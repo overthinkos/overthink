@@ -150,7 +150,7 @@ func CollectImageAlias(cfg *Config, layers map[string]*Layer, imageName string) 
 	// Collect from layers
 	for _, layerName := range resolved {
 		layer, ok := layers[layerName]
-		if !ok || !layer.HasAliases {
+		if !ok || !layer.HasAliases() {
 			continue
 		}
 		for _, a := range layer.Alias() {

@@ -32,8 +32,8 @@ func TestResolveDeployChain_VmFlat(t *testing.T) {
 		"bench-vm": {
 			Target: "vm",
 			VmState: &VmDeployState{
-				SshUser:    "arch",
-				SshPort:    2222,
+				SshUser: "arch",
+				SshPort: 2222,
 			},
 		},
 	}
@@ -59,8 +59,8 @@ func TestResolveDeployChain_VmInnerPod(t *testing.T) {
 		"bench-vm": {
 			Target: "vm",
 			VmState: &VmDeployState{
-				SshUser:    "arch",
-				SshPort:    2222,
+				SshUser: "arch",
+				SshPort: 2222,
 			},
 			Nested: map[string]*DeploymentNode{
 				"inner": innerNode,
@@ -99,8 +99,8 @@ func TestResolveDeployChain_ThreeDeep(t *testing.T) {
 		"bench-vm": {
 			Target: "vm",
 			VmState: &VmDeployState{
-				SshUser:    "arch",
-				SshPort:    2222,
+				SshUser: "arch",
+				SshPort: 2222,
 			},
 			Nested: map[string]*DeploymentNode{
 				"inner": innerNode,
@@ -150,8 +150,8 @@ func TestResolveDeployChain_UnknownNestedChild(t *testing.T) {
 		"vm": {
 			Target: "vm",
 			VmState: &VmDeployState{
-				SshUser:    "arch",
-				SshPort:    2222,
+				SshUser: "arch",
+				SshPort: 2222,
 			},
 			Nested: map[string]*DeploymentNode{
 				"inner-app": {Target: "pod"},

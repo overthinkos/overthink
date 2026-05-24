@@ -13,10 +13,9 @@ func TestCollectImageVolumesSimple(t *testing.T) {
 	}
 	layers := map[string]*Layer{
 		"svc": {
-			Name:       "svc",
-			HasTasks:   true,
-			HasVolumes: true,
-			volumes:    []VolumeYAML{{Name: "data", Path: "~/.myapp"}},
+			Name:    "svc",
+			tasks:   []Task{{Cmd: "true"}},
+			volumes: []VolumeYAML{{Name: "data", Path: "~/.myapp"}},
 		},
 	}
 
@@ -42,16 +41,14 @@ func TestCollectImageVolumesChain(t *testing.T) {
 	}
 	layers := map[string]*Layer{
 		"store": {
-			Name:       "store",
-			HasTasks:   true,
-			HasVolumes: true,
-			volumes:    []VolumeYAML{{Name: "models", Path: "~/.models"}},
+			Name:    "store",
+			tasks:   []Task{{Cmd: "true"}},
+			volumes: []VolumeYAML{{Name: "models", Path: "~/.models"}},
 		},
 		"app": {
-			Name:       "app",
-			HasTasks:   true,
-			HasVolumes: true,
-			volumes:    []VolumeYAML{{Name: "data", Path: "~/.app"}},
+			Name:    "app",
+			tasks:   []Task{{Cmd: "true"}},
+			volumes: []VolumeYAML{{Name: "data", Path: "~/.app"}},
 		},
 	}
 
@@ -79,16 +76,14 @@ func TestCollectImageVolumesDedup(t *testing.T) {
 	}
 	layers := map[string]*Layer{
 		"store": {
-			Name:       "store",
-			HasTasks:   true,
-			HasVolumes: true,
-			volumes:    []VolumeYAML{{Name: "data", Path: "~/.base-data"}},
+			Name:    "store",
+			tasks:   []Task{{Cmd: "true"}},
+			volumes: []VolumeYAML{{Name: "data", Path: "~/.base-data"}},
 		},
 		"override": {
-			Name:       "override",
-			HasTasks:   true,
-			HasVolumes: true,
-			volumes:    []VolumeYAML{{Name: "data", Path: "~/.child-data"}},
+			Name:    "override",
+			tasks:   []Task{{Cmd: "true"}},
+			volumes: []VolumeYAML{{Name: "data", Path: "~/.child-data"}},
 		},
 	}
 
@@ -113,7 +108,7 @@ func TestCollectImageVolumesNoVolumes(t *testing.T) {
 		},
 	}
 	layers := map[string]*Layer{
-		"plain": {Name: "plain", HasTasks: true},
+		"plain": {Name: "plain", tasks: []Task{{Cmd: "true"}}},
 	}
 
 	mounts, err := CollectImageVolume(cfg, layers, "base", "/home/user", nil)

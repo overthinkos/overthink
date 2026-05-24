@@ -99,6 +99,125 @@ func BareRef(ref string) string {
 	return strings.TrimPrefix(bare, "@")
 }
 
+// LayerRef is a single layer reference as authored in layer.yml `require:` /
+// `layer:` (or image.yml `layer:`). It carries the ORIGINAL ref string — with
+// any `@repo` prefix and `:version` suffix — as the single source of truth; the
+// bare map-key form (.Bare()) and the pinned version (.Version()) are DERIVED on
+// demand, so a ref's identity and its version can never drift apart. The
+// transitive fetch keys on .Raw; the dependency graph keys on .Bare().
+type LayerRef struct {
+	Raw string // original ref, e.g. "@github.com/org/repo/layers/x:v1" or bare "x"
+	// resolved is the qualified layer-map key assigned when a freshly-fetched
+	// remote layer's plain-name sibling deps are qualified to
+	// "<repo>/<subpathprefix><name>" (qualifyRemoteSiblingDeps). Empty for every
+	// other ref, where the map key derives from Raw. Keeping Raw immutable while
+	// resolution lands in a separate slot lets ONE list serve both the graph
+	// (which keys on .Bare()) and the transitive fetch (which keys on .Raw).
+	resolved string
+}
+
+// Bare returns the layer-map key (no @ prefix, no :version) — the form used for
+// dependency resolution and graph keying. After remote sibling-qualification it
+// is the qualified key; otherwise it derives from the original ref.
+func (r LayerRef) Bare() string {
+	if r.resolved != "" {
+		return r.resolved
+	}
+	return BareRef(r.Raw)
+}
+
+// Version returns the pinned version (the ":vX" suffix), or "" for an unpinned
+// remote ref or a local (bare-name) ref.
+func (r LayerRef) Version() string { _, v := StripVersion(r.Raw); return v }
+
+// IsRemote reports whether this is an @-prefixed remote ref.
+func (r LayerRef) IsRemote() bool { return IsRemoteLayerRef(r.Raw) }
+
+// toLayerRefs wraps raw ref strings (as parsed from layer.yml) into LayerRef
+// values. Returns nil for a nil/empty input so an absent list stays absent.
+func toLayerRefs(raw []string) []LayerRef {
+	if len(raw) == 0 {
+		return nil
+	}
+	out := make([]LayerRef, len(raw))
+	for i, s := range raw {
+		out[i] = LayerRef{Raw: s}
+	}
+	return out
+}
+
+// bareRefs returns the bare map-key form of each ref — for the consumers that
+// resolve a layer list against the layer map.
+func bareRefs(refs []LayerRef) []string {
+	if len(refs) == 0 {
+		return nil
+	}
+	out := make([]string, len(refs))
+	for i, r := range refs {
+		out[i] = r.Bare()
+	}
+	return out
+}
+
+// refVersionTracker resolves each layer (bare ref) to a SINGLE version when it
+// is referenced at more than one — the policy the whole resolver depends on. A
+// given bare ref may be referenced many times; when two references disagree on
+// version, ov does NOT fail: it warns once (naming both versions and their
+// sources) and keeps the NEWEST (highest CalVer/semver). This soft policy lets a
+// build proceed with the latest referenced version of each layer rather than
+// requiring every reference across the whole import graph to pin the same tag.
+// It is the single shared mechanism behind BOTH the initial ref collection
+// (CollectRemoteRefsOpts) and the transitive fix-point fetch
+// (ScanAllLayerWithConfigOpts), so the SAME newest-wins choice (and warning) is
+// applied uniformly to direct and transitive references. See CHANGELOG.md.
+type refVersionTracker struct {
+	versions map[string]string // bareRef -> winning (newest) version
+	sources  map[string]string // bareRef -> source of the winning version
+	warned   map[string]bool   // bareRef -> already warned (one warning per layer)
+}
+
+func newRefVersionTracker() *refVersionTracker {
+	return &refVersionTracker{
+		versions: make(map[string]string),
+		sources:  make(map[string]string),
+		warned:   make(map[string]bool),
+	}
+}
+
+// record registers a reference to bareRef at version (attributed to source). It
+// returns winning=true when `version` is (now) the version that should be
+// fetched/scanned for bareRef — i.e. the FIRST reference, or one NEWER than the
+// current winner. It returns false when this reference loses to an
+// already-recorded equal-or-newer version. On a version DISAGREEMENT it emits a
+// single warning naming both versions and keeps the newest.
+func (t *refVersionTracker) record(bareRef, version, source string) (winning bool) {
+	existing, ok := t.versions[bareRef]
+	if !ok {
+		t.versions[bareRef] = version
+		t.sources[bareRef] = source
+		return true
+	}
+	if existing == version {
+		return false // already known at this version
+	}
+	newWins := compareSemver(version, existing) > 0
+	if !t.warned[bareRef] {
+		win, winSrc, lose, loseSrc := existing, t.sources[bareRef], version, source
+		if newWins {
+			win, winSrc, lose, loseSrc = version, source, existing, t.sources[bareRef]
+		}
+		fmt.Fprintf(os.Stderr, "Warning: layer %s referenced at multiple versions; using newest %s (from %s), ignoring %s (from %s)\n",
+			bareRef, win, winSrc, lose, loseSrc)
+		t.warned[bareRef] = true
+	}
+	if newWins {
+		t.versions[bareRef] = version
+		t.sources[bareRef] = source
+		return true
+	}
+	return false
+}
+
 // RepoCacheDir returns the cache directory for remote repos.
 // Uses $OV_REPO_CACHE env var if set, otherwise ~/.cache/ov/repos/
 func RepoCacheDir() (string, error) {
@@ -201,11 +320,12 @@ func CollectRemoteRefs(cfg *Config, layers map[string]*Layer) ([]RemoteDownload,
 // fetched/registered, surfacing as "unknown layer" while computing global layer
 // order.
 func CollectRemoteRefsOpts(cfg *Config, layers map[string]*Layer, opts ResolveOpts) ([]RemoteDownload, error) {
-	// bareRef -> version (for conflict detection)
-	refVersions := make(map[string]string)
-	// (repoPath, version) -> set of bare refs
-	type repoVer struct{ repo, ver string }
-	downloads := make(map[repoVer]map[string]bool)
+	// Warn-and-newest-wins version resolution (shared with the fix-point fetch).
+	// The winning version per bare ref is only known after EVERY reference has
+	// been recorded, so downloads are built from the tracker AFTER collection
+	// rather than appended inline.
+	tracker := newRefVersionTracker()
+	bareRepo := make(map[string]string) // bareRef -> repoPath (for grouping downloads)
 	// Track resolved default branches per repo (to avoid duplicate git queries)
 	defaultBranches := make(map[string]string)
 
@@ -231,80 +351,113 @@ func CollectRemoteRefsOpts(cfg *Config, layers map[string]*Layer, opts ResolveOp
 				fmt.Fprintf(os.Stderr, "Resolved @%s -> %s (default branch)\n", parsed.RepoPath, version)
 			}
 		}
-		// Conflict: same bare ref at different versions
-		if existing, ok := refVersions[bareRef]; ok && existing != version {
-			return fmt.Errorf("version conflict for %s: %s vs %s (from %s)", bareRef, existing, version, source)
-		}
-		refVersions[bareRef] = version
-
-		key := repoVer{parsed.RepoPath, version}
-		if downloads[key] == nil {
-			downloads[key] = make(map[string]bool)
-		}
-		downloads[key][bareRef] = true
+		bareRepo[bareRef] = parsed.RepoPath
+		tracker.record(bareRef, version, source)
 		return nil
 	}
 
 	// format_config: has been removed. Remote build-config refs now live in
 	// overthink.yml's `includes:` mechanism (see unified.go).
 
-	// Scan image + kind:local layer references, recursively across import
-	// namespaces. A pulled-in namespaced base/builder image (e.g.
-	// `ov.arch-builder`) carries its own @github layers; they must land in the
-	// same shared (bare-ref-keyed) layer map. Over-collecting an unreferenced
-	// namespace image's layers is harmless — all refs pin the same version, so
-	// the conflict check below never fires; under-collecting would surface as
-	// "unknown layer" at generate time. seenCfg breaks the main<->cachyos cycle.
-	seenCfg := map[*Config]bool{}
-	var scanCfg func(c *Config) error
-	scanCfg = func(c *Config) error {
-		if c == nil || seenCfg[c] {
+	// Collect layer refs from the ROOT project's own build/deploy targets (every
+	// enabled image + every kind:local template), then follow base/builder edges
+	// into imported namespaces, collecting ONLY the namespaced images actually
+	// reachable as a base or builder. A namespace is imported to provide
+	// bases/builders; its UNREFERENCED images and its kind:local templates (which
+	// can never be a base/builder of the importing project) are not build inputs
+	// here and must not be collected. Over-collecting them pulled unrelated
+	// layers pinned at a different ecosystem tag, which the one-layer-one-version
+	// invariant (tracker) then correctly — but spuriously — rejected. The
+	// per-(Config,name) `collected` set also breaks the main<->cachyos cycle.
+	collected := map[*Config]map[string]bool{}
+	var collectImage func(c *Config, name string) error
+	collectImage = func(c *Config, name string) error {
+		seen := collected[c]
+		if seen == nil {
+			seen = map[string]bool{}
+			collected[c] = seen
+		}
+		if seen[name] {
 			return nil
 		}
-		seenCfg[c] = true
-		for imgName, img := range c.Image {
-			if !img.IsEnabled() && !opts.shouldIncludeDisabled(imgName) {
-				continue
+		seen[name] = true
+		img, ok := c.Image[name]
+		if !ok {
+			return nil // external OCI base or unknown name — no layers to collect
+		}
+		for _, layerRef := range img.Layer {
+			if err := addRef(layerRef, fmt.Sprintf("image %s", name)); err != nil {
+				return err
 			}
-			for _, layerRef := range img.Layer {
-				if err := addRef(layerRef, fmt.Sprintf("image %s", imgName)); err != nil {
+		}
+		// Follow the base edge, plus builder edges when this image actually builds
+		// (a layerless base needs no builder). A namespaced builder (e.g.
+		// ov.fedora-builder) is BUILT as an intermediate in the consumer's graph,
+		// so its layers (rpmfusion, yay, …) must be fetched here — dropping the
+		// builder edge under-collects them ("unknown layer"). Qualified refs
+		// descend into the imported namespace; bare refs resolve within c; an
+		// external-URL/unknown base resolves to ok=false and is skipped.
+		edges := []string{}
+		if img.Base != "" {
+			edges = append(edges, img.Base)
+		}
+		if len(img.Layer) > 0 {
+			edges = append(edges, img.Builder.AllBuilder()...)
+		}
+		for _, ref := range edges {
+			if _, tc, ok := c.resolveImageRef(ref); ok {
+				if err := collectImage(tc, leafName(ref)); err != nil {
 					return err
 				}
 			}
 		}
-		for tplName, spec := range c.Local {
+		return nil
+	}
+	if cfg != nil {
+		for imgName, img := range cfg.Image {
+			if !img.IsEnabled() && !opts.shouldIncludeDisabled(imgName) {
+				continue
+			}
+			if err := collectImage(cfg, imgName); err != nil {
+				return nil, err
+			}
+		}
+		for tplName, spec := range cfg.Local {
 			if spec == nil {
 				continue
 			}
 			for _, layerRef := range spec.Layer {
 				if err := addRef(layerRef, fmt.Sprintf("kind:local %s", tplName)); err != nil {
-					return err
+					return nil, err
 				}
 			}
 		}
-		for _, sub := range c.Namespaces {
-			if err := scanCfg(sub); err != nil {
-				return err
-			}
-		}
-		return nil
-	}
-	if err := scanCfg(cfg); err != nil {
-		return nil, err
 	}
 
-	// Scan layer.yml depends and layers: fields
+	// Scan layer.yml require: and layer: fields
 	for layerName, layer := range layers {
-		for _, dep := range layer.RawRequire {
-			if err := addRef(dep, fmt.Sprintf("layer %s depends", layerName)); err != nil {
+		for _, dep := range layer.Require {
+			if err := addRef(dep.Raw, fmt.Sprintf("layer %s require", layerName)); err != nil {
 				return nil, err
 			}
 		}
-		for _, ref := range layer.RawIncludedLayer {
-			if err := addRef(ref, fmt.Sprintf("layer %s layers", layerName)); err != nil {
+		for _, ref := range layer.IncludedLayer {
+			if err := addRef(ref.Raw, fmt.Sprintf("layer %s layer", layerName)); err != nil {
 				return nil, err
 			}
 		}
+	}
+
+	// Build downloads from the WINNING version per bare ref (newest-wins is now
+	// resolved across all references), grouped by (repo, version).
+	type repoVer struct{ repo, ver string }
+	downloads := make(map[repoVer]map[string]bool)
+	for bareRef, ver := range tracker.versions {
+		key := repoVer{bareRepo[bareRef], ver}
+		if downloads[key] == nil {
+			downloads[key] = make(map[string]bool)
+		}
+		downloads[key][bareRef] = true
 	}
 
 	// Convert to sorted list

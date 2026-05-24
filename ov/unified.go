@@ -2516,29 +2516,23 @@ func synthesizeInlineLayer(name string, il *InlineLayer, rootDir string) (*Layer
 	return layer, nil
 }
 
-// populateLayerFromYAML copies fields from a LayerYAML into the legacy Layer
-// struct, mirroring scanLayer's post-parse block without the install-file
-// detection (which synthesizeInlineLayer does separately against SourceDir).
+// populateLayerFromYAML copies every field from a parsed LayerYAML into the
+// runtime Layer. It is the SINGLE post-parse populator: BOTH scanLayer (the
+// discovered-layer-dir path) and synthesizeInlineLayer (the overthink.yml
+// inline path) call it, so the two can never drift. (They previously did — the
+// inline path silently dropped artifacts/capabilities/requiresCapabilities/
+// shell and the unexported description.) The caller is responsible for the
+// install-file filesystem probes (HasPixiToml etc.) against SourceDir.
 func populateLayerFromYAML(layer *Layer, ly *LayerYAML) {
 	layer.Version = ly.Version
 	layer.Description = ly.Description
 	layer.Status = descriptionStatus(ly.Description)
 	layer.Info = descriptionInfo(ly.Description)
 
-	layer.RawRequire = ly.Require
-	layer.Require = make([]string, len(ly.Require))
-	for i, dep := range ly.Require {
-		layer.Require[i] = BareRef(dep)
-	}
-	layer.RawIncludedLayer = ly.Layer
-	layer.IncludedLayer = make([]string, len(ly.Layer))
-	for i, ref := range ly.Layer {
-		layer.IncludedLayer[i] = BareRef(ref)
-	}
+	layer.Require = toLayerRefs(ly.Require)
+	layer.IncludedLayer = toLayerRefs(ly.Layer)
+
 	layer.service = ly.Service
-	layer.HasEnv = len(ly.Env) > 0 || len(ly.PathAppend) > 0
-	layer.HasPorts = len(ly.Port) > 0
-	layer.HasRoute = ly.Route != nil
 	layer.formatSections = ly.FormatSections
 	if layer.formatSections == nil {
 		layer.formatSections = make(map[string]*PackageSection)
@@ -2548,7 +2542,7 @@ func populateLayerFromYAML(layer *Layer, ly *LayerYAML) {
 	if len(ly.Package) > 0 || len(ly.Distro) > 0 {
 		derivePackageSectionsFromCalamares(layer, ly)
 	}
-	if layer.HasPorts {
+	if len(ly.Port) > 0 {
 		layer.ports = make([]string, len(ly.Port))
 		layer.portSpecs = make([]PortSpec, len(ly.Port))
 		for i, p := range ly.Port {
@@ -2560,7 +2554,7 @@ func populateLayerFromYAML(layer *Layer, ly *LayerYAML) {
 			layer.portSpecs[i] = p
 		}
 	}
-	if layer.HasEnv {
+	if len(ly.Env) > 0 || len(ly.PathAppend) > 0 {
 		env := ly.Env
 		if env == nil {
 			env = make(map[string]string)
@@ -2570,57 +2564,29 @@ func populateLayerFromYAML(layer *Layer, ly *LayerYAML) {
 	if ly.Route != nil {
 		layer.route = &RouteConfig{Host: ly.Route.Host, Port: fmt.Sprintf("%d", ly.Route.Port)}
 	}
-	layer.HasVolumes = len(ly.Volume) > 0
 	layer.volumes = ly.Volume
-	layer.HasAliases = len(ly.Alias) > 0
 	layer.aliases = ly.Alias
-	layer.HasExtract = len(ly.Extract) > 0
 	layer.extract = ly.Extract
-	layer.HasData = len(ly.Data) > 0
 	layer.data = ly.Data
 	layer.security = ly.Security
-	if len(ly.Libvirt) > 0 {
-		layer.HasLibvirt = true
-		layer.libvirt = ly.Libvirt
-	}
+	layer.libvirt = ly.Libvirt
 	layer.hooks = ly.Hooks
 	layer.tests = ly.Eval
+	layer.artifacts = ly.Artifact
+	layer.capabilities = ly.Capabilities
+	layer.requiresCapabilities = ly.RequiresCapability
 	layer.PortRelayPorts = ly.PortRelay
 	layer.secrets = ly.SecretYAML
-	if len(ly.EnvProvides) > 0 {
-		layer.HasEnvProvides = true
-		layer.envProvides = ly.EnvProvides
-	}
-	if len(ly.EnvRequire) > 0 {
-		layer.HasEnvRequires = true
-		layer.envRequires = ly.EnvRequire
-	}
-	if len(ly.EnvAccept) > 0 {
-		layer.HasEnvAccepts = true
-		layer.envAccepts = ly.EnvAccept
-	}
-	if len(ly.SecretAccept) > 0 {
-		layer.HasSecretAccepts = true
-		layer.secretAccepts = ly.SecretAccept
-	}
-	if len(ly.SecretRequire) > 0 {
-		layer.HasSecretRequires = true
-		layer.secretRequires = ly.SecretRequire
-	}
-	if len(ly.MCPProvide) > 0 {
-		layer.HasMCPProvides = true
-		layer.mcpProvides = ly.MCPProvide
-	}
-	if len(ly.MCPRequire) > 0 {
-		layer.HasMCPRequires = true
-		layer.mcpRequires = ly.MCPRequire
-	}
-	if len(ly.MCPAccept) > 0 {
-		layer.HasMCPAccepts = true
-		layer.mcpAccepts = ly.MCPAccept
-	}
+	layer.envProvides = ly.EnvProvides
+	layer.envRequires = ly.EnvRequire
+	layer.envAccepts = ly.EnvAccept
+	layer.secretAccepts = ly.SecretAccept
+	layer.secretRequires = ly.SecretRequire
+	layer.mcpProvides = ly.MCPProvide
+	layer.mcpRequires = ly.MCPRequire
+	layer.mcpAccepts = ly.MCPAccept
 	layer.engine = ly.Engine
 	layer.vars = ly.Vars
 	layer.tasks = ly.Task
-	layer.HasTasks = len(ly.Task) > 0
+	layer.shell = ly.Shell
 }

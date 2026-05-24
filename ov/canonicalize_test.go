@@ -9,11 +9,11 @@ import "testing"
 // looked up the wrong deploy.yml key (dropping port/env overlays).
 func TestCanonicalizeDeployArg(t *testing.T) {
 	for _, tc := range []struct {
-		name        string
-		arg         string
-		instance    string
-		wantImage   string
-		wantInst    string
+		name      string
+		arg       string
+		instance  string
+		wantImage string
+		wantInst  string
 	}{
 		{"pattern_A_split", "versa/ecovoyage", "", "versa", "ecovoyage"},
 		{"pattern_A_three_segments_NOT_split", "ghcr.io/owner/img", "", "ghcr.io/owner/img", ""}, // registry host

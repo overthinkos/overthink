@@ -32,19 +32,19 @@ func TestCollectTests_Sections(t *testing.T) {
 		Image: map[string]ImageConfig{
 			"redis-ml": {
 				Base:    "base",
-				Layer:  []string{"redis"},
+				Layer:   []string{"redis"},
 				Enabled: boolPtr(true),
-				Eval:  []Check{
+				Eval: []Check{
 					{Command: "supervisord -v"},
 					{HTTP: "https://${DNS}/", Scope: "deploy"},
 				},
-				DeployEval:  []Check{
+				DeployEval: []Check{
 					{Port: 6379, Reachable: ptrBool(true)},
 				},
 			},
 			"base": {
 				Enabled: boolPtr(true),
-				Layer:  []string{"base"},
+				Layer:   []string{"base"},
 			},
 		},
 	}

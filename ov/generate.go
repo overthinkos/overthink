@@ -414,7 +414,7 @@ func (g *Generator) generateContainerfile(imageName string) error {
 	// Emit extraction stages for layers with extract field
 	for _, layerName := range layerOrder {
 		layer := g.Layers[layerName]
-		if !layer.HasExtract {
+		if !layer.HasExtract() {
 			continue
 		}
 		for i, ext := range layer.Extract() {
@@ -450,7 +450,7 @@ func (g *Generator) generateContainerfile(imageName string) error {
 	hasTraefik := false
 	for _, layerName := range layerOrder {
 		layer := g.Layers[layerName]
-		if layer.HasRoute {
+		if layer.HasRoute() {
 			hasRoutes = true
 		}
 		if layerName == "traefik" {
@@ -648,7 +648,7 @@ func (g *Generator) generateContainerfile(imageName string) error {
 	hasExtract := false
 	for _, layerName := range layerOrder {
 		layer := g.Layers[layerName]
-		if !layer.HasExtract {
+		if !layer.HasExtract() {
 			continue
 		}
 		if !hasExtract {
@@ -785,7 +785,7 @@ func (g *Generator) generateDataImageContainerfile(imageName string, img *Resolv
 	// Scratch stages for layers that have data
 	for _, layerName := range layerOrder {
 		layer := g.Layers[layerName]
-		if !layer.HasData {
+		if !layer.HasData() {
 			continue
 		}
 		b.WriteString(fmt.Sprintf("FROM scratch AS %s\n", layer.Name))
@@ -811,7 +811,7 @@ func (g *Generator) generateDataImageContainerfile(imageName string, img *Resolv
 	var dataEntries []LabelDataEntry
 	for _, layerName := range layerOrder {
 		layer := g.Layers[layerName]
-		if !layer.HasData {
+		if !layer.HasData() {
 			continue
 		}
 		for _, d := range layer.Data() {
@@ -1014,7 +1014,7 @@ func (g *Generator) writeLayerEnv(b *strings.Builder, layerOrder []string, img *
 
 	for _, layerName := range layerOrder {
 		layer := g.Layers[layerName]
-		if layer.HasEnv {
+		if layer.HasEnv() {
 			cfg, err := layer.EnvConfig()
 			if err == nil && cfg != nil {
 				configs = append(configs, cfg)
@@ -1076,7 +1076,7 @@ func (g *Generator) writeExpose(b *strings.Builder, layerOrder []string) {
 
 	for _, layerName := range layerOrder {
 		layer := g.Layers[layerName]
-		if !layer.HasPorts {
+		if !layer.HasPorts() {
 			continue
 		}
 		layerPorts, err := layer.Port()
@@ -1109,7 +1109,7 @@ func (g *Generator) writeDataStaging(b *strings.Builder, layerOrder []string, im
 	hasData := false
 	for _, layerName := range layerOrder {
 		layer := g.Layers[layerName]
-		if !layer.HasData {
+		if !layer.HasData() {
 			continue
 		}
 		if !hasData {
@@ -1158,7 +1158,7 @@ func (g *Generator) generateTraefikRoutes(imageName string, layerOrder []string,
 	var routes []routeEntry
 	for _, layerName := range layerOrder {
 		layer := g.Layers[layerName]
-		if !layer.HasRoute {
+		if !layer.HasRoute() {
 			continue
 		}
 		route, err := layer.Route()
@@ -1344,7 +1344,7 @@ func (g *Generator) writeLayerSteps(b *strings.Builder, layerName string, img *R
 	// 0. ENV from vars: + ARCH (ARG TARGETARCH) — emitted once per layer
 	// before packages/tasks so Docker's variable substitution sees the
 	// values in subsequent directives (COPY dests, RUN commands, etc.).
-	if layer.HasTasks || len(layer.vars) > 0 {
+	if layer.HasTasks() || len(layer.vars) > 0 {
 		emitVarsEnv(b, layer.vars)
 	}
 
@@ -1415,7 +1415,7 @@ func (g *Generator) writeLayerSteps(b *strings.Builder, layerName string, img *R
 
 	// 2a. tasks: list (new path — replaces both root.yml and user.yml).
 	// Validator rejects layers that have both tasks: and root.yml/user.yml.
-	if layer.HasTasks {
+	if layer.HasTasks() {
 		imageName := img.Name
 		buildDir := filepath.Join(g.BuildDir, imageName)
 		contextRelPrefix := filepath.ToSlash(filepath.Join(".build", imageName))
@@ -1921,7 +1921,7 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 	envProvides := make(map[string]string)
 	for _, layerName := range layerOrder {
 		layer := g.Layers[layerName]
-		if layer.HasEnvProvides {
+		if layer.HasEnvProvides() {
 			for k, v := range layer.EnvProvides() {
 				envProvides[k] = v
 			}
@@ -1935,7 +1935,7 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 	envRequiresMap := make(map[string]EnvDependency) // deduplicate by name, last wins
 	for _, layerName := range layerOrder {
 		layer := g.Layers[layerName]
-		if layer.HasEnvRequires {
+		if layer.HasEnvRequires() {
 			for _, dep := range layer.EnvRequire() {
 				envRequiresMap[dep.Name] = dep
 			}
@@ -1949,7 +1949,7 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 	envAcceptsMap := make(map[string]EnvDependency) // deduplicate by name, last wins
 	for _, layerName := range layerOrder {
 		layer := g.Layers[layerName]
-		if layer.HasEnvAccepts {
+		if layer.HasEnvAccepts() {
 			for _, dep := range layer.EnvAccept() {
 				envAcceptsMap[dep.Name] = dep
 			}
@@ -1963,7 +1963,7 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 	secretRequiresMap := make(map[string]EnvDependency) // deduplicate by name, last wins
 	for _, layerName := range layerOrder {
 		layer := g.Layers[layerName]
-		if layer.HasSecretRequires {
+		if layer.HasSecretRequires() {
 			for _, dep := range layer.SecretRequire() {
 				secretRequiresMap[dep.Name] = dep
 			}
@@ -1977,7 +1977,7 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 	secretAcceptsMap := make(map[string]EnvDependency) // deduplicate by name, last wins
 	for _, layerName := range layerOrder {
 		layer := g.Layers[layerName]
-		if layer.HasSecretAccepts {
+		if layer.HasSecretAccepts() {
 			for _, dep := range layer.SecretAccept() {
 				secretAcceptsMap[dep.Name] = dep
 			}
@@ -1991,7 +1991,7 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 	mcpProvidesMap := make(map[string]MCPServerYAML) // deduplicate by name, last wins
 	for _, layerName := range layerOrder {
 		layer := g.Layers[layerName]
-		if layer.HasMCPProvides {
+		if layer.HasMCPProvides() {
 			for _, mcp := range layer.MCPProvide() {
 				mcpProvidesMap[mcp.Name] = mcp
 			}
@@ -2015,7 +2015,7 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 	mcpRequiresMap := make(map[string]EnvDependency) // deduplicate by name, last wins
 	for _, layerName := range layerOrder {
 		layer := g.Layers[layerName]
-		if layer.HasMCPRequires {
+		if layer.HasMCPRequires() {
 			for _, dep := range layer.MCPRequire() {
 				mcpRequiresMap[dep.Name] = dep
 			}
@@ -2029,7 +2029,7 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 	mcpAcceptsMap := make(map[string]EnvDependency) // deduplicate by name, last wins
 	for _, layerName := range layerOrder {
 		layer := g.Layers[layerName]
-		if layer.HasMCPAccepts {
+		if layer.HasMCPAccepts() {
 			for _, dep := range layer.MCPAccept() {
 				mcpAcceptsMap[dep.Name] = dep
 			}
@@ -2043,7 +2043,7 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 	var routes []LabelRoute
 	for _, layerName := range layerOrder {
 		layer := g.Layers[layerName]
-		if layer.HasRoute {
+		if layer.HasRoute() {
 			rc, err := layer.Route()
 			if err == nil && rc != nil {
 				port, _ := strconv.Atoi(rc.Port)
@@ -2134,7 +2134,7 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 			}
 			seenDataLayers[layerName] = true
 			layer, ok := g.Layers[layerName]
-			if !ok || !layer.HasData {
+			if !ok || !layer.HasData() {
 				continue
 			}
 			for _, d := range layer.Data() {

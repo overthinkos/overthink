@@ -114,7 +114,7 @@ func TestAppiumBaseURL_RespectsCustomBasePath(t *testing.T) {
 	}{
 		{"", "/wd/hub"},
 		{"/wd/hub", "/wd/hub"},
-		{"wd/hub", "/wd/hub"},   // no leading slash → added
+		{"wd/hub", "/wd/hub"}, // no leading slash → added
 		{"/custom", "/custom"},
 		{"/", "/"},
 	} {

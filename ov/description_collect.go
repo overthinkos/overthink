@@ -56,12 +56,12 @@ func CollectDescriptions(cfg *Config, layers map[string]*Layer, imageName string
 		}
 		seen[layerName] = true
 		layer, ok := layers[layerName]
-		if !ok || layer.description == nil {
+		if !ok || layer.Description == nil {
 			continue
 		}
 		set.Layer = append(set.Layer, LabeledDescription{
 			Origin:      "layer:" + layerName,
-			Description: *layer.description,
+			Description: *layer.Description,
 		})
 	}
 

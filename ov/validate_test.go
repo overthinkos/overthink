@@ -19,8 +19,8 @@ func TestValidateSuccess(t *testing.T) {
 
 	layers := map[string]*Layer{
 		"pixi": {
-			Name:     "pixi",
-			HasTasks: true,
+			Name:  "pixi",
+			tasks: []Task{{Cmd: "true"}},
 		},
 	}
 
@@ -114,7 +114,7 @@ func TestValidateMissingLayerWithTypo(t *testing.T) {
 		},
 	}
 	layers := map[string]*Layer{
-		"pixi": {Name: "pixi", HasTasks: true},
+		"pixi": {Name: "pixi", tasks: []Task{{Cmd: "true"}}},
 	}
 
 	err := Validate(cfg, layers, testProjectDir(t), ResolveOpts{})
@@ -170,8 +170,8 @@ func TestValidateCoprWithoutPackages(t *testing.T) {
 	}
 	layers := map[string]*Layer{
 		"layer": {
-			Name:     "layer",
-			HasTasks: true,
+			Name:  "layer",
+			tasks: []Task{{Cmd: "true"}},
 			formatSections: map[string]*PackageSection{
 				"rpm": {FormatName: "rpm", Raw: map[string]interface{}{"copr": []interface{}{"owner/project"}}},
 			},
@@ -193,8 +193,8 @@ func TestValidateReposWithoutPackages(t *testing.T) {
 	}
 	layers := map[string]*Layer{
 		"layer": {
-			Name:     "layer",
-			HasTasks: true, // needs some install file
+			Name:  "layer",
+			tasks: []Task{{Cmd: "true"}}, // needs some install file
 			formatSections: map[string]*PackageSection{
 				"rpm": {FormatName: "rpm", Raw: map[string]interface{}{"repos": []interface{}{map[string]interface{}{"name": "test", "url": "http://example.com"}}}},
 			},
@@ -216,8 +216,8 @@ func TestValidateModulesWithoutPackages(t *testing.T) {
 	}
 	layers := map[string]*Layer{
 		"layer": {
-			Name:     "layer",
-			HasTasks: true,
+			Name:  "layer",
+			tasks: []Task{{Cmd: "true"}},
 			formatSections: map[string]*PackageSection{
 				"rpm": {FormatName: "rpm", Raw: map[string]interface{}{"modules": []interface{}{"valkey:remi-9.0"}}},
 			},
@@ -242,7 +242,7 @@ func TestValidateModulesWithoutPackages(t *testing.T) {
 func TestValidatePacPkgValue(t *testing.T) {
 	cfg := &Config{
 		Defaults: ImageConfig{Build: BuildFormats{"pac"}},
-		Image:   map[string]ImageConfig{},
+		Image:    map[string]ImageConfig{},
 	}
 	layers := map[string]*Layer{}
 
@@ -308,8 +308,8 @@ func TestValidateAurWithoutAurBuilder(t *testing.T) {
 		},
 		Image: map[string]ImageConfig{
 			"arch-img": {
-				Base:   "arch:latest",
-				Build:  BuildFormats{"pac", "aur"},
+				Base:  "arch:latest",
+				Build: BuildFormats{"pac", "aur"},
 				Layer: []string{"aur-layer"},
 			},
 		},
@@ -345,8 +345,8 @@ func TestValidateAurOnFedoraImageNoError(t *testing.T) {
 		},
 		Image: map[string]ImageConfig{
 			"fedora-img": {
-				Base:   "quay.io/fedora/fedora:43",
-				Build:  BuildFormats{"rpm"},
+				Base:  "quay.io/fedora/fedora:43",
+				Build: BuildFormats{"rpm"},
 				Layer: []string{"multi-distro-layer"},
 			},
 		},
@@ -377,8 +377,8 @@ func TestValidateAurOnArchImageWithoutAurInBuildFormats(t *testing.T) {
 		},
 		Image: map[string]ImageConfig{
 			"arch-pac-only": {
-				Base:   "arch:latest",
-				Build:  BuildFormats{"pac"},
+				Base:  "arch:latest",
+				Build: BuildFormats{"pac"},
 				Layer: []string{"aur-layer"},
 			},
 		},
@@ -411,8 +411,8 @@ func TestValidatePixiBuilderUnconditional(t *testing.T) {
 		},
 		Image: map[string]ImageConfig{
 			"fedora-img": {
-				Base:   "quay.io/fedora/fedora:43",
-				Build:  BuildFormats{"rpm"},
+				Base:  "quay.io/fedora/fedora:43",
+				Build: BuildFormats{"rpm"},
 				Layer: []string{"pixi-layer"},
 			},
 		},
@@ -439,9 +439,9 @@ func TestValidateUnknownDependency(t *testing.T) {
 	}
 	layers := map[string]*Layer{
 		"layer": {
-			Name:     "layer",
-			HasTasks: true,
-			Require:  []string{"unknown"},
+			Name:    "layer",
+			tasks:   []Task{{Cmd: "true"}},
+			Require: toLayerRefs([]string{"unknown"}),
 		},
 	}
 
@@ -481,9 +481,9 @@ func TestValidateLayerCycle(t *testing.T) {
 		},
 	}
 	layers := map[string]*Layer{
-		"a": {Name: "a", HasTasks: true, Require: []string{"b"}},
-		"b": {Name: "b", HasTasks: true, Require: []string{"c"}},
-		"c": {Name: "c", HasTasks: true, Require: []string{"a"}},
+		"a": {Name: "a", tasks: []Task{{Cmd: "true"}}, Require: toLayerRefs([]string{"b"})},
+		"b": {Name: "b", tasks: []Task{{Cmd: "true"}}, Require: toLayerRefs([]string{"c"})},
+		"c": {Name: "c", tasks: []Task{{Cmd: "true"}}, Require: toLayerRefs([]string{"a"})},
 	}
 
 	err := Validate(cfg, layers, testProjectDir(t), ResolveOpts{})
@@ -526,10 +526,10 @@ func TestValidateLayerPortsValid(t *testing.T) {
 	}
 	layers := map[string]*Layer{
 		"web": {
-			Name:     "web",
-			HasTasks: true,
-			HasPorts: true,
-			ports:    []string{"8080", "9090"},
+			Name:      "web",
+			tasks:     []Task{{Cmd: "true"}},
+			portSpecs: []PortSpec{{Port: 8080}},
+			ports:     []string{"8080", "9090"},
 		},
 	}
 
@@ -545,10 +545,10 @@ func TestValidateLayerPortsInvalid(t *testing.T) {
 	}
 	layers := map[string]*Layer{
 		"web": {
-			Name:     "web",
-			HasTasks: true,
-			HasPorts: true,
-			ports:    []string{"99999"},
+			Name:      "web",
+			tasks:     []Task{{Cmd: "true"}},
+			portSpecs: []PortSpec{{Port: 8080}},
+			ports:     []string{"99999"},
 		},
 	}
 
@@ -567,10 +567,10 @@ func TestValidateLayerPortsInvalidFromYAML(t *testing.T) {
 	}
 	layers := map[string]*Layer{
 		"web": {
-			Name:     "web",
-			HasTasks: true,
-			HasPorts: true,
-			ports:    []string{"0"},
+			Name:      "web",
+			tasks:     []Task{{Cmd: "true"}},
+			portSpecs: []PortSpec{{Port: 8080}},
+			ports:     []string{"0"},
 		},
 	}
 
@@ -598,7 +598,7 @@ func TestValidateImagePortsValid(t *testing.T) {
 		},
 	}
 	layers := map[string]*Layer{
-		"web": {Name: "web", HasTasks: true},
+		"web": {Name: "web", tasks: []Task{{Cmd: "true"}}},
 	}
 
 	err := Validate(cfg, layers, testProjectDir(t), ResolveOpts{})
@@ -617,7 +617,7 @@ func TestValidateImagePortsInvalid(t *testing.T) {
 		},
 	}
 	layers := map[string]*Layer{
-		"web": {Name: "web", HasTasks: true},
+		"web": {Name: "web", tasks: []Task{{Cmd: "true"}}},
 	}
 
 	err := Validate(cfg, layers, testProjectDir(t), ResolveOpts{})
@@ -639,7 +639,7 @@ func TestValidateImagePortsBadFormat(t *testing.T) {
 		},
 	}
 	layers := map[string]*Layer{
-		"web": {Name: "web", HasTasks: true},
+		"web": {Name: "web", tasks: []Task{{Cmd: "true"}}},
 	}
 
 	err := Validate(cfg, layers, testProjectDir(t), ResolveOpts{})
@@ -657,10 +657,9 @@ func TestValidateRouteMissingHost(t *testing.T) {
 	}
 	layers := map[string]*Layer{
 		"svc": {
-			Name:     "svc",
-			HasRoute: true,
-			HasTasks: true,
-			route:    &RouteConfig{Host: "", Port: "8080"},
+			Name:  "svc",
+			tasks: []Task{{Cmd: "true"}},
+			route: &RouteConfig{Host: "", Port: "8080"},
 		},
 	}
 
@@ -679,10 +678,9 @@ func TestValidateRouteMissingPort(t *testing.T) {
 	}
 	layers := map[string]*Layer{
 		"svc": {
-			Name:     "svc",
-			HasRoute: true,
-			HasTasks: true,
-			route:    &RouteConfig{Host: "svc.localhost", Port: ""},
+			Name:  "svc",
+			tasks: []Task{{Cmd: "true"}},
+			route: &RouteConfig{Host: "svc.localhost", Port: ""},
 		},
 	}
 
@@ -701,10 +699,9 @@ func TestValidateRouteInvalidPort(t *testing.T) {
 	}
 	layers := map[string]*Layer{
 		"svc": {
-			Name:     "svc",
-			HasRoute: true,
-			HasTasks: true,
-			route:    &RouteConfig{Host: "svc.localhost", Port: "99999"},
+			Name:  "svc",
+			tasks: []Task{{Cmd: "true"}},
+			route: &RouteConfig{Host: "svc.localhost", Port: "99999"},
 		},
 	}
 
@@ -727,10 +724,9 @@ func TestValidateRouteWithoutTraefik(t *testing.T) {
 	}
 	layers := map[string]*Layer{
 		"svc": {
-			Name:     "svc",
-			HasRoute: true,
-			HasTasks: true,
-			route:    &RouteConfig{Host: "svc.localhost", Port: "8080"},
+			Name:  "svc",
+			tasks: []Task{{Cmd: "true"}},
+			route: &RouteConfig{Host: "svc.localhost", Port: "8080"},
 		},
 	}
 
@@ -753,14 +749,13 @@ func TestValidateRouteWithTraefik(t *testing.T) {
 	}
 	layers := map[string]*Layer{
 		"traefik": {
-			Name:     "traefik",
-			HasTasks: true,
+			Name:  "traefik",
+			tasks: []Task{{Cmd: "true"}},
 		},
 		"svc": {
-			Name:     "svc",
-			HasRoute: true,
-			HasTasks: true,
-			route:    &RouteConfig{Host: "svc.localhost", Port: "8080"},
+			Name:  "svc",
+			tasks: []Task{{Cmd: "true"}},
+			route: &RouteConfig{Host: "svc.localhost", Port: "8080"},
 		},
 	}
 
@@ -781,13 +776,13 @@ func TestValidateSkipsDisabledImages(t *testing.T) {
 			"good": {Layer: []string{"pixi"}},
 			"bad-disabled": {
 				Enabled: boolPtr(false),
-				Layer:  []string{"nonexistent-layer"},
+				Layer:   []string{"nonexistent-layer"},
 				Build:   BuildFormats{"invalid"},
 			},
 		},
 	}
 	layers := map[string]*Layer{
-		"pixi": {Name: "pixi", HasTasks: true},
+		"pixi": {Name: "pixi", tasks: []Task{{Cmd: "true"}}},
 	}
 
 	err := Validate(cfg, layers, testProjectDir(t), ResolveOpts{})
@@ -802,10 +797,9 @@ func TestValidateVolumesValid(t *testing.T) {
 	}
 	layers := map[string]*Layer{
 		"svc": {
-			Name:       "svc",
-			HasTasks:   true,
-			HasVolumes: true,
-			volumes:    []VolumeYAML{{Name: "data", Path: "~/.myapp"}},
+			Name:    "svc",
+			tasks:   []Task{{Cmd: "true"}},
+			volumes: []VolumeYAML{{Name: "data", Path: "~/.myapp"}},
 		},
 	}
 
@@ -821,10 +815,9 @@ func TestValidateVolumesMissingName(t *testing.T) {
 	}
 	layers := map[string]*Layer{
 		"svc": {
-			Name:       "svc",
-			HasTasks:   true,
-			HasVolumes: true,
-			volumes:    []VolumeYAML{{Name: "", Path: "~/.myapp"}},
+			Name:    "svc",
+			tasks:   []Task{{Cmd: "true"}},
+			volumes: []VolumeYAML{{Name: "", Path: "~/.myapp"}},
 		},
 	}
 
@@ -843,10 +836,9 @@ func TestValidateVolumesMissingPath(t *testing.T) {
 	}
 	layers := map[string]*Layer{
 		"svc": {
-			Name:       "svc",
-			HasTasks:   true,
-			HasVolumes: true,
-			volumes:    []VolumeYAML{{Name: "data", Path: ""}},
+			Name:    "svc",
+			tasks:   []Task{{Cmd: "true"}},
+			volumes: []VolumeYAML{{Name: "data", Path: ""}},
 		},
 	}
 
@@ -865,10 +857,9 @@ func TestValidateVolumesInvalidName(t *testing.T) {
 	}
 	layers := map[string]*Layer{
 		"svc": {
-			Name:       "svc",
-			HasTasks:   true,
-			HasVolumes: true,
-			volumes:    []VolumeYAML{{Name: "My Data!", Path: "~/.myapp"}},
+			Name:    "svc",
+			tasks:   []Task{{Cmd: "true"}},
+			volumes: []VolumeYAML{{Name: "My Data!", Path: "~/.myapp"}},
 		},
 	}
 
@@ -887,9 +878,8 @@ func TestValidateVolumesDuplicate(t *testing.T) {
 	}
 	layers := map[string]*Layer{
 		"svc": {
-			Name:       "svc",
-			HasTasks:   true,
-			HasVolumes: true,
+			Name:  "svc",
+			tasks: []Task{{Cmd: "true"}},
 			volumes: []VolumeYAML{
 				{Name: "data", Path: "~/.myapp"},
 				{Name: "data", Path: "~/.other"},
@@ -911,17 +901,16 @@ func TestValidateAliasesValid(t *testing.T) {
 		Defaults: ImageConfig{Build: BuildFormats{"rpm"}},
 		Image: map[string]ImageConfig{
 			"test": {
-				Layer:  []string{"svc"},
+				Layer: []string{"svc"},
 				Alias: []AliasConfig{{Name: "mycli", Command: "mycli-bin"}},
 			},
 		},
 	}
 	layers := map[string]*Layer{
 		"svc": {
-			Name:       "svc",
-			HasTasks:   true,
-			HasAliases: true,
-			aliases:    []AliasYAML{{Name: "svc-cli", Command: "svc-cli-bin"}},
+			Name:    "svc",
+			tasks:   []Task{{Cmd: "true"}},
+			aliases: []AliasYAML{{Name: "svc-cli", Command: "svc-cli-bin"}},
 		},
 	}
 
@@ -937,10 +926,9 @@ func TestValidateAliasesMissingName(t *testing.T) {
 	}
 	layers := map[string]*Layer{
 		"svc": {
-			Name:       "svc",
-			HasTasks:   true,
-			HasAliases: true,
-			aliases:    []AliasYAML{{Name: "", Command: "cmd"}},
+			Name:    "svc",
+			tasks:   []Task{{Cmd: "true"}},
+			aliases: []AliasYAML{{Name: "", Command: "cmd"}},
 		},
 	}
 
@@ -959,10 +947,9 @@ func TestValidateAliasesMissingCommand(t *testing.T) {
 	}
 	layers := map[string]*Layer{
 		"svc": {
-			Name:       "svc",
-			HasTasks:   true,
-			HasAliases: true,
-			aliases:    []AliasYAML{{Name: "mycli", Command: ""}},
+			Name:    "svc",
+			tasks:   []Task{{Cmd: "true"}},
+			aliases: []AliasYAML{{Name: "mycli", Command: ""}},
 		},
 	}
 
@@ -981,9 +968,8 @@ func TestValidateAliasesDuplicate(t *testing.T) {
 	}
 	layers := map[string]*Layer{
 		"svc": {
-			Name:       "svc",
-			HasTasks:   true,
-			HasAliases: true,
+			Name:  "svc",
+			tasks: []Task{{Cmd: "true"}},
 			aliases: []AliasYAML{
 				{Name: "mycli", Command: "cmd1"},
 				{Name: "mycli", Command: "cmd2"},
@@ -1006,10 +992,9 @@ func TestValidateAliasesInvalidName(t *testing.T) {
 	}
 	layers := map[string]*Layer{
 		"svc": {
-			Name:       "svc",
-			HasTasks:   true,
-			HasAliases: true,
-			aliases:    []AliasYAML{{Name: "-bad", Command: "cmd"}},
+			Name:    "svc",
+			tasks:   []Task{{Cmd: "true"}},
+			aliases: []AliasYAML{{Name: "-bad", Command: "cmd"}},
 		},
 	}
 
@@ -1035,7 +1020,7 @@ func TestValidateImageAliasesDuplicate(t *testing.T) {
 		},
 	}
 	layers := map[string]*Layer{
-		"svc": {Name: "svc", HasTasks: true},
+		"svc": {Name: "svc", tasks: []Task{{Cmd: "true"}}},
 	}
 
 	err := Validate(cfg, layers, testProjectDir(t), ResolveOpts{})
@@ -1054,13 +1039,13 @@ func TestValidateSelfBuilder(t *testing.T) {
 		},
 		Image: map[string]ImageConfig{
 			"myimg": {
-				Layer:  []string{"pixi"},
+				Layer:   []string{"pixi"},
 				Builder: BuilderMap{"pixi": "myimg"},
 			},
 		},
 	}
 	layers := map[string]*Layer{
-		"pixi": {Name: "pixi", HasTasks: true},
+		"pixi": {Name: "pixi", tasks: []Task{{Cmd: "true"}}},
 	}
 
 	err := Validate(cfg, layers, testdataDir, ResolveOpts{})
@@ -1084,7 +1069,7 @@ func TestValidateBuilderInheritedSelfNotError(t *testing.T) {
 		},
 	}
 	layers := map[string]*Layer{
-		"pixi": {Name: "pixi", HasTasks: true},
+		"pixi": {Name: "pixi", tasks: []Task{{Cmd: "true"}}},
 	}
 
 	err := Validate(cfg, layers, testdataDir, ResolveOpts{})
@@ -1100,13 +1085,13 @@ func TestValidatePerImageBuilderNotFound(t *testing.T) {
 		},
 		Image: map[string]ImageConfig{
 			"app": {
-				Layer:  []string{"pixi"},
+				Layer:   []string{"pixi"},
 				Builder: BuilderMap{"pixi": "nonexistent"},
 			},
 		},
 	}
 	layers := map[string]*Layer{
-		"pixi": {Name: "pixi", HasTasks: true},
+		"pixi": {Name: "pixi", tasks: []Task{{Cmd: "true"}}},
 	}
 
 	err := Validate(cfg, layers, testdataDir, ResolveOpts{})
@@ -1150,9 +1135,9 @@ func TestValidateLayerWithIncludesNoInstallFiles(t *testing.T) {
 		},
 	}
 	layers := map[string]*Layer{
-		"pipewire":     {Name: "pipewire", HasTasks: true},
-		"wayvnc":       {Name: "wayvnc", HasTasks: true},
-		"sway-desktop": {Name: "sway-desktop", IncludedLayer: []string{"pipewire", "wayvnc"}},
+		"pipewire":     {Name: "pipewire", tasks: []Task{{Cmd: "true"}}},
+		"wayvnc":       {Name: "wayvnc", tasks: []Task{{Cmd: "true"}}},
+		"sway-desktop": {Name: "sway-desktop", IncludedLayer: toLayerRefs([]string{"pipewire", "wayvnc"})},
 	}
 
 	err := Validate(cfg, layers, testProjectDir(t), ResolveOpts{})
@@ -1166,8 +1151,8 @@ func TestValidateLayerIncludesCycle(t *testing.T) {
 		Image: map[string]ImageConfig{},
 	}
 	layers := map[string]*Layer{
-		"a": {Name: "a", HasTasks: true, IncludedLayer: []string{"b"}},
-		"b": {Name: "b", HasTasks: true, IncludedLayer: []string{"a"}},
+		"a": {Name: "a", tasks: []Task{{Cmd: "true"}}, IncludedLayer: toLayerRefs([]string{"b"})},
+		"b": {Name: "b", tasks: []Task{{Cmd: "true"}}, IncludedLayer: toLayerRefs([]string{"a"})},
 	}
 
 	err := Validate(cfg, layers, testProjectDir(t), ResolveOpts{})
@@ -1181,7 +1166,7 @@ func TestValidateLayerIncludesMissing(t *testing.T) {
 		Image: map[string]ImageConfig{},
 	}
 	layers := map[string]*Layer{
-		"desktop": {Name: "desktop", IncludedLayer: []string{"nonexistent"}},
+		"desktop": {Name: "desktop", IncludedLayer: toLayerRefs([]string{"nonexistent"})},
 	}
 
 	err := Validate(cfg, layers, testProjectDir(t), ResolveOpts{})
@@ -1222,13 +1207,12 @@ func TestValidatePortRelayValid(t *testing.T) {
 		},
 	}
 	layers := map[string]*Layer{
-		"supervisord": {Name: "supervisord", Require: []string{"python"}, HasTasks: true, formatSections: map[string]*PackageSection{"rpm": {FormatName: "rpm", Packages: []string{"supervisor"}}}},
-		"python":      {Name: "python", HasTasks: true},
-		"socat":       {Name: "socat", HasTasks: true, formatSections: map[string]*PackageSection{"rpm": {FormatName: "rpm", Packages: []string{"socat", "iproute"}}}},
+		"supervisord": {Name: "supervisord", Require: toLayerRefs([]string{"python"}), tasks: []Task{{Cmd: "true"}}, formatSections: map[string]*PackageSection{"rpm": {FormatName: "rpm", Packages: []string{"supervisor"}}}},
+		"python":      {Name: "python", tasks: []Task{{Cmd: "true"}}},
+		"socat":       {Name: "socat", tasks: []Task{{Cmd: "true"}}, formatSections: map[string]*PackageSection{"rpm": {FormatName: "rpm", Packages: []string{"socat", "iproute"}}}},
 		"chrome": {
 			Name:           "chrome",
-			HasTasks:       true,
-			HasPorts:       true,
+			tasks:          []Task{{Cmd: "true"}},
 			ports:          []string{"9222"},
 			portSpecs:      []PortSpec{{Port: 9222, Protocol: "http"}},
 			PortRelayPorts: []int{9222},
@@ -1248,8 +1232,7 @@ func TestValidatePortRelayInvalidPort(t *testing.T) {
 	layers := map[string]*Layer{
 		"svc": {
 			Name:           "svc",
-			HasTasks:       true,
-			HasPorts:       true,
+			tasks:          []Task{{Cmd: "true"}},
 			ports:          []string{"99999"},
 			portSpecs:      []PortSpec{{Port: 99999, Protocol: "http"}},
 			PortRelayPorts: []int{99999},
@@ -1272,8 +1255,7 @@ func TestValidatePortRelayNotInPorts(t *testing.T) {
 	layers := map[string]*Layer{
 		"svc": {
 			Name:           "svc",
-			HasTasks:       true,
-			HasPorts:       true,
+			tasks:          []Task{{Cmd: "true"}},
 			ports:          []string{"8080"},
 			portSpecs:      []PortSpec{{Port: 8080, Protocol: "http"}},
 			PortRelayPorts: []int{9222},
@@ -1296,7 +1278,7 @@ func TestValidatePortRelayNoPorts(t *testing.T) {
 	layers := map[string]*Layer{
 		"svc": {
 			Name:           "svc",
-			HasTasks:       true,
+			tasks:          []Task{{Cmd: "true"}},
 			PortRelayPorts: []int{9222},
 		},
 	}
@@ -1317,8 +1299,7 @@ func TestValidatePortRelayDuplicate(t *testing.T) {
 	layers := map[string]*Layer{
 		"svc": {
 			Name:           "svc",
-			HasTasks:       true,
-			HasPorts:       true,
+			tasks:          []Task{{Cmd: "true"}},
 			ports:          []string{"9222"},
 			portSpecs:      []PortSpec{{Port: 9222, Protocol: "http"}},
 			PortRelayPorts: []int{9222, 9222},
@@ -1343,8 +1324,7 @@ func TestValidatePortRelayMissingSocat(t *testing.T) {
 	layers := map[string]*Layer{
 		"chrome": {
 			Name:           "chrome",
-			HasTasks:       true,
-			HasPorts:       true,
+			tasks:          []Task{{Cmd: "true"}},
 			ports:          []string{"9222"},
 			portSpecs:      []PortSpec{{Port: 9222, Protocol: "http"}},
 			PortRelayPorts: []int{9222},
@@ -1374,16 +1354,14 @@ func TestValidateDataEntryUnknownVolume(t *testing.T) {
 	}
 	layers := map[string]*Layer{
 		"jupyter": {
-			Name:       "jupyter",
-			HasTasks:   true,
-			HasVolumes: true,
+			Name:  "jupyter",
+			tasks: []Task{{Cmd: "true"}},
 			volumes: []VolumeYAML{
 				{Name: "workspace", Path: "~/workspace"},
 			},
 		},
 		"notebook-templates": {
-			Name:    "notebook-templates",
-			HasData: true,
+			Name: "notebook-templates",
 			// Typo: "workspae" instead of "workspace" — must be caught.
 			data: []DataYAML{
 				{Src: "data/notebooks", Volume: "workspae"},
@@ -1419,17 +1397,15 @@ func TestValidateDataEntryKnownVolume(t *testing.T) {
 	}
 	layers := map[string]*Layer{
 		"jupyter": {
-			Name:       "jupyter",
-			HasTasks:   true,
-			HasVolumes: true,
+			Name:  "jupyter",
+			tasks: []Task{{Cmd: "true"}},
 			volumes: []VolumeYAML{
 				{Name: "workspace", Path: "~/workspace"},
 			},
 		},
 		"notebook-templates": {
-			Name:     "notebook-templates",
-			HasTasks: true,
-			HasData:  true,
+			Name:  "notebook-templates",
+			tasks: []Task{{Cmd: "true"}},
 			data: []DataYAML{
 				{Src: "data/notebooks", Volume: "workspace"},
 			},
@@ -1451,7 +1427,7 @@ func TestValidateDataEntryKnownVolume(t *testing.T) {
 // secretDepsLayer builds a minimal layer with the given secret dependency
 // configuration, for reuse across tests.
 func secretDepsLayer(name string, opts func(l *Layer)) *Layer {
-	l := &Layer{Name: name, HasTasks: true}
+	l := &Layer{Name: name, tasks: []Task{{Cmd: "true"}}}
 	if opts != nil {
 		opts(l)
 	}
@@ -1464,7 +1440,6 @@ func TestValidateSecretAcceptsHappyPath(t *testing.T) {
 	cfg := &Config{Image: map[string]ImageConfig{}}
 	layers := map[string]*Layer{
 		"svc": secretDepsLayer("svc", func(l *Layer) {
-			l.HasSecretAccepts = true
 			l.secretAccepts = []EnvDependency{
 				{Name: "OPENROUTER_API_KEY", Description: "OpenRouter API key", Key: "ov/api-key/openrouter"},
 			}
@@ -1481,7 +1456,6 @@ func TestValidateSecretRequiresMissingDescription(t *testing.T) {
 	cfg := &Config{Image: map[string]ImageConfig{}}
 	layers := map[string]*Layer{
 		"svc": secretDepsLayer("svc", func(l *Layer) {
-			l.HasSecretRequires = true
 			l.secretRequires = []EnvDependency{
 				{Name: "WEBUI_ADMIN_PASSWORD"}, // no Description
 			}
@@ -1502,7 +1476,6 @@ func TestValidateSecretAcceptsInvalidName(t *testing.T) {
 	cfg := &Config{Image: map[string]ImageConfig{}}
 	layers := map[string]*Layer{
 		"svc": secretDepsLayer("svc", func(l *Layer) {
-			l.HasSecretAccepts = true
 			l.secretAccepts = []EnvDependency{
 				{Name: "OPENROUTER-API-KEY", Description: "hyphen not allowed"},
 			}
@@ -1523,11 +1496,9 @@ func TestValidateSecretAcceptsCollidesWithEnvAccepts(t *testing.T) {
 	cfg := &Config{Image: map[string]ImageConfig{}}
 	layers := map[string]*Layer{
 		"svc": secretDepsLayer("svc", func(l *Layer) {
-			l.HasEnvAccepts = true
 			l.envAccepts = []EnvDependency{
 				{Name: "OPENROUTER_API_KEY", Description: "plaintext"},
 			}
-			l.HasSecretAccepts = true
 			l.secretAccepts = []EnvDependency{
 				{Name: "OPENROUTER_API_KEY", Description: "credential-backed"},
 			}
@@ -1548,11 +1519,9 @@ func TestValidateSecretRequiresCollidesWithEnvRequires(t *testing.T) {
 	cfg := &Config{Image: map[string]ImageConfig{}}
 	layers := map[string]*Layer{
 		"svc": secretDepsLayer("svc", func(l *Layer) {
-			l.HasEnvRequires = true
 			l.envRequires = []EnvDependency{
 				{Name: "WEBUI_ADMIN_PASSWORD", Description: "plaintext"},
 			}
-			l.HasSecretRequires = true
 			l.secretRequires = []EnvDependency{
 				{Name: "WEBUI_ADMIN_PASSWORD", Description: "credential-backed"},
 			}
@@ -1573,11 +1542,9 @@ func TestValidateSecretAcceptsCollidesWithSecretRequires(t *testing.T) {
 	cfg := &Config{Image: map[string]ImageConfig{}}
 	layers := map[string]*Layer{
 		"svc": secretDepsLayer("svc", func(l *Layer) {
-			l.HasSecretRequires = true
 			l.secretRequires = []EnvDependency{
 				{Name: "API_TOKEN", Description: "required"},
 			}
-			l.HasSecretAccepts = true
 			l.secretAccepts = []EnvDependency{
 				{Name: "API_TOKEN", Description: "optional"},
 			}
@@ -1599,11 +1566,9 @@ func TestValidateSecretCollidesWithEnvProvides(t *testing.T) {
 	cfg := &Config{Image: map[string]ImageConfig{}}
 	layers := map[string]*Layer{
 		"svc": secretDepsLayer("svc", func(l *Layer) {
-			l.HasEnvProvides = true
 			l.envProvides = map[string]string{
 				"API_TOKEN": "http://{{.ContainerName}}:8080/token", // would be plaintext
 			}
-			l.HasSecretAccepts = true
 			l.secretAccepts = []EnvDependency{
 				{Name: "API_TOKEN", Description: "credential-backed"},
 			}
@@ -1625,7 +1590,6 @@ func TestValidateSecretAcceptsKeyMustStartWithOv(t *testing.T) {
 	cfg := &Config{Image: map[string]ImageConfig{}}
 	layers := map[string]*Layer{
 		"svc": secretDepsLayer("svc", func(l *Layer) {
-			l.HasSecretAccepts = true
 			l.secretAccepts = []EnvDependency{
 				{Name: "AWS_ACCESS_KEY_ID", Description: "bad key", Key: "aws/access-key"},
 			}
@@ -1653,7 +1617,6 @@ func TestValidateSecretAcceptsKeyValidFormats(t *testing.T) {
 		cfg := &Config{Image: map[string]ImageConfig{}}
 		layers := map[string]*Layer{
 			"svc": secretDepsLayer("svc", func(l *Layer) {
-				l.HasSecretAccepts = true
 				l.secretAccepts = []EnvDependency{
 					{Name: "SOME_API_KEY", Description: "ok", Key: k},
 				}
@@ -1680,7 +1643,6 @@ func TestValidateSecretAcceptsKeyInvalidFormats(t *testing.T) {
 		cfg := &Config{Image: map[string]ImageConfig{}}
 		layers := map[string]*Layer{
 			"svc": secretDepsLayer("svc", func(l *Layer) {
-				l.HasSecretAccepts = true
 				l.secretAccepts = []EnvDependency{
 					{Name: "SOME_API_KEY", Description: "ok", Key: k},
 				}
@@ -1700,7 +1662,6 @@ func TestValidateSecretAcceptsInvalidSlug(t *testing.T) {
 	cfg := &Config{Image: map[string]ImageConfig{}}
 	layers := map[string]*Layer{
 		"svc": secretDepsLayer("svc", func(l *Layer) {
-			l.HasSecretAccepts = true
 			l.secretAccepts = []EnvDependency{
 				{Name: "_LEADING_UNDERSCORE", Description: "bad slug"},
 			}

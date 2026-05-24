@@ -36,6 +36,21 @@ func splitNamespaceRef(ref string) (ns, rest string, ok bool) {
 	return ref[:i], ref[i+1:], true
 }
 
+// leafName strips every namespace prefix from a (possibly qualified) ref,
+// returning the final member name — e.g. "ov.arch-builder" -> "arch-builder",
+// "a.b.c" -> "c", bare "fedora" -> "fedora". Paired with resolveImageRef's
+// returned namespace Config, it gives the key under which the resolved entity
+// lives in that Config's Image map.
+func leafName(ref string) string {
+	for {
+		_, rest, ok := splitNamespaceRef(ref)
+		if !ok {
+			return ref
+		}
+		ref = rest
+	}
+}
+
 // resolveImageRef resolves a (possibly qualified) image name to its ImageConfig
 // and the Config (namespace context) it lives in. Bare names resolve in c;
 // `ns.name` descends into c.Namespaces[ns] recursively.

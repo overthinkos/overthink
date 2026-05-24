@@ -35,9 +35,9 @@ func TestDeployConfigLookup_NilSafe(t *testing.T) {
 // deployKey (image/instance); LookupKey takes the raw deploy.yml key.
 func TestDeployConfigLookup_PresentAndAbsent(t *testing.T) {
 	dc := &DeployConfig{Deploy: map[string]DeploymentNode{
-		"foo":         {Target: "pod", Image: "foo"},
-		"foo/inst1":   {Target: "pod", Image: "foo"},
-		"vm:arch": {Target: "vm"},
+		"foo":       {Target: "pod", Image: "foo"},
+		"foo/inst1": {Target: "pod", Image: "foo"},
+		"vm:arch":   {Target: "vm"},
 	}}
 
 	// Lookup (image, instance) form.

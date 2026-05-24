@@ -22,6 +22,74 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-05
 
+### 2026-05-24 — Remote-layer resolver: warn-and-newest-wins version resolution + precise namespace collection + `LayerRef`/`Has*`/parse-path cleanup (bug fix + refactor, no schema bump)
+
+A full RCA of the selkies-desktop `ffmpeg`-missing failure overturned the earlier
+"compose `ffmpeg`" hypothesis: the selkies layer's `layers: [ffmpeg]` was already
+correct. The real defect was in the `ov` remote-layer resolver, and the fix is a
+unified rewrite of how versioned `@github` layer refs are collected and resolved.
+
+**Root cause — silent version-collision.** A submodule pins different parts of the
+ecosystem at different tags (selkies-desktop at `v2026.144.0531`, shared infra at
+`v2026.141.1600`). Shared transitive leaves (`ffmpeg`, `chrome`, `supervisord`,
+`pipewire`, `nodejs`, …) were therefore reached at TWO tags. The transitive
+fix-point in `ScanAllLayerWithConfigOpts` (`layers.go`) deduped remote refs by
+**bare ref, version-blind** (`scanned map[string]bool`) and let the
+**first-scanned** version win silently — while the initial collector
+(`CollectRemoteRefsOpts`, `refs.go`) hard-errored on the same condition. The two
+paths were inconsistent. For `ffmpeg`, the older `v2026.141.1600` (which predated
+the layer's `distro.arch.package`) won the race, so the cachyos/`pac` build
+emitted no `ffmpeg` install → `libx264.so.165` missing → pixelflux never created
+`/tmp/wayland-1` → chrome crash-loop. The "depth-2 vs depth-3 composition" theory
+was a red herring; the discriminator was "this layer changed between the two
+pinned tags."
+
+**Resolver policy — warn-and-newest-wins (`refVersionTracker`).** A single shared
+`refVersionTracker` (`refs.go`) now backs BOTH the initial collection and the
+transitive fix-point. When a bare ref is referenced at two versions it does NOT
+fail: it warns once (naming both versions + their sources) and keeps the NEWEST
+(highest CalVer/semver via `compareSemver`). The fix-point re-scans a layer when a
+newer winner is discovered later (`scannedAt` tracks the version materialized).
+This lets a build proceed with the latest referenced version of each layer instead
+of requiring every reference across the whole import graph to pin one tag — and it
+fixes selkies-desktop with zero submodule re-pinning (`ffmpeg`/`chrome`/`nodejs`/…
+all resolve to `v2026.144.0531`, the version carrying the fixes). Single-version
+projects are byte-unchanged (no conflict → no warning → no re-scan).
+
+**Over-collection eliminated — precise namespace collection.** `CollectRemoteRefsOpts`
+previously scanned EVERY image and EVERY `kind:local` template of EVERY imported
+namespace ("harmless because all refs pin the same version" — an assumption the
+multi-tag submodule layout broke). That pulled, e.g., the cachyos `ov-cachyos`
+operator-workstation template's `chrome:v2026.141.1600` into a selkies-desktop
+build that never uses it. Collection now walks only **base/builder reachability**
+from the enabled root images (a namespace is imported to provide bases/builders;
+its unreferenced images and its `kind:local` templates can never be a base/builder
+of the importing project). Builder edges ARE followed (a namespaced builder like
+`ov.fedora-builder` is built as an intermediate and needs its `rpmfusion`/`yay`
+layers); dropping them under-collected. Verified: all eight submodules + main
+`image generate` clean (no under-collection).
+
+**`Layer` struct rethink (the duplication that enabled the bug).** The parallel
+`Require`/`RawRequire` + `IncludedLayer`/`RawIncludedLayer` arrays (the bare copy
+was just `BareRef(raw)` kept in lockstep) collapsed into one `[]LayerRef` per
+concern; `LayerRef.Bare()`/`.Version()`/`.IsRemote()` derive from the single
+stored ref, and a `resolved` slot carries the qualified sibling key so one list
+serves both the graph (keys on `.Bare()`) and the fetch (keys on `.Raw`). The ~17
+denormalized `Has*` boolean fields (`HasEnv`, `HasPorts`, `HasVolumes`, …) became
+derived methods; the 7 filesystem-probe caches (`HasPixiToml`, `HasSrcDir`, …)
+stayed fields. The duplicate exported/unexported `Description`/`description`
+fields collapsed to one. The two post-parse populators (`scanLayer`'s inline block
+and `unified.go`'s `populateLayerFromYAML`) unified into one — which fixed a latent
+drift where the inline path silently dropped `artifacts`/`capabilities`/
+`requiresCapabilities`/`shell`/`description`.
+
+Standing rules established forward-looking in `/ov-internals:go`,
+`/ov-image:layer`, `/ov-build:generate`: one layer resolves to one version per
+build (newest-wins with a warning on disagreement); remote-ref collection is
+reachability-scoped to bases/builders of the build set; `LayerRef` is the single
+ref representation; `Has*` predicates are derived methods except the
+filesystem-probe caches. No schema change — `version:` unchanged.
+
 ### 2026-05-24 — selkies composes `ffmpeg` (pixelflux runtime libs missing on the cachyos base) + auto-detection eval tests (bug fix, no schema bump)
 
 The cachyos-based `selkies-desktop` (since the affbd46 cachyos migration) deploys

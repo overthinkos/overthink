@@ -66,13 +66,11 @@ func TestCollectLibvirtSnippets(t *testing.T) {
 	}
 	layers := map[string]*Layer{
 		"layer-a": {
-			Name:       "layer-a",
-			HasLibvirt: true,
-			libvirt:    []string{"<channel type='unix'><target type='virtio' name='org.qemu.guest_agent.0'/></channel>"},
+			Name:    "layer-a",
+			libvirt: []string{"<channel type='unix'><target type='virtio' name='org.qemu.guest_agent.0'/></channel>"},
 		},
 		"layer-b": {
-			Name:       "layer-b",
-			HasLibvirt: false,
+			Name: "layer-b",
 		},
 	}
 

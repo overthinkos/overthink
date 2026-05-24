@@ -96,7 +96,7 @@ func TestValidateTests_IDUniqueness_SameImage(t *testing.T) {
 	cfg := &Config{Image: map[string]ImageConfig{
 		"img": {
 			Enabled: boolPtr(true),
-			Eval:  []Check{
+			Eval: []Check{
 				{ID: "same", File: "/a"},
 				{ID: "same", File: "/b"},
 			},
@@ -383,9 +383,9 @@ func TestValidateTests_Clean(t *testing.T) {
 	cfg := &Config{Image: map[string]ImageConfig{
 		"redis-ml": {
 			Enabled: boolPtr(true),
-			Layer:  []string{"redis"},
+			Layer:   []string{"redis"},
 			Eval:    []Check{{ID: "version", Command: "redis-server --version"}},
-			DeployEval:  []Check{
+			DeployEval: []Check{
 				{ID: "routed", HTTP: "https://${DNS}/health", Status: 200},
 			},
 		},

@@ -6,6 +6,85 @@ import (
 	"testing"
 )
 
+func TestLayerRef(t *testing.T) {
+	tests := []struct {
+		raw      string
+		bare     string
+		version  string
+		isRemote bool
+	}{
+		{"python", "python", "", false},
+		{"@github.com/org/repo/layers/cuda:v1.0.0", "github.com/org/repo/layers/cuda", "v1.0.0", true},
+		{"@github.com/org/repo/layers/cuda", "github.com/org/repo/layers/cuda", "", true},
+	}
+	for _, tt := range tests {
+		r := LayerRef{Raw: tt.raw}
+		if got := r.Bare(); got != tt.bare {
+			t.Errorf("LayerRef{%q}.Bare() = %q, want %q", tt.raw, got, tt.bare)
+		}
+		if got := r.Version(); got != tt.version {
+			t.Errorf("LayerRef{%q}.Version() = %q, want %q", tt.raw, got, tt.version)
+		}
+		if got := r.IsRemote(); got != tt.isRemote {
+			t.Errorf("LayerRef{%q}.IsRemote() = %v, want %v", tt.raw, got, tt.isRemote)
+		}
+	}
+	// A resolved sibling key overrides Bare() but leaves Raw (and thus the
+	// transitive-fetch view) intact.
+	r := LayerRef{Raw: "ffmpeg", resolved: "github.com/org/repo/layers/ffmpeg"}
+	if r.Bare() != "github.com/org/repo/layers/ffmpeg" {
+		t.Errorf("resolved Bare() = %q", r.Bare())
+	}
+	if r.Raw != "ffmpeg" {
+		t.Errorf("resolved must leave Raw intact, got %q", r.Raw)
+	}
+}
+
+// TestRefVersionTracker covers the warn-and-newest-wins resolution shared by the
+// initial collector and the transitive fix-point fetch — the regression guard
+// for the silent version-collision that shipped images missing a newer layer's
+// packages. record returns winning=true when the version should be fetched.
+func TestRefVersionTracker(t *testing.T) {
+	tr := newRefVersionTracker()
+	ref := "github.com/o/r/layers/x"
+
+	// First sighting wins (fetch it).
+	if !tr.record(ref, "v1.0.0", "src-a") {
+		t.Fatal("first record should win")
+	}
+	// Same version again: not a new fetch.
+	if tr.record(ref, "v1.0.0", "src-b") {
+		t.Fatal("same-version record should not win again")
+	}
+	// An OLDER version loses to the current winner (no re-fetch).
+	if tr.record(ref, "v0.9.0", "src-c") {
+		t.Error("older version must lose to the current winner")
+	}
+	if tr.versions[ref] != "v1.0.0" {
+		t.Errorf("winner after older ref = %q, want v1.0.0", tr.versions[ref])
+	}
+	// A NEWER version wins (re-fetch) and becomes the winner.
+	if !tr.record(ref, "v2.0.0", "src-d") {
+		t.Error("newer version must win")
+	}
+	if tr.versions[ref] != "v2.0.0" {
+		t.Errorf("winner after newer ref = %q, want v2.0.0", tr.versions[ref])
+	}
+	// CalVer ordering: a newer day-of-year wins over an older one.
+	cal := "github.com/o/r/layers/cal"
+	tr.record(cal, "v2026.141.1600", "infra")
+	if !tr.record(cal, "v2026.144.0531", "selkies") {
+		t.Error("newer CalVer (v2026.144.0531) must win over v2026.141.1600")
+	}
+	if tr.versions[cal] != "v2026.144.0531" {
+		t.Errorf("CalVer winner = %q, want v2026.144.0531", tr.versions[cal])
+	}
+	// A different ref is tracked independently.
+	if !tr.record("github.com/o/r/layers/y", "v9.0.0", "src-e") {
+		t.Fatal("independent ref first sighting should win")
+	}
+}
+
 func TestStripVersion(t *testing.T) {
 	tests := []struct {
 		ref     string
@@ -162,12 +241,13 @@ func TestScanRemoteLayers(t *testing.T) {
 	// sibling's fully-qualified map key, so the dependency graph resolves it
 	// against the cuda layer fetched from the same repo (keyed identically).
 	wantDep := "github.com/overthinkos/ml-layers/layers/cuda"
-	if len(pyml.Require) != 1 || pyml.Require[0] != wantDep {
+	if len(pyml.Require) != 1 || pyml.Require[0].Bare() != wantDep {
 		t.Errorf("python-ml.Require = %v, want [%s]", pyml.Require, wantDep)
 	}
-	// RawRequire preserves the original short-name form for transitive fetch.
-	if len(pyml.RawRequire) != 1 || pyml.RawRequire[0] != "cuda" {
-		t.Errorf("python-ml.RawRequire = %v, want [cuda]", pyml.RawRequire)
+	// LayerRef.Raw preserves the original short-name form for transitive fetch,
+	// while .Bare() yields the qualified sibling key the graph resolves on.
+	if pyml.Require[0].Raw != "cuda" {
+		t.Errorf("python-ml.Require[0].Raw = %q, want cuda", pyml.Require[0].Raw)
 	}
 }
 
@@ -199,10 +279,10 @@ func TestCollectRemoteRefs(t *testing.T) {
 		},
 	}
 	layers := map[string]*Layer{
-		"pixi": {Name: "pixi", Require: []string{}},
-		"my-layer": {Name: "my-layer", RawRequire: []string{
+		"pixi": {Name: "pixi", Require: toLayerRefs([]string{})},
+		"my-layer": {Name: "my-layer", Require: toLayerRefs([]string{
 			"@github.com/myorg/service-layers/layers/svc:v2.0.0",
-		}},
+		})},
 	}
 
 	downloads, err := CollectRemoteRefs(cfg, layers)
@@ -324,26 +404,40 @@ func TestCollectRemoteRefsOptsIncludeDisabled(t *testing.T) {
 	}
 }
 
-func TestCollectRemoteRefsSameLayerConflict(t *testing.T) {
-	// Same bare ref at different versions should error
+func TestCollectRemoteRefsSameLayerVersionNewestWins(t *testing.T) {
+	// Same bare ref at different versions: no error — warn-and-newest-wins
+	// resolves to the highest version (here the image layer at v2.0.0 over the
+	// local layer's require at v1.0.0).
 	cfg := &Config{
 		Image: map[string]ImageConfig{
 			"myapp": {
 				Layer: []string{
-					"@github.com/org/repo/layers/cuda:v1.0.0",
+					"@github.com/org/repo/layers/cuda:v2.0.0",
 				},
 			},
 		},
 	}
 	layers := map[string]*Layer{
-		"local": {Name: "local", RawRequire: []string{
-			"@github.com/org/repo/layers/cuda:v2.0.0",
-		}},
+		"local": {Name: "local", Require: toLayerRefs([]string{
+			"@github.com/org/repo/layers/cuda:v1.0.0",
+		})},
 	}
 
-	_, err := CollectRemoteRefs(cfg, layers)
-	if err == nil {
-		t.Fatal("expected version conflict error for same bare ref")
+	downloads, err := CollectRemoteRefs(cfg, layers)
+	if err != nil {
+		t.Fatalf("CollectRemoteRefs() unexpected error: %v", err)
+	}
+	// Exactly one download for cuda, at the newest version.
+	var cudaVers []string
+	for _, dl := range downloads {
+		for _, ref := range dl.Refs {
+			if ref == "github.com/org/repo/layers/cuda" {
+				cudaVers = append(cudaVers, dl.Version)
+			}
+		}
+	}
+	if len(cudaVers) != 1 || cudaVers[0] != "v2.0.0" {
+		t.Errorf("cuda resolved to %v, want exactly [v2.0.0] (newest-wins)", cudaVers)
 	}
 }
 

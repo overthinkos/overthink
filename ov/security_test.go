@@ -284,7 +284,7 @@ func TestCollectSecurityImageOverridesCaps(t *testing.T) {
 	cfg := &Config{
 		Image: map[string]ImageConfig{
 			"heavy": {
-				Layer:   []string{"chrome"},
+				Layer:    []string{"chrome"},
 				Security: &SecurityConfig{MemoryMax: "16g"},
 			},
 		},

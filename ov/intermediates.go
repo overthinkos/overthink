@@ -22,7 +22,8 @@ func pixiBoundLayers(layers map[string]*Layer) map[string]bool {
 			continue
 		}
 		// This layer owns a pixi env. Check its IncludedLayers.
-		for _, included := range layer.IncludedLayer {
+		for _, includedRef := range layer.IncludedLayer {
+			included := includedRef.Bare()
 			child, ok := layers[included]
 			if !ok {
 				continue
@@ -89,12 +90,14 @@ func GlobalLayerOrder(images map[string]*ResolvedImage, layers map[string]*Layer
 			continue
 		}
 		var deps []string
-		for _, dep := range layer.Require {
+		for _, depRef := range layer.Require {
+			dep := depRef.Bare()
 			if _, inUse := popularity[dep]; inUse {
 				deps = append(deps, dep)
 			}
 		}
-		for _, included := range layer.IncludedLayer {
+		for _, includedRef := range layer.IncludedLayer {
+			included := includedRef.Bare()
 			if _, inUse := popularity[included]; inUse {
 				deps = append(deps, included)
 			}
@@ -156,7 +159,7 @@ func GlobalLayerOrder(images map[string]*ResolvedImage, layers map[string]*Layer
 	}
 	for name := range popularity {
 		if l, ok := layers[name]; ok {
-			addListEdges(l.IncludedLayer)
+			addListEdges(bareRefs(l.IncludedLayer))
 		}
 	}
 
@@ -798,14 +801,16 @@ func addTransitiveDeps(layerName string, layers map[string]*Layer, needed map[st
 	if !ok {
 		return
 	}
-	for _, dep := range layer.Require {
+	for _, depRef := range layer.Require {
+		dep := depRef.Bare()
 		if excluded[dep] || needed[dep] {
 			continue
 		}
 		needed[dep] = true
 		addTransitiveDeps(dep, layers, needed, excluded)
 	}
-	for _, included := range layer.IncludedLayer {
+	for _, includedRef := range layer.IncludedLayer {
+		included := includedRef.Bare()
 		if excluded[included] || needed[included] {
 			continue
 		}

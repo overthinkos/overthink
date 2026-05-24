@@ -33,7 +33,7 @@ func fxCheckLiveOnly(id string) Check {
 func fxUnified() *UnifiedFile {
 	return &UnifiedFile{
 		Version: LatestSchemaVersion().String(),
-		Image:  map[string]ImageConfig{},
+		Image:   map[string]ImageConfig{},
 		Pod:     map[string]*PodSpec{},
 		VM:      map[string]*VmSpec{},
 		Recipe:  map[string]*HarnessRecipe{},
@@ -81,10 +81,10 @@ func TestExpandFromLayer(t *testing.T) {
 func TestExpandFromImage(t *testing.T) {
 	uf := fxUnified()
 	uf.Image["arch-coder"] = ImageConfig{
-		Eval:  []Check{
+		Eval: []Check{
 			fxCheckCommand("arch-coder-ov", "test -x /usr/local/bin/ov"),
 		},
-		DeployEval:  []Check{
+		DeployEval: []Check{
 			fxCheckCommand("arch-coder-ov-version", "ov version"),
 		},
 	}
@@ -105,8 +105,8 @@ func TestExpandFromImage(t *testing.T) {
 func TestExpandFromPod(t *testing.T) {
 	uf := fxUnified()
 	uf.Pod["redis"] = &PodSpec{
-		Eval:  []Check{fxCheckFile("redis-binary", "/usr/bin/redis-server")},
-		DeployEval:  []Check{fxCheckCommand("redis-ping", "redis-cli ping")},
+		Eval:       []Check{fxCheckFile("redis-binary", "/usr/bin/redis-server")},
+		DeployEval: []Check{fxCheckCommand("redis-ping", "redis-cli ping")},
 	}
 	layers := map[string]*Layer{}
 	recipe := &HarnessRecipe{
@@ -125,8 +125,8 @@ func TestExpandFromPod(t *testing.T) {
 func TestExpandFromVM(t *testing.T) {
 	uf := fxUnified()
 	uf.VM["arch-vm"] = &VmSpec{
-		Eval:        []Check{fxCheckCommand("vm-id", "id")},
-		DeployEval:  []Check{fxCheckCommand("vm-uptime", "uptime")},
+		Eval:       []Check{fxCheckCommand("vm-id", "id")},
+		DeployEval: []Check{fxCheckCommand("vm-uptime", "uptime")},
 	}
 	layers := map[string]*Layer{}
 	recipe := &HarnessRecipe{
@@ -147,10 +147,10 @@ func TestExpandFromVM(t *testing.T) {
 func TestMultiKindComposition(t *testing.T) {
 	uf := fxUnified()
 	uf.Image["img-a"] = ImageConfig{
-		Eval:  []Check{fxCheckCommand("img-a-test", "true")},
+		Eval: []Check{fxCheckCommand("img-a-test", "true")},
 	}
 	uf.Pod["pod-a"] = &PodSpec{
-		Eval:  []Check{fxCheckFile("pod-a-test", "/etc/foo")},
+		Eval: []Check{fxCheckFile("pod-a-test", "/etc/foo")},
 	}
 	layers := map[string]*Layer{
 		"layer-a": fxLayer("layer-a", []Check{fxCheckFile("layer-a-test", "/etc/bar")}),
@@ -441,8 +441,8 @@ func TestIdempotentExpansion(t *testing.T) {
 func TestScopeFilterDeployOnly(t *testing.T) {
 	uf := fxUnified()
 	uf.Image["i"] = ImageConfig{
-		Eval:        []Check{fxCheckCommand("img-build", "echo build")},
-		DeployEval:  []Check{fxCheckCommand("img-deploy", "echo deploy")},
+		Eval:       []Check{fxCheckCommand("img-build", "echo build")},
+		DeployEval: []Check{fxCheckCommand("img-deploy", "echo deploy")},
 	}
 	recipe := &HarnessRecipe{
 		From: []HarnessRecipeFrom{

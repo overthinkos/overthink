@@ -41,7 +41,7 @@ func TestExtractMetadata_Tests(t *testing.T) {
 		return map[string]string{
 			LabelVersion: "1",
 			LabelImage:   "redis-ml",
-			LabelEval:   string(testsBlob),
+			LabelEval:    string(testsBlob),
 		}, nil
 	}
 
@@ -106,7 +106,7 @@ func TestExtractMetadata_Tests_MalformedLabel(t *testing.T) {
 		return map[string]string{
 			LabelVersion: "1",
 			LabelImage:   "x",
-			LabelEval:   "{not valid json",
+			LabelEval:    "{not valid json",
 		}, nil
 	}
 	_, err := ExtractMetadata("podman", "x")

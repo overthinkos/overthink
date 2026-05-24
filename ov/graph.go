@@ -56,7 +56,7 @@ func ExpandLayer(requested []string, layers map[string]*Layer) ([]string, error)
 		if len(layer.IncludedLayer) > 0 {
 			expanding[name] = true
 			for _, included := range layer.IncludedLayer {
-				if err := expand(included); err != nil {
+				if err := expand(included.Bare()); err != nil {
 					return err
 				}
 			}
@@ -128,14 +128,14 @@ func ResolveLayerOrder(requested []string, layers map[string]*Layer, parentLayer
 
 		// Add included layers (composition)
 		for _, included := range layer.IncludedLayer {
-			if err := addTransitive(included, newPath); err != nil {
+			if err := addTransitive(included.Bare(), newPath); err != nil {
 				return err
 			}
 		}
 
 		// Add dependencies
 		for _, dep := range layer.Require {
-			if err := addTransitive(dep, newPath); err != nil {
+			if err := addTransitive(dep.Bare(), newPath); err != nil {
 				return err
 			}
 		}
@@ -172,7 +172,7 @@ func ResolveLayerOrder(requested []string, layers map[string]*Layer, parentLayer
 		}
 		var edges []string
 		for _, included := range layer.IncludedLayer {
-			edges = append(edges, resolveDepEdges(included)...)
+			edges = append(edges, resolveDepEdges(included.Bare())...)
 		}
 		return edges
 	}
@@ -181,11 +181,11 @@ func ResolveLayerOrder(requested []string, layers map[string]*Layer, parentLayer
 		layer := layers[name]
 		var deps []string
 		for _, dep := range layer.Require {
-			deps = append(deps, resolveDepEdges(dep)...)
+			deps = append(deps, resolveDepEdges(dep.Bare())...)
 		}
 		// Included layers that have content are also dependencies (must install before)
 		for _, included := range layer.IncludedLayer {
-			deps = append(deps, resolveDepEdges(included)...)
+			deps = append(deps, resolveDepEdges(included.Bare())...)
 		}
 		graph[name] = deps
 	}

@@ -454,7 +454,7 @@ func buildSystemPackagesStep(format string, phase Phase, packages []string, raw 
 // need to re-resolve ${USER} later; CtxPath carries the layer's absolute
 // directory for /ctx/ substitution on the host.
 func compileTaskSteps(layer *Layer, img *ResolvedImage) []InstallStep {
-	if !layer.HasTasks || len(layer.tasks) == 0 {
+	if !layer.HasTasks() || len(layer.tasks) == 0 {
 		return nil
 	}
 	out := make([]InstallStep, 0, len(layer.tasks))

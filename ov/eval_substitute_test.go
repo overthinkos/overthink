@@ -23,7 +23,7 @@ func TestSubstitute_WellKnownTokens(t *testing.T) {
 		AttemptsLeft:     2,
 		MCPEndpoint:      "http://mcp.example/",
 		Notes:            "remember this",
-		Recipe:          "- recipe: tier1\n",
+		Recipe:           "- recipe: tier1\n",
 		Tag:              "@smoke",
 	}
 	cases := map[string]string{

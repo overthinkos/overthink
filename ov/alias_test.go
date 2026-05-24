@@ -131,10 +131,9 @@ func TestCollectImageAliases(t *testing.T) {
 	}
 	layers := map[string]*Layer{
 		"svc": {
-			Name:       "svc",
-			HasTasks:   true,
-			HasAliases: true,
-			aliases:    []AliasYAML{{Name: "svc-cli", Command: "svc-cli-bin"}},
+			Name:    "svc",
+			tasks:   []Task{{Cmd: "true"}},
+			aliases: []AliasYAML{{Name: "svc-cli", Command: "svc-cli-bin"}},
 		},
 	}
 
@@ -153,17 +152,16 @@ func TestCollectImageAliasesImageOverridesLayer(t *testing.T) {
 	cfg := &Config{
 		Image: map[string]ImageConfig{
 			"myapp": {
-				Layer:  []string{"svc"},
+				Layer: []string{"svc"},
 				Alias: []AliasConfig{{Name: "svc-cli", Command: "custom-cmd"}},
 			},
 		},
 	}
 	layers := map[string]*Layer{
 		"svc": {
-			Name:       "svc",
-			HasTasks:   true,
-			HasAliases: true,
-			aliases:    []AliasYAML{{Name: "svc-cli", Command: "svc-cli-bin"}},
+			Name:    "svc",
+			tasks:   []Task{{Cmd: "true"}},
+			aliases: []AliasYAML{{Name: "svc-cli", Command: "svc-cli-bin"}},
 		},
 	}
 
@@ -184,15 +182,15 @@ func TestCollectImageAliasesDefaultCommand(t *testing.T) {
 	cfg := &Config{
 		Image: map[string]ImageConfig{
 			"myapp": {
-				Layer:  []string{"svc"},
+				Layer: []string{"svc"},
 				Alias: []AliasConfig{{Name: "mycli"}}, // no command
 			},
 		},
 	}
 	layers := map[string]*Layer{
 		"svc": {
-			Name:     "svc",
-			HasTasks: true,
+			Name:  "svc",
+			tasks: []Task{{Cmd: "true"}},
 		},
 	}
 
@@ -220,7 +218,7 @@ func TestLayerAliases(t *testing.T) {
 		t.Fatal("webservice layer not found")
 	}
 
-	if !ws.HasAliases {
+	if !ws.HasAliases() {
 		t.Error("webservice should have aliases")
 	}
 

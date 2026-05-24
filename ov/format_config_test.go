@@ -267,7 +267,7 @@ func TestDnfConfigInherit(t *testing.T) {
 			Bootstrap: BootstrapDef{InstallCmd: "dnf install -y"},
 			Dnf:       &DnfConfig{MaxParallelDownloads: 10, Fastestmirror: true},
 		},
-		"fedora-child":  {Inherits: "fedora"},                                  // no own Dnf → inherits
+		"fedora-child":  {Inherits: "fedora"},                                           // no own Dnf → inherits
 		"fedora-child2": {Inherits: "fedora", Dnf: &DnfConfig{MaxParallelDownloads: 3}}, // own Dnf wins
 	}}
 

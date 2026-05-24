@@ -112,7 +112,7 @@ func withTempLedger(t *testing.T) *LedgerPaths {
 	return &LedgerPaths{
 		Root:     root,
 		Deploys:  filepath.Join(root, "deploys"),
-		Layers:  filepath.Join(root, "layers"),
+		Layers:   filepath.Join(root, "layers"),
 		LockFile: filepath.Join(root, ".lock"),
 	}
 }
@@ -123,7 +123,7 @@ func TestLedgerRoundTrip(t *testing.T) {
 		DeployID:   "abc123",
 		Image:      "fedora-coder",
 		Target:     "host",
-		Layer:     []string{"ripgrep", "uv"},
+		Layer:      []string{"ripgrep", "uv"},
 		DeployedAt: "2026-04-21T00:00:00Z",
 	}
 	if err := WriteDeployRecord(paths, rec); err != nil {

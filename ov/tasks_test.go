@@ -582,9 +582,8 @@ func TestEmitVarsEnv_SortedKeys(t *testing.T) {
 func TestValidateLayerTasks_CopyRequiresTo(t *testing.T) {
 	layers := map[string]*Layer{
 		"mylyr": {
-			Name:     "mylyr",
-			HasTasks: true,
-			tasks:    []Task{{Copy: "foo" /* no To */}},
+			Name:  "mylyr",
+			tasks: []Task{{Copy: "foo" /* no To */}},
 		},
 	}
 	errs := &ValidationError{}
@@ -600,9 +599,8 @@ func TestValidateLayerTasks_CopyRequiresTo(t *testing.T) {
 func TestValidateLayerTasks_UnresolvedVar(t *testing.T) {
 	layers := map[string]*Layer{
 		"mylyr": {
-			Name:     "mylyr",
-			HasTasks: true,
-			tasks:    []Task{{Mkdir: "${UNDEFINED}/foo"}},
+			Name:  "mylyr",
+			tasks: []Task{{Mkdir: "${UNDEFINED}/foo"}},
 		},
 	}
 	errs := &ValidationError{}
@@ -618,9 +616,9 @@ func TestValidateLayerTasks_UnresolvedVar(t *testing.T) {
 func TestValidateLayerTasks_ReservedVarKey(t *testing.T) {
 	layers := map[string]*Layer{
 		"mylyr": {
-			Name:     "mylyr",
-			HasTasks: true,
-			vars:     map[string]string{"USER": "ignored"}, // collides with auto-export
+			Name:  "mylyr",
+			tasks: []Task{{Cmd: "true"}},
+			vars:  map[string]string{"USER": "ignored"}, // collides with auto-export
 		},
 	}
 	errs := &ValidationError{}
@@ -636,9 +634,8 @@ func TestValidateLayerTasks_ReservedVarKey(t *testing.T) {
 func TestValidateLayerTasks_BadMode(t *testing.T) {
 	layers := map[string]*Layer{
 		"mylyr": {
-			Name:     "mylyr",
-			HasTasks: true,
-			tasks:    []Task{{Mkdir: "/a", Mode: "9999"}},
+			Name:  "mylyr",
+			tasks: []Task{{Mkdir: "/a", Mode: "9999"}},
 		},
 	}
 	errs := &ValidationError{}
@@ -651,9 +648,8 @@ func TestValidateLayerTasks_BadMode(t *testing.T) {
 func TestValidateLayerTasks_BuildOnlyAll(t *testing.T) {
 	layers := map[string]*Layer{
 		"mylyr": {
-			Name:     "mylyr",
-			HasTasks: true,
-			tasks:    []Task{{Build: "pixi"}}, // reserved for future
+			Name:  "mylyr",
+			tasks: []Task{{Build: "pixi"}}, // reserved for future
 		},
 	}
 	errs := &ValidationError{}
@@ -666,9 +662,8 @@ func TestValidateLayerTasks_BuildOnlyAll(t *testing.T) {
 func TestValidateLayerTasks_HappyPath(t *testing.T) {
 	layers := map[string]*Layer{
 		"mylyr": {
-			Name:     "mylyr",
-			HasTasks: true,
-			vars:     map[string]string{"VERSION": "1.0"},
+			Name: "mylyr",
+			vars: map[string]string{"VERSION": "1.0"},
 			tasks: []Task{
 				{Mkdir: "/etc/foo", User: "root"},
 				{Copy: "bar", To: "/etc/foo/bar", Mode: "0644", User: "root"},
@@ -690,7 +685,7 @@ func TestValidateLayerTasks_HappyPath(t *testing.T) {
 // --- Parity: ensure HasInstallFiles picks up HasTasks ---
 
 func TestLayer_HasInstallFiles_IncludesTasks(t *testing.T) {
-	l := &Layer{HasTasks: true}
+	l := &Layer{tasks: []Task{{Cmd: "true"}}}
 	if !l.HasInstallFiles() {
 		t.Error("HasInstallFiles() should be true when HasTasks is true")
 	}

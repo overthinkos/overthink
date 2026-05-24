@@ -45,7 +45,7 @@ func CollectImageVolume(cfg *Config, layers map[string]*Layer, imageName string,
 	var mounts []VolumeMount
 	for _, layerName := range allLayerNames {
 		layer, ok := layers[layerName]
-		if !ok || !layer.HasVolumes {
+		if !ok || !layer.HasVolumes() {
 			continue
 		}
 		for _, vol := range layer.Volume() {

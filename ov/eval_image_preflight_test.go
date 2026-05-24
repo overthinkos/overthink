@@ -49,8 +49,8 @@ func TestResolveImageRefForEnsure_ShortNameRequiresCfg(t *testing.T) {
 // host with no ghcr.io credentials.
 func TestBuildableShortName_FullRefBasenameLookup(t *testing.T) {
 	cfg := &Config{Image: map[string]ImageConfig{
-		"arch-builder": {},
-		"fedora-builder":    {},
+		"arch-builder":   {},
+		"fedora-builder": {},
 	}}
 	cases := []struct {
 		image string

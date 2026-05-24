@@ -30,7 +30,7 @@ func TestLayerPixi(t *testing.T) {
 		t.Fatal("pixi layer not found")
 	}
 
-	if !pixi.HasTasks {
+	if !pixi.HasTasks() {
 		t.Error("pixi should have tasks:")
 	}
 	if pixi.FormatSection("rpm") != nil {
@@ -58,7 +58,7 @@ func TestLayerPython(t *testing.T) {
 	if !python.HasPixiToml {
 		t.Error("python should have pixi.toml")
 	}
-	if !reflect.DeepEqual(python.Require, []string{"pixi"}) {
+	if !reflect.DeepEqual(bareRefs(python.Require), []string{"pixi"}) {
 		t.Errorf("python.Require = %v, want [pixi]", python.Require)
 	}
 }
@@ -216,7 +216,7 @@ func TestLayerPorts(t *testing.T) {
 		t.Fatal("webservice layer not found")
 	}
 
-	if !ws.HasPorts {
+	if !ws.HasPorts() {
 		t.Error("webservice should have ports")
 	}
 
@@ -245,7 +245,7 @@ func TestLayerPortsNone(t *testing.T) {
 	}
 
 	pixi := layers["pixi"]
-	if pixi.HasPorts {
+	if pixi.HasPorts() {
 		t.Error("pixi should not have ports")
 	}
 
@@ -269,7 +269,7 @@ func TestLayerRoute(t *testing.T) {
 		t.Fatal("webservice layer not found")
 	}
 
-	if !ws.HasRoute {
+	if !ws.HasRoute() {
 		t.Error("webservice should have route")
 	}
 
@@ -301,7 +301,7 @@ func TestLayerRouteNone(t *testing.T) {
 	}
 
 	pixi := layers["pixi"]
-	if pixi.HasRoute {
+	if pixi.HasRoute() {
 		t.Error("pixi should not have route")
 	}
 
@@ -334,7 +334,7 @@ func TestLayerPixiLocked(t *testing.T) {
 	if locked.PixiManifest() != "pixi.toml" {
 		t.Errorf("pixi-locked.PixiManifest() = %q, want %q", locked.PixiManifest(), "pixi.toml")
 	}
-	if !reflect.DeepEqual(locked.Require, []string{"pixi"}) {
+	if !reflect.DeepEqual(bareRefs(locked.Require), []string{"pixi"}) {
 		t.Errorf("pixi-locked.Require = %v, want [pixi]", locked.Require)
 	}
 }
@@ -369,7 +369,7 @@ func TestLayerVolumes(t *testing.T) {
 		t.Fatal("webservice layer not found")
 	}
 
-	if !ws.HasVolumes {
+	if !ws.HasVolumes() {
 		t.Error("webservice should have volumes")
 	}
 
@@ -392,7 +392,7 @@ func TestLayerVolumesNone(t *testing.T) {
 	}
 
 	pixi := layers["pixi"]
-	if pixi.HasVolumes {
+	if pixi.HasVolumes() {
 		t.Error("pixi should not have volumes")
 	}
 	if len(pixi.Volume()) != 0 {
@@ -440,9 +440,8 @@ func TestLayerPortRelay(t *testing.T) {
 	// Test direct struct construction (no testdata file needed)
 	layer := &Layer{
 		Name:           "chrome",
-		HasTasks:       true,
+		tasks:          []Task{{Cmd: "true"}},
 		PortRelayPorts: []int{9222},
-		HasPorts:       true,
 		ports:          []string{"9222"},
 		portSpecs:      []PortSpec{{Port: 9222, Protocol: "http"}},
 	}
@@ -458,8 +457,8 @@ func TestLayerPortRelay(t *testing.T) {
 
 func TestLayerPortRelayNone(t *testing.T) {
 	layer := &Layer{
-		Name:     "basic",
-		HasTasks: true,
+		Name:  "basic",
+		tasks: []Task{{Cmd: "true"}},
 	}
 
 	if len(layer.PortRelayPorts) != 0 {
@@ -470,9 +469,8 @@ func TestLayerPortRelayNone(t *testing.T) {
 func TestLayerPortRelayMultiple(t *testing.T) {
 	layer := &Layer{
 		Name:           "multi",
-		HasTasks:       true,
+		tasks:          []Task{{Cmd: "true"}},
 		PortRelayPorts: []int{9222, 5900},
-		HasPorts:       true,
 		ports:          []string{"9222", "5900"},
 		portSpecs:      []PortSpec{{Port: 9222, Protocol: "http"}, {Port: 5900, Protocol: "tcp"}},
 	}

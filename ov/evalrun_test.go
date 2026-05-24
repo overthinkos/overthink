@@ -46,8 +46,8 @@ func (f *fakeExecutor) ResolveHome(_ context.Context, _ string) (string, error) 
 }
 
 // Stubs satisfying the rest of DeployExecutor — never called by these tests.
-func (f *fakeExecutor) RunSystem(_ context.Context, _ string, _ EmitOpts) error    { return nil }
-func (f *fakeExecutor) RunUser(_ context.Context, _ string, _ EmitOpts) error      { return nil }
+func (f *fakeExecutor) RunSystem(_ context.Context, _ string, _ EmitOpts) error { return nil }
+func (f *fakeExecutor) RunUser(_ context.Context, _ string, _ EmitOpts) error   { return nil }
 func (f *fakeExecutor) RunBuilder(_ context.Context, _ BuilderRunOpts) ([]byte, error) {
 	return nil, nil
 }

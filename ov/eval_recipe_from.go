@@ -234,10 +234,10 @@ func collectScenariosForFromDescription(uf *UnifiedFile, layers map[string]*Laye
 		if !ok {
 			return nil, fmt.Errorf("layer %q not found (available: %s)", from.Name, sortedMapKeys(layers))
 		}
-		if layer.description == nil {
+		if layer.Description == nil {
 			return nil, fmt.Errorf("layer %q has no description: block to import scenarios from", from.Name)
 		}
-		return append([]Scenario(nil), layer.description.Scenario...), nil
+		return append([]Scenario(nil), layer.Description.Scenario...), nil
 
 	case "image":
 		_, ok := uf.Image[from.Name]

@@ -44,7 +44,7 @@ func (c *FeatureListCmd) Run() error {
 			if layer == nil {
 				continue
 			}
-			summarizeDesc("layer", name, layer.description)
+			summarizeDesc("layer", name, layer.Description)
 		}
 	}
 	if filter == "" || filter == "image" {
@@ -149,7 +149,7 @@ func (c *FeaturePendingCmd) Run() error {
 
 	for name, layer := range layers {
 		if layer != nil {
-			scan("layer", name, layer.description)
+			scan("layer", name, layer.Description)
 		}
 	}
 	for name, img := range cfg.Image {
@@ -197,7 +197,7 @@ func (c *FeatureValidateCmd) Run() error {
 
 	for name, layer := range layers {
 		if layer != nil {
-			validate("layer", name, layer.description)
+			validate("layer", name, layer.Description)
 		}
 	}
 	for name, img := range cfg.Image {

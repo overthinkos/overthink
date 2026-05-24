@@ -39,12 +39,12 @@ func captureStderr(t *testing.T, fn func()) string {
 
 func TestParseHostPorts_AllForms(t *testing.T) {
 	in := []string{
-		"8888",                  // bare numeric
-		"8080:80",               // host:container
-		"127.0.0.1:5900:5900",   // IPv4 bind prefix (the regression case)
-		"[::1]:8080:80",         // IPv6 bind prefix
-		"47998:47998/udp",       // proto suffix
-		"127.0.0.1:53:53/udp",   // bind + proto
+		"8888",                // bare numeric
+		"8080:80",             // host:container
+		"127.0.0.1:5900:5900", // IPv4 bind prefix (the regression case)
+		"[::1]:8080:80",       // IPv6 bind prefix
+		"47998:47998/udp",     // proto suffix
+		"127.0.0.1:53:53/udp", // bind + proto
 	}
 	got := parseHostPorts(in)
 	want := []int{8888, 8080, 5900, 8080, 47998, 53}

@@ -9,10 +9,10 @@ func TestResolveLayerOrder(t *testing.T) {
 	// Create test layers
 	layers := map[string]*Layer{
 		"pixi":    {Name: "pixi", Require: nil},
-		"python":  {Name: "python", Require: []string{"pixi"}},
-		"ml-libs": {Name: "ml-libs", Require: []string{"python"}},
+		"python":  {Name: "python", Require: toLayerRefs([]string{"pixi"})},
+		"ml-libs": {Name: "ml-libs", Require: toLayerRefs([]string{"python"})},
 		"nodejs":  {Name: "nodejs", Require: nil},
-		"web-ui":  {Name: "web-ui", Require: []string{"nodejs"}},
+		"web-ui":  {Name: "web-ui", Require: toLayerRefs([]string{"nodejs"})},
 	}
 
 	tests := []struct {
@@ -88,9 +88,9 @@ func TestResolveLayerOrder(t *testing.T) {
 func TestResolveLayerOrderCycle(t *testing.T) {
 	// Create layers with a cycle: a -> b -> c -> a
 	layers := map[string]*Layer{
-		"a": {Name: "a", Require: []string{"b"}},
-		"b": {Name: "b", Require: []string{"c"}},
-		"c": {Name: "c", Require: []string{"a"}},
+		"a": {Name: "a", Require: toLayerRefs([]string{"b"})},
+		"b": {Name: "b", Require: toLayerRefs([]string{"c"})},
+		"c": {Name: "c", Require: toLayerRefs([]string{"a"})},
 	}
 
 	_, err := ResolveLayerOrder([]string{"a"}, layers, nil)
@@ -302,19 +302,19 @@ func TestLayersProvidedByImage(t *testing.T) {
 			Name:           "base",
 			Base:           "quay.io/fedora/fedora:43",
 			IsExternalBase: true,
-			Layer:         []string{"pixi"},
+			Layer:          []string{"pixi"},
 		},
 		"cuda": {
 			Name:           "cuda",
 			Base:           "base",
 			IsExternalBase: false,
-			Layer:         []string{"cuda"},
+			Layer:          []string{"cuda"},
 		},
 		"ml-cuda": {
 			Name:           "ml-cuda",
 			Base:           "cuda",
 			IsExternalBase: false,
-			Layer:         []string{"python", "ml-libs"},
+			Layer:          []string{"python", "ml-libs"},
 		},
 	}
 
@@ -357,12 +357,12 @@ func TestLayersProvidedByImage(t *testing.T) {
 
 func TestExpandLayers(t *testing.T) {
 	layers := map[string]*Layer{
-		"pipewire":     {Name: "pipewire", HasTasks: true},
-		"wayvnc":       {Name: "wayvnc", HasTasks: true},
-		"chrome":       {Name: "chrome", HasTasks: true},
-		"waybar":       {Name: "waybar", HasTasks: true},
-		"sway-desktop": {Name: "sway-desktop", IncludedLayer: []string{"pipewire", "wayvnc", "chrome", "waybar"}},
-		"openclaw":     {Name: "openclaw", HasTasks: true},
+		"pipewire":     {Name: "pipewire", tasks: []Task{{Cmd: "true"}}},
+		"wayvnc":       {Name: "wayvnc", tasks: []Task{{Cmd: "true"}}},
+		"chrome":       {Name: "chrome", tasks: []Task{{Cmd: "true"}}},
+		"waybar":       {Name: "waybar", tasks: []Task{{Cmd: "true"}}},
+		"sway-desktop": {Name: "sway-desktop", IncludedLayer: toLayerRefs([]string{"pipewire", "wayvnc", "chrome", "waybar"})},
+		"openclaw":     {Name: "openclaw", tasks: []Task{{Cmd: "true"}}},
 	}
 
 	// Basic expansion
@@ -378,9 +378,9 @@ func TestExpandLayers(t *testing.T) {
 
 func TestExpandLayersDedup(t *testing.T) {
 	layers := map[string]*Layer{
-		"pipewire":     {Name: "pipewire", HasTasks: true},
-		"wayvnc":       {Name: "wayvnc", HasTasks: true},
-		"sway-desktop": {Name: "sway-desktop", IncludedLayer: []string{"pipewire", "wayvnc"}},
+		"pipewire":     {Name: "pipewire", tasks: []Task{{Cmd: "true"}}},
+		"wayvnc":       {Name: "wayvnc", tasks: []Task{{Cmd: "true"}}},
+		"sway-desktop": {Name: "sway-desktop", IncludedLayer: toLayerRefs([]string{"pipewire", "wayvnc"})},
 	}
 
 	// pipewire referenced directly AND via sway-desktop — should appear once
@@ -396,11 +396,11 @@ func TestExpandLayersDedup(t *testing.T) {
 
 func TestExpandLayersNested(t *testing.T) {
 	layers := map[string]*Layer{
-		"pipewire":     {Name: "pipewire", HasTasks: true},
-		"wayvnc":       {Name: "wayvnc", HasTasks: true},
-		"chrome":       {Name: "chrome", HasTasks: true},
-		"vnc-stack":    {Name: "vnc-stack", IncludedLayer: []string{"pipewire", "wayvnc"}},
-		"browser-desk": {Name: "browser-desk", IncludedLayer: []string{"vnc-stack", "chrome"}},
+		"pipewire":     {Name: "pipewire", tasks: []Task{{Cmd: "true"}}},
+		"wayvnc":       {Name: "wayvnc", tasks: []Task{{Cmd: "true"}}},
+		"chrome":       {Name: "chrome", tasks: []Task{{Cmd: "true"}}},
+		"vnc-stack":    {Name: "vnc-stack", IncludedLayer: toLayerRefs([]string{"pipewire", "wayvnc"})},
+		"browser-desk": {Name: "browser-desk", IncludedLayer: toLayerRefs([]string{"vnc-stack", "chrome"})},
 	}
 
 	result, err := ExpandLayer([]string{"browser-desk"}, layers)
@@ -415,8 +415,8 @@ func TestExpandLayersNested(t *testing.T) {
 
 func TestExpandLayersCycle(t *testing.T) {
 	layers := map[string]*Layer{
-		"a": {Name: "a", IncludedLayer: []string{"b"}},
-		"b": {Name: "b", IncludedLayer: []string{"a"}},
+		"a": {Name: "a", IncludedLayer: toLayerRefs([]string{"b"})},
+		"b": {Name: "b", IncludedLayer: toLayerRefs([]string{"a"})},
 	}
 
 	_, err := ExpandLayer([]string{"a"}, layers)
@@ -427,10 +427,10 @@ func TestExpandLayersCycle(t *testing.T) {
 
 func TestExpandLayersWithContent(t *testing.T) {
 	layers := map[string]*Layer{
-		"pipewire": {Name: "pipewire", HasTasks: true},
-		"wayvnc":   {Name: "wayvnc", HasTasks: true},
+		"pipewire": {Name: "pipewire", tasks: []Task{{Cmd: "true"}}},
+		"wayvnc":   {Name: "wayvnc", tasks: []Task{{Cmd: "true"}}},
 		// Composing layer that also has its own install content
-		"desktop": {Name: "desktop", HasTasks: true, IncludedLayer: []string{"pipewire", "wayvnc"}},
+		"desktop": {Name: "desktop", tasks: []Task{{Cmd: "true"}}, IncludedLayer: toLayerRefs([]string{"pipewire", "wayvnc"})},
 	}
 
 	result, err := ExpandLayer([]string{"desktop"}, layers)
@@ -446,10 +446,10 @@ func TestExpandLayersWithContent(t *testing.T) {
 
 func TestResolveLayerOrderWithComposition(t *testing.T) {
 	layers := map[string]*Layer{
-		"pixi":        {Name: "pixi", HasTasks: true},
-		"python":      {Name: "python", HasTasks: true, Require: []string{"pixi"}},
-		"supervisord": {Name: "supervisord", HasTasks: true, Require: []string{"python"}},
-		"svc-stack":   {Name: "svc-stack", IncludedLayer: []string{"python", "supervisord"}},
+		"pixi":        {Name: "pixi", tasks: []Task{{Cmd: "true"}}},
+		"python":      {Name: "python", tasks: []Task{{Cmd: "true"}}, Require: toLayerRefs([]string{"pixi"})},
+		"supervisord": {Name: "supervisord", tasks: []Task{{Cmd: "true"}}, Require: toLayerRefs([]string{"python"})},
+		"svc-stack":   {Name: "svc-stack", IncludedLayer: toLayerRefs([]string{"python", "supervisord"})},
 	}
 
 	order, err := ResolveLayerOrder([]string{"svc-stack"}, layers, nil)
@@ -465,10 +465,10 @@ func TestResolveLayerOrderWithComposition(t *testing.T) {
 
 func TestDependsOnComposingLayer(t *testing.T) {
 	layers := map[string]*Layer{
-		"pipewire":     {Name: "pipewire", HasTasks: true},
-		"wayvnc":       {Name: "wayvnc", HasTasks: true},
-		"sway-desktop": {Name: "sway-desktop", IncludedLayer: []string{"pipewire", "wayvnc"}},
-		"myapp":        {Name: "myapp", HasTasks: true, Require: []string{"sway-desktop"}},
+		"pipewire":     {Name: "pipewire", tasks: []Task{{Cmd: "true"}}},
+		"wayvnc":       {Name: "wayvnc", tasks: []Task{{Cmd: "true"}}},
+		"sway-desktop": {Name: "sway-desktop", IncludedLayer: toLayerRefs([]string{"pipewire", "wayvnc"})},
+		"myapp":        {Name: "myapp", tasks: []Task{{Cmd: "true"}}, Require: toLayerRefs([]string{"sway-desktop"})},
 	}
 
 	order, err := ResolveLayerOrder([]string{"myapp"}, layers, nil)

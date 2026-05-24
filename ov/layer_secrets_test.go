@@ -162,7 +162,6 @@ func TestResolveLayerSecrets_RequiredAutoGen(t *testing.T) {
 	defer setupIsolatedConfigStore(t)()
 
 	layer := &Layer{
-		HasSecretRequires: true,
 		secretRequires: []EnvDependency{
 			{Name: "K3S_CLUSTER_TOKEN"},
 		},
@@ -184,7 +183,6 @@ func TestResolveLayerSecrets_OptionalDefaultFallback(t *testing.T) {
 	defer setupIsolatedConfigStore(t)()
 
 	layer := &Layer{
-		HasSecretAccepts: true,
 		secretAccepts: []EnvDependency{
 			{Name: "OPTIONAL_VAR", Default: "fallback-value"},
 		},
@@ -203,12 +201,10 @@ func TestResolveSecretsForLayers_TwoLayersSameSecret(t *testing.T) {
 	defer setupIsolatedConfigStore(t)()
 
 	server := &Layer{
-		HasSecretRequires: true,
-		secretRequires:    []EnvDependency{{Name: "K3S_CLUSTER_TOKEN"}},
+		secretRequires: []EnvDependency{{Name: "K3S_CLUSTER_TOKEN"}},
 	}
 	agent := &Layer{
-		HasSecretRequires: true,
-		secretRequires:    []EnvDependency{{Name: "K3S_CLUSTER_TOKEN"}},
+		secretRequires: []EnvDependency{{Name: "K3S_CLUSTER_TOKEN"}},
 	}
 	env := ResolveSecretForLayer([]*Layer{server, agent})
 

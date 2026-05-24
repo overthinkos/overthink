@@ -468,7 +468,7 @@ func validateLayerReferences(cfg *Config, layers map[string]*Layer, errs *Valida
 func validateLayerContents(layers map[string]*Layer, errs *ValidationError) {
 	for name, layer := range layers {
 		// Layer must have at least one install file, a layers: field (composition), or data declarations
-		if !layer.HasInstallFiles() && len(layer.IncludedLayer) == 0 && !layer.HasData {
+		if !layer.HasInstallFiles() && len(layer.IncludedLayer) == 0 && !layer.HasData() {
 			errs.Add("layer %q: must have at least one install file (layer.yml rpm/deb packages, root.yml, pixi.toml, pyproject.toml, environment.yml, package.json, Cargo.toml, or user.yml) or a layers: field", name)
 		}
 
@@ -486,7 +486,8 @@ func validateLayerContents(layers map[string]*Layer, errs *ValidationError) {
 		// Validate depends references. Remote layers' deps were qualified to
 		// fully-qualified map keys at scan time (qualifyRemoteSiblingDeps), so a
 		// direct lookup covers both local short names and remote sibling refs.
-		for _, dep := range layer.Require {
+		for _, depRef := range layer.Require {
+			dep := depRef.Bare()
 			if _, ok := layers[dep]; !ok {
 				suggestion := findSimilarName(dep, LayerNames(layers))
 				if suggestion != "" {
@@ -597,10 +598,11 @@ func validateLayerIncludes(layers map[string]*Layer, errs *ValidationError) {
 
 		depSet := make(map[string]bool)
 		for _, d := range layer.Require {
-			depSet[d] = true
+			depSet[d.Bare()] = true
 		}
 
-		for _, ref := range layer.IncludedLayer {
+		for _, includedRef := range layer.IncludedLayer {
+			ref := includedRef.Bare()
 			// Self-inclusion
 			if ref == name {
 				errs.Add("layer %q layers: cannot include itself", name)
@@ -649,8 +651,8 @@ func checkIncludeCycle(name string, layers map[string]*Layer, visited map[string
 		return nil
 	}
 	visited[name] = true
-	for _, ref := range layer.IncludedLayer {
-		if err := checkIncludeCycle(ref, layers, visited); err != nil {
+	for _, includedRef := range layer.IncludedLayer {
+		if err := checkIncludeCycle(includedRef.Bare(), layers, visited); err != nil {
 			return err
 		}
 	}
@@ -661,7 +663,7 @@ func checkIncludeCycle(name string, layers map[string]*Layer, visited map[string
 // validateEnvFiles validates env config from layer.yml
 func validateEnvFiles(layers map[string]*Layer, errs *ValidationError) {
 	for name, layer := range layers {
-		if !layer.HasEnv {
+		if !layer.HasEnv() {
 			continue
 		}
 
@@ -778,7 +780,7 @@ func validateLayerDAG(cfg *Config, layers map[string]*Layer, errs *ValidationErr
 func validatePort(cfg *Config, layers map[string]*Layer, errs *ValidationError) {
 	// Validate layer ports from layer.yml
 	for name, layer := range layers {
-		if !layer.HasPorts {
+		if !layer.HasPorts() {
 			continue
 		}
 		ports, _ := layer.Port()
@@ -828,7 +830,7 @@ func validatePort(cfg *Config, layers map[string]*Layer, errs *ValidationError) 
 func validateRoutes(cfg *Config, layers map[string]*Layer, errs *ValidationError) {
 	// Validate route config from layer.yml
 	for name, layer := range layers {
-		if !layer.HasRoute {
+		if !layer.HasRoute() {
 			continue
 		}
 		route, _ := layer.Route()
@@ -922,7 +924,7 @@ var volumeNameRe = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
 // validateVolume validates volume declarations in layers
 func validateVolume(layers map[string]*Layer, errs *ValidationError) {
 	for name, layer := range layers {
-		if !layer.HasVolumes {
+		if !layer.HasVolumes() {
 			continue
 		}
 		seen := make(map[string]bool)
@@ -947,7 +949,7 @@ func validateVolume(layers map[string]*Layer, errs *ValidationError) {
 func validateAliases(cfg *Config, layers map[string]*Layer, errs *ValidationError) {
 	// Validate layer aliases
 	for name, layer := range layers {
-		if !layer.HasAliases {
+		if !layer.HasAliases() {
 			continue
 		}
 		seen := make(map[string]bool)
@@ -1534,7 +1536,7 @@ func levenshteinDistance(a, b string) int {
 func validateLibvirt(cfg *Config, layers map[string]*Layer, errs *ValidationError) {
 	// Validate layer-level snippets
 	for name, layer := range layers {
-		if !layer.HasLibvirt {
+		if !layer.HasLibvirt() {
 			continue
 		}
 		for i, snippet := range layer.Libvirt() {
@@ -1620,7 +1622,7 @@ func validatePortRelay(cfg *Config, layers map[string]*Layer, errs *ValidationEr
 		}
 
 		// Warn if relay port isn't declared in the layer's ports
-		if layer.HasPorts {
+		if layer.HasPorts() {
 			layerPorts := make(map[int]bool)
 			for _, ps := range layer.PortSpecs() {
 				layerPorts[ps.Port] = true
@@ -1794,7 +1796,7 @@ func layerHasFormatConfig(layer *Layer, formatName string) bool {
 func validateDataLayers(cfg *Config, layers map[string]*Layer, errs *ValidationError) {
 	// Validate data src directories exist
 	for name, layer := range layers {
-		if !layer.HasData {
+		if !layer.HasData() {
 			continue
 		}
 		for _, d := range layer.Data() {
@@ -1833,7 +1835,7 @@ func validateDataLayers(cfg *Config, layers map[string]*Layer, errs *ValidationE
 		hasData := false
 		for _, layerName := range resolved {
 			layer, ok := layers[layerName]
-			if !ok || !layer.HasData {
+			if !ok || !layer.HasData() {
 				continue
 			}
 			hasData = true
@@ -1861,7 +1863,7 @@ func validateDataLayers(cfg *Config, layers map[string]*Layer, errs *ValidationE
 				if layer.HasService() {
 					errs.Add("image %s: data_image includes layer %s which has service: declarations", imgName, layerName)
 				}
-				if layer.HasPorts {
+				if layer.HasPorts() {
 					errs.Add("image %s: data_image includes layer %s which has port declarations", imgName, layerName)
 				}
 				if len(layer.PortRelayPorts) > 0 {
@@ -1875,7 +1877,7 @@ func validateDataLayers(cfg *Config, layers map[string]*Layer, errs *ValidationE
 // validateEnvProvides checks env_provides declarations in layers.
 func validateEnvProvides(layers map[string]*Layer, errs *ValidationError) {
 	for name, layer := range layers {
-		if !layer.HasEnvProvides {
+		if !layer.HasEnvProvides() {
 			continue
 		}
 		for key, tmpl := range layer.EnvProvides() {
@@ -1960,7 +1962,7 @@ func envVarNameToPodmanSecretSlug(envVarName string) string {
 // plaintext `env_provides` map. Plan §4.4.
 func validateSecretDeps(layers map[string]*Layer, errs *ValidationError) {
 	for name, layer := range layers {
-		if !layer.HasSecretAccepts && !layer.HasSecretRequires {
+		if !layer.HasSecretAccepts() && !layer.HasSecretRequires() {
 			continue
 		}
 
@@ -2003,7 +2005,7 @@ func validateSecretDeps(layers map[string]*Layer, errs *ValidationError) {
 // validateMCPProvides checks mcp_provides declarations in layers.
 func validateMCPProvides(layers map[string]*Layer, errs *ValidationError) {
 	for name, layer := range layers {
-		if !layer.HasMCPProvides {
+		if !layer.HasMCPProvides() {
 			continue
 		}
 		seen := make(map[string]bool)
@@ -2137,7 +2139,7 @@ func validateLayerTasks(layers map[string]*Layer, errs *ValidationError) {
 			_ = v // value is free-form; no further pattern enforced
 		}
 
-		if !layer.HasTasks {
+		if !layer.HasTasks() {
 			continue
 		}
 

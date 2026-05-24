@@ -285,7 +285,6 @@ func (t *OCITarget) emitTask(s *TaskStep) error {
 	// renders only it. Restore on exit.
 	saved := layer.tasks
 	layer.tasks = []Task{*s.Task}
-	layer.HasTasks = true
 	defer func() { layer.tasks = saved }()
 
 	_, err := t.Generator.emitTasks(&t.buf, layer, t.Image, t.BuildDir, t.ContextRelPrefix, "0")

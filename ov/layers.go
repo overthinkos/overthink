@@ -729,39 +729,30 @@ type Layer struct {
 	Description       *Description // Gherkin-shaped self-description (Feature/Narrative/Tag/Scenario)
 	Status            string       // derived from Description.Tag — working/testing/broken (empty = testing)
 	Info              string       // derived from Description.Feature+Narrative
+	// Parse-time filesystem-probe caches: each caches a single fileExists /
+	// dirExists check against SourceDir performed once at scan time. These stay
+	// fields (a remote layer's cache dir may be evicted before they're read,
+	// and re-probing on every access would re-do I/O) — they are NOT redundant.
+	// Every OTHER Has* predicate (HasEnv/HasPorts/HasVolumes/HasData/…) is a
+	// derived method computed from the populated field, not a stored bool.
 	HasPixiToml       bool
 	HasPyprojectToml  bool
 	HasEnvironmentYml bool
 	HasPackageJson    bool
 	HasCargoToml      bool
 	HasSrcDir         bool
-	HasEnv            bool
-	HasPorts          bool
-	HasRoute          bool
-	HasVolumes        bool
-	HasAliases        bool
-	HasPixiLock       bool
-	HasExtract        bool
-	HasData           bool
-	HasEnvProvides    bool
-	HasEnvRequires    bool
-	HasEnvAccepts     bool
-	HasSecretAccepts  bool
-	HasSecretRequires bool
-	HasMCPProvides    bool
-	HasMCPRequires    bool
-	HasMCPAccepts     bool
-	HasLibvirt        bool
-	HasTasks          bool // layer.yml has a non-empty tasks: list
+	HasPixiLock       bool // layer.yml has a non-empty tasks: list
 
 	// Init system detection (populated by PopulateLayerInitSystem)
 	InitSystems    map[string]bool // set of init system names this layer triggers
 	PortRelayPorts []int           // port_relay: field (init-agnostic)
 
-	Require           []string // bare refs (version stripped) for resolution
-	RawRequire        []string // original refs with :version for remote ref collection
-	IncludedLayer     []string // bare refs from layer: field (version stripped)
-	RawIncludedLayer  []string // original layer: refs with :version
+	// Layer references. Each LayerRef carries the original ref string; the bare
+	// map-key form (.Bare()) and pinned version (.Version()) are derived. One
+	// list per concern — no parallel bare/raw arrays (the duplication that
+	// split version off the ref and enabled the silent version-collision bug).
+	Require       []LayerRef // require: deps (ordering + resolution)
+	IncludedLayer []LayerRef // layer: composition refs (splicing)
 
 	// Remote layer metadata
 	Remote        bool   // true if from a remote repo
@@ -799,7 +790,6 @@ type Layer struct {
 	tests          []Check           // declarative checks (from layer.yml tests:)
 	artifacts      []LayerArtifact   // files to retrieve after setup (from layer.yml artifacts:)
 	shell          *ShellConfig      // shell-init declarations (from layer.yml shell:)
-	description    *Description      // Gherkin-shaped self-description (from layer.yml description:)
 
 	// Layer-contributed image-level facts (capabilities: block in layer.yml)
 	// and cross-layer requirement declarations (requires_capabilities:).
@@ -1028,183 +1018,10 @@ func scanLayer(path string, name string) (*Layer, error) {
 	}
 
 	if ly != nil {
-
-		// Pre-populate version + Description (which carries Tag/Feature/
-		// Narrative — the post-cutover replacements for legacy
-		// status:/info:). Layer.Status/Info derive from Description.
-		layer.Version = ly.Version
-		layer.Description = ly.Description
-		layer.Status = descriptionStatus(ly.Description)
-		layer.Info = descriptionInfo(ly.Description)
-
-		// Keep raw depends for remote ref collection
-		layer.RawRequire = ly.Require
-		// Strip :version from remote refs for layer resolution (map keys use bare refs)
-		layer.Require = make([]string, len(ly.Require))
-		for i, dep := range ly.Require {
-			layer.Require[i] = BareRef(dep)
-		}
-
-		// Parse layers: field for layer composition
-		layer.RawIncludedLayer = ly.Layer
-		layer.IncludedLayer = make([]string, len(ly.Layer))
-		for i, ref := range ly.Layer {
-			layer.IncludedLayer[i] = BareRef(ref)
-		}
-		layer.service = ly.Service
-		layer.HasEnv = len(ly.Env) > 0 || len(ly.PathAppend) > 0
-		layer.HasPorts = len(ly.Port) > 0
-		layer.HasRoute = ly.Route != nil
-
-		// Package config: format sections and tag sections are populated by
-		// the custom UnmarshalYAML on LayerYAML. Format sections are detected
-		// by matching top-level keys against build.yml distro format names.
-		layer.formatSections = ly.FormatSections
-		if layer.formatSections == nil {
-			layer.formatSections = make(map[string]*PackageSection)
-		}
-		layer.tagSections = ly.TagSections
-
-		// 2026-05 Calamares cutover: derive format/tag sections from the new
-		// top-level `packages:` + `distros:` map so the legacy renderer reads
-		// the post-migration shape without changes. Transitional during the
-		// cutover; FormatSections/TagSections deletion happens after the
-		// renderer is ported in a follow-up pass.
-		if len(ly.Package) > 0 || len(ly.Distro) > 0 {
-			derivePackageSectionsFromCalamares(layer, ly)
-		}
-
-		// Pre-populate ports cache
-		if layer.HasPorts {
-			layer.ports = make([]string, len(ly.Port))
-			layer.portSpecs = make([]PortSpec, len(ly.Port))
-			for i, p := range ly.Port {
-				if p.Protocol == "udp" {
-					layer.ports[i] = strconv.Itoa(p.Port) + "/udp"
-				} else {
-					layer.ports[i] = strconv.Itoa(p.Port)
-				}
-				layer.portSpecs[i] = p
-			}
-		}
-
-		// Pre-populate env cache
-		if layer.HasEnv {
-			env := ly.Env
-			if env == nil {
-				env = make(map[string]string)
-			}
-			layer.envConfig = &EnvConfig{
-				Vars:       env,
-				PathAppend: ly.PathAppend,
-			}
-		}
-
-		// Pre-populate route cache
-		if ly.Route != nil {
-			layer.route = &RouteConfig{
-				Host: ly.Route.Host,
-				Port: strconv.Itoa(ly.Route.Port),
-			}
-		}
-
-		// Pre-populate volumes
-		layer.HasVolumes = len(ly.Volume) > 0
-		layer.volumes = ly.Volume
-
-		// Pre-populate aliases
-		layer.HasAliases = len(ly.Alias) > 0
-		layer.aliases = ly.Alias
-
-		// Pre-populate extract
-		layer.HasExtract = len(ly.Extract) > 0
-		layer.extract = ly.Extract
-
-		// Pre-populate data mappings
-		layer.HasData = len(ly.Data) > 0
-		layer.data = ly.Data
-
-		// Pre-populate security
-		layer.security = ly.Security
-
-		// Pre-populate libvirt snippets
-		if len(ly.Libvirt) > 0 {
-			layer.HasLibvirt = true
-			layer.libvirt = ly.Libvirt
-		}
-
-		// Pre-populate hooks
-		layer.hooks = ly.Hooks
-
-		// Pre-populate tests (declarative checks)
-		layer.tests = ly.Eval
-
-		// Pre-populate description (Gherkin-shaped self-description)
-		layer.description = ly.Description
-
-		// Pre-populate artifacts (files to retrieve after setup)
-		layer.artifacts = ly.Artifact
-
-		// Pre-populate layer-contributed capabilities + requirements
-		layer.capabilities = ly.Capabilities
-		layer.requiresCapabilities = ly.RequiresCapability
-
-		// Pre-populate port relay
-		layer.PortRelayPorts = ly.PortRelay
-
-		// Pre-populate secrets
-		layer.secrets = ly.SecretYAML
-
-		// Pre-populate env_provides (env vars for other containers)
-		if len(ly.EnvProvides) > 0 {
-			layer.HasEnvProvides = true
-			layer.envProvides = ly.EnvProvides
-		}
-
-		// Pre-populate env_requires and env_accepts
-		if len(ly.EnvRequire) > 0 {
-			layer.HasEnvRequires = true
-			layer.envRequires = ly.EnvRequire
-		}
-		if len(ly.EnvAccept) > 0 {
-			layer.HasEnvAccepts = true
-			layer.envAccepts = ly.EnvAccept
-		}
-
-		// Pre-populate secret_accepts and secret_requires (credential-store-backed env vars)
-		if len(ly.SecretRequire) > 0 {
-			layer.HasSecretRequires = true
-			layer.secretRequires = ly.SecretRequire
-		}
-		if len(ly.SecretAccept) > 0 {
-			layer.HasSecretAccepts = true
-			layer.secretAccepts = ly.SecretAccept
-		}
-
-		// Pre-populate mcp_provides (MCP servers for other containers)
-		if len(ly.MCPProvide) > 0 {
-			layer.HasMCPProvides = true
-			layer.mcpProvides = ly.MCPProvide
-		}
-
-		// Pre-populate mcp_requires and mcp_accepts
-		if len(ly.MCPRequire) > 0 {
-			layer.HasMCPRequires = true
-			layer.mcpRequires = ly.MCPRequire
-		}
-		if len(ly.MCPAccept) > 0 {
-			layer.HasMCPAccepts = true
-			layer.mcpAccepts = ly.MCPAccept
-		}
-
-		// Pre-populate engine requirement
-		layer.engine = ly.Engine
-
-		// Pre-populate vars + tasks (replacement for root.yml/user.yml)
-		layer.vars = ly.Vars
-		layer.tasks = ly.Task
-		layer.HasTasks = len(ly.Task) > 0
-		layer.shell = ly.Shell
+		// Single shared post-parse populator (see unified.go). Both this
+		// discovered-layer path and the overthink.yml inline path call it, so
+		// they can never drift.
+		populateLayerFromYAML(layer, ly)
 	}
 
 	return layer, nil
@@ -1215,17 +1032,40 @@ func (l *Layer) HasInstallFiles() bool {
 	return l.HasFormatPackages() ||
 		l.HasPixiToml || l.HasPyprojectToml || l.HasEnvironmentYml ||
 		l.HasPackageJson || l.HasCargoToml ||
-		l.HasTasks
+		l.HasTasks()
 }
 
 // HasContent returns true if the layer has install files or any configuration
 // that contributes to the Containerfile (env, ports, volumes, etc.)
 func (l *Layer) HasContent() bool {
-	return l.HasInstallFiles() || l.HasEnv || l.HasPorts || l.HasRoute ||
-		l.HasVolumes || l.HasAliases || l.HasExtract || l.HasData || l.HasLibvirt ||
+	return l.HasInstallFiles() || l.HasEnv() || l.HasPorts() || l.HasRoute() ||
+		l.HasVolumes() || l.HasAliases() || l.HasExtract() || l.HasData() || l.HasLibvirt() ||
 		l.HasAnyInit() || len(l.PortRelayPorts) > 0 ||
 		len(l.serviceFiles) > 0 || len(l.service) > 0
 }
+
+// Derived Has* predicates. Each is computed from the populated field — there is
+// no stored boolean (the former Has* fields were a denormalized cache that had
+// to be kept in lockstep with the field at every parse site). The filesystem
+// install-file probes (HasPixiToml/HasSrcDir/…) stay as cached fields; see the
+// Layer struct.
+func (l *Layer) HasEnv() bool            { return l.envConfig != nil }
+func (l *Layer) HasPorts() bool          { return len(l.portSpecs) > 0 }
+func (l *Layer) HasRoute() bool          { return l.route != nil }
+func (l *Layer) HasVolumes() bool        { return len(l.volumes) > 0 }
+func (l *Layer) HasAliases() bool        { return len(l.aliases) > 0 }
+func (l *Layer) HasExtract() bool        { return len(l.extract) > 0 }
+func (l *Layer) HasData() bool           { return len(l.data) > 0 }
+func (l *Layer) HasLibvirt() bool        { return len(l.libvirt) > 0 }
+func (l *Layer) HasTasks() bool          { return len(l.tasks) > 0 }
+func (l *Layer) HasEnvProvides() bool    { return len(l.envProvides) > 0 }
+func (l *Layer) HasEnvRequires() bool    { return len(l.envRequires) > 0 }
+func (l *Layer) HasEnvAccepts() bool     { return len(l.envAccepts) > 0 }
+func (l *Layer) HasSecretRequires() bool { return len(l.secretRequires) > 0 }
+func (l *Layer) HasSecretAccepts() bool  { return len(l.secretAccepts) > 0 }
+func (l *Layer) HasMCPProvides() bool    { return len(l.mcpProvides) > 0 }
+func (l *Layer) HasMCPRequires() bool    { return len(l.mcpRequires) > 0 }
+func (l *Layer) HasMCPAccepts() bool     { return len(l.mcpAccepts) > 0 }
 
 // PixiManifest returns the filename of the pixi manifest if it exists
 func (l *Layer) PixiManifest() string {
@@ -1385,7 +1225,7 @@ func (l *Layer) Route() (*RouteConfig, error) {
 func RouteLayer(layers map[string]*Layer) []*Layer {
 	var routes []*Layer
 	for _, layer := range layers {
-		if layer.HasRoute {
+		if layer.HasRoute() {
 			routes = append(routes, layer)
 		}
 	}
@@ -1517,7 +1357,7 @@ func InitLayer(layers map[string]*Layer) []*Layer {
 func VolumeLayer(layers map[string]*Layer) []*Layer {
 	var vols []*Layer
 	for _, layer := range layers {
-		if layer.HasVolumes {
+		if layer.HasVolumes() {
 			vols = append(vols, layer)
 		}
 	}
@@ -1533,7 +1373,7 @@ func (l *Layer) Alias() []AliasYAML {
 func AliasLayer(layers map[string]*Layer) []*Layer {
 	var result []*Layer
 	for _, layer := range layers {
-		if layer.HasAliases {
+		if layer.HasAliases() {
 			result = append(result, layer)
 		}
 	}
@@ -1571,21 +1411,22 @@ func (l *Layer) HasPypiDeps() bool {
 // ScanRemoteLayer scans specific layers from a downloaded remote repository.
 // Only imports layers whose bare refs are in the wantRefs set.
 // Bare refs use the full path format: "github.com/org/repo/layers/name".
-// qualifyRemoteSiblingDeps rewrites a freshly-scanned remote layer's plain-name
-// require:/layers: deps into fully-qualified "<repo>/<subpathprefix><dep>" map
-// keys (the same form ScanRemoteLayer keys fetched siblings under). @-ref deps
-// are left untouched — scanLayer already reduced them to their bare path.
-// Indexed off RawRequire/RawIncludedLayer, which preserve the original ref form
-// (1:1 with the BareRef'd Require/IncludedLayer that scanLayer produced).
+// qualifyRemoteSiblingDeps records, for a freshly-scanned remote layer, the
+// fully-qualified "<repo>/<subpathprefix><dep>" map key of each plain-name
+// require:/layer: dep (the same form ScanRemoteLayer keys fetched siblings
+// under). It sets each ref's resolved key (LayerRef.resolved) and leaves
+// LayerRef.Raw intact, so the graph resolves on .Bare() (qualified) while the
+// transitive fetch loop still keys on the original .Raw plain name. @-ref deps
+// are left untouched — their bare path already resolves directly.
 func qualifyRemoteSiblingDeps(layer *Layer) {
-	for i, raw := range layer.RawRequire {
-		if i < len(layer.Require) && !IsRemoteLayerRef(raw) {
-			layer.Require[i] = layer.RepoPath + "/" + layer.SubPathPrefix + raw
+	for i := range layer.Require {
+		if !layer.Require[i].IsRemote() {
+			layer.Require[i].resolved = layer.RepoPath + "/" + layer.SubPathPrefix + layer.Require[i].Raw
 		}
 	}
-	for i, raw := range layer.RawIncludedLayer {
-		if i < len(layer.IncludedLayer) && !IsRemoteLayerRef(raw) {
-			layer.IncludedLayer[i] = layer.RepoPath + "/" + layer.SubPathPrefix + raw
+	for i := range layer.IncludedLayer {
+		if !layer.IncludedLayer[i].IsRemote() {
+			layer.IncludedLayer[i].resolved = layer.RepoPath + "/" + layer.SubPathPrefix + layer.IncludedLayer[i].Raw
 		}
 	}
 }
@@ -1674,15 +1515,24 @@ func ScanAllLayerWithConfigOpts(dir string, cfg *Config, opts ResolveOpts) (map[
 	// until no new refs surface, so cross-repo transitive closures (e.g.
 	// ov-full → virtualization → socat) are fully materialized.
 	type repoVer struct{ repo, ver string }
-	scanned := make(map[string]bool)           // bare refs already scanned
+	// Shared warn-and-newest-wins resolution (same mechanism as
+	// CollectRemoteRefsOpts). Seeded from the initial collection's winners so a
+	// transitive dep that requests an already-collected layer at a NEWER version
+	// supersedes it (the layer is re-scanned at the newer version), while an
+	// older one is ignored with a warning. This replaced the silent
+	// first-writer-wins drop that shipped images missing a newer layer's packages.
+	tracker := newRefVersionTracker()
+	for _, dl := range downloads {
+		for _, ref := range dl.Refs {
+			tracker.record(ref, dl.Version, "remote ref collection")
+		}
+	}
+	scannedAt := make(map[string]string)       // bare ref -> version already scanned into the layer map
 	defaultBranches := make(map[string]string) // repo → resolved default branch
 	queue := downloads
 	for len(queue) > 0 {
 		nextByKey := make(map[repoVer]map[string]bool)
-		enqueue := func(repo, ver, bare string) error {
-			if scanned[bare] {
-				return nil
-			}
+		enqueue := func(repo, ver, bare, source string) error {
 			if ver == "" {
 				if b, ok := defaultBranches[repo]; ok {
 					ver = b
@@ -1694,6 +1544,12 @@ func ScanAllLayerWithConfigOpts(dir string, cfg *Config, opts ResolveOpts) (map[
 					defaultBranches[repo] = b
 					ver = b
 				}
+			}
+			// Only enqueue when this version WINS (first sighting or newer than
+			// the current winner). A losing (older/equal-already-scanned) ref is
+			// dropped — newest-wins, with the warning emitted by record.
+			if !tracker.record(bare, ver, source) {
+				return nil
 			}
 			key := repoVer{repo, ver}
 			if nextByKey[key] == nil {
@@ -1710,7 +1566,9 @@ func ScanAllLayerWithConfigOpts(dir string, cfg *Config, opts ResolveOpts) (map[
 			}
 			wantRefs := make(map[string]bool)
 			for _, ref := range dl.Refs {
-				if !scanned[ref] {
+				// Scan only the CURRENT winning version, and only if not already
+				// scanned at it (a newer winner discovered later re-scans + overwrites).
+				if tracker.versions[ref] == dl.Version && scannedAt[ref] != dl.Version {
 					wantRefs[ref] = true
 				}
 			}
@@ -1722,30 +1580,34 @@ func ScanAllLayerWithConfigOpts(dir string, cfg *Config, opts ResolveOpts) (map[
 				return nil, fmt.Errorf("scanning %s:%s: %w", dl.RepoPath, dl.Version, err)
 			}
 			for ref, layer := range remoteLayers {
-				if existing, ok := layers[ref]; ok && existing.Remote {
-					return nil, fmt.Errorf("layer reference conflict: %q provided by both %s and %s", ref, existing.RepoPath, layer.RepoPath)
-				}
 				if _, ok := layers[layer.Name]; ok {
 					fmt.Fprintf(os.Stderr, "Note: local layer %q shadows remote layer %q\n", layer.Name, ref)
 				}
+				// Newest-wins: a re-scan at a newer version overwrites the prior entry.
 				layers[ref] = layer
-				scanned[ref] = true
+				scannedAt[ref] = dl.Version
 
-				// Enqueue this layer's transitive deps. Use the RAW form so an
-				// @-ref's pinned version survives; plain names become same-repo,
-				// same-version siblings.
-				rawDeps := append(append([]string{}, layer.RawRequire...), layer.RawIncludedLayer...)
-				for _, raw := range rawDeps {
-					if IsRemoteLayerRef(raw) {
-						p := ParseRemoteRef(raw)
-						if err := enqueue(p.RepoPath, p.Version, BareRef(raw)); err != nil {
-							return nil, err
-						}
-					} else {
-						sibling := dl.RepoPath + "/" + layer.SubPathPrefix + raw
-						if err := enqueue(dl.RepoPath, dl.Version, sibling); err != nil {
-							return nil, err
-						}
+				// Enqueue this layer's transitive deps. The LayerRef's original
+				// .Raw form drives the decision: an @-ref carries its own pinned
+				// repo/version; a plain name becomes a same-repo, same-version
+				// sibling.
+				enqueueDep := func(dep LayerRef, kind string) error {
+					src := fmt.Sprintf("layer %s %s", layer.Name, kind)
+					if dep.IsRemote() {
+						p := ParseRemoteRef(dep.Raw)
+						return enqueue(p.RepoPath, p.Version, dep.Bare(), src)
+					}
+					sibling := dl.RepoPath + "/" + layer.SubPathPrefix + dep.Raw
+					return enqueue(dl.RepoPath, dl.Version, sibling, src)
+				}
+				for _, dep := range layer.Require {
+					if err := enqueueDep(dep, "require"); err != nil {
+						return nil, err
+					}
+				}
+				for _, dep := range layer.IncludedLayer {
+					if err := enqueueDep(dep, "layer"); err != nil {
+						return nil, err
 					}
 				}
 			}

@@ -332,7 +332,7 @@ func TestResolveImagePorts(t *testing.T) {
 			Registry:  "ghcr.io/test",
 			Build:     BuildFormats{"rpm"},
 			Platforms: []string{"linux/amd64"},
-			Port:     []string{"80:80"},
+			Port:      []string{"80:80"},
 		},
 		Image: map[string]ImageConfig{
 			"with-ports":    {Layer: []string{}, Port: []string{"9090:9090"}},
@@ -520,21 +520,21 @@ func TestResolveImageDistroBaseChain(t *testing.T) {
 			"fedora": {
 				Base:   "quay.io/fedora/fedora:43",
 				Distro: []string{"fedora:43", "fedora"},
-				Layer: []string{},
+				Layer:  []string{},
 			},
 			// Level 1: no distro set, should inherit from fedora
 			"fedora-nonfree": {
-				Base:   "fedora",
+				Base:  "fedora",
 				Layer: []string{},
 			},
 			// Level 2: no distro set, should inherit through fedora-nonfree -> fedora
 			"nvidia": {
-				Base:   "fedora-nonfree",
+				Base:  "fedora-nonfree",
 				Layer: []string{},
 			},
 			// Level 3: no distro set, should inherit through nvidia -> fedora-nonfree -> fedora
 			"ml-app": {
-				Base:   "nvidia",
+				Base:  "nvidia",
 				Layer: []string{},
 			},
 		},
@@ -574,18 +574,18 @@ func TestResolveImageBuildBaseChain(t *testing.T) {
 		Image: map[string]ImageConfig{
 			// Level 0: defines build
 			"arch": {
-				Base:   "docker.io/library/archlinux:latest",
-				Build:  BuildFormats{"pac"},
+				Base:  "docker.io/library/archlinux:latest",
+				Build: BuildFormats{"pac"},
 				Layer: []string{},
 			},
 			// Level 1: no build set, should inherit from arch
 			"arch-extended": {
-				Base:   "arch",
+				Base:  "arch",
 				Layer: []string{},
 			},
 			// Level 2: no build set, should inherit through chain
 			"arch-app": {
-				Base:   "arch-extended",
+				Base:  "arch-extended",
 				Layer: []string{},
 			},
 		},

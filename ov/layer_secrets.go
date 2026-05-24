@@ -73,14 +73,14 @@ func ResolveLayerSecret(layer *Layer) map[string]string {
 		return env
 	}
 
-	if layer.HasSecretRequires {
+	if layer.HasSecretRequires() {
 		for _, dep := range layer.SecretRequire() {
 			val, _ := ensureLayerSecret(dep, true)
 			env[dep.Name] = val
 		}
 	}
 
-	if layer.HasSecretAccepts {
+	if layer.HasSecretAccepts() {
 		for _, dep := range layer.SecretAccept() {
 			val, _ := ensureLayerSecret(dep, false)
 			if val == "" && dep.Default != "" {

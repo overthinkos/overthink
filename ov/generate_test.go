@@ -155,14 +155,13 @@ func TestGenerateTraefikRoutes(t *testing.T) {
 		BuildDir: tmpDir,
 		Layers: map[string]*Layer{
 			"traefik": {
-				Name:     "traefik",
-				HasTasks: true,
+				Name:  "traefik",
+				tasks: []Task{{Cmd: "true"}},
 			},
 			"svc": {
-				Name:     "svc",
-				HasRoute: true,
-				HasTasks: true,
-				route:    &RouteConfig{Host: "svc.localhost", Port: "9090"},
+				Name:  "svc",
+				tasks: []Task{{Cmd: "true"}},
+				route: &RouteConfig{Host: "svc.localhost", Port: "9090"},
 			},
 		},
 	}
@@ -214,10 +213,9 @@ func TestGenerateRouteWithoutTraefik_NoTraefikRoutes(t *testing.T) {
 		Config:   &Config{},
 		Layers: map[string]*Layer{
 			"svc": {
-				Name:     "svc",
-				HasRoute: true,
-				HasTasks: true,
-				route:    &RouteConfig{Host: "svc.localhost", Port: "9090"},
+				Name:  "svc",
+				tasks: []Task{{Cmd: "true"}},
+				route: &RouteConfig{Host: "svc.localhost", Port: "9090"},
 			},
 		},
 		Images: map[string]*ResolvedImage{
@@ -268,13 +266,13 @@ func TestGenerateInitFragments(t *testing.T) {
 		BuildDir: tmpDir,
 		Layers: map[string]*Layer{
 			"python": {
-				Name:     "python",
-				HasTasks: true,
+				Name:  "python",
+				tasks: []Task{{Cmd: "true"}},
 			},
 			"svc": {
 				Name:        "svc",
 				InitSystems: map[string]bool{"supervisord": true},
-				HasTasks:    true,
+				tasks:       []Task{{Cmd: "true"}},
 				service: []ServiceEntry{
 					{Name: "svc", Exec: "svc serve"},
 				},
@@ -282,7 +280,7 @@ func TestGenerateInitFragments(t *testing.T) {
 			"other": {
 				Name:        "other",
 				InitSystems: map[string]bool{"supervisord": true},
-				HasTasks:    true,
+				tasks:       []Task{{Cmd: "true"}},
 				service: []ServiceEntry{
 					{Name: "other", Exec: "other run"},
 				},
@@ -341,12 +339,12 @@ func TestGenerateRelayInitFragments(t *testing.T) {
 		BuildDir: tmpDir,
 		Layers: map[string]*Layer{
 			"socat": {
-				Name:     "socat",
-				HasTasks: true,
+				Name:  "socat",
+				tasks: []Task{{Cmd: "true"}},
 			},
 			"chrome": {
 				Name:           "chrome",
-				HasTasks:       true,
+				tasks:          []Task{{Cmd: "true"}},
 				PortRelayPorts: []int{9222},
 				InitSystems:    map[string]bool{"supervisord": true},
 				service: []ServiceEntry{

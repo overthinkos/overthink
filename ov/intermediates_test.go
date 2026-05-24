@@ -9,8 +9,8 @@ func TestGlobalLayerOrder_PopularityTieBreaking(t *testing.T) {
 	layers := map[string]*Layer{
 		"pixi":    {Name: "pixi", Require: nil},
 		"nodejs":  {Name: "nodejs", Require: nil},
-		"python":  {Name: "python", Require: []string{"pixi"}},
-		"testapi": {Name: "testapi", Require: []string{"python"}, HasPixiToml: true},
+		"python":  {Name: "python", Require: toLayerRefs([]string{"pixi"})},
+		"testapi": {Name: "testapi", Require: toLayerRefs([]string{"python"}), HasPixiToml: true},
 	}
 
 	// pixi is used by 2 images, nodejs by 1
@@ -46,7 +46,7 @@ func TestGlobalLayerOrder_PopularityTieBreaking(t *testing.T) {
 func TestGlobalLayerOrder_RespectsDependencies(t *testing.T) {
 	layers := map[string]*Layer{
 		"pixi":   {Name: "pixi", Require: nil},
-		"python": {Name: "python", Require: []string{"pixi"}},
+		"python": {Name: "python", Require: toLayerRefs([]string{"pixi"})},
 	}
 
 	images := map[string]*ResolvedImage{
@@ -127,9 +127,9 @@ func TestGlobalLayerOrder_ConflictingListOrderFallsBack(t *testing.T) {
 func TestAbsoluteLayerSequence_WithInternalBase(t *testing.T) {
 	layers := map[string]*Layer{
 		"pixi":    {Name: "pixi", Require: nil},
-		"python":  {Name: "python", Require: []string{"pixi"}},
+		"python":  {Name: "python", Require: toLayerRefs([]string{"pixi"})},
 		"nodejs":  {Name: "nodejs", Require: nil},
-		"testapi": {Name: "testapi", Require: []string{"python"}, HasPixiToml: true},
+		"testapi": {Name: "testapi", Require: toLayerRefs([]string{"python"}), HasPixiToml: true},
 	}
 
 	images := map[string]*ResolvedImage{
@@ -150,8 +150,8 @@ func TestAbsoluteLayerSequence_WithInternalBase(t *testing.T) {
 
 func TestComputeIntermediates_NoBranching(t *testing.T) {
 	layers := map[string]*Layer{
-		"pixi":   {Name: "pixi", Require: nil, HasTasks: true},
-		"python": {Name: "python", Require: []string{"pixi"}, HasPixiToml: true},
+		"pixi":   {Name: "pixi", Require: nil, tasks: []Task{{Cmd: "true"}}},
+		"python": {Name: "python", Require: toLayerRefs([]string{"pixi"}), HasPixiToml: true},
 	}
 
 	images := map[string]*ResolvedImage{
@@ -164,7 +164,7 @@ func TestComputeIntermediates_NoBranching(t *testing.T) {
 
 	cfg := &Config{
 		Defaults: ImageConfig{Registry: "r", Build: BuildFormats{"rpm"}},
-		Image:   map[string]ImageConfig{"app": {Layer: []string{"python"}}},
+		Image:    map[string]ImageConfig{"app": {Layer: []string{"python"}}},
 	}
 
 	result, err := ComputeIntermediates(images, layers, cfg, "v1")
@@ -186,10 +186,10 @@ func TestComputeIntermediates_NoBranching(t *testing.T) {
 
 func TestComputeIntermediates_SimpleBranch(t *testing.T) {
 	layers := map[string]*Layer{
-		"pixi":    {Name: "pixi", Require: nil, HasTasks: true},
-		"python":  {Name: "python", Require: []string{"pixi"}, HasPixiToml: true},
-		"nodejs":  {Name: "nodejs", Require: nil, HasTasks: true},
-		"testapi": {Name: "testapi", Require: []string{"python"}, HasPixiToml: true},
+		"pixi":    {Name: "pixi", Require: nil, tasks: []Task{{Cmd: "true"}}},
+		"python":  {Name: "python", Require: toLayerRefs([]string{"pixi"}), HasPixiToml: true},
+		"nodejs":  {Name: "nodejs", Require: nil, tasks: []Task{{Cmd: "true"}}},
+		"testapi": {Name: "testapi", Require: toLayerRefs([]string{"python"}), HasPixiToml: true},
 	}
 
 	images := map[string]*ResolvedImage{
@@ -246,11 +246,11 @@ func TestComputeIntermediates_SimpleBranch(t *testing.T) {
 
 func TestComputeIntermediates_SharedPrefix(t *testing.T) {
 	layers := map[string]*Layer{
-		"pixi":        {Name: "pixi", Require: nil, HasTasks: true},
-		"python":      {Name: "python", Require: []string{"pixi"}, HasPixiToml: true},
-		"supervisord": {Name: "supervisord", Require: []string{"python"}, HasPixiToml: true},
-		"testapi":     {Name: "testapi", Require: []string{"supervisord"}, HasPixiToml: true},
-		"openclaw":    {Name: "openclaw", Require: []string{"supervisord"}, HasPackageJson: true},
+		"pixi":        {Name: "pixi", Require: nil, tasks: []Task{{Cmd: "true"}}},
+		"python":      {Name: "python", Require: toLayerRefs([]string{"pixi"}), HasPixiToml: true},
+		"supervisord": {Name: "supervisord", Require: toLayerRefs([]string{"python"}), HasPixiToml: true},
+		"testapi":     {Name: "testapi", Require: toLayerRefs([]string{"supervisord"}), HasPixiToml: true},
+		"openclaw":    {Name: "openclaw", Require: toLayerRefs([]string{"supervisord"}), HasPackageJson: true},
 	}
 
 	images := map[string]*ResolvedImage{
@@ -316,8 +316,8 @@ func TestComputeIntermediates_SharedPrefix(t *testing.T) {
 
 func TestComputeIntermediates_ExistingImageReuse(t *testing.T) {
 	layers := map[string]*Layer{
-		"pixi":   {Name: "pixi", Require: nil, HasTasks: true},
-		"nodejs": {Name: "nodejs", Require: nil, HasTasks: true},
+		"pixi":   {Name: "pixi", Require: nil, tasks: []Task{{Cmd: "true"}}},
+		"nodejs": {Name: "nodejs", Require: nil, tasks: []Task{{Cmd: "true"}}},
 	}
 
 	images := map[string]*ResolvedImage{
@@ -369,10 +369,10 @@ func TestComputeIntermediates_ExistingImageReuse(t *testing.T) {
 
 func TestImageNeedsBuilder(t *testing.T) {
 	layers := map[string]*Layer{
-		"pixi":    {Name: "pixi", Require: nil, HasTasks: true},
-		"python":  {Name: "python", Require: []string{"pixi"}, HasPixiToml: true},
-		"nodejs":  {Name: "nodejs", Require: nil, HasTasks: true},
-		"tooling": {Name: "tooling", Require: nil, HasTasks: true},
+		"pixi":    {Name: "pixi", Require: nil, tasks: []Task{{Cmd: "true"}}},
+		"python":  {Name: "python", Require: toLayerRefs([]string{"pixi"}), HasPixiToml: true},
+		"nodejs":  {Name: "nodejs", Require: nil, tasks: []Task{{Cmd: "true"}}},
+		"tooling": {Name: "tooling", Require: nil, tasks: []Task{{Cmd: "true"}}},
 	}
 
 	images := map[string]*ResolvedImage{
@@ -418,14 +418,14 @@ func TestImageNeedsBuilder(t *testing.T) {
 func TestComputeIntermediates_RealisticConfig(t *testing.T) {
 	// Simplified version of the actual image.yml setup
 	layers := map[string]*Layer{
-		"pixi":            {Name: "pixi", Require: nil, HasTasks: true},
-		"nodejs":          {Name: "nodejs", Require: nil, HasTasks: true},
-		"python":          {Name: "python", Require: []string{"pixi"}, HasPixiToml: true},
-		"supervisord":     {Name: "supervisord", Require: []string{"python"}, HasPixiToml: true},
-		"build-toolchain": {Name: "build-toolchain", Require: nil, HasTasks: true},
-		"testapi":         {Name: "testapi", Require: []string{"supervisord"}, HasPixiToml: true},
-		"traefik":         {Name: "traefik", Require: []string{"supervisord"}, HasTasks: true},
-		"openclaw":        {Name: "openclaw", Require: []string{"supervisord", "nodejs"}, HasPackageJson: true},
+		"pixi":            {Name: "pixi", Require: nil, tasks: []Task{{Cmd: "true"}}},
+		"nodejs":          {Name: "nodejs", Require: nil, tasks: []Task{{Cmd: "true"}}},
+		"python":          {Name: "python", Require: toLayerRefs([]string{"pixi"}), HasPixiToml: true},
+		"supervisord":     {Name: "supervisord", Require: toLayerRefs([]string{"python"}), HasPixiToml: true},
+		"build-toolchain": {Name: "build-toolchain", Require: nil, tasks: []Task{{Cmd: "true"}}},
+		"testapi":         {Name: "testapi", Require: toLayerRefs([]string{"supervisord"}), HasPixiToml: true},
+		"traefik":         {Name: "traefik", Require: toLayerRefs([]string{"supervisord"}), tasks: []Task{{Cmd: "true"}}},
+		"openclaw":        {Name: "openclaw", Require: toLayerRefs([]string{"supervisord", "nodejs"}), HasPackageJson: true},
 	}
 
 	images := map[string]*ResolvedImage{
@@ -511,20 +511,20 @@ func TestComputeIntermediates_RealisticConfig(t *testing.T) {
 func TestComputeIntermediates_NvidiaScenario(t *testing.T) {
 	// Mirror the actual nvidia/python-ml/jupyter/comfyui/ollama config
 	layers := map[string]*Layer{
-		"pixi":            {Name: "pixi", Require: nil, HasTasks: true},
-		"nodejs":          {Name: "nodejs", Require: nil, HasTasks: true},
-		"python":          {Name: "python", Require: []string{"pixi"}, HasPixiToml: true},
-		"supervisord":     {Name: "supervisord", Require: []string{"python"}, HasPixiToml: true},
-		"build-toolchain": {Name: "build-toolchain", Require: nil, HasTasks: true},
-		"cuda":            {Name: "cuda", Require: nil, HasTasks: true},
-		"python-ml":       {Name: "python-ml", Require: []string{"pixi", "cuda"}, HasPixiToml: true},
-		"jupyter":         {Name: "jupyter", Require: []string{"python-ml", "supervisord"}, HasPixiToml: true},
-		"comfyui":         {Name: "comfyui", Require: []string{"python-ml", "supervisord"}, HasTasks: true},
-		"ollama":          {Name: "ollama", Require: []string{"cuda", "supervisord"}, HasTasks: true},
-		"openclaw":        {Name: "openclaw", Require: []string{"supervisord", "nodejs"}, HasPackageJson: true},
-		"testapi":         {Name: "testapi", Require: []string{"supervisord"}, HasPixiToml: true},
-		"traefik":         {Name: "traefik", Require: []string{"supervisord"}, HasTasks: true},
-		"github-runner":   {Name: "github-runner", Require: []string{"supervisord"}, HasTasks: true},
+		"pixi":            {Name: "pixi", Require: nil, tasks: []Task{{Cmd: "true"}}},
+		"nodejs":          {Name: "nodejs", Require: nil, tasks: []Task{{Cmd: "true"}}},
+		"python":          {Name: "python", Require: toLayerRefs([]string{"pixi"}), HasPixiToml: true},
+		"supervisord":     {Name: "supervisord", Require: toLayerRefs([]string{"python"}), HasPixiToml: true},
+		"build-toolchain": {Name: "build-toolchain", Require: nil, tasks: []Task{{Cmd: "true"}}},
+		"cuda":            {Name: "cuda", Require: nil, tasks: []Task{{Cmd: "true"}}},
+		"python-ml":       {Name: "python-ml", Require: toLayerRefs([]string{"pixi", "cuda"}), HasPixiToml: true},
+		"jupyter":         {Name: "jupyter", Require: toLayerRefs([]string{"python-ml", "supervisord"}), HasPixiToml: true},
+		"comfyui":         {Name: "comfyui", Require: toLayerRefs([]string{"python-ml", "supervisord"}), tasks: []Task{{Cmd: "true"}}},
+		"ollama":          {Name: "ollama", Require: toLayerRefs([]string{"cuda", "supervisord"}), tasks: []Task{{Cmd: "true"}}},
+		"openclaw":        {Name: "openclaw", Require: toLayerRefs([]string{"supervisord", "nodejs"}), HasPackageJson: true},
+		"testapi":         {Name: "testapi", Require: toLayerRefs([]string{"supervisord"}), HasPixiToml: true},
+		"traefik":         {Name: "traefik", Require: toLayerRefs([]string{"supervisord"}), tasks: []Task{{Cmd: "true"}}},
+		"github-runner":   {Name: "github-runner", Require: toLayerRefs([]string{"supervisord"}), tasks: []Task{{Cmd: "true"}}},
 	}
 
 	images := map[string]*ResolvedImage{
@@ -588,17 +588,17 @@ func TestComputeIntermediates_NvidiaScenario(t *testing.T) {
 	cfg := &Config{
 		Defaults: ImageConfig{Registry: "r", Build: BuildFormats{"rpm"}, Builder: BuilderMap{"pixi": "builder", "npm": "builder"}},
 		Image: map[string]ImageConfig{
-			"builder":         {Layer: []string{"pixi", "nodejs", "build-toolchain"}},
-			"fedora":          {Layer: []string{}},
-			"nvidia":          {Base: "fedora", Layer: []string{"cuda"}},
-			"python-ml":       {Base: "nvidia", Layer: []string{"python-ml"}},
-			"jupyter":         {Base: "python-ml", Layer: []string{"jupyter"}},
-			"comfyui":         {Base: "python-ml", Layer: []string{"comfyui"}},
-			"ollama":          {Base: "nvidia", Layer: []string{"ollama"}},
-			"gpu-gateway": {Base: "nvidia", Layer: []string{"openclaw", "ollama"}},
-			"fedora-test":     {Base: "fedora", Layer: []string{"traefik", "testapi"}},
-			"openclaw":        {Base: "fedora", Layer: []string{"openclaw"}},
-			"githubrunner":    {Base: "fedora", Layer: []string{"github-runner"}},
+			"builder":      {Layer: []string{"pixi", "nodejs", "build-toolchain"}},
+			"fedora":       {Layer: []string{}},
+			"nvidia":       {Base: "fedora", Layer: []string{"cuda"}},
+			"python-ml":    {Base: "nvidia", Layer: []string{"python-ml"}},
+			"jupyter":      {Base: "python-ml", Layer: []string{"jupyter"}},
+			"comfyui":      {Base: "python-ml", Layer: []string{"comfyui"}},
+			"ollama":       {Base: "nvidia", Layer: []string{"ollama"}},
+			"gpu-gateway":  {Base: "nvidia", Layer: []string{"openclaw", "ollama"}},
+			"fedora-test":  {Base: "fedora", Layer: []string{"traefik", "testapi"}},
+			"openclaw":     {Base: "fedora", Layer: []string{"openclaw"}},
+			"githubrunner": {Base: "fedora", Layer: []string{"github-runner"}},
 		},
 	}
 
@@ -703,11 +703,11 @@ func TestComputeIntermediates_UserImageAtBranchPoint(t *testing.T) {
 	// User defines an image that sits exactly at the shared prefix branch point.
 	// It should be reused as the intermediate, not duplicated.
 	layers := map[string]*Layer{
-		"pixi":        {Name: "pixi", Require: nil, HasTasks: true},
-		"python":      {Name: "python", Require: []string{"pixi"}, HasPixiToml: true},
-		"supervisord": {Name: "supervisord", Require: []string{"python"}, HasPixiToml: true},
-		"testapi":     {Name: "testapi", Require: []string{"supervisord"}, HasPixiToml: true},
-		"webapp":      {Name: "webapp", Require: []string{"supervisord"}, HasTasks: true},
+		"pixi":        {Name: "pixi", Require: nil, tasks: []Task{{Cmd: "true"}}},
+		"python":      {Name: "python", Require: toLayerRefs([]string{"pixi"}), HasPixiToml: true},
+		"supervisord": {Name: "supervisord", Require: toLayerRefs([]string{"python"}), HasPixiToml: true},
+		"testapi":     {Name: "testapi", Require: toLayerRefs([]string{"supervisord"}), HasPixiToml: true},
+		"webapp":      {Name: "webapp", Require: toLayerRefs([]string{"supervisord"}), tasks: []Task{{Cmd: "true"}}},
 	}
 
 	images := map[string]*ResolvedImage{
@@ -805,10 +805,10 @@ func TestComputeIntermediates_UserImageAsBranchIntermediate(t *testing.T) {
 	// and has children in the same sibling group. The algorithm should reuse it
 	// as the intermediate without creating a duplicate.
 	layers := map[string]*Layer{
-		"A": {Name: "A", Require: nil, HasTasks: true},
-		"B": {Name: "B", Require: []string{"A"}, HasTasks: true},
-		"C": {Name: "C", Require: []string{"B"}, HasTasks: true},
-		"D": {Name: "D", Require: []string{"B"}, HasTasks: true},
+		"A": {Name: "A", Require: nil, tasks: []Task{{Cmd: "true"}}},
+		"B": {Name: "B", Require: toLayerRefs([]string{"A"}), tasks: []Task{{Cmd: "true"}}},
+		"C": {Name: "C", Require: toLayerRefs([]string{"B"}), tasks: []Task{{Cmd: "true"}}},
+		"D": {Name: "D", Require: toLayerRefs([]string{"B"}), tasks: []Task{{Cmd: "true"}}},
 	}
 
 	images := map[string]*ResolvedImage{
@@ -897,12 +897,12 @@ func TestComputeIntermediates_PlatformInheritance(t *testing.T) {
 	// Parent with restricted platforms should propagate to auto-intermediates.
 	// nvidia is amd64-only; nvidia-supervisord should also be amd64-only.
 	layers := map[string]*Layer{
-		"pixi":        {Name: "pixi", Require: nil, HasTasks: true},
-		"python":      {Name: "python", Require: []string{"pixi"}, HasPixiToml: true},
-		"supervisord": {Name: "supervisord", Require: []string{"python"}, HasPixiToml: true},
-		"cuda":        {Name: "cuda", Require: nil, HasTasks: true},
-		"appA":        {Name: "appA", Require: []string{"supervisord"}, HasTasks: true},
-		"appB":        {Name: "appB", Require: []string{"supervisord"}, HasTasks: true},
+		"pixi":        {Name: "pixi", Require: nil, tasks: []Task{{Cmd: "true"}}},
+		"python":      {Name: "python", Require: toLayerRefs([]string{"pixi"}), HasPixiToml: true},
+		"supervisord": {Name: "supervisord", Require: toLayerRefs([]string{"python"}), HasPixiToml: true},
+		"cuda":        {Name: "cuda", Require: nil, tasks: []Task{{Cmd: "true"}}},
+		"appA":        {Name: "appA", Require: toLayerRefs([]string{"supervisord"}), tasks: []Task{{Cmd: "true"}}},
+		"appB":        {Name: "appB", Require: toLayerRefs([]string{"supervisord"}), tasks: []Task{{Cmd: "true"}}},
 	}
 
 	images := map[string]*ResolvedImage{
@@ -998,20 +998,20 @@ func TestComputeIntermediates_PlatformInheritance(t *testing.T) {
 
 func TestPixiBoundLayers(t *testing.T) {
 	layers := map[string]*Layer{
-		"llama-cpp": {Name: "llama-cpp", HasTasks: true},
-		"unsloth":   {Name: "unsloth", HasTasks: true},
+		"llama-cpp": {Name: "llama-cpp", tasks: []Task{{Cmd: "true"}}},
+		"unsloth":   {Name: "unsloth", tasks: []Task{{Cmd: "true"}}},
 		"jupyter-ml": {
-			Name: "jupyter-ml", HasPixiToml: true, HasTasks: true,
-			IncludedLayer: []string{"llama-cpp", "unsloth"},
-			Require:        []string{"cuda", "supervisord"},
+			Name: "jupyter-ml", HasPixiToml: true, tasks: []Task{{Cmd: "true"}},
+			IncludedLayer: toLayerRefs([]string{"llama-cpp", "unsloth"}),
+			Require:       toLayerRefs([]string{"cuda", "supervisord"}),
 		},
 		"unsloth-studio": {
 			Name: "unsloth-studio", HasPixiToml: true,
-			IncludedLayer: []string{"llama-cpp", "unsloth"},
-			Require:        []string{"cuda", "supervisord"},
+			IncludedLayer: toLayerRefs([]string{"llama-cpp", "unsloth"}),
+			Require:       toLayerRefs([]string{"cuda", "supervisord"}),
 		},
-		"cuda":        {Name: "cuda", HasTasks: true},
-		"supervisord": {Name: "supervisord", HasTasks: true},
+		"cuda":        {Name: "cuda", tasks: []Task{{Cmd: "true"}}},
+		"supervisord": {Name: "supervisord", tasks: []Task{{Cmd: "true"}}},
 	}
 
 	bound := pixiBoundLayers(layers)
@@ -1043,29 +1043,29 @@ func TestComputeIntermediates_PixiBoundNotExtracted(t *testing.T) {
 	// The intermediate generator must NOT extract unsloth into an intermediate
 	// because it needs the pixi environment from the final image.
 	layers := map[string]*Layer{
-		"dbus":                {Name: "dbus", HasTasks: true},
-		"ov":                  {Name: "ov", HasTasks: true},
-		"llama-cpp":           {Name: "llama-cpp", HasTasks: true},
-		"unsloth":             {Name: "unsloth", HasTasks: true, HasEnv: true, HasVolumes: true},
-		"notebook-templates":  {Name: "notebook-templates", HasData: true},
-		"notebook-finetuning": {Name: "notebook-finetuning", HasData: true},
+		"dbus":                {Name: "dbus", tasks: []Task{{Cmd: "true"}}},
+		"ov":                  {Name: "ov", tasks: []Task{{Cmd: "true"}}},
+		"llama-cpp":           {Name: "llama-cpp", tasks: []Task{{Cmd: "true"}}},
+		"unsloth":             {Name: "unsloth", tasks: []Task{{Cmd: "true"}}},
+		"notebook-templates":  {Name: "notebook-templates"},
+		"notebook-finetuning": {Name: "notebook-finetuning"},
 		"jupyter-ml": {
-			Name: "jupyter-ml", HasPixiToml: true, HasTasks: true,
-			IncludedLayer: []string{"llama-cpp", "unsloth"},
-			Require:        []string{"cuda", "supervisord"},
-			HasPorts:       true,
+			Name: "jupyter-ml", HasPixiToml: true, tasks: []Task{{Cmd: "true"}},
+			IncludedLayer: toLayerRefs([]string{"llama-cpp", "unsloth"}),
+			Require:       toLayerRefs([]string{"cuda", "supervisord"}),
+			portSpecs:     []PortSpec{{Port: 8080}},
 		},
 		"unsloth-studio": {
 			Name: "unsloth-studio", HasPixiToml: true,
-			IncludedLayer: []string{"llama-cpp", "unsloth"},
-			Require:        []string{"cuda", "supervisord"},
-			HasPorts:       true,
+			IncludedLayer: toLayerRefs([]string{"llama-cpp", "unsloth"}),
+			Require:       toLayerRefs([]string{"cuda", "supervisord"}),
+			portSpecs:     []PortSpec{{Port: 8080}},
 		},
-		"agent-forwarding": {Name: "agent-forwarding", HasTasks: true},
-		"cuda":             {Name: "cuda", HasTasks: true},
-		"pixi":             {Name: "pixi", HasTasks: true},
-		"python":           {Name: "python", Require: []string{"pixi"}, HasPixiToml: true},
-		"supervisord":      {Name: "supervisord", Require: []string{"python"}, HasPixiToml: true},
+		"agent-forwarding": {Name: "agent-forwarding", tasks: []Task{{Cmd: "true"}}},
+		"cuda":             {Name: "cuda", tasks: []Task{{Cmd: "true"}}},
+		"pixi":             {Name: "pixi", tasks: []Task{{Cmd: "true"}}},
+		"python":           {Name: "python", Require: toLayerRefs([]string{"pixi"}), HasPixiToml: true},
+		"supervisord":      {Name: "supervisord", Require: toLayerRefs([]string{"python"}), HasPixiToml: true},
 	}
 
 	images := map[string]*ResolvedImage{
@@ -1089,19 +1089,19 @@ func TestComputeIntermediates_PixiBoundNotExtracted(t *testing.T) {
 		"jupyter-ml": {
 			Name: "jupyter-ml", Base: "nvidia", IsExternalBase: false,
 			Layer: []string{"agent-forwarding", "jupyter-ml", "notebook-templates", "dbus", "ov"},
-			Tag:    "v1", Registry: "r", FullTag: "r/jupyter-ml:v1", Pkg: "rpm",
+			Tag:   "v1", Registry: "r", FullTag: "r/jupyter-ml:v1", Pkg: "rpm",
 			Builder: BuilderMap{"pixi": "builder", "npm": "builder"},
 		},
 		"jupyter-ml-notebook": {
 			Name: "jupyter-ml-notebook", Base: "nvidia", IsExternalBase: false,
 			Layer: []string{"agent-forwarding", "jupyter-ml", "notebook-templates", "notebook-finetuning", "dbus", "ov"},
-			Tag:    "v1", Registry: "r", FullTag: "r/jupyter-ml-notebook:v1", Pkg: "rpm",
+			Tag:   "v1", Registry: "r", FullTag: "r/jupyter-ml-notebook:v1", Pkg: "rpm",
 			Builder: BuilderMap{"pixi": "builder", "npm": "builder"},
 		},
 		"unsloth-studio": {
 			Name: "unsloth-studio", Base: "nvidia", IsExternalBase: false,
 			Layer: []string{"agent-forwarding", "unsloth-studio", "notebook-finetuning", "dbus", "ov"},
-			Tag:    "v1", Registry: "r", FullTag: "r/unsloth-studio:v1", Pkg: "rpm",
+			Tag:   "v1", Registry: "r", FullTag: "r/unsloth-studio:v1", Pkg: "rpm",
 			Builder: BuilderMap{"pixi": "builder", "npm": "builder"},
 		},
 	}
@@ -1179,9 +1179,9 @@ func TestComputeIntermediates_PixiBoundNotExtracted(t *testing.T) {
 // through to defaults. See root cause in ov/intermediates.go createIntermediate.
 func TestComputeIntermediates_InheritDistroFromParent(t *testing.T) {
 	layers := map[string]*Layer{
-		"a": {Name: "a", HasTasks: true},
-		"b": {Name: "b", HasTasks: true},
-		"c": {Name: "c", HasTasks: true},
+		"a": {Name: "a", tasks: []Task{{Cmd: "true"}}},
+		"b": {Name: "b", tasks: []Task{{Cmd: "true"}}},
+		"c": {Name: "c", tasks: []Task{{Cmd: "true"}}},
 	}
 
 	images := map[string]*ResolvedImage{
@@ -1222,10 +1222,10 @@ func TestComputeIntermediates_InheritDistroFromParent(t *testing.T) {
 			Build:    BuildFormats{"rpm"},
 		},
 		Image: map[string]ImageConfig{
-			"fedora":    {Layer: []string{}},
-			"arch": {Base: "ext:arch", Layer: []string{}},
-			"arch-a-b":  {Base: "arch", Layer: []string{"a", "b"}},
-			"arch-a-c":  {Base: "arch", Layer: []string{"a", "c"}},
+			"fedora":   {Layer: []string{}},
+			"arch":     {Base: "ext:arch", Layer: []string{}},
+			"arch-a-b": {Base: "arch", Layer: []string{"a", "b"}},
+			"arch-a-c": {Base: "arch", Layer: []string{"a", "c"}},
 		},
 	}
 
@@ -1276,9 +1276,9 @@ func TestComputeIntermediates_InheritDistroFromParent(t *testing.T) {
 // formats with every consuming descendant's, parent's primary format first.
 func TestComputeIntermediates_UnionChildBuildFormats(t *testing.T) {
 	layers := map[string]*Layer{
-		"a": {Name: "a", HasTasks: true},
-		"b": {Name: "b", HasTasks: true},
-		"c": {Name: "c", HasTasks: true},
+		"a": {Name: "a", tasks: []Task{{Cmd: "true"}}},
+		"b": {Name: "b", tasks: []Task{{Cmd: "true"}}},
+		"c": {Name: "c", tasks: []Task{{Cmd: "true"}}},
 	}
 
 	images := map[string]*ResolvedImage{

@@ -560,3 +560,28 @@ func TestBuilderRefForFormat(t *testing.T) {
 		t.Errorf("builderRefForFormat(aur) = %q, want empty", ref)
 	}
 }
+
+// TestWriteDataStaging_RemoteLayerUsesShortStageAlias is the regression for the
+// 2026-05-24 cachyos-GPU cutover: a DATA layer fetched via a remote @github ref
+// is keyed in g.Layers by its FULL ref, but its `FROM scratch AS <name>` stage
+// uses the SHORT name (layer.Name). The data COPY --from must reference the short
+// alias, else podman fails with "no stage or image found" (it tries to pull the
+// full ref as an image). Local data layers are unaffected (key == Name).
+func TestWriteDataStaging_RemoteLayerUsesShortStageAlias(t *testing.T) {
+	fullKey := "github.com/overthinkos/overthink/layers/notebook-templates"
+	g := &Generator{
+		Layers: map[string]*Layer{
+			fullKey: {Name: "notebook-templates", data: []DataYAML{{Src: "data/notebooks", Volume: "workspace"}}},
+		},
+	}
+	img := &ResolvedImage{UID: 1000, GID: 1000}
+	var b strings.Builder
+	g.writeDataStaging(&b, []string{fullKey}, img)
+	out := b.String()
+	if !strings.Contains(out, "COPY --from=notebook-templates ") {
+		t.Errorf("data COPY must use the short stage alias; got:\n%s", out)
+	}
+	if strings.Contains(out, "COPY --from="+fullKey) {
+		t.Errorf("data COPY used the full @github ref as the stage name (the bug); got:\n%s", out)
+	}
+}

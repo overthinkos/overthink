@@ -1143,8 +1143,12 @@ func (g *Generator) writeDataStaging(b *strings.Builder, layerOrder []string, im
 				}
 			}
 
+			// Use the short stage alias (layer.Name) to match `FROM scratch AS
+			// <layer.Name>` — for REMOTE layers layerName is the full @github map
+			// key, which is NOT a valid build-stage reference (podman would try to
+			// pull it as an image). Local layers: layerName == layer.Name (no-op).
 			b.WriteString(fmt.Sprintf("COPY --from=%s --chown=%d:%d %s %s\n",
-				layerName, img.UID, img.GID, srcPath, dstPath))
+				layer.Name, img.UID, img.GID, srcPath, dstPath))
 		}
 	}
 	if hasData {

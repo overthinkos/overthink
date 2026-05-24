@@ -119,7 +119,7 @@ func (c *ShellCmd) Run() error {
 		return fmt.Errorf("image %s has no embedded metadata; rebuild with latest ov", imageRef)
 	}
 	engine = ResolveImageEngineFromMeta(meta, rt.RunEngine)
-	MergeDeployOntoMetadata(meta, dc, c.Instance)
+	MergeDeployOntoMetadata(meta, dc, c.Image, c.Instance)
 
 	uid := meta.UID
 	gid := meta.GID
@@ -131,7 +131,7 @@ func (c *ShellCmd) Run() error {
 	var deployEnvFile string
 
 	cliVolumes := parseVolumeFlagsStandalone(c.VolumeFlag, c.Bind)
-	volumes, bindMounts := ResolveVolumeBacking(c.Image, meta.Volumes, mergeVolumeConfigs(deployVolumes, cliVolumes), meta.Home, rt.EncryptedStoragePath, rt.VolumesPath)
+	volumes, bindMounts := ResolveVolumeBacking(c.Image, c.Instance, meta.Volumes, mergeVolumeConfigs(deployVolumes, cliVolumes), meta.Home, rt.EncryptedStoragePath, rt.VolumesPath)
 
 	envAccepts := meta.EnvAccepts
 	envRequires := meta.EnvRequires
@@ -139,8 +139,6 @@ func (c *ShellCmd) Run() error {
 		imageRef = resolveShellImageRef(meta.Registry, deployImageName, c.Tag)
 	}
 
-	// Apply instance-specific volume naming
-	volumes = InstanceVolume(volumes, c.Image, c.Instance)
 	shellCtrName := containerNameInstance(c.Image, c.Instance)
 	shellAccepted := AcceptedEnvSet(envAccepts, envRequires)
 	shellGlobalEnv := dc.GlobalEnvForImage(deployKey(c.Image, c.Instance), shellCtrName, shellAccepted)

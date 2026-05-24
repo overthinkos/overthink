@@ -105,6 +105,46 @@ func printDebugRetentionNotice(w io.Writer, name string, node DeploymentNode) {
 	}
 }
 
+// Readiness-retry bounds for a pod/vm bed's eval-live step. A fresh service may
+// take time to become serviceable (Immich's first-run DB migration is the worst
+// case observed) — stepReady polls eval-live until it passes or the deadline.
+const (
+	bedEvalReadyDeadline = 6 * time.Minute
+	bedEvalReadyInterval = 15 * time.Second
+)
+
+// persistBedDeployOverrides seeds the per-host deploy.yml with a kind:eval
+// bed's project-declared deploy-shaped fields (port / volume / env / tunnel /
+// security / network) plus its disposable/lifecycle classification, BEFORE the
+// bed's `ov config` step runs. The folded bed node is the source of truth, but
+// `ov deploy add` / `ov config` otherwise source those fields from the IMAGE
+// LABELS and gate port writes behind an operator `-p` — so a bed's declared
+// `port:` remap would never reach the quadlet (it would fall back to the image
+// default and collide with any same-image deploy already bound to that port).
+// Seeding the per-host entry up front lets the existing
+// MergeDeployOntoMetadata → quadlet path honor the overrides with no new merge
+// logic; `ov config`'s own SetPorts-gated save then leaves the seeded port
+// untouched (it passes no `-p`). saveDeployState's per-field guards make
+// unset bed fields no-ops, so this is safe for beds that declare only a subset.
+func persistBedDeployOverrides(name string, node DeploymentNode) {
+	saveDeployState(name, "", SaveDeployStateInput{
+		Ports:         node.Port,
+		SetPorts:      len(node.Port) > 0,
+		Volume:        node.Volume,
+		Env:           node.Env,
+		CleanEnv:      true,
+		Tunnel:        node.Tunnel,
+		Security:      node.Security,
+		Network:       node.Network,
+		Image:         node.Image,
+		Target:        node.Target,
+		SetDisposable: true,
+		Disposable:    node.Disposable,
+		SetLifecycle:  node.Lifecycle != "",
+		Lifecycle:     node.Lifecycle,
+	})
+}
+
 // runEvalBed executes the canonical R10 sequence for one `kind: eval` bed
 // and writes per-step logs + summary.yml to .eval/<name>/<calver>/. Returns
 // the result struct (always non-nil) and the first error encountered.
@@ -148,6 +188,43 @@ func runEvalBed(exe, name string, node DeploymentNode, opts bedRunOpts) (*bedRun
 		return runErr
 	}
 
+	// stepReady runs a step with a bounded readiness retry: it re-runs the
+	// command until it succeeds or the deadline elapses, recording only the
+	// FINAL attempt. A service with slow first-run startup (e.g. a fresh Immich
+	// running its one-shot DB migration before the API binds) is not ready when
+	// the container is merely exec-able, so the deploy-scope eval probes need a
+	// readiness poll — the checks THEMSELVES are the readiness condition (a real
+	// synchronization primitive, not a fixed sleep). Fast beds pass on the first
+	// attempt (zero added latency); a genuinely-broken deploy still fails after
+	// the deadline.
+	stepReady := func(stepName string, args []string, deadline, interval time.Duration) error {
+		t0 := time.Now()
+		end := t0.Add(deadline)
+		var out []byte
+		var runErr error
+		for {
+			out, runErr = runCapture(exe, args)
+			if runErr == nil || time.Now().After(end) {
+				break
+			}
+			time.Sleep(interval)
+		}
+		dur := time.Since(t0)
+		ok := runErr == nil
+		res.Step = append(res.Step, stepResult{Name: stepName, Duration: dur, OK: ok})
+		if !ok {
+			res.OK = false
+			if res.FailExitCode == 0 {
+				res.FailExitCode = exitCodeOf(runErr)
+			}
+		}
+		logPath := filepath.Join(logDir, stepName+".log")
+		if writeErr := os.WriteFile(logPath, out, 0o644); writeErr != nil {
+			fmt.Fprintf(os.Stderr, "ov eval run %s: writing %s: %v\n", name, logPath, writeErr)
+		}
+		return runErr
+	}
+
 	// cleanup tears the disposable bed down (suppressed by --keep). Used on
 	// both the happy-path tear-down AND the failure path so the bed doesn't
 	// linger after a partial run.
@@ -158,7 +235,10 @@ func runEvalBed(exe, name string, node DeploymentNode, opts bedRunOpts) (*bedRun
 		if isVM {
 			_ = step("cleanup", []string{"vm", "destroy", vmTemplate})
 		} else {
-			_ = step("cleanup", []string{"remove", name})
+			// --purge removes the bed's named volumes too. Safe because a
+			// disposable bed's volumes are re-scoped to its own deploy key
+			// (ov-<bed>-<vol>), never a production deploy's ov-<image>-<vol>.
+			_ = step("cleanup", []string{"remove", name, "--purge"})
 		}
 	}
 
@@ -231,7 +311,18 @@ func runEvalBed(exe, name string, node DeploymentNode, opts bedRunOpts) (*bedRun
 		// above). A failed run now LEAVES the bed up for debugging, so this
 		// clears it before the fresh deploy — kept-alive state never blocks
 		// a re-run. Silent on the common no-op case.
-		_ = exec.Command(exe, "remove", name).Run()
+		// --purge clears any prior bed volumes so each deploy starts fresh
+		// (a stale postgres volume would carry a stale password). Safe: a bed's
+		// volumes are isolated under its own deploy key, never production's.
+		_ = exec.Command(exe, "remove", name, "--purge").Run()
+		// Seed the per-host deploy.yml with the bed's project-declared
+		// deploy-shaped overrides (port / volume / env / tunnel / security /
+		// network) BEFORE ov config runs. The folded bed node is the source of
+		// truth, but ov deploy add / ov config otherwise source those fields
+		// from the IMAGE LABELS (and gate port writes behind an operator -p), so
+		// a bed's declared port: remap would silently fall back to the image
+		// default and collide with any same-image deploy already bound to it.
+		persistBedDeployOverrides(name, node)
 		if err := step("deploy-add", []string{"deploy", "add", name, ref}); err != nil {
 			return fail("deploy add %s: %w", name, err)
 		}
@@ -258,7 +349,11 @@ func runEvalBed(exe, name string, node DeploymentNode, opts bedRunOpts) (*bedRun
 	// against — its layers apply to the host filesystem during deploy-add,
 	// and the update step exercises tear-down + re-apply.
 	if !isLocal {
-		if err := step("eval-live", []string{"eval", "live", name}); err != nil {
+		// Readiness retry: a fresh service may still be starting (e.g. Immich's
+		// first-run DB migration runs minutes before the API binds). stepReady
+		// polls eval-live until it passes or the deadline, so we wait for real
+		// readiness instead of racing a fixed sleep.
+		if err := stepReady("eval-live", []string{"eval", "live", name}, bedEvalReadyDeadline, bedEvalReadyInterval); err != nil {
 			return fail("eval live %s: %w", name, err)
 		}
 	}

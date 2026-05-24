@@ -77,31 +77,18 @@ func expandHome(path, home string) string {
 	return path
 }
 
-// InstanceVolume renames volume mounts for a specific instance.
-// e.g. "ov-githubrunner-state" -> "ov-githubrunner-runner-1-state"
-func InstanceVolume(mounts []VolumeMount, imageName, instance string) []VolumeMount {
-	if instance == "" {
-		return mounts
-	}
-	prefix := "ov-" + imageName + "-"
-	newPrefix := "ov-" + imageName + "-" + instance + "-"
-	result := make([]VolumeMount, len(mounts))
-	for i, m := range mounts {
-		result[i] = VolumeMount{
-			VolumeName:    strings.Replace(m.VolumeName, prefix, newPrefix, 1),
-			ContainerPath: m.ContainerPath,
-		}
-	}
-	return result
-}
+// Per-deploy volume naming (base / instance / Pattern-B / kind:eval bed) is
+// handled centrally by scopeVolumesToDeployKey + deployVolumePrefix in deploy.go
+// (keyed by the deploy's container name), so a dedicated instance-only renamer is
+// no longer needed.
 
 // BareVolumeName recovers the short volume name (e.g. "workspace") from a
-// fully-qualified podman volume name. Inverse of the prefix CollectImageVolume
-// adds at line 57 ("ov-"+image+"-"+name) and the per-instance rewrite
-// InstanceVolume performs ("ov-"+image+"-"+instance+"-"+name). Strips the
-// instance segment first when present, then the image-name segment, so
-// instance-rewritten volumes (`ov-versa-ecovoyage-workspace`) and base
-// volumes (`ov-versa-workspace`) BOTH collapse to "workspace".
+// fully-qualified podman volume name. Inverse of deployVolumePrefix: pass the
+// DEPLOY KEY (not the image) so it strips the deploy-scoped prefix
+// (`ov-<deploy>-` or `ov-<deploy>-<instance>-`). Strips the instance segment
+// first when present, then the deploy-name segment, so instance volumes
+// (`ov-versa-ecovoyage-workspace`) and base volumes (`ov-versa-workspace`)
+// BOTH collapse to "workspace".
 //
 // Returns the input unchanged when no prefix matches — callers can detect
 // "not a managed volume name" by checking equality with the input.

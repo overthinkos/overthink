@@ -192,7 +192,7 @@ func (c *EvalLiveCmd) Run() error {
 		return nil
 	}
 	localTests = MergeDeployEval(projectTests, localTests)
-	resolver, _ := ResolveEvalVarsRuntime(meta, deployOverlay, engine, containerName, c.Instance)
+	resolver, _ := ResolveEvalVarsRuntime(meta, deployOverlay, engine, c.Image, containerName, c.Instance)
 
 	// Compose the final check list: layer + image + merged deploy.
 	checks := collectChecksForRun(meta.Eval, localTests, c.Section, c.Filter)

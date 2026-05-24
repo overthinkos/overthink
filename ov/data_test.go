@@ -106,7 +106,7 @@ func TestProvisionDataNoEntries(t *testing.T) {
 	fake := installFakeRunner(t)
 	meta := &ImageMetadata{Image: "jupyter"}
 
-	n, err := provisionData("podman", "jupyter-img", meta, nil, nil, "", DataProvisionInitial)
+	n, err := provisionData("podman", "jupyter-img", meta, nil, nil, "jupyter", "", DataProvisionInitial)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -122,7 +122,7 @@ func TestProvisionDataNoVolumes(t *testing.T) {
 	fake := installFakeRunner(t)
 	meta := makeJupyterMeta(false)
 
-	n, err := provisionData("podman", "jupyter-img", meta, nil, nil, "", DataProvisionInitial)
+	n, err := provisionData("podman", "jupyter-img", meta, nil, nil, "jupyter", "", DataProvisionInitial)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -142,7 +142,7 @@ func TestProvisionDataBindOnly_InitialEmpty(t *testing.T) {
 		{Name: "workspace", HostPath: hostDir, ContPath: "/workspace"},
 	}
 
-	n, err := provisionData("podman", "jupyter-img", meta, bindMounts, nil, "", DataProvisionInitial)
+	n, err := provisionData("podman", "jupyter-img", meta, bindMounts, nil, "jupyter", "", DataProvisionInitial)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -176,7 +176,7 @@ func TestProvisionDataBindOnly_InitialNonEmpty(t *testing.T) {
 		{Name: "workspace", HostPath: hostDir},
 	}
 
-	n, err := provisionData("podman", "jupyter-img", meta, bindMounts, nil, "", DataProvisionInitial)
+	n, err := provisionData("podman", "jupyter-img", meta, bindMounts, nil, "jupyter", "", DataProvisionInitial)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -197,7 +197,7 @@ func TestProvisionDataBindOnly_Merge(t *testing.T) {
 	meta := makeJupyterMeta(false)
 	bindMounts := []ResolvedBindMount{{Name: "workspace", HostPath: hostDir}}
 
-	n, err := provisionData("podman", "jupyter-img", meta, bindMounts, nil, "", DataProvisionMerge)
+	n, err := provisionData("podman", "jupyter-img", meta, bindMounts, nil, "jupyter", "", DataProvisionMerge)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -229,7 +229,7 @@ func TestProvisionDataNamedOnly_InitialEmpty(t *testing.T) {
 		{VolumeName: "ov-jupyter-workspace", ContainerPath: "/workspace"},
 	}
 
-	n, err := provisionData("podman", "jupyter-img", meta, nil, namedVolumes, "", DataProvisionInitial)
+	n, err := provisionData("podman", "jupyter-img", meta, nil, namedVolumes, "jupyter", "", DataProvisionInitial)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -265,7 +265,7 @@ func TestProvisionDataNamedOnly_InitialNonEmpty(t *testing.T) {
 	meta := makeJupyterMeta(false)
 	namedVolumes := []VolumeMount{{VolumeName: "ov-jupyter-workspace"}}
 
-	n, err := provisionData("podman", "jupyter-img", meta, nil, namedVolumes, "", DataProvisionInitial)
+	n, err := provisionData("podman", "jupyter-img", meta, nil, namedVolumes, "jupyter", "", DataProvisionInitial)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -282,7 +282,7 @@ func TestProvisionDataNamedOnly_Merge(t *testing.T) {
 	meta := makeJupyterMeta(false)
 	namedVolumes := []VolumeMount{{VolumeName: "ov-jupyter-workspace"}}
 
-	n, err := provisionData("podman", "jupyter-img", meta, nil, namedVolumes, "", DataProvisionMerge)
+	n, err := provisionData("podman", "jupyter-img", meta, nil, namedVolumes, "jupyter", "", DataProvisionMerge)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -322,7 +322,7 @@ func TestProvisionDataMixed(t *testing.T) {
 		{VolumeName: "ov-multi-models"},
 	}
 
-	n, err := provisionData("podman", "multi-img", meta, bindMounts, namedVolumes, "", DataProvisionInitial)
+	n, err := provisionData("podman", "multi-img", meta, bindMounts, namedVolumes, "multi", "", DataProvisionInitial)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -374,7 +374,7 @@ func TestProvisionDataUnknownVolumeWarns(t *testing.T) {
 	}
 	bindMounts := []ResolvedBindMount{{Name: "workspace", HostPath: t.TempDir()}}
 
-	n, err := provisionData("podman", "jupyter-img", meta, bindMounts, nil, "", DataProvisionInitial)
+	n, err := provisionData("podman", "jupyter-img", meta, bindMounts, nil, "jupyter", "", DataProvisionInitial)
 	_ = w.Close()
 	captured := make([]byte, 4096)
 	nb, _ := r.Read(captured)
@@ -410,7 +410,7 @@ func TestProvisionDataScratchImageNamedVolume(t *testing.T) {
 	meta := makeJupyterMeta(true) // DataImage = true
 	namedVolumes := []VolumeMount{{VolumeName: "ov-jupyter-workspace"}}
 
-	n, err := provisionData("podman", "scratch-data-img", meta, nil, namedVolumes, "", DataProvisionMerge)
+	n, err := provisionData("podman", "scratch-data-img", meta, nil, namedVolumes, "jupyter", "", DataProvisionMerge)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -447,7 +447,7 @@ func TestProvisionDataScratchImageBindMount(t *testing.T) {
 	meta := makeJupyterMeta(true)
 	bindMounts := []ResolvedBindMount{{Name: "workspace", HostPath: hostDir}}
 
-	n, err := provisionData("podman", "scratch-data-img", meta, bindMounts, nil, "", DataProvisionInitial)
+	n, err := provisionData("podman", "scratch-data-img", meta, bindMounts, nil, "jupyter", "", DataProvisionInitial)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -497,7 +497,7 @@ func TestProvisionDataEntryDestSubdir(t *testing.T) {
 	}
 	bindMounts := []ResolvedBindMount{{Name: "workspace", HostPath: hostDir}}
 
-	n, err := provisionData("podman", "jupyter-img", meta, bindMounts, nil, "", DataProvisionInitial)
+	n, err := provisionData("podman", "jupyter-img", meta, bindMounts, nil, "jupyter", "", DataProvisionInitial)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

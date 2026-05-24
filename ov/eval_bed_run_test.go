@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -190,5 +192,68 @@ func TestValidateEvalBeds_LocalRefMustResolve(t *testing.T) {
 	}
 	if err := validateEvalBeds(ok); err != nil {
 		t.Fatalf("defined local ref should pass, got %v", err)
+	}
+}
+
+// TestPersistBedDeployOverrides_SeedsPortBeforeConfig pins the fix for the
+// bug class where a kind:eval pod bed's project-declared deploy-shaped fields
+// (port:/volume:/env:/tunnel:) never reached the per-host deploy.yml: ov eval
+// run shelled out `ov deploy add`/`ov config` with just the bed NAME, and both
+// source port/security/network from the IMAGE LABELS (gating port writes behind
+// an operator -p), so the bed's `port: 45434:11434` remap silently fell back to
+// the image default and collided with a same-image production deploy at start.
+// persistBedDeployOverrides seeds the bed node's overrides up front so the
+// existing ov config -> MergeDeployOntoMetadata -> quadlet path honors them.
+func TestPersistBedDeployOverrides_SeedsPortBeforeConfig(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+	if err := os.MkdirAll(filepath.Join(dir, "ov"), 0700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	// A pre-existing unrelated deploy must survive the seed (merge, not clobber).
+	initialYAML := `deploy:
+    ollama:
+        target: pod
+        image: ollama
+        port:
+            - 11434:11434
+`
+	path := filepath.Join(dir, "ov", "deploy.yml")
+	if err := os.WriteFile(path, []byte(initialYAML), 0600); err != nil {
+		t.Fatalf("write initial: %v", err)
+	}
+
+	// A bed whose key differs from its image and whose port remaps off the
+	// image default — exactly the eval-cachyos-ollama-pod shape.
+	bed := DeploymentNode{
+		Target:     "pod",
+		Image:      "ollama",
+		Port:       []string{"45434:11434"},
+		Disposable: true,
+		Lifecycle:  "dev",
+	}
+	persistBedDeployOverrides("eval-cachyos-ollama-pod", bed)
+
+	dc, err := LoadDeployConfig()
+	if err != nil {
+		t.Fatalf("reload after seed: %v", err)
+	}
+	entry, ok := dc.Deploy["eval-cachyos-ollama-pod"]
+	if !ok {
+		t.Fatal("bed entry not seeded into deploy.yml")
+	}
+	if len(entry.Port) != 1 || entry.Port[0] != "45434:11434" {
+		t.Errorf("bed port not seeded: got %v, want [45434:11434]", entry.Port)
+	}
+	if entry.Image != "ollama" || entry.Target != "pod" {
+		t.Errorf("bed image/target not seeded: got image=%q target=%q", entry.Image, entry.Target)
+	}
+	if !entry.Disposable {
+		t.Error("bed disposable not seeded (ov update would refuse the fresh-rebuild step)")
+	}
+	// The sibling production deploy must be untouched (distinct key).
+	sib, ok := dc.Deploy["ollama"]
+	if !ok || len(sib.Port) != 1 || sib.Port[0] != "11434:11434" {
+		t.Errorf("sibling 'ollama' deploy clobbered: got %+v", sib)
 	}
 }

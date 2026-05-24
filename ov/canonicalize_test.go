@@ -73,6 +73,82 @@ func TestResolveLocalImageRef_PrefersBaseOverAlias(t *testing.T) {
 	}
 }
 
+// TestMergeDeployOntoMetadata_KeyedByDeployNameNotImage guards the bug class
+// where MergeDeployOntoMetadata looked up the deploy overlay by meta.Image (the
+// baked org.overthinkos.image short-name) instead of the caller's deploy key. A
+// kind:eval bed (key "eval-cachyos-ollama-pod", image "ollama") that remaps
+// 45434:11434 MUST keep its own port even when a sibling production deploy keyed
+// "ollama" publishes the image-default 11434 — otherwise the bed's quadlet
+// inherits 11434 and collides with the running same-image service at start
+// (rootlessport "address already in use"). Fails against the pre-fix code, which
+// keyed on meta.Image and therefore returned 11434 for the bed too.
+func TestMergeDeployOntoMetadata_KeyedByDeployNameNotImage(t *testing.T) {
+	dc := &DeployConfig{
+		Deploy: map[string]DeploymentNode{
+			"ollama":                  {Port: []string{"11434:11434"}},
+			"eval-cachyos-ollama-pod": {Image: "ollama", Port: []string{"45434:11434"}},
+		},
+	}
+
+	// Bed: deploy key differs from the baked image short-name. The merge must
+	// resolve the bed's OWN entry, not the sibling "ollama" deploy.
+	bedMeta := &ImageMetadata{Image: "ollama", Ports: []string{"11434:11434"}}
+	MergeDeployOntoMetadata(bedMeta, dc, "eval-cachyos-ollama-pod", "")
+	if len(bedMeta.Ports) != 1 || bedMeta.Ports[0] != "45434:11434" {
+		t.Errorf("bed merge: got Ports=%v, want [45434:11434] (must not pick up sibling 'ollama' deploy or the image default)", bedMeta.Ports)
+	}
+
+	// Plain deploy: key == image short-name. Resolves its own entry as before.
+	plainMeta := &ImageMetadata{Image: "ollama", Ports: []string{"9999:11434"}}
+	MergeDeployOntoMetadata(plainMeta, dc, "ollama", "")
+	if len(plainMeta.Ports) != 1 || plainMeta.Ports[0] != "11434:11434" {
+		t.Errorf("plain merge: got Ports=%v, want [11434:11434]", plainMeta.Ports)
+	}
+
+	// Instance deploy: "<base>/<instance>" key form resolves correctly.
+	dc.Deploy["selkies/work"] = DeploymentNode{Image: "selkies", Port: []string{"3001:3000"}}
+	instMeta := &ImageMetadata{Image: "selkies", Ports: []string{"3000:3000"}}
+	MergeDeployOntoMetadata(instMeta, dc, "selkies", "work")
+	if len(instMeta.Ports) != 1 || instMeta.Ports[0] != "3001:3000" {
+		t.Errorf("instance merge: got Ports=%v, want [3001:3000]", instMeta.Ports)
+	}
+}
+
+// TestMergeDeployOntoMetadata_VolumesScopedToDeployKey pins the GENERIC
+// guarantee the operator asked for: EVERY distinctly-named deploy of an image —
+// the base deploy, a second production pod (Pattern-B), an instance, or a
+// kind:eval bed — gets volume mounts under its OWN deploy/container name, so no
+// two differently-named pods ever share a named volume (the immich-pgdata
+// sharing incident). The ONLY no-op is the base deploy whose key == image
+// (nothing else can share that name), so that single deploy's names never
+// change (zero migration). Keyed by deployVolumePrefix == container name.
+func TestMergeDeployOntoMetadata_VolumesScopedToDeployKey(t *testing.T) {
+	const vol = "ov-immich-ml-pgdata"
+	mk := func() *ImageMetadata {
+		return &ImageMetadata{Image: "immich-ml", Volumes: []VolumeMount{{VolumeName: vol, ContainerPath: "/data"}}}
+	}
+	for _, tc := range []struct {
+		name       string
+		deployName string
+		instance   string
+		want       string
+	}{
+		{"base_deploy_key_equals_image_unchanged", "immich-ml", "", "ov-immich-ml-pgdata"},
+		{"second_production_pod_same_image_isolated", "immich-prod", "", "ov-immich-prod-pgdata"},
+		{"instance_isolated", "immich-ml", "blue", "ov-immich-ml-blue-pgdata"},
+		{"eval_bed_isolated", "eval-cachyos-immich-ml-pod", "", "ov-eval-cachyos-immich-ml-pod-pgdata"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			meta := mk()
+			// nil dc → exercises the unconditional, overlay-independent re-scope.
+			MergeDeployOntoMetadata(meta, nil, tc.deployName, tc.instance)
+			if got := meta.Volumes[0].VolumeName; got != tc.want {
+				t.Errorf("deploy %q/%q: volume = %q, want %q", tc.deployName, tc.instance, got, tc.want)
+			}
+		})
+	}
+}
+
 func lastIndex(s string, b byte) int {
 	for i := len(s) - 1; i >= 0; i-- {
 		if s[i] == b {

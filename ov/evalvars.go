@@ -126,7 +126,7 @@ func ResolveEvalVarsBuild(meta *ImageMetadata) *EvalVarResolver {
 // On inspect failure the function still returns a resolver with the
 // build-time portion populated; HasRuntime is false and runtime-only vars
 // will be unresolved downstream.
-func ResolveEvalVarsRuntime(meta *ImageMetadata, deploy *DeploymentNode, engine, containerName, instance string) (*EvalVarResolver, error) {
+func ResolveEvalVarsRuntime(meta *ImageMetadata, deploy *DeploymentNode, engine, deployName, containerName, instance string) (*EvalVarResolver, error) {
 	_ = deploy // reserved for future per-deploy overrides; instance now arrives explicitly
 	env := buildTimeVars(meta, instance)
 
@@ -135,7 +135,7 @@ func ResolveEvalVarsRuntime(meta *ImageMetadata, deploy *DeploymentNode, engine,
 		return &EvalVarResolver{Env: env, HasRuntime: false}, err
 	}
 
-	mergeRuntimeVars(env, meta, inspection, instance)
+	mergeRuntimeVars(env, meta, inspection, deployName, instance)
 	return &EvalVarResolver{Env: env, HasRuntime: true}, nil
 }
 
@@ -181,7 +181,7 @@ func buildTimeVars(meta *ImageMetadata, instance string) map[string]string {
 // stripping the "ov-<image>-" prefix from the engine's full volume name.
 // Bind mounts without a named volume are cross-referenced by destination
 // path against meta.Volumes to recover the short name.
-func mergeRuntimeVars(env map[string]string, meta *ImageMetadata, c *ContainerInspection, instance string) {
+func mergeRuntimeVars(env map[string]string, meta *ImageMetadata, c *ContainerInspection, deployName, instance string) {
 	if c == nil {
 		return
 	}
@@ -255,7 +255,10 @@ func mergeRuntimeVars(env map[string]string, meta *ImageMetadata, c *ContainerIn
 	for _, m := range c.Mounts {
 		short := ""
 		if m.Name != "" && meta != nil && meta.Image != "" {
-			short = BareVolumeName(m.Name, meta.Image, instance)
+			// c.Mounts are the container's ACTUAL (deploy-scoped) volume names,
+			// so strip by the deploy key, not the image. meta.Volumes above is
+			// image-label-named, so that loop keeps using meta.Image.
+			short = BareVolumeName(m.Name, deployName, instance)
 			if short == m.Name {
 				short = "" // not one of ours — fall through to dest lookup
 			}

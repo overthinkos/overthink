@@ -81,7 +81,7 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 		return fmt.Errorf("image %s has no embedded metadata; rebuild with latest ov", imageRef)
 	}
 	engine = ResolveImageEngineFromMeta(meta, rt.RunEngine)
-	MergeDeployOntoMetadata(meta, dc, c.Instance)
+	MergeDeployOntoMetadata(meta, dc, c.Image, c.Instance)
 
 	// Sidecars require quadlet mode (pod networking is only available via quadlet)
 	if overlay, ok := dc.Lookup(c.Image, c.Instance); ok && len(overlay.Sidecar) > 0 {
@@ -97,16 +97,13 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 	entrypoint := resolveEntrypointFromMeta(meta)
 
 	cliVolumes := parseVolumeFlagsStandalone(c.VolumeFlag, c.Bind)
-	volumes, bindMounts := ResolveVolumeBacking(c.Image, meta.Volumes, mergeVolumeConfigs(deployVolumes, cliVolumes), meta.Home, rt.EncryptedStoragePath, rt.VolumesPath)
+	volumes, bindMounts := ResolveVolumeBacking(c.Image, c.Instance, meta.Volumes, mergeVolumeConfigs(deployVolumes, cliVolumes), meta.Home, rt.EncryptedStoragePath, rt.VolumesPath)
 
 	envAccepts := meta.EnvAccepts
 	envRequires := meta.EnvRequires
 	if meta.Registry != "" {
 		imageRef = resolveShellImageRef(meta.Registry, deployImageName, c.Tag)
 	}
-
-	// Apply instance-specific volume naming
-	volumes = InstanceVolume(volumes, c.Image, c.Instance)
 
 	// Auto-initialize and mount encrypted volumes if needed
 	if err := ensureEncryptedMounts(c.Image, c.Instance, false); err != nil {
@@ -395,7 +392,7 @@ func stopTunnelForImage(imageName, instance string) {
 		meta, metaErr := ExtractMetadata("podman", imageRef)
 		if metaErr == nil && meta != nil {
 			dc := loadDeployConfigForRead("ov start tunnel merge")
-			MergeDeployOntoMetadata(meta, dc, instance)
+			MergeDeployOntoMetadata(meta, dc, imageName, instance)
 			if meta.Tunnel != nil {
 				tc = TunnelConfigFromMetadata(meta)
 			}

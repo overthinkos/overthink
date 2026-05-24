@@ -92,10 +92,9 @@ func RunHook(engine, containerName, hookScript string, envVars []string) error {
 
 // removeVolumes removes all named volumes matching the image/instance prefix.
 func removeVolumes(engine, imageName, instance string) {
-	prefix := "ov-" + imageName + "-"
-	if instance != "" {
-		prefix = "ov-" + imageName + "-" + instance + "-"
-	}
+	// Same per-deploy prefix the create side uses (deployVolumePrefix), so purge
+	// removes exactly this deploy's volumes and never a same-image sibling's.
+	prefix := deployVolumePrefix(imageName, instance)
 
 	out, err := exec.Command(engine, "volume", "ls", "--format", "{{.Name}}", "--filter", "name="+prefix).Output()
 	if err != nil {

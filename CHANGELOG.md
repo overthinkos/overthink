@@ -48,17 +48,30 @@ layer's extension-dir detection switched from hardcoded `/usr/lib*/pgsql` +
 `/usr/share/pgsql` to `pg_config --pkglibdir` / `--sharedir`, authoritative on
 both Fedora (`pgsql`) and Arch (`postgresql`) layouts. Per the per-kind
 versioning rules (this cutover lands on top of that one), every changed layer's
-`version:` was bumped to `2026.144.1531`. Fedora package sets are byte-stable.
+`version:` was bumped — the GPU-stack layers to `2026.144.1531`, `nodejs` later
+to `2026.144.1613` (the standalone-pnpm correction, below). Fedora package sets
+are byte-stable.
 
 **nodejs24 → nodejs merge.** The standalone `nodejs24` layer was deleted; its
-pnpm provision moved into the generic `nodejs` layer (a `package.json` with
-`pnpm@10`, installed via the npm builder into `~/.npm-global/bin`). Every
-consumer repointed to `nodejs`: the `immich` layer's `require:`, the main
-`immich`/`immich-ml` images, and `fedora-coder` (in `overthinkos/fedora`).
-Immich has no hard Node requirement (its `engines` pins only `pnpm>=10`; the
-`node` version is a non-enforced volta dev-pin), so consumers follow the
-distro-default Node — v26 on Arch, v22 on Fedora. R5 sweep: `git grep nodejs24`
-returns only this file.
+pnpm provision moved into the generic `nodejs` layer. pnpm is installed as the
+**self-contained standalone binary** (it bundles its own Node) to
+`/usr/local/bin/pnpm` via a `task:` download — a plain RUN step, NOT a
+`package.json`. (A `package.json` on `nodejs` was tried first but reverted before
+landing: it triggers the npm multi-stage builder on *every* image that composes
+`nodejs` — including the builder images `arch-builder`/`fedora-builder`, which
+compose `nodejs` to BE the npm builder and therefore cannot self-provide it
+(self-reference is filtered), so `ov image generate` failed with
+`layer nodejs needs builder npm but no builders.npm configured`. The standalone
+binary is a plain RUN, no builder trigger.) `/usr/local/bin` is on the system
+PATH for every user including root — Immich runs its pnpm build as root, which the
+old `~/.npm-global` (uid-1000) path silently broke. Every consumer repointed to
+`nodejs`: the `immich` layer's `require:`, the main `immich`/`immich-ml` images,
+and `fedora-coder` (in `overthinkos/fedora`). Immich has no hard Node requirement
+(its `engines` pins only `pnpm>=10`; the `node` version is a non-enforced volta
+dev-pin), so consumers follow the distro-default Node — v26 on Arch, v22 on
+Fedora. The `nodejs` layer landed at `version: 2026.144.1613` (the standalone-pnpm
+correction); the other changed layers at `2026.144.1531`. R5 sweep:
+`git grep nodejs24` returns only this file.
 
 No further schema bump — this change is additive (new images, new distro
 sections, a layer removal) on top of the per-kind-versioning schema
@@ -66,6 +79,90 @@ sections, a layer removal) on top of the per-kind-versioning schema
 first, then `image/cachyos` reconciles its `@github` pins to that tag and runs
 the authoritative R10 (build → deploy → eval-live → fresh rebuild) of the eight
 GPU images on real NVIDIA hardware.
+
+**Follow-up fixes surfaced during R10 (same cutover, separate `ov`/main commits).**
+
+- **`generate`: remote data-layer `COPY --from` used the wrong stage name.**
+  `writeDataStaging` emitted `COPY --from=<map-key>`; for a REMOTE `@github` data
+  layer the map key is the full ref (e.g.
+  `github.com/overthinkos/overthink/layers/notebook-templates`), which is not a
+  valid build-stage reference — podman tried to pull it as an image and failed
+  with `no stage or image found` (exit 125). The matching `FROM scratch AS <name>`
+  uses the SHORT name (`layer.Name`). Fix: emit `COPY --from=<layer.Name>` so both
+  match; local data layers are unaffected (map key == Name). Surfaced building the
+  cachyos `jupyter-ml` image (first `@github` data-layer consumer,
+  `notebook-templates`); `unsloth-studio` (`notebook-finetuning`) hit the same.
+  Guarded by `TestWriteDataStaging_RemoteLayerUsesShortStageAlias`.
+
+- **`ov config`: quadlet `PublishPort=` keyed by image short-name, not deploy
+  key.** `MergeDeployOntoMetadata` looked up the deploy.yml overlay by
+  `meta.Image` (the baked `org.overthinkos.image` short-name) instead of the
+  deploy key the caller was operating on. A `kind: eval` bed (key
+  `eval-cachyos-ollama-pod`, image `ollama`) remapping `45434:11434` therefore had
+  its port silently replaced by the image default `11434`, colliding at `ov start`
+  with a running same-image production deploy (`ov-ollama`) →
+  `rootlessport bind: address already in use`. This was the documented
+  "quadlet-port lookup keyed by image, not deploy-key" known issue; it blocked the
+  deploy-scope R10 of every cachyos GPU bed on a host that runs same-named
+  production services. Fix: `MergeDeployOntoMetadata(meta, dc, deployName,
+  instance)` now keys on `deployKey(deployName, instance)` with the deploy key
+  passed by all five call sites (`ov config`/`start`/`shell` + the `--update-all`
+  and tunnel-teardown loops); the sibling `dc.Lookup` parameter was renamed
+  `deployName` to document the same contract (R3). Guarded by
+  `TestMergeDeployOntoMetadata_KeyedByDeployNameNotImage`; the stale "Known issue"
+  paragraph in `/ov-core:deploy` was removed (R5).
+
+- **`ov eval run`: `kind: eval` pod beds' declared `port:` never reached the
+  quadlet.** The bed bring-up shelled out `ov deploy add`/`ov config`/`ov start`
+  with only the bed NAME; neither verb consults the project-side folded bed node,
+  and both source `port:`/`security:`/`network:` from the IMAGE LABELS (persisting
+  ports only behind an operator `-p` gate). So a bed's project-declared `port:`
+  override lived only in `Config.Deploy[name]` and was never propagated to the
+  per-host `deploy.yml` that `ov config` reads — every pod bed silently fell back
+  to its image's default port and only "worked" because that port was free on a
+  clean eval host. On a host running same-named production services it collided at
+  start. Fix: `runEvalBed` now calls `persistBedDeployOverrides(name, node)` after
+  the pre-run teardown and before `ov deploy add`, seeding the bed node's
+  `port:`/`volume:`/`env:`/`tunnel:`/`security:`/`network:`/`disposable:` into the
+  per-host deploy.yml so the existing config→merge→quadlet path honors them (no
+  new merge logic; `ov config`'s `SetPorts`-gated save leaves the seeded port
+  untouched). This repairs every existing bed, not just the cachyos ones. Guarded
+  by `TestPersistBedDeployOverrides_SeedsPortBeforeConfig`.
+
+- **Volumes were keyed by image, not deploy — differently-named pods of one
+  image shared volume mounts (data-safety bug).** Named-volume names were derived
+  from the image (`ov-<image>-<vol>`, `labels.go:314` via `meta.Image`), so EVERY
+  distinctly-named deploy of an image — a second production pod (Pattern-B), or a
+  `kind: eval` bed — mounted the SAME named volumes (instances were partially
+  isolated via the old `InstanceVolume`, but production pods and beds were not).
+  Running the `eval-cachyos-immich-ml-pod` bed alongside the operator's production
+  `ov-immich-ml` put two Postgres postmasters on the **same `ov-immich-ml-pgdata`
+  volume** (the bed's password-auth mismatch was a symptom — it reused the
+  production DB's existing password, which differed from the bed's freshly
+  generated secret). Fix (generic): a single `deployVolumePrefix` (= the deploy's
+  container name) now keys ALL volume naming — named volumes
+  (`scopeVolumesToDeployKey`, run unconditionally in `MergeDeployOntoMetadata`),
+  bind-auto paths and encrypted-volume dirs (`ResolveVolumeBacking` +
+  `deployStorageDir`, threaded through the `enc.go` mount/unmount/passwd ops), and
+  purge (`removeVolumes`). So every distinctly-named pod — base, instance,
+  Pattern-B, or bed — ALWAYS gets its own volume namespace; the lone no-op is the
+  base deploy whose key equals the image (nothing else can share that name), so
+  that deploy's names never change (zero migration; the now-redundant
+  `InstanceVolume` was removed since `deployVolumePrefix` subsumes it identically
+  for instances). The bed runner additionally `--purge`s on its pre-run and
+  teardown (safe — isolated names) so each bed deploy starts from a clean volume.
+  Guarded by `TestMergeDeployOntoMetadata_VolumesScopedToDeployKey` (base /
+  second-production-pod / instance / bed).
+
+- **`ov eval run`: pod/vm beds raced eval-live against slow first-run startup.**
+  The pod bed path ran eval-live after only a 30s exec-check; a fresh Immich runs
+  its one-shot DB migration for minutes before the API binds, so the deploy-scope
+  probes failed against a not-yet-ready service. Fix: `stepReady` runs eval-live
+  with a bounded readiness retry (re-runs until the checks pass or a 6-minute
+  deadline) — the eval checks themselves are the readiness condition, a real
+  synchronization primitive, not a fixed sleep. Fast beds pass on the first
+  attempt with zero added latency; a genuinely-broken deploy still fails after
+  the deadline.
 
 ### 2026-05-24 — per-kind versioning: author-declared `version:` as the authoritative identity for layers AND images (hard cutover)
 

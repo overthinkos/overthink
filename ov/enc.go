@@ -429,7 +429,7 @@ func encInit(imageName, instance, volume string) error {
 			continue
 		}
 
-		volDir := resolveEncVolumeDir(m, storagePath, imageName)
+		volDir := resolveEncVolumeDir(m, storagePath, deployStorageDir(imageName, instance))
 		cipherDir := filepath.Join(volDir, "cipher")
 		plainDir := filepath.Join(volDir, "plain")
 
@@ -483,7 +483,7 @@ func encMount(imageName, instance, volume string) error {
 			continue
 		}
 		requested++
-		volDir := resolveEncVolumeDir(m, storagePath, imageName)
+		volDir := resolveEncVolumeDir(m, storagePath, deployStorageDir(imageName, instance))
 		plainDir := filepath.Join(volDir, "plain")
 		if isEncryptedMounted(plainDir) {
 			mounted++
@@ -506,7 +506,7 @@ func encMount(imageName, instance, volume string) error {
 			continue
 		}
 
-		volDir := resolveEncVolumeDir(m, storagePath, imageName)
+		volDir := resolveEncVolumeDir(m, storagePath, deployStorageDir(imageName, instance))
 		cipherDir := filepath.Join(volDir, "cipher")
 		plainDir := filepath.Join(volDir, "plain")
 
@@ -524,7 +524,7 @@ func encMount(imageName, instance, volume string) error {
 		}
 
 		gcArgs := append(extpassArgs, "-allow_other", cipherDir, plainDir)
-		scopeUnit := fmt.Sprintf("ov-enc-%s-%s", imageName, m.Name)
+		scopeUnit := fmt.Sprintf("ov-enc-%s-%s", deployStorageDir(imageName, instance), m.Name)
 		scopeArgs := append([]string{"--scope", "--user", "--unit=" + scopeUnit, "--", "gocryptfs"}, gcArgs...)
 		cmd := exec.Command("systemd-run", scopeArgs...)
 		cmd.Env = append(os.Environ(), "GOCRYPTFS_PASSWORD="+passphrase)
@@ -562,7 +562,7 @@ func encUnmount(imageName, instance, volume string) error {
 			continue
 		}
 
-		volDir := resolveEncVolumeDir(m, storagePath, imageName)
+		volDir := resolveEncVolumeDir(m, storagePath, deployStorageDir(imageName, instance))
 		plainDir := filepath.Join(volDir, "plain")
 
 		if !isEncryptedMounted(plainDir) {
@@ -577,7 +577,7 @@ func encUnmount(imageName, instance, volume string) error {
 			return fmt.Errorf("unmounting %s: %w", m.Name, err)
 		}
 		// Stop the gocryptfs scope unit (gocryptfs may linger after fusermount)
-		scopeUnit := fmt.Sprintf("ov-enc-%s-%s.scope", imageName, m.Name)
+		scopeUnit := fmt.Sprintf("ov-enc-%s-%s.scope", deployStorageDir(imageName, instance), m.Name)
 		exec.Command("systemctl", "--user", "stop", scopeUnit).Run() // best-effort
 		fmt.Fprintf(os.Stderr, "Unmounted %s\n", m.Name)
 	}
@@ -598,7 +598,7 @@ func encStatus(imageName, instance string) error {
 
 	fmt.Printf("%-20s %-12s %-8s %s\n", "NAME", "INITIALIZED", "MOUNTED", "PATH")
 	for _, m := range mounts {
-		volDir := resolveEncVolumeDir(m, storagePath, imageName)
+		volDir := resolveEncVolumeDir(m, storagePath, deployStorageDir(imageName, instance))
 		cipherDir := filepath.Join(volDir, "cipher")
 		plainDir := filepath.Join(volDir, "plain")
 
@@ -628,7 +628,7 @@ func encPasswd(imageName, instance string) error {
 
 	// All volumes must be unmounted before changing password
 	for _, m := range mounts {
-		volDir := resolveEncVolumeDir(m, storagePath, imageName)
+		volDir := resolveEncVolumeDir(m, storagePath, deployStorageDir(imageName, instance))
 		plainDir := filepath.Join(volDir, "plain")
 		if isEncryptedMounted(plainDir) {
 			return fmt.Errorf("encrypted volume %q is still mounted; run 'ov config unmount %s' first", m.Name, imageName)
@@ -657,7 +657,7 @@ func encPasswd(imageName, instance string) error {
 	}
 
 	for _, m := range mounts {
-		volDir := resolveEncVolumeDir(m, storagePath, imageName)
+		volDir := resolveEncVolumeDir(m, storagePath, deployStorageDir(imageName, instance))
 		cipherDir := filepath.Join(volDir, "cipher")
 
 		if !isEncryptedInitialized(cipherDir) {
@@ -703,7 +703,7 @@ func ensureEncryptedMounts(imageName, instance string, autoGenerate bool) error 
 
 	anyNotReady := false
 	for _, m := range mounts {
-		volDir := resolveEncVolumeDir(m, storagePath, imageName)
+		volDir := resolveEncVolumeDir(m, storagePath, deployStorageDir(imageName, instance))
 		cipherDir := filepath.Join(volDir, "cipher")
 		plainDir := filepath.Join(volDir, "plain")
 		if !isEncryptedInitialized(cipherDir) || !isEncryptedMounted(plainDir) {
@@ -723,7 +723,7 @@ func ensureEncryptedMounts(imageName, instance string, autoGenerate bool) error 
 	defer cleanup()
 
 	for _, m := range mounts {
-		volDir := resolveEncVolumeDir(m, storagePath, imageName)
+		volDir := resolveEncVolumeDir(m, storagePath, deployStorageDir(imageName, instance))
 		cipherDir := filepath.Join(volDir, "cipher")
 		plainDir := filepath.Join(volDir, "plain")
 

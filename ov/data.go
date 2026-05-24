@@ -99,7 +99,7 @@ var (
 // create + podman cp path.
 func provisionData(engine string, imageRef string, meta *ImageMetadata,
 	bindMounts []ResolvedBindMount, namedVolumes []VolumeMount,
-	instance string, mode DataProvisionMode) (int, error) {
+	deployName, instance string, mode DataProvisionMode) (int, error) {
 
 	if len(meta.DataEntries) == 0 {
 		return 0, nil
@@ -122,7 +122,7 @@ func provisionData(engine string, imageRef string, meta *ImageMetadata,
 	// instance deploy.
 	targets := make(map[string]seedTarget, len(bindMounts)+len(namedVolumes))
 	for _, nv := range namedVolumes {
-		bare := BareVolumeName(nv.VolumeName, meta.Image, instance)
+		bare := BareVolumeName(nv.VolumeName, deployName, instance)
 		targets[bare] = seedTarget{
 			bareName:    bare,
 			kind:        seedKindNamed,

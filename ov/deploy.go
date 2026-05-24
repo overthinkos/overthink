@@ -1248,8 +1248,6 @@ func MergeDeployOverlay(cfg *Config, dc *DeployConfig) {
 	}
 }
 
-// MergeDeployOntoMetadata applies deploy.yml overrides onto label-derived metadata.
-// Same field-level replace semantics as MergeDeployOverlay.
 // OccupiedHostPorts returns the set of host ports already published by
 // any deployment in dc except the named one (`excludeKey` is typically
 // the deploy key for the entry currently being expanded — we want to
@@ -1282,12 +1280,30 @@ func (dc *DeployConfig) OccupiedHostPorts(excludeKey string) map[int]bool {
 	return out
 }
 
-func MergeDeployOntoMetadata(meta *ImageMetadata, dc *DeployConfig, instance string) {
+// MergeDeployOntoMetadata applies a deploy.yml entry's overrides (ports, env,
+// security, tunnel, secrets, …) onto label-derived image metadata. Field-level
+// replace semantics, same as MergeDeployOverlay.
+//
+// The overlay entry is keyed by deployName — the deploy.yml key base the caller
+// is operating on (the bed / instance / Pattern-B name), NOT meta.Image (the
+// baked org.overthinkos.image short-name). For a plain deploy the two coincide,
+// but a kind:eval bed or a Pattern-B deploy carries a key distinct from its
+// image, so the caller MUST pass its own deploy key (typically c.Image). Keying
+// off meta.Image would read whichever sibling deploy merely shares the image and
+// clobber this entry's explicit port:/env:/security: — e.g. a bed remapping
+// 45434:11434 would lose its port to a running same-image deploy on 11434.
+func MergeDeployOntoMetadata(meta *ImageMetadata, dc *DeployConfig, deployName, instance string) {
+	// Volume isolation runs UNCONDITIONALLY (independent of any deploy.yml
+	// overlay), so every distinctly-named deploy gets its own volume namespace
+	// on the very first `ov config` and every run after — see
+	// scopeVolumesToDeployKey.
+	scopeVolumesToDeployKey(meta, deployName, instance)
+
 	if dc == nil || dc.Deploy == nil || meta == nil {
 		return
 	}
 
-	overlay, ok := dc.Deploy[deployKey(meta.Image, instance)]
+	overlay, ok := dc.Deploy[deployKey(deployName, instance)]
 	if !ok {
 		return
 	}
@@ -1402,6 +1418,58 @@ func MergeDeployOntoMetadata(meta *ImageMetadata, dc *DeployConfig, instance str
 			}
 		}
 	}
+
+}
+
+// deployVolumePrefix is the named-volume prefix for a deploy: it equals the
+// deploy's container name plus a dash, so EVERY distinctly-named deploy — a base
+// deploy, a Pattern-B deploy, a `<base>/<instance>`, or a kind:eval bed — gets
+// its own volume namespace. Two deploys NEVER share a named volume unless they
+// share a container name (which they can't — container names are unique). This
+// is the single source of truth for volume naming; ResolveVolumeBacking,
+// removeVolumes, and scopeVolumesToDeployKey all key off it.
+func deployVolumePrefix(deployKey, instance string) string {
+	return containerNameInstance(deployKey, instance) + "-"
+}
+
+// deployStorageDir is the per-deploy directory component for bind-auto paths and
+// encrypted-volume directories. Like deployVolumePrefix it is unique per deploy
+// (base vs instance vs Pattern-B vs bed), so auto-provisioned bind/encrypted
+// storage is never shared across differently-named deploys. For a base deploy
+// with no instance it is just the deploy key (unchanged from the historical
+// layout); an instance appends "-<instance>".
+func deployStorageDir(deployKey, instance string) string {
+	if instance == "" {
+		return deployKey
+	}
+	return deployKey + "-" + instance
+}
+
+// scopeVolumesToDeployKey renames meta's named-volume mounts from the
+// image-derived prefix (ov-<image>-) to the deploy's own prefix
+// (deployVolumePrefix), so every distinctly-named deploy ALWAYS gets volume
+// mounts distinct from any other deploy of the same image — production pods,
+// instances, and disposable kind:eval beds alike. Before this, names were keyed
+// by the baked org.overthinkos.image label, so two deploys of one image (e.g.
+// the operator's immich plus a disposable immich bed, or two production pods)
+// shared the SAME named volumes and could read or corrupt each other's data.
+// No-op when the deploy's prefix already equals the image prefix (the common
+// `ov config <image>` base deploy), so that deploy's volume names never change.
+// Idempotent: re-running on already-scoped names is a no-op.
+func scopeVolumesToDeployKey(meta *ImageMetadata, deployName, instance string) {
+	if meta == nil || deployName == "" {
+		return
+	}
+	newPrefix := deployVolumePrefix(deployName, instance)
+	oldPrefix := "ov-" + meta.Image + "-"
+	if newPrefix == oldPrefix {
+		return
+	}
+	for i := range meta.Volumes {
+		if rest := strings.TrimPrefix(meta.Volumes[i].VolumeName, oldPrefix); rest != meta.Volumes[i].VolumeName {
+			meta.Volumes[i].VolumeName = newPrefix + rest
+		}
+	}
 }
 
 // ResolveVolumeBacking splits image volumes into named volumes and bind mounts
@@ -1409,7 +1477,7 @@ func MergeDeployOntoMetadata(meta *ImageMetadata, dc *DeployConfig, instance str
 // Volumes without a deploy override remain as named volumes.
 // Volumes with type=bind or type=encrypted become ResolvedBindMount.
 // Deploy-only volumes (with Path set, not in labels) are also supported.
-func ResolveVolumeBacking(imageName string, labelVolumes []VolumeMount, deployVolumes []DeployVolumeConfig, home string, encStoragePath string, volumesPath string) ([]VolumeMount, []ResolvedBindMount) {
+func ResolveVolumeBacking(imageName, instance string, labelVolumes []VolumeMount, deployVolumes []DeployVolumeConfig, home string, encStoragePath string, volumesPath string) ([]VolumeMount, []ResolvedBindMount) {
 	// Index deploy volume configs by name
 	deployByName := make(map[string]DeployVolumeConfig, len(deployVolumes))
 	for _, dv := range deployVolumes {
@@ -1423,8 +1491,8 @@ func ResolveVolumeBacking(imageName string, labelVolumes []VolumeMount, deployVo
 	var bindMounts []ResolvedBindMount
 
 	for _, vol := range labelVolumes {
-		// Extract short name from "ov-<image>-<name>"
-		shortName := strings.TrimPrefix(vol.VolumeName, "ov-"+imageName+"-")
+		// Extract short name from the deploy-scoped prefix (ov-<deploy>-<name>).
+		shortName := strings.TrimPrefix(vol.VolumeName, deployVolumePrefix(imageName, instance))
 
 		dv, hasOverride := deployByName[shortName]
 		if hasOverride {
@@ -1438,14 +1506,14 @@ func ResolveVolumeBacking(imageName string, labelVolumes []VolumeMount, deployVo
 					// Explicit per-volume path: /path/{cipher,plain}
 					hostPath = filepath.Join(expandHostHome(dv.Host), "plain")
 				} else {
-					// Global default: <encStoragePath>/ov-<image>-<name>/{cipher,plain}
-					hostPath = encryptedPlainDir(encStoragePath, imageName, shortName)
+					// Global default, per-deploy: <encStoragePath>/ov-<deploy>-<name>/{cipher,plain}
+					hostPath = encryptedPlainDir(encStoragePath, deployStorageDir(imageName, instance), shortName)
 				}
 			} else if dv.Host != "" {
 				hostPath = expandHostHome(dv.Host)
 			} else {
-				// Auto path: <volumesPath>/<image>/<name>
-				hostPath = filepath.Join(volumesPath, imageName, shortName)
+				// Auto path, per-deploy: <volumesPath>/<deploy>/<name>
+				hostPath = filepath.Join(volumesPath, deployStorageDir(imageName, instance), shortName)
 			}
 			bindMounts = append(bindMounts, ResolvedBindMount{
 				Name:      shortName,
@@ -1471,12 +1539,12 @@ func ResolveVolumeBacking(imageName string, labelVolumes []VolumeMount, deployVo
 				if dv.Host != "" {
 					hostPath = filepath.Join(expandHostHome(dv.Host), "plain")
 				} else {
-					hostPath = encryptedPlainDir(encStoragePath, imageName, dv.Name)
+					hostPath = encryptedPlainDir(encStoragePath, deployStorageDir(imageName, instance), dv.Name)
 				}
 			} else if dv.Host != "" {
 				hostPath = expandHostHome(dv.Host)
 			} else {
-				hostPath = filepath.Join(volumesPath, imageName, dv.Name)
+				hostPath = filepath.Join(volumesPath, deployStorageDir(imageName, instance), dv.Name)
 			}
 			bindMounts = append(bindMounts, ResolvedBindMount{
 				Name:      dv.Name,
@@ -1486,7 +1554,7 @@ func ResolveVolumeBacking(imageName string, labelVolumes []VolumeMount, deployVo
 			})
 		} else {
 			volumes = append(volumes, VolumeMount{
-				VolumeName:    "ov-" + imageName + "-" + dv.Name,
+				VolumeName:    deployVolumePrefix(imageName, instance) + dv.Name,
 				ContainerPath: containerPath,
 			})
 		}
@@ -1553,16 +1621,19 @@ func SaveDeployConfig(dc *DeployConfig) error {
 	return nil
 }
 
-// Lookup returns the DeploymentNode for (image, instance), or
+// Lookup returns the DeploymentNode for (deployName, instance), or
 // (zero, false) when the entry is absent. Safe to call on a nil
 // *DeployConfig — lets callers chain
-// `loadDeployConfigForRead(...).Lookup(image, instance)` without a
-// separate nil check.
-func (dc *DeployConfig) Lookup(image, instance string) (DeploymentNode, bool) {
+// `loadDeployConfigForRead(...).Lookup(deployName, instance)` without a
+// separate nil check. deployName is the deploy.yml key base the caller is
+// operating on (typically c.Image), NOT the baked image short-name — for a
+// kind:eval bed or Pattern-B deploy the two differ. Pass the deploy key, never
+// a value derived from an image label (see MergeDeployOntoMetadata).
+func (dc *DeployConfig) Lookup(deployName, instance string) (DeploymentNode, bool) {
 	if dc == nil {
 		return DeploymentNode{}, false
 	}
-	entry, ok := dc.Deploy[deployKey(image, instance)]
+	entry, ok := dc.Deploy[deployKey(deployName, instance)]
 	return entry, ok
 }
 

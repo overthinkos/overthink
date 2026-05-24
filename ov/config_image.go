@@ -207,7 +207,7 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 		}
 	}
 
-	MergeDeployOntoMetadata(meta, dc, c.Instance)
+	MergeDeployOntoMetadata(meta, dc, c.Image, c.Instance)
 
 	uid, gid := meta.UID, meta.GID
 	ports := meta.Ports
@@ -226,7 +226,7 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	}
 
 	// Resolve volume backing from labels + deploy config
-	volumes, bindMounts := ResolveVolumeBacking(c.Image, meta.Volumes, deployVolumes, meta.Home, rt.EncryptedStoragePath, rt.VolumesPath)
+	volumes, bindMounts := ResolveVolumeBacking(c.Image, c.Instance, meta.Volumes, deployVolumes, meta.Home, rt.EncryptedStoragePath, rt.VolumesPath)
 
 	// Re-resolve the canonical registry ref UNLESS the operator
 	// supplied an explicit ref via the deploy entry's `image:`
@@ -245,9 +245,6 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	if meta.Tunnel != nil {
 		tunnelCfg = TunnelConfigFromMetadata(meta)
 	}
-
-	// Apply instance-specific volume naming
-	volumes = InstanceVolume(volumes, c.Image, c.Instance)
 
 	// Apply CLI --port overrides FIRST so env_provides templates that
 	// reference {{.HostPort N}} see the final host-port mapping, not
@@ -743,7 +740,7 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 			}
 
 			fmt.Fprintln(os.Stderr, "Provisioning data into volumes...")
-			seeded, err := provisionData(dataEngine, dataRef, dataMeta, bindMounts, volumes, c.Instance, mode)
+			seeded, err := provisionData(dataEngine, dataRef, dataMeta, bindMounts, volumes, c.Image, c.Instance, mode)
 			if err != nil {
 				return fmt.Errorf("data provisioning: %w", err)
 			}
@@ -1532,8 +1529,10 @@ func updateAllDeployedQuadlets(rt *ResolvedRuntime, skipImage string) error {
 			continue
 		}
 
-		// Apply deploy.yml overrides (instance-aware)
-		MergeDeployOntoMetadata(meta, dc, instance)
+		// Apply deploy.yml overrides (instance-aware). Key by the deploy-key
+		// base (imageName from parseDeployKey), not meta.Image — a bed /
+		// Pattern-B entry carries a key distinct from its baked image label.
+		MergeDeployOntoMetadata(meta, dc, imageName, instance)
 
 		// Resolve env vars with updated global env. Pass deployKey so an
 		// instance's quadlet doesn't pick up another instance's provides.
@@ -1560,10 +1559,7 @@ func updateAllDeployedQuadlets(rt *ResolvedRuntime, skipImage string) error {
 			deployVolumes = overlay.Volume
 			deploySidecars = overlay.Sidecar
 		}
-		volumes, bindMounts := ResolveVolumeBacking(imageName, meta.Volumes, deployVolumes, meta.Home, rt.EncryptedStoragePath, rt.VolumesPath)
-
-		// Apply instance-specific volume naming
-		volumes = InstanceVolume(volumes, imageName, instance)
+		volumes, bindMounts := ResolveVolumeBacking(imageName, instance, meta.Volumes, deployVolumes, meta.Home, rt.EncryptedStoragePath, rt.VolumesPath)
 
 		// Resolve env file
 		var quadletEnvFile string

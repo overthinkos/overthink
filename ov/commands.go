@@ -159,7 +159,11 @@ func (c *UpdateCmd) syncData(engine string, imageRef string, meta *ImageMetadata
 		return
 	}
 
-	volumes, bindMounts := ResolveVolumeBacking(c.Image, newMeta.Volumes, imgDeploy.Volume,
+	// Re-scope volume names to this deploy (syncData doesn't route through
+	// MergeDeployOntoMetadata) so syncData targets the deploy's OWN volumes,
+	// never a same-image sibling's.
+	scopeVolumesToDeployKey(newMeta, c.Image, c.Instance)
+	volumes, bindMounts := ResolveVolumeBacking(c.Image, c.Instance, newMeta.Volumes, imgDeploy.Volume,
 		newMeta.Home, rt.EncryptedStoragePath, rt.VolumesPath)
 	if len(bindMounts) == 0 && len(volumes) == 0 {
 		return
@@ -171,7 +175,7 @@ func (c *UpdateCmd) syncData(engine string, imageRef string, meta *ImageMetadata
 	}
 
 	fmt.Fprintln(os.Stderr, "Syncing data from new image...")
-	seeded, err := provisionData(engine, dataRef, dataMeta, bindMounts, volumes, c.Instance, mode)
+	seeded, err := provisionData(engine, dataRef, dataMeta, bindMounts, volumes, c.Image, c.Instance, mode)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: data sync failed: %v\n", err)
 		return

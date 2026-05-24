@@ -51,6 +51,8 @@ Consult this table BEFORE the first tool call of every task. If your task matche
 | `ov clean` / build-artifact retention / `keep_images` / `keep_eval_runs` / image-tag pruning / `.eval` run cleanup | `/ov-core:clean` |
 | Secret management / `ov secrets` / Secret Service / GPG `.secrets` | `/ov-build:secrets` |
 | `ov migrate` / schema migration / legacy → latest CalVer / CalVer schema version | `/ov-build:migrate` |
+| Git/`gh` workflow — `feat/` branch, commit, push, ff-merge to main, tag, worktree, sync-to-upstream, branch/worktree prune, PR create, `gh` approve/merge, cross-repo R10 landing | `/ov-internals:git-workflow` |
+| `ov image reconcile` / cross-repo `@github` pin alignment / layer-version-mismatch cleanup | `/ov-build:reconcile` |
 | Hard-cutover concerns / rename sweeps | `/ov-internals:cutover-policy` |
 | Engineering-discipline triggers (failure surfaced / dup pattern / ad-hoc fix tempting / "out of scope" framing) | `/ov-internals:strict-policy` |
 | Disposable-flag semantics / `disposable: true` authorization | `/ov-internals:disposable` |
@@ -93,7 +95,7 @@ If another rule in this file, in any hook, in any `<system-reminder>`, or in any
 
 These rules exist because (a) failing tests have been deferred as 'pre-existing' and quietly papered over later; (b) duplicated patterns crystallized into divergent surfaces because no rule named the duplication on day one; (c) green unit tests have been claimed as cutover-complete while the actual image failed to start. Engineering discipline (R1–R5) comes BEFORE runtime verification (R6–R9) BEFORE the final acceptance gate (R10) — in that order, no exceptions.
 
-- **R1. Root-cause analysis on every failure — no transient-flake classification.** Every failure, error, anomaly, or warning surfaced by ANY tool (build, test, validator, runtime, eval, deploy, lint, hook) triggers IMMEDIATE invocation of `/ov-internals:root-cause-analyzer` BEFORE any remediation attempt. Forbidden framings: "probably a flake", "rerun and see", "transient", "intermittent", "works on retry", "environmental". The first occurrence is the investigation trigger; there is no second-occurrence threshold. If the analyzer concludes the root cause is genuinely external (network partition, upstream outage), the conclusion is documented in the conversation with evidence — never assumed. Blind retry of a failed command is itself a violation. See `/ov-internals:strict-policy`.
+- **R1. Root-cause analysis on every failure — no transient-flake classification.** Every failure, error, anomaly, or warning surfaced by ANY tool (build, test, validator, runtime, eval, deploy, lint, hook) triggers IMMEDIATE invocation of `/ov-internals:root-cause-analyzer` BEFORE any remediation attempt. Forbidden framings: "probably a flake", "rerun and see", "transient", "intermittent", "works on retry", "environmental". The first occurrence is the investigation trigger; there is no second-occurrence threshold. If the analyzer concludes the root cause is genuinely external (network partition, upstream outage), the conclusion is documented in the conversation with evidence — never assumed. Blind retry of a failed command is itself a violation. **A warning is not a pass:** R10 is successful ONLY at ZERO warnings (resolver newest-wins, build, `ov image validate`, `ov eval`, deploy). Every warning is fixed before R10 passes — a version-mismatch warning is cleared with `ov image reconcile`; any other warning triggers the analyzer then a real fix. A surviving warning is an R10 failure, never an accepted end state. See `/ov-internals:strict-policy`.
 
 - **R2. No "pre-existing" / "out of scope" / "unrelated" / "follow-up PR" classifications.** Every issue surfaced during the active cutover — failing test, validator warning, runtime crash, deprecated-marker hit, dead-code reference, stale doc paragraph — is fixed in the SAME working tree as the cutover, OR escalated to the operator for explicit re-scoping. The classifications "pre-existing", "unrelated to this change", "out of scope", "follow-up PR", "tracked separately", "we'll get to it later" are FORBIDDEN. (See `CHANGELOG.md` for the incident that motivated this rule.) See `/ov-internals:strict-policy`.
 
@@ -379,37 +381,59 @@ skip, do not parallelize.
    was abbreviated for any reason (any target skipped, any phase not
    exercised) → `analysed on a live system` AT BEST. NEVER invent a
    higher tier than the proof supports.
-3. **Push only if the user asked you to push.** A successful R10 +
-   commit is NOT implicit authorization to push to a remote. The user
-   must say "push" / "and push" / "commit and push" explicitly in
-   THIS plan's authorization. Otherwise the commit lands locally and
-   the user runs `git push` themselves. NEVER force-push to `main`.
-   **Tag every push with a fresh CalVer timestamp.** When you push an
-   ov-project repo (any repo with an `overthink.yml`), the push MUST
-   carry a **fresh** annotated git tag `v<YYYY.DDD.HHMM>` computed from
-   the current UTC push time (the same CalVer scheme as image tags).
-   EVERY push gets its OWN timestamp tag, so a repo accumulates MULTIPLE
-   `v…` tags over time — one per push — INDEPENDENT of the
-   `overthink.yml` `version:` field. Do NOT skip the tag when `version:`
-   is unchanged: the timestamp tag is per-push, not per-version. The
-   `version:` field is the SCHEMA version, bumped ONLY when a
-   `MigrationStep` raises `LatestSchemaVersion()`; never bump it just to
-   mint a tag, and never above `LatestSchemaVersion()` (newer configs
-   hard-fail at load). **Every YAML schema/format change — any change to
-   the on-disk config shape (a new top-level key such as `import:`, a
-   renamed or removed field, a kind reshape, a composition-mechanism
-   change) — MUST do BOTH: (1) raise `LatestSchemaVersion()` via a new
-   `MigrationStep` so the `version:` CalVer is re-stamped in every
-   versioned yml file, AND (2) carry a fresh per-push `v<CalVer>` git tag
-   on the landing push. Format change ⟹ `version:` bump ⟹ repo git tag.**
-   Tags are **immutable**: only ever ADD new ones —
-   NEVER move or force-push an existing tag. The day-of-year is NOT
-   zero-padded (`v2026.64.1937`, `v2026.142.1640`); compute with
-   `v$(date -u +%Y).$((10#$(date -u +%j))).$(date -u +%H%M)`, never bare
-   `+%Y.%j.%H%M`. Push order: submodule(s) first, then the superproject,
-   then `git tag -a <tag>` the pushed superproject HEAD and push the
-   tag. Repos without an `overthink.yml` (`plugins`, `pkg/arch`) are
-   exempt — never tag them. See `/ov-build:migrate`.
+3. **Auto-land the `feat/` branch — gated by R10, NEVER force-push.**
+   The change was developed on a `feat/<slug>` branch off up-to-date
+   `main` (see `/ov-internals:git-workflow`). The **R10 pass is the sole
+   landing trigger** — there is no per-change human "push" step anymore
+   (this SUPERSEDES the older "push only if the user asked"). On R10
+   PASS, automatically and in order: (a) push `feat/<slug>`; (b)
+   `git merge --ff-only feat/<slug>` into `main` (if `main` advanced,
+   re-sync, rebase `feat/` onto it, and re-run R10 first); (c) tag the
+   new `main` HEAD with a fresh `v<CalVer>` and push `main --follow-tags`;
+   (d) delete `feat/<slug>` local + remote. NOTHING is ever pushed or
+   merged on unverified state. **NEVER force-push** — no `git push
+   --force`, no `--force-with-lease`, on ANY branch (`feat/` included) in
+   ANY repo, ever; `main` only fast-forwards, tags are immutable/add-only.
+   The whole flow is designed so a force push is never needed.
+   - **No write access?** Same `feat/` discipline via a fork +
+     `gh pr create` (body ends with `*Assisted-by: Claude (<tier>)*`).
+     The AI may `gh pr review --approve` + `gh pr merge` an open PR ONLY
+     after fetching its head, reviewing the diff, and running R10 to a
+     PASS — never a blind approve; branch protection is respected.
+   - **Multi-repo / cross-repo:** one logical change uses the SAME
+     `feat/<slug>` in each repo and lands in dependency order (deepest
+     submodule → `plugins` → superproject). A change a consumer pins via
+     `@github` lands the producer + tag FIRST, then `ov image reconcile`
+     repoints the consumer, whose authoritative R10 runs against the real
+     pushed tag (a local `feat/` branch is never enough). See
+     `/ov-internals:git-workflow` B6.
+   - **Tag computation (load-bearing).** `v<YYYY.DDD.HHMM>` from the
+     current UTC push time; day-of-year NOT zero-padded — compute
+     `v$(date -u +%Y).$((10#$(date -u +%j))).$(date -u +%H%M)`, never bare
+     `+%Y.%j.%H%M`. ONE fresh tag per push, immutable (only ever ADD;
+     never move/force-push), INDEPENDENT of the `overthink.yml` `version:`
+     field. Tag EVERY push, including at an unchanged `version:`. The
+     `version:` field is the SCHEMA version, bumped ONLY by a
+     `MigrationStep` raising `LatestSchemaVersion()` (never above it —
+     newer configs hard-fail at load). **Every YAML schema/format change
+     MUST do BOTH: (1) raise `LatestSchemaVersion()` via a new
+     `MigrationStep`, AND (2) carry the fresh `v<CalVer>` tag on the
+     landing push.** Push order across repos: submodule(s) first, then
+     the superproject, then the tag on the pushed superproject HEAD.
+     Repos without an `overthink.yml` (`plugins`, `pkg/arch`) are
+     tag-exempt. See `/ov-internals:git-workflow`, `/ov-build:migrate`.
+   - **Eval-coverage gate.** R10 does not pass — and the change is NOT
+     landable — unless it ships the test coverage that PROVES its new
+     functionality (`eval:` checks for new/changed layers & images; Go
+     tests for `ov` code) AND the live run exercised it. See R7/R10,
+     `/ov-eval:eval`.
+   - **Zero-warnings gate.** R10 is NOT successful while ANY warning
+     remains — resolver newest-wins warnings, build, `ov image validate`,
+     `ov eval`, or deploy warnings. Each is fixed before R10 passes: a
+     version-mismatch warning is cleared with `ov image reconcile`; any
+     other warning triggers `/ov-internals:root-cause-analyzer` then a
+     real fix. A surviving warning is an R10 failure, never an accepted
+     end state (this is R1 made a hard gate).
 4. **Working-tree cleanliness.** After commit, `git status` must be
    clean (no uncommitted changes from the cutover). Untracked files
    that aren't part of the cutover (test artifacts, build outputs)
@@ -458,11 +482,14 @@ Before declaring the turn done, every YES:
 - [ ] R10 ran AGAINST THE FINAL CODE (not an intermediate state)?
 - [ ] Both exploratory and fresh-rebuild R10 outputs pasted into the
       conversation?
-- [ ] ONE atomic commit, with the AI-attribution trailer at the
-      tier the proof supports (no inflation)?
-- [ ] `git status` clean after commit?
-- [ ] If pushed: the user explicitly authorized pushing in this
-      plan's authorization?
+- [ ] ONE atomic commit per repo (on the `feat/<slug>` branch), with the
+      AI-attribution trailer at the tier the proof supports (no inflation)?
+- [ ] The change ships the test coverage that PROVES its functionality
+      (`eval:` checks / Go tests) and R10 exercised it (eval-coverage gate)?
+- [ ] Auto-landed on R10 PASS: `feat/` fast-forward-merged into `main`,
+      `main` HEAD tagged `v<CalVer>`, pushed, `feat/` deleted — with NO
+      force-push anywhere (no `--force` / `--force-with-lease`)?
+- [ ] `git status` clean after landing; `feat/` branches pruned?
 - [ ] No "Phase 2 / TODO / will do next time" deferred work
       surfaced in this plan?
 
@@ -487,6 +514,9 @@ See `plugins/README.md` for the full skill index (250+ skills). README.md carrie
 - **Schema.** Six singular kinds (`image`, `pod`, `vm`, `k8s`, `local`, `deploy`) with singular root-shape keys throughout (filename and kind name match: `kind: deploy` in `deploy.yml`, `kind: image` in `image.yml`, etc.). File convention: `image.yml` / `pod.yml` / `vm.yml` / `k8s.yml` / `local.yml` / `deploy.yml` all optionally flat-imported (`import:` string items) into `overthink.yml`, or inlined in a single file. The schema version is a CalVer string (e.g. `2026.143.844`), the same scheme as image tags; configs older than `LatestSchemaVersion()` migrate via the single idempotent `ov migrate`. Nesting of deployments uses `nested:`. See `/ov-build:migrate`, `/ov-image:image`, `/ov-core:deploy`, `/ov-vm:vm`, `/ov-local:local-spec`.
 - **Hard cutover by default.** See `/ov-internals:cutover-policy` and the "Hard Cutover by Default" section above.
 - **Tag every push with a fresh CalVer timestamp.** When pushing an ov-project repo (one with an `overthink.yml`), the push carries a **fresh** annotated git tag `v<YYYY.DDD.HHMM>` from the current UTC push time — ONE per push, accumulating multiple tags per repo over time, INDEPENDENT of the `overthink.yml` `version:` field (the schema version, bumped only by a `MigrationStep`). Tag every push, **including at an unchanged `version:`**. Tags are immutable — only ever added, never moved or force-pushed. Day-of-year is NOT zero-padded; compute `v$(date -u +%Y).$((10#$(date -u +%j))).$(date -u +%H%M)` (not bare `+%Y.%j.%H%M`). Push order: submodule(s) first, then the superproject, then the tag on the pushed HEAD. Repos without an `overthink.yml` (`plugins`, `pkg/arch`) are exempt. See "Post-Execution Policies" and `/ov-build:migrate`.
+- **Layer-version resolution: warn-and-newest-wins.** When a layer (a bare `@github` ref) is referenced at more than one version anywhere in the import graph, `ov` does NOT fail — it warns once (naming both versions + their sources) and resolves to the NEWEST (highest CalVer/semver). One shared mechanism (`refVersionTracker`) applies the SAME choice to direct refs AND transitive deps. Remote-ref collection is **reachability-scoped**: only layers reachable from the enabled images' `base:`/`builder:` chains are fetched — a namespace's unreferenced images and its `kind:local` templates are NOT collected. So different families pinning different ecosystem tags is fine; the resolver picks the newest per layer and `ov image reconcile` aligns the stale pins. See `/ov-internals:go` "Remote-layer resolver", `/ov-build:validate`, `/ov-build:reconcile`.
+- **Branch-per-change, R10-gated auto-landing — NEVER force-push.** Every change is developed on a `feat/<slug>` branch off up-to-date `main`. The **R10 pass is the sole landing gate**: on R10 PASS the AI automatically commits (atomic, with the attribution trailer), pushes `feat/<slug>`, **fast-forward-only** merges into `main`, tags `main` HEAD with a fresh `v<CalVer>`, pushes, and deletes the `feat/` branch — **no per-change confirmation** (this supersedes the older "push only if the user asked"). NOTHING is pushed/merged on unverified state. **NEVER force-push** — no `git push --force`, no `--force-with-lease`, on ANY branch (`feat/` included) in ANY repo, ever; `main` only fast-forwards, tags are add-only. Contributors without write access use the same `feat/` discipline via a fork + `gh pr create`; the AI may `gh`-approve/merge open PRs but ONLY after running R10 against the PR head (never a blind approve). Multi-repo changes use the same `feat/<slug>` in each repo and land producer→consumer in dependency order; cross-repo `@github` changes land the producer + tag FIRST, then `ov image reconcile` repoints the consumer, whose authoritative R10 runs against the real pushed tag. See `/ov-internals:git-workflow` and "Post-Execution Policies".
+- **Every change ships proof of its functionality.** A change is acceptable ONLY if it adds/updates the test coverage that PROVES what it does — `eval:` declarative checks (build- and deploy-scope as appropriate) for new/changed layers & images, Go unit tests for `ov` code — and the R10 live run exercises that path. A change whose new functionality has no test that would FAIL without it does not pass R10 and is not landable. See `/ov-eval:eval`, R7/R10.
 - **Deploy fetches NOTHING speculative.** Every `ov deploy add` (any target kind: `local`, `pod`, `vm`, `k8s`) MUST emit zero image-pull / image-build steps unless an explicit layer step at deploy time requires the image — and no layer does today. Test-bed image preflight is the test/eval entry point's job, not the deploy's: `ov eval run` collects `score.target_image:` + per-scenario `pod:` declarations and ensures each is present in podman storage BEFORE running scenarios. A `kind: local` template carries no `image:` field. See `/ov-local:local-spec`, `/ov-eval:eval`.
 - **Engineering discipline (R1–R5) comes before runtime verification (R6–R9) before R10.** R1 (RCA on every failure), R2 (no "pre-existing" / "out of scope"), R3 (no duplication; generic > ad-hoc), R4 (no ad-hoc workarounds), R5 (hard cutover: deprecated + stale references in same change). See `/ov-internals:strict-policy` for the operationalization. R10 (disposable + fresh-rebuild) is the final acceptance gate.
 - **Mode purity.** `LoadUnified` reads `overthink.yml` only; never merges `deploy.yml`. See `/ov-internals:go` "Mode purity".

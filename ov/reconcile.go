@@ -1,0 +1,191 @@
+package main
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"sort"
+
+	"gopkg.in/yaml.v3"
+)
+
+// ImageReconcileCmd aligns cross-repo `@github` version pins so the
+// warn-and-newest-wins resolver has nothing to warn about. For each distinct
+// repo referenced by the project's versioned YAML files, every pin of that repo
+// is rewritten to ONE target version: the newest already-referenced version
+// (default) or the newest tag on the remote (`--remote`). Edits are
+// comment-preserving (yaml.v3 node API) and idempotent. Operates on the current
+// project (cwd; honors the top-level -C / --dir / OV_PROJECT_DIR). For a
+// multi-repo tree, run it per repo (e.g. `ov -C image/<name> image reconcile`).
+type ImageReconcileCmd struct {
+	DryRun bool `name:"dry-run" help:"Print the pin rewrites without modifying any file."`
+	Remote bool `help:"Align each repo's pins to its newest REMOTE tag (git ls-remote) instead of the newest already-referenced version."`
+}
+
+// reconcileCandidateFiles returns the versioned YAML files in dir that may carry
+// `@github` refs (overthink.yml + its flat-imported per-kind siblings).
+func reconcileCandidateFiles(dir string) []string {
+	names := []string{
+		"overthink.yml", "image.yml", "base.yml", "build.yml",
+		"eval.yml", "local.yml", "pod.yml", "k8s.yml", "vm.yml", "deploy.yml",
+	}
+	var out []string
+	for _, n := range names {
+		p := filepath.Join(dir, n)
+		if fileExists(p) {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// walkScalars visits every scalar node in a YAML node tree.
+func walkScalars(n *yaml.Node, fn func(*yaml.Node)) {
+	if n == nil {
+		return
+	}
+	if n.Kind == yaml.ScalarNode {
+		fn(n)
+		return
+	}
+	for _, c := range n.Content {
+		walkScalars(c, fn)
+	}
+}
+
+func (c *ImageReconcileCmd) Run() error {
+	dir, err := os.Getwd()
+	if err != nil {
+		return err
+	}
+	files := reconcileCandidateFiles(dir)
+	if len(files) == 0 {
+		return fmt.Errorf("no overthink project files found in %s (run from a project directory or use -C)", dir)
+	}
+
+	// Pass 1: collect, per repo, the set of pinned versions referenced anywhere.
+	refVersions := make(map[string]map[string]bool) // repoPath -> set of versions
+	roots := make(map[string]*yaml.Node)            // file -> document root (reused in pass 2)
+	for _, f := range files {
+		data, err := os.ReadFile(f)
+		if err != nil {
+			return fmt.Errorf("reading %s: %w", f, err)
+		}
+		var root yaml.Node
+		if err := yaml.Unmarshal(data, &root); err != nil {
+			return fmt.Errorf("parsing %s: %w", f, err)
+		}
+		roots[f] = &root
+		walkScalars(&root, func(s *yaml.Node) {
+			if !IsRemoteLayerRef(s.Value) {
+				return
+			}
+			p := ParseRemoteRef(s.Value)
+			if p.Version == "" {
+				return // unpinned ref — nothing to align
+			}
+			if refVersions[p.RepoPath] == nil {
+				refVersions[p.RepoPath] = make(map[string]bool)
+			}
+			refVersions[p.RepoPath][p.Version] = true
+		})
+	}
+	if len(refVersions) == 0 {
+		fmt.Println("no @github pins found — nothing to reconcile")
+		return nil
+	}
+
+	// Compute the target version per repo.
+	target := make(map[string]string)
+	for repo, vers := range refVersions {
+		t, err := c.targetVersion(repo, vers)
+		if err != nil {
+			return err
+		}
+		target[repo] = t
+	}
+
+	// Pass 2: rewrite every pin whose version != its repo's target.
+	type rewrite struct{ file, from, to string }
+	var rewrites []rewrite
+	for _, f := range files {
+		root := roots[f]
+		fileChanged := false
+		walkScalars(root, func(s *yaml.Node) {
+			if !IsRemoteLayerRef(s.Value) {
+				return
+			}
+			p := ParseRemoteRef(s.Value)
+			if p.Version == "" {
+				return
+			}
+			want := target[p.RepoPath]
+			if p.Version == want {
+				return
+			}
+			stripped, _ := StripVersion(s.Value)
+			newRef := stripped + ":" + want
+			rewrites = append(rewrites, rewrite{filepath.Base(f), s.Value, newRef})
+			if !c.DryRun {
+				s.Value = newRef
+			}
+			fileChanged = true
+		})
+		if fileChanged && !c.DryRun {
+			out, err := yaml.Marshal(root)
+			if err != nil {
+				return fmt.Errorf("serializing %s: %w", f, err)
+			}
+			if err := os.WriteFile(f, out, 0o644); err != nil {
+				return fmt.Errorf("writing %s: %w", f, err)
+			}
+		}
+	}
+
+	// Report per-repo targets (only the ones that were at >1 version).
+	repos := make([]string, 0, len(target))
+	for r := range target {
+		repos = append(repos, r)
+	}
+	sort.Strings(repos)
+	for _, r := range repos {
+		if len(refVersions[r]) > 1 {
+			fmt.Printf("%s -> %s (was at %d versions)\n", r, target[r], len(refVersions[r]))
+		}
+	}
+	if len(rewrites) == 0 {
+		fmt.Println("already reconciled — every repo's pins are at one version")
+		return nil
+	}
+	if c.DryRun {
+		fmt.Printf("would rewrite %d pin(s):\n", len(rewrites))
+	} else {
+		fmt.Printf("rewrote %d pin(s):\n", len(rewrites))
+	}
+	for _, rw := range rewrites {
+		fmt.Printf("  %s: %s -> %s\n", rw.file, rw.from, rw.to)
+	}
+	return nil
+}
+
+// targetVersion picks the version every pin of repo should align to.
+func (c *ImageReconcileCmd) targetVersion(repo string, vers map[string]bool) (string, error) {
+	if c.Remote {
+		latest, err := GitLatestTag(RepoGitURL(repo))
+		if err != nil {
+			return "", fmt.Errorf("resolving newest remote tag for %s: %w", repo, err)
+		}
+		if latest == "" {
+			return "", fmt.Errorf("no tags on remote %s", repo)
+		}
+		return latest, nil
+	}
+	// Newest already-referenced version (CalVer/semver via compareSemver).
+	newest := ""
+	for v := range vers {
+		if newest == "" || compareSemver(v, newest) > 0 {
+			newest = v
+		}
+	}
+	return newest, nil
+}

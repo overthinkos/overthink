@@ -22,6 +22,54 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-05
 
+### 2026-05-24 — Resolver docs + feat/-branch R10-gated git workflow + eval-coverage & zero-warnings gates + `ov image reconcile` (docs + tooling cutover, no schema bump)
+
+Forward-looking documentation of the warn-and-newest-wins resolver (the prior
+entry), a new standing git workflow, two sharpened acceptance gates, and a small
+tool — landed as one cutover per repo (main + `plugins`) via the very workflow it
+documents.
+
+**Resolver docs.** CLAUDE.md "Key Rules" gains a layer-version-resolution bullet
+(warn-and-newest-wins + reachability-scoped collection); `/ov-internals:go` gains
+a "Remote-layer resolver" section (`refVersionTracker`, precise base/builder
+`collectImage` walk, `LayerRef`, the unified `populateLayerFromYAML`);
+`/ov-build:validate` is corrected (a layer at conflicting versions is no longer
+"an error" — it warns and resolves newest); `/ov-image:image`,
+`/ov-internals:generate-source`, and `/ov-local:ov-cachyos` get matching notes.
+
+**feat/-branch, R10-gated git workflow** (`/ov-internals:git-workflow`, CLAUDE.md
+Post-Execution rewrite). Every change is developed on a `feat/<slug>` branch off
+up-to-date `main`; the **R10 pass is the sole landing trigger** — on PASS the AI
+auto-commits, pushes `feat/`, **fast-forward-only** merges into `main`, tags, and
+prunes the branch, with **no per-change confirmation** (supersedes "push only if
+the user asked"). **NEVER force-push** — broadened to any branch in any repo, no
+`--force` / `--force-with-lease`. Contributors without write access use the same
+discipline via a fork + `gh pr create`; the AI may `gh`-approve/merge an open PR
+ONLY after fetching its head, reviewing the diff, and running R10 to a PASS.
+Multi-repo changes share one `feat/<slug>` and land producer→consumer in
+dependency order; a change referenced via `@github` lands the producer + tag
+FIRST, then `ov image reconcile` repoints the consumer, whose authoritative R10
+runs against the real pushed tag. Sync-to-upstream before start/landing and
+prune-only-merged-branches + worktree-prune hygiene per repo.
+
+**Two sharpened acceptance gates.** (1) **Eval-coverage:** a change is landable
+only if it ships the test coverage that PROVES its functionality (`eval:` checks
+for new/changed layers & images, Go tests for `ov` code) and the R10 run
+exercised it. (2) **Zero-warnings:** R10 is successful only at ZERO warnings
+(resolver newest-wins / build / `ov image validate` / `ov eval` / deploy) — a
+version-mismatch warning is cleared with `ov image reconcile`, anything else via
+root-cause-analyzer + a real fix. R1 is now a hard gate, not just an
+investigation trigger.
+
+**`ov image reconcile`** (`ov/reconcile.go`, `/ov-build:reconcile`). Aligns every
+`@github` pin of a repo to one version — newest already-referenced (default,
+offline) or newest remote tag (`--remote`) — comment-preserving and idempotent,
+so the resolver emits zero newest-wins warnings. Reuses `ParseRemoteRef` /
+`StripVersion` / `compareSemver` / `GitLatestTag` and the `yaml_setter.go`
+node-API pattern; covered by `ov/reconcile_test.go`.
+
+No schema change (`version:` unchanged) — additive command + documentation only.
+
 ### 2026-05-24 — Remote-layer resolver: warn-and-newest-wins version resolution + precise namespace collection + `LayerRef`/`Has*`/parse-path cleanup (bug fix + refactor, no schema bump)
 
 A full RCA of the selkies-desktop `ffmpeg`-missing failure overturned the earlier

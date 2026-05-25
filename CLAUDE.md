@@ -43,7 +43,7 @@ Consult this table BEFORE the first tool call of every task. If your task matche
 | `ov eval run <bed>` (kind:eval R10 bed) / authoring `kind: eval` beds in `eval.yml` / `ov eval live` / `ov eval cdp/wl/dbus/vnc/mcp/record/spice/libvirt` | `/ov-eval:eval` |
 | `ov eval k8s <verb>` / cluster probes | `/ov-kubernetes:eval-k8s` |
 | `ov eval adb <method>` / Android Debug Bridge from host (devices, shell, install, getprop, screencap, logcat, wait-for-device) | `/ov-eval:adb` + `/ov-eval:eval` |
-| `ov eval appium <method>` / Android UI automation / W3C WebDriver / APK install via mobile:installApp / session lifecycle | `/ov-eval:appium` + `/ov-eval:eval` |
+| `ov eval appium <method>` / Android UI automation / W3C WebDriver / APK install via mobile:installApp / session lifecycle / element introspection (get-text/get-attribute/clear/find-all/source) / per-class sugar groups (`gesture-*`/`app-*`/`key-*`/`device-*`) / generic WebDriver escape hatch (`execute`/`raw`) | `/ov-eval:appium` + `/ov-eval:eval` |
 | Editing `layer.yml`, layer authoring, layer tasks/services | `/ov-image:layer` |
 | Editing `image.yml`, image composition | `/ov-image:image` |
 | `ov image build` / `ov image generate` / Containerfile | `/ov-build:build` + `/ov-build:generate` + `/ov-internals:generate-source` |

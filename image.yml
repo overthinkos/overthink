@@ -730,7 +730,7 @@ image:
               file: /opt/android-sdk/platform-tools/adb
               exists: true
             - id: image-appium-binary
-              file: /usr/local/bin/appium
+              file: /usr/bin/appium
               exists: true
             - id: image-java-binary
               file: /usr/bin/java

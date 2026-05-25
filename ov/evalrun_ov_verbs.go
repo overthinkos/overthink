@@ -342,6 +342,7 @@ var adbMethods = map[string]methodSpec{
 // ---------------------------------------------------------------------------
 
 var appiumMethods = map[string]methodSpec{
+	// lifecycle + element basics (existing)
 	"status":         {path: []string{"appium", "status"}},
 	"session-create": {path: []string{"appium", "session-create"}, required: []string{"Caps"}, posArgs: posCapsFlag},
 	"session-delete": {path: []string{"appium", "session-delete"}},
@@ -350,6 +351,57 @@ var appiumMethods = map[string]methodSpec{
 	"click":          {path: []string{"appium", "click"}, required: []string{"Selector"}, posArgs: posSelectorStrategy},
 	"send-keys":      {path: []string{"appium", "send-keys"}, required: []string{"Selector", "Text"}, posArgs: posSelectorTextStrategy},
 	"screenshot":     {path: []string{"appium", "screenshot"}, required: []string{"Artifact"}, posArgs: posArtifactFlag, artifact: true},
+
+	// Tier 1 — typed element introspection / navigation
+	"get-text":      {path: []string{"appium", "get-text"}, required: []string{"Selector"}, posArgs: posSelectorStrategy},
+	"get-attribute": {path: []string{"appium", "get-attribute"}, required: []string{"Selector", "Attribute"}, posArgs: posSelectorAttribute},
+	"clear":         {path: []string{"appium", "clear"}, required: []string{"Selector"}, posArgs: posSelectorStrategy},
+	"find-all":      {path: []string{"appium", "find-all"}, required: []string{"Selector"}, posArgs: posSelectorStrategy},
+	"source":        {path: []string{"appium", "source"}, posArgs: posSessionOnly},
+	"back":          {path: []string{"appium", "back"}, posArgs: posSessionOnly},
+
+	// Tier 2 — gesture group (wl sway-style flat names → `ov eval appium gesture <op>`)
+	"gesture-tap":         {path: []string{"appium", "gesture", "tap"}, posArgs: posElemOrXY},
+	"gesture-double-tap":  {path: []string{"appium", "gesture", "double-tap"}, posArgs: posElemOrXY},
+	"gesture-long-press":  {path: []string{"appium", "gesture", "long-press"}, posArgs: posElemOrXY},
+	"gesture-drag":        {path: []string{"appium", "gesture", "drag"}, posArgs: posElemOrXY},
+	"gesture-swipe":       {path: []string{"appium", "gesture", "swipe"}, required: []string{"Direction"}, posArgs: posGesture},
+	"gesture-scroll":      {path: []string{"appium", "gesture", "scroll"}, required: []string{"Direction"}, posArgs: posGesture},
+	"gesture-fling":       {path: []string{"appium", "gesture", "fling"}, required: []string{"Direction"}, posArgs: posGesture},
+	"gesture-pinch-open":  {path: []string{"appium", "gesture", "pinch-open"}, posArgs: posGesture},
+	"gesture-pinch-close": {path: []string{"appium", "gesture", "pinch-close"}, posArgs: posGesture},
+
+	// Tier 2 — app lifecycle + activity group
+	"app-start-activity":   {path: []string{"appium", "app", "start-activity"}, required: []string{"Activity"}, posArgs: posActivity},
+	"app-activate":         {path: []string{"appium", "app", "activate"}, required: []string{"AppId"}, posArgs: posAppId},
+	"app-terminate":        {path: []string{"appium", "app", "terminate"}, required: []string{"AppId"}, posArgs: posAppId},
+	"app-remove":           {path: []string{"appium", "app", "remove"}, required: []string{"AppId"}, posArgs: posAppId},
+	"app-clear":            {path: []string{"appium", "app", "clear"}, required: []string{"AppId"}, posArgs: posAppId},
+	"app-is-installed":     {path: []string{"appium", "app", "is-installed"}, required: []string{"AppId"}, posArgs: posAppId},
+	"app-state":            {path: []string{"appium", "app", "state"}, required: []string{"AppId"}, posArgs: posAppId},
+	"app-current-activity": {path: []string{"appium", "app", "current-activity"}, posArgs: posSessionOnly},
+	"app-current-package":  {path: []string{"appium", "app", "current-package"}, posArgs: posSessionOnly},
+
+	// Tier 2 — keys + keyboard group
+	"key-press": {path: []string{"appium", "key", "press"}, required: []string{"Keycode"}, posArgs: posKeycode},
+	"key-hide":  {path: []string{"appium", "key", "hide"}, posArgs: posSessionOnly},
+	"key-shown": {path: []string{"appium", "key", "shown"}, posArgs: posSessionOnly},
+
+	// Tier 2 — device / system + WebView context group
+	"device-info":            {path: []string{"appium", "device", "info"}, posArgs: posSessionOnly},
+	"device-battery":         {path: []string{"appium", "device", "battery"}, posArgs: posSessionOnly},
+	"device-time":            {path: []string{"appium", "device", "time"}, posArgs: posSessionOnly},
+	"device-orientation":     {path: []string{"appium", "device", "orientation"}, posArgs: posParamsOnly},
+	"device-set-orientation": {path: []string{"appium", "device", "set-orientation"}, required: []string{"Params"}, posArgs: posParamsOnly},
+	"device-notifications":   {path: []string{"appium", "device", "notifications"}, posArgs: posSessionOnly},
+	"device-get-clipboard":   {path: []string{"appium", "device", "get-clipboard"}, posArgs: posSessionOnly},
+	"device-set-clipboard":   {path: []string{"appium", "device", "set-clipboard"}, required: []string{"Params"}, posArgs: posParamsOnly},
+	"device-contexts":        {path: []string{"appium", "device", "contexts"}, posArgs: posSessionOnly},
+	"device-context":         {path: []string{"appium", "device", "context"}, posArgs: posParamsOnly},
+
+	// Tier 3 — generic escape hatch (cdp raw / eval equivalents)
+	"execute": {path: []string{"appium", "execute"}, required: []string{"Expression"}, posArgs: posAppiumExecute},
+	"raw":     {path: []string{"appium", "raw"}, required: []string{"Method", "Path"}, posArgs: posAppiumRaw},
 }
 
 // k8s methods all run against a cluster, not an image/container, so
@@ -540,6 +592,7 @@ func posCdpRaw(c *Check) []string {
 func posXY(c *Check) []string {
 	return []string{strconv.Itoa(c.X), strconv.Itoa(c.Y)}
 }
+
 // posXYXY emits four positionals (start + end) for verbs whose CLI
 // signature is `<image> <x1> <y1> <x2> <y2>` — e.g. `wl drag`.
 // Reuses X/Y as the start and X2/Y2 as the end so click/drag share
@@ -727,30 +780,144 @@ func posPackageArg(c *Check) []string {
 	return []string{c.Args[0]}
 }
 
-func posPropertyArg(c *Check) []string { return []string{c.Property} }
-func posApkFlag(c *Check) []string     { return []string{"--apk", c.Apk} }
+func posPropertyArg(c *Check) []string  { return []string{c.Property} }
+func posApkFlag(c *Check) []string      { return []string{"--apk", c.Apk} }
 func posArtifactFlag(c *Check) []string { return []string{"--artifact", c.Artifact} }
-func posCapsFlag(c *Check) []string    { return []string{"--caps", c.Caps} }
+func posCapsFlag(c *Check) []string     { return []string{"--caps", c.Caps} }
 
-// posSelectorStrategy emits --selector + optional --strategy. Used by appium
-// find / click. Default strategy (xpath) is applied subprocess-side when
-// --strategy is omitted.
-func posSelectorStrategy(c *Check) []string {
-	args := []string{"--selector", c.Selector}
-	if c.Strategy != "" {
-		args = append(args, "--strategy", c.Strategy)
-	}
+// appendSession appends --session <id> when an explicit session override is
+// set. Shared by every appium builder (R3: one session-flag rule).
+func appendSession(args []string, c *Check) []string {
 	if c.Session != "" {
-		args = append(args, "--session", c.Session)
+		return append(args, "--session", c.Session)
 	}
 	return args
 }
 
+// appendSelector appends --selector + optional --strategy. Shared prefix for
+// element-targeted appium builders.
+func appendSelector(args []string, c *Check) []string {
+	args = append(args, "--selector", c.Selector)
+	if c.Strategy != "" {
+		args = append(args, "--strategy", c.Strategy)
+	}
+	return args
+}
+
+// appendOptSelector appends --selector(+--strategy) only when a selector is set
+// (used by execute/raw, where the element is optional and substituted via the
+// {element} token).
+func appendOptSelector(args []string, c *Check) []string {
+	if c.Selector == "" {
+		return args
+	}
+	return appendSelector(args, c)
+}
+
+// appendElemOrXY appends either --selector(+--strategy) or --x/--y. The CLI
+// gesture leaves require exactly one of the two targeting modes.
+func appendElemOrXY(args []string, c *Check) []string {
+	if c.Selector != "" {
+		return appendSelector(args, c)
+	}
+	return append(args, "--x", strconv.Itoa(c.X), "--y", strconv.Itoa(c.Y))
+}
+
+// posSelectorStrategy emits --selector + optional --strategy + session. Used by
+// appium find / click / get-text / clear / find-all. Default strategy (xpath)
+// is applied subprocess-side when --strategy is omitted.
+func posSelectorStrategy(c *Check) []string {
+	return appendSession(appendSelector(nil, c), c)
+}
+
 // posSelectorTextStrategy adds --text for send-keys.
 func posSelectorTextStrategy(c *Check) []string {
-	args := posSelectorStrategy(c)
-	args = append(args, "--text", c.Text)
-	return args
+	return appendSession(append(appendSelector(nil, c), "--text", c.Text), c)
+}
+
+// posSelectorAttribute adds --attribute for get-attribute.
+func posSelectorAttribute(c *Check) []string {
+	return appendSession(append(appendSelector(nil, c), "--attribute", c.Attribute), c)
+}
+
+// posSessionOnly emits only --session when set (source/back/contexts/info/...).
+func posSessionOnly(c *Check) []string { return appendSession(nil, c) }
+
+// posAppId emits --app-id for the app-lifecycle group.
+func posAppId(c *Check) []string { return appendSession([]string{"--app-id", c.AppId}, c) }
+
+// posActivity emits --activity (+ optional --params) for app-start-activity.
+func posActivity(c *Check) []string {
+	args := []string{"--activity", c.Activity}
+	if c.Params != "" {
+		args = append(args, "--params", c.Params)
+	}
+	return appendSession(args, c)
+}
+
+// posKeycode emits --keycode (+ optional --params) for key-press.
+func posKeycode(c *Check) []string {
+	args := []string{"--keycode", strconv.Itoa(c.Keycode)}
+	if c.Params != "" {
+		args = append(args, "--params", c.Params)
+	}
+	return appendSession(args, c)
+}
+
+// posParamsOnly emits optional --params (+ session). device-* get/set ops:
+// empty params = get, non-empty = the value/JSON to apply.
+func posParamsOnly(c *Check) []string {
+	var args []string
+	if c.Params != "" {
+		args = append(args, "--params", c.Params)
+	}
+	return appendSession(args, c)
+}
+
+// posElemOrXY: element-or-coordinate target (+ optional --params + session).
+// Used by gesture-tap/double-tap/long-press/drag.
+func posElemOrXY(c *Check) []string {
+	args := appendElemOrXY(nil, c)
+	if c.Params != "" {
+		args = append(args, "--params", c.Params)
+	}
+	return appendSession(args, c)
+}
+
+// posGesture: element-or-coordinate + optional --direction/--percent (+ --params
+// + session). Used by gesture-swipe/scroll/fling/pinch-open/pinch-close.
+func posGesture(c *Check) []string {
+	args := appendElemOrXY(nil, c)
+	if c.Direction != "" {
+		args = append(args, "--direction", c.Direction)
+	}
+	if c.Percent != "" {
+		args = append(args, "--percent", c.Percent)
+	}
+	if c.Params != "" {
+		args = append(args, "--params", c.Params)
+	}
+	return appendSession(args, c)
+}
+
+// posAppiumExecute: --expression (+ optional --request-body + optional selector
+// for {element} substitution + session). The mobile:/execute-script escape hatch.
+func posAppiumExecute(c *Check) []string {
+	args := []string{"--expression", c.Expression}
+	if c.RequestBody != "" {
+		args = append(args, "--request-body", c.RequestBody)
+	}
+	return appendSession(appendOptSelector(args, c), c)
+}
+
+// posAppiumRaw: --method + --path (+ optional --request-body + optional selector
+// + session). The full W3C WebDriver HTTP escape hatch.
+func posAppiumRaw(c *Check) []string {
+	args := []string{"--method", c.Method, "--path", c.Path}
+	if c.RequestBody != "" {
+		args = append(args, "--request-body", c.RequestBody)
+	}
+	return appendSession(appendOptSelector(args, c), c)
 }
 
 // posLogcatTail emits --lines / --filter optionals only when set; the CLI
@@ -1250,6 +1417,18 @@ func isZeroField(c *Check, name string) bool {
 		return c.Adb == ""
 	case "Appium":
 		return c.Appium == ""
+	case "AppId":
+		return c.AppId == ""
+	case "Activity":
+		return c.Activity == ""
+	case "Attribute":
+		return c.Attribute == ""
+	case "Percent":
+		return c.Percent == ""
+	case "Keycode":
+		return c.Keycode == 0
+	case "Params":
+		return c.Params == ""
 	}
 	// Unknown field name is a programming error: treat as "not zero" so
 	// authoring errors surface elsewhere instead of spurious skips.

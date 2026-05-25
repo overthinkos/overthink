@@ -22,6 +22,51 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-05
 
+### 2026-05-25 — Comprehensive `ov eval appium` surface + AUR-packaged android-emulator toolchain
+
+`ov eval appium` grew from 8 typed methods to a three-tier surface mirroring
+the `cdp` (typed + `raw`) and `wl` (nested `sway-*`/`overlay-*` groups)
+precedents, so an `eval:` block can drive any screen the Appium ApiDemos app
+exercises — and any UiAutomator2 operation at all:
+
+- **Tier 1 (typed):** added `get-text`, `get-attribute`, `clear`, `find-all`,
+  `source`, `back` (find/click/send-keys/install-app/screenshot/session-* stay).
+  The Go `apidemos_test.go` sample is now expressible end-to-end, including the
+  previously-impossible **read-back** (`get-text` of a field after `send-keys`).
+- **Tier 2 (per-class sugar groups):** `appium gesture …` (9 UiAutomator2
+  gestures), `appium app …` (lifecycle + `start-activity`, intent form),
+  `appium key …`, `appium device …` (device info + WebView contexts). On the CLI
+  these are nested groups; in eval YAML they are flat `gesture-tap`/`app-activate`/
+  `device-contexts`/… method names.
+- **Tier 3 (generic escape hatch):** `appium: execute` (any `mobile:`/JS via
+  `/execute/sync`) and `appium: raw` (any W3C call under `/session/<id>`) —
+  `raw` alone reaches 100% of the WebDriver + UiAutomator2 surface. Both support
+  a `{element}` token substituted from a resolved `selector:`.
+
+Six `Check` fields were added (`app_id`, `activity`, `attribute`, `percent`,
+`keycode`, `params`); the generic methods reuse the existing
+`method`/`path`/`request_body`/`expression`/`selector`/`strategy`/`session`
+fields (no duplication). `eval-android-emulator-pod` gained one representative
+ApiDemos screen per interaction class (TextFields read-back, Controls, RadioGroup,
+List+scroll, Spinner, Date/Time, SeekBar, drag-and-drop, WebView, Notifications)
+plus device/system smoke.
+
+The android-emulator **toolchain moved to CachyOS/AUR packages** (the image is
+CachyOS): `android-sdk-cmdline-tools-latest`, `android-sdk-platform-tools`,
+`android-sdk-build-tools-34` (brings `aapt2`, previously absent — Appium logged
+`Could not find 'aapt2'`), `android-platform-34`, `android-emulator`, and the
+`appium` package, all under `/opt/android-sdk`. The only sdkmanager-fetched
+component is the API-34 google_apis system image (no package exists anywhere).
+WebView automation pre-bakes the **pinned chromedriver 113** (matching the
+System WebView's Chrome) at `/opt/chromedriver/113` and switches via the
+`appium:chromedriverExecutableDir` cap — eliminating the slow/hanging runtime
+autodownload and the need for `--allow-insecure`. The emulator gained
+`-memory`/`-cores` boot tuning. The stale "the AVD has no internet" comment was
+corrected: the AVD has full internet + DNS out of the box (the emulator's NAT
+forwards guest DNS to the container's resolver, which has bridge egress); the
+verifier-disable is a determinism/speed measure, not a no-internet workaround,
+and a regression-guard eval check (`ping 8.8.8.8` + `ping google.com`) locks it in.
+
 ### 2026-05-24 — CachyOS GPU image family + nodejs24→nodejs merge
 
 The NVIDIA/CUDA GPU image stack gained a **CachyOS (Arch) sibling family**

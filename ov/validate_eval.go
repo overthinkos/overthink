@@ -199,6 +199,13 @@ func validateOvVerb(c *Check, verb, loc, effectiveScope string, errs *Validation
 	if c.ArtifactMinCastEvents > 0 && !spec.artifact {
 		errs.Add("%s: %s: %s is not an artifact-producing method; artifact_min_cast_events is not applicable", loc, verb, method)
 	}
+
+	// {element} substitution requires a selector to resolve the element id
+	// host-side (appium execute/raw). A literal {element} with no selector would
+	// reach the server unresolved — catch it at config time.
+	if (strings.Contains(c.RequestBody, "{element}") || strings.Contains(c.Path, "{element}")) && c.Selector == "" {
+		errs.Add("%s: %s: %s references the {element} token but no selector is set to resolve it", loc, verb, method)
+	}
 }
 
 // validWxH reports whether s parses as "<int>x<int>" with both ints > 0.

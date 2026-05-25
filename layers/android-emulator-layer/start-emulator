@@ -6,6 +6,11 @@ EMULATOR_API_LEVEL="${EMULATOR_API_LEVEL:-34}"
 EMULATOR_DEVICE="${EMULATOR_DEVICE:-pixel_6}"
 EMULATOR_IMG_TYPE="${EMULATOR_IMG_TYPE:-google_apis}"
 EMULATOR_SYS_IMG="${EMULATOR_SYS_IMG:-x86_64}"
+# Boot-speed tuning: more guest RAM + vCPUs makes the cold boot noticeably
+# faster on a multi-core host. Named env (not magic numbers) so a deploy can
+# size them down on constrained hosts.
+EMULATOR_MEMORY="${EMULATOR_MEMORY:-3072}"
+EMULATOR_CORES="${EMULATOR_CORES:-4}"
 ANDROID_HOME="${ANDROID_HOME:-/opt/android-sdk}"
 ANDROID_AVD_HOME="${ANDROID_AVD_HOME:-${HOME}/.android/avd}"
 export ANDROID_HOME ANDROID_AVD_HOME
@@ -54,5 +59,7 @@ exec "${ANDROID_HOME}/emulator/emulator" "@${EMULATOR_NAME}" \
   -gpu swiftshader_indirect \
   -no-boot-anim \
   -no-audio \
+  -memory "${EMULATOR_MEMORY}" \
+  -cores "${EMULATOR_CORES}" \
   $ACCEL_FLAGS \
   -ports 5554,5555

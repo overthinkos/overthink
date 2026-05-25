@@ -122,7 +122,7 @@ type Check struct {
 	//   On:            target-entity override for multi-target scenarios. Omit → use the scenario's default target.
 	//                  Each On dispatch resolves a target-specific VarResolver (HOST_PORT / CONTAINER_IP / …).
 	//   Tag: free-form label set for --tag filtering. Combined with the enclosing scenario's tags.
-	Capture       string   `yaml:"capture,omitempty"        json:"capture,omitempty"`
+	Capture string `yaml:"capture,omitempty"        json:"capture,omitempty"`
 	// CaptureExtract: optional Go RE2 regex applied to the raw capture
 	// value before it lands in ScenarioContext.Captures. The first
 	// regex submatch group becomes the captured value (whole match if
@@ -134,10 +134,10 @@ type Check struct {
 	// than storing the unextracted value (silent fall-through would
 	// be worse than a loud failure here).
 	CaptureExtract string   `yaml:"capture_extract,omitempty" json:"capture_extract,omitempty"`
-	Eventually    string   `yaml:"eventually,omitempty"     json:"eventually,omitempty"`
-	RetryInterval string   `yaml:"retry_interval,omitempty" json:"retry_interval,omitempty"`
-	On            string   `yaml:"on,omitempty"             json:"on,omitempty"`
-	Tag           []string `yaml:"tag,omitempty"           json:"tag,omitempty"`
+	Eventually     string   `yaml:"eventually,omitempty"     json:"eventually,omitempty"`
+	RetryInterval  string   `yaml:"retry_interval,omitempty" json:"retry_interval,omitempty"`
+	On             string   `yaml:"on,omitempty"             json:"on,omitempty"`
+	Tag            []string `yaml:"tag,omitempty"           json:"tag,omitempty"`
 
 	// Concurrency primitives (2026-05) — usable in scenario Steps to express
 	// stress, race, and high-volume concurrency tests declaratively.
@@ -172,10 +172,10 @@ type Check struct {
 	// Per-metric numeric matchers — when set, the verb fails if the metric
 	// exceeds the threshold. Reuses the existing Matcher type so lt/le/gt/ge
 	// numeric ops work as on any other verb.
-	P50Match Matcher `yaml:"p50,omitempty"  json:"p50,omitempty"`
-	P95Match Matcher `yaml:"p95,omitempty"  json:"p95,omitempty"`
-	P99Match Matcher `yaml:"p99,omitempty"  json:"p99,omitempty"`
-	MaxMatch Matcher `yaml:"max,omitempty"  json:"max,omitempty"`
+	P50Match  Matcher `yaml:"p50,omitempty"  json:"p50,omitempty"`
+	P95Match  Matcher `yaml:"p95,omitempty"  json:"p95,omitempty"`
+	P99Match  Matcher `yaml:"p99,omitempty"  json:"p99,omitempty"`
+	MaxMatch  Matcher `yaml:"max,omitempty"  json:"max,omitempty"`
 	MeanMatch Matcher `yaml:"mean,omitempty" json:"mean,omitempty"`
 
 	// Origin is populated at collection time (layer:<name>, image:<name>,
@@ -184,13 +184,13 @@ type Check struct {
 	Origin string `yaml:"-" json:"origin,omitempty"`
 
 	// file-specific
-	Exists   *bool       `yaml:"exists,omitempty"   json:"exists,omitempty"`
-	Mode     string      `yaml:"mode,omitempty"     json:"mode,omitempty"`
-	Owner    string      `yaml:"owner,omitempty"    json:"owner,omitempty"`
-	GroupOf  string      `yaml:"group_of,omitempty" json:"group_of,omitempty"` // file's group; named to avoid clashing with verb-level Group
-	Filetype string      `yaml:"filetype,omitempty" json:"filetype,omitempty"` // file, directory, symlink
+	Exists   *bool        `yaml:"exists,omitempty"   json:"exists,omitempty"`
+	Mode     string       `yaml:"mode,omitempty"     json:"mode,omitempty"`
+	Owner    string       `yaml:"owner,omitempty"    json:"owner,omitempty"`
+	GroupOf  string       `yaml:"group_of,omitempty" json:"group_of,omitempty"` // file's group; named to avoid clashing with verb-level Group
+	Filetype string       `yaml:"filetype,omitempty" json:"filetype,omitempty"` // file, directory, symlink
 	Contains ContainsList `yaml:"contains,omitempty" json:"contains,omitempty"`
-	Sha256   string      `yaml:"sha256,omitempty"   json:"sha256,omitempty"`
+	Sha256   string       `yaml:"sha256,omitempty"   json:"sha256,omitempty"`
 
 	// package-specific
 	Installed *bool    `yaml:"installed,omitempty" json:"installed,omitempty"`
@@ -268,31 +268,31 @@ type Check struct {
 
 	// cdp/wl/dbus/vnc-specific modifiers. Applicable sets vary per method —
 	// validate_tests.go enforces required-modifier rules per {verb, method}.
-	Tab              string   `yaml:"tab,omitempty"                json:"tab,omitempty"`                // cdp: tab id
-	Expression       string   `yaml:"expression,omitempty"         json:"expression,omitempty"`         // cdp: eval expression
-	URL              string   `yaml:"url,omitempty"                json:"url,omitempty"`                // cdp: open url
-	Selector         string   `yaml:"selector,omitempty"           json:"selector,omitempty"`           // cdp: click/type/wait/coords/axtree
-	Dest             string   `yaml:"dest,omitempty"               json:"dest,omitempty"`               // dbus: service name
-	Path             string   `yaml:"path,omitempty"               json:"path,omitempty"`               // dbus: object path
-	Args             []string `yaml:"arg,omitempty"               json:"args,omitempty"`               // dbus: method args (type:value)
-	Artifact              string `yaml:"artifact,omitempty"                json:"artifact,omitempty"`                // cdp/wl/vnc: output file path for screenshot / raw capture
-	ArtifactMinBytes      int    `yaml:"artifact_min_bytes,omitempty"      json:"artifact_min_bytes,omitempty"`      // post-run size assertion on artifact
-	ArtifactMinDimensions string `yaml:"artifact_min_dimensions,omitempty" json:"artifact_min_dimensions,omitempty"` // post-run "WxH" min dimensions assertion (PNG/JPEG header decode)
-	ArtifactNotUniform    bool   `yaml:"artifact_not_uniform,omitempty"    json:"artifact_not_uniform,omitempty"`    // post-run "image is not uniformly one color" assertion (full decode + pixel sampling)
-	ArtifactMinCastEvents int    `yaml:"artifact_min_cast_events,omitempty" json:"artifact_min_cast_events,omitempty"` // post-run asciinema .cast event-line count assertion
-	X                int      `yaml:"x,omitempty"                  json:"x,omitempty"`                  // wl/vnc: click/mouse x coord; for drag: start x (X1)
-	Y                int      `yaml:"y,omitempty"                  json:"y,omitempty"`                  // wl/vnc: click/mouse y coord; for drag: start y (Y1)
-	X2               int      `yaml:"x2,omitempty"                 json:"x2,omitempty"`                 // wl: drag end x (mirrors WlDragCmd.X2)
-	Y2               int      `yaml:"y2,omitempty"                 json:"y2,omitempty"`                 // wl: drag end y (mirrors WlDragCmd.Y2)
-	Button           string   `yaml:"button,omitempty"             json:"button,omitempty"`             // wl/vnc: left/middle/right
-	Text             string   `yaml:"text,omitempty"               json:"text,omitempty"`               // wl/vnc: type text / overlay text
-	KeyName          string   `yaml:"key,omitempty"                json:"key,omitempty"`                // wl/vnc: key name (Return/Escape/...)
-	Combo            string   `yaml:"combo,omitempty"              json:"combo,omitempty"`              // wl: key-combo (ctrl+c)
-	Direction        string   `yaml:"direction,omitempty"          json:"direction,omitempty"`          // wl: scroll up/down/left/right
-	Amount           int      `yaml:"amount,omitempty"             json:"amount,omitempty"`             // wl: scroll amount
-	Target           string   `yaml:"target,omitempty"             json:"target,omitempty"`             // wl: focus/close/geometry/xprop target
-	Action           string   `yaml:"action,omitempty"             json:"action,omitempty"`             // wl: atspi action (tree/find/click)
-	Query            string   `yaml:"query,omitempty"              json:"query,omitempty"`              // cdp: axtree filter / wl: atspi find query
+	Tab                   string   `yaml:"tab,omitempty"                json:"tab,omitempty"`                            // cdp: tab id
+	Expression            string   `yaml:"expression,omitempty"         json:"expression,omitempty"`                     // cdp: eval expression
+	URL                   string   `yaml:"url,omitempty"                json:"url,omitempty"`                            // cdp: open url
+	Selector              string   `yaml:"selector,omitempty"           json:"selector,omitempty"`                       // cdp: click/type/wait/coords/axtree
+	Dest                  string   `yaml:"dest,omitempty"               json:"dest,omitempty"`                           // dbus: service name
+	Path                  string   `yaml:"path,omitempty"               json:"path,omitempty"`                           // dbus: object path
+	Args                  []string `yaml:"arg,omitempty"               json:"args,omitempty"`                            // dbus: method args (type:value)
+	Artifact              string   `yaml:"artifact,omitempty"                json:"artifact,omitempty"`                  // cdp/wl/vnc: output file path for screenshot / raw capture
+	ArtifactMinBytes      int      `yaml:"artifact_min_bytes,omitempty"      json:"artifact_min_bytes,omitempty"`        // post-run size assertion on artifact
+	ArtifactMinDimensions string   `yaml:"artifact_min_dimensions,omitempty" json:"artifact_min_dimensions,omitempty"`   // post-run "WxH" min dimensions assertion (PNG/JPEG header decode)
+	ArtifactNotUniform    bool     `yaml:"artifact_not_uniform,omitempty"    json:"artifact_not_uniform,omitempty"`      // post-run "image is not uniformly one color" assertion (full decode + pixel sampling)
+	ArtifactMinCastEvents int      `yaml:"artifact_min_cast_events,omitempty" json:"artifact_min_cast_events,omitempty"` // post-run asciinema .cast event-line count assertion
+	X                     int      `yaml:"x,omitempty"                  json:"x,omitempty"`                              // wl/vnc: click/mouse x coord; for drag: start x (X1)
+	Y                     int      `yaml:"y,omitempty"                  json:"y,omitempty"`                              // wl/vnc: click/mouse y coord; for drag: start y (Y1)
+	X2                    int      `yaml:"x2,omitempty"                 json:"x2,omitempty"`                             // wl: drag end x (mirrors WlDragCmd.X2)
+	Y2                    int      `yaml:"y2,omitempty"                 json:"y2,omitempty"`                             // wl: drag end y (mirrors WlDragCmd.Y2)
+	Button                string   `yaml:"button,omitempty"             json:"button,omitempty"`                         // wl/vnc: left/middle/right
+	Text                  string   `yaml:"text,omitempty"               json:"text,omitempty"`                           // wl/vnc: type text / overlay text
+	KeyName               string   `yaml:"key,omitempty"                json:"key,omitempty"`                            // wl/vnc: key name (Return/Escape/...)
+	Combo                 string   `yaml:"combo,omitempty"              json:"combo,omitempty"`                          // wl: key-combo (ctrl+c)
+	Direction             string   `yaml:"direction,omitempty"          json:"direction,omitempty"`                      // wl: scroll up/down/left/right
+	Amount                int      `yaml:"amount,omitempty"             json:"amount,omitempty"`                         // wl: scroll amount
+	Target                string   `yaml:"target,omitempty"             json:"target,omitempty"`                         // wl: focus/close/geometry/xprop target
+	Action                string   `yaml:"action,omitempty"             json:"action,omitempty"`                         // wl: atspi action (tree/find/click)
+	Query                 string   `yaml:"query,omitempty"              json:"query,omitempty"`                          // cdp: axtree filter / wl: atspi find query
 
 	// mcp-specific modifiers. See /ov:test "Method allowlist — mcp" for which
 	// methods require which fields; enforcement in validate_tests.go.
@@ -302,11 +302,17 @@ type Check struct {
 	Input   string `yaml:"input,omitempty"    json:"input,omitempty"`    // mcp: JSON argument blob for the `call` method (e.g. '{"path":"x.ipynb"}')
 
 	// adb / appium-specific modifiers. See /ov-eval:adb and /ov-eval:appium.
-	Apk      string `yaml:"apk,omitempty"      json:"apk,omitempty"`      // adb: install / appium: install-app — APK path on host filesystem
-	Property string `yaml:"property,omitempty" json:"property,omitempty"` // adb: getprop — system property key (e.g. sys.boot_completed)
-	Caps     string `yaml:"caps,omitempty"     json:"caps,omitempty"`     // appium: session-create — W3C alwaysMatch capabilities JSON
-	Strategy string `yaml:"strategy,omitempty" json:"strategy,omitempty"` // appium: find/click/send-keys — locator strategy (xpath|id|accessibility-id|class-name|android-uiautomator)
-	Session  string `yaml:"session,omitempty"  json:"session,omitempty"`  // appium: explicit session id override (default: read from ~/.cache/ov/appium/sessions/<image>[_<instance>].json)
+	Apk       string `yaml:"apk,omitempty"      json:"apk,omitempty"`        // adb: install / appium: install-app — APK path on host filesystem
+	Property  string `yaml:"property,omitempty" json:"property,omitempty"`   // adb: getprop — system property key (e.g. sys.boot_completed)
+	Caps      string `yaml:"caps,omitempty"     json:"caps,omitempty"`       // appium: session-create — W3C alwaysMatch capabilities JSON
+	Strategy  string `yaml:"strategy,omitempty" json:"strategy,omitempty"`   // appium: find/click/send-keys — locator strategy (xpath|id|accessibility-id|class-name|android-uiautomator)
+	Session   string `yaml:"session,omitempty"  json:"session,omitempty"`    // appium: explicit session id override (default: read from ~/.cache/ov/appium/sessions/<image>[_<instance>].json)
+	AppId     string `yaml:"app_id,omitempty"   json:"app_id,omitempty"`     // appium app-*: package id (io.appium.android.apis) for activate/terminate/remove/clear/is-installed/state
+	Activity  string `yaml:"activity,omitempty" json:"activity,omitempty"`   // appium app-start-activity: pkg/.activity (intent form, e.g. io.appium.android.apis/.view.TextFields)
+	Attribute string `yaml:"attribute,omitempty" json:"attribute,omitempty"` // appium get-attribute: attribute name (checked/enabled/selected/text/class/...)
+	Percent   string `yaml:"percent,omitempty"  json:"percent,omitempty"`    // appium gesture-swipe/scroll/fling/pinch: magnitude fraction (e.g. "0.75")
+	Keycode   int    `yaml:"keycode,omitempty"  json:"keycode,omitempty"`    // appium key-press: Android keycode (4=BACK, 66=ENTER, ...)
+	Params    string `yaml:"params,omitempty"   json:"params,omitempty"`     // appium gesture/device escape: JSON object merged into the mobile: args / W3C body (speed, duration, endX/endY, clipboard text, orientation, context name)
 
 	// record-specific modifiers — record: verb wraps `ov eval record <method>`.
 	// The Artifact + ArtifactMinBytes modifiers are reused: for `record: stop`
@@ -353,9 +359,10 @@ func (c *Check) Kind() (string, error) {
 // Otherwise (no ov-verb set), `command:` is the verb discriminator selecting
 // `runCommand` to shell out via the executor. The recipe-author surface
 // stays:
-//   command: "uname -s"      # alone → command verb
-//   libvirt: guest/exec
-//   command: "uname -s"      # paired → modifier for guest/exec argv
+//
+//	command: "uname -s"      # alone → command verb
+//	libvirt: guest/exec
+//	command: "uname -s"      # paired → modifier for guest/exec argv
 func (c *Check) verbsSet() []string {
 	var set []string
 	if c.File != "" {

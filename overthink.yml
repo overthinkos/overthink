@@ -20,7 +20,7 @@ import:
     # (main's `versa` image is `base: cachyos.cachyos`). This is the deliberate
     # main → cachyos coupling. The cachyos repo, in turn, imports this repo under
     # the `ov` namespace for ov.arch-builder (mutual import; cycle-broken at load).
-    - cachyos: '@github.com/overthinkos/cachyos:v2026.143.844'
+    - cachyos: '@github.com/overthinkos/cachyos:v2026.145.1111'
     # nvidia GPU base family — owned by the overthinkos/nvidia submodule. Mounted
     # under the `nvidia` import namespace; main's GPU pod families (comfyui /
     # jupyter-ml / jupyter-ml-notebook / ollama / unsloth-studio) root on

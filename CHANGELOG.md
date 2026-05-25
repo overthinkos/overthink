@@ -22,6 +22,92 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-05
 
+### 2026-05-25 — Android + APK as first-class `ov` kinds: `kind: android` device + `apk` package format + `target: android` deploy
+
+Android was elevated from a single `kind: image` (`android-emulator`) plus
+imperative eval verbs into a first-class, declarative, nestable deploy surface
+modeled on `kind: k8s`. This is a **purely additive** cutover (a new optional
+kind, a new optional layer field, a new `target:` value — no removals), so it
+raises **neither** `LatestSchemaVersion()` nor a `MigrationStep` (per the
+migrate skill's "purely additive → just add it" rule); it landed at the
+unchanged schema version `2026.144.1443` with a fresh per-push `v<CalVer>` tag.
+
+What landed:
+
+- **`kind: android`** — an Android DEVICE substrate (the parallel of
+  `kind: k8s` the cluster). A device is either an in-pod emulator (referenced
+  by `image:`) or a remote/physical adb endpoint (`adb: {host: <host:port>}`).
+  Carries `serial:`, `google_account:` (credential-store secret-key refs for
+  the apkeep google-play source), and informational `device:`/`api_level:`
+  (the API level + system image remain BUILD-time properties of the referenced
+  image — `kind: android` references, never drives, the build). Loader wiring
+  clones every `k8s` site in `ov/unified.go` (`UnifiedFile.Android`,
+  `entityKinds`, `rootShapeKeys`, `kindKeyedDoc.Android` + `AndroidDoc`,
+  `mergeAndroidMap`, `mergeKindDoc`, `validateEvalBeds`). Types in
+  `ov/android_spec.go`; `findAndroidSpec` mirrors `findK8sSpec`.
+
+- **`apk` package format** — Android apps are declared in LAYERS via a new
+  top-level `apk:` list (NOT a separate kind), parallel to `package:`/`aur:`
+  but device-scoped. Each entry is a `package:` (apkeep download by id, with
+  `source`/`arch`/`version`) XOR an `apk:` (committed local APK pushed via the
+  adb sync protocol). It compiles (`compileApkStep` in `install_build.go`) into
+  an `ApkInstallStep` (`install_plan.go`) that ONLY `AndroidDeployTarget`
+  executes — OCITarget emits nothing for it (there is no device at image-build
+  time; verified: no apk RUN leaks into the Containerfile) and Local/Vm/Pod
+  targets record a skip. A layer carrying only `apk:` is valid install content
+  (`HasInstallFiles` includes `HasApk`); `validateLayerApk` enforces
+  package-xor-apk + the source allowlist.
+
+- **`target: android` deploy + `AndroidDeployTarget`** (`ov/android_target.go`,
+  `ov/android_deploy_cmd.go`) — an IR-consuming target (like LocalDeployTarget,
+  unlike the no-op K8sDeployTarget). It applies the deploy's `add_layer:`
+  layers' `apk:` packages onto the device, gating on `sys.boot_completed`
+  first (a real readiness condition, never a fixed sleep). The dispatch in
+  `deploy_add_cmd.go` routes `target: android` like `local`/`vm` (no primary
+  image plan; apps ride in on add_layers).
+
+- **ONE shared installer (R3)** — `ov/android_install.go` holds the single
+  install path: `AndroidDevice.InstallByPackage` (apkeep + adb, run in-pod via
+  `engine exec` for an image device or on the host via `adb -H -P` for an
+  endpoint) and `InstallFromHostApk` (goadb push for committed APKs). The
+  `ov eval adb install-app` / `ov eval adb install` verbs were refactored into
+  thin wrappers over it — their CLI surface and the `adbMethods` allowlist are
+  unchanged.
+
+- **Nested deployment** — `pod → android` (the device on its emulator pod)
+  mirrors `vm → k8s`. `target: android` is a passthrough hop in the deploy
+  chain (the device shares its host pod's adb venue / the endpoint addr; no new
+  shell venue). `ov deploy add` gained `--node-only` (dispatch just the named
+  node, no descent) so a pod substrate can be started before its android
+  children deploy; `ov eval run <bed>` now deploys a bed's nested children
+  AFTER `ov start`, then runs eval-live.
+
+- **R10 bed** — `eval-android-emulator-pod` gained two nested `kind: android`
+  children: `device` (in-pod emulator) installs F-Droid via the apk format
+  (apkeep in-pod) from the new `android-test-apps` layer; `device-net`
+  addresses the SAME emulator as a remote adb ENDPOINT (`127.0.0.1:35002`,
+  the bed's published port) and installs the committed ApiDemos via goadb from
+  the `android-apidemos` layer — exercising the remote/physical device code
+  path with no hardware. The android-emulator-layer's former imperative
+  `apkeep-install-fdroid` eval verb check became presence/launch ASSERTIONS
+  (`apk-fdroid-present`/`apk-fdroid-launch`/`apk-net-apidemos-present`) of what
+  the deploys installed.
+
+- **Host deps (R9)** — the remote-device `package:` path runs apkeep + adb on
+  the host; `android-tools` (host adb) is declared as a PKGBUILD `optdepends`.
+  apkeep has no buildable Arch package (its AUR Rust build fails to link
+  ring/zstd-sys under lld — the same reason it ships as the in-pod upstream
+  binary), so the host apkeep-download path is documented (install the upstream
+  binary) rather than a hard dep; the committed-APK endpoint path needs neither
+  (pure goadb). The remote-endpoint host-apkeep path is unit-tested; the in-pod
+  apk format + the goadb endpoint path are live-verified on the bed.
+
+Rejected during planning: `kind: apk` (the operator directed that apk be "just
+another package format like .pac, defined via layers" — so apk is a format, not
+a kind); driving image builds from `kind: android` (api_level is informational,
+not a build driver); an APK artifact registry (apkeep fetches on demand;
+committed APKs reuse the adb-sync push).
+
 ### 2026-05-25 — Android emulator → Android 16 / API 36 + Play Store + GMS + generic apkeep install-app verb
 
 The `android-emulator` image was upgraded from Android 14 (API 34, `google_apis`,

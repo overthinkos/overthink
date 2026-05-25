@@ -529,6 +529,30 @@ func validateLayerContents(layers map[string]*Layer, errs *ValidationError) {
 
 		// Validate shell:-schema declarations (2026-05 cutover).
 		validateLayerShell(name, layer.Shell(), errs)
+
+		// Validate apk:-package-format entries (Android app installs).
+		validateLayerApk(name, layer.Apk(), errs)
+	}
+}
+
+// validateLayerApk enforces the `apk:` package-format invariants:
+//   - exactly one of package: / apk: per entry (download by id XOR a
+//     committed local APK),
+//   - source: (when set) is one of the apkeep sources.
+func validateLayerApk(layerName string, apks []ApkPackageSpec, errs *ValidationError) {
+	for i, a := range apks {
+		switch {
+		case a.Package == "" && a.Apk == "":
+			errs.Add("layer %q apk[%d]: must set either `package:` (apkeep download) or `apk:` (committed local APK)", layerName, i)
+		case a.Package != "" && a.Apk != "":
+			errs.Add("layer %q apk[%d]: set only ONE of `package:` or `apk:`, not both", layerName, i)
+		}
+		if a.Source != "" && !apkSourceAllowlist[a.Source] {
+			errs.Add("layer %q apk[%d]: source %q is not valid (want apk-pure, google-play, f-droid, or huawei-app-gallery)", layerName, i, a.Source)
+		}
+		if a.Apk != "" && a.Source != "" {
+			errs.Add("layer %q apk[%d]: `source:` applies only to `package:` (apkeep) installs, not committed `apk:` files", layerName, i)
+		}
 	}
 }
 

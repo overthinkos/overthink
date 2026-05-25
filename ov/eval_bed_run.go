@@ -323,7 +323,13 @@ func runEvalBed(exe, name string, node DeploymentNode, opts bedRunOpts) (*bedRun
 		// a bed's declared port: remap would silently fall back to the image
 		// default and collide with any same-image deploy already bound to it.
 		persistBedDeployOverrides(name, node)
-		if err := step("deploy-add", []string{"deploy", "add", name, ref}); err != nil {
+		// --node-only: deploy ONLY the bed's root node here. A pod bed's
+		// container doesn't exist until `ov start` below, so any nested
+		// children (e.g. a `target: android` device that installs apk:
+		// packages onto the running emulator) can't deploy yet — they're
+		// deployed after start (see the nested-child loop below). Harmless
+		// for childless beds (the no-op is identical to a full walk).
+		if err := step("deploy-add", []string{"deploy", "add", name, ref, "--node-only"}); err != nil {
 			return fail("deploy add %s: %w", name, err)
 		}
 		deployed = true // target registered — keep it on any later failure
@@ -342,6 +348,16 @@ func runEvalBed(exe, name string, node DeploymentNode, opts bedRunOpts) (*bedRun
 			// container's services may not have bound ports yet. Poll until
 			// `podman exec true` succeeds (cheap; usually <1s).
 			waitForContainerReady(name, 30*time.Second)
+			// Now the substrate is up: deploy any nested children onto it,
+			// pre-order. The canonical case is a `target: android` device
+			// child whose layers' apk: packages install onto the running
+			// emulator (`ov deploy add <bed>.<child>` resolves the child
+			// against the started pod's executor). Childless beds skip this.
+			for _, childKey := range sortedNestedKeys(node.Nested) {
+				if err := step("deploy-"+childKey, []string{"deploy", "add", name + "." + childKey}); err != nil {
+					return fail("deploy nested child %s.%s: %w", name, childKey, err)
+				}
+			}
 		}
 	}
 
@@ -363,6 +379,23 @@ func runEvalBed(exe, name string, node DeploymentNode, opts bedRunOpts) (*bedRun
 	if !opts.NoRebuild {
 		if err := step("update", []string{"update", name}); err != nil {
 			return fail("update %s: %w", name, err)
+		}
+		// For a nested pod bed, the fresh rebuild discards the substrate's
+		// previously-deployed children (a rebuilt pod is empty), so the
+		// nested deploys + eval-live MUST re-run to actually re-verify the
+		// new functionality on the rebuild — otherwise the post-update state
+		// is unexercised. (A flat bed's `ov update` succeeding is itself the
+		// rebuild proof; its baked deploy-scope eval needs no re-deploy.)
+		if !isVM && !isLocal && len(node.Nested) > 0 {
+			waitForContainerReady(name, 30*time.Second)
+			for _, childKey := range sortedNestedKeys(node.Nested) {
+				if err := step("redeploy-"+childKey, []string{"deploy", "add", name + "." + childKey}); err != nil {
+					return fail("re-deploy nested child %s.%s (fresh rebuild): %w", name, childKey, err)
+				}
+			}
+			if err := stepReady("eval-live-rebuild", []string{"eval", "live", name}, bedEvalReadyDeadline, bedEvalReadyInterval); err != nil {
+				return fail("eval live (fresh rebuild) %s: %w", name, err)
+			}
 		}
 	}
 

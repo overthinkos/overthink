@@ -33,8 +33,9 @@ type DeployAddCmd struct {
 	AddLayer []string `long:"add-layer" help:"Extra layer to apply on top of the base image (repeatable)"`
 
 	// Plan-level flags.
-	Tag    string `long:"tag" help:"Image CalVer tag (empty = newest local CalVer resolved via the org.overthinkos.version OCI label)"`
-	DryRun bool   `long:"dry-run" help:"Print the plan without executing"`
+	Tag      string `long:"tag" help:"Image CalVer tag (empty = newest local CalVer resolved via the org.overthinkos.version OCI label)"`
+	DryRun   bool   `long:"dry-run" help:"Print the plan without executing"`
+	NodeOnly bool   `long:"node-only" help:"Dispatch only the named node; do not descend into nested children (children of a pod can't deploy until the pod is started)"`
 	Format string `long:"format" default:"table" enum:"table,json" help:"Output format for --dry-run"`
 	Pull   bool   `long:"pull" help:"Force re-fetch of remote refs / image pull"`
 	Verify bool   `long:"verify" help:"Re-run layer tests: on the host after install"`
@@ -133,6 +134,14 @@ func (c *DeployAddCmd) Run() error {
 		return c.dispatchNode(resolvedPath, nil, nil, dir)
 	}
 
+	// --node-only dispatches just the resolved node, skipping the nested
+	// tree walk. Used when a parent substrate (e.g. a pod) must be started
+	// before its children can deploy — the caller deploys the children
+	// explicitly afterwards via dotted-path `ov deploy add parent.child`.
+	if c.NodeOnly {
+		return c.dispatchNode(resolvedPath, rootNode, parentExec, dir)
+	}
+
 	return WalkDeploymentTree(resolvedPath, rootNode, parentExec, func(path string, node *DeploymentNode, parentExec DeployExecutor) (DeployExecutor, error) {
 		if err := c.dispatchNode(path, node, parentExec, dir); err != nil {
 			return nil, err
@@ -223,9 +232,10 @@ func (c *DeployAddCmd) dispatchNode(path string, node *DeploymentNode, parentExe
 		opts = tmpl.InstallOpts.ApplyTo(opts)
 	}
 
-	// Target-only deploys (local, vm) don't compile primary plans —
-	// everything comes from add_layers.
-	if target == "local" || target == "vm" {
+	// Target-only deploys (local, vm, android) don't compile a primary
+	// image plan — everything comes from add_layers (for android: the
+	// layers' apk: packages installed onto the device).
+	if target == "local" || target == "vm" || target == "android" {
 		base = path
 	} else {
 		ref, err := ResolveDeployRef(refStr, dir)
@@ -349,6 +359,8 @@ func (c *DeployAddCmd) dispatchNode(path string, node *DeploymentNode, parentExe
 		return err
 	case "k8s":
 		return c.runK8s(plans, dir, opts)
+	case "android":
+		return c.runAndroid(node, plans, dir, opts)
 	case "pod":
 		// Pod target (formerly container). runContainer uses c.Name
 		// as the pod name; nested pods flatten the dotted path.
@@ -360,7 +372,7 @@ func (c *DeployAddCmd) dispatchNode(path string, node *DeploymentNode, parentExe
 		c.Name = saved
 		return err
 	default:
-		return fmt.Errorf("unknown target %q; want host|vm|pod|k8s", target)
+		return fmt.Errorf("unknown target %q; want host|vm|pod|k8s|android", target)
 	}
 }
 
@@ -419,7 +431,9 @@ func deriveChildExecutorForPath(path string, node *DeploymentNode, parentExec De
 		return parentExec, nil
 	}
 	switch classifyNodeTarget(node, path) {
-	case "local":
+	case "local", "android":
+		// android shares its host pod's venue (adb reaches the device via
+		// published ports / the endpoint); no executor hop.
 		if parentExec != nil {
 			return parentExec, nil
 		}
@@ -487,6 +501,8 @@ func (c *DeployDelCmd) Run() error {
 		return c.runContainerDel(paths)
 	case "k8s":
 		return c.runK8sDel(paths)
+	case "android":
+		return c.runAndroidDel(paths)
 	default:
 		return c.runContainerDel(paths)
 	}

@@ -110,7 +110,31 @@ func BuildDeployPlan(layer *Layer, img *ResolvedImage, hostCtx HostContext) (*In
 	shellSteps := compileShellSnippetSteps(layer, img, hostCtx)
 	plan.Steps = append(plan.Steps, shellSteps...)
 
+	// 6. Android apps: layer.yml `apk:` package format. Compiled into ONE
+	// ApkInstallStep regardless of target; only AndroidDeployTarget executes
+	// it (every other target records a skip). See ApkInstallStep.
+	if apkStep := compileApkStep(layer); apkStep != nil {
+		plan.Steps = append(plan.Steps, apkStep)
+	}
+
 	return plan, nil
+}
+
+// compileApkStep turns a layer's `apk:` package list into a single
+// ApkInstallStep, or nil if the layer declares no apk packages. The `apk`
+// format is target-agnostic at compile time — the step carries the specs and
+// each DeployTarget decides whether to execute (android) or skip (everything
+// else), exactly as the IR intends for venue-specific work.
+func compileApkStep(layer *Layer) InstallStep {
+	apks := layer.Apk()
+	if len(apks) == 0 {
+		return nil
+	}
+	return &ApkInstallStep{
+		Packages:  append([]ApkPackageSpec(nil), apks...),
+		LayerName: layer.Name,
+		LayerDir:  layer.SourceDir,
+	}
 }
 
 // MergePlan combines a list of per-layer plans into one whole-image

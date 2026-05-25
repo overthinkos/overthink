@@ -109,6 +109,11 @@ func (t *OCITarget) emitStep(step InstallStep, plan *InstallPlan) error {
 		return t.emitRepoChange(s)
 	case *ShellSnippetStep:
 		return t.emitShellSnippet(s)
+	case *ApkInstallStep:
+		// apk installs land on a RUNNING Android device, not the image
+		// being built — there is no device at image-build time. Skip
+		// silently (the deploy-time AndroidDeployTarget executes it).
+		return nil
 	}
 	return fmt.Errorf("OCITarget: unknown step kind %q", step.Kind())
 }

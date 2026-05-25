@@ -112,8 +112,10 @@ func appendHopForNode(chain DeployExecutor, node *DeploymentNode, name string) (
 // underscores — used as the container name suffix.
 func appendHopForFlatPath(chain DeployExecutor, node *DeploymentNode, flatPath string) (DeployExecutor, error) {
 	switch classifyTarget(node) {
-	case "host":
-		// Host nodes share the parent venue. No new hop.
+	case "host", "android":
+		// Host + android nodes share the parent venue (an android device is
+		// reached via adb over the parent pod's published port / the
+		// endpoint — there is no shell venue to "enter"). No new hop.
 		return chain, nil
 
 	case "pod":

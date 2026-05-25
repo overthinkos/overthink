@@ -1,0 +1,24 @@
+layer:
+    version: 2026.145.1700
+    name: android-test-apps
+    description:
+        feature: |
+            Android apps installed onto a `kind: android` device via the `apk:`
+            package format — the declarative counterpart to the `ov eval adb
+            install-app` probe verb. Carries the F-Droid client (org.fdroid.fdroid)
+            fetched from APKPure (apk-pure, no credentials) for the x86_64
+            emulator. A `target: android` deploy applies this layer's `apk:` list
+            onto the running device through AndroidDeployTarget (apkeep in-pod for
+            an image device, host apkeep + goadb for a remote endpoint). Pair with
+            the `android-apidemos` layer (committed-APK path) to exercise both
+            apk-entry kinds.
+        tag: [testing]
+    # apk: is the Android app-install package format (parallel to package:/aur:
+    # but device-scoped). Each entry is either a `package:` (apkeep download by
+    # id) or an `apk:` (committed local file). F-Droid is the canonical
+    # sideloadable test app — unlike Chrome it has no static-library dependency,
+    # so it installs cleanly from APKPure as a single x86_64 .apk.
+    apk:
+        - package: org.fdroid.fdroid
+          source: apk-pure
+          arch: x86_64

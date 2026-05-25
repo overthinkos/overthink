@@ -156,6 +156,7 @@ const (
 	StepKindShellHook       StepKind = "ShellHook"
 	StepKindShellSnippet    StepKind = "ShellSnippet"
 	StepKindRepoChange      StepKind = "RepoChange"
+	StepKindApkInstall      StepKind = "ApkInstall"
 )
 
 // ---------------------------------------------------------------------------
@@ -823,6 +824,55 @@ func (s *RepoChangeStep) Reverse() []ReverseOp {
 		Scope:   ScopeSystem,
 		Extra:   map[string]string{"layer": s.LayerName, "format": s.Format},
 	}}
+}
+
+// ---------------------------------------------------------------------------
+// ApkInstallStep — `apk:` package format (Android app install onto a device).
+// ---------------------------------------------------------------------------
+
+// ApkInstallStep installs Android apps onto a `kind: android` device. It is
+// the IR form of a layer's `apk:` package section — the apk "package format"
+// (parallel to SystemPackagesStep for rpm/deb/pac, and BuilderStep for aur).
+//
+// Unlike every other step, an apk install lands on a RUNNING Android device,
+// not the build/host filesystem, so ONLY AndroidDeployTarget executes it
+// (via the shared installer in android_install.go: apkeep + adb). Every
+// other target SKIPS it — OCITarget emits nothing (there is no device at
+// image-build time), and Local/Vm/Pod targets record a skip (a host/VM/pod
+// is not an Android device). This is the same "wrong venue → skip" shape
+// `aur:` uses off-Arch, expressed as a clean recorded skip rather than an
+// error (an image legitimately builds without installing apps).
+type ApkInstallStep struct {
+	Packages  []ApkPackageSpec
+	LayerName string
+	LayerDir  string // layer source dir — anchors relative committed-APK paths
+}
+
+func (s *ApkInstallStep) Kind() StepKind { return StepKindApkInstall }
+
+// Scope is system — installing an app mutates device-global package state.
+func (s *ApkInstallStep) Scope() Scope { return ScopeSystem }
+
+// Venue is host-native — AndroidDeployTarget orchestrates apkeep + adb from
+// the host (apkeep itself may run in-pod, but the step is driven host-side).
+func (s *ApkInstallStep) Venue() Venue       { return VenueHostNative }
+func (s *ApkInstallStep) RequiresGate() Gate { return GateNone }
+
+// Reverse returns no ledger ops — Android teardown is not ledger-based.
+// `ov deploy del <android>` (runAndroidDel) re-resolves the deploy's apk
+// layers and `pm uninstall`s each package directly.
+func (s *ApkInstallStep) Reverse() []ReverseOp { return nil }
+
+// PackageIDs returns the installable package ids (committed-APK entries with
+// no `package:` id are excluded — they can't be uninstalled by id).
+func (s *ApkInstallStep) PackageIDs() []string {
+	var out []string
+	for _, p := range s.Packages {
+		if p.Package != "" {
+			out = append(out, p.Package)
+		}
+	}
+	return out
 }
 
 // ---------------------------------------------------------------------------

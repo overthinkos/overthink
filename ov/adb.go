@@ -4,7 +4,6 @@ import (
 	"encoding/base64"
 	"fmt"
 	"os"
-	"os/exec"
 	"strings"
 	"time"
 
@@ -239,45 +238,48 @@ type AdbInstallCmd struct {
 }
 
 func (c *AdbInstallCmd) Run() error {
-	dev, err := adbDeviceFor(c.Image, c.Instance, c.Serial)
+	// Resolve the device's adb-server address (published 5037), then delegate
+	// to the SINGLE shared installer's committed-APK path (android_install.go)
+	// — the same goadb push the `apk:` format's committed entries use (R3).
+	addr, err := adbAddrFor(c.Image, c.Instance)
 	if err != nil {
 		return err
 	}
-	// Read APK from host filesystem.
-	apkBytes, err := os.ReadFile(c.Apk)
+	dev := AndroidDevice{AdbAddr: addr, Serial: c.Serial}
+	out, err := dev.InstallFromHostApk(c.Apk)
+	if out != "" {
+		fmt.Println(out)
+	}
+	return err
+}
+
+// adbAddrFor resolves the "127.0.0.1:<host-port>" adb-server address for a
+// running deploy's published 5037. Shared by the host-side install + the
+// AndroidDeployTarget in-pod device resolution.
+func adbAddrFor(image, instance string) (string, error) {
+	engine, containerName, err := resolveContainer(image, instance)
 	if err != nil {
-		return fmt.Errorf("read APK %s: %w", c.Apk, err)
+		return "", err
 	}
-	if len(apkBytes) == 0 {
-		return fmt.Errorf("APK %s is empty", c.Apk)
-	}
-	// Push to /data/local/tmp/<basename> via the sync protocol.
-	remote := fmt.Sprintf("/data/local/tmp/ov-install-%d.apk", time.Now().UnixNano())
-	writer, err := dev.OpenWrite(remote, 0644, time.Now())
+	return adbAddrForContainer(engine, containerName)
+}
+
+// adbAddrForContainer resolves the "127.0.0.1:<host-port>" adb-server address
+// for an already-known running container (its published 5037). Used when the
+// container name is derived from a nested deploy path rather than an image.
+func adbAddrForContainer(engine, containerName string) (string, error) {
+	insp, err := InspectContainer(engine, containerName)
 	if err != nil {
-		return fmt.Errorf("adb push %s → %s: %w", c.Apk, remote, err)
+		return "", fmt.Errorf("inspect %s: %w", containerName, err)
 	}
-	if _, err := writer.Write(apkBytes); err != nil {
-		writer.Close()
-		return fmt.Errorf("write APK to device: %w", err)
+	if insp == nil {
+		return "", fmt.Errorf("inspect %s: nil result", containerName)
 	}
-	if err := writer.Close(); err != nil {
-		return fmt.Errorf("close push stream: %w", err)
-	}
-	// Install via pm.
-	out, err := dev.RunCommand("pm", "install", "-r", remote)
+	port, err := findHostPort(insp, 5037)
 	if err != nil {
-		return fmt.Errorf("pm install: %w", err)
+		return "", err
 	}
-	// pm install prints "Success" on success; anything else is failure.
-	trimmed := strings.TrimSpace(out)
-	fmt.Println(trimmed)
-	// Best-effort cleanup of the staged APK.
-	_, _ = dev.RunCommand("rm", "-f", remote)
-	if !strings.Contains(trimmed, "Success") {
-		return fmt.Errorf("pm install did not return Success: %s", trimmed)
-	}
-	return nil
+	return fmt.Sprintf("127.0.0.1:%d", port), nil
 }
 
 // ---------------------------------------------------------------------------
@@ -314,67 +316,21 @@ func (c *AdbInstallAppCmd) Run() error {
 	if err != nil {
 		return err
 	}
-
-	// Build the apkeep -a value (package, optionally @version).
-	appArg := c.Package
-	if c.AppVersion != "" {
-		appArg = c.Package + "@" + c.AppVersion
+	// In-pod device: apkeep + adb run inside the emulator pod. Delegates to
+	// the SINGLE shared installer (android_install.go) — the same path the
+	// `apk:` package format drives via AndroidDeployTarget (R3). google-play
+	// creds come from the container env (secret_accepts), so none are passed.
+	dev := AndroidDevice{Engine: engine, Container: containerName, Serial: c.Serial}
+	out, err := dev.InstallByPackage(ApkPackageSpec{
+		Package:    c.Package,
+		Source:     c.Source,
+		Arch:       c.Arch,
+		AppVersion: c.AppVersion,
+	})
+	if out != "" {
+		fmt.Println(out)
 	}
-
-	// Per-source apkeep invocation, run IN the container (where apkeep lives and
-	// the downloaded files land). google-play reads the opt-in AAS credentials
-	// from the container env (injected via secret_accepts).
-	var apkeepCmd string
-	switch c.Source {
-	case "google-play":
-		apkeepCmd = `if [ -z "${GOOGLE_ACCOUNT_EMAIL:-}" ] || [ -z "${GOOGLE_AAS_TOKEN:-}" ]; then ` +
-			`echo "install-app --source google-play requires GOOGLE_ACCOUNT_EMAIL + GOOGLE_AAS_TOKEN (set via ov secrets)" >&2; exit 1; fi; ` +
-			`apkeep -a ` + shellSingleQuote(appArg) + ` -d google-play -e "$GOOGLE_ACCOUNT_EMAIL" -t "$GOOGLE_AAS_TOKEN" -o split_apk=1 "$TMP"`
-	case "f-droid", "huawei-app-gallery":
-		apkeepCmd = `apkeep -a ` + shellSingleQuote(appArg) + ` -d ` + shellSingleQuote(c.Source) + ` "$TMP"`
-	default: // apk-pure
-		apkeepCmd = `apkeep -a ` + shellSingleQuote(appArg) + ` -d apk-pure`
-		if c.Arch != "" {
-			apkeepCmd += ` -o arch=` + shellSingleQuote(c.Arch)
-		}
-		apkeepCmd += ` "$TMP"`
-	}
-
-	// One in-container script: download → locate artifact (single .apk / split
-	// set / .xapk) → install onto the emulator → cleanup.
-	script := `set -euo pipefail
-export PATH="/opt/android-sdk/platform-tools:$PATH"
-ADB="/opt/android-sdk/platform-tools/adb -s ` + c.Serial + `"
-TMP="$(mktemp -d /tmp/ov-installapp-XXXXXX)"
-trap 'rm -rf "$TMP"' EXIT
-` + apkeepCmd + `
-shopt -s nullglob
-xapks=("$TMP"/*.xapk)
-apks=("$TMP"/*.apk)
-if [ ${#xapks[@]} -gt 0 ]; then
-  mkdir -p "$TMP/x"; unzip -o -q "${xapks[0]}" -d "$TMP/x"
-  $ADB install-multiple -r "$TMP"/x/*.apk
-elif [ ${#apks[@]} -gt 1 ]; then
-  $ADB install-multiple -r "${apks[@]}"
-elif [ ${#apks[@]} -eq 1 ]; then
-  $ADB install -r "${apks[0]}"
-else
-  echo "install-app: apkeep produced no .apk/.xapk in $TMP" >&2; ls -la "$TMP" >&2 || true; exit 1
-fi`
-
-	out, runErr := exec.Command(engine, "exec", containerName, "bash", "-c", script).CombinedOutput()
-	trimmed := strings.TrimSpace(string(out))
-	if trimmed != "" {
-		fmt.Println(trimmed)
-	}
-	if runErr != nil {
-		return fmt.Errorf("install-app %s (source %s): %v", c.Package, c.Source, runErr)
-	}
-	// `adb install`/`install-multiple` print "Success" on success.
-	if !strings.Contains(trimmed, "Success") {
-		return fmt.Errorf("install-app %s did not return Success: %s", c.Package, trimmed)
-	}
-	return nil
+	return err
 }
 
 // ---------------------------------------------------------------------------

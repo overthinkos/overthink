@@ -255,6 +255,13 @@ func (t *LocalDeployTarget) execStep(step InstallStep, plan *InstallPlan, opts E
 		return t.execRepoChange(s, plan, opts, rec, start)
 	case *ShellSnippetStep:
 		return t.execShellSnippet(s, plan, opts, rec, start)
+	case *ApkInstallStep:
+		// apk packages install onto a `kind: android` device, not a host —
+		// a local deploy has no emulator. Record a skip and continue (a
+		// layer carrying apk: may also carry host-relevant steps).
+		t.noteStep(rec, StepKindApkInstall, s.Scope(), VenueSkip,
+			fmt.Sprintf("layer=%s skipped: apk installs only on a kind:android device", s.LayerName), start)
+		return nil
 	}
 	return fmt.Errorf("LocalDeployTarget: unknown step kind %T", step)
 }

@@ -1,0 +1,238 @@
+package main
+
+// deploy_add_cmd_android.go — runAndroid / runAndroidDel: the kind:android
+// sibling of runK8s / runLocal / runVM. Wires the dispatch switch in
+// deploy_add_cmd.go.
+//
+// A `target: android` deploy installs its layers' `apk:` packages onto a
+// kind:android DEVICE (an in-pod emulator or a remote adb endpoint). The
+// apps ride in on the deploy's add_layer: set — the SAME overlay mechanism
+// the local/vm targets use — so runAndroid receives the already-compiled
+// plans and hands their ApkInstallStep entries to AndroidDeployTarget.
+//
+// The device must already be reachable (the emulator pod started, or the
+// endpoint's adb server up). runAndroid gates on sys.boot_completed before
+// installing — never a fixed sleep.
+
+import (
+	"fmt"
+	"os"
+	"strings"
+	"time"
+)
+
+// androidBootDeadline bounds the readiness gate for a freshly-started
+// emulator (cold boot of an API-36 Play-Store image is the worst case).
+const androidBootDeadline = 5 * time.Minute
+
+// findAndroidSpec resolves a kind:android device by name from the unified
+// config (sibling of findK8sSpec).
+func findAndroidSpec(dir, name string) *AndroidSpec {
+	uf, ok, err := LoadUnified(dir)
+	if err != nil || !ok || uf == nil || uf.Android == nil {
+		return nil
+	}
+	return uf.Android[name]
+}
+
+// runAndroid handles `ov deploy add <name>` for target: android entries.
+// plans are the compiled add_layer: plans (their ApkInstallStep entries are
+// what gets installed); base/layerSet are unused (kept for dispatch symmetry).
+func (c *DeployAddCmd) runAndroid(node *DeploymentNode, plans []*InstallPlan, dir string, opts EmitOpts) error {
+	if node == nil || node.Android == "" {
+		return fmt.Errorf("deploy %q: target=android requires `android:` (kind:android device reference)", c.Name)
+	}
+	spec := findAndroidSpec(dir, node.Android)
+	if spec == nil {
+		return fmt.Errorf("deploy %q: kind:android device %q not declared in the android: section", c.Name, node.Android)
+	}
+
+	// Dry-run prints the planned installs WITHOUT resolving (or requiring) a
+	// live device — the emulator pod may not be running yet.
+	if opts.DryRun {
+		fmt.Printf("[dry-run] android device %q (apk packages from add_layer: %v)\n", node.Android, node.AddLayer)
+		return (&AndroidDeployTarget{}).Emit(plans, opts)
+	}
+
+	dev, err := resolveAndroidDevice(spec, node, opts.Path)
+	if err != nil {
+		return fmt.Errorf("deploy %q: resolving android device %q: %w", c.Name, node.Android, err)
+	}
+
+	// Readiness gate — the emulator must have finished booting before pm
+	// install will accept packages. Poll sys.boot_completed (a real
+	// synchronization condition, never a fixed sleep).
+	if err := waitAndroidReady(dev, androidBootDeadline); err != nil {
+		return fmt.Errorf("deploy %q: %w", c.Name, err)
+	}
+
+	return (&AndroidDeployTarget{Device: dev}).Emit(plans, opts)
+}
+
+// runAndroidDel handles `ov deploy del <name>` for target: android entries.
+// Best-effort: re-resolve the deploy's apk packages and `pm uninstall` each
+// (idempotent). The device itself (the pod / remote endpoint) is left intact
+// — its lifecycle belongs to the pod deploy / the remote host.
+func (c *DeployDelCmd) runAndroidDel(paths *LedgerPaths) error {
+	_ = paths
+	dir, err := os.Getwd()
+	if err != nil {
+		return err
+	}
+	tree, _ := resolveTreeRoot(dir)
+	node, ok := tree[c.Name]
+	if !ok {
+		fmt.Fprintf(os.Stderr, "ov deploy del %s: no android deploy entry; nothing to uninstall\n", c.Name)
+		return nil
+	}
+	spec := findAndroidSpec(dir, node.Android)
+	if spec == nil {
+		return fmt.Errorf("deploy %q: kind:android device %q not declared", c.Name, node.Android)
+	}
+	dev, err := resolveAndroidDevice(spec, &node, c.Name)
+	if err != nil {
+		// Device gone (pod removed) — nothing to uninstall.
+		fmt.Fprintf(os.Stderr, "ov deploy del %s: android device not reachable (%v); skipping uninstall\n", c.Name, err)
+		return nil
+	}
+	pkgs := androidApkPackageIDs(&node, dir)
+	for _, pkg := range pkgs {
+		if c.DryRun {
+			fmt.Printf("[dry-run] android: would uninstall %s\n", pkg)
+			continue
+		}
+		out, err := dev.Uninstall(pkg)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "ov deploy del %s: uninstall %s: %v\n", c.Name, pkg, err)
+			continue
+		}
+		fmt.Printf("android: uninstalled %s: %s\n", pkg, out)
+	}
+	return nil
+}
+
+// androidApkPackageIDs re-resolves the deploy's add_layer: layers and
+// collects every apk: package id (committed-APK entries have no id and are
+// skipped — they can't be uninstalled by id). Best-effort; returns nil on
+// resolution failure.
+func androidApkPackageIDs(node *DeploymentNode, dir string) []string {
+	cfg, err := LoadConfig(dir)
+	if err != nil {
+		return nil
+	}
+	layers, err := ScanAllLayerWithConfig(dir, cfg)
+	if err != nil {
+		return nil
+	}
+	var ids []string
+	for _, ref := range node.AddLayer {
+		lref, err := ResolveDeployRefAsLayer(ref, dir)
+		if err != nil {
+			continue
+		}
+		order, err := ResolveLayerOrder([]string{lref.Name}, layers, nil)
+		if err != nil {
+			continue
+		}
+		for _, name := range order {
+			l := layers[name]
+			if l == nil {
+				continue
+			}
+			for _, a := range l.Apk() {
+				if a.Package != "" {
+					ids = append(ids, a.Package)
+				}
+			}
+		}
+	}
+	return ids
+}
+
+// resolveAndroidDevice builds the AndroidDevice install handle from the spec
+// and deploy context. Endpoint devices target a remote adb server (apkeep on
+// the host); image devices target an in-pod emulator (apkeep in-pod). For a
+// nested deploy (dotted path), the in-pod container is the PARENT pod
+// (ov-<flat-parent-path>); for a top-level deploy it resolves by image name.
+func resolveAndroidDevice(spec *AndroidSpec, node *DeploymentNode, path string) (AndroidDevice, error) {
+	serial := spec.EffectiveSerial()
+
+	// Remote/physical endpoint — host-side apkeep + goadb.
+	if spec.IsEndpoint() {
+		email, token := resolveAndroidGoogleCreds(spec.GoogleAccount)
+		return AndroidDevice{
+			AdbAddr:     spec.Adb.Host,
+			Serial:      serial,
+			GoogleEmail: email,
+			GoogleToken: token,
+		}, nil
+	}
+
+	if spec.Image == "" {
+		return AndroidDevice{}, fmt.Errorf("kind:android device has neither image: nor adb:")
+	}
+
+	engine := "podman"
+	if node != nil && node.Engine == "docker" {
+		engine = "docker"
+	}
+	var container string
+	if i := strings.LastIndexByte(path, '.'); i >= 0 {
+		// Nested under a pod — the emulator runs in the PARENT pod container.
+		parent := path[:i]
+		container = "ov-" + NestedContainerName(parent)
+		engine = EngineBinary(engine)
+		if !containerRunning(engine, container) {
+			return AndroidDevice{}, fmt.Errorf("parent pod container %s is not running (start it before deploying the android device)", container)
+		}
+	} else {
+		// Top-level — resolve the running container by the device's image.
+		eng, name, err := resolveContainer(spec.Image, "")
+		if err != nil {
+			return AndroidDevice{}, err
+		}
+		engine, container = eng, name
+	}
+
+	addr, err := adbAddrForContainer(engine, container)
+	if err != nil {
+		return AndroidDevice{}, err
+	}
+	return AndroidDevice{Engine: engine, Container: container, AdbAddr: addr, Serial: serial}, nil
+}
+
+// resolveAndroidGoogleCreds reads the apkeep google-play credentials from the
+// credential store using the device's google_account secret-key refs (or the
+// GOOGLE_ACCOUNT_EMAIL / GOOGLE_AAS_TOKEN defaults). Empty when unset — the
+// google-play path errors clearly if it needs them.
+func resolveAndroidGoogleCreds(ga *AndroidGoogleAccount) (email, token string) {
+	emailKey, tokenKey := "GOOGLE_ACCOUNT_EMAIL", "GOOGLE_AAS_TOKEN"
+	if ga != nil {
+		if ga.EmailSecret != "" {
+			emailKey = ga.EmailSecret
+		}
+		if ga.TokenSecret != "" {
+			tokenKey = ga.TokenSecret
+		}
+	}
+	store := DefaultCredentialStore()
+	email, _ = store.Get("ov/secret", emailKey)
+	token, _ = store.Get("ov/secret", tokenKey)
+	return email, token
+}
+
+// waitAndroidReady polls sys.boot_completed on the device until it returns
+// "1" or the deadline elapses. The check IS the readiness condition — never a
+// fixed sleep.
+func waitAndroidReady(dev AndroidDevice, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if d, err := adbDeviceForAddr(dev.AdbAddr, dev.Serial); err == nil {
+			if out, err := d.RunCommand("getprop", "sys.boot_completed"); err == nil && strings.TrimSpace(out) == "1" {
+				return nil
+			}
+		}
+		time.Sleep(2 * time.Second)
+	}
+	return fmt.Errorf("android device (%s): sys.boot_completed != 1 after %s", dev.AdbAddr, timeout)
+}

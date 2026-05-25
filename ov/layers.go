@@ -289,6 +289,14 @@ type LayerYAML struct {
 	Package []PackageItem              `yaml:"package,omitempty"`
 	Distro  map[string]*DistroPackages `yaml:"distro,omitempty"`
 
+	// Apk is the Android app-install package format — a list of apps the
+	// layer installs onto a `kind: android` device (apkeep by package id, or
+	// a committed local APK). Parallel to package:/aur: but device-scoped, not
+	// OS-distro-scoped, so it lives at the top level rather than under distro:.
+	// Compiled into an ApkInstallStep; executed ONLY by a `target: android`
+	// deploy (every other target skips it). See android_spec.go ApkPackageSpec.
+	Apk []ApkPackageSpec `yaml:"apk,omitempty"`
+
 	// Replaces root.yml / user.yml — see Task type and docs/plan.
 	Vars map[string]string `yaml:"var,omitempty"` // layer-local variables for ${VAR} substitution in tasks
 	Task []Task            `yaml:"task,omitempty"` // ordered install operations
@@ -356,6 +364,7 @@ var layerYAMLKnownFields = map[string]bool{
 	"artifact":     true,
 	"capabilities": true, "requires_capability": true,
 	"package":      true, "distro": true,
+	"apk":          true,
 	"shell":        true,
 }
 
@@ -797,6 +806,7 @@ type Layer struct {
 	engine         string            // required run engine from layer.yml ("docker", "podman", or "")
 	vars           map[string]string // layer-local variables (from layer.yml vars:)
 	tasks          []Task            // ordered install operations (from layer.yml tasks:)
+	apk            []ApkPackageSpec  // Android apps to install on a kind:android device (from layer.yml apk:)
 	tests          []Check           // declarative checks (from layer.yml tests:)
 	artifacts      []LayerArtifact   // files to retrieve after setup (from layer.yml artifacts:)
 	shell          *ShellConfig      // shell-init declarations (from layer.yml shell:)
@@ -1042,7 +1052,7 @@ func (l *Layer) HasInstallFiles() bool {
 	return l.HasFormatPackages() ||
 		l.HasPixiToml || l.HasPyprojectToml || l.HasEnvironmentYml ||
 		l.HasPackageJson || l.HasCargoToml ||
-		l.HasTasks()
+		l.HasTasks() || l.HasApk()
 }
 
 // HasContent returns true if the layer has install files or any configuration
@@ -1068,6 +1078,11 @@ func (l *Layer) HasExtract() bool        { return len(l.extract) > 0 }
 func (l *Layer) HasData() bool           { return len(l.data) > 0 }
 func (l *Layer) HasLibvirt() bool        { return len(l.libvirt) > 0 }
 func (l *Layer) HasTasks() bool          { return len(l.tasks) > 0 }
+func (l *Layer) HasApk() bool            { return len(l.apk) > 0 }
+
+// Apk returns the layer's Android app-install entries (the `apk:` package
+// format). Empty for non-Android layers.
+func (l *Layer) Apk() []ApkPackageSpec { return l.apk }
 func (l *Layer) HasEnvProvides() bool    { return len(l.envProvides) > 0 }
 func (l *Layer) HasEnvRequires() bool    { return len(l.envRequires) > 0 }
 func (l *Layer) HasEnvAccepts() bool     { return len(l.envAccepts) > 0 }

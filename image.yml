@@ -720,9 +720,12 @@ image:
                 PREINSTALLED. Browser UI on https://localhost:3000 (Selkies WebRTC),
                 Appium WebDriver on :4723, ADB server on :5037 (set
                 ANDROID_ADB_SERVER_SOCKET=tcp:localhost:5037 to drive from host).
-                Install any app by package id via the generic `ov eval adb
-                install-app` verb (apkeep in-pod: apk-pure default, google-play via
-                an AAS-token secret). CPU/RAM auto-size from the host at runtime.
+                Install apps either declaratively — a `kind: android` device + a
+                `target: android` deploy applies layers' `apk:` packages onto the
+                running emulator (apkeep in-pod) — or imperatively via the generic
+                `ov eval adb install-app` verb (both share one installer). apk
+                sources: apk-pure default, google-play via an AAS-token secret.
+                CPU/RAM auto-size from the host at runtime.
                 Requires /dev/kvm + kvm-group passthrough for hardware acceleration;
                 the layer declares this via security.devices so the quadlet
                 auto-emits AddDevice=/dev/kvm.

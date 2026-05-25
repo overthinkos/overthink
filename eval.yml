@@ -1563,8 +1563,27 @@ eval:
             - 35001:4723  # Appium WebDriver
             - 35002:5037  # ADB server
             - 35003:2222  # SSH
+        # Nested kind:android devices, deployed onto the STARTED emulator pod
+        # (the bed runner deploys nested children after `ov start`, then runs
+        # eval-live). `device` is the in-pod emulator (apkeep in-pod installs
+        # the android-test-apps layer's F-Droid); `device-net` addresses the
+        # SAME emulator as a remote adb ENDPOINT (goadb push installs the
+        # android-apidemos committed APK), exercising the remote/physical
+        # device code path with no hardware. App presence is asserted by the
+        # android-emulator-layer baked eval (apk-fdroid-* / apk-net-apidemos-*).
+        nested:
+            device:
+                target: android
+                android: pixel9a-36
+                add_layer:
+                    - android-test-apps
+            device-net:
+                target: android
+                android: pixel9a-endpoint
+                add_layer:
+                    - android-apidemos
         description:
-            feature: "R10 bed for android-emulator — Android 16 (API 36 x86_64 google_apis_playstore) emulator on pixel_9a with /dev/kvm passthrough, Selkies web UI on https://localhost:35000, Appium WebDriver on http://localhost:35001/wd/hub, ADB via ANDROID_ADB_SERVER_SOCKET=tcp:localhost:35002 adb devices. Play Store + GMS + Chrome are preinstalled (asserted present + launchable). The generic `ov eval adb install-app` verb (apkeep in-pod) is exercised with the F-Droid test app (download from APKPure → install → launch → uninstall); Chrome can't be sideloaded (Trichrome static-library dependency) so it's verified as preinstalled, not installed. CPU/RAM auto-size from the host."
+            feature: "R10 bed for android-emulator — Android 16 (API 36 x86_64 google_apis_playstore) emulator on pixel_9a with /dev/kvm passthrough, Selkies web UI on https://localhost:35000, Appium WebDriver on http://localhost:35001/wd/hub, ADB via ANDROID_ADB_SERVER_SOCKET=tcp:localhost:35002 adb devices. Play Store + GMS + Chrome preinstalled (asserted present + launchable). Nested kind:android devices install apps via the `apk:` package format: an in-pod emulator device installs F-Droid (apkeep in-pod), and a remote adb-ENDPOINT device installs the committed ApiDemos (goadb over the published 35002 port) — proving target:android + nested deployment for both device kinds. CPU/RAM auto-size from the host."
             tag: [testing]
     # eval-openclaw-pod deploys the minimal headless openclaw gateway on the
     # CachyOS (Arch) base. Exercises the cachyos→arch-builder npm build of the

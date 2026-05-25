@@ -285,6 +285,11 @@ func (t *VmDeployTarget) emitPlan(ctx context.Context, plan *InstallPlan, opts E
 			}
 			rec.ReverseOps = append(rec.ReverseOps, s.Reverse()...)
 
+		case *ApkInstallStep:
+			// apk packages install onto a `kind: android` device, not a VM
+			// guest. Skip (a `target: android` deploy handles them).
+			fmt.Fprintf(os.Stderr, "VmDeployTarget: skipping apk install (layer=%s) — apk installs only on a kind:android device\n", s.LayerName)
+
 		default:
 			fmt.Fprintf(os.Stderr, "VmDeployTarget: skipping unsupported step kind %T\n", step)
 		}

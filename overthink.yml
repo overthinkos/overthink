@@ -10,6 +10,7 @@ import:
     - vm.yml
     - pod.yml
     - k8s.yml
+    - android.yml
     - build.yml
     # arch + fedora base stacks (arch/arch-builder/fedora/fedora-builder/
     # fedora-nonfree). Combined from arch-base.yml + fedora-base.yml in the

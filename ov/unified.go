@@ -88,6 +88,12 @@ type UnifiedFile struct {
 	K8s   map[string]*K8sSpec   `yaml:"k8s,omitempty"`
 	Local map[string]*LocalSpec `yaml:"local,omitempty"`
 
+	// Android (kind:android) — Android device substrates (an in-pod emulator
+	// or a remote/physical adb endpoint) onto which `apk:` packages install
+	// via a `target: android` deploy. Modeled on K8s (the device is the
+	// substrate; the apps ride in on the deploy's layers). See android_spec.go.
+	Android map[string]*AndroidSpec `yaml:"android,omitempty"`
+
 	// AI catalog (kind:ai), harness recipes (kind:recipe = pure spec),
 	// and harness scores (kind:score = runner config that references
 	// recipes). See ai_config.go, harness_recipe.go, harness_score_kind.go,
@@ -299,9 +305,10 @@ type kindKeyedDoc struct {
 	Init       *InitDoc       `yaml:"init,omitempty"`
 	VM         *VmDoc         `yaml:"vm,omitempty"`
 	// Schema v4 first-class target templates.
-	Pod   *PodDoc   `yaml:"pod,omitempty"`
-	K8s   *K8sDoc   `yaml:"k8s,omitempty"`
-	Local *LocalDoc `yaml:"local,omitempty"`
+	Pod     *PodDoc     `yaml:"pod,omitempty"`
+	K8s     *K8sDoc     `yaml:"k8s,omitempty"`
+	Local   *LocalDoc   `yaml:"local,omitempty"`
+	Android *AndroidDoc `yaml:"android,omitempty"`
 	// 2026-04 harness cutover.
 	AI     *AIDoc     `yaml:"ai,omitempty"`
 	Recipe *RecipeDoc `yaml:"recipe,omitempty"`
@@ -353,6 +360,13 @@ type K8sDoc struct {
 type LocalDoc struct {
 	Name      string `yaml:"name"`
 	LocalSpec `yaml:",inline"`
+}
+
+// AndroidDoc wraps a single AndroidSpec with an explicit Name — the
+// kind:android standalone form (authored in android.yml or inline).
+type AndroidDoc struct {
+	Name        string `yaml:"name"`
+	AndroidSpec `yaml:",inline"`
 }
 
 // LayerDoc wraps a LayerYAML body with an explicit Name — the standalone form
@@ -439,6 +453,7 @@ var entityKinds = []entityKind{
 	{Key: "vm", Filename: "vm.yml"},
 	{Key: "k8s", Filename: "k8s.yml"},
 	{Key: "local", Filename: "local.yml"},
+	{Key: "android", Filename: "android.yml"},
 	// 2026-04 harness cutover: `ai:`, `recipe:` (pure spec) and
 	// `score:` (runner config referencing recipes) kinds. Convention
 	// file: eval.yml (carries all three kinds together).
@@ -1093,6 +1108,7 @@ var rootShapeKeys = map[string]bool{
 	"distro": true, "builder": true, "init": true,
 	"layer": true,
 	"image": true, "pod": true, "vm": true, "k8s": true, "local": true,
+	"android": true,
 	"deploy": true,
 	// 2026-04 harness cutover: `ai:` and `recipe:` are recognized as
 	// root-shape collection-map keys (in addition to being valid
@@ -1499,6 +1515,7 @@ func mergeUnified(dst, src *UnifiedFile, srcDir string) {
 	mergePodMap(&dst.Pod, src.Pod)
 	mergeK8sMap(&dst.K8s, src.K8s)
 	mergeLocalMap(&dst.Local, src.Local)
+	mergeAndroidMap(&dst.Android, src.Android)
 	mergeAIMap(&dst.AI, src.AI)
 	mergeRecipeMap(&dst.Recipe, src.Recipe)
 	mergeScoreMap(&dst.Score, src.Score)
@@ -1692,6 +1709,20 @@ func mergeK8sMap(dst *map[string]*K8sSpec, src map[string]*K8sSpec) {
 	}
 }
 
+func mergeAndroidMap(dst *map[string]*AndroidSpec, src map[string]*AndroidSpec) {
+	if len(src) == 0 {
+		return
+	}
+	if *dst == nil {
+		*dst = make(map[string]*AndroidSpec)
+	}
+	for k, v := range src {
+		if _, exists := (*dst)[k]; !exists {
+			(*dst)[k] = v
+		}
+	}
+}
+
 func mergeLocalMap(dst *map[string]*LocalSpec, src map[string]*LocalSpec) {
 	if len(src) == 0 {
 		return
@@ -1839,8 +1870,15 @@ func validateEvalBeds(uf *UnifiedFile) error {
 			if _, ok := uf.Local[node.Local]; !ok {
 				return fmt.Errorf("kind:eval bed %q references local template %q which is not defined", name, node.Local)
 			}
+		case "android":
+			if node.Android == "" {
+				return fmt.Errorf("kind:eval bed %q (target: android) must set `android: <device>`", name)
+			}
+			if _, ok := uf.Android[node.Android]; !ok {
+				return fmt.Errorf("kind:eval bed %q references android device %q which is not defined", name, node.Android)
+			}
 		default:
-			return fmt.Errorf("kind:eval bed %q has unsupported target %q (must be pod, vm, or local)", name, node.Target)
+			return fmt.Errorf("kind:eval bed %q has unsupported target %q (must be pod, vm, local, or android)", name, node.Target)
 		}
 	}
 	return nil
@@ -1953,6 +1991,9 @@ func mergeKindDoc(merged *UnifiedFile, kd *kindKeyedDoc, srcDir string) error {
 		count++
 	}
 	if kd.Local != nil {
+		count++
+	}
+	if kd.Android != nil {
 		count++
 	}
 	if kd.AI != nil {
@@ -2086,6 +2127,17 @@ func mergeKindDoc(merged *UnifiedFile, kd *kindKeyedDoc, srcDir string) error {
 		if _, exists := merged.Local[kd.Local.Name]; !exists {
 			spec := kd.Local.LocalSpec
 			merged.Local[kd.Local.Name] = &spec
+		}
+	case kd.Android != nil:
+		if kd.Android.Name == "" {
+			return fmt.Errorf("android: missing name")
+		}
+		if merged.Android == nil {
+			merged.Android = map[string]*AndroidSpec{}
+		}
+		if _, exists := merged.Android[kd.Android.Name]; !exists {
+			spec := kd.Android.AndroidSpec
+			merged.Android[kd.Android.Name] = &spec
 		}
 	case kd.AI != nil:
 		if kd.AI.Name == "" {
@@ -2588,5 +2640,6 @@ func populateLayerFromYAML(layer *Layer, ly *LayerYAML) {
 	layer.engine = ly.Engine
 	layer.vars = ly.Vars
 	layer.tasks = ly.Task
+	layer.apk = ly.Apk
 	layer.shell = ly.Shell
 }

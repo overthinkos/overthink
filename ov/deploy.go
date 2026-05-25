@@ -187,6 +187,14 @@ type DeploymentNode struct {
 	// without a template.
 	Local string `yaml:"local,omitempty"`
 
+	// Android names a kind:android device (an in-pod emulator or a
+	// remote/physical adb endpoint). Only meaningful for target: android —
+	// the deploy installs its `add_layer:` layers' `apk:` packages onto the
+	// device via AndroidDeployTarget. The apps ride in on add_layer: (the
+	// same overlay mechanism every other target uses), so there is no
+	// dedicated apk-list field here.
+	Android string `yaml:"android,omitempty"`
+
 	// Host is the destination machine for target:local deployments
 	// (Ansible-style). The literal string "local" (or empty/absent) means
 	// direct local execution via ShellExecutor. Anything else is treated

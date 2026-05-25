@@ -148,6 +148,12 @@ func deriveChildExecutor(node *DeploymentNode, parentExec DeployExecutor, deploy
 		return containerChildExecutor(node, parentExec)
 	case "pod", "container":
 		return containerChildExecutor(node, parentExec)
+	case "android":
+		// android shares the parent venue (device reached via adb). No hop.
+		if parentExec != nil {
+			return parentExec, nil
+		}
+		return ShellExecutor{}, nil
 	case "vm":
 		return vmChildExecutor(node, parentExec, deployName)
 	case "k8s", "kubernetes":

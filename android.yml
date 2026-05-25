@@ -1,0 +1,35 @@
+#  Per-kind file for `kind: android` device entries. Sibling of overthink.yml —
+#  imported via overthink.yml's `import:` list. The schema kind discriminator is
+#  `kind: android` for kind-keyed entries; the root-shape map is `android:`
+#  (this file). A kind:android entity is an Android DEVICE substrate: an in-pod
+#  emulator (image:) or a remote/physical adb endpoint (adb:). A
+#  `target: android` deploy installs its layers' `apk:` packages onto it.
+version: 2026.144.1443
+android:
+    # In-pod emulator device — the android-emulator image bakes the Android 16
+    # (API 36, google_apis_playstore x86_64) system image + the pixel_9a AVD;
+    # this device REFERENCES it (the API level / system image are build-time
+    # properties, not driven from here). apkeep runs in-pod; adb reaches the
+    # emulator via the pod. google_account names the credential-store secret
+    # keys the apkeep google-play source reads (an AAS token, NOT a password).
+    pixel9a-36:
+        image: android-emulator
+        device: pixel_9a
+        api_level: 36
+        google_account:
+            email_secret: GOOGLE_ACCOUNT_EMAIL
+            token_secret: GOOGLE_AAS_TOKEN
+    # Remote/physical device example — addresses an adb SERVER over the network
+    # (a host running `adb connect` to a phone, OR an emulator pod's published
+    # 5037). apkeep runs on the HOST and the APK is pushed via goadb to the
+    # endpoint; the host needs apkeep + android-tools (adb) for the `package:`
+    # download path (PKGBUILD optdepends). The `apk: <committed-file>` path
+    # needs neither (pure goadb push). The 127.0.0.1:35002 value here matches
+    # the eval-android-emulator-pod bed's published ADB port — it lets the
+    # remote/endpoint code path be exercised against the bed's own emulator
+    # with no physical hardware.
+    pixel9a-endpoint:
+        adb:
+            host: 127.0.0.1:35002
+        serial: emulator-5554
+        device: pixel_9a

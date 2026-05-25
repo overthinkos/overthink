@@ -113,14 +113,51 @@ func TestAdbMethods_AllowlistShape(t *testing.T) {
 			t.Errorf("adbMethods[%q]: path[0] = %v, want []string{\"adb\", ...}", name, spec.path)
 		}
 	}
-	// The 8 methods we promise in v1 must all be present.
+	// The methods we promise must all be present.
 	wantMethods := []string{
-		"devices", "shell", "install", "uninstall",
+		"devices", "shell", "install", "install-app", "uninstall",
 		"getprop", "screencap", "logcat-tail", "wait-for-device",
 	}
 	for _, name := range wantMethods {
 		if _, ok := adbMethods[name]; !ok {
-			t.Errorf("adbMethods missing v1 method %q", name)
+			t.Errorf("adbMethods missing method %q", name)
 		}
+	}
+}
+
+func TestPosInstallApp(t *testing.T) {
+	cases := []struct {
+		name string
+		c    Check
+		want []string
+	}{
+		{"package-only", Check{AppId: "org.fdroid.fdroid"}, []string{"--package", "org.fdroid.fdroid"}},
+		{"with-source-arch", Check{AppId: "org.fdroid.fdroid", Source: "apk-pure", Arch: "x86_64"},
+			[]string{"--package", "org.fdroid.fdroid", "--source", "apk-pure", "--arch", "x86_64"}},
+		{"google-play-version", Check{AppId: "com.example", Source: "google-play", AppVersion: "1.2.3"},
+			[]string{"--package", "com.example", "--source", "google-play", "--app-version", "1.2.3"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := posInstallApp(&tc.c)
+			if !reflect.DeepEqual(got, tc.want) {
+				t.Errorf("posInstallApp = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestValidateOvVerb_InstallAppRequiresAppId(t *testing.T) {
+	// Missing app_id ⇒ validation error.
+	errs := &ValidationError{}
+	validateOvVerb(&Check{Adb: "install-app"}, "adb", "loc", "deploy", errs)
+	if !errs.HasErrors() {
+		t.Error("install-app without app_id should fail validation")
+	}
+	// With app_id ⇒ no error.
+	errs2 := &ValidationError{}
+	validateOvVerb(&Check{Adb: "install-app", AppId: "org.fdroid.fdroid"}, "adb", "loc", "deploy", errs2)
+	if errs2.HasErrors() {
+		t.Errorf("install-app with app_id should pass, got: %v", errs2.Errors)
 	}
 }

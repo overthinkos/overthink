@@ -326,6 +326,7 @@ var adbMethods = map[string]methodSpec{
 	"devices":         {path: []string{"adb", "devices"}},
 	"shell":           {path: []string{"adb", "shell"}, required: []string{"Args"}, posArgs: posShellArgs},
 	"install":         {path: []string{"adb", "install"}, required: []string{"Apk"}, posArgs: posApkFlag},
+	"install-app":     {path: []string{"adb", "install-app"}, required: []string{"AppId"}, posArgs: posInstallApp},
 	"uninstall":       {path: []string{"adb", "uninstall"}, required: []string{"Args"}, posArgs: posPackageArg},
 	"getprop":         {path: []string{"adb", "getprop"}, required: []string{"Property"}, posArgs: posPropertyArg},
 	"screencap":       {path: []string{"adb", "screencap"}, required: []string{"Artifact"}, posArgs: posArtifactFlag, artifact: true},
@@ -780,7 +781,25 @@ func posPackageArg(c *Check) []string {
 	return []string{c.Args[0]}
 }
 
-func posPropertyArg(c *Check) []string  { return []string{c.Property} }
+func posPropertyArg(c *Check) []string { return []string{c.Property} }
+
+// posInstallApp builds the flags for `adb install-app` from the install-app
+// modifiers. Source/Arch/AppVersion are passed only when set so the CLI
+// defaults (apk-pure / x86_64) apply otherwise.
+func posInstallApp(c *Check) []string {
+	args := []string{"--package", c.AppId}
+	if c.Source != "" {
+		args = append(args, "--source", c.Source)
+	}
+	if c.Arch != "" {
+		args = append(args, "--arch", c.Arch)
+	}
+	if c.AppVersion != "" {
+		args = append(args, "--app-version", c.AppVersion)
+	}
+	return args
+}
+
 func posApkFlag(c *Check) []string      { return []string{"--apk", c.Apk} }
 func posArtifactFlag(c *Check) []string { return []string{"--artifact", c.Artifact} }
 func posCapsFlag(c *Check) []string     { return []string{"--caps", c.Caps} }

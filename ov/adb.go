@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"os"
+	"os/exec"
 	"strings"
 	"time"
 
@@ -26,11 +27,12 @@ import (
 // Method allowlist + declarative dispatch live in evalrun_ov_verbs.go
 // (adbMethods + runAdb).
 
-// AdbCmd groups the 8 `ov eval adb …` leaves.
+// AdbCmd groups the `ov eval adb …` leaves.
 type AdbCmd struct {
 	Devices       AdbDevicesCmd       `cmd:"" help:"List ADB devices/emulators with state"`
 	Shell         AdbShellCmd         `cmd:"" help:"Run a shell command on the emulator and stream stdout"`
 	Install       AdbInstallCmd       `cmd:"" help:"Install an APK from the host filesystem"`
+	InstallApp    AdbInstallAppCmd    `cmd:"install-app" help:"Download an app by package id via apkeep IN the pod and install it (apk-pure default; google-play via AAS)"`
 	Uninstall     AdbUninstallCmd     `cmd:"" help:"Remove a package by id"`
 	Getprop       AdbGetpropCmd       `cmd:"" help:"Read a system property (e.g. sys.boot_completed)"`
 	Screencap     AdbScreencapCmd     `cmd:"" help:"Capture a screenshot to a host-side PNG file"`
@@ -274,6 +276,103 @@ func (c *AdbInstallCmd) Run() error {
 	_, _ = dev.RunCommand("rm", "-f", remote)
 	if !strings.Contains(trimmed, "Success") {
 		return fmt.Errorf("pm install did not return Success: %s", trimmed)
+	}
+	return nil
+}
+
+// ---------------------------------------------------------------------------
+// adb install-app — generic "install any app by package id" verb. Unlike
+// `adb install` (which pushes a HOST apk via the goadb sync protocol), this
+// runs `apkeep` INSIDE the pod to download the app by package id from APKPure
+// (default, no creds) or the Google Play Store (google-play, via an AAS token),
+// then installs the result onto the emulator with the container's own adb. The
+// pod owns the capability (apkeep is baked into the android-sdk layer); this
+// verb just orchestrates the in-pod download + install. Handles a single .apk,
+// a split .apk set, and a .xapk (APKPure's split bundle — unzipped, then
+// install-multiple). Source/Arch/AppVersion are the apkeep knobs.
+//
+// NB (live-verified 2026-05-25): apps depending on a static shared library
+// (e.g. Chrome's Trichrome) FAIL to sideload — the Play Store dependency
+// installer isn't available — so this verb is for ordinary apps; Chrome is
+// preinstalled in the google_apis_playstore image.
+// ---------------------------------------------------------------------------
+
+// AdbInstallAppCmd: `ov eval adb install-app <image> --package <id>
+// [--source apk-pure|google-play|f-droid|huawei-app-gallery] [--arch x86_64]
+// [--app-version X]`.
+type AdbInstallAppCmd struct {
+	Image      string `arg:"" help:"Image name"`
+	Package    string `long:"package" required:"" help:"App package id to fetch+install (e.g. org.fdroid.fdroid)"`
+	Source     string `long:"source" default:"apk-pure" enum:"apk-pure,google-play,f-droid,huawei-app-gallery" help:"apkeep download source"`
+	Arch       string `long:"arch" default:"x86_64" help:"apkeep -o arch= native ABI (apk-pure only; match the emulator)"`
+	AppVersion string `long:"app-version" help:"Specific app version (default: latest)"`
+	adbCommonFlags
+}
+
+func (c *AdbInstallAppCmd) Run() error {
+	engine, containerName, err := resolveContainer(c.Image, c.Instance)
+	if err != nil {
+		return err
+	}
+
+	// Build the apkeep -a value (package, optionally @version).
+	appArg := c.Package
+	if c.AppVersion != "" {
+		appArg = c.Package + "@" + c.AppVersion
+	}
+
+	// Per-source apkeep invocation, run IN the container (where apkeep lives and
+	// the downloaded files land). google-play reads the opt-in AAS credentials
+	// from the container env (injected via secret_accepts).
+	var apkeepCmd string
+	switch c.Source {
+	case "google-play":
+		apkeepCmd = `if [ -z "${GOOGLE_ACCOUNT_EMAIL:-}" ] || [ -z "${GOOGLE_AAS_TOKEN:-}" ]; then ` +
+			`echo "install-app --source google-play requires GOOGLE_ACCOUNT_EMAIL + GOOGLE_AAS_TOKEN (set via ov secrets)" >&2; exit 1; fi; ` +
+			`apkeep -a ` + shellSingleQuote(appArg) + ` -d google-play -e "$GOOGLE_ACCOUNT_EMAIL" -t "$GOOGLE_AAS_TOKEN" -o split_apk=1 "$TMP"`
+	case "f-droid", "huawei-app-gallery":
+		apkeepCmd = `apkeep -a ` + shellSingleQuote(appArg) + ` -d ` + shellSingleQuote(c.Source) + ` "$TMP"`
+	default: // apk-pure
+		apkeepCmd = `apkeep -a ` + shellSingleQuote(appArg) + ` -d apk-pure`
+		if c.Arch != "" {
+			apkeepCmd += ` -o arch=` + shellSingleQuote(c.Arch)
+		}
+		apkeepCmd += ` "$TMP"`
+	}
+
+	// One in-container script: download → locate artifact (single .apk / split
+	// set / .xapk) → install onto the emulator → cleanup.
+	script := `set -euo pipefail
+export PATH="/opt/android-sdk/platform-tools:$PATH"
+ADB="/opt/android-sdk/platform-tools/adb -s ` + c.Serial + `"
+TMP="$(mktemp -d /tmp/ov-installapp-XXXXXX)"
+trap 'rm -rf "$TMP"' EXIT
+` + apkeepCmd + `
+shopt -s nullglob
+xapks=("$TMP"/*.xapk)
+apks=("$TMP"/*.apk)
+if [ ${#xapks[@]} -gt 0 ]; then
+  mkdir -p "$TMP/x"; unzip -o -q "${xapks[0]}" -d "$TMP/x"
+  $ADB install-multiple -r "$TMP"/x/*.apk
+elif [ ${#apks[@]} -gt 1 ]; then
+  $ADB install-multiple -r "${apks[@]}"
+elif [ ${#apks[@]} -eq 1 ]; then
+  $ADB install -r "${apks[0]}"
+else
+  echo "install-app: apkeep produced no .apk/.xapk in $TMP" >&2; ls -la "$TMP" >&2 || true; exit 1
+fi`
+
+	out, runErr := exec.Command(engine, "exec", containerName, "bash", "-c", script).CombinedOutput()
+	trimmed := strings.TrimSpace(string(out))
+	if trimmed != "" {
+		fmt.Println(trimmed)
+	}
+	if runErr != nil {
+		return fmt.Errorf("install-app %s (source %s): %v", c.Package, c.Source, runErr)
+	}
+	// `adb install`/`install-multiple` print "Success" on success.
+	if !strings.Contains(trimmed, "Success") {
+		return fmt.Errorf("install-app %s did not return Success: %s", c.Package, trimmed)
 	}
 	return nil
 }

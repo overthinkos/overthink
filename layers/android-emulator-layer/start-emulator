@@ -1,16 +1,39 @@
 #!/bin/bash
 set -euo pipefail
 
-EMULATOR_NAME="${EMULATOR_NAME:-ov_avd_14}"
-EMULATOR_API_LEVEL="${EMULATOR_API_LEVEL:-34}"
-EMULATOR_DEVICE="${EMULATOR_DEVICE:-pixel_6}"
-EMULATOR_IMG_TYPE="${EMULATOR_IMG_TYPE:-google_apis}"
+EMULATOR_NAME="${EMULATOR_NAME:-ov_avd_36}"
+EMULATOR_API_LEVEL="${EMULATOR_API_LEVEL:-36}"
+EMULATOR_DEVICE="${EMULATOR_DEVICE:-pixel_9a}"
+EMULATOR_IMG_TYPE="${EMULATOR_IMG_TYPE:-google_apis_playstore}"
 EMULATOR_SYS_IMG="${EMULATOR_SYS_IMG:-x86_64}"
-# Boot-speed tuning: more guest RAM + vCPUs makes the cold boot noticeably
-# faster on a multi-core host. Named env (not magic numbers) so a deploy can
-# size them down on constrained hosts.
-EMULATOR_MEMORY="${EMULATOR_MEMORY:-3072}"
-EMULATOR_CORES="${EMULATOR_CORES:-4}"
+
+# Host-derived CPU/RAM auto-sizing. When EMULATOR_CORES / EMULATOR_MEMORY are
+# unset, derive them from what the container actually sees so the SAME image
+# right-sizes on a 4-core laptop and a 16-core box. An operator override (env /
+# deploy.yml -e) always wins. All bounds are named constants (no magic numbers):
+# the Android emulator gains little past ~8 vCPU and Android caps usable guest
+# RAM, so cap at 8 vCPU / 8 GiB and leave host headroom for selkies + appium.
+CORES_HEADROOM=2     # cores left for the container's other services + host
+CORES_MIN=2
+CORES_MAX=8
+MEM_FRACTION_DIV=2   # use ~half of currently-available RAM
+MEM_MIN=2048         # MiB
+MEM_MAX=8192         # MiB
+if [ -z "${EMULATOR_CORES:-}" ]; then
+  _ncpu="$(nproc 2>/dev/null || echo 4)"
+  _cores=$(( _ncpu - CORES_HEADROOM ))
+  [ "${_cores}" -lt "${CORES_MIN}" ] && _cores="${CORES_MIN}"
+  [ "${_cores}" -gt "${CORES_MAX}" ] && _cores="${CORES_MAX}"
+  EMULATOR_CORES="${_cores}"
+fi
+if [ -z "${EMULATOR_MEMORY:-}" ]; then
+  _memavail_kb="$(awk '/^MemAvailable:/{print $2}' /proc/meminfo 2>/dev/null || echo 0)"
+  _mem=$(( _memavail_kb / 1024 / MEM_FRACTION_DIV ))
+  [ "${_mem}" -lt "${MEM_MIN}" ] && _mem="${MEM_MIN}"
+  [ "${_mem}" -gt "${MEM_MAX}" ] && _mem="${MEM_MAX}"
+  EMULATOR_MEMORY="${_mem}"
+fi
+echo "[start-emulator] auto-sized: cores=${EMULATOR_CORES} memory=${EMULATOR_MEMORY}MiB (host nproc=$(nproc 2>/dev/null || echo '?'))" >&2
 ANDROID_HOME="${ANDROID_HOME:-/opt/android-sdk}"
 ANDROID_AVD_HOME="${ANDROID_AVD_HOME:-${HOME}/.android/avd}"
 export ANDROID_HOME ANDROID_AVD_HOME

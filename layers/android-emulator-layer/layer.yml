@@ -1,24 +1,41 @@
 layer:
-    version: 2026.145.0900
+    version: 2026.145.1302
     name: android-emulator-layer
     description: |
         Composite glue layer that turns the underlying selkies-desktop +
-        android-sdk + appium-server stack into a running Android 14 emulator.
-        Ships two helper scripts (start-emulator, wait-for-display), two
-        supervisord services (emulator + adb-server), the AVD volume, and the
-        /dev/kvm device-passthrough declaration that round-trips through the
-        OCI label into the quadlet.
+        android-sdk + appium-server stack into a running Android 16 (API 36,
+        google_apis_playstore x86_64, pixel_9a) emulator. The Play Store image
+        ships Play Store + Google Play services (GMS) + Google Chrome
+        preinstalled. Ships two helper scripts (start-emulator, wait-for-display),
+        two supervisord services (emulator + adb-server), the AVD volume, and the
+        /dev/kvm device-passthrough declaration that round-trips through the OCI
+        label into the quadlet. CPU/RAM are auto-sized from the host at runtime
+        (start-emulator). Optional GOOGLE_ACCOUNT_EMAIL + GOOGLE_AAS_TOKEN secrets
+        feed the `ov eval adb install-app --source google-play` path.
     require:
         - android-sdk
         - appium-server
         - supervisord
     env:
-        EMULATOR_NAME: "ov_avd_14"
-        EMULATOR_API_LEVEL: "34"
-        EMULATOR_DEVICE: "pixel_6"
-        EMULATOR_MEMORY: "3072"
-        EMULATOR_CORES: "4"
+        EMULATOR_NAME: "ov_avd_36"
+        EMULATOR_API_LEVEL: "36"
+        EMULATOR_DEVICE: "pixel_9a"
+        # EMULATOR_MEMORY / EMULATOR_CORES are intentionally NOT set here — they
+        # are auto-sized from the host (nproc / MemAvailable) by start-emulator,
+        # so the same image right-sizes on a 4-core laptop and a 16-core box. An
+        # operator can still pin them explicitly via deploy.yml / -e to size down.
         ANDROID_AVD_HOME: "/home/user/.android/avd"
+    # Optional, opt-in Google account credentials (absent = green). Used ONLY by
+    # the `ov eval adb install-app --source google-play` path (apkeep -e/-t). The
+    # token is an apkeep AAS token (NOT a password) minted from a Google
+    # oauth_token via `apkeep -e <email> --oauth-token oauth2_4/…`. Resolved from
+    # the credential store at ov config and injected as podman secrets — never
+    # plaintext in deploy.yml / quadlet.
+    secret_accepts:
+        - name: GOOGLE_ACCOUNT_EMAIL
+          description: "Google account email for the apkeep google-play source (opt-in)"
+        - name: GOOGLE_AAS_TOKEN
+          description: "apkeep AAS token for the google-play source (opt-in; NOT a password)"
     security:
         devices:
             - /dev/kvm
@@ -77,11 +94,11 @@ layer:
             ANDROID_HOME: /opt/android-sdk
             ANDROID_SDK_ROOT: /opt/android-sdk
             ANDROID_AVD_HOME: /home/user/.android/avd
-            EMULATOR_NAME: ov_avd_14
-            EMULATOR_API_LEVEL: "34"
-            EMULATOR_DEVICE: pixel_6
-            EMULATOR_MEMORY: "3072"
-            EMULATOR_CORES: "4"
+            EMULATOR_NAME: ov_avd_36
+            EMULATOR_API_LEVEL: "36"
+            EMULATOR_DEVICE: pixel_9a
+            EMULATOR_IMG_TYPE: google_apis_playstore
+            EMULATOR_SYS_IMG: x86_64
             JAVA_HOME: /usr/lib/jvm/ov-jdk21
           restart: always
           priority: 30
@@ -197,7 +214,93 @@ layer:
           # Args[0..] becomes argv for the shell. Result asserted on stdout.
           arg: [getprop, ro.build.version.release]
           stdout:
-            - contains: "14"
+            - contains: "16"
+
+        # ===================================================================
+        # Play Store + GMS + Chrome are PREINSTALLED in the google_apis_playstore
+        # image (live-verified 2026-05-25: com.android.vending / com.google.android.gms
+        # / com.google.android.gsf / com.android.chrome all present out of the box).
+        # These assert that the image switch delivered the full Google stack.
+        # ===================================================================
+        - id: play-store-present
+          scope: deploy
+          adb: shell
+          arg: [pm, list, packages, com.android.vending]
+          stdout:
+            - contains: "com.android.vending"
+        - id: gms-present
+          scope: deploy
+          adb: shell
+          arg: [pm, list, packages, com.google.android.gms]
+          stdout:
+            - contains: "com.google.android.gms"
+        - id: gsf-present
+          scope: deploy
+          adb: shell
+          arg: [pm, list, packages, com.google.android.gsf]
+          stdout:
+            - contains: "com.google.android.gsf"
+        - id: chrome-preinstalled
+          scope: deploy
+          adb: shell
+          arg: [pm, list, packages, com.android.chrome]
+          stdout:
+            - contains: "com.android.chrome"
+        - id: chrome-launch
+          scope: deploy
+          adb: shell
+          # monkey injects a LAUNCHER intent; exit 0 means the activity started.
+          arg: [monkey, -p, com.android.chrome, -c, android.intent.category.LAUNCHER, "1"]
+          exit_status: 0
+        - id: chrome-screencap
+          scope: deploy
+          adb: screencap
+          artifact: /tmp/ov-eval-chrome.png
+          artifact_min_bytes: 5000
+
+        # ===================================================================
+        # Generic install-from-store verb (apkeep IN the pod) — exercised with
+        # F-Droid, NOT Chrome (Chrome's .xapk can't be sideloaded: it needs the
+        # Trichrome static library that only the Play Store dependency-installer
+        # provides; and Chrome is preinstalled anyway). Live-verified 2026-05-25:
+        # apkeep apk-pure → org.fdroid.fdroid.apk → install → launch → uninstall.
+        # ===================================================================
+        - id: apkeep-install-fdroid
+          scope: deploy
+          adb: install-app
+          # app_id (NOT package: — that key is the goss `package:` verb discriminator)
+          app_id: org.fdroid.fdroid
+          source: apk-pure            # default no-creds source
+          arch: x86_64
+          stdout:
+            - contains: Success
+          timeout: 300s
+          # apkeep downloads from APKPure over the network on a fresh boot; allow
+          # generous retry until the device is fully settled (mirrors apidemos).
+          eventually: 300s
+          retry_interval: 10s
+        - id: apkeep-fdroid-present
+          scope: deploy
+          adb: shell
+          arg: [pm, list, packages, org.fdroid.fdroid]
+          stdout:
+            - contains: "org.fdroid.fdroid"
+        - id: apkeep-fdroid-launch
+          scope: deploy
+          adb: shell
+          # Launch raises a runtime-permission dialog (GrantPermissionsActivity)
+          # that covers F-Droid, so assert the PROCESS is running (pidof prints a
+          # PID), NOT the focused activity (live-observed 2026-05-25).
+          arg: [sh, -c, "monkey -p org.fdroid.fdroid -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1; sleep 3; pidof org.fdroid.fdroid"]
+          stdout:
+            - matches: "[0-9]"
+        - id: apkeep-fdroid-uninstall
+          scope: deploy
+          adb: uninstall
+          # leave the bed idempotent for the next run
+          arg: [org.fdroid.fdroid]
+          stdout:
+            - contains: Success
         # Disable Play Protect's ADB-install verification before the install
         # checks. NOTE: the AVD has full internet (see the guard above) — this is
         # NOT a no-internet workaround; it's a determinism/speed measure. The
@@ -269,11 +372,12 @@ layer:
           # UiAutomator2 installs its instrumentation server APK + waits for the
           # test runner on first invocation; on a fresh emulator this exceeds the
           # 30s default, so bump the two timeouts. chromedriverExecutableDir
-          # points at the pinned chromedriver-113 baked by appium-server so the
-          # WebView context switch works offline (NO --allow-insecure autodownload);
-          # chromedriverDisableBuildCheck tolerates a WebView patch-version skew.
+          # points at the pinned chromedriver-133 baked by appium-server (matches
+          # the API-36 System WebView 133) so the WebView context switch works
+          # offline (NO --allow-insecure autodownload); chromedriverDisableBuildCheck
+          # tolerates a WebView patch-version skew.
           caps: |
-            {"platformName":"Android","appium:automationName":"UiAutomator2","appium:deviceName":"emulator-5554","appium:platformVersion":"14","appium:noReset":true,"appium:newCommandTimeout":120,"appium:uiautomator2ServerInstallTimeout":240000,"appium:uiautomator2ServerLaunchTimeout":240000,"appium:chromedriverExecutableDir":"/opt/chromedriver/113","appium:chromedriverDisableBuildCheck":true}
+            {"platformName":"Android","appium:automationName":"UiAutomator2","appium:deviceName":"emulator-5554","appium:platformVersion":"16","appium:noReset":true,"appium:newCommandTimeout":120,"appium:uiautomator2ServerInstallTimeout":240000,"appium:uiautomator2ServerLaunchTimeout":240000,"appium:chromedriverExecutableDir":"/opt/chromedriver/133","appium:chromedriverDisableBuildCheck":true}
           timeout: 600s
         # Set a W3C implicit wait so every find polls until the element renders.
         # Without it, a find fired immediately after `app-start-activity` races
@@ -293,7 +397,7 @@ layer:
           apk: ./tests/data/ApiDemos-debug.apk
           timeout: 120s
 
-        # Pre-grant POST_NOTIFICATIONS so Android 14's runtime-permission dialog
+        # Pre-grant POST_NOTIFICATIONS so Android 16's runtime-permission dialog
         # (com.google.android.permissioncontroller) does NOT cover ApiDemos on
         # first launch — without this, every per-class find hits the dialog and
         # returns "no such element" (verified live 2026-05-25). force-stop makes
@@ -502,7 +606,7 @@ layer:
           stdout:
             - contains: Dropped
 
-        # --- WebView: context presence (always) + switch via pre-baked cd-113 ---
+        # --- WebView: context presence (always) + switch via pre-baked cd-133 ---
         - id: av-webview-open
           scope: deploy
           appium: app-start-activity

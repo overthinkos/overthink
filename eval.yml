@@ -1436,7 +1436,7 @@ score:
 #   eval-jupyter-pod          (pod) — jupyter-mcp regression coverage
 #   eval-jupyter-ml-pod       (pod) — jupyter-ml spacy/quarto + GPU MCP probes
 #   eval-versa-pod            (pod) — versa OSM analytics + vector-tile + marimo MCP
-#   eval-android-emulator-pod (pod) — Android 14 emulator (/dev/kvm) + adb/appium
+#   eval-android-emulator-pod (pod) — Android 16 emulator (/dev/kvm) + adb/appium
 #   eval-openclaw-pod         (pod) — minimal openclaw gateway on the cachyos base
 #   eval-openclaw-full-pod    (pod) — maximal openclaw-full on cachyos (AUR chrome,
 #                                     gogcli@latest, ffmpeg/sqlite arch coverage)
@@ -1564,7 +1564,7 @@ eval:
             - 35002:5037  # ADB server
             - 35003:2222  # SSH
         description:
-            feature: "R10 bed for android-emulator — Android 14 (API 34 x86_64 google_apis) emulator with /dev/kvm passthrough, Selkies web UI on https://localhost:35000, Appium WebDriver on http://localhost:35001/wd/hub, ADB via ANDROID_ADB_SERVER_SOCKET=tcp:localhost:35002 adb devices. R10 of adb/appium eval verbs uses host-path `apk:` for BOTH adb: install and appium: install-app (each stages the host APK into the container itself; no external pre-staging)."
+            feature: "R10 bed for android-emulator — Android 16 (API 36 x86_64 google_apis_playstore) emulator on pixel_9a with /dev/kvm passthrough, Selkies web UI on https://localhost:35000, Appium WebDriver on http://localhost:35001/wd/hub, ADB via ANDROID_ADB_SERVER_SOCKET=tcp:localhost:35002 adb devices. Play Store + GMS + Chrome are preinstalled (asserted present + launchable). The generic `ov eval adb install-app` verb (apkeep in-pod) is exercised with the F-Droid test app (download from APKPure → install → launch → uninstall); Chrome can't be sideloaded (Trichrome static-library dependency) so it's verified as preinstalled, not installed. CPU/RAM auto-size from the host."
             tag: [testing]
     # eval-openclaw-pod deploys the minimal headless openclaw gateway on the
     # CachyOS (Arch) base. Exercises the cachyos→arch-builder npm build of the

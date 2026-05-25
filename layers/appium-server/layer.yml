@@ -1,26 +1,31 @@
 layer:
-    version: 2026.145.0900
+    version: 2026.145.1302
     name: appium-server
     description: |
         Appium 3.x WebDriver server from the CachyOS/AUR `appium` package (binary
         at /usr/bin/appium; depends on the pacman nodejs the nodejs layer already
         pulls via npm) with the uiautomator2 driver installed per-user into
-        ~/.appium. Also pre-bakes a pinned chromedriver matching the API-34
-        google_apis System WebView (Chrome 113) at /opt/chromedriver/113, so
-        WebView context switching works offline via the session cap
-        appium:chromedriverExecutableDir — no runtime autodownload, no
-        --allow-insecure (autodownload was verified slow/hanging). cachyos
-        consumes the arch: section and routes aur → arch-builder; the consuming
-        image declares build:[pac,aur].
+        ~/.appium. Also pre-bakes a pinned chromedriver matching the API-36
+        google_apis_playstore System WebView (Chrome 133) at /opt/chromedriver/133
+        (sourced from Chrome-for-Testing), so WebView context switching works
+        offline via the session cap appium:chromedriverExecutableDir — no runtime
+        autodownload, no --allow-insecure (autodownload was verified slow/hanging).
+        cachyos consumes the arch: section and routes aur → arch-builder; the
+        consuming image declares build:[pac,aur].
     require:
         - nodejs
         - java-openjdk
         - android-sdk
         - supervisord
     var:
-        # Tracks the API-34 google_apis System WebView Chrome major (113). Bump
-        # in lockstep with the system image's WebView version.
-        WEBVIEW_CHROMEDRIVER_VERSION: "113.0.5672.63"
+        # Tracks the API-36 google_apis_playstore System WebView Chrome version
+        # (live-probed 133.0.6943.137). Pinned to the nearest Chrome-for-Testing
+        # build (133.0.6943.141 — same major.minor.build; the +4 patch skew is
+        # tolerated by the session cap appium:chromedriverDisableBuildCheck). Bump
+        # BOTH vars in lockstep with the system image's WebView version, and the
+        # literal /opt/chromedriver/133 in the eval below + the emulator-layer cap.
+        WEBVIEW_CHROMEDRIVER_VERSION: "133.0.6943.141"
+        WEBVIEW_CHROMEDRIVER_MAJOR: "133"
     distro:
         arch:
             aur:
@@ -36,14 +41,21 @@ layer:
             export PATH="$JAVA_HOME/bin:$PATH"
             /usr/bin/appium driver install uiautomator2
           user: "${USER}"
-        - mkdir: /opt/chromedriver/113
+        - mkdir: /opt/chromedriver/${WEBVIEW_CHROMEDRIVER_MAJOR}
           user: root
           mode: "0755"
-        - download: "https://chromedriver.storage.googleapis.com/${WEBVIEW_CHROMEDRIVER_VERSION}/chromedriver_linux64.zip"
+        # Chrome-for-Testing endpoint (the legacy chromedriver.storage.googleapis.com
+        # serves chromedriver ≤114 only). The CfT zip nests the binary under
+        # chromedriver-linux64/, so flatten it into /opt/chromedriver/<major>/.
+        - download: "https://storage.googleapis.com/chrome-for-testing-public/${WEBVIEW_CHROMEDRIVER_VERSION}/linux64/chromedriver-linux64.zip"
           extract: zip
-          to: /opt/chromedriver/113
+          to: /opt/chromedriver/${WEBVIEW_CHROMEDRIVER_MAJOR}
           user: root
-        - cmd: chmod 0755 /opt/chromedriver/113/chromedriver
+        - cmd: |
+            set -euo pipefail
+            D="/opt/chromedriver/${WEBVIEW_CHROMEDRIVER_MAJOR}"
+            install -m 0755 "${D}/chromedriver-linux64/chromedriver" "${D}/chromedriver"
+            rm -rf "${D}/chromedriver-linux64"
           user: root
     service:
         - name: appium
@@ -73,9 +85,19 @@ layer:
           file: ${HOME}/.appium/node_modules/appium-uiautomator2-driver
           exists: true
           filetype: directory
-        - id: chromedriver-113-baked
-          file: /opt/chromedriver/113/chromedriver
+        - id: chromedriver-baked
+          file: /opt/chromedriver/133/chromedriver
           exists: true
+        # Major-match guard: the baked chromedriver major MUST match the API-36
+        # System WebView major (133). If a future system-image bump moves the
+        # WebView major and this pin is left stale, this check FAILS loudly
+        # instead of letting WebView automation silently mismatch.
+        - id: chromedriver-major-matches-webview
+          scope: deploy
+          command: /opt/chromedriver/133/chromedriver --version
+          exit_status: 0
+          stdout:
+            - matches: "ChromeDriver 133\\."
         - id: appium-status-endpoint
           scope: deploy
           http: http://127.0.0.1:${HOST_PORT:4723}/wd/hub/status

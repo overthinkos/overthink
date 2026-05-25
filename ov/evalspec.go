@@ -307,7 +307,12 @@ type Check struct {
 	Caps      string `yaml:"caps,omitempty"     json:"caps,omitempty"`       // appium: session-create — W3C alwaysMatch capabilities JSON
 	Strategy  string `yaml:"strategy,omitempty" json:"strategy,omitempty"`   // appium: find/click/send-keys — locator strategy (xpath|id|accessibility-id|class-name|android-uiautomator)
 	Session   string `yaml:"session,omitempty"  json:"session,omitempty"`    // appium: explicit session id override (default: read from ~/.cache/ov/appium/sessions/<image>[_<instance>].json)
-	AppId     string `yaml:"app_id,omitempty"   json:"app_id,omitempty"`     // appium app-*: package id (io.appium.android.apis) for activate/terminate/remove/clear/is-installed/state
+	AppId     string `yaml:"app_id,omitempty"   json:"app_id,omitempty"`     // appium app-*: package id (io.appium.android.apis); ALSO adb install-app: the app package id to fetch+install via apkeep
+	// adb install-app (apkeep) modifiers. The verb downloads <app_id> via apkeep
+	// IN the pod and installs it onto the emulator (single .apk / split set / .xapk).
+	Source     string `yaml:"source,omitempty"      json:"source,omitempty"`      // adb install-app: apkeep source (apk-pure|google-play|f-droid|huawei-app-gallery; default apk-pure)
+	Arch       string `yaml:"arch,omitempty"        json:"arch,omitempty"`        // adb install-app: apkeep -o arch= native ABI (e.g. x86_64) — apk-pure only
+	AppVersion string `yaml:"app_version,omitempty" json:"app_version,omitempty"` // adb install-app: optional specific app version (default: latest)
 	Activity  string `yaml:"activity,omitempty" json:"activity,omitempty"`   // appium app-start-activity: pkg/.activity (intent form, e.g. io.appium.android.apis/.view.TextFields)
 	Attribute string `yaml:"attribute,omitempty" json:"attribute,omitempty"` // appium get-attribute: attribute name (checked/enabled/selected/text/class/...)
 	Percent   string `yaml:"percent,omitempty"  json:"percent,omitempty"`    // appium gesture-swipe/scroll/fling/pinch: magnitude fraction (e.g. "0.75")

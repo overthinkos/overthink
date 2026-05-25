@@ -22,6 +22,60 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-05
 
+### 2026-05-25 — Android emulator → Android 16 / API 36 + Play Store + GMS + generic apkeep install-app verb
+
+The `android-emulator` image was upgraded from Android 14 (API 34, `google_apis`,
+`pixel_6`) to **Android 16 (API 36, `google_apis_playstore`, `pixel_9a`)**. The
+Play Store system image ships **Play Store (`com.android.vending`), Google Play
+services (`com.google.android.gms`), the Google Services Framework
+(`com.google.android.gsf`), and Google Chrome (`com.android.chrome`)
+preinstalled** — live-verified on the disposable `eval-android-emulator-pod`
+bed before implementation. Concretely:
+
+- **`layers/android-sdk/layer.yml`** — `var:` bumped to API 36 +
+  `google_apis_playstore`; AUR `android-sdk-build-tools-36` + `android-platform-36`
+  (both confirmed to exist in the AUR) replace the `-34` packages; **`apkeep`**
+  (EFF, the by-package-name app downloader) added. The system-image cache sentinel
+  is now keyed per API level + variant (`.ov-sysimg-complete-<api>-<variant>`) so a
+  prior API level's completed download in the persistent build mount can't
+  short-circuit a new pull. Eval paths updated (build-tools/36.0.0,
+  platforms/android-36, system-images/android-36/google_apis_playstore/x86_64) +
+  an `apkeep-binary` check.
+- **`layers/android-emulator-layer/layer.yml`** — `ov_avd_36` / `pixel_9a`; static
+  `EMULATOR_MEMORY`/`EMULATOR_CORES` removed (now host-auto-sized); opt-in
+  `secret_accepts: GOOGLE_ACCOUNT_EMAIL + GOOGLE_AAS_TOKEN` for the google-play
+  source. Eval asserts Play Store/GMS/GSF + Chrome preinstalled & launchable, and
+  exercises the new `adb: install-app` verb with the F-Droid test app
+  (install → present → launch-via-pidof → uninstall). The version assertion moved
+  14→16; the Appium session caps moved `platformVersion` 14→16 and
+  `chromedriverExecutableDir` /opt/chromedriver/113 → /opt/chromedriver/133.
+- **`layers/android-emulator-layer/start-emulator`** — CPU/RAM are derived from the
+  host at runtime when unset: cores = `nproc − 2` clamped [2,8]; memory =
+  `MemAvailable/2` MiB clamped [2048,8192]. Named constants, operator-overridable.
+- **`layers/appium-server/layer.yml`** — the offline-baked chromedriver was
+  re-pinned from the stale 113 to **133.0.6943.141** (Chrome-for-Testing; nearest
+  CfT build to the live-probed API-36 System WebView 133.0.6943.137; the +4 patch
+  skew is tolerated by `chromedriverDisableBuildCheck`). Source switched to the
+  Chrome-for-Testing endpoint (the legacy `chromedriver.storage.googleapis.com`
+  serves ≤114 only). Added a deploy-scope major-match guard so a future stale pin
+  FAILS loudly.
+- **Go — new generic verb `ov eval adb install-app`** (`ov/adb.go`,
+  `ov/evalrun_ov_verbs.go`, `ov/validate_eval.go`, `ov/adb_test.go`). Runs
+  `apkeep` IN the pod to download an app by package id from APKPure (default, no
+  creds) or the Google Play Store (`--source google-play`, via the opt-in AAS
+  token), then installs the result onto the emulator with the container's adb —
+  handling a single `.apk`, a split `.apk` set, AND an `.xapk` (APKPure's split
+  bundle: unzip → `install-multiple`). The eval modifier is `app_id:` (NOT
+  `package:`, which is the goss `package:` verb discriminator).
+
+  Two live-verified facts shaped the design: **Chrome cannot be sideloaded** — its
+  `.xapk` needs the Trichrome static library that only the Play Store dependency
+  installer provides (`INSTALL_FAILED_MISSING_SHARED_LIBRARY`) — and it is
+  preinstalled anyway, so the verb is exercised with F-Droid, not Chrome; and
+  upstream apkeep has **no `apk-mirror` source** (only apk-pure / google-play /
+  f-droid / huawei-app-gallery), so the original "install from APKMirror" intent
+  resolves to APKPure.
+
 ### 2026-05-25 — Eliminate `:latest` from every base image (pin arch + cachyos-v3; bootc ref resolver)
 
 `:latest` is no longer used by any base image anywhere in the project. The two

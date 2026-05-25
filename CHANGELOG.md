@@ -22,6 +22,47 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-05
 
+### 2026-05-25 — Eliminate `:latest` from every base image (pin arch + cachyos-v3; bootc ref resolver)
+
+`:latest` is no longer used by any base image anywhere in the project. The two
+external base refs that still floated on `:latest` are pinned to precise,
+immutable coordinates, and the one Go code path that fabricated a `:latest`
+image ref is fixed to resolve a real CalVer tag.
+
+- **Arch base** (`base.yml` `arch`): `quay.io/archlinux/archlinux:latest` →
+  `quay.io/archlinux/archlinux:base-20260525.0.535911` — quay's `base-*`
+  date-serial tags are immutable; this digest (`sha256:50dbcaa…`) is identical
+  to what `:latest` resolved to on the pin date, so the rebuild is cache-stable.
+  Refresh by bumping to a newer `base-*` tag.
+- **CachyOS base** (`image/cachyos/image.yml` `cachyos`, in the
+  `overthinkos/cachyos` submodule): `docker.io/cachyos/cachyos-v3:latest` →
+  `docker.io/cachyos/cachyos-v3@sha256:b56444f1d41cd697cc2f6034618259a6136c70127efef5139b421b64b1527888`.
+  Docker Hub publishes ONLY a `:latest` tag for `cachyos-v3` (no named/dated
+  tags exist), so a digest pin is the most precise coordinate available. Refresh
+  by repinning to a newer cachyos-v3 digest.
+- **Per-kind version labels unchanged.** Both pins are content-identical to the
+  `:latest` they replace, so `arch` and `cachyos` keep their existing
+  `version:` and their emitted `org.overthinkos.version` labels stay stable — no
+  cache-miss cascade to downstream images.
+- **`BuildBootcVM` (`ov/vm_bootc_install.go`)** no longer defaults an internal
+  kind:image short name to `ghcr.io/overthinkos/<name>:latest` (a ref ov never
+  builds or pushes — it is CalVer-only). The new `resolveBootcImageRef` helper
+  passes full OCI refs through unchanged and resolves an internal short name to
+  its newest local CalVer tag via the shared `resolveLocalImageRef`, surfacing
+  an actionable `ov image build <name>` error when the image is missing. Covered
+  by `ov/vm_bootc_install_test.go`.
+- **R5 stale-reference sweep:** the `cachyos-v3:latest` / `archlinux:latest`
+  references in `build.yml`, `ov/migrate_entity_version.go`, `README.md`, and the
+  `cachyos` / `arch` / `arch-ov` / `image` / `openclaw` / `versa` skills are
+  updated to the pinned forms (the arch skills also corrected from the stale
+  `docker.io/library/archlinux` registry to the `quay.io/archlinux` mirror in
+  actual use). `git grep` for the old base refs now returns only this entry.
+- **Out of scope (intentionally NOT pinned):** `quay.io/libpod/alpine:latest`
+  in the `openclaw-desktop` nested-podman eval check (a throwaway test container
+  — the probe only needs *some* runnable image) and `ghcr.io/tailscale/tailscale:latest`
+  in `ov/sidecar.yml` (a sidecar that should float for security updates). Neither
+  is a base image.
+
 ### 2026-05-25 — Comprehensive `ov eval appium` surface + AUR-packaged android-emulator toolchain
 
 `ov eval appium` grew from 8 typed methods to a three-tier surface mirroring

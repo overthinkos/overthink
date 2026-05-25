@@ -12,7 +12,8 @@ package main
 //     layer kind now REQUIRES it (validateLayerContents hard-errors otherwise).
 //  2. Bare-base image entries — an `image:` entry with NO `layer:` field AND an
 //     EXTERNAL `base:` (a registry ref, detected by a "/" in the value, e.g.
-//     `quay.io/archlinux/archlinux:latest`) — get a dedicated `version: <seed>`
+//     `quay.io/archlinux/archlinux:base-20260525.0.535911`) — get a dedicated
+//     `version: <seed>`
 //     so their label is stable (a layerless image cannot derive a
 //     highest-layer-version). Layered images and internal-base images (builders
 //     `FROM arch`, namespaced `base: cachyos.cachyos`) are left UNVERSIONED so

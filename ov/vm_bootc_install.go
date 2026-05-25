@@ -16,6 +16,26 @@ type BootcVMResult struct {
 	CloudInitDigest string
 }
 
+// resolveBootcImageRef maps a bootc source.image to a concrete OCI ref.
+//
+// A full ref (containing "/", e.g. "quay.io/fedora/fedora-bootc:43" or a
+// pinned "…@sha256:…") passes through unchanged — bootc may pull it from a
+// registry. An internal kind:image short name (e.g. "fedora-bootc") resolves
+// against local podman storage to its newest CalVer tag via the shared
+// resolveLocalImageRef: ov is CalVer-only, so there is NO `:latest` fallback —
+// the bootc image must be built first (`ov image build <name>`), which is
+// surfaced as an actionable error when it is missing.
+func resolveBootcImageRef(engine, image string) (string, error) {
+	if strings.Contains(image, "/") {
+		return image, nil
+	}
+	resolved, err := resolveLocalImageRef(engine, image)
+	if err != nil {
+		return "", fmt.Errorf("resolving bootc image %q: %w (build it first with `ov image build %s`)", image, err, image)
+	}
+	return resolved, nil
+}
+
 // BuildBootcVM creates a fresh VM disk by running `bootc install
 // to-disk` inside a privileged container that hosts the referenced
 // kind:image entry. Replaces the Task-21 stub at vm_build.go:198.
@@ -28,6 +48,7 @@ func BuildBootcVM(
 	spec *VmSpec,
 	outputDir, vmStateDir string,
 	existingState *VmDeployState,
+	engine string,
 ) (BootcVMResult, error) {
 	if spec.Source.Kind != "bootc" {
 		return BootcVMResult{}, fmt.Errorf("BuildBootcVM called with source.kind=%q (expected bootc)", spec.Source.Kind)
@@ -51,14 +72,11 @@ func BuildBootcVM(
 		rootfs = "ext4"
 	}
 
-	// Resolve the bootc image ref. For internal kind:image entries,
-	// the project's registry config provides a tag; for full OCI tags
-	// (containing /), use as-is.
-	imageRef := spec.Source.Image
-	if !strings.Contains(imageRef, "/") {
-		// Internal image name; default to ghcr.io/overthinkos/<name>:latest
-		// unless explicit registry/tag is in the ref.
-		imageRef = fmt.Sprintf("ghcr.io/overthinkos/%s:latest", imageRef)
+	// Resolve the bootc image ref (full ref → as-is; internal short name →
+	// newest local CalVer tag; NO `:latest` fallback — see resolveBootcImageRef).
+	imageRef, err := resolveBootcImageRef(engine, spec.Source.Image)
+	if err != nil {
+		return BootcVMResult{}, err
 	}
 
 	// Render bootc install script. We allocate the raw disk on the host,

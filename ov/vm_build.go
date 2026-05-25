@@ -183,8 +183,7 @@ func (c *VmBuildCmd) runVmSpecBuild(vmName string, spec *VmSpec, rt *ResolvedRun
 		return nil
 
 	case "bootc":
-		_ = rt
-		res, err := BuildBootcVM(spec, outputDir, vmStateDir, existingState)
+		res, err := BuildBootcVM(spec, outputDir, vmStateDir, existingState, rt.BuildEngine)
 		if err != nil {
 			return err
 		}

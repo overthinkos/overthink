@@ -120,7 +120,7 @@ fedora:
   builds: [pixi, npm, cargo]       # multi-stage build capabilities
 
 archlinux:
-  base: "docker.io/library/archlinux:latest"
+  base: "quay.io/archlinux/archlinux:base-20260525.0.535911"
   distro: [archlinux]
   build: [pac]
   builds: [pixi, npm, cargo, aur]

@@ -258,7 +258,14 @@ type DeploymentNode struct {
 	// is auto-promoted to true at load time (see classification.go).
 	// Authoring `disposable: false` together with `ephemeral: ...` is
 	// rejected as a contradiction.
-	Disposable bool `yaml:"disposable,omitempty"`
+	//
+	// Pointer-bool so `disposable: false` survives the YAML round-trip:
+	// a plain `bool` with `omitempty` is indistinguishable from "absent"
+	// at marshal time (Go YAML drops false), which silently erases an
+	// operator's explicit lockdown intent on the next saveDeployState
+	// call. nil = absent (default false behavior); &false = explicit
+	// lockdown (preserved on write); &true = explicit authorization.
+	Disposable *bool `yaml:"disposable,omitempty"`
 
 	// Lifecycle is a free-form human-facing tier tag (scratch | dev |
 	// test | qa | staging | prod | custom). Informational only — has
@@ -409,7 +416,7 @@ func (o *DeployShellOverlay) ToShellEntry() ShellEntry {
 // MUST be auto-destroyed and therefore MAY be — see /ov-internals:disposable
 // "the ephemeral exception"). Implements the Classified interface.
 func (c DeploymentNode) IsDisposable() bool {
-	return c.Disposable || c.IsEphemeral()
+	return (c.Disposable != nil && *c.Disposable) || c.IsEphemeral()
 }
 
 // IsEphemeral reports whether this deploy is marked ephemeral
@@ -1153,8 +1160,9 @@ func LoadDeployConfig() (*DeployConfig, error) {
 	// rule — ephemeral STRENGTHENS the disposability contract; see
 	// classification.go for the rationale).
 	for name, node := range dc.Deploy {
-		if node.IsEphemeral() && !node.Disposable {
-			node.Disposable = true
+		if node.IsEphemeral() && (node.Disposable == nil || !*node.Disposable) {
+			t := true
+			node.Disposable = &t
 			dc.Deploy[name] = node
 		}
 	}
@@ -2001,7 +2009,8 @@ func saveDeployState(imageName, instance string, input SaveDeployStateInput) {
 	// saveDeployState calls from unrelated code paths (ov start, ov
 	// config) leave a user-authored `disposable: true` in place.
 	if input.SetDisposable {
-		entry.Disposable = input.Disposable
+		v := input.Disposable
+		entry.Disposable = &v
 	}
 	if input.SetLifecycle {
 		entry.Lifecycle = input.Lifecycle

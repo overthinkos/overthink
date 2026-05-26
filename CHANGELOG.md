@@ -22,6 +22,96 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-05
 
+### 2026-05-26 (later) — `ov update` disposable enforcement + deploy.yml round-trip preservation + cross-deploy quadlet-refresh Image= preservation
+
+Follow-up cutover to the morning's sidecar-sweep + pixi-pytest fixes.
+Three more latent bugs in `ov`'s update path that were documented but
+not fixed in the earlier cutover (per CLAUDE.md R2 "escalated to the
+operator for explicit re-scoping") are now landed in source + tests +
+deployed binary + R10-verified end-to-end.
+
+1. **`ov update <image> -i <instance>` did NOT enforce `disposable`.**
+   The dispatcher in `ov/update_deploy_dispatch.go::dispatchByDeployTarget`
+   resolved the deploy node and immediately handed off to the per-
+   target update helper without ever consulting `node.IsDisposable()`.
+   `ov update versa -i ecovoyage` therefore destroyed + recreated the
+   production tenant unattended even when the operator had explicitly
+   set `disposable: false` on the entry. Fix: added a
+   `checkUpdateDisposable(node, image, instance)` helper that refuses
+   with the canonical refusal text from `/ov-internals:disposable`
+   (instance-aware: the remediation hint shows the full `<base>/<inst>`
+   key when an instance is set). Wired into the dispatcher right after
+   `resolveUpdateDeployNode`. 6 sub-test regression coverage:
+   explicit-true allowed, ephemeral-implies-disposable allowed,
+   absent-flag refused, explicit-false refused, instance-key formatting,
+   lifecycle-dev-alone-does-NOT-authorize.
+
+2. **deploy.yml re-serializer DROPPED explicit `disposable: false`.**
+   `DeploymentNode.Disposable` was declared as `bool` + `yaml:
+   "disposable,omitempty"`. Go YAML treats `false` as the zero value of
+   `bool`, so `omitempty` silently elided the field on every save. The
+   operator's explicit lockdown intent vanished on the next
+   `saveDeployState` call — visible regression: `disposable: false`
+   reappears after every `ov update`/`ov config` invocation. Fix:
+   changed type to `*bool`. nil = absent (default `false` behavior);
+   `&false` = explicit lockdown (preserved on write); `&true` =
+   explicit authorization. Same pattern already in use at
+   `vm_instance_override.go:42`. `IsDisposable()`, ephemeral
+   auto-promotion (`deploy.go:1156`), and `saveDeployState`
+   (`deploy.go:2004`) updated to handle the indirection;
+   `eval_bed_run.go:142` switched from `node.Disposable` deref to
+   `node.IsDisposable()` (the bed copy's bool sentinel must cover the
+   `ephemeral implies disposable` case the source carried via Ephemeral).
+   Round-trip regression test (`TestDeploymentNode_DisposableFalseRoundTrip`)
+   asserts all three forms (`true`/`false`/absent) round-trip
+   faithfully and `IsDisposable()` returns the right answer in each.
+
+3. **`updateAllDeployedQuadlets` cross-polluted sibling deploys'
+   Image= lines.** When `ov update <bed>` ran its env-refresh sweep
+   across every other deployed quadlet, it re-resolved each sibling's
+   `Image=` via `resolveShellImageRef("", imageName, "")`. That helper
+   walks every local image carrying the matching
+   `org.overthinkos.image` label, which includes the bed's per-deploy
+   alias re-tag from `bumpDeployAlias` (which inherits the base's
+   labels). On a tie (same label-CalVer, same tag-CalVer — the alias
+   IS the base, same content), the existing sort tiebreaker SHOULD
+   have preferred the bare-base ref, but in practice the just-rebuilt
+   bed alias landed first and overwrote ecovoyage's Image= line to
+   `eval-versa-pod:<calver>`. Fix: at the top of each per-deploy loop
+   iteration, read the existing quadlet's `Image=` line via the new
+   `extractQuadletImageLine(qpath)` helper and use THAT as the
+   `imageRef` for the regenerated quadlet. The fresh
+   `resolveShellImageRef` lookup remains only as a fallback when the
+   existing quadlet somehow has no Image= line. The downstream
+   `imageRef = resolveShellImageRef(meta.Registry, imageName, "")`
+   replacement near the bottom of the loop (which was overwriting the
+   preserved value at the last minute) is also removed.
+   `updateAllDeployedQuadlets`'s documented purpose was always "pick
+   up env_provides / env_accepts changes" — it should NEVER advance
+   a sibling deploy's Image= choice. The canonical way to move tags
+   is `ov update <deploy>` (which routes through
+   `rewriteQuadletImageLine` with the operator-authorized tag).
+   `TestExtractQuadletImageLine` covers 4 cases: Image= present at
+   top of [Container], Image= present alongside a sidecar Pod=
+   directive (proves the regex doesn't get confused), absent Image=
+   returns empty (caller falls back), missing file errors cleanly.
+
+**R10**: `ov eval run eval-versa-pod` 8/8 PASS in 47 min. eval-live
+124 / 124 (no regression). Bug 1 live-verification: the
+`~/.config/containers/systemd/ov-versa-ecovoyage.container` Image=
+line was `versa:2026.146.1239` before the R10 and STILL
+`versa:2026.146.1239` after the R10 — identical content, no
+cross-pollution. The only quadlet diff is one OV_MCP_SERVERS line
+adding a transient `marimo @ ov-eval-versa-pod` discovery entry
+(the env-refresh's documented job — registering the bed's MCP
+endpoint with consumers). Bug 2A live-verification:
+`ov update versa -i ecovoyage` refuses with the exact remediation
+message from the new code. Bug 2B live-verification:
+`disposable: false` persists in deploy.yml across the refused
+update attempt (the write path would have dropped it before).
+Operator data preserved (bind mount + named volume untouched);
+ecovoyage container untouched (no destroy + restart triggered).
+
 ### 2026-05-26 — `ov config remove` sidecar-sweep + versa pixi pytest fix; versa/ecovoyage cut over to fresh image with disposable lockdown
 
 Two latent bugs surfaced during a routine `versa` ecosystem refresh

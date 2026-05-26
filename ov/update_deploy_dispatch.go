@@ -70,6 +70,18 @@ func (c *UpdateCmd) dispatchByDeployTarget() error {
 		return err
 	}
 
+	// Enforce disposable-only autonomy: ov update destroys + recreates
+	// the deploy unattended, so the only authorization for that is an
+	// explicit `disposable: true` on the deploy entry (or `ephemeral:`,
+	// which implies disposability — see IsDisposable() + /ov-internals:
+	// disposable "the ephemeral exception"). Lifecycle tags alone do
+	// NOT authorize — this is the anti-derivation invariant. Refusing
+	// here protects shared-host production deploys from accidental
+	// destroy-on-update.
+	if err := checkUpdateDisposable(node, c.Image, c.Instance); err != nil {
+		return err
+	}
+
 	// Normalize the target. Empty / "container" both mean "pod".
 	target := node.Target
 	if target == "" || target == "container" {
@@ -357,6 +369,27 @@ func quadletPathForDeploy(deployName, instance string) (string, error) {
 // `^` / `$` at line boundaries.
 var quadletImageLineRe = regexp.MustCompile(`(?m)^Image=.*$`)
 
+// extractQuadletImageLine returns the value of the `Image=<value>`
+// directive in the quadlet at `path`. Returns ("", error) when the file
+// cannot be read; returns ("", nil) when the file is readable but
+// contains no Image= directive (caller decides whether to fall back).
+// Used by updateAllDeployedQuadlets to preserve the operator-chosen
+// image ref across cross-deploy quadlet refreshes — see the bug-fix
+// note in that function for the cross-pollution scenario the bare
+// resolveShellImageRef lookup falls victim to when a sibling deploy's
+// alias tag has been re-tagged onto the base image.
+func extractQuadletImageLine(path string) (string, error) {
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	m := quadletImageLineRe.FindString(string(content))
+	if m == "" {
+		return "", nil
+	}
+	return strings.TrimPrefix(m, "Image="), nil
+}
+
 // rewriteQuadletImageLine replaces the `Image=<old>` line in the
 // quadlet at `path` with `Image=<newRef>`. All other lines are
 // preserved verbatim. Atomic write: writes to `<path>.new`, then
@@ -424,4 +457,32 @@ func (c *UpdateCmd) updateLocalDeploy(deployName string) error {
 		return fmt.Errorf("ov update %s (local target): %w", deployName, err)
 	}
 	return nil
+}
+
+// checkUpdateDisposable enforces the disposable-only autonomy invariant
+// at the `ov update` entry point. Refuses with a remediation message
+// that mirrors `/ov-internals:disposable`'s sample refusal text when
+// the deploy node is not explicitly disposable (and not ephemeral —
+// see IsDisposable() for the implication chain).
+//
+// Cross-kind name reuse is permitted, so the user-facing key for the
+// remediation hint must include the instance suffix when present (the
+// deployKey form matches what's in deploy.yml and what the user typed).
+func checkUpdateDisposable(node *DeploymentNode, image, instance string) error {
+	if node == nil || node.IsDisposable() {
+		return nil
+	}
+	key := deployKey(image, instance)
+	lifecycle := node.Lifecycle
+	if lifecycle == "" {
+		lifecycle = "(unset)"
+	}
+	addArg := image
+	if instance != "" {
+		addArg = key
+	}
+	return fmt.Errorf("ov update: %q is not marked `disposable: true` in deploy.yml (current lifecycle: %s).\n"+
+		"  `ov update` only acts on explicitly disposable deploys — lifecycle tags alone do NOT authorize autonomous destroy.\n"+
+		"  To opt in: edit deploy.yml and set `disposable: true` on the entry, or run: ov deploy add %s <ref> --disposable",
+		key, lifecycle, addArg)
 }

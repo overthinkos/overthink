@@ -139,7 +139,7 @@ func persistBedDeployOverrides(name string, node DeploymentNode) {
 		Image:         node.Image,
 		Target:        node.Target,
 		SetDisposable: true,
-		Disposable:    node.Disposable,
+		Disposable:    node.IsDisposable(),
 		SetLifecycle:  node.Lifecycle != "",
 		Lifecycle:     node.Lifecycle,
 	})

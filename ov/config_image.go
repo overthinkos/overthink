@@ -1525,10 +1525,28 @@ func updateAllDeployedQuadlets(rt *ResolvedRuntime, skipImage string) error {
 			continue
 		}
 
-		// Extract metadata from base image (not the deploy key).
-		// Empty tag → resolveShellImageRef picks newest local CalVer
-		// via the org.overthinkos.version label.
-		imageRef := resolveShellImageRef("", imageName, "")
+		// Image ref: PREFER the existing quadlet's Image= line over a
+		// fresh resolveShellImageRef("", imageName, "") lookup. The
+		// fresh lookup walks all local images that carry the matching
+		// org.overthinkos.image label, which includes per-deploy alias
+		// re-tags (bumpDeployAlias in update_deploy_dispatch.go). When
+		// a sibling deploy of the same image has just been ov-updated
+		// (e.g. an eval bed of the versa image), its alias tag
+		// (`<registry>/<sibling-deploy>:<calver>`) inherits the same
+		// labels as the base, so the fresh lookup can — and did, see
+		// the 2026-05-26 bug — pick the SIBLING's alias instead of the
+		// bare base ref. updateAllDeployedQuadlets's documented purpose
+		// is to refresh the Environment= block to pick up env_provides
+		// changes; it should NEVER overwrite the operator's deliberate
+		// Image= choice on an unrelated deploy. Preserving the existing
+		// line is the correct fix at the cross-deploy refresh boundary.
+		// Use `ov update <deploy>` (which routes through updatePodDeploy
+		// + rewriteQuadletImageLine) to actually advance a deploy's
+		// image — that path is the operator-authorized way to move tags.
+		imageRef, _ := extractQuadletImageLine(qpath)
+		if imageRef == "" {
+			imageRef = resolveShellImageRef("", imageName, "")
+		}
 		meta, err := ExtractMetadata("podman", imageRef)
 		if err != nil || meta == nil {
 			fmt.Fprintf(os.Stderr, "Warning: could not read metadata for %s, skipping quadlet update\n", key)
@@ -1632,9 +1650,15 @@ func updateAllDeployedQuadlets(rt *ResolvedRuntime, skipImage string) error {
 		backend := resolveSecretBackend()
 		isKeyring := backend == "keyring" || backend == "auto" || backend == ""
 
-		if meta.Registry != "" {
-			imageRef = resolveShellImageRef(meta.Registry, imageName, "")
-		}
+		// NOTE: previously this block re-resolved imageRef via
+		// resolveShellImageRef(meta.Registry, imageName, "") — i.e. it
+		// overwrote the operator-chosen Image= line at the LAST minute
+		// before emitting the quadlet. That fresh resolution is the
+		// exact cross-pollution path described in the comment near the
+		// extractQuadletImageLine call earlier in this function. We
+		// keep the existing-quadlet-derived imageRef unchanged here so
+		// the operator's deliberate Image= choice survives the env-
+		// refresh pass intact.
 
 		// Resolve tunnel config from metadata (includes deploy.yml overrides)
 		var tunnelCfg *TunnelConfig

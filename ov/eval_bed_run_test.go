@@ -84,9 +84,9 @@ func TestEvalFailedError(t *testing.T) {
 func TestFoldEvalBeds_FoldsIntoDeploy(t *testing.T) {
 	uf := &UnifiedFile{
 		Eval: map[string]DeploymentNode{
-			"sample-pod-bed":   {Target: "pod", Image: "sample-image", Disposable: true},
-			"sample-vm-bed":    {Target: "vm", Vm: "sample-vm", Disposable: true},
-			"sample-local-bed": {Target: "local", Local: "sample-local", Disposable: true},
+			"sample-pod-bed":   {Target: "pod", Image: "sample-image", Disposable: boolPtr(true)},
+			"sample-vm-bed":    {Target: "vm", Vm: "sample-vm", Disposable: boolPtr(true)},
+			"sample-local-bed": {Target: "local", Local: "sample-local", Disposable: boolPtr(true)},
 		},
 	}
 	if err := foldEvalBeds(uf); err != nil {
@@ -115,7 +115,7 @@ func TestFoldEvalBeds_DisjointNameGuard(t *testing.T) {
 			"clash": {Target: "pod", Image: "x"},
 		},
 		Eval: map[string]DeploymentNode{
-			"clash": {Target: "pod", Image: "y", Disposable: true},
+			"clash": {Target: "pod", Image: "y", Disposable: boolPtr(true)},
 		},
 	}
 	err := foldEvalBeds(uf)
@@ -142,7 +142,7 @@ func TestValidateEvalBeds_DisposableRequired(t *testing.T) {
 func TestValidateEvalBeds_TargetEnum(t *testing.T) {
 	uf := &UnifiedFile{
 		Eval: map[string]DeploymentNode{
-			"eval-weird": {Target: "k8s", Disposable: true},
+			"eval-weird": {Target: "k8s", Disposable: boolPtr(true)},
 		},
 	}
 	err := validateEvalBeds(uf)
@@ -156,7 +156,7 @@ func TestValidateEvalBeds_TargetEnum(t *testing.T) {
 func TestValidateEvalBeds_VmRefMustResolve(t *testing.T) {
 	missing := &UnifiedFile{
 		Eval: map[string]DeploymentNode{
-			"eval-k3s-vm": {Target: "vm", Vm: "k3s-vm", Disposable: true},
+			"eval-k3s-vm": {Target: "vm", Vm: "k3s-vm", Disposable: boolPtr(true)},
 		},
 	}
 	if err := validateEvalBeds(missing); err == nil || !strings.Contains(err.Error(), "not defined") {
@@ -165,7 +165,7 @@ func TestValidateEvalBeds_VmRefMustResolve(t *testing.T) {
 	ok := &UnifiedFile{
 		VM: map[string]*VmSpec{"k3s-vm": {}},
 		Eval: map[string]DeploymentNode{
-			"eval-k3s-vm": {Target: "vm", Vm: "k3s-vm", Disposable: true},
+			"eval-k3s-vm": {Target: "vm", Vm: "k3s-vm", Disposable: boolPtr(true)},
 		},
 	}
 	if err := validateEvalBeds(ok); err != nil {
@@ -178,7 +178,7 @@ func TestValidateEvalBeds_VmRefMustResolve(t *testing.T) {
 func TestValidateEvalBeds_LocalRefMustResolve(t *testing.T) {
 	missing := &UnifiedFile{
 		Eval: map[string]DeploymentNode{
-			"eval-local": {Target: "local", Local: "eval-local", Disposable: true},
+			"eval-local": {Target: "local", Local: "eval-local", Disposable: boolPtr(true)},
 		},
 	}
 	if err := validateEvalBeds(missing); err == nil || !strings.Contains(err.Error(), "not defined") {
@@ -187,7 +187,7 @@ func TestValidateEvalBeds_LocalRefMustResolve(t *testing.T) {
 	ok := &UnifiedFile{
 		Local: map[string]*LocalSpec{"eval-local": {}},
 		Eval: map[string]DeploymentNode{
-			"eval-local": {Target: "local", Local: "eval-local", Disposable: true},
+			"eval-local": {Target: "local", Local: "eval-local", Disposable: boolPtr(true)},
 		},
 	}
 	if err := validateEvalBeds(ok); err != nil {
@@ -229,7 +229,7 @@ func TestPersistBedDeployOverrides_SeedsPortBeforeConfig(t *testing.T) {
 		Target:     "pod",
 		Image:      "ollama",
 		Port:       []string{"45434:11434"},
-		Disposable: true,
+		Disposable: boolPtr(true),
 		Lifecycle:  "dev",
 	}
 	persistBedDeployOverrides("eval-cachyos-ollama-pod", bed)
@@ -248,7 +248,7 @@ func TestPersistBedDeployOverrides_SeedsPortBeforeConfig(t *testing.T) {
 	if entry.Image != "ollama" || entry.Target != "pod" {
 		t.Errorf("bed image/target not seeded: got image=%q target=%q", entry.Image, entry.Target)
 	}
-	if !entry.Disposable {
+	if entry.Disposable == nil || !*entry.Disposable {
 		t.Error("bed disposable not seeded (ov update would refuse the fresh-rebuild step)")
 	}
 	// The sibling production deploy must be untouched (distinct key).

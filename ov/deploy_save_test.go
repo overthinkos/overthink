@@ -174,7 +174,7 @@ func TestSaveDeployState_PersistsImageAndTargetForNewEntry(t *testing.T) {
 	if newEntry.Target != "pod" {
 		t.Errorf("Target not persisted on new entry: got %q want %q", newEntry.Target, "pod")
 	}
-	if !newEntry.Disposable {
+	if newEntry.Disposable == nil || !*newEntry.Disposable {
 		t.Error("Disposable not persisted on new entry")
 	}
 }
@@ -218,7 +218,7 @@ func TestSaveDeployState_DoesNotClobberExistingImageTarget(t *testing.T) {
 	if entry.Target != "pod" {
 		t.Errorf("Target clobbered: got %q want %q", entry.Target, "pod")
 	}
-	if !entry.Disposable {
+	if entry.Disposable == nil || !*entry.Disposable {
 		t.Error("Disposable not applied (this field SHOULD update)")
 	}
 }
@@ -262,5 +262,87 @@ func TestSaveDeployConfig_AtomicWriteLeavesNoTempLeftover(t *testing.T) {
 	}
 	if info.Mode().Perm() != 0600 {
 		t.Errorf("file mode = %o; want 0600", info.Mode().Perm())
+	}
+}
+
+// TestDeploymentNode_DisposableFalseRoundTrip pins the *bool Disposable
+// fix: an operator's explicit `disposable: false` must survive YAML
+// unmarshal → re-marshal. With the prior `Disposable bool` +
+// `omitempty` declaration, `false` was indistinguishable from "absent"
+// at marshal time so the explicit lockdown intent was silently erased
+// on the next saveDeployState. With *bool, nil=absent and &false=
+// explicit lockdown both round-trip faithfully.
+func TestDeploymentNode_DisposableFalseRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+	if err := os.MkdirAll(filepath.Join(dir, "ov"), 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	src := `deploy:
+    locked-pod:
+        target: pod
+        image: foo
+        disposable: false
+    open-pod:
+        target: pod
+        image: bar
+        disposable: true
+    bare-pod:
+        target: pod
+        image: baz
+`
+	path := filepath.Join(dir, "ov", "deploy.yml")
+	if err := os.WriteFile(path, []byte(src), 0o600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	dc, err := LoadDeployConfig()
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+
+	if dc == nil {
+		t.Fatal("LoadDeployConfig returned nil")
+	}
+	locked := dc.Deploy["locked-pod"]
+	if locked.Disposable == nil {
+		t.Fatal("locked-pod: explicit `disposable: false` parsed as nil; should be &false")
+	}
+	if *locked.Disposable {
+		t.Errorf("locked-pod: disposable = %v, want false", *locked.Disposable)
+	}
+	if locked.IsDisposable() {
+		t.Error("locked-pod.IsDisposable() returned true despite explicit disposable: false")
+	}
+
+	open := dc.Deploy["open-pod"]
+	if open.Disposable == nil || !*open.Disposable {
+		t.Errorf("open-pod: disposable = %v, want &true", open.Disposable)
+	}
+	if !open.IsDisposable() {
+		t.Error("open-pod.IsDisposable() returned false despite explicit disposable: true")
+	}
+
+	bare := dc.Deploy["bare-pod"]
+	if bare.Disposable != nil {
+		t.Errorf("bare-pod: disposable = %v, want nil (field absent in source)", bare.Disposable)
+	}
+	if bare.IsDisposable() {
+		t.Error("bare-pod.IsDisposable() returned true for absent disposable field")
+	}
+
+	if err := SaveDeployConfig(dc); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+
+	out, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read after save: %v", err)
+	}
+	if !bytes.Contains(out, []byte("disposable: false")) {
+		t.Errorf("re-serialized deploy.yml dropped explicit `disposable: false`:\n%s", string(out))
+	}
+	if !bytes.Contains(out, []byte("disposable: true")) {
+		t.Errorf("re-serialized deploy.yml dropped explicit `disposable: true`:\n%s", string(out))
 	}
 }

@@ -1,5 +1,5 @@
 layer:
-    version: 2026.144.1443
+    version: 2026.146.1100
     name: container-nesting
     description: Container-in-container support (rootless nested podman, buildah, skopeo).
     package:
@@ -37,9 +37,11 @@ layer:
                   components: main
         fedora:
             package:
+                - crun
+                - libsecret
+                - podman
                 - shadow-utils
                 - tailscale
-                - libsecret
             repo:
                 - name: tailscale-stable
                   url: "https://pkgs.tailscale.com/stable/fedora/tailscale.repo"

@@ -1,5 +1,5 @@
 layer:
-    version: 2026.144.1443
+    version: 2026.146.1000
     name: ov-mcp
     description: "MCP server exposing the full ov CLI as tools (Streamable HTTP on port 18765)"
     layer:
@@ -65,7 +65,7 @@ layer:
           stdout:
             - contains: image.build
             - contains: status
-            - contains: test.mcp.ping
+            - contains: version
         # Live tool invocation — version is the safest non-destructive tool on
         # the surface (zero arguments, zero side effects, deterministic output).
         - id: mcp-ov-call-version
@@ -77,9 +77,12 @@ layer:
           exit_status: 0
           stdout:
             - matches: "[0-9]{4}\\.[0-9]+"
-        # Build-mode tool invocation through the bind-mounted project dir.
-        # Proves OV_PROJECT_DIR wiring: image.list.images requires image.yml,
-        # which is only reachable via the /project bind from the host.
+        # Build-mode tool invocation. image.list.images returns the project's
+        # own catalog when /workspace is bind-mounted to a project checkout, or
+        # the embedded fallback (overthinkos/overthink) when it is not — both
+        # are valid runtime modes. exit_status: 0 verifies the tool is callable
+        # in either mode; project-specific content assertions live on per-bed
+        # tests that pin the bind-mount, not on this layer-level check.
         - id: mcp-ov-call-list-images
           scope: deploy
           mcp: call
@@ -87,8 +90,6 @@ layer:
           input: "{}"
           mcp_name: ov
           exit_status: 0
-          stdout:
-            - contains: "fedora"
     service:
         - name: ov-mcp
           exec: "/usr/local/bin/ov mcp serve --listen :18765"

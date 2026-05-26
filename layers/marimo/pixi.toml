@@ -131,6 +131,21 @@ nx-cugraph-cu13   = "*"
 pylibcugraph-cu13 = "*"
 cuml-cu13         = "*"
 
+# === pytest (involuntary transitive — cupy lazy-loader trap) ===
+# cugraph imports cupy; cupy ships `testing` as importlib.util.LazyLoader
+# (cupy/__init__.py); cupy/testing/__init__.py eagerly imports
+# cupy.testing._random which `import pytest` at module top. torch 2.11's
+# `library.custom_op` decorator runs `inspect.getmodule(frame) →
+# hasattr(module, "__file__")` during fake-op registration, which trips
+# the LazyLoader and forces the cupy.testing chain — pulling pytest into
+# the runtime path even though nothing in this env uses pytest as a test
+# framework. Without it, the joint `import cugraph; import torch_geometric`
+# sequence raises ModuleNotFoundError. Upstream cupy packaging defect (a
+# runtime helper module should not eagerly import a test framework);
+# downstream fix is supplying pytest. Pure-Python wheel — does not break
+# the `no-build = true` invariant the apache-airflow pin requires.
+pytest = "*"
+
 # === PyTorch Geometric (GNN library; native extensions in build.sh) ===
 # torch-geometric core is pure Python and lives here. The native
 # extensions (torch_scatter, torch_sparse, torch_cluster) ship as

@@ -1097,17 +1097,23 @@ func (c *ImageConfigRemoveCmd) Run() error {
 	disablePod := exec.Command("systemctl", "--user", "disable", "--now", podSvc)
 	_ = disablePod.Run()
 
-	// Disable sidecar services by scanning quadlet directory
+	// Disable sidecar services attached to this pod. Identified by the
+	// `Pod=<podname>.pod` directive inside each quadlet's [Container]
+	// section — the load-bearing invariant that distinguishes a true
+	// sidecar from a sibling instance of the same image. A bare prefix
+	// match on the filename collides with sibling instances (the
+	// `<base>/<instance>` deploy-key pattern produces quadlet filenames
+	// like ov-versa-ecovoyage.container that share the ov-versa- prefix
+	// with sidecars but belong to an unrelated deploy). See
+	// findPodSidecarQuadlets in sidecar.go.
 	if qdir, qErr := quadletDir(); qErr == nil {
-		podPrefix := PodNameInstance(imageName, c.Instance) + "-"
-		if entries, dErr := os.ReadDir(qdir); dErr == nil {
-			for _, entry := range entries {
-				name := entry.Name()
-				if strings.HasPrefix(name, podPrefix) && strings.HasSuffix(name, ".container") {
-					scSvc := strings.TrimSuffix(name, ".container") + ".service"
-					disableSc := exec.Command("systemctl", "--user", "disable", "--now", scSvc)
-					_ = disableSc.Run()
-				}
+		podName := PodNameInstance(imageName, c.Instance)
+		mainFile := containerNameInstance(imageName, c.Instance) + ".container"
+		if sidecars, dErr := findPodSidecarQuadlets(qdir, podName, mainFile); dErr == nil {
+			for _, name := range sidecars {
+				scSvc := strings.TrimSuffix(name, ".container") + ".service"
+				fmt.Fprintf(os.Stderr, "Disabling sidecar %s\n", scSvc)
+				_ = exec.Command("systemctl", "--user", "disable", "--now", scSvc).Run()
 			}
 		}
 	}

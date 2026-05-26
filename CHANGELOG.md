@@ -22,7 +22,122 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-05
 
-### 2026-05-25 — Android + APK as first-class `ov` kinds: `kind: android` device + `apk` package format + `target: android` deploy
+### 2026-05-26 — `ov config remove` sidecar-sweep + versa pixi pytest fix; versa/ecovoyage cut over to fresh image with disposable lockdown
+
+Two latent bugs surfaced during a routine `versa` ecosystem refresh
+(drop stale `versa` operator pod, R10 the versa image via
+`eval-versa-pod`, then update `versa/ecovoyage` to the freshly-built
+tag) and were fixed in the same cutover:
+
+1. **`ov config remove <image>` swept sibling instances of the same
+   image** (R3 — naive filename-prefix match without an instance-
+   boundary anchor). The sidecar-disable loop at
+   `ov/config_image.go:1100-1113` matched every quadlet starting with
+   `ov-<image>-` and ran `systemctl --user disable --now <unit>` on it.
+   When the operator removed an orphan `versa` operator pod, the
+   loop also disabled the unrelated production `ov-versa-ecovoyage`
+   service — a clean shutdown via the supervisord drain, but a
+   shutdown nonetheless. The user invariant
+   ("cross-kind name reuse is permitted and encouraged" — CLAUDE.md)
+   means `ov-<image>-<instance>.container` is NOT a sidecar of pod
+   `ov-<image>.pod`; only true sidecars carry the
+   `Pod=<podname>.pod` directive in their `[Container]` section. Fix:
+   identify sidecars via the `Pod=` directive, not the filename
+   prefix. Implemented `findPodSidecarQuadlets` (`ov/sidecar.go`) +
+   3 regression tests covering instance-aware scoping, the
+   exclusion of sibling instances, and the empty-quadlet-dir case;
+   call site at `config_image.go:1100-1118` rewritten to use the new
+   helper with stderr logging of every swept service. Live-verified:
+   `ov remove eval-versa-pod` (the R10 bed teardown) no longer
+   touches `ov-versa-ecovoyage` (which stayed `Up` uninterrupted).
+
+2. **`versa` GPU-graph eval probes failed on a fresh build because
+   `pytest` was missing from the marimo layer's pixi env.** Latent
+   since 2026-05-15 (the `f4b9c50` commit that introduced cugraph +
+   cuml + nx-cugraph + pylibcugraph + torch-geometric + graphistry
+   and the `versa-graph-imports` probe but never declared pytest).
+   Mechanism is an upstream cupy packaging defect: cupy ships
+   `testing` as `importlib.util.LazyLoader`
+   (`cupy/__init__.py:1156-1173`); `cupy/testing/__init__.py:50`
+   eagerly imports `cupy.testing._random`; `_random.py:11` does
+   `import pytest` at module top. torch 2.11's `library.custom_op`
+   decorator runs `inspect.getmodule(frame) → hasattr(module,
+   "__file__")` during fake-op registration, which trips the
+   LazyLoader and forces the cupy.testing chain. The joint sequence
+   `import cugraph; import torch_geometric` therefore needs
+   `pytest` in the env, or it `ModuleNotFoundError`s deep in
+   torch's fake-op machinery. Downstream fix: add `pytest = "*"`
+   to `layers/marimo/pixi.toml` `[pypi-dependencies]` (pure-Python
+   wheel — does not break the `no-build = true` invariant the
+   `apache-airflow` pin requires). Lockfile regenerated cleanly:
+   `+ pytest 9.0.3` + `+ iniconfig 2.3.0`, both
+   `py3-none-any` wheels. Skill `/ov-versa:versa` carries a new
+   "Load-bearing transitive: pytest in the pixi env" section
+   explaining the lazy-loader trap so a future contributor doesn't
+   strip the dep as unused.
+
+**Cutover sequence** (one phase, R10 at the end):
+
+1. Dropped the orphan `versa` operator pod (4-surface cleanup:
+   `ov config remove versa` + delete quadlet + reload + 3 orphan
+   volumes). Production `versa/ecovoyage` was collateral damage
+   from bug #1 above; recovered cleanly via
+   `systemctl --user start ov-versa-ecovoyage.service` after the
+   root-cause analysis confirmed no state corruption (the
+   `ov-versa-ecovoyage-airflow-data` volume was untouched; the
+   bind mount at `/home/atrawog/Atrapub/ecovoyage` was never the
+   target of the sweep). A pre-update snapshot of
+   `~/.config/containers/systemd/ov-versa-ecovoyage.container` +
+   `~/.config/ov/deploy.yml` was saved to
+   `/tmp/ecovoyage-snapshot-pre/` before any further work.
+2. Fixed bug #1 in source (`ov/sidecar.go` + `ov/config_image.go`
+   + `ov/sidecar_test.go`), full `go test ./...` PASS, rebuilt the
+   ov binary via `task build:ov` + `makepkg -si` (pkg/arch
+   `pkgver` bumped to `2026.146.1105`), verified
+   `Pod=%s.pod` + `Disabling sidecar %s` strings present in
+   `/usr/bin/ov`.
+3. Fixed bug #2 in source (`layers/marimo/pixi.toml` +
+   `layers/marimo/layer.yml` version bump to `2026.146.1203` +
+   `layers/marimo/pixi.lock` regen).
+4. R10 via `ov eval run eval-versa-pod`: 8/8 steps PASS in 35 min
+   (image-build 32m + eval-image 55s + deploy-add 19s + config 2s
+   + start 0s + eval-live 87s + update 14s + cleanup 11s).
+   eval-live: **124 passed · 0 failed · 0 skipped**. The
+   `versa-graph-imports` and `versa-graph-notebook-export` probes
+   that failed before the pytest fix now both ✓ exit 0.
+5. `ov update versa -i ecovoyage` applied the freshly-built versa
+   image to the operator's production tenant.
+   `ov-versa-ecovoyage.container` regenerated cleanly:
+   `Image=ghcr.io/overthinkos/versa:2026.146.1239`, all 7
+   `PublishPort`s identical to the snapshot, both `Volume=`
+   mounts identical (bind at `/home/atrawog/Atrapub/ecovoyage` +
+   `ov-versa-ecovoyage-airflow-data` named volume), all 9
+   `AddDevice` GPU lines identical, `ContainerName` unchanged,
+   all 14 tailscale `ExecStartPost`/`ExecStopPost` hooks
+   identical. The only intended changes are the new Image tag and
+   the removal of a stale MCP discovery entry for an
+   already-torn-down eval bed.
+6. `disposable: false` set on `versa/ecovoyage` in
+   `~/.config/ov/deploy.yml` per operator directive — future
+   autonomous updates must be re-authorized.
+
+**Latent surfaces NOT fixed in this cutover** (operator escalation
+pending): two additional `ov` bugs surfaced during the cascade —
+(a) the `ov update <bed>` step regenerated quadlets for every
+deploy whose `image:` resolves to the bed's source image, AND used
+the bed's overlay tag (`eval-versa-pod:<calver>`) instead of the
+sibling deploy's correct image tag (`versa:<calver>`). Bounded
+blast radius (only `ov-versa-ecovoyage.container` was corrupted;
+the subsequent `ov update versa -i ecovoyage` overwrote the
+corruption with the correct image); (b) `ov update <image> -i
+<instance>` does not enforce the `disposable: true` precondition
+the way `ov update <name>` does, AND the deploy.yml re-serializer
+drops `disposable: false` as an "omitted default" so the explicit
+lockdown intent isn't preserved across re-writes. Both surfaces
+require code changes in `ov`'s update / deploy.yml paths that are
+larger than the present cutover's scope.
+
+
 
 Android was elevated from a single `kind: image` (`android-emulator`) plus
 imperative eval verbs into a first-class, declarative, nestable deploy surface

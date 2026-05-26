@@ -1,5 +1,5 @@
 layer:
-    version: 2026.144.1443
+    version: 2026.146.1203
     name: marimo
     description: "marimo reactive notebook server (also runs as MCP server via --mcp), GPU-accelerated OSM analytics deps (Polars-GPU/cuDF, geopandas, quackosm), Apache Airflow Python deps (the airflow layer ships no pixi env), and the marimo-team/learn curriculum + marimo-team/skills bundle for AI agents."
     require:

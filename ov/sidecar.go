@@ -442,6 +442,46 @@ func PodNameInstance(imageName, instance string) string {
 	return containerNameInstance(imageName, instance)
 }
 
+// findPodSidecarQuadlets returns the .container quadlets in qdir that belong
+// to the pod podName, identified by the load-bearing `Pod=<podName>.pod`
+// directive inside the quadlet's [Container] section. Filename-prefix
+// matching is NOT used because it collides with sibling instances of the
+// same image (e.g. ov-versa-ecovoyage.container is an instance of versa,
+// NOT a sidecar of pod ov-versa.pod). Only true pod members carry the
+// Pod= directive — sibling instances and standalone container deploys
+// do not. mainContainerFile (typically the main pod container's quadlet
+// filename) is excluded from the returned list because its lifecycle is
+// owned by the caller's main systemctl disable, not by the sidecar sweep.
+func findPodSidecarQuadlets(qdir, podName, mainContainerFile string) ([]string, error) {
+	expected := fmt.Sprintf("Pod=%s.pod", podName)
+	entries, err := os.ReadDir(qdir)
+	if err != nil {
+		return nil, err
+	}
+	var matches []string
+	for _, entry := range entries {
+		name := entry.Name()
+		if !strings.HasSuffix(name, ".container") {
+			continue
+		}
+		if name == mainContainerFile {
+			continue
+		}
+		content, rErr := os.ReadFile(filepath.Join(qdir, name))
+		if rErr != nil {
+			continue
+		}
+		for _, line := range strings.Split(string(content), "\n") {
+			if strings.TrimSpace(line) == expected {
+				matches = append(matches, name)
+				break
+			}
+		}
+	}
+	sort.Strings(matches)
+	return matches, nil
+}
+
 func HasTailscaleSidecar(sidecars map[string]SidecarDef) bool {
 	_, ok := sidecars["tailscale"]
 	return ok

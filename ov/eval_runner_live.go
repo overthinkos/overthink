@@ -487,6 +487,15 @@ func resolveScoringChain(roots map[string]DeploymentNode, pod string) (DeployExe
 		// container.
 		return nil, fmt.Errorf("scenario.pod %q is dotted but does not resolve through deploy tree: %w", pod, err)
 	}
+	// Flat target resolving to a `target: local` node → its venue is the host
+	// (ShellExecutor) or a remote SSH host, NOT a container. Route through the
+	// shared selector instead of fabricating a non-existent ov-<pod> container
+	// (mirrors eval-live's local dispatch — R3).
+	if roots != nil {
+		if node, ok := roots[pod]; ok && classifyTarget(&node) == "local" {
+			return rootExecutorForDeployNode(&node)
+		}
+	}
 	// Flat pod or no tree — single-hop into "ov-<pod>", same shape
 	// as the pre-cutover hardcoded ContainerExecutor.
 	return ContainerChain("podman", "ov-"+pod), nil

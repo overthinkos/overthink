@@ -835,36 +835,26 @@ func (c *DeployAddCmd) runLocal(node *DeploymentNode, plans []*InstallPlan, dir 
 	if cfg, cfgErr := LoadConfig(dir); cfgErr == nil {
 		tgt.Cfg = cfg
 	}
-	// Pick the executor.
+	// Pick the executor via the shared selector (R3 — same logic
+	// ov eval live's runLocalEval uses). opts.ParentExec (nested
+	// local-target inside a container/VM) stays here: it's
+	// deploy-execution-specific, not a property of the node's host:.
 	var exec DeployExecutor = ShellExecutor{}
 	switch {
 	case opts.ParentExec != nil:
-		// Nested local-target inside a container/VM — run through the
-		// parent's venue.
 		tgt.Executor = opts.ParentExec
 		exec = opts.ParentExec
-	case node != nil:
-		hostField := strings.TrimSpace(node.Host)
-		if hostField != "" && hostField != "local" {
-			sshTarget, perr := ParseSSHTarget(hostField)
-			if perr != nil {
-				return fmt.Errorf("deployment %q: invalid host %q: %w", c.Name, hostField, perr)
-			}
-			user := ""
-			if strings.Contains(hostField, "@") {
-				user = sshTarget.User
-			} else if node.User != "" {
-				user = node.User
-			}
-			sshExec := &SSHExecutor{
-				User:           user,
-				Host:           sshTarget.Host,
-				Port:           sshTarget.Port,
-				Args:           append([]string(nil), node.SSHArgs...),
-				ConnectTimeout: 10,
-			}
-			tgt.Executor = sshExec
-			exec = sshExec
+	default:
+		e, perr := rootExecutorForDeployNode(node)
+		if perr != nil {
+			return fmt.Errorf("deployment %q: %w", c.Name, perr)
+		}
+		exec = e
+		// Preserve prior behaviour: leave tgt.Executor unset (nil →
+		// LocalDeployTarget's internal ShellExecutor default) for host:local;
+		// set it only for a remote SSH venue.
+		if _, isShell := e.(ShellExecutor); !isShell {
+			tgt.Executor = e
 		}
 	}
 
@@ -911,6 +901,21 @@ func (c *DeployAddCmd) runLocal(node *DeploymentNode, plans []*InstallPlan, dir 
 			if err := K3sPostProvision(c.Name); err != nil {
 				return fmt.Errorf("k3s post-provision: %w", err)
 			}
+		}
+	}
+
+	// --verify: run the deployment's deploy-scope eval probes on the venue we
+	// just deployed to (the same `exec`). Default (Verify=false) is a no-op, so
+	// normal deploys are unchanged. Reuses evalLocalDeployScope so `ov deploy
+	// add <local> --verify` sources + runs probes identically to
+	// `ov eval live <local>` (R3).
+	if opts.Verify && !opts.DryRun {
+		fails, verr := evalLocalDeployScope(dir, node, c.Name, "", "", nil, exec, "text")
+		if verr != nil {
+			return fmt.Errorf("deployment %q: --verify: %w", c.Name, verr)
+		}
+		if fails > 0 {
+			return fmt.Errorf("deployment %q: --verify: %d deploy-scope check(s) failed", c.Name, fails)
 		}
 	}
 	return nil

@@ -112,10 +112,12 @@ func appendHopForNode(chain DeployExecutor, node *DeploymentNode, name string) (
 // underscores — used as the container name suffix.
 func appendHopForFlatPath(chain DeployExecutor, node *DeploymentNode, flatPath string) (DeployExecutor, error) {
 	switch classifyTarget(node) {
-	case "host", "android":
-		// Host + android nodes share the parent venue (an android device is
-		// reached via adb over the parent pod's published port / the
-		// endpoint — there is no shell venue to "enter"). No new hop.
+	case "host", "local", "android":
+		// Host/local + android nodes share the parent venue: a local node's
+		// venue IS the chain root (a ShellExecutor for host:local, or an
+		// SSHExecutor for host:<remote> — selected by rootExecutorForDeployNode
+		// and passed in as `root`), and an android device is reached via adb
+		// over the parent pod's published port. No new hop.
 		return chain, nil
 
 	case "pod":
@@ -162,6 +164,46 @@ func appendHopForFlatPath(chain DeployExecutor, node *DeploymentNode, flatPath s
 		return nil, fmt.Errorf("k8s targets cannot be reached via the deploy chain (use kubectl)")
 	}
 	return nil, fmt.Errorf("unknown target %q on node", classifyTarget(node))
+}
+
+// rootExecutorForDeployNode selects the ROOT DeployExecutor for a
+// `target: local` deployment node from its `host:` field — the single source
+// of truth for "where does a local deploy's work run?", shared by
+// `ov deploy add` (runLocal) and `ov eval live` (runLocalEval) so neither
+// re-implements the selection (R3):
+//
+//	host: ""  / "local"        → ShellExecutor{} (this machine, direct shell)
+//	host: "<user>@<machine>"   → &SSHExecutor{User, Host, Port, …}
+//	host: "<machine>" + user:  → SSHExecutor with User from node.User
+//
+// It does NOT handle the nested-inside-a-parent case (opts.ParentExec); that
+// stays in runLocal because it's deploy-execution-specific. Returns
+// ShellExecutor{} for a nil node.
+func rootExecutorForDeployNode(node *DeploymentNode) (DeployExecutor, error) {
+	if node == nil {
+		return ShellExecutor{}, nil
+	}
+	hostField := strings.TrimSpace(node.Host)
+	if hostField == "" || hostField == "local" {
+		return ShellExecutor{}, nil
+	}
+	sshTarget, err := ParseSSHTarget(hostField)
+	if err != nil {
+		return nil, fmt.Errorf("invalid host %q: %w", hostField, err)
+	}
+	user := ""
+	if strings.Contains(hostField, "@") {
+		user = sshTarget.User
+	} else if node.User != "" {
+		user = node.User
+	}
+	return &SSHExecutor{
+		User:           user,
+		Host:           sshTarget.Host,
+		Port:           sshTarget.Port,
+		Args:           append([]string(nil), node.SSHArgs...),
+		ConnectTimeout: 10,
+	}, nil
 }
 
 // ContainerChain returns a one-hop chain that exec's into a single named

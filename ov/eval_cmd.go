@@ -125,6 +125,14 @@ func (c *EvalLiveCmd) Run() error {
 		return c.runVm()
 	}
 
+	// Local dispatch: a `target: local` deploy is a host filesystem apply, not
+	// a container, so its deploy-scope probes run on the host (or over SSH for
+	// host: <remote>) via a ShellExecutor/SSHExecutor — the SAME target-dispatch
+	// `ov deploy add` uses — instead of the podman-exec container path below.
+	if c.isLocalTarget() {
+		return c.runLocalEval()
+	}
+
 	engine, containerName, err := resolveContainer(c.Image, c.Instance)
 	if err != nil {
 		return err
@@ -420,6 +428,152 @@ func (c *EvalLiveCmd) runVm() error {
 		return &EvalFailedError{Failed: fails}
 	}
 	return nil
+}
+
+// isLocalTarget returns true when c.Image names a `target: local` deployment
+// (a host filesystem apply) OR a dotted-path child whose root segment is a
+// target:local deployment. Mirror of isVmTarget — a missing/unreadable
+// overthink.yml returns false and the caller falls through to the container
+// dispatch path.
+func (c *EvalLiveCmd) isLocalTarget() bool {
+	dir, err := os.Getwd()
+	if err != nil {
+		return false
+	}
+	uf, ok, err := LoadUnified(dir)
+	if err != nil || !ok || uf.Deploy == nil {
+		return false
+	}
+	if entry, present := uf.Deploy[c.Image]; present && entry.Target == "local" {
+		return true
+	}
+	if idx := strings.Index(c.Image, "."); idx > 0 {
+		root := c.Image[:idx]
+		if entry, present := uf.Deploy[root]; present && entry.Target == "local" {
+			return true
+		}
+	}
+	return false
+}
+
+// runLocalEval executes deploy-scope checks against a `target: local`
+// deployment on its host venue. Mirror of runVm, but the venue is a
+// ShellExecutor (host: local) or SSHExecutor (host: <remote>) selected by the
+// shared rootExecutorForDeployNode, and dotted paths compose through
+// ResolveDeployChain exactly like runVm.
+//
+// Local deploys carry no OCI image labels, so there is no layer/image test
+// section — checks come from the resolved kind:local template's `eval:` (base)
+// merged with the deploy entry's `eval:` and the per-host deploy.yml overlay
+// (id-based replace/append, same as everywhere). Host-context vars only: no
+// HOST_PORT:<N> / CONTAINER_IP (host services bind real ports; faking a port
+// mapping would be wrong).
+func (c *EvalLiveCmd) runLocalEval() error {
+	dir, _ := os.Getwd()
+	uf, _, err := LoadUnified(dir)
+	if err != nil {
+		return err
+	}
+
+	// Resolve the target node (leaf for a dotted path; the entry otherwise)
+	// and the root-segment node (whose host: selects the chain's root venue).
+	dotted := strings.Contains(c.Image, ".")
+	var node, rootNode *DeploymentNode
+	if uf.Deploy != nil {
+		if dotted {
+			node = resolveNestedNode(uf.Deploy, c.Image)
+			root := c.Image[:strings.Index(c.Image, ".")]
+			if entry, ok := uf.Deploy[root]; ok {
+				rn := entry
+				rootNode = &rn
+			}
+		} else if entry, ok := uf.Deploy[c.Image]; ok {
+			n := entry
+			node = &n
+			rootNode = &n
+		}
+	}
+	if node == nil {
+		return fmt.Errorf("eval live: local deployment %q not found", c.Image)
+	}
+
+	// Select the root venue from the root node's host:, then compose nested
+	// hops for a dotted path through the shared ResolveDeployChain.
+	executor, err := rootExecutorForDeployNode(rootNode)
+	if err != nil {
+		return fmt.Errorf("eval live %q: %w", c.Image, err)
+	}
+	if dotted {
+		if roots, _ := resolveTreeRoot(dir); roots != nil {
+			if _, chain, chainErr := ResolveDeployChain(roots, c.Image, executor); chainErr == nil && chain != nil {
+				executor = chain
+			}
+		}
+	}
+
+	venue := "host (local)"
+	if _, isShell := executor.(ShellExecutor); !isShell {
+		venue = executor.Venue()
+	}
+	fmt.Fprintf(os.Stderr, "Local deploy: %s [%s]\n", c.Image, venue)
+
+	fails, err := evalLocalDeployScope(dir, node, c.Image, c.Instance, c.Section, c.Filter, executor, c.Format)
+	if err != nil {
+		return err
+	}
+	if fails > 0 {
+		return &EvalFailedError{Failed: fails}
+	}
+	return nil
+}
+
+// evalLocalDeployScope collects a local deployment's deploy-scope checks —
+// kind:local template `eval:` (base) merged with the deploy entry `eval:`
+// (extends/overrides) and the per-host deploy.yml overlay — and runs them on
+// `exec`. Shared by `ov eval live <local>` (runLocalEval) and
+// `ov deploy add <local> --verify` (LocalDeployTarget) so the two surfaces
+// source + run probes identically (R3). Host-context vars only (no
+// HOST_PORT:<N> / CONTAINER_IP). Returns the failure count.
+func evalLocalDeployScope(dir string, node *DeploymentNode, image, instance, section string, filter []string, exec DeployExecutor, format string) (int, error) {
+	var tests []Check
+	if node != nil && strings.TrimSpace(node.Local) != "" {
+		if spec := findLocalSpec(dir, strings.TrimSpace(node.Local)); spec != nil {
+			tests = append(tests, spec.Eval...)
+		}
+	}
+	if node != nil {
+		tests = MergeDeployEval(tests, node.Eval)
+	}
+	if dc := loadDeployConfigForRead("ov eval live"); dc != nil {
+		if entry, ok := dc.Deploy[deployKey(image, instance)]; ok {
+			tests = MergeDeployEval(tests, entry.Eval)
+		} else if entry, ok := dc.Deploy[image]; ok {
+			tests = MergeDeployEval(tests, entry.Eval)
+		}
+	}
+
+	user := os.Getenv("USER")
+	home, herr := exec.ResolveHome(context.Background(), user)
+	if herr != nil || home == "" {
+		home = os.Getenv("HOME")
+	}
+	resolver := &EvalVarResolver{Env: map[string]string{
+		"IMAGE":    image,
+		"INSTANCE": instance,
+		"USER":     user,
+		"HOME":     home,
+	}, HasRuntime: true}
+
+	checks := collectChecksForRun(&LabelEvalSet{}, tests, section, filter)
+	if len(checks) == 0 {
+		fmt.Fprintln(os.Stderr, "No checks to run after filtering.")
+		return 0, nil
+	}
+	runner := NewRunner(exec, resolver, RunModeLive)
+	runner.Image = image
+	runner.Instance = instance
+	results := runner.Run(context.Background(), checks)
+	return formatResults(results, format), nil
 }
 
 // EvalImageCmd runs PURE-IMAGE eval against a disposable container.

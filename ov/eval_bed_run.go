@@ -361,17 +361,18 @@ func runEvalBed(exe, name string, node DeploymentNode, opts bedRunOpts) (*bedRun
 		}
 	}
 
-	// Step 4: full-stack live eval. kind:local has no container/VM to exec
-	// against — its layers apply to the host filesystem during deploy-add,
-	// and the update step exercises tear-down + re-apply.
-	if !isLocal {
-		// Readiness retry: a fresh service may still be starting (e.g. Immich's
-		// first-run DB migration runs minutes before the API binds). stepReady
-		// polls eval-live until it passes or the deadline, so we wait for real
-		// readiness instead of racing a fixed sleep.
-		if err := stepReady("eval-live", []string{"eval", "live", name}, bedEvalReadyDeadline, bedEvalReadyInterval); err != nil {
-			return fail("eval live %s: %w", name, err)
-		}
+	// Step 4: full-stack live eval against the deployed target's venue —
+	// container/VM via podman-exec/SSH, or the HOST filesystem (ShellExecutor)
+	// for kind:local. A local bed's deploy-scope `eval:` probes now run through
+	// `ov eval live <name>`'s local dispatch (runLocalEval); the host is ready
+	// the moment deploy-add returns, so stepReady passes on the first poll.
+	//
+	// Readiness retry: a fresh service may still be starting (e.g. Immich's
+	// first-run DB migration runs minutes before the API binds). stepReady
+	// polls eval-live until it passes or the deadline, so we wait for real
+	// readiness instead of racing a fixed sleep.
+	if err := stepReady("eval-live", []string{"eval", "live", name}, bedEvalReadyDeadline, bedEvalReadyInterval); err != nil {
+		return fail("eval live %s: %w", name, err)
 	}
 
 	// Step 5: fresh-update re-verify (the R10 acceptance gate). Suppressed

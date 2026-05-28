@@ -105,6 +105,12 @@ func (c *BuildCmd) Run() error {
 			resolveOpts.IncludeDisabledNames[name] = true
 		}
 	}
+	// Pass the explicit targets through so a qualified one (e.g.
+	// `ov image build ov.arch-builder`, or ensure-image's build-fallback for a
+	// namespaced builder) is pulled into the resolved set even when it isn't a
+	// base/builder of any root image. Remote (`@github…`) refs were already
+	// dispatched to buildRemote above, so these are local names only.
+	resolveOpts.RequestedImages = c.Images
 	gen, err := NewGenerator(dir, c.Tag, resolveOpts)
 	if err != nil {
 		return err

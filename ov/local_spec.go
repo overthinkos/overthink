@@ -67,10 +67,12 @@ func findLocalSpec(dir, name string) *LocalSpec {
 	if err != nil || uf == nil {
 		return nil
 	}
-	if uf.Local == nil {
-		return nil
-	}
-	return uf.Local[name]
+	// Namespace-aware via the single resolver: a bare name hits this project's
+	// `local:` map exactly as before, while a qualified `local: <ns>.<tmpl>`
+	// ref descends into the imported namespace. resolveLocalRef tolerates a nil
+	// Local map, so the previous explicit nil-guard is no longer needed.
+	spec, _ := uf.ProjectConfig().resolveLocalRef(name)
+	return spec
 }
 
 // Force os import use — findLocalSpec doesn't reach for it but the

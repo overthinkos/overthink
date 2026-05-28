@@ -17,22 +17,12 @@ type HooksConfig struct {
 // Hooks from multiple layers are concatenated in layer order.
 func CollectHooks(cfg *Config, layers map[string]*Layer, imageName string) *HooksConfig {
 	var allLayerNames []string
-	current := imageName
-	for {
-		img, ok := cfg.Image[current]
-		if !ok {
-			break
-		}
-		resolved, err := ResolveLayerOrder(img.Layer, layers, nil)
+	for _, node := range cfg.walkBaseChain(imageName) {
+		resolved, err := ResolveLayerOrder(node.Img.Layer, layers, nil)
 		if err != nil {
 			break
 		}
 		allLayerNames = append(allLayerNames, resolved...)
-		if baseImg, isInternal := cfg.Image[img.Base]; isInternal && baseImg.IsEnabled() {
-			current = img.Base
-		} else {
-			break
-		}
 	}
 
 	var postEnable, preRemove []string

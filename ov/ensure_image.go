@@ -203,9 +203,12 @@ func podmanPullForEnsure(ctx context.Context, ref string) error {
 //   - Short names (no slash, no @prefix) are returned as-is when
 //     `cfg.Image[name]` exists.
 //   - Full registry refs have their basename (last path segment,
-//     before the tag) extracted and checked against `cfg.Image`.
-//     This is what lets `ghcr.io/overthinkos/arch-builder:<tag>`
-//     fall back to building the project's `arch-builder` image.
+//     before the tag) extracted and resolved via findImageByLeaf,
+//     which searches the root image map AND every imported namespace.
+//     This is what lets `ghcr.io/overthinkos/arch-builder:<tag>` fall
+//     back to building the project's `arch-builder` image whether it
+//     lives at the root or under an imported namespace (e.g. the
+//     cachyos profile's `ov.arch-builder`).
 //   - Remote `@github.com/...` refs are skipped — the remote
 //     project's image.yml already determined the canonical ref;
 //     local build-fallback is not applicable.
@@ -233,8 +236,14 @@ func buildableShortName(image string, cfg *Config) string {
 	if work == "" {
 		return ""
 	}
-	if _, ok := cfg.Image[work]; ok {
-		return work
+	// Route through the single namespace-aware resolver. The basename may map
+	// to a root image (returned bare) OR to an image living in an imported
+	// namespace (returned qualified, e.g. `ov.arch-builder`). Both forms are
+	// buildable: ResolveImage and the `ov image build` target path are both
+	// namespace-aware, so the build-fallback can build a namespaced builder
+	// the same way it builds a root one.
+	if q, ok := cfg.findImageByLeaf(work); ok {
+		return q
 	}
 	return ""
 }

@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 )
 
@@ -73,6 +74,40 @@ func (c *Config) resolveImageRef(ref string) (ImageConfig, *Config, bool) {
 		return ImageConfig{}, nil, false
 	}
 	return img, c, true
+}
+
+// findImageByLeaf searches for an image whose leaf (unqualified) name equals
+// `leaf` — first in c's own root image map, then recursively in each imported
+// namespace (deterministic alias order). Returns the fully-qualified ref under
+// which the image is reachable from c (bare for a root hit, `ns.<...>` for a
+// namespaced hit), or ok=false when no image with that leaf exists anywhere in
+// the namespace tree.
+//
+// This is the DISCOVERY dual of resolveImageRef: resolveImageRef resolves a
+// KNOWN qualified ref by descent, whereas findImageByLeaf discovers the
+// qualification for a bare leaf that may live in a namespace. ensure-image's
+// build-fallback needs it because it only has the basename of a full registry
+// ref (e.g. `arch-builder` extracted from
+// `ghcr.io/overthinkos/arch-builder:<tag>`) and must find that the image lives
+// under the `ov` namespace to build it locally.
+func (c *Config) findImageByLeaf(leaf string) (string, bool) {
+	if leaf == "" {
+		return "", false
+	}
+	if _, ok := c.Image[leaf]; ok {
+		return leaf, true
+	}
+	aliases := make([]string, 0, len(c.Namespaces))
+	for ns := range c.Namespaces {
+		aliases = append(aliases, ns)
+	}
+	sort.Strings(aliases)
+	for _, ns := range aliases {
+		if q, ok := c.Namespaces[ns].findImageByLeaf(leaf); ok {
+			return ns + "." + q, true
+		}
+	}
+	return "", false
 }
 
 // resolveLocalRef resolves a (possibly qualified) kind:local template ref.

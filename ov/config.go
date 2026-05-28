@@ -341,6 +341,12 @@ func LoadConfigRaw(dir string) (*Config, error) {
 type ResolveOpts struct {
 	IncludeDisabled      bool            // skip the `enabled: false` check
 	IncludeDisabledNames map[string]bool // when non-empty, scope IncludeDisabled to these names only
+	// RequestedImages are the explicit build targets (`ov image build <name>`).
+	// A qualified name here (e.g. `ov.arch-builder`) is pulled into the resolved
+	// set even when it isn't reachable as a base/builder of a root image — so a
+	// namespaced image can be an on-demand build target, not only a transitive
+	// base. Bare names are ignored here (they resolve through the root loop).
+	RequestedImages []string
 }
 
 // shouldIncludeDisabled reports whether name's disabled gate should be
@@ -358,6 +364,24 @@ func (opts ResolveOpts) shouldIncludeDisabled(name string) bool {
 
 // ResolveImage resolves a single image's configuration by applying defaults
 func (c *Config) ResolveImage(name string, calverTag string, dir string, opts ResolveOpts) (*ResolvedImage, error) {
+	// Namespace-aware entry: a qualified name (e.g. `ov.arch-builder`,
+	// `cachyos.cachyos`) resolves inside the Config of the namespace that
+	// owns it, where its base:/builder: refs are relative. This mirrors
+	// resolveImageRef's descent (namespace.go) so that EVERY ResolveImage
+	// caller — `ov image inspect/generate/merge/pull/validate`,
+	// ensure-image's build-fallback, `ov deploy add`/`ov update` — is
+	// namespace-aware through this single chokepoint instead of each
+	// re-implementing (or omitting) the descent. Additive: a bare name
+	// takes the flat tail below exactly as before, so existing behaviour
+	// is unchanged; only qualified names (which previously hard-errored
+	// "not found") gain resolution.
+	if ns, rest, ok := splitNamespaceRef(name); ok {
+		sub, found := c.Namespaces[ns]
+		if !found {
+			return nil, fmt.Errorf("import namespace %q not found (resolving image %q)", ns, name)
+		}
+		return sub.ResolveImage(rest, calverTag, dir, opts)
+	}
 	img, ok := c.Image[name]
 	if !ok {
 		return nil, fmt.Errorf("image %q not found in image.yml", name)
@@ -620,6 +644,27 @@ func (c *Config) ResolveAllImage(calverTag string, dir string, opts ResolveOpts)
 	// `base: cachyos.cachyos`) resolved within their own namespace context,
 	// keyed by the fully-qualified name, so the build graph + generator can
 	// reference them. See namespace.go.
+	// Pull in any explicitly-requested namespace-qualified targets BEFORE base
+	// resolution. resolveNamespacedBases is reachability-scoped (it only follows
+	// bases/builders of root images); an on-demand target like
+	// `ov image build ov.arch-builder` — or ensure-image's build-fallback for a
+	// namespaced builder — must be pulled explicitly so it lands in the resolved
+	// map under its fully-qualified key. Pulling it FIRST lets the
+	// resolveNamespacedBases fixpoint below also collect the target's own
+	// transitive bases AND builders (it iterates the resolved set), so the build
+	// graph + filterImage have every dependency. Uses the SAME
+	// pullNamespacedImage path as the base pull.
+	for _, name := range opts.RequestedImages {
+		if _, _, qualified := splitNamespaceRef(name); !qualified {
+			continue
+		}
+		if _, done := resolved[name]; done {
+			continue
+		}
+		if err := c.pullNamespacedImage(c, name, "", calverTag, dir, opts, resolved); err != nil {
+			return nil, err
+		}
+	}
 	if err := c.resolveNamespacedBases(resolved, calverTag, dir, opts); err != nil {
 		return nil, err
 	}
@@ -692,6 +737,13 @@ func (c *Config) resolveEffectiveBuilder(name string, distro []string, base stri
 		out[typ] = b
 	}
 	if !isExternalBase {
+		// DELIBERATELY flat (not resolveImageRef): a base's builder map is only
+		// inherited when the base is ROOT-local. A namespace-qualified base
+		// (e.g. `cachyos.cachyos`) intentionally does NOT contribute its builder
+		// map here — builder: is a map of namespace-relative refs that would
+		// dangle in this consumer's namespace; the consumer instead gets its
+		// builder distro-keyed via distroBuilderMap above. So the qualified-base
+		// miss is correct, not a divergence bug. See namespace.go's header.
 		if baseImg, ok := c.Image[base]; ok {
 			for typ, b := range baseImg.Builder {
 				out[typ] = b
@@ -806,6 +858,58 @@ func (c *Config) walkBaseChainBuild(baseName string) []string {
 		cur = sub
 		current = baseImg.Base
 	}
+}
+
+// baseChainNode is one image visited while walking an internal base chain.
+// Name is the ref as it was reached (bare for a root image, namespace-qualified
+// for a base reached across an import boundary, e.g. `cachyos.cachyos`).
+type baseChainNode struct {
+	Name string
+	Img  ImageConfig
+}
+
+// walkBaseChain walks imageName's ROOT-INTERNAL base-image chain and returns
+// the images in walk order (self first, then each internal base). It is the ONE
+// shared base-chain traversal used by every chain-walking collector
+// (CollectHooks / CollectEval / CollectShell / CollectDescription /
+// CollectImageVolume) — each previously re-implemented the identical
+// `for { img := cfg.Image[current]; ...; current = img.Base }` loop (R3: one
+// implementation, no divergent copies), now cycle-safe for all of them.
+//
+// It deliberately does NOT descend import namespaces. A namespace-qualified
+// base (e.g. `selkies.selkies-desktop`) is a SEPARATELY-BUILT image that owns
+// its own baked eval / hooks / shell / volume labels; re-collecting its layers
+// into the consumer would DOUBLE-COUNT every layer the consumer also lists
+// directly (the same layer reached bare here and via its `@github…` ref in the
+// base), which the per-section id-uniqueness validator correctly rejects.
+// Stopping at the namespace boundary (and at external / disabled / missing
+// bases) is the long-standing, semantically-correct per-image collection
+// behaviour — preserved here byte-for-byte. Namespace-AWARENESS belongs to
+// NAME resolution (ResolveImage / resolveImageRef / findImageByLeaf), not to
+// this per-image layer-collection walk; the distro/build VALUE walkers
+// (walkBaseChainDistro / walkBaseChainBuild) cross namespaces precisely because
+// those are inherited values, whereas layer contributions are not.
+func (c *Config) walkBaseChain(imageName string) []baseChainNode {
+	var out []baseChainNode
+	seen := make(map[string]bool)
+	current := imageName
+	for {
+		if current == "" || seen[current] {
+			break
+		}
+		seen[current] = true
+		img, ok := c.Image[current]
+		if !ok {
+			break
+		}
+		out = append(out, baseChainNode{Name: current, Img: img})
+		baseImg, isInternal := c.Image[img.Base]
+		if !isInternal || !baseImg.IsEnabled() {
+			break
+		}
+		current = img.Base
+	}
+	return out
 }
 
 // sortStrings sorts a slice of strings in place

@@ -18,26 +18,13 @@ type VolumeMount struct {
 func CollectImageVolume(cfg *Config, layers map[string]*Layer, imageName string, home string, excludeNames map[string]bool) ([]VolumeMount, error) {
 	// Collect all layer names from the image chain (outermost first)
 	var allLayerNames []string
-	current := imageName
-	for {
-		img, ok := cfg.Image[current]
-		if !ok {
-			break
-		}
-
+	for _, node := range cfg.walkBaseChain(imageName) {
 		// Resolve layers for this image (includes transitive deps)
-		resolved, err := ResolveLayerOrder(img.Layer, layers, nil)
+		resolved, err := ResolveLayerOrder(node.Img.Layer, layers, nil)
 		if err != nil {
 			return nil, err
 		}
 		allLayerNames = append(allLayerNames, resolved...)
-
-		// Walk to base if it's an internal image
-		if baseImg, isInternal := cfg.Image[img.Base]; isInternal && baseImg.IsEnabled() {
-			current = img.Base
-		} else {
-			break
-		}
 	}
 
 	// Collect volumes, dedup by name (first wins), skip excluded names

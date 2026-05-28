@@ -249,7 +249,11 @@ func resolveLocalName(name, projectDir string, preferKind RefKind) (*DeployRef, 
 	// names through the unified loader (which pulls in includes like
 	// image.yml / images.yml transparently). No direct file reads here.
 	if uf, ok, err := LoadUnified(projectDir); err == nil && ok && uf != nil {
-		if _, present := uf.Image[name]; present {
+		// Namespace-aware presence check via the single resolver, so a qualified
+		// deploy ref (`ov deploy add ov.<image>`) resolves the same way every
+		// other command resolves an image name. Bare names hit the root map
+		// exactly as the previous flat `uf.Image[name]` did.
+		if _, _, present := uf.ProjectConfig().resolveImageRef(name); present {
 			inImageYml = true
 			resolvedImgPath = imgYml
 		}

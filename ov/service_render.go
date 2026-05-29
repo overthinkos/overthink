@@ -67,6 +67,13 @@ type ServiceEntry struct {
 	User             string            `yaml:"user,omitempty"`
 	After            []string          `yaml:"after,omitempty"`
 	Before           []string          `yaml:"before,omitempty"`
+	// WantedBy overrides the [Install] target the unit is enabled into.
+	// Default (empty) → the scope default (user→default.target,
+	// system→multi-user.target). Set to e.g. [graphical-session.target] for a
+	// user service that must start WITH the logged-in graphical session (so it
+	// is NOT pulled at early user-manager start, before the session/portal
+	// exist). systemd-only; supervisord ignores it.
+	WantedBy         []string          `yaml:"wanted_by,omitempty"`
 	Stdout           string            `yaml:"stdout,omitempty"` // journal | file:<path> | none
 	StopTimeout      string            `yaml:"stop_timeout,omitempty"`
 
@@ -155,6 +162,7 @@ type ServiceRenderContext struct {
 	User             string
 	After            []string
 	Before           []string
+	WantedBy         []string // [Install] WantedBy override; empty → scope default
 	Stdout           string
 	StopTimeout      string
 	Scope            string // "system" | "user"
@@ -253,6 +261,7 @@ func RenderService(entry *ServiceEntry, initDef *InitDef, ctx ServiceRenderConte
 		ctx.After = append(ctx.After, entry.Overrides.After...)
 	}
 	ctx.Before = append(ctx.Before, entry.Before...)
+	ctx.WantedBy = entry.WantedBy
 	ctx.Restart = entry.Restart
 	ctx.Stdout = entry.Stdout
 	ctx.StopTimeout = entry.StopTimeout

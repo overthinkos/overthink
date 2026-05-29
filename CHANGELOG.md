@@ -22,6 +22,81 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-05
 
+### 2026-05-29 — cachyos GPU VM eval: SPICE virtual monitor + deeper selkies verification + honest LG bed-scope
+
+The `cachyos-coder` / `cachyos-gpu-vm` eval previously verified only that things
+EXIST (KDE binaries present, sddm enabled, `nvh264enc` installed, `:3000`=200,
+`/dev/kvmfr0` present) — a black or hung GPU-passthrough session would still pass.
+This change adds a SPICE virtual monitor that proves the desktop actually RENDERS,
+deepens the selkies stream verification (prove the stream is wired end-to-end,
+not just that the port answers), and — after a source-grounded RCA — surfaces and
+honestly drops the bed's Looking-Glass frame-flow check. Looking Glass itself is
+unchanged (layer + `<shmem>` + `memory_backing` + kvmfr all intact for the
+operator's monitor-attached workstation use); only the *unattended bed
+verification* of LG frame-flow is incompatible with how LG-on-KWin-Wayland works
+in practice.
+
+- **SPICE virtual monitor on both VM entities** (`image/cachyos/vm.yml`). Added
+  `graphics: spice` (UNIX socket) + a `spicevmc` channel + a virtio-gpu `primary`
+  video head (replacing the dummy `vga`) to `cachyos-gpu-vm` and `cachyos-coder`,
+  matching the arch VM's proven pattern. On the operator workstation the
+  passed-through NVIDIA GPU drives the physical monitor (the operator sees the
+  desktop directly); on the bed the virtio-gpu head is the seat-0 scanout the
+  SDDM/Plasma session renders to. SPICE serves it so `ov eval spice screenshot`
+  can capture the live desktop, the operator gains a 4th access path + a headless
+  recovery console, and the bed proves the GPU-passthrough KDE session actually
+  rendered. The NVIDIA hostdevs, Looking-Glass IVSHMEM, and `memory_backing`
+  stay (orthogonal devices, retained for monitor-attached LG use).
+- **SDDM auto-login** the deploy user into the Plasma Wayland session
+  (`image/cachyos/layers/cachyos-kde-settings`): on the bed (no operator at the
+  SDDM greeter) it guarantees a real KDE session exists at boot so SPICE and
+  selkies have a desktop to capture, and on the operator VM it removes the
+  greeter step.
+- **Generic `wanted_by:` service-schema field added** (`ServiceEntry` +
+  `ServiceRenderContext` + the systemd `service_template` `[Install]` block;
+  unit test `TestRenderServiceWantedBy`). Any service can now declare
+  `wanted_by: [<target>]` and the systemd unit gets a matching `WantedBy=`.
+  Used by `looking-glass-host` to set `wanted_by: [graphical-session.target]`,
+  so the LG service is pulled WHEN the session starts (not at early
+  user-manager start, where there's no display).
+- **Render-proof check** `desktop-renders-spice` (`image/cachyos/overthink.yml`)
+  — `ov eval spice screenshot` asserts `artifact_not_uniform: true`, so a
+  solid-color/black/hung session FAILS (`assertArtifactNotUniform` samples
+  pixels). The GPU-passthrough desktop must really render to pass.
+- **selkies stream verification deepened** (`image/cachyos/overthink.yml`).
+  Two checks added beyond the prior `:3000`=200 / `nvh264enc` binary present:
+  - `selkies-encoding-frames` — pixelflux's nested compositor (`wayland-1`)
+    socket exists, the `:8081` capture backend is listening, and the
+    `ov-selkies-selkies` journal shows the encoder actually started. Proves
+    the pipeline is live, not just that the port answers.
+  - `kde-selkies-html-content` — `curl https://127.0.0.1:3000/` returns
+    selkies/pixelflux/WebRTC content (not just any 200 from traefik), proving
+    the web UI is wired end-to-end (traefik → `:8081` → pixelflux's bundle).
+- **LG frame-flow bed check honestly dropped; LG infra check kept**
+  (`image/cachyos/overthink.yml`). RCA (source-grounded — see
+  `gnif/LookingGlass` `host/.../portal.c` and `KDE/xdg-desktop-portal-kde`
+  `src/screencast.cpp` on `master`): on KWin Wayland, `looking-glass-host`'s
+  PipeWire backend is the only KWin path that yields the actual output, but
+  the xdg-desktop-portal ScreenCast `Start` call **always** shows an
+  interactive source-selection dialog UNLESS the client sends `persist_mode`
+  + a valid `restore_data` blob — and `looking-glass-host` (every version,
+  including upstream master) sends **neither** (its `portal.c` requests no
+  persistence; only the per-session `handle_token` is present, which is not
+  a persistence token). KDE's `screencast.cpp` does not consult the
+  `PermissionStore` for the picker decision, and the `kde-authorized`
+  pre-auth table covers RemoteDesktop only, not ScreenCast. So there is no
+  app-targeted non-interactive grant on KWin. The alternative XCB backend
+  grabs KWin's XWayland root (KWin sizes it to the largest possible mode,
+  e.g. 10684×2160), which overflows the 64 MiB IVSHMEM and SIGABRTs in
+  `lgmpHostMemPtr`. The bed runs unattended — neither path can produce
+  frames without an interactive click — so the `looking-glass-frames-flowing`
+  check was removed. The infra check `looking-glass-guest` (binary
+  installed + IVSHMEM node present + kvmfr loaded) stays — it IS verifiable
+  headless and proves the wiring is correct. On the monitor-attached
+  operator VM, the operator clicks "Share" once per session at the physical
+  monitor and frames flow normally; that's an operator-side verification of
+  a feature whose wiring the bed already proved.
+
 ### 2026-05-29 — `ov vm`: per-VM disk/seed paths + SMBIOS credential delivery (SSH key injection made authoritative)
 
 Surfaced while bringing up the operator `cachyos-coder` VM (the deliverable of the

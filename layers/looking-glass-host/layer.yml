@@ -1,5 +1,5 @@
 layer:
-    version: 2026.149.1210
+    version: 2026.149.2019
     name: looking-glass-host
     description: |
         Looking Glass GUEST side for a GPU-passthrough VM: the Linux "host"
@@ -59,14 +59,20 @@ layer:
             f /dev/shm/looking-glass 0660 root kvm -
     service:
         # Capture the active KDE session and push frames to the IVSHMEM device.
-        # User-scope: it must run inside the graphical session (portal/Wayland
-        # access). Enabled; starts with the KDE session.
+        # User-scope + WantedBy=graphical-session.target: it must run INSIDE the
+        # logged-in graphical session (PipeWire ScreenCast portal + Wayland
+        # display access), so it is pulled WHEN the session starts — NOT at early
+        # user-manager start (default.target), where the portal/display don't yet
+        # exist and looking-glass-host fail-loops "No supported capture interface"
+        # until it hits the start limit. Requires an auto-logged-in session
+        # (SDDM autologin) so graphical-session.target actually activates headless.
         - name: looking-glass-host
           exec: /usr/bin/looking-glass-host
           restart: always
           scope: user
           enable: true
           after: [graphical-session.target]
+          wanted_by: [graphical-session.target]
     eval:
         - id: kvmfr-modprobe-conf
           file: /etc/modprobe.d/ov-kvmfr.conf

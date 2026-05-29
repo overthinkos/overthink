@@ -23,7 +23,7 @@ ExecStart={{.Exec}}
 {{end}}Restart={{systemdRestart .Restart}}
 
 [Install]
-WantedBy={{if eq .Scope "system"}}multi-user.target{{else}}default.target{{end}}
+WantedBy={{if .WantedBy}}{{join .WantedBy " "}}{{else if eq .Scope "system"}}multi-user.target{{else}}default.target{{end}}
 `
 
 const testSystemdUnitPathTemplate = `{{- if eq .Scope "system" -}}
@@ -106,6 +106,36 @@ func TestRenderServiceCustomSystemd(t *testing.T) {
 	}
 	if rendered.DropinText != "" {
 		t.Errorf("custom entry should have empty DropinText; got %q", rendered.DropinText)
+	}
+}
+
+// A user service with an explicit wanted_by must enable into THAT target
+// (graphical-session.target) rather than the user default — so a
+// graphical-session capture service (looking-glass-host) is pulled WITH the
+// logged-in session, not at early user-manager start (where the Wayland
+// display + ScreenCast portal don't yet exist and it fail-loops).
+func TestRenderServiceWantedBy(t *testing.T) {
+	entry := &ServiceEntry{
+		Name:     "looking-glass-host",
+		Exec:     "/usr/bin/looking-glass-host",
+		Restart:  "always",
+		Scope:    "user",
+		Enable:   true,
+		After:    []string{"graphical-session.target"},
+		WantedBy: []string{"graphical-session.target"},
+	}
+	rendered, err := RenderService(entry, testSystemdInitDef(), ServiceRenderContext{
+		Layer:       "looking-glass-host",
+		UserUnitDir: "/home/cachy/.config/systemd/user",
+	})
+	if err != nil {
+		t.Fatalf("RenderService: %v", err)
+	}
+	if !strings.Contains(rendered.UnitText, "WantedBy=graphical-session.target") {
+		t.Errorf("missing WantedBy=graphical-session.target; got:\n%s", rendered.UnitText)
+	}
+	if strings.Contains(rendered.UnitText, "WantedBy=default.target") {
+		t.Errorf("user-default WantedBy leaked despite explicit wanted_by; got:\n%s", rendered.UnitText)
 	}
 }
 

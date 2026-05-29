@@ -1355,6 +1355,16 @@ func renderPixiScript(s *BuilderStep, hostHome string) string {
 	b.WriteString("  pyproject.toml) pixi install --manifest-path pyproject.toml ;;\n")
 	b.WriteString("  environment.yml) pixi project import environment.yml && pixi install ;;\n")
 	b.WriteString("esac\n")
+	// Mirror the image build's pixi stage_template (build.yml builder.pixi:
+	// `{{.InstallCmd}} && bash /tmp/{{.BuildScript}}`): after `pixi install`, run
+	// the layer's build.sh if present. For selkies that build.sh is what compiles
+	// pixelflux (NVENC when the builder has CUDA) AND runs `selkies pip install`
+	// (which provides the `websockets` runtime dep). Without this the cross-host
+	// pixi env is bare (pixi.toml conda deps only) and the capture-server fails
+	// at `import websockets` / missing pixelflux. build.sh runs in $HOME (the
+	// pixi project) so its `pixi run` / env-relative installs land in
+	// ~/.pixi/envs/default, exactly as the image build does.
+	b.WriteString("if [ -f /work/build.sh ]; then bash /work/build.sh; fi\n")
 	b.WriteString("rm -f $manifest pixi.lock\n")
 	_ = manifest
 	return b.String()

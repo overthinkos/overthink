@@ -589,9 +589,7 @@ OV_REPO
 // checked in emitPlan.
 func (t *VmDeployTarget) execServicePackaged(ctx context.Context, s *ServicePackagedStep, plan *InstallPlan, opts EmitOpts) error {
 	if s.OverridesText != "" && s.OverridesPath != "" {
-		writeScript := fmt.Sprintf("set -e\ninstall -D -m0644 /dev/stdin %s <<'OV_DROPIN'\n%s\nOV_DROPIN\nsystemctl daemon-reload\n",
-			deployShellQuote(s.OverridesPath), s.OverridesText)
-		if err := t.Exec.RunSystem(ctx, writeScript, opts); err != nil {
+		if err := t.writeGuestUnitFile(ctx, s.OverridesPath, s.OverridesText, s.TargetScope, opts); err != nil {
 			return err
 		}
 	}
@@ -599,6 +597,21 @@ func (t *VmDeployTarget) execServicePackaged(ctx context.Context, s *ServicePack
 		return t.enableServiceUnit(ctx, s.Unit, s.TargetScope, opts)
 	}
 	return nil
+}
+
+// writeGuestUnitFile installs a systemd unit (or drop-in) on the guest at the
+// resolved path, honoring scope. A user-scope file is written AS THE USER
+// (RunUser) so the ~/.config/systemd/user/ tree is USER-owned — otherwise a
+// later `systemctl --user enable` (run as the user) cannot create the
+// .wants symlink in a root-owned dir and fails with a misleading
+// "Unit ... does not exist". System-scope goes to /etc/systemd/system/ via sudo.
+// The matching daemon (user or system) is reloaded.
+func (t *VmDeployTarget) writeGuestUnitFile(ctx context.Context, path, content string, scope Scope, opts EmitOpts) error {
+	install := fmt.Sprintf("install -D -m0644 /dev/stdin %s <<'OV_UNIT'\n%s\nOV_UNIT\n", deployShellQuote(path), content)
+	if scope == ScopeUser {
+		return t.Exec.RunUser(ctx, "set -e\n"+install+"export XDG_RUNTIME_DIR=\"/run/user/$(id -u)\"\nsystemctl --user daemon-reload || true\n", opts)
+	}
+	return t.Exec.RunSystem(ctx, "set -e\n"+install+"systemctl daemon-reload\n", opts)
 }
 
 // enableServiceUnit enables (and best-effort starts) a unit on the guest,
@@ -649,13 +662,7 @@ func (t *VmDeployTarget) execServiceCustom(ctx context.Context, s *ServiceCustom
 	if s.UnitText == "" || s.UnitPath == "" {
 		return fmt.Errorf("service %s: no unit text rendered (compile-time render skipped this entry; check that the layer's mixed-`service:` pair is well-formed)", s.Name)
 	}
-	writeScript := fmt.Sprintf(`set -e
-install -D -m0644 /dev/stdin %s <<'OV_UNIT'
-%s
-OV_UNIT
-systemctl daemon-reload
-`, deployShellQuote(s.UnitPath), s.UnitText)
-	if err := t.Exec.RunSystem(ctx, writeScript, opts); err != nil {
+	if err := t.writeGuestUnitFile(ctx, s.UnitPath, s.UnitText, s.TargetScope, opts); err != nil {
 		return err
 	}
 	if s.Enable {

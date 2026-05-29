@@ -1,5 +1,5 @@
 layer:
-    version: 2026.149.1500
+    version: 2026.149.1626
     name: selkies
     require:
         - supervisord
@@ -72,14 +72,16 @@ layer:
     var:
         TRAEFIK_VERSION: v3.4.0
     task:
-        # Move pre-built Selkies web UI from the pixi build-stage output into the
-        # system share directory. The pixi stage writes to /home/user/.local/share
-        # under the build user's home; we relocate so the runtime has no dependency
-        # on the builder-user layout.
+        # Move pre-built Selkies web UI from the build-stage output into the system
+        # share directory. The build (pixi + build.sh) writes selkies-build/web into
+        # the build user's ~/.local/share — uid 1000, but the path differs by target:
+        # /home/user in a container build, /home/<deploy-user> on a host/VM cross-host
+        # build. Resolve it via getent (this cmd runs as root, so $HOME would be /root).
         - cmd: |
+            SRCH="$(getent passwd 1000 | cut -d: -f6)"
             mkdir -p /usr/local/share/selkies/web
-            cp -r /home/user/.local/share/selkies-build/web/* /usr/local/share/selkies/web/
-            rm -rf /home/user/.local/share/selkies-build
+            cp -r "$SRCH"/.local/share/selkies-build/web/* /usr/local/share/selkies/web/
+            rm -rf "$SRCH"/.local/share/selkies-build
           user: root
         # Traefik binary (same version the dedicated traefik layer uses).
         - download: "https://github.com/traefik/traefik/releases/download/${TRAEFIK_VERSION}/traefik_${TRAEFIK_VERSION}_linux_${ARCH}.tar.gz"

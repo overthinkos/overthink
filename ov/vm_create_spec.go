@@ -117,6 +117,17 @@ func (c *VmCreateCmd) runVmSpecCreate(vmName string, spec *VmSpec, backend strin
 		}
 		fmt.Fprintf(os.Stderr, "Created VM %s (libvirt session)\n", vmDomainName)
 
+		// Boot-autostart: set the libvirt flag, then wire the session-boot
+		// trigger (linger + user socket). The flag is load-bearing; the
+		// prereqs are best-effort with actionable warnings on failure.
+		if spec.Autostart {
+			if err := conn.setDomainAutostart(vmDomainName, true); err != nil {
+				return fmt.Errorf("enabling autostart for %s: %w", vmDomainName, err)
+			}
+			fmt.Fprintf(os.Stderr, "Autostart enabled for %s\n", vmDomainName)
+			ensureBootAutostartPrereqs()
+		}
+
 		// Inject any raw libvirt snippets from layers/spec.libvirt.snippets.
 		if spec.Libvirt != nil && len(spec.Libvirt.Snippets) > 0 {
 			if err := InjectLibvirtXML(vmDomainName, spec.Libvirt.Snippets); err != nil {

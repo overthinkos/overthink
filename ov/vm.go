@@ -163,6 +163,46 @@ func startLibvirtUserSession() {
 	}
 }
 
+// ensureBootAutostartPrereqs makes a qemu:///session VM actually start at
+// host boot. A session domain's autostart flag is only honored once the
+// user's systemd instance — and thus virtqemud — is running, which at boot
+// requires lingering. So this enables linger (idempotent) and the virtqemud
+// user socket (so socket-activation brings the daemon up under the lingering
+// session). Best-effort: the autostart flag itself is already set by the
+// caller; failures here only mean the operator must wire the boot trigger
+// manually, and we say exactly how.
+func ensureBootAutostartPrereqs() {
+	username := currentUsername()
+	if username != "" && !lingerEnabled(username) {
+		if err := exec.Command("loginctl", "enable-linger", username).Run(); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: could not enable systemd linger for %s (%v); the VM will not autostart at boot until you run: loginctl enable-linger %s\n", username, err, username)
+		} else {
+			fmt.Fprintf(os.Stderr, "Enabled systemd linger for %s (user session persists across logout so the VM autostarts at boot)\n", username)
+		}
+	}
+	// Enable (not merely start) a libvirt user socket so it activates at boot.
+	enabled := false
+	for _, unit := range []string{"virtqemud.socket", "libvirtd.socket"} {
+		if err := exec.Command("systemctl", "--user", "enable", unit).Run(); err == nil {
+			enabled = true
+			break
+		}
+	}
+	if !enabled {
+		fmt.Fprintf(os.Stderr, "Warning: could not enable a libvirt user socket (virtqemud.socket / libvirtd.socket); ensure one is enabled so the daemon starts at boot\n")
+	}
+}
+
+// lingerEnabled reports whether systemd user lingering is already on for
+// the given user, so we don't shell out to enable it redundantly.
+func lingerEnabled(username string) bool {
+	out, err := exec.Command("loginctl", "show-user", username, "--property=Linger").Output()
+	if err != nil {
+		return false
+	}
+	return strings.TrimSpace(string(out)) == "Linger=yes"
+}
+
 // qemuSystemBinary returns the architecture-appropriate QEMU binary name.
 func qemuSystemBinary() string {
 	switch runtime.GOARCH {

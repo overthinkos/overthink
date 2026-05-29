@@ -334,6 +334,26 @@ func (c *libvirtConn) redefineDomain(xmlStr string) error {
 	return err
 }
 
+// setDomainAutostart toggles libvirt's per-domain autostart flag. The
+// flag is a libvirt domain property (not part of the domain XML), so it
+// survives DomainDefineXML re-definitions; we re-assert it on create
+// anyway. For qemu:///session the flag only triggers at host boot when
+// the user session lingers — see ensureBootAutostartPrereqs.
+func (c *libvirtConn) setDomainAutostart(name string, on bool) error {
+	dom, err := c.lookupDomain(name)
+	if err != nil {
+		return fmt.Errorf("looking up domain %s: %w", name, err)
+	}
+	flag := int32(0)
+	if on {
+		flag = 1
+	}
+	if err := c.l.DomainSetAutostart(dom, flag); err != nil {
+		return fmt.Errorf("setting autostart on %s: %w", name, err)
+	}
+	return nil
+}
+
 // listOvDomains returns all domains with the "ov-" prefix.
 func (c *libvirtConn) listOvDomains() ([]domainInfo, error) {
 	flags := libvirt.ConnectListDomainsActive | libvirt.ConnectListDomainsInactive

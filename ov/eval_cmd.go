@@ -345,7 +345,7 @@ func (c *EvalLiveCmd) runVm() error {
 	//       overrides/additions.
 	//
 	// Schema v3: also accept plain-identifier deployment entries whose
-	// `target: vm` + `vm_source: <c.Image>` resolves to the same VM.
+	// `target: vm` + `vm: <c.Image>` resolves to the same VM.
 	// This is what makes `ov eval live <deploy-name>` work for beds like
 	// `arch-vm` that don't carry the legacy `vm:` prefix in the key.
 	// Merge by id (local replaces project); same rules as MergeDeployEval.

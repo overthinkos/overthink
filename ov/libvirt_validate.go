@@ -21,6 +21,9 @@ func ValidateVmSpec(name string, spec *VmSpec, errs *ValidationError) {
 	validateVmFirmwareMachine(name, spec, errs)
 	validateVmSSH(name, spec, errs)
 	validateVmNetwork(name, spec, errs)
+	if spec.Autostart && spec.Backend == "qemu" {
+		errs.Add("vm %q: autostart: true requires the libvirt backend (backend: qemu has no persistent daemon to honor it); set backend: libvirt or remove autostart", name)
+	}
 	if spec.Libvirt != nil {
 		ValidateLibvirtDomain(name, spec, errs)
 	}
@@ -401,6 +404,35 @@ func ValidateLibvirtDomain(name string, spec *VmSpec, errs *ValidationError) {
 		for i, h := range lv.Devices.Hostdevs {
 			validateLibvirtHostdev(name, i, h, errs)
 		}
+		for i, f := range lv.Devices.Filesystems {
+			validateLibvirtFilesystem(name, i, f, errs)
+		}
+	}
+}
+
+// validateLibvirtFilesystem checks a virtiofs/9p host↔guest share. source
+// (host path) + target (guest mount tag) are both required; an empty one
+// silently drops the element at render time. A literal /home path is allowed
+// here (unlike <channel> sockets) — a filesystem share's whole purpose is to
+// expose a host directory, so the operator's chosen path is intentional.
+func validateLibvirtFilesystem(name string, i int, f LibvirtFilesystem, errs *ValidationError) {
+	if f.Source == "" {
+		errs.Add("vm %q: libvirt.devices.filesystems[%d]: source is required (host path to share)", name, i)
+	}
+	if f.Target == "" {
+		errs.Add("vm %q: libvirt.devices.filesystems[%d]: target is required (guest mount tag)", name, i)
+	}
+	switch f.Driver {
+	case "", "virtiofs", "9p", "path":
+		// OK
+	default:
+		errs.Add("vm %q: libvirt.devices.filesystems[%d].driver %q is unknown (want virtiofs, 9p, or path)", name, i, f.Driver)
+	}
+	switch f.AccessMode {
+	case "", "passthrough", "mapped", "squash":
+		// OK
+	default:
+		errs.Add("vm %q: libvirt.devices.filesystems[%d].accessmode %q is invalid (want passthrough, mapped, or squash)", name, i, f.AccessMode)
 	}
 }
 

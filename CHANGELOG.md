@@ -22,6 +22,65 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-05
 
+### 2026-05-29 — full ov-cachyos GPU workstation VM (autostart + virtiofs /workspace + full guest agent)
+
+Built on the 2026-05-28 GPU-passthrough stack: a persistent, autostarting
+CachyOS GPU **workstation** VM (`ov-cachyos-gpu`) with the full ~30-layer
+ov-cachyos dev stack, the NVIDIA RTX 4080 SUPER passed through, the operator's
+`/home/atrawog` shared in at `/workspace`, the full qemu-guest-agent surface, and
+a 1 TB lazily-allocated disk.
+
+**Main repo (generic machinery):**
+
+1. **VM autostart** — new `VmSpec.Autostart` field (`ov/vm_spec.go`).
+   `runVmSpecCreate` (`ov/vm_create_spec.go`) sets libvirt's domain autostart flag
+   via `setDomainAutostart` (`ov/vm_libvirt.go`, `DomainSetAutostart`) and, because
+   ov VMs run under `qemu:///session` (no portable user-level `virtqemud.socket` —
+   Arch ships none), calls `ensureBootAutostartPrereqs` (`ov/vm.go`): idempotent
+   `loginctl enable-linger <user>` + writes/enables a per-VM user oneshot
+   `ov-autostart-<domain>.service` that `virsh -c qemu:///session start`s the
+   domain at boot (`ov vm destroy` removes it via `removeAutostartUserUnit`). The
+   libvirt flag is a domain property (not XML), so it survives redefinition and is
+   re-asserted on every create/rebuild.
+   `ValidateVmSpec` rejects `autostart: true` with `backend: qemu`. Additive
+   optional field — deliberately NO schema-version bump (matches how
+   `backend`/`filesystems`/`channels` were added; bumping would force a needless
+   cross-repo re-stamp of every project file via `calver-schema`).
+2. **virtiofs robustness** — `ensureVirtiofsSharedMemory`
+   (`ov/libvirt_yaml_bridge.go`) auto-pairs `<memoryBacking><source type='memfd'/>
+   <access mode='shared'/>` whenever a `driver: virtiofs` filesystem is present and
+   no shared backing was declared (an explicit backing is honored). `mapFilesystem`
+   now renders the optional virtiofsd `binary:` knobs. `mapChannel` learned the
+   bare `type: unix` (no path) guest-agent idiom → a libvirt-managed unix socket
+   (`<source mode='bind'/>`); previously the structured `channels:` path silently
+   dropped the channel type for the agent. `validateLibvirtFilesystem` requires
+   source+target and checks driver/accessmode enums (a `/home` source is allowed —
+   a share's whole purpose is to expose a host dir).
+3. **1 TB lazy disk** — confirmed no code change needed: the bootstrap path's
+   `truncate` (sparse raw) + `qemu-img convert -O qcow2` (no `preallocation` →
+   default off) already yields a sparse qcow2 that grows on demand. `disk_size: 1T`
+   is a virtual ceiling.
+4. **New `workspace-mount` layer** (`layers/workspace-mount/`) — systemd
+   `workspace.mount` (virtiofs tag `workspace` → `/workspace`), enabled for boot,
+   skip-aware eval.
+5. **`qemu-guest-agent` layer** — already cross-distro (same package name on
+   Arch/Fedora); extended with `/etc/qemu/qemu-ga.conf` (explicit full-RPC surface)
+   + the standard fsfreeze hook dispatcher (`/etc/qemu/fsfreeze-hook` +
+   `fsfreeze-hook.d/`) for application-consistent snapshots.
+
+`virtiofsd` was already a `pkg/arch/PKGBUILD` dependency (R9 pre-satisfied).
+
+**CachyOS submodule (`image/cachyos`):**
+
+- `ov-cachyos-gpu` `kind: vm` — bootstrap/pacstrap UEFI, 12 vCPU / 64 GiB / 1 TB
+  sparse, `autostart: true`, NVIDIA hostdevs, guest-agent channel, virtiofs
+  `/home/atrawog → workspace`.
+- `ov-cachyos-gpu` `kind: deploy` (`target: vm`, NOT disposable) — the full
+  ov-cachyos layer stack + `nvidia-driver` + `qemu-guest-agent` + `workspace-mount`.
+- The disposable `eval-cachyos-gpu-vm` bed extended to exercise autostart +
+  virtiofs + guest-agent on a throwaway share — the R10 vehicle for the generic
+  machinery (the operator VM is non-disposable and uses the same proven code).
+
 ### 2026-05-28 — VFIO GPU passthrough + nested GPU eval stack (host → GPU-passthrough VM → CUDA container)
 
 Added end-to-end support for passing a physical NVIDIA GPU through to an

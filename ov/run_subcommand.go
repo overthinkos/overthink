@@ -86,7 +86,7 @@ func isBenignAlreadyRunning(stderr string) bool {
 
 // vmDisposableFromDeployments returns the disposability + lifecycle
 // tag for a kind:vm entity by searching the deployments tree for
-// entries with target:vm pointing at vmName via vm_source:. Disposable
+// entries with target:vm pointing at vmName via vm:. Disposable
 // is true iff any matching deployment sets it; lifecycle is the first
 // non-empty tag encountered (stable iteration via map access is not
 // guaranteed, but for the common one-deploy-per-vm case this is

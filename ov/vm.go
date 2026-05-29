@@ -163,6 +163,106 @@ func startLibvirtUserSession() {
 	}
 }
 
+// ensureBootAutostartPrereqs makes a qemu:///session domain actually start at
+// host boot. Two pieces are required:
+//
+//  1. Lingering — so the invoking user's systemd instance starts at boot
+//     (without a login session). Idempotent.
+//  2. A boot trigger that starts the domain. libvirt's own per-domain autostart
+//     flag (set by the caller) only fires once the SESSION virtqemud is running,
+//     and there is no portable user-level virtqemud.socket to socket-activate it
+//     at boot — Arch/CachyOS ships none. So instead of relying on a shipped
+//     socket unit, we generate a per-VM user systemd oneshot that runs
+//     `virsh -c qemu:///session start <domain>` at boot; virsh spawns the
+//     session daemon on demand and starts the (already-defined) domain. This is
+//     deterministic and cross-distro.
+//
+// Best-effort with actionable warnings — the libvirt autostart flag is already
+// set by the caller, so a failure here only loses the boot trigger.
+func ensureBootAutostartPrereqs(domainName string) {
+	username := currentUsername()
+	if username != "" && !lingerEnabled(username) {
+		if err := exec.Command("loginctl", "enable-linger", username).Run(); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: could not enable systemd linger for %s (%v); the VM will not autostart at boot until you run: loginctl enable-linger %s\n", username, err, username)
+		} else {
+			fmt.Fprintf(os.Stderr, "Enabled systemd linger for %s (user session persists across logout so the VM autostarts at boot)\n", username)
+		}
+	}
+	if err := writeAutostartUserUnit(domainName); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: could not install the boot-autostart user unit for %s (%v); the VM may not start at boot\n", domainName, err)
+	}
+}
+
+// autostartUnitName is the per-domain user unit that starts a session VM at boot.
+func autostartUnitName(domainName string) string {
+	return "ov-autostart-" + domainName + ".service"
+}
+
+// writeAutostartUserUnit writes + enables the per-VM boot-autostart user unit.
+func writeAutostartUserUnit(domainName string) error {
+	cfgDir, err := os.UserConfigDir()
+	if err != nil {
+		return err
+	}
+	unitDir := filepath.Join(cfgDir, "systemd", "user")
+	if err := os.MkdirAll(unitDir, 0o755); err != nil {
+		return err
+	}
+	virsh, err := exec.LookPath("virsh")
+	if err != nil || virsh == "" {
+		virsh = "virsh"
+	}
+	unit := fmt.Sprintf(`[Unit]
+Description=Overthink autostart for libvirt session domain %[1]s
+After=default.target
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c 'exec %[2]s -c qemu:///session start %[1]s 2>/dev/null || true'
+RemainAfterExit=yes
+
+[Install]
+WantedBy=default.target
+`, domainName, virsh)
+	unitName := autostartUnitName(domainName)
+	if err := os.WriteFile(filepath.Join(unitDir, unitName), []byte(unit), 0o644); err != nil {
+		return err
+	}
+	_ = exec.Command("systemctl", "--user", "daemon-reload").Run()
+	if err := exec.Command("systemctl", "--user", "enable", unitName).Run(); err != nil {
+		return fmt.Errorf("systemctl --user enable %s: %w", unitName, err)
+	}
+	fmt.Fprintf(os.Stderr, "Installed boot-autostart user unit %s (starts %s at boot under the lingering session)\n", unitName, domainName)
+	return nil
+}
+
+// removeAutostartUserUnit disables + deletes the per-domain boot-autostart user
+// unit, if present. Idempotent — silent when there is nothing to remove.
+func removeAutostartUserUnit(domainName string) {
+	unitName := autostartUnitName(domainName)
+	_ = exec.Command("systemctl", "--user", "disable", unitName).Run()
+	cfgDir, err := os.UserConfigDir()
+	if err != nil {
+		return
+	}
+	unitPath := filepath.Join(cfgDir, "systemd", "user", unitName)
+	if _, statErr := os.Stat(unitPath); statErr == nil {
+		_ = os.Remove(unitPath)
+		_ = exec.Command("systemctl", "--user", "daemon-reload").Run()
+		fmt.Fprintf(os.Stderr, "Removed boot-autostart user unit %s\n", unitName)
+	}
+}
+
+// lingerEnabled reports whether systemd user lingering is already on for
+// the given user, so we don't shell out to enable it redundantly.
+func lingerEnabled(username string) bool {
+	out, err := exec.Command("loginctl", "show-user", username, "--property=Linger").Output()
+	if err != nil {
+		return false
+	}
+	return strings.TrimSpace(string(out)) == "Linger=yes"
+}
+
 // qemuSystemBinary returns the architecture-appropriate QEMU binary name.
 func qemuSystemBinary() string {
 	switch runtime.GOARCH {
@@ -578,6 +678,10 @@ func (c *VmDestroyCmd) Run() error {
 		os.RemoveAll(stateDir)
 		fmt.Fprintf(os.Stderr, "Destroyed VM %s\n", name)
 	}
+
+	// Remove any boot-autostart user unit (the inverse of ensureBootAutostartPrereqs),
+	// so a destroyed VM doesn't leave a unit that fails at boot. Idempotent.
+	removeAutostartUserUnit(name)
 
 	// Remove the managed ssh-config Host stanza (the inverse of what
 	// `ov vm create` published). The libvirt/qemu domain `name` is

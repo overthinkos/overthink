@@ -29,6 +29,14 @@ type VmSpec struct {
 	// daemon" behavior was a no-op until this field was added).
 	Backend string `yaml:"backend,omitempty"`
 
+	// Autostart makes libvirt start this domain when the session daemon
+	// starts. For qemu:///session that only fires at host boot when the
+	// user's systemd instance is lingering, so VmCreateCmd also enables
+	// linger + the virtqemud user socket (see ensureBootAutostartPrereqs).
+	// Requires the libvirt backend — rejected with backend: qemu, which
+	// has no persistent daemon to honor it.
+	Autostart bool `yaml:"autostart,omitempty"`
+
 	// --- Network (structured; replaces old VmConfig.Network string tag) ---
 
 	Network *VmNetwork `yaml:"network,omitempty"`
@@ -101,7 +109,7 @@ type VmSnapshotDecl struct {
 // lives exclusively on DeploymentNode. The former `VmSpec.Disposable`
 // / `VmSpec.Lifecycle` fields were removed in the schema-v3 cutover —
 // the `ov rebuild <vm-name>` authorization reads from the
-// DeploymentNode(s) that reference this VM via `vm_source:` (see
+// DeploymentNode(s) that reference this VM via `vm:` (see
 // rebuild.go:vmDisposableFromDeployments). `ov migrate`
 // moves any residual flags on a user's on-disk configs to the
 // matching deployment entries.

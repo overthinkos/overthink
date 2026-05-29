@@ -103,6 +103,7 @@ func BuildLibvirtDomainXML(spec *VmSpec, rt VmRuntimeParams) (*libvirtxml.Domain
 	d.CPU = buildDomainCPU(spec, rt)
 	d.Clock = buildDomainClock(lv)
 	d.Devices = buildDomainDevices(spec, rt)
+	ensureVirtiofsSharedMemory(d)
 
 	if lv != nil && lv.SecLabel != nil {
 		d.SecLabel = []libvirtxml.DomainSecLabel{mapSecLabel(lv.SecLabel)}
@@ -400,6 +401,38 @@ func buildDomainClock(lv *LibvirtDomain) *libvirtxml.DomainClock {
 }
 
 // ---------------- MemoryBacking / MemTune / NUMATune / CPUTune ----------------
+
+// ensureVirtiofsSharedMemory makes any virtiofs share startable. virtiofs
+// shares the guest's RAM with the virtiofsd process, which requires
+// <memoryBacking><source type='memfd'/><access mode='shared'/></memoryBacking>;
+// without it libvirt refuses to start the domain with a cryptic error. We
+// auto-pair it for any virtiofs filesystem so authors never have to remember
+// the coupling. An explicitly-declared backing (e.g. hugepages) is honored —
+// only the missing source/access bits are filled in.
+func ensureVirtiofsSharedMemory(d *libvirtxml.Domain) {
+	if d == nil || d.Devices == nil {
+		return
+	}
+	hasVirtiofs := false
+	for _, fs := range d.Devices.Filesystems {
+		if fs.Driver != nil && fs.Driver.Type == "virtiofs" {
+			hasVirtiofs = true
+			break
+		}
+	}
+	if !hasVirtiofs {
+		return
+	}
+	if d.MemoryBacking == nil {
+		d.MemoryBacking = &libvirtxml.DomainMemoryBacking{}
+	}
+	if d.MemoryBacking.MemorySource == nil {
+		d.MemoryBacking.MemorySource = &libvirtxml.DomainMemorySource{Type: "memfd"}
+	}
+	if d.MemoryBacking.MemoryAccess == nil {
+		d.MemoryBacking.MemoryAccess = &libvirtxml.DomainMemoryAccess{Mode: "shared"}
+	}
+}
 
 func mapMemoryBacking(mb *LibvirtMemoryBacking) *libvirtxml.DomainMemoryBacking {
 	out := &libvirtxml.DomainMemoryBacking{}
@@ -974,9 +1007,10 @@ func mapInterface(iface LibvirtInterface) libvirtxml.DomainInterface {
 
 func mapChannel(ch LibvirtChannel, rt VmRuntimeParams) libvirtxml.DomainChannel {
 	out := libvirtxml.DomainChannel{}
-	if ch.Type == "spicevmc" {
+	switch {
+	case ch.Type == "spicevmc":
 		out.Source = &libvirtxml.DomainChardevSource{SpiceVMC: &libvirtxml.DomainChardevSourceSpiceVMC{}}
-	} else if ch.Source != "" || ch.Path != "" {
+	case ch.Source != "" || ch.Path != "":
 		path := ch.Source
 		if path == "" {
 			path = ch.Path
@@ -984,6 +1018,14 @@ func mapChannel(ch LibvirtChannel, rt VmRuntimeParams) libvirtxml.DomainChannel 
 		path = expandVmPathTemplate(path, rt)
 		out.Source = &libvirtxml.DomainChardevSource{
 			UNIX: &libvirtxml.DomainChardevSourceUNIX{Mode: "bind", Path: path},
+		}
+	case ch.Type == "unix":
+		// unix channel with no explicit path — the qemu-guest-agent idiom.
+		// Bind a libvirt-managed socket: with mode=bind and no path, libvirt
+		// auto-assigns the socket under the domain's per-VM lib dir, and the
+		// channel renders type="unix" from the UNIX source presence.
+		out.Source = &libvirtxml.DomainChardevSource{
+			UNIX: &libvirtxml.DomainChardevSourceUNIX{Mode: "bind"},
 		}
 	}
 	out.Target = &libvirtxml.DomainChannelTarget{VirtIO: &libvirtxml.DomainChannelTargetVirtIO{Name: ch.Name}}
@@ -1323,6 +1365,45 @@ func mapFilesystem(f LibvirtFilesystem) libvirtxml.DomainFilesystem {
 	}
 	if boolPtrTrue(f.Readonly) {
 		out.ReadOnly = &libvirtxml.DomainFilesystemReadOnly{}
+	}
+	if b := mapFilesystemBinary(f.Binary); b != nil {
+		out.Binary = b
+	}
+	return out
+}
+
+// mapFilesystemBinary renders the optional virtiofsd <binary> knobs. Useful
+// for rootless qemu:///session where the daemon path or sandbox mode may need
+// pinning (e.g. sandbox: chroot when the namespace sandbox is unavailable).
+// Returns nil when no knobs are set so the element is omitted.
+func mapFilesystemBinary(m map[string]string) *libvirtxml.DomainFilesystemBinary {
+	if len(m) == 0 {
+		return nil
+	}
+	out := &libvirtxml.DomainFilesystemBinary{}
+	set := false
+	if v := m["path"]; v != "" {
+		out.Path = v
+		set = true
+	}
+	if v := m["xattr"]; v != "" {
+		out.XAttr = v
+		set = true
+	}
+	if v := m["cache"]; v != "" {
+		out.Cache = &libvirtxml.DomainFilesystemBinaryCache{Mode: v}
+		set = true
+	}
+	if v := m["sandbox"]; v != "" {
+		out.Sandbox = &libvirtxml.DomainFilesystemBinarySandbox{Mode: v}
+		set = true
+	}
+	if v := m["thread_pool"]; v != "" {
+		out.ThreadPool = &libvirtxml.DomainFilesystemBinaryThreadPool{Size: uintFromStr(v)}
+		set = true
+	}
+	if !set {
+		return nil
 	}
 	return out
 }

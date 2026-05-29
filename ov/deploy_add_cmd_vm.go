@@ -351,7 +351,7 @@ func (r *sshReverseRunner) RunUser(script string) error {
 // in the legacy "vm:<name>[/<instance>]" form. This form is the
 // internal shape that deploy_add_cmd.go's dispatch rewrites before
 // calling runVM/runVmDel — schema-v3 entries with plain identifiers
-// and explicit `vm_source:` are rewritten upstream so this helper
+// and explicit `vm:` are rewritten upstream so this helper
 // always receives the prefixed form. The `instance` suffix is
 // preserved for future per-instance addressing but currently unused.
 func vmNameFromDeployName(deployName string) (string, error) {

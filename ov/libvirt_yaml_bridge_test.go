@@ -285,3 +285,126 @@ func TestRenderDomainXML_AutoSynthesizedDisk(t *testing.T) {
 		}
 	}
 }
+
+// TestRenderDomainXML_VirtiofsAutoSharedMemory verifies that declaring a
+// virtiofs filesystem auto-pairs the shared-memory backing the device
+// requires (memfd + access=shared) even when the entity declares none — so
+// authors can't ship a virtiofs VM that silently fails to start.
+func TestRenderDomainXML_VirtiofsAutoSharedMemory(t *testing.T) {
+	yamlStr := `
+devices:
+  filesystems:
+    - driver: virtiofs
+      accessmode: passthrough
+      source: /home/atrawog
+      target: workspace
+`
+	var lv LibvirtDomain
+	if err := yaml.Unmarshal([]byte(yamlStr), &lv); err != nil {
+		t.Fatalf("yaml unmarshal: %v", err)
+	}
+	spec := &VmSpec{Firmware: "bios", Libvirt: &lv}
+	rt := VmRuntimeParams{Name: "ov-ws", RamMB: 4096, Cpus: 2, HostArch: "x86_64"}
+	out, err := RenderDomainXML(spec, rt)
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	for _, frag := range []string{
+		`<filesystem type="mount" accessmode="passthrough">`,
+		`<driver type="virtiofs">`,
+		`<source dir="/home/atrawog">`,
+		`<target dir="workspace">`,
+		// Auto-injected shared memory backing (required by virtiofs).
+		`<memoryBacking>`,
+		`<source type="memfd">`,
+		`<access mode="shared">`,
+	} {
+		if !strings.Contains(out, frag) {
+			t.Errorf("missing fragment: %s\n--- output ---\n%s", frag, out)
+		}
+	}
+}
+
+// TestRenderDomainXML_VirtiofsHonorsExplicitBacking verifies the auto-pairing
+// does NOT duplicate or clobber an explicitly-declared memory backing — it
+// only fills the missing source/access bits.
+func TestRenderDomainXML_VirtiofsHonorsExplicitBacking(t *testing.T) {
+	yamlStr := `
+memory_backing:
+  access: shared
+  source: memfd
+devices:
+  filesystems:
+    - driver: virtiofs
+      source: /srv/data
+      target: data
+`
+	var lv LibvirtDomain
+	if err := yaml.Unmarshal([]byte(yamlStr), &lv); err != nil {
+		t.Fatalf("yaml unmarshal: %v", err)
+	}
+	spec := &VmSpec{Firmware: "bios", Libvirt: &lv}
+	rt := VmRuntimeParams{Name: "ov-data", RamMB: 2048, Cpus: 1, HostArch: "x86_64"}
+	out, err := RenderDomainXML(spec, rt)
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	if n := strings.Count(out, "<memoryBacking>"); n != 1 {
+		t.Errorf("expected exactly one <memoryBacking>, got %d\n%s", n, out)
+	}
+	for _, frag := range []string{`<source type="memfd">`, `<access mode="shared">`} {
+		if !strings.Contains(out, frag) {
+			t.Errorf("missing fragment: %s\n--- output ---\n%s", frag, out)
+		}
+	}
+}
+
+// TestRenderDomainXML_GuestAgentChannel verifies the structured
+// channels: [{type: unix, name: org.qemu.guest_agent.0}] idiom renders a
+// libvirt-managed unix channel (type="unix" + virtio target) — the path the
+// kind:vm entity uses to wire the guest agent.
+func TestRenderDomainXML_GuestAgentChannel(t *testing.T) {
+	yamlStr := `
+devices:
+  channels:
+    - type: unix
+      name: org.qemu.guest_agent.0
+`
+	var lv LibvirtDomain
+	if err := yaml.Unmarshal([]byte(yamlStr), &lv); err != nil {
+		t.Fatalf("yaml unmarshal: %v", err)
+	}
+	spec := &VmSpec{Firmware: "bios", Libvirt: &lv}
+	rt := VmRuntimeParams{Name: "ov-aga", RamMB: 2048, Cpus: 1, HostArch: "x86_64"}
+	out, err := RenderDomainXML(spec, rt)
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	for _, frag := range []string{
+		`<channel type="unix">`,
+		`<target type="virtio" name="org.qemu.guest_agent.0">`,
+	} {
+		if !strings.Contains(out, frag) {
+			t.Errorf("missing fragment: %s\n--- output ---\n%s", frag, out)
+		}
+	}
+}
+
+// TestVmSpecAutostartYAMLRoundTrip verifies the `autostart:` key parses into
+// VmSpec.Autostart (the field VmCreateCmd reads to set the libvirt flag).
+func TestVmSpecAutostartYAMLRoundTrip(t *testing.T) {
+	var on VmSpec
+	if err := yaml.Unmarshal([]byte("autostart: true\nbackend: libvirt\n"), &on); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if !on.Autostart {
+		t.Error("autostart: true did not parse into VmSpec.Autostart")
+	}
+	var off VmSpec
+	if err := yaml.Unmarshal([]byte("backend: libvirt\n"), &off); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if off.Autostart {
+		t.Error("absent autostart should default to false")
+	}
+}

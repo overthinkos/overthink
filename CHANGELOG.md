@@ -170,7 +170,7 @@ author-declared idmap, a non-passthrough accessmode, or a missing subordinate-ID
 range leave libvirt's default untouched.
 
 **R10-surfaced fixes (the iterative debugging the disposable bed caught).** The
-`eval-cachyos-gpu-vm` bed R10 caught three further real bugs, each RCA'd before
+`eval-cachyos-coder-vm` bed R10 caught seven further real bugs, each RCA'd before
 any fix (per R1) and re-verified to a clean `PASS (steps=11)`:
 
 - **`SSHExecutor.ResolveHome` `bash -c` → `bash -s`.** ResolveHome passed its
@@ -217,6 +217,26 @@ any fix (per R1) and re-verified to a clean `PASS (steps=11)`:
   `ShellInitFilePath(bash)` → `~/.bashrc` (sourced by interactive shells and by
   login via `~/.bash_profile`). The bed eval now asserts the AI CLI resolves on
   the interactive-login PATH (`bash -lic`), not merely that the block exists.
+- **Selkies web-UI copy hardcoded `/home/user` (stream `:3000` 404).** The selkies
+  layer's web-copy task did `cp /home/user/.local/share/selkies-build/web/* …` —
+  the container build-user home. On a host/VM deploy the deploy user is `cachy`, so
+  the copy was a silent no-op and `/usr/local/share/selkies/web` stayed empty;
+  traefik's fileserver served nothing → `curl https://127.0.0.1:3000/` returned 404.
+  Fixed: resolve the build-user home via `getent passwd 1000 | cut -d: -f6` (the cmd
+  runs as root, so `$HOME` would be `/root`), so it works identically in a container
+  build (uid 1000 = `user`) and on a cross-host deploy (uid 1000 = the deploy user).
+- **Deploy ran a layer's tasks BEFORE its builder (the deeper `:3000` cause).**
+  `BuildDeployPlan` emitted task steps before builder steps, but the image build
+  COPYs every pixi/npm/cargo builder's `/home` into the main stage UP FRONT (before
+  any layer install step). So on a cross-host deploy the selkies web-copy task ran
+  before `execHomeArtifactBuilder` extracted the pixi/`build.sh` output
+  (`~/.local/share/selkies-build`) into the guest home — the copy found nothing,
+  then the artifacts appeared a moment later. Fixed: emit builder steps before task
+  steps in `BuildDeployPlan`. A builder runs in an isolated stage/image and never
+  consumes the layer's own tasks, so builder-first is always safe; the OCI target
+  hoists builder stages regardless of step order, so the generated Containerfile is
+  byte-identical (verified by regenerate + diff: only time-derived builder tags
+  differed).
 
 ### 2026-05-29 — full ov-cachyos GPU workstation VM (autostart + virtiofs /workspace + full guest agent)
 

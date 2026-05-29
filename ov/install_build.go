@@ -89,13 +89,24 @@ func BuildDeployPlan(layer *Layer, img *ResolvedImage, hostCtx HostContext) (*In
 	pkgSteps := compileSystemPackageSteps(layer, img, hostCtx)
 	plan.Steps = append(plan.Steps, pkgSteps...)
 
-	// 2. Inline tasks (cmd / mkdir / copy / write / link / download / setcap).
-	taskSteps := compileTaskSteps(layer, img)
-	plan.Steps = append(plan.Steps, taskSteps...)
-
-	// 3. Multi-stage builders triggered by layer manifest files.
+	// 2. Multi-stage builders triggered by layer manifest files. Emitted
+	// BEFORE the layer's tasks so a task that consumes the builder's home
+	// artifacts (e.g. selkies' web-copy reads the pixi/build.sh output at
+	// ~/.local/share/selkies-build) finds them already in place. This
+	// matches the image build, where every builder stage's /home is COPYed
+	// into the main stage up front (before any layer install step) — the
+	// builder runs in an isolated stage/image and never depends on the
+	// layer's own tasks, so running it first is always safe. On a cross-host
+	// deploy the BuilderStep extracts the home artifacts into the guest home,
+	// which the subsequent TaskStep then relocates; the OCI target hoists the
+	// builder stages regardless of step order, so its Containerfile is
+	// unchanged.
 	builderSteps := compileBuilderSteps(layer, img, hostCtx)
 	plan.Steps = append(plan.Steps, builderSteps...)
+
+	// 3. Inline tasks (cmd / mkdir / copy / write / link / download / setcap).
+	taskSteps := compileTaskSteps(layer, img)
+	plan.Steps = append(plan.Steps, taskSteps...)
 
 	// 4. Services: both legacy `service:` (supervisord INI fragments) and
 	// `system_services:` (systemd unit names). After the Task 6 migration

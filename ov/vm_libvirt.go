@@ -152,6 +152,37 @@ func (c *libvirtConn) destroyDomain(dom libvirt.Domain) error {
 	return c.l.DomainDestroy(dom)
 }
 
+// gracefulStopTimeout bounds the wait for an ACPI/agent shutdown before
+// gracefulStopDomain falls back to a forced destroy.
+const gracefulStopTimeout = 60 * time.Second
+
+// gracefulStopDomain requests an ACPI/agent shutdown and waits (up to
+// gracefulStopTimeout) for the domain to power off, forcing a destroy only if
+// it will not stop in time. A graceful stop lets the guest flush its
+// filesystems — notably the in-guest podman OVERLAY STORE: a forced
+// DomainDestroy of a busy guest can leave a layer's diff dir half-written, so a
+// qcow2 disk REUSED across an `ov update` recreate would then carry a torn
+// image that fails `podman run` with `…/storage/overlay/<hash>: no such file`.
+// No-op when the domain is already stopped or absent.
+func (c *libvirtConn) gracefulStopDomain(dom libvirt.Domain) {
+	if state, err := c.domainState(dom); err != nil || state != domainStateRunning {
+		return
+	}
+	if err := c.shutdownDomain(dom); err != nil {
+		// ACPI/agent request rejected (no acpid, no guest agent) — force now.
+		_ = c.destroyDomain(dom)
+		return
+	}
+	deadline := time.Now().Add(gracefulStopTimeout)
+	for time.Now().Before(deadline) {
+		if state, err := c.domainState(dom); err != nil || state != domainStateRunning {
+			return // powered off (or domain gone)
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+	_ = c.destroyDomain(dom) // timed out — force
+}
+
 // undefineDomain removes the domain definition.
 // Note: removeStorage is handled by the caller (file deletion), not via libvirt flags,
 // since libvirt's storage wipe only works with managed storage pools.

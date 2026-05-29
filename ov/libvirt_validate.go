@@ -398,6 +398,40 @@ func ValidateLibvirtDomain(name string, spec *VmSpec, errs *ValidationError) {
 			validateLibvirtChannelPath(name, i, ch.Path, errs)
 			validateLibvirtChannelPath(name, i, ch.Source, errs)
 		}
+		for i, h := range lv.Devices.Hostdevs {
+			validateLibvirtHostdev(name, i, h, errs)
+		}
+	}
+}
+
+// validateLibvirtHostdev checks a PCI/USB/SCSI/mdev passthrough device.
+// For PCI (the GPU-passthrough case) the source address must carry hex
+// domain/bus/slot/function; a malformed address otherwise silently drops the
+// <source> at render time and libvirt fails to attach the device.
+func validateLibvirtHostdev(name string, i int, h LibvirtHostdev, errs *ValidationError) {
+	switch h.Type {
+	case "pci", "usb", "scsi", "mdev":
+		// OK
+	default:
+		errs.Add("vm %q: libvirt.devices.hostdevs[%d].type %q is unknown (want pci, usb, scsi, or mdev)", name, i, h.Type)
+	}
+	switch h.Managed {
+	case "", "yes", "no":
+		// OK
+	default:
+		errs.Add("vm %q: libvirt.devices.hostdevs[%d].managed %q is invalid (want \"yes\" or \"no\")", name, i, h.Managed)
+	}
+	if h.Type == "pci" {
+		for _, k := range []string{"domain", "bus", "slot", "function"} {
+			v := h.Source[k]
+			if v == "" {
+				errs.Add("vm %q: libvirt.devices.hostdevs[%d] (pci): source.%s is required (run `ov vm gpu list`)", name, i, k)
+				continue
+			}
+			if hexUintPtr(v) == nil {
+				errs.Add("vm %q: libvirt.devices.hostdevs[%d] (pci): source.%s %q must be a hex value (e.g. 0x01)", name, i, k, v)
+			}
+		}
 	}
 }
 

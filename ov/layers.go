@@ -297,6 +297,14 @@ type LayerYAML struct {
 	// deploy (every other target skips it). See android_spec.go ApkPackageSpec.
 	Apk []ApkPackageSpec `yaml:"apk,omitempty"`
 
+	// Reboot requests a reboot of the deploy target after this layer's
+	// steps (a trailing RebootStep). For kernel-module layers (e.g.
+	// nvidia-open-dkms) whose module only loads on a fresh boot with the
+	// conflicting in-tree driver blacklisted. Honored by target:vm (reboots
+	// the guest over SSH + waits for it to return); skipped at image build
+	// (OCI/pod) and on target:local (never reboots the operator host).
+	Reboot bool `yaml:"reboot,omitempty"`
+
 	// Replaces root.yml / user.yml — see Task type and docs/plan.
 	Vars map[string]string `yaml:"var,omitempty"` // layer-local variables for ${VAR} substitution in tasks
 	Task []Task            `yaml:"task,omitempty"` // ordered install operations
@@ -807,6 +815,7 @@ type Layer struct {
 	vars           map[string]string // layer-local variables (from layer.yml vars:)
 	tasks          []Task            // ordered install operations (from layer.yml tasks:)
 	apk            []ApkPackageSpec  // Android apps to install on a kind:android device (from layer.yml apk:)
+	reboot         bool              // reboot the deploy target after this layer (from layer.yml reboot:)
 	tests          []Check           // declarative checks (from layer.yml tests:)
 	artifacts      []LayerArtifact   // files to retrieve after setup (from layer.yml artifacts:)
 	shell          *ShellConfig      // shell-init declarations (from layer.yml shell:)

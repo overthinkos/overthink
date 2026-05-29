@@ -117,6 +117,15 @@ func BuildDeployPlan(layer *Layer, img *ResolvedImage, hostCtx HostContext) (*In
 		plan.Steps = append(plan.Steps, apkStep)
 	}
 
+	// 7. Reboot: layer.yml `reboot: true`. Emitted LAST so the reboot
+	// follows every install step of this layer. Only VmDeployTarget acts
+	// on it (reboots the guest + waits); OCI/pod/k8s skip it (no machine
+	// at build time); LocalDeployTarget skips + warns (never reboots the
+	// operator host unattended). See RebootStep.
+	if layer.reboot {
+		plan.Steps = append(plan.Steps, &RebootStep{LayerName: layer.Name})
+	}
+
 	return plan, nil
 }
 

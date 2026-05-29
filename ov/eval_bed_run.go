@@ -276,6 +276,37 @@ func runEvalBed(exe, name string, node DeploymentNode, opts bedRunOpts) (*bedRun
 		}
 	}
 
+	// transferNestedPodImagesToGuest builds each nested pod child's image on
+	// the host, then loads it into the VM guest's podman storage under a
+	// stable `localhost/ov-<childKey>:latest` ref (the convention the bed's
+	// CUDA eval check references). This is the host→guest delivery path for a
+	// locally-built image that isn't on a registry — the nested CUDA pod case.
+	// Safe to re-run after `ov update`: the transfer is VERIFIED — it skips
+	// only when the guest already holds the ref AND it is intact, and
+	// re-streams a present-but-torn image (TransferImageToGuest).
+	transferNestedPodImagesToGuest := func() (*bedRunResult, error) {
+		for _, childKey := range sortedNestedKeys(node.Nested) {
+			child := node.Nested[childKey]
+			if child == nil || child.Image == "" {
+				continue
+			}
+			switch child.Target {
+			case "", "pod", "container":
+				// pod child — needs its image inside the guest
+			default:
+				continue
+			}
+			if err := step("image-build-"+childKey, []string{"image", "build", child.Image}); err != nil {
+				return fail("build nested image %s (%s): %w", childKey, child.Image, err)
+			}
+			asRef := "localhost/ov-" + childKey + ":latest"
+			if err := step("cp-image-"+childKey, []string{"vm", "cp-image", vmTemplate, child.Image, "--as", asRef}); err != nil {
+				return fail("cp-image nested %s -> guest: %w", childKey, err)
+			}
+		}
+		return nil, nil
+	}
+
 	// Step 3: bring up the bed.
 	if isVM {
 		// VM beds need libvirt's user-session daemon for the eval probes
@@ -297,8 +328,21 @@ func runEvalBed(exe, name string, node DeploymentNode, opts bedRunOpts) (*bedRun
 		// 30-90s on cold boot; poll until ssh connects so deploy-add starts
 		// at a known-ready state. Best-effort: silent on timeout.
 		waitForVmSshReady(vmTemplate, 120*time.Second)
-		if err := step("deploy-add", []string{"deploy", "add", name, vmTemplate}); err != nil {
+		// --node-only: apply ONLY the VM node's own layers, NOT its nested
+		// children. A nested pod child (the cuda-pod naming the image to load
+		// into the guest) must not be auto-walked here — the deploy walker would
+		// mis-resolve it against the CLI ref (the vm template name). Its image is
+		// loaded by transferNestedPodImagesToGuest below; the in-guest container
+		// runs from a deploy-scope eval check.
+		if err := step("deploy-add", []string{"deploy", "add", name, vmTemplate, "--node-only"}); err != nil {
 			return fail("deploy add %s: %w", name, err)
+		}
+		// VM bed with nested pod children (the GPU CUDA-pod case): the layer
+		// deploy above made the guest a GPU container host (driver + toolkit,
+		// rebooted); now load each nested pod's image into the guest so the
+		// in-guest CUDA container can run from local storage.
+		if r, err := transferNestedPodImagesToGuest(); err != nil {
+			return r, err
 		}
 	} else {
 		// Pod beds → image ref; kind:local beds → local template ref.
@@ -381,17 +425,32 @@ func runEvalBed(exe, name string, node DeploymentNode, opts bedRunOpts) (*bedRun
 		if err := step("update", []string{"update", name}); err != nil {
 			return fail("update %s: %w", name, err)
 		}
-		// For a nested pod bed, the fresh rebuild discards the substrate's
-		// previously-deployed children (a rebuilt pod is empty), so the
-		// nested deploys + eval-live MUST re-run to actually re-verify the
-		// new functionality on the rebuild — otherwise the post-update state
-		// is unexercised. (A flat bed's `ov update` succeeding is itself the
-		// rebuild proof; its baked deploy-scope eval needs no re-deploy.)
-		if !isVM && !isLocal && len(node.Nested) > 0 {
-			waitForContainerReady(name, 30*time.Second)
-			for _, childKey := range sortedNestedKeys(node.Nested) {
-				if err := step("redeploy-"+childKey, []string{"deploy", "add", name + "." + childKey}); err != nil {
-					return fail("re-deploy nested child %s.%s (fresh rebuild): %w", name, childKey, err)
+		// For a nested bed, the fresh rebuild discards the substrate's
+		// previously-deployed children (a rebuilt pod / VM guest is empty), so
+		// the nested material MUST be re-applied and eval-live re-run to
+		// actually re-verify the new functionality on the rebuild — otherwise
+		// the post-update state is unexercised. (A flat bed's `ov update`
+		// succeeding is itself the rebuild proof; its baked deploy-scope eval
+		// needs no re-deploy.)
+		if !isLocal && len(node.Nested) > 0 {
+			if isVM {
+				// `ov update` recreated the libvirt domain (the qcow2 disk —
+				// and thus the applied guest layers — persists across the
+				// recreate). Re-assert the nested pod images: the VERIFIED
+				// transfer skips an intact image and re-streams a torn one (an
+				// abrupt domain destroy can leave the in-guest overlay store
+				// inconsistent), so the rebuild eval always runs against a
+				// known-good image.
+				waitForVmSshReady(vmTemplate, 120*time.Second)
+				if r, err := transferNestedPodImagesToGuest(); err != nil {
+					return r, err
+				}
+			} else {
+				waitForContainerReady(name, 30*time.Second)
+				for _, childKey := range sortedNestedKeys(node.Nested) {
+					if err := step("redeploy-"+childKey, []string{"deploy", "add", name + "." + childKey}); err != nil {
+						return fail("re-deploy nested child %s.%s (fresh rebuild): %w", name, childKey, err)
+					}
 				}
 			}
 			if err := stepReady("eval-live-rebuild", []string{"eval", "live", name}, bedEvalReadyDeadline, bedEvalReadyInterval); err != nil {

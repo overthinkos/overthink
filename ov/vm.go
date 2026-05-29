@@ -28,8 +28,10 @@ type VmCmd struct {
 	Build    VmBuildCmd    `cmd:"" help:"Build QCOW2/RAW disk image from bootc container"`
 	Clone    VmCloneCmd    `cmd:"" help:"Clone a new VM from another VM's snapshot (writes a kind:vm declaration)"`
 	Console  VmConsoleCmd  `cmd:"" help:"Attach to VM serial console"`
+	CpImage  VmCpImageCmd  `cmd:"" name:"cp-image" help:"Load a host image into a running VM guest's podman storage"`
 	Create   VmCreateCmd   `cmd:"" help:"Create a VM from a disk image"`
 	Destroy  VmDestroyCmd  `cmd:"" help:"Remove VM definition and optionally delete disk"`
+	Gpu      VmGpuCmd      `cmd:"" help:"Inspect host VFIO/GPU-passthrough readiness (status, list)"`
 	Import   VmImportCmd   `cmd:"" help:"Adopt an existing libvirt-managed VM into ov configuration"`
 	List     VmListCmd     `cmd:"" help:"List VMs and their status"`
 	Snapshot VmSnapshotCmd `cmd:"" help:"Manage VM snapshots (create, list, delete, revert, promote)"`
@@ -550,11 +552,9 @@ func (c *VmDestroyCmd) Run() error {
 			return fmt.Errorf("VM %s not found: %w", name, err)
 		}
 
-		// Stop if running
-		state, _ := conn.domainState(dom)
-		if state == domainStateRunning {
-			_ = conn.destroyDomain(dom)
-		}
+		// Stop if running — gracefully (flush the guest filesystem, incl. the
+		// in-guest podman overlay store), forcing only if it won't power off.
+		conn.gracefulStopDomain(dom)
 
 		// Undefine
 		if err := conn.undefineDomain(dom, c.Disk); err != nil {

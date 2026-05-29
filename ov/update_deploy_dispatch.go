@@ -429,9 +429,11 @@ func updateDirectMarkerImageRef(deployName, instance, newRef string) error {
 	return writeDirectDeployMarker(*m)
 }
 
-// updateVmDeploy delegates to VmUnifiedTarget which handles in-guest
-// layer re-apply via SSH for VM deploys (no destroy of the libvirt
-// domain — purely additive layer application against the running VM).
+// updateVmDeploy delegates to VmUnifiedTarget.Rebuild, which destroys +
+// recreates the libvirt domain and restarts it. WITHOUT --build the existing
+// qcow2 disk is re-attached (guest filesystem — installed layers, podman
+// storage — persists across the recreate); WITH --build (c.Build) the disk is
+// rebuilt from scratch (`ov vm build`) for a genuinely-clean guest.
 func (c *UpdateCmd) updateVmDeploy(deployName string) error {
 	target := &VmUnifiedTarget{NodeName: deployName}
 	if err := target.Rebuild(context.Background(), RebuildOpts{

@@ -290,6 +290,11 @@ func (t *VmDeployTarget) emitPlan(ctx context.Context, plan *InstallPlan, opts E
 			// guest. Skip (a `target: android` deploy handles them).
 			fmt.Fprintf(os.Stderr, "VmDeployTarget: skipping apk install (layer=%s) — apk installs only on a kind:android device\n", s.LayerName)
 
+		case *RebootStep:
+			if err := t.execReboot(ctx, s, opts); err != nil {
+				return rec, err
+			}
+
 		default:
 			fmt.Fprintf(os.Stderr, "VmDeployTarget: skipping unsupported step kind %T\n", step)
 		}
@@ -402,6 +407,50 @@ func (t *VmDeployTarget) execTask(ctx context.Context, s *TaskStep, plan *Instal
 		return t.Exec.RunSystem(ctx, cmd, opts)
 	}
 	return t.Exec.RunUser(ctx, cmd, opts)
+}
+
+// execReboot reboots the guest and waits for it to return. It is deterministic,
+// not a sleep-and-pray: it records the kernel boot_id before the reboot, then
+// polls until SSH answers AND the boot_id has changed — so the still-up sshd of
+// the pre-reboot system can't be mistaken for "back up". Needed by kernel-module
+// layers (e.g. nvidia-open-dkms) whose module only loads on a fresh boot.
+func (t *VmDeployTarget) execReboot(ctx context.Context, s *RebootStep, opts EmitOpts) error {
+	if opts.DryRun {
+		fmt.Fprintf(os.Stderr, "[dry-run] reboot guest %s (layer %s) and wait for it to return\n", t.VMName, s.LayerName)
+		return nil
+	}
+
+	oldBoot, _, _, _ := t.Exec.RunCapture(ctx, "cat /proc/sys/kernel/random/boot_id 2>/dev/null")
+	oldBoot = strings.TrimSpace(oldBoot)
+
+	fmt.Fprintf(os.Stderr, "vm:%s reboot: requested by layer %q — rebooting guest and waiting for it to return\n", t.VMName, s.LayerName)
+	// Fire the reboot in the background so the ssh session closes cleanly
+	// (a foreground `reboot` would race the connection teardown and yield an
+	// ambiguous exit code). The 1s delay is for clean session close, not a
+	// correctness-timing workaround.
+	_ = t.Exec.RunSystem(ctx, "(sleep 1; systemctl reboot || reboot) >/dev/null 2>&1 &\nexit 0", opts)
+
+	deadline := time.Now().Add(7 * time.Minute)
+	for time.Now().Before(deadline) {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(3 * time.Second):
+		}
+		out, _, _, err := t.Exec.RunCapture(ctx, "cat /proc/sys/kernel/random/boot_id 2>/dev/null")
+		if err != nil {
+			continue // guest still down or sshd not yet accepting
+		}
+		newBoot := strings.TrimSpace(out)
+		if newBoot == "" {
+			continue
+		}
+		if oldBoot == "" || newBoot != oldBoot {
+			fmt.Fprintf(os.Stderr, "vm:%s reboot: guest is back up (boot_id=%s)\n", t.VMName, newBoot)
+			return nil
+		}
+	}
+	return fmt.Errorf("vm:%s: guest did not return within 7m after reboot requested by layer %q", t.VMName, s.LayerName)
 }
 
 // execFile handles a FileStep — reads the file content from FileStep.Source

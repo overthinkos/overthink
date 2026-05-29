@@ -116,6 +116,11 @@ func runDoctorChecks(distro Distro) []CheckGroup {
 			Checks:   vmChecks(distro),
 		},
 		{
+			Name:     "VFIO / GPU passthrough",
+			Required: false,
+			Checks:   vfioChecks(),
+		},
+		{
 			Name:     "Encrypted Storage",
 			Required: false,
 			Checks: []CheckResult{
@@ -188,6 +193,80 @@ func vmChecks(distro Distro) []CheckResult {
 		checkBinary("virsh", distro),
 		checkBinary("ssh", distro),
 		checkLibvirtSocket(),
+	}
+	return checks
+}
+
+// vfioChecks reports host readiness for VFIO GPU passthrough, reusing the same
+// DetectVFIO probe that `ov vm gpu` consumes.
+func vfioChecks() []CheckResult {
+	rep := DetectVFIO()
+	var checks []CheckResult
+
+	if rep.IOMMUEnabled {
+		detail := "enabled"
+		if rep.IOMMUKind != "" {
+			detail = rep.IOMMUKind + " — enabled"
+		}
+		checks = append(checks, CheckResult{Name: "IOMMU", Status: CheckOK, Detail: detail})
+	} else {
+		checks = append(checks, CheckResult{
+			Name:        "IOMMU",
+			Status:      CheckWarning,
+			Detail:      "not enabled (/sys/kernel/iommu_groups empty)",
+			InstallHint: "add intel_iommu=on or amd_iommu=on plus iommu=pt to the kernel cmdline, then reboot",
+		})
+	}
+
+	if vfioPciAvailable() {
+		checks = append(checks, CheckResult{Name: "vfio-pci driver", Status: CheckOK})
+	} else {
+		checks = append(checks, CheckResult{
+			Name:        "vfio-pci driver",
+			Status:      CheckWarning,
+			Detail:      "not loaded",
+			InstallHint: "sudo modprobe vfio-pci (libvirt managed='yes' loads it on VM start)",
+		})
+	}
+
+	// memlock — VFIO pins all guest RAM; a rootless session needs a high limit.
+	if _, hard := MemlockLimitBytes(); memlockUnlimited(hard) {
+		checks = append(checks, CheckResult{Name: "memlock limit", Status: CheckOK, Detail: "unlimited"})
+	} else if hard >= 16<<30 {
+		checks = append(checks, CheckResult{Name: "memlock limit", Status: CheckOK, Detail: fmt.Sprintf("%d MiB", hard>>20)})
+	} else {
+		checks = append(checks, CheckResult{
+			Name:        "memlock limit",
+			Status:      CheckWarning,
+			Detail:      fmt.Sprintf("%d MiB — too low for GPU passthrough (needs >= guest RAM)", hard>>20),
+			InstallHint: "raise RLIMIT_MEMLOCK for the libvirt session (limits.d 'hard memlock unlimited' + re-login)",
+		})
+	}
+
+	if len(rep.GPUs) == 0 {
+		checks = append(checks, CheckResult{Name: "passthrough GPU", Status: CheckAbsent, Detail: "none detected"})
+		return checks
+	}
+	for _, g := range rep.GPUs {
+		grp := "no IOMMU group"
+		access := ""
+		if g.IOMMUGroup >= 0 {
+			grp = fmt.Sprintf("group %d", g.IOMMUGroup)
+			if VfioGroupAccessible(g.IOMMUGroup) {
+				access = ", /dev/vfio rw"
+			} else {
+				access = fmt.Sprintf(", /dev/vfio/%d NOT accessible (ov udev install)", g.IOMMUGroup)
+			}
+		}
+		drv := g.Driver
+		if drv == "" {
+			drv = "unbound"
+		}
+		checks = append(checks, CheckResult{
+			Name:   g.Addr,
+			Status: CheckInfo,
+			Detail: fmt.Sprintf("%s:%s %s — driver=%s, %s%s", trim0x(g.VendorID), trim0x(g.DeviceID), g.ClassLabel, drv, grp, access),
+		})
 	}
 	return checks
 }

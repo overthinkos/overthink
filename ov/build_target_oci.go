@@ -114,6 +114,10 @@ func (t *OCITarget) emitStep(step InstallStep, plan *InstallPlan) error {
 		// being built — there is no device at image-build time. Skip
 		// silently (the deploy-time AndroidDeployTarget executes it).
 		return nil
+	case *RebootStep:
+		// No machine to reboot during an image build — skip silently
+		// (a target:vm deploy of this layer performs the reboot).
+		return nil
 	}
 	return fmt.Errorf("OCITarget: unknown step kind %q", step.Kind())
 }

@@ -157,6 +157,7 @@ const (
 	StepKindShellSnippet    StepKind = "ShellSnippet"
 	StepKindRepoChange      StepKind = "RepoChange"
 	StepKindApkInstall      StepKind = "ApkInstall"
+	StepKindReboot          StepKind = "Reboot"
 )
 
 // ---------------------------------------------------------------------------
@@ -862,6 +863,28 @@ func (s *ApkInstallStep) RequiresGate() Gate { return GateNone }
 // `ov deploy del <android>` (runAndroidDel) re-resolves the deploy's apk
 // layers and `pm uninstall`s each package directly.
 func (s *ApkInstallStep) Reverse() []ReverseOp { return nil }
+
+// RebootStep requests a reboot of the deploy target after this layer's steps.
+// It is emitted (last in the layer) when a layer declares `reboot: true` —
+// the canonical case is a kernel-module layer (e.g. nvidia-open-dkms) whose
+// module only loads on a fresh boot with nouveau blacklisted.
+//
+// Only targets that OWN a rebootable machine act on it: VmDeployTarget reboots
+// the guest over SSH and waits for it to return. OCITarget / PodDeployTarget /
+// K8sDeployTarget have no machine to reboot at build time and skip it;
+// LocalDeployTarget refuses to reboot the operator's host unattended (skip +
+// warn). Mirrors the ApkInstallStep "only one target executes" pattern.
+type RebootStep struct {
+	LayerName string
+}
+
+func (s *RebootStep) Kind() StepKind     { return StepKindReboot }
+func (s *RebootStep) Scope() Scope       { return ScopeSystem }
+func (s *RebootStep) Venue() Venue       { return VenueHostNative }
+func (s *RebootStep) RequiresGate() Gate { return GateNone }
+
+// Reverse is empty — a reboot is not a persistent artifact to undo.
+func (s *RebootStep) Reverse() []ReverseOp { return nil }
 
 // PackageIDs returns the installable package ids (committed-APK entries with
 // no `package:` id are excluded — they can't be uninstalled by id).

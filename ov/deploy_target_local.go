@@ -262,6 +262,14 @@ func (t *LocalDeployTarget) execStep(step InstallStep, plan *InstallPlan, opts E
 		t.noteStep(rec, StepKindApkInstall, s.Scope(), VenueSkip,
 			fmt.Sprintf("layer=%s skipped: apk installs only on a kind:android device", s.LayerName), start)
 		return nil
+	case *RebootStep:
+		// Never reboot the operator's host unattended. Record a skip and
+		// warn — a host that needs a kernel module reloaded should be
+		// rebooted by the operator, not by a deploy.
+		fmt.Fprintf(os.Stderr, "warning: layer %q requests a reboot; skipping on target:local (reboot the host yourself if a new kernel module must load)\n", s.LayerName)
+		t.noteStep(rec, StepKindReboot, s.Scope(), VenueSkip,
+			fmt.Sprintf("layer=%s skipped: reboot not performed on target:local", s.LayerName), start)
+		return nil
 	}
 	return fmt.Errorf("LocalDeployTarget: unknown step kind %T", step)
 }

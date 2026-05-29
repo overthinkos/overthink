@@ -275,9 +275,62 @@ func buildDomainFeatures(lv *LibvirtDomain) *libvirtxml.DomainFeatureList {
 	if boolPtrTrue(f.PMU) {
 		fl.PMU = &libvirtxml.DomainFeatureState{State: "on"}
 	}
-	// HyperV / KVM / IBS: not mapped in the bridge. Users set them
-	// via xml_passthrough if needed.
+	if kvm := mapKVMFeature(f.KVM); kvm != nil {
+		fl.KVM = kvm
+	}
+	if hv := mapHyperVFeature(f.HyperV); hv != nil {
+		fl.HyperV = hv
+	}
+	if f.IBS != "" {
+		fl.IBS = &libvirtxml.DomainFeatureIBS{Value: f.IBS}
+	}
 	return fl
+}
+
+// stateFeature renders a `<elem state='on|off'/>` feature, nil when unset.
+func stateFeature(s string) *libvirtxml.DomainFeatureState {
+	if s == "" {
+		return nil
+	}
+	return &libvirtxml.DomainFeatureState{State: s}
+}
+
+// mapKVMFeature renders <kvm>...</kvm>. The load-bearing field for NVIDIA
+// consumer-GPU passthrough is <hidden state='on'/> (the classic Code-43
+// workaround); the rest are para-virt perf knobs.
+func mapKVMFeature(k *LibvirtKVM) *libvirtxml.DomainFeatureKVM {
+	if k == nil {
+		return nil
+	}
+	kvm := &libvirtxml.DomainFeatureKVM{
+		Hidden:        stateFeature(k.Hidden),
+		HintDedicated: stateFeature(k.HintDedicated),
+		PollControl:   stateFeature(k.PollControl),
+		PVIPI:         stateFeature(k.PVIPI),
+	}
+	if k.DirtyRingSize > 0 {
+		kvm.DirtyRing = &libvirtxml.DomainFeatureKVMDirtyRing{
+			DomainFeatureState: libvirtxml.DomainFeatureState{State: "on"},
+			Size:               uint(k.DirtyRingSize),
+		}
+	}
+	if *kvm == (libvirtxml.DomainFeatureKVM{}) {
+		return nil
+	}
+	return kvm
+}
+
+// mapHyperVFeature renders <hyperv>. Only vendor_id is mapped here — the
+// Code-43-relevant piece (`<vendor_id state='on' value='...'/>` hides the KVM
+// signature from the NVIDIA driver). Other HyperV enlightenments (Windows-guest
+// perf knobs, irrelevant to a Linux GPU guest) stay available via libvirt.snippets.
+func mapHyperVFeature(h *LibvirtHyperV) *libvirtxml.DomainFeatureHyperV {
+	if h == nil || h.VendorID == nil {
+		return nil
+	}
+	vid := &libvirtxml.DomainFeatureHyperVVendorId{Value: h.VendorID.Value}
+	vid.State = h.VendorID.State
+	return &libvirtxml.DomainFeatureHyperV{VendorId: vid}
 }
 
 // ---------------- CPU ----------------
@@ -1176,6 +1229,7 @@ func mapHostdev(h LibvirtHostdev) *libvirtxml.DomainHostdev {
 		}
 		out.SubsysPCI = &libvirtxml.DomainHostdevSubsysPCI{
 			Source: &libvirtxml.DomainHostdevSubsysPCISource{Address: addr},
+			Driver: mapHostdevPCIDriver(h.Driver),
 		}
 	case "usb":
 		sub := &libvirtxml.DomainHostdevSubsysUSB{
@@ -1195,7 +1249,36 @@ func mapHostdev(h LibvirtHostdev) *libvirtxml.DomainHostdev {
 	default:
 		return nil
 	}
+	// ROM passthrough applies regardless of subsystem type (commonly
+	// `<rom bar='off'/>` for a secondary GPU, or `file=` for a dumped VBIOS).
+	out.ROM = mapHostdevROM(h.ROM)
 	return out
+}
+
+// mapHostdevROM renders the optional <rom .../> element from the YAML rom map
+// (keys: bar | file | enabled). Returns nil when no rom config is present.
+func mapHostdevROM(rom map[string]string) *libvirtxml.DomainROM {
+	if len(rom) == 0 {
+		return nil
+	}
+	out := &libvirtxml.DomainROM{Bar: rom["bar"], Enabled: rom["enabled"]}
+	if f, ok := rom["file"]; ok {
+		out.File = &f
+	}
+	return out
+}
+
+// mapHostdevPCIDriver renders the optional <driver .../> element on a PCI
+// hostdev (keys: name | model | iommufd). `name: vfio` is the usual value.
+func mapHostdevPCIDriver(drv map[string]string) *libvirtxml.DomainHostdevSubsysPCIDriver {
+	if len(drv) == 0 {
+		return nil
+	}
+	return &libvirtxml.DomainHostdevSubsysPCIDriver{
+		Name:    drv["name"],
+		Model:   drv["model"],
+		IommuFD: drv["iommufd"],
+	}
 }
 
 func pciAddress(src map[string]string) *libvirtxml.DomainAddressPCI {

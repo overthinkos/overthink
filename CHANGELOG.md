@@ -22,6 +22,85 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-05
 
+### 2026-05-28 — VFIO GPU passthrough + nested GPU eval stack (host → GPU-passthrough VM → CUDA container)
+
+Added end-to-end support for passing a physical NVIDIA GPU through to an
+`ov`-managed VM and running a CUDA container inside it, plus the disposable
+R10 bed that proves the whole nested stack on real hardware (verified live on
+an RTX 4080 SUPER bound to vfio-pci, host on the AMD iGPU).
+
+**Main repo (generic machinery):**
+
+1. **Host VFIO/IOMMU detection** — `DetectVFIO` in `ov/devices.go` (pure
+   `scanVFIO(sysfsRoot, cmdlinePath)`, testable like `DetectGPU`): parses
+   `/proc/cmdline` for the IOMMU flag, enumerates `/sys/bus/pci/devices`
+   GPU+audio classes, and resolves each device's driver + IOMMU group +
+   group members. Surfaced two ways that share the one detector: a new
+   `ov vm gpu` verb (`status` reports IOMMU readiness; `list` prints a
+   ready-to-paste `libvirt.devices.hostdevs:` block with `managed: "yes"`
+   covering the whole IOMMU group) and an informational `ov doctor`
+   "VFIO / GPU passthrough" check group.
+2. **libvirt passthrough rendering completed** — `mapHostdev` now emits the
+   previously-dropped `ROM` (`<rom bar=…/file=>`) and PCI `Driver`
+   (`<driver name='vfio'/>`) elements; `buildDomainFeatures` now emits
+   `KVM.Hidden` (`<kvm><hidden state='on'/>`) and `HyperV.VendorID`
+   (`<hyperv><vendor_id …/>`) — the NVIDIA Code-43 workarounds that were
+   defined-but-unwired (the "not mapped … via xml_passthrough" comment is
+   gone). Hostdev validation (type/managed enum, hex PCI source fields)
+   added to `ValidateLibvirtDomain`.
+3. **`RebootStep` IR + `reboot:` layer field** — a layer declaring
+   `reboot: true` emits a trailing `RebootStep`. Only `VmDeployTarget`
+   acts on it (reboots the guest over SSH and waits for it to return —
+   deterministically, via a boot_id-change poll, not a sleep); OCI / pod /
+   k8s skip it (no machine at build time); `LocalDeployTarget` skips +
+   warns (never reboots the operator host unattended). This is what lets a
+   kernel-module layer load its module on a clean boot.
+4. **Host→guest image transfer** — `ov vm cp-image <vm> <ref> [--as <tag>]`
+   + the reusable `TransferImageToGuest` helper stream a locally-built image
+   into a VM guest's podman (`podman save | scp | podman load`), idempotent
+   and offline (no registry round-trip). The `kind: eval` VM-bed runner now
+   builds each nested pod child's image on the host and loads it into the
+   guest (and re-loads + re-evaluates after the fresh `ov update`), so a
+   nested pod's locally-built image is available inside the VM.
+5. **Rootless-VFIO host-prereq detection** — the live test surfaced two host
+   prerequisites that fail cryptically otherwise, so `ov vm gpu status` and the
+   `ov doctor` "VFIO / GPU passthrough" group now report them: (a) the
+   **RLIMIT_MEMLOCK** limit (VFIO pins all guest RAM, so rootless
+   `qemu:///session` needs a limit ≥ guest RAM; the 8 MiB session default is
+   too low and yields "cannot limit locked memory"), and (b) **/dev/vfio/<group>
+   accessibility** (root-only by default). `ov udev` now also installs a
+   `SUBSYSTEM=="vfio", GROUP="kvm"` rule so `ov udev install` grants persistent
+   group-node access for passthrough.
+
+**CachyOS submodule (`image/cachyos`, the consumer):**
+
+- `cuda-smoke` layer + `cuda-eval` image (`base: cachyos.nvidia` + a baked,
+  nvcc-compiled vector-add that prints `CUDA-OK`; built with `g++-15` since
+  CUDA 13.2's nvcc rejects gcc 16). This is the CachyOS CUDA image under test.
+- `podman` layer (rootful podman engine for the guest — minimal, distinct from
+  `container-nesting`'s rootless-nesting config).
+- `nvidia-driver` layer (vendored locally): `nvidia-open-dkms` + matched
+  `linux`/`linux-headers` + the dkms toolchain (built against the guest kernel,
+  no prebuilt-vs-running skew), blacklists nouveau, regenerates the initramfs,
+  `reboot: true`.
+- `cachyos-gpu-vm` VM — an **Arch cloud_image** substrate (the proven path
+  `eval-k3s-vm` uses; ships working pacman + Arch repos for the GPU stack),
+  `firmware: bios` (the Arch cloud image won't boot under UEFI/OVMF — stale
+  BOOTX64.EFI), `backend: libvirt`. Committed **portable** with NO hostdev
+  block (a PCI address is host-specific; `ov vm gpu list` generates it to add
+  locally for a live run). The CachyOS *bootstrap* substrate was ruled out: on
+  a rootless host pacstrap can't mount sysfs and the resulting guest ships no
+  `/etc/pacman.conf`, so it can't be a runtime package host. **Headless compute
+  passthrough needs `rom: {bar: off}` on the GPU hostdev** — otherwise SeaBIOS
+  hangs executing the GPU's VGA option ROM and the guest never boots.
+- `eval-cachyos-gpu-vm` `kind: eval` bed: applies `podman` + `nvidia` +
+  `nvidia-driver` to the guest, loads `cuda-eval` in as
+  `localhost/ov-cuda-pod:latest`, and its deploy-scope checks run the CUDA
+  container in the guest (`sudo podman run --device nvidia.com/gpu=all … →
+  CUDA-OK`). Every GPU/CUDA check gates on an active in-guest driver and passes
+  with an N/A note when no GPU is present, so the bed stays host-portable (same
+  skip-when-no-device pattern as the `ov-cachyos` nvidia-ctk/CDI probes).
+
 ### 2026-05-26 (later) — `ov update` disposable enforcement + deploy.yml round-trip preservation + cross-deploy quadlet-refresh Image= preservation
 
 Follow-up cutover to the morning's sidecar-sweep + pixi-pytest fixes.

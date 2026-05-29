@@ -179,6 +179,21 @@ cd /tmp
 curl -sL "https://github.com/linuxserver/pixelflux/archive/${PFX_SHA}.tar.gz" | tar xzf -
 cd "pixelflux-${PFX_SHA}"
 
+# NVENC (Patch 2a/2b) is stubbed UNLESS the builder ships CUDA + the NVENC
+# headers. The cuda-arch-builder (used by the GPU VM / cachyos-coder path) has
+# nvcc + ffnvcodec's nvEncodeAPI.h, so pixelflux builds the real nvenc-sys
+# encoder there; the stock arch/fedora builder has no CUDA, so the stub keeps
+# the container selkies-desktop build green. One build.sh, capability-driven
+# (R3) — no per-image fork.
+PIXELFLUX_NVENC=0
+if command -v nvcc >/dev/null 2>&1 || [ -e /opt/cuda/bin/nvcc ] || { [ -n "${CUDA_HOME:-}" ] && [ -d "${CUDA_HOME}/include" ]; }; then
+    if [ -e /usr/include/ffnvcodec/nvEncodeAPI.h ] || [ -e /usr/include/nvEncodeAPI.h ] || [ -e /opt/cuda/include/nvEncodeAPI.h ]; then
+        PIXELFLUX_NVENC=1
+    fi
+fi
+if [ "$PIXELFLUX_NVENC" = "1" ]; then
+    echo "pixelflux: CUDA + NVENC headers detected — building real NvencEncoder (GPU encode)"
+else
 # Patch 2a: delete the [dependencies.nvenc-sys] block from Cargo.toml
 python3 -c "
 import pathlib
@@ -244,6 +259,7 @@ impl NvencEncoder {
 }
 NVENC_STUB_EOF
 echo "Stubbed pixelflux_wayland/src/encoders/nvenc.rs (NvencEncoder::new always Err)"
+fi
 
 # Patch 2b.5: disable the C++ X11 screen_capture_module build. pixelflux's
 # setup.py BuildCtypesExt.run() calls build_custom_cpp() which invokes g++

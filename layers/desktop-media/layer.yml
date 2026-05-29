@@ -1,0 +1,44 @@
+layer:
+    version: 2026.149.1210
+    name: desktop-media
+    description: |
+        Desktop media codecs + ALSA bridge for a full KDE workstation: the
+        GStreamer plugin set (so Plasma/Phonon/Haruna play everything), VLC
+        plugins, DVD CSS, thumbnailer support libs (libgsf/libopenraw/poppler),
+        and the ALSA<->PipeWire bridge + pavucontrol. Mirrors the CachyOS
+        netinstall "desktop integration" + "audio" subgroups (host-firmware
+        entries like alsa-firmware/sof-firmware are excluded — no physical audio
+        hardware in the VM, the streamed/null sinks come from PipeWire).
+    require:
+        - pipewire
+    distro:
+        arch:
+            package:
+                # GStreamer / codecs
+                - gst-libav
+                - gst-plugin-pipewire
+                - gst-plugins-bad
+                - gst-plugins-ugly
+                - gst-plugin-va
+                - vlc-plugins-all
+                - libdvdcss
+                # Thumbnailer / document libs
+                - ffmpegthumbnailer
+                - libgsf
+                - libopenraw
+                - poppler-glib
+                # ALSA bridge + mixer UI
+                - alsa-utils
+                - alsa-plugins
+                - pipewire-alsa
+                - pavucontrol
+    eval:
+        - id: gst-libav-installed
+          package: gst-libav
+          installed: true
+        - id: pavucontrol-binary
+          file: /usr/bin/pavucontrol
+          exists: true
+        - id: pipewire-alsa-installed
+          package: pipewire-alsa
+          installed: true

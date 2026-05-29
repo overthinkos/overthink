@@ -1,0 +1,17 @@
+layer:
+    version: 2026.149.1210
+    name: nvenc-headers
+    description: |
+        NVIDIA Video Codec SDK headers (ffnvcodec / nvEncodeAPI.h) for building
+        NVENC-capable encoders. Build-time only — used by the cuda-arch-builder so
+        pixelflux's nvenc-sys crate can compile the real NvencEncoder. Kept out of
+        the shared cuda layer so the many CUDA runtime images (comfyui, jupyter-ml,
+        immich-ml, …) don't cascade-rebuild for a build-only header.
+    distro:
+        arch:
+            package:
+                - ffnvcodec-headers
+    eval:
+        - id: nvencodeapi-header
+          file: /usr/include/ffnvcodec/nvEncodeAPI.h
+          exists: true

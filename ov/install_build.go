@@ -764,9 +764,19 @@ func compileServiceSteps(layer *Layer, img *ResolvedImage, hostCtx HostContext) 
 			Layer:         layer.Name,
 			SystemUnitDir: "/etc/systemd/system",
 		}
-		if homeDir, _ := os.UserHomeDir(); homeDir != "" {
-			renderCtx.Home = homeDir
-			renderCtx.UserUnitDir = homeDir + "/.config/systemd/user"
+		// Service home, like shell-snippet home, must be the DESTINATION user's
+		// home — not the build host's. For host/vm deploys defer it via the
+		// {{.Home}} token (InstallPlan.ResolveHome substitutes the real guest /
+		// host home at emit); for a container-systemd build the image's resolved
+		// Home is the runtime home. (os.UserHomeDir() — the operator's home — was
+		// the service-side instance of the VM $HOME bug.)
+		svcHome := img.Home
+		if hostCtx.Target == "host" || hostCtx.Target == "vm" {
+			svcHome = HomeToken
+		}
+		if svcHome != "" {
+			renderCtx.Home = svcHome
+			renderCtx.UserUnitDir = svcHome + "/.config/systemd/user"
 		}
 		return true
 	}

@@ -1,0 +1,70 @@
+layer:
+    version: 2026.149.1210
+    name: kde-selkies
+    description: |
+        A KDE Plasma edition of the selkies streaming desktop: reuses the selkies
+        WebRTC transport (pixelflux virtual compositor + capture server + traefik
+        web UI on :3000) but runs a full KDE Plasma Wayland session NESTED in
+        pixelflux's wayland-1 (via kde-selkies-session) instead of labwc — so the
+        browser stream shows Plasma, GPU-encoded with NVENC on the passthrough
+        RTX 4080.
+
+        Composes selkies (transport) + kde-desktop (Plasma) + pipewire (audio).
+        The selkies service exec uses supervisord's %(ENV_HOME)s syntax; on this
+        systemd VM the ov service renderer now resolves that against the guest
+        home (see service_render.go) so the units' ExecStart are valid. NVENC
+        comes from the pixelflux build un-stubbed against the cuda-arch-builder
+        (see layers/selkies/build.sh + the cuda-arch-builder image); pixelflux
+        auto-detects NVENC at runtime and falls back to VA-API/CPU if absent.
+
+        This streamed Plasma is the pixelflux virtual-framebuffer session —
+        intentionally distinct from the SDDM/Plasma DRM session that a physical
+        monitor + Looking Glass display on the real GPU output.
+    require:
+        - selkies
+        - kde-desktop
+        - pipewire
+    env:
+        # Prefer GPU NVENC; pixelflux falls back to VA-API/CPU when unavailable.
+        SELKIES_ENCODER: "nvh264enc"
+        SELKIES_FRAMERATE: "60"
+    task:
+        - mkdir: "${HOME}/.local/bin"
+          user: "${USER}"
+        - copy: kde-selkies-session
+          to: "${HOME}/.local/bin/kde-selkies-session"
+          mode: "0755"
+          user: "${USER}"
+    service:
+        # Nested KDE Plasma session, started after pixelflux (selkies, priority 8)
+        # has created wayland-1. The wrapper polls for the socket.
+        - name: kde-selkies-session
+          exec: "${HOME}/.local/bin/kde-selkies-session"
+          env:
+            XDG_RUNTIME_DIR: /tmp
+          restart: always
+          priority: 12
+          start_sec: 3
+          enable: true
+          scope: system
+          after: [graphical-session.target]
+    eval:
+        - id: kde-selkies-session-wrapper
+          file: ${HOME}/.local/bin/kde-selkies-session
+          exists: true
+          mode: "0755"
+        - id: startplasma-wayland-binary
+          file: /usr/bin/startplasma-wayland
+          exists: true
+        # GPU NVENC GStreamer element present (proves the pixelflux/gst NVENC
+        # path is built). Deploy-scope (needs the driver).
+        - id: nvenc-encoder-available
+          scope: deploy
+          command: gst-inspect-1.0 nvh264enc
+          exit_status: 0
+        - id: kde-selkies-stream-https
+          scope: deploy
+          http: https://127.0.0.1:${HOST_PORT:3000}/
+          status: 200
+          allow_insecure: true
+          timeout: 10s

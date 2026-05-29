@@ -1,0 +1,33 @@
+layer:
+    version: 2026.149.1210
+    name: fonts-extended
+    description: |
+        The full CachyOS desktop font set (the netinstall "fonts" subgroup) on top
+        of the lean desktop-fonts layer: Noto (incl. CJK + emoji), Cantarell,
+        DejaVu, Bitstream Vera, Open Sans, Meslo Nerd, and the awesome-terminal
+        glyphs. Separate from desktop-fonts so the lightweight streaming-desktop
+        images don't pull the heavy CJK set; a full KDE workstation wants it.
+    require:
+        - desktop-fonts
+    distro:
+        arch:
+            package:
+                - noto-fonts
+                - noto-fonts-cjk
+                - noto-fonts-emoji
+                - cantarell-fonts
+                - ttf-bitstream-vera
+                - ttf-dejavu
+                - ttf-opensans
+                - ttf-meslo-nerd
+                - awesome-terminal-fonts
+    eval:
+        - id: noto-fonts-installed
+          package: noto-fonts
+          installed: true
+        - id: noto-cjk-installed
+          package: noto-fonts-cjk
+          installed: true
+        - id: cantarell-installed
+          package: cantarell-fonts
+          installed: true

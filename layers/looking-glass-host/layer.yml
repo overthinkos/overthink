@@ -1,0 +1,79 @@
+layer:
+    version: 2026.149.1210
+    name: looking-glass-host
+    description: |
+        Looking Glass GUEST side for a GPU-passthrough VM: the Linux "host"
+        capture app (looking-glass-host-git — pushes the guest framebuffer into
+        the IVSHMEM device) + the kvmfr kernel module (exposes the libvirt
+        <shmem name='looking-glass'> PCI device as /dev/kvmfr0) so the operator's
+        CachyOS host can view the SAME KDE session in looking-glass-client with
+        near-zero latency. (The client is operator-side, installed on the host,
+        not in this layer.)
+
+        Requires the libvirt domain to carry an IVSHMEM <shmem> device + a dummy
+        <video> scanout (declared on the cachyos-coder vm entity) so the GPU has
+        a framebuffer to capture with no physical monitor attached.
+
+        kvmfr is a DKMS module → pulls the matching linux-cachyos-headers + dkms;
+        built in-guest at deploy time against the running cachyos kernel. The
+        Wayland-session capture path is newer in Looking Glass B7 and is validated
+        live (R10) — falls back to an X11 session if Wayland capture is
+        unavailable. Only meaningful on a VM guest with the GPU + IVSHMEM.
+    require:
+        - build-toolchain
+        - yay
+    distro:
+        arch:
+            package:
+                # kvmfr DKMS needs headers matching the guest cachyos kernel.
+                - linux-cachyos-headers
+                - dkms
+            aur:
+                package:
+                    - looking-glass-host-git
+                    - looking-glass-module-dkms-git
+    task:
+        # Load kvmfr at boot with a static region sized for up to 4K (64 MiB),
+        # matching the <shmem> size on the vm entity.
+        - write: /etc/modprobe.d/ov-kvmfr.conf
+          user: root
+          mode: "0644"
+          content: |
+            options kvmfr static_size_mb=64
+        - write: /etc/modules-load.d/ov-kvmfr.conf
+          user: root
+          mode: "0644"
+          content: |
+            kvmfr
+        # /dev/kvmfr0 readable/writable by the desktop user (kvm group).
+        - write: /etc/udev/rules.d/99-ov-kvmfr.rules
+          user: root
+          mode: "0644"
+          content: |
+            SUBSYSTEM=="kvmfr", OWNER="root", GROUP="kvm", MODE="0660"
+        - write: /etc/tmpfiles.d/ov-looking-glass.conf
+          user: root
+          mode: "0644"
+          content: |
+            # Fallback /dev/shm region perms when ivshmem-plain is used without kvmfr.
+            f /dev/shm/looking-glass 0660 root kvm -
+    service:
+        # Capture the active KDE session and push frames to the IVSHMEM device.
+        # User-scope: it must run inside the graphical session (portal/Wayland
+        # access). Enabled; starts with the KDE session.
+        - name: looking-glass-host
+          exec: /usr/bin/looking-glass-host
+          restart: always
+          scope: user
+          enable: true
+          after: [graphical-session.target]
+    eval:
+        - id: kvmfr-modprobe-conf
+          file: /etc/modprobe.d/ov-kvmfr.conf
+          contains: "kvmfr"
+        - id: looking-glass-host-binary
+          file: /usr/bin/looking-glass-host
+          exists: true
+        - id: kvmfr-modules-load
+          file: /etc/modules-load.d/ov-kvmfr.conf
+          contains: "kvmfr"

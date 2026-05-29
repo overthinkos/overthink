@@ -22,6 +22,49 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-05
 
+### 2026-05-29 — `cachyos-coder`: full KDE GPU workstation VM synced to the host (monitor + Looking Glass + KDE-selkies stream)
+
+Evolved the headless `ov-cachyos-gpu` operator VM into `cachyos-coder` — a full
+graphical CachyOS KDE Plasma workstation in a GPU-passthrough VM, brought into
+sync with the operator's host package set and usable three ways on the one
+RTX 4080: a physical monitor (SDDM/Plasma on DRM), Looking Glass locally
+(IVSHMEM + dummy scanout + the `looking-glass-host` guest layer; client on the
+host), and a remote KDE-selkies WebRTC browser stream (NVENC, port 3000) of a
+nested Plasma session. Supersedes `ov-cachyos-gpu` (vm/deploy/bed renamed; the
+old entity deleted in the same change).
+
+Package selection was reverse-resolved (operator directive) to top-level
+packages + the dependency-pulling `plasma-desktop` meta and CachyOS's own
+curated KDE-Desktop netinstall set — never leaf enumeration nor the giant
+`kde-applications` group. Host-hardware/boot/firmware/network packages
+(amd-ucode, AMD-GPU drivers, linux-firmware, bluez, NetworkManager, disk/boot
+tooling, …) are excluded by design — inert or harmful in the VM.
+
+New layers (main repo): `kde-desktop` (Plasma + SDDM + graphical.target via
+`plasma-desktop` deps), `fonts-extended`, `desktop-media`, `cachyos-extras`
+(the dev/CLI gap + AUR cloudflared/gvisor), `looking-glass-host` (kvmfr DKMS +
+the Linux capture app), `kde-selkies` (KDE Plasma Wayland nested in pixelflux,
+streamed over the reused selkies WebRTC transport), `nvenc-headers` (ffnvcodec).
+Vendored in `image/cachyos`: `cachyos-kde-settings` (theming/settings/SDDM
+theme); `nvidia-driver` extended with egl-wayland + opencl + nvidia-settings +
+the VA-API driver for a Wayland KDE session on the proprietary driver.
+
+NVENC streaming required un-stubbing pixelflux's encoder: `selkies/build.sh` now
+auto-detects CUDA + the NVENC SDK headers and builds the real `NvencEncoder`
+when present (the new `cuda-arch-builder` image = arch-builder + cuda +
+nvenc-headers), keeping the stub — and the unchanged container `selkies-desktop`
+family — when absent (R3: one capability-driven build.sh, no per-image fork).
+
+Service-exec portability (R3, generic): the systemd service renderer now
+resolves supervisord's `%(ENV_HOME)s` / `$HOME` in `exec:`/`env:` against the
+destination home (the deferred `{{.Home}}` token for host/vm, substituted per
+target by `InstallPlan.ResolveHome`). Previously a reused supervisord exec
+yielded a broken systemd `ExecStart`, and the service home came from the build
+host (`os.UserHomeDir()`) — the service-side instance of the VM `$HOME` bug.
+This is what lets the supervisord-designed selkies stack run as systemd units in
+the VM guest. (`ov/service_render.go`, `ov/install_build.go`,
+`ov/install_plan.go`.)
+
 ### 2026-05-29 — VM deploy correctness: one render path, deploy-time `$HOME`, cross-host builders, guest-user virtiofs idmap
 
 Deploying the real `ov-cachyos-gpu` operator VM (the deliverable of the earlier

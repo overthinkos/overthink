@@ -222,6 +222,27 @@ func RenderService(entry *ServiceEntry, initDef *InitDef, ctx ServiceRenderConte
 	if entry.WorkingDirectory != "" {
 		ctx.WorkingDirectory = entry.WorkingDirectory
 	}
+	// Make home-relative exec/working-dir/env portable across init systems.
+	// supervisord expands its own `%(ENV_HOME)s` at runtime; systemd does NOT,
+	// so a layer whose service exec reuses that syntax (or a bare $HOME) yields
+	// a broken ExecStart on a systemd target. Resolve both against ctx.Home —
+	// which the compiler sets to the deferred {{.Home}} token for host/vm
+	// targets (substituted per-destination by InstallPlan.ResolveHome at emit)
+	// and to the image's runtime home for a container-systemd build. No-op for
+	// the common case of absolute exec paths.
+	if ctx.Home != "" {
+		homify := func(s string) string {
+			s = strings.ReplaceAll(s, "%(ENV_HOME)s", ctx.Home)
+			s = strings.ReplaceAll(s, "$HOME", ctx.Home)
+			return s
+		}
+		ctx.Exec = homify(ctx.Exec)
+		ctx.WorkingDirectory = homify(ctx.WorkingDirectory)
+		for k, v := range ctx.Env {
+			ctx.Env[k] = homify(v)
+		}
+		ctx.EnvList = sortedEnvList(ctx.Env)
+	}
 	if entry.User != "" {
 		ctx.User = entry.User
 	}

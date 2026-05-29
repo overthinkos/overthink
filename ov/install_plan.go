@@ -978,6 +978,12 @@ func (p *InstallPlan) ResolveHome(home string) {
 			}
 		case *FileStep:
 			s.Dest = sub(s.Dest)
+		case *ServiceCustomStep:
+			// The systemd unit is pre-rendered at compile with {{.Home}} for
+			// host/vm targets (see compileServiceSteps); resolve it — and the
+			// user-scope unit install path — against the destination home here.
+			s.UnitText = sub(s.UnitText)
+			s.UnitPath = sub(s.UnitPath)
 		}
 	}
 }

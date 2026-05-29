@@ -109,6 +109,59 @@ func TestRenderServiceCustomSystemd(t *testing.T) {
 	}
 }
 
+// A service exec that reuses supervisord's %(ENV_HOME)s syntax (or a bare
+// $HOME) must render a USABLE systemd ExecStart. With ctx.Home set to the
+// deferred {{.Home}} token (what the compiler passes for host/vm targets),
+// both spellings resolve to the token so InstallPlan.ResolveHome can
+// substitute the real destination home at emit — not the build host's home.
+func TestRenderServiceHomePortabilityToken(t *testing.T) {
+	entry := &ServiceEntry{
+		Name:   "selkies",
+		Exec:   "python3 %(ENV_HOME)s/.local/bin/selkies-capture-server",
+		Env:    map[string]string{"SELKIES_DATA": "$HOME/.config/selkies"},
+		Scope:  "user",
+		Enable: true,
+	}
+	rendered, err := RenderService(entry, testSystemdInitDef(), ServiceRenderContext{
+		Layer:       "selkies",
+		Home:        HomeToken, // compiler defers for host/vm
+		UserUnitDir: HomeToken + "/.config/systemd/user",
+	})
+	if err != nil {
+		t.Fatalf("RenderService: %v", err)
+	}
+	if !strings.Contains(rendered.UnitText, "ExecStart=python3 {{.Home}}/.local/bin/selkies-capture-server") {
+		t.Errorf("%%(ENV_HOME)s not translated to the home token; got:\n%s", rendered.UnitText)
+	}
+	if strings.Contains(rendered.UnitText, "%(ENV_HOME)s") {
+		t.Errorf("raw supervisord %%(ENV_HOME)s leaked into the systemd unit:\n%s", rendered.UnitText)
+	}
+	if !strings.Contains(rendered.UnitText, `Environment="SELKIES_DATA={{.Home}}/.config/selkies"`) {
+		t.Errorf("$HOME in env not resolved to the home token; got:\n%s", rendered.UnitText)
+	}
+	// The user-scope unit path is also home-relative → carries the token.
+	if !strings.Contains(rendered.UnitPath, "{{.Home}}/.config/systemd/user/") {
+		t.Errorf("user-scope UnitPath should carry the home token; got %q", rendered.UnitPath)
+	}
+
+	// Emit-time resolution: a ServiceCustomStep carrying that text resolves to
+	// the real guest home, not the operator's.
+	plan := &InstallPlan{Steps: []InstallStep{
+		&ServiceCustomStep{Name: "ov-selkies-selkies", UnitText: rendered.UnitText, UnitPath: rendered.UnitPath, TargetScope: ScopeUser},
+	}}
+	plan.ResolveHome("/home/cachy")
+	cs := plan.Steps[0].(*ServiceCustomStep)
+	if !strings.Contains(cs.UnitText, "ExecStart=python3 /home/cachy/.local/bin/selkies-capture-server") {
+		t.Errorf("ResolveHome did not substitute the unit ExecStart; got:\n%s", cs.UnitText)
+	}
+	if !strings.Contains(cs.UnitPath, "/home/cachy/.config/systemd/user/") {
+		t.Errorf("ResolveHome did not substitute the unit path; got %q", cs.UnitPath)
+	}
+	if strings.Contains(cs.UnitText, "{{.Home}}") {
+		t.Errorf("home token survived ResolveHome:\n%s", cs.UnitText)
+	}
+}
+
 func TestRenderServicePackagedWithOverrides(t *testing.T) {
 	entry := &ServiceEntry{
 		Name:        "postgresql",

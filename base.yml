@@ -61,6 +61,22 @@ image:
             - npm
             - cargo
             - aur
+    # arch-builder + CUDA toolkit + NVENC SDK headers, so multi-stage builders
+    # (pixi/cargo) can compile GPU-encode code — notably pixelflux's nvenc-sys
+    # (real NvencEncoder) for the cachyos-coder GPU streaming desktop. The stock
+    # arch-builder has no CUDA, so selkies' build.sh keeps the NVENC stub there
+    # (container selkies-desktop is unchanged); pointing a build at this builder
+    # flips on real GPU encode. Build-time only.
+    cuda-arch-builder:
+        base: arch-builder
+        layer:
+            - cuda
+            - nvenc-headers
+        produce:
+            - pixi
+            - npm
+            - cargo
+            - aur
     fedora:
         version: 2026.144.1443
         base: quay.io/fedora/fedora:43

@@ -1,6 +1,16 @@
 layer:
-    version: 2026.144.1443
+    version: 2026.149.1500
     name: supervisord
+    # XDG_RUNTIME_DIR for the CONTAINER. A container has no logind /run/user/<uid>,
+    # so the per-user runtime dir is /tmp; supervisord (PID 1) + every program it
+    # starts inherit this image ENV. It lives HERE — on the container init layer —
+    # not hardcoded in each desktop/wayland layer, so that on a systemd target
+    # (host/vm) where this supervisord layer is pruned (systemd is the only init),
+    # the systemd user manager provides the correct /run/user/<uid> instead. This
+    # is what lets pipewire/selkies/the nested compositor reach the user session
+    # bus on a VM while keeping the container behavior unchanged.
+    env:
+        XDG_RUNTIME_DIR: "/tmp"
     package:
         - supervisor
     eval:

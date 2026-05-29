@@ -462,6 +462,16 @@ type TaskStep struct {
 	CtxPath      string // absolute layer-dir path replacing "/ctx/" on host
 	ResolvedUser string // uid:gid or "root" after resolveUserSpec
 
+	// To is the home-resolved copy/download destination for the DEPLOY path.
+	// The compiler tokenizes the task's `to:` (~ / ${HOME} / $HOME → {{.Home}})
+	// here; InstallPlan.ResolveHome substitutes the destination's real home at
+	// emit. execTask uses this (not the raw Task.To) for PutFile, so a
+	// `copy: to: ${HOME}/...` lands in the actual guest/host home instead of a
+	// literal "${HOME}" directory under sudo (HOME=/root). Empty when the task
+	// has no `to:`. The OCI build emitter reads Task.To directly (build-time
+	// ENV expands ${HOME}), so it is unaffected by this field.
+	To string
+
 	// LayerVars are the layer.yml `vars:` map propagated into the task
 	// script as exports. Build-time gets these via Containerfile ENV
 	// directives (emitVarsEnv); host/local-deploy time has no equivalent
@@ -984,6 +994,11 @@ func (p *InstallPlan) ResolveHome(home string) {
 			// user-scope unit install path — against the destination home here.
 			s.UnitText = sub(s.UnitText)
 			s.UnitPath = sub(s.UnitPath)
+		case *TaskStep:
+			// Home-relative copy/download dest (tokenized at compile). The
+			// Task body itself (cmd/content) is left alone — those shell-expand
+			// $HOME at runtime as the deploy user.
+			s.To = sub(s.To)
 		}
 	}
 }

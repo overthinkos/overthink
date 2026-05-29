@@ -75,7 +75,7 @@ func TestResolveHomeSubstitutesAcrossSteps(t *testing.T) {
 		&ShellHookStep{EnvVars: map[string]string{"P": "{{.Home}}/.npm-global"}, PathAdd: []string{"{{.Home}}/bin"}},
 		&ShellSnippetStep{Snippet: "export X={{.Home}}/y", Destination: "{{.Home}}/.bashrc", PathAppend: []string{"{{.Home}}/bin"}},
 		&FileStep{Dest: "{{.Home}}/.config/foo"},
-		&TaskStep{Task: &Task{Cmd: "echo {{.Home}}"}},
+		&TaskStep{Task: &Task{Cmd: "echo {{.Home}}", Copy: "wrapper"}, To: "{{.Home}}/.local/bin/wrapper"},
 	}}
 	plan.ResolveHome("/home/cachy")
 
@@ -94,6 +94,12 @@ func TestResolveHomeSubstitutesAcrossSteps(t *testing.T) {
 	ts := plan.Steps[3].(*TaskStep)
 	if ts.Task.Cmd != "echo {{.Home}}" {
 		t.Errorf("TaskStep.Cmd should be untouched (runtime $HOME), got %q", ts.Task.Cmd)
+	}
+	// The copy/download dest IS resolved — it's the PutFile target (single-quoted
+	// under sudo, so it can't shell-expand). A literal "${HOME}" dest would make
+	// PutFile create a "/home/cachy/${HOME}/..." dir under sudo (HOME=/root).
+	if ts.To != "/home/cachy/.local/bin/wrapper" {
+		t.Errorf("TaskStep.To (copy dest) = %q, want /home/cachy/.local/bin/wrapper", ts.To)
 	}
 
 	// Idempotent: a second call (token already gone) is a no-op.

@@ -232,9 +232,11 @@ func RenderService(entry *ServiceEntry, initDef *InitDef, ctx ServiceRenderConte
 	// the common case of absolute exec paths.
 	if ctx.Home != "" {
 		homify := func(s string) string {
+			// supervisord's own %(ENV_HOME)s first, then ~ / ${HOME} / $HOME via
+			// ExpandPath (the braced ${HOME} form is what kde-selkies/labwc-style
+			// exec lines use — a bare $HOME ReplaceAll would miss it).
 			s = strings.ReplaceAll(s, "%(ENV_HOME)s", ctx.Home)
-			s = strings.ReplaceAll(s, "$HOME", ctx.Home)
-			return s
+			return ExpandPath(s, ctx.Home)
 		}
 		ctx.Exec = homify(ctx.Exec)
 		ctx.WorkingDirectory = homify(ctx.WorkingDirectory)

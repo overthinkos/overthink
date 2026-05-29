@@ -694,6 +694,7 @@ func (c *DeployAddCmd) compileImagePlans(ref *DeployRef, cfg *Config, distroCfg 
 	}
 	var plans []*InstallPlan
 	hostCtx := detectHostContext()
+	order = pruneContainerInitForSystemd(order, hostCtx)
 	for _, layerName := range order {
 		layer := layers[layerName]
 		if layer == nil {
@@ -706,6 +707,29 @@ func (c *DeployAddCmd) compileImagePlans(ref *DeployRef, cfg *Config, distroCfg 
 		plans = append(plans, p)
 	}
 	return plans, img.Name, order, nil
+}
+
+// pruneContainerInitForSystemd drops the `supervisord` layer (the CONTAINER
+// init system) from a resolved DEPLOY layer order when the target is systemd
+// (host / vm). On a systemd target the OS init is the one and only init system
+// — every layer's `service:` entries render as systemd units — so pulling in
+// supervisord is wrong (it lands installed-but-unused, a second init). Pod/k8s
+// deploys and OCI image builds keep supervisord (it IS their init), so this
+// only affects host/vm deploys. Layers that `require: supervisord` purely for
+// graph ordering are unaffected at runtime — their services run under systemd
+// regardless of whether the supervisord package is present.
+func pruneContainerInitForSystemd(order []string, hostCtx HostContext) []string {
+	if hostCtx.Target != "host" && hostCtx.Target != "vm" {
+		return order
+	}
+	out := make([]string, 0, len(order))
+	for _, n := range order {
+		if n == "supervisord" {
+			continue
+		}
+		out = append(out, n)
+	}
+	return out
 }
 
 // compileLayerPlansWithContext is the same as compileLayerPlans but uses
@@ -729,6 +753,7 @@ func (c *DeployAddCmd) compileLayerPlansWithContext(ref *DeployRef, cfg *Config,
 		ctx.BuilderConfig = builderCfg
 	}
 	hostCtx := detectHostContext()
+	order = pruneContainerInitForSystemd(order, hostCtx)
 	var plans []*InstallPlan
 	for _, name := range order {
 		p, err := BuildDeployPlan(layers[name], ctx, hostCtx)
@@ -788,6 +813,7 @@ func (c *DeployAddCmd) compileLayerPlans(ref *DeployRef, cfg *Config, distroCfg 
 	if cfg != nil {
 		img.Builder = cfg.resolveEffectiveBuilder(img.Name, img.Distro, img.Base, img.IsExternalBase, img.Builder)
 	}
+	order = pruneContainerInitForSystemd(order, hostCtx)
 	var plans []*InstallPlan
 	for _, name := range order {
 		p, err := BuildDeployPlan(layers[name], img, hostCtx)

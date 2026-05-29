@@ -618,7 +618,12 @@ func (t *LocalDeployTarget) execTask(s *TaskStep, plan *InstallPlan, opts EmitOp
 	// false for SSH/VM deploys — the historic VM copy:-task bug).
 	if s.Task.Copy != "" {
 		src := filepath.Join(s.LayerDir, s.Task.Copy)
-		dst := s.Task.To
+		// Prefer the home-resolved dest (s.To) so `to: ${HOME}/...` expands to
+		// the real host home rather than staying a literal "${HOME}".
+		dst := s.To
+		if dst == "" {
+			dst = s.Task.To
+		}
 		if dst == "" {
 			dst = s.Task.Copy
 		}

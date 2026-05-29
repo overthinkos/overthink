@@ -1,5 +1,5 @@
 layer:
-    version: 2026.144.1443
+    version: 2026.149.1500
     name: selkies
     require:
         - supervisord
@@ -206,14 +206,20 @@ layer:
           priority: 19
           start_sec: 1
           enable: true
-          scope: system
+          # user scope: runs in the deploy user's session so $HOME + the session
+          # bus + XDG_RUNTIME_DIR are correct. supervisord ignores scope (renders
+          # the same INI), so the container is unchanged.
+          scope: user
         - name: selkies
           exec: "%(ENV_HOME)s/.local/bin/selkies-wrapper"
           env:
             PIXELFLUX_WAYLAND: true
-            XDG_RUNTIME_DIR: /tmp
           restart: always
           priority: 8
           start_sec: 3
           enable: true
-          scope: system
+          # user scope: pixelflux needs the user session bus + per-user runtime
+          # dir (XDG_RUNTIME_DIR now from the init: /tmp in a container via the
+          # supervisord layer, /run/user/<uid> on a systemd VM via the user
+          # manager) — not a root system service. Container render is unchanged.
+          scope: user

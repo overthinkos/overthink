@@ -523,6 +523,14 @@ func compileTaskSteps(layer *Layer, img *ResolvedImage) []InstallStep {
 				layerVars[k] = v
 			}
 		}
+		// Tokenize a home-relative copy/download dest so each DeployTarget
+		// resolves it against the real destination home at emit (the guest
+		// home for vm, the host home for local) — leaving the literal
+		// "${HOME}" out of the PutFile dest. Empty `to:` stays empty.
+		var resolvedTo string
+		if task.To != "" {
+			resolvedTo = ExpandPath(task.To, HomeToken)
+		}
 		out = append(out, &TaskStep{
 			Task:         task,
 			LayerName:    layer.Name,
@@ -530,6 +538,7 @@ func compileTaskSteps(layer *Layer, img *ResolvedImage) []InstallStep {
 			CtxPath:      layer.SourceDir,
 			ResolvedUser: userDir,
 			LayerVars:    layerVars,
+			To:           resolvedTo,
 		})
 	}
 	return out

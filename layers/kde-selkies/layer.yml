@@ -1,5 +1,5 @@
 layer:
-    version: 2026.149.1210
+    version: 2026.149.1500
     name: kde-selkies
     description: |
         A KDE Plasma edition of the selkies streaming desktop: reuses the selkies
@@ -40,13 +40,14 @@ layer:
         # has created wayland-1. The wrapper polls for the socket.
         - name: kde-selkies-session
           exec: "${HOME}/.local/bin/kde-selkies-session"
-          env:
-            XDG_RUNTIME_DIR: /tmp
           restart: always
           priority: 12
           start_sec: 3
           enable: true
-          scope: system
+          # user scope: the nested Plasma session runs in the deploy user's
+          # session (session bus + XDG_RUNTIME_DIR from the user manager), so it
+          # finds pixelflux's wayland-1 at the same per-user runtime dir.
+          scope: user
           after: [graphical-session.target]
     eval:
         - id: kde-selkies-session-wrapper

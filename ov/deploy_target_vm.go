@@ -470,7 +470,13 @@ func (t *VmDeployTarget) execTask(ctx context.Context, s *TaskStep, plan *Instal
 	// doesn't exist in the guest → file-not-found on every copy: task.
 	if s.Task.Copy != "" {
 		src := filepath.Join(s.LayerDir, s.Task.Copy)
-		dst := s.Task.To
+		// Prefer the home-resolved dest (s.To) so `to: ${HOME}/...` lands in the
+		// real guest home, not a literal "${HOME}" dir created under sudo
+		// (HOME=/root). Falls back to the raw Task.To, then the src name.
+		dst := s.To
+		if dst == "" {
+			dst = s.Task.To
+		}
 		if dst == "" {
 			dst = s.Task.Copy
 		}
@@ -582,17 +588,49 @@ OV_REPO
 // optional drop-ins) on the guest. --with-services gate already
 // checked in emitPlan.
 func (t *VmDeployTarget) execServicePackaged(ctx context.Context, s *ServicePackagedStep, plan *InstallPlan, opts EmitOpts) error {
-	var b strings.Builder
-	b.WriteString("set -e\n")
 	if s.OverridesText != "" && s.OverridesPath != "" {
-		fmt.Fprintf(&b, "install -D -m0644 /dev/stdin %s <<'OV_DROPIN'\n%s\nOV_DROPIN\n",
+		writeScript := fmt.Sprintf("set -e\ninstall -D -m0644 /dev/stdin %s <<'OV_DROPIN'\n%s\nOV_DROPIN\nsystemctl daemon-reload\n",
 			deployShellQuote(s.OverridesPath), s.OverridesText)
-		b.WriteString("systemctl daemon-reload\n")
+		if err := t.Exec.RunSystem(ctx, writeScript, opts); err != nil {
+			return err
+		}
 	}
 	if s.Enable {
-		fmt.Fprintf(&b, "systemctl enable --now %s\n", deployShellQuote(s.Unit))
+		return t.enableServiceUnit(ctx, s.Unit, s.TargetScope, opts)
 	}
-	return t.Exec.RunSystem(ctx, b.String(), opts)
+	return nil
+}
+
+// enableServiceUnit enables (and best-effort starts) a unit on the guest,
+// honoring its scope — the SSH-executor counterpart of LocalDeployTarget's
+// systemctlEnable (R3: same scope semantics, target-appropriate execution).
+//
+//   - ScopeSystem: `systemctl enable` via sudo (RunSystem).
+//   - ScopeUser: run in the deploy user's OWN systemd instance via RunUser
+//     (`systemctl --user enable`), after `loginctl enable-linger` so the user
+//     manager — and the unit — start on boot without an interactive login.
+//     Without this, a user-scope unit (written to ~/.config/systemd/user/) is
+//     invisible to a system `systemctl enable`, which fails and aborts the
+//     deploy. User-scope is what pipewire / selkies / the nested-Plasma stream
+//     need (session bus + per-user runtime dir).
+//
+// Enable is hard (the durable boot intent); the immediate start is best-effort
+// everywhere — a GPU/graphical-session service that can't start mid-deploy
+// (before the nvidia-driver reboot + a live session) starts on the post-reboot
+// boot, and the deploy-scope eval verifies it.
+func (t *VmDeployTarget) enableServiceUnit(ctx context.Context, unit string, scope Scope, opts EmitOpts) error {
+	q := deployShellQuote(unit)
+	if scope == ScopeUser {
+		if err := t.Exec.RunUser(ctx, `sudo loginctl enable-linger "$(id -un)" >/dev/null 2>&1 || true`, opts); err != nil {
+			return err
+		}
+		script := fmt.Sprintf("set -e\nexport XDG_RUNTIME_DIR=\"/run/user/$(id -u)\"\nsystemctl --user daemon-reload || true\nsystemctl --user enable %s\nsystemctl --user start %s || echo \"ov: deferred start (will start on boot): %s\" >&2\n",
+			q, q, unit)
+		return t.Exec.RunUser(ctx, script, opts)
+	}
+	script := fmt.Sprintf("set -e\nsystemctl enable %s\nsystemctl start %s || echo \"ov: deferred start (will start on boot): %s\" >&2\n",
+		q, q, unit)
+	return t.Exec.RunSystem(ctx, script, opts)
 }
 
 // execServiceCustom writes a custom systemd unit file to the guest
@@ -611,17 +649,21 @@ func (t *VmDeployTarget) execServiceCustom(ctx context.Context, s *ServiceCustom
 	if s.UnitText == "" || s.UnitPath == "" {
 		return fmt.Errorf("service %s: no unit text rendered (compile-time render skipped this entry; check that the layer's mixed-`service:` pair is well-formed)", s.Name)
 	}
-	script := fmt.Sprintf(`
-set -e
+	writeScript := fmt.Sprintf(`set -e
 install -D -m0644 /dev/stdin %s <<'OV_UNIT'
 %s
 OV_UNIT
 systemctl daemon-reload
 `, deployShellQuote(s.UnitPath), s.UnitText)
-	if s.Enable {
-		script += fmt.Sprintf("systemctl enable --now %s\n", deployShellQuote(s.Name))
+	if err := t.Exec.RunSystem(ctx, writeScript, opts); err != nil {
+		return err
 	}
-	return t.Exec.RunSystem(ctx, script, opts)
+	if s.Enable {
+		// Scope-aware enable: system via sudo, user via the deploy user's own
+		// systemd instance (+ linger). See enableServiceUnit.
+		return t.enableServiceUnit(ctx, s.Name, s.TargetScope, opts)
+	}
+	return nil
 }
 
 // execBuilder runs a builder step on the HOST (where podman is

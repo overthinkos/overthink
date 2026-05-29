@@ -1,10 +1,8 @@
 layer:
-    version: 2026.144.1443
+    version: 2026.149.1500
     name: pipewire
     require:
         - supervisord
-    env:
-        XDG_RUNTIME_DIR: "/tmp"
     distro:
         arch:
             package:
@@ -41,10 +39,10 @@ layer:
     service:
         - name: pipewire
           exec: "%(ENV_HOME)s/.local/bin/pipewire-wrapper"
-          env:
-            XDG_RUNTIME_DIR: /tmp
           restart: always
           priority: 5
           start_sec: 2
           enable: true
-          scope: system
+          # user scope: pipewire/wireplumber need the user session bus + per-user
+          # runtime dir. supervisord ignores scope → container render unchanged.
+          scope: user

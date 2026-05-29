@@ -10,7 +10,9 @@ type EnvConfig struct {
 	PathAppend []string          // PATH append entries (from path_append field)
 }
 
-// ExpandPath expands ~ and $HOME in a path string to the given home directory
+// ExpandPath expands ~, ${HOME} and $HOME in a path string to the given home
+// directory. ${HOME} is replaced before bare $HOME so the braced form is
+// handled (a bare $HOME ReplaceAll would not match "${HOME}").
 func ExpandPath(path string, home string) string {
 	// Expand ~ at the start of the path
 	if strings.HasPrefix(path, "~/") {
@@ -19,7 +21,8 @@ func ExpandPath(path string, home string) string {
 		path = home
 	}
 
-	// Expand $HOME anywhere in the path
+	// Expand ${HOME} then $HOME anywhere in the path
+	path = strings.ReplaceAll(path, "${HOME}", home)
 	path = strings.ReplaceAll(path, "$HOME", home)
 
 	return path

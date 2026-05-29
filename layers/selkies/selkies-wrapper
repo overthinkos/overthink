@@ -44,9 +44,17 @@ fi
 # compositor). Standalone scripts can't do this — they create their own
 # empty compositor. See selkies-capture-server for protocol details.
 CAPTURE_SERVER="$HOME/.local/bin/selkies-capture-server"
-# Direct exec so selkies-capture-server's own shebang resolves the
-# interpreter (pinned to the pixi env's python). `python3 "$SCRIPT"`
-# would override the shebang and route through whatever /usr/bin/python3
-# happens to point at — Fedora 43 made that python3.14, but the pixi
-# env (with websockets, pixelflux, pcmflux) is on 3.13.
+# Invoke through the pixi env's python EXPLICITLY (resolved from $HOME at
+# runtime) rather than relying on selkies-capture-server's baked
+# `#!/home/user/...` shebang — that shebang is correct only in the container
+# (build user `user`, HOME /home/user); on a host/VM deploy the user is
+# different (HOME /home/<deploy-user>) and the literal interpreter path is dead
+# (exit 127). The pixi env (websockets, pixelflux, pcmflux on python 3.13) lives
+# at $HOME/.pixi regardless of which user owns it, so this is home-agnostic and
+# correct on every target. Falls back to the shebang if the pinned python is
+# absent.
+PIXI_PY="$HOME/.pixi/envs/default/bin/python"
+if [ -x "$PIXI_PY" ]; then
+    exec "$PIXI_PY" "$CAPTURE_SERVER" --addr="0.0.0.0" --mode="websockets"
+fi
 exec "$CAPTURE_SERVER" --addr="0.0.0.0" --mode="websockets"

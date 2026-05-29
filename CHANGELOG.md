@@ -65,6 +65,35 @@ This is what lets the supervisord-designed selkies stack run as systemd units in
 the VM guest. (`ov/service_render.go`, `ov/install_build.go`,
 `ov/install_plan.go`.)
 
+R10-surfaced (systemd init purity + user-session architecture). The bed deploy
+exposed that the selkies/desktop stack carried container-only assumptions that
+break on a systemd VM, each RCA'd and fixed generically:
+
+- **systemd is the one init system on a systemd target.** A VM/host deploy no
+  longer installs supervisord: `pruneContainerInitForSystemd`
+  (`ov/deploy_add_cmd.go`) drops the `supervisord` init layer from the resolved
+  layer order on host/vm targets (pod/k8s/OCI builds keep it — it IS their
+  init). The ~36 layers that `require: supervisord` for graph ordering are
+  unaffected; their `service:` entries render as systemd units.
+- **`copy: to: ${HOME}/...` is home-resolved.** It was left literal and
+  `PutFile` (single-quoted, under sudo with HOME=/root) created a real
+  `/home/<user>/${HOME}/...` dir. Now tokenized at compile (`TaskStep.To` via
+  `ExpandPath`, which also gained `${HOME}`) and resolved per-target by
+  `InstallPlan.ResolveHome` — VM and local both.
+- **Scope-aware service enable on the VM.** `VmDeployTarget.enableServiceUnit`
+  honors `scope: user` (linger + `systemctl --user enable` in the deploy user's
+  instance) — the SSH counterpart of LocalDeployTarget's scope-aware enable
+  (the VM target had ignored scope, aborting on a user-scope unit). Enable is
+  hard, start best-effort (GPU/session services start on the post-reboot boot).
+- **User-session services.** pipewire / selkies / selkies-fileserver /
+  kde-selkies / looking-glass-host run as `scope: user` so they get the user
+  session bus + per-user runtime dir + `$HOME`. `XDG_RUNTIME_DIR` moved off the
+  desktop layers onto the supervisord (container-init) layer — container gets
+  `/tmp`, the systemd VM gets `/run/user/<uid>` from the user manager. The
+  selkies capture-server is invoked through `$HOME/.pixi/.../python` (home-
+  agnostic) instead of its baked `#!/home/user/...` shebang. The deploy user is
+  added to `video`/`render` for GPU access.
+
 ### 2026-05-29 — VM deploy correctness: one render path, deploy-time `$HOME`, cross-host builders, guest-user virtiofs idmap
 
 Deploying the real `ov-cachyos-gpu` operator VM (the deliverable of the earlier

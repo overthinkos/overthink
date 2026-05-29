@@ -9,10 +9,12 @@ package main
 // get sourced at login.
 //
 // Shell detection:
-//   - bash → write both ~/.bashrc (interactive) and ~/.profile (login).
-//     We insert the managed block into ~/.profile only (bash auto-
-//     sources that on login), but the user may still need to run
-//     `. ~/.profile` in an already-open shell.
+//   - bash → ~/.bashrc. A bash login shell sources the FIRST of
+//     ~/.bash_profile / ~/.bash_login / ~/.profile; when ~/.bash_profile
+//     exists (the Arch/CachyOS default, which does `. ~/.bashrc`) ~/.profile
+//     is NEVER read, so a block placed there silently never loads. ~/.bashrc
+//     is sourced by interactive shells directly AND by login shells via the
+//     default ~/.bash_profile, so the env.d block loads in the user's terminal.
 //   - zsh  → ~/.zshenv (sourced for every zsh invocation type).
 //   - fish → ~/.config/fish/conf.d/overthink.fish (conf.d is idiomatic).
 //
@@ -27,6 +29,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"os"
 	"os/user"
@@ -200,24 +203,61 @@ func ShellInitFilePath(shell ShellKind, hostHome string) string {
 		return filepath.Join(hostHome, ".zshenv")
 	case ShellFish:
 		return filepath.Join(hostHome, ".config", "fish", "conf.d", "overthink.fish")
+	case ShellBash:
+		// ~/.bashrc, NOT ~/.profile. A bash login shell sources the FIRST of
+		// ~/.bash_profile / ~/.bash_login / ~/.profile — so when ~/.bash_profile
+		// exists (the Arch/CachyOS default, which does `. ~/.bashrc`), ~/.profile
+		// is NEVER read and an env.d block placed there silently never loads
+		// (the env.d PATH additions, e.g. ~/.npm-global/bin for the AI CLIs,
+		// went missing on the operator VM despite being installed). ~/.bashrc IS
+		// sourced by interactive shells directly AND by a login shell through
+		// the default ~/.bash_profile, so the block loads in the user's terminal.
+		return filepath.Join(hostHome, ".bashrc")
 	default:
+		// sh / unknown: POSIX login reads ~/.profile.
 		return filepath.Join(hostHome, ".profile")
 	}
 }
 
-// EnsureManagedBlock inserts (or updates) the managed block in the
-// shell init file. Creates the file (and its parent dirs) if missing.
-// Returns the file path written.
+// EnsureManagedBlock inserts (or updates) the env.d-sourcing managed block in
+// the shell init file on the LOCAL filesystem. Thin wrapper over
+// EnsureManagedBlockVia with a local ShellExecutor — the single write path is
+// the executor-based one, so the local-deploy and vm-deploy code paths can't
+// drift (R3). Returns the file path written.
 func EnsureManagedBlock(shell ShellKind, hostHome string) (string, error) {
-	path := ShellInitFilePath(shell, hostHome)
-	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
-		return "", fmt.Errorf("EnsureManagedBlock mkdir: %w", err)
+	return EnsureManagedBlockVia(context.Background(), ShellExecutor{}, shell, hostHome, EmitOpts{})
+}
+
+// EnsureManagedBlockVia inserts (or updates) the env.d-sourcing managed block
+// in the shell init file via a DeployExecutor, so the SAME code path serves a
+// local deploy (ShellExecutor → host filesystem) and a VM deploy (SSHExecutor
+// → guest filesystem). `home` is the DESTINATION user's home — the host
+// operator's for local, the GUEST user's for vm. PutFile's `install -D`
+// creates parent dirs (e.g. ~/.config/fish/conf.d). Returns the path written.
+func EnsureManagedBlockVia(ctx context.Context, exec DeployExecutor, shell ShellKind, home string, opts EmitOpts) (string, error) {
+	path := ShellInitFilePath(shell, home)
+	body := ManagedBlockBody(shell, home)
+	existing, err := exec.GetFile(ctx, path, false, opts)
+	if err != nil && !isFileNotFoundErr(err) {
+		return "", fmt.Errorf("EnsureManagedBlockVia read %s: %w", path, err)
 	}
-	existing, _ := os.ReadFile(path) // may not exist yet; ignore error
-	body := ManagedBlockBody(shell, hostHome)
 	updated := replaceOrAppendManagedBlock(string(existing), body, "")
-	if err := os.WriteFile(path, []byte(updated), 0644); err != nil {
-		return "", fmt.Errorf("EnsureManagedBlock write %s: %w", path, err)
+	if opts.DryRun {
+		return path, nil
+	}
+	tmp, err := os.CreateTemp("", "ov-managed-block-")
+	if err != nil {
+		return "", fmt.Errorf("EnsureManagedBlockVia tmp: %w", err)
+	}
+	tmpPath := tmp.Name()
+	defer os.Remove(tmpPath)
+	if _, err := tmp.WriteString(updated); err != nil {
+		tmp.Close()
+		return "", fmt.Errorf("EnsureManagedBlockVia stage: %w", err)
+	}
+	tmp.Close()
+	if err := exec.PutFile(ctx, tmpPath, path, 0644, false, opts); err != nil {
+		return "", fmt.Errorf("EnsureManagedBlockVia write %s: %w", path, err)
 	}
 	return path, nil
 }

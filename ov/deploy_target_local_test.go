@@ -48,10 +48,11 @@ func TestHostDeployTargetDryRunShellHook(t *testing.T) {
 		t.Errorf("env.d contents wrong:\n%s", data)
 	}
 
-	// Managed block in ~/.profile.
-	profile, err := os.ReadFile(filepath.Join(home, ".profile"))
+	// Managed block in ~/.bashrc (bash → ~/.bashrc, sourced by the login shell
+	// via ~/.bash_profile; ~/.profile is not read when ~/.bash_profile exists).
+	profile, err := os.ReadFile(filepath.Join(home, ".bashrc"))
 	if err != nil {
-		t.Fatalf("~/.profile missing: %v", err)
+		t.Fatalf("~/.bashrc missing: %v", err)
 	}
 	if !strings.Contains(string(profile), "# overthink:begin") {
 		t.Errorf("managed block not inserted:\n%s", profile)
@@ -143,9 +144,8 @@ func TestHostDeployTargetDryRunSystemPackages(t *testing.T) {
 }
 
 func TestRenderTaskCommandMkdir(t *testing.T) {
-	tgt := &LocalDeployTarget{}
 	ts := &TaskStep{Task: &Task{Mkdir: "/etc/foo", Mode: "0700"}}
-	cmd, err := tgt.renderTaskCommand(ts)
+	cmd, err := renderTaskCommand(ts)
 	if err != nil {
 		t.Fatalf("render: %v", err)
 	}
@@ -158,12 +158,11 @@ func TestRenderTaskCommandMkdir(t *testing.T) {
 }
 
 func TestRenderTaskCommandCmdWithCtx(t *testing.T) {
-	tgt := &LocalDeployTarget{}
 	ts := &TaskStep{
 		Task:    &Task{Cmd: "cp /ctx/config.json /etc/foo/"},
 		CtxPath: "/home/u/layers/foo",
 	}
-	cmd, _ := tgt.renderTaskCommand(ts)
+	cmd, _ := renderTaskCommand(ts)
 	if !strings.Contains(cmd, "/home/u/layers/foo/config.json") {
 		t.Errorf("/ctx/ not substituted: %s", cmd)
 	}
@@ -173,7 +172,6 @@ func TestRenderTaskCommandCmdWithCtx(t *testing.T) {
 }
 
 func TestRenderFallbackPkgCmd(t *testing.T) {
-	tgt := &LocalDeployTarget{}
 	tests := []struct {
 		format   string
 		packages []string
@@ -191,13 +189,13 @@ func TestRenderFallbackPkgCmd(t *testing.T) {
 	}
 	for _, tc := range tests {
 		s := &SystemPackagesStep{Format: tc.format, Phase: PhaseInstall, Packages: tc.packages}
-		if got := tgt.renderFallbackPkgCmd(s); got != tc.want {
+		if got := renderFallbackPkgCmd(s); got != tc.want {
 			t.Errorf("%s → %q, want %q", tc.format, got, tc.want)
 		}
 	}
 	// Non-install phases should return empty.
 	s := &SystemPackagesStep{Format: "rpm", Phase: PhasePrepare, Packages: []string{"x"}}
-	if got := tgt.renderFallbackPkgCmd(s); got != "" {
+	if got := renderFallbackPkgCmd(s); got != "" {
 		t.Errorf("prepare phase returned %q, want empty", got)
 	}
 }

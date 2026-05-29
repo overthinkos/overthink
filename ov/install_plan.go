@@ -21,7 +21,22 @@ package main
 // turns layer.yml → InstallPlan lives in install_build.go; the emitters live
 // in build_target_oci.go / deploy_target_container.go / deploy_target_host.go.
 
-import "os"
+import (
+	"os"
+	"strings"
+)
+
+// HomeToken is the deferred-home placeholder the compiler bakes into
+// home-bearing step fields (env.d values, path_append entries, shell-snippet
+// destinations) instead of expanding `~`/`$HOME` against a compile-time home.
+// Each DeployTarget resolves it at emit time via InstallPlan.ResolveHome with
+// the home of the ACTUAL destination — img.Home for the OCI/pod-overlay build,
+// the host home for LocalDeployTarget, the GUEST home for VmDeployTarget. This
+// is what lets a `target: vm` deploy write env.d that points at the guest
+// user's home (/home/<guest-user>) rather than the host operator's home.
+// The `{{.Home}}` spelling matches the existing builder-artifact convention
+// (generate.go:expandBuilderPath), so the two token systems stay aligned.
+const HomeToken = "{{.Home}}"
 
 // ---------------------------------------------------------------------------
 // Scope — where the effect lands on the target filesystem.
@@ -926,6 +941,45 @@ type InstallPlan struct {
 	AddLayers      []string          // layers added on top via deploy.yml add_layers: (for provenance)
 	BuilderImage   string            // selected builder image for VenueContainerBuilder steps
 	Meta           map[string]string // free-form metadata (builder image, glibc version, …)
+}
+
+// ResolveHome substitutes the deferred HomeToken with a concrete home in
+// every home-bearing step field, in place. Each DeployTarget calls this once
+// at emit time with the home of its real destination: img.Home for the
+// OCI/pod-overlay build, the host home for LocalDeployTarget, the GUEST home
+// (SSH executor ResolveHome) for VmDeployTarget. Idempotent — fields without
+// the token are left untouched, so a second call is a no-op.
+//
+// Covered fields: ShellHookStep env values + PathAdd, ShellSnippetStep Snippet
+// + Destination + PathAppend, FileStep.Dest. TaskStep cmd/content bodies are
+// intentionally NOT touched — `~`/`$HOME` there shell-expand at runtime on the
+// destination as the deploy user, which is already correct on every venue.
+// BuilderStep is also untouched — its home is resolved separately by
+// renderBuilderScript against the builder/guest home (see execBuilder).
+func (p *InstallPlan) ResolveHome(home string) {
+	if p == nil || home == "" {
+		return
+	}
+	sub := func(s string) string { return strings.ReplaceAll(s, HomeToken, home) }
+	for _, step := range p.Steps {
+		switch s := step.(type) {
+		case *ShellHookStep:
+			for k, v := range s.EnvVars {
+				s.EnvVars[k] = sub(v)
+			}
+			for i, pth := range s.PathAdd {
+				s.PathAdd[i] = sub(pth)
+			}
+		case *ShellSnippetStep:
+			s.Snippet = sub(s.Snippet)
+			s.Destination = sub(s.Destination)
+			for i, pth := range s.PathAppend {
+				s.PathAppend[i] = sub(pth)
+			}
+		case *FileStep:
+			s.Dest = sub(s.Dest)
+		}
+	}
 }
 
 // StepsByVenue partitions the plan's steps by (Scope, Venue) tuple while

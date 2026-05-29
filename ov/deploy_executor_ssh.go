@@ -220,7 +220,6 @@ func (e *SSHExecutor) Kind() string { return "ssh" }
 // guest user's. Any subsequent shell-rc edit (env.d sourcing block,
 // new shell:-schema managed-block, etc.) now lands in the right place.
 func (e *SSHExecutor) ResolveHome(ctx context.Context, user string) (string, error) {
-	args := e.sshBaseArgs()
 	var script string
 	if user == "" {
 		// $HOME on the SSH-login user's session.
@@ -230,8 +229,17 @@ func (e *SSHExecutor) ResolveHome(ctx context.Context, user string) (string, err
 		// Fallback to ~user expansion if getent isn't available.
 		script = `entry=$(getent passwd ` + shellSingleQuoteSSH(user) + ` 2>/dev/null) && printf %s "$(printf %s "$entry" | cut -d: -f6)" || eval "printf %s ~` + shellSingleQuoteSSH(user) + `"`
 	}
-	args = append(args, "bash", "-c", script)
+	// Feed the script over stdin to `bash -s` (the same transport
+	// RunCapture/RunUser use). Passing it as a `bash -c <script>` remote
+	// argv is broken: ssh space-joins all remote-command args into one
+	// string and the guest shell re-splits on whitespace, so
+	// `bash -c printf %s "$HOME"` runs bare `printf` ($0=printf, no format)
+	// and exits 2 — which hard-aborted every VM deploy's guest-home
+	// preflight. stdin preserves the script verbatim.
+	args := e.sshBaseArgs()
+	args = append(args, "bash", "-s")
 	cmd := exec.CommandContext(ctx, "ssh", args...)
+	cmd.Stdin = strings.NewReader(script)
 	var stdout bytes.Buffer
 	cmd.Stdout = &stdout
 	if err := cmd.Run(); err != nil {
@@ -294,21 +302,39 @@ func (e *SSHExecutor) WaitForSSH(ctx context.Context, maxWaitSeconds int) error 
 // cloud-image VMs; callers should skip this for bootc sources with
 // no cidata ISO attached.
 func (e *SSHExecutor) WaitForCloudInit(ctx context.Context) error {
-	script := `
-if command -v cloud-init >/dev/null 2>&1; then
-    cloud-init status --wait
-else
-    echo "cloud-init not installed; skipping wait" >&2
-fi
-`
-	var buf bytes.Buffer
-	args := e.sshBaseArgs()
-	args = append(args, "bash", "-s")
-	cmd := exec.CommandContext(ctx, "ssh", args...)
-	cmd.Stdin = strings.NewReader(script)
-	cmd.Stdout = &buf
-	cmd.Stderr = &buf
-	return cmd.Run()
+	// On first boot cloud-init regenerates the SSH host keys and restarts
+	// sshd AFTER the initial sshd start (i.e. after WaitForSSH already
+	// passed). That restart drops in-flight connections and resets the next
+	// one mid-key-exchange ("kex_exchange_identification: Connection reset by
+	// peer"), which otherwise fails the scp in EnsureOvInGuest. Retry until an
+	// ssh connection SURVIVES `cloud-init status --wait` — that is the
+	// deterministic signal that cloud-init has settled and sshd is stable
+	// (not a sleep-and-pray). `|| true` tolerates a non-zero cloud-init result
+	// (error/degraded): we wait for cloud-init to be DONE, not necessarily OK,
+	// and a non-zero status delivered over a live connection still proves sshd
+	// is stable.
+	script := `if command -v cloud-init >/dev/null 2>&1; then cloud-init status --wait >/dev/null 2>&1 || true; fi`
+	deadline := time.Now().Add(5 * time.Minute)
+	for {
+		var buf bytes.Buffer
+		args := e.sshBaseArgs()
+		args = append(args, "bash", "-s")
+		cmd := exec.CommandContext(ctx, "ssh", args...)
+		cmd.Stdin = strings.NewReader(script)
+		cmd.Stdout = &buf
+		cmd.Stderr = &buf
+		if err := cmd.Run(); err == nil {
+			return nil
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("cloud-init wait: ssh did not stabilize within 5m")
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(3 * time.Second):
+		}
+	}
 }
 
 // sshBaseArgs builds the common ssh invocation prefix. ssh(1) reads

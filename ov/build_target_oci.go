@@ -73,6 +73,12 @@ func (t *OCITarget) String() string {
 
 // emitPlan emits directives for one layer's plan.
 func (t *OCITarget) emitPlan(plan *InstallPlan, opts EmitOpts) error {
+	// Resolve the deferred {{.Home}} token in home-bearing step fields to
+	// the image's runtime home. For an OCI build (and the pod-overlay build
+	// that reuses OCITarget) img.Home IS the home the baked paths run under.
+	if t.Image != nil {
+		plan.ResolveHome(t.Image.Home)
+	}
 	fmt.Fprintf(&t.buf, "# Layer: %s\n", plan.Layer)
 	for _, step := range plan.Steps {
 		if step.Venue() == VenueSkip {

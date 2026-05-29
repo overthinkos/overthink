@@ -22,6 +22,130 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-05
 
+### 2026-05-29 — VM deploy correctness: one render path, deploy-time `$HOME`, cross-host builders, guest-user virtiofs idmap
+
+Deploying the real `ov-cachyos-gpu` operator VM (the deliverable of the earlier
+2026-05-29 cutover below) surfaced a chain of VM-deploy bugs that no unit test
+or disposable-bed run had caught — the bed used throwaway inputs (a world-
+readable `/tmp` virtiofs source; no npm-builder layer) that masked them. This
+cutover RCA'd and fixed all of them in one working tree, with the operator VM as
+the live proof.
+
+**Render consolidation (the trigger — "check all renders use the same code
+path").** `LocalDeployTarget` and `VmDeployTarget` had drifted into divergent
+renderers. Unified onto ONE path: `renderTaskCommand` / `renderFallbackPkgCmd`
+became package-level (used by both targets); `copy:` tasks stage through the
+executor's `PutFile` (a local `install` vs `scp+install` over SSH) instead of a
+rendered `install <hostLayerDir>/<f> <dst>` that referenced a host path absent
+in the guest (the `socat relay-wrapper` 404); env.d rendering shares
+`renderEnvdBody`. The VM AUR builder's wrapper was dropping privileges twice
+(`su - user` around a script that already configures NOPASSWD-wheel and drops
+via `sudo -u`), failing every AUR layer with `Permission denied` on the sudoers
+write — fixed to run the inner script as container-root, matching the local path.
+
+**pacman.conf repo layout (image/cachyos).** The hand-written cloud-init
+`pacman.conf` declared `[cachyos-extra-v3]` (404s `libyuv` via a malformed DB
+entry) and `[cachyos-extra]` (returns HTML at `$arch`, `Unrecognized archive
+format`). Aligned to the canonical `build.yml` `renderPacstrapExtraConf` layout
+— `cachyos-v3` / `cachyos-core-v3` (x86_64_v3) + `cachyos` ($arch) via
+`mirror.cachyos.org`, with `libyuv` resolving from Arch `extra`. (NOT a CDN
+outage — the operator correctly rejected that premature conclusion; the
+divergence from the canonical conf was the root cause.)
+
+**D1 — deploy-time `$HOME` resolution (pre-existing, systemic).** `~`/`$HOME` in
+a layer's `env:` / `path_append:` / shell-snippet destination was expanded at
+**compile** time against `ResolvedImage.Home`. For a `target: vm` deploy the
+synthetic plan's Home was the **host operator's** home, so env.d on the guest
+read `export NPM_CONFIG_PREFIX=/home/atrawog/.npm-global` and the managed
+profile block landed in a root-created `/home/atrawog/.profile` — not the guest
+user's `/home/cachy`. Fix: the compiler now emits the deferred `{{.Home}}` token
+(`HomeToken`); each `DeployTarget` resolves it at emit via
+`InstallPlan.ResolveHome(home)` against the REAL destination home — `img.Home`
+for OCI/pod-overlay, host home for local, the SSH-resolved **guest** home for
+vm. `cmd:` task bodies are left to shell-expand `$HOME` at runtime. The
+container BUILD path (`generate.go`) is unchanged — there `img.Home` is the
+runtime home. (RCA verdict: pre-existing, not a regression from the render
+consolidation; HEAD's old VM renderer consumed the same compile-baked values.)
+
+**D2 — env.d-sourcing managed block on the VM path.** `VmDeployTarget` never
+called `EnsureManagedBlock`, so the per-layer env.d files were written but never
+sourced — PATH never picked up `~/.npm-global/bin`. The managed-block writer is
+now executor-based (`EnsureManagedBlockVia`, `GetFile`/merge/`PutFile`) and
+shared by both targets; the os-based `EnsureManagedBlock` is a thin wrapper.
+The guest's login shell is detected from the guest `/etc/passwd`
+(`detectGuestShell`) since the guest default may differ from the operator's
+(CachyOS ships fish).
+
+**D3 — cross-host npm/pixi/cargo builders for VM deploys.** `VmDeployTarget`
+previously implemented only the `aur` builder; npm/pixi/cargo were skipped under
+`--skip-incompatible`, so the AI-CLI layers (`claude-code`, `codex`, `gemini`,
+`oracle`, `forgecode` — all npm-builder `package.json` layers) silently never
+installed on the VM. `execHomeArtifactBuilder` now builds them on the host with
+HOME bind-mounted AS the **guest home path** (so npm shebangs / cargo rpaths /
+pixi activation scripts bake the path the guest will use), then tars the home
+subdirs (`~/.npm-global`, `~/.pixi`, `~/.cargo`; caches excluded), scp's the
+tarball in, and extracts it into the guest `$HOME` as the guest user.
+
+**D4 — guest-user virtiofs idmap.** libvirt's default rootless
+`qemu:///session` idmap maps **guest-root → the host operator**, so a host-home
+passthrough virtiofs share was `root:root` inside the guest and the interactive
+user (`cachy`, uid 1000) got `Permission denied` — `/workspace` was mounted but
+unusable. `ensureVirtiofsIdmap` (paired with `ensureVirtiofsSharedMemory`)
+auto-injects an `<idmap>` mapping the guest's primary user (uid/gid 1000) to the
+host operator, with the rest in the operator's `/etc/subuid`/`/etc/subgid`
+range, so the share is owned by — and writable as — the guest user. An
+author-declared idmap, a non-passthrough accessmode, or a missing subordinate-ID
+range leave libvirt's default untouched.
+
+**R10-surfaced fixes (the iterative debugging the disposable bed caught).** The
+`eval-cachyos-gpu-vm` bed R10 caught three further real bugs, each RCA'd before
+any fix (per R1) and re-verified to a clean `PASS (steps=11)`:
+
+- **`SSHExecutor.ResolveHome` `bash -c` → `bash -s`.** ResolveHome passed its
+  script as a `bash -c <script>` REMOTE argv; ssh space-joins remote-command
+  args into one string and the guest shell re-splits on whitespace, so
+  `bash -c printf %s "$HOME"` ran bare `printf` (no format) → exit 2. The D1
+  guest-home preflight (which has no fallback, unlike the `eval_cmd.go` caller
+  that silently masked it with `os.Getenv("HOME")`) turned this latent bug into
+  a hard deploy abort with an EMPTY guest ledger. Fixed by feeding the script
+  over stdin to `bash -s` (the transport `RunCapture`/`RunUser` already use) —
+  one shared method, fixing both call sites.
+- **nvidia-container-toolkit install-time CDI hook.** A fresh `nvidia-container-toolkit`
+  install runs an `nvidia-ctk-cdi.hook` alpm hook (`nvidia-ctk cdi generate`)
+  that fails pre-reboot ("NVML: Driver Not Loaded" — the passed-through GPU's
+  driver only loads after the `nvidia-driver` layer's reboot), making `pacman`
+  exit non-zero and aborting the deploy at the nvidia layer. Disabled on the VM
+  (cloud-init symlinks the hook to `/dev/null`), with a post-reboot
+  `ov-nvidia-cdi` oneshot regenerating CDI once the driver is up. (The operator
+  VM had masked it: an earlier iteration already had nvidia-utils, so its deploy
+  hit a no-op; the fresh disposable bed exposed it.)
+- **Cross-host builder cleanup `rm` (D3).** `execHomeArtifactBuilder` placed the
+  artifact tarball via `PutFile` (which runs `install` under `sudo bash`, so the
+  file is root-owned) into the sticky `/tmp`, then its extract script's `rm` ran
+  as the GUEST user → "Operation not permitted" under `set -e`. The tar EXTRACT
+  succeeded (claude installed), only the cleanup failed. Fixed: extract as the
+  guest user (artifacts guest-owned), remove the root-owned tarball as root.
+- **Cold-boot cloud-init sshd flap (operator VM deploy).** On first boot
+  cloud-init regenerates the SSH host keys + restarts sshd AFTER the initial
+  sshd start (after `WaitForSSH` already passed), so the EnsureOvInGuest scp
+  raced the restart ("kex_exchange_identification: Connection reset by peer").
+  Bootstrap VMs (pacstrap/debootstrap) skipped `WaitForCloudInit` (it gated on
+  `cloud_image` only), so nothing waited for cloud-init to settle. Fixed: run
+  `WaitForCloudInit` for ANY VM with a cloud-init seed (`spec.CloudInit != nil`),
+  and make it retry until an ssh connection SURVIVES `cloud-init status --wait`
+  (the deterministic "sshd stable" signal — not a sleep), tolerating a non-zero
+  cloud-init result.
+- **env.d aggregator never loaded in bash login (AI CLIs not on PATH).**
+  `ShellInitFilePath(bash)` wrote the env.d-sourcing managed block to
+  `~/.profile`, but a bash login shell sources the FIRST of `~/.bash_profile` /
+  `~/.bash_login` / `~/.profile` — and the Arch/CachyOS default `~/.bash_profile`
+  (`. ~/.bashrc`) means `~/.profile` is NEVER read. So the AI CLIs installed in
+  `~/.npm-global/bin` were absent from the operator's login PATH (`bash -lic
+  command -v claude` → not found) despite being installed. Fixed:
+  `ShellInitFilePath(bash)` → `~/.bashrc` (sourced by interactive shells and by
+  login via `~/.bash_profile`). The bed eval now asserts the AI CLI resolves on
+  the interactive-login PATH (`bash -lic`), not merely that the block exists.
+
 ### 2026-05-29 — full ov-cachyos GPU workstation VM (autostart + virtiofs /workspace + full guest agent)
 
 Built on the 2026-05-28 GPU-passthrough stack: a persistent, autostarting

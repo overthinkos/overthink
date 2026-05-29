@@ -208,9 +208,17 @@ func primaryDistroTag(img *ResolvedImage, hostCtx HostContext) string {
 // ---------------------------------------------------------------------------
 
 // compileShellHookStep returns a ShellHookStep for the layer's env: and
-// path_append: fields, or nil if the layer contributes neither. Path
-// entries are {{.Home}}-substituted using the image's resolved Home so
-// targets can emit them literally.
+// path_append: fields, or nil if the layer contributes neither.
+//
+// Home resolution is DEFERRED: `~`/`$HOME` are rewritten to the literal
+// `{{.Home}}` token rather than expanded against img.Home. Each DeployTarget
+// resolves the token at emit time against the home of the actual deploy
+// destination — img.Home for the OCI/pod-overlay build, the host home for
+// LocalDeployTarget, and the GUEST home (via the SSH executor's ResolveHome)
+// for VmDeployTarget. Baking img.Home here was wrong for VM deploys: the
+// synthetic plan's Home was the host operator's home, so env.d on the guest
+// pointed at /home/<operator> instead of /home/<guest-user>. See
+// InstallPlan.ResolveHome.
 func compileShellHookStep(layer *Layer, img *ResolvedImage) *ShellHookStep {
 	envCfg, _ := layer.EnvConfig()
 	if envCfg == nil {
@@ -221,11 +229,11 @@ func compileShellHookStep(layer *Layer, img *ResolvedImage) *ShellHookStep {
 	}
 	vars := make(map[string]string, len(envCfg.Vars))
 	for k, v := range envCfg.Vars {
-		vars[k] = ExpandPath(v, img.Home)
+		vars[k] = ExpandPath(v, HomeToken)
 	}
 	paths := make([]string, 0, len(envCfg.PathAppend))
 	for _, p := range envCfg.PathAppend {
-		paths = append(paths, ExpandPath(p, img.Home))
+		paths = append(paths, ExpandPath(p, HomeToken))
 	}
 	return &ShellHookStep{
 		LayerName: layer.Name,
@@ -240,10 +248,10 @@ func compileShellHookStep(layer *Layer, img *ResolvedImage) *ShellHookStep {
 
 // compileShellSnippetSteps returns one ShellSnippetStep per (layer, shell)
 // pair the layer contributes. Selection rule (mirrors TagPkgConfig):
-//   1. If layer.Shell.ByShell[shell] exists, render it.
-//   2. Else if layer.Shell.Init is non-empty, render the generic body with
-//      ${SHELL_NAME} substituted to the active shell name.
-//   3. Else this shell gets nothing from this layer.
+//  1. If layer.Shell.ByShell[shell] exists, render it.
+//  2. Else if layer.Shell.Init is non-empty, render the generic body with
+//     ${SHELL_NAME} substituted to the active shell name.
+//  3. Else this shell gets nothing from this layer.
 //
 // path_append entries are rendered into the snippet body using
 // shell-appropriate syntax (PATH=... for bash/zsh/sh, fish_add_path for
@@ -266,6 +274,15 @@ func compileShellSnippetSteps(layer *Layer, img *ResolvedImage, hostCtx HostCont
 		return nil
 	}
 	out := make([]InstallStep, 0, len(ShellAllowlist))
+	// Home resolution is deferred for DEPLOY targets (host/vm): emit the
+	// `{{.Home}}` token so each target resolves it at emit time against the
+	// real destination home (host home for local, GUEST home for vm). The
+	// container BUILD path (empty/oci target) keeps img.Home — there the
+	// image's resolved Home IS the runtime home. See InstallPlan.ResolveHome.
+	snippetHome := img.Home
+	if hostCtx.Target == "host" || hostCtx.Target == "vm" {
+		snippetHome = HomeToken
+	}
 	// Stable iteration: walk the allowlist in fixed order so plan output
 	// is deterministic across runs.
 	for _, shell := range []string{"bash", "zsh", "fish", "sh"} {
@@ -273,12 +290,12 @@ func compileShellSnippetSteps(layer *Layer, img *ResolvedImage, hostCtx HostCont
 		if !ok {
 			continue
 		}
-		dest, useDropin := shellSnippetDestination(layer.Name, shell, hostCtx, img.Home, spec.Path)
+		dest, useDropin := shellSnippetDestination(layer.Name, shell, hostCtx, snippetHome, spec.Path)
 		if dest == "" {
 			continue
 		}
 		// Render path_append into the body using shell-appropriate syntax.
-		body = appendShellPathLines(body, paths, shell, img.Home)
+		body = appendShellPathLines(body, paths, shell, snippetHome)
 		if body == "" {
 			continue
 		}

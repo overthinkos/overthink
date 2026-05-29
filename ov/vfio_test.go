@@ -324,6 +324,60 @@ func TestTransferImageToGuestReloadsCorrupt(t *testing.T) {
 	}
 }
 
+// --- Render consolidation: VM + local share ONE render path per functionality ---
+
+// A copy: task MUST stage the layer file through the executor's PutFile
+// (scp+install over SSH), never a rendered `install <hostLayerDir>/<f> <dst>`
+// — the host path doesn't exist in the guest (the socat relay-wrapper 404 bug).
+func TestVmExecTaskCopyStagesViaPutFile(t *testing.T) {
+	fe := &fakeGuestExec{}
+	tgt := &VmDeployTarget{Exec: fe}
+	s := &TaskStep{
+		Task:     &Task{Copy: "relay-wrapper", To: "/usr/local/bin/relay-wrapper", Mode: "0755"},
+		LayerDir: "/host/cache/layers/socat",
+	}
+	if err := tgt.execTask(context.Background(), s, &InstallPlan{}, EmitOpts{}); err != nil {
+		t.Fatalf("execTask copy: %v", err)
+	}
+	if !fe.putCalled {
+		t.Error("copy: task did not route through PutFile — would 404 on a host-path install in the guest")
+	}
+	if fe.runCalled {
+		t.Error("copy: task ran a shell command instead of PutFile")
+	}
+}
+
+// A non-copy task renders through the SHARED renderTaskCommand and runs via the
+// executor (RunSystem for system scope) — proving VM no longer has its own
+// renderVmTaskCommand.
+func TestVmExecTaskCmdUsesSharedRenderer(t *testing.T) {
+	fe := &fakeGuestExec{}
+	tgt := &VmDeployTarget{Exec: fe}
+	s := &TaskStep{Task: &Task{Cmd: "echo hi"}, ResolvedUser: "root"}
+	if err := tgt.execTask(context.Background(), s, &InstallPlan{}, EmitOpts{}); err != nil {
+		t.Fatalf("execTask cmd: %v", err)
+	}
+	if !fe.runCalled {
+		t.Error("cmd: task did not run via the executor")
+	}
+	if fe.putCalled {
+		t.Error("cmd: task should not have called PutFile")
+	}
+}
+
+// renderTaskCommand is the ONE shared task renderer; copy: is explicitly NOT
+// handled here (it must be staged via PutFile in execTask), and pac package
+// installs carry options: through (the divergence the consolidation fixed).
+func TestSharedRenderersConsolidated(t *testing.T) {
+	if _, err := renderTaskCommand(&TaskStep{Task: &Task{Copy: "f"}}); err == nil {
+		t.Error("renderTaskCommand must reject copy: (staged via PutFile, not rendered)")
+	}
+	got := renderFallbackPkgCmd(&SystemPackagesStep{Format: "pac", Phase: PhaseInstall, Packages: []string{"libyuv"}, Options: []string{"--overwrite", "*"}})
+	if got != "pacman -Sy --noconfirm --needed --overwrite * libyuv" {
+		t.Errorf("pac options not applied by shared renderer: %q", got)
+	}
+}
+
 // --- ov-cachyos-gpu VM: autostart + virtiofs filesystem validation ---
 
 func TestValidateVmSpec_AutostartRequiresLibvirt(t *testing.T) {

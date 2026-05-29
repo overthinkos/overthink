@@ -23,6 +23,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -170,14 +171,21 @@ func (t *LocalDeployTarget) Emit(plans []*InstallPlan, opts EmitOpts) error {
 		if plan == nil {
 			continue
 		}
+		// Resolve the deferred {{.Home}} token to this destination's home
+		// (host home for the local ShellExecutor, the REMOTE user's home for
+		// an SSHExecutor `host: user@machine`). HostHome is already the
+		// executor-resolved home, so this lands env.d/profile paths on the
+		// right user even for remote local-target deploys.
+		plan.ResolveHome(t.HostHome)
 		if err := t.emitPlan(plan, opts); err != nil {
 			return fmt.Errorf("plan %s: %w", plan.Layer, err)
 		}
 	}
 
-	// Ensure the shell managed block is in place. Idempotent — safe to
-	// run after every deploy.
-	if _, err := EnsureManagedBlock(t.Shell, t.HostHome); err != nil {
+	// Ensure the env.d-sourcing managed block is in place. Idempotent —
+	// safe to run after every deploy. Goes through the executor so local
+	// and VM deploys share one write path (R3).
+	if _, err := EnsureManagedBlockVia(opts.ContextOrDefault(), t.exec(), t.Shell, t.HostHome, opts); err != nil {
 		return fmt.Errorf("managed block: %w", err)
 	}
 	return nil
@@ -440,53 +448,39 @@ func (t *LocalDeployTarget) renderSystemPackageCommand(s *SystemPackagesStep) (s
 	// DistroDef on the target.
 	// Absent a FormatDef reference, we fall back to a minimal inline
 	// renderer that joins packages with the format's default command.
-	cmd := t.renderFallbackPkgCmd(s)
+	cmd := renderFallbackPkgCmd(s)
 	if cmd == "" {
 		return "", fmt.Errorf("no host template for %s / %s", s.Format, s.Phase)
 	}
 	return cmd, nil
 }
 
-// renderFallbackPkgCmd produces a plain shell command for package
-// install when no build.yml host template is available yet. Used
-// during the incremental migration (Task 7 converts build.yml templates
-// format-by-format). The output is a best-effort heuristic — layers
-// depending on complex repo/key setup should move to the structured
-// templates ASAP.
+// renderFallbackPkgCmd renders a package-install command for a
+// SystemPackagesStep. Package-level so LocalDeployTarget AND VmDeployTarget
+// install packages through ONE code path. (The previous two copies drifted —
+// the VM copy applied `options:` to the pac install, the host copy dropped
+// them; the unified version applies options to all three formats.)
 //
-// Each format prefixes a database-refresh step before the install:
-//   - apt: `apt-get update` (refresh /var/lib/apt/lists/) before install
-//     — apt-get install does NOT auto-refresh; without this the install
-//     fetches stale URLs and 404s when packages have been version-bumped.
-//   - pacman: `-Sy` (refresh /var/lib/pacman/sync/) before install
-//     — pacman -S does NOT auto-refresh either; same 404-on-stale failure
-//     mode (observed on a-cachy 2026-05: nspr-4.38.2 fetched per stale db,
-//     upstream had moved to 4.39, mirror returned 404). Note: this is
-//     `-Sy` not `-Syu` — refreshing the db is required for correctness;
-//     a bulk system upgrade as a side effect of installing one new tool
-//     is surprising on a user's running workstation. Operators run
-//     `pacman -Syu` themselves when they want a full upgrade.
-//   - dnf: no refresh prefix needed — dnf auto-refreshes metadata via
-//     repo metadata_expire (48h default) and refreshes inline when stale.
-func (t *LocalDeployTarget) renderFallbackPkgCmd(s *SystemPackagesStep) string {
+// Each format refreshes its package DB before install (apt-get update / pacman
+// -Sy — neither auto-refreshes, so a stale DB 404s on version-bumped packages;
+// dnf auto-refreshes via metadata_expire). pacman uses `-Sy` NOT `-Syu` — a DB
+// refresh is required for correctness, but a bulk system upgrade as a
+// side-effect of installing one tool is surprising on a running workstation.
+func renderFallbackPkgCmd(s *SystemPackagesStep) string {
 	if s.Phase != PhaseInstall || len(s.Packages) == 0 {
 		return ""
 	}
+	opts := ""
+	if len(s.Options) > 0 {
+		opts = " " + strings.Join(s.Options, " ")
+	}
 	switch s.Format {
 	case "rpm":
-		opts := ""
-		if len(s.Options) > 0 {
-			opts = " " + strings.Join(s.Options, " ")
-		}
 		return fmt.Sprintf("dnf install -y%s %s", opts, strings.Join(s.Packages, " "))
 	case "deb":
-		opts := ""
-		if len(s.Options) > 0 {
-			opts = " " + strings.Join(s.Options, " ")
-		}
 		return fmt.Sprintf("DEBIAN_FRONTEND=noninteractive apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y%s %s", opts, strings.Join(s.Packages, " "))
 	case "pac":
-		return fmt.Sprintf("pacman -Sy --noconfirm --needed %s", strings.Join(s.Packages, " "))
+		return fmt.Sprintf("pacman -Sy --noconfirm --needed%s %s", opts, strings.Join(s.Packages, " "))
 	}
 	return ""
 }
@@ -616,7 +610,28 @@ func (t *LocalDeployTarget) execTask(s *TaskStep, plan *InstallPlan, opts EmitOp
 	if s.Task == nil {
 		return nil
 	}
-	cmd, err := t.renderTaskCommand(s)
+	// copy: stages a layer file onto the venue through the executor's
+	// PutFile — a plain `install` locally, scp+install over SSH. This is
+	// the ONE path both LocalDeployTarget and VmDeployTarget share for
+	// file-copy tasks (a rendered `install <layerDir>/<f> <dst>` only works
+	// when the layer dir is on the same host the command runs on, which is
+	// false for SSH/VM deploys — the historic VM copy:-task bug).
+	if s.Task.Copy != "" {
+		src := filepath.Join(s.LayerDir, s.Task.Copy)
+		dst := s.Task.To
+		if dst == "" {
+			dst = s.Task.Copy
+		}
+		if err := t.exec().PutFile(opts.ContextOrDefault(), src, dst, parseTaskMode(s.Task.Mode, 0o644), s.Scope() == ScopeSystem, opts); err != nil {
+			return err
+		}
+		kind, _ := s.Task.Kind()
+		t.noteStep(rec, StepKindTask, s.Scope(), s.Venue(),
+			fmt.Sprintf("%s: %s", kind, taskSummary(s.Task)), start)
+		rec.ReverseOps = append(rec.ReverseOps, s.Reverse()...)
+		return nil
+	}
+	cmd, err := renderTaskCommand(s)
 	if err != nil {
 		return err
 	}
@@ -651,7 +666,12 @@ func (t *LocalDeployTarget) execTask(s *TaskStep, plan *InstallPlan, opts EmitOp
 // For v1 of the host target we implement cmd, mkdir, and link — the
 // most common verbs. The rest fall back to a "not yet supported" error
 // that tests can verify against.
-func (t *LocalDeployTarget) renderTaskCommand(s *TaskStep) (string, error) {
+// renderTaskCommand turns a non-copy TaskStep into a shell command. It is
+// package-level (uses only the step, not the target) so LocalDeployTarget AND
+// VmDeployTarget render every task verb through ONE code path. copy: is NOT
+// handled here — it is staged via the executor's PutFile in execTask, the only
+// portable way to place a layer file on a remote/SSH venue.
+func renderTaskCommand(s *TaskStep) (string, error) {
 	task := s.Task
 	ctxPath := s.CtxPath
 
@@ -685,16 +705,9 @@ func (t *LocalDeployTarget) renderTaskCommand(s *TaskStep) (string, error) {
 		caps := task.Caps
 		return fmt.Sprintf("setcap %s %s", shDoubleQuote(caps), shDoubleQuote(task.Setcap)), nil
 	case task.Copy != "":
-		src := filepath.Join(s.LayerDir, task.Copy)
-		dst := task.To
-		if dst == "" {
-			dst = task.Copy
-		}
-		mode := task.Mode
-		if mode == "" {
-			mode = "0644"
-		}
-		return fmt.Sprintf("install -m%s %s %s", mode, shDoubleQuote(src), shDoubleQuote(dst)), nil
+		// Handled in execTask via the executor's PutFile (portable across
+		// local + SSH). Reaching here means execTask didn't intercept it.
+		return "", fmt.Errorf("copy: task must be staged via PutFile, not rendered")
 	case task.Write != "":
 		mode := task.Mode
 		if mode == "" {
@@ -706,6 +719,19 @@ func (t *LocalDeployTarget) renderTaskCommand(s *TaskStep) (string, error) {
 		return renderDownloadScript(task, s.LayerVars), nil
 	}
 	return "", fmt.Errorf("task has no supported verb: %+v", task)
+}
+
+// parseTaskMode parses a layer task mode string ("0644", "0o755") into a
+// uint32 file mode for PutFile, falling back to def when empty/unparseable.
+func parseTaskMode(mode string, def uint32) uint32 {
+	if mode == "" {
+		return def
+	}
+	v, err := strconv.ParseUint(strings.TrimPrefix(mode, "0o"), 8, 32)
+	if err != nil {
+		return def
+	}
+	return uint32(v)
 }
 
 // taskShellPreamble returns the BUILD_ARCH/ARCH exports plus any
@@ -724,6 +750,20 @@ func taskShellPreamble(s *TaskStep) string {
 		sortStrings(keys)
 		for _, k := range keys {
 			fmt.Fprintf(&b, "export %s=%s\n", k, shQuoteArg(s.LayerVars[k]))
+		}
+	}
+	// Task.Env (sorted) — declared env: on the task AND the secret-injection
+	// path (layer_secrets.go InjectSecretsIntoPlans) which sets task.Env to
+	// credential-store-resolved values. Exporting here means BOTH local and VM
+	// deploys propagate them to cmd: bodies through this one shared preamble.
+	if s.Task != nil && len(s.Task.Env) > 0 {
+		keys := make([]string, 0, len(s.Task.Env))
+		for k := range s.Task.Env {
+			keys = append(keys, k)
+		}
+		sortStrings(keys)
+		for _, k := range keys {
+			fmt.Fprintf(&b, "export %s=%s\n", k, shQuoteArg(s.Task.Env[k]))
 		}
 	}
 	return b.String()
@@ -1360,9 +1400,9 @@ func renderCargoScript(s *BuilderStep, hostHome string) string {
 // arch-builder's `user` account is added to wheel idempotently.
 // Then the script drops to that user via `sudo -u user yay -S …`:
 //
-//   * yay/makepkg run as the unprivileged user (modern makepkg refuses
+//   - yay/makepkg run as the unprivileged user (modern makepkg refuses
 //     root by design).
-//   * yay's own internal `sudo pacman -U` for build dependencies
+//   - yay's own internal `sudo pacman -U` for build dependencies
 //     passes through the NOPASSWD-wheel policy.
 //
 // Mirroring the host's wheel-based pattern (instead of a per-user

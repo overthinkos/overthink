@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
-	"sort"
 	"strings"
 	"time"
 )
@@ -60,6 +60,13 @@ type VmDeployTarget struct {
 	// LocalDeployTarget.shellsPresent — populated lazily on the first
 	// ShellSnippetStep encountered.
 	shellsPresent map[string]bool
+
+	// guestHome is the GUEST user's home directory, resolved once at the
+	// top of Emit via the SSH executor (echo $HOME in the guest). Drives
+	// InstallPlan.ResolveHome (so env.d / shell-snippet destinations point
+	// at /home/<guest-user>, not the host operator's home), the env.d
+	// sourcing managed block, and the cross-host builder artifact transfer.
+	guestHome string
 }
 
 // Name returns the target's display name.
@@ -97,9 +104,16 @@ func (t *VmDeployTarget) Emit(plans []*InstallPlan, opts EmitOpts) error {
 		}
 	}
 
-	// 2. Wait for cloud-init (cloud-image sources only; bootc guests
-	//    don't run cloud-init unless the layer is included).
-	if t.Spec.Source.Kind == "cloud_image" {
+	// 2. Wait for cloud-init to settle on ANY VM with a cloud-init seed —
+	//    cloud_image sources AND bootstrap (pacstrap/debootstrap) VMs whose
+	//    seed configures the guest on first boot. cloud-init regenerates the
+	//    SSH host keys + restarts sshd on first boot AFTER the initial sshd
+	//    start, so without this wait the EnsureOvInGuest scp below races that
+	//    restart ("kex Connection reset by peer"). Bootstrap VMs hit this just
+	//    as cloud_image VMs do — gating on cloud_image alone left bootstrap
+	//    deploys flaky on a cold first boot. (bootc guests with no cloud-init
+	//    seed have spec.CloudInit == nil and skip this.)
+	if t.Spec.Source.Kind == "cloud_image" || t.Spec.CloudInit != nil {
 		if sshExec, ok := t.Exec.(*SSHExecutor); ok {
 			fmt.Fprintf(os.Stderr, "Waiting for cloud-init to finish in guest...\n")
 			if err := sshExec.WaitForCloudInit(ctx); err != nil {
@@ -118,6 +132,20 @@ func (t *VmDeployTarget) Emit(plans []*InstallPlan, opts EmitOpts) error {
 	// 4. Ensure guest ledger + env.d directories.
 	if err := t.ensureGuestLedgerDirs(ctx, opts); err != nil {
 		return fmt.Errorf("VmDeployTarget: ensure guest ledger dirs: %w", err)
+	}
+
+	// 4b. Resolve the GUEST user's home once. Every home-bearing step field
+	//     ({{.Home}} in env.d values, shell-snippet destinations, builder
+	//     artifact paths) resolves against THIS home — not the host
+	//     operator's. Without it env.d on the guest pointed at the operator's
+	//     /home/<operator> and user-scope installs (npm -g, cargo) landed in
+	//     a root-owned path the guest user couldn't write.
+	if !opts.DryRun {
+		guestHome, err := t.Exec.ResolveHome(ctx, "")
+		if err != nil {
+			return fmt.Errorf("VmDeployTarget: resolve guest HOME: %w", err)
+		}
+		t.guestHome = guestHome
 	}
 
 	// 5. Iterate plans, writing per-layer ledger records INTO THE GUEST
@@ -139,6 +167,10 @@ func (t *VmDeployTarget) Emit(plans []*InstallPlan, opts EmitOpts) error {
 	}
 
 	for _, plan := range plans {
+		// Resolve {{.Home}} → the guest user's home before emitting so env.d
+		// content, shell-snippet destinations, and managed blocks all point
+		// at the guest user's home rather than the host operator's.
+		plan.ResolveHome(t.guestHome)
 		layerRec, err := t.emitPlan(ctx, plan, opts)
 		if err != nil {
 			// Persist what we have so far before returning.
@@ -156,6 +188,17 @@ func (t *VmDeployTarget) Emit(plans []*InstallPlan, opts EmitOpts) error {
 			// For pure-add_layers vm deploys the deploy-id's "image" slot
 			// stays as the vm: target name so `ov deploy del` can find it.
 			deployRec.Image = t.targetName()
+		}
+	}
+
+	// Ensure the env.d-sourcing managed block exists in the GUEST user's
+	// shell init so the per-layer env.d files actually get sourced at login.
+	// Without this the env.d files are written but never read — PATH never
+	// picks up ~/.npm-global/bin etc. Uses the guest's detected login shell
+	// and the same executor-based writer as the local path (R3).
+	if !opts.DryRun {
+		if _, err := EnsureManagedBlockVia(ctx, t.Exec, t.detectGuestShell(ctx), t.guestHome, opts); err != nil {
+			return fmt.Errorf("VmDeployTarget: guest managed block: %w", err)
 		}
 	}
 
@@ -378,6 +421,28 @@ func (t *VmDeployTarget) ensureShellProbe(ctx context.Context, opts EmitOpts) er
 	return nil
 }
 
+// detectGuestShell resolves the GUEST user's login shell from the guest's
+// /etc/passwd (via getent), mapping the shell basename to a ShellKind. The
+// guest's default shell is NOT necessarily the operator's — CachyOS images
+// ship fish as the interactive default, so writing the env.d-sourcing block
+// to ~/.profile (bash) would never be sourced. Defaults to bash on any
+// detection failure (POSIX-safest, matches DetectLoginShell). DryRun → bash.
+func (t *VmDeployTarget) detectGuestShell(ctx context.Context) ShellKind {
+	stdout, _, _, err := t.Exec.RunCapture(ctx,
+		`getent passwd "$(id -un)" 2>/dev/null | awk -F: '{print $7}'`)
+	if err != nil {
+		return ShellBash
+	}
+	switch filepath.Base(strings.TrimSpace(stdout)) {
+	case "zsh":
+		return ShellZsh
+	case "fish":
+		return ShellFish
+	default:
+		return ShellBash
+	}
+}
+
 // execSystemPackages runs the distro's package install command on the
 // guest. Currently uses the fallback renderer (dnf / apt-get / pacman);
 // the structured-template path is shared with LocalDeployTarget and
@@ -386,7 +451,7 @@ func (t *VmDeployTarget) execSystemPackages(ctx context.Context, s *SystemPackag
 	if s.Phase != PhaseInstall || len(s.Packages) == 0 {
 		return nil
 	}
-	cmd := fallbackPackageInstallCmd(s)
+	cmd := renderFallbackPkgCmd(s)
 	if cmd == "" {
 		return fmt.Errorf("VmDeployTarget: no package-install command for format %q", s.Format)
 	}
@@ -399,7 +464,24 @@ func (t *VmDeployTarget) execTask(ctx context.Context, s *TaskStep, plan *Instal
 	if s.Task == nil {
 		return nil
 	}
-	cmd := renderVmTaskCommand(s)
+	// copy: stages the layer file into the guest via PutFile (scp+install) —
+	// the SAME shared path LocalDeployTarget uses. The old renderVmTaskCommand
+	// emitted `install <hostLayerDir>/<f> <dst>`, referencing a host path that
+	// doesn't exist in the guest → file-not-found on every copy: task.
+	if s.Task.Copy != "" {
+		src := filepath.Join(s.LayerDir, s.Task.Copy)
+		dst := s.Task.To
+		if dst == "" {
+			dst = s.Task.Copy
+		}
+		return t.Exec.PutFile(ctx, src, dst, parseTaskMode(s.Task.Mode, 0o644), s.Scope() == ScopeSystem, opts)
+	}
+	// Every other verb renders through the ONE shared renderTaskCommand
+	// (cmd/mkdir/link/setcap/write/download) so VM and local can't drift.
+	cmd, err := renderTaskCommand(s)
+	if err != nil {
+		return err
+	}
 	if cmd == "" {
 		return nil
 	}
@@ -468,8 +550,12 @@ func (t *VmDeployTarget) execFile(ctx context.Context, s *FileStep, plan *Instal
 // up in ~/.config/overthink/env.d/<layer>.env on the guest; the managed
 // block in the guest user's shell init sources them.
 func (t *VmDeployTarget) execShellHook(ctx context.Context, s *ShellHookStep, plan *InstallPlan, opts EmitOpts) error {
-	// Emit a trivial script that writes the env.d file in $HOME.
-	envDBody := renderEnvDFileBody(s)
+	// Shared env.d renderer (shell_profile.go renderEnvdBody) so VM and local
+	// produce byte-identical env.d files — including the accumulating
+	// PATH-prepend (export PATH="d1:d2:$PATH") that the old VM-only renderer
+	// got wrong (it emitted per-entry `export PATH=$PATH:d`, a different order
+	// + no managed-by-ov header).
+	envDBody := renderEnvdBody(s.LayerName, s.EnvVars, s.PathAdd)
 	script := fmt.Sprintf(`
 set -e
 mkdir -p "$HOME/.config/overthink/env.d"
@@ -541,52 +627,34 @@ systemctl daemon-reload
 // execBuilder runs a builder step on the HOST (where podman is
 // available), then transfers the resulting artifacts into the guest.
 //
-// Today only the `aur` builder is fully implemented: it produces
-// .pkg.tar.zst files in a host staging dir; we tar the staging dir,
-// scp it to the guest's /tmp, and run `pacman -U <files>` via SSH.
-// The aur path is the most well-defined cross-machine case (pacman -U
-// is the canonical install verb; no home-dir assumptions to translate).
+//   - aur:           produces .pkg.tar.zst files in a host staging dir; we
+//     tar them, scp to the guest's /tmp, and `pacman -U` via SSH.
+//   - npm/pixi/cargo: produce user-home subdirs (~/.npm-global, ~/.pixi,
+//     ~/.cargo). execHomeArtifactBuilder builds with HOME set to
+//     the GUEST home path (so shebangs/configs bake the right
+//     path), then tars the home subdirs and extracts them into
+//     the guest user's $HOME over SSH — the cross-host home
+//     translation the AUR-canary MVP deferred.
 //
-// pixi / npm / cargo still emit ErrNotYetImplemented because their
-// outputs land in user-home subdirectories whose mappings to the
-// guest's home (different uid/gid, possibly different shell, possibly
-// different user names) need per-builder translation — out of scope
-// for the AUR-canary MVP. --skip-incompatible continues to skip them.
+// Unknown builders honor --skip-incompatible (set by callers that legitimately
+// want to skip rpm:/deb:-only sections) and otherwise hard-error.
 func (t *VmDeployTarget) execBuilder(ctx context.Context, s *BuilderStep, plan *InstallPlan, opts EmitOpts) error {
-	// AUR is the only fully-supported builder for VM targets today.
-	// Other builders honor SkipIncompatible (which the operator may
-	// legitimately set for "skip rpm:/deb:-only sections" without
-	// intending to skip aur) — but for aur specifically we always
-	// attempt the build since the cross-host pipeline is now wired.
-	if s.Builder != "aur" {
+	switch s.Builder {
+	case "npm", "pixi", "cargo":
+		return t.execHomeArtifactBuilder(ctx, s, opts)
+	case "aur":
+		// handled inline below
+	default:
 		if opts.SkipIncompatible {
 			fmt.Fprintf(os.Stderr, "VmDeployTarget: skipping builder step %q (--skip-incompatible)\n", s.Builder)
 			return nil
 		}
-		return fmt.Errorf("builder %q on VM target is not yet supported; only `aur` works cross-host today (others have user-home assumptions that need per-builder mapping). Run with --skip-incompatible to skip, or restructure the layer to use install: instead of builder:", s.Builder)
+		return fmt.Errorf("builder %q on VM target is not supported (known: aur, npm, pixi, cargo). Run with --skip-incompatible to skip, or restructure the layer to use install: instead of builder:", s.Builder)
 	}
 
-	// BuilderImage resolution order:
-	//   1. EmitOpts.BuilderImageOverride (--builder-image flag)
-	//   2. BuilderStep.BuilderImage (compiled from image.yml's
-	//      builder: section by install_build.go)
-	//   3. t.BuilderImageResolver (rarely wired)
-	//
-	// For VM-target deploys where the deploy is a deploy.yml entity
-	// (no associated image.yml), step 2 returns empty — the operator
-	// must either pass --builder-image or the layer's `aur:` config
-	// must reference a known builder. Pre-C9 this branch was an
-	// unreachable error; C9 makes it reachable but still requires a
-	// resolved image to proceed.
-	image := opts.BuilderImageOverride
-	if image == "" {
-		image = s.BuilderImage
-	}
-	if image == "" && t.BuilderImageResolver != nil {
-		image = t.BuilderImageResolver(s.Builder)
-	}
-	if image == "" {
-		return fmt.Errorf("no builder image for aur (layer=%s); set --builder-image or define builder.aur in image.yml", s.LayerName)
+	image, err := t.resolveBuilderImage(s, opts)
+	if err != nil {
+		return err
 	}
 
 	// Stage the .pkg.tar.zst output on the host. The builder writes
@@ -613,22 +681,20 @@ func (t *VmDeployTarget) execBuilder(ctx context.Context, s *BuilderStep, plan *
 	bindMounts["/tmp/aur-pkgs"] = hostStage
 	envVars := UserScopeEnv(hostHome)
 
-	// VM-specific aur script: runs as root inside the container,
-	// configures NOPASSWD sudoers for the `user` account, then drops
-	// to that user to run the existing aur build flow. The host-side
-	// renderAurScript assumes a pre-baked sudoers (OCI multistage
-	// builds add it via stage_template); deploy-time podman-run on a
-	// stock arch-builder image doesn't have that, so we set it
-	// up ourselves before invoking the inner build.
+	// renderAurScript is written to run AS ROOT inside the builder container
+	// (BuilderRun RunAsRoot=true, exactly like the local path): it installs the
+	// NOPASSWD-wheel sudoers (/etc/sudoers.d/20-nopasswd-wheel), adds `user` to
+	// wheel, then drops to `user` ITSELF via `sudo -u user` for the yay/makepkg
+	// build. So run it directly as root — do NOT pre-drop to `user`. A prior
+	// `su - user` wrapper double-dropped privileges, making renderAurScript's own
+	// root setup (writing the sudoers file, usermod) fail with "Permission
+	// denied" on every AUR layer of a VM deploy.
 	innerScript, err := renderBuilderScript(s, hostHome)
 	if err != nil {
 		return err
 	}
 	wrappedScript := "set -e\n" +
-		"echo 'user ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/ov-builder\n" +
-		"chmod 440 /etc/sudoers.d/ov-builder\n" +
-		"# Drop to user; pass HOME so $HOME inside the inner script is /home/user.\n" +
-		"su - user -c " + shQuoteArg("set -e\n"+innerScript) + "\n" +
+		innerScript + "\n" +
 		"# Backstop find: yay -S installs the package and cleans up its\n" +
 		"# build tree, so renderAurScript's find may run after yay\n" +
 		"# already wiped /tmp/aur-build. Broaden the search if the\n" +
@@ -705,132 +771,139 @@ rm -f %[1]s/*.pkg.tar.zst 2>/dev/null || true
 	return nil
 }
 
-// --- Package-install fallback shared with host (mirrors
-// LocalDeployTarget.renderFallbackPkgCmd). ---
+// resolveBuilderImage picks the builder image ref for a BuilderStep on a VM
+// target. Order: --builder-image override → compiled BuilderStep.BuilderImage
+// → BuilderImageResolver. The builder always runs on the HOST (podman); the
+// guest never needs a container runtime.
+func (t *VmDeployTarget) resolveBuilderImage(s *BuilderStep, opts EmitOpts) (string, error) {
+	image := opts.BuilderImageOverride
+	if image == "" {
+		image = s.BuilderImage
+	}
+	if image == "" && t.BuilderImageResolver != nil {
+		image = t.BuilderImageResolver(s.Builder)
+	}
+	if image == "" {
+		return "", fmt.Errorf("no builder image for %s (layer=%s); set --builder-image or define builder.%s in image.yml",
+			s.Builder, s.LayerName, s.Builder)
+	}
+	return image, nil
+}
+
+// execHomeArtifactBuilder runs a user-home builder (npm/pixi/cargo) on the
+// HOST into a staging dir that is bind-mounted AS the guest home, then ships
+// the produced home subdirs into the guest user's $HOME over SSH.
 //
-// Each format prefixes a database-refresh step before the install: see
-// the doc comment on LocalDeployTarget.renderFallbackPkgCmd for the
-// rationale (apt-get and pacman do NOT auto-refresh, and a stale db
-// causes 404 fetches when packages have been version-bumped upstream).
-// Keep this function and renderFallbackPkgCmd in lock-step.
+// The critical move is running the builder with HOME = the GUEST home PATH
+// (t.guestHome). npm shebangs, cargo binary rpaths, and pixi env activation
+// scripts bake the install-prefix path; baking the guest's home means the
+// artifacts work unchanged once extracted into the guest's real $HOME. Build
+// caches (.cache/) are excluded from the transfer — they're large and the
+// guest doesn't need them.
+func (t *VmDeployTarget) execHomeArtifactBuilder(ctx context.Context, s *BuilderStep, opts EmitOpts) error {
+	image, err := t.resolveBuilderImage(s, opts)
+	if err != nil {
+		return err
+	}
+	if t.guestHome == "" && !opts.DryRun {
+		return fmt.Errorf("execHomeArtifactBuilder: guest home unresolved (layer=%s)", s.LayerName)
+	}
+	guestHome := t.guestHome
+	if guestHome == "" {
+		guestHome = "/home/ov" // dry-run placeholder; never written
+	}
 
-func fallbackPackageInstallCmd(s *SystemPackagesStep) string {
-	if s.Phase != PhaseInstall || len(s.Packages) == 0 {
-		return ""
+	// Host staging dir mounted AS the guest home inside the builder, so the
+	// builder writes ~/.npm-global etc. to a host-side dir while baking the
+	// guest's home path into shebangs/configs.
+	stageHost, err := os.MkdirTemp("", "ov-vm-builder-")
+	if err != nil {
+		return fmt.Errorf("builder staging mkdir: %w", err)
 	}
-	opts := ""
-	if len(s.Options) > 0 {
-		opts = " " + strings.Join(s.Options, " ")
+	RegisterTempCleanup(stageHost)
+	defer func() { os.RemoveAll(stageHost); UnregisterTempCleanup(stageHost) }()
+
+	bindMounts := map[string]string{guestHome: stageHost}
+	envVars := UserScopeEnv(guestHome)
+	script, err := renderBuilderScript(s, guestHome)
+	if err != nil {
+		return err
 	}
-	switch s.Format {
-	case "rpm":
-		return fmt.Sprintf("dnf install -y%s %s", opts, strings.Join(s.Packages, " "))
-	case "deb":
-		return fmt.Sprintf("DEBIAN_FRONTEND=noninteractive apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y%s %s", opts, strings.Join(s.Packages, " "))
-	case "pac":
-		return fmt.Sprintf("pacman -Sy --noconfirm --needed%s %s", opts, strings.Join(s.Packages, " "))
+
+	out, err := BuilderRun(opts.ContextOrDefault(), BuilderRunOpts{
+		BuilderImage: image,
+		LayerDir:     s.LayerDir,
+		ScriptBody:   script,
+		BindMounts:   bindMounts,
+		Env:          envVars,
+		HostHome:     guestHome,
+		DryRun:       opts.DryRun,
+		RunAsRoot:    true,
+	})
+	if len(out) > 0 {
+		os.Stderr.Write(out)
 	}
-	return ""
+	if err != nil {
+		return fmt.Errorf("VM %s builder (layer=%s): %w", s.Builder, s.LayerName, err)
+	}
+	if opts.DryRun {
+		return nil
+	}
+
+	// Collect the produced home subdirs, skipping build caches.
+	entries, err := os.ReadDir(stageHost)
+	if err != nil {
+		return fmt.Errorf("reading builder staging dir: %w", err)
+	}
+	var transferDirs []string
+	for _, e := range entries {
+		if e.Name() == ".cache" {
+			continue
+		}
+		transferDirs = append(transferDirs, e.Name())
+	}
+	if len(transferDirs) == 0 {
+		return fmt.Errorf("%s builder for layer %q produced no home artifacts in %s; check the builder output above",
+			s.Builder, s.LayerName, stageHost)
+	}
+
+	// Tar the artifacts into a single tarball on the host.
+	tarDir, err := os.MkdirTemp("", "ov-vm-builder-tar-")
+	if err != nil {
+		return fmt.Errorf("tar staging mkdir: %w", err)
+	}
+	RegisterTempCleanup(tarDir)
+	defer func() { os.RemoveAll(tarDir); UnregisterTempCleanup(tarDir) }()
+	tarball := filepath.Join(tarDir, "artifacts.tar.gz")
+	tarArgs := append([]string{"-C", stageHost, "-czf", tarball}, transferDirs...)
+	tarCmd := exec.CommandContext(ctx, "tar", tarArgs...)
+	tarCmd.Stderr = os.Stderr
+	if err := tarCmd.Run(); err != nil {
+		return fmt.Errorf("tar builder artifacts: %w", err)
+	}
+
+	// Ship to the guest and extract into the guest user's $HOME AS the guest
+	// user, so ownership + baked paths are correct.
+	guestTar := "/tmp/ov-builder-" + s.LayerName + ".tar.gz"
+	if err := t.Exec.PutFile(ctx, tarball, guestTar, 0o644, false, opts); err != nil {
+		return fmt.Errorf("scp builder artifacts: %w", err)
+	}
+	// Extract AS THE GUEST USER so the home artifacts (~/.npm-global, ~/.cargo,
+	// ~/.pixi) end up owned by the guest user, not root.
+	extractScript := fmt.Sprintf("set -e\nmkdir -p \"$HOME\"\ntar -C \"$HOME\" -xzf %s\n", deployShellQuote(guestTar))
+	if err := t.Exec.RunUser(ctx, extractScript, opts); err != nil {
+		return fmt.Errorf("extracting builder artifacts in guest: %w", err)
+	}
+	// Remove the tarball AS ROOT: PutFile placed it via `sudo install`, so it is
+	// root-owned, and /tmp is sticky (1777) — the guest user can't remove a
+	// root-owned file there ("Operation not permitted"). Cleaning up as root
+	// avoids leaving a root-owned tarball behind (and previously aborted the
+	// deploy under the extract script's `set -e`).
+	if err := t.Exec.RunSystem(ctx, fmt.Sprintf("rm -f %s\n", deployShellQuote(guestTar)), opts); err != nil {
+		return fmt.Errorf("removing builder tarball in guest: %w", err)
+	}
+	return nil
 }
 
-// renderVmTaskCommand renders the same task verbs as LocalDeployTarget
-// (cmd/mkdir/link/setcap/copy/write/download). Kept a separate function
-// so VmDeployTarget doesn't depend on LocalDeployTarget's receiver, but
-// the supported verb set MUST stay in lock-step with the host version —
-// any verb the host supports needs a parallel branch here, otherwise
-// task steps silently no-op on VMs (observed live 2026-04-22: uv
-// layer's `download:` task was silently skipped under VmDeployTarget,
-// leaving /usr/local/bin/uv missing).
-func renderVmTaskCommand(s *TaskStep) string {
-	task := s.Task
-	ctxPath := s.CtxPath
-
-	// Task.Env prelude — matches LocalDeployTarget.renderTaskCommand so
-	// layer authors can declare env vars and have them reach the shell
-	// regardless of target (host/vm). Also required for the secret-
-	// injection path (ov/layer_secrets.go InjectSecretsIntoPlans) to
-	// propagate credential-store-resolved values to VM deploys. Layer
-	// vars are appended via taskShellPreamble so cmd bodies templating
-	// ${LAYER_VAR} resolve at deploy-time the same as build-time.
-	envPrelude := taskShellPreamble(s)
-	if len(task.Env) > 0 {
-		keys := make([]string, 0, len(task.Env))
-		for k := range task.Env {
-			keys = append(keys, k)
-		}
-		sort.Strings(keys)
-		var b strings.Builder
-		b.WriteString(envPrelude)
-		for _, k := range keys {
-			fmt.Fprintf(&b, "export %s=%s\n", k, shQuoteArg(task.Env[k]))
-		}
-		envPrelude = b.String()
-	}
-
-	switch {
-	case task.Cmd != "":
-		body := task.Cmd
-		if ctxPath != "" {
-			body = strings.ReplaceAll(body, "/ctx/", ctxPath+"/")
-		}
-		return envPrelude + body
-	case task.Mkdir != "":
-		mode := task.Mode
-		if mode == "" {
-			mode = "0755"
-		}
-		return fmt.Sprintf("install -d -m%s %s", mode, deployShellQuote(task.Mkdir))
-	case task.Link != "":
-		target := task.Target
-		if target == "" {
-			target = task.To
-		}
-		return fmt.Sprintf("ln -sfn %s %s", deployShellQuote(target), deployShellQuote(task.Link))
-	case task.Setcap != "":
-		return fmt.Sprintf("setcap %s %s", deployShellQuote(task.Caps), deployShellQuote(task.Setcap))
-	case task.Copy != "":
-		src := task.Copy
-		if s.LayerDir != "" {
-			src = filepath.Join(s.LayerDir, task.Copy)
-		}
-		dst := task.To
-		if dst == "" {
-			dst = task.Copy
-		}
-		mode := task.Mode
-		if mode == "" {
-			mode = "0644"
-		}
-		return fmt.Sprintf("install -m%s %s %s", mode, deployShellQuote(src), deployShellQuote(dst))
-	case task.Write != "":
-		mode := task.Mode
-		if mode == "" {
-			mode = "0644"
-		}
-		return fmt.Sprintf("install -m%s /dev/stdin %s <<'OV_WRITE'\n%s\nOV_WRITE",
-			mode, deployShellQuote(task.Write), task.Content)
-	case task.Download != "":
-		return renderDownloadScript(task, s.LayerVars)
-	}
-	return ""
-}
-
-// renderEnvDFileBody renders a layer's env vars + path_append into the
-// form expected by ~/.config/overthink/env.d/<layer>.env.
-func renderEnvDFileBody(s *ShellHookStep) string {
-	var b strings.Builder
-	// EnvVars is a map[string]string — iteration order is non-deterministic;
-	// sort for stable output (critical for CloudInitRenderedDigest drift detection).
-	keys := make([]string, 0, len(s.EnvVars))
-	for k := range s.EnvVars {
-		keys = append(keys, k)
-	}
-	sortStrings(keys)
-	for _, k := range keys {
-		fmt.Fprintf(&b, "export %s=%s\n", k, deployShellQuote(s.EnvVars[k]))
-	}
-	for _, p := range s.PathAdd {
-		fmt.Fprintf(&b, "export PATH=$PATH:%s\n", deployShellQuote(p))
-	}
-	return b.String()
-}
+// (env.d rendering shared with the host path — see renderEnvdBody in
+// shell_profile.go; VmDeployTarget.execShellHook calls it directly.)

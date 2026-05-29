@@ -363,7 +363,10 @@ func TestManagedBlockBodyGlobUnquoted(t *testing.T) {
 func TestShellInitFilePath(t *testing.T) {
 	home := "/home/atrawog"
 	tests := map[ShellKind]string{
-		ShellBash: "/home/atrawog/.profile",
+		// bash → ~/.bashrc: a bash login shell prefers ~/.bash_profile (which
+		// sources ~/.bashrc) over ~/.profile, so the env.d block must land in
+		// ~/.bashrc to actually load in the user's terminal.
+		ShellBash: "/home/atrawog/.bashrc",
 		ShellZsh:  "/home/atrawog/.zshenv",
 		ShellFish: "/home/atrawog/.config/fish/conf.d/overthink.fish",
 	}

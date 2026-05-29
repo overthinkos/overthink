@@ -31,6 +31,9 @@ package main
 import (
 	"encoding/xml"
 	"fmt"
+	"os"
+	"os/user"
+	"strconv"
 	"strings"
 	"text/template"
 
@@ -104,6 +107,7 @@ func BuildLibvirtDomainXML(spec *VmSpec, rt VmRuntimeParams) (*libvirtxml.Domain
 	d.Clock = buildDomainClock(lv)
 	d.Devices = buildDomainDevices(spec, rt)
 	ensureVirtiofsSharedMemory(d)
+	ensureVirtiofsIdmap(d)
 
 	if lv != nil && lv.SecLabel != nil {
 		d.SecLabel = []libvirtxml.DomainSecLabel{mapSecLabel(lv.SecLabel)}
@@ -432,6 +436,132 @@ func ensureVirtiofsSharedMemory(d *libvirtxml.Domain) {
 	if d.MemoryBacking.MemoryAccess == nil {
 		d.MemoryBacking.MemoryAccess = &libvirtxml.DomainMemoryAccess{Mode: "shared"}
 	}
+}
+
+// defaultGuestUserID is the conventional uid/gid of the first interactive
+// user a cloud/bootstrap VM creates (cloud-init, pacstrap, debootstrap all
+// number the primary account 1000). The guest-user virtiofs idmap maps THIS
+// guest id to the host operator so the share is owned by the guest's
+// interactive user.
+const defaultGuestUserID = 1000
+
+// ensureVirtiofsIdmap auto-injects a guest-user-owned <idmap> onto every
+// passthrough virtiofs share that doesn't already declare one. libvirt's
+// DEFAULT rootless idmap maps guest-root → the host operator, so a host-home
+// passthrough share is owned by root inside the guest and the interactive
+// guest user (uid 1000 by convention) gets EACCES — exactly the "/workspace
+// is mounted but cachy can't read it" footgun. Mapping the guest's primary
+// user to the host operator instead makes the share usable by the guest user,
+// which is what "mount my home into the VM" means in practice. An
+// author-declared idmap, a non-passthrough accessmode, or a missing host
+// subordinate-ID range all leave libvirt's own default untouched.
+func ensureVirtiofsIdmap(d *libvirtxml.Domain) {
+	if !domainHasUnmappedPassthroughVirtiofs(d) {
+		return
+	}
+	hostUID := os.Getuid()
+	hostGID := os.Getgid()
+	username := ""
+	if u, err := user.Current(); err == nil {
+		username = u.Username
+	}
+	subUIDStart, subUIDCount, okU := subIDRange("/etc/subuid", username, hostUID)
+	subGIDStart, subGIDCount, okG := subIDRange("/etc/subgid", username, hostGID)
+	if !okU || !okG {
+		// No subordinate-ID range configured for this user — rootless
+		// virtiofs can't remap arbitrary ids anyway; leave libvirt's
+		// default idmap in place.
+		return
+	}
+	uidMap := guestOwnerIDMap(defaultGuestUserID, hostUID, subUIDStart, subUIDCount)
+	gidMap := guestOwnerIDMap(defaultGuestUserID, hostGID, subGIDStart, subGIDCount)
+	applyVirtiofsIdmap(d, uidMap, gidMap)
+}
+
+// domainHasUnmappedPassthroughVirtiofs reports whether the domain has at least
+// one passthrough virtiofs share that does not yet declare an <idmap>.
+func domainHasUnmappedPassthroughVirtiofs(d *libvirtxml.Domain) bool {
+	if d == nil || d.Devices == nil {
+		return false
+	}
+	for i := range d.Devices.Filesystems {
+		fs := &d.Devices.Filesystems[i]
+		if fs.Driver != nil && fs.Driver.Type == "virtiofs" &&
+			(fs.AccessMode == "" || fs.AccessMode == "passthrough") && fs.IDMap == nil {
+			return true
+		}
+	}
+	return false
+}
+
+// applyVirtiofsIdmap sets the given uid/gid maps on every passthrough virtiofs
+// share that doesn't already declare one. No-op when either map is nil
+// (unbuildable partition) so a bad host config never produces a broken idmap.
+func applyVirtiofsIdmap(d *libvirtxml.Domain, uidMap, gidMap []libvirtxml.DomainFilesystemIDMapEntry) {
+	if d == nil || d.Devices == nil || uidMap == nil || gidMap == nil {
+		return
+	}
+	for i := range d.Devices.Filesystems {
+		fs := &d.Devices.Filesystems[i]
+		if fs.Driver == nil || fs.Driver.Type != "virtiofs" {
+			continue
+		}
+		if fs.AccessMode != "" && fs.AccessMode != "passthrough" {
+			continue
+		}
+		if fs.IDMap != nil {
+			continue // author-declared idmap wins
+		}
+		fs.IDMap = &libvirtxml.DomainFilesystemIDMap{UID: uidMap, GID: gidMap}
+	}
+}
+
+// guestOwnerIDMap builds the three-segment filesystem idmap that maps the
+// guest's primary id (guestID) to the host operator (hostID) and every other
+// guest id into the operator's subordinate-ID range [subStart, subStart+
+// subCount). libvirt idmap semantics: each entry maps guest `start` → host
+// `target` for `count` ids. Returns nil when guestID falls outside the
+// mappable range (the caller then leaves libvirt's default in place).
+//
+//	guest 0 .. guestID-1        → subStart .. subStart+guestID-1
+//	guest guestID               → hostID                          (the operator)
+//	guest guestID+1 .. subCount → subStart+guestID .. subStart+subCount-1
+func guestOwnerIDMap(guestID, hostID, subStart, subCount int) []libvirtxml.DomainFilesystemIDMapEntry {
+	if guestID < 1 || guestID >= subCount || subStart < 0 {
+		return nil
+	}
+	return []libvirtxml.DomainFilesystemIDMapEntry{
+		{Start: 0, Target: uint(subStart), Count: uint(guestID)},
+		{Start: uint(guestID), Target: uint(hostID), Count: 1},
+		{Start: uint(guestID + 1), Target: uint(subStart + guestID), Count: uint(subCount - guestID)},
+	}
+}
+
+// subIDRange reads /etc/subuid or /etc/subgid and returns the [start, count)
+// subordinate-ID range allocated to the user (matched by name OR uid). ok is
+// false when the file is unreadable or the user has no entry.
+func subIDRange(path, username string, uid int) (start, count int, ok bool) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return 0, 0, false
+	}
+	uidStr := strconv.Itoa(uid)
+	for _, line := range strings.Split(string(data), "\n") {
+		fields := strings.Split(strings.TrimSpace(line), ":")
+		if len(fields) != 3 {
+			continue
+		}
+		if fields[0] != username && fields[0] != uidStr {
+			continue
+		}
+		s, err1 := strconv.Atoi(fields[1])
+		c, err2 := strconv.Atoi(fields[2])
+		if err1 != nil || err2 != nil || c <= 0 {
+			continue
+		}
+		return s, c, true
+	}
+	return 0, 0, false
 }
 
 func mapMemoryBacking(mb *LibvirtMemoryBacking) *libvirtxml.DomainMemoryBacking {

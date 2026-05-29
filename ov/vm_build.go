@@ -154,7 +154,7 @@ var KnownVmSourceKinds = []string{"cloud_image", "bootc", "bootstrap"}
 func (c *VmBuildCmd) runVmSpecBuild(vmName string, spec *VmSpec, rt *ResolvedRuntime) error {
 	fmt.Fprintf(os.Stderr, "Building VM %q (source.kind=%s)\n", vmName, spec.Source.Kind)
 
-	outputDir, err := filepath.Abs(filepath.Join("output", "qcow2"))
+	outputDir, err := filepath.Abs(vmDiskDir(vmName))
 	if err != nil {
 		return err
 	}

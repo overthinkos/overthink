@@ -62,7 +62,7 @@ func BuildClone(vmName string, spec *VmSpec, outputDir, vmStateDir string) error
 	}
 
 	// Materialize the clone overlay using the existing primitive.
-	clonePath := filepath.Join(outputDir, "qcow2", "disk.qcow2")
+	clonePath := filepath.Join(vmDiskDir(vmName), "disk.qcow2")
 	if err := os.MkdirAll(filepath.Dir(clonePath), 0o755); err != nil {
 		return fmt.Errorf("creating output dir: %w", err)
 	}
@@ -82,7 +82,7 @@ func BuildClone(vmName string, spec *VmSpec, outputDir, vmStateDir string) error
 	// Regenerate the cloud-init seed ISO with a fresh InstanceID.
 	// Pass nil for existingState — that's the path that auto-generates
 	// a new UUIDv4 (see vm_cloud_image.go:164-169).
-	seedPath := filepath.Join(outputDir, "qcow2", "seed.iso")
+	seedPath := filepath.Join(vmDiskDir(vmName), "seed.iso")
 	if spec.CloudInit != nil || spec.SSH != nil {
 		// If cloud_init_clean is set, inject the clean runcmd so
 		// machine-id and ssh host keys regenerate on first boot.

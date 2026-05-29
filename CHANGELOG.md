@@ -22,6 +22,46 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-05
 
+### 2026-05-29 — `ov vm`: per-VM disk/seed paths + SMBIOS credential delivery (SSH key injection made authoritative)
+
+Surfaced while bringing up the operator `cachyos-coder` VM (the deliverable of the
+cachyos-coder cutover below): three real `ov vm` defects in the disk/seed/SSH-key
+path, each RCA'd before any fix and live-verified on the operator VM.
+
+- **Shared disk/seed output path → cross-VM seed reuse.** `ov vm build`/`create`
+  wrote `disk.qcow2` + `seed.iso` to a SHARED `output/qcow2/`, not per-VM. So
+  `ov vm create cachyos-coder` (run after the disposable `cachyos-gpu-vm` bed)
+  silently adopted the torn-down bed VM's `seed.iso` — whose embedded SSH key
+  mismatched cachyos-coder's own `id_ed25519` — so cloud-init injected the wrong
+  key and the deploy could not authenticate. Fixed with one `vmDiskDir(vmName)`
+  helper → `output/qcow2/<vm>/`, applied to every disk/seed site (build / create /
+  destroy / snapshot) + the unwired clone path; dead `resolveQcow2Path` removed.
+  `ov vm create` now fails with a clear "run ov vm build" error instead of
+  adopting a sibling's disk, and `ov vm destroy --disk` removes only the VM's own
+  dir (not every VM's).
+- **SMBIOS OEM credential never reached the guest.** The libvirt domain carried
+  `<sysinfo type='smbios'><oemStrings>` (the systemd `tmpfiles.extra` SSH-key
+  credential) but NO `<os><smbios mode='sysinfo'/>`, so QEMU defined the OEM
+  strings yet never presented them to the guest's DMI — `systemd-creds` /
+  `systemd-tmpfiles` never saw the credential and the entire SMBIOS key-injection
+  channel was silently dead (the deploy survived only because cloud-init also
+  injects the key). `BuildLibvirtDomainXML` now emits `<smbios mode='sysinfo'/>`
+  whenever an OEM credential is present.
+- **SMBIOS key made authoritative without breaking cloud-init.** The per-VM SSH
+  key is now written to a root-owned, cloud-init-proof `/etc/ssh/authorized_keys.d/<user>`
+  plus a `sshd_config.d` drop-in widening `AuthorizedKeysFile` to check BOTH that
+  file AND `~/.ssh/authorized_keys` (applied by systemd-tmpfiles before sshd
+  starts) — so the SMBIOS/deploy key is always accepted even if cloud-init later
+  rewrites the user's own `authorized_keys`. cloud-init keeps deploying its keys
+  into `~/.ssh` (its domain); the key is also written there as a fallback for any
+  sshd that ignores the drop-in.
+
+Live-verified on the operator `cachyos-coder` VM: deploy authenticates,
+`/etc/ssh/authorized_keys.d/cachy` carries the key, `sshd -T authorizedkeysfile`
+lists both locations, cloud-init's key is in `~/.ssh`, and KDE / selkies `:3000`
+(200) / Looking-Glass IVSHMEM all work. Go tests: `TestVmDiskDir_PerVM`,
+`TestKeyToUserTmpfilesD_SmbiosPriority`, `TestRenderDomainXML_SmbiosSysinfoMode`.
+
 ### 2026-05-29 — `cachyos-coder`: full KDE GPU workstation VM synced to the host (monitor + Looking Glass + KDE-selkies stream)
 
 Evolved the headless `ov-cachyos-gpu` operator VM into `cachyos-coder` — a full

@@ -283,14 +283,16 @@ func qemuMachineType() string {
 	}
 }
 
-// resolveQcow2Path finds the QCOW2 disk image for the given image name.
-func resolveQcow2Path(image string) (string, error) {
-	path := filepath.Join("output", "qcow2", "disk.qcow2")
-	if _, err := os.Stat(path); err == nil {
-		abs, _ := filepath.Abs(path)
-		return abs, nil
-	}
-	return "", fmt.Errorf("QCOW2 not found for %q — run 'ov vm build %s' first", image, image)
+// vmDiskDir returns the per-VM directory holding a built disk image
+// (disk.qcow2) and, for cloud_image/bootstrap/clone sources, its NoCloud
+// seed.iso. The path is namespaced by VM name so building or creating one VM
+// never reuses a SIBLING VM's disk or — critically — its stale seed.iso,
+// whose embedded SSH key would mismatch this VM's own id_ed25519 and silently
+// break the deploy's authentication. (A `disk.qcow2` absent here makes
+// `ov vm create` fail with a clear "run ov vm build" error instead of
+// adopting whatever a previous VM happened to leave in a shared directory.)
+func vmDiskDir(vmName string) string {
+	return filepath.Join("output", "qcow2", vmName)
 }
 
 // --- VmCreateCmd ---
@@ -700,8 +702,9 @@ func (c *VmDestroyCmd) Run() error {
 	}
 
 	if c.Disk {
-		// Remove QCOW2 output
-		qcow2Dir := filepath.Join("output", "qcow2")
+		// Remove only THIS VM's disk dir — never the shared parent (which
+		// would delete every other VM's disk too).
+		qcow2Dir := vmDiskDir(c.Image)
 		os.RemoveAll(qcow2Dir)
 		fmt.Fprintf(os.Stderr, "Deleted disk images in %s\n", qcow2Dir)
 	}

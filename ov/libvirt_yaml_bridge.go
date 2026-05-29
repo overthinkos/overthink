@@ -117,6 +117,16 @@ func BuildLibvirtDomainXML(spec *VmSpec, rt VmRuntimeParams) (*libvirtxml.Domain
 	}
 	if si := buildDomainSysInfo(spec, rt); si != nil {
 		d.SysInfo = []libvirtxml.DomainSysInfo{*si}
+		// Expose our <sysinfo> as the guest's SMBIOS tables. Without
+		// <os><smbios mode='sysinfo'/> QEMU defines the OEM strings but never
+		// presents them to the guest's DMI, so systemd-creds/systemd-tmpfiles
+		// never see the `tmpfiles.extra` SSH-key credential — the entire SMBIOS
+		// key-injection channel is silently dead (the deploy then depends solely
+		// on cloud-init). This pairs the directive with the credential so SMBIOS
+		// injection actually works (and stays authoritative, per KeyToUserTmpfilesD).
+		if d.OS != nil {
+			d.OS.SMBios = &libvirtxml.DomainSMBios{Mode: "sysinfo"}
+		}
 	}
 	if lv != nil && lv.Resource != nil {
 		d.Resource = mapResource(lv.Resource)

@@ -13,8 +13,8 @@ import (
 // Produces either a libvirt domain (via RenderDomain + virDomainDefine)
 // or a QEMU process (via RenderQemuArgv + exec) depending on the
 // resolved backend. Pre-conditions: `ov vm build <vm-name>` has run,
-// placing disk.qcow2 (+ seed.iso for cloud_image sources) under
-// output/qcow2/.
+// placing disk.qcow2 (+ seed.iso for cloud_image sources) under the per-VM
+// disk dir output/qcow2/<vm>/.
 func (c *VmCreateCmd) runVmSpecCreate(vmName string, spec *VmSpec, backend string) error {
 	name := vmName
 	if c.Instance != "" {
@@ -22,14 +22,16 @@ func (c *VmCreateCmd) runVmSpecCreate(vmName string, spec *VmSpec, backend strin
 	}
 	vmDomainName := "ov-" + name
 
-	// Locate prebuilt disk + seed ISO.
-	qcow2 := filepath.Join("output", "qcow2", "disk.qcow2")
+	// Locate prebuilt disk + seed ISO in this VM's OWN per-VM disk dir, so a
+	// fresh create can never adopt a sibling VM's stale disk/seed (whose
+	// embedded SSH key would mismatch this VM's id_ed25519).
+	qcow2 := filepath.Join(vmDiskDir(vmName), "disk.qcow2")
 	if _, err := os.Stat(qcow2); err != nil {
 		return fmt.Errorf("disk.qcow2 not found at %s — run `ov vm build %s` first", qcow2, vmName)
 	}
 	qcow2Abs, _ := filepath.Abs(qcow2)
 
-	seedISO := filepath.Join("output", "qcow2", "seed.iso")
+	seedISO := filepath.Join(vmDiskDir(vmName), "seed.iso")
 	seedISOAbs := ""
 	if _, err := os.Stat(seedISO); err == nil {
 		seedISOAbs, _ = filepath.Abs(seedISO)

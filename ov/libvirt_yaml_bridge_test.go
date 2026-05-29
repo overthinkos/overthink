@@ -286,6 +286,34 @@ func TestRenderDomainXML_AutoSynthesizedDisk(t *testing.T) {
 	}
 }
 
+// TestRenderDomainXML_SmbiosSysinfoMode asserts that whenever an SMBIOS OEM
+// credential is present, the domain ALSO carries <os><smbios mode="sysinfo"/>.
+// Without that directive QEMU defines the OEM strings but never presents them
+// to the guest's DMI, so systemd-creds/systemd-tmpfiles never see the
+// `tmpfiles.extra` SSH-key credential and the SMBIOS injection channel is dead.
+func TestRenderDomainXML_SmbiosSysinfoMode(t *testing.T) {
+	spec := &VmSpec{}
+	rt := VmRuntimeParams{
+		Name:     "ov-smbios",
+		RamMB:    512,
+		Cpus:     1,
+		HostArch: "x86_64",
+		SMBIOSCredentials: []string{
+			SmbiosCredForSSH("cachy", "/home/cachy", "ssh-ed25519 AAAATESTKEY user@host"),
+		},
+	}
+	out, err := RenderDomainXML(spec, rt)
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	if !strings.Contains(out, "<oemStrings>") {
+		t.Errorf("missing <oemStrings> SMBIOS credential\n--- output ---\n%s", out)
+	}
+	if !strings.Contains(out, `<smbios mode="sysinfo">`) {
+		t.Errorf("missing <os><smbios mode=\"sysinfo\"/> — OEM credential never reaches the guest\n--- output ---\n%s", out)
+	}
+}
+
 // TestRenderDomainXML_VirtiofsAutoSharedMemory verifies that declaring a
 // virtiofs filesystem auto-pairs the shared-memory backing the device
 // requires (memfd + access=shared) even when the entity declares none — so

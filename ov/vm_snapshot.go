@@ -107,14 +107,14 @@ func snapshotsDir(vmName string) (string, error) {
 // (for clone backing, for libvirt snapshot XML) should pass an
 // explicit override; this helper is for the registry's own bookkeeping.
 func vmDiskPath(vmName string) (string, error) {
-	// Project-relative path used by ov vm build cloud_image / bootc paths.
-	// (See ov/vm_create_spec.go which resolves output/qcow2/disk.qcow2 the
-	// same way.)
+	// Per-VM disk dir used by the ov vm build cloud_image / bootc / bootstrap
+	// paths. (See ov/vm_create_spec.go which resolves the same per-VM
+	// output/qcow2/<vm>/disk.qcow2.)
 	cwd, err := os.Getwd()
 	if err != nil {
 		return "", err
 	}
-	candidate := filepath.Join(cwd, "output", "qcow2", "disk.qcow2")
+	candidate := filepath.Join(cwd, vmDiskDir(vmName), "disk.qcow2")
 	if _, err := os.Stat(candidate); err == nil {
 		return candidate, nil
 	}
@@ -127,7 +127,7 @@ func vmDiskPath(vmName string) (string, error) {
 	if _, err := os.Stat(candidate); err == nil {
 		return candidate, nil
 	}
-	return "", fmt.Errorf("vm %q: cannot locate primary disk (looked in output/qcow2/disk.qcow2 and ~/.local/share/ov/vm/ov-%s/disk.qcow2)", vmName, vmName)
+	return "", fmt.Errorf("vm %q: cannot locate primary disk (looked in %s/disk.qcow2 and ~/.local/share/ov/vm/ov-%s/disk.qcow2)", vmName, vmDiskDir(vmName), vmName)
 }
 
 // registryPath returns the registry.json path for a VM.

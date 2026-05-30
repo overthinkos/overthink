@@ -22,6 +22,38 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-05
 
+### 2026-05-30 — debian repo (overthinkos/debian): schema migrate + standard eval-*-vm bed naming
+
+- **Migrated to schema 2026.144.1443** (`ov migrate`: kind-files split inline
+  image/vm/pod/k8s into siblings + entity-version backfill + calver stamp).
+- **Disposable bed renamed to the standard `eval-<descriptor>-<kind>` form:**
+  `debian-debootstrap-vm` → `eval-debian-debootstrap-vm`. R5 sweep across the
+  debian repo (overthink.yml / README) + the `/ov-vm:debian` & `/ov-distros:debian`
+  plugins skills.
+- **`version:` backfilled on the layerless `debian-debootstrap`
+  (`from: builder:debootstrap`) and the bare-base `debian` images** — the runtime
+  requires a `version:` for a layerless image on an external base, and the
+  `entity-version` migrate step backfills only `base:`-style bare bases, not
+  `from:`-style, so it is declared explicitly.
+- R10: `ov -C image/debian eval run eval-debian-debootstrap-vm` → PASS (steps=6)
+  on the disposable bed (build → eval image → create → eval live → fresh rebuild
+  → teardown). Landed image/debian `v2026.150.1654`, plugins `0f1d55d`.
+- **Host-environment cautionary tale (NOT a project bug).** The first R10
+  attempts failed at `vm create` with the misleading libvirt error
+  `Unable to find 'efi' firmware that is compatible with the current
+  configuration`. RCA traced it through three layers: the `firmware='efi'`
+  autoselect aborts because **virtqemud had cached `accel 'kvm' is not
+  supported`** — it had probed `/dev/kvm` while an external process
+  intermittently regrouped the node from the udev-canonical `kvm 0666` to
+  `root:input 0660`, denying KVM access. The debian config (`uefi-insecure`
+  + the `version:` backfill) was correct throughout. Fix: restore `/dev/kvm`
+  to `0666 kvm` **AND** restart the stale `virtqemud` so it re-probes (the
+  perm-restore alone is insufficient — the daemon caches the no-kvm verdict
+  in memory: `--timeout=120`, no on-disk capabilities cache). A `/dev/kvm`
+  canonical-state guard held the node sane through the live R10. Standing
+  guidance: when an `ov vm create` reports an EFI-firmware error on a host
+  with KVM present, check `/dev/kvm` ownership/mode and restart `virtqemud`.
+
 ### 2026-05-30 — arch repo (overthinkos/arch): schema migrate + standard eval-*-vm bed naming
 
 - **Migrated to schema 2026.144.1443** (`ov migrate`: kind-files split inline

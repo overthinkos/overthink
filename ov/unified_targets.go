@@ -1,6 +1,6 @@
 package main
 
-// unified_targets.go — Phase 2 of the schema-v3 refactor.
+// unified_targets.go — The unified deploy-target abstraction.
 //
 // Adds UnifiedDeployTarget/LifecycleTarget adapters for each of the
 // four legacy DeployTarget implementers (LocalDeployTarget,
@@ -232,7 +232,7 @@ func (t *K8sUnifiedTarget) Update(ctx context.Context, plans []*InstallPlan, opt
 //
 // Errors:
 //   - "no deployment X" — node absent from deploy.yml
-//   - "X: missing required `target:`" — schema-v3 violation
+//   - "X: missing required `target:`" — schema violation
 //   - "X: unknown target Y" — value not in host|vm|pod|k8s
 func ResolveTarget(node *DeploymentNode, name string) (UnifiedDeployTarget, error) {
 	if node == nil {

@@ -56,8 +56,8 @@ var CanonicalLifecycleTags = []string{
 	"scratch", "dev", "test", "qa", "staging", "prod",
 }
 
-// Note: the former `IsDisposableFields(disposable, lifecycle)` helper
-// was removed in the schema-v3 cutover. There was no derivation to
-// encode — the result was always the `disposable` argument verbatim,
-// and the helper's existence obscured that. Callers now read
+// Note: there is no `IsDisposableFields(disposable, lifecycle)` helper.
+// There is no derivation to
+// encode — the result would always be the `disposable` argument verbatim,
+// and such a helper would obscure that. Callers read
 // `node.Disposable` directly. See /ov-internals:disposable.

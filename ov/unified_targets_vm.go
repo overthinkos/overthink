@@ -270,8 +270,8 @@ func (t *VmUnifiedTarget) Shell(ctx context.Context, cmd []string) error {
 }
 
 // Rebuild destroys + (optionally) rebuilds the disk image + recreates +
-// starts the VM. Body extracted from RebuildCmd.rebuildVm. The
-// disposable check is the caller's responsibility (rebuild.go's
+// starts the VM. This is the VM rebuild path. The
+// disposable check is the caller's responsibility (the disposable
 // classification); this method does not re-validate.
 func (t *VmUnifiedTarget) Rebuild(ctx context.Context, opts RebuildOpts) error {
 	name := t.vmEntityName()

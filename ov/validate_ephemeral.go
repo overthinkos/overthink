@@ -7,7 +7,7 @@ import (
 
 // validate_ephemeral.go — validation rules for the ephemeral / clone /
 // imported / snapshot additions. Wired into the existing validation
-// hot path via Validate() in validate.go (and the schema-v4 unified
+// hot path via Validate() in validate.go (and the unified
 // loader, which calls these helpers when materializing kind:vm and
 // kind:deployment entities).
 

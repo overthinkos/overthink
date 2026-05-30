@@ -325,7 +325,7 @@ func (c *DeployAddCmd) dispatchNode(path string, node *DeploymentNode, parentExe
 		return c.printPlans(plans, opts)
 	}
 
-	// Target dispatch. Canonical schema-v3 values: host|vm|pod|k8s.
+	// Target dispatch. Canonical target values: host|vm|pod|k8s.
 	// Legacy "container"/"kubernetes" normalized once here so all
 	// downstream code uses the new vocabulary.
 	switch target {
@@ -377,7 +377,7 @@ func (c *DeployAddCmd) dispatchNode(path string, node *DeploymentNode, parentExe
 }
 
 // classifyNodeTarget picks the target discriminator for a node. Uses
-// node.Target when non-empty. Returns canonical schema-v3 values
+// node.Target when non-empty. Returns canonical target values
 // (host|vm|pod|k8s); legacy "container"/"kubernetes" spellings are
 // normalized to pod/k8s for transition compatibility — the `ov
 // migrate deploy-v3` command converts them to the canonical values
@@ -508,7 +508,7 @@ func (c *DeployDelCmd) Run() error {
 	}
 }
 
-// resolveDelTargetKind returns the canonical schema-v3 target kind
+// resolveDelTargetKind returns the canonical target kind
 // (host|vm|pod|k8s) for c.Name, using the deploy.yml tree when
 // available. Fallback: legacy name-prefix heuristic.
 func (c *DeployDelCmd) resolveDelTargetKind() string {
@@ -538,7 +538,7 @@ func (c *DeployDelCmd) resolveDelTargetKind() string {
 // runLocalDel is a thin wrapper that constructs a LocalUnifiedTarget
 // with this cmd's gate flags and delegates teardown to the unified
 // target's Del method (see unified_targets_host.go). The body lives on
-// LocalUnifiedTarget.Del so future schema-v3 dispatchers can call into
+// LocalUnifiedTarget.Del so future dispatchers can call into
 // the same logic without going through DeployDelCmd.
 func (c *DeployDelCmd) runLocalDel(paths *LedgerPaths) error {
 	target := &LocalUnifiedTarget{
@@ -568,7 +568,7 @@ func (c *DeployDelCmd) runContainerDel(paths *LedgerPaths) error {
 }
 
 // findContainerDeploy locates the deploy record with matching Target.
-// Accepts both schema-v3 ("pod:<name>") and legacy ("container:<name>")
+// Accepts both canonical ("pod:<name>") and legacy ("container:<name>")
 // keying; Phase 6 migration rewrites existing records to the new form.
 func findContainerDeploy(paths *LedgerPaths, name string) (*DeployRecord, error) {
 	entries, err := os.ReadDir(paths.Deploys)

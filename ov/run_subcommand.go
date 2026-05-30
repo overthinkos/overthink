@@ -9,11 +9,10 @@ package main
 //   - eval_kind_cmd.go — orchestrates per-kind R10 sequences
 //   - cycle.go — ov vm cycle / etc.
 //
-// Extracted from the now-deleted ov/rebuild.go in the 2026-05-09
-// rebuild→update cutover. Keeping the helpers in their own file makes
-// the ownership explicit (they're internal subprocess plumbing, not
-// part of any one verb's implementation) and lets the unified-target
-// dispatch keep working without RebuildCmd.
+// These helpers are internal subprocess plumbing for the update path.
+// Keeping them in their own file makes the ownership explicit (they're
+// not part of any one verb's implementation) and lets the
+// unified-target dispatch keep working through it.
 
 import (
 	"bytes"

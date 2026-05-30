@@ -258,7 +258,7 @@ func (c *DeployAddCmd) runVM(deployName string, plans []*InstallPlan, dir string
 // runVmDel is a thin wrapper that constructs a VmUnifiedTarget with
 // this cmd's gate flags and delegates teardown to the unified target's
 // Del method (see unified_targets_vm.go). The body lives on
-// VmUnifiedTarget.Del so future schema-v3 dispatchers can call into the
+// VmUnifiedTarget.Del so future dispatchers can call into the
 // same logic without going through DeployDelCmd.
 func (c *DeployDelCmd) runVmDel(paths *LedgerPaths) error {
 	target := &VmUnifiedTarget{
@@ -350,7 +350,7 @@ func (r *sshReverseRunner) RunUser(script string) error {
 // vmNameFromDeployName extracts the VM entity name from a deploy-key
 // in the legacy "vm:<name>[/<instance>]" form. This form is the
 // internal shape that deploy_add_cmd.go's dispatch rewrites before
-// calling runVM/runVmDel — schema-v3 entries with plain identifiers
+// calling runVM/runVmDel — entries with plain identifiers
 // and explicit `vm:` are rewritten upstream so this helper
 // always receives the prefixed form. The `instance` suffix is
 // preserved for future per-instance addressing but currently unused.

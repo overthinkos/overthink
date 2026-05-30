@@ -260,7 +260,7 @@ func sshParamsForVm(deployName string) *SSHExecutor {
 // classifyTarget normalizes the Target field for dispatch. Empty
 // Target falls back to "pod" (default for named deploys). Legacy
 // "container"/"kubernetes" spellings normalize to pod/k8s so
-// downstream code speaks the schema-v3 vocabulary exclusively.
+// downstream code speaks the canonical target vocabulary exclusively.
 // Target is the canonical source of truth (no name-prefix heuristic).
 func classifyTarget(node *DeploymentNode) string {
 	if node == nil || node.Target == "" {

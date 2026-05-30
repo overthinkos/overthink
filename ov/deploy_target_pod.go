@@ -468,7 +468,7 @@ func (t *PodDeployTarget) renderOverlaySecurityLabel(overlayLayers []string) str
 }
 
 // readImageRegistry reads the org.overthinkos.registry OCI label from
-// an image. Used by the schema-v3 alias tagging to preserve the
+// an image. Used by the alias tagging to preserve the
 // registry prefix the quadlet generator expects.
 func readImageRegistry(engine, imageRef string) string {
 	out, err := exec.Command(engine, "inspect", "--format", "{{index .Config.Labels \"org.overthinkos.registry\"}}", imageRef).CombinedOutput()

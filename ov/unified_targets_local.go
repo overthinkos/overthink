@@ -266,10 +266,10 @@ func (t *LocalUnifiedTarget) Shell(ctx context.Context, cmd []string) error {
 // "rebuild" is refresh semantics (re-Add over the existing ledger) —
 // destruction would reverse repo changes, disable services, and strip
 // env.d files the operator explicitly opted into. The Disposable gate
-// from RebuildOpts is checked by the caller (rebuild.go's
-// classification logic), so this method does not re-validate.
+// from RebuildOpts is checked by the caller's disposable-classification
+// logic, so this method does not re-validate.
 //
-// Body extracted from RebuildCmd.rebuildHostDeploy — the cmd-file
+// This is the host-deploy rebuild path — the cmd-file
 // caller is now a thin wrapper.
 func (t *LocalUnifiedTarget) Rebuild(ctx context.Context, opts RebuildOpts) error {
 	if opts.DryRun {

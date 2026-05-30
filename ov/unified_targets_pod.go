@@ -6,7 +6,7 @@ package main
 // Pattern mirrors C11 (Host) and C12 (VM) extractions:
 //   - Del: extracted from DeployDelCmd.runContainerDel; cmd-file becomes
 //     a thin wrapper.
-//   - Rebuild: extracted from RebuildCmd.rebuildContainerDeploy; cmd-
+//   - Rebuild: the pod rebuild path; cmd-
 //     file becomes a thin wrapper.
 //   - Lifecycle methods (Start, Stop, Status, Logs, Shell) shell out via
 //     runOvSubcommand to the existing CLI surfaces (ov start / ov stop /
@@ -216,7 +216,7 @@ func (t *PodUnifiedTarget) Shell(ctx context.Context, cmd []string) error {
 
 // Rebuild follows the standard pod rebuild sequence: image rebuild
 // (optional) → image eval → deploy add → stop → config (regen
-// quadlet) → start. Body extracted from RebuildCmd.rebuildContainerDeploy
+// quadlet) → start. This is the pod rebuild path
 // — the cmd-file caller is now a thin wrapper.
 //
 // Per the existing rebuild semantics, `ov stop` is used (not `ov

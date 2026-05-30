@@ -22,6 +22,30 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-05
 
+### 2026-05-30 — docs: sweep stale `rebuild.go` / `RebuildCmd` / `schema-vN` / dated-cutover Go comments
+
+Comments-only R5 doc-hygiene sweep across `ov/*.go`: stale references left by
+earlier cutovers no longer point at things that exist. Removed every comment
+reference to the deleted file `ov/rebuild.go` (re-pointed `vmDisposableFromDeployments`
+to `run_subcommand.go`, the rebuild-method bodies to `unified_targets_*.go`, the
+disposable gate to the `ov update` dispatch) and the deleted type `RebuildCmd`
+("Body extracted from RebuildCmd.X" → "the X rebuild path"); dropped the stale
+integer-schema `schema-v3` / `schema-v4` version labels in non-migration code
+(the schema is CalVer-versioned now — e.g. "canonical schema-v3 values" →
+"canonical target values", "the schema-v3 contract" → "the unified contract");
+and rewrote the dated `2026-05-09 rebuild→update cutover` narrations to
+present tense.
+
+Scope discipline: left untouched the `migrate_*.go` migration code (which
+legitimately names the schema versions/dates it migrates) and the inline
+incident/RCA "why" rationale comments (the 2026-04-18 immich incident, the
+2026-05-06 R10 follow-up, the cuda-cudnn / stale-alias incident notes, the
+2026-05-12 require-image contract) — those explain current code and are not
+stale-identifier references. After the sweep `git grep` finds zero
+`rebuild.go`/`RebuildCmd` comment refs and `schema-v3`/`schema-v4` only inside
+`migrate_*.go`. Verified: `go build`/`vet`/`test ./...` green, `ov image
+validate` clean — comments only, no code or identifiers changed.
+
 ### 2026-05-30 — fix: `keep_images` retention over-removal (per-tag prune + image-list dedup)
 
 The `keep_images` auto-prune (after `ov image build`) could delete EVERY tag of

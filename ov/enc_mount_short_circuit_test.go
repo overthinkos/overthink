@@ -27,7 +27,7 @@ func TestEncMount_ShortCircuit_AllMounted(t *testing.T) {
 	}
 
 	// Deploy.yml fixture: one image with two encrypted volumes.
-	// Post schema-v4 the deployment map key is `deploy:` singular,
+	// The deployment map key is `deploy:` singular,
 	// not legacy `images:` plural. Per the 2026-05-12 require-image
 	// cutover, every pod-target deploy must declare `image:` — without
 	// it LoadDeployConfig returns an error and loadEncryptedVolume

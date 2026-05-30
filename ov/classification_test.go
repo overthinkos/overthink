@@ -6,7 +6,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Note: schema-v3 removed VmSpec.Disposable / VmSpec.Lifecycle and
+// Note: VmSpec carries no Disposable / Lifecycle fields and
 // the IsDisposableFields helper — disposability is now a DEPLOY
 // property only (see /ov-internals:disposable). The former
 // TestVmSpec_DisposableRoundTrip / TestVmSpec_LifecycleAloneDoesNotAuthorize
@@ -48,7 +48,7 @@ func TestDeployImageConfig_LifecycleAloneDoesNotAuthorize(t *testing.T) {
 // the same image with different disposable values must behave
 // independently (the multi-instance requirement).
 func TestMultipleInstances_IndependentFlags(t *testing.T) {
-	// Post schema-v4 (singular kinds) DeployConfig.Deploy is keyed
+	// Under singular kinds, DeployConfig.Deploy is keyed
 	// off the `deployment:` (singular) YAML map, not the legacy plural
 	// `images:`. The resolver renamed both files (deploy.yml carries
 	// `deployment:`) — fixture follows suit.

@@ -103,9 +103,8 @@ var updateCmdBuildFn = func(image, tag string) error {
 // "treat the argument as an image name" — to refresh an image artifact
 // without restarting any deploy, use `ov image pull <name>`.
 //
-// Per the 2026-05-09 rebuild→update cutover + the "ruthless cleanup"
-// follow-up: ZERO duplicate code paths, ZERO silent fallbacks. Every
-// branch fails fast with an actionable error message.
+// The dispatch keeps ZERO duplicate code paths and ZERO silent
+// fallbacks. Every branch fails fast with an actionable error message.
 func (c *UpdateCmd) Run() error {
 	if IsRemoteImageRef(StripURLScheme(c.Image)) {
 		return fmt.Errorf("remote refs are not accepted here; run 'ov image pull %s' first", c.Image)

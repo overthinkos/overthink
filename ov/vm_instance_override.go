@@ -84,7 +84,7 @@ func LoadVmInstanceOverride(domainName string) (*VmInstanceOverride, error) {
 // (disposable, lifecycle) pair. When the override is nil or empty,
 // returns the upstream pair unchanged. When set, the override wins.
 //
-// Centralised here so every caller (rebuild.go's VM-entity path,
+// Centralised here so every caller (the `ov update` VM-entity path,
 // future commands that want per-instance classification) gets the
 // same semantics.
 func (o *VmInstanceOverride) ApplyToVmClassification(disposable bool, lifecycle string) (bool, string) {

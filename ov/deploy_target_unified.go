@@ -5,7 +5,7 @@ package main
 //
 // The legacy DeployTarget interface at install_plan.go:859 is the 2-method
 // contract (Name + Emit) that the four target implementers (host, vm,
-// container/pod, k8s) currently satisfy. This file defines the schema-v3
+// container/pod, k8s) currently satisfy. This file defines the unified
 // replacement: UnifiedDeployTarget with real methods, plus LifecycleTarget
 // for the three live-runtime targets.
 //
@@ -28,7 +28,7 @@ import (
 	"context"
 )
 
-// UnifiedDeployTarget is the schema-v3 contract all four deploy methods
+// UnifiedDeployTarget is the unified contract all four deploy methods
 // (host, vm, pod, k8s) implement uniformly. Each method corresponds to
 // an `ov deploy …` subcommand, so the dispatcher in resolve_target.go
 // can route purely on target.Kind() without per-cmd switches.

@@ -138,7 +138,7 @@ func TestHasChildren(t *testing.T) {
 }
 
 // TestMergeDeployConfigsLocalCutoverFields locks in the field-level merge for
-// the schema-v4 local cutover (kind:host → kind:local) additions: Local, User,
+// the kind:local target fields: Local, User,
 // SSHArgs. Without these, target:local deployments authored in the project
 // deploy.yml lost their template ref + ssh overrides whenever resolveTreeRoot
 // merged via MergeDeployConfigs(projectDC, localDC), leaving runLocal with an

@@ -106,11 +106,11 @@ type VmSnapshotDecl struct {
 }
 
 // Note: per /ov-internals:disposable, disposability is a DEPLOY property and
-// lives exclusively on DeploymentNode. The former `VmSpec.Disposable`
-// / `VmSpec.Lifecycle` fields were removed in the schema-v3 cutover —
+// lives exclusively on DeploymentNode. `VmSpec.Disposable`
+// / `VmSpec.Lifecycle` are not VmSpec fields —
 // the `ov update <vm-name>` authorization reads from the
 // DeploymentNode(s) that reference this VM via `vm:` (see
-// rebuild.go:vmDisposableFromDeployments). `ov migrate`
+// run_subcommand.go:vmDisposableFromDeployments). `ov migrate`
 // moves any residual flags on a user's on-disk configs to the
 // matching deployment entries.
 

@@ -22,6 +22,42 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-05
 
+### 2026-05-30 — debootstrap chroot corrupts host /dev/kvm (build.yml fix)
+
+- **Symptom.** Every `ov vm build` of a debian/ubuntu debootstrap VM
+  intermittently broke KVM on the host, surfacing later as `ov vm create`
+  failing with the misleading libvirt error `Unable to find 'efi' firmware
+  that is compatible with the current configuration`.
+- **RCA (three misdirecting layers).** The firmware error is libvirt's
+  `firmware='efi'` autoselect aborting because **virtqemud had cached
+  `accel 'kvm' is not supported`** — it probed `/dev/kvm` while the node was
+  corrupted to `0660` + a wrong group (`clock`/`input`). The corruptor: the
+  privileged debootstrap builder runs `-v /dev:/dev` (losetup needs the shared
+  host `/dev`), and its **stage-2 chroot `apt install systemd` runs
+  `systemd-tmpfiles --create`**, which re-chmods/chowns `/dev/kvm` per Debian's
+  `static-nodes-permissions.conf`. Debian's `/etc/group` maps the `kvm`/`vhost`
+  gids to DIFFERENT numbers than the Arch host, so the shared host `/dev/kvm`
+  got reset to Debian's gids — denying the operator KVM access. debian passed
+  its bed R10 by timing luck (corruption fired before its `vm create`); ubuntu's
+  fired exactly during it.
+- **Fix (`build.yml` debootstrap builder template, debootstrap-scoped).** Before
+  the stage-2 chroot, shadow the chroot's `/dev/kvm` (+ `/dev/vhost-net`,
+  `/dev/vhost-vsock`) with throwaway files
+  (`mount --bind /tmp/ov-devshadow-* /target/dev/*`) so the chroot's
+  `systemd-tmpfiles` touches the shadows, not the host nodes; drop the shadows
+  before tearing `/dev` down. The chroot never uses KVM. The pacstrap path
+  (arch/cachyos) is Arch-based — its chroot assigns the SAME gids as the host
+  and never corrupts — so it is deliberately untouched (no Go-level `/dev` mask
+  that would over-broaden to every privileged build and break plain `--bind`).
+- **R10.** Live debian debootstrap build keeps `/dev/kvm` at `0666 kvm` across
+  the `Creating group 'kvm'` chroot config that previously corrupted it (audit:
+  zero `systemd-tmpfiles` host-node hits), plus the
+  `ov -C image/ubuntu eval run eval-ubuntu-debootstrap-vm` bed R10.
+- **Recovery (if already corrupted).** Restore `/dev/kvm` to `0666 kvm` AND
+  restart the stale `virtqemud` so it re-probes — the perm-restore alone is
+  insufficient because the daemon caches the no-kvm verdict in memory
+  (`--timeout=120`, no on-disk capabilities cache).
+
 ### 2026-05-30 — debian repo (overthinkos/debian): schema migrate + standard eval-*-vm bed naming
 
 - **Migrated to schema 2026.144.1443** (`ov migrate`: kind-files split inline

@@ -73,6 +73,21 @@ builder:
                     mount --bind /sys /target/sys
                     mount --bind /dev /target/dev
                     mount --bind /dev/pts /target/dev/pts
+                    # Shadow the chroot's /dev/kvm (+ vhost nodes) with throwaway
+                    # files so the stage-2 package-config systemd-tmpfiles can't
+                    # corrupt the HOST's /dev/kvm (shared via the /dev bind).
+                    # Debian's static-nodes-permissions assigns these a numeric
+                    # gid that maps to a DIFFERENT group on the Arch host, so
+                    # without this the chroot resets the shared /dev/kvm to 0660
+                    # with the wrong group — virtqemud then caches "no kvm" and
+                    # `ov vm create` fails with a misleading EFI-firmware error.
+                    # The chroot never uses KVM. See CHANGELOG (2026-05 RCA).
+                    for d in kvm vhost-net vhost-vsock; do
+                      if [ -e "/target/dev/$d" ]; then
+                        : > "/tmp/ov-devshadow-$d"
+                        mount --bind "/tmp/ov-devshadow-$d" "/target/dev/$d"
+                      fi
+                    done
                     chroot /target apt-get update
                     DEBIAN_FRONTEND=noninteractive chroot /target \
                       apt-get install -y --no-install-recommends \
@@ -80,6 +95,10 @@ builder:
                     # Clean apt cache before tarring so the rootfs is lean.
                     chroot /target apt-get clean
                     rm -rf /target/var/lib/apt/lists/*
+                    # Drop the device shadows (sub-mounts of /target/dev) first.
+                    for d in kvm vhost-net vhost-vsock; do
+                      umount "/target/dev/$d" 2>/dev/null || true
+                    done
                     umount /target/dev/pts /target/dev /target/sys /target/proc
                     tar -C /target --xattrs --acls -czf /out/rootfs.tar.gz .
     aur:

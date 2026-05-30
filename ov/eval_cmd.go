@@ -423,6 +423,15 @@ func (c *EvalLiveCmd) runVm() error {
 		"CONTAINER_NAME": "ov-" + c.Image,
 		"USER":           user,
 		"HOME":           "/home/" + user,
+		// VM_HOSTDEV_COUNT = how many <hostdev> passthrough devices THIS VM's
+		// spec declares (the operator's INTENT). A guest-side GPU check uses it
+		// to tell "no GPU configured for this VM" (legit N/A) apart from "a GPU
+		// hostdev WAS configured but the guest cannot see it" (passthrough
+		// silently failed → the check must HARD-FAIL, never N/A-pass). Sourced
+		// from the VmSpec, NOT the running domain: a libvirt hostdev drop would
+		// zero the running count and re-mask the exact failure this guards
+		// against (the eval-cachyos-gpu-vm false-green that motivated this var).
+		"VM_HOSTDEV_COUNT": strconv.Itoa(vmHostdevCount(spec)),
 	}
 	resolver := &EvalVarResolver{Env: env, HasRuntime: true}
 
@@ -444,6 +453,19 @@ func (c *EvalLiveCmd) runVm() error {
 		return &EvalFailedError{Failed: fails}
 	}
 	return nil
+}
+
+// vmHostdevCount returns how many <hostdev> passthrough devices the VM spec
+// declares — the operator's INTENT, sourced from the authored VmSpec rather
+// than the running domain (a libvirt drop would zero the live count and re-mask
+// a silent passthrough failure). nil-safe at every level: a spec with no
+// libvirt block, no devices block, or no hostdevs all yield 0, which a GPU eval
+// check reads as "no GPU configured for this VM" (legit N/A).
+func vmHostdevCount(spec *VmSpec) int {
+	if spec == nil || spec.Libvirt == nil || spec.Libvirt.Devices == nil {
+		return 0
+	}
+	return len(spec.Libvirt.Devices.Hostdevs)
 }
 
 // collectAddLayerDeployEval collects the deploy-scope eval checks from each

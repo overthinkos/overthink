@@ -22,6 +22,37 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-05
 
+### 2026-05-30 — cachyos GPU eval: `VM_HOSTDEV_COUNT` intent gate closes the silent-passthrough false-green
+
+A live `eval-cachyos-gpu-vm` bed run reported `PASS` while EVERY GPU check
+logged `N/A: no NVIDIA GPU passed through` — despite a `<hostdev>` being
+configured for the VM. The GPU checks N/A-pass when no NVIDIA device (`0x10de`)
+reaches the guest (correct on a portable host), but could not tell "no GPU
+configured for this VM" (legit N/A) from "a GPU hostdev WAS configured but
+passthrough silently failed" (must FAIL). The result was a green-but-meaningless
+GPU R10 — caught only by manually inspecting the per-check verdicts.
+
+- **ov (`VM_HOSTDEV_COUNT`).** VM live-eval (`ov/eval_cmd.go`) now resolves
+  `VM_HOSTDEV_COUNT` = `len(VmSpec.Libvirt.Devices.Hostdevs)` — the operator's
+  passthrough INTENT, sourced from the authored VmSpec, NOT the running domain
+  (a libvirt hostdev drop would zero the live count and re-mask the very failure
+  this guards against). Exposed as a deploy-scope, runtime-only eval var
+  (`vmHostdevCount` helper + a `runtimeOnlyVarPrefixes` entry so build-scope
+  checks can't reference it). Unit-tested in `ov/vm_hostdev_test.go`.
+- **cachyos (`gpu-passthrough-intent-honored`).** One gate check (R3 — a single
+  gate, not a duplicated guard in every GPU check) in the
+  `cachyos-gpu-desktop-eval` layer HARD-FAILS when `VM_HOSTDEV_COUNT > 0` but no
+  `0x10de` is in the guest. A GPU host can no longer silently pass without the
+  GPU; the `gpu-driver-active` / `gpu-cuda-container` comment was corrected to
+  describe the gate. cachyos `v2026.150.2135`.
+- **R10.** `ov -C image/cachyos eval run eval-cachyos-gpu-vm` PASS (31 passed,
+  gate `✓`, the real RTX 4080 SUPER branch — `nvidia-smi -L` / `cuda-smoke` /
+  NVENC) with the host's hostdev attached, including the fresh-rebuild
+  re-verification; `ov eval live cachyos-gpu` PASS (32 passed, gate `✓`) on the
+  persistent operator VM (`nvidia-smi` in-guest: RTX 4080 SUPER, driver
+  610.43.02). The host-specific `<hostdev>` is added locally and reverted after
+  the run — never committed (the committed bed stays portable).
+
 ### 2026-05-30 — ubuntu repo (overthinkos/ubuntu): schema migrate + eval-*-vm bed naming + VM host-port deconfliction
 
 - **Migrated to schema 2026.144.1443** (`ov migrate`: kind-files split +

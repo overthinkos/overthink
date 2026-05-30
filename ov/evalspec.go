@@ -763,6 +763,10 @@ var runtimeOnlyVarPrefixes = []string{
 	"CAPTURED",
 	"SCENARIO_ID",
 	"STEP_ID",
+	// VM live-eval intent: how many <hostdev> the VM's spec declares. Resolved
+	// only against a live VM deployment (eval_cmd.go VM path), so a build-scope
+	// check must not reference it.
+	"VM_HOSTDEV_COUNT",
 }
 
 // IsRuntimeOnlyVar reports whether the given variable key (as returned by

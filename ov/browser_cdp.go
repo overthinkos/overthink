@@ -31,11 +31,12 @@ func (e *cdpError) Error() string {
 
 // CDPClient is a lightweight Chrome DevTools Protocol WebSocket client.
 type CDPClient struct {
-	ws      *websocket.Conn
-	nextID  atomic.Int64
-	mu      sync.Mutex
-	pending map[int]chan cdpMessage
-	done    chan struct{}
+	ws       *websocket.Conn
+	nextID   atomic.Int64
+	mu       sync.Mutex
+	pending  map[int]chan cdpMessage
+	done     chan struct{}
+	endpoint *EvalEndpoint // ssh -L forward (VM/ssh venues); nil for container/local
 }
 
 // NewCDPClient connects to a CDP WebSocket endpoint and starts reading messages.
@@ -137,4 +138,6 @@ func (c *CDPClient) Call(method string, params any) (json.RawMessage, error) {
 func (c *CDPClient) Close() {
 	c.ws.Close()
 	<-c.done
+	// Tear down the ssh -L forward (if any) after the WebSocket closes.
+	c.endpoint.Close()
 }

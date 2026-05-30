@@ -74,6 +74,6 @@ func TestParseDbusArgsEmpty(t *testing.T) {
 }
 
 func TestDbusNotifyRemoteNonexistent(t *testing.T) {
-	// Should not panic with bogus engine/container
-	sendContainerNotification("nonexistent-engine", "nonexistent-container", "test", "body")
+	// Should not panic with a chain into a bogus container (best-effort notify).
+	sendVenueNotification(ContainerChain("nonexistent-engine", "nonexistent-container"), "test", "body")
 }

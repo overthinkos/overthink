@@ -180,7 +180,7 @@ curl -sL "https://github.com/linuxserver/pixelflux/archive/${PFX_SHA}.tar.gz" | 
 cd "pixelflux-${PFX_SHA}"
 
 # NVENC (Patch 2a/2b) is stubbed UNLESS the builder ships CUDA + the NVENC
-# headers. The cuda-arch-builder (used by the GPU VM / cachyos-coder path) has
+# headers. The cuda-arch-builder (used by the GPU VM / cachyos-gpu path) has
 # nvcc + ffnvcodec's nvEncodeAPI.h, so pixelflux builds the real nvenc-sys
 # encoder there; the stock arch/fedora builder has no CUDA, so the stub keeps
 # the container selkies-desktop build green. One build.sh, capability-driven

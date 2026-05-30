@@ -150,6 +150,80 @@ paste-proof survives delegation — a delegated bed run whose failure is
 summarized away is fraud); the hooks doctrine; and the per-directory signpost
 convention. Agent teams remain documented opt-in (experimental), not enabled
 in committed settings.
+### 2026-05-30 — CachyOS GPU VM: venue-agnostic eval verbs, eval-anywhere, `cachyos-gpu` naming cutover, + headless Looking-Glass RCA
+
+A five-part cutover on the CachyOS GPU-passthrough workstation. The operator VM
+was renamed `cachyos-coder` → `cachyos-gpu`; every interactive `ov eval` verb was
+made venue-agnostic (container | VM | ssh through ONE `DeployExecutor`); VM
+live-eval now sources an applied layer's deploy-scope checks so the SAME monitor /
+SPICE / mouse / keyboard / screenshot / selkies / Looking-Glass checks run against
+BOTH the disposable bed and the persistent operator deploy; and a full empirical
+RCA settled the headless Looking-Glass story.
+
+- **T1 — VM naming cutover.** `cachyos-coder` → `cachyos-gpu` across
+  `image/cachyos/vm.yml` (the kind:vm entity) and `image/cachyos/overthink.yml`
+  (the deploy entry + the `eval-cachyos-gpu` disposable bed). The dead
+  `ov-cachyos-gpu` / `ov-ov-cachyos-gpu` autostart units + state dirs + stale
+  deploy entries were purged. R5 self-test: `git grep cachyos-coder` returns only
+  this file in both repos.
+
+- **T2 — venue-agnostic `ov eval` verbs (`ov/eval_venue.go`, new).** The
+  interactive verbs (`wl` / `cdp` / `dbus` / `record` / `vnc`) hardcoded
+  `podman exec` and only worked against a container. A new `resolveEvalVenue`
+  builds an `EvalVenue{Exec,…}` over the existing `ResolveDeployChain` /
+  `ResolveTarget`, returning a container chain, an `SSHExecutor` (VM-over-SSH /
+  ssh-host), a `ShellExecutor` (local), or a `NestedExecutor` (dotted multi-hop).
+  Every verb now routes through `venue.Exec` (`RunCapture` / `GetFile` /
+  `PutFile`) — the SAME verb works in a container, a VM, and over ssh. The
+  port-protocol verbs (`cdp` / `vnc`) gained venue-aware endpoint resolution:
+  `containerPublishedAddr` via `podman port` for containers, `sshForwardEndpoint`
+  (an `ssh -NT -L` forward gated by a readiness probe — not a sleep) for VM /
+  ssh hosts, each owning an `EvalEndpoint` closed on the client's `Close()`.
+  `spice` / `libvirt` stay VM-native (no container analog). No `*-host` / `*-vm`
+  verb duplication (R3).
+
+- **T3 — eval against any deployment, disposable or not (`ov/eval_cmd.go`).**
+  VM live-eval previously attached no checks to a persistent VM.
+  `collectAddLayerDeployEval` now scans an applied layer's deploy-scope `eval:`
+  checks (`ScanAllLayerWithConfig` over the project config, skipping remote
+  `@github` refs) and `MergeDeployEval`s them into the run — so
+  `ov eval live cachyos-gpu` runs the exact same check set as the disposable bed
+  from ONE source (R3). 28/28 passed on the persistent operator deploy.
+
+- **`cachyos-gpu-desktop-eval` (new shared check layer).** Carries only the
+  desktop-interaction TEST TOOLS (`ydotool`) plus a deploy-scope `eval:` block,
+  added to BOTH the bed and the operator deploy. It proves the desktop RENDERS
+  and accepts input headlessly: SPICE-wire mouse-move / click / key / type
+  injection (which also wakes a DPMS-blanked head) FOLLOWED BY a non-uniform
+  SPICE screenshot; GPU-gated `nvidia-smi` + `kscreen-doctor` monitor-output
+  enumeration; the selkies stream (`wayland-1` socket + `:8081` backend + capture
+  journal + `:3000` HTTPS + WebRTC HTML); and the Looking-Glass guest wiring.
+
+- **T4 — headless Looking Glass: empirical RCA, frame-flow blocked upstream.**
+  Exhaustive live-image testing established: (a) the kvmfr `static_size_mb=64`
+  modprobe option created a guest-local `/dev/kvmfr0` that SHADOWED the shared
+  ivshmem PCI BAR, so host-side `looking-glass-client` never saw the guest's
+  frames — REMOVED (`layers/looking-glass-host`); kvmfr now auto-binds to the
+  ivshmem PCI device, and LG then read the real region. (b) The `<shmem>` was
+  bumped 64 → 128 MiB on both VM entities. (c) Zero-auth headless capture needs
+  an X11 seat (LG's XCB backend captures the root with no PipeWire ScreenCast
+  portal prompt), but a headless GPU VM's X11 seat falls back to the **virtio
+  head — 0 GPU outputs** without a forced EDID (forcing one broke Xorg), whereas
+  the Wayland session drives a GPU-backed virtual output (`kscreen-doctor`
+  -enumerable). The desktop therefore stays Wayland **on the data**, not on
+  preference. (d) With all of the above correct, the Looking-Glass B7 LGMP host
+  still aborts in `lgmpHostMemPtr` (`lgmp/src/host.c`) during init — an upstream
+  LG bug, independent of ivshmem size / sharing / capture backend (host↔guest
+  propagation was confirmed working: LG's partial LGMP header reached the host
+  `/dev/shm`). The kvmfr + IVSHMEM + capture wiring ships; guest→host frame-flow
+  awaits an upstream Looking-Glass fix, so no `looking-glass-frames-flowing` eval
+  check is added (it would be unpassable until the upstream fix lands).
+
+- **eval robustness fixes (`keepassxc-keyring`).** The `ssh-agent` service check
+  switched `is-active` → `is-enabled` (the socket-activated unit matches the
+  layer's `enable` action); the direnv fish-hook check now references the current
+  `ov-direnv.fish` path and tolerates a bash-login target where fish isn't
+  per-user-configured.
 
 ### 2026-05-29 — cachyos GPU VM eval: SPICE virtual monitor + deeper selkies verification + honest LG bed-scope
 

@@ -1,14 +1,15 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"strings"
 	"time"
 )
 
-// RecordCmd manages recording sessions (terminal and desktop) inside containers.
+// RecordCmd manages recording sessions (terminal and desktop) on the venue
+// (container / VM / host) via the shared DeployExecutor.
 type RecordCmd struct {
 	Cmd   RecordCmdCmd   `cmd:"" help:"Send a command to the recording's terminal"`
 	List  RecordListCmd  `cmd:"" help:"List active recording sessions"`
@@ -16,7 +17,7 @@ type RecordCmd struct {
 	Stop  RecordStopCmd  `cmd:"" help:"Stop a recording session and save output"`
 }
 
-// RecordStartCmd starts a recording session inside a container.
+// RecordStartCmd starts a recording session on the venue.
 type RecordStartCmd struct {
 	Image    string `arg:"" help:"Image name"`
 	Name     string `short:"n" long:"name" default:"default" help:"Recording name"`
@@ -27,29 +28,28 @@ type RecordStartCmd struct {
 }
 
 func (c *RecordStartCmd) Run() error {
-	engine, name, err := resolveContainer(c.Image, c.Instance)
+	venue, err := resolveEvalVenue(c.Image, c.Instance)
 	if err != nil {
 		return err
 	}
-	if err := checkTmuxInstalled(engine, name); err != nil {
+	if err := checkTmuxInstalled(venue.Exec); err != nil {
 		return err
 	}
 
 	session := recordSessionName(c.Name)
-	if tmuxHasSession(engine, name, session) {
+	if tmuxHasSession(venue.Exec, session) {
 		return fmt.Errorf("recording %q already active (session %s). Stop it first with: ov eval record stop %s -n %s",
 			c.Name, session, c.Image, c.Name)
 	}
 
 	// Determine recording mode and tool
-	tool, mode, err := c.resolveMode(engine, name)
+	tool, mode, err := c.resolveMode(venue.Exec)
 	if err != nil {
 		return err
 	}
 
-	// Create output directory
-	mkdirCmd := exec.Command(engine, "exec", name, "mkdir", "-p", "/tmp/ov-recordings")
-	if err := mkdirCmd.Run(); err != nil {
+	// Create output directory on the venue.
+	if err := venueRunSilent(venue.Exec, "mkdir -p /tmp/ov-recordings"); err != nil {
 		return fmt.Errorf("creating recording directory: %w", err)
 	}
 
@@ -76,42 +76,37 @@ func (c *RecordStartCmd) Run() error {
 		}
 	}
 
-	// Start tmux session with the recorder command
-	cmd := exec.Command(engine, "exec", name, "tmux", "new-session", "-d", "-s", session, recorderCmd)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
+	// Start tmux session with the recorder command on the venue.
+	if err := execTmux(venue.Exec, "new-session", "-d", "-s", session, recorderCmd); err != nil {
 		return fmt.Errorf("starting recording session: %w", err)
 	}
 
-	// Write mode metadata for stop command
+	// Write mode metadata for stop command (best-effort).
 	modeFile := "/tmp/ov-recordings/" + c.Name + ".mode"
-	modeCmd := exec.Command(engine, "exec", name, "sh", "-c",
-		fmt.Sprintf("echo %s > %s", shellQuote(mode), shellQuote(modeFile)))
-	modeCmd.Run() // best-effort
+	_ = venueRunSilent(venue.Exec, fmt.Sprintf("printf '%%s' %s > %s", shellQuote(mode), shellQuote(modeFile)))
 
 	fmt.Fprintf(os.Stderr, "Recording started (mode: %s, tool: %s, session: %s)\n", mode, tool, session)
-	fmt.Fprintf(os.Stderr, "  Output: %s (inside container)\n", outFile)
+	fmt.Fprintf(os.Stderr, "  Output: %s (on the target)\n", outFile)
 	fmt.Fprintf(os.Stderr, "  Stop with: ov eval record stop %s -n %s [-o local-file]\n", c.Image, c.Name)
 	return nil
 }
 
 // resolveMode determines the recording tool and mode based on --mode flag and available tools.
-func (c *RecordStartCmd) resolveMode(engine, containerName string) (tool, mode string, err error) {
+func (c *RecordStartCmd) resolveMode(ex DeployExecutor) (tool, mode string, err error) {
 	switch c.Mode {
 	case "terminal":
-		if err := checkToolAvailable(engine, containerName, "asciinema"); err != nil {
+		if !venueHasTool(ex, "asciinema") {
 			return "", "", fmt.Errorf("terminal recording requires asciinema (add the asciinema layer)")
 		}
 		return "asciinema", "terminal", nil
 	case "desktop":
-		tool, err := detectDesktopRecorder(engine, containerName)
+		tool, err := detectDesktopRecorder(ex)
 		if err != nil {
 			return "", "", err
 		}
 		return tool, "desktop", nil
 	default: // auto
-		tool, mode, err := detectRecordTool(engine, containerName)
+		tool, mode, err := detectRecordTool(ex)
 		if err != nil {
 			return "", "", err
 		}
@@ -128,34 +123,34 @@ type RecordStopCmd struct {
 }
 
 func (c *RecordStopCmd) Run() error {
-	engine, name, err := resolveContainer(c.Image, c.Instance)
+	venue, err := resolveEvalVenue(c.Image, c.Instance)
 	if err != nil {
 		return err
 	}
 
 	session := recordSessionName(c.Name)
-	if !tmuxHasSession(engine, name, session) {
+	if !tmuxHasSession(venue.Exec, session) {
 		return fmt.Errorf("no active recording %q (session %s not found). Use 'ov eval record list %s' to see active recordings",
 			c.Name, session, c.Image)
 	}
 
 	// Read recording mode from metadata file
-	mode := readRecordingMode(engine, name, c.Name)
+	mode := readRecordingMode(venue.Exec, c.Name)
 
 	// Stop the recorder gracefully
 	if mode == "terminal" {
 		// Terminal recording (asciinema): send "exit" to end the shell
-		execTmux(engine, name, "send-keys", "-t", session, "exit", "Enter")
+		_ = execTmux(venue.Exec, "send-keys", "-t", session, "exit", "Enter")
 	} else {
 		// Desktop recording (pixelflux-record, wf-recorder): send SIGINT
-		execTmux(engine, name, "send-keys", "-t", session, "C-c")
+		_ = execTmux(venue.Exec, "send-keys", "-t", session, "C-c")
 	}
 
-	// Wait for session to exit gracefully
+	// Wait for session to exit gracefully (bounded readiness probe).
 	stopped := false
 	for i := 0; i < 10; i++ {
 		time.Sleep(500 * time.Millisecond)
-		if !tmuxHasSession(engine, name, session) {
+		if !tmuxHasSession(venue.Exec, session) {
 			stopped = true
 			break
 		}
@@ -163,33 +158,33 @@ func (c *RecordStopCmd) Run() error {
 
 	if !stopped {
 		// Force kill if still running
-		execTmux(engine, name, "kill-session", "-t", session)
+		_ = execTmux(venue.Exec, "kill-session", "-t", session)
 		fmt.Fprintf(os.Stderr, "Recording session force-killed after timeout\n")
 	}
 
 	// Clean up mode metadata file
-	cleanupModeFile(engine, name, c.Name)
+	cleanupModeFile(venue.Exec, c.Name)
 
 	outFile := recordingFilePath(c.Name, mode)
 
 	if c.Output != "" {
-		// Copy file from container to host
-		cpCmd := exec.Command(engine, "cp", name+":"+outFile, c.Output)
-		cpCmd.Stdout = os.Stdout
-		cpCmd.Stderr = os.Stderr
-		if err := cpCmd.Run(); err != nil {
+		// Pull the recording off the venue (podman exec cat / ssh cat / local read).
+		data, err := venue.Exec.GetFile(context.Background(), outFile, false, EmitOpts{})
+		if err != nil {
 			return fmt.Errorf("copying recording: %w (file: %s)", err, outFile)
+		}
+		if err := os.WriteFile(c.Output, data, 0o644); err != nil {
+			return fmt.Errorf("writing recording to %s: %w", c.Output, err)
 		}
 
 		// Get file size for display
-		info, err := os.Stat(c.Output)
-		if err == nil {
+		if info, err := os.Stat(c.Output); err == nil {
 			fmt.Fprintf(os.Stderr, "Recording saved to %s (%s)\n", c.Output, formatSize(info.Size()))
 		} else {
 			fmt.Fprintf(os.Stderr, "Recording saved to %s\n", c.Output)
 		}
 	} else {
-		fmt.Fprintf(os.Stderr, "Recording stopped. File inside container: %s\n", outFile)
+		fmt.Fprintf(os.Stderr, "Recording stopped. File on the target: %s\n", outFile)
 		fmt.Fprintf(os.Stderr, "  Copy with: ov eval record stop %s -n %s -o <local-path>\n", c.Image, c.Name)
 	}
 
@@ -203,15 +198,15 @@ type RecordListCmd struct {
 }
 
 func (c *RecordListCmd) Run() error {
-	engine, name, err := resolveContainer(c.Image, c.Instance)
+	venue, err := resolveEvalVenue(c.Image, c.Instance)
 	if err != nil {
 		return err
 	}
 
 	// List tmux sessions with "record-" prefix
-	out, err := captureTmux(engine, name, "list-sessions", "-F", "#{session_name}")
+	out, err := captureTmux(venue.Exec, "list-sessions", "-F", "#{session_name}")
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "No active recordings in %s\n", name)
+		fmt.Fprintf(os.Stderr, "No active recordings in %s\n", c.Image)
 		return nil
 	}
 
@@ -224,14 +219,14 @@ func (c *RecordListCmd) Run() error {
 	}
 
 	if len(recordings) == 0 {
-		fmt.Fprintf(os.Stderr, "No active recordings in %s\n", name)
+		fmt.Fprintf(os.Stderr, "No active recordings in %s\n", c.Image)
 		return nil
 	}
 
 	fmt.Printf("%-20s %-10s %s\n", "NAME", "MODE", "FILE")
 	for _, session := range recordings {
 		recName := strings.TrimPrefix(session, "record-")
-		mode := readRecordingMode(engine, name, recName)
+		mode := readRecordingMode(venue.Exec, recName)
 		file := recordingFilePath(recName, mode)
 		fmt.Printf("%-20s %-10s %s\n", recName, mode, file)
 	}
@@ -248,21 +243,21 @@ type RecordCmdCmd struct {
 }
 
 func (c *RecordCmdCmd) Run() error {
-	engine, name, err := resolveContainer(c.Image, c.Instance)
+	venue, err := resolveEvalVenue(c.Image, c.Instance)
 	if err != nil {
 		return err
 	}
 
 	session := recordSessionName(c.Name)
-	if !tmuxHasSession(engine, name, session) {
+	if !tmuxHasSession(venue.Exec, session) {
 		return fmt.Errorf("no active recording %q (session %s not found)", c.Name, session)
 	}
 
-	if err := sendTmuxCommand(engine, name, session, c.Command); err != nil {
+	if err := sendTmuxCommand(venue.Exec, session, c.Command); err != nil {
 		return err
 	}
 
-	sendContainerNotification(engine, name,
+	sendVenueNotification(venue.Exec,
 		fmt.Sprintf("ov: sent to %s", session), c.Command)
 
 	fmt.Fprintf(os.Stderr, "Sent to %s: %s\n", session, c.Command)
@@ -276,7 +271,7 @@ func recordSessionName(name string) string {
 	return "record-" + name
 }
 
-// recordingFilePath returns the in-container path for a recording.
+// recordingFilePath returns the on-target path for a recording.
 func recordingFilePath(name, mode string) string {
 	ext := ".mp4"
 	if mode == "terminal" {
@@ -285,44 +280,38 @@ func recordingFilePath(name, mode string) string {
 	return "/tmp/ov-recordings/" + name + ext
 }
 
-// checkToolAvailable verifies a tool is installed inside the container.
-func checkToolAvailable(engine, containerName, tool string) error {
-	cmd := exec.Command(engine, "exec", containerName, "which", tool)
-	return cmd.Run()
-}
-
-// detectDesktopRecorder finds the best available desktop recording tool.
-func detectDesktopRecorder(engine, containerName string) (string, error) {
-	if checkToolAvailable(engine, containerName, "pixelflux-record") == nil {
+// detectDesktopRecorder finds the best available desktop recording tool on the venue.
+func detectDesktopRecorder(ex DeployExecutor) (string, error) {
+	if venueHasTool(ex, "pixelflux-record") {
 		return "pixelflux-record", nil
 	}
-	if checkToolAvailable(engine, containerName, "wf-recorder") == nil {
+	if venueHasTool(ex, "wf-recorder") {
 		return "wf-recorder", nil
 	}
 	return "", fmt.Errorf("no desktop recorder available (need pixelflux-record or wf-recorder)")
 }
 
-// detectRecordTool probes the container for available recording tools (auto mode).
-func detectRecordTool(engine, containerName string) (tool, mode string, err error) {
+// detectRecordTool probes the venue for available recording tools (auto mode).
+func detectRecordTool(ex DeployExecutor) (tool, mode string, err error) {
 	// Desktop tools first (more specific)
-	if checkToolAvailable(engine, containerName, "pixelflux-record") == nil {
+	if venueHasTool(ex, "pixelflux-record") {
 		return "pixelflux-record", "desktop", nil
 	}
-	if checkToolAvailable(engine, containerName, "wf-recorder") == nil {
+	if venueHasTool(ex, "wf-recorder") {
 		return "wf-recorder", "desktop", nil
 	}
 	// Terminal fallback
-	if checkToolAvailable(engine, containerName, "asciinema") == nil {
+	if venueHasTool(ex, "asciinema") {
 		return "asciinema", "terminal", nil
 	}
 	return "", "", fmt.Errorf("no recording tool available (need asciinema, pixelflux-record, or wf-recorder)")
 }
 
-// readRecordingMode reads the recording mode from the .mode metadata file.
-// Returns "terminal" or "desktop". Falls back to "desktop" if file is missing.
-func readRecordingMode(engine, containerName, name string) string {
+// readRecordingMode reads the recording mode from the .mode metadata file on
+// the venue. Returns "terminal" or "desktop". Falls back to "desktop" if missing.
+func readRecordingMode(ex DeployExecutor, name string) string {
 	modeFile := "/tmp/ov-recordings/" + name + ".mode"
-	out, err := exec.Command(engine, "exec", containerName, "cat", modeFile).Output()
+	out, err := venueCapture(ex, "cat "+shellQuote(modeFile))
 	if err == nil {
 		mode := strings.TrimSpace(string(out))
 		if mode == "terminal" || mode == "desktop" {
@@ -333,9 +322,9 @@ func readRecordingMode(engine, containerName, name string) string {
 }
 
 // cleanupModeFile removes the .mode metadata file after stopping a recording.
-func cleanupModeFile(engine, containerName, name string) {
+func cleanupModeFile(ex DeployExecutor, name string) {
 	modeFile := "/tmp/ov-recordings/" + name + ".mode"
-	exec.Command(engine, "exec", containerName, "rm", "-f", modeFile).Run()
+	_ = venueRunSilent(ex, "rm -f "+shellQuote(modeFile))
 }
 
 // formatSize returns a human-readable file size string.

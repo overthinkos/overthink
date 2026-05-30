@@ -56,7 +56,7 @@ func (c *CmdCmd) Run() error {
 		if runErr != nil {
 			status = "failed"
 		}
-		sendContainerNotification(engine, name,
+		sendVenueNotification(ContainerChain(engine, name),
 			fmt.Sprintf("ov: command %s", status),
 			fmt.Sprintf("%s (%s)", c.Command, elapsed))
 	}

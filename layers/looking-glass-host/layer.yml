@@ -1,5 +1,5 @@
 layer:
-    version: 2026.149.2019
+    version: 2026.150.0947
     name: looking-glass-host
     description: |
         Looking Glass GUEST side for a GPU-passthrough VM: the Linux "host"
@@ -11,14 +11,20 @@ layer:
         not in this layer.)
 
         Requires the libvirt domain to carry an IVSHMEM <shmem> device + a dummy
-        <video> scanout (declared on the cachyos-coder vm entity) so the GPU has
+        <video> scanout (declared on the cachyos-gpu vm entity) so the GPU has
         a framebuffer to capture with no physical monitor attached.
 
         kvmfr is a DKMS module → pulls the matching linux-cachyos-headers + dkms;
         built in-guest at deploy time against the running cachyos kernel. The
-        Wayland-session capture path is newer in Looking Glass B7 and is validated
-        live (R10) — falls back to an X11 session if Wayland capture is
-        unavailable. Only meaningful on a VM guest with the GPU + IVSHMEM.
+        kvmfr + IVSHMEM wiring is session-independent and in place. Guest->host
+        frame-flow on this Looking Glass build is currently blocked by an upstream
+        LGMP-host issue (see CHANGELOG). Note the capture trade-off: a zero-auth
+        headless capture needs an X11 seat (LG's XCB backend captures the root
+        with no PipeWire ScreenCast portal prompt), but a headless GPU VM's X11
+        seat falls back to the virtio head — 0 GPU outputs — without a forced
+        EDID, so consumers run the Wayland session (KWin drives a GPU-backed
+        virtual output) until the upstream fix lands. Only meaningful on a VM
+        guest with the GPU + IVSHMEM.
     require:
         - build-toolchain
         - yay
@@ -33,13 +39,20 @@ layer:
                     - looking-glass-host-git
                     - looking-glass-module-dkms-git
     task:
-        # Load kvmfr at boot with a static region sized for up to 4K (64 MiB),
-        # matching the <shmem> size on the vm entity.
+        # Load kvmfr at boot. On a libvirt VM guest the <shmem> ivshmem PCI
+        # device IS the shared Looking Glass region; kvmfr auto-binds to it as
+        # /dev/kvmfr0 with NO module options. We deliberately do NOT set
+        # static_size_mb: a static region creates a SEPARATE guest-local
+        # /dev/kvmfr0 that shadows the shared PCI BAR, so the host-side
+        # looking-glass-client never sees the guest's frames (CHANGELOG:
+        # static-shadow RCA). The <shmem> size lives on the vm entity (>=128 MiB).
         - write: /etc/modprobe.d/ov-kvmfr.conf
           user: root
           mode: "0644"
           content: |
-            options kvmfr static_size_mb=64
+            # kvmfr auto-binds to the ivshmem PCI device as /dev/kvmfr0.
+            # Do NOT add `options kvmfr static_size_mb=...`: a static region
+            # shadows the shared PCI BAR and breaks guest->host frame flow.
         - write: /etc/modules-load.d/ov-kvmfr.conf
           user: root
           mode: "0644"

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -122,31 +121,23 @@ type CdpStatusCmd struct {
 }
 
 func (c *CdpStatusCmd) Run() error {
-	engine, name, err := resolveCdpContainer(c.Image, c.Instance)
+	// Resolve a host-reachable DevTools endpoint (an ssh -L forward for VM/ssh
+	// venues) and probe /json/version — venue-agnostic.
+	devtoolsURL, ep, _, err := cdpDevTools(c.Image, c.Instance)
 	if err != nil {
-		return err
+		fmt.Printf("CDP:       unreachable\n")
+		fmt.Printf("Detail:    %v\n", err)
+		return nil
 	}
-	// Local mode (engine == "") talks to localhost:9222 directly; no
-	// snapshot exists. Synthesize a host-network snapshot so the probe
-	// uses HostPortFor's host-net branch.
-	var snap *ContainerSnapshot
-	if engine == "" {
-		snap = &ContainerSnapshot{NetworkMode: "host"}
-	} else {
-		snap, err = NewEngineClient(engine).Snapshot(name)
-		if err != nil {
-			return err
-		}
+	defer ep.Close()
+	httpc := &http.Client{Timeout: 5 * time.Second}
+	resp, herr := httpc.Get(devtoolsURL + "/json/version")
+	if herr != nil {
+		fmt.Printf("CDP:       unreachable (%s)\n", ep.Addr)
+		return nil
 	}
-	ts := cdpProbe{}.ProbeHost(context.Background(), snap)
-	if ts.Port > 0 {
-		fmt.Printf("CDP:       %s (port %d)\n", ts.Status, ts.Port)
-	} else {
-		fmt.Printf("CDP:       %s\n", ts.Status)
-	}
-	if ts.Detail != "" {
-		fmt.Printf("Detail:    %s\n", ts.Detail)
-	}
+	resp.Body.Close()
+	fmt.Printf("CDP:       ok (%s)\n", ep.Addr)
 	return nil
 }
 
@@ -158,15 +149,11 @@ type CdpOpenCmd struct {
 }
 
 func (c *CdpOpenCmd) Run() error {
-	engine, name, err := resolveCdpContainer(c.Image, c.Instance)
+	devtoolsURL, ep, venue, err := cdpDevTools(c.Image, c.Instance)
 	if err != nil {
 		return err
 	}
-
-	devtoolsURL, err := resolveDevToolsURL(engine, name)
-	if err != nil {
-		return err
-	}
+	defer ep.Close()
 
 	// Create a new tab navigated to the URL via Chrome DevTools HTTP API.
 	// URL-encode the target so its query params don't conflict with the endpoint.
@@ -178,7 +165,7 @@ func (c *CdpOpenCmd) Run() error {
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return diagnoseCDP(engine, name, c.Image, fmt.Errorf("opening URL in Chrome: %w", err))
+		return diagnoseCDP(venue.Engine, venue.Name, c.Image, fmt.Errorf("opening URL in Chrome: %w", err))
 	}
 	defer resp.Body.Close()
 
@@ -187,7 +174,7 @@ func (c *CdpOpenCmd) Run() error {
 		return fmt.Errorf("parsing response: %w", err)
 	}
 
-	fmt.Fprintf(os.Stderr, "Opened %s in %s (tab %s)\n", c.URL, name, tab.ID)
+	fmt.Fprintf(os.Stderr, "Opened %s in %s (tab %s)\n", c.URL, venue.Name, tab.ID)
 	return nil
 }
 
@@ -207,20 +194,16 @@ type devToolsTab struct {
 }
 
 func (c *CdpListCmd) Run() error {
-	engine, name, err := resolveCdpContainer(c.Image, c.Instance)
+	devtoolsURL, ep, venue, err := cdpDevTools(c.Image, c.Instance)
 	if err != nil {
 		return err
 	}
-
-	devtoolsURL, err := resolveDevToolsURL(engine, name)
-	if err != nil {
-		return err
-	}
+	defer ep.Close()
 
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Get(devtoolsURL + "/json")
 	if err != nil {
-		return diagnoseCDP(engine, name, c.Image, fmt.Errorf("failed to connect to Chrome DevTools: %w", err))
+		return diagnoseCDP(venue.Engine, venue.Name, c.Image, fmt.Errorf("failed to connect to Chrome DevTools: %w", err))
 	}
 	defer resp.Body.Close()
 
@@ -254,15 +237,11 @@ type CdpCloseCmd struct {
 }
 
 func (c *CdpCloseCmd) Run() error {
-	engine, name, err := resolveCdpContainer(c.Image, c.Instance)
+	devtoolsURL, ep, venue, err := cdpDevTools(c.Image, c.Instance)
 	if err != nil {
 		return err
 	}
-
-	devtoolsURL, err := resolveDevToolsURL(engine, name)
-	if err != nil {
-		return err
-	}
+	defer ep.Close()
 
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Get(devtoolsURL + "/json/close/" + c.TabID)
@@ -275,51 +254,25 @@ func (c *CdpCloseCmd) Run() error {
 		return fmt.Errorf("failed to close tab %s (HTTP %d)", c.TabID, resp.StatusCode)
 	}
 
-	fmt.Fprintf(os.Stderr, "Closed tab %s in %s\n", c.TabID, name)
+	fmt.Fprintf(os.Stderr, "Closed tab %s in %s\n", c.TabID, venue.Name)
 	return nil
 }
 
-// resolveCdpContainer resolves the engine and container name, verifying the container is running.
-// Use "." as image name for local mode (direct connection to localhost).
-func resolveCdpContainer(image, instance string) (engine, name string, err error) {
-	return resolveContainer(image, instance)
-}
-
-// resolveDevToolsURL inspects the container's port mapping for port 9222
-// and returns the DevTools WebSocket URL.
-// When engine is empty (local mode), connects to localhost directly.
-func resolveDevToolsURL(engine, containerName string) (string, error) {
-	if engine == "" {
-		return "http://127.0.0.1:9222", nil
-	}
-	cmd := exec.Command(engine, "port", containerName, "9222")
-	output, err := cmd.Output()
+// cdpDevTools resolves the venue (container / VM / ssh / local) and a
+// host-reachable DevTools base URL for the in-venue CDP port 9222 — a container
+// port mapping, or an ssh -L forward for VM/ssh venues. The caller MUST close
+// the returned endpoint when done; for the persistent-WebSocket path the
+// CDPClient takes ownership and closes it on Close.
+func cdpDevTools(image, instance string) (devtoolsURL string, ep *EvalEndpoint, venue *EvalVenue, err error) {
+	venue, err = resolveEvalVenue(image, instance)
 	if err != nil {
-		// Host-networked containers have no port mappings — fall back to localhost.
-		if isHostNetworked(engine, containerName) {
-			return "http://127.0.0.1:9222", nil
-		}
-		return "", fmt.Errorf("no port mapping found for 9222")
+		return "", nil, nil, err
 	}
-	return parseDevToolsPort(string(output))
-}
-
-// parseDevToolsPort parses the output of `docker/podman port <name> 9222`
-// and returns an HTTP URL for the DevTools endpoint.
-func parseDevToolsPort(output string) (string, error) {
-	// Output may contain multiple lines (IPv4 + IPv6); use the first one.
-	lines := strings.Split(strings.TrimSpace(output), "\n")
-	if len(lines) == 0 || lines[0] == "" {
-		return "", fmt.Errorf("no port mapping found for 9222")
+	ep, err = resolveEvalEndpoint(venue, 9222)
+	if err != nil {
+		return "", nil, venue, err
 	}
-	hostPort := strings.TrimSpace(lines[0])
-	// Replace 0.0.0.0 with 127.0.0.1 for local connections
-	hostPort = strings.Replace(hostPort, "0.0.0.0", "127.0.0.1", 1)
-	// Handle IPv6 [::] -> 127.0.0.1
-	if strings.HasPrefix(hostPort, "[::]:") {
-		hostPort = "127.0.0.1:" + strings.TrimPrefix(hostPort, "[::]:")
-	}
-	return "http://" + hostPort, nil
+	return "http://" + ep.Addr, ep, venue, nil
 }
 
 // resolveTabWS fetches /json from the DevTools HTTP endpoint and returns the
@@ -373,25 +326,24 @@ func resolveTabWS(devtoolsURL, tabID string) (string, error) {
 // connectTab resolves container -> devtools URL -> tab WS URL -> CDPClient.
 // On connection failure, runs CDP diagnostics to help identify the cause.
 func connectTab(image, tabID, instance string) (*CDPClient, error) {
-	engine, name, err := resolveCdpContainer(image, instance)
-	if err != nil {
-		return nil, err
-	}
-
-	devtoolsURL, err := resolveDevToolsURL(engine, name)
+	devtoolsURL, ep, venue, err := cdpDevTools(image, instance)
 	if err != nil {
 		return nil, err
 	}
 
 	wsURL, err := resolveTabWS(devtoolsURL, tabID)
 	if err != nil {
-		return nil, diagnoseCDP(engine, name, image, err)
+		ep.Close()
+		return nil, diagnoseCDP(venue.Engine, venue.Name, image, err)
 	}
 
 	client, err := NewCDPClient(wsURL)
 	if err != nil {
-		return nil, diagnoseCDP(engine, name, image, err)
+		ep.Close()
+		return nil, diagnoseCDP(venue.Engine, venue.Name, image, err)
 	}
+	// The CDPClient owns the forward for the life of the WebSocket.
+	client.endpoint = ep
 	return client, nil
 }
 
@@ -641,15 +593,15 @@ func (c *CdpClickCmd) Run() error {
 		}
 		desktopX := int(coords.X + offset.ScreenX)
 		desktopY := int(coords.Y + offset.ScreenY + offset.ChromeHeight)
-		engine, containerName, err := resolveContainer(c.Image, c.Instance)
+		venue, err := resolveEvalVenue(c.Image, c.Instance)
 		if err != nil {
-			return fmt.Errorf("resolving container for WL click: %w", err)
+			return fmt.Errorf("resolving venue for WL click: %w", err)
 		}
 		shellCmd := fmt.Sprintf(
 			"wlrctl pointer move -10000 -10000 && wlrctl pointer move %d %d && sleep 0.05 && wlrctl pointer click left",
 			desktopX, desktopY,
 		)
-		if err := execWlCmd(engine, containerName, shellCmd); err != nil {
+		if err := execWlCmd(venue.Exec, shellCmd); err != nil {
 			return fmt.Errorf("WL click at (%d, %d): %w", desktopX, desktopY, err)
 		}
 		fmt.Fprintf(os.Stderr, "Clicked element at viewport (%.0f, %.0f) → desktop (%d, %d) via wlrctl\n",
@@ -951,10 +903,11 @@ func (c *CdpCoordsCmd) Run() error {
 			rect.X+offset.ScreenX, rect.Y+offset.ScreenY+offset.ChromeHeight, desktopX, desktopY, offset.ChromeHeight)
 	}
 
-	// Get sway-based desktop offset.
-	engine, name, err := resolveContainer(c.Image, c.Instance)
-	if err == nil && engine != "" {
-		swayRect, err := FindWindowRect(engine, name, c.AppID)
+	// Get sway-based desktop offset (only meaningful on a wlroots/sway venue;
+	// resolves via the shared venue so it works for container or VM).
+	venue, err := resolveEvalVenue(c.Image, c.Instance)
+	if err == nil && venue.Exec != nil {
+		swayRect, err := FindWindowRect(venue.Exec, c.AppID)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: could not get sway window rect for %s: %v\n", c.AppID, err)
 		} else {

@@ -4,7 +4,7 @@ import (
 	"testing"
 )
 
-func TestParseVNCPort(t *testing.T) {
+func TestParsePublishedPort(t *testing.T) {
 	tests := []struct {
 		name    string
 		output  string
@@ -23,13 +23,13 @@ func TestParseVNCPort(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := parseVNCPort(tt.output)
+			got, err := parsePublishedPort(tt.output, 5900)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("parseVNCPort() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("parsePublishedPort() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 			if got != tt.want {
-				t.Errorf("parseVNCPort() = %q, want %q", got, tt.want)
+				t.Errorf("parsePublishedPort() = %q, want %q", got, tt.want)
 			}
 		})
 	}

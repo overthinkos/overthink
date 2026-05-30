@@ -3,28 +3,24 @@ package main
 import (
 	"fmt"
 	"os"
-	"os/exec"
 )
 
-// sendContainerNotification sends a desktop notification inside a container.
-// Best-effort: silently ignores all errors (no daemon, no dbus, headless container).
-func sendContainerNotification(engine, containerName, title, body string) {
-	if engine == "" {
-		// Local mode (inside container): connect to session bus directly
-		dbusNotifyLocal(title, body) //nolint: errcheck — best-effort
-		return
-	}
-
-	// Remote mode: delegate to container's ov binary, fall back to gdbus
-	if checkToolAvailable(engine, containerName, "ov") == nil {
-		cmd := exec.Command(engine, "exec", containerName, "ov", "eval", "dbus", "notify", ".", title, body)
-		if cmd.Run() == nil {
+// sendVenueNotification sends a desktop notification on the venue (container /
+// VM / host). Best-effort: silently ignores all errors (no daemon, no dbus,
+// headless target). Delegates to the venue's own `ov eval dbus notify .` so the
+// notification reaches the live session bus inside the target, falling back to
+// gdbus — the same pattern as dbusNotifyRemoteStrict, now venue-agnostic (R3).
+func sendVenueNotification(ex DeployExecutor, title, body string) {
+	if venueHasTool(ex, "ov") {
+		script := fmt.Sprintf("ov eval dbus notify . %s %s",
+			deployShellQuote(title), deployShellQuote(body))
+		if venueRunSilent(ex, script) == nil {
 			return
 		}
 	}
 
-	// Fallback: gdbus call inside container
-	if checkToolAvailable(engine, containerName, "gdbus") == nil {
+	// Fallback: gdbus call on the venue.
+	if venueHasTool(ex, "gdbus") {
 		gdbusCmd := fmt.Sprintf(
 			`export DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=/tmp/dbus-session}" && `+
 				`gdbus call --session `+
@@ -33,10 +29,9 @@ func sendContainerNotification(engine, containerName, title, body string) {
 				`--method=org.freedesktop.Notifications.Notify `+
 				`"ov" 0 "" %s %s "[]" "{}" -- -1`,
 			shellQuote(title), shellQuote(body))
-		cmd := exec.Command(engine, "exec", containerName, "sh", "-c", gdbusCmd)
-		cmd.Run() //nolint: errcheck — best-effort
+		_ = venueRunSilent(ex, gdbusCmd) // best-effort
 		return
 	}
 
-	fmt.Fprintf(os.Stderr, "Warning: cannot send notification — neither 'ov' nor 'gdbus' found in container\n")
+	fmt.Fprintf(os.Stderr, "Warning: cannot send notification — neither 'ov' nor 'gdbus' found on target\n")
 }

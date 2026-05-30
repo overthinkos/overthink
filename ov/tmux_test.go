@@ -6,7 +6,10 @@ import (
 )
 
 func TestCheckTmuxInstalled(t *testing.T) {
-	err := checkTmuxInstalled("nonexistent-engine", "nonexistent-container")
+	// A chain into a nonexistent container makes every probe fail, so the
+	// availability check returns the not-installed error.
+	ex := ContainerChain("nonexistent-engine", "nonexistent-container")
+	err := checkTmuxInstalled(ex)
 	if err == nil {
 		t.Error("expected error for nonexistent engine")
 	}
@@ -17,7 +20,8 @@ func TestCheckTmuxInstalled(t *testing.T) {
 }
 
 func TestTmuxHasSession(t *testing.T) {
-	result := tmuxHasSession("nonexistent-engine", "nonexistent-container", "test")
+	ex := ContainerChain("nonexistent-engine", "nonexistent-container")
+	result := tmuxHasSession(ex, "test")
 	if result {
 		t.Error("expected false for nonexistent session")
 	}

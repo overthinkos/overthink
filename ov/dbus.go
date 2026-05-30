@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"strconv"
 	"strings"
 
@@ -30,11 +29,11 @@ func (c *DbusNotifyCmd) Run() error {
 	if c.Image == "." {
 		return dbusNotifyLocal(c.Title, c.Body)
 	}
-	engine, name, err := resolveContainer(c.Image, c.Instance)
+	venue, err := resolveEvalVenue(c.Image, c.Instance)
 	if err != nil {
 		return err
 	}
-	return dbusNotifyRemoteStrict(engine, name, c.Title, c.Body)
+	return dbusNotifyRemoteStrict(venue.Exec, c.Title, c.Body)
 }
 
 // DbusCallCmd makes a generic D-Bus method call.
@@ -51,11 +50,11 @@ func (c *DbusCallCmd) Run() error {
 	if c.Image == "." {
 		return dbusCallLocal(c.Dest, c.Path, c.Method, c.Args)
 	}
-	engine, name, err := resolveContainer(c.Image, c.Instance)
+	venue, err := resolveEvalVenue(c.Image, c.Instance)
 	if err != nil {
 		return err
 	}
-	return dbusCallRemote(engine, name, c.Dest, c.Path, c.Method, c.Args)
+	return dbusCallRemote(venue.Exec, c.Dest, c.Path, c.Method, c.Args)
 }
 
 // DbusListCmd lists available D-Bus services.
@@ -68,11 +67,11 @@ func (c *DbusListCmd) Run() error {
 	if c.Image == "." {
 		return dbusListLocal()
 	}
-	engine, name, err := resolveContainer(c.Image, c.Instance)
+	venue, err := resolveEvalVenue(c.Image, c.Instance)
 	if err != nil {
 		return err
 	}
-	return dbusCallRemote(engine, name, "org.freedesktop.DBus", "/org/freedesktop/DBus",
+	return dbusCallRemote(venue.Exec, "org.freedesktop.DBus", "/org/freedesktop/DBus",
 		"org.freedesktop.DBus.ListNames", nil)
 }
 
@@ -88,11 +87,11 @@ func (c *DbusIntrospectCmd) Run() error {
 	if c.Image == "." {
 		return dbusIntrospectLocal(c.Dest, c.Path)
 	}
-	engine, name, err := resolveContainer(c.Image, c.Instance)
+	venue, err := resolveEvalVenue(c.Image, c.Instance)
 	if err != nil {
 		return err
 	}
-	return dbusCallRemote(engine, name, c.Dest, c.Path,
+	return dbusCallRemote(venue.Exec, c.Dest, c.Path,
 		"org.freedesktop.DBus.Introspectable.Introspect", nil)
 }
 
@@ -188,25 +187,27 @@ func dbusIntrospectLocal(dest, path string) error {
 
 // --- Remote D-Bus operations (host → container delegation) ---
 
-// dbusNotifyRemoteStrict sends a notification to a container, returning errors (for ov eval dbus notify).
-func dbusNotifyRemoteStrict(engine, name, title, body string) error {
-	// Try native ov binary first
-	if checkToolAvailable(engine, name, "ov") == nil {
-		cmd := exec.Command(engine, "exec", name, "ov", "eval", "dbus", "notify", ".", title, body)
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		if err := cmd.Run(); err == nil {
+// dbusNotifyRemoteStrict sends a notification to the venue (container / VM /
+// host), returning errors (for ov eval dbus notify). Delegates to the venue's
+// own `ov eval dbus notify .` so the call runs with the live session bus inside
+// the target — the same delegation pattern, now venue-agnostic (R3).
+func dbusNotifyRemoteStrict(ex DeployExecutor, title, body string) error {
+	// Try the native ov binary on the venue first.
+	if venueHasTool(ex, "ov") {
+		script := fmt.Sprintf("ov eval dbus notify . %s %s",
+			deployShellQuote(title), deployShellQuote(body))
+		if err := venueRun(ex, script); err == nil {
 			return nil
 		}
-		fmt.Fprintf(os.Stderr, "Warning: in-container ov eval dbus failed, trying gdbus fallback\n")
+		fmt.Fprintf(os.Stderr, "Warning: in-venue ov eval dbus failed, trying gdbus fallback\n")
 	} else {
-		fmt.Fprintf(os.Stderr, "Warning: ov binary not found in container, falling back to gdbus\n"+
+		fmt.Fprintf(os.Stderr, "Warning: ov binary not found on the target, falling back to gdbus\n"+
 			"  For native D-Bus support, add the 'ov' layer to your image.\n")
 	}
 
-	// Fallback: gdbus call inside container
-	if checkToolAvailable(engine, name, "gdbus") != nil {
-		return dbusNoToolError(name)
+	// Fallback: gdbus call on the venue.
+	if !venueHasTool(ex, "gdbus") {
+		return dbusNoToolError(ex.Venue())
 	}
 	gdbusCmd := fmt.Sprintf(
 		`export DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=/tmp/dbus-session}" && `+
@@ -216,26 +217,22 @@ func dbusNotifyRemoteStrict(engine, name, title, body string) error {
 			`--method=org.freedesktop.Notifications.Notify `+
 			`"ov" 0 "" %s %s "[]" "{}" -- -1`,
 		shellQuote(title), shellQuote(body))
-	cmd := exec.Command(engine, "exec", name, "sh", "-c", gdbusCmd)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
+	return venueRun(ex, gdbusCmd)
 }
 
-// dbusCallRemote delegates a D-Bus call to the container's ov binary.
-func dbusCallRemote(engine, name, dest, path, method string, args []string) error {
-	// Try native ov binary first
-	if checkToolAvailable(engine, name, "ov") == nil {
-		ovArgs := []string{"exec", name, "ov", "eval", "dbus", "call", ".", dest, path, method}
-		ovArgs = append(ovArgs, args...)
-		cmd := exec.Command(engine, ovArgs...)
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		return cmd.Run()
+// dbusCallRemote delegates a D-Bus call to the venue's ov binary.
+func dbusCallRemote(ex DeployExecutor, dest, path, method string, args []string) error {
+	if venueHasTool(ex, "ov") {
+		parts := []string{"ov", "eval", "dbus", "call", ".",
+			deployShellQuote(dest), deployShellQuote(path), deployShellQuote(method)}
+		for _, a := range args {
+			parts = append(parts, deployShellQuote(a))
+		}
+		return venueRun(ex, strings.Join(parts, " "))
 	}
-	return fmt.Errorf("ov binary not found in container %s\n"+
+	return fmt.Errorf("ov binary not found on the target %s\n"+
 		"  Generic D-Bus calls require the 'ov' layer.\n"+
-		"  For notifications only, 'gdbus' (from glib2) can be used as a fallback.", name)
+		"  For notifications only, 'gdbus' (from glib2) can be used as a fallback.", ex.Venue())
 }
 
 // --- Argument parsing ---
@@ -313,7 +310,7 @@ func dbusNoBusError() error {
 		"  Check with: ov service status <image> dbus")
 }
 
-func dbusNoToolError(containerName string) error {
-	return fmt.Errorf("cannot send D-Bus call — neither 'ov' nor 'gdbus' found in container %s\n"+
-		"  Add the 'ov' layer (native D-Bus) or ensure glib2 is installed (provides gdbus).", containerName)
+func dbusNoToolError(venue string) error {
+	return fmt.Errorf("cannot send D-Bus call — neither 'ov' nor 'gdbus' found on target %s\n"+
+		"  Add the 'ov' layer (native D-Bus) or ensure glib2 is installed (provides gdbus).", venue)
 }

@@ -1,14 +1,13 @@
 package main
 
 import (
-	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"image/png"
+	"net"
 	"os"
-	"os/exec"
 	"strings"
 	"time"
 )
@@ -93,11 +92,11 @@ func (c *VncClickCmd) Run() error {
 
 	// Translate from window-relative coordinates to desktop coordinates via sway.
 	if c.FromSway != "" {
-		engine, name, err := resolveContainer(c.Image, c.Instance)
+		venue, err := resolveEvalVenue(c.Image, c.Instance)
 		if err != nil {
-			return fmt.Errorf("resolving container for sway: %w", err)
+			return fmt.Errorf("resolving venue for sway: %w", err)
 		}
-		rect, err := FindWindowRect(engine, name, c.FromSway)
+		rect, err := FindWindowRect(venue.Exec, c.FromSway)
 		if err != nil {
 			return err
 		}
@@ -109,15 +108,15 @@ func (c *VncClickCmd) Run() error {
 
 	// Translate from X11 window-internal coordinates to desktop coordinates.
 	if c.FromX11 != "" {
-		engine, name, err := resolveContainer(c.Image, c.Instance)
+		venue, err := resolveEvalVenue(c.Image, c.Instance)
 		if err != nil {
-			return fmt.Errorf("resolving container for X11: %w", err)
+			return fmt.Errorf("resolving venue for X11: %w", err)
 		}
-		rect, err := FindWindowRect(engine, name, c.FromX11)
+		rect, err := FindWindowRect(venue.Exec, c.FromX11)
 		if err != nil {
 			return err
 		}
-		x11W, x11H, err := FindX11WindowGeometry(engine, name, c.FromX11)
+		x11W, x11H, err := FindX11WindowGeometry(venue.Exec, c.FromX11)
 		if err != nil {
 			return err
 		}
@@ -226,34 +225,23 @@ type VncStatusCmd struct {
 }
 
 func (c *VncStatusCmd) Run() error {
-	engine, name, err := resolveVNCContainer(c.Image, c.Instance)
+	venue, err := resolveEvalVenue(c.Image, c.Instance)
 	if err != nil {
 		return err
 	}
-	var snap *ContainerSnapshot
-	if engine == "" {
-		snap = &ContainerSnapshot{NetworkMode: "host"}
-	} else {
-		snap, err = NewEngineClient(engine).Snapshot(name)
-		if err != nil {
-			return err
-		}
+	// Resolve a host-reachable endpoint for the in-venue VNC port (an ssh -L
+	// forward for VM/ssh venues) and probe it with a TCP dial — venue-agnostic.
+	ep, err := resolveEvalEndpoint(venue, 5900)
+	if err != nil {
+		return fmt.Errorf("VNC server not reachable (port 5900): %w", err)
 	}
-	ts := vncProbe{}.ProbeHost(context.Background(), snap)
-	if ts.Status == "-" {
-		return fmt.Errorf("VNC server not configured (port 5900 not mapped)")
+	defer ep.Close()
+	conn, derr := net.DialTimeout("tcp", ep.Addr, 3*time.Second)
+	if derr != nil {
+		return fmt.Errorf("VNC server not reachable at %s: %w", ep.Addr, derr)
 	}
-	if ts.Status == "unreachable" {
-		return fmt.Errorf("VNC server not reachable")
-	}
-	if ts.Port > 0 {
-		fmt.Printf("VNC:        %s (port %d)\n", ts.Status, ts.Port)
-	} else {
-		fmt.Printf("VNC:        %s\n", ts.Status)
-	}
-	if ts.Detail != "" {
-		fmt.Printf("Detail:     %s\n", ts.Detail)
-	}
+	_ = conn.Close()
+	fmt.Printf("VNC:        ok (%s)\n", ep.Addr)
 	fmt.Fprintf(os.Stderr, "VNC server is reachable\n")
 	return nil
 }
@@ -266,7 +254,7 @@ type VncPasswdCmd struct {
 }
 
 func (c *VncPasswdCmd) Run() error {
-	engine, name, err := resolveVNCContainer(c.Image, c.Instance)
+	venue, err := resolveEvalVenue(c.Image, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -303,41 +291,27 @@ func (c *VncPasswdCmd) Run() error {
 	fmt.Fprintf(os.Stderr, "Stored VNC password for '%s' in %s.\n", configKey, store.Name())
 	fmt.Fprintf(os.Stderr, "To verify: ov config get vnc.password.%s\n", configKey)
 
-	// Resolve $HOME inside the container to get absolute paths (wayvnc doesn't expand shell vars).
-	homeCmd := exec.Command(engine, "exec", name, "sh", "-c", "echo $HOME")
-	homeOut, err := homeCmd.Output()
+	// Resolve $HOME on the venue to get absolute paths (wayvnc doesn't expand shell vars).
+	homeOut, err := venueCapture(venue.Exec, "echo $HOME")
 	if err != nil {
-		return fmt.Errorf("resolving home directory in container: %w", err)
+		return fmt.Errorf("resolving home directory on the target: %w", err)
 	}
 	configDir := strings.TrimSpace(string(homeOut)) + "/.config/wayvnc"
 
-	mkdirCmd := exec.Command(engine, "exec", name, "sh", "-c",
-		fmt.Sprintf("mkdir -p %s", configDir))
-	mkdirCmd.Stderr = os.Stderr
-	if err := mkdirCmd.Run(); err != nil {
+	if err := venueRunSilent(venue.Exec, "mkdir -p "+shellQuote(configDir)); err != nil {
 		return fmt.Errorf("creating wayvnc config dir: %w", err)
 	}
 
-	certCheck := exec.Command(engine, "exec", name, "sh", "-c",
-		fmt.Sprintf("test -f %s/tls.crt", configDir))
-	if certCheck.Run() != nil {
+	if venueRunSilent(venue.Exec, fmt.Sprintf("test -f %s/tls.crt", configDir)) != nil {
 		fmt.Fprintf(os.Stderr, "Generating TLS certificate...\n")
-		genCert := exec.Command(engine, "exec", name, "sh", "-c",
-			fmt.Sprintf("openssl req -x509 -newkey rsa:4096 -nodes -keyout %s/tls.key -out %s/tls.crt -days 3650 -subj '/CN=wayvnc' 2>/dev/null", configDir, configDir))
-		genCert.Stderr = os.Stderr
-		if err := genCert.Run(); err != nil {
+		if err := venueRun(venue.Exec, fmt.Sprintf("openssl req -x509 -newkey rsa:4096 -nodes -keyout %s/tls.key -out %s/tls.crt -days 3650 -subj '/CN=wayvnc' 2>/dev/null", configDir, configDir)); err != nil {
 			return fmt.Errorf("generating TLS certificate: %w", err)
 		}
 	}
 
-	rsaCheck := exec.Command(engine, "exec", name, "sh", "-c",
-		fmt.Sprintf("test -f %s/rsa.key", configDir))
-	if rsaCheck.Run() != nil {
+	if venueRunSilent(venue.Exec, fmt.Sprintf("test -f %s/rsa.key", configDir)) != nil {
 		fmt.Fprintf(os.Stderr, "Generating RSA key...\n")
-		genRSA := exec.Command(engine, "exec", name, "sh", "-c",
-			fmt.Sprintf("openssl genrsa -traditional -out %s/rsa.key 4096 2>/dev/null", configDir))
-		genRSA.Stderr = os.Stderr
-		if err := genRSA.Run(); err != nil {
+		if err := venueRun(venue.Exec, fmt.Sprintf("openssl genrsa -traditional -out %s/rsa.key 4096 2>/dev/null", configDir)); err != nil {
 			return fmt.Errorf("generating RSA key: %w", err)
 		}
 	}
@@ -350,11 +324,8 @@ certificate_file=%s/tls.crt
 rsa_private_key_file=%s/rsa.key
 `, password, configDir, configDir, configDir)
 
-	writeCmd := exec.Command(engine, "exec", "-i", name, "sh", "-c",
-		fmt.Sprintf("cat > %s/config", configDir))
-	writeCmd.Stdin = strings.NewReader(configContent)
-	writeCmd.Stderr = os.Stderr
-	if err := writeCmd.Run(); err != nil {
+	if err := venueRunSilent(venue.Exec,
+		"printf '%s' "+deployShellQuote(configContent)+" > "+shellQuote(configDir)+"/config"); err != nil {
 		return fmt.Errorf("writing wayvnc config: %w", err)
 	}
 
@@ -368,7 +339,7 @@ rsa_private_key_file=%s/rsa.key
 		return fmt.Errorf("restarting wayvnc: %w", err)
 	}
 
-	fmt.Fprintf(os.Stderr, "VNC password set for %s\n", name)
+	fmt.Fprintf(os.Stderr, "VNC password set for %s\n", c.Image)
 	return nil
 }
 

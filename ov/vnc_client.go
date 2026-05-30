@@ -11,7 +11,6 @@ import (
 	"image/color"
 	"io"
 	"net"
-	"os/exec"
 	"strings"
 	"time"
 )
@@ -25,6 +24,7 @@ type VNCClient struct {
 	pixelFormat vncPixelFormat
 	zBuf        *bytes.Buffer // persistent zlib input buffer for ZRLE
 	zReader     io.ReadCloser // persistent zlib decompressor for ZRLE
+	endpoint    *EvalEndpoint // ssh -L forward (VM/ssh venues); nil for container/local
 }
 
 // vncPixelFormat represents the RFB pixel format (16 bytes on wire).
@@ -694,7 +694,10 @@ func (c *VNCClient) Close() error {
 	if c.zReader != nil {
 		c.zReader.Close()
 	}
-	return c.conn.Close()
+	err := c.conn.Close()
+	// Tear down the ssh -L forward (if any) after the TCP connection closes.
+	c.endpoint.Close()
+	return err
 }
 
 // --- ZRLE encoding support (RFC 6143 §7.7.6) ---
@@ -937,37 +940,16 @@ func (c *VNCClient) decodeZRLETile(img *image.RGBA, tx, ty, tw, th, cpLen int) e
 
 // --- Container resolution helpers (mirror browser.go pattern) ---
 
-func resolveVNCContainer(imageName, instance string) (engine, name string, err error) {
-	return resolveContainer(imageName, instance)
-}
-
-func resolveVNCAddress(engine, containerName string) (string, error) {
-	if engine == "" {
-		return "127.0.0.1:5900", nil
-	}
-	cmd := exec.Command(engine, "port", containerName, "5900")
-	output, err := cmd.Output()
+// resolveVNCEndpoint resolves the venue (container / VM / ssh / local) and a
+// host-reachable endpoint for the in-venue VNC port 5900 (an ssh -L forward for
+// VM/ssh venues). The caller transfers ownership to the VNCClient, which closes
+// the forward on Close.
+func resolveVNCEndpoint(image, instance string) (*EvalEndpoint, error) {
+	venue, err := resolveEvalVenue(image, instance)
 	if err != nil {
-		// Host-networked containers have no port mappings — fall back to localhost.
-		if isHostNetworked(engine, containerName) {
-			return "127.0.0.1:5900", nil
-		}
-		return "", fmt.Errorf("no port mapping found for 5900")
+		return nil, err
 	}
-	return parseVNCPort(string(output))
-}
-
-func parseVNCPort(output string) (string, error) {
-	lines := strings.Split(strings.TrimSpace(output), "\n")
-	if len(lines) == 0 || lines[0] == "" {
-		return "", fmt.Errorf("no port mapping found for 5900")
-	}
-	hostPort := strings.TrimSpace(lines[0])
-	hostPort = strings.Replace(hostPort, "0.0.0.0", "127.0.0.1", 1)
-	if strings.HasPrefix(hostPort, "[::]:") {
-		hostPort = "127.0.0.1:" + strings.TrimPrefix(hostPort, "[::]:")
-	}
-	return hostPort, nil
+	return resolveEvalEndpoint(venue, 5900)
 }
 
 func resolveVNCPassword(imageName, instance string) string {
@@ -984,16 +966,18 @@ func resolveVNCPassword(imageName, instance string) string {
 }
 
 func connectVNC(image, instance string) (*VNCClient, error) {
-	engine, name, err := resolveVNCContainer(image, instance)
-	if err != nil {
-		return nil, err
-	}
-	address, err := resolveVNCAddress(engine, name)
+	ep, err := resolveVNCEndpoint(image, instance)
 	if err != nil {
 		return nil, err
 	}
 	password := resolveVNCPassword(resolveImageName(image), instance)
-	return NewVNCClient(address, password)
+	client, err := NewVNCClient(ep.Addr, password)
+	if err != nil {
+		ep.Close()
+		return nil, err
+	}
+	client.endpoint = ep
+	return client, nil
 }
 
 func connectVNCScreenshot(image, instance string) (image.Image, uint16, uint16, error) {

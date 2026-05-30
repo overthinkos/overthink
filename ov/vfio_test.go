@@ -378,7 +378,7 @@ func TestSharedRenderersConsolidated(t *testing.T) {
 	}
 }
 
-// --- cachyos-coder VM: autostart + virtiofs filesystem validation ---
+// --- cachyos-gpu VM: autostart + virtiofs filesystem validation ---
 
 func TestValidateVmSpec_AutostartRequiresLibvirt(t *testing.T) {
 	base := func(backend string) *VmSpec {

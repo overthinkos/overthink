@@ -1,9 +1,8 @@
 package main
 
 import (
+	"context"
 	"fmt"
-	"os"
-	"os/exec"
 	"strings"
 	"time"
 )
@@ -58,21 +57,21 @@ type WlOverlayStatusCmd struct {
 }
 
 func (c *WlOverlayShowCmd) Run() error {
-	engine, name, err := resolveContainer(c.Image, c.Instance)
+	venue, err := resolveEvalVenue(c.Image, c.Instance)
 	if err != nil {
 		return err
 	}
-	if err := checkOverlayAvailable(engine, name); err != nil {
+	if err := checkOverlayAvailable(venue.Exec); err != nil {
 		return err
 	}
-	if err := ensureOverlayDaemon(engine, name); err != nil {
+	if err := ensureOverlayDaemon(venue.Exec); err != nil {
 		return err
 	}
-	return execWlCmd(engine, name, buildOverlayShowArgs(c))
+	return execWlCmd(venue.Exec, buildOverlayShowArgs(c))
 }
 
 func (c *WlOverlayHideCmd) Run() error {
-	engine, name, err := resolveContainer(c.Image, c.Instance)
+	venue, err := resolveEvalVenue(c.Image, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -85,23 +84,23 @@ func (c *WlOverlayHideCmd) Run() error {
 	} else {
 		args += " --name " + shellQuote(c.Name)
 	}
-	return execWlCmd(engine, name, args)
+	return execWlCmd(venue.Exec, args)
 }
 
 func (c *WlOverlayListCmd) Run() error {
-	engine, name, err := resolveContainer(c.Image, c.Instance)
+	venue, err := resolveEvalVenue(c.Image, c.Instance)
 	if err != nil {
 		return err
 	}
-	return execWlCmd(engine, name, "ov-overlay list")
+	return execWlCmd(venue.Exec, "ov-overlay list")
 }
 
 func (c *WlOverlayStatusCmd) Run() error {
-	engine, name, err := resolveContainer(c.Image, c.Instance)
+	venue, err := resolveEvalVenue(c.Image, c.Instance)
 	if err != nil {
 		return err
 	}
-	return execWlCmd(engine, name, "ov-overlay status")
+	return execWlCmd(venue.Exec, "ov-overlay status")
 }
 
 // buildOverlayShowArgs constructs the ov-overlay show command string from flags.
@@ -145,59 +144,47 @@ func buildOverlayShowArgs(c *WlOverlayShowCmd) string {
 	return strings.Join(parts, " ")
 }
 
-// checkOverlayAvailable verifies ov-overlay is installed in the container.
-func checkOverlayAvailable(engine, containerName string) error {
-	if engine == "" {
-		// Local mode
-		if _, err := exec.LookPath("ov-overlay"); err != nil {
-			return fmt.Errorf("ov-overlay not found in PATH (install the wl-overlay layer)")
-		}
-		return nil
-	}
-	cmd := exec.Command(engine, "exec", containerName, "which", "ov-overlay")
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("ov-overlay not available in container %s (add the wl-overlay layer to your image)", containerName)
+// checkOverlayAvailable verifies ov-overlay is installed on the venue
+// (container / VM / host).
+func checkOverlayAvailable(ex DeployExecutor) error {
+	if err := execWlCmdSilent(ex, "command -v ov-overlay >/dev/null 2>&1"); err != nil {
+		return fmt.Errorf("ov-overlay not available on the target (add the wl-overlay layer to your image, or install it on the host/VM)")
 	}
 	return nil
 }
 
-// ensureOverlayDaemon starts the overlay daemon in a tmux session if not already running.
-func ensureOverlayDaemon(engine, containerName string) error {
+// ensureOverlayDaemon starts the overlay daemon in a tmux session on the venue
+// if not already running. The daemon hosts the overlay socket; the tmux session
+// keeps it alive across the short-lived `ov eval wl overlay` invocations.
+func ensureOverlayDaemon(ex DeployExecutor) error {
 	// Check if daemon socket already exists (daemon running)
-	if execWlCmdSilent(engine, containerName, "test -S /tmp/ov-overlay.sock") == nil {
+	if execWlCmdSilent(ex, "test -S /tmp/ov-overlay.sock") == nil {
 		return nil
 	}
 
-	// Need tmux to host the daemon
-	if engine != "" {
-		if err := checkTmuxInstalled(engine, containerName); err != nil {
-			return err
-		}
+	// Need tmux to host the daemon (on every venue).
+	if err := execWlCmdSilent(ex, "command -v tmux >/dev/null 2>&1"); err != nil {
+		return fmt.Errorf("tmux not available on the target (needed to host the overlay daemon)")
 	}
 
 	// Clean up any stale socket
-	_ = execWlCmdSilent(engine, containerName, "rm -f /tmp/ov-overlay.sock")
+	_ = execWlCmdSilent(ex, "rm -f /tmp/ov-overlay.sock")
 
-	// Start the daemon in a tmux session.
-	// The daemon needs Wayland environment variables, same as other wl commands.
+	// Start the daemon in a tmux session. The daemon needs the same Wayland
+	// environment exports as every other wl command (wlShellCmd).
 	daemonCmd := wlShellCmd("ov-overlay daemon")
-
-	var cmd *exec.Cmd
-	if engine == "" {
-		cmd = exec.Command("tmux", "new-session", "-d", "-s", overlayDaemonSession, "sh", "-c", daemonCmd)
-	} else {
-		cmd = exec.Command(engine, "exec", containerName, "tmux", "new-session", "-d", "-s", overlayDaemonSession, "sh", "-c", daemonCmd)
-	}
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
+	startScript := fmt.Sprintf("tmux new-session -d -s %s sh -c %s",
+		overlayDaemonSession, shellQuote(daemonCmd))
+	if _, stderr, exit, err := ex.RunCapture(context.Background(), startScript); err != nil {
 		return fmt.Errorf("starting overlay daemon: %w", err)
+	} else if exit != 0 {
+		return fmt.Errorf("starting overlay daemon: %s", strings.TrimSpace(stderr))
 	}
 
-	// Wait for socket to appear
+	// Wait for socket to appear (bounded readiness probe, not a blind sleep).
 	for i := 0; i < 20; i++ {
 		time.Sleep(250 * time.Millisecond)
-		if execWlCmdSilent(engine, containerName, "test -S /tmp/ov-overlay.sock") == nil {
+		if execWlCmdSilent(ex, "test -S /tmp/ov-overlay.sock") == nil {
 			return nil
 		}
 	}

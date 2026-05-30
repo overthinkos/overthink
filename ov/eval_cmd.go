@@ -237,32 +237,11 @@ func (c *EvalLiveCmd) isVmTarget() bool {
 	if err != nil || !ok {
 		return false
 	}
-	// Direct kind:vm entity name match.
-	if uf.VM != nil {
-		if _, present := uf.VM[c.Image]; present {
-			return true
-		}
-	}
-	// Schema v4: kind:deployment name with target:vm (possibly dotted).
-	if uf.Deploy != nil {
-		// Simple deployment-key lookup.
-		if entry, present := uf.Deploy[c.Image]; present {
-			if entry.Target == "vm" {
-				return true
-			}
-		}
-		// Dotted-path nested lookup: route via the VM parent when the
-		// root segment points at a target:vm deployment (regardless of
-		// the leaf's target — child commands execute through the
-		// parent's SSH substrate).
-		if idx := strings.Index(c.Image, "."); idx > 0 {
-			root := c.Image[:idx]
-			if entry, present := uf.Deploy[root]; present && entry.Target == "vm" {
-				return true
-			}
-		}
-	}
-	return false
+	// Shared classifier (eval_venue.go) — also drives resolveEvalVenue for
+	// the interactive verbs, so `ov eval live <vm>` and `ov eval wl <vm>`
+	// agree on what is a VM target (R3).
+	_, isVM := evalVmTarget(uf, c.Image)
+	return isVM
 }
 
 // resolveNestedNode walks a dotted path through the Nested tree rooted at
@@ -355,13 +334,16 @@ func (c *EvalLiveCmd) runVm() error {
 	// differs from its vm entity (eval-k3s-vm -> vm: k3s-vm) resolves to its
 	// own entry rather than being mis-matched via the vm entity name.
 	var projectTests, localTests []Check
+	var addLayers []string
 	// Nested dotted-path short-circuit: when the request is for a
 	// child node, use its own Tests directly instead of the parent's.
 	if nestedLeaf != nil {
 		projectTests = nestedLeaf.Eval
+		addLayers = nestedLeaf.AddLayer
 	} else if pc := uf.ProjectDeployConfig(); pc != nil {
 		if entry, ok := findVmDeployNode(pc.Deploy, c.Image, vmName); ok {
 			projectTests = entry.Eval
+			addLayers = entry.AddLayer
 		}
 	}
 	if dc := loadDeployConfigForRead("ov eval vm"); dc != nil {
@@ -378,6 +360,16 @@ func (c *EvalLiveCmd) runVm() error {
 		}
 	}
 	tests := MergeDeployEval(projectTests, localTests)
+
+	// Collect deploy-scope eval from the layers this VM deployment applies, so
+	// ANY VM deploy — the disposable bed OR the persistent operator VM — that
+	// adds a layer automatically runs that layer's checks. This is what makes
+	// `ov eval live` work against any deployment (disposable or not) with ONE
+	// check set per layer instead of a copy on each deploy (R3). Deploy-level
+	// checks override a layer check on id collision (layer is the base).
+	if layerChecks := collectAddLayerDeployEval(uf, dir, addLayers); len(layerChecks) > 0 {
+		tests = MergeDeployEval(layerChecks, tests)
+	}
 
 	// SSH connection details (User/Port/IdentityFile) live in the
 	// managed ssh-config Host stanza (ov-<vmName>) written at deploy
@@ -430,6 +422,51 @@ func (c *EvalLiveCmd) runVm() error {
 	return nil
 }
 
+// collectAddLayerDeployEval collects the deploy-scope eval checks from each
+// layer a VM deployment applies via add_layer. ProjectLayers resolves the
+// project's LOCAL layer map (the shared check-only layers live here); remote
+// @github layers not materialized locally are skipped. This is the general
+// mechanism that lets `ov eval live <vm>` run a layer's checks against ANY
+// deployment that applies it — the disposable bed or the persistent operator
+// VM — so one shared check-only layer covers both (no per-deploy copy, R3).
+func collectAddLayerDeployEval(uf *UnifiedFile, dir string, addLayers []string) []Check {
+	if uf == nil || len(addLayers) == 0 {
+		return nil
+	}
+	// ScanAllLayerWithConfig (not ProjectLayers) — it includes the FILESYSTEM
+	// layers under layers/ discovered via `discover:`, where the shared
+	// check-only layers live; ProjectLayers only sees inline `layer:` entries.
+	var cfg *Config
+	if uf != nil {
+		cfg = uf.ProjectConfig()
+	}
+	layerMap, err := ScanAllLayerWithConfig(dir, cfg)
+	if err != nil || layerMap == nil {
+		return nil
+	}
+	var out []Check
+	for _, ref := range addLayers {
+		// Only LOCAL (filesystem) layers contribute checks here — the shared
+		// check-only layers live in the project's layers/ dir. Remote @github
+		// layers are SKIPPED: they carry their own test context (and a re-scan
+		// can resolve a different cached version than what was deployed, which
+		// would surface checks the deployed version never defined).
+		if IsRemoteLayerRef(ref) {
+			continue
+		}
+		lyr, ok := layerMap[BareRef(ref)]
+		if !ok || lyr == nil {
+			continue
+		}
+		for _, chk := range lyr.tests {
+			if chk.Scope == "deploy" {
+				out = append(out, chk)
+			}
+		}
+	}
+	return out
+}
+
 // isLocalTarget returns true when c.Image names a `target: local` deployment
 // (a host filesystem apply) OR a dotted-path child whose root segment is a
 // target:local deployment. Mirror of isVmTarget — a missing/unreadable
@@ -441,19 +478,12 @@ func (c *EvalLiveCmd) isLocalTarget() bool {
 		return false
 	}
 	uf, ok, err := LoadUnified(dir)
-	if err != nil || !ok || uf.Deploy == nil {
+	if err != nil || !ok {
 		return false
 	}
-	if entry, present := uf.Deploy[c.Image]; present && entry.Target == "local" {
-		return true
-	}
-	if idx := strings.Index(c.Image, "."); idx > 0 {
-		root := c.Image[:idx]
-		if entry, present := uf.Deploy[root]; present && entry.Target == "local" {
-			return true
-		}
-	}
-	return false
+	// Shared classifier (eval_venue.go), same as isVmTarget (R3).
+	_, isLocal := evalLocalTarget(uf, c.Image)
+	return isLocal
 }
 
 // runLocalEval executes deploy-scope checks against a `target: local`

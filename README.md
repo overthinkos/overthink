@@ -84,6 +84,19 @@ generates multi-stage Containerfiles with cache mounts, and builds
 in the right order — handling the hard parts so you (and your AI)
 don't have to.
 
+**Testing and evaluating deployment configs is a first-class goal —
+for AI and humans.** A deploy config is only useful if you can prove it
+works. `ov` ships a goss-style declarative test framework (`eval:` checks
+baked into every image's OCI labels) plus disposable `kind: eval` test
+beds, so any image or deployment config is self-verifiable end-to-end:
+`ov eval image` (build-scope), `ov eval live` (a running deploy), and
+`ov eval run <bed>` (a full build → deploy → eval → fresh-rebuild →
+teardown cycle). The same surface serves a human operator at the keyboard
+and an AI agent driving it: Claude Code sub-agents (`eval-bed-runner`,
+`deploy-verifier`) and dynamic workflows (`/verify-beds`,
+`/audit-deploy-configs`) run these beds to test and verify autonomously.
+→ `/ov-eval:eval`, `/ov-internals:agents`.
+
 **Rootless-first power-user images.** The four images carrying the
 full `ov` toolchain (`fedora-coder`, `fedora-ov`, `arch-ov`,
 `githubrunner`) all run as uid=1000 with passwordless sudo. Four
@@ -467,6 +480,12 @@ infra/usage error (the eval never reached a verdict), `2` =
 checks failed. R10 automation treats `1` as "did not run",
 not "failed".
 
+**Agents drive these beds.** Claude Code sub-agents (`eval-bed-runner`,
+`deploy-verifier`) and dynamic workflows (`/verify-beds`,
+`/audit-deploy-configs`) run `ov eval run`/`live`/`image` against the
+existing beds and return verbatim pass/fail — the same disposable-bed
+verification, whether you run it or your agent does. → `/ov-internals:agents`.
+
 Eleven live-container probe verbs — authorable inline as
 declarative checks inside any `eval:` block (`cdp: eval`, `wl:
 screenshot`, `dbus: call`, `vnc: status`, `mcp: list-tools`, `adb:
@@ -740,6 +759,18 @@ the agent reaches the full build / deploy / test surface over RPC.
 Per-image MCP servers (chrome-devtools-mcp, jupyter-mcp,
 marimo-mcp, ov-mcp) auto-discover via `mcp_provides:` when their
 containers are running.
+
+**Sub-agents, dynamic workflows, and agent teams.** Beyond skills, the
+project ships Claude Code **sub-agents** (`plugins/internals/agents/`):
+executors `eval-bed-runner` and `deploy-verifier` that drive the `ov eval`
+beds and return verbatim proof, plus enforcers `root-cause-analyzer`,
+`testing-validator`, and `layer-validator`. Two **dynamic workflows**
+(`.claude/workflows/`) fan the work out — `/verify-beds` runs every
+`kind: eval` bed as the R10 gate, `/audit-deploy-configs` evaluates your
+deploy configs — and the same agent definitions reuse as **agent-team**
+teammates. Whether you drive `ov` from the keyboard or hand it to an AI,
+testing and verifying deployments uses the one surface.
+→ `/ov-internals:agents`.
 
 See [CLAUDE.md](CLAUDE.md) for the complete system specification,
 [plugins/README.md](plugins/README.md) for the full skill index,

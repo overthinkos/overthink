@@ -1,5 +1,13 @@
 {
   "includeCoAuthoredBy": false,
+  "permissions": {
+    "allow": [
+      "Bash(ov eval run:*)",
+      "Bash(ov eval live:*)",
+      "Bash(ov eval image:*)",
+      "Bash(ov status:*)"
+    ]
+  },
   "enabledPlugins": {
     "ov-core@ov-plugins": true,
     "ov-build@ov-plugins": true,
@@ -54,6 +62,21 @@
           {
             "type": "command",
             "command": "bash $CLAUDE_PROJECT_DIR/.claude/hooks/end-of-turn-challenge.sh"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash $CLAUDE_PROJECT_DIR/.claude/hooks/pre-commit-gate.sh"
+          },
+          {
+            "type": "command",
+            "command": "bash $CLAUDE_PROJECT_DIR/.claude/hooks/pre-push-gate.sh"
           }
         ]
       }

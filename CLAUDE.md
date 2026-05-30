@@ -74,6 +74,9 @@ Consult this table BEFORE the first tool call of every task. If your task matche
 | "What does layer X do?" — CLI utility / ov binary | `/ov-tools:<name>` (ripgrep, himalaya, whisper, ov, ov-full, …) |
 | Skill authoring / skill maintenance | `/ov-internals:skills` |
 | `ov eval *` / `eval.yml` `recipe:`/`score:` / AI-agent scoring / `oveval/*` branches | `/ov-eval:eval` |
+| Sub-agents / dynamic workflows / agent teams / agent-lifecycle or commit-push gate hooks | `/ov-internals:agents` |
+| Verify a cutover by running the R10 beds (drive `ov eval run <bed>`) | `/ov-internals:agents` + `/ov-eval:eval` (agent `eval-bed-runner`, workflow `/verify-beds`) |
+| Evaluate/audit a deployment config (image or deploy, AI or human) | `/ov-internals:agents` + `/ov-eval:eval` (agent `deploy-verifier`, workflow `/audit-deploy-configs`) |
 
 Full index: `plugins/README.md`. This table covers the top triggers; anything not listed here requires reading the index FIRST, loading the matching skill SECOND, touching code THIRD. Never reverse this order.
 
@@ -493,6 +496,44 @@ Before declaring the turn done, every YES:
 - [ ] `git status` clean after landing; `feat/` branches pruned?
 - [ ] No "Phase 2 / TODO / will do next time" deferred work
       surfaced in this plan?
+
+## Agents, Workflows & Teams
+
+Overthink is built to be driven from Claude Code's multi-agent primitives —
+**sub-agents** (`plugins/internals/agents/*.md`), **dynamic workflows**
+(`.claude/workflows/*.js`, run `/<name>`), and **agent teams** (experimental,
+opt-in via `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`). Full reference:
+`/ov-internals:agents`. This is the brief.
+
+**Agent roster** — *executors* run `ov eval` and return verbatim proof:
+`eval-bed-runner` (runs `ov eval run <bed>` — the R10 acceptance executor),
+`deploy-verifier` (read-only `ov eval image`/`live` + `ov status` for an image
+or a user's deploy). *Enforcers* gate claims: `root-cause-analyzer` (R1 RCA),
+`testing-validator` (proof-before-"works"), `layer-validator` (pre-edit
+`layer.yml`).
+
+**Workflows** — `/verify-beds [bed …]` fans the `kind: eval` beds out as the
+R10 gate; `/audit-deploy-configs [target …]` evaluates deploy configs
+(validate + `ov eval image`/`live` + `deploy-verifier`) for AI and humans.
+
+**Binding rule — running a bed is R10-class.** Any agent or workflow that runs
+`ov eval run <bed>` / `ov update` obeys: disposable-only authorization (Law 4),
+R10 is the last step and never a parallel/background track (Law 5), no
+scope-shrinking flags (Law 3.6), and **paste-proof survives delegation** — the
+executor returns the verbatim verdict + exit code, and the delegating agent
+PASTES it (a delegated bed run whose failure is summarized away is fraud).
+
+**Hooks doctrine.** Hooks are LEAN POINTERS to this file + skills (never copies
+of R0–R10 — duplication drifts) PLUS deterministic `PreToolUse` gates
+(`pre-commit-gate.sh`, `pre-push-gate.sh`) that BLOCK only unambiguous
+invariants (`--no-verify`, illegal/absent attribution tier, `--force`). Hooks
+gate mechanical invariants; agents judge proof. Never re-bloat the hooks.
+
+**Per-directory CLAUDE.md signposts.** This root file is the single canonical
+R0–R10 rule-set. `ov/`, `layers/`, `plugins/`, and each `image/<distro>`
+submodule carry a THIN signpost `CLAUDE.md` that only names the skills to load
+for that area and points back here — it restates no rule (duplication drifts).
+Subagents/teammates load the full `CLAUDE.md` hierarchy from their working dir.
 
 ## Where things are documented
 

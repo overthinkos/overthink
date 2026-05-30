@@ -22,6 +22,80 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-05
 
+### 2026-05-30 — Multi-agent support: sub-agents + dynamic workflows + agent teams driving the `ov eval` beds; layered hooks; hybrid per-directory CLAUDE.md signposts
+
+Made Overthink a first-class citizen of Claude Code's three multi-agent
+primitives, all pointed at the existing `ov eval` disposable beds for
+test/verify. One atomic cutover across the main repo, the `plugins`
+submodule, and all eight `image/<distro>` submodules.
+
+- **Sub-agents.** Added two *executor* agents in
+  `plugins/internals/agents/`: `eval-bed-runner` (runs `ov eval run <bed>` —
+  the full R10 sequence — and returns the verbatim per-step verdict + exit
+  code + failing-log tail) and `deploy-verifier` (read-only `ov eval
+  image`/`live` + `ov status` for an image or a user's deploy config, for AI
+  and humans). Aligned the three existing *enforcer* agents to the current
+  surface: `testing-validator` now lists `ov eval run`/`live`/`image` as the
+  R10 evidence and its confidence table matches CLAUDE.md's four tiers;
+  `root-cause-analyzer` gained `ov eval` in its toolkit; `layer-validator`
+  was rewritten from a drifted, re-enumerated schema (it listed `depends`
+  instead of `requires`, described `service:` as a raw supervisord INI
+  string, and omitted the mandatory `version:`) into a focused high-value
+  checker that defers the full schema to `/ov-image:layer` + `ov image
+  validate`.
+- **New skill `/ov-internals:agents`** — the SSOT for the multi-agent story
+  (primitives comparison, agent roster, the two workflows, the
+  R10/disposable/paste-proof binding rule, the hooks doctrine, the signpost
+  convention, the agent-teams opt-in). Cross-referenced from `/ov-eval:eval`
+  and `/ov-internals:skills`.
+- **Dynamic workflows** (`.claude/workflows/`, run `/<name>`):
+  `/verify-beds [bed …]` fans the `kind: eval` beds out as the R10 gate
+  (resource-aware: no-build `local` beds run concurrently, image-building and
+  VM/KVM beds run sequentially to avoid build-cache/KVM/libvirt contention;
+  missing host prereqs are logged, not silently dropped); `/audit-deploy-configs
+  [target …]` runs `ov image validate` + per-target `ov eval image`/`live`
+  + `deploy-verifier` and aggregates a health report.
+- **Layered hooks.** Slimmed `runtime-verification-reminder.sh` and
+  `end-of-turn-challenge.sh` from ~1,076 lines of CLAUDE.md-duplicating,
+  drifted static text into lean POINTERS to CLAUDE.md/skills. This cleared a
+  live R5 stale-reference bug — the hooks still named the renamed `ov
+  harness` / `ov rebuild` / `bench-pod` / `harness.yml` / `ov harness
+  list-recipe|list-score` (now `ov eval` / `ov update` / `eval-sandbox` /
+  `eval.yml` / `ov eval list-*`) — and resolved a direct conflict with
+  CLAUDE.md (the Stop hook said "push only if authorized"; CLAUDE.md
+  auto-lands on R10 pass). Added two deterministic `PreToolUse` (Bash) gates:
+  `pre-commit-gate.sh` blocks `git commit --no-verify` and an
+  absent/illegal `Assisted-by: Claude (<tier>)` trailer (incl. the forbidden
+  `theoretical suggestion`); `pre-push-gate.sh` blocks
+  `--force`/`--force-with-lease`/`-f`/`--no-verify`. Gates use
+  command-position anchoring so they block real invocations but never
+  mentions (`echo`/`grep`/quoted args). Both wired in `.claude/settings.json`
+  alongside an `ov eval`-verb allowlist so the workflows run unattended.
+  Standing rule: hooks gate mechanical invariants, agents judge proof; hooks
+  are lean pointers + deterministic gates and are never re-bloated into
+  CLAUDE.md copies.
+- **CLAUDE.md** gained an "Agents, Workflows & Teams" section, three Skill
+  Dispatcher rows (verify beds / audit deploy / agents setup), and the
+  hooks-doctrine + per-directory-signpost notes.
+- **Hybrid per-directory CLAUDE.md signposts.** The repo-root CLAUDE.md
+  stays the single canonical R0–R10 rule-set; added THIN signpost
+  `CLAUDE.md` files to `ov/`, `layers/`, `plugins/`, and each of the eight
+  `image/<distro>` submodules (arch, bootc, cachyos, debian, fedora, nvidia,
+  selkies, ubuntu). Each only names the skills to load for that area and
+  points back to root — it restates no rule (duplication drifts).
+- **README.md** now states "testing and evaluating deployment configs, for
+  AI and humans" as a first-class `ov` goal in "Why Overthink?", strengthens
+  the Test section, and documents the agents/workflows/teams in "Works with
+  Claude Code".
+
+Standing rules established (forward-looking in CLAUDE.md / `/ov-internals:agents`):
+running an `ov eval` bed is R10-class (disposable-only authorization, last
+step never a parallel/background track, no scope-shrinking flags, and
+paste-proof survives delegation — a delegated bed run whose failure is
+summarized away is fraud); the hooks doctrine; and the per-directory signpost
+convention. Agent teams remain documented opt-in (experimental), not enabled
+in committed settings.
+
 ### 2026-05-29 — cachyos GPU VM eval: SPICE virtual monitor + deeper selkies verification + honest LG bed-scope
 
 The `cachyos-coder` / `cachyos-gpu-vm` eval previously verified only that things

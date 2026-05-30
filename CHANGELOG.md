@@ -22,6 +22,27 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-05
 
+### 2026-05-30 — CachyOS GPU workstation: KDE Plasma panel (menu bar) on every monitor
+
+On the GPU-passthrough workstation the SPICE virtio output owns Plasma's screen 0
+(the 0,0 origin), so KDE's single default panel landed there — invisible on the
+two physical monitors (HDMI-A-1 3440×1440 + HDMI-A-2 3840×2160), which showed a
+bare desktop with no menu bar.
+
+- **`cachyos-kde-settings`: a Plasma panel on EVERY screen by default.** An
+  idempotent ensure-script (`ov-kde-panels-all-screens.sh`) drives the Plasma
+  scripting API (`qdbus6` → `org.kde.plasmashell` `evaluateScript`) to add a
+  standard bottom panel (kickoff / icontasks / systray / clock) to any screen that
+  lacks one; an XDG autostart entry (`/etc/xdg/autostart`, KDE phase-2) runs it on
+  every login and after a monitor hotplug, so the fix self-heals and adapts to any
+  monitor count. The autostart only ADDS where missing (it never removes a user's
+  intentional extra panel). Readiness is a real `gdbus wait` + evaluateScript probe
+  (no fixed sleep). `qt6-tools` (provides `qdbus6`) added as an explicit R9 dep.
+- R10: `eval-cachyos-gpu-vm` bed 30/30 (eval-live + post-update rebuild — the new
+  `kde-panel-autostart-installed` + `kde-panel-on-every-screen` checks green). Prod
+  `cachyos-gpu`: from a reset 1-panel state, a reboot's baked autostart re-created
+  panels on all 3 outputs (`panels_on_screens=[0,1,2]`).
+
 ### 2026-05-30 — docs: sweep stale `rebuild.go` / `RebuildCmd` / `schema-vN` / dated-cutover Go comments
 
 Comments-only R5 doc-hygiene sweep across `ov/*.go`: stale references left by

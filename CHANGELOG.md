@@ -22,6 +22,25 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-05
 
+### 2026-05-30 — arch repo (overthinkos/arch): schema migrate + standard eval-*-vm bed naming
+
+- **Migrated to schema 2026.144.1443** (`ov migrate`: kind-files split inline
+  image/vm/pod/k8s into siblings + entity-version backfill + calver stamp).
+- **Disposable beds renamed to the standard `eval-<descriptor>-<kind>` form:**
+  `arch-vm` → `eval-arch-vm`, `arch-pacstrap-vm` → `eval-arch-pacstrap-vm`. R5 sweep
+  across the arch repo (overthink.yml / vm.yml / README) + 5 plugins skills.
+- **Builder gap fixed on `eval-arch-vm`:** the bed deploys the npm-building
+  `pre-commit` add_layer to an arch CLOUD-IMAGE VM (no ov builder context), so the
+  VM deploy could not resolve the npm builder. Named the arch-builder via
+  `install_opts.builder_image` — the supported path (`DeploymentNode` has no
+  `builder:` map field), mirroring the cachyos VM deploys.
+- R10: `ov -C image/arch eval run eval-arch-vm` PASS — 52/52 (eval-live +
+  post-update rebuild), all 7 steps ok. (An initial run surfaced 8 check failures
+  that RCA traced to a transient `pkgbuild.com` mirror flake during cloud-init's
+  package install — NOT a config bug; the arch VM already declares
+  `portaudio`/`opusfile` for ov's cgo audio libs. A healthy-mirror re-run passed
+  clean.)
+
 ### 2026-05-30 — CachyOS GPU workstation: KDE Plasma panel (menu bar) on every monitor
 
 On the GPU-passthrough workstation the SPICE virtio output owns Plasma's screen 0

@@ -1,5 +1,5 @@
 layer:
-    version: 2026.150.0947
+    version: 2026.150.2158
     name: looking-glass-host
     description: |
         Looking Glass GUEST side for a GPU-passthrough VM: the Linux "host"
@@ -16,15 +16,15 @@ layer:
 
         kvmfr is a DKMS module → pulls the matching linux-cachyos-headers + dkms;
         built in-guest at deploy time against the running cachyos kernel. The
-        kvmfr + IVSHMEM wiring is session-independent and in place. Guest->host
-        frame-flow on this Looking Glass build is currently blocked by an upstream
-        LGMP-host issue (see CHANGELOG). Note the capture trade-off: a zero-auth
-        headless capture needs an X11 seat (LG's XCB backend captures the root
-        with no PipeWire ScreenCast portal prompt), but a headless GPU VM's X11
-        seat falls back to the virtio head — 0 GPU outputs — without a forced
-        EDID, so consumers run the Wayland session (KWin drives a GPU-backed
-        virtual output) until the upstream fix lands. Only meaningful on a VM
-        guest with the GPU + IVSHMEM.
+        kvmfr + IVSHMEM wiring is session-independent and in place — capture is
+        the catch: this Arch build compiles only XCB (needs an X11 root window)
+        and PipeWire (needs a headless ScreenCast-portal grant KDE does not give
+        unattended). ov runs Wayland-only sessions, so NEITHER backend can
+        capture headlessly, and the ov-lg-host-or-skip wrapper makes the service
+        SKIP cleanly (exit 0) instead of crash-looping into a failed unit. The
+        host binary + kvmfr/IVSHMEM stay wired for the operator-side
+        looking-glass-client and a future headless-Wayland capture backend. Only
+        meaningful on a VM guest with the GPU + IVSHMEM.
     require:
         - build-toolchain
         - yay
@@ -39,6 +39,12 @@ layer:
                     - looking-glass-host-git
                     - looking-glass-module-dkms-git
     task:
+        # Graceful-skip wrapper for the looking-glass-host service (see the
+        # service: block) — copied first so the service exec path exists.
+        - copy: ov-lg-host-or-skip
+          to: /usr/local/bin/ov-lg-host-or-skip
+          mode: "0755"
+          user: root
         # Load kvmfr at boot. On a libvirt VM guest the <shmem> ivshmem PCI
         # device IS the shared Looking Glass region; kvmfr auto-binds to it as
         # /dev/kvmfr0 with NO module options. We deliberately do NOT set
@@ -80,8 +86,14 @@ layer:
         # until it hits the start limit. Requires an auto-logged-in session
         # (SDDM autologin) so graphical-session.target actually activates headless.
         - name: looking-glass-host
-          exec: /usr/bin/looking-glass-host
-          restart: always
+          # Wrapped in ov-lg-host-or-skip: ov sessions are Wayland-only and
+          # neither compiled capture backend works headlessly there (XCB needs
+          # an X11 root, PipeWire stalls on the KDE ScreenCast portal). The
+          # wrapper exits 0 cleanly so the unit records a clean "skipped" state
+          # instead of crash-looping into a failed unit. restart: on-failure
+          # (not always) so the clean skip does not loop.
+          exec: /usr/local/bin/ov-lg-host-or-skip
+          restart: on-failure
           scope: user
           enable: true
           after: [graphical-session.target]

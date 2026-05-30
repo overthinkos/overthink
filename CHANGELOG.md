@@ -22,6 +22,33 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-05
 
+### 2026-05-30 — ubuntu repo (overthinkos/ubuntu): schema migrate + eval-*-vm bed naming + VM host-port deconfliction
+
+- **Migrated to schema 2026.144.1443** (`ov migrate`: kind-files split +
+  entity-version backfill + calver stamp).
+- **Disposable bed renamed** `ubuntu-debootstrap-vm` →
+  `eval-ubuntu-debootstrap-vm`. R5 sweep across `overthink.yml` / README + the
+  `/ov-vm:ubuntu` & `/ov-distros:ubuntu` plugins skills.
+- **`version:` backfilled** on the layerless `ubuntu-debootstrap`
+  (`from: builder:debootstrap`) and the bare-base `ubuntu` images.
+- **build.yml pin bumped to `v2026.150.1904`** to fetch the debootstrap
+  `/dev/kvm` chroot-shadow fix (surgical: build.yml pin only, layers untouched —
+  no unrelated coder-image churn).
+- **VM host-port deconfliction.** The cachyos cutover had assigned its VMs ports
+  `12226/12227/12228`, overlapping the canonical bed ports — the running
+  `cachyos-gpu` operator (12228) collided with the ubuntu bed (12228), and the
+  `cachyos-gpu-vm` bed (12227) overlaps the debian bed (12227). The ubuntu bed
+  moves `12228 → 12229` so it can run alongside the operator (a disposable bed
+  yields rather than cycling the running GPU operator). **Known latent overlap:**
+  `cachyos-gpu-vm`(12227) ↔ `debian`(12227) — both are beds that never run
+  together, so it doesn't manifest; deferred because reassigning the cachyos bed
+  would cycle the running GPU operator to re-R10 it.
+- R10: `ov -C image/ubuntu eval run eval-ubuntu-debootstrap-vm` → PASS (steps=6),
+  plus the debian bed re-verified PASS (steps=6) on the bumped pin. `/dev/kvm`
+  stayed `0666 kvm` throughout both (audit: zero `systemd-tmpfiles` host-node
+  hits), zero warnings, operator undisturbed. Landed image/ubuntu
+  `v2026.150.1931`, image/debian `v2026.150.1931`, plugins `bb14bdc`.
+
 ### 2026-05-30 — debootstrap chroot corrupts host /dev/kvm (build.yml fix)
 
 - **Symptom.** Every `ov vm build` of a debian/ubuntu debootstrap VM

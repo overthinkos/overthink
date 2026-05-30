@@ -2,11 +2,10 @@ package main
 
 // Deploy-name resolution + per-target dispatch for `ov update`.
 //
-// Added 2026-05-09 in the rebuild→update cutover. Before this, `ov
-// update <image>` only handled image-name input and only worked for
-// pod targets. The deleted `ov rebuild` covered VM/local targets via
-// the *UnifiedTarget.Rebuild methods. This file consolidates that
-// dispatch into UpdateCmd so the user-facing surface is just one verb.
+// `ov update <name>` resolves a deploy name (VM/local/pod targets all
+// dispatch from here) or a bare image name; this file consolidates the
+// per-target dispatch into UpdateCmd so the user-facing surface is just
+// one verb.
 //
 // Critical semantic: NONE of the dispatchers below regenerate the
 // user-overlay deploy entry (no `ov deploy add` / `ov config` calls

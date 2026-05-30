@@ -5,7 +5,7 @@ layer:
         feature: harness-k8s-fixture — fake Kubernetes API surface for harness phase 5
         narrative: |
             Stands in for a real k3s cluster. Real k3s cannot run inside the
-            bench-pod because the rootless user-namespace slice does not
+            eval-sandbox because the rootless user-namespace slice does not
             delegate the `cpuset` cgroup controller — k3s aborts with
             "failed to find cpuset cgroup (v2)" before kubelet starts.
             Instead, this layer runs a minimal Python http.server that

@@ -182,7 +182,7 @@ type LogsOpts struct {
 	Tail int
 }
 
-// RebuildOpts parameterizes `ov rebuild`. Per /ov-internals:disposable, the
+// RebuildOpts parameterizes the rebuild path of `ov update`. Per /ov-internals:disposable, the
 // target MUST be marked `disposable: true` in deploy.yml — every
 // implementation asserts this before any destructive action.
 type RebuildOpts struct {

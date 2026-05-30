@@ -92,10 +92,9 @@ func isBenignAlreadyRunning(stderr string) bool {
 // guaranteed, but for the common one-deploy-per-vm case this is
 // unambiguous).
 //
-// Pre-2026-05-09: lived in rebuild.go and gated `ov rebuild`. Post-cutover:
-// retained because vm_classification.go + ov vm cycle still consult it
+// Retained because vm_classification.go + ov vm cycle still consult it
 // to surface lifecycle metadata in operator-facing output. The
-// disposability-as-authorization concept itself is gone (ov update is
+// disposability-as-authorization gate is not applied here (ov update is
 // non-destructive by design and doesn't need a gate).
 func vmDisposableFromDeployments(tree map[string]DeploymentNode, vmName string) (disposable bool, lifecycle string) {
 	for _, node := range tree {

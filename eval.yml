@@ -1262,7 +1262,7 @@ score:
       Notes: ${NOTES}
 
       == Ground rules ==
-        - Recipe scenarios are immutable — they live in harness.yml.
+        - Recipe scenarios are immutable — they live in eval.yml.
         - The ${TARGET_NAME} sandbox was rebuilt FRESH for this run; it persists
           across iters but is destroyed + recreated NEXT run.
         - Every pod a scenario references MUST be running at exit (that's
@@ -1298,7 +1298,7 @@ score:
           declared `artifact:` path, with mtime ≥ iter start.
 
       == MANDATORY before exiting this iteration ==
-      Run `ov harness self-evaluate` and read its output BEFORE you
+      Run `ov eval self-evaluate` and read its output BEFORE you
       exit. It runs every in-scope probe against live systems via the
       SAME code path the harness scorer will invoke at iter end. The
       verdict it prints (pass / fail / skipped per scenario) is what
@@ -1393,7 +1393,7 @@ score:
       named upstream scenarios pass.
 
       == Ground rules ==
-        - Recipe scenarios are immutable — they live in harness.yml.
+        - Recipe scenarios are immutable — they live in eval.yml.
         - Every pod a scenario references MUST be running at exit
           (that's what gets scored).
         - Imported probes are scored identically to hand-written

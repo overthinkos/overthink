@@ -237,7 +237,7 @@ func (c *EvalRunCmd) Run() error {
 	// the AI's job and lives inside the pod's nested podman, all
 	// destroyed when the pod's container layer is wiped on restart.
 	//
-	// We deliberately do NOT use `ov rebuild` here: rebuild regenerates
+	// We deliberately do NOT go through a full redeploy here: that regenerates
 	// the systemd quadlet via `ov config`, and the current generator
 	// emits the image's default named volume AND the deploy.yml bind
 	// override at the same mount path (a pre-existing dedup bug). Going

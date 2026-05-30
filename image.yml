@@ -556,7 +556,7 @@ image:
             - eval-target-layer
         port:
             - 18765:18765
-    # ov harness `default` score — per-pod target images.
+    # ov eval `default` score — per-pod target images.
     os:
         base: fedora
         layer:

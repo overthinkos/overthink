@@ -17,7 +17,7 @@ import (
 // without modifying the project's deploy.yml or vm.yml.
 //
 // Today the override only carries `disposable:` and `lifecycle:` —
-// the two fields that gate `ov rebuild <vm-entity>`. Future fields
+// the two fields that gate `ov update <vm-entity>`. Future fields
 // (per-instance ports, env, add_layers) can be added without
 // breaking the on-disk format because yaml.v3 unknown-keys defaults
 // to forgiving.
@@ -32,7 +32,7 @@ import (
 //   ~/.local/share/ov/vm/ov-arch/instance.yml:
 //     disposable: false
 //     lifecycle: long-running
-// and `ov rebuild arch` will refuse with the standard refusal
+// and `ov update arch` will refuse with the standard refusal
 // message — no need to edit the project's deploy.yml or stash a
 // different lifecycle tag in version control.
 type VmInstanceOverride struct {

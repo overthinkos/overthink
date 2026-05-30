@@ -64,14 +64,13 @@ func (c *LogsCmd) Run() error {
 // existing deploy config (user-overlay state untouched), and restarts
 // the service to pick up the new image.
 //
-// As of the 2026-05-09 rebuild→update cutover, this verb absorbs the
-// destroy-free responsibilities of the deleted `ov rebuild`. The first
-// arg accepts EITHER a deploy name (looked up in deploy.yml — VM/local/
-// pod targets all dispatch from here) OR a bare image name (existing
-// behavior, for direct image updates not tied to a deploy).
+// This verb handles the destroy-free update path for every target. The
+// first arg accepts EITHER a deploy name (looked up in deploy.yml —
+// VM/local/pod targets all dispatch from here) OR a bare image name
+// (for direct image updates not tied to a deploy).
 //
-// Key semantic distinction from the deleted `ov rebuild`: this verb
-// NEVER calls `ov deploy add` to regenerate the user-overlay deploy
+// Key semantic: this verb NEVER calls `ov deploy add` to regenerate
+// the user-overlay deploy
 // entry. User-overlay configuration (port overrides, volume bindings,
 // env, tunnel) is preserved across updates. Per the user's directive:
 // "Any config changes should be done via ov config only" — this verb

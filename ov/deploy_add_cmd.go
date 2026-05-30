@@ -50,10 +50,10 @@ type DeployAddCmd struct {
 
 	// Disposable + lifecycle classification (see /ov-internals:disposable).
 	// --disposable writes `disposable: true` into the deploy.yml
-	// entry and authorizes autonomous `ov rebuild`. --lifecycle writes
+	// entry and authorizes autonomous `ov update`. --lifecycle writes
 	// the informational tier tag; it has NO effect on disposability
 	// (no derivation).
-	Disposable bool   `long:"disposable" help:"Mark this deploy disposable (authorizes autonomous ov rebuild; writes disposable: true into deploy.yml)"`
+	Disposable bool   `long:"disposable" help:"Mark this deploy disposable (authorizes autonomous ov update; writes disposable: true into deploy.yml)"`
 	Lifecycle  string `long:"lifecycle" help:"Informational tier tag (scratch|dev|test|qa|staging|prod|custom). NO effect on disposability — use --disposable for that."`
 }
 
@@ -1059,7 +1059,7 @@ func (c *DeployAddCmd) runContainer(plans []*InstallPlan, base string, distroCfg
 			Target:        "pod",
 		})
 		if c.Disposable {
-			fmt.Fprintln(os.Stderr, "Marked deploy disposable — `ov rebuild` will act unattended on this deploy.")
+			fmt.Fprintln(os.Stderr, "Marked deploy disposable — `ov update` will act unattended on this deploy.")
 		}
 	}
 	fmt.Printf("Overlay image ready: %s\n", tgt.OverlayImageRef())

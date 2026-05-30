@@ -249,7 +249,7 @@ type DeploymentNode struct {
 
 	// --- Disposable / lifecycle / ephemeral classification (see /ov-internals:disposable) ---
 
-	// Disposable, when true, authorizes `ov rebuild <name>` to
+	// Disposable, when true, authorizes `ov update <name>` to
 	// destroy + rebuild + restart this deploy unattended. Default
 	// is false (conservative; explicit opt-in). There is NO
 	// derivation from Lifecycle. See CLAUDE.md R10.

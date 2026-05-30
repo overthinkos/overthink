@@ -76,7 +76,7 @@ func TestExtractStringSlice_AurReplacesShape(t *testing.T) {
 // and returns the REAL package name on stdout. `pacman -Rs <pkg>`,
 // in contrast, only accepts real package names and exits with
 // `target not found` for provides-only names. The bug we fixed:
-// a re-run of `ov rebuild ov-cachyos` after a successful vscode
+// a re-run of `ov update ov-cachyos` after a successful vscode
 // install hit `pacman -Qq code` returning `visual-studio-code-bin`,
 // the precheck said "installed", and `pacman -Rs --noconfirm code`
 // then failed and halted the entire deploy.

@@ -6,7 +6,7 @@ package main
 // counterpart:
 //
 //   disposable: <bool>    // LOAD-BEARING. Default false. Explicit opt-in.
-//                         //   `true` authorizes `ov rebuild <name>` to
+//                         //   `true` authorizes `ov update <name>` to
 //                         //   destroy + rebuild + restart unattended.
 //   lifecycle: <tier>     // INFORMATIONAL ONLY. Free-form human tag
 //                         //   (dev | qa | prod | custom-whatever).

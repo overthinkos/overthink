@@ -197,7 +197,7 @@ func runEvalBed(exe, name string, node DeploymentNode, opts bedRunOpts) (*bedRun
 	// synchronization primitive, not a fixed sleep). Fast beds pass on the first
 	// attempt (zero added latency); a genuinely-broken deploy still fails after
 	// the deadline.
-	stepReady := func(stepName string, args []string, deadline, interval time.Duration) error {
+	stepReady := func(stepName string, args []string, deadline, interval time.Duration, beforeRetry func()) error {
 		t0 := time.Now()
 		end := t0.Add(deadline)
 		var out []byte
@@ -206,6 +206,9 @@ func runEvalBed(exe, name string, node DeploymentNode, opts bedRunOpts) (*bedRun
 			out, runErr = runCapture(exe, args)
 			if runErr == nil || time.Now().After(end) {
 				break
+			}
+			if beforeRetry != nil {
+				beforeRetry()
 			}
 			time.Sleep(interval)
 		}
@@ -223,6 +226,29 @@ func runEvalBed(exe, name string, node DeploymentNode, opts bedRunOpts) (*bedRun
 			fmt.Fprintf(os.Stderr, "ov eval run %s: writing %s: %v\n", name, logPath, writeErr)
 		}
 		return runErr
+	}
+
+	// recoverVMIfDown is the eval-live retry recovery hook for a disposable VM
+	// bed: if the guest became unreachable mid-eval (e.g. a rare host-side
+	// QEMU/spice-server crash on a probe connect — see the 2026-05 RCA), restart
+	// the domain and wait for sshd so the NEXT eval-live retry runs against a
+	// LIVE guest instead of pointlessly re-failing against a dead one. A
+	// detect→restart→wait-ready recovery primitive, NOT a blind sleep-retry: it
+	// no-ops when the guest still answers (the eval-live failure is then a real
+	// check failure to surface) and for non-VM / non-disposable beds.
+	recoverVMIfDown := func() {
+		if !isVM || !node.IsDisposable() {
+			return
+		}
+		alias := "ov-" + vmTemplate
+		probe := exec.Command("ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=3",
+			"-o", "LogLevel=ERROR", alias, "true")
+		if probe.Run() == nil {
+			return // guest answers — not a dead VM
+		}
+		fmt.Fprintf(os.Stderr, "ov eval run %s: VM bed %q unreachable mid-eval — restarting disposable domain before retry\n", name, vmTemplate)
+		_ = exec.Command(exe, "vm", "start", vmTemplate).Run()
+		waitForVmSshReady(vmTemplate, 120*time.Second)
 	}
 
 	// cleanup tears the disposable bed down (suppressed by --keep). Used on
@@ -415,7 +441,7 @@ func runEvalBed(exe, name string, node DeploymentNode, opts bedRunOpts) (*bedRun
 	// first-run DB migration runs minutes before the API binds). stepReady
 	// polls eval-live until it passes or the deadline, so we wait for real
 	// readiness instead of racing a fixed sleep.
-	if err := stepReady("eval-live", []string{"eval", "live", name}, bedEvalReadyDeadline, bedEvalReadyInterval); err != nil {
+	if err := stepReady("eval-live", []string{"eval", "live", name}, bedEvalReadyDeadline, bedEvalReadyInterval, recoverVMIfDown); err != nil {
 		return fail("eval live %s: %w", name, err)
 	}
 
@@ -453,7 +479,7 @@ func runEvalBed(exe, name string, node DeploymentNode, opts bedRunOpts) (*bedRun
 					}
 				}
 			}
-			if err := stepReady("eval-live-rebuild", []string{"eval", "live", name}, bedEvalReadyDeadline, bedEvalReadyInterval); err != nil {
+			if err := stepReady("eval-live-rebuild", []string{"eval", "live", name}, bedEvalReadyDeadline, bedEvalReadyInterval, recoverVMIfDown); err != nil {
 				return fail("eval live (fresh rebuild) %s: %w", name, err)
 			}
 		}

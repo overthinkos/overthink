@@ -162,7 +162,7 @@ RCA settled the headless Looking-Glass story.
 
 - **T1 — VM naming cutover.** `cachyos-coder` → `cachyos-gpu` across
   `image/cachyos/vm.yml` (the kind:vm entity) and `image/cachyos/overthink.yml`
-  (the deploy entry + the `eval-cachyos-gpu` disposable bed). The dead
+  (the deploy entry + the `eval-cachyos-gpu-vm` disposable bed). The dead
   `ov-cachyos-gpu` / `ov-ov-cachyos-gpu` autostart units + state dirs + stale
   deploy entries were purged. R5 self-test: `git grep cachyos-coder` returns only
   this file in both repos.
@@ -224,6 +224,40 @@ RCA settled the headless Looking-Glass story.
   layer's `enable` action); the direnv fish-hook check now references the current
   `ov-direnv.fish` path and tolerates a bash-login target where fish isn't
   per-user-configured.
+
+- **VM eval readiness gate + disposable-bed crash recovery (`ov/eval_cmd.go`,
+  `ov/eval_bed_run.go`).** Every VM `ov eval live` now runs `WaitForSSH` +
+  `WaitForCloudInit` BEFORE any check, so the eval never tests a guest that is
+  down, mid-cloud-init, or mid-restart (real synchronization primitives, not
+  sleeps — the same preflight `VmDeployTarget.Emit` uses at deploy time). The bed
+  runner adds a domain-death recovery: if a disposable bed's guest dies mid-eval,
+  it restarts the domain + waits for sshd before the next eval-live retry instead
+  of re-failing against a dead VM. The shared `cachyos-gpu-desktop-eval` check
+  layer gained matching visible assertions (`vm-ssh-reachable`,
+  `cloud-init-settled`).
+
+- **Looking-Glass crash RCA (exonerates the kvmfr fix).** A GPU-bed R10 failed
+  when the guest crashed (`qemu reason=crashed`) ~3s after a cuda-image load. A
+  coredump RCA traced it to a NULL-pointer deref inside host-side
+  `libspice-server.so.1.15.0` (spice-server 0.16.0) — the SPICE display-worker
+  thread SIGSEGV'd QEMU on an `ov eval spice` probe connect (1-in-62 boots),
+  independent of ivshmem size / kvmfr / VFIO (host↔guest propagation confirmed
+  working). The kvmfr fix is correct and kept; the readiness gate's recovery
+  makes the rare host-spice crash non-fatal to the R10.
+
+- **`cloud-init-settled` check tolerance.** The pacstrap bed's cloud-init reports
+  `status: error` (a recoverable `resizefs` module error — `btrfs` absent during
+  early-boot resize on a pre-sized disk) but `extended_status: error - done` —
+  i.e. FINISHED. The check now keys on `extended_status` (which carries the
+  done/running phase) and fails only on `running`, matching the gate's tolerance.
+
+- **eval-bed naming.** The cachyos disposable beds adopt the standard
+  `eval-<descriptor>-<kind>` form: `eval-cachyos-gpu-vm` (the GPU bed, aligning the
+  config with the skill that already used that name) and `eval-cachyos-vm` (the
+  bootstrap bed). The GPU bed's `hostdevs:` block is reverted to PORTABLE (a PCI
+  address is host-specific — add it locally for a GPU run; the GPU-gated checks
+  are N/A on a portable bed). Both beds R10'd; `eval-cachyos-gpu-vm` passed 29/29
+  (eval-live + post-update re-verify) with the RTX 4080 attached.
 
 ### 2026-05-29 — cachyos GPU VM eval: SPICE virtual monitor + deeper selkies verification + honest LG bed-scope
 

@@ -280,6 +280,10 @@ func resolveNestedNode(roots map[string]DeploymentNode, path string) *Deployment
 //
 // VMs have no OCI image labels, so no layer/image test section exists —
 // only the local deploy overlay's `tests:` list applies.
+// vmEvalReadyWaitSeconds bounds the VM eval-live readiness gate's WaitForSSH
+// poll (WaitForCloudInit carries its own internal 5-minute bound).
+const vmEvalReadyWaitSeconds = 120
+
 func (c *EvalLiveCmd) runVm() error {
 	dir, _ := os.Getwd()
 	uf, _, err := LoadUnified(dir)
@@ -389,6 +393,26 @@ func (c *EvalLiveCmd) runVm() error {
 				executor = chain
 			}
 		}
+	}
+
+	// Readiness gate (runs as the first step of the VM eval sequence): confirm
+	// the VM is up + SSH-reachable AND cloud-init has settled BEFORE running any
+	// checks. Without it, a guest that is down, mid-cloud-init, or mid-restart
+	// surfaces as a confusing wall of "Connection refused" on EVERY check
+	// instead of one clear "VM not ready" signal — and a cloud-init that
+	// triggers a reboot would otherwise be tested mid-restart. WaitForSSH (poll
+	// until sshd answers) and WaitForCloudInit (retry until an ssh connection
+	// survives `cloud-init status --wait`) are real synchronization primitives,
+	// not fixed sleeps — the same SSHExecutor preflight VmDeployTarget.Emit runs
+	// at deploy time. Fast no-op on an already-settled guest (zero added
+	// latency); the VM analog of waitForContainerReady for the bed runner.
+	gate := &SSHExecutor{Host: VmSshAlias(vmName), ConnectTimeout: 5}
+	gctx := context.Background()
+	if gerr := gate.WaitForSSH(gctx, vmEvalReadyWaitSeconds); gerr != nil {
+		return fmt.Errorf("vm %q is not up / SSH-reachable — is the domain running? %w", vmName, gerr)
+	}
+	if gerr := gate.WaitForCloudInit(gctx); gerr != nil {
+		return fmt.Errorf("vm %q cloud-init did not settle (still running or restarting?): %w", vmName, gerr)
 	}
 
 	env := map[string]string{

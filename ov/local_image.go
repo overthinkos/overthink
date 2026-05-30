@@ -28,46 +28,90 @@ func defaultListLocalImages(engine string) ([]LocalImageInfo, error) {
 	if err != nil {
 		return nil, fmt.Errorf("listing local images via %s: %w", binary, err)
 	}
+	return parseLocalImagesJSON(out)
+}
 
+// parseLocalImagesJSON parses `{podman,docker} images --format json` output
+// into ONE LocalImageInfo per distinct image ID, with that id's tag refs
+// merged into Names.
+//
+// This dedup is load-bearing: podman emits ONE ROW PER TAG, and each row's
+// Names array already lists EVERY tag on that id. A naive row-by-row mapping
+// therefore produces N near-identical entries for an id with N tags — which
+// made `ov clean`'s keep-N retention over-count entries and, worse, remove an
+// id's whole Names array per "extra" entry (deleting tags it meant to keep).
+// Collapsing to one-id-with-a-tag-list matches the struct's shape and what
+// every consumer (retention prune, short-name resolver) expects.
+//
+// Empty-id rows (dangling/untagged) are kept separate via a per-row sentinel
+// key so they never merge into one another.
+func parseLocalImagesJSON(out []byte) ([]LocalImageInfo, error) {
 	var rawImages []map[string]any
 	if err := json.Unmarshal(out, &rawImages); err != nil {
-		return nil, fmt.Errorf("parsing %s images output: %w", binary, err)
+		return nil, fmt.Errorf("parsing images output: %w", err)
 	}
-
-	result := make([]LocalImageInfo, 0, len(rawImages))
-	for _, raw := range rawImages {
-		info := LocalImageInfo{Labels: make(map[string]string)}
+	byKey := make(map[string]*LocalImageInfo)
+	order := make([]string, 0, len(rawImages))
+	for i, raw := range rawImages {
 		// Image ID: podman uses "Id", docker uses "ID".
-		if id, ok := raw["Id"].(string); ok {
-			info.ID = id
-		} else if id, ok := raw["ID"].(string); ok {
-			info.ID = id
+		id := ""
+		if s, ok := raw["Id"].(string); ok {
+			id = s
+		} else if s, ok := raw["ID"].(string); ok {
+			id = s
 		}
+		key := id
+		if key == "" {
+			key = fmt.Sprintf("\x00row%d", i) // never merge distinct untagged images
+		}
+		info, ok := byKey[key]
+		if !ok {
+			info = &LocalImageInfo{ID: id, Labels: make(map[string]string)}
+			byKey[key] = info
+			order = append(order, key)
+		}
+		// Tag refs: podman uses "Names", docker uses "RepoTags". Merge + dedup.
+		var refs []string
 		if names, ok := raw["Names"].([]any); ok {
 			for _, n := range names {
 				if s, ok := n.(string); ok {
-					info.Names = append(info.Names, s)
+					refs = append(refs, s)
 				}
 			}
 		}
-		// Docker uses RepoTags; podman uses Names. Handle both.
-		if len(info.Names) == 0 {
+		if len(refs) == 0 {
 			if tags, ok := raw["RepoTags"].([]any); ok {
 				for _, t := range tags {
 					if s, ok := t.(string); ok {
-						info.Names = append(info.Names, s)
+						refs = append(refs, s)
 					}
 				}
 			}
 		}
+		seen := make(map[string]bool, len(info.Names))
+		for _, n := range info.Names {
+			seen[n] = true
+		}
+		for _, n := range refs {
+			if !seen[n] {
+				info.Names = append(info.Names, n)
+				seen[n] = true
+			}
+		}
+		// Labels are identical across rows for one id; first-writer wins.
 		if labels, ok := raw["Labels"].(map[string]any); ok {
 			for k, v := range labels {
 				if s, ok := v.(string); ok {
-					info.Labels[k] = s
+					if _, exists := info.Labels[k]; !exists {
+						info.Labels[k] = s
+					}
 				}
 			}
 		}
-		result = append(result, info)
+	}
+	result := make([]LocalImageInfo, 0, len(order))
+	for _, key := range order {
+		result = append(result, *byKey[key])
 	}
 	return result, nil
 }

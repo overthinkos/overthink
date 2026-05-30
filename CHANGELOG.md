@@ -22,6 +22,37 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-05
 
+### 2026-05-30 — fix: `keep_images` retention over-removal (per-tag prune + image-list dedup)
+
+The `keep_images` auto-prune (after `ov image build`) could delete EVERY tag of
+an image — including the just-built one — when a content-stable image had
+accumulated many CalVer tags pointing at ONE image id. Observed: after repeated
+`ov eval run eval-pod` runs, a build's prune left ZERO eval-pod images, so the
+bed's `ov eval image` step failed with "image not available locally."
+
+Root cause: `defaultListLocalImages` mapped `podman images --format json` 1:1,
+but podman emits ONE ROW PER TAG (each row's `Names` already lists every tag on
+that id). So N tags on one id became N near-identical `LocalImageInfo` entries;
+`pruneImagesByRetention` counted ENTRIES for the keep-N guard and, for each
+"removable" entry, `rmi`'d that entry's WHOLE `Names` array — deleting tags it
+meant to keep and, once the last tag of the shared id went, the image itself.
+
+Fix (two levels): (1) `parseLocalImagesJSON` (extracted from
+`defaultListLocalImages`) collapses rows to ONE entry per distinct image id with
+tag refs merged — the one-id-with-a-tag-list shape `LocalImageInfo` was designed
+for; this also de-duplicates `resolveLocalImageRef`'s candidate set. (2)
+`pruneImagesByRetention` is now per-TAG: keep the newest N tags (label-CalVer
+PRIMARY, build-tag TIEBREAKER), `rmi` only the INDIVIDUAL older tags — so a
+shared id survives as long as a kept tag holds it and the newest/just-built tag
+is never removed. Removed the now-dead `imageTagCalVer` / `imageDatable`.
+
+Tests: `TestPruneImagesByRetention_SharedID` (five tags on one id, keep 3 — the
+newest/just-built tag is never removed) and `TestParseLocalImagesJSON_DedupByID`
+(+ a docker-RepoTags / unmerged-empty-id case). R10: `go test ./...` green; on a
+fresh `ov`, 4× repeated `ov image build eval-pod` hold at `keep_images=3` (never
+0) with the newest tag always present, and `ov eval run eval-pod` passes
+end-to-end (8/8 steps) under the accumulated-tag state that previously failed.
+
 ### 2026-05-30 — Multi-agent support: sub-agents + dynamic workflows + agent teams driving the `ov eval` beds; layered hooks; hybrid per-directory CLAUDE.md signposts
 
 Made Overthink a first-class citizen of Claude Code's three multi-agent

@@ -78,38 +78,20 @@ func imageLabelCalVer(im LocalImageInfo) (CalVer, bool) {
 	return ParseCalVer(im.Labels[LabelVersion])
 }
 
-// imageTagCalVer returns the newest CalVer among an image's `:YYYY.DDD.HHMM`
-// tags (the per-build timestamp) — the TIEBREAKER. Because the version label is
-// content-stable, many builds of an unchanged image share one label-CalVer, so
-// the tag is what distinguishes (and retains) the newest BUILD.
-func imageTagCalVer(im LocalImageInfo) (CalVer, bool) {
-	var best CalVer
-	found := false
-	for _, n := range im.Names {
-		if cv, ok := ParseCalVer(extractCalVerTag(n)); ok {
-			if !found || best.Less(cv) {
-				best, found = cv, true
-			}
-		}
-	}
-	return best, found
-}
-
-// imageDatable reports whether an image carries EITHER a parseable label-CalVer
-// OR a parseable tag-CalVer — i.e. retention can order it. An undatable image
-// is never removed.
-func imageDatable(im LocalImageInfo) bool {
-	_, okL := imageLabelCalVer(im)
-	_, okT := imageTagCalVer(im)
-	return okL || okT
-}
-
-// pruneImagesByRetention removes all but the newest keepN builds per
-// `org.overthinkos.image` group, ordered by the `org.overthinkos.version`
-// CalVer label. Images in use by a container are skipped, and `rmi` is invoked
-// WITHOUT `-f` so the engine refuses any still-referenced image as a backstop.
-// keepN <= 0 disables (no-op). Returns the refs removed (or that would be, when
-// dryRun).
+// pruneImagesByRetention keeps the newest keepN build TAGS per
+// `org.overthinkos.image` group and removes the older ones. Tags are ordered by
+// the `org.overthinkos.version` CalVer label (PRIMARY) then the `:YYYY.DDD.HHMM`
+// build TAG (TIEBREAKER); because the label is content-stable, the tag is what
+// distinguishes the newest builds.
+//
+// Retention is per TAG, not per image entry. Older tags are `rmi`'d
+// INDIVIDUALLY — so when several tags share one image id, the kept tags hold
+// the id alive and the just-built (newest) tag is always retained. (The earlier
+// per-entry form removed an entry's whole Names array, which deleted kept tags
+// and could wipe the just-built image when content-stable rebuilds piled many
+// tags onto one id — see CHANGELOG.) Tags whose image is referenced by a
+// container are skipped, and `rmi` runs WITHOUT `-f` as a backstop. keepN <= 0
+// disables (no-op). Returns the refs removed (or that would be, when dryRun).
 func pruneImagesByRetention(engine string, keepN int, dryRun bool) ([]string, error) {
 	if keepN <= 0 {
 		return nil, nil
@@ -123,67 +105,77 @@ func pruneImagesByRetention(engine string, keepN int, dryRun bool) ([]string, er
 		return nil, err
 	}
 
-	// Group ov-labelled images by short name; ignore images without the label
-	// (never touch non-ov images).
-	groups := map[string][]LocalImageInfo{}
+	// One candidate PER TAG (deduped by ref — robust even if the lister returns
+	// row-per-tag duplicates), grouped by the org.overthinkos.image label.
+	// Non-ov images (no label) are never touched.
+	type tagCand struct {
+		ref         string
+		labelCalVer CalVer
+		okLabel     bool
+		tagCalVer   CalVer
+		okTag       bool
+		inUse       bool
+	}
+	groups := map[string][]tagCand{}
+	seenRef := map[string]bool{}
 	for _, im := range imgs {
 		short := im.Labels["org.overthinkos.image"]
 		if short == "" {
 			continue
 		}
-		groups[short] = append(groups[short], im)
+		lcv, okL := imageLabelCalVer(im)
+		inUse := imageInUse(im, inUseIDs, inUseRefs)
+		for _, ref := range im.Names {
+			if seenRef[ref] {
+				continue
+			}
+			seenRef[ref] = true
+			tcv, okT := ParseCalVer(extractCalVerTag(ref))
+			groups[short] = append(groups[short], tagCand{
+				ref: ref, labelCalVer: lcv, okLabel: okL,
+				tagCalVer: tcv, okTag: okT, inUse: inUse,
+			})
+		}
 	}
 
 	var removed []string
 	for _, group := range groups {
-		// Newest first by the org.overthinkos.version LABEL (the content-derived
-		// EffectiveVersion) as the PRIMARY key, then the `:YYYY.DDD.HHMM` build
-		// TAG as the TIEBREAKER. The label is content-stable, so unchanged-image
-		// builds share one label-CalVer and the tag is what keeps the newest
-		// BUILDS. Images datable by neither sort last and are skipped below.
+		// Newest first: label-CalVer PRIMARY, per-ref build-tag CalVer
+		// TIEBREAKER. Undatable tags (neither key) sort last; never removed.
 		sort.SliceStable(group, func(i, j int) bool {
-			li, okLi := imageLabelCalVer(group[i])
-			lj, okLj := imageLabelCalVer(group[j])
-			if okLi && okLj && li != lj {
-				return lj.Less(li) // newer label first
+			if group[i].okLabel && group[j].okLabel && group[i].labelCalVer != group[j].labelCalVer {
+				return group[j].labelCalVer.Less(group[i].labelCalVer) // newer label first
 			}
-			if okLi != okLj {
-				return okLi // labelled sorts before unlabelled
+			if group[i].okLabel != group[j].okLabel {
+				return group[i].okLabel // labelled sorts before unlabelled
 			}
-			// Equal (or both-absent) label-CalVer → tiebreak on the build tag.
-			ti, okTi := imageTagCalVer(group[i])
-			tj, okTj := imageTagCalVer(group[j])
-			if okTi && okTj {
-				return tj.Less(ti) // newer build first
+			if group[i].okTag && group[j].okTag && group[i].tagCalVer != group[j].tagCalVer {
+				return group[j].tagCalVer.Less(group[i].tagCalVer) // newer build first
 			}
-			return okTi && !okTj // dateable sorts before undateable
+			return group[i].okTag && !group[j].okTag // dateable sorts before undateable
 		})
-		for idx, im := range group {
+		for idx, c := range group {
 			if idx < keepN {
-				continue // keep the newest keepN
+				continue // keep the newest keepN tags
 			}
-			if !imageDatable(im) {
-				continue // never remove an image we can't date (no label/tag CalVer)
+			if !c.okLabel && !c.okTag {
+				continue // never remove a tag we can't date (no label/tag CalVer)
 			}
-			if imageInUse(im, inUseIDs, inUseRefs) {
-				continue // referenced by a container/deploy
+			if c.inUse {
+				continue // image referenced by a container/deploy
 			}
-			for _, ref := range im.Names {
-				if dryRun {
-					removed = append(removed, ref)
-					continue
-				}
-				// rmi without -f refuses images still in use by a container —
-				// including "external"/build containers that `podman ps -a`
-				// doesn't list, which our imageInUse pre-check can't see. That
-				// refusal is the safety backstop: such images are correctly
-				// retained. Silent skip — in-use retention is expected, not an
-				// error worth per-image noise on every build.
-				if err := exec.Command(EngineBinary(engine), "rmi", ref).Run(); err != nil {
-					continue
-				}
-				removed = append(removed, ref)
+			if dryRun {
+				removed = append(removed, c.ref)
+				continue
 			}
+			// rmi WITHOUT -f untags this ref while other tags of a shared id
+			// survive; it also refuses an image still held by a build /
+			// "external" container our imageInUse pre-check can't see — the
+			// safety backstop. Silent skip — in-use retention is expected.
+			if err := exec.Command(EngineBinary(engine), "rmi", c.ref).Run(); err != nil {
+				continue
+			}
+			removed = append(removed, c.ref)
 		}
 	}
 	return removed, nil

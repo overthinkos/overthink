@@ -51,6 +51,56 @@ func TestPruneImagesByRetention(t *testing.T) {
 	}
 }
 
+// TestPruneImagesByRetention_SharedID is the regression guard for the
+// keep_images over-removal bug: a content-stable image rebuilt many times has
+// MANY CalVer tags all pointing at ONE image id. podman lists one row per tag,
+// each row's Names listing every tag — model that worst case (pre-dedup input)
+// to prove retention is per-TAG and never wipes the just-built/newest tag.
+func TestPruneImagesByRetention_SharedID(t *testing.T) {
+	origList, origCtr := ListLocalImages, listContainerImageRefs
+	defer func() { ListLocalImages, listContainerImageRefs = origList, origCtr }()
+
+	allTags := []string{
+		"ghcr/eval-pod:2026.150.827",
+		"ghcr/eval-pod:2026.150.830",
+		"ghcr/eval-pod:2026.150.835",
+		"ghcr/eval-pod:2026.150.836",
+		"ghcr/eval-pod:2026.150.916", // newest / just-built
+	}
+	rowPerTag := make([]LocalImageInfo, len(allTags))
+	for i := range allTags {
+		rowPerTag[i] = LocalImageInfo{
+			ID:    "ccc", // all five tags share ONE image id
+			Names: append([]string(nil), allTags...),
+			Labels: map[string]string{
+				"org.overthinkos.image":   "eval-pod",
+				"org.overthinkos.version": "2026.144.1443", // content-stable across tags
+			},
+		}
+	}
+	ListLocalImages = func(string) ([]LocalImageInfo, error) { return rowPerTag, nil }
+	listContainerImageRefs = func(string) (map[string]bool, map[string]bool, error) {
+		return map[string]bool{}, map[string]bool{}, nil
+	}
+
+	removed, err := pruneImagesByRetention("podman", 3, true)
+	if err != nil {
+		t.Fatalf("prune: %v", err)
+	}
+	sort.Strings(removed)
+	// keepN=3 keeps the newest 3 tags (.835/.836/.916); only the 2 oldest go.
+	want := []string{"ghcr/eval-pod:2026.150.827", "ghcr/eval-pod:2026.150.830"}
+	if len(removed) != len(want) || removed[0] != want[0] || removed[1] != want[1] {
+		t.Fatalf("removed = %v, want %v", removed, want)
+	}
+	// The just-built newest tag must NEVER be removed — this is the bug.
+	for _, r := range removed {
+		if r == "ghcr/eval-pod:2026.150.916" {
+			t.Fatalf("BUG: removed the newest/just-built tag %q", r)
+		}
+	}
+}
+
 func TestPruneImagesByRetention_Disabled(t *testing.T) {
 	called := false
 	origList := ListLocalImages

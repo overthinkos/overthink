@@ -22,6 +22,85 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-05
 
+### 2026-05-31 — CachyOS GPU workstation: remove Looking Glass; headless always-on display (no idle blank/lock); SPICE bed-only; SPICE eval-gating; selkies-frames GPU-gate
+
+The persistent GPU-passthrough CachyOS operator VM (`cachyos-gpu`) presented as
+"no output on the physical monitors". Root cause (`/ov-internals:root-cause-analyzer`):
+KDE's default idle power management DPMS-off'd AND RELEASED the physical RTX 4080
+HDMI heads after idle, and an input-less GPU-passthrough seat has no local
+keyboard/mouse to wake them — so the connected monitors stayed permanently dark.
+The same investigation established that the `looking-glass-host` layer can never
+capture headlessly on Wayland-only ov, and that the operator's virtio/SPICE head
+(a headless console) was being made the Plasma primary at `0,0`, displacing the
+panel and the real monitors.
+
+- **Looking Glass removed (cross-repo).** The `looking-glass-host` layer — and
+  its superseded graceful-skip wrapper `ov-lg-host-or-skip` (the prior
+  `v2026.150.2215` landing) — are DELETED (125 lines); the cachyos `@github`
+  `add_layer` references on BOTH the eval bed and the operator are removed; the
+  libvirt IVSHMEM `<shmem name='looking-glass'>` device is removed from both VM
+  entities; `nvidia-driver` drops the now-pointless `kvm` supplementary group
+  (only `/dev/kvmfr0` needed it). Every remaining comment / fixture / string
+  reference is scrubbed — R5 `git grep` for `looking-glass`/`kvmfr`/`LookingGlass`
+  returns only this file. RCA: Arch's `looking-glass-host` compiles ONLY the XCB
+  capture backend (needs an X11 root window — ov is Wayland-only) plus PipeWire
+  (which stalls on the KDE ScreenCast portal picker), so it can NEVER produce
+  frames headlessly. `service_render.go`'s `TestRenderServiceWantedBy` fixture was
+  renamed off the dead layer name to a generic `session-capture`.
+- **Headless always-on display** (`cachyos-kde-settings`, `2026.150.1339` →
+  `2026.151.0543`). Two coupled fixes written to the system KDE config dir
+  (`/etc/xdg`, since the deploy user has no `~/.config` override): (1) disable the
+  idle screen-LOCKER (`kscreenlockerrc` `Autolock=false`/`LockOnResume=false` — a
+  remote/passthrough seat has no keyboard to type an unlock password); (2) ship an
+  `ov-display-keepalive` user service running `kde-inhibit --power --screenSaver
+  sleep infinity` (`restart: always`), which holds a PowerManagement + ScreenSaver
+  inhibit so powerdevil never idle-DPMS-offs the heads. (`idleTime=0` was found to
+  mean "turn off IMMEDIATELY", not "never" — the inhibitor is the correct
+  mechanism.) Two new deploy-scope eval checks assert both
+  (`kscreenlocker-autolock-disabled`, `display-keepalive-active`).
+- **SPICE dropped from the operator (bed-only).** `cachyos-gpu` now declares
+  `video: [{model: none}]` / no `<graphics>` / no spicevmc channel — the
+  passed-through RTX 4080 drives the physical monitors directly over DRM, and
+  early-boot output is the serial console (`console=ttyS0`). SPICE + a virtio-gpu
+  head stay on the portable `cachyos-gpu-vm` eval bed only (no physical GPU →
+  needs a virtual head to screenshot). Removing the virtio head also eliminates
+  the spurious `Virtual-1` Plasma-primary at `0,0`.
+- **selkies-frames GPU-gate** (`cachyos-gpu-desktop-eval`, `2026.150.2056` →
+  `2026.151.0543`). The dead `looking-glass-guest` check (required
+  `looking-glass-host` + an IVSHMEM node) is removed. The `selkies-encoding-frames`
+  check still asserts selkies CAME UP (compositor socket + `:8081` + capture
+  journal) unconditionally, but only asserts `frames>0` (via `STATUS` on
+  `/tmp/ov-capture.sock`) when an `0x10de` device is present — pixelflux's
+  capture/encode is GPU-bound on this stack and never produces frames without a
+  card, so the frame assertion N/A's on a no-GPU host (matching the bed's portable
+  design).
+- **SPICE eval-gating** (ov, `evalrun_ov_verbs.go` + `vm_display_gate_test.go`).
+  `runOvVerb` now SKIPS a `spice`/`vnc` verb when the verb subprocess reports the
+  target VM declares no such display device (the VM-target resolver's own "VM
+  <name> has no SPICE graphics device declared in vm.yml" signal). The SHARED
+  `cachyos-gpu-desktop-eval` SPICE checks therefore N/A on the SPICE-less operator
+  while still asserting on the SPICE-having bed — ONE shared eval layer, no
+  operator/bed split (R3). Unit-tested with 6 cases (spice/vnc no-device → skip;
+  spice connected / non-display verb / empty stderr → no skip).
+- **R10.** `ov -C image/cachyos eval run eval-cachyos-gpu-vm` PASS on the real
+  RTX 4080 SUPER (in-guest `lspci`: `AD103 [GeForce RTX 4080 SUPER] [10de:2702]`
+  + its `[10de:22bb]` audio function; domain hostdev count 2) — 33/0/0 on both the
+  eval-live and the fresh-rebuild legs. A portable confirmatory re-run on the
+  FINAL code (with the gate) also passed 33/0/0 on both legs with 0 skipped — the
+  gate is a clean no-op on the SPICE-having bed. The operator `cachyos-gpu` was
+  recreated from clean and verified live (RTX heads `enabled`/`dpms=On`,
+  `ov-display-keepalive` running, locker disabled, KDE panels present on every
+  head, Looking Glass gone, selkies streaming) — `ov eval live cachyos-gpu` 28/0
+  with the 6 SPICE checks correctly N/A'd. Monitor + selkies
+  mouse/keyboard/screenshot demonstrated (ydotool→seat-0 + spectacle on the RTX
+  heads; the selkies capture bridge + nested-Plasma `kate`). `go test ./...` green.
+
+(The browser ScreenCast-portal mirror — streaming the SAME physical-monitor
+desktop to the selkies browser stream — is scoped as a separate follow-up effort:
+pixelflux is nested-only and cannot mirror seat-0, the headless portal-capture
+picker auto-accept is unproven, PipeWire was failing, and selkies currently
+CPU-encodes; none of that is landed here.)
+
 ### 2026-05-30 — cachyos GPU eval: `VM_HOSTDEV_COUNT` intent gate closes the silent-passthrough false-green
 
 A live `eval-cachyos-gpu-vm` bed run reported `PASS` while EVERY GPU check

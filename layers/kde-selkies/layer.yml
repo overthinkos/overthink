@@ -19,7 +19,7 @@ layer:
 
         This streamed Plasma is the pixelflux virtual-framebuffer session —
         intentionally distinct from the SDDM/Plasma DRM session that a physical
-        monitor + Looking Glass display on the real GPU output.
+        monitor displays on the real GPU output.
     require:
         - selkies
         - kde-desktop

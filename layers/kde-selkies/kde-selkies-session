@@ -5,7 +5,7 @@
 # pixelflux owns wayland-1; KWin/Plasma renders into it; pixelflux captures +
 # H.264/NVENC-encodes the composited frames. (This streamed session is the
 # pixelflux virtual framebuffer — distinct from the SDDM/Plasma DRM session a
-# physical monitor + Looking Glass show on the real GPU.)
+# physical monitor shows on the real GPU.)
 
 PIXELFLUX_SOCKET="${XDG_RUNTIME_DIR:-/tmp}/wayland-1"
 TIMEOUT=60

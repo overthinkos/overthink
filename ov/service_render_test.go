@@ -111,13 +111,12 @@ func TestRenderServiceCustomSystemd(t *testing.T) {
 
 // A user service with an explicit wanted_by must enable into THAT target
 // (graphical-session.target) rather than the user default — so a
-// graphical-session capture service (looking-glass-host) is pulled WITH the
-// logged-in session, not at early user-manager start (where the Wayland
-// display + ScreenCast portal don't yet exist and it fail-loops).
+// graphical-session-scoped service is pulled WITH the logged-in session, not at
+// early user-manager start (where the Wayland display doesn't yet exist).
 func TestRenderServiceWantedBy(t *testing.T) {
 	entry := &ServiceEntry{
-		Name:     "looking-glass-host",
-		Exec:     "/usr/bin/looking-glass-host",
+		Name:     "session-capture",
+		Exec:     "/usr/bin/session-capture",
 		Restart:  "always",
 		Scope:    "user",
 		Enable:   true,
@@ -125,7 +124,7 @@ func TestRenderServiceWantedBy(t *testing.T) {
 		WantedBy: []string{"graphical-session.target"},
 	}
 	rendered, err := RenderService(entry, testSystemdInitDef(), ServiceRenderContext{
-		Layer:       "looking-glass-host",
+		Layer:       "session-capture",
 		UserUnitDir: "/home/cachy/.config/systemd/user",
 	})
 	if err != nil {

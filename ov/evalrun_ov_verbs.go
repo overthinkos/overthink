@@ -1011,6 +1011,20 @@ func (r *Runner) runAppium(ctx context.Context, c *Check) EvalResult {
 // runOvVerb is the shared dispatch path: skip checks, method lookup,
 // argv building, subprocess exec, matcher pipeline, optional artifact size
 // assertion. Returns the EvalResult directly.
+// vmDisplayDeviceAbsent reports whether a VM-display verb (spice/vnc) failed
+// because the target VM declares no such display device — a legitimate N/A
+// SKIP, NOT a check failure. The cachyos-gpu operator drops SPICE (the
+// passed-through RTX heads ARE the display), so the SHARED
+// cachyos-gpu-desktop-eval SPICE checks skip on the operator while still
+// asserting on the disposable eval bed (which keeps a virtio/SPICE head) — one
+// shared layer, no operator/bed split (R3). The signal is the VM-target
+// resolver's own "VM <name> has no SPICE graphics device declared in vm.yml"
+// error (ov/vm_target.go), surfaced on the verb subprocess's stderr.
+func vmDisplayDeviceAbsent(verb, stderr string) bool {
+	return (verb == "spice" || verb == "vnc") &&
+		strings.Contains(stderr, "graphics device declared in vm.yml")
+}
+
 func (r *Runner) runOvVerb(ctx context.Context, c *Check, verb, method string, allowlist map[string]methodSpec) EvalResult {
 	if r.Mode == RunModeImage {
 		return skipf(c, fmt.Sprintf("%s: %s requires a running container (skip under ov eval image)", verb, method))
@@ -1105,6 +1119,13 @@ func (r *Runner) runOvVerb(ctx context.Context, c *Check, verb, method string, a
 	stdout, stderr, exit, execErr := runCaptureCmd(cmd)
 	if execErr != nil {
 		return failf(c, "%s: %s: execution error: %v", verb, method, execErr)
+	}
+	// Precondition-not-met gate: a VM-display verb run against a deployment that
+	// declares no such display device is N/A, not a failure (the SPICE-less
+	// cachyos-gpu operator vs the SPICE-having eval bed). See vmDisplayDeviceAbsent.
+	if vmDisplayDeviceAbsent(verb, stderr) {
+		return skipf(c, fmt.Sprintf("%s %s — N/A: deployment has no %s graphics device (SPICE-less GPU desktop)",
+			verb, method, strings.ToUpper(verb)))
 	}
 
 	wantExit := 0

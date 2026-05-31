@@ -36,7 +36,7 @@ user-only credential/permission, destructive action outside authorization,
 R10 failure needing redesign) — not context/scope/time/"handoff".
 
 Drive the existing `ov eval` beds to test/verify (eval-bed-runner +
-/verify-beds; deploy-verifier + /audit-deploy-configs). Running a bed is
-R10-class: the last step, never a parallel/background track, only on
-`disposable: true`, no scope-shrinking flags. See /ov-internals:agents.
+/verify-beds; deploy-verifier + /audit-deploy-configs). The COMMIT is gated on
+a full final-code bed test (pasted); run beds freely throughout to verify —
+only on `disposable: true`, no scope-shrinking flags. See /ov-internals:agents.
 EOF

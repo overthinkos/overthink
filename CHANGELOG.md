@@ -22,6 +22,65 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-05
 
+### 2026-05-31 — Agent teams enabled; bed-scoped parallel real-deployment testing; Hard-Cutover correction (the commit is the only gate)
+
+We wanted multiple Claude Code instances to develop and test different aspects
+of `ov` on real, live deployments **in parallel, without git-worktree
+overhead**, verifying empirically on `kind: eval` beds at every stage. Pursuing
+that surfaced a real over-reach in `CLAUDE.md`: the Hard-Cutover policy's
+"Premature R10 launch" prohibition read as if running `ov` commands mid-cutover
+was itself forbidden. It is not — the policy's sole legitimate purpose is to
+**gate the git commit behind a full live test of the FINAL code**. Running beds
+to *verify* during development is encouraged; it is the proactive twin of R1
+("verify before you change").
+
+- **Agent teams enabled in committed settings.** `.claude/settings.json` gains
+  `env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`, `teammateMode: "auto"`, and the
+  `TaskCreated` / `TaskCompleted` / `TeammateIdle` lifecycle hooks wired to a new
+  lean `team-coordination-reminder.sh` (a soft pointer, exit 0). The experimental
+  caveats stand (no in-process session resume, one team at a time, no nested
+  teams, fixed lead); enabling needs a `claude` restart because the `env` flag is
+  read at process start. The prior "not enabled in committed settings / opt-in
+  per session" framing in CLAUDE.md and the agents skill is gone.
+- **The eval bed is the unit of ownership + isolation — no worktree.**
+  `validateEvalBeds` already guarantees each `kind: eval` bed has a name disjoint
+  from every other deploy, `target ∈ {pod,vm,local}`, and `disposable: true`, so
+  distinct beds get distinct container/VM/image names + ports and run
+  concurrently and safely. A bed pins an image → layers → files, so owning a bed
+  owns those source files — exactly what a worktree would isolate. The lead
+  partitions the beds; each teammate is a bed-owner running its bed's full
+  `ov eval run <bed>` on a real deployment; the lead owns the single atomic
+  commit; teammates never commit/push.
+- **`verify-beds` de-serialized.** The workflow previously serialized pod/vm/kvm
+  beds and ran only no-build `local` beds concurrently, on the (unverified)
+  premise that "each bed run saturates the host (single-tenant KVM/libvirt)". KVM
+  and libvirt are multi-tenant, and podman builds distinct image tags
+  concurrently; that comment was over-caution and is deleted. All beds now run via
+  `parallel()`, bounded by the runtime's documented 16-concurrent / 1000-total
+  dynamic-workflow agent ceiling.
+- **Hard-Cutover correction — the commit is the only gate.** The "Premature R10
+  launch" forbid bullets, the "R10-class verbs are FORBIDDEN until every task is
+  done" workflow step, the "Premature R10 launch" anti-pattern, and the
+  "R10 is the last step and never a parallel/background track" binding rule are
+  rewritten throughout (CLAUDE.md, `runtime-verification-reminder.sh`, the agents
+  skill, `verify-beds.js`'s description, `eval-bed-runner.md`, the git-workflow
+  skill). The forbidden acts are now stated only about the COMMIT/CLAIM —
+  committing or claiming success on an intermediate state, faking the final test,
+  splitting a cutover across turns/sessions, inflating the attribution tier —
+  never about running `ov`. Law 5 is redefined: "the commit is gated on a full
+  final-code live test (pasted); beds run freely throughout to verify." Laws 4
+  (disposable-only) and 3.6 (no scope-shrinking flags) are unchanged.
+- **New `/triage-eval-failure <bed>` workflow** — competing-hypotheses RCA of a
+  failed bed run, each hypothesis validated on the live bed, adversarial
+  cross-check, converge, hand back a fix to re-run the real bed.
+- **`teammateMode: "auto"` correction.** An earlier draft proposed a
+  "host-aware cap `min(16, cores-2)`" for `parallel()`; there is no such term —
+  the real bound is the runtime's documented 16-concurrent agent ceiling. And
+  `teammateMode: "auto"` is already the default; it is committed for explicitness.
+
+Scope was docs + Claude Code config + hooks + skills only — no `ov` Go / layer /
+image / schema changes, so no `ov migrate` and no `LatestSchemaVersion()` bump.
+
 ### 2026-05-31 — CachyOS GPU workstation: remove Looking Glass; headless always-on display (no idle blank/lock); SPICE bed-only; SPICE eval-gating; selkies-frames GPU-gate
 
 The persistent GPU-passthrough CachyOS operator VM (`cachyos-gpu`) presented as

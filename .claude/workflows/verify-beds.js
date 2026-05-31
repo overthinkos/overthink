@@ -1,7 +1,7 @@
 export const meta = {
   name: 'verify-beds',
   description:
-    'R10 fan-out over the existing kind:eval disposable beds: run `ov eval run <bed>` to completion (build → eval image → deploy → eval live → fresh ov update → teardown) and aggregate a verbatim pass/fail report. This is the DEDICATED verification phase — run it AFTER every implementation task is complete, never as a parallel/background track during a cutover (CLAUDE.md Law 5). Each bed run saturates the host (image build, single-tenant KVM/libvirt), so only no-build local beds run concurrently; image-building pod beds and VM/KVM beds run sequentially.',
+    'Full-live-test commit-gate fan-out over the existing kind:eval disposable beds, also usable for continuous verification throughout development: run `ov eval run <bed>` to completion (build → eval image → deploy → eval live → fresh ov update → teardown) and aggregate a verbatim pass/fail report. ALL beds run in PARALLEL via parallel(), bounded by the runtime’s documented 16-concurrent / 1000-total dynamic-workflow agent ceiling — KVM/libvirt are multi-tenant and podman builds distinct image tags concurrently. Beds skipped for a missing host prereq (libvirt session for a vm bed, /dev/kvm for android) are logged, never silently dropped.',
   phases: [
     { title: 'Discover', detail: 'enumerate kind:eval beds + their target kind' },
     { title: 'Run beds', detail: 'ov eval run <bed> per bed; return verbatim verdict' },
@@ -72,13 +72,10 @@ if (!beds.length) {
   return { beds: [], note: 'no beds discovered' }
 }
 
-// Resource split: only no-build `local` beds run concurrently. Anything that
-// builds an image (`pod`) or uses single-tenant KVM/libvirt (`vm`, android)
-// runs sequentially to avoid build-cache/disk/KVM contention (R4).
-const isSerial = (b) => b.target === 'pod' || b.target === 'vm' || /android|kvm/i.test(b.bed)
-const serial = beds.filter(isSerial)
-const concurrent = beds.filter((b) => !isSerial(b))
-log(`Discovered ${beds.length} bed(s): ${concurrent.length} concurrent (local), ${serial.length} sequential (build/VM/KVM).`)
+// All beds run in PARALLEL. KVM and libvirt are multi-tenant; podman builds
+// distinct image tags concurrently. Simultaneity is bounded by the runtime's
+// documented 16-concurrent dynamic-workflow agent ceiling, which queues excess.
+log(`Discovered ${beds.length} bed(s): running all in parallel (bounded + queued by the 16-concurrent runtime ceiling).`)
 
 const runBed = (b) =>
   agent(
@@ -87,13 +84,7 @@ const runBed = (b) =>
   )
 
 phase('Run beds')
-const concurrentResults = concurrent.length ? await parallel(concurrent.map((b) => () => runBed(b))) : []
-const serialResults = []
-for (const b of serial) {
-  serialResults.push(await runBed(b))
-}
-
-const all = [...concurrentResults, ...serialResults].filter(Boolean)
+const all = (await parallel(beds.map((b) => () => runBed(b)))).filter(Boolean)
 const passed = all.filter((r) => r.ok && !r.skippedPrereq)
 const failed = all.filter((r) => !r.ok && !r.skippedPrereq)
 const skipped = all.filter((r) => r.skippedPrereq)

@@ -228,22 +228,12 @@ un-testable. That is FORBIDDEN.**
   cannot resolve that requires user input, or (b) the plan contradicts
   itself, CLAUDE.md, or a loaded skill — in either case STOP and ask,
   do NOT silently downgrade scope or commit a partial state.
-- **Premature R10 launch.** Starting any LIVE artifact-producing or
-  artifact-consuming command — `ov update`, `ov image build`,
-  `ov eval run`, `ov vm build/create`, `ov deploy add` against a
-  live target — while ANY implementation task in the active cutover is
-  still `pending` or `in_progress`. R10 runs ONCE, AT THE END, against
-  the FINAL code. Kicking off a rebuild "in background while I finish
-  task X" is INEXCUSABLE: it burns minutes-to-hours of compute on an
-  artifact that MUST be discarded the moment the next implementation
-  task lands, and it tempts the second-order violation of committing
-  the half-migrated state because "the rebuild already passed". The
-  ONLY between-task verifications permitted are cheap smoke (compile,
-  unit tests, schema validation) — anything that requires building or
-  running a live artifact is R10-class and FORBIDDEN until every
-  implementation task is `completed`. If you catch yourself with a
-  live rebuild running while tasks remain open: KILL the job, reset
-  R10 to pending, finish the implementation, THEN run R10 once.
+- **Authorizing a commit from an intermediate-state run.** The commit is
+  gated on the full live test of EVERYTHING against the FINAL code, pasted. A
+  bed run that passes on an *intermediate* state does NOT authorize a commit —
+  only the full final-code live test does. (Running the beds on intermediate
+  states to *verify* is encouraged; see the permits list. What is forbidden is
+  treating such a run as the commit gate.)
 
 **What this policy permits — equally precisely:**
 
@@ -254,6 +244,13 @@ un-testable. That is FORBIDDEN.**
 - **Transitional aliases / legacy-accepting paths DURING implementation.**
   Every one of them is DELETED before the cutover ends — but they can
   exist mid-flight to simplify the refactor.
+- **Running `ov` to verify, at any stage, as often as useful.**
+  `ov image build`, `ov update`, `ov eval run`, `ov vm create`, `ov start`
+  against a `disposable: true` target — in parallel or in the background — are
+  ENCOURAGED throughout the cutover. **Verify before you change** (the
+  proactive twin of R1): validate every assumption + error diagnosis on a live
+  bed BEFORE editing, so you are never disproven hours later. Only the COMMIT
+  is gated (on the full final-code test); running the beds to verify is not.
 - **Cheap smoke-confirmation between tasks.** Running `go build` or
   `go test` after each task is good hygiene. It is NOT the acceptance
   gate. The acceptance gate is the FULL-STACK R10 run against the final
@@ -283,15 +280,16 @@ introduced unseen regressions and flushes them out.
    Transitional aliases / legacy-accepting paths are fine DURING
    implementation, but every one of them is DELETED before the end of the
    same cutover.
-3. **Cheap smoke between tasks is fine; R10-class verbs are FORBIDDEN
-   until every task is done.** Cheap smoke = `go build`, `go test`,
-   `ov image validate`, `ov image generate --dry-run`. R10-class verbs =
-   `ov image build`, `ov update`, `ov deploy add` against a live target,
-   `ov vm create` of a real VM, `ov eval run`, `ov update`, `ov start`
-   against a real container/VM. The first time any R10-class verb runs
-   is the dedicated end-of-cutover R10 round. Running one earlier burns
-   cycles on artifacts the next task obsoletes AND tempts the second-order
-   violation of committing a half-migrated state because "it built."
+3. **Verify continuously; the commit gate is the full final-code test.**
+   Run `ov` commands freely throughout — `ov image build`, `ov update`,
+   `ov deploy add`, `ov vm create`, `ov eval run`, `ov start` against a
+   `disposable: true` target — at any stage, in parallel or in the
+   background, to validate assumptions and diagnose errors BEFORE you edit
+   (the proactive twin of R1). What the COMMIT is gated on is the full live
+   test of EVERYTHING against the FINAL code (pasted): a run that passes on
+   an intermediate state never authorizes a commit. Cheap smoke (`go build`,
+   `go test`, `ov image validate`) is good hygiene between tasks but is NOT
+   the gate.
 4. **Full R10 test AFTER all code changes are implemented.** Unit tests,
    live build, live deploy to a `disposable: true` target, fresh-rebuild
    re-verification. The tests run against the FINAL code, not an
@@ -338,12 +336,11 @@ command surface.
   requires image builds".
 - Declaring any confidence higher than `syntax check only` without a
   fresh-rebuild R10 re-verification on every affected target.
-- **Premature R10 launch — starting `ov update`, `ov image build`,
-  `ov eval run`, `ov vm build`, or any live deploy with implementation
-  tasks still open in the cutover.** R10 is the final gate, not a parallel
-  track. Backgrounding the rebuild "while finishing task N" is INEXCUSABLE
-  — every R10-class action you start before the LAST task completes is a
-  protocol violation from the first tool call.
+- **Committing — or claiming the cutover done — on the strength of an
+  intermediate-state bed run.** The commit is gated on the full final-code
+  live test (pasted); a run that passed before the last task landed does not
+  authorize it. (Running the beds throughout to *verify* is encouraged — only
+  the commit is gated, never the act of running `ov`.)
 - **Classifying a surfaced issue as "pre-existing" / "unrelated" / "out
   of scope" / "follow-up PR" / "tracked separately".** R2 forbids this
   absolutely — every issue surfaced during the active cutover is fixed
@@ -502,8 +499,19 @@ Before declaring the turn done, every YES:
 Overthink is built to be driven from Claude Code's multi-agent primitives —
 **sub-agents** (`plugins/internals/agents/*.md`), **dynamic workflows**
 (`.claude/workflows/*.js`, run `/<name>`), and **agent teams** (experimental,
-opt-in via `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`). Full reference:
-`/ov-internals:agents`. This is the brief.
+**enabled in the committed `.claude/settings.json`** via
+`env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`; experimental caveats remain — no
+in-process session resume, one team at a time, no nested teams, fixed lead).
+Full reference: `/ov-internals:agents`. This is the brief.
+
+**Teams test in parallel on real deployments — the eval bed is the unit of
+ownership.** The lead partitions the `kind: eval` beds so no two teammates own
+the same bed; distinct beds have disjoint container/VM/image names + ports
+(`validateEvalBeds` guarantees it), so they run concurrently and safely with no
+worktree. Each teammate runs its own bed's full `ov eval run <bed>` on a real
+deployment and **verifies before it changes** (validate assumptions on a live
+bed before editing). One cutover stays one phase / one commit, owned by the
+lead; teammates never commit or push independently.
 
 **Agent roster** — *executors* run `ov eval` and return verbatim proof:
 `eval-bed-runner` (runs `ov eval run <bed>` — the R10 acceptance executor),
@@ -518,7 +526,8 @@ R10 gate; `/audit-deploy-configs [target …]` evaluates deploy configs
 
 **Binding rule — running a bed is R10-class.** Any agent or workflow that runs
 `ov eval run <bed>` / `ov update` obeys: disposable-only authorization (Law 4),
-R10 is the last step and never a parallel/background track (Law 5), no
+the commit is gated on a full final-code live test that is pasted (Law 5) —
+beds run freely throughout to verify; only the commit is gated — no
 scope-shrinking flags (Law 3.6), and **paste-proof survives delegation** — the
 executor returns the verbatim verdict + exit code, and the delegating agent
 PASTES it (a delegated bed run whose failure is summarized away is fraud).

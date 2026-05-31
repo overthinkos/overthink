@@ -395,3 +395,38 @@ func TestValidateTests_Clean(t *testing.T) {
 		t.Errorf("clean fixture produced errors: %s", got)
 	}
 }
+
+// Lowercase ${...} in a k8s identifier field is rejected — eval variables are
+// UPPERCASE, so a lowercase token never resolves and reaches the verb literally
+// (the k3s-server "cluster: ${deploy_name}" class of bug). Uppercase is accepted,
+// and a lowercase ${var} in a shell command body is NOT flagged (legit bash var).
+func TestValidateTests_LowercaseEvalVarInClusterField(t *testing.T) {
+	cfg := &Config{Image: map[string]ImageConfig{}}
+
+	bad := map[string]*Layer{
+		"lyr": {Name: "lyr", tests: []Check{
+			{K8s: "addons", Cluster: "${deploy_name}", Scope: "deploy"},
+		}},
+	}
+	if got := runValidateTests(t, cfg, bad); !strings.Contains(got, "UPPERCASE") || !strings.Contains(got, "${deploy_name}") {
+		t.Errorf("expected lowercase-eval-var rejection: %s", got)
+	}
+
+	ok := map[string]*Layer{
+		"lyr": {Name: "lyr", tests: []Check{
+			{K8s: "addons", Cluster: "${DEPLOY_NAME}", Scope: "deploy"},
+		}},
+	}
+	if got := runValidateTests(t, cfg, ok); strings.Contains(got, "UPPERCASE") {
+		t.Errorf("uppercase eval var should pass: %s", got)
+	}
+
+	shell := map[string]*Layer{
+		"lyr": {Name: "lyr", tests: []Check{
+			{Command: `for v in ${name}; do echo "$v"; done`, Scope: "deploy"},
+		}},
+	}
+	if got := runValidateTests(t, cfg, shell); strings.Contains(got, "UPPERCASE") {
+		t.Errorf("lowercase shell var in command must NOT be flagged: %s", got)
+	}
+}

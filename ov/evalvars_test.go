@@ -234,3 +234,26 @@ func TestResolver_EndToEndExpansion(t *testing.T) {
 type errStub string
 
 func (e errStub) Error() string { return string(e) }
+
+// DEPLOY_NAME is seeded (sanitized) in the runtime resolver so deploy-scope
+// checks can address their own cluster via cluster: "${DEPLOY_NAME}" — the
+// k3s-server fix. A colon-prefixed VM deploy name is sanitized identically to
+// K3sPostProvision's ClusterProfile naming (vm:k3s-vm -> vm-k3s-vm).
+func TestResolveTestVarsRuntime_DeployName(t *testing.T) {
+	origInspect := InspectContainer
+	defer func() { InspectContainer = origInspect }()
+	InspectContainer = func(engine, name string) (*ContainerInspection, error) {
+		return &ContainerInspection{Name: "/ov-x"}, nil
+	}
+	r, err := ResolveEvalVarsRuntime(&ImageMetadata{Image: "x"}, nil, "podman", "redis-ml", "ov-x", "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := r.Env["DEPLOY_NAME"]; got != "redis-ml" {
+		t.Errorf("DEPLOY_NAME = %q, want redis-ml", got)
+	}
+	r2, _ := ResolveEvalVarsRuntime(&ImageMetadata{Image: "x"}, nil, "podman", "vm:k3s-vm", "ov-x", "")
+	if got := r2.Env["DEPLOY_NAME"]; got != "vm-k3s-vm" {
+		t.Errorf("DEPLOY_NAME = %q, want vm-k3s-vm", got)
+	}
+}

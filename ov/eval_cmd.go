@@ -432,6 +432,12 @@ func (c *EvalLiveCmd) runVm() error {
 		// zero the running count and re-mask the exact failure this guards
 		// against (the eval-cachyos-gpu-vm false-green that motivated this var).
 		"VM_HOSTDEV_COUNT": strconv.Itoa(vmHostdevCount(spec)),
+		// DEPLOY_NAME — the sanitized VM deploy name (vm:<vmName> -> vm-<vmName>),
+		// the SAME identifier `ov deploy add vm:<vmName>` feeds to K3sPostProvision
+		// for the kubeconfig context + ClusterProfile. Lets a layer's deploy-scope
+		// k8s checks address their own cluster generically via cluster:
+		// "${DEPLOY_NAME}" instead of hard-coding the bed's cluster name.
+		"DEPLOY_NAME": sanitizeDeployName("vm:" + vmName),
 	}
 	resolver := &EvalVarResolver{Env: env, HasRuntime: true}
 

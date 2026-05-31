@@ -1,5 +1,5 @@
 layer:
-    version: 2026.144.1443
+    version: 2026.151.1142
     name: k3s-server
     description: k3s control-plane (server) node — ships with ServiceLB, Traefik, local-path-provisioner enabled by default
     require:
@@ -183,7 +183,7 @@ layer:
 
           scope: deploy
           k8s: wait-nodes
-          cluster: "${deploy_name}"
+          cluster: "${DEPLOY_NAME}"
           k8s_count: 1
           timeout: 180s
           stdout:
@@ -191,18 +191,18 @@ layer:
         - id: traefik-ingressclass-default
           scope: deploy
           k8s: ingressclass
-          cluster: "${deploy_name}"
+          cluster: "${DEPLOY_NAME}"
           stdout:
             contains: "traefik"
         - id: local-path-storageclass-default
           scope: deploy
           k8s: storageclass
-          cluster: "${deploy_name}"
+          cluster: "${DEPLOY_NAME}"
           stdout:
             contains: "local-path"
         - id: addons-healthy
           scope: deploy
           k8s: addons
-          cluster: "${deploy_name}"
+          cluster: "${DEPLOY_NAME}"
           timeout: 240s
           exit_status: 0

@@ -130,6 +130,15 @@ func ResolveEvalVarsRuntime(meta *ImageMetadata, deploy *DeploymentNode, engine,
 	_ = deploy // reserved for future per-deploy overrides; instance now arrives explicitly
 	env := buildTimeVars(meta, instance)
 
+	// DEPLOY_NAME — the sanitized name of the deployment under eval, the same
+	// identifier K3sPostProvision uses for the kubeconfig context + ClusterProfile
+	// (sanitizeDeployName collapses ':'/'.'/'/'-> '-'). Deploy-scope checks address
+	// their own cluster generically via cluster: "${DEPLOY_NAME}". Runtime-only
+	// (see runtimeOnlyVarPrefixes) so it is never offered to build-scope checks.
+	if deployName != "" {
+		env["DEPLOY_NAME"] = sanitizeDeployName(deployName)
+	}
+
 	inspection, err := InspectContainer(engine, containerName)
 	if err != nil {
 		return &EvalVarResolver{Env: env, HasRuntime: false}, err

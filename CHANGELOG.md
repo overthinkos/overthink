@@ -22,6 +22,44 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-05
 
+### 2026-05-31 — k3s-server eval checks: `${DEPLOY_NAME}` eval var (fix un-expandable cluster token)
+
+The `eval-k3s-vm` R10 bed failed 4 of 20 eval-live checks: the `k3s-server`
+layer's deploy-scope k8s checks authored `cluster: "${deploy_name}"`, but the
+eval-var expander (`testVarRefPattern`, `ov/evalspec.go`) recognizes only
+UPPERCASE names, so the lowercase token passed through literally as
+`--cluster '${deploy_name}'`, resolved to no ClusterProfile (empty kubeconfig →
+"no configuration has been provided / KUBERNETES_MASTER"), and the checks failed.
+The bed's own baked checks hard-coded `cluster: "vm-k3s-vm"` and passed, masking
+the layer-check failure. Surfaced by the agent-team bed smoke and root-caused by
+`/ov-internals:root-cause-analyzer`; landed as its OWN cutover (operator-rescoped,
+separate from the agent-teams docs change that surfaced it).
+
+- **`DEPLOY_NAME` is now a first-class runtime-only eval var.** Added to
+  `runtimeOnlyVarPrefixes` (`ov/evalspec.go`) and seeded — sanitized via
+  `sanitizeDeployName` (`:`/`.`/`/` → `-`) — in both `ResolveEvalVarsRuntime`
+  (`ov/evalvars.go`, pod/local path) and `runVm` (`ov/eval_cmd.go`, as
+  `sanitizeDeployName("vm:"+vmName)`). It resolves to the SAME identifier
+  `K3sPostProvision` uses for the kubeconfig context + ClusterProfile, so a
+  layer's deploy-scope k8s checks address their own cluster generically. This is
+  a generic eval-resolver feature, not a k3s-specific patch.
+- **`layers/k3s-server/layer.yml`**: the 4 `cluster:` fields → `${DEPLOY_NAME}`
+  (the artifact `retrieve_to:` keeps lowercase `${deploy_name}` — a separate,
+  artifact-path expander, `expandArtifactVars`). Layer `version:` bumped.
+- **Validator guard (R3 — prevents recurrence).** `ov image validate` now rejects
+  a lowercase `${...}` token in the k8s / resource-identity eval fields (cluster,
+  name, namespace, label, kubeconfig, k8s_context, k8s_resource, k8s_group,
+  k8s_version, manifest) — the class of bug that previously passed both validate
+  AND runtime. Scoped to CLI-arg identifier fields, so shell `command:` bodies
+  (legitimate bash vars) and cdp `expression:` (JS template literals) are
+  untouched.
+- Skill `eval-k8s` example updated to `${DEPLOY_NAME}` + an explanatory note; Go
+  tests added (the validator guard, `DEPLOY_NAME` seeding + sanitization, the
+  runtime-only classification).
+
+R10: `ov eval run eval-k3s-vm` → exit 0, **20/20** (was 16/20), the full sequence
+including the fresh `ov update` re-verification gate.
+
 ### 2026-05-31 — Agent teams enabled; bed-scoped parallel real-deployment testing; Hard-Cutover correction (the commit is the only gate)
 
 We wanted multiple Claude Code instances to develop and test different aspects

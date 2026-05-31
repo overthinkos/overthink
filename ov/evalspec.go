@@ -767,6 +767,11 @@ var runtimeOnlyVarPrefixes = []string{
 	// only against a live VM deployment (eval_cmd.go VM path), so a build-scope
 	// check must not reference it.
 	"VM_HOSTDEV_COUNT",
+	// The sanitized deploy name of the deployment under eval — the same value
+	// K3sPostProvision uses for the kubeconfig context + ClusterProfile name, so
+	// a deploy-scope k8s check can address its own cluster generically via
+	// cluster: "${DEPLOY_NAME}". Resolved only against a live deployment.
+	"DEPLOY_NAME",
 }
 
 // IsRuntimeOnlyVar reports whether the given variable key (as returned by

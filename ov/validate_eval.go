@@ -2,11 +2,19 @@ package main
 
 import (
 	"fmt"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 )
+
+// lowercaseEvalVarPattern matches a ${name} token whose identifier begins with a
+// lowercase letter. The eval-var expander (testVarRefPattern in evalspec.go) only
+// recognizes UPPERCASE names, so such a token is never substituted — it reaches
+// the verb literally. Used by validateCheck to reject it in pure-identifier eval
+// fields (k8s/resource modifiers), catching the k3s-server `${deploy_name}` class.
+var lowercaseEvalVarPattern = regexp.MustCompile(`\$\{[a-z][a-zA-Z0-9_]*\}`)
 
 // validateTests checks every declarative test spec in the project for
 // authoring errors before build time. Hooked into ov image validate.
@@ -103,6 +111,26 @@ func validateCheck(c *Check, loc, effectiveScope string, errs *ValidationError) 
 			if IsRuntimeOnlyVar(r) {
 				errs.Add("%s: references runtime-only variable ${%s} but scope is build — mark as scope: deploy or use scope:deploy-only attributes", loc, r)
 			}
+		}
+	}
+
+	// Lowercase ${...} in a pure-identifier eval field is NEVER an eval variable:
+	// the eval-var expander (testVarRefPattern) only recognizes UPPERCASE names,
+	// so a lowercase token is silently passed through literally and reaches the
+	// verb as the string "${...}" (the k3s-server `cluster: "${deploy_name}"`
+	// class of bug — it passed both validate and runtime, resolving to no cluster).
+	// Scoped to the k8s/resource-identity modifiers, which are CLI-arg identifiers
+	// passed to `ov eval k8s` — never a shell body (cmd:) or JS (cdp expression:),
+	// where a lowercase ${var} is legitimate. Did you mean an UPPERCASE eval var
+	// (e.g. ${DEPLOY_NAME})?
+	for _, f := range []struct{ label, val string }{
+		{"cluster", c.Cluster}, {"name", c.Name}, {"namespace", c.Namespace},
+		{"label", c.Label}, {"kubeconfig", c.Kubeconfig}, {"k8s_context", c.K8sContext},
+		{"k8s_resource", c.K8sResource}, {"k8s_group", c.K8sGroup},
+		{"k8s_version", c.K8sVersion}, {"manifest", c.Manifest},
+	} {
+		if m := lowercaseEvalVarPattern.FindString(f.val); m != "" {
+			errs.Add("%s: %s contains %s — eval variables are UPPERCASE (e.g. ${DEPLOY_NAME}); a lowercase ${...} never resolves and is passed through literally", loc, f.label, m)
 		}
 	}
 

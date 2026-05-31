@@ -568,3 +568,11 @@ signal: KILL
 		t.Errorf("Kind() = %q, want %q", kind, "kill")
 	}
 }
+
+// DEPLOY_NAME is deploy-scope (resolved only against a live deployment), so a
+// build-scope check referencing it must be rejected by the validator.
+func TestIsRuntimeOnlyVar_DeployName(t *testing.T) {
+	if !IsRuntimeOnlyVar("DEPLOY_NAME") {
+		t.Error("DEPLOY_NAME must be runtime-only")
+	}
+}

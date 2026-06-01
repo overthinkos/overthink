@@ -22,6 +22,61 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-01 — engineering-discipline policy: blocking vs non-blocking issue handling + long-running-eval-bed guidance
+
+Two engineering-discipline policies were refined after a four-substrate R10 run
+and a multi-agent merge/push audit exposed where the existing wording fell short.
+
+**Blocking vs non-blocking surfaced issues (R2 refinement).** R2 forbade every
+"pre-existing / out-of-scope / follow-up PR" deferral. It now names the ONE
+legitimate way an issue leaves the current cutover: classify each surfaced issue
+as BLOCKING (the current change is incorrect/incomplete/unsafe without it → fix
+in the SAME working tree, prove under the CURRENT cutover's R10) or NON-BLOCKING
+(the current change is correct AND complete without it, and the issue is
+genuinely separable → fix it immediately as its OWN cutover with its OWN full
+R10, opened the moment the current cutover is R10-passed and committed). The
+non-blocking path is NOT the forbidden "someday follow-up": it is a distinct
+change, done now, fully verified, with no window of unverified brokenness on
+`main`. The discriminator is whether shipping the current cutover without the fix
+would leave the tree correct and the cutover's claim true (unsure → blocking).
+Mislabeling a blocking issue "non-blocking", or carving one change's own scope
+into two, remains the forbidden split. Landed in CLAUDE.md R2 +
+`/ov-internals:strict-policy` (R2 third path) + `/ov-internals:cutover-policy`
+(new "Blocking vs non-blocking surfaced issues" section, reconciled with the
+no-author-it-as-two-plans rule).
+
+**Long-running-eval-bed guidance (correction of a disproven draft).** A draft
+rule had prescribed that a long bed is "ALWAYS delegated to a TEAMMATE; the LEAD
+does NOT run long beds." A four-substrate R10 run disproved it: teammates
+orphaned both long beds (a teammate's `run_in_background` process tree is torn
+down when the teammate goes idle — no clean exit, no re-invoke), while the
+persistent main session ran all four beds to completion as harness-tracked
+background tasks. The rule is replaced with guidance framed by MECHANISM rather
+than by who owns the run: a long bed (VM/emulator — `eval-k3s-vm`,
+`eval-android-emulator-pod`, the bootstrap-VM beds) (1) launches as a
+harness-tracked `run_in_background` task — never foreground (the Bash 120s/600s
+timeout kills it mid-`vm-create`) and never a sleep/poll loop (the R4 bandaid);
+(2) is driven by the completion notification, so its owner must be a session that
+SURVIVES to completion to be re-invoked — the persistent main session does; an
+ephemeral sub-agent (returns synchronously) and an idle teammate (torn down on
+idle) do not; (3) is reconnected to via durable state (`.eval/<bed>/<calver>/`
+`summary.yml` + the live domain), never a held process handle. "Prefer agents"
+now carries this one explicit exception for long-running work. Landed in CLAUDE.md
+"Agents, Workflows & Teams" + `/ov-internals:agents` (binding rule + preference) +
+`/ov-eval:eval` (long-bed section).
+
+**Docs/policy-only attribution provision.** The AI Attribution table is
+runtime-defined, so a documentation-only cutover (no Go/YAML/image/runtime
+surface) had no tier it could honestly claim — `fully tested and validated`
+requires R10 beds that do not exist for docs, and `syntax check only` is paired
+with "do NOT commit; STOP and ask". The section now states that a docs/policy-only
+cutover is validated by the applicable non-runtime standards (adversarial
+consistency review, the R5 grep self-test, cross-reference validation, markdown
+integrity, the pre-commit/pre-push gates) and earns `fully tested and validated`
+when all of them pass; the `syntax check only → do NOT commit` clause is scoped to
+code with a pending R10. This cutover is itself the first docs-only cutover landed
+under the provision.
+
 ### 2026-06-01 — `ov eval` in-container `command:` stdin guard + first-class `adb` UI readiness verbs
 
 Two `ov eval` framework defects surfaced while hardening the

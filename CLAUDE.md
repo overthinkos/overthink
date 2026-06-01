@@ -101,7 +101,7 @@ These rules exist because (a) failing tests have been deferred as 'pre-existing'
 
 - **R1. Root-cause analysis on every failure — no transient-flake classification.** Every failure, error, anomaly, or warning surfaced by ANY tool (build, test, validator, runtime, eval, deploy, lint, hook) triggers IMMEDIATE invocation of `/ov-internals:root-cause-analyzer` BEFORE any remediation attempt. Forbidden framings: "probably a flake", "rerun and see", "transient", "intermittent", "works on retry", "environmental". The first occurrence is the investigation trigger; there is no second-occurrence threshold. If the analyzer concludes the root cause is genuinely external (network partition, upstream outage), the conclusion is documented in the conversation with evidence — never assumed. Blind retry of a failed command is itself a violation. **A warning is not a pass:** R10 is successful ONLY at ZERO warnings (resolver newest-wins, build, `ov image validate`, `ov eval`, deploy). Every warning is fixed before R10 passes — a version-mismatch warning is cleared with `ov image reconcile`; any other warning triggers the analyzer then a real fix. A surviving warning is an R10 failure, never an accepted end state. See `/ov-internals:strict-policy`.
 
-- **R2. No "pre-existing" / "out of scope" / "unrelated" / "follow-up PR" classifications.** Every issue surfaced during the active cutover — failing test, validator warning, runtime crash, deprecated-marker hit, dead-code reference, stale doc paragraph — is fixed in the SAME working tree as the cutover, OR escalated to the operator for explicit re-scoping. The classifications "pre-existing", "unrelated to this change", "out of scope", "follow-up PR", "tracked separately", "we'll get to it later" are FORBIDDEN. (See `CHANGELOG.md` for the incident that motivated this rule.) See `/ov-internals:strict-policy`.
+- **R2. No "pre-existing" / "out of scope" / "unrelated" / "follow-up PR" classifications.** Every issue surfaced during the active cutover — failing test, validator warning, runtime crash, deprecated-marker hit, dead-code reference, stale doc paragraph — is fixed in the SAME working tree as the cutover, OR escalated to the operator for explicit re-scoping. The classifications "pre-existing", "unrelated to this change", "out of scope", "follow-up PR", "tracked separately", "we'll get to it later" are FORBIDDEN. **Blocking vs non-blocking — the ONE legitimate way an issue leaves the current cutover.** Classify every surfaced issue. A **blocking** issue — the current change is incorrect, incomplete, or unsafe without it — is fixed in the SAME working tree and proved under the CURRENT cutover's R10. A **non-blocking** issue — the current change is correct AND complete without it, and it is genuinely separable from this change — is STILL fixed immediately, but as its OWN cutover with its OWN full R10, opened the moment the current cutover is R10-passed and committed; it is NEVER parked as an indefinite "follow-up / someday" (that stays forbidden). The discriminator: *would shipping the current cutover WITHOUT this fix leave the tree correct and the cutover's claim true?* Yes → non-blocking (its own immediate-next cutover); No → blocking (this cutover); unsure → treat as blocking. **Objective test for "separable":** the current cutover's OWN R10 (its eval-coverage + fresh-rebuild) passes and proves the cutover's claim WITHOUT the fix — the fix is neither exercised by nor changes the verdict of this cutover's test coverage; a fix that would alter this cutover's R10 result or eval-coverage gate is BLOCKING. Mislabeling a blocking issue "non-blocking" to ship faster, or carving the current change's OWN scope into two, is the forbidden split — a genuinely separate concern getting its own cutover is not. (See `CHANGELOG.md` for the incident that motivated this rule.) See `/ov-internals:strict-policy`.
 
 - **R3. No code duplication; generic, reusable solutions over ad-hoc patches.** On the FIRST surface where the same pattern, predicate, filter, transform, or guard appears in two places, refactor to ONE shared abstraction in the SAME working tree. Sibling-layer naming (`<name>-host`, `<name>-pod`), parallel filter functions, and per-call-site re-implementations of the same predicate are FORBIDDEN. Every fix MUST apply cleanly to ALL surfaces it logically covers, not just the surface that prompted the report. Generic > ad-hoc, every time. (See `CHANGELOG.md` for the worked examples that motivated this rule.) See `/ov-internals:strict-policy`.
 
@@ -466,10 +466,18 @@ signal. The plan is not done.
 
 ### What is NOT post-execution
 
-- **Starting the next cutover.** Each cutover ends with the commit.
-  Picking up "the next thing on the plan that didn't fit" is FORBIDDEN
-  — it would create another mid-cutover state. If there is more work,
-  the user authorizes a NEW plan.
+- **Starting the next cutover from leftover plan scope.** Each cutover
+  ends with the commit. Picking up "the next thing on the plan that
+  didn't fit" is FORBIDDEN — it would create another mid-cutover state.
+  For net-new work the cutover did NOT surface, the user authorizes a
+  NEW plan. **The ONE exception is a genuinely-separate NON-BLOCKING
+  issue this cutover itself surfaced (R2):** the AI opens it as its own
+  immediate-next cutover — own full R10, own atomic commit — without
+  waiting for re-authorization, because the standing R2 policy already
+  authorizes addressing surfaced non-blocking issues immediately. That
+  autonomy is scoped to issues THIS cutover surfaced, each itself fully
+  R10'd before its commit (no half-states, no cascade into net-new
+  exploration); a blocking issue is fixed IN the current cutover.
 - **Backporting / cherry-picking.** Out of scope for the post-
   execution flow. If needed, the user opens a follow-up.
 - **Documenting "what would have been Phase 2".** The cutover either
@@ -504,6 +512,24 @@ Overthink is built to be driven from Claude Code's multi-agent primitives —
 in-process session resume, one team at a time, no nested teams, fixed lead).
 Full reference: `/ov-internals:agents`. This is the brief.
 
+**Prefer agents over background tasks — everything that CAN run as an agent SHOULD
+run as an agent.** When a unit of work can be done by an addressable,
+operator-visible **sub-agent** or **agent-team teammate**, use that — never an
+opaque background workflow. **Team agents are the DEFAULT for parallel work** (the
+operator watches and messages them live). A background dynamic workflow
+(`Workflow` tool) is a LAST RESORT, reserved for deterministic scripted control
+flow (loops / conditionals / large fan-out) that a team genuinely cannot express —
+and even then it surfaces its work as agents and obeys the same bed-scoped
+discipline. Operator-facing agents > opaque background tasks, always; visibility
+and interactive control are the point. **The one exception is long-running
+work that outlives a single turn** (a VM/emulator eval bed): no agent can
+reliably hold it — a sub-agent returns synchronously (its background children
+die on return) and a teammate is torn down on idle — so it runs as a
+harness-tracked background task owned by the persistent session, driven by the
+completion notification (see "Handling a long-running eval bed" below). "Prefer
+agents" governs BOUNDED work; long-running work uses the
+background-task-plus-notification mechanism, not a who-owns-it rule.
+
 **Teams test in parallel on real deployments — the eval bed is the unit of
 ownership.** The lead partitions the `kind: eval` beds so no two teammates own
 the same bed; distinct beds have disjoint container/VM/image names + ports
@@ -512,6 +538,23 @@ worktree. Each teammate runs its own bed's full `ov eval run <bed>` on a real
 deployment and **verifies before it changes** (validate assumptions on a live
 bed before editing). One cutover stays one phase / one commit, owned by the
 lead; teammates never commit or push independently.
+
+**Dynamic workflows that IMPLEMENT a cutover obey the SAME bed-scoped discipline
+as teams — not optional.** A workflow that fans implementation out across
+`agent()` calls MUST partition the parallel work by `kind: eval` bed (one
+disjoint disposable bed per parallel owner), each owner **verifying before it
+changes** and running its bed's real `ov eval run <bed>` — eval-testing at EVERY
+stage of development, never deferred to the end. Read-only diff review is an
+ADDITIONAL adversarial layer, NEVER a substitute for real-deployment bed testing;
+a workflow that swaps bed runs for code review is a protocol violation. Single-Go-
+package compile-coherence is handled STRUCTURALLY — the lead lands the shared core
+FIRST, each parallel unit is an independent `init()`-registered file, and the one
+shared `ov` binary rebuild is a single barrier between parallel-implement and
+parallel-bed-R10 — it is NEVER a license to serialize the whole implementation or
+to trade beds for review. Canonical shape: `Core (seq) → Implement (parallel by
+bed) → Integrate+build (seq barrier) → BedR10 (parallel by bed) → Review (parallel,
+read-only, optional)`. Same R10 gate + disposable-only + no-scope-shrinking-flags +
+paste-proof rules as teams.
 
 **Agent roster** — *executors* run `ov eval` and return verbatim proof:
 `eval-bed-runner` (runs `ov eval run <bed>` — the R10 acceptance executor),
@@ -531,6 +574,28 @@ beds run freely throughout to verify; only the commit is gated — no
 scope-shrinking flags (Law 3.6), and **paste-proof survives delegation** — the
 executor returns the verbatim verdict + exit code, and the delegating agent
 PASTES it (a delegated bed run whose failure is summarized away is fraud).
+**Handling a long-running eval bed — by mechanism, not by who owns it.** A
+VM/emulator bed (`eval-k3s-vm`, `eval-android-emulator-pod`, the bootstrap-VM
+beds) runs for minutes-to-tens-of-minutes and spawns a libvirt domain / emulator
+that OUTLIVES a single turn. (1) **Launch it as a harness-tracked background
+task** (`run_in_background`) — never in the foreground (the Bash 120s/600s
+timeout kills the call mid-`vm-create`, orphaning the domain) and never kept
+alive by a sleep/poll loop (that busy-poll is the R4 bandaid this guidance
+replaces). (2) **Let the completion notification drive the next step** — the
+harness re-invokes the LAUNCHING session when the run exits, so the launcher must
+SURVIVE to completion to receive it: the persistent main session does; an
+ephemeral sub-agent (returns synchronously, its background children die) and an
+idle teammate (process tree torn down on idle) do NOT and orphan the bed. Long
+beds therefore belong to a session that lives to be notified; short beds (finish
+within one turn / the 600s foreground budget) can be sub-agent- or
+teammate-owned. (3) **Reconnect via durable state, not a held handle** —
+`.eval/<bed>/<calver>/summary.yml` (overall `ok:` + per-step status) + the live
+domain/container ARE the source of truth: "done + verdict" = `summary.yml`
+present; "still alive" = the `ov eval run` orchestrator is in the process table;
+on a suspected orphan (`running` domain, no live orchestrator) `ov vm destroy
+<entity>` before re-running. (4) **Paste-proof still holds** (Law 5) — the owner
+reports the verbatim verdict + exit code; the lead pastes it. Detail:
+`/ov-internals:agents`, `/ov-eval:eval`.
 
 **Hooks doctrine.** Hooks are LEAN POINTERS to this file + skills (never copies
 of R0–R10 — duplication drifts) PLUS deterministic `PreToolUse` gates
@@ -590,8 +655,10 @@ Per [Fedora AI Contribution Policy](https://docs.fedoraproject.org/en-US/council
 |-----------|-------------|
 | `fully tested and validated` | All 10 evaluation standards met + fresh-rebuild re-verification (R10) on every affected `disposable: true` target + the cutover's NEW/CHANGED runner / AI loop / verb evaluation actually executed against the fresh rebuild + R10 outputs (exploratory + fresh-rebuild) pasted in the conversation |
 | `analysed on a live system` | A live invocation of the runner / AI loop / verb evaluation / subprocess that the cutover ADDED OR CHANGED actually ran AND its output is pasted. An eval-sandbox rebuild WITHOUT the subsequent runner invocation does NOT qualify — that's `syntax check only`. NEVER use this tier when only a `--dry-run` was performed |
-| `syntax check only` | Compile + unit tests + validators / dry-run / parse confirmations passed; the live runner did NOT execute. HONEST default when R10 hasn't physically fit yet — pair with explicit "R10 not yet run, awaiting authorization for the live round" AND do NOT commit. Pairing this tier with a commit is a violation; STOP and ask |
+| `syntax check only` | Compile + unit tests + validators / dry-run / parse confirmations passed; the live runner did NOT execute. HONEST default when R10 hasn't physically fit yet — pair with explicit "R10 not yet run, awaiting authorization for the live round" AND do NOT commit. Pairing this tier with a commit is a violation; STOP and ask (this targets CODE with a pending R10 — a docs/policy-only cutover is governed by the provision below) |
 | `theoretical suggestion` | No validation performed — FORBIDDEN as a shipped-code tier |
+
+**Docs/policy-only cutovers — the runtime tiers are read against the APPLICABLE standards.** A cutover that touches ONLY documentation/policy (`CLAUDE.md`, `plugins/**/SKILL.md`, `README.md`, `plugins/README.md`, `CHANGELOG.md` — no Go, no YAML schema, no `layer.yml`/`image.yml`, no other runtime surface) has NO R10 bed to run. Its applicable evaluation standards are the non-runtime ones: adversarial consistency review, the R5 grep self-test, cross-reference validation, markdown integrity, and the `pre-commit-gate.sh` / `pre-push-gate.sh` gates. Such a cutover earns `fully tested and validated` when ALL applicable (non-runtime) standards pass; the `syntax check only → do NOT commit` clause does NOT apply to it (that clause targets code with a pending R10). The moment a cutover ALSO touches code or config it is NOT docs-only — it is gated on that surface's R10 as usual, at the tier its runtime proof supports, and the docs ride along in the same commit.
 
 **Any rule violation forbids commit. Period.** A violation of R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, OR the "Prioritize Clean Architecture Above All Else" section means: NO commit, at any tier, in any submodule, with any wording. There is no "downgrade tier and ship anyway" path — that path does NOT exist. The agent's only authorized responses to a known violation are (a) fix the violation in the same working tree and re-run all verification, or (b) escalate to the operator and STOP. Suggesting any other path — "lower tier", "downgrade", "commit at a reduced confidence", "ship with a caveat", "note the violation in the commit message and proceed" — is itself a rule violation. The four-tier table above describes WHICH tier the proof supports when committing IS permitted; a known rule violation makes commit NOT permitted regardless of tier.
 

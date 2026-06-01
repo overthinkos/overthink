@@ -1,5 +1,5 @@
 layer:
-    version: 2026.144.1443
+    version: 2026.152.0733
     name: labwc
     require:
         - dbus
@@ -78,6 +78,20 @@ layer:
           in_container: true
           eventually: 60s
           retry_interval: 3s
+        # ROBUST liveness — labwc-wayland-socket above is crash-loop-BLIND: the
+        # /tmp/wayland-0 unix socket persists as a stale file across labwc crash
+        # restarts, so `test -e` passes even while labwc is dying every few seconds.
+        # Assert labwc has held supervisord RUNNING >=20s continuously; a labwc
+        # crash-looping on a nested-compositor fault (e.g. the pixelflux out-of-order
+        # xdg configure-serial bug fixed in overthinkos/pixelflux) restarts every
+        # ~3-5s and never accumulates 20s of uptime.
+        - id: labwc-stable
+          scope: deploy
+          in_container: true
+          exit_status: 0
+          eventually: 120s
+          retry_interval: 5s
+          command: "supervisorctl status labwc | awk '/RUNNING/{n=split($NF,a,\":\"); s=a[n]+a[n-1]*60+a[n-2]*3600; if(s>=20){f=1}} END{exit !f}'"
     service:
         - name: labwc
           exec: "%(ENV_HOME)s/.local/bin/labwc-wrapper"

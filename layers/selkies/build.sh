@@ -174,9 +174,9 @@ print('Patched selkies.py: _shared_screen_captures cache prevents pixelflux Wayl
 # encoders/nvenc.rs — we do not have CUDA headers in the builder, and the
 # target container has an AMD iGPU anyway (no NVENC at runtime).
 # ---------------------------------------------------------------------------
-PFX_SHA=9cd4c9daaa4288f3d7abb261d5cf86aacafb679b
+PFX_SHA=9650b0380f248364560ac872c6356d807e5de41b
 cd /tmp
-curl -sL "https://github.com/linuxserver/pixelflux/archive/${PFX_SHA}.tar.gz" | tar xzf -
+curl -sL "https://github.com/overthinkos/pixelflux/archive/${PFX_SHA}.tar.gz" | tar xzf -
 cd "pixelflux-${PFX_SHA}"
 
 # NVENC (Patch 2a/2b) is stubbed UNLESS the builder ships CUDA + the NVENC

@@ -1,5 +1,5 @@
 layer:
-    version: 2026.149.1626
+    version: 2026.152.0733
     name: selkies
     require:
         - supervisord

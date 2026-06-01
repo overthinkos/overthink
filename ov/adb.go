@@ -37,6 +37,9 @@ type AdbCmd struct {
 	Screencap     AdbScreencapCmd     `cmd:"" help:"Capture a screenshot to a host-side PNG file"`
 	LogcatTail    AdbLogcatTailCmd    `cmd:"logcat-tail" help:"Dump recent logcat lines (logcat -d)"`
 	WaitForDevice AdbWaitForDeviceCmd `cmd:"wait-for-device" help:"Block until the emulator is ready"`
+	WaitUiSettled AdbWaitUiSettledCmd `cmd:"wait-ui-settled" help:"Block until the UI is settled — dismiss any ANR/error dialog"`
+	Keyevent      AdbKeyeventCmd      `cmd:"" help:"Send a key event (input keyevent KEYCODE_…)"`
+	CurrentFocus  AdbCurrentFocusCmd  `cmd:"current-focus" help:"Print the foreground window (mCurrentFocus)"`
 }
 
 // adbCommonFlags carries the deploy-addressing fields every leaf needs.
@@ -510,4 +513,126 @@ func (c *AdbWaitForDeviceCmd) Run() error {
 		time.Sleep(2 * time.Second)
 	}
 	return fmt.Errorf("wait-for-device: sys.boot_completed != 1 after %s", timeout)
+}
+
+// ---------------------------------------------------------------------------
+// adb current-focus / keyevent / wait-ui-settled — UI readiness + input.
+// All three go through goadb RunCommand (no container-side shell), so they are
+// immune to the stdin-heredoc hazard that bit the old shell-based settle gate.
+// ---------------------------------------------------------------------------
+
+// adbCurrentFocus returns the `mCurrentFocus` window line from `dumpsys window`
+// — e.g. `mCurrentFocus=Window{… io.appium.android.apis/.view.TextFields}`. A
+// stuck system dialog appears as `…Application Not Responding: <pkg>`. Returns
+// "" with no error when no focus line is present (a transient boot state).
+func adbCurrentFocus(dev *adb.Device) (string, error) {
+	out, err := dev.RunCommand("dumpsys", "window")
+	if err != nil {
+		return "", fmt.Errorf("dumpsys window: %w", err)
+	}
+	return parseCurrentFocus(out), nil
+}
+
+// parseCurrentFocus extracts the first mCurrentFocus line from `dumpsys window`
+// output (trimmed), or "" if absent. Pure — split out for unit testing.
+func parseCurrentFocus(dumpsysWindow string) string {
+	for _, line := range strings.Split(dumpsysWindow, "\n") {
+		if strings.Contains(line, "mCurrentFocus") {
+			return strings.TrimSpace(line)
+		}
+	}
+	return ""
+}
+
+// AdbCurrentFocusCmd: `ov eval adb current-focus <image>` — prints the
+// foreground window line. Use it to assert the foreground app (e.g. stdout
+// contains `io.appium.android.apis`) or to detect a stuck ANR dialog.
+type AdbCurrentFocusCmd struct {
+	Image string `arg:"" help:"Image name"`
+	adbCommonFlags
+}
+
+func (c *AdbCurrentFocusCmd) Run() error {
+	dev, err := adbDeviceFor(c.Image, c.Instance, c.Serial)
+	if err != nil {
+		return err
+	}
+	focus, err := adbCurrentFocus(dev)
+	if err != nil {
+		return err
+	}
+	fmt.Println(focus)
+	return nil
+}
+
+// AdbKeyeventCmd: `ov eval adb keyevent <image> <key>` — sends a single key
+// event via `input keyevent` (KEYCODE_HOME / KEYCODE_BACK / … or a numeric
+// code). Generic input building block; wait-ui-settled uses the same call to
+// dismiss dialogs.
+type AdbKeyeventCmd struct {
+	Image string `arg:"" help:"Image name"`
+	Key   string `arg:"" help:"Key event (KEYCODE_HOME / KEYCODE_BACK / … or a numeric code)"`
+	adbCommonFlags
+}
+
+func (c *AdbKeyeventCmd) Run() error {
+	dev, err := adbDeviceFor(c.Image, c.Instance, c.Serial)
+	if err != nil {
+		return err
+	}
+	if _, err := dev.RunCommand("input", "keyevent", c.Key); err != nil {
+		return fmt.Errorf("input keyevent %s: %w", c.Key, err)
+	}
+	fmt.Printf("sent keyevent %s\n", c.Key)
+	return nil
+}
+
+// AdbWaitUiSettledCmd: `ov eval adb wait-ui-settled <image> [--timeout 600s]` —
+// blocks until the foreground window is NOT a system "Application Not
+// Responding" dialog, dismissing any such dialog with KEYCODE_HOME (the "Wait"
+// action) between polls. Returns 0 when settled, non-zero on timeout.
+//
+// Why a first-class verb: a freshly-booted google_apis_playstore emulator runs
+// minutes of GMS post-boot churn (Play Store auto-update, Chimera, Heterodyne
+// sync) that starves the GMS-coupled system UI (Pixel Launcher via AiAi,
+// systemui). It ANRs, and the dialog occludes whatever app is foreground — so a
+// UI probe (appium find, input) fired right after sys.boot_completed silently
+// fails. sys.boot_completed is necessary-but-not-sufficient readiness; this is
+// the sufficient half. It runs entirely over goadb (no shell, no heredoc) and
+// adapts to host load via --timeout — a load-dilated churn just polls longer.
+type AdbWaitUiSettledCmd struct {
+	Image string `arg:"" help:"Image name"`
+	adbCommonFlags
+}
+
+func (c *AdbWaitUiSettledCmd) Run() error {
+	dev, err := adbDeviceFor(c.Image, c.Instance, c.Serial)
+	if err != nil {
+		return err
+	}
+	timeout := c.Timeout
+	if timeout <= 0 {
+		timeout = 300 * time.Second
+	}
+	deadline := time.Now().Add(timeout)
+	lastFocus := ""
+	for time.Now().Before(deadline) {
+		focus, ferr := adbCurrentFocus(dev)
+		if ferr == nil {
+			lastFocus = focus
+			if strings.Contains(focus, "Application Not Responding") {
+				// A system ANR/error dialog holds focus — dismiss it (HOME acts
+				// as "Wait", returning a responsive launcher) and keep polling.
+				_, _ = dev.RunCommand("input", "keyevent", "KEYCODE_HOME")
+			} else {
+				// No ANR dialog focused — the UI is settled.
+				fmt.Println("settled")
+				return nil
+			}
+		}
+		// ferr != nil → adb/dumpsys momentarily unreachable; keep polling rather
+		// than failing the gate on a transient.
+		time.Sleep(4 * time.Second)
+	}
+	return fmt.Errorf("wait-ui-settled: UI not settled after %s (last focus: %q)", timeout, lastFocus)
 }

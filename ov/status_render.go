@@ -10,47 +10,67 @@ import (
 	"text/tabwriter"
 )
 
-// ContainerStatus is the rendered shape for the table + JSON outputs. Ports
-// is a structured []PortMapping (was []string) so the JSON consumer can read
-// host vs container ports without re-parsing.
-type ContainerStatus struct {
-	Image     string        `json:"image"`
-	Instance  string        `json:"instance,omitempty"`
-	Status    string        `json:"status"`
-	Uptime    string        `json:"uptime,omitempty"`
-	Container string        `json:"container"`
-	Ports     []PortMapping `json:"ports,omitempty"`
-	Devices   []string      `json:"devices,omitempty"`
-	Tools     []ToolStatus  `json:"tools,omitempty"`
-	Volumes   []string      `json:"volumes,omitempty"`
-	Network   string        `json:"network,omitempty"`
-	Tunnel    string        `json:"tunnel,omitempty"`
-	RunMode   string        `json:"run_mode"`
+// DeploymentStatus is the rendered shape for the table + JSON outputs across
+// every deployment substrate (pod / vm / k8s / local / android). Ports is a
+// structured []PortMapping (was []string) so the JSON consumer can read host
+// vs container ports without re-parsing. Kind discriminates the substrate;
+// Nested carries multi-hop children (populated by the nested overlay); Source
+// records provenance (libvirt|ledger|adb|tree|podman).
+type DeploymentStatus struct {
+	Kind      SubstrateKind      `json:"kind"`
+	Image     string             `json:"image"`
+	Instance  string             `json:"instance,omitempty"`
+	Status    string             `json:"status"`
+	Uptime    string             `json:"uptime,omitempty"`
+	Container string             `json:"container"`
+	Ports     []PortMapping      `json:"ports,omitempty"`
+	Devices   []string           `json:"devices,omitempty"`
+	Tools     []ToolStatus       `json:"tools,omitempty"`
+	Volumes   []string           `json:"volumes,omitempty"`
+	Network   string             `json:"network,omitempty"`
+	Tunnel    string             `json:"tunnel,omitempty"`
+	RunMode   string             `json:"run_mode"`
+	Nested    []DeploymentStatus `json:"nested,omitempty"`
+	Source    string             `json:"source,omitempty"` // provenance: libvirt|ledger|adb|tree|podman
 }
 
 // RenderTable writes the multi-row aligned table.
 //
-// Columns: IMAGE  STATUS  PORTS  TUNNEL  DEVICES  TOOLS
-// IMAGE merges image + instance ("image/instance") so a multi-instance
-// deployment is visually distinct.
-func RenderTable(w io.Writer, ss []ContainerStatus) error {
+// Columns: KIND  IMAGE  STATUS  PORTS  TUNNEL  DEVICES  TOOLS
+// KIND names the substrate (pod / vm / k8s / local / android). IMAGE merges
+// image + instance ("image/instance") so a multi-instance deployment is
+// visually distinct. Nested children render as indented IMAGE-cell rows.
+func RenderTable(w io.Writer, ss []DeploymentStatus) error {
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(tw, "IMAGE\tSTATUS\tPORTS\tTUNNEL\tDEVICES\tTOOLS")
+	fmt.Fprintln(tw, "KIND\tIMAGE\tSTATUS\tPORTS\tTUNNEL\tDEVICES\tTOOLS")
 	for _, s := range ss {
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\n",
-			cellImage(s),
-			s.Status,
-			cellPorts(s.Ports),
-			cellTunnel(s.Tunnel),
-			cellDevices(s.Devices),
-			cellTools(s.Tools),
-		)
+		renderTableRow(tw, s, "")
 	}
 	return tw.Flush()
 }
 
+// renderTableRow writes one row (with an optional IMAGE-cell prefix for nested
+// indentation) and recurses into its nested children.
+func renderTableRow(tw io.Writer, s DeploymentStatus, prefix string) {
+	fmt.Fprintf(tw, "%s\t%s%s\t%s\t%s\t%s\t%s\t%s\n",
+		cellKind(s.Kind),
+		prefix, cellImage(s),
+		s.Status,
+		cellPorts(s.Ports),
+		cellTunnel(s.Tunnel),
+		cellDevices(s.Devices),
+		cellTools(s.Tools),
+	)
+	for _, child := range s.Nested {
+		renderTableRow(tw, child, prefix+"  └─ ")
+	}
+}
+
 // RenderDetail writes the single-image detail view (key: value).
-func RenderDetail(w io.Writer, s ContainerStatus) error {
+func RenderDetail(w io.Writer, s DeploymentStatus) error {
+	if s.Kind != "" {
+		fmt.Fprintf(w, "Kind:      %s\n", s.Kind)
+	}
 	fmt.Fprintf(w, "Image:     %s\n", s.Image)
 	if s.Instance != "" {
 		fmt.Fprintf(w, "Instance:  %s\n", s.Instance)
@@ -84,21 +104,29 @@ func RenderDetail(w io.Writer, s ContainerStatus) error {
 	if s.Tunnel != "" {
 		fmt.Fprintf(w, "Tunnel:    %s\n", s.Tunnel)
 	}
+	for i, child := range s.Nested {
+		label := "Nested:"
+		if i > 0 {
+			label = "       "
+		}
+		fmt.Fprintf(w, "%-10s %s %s (%s)\n", label, cellKind(child.Kind), cellImage(child), child.Status)
+	}
 	return nil
 }
 
 // RenderJSON writes the structured output. For the multi-image flow this is
-// an array of ContainerStatus; for the single-image flow callers should pass
-// a one-element slice and the caller decides whether to unwrap.
-func RenderJSON(w io.Writer, ss []ContainerStatus) error {
+// an array of DeploymentStatus; for the single-image flow callers should pass
+// a one-element slice and the caller decides whether to unwrap. The kind and
+// nested fields are part of the encoded shape.
+func RenderJSON(w io.Writer, ss []DeploymentStatus) error {
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
 	return enc.Encode(ss)
 }
 
-// RenderJSONOne writes one container's status as a single object (matches
+// RenderJSONOne writes one deployment's status as a single object (matches
 // the single-image detail JSON shape).
-func RenderJSONOne(w io.Writer, s ContainerStatus) error {
+func RenderJSONOne(w io.Writer, s DeploymentStatus) error {
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
 	return enc.Encode(s)
@@ -106,10 +134,18 @@ func RenderJSONOne(w io.Writer, s ContainerStatus) error {
 
 // --- Cell formatters ---
 
+// cellKind returns the substrate token for the KIND column, or "-" when unset.
+func cellKind(k SubstrateKind) string {
+	if k == "" {
+		return "-"
+	}
+	return string(k)
+}
+
 // cellImage returns "image" or "image/instance". The slash-separated form
 // matches deployKey(): both deploy.yml and `ov ... -i <inst>` use it, so the
 // table label aligns with the operator's mental model.
-func cellImage(s ContainerStatus) string {
+func cellImage(s DeploymentStatus) string {
 	if s.Instance == "" {
 		return s.Image
 	}

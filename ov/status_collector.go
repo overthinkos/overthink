@@ -20,6 +20,7 @@ type Collector struct {
 	engine  *EngineClient
 	quadlet string
 	deploy  *DeployConfig
+	unified *UnifiedFile // best-effort overthink.yml projection (may be nil)
 }
 
 // NewCollector wires up the runtime + engine + cached deploy + quadlet dir.
@@ -40,76 +41,96 @@ func NewCollector(rt *ResolvedRuntime) (*Collector, error) {
 	if qdir, err := quadletDir(); err == nil {
 		c.quadlet = qdir
 	}
+	// Best-effort overthink.yml projection (incl. folded kind:eval beds) for
+	// the non-pod substrate collectors. Absence / load errors are non-fatal:
+	// the unified field stays nil and substrate collectors degrade gracefully.
+	if cwd, err := os.Getwd(); err == nil {
+		if uf, ok, err := LoadUnified(cwd); err == nil && ok {
+			c.unified = uf
+		}
+	}
 	return c, nil
 }
 
-// All collects status for every running ov-* container, plus enabled-but-
-// not-running quadlet entries when includeAll is set. Per-container work is
-// fanned out across a NumCPU*2 worker pool.
-func (c *Collector) All(ctx context.Context, includeAll bool) ([]ContainerStatus, error) {
-	snapshots, err := c.engine.SnapshotAll(includeAll)
-	if err != nil {
-		return nil, err
-	}
-	// Filter to ov-* (the ps filter is name=ov- which already matches, but
-	// belt-and-braces in case docker fuzz-matches differently).
-	filtered := snapshots[:0]
-	seen := map[string]bool{}
-	for _, s := range snapshots {
-		if !strings.HasPrefix(s.Name, "ov-") {
-			continue
-		}
-		filtered = append(filtered, s)
-		seen[s.Name] = true
-	}
-	snapshots = filtered
-
-	// Quadlet enrichment: split joined container name into image + instance.
-	for i := range snapshots {
-		c.applyQuadletDescription(&snapshots[i])
+// All collects status across every registered deployment substrate (pod / vm /
+// k8s / local / android). It builds one read-only CollectOpts, fans the
+// available collectors out across a NumCPU*2-bounded goroutine pool, merges
+// their rows, applies the nested overlay, and sorts by (Kind, cellImage).
+//
+// A collector returning an error logs a WARNING to stderr and contributes no
+// rows (graceful degradation) — it NEVER aborts the whole command. The pod
+// substrate's worker-pool fan-out lives inside PodCollector.Collect.
+func (c *Collector) All(ctx context.Context, includeAll, nested bool) ([]DeploymentStatus, error) {
+	opts := CollectOpts{
+		IncludeAll: includeAll,
+		Nested:     nested,
+		Deploy:     c.deploy,
+		Unified:    c.unified,
+		Engine:     c.engine,
+		Quadlet:    c.quadlet,
+		RunMode:    c.rt.RunMode,
 	}
 
-	// --all in quadlet mode: append enabled-but-not-running entries.
-	if includeAll && c.rt.RunMode == "quadlet" {
-		for _, q := range c.enabledQuadlets(seen) {
-			snapshots = append(snapshots, q)
+	// Build the available collectors from the init() registry.
+	var collectors []SubstrateCollector
+	for _, f := range substrateFactories {
+		sc := f(c)
+		if sc.Available(opts) {
+			collectors = append(collectors, sc)
 		}
 	}
 
-	// Worker pool fan-out across containers.
-	results := make([]ContainerStatus, len(snapshots))
+	// Concurrent substrate fan-out, bounded by the same NumCPU*2 cap the pod
+	// worker pool uses.
+	perKind := make([][]DeploymentStatus, len(collectors))
 	workers := runtime.NumCPU() * 2
 	if workers < 4 {
 		workers = 4
 	}
-	if workers > len(snapshots) {
-		workers = len(snapshots)
+	if workers > len(collectors) {
+		workers = len(collectors)
 	}
 	if workers < 1 {
 		workers = 1
 	}
 	sem := make(chan struct{}, workers)
 	var wg sync.WaitGroup
-	for i := range snapshots {
+	for i, sc := range collectors {
 		wg.Add(1)
 		sem <- struct{}{}
-		go func(i int) {
+		go func(i int, sc SubstrateCollector) {
 			defer wg.Done()
 			defer func() { <-sem }()
-			results[i] = c.collectOne(ctx, &snapshots[i])
-		}(i)
+			rows, err := sc.Collect(ctx, opts)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "WARNING: ov status: %s collector: %v\n", sc.Kind(), err)
+				return
+			}
+			perKind[i] = rows
+		}(i, sc)
 	}
 	wg.Wait()
 
+	var results []DeploymentStatus
+	for _, rows := range perKind {
+		results = append(results, rows...)
+	}
+
+	results = applyNestedOverlay(results, opts)
+
 	sort.SliceStable(results, func(i, j int) bool {
+		if results[i].Kind != results[j].Kind {
+			return results[i].Kind < results[j].Kind
+		}
 		return cellImage(results[i]) < cellImage(results[j])
 	})
 	return results, nil
 }
 
 // Single collects status for one image+instance. Sequential — only one
-// container, no need for the worker pool.
-func (c *Collector) Single(ctx context.Context, image, instance string) (ContainerStatus, error) {
+// container, no need for the worker pool. Pod-scoped: the `ov status <image>`
+// detail path covers the podman/docker substrate.
+func (c *Collector) Single(ctx context.Context, image, instance string) (DeploymentStatus, error) {
 	imageName := resolveImageName(image)
 	runEngine := ResolveImageEngineForDeploy(imageName, instance, c.rt.RunEngine)
 	engine := NewEngineClient(runEngine)
@@ -153,11 +174,14 @@ func (c *Collector) Single(ctx context.Context, image, instance string) (Contain
 	return cs, nil
 }
 
-// collectOne builds a ContainerStatus from a snapshot. Pure function over
+// collectOne builds a DeploymentStatus from a snapshot. Pure function over
 // (snapshot, deploy, engine); no global state, safe to call concurrently
-// from worker goroutines.
-func (c *Collector) collectOne(ctx context.Context, snap *ContainerSnapshot) ContainerStatus {
-	cs := ContainerStatus{
+// from worker goroutines. Every row is stamped Kind=SubstratePod,
+// Source="podman" — this is the pod substrate's row builder.
+func (c *Collector) collectOne(ctx context.Context, snap *ContainerSnapshot) DeploymentStatus {
+	cs := DeploymentStatus{
+		Kind:      SubstratePod,
+		Source:    "podman",
 		Image:     snap.Image,
 		Instance:  snap.Instance,
 		Status:    statusFromState(snap.State),

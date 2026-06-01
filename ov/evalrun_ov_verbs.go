@@ -332,6 +332,9 @@ var adbMethods = map[string]methodSpec{
 	"screencap":       {path: []string{"adb", "screencap"}, required: []string{"Artifact"}, posArgs: posArtifactFlag, artifact: true},
 	"logcat-tail":     {path: []string{"adb", "logcat-tail"}, posArgs: posLogcatTail},
 	"wait-for-device": {path: []string{"adb", "wait-for-device"}, posArgs: posWaitForDevice},
+	"wait-ui-settled": {path: []string{"adb", "wait-ui-settled"}, posArgs: posWaitForDevice},
+	"current-focus":   {path: []string{"adb", "current-focus"}},
+	"keyevent":        {path: []string{"adb", "keyevent"}, required: []string{"KeyName"}, posArgs: posKeyName},
 }
 
 // ---------------------------------------------------------------------------

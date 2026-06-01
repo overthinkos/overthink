@@ -122,12 +122,12 @@ func TestCellToolsDetail(t *testing.T) {
 func TestCellImage(t *testing.T) {
 	tests := []struct {
 		name string
-		in   ContainerStatus
+		in   DeploymentStatus
 		want string
 	}{
-		{"image only", ContainerStatus{Image: "redis"}, "redis"},
-		{"image+instance", ContainerStatus{Image: "selkies-desktop", Instance: "work"}, "selkies-desktop/work"},
-		{"hyphen in image", ContainerStatus{Image: "eval-sway-browser-vnc-pod"}, "eval-sway-browser-vnc-pod"},
+		{"image only", DeploymentStatus{Image: "redis"}, "redis"},
+		{"image+instance", DeploymentStatus{Image: "selkies-desktop", Instance: "work"}, "selkies-desktop/work"},
+		{"hyphen in image", DeploymentStatus{Image: "eval-sway-browser-vnc-pod"}, "eval-sway-browser-vnc-pod"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -374,7 +374,7 @@ func TestSplitProbeSections(t *testing.T) {
 // --- Renderers ---
 
 func TestRenderTable_HasColumns(t *testing.T) {
-	statuses := []ContainerStatus{
+	statuses := []DeploymentStatus{
 		{
 			Image:    "selkies-desktop",
 			Instance: "work",
@@ -405,7 +405,7 @@ func TestRenderTable_HasColumns(t *testing.T) {
 }
 
 func TestRenderJSON_StructuredPorts(t *testing.T) {
-	statuses := []ContainerStatus{
+	statuses := []DeploymentStatus{
 		{
 			Image: "x",
 			Ports: []PortMapping{{HostIP: "127.0.0.1", HostPort: 9240, CtrPort: 9222, Proto: "tcp"}},

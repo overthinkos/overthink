@@ -1498,6 +1498,16 @@ eval:
             - {id: kv-ov-version, scope: deploy, command: "/tmp/ov-build/ov version || ov version", stdout: {matches: "[0-9]{4}\\.[0-9]+"}, in_container: false}
             # --- matching: verb smoke --------------------------------
             - {id: kv-matching, scope: deploy, matching: "eval-k3s-vm up", contains: {contains: "k3s"}}
+            # eval-coverage gate for the unified `ov status` VM substrate: the
+            # libvirt-domain row must render (host-side, via listOvDomains). Fails
+            # if VMCollector regresses.
+            - id: status-shows-vm
+              scope: deploy
+              command: ov status --json
+              in_container: false
+              stdout:
+                - contains: '"kind": "vm"'
+                - contains: k3s-vm
     # Combined R10 mechanism bed — disposable, fast (fedora-minimal:43 base).
     # One bed covers kind:image build + kind:layer composition order +
     # kind:pod runtime (nc :18794 + supervisord) + DeployTarget rendering
@@ -1512,6 +1522,16 @@ eval:
         description:
             feature: Combined fast pod bed — kind:image + kind:layer + kind:pod + DeployTarget mechanisms
             tag: [working]
+        eval:
+            # eval-coverage gate for the unified `ov status` POD substrate: the
+            # row + KIND discriminator must render. Fails if PodCollector regresses.
+            - id: status-shows-pod
+              scope: deploy
+              command: ov status --json
+              in_container: false
+              stdout:
+                - contains: '"kind": "pod"'
+                - contains: eval-pod
     eval-local:
         target: local
         local: eval-local
@@ -1521,6 +1541,18 @@ eval:
         description:
             feature: Fast local bed exercising kind:local layer application
             tag: [working]
+        eval:
+            # eval-coverage gate for the unified `ov status` LOCAL substrate: the
+            # install-ledger row must render. Fails if LocalCollector regresses.
+            - id: status-shows-local
+              scope: deploy
+              command: ov status --json
+              in_container: false
+              stdout:
+                # local deploy-ids are content hashes (not the bed name), so assert
+                # the substrate renders via the kind discriminator + ledger source.
+                - contains: '"kind": "local"'
+                - contains: '"source": "ledger"'
     eval-jupyter-pod:
         target: pod
         image: jupyter
@@ -1585,6 +1617,29 @@ eval:
         description:
             feature: "R10 bed for android-emulator — Android 16 (API 36 x86_64 google_apis_playstore) emulator on pixel_9a with /dev/kvm passthrough, Selkies web UI on https://localhost:35000, Appium WebDriver on http://localhost:35001/wd/hub, ADB via ANDROID_ADB_SERVER_SOCKET=tcp:localhost:35002 adb devices. Play Store + GMS + Chrome preinstalled (asserted present + launchable). Nested kind:android devices install apps via the `apk:` package format: an in-pod emulator device installs F-Droid (apkeep in-pod), and a remote adb-ENDPOINT device installs the committed ApiDemos (goadb over the published 35002 port) — proving target:android + nested deployment for both device kinds. CPU/RAM auto-size from the host."
             tag: [testing]
+        eval:
+            # eval-coverage gate for the unified `ov status` ANDROID substrate +
+            # the nested-deploy tree: the android device row(s) must render, and
+            # the nested structure must overlay under the emulator pod. Fails if
+            # AndroidCollector or status_nested regress.
+            - id: status-shows-android
+              scope: deploy
+              command: ov status --json
+              in_container: false
+              stdout:
+                - contains: '"kind": "android"'
+            - id: status-shows-nested
+              scope: deploy
+              command: ov status --json
+              in_container: false
+              stdout:
+                # The pod→android nested tree renders as a JSON `nested:[…]`
+                # array under the emulator pod (children bare-keyed device/
+                # device-net; the parent context comes from the nesting, so
+                # there is no flattened dotted path). Assert the overlay
+                # structure. Fails if status_nested stops nesting the
+                # AndroidCollector rows under their parent pod.
+                - contains: '"nested"'
     # eval-openclaw-pod deploys the minimal headless openclaw gateway on the
     # CachyOS (Arch) base. Exercises the cachyos→arch-builder npm build of the
     # openclaw package + the dbus/ov/socat/supervisord stack. The deploy-scope

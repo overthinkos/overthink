@@ -1,5 +1,5 @@
 layer:
-    version: 2026.145.1302
+    version: 2026.152.1445
     name: android-emulator-layer
     description: |
         Composite glue layer that turns the underlying selkies-desktop +
@@ -205,6 +205,27 @@ layer:
             - contains: "1 received"
           eventually: 60s
           retry_interval: 5s
+        # GMS-settle readiness gate (LOAD-BEARING — must precede every interactive
+        # check below: chrome-launch + the whole appium scenario). A freshly-booted
+        # google_apis_playstore emulator runs minutes of GMS post-boot churn (Play
+        # Store auto-update, ChimeraConfigurator, Heterodyne sync, RCS provisioning)
+        # that starves the GMS-coupled system UI (the Pixel Launcher via AiAi
+        # app-prediction, and systemui), which ANRs; the "Application Not Responding"
+        # dialog then OCCLUDES whatever app is foreground, so an appium find/gesture
+        # fired right after an app-start silently 404s (the test app is resumed but
+        # hidden behind the dialog). sys.boot_completed is NECESSARY-BUT-NOT-SUFFICIENT
+        # readiness — it fires before GMS quiesces. The first-class `adb:
+        # wait-ui-settled` verb (ov/adb.go) polls the focused window over goadb and
+        # dismisses any ANR dialog via KEYCODE_HOME until the UI is stable. It is
+        # LOAD-INDEPENDENT (the ANR is GMS churn, not host load) and adapts to a
+        # load-dilated churn purely via timeout:. All logic is typed Go over goadb —
+        # no in-container shell, no stdin-heredoc hazard, no per-command </dev/null.
+        - id: emulator-ui-settled
+          scope: deploy
+          adb: wait-ui-settled
+          timeout: 600s
+          stdout:
+            - contains: settled
         # Extended adb verb coverage — proves each method end-to-end on a
         # fresh disposable rebuild (R10 acceptance). All run AFTER the readiness
         # gate above, so the device is fully booted.

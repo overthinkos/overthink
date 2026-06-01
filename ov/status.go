@@ -19,6 +19,7 @@ type StatusCmd struct {
 	Image    string `arg:"" optional:"" help:"Image name (omit to list all ov containers)"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 	All      bool   `short:"a" long:"all" help:"Include enabled-but-not-running services"`
+	Nested   bool   `long:"nested" help:"Probe nested children + live k8s workloads (multi-hop, slower)"`
 	JSON     bool   `long:"json" help:"Output as JSON"`
 }
 
@@ -35,7 +36,7 @@ func (c *StatusCmd) Run() error {
 
 	c.Image, c.Instance = canonicalizeDeployArg(c.Image, c.Instance)
 	if c.Image == "" {
-		statuses, err := col.All(ctx, c.All)
+		statuses, err := col.All(ctx, c.All, c.Nested)
 		if err != nil {
 			return err
 		}

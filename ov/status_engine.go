@@ -11,7 +11,7 @@ import (
 
 // PortMapping is the structured runtime port mapping for one published port.
 // Replaces the string-flattened representation that lived on the old
-// ContainerPSEntry. Surfaces all the way to ContainerStatus so renderers and
+// ContainerPSEntry. Surfaces all the way to DeploymentStatus so renderers and
 // host probes can consume it without re-parsing.
 type PortMapping struct {
 	HostIP   string `json:"host_ip,omitempty"`

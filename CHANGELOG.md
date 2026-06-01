@@ -20,7 +20,132 @@ from their former homes so nothing is lost in the relocation.
 
 ---
 
+## 2026-06
+
+### 2026-06-01 — `ov eval` in-container `command:` stdin guard + first-class `adb` UI readiness verbs
+
+Two `ov eval` framework defects surfaced while hardening the
+`eval-android-emulator-pod` bed against a flaky appium phase, and were fixed
+generically in `ov` instead of being worked around in the layer config.
+
+**The stdin-heredoc bug (generic).** In-container `command:` checks are
+delivered to the pod shell over a STDIN heredoc (`NestedExecutor.wrapWithJump`
+— "stdin-attached exec"). Any script whose first subcommand reads stdin
+(`adb shell`, `ssh`, `read`, `cat`) consumed the REST of the heredoc — the
+not-yet-executed script lines — silently truncating the check to its first
+command and emitting empty stdout. A multi-line settle gate built on
+`adb shell` therefore produced nothing and timed out *at every host load*; the
+"only fails under load" symptom was a red herring — the gate never ran. Fix:
+`runCommand` now wraps every in-container script in `{ <script>; } </dev/null`
+(`wrapContainerCommand`, `ov/evalrun.go`) — the shell drains the whole heredoc
+at parse time, then runs the group with every subcommand's stdin tied to
+/dev/null. One framework change makes every in-container `command:` check
+robust; authors no longer need a per-call-site `</dev/null`.
+
+**Hand-rolled shell where a verb belonged.** The android-emulator GMS-churn
+settle gate (poll the focused window, dismiss the ANR dialog, repeat) was a
+~60-line `command: in_container` shell script in `layer.yml`. It is now three
+first-class Go/goadb `adb` verbs (`ov/adb.go`): `adb: wait-ui-settled` (the
+readiness gate — polls `mCurrentFocus`, dismisses any "Application Not
+Responding" dialog with `KEYCODE_HOME`, honors `timeout:`), `adb: current-focus`
+(prints the foreground window line for assertions), and `adb: keyevent` (generic
+input). They run entirely over goadb `RunCommand` — no in-container shell, no
+heredoc, no stdin hazard — and are immune to the bug above by construction. The
+`android-emulator-layer` gate collapsed to a single `adb: wait-ui-settled` +
+`timeout: 600s` check.
+
+Root cause of the original appium failures (established by RCA, not load
+experiments): the `google_apis_playstore` emulator runs minutes of GMS
+post-boot churn (Play Store auto-update, Chimera, Heterodyne sync) that starves
+the GMS-coupled system UI (Pixel Launcher via AiAi, systemui); it ANRs and the
+dialog occludes the foreground app, so an appium find fired right after
+`sys.boot_completed` 404s. `sys.boot_completed` is necessary-but-not-sufficient
+readiness; `wait-ui-settled` is the sufficient half, and it is LOAD-INDEPENDENT
+(the ANR is GMS churn, not host contention — a deliberately overloaded 6-burner
+run only proved that adb itself dies before that, which no UI gate can survive).
+
+---
+
 ## 2026-05
+
+### 2026-05-31 — unified `ov status`: one table across pod / vm / k8s / local / android
+
+`ov status` became the **unified deployment-status surface**: a single table
+(or JSON array, or single-deployment detail view) showing every ov deployment
+across all five substrates side by side, with a leading **KIND** column /
+`"kind"` JSON field discriminating which substrate each row came from. Before
+this cutover `ov status` was pod-only — it did one batched `podman ps` +
+`podman inspect` over `ov-*` containers and knew nothing about VMs, k8s
+clusters, `target: local` deploys, or `target: android` devices, so an operator
+running a VM + a local profile + an emulator had to consult three different
+verbs to see their fleet.
+
+- **Substrate-collector registry.** The pod-only `Collector` was generalized
+  into a registry of `SubstrateCollector`s (`ov/status_substrate.go`): the
+  `SubstrateKind` discriminator (`pod`/`vm`/`k8s`/`local`/`android`), a
+  read-only `CollectOpts` input, the `SubstrateCollector` interface
+  (`Kind`/`Available`/`Collect`), and an `init()`-time `registerSubstrate`
+  registry. Each substrate lives in its OWN file and self-registers — there is
+  NO central slice to edit when a substrate is added. The five collectors:
+  `PodCollector` (`status_collect_pod.go`, the existing engine snapshot +
+  worker-pool probe path, `Source="podman"`), `VMCollector`
+  (`status_collect_vm.go`, libvirt domains, `Source="libvirt"`), `K8sCollector`
+  (`status_collect_k8s.go`, cluster workloads + live client-go probing under
+  `--nested`), `LocalCollector` (`status_collect_local.go`, the install ledger,
+  `Source="ledger"`), and `AndroidCollector` (`status_collect_adb.go`, declared
+  `target: android` devices via adb `host:devices`, `Source="adb"`). All five
+  use the identical struct-literal registration shape
+  (`registerSubstrate(func(c *Collector) SubstrateCollector { return &XxxCollector{c: c} })`)
+  with an exported `XxxCollector` type — the integration pass normalized the vm
+  and k8s collectors (which had carried lowercase `vmCollector`/`k8sCollector`
+  types plus redundant `newvmCollector`/`newk8sCollector` constructors — the
+  latter even returning the concrete `*k8sCollector` while the former returned
+  the interface) to drop that drift (R3).
+- **`Collector.All` fan-out.** Builds one `CollectOpts`, runs the available
+  collectors across a `NumCPU*2`-bounded goroutine pool, merges their rows,
+  applies the nested overlay, and sorts by `(Kind, image)`. A collector whose
+  backend is unreachable (`Available == false`) is skipped silently; a
+  collector that errors mid-collect logs ONE `WARNING:` and contributes zero
+  rows but never aborts the command — graceful degradation is the contract, so
+  `ov status` on a podman-only host shows the pod rows and silently omits the
+  rest.
+- **KIND column + unified `DeploymentStatus` JSON.** `RenderTable` gained the
+  leading KIND column (`cellKind`); the rendered shape is now
+  `DeploymentStatus` (`status_render.go`) with `Kind` (`json:"kind"`), `Nested`
+  (`json:"nested,omitempty"`), and `Source` (`json:"source,omitempty"`) added
+  to the prior fields. Detail view gained a `Kind:` field and a `Nested:`
+  section. Because the JSON encoder indents, the on-the-wire substring is
+  `"kind": "pod"` — a SPACE after the colon; eval checks assert the spaced form.
+- **`--nested` + the nested overlay (with dedup).** Nested deployment trees
+  (`pod → android`, `vm → pod`, `vm → host`, …) are reflected WITHOUT a
+  dedicated collector — a nested child's venue is always reached THROUGH its
+  parent. `status_nested.go` post-processes the merged flat rows:
+  `applyNestedOverlay` reads the declared tree (project `overthink.yml` incl.
+  folded `kind: eval` beds + `~/.config/ov/deploy.yml`) and attaches each
+  declared child to its parent row's `Nested[]`. **Dedup:** a declared child
+  that ALSO surfaced as a flat top-level row — an `AndroidCollector` row keyed
+  on the dotted path (`<parent>.device`), or a nested-pod row keyed on the
+  flattened `NestedContainerName` (`<seg1>_<seg2>`) — has its real collected
+  data MOVED into the nested position (preserving its origin `Source` like
+  `adb`/`podman`, not restamping `nested`) and its flat row REMOVED from the top
+  level, so a nested child appears exactly once. A child with no flat match
+  keeps the synthesized declared row (`Source="nested"`). Default = cheap
+  (declared kind + moved/inherited flat-row state); `--nested` probes each
+  child's live multi-hop venue through the SAME `ResolveDeployChain` +
+  `NestedExecutor` primitive `ov deploy add` / `ov eval live parent.child` use
+  (R3 — no bespoke nested dial), under a strict 4-second per-child context
+  deadline (a deadline, never a sleep/retry — R4).
+- **Proof-of-functionality eval coverage.** Each of the four core `kind: eval`
+  beds gained a `status-shows-*` deploy-scope check that greps host-side
+  `ov status --json` for the substrate it exercises: `eval-pod` →
+  `status-shows-pod` (`"kind": "pod"` + `ov-eval-pod`); `eval-k3s-vm` →
+  `status-shows-vm` (`"kind": "vm"` + `eval-k3s-vm`); `eval-local` →
+  `status-shows-local` (`"kind": "local"`); `eval-android-emulator-pod` →
+  `status-shows-android-nested` (`"kind": "android"` + the `"nested"` tree). A
+  `verify-status` dynamic workflow (`.claude/workflows/verify-status.js`,
+  modeled on `verify-beds.js`) emits the substrate→bed map and fans
+  `ov eval run <bed>` out in parallel, aggregating the verbatim
+  `status-shows-*` verdict per substrate.
 
 ### 2026-05-31 — k3s-server eval checks: `${DEPLOY_NAME}` eval var (fix un-expandable cluster token)
 

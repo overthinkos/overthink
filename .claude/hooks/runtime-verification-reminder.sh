@@ -30,6 +30,14 @@ violation forbids commit at ANY tier (fix in-tree or escalate — never
 "downgrade and ship"). The 2026-04-26 incident (dry-run-as-R10 + tier
 inflation + task deletion) is recorded in CHANGELOG.md; do not repeat it.
 
+RDD — RISK DRIVEN DEVELOPMENT (proactive twin of R1; rules in CLAUDE.md). ALWAYS
+prove a HIGH-RISK assumption on a `disposable: true` bed — never accept the
+skills, CLAUDE.md, or current code as automatically correct (they drift). Load
+the skill first for intent (R0), but confirm high-risk claims — above all
+whether a layer composition at its latest versions builds/deploys/runs TOGETHER
+— on a real bed EARLY. "The docs say so" / "the code does X" / "it probably
+composes" are confessions for a high-risk call. See /ov-internals:strict-policy.
+
 An approved plan runs end-to-end through R10 in ONE phase. The only valid
 mid-plan stops are CLAUDE.md's narrow blockers (genuine design change,
 user-only credential/permission, destructive action outside authorization,

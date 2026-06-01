@@ -22,6 +22,59 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-01 — engineering-discipline policy: name "Risk Driven Development" (RDD) — the proactive twin of R1
+
+The front-loaded-validation discipline that already ran through the project under
+the slogan "Verify before you change (the proactive twin of R1)" is now a named,
+first-class philosophy: **Risk Driven Development (RDD)**. This is **additive
+naming**, not a rename — the slogan is retained everywhere as RDD's operational
+mnemonic; nothing was deleted. (See CLAUDE.md "Risk Driven Development (RDD)" for
+the current, forward-looking definition.)
+
+**What RDD names.** ALWAYS validate ANY high-risk assumption empirically on a live
+`disposable: true` bed before the design commits to it — never accept the skills,
+CLAUDE.md, or the current code as automatically correct (documentation drifts and
+code has bugs). It is the proactive twin of R1 (reactive RCA) and the front-loaded
+bookend of R10 (final fresh-rebuild proof): R1 / RDD / R10 are the same "never
+trust, verify" discipline at three points in time.
+
+**Risk — not documentation status — is the trigger.** Low-risk orientation ("what
+does layer X do") stays a zero-risk skills-first (R0) lookup; RDD fires only for a
+high-risk unknown and is proven on a bed regardless of what any doc or code
+asserts. The archetypal high-risk unknown is composition: whether a specific
+combination of layers, at the latest currently-available versions the resolver
+picks, builds / deploys / runs together — which no skill can certify. RDD composes
+with R0 rather than competing with it: R0 governs where you start, RDD governs what
+you accept as proven. When a bed contradicts a doc, the doc is stale — fix it.
+
+**Surfaces touched (one cutover, two repos).** Canonical definition + at-a-glance
+table + the three failure modes added to CLAUDE.md (new "Risk Driven Development
+(RDD)" section, a Key Rules pointer, an End-of-turn and a post-execution checklist
+line, and the existing slogan mentions re-anchored to the name). README "Why
+Overthink?" gained a user-facing RDD paragraph. In the `plugins` submodule: a
+`## RDD` section in `/ov-internals:strict-policy`; the `root-cause-analyzer` agent's
+proactive-twin paragraph + a forbidden-rationalization block; `testing-validator`
+standard #9; an eval "Standard 0"; and RDD-anchoring of the slogan in
+`/ov-internals:agents`, `/ov-internals:cutover-policy`, `/ov-internals:disposable`,
+`/ov-internals:git-workflow`, and the skill-maintenance meta-skill. Lean RDD
+pointers were added to the three soft hooks (`runtime-verification-reminder.sh`,
+`end-of-turn-challenge.sh`, `team-coordination-reminder.sh`); RDD is deliberately
+NOT in the deterministic `pre-commit` / `pre-push` gates, because "highest-risk,
+validated early" is a judgment, not a mechanical invariant ("hooks gate mechanical
+invariants; agents judge proof").
+
+**Also in this commit.** `.claude/settings.json` gained
+`"worktree": {"bgIsolation": "none"}` so the background-isolation guard defers to
+the operator's dedicated per-purpose worktrees (the `av` / `ac` / `oc` / `qc`
+checkouts) rather than requiring a nested `.claude/worktrees/` worktree.
+
+Docs/policy-only cutover (plus three lean `.sh` hook pointers, verified by running
+each hook). Verification: adversarial consistency review, the R5
+naming-completeness grep (every "verify before you change" slogan now carries a
+named RDD link — three orphans the grep surfaced were fixed in the same tree),
+markdown integrity, and a clean run of all three touched hooks. No schema change,
+no `MigrationStep`.
+
 ### 2026-06-01 — ov tooling: `ov layer set` wrapper descent + annotated-tag clone (no "is not a commit" warning)
 
 Two `ov` Go defects that surfaced during the selkies/pixelflux landing were fixed

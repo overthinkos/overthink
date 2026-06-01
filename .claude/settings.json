@@ -1,5 +1,8 @@
 {
   "includeCoAuthoredBy": false,
+  "worktree": {
+    "bgIsolation": "none"
+  },
   "env": {
     "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
   },

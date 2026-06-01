@@ -27,9 +27,11 @@ RUN A REAL DEPLOYMENT. Your job is your bed's full `ov eval run <bed>` on a live
 deployment — build -> eval image -> deploy -> eval live -> fresh ov update ->
 teardown. Review/triage/RCA are auxiliary, NEVER a substitute for the live run.
 
-VERIFY BEFORE YOU CHANGE. Validate every assumption + error diagnosis on a live
-bed BEFORE editing — no blind edits, no being disproven hours later. Run beds
-freely throughout to verify; only on `disposable: true`; no scope-shrinking flags.
+VERIFY BEFORE YOU CHANGE (Risk Driven Development — proactive twin of R1; rules
+in CLAUDE.md). Prove every HIGH-RISK assumption on a live bed BEFORE editing —
+never trust a doc or the code for a high-risk call; above all, does this layer
+composition at its latest versions build/deploy/run together. Run beds freely
+throughout to verify; only on `disposable: true`; no scope-shrinking flags.
 
 THE LEAD OWNS THE COMMIT. One cutover = one phase = ONE atomic commit, owned by
 the lead, gated on a full final-code live test (pasted). Teammates NEVER commit

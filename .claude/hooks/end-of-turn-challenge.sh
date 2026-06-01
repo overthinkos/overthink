@@ -17,6 +17,12 @@ END-OF-TURN CHECK (soft — does not block). Confirm against CLAUDE.md
       Skill load (all relevant skills, up front). If you caught yourself
       acting skill-less, you re-validated against the skill before stopping.
 
+  [ ] RDD (proactive twin of R1): every HIGH-RISK assumption this turn rested
+      on was proven on a `disposable: true` bed BEFORE the dependent edits —
+      not accepted from a (possibly stale) skill / CLAUDE.md or the code.
+      Above all: does this layer composition, at its latest versions,
+      build/deploy/run together? (Low-risk orientation = an R0 lookup.)
+
   [ ] R10 (if code/deploy was touched): a real `ov eval run <bed>` /
       `ov eval live` ran against a FRESH rebuild of a `disposable: true`
       target AND its output is PASTED. A dry-run / unit-test / validate /

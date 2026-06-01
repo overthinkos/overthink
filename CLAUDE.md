@@ -145,6 +145,36 @@ You have all the time in the world and taking the time to get things properly do
 
 **No workarounds.** Sleep loops, retry-on-flake, magic-number tuning, "works on my machine" fixes are FORBIDDEN at the architectural level too — not just at the procedural-rule level. Procedural rule R4; architectural framing here. If a race exists, the fix is the synchronization primitive, not a delay.
 
+## Risk Driven Development (RDD)
+
+Overthink is built around **Risk Driven Development (RDD)**: ALWAYS validate ANY HIGH-RISK assumption empirically against the live system — NEVER accept the skills, CLAUDE.md, or the current code as automatically correct. Documentation drifts and code has bugs; for a high-risk decision, **reality is the only ground truth.** Prove it on a real `disposable: true` bed in the PLANNING / EARLY-CODING phase, before the design commits to it. The discipline is *never trust, verify*.
+
+**RDD and skills-first (R0) compose — they do not conflict.** R0 governs where you START: load the matching skill first, trust it over your stale training, never grep blind. RDD governs what you accept as PROVEN: a skill or code passage is the best available HYPOTHESIS, not a settled fact, when the stakes are high. You still load the skill first (R0); you just don't bet a plan on a high-risk claim until a bed confirms it. When the bed contradicts the doc, the DOC IS STALE — fix it (skills are living documents).
+
+**Risk — not documentation status — is the trigger.**
+
+- **Low-risk / recoverable** (orientation: "roughly what does this layer do"): the skill lookup suffices. Do NOT burn a bed on it, and do NOT add defensive complexity "to be safe" — that over-caution is failure mode 2 below.
+- **High-risk** (being wrong invalidates the plan, is costly or hard to reverse, or would send RCA down a false trail): validate it on a live bed REGARDLESS of what a skill, CLAUDE.md, or the code asserts.
+
+| Assumption | Risk if wrong | How RDD settles it |
+|---|---|---|
+| "Roughly what does layer X do?" (orientation) | Low, recoverable | Skill lookup (R0) — no bed |
+| "Layer X behaves EXACTLY as documented, and my plan depends on it" | High | Validate on a live bed — the skill may be stale |
+| "The code does X, so my change is safe" | High | Run it — code has bugs; the emitted artifact / live run is the arbiter (R8/R9) |
+| "These layers, at their latest versions, compose & run together" | High (no skill can certify) | Build + deploy + `ov eval` EARLY |
+
+**The archetypal high-risk unknown: composition.** The single highest, least-documented risk in a layer-composition system is whether a SPECIFIC combination of layers — especially at the LATEST currently-available versions the resolver picks (newest-wins) — actually builds, deploys, and reaches steady-state TOGETHER. No skill can certify a never-composed combination. Build it, deploy it, and `ov eval` it EARLY, before the plan rests on the assumption that it works.
+
+**RDD prevents three failure modes:**
+
+1. **A wrong high-risk assumption baked into the design** — "the skill says X" / "the code does Y" / "these layers compose" / "the newest version is drop-in" treated as proven; every task built on it inherits the defect when reality differs from the stale doc or buggy code.
+2. **Unnecessary caution / over-engineering** — guards, fallbacks, or pinned-back versions added against a danger a real check would have disproven. (For a low-risk item, spinning up a bed at all is the same waste in process form.)
+3. **Erroneous root-cause analysis** — diagnosing from speculation or from a stale doc / code reading instead of a real bed run. RDD front-loads the evidence so R1's RCA reasons from a real failure, not a guess.
+
+R1 is reactive (RCA after failure), RDD is proactive (prove the riskiest unknown first), R10 is the final proof (fresh rebuild on a `disposable: true` target). Same *never trust, verify* discipline at three points in time. See `/ov-internals:strict-policy` and the `/ov-internals:root-cause-analyzer` agent.
+
+The cheapest moment to discover a doc is stale, code is buggy, or a composition breaks is before you build the plan on it — on a disposable bed, not after commit.
+
 ## Disposable-Only Autonomy + Mandatory Live-Deploy Verification
 
 **`disposable: true` is the ONE and ONLY authorization for autonomous destroy + rebuild.** Default is `false` (explicit opt-in only; see `/ov-internals:disposable`). No derivation from other fields. No "this looks like a test bed" heuristic. No hostname-based assumptions. A deploy is either explicitly marked `disposable: true` in deploy.yml or it is NOT rebuildable unattended — even if its name contains "test", even if it's a project on a shared host where unrelated production services also run. Explicit-only is what makes this rule safe on shared infrastructure with live users on other resources.
@@ -182,6 +212,7 @@ The verification loop has three rules:
 
 Before saying "done" answer YES to all of these:
 
+- Did Risk Driven Development apply — was every HIGH-RISK assumption proven on a `disposable: true` bed rather than accepted from a (possibly stale) skill / CLAUDE.md or the current code, above all whether this layer composition at its latest versions builds/deploys/runs together (RDD, the proactive twin of R1)? (Low-risk orientation is an R0 lookup.)
 - Did `/ov-internals:root-cause-analyzer` run on every failure / warning / anomaly observed during the session (R1)?
 - Was every issue surfaced during the session fixed in this cutover or explicitly escalated (R2)?
 - Does `git grep` on every removed identifier return ONLY `CHANGELOG.md` / migration-help-text context (R5)?
@@ -247,10 +278,12 @@ un-testable. That is FORBIDDEN.**
 - **Running `ov` to verify, at any stage, as often as useful.**
   `ov image build`, `ov update`, `ov eval run`, `ov vm create`, `ov start`
   against a `disposable: true` target — in parallel or in the background — are
-  ENCOURAGED throughout the cutover. **Verify before you change** (the
-  proactive twin of R1): validate every assumption + error diagnosis on a live
-  bed BEFORE editing, so you are never disproven hours later. Only the COMMIT
-  is gated (on the full final-code test); running the beds to verify is not.
+  ENCOURAGED throughout the cutover. **Verify before you change — Risk Driven
+  Development** (the proactive twin of R1; see the **Risk Driven Development**
+  section): validate every HIGH-RISK assumption + error diagnosis on a live bed
+  BEFORE editing — never trust a doc or code reading for a high-risk call — so
+  you are never disproven hours later. Only the COMMIT is gated (on the full
+  final-code test); running the beds to verify is not.
 - **Cheap smoke-confirmation between tasks.** Running `go build` or
   `go test` after each task is good hygiene. It is NOT the acceptance
   gate. The acceptance gate is the FULL-STACK R10 run against the final
@@ -284,8 +317,9 @@ introduced unseen regressions and flushes them out.
    Run `ov` commands freely throughout — `ov image build`, `ov update`,
    `ov deploy add`, `ov vm create`, `ov eval run`, `ov start` against a
    `disposable: true` target — at any stage, in parallel or in the
-   background, to validate assumptions and diagnose errors BEFORE you edit
-   (the proactive twin of R1). What the COMMIT is gated on is the full live
+   background, to validate high-risk assumptions and diagnose errors BEFORE you
+   edit (Risk Driven Development — the proactive twin of R1). What the COMMIT is
+   gated on is the full live
    test of EVERYTHING against the FINAL code (pasted): a run that passes on
    an intermediate state never authorizes a commit. Cheap smoke (`go build`,
    `go test`, `ov image validate`) is good hygiene between tasks but is NOT
@@ -501,6 +535,9 @@ Before declaring the turn done, every YES:
       AI-attribution trailer at the tier the proof supports (no inflation)?
 - [ ] The change ships the test coverage that PROVES its functionality
       (`eval:` checks / Go tests) and R10 exercised it (eval-coverage gate)?
+- [ ] Every high-risk assumption this cutover rested on was proven EARLY on a
+      disposable bed (RDD) — none was carried into the final code on the
+      strength of a doc/code reading alone?
 - [ ] Auto-landed on R10 PASS: `feat/` fast-forward-merged into `main`,
       `main` HEAD tagged `v<CalVer>`, pushed, `feat/` deleted — with NO
       force-push anywhere (no `--force` / `--force-with-lease`)?
@@ -541,8 +578,9 @@ ownership.** The lead partitions the `kind: eval` beds so no two teammates own
 the same bed; distinct beds have disjoint container/VM/image names + ports
 (`validateEvalBeds` guarantees it), so they run concurrently and safely with no
 worktree. Each teammate runs its own bed's full `ov eval run <bed>` on a real
-deployment and **verifies before it changes** (validate assumptions on a live
-bed before editing). One cutover stays one phase / one commit, owned by the
+deployment and **verifies before it changes** (Risk Driven Development —
+validate high-risk assumptions on a live bed before editing). One cutover stays
+one phase / one commit, owned by the
 lead; teammates never commit or push independently.
 
 **Dynamic workflows that IMPLEMENT a cutover obey the SAME bed-scoped discipline
@@ -643,6 +681,7 @@ See `plugins/README.md` for the full skill index (250+ skills). README.md carrie
 - **Every change ships proof of its functionality.** A change is acceptable ONLY if it adds/updates the test coverage that PROVES what it does — `eval:` declarative checks (build- and deploy-scope as appropriate) for new/changed layers & images, Go unit tests for `ov` code — and the R10 live run exercises that path. A change whose new functionality has no test that would FAIL without it does not pass R10 and is not landable. See `/ov-eval:eval`, R7/R10.
 - **Deploy fetches NOTHING speculative.** Every `ov deploy add` (any target kind: `local`, `pod`, `vm`, `k8s`) MUST emit zero image-pull / image-build steps unless an explicit layer step at deploy time requires the image — and no layer does today. Test-bed image preflight is the test/eval entry point's job, not the deploy's: `ov eval run` collects `score.target_image:` + per-scenario `pod:` declarations and ensures each is present in podman storage BEFORE running scenarios. A `kind: local` template carries no `image:` field. See `/ov-local:local-spec`, `/ov-eval:eval`.
 - **Engineering discipline (R1–R5) comes before runtime verification (R6–R9) before R10.** R1 (RCA on every failure), R2 (no "pre-existing" / "out of scope"), R3 (no duplication; generic > ad-hoc), R4 (no ad-hoc workarounds), R5 (hard cutover: deprecated + stale references in same change). See `/ov-internals:strict-policy` for the operationalization. R10 (disposable + fresh-rebuild) is the final acceptance gate.
+- **Risk Driven Development (RDD) — never trust, verify.** Always prove ANY high-risk assumption on a live `disposable: true` bed before building on it; never accept the skills, CLAUDE.md, or current code as ground truth for a high-risk call (they drift and have bugs). Risk — not documentation status — is the trigger; the archetypal high-risk unknown is whether a layer composition, at its latest available versions, builds/deploys/runs together. The proactive twin of R1; see the **Risk Driven Development** section above and `/ov-internals:strict-policy`.
 - **Mode purity.** `LoadUnified` reads `overthink.yml` only; never merges `deploy.yml`. See `/ov-internals:go` "Mode purity".
 - **Project directory resolution.** See `/ov-image:image` "Project directory resolution".
 - **User policy: adopt over rename.** Declarative via `build.yml distro.<name>.base_user:` + `user_policy:`. See `/ov-image:image` "user_policy" and `/ov-build:build` "base_user:".

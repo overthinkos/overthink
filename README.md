@@ -97,6 +97,15 @@ and an AI agent driving it: Claude Code sub-agents (`eval-bed-runner`,
 `/audit-deploy-configs`) run these beds to test and verify autonomously.
 → `/ov-eval:eval`, `/ov-internals:agents`.
 
+**Designed around Risk Driven Development.** Documentation drifts and code
+has bugs, so Overthink never lets a high-risk assumption ride on "the docs
+say so." The riskiest unknown — whether a particular *combination* of layers,
+at their latest versions, actually builds and runs together — gets proven
+empirically on a disposable bed EARLY, before a design is built on it.
+`kind: eval` beds and `ov eval` make that proof cheap, for AI agents and humans
+alike: read the skill for the design intent, then confirm the high-risk parts
+against a real, running system. → CLAUDE.md "Risk Driven Development (RDD)".
+
 **Rootless-first power-user images.** The four images carrying the
 full `ov` toolchain (`fedora-coder`, `fedora-ov`, `arch-ov`,
 `githubrunner`) all run as uid=1000 with passwordless sudo. Four

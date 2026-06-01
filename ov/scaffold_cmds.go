@@ -274,7 +274,15 @@ func (c *LayerSetCmd) Run() error {
 	if _, err := os.Stat(layerYml); err != nil {
 		return fmt.Errorf("layer %q not found at %s", c.Name, layerYml)
 	}
-	return SetByDotPath(layerYml, c.Path, c.Value)
+	// Layer files are kind-keyed (`layer: {...}`), so a body-relative dot-path
+	// like `version` or `env.X` must descend into the `layer:` wrapper.
+	// Without this, SetByDotPath appends a stray top-level key (e.g. a second
+	// `version:`) and the loader then rejects the file as ambiguous.
+	path := c.Path
+	if path != "layer" && !strings.HasPrefix(path, "layer.") {
+		path = "layer." + path
+	}
+	return SetByDotPath(layerYml, path, c.Value)
 }
 
 // LayerAddPkgCmd is shared between add-rpm/add-deb/add-pac/add-aur. The

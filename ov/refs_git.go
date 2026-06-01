@@ -17,35 +17,17 @@ func GitResolveRef(repoURL string, ref string) (string, error) {
 		return ref, nil
 	}
 
-	// Try ls-remote to resolve tags and branches
-	cmd := exec.Command("git", "ls-remote", repoURL, ref, "refs/tags/"+ref, "refs/heads/"+ref)
+	// Query the ref AND its peeled ^{} form so an ANNOTATED tag resolves to the
+	// underlying COMMIT (refs/tags/X^{}), not the tag object (refs/tags/X).
+	cmd := exec.Command("git", "ls-remote", repoURL, ref, "refs/tags/"+ref, "refs/tags/"+ref+"^{}", "refs/heads/"+ref)
 	out, err := cmd.Output()
 	if err != nil {
 		return "", fmt.Errorf("git ls-remote %s %s: %w", repoURL, ref, err)
 	}
 
 	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
-	for _, line := range lines {
-		if line == "" {
-			continue
-		}
-		parts := strings.Fields(line)
-		if len(parts) >= 2 {
-			commit := parts[0]
-			refName := parts[1]
-			// Prefer exact tag match, then branch
-			if refName == "refs/tags/"+ref || refName == "refs/heads/"+ref || refName == ref {
-				return commit, nil
-			}
-		}
-	}
-
-	// Check for peeled tag (annotated tags show as refs/tags/v1.0.0^{})
-	for _, line := range lines {
-		parts := strings.Fields(line)
-		if len(parts) >= 2 && strings.HasSuffix(parts[1], "^{}") {
-			return parts[0], nil
-		}
+	if commit := pickResolvedCommit(lines, ref); commit != "" {
+		return commit, nil
 	}
 
 	// If nothing matched but ref is a short hex, it might be a short commit
@@ -56,6 +38,40 @@ func GitResolveRef(repoURL string, ref string) (string, error) {
 	return "", fmt.Errorf("could not resolve ref %q in %s", ref, repoURL)
 }
 
+// pickResolvedCommit selects the commit hash for ref from `git ls-remote`
+// output lines. An ANNOTATED tag exposes two refs — `refs/tags/<ref>` (the tag
+// OBJECT) and `refs/tags/<ref>^{}` (the COMMIT it points at) — so the peeled
+// form is preferred; a lightweight tag or branch has only its direct ref.
+// Returns "" when ref isn't present. Keeping this pure makes the peel-preference
+// unit-testable without a network round-trip.
+func pickResolvedCommit(lines []string, ref string) string {
+	peeled := "refs/tags/" + ref + "^{}"
+	tagRef := "refs/tags/" + ref
+	headRef := "refs/heads/" + ref
+	// 1. Peeled annotated-tag commit wins (never the tag object).
+	for _, line := range lines {
+		parts := strings.Fields(line)
+		if len(parts) >= 2 && parts[1] == peeled {
+			return parts[0]
+		}
+	}
+	// 2. Exact lightweight-tag / branch / ref match.
+	for _, line := range lines {
+		parts := strings.Fields(line)
+		if len(parts) >= 2 && (parts[1] == tagRef || parts[1] == headRef || parts[1] == ref) {
+			return parts[0]
+		}
+	}
+	// 3. Defensive: any other peeled ref present.
+	for _, line := range lines {
+		parts := strings.Fields(line)
+		if len(parts) >= 2 && strings.HasSuffix(parts[1], "^{}") {
+			return parts[0]
+		}
+	}
+	return ""
+}
+
 // GitClone clones a git repository at a specific ref into the target directory.
 // Uses shallow clone for efficiency.
 func GitClone(repoURL string, ref string, commit string, targetDir string) error {
@@ -64,14 +80,25 @@ func GitClone(repoURL string, ref string, commit string, targetDir string) error
 		return fmt.Errorf("creating parent directory: %w", err)
 	}
 
-	// Clone with depth 1 at the specific ref
-	// First try as a tag/branch name
+	// Primary: shallow-clone the resolved COMMIT directly. `commit` is already
+	// peeled to a real commit by GitResolveRef, and GitHub/GitLab allow fetching
+	// a reachable commit by sha. This avoids git's
+	// "refs/tags/<tag> <sha> is not a commit!" warning that
+	// `git clone --depth 1 --branch <annotated-tag>` emits (the annotated tag
+	// ref is a tag object, not a commit).
+	if len(commit) >= 7 && isHex(commit) {
+		if err := gitCloneByCommit(repoURL, commit, targetDir); err == nil {
+			return nil
+		}
+		os.RemoveAll(targetDir) // clean up partial clone before falling back
+	}
+
+	// Fallback: clone by ref name (servers that don't allow fetch-by-sha).
 	cmd := exec.Command("git", "clone", "--depth", "1", "--branch", ref, repoURL, targetDir)
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
-		// If that fails, do a full clone and checkout the commit
 		os.RemoveAll(targetDir) // clean up partial clone
-		return gitCloneByCommit(repoURL, commit, targetDir)
+		return fmt.Errorf("git clone --branch %s %s: %w", ref, repoURL, err)
 	}
 
 	return nil
@@ -84,10 +111,14 @@ func gitCloneByCommit(repoURL string, commit string, targetDir string) error {
 	}
 
 	cmds := [][]string{
-		{"git", "init"},
+		// Keep the throwaway clone SILENT on success (zero-warnings gate):
+		// -c init.defaultBranch suppresses git's "using 'master' ... suppress
+		// this warning" hint; -q + advice.detachedHead=false silence the
+		// remaining init / fetch / detached-checkout chatter.
+		{"git", "-c", "init.defaultBranch=main", "init", "-q"},
 		{"git", "remote", "add", "origin", repoURL},
-		{"git", "fetch", "--depth", "1", "origin", commit},
-		{"git", "checkout", "FETCH_HEAD"},
+		{"git", "fetch", "--depth", "1", "-q", "origin", commit},
+		{"git", "-c", "advice.detachedHead=false", "checkout", "-q", "FETCH_HEAD"},
 	}
 
 	for _, args := range cmds {

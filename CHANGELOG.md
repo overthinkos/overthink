@@ -22,6 +22,33 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-01 — ov tooling: `ov layer set` wrapper descent + annotated-tag clone (no "is not a commit" warning)
+
+Two `ov` Go defects that surfaced during the selkies/pixelflux landing were fixed
+in a dedicated cutover.
+
+**`ov layer set <layer> <dotpath> <value>` appended a stray top-level key.** Layer
+files are kind-keyed (`layer: {...}`), but `LayerSetCmd` passed the body-relative
+dot-path straight to `SetByDotPath`, which walks from the document root — so
+`ov layer set foo version X` created a second, top-level `version:` instead of
+editing `layer.version`, and the loader then rejected the file as "ambiguous —
+layer: wrapper present AND other top-level keys [version]". Fix: `LayerSetCmd.Run`
+prepends `layer.` to the dot-path (idempotent — an already `layer.`-qualified path
+is left alone). `ov/scaffold_cmds.go`; `TestLayerSet_DescendsIntoLayerWrapper`.
+
+**Remote-layer resolution warned `refs/tags/vX <sha> is not a commit!` on the
+first fetch of an annotated tag.** `GitResolveRef` returned the tag OBJECT sha
+(its first loop matched the unpeeled `refs/tags/X` before the `^{}` loop ran), and
+`GitClone` then ran `git clone --depth 1 --branch <annotated-tag>`, whose shallow
+handling emits git's "is not a commit!" warning before peeling. Fix: `GitResolveRef`
+now also queries `refs/tags/X^{}` and a pure `pickResolvedCommit` prefers the
+peeled COMMIT; `GitClone` shallow-clones that resolved commit directly
+(`gitCloneByCommit`, fetch-by-sha — GitHub/GitLab allow it), keeping `git clone
+--branch` only as a fallback for servers without sha-fetch. The throwaway clone is
+silenced (`-c init.defaultBranch=main`, `-q`, `advice.detachedHead=false`) so it
+adds no new stderr. `ov/refs_git.go`; `TestPickResolvedCommit`. The annotated-tag
+re-fetch is now fully warning-free, satisfying the zero-warnings gate.
+
 ### 2026-06-01 — engineering-discipline policy: autonomous-by-default (act on any issue; ask only at a crossroad)
 
 A same-day follow-up corrected an over-restriction in the blocking/non-blocking

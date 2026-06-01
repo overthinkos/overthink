@@ -208,6 +208,9 @@ type RemoveCmd struct {
 
 func (c *RemoveCmd) Run() error {
 	c.Image, c.Instance = canonicalizeDeployArg(c.Image, c.Instance)
+	// Releasing a persistent exclusive claim restores any holder this deploy
+	// preempted (no-op if no lease / gated by an outer orchestrator).
+	defer releaseExclusiveForClaimant(deployKey(c.Image, c.Instance))
 	imageName := resolveImageName(c.Image)
 
 	// Stop tunnel before removing container (best-effort)

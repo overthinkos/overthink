@@ -282,6 +282,36 @@ type DeploymentNode struct {
 	// ... }` (full block). nil means non-ephemeral.
 	Ephemeral *EphemeralLifetime `yaml:"ephemeral,omitempty"`
 
+	// Preemptible is the HOLDER side of the resource-arbitration axis: a
+	// fourth, ORTHOGONAL classification alongside disposable / ephemeral /
+	// lifecycle (see /ov-internals:disposable). Presence means "this deploy
+	// occupies the named exclusive host-resource token(s) in `holds:`, and
+	// MAY be gracefully stopped to free them for a claimant that needs them
+	// — but MUST be restarted afterward (disk + definition preserved)". It
+	// is the inverse of disposable: disposable says *you may wipe me*,
+	// preemptible says *you may pause me, but bring me back*.
+	//
+	// NO derivation either way — preemptible neither implies nor is implied
+	// by disposable/ephemeral/lifecycle. A deploy may legitimately be BOTH
+	// preemptible (the arbiter stops it) and disposable (R10 may rebuild
+	// it). nil means not preemptible. Authored as a token list shorthand
+	// (`preemptible: [nvidia-gpu]`) or a block (`preemptible: {holds: [...],
+	// stop: shutdown, restore: always}`).
+	Preemptible *PreemptibleConfig `yaml:"preemptible,omitempty"`
+
+	// RequiresExclusive is the CLAIMANT side: the named exclusive
+	// host-resource token(s) this deploy needs sole use of while it runs.
+	// Before bring-up, the resource arbiter (ov/preempt.go) finds every
+	// RUNNING preemptible holder whose `holds:` intersects these tokens,
+	// gracefully stops them, records a crash-safe restore obligation, and
+	// restores them when this claim is released. A token with no declared
+	// holder is valid (the resource is simply free). The token is an
+	// operator-chosen NAME for a physical resource (e.g. "nvidia-gpu"),
+	// deliberately decoupled from the access mechanism (PCI hostdev for a
+	// VM, --device/CDI for a pod) so it unifies pod-vs-VM contention. nil/
+	// empty means this deploy claims nothing exclusive.
+	RequiresExclusive []string `yaml:"requires_exclusive,omitempty"`
+
 	// FromSnapshot, on a target=vm deploy, names the snapshot on the
 	// referenced kind:vm to use as the cloned overlay's backing disk.
 	// Empty means "boot the template VM directly" (legacy behavior).
@@ -426,6 +456,29 @@ func (c DeploymentNode) IsDisposable() bool {
 // the lifecycle.
 func (c DeploymentNode) IsEphemeral() bool {
 	return c.Ephemeral != nil
+}
+
+// IsPreemptible reports whether this deploy is a HOLDER of an exclusive
+// resource that may be gracefully stopped to free it (the `preemptible:`
+// field present). Orthogonal to IsDisposable/IsEphemeral — no derivation
+// either way. Implements the Classified interface.
+func (c DeploymentNode) IsPreemptible() bool {
+	return c.Preemptible != nil && len(c.Preemptible.Holds) > 0
+}
+
+// PreemptionHolds returns the exclusive-resource token(s) this deploy
+// occupies as a holder (nil-safe; empty when not preemptible).
+func (c DeploymentNode) PreemptionHolds() []string {
+	if c.Preemptible == nil {
+		return nil
+	}
+	return c.Preemptible.Holds
+}
+
+// RequiredExclusive returns the exclusive-resource token(s) this deploy
+// claims sole use of (the claimant side; nil-safe).
+func (c DeploymentNode) RequiredExclusive() []string {
+	return c.RequiresExclusive
 }
 
 // HasChildren reports whether this node has any nested deployments.
@@ -657,6 +710,94 @@ func (e *EphemeralLifetime) EffectiveNamingPattern() string {
 		return "{{.Source}}-eph-{{.UUID6}}"
 	}
 	return e.NamingPattern
+}
+
+// Canonical preemption policy values. Stop is the freeing mechanism;
+// Restore is when the holder is brought back.
+const (
+	PreemptStopShutdown   = "shutdown"   // graceful ACPI shutdown / podman stop; disk preserved (only supported value)
+	PreemptRestoreAlways  = "always"     // restart the holder regardless of the claim's outcome (default)
+	PreemptRestoreSuccess = "on-success" // restart only if the claim released cleanly; leave stopped on failure
+)
+
+// PreemptibleConfig is the HOLDER-side block of the resource-arbitration
+// axis (see DeploymentNode.Preemptible). Authoring forms:
+//
+//	preemptible: [nvidia-gpu]        # list shorthand → Holds, default stop/restore
+//	preemptible:                     # block form
+//	  holds: [nvidia-gpu]
+//	  stop: shutdown
+//	  restore: always
+type PreemptibleConfig struct {
+	// Holds is the set of named exclusive-resource tokens this deploy
+	// occupies. REQUIRED, non-empty (validated): a preemptible holder that
+	// holds nothing is meaningless. Tokens are operator-chosen names matched
+	// by set-intersection against a claimant's requires_exclusive.
+	Holds []string `yaml:"holds,omitempty"`
+
+	// Stop is how the arbiter frees the resource. Only "shutdown" (graceful
+	// ACPI shutdown for a VM / podman stop for a pod, disk + definition
+	// preserved) is supported — the ONLY mechanism that releases a VFIO
+	// passthrough device (suspend/pause keep the device assigned;
+	// managedsave is unsupported with passthrough). Empty → "shutdown".
+	Stop string `yaml:"stop,omitempty"`
+
+	// Restore is when the arbiter restarts the holder after the claim is
+	// released: "always" (default — the holder MUST survive, so it returns
+	// regardless of the claim's outcome) or "on-success" (leave it stopped
+	// on a failed claim, for operator inspection). Empty → "always".
+	Restore string `yaml:"restore,omitempty"`
+}
+
+// UnmarshalYAML accepts either a token-list shorthand (`preemptible:
+// [nvidia-gpu]` → Holds with default stop/restore) or a mapping block
+// (`preemptible: {holds: [...], stop: ..., restore: ...}`). A bare scalar
+// (e.g. `preemptible: true`) is rejected — a holder must name what it holds.
+func (p *PreemptibleConfig) UnmarshalYAML(node *yaml.Node) error {
+	if node == nil {
+		return nil
+	}
+	switch node.Kind {
+	case yaml.SequenceNode:
+		var holds []string
+		if err := node.Decode(&holds); err != nil {
+			return fmt.Errorf("preemptible list: %w", err)
+		}
+		p.Holds = holds
+		return nil
+	case yaml.MappingNode:
+		type rawPreemptible struct {
+			Holds   []string `yaml:"holds,omitempty"`
+			Stop    string   `yaml:"stop,omitempty"`
+			Restore string   `yaml:"restore,omitempty"`
+		}
+		var raw rawPreemptible
+		if err := node.Decode(&raw); err != nil {
+			return fmt.Errorf("preemptible block: %w", err)
+		}
+		p.Holds = raw.Holds
+		p.Stop = raw.Stop
+		p.Restore = raw.Restore
+		return nil
+	default:
+		return fmt.Errorf("preemptible: expected a token list (preemptible: [token, ...]) or a block (preemptible: {holds: [...]}), got YAML node kind %d", node.Kind)
+	}
+}
+
+// EffectiveStop returns the configured stop mechanism with the default.
+func (p *PreemptibleConfig) EffectiveStop() string {
+	if p == nil || p.Stop == "" {
+		return PreemptStopShutdown
+	}
+	return p.Stop
+}
+
+// EffectiveRestore returns the configured restore policy with the default.
+func (p *PreemptibleConfig) EffectiveRestore() string {
+	if p == nil || p.Restore == "" {
+		return PreemptRestoreAlways
+	}
+	return p.Restore
 }
 
 // LifecycleTag returns the literal Lifecycle field. Implements the
@@ -1171,6 +1312,7 @@ func LoadDeployConfig() (*DeployConfig, error) {
 	// here are surfaced at load time with a clear remediation hint.
 	verrs := &ValidationError{}
 	ValidateEphemeralAcrossDeploy(&dc, verrs)
+	ValidatePreemptibleAcrossDeploy(&dc, verrs)
 	for name := range dc.Deploy {
 		ValidateVmNamingGuard(name, verrs)
 	}

@@ -691,6 +691,9 @@ func LoadUnified(dir string) (*UnifiedFile, bool, error) {
 	if err := validateEvalBeds(merged); err != nil {
 		return nil, true, fmt.Errorf("%s: %w", root, err)
 	}
+	if err := validatePreemptibleUnified(merged); err != nil {
+		return nil, true, fmt.Errorf("%s: %w", root, err)
+	}
 	// Hard load-time error for the retired `local.cachyos-dx` key.
 	// Pairs with the deployment-side checks in validateDeploymentTree.
 	// All three retired keys (deployment.qc, deployment.cachyos-dx,

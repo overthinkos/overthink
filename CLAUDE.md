@@ -57,6 +57,7 @@ Consult this table BEFORE the first tool call of every task. If your task matche
 | Hard-cutover concerns / rename sweeps | `/ov-internals:cutover-policy` |
 | Engineering-discipline triggers (failure surfaced / dup pattern / ad-hoc fix tempting / "out of scope" framing) | `/ov-internals:strict-policy` |
 | Disposable-flag semantics / `disposable: true` authorization | `/ov-internals:disposable` |
+| Preemptible-flag / `requires_exclusive:` / `ov preempt` / exclusive host-resource arbitration (GPU passthrough contention) | `/ov-internals:disposable` + `/ov-core:deploy` |
 | Go source work (adding/modifying `ov` commands) | `/ov-internals:go` |
 | IR / InstallPlan / DeployTarget / OCITarget | `/ov-internals:install-plan` |
 | OCI labels / capabilities contract | `/ov-internals:capabilities` |

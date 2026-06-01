@@ -52,6 +52,7 @@ type CLI struct {
 	Logs        LogsCmd         `cmd:"" help:"Show service container logs"`
 	Mcp         McpCmdGroup     `cmd:"" help:"Run an MCP server exposing the ov CLI as tools"`
 	Migrate     MigrateCmd      `cmd:"" help:"Migrate any overthink config up to the latest schema CalVer (single idempotent chain — no sub-verbs)"`
+	Preempt     PreemptCmd      `cmd:"" help:"Inspect and recover exclusive-resource preemption leases (preemptible holders stopped to free a resource for a claimant)"`
 	ReapOrphans ReapOrphansCmd  `cmd:"reap-orphans" help:"Find ephemeral deployments whose underlying resource is gone and clean them up"`
 	Remove      RemoveCmd       `cmd:"" help:"Remove service container"`
 	Restart     RestartCmd      `cmd:"" help:"Restart a service container atomically (systemctl --user restart)"`

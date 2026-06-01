@@ -20,6 +20,18 @@ package main
 //                         //   derivation, because ephemeral
 //                         //   STRENGTHENS the contract).
 //
+//   preemptible: <list|block>  // RESOURCE-ARBITRATION axis (the fourth,
+//                         //   fully ORTHOGONAL classification). Holder
+//                         //   side: this deploy occupies the named
+//                         //   exclusive host-resource token(s) and MAY
+//                         //   be gracefully stopped to free them, but
+//                         //   MUST be restarted afterward (disk + def
+//                         //   preserved). The INVERSE of disposable
+//                         //   ("you may pause me, but bring me back"
+//                         //   vs "you may wipe me"). The claimant side
+//                         //   is requires_exclusive: [token...]. The
+//                         //   arbiter (ov/preempt.go) matches the two.
+//
 // Anti-derivation invariant (with one named exception):
 //   `lifecycle: dev` does NOT imply `disposable: true` — lifecycle is
 //   informational only.
@@ -28,6 +40,10 @@ package main
 //   only be honored if "may be destroyed" is also true. Setting
 //   `ephemeral: true` together with `disposable: false` is a
 //   contradiction; the loader rejects it with a clear error.
+//   `preemptible: ...` implies NOTHING and is implied by nothing —
+//   it is orthogonal to all three above. A deploy may be both
+//   preemptible (the arbiter stops it) and disposable (R10 rebuilds
+//   it); neither derives from the other.
 //
 // See /ov-internals:disposable for the schema + rationale, and CLAUDE.md
 // R10 for the verification-loop implications.
@@ -40,10 +56,13 @@ package main
 //
 // IsDisposable returns true when the config carries `disposable: true`
 // OR is ephemeral (load-bearing implication). IsEphemeral is the
-// stricter check.
+// stricter check. IsPreemptible is independent of both — it reports the
+// resource-arbitration holder side (`preemptible:` present with a
+// non-empty `holds:`), and never derives from / to disposability.
 type Classified interface {
 	IsDisposable() bool
 	IsEphemeral() bool
+	IsPreemptible() bool
 	LifecycleTag() string
 }
 

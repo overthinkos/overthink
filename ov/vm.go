@@ -323,6 +323,18 @@ func (c *VmCreateCmd) Run() error {
 	// surfaces the actual issue.
 	startLibvirtUserSession()
 
+	// Resource arbitration: a standalone `ov vm create` of a VM that a
+	// deploy/eval node claims via requires_exclusive preempts the running
+	// holders of that resource (persistent lease — released by `ov vm stop`/
+	// `ov vm destroy`). No-op when an outer orchestrator already owns the lease
+	// (OV_PREEMPT_LEASE set, e.g. an eval bed run) or when no claimant node
+	// references this VM entity. See ov/preempt.go.
+	if claimant, cnode, ok := lookupVMClaimant(c.Image); ok {
+		if _, perr := acquireExclusiveForClaimant(claimant, cnode, false); perr != nil {
+			return perr
+		}
+	}
+
 	// --- New kind:vm entity path (D1, D4, D12) ---
 	// Resolve the kind:vm entity FIRST so its `backend:` pin (when set)
 	// overrides the global vm.backend setting BEFORE backend resolution —
@@ -494,17 +506,25 @@ type VmStartCmd struct {
 }
 
 func (c *VmStartCmd) Run() error {
+	return startVM(c.Image, c.Instance)
+}
+
+// startVM starts a previously-created VM by image+instance, dispatching by
+// backend (libvirt domain start / re-exec the stored qemu command). Shared
+// by VmStartCmd.Run and the resource arbiter (ov/preempt.go) so the holder-
+// restart path runs the exact same lifecycle code as `ov vm start`.
+func startVM(image, instance string) error {
 	rt, err := ResolveRuntime()
 	if err != nil {
 		return err
 	}
 
-	backend, err := resolveVmBackend(vmConfiguredBackend(c.Image, rt.VmBackend))
+	backend, err := resolveVmBackend(vmConfiguredBackend(image, rt.VmBackend))
 	if err != nil {
 		return err
 	}
 
-	name := vmName(c.Image, c.Instance)
+	name := vmName(image, instance)
 
 	switch backend {
 	case "libvirt":
@@ -531,7 +551,7 @@ func (c *VmStartCmd) Run() error {
 		cmdFile := filepath.Join(stateDir, "command")
 		data, err := os.ReadFile(cmdFile)
 		if err != nil {
-			return fmt.Errorf("VM %s not found — run 'ov vm create %s' first", name, c.Image)
+			return fmt.Errorf("VM %s not found — run 'ov vm create %s' first", name, image)
 		}
 		parts := strings.Fields(string(data))
 		if len(parts) < 2 {
@@ -557,17 +577,35 @@ type VmStopCmd struct {
 }
 
 func (c *VmStopCmd) Run() error {
+	if err := stopVM(c.Image, c.Instance, c.Force); err != nil {
+		return err
+	}
+	// Releasing a persistent exclusive claim on this VM restores any holder it
+	// preempted (no-op if no lease / gated by an outer orchestrator).
+	if claimant, _, ok := lookupVMClaimant(c.Image); ok {
+		releaseExclusiveForClaimant(claimant)
+	}
+	return nil
+}
+
+// stopVM stops a running VM by image+instance. force=false performs a
+// graceful ACPI shutdown (disk + definition preserved — the "stopped, but
+// not depleted" semantic the resource arbiter relies on); force=true
+// destroys/kills it. Shared by VmStopCmd.Run and the resource arbiter
+// (ov/preempt.go), which always calls it with force=false so a preempted
+// holder is gracefully shut down and remains restartable.
+func stopVM(image, instance string, force bool) error {
 	rt, err := ResolveRuntime()
 	if err != nil {
 		return err
 	}
 
-	backend, err := resolveVmBackend(vmConfiguredBackend(c.Image, rt.VmBackend))
+	backend, err := resolveVmBackend(vmConfiguredBackend(image, rt.VmBackend))
 	if err != nil {
 		return err
 	}
 
-	name := vmName(c.Image, c.Instance)
+	name := vmName(image, instance)
 
 	switch backend {
 	case "libvirt":
@@ -581,7 +619,7 @@ func (c *VmStopCmd) Run() error {
 		if err != nil {
 			return fmt.Errorf("VM %s not found: %w", name, err)
 		}
-		if c.Force {
+		if force {
 			_ = conn.destroyDomain(dom)
 		} else {
 			if err := conn.shutdownDomain(dom); err != nil {
@@ -595,7 +633,7 @@ func (c *VmStopCmd) Run() error {
 			return err
 		}
 		stateDir := filepath.Join(dir, name)
-		if c.Force {
+		if force {
 			// Try QMP quit first, fall back to process kill
 			if err := qemuForceShutdown(stateDir); err != nil {
 				// Fallback: kill via PID
@@ -629,6 +667,13 @@ type VmDestroyCmd struct {
 }
 
 func (c *VmDestroyCmd) Run() error {
+	// Releasing a persistent exclusive claim on this VM restores any preempted
+	// holder once the claimant is gone (deferred so it runs on every exit;
+	// no-op if no lease / gated by an outer orchestrator).
+	if claimant, _, ok := lookupVMClaimant(c.Image); ok {
+		defer releaseExclusiveForClaimant(claimant)
+	}
+
 	rt, err := ResolveRuntime()
 	if err != nil {
 		return err

@@ -28,6 +28,20 @@ func (c *StartCmd) Run() error {
 	}
 	c.Image, c.Instance = canonicalizeDeployArg(c.Image, c.Instance)
 
+	// Resource arbitration: starting a pod deploy that claims requires_exclusive
+	// preempts the running holders of that resource (persistent lease —
+	// released by `ov stop`/`ov remove`). No-op when gated by an outer
+	// orchestrator or when this deploy claims nothing exclusive. See
+	// ov/preempt.go.
+	if dc := loadDeployConfigForRead("ov start"); dc != nil {
+		key := deployKey(c.Image, c.Instance)
+		if node, ok := dc.Deploy[key]; ok && len(node.RequiredExclusive()) > 0 {
+			if _, perr := acquireExclusiveForClaimant(key, node, false); perr != nil {
+				return perr
+			}
+		}
+	}
+
 	rt, err := ResolveRuntime()
 	if err != nil {
 		return err
@@ -257,6 +271,9 @@ type StopCmd struct {
 
 func (c *StopCmd) Run() error {
 	c.Image, c.Instance = canonicalizeDeployArg(c.Image, c.Instance)
+	// Releasing a persistent exclusive claim restores any holder this deploy
+	// preempted (no-op if no lease / gated by an outer orchestrator).
+	defer releaseExclusiveForClaimant(deployKey(c.Image, c.Instance))
 	// Resolve the image name (handle remote refs)
 	imageName := c.Image
 	ref := StripURLScheme(c.Image)
@@ -267,16 +284,25 @@ func (c *StopCmd) Run() error {
 	// Stop tunnel before stopping container (best-effort)
 	stopTunnelForImage(imageName, c.Instance)
 
-	rt, err := ResolveRuntime()
-	if err != nil {
+	if err := stopPodService(imageName, c.Instance); err != nil {
 		return err
 	}
 
-	// Always use systemctl for quadlet-managed containers, regardless of run_mode.
-	// Without this, podman stop + systemd Restart=always creates a restart loop.
-	quadletActive, _ := quadletExistsInstance(imageName, c.Instance)
+	stopUnmountIfRequested(c.Unmount, imageName, c.Instance)
+	return nil
+}
+
+// stopPodService stops a running pod deployment — the quadlet service when
+// one exists (always via systemctl, so podman-stop + Restart=always can't
+// create a restart loop), else the container directly via the resolved engine
+// with a fallback to the other engine. It performs NO tunnel/unmount side
+// effects — callers layer those on. Shared by StopCmd.Run and the resource
+// arbiter (ov/preempt.go), whose preemption path wants a bare, reversible
+// service stop that leaves the holder's disk/container intact for restart.
+func stopPodService(imageName, instance string) error {
+	quadletActive, _ := quadletExistsInstance(imageName, instance)
 	if quadletActive {
-		svc := serviceNameInstance(imageName, c.Instance)
+		svc := serviceNameInstance(imageName, instance)
 		cmd := exec.Command("systemctl", "--user", "stop", svc)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
@@ -284,15 +310,16 @@ func (c *StopCmd) Run() error {
 			return fmt.Errorf("stopping %s: %w", svc, err)
 		}
 		fmt.Fprintf(os.Stderr, "Stopped %s\n", svc)
-		stopUnmountIfRequested(c.Unmount, imageName, c.Instance)
 		return nil
 	}
 
-	// Resolve per-image engine from deploy.yml
-	runEngine := ResolveImageEngineForDeploy(imageName, c.Instance, rt.RunEngine)
-
+	rt, err := ResolveRuntime()
+	if err != nil {
+		return err
+	}
+	runEngine := ResolveImageEngineForDeploy(imageName, instance, rt.RunEngine)
 	engine := EngineBinary(runEngine)
-	name := containerNameInstance(imageName, c.Instance)
+	name := containerNameInstance(imageName, instance)
 
 	cmd := exec.Command(engine, "stop", name)
 	output, err := cmd.CombinedOutput()
@@ -306,14 +333,49 @@ func (c *StopCmd) Run() error {
 		fallbackCmd := exec.Command(otherBinary, "stop", name)
 		if _, fallbackErr := fallbackCmd.CombinedOutput(); fallbackErr == nil {
 			fmt.Fprintf(os.Stderr, "Stopped %s (via %s)\n", name, otherEngine)
-			stopUnmountIfRequested(c.Unmount, imageName, c.Instance)
 			return nil
 		}
 		return fmt.Errorf("%s stop failed: %w\n%s", engine, err, strings.TrimSpace(string(output)))
 	}
 
 	fmt.Fprintf(os.Stderr, "Stopped %s\n", name)
-	stopUnmountIfRequested(c.Unmount, imageName, c.Instance)
+	return nil
+}
+
+// startPodService starts an already-configured pod deployment — the quadlet
+// service when one exists, else the existing stopped container via the
+// resolved engine. Used by the resource arbiter to restore a preempted holder:
+// the deployment's quadlet/container already exists (the holder was running
+// before preemption), so this is a plain service/container start, not a full
+// `ov start` re-config.
+func startPodService(imageName, instance string) error {
+	quadletActive, _ := quadletExistsInstance(imageName, instance)
+	if quadletActive {
+		svc := serviceNameInstance(imageName, instance)
+		cmd := exec.Command("systemctl", "--user", "start", svc)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("starting %s: %w", svc, err)
+		}
+		fmt.Fprintf(os.Stderr, "Started %s\n", svc)
+		return nil
+	}
+
+	rt, err := ResolveRuntime()
+	if err != nil {
+		return err
+	}
+	runEngine := ResolveImageEngineForDeploy(imageName, instance, rt.RunEngine)
+	engine := EngineBinary(runEngine)
+	name := containerNameInstance(imageName, instance)
+
+	cmd := exec.Command(engine, "start", name)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("%s start failed: %w\n%s", engine, err, strings.TrimSpace(string(output)))
+	}
+	fmt.Fprintf(os.Stderr, "Started %s\n", name)
 	return nil
 }
 

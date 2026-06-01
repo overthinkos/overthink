@@ -162,6 +162,33 @@ func runEvalBed(exe, name string, node DeploymentNode, opts bedRunOpts) (*bedRun
 	}
 	res := &bedRunResult{Bed: name, CalVer: calver, OK: true}
 
+	// Resource arbitration (the "preemptible" axis): if this bed claims an
+	// exclusive host resource (requires_exclusive — e.g. a passthrough GPU),
+	// gracefully stop any running preemptible holder of it BEFORE bring-up and
+	// restore it AFTER teardown. The lease is owned HERE (the outermost
+	// orchestrator) and OV_PREEMPT_LEASE suppresses the nested `ov vm create`/
+	// `ov deploy add`/`ov vm destroy` subprocesses from touching it. The defer
+	// guarantees restore on EVERY exit path (success, failure, early return);
+	// crash-recovery beyond the defer is handled by the ledger + `ov preempt
+	// restore`. See ov/preempt.go.
+	lease, lerr := acquireExclusiveForClaimant(name, node, true)
+	if lerr != nil {
+		res.OK = false
+		res.Step = append(res.Step, stepResult{Name: "preempt-acquire", OK: false})
+		writeBedSummary(logDir, res)
+		return res, fmt.Errorf("acquiring exclusive resources for %s: %w", name, lerr)
+	}
+	defer func() {
+		if res.OK {
+			_ = lease.Release()
+		} else {
+			_ = lease.ReleaseFailed()
+		}
+		if lease.active {
+			_ = os.Unsetenv(envPreemptLeaseHeld)
+		}
+	}()
+
 	// step records a step's outcome and writes its log file. Returns the
 	// run error so the caller can short-circuit via fail().
 	step := func(stepName string, args []string) error {

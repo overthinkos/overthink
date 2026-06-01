@@ -22,6 +22,61 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-01 — feat: `preemptible` — exclusive host-resource arbitration (the fourth deploy axis)
+
+**Additive (no schema-version bump, no migration).** Introduces a fourth,
+orthogonal deploy-classification axis alongside `disposable` / `ephemeral` /
+`lifecycle`: **`preemptible`** (holder side) + **`requires_exclusive`** (claimant
+side) on `DeploymentNode`. A `preemptible` deploy occupies named exclusive
+host-resource token(s) (`holds: [...]`) and MAY be gracefully stopped to free
+them for a claimant that declares `requires_exclusive: [...]`, then MUST be
+restarted (disk + definition preserved). It is the INVERSE of `disposable`
+("you may pause me, but bring me back" vs "you may wipe me") and derives
+nothing from / to the other three axes.
+
+**Motivation.** A physical GPU passed through to a VM via VFIO can be bound by
+exactly one VM at a time. A long-running operator GPU VM (`vm:cachyos-gpu`) and
+the GPU eval bed (`eval-cachyos-gpu-vm`) contend for the same card; before this
+change the operator had to stop the holder by hand, run the eval, and remember
+to restart it.
+
+**Mechanism.** A new `ResourceArbiter` (`ov/preempt.go`) matches a claimant's
+required tokens against running preemptible holders (pure set-intersection — the
+token is an operator-chosen NAME, decoupled from the access mechanism, so it
+unifies pod-vs-VM contention), gracefully stops each holder, **waits until it
+actually powers off** (a readiness poll, since `vm stop` issues an async ACPI
+shutdown and a VFIO device isn't released until power-off), records a crash-safe
+**lease** (`~/.local/share/ov/preemption/leases.yml`, written BEFORE any stop so
+recovery is always possible), and restores the holders on release. The arbiter is
+wired at the transient claim point (`ov eval run` via `runEvalBed`, `defer`-
+released) and the persistent ones (`ov vm create` / `ov start`, released by
+`ov vm stop`/`vm destroy`/`ov stop`/`ov remove`); nested `ov` subprocesses
+inherit the lease via `OV_PREEMPT_LEASE` and never re-acquire. `restore: always`
+(default) brings the holder back regardless of the claim's outcome;
+`restore: on-success` leaves it stopped on a failed claim. New `ov preempt
+status` / `ov preempt restore [claimant]` surface inspection + crash recovery
+(`reconcileStranded` also runs automatically at each acquire). The VM/pod
+graceful-stop + start logic was extracted into shared `stopVM`/`startVM`/
+`stopPodService`/`startPodService` funcs (R3) so the arbiter and the `ov vm`/`ov
+start`/`ov stop` commands run identical lifecycle code.
+
+**Surfaces.** `ov/deploy.go` (`Preemptible *PreemptibleConfig` +
+`RequiresExclusive []string` + `IsPreemptible()`/`PreemptionHolds()`/
+`RequiredExclusive()`), `ov/classification.go` (`Classified.IsPreemptible()` +
+orthogonality), `ov/preempt.go` (arbiter + ledger + lifecycle deps),
+`ov/preempt_cmd.go` (`ov preempt`), `ov/validate_preempt.go` (holds non-empty,
+stop ∈ {shutdown}, restore ∈ {always,on-success}, no self-contention) hooked into
+both load paths, integration edits in `ov/vm.go`/`ov/start.go`/`ov/commands.go`/
+`ov/eval_bed_run.go`, and `ov/main.go`. Tests in `ov/preempt_test.go` +
+`ov/preempt_schema_test.go`. Docs: `/ov-internals:disposable` ("The
+resource-arbitration axis"), `/ov-core:deploy` ("Preemptible resource
+arbitration"), CLAUDE.md Skill Dispatcher row. The host-specific GPU hostdev on
+`cachyos-gpu-vm` and the `preemptible:` flag on the operator `vm:cachyos-gpu`
+remain per-host/uncommitted (a PCI address is host-specific) — the R10 ran them
+locally: the arbiter preempted the live `ov-cachyos-gpu` workstation, freed
+`/dev/vfio/13`, the disposable `cachyos-gpu-vm` claimed the card, and the holder
+was restored on teardown.
+
 ### 2026-06-01 — philosophy: name "candyboxing" (secure the box, stock it fully) as a first-class concept
 
 **Additive.** Names the environment philosophy Overthink already embodies:

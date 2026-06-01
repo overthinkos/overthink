@@ -1,31 +1,31 @@
 [submodule "plugins"]
 	path = plugins
-	url = https://github.com/overthinkos/overthink-plugins.git
+	url = git@github.com:overthinkos/overthink-plugins.git
 [submodule "pkg/arch"]
 	path = pkg/arch
-	url = https://github.com/overthinkos/overthink-arch.git
+	url = git@github.com:overthinkos/overthink-arch.git
 [submodule "image/arch"]
 	path = image/arch
-	url = https://github.com/overthinkos/arch.git
+	url = git@github.com:overthinkos/arch.git
 	branch = main
 [submodule "image/cachyos"]
 	path = image/cachyos
-	url = https://github.com/overthinkos/cachyos.git
+	url = git@github.com:overthinkos/cachyos.git
 [submodule "image/debian"]
 	path = image/debian
-	url = https://github.com/overthinkos/debian.git
+	url = git@github.com:overthinkos/debian.git
 [submodule "image/ubuntu"]
 	path = image/ubuntu
-	url = https://github.com/overthinkos/ubuntu.git
+	url = git@github.com:overthinkos/ubuntu.git
 [submodule "image/fedora"]
 	path = image/fedora
-	url = https://github.com/overthinkos/fedora.git
+	url = git@github.com:overthinkos/fedora.git
 [submodule "image/bootc"]
 	path = image/bootc
-	url = https://github.com/overthinkos/bootc.git
+	url = git@github.com:overthinkos/bootc.git
 [submodule "image/nvidia"]
 	path = image/nvidia
-	url = https://github.com/overthinkos/nvidia.git
+	url = git@github.com:overthinkos/nvidia.git
 [submodule "image/selkies"]
 	path = image/selkies
-	url = https://github.com/overthinkos/selkies.git
+	url = git@github.com:overthinkos/selkies.git

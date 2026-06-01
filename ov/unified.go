@@ -65,8 +65,8 @@ type UnifiedFile struct {
 	// same-repo file splits + shared build.yml vocabulary) or a single-key
 	// map `alias: ref` (a namespaced child import — cross-repo entity
 	// cherry-pick, referenced qualified as `alias.entry`). See ImportList.
-	Import   ImportList      `yaml:"import,omitempty"`
-	Discover *DiscoverConfig `yaml:"discover,omitempty"`
+	Import   ImportList             `yaml:"import,omitempty"`
+	Discover *DiscoverConfig        `yaml:"discover,omitempty"`
 	Distro   map[string]*DistroDef  `yaml:"distro,omitempty"`
 	Builder  map[string]*BuilderDef `yaml:"builder,omitempty"`
 	Init     map[string]*InitDef    `yaml:"init,omitempty"`
@@ -198,14 +198,14 @@ func (il ImportList) MarshalYAML() (interface{}, error) {
 // DiscoverConfig drives filesystem scans for standalone kind-keyed files. Each
 // sub-key is independent; a file with only `discover.layer:` is common.
 type DiscoverConfig struct {
-	Layer    []ScanSpec `yaml:"layer,omitempty"`
-	Image    []ScanSpec `yaml:"image,omitempty"`
-	Deploy   []ScanSpec `yaml:"deploy,omitempty"`
-	Builder  []ScanSpec `yaml:"builder,omitempty"`
-	Distro   []ScanSpec `yaml:"distro,omitempty"`
-	Init     []ScanSpec `yaml:"init,omitempty"`
-	VM       []ScanSpec `yaml:"vm,omitempty"`
-	Cluster  []ScanSpec `yaml:"cluster,omitempty"` // reserved for Part F
+	Layer   []ScanSpec `yaml:"layer,omitempty"`
+	Image   []ScanSpec `yaml:"image,omitempty"`
+	Deploy  []ScanSpec `yaml:"deploy,omitempty"`
+	Builder []ScanSpec `yaml:"builder,omitempty"`
+	Distro  []ScanSpec `yaml:"distro,omitempty"`
+	Init    []ScanSpec `yaml:"init,omitempty"`
+	VM      []ScanSpec `yaml:"vm,omitempty"`
+	Cluster []ScanSpec `yaml:"cluster,omitempty"` // reserved for Part F
 	// Calamares-aligned kinds.
 	Group  []ScanSpec `yaml:"group,omitempty"`
 	Target []ScanSpec `yaml:"target,omitempty"`
@@ -297,13 +297,13 @@ type DeploymentsSection struct {
 // -----------------------------------------------------------------------------
 
 type kindKeyedDoc struct {
-	Layer      *LayerDoc      `yaml:"layer,omitempty"`
-	Image      *ImageDoc      `yaml:"image,omitempty"`
-	Deploy     *DeployDoc `yaml:"deploy,omitempty"`
-	Builder    *BuilderDoc    `yaml:"builder,omitempty"`
-	Distro     *DistroDoc     `yaml:"distro,omitempty"`
-	Init       *InitDoc       `yaml:"init,omitempty"`
-	VM         *VmDoc         `yaml:"vm,omitempty"`
+	Layer   *LayerDoc   `yaml:"layer,omitempty"`
+	Image   *ImageDoc   `yaml:"image,omitempty"`
+	Deploy  *DeployDoc  `yaml:"deploy,omitempty"`
+	Builder *BuilderDoc `yaml:"builder,omitempty"`
+	Distro  *DistroDoc  `yaml:"distro,omitempty"`
+	Init    *InitDoc    `yaml:"init,omitempty"`
+	VM      *VmDoc      `yaml:"vm,omitempty"`
 	// Schema v4 first-class target templates.
 	Pod     *PodDoc     `yaml:"pod,omitempty"`
 	K8s     *K8sDoc     `yaml:"k8s,omitempty"`
@@ -1112,7 +1112,7 @@ var rootShapeKeys = map[string]bool{
 	"layer": true,
 	"image": true, "pod": true, "vm": true, "k8s": true, "local": true,
 	"android": true,
-	"deploy": true,
+	"deploy":  true,
 	// 2026-04 harness cutover: `ai:` and `recipe:` are recognized as
 	// root-shape collection-map keys (in addition to being valid
 	// kind-keyed forms). Mirrors how image/pod/vm work.

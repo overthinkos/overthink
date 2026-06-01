@@ -22,6 +22,29 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-01 — engineering-discipline policy: autonomous-by-default (act on any issue; ask only at a crossroad)
+
+A same-day follow-up corrected an over-restriction in the blocking/non-blocking
+landing below. That landing said net-new work the cutover did not surface
+required the user to authorize a NEW plan, and scoped the AI's autonomy to issues
+the current cutover happened to surface. The operator's correction: picking up
+the next thing automatically is exactly what the AI should do — the discriminator
+is CERTAINTY (clear path vs genuine fork), not provenance (surfaced-here vs
+net-new). The policy now states the default plainly: the AI solves ANY issue it
+finds automatically, opening the next cutover without waiting for authorization,
+each as an atomic fully-R10'd change; it pauses to ASK only at a genuine
+unexpected/unplanned crossroad — a decision it cannot resolve from the request,
+the code, the loaded skills, or sensible defaults (a design choice with material
+trade-offs, a hard-to-reverse or outward-facing action without standing
+authorization, a plan↔CLAUDE.md/skills contradiction, or genuinely ambiguous
+requirements). Escalation became the narrow crossroad exception rather than a
+co-equal default; verification discipline (R10, disposable-only, no-fraud) is
+unchanged — autonomy is initiative, not skipping proof. Landed in CLAUDE.md (the
+"Autonomous by default — act, don't ask" Key Rule + the "Starting the next
+cutover" post-execution bullet + R2's escalation framing) +
+`/ov-internals:strict-policy` (fix-by-default / escalate-at-crossroad) +
+`/ov-internals:cutover-policy` (non-blocking path broadened beyond surfaced-here).
+
 ### 2026-06-01 — engineering-discipline policy: blocking vs non-blocking issue handling + long-running-eval-bed guidance
 
 Two engineering-discipline policies were refined after a four-substrate R10 run

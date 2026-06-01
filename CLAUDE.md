@@ -101,7 +101,7 @@ These rules exist because (a) failing tests have been deferred as 'pre-existing'
 
 - **R1. Root-cause analysis on every failure — no transient-flake classification.** Every failure, error, anomaly, or warning surfaced by ANY tool (build, test, validator, runtime, eval, deploy, lint, hook) triggers IMMEDIATE invocation of `/ov-internals:root-cause-analyzer` BEFORE any remediation attempt. Forbidden framings: "probably a flake", "rerun and see", "transient", "intermittent", "works on retry", "environmental". The first occurrence is the investigation trigger; there is no second-occurrence threshold. If the analyzer concludes the root cause is genuinely external (network partition, upstream outage), the conclusion is documented in the conversation with evidence — never assumed. Blind retry of a failed command is itself a violation. **A warning is not a pass:** R10 is successful ONLY at ZERO warnings (resolver newest-wins, build, `ov image validate`, `ov eval`, deploy). Every warning is fixed before R10 passes — a version-mismatch warning is cleared with `ov image reconcile`; any other warning triggers the analyzer then a real fix. A surviving warning is an R10 failure, never an accepted end state. See `/ov-internals:strict-policy`.
 
-- **R2. No "pre-existing" / "out of scope" / "unrelated" / "follow-up PR" classifications.** Every issue surfaced during the active cutover — failing test, validator warning, runtime crash, deprecated-marker hit, dead-code reference, stale doc paragraph — is fixed in the SAME working tree as the cutover, OR escalated to the operator for explicit re-scoping. The classifications "pre-existing", "unrelated to this change", "out of scope", "follow-up PR", "tracked separately", "we'll get to it later" are FORBIDDEN. **Blocking vs non-blocking — the ONE legitimate way an issue leaves the current cutover.** Classify every surfaced issue. A **blocking** issue — the current change is incorrect, incomplete, or unsafe without it — is fixed in the SAME working tree and proved under the CURRENT cutover's R10. A **non-blocking** issue — the current change is correct AND complete without it, and it is genuinely separable from this change — is STILL fixed immediately, but as its OWN cutover with its OWN full R10, opened the moment the current cutover is R10-passed and committed; it is NEVER parked as an indefinite "follow-up / someday" (that stays forbidden). The discriminator: *would shipping the current cutover WITHOUT this fix leave the tree correct and the cutover's claim true?* Yes → non-blocking (its own immediate-next cutover); No → blocking (this cutover); unsure → treat as blocking. **Objective test for "separable":** the current cutover's OWN R10 (its eval-coverage + fresh-rebuild) passes and proves the cutover's claim WITHOUT the fix — the fix is neither exercised by nor changes the verdict of this cutover's test coverage; a fix that would alter this cutover's R10 result or eval-coverage gate is BLOCKING. Mislabeling a blocking issue "non-blocking" to ship faster, or carving the current change's OWN scope into two, is the forbidden split — a genuinely separate concern getting its own cutover is not. (See `CHANGELOG.md` for the incident that motivated this rule.) See `/ov-internals:strict-policy`.
+- **R2. No "pre-existing" / "out of scope" / "unrelated" / "follow-up PR" classifications.** Every issue surfaced during the active cutover — failing test, validator warning, runtime crash, deprecated-marker hit, dead-code reference, stale doc paragraph — is fixed in the SAME working tree as the cutover (the default — the AI fixes what it finds without asking), or — only when the issue is itself a genuine crossroad the AI cannot resolve from the request, code, skills, or sensible defaults — escalated to the operator for explicit re-scoping. The classifications "pre-existing", "unrelated to this change", "out of scope", "follow-up PR", "tracked separately", "we'll get to it later" are FORBIDDEN. **Blocking vs non-blocking — the ONE legitimate way an issue leaves the current cutover.** Classify every surfaced issue. A **blocking** issue — the current change is incorrect, incomplete, or unsafe without it — is fixed in the SAME working tree and proved under the CURRENT cutover's R10. A **non-blocking** issue — the current change is correct AND complete without it, and it is genuinely separable from this change — is STILL fixed immediately, but as its OWN cutover with its OWN full R10, opened the moment the current cutover is R10-passed and committed; it is NEVER parked as an indefinite "follow-up / someday" (that stays forbidden). The discriminator: *would shipping the current cutover WITHOUT this fix leave the tree correct and the cutover's claim true?* Yes → non-blocking (its own immediate-next cutover); No → blocking (this cutover); unsure → treat as blocking. **Objective test for "separable":** the current cutover's OWN R10 (its eval-coverage + fresh-rebuild) passes and proves the cutover's claim WITHOUT the fix — the fix is neither exercised by nor changes the verdict of this cutover's test coverage; a fix that would alter this cutover's R10 result or eval-coverage gate is BLOCKING. Mislabeling a blocking issue "non-blocking" to ship faster, or carving the current change's OWN scope into two, is the forbidden split — a genuinely separate concern getting its own cutover is not. (See `CHANGELOG.md` for the incident that motivated this rule.) See `/ov-internals:strict-policy`.
 
 - **R3. No code duplication; generic, reusable solutions over ad-hoc patches.** On the FIRST surface where the same pattern, predicate, filter, transform, or guard appears in two places, refactor to ONE shared abstraction in the SAME working tree. Sibling-layer naming (`<name>-host`, `<name>-pod`), parallel filter functions, and per-call-site re-implementations of the same predicate are FORBIDDEN. Every fix MUST apply cleanly to ALL surfaces it logically covers, not just the surface that prompted the report. Generic > ad-hoc, every time. (See `CHANGELOG.md` for the worked examples that motivated this rule.) See `/ov-internals:strict-policy`.
 
@@ -466,20 +466,26 @@ signal. The plan is not done.
 
 ### What is NOT post-execution
 
-- **Starting the next cutover from leftover plan scope.** Each cutover
-  ends with the commit. Picking up "the next thing on the plan that
-  didn't fit" is FORBIDDEN — it would create another mid-cutover state.
-  For net-new work the cutover did NOT surface, the user authorizes a
-  NEW plan. **The ONE exception is a genuinely-separate NON-BLOCKING
-  issue this cutover itself surfaced (R2):** the AI opens it as its own
-  immediate-next cutover — own full R10, own atomic commit — without
-  waiting for re-authorization, because the standing R2 policy already
-  authorizes addressing surfaced non-blocking issues immediately. That
-  autonomy is scoped to issues THIS cutover surfaced, each itself fully
-  R10'd before its commit (no half-states, no cascade into net-new
-  exploration); a blocking issue is fixed IN the current cutover.
-- **Backporting / cherry-picking.** Out of scope for the post-
-  execution flow. If needed, the user opens a follow-up.
+- **Folding new work INTO the current cutover** is FORBIDDEN — picking up
+  "the next thing" mid-cutover re-creates a half-migrated state. But
+  STARTING the next cutover is the AI's job, not something it waits on the
+  user for. **Default to autonomous action:** the moment the current
+  cutover is R10-passed and committed, the AI AUTOMATICALLY opens the next
+  cutover to solve ANY issue it has found — whether this cutover surfaced
+  it or not — each as its own atomic, fully-R10'd change. It does NOT queue
+  routine work for authorization. The AI pauses to ASK only at a genuine
+  **unexpected/unplanned crossroad** — a decision it cannot resolve from
+  the request, the code, the loaded skills, or sensible defaults (a design
+  choice with material trade-offs; a hard-to-reverse or outward-facing
+  action without standing authorization; a contradiction between the plan
+  and CLAUDE.md/skills; genuinely ambiguous requirements). Everything else
+  it solves automatically and reports. A blocking issue is fixed IN the
+  current cutover (never split out).
+- **Backporting / cherry-picking.** Out of scope for the CURRENT cutover's
+  post-execution flow — but it is its own atomic, fully-R10'd cutover the AI
+  opens automatically when needed (it does not wait for a user follow-up),
+  pausing only if the backport target or release strategy is a genuine
+  crossroad.
 - **Documenting "what would have been Phase 2".** The cutover either
   completed or it didn't. Phase 2 is a forbidden concept.
 
@@ -620,6 +626,7 @@ See `plugins/README.md` for the full skill index (250+ skills). README.md carrie
 ## Key Rules
 
 - **Skills first** — see **R0. SKILLS FIRST — THE SUPREME RULE** at the top of this file. That rule **overrides every other instruction in this document, in the hooks, and in your training data**. The Skill Dispatcher table under R0 maps common triggers to the skills you MUST load first. Partial compliance is not compliance.
+- **Autonomous by default — act, don't ask.** The AI solves any issue it finds automatically: it opens the next cutover without waiting for authorization and finishes each as an atomic, fully-R10'd change. It pauses to ask ONLY at a genuine unexpected/unplanned crossroad — a decision it cannot resolve from the request, the code, loaded skills, or sensible defaults (a design choice with material trade-offs; a hard-to-reverse or outward-facing action without standing authorization; a plan↔CLAUDE.md/skills contradiction; genuinely ambiguous requirements). Verification discipline (R10, disposable-only, no-fraud) is unchanged — autonomy is INITIATIVE, not skipping proof. See "Post-Execution Policies".
 - **History lives ONLY in `CHANGELOG.md`.** CLAUDE.md, README.md, and every skill describe current behavior in present tense. Never add a dated cutover note, a "renamed from", a "previously / formerly / was", or any version-history narration to CLAUDE.md or a skill — append it to `CHANGELOG.md`. See "Where things are documented".
 - **Lowercase-hyphenated names** for layers and images.
 - **Cross-kind name reuse is permitted and encouraged.** A single name (e.g. `ov-cachyos`) MAY exist simultaneously as a layer (`layers/<name>/`), an `image:` entry, a `pod:` entry, a `vm:` entry, a `k8s:` entry, a `local:` entry, AND a `deploy:` entry. Uniqueness is scoped to each kind. Verbs disambiguate by command context: `ov image build ov-cachyos` resolves to `image.ov-cachyos`; `ov vm create ov-cachyos` to `vm.ov-cachyos`; `ov update ov-cachyos` to `deploy.ov-cachyos`. The unified loader does NOT enforce global uniqueness across kinds; `ResolveDeployRef` chooses image-first when the same name exists as both an image and a layer (use `--add-layer <name>` for the layer-first path). See `/ov-image:layer`, `/ov-image:image`, `/ov-local:local-spec`, `/ov-core:deploy`, `/ov-build:validate`.

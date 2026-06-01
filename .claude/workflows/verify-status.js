@@ -12,7 +12,8 @@ export const meta = {
 // eval check that asserts `ov status --json` reports the correct `kind` (and,
 // for android, the declared pod→android nested tree) for the live deployment.
 // One bed per substrate is the unit of coverage — distinct beds get distinct
-// container/VM/image names + disjoint ports (validateEvalBeds guarantees it),
+// container/VM/image names; the author gives each disjoint host ports (the
+// loader does NOT check ports — an overlap fails the second bed at deploy),
 // so they run concurrent-safe with no worktree.
 const SUBSTRATE_BEDS = [
   { substrate: 'pod', bed: 'eval-pod', check: 'status-shows-pod' },

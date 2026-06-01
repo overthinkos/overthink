@@ -20,8 +20,17 @@ current.
 
 OWN A DISJOINT BED. The eval bed is the unit of ownership AND isolation (no
 worktree). The lead partitions the kind:eval beds so no two teammates own the
-same bed — distinct beds have disjoint container/VM/image names + ports
-(validateEvalBeds guarantees it), so they are concurrent-safe.
+same bed — distinct beds get distinct container/VM/image names; the lead also
+gives each disjoint host ports (the loader does NOT check ports — an overlap
+fails the second bed at deploy), so they are concurrent-safe.
+
+ONE AGENT PER BED = THROUGHPUT. `ov eval run --all-beds` is SEQUENTIAL — parallel
+speed comes ONLY from one agent per bed (N concurrent `ov eval run <bed>`).
+Schedule longest-pole-first: slow VM/desktop beds as persistent-session
+background tasks, cheap pod beds overlapping. FREEZE ov/*.go during the bed phase
+— a Go edit mid-bed-run trips the freshness guard and aborts everyone's next
+build/deploy/eval (the lead rebuilds ov ONCE at the barrier). Detail:
+/ov-internals:agents "Speed levers".
 
 RUN A REAL DEPLOYMENT. Your job is your bed's full `ov eval run <bed>` on a live
 deployment — build -> eval image -> deploy -> eval live -> fresh ov update ->

@@ -589,8 +589,12 @@ background-task-plus-notification mechanism, not a who-owns-it rule.
 **Teams test in parallel on real deployments — the eval bed is the unit of
 ownership AND of THROUGHPUT.** `ov eval run --all-beds` is strictly SEQUENTIAL (a
 plain loop; `ov` has no bed-level concurrency), so the ONLY way to compress
-wall-clock is the agent layer: one agent ⇄ one bed, N beds running as N
-concurrent `ov eval run <bed>` processes. The lead partitions the `kind: eval`
+wall-clock is to run beds concurrently — and **every full `ov eval run <bed>` is
+a background task owned by the persistent main session** (the only session that
+survives across turns to receive the completion notification; no 600s/duration
+carve-out — 600s is a Bash FOREGROUND cap, irrelevant to a backgrounded bed), so
+"one agent ⇄ one bed" = the persistent session multiplexing N concurrent
+background bed tasks. The lead partitions the `kind: eval`
 beds so no two teammates own the same bed; `foldEvalBeds` + `validateEvalBeds`
 guarantee disjoint names + `disposable: true` + a valid target kind, and the
 AUTHOR gives each bed disjoint host ports (the loader does NOT check ports — an
@@ -598,17 +602,20 @@ overlap only fails the second bed at deploy), so beds run concurrently with no
 worktree, bounded by host CPU/RAM/podman (there is no `ov` concurrency cap).
 Schedule **longest-pole-first** — start the slow VM/desktop beds first (as
 persistent-session background tasks) and overlap the cheap pod beds underneath;
-wall-clock ≈ the slowest single bed, not the sum. Each teammate owns its bed's
-FULL inner loop (verify-before-change → edit → run → RCA → fix → re-run) on a
-real deployment, not merely one run. One cutover stays one phase / one commit,
-owned by the lead; teammates never commit or push independently.
+wall-clock ≈ the slowest single bed, not the sum. Teammates do NOT run full beds:
+each owns a disjoint bed's SOURCE files (parallel bed-local editing) + short
+foreground checks (`ov eval image`), while the LEAD runs every full `ov eval run`
+and triages failures. One cutover stays one phase / one commit, owned by the
+lead; teammates never commit or push independently.
 
 **Dynamic workflows that IMPLEMENT a cutover obey the SAME bed-scoped discipline
 as teams — not optional.** A workflow that fans implementation out across
 `agent()` calls MUST partition the parallel work by `kind: eval` bed (one
-disjoint disposable bed per parallel owner), each owner **verifying before it
-changes** and running its bed's real `ov eval run <bed>` — eval-testing at EVERY
-stage of development, never deferred to the end. Read-only diff review is an
+disjoint disposable bed per parallel owner) for the bed-local EDITING — **verify
+before you change** and eval-test at EVERY stage, never deferred to the end. The
+full `ov eval run <bed>` is a persistent-session background task, not a
+workflow-agent run (a workflow agent returns synchronously and can't hold a long
+bed). Read-only diff review is an
 ADDITIONAL adversarial layer, NEVER a substitute for real-deployment bed testing;
 a workflow that swaps bed runs for code review is a protocol violation. **Two-tier
 change model:** a BED-LOCAL change (YAML / layers / images / skills / `eval:`
@@ -627,9 +634,10 @@ read-only, optional)`. Same R10 gate + disposable-only + no-scope-shrinking-flag
 paste-proof rules as teams.
 
 **Agent roster** — *executors* run `ov eval` and return verbatim proof:
-`eval-bed-runner` (runs `ov eval run <bed>` ONE-SHOT — the R10 acceptance executor;
-the ITERATING bed-owner that loops dev→test is a teammate for bounded beds, or the
-persistent session for long beds),
+`eval-bed-runner` (the verbatim-verdict capture discipline for a full `ov eval run
+<bed>`; the **persistent session runs every full bed as a background task** and
+pastes the verdict — teammates/sub-agents do bed-local edits + short foreground
+checks, never the full run),
 `deploy-verifier` (read-only `ov eval image`/`live` + `ov status` for an image
 or a user's deploy). *Enforcers* gate claims: `root-cause-analyzer` (R1 RCA),
 `testing-validator` (proof-before-"works"), `layer-validator` (pre-edit
@@ -657,10 +665,11 @@ replaces). (2) **Let the completion notification drive the next step** — the
 harness re-invokes the LAUNCHING session when the run exits, so the launcher must
 SURVIVE to completion to receive it: the persistent main session does; an
 ephemeral sub-agent (returns synchronously, its background children die) and an
-idle teammate (process tree torn down on idle) do NOT and orphan the bed. Long
-beds therefore belong to a session that lives to be notified; short beds (whose
-`ov eval run` fits a single foreground Bash call, under that 600s `timeout`
-ceiling) can be sub-agent- or teammate-owned. (3) **Reconnect via durable state, not a held handle** —
+idle teammate (process tree torn down on idle) do NOT and orphan the bed. So
+**every full `ov eval run <bed>` belongs to the persistent session as a
+background task** — duration-independent (the 600s is a Bash FOREGROUND cap,
+irrelevant to a backgrounded bed); sub-agents/teammates do bed-local edits + short
+foreground checks, never the full run. (3) **Reconnect via durable state, not a held handle** —
 `.eval/<bed>/<calver>/summary.yml` (overall `ok:` + per-step status) + the live
 domain/container ARE the source of truth: "done + verdict" = `summary.yml`
 present; "still alive" = the `ov eval run` orchestrator is in the process table;

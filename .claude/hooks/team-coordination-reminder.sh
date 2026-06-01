@@ -24,17 +24,21 @@ same bed — distinct beds get distinct container/VM/image names; the lead also
 gives each disjoint host ports (the loader does NOT check ports — an overlap
 fails the second bed at deploy), so they are concurrent-safe.
 
-ONE AGENT PER BED = THROUGHPUT. `ov eval run --all-beds` is SEQUENTIAL — parallel
-speed comes ONLY from one agent per bed (N concurrent `ov eval run <bed>`).
-Schedule longest-pole-first: slow VM/desktop beds as persistent-session
-background tasks, cheap pod beds overlapping. FREEZE ov/*.go during the bed phase
-— a Go edit mid-bed-run trips the freshness guard and aborts everyone's next
-build/deploy/eval (the lead rebuilds ov ONCE at the barrier). Detail:
-/ov-internals:agents "Speed levers".
+BED RUNS = THROUGHPUT, LEAD-OWNED. `ov eval run --all-beds` is SEQUENTIAL —
+parallel speed comes from running beds concurrently, and EVERY full `ov eval run
+<bed>` is a background task owned by the persistent session (the only one that
+survives across turns to be notified; no 600s/duration carve-out — 600s is a Bash
+FOREGROUND cap, irrelevant to a backgrounded bed). The lead launches them
+longest-pole-first (slow VM/desktop first, cheap pods overlapping). FREEZE
+ov/*.go during the bed phase — a Go edit mid-bed-run trips the freshness guard
+and aborts everyone's next build/deploy/eval (the lead rebuilds ov ONCE at the
+barrier). Detail: /ov-internals:agents "Speed levers".
 
-RUN A REAL DEPLOYMENT. Your job is your bed's full `ov eval run <bed>` on a live
-deployment — build -> eval image -> deploy -> eval live -> fresh ov update ->
-teardown. Review/triage/RCA are auxiliary, NEVER a substitute for the live run.
+EDIT YOUR BED, DON'T RUN IT. Your job is your bed's SOURCE (bed-local edits) +
+short foreground checks (`ov eval image`, `ov image validate`) — NOT the full `ov
+eval run` (the LEAD owns that as a background task). The full live run — build ->
+eval image -> deploy -> eval live -> fresh ov update -> teardown — is the lead's;
+review/triage/RCA are auxiliary, never a substitute for it.
 
 VERIFY BEFORE YOU CHANGE (Risk Driven Development — proactive twin of R1; rules
 in CLAUDE.md). Prove every HIGH-RISK assumption on a live bed BEFORE editing —

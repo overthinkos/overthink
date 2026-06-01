@@ -22,6 +22,25 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-01 — philosophy: name "candyboxing" (secure the box, stock it fully) as a first-class concept
+
+**Additive.** Names the environment philosophy Overthink already embodies:
+secure the disposable container / VM / eval-bed boundary as a whole (rootless
+podman + userns, KVM/libvirt, gocryptfs, tailscale, `disposable: true`), then
+fill it with the full toolset (every `ov` verb, MCP server, layer, `ov eval`
+probe) — the inverse of a classical tool-restricting sandbox. The full candy
+store inside the box is what makes RDD honest and Disposable-Only Autonomy
+fearless; it loosens no safety gate.
+
+**Surfaces.** New `## Candyboxing` section in CLAUDE.md (after "Prioritize Clean
+Architecture", before "Risk Driven Development") + a Key Rules pointer bullet + a
+"Why Overthink?" paragraph in README (with a light nod in the existing "Sandboxed
+AI desktops" bullet); restatements/pointers in `/ov-internals:disposable`
+(the lifecycle boundary of the candybox), `/ov-eval:eval` (the bed *is* the
+candybox), and `/ov-internals:agents` (each teammate's bed is its candybox). No
+hook pointer — candyboxing is framing, not a per-turn gate. No schema change, no
+`MigrationStep`, nothing deleted.
+
 ### 2026-06-01 — engineering-discipline policy: name "Risk Driven Development" (RDD) — the proactive twin of R1
 
 The front-loaded-validation discipline that already ran through the project under

@@ -106,6 +106,16 @@ empirically on a disposable bed EARLY, before a design is built on it.
 alike: read the skill for the design intent, then confirm the high-risk parts
 against a real, running system. → CLAUDE.md "Risk Driven Development (RDD)".
 
+**Candyboxing, not sandboxing.** Most tools secure an AI by taking
+candy away — fewer commands, no network, no package installs — which
+also takes away its ability to build and test anything real. Overthink
+flips that: it secures the *box* (a disposable, rootless container or
+VM with real isolation) and then hands your agent the whole candy store
+inside it — every tool, every layer, every `ov eval` probe, a real
+registry, a real GPU if you have one. A fully-stocked, throwaway
+workshop instead of a padded cell: the agent can do and prove far more,
+and a mistake costs one rebuild. → CLAUDE.md "Candyboxing".
+
 **Rootless-first power-user images.** The four images carrying the
 full `ov` toolchain (`fedora-coder`, `fedora-ov`, `arch-ov`,
 `githubrunner`) all run as uid=1000 with passwordless sudo. Four
@@ -121,7 +131,8 @@ security_opt from the `container-nesting` layer.
 model: instead of restricting what the AI can do, give it full
 access to a complete desktop (Chrome, Wayland compositor, dev tools,
 network services) and sandbox the *entire desktop* inside a
-container. `/ov-openclaw:openclaw-desktop` is the all-in-one CachyOS
+container — candyboxing applied to a whole desktop (→ CLAUDE.md
+"Candyboxing"). `/ov-openclaw:openclaw-desktop` is the all-in-one CachyOS
 streaming desktop: Selkies desktop + openclaw-full gateway + AI
 CLIs (claude-code, codex, gemini) + CPU ollama + nested `ov`. The
 AI (or the user) builds images, launches nested rootless pods, and

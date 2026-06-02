@@ -24,15 +24,15 @@ absolutely everything.*
 ## Table of contents
 
 - [What's in the knife](#whats-in-the-knife)
-- [Why Overthink?](#why-overthink)
 - [Core concepts](#core-concepts)
+- [Why Overthink?](#why-overthink)
 - [Install](#install)
 - [Quickstart](#quickstart)
 - [Lifecycle](#lifecycle)
-  - [Build — the repo2docker slot](#build--the-repo2docker-slot)
-  - [Run — the docker-compose slot](#run--the-docker-compose-slot)
-  - [Deploy — the pyinfra slot](#deploy--the-pyinfra-slot)
-  - [Test — the Molecule slot](#test--the-molecule-slot)
+  - [Build](#build)
+  - [Run](#run)
+  - [Deploy](#deploy)
+  - [Evaluate](#evaluate)
   - [Author with AI](#author-with-ai)
   - [Manage](#manage)
 - [Command reference](#command-reference)
@@ -44,104 +44,42 @@ absolutely everything.*
 
 ## What's in the knife
 
-`ov` is a Swiss-army knife. Each subcommand replaces a tool you'd
-otherwise install separately, in a simplified form, driven from one
-config and one mental model:
+`ov` is a Swiss-army knife. Each blade is a stage of the container
+lifecycle — **build, run, deploy, evaluate** — driven from one config
+and one mental model:
 
-| If you reach for…  | …`ov` gives you (simplified)                     | `ov` surface                                                |
-|--------------------|--------------------------------------------------|-------------------------------------------------------------|
-| docker-compose     | multi-container pod orchestration via quadlets   | `kind: pod`, `ov deploy add`, `ov start` → [Run](#run--the-docker-compose-slot)        |
-| repo2docker        | reproducible images from a declarative spec      | `kind: image` / `kind: layer`, `ov image build` → [Build](#build--the-repo2docker-slot) |
-| Ansible Molecule   | disposable build → deploy → probe → tear-down beds | `kind: eval`, `ov eval run` → [Test](#test--the-molecule-slot)                          |
-| pyinfra            | agentless ssh deploy to hosts and VMs            | `kind: local`, `target: local` + `host: user@machine` → [Deploy](#deploy--the-pyinfra-slot) |
+| Reach for `ov` when you want to…                            | …and you get                                       | Stage                 |
+|-------------------------------------------------------------|----------------------------------------------------|-----------------------|
+| compose a reproducible image from a layer list              | `kind: image` / `kind: layer`, `ov image build`    | [Build](#build)       |
+| run one or more containers as a managed pod                 | `kind: pod`, `ov deploy add`, `ov start`           | [Run](#run)           |
+| apply the same layers to a host, VM, k8s, or Android device | `ov deploy add` + `target:`                        | [Deploy](#deploy)     |
+| prove a config actually works, end-to-end                   | `kind: eval`, `ov eval run`, baked `eval:` checks  | [Evaluate](#evaluate) |
 
-> `ov` isn't trying to win on any single column — Compose has a
-> richer service graph, repo2docker handles notebooks-as-input,
-> Molecule integrates deeper with Ansible roles, pyinfra runs
-> arbitrary Python on the remote. The value of `ov` is the
-> *integration glue between them*: the same `layer.yml` + same image
-> + same `deploy.yml` + same `kind: eval` bed drive the build, the
-> local run, the remote deploy, and the test harness — and the
-> binary that wires them together is also an MCP server, so your
-> AI agent reaches every verb over the same RPC.
+The same `ov` drives two further stages — it
+[authors layers and images with an AI in the loop](#author-with-ai)
+and [manages](#manage) the running lifecycle (cleanup, diagnostics,
+schema upgrades, runtime config).
 
-## Why Overthink?
-
-Containers are a great idea with rough edges. Real-world needs pile
-up fast: GPU passthrough with the right driver stack, containers
-that need `/dev/kvm` or virtualization access without blanket
-`--privileged`, multiple services managed together, encrypted
-volumes, VNC or browser-streamed desktops, device permissions that
-don't compromise your host. Each is solvable — but solving them all
-at once, reliably, across images, is where things get hard. And if
-your AI agent has to build and manage these containers too, the
-complexity compounds.
-
-Overthink treats container images as composable building blocks.
-Each **layer** is a self-contained unit; an **image** is a list of
-layers on top of a base. `ov` resolves the dependency graph,
-generates multi-stage Containerfiles with cache mounts, and builds
-in the right order — handling the hard parts so you (and your AI)
-don't have to.
-
-**Testing and evaluating deployment configs is a first-class goal —
-for AI and humans.** A deploy config is only useful if you can prove it
-works. `ov` ships a goss-style declarative test framework (`eval:` checks
-baked into every image's OCI labels) plus disposable `kind: eval` test
-beds, so any image or deployment config is self-verifiable end-to-end:
-`ov eval image` (build-scope), `ov eval live` (a running deploy), and
-`ov eval run <bed>` (a full build → deploy → eval → fresh-rebuild →
-teardown cycle). The same surface serves a human operator at the keyboard
-and an AI agent driving it: Claude Code sub-agents (`eval-bed-runner`,
-`deploy-verifier`) and dynamic workflows (`/verify-beds`,
-`/audit-deploy-configs`) run these beds to test and verify autonomously.
-→ `/ov-eval:eval`, `/ov-internals:agents`.
-
-**Designed around Risk Driven Development.** Documentation drifts and code
-has bugs, so Overthink never lets a high-risk assumption ride on "the docs
-say so." The riskiest unknown — whether a particular *combination* of layers,
-at their latest versions, actually builds and runs together — gets proven
-empirically on a disposable bed EARLY, before a design is built on it.
-`kind: eval` beds and `ov eval` make that proof cheap, for AI agents and humans
-alike: read the skill for the design intent, then confirm the high-risk parts
-against a real, running system. → CLAUDE.md "Risk Driven Development (RDD)".
-
-**Candyboxing, not sandboxing.** Most tools secure an AI by taking
-candy away — fewer commands, no network, no package installs — which
-also takes away its ability to build and test anything real. Overthink
-flips that: it secures the *box* (a disposable, rootless container or
-VM with real isolation) and then hands your agent the whole candy store
-inside it — every tool, every layer, every `ov eval` probe, a real
-registry, a real GPU if you have one. A fully-stocked, throwaway
-workshop instead of a padded cell: the agent can do and prove far more,
-and a mistake costs one rebuild. → CLAUDE.md "Candyboxing".
-
-**Rootless-first power-user images.** The four images carrying the
-full `ov` toolchain (`fedora-coder`, `fedora-ov`, `arch-ov`,
-`githubrunner`) all run as uid=1000 with passwordless sudo. Four
-cross-distro coder images (`/ov-coder:fedora-coder`/`arch-coder`/
-`debian-coder`/`ubuntu-coder`) share ~30 layers, differing only in
-package sections and how the uid-1000 user lands (create vs. adopt
-mode). Rootless nested containers and rootless libvirt VMs work
-with zero additive capabilities via the surgical `unmask=/proc/*`
-security_opt from the `container-nesting` layer.
-→ `/ov-distros:container-nesting`, `/ov-coder:fedora-coder`.
-
-**Sandboxed AI desktops.** Overthink flips the usual AI sandboxing
-model: instead of restricting what the AI can do, give it full
-access to a complete desktop (Chrome, Wayland compositor, dev tools,
-network services) and sandbox the *entire desktop* inside a
-container — candyboxing applied to a whole desktop (→ CLAUDE.md
-"Candyboxing"). `/ov-openclaw:openclaw-desktop` is the all-in-one CachyOS
-streaming desktop: Selkies desktop + openclaw-full gateway + AI
-CLIs (claude-code, codex, gemini) + CPU ollama + nested `ov`. The
-AI (or the user) builds images, launches nested rootless pods, and
-creates libvirt VMs from a terminal inside the browser-accessible
-desktop — uid 1000, no `--privileged`, no added capabilities.
+> One `layer.yml`, one image, one `deploy.yml`, and one `kind: eval`
+> bed drive all four stages — the build, the local run, the remote
+> deploy, and the test harness. The binary that wires them together is
+> also an MCP server, so your AI agent reaches every verb over the same
+> RPC.
 
 ## Core concepts
 
-A handful of terms recur everywhere — one definition each:
+A handful of ideas recur everywhere. Four of them are the heart of
+Overthink — **layers & images**, **candyboxing**, **Risk Driven
+Development**, and the **build → run → deploy → evaluate** lifecycle —
+and the rest is the schema vocabulary that ties them together.
+
+### Layers & images
+
+Overthink treats container images as composable building blocks. Each
+**layer** is a self-contained unit; an **image** is an ordered list of
+layers on top of a base. `ov` resolves the dependency graph, generates
+multi-stage Containerfiles with cache mounts, and builds in the right
+order — handling the hard parts so you (and your AI) don't have to.
 
 - **Layer** (`kind: layer` in `layer.yml`) — packages (per-distro),
   tasks (eight verbs: `cmd`/`mkdir`/`copy`/`write`/`link`/`download`/
@@ -153,6 +91,53 @@ A handful of terms recur everywhere — one definition each:
 - **Image** (`kind: image`) — base + ordered layer list. Multi-stage
   Containerfile, content-derived `org.overthinkos.version` OCI label,
   stable cache. → `/ov-image:image`.
+
+### Candyboxing
+
+Most tools secure an AI by taking candy away — fewer commands, no
+network, no package installs — which also takes away its ability to
+build and test anything real. Overthink flips that: it secures the
+*box* (a disposable, rootless container or VM with real isolation) and
+then hands your agent the whole candy store inside it — every tool,
+every layer, every `ov eval` probe, a real registry, a real GPU if you
+have one. A fully-stocked, throwaway workshop instead of a padded cell:
+the agent can do and prove far more, and a mistake costs one rebuild.
+→ CLAUDE.md "Candyboxing".
+
+### Risk Driven Development (early)
+
+Documentation drifts and code has bugs, so Overthink never lets a
+high-risk assumption ride on "the docs say so." The riskiest unknown —
+whether a particular *combination* of layers, at their latest versions,
+actually builds and runs together — gets proven empirically on a
+disposable bed EARLY, before a design is built on it. `kind: eval` beds
+and `ov eval` make that proof cheap, for AI agents and humans alike:
+read the skill for the design intent, then confirm the high-risk parts
+against a real, running system. → CLAUDE.md "Risk Driven Development
+(RDD)".
+
+### Build → run → deploy → evaluate
+
+The container lifecycle is four verbs, and the same declarative inputs
+flow through all of them:
+
+- **Build** — a `kind: image` composes layers into a reproducible
+  multi-stage image.
+- **Run** — a `kind: pod` brings containers up as systemd-managed
+  Podman quadlets.
+- **Deploy** — `ov deploy add` applies the same layers to a host, VM,
+  k8s cluster, or Android device via `target:`.
+- **Evaluate** — `kind: eval` beds and baked `eval:` checks prove any
+  image or deployment works end-to-end.
+
+See [Lifecycle](#lifecycle) for the full verb families (plus
+authoring-with-AI and management).
+
+### Schema kinds
+
+Beyond `layer` and `image`, the schema has these kinds — each a `kind:`
+discriminator in its file:
+
 - **Pod** (`kind: pod`) — multi-container deploy shape: containers,
   sidecars, tunnels. Deployed as a Podman pod with a quadlet per
   container. → `/ov-pod:pod`.
@@ -177,6 +162,8 @@ A handful of terms recur everywhere — one definition each:
   fresh-update → tear-down. The `kind: recipe` / `kind: score` /
   `kind: ai` overlays drive the AI-iteration harness on top.
   → `/ov-eval:eval`.
+
+### Cross-cutting rules
 
 **`overthink.yml` is the single project entry point.** Every other
 file is composed in via `import:` — a bare string for a flat
@@ -208,6 +195,56 @@ differing only in package sections.
 autonomous destroy + rebuild. No hostname heuristic, no inference.
 Explicit-only is what makes `ov update <name>` safe on shared
 infrastructure. → `/ov-internals:disposable`.
+
+## Why Overthink?
+
+Containers are a great idea with rough edges. Real-world needs pile
+up fast: GPU passthrough with the right driver stack, containers
+that need `/dev/kvm` or virtualization access without blanket
+`--privileged`, multiple services managed together, encrypted
+volumes, VNC or browser-streamed desktops, device permissions that
+don't compromise your host. Each is solvable — but solving them all
+at once, reliably, across images, is where things get hard. And if
+your AI agent has to build and manage these containers too, the
+complexity compounds.
+
+Overthink treats container images as composable building blocks (see
+[Core concepts](#core-concepts)) — handling the hard parts so you (and
+your AI) don't have to.
+
+**Testing and evaluating deployment configs is a first-class goal —
+for AI and humans.** A deploy config is only useful if you can prove it
+works. `ov` ships a goss-style declarative test framework (`eval:` checks
+baked into every image's OCI labels) plus disposable `kind: eval` test
+beds, so any image or deployment config is self-verifiable end-to-end.
+The same surface serves a human operator at the keyboard and an AI agent
+driving it: Claude Code sub-agents (`eval-bed-runner`, `deploy-verifier`)
+and dynamic workflows (`/verify-beds`, `/audit-deploy-configs`) run these
+beds to test and verify autonomously.
+→ [Evaluate](#evaluate), `/ov-eval:eval`, `/ov-internals:agents`.
+
+**Rootless-first power-user images.** The four images carrying the
+full `ov` toolchain (`fedora-coder`, `fedora-ov`, `arch-ov`,
+`githubrunner`) all run as uid=1000 with passwordless sudo. Four
+cross-distro coder images (`/ov-coder:fedora-coder`/`arch-coder`/
+`debian-coder`/`ubuntu-coder`) share ~30 layers, differing only in
+package sections and how the uid-1000 user lands (create vs. adopt
+mode). Rootless nested containers and rootless libvirt VMs work
+with zero additive capabilities via the surgical `unmask=/proc/*`
+security_opt from the `container-nesting` layer.
+→ `/ov-distros:container-nesting`, `/ov-coder:fedora-coder`.
+
+**Sandboxed AI desktops.** Overthink flips the usual AI sandboxing
+model: instead of restricting what the AI can do, give it full
+access to a complete desktop (Chrome, Wayland compositor, dev tools,
+network services) and sandbox the *entire desktop* inside a
+container — candyboxing applied to a whole desktop (→ CLAUDE.md
+"Candyboxing"). `/ov-openclaw:openclaw-desktop` is the all-in-one CachyOS
+streaming desktop: Selkies desktop + openclaw-full gateway + AI
+CLIs (claude-code, codex, gemini) + CPU ollama + nested `ov`. The
+AI (or the user) builds images, launches nested rootless pods, and
+creates libvirt VMs from a terminal inside the browser-accessible
+desktop — uid 1000, no `--privileged`, no added capabilities.
 
 ## Install
 
@@ -292,16 +329,14 @@ ov eval run eval-pod
 
 ## Lifecycle
 
-The same six stages cover everything `ov` does — develop, run,
-deploy, test, author, manage. Each stage opens with a callback to
-its row in [What's in the knife](#whats-in-the-knife) and closes
-with the humility line that anchors `ov`'s posture against the
-external tool it loosely resembles.
+The same six stages cover everything `ov` does — **build, run, deploy,
+evaluate, author, manage**. Each maps to a family of `ov` verbs that
+share the same declarative inputs.
 
-### Build — the repo2docker slot
+### Build
 
-> Declarative input → reproducible image. Same idea, simpler
-> vocabulary.
+> Declarative layer list → reproducible, fully-cached multi-stage
+> image.
 
 Each image declares a `base:`, an ordered `layer:` list, a `distro:`
 identity, and a `build:` set of package formats. The planner
@@ -332,14 +367,10 @@ reconcile` aligns the cross-repo pins when a layer's CalVer moves.
 `/ov-build:inspect`, `/ov-build:reconcile`, `/ov-image:image`,
 `/ov-image:layer`, `/ov-internals:capabilities`.
 
-*This is simplified, not tougher than repo2docker — it doesn't
-ingest notebooks-as-input; it does compose any image you can spell
-in YAML, on five distros, with full multi-stage caching.*
+### Run
 
-### Run — the docker-compose slot
-
-> Multiple containers, one declaration, one start command. Same
-> shape as Compose, different mechanism.
+> Multiple containers, one declaration, one start command — as
+> systemd-native units.
 
 `kind: pod` is the multi-container deploy shape. `ov deploy add
 <name> <pod-ref>` materializes it; `ov start` brings it up via
@@ -396,20 +427,15 @@ input.
 `/ov-automation:enc`, `/ov-automation:udev`, `/ov-pod:pod`,
 `/ov-selkies:selkies-desktop-layer`, `/ov-selkies:sway`.
 
-*This is simplified, not tougher than docker-compose — Compose has
-the richer service-graph DSL; `ov` gives you systemd-native
-lifecycle, encrypted volumes, GPU/Wayland/MCP/tunnel sugar, and the
-same YAML on both sides of the host boundary.*
+### Deploy
 
-### Deploy — the pyinfra slot
-
-> Agentless. Same `layer.yml` on the host, on a remote ssh box, in
-> a VM, in k3s, on an Android emulator.
+> The same `layer.yml` applied to a host, a remote ssh box, a VM, a
+> k3s cluster, or an Android device.
 
 `ov deploy add <name> <ref>` is the unified verb; `target:`
 discriminates where it lands:
 
-- **`target: pod`** (default) — Podman + quadlet, as in [Run](#run--the-docker-compose-slot).
+- **`target: pod`** (default) — Podman + quadlet, as in [Run](#run).
 - **`target: vm`** — libvirt + QEMU. Layers are applied *inside* the
   booted VM over SSH via the same InstallPlan IR. `ov vm build`
   (bootc → QCOW2/RAW), `ov vm create/destroy/start/stop`, `ov vm
@@ -460,15 +486,10 @@ binds host `SSH_AUTH_SOCK` / `GPG_AGENT_SOCK` into the container.
 → `/ov-core:deploy`, `/ov-core:ov-config`, `/ov-core:ov-update`,
 `/ov-internals:disposable`, `/ov-vm:vms-catalog`.
 
-*This is simplified, not tougher than pyinfra — pyinfra runs
-arbitrary Python on the remote and has a deeper inventory model;
-`ov` gives you the same layer recipe on host / VM / k8s / android
-and the same eval probes verifying each.*
+### Evaluate
 
-### Test — the Molecule slot
-
-> Build → deploy → probe → fresh-update → tear down. Disposable
-> beds with the same DSL as production deploys.
+> Build → deploy → probe → fresh-update → tear down — disposable beds
+> with the same DSL as production deploys.
 
 Tests are first-class. Every `layer.yml` / `image.yml` /
 `deploy.yml` can declare an `eval:` block of goss-style checks
@@ -539,14 +560,10 @@ Gherkin-shaped descriptions on the same entries.
 `/ov-eval:record`, `/ov-eval:eval-k8s`, `/ov-eval:adb`,
 `/ov-eval:appium`, `/ov-eval:android`.
 
-*This is simplified, not tougher than Molecule — Molecule wires
-deeper into Ansible roles; `ov` gives you build-scope and
-deploy-scope checks from one DSL and the same disposable bed
-abstraction across pod / vm / k8s / local / android targets.*
-
 ### Author with AI
 
-> No equivalent in the four-tool comparison. `ov`-specific.
+> AI in the loop, authoring and iterating on layers and images —
+> `ov`-specific.
 
 The AI iteration harness sits on top of `kind: eval` and adds three
 overlay kinds:

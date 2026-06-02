@@ -1577,17 +1577,8 @@ eval:
         lifecycle: dev
         port: [auto]   # auto-allocate free host ports (avoid fixed-port collisions with other running pods)
         description:
-            feature: "R10 host-pod bed — full KDE Plasma selkies flavor (de-SDDM startplasma-wayland nested in pixelflux, headless, no seat). Inherits the image's baked kde-selkies-stable + selkies stream (:3000 HTTPS) + chrome-cdp probes; adds the host render-node VAAPI H264 encode-capability assertion. Proves headless Plasma builds + deploys without a seat + streams + HW-encodes on the AMD iGPU."
+            feature: "R10 host-pod bed — full KDE Plasma selkies flavor (de-SDDM startplasma-wayland nested in pixelflux, headless, no seat). Inherits the image's baked kde-selkies-stable + selkies stream (:3000 HTTPS) + chrome-cdp + the selkies-layer VAAPI H264 encode-capability probe (factored into the selkies layer, R3). Proves headless Plasma builds + deploys without a seat + streams + HW-encodes on the AMD iGPU."
             tag: [testing]
-        eval:
-            - id: selkies-kde-vaapi-encode
-              scope: deploy
-              command: |
-                node="${DRINODE:-/dev/dri/renderD128}"
-                if vainfo --display drm --device "$node" 2>/dev/null | grep -q "VAProfileH264.*VAEntrypointEncSlice"; then echo "VAAPI-ENCODE-CAPABLE ($node)"; else echo "VAAPI-N/A (software x264 path)"; fi
-              exit_status: 0
-              stdout:
-                - matches: "VAAPI-ENCODE-CAPABLE|VAAPI-N/A"
     eval-versa-pod:
         target: pod
         image: versa

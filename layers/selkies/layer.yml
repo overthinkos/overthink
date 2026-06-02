@@ -1,5 +1,5 @@
 layer:
-    version: 2026.152.2006
+    version: 2026.153.0902
     name: selkies
     require:
         - supervisord
@@ -194,6 +194,20 @@ layer:
           status: 200
           allow_insecure: true
           timeout: 10s
+        - id: selkies-vaapi-encode
+          # Runtime encoder-capability probe (R3: factored here from the per-bed
+          # eval-selkies-*-pod copies). pixelflux auto-selects the encoder from the
+          # host render node — this asserts VAAPI H264 encode on an AMD/Intel
+          # renderD (real on such a host), or reports N/A (software x264) where no
+          # VAAPI encoder exists (a CPU host, or the -nvidia flavor in a VM). Either
+          # outcome passes; it never asserts a silent x264 fallback as a GPU win.
+          scope: deploy
+          command: |
+            node="${DRINODE:-/dev/dri/renderD128}"
+            if vainfo --display drm --device "$node" 2>/dev/null | grep -q "VAProfileH264.*VAEntrypointEncSlice"; then echo "VAAPI-ENCODE-CAPABLE ($node)"; else echo "VAAPI-N/A (software x264 path)"; fi
+          exit_status: 0
+          stdout:
+            - matches: "VAAPI-ENCODE-CAPABLE|VAAPI-N/A"
     service:
         - name: traefik
           exec: "/usr/local/bin/traefik --configFile=/usr/local/share/selkies/traefik.yml"

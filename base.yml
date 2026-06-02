@@ -69,9 +69,14 @@ image:
     # flips on real GPU encode. Build-time only.
     cuda-arch-builder:
         base: arch-builder
+        # @github-qualified (like arch-builder's own layers) so this builder
+        # resolves when pulled CROSS-REPO — e.g. image/cachyos's selkies-*-nvidia
+        # images set builder.pixi: ov.cuda-arch-builder, which builds this image as
+        # an intermediate in the consumer's graph; a bare `cuda` would be an
+        # "unknown layer" there (it's a main-repo layer, not the consumer's).
         layer:
-            - cuda
-            - nvenc-headers
+            - '@github.com/overthinkos/overthink/layers/cuda:v2026.153.0916'
+            - '@github.com/overthinkos/overthink/layers/nvenc-headers:v2026.153.0916'
         produce:
             - pixi
             - npm

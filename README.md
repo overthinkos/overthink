@@ -407,7 +407,7 @@ input.
   ROCm for AMD; `ov udev install/remove` writes the host-side
   rules. CUDA toolkit + cuDNN + ONNX Runtime in the `cuda` layer.
 - **Wayland desktop streaming** — the Selkies family
-  (`selkies-desktop`, `sway-desktop`, `sway-browser-vnc`) bundles a
+  (`selkies-labwc`, `sway-desktop`, `sway-browser-vnc`) bundles a
   Wayland compositor (sway or labwc) + Chrome + `wayvnc` on port
   5900 + Pipewire audio. Browser pane at `:3000`.
 - **Per-image MCP servers** — `chrome-devtools-mcp` on `:9224`,

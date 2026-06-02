@@ -346,3 +346,84 @@ func TestDeploymentNode_DisposableFalseRoundTrip(t *testing.T) {
 		t.Errorf("re-serialized deploy.yml dropped explicit `disposable: true`:\n%s", string(out))
 	}
 }
+
+// TestRemoveVmDeployEntry_SelectiveAndIdempotent pins the deploy-lifecycle
+// cleanup primitive that `ov vm destroy` (vm.go) and `ov deploy del vm:<name>`
+// (unified_targets_vm.go) rely on to remove a VM's deploy.yml entry on teardown
+// — the inverse of the saveVmDeployState written on add. It proves the two
+// load-bearing properties of the fix:
+//
+//  1. SELECTIVE removal — removing `vm:k3s-vm` strips ONLY that entry; sibling
+//     VM entries (incl. a running, preemptible operator workstation) and pod
+//     entries survive untouched. This is the operator-safety property: a
+//     disposable bed's teardown can never collateral-remove the workstation.
+//  2. IDEMPOTENCY — a second removal of the already-gone entry returns nil and
+//     leaves the file valid + siblings intact. This is the config-layer half of
+//     the "a config whose libvirt domain is already destroyed is STILL cleaned"
+//     behavior (the other half being vm.go's now-non-fatal lookupDomain miss).
+//
+// Without the fix, `ov vm destroy` never called removeVmDeployEntry, so a
+// disposable eval-bed VM entry lingered in deploy.yml after every bed run.
+func TestRemoveVmDeployEntry_SelectiveAndIdempotent(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+	if err := os.MkdirAll(filepath.Join(dir, "ov"), 0700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	// Seed: the disposable bed VM to remove, plus a running preemptible
+	// operator workstation and an unrelated pod deploy that must both survive.
+	initialYAML := `deploy:
+    vm:k3s-vm:
+        target: vm
+        vm: k3s-vm
+        vm_state:
+            ssh_port: 38067
+            ssh_user: arch
+    vm:cachyos-gpu:
+        target: vm
+        vm: cachyos-gpu
+        preemptible:
+            holds:
+                - nvidia-gpu
+    web-app:
+        target: pod
+        image: web-app
+`
+	path := filepath.Join(dir, "ov", "deploy.yml")
+	if err := os.WriteFile(path, []byte(initialYAML), 0600); err != nil {
+		t.Fatalf("write initial: %v", err)
+	}
+
+	// (1) Selective removal of the disposable bed VM.
+	if err := removeVmDeployEntry("vm:k3s-vm"); err != nil {
+		t.Fatalf("removeVmDeployEntry(vm:k3s-vm): %v", err)
+	}
+	dc, err := LoadDeployConfig()
+	if err != nil {
+		t.Fatalf("reload after removal: %v", err)
+	}
+	if _, ok := dc.LookupKey("vm:k3s-vm"); ok {
+		t.Error("vm:k3s-vm still present after removeVmDeployEntry — entry not removed")
+	}
+	if _, ok := dc.LookupKey("vm:cachyos-gpu"); !ok {
+		t.Error("vm:cachyos-gpu (operator workstation) was collateral-removed — selective-removal property violated")
+	}
+	if _, ok := dc.LookupKey("web-app"); !ok {
+		t.Error("web-app pod deploy was collateral-removed — selective-removal property violated")
+	}
+
+	// (2) Idempotency: removing the already-gone entry is a clean no-op.
+	if err := removeVmDeployEntry("vm:k3s-vm"); err != nil {
+		t.Fatalf("idempotent re-removal of vm:k3s-vm errored: %v", err)
+	}
+	dc2, err := LoadDeployConfig()
+	if err != nil {
+		t.Fatalf("reload after idempotent re-removal: %v", err)
+	}
+	if _, ok := dc2.LookupKey("vm:cachyos-gpu"); !ok {
+		t.Error("vm:cachyos-gpu disappeared after idempotent re-removal")
+	}
+	if _, ok := dc2.LookupKey("web-app"); !ok {
+		t.Error("web-app disappeared after idempotent re-removal")
+	}
+}

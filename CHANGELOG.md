@@ -22,6 +22,35 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-02 — fix(vm): `ov vm destroy` removes the deploy.yml entry (+ idempotent)
+
+`ov vm destroy <name>` now removes the deploy.yml `vm:<name>` entry — the inverse
+of the `saveVmDeployState` that `ov deploy add vm:` (and the `ssh.port_auto`
+vm-create persist) write — and is idempotent: a `lookupDomain` miss is no longer
+fatal, so a config whose libvirt domain is already gone is STILL cleaned
+(previously the entry could never be removed once the domain was destroyed).
+`--keep-deploy` preserves the entry for a deliberate re-create, mirroring
+`ov remove --keep-deploy` for pods.
+
+This closes a deploy-lifecycle gap: disposable eval-bed VM entries accumulated in
+deploy.yml because the bed cleanup tears down via `ov vm destroy`, which destroyed
+the domain but left `vm:<name>` lingering. Pod/local beds were already clean
+(`ov remove` removes the entry on teardown), and deploy-add saves uniformly for
+every target kind — so with this fix ALL deployment configs (including eval beds)
+are both saved on add and removed on teardown, symmetrically. Pre-fix bed entries
+self-heal on their next run; they are not scrubbed unattended (a deploy.yml
+`vm_state` record carries no `disposable:` marker — that authorization lives on
+the `kind: eval` bed — so a blind sweep can't prove an entry disposable).
+
+R10: the `eval-k3s-vm` full-lifecycle bed (disposable libvirt VM) — `deploy-add`
+saved `vm:k3s-vm`, `cleanup` ran `ov vm destroy k3s-vm`, and `vm:k3s-vm` was gone
+from deploy.yml afterward (count 1→0); all 6 steps `ok: true`, exit 0. The
+idempotent path was proven separately: `ov vm destroy k3s-vm` against an
+already-destroyed domain printed "already destroyed (or not defined)" and still
+removed the entry. Go unit test `TestRemoveVmDeployEntry_SelectiveAndIdempotent`
+pins the primitive: selective removal (a sibling preemptible operator-workstation
+entry + an unrelated pod deploy both survive) + idempotent re-removal.
+
 ### 2026-06-02 — feat(android): resolve ${HOST_PORT:N} in a nested endpoint device's adb host
 
 A `kind: android` `adb:` endpoint device nested under an emulator pod can address

@@ -661,9 +661,10 @@ func stopVM(image, instance string, force bool) error {
 // --- VmDestroyCmd ---
 
 type VmDestroyCmd struct {
-	Image    string `arg:"" help:"Image name"`
-	Instance string `short:"i" long:"instance" help:"Instance name"`
-	Disk     bool   `long:"disk" help:"Also delete the QCOW2 disk image"`
+	Image      string `arg:"" help:"Image name"`
+	Instance   string `short:"i" long:"instance" help:"Instance name"`
+	Disk       bool   `long:"disk" help:"Also delete the QCOW2 disk image"`
+	KeepDeploy bool   `long:"keep-deploy" help:"Keep the deploy.yml vm:<name> entry (default: remove it, like 'ov remove' for pods)"`
 }
 
 func (c *VmDestroyCmd) Run() error {
@@ -696,18 +697,21 @@ func (c *VmDestroyCmd) Run() error {
 
 		dom, err := conn.lookupDomain(name)
 		if err != nil {
-			return fmt.Errorf("VM %s not found: %w", name, err)
+			// Already gone (or never defined) — idempotent: fall through to the
+			// deploy.yml + ssh-config cleanup below so a lingering config whose
+			// domain is already destroyed is still removed (otherwise the entry
+			// can never be cleaned once the domain is gone).
+			fmt.Fprintf(os.Stderr, "VM %s already destroyed (or not defined)\n", name)
+		} else {
+			// Stop if running — gracefully (flush the guest filesystem, incl. the
+			// in-guest podman overlay store), forcing only if it won't power off.
+			conn.gracefulStopDomain(dom)
+			// Undefine
+			if err := conn.undefineDomain(dom, c.Disk); err != nil {
+				return fmt.Errorf("undefining VM %s: %w", name, err)
+			}
+			fmt.Fprintf(os.Stderr, "Destroyed VM %s\n", name)
 		}
-
-		// Stop if running — gracefully (flush the guest filesystem, incl. the
-		// in-guest podman overlay store), forcing only if it won't power off.
-		conn.gracefulStopDomain(dom)
-
-		// Undefine
-		if err := conn.undefineDomain(dom, c.Disk); err != nil {
-			return fmt.Errorf("undefining VM %s: %w", name, err)
-		}
-		fmt.Fprintf(os.Stderr, "Destroyed VM %s\n", name)
 
 	case "qemu":
 		dir, err := vmDir()
@@ -752,6 +756,19 @@ func (c *VmDestroyCmd) Run() error {
 		qcow2Dir := vmDiskDir(c.Image)
 		os.RemoveAll(qcow2Dir)
 		fmt.Fprintf(os.Stderr, "Deleted disk images in %s\n", qcow2Dir)
+	}
+
+	// Remove the deploy.yml vm:<name> entry — the inverse of the saveVmDeployState
+	// that `ov deploy add vm:<name>` (and the ssh.port_auto vm-create persist)
+	// wrote. Destroying the VM removes the deployment, so its config must not
+	// linger; this is what made disposable eval-bed VM entries accumulate (the
+	// bed cleanup tears down via `ov vm destroy`). --keep-deploy preserves it for
+	// a deliberate re-create, mirroring `ov remove --keep-deploy` for pods.
+	if !c.KeepDeploy {
+		deployName := "vm:" + deployKey(c.Image, c.Instance)
+		if err := removeVmDeployEntry(deployName); err != nil {
+			fmt.Fprintf(os.Stderr, "note: deploy.yml entry cleanup (%s): %v\n", deployName, err)
+		}
 	}
 
 	return nil

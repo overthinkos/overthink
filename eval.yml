@@ -1570,24 +1570,6 @@ eval:
         description:
             feature: R10 bed for jupyter-ml — exercises spacy-import, jupyterlab-quarto-enabled build-scope checks plus deploy-scope MCP probes against the GPU-backed image
             tag: [testing]
-    eval-selkies-labwc-pod:
-        target: pod
-        image: selkies-labwc
-        disposable: true
-        lifecycle: dev
-        port: [auto]   # auto-allocate free host ports (avoid fixed-port collisions with other running pods)
-        description:
-            feature: "R10 host-pod bed — labwc selkies flavor (CachyOS base). Inherits the image's baked labwc-stable + selkies stream (:3000 HTTPS) + chrome-cdp probes; adds the host render-node VAAPI H264 encode-capability assertion (this host's AMD iGPU). NOTE: the vaapi-encode check duplicates eval-selkies-kde-pod — factor into the selkies layer deploy-scope eval in a follow-up (R3)."
-            tag: [testing]
-        eval:
-            - id: selkies-labwc-vaapi-encode
-              scope: deploy
-              command: |
-                node="${DRINODE:-/dev/dri/renderD128}"
-                if vainfo --display drm --device "$node" 2>/dev/null | grep -q "VAProfileH264.*VAEntrypointEncSlice"; then echo "VAAPI-ENCODE-CAPABLE ($node)"; else echo "VAAPI-N/A (software x264 path)"; fi
-              exit_status: 0
-              stdout:
-                - matches: "VAAPI-ENCODE-CAPABLE|VAAPI-N/A"
     eval-selkies-kde-pod:
         target: pod
         image: selkies-kde

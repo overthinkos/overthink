@@ -32,7 +32,7 @@ import:
     # submodule (image/selkies). Mounted under the `selkies` import namespace;
     # main's android-emulator roots on `base: selkies.selkies-labwc`. The desktop
     # LAYERS stay in main (shared with openclaw-desktop) — only the images moved.
-    - selkies: '@github.com/overthinkos/selkies:v2026.146.0944'
+    - selkies: '@github.com/overthinkos/selkies:v2026.153.0757'
 discover:
     layer:
         - path: layers

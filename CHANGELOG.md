@@ -22,6 +22,57 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-02 — feat(selkies): labwc + KDE-Plasma flavor split via selkies-core decomposition
+
+**Breaking (image rename), no schema-version bump.** Decomposes the selkies
+streaming-desktop stack into a compositor-agnostic `selkies-core` (pixelflux
+transport + the ~13 fixings) plus per-flavor metalayers: `selkies-desktop`
+(labwc, re-expressed) and the NEW `selkies-kde-desktop` (full KDE Plasma, run
+headless via a de-SDDM `startplasma-wayland` nested in pixelflux under a
+supervisord `wayland-1` socket-poll service). Adds `kde-shell` (SDDM-free Plasma
+package leaf, shared by `kde-desktop` + `kde-selkies`) and the de-SDDM
+`kde-selkies` rewrite — it drops `require: kde-desktop` and
+`after: graphical-session.target`; the wrapper's `wayland-1` socket-poll is the
+ordering primitive (the load-bearing headless change). Both pod flavors
+R10-proven on disposable beds.
+
+Landed cross-repo (B6, producer→consumer, never force-push): the main producer
+(the layers + a `selkies-desktop`→`selkies-labwc` Go ref sweep + all eval **pod**
+beds → `port: [auto]`, tag `v2026.153.0623`) → image/bootc (delete the
+`selkies-desktop-bootc` image + `selkies-desktop-bootc-bootc` VM, keep a single
+`overthink.yml`, `v2026.153.0745`) → image/fedora (pod-bed auto-port,
+`v2026.153.0749`) → image/selkies (the `selkies-desktop` IMAGE renamed →
+`selkies-labwc`, re-R10'd against the pushed producer tag, `v2026.153.0757`) →
+plugins (4 new selkies skills, the 2 bootc-desktop skills deleted, R5 doc
+repoints) → main gitlink bump + relocate the `selkies-labwc` test vehicle into
+image/selkies. The `selkies-desktop` LAYER name is KEPT (shared by
+openclaw/android); `android-emulator`'s base repoints to `selkies.selkies-labwc`.
+
+**Resolver bug fixed as its own atomic cutover (`v2026.153.0743`), surfaced by the
+bootc deletion.** `CollectRemoteRefsOpts.collectImage` followed builder edges via
+the RAW per-image `img.Builder`, which is empty for an image whose builder comes
+from `defaults.builder` / the distro-keyed default (bazzite/aurora →
+`ov.fedora-builder`) — so the builder's transitive layers were never fetched,
+surfacing as "unknown layer …/rpmfusion" at `ov image generate`/`build` while
+`ov image validate` passed (it never resolved a pulled builder's layer list).
+Fixed by routing the fetch walk through the canonical `resolveEffectiveBuilder`
+(new `effectiveBuilderForImage`), keeping the FETCH set in lockstep with the
+RESOLVE set; `validateImageDAG` now runs `GlobalLayerOrder` over the enriched set
+on an acyclic DAG so the gap is caught at validate time (validate↔generate
+agreement); and `collectAllImageLayers` gained an image-visited guard against a
+base-cycle stack overflow. Regression test
+`TestCollectRemoteRefsDefaultsBuilderTransitiveLayers` (fails before / passes
+after); eval-pod bed R10 8/8.
+
+**Deferred to follow-on cutovers** (each its own atomic, fully-R10'd change): the
+per-GPU matrix in image/cachyos (`selkies-kde-{cpu,amd,nvidia}`,
+`selkies-labwc-{amd,nvidia}` + the AMD-VAAPI pod and NVENC passthrough-VM beds) —
+`selkies-kde` remains a main test vehicle until then; the single-file-convention
+migrator change (`ov migrate`'s `kind-files` split + re-inlining the split
+submodules); the VM-target and android-adb-host `port: [auto]` Go support; and
+factoring the duplicated `vaapi-encode` eval check into the selkies layer's
+deploy scope (R3).
+
 ### 2026-06-01 — feat: `preemptible` — exclusive host-resource arbitration (the fourth deploy axis)
 
 **Additive (no schema-version bump, no migration).** Introduces a fourth,

@@ -108,7 +108,7 @@ func TestCollectTests_EmptyReturnsNil(t *testing.T) {
 // raw refs against the BareRef-keyed layer map, missed every one, silently
 // swallowed the resulting "unknown layer" error, and collected ZERO
 // layer-level checks — so every @github-ref-composed image shipped with
-// image-level checks only (e.g. selkies-desktop-bootc: 1 instead of ~77). The
+// image-level checks only (e.g. a @github-ref-composed bootc image: 1 instead of ~77). The
 // same chokepoint feeds CollectHooks/Shell/Descriptions/Security/Volumes/Alias,
 // so this single test guards the whole family.
 func TestCollectEval_RemoteRefLayersResolve(t *testing.T) {

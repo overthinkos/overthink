@@ -30,7 +30,7 @@ import:
     - nvidia: '@github.com/overthinkos/nvidia:v2026.146.0921'
     # selkies / sway streaming-desktop family — owned by the overthinkos/selkies
     # submodule (image/selkies). Mounted under the `selkies` import namespace;
-    # main's android-emulator roots on `base: selkies.selkies-desktop`. The desktop
+    # main's android-emulator roots on `base: selkies.selkies-labwc`. The desktop
     # LAYERS stay in main (shared with openclaw-desktop) — only the images moved.
     - selkies: '@github.com/overthinkos/selkies:v2026.146.0944'
 discover:

@@ -170,6 +170,56 @@ image:
             - ov
         port:
             - 8888:8888
+    selkies-labwc:
+        # labwc flavor of the selkies streaming desktop, run as a headless pod.
+        # base cachyos.cachyos; pixelflux auto-selects the encoder at runtime from
+        # the host render node — VAAPI on an AMD/Intel renderD (libva-native, NO
+        # gstreamer), software x264 with none (the -nvidia sibling adds NVENC).
+        # chrome + wlrctl build from the AUR -> build:[pac, aur]. Composes the local
+        # selkies-desktop metalayer (selkies-core + labwc + waybar-labwc + swaync).
+        enabled: true
+        base: cachyos.cachyos
+        build:
+            - pac
+            - aur
+        platform:
+            - linux/amd64
+        layer:
+            - agent-forwarding
+            - selkies-desktop
+            - dbus
+            - ov
+        port:
+            - 3000:3000
+            - 9222:9222
+            - 9224:9224
+            - 2222:2222
+
+    selkies-kde:
+        # Full KDE Plasma flavor of the selkies streaming desktop, run as a headless
+        # pod (de-SDDM startplasma-wayland nested in pixelflux). base cachyos.cachyos;
+        # encoder auto-selected at runtime — VAAPI on an AMD/Intel renderD (proven on
+        # this host), software x264 with none (the -nvidia sibling adds NVENC). chrome
+        # + wlrctl from the AUR -> build:[pac, aur]. Composes the local
+        # selkies-kde-desktop metalayer (selkies-core + kde-selkies + kde-shell).
+        enabled: true
+        base: cachyos.cachyos
+        build:
+            - pac
+            - aur
+        platform:
+            - linux/amd64
+        layer:
+            - agent-forwarding
+            - selkies-kde-desktop
+            - dbus
+            - ov
+        port:
+            - 3000:3000
+            - 9222:9222
+            - 9224:9224
+            - 2222:2222
+
     versa:
         enabled: true
         base: cachyos.cachyos
@@ -687,7 +737,7 @@ image:
         port:
             - 18794:18794
     android-emulator:
-        base: selkies.selkies-desktop
+        base: selkies.selkies-labwc
         platform:
             - linux/amd64
         layer:

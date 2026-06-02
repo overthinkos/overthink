@@ -1268,7 +1268,7 @@ func TestComputeIntermediates_InheritDistroFromParent(t *testing.T) {
 // TestComputeIntermediates_UnionChildBuildFormats guards the orthogonal case to
 // the test above: a build format declared on the CONSUMING children but NOT the
 // parent must still reach an auto-intermediate that hoists a layer needing it.
-// Real-world regression: the cachyos base is build:[pac]; selkies-desktop and
+// Real-world regression: the cachyos base is build:[pac]; selkies-labwc and
 // openclaw-desktop are build:[pac,aur]; the shared chrome layer (aur:
 // google-chrome) gets hoisted into a shared intermediate. With parent-only
 // inheritance the intermediate was [pac]-only, so chrome's aur: section was

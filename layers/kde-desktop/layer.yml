@@ -1,62 +1,50 @@
 layer:
-    version: 2026.149.1210
+    version: 2026.152.2006
     name: kde-desktop
     description: |
-        KDE Plasma desktop for a graphical workstation (host or VM guest with a
-        real GPU). `plasma-desktop` is the dependency-pulling top package — it
-        drags in the full plasma-workspace / kwin / kf6 / qt6 stack as deps, so
-        we name it (plus a curated app set the CachyOS KDE-Desktop netinstall
-        ships) rather than enumerating leaves or installing the giant
-        `kde-applications` group. SDDM is the display manager; the layer sets the
+        Bare-metal KDE Plasma desktop for a graphical workstation (host or VM
+        guest with a real GPU output). Composes the shared kde-shell layer (the
+        SDDM-free Plasma session: plasma-desktop deps-puller + core components +
+        curated apps) and adds the display-manager half: SDDM plus the
+        workstation-only extras that would only bloat the headless streaming pod
+        (system monitor, browser integration, firewall/thunderbolt KCMs, kwallet,
+        kdeconnect, bluetooth, partition tools, media players). The layer sets the
         systemd default to graphical.target so a real GPU output lights up a KDE
-        login. Wayland-native (kwin_wayland); xorg-xwayland is included for X11
-        apps. CachyOS theming/settings live in the separate cachyos-kde-settings
-        layer; audio in pipewire; fonts in desktop-fonts.
+        login. CachyOS theming/settings live in the separate cachyos-kde-settings
+        layer (bare-metal seat only — NOT part of the headless streaming pod
+        path); audio in pipewire; fonts in desktop-fonts.
 
         Only meaningful on a systemd target with a real display (bare host / VM
         guest with GPU). On supervisord-init containers the sddm use_packaged
-        entry is skipped (warn) by design.
+        entry is skipped (warn) by design. For the headless streamed KDE pod use
+        selkies-kde-desktop, which composes kde-shell directly without SDDM.
     require:
         - dbus
         - pipewire
+    layer:
+        # The SDDM-free Plasma session packages (kwin_wayland + plasmashell + the
+        # curated app set) are shared with the headless kde-selkies pod (R3).
+        - kde-shell
     distro:
         arch:
             package:
-                # Dependency-pulling top package: plasma-desktop pulls
-                # plasma-workspace + kwin + kf6 + qt6 + breeze as deps.
-                - plasma-desktop
+                # Display manager + the systemd graphical seat.
                 - sddm
-                - xorg-xwayland
-                # Plasma session components the CachyOS KDE-Desktop netinstall ships.
-                - plasma-pa
-                - plasma-nm
+                # Workstation-only Plasma extras — deliberately NOT in kde-shell,
+                # so the headless selkies-kde streaming pod stays lean.
                 - plasma-systemmonitor
                 - plasma-browser-integration
                 - plasma-firewall
                 - plasma-thunderbolt
-                - powerdevil
-                - kscreen
-                - kde-gtk-config
                 - kdeplasma-addons
                 - kwallet-pam
                 - kwalletmanager
                 - bluedevil
-                - breeze-gtk
                 - kinfocenter
                 - xsettingsd
-                # Curated KDE applications (the netinstall KDE-Desktop set).
-                - ark
-                - dolphin
-                - konsole
-                - kate
-                - kcalc
-                - gwenview
-                - spectacle
                 - filelight
                 - partitionmanager
                 - kdeconnect
-                - kdialog
-                - kio-admin
                 - kdegraphics-thumbnailers
                 - ffmpegthumbs
                 - phonon-qt6-vlc
@@ -75,23 +63,8 @@ layer:
           enable: true
           scope: system
     eval:
-        - id: plasma-desktop-installed
-          package: plasma-desktop
-          installed: true
-        - id: plasmashell-binary
-          file: /usr/bin/plasmashell
-          exists: true
-        - id: kwin-wayland-binary
-          file: /usr/bin/kwin_wayland
-          exists: true
         - id: sddm-binary
           file: /usr/bin/sddm
-          exists: true
-        - id: dolphin-binary
-          file: /usr/bin/dolphin
-          exists: true
-        - id: konsole-binary
-          file: /usr/bin/konsole
           exists: true
         - id: sddm-enabled
           scope: deploy

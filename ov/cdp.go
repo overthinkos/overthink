@@ -527,7 +527,7 @@ type CdpClickCmd struct {
 	Selector string `arg:"" help:"CSS selector of element to click"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 	VNC      bool   `long:"vnc" help:"Deliver click via VNC instead of CDP (translates viewport coords to desktop coords)"`
-	WL       bool   `long:"wl" help:"Deliver click via Wayland pointer (wlrctl) instead of CDP (for selkies-desktop/labwc)"`
+	WL       bool   `long:"wl" help:"Deliver click via Wayland pointer (wlrctl) instead of CDP (for selkies-labwc)"`
 }
 
 func (c *CdpClickCmd) Run() error {

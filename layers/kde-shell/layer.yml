@@ -1,0 +1,61 @@
+layer:
+    version: 2026.152.2006
+    name: kde-shell
+    description: |
+        The SDDM-free KDE Plasma Wayland SESSION package set — the shared subset
+        needed by BOTH the bare-metal KDE desktop (kde-desktop, which adds SDDM +
+        graphical.target on a real GPU output) AND the headless streamed KDE pod
+        (kde-selkies, which runs startplasma-wayland nested in pixelflux with no
+        seat). plasma-desktop is the dependency-pulling top package (drags
+        plasma-workspace + kwin_wayland + plasmashell + kf6 + qt6 + breeze as
+        deps). Only the core session components + a curated app set usable in
+        both venues live here; workstation-only extras (partition tools,
+        kdeconnect, bluetooth, firewall/thunderbolt, kwallet, kinfocenter, media
+        players) stay in kde-desktop so the streaming pod is not bloated. Factored
+        out of kde-desktop so the bare-metal seat and the headless pod share ONE
+        package list (R3). require: dbus (the Plasma session bus).
+    require:
+        - dbus
+    distro:
+        arch:
+            package:
+                # Dependency-pulling top package: plasma-desktop pulls
+                # plasma-workspace + kwin_wayland + plasmashell + kf6 + qt6 + breeze.
+                - plasma-desktop
+                - xorg-xwayland
+                # Core Plasma session components (needed headless AND bare-metal).
+                - plasma-pa
+                - plasma-nm
+                - powerdevil
+                - kscreen
+                - kde-gtk-config
+                - breeze-gtk
+                - kdialog
+                - kio-admin
+                # Curated KDE apps usable in both the seat and the stream.
+                - ark
+                - dolphin
+                - konsole
+                - kate
+                - kcalc
+                - gwenview
+                - spectacle
+    eval:
+        - id: plasma-desktop-installed
+          package: plasma-desktop
+          installed: true
+        - id: plasmashell-binary
+          file: /usr/bin/plasmashell
+          exists: true
+        - id: kwin-wayland-binary
+          file: /usr/bin/kwin_wayland
+          exists: true
+        - id: startplasma-wayland-binary
+          file: /usr/bin/startplasma-wayland
+          exists: true
+        - id: dolphin-binary
+          file: /usr/bin/dolphin
+          exists: true
+        - id: konsole-binary
+          file: /usr/bin/konsole
+          exists: true

@@ -1517,8 +1517,7 @@ eval:
         image: eval-pod
         disposable: true
         lifecycle: dev
-        port:
-            - 18794:18794
+        port: [auto]   # auto-allocate free host ports (avoid fixed-port collisions)
         description:
             feature: Combined fast pod bed — kind:image + kind:layer + kind:pod + DeployTarget mechanisms
             tag: [working]
@@ -1558,8 +1557,7 @@ eval:
         image: jupyter
         disposable: true
         lifecycle: dev
-        port:
-            - 28888:8888
+        port: [auto]   # auto-allocate free host ports (avoid fixed-port collisions)
         description:
             feature: R10 bed for jupyter-mcp regression coverage (auto-attach, canonicalization, idle-room sweep, cell_update id-preservation)
             tag: [working]
@@ -1568,11 +1566,46 @@ eval:
         image: jupyter-ml
         disposable: true
         lifecycle: dev
-        port:
-            - 28889:8888
+        port: [auto]   # auto-allocate free host ports (avoid fixed-port collisions)
         description:
             feature: R10 bed for jupyter-ml — exercises spacy-import, jupyterlab-quarto-enabled build-scope checks plus deploy-scope MCP probes against the GPU-backed image
             tag: [testing]
+    eval-selkies-labwc-pod:
+        target: pod
+        image: selkies-labwc
+        disposable: true
+        lifecycle: dev
+        port: [auto]   # auto-allocate free host ports (avoid fixed-port collisions with other running pods)
+        description:
+            feature: "R10 host-pod bed — labwc selkies flavor (CachyOS base). Inherits the image's baked labwc-stable + selkies stream (:3000 HTTPS) + chrome-cdp probes; adds the host render-node VAAPI H264 encode-capability assertion (this host's AMD iGPU). NOTE: the vaapi-encode check duplicates eval-selkies-kde-pod — factor into the selkies layer deploy-scope eval in a follow-up (R3)."
+            tag: [testing]
+        eval:
+            - id: selkies-labwc-vaapi-encode
+              scope: deploy
+              command: |
+                node="${DRINODE:-/dev/dri/renderD128}"
+                if vainfo --display drm --device "$node" 2>/dev/null | grep -q "VAProfileH264.*VAEntrypointEncSlice"; then echo "VAAPI-ENCODE-CAPABLE ($node)"; else echo "VAAPI-N/A (software x264 path)"; fi
+              exit_status: 0
+              stdout:
+                - matches: "VAAPI-ENCODE-CAPABLE|VAAPI-N/A"
+    eval-selkies-kde-pod:
+        target: pod
+        image: selkies-kde
+        disposable: true
+        lifecycle: dev
+        port: [auto]   # auto-allocate free host ports (avoid fixed-port collisions with other running pods)
+        description:
+            feature: "R10 host-pod bed — full KDE Plasma selkies flavor (de-SDDM startplasma-wayland nested in pixelflux, headless, no seat). Inherits the image's baked kde-selkies-stable + selkies stream (:3000 HTTPS) + chrome-cdp probes; adds the host render-node VAAPI H264 encode-capability assertion. Proves headless Plasma builds + deploys without a seat + streams + HW-encodes on the AMD iGPU."
+            tag: [testing]
+        eval:
+            - id: selkies-kde-vaapi-encode
+              scope: deploy
+              command: |
+                node="${DRINODE:-/dev/dri/renderD128}"
+                if vainfo --display drm --device "$node" 2>/dev/null | grep -q "VAProfileH264.*VAEntrypointEncSlice"; then echo "VAAPI-ENCODE-CAPABLE ($node)"; else echo "VAAPI-N/A (software x264 path)"; fi
+              exit_status: 0
+              stdout:
+                - matches: "VAAPI-ENCODE-CAPABLE|VAAPI-N/A"
     eval-versa-pod:
         target: pod
         image: versa
@@ -1649,8 +1682,7 @@ eval:
         image: openclaw
         disposable: true
         lifecycle: dev
-        port:
-            - 38789:18789
+        port: [auto]   # auto-allocate free host ports (avoid fixed-port collisions)
         description:
             feature: "R10 bed for the minimal headless openclaw gateway on the CachyOS (Arch) base — exercises the cachyos→arch-builder npm build of the openclaw package plus the dbus/ov/socat/supervisord layer stack."
             tag: [testing]
@@ -1666,8 +1698,7 @@ eval:
         image: openclaw-full
         disposable: true
         lifecycle: dev
-        port:
-            - 38789:18789
+        port: [auto]   # auto-allocate free host ports (avoid fixed-port collisions)
         description:
             feature: "R10 bed for the maximal headless openclaw-full on the CachyOS (Arch) base — a non-browser gateway exercising the tool stack incl. the gogcli@latest go install (Arch go 1.26.x) and the ffmpeg/sqlite Arch package coverage."
             tag: [testing]
@@ -1690,13 +1721,7 @@ eval:
         image: openclaw-desktop
         disposable: true
         lifecycle: dev
-        port:
-            - 34000:3000
-            - 34222:9222
-            - 34224:9224
-            - 34022:2222
-            - 34789:18789
-            - 34434:11434
+        port: [auto]   # auto-allocate free host ports (avoid fixed-port collisions)
         description:
             feature: "R10 bed for openclaw-desktop — the all-in-one CachyOS image fusing the selkies streaming desktop, the openclaw-full gateway+tools stack (claude-code/codex/gemini), a CPU ollama, and the full nested ov toolchain (ov-full + container-nesting + golang + gh). Exercises AUR google-chrome, the ollama binary tarball on a pac base, and nested rootless podman on one image."
             tag: [testing]

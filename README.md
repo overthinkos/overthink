@@ -277,9 +277,9 @@ ov start jupyter
 ov config jupyter
 
 # Build a bootable VM disk image
-ov image build selkies-desktop-bootc                  # the kind:image
-ov vm build  selkies-desktop-bootc-bootc --type qcow2 # the kind:vm
-ov vm create selkies-desktop-bootc-bootc
+ov image build bazzite               # the kind:image
+ov vm build  bazzite-bootc --type qcow2 # the kind:vm
+ov vm create bazzite-bootc
 
 # Apply layers directly to your workstation (no container)
 ov deploy add host ripgrep

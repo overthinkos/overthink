@@ -12,7 +12,7 @@ import (
 func TestResolveBootcImageRef_FullRefPassthrough(t *testing.T) {
 	for _, ref := range []string{
 		"quay.io/fedora/fedora-bootc:43",
-		"ghcr.io/overthinkos/selkies-desktop-bootc@sha256:b56444f1d41cd697cc2f6034618259a6136c70127efef5139b421b64b1527888",
+		"quay.io/fedora/fedora-bootc:43@sha256:3a6b31238244f72a531a64f5fa0c102fcc1c64afcf0277f09fe85a8d6b0256d1",
 	} {
 		got, err := resolveBootcImageRef("podman", ref)
 		if err != nil {

@@ -877,7 +877,7 @@ type baseChainNode struct {
 // implementation, no divergent copies), now cycle-safe for all of them.
 //
 // It deliberately does NOT descend import namespaces. A namespace-qualified
-// base (e.g. `selkies.selkies-desktop`) is a SEPARATELY-BUILT image that owns
+// base (e.g. `selkies.selkies-labwc`) is a SEPARATELY-BUILT image that owns
 // its own baked eval / hooks / shell / volume labels; re-collecting its layers
 // into the consumer would DOUBLE-COUNT every layer the consumer also lists
 // directly (the same layer reached bare here and via its `@github…` ref in the

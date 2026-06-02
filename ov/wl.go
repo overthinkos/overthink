@@ -74,7 +74,7 @@ func (c *WlScreenshotCmd) Run() error {
 	// Detect available screenshot tool.
 	var captureCmd string
 	if execWlCmdSilent(venue.Exec,"command -v pixelflux-screenshot >/dev/null 2>&1") == nil {
-		// selkies-desktop: use pixelflux rendering pipeline capture.
+		// selkies-labwc: use pixelflux rendering pipeline capture.
 		captureCmd = "pixelflux-screenshot"
 	} else if execWlCmdSilent(venue.Exec,"command -v grim >/dev/null 2>&1") == nil {
 		// sway-desktop: use grim (wlr-screencopy).

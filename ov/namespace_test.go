@@ -183,8 +183,8 @@ image:
 //	import namespace "up" not found (resolving "up.archlike-builder")
 //
 // because the builder ref was re-resolved from root (no `up` namespace there).
-// Mirrors the real selkies-desktop (`builder: ov.arch-builder`) consumed by main's
-// android-emulator (`base: selkies.selkies-desktop`). The shape — a namespaced base
+// Mirrors the real selkies-labwc (`builder: ov.arch-builder`) consumed by main's
+// android-emulator (`base: selkies.selkies-labwc`). The shape — a namespaced base
 // with BOTH buildable layers AND a namespace-relative builder map — is the exact
 // combination the prior tests never exercised.
 func TestResolveNamespacedBase_BuilderRefRequalified(t *testing.T) {

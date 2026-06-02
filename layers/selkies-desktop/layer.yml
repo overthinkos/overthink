@@ -1,23 +1,19 @@
 layer:
-    version: 2026.144.1443
+    version: 2026.152.2006
     name: selkies-desktop
+    description: |
+        The labwc edition of the selkies streaming desktop (the original, proven
+        flavor — kept by name because openclaw-desktop composes this layer and
+        android-emulator chains through the same-named image). Composes the shared
+        selkies-core (pixelflux WebRTC transport + Chrome/CDP + wl-* tooling +
+        fonts + a11y + terminal-recording + sshd) with the labwc nested compositor
+        and its labwc-specific desktop UI: waybar-labwc (top panel), swaync
+        (notifications), and pavucontrol (the GTK audio control the waybar audio
+        module launches). The KDE sibling is selkies-kde-desktop; both share
+        selkies-core unchanged and differ ONLY in the nested compositor (R3).
     layer:
-        - pipewire
-        - chrome
-        - chrome-cdp
+        - selkies-core
         - labwc
         - waybar-labwc
-        - desktop-fonts
         - swaync
         - pavucontrol
-        - wl-tools
-        - wl-screenshot-pixelflux
-        - wl-overlay
-        - wl-record-pixelflux
-        - a11y-tools
-        - xterm
-        - tmux
-        - asciinema
-        - fastfetch
-        - selkies
-        - sshd

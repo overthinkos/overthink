@@ -1,0 +1,30 @@
+layer:
+    version: 2026.152.2006
+    name: selkies-core
+    description: |
+        Compositor-agnostic core of the selkies streaming desktop: the pixelflux
+        WebRTC transport (selkies) plus the shared desktop fixings every flavor
+        (labwc, KDE Plasma) needs — Chrome + CDP, fonts, the wl-* pixelflux
+        screenshot/record/overlay tooling, accessibility introspection, an X
+        terminal, the terminal-recording stack, and sshd. There is NO compositor
+        here and NO compositor-specific panel/notifier — those live in the
+        per-flavor metalayer (selkies-desktop for labwc; selkies-kde-desktop for
+        KDE Plasma). This is the single shared spine consumed by BOTH flavors
+        across ALL GPU configs, so the streaming transport + fixings are defined
+        exactly once (R3 — no duplication, no -host/-pod siblings).
+    layer:
+        - selkies
+        - pipewire
+        - chrome
+        - chrome-cdp
+        - desktop-fonts
+        - wl-tools
+        - wl-screenshot-pixelflux
+        - wl-overlay
+        - wl-record-pixelflux
+        - a11y-tools
+        - xterm
+        - tmux
+        - asciinema
+        - fastfetch
+        - sshd

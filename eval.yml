@@ -1570,15 +1570,6 @@ eval:
         description:
             feature: R10 bed for jupyter-ml — exercises spacy-import, jupyterlab-quarto-enabled build-scope checks plus deploy-scope MCP probes against the GPU-backed image
             tag: [testing]
-    eval-selkies-kde-pod:
-        target: pod
-        image: selkies-kde
-        disposable: true
-        lifecycle: dev
-        port: [auto]   # auto-allocate free host ports (avoid fixed-port collisions with other running pods)
-        description:
-            feature: "R10 host-pod bed — full KDE Plasma selkies flavor (de-SDDM startplasma-wayland nested in pixelflux, headless, no seat). Inherits the image's baked kde-selkies-stable + selkies stream (:3000 HTTPS) + chrome-cdp + the selkies-layer VAAPI H264 encode-capability probe (factored into the selkies layer, R3). Proves headless Plasma builds + deploys without a seat + streams + HW-encodes on the AMD iGPU."
-            tag: [testing]
     eval-versa-pod:
         target: pod
         image: versa

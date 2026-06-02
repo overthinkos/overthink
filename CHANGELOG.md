@@ -22,6 +22,69 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-02 — feat(selkies): GPU matrix — selkies-{labwc,kde}-nvidia (real NVENC) + selkies-kde relocation
+
+**Breaking (image rename), no schema-version bump.** Completes the selkies
+flavor split (see the entry below) with the GPU-accelerated row of the matrix and
+relocates the KDE flavor to its canonical home.
+
+**Images (image/cachyos).** Adds `selkies-labwc-nvidia` (renamed from
+`selkies-desktop-nvidia`) + the NEW `selkies-kde-nvidia`, both on the
+`cachyos.nvidia` GPU base with REAL NVENC: `builder.pixi: ov.cuda-arch-builder`,
+whose nvcc + ffnvcodec NVENC headers (the `nvenc-headers` layer) let the selkies
+`build.sh` compile pixelflux's real `nvenc-sys` `NvencEncoder` instead of the
+AMD/CPU stub. Relocates `selkies-kde` from main's test vehicle to image/cachyos
+(its canonical home alongside the cachyos base); removes main's `selkies-kde`
+image + `eval-selkies-kde-pod` bed (R3 dedup). The `selkies-kde-desktop` layer
+stays in main (image/cachyos fetches it cross-repo via `@github`).
+
+**Cross-repo enabling fix — cuda-arch-builder resolves cross-repo.** main's
+`cuda-arch-builder` (base.yml) referenced its `cuda` + `nvenc-headers` layers by
+BARE name, so it failed to resolve when image/cachyos pulled it as a pixi builder
+(`ov.cuda-arch-builder` → "unknown layer cuda"). `@github`-qualified them (like
+`arch-builder`'s own layers); within main they shadow to the local layers so
+main's own build is byte-unchanged.
+
+**Resolver fix — collect builder layers via the effective builder.**
+`CollectRemoteRefsOpts.collectImage` followed the raw `img.Builder` edge, missing
+layers reachable only via the `defaults.builder` / distro-keyed effective builder
+(an "unknown layer" at generate time). Now resolves via the canonical
+`effectiveBuilderForImage`. Added `validateImageDAG` GlobalLayerOrder coverage +
+a base-cycle guard in `collectAllImageLayers`, and a regression test.
+
+**NVENC eval-coverage (regression-proof).** Both -nvidia images carry a
+build-scope `pixelflux-nvenc-compiled` check: `strings pixelflux_wayland*.so |
+grep -q NvEncodeAPICreateInstance` — the NVENC SDK entry point the real encoder
+binds, absent from the stub build (which patches `nvenc-sys` out of pixelflux's
+Cargo.toml). The check FAILS on a non-NVENC build, so it proves the image's NVENC
+functionality rather than merely the presence of a GPU.
+
+**vaapi-encode eval factored into the selkies layer (R3).** The VAAPI H264
+encode-capability probe (duplicated across the per-flavor pod beds) moved into
+the selkies layer's deploy-scope eval (`selkies-vaapi-encode`); every selkies
+image inherits it once via the baked `org.overthinkos.eval` label.
+
+**R10 (all green).**
+- `eval-selkies-kde-pod` (AMD host-pod, the relocated selkies-kde): 8/8, the
+  layer VAAPI probe ran live on the host iGPU.
+- `ov eval image selkies-labwc-nvidia`: 88/88 build-scope, incl. the
+  `pixelflux-nvenc-compiled` check; `ov eval image selkies-kde-nvidia`: 82/82.
+- `eval-selkies-labwc-nvidia-vm` (RTX-4080 passthrough VM): 11 steps incl. the
+  fresh-rebuild leg — the real-NvencEncoder image built, cp-imaged into the
+  guest, deployed + streamed on the passed-through GPU.
+- `eval-selkies-kde-nvidia-vm` (KDE Plasma + NVENC in the passthrough VM): 11
+  steps incl. the fresh-rebuild leg.
+- For both VM beds the resource arbiter preempted the operator's `vm:cachyos-gpu`
+  workstation to free `nvidia-gpu`, ran the bed, and restored the workstation
+  (`restore: always`). The RTX-4080 hostdev was added to the disposable bed VM
+  locally (uncommitted) for the live leg, per the portable-bed design.
+
+**R5.** Renamed `selkies-desktop-nvidia` → `selkies-labwc-nvidia` (the skill +
+its directory + every reference across plugins / image/nvidia / image/selkies);
+dropped the deleted `/ov-selkies:selkies-desktop-bootc` skill ref from CLAUDE.md's
+bootc dispatcher row. `git grep selkies-desktop-{nvidia,bootc}` returns only this
+file.
+
 ### 2026-06-02 — feat(selkies): labwc + KDE-Plasma flavor split via selkies-core decomposition
 
 **Breaking (image rename), no schema-version bump.** Decomposes the selkies

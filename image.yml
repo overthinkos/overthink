@@ -170,31 +170,6 @@ image:
             - ov
         port:
             - 8888:8888
-    selkies-kde:
-        # Full KDE Plasma flavor of the selkies streaming desktop, run as a headless
-        # pod (de-SDDM startplasma-wayland nested in pixelflux). base cachyos.cachyos;
-        # encoder auto-selected at runtime — VAAPI on an AMD/Intel renderD (proven on
-        # this host), software x264 with none (the -nvidia sibling adds NVENC). chrome
-        # + wlrctl from the AUR -> build:[pac, aur]. Composes the local
-        # selkies-kde-desktop metalayer (selkies-core + kde-selkies + kde-shell).
-        enabled: true
-        base: cachyos.cachyos
-        build:
-            - pac
-            - aur
-        platform:
-            - linux/amd64
-        layer:
-            - agent-forwarding
-            - selkies-kde-desktop
-            - dbus
-            - ov
-        port:
-            - 3000:3000
-            - 9222:9222
-            - 9224:9224
-            - 2222:2222
-
     versa:
         enabled: true
         base: cachyos.cachyos

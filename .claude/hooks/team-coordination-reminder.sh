@@ -24,12 +24,14 @@ same bed — distinct beds get distinct container/VM/image names; the lead also
 gives each disjoint host ports (the loader does NOT check ports — an overlap
 fails the second bed at deploy), so they are concurrent-safe.
 
-BED RUNS = THROUGHPUT, LEAD-OWNED. `ov eval run --all-beds` is SEQUENTIAL —
-parallel speed comes from running beds concurrently, and EVERY full `ov eval run
-<bed>` is a background task owned by the persistent session (the only one that
-survives across turns to be notified; no 600s/duration carve-out — 600s is a Bash
-FOREGROUND cap, irrelevant to a backgrounded bed). The lead launches them
-longest-pole-first (slow VM/desktop first, cheap pods overlapping). FREEZE
+BED RUNS = THROUGHPUT, PERSISTENT-OWNER-OWNED. `ov eval run --all-beds` is
+SEQUENTIAL — parallel speed comes from running beds concurrently, and EVERY full
+`ov eval run <bed>` is a `run_in_background` task owned by a PERSISTENT owner that
+survives across turns to be notified: the lead's persistent session (one task per
+bed), a background agent, or (interactive tmux) a split-pane teammate. An
+IN-PROCESS teammate CANNOT own a bed — its bg dies on yield. No 600s/duration
+carve-out (600s is a Bash FOREGROUND cap, irrelevant to a backgrounded bed).
+Launch longest-pole-first (slow VM/desktop first, cheap pods overlapping). FREEZE
 ov/*.go during the bed phase — a Go edit mid-bed-run trips the freshness guard
 and aborts everyone's next build/deploy/eval (the lead rebuilds ov ONCE at the
 barrier). Detail: /ov-internals:agents "Speed levers".

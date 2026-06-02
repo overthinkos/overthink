@@ -301,7 +301,7 @@ func (f *fakeGuestExec) ResolveHome(ctx context.Context, user string) (string, e
 
 func TestTransferImageToGuestIdempotent(t *testing.T) {
 	fe := &fakeGuestExec{}
-	err := TransferImageToGuest(context.Background(), fe, "podman", "localhost/cuda:latest", "", EmitOpts{})
+	err := TransferImageToGuest(context.Background(), fe, "podman", "localhost/cuda:latest", "", false, EmitOpts{})
 	if err != nil {
 		t.Fatalf("TransferImageToGuest: %v", err)
 	}
@@ -315,7 +315,7 @@ func TestTransferImageToGuestIdempotent(t *testing.T) {
 // proving it did not short-circuit on the name-exists check).
 func TestTransferImageToGuestReloadsCorrupt(t *testing.T) {
 	fe := &fakeGuestExec{corrupt: true}
-	err := TransferImageToGuest(context.Background(), fe, "podman", "localhost/cuda:latest", "", EmitOpts{})
+	err := TransferImageToGuest(context.Background(), fe, "podman", "localhost/cuda:latest", "", false, EmitOpts{})
 	if err == nil || !strings.Contains(err.Error(), "SSH executor") {
 		t.Fatalf("expected the corrupt image to NOT skip and proceed to re-load (hitting the SSH-executor requirement); got err=%v", err)
 	}

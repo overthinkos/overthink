@@ -50,6 +50,14 @@ type ImageConfigSetupCmd struct {
 	Sidecar         []string `long:"sidecar" help:"Attach sidecar (from built-in templates, e.g. 'tailscale')"`
 	ListSidecars    bool     `long:"list-sidecars" help:"List available sidecar templates and exit"`
 	AutoDetectFlags `embed:""`
+
+	// ExplicitRef, when non-empty, bypasses the short-name → registry-ref
+	// resolution in runConfig and uses this exact image ref (a full local or
+	// registry ref). Set by `ov deploy from-image` for a source-less pod
+	// deploy — quadlet config comes from the image's baked OCI labels with no
+	// overthink.yml project. Image then carries the deploy-key/name only.
+	// Not a CLI flag (kong:"-").
+	ExplicitRef string `kong:"-"`
 }
 
 func (c *ImageConfigSetupCmd) Run() error {
@@ -128,11 +136,22 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	// short name through resolveShellImageRef yields a full local-CalVer ref
 	// podman storage knows (storage is keyed by full registry refs like
 	// ghcr.io/overthinkos/arch:TAG, not bare short names).
-	deployImageName := resolveDeployImageName(c.Image, c.Instance)
-	if deployImageName != c.Image {
-		fmt.Fprintf(os.Stderr, "config: deploy %q declares image: %q\n", c.Image, deployImageName)
+	var deployImageName, imageRef string
+	if c.ExplicitRef != "" {
+		// Source-less from-image deploy (`ov deploy from-image`): use the exact
+		// ref as-is; c.Image is the deploy-key/name only. No deploy.yml
+		// short-name resolution, no registry-ref composition — the image is
+		// already present locally (e.g. cp-image'd into a VM guest) and its
+		// quadlet config comes entirely from its baked OCI labels.
+		deployImageName = c.Image
+		imageRef = c.ExplicitRef
+	} else {
+		deployImageName = resolveDeployImageName(c.Image, c.Instance)
+		if deployImageName != c.Image {
+			fmt.Fprintf(os.Stderr, "config: deploy %q declares image: %q\n", c.Image, deployImageName)
+		}
+		imageRef = resolveShellImageRef("", deployImageName, c.Tag)
 	}
-	imageRef := resolveShellImageRef("", deployImageName, c.Tag)
 	podmanRT := &ResolvedRuntime{BuildEngine: rt.BuildEngine, RunEngine: "podman"}
 	if err := EnsureImage(imageRef, podmanRT); err != nil {
 		return err
@@ -236,7 +255,7 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	// (e.g. `ghcr.io/overthinkos/versa:2026.131.2134`) — pinning
 	// to that exact tag is the whole point, so don't substitute
 	// the deploy-key into a freshly-composed ref.
-	if meta.Registry != "" && !looksLikeFullRef(imageRef) {
+	if meta.Registry != "" && !looksLikeFullRef(imageRef) && c.ExplicitRef == "" {
 		imageRef = resolveShellImageRef(meta.Registry, deployImageName, c.Tag)
 	}
 

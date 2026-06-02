@@ -19,6 +19,17 @@ type BootstrapVMResult struct {
 	CloudInitDigest string
 }
 
+// bootstrapRootfsExtractTar extracts the bootstrap rootfs.tar.gz into the VM
+// disk's mounted root. --xattrs-include='*' is REQUIRED: GNU tar's --xattrs
+// default-EXCLUDES the security.* namespace on extract, which silently drops
+// file capabilities (security.capability). Without it, /usr/bin/newuidmap +
+// newgidmap lose cap_setuid/cap_setgid and rootless podman in the guest cannot
+// map user namespaces (and ping loses cap_net_raw). The privileged builder runs
+// this as root, so it can restore the security.* xattrs. Verified empirically:
+// a plain `tar --xattrs` round-trip drops cap_setuid; the include preserves it.
+// (The build.yml create-side tars carry the same flag — TestBootstrapTarPreservesFileCaps.)
+const bootstrapRootfsExtractTar = `tar -C /mnt --xattrs --xattrs-include='*' --acls -xzf /in/rootfs.tar.gz`
+
 // BuildBootstrapVM creates a fresh VM disk by:
 //   1. Resolving the bootstrap builder + distro from build.yml
 //   2. Running the bootstrap builder via RunPrivileged (pacstrap /
@@ -171,9 +182,7 @@ func BuildBootstrapVM(
 		return BootstrapVMResult{}, fmt.Errorf("rendering bootloader script: %w", err)
 	}
 
-	installBody := fmt.Sprintf(`tar -C /mnt --xattrs --acls -xzf /in/rootfs.tar.gz
-%s
-`, bootloaderScript)
+	installBody := fmt.Sprintf("%s\n%s\n", bootstrapRootfsExtractTar, bootloaderScript)
 	fullScript := prelude + installBody + finalize
 
 	diskPath := filepath.Join(outputDir, "disk.qcow2")

@@ -150,14 +150,45 @@ func defaultDetectHostDevices() DetectedDevices {
 		matches, _ := filepath.Glob(pattern)
 		result.Devices = append(result.Devices, matches...)
 	}
-	// Find the first render node for DRINODE/DRI_NODE auto-injection
-	for _, d := range result.Devices {
-		if strings.HasPrefix(filepath.Base(d), "renderD") {
-			result.RenderNode = d
-			break
+	// Pick the render node for DRINODE/DRI_NODE auto-injection, preferring a
+	// real GPU over the paravirtual virtio-gpu (see pickRenderNode).
+	result.RenderNode = pickRenderNode(result.Devices)
+	return result
+}
+
+// renderNodeVendor reads the PCI vendor id of a /dev/dri/renderD* node from
+// sysfs (e.g. "0x10de" NVIDIA, "0x1002" AMD, "0x8086" Intel, "0x1af4" virtio).
+// Package var so tests can supply a fake without a real /sys.
+var renderNodeVendor = func(node string) string {
+	b, err := os.ReadFile("/sys/class/drm/" + filepath.Base(node) + "/device/vendor")
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(b))
+}
+
+// pickRenderNode chooses the DRINODE/DRI_NODE render node from the detected
+// device list. It PREFERS a real GPU (NVIDIA/AMD/Intel) over the paravirtual
+// virtio-gpu (0x1af4): on a GPU-passthrough VM the seat's virtio head is
+// renderD128 and the passed-through card is renderD129, so the old first-wins
+// default pointed VAAPI/encoder probing at the encode-incapable virtio node.
+// Falls back to the first renderD* when no vendor distinguishes them, so
+// single-GPU hosts (the common case) are unchanged.
+func pickRenderNode(devices []string) string {
+	var first string
+	for _, d := range devices {
+		if !strings.HasPrefix(filepath.Base(d), "renderD") {
+			continue
+		}
+		if first == "" {
+			first = d
+		}
+		switch renderNodeVendor(d) {
+		case "0x10de", "0x1002", "0x8086": // NVIDIA / AMD / Intel — a real, encode-capable GPU
+			return d
 		}
 	}
-	return result
+	return first
 }
 
 // LogDetectedDevices prints detected devices to stderr.

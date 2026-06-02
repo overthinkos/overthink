@@ -138,7 +138,12 @@ func (c *DeployAddCmd) Run() error {
 	// tree walk. Used when a parent substrate (e.g. a pod) must be started
 	// before its children can deploy — the caller deploys the children
 	// explicitly afterwards via dotted-path `ov deploy add parent.child`.
-	if c.NodeOnly {
+	//
+	// A VM root is ALSO dispatched node-only: its nested target:pod children
+	// deploy IN the guest (the host can't tree-walk a pod-in-VM), so runVM
+	// deploys them itself after the VM is up (deployNestedPodsInGuest). A host
+	// tree walk would wrongly try to deploy them locally / double-deploy.
+	if c.NodeOnly || (rootNode != nil && (rootNode.Target == "vm" || strings.HasPrefix(resolvedPath, "vm:"))) {
 		return c.dispatchNode(resolvedPath, rootNode, parentExec, dir)
 	}
 

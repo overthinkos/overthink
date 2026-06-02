@@ -25,7 +25,7 @@ builder:
                     cat /etc/pacman.conf.extra >> /etc/pacman.conf
                     {{- end}}
                     pacstrap -K -G /target {{range .Packages}}{{.}} {{end}}
-                    tar -C /target --xattrs --acls -czf /out/rootfs.tar.gz .
+                    tar -C /target --xattrs --xattrs-include='*' --acls -czf /out/rootfs.tar.gz .
     debootstrap:
         kind: bootstrap
         privileged: true
@@ -100,7 +100,7 @@ builder:
                       umount "/target/dev/$d" 2>/dev/null || true
                     done
                     umount /target/dev/pts /target/dev /target/sys /target/proc
-                    tar -C /target --xattrs --acls -czf /out/rootfs.tar.gz .
+                    tar -C /target --xattrs --xattrs-include='*' --acls -czf /out/rootfs.tar.gz .
     aur:
         detect_config: aur
         cache_mount:
@@ -846,8 +846,8 @@ init:
                 {{- if .EnvList}}
                 environment={{range $i, $kv := .EnvList}}{{if $i}},{{end}}{{$kv.Key}}="{{$kv.Value}}"{{end}}
                 {{- end}}
-                stdout_logfile=/dev/fd/1
-                stdout_logfile_maxbytes=0
+                stdout_logfile={{supervisordLog .Stdout}}
+                stdout_logfile_maxbytes={{supervisordLogMaxbytes .Stdout}}
                 {{- if not (eq .Kind "eventlistener")}}
                 redirect_stderr=true
                 {{- else}}

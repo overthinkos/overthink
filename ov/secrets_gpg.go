@@ -1304,35 +1304,49 @@ func (c *SecretsGpgSetupCmd) Run() error {
 }
 
 func (c *SecretsGpgSetupCmd) checkPrereqs() error {
-	checks := []struct {
-		name    string
-		cmdName string
-		extra   string
-	}{
-		{"gpg", "gpg", ""},
-		{"gpg-connect-agent", "gpg-connect-agent", ""},
-		{"pinentry-qt", "pinentry-qt", ""},
-		{"secret-tool", "secret-tool", " (install libsecret)"},
+	// Required for GPG itself.
+	required := []struct{ name, cmdName string }{
+		{"gpg", "gpg"},
+		{"gpg-connect-agent", "gpg-connect-agent"},
+	}
+	// Optional — needed ONLY for KeePassXC Secret Service passphrase
+	// auto-retrieval (pinentry-qt links libsecret to look the GPG passphrase up
+	// in KeePassXC). Without them gpg still works: gpg-agent simply prompts via
+	// the configured GUI/TTY pinentry instead of auto-retrieving. ov's own
+	// credential store does NOT use these at all — it speaks the Secret Service
+	// over D-Bus via the pure-Go go-keyring client. So a missing one is a note,
+	// never a setup failure (the old "install libsecret" hard-error was
+	// misleading — ov does not depend on libsecret).
+	optional := []struct{ name, cmdName, note string }{
+		{"pinentry-qt", "pinentry-qt", "GUI prompt + KeePassXC passphrase auto-retrieval"},
+		{"secret-tool", "secret-tool", "from libsecret; KeePassXC passphrase auto-retrieval"},
 	}
 	allOK := true
-	for _, ch := range checks {
+	for _, ch := range required {
 		if _, err := exec.LookPath(ch.cmdName); err != nil {
-			fmt.Fprintf(os.Stderr, "  %s: MISSING%s\n", ch.name, ch.extra)
+			fmt.Fprintf(os.Stderr, "  %s: MISSING (required)\n", ch.name)
 			allOK = false
 		} else {
 			fmt.Fprintf(os.Stderr, "  %s: found\n", ch.name)
 		}
 	}
+	for _, ch := range optional {
+		if _, err := exec.LookPath(ch.cmdName); err != nil {
+			fmt.Fprintf(os.Stderr, "  %s: not installed (optional — %s)\n", ch.name, ch.note)
+		} else {
+			fmt.Fprintf(os.Stderr, "  %s: found\n", ch.name)
+		}
+	}
 
-	// Check pinentry-qt libsecret linkage
+	// pinentry-qt libsecret linkage — an optional convenience, never required.
 	if pinentryHasLibsecret() {
-		fmt.Fprintln(os.Stderr, "  pinentry-qt libsecret: yes (Secret Service capable)")
+		fmt.Fprintln(os.Stderr, "  pinentry-qt libsecret: yes (KeePassXC passphrase auto-retrieval available)")
 	} else {
-		fmt.Fprintln(os.Stderr, "  pinentry-qt libsecret: NO (passphrase auto-cache won't work)")
+		fmt.Fprintln(os.Stderr, "  pinentry-qt libsecret: no (optional — gpg prompts interactively instead of auto-retrieving from KeePassXC)")
 	}
 
 	if !allOK {
-		return fmt.Errorf("missing prerequisites (see above)")
+		return fmt.Errorf("missing required prerequisites (see above)")
 	}
 	return nil
 }

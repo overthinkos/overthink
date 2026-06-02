@@ -1,0 +1,41 @@
+package main
+
+import (
+	"os"
+	"strings"
+	"testing"
+)
+
+// TestBootstrapTarPreservesFileCaps guards the file-capability fix: GNU tar's
+// --xattrs default-EXCLUDES the security.* namespace on extract, which silently
+// drops file capabilities (security.capability). A bootstrap rootfs that loses
+// the cap_setuid on /usr/bin/newuidmap (and cap_setgid on newgidmap) leaves
+// rootless podman broken in the guest — the exact failure that hung the nested
+// pod-in-VM deploy (host `podman save | ssh podman load` stalled because the
+// guest's rootless `podman load` could not map namespaces). Every bootstrap tar
+// that round-trips a rootfs MUST carry --xattrs-include so security.* survives.
+//
+// This test would FAIL without the fix (the flag absent on extract/create).
+func TestBootstrapTarPreservesFileCaps(t *testing.T) {
+	// 1. The Go extract command (vm_bootstrap.go) — the confirmed culprit.
+	if !strings.Contains(bootstrapRootfsExtractTar, "--xattrs-include") {
+		t.Errorf("bootstrapRootfsExtractTar lacks --xattrs-include, so GNU tar drops "+
+			"security.capability on extract (newuidmap loses cap_setuid → rootless "+
+			"podman broken): %q", bootstrapRootfsExtractTar)
+	}
+
+	// 2. Every `tar … --xattrs` line in build.yml's bootstrap builders must also
+	//    carry --xattrs-include (create side; defensive + symmetric with extract).
+	//    A generic scan so any future bootstrap tar is caught too.
+	data, err := os.ReadFile("../build.yml")
+	if err != nil {
+		t.Fatalf("reading ../build.yml: %v", err)
+	}
+	for i, line := range strings.Split(string(data), "\n") {
+		if strings.Contains(line, "tar ") && strings.Contains(line, "--xattrs") &&
+			!strings.Contains(line, "--xattrs-include") {
+			t.Errorf("build.yml line %d: `tar --xattrs` without --xattrs-include drops "+
+				"file capabilities (security.capability): %s", i+1, strings.TrimSpace(line))
+		}
+	}
+}

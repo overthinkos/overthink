@@ -423,15 +423,31 @@ func serviceRenderFuncs() template.FuncMap {
 			}
 			return s
 		},
-		// supervisordLog handles supervisord's stdout_logfile= mapping.
+		// supervisordLog maps the abstract `stdout:` keyword to supervisord's
+		// stdout_logfile= value. "file:/path" → a dedicated rotating log file;
+		// "none" → /dev/null; "journal"/unset → /dev/fd/1 (the container's own
+		// stdout, the long-standing default, so services that don't set stdout:
+		// are unchanged).
 		"supervisordLog": func(s string) string {
 			if strings.HasPrefix(s, "file:") {
 				return strings.TrimPrefix(s, "file:")
 			}
-			if s == "journal" || s == "" {
-				return "/dev/stdout"
+			switch s {
+			case "none":
+				return "/dev/null"
+			case "journal", "":
+				return "/dev/fd/1"
 			}
 			return s
+		},
+		// supervisordLogMaxbytes pairs with supervisordLog: a real log file
+		// rotates (10MB), but the special files /dev/fd/1 and /dev/null MUST be
+		// maxbytes=0 — supervisord rejects rotation on non-seekable targets.
+		"supervisordLogMaxbytes": func(s string) string {
+			if strings.HasPrefix(s, "file:") {
+				return "10MB"
+			}
+			return "0"
 		},
 	}
 }

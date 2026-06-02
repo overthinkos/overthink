@@ -25,7 +25,11 @@ import (
 // directory, inheriting stdin/stdout/stderr. Uses the same ov binary
 // the caller invoked (via os.Args[0]) so update loops pick up the
 // local build-under-test automatically.
-func runOvSubcommand(args ...string) error {
+//
+// A package var (not a plain func) so tests can stub the child-process
+// boundary — e.g. deploy_nested_pod_test.go records the image-build /
+// vm-cp-image calls deployNestedPodsInGuest makes without spawning ov.
+var runOvSubcommand = func(args ...string) error {
 	exe := os.Args[0]
 	cmd := exec.Command(exe, args...)
 	cmd.Stdin = os.Stdin

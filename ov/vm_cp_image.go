@@ -9,22 +9,24 @@ import (
 )
 
 // VmCpImageCmd loads a locally-built container image into a running VM guest's
-// (rootful) podman storage via `podman save | scp | podman load`. This is the
-// host→guest delivery path for images that are NOT on a registry — the case a
-// disposable GPU eval bed hits: the freshly-built `cachyos.cuda-eval` image
-// exists only in the operator's local podman, but the in-guest CUDA container
-// must run from the guest's own storage.
+// podman storage via `podman save | scp | podman load`. This is the host→guest
+// delivery path for images that are NOT on a registry — the case the
+// nested-pod-in-VM capability hits: deployNestedPodsInGuest host-builds a nested
+// pod's image (e.g. `cachyos.selkies-kde-nvidia`), cp-images it in as
+// `localhost/ov-<child>:latest`, then the guest's own `ov deploy from-image`
+// brings it up as a persistent quadlet — all offline, no registry.
 //
 // Idempotent: skips the transfer when the guest already has the image.
 type VmCpImageCmd struct {
-	VM    string `arg:"" help:"kind:vm entity name (uses its managed ov-<name> ssh alias)"`
-	Image string `arg:"" help:"image ref (short name or full ref) present in host podman storage"`
-	As    string `long:"as" help:"after load, tag the image in the guest under this stable ref (e.g. localhost/cuda-eval:latest)"`
+	VM       string `arg:"" help:"kind:vm entity name (uses its managed ov-<name> ssh alias)"`
+	Image    string `arg:"" help:"image ref (short name or full ref) present in host podman storage"`
+	As       string `long:"as" help:"after load, tag the image in the guest under this stable ref (e.g. localhost/ov-selkies-kde:latest)"`
+	Rootless bool   `long:"rootless" help:"load into the guest USER's rootless podman storage instead of root's — so a rootless --user quadlet (e.g. a nested-pod-in-VM deploy) can run it"`
 }
 
 func (c *VmCpImageCmd) Run() error {
 	ref := c.Image
-	// Resolve a short name (e.g. "cachyos.cuda-eval") to a concrete local ref.
+	// Resolve a short name (e.g. "cachyos.selkies-kde-nvidia") to a concrete local ref.
 	if !hostImageExists("podman", ref) {
 		if resolved, err := ResolveNewestLocalCalVer("podman", ref); err == nil && resolved != "" {
 			ref = resolved
@@ -34,7 +36,7 @@ func (c *VmCpImageCmd) Run() error {
 		return fmt.Errorf("image %q not found in host podman storage — build it first (ov image build)", c.Image)
 	}
 	guest := sshParamsForVm(c.VM)
-	return TransferImageToGuest(context.Background(), guest, "podman", ref, c.As, EmitOpts{})
+	return TransferImageToGuest(context.Background(), guest, "podman", ref, c.As, c.Rootless, EmitOpts{})
 }
 
 // hostImageExists reports whether the host engine has the image locally.
@@ -43,12 +45,21 @@ func hostImageExists(engine, ref string) bool {
 	return cmd.Run() == nil
 }
 
-// TransferImageToGuest streams a host image into a VM guest's rootful podman
-// storage by piping `podman save <ref>` straight into `ssh <guest> sudo podman
-// load` — NO intermediate tarball on either side. (A file-based copy fails for
-// a multi-GB image because the guest's /tmp is a size-limited tmpfs.) The image
-// lands in ROOT podman storage so a `sudo podman run --device
-// nvidia.com/gpu=all` in the guest — which needs /dev/nvidia* access — finds it.
+// TransferImageToGuest streams a host image into a VM guest's podman storage by
+// piping `podman save <ref>` straight into `ssh <guest> [sudo] podman load` — NO
+// intermediate tarball on either side. (A file-based copy fails for a multi-GB
+// image because the guest's /tmp is a size-limited tmpfs.)
+//
+// rootless selects WHICH guest podman storage:
+//   - rootless == false → ROOT storage (`sudo podman`). For a `sudo podman run
+//     --device nvidia.com/gpu=all` consumer that needs /dev/nvidia* via root.
+//   - rootless == true  → the SSH user's ROOTLESS storage (`podman`, no sudo).
+//     This is what the nested-pod-in-VM deploy needs: deployNestedPodsInGuest
+//     brings the pod up with the guest user's own `ov deploy from-image` (a
+//     --user quadlet), which reads the USER's podman storage — so the image must
+//     land there, not in root's. Rootless GPU works via CDI (/dev/nvidia* are
+//     world-rw; the nvidia-driver layer's boot service writes a world-readable
+//     /etc/cdi/nvidia.yaml).
 //
 // VERIFIED transfer: `podman load` can exit 0 on a TRUNCATED stream and
 // register an image whose overlay layers are incomplete — a `podman run` then
@@ -64,7 +75,7 @@ func hostImageExists(engine, ref string) bool {
 //     error (surfaced, never silently shipped as a broken image).
 //
 // Requires an *SSHExecutor (the VM case). The GPU eval bed is the first caller.
-func TransferImageToGuest(ctx context.Context, de DeployExecutor, hostEngine, ref, as string, opts EmitOpts) error {
+func TransferImageToGuest(ctx context.Context, de DeployExecutor, hostEngine, ref, as string, rootless bool, opts EmitOpts) error {
 	if de == nil {
 		return fmt.Errorf("TransferImageToGuest: nil executor")
 	}
@@ -80,13 +91,13 @@ func TransferImageToGuest(ctx context.Context, de DeployExecutor, hostEngine, re
 	}
 
 	// Verified idempotency.
-	if guestHasImage(ctx, de, probeRef) {
-		if !guestImageCorrupt(ctx, de, probeRef) {
+	if guestHasImage(ctx, de, probeRef, rootless) {
+		if !guestImageCorrupt(ctx, de, probeRef, rootless) {
 			fmt.Fprintf(os.Stderr, "cp-image: guest already has %s (verified intact) — skipping transfer\n", probeRef)
 			return nil
 		}
 		fmt.Fprintf(os.Stderr, "cp-image: guest %s is present but corrupt (torn overlay) — re-loading\n", probeRef)
-		removeGuestImages(ctx, de, probeRef, ref)
+		removeGuestImages(ctx, de, rootless, probeRef, ref)
 	}
 
 	sshExec, ok := de.(*SSHExecutor)
@@ -95,20 +106,20 @@ func TransferImageToGuest(ctx context.Context, de DeployExecutor, hostEngine, re
 	}
 
 	if opts.DryRun {
-		fmt.Fprintf(os.Stderr, "[dry-run] %s save %s | ssh <guest> sudo podman load\n", hostEngine, ref)
+		fmt.Fprintf(os.Stderr, "[dry-run] %s save %s | ssh <guest> %s load\n", hostEngine, ref, podmanCmd(rootless))
 		return nil
 	}
 
-	if err := streamLoadAndTag(ctx, sshExec, de, hostEngine, ref, as, opts); err != nil {
+	if err := streamLoadAndTag(ctx, sshExec, de, hostEngine, ref, as, rootless, opts); err != nil {
 		return err
 	}
-	if guestImageCorrupt(ctx, de, probeRef) {
+	if guestImageCorrupt(ctx, de, probeRef, rootless) {
 		fmt.Fprintf(os.Stderr, "cp-image: load produced a corrupt %s — re-streaming once\n", probeRef)
-		removeGuestImages(ctx, de, probeRef, ref)
-		if err := streamLoadAndTag(ctx, sshExec, de, hostEngine, ref, as, opts); err != nil {
+		removeGuestImages(ctx, de, rootless, probeRef, ref)
+		if err := streamLoadAndTag(ctx, sshExec, de, hostEngine, ref, as, rootless, opts); err != nil {
 			return err
 		}
-		if guestImageCorrupt(ctx, de, probeRef) {
+		if guestImageCorrupt(ctx, de, probeRef, rootless) {
 			return fmt.Errorf("cp-image: %s is still corrupt in guest storage after a clean re-load — transfer unreliable", probeRef)
 		}
 	}
@@ -116,9 +127,20 @@ func TransferImageToGuest(ctx context.Context, de DeployExecutor, hostEngine, re
 	return nil
 }
 
+// podmanCmd returns the guest podman invocation prefix for the chosen storage:
+// "podman" (the SSH user's rootless storage) when rootless, else "sudo podman"
+// (root storage). Used everywhere cp-image touches guest podman so root/rootless
+// stays consistent across the load, the integrity probe, and the tag.
+func podmanCmd(rootless bool) string {
+	if rootless {
+		return "podman"
+	}
+	return "sudo podman"
+}
+
 // guestHasImage reports whether the guest engine holds the image by name.
-func guestHasImage(ctx context.Context, de DeployExecutor, ref string) bool {
-	_, _, code, err := de.RunCapture(ctx, "sudo podman image exists "+deployShellQuote(ref))
+func guestHasImage(ctx context.Context, de DeployExecutor, ref string, rootless bool) bool {
+	_, _, code, err := de.RunCapture(ctx, podmanCmd(rootless)+" image exists "+deployShellQuote(ref))
 	return err == nil && code == 0
 }
 
@@ -130,9 +152,9 @@ func guestHasImage(ctx context.Context, de DeployExecutor, ref string) bool {
 // counts as corruption: any other failure (e.g. the probe binary is absent, an
 // exotic entrypoint) means the overlay mounted fine, so the image is treated as
 // intact — the probe is an integrity check, not an entrypoint test.
-func guestImageCorrupt(ctx context.Context, de DeployExecutor, ref string) bool {
+func guestImageCorrupt(ctx context.Context, de DeployExecutor, ref string, rootless bool) bool {
 	stdout, stderr, code, err := de.RunCapture(ctx,
-		"sudo podman run --rm --entrypoint /usr/bin/true "+deployShellQuote(ref))
+		podmanCmd(rootless)+" run --rm --entrypoint /usr/bin/true "+deployShellQuote(ref))
 	if err == nil && code == 0 {
 		return false
 	}
@@ -144,12 +166,12 @@ func guestImageCorrupt(ctx context.Context, de DeployExecutor, ref string) bool 
 // `podman rmi -f` on every ref that points at the torn image ID is required —
 // dropping only one tag leaves the broken layers in storage, and a re-load that
 // shares those layer digests would skip extraction and inherit the corruption.
-func removeGuestImages(ctx context.Context, de DeployExecutor, refs ...string) {
+func removeGuestImages(ctx context.Context, de DeployExecutor, rootless bool, refs ...string) {
 	for _, r := range refs {
 		if r == "" {
 			continue
 		}
-		_, _, _, _ = de.RunCapture(ctx, "sudo podman rmi -f "+deployShellQuote(r))
+		_, _, _, _ = de.RunCapture(ctx, podmanCmd(rootless)+" rmi -f "+deployShellQuote(r))
 	}
 }
 
@@ -157,9 +179,14 @@ func removeGuestImages(ctx context.Context, de DeployExecutor, refs ...string) {
 // podman storage (`ssh … sudo podman load`) with NO intermediate tarball, then
 // (when `as` is set) tags the loaded ref under that stable name. Disk-backed on
 // the guest (podman extracts into /var/lib/containers), so no tmpfs limit.
-func streamLoadAndTag(ctx context.Context, sshExec *SSHExecutor, de DeployExecutor, hostEngine, ref, as string, opts EmitOpts) error {
+func streamLoadAndTag(ctx context.Context, sshExec *SSHExecutor, de DeployExecutor, hostEngine, ref, as string, rootless bool, opts EmitOpts) error {
 	fmt.Fprintf(os.Stderr, "cp-image: streaming %s into guest podman (save | ssh load)...\n", ref)
-	sshArgs := append(sshExec.sshBaseArgs(), "sudo", "podman", "load")
+	var sshArgs []string
+	if rootless {
+		sshArgs = append(sshExec.sshBaseArgs(), "podman", "load")
+	} else {
+		sshArgs = append(sshExec.sshBaseArgs(), "sudo", "podman", "load")
+	}
 	save := osExecCommand(ctx, hostEngine, "save", ref)
 	load := osExecCommand(ctx, "ssh", sshArgs...)
 	pipe, err := save.StdoutPipe()
@@ -185,9 +212,17 @@ func streamLoadAndTag(ctx context.Context, sshExec *SSHExecutor, de DeployExecut
 		return fmt.Errorf("cp-image: guest podman load: %w", loadErr)
 	}
 	if as != "" {
-		tagScript := "sudo podman tag " + deployShellQuote(ref) + " " + deployShellQuote(as)
-		if err := de.RunSystem(ctx, tagScript, opts); err != nil {
-			return fmt.Errorf("cp-image: guest podman tag %s -> %s: %w", ref, as, err)
+		// Tag in the SAME storage the load targeted: as the user (RunUser +
+		// `podman tag`) for rootless, as root (RunSystem + `sudo podman tag`)
+		// otherwise — a cross-scope tag would not see the just-loaded image.
+		var tagErr error
+		if rootless {
+			tagErr = de.RunUser(ctx, "podman tag "+deployShellQuote(ref)+" "+deployShellQuote(as), opts)
+		} else {
+			tagErr = de.RunSystem(ctx, "sudo podman tag "+deployShellQuote(ref)+" "+deployShellQuote(as), opts)
+		}
+		if tagErr != nil {
+			return fmt.Errorf("cp-image: guest podman tag %s -> %s: %w", ref, as, tagErr)
 		}
 	}
 	return nil

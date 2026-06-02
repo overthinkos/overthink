@@ -9,6 +9,17 @@ if [ -d "$NVRTC_PATH" ]; then
     export LD_LIBRARY_PATH="${NVRTC_PATH}${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 fi
 
+# Force the headless wlroots backend. Pixelflux is a HEADLESS capture compositor
+# — it renders the nested labwc desktop OFF-SCREEN for streaming and never drives
+# a physical display. Without this, wlroots auto-selects the DRM/KMS backend and
+# tries to allocate scanout buffers on the seat's modeset device (card0); in a
+# pod that device is owned by the host/guest seat, so DRM_IOCTL_MODE_CREATE_DUMB
+# is denied, the compositor never starts, and the stream silently produces no
+# frames (falling back to a dead x264 default). Headless renders via the render
+# node (GBM/EGL) instead, so capture + the auto-detected NVENC/VAAPI encoder work
+# in any pod regardless of who owns the seat.
+export WLR_BACKENDS="${WLR_BACKENDS:-headless}"
+
 # GPU detection for NVENC hardware encoding
 if command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi >/dev/null 2>&1; then
     echo "selkies-wrapper: NVIDIA GPU detected, DRINODE=${DRINODE:-not set}"

@@ -116,6 +116,12 @@ layer:
           user: "${USER}"
         - mkdir: "${HOME}/.config/selkies"
           user: "${USER}"
+        # Dedicated selkies log dir — the `selkies` capture-server writes a
+        # rotating stdout/stderr log here (see its `stdout: file:` below), so
+        # capture/encoder failures are tailable instead of buried in the pod's
+        # interleaved container stdout.
+        - mkdir: "${HOME}/.local/share/selkies"
+          user: "${USER}"
         - copy: selkies-wrapper
           to: "${HOME}/.local/bin/selkies-wrapper"
           mode: "0755"
@@ -195,16 +201,30 @@ layer:
           allow_insecure: true
           timeout: 10s
         - id: selkies-vaapi-encode
-          # Runtime encoder-capability probe (R3: factored here from the per-bed
+          # Runtime encoder probe (R3: factored here from the per-bed
           # eval-selkies-*-pod copies). pixelflux auto-selects the encoder from the
-          # host render node — this asserts VAAPI H264 encode on an AMD/Intel
-          # renderD (real on such a host), or reports N/A (software x264) where no
-          # VAAPI encoder exists (a CPU host, or the -nvidia flavor in a VM). Either
-          # outcome passes; it never asserts a silent x264 fallback as a GPU win.
+          # host render node. On an AMD (0x1002) / Intel (0x8086) render node VAAPI
+          # H264 encode MUST be present, so this REQUIRES it (HARD-FAIL otherwise: a
+          # misconfigured DRINODE / broken libva silently drops to CPU x264 — the
+          # exact false-green this probe exists to catch). N/A is legitimate ONLY
+          # where no VAAPI-encode GPU exists (a CPU host, or the -nvidia flavor in a
+          # VM, which encodes via NVENC). NOTE: $DRINODE is referenced WITHOUT braces
+          # — ov's eval var resolver only substitutes ${UPPERCASE} forms and would
+          # otherwise treat ${DRINODE:-default} as one unresolvable variable and SKIP
+          # the whole check; braceless $DRINODE is left for the in-container shell.
           scope: deploy
           command: |
-            node="${DRINODE:-/dev/dri/renderD128}"
-            if vainfo --display drm --device "$node" 2>/dev/null | grep -q "VAProfileH264.*VAEntrypointEncSlice"; then echo "VAAPI-ENCODE-CAPABLE ($node)"; else echo "VAAPI-N/A (software x264 path)"; fi
+            node="$DRINODE"
+            [ -n "$node" ] || node=$(ls -1 /dev/dri/renderD* 2>/dev/null | head -1)
+            [ -n "$node" ] || node=/dev/dri/renderD128
+            vendor=$(cat /sys/class/drm/$(basename "$node")/device/vendor 2>/dev/null)
+            if vainfo --display drm --device "$node" 2>/dev/null | grep -q "VAProfileH264.*VAEntrypointEncSlice"; then
+              echo "VAAPI-ENCODE-CAPABLE ($node vendor=$vendor)"
+            elif [ "$vendor" = "0x1002" ] || [ "$vendor" = "0x8086" ]; then
+              echo "FAIL: AMD/Intel GPU ($vendor) at $node but no VAAPI H264 encode — DRINODE misconfig / broken libva (CPU x264 fallback)"; exit 1
+            else
+              echo "VAAPI-N/A (no VAAPI-encode GPU at $node vendor=${vendor:-none} — NVENC/x264 path)"
+            fi
           exit_status: 0
           stdout:
             - matches: "VAAPI-ENCODE-CAPABLE|VAAPI-N/A"
@@ -228,6 +248,12 @@ layer:
           scope: user
         - name: selkies
           exec: "%(ENV_HOME)s/.local/bin/selkies-wrapper"
+          # Dedicated rotating log (supervisord expands %(ENV_HOME)s at runtime)
+          # so capture/encoder failures — a wlroots backend error, an NVENC init
+          # failure, a silent x264 fallback — are tailable via
+          # `supervisorctl tail selkies` / the file, not buried in the pod's
+          # interleaved container stdout.
+          stdout: "file:%(ENV_HOME)s/.local/share/selkies/selkies.log"
           env:
             PIXELFLUX_WAYLAND: true
           restart: always

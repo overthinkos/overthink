@@ -22,6 +22,54 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-02 — feat(vm,selkies): persistent nested-pod-in-VM + real GPU NVENC selkies stream
+
+**Cutover 2.** A `target: vm` deploy's `nested: {child: target:pod}` now deploys
+the child as a PERSISTENT in-guest quadlet (host-build → `ov vm cp-image
+--rootless` → guest `ov deploy from-image <ref> <name>` under the guest's systemd
+with linger), so it survives a guest reboot — replacing the transient cp-image
+path. The `cachyos-gpu` workstation's KDE-selkies stream is intended to move from
+in-guest systemd layers to a nested `selkies-kde-nvidia` pod; `eval-cachyos-gpu-vm`
+proves the mechanism on a VFIO-GPU-passthrough bed.
+
+**The GPU NVENC stream actually works now.** RDD on the real RTX-4080 bed exposed
+that the nested selkies pod never produced video: pixelflux (a headless wlroots
+capture compositor) was auto-selecting the DRM/KMS backend and failing
+`DRM_IOCTL_MODE_CREATE_DUMB: Permission denied` on the seat's `card0` (a rootless
+pod can't own it) → no compositor → a silent software-x264 default. Fix:
+`selkies-wrapper` forces `WLR_BACKENDS=headless` (render off-screen via the render
+node), after which the compositor starts and NVENC initializes. `ov/devices.go`
+DRINODE auto-detect now prefers a real-GPU render node (NVIDIA/AMD/Intel) over the
+paravirtual virtio-gpu, so on a passthrough VM it picks NVIDIA `renderD129`, not
+virtio `renderD128`.
+
+**No more silent/black encode (eval beef-up).** `nested-selkies-kde-encoder`
+asserts NVENC was *selected* (not a silent x264 fallback) from the selkies log;
+the new `selkies-frame-not-black` captures a frame via pixelflux and asserts a
+non-uniform luma spread (ffmpeg `signalstats`) so a black/broken stream fails the
+bed instead of passing.
+
+**`stdout:` service-logging field implemented for supervisord.** The documented
+`stdout: file:<path>|none|journal` service field was wired only for systemd; the
+supervisord template hardcoded `stdout_logfile=/dev/fd/1`. Now `supervisordLog` +
+`supervisordLogMaxbytes` render a dedicated rotating log when set (default
+unchanged for every other service). The selkies capture-server writes
+`~/.local/share/selkies/selkies.log`, so capture/encoder failures are tailable —
+which is how the KMS failure above was finally diagnosed.
+
+**Portability + cleanup.** `ov` is now near-static: the Shells-com/spice audio
+channels (its only opus/portaudio cgo consumers) are build-tagged off by default
+(`-tags spice_audio` to re-enable), so a plain build links no audio libs and runs
+on any glibc host. `pkg/arch` PKGBUILD drops the now-optional deps (opusfile,
+portaudio, libsecret, dmidecode, openbsd-netcat, go-task) to `optdepends`, and
+`ov secrets gpg` doctor hints no longer imply libsecret is required (ov speaks the
+Secret Service via the pure-Go go-keyring client). Rootless pacstrap/debootstrap
+rootfs builds preserve file capabilities (`tar --xattrs-include='*'`) so
+`newuidmap`/`newgidmap` keep `cap_setuid` and rootless podman works in the guest.
+The `selkies-vaapi-encode` eval check no longer silently SKIPS (`${DRINODE:-…}`
+was an unsupported bash-default the eval resolver couldn't parse — now braceless
+`$DRINODE`) and HARD-FAILS on an AMD/Intel render node without VAAPI H264 encode.
+
 ### 2026-06-02 — fix(vm): `ov vm destroy` removes the deploy.yml entry (+ idempotent)
 
 `ov vm destroy <name>` now removes the deploy.yml `vm:<name>` entry — the inverse

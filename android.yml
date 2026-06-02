@@ -30,6 +30,10 @@ android:
     # with no physical hardware.
     pixel9a-endpoint:
         adb:
-            host: 127.0.0.1:35002
+            # ${HOST_PORT:5037} resolves at deploy time to the PARENT emulator
+            # pod's host-mapped adb-server port (container 5037), so the endpoint
+            # follows the pod's published port instead of hard-coding it. Used
+            # nested under eval-android-emulator-pod (which publishes …:5037).
+            host: 127.0.0.1:${HOST_PORT:5037}
         serial: emulator-5554
         device: pixel_9a

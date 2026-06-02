@@ -22,6 +22,24 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-02 — feat(android): resolve ${HOST_PORT:N} in a nested endpoint device's adb host
+
+A `kind: android` `adb:` endpoint device nested under an emulator pod can address
+its parent's published adb port dynamically via `adb.host: 127.0.0.1:${HOST_PORT:5037}`
+instead of hard-coding the host port. `resolveAndroidDevice` substitutes a single
+`${HOST_PORT:N}` token with the parent pod's host-mapped port for container port N
+(read from NetworkSettings.Ports via the same `findHostPort` the image-device
+branch uses — R3; the parent pod is derived from the deploy path). Literal
+host:port endpoints pass through unchanged; a non-nested device or an unpublished
+port errors clearly.
+
+R10: `eval-android-emulator-pod` — the device-net leg (pixel9a-endpoint,
+`adb.host: 127.0.0.1:${HOST_PORT:5037}`) resolved to the emulator pod's published
+adb port and installed the committed ApiDemos over it (an unresolved token would
+have failed the adb connect); eval-live 113/0; fresh-rebuild leg passed
+(summary.yml ok:true). Go unit test covers the parse paths (passthrough,
+no-parent, malformed, no-brace).
+
 ### 2026-06-02 — feat(vm): ssh.port_auto — auto-allocate the VM SSH host port
 
 **Additive, no schema-version bump** (same class as `autostart`). A `kind: vm`

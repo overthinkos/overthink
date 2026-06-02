@@ -160,8 +160,16 @@ func resolveAndroidDevice(spec *AndroidSpec, node *DeploymentNode, path string) 
 	// Remote/physical endpoint — host-side apkeep + goadb.
 	if spec.IsEndpoint() {
 		email, token := resolveAndroidGoogleCreds(spec.GoogleAccount)
+		// A nested endpoint device may address its parent emulator pod's
+		// published adb port dynamically via ${HOST_PORT:N} instead of a
+		// hard-coded host port (decouples the device from the bed's fixed
+		// publish). Resolve it against the parent pod's NetworkSettings.Ports.
+		addr, err := resolveAndroidHostPortRef(spec.Adb.Host, path, node)
+		if err != nil {
+			return AndroidDevice{}, err
+		}
 		return AndroidDevice{
-			AdbAddr:     spec.Adb.Host,
+			AdbAddr:     addr,
 			Serial:      serial,
 			GoogleEmail: email,
 			GoogleToken: token,
@@ -199,6 +207,51 @@ func resolveAndroidDevice(spec *AndroidSpec, node *DeploymentNode, path string) 
 		return AndroidDevice{}, err
 	}
 	return AndroidDevice{Engine: engine, Container: container, AdbAddr: addr, Serial: serial}, nil
+}
+
+// resolveAndroidHostPortRef substitutes a single ${HOST_PORT:N} token in a
+// nested endpoint device's adb host with the PARENT pod's host-mapped port for
+// container port N — read from NetworkSettings.Ports via the same findHostPort
+// the image-device branch uses (R3). The parent pod is derived from the deploy
+// path (path[:lastDot]), exactly like the image branch. Returns addr unchanged
+// when it carries no ${HOST_PORT:N} reference (a literal host:port endpoint).
+func resolveAndroidHostPortRef(addr, path string, node *DeploymentNode) (string, error) {
+	const marker = "${HOST_PORT:"
+	idx := strings.Index(addr, marker)
+	if idx < 0 {
+		return addr, nil
+	}
+	rest := addr[idx+len(marker):]
+	end := strings.IndexByte(rest, '}')
+	if end < 0 {
+		return "", fmt.Errorf("adb host %q: malformed ${HOST_PORT:N} (no closing brace)", addr)
+	}
+	var ctrPort int
+	if _, err := fmt.Sscanf(rest[:end], "%d", &ctrPort); err != nil || ctrPort <= 0 {
+		return "", fmt.Errorf("adb host %q: ${HOST_PORT:N} requires a positive container port", addr)
+	}
+	i := strings.LastIndexByte(path, '.')
+	if i < 0 {
+		return "", fmt.Errorf("adb host %q uses ${HOST_PORT:%d} but the device is not nested under a pod (deploy path %q has no parent to read the published port from)", addr, ctrPort, path)
+	}
+	engine := "podman"
+	if node != nil && node.Engine == "docker" {
+		engine = "docker"
+	}
+	engine = EngineBinary(engine)
+	container := "ov-" + NestedContainerName(path[:i])
+	if !containerRunning(engine, container) {
+		return "", fmt.Errorf("parent pod container %s is not running (start it before deploying the android endpoint device)", container)
+	}
+	insp, err := InspectContainer(engine, container)
+	if err != nil {
+		return "", fmt.Errorf("inspect %s: %w", container, err)
+	}
+	hp, err := findHostPort(insp, ctrPort)
+	if err != nil {
+		return "", err
+	}
+	return addr[:idx] + fmt.Sprintf("%d", hp) + rest[end+1:], nil
 }
 
 // resolveAndroidGoogleCreds reads the apkeep google-play credentials from the

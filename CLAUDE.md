@@ -69,7 +69,7 @@ Consult this table BEFORE the first tool call of every task. If your task matche
 | Debian images / `debian*` / `image/debian` submodule | `/ov-distros:debian` + `/ov-distros:debian-builder` + `/ov-distros:debian-debootstrap` + `/ov-coder:debian-coder` + `/ov-vm:debian` |
 | Ubuntu images / `ubuntu*` / `image/ubuntu` submodule | `/ov-distros:ubuntu` + `/ov-distros:ubuntu-builder` + `/ov-distros:ubuntu-debootstrap` + `/ov-coder:ubuntu-coder` + `/ov-vm:ubuntu` |
 | Fedora images / `fedora*` / `image/fedora` submodule / `fedora-base.yml` | `/ov-distros:fedora` + `/ov-distros:fedora-builder` + `/ov-distros:fedora-nonfree` + `/ov-coder:fedora-coder` + `/ov-distros:fedora-ov` + `/ov-distros:fedora-test` |
-| bootc images / `bazzite` / `aurora` / `*-bootc` / `image/bootc` submodule | `/ov-distros:bazzite` + `/ov-distros:aurora` + `/ov-selkies:selkies-desktop-bootc` + `/ov-distros:bootc-base` + `/ov-vm:vm` |
+| bootc images / `bazzite` / `aurora` / `*-bootc` / `image/bootc` submodule | `/ov-distros:bazzite` + `/ov-distros:aurora` + `/ov-distros:bootc-base` + `/ov-vm:vm` |
 | "What does layer X do?" — language runtime | `/ov-languages:<name>` (python, python-ml, pixi) |
 | "What does layer X do?" — infrastructure service | `/ov-infrastructure:<name>` (postgresql, redis, k3s, traefik, supervisord, tailscale, gocryptfs, virtualization, dbus-layer, tmux-layer, …) |
 | "What does layer X do?" — CLI utility / ov binary | `/ov-tools:<name>` (ripgrep, himalaya, whisper, ov, ov-full, …) |

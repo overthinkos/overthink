@@ -318,7 +318,10 @@ func (c *EvalLiveCmd) runVm() error {
 	}
 
 	user := resolveVmSshUser(spec)
-	port := resolveVmSshPort(spec)
+	port, err := resolveVmSshPort(spec, vmName)
+	if err != nil {
+		return err
+	}
 
 	// Two deploy sources for VMs:
 	//   - project-level: overthink.yml / deploy.yml `deployments.images["vm:<name>"]`

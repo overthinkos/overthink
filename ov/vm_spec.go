@@ -318,6 +318,13 @@ type VmSSH struct {
 	// Port is the host port forwarded to guest :22. Default: 2222.
 	Port int `yaml:"port,omitempty"`
 
+	// PortAuto, when true, auto-allocates a free host port for the SSH
+	// forward at `ov vm create` and persists it in vm_state.ssh_port (reused
+	// on rebuild — idempotent). Mutually exclusive with Port. Lets concurrent
+	// VM beds avoid fixed host-port collisions, mirroring the pod path's
+	// `port: [auto]`.
+	PortAuto bool `yaml:"port_auto,omitempty"`
+
 	// KeySource controls which SSH public key gets injected into the
 	// guest. Values:
 	//   auto          — use the first ~/.ssh/*.pub found (default)

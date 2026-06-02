@@ -215,6 +215,9 @@ func validateVmSSH(name string, spec *VmSpec, errs *ValidationError) {
 	if spec.SSH.Port < 0 || spec.SSH.Port > 65535 {
 		errs.Add("vm %q: ssh.port %d out of range 0-65535", name, spec.SSH.Port)
 	}
+	if spec.SSH.PortAuto && spec.SSH.Port > 0 {
+		errs.Add("vm %q: ssh.port and ssh.port_auto are mutually exclusive (use one)", name)
+	}
 	switch spec.SSH.KeySource {
 	case "", "auto", "generate", "none":
 		// OK

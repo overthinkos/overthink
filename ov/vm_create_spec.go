@@ -83,7 +83,30 @@ func (c *VmCreateCmd) runVmSpecCreate(vmName string, spec *VmSpec, backend strin
 		return fmt.Errorf("resolving firmware: %w", err)
 	}
 
-	// Compose VmRuntimeParams.
+	// Compose VmRuntimeParams. SSH port resolves here so ssh.port_auto can
+	// allocate (or reuse the persisted) host port before the libvirt forward
+	// is rendered.
+	sshPort, err := resolveVmSshPort(spec, vmName)
+	if err != nil {
+		return fmt.Errorf("resolving SSH port: %w", err)
+	}
+	// For ssh.port_auto, persist the resolved port NOW so deploy-add's
+	// reachability probe (and every later read) reuses THIS exact port. The
+	// auto-allocation must be stable across the vm-create → deploy-add sequence;
+	// without persisting here deploy-add re-resolves, finds no persisted port,
+	// allocates a DIFFERENT one, probes the wrong port, declares the VM
+	// unreachable, and auto-boots `ov vm create` into an "already exists" error.
+	if spec.SSH != nil && spec.SSH.PortAuto {
+		deployKey := "vm:" + vmName
+		st := &VmDeployState{}
+		if entry, ok := loadDeployConfigForRead("ov vm create persist-auto-port").LookupKey(deployKey); ok && entry.VmState != nil {
+			st = entry.VmState
+		}
+		st.SshPort = sshPort
+		if err := saveVmDeployState(deployKey, st, spec); err != nil {
+			return fmt.Errorf("persisting auto-allocated ssh port: %w", err)
+		}
+	}
 	rt := VmRuntimeParams{
 		Name:              vmDomainName,
 		QCOW2Path:         qcow2Abs,
@@ -95,7 +118,7 @@ func (c *VmCreateCmd) runVmSpecCreate(vmName string, spec *VmSpec, backend strin
 		SMBIOSCredentials: smbiosCreds,
 		RamMB:             parseRAMtoMB(resolveVmRam(spec)),
 		Cpus:              resolveVmCpus(spec),
-		SshPort:           resolveVmSshPort(spec),
+		SshPort:           sshPort,
 		VmStateDir:        vmStateDir,
 	}
 	// ExtraPortForwards intentionally empty — spec.Network.PortForwards is

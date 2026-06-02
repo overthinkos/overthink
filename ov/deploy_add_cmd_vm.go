@@ -73,7 +73,10 @@ func (c *DeployAddCmd) runVM(deployName string, plans []*InstallPlan, dir string
 
 	// Resolve SSH details.
 	sshUser := resolveVmSshUser(spec)
-	sshPort := resolveVmSshPort(spec)
+	sshPort, err := resolveVmSshPort(spec, vmName)
+	if err != nil {
+		return err
+	}
 	sshKeyPath := filepath.Join(stateDir, "id_ed25519")
 	knownHostsPath := filepath.Join(stateDir, "known_hosts")
 
@@ -387,12 +390,28 @@ func resolveVmSshUser(spec *VmSpec) string {
 	return ""
 }
 
-// resolveVmSshPort picks the host-side SSH port forward. Default 2222.
-func resolveVmSshPort(spec *VmSpec) int {
-	if spec.SSH != nil && spec.SSH.Port > 0 {
-		return spec.SSH.Port
+// resolveVmSshPort picks the host-side SSH port forward.
+//
+//   - ssh.port_auto: true → reuse the persisted vm_state.ssh_port if one was
+//     already allocated (idempotent across rebuilds), else allocate a free host
+//     port via the shared pod-path allocator and let the caller persist it.
+//   - ssh.port: N        → that fixed port.
+//   - neither            → 2222.
+func resolveVmSshPort(spec *VmSpec, vmName string) (int, error) {
+	if spec.SSH != nil && spec.SSH.PortAuto {
+		if entry, ok := loadDeployConfigForRead("ov vm ssh-port").LookupKey("vm:" + vmName); ok && entry.VmState != nil && entry.VmState.SshPort > 0 {
+			return entry.VmState.SshPort, nil
+		}
+		alloc, err := AllocateAutoPorts([]int{22}, nil)
+		if err != nil {
+			return 0, fmt.Errorf("vm %q: ssh.port_auto allocation failed: %w", vmName, err)
+		}
+		return alloc[0].Host, nil
 	}
-	return 2222
+	if spec.SSH != nil && spec.SSH.Port > 0 {
+		return spec.SSH.Port, nil
+	}
+	return 2222, nil
 }
 
 // saveVmDeployState writes the updated VmDeployState into

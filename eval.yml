@@ -1728,7 +1728,11 @@ vm:
             port_forwards:
                 - "16443:6443"
         ssh:
-            port: 2225 # non-default host SSH port for the eval-k3s-vm bed
+            # port_auto auto-allocates the host SSH port at create (was a fixed
+            # 2225 chosen to dodge collisions — port_auto does that automatically).
+            # This bed is also the R10 for the ssh.port_auto feature: the entire
+            # k3s deploy connects over SSH on the auto-allocated port.
+            port_auto: true
             key_source: generate
         cloud_init:
             timezone: UTC

@@ -22,6 +22,33 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-02 — feat(vm): ssh.port_auto — auto-allocate the VM SSH host port
+
+**Additive, no schema-version bump** (same class as `autostart`). A `kind: vm`
+entity can set `ssh.port_auto: true` to auto-allocate a free host port for the
+SSH forward at `ov vm create` (persisted in `vm_state.ssh_port`, reused on
+rebuild — idempotent) instead of a fixed `ssh.port`. Mutually exclusive with
+`ssh.port`. Lets concurrent VM beds avoid fixed host-port collisions, mirroring
+the pod path's `port: [auto]`.
+
+`resolveVmSshPort` gains a `vmName` parameter + an error return: on `port_auto`
+it reuses the persisted port if present, else allocates via the shared
+`AllocateAutoPorts` (R3 — the same probe loop the pod path uses). It stays PURE
+(no side effects); **vm-create persists** the resolved auto-port so deploy-add's
+reachability probe + every later read reuse THIS exact port (an early bug had
+deploy-add re-allocate a different port, find the VM unreachable, and auto-boot
+into an "already exists" — RCA in the eval-k3s-vm run). All three call sites
+thread through it (vm-create, `deploy add vm:`, eval-live); `validateVmSSH`
+rejects `port` + `port_auto` set together.
+
+R10: `eval-k3s-vm` (disposable Arch-cloud VM, converted to `ssh.port_auto`) —
+the host SSH port auto-allocated to a fresh ephemeral 38067 (persisted at
+vm-create), and the entire k3s-server deploy + 21 k8s probes
+(nodes/coredns/traefik/local-path/svclb Ready) ran over it; the fresh-rebuild
+`update` leg + teardown passed (summary.yml ok:true, 6 steps). Go unit tests
+(`vm_ssh_port_test.go`) cover the three resolution paths + the mutual-exclusion
+validation.
+
 ### 2026-06-02 — feat(selkies): GPU matrix — selkies-{labwc,kde}-nvidia (real NVENC) + selkies-kde relocation
 
 **Breaking (image rename), no schema-version bump.** Completes the selkies

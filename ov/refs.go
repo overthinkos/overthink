@@ -348,15 +348,22 @@ func CollectRemoteRefsOpts(cfg *Config, layers map[string]*Layer, opts ResolveOp
 		// (a layerless base needs no builder). A namespaced builder (e.g.
 		// ov.fedora-builder) is BUILT as an intermediate in the consumer's graph,
 		// so its layers (rpmfusion, yay, …) must be fetched here — dropping the
-		// builder edge under-collects them ("unknown layer"). Qualified refs
-		// descend into the imported namespace; bare refs resolve within c; an
-		// external-URL/unknown base resolves to ok=false and is skipped.
+		// builder edge under-collects them ("unknown layer"). The builder edge
+		// follows the EFFECTIVE builder (effectiveBuilderForImage → the canonical
+		// resolveEffectiveBuilder), NOT the raw per-image img.Builder: an image
+		// whose builder comes from defaults.builder / the distro-keyed default
+		// (e.g. bazzite/aurora -> ov.fedora-builder, with no per-image builder:
+		// block) has an EMPTY raw img.Builder, so reading it skipped the builder
+		// edge and under-collected its layers — the exact fetch/resolve lockstep
+		// break this walk exists to prevent. Qualified refs descend into the
+		// imported namespace; bare refs resolve within c; an external-URL/unknown
+		// base resolves to ok=false and is skipped.
 		edges := []string{}
 		if img.Base != "" {
 			edges = append(edges, img.Base)
 		}
 		if len(img.Layer) > 0 {
-			edges = append(edges, img.Builder.AllBuilder()...)
+			edges = append(edges, c.effectiveBuilderForImage(name, img).AllBuilder()...)
 		}
 		for _, ref := range edges {
 			if _, tc, ok := c.resolveImageRef(ref); ok {

@@ -791,6 +791,21 @@ func validateImageDAG(cfg *Config, layers map[string]*Layer, dir string, opts Re
 		} else {
 			errs.Add("image DAG error: %v", orderErr)
 		}
+		// A cyclic / broken image DAG was already reported; the global layer
+		// order over it is meaningless, so stop here.
+		return
+	}
+
+	// Resolve the GLOBAL layer order over the enriched image set (locals PLUS the
+	// namespace-pulled bases/builders above) — the SAME computation that
+	// `ov image generate`/`build` run (ComputeIntermediates → GlobalLayerOrder).
+	// validateLayerDAG only iterates cfg.Image, so a layer missing from a PULLED
+	// builder (e.g. an imported ov.fedora-builder's rpmfusion) slipped past
+	// validate yet failed generate; running it here restores validate↔generate
+	// agreement so the gap is caught at validate time, not only at build time.
+	// Reached only on an acyclic DAG (the cycle guard above returned otherwise).
+	if _, glErr := GlobalLayerOrder(images, layers); glErr != nil {
+		errs.Add("global layer order: %v", glErr)
 	}
 }
 

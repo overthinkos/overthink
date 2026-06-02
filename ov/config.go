@@ -523,8 +523,9 @@ func (c *Config) ResolveImage(name string, calverTag string, dir string, opts Re
 	}
 
 	// Builder resolution flows through the ONE canonical method so it can't
-	// diverge across commands (build/generate/inspect via ResolveImage, and
-	// `ov deploy add`'s synthetic host/VM image, both call this).
+	// diverge across commands (build/generate/inspect via ResolveImage,
+	// `ov deploy add`'s synthetic host/VM image, and the remote-ref fetch walk
+	// via effectiveBuilderForImage all call resolveEffectiveBuilder).
 	resolved.Builder = c.resolveEffectiveBuilder(name, resolved.Distro, resolved.Base, resolved.IsExternalBase, img.Builder)
 
 	// BuilderCapabilities: image-specific capability declaration, NOT inherited
@@ -725,9 +726,11 @@ func intPtr(v int) *int {
 // the boundary, so we key off the resolved distro and source the builder map
 // from a root-namespace image whose bare refs resolve HERE.
 //
-// EVERY builder-consuming path calls this — ResolveImage (image.yml images) and
-// the synthetic host/VM image in `ov deploy add` (deploy_add_cmd.go) — so the
-// resolution can never drift between commands.
+// EVERY builder-consuming path calls this — ResolveImage (image.yml images), the
+// synthetic host/VM image in `ov deploy add` (deploy_add_cmd.go), and the
+// remote-ref FETCH walk (effectiveBuilderForImage → CollectRemoteRefsOpts) — so
+// the resolution can never drift between commands and the fetch set stays in
+// lockstep with the resolve set.
 func (c *Config) resolveEffectiveBuilder(name string, distro []string, base string, isExternalBase bool, imgBuilder BuilderMap) BuilderMap {
 	out := make(BuilderMap)
 	for typ, b := range c.Defaults.Builder {
@@ -759,6 +762,44 @@ func (c *Config) resolveEffectiveBuilder(name string, distro []string, base stri
 		}
 	}
 	return out
+}
+
+// effectiveBuilderForImage computes the builder image refs an image will build
+// against, from a RAW ImageConfig — the FETCH-path counterpart to ResolveImage's
+// resolved-value path. Both end at the ONE canonical resolveEffectiveBuilder;
+// this helper just supplies its inputs (base, is-external-base, distro) using the
+// SAME precedence + canonical helpers ResolveImage uses (Defaults fallback,
+// resolveImageRef for the internal/external line, walkBaseChainDistro for distro
+// inheritance). It exists because CollectRemoteRefsOpts.collectImage runs during
+// the remote-ref FETCH phase, before any ResolvedImage exists (and without the
+// dir/tag ResolveImage needs); reading the raw per-image img.Builder there
+// under-collected builders supplied by defaults.builder / the distro-keyed
+// default (whose per-image map is empty — e.g. bazzite/aurora -> ov.fedora-builder),
+// surfacing as "unknown layer" at generate time. Routing through this keeps the
+// FETCH set's builder edges in lockstep with the RESOLVE set's (resolveNamespacedBases).
+func (c *Config) effectiveBuilderForImage(name string, img ImageConfig) BuilderMap {
+	base := "scratch"
+	isExternalBase := true
+	if img.From == "" && !img.DataImage {
+		base = img.Base
+		if base == "" {
+			base = c.Defaults.Base
+		}
+		if base == "" {
+			base = "quay.io/fedora/fedora:43"
+		}
+		if baseImg, _, isInternal := c.resolveImageRef(base); isInternal && baseImg.IsEnabled() {
+			isExternalBase = false
+		}
+	}
+	distro := img.Distro
+	if len(distro) == 0 {
+		distro = c.walkBaseChainDistro(base)
+	}
+	if len(distro) == 0 {
+		distro = c.Defaults.Distro
+	}
+	return c.resolveEffectiveBuilder(name, distro, base, isExternalBase, img.Builder)
 }
 
 // distroBuilderMap returns the builder map of the root-namespace image that

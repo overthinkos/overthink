@@ -254,10 +254,21 @@ func sortByPopularity(s []string, popularity map[string]int) {
 // including all layers inherited through the base chain.
 func collectAllImageLayers(imageName string, images map[string]*ResolvedImage, layers map[string]*Layer) []string {
 	seen := make(map[string]bool)
+	// walked is an IMAGE-visited guard for the base-chain recursion below. A
+	// base edge may form a cycle (A.base=B, B.base=A); that's caught + reported
+	// by ResolveImageOrder, but without this guard the walk recurses a cyclic
+	// chain until the stack overflows. Re-visiting a base also can't add new
+	// layers (its layers were collected on the first visit), so skipping it is
+	// correct for the acyclic case too.
+	walked := make(map[string]bool)
 	var result []string
 
 	var walk func(name string)
 	walk = func(name string) {
+		if walked[name] {
+			return
+		}
+		walked[name] = true
 		img, ok := images[name]
 		if !ok {
 			return

@@ -417,6 +417,61 @@ func TestCollectRemoteRefsOptsIncludeDisabled(t *testing.T) {
 	}
 }
 
+func TestCollectRemoteRefsDefaultsBuilderTransitiveLayers(t *testing.T) {
+	// An image whose builder comes from defaults.builder (a NAMESPACED builder,
+	// with NO per-image builder: block) must still have that builder's transitive
+	// layers fetched — collectImage follows the EFFECTIVE builder edge
+	// (effectiveBuilderForImage → resolveEffectiveBuilder), not the empty raw
+	// img.Builder. Regression guard for the bazzite/aurora
+	// "unknown layer .../rpmfusion" under-collection: the builder's layer lives in
+	// a DISTINCT repo, so it appears in downloads ONLY if the defaults-supplied
+	// builder edge was actually followed (it was absent before the fix, because
+	// the raw per-image img.Builder these images carry is empty).
+	cfg := &Config{
+		Defaults: ImageConfig{Builder: BuilderMap{"pixi": "ov.fedora-builder"}},
+		Image: map[string]ImageConfig{
+			"bazzite": {
+				Base:  "ghcr.io/ublue-os/bazzite:stable", // external base
+				Layer: []string{"@github.com/overthinkos/overthink/layers/foo:v1.0.0"},
+				// NO per-image Builder: — supplied by defaults.builder above.
+			},
+		},
+		Namespaces: map[string]*Config{
+			"ov": {
+				Image: map[string]ImageConfig{
+					"fedora-builder": {
+						Base:    "quay.io/fedora/fedora:43",
+						Produce: []string{"pixi"},
+						Layer:   []string{"@github.com/buildorg/build-layers/layers/rpmfusion:v1.0.0"},
+					},
+				},
+			},
+		},
+	}
+	layers := map[string]*Layer{}
+
+	downloads, err := CollectRemoteRefs(cfg, layers)
+	if err != nil {
+		t.Fatalf("CollectRemoteRefs() error = %v", err)
+	}
+	found := make(map[string]string)
+	for _, dl := range downloads {
+		found[dl.RepoPath] = dl.Version
+	}
+	// Sanity: the image's own layer repo is always collected.
+	if found["github.com/overthinkos/overthink"] != "v1.0.0" {
+		t.Errorf("image's own layer not collected: overthink = %q", found["github.com/overthinkos/overthink"])
+	}
+	// The fix: ov.fedora-builder (from defaults.builder) is built as an
+	// intermediate, so its transitive layer's repo MUST be collected. Absent
+	// before the fix (raw img.Builder was empty) → "unknown layer" at generate.
+	if found["github.com/buildorg/build-layers"] != "v1.0.0" {
+		t.Errorf("defaults.builder's transitive layer not collected: build-layers = %q, want %q "+
+			"(builder edge followed via raw img.Builder instead of the effective builder?)",
+			found["github.com/buildorg/build-layers"], "v1.0.0")
+	}
+}
+
 func TestCollectRemoteRefsSameLayerBothTagsCollected(t *testing.T) {
 	// Same bare ref at two git tags: collection now emits BOTH (the git tag is
 	// only the FETCH coordinate). Per-entity-version arbitration (newest-wins,

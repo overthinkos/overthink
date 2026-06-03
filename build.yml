@@ -118,6 +118,15 @@ builder:
               owned: true
             - dst: /tmp/aur-xdg-cache
               owned: true
+        # The builder image bakes a pacman sync DB at image-build time, and that
+        # `pacman -Sy` RUN step caches — so a builder reused days later carries a
+        # STALE DB. yay/makepkg then resolves a makedepend (e.g. `go`) to a
+        # version the mirror has since rotated out, and the .pkg.tar.zst.sig 404s
+        # ("failed retrieving go-2:1.26.3-1...sig" while the mirror serves 1.26.4).
+        # Refresh to the current mirror state with a FULL `pacman -Syu` (never a
+        # partial `-Sy`, which Arch forbids) before resolving makedepends. Same
+        # template drives the OCI AUR stage AND the cross-host VM aur builder
+        # (deploy_target_vm.go), so this one refresh covers every AUR build (R3).
         stage_template: |
             FROM {{.BuilderRef}} AS {{.StageName}}
             USER root
@@ -130,6 +139,7 @@ builder:
                 cp /etc/makepkg.conf /tmp/makepkg.conf && \
                 sed -i '/^OPTIONS/s/ debug/ !debug/' /tmp/makepkg.conf && \
                 echo 'SRCDEST=/tmp/aur-srcdest' >> /tmp/makepkg.conf && \
+                sudo pacman -Syu --noconfirm && \
                 yay -S --noconfirm --needed --builddir /tmp/aur-build --makepkgconf /tmp/makepkg.conf
             {{- range .Options}} {{.}}{{end}}
             {{- range .Packages}} \

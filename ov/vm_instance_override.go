@@ -16,9 +16,18 @@ import (
 // project-level VM classification for their specific instance
 // without modifying the project's deploy.yml or vm.yml.
 //
-// Today the override only carries `disposable:` and `lifecycle:` —
-// the two fields that gate `ov update <vm-entity>`. Future fields
-// (per-instance ports, env, add_layers) can be added without
+// The override carries `disposable:` / `lifecycle:` (the two fields
+// that gate `ov update <vm-entity>`) AND a `libvirt:` block — a
+// per-host libvirt device overlay, using the SAME schema as a
+// `kind: vm` entity's `libvirt:` block, merged into the VmSpec at
+// `ov vm create`. This is where HOST-SPECIFIC device config lives:
+// a PCI `<hostdev>` (the GPU's bus/slot address is host-specific) and
+// a virtiofs `<filesystem>` share rooted at an absolute host path
+// (e.g. /home/<operator>). Keeping these in the home overlay — never
+// the committed `vm.yml` — lets the project's VM entities stay PORTABLE
+// (no PCI address, no operator-home path baked into version control)
+// while this host attaches its real GPU + shares for a live run. Future
+// fields (per-instance ports, env, add_layers) can be added without
 // breaking the on-disk format because yaml.v3 unknown-keys defaults
 // to forgiving.
 //
@@ -45,6 +54,15 @@ type VmInstanceOverride struct {
 	Disposable *bool `yaml:"disposable,omitempty"`
 	// Lifecycle, when non-empty, overrides the upstream lifecycle tag.
 	Lifecycle string `yaml:"lifecycle,omitempty"`
+	// Libvirt, when non-nil, is a per-host device overlay merged into the
+	// VmSpec at create time (ApplyToVmSpec). Uses the SAME schema as a
+	// `kind: vm` entity's `libvirt:` block, but only the host-specific
+	// device categories are merged: `devices.hostdevs` (PCI passthrough —
+	// the address is host-specific) and `devices.filesystems` (virtiofs
+	// shares rooted at an absolute host path). Both APPEND to whatever the
+	// portable repo `vm.yml` already declares, so the committed entity
+	// carries no host-specific identity.
+	Libvirt *LibvirtDomain `yaml:"libvirt,omitempty"`
 }
 
 // VmInstanceOverridePath returns the canonical path for a domain's
@@ -101,4 +119,38 @@ func (o *VmInstanceOverride) ApplyToVmClassification(disposable bool, lifecycle 
 		lifecycle = o.Lifecycle
 	}
 	return disposable, lifecycle
+}
+
+// ApplyToVmSpec merges the override's per-host `libvirt:` device overlay onto
+// spec IN PLACE, called by runVmSpecCreate before the domain XML is rendered.
+// Only the HOST-SPECIFIC device categories are merged — `devices.hostdevs`
+// (PCI passthrough, a host-specific bus/slot address) and `devices.filesystems`
+// (virtiofs shares rooted at an absolute host path) — and they APPEND to
+// whatever the portable repo vm.yml already declares. This is what lets the
+// committed `kind: vm` entity stay free of any PCI address or operator-home
+// path: the project ships the portable shape, the operator's home overlay
+// supplies this host's GPU + shares.
+//
+// Nil override or nil overlay → no-op (the common case). spec.Libvirt /
+// spec.Libvirt.Devices are created on demand so an entity that declares no
+// libvirt block at all still receives the overlay. Other libvirt fields in
+// the overlay are intentionally ignored — host-specific config is exactly the
+// passthrough device + the host-path share, nothing else.
+func (o *VmInstanceOverride) ApplyToVmSpec(spec *VmSpec) {
+	if o == nil || o.Libvirt == nil || o.Libvirt.Devices == nil || spec == nil {
+		return
+	}
+	od := o.Libvirt.Devices
+	if len(od.Hostdevs) == 0 && len(od.Filesystems) == 0 {
+		return
+	}
+	if spec.Libvirt == nil {
+		spec.Libvirt = &LibvirtDomain{}
+	}
+	if spec.Libvirt.Devices == nil {
+		spec.Libvirt.Devices = &LibvirtDevices{}
+	}
+	d := spec.Libvirt.Devices
+	d.Hostdevs = append(d.Hostdevs, od.Hostdevs...)
+	d.Filesystems = append(d.Filesystems, od.Filesystems...)
 }

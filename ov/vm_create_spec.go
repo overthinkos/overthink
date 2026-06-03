@@ -22,6 +22,17 @@ func (c *VmCreateCmd) runVmSpecCreate(vmName string, spec *VmSpec, backend strin
 	}
 	vmDomainName := "ov-" + name
 
+	// Merge this host's per-domain instance override (~/.local/share/ov/vm/
+	// <domain>/instance.yml) onto the spec BEFORE any rendering. Its `libvirt:`
+	// overlay carries the host-specific GPU <hostdev> + host-path virtiofs
+	// shares the committed vm.yml deliberately omits, so the portable entity
+	// attaches this host's real devices for a live run. No-op when absent.
+	ovr, err := LoadVmInstanceOverride(vmDomainName)
+	if err != nil {
+		return fmt.Errorf("loading instance override for %s: %w", vmDomainName, err)
+	}
+	ovr.ApplyToVmSpec(spec)
+
 	// Locate prebuilt disk + seed ISO in this VM's OWN per-VM disk dir, so a
 	// fresh create can never adopt a sibling VM's stale disk/seed (whose
 	// embedded SSH key would mismatch this VM's id_ed25519).

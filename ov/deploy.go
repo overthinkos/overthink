@@ -599,6 +599,21 @@ func sortedNestedKeys(children map[string]*DeploymentNode) []string {
 	return out
 }
 
+// bedEvalLiveRefs returns the ordered `ov eval live` targets for a bed: the
+// substrate itself first, then each nested child as a sorted dotted path. This
+// is the pure list `ov eval run` walks so a nested pod's BAKED layer/image eval
+// (e.g. the selkies layer's encoder + frame checks on a nested selkies-kde pod)
+// is exercised against its real venue through the chain — not just the parent
+// substrate. Without the nested entries, `ov eval run` deploys nested children
+// but never evaluates them. Pure + unit-tested.
+func bedEvalLiveRefs(name string, children map[string]*DeploymentNode) []string {
+	refs := []string{name}
+	for _, k := range sortedNestedKeys(children) {
+		refs = append(refs, name+"."+k)
+	}
+	return refs
+}
+
 // EphemeralLifetime parameterizes the auto-destruction lifecycle for a
 // deploy. The presence of this struct (Ephemeral != nil) is the marker;
 // fields default to sane values when the block-form is absent.

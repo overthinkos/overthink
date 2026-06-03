@@ -193,6 +193,82 @@ if command -v nvcc >/dev/null 2>&1 || [ -e /opt/cuda/bin/nvcc ] || { [ -n "${CUD
 fi
 if [ "$PIXELFLUX_NVENC" = "1" ]; then
     echo "pixelflux: CUDA + NVENC headers detected — building real NvencEncoder (GPU encode)"
+# Patch 2d: fix NvencEncoder::new() for Ada/Lovelace (RTX 40xx) + recent drivers.
+# Upstream pixelflux fetches the encode config with the LEGACY named preset
+# NV_ENC_PRESET_LOW_LATENCY_HQ_GUID via nvEncGetEncodePresetConfig AND discards
+# its return value. That named preset was deprecated in NVENC SDK 10 and on Ada
+# GPUs under driver 6xx no longer yields a valid config — preset_config stays
+# zeroed, so nvEncInitializeEncoder rejects it ("Failed to initialize encoder")
+# and pixelflux silently falls back to CPU x264 (the exact silent-fallback the
+# selkies-encoder eval now guards against). ffmpeg's h264_nvenc encodes fine on
+# the same GPU because it uses the modern P-preset + tuningInfo Ex API. Switch
+# pixelflux to nvEncGetEncodePresetConfigEx(P4, LOW_LATENCY) + init tuningInfo,
+# CHECK both NVENCSTATUS returns, and surface the code so any future failure is
+# diagnosable instead of silent. nvenc-sys (NVENCAPI 11.1, the pinned dep)
+# already exposes the Ex fn, the P-preset GUIDs, NV_ENC_TUNING_INFO, and the
+# init tuningInfo field — no dep bump needed.
+python3 - pixelflux_wayland/src/encoders/nvenc.rs <<'NVENC_PRESET_FIX_EOF'
+import sys, pathlib
+p = pathlib.Path(sys.argv[1])
+code = p.read_text()
+
+# A: legacy preset fetch -> modern Ex (P4 + low-latency tuning), return CHECKED
+old_a = '''            let get_preset = function_list.nvEncGetEncodePresetConfig.unwrap();
+            get_preset(
+                encoder_session,
+                NV_ENC_CODEC_H264_GUID,
+                NV_ENC_PRESET_LOW_LATENCY_HQ_GUID,
+                &mut preset_config,
+            );'''
+new_a = '''            let tuning_info = NV_ENC_TUNING_INFO::NV_ENC_TUNING_INFO_LOW_LATENCY;
+            let get_preset = function_list.nvEncGetEncodePresetConfigEx.unwrap();
+            let preset_status = get_preset(
+                encoder_session,
+                NV_ENC_CODEC_H264_GUID,
+                NV_ENC_PRESET_P4_GUID,
+                tuning_info,
+                &mut preset_config,
+            );
+            if preset_status != NVENCSTATUS::NV_ENC_SUCCESS {
+                return Err(format!(
+                    "Failed to get NVENC preset config (P4/low-latency): NVENCSTATUS {}",
+                    preset_status as i32
+                ));
+            }'''
+if code.count(old_a) != 1:
+    raise SystemExit('FATAL: pixelflux nvenc.rs preset-fetch anchor not unique (found %d)' % code.count(old_a))
+code = code.replace(old_a, new_a)
+
+# B1: init_params presetGUID -> P4 + carry tuningInfo
+old_b1 = '''                presetGUID: NV_ENC_PRESET_LOW_LATENCY_HQ_GUID,
+                encodeWidth: width,'''
+new_b1 = '''                presetGUID: NV_ENC_PRESET_P4_GUID,
+                tuningInfo: tuning_info,
+                encodeWidth: width,'''
+if code.count(old_b1) != 1:
+    raise SystemExit('FATAL: pixelflux nvenc.rs init-params anchor not unique (found %d)' % code.count(old_b1))
+code = code.replace(old_b1, new_b1)
+
+# B2: init call -> capture + surface the real NVENCSTATUS
+old_b2 = '''            let init_fn = function_list.nvEncInitializeEncoder.unwrap();
+            if init_fn(encoder_session, &mut init_params) != NVENCSTATUS::NV_ENC_SUCCESS {
+                return Err("Failed to initialize encoder".into());
+            }'''
+new_b2 = '''            let init_fn = function_list.nvEncInitializeEncoder.unwrap();
+            let init_status = init_fn(encoder_session, &mut init_params);
+            if init_status != NVENCSTATUS::NV_ENC_SUCCESS {
+                return Err(format!(
+                    "Failed to initialize encoder: NVENCSTATUS {}",
+                    init_status as i32
+                ));
+            }'''
+if code.count(old_b2) != 1:
+    raise SystemExit('FATAL: pixelflux nvenc.rs init-call anchor not unique (found %d)' % code.count(old_b2))
+code = code.replace(old_b2, new_b2)
+
+p.write_text(code)
+print('Patched pixelflux nvenc.rs: modern Ex preset API (P4 + low-latency tuning), checked returns, NVENCSTATUS surfaced')
+NVENC_PRESET_FIX_EOF
 else
 # Patch 2a: delete the [dependencies.nvenc-sys] block from Cargo.toml
 python3 -c "

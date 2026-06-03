@@ -1,5 +1,5 @@
 layer:
-    version: 2026.153.0902
+    version: 2026.153.2308
     name: selkies
     require:
         - supervisord
@@ -228,6 +228,82 @@ layer:
           exit_status: 0
           stdout:
             - matches: "VAAPI-ENCODE-CAPABLE|VAAPI-N/A"
+        # Generic capture-content probe (R3: lives on the selkies layer so it
+        # runs on EVERY selkies image — AMD pod, NVIDIA pod-in-VM, CPU pod —
+        # via `ov eval live`, no per-bed re-implementation). A black/broken
+        # stream — dead compositor, silent encoder failure producing blank
+        # output — passes every file/port/https probe; THIS is the only check
+        # that proves real pixels reach the stream. Captures via the pixelflux
+        # capture bridge (pixelflux-screenshot writes PNG to STDOUT — it ignores
+        # path args, so redirect) and measures luma spread with ffmpeg
+        # signalstats: a uniform/black frame has YMIN==YMAX. Vendor-agnostic.
+        # Polls while the desktop session paints.
+        - id: selkies-frame-not-black
+          scope: deploy
+          command: |
+            rm -f /tmp/ov-frame.png
+            pixelflux-screenshot > /tmp/ov-frame.png 2>/dev/null
+            [ -s /tmp/ov-frame.png ] || { echo "no PNG captured yet"; exit 1; }
+            out=$(ffmpeg -hide_banner -i /tmp/ov-frame.png -vf "signalstats,metadata=print" -f null - 2>&1)
+            ymin=$(printf "%s" "$out" | grep -oE "YMIN=[0-9]+" | grep -oE "[0-9]+" | head -1); ymin=${ymin:-0}
+            ymax=$(printf "%s" "$out" | grep -oE "YMAX=[0-9]+" | grep -oE "[0-9]+" | head -1); ymax=${ymax:-0}
+            sp=$((ymax - ymin))
+            [ "$sp" -gt 24 ] && { echo "FRAME-NOT-BLACK (luma spread=$sp ymin=$ymin ymax=$ymax)"; exit 0; }
+            echo "frame still uniform (spread=$sp ymin=$ymin ymax=$ymax)"; exit 1
+          exit_status: 0
+          in_container: true
+          eventually: 90s
+          retry_interval: 5s
+          stdout:
+            - contains: "FRAME-NOT-BLACK"
+        # Generic encoder-SELECTION probe (R3: on the layer, runs everywhere).
+        # The danger it guards: pixelflux silently falling back to CPU x264 when
+        # a GPU encoder init fails (the exact pixelflux-NVENC bug build.sh Patch
+        # 2d fixes) — every other probe stays green while the stream burns CPU.
+        # Reads the dedicated selkies log and vendor-gates on the active render
+        # node: NVIDIA (0x10de) MUST be NVENC (a CPU-fallback marker is a HARD
+        # fail); AMD/Intel MUST NOT have fallen back to CPU (VAAPI *capability*
+        # is asserted separately by selkies-vaapi-encode); no GPU node is
+        # legitimately CPU x264. $DRINODE braceless (resolver only substitutes
+        # ${UPPERCASE} — ${DRINODE:-x} would SKIP the whole check).
+        - id: selkies-encoder-active
+          scope: deploy
+          command: |
+            home="$HOME"
+            [ -n "$home" ] || home=$(getent passwd "$(id -u)" 2>/dev/null | cut -d: -f6)
+            log="$home/.local/share/selkies/selkies.log"
+            [ -f "$log" ] || { echo "selkies log not present yet"; exit 1; }
+            node="$DRINODE"
+            [ -n "$node" ] || node=$(ls -1 /dev/dri/renderD* 2>/dev/null | head -1)
+            # Only trust a render node actually present in THIS container: a
+            # GPU-less (CPU) pod can still carry an injected DRINODE for a host
+            # device that was never mapped in — selkies itself then falls to
+            # software too, so treat it as no-GPU (the clean CPU x264 path).
+            [ -n "$node" ] && [ ! -e "$node" ] && node=""
+            vendor=""
+            [ -n "$node" ] && vendor=$(cat /sys/class/drm/$(basename "$node")/device/vendor 2>/dev/null)
+            if grep -qiE "Failed to init NVENC|Falling back to CPU|Using CPU Software Encoding|Mode: H264 \(CPU\)" "$log"; then
+              cpu_fallback=1
+            else
+              cpu_fallback=0
+            fi
+            case "$vendor" in
+              0x10de)
+                [ "$cpu_fallback" = "1" ] && { echo "FAIL: NVIDIA GPU ($node) but pixelflux fell back to CPU — NVENC not active. log tail:"; grep -iE "NVENC|CUDA|CPU|encoder" "$log" | tail -8; exit 1; }
+                grep -qiE "NVENC" "$log" || { echo "NVENC not initialized yet"; exit 1; }
+                echo "ENCODER-OK: NVENC active on NVIDIA $node"; exit 0 ;;
+              0x1002|0x8086)
+                [ "$cpu_fallback" = "1" ] && { echo "FAIL: AMD/Intel GPU ($node) but pixelflux fell back to CPU — hardware encode not selected. log tail:"; grep -iE "VAAPI|VA-API|CPU|encoder" "$log" | tail -8; exit 1; }
+                echo "ENCODER-OK: hardware encode selected on $node (VAAPI capability asserted by selkies-vaapi-encode)"; exit 0 ;;
+              *)
+                echo "ENCODER-OK: CPU x264 (no GPU render node — vendor=${vendor:-none})"; exit 0 ;;
+            esac
+          exit_status: 0
+          in_container: true
+          eventually: 90s
+          retry_interval: 5s
+          stdout:
+            - contains: "ENCODER-OK"
     service:
         - name: traefik
           exec: "/usr/local/bin/traefik --configFile=/usr/local/share/selkies/traefik.yml"

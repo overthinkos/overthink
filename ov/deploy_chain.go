@@ -89,9 +89,10 @@ func ResolveDeployChain(roots map[string]DeploymentNode, dotted string, root Dep
 				dotted, seg, traversed, didYouMeanNestedChild(seg, current.Nested))
 		}
 		current = child
-		// Container names flatten the FULL path so far (parts[:i+2]).
+		// Container names flatten the FULL path so far (parts[:i+2]); seg is the
+		// leaf segment, used for a pod deployed standalone inside a VM guest.
 		flatPath := strings.Join(parts[:i+2], "_")
-		next, err := appendHopForFlatPath(chain, current, flatPath)
+		next, err := appendHopForFlatPath(chain, current, flatPath, seg)
 		if err != nil {
 			return nil, nil, fmt.Errorf("entering %q: %w", strings.Join(parts[:i+2], "."), err)
 		}
@@ -104,13 +105,31 @@ func ResolveDeployChain(roots map[string]DeploymentNode, dotted string, root Dep
 // appendHopForNode is the root-segment variant — uses `name` for the
 // container target (no flattening needed at the root).
 func appendHopForNode(chain DeployExecutor, node *DeploymentNode, name string) (DeployExecutor, error) {
-	return appendHopForFlatPath(chain, node, name)
+	return appendHopForFlatPath(chain, node, name, name)
+}
+
+// chainEntersVMGuest reports whether the executor chain so far terminates in a
+// hop INTO a VM guest over SSH — either a plain SSHExecutor (the VM is the
+// chain root) or a NestedExecutor whose last jump is JumpSSH (a VM nested in a
+// parent). A pod hop stacked on such a chain lands inside the guest, where the
+// pod was deployed standalone as "ov-<childKey>" (deployNestedPodsInGuest), not
+// under the host-side flatPath name.
+func chainEntersVMGuest(chain DeployExecutor) bool {
+	switch c := chain.(type) {
+	case *SSHExecutor:
+		return true
+	case *NestedExecutor:
+		return c.Jump.Kind == JumpSSH
+	}
+	return false
 }
 
 // appendHopForFlatPath stacks one executor hop so commands land inside
 // `node`'s substrate. flatPath is the dotted path with dots replaced by
-// underscores — used as the container name suffix.
-func appendHopForFlatPath(chain DeployExecutor, node *DeploymentNode, flatPath string) (DeployExecutor, error) {
+// underscores — the host-side container name suffix; leaf is the final path
+// segment (the node's own key), used for a pod deployed STANDALONE inside a VM
+// guest (which has no parent-path concept — see the pod case).
+func appendHopForFlatPath(chain DeployExecutor, node *DeploymentNode, flatPath, leaf string) (DeployExecutor, error) {
 	switch classifyTarget(node) {
 	case "host", "local", "android":
 		// Host/local + android nodes share the parent venue: a local node's
@@ -121,11 +140,21 @@ func appendHopForFlatPath(chain DeployExecutor, node *DeploymentNode, flatPath s
 		return chain, nil
 
 	case "pod":
-		// Container name convention: "ov-<flat-path>". Matches the
-		// harness's pre-cutover ContainerName construction
-		// ("ov-"+pod) and the deploy convention used by quadlet
-		// emission. Nested pods get "ov-<seg1>_<seg2>".
-		name := "ov-" + flatPath
+		// Container name convention: "ov-<flat-path>" — matches quadlet
+		// emission, which deploys a HOST-side nested pod as "ov-<seg1>_<seg2>".
+		// EXCEPTION — a pod nested inside a VM guest: it is deployed by the
+		// guest's OWN `ov deploy from-image <ref> <childKey>`
+		// (deployNestedPodsInGuest), so the in-guest container is "ov-<childKey>"
+		// (the leaf). The guest never sees the host-side bed/VM-entity prefix, so
+		// once the chain has crossed into a VM guest the podman-exec hop must
+		// target the leaf name — otherwise it exec's a container that doesn't
+		// exist (the silent failure the nested-pod-in-VM eval hit: probes ran
+		// against "ov-<bed>_<child>" which the guest never created).
+		podName := flatPath
+		if chainEntersVMGuest(chain) {
+			podName = leaf
+		}
+		name := "ov-" + podName
 		engineJump := JumpPodmanExec
 		if node.Engine == "docker" {
 			engineJump = JumpDockerExec

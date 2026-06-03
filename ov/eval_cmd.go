@@ -444,7 +444,29 @@ func (c *EvalLiveCmd) runVm() error {
 	}
 	resolver := &EvalVarResolver{Env: env, HasRuntime: true}
 
+	// Nested POD leaf: run the pod IMAGE's baked layer/image eval (e.g. the
+	// selkies layer's encoder + frame checks) through the chain executor, with
+	// ${HOME}/${USER}/${UID}/${IMAGE} resolved from the POD image's OCI
+	// metadata — NOT the VM guest's, whose user/home differ. This makes a
+	// nested pod's coverage its layers' OWN baked checks instead of a per-bed
+	// re-implementation (R3), and closes the gap where `ov eval run` deploys
+	// nested children (eval_bed_run.go) but never evaluated their baked checks.
+	// The pod image lives in HOST podman storage (built here, then cp-image'd
+	// into the guest), so its eval label reads on the host. command/in_container
+	// checks run INSIDE the nested pod via the chain; deploy-runtime-var checks
+	// (${HOST_PORT:N}, ${CONTAINER_IP}) can't resolve through the chain
+	// (HasRuntime=false) and SKIP — they are covered by the direct pod beds.
 	baked := &LabelEvalSet{}
+	if nestedLeaf != nil && nestedLeaf.Target == "pod" && nestedLeaf.Image != "" {
+		if rt, rterr := ResolveRuntime(); rterr == nil {
+			if ref, rferr := resolveImageRefForEnsure(nestedLeaf.Image, uf.ProjectConfig(), dir); rferr == nil {
+				if pmeta, merr := ExtractMetadata(rt.RunEngine, ref); merr == nil && pmeta != nil && pmeta.Eval != nil {
+					baked = pmeta.Eval
+					resolver = ResolveEvalVarsBuild(pmeta)
+				}
+			}
+		}
+	}
 	checks := collectChecksForRun(baked, tests, c.Section, c.Filter)
 	if len(checks) == 0 {
 		fmt.Fprintln(os.Stderr, "No checks to run after filtering.")

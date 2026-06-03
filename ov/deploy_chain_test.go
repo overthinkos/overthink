@@ -75,9 +75,14 @@ func TestResolveDeployChain_VmInnerPod(t *testing.T) {
 		t.Errorf("leaf mismatch: got %+v, want %+v", leaf, innerNode)
 	}
 	venue := chain.Venue()
-	// Expect chain ending with podman-exec:ov-bench-vm_inner
-	if !strings.Contains(venue, "podman-exec:ov-bench-vm_inner") {
-		t.Errorf("venue %q does not contain podman-exec:ov-bench-vm_inner (flattened nested name)", venue)
+	// A pod nested in a VM guest is deployed STANDALONE by the guest's own
+	// `ov deploy from-image <ref> <childKey>` (deployNestedPodsInGuest), so the
+	// in-guest container is "ov-<childKey>" (the leaf) — NOT the host-side
+	// "ov-<vm>_<inner>" flatPath the guest never sees. The chain must podman-exec
+	// the leaf name, or it targets a container that doesn't exist (the silent
+	// single-hop the nested-pod-in-VM eval hit before this fix).
+	if !strings.Contains(venue, "podman-exec:ov-inner") {
+		t.Errorf("venue %q does not contain podman-exec:ov-inner (in-guest leaf name)", venue)
 	}
 	// And the chain should also contain the SSH hop earlier.
 	if !strings.Contains(venue, "ssh:") {

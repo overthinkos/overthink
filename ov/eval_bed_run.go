@@ -422,6 +422,28 @@ func runEvalBed(exe, name string, node DeploymentNode, opts bedRunOpts) (*bedRun
 		}
 	}
 
+	// evalLiveTree runs `ov eval live` against the bed's substrate AND every
+	// nested child through the multi-hop NestedExecutor chain, so a nested
+	// child's BAKED layer/image eval (e.g. the selkies layer's frame-not-black
+	// + encoder-active checks on a nested selkies-kde pod) is actually exercised
+	// against its real venue. Without this, `ov eval run` deploys nested
+	// children (above) but never evaluates them — their coverage is silently
+	// skipped, which is exactly why nested beds used to hand-roll guest-side
+	// `podman exec <child>` probes. For a flat bed (no children) it is exactly
+	// the prior parent-only eval. stepLabel disambiguates initial vs rebuild.
+	evalLiveTree := func(stepLabel string) error {
+		for i, ref := range bedEvalLiveRefs(name, node.Nested) {
+			label := stepLabel
+			if i > 0 {
+				label = stepLabel + "-" + ref[len(name)+1:] // childKey after "<name>."
+			}
+			if err := stepReady(label, []string{"eval", "live", ref}, bedEvalReadyDeadline, bedEvalReadyInterval, recoverVMIfDown); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
 	// Step 4: full-stack live eval against the deployed target's venue —
 	// container/VM via podman-exec/SSH, or the HOST filesystem (ShellExecutor)
 	// for kind:local. A local bed's deploy-scope `eval:` probes now run through
@@ -432,7 +454,7 @@ func runEvalBed(exe, name string, node DeploymentNode, opts bedRunOpts) (*bedRun
 	// first-run DB migration runs minutes before the API binds). stepReady
 	// polls eval-live until it passes or the deadline, so we wait for real
 	// readiness instead of racing a fixed sleep.
-	if err := stepReady("eval-live", []string{"eval", "live", name}, bedEvalReadyDeadline, bedEvalReadyInterval, recoverVMIfDown); err != nil {
+	if err := evalLiveTree("eval-live"); err != nil {
 		return fail("eval live %s: %w", name, err)
 	}
 
@@ -467,7 +489,7 @@ func runEvalBed(exe, name string, node DeploymentNode, opts bedRunOpts) (*bedRun
 					}
 				}
 			}
-			if err := stepReady("eval-live-rebuild", []string{"eval", "live", name}, bedEvalReadyDeadline, bedEvalReadyInterval, recoverVMIfDown); err != nil {
+			if err := evalLiveTree("eval-live-rebuild"); err != nil {
 				return fail("eval live (fresh rebuild) %s: %w", name, err)
 			}
 		}

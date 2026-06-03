@@ -257,3 +257,33 @@ func TestPersistBedDeployOverrides_SeedsPortBeforeConfig(t *testing.T) {
 		t.Errorf("sibling 'ollama' deploy clobbered: got %+v", sib)
 	}
 }
+
+// TestBedEvalLiveRefs proves `ov eval run <bed>` eval-lives the substrate AND
+// every nested child (sorted, dotted) — so a nested pod's baked layer/image
+// eval runs against its real venue. Before the nested-eval fix this produced
+// only [name], so a nested selkies-kde pod was deployed but never evaluated.
+func TestBedEvalLiveRefs(t *testing.T) {
+	// Flat bed: just the substrate (identical to the prior behavior).
+	if got := bedEvalLiveRefs("eval-pod", nil); len(got) != 1 || got[0] != "eval-pod" {
+		t.Fatalf("flat bed: got %v, want [eval-pod]", got)
+	}
+	// Nested bed: substrate first, then each child as a sorted dotted path.
+	nested := map[string]*DeploymentNode{
+		"selkies-kde": {Target: "pod"},
+		"cuda-pod":    {Target: "pod"},
+	}
+	got := bedEvalLiveRefs("eval-cachyos-gpu-vm", nested)
+	want := []string{
+		"eval-cachyos-gpu-vm",
+		"eval-cachyos-gpu-vm.cuda-pod",     // sorted before selkies-kde
+		"eval-cachyos-gpu-vm.selkies-kde",
+	}
+	if len(got) != len(want) {
+		t.Fatalf("nested bed: got %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("nested bed ref[%d]: got %q, want %q", i, got[i], want[i])
+		}
+	}
+}

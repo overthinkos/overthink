@@ -303,6 +303,16 @@ func deployNestedPodsInGuest(vmName string, node *DeploymentNode, exec DeployExe
 	if node == nil || len(node.Nested) == 0 {
 		return nil
 	}
+	// The guest's own `ov` runs the from-image deploy below. syncOvIntoGuest
+	// returns the right command: the guest's SYSTEM ov when it is current
+	// (>= host by CalVer — never shadowed, never downgraded), or a /tmp copy of
+	// the host binary (outside $PATH) when the guest's ov is absent or older. The
+	// guest venue is the same for every child, so resolve it once. See
+	// syncOvIntoGuest.
+	ovCmd, err := syncOvIntoGuest(context.Background(), exec, opts)
+	if err != nil {
+		return fmt.Errorf("resolving the ov command for guest %s: %w", vmName, err)
+	}
 	for _, childKey := range sortedNestedKeys(node.Nested) {
 		child := node.Nested[childKey]
 		if child == nil || child.Image == "" {
@@ -332,11 +342,14 @@ func deployNestedPodsInGuest(vmName string, node *DeploymentNode, exec DeployExe
 		// XDG_RUNTIME_DIR must be exported so the `systemctl --user` calls inside
 		// `ov deploy from-image` reach the lingering user bus over this non-login
 		// SSH session — the same pattern VmDeployTarget uses for user services.
+		// ovCmd is "ov" (the guest's own ov is current) or a temp path to a
+		// freshly-pushed host copy (the guest's ov was older) — see
+		// ensureFreshNestedOv above.
 		script := fmt.Sprintf(
 			"sudo loginctl enable-linger \"$(id -un)\" >/dev/null 2>&1 || true\n"+
 				"export XDG_RUNTIME_DIR=\"/run/user/$(id -u)\"\n"+
-				"ov deploy from-image %s %s",
-			asRef, childKey)
+				"%s deploy from-image %s %s",
+			ovCmd, asRef, childKey)
 		if err := exec.RunUser(context.Background(), script, opts); err != nil {
 			return fmt.Errorf("deploy nested pod %s in guest: %w", childKey, err)
 		}
@@ -539,7 +552,30 @@ func removeVmDeployEntry(deployName string) error {
 	if dc == nil || dc.Deploy == nil {
 		return nil
 	}
-	delete(dc.Deploy, deployName)
+	entry, ok := dc.Deploy[deployName]
+	if !ok {
+		return nil
+	}
+	// Destroying the VM invalidates only the RUNTIME state (vm_state). Clear
+	// that, but PRESERVE every operator-authored per-host field (preemptible,
+	// env, tunnel, port, security, add_layers, install_opts, …) so a
+	// destroy→create cycle — which is exactly what `ov update <vm>` does
+	// (VmUnifiedTarget.Rebuild shells `ov vm destroy` then `ov vm create`) —
+	// never silently drops local config. (This is the root cause of the lost
+	// `preemptible: {holds: [nvidia-gpu]}` on the operator workstation.)
+	//
+	// If, after clearing vm_state, the entry carries NOTHING operator-authored
+	// beyond the fields saveVmDeployState auto-sets (target: vm + vm:), it was a
+	// pure auto-created VM-state record — e.g. a disposable eval-bed VM — so
+	// delete it entirely (such entries must not accumulate; that's why
+	// destroy cleaned up the entry in the first place). Otherwise keep the
+	// now-stateless entry so its operator config survives.
+	entry.VmState = nil
+	if isAutoVmDeployEntry(entry) {
+		delete(dc.Deploy, deployName)
+	} else {
+		dc.Deploy[deployName] = entry
+	}
 	return SaveDeployConfig(dc)
 }
 

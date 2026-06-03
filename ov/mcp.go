@@ -372,7 +372,7 @@ func defaultMcpOpenSession(ctx context.Context, image, instance, wantName string
 		return nil, entry, func() {}, err
 	}
 
-	client := mcp.NewClient(&mcp.Implementation{Name: "ov", Version: ComputeCalVer()}, nil)
+	client := mcp.NewClient(&mcp.Implementation{Name: "ov", Version: OvVersion()}, nil)
 	sess, err := client.Connect(ctx, transport, nil)
 	if err != nil {
 		return nil, entry, func() {}, fmt.Errorf("mcp connect %s (%s): %w", entry.Name, entry.URL, err)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 )
 
 // OvInstallStrategy is the resolved strategy string after defaults.
@@ -41,7 +42,10 @@ func ResolveOvInstallStrategy(spec *VmSpec) OvInstallStrategy {
 // calls after the guest is booted, sshd is up, and cloud-init has
 // finished. Behavior per strategy:
 //
-//	auto / scp — PutFile os.Executable() → /usr/local/bin/ov (root:root, 0755)
+//	auto / scp — use the guest's system ov when it is current (>= host by
+//	             CalVer); ONLY when it is absent or older, scp the host ov to a
+//	             /tmp path (outside $PATH, no shadow) for explicit use
+//	             (syncOvIntoGuest). Routine updates are the package manager's job.
 //	url        — verify `ov --version` works (cloud-init runcmd did the curl)
 //	skip       — verify `command -v ov` exists; error if missing
 //
@@ -59,7 +63,14 @@ func EnsureOvInGuest(
 
 	switch strategy {
 	case OvInstallAuto, OvInstallScp:
-		return installOvViaSCP(ctx, exec, opts)
+		cmd, err := syncOvIntoGuest(ctx, exec, opts)
+		if err != nil {
+			return "", err
+		}
+		if cmd == "ov" {
+			return "guest ov is current (>= host); using the system ov (no scp)", nil
+		}
+		return fmt.Sprintf("guest ov absent/outdated; host ov provided at %s for deploy use", cmd), nil
 
 	case OvInstallURL:
 		return verifyOvPresent(ctx, exec, opts, "url")
@@ -72,28 +83,62 @@ func EnsureOvInGuest(
 	}
 }
 
-// installOvViaSCP copies the locally-running `ov` binary to
-// /usr/local/bin/ov in the guest. Uses os.Executable() to find the
-// binary backing the current process.
-func installOvViaSCP(ctx context.Context, exec DeployExecutor, opts EmitOpts) (string, error) {
-	localPath, err := os.Executable()
-	if err != nil {
-		return "", fmt.Errorf("locating local ov binary via os.Executable(): %w", err)
-	}
-	// On Linux os.Executable returns the realpath; on macOS it can
-	// point at an app bundle — stat it to ensure it's a regular file.
-	info, err := os.Stat(localPath)
-	if err != nil {
-		return "", fmt.Errorf("stat %s: %w", localPath, err)
-	}
-	if !info.Mode().IsRegular() {
-		return "", fmt.Errorf("local ov path %s is not a regular file", localPath)
+// syncOvIntoGuest returns the `ov` command to invoke for HOST-DRIVEN deploy
+// operations inside a guest/pod venue (e.g. the guest-side `ov deploy
+// from-image` in deployNestedPodsInGuest). It is BOTH the auto/scp strategy of
+// EnsureOvInGuest AND the host→nested delegation helper — ONE arbiter (R3).
+//
+// The venue's SYSTEM ov (the PATH `ov`, normally a package-manager binary kept
+// current by `pacman -Syu`) is authoritative whenever it is at least as new as
+// the host's: it is used as-is — NEVER shadowed, NEVER downgraded, NEVER
+// overwritten. ONLY when the venue's ov is ABSENT or OLDER (by CalVer — the true
+// build identity, never a content checksum, which can say "different" but never
+// "newer") does the host scp its OWN binary — to a /tmp path OUTSIDE $PATH,
+// invoked by explicit path — so a host driving a deploy with newer code runs
+// that code WITHOUT clobbering or shadowing the venue's package-managed ov. The
+// scp is the dev crutch; routine updates are the package manager's job.
+//
+// Returns "ov" (use the venue's PATH ov) or "/tmp/ov-<calver>" (the scp'd host
+// copy). The /tmp name embeds the host CalVer so repeated calls within one
+// deploy reuse the same copy (idempotent); SweepStaleTemps reclaims leftovers.
+func syncOvIntoGuest(ctx context.Context, exec DeployExecutor, opts EmitOpts) (string, error) {
+	hostVer := OvVersion()
+	stdout, _, _, _ := exec.RunCapture(ctx,
+		`command -v ov >/dev/null 2>&1 && ov version 2>/dev/null || true`)
+	venueVer := strings.TrimSpace(stdout)
+
+	// Venue ov present AND equal-or-newer → use the system ov as-is.
+	if venueVer != "" && !hostOvIsNewer(hostVer, venueVer) {
+		return "ov", nil
 	}
 
-	if err := exec.PutFile(ctx, localPath, "/usr/local/bin/ov", 0o755, true, opts); err != nil {
-		return "", fmt.Errorf("scp ov binary to guest: %w", err)
+	// Venue ov absent or older → provide the host binary at a /tmp path (outside
+	// $PATH; the system ov is left untouched), invoked explicitly by the caller.
+	localPath, err := os.Executable()
+	if err != nil {
+		return "ov", fmt.Errorf("locating local ov via os.Executable(): %w", err)
 	}
-	return fmt.Sprintf("copied %s → guest:/usr/local/bin/ov", localPath), nil
+	// On Linux os.Executable returns the realpath; on macOS it can point at an
+	// app bundle — stat it to ensure it's a regular file.
+	info, err := os.Stat(localPath)
+	if err != nil {
+		return "ov", fmt.Errorf("stat %s: %w", localPath, err)
+	}
+	if !info.Mode().IsRegular() {
+		return "ov", fmt.Errorf("local ov path %s is not a regular file", localPath)
+	}
+	tmp := "/tmp/ov-" + hostVer
+	shown := venueVer
+	if shown == "" {
+		shown = "absent"
+	}
+	fmt.Fprintf(os.Stderr,
+		"guest ov (%s) is absent/older than host ov (%s) — using a host copy at %s for this deploy (system ov untouched)\n",
+		shown, hostVer, tmp)
+	if err := exec.PutFile(ctx, localPath, tmp, 0o755, false, opts); err != nil {
+		return "ov", fmt.Errorf("copying host ov into guest %s: %w", tmp, err)
+	}
+	return tmp, nil
 }
 
 // verifyOvPresent runs `command -v ov` in the guest and reports
@@ -118,3 +163,4 @@ ov version
 	}
 	return fmt.Sprintf("verified ov present in guest (strategy=%s)", strategy), nil
 }
+

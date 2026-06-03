@@ -11,6 +11,7 @@ import (
 // the test can assert the nested-pod-in-VM orchestration without a real guest.
 type nestedRecordingExec struct {
 	userScripts []string
+	captureOut  string // canned `ov version` probe output for ensureFreshNestedOv
 }
 
 func (e *nestedRecordingExec) Venue() string                                     { return "nested-rec://test" }
@@ -29,7 +30,7 @@ func (e *nestedRecordingExec) GetFile(context.Context, string, bool, EmitOpts) (
 	return nil, nil
 }
 func (e *nestedRecordingExec) RunCapture(context.Context, string) (string, string, int, error) {
-	return "", "", 0, nil
+	return e.captureOut, "", 0, nil
 }
 func (e *nestedRecordingExec) Kind() string { return "nested-rec" }
 func (e *nestedRecordingExec) ResolveHome(context.Context, string) (string, error) {
@@ -54,7 +55,16 @@ func TestDeployNestedPodsInGuest_DeploysOnlyPodChildren(t *testing.T) {
 	}
 	defer func() { runOvSubcommand = orig }()
 
-	exec := &nestedRecordingExec{}
+	// Stamp the host ov identity and make the guest report the SAME CalVer, so
+	// the delegation-time freshness check (ensureFreshNestedOv) finds the guest
+	// ov current and delegates via "ov" (not a temp copy) — keeping this test
+	// focused on the only-pod-children orchestration. The freshness branches
+	// themselves are covered by TestEnsureFreshNestedOv.
+	savedVer := BuildCalVer
+	defer func() { BuildCalVer = savedVer }()
+	BuildCalVer = "2026.154.943"
+
+	exec := &nestedRecordingExec{captureOut: "2026.154.943"}
 	node := &DeploymentNode{
 		Nested: map[string]*DeploymentNode{
 			"selkies-kde": {Target: "pod", Image: "selkies-kde-nvidia"},

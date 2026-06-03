@@ -22,6 +22,131 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-03 — refactor(ov)!: `ov update` is one unified codepath for every kind (no per-kind divergence)
+
+RCA found `ov update` did NOT use the unified `LifecycleTarget.Rebuild`
+interface uniformly: `dispatchByDeployTarget` had a per-kind `switch` where vm
+and local called thin wrappers (`updateVmDeploy` / `updateLocalDeploy`) that
+constructed the target by hand and called `Rebuild`, **pod ran a wholly
+separate ~180-line bespoke path** (`updatePodDeploy` + `updatePodDeployQuadlet`
++ `updatePodDeployDirect`: image pull/build → `bumpDeployAlias` → surgical
+quadlet `Image=` rewrite), and k8s returned an ad-hoc error. So pod-update had
+**two** implementations (the bespoke one *and* the unused
+`PodUnifiedTarget.Rebuild`) and each kind behaved differently.
+
+Fix: `ov update` now resolves the node through `ResolveTarget` and calls
+`LifecycleTarget.Rebuild(RebuildOpts{RebuildImage: c.Build})` for EVERY kind —
+one codepath, no per-kind branching. `Rebuild`'s unified contract is **"redeploy
+the current artifact + restart; with `--build`, rebuild the artifact first"**,
+realized per substrate (vm: destroy→create the domain, reuse disk unless
+`--build`; pod: `deploy add → config → start`, `--build` rebuilds the image;
+local: re-apply layers). k8s is deliberately NOT a `LifecycleTarget` (it is
+applied out-of-band via `kubectl apply -k`), so `ov update <k8s>` falls out with
+one clear error instead of a hand-written branch. Deleted: `updatePodDeploy`,
+`updatePodDeployQuadlet`, `updatePodDeployDirect`, `quadletPathForDeploy`,
+`updateDirectMarkerImageRef`, `updateVmDeploy`, `updateLocalDeploy` (the shared
+helpers `bumpDeployAlias` / `rewriteQuadletImageLine` / `extractQuadletImageLine`
+/ `tagPart` stay — `ov config` still uses them).
+
+**Behavior change (`!`):** `ov update <pod>` no longer AUTO-PULLS the latest
+registry image (the old pod-only `= ov deploy add --pull` behavior). It now
+redeploys the current local image — consistent with vm's reuse-disk default. To
+advance a pod to a newer image: `ov image pull <ref>` then `ov update`, or
+`ov update --build` to rebuild locally. The per-kind auto-pull was exactly the
+"behaves differently for every kind" divergence this removes.
+
+### 2026-06-03 — fix(ov): `ov version` is a stamped build identity, not a wall clock; CalVer-based nested-ov freshness
+
+While finishing Cutover 2 Part C (migrating the `cachyos-gpu` workstation to a
+nested `selkies-kde` pod), the nested-pod deploy failed because the guest's
+`/usr/local/bin/ov` lacked `deploy from-image` while the host's had it — yet
+`ov version` reported the SAME CalVer (`2026.154.956`) on both. The first RCA
+attempt ("two builds in the same minute") was wrong.
+
+**Real root cause.** `ov version` called `ComputeCalVer()` →
+`ComputeCalVerAt(time.Now().UTC())` — it formatted the **current wall-clock
+time at the moment of invocation**, with ZERO connection to the binary. The
+"matching" CalVer was simply two `ov version` invocations (host + guest) landing
+in the same UTC minute; the two binaries were entirely different builds. A
+content checksum was briefly used as a freshness signal and then removed: a
+checksum can say "different" but never "newer", so it cannot tell a stale venue
+ov from one legitimately AHEAD of the host — useless for deciding which to keep.
+
+**The fix (head-on, not a band-aid).**
+- `ov/version.go`: new `var BuildCalVer string`, injected at compile time via
+  `-ldflags "-X main.BuildCalVer=<calver>"`. `OvVersion()` returns it (or
+  `"unknown"` for an unstamped `go build`/`go test`, never the clock).
+  `VersionCmd.Run`, the MCP client (`mcp.go`) and server (`mcp_server.go`) now
+  report `OvVersion()`. The remaining `ComputeCalVer()` callers are all "tag an
+  artifact created NOW" (image build tag, eval-run dir, deploy alias) and keep
+  the wall clock correctly.
+- The stamp is derived from the **git commit date** (build-time fallback when
+  the tree is dirty / non-git) by `pkg/arch/calver.sh` — ONE shared bash impl
+  (R3) sourced by both `pkg/arch/PKGBUILD` (pkgver + the source-build ldflag)
+  and `taskfiles/Build.yml`'s `build:ov`. So `ov version` == `pacman -Q
+  overthink-git` == a reproducible, monotonic identity. (Go's embedded
+  `vcs.time` was rejected by RDD: in the git-worktree layout it was stuck at a
+  stale `2025-08-15` revision across rebuilds — useless. Explicit ldflags are
+  deterministic.)
+- `ov/version.go` `hostOvIsNewer(hostVer, venueVerOut)`: the single CalVer
+  arbiter (R3) shared by both ov-into-venue paths. Unparseable/absent venue →
+  host wins; venue equal-or-newer → keep the venue ov (NEVER downgrade an ov
+  that is ahead of the host); unparseable host → don't clobber on an unprovable
+  claim.
+- `ov/ov_install.go` `syncOvIntoGuest` is now the SINGLE host→guest ov resolver
+  (R3) — used by BOTH EnsureOvInGuest's auto/scp strategy AND the host→nested
+  delegation in `ov/deploy_add_cmd_vm.go` `deployNestedPodsInGuest` (the old
+  `installOvViaSCP` + the separate `ensureFreshNestedOv` were merged). It honors
+  the operator's model exactly: the guest's SYSTEM ov (the PATH `ov`, normally
+  the pacman `/usr/bin/ov` kept current by `pacman -Syu`) is used as-is whenever
+  it is at least as new as the host's — NEVER shadowed, NEVER downgraded, NEVER
+  overwritten. ONLY when the guest's ov is **absent or older** (by CalVer) does
+  the host scp its own binary — to **`/tmp/ov-<calver>` (outside `$PATH`),
+  invoked by explicit path** — so a host driving a deploy with newer code runs
+  that code without clobbering the package-managed ov. (The earlier draft wrote
+  `/usr/local/bin/ov`, which sits ahead of `/usr/bin/ov` on PATH and would shadow
+  a pacman ov forever; the scp is a dev crutch, not the update mechanism —
+  routine updates are `pacman -Syu`'s job. A briefly-tried content checksum was
+  removed: it can say "different" but never "newer".)
+
+Coverage: `ov/version_test.go` (`OvVersion`, `hostOvIsNewer` incl. the
+pod-newer-than-host no-downgrade case) + `ov/ov_install_test.go`
+(`syncOvIntoGuest`: system-ov-current → no scp; absent/older → `/tmp` copy;
+never writes `/usr/local/bin/ov`). The `eval-cachyos-gpu-vm` bed exercises both
+branches live (the baked guest ov is older than the freshly-stamped host →
+`/tmp` copy drives the nested `ov deploy from-image`).
+
+**`ov update` config-clobber + preempt-precedence RCA (same cutover).** The bed
+first failed at `vm-create` — `PCI 0000:01:00.0 is in use by domain
+ov-cachyos-gpu` — because the running operator workstation held the GPU and was
+NOT preempted. The operator's `cachyos-gpu` had been `preemptible` previously;
+its per-host `~/.config/ov/deploy.yml` entry (`preemptible:` is a PER-HOST LOCAL
+DEPLOY property — it depends on this host's single GPU shared with the beds —
+never a committed image/vm property) had been silently dropped. Two root-cause
+bugs, both fixed (with regression tests in `ov/deploy_preserve_test.go`):
+
+- **`ov update <vm>` clobbered the per-host entry.** `VmUnifiedTarget.Rebuild`
+  shells `ov vm destroy` then `ov vm create`; `ov vm destroy`'s
+  `removeVmDeployEntry` did `delete(dc.Deploy, name)` — wiping the WHOLE entry,
+  then `ov vm create` re-stamped a fresh `Target`/`Vm`/`VmState`-only one. So a
+  destroy→create cycle dropped every operator-authored per-host field
+  (`preemptible`, `env`, `tunnel`, …). Fix: `removeVmDeployEntry` now clears only
+  the runtime `vm_state` and KEEPS the entry whenever any operator-authored
+  field remains (`isAutoVmDeployEntry`); it deletes the entry only when nothing
+  but the auto-set `target: vm`/`vm:` remains (so disposable bed VM entries still
+  don't accumulate).
+- **The preempt arbiter ignored the per-host overlay.** `gatherDeployNodes`
+  loaded per-host first then let the committed project node WHOLESALE-OVERWRITE
+  it, so a per-host `preemptible` never reached the arbiter. Fix: project is the
+  base and the per-host overlay is merged ON TOP (`MergeDeploymentNode`,
+  per-host wins) — the same overlay precedence the rest of deploy resolution
+  uses.
+
+The operator's `preemptible: {holds: [nvidia-gpu]}` is restored in the per-host
+`~/.config/ov/deploy.yml` (with `target: vm`/`vm:` so the overlay validates
+standalone) — NOT committed (committing it would make preempt the default for
+every host that deploys `cachyos-gpu`, which is wrong).
+
 ### 2026-06-03 — fix(selkies,build,ov): real NVENC actually compiles + runs; build-system cache correctness; nested-pod eval
 
 Continuation of Cutover 2 (below). The 2026-06-02 work fixed *capture* (the

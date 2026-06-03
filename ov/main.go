@@ -677,7 +677,8 @@ func (c *SettingsPathCmd) Run() error {
 type VersionCmd struct{}
 
 func (c *VersionCmd) Run() error {
-	fmt.Println(ComputeCalVer())
+	// The BINARY's identity (stamped at build time), NOT the wall clock.
+	fmt.Println(OvVersion())
 	return nil
 }
 

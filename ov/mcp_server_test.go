@@ -190,21 +190,22 @@ func TestMcpServerSchema_AdditionalPropertiesFalse(t *testing.T) {
 }
 
 // TestMcpServer_VersionRoundTrip exercises the full in-process capture +
-// kong.Parse invocation path on a command that's safe (no side effects) and
-// whose output is deterministic (CalVer based on current date/time).
+// kong.Parse invocation path on a command that's safe (no side effects). It also
+// proves `ov version` reports the STAMPED build identity (BuildCalVer), not a
+// wall-clock readout — so the round-trip carries the binary's true CalVer.
 func TestMcpServer_VersionRoundTrip(t *testing.T) {
+	saved := BuildCalVer
+	defer func() { BuildCalVer = saved }()
+	BuildCalVer = "2026.154.943"
+
 	stdout, stderr, err := captureAndRun([]string{"version"})
 	if err != nil {
 		t.Fatalf("captureAndRun(version): %v", err)
 	}
 	trimmed := strings.TrimSpace(stdout)
-	if trimmed == "" {
-		t.Errorf("expected non-empty version output, got %q (stderr=%q)", stdout, stderr)
-	}
-	// Version looks like YYYY.N[.NN] — check the leading year matches the
-	// CalVer pattern the ov-version layer test uses.
-	if !strings.ContainsAny(trimmed, "0123456789") || !strings.Contains(trimmed, ".") {
-		t.Errorf("version output %q does not look like a CalVer", trimmed)
+	// Must echo the stamped identity verbatim — not the current time.
+	if trimmed != "2026.154.943" {
+		t.Errorf("version output = %q, want the stamped BuildCalVer %q (stderr=%q)", trimmed, "2026.154.943", stderr)
 	}
 }
 

@@ -1932,6 +1932,23 @@ func MergeDeploymentNode(dst, src DeploymentNode) DeploymentNode {
 	return dst
 }
 
+// isAutoVmDeployEntry reports whether a VM deploy entry carries NOTHING beyond
+// the fields saveVmDeployState auto-sets — target: vm, vm:, and vm_state. Such
+// an entry is a pure runtime-state record (e.g. a disposable eval-bed VM) that
+// `ov vm destroy` should delete so it doesn't accumulate. Any OTHER non-zero
+// field means operator-authored per-host config (preemptible, env, tunnel,
+// port, security, …) that MUST survive a destroy→create cycle. Compares against
+// the zero node after blanking the three auto-set fields, so a newly-added
+// per-host field is covered automatically (no remembered append — same
+// drift-proof discipline as MergeDeploymentNode).
+func isAutoVmDeployEntry(entry DeploymentNode) bool {
+	probe := entry
+	probe.VmState = nil
+	probe.Target = ""
+	probe.Vm = ""
+	return reflect.DeepEqual(probe, DeploymentNode{})
+}
+
 // RemoveImageDeploy removes an image's entry from a deploy config.
 func RemoveImageDeploy(dc *DeployConfig, imageName string) {
 	if dc != nil && dc.Deploy != nil {

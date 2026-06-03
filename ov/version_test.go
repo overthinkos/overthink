@@ -5,6 +5,56 @@ import (
 	"time"
 )
 
+func TestOvVersion(t *testing.T) {
+	// OvVersion reports the binary's STAMPED identity (BuildCalVer), never the
+	// wall clock. Save/restore the package var around the test.
+	saved := BuildCalVer
+	defer func() { BuildCalVer = saved }()
+
+	BuildCalVer = "2026.154.943"
+	if got := OvVersion(); got != "2026.154.943" {
+		t.Errorf("stamped OvVersion() = %q, want 2026.154.943", got)
+	}
+
+	BuildCalVer = ""
+	if got := OvVersion(); got != "unknown" {
+		t.Errorf("unstamped OvVersion() = %q, want %q", got, "unknown")
+	}
+	// "unknown" must be rejected by ParseCalVer so freshness treats it as oldest.
+	if _, ok := ParseCalVer(OvVersion()); ok {
+		t.Errorf("ParseCalVer(%q) parsed ok; an unstamped build must sort as oldest", OvVersion())
+	}
+}
+
+func TestHostOvIsNewer(t *testing.T) {
+	// hostOvIsNewer is the single CalVer arbiter shared by syncOvIntoGuest and
+	// ensureFreshNestedOv (R3). Strictly newer → true; equal-or-newer venue →
+	// false (never downgrade); unparseable venue → true; unparseable host → false.
+	tests := []struct {
+		name     string
+		host     string
+		venue    string
+		expected bool
+	}{
+		{"host strictly newer", "2026.154.1027", "2026.154.943", true},
+		{"venue strictly newer (pod ahead of host — DO NOT downgrade)", "2026.154.943", "2026.155.10", false},
+		{"equal — not newer (no downgrade, no needless push)", "2026.154.943", "2026.154.943", false},
+		{"venue absent → host wins", "2026.154.943", "", true},
+		{"venue 'unknown' (unstamped) → host wins", "2026.154.943", "unknown", true},
+		{"venue junk → host wins", "2026.154.943", "not-a-calver", true},
+		{"host unparseable → cannot prove newer → false", "unknown", "2026.154.943", false},
+		{"host newer across day boundary", "2026.155.1", "2026.154.2359", true},
+		{"venue whitespace padded, equal → false", "2026.154.943", "  2026.154.943\n", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := hostOvIsNewer(tt.host, tt.venue); got != tt.expected {
+				t.Errorf("hostOvIsNewer(%q, %q) = %v, want %v", tt.host, tt.venue, got, tt.expected)
+			}
+		})
+	}
+}
+
 func TestComputeCalVerAt(t *testing.T) {
 	tests := []struct {
 		name     string

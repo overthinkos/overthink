@@ -7,6 +7,60 @@ import (
 	"time"
 )
 
+// BuildCalVer is the CalVer build identity of THIS binary, injected at compile
+// time via `-ldflags "-X main.BuildCalVer=<calver>"` (see taskfiles/Build.yml +
+// pkg/arch/PKGBUILD, both of which derive it from the git commit date through
+// pkg/arch/calver.sh — the same value `pacman -Q overthink-git` reports). Empty
+// for an unstamped build (`go build` / `go test` without the ldflag).
+//
+// This is the binary's TRUE identity — frozen at build time — as opposed to
+// ComputeCalVer() below, which is a wall-clock readout of the current moment.
+// `ov version` reports BuildCalVer, never the clock: two different binaries must
+// never claim the same version, and a newer build must sort higher so a CalVer
+// comparison is a RELIABLE freshness signal (a content checksum tells you
+// "different" but never "newer" — useless for deciding which ov to keep).
+var BuildCalVer string
+
+// OvVersion returns the CalVer identity of this `ov` binary. It is the stamped
+// BuildCalVer when present; otherwise "unknown" (an unstamped dev/test build —
+// ParseCalVer rejects it, so freshness comparisons treat it as older than every
+// real CalVer). It NEVER falls back to the wall clock: the clock identifies the
+// moment of invocation, not the binary, and that conflation is exactly the
+// defect this replaces.
+func OvVersion() string {
+	if BuildCalVer != "" {
+		return BuildCalVer
+	}
+	return "unknown"
+}
+
+// hostOvIsNewer reports whether the host ov (identified by hostVer, normally
+// OvVersion()) is STRICTLY newer than a venue's ov, where venueVerOut is the raw
+// stdout of `ov version` run inside that venue (pod/VM). It is the single
+// CalVer-comparison arbiter shared by EnsureOvInGuest (boot-time install) and
+// the host→nested delegation path (R3), so both agree on "is the venue's ov
+// stale?".
+//
+// Semantics:
+//   - venue version unparseable / absent (empty, "unknown", junk) → host wins
+//     (true): a venue ov that can't state a CalVer is treated as older.
+//   - both parse → strict CalVer compare. host newer → true; venue equal-or-newer
+//     → false. Equal-or-newer is deliberately NOT overwritten: never downgrade a
+//     venue ov that is ahead of (or matches) the host.
+//   - host version unparseable → false: we cannot prove the host is newer, so we
+//     do NOT clobber a venue ov on an unprovable claim.
+func hostOvIsNewer(hostVer, venueVerOut string) bool {
+	host, hostOK := ParseCalVer(strings.TrimSpace(hostVer))
+	if !hostOK {
+		return false
+	}
+	venue, venueOK := ParseCalVer(strings.TrimSpace(venueVerOut))
+	if !venueOK {
+		return true
+	}
+	return venue.Less(host)
+}
+
 // ComputeCalVer computes a CalVer version in the format YYYY.DDD.HHMM
 // where:
 //   - YYYY = year (e.g., 2026)
@@ -15,6 +69,11 @@ import (
 //
 // This produces valid semver: all three components are non-negative integers.
 // Versions sort correctly both lexically and numerically.
+//
+// NB: this is "what time is it NOW", used to TAG an artifact created at this
+// moment (image build tag, eval-run dir, deploy alias). It is NOT the identity
+// of the ov binary — that is OvVersion()/BuildCalVer. Never use ComputeCalVer()
+// to report the running binary's version.
 func ComputeCalVer() string {
 	return ComputeCalVerAt(time.Now().UTC())
 }

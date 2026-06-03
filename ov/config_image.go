@@ -1559,9 +1559,10 @@ func updateAllDeployedQuadlets(rt *ResolvedRuntime, skipImage string) error {
 		// changes; it should NEVER overwrite the operator's deliberate
 		// Image= choice on an unrelated deploy. Preserving the existing
 		// line is the correct fix at the cross-deploy refresh boundary.
-		// Use `ov update <deploy>` (which routes through updatePodDeploy
-		// + rewriteQuadletImageLine) to actually advance a deploy's
-		// image — that path is the operator-authorized way to move tags.
+		// Use `ov update <deploy>` (which routes through the unified
+		// PodUnifiedTarget.Rebuild — deploy add → config → start, optionally
+		// `--build`) to actually advance a deploy's image — that path is the
+		// operator-authorized way to move tags.
 		imageRef, _ := extractQuadletImageLine(qpath)
 		if imageRef == "" {
 			imageRef = resolveShellImageRef("", imageName, "")

@@ -482,19 +482,28 @@ func (a *ResourceArbiter) Status() (*preemptLedger, []string, error) {
 // --- production dependency wiring -----------------------------------------
 
 // gatherDeployNodes returns every deploy node visible to the current
-// invocation: the operator's ~/.config/ov/deploy.yml plus the current
-// project's deploy map (which includes folded kind:eval beds). Keyed by deploy
-// name; project entries win on a name clash.
+// invocation: the current project's deploy map (committed overthink.yml, which
+// includes folded kind:eval beds) as the BASE, with the operator's per-host
+// ~/.config/ov/deploy.yml overlay merged ON TOP. Keyed by deploy name.
+//
+// The per-host overlay WINS on a name clash — it carries local-only deploy
+// properties (above all `preemptible:`, a PER-HOST decision about whether THIS
+// host's VM may be stopped to free an exclusive resource) that must override
+// the committed profile, never be overwritten by it. The merge is per-field
+// (MergeDeploymentNode), so a per-host `preemptible` AUGMENTS the committed node
+// (keeping its target/vm/…) rather than the two clobbering each other. (The
+// prior order let the project node wholesale-overwrite the per-host overlay, so
+// a per-host preemptible silently never took effect for the arbiter.)
 func gatherDeployNodes() map[string]DeploymentNode {
 	out := map[string]DeploymentNode{}
-	if dc := loadDeployConfigForRead("ov preempt"); dc != nil {
-		for name, node := range dc.Deploy {
-			out[name] = node
-		}
-	}
 	if uf, ok, err := LoadUnified("."); err == nil && ok && uf != nil {
 		for name, node := range uf.Deploy {
 			out[name] = node
+		}
+	}
+	if dc := loadDeployConfigForRead("ov preempt"); dc != nil {
+		for name, node := range dc.Deploy {
+			out[name] = MergeDeploymentNode(out[name], node)
 		}
 	}
 	return out

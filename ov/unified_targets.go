@@ -258,7 +258,10 @@ func ResolveTarget(node *DeploymentNode, name string) (UnifiedDeployTarget, erro
 		return &VmUnifiedTarget{NodeName: name}, nil
 
 	case "pod":
-		return &PodUnifiedTarget{NodeName: name}, nil
+		// BaseImageRef is the image the rebuild's build/eval steps target;
+		// node.Image is the deploy.yml `image:` field (Rebuild falls back to
+		// NodeName when empty).
+		return &PodUnifiedTarget{NodeName: name, BaseImageRef: node.Image}, nil
 
 	case "k8s", "kubernetes":
 		// "kubernetes" is the legacy spelling; same pattern as

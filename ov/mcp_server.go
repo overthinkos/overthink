@@ -250,7 +250,7 @@ func buildMcpServer(readOnly bool) (*mcp.Server, error) {
 
 	server := mcp.NewServer(&mcp.Implementation{
 		Name:    "ov",
-		Version: ComputeCalVer(),
+		Version: OvVersion(),
 	}, nil)
 
 	count := 0

@@ -109,6 +109,18 @@ type Runner struct {
 	// distros (e.g. openssh-server on Fedora vs openssh on Arch).
 	Distros []string
 
+	// SkipHostContainerVerbs skips the protocol verbs (cdp/wl/dbus/vnc/mcp)
+	// that delegate to a host-side `ov eval <verb> <image>` subprocess, which
+	// resolves the target container by name ON THE HOST. For a nested-in-VM pod
+	// the container lives inside the guest (reached only via the NestedExecutor
+	// chain), so those verbs error "container not running" — they SKIP instead,
+	// the same treatment as ${HOST_PORT}-based addr/http checks that can't
+	// resolve through the chain. Chain-reachable checks
+	// (file/package/service/command/in_container) still run inside the nested
+	// pod. Set by runVm for a nested-pod leaf; the direct-pod bed covers these
+	// verbs against the same image.
+	SkipHostContainerVerbs bool
+
 	// Scenario carries the BDD scenario context when the runner is
 	// driving a description: scenario (from description_run.go). Nil
 	// under classical `tests:` runs — captures/${SCENARIO_ID}/etc. stay
@@ -318,16 +330,24 @@ func (r *Runner) runOne(ctx context.Context, c *Check) EvalResult {
 			dr = r.runAddr(ctx, &expanded)
 		case "matching":
 			dr = r.runMatching(ctx, &expanded)
-		case "cdp":
-			dr = r.runCdp(ctx, &expanded)
-		case "wl":
-			dr = r.runWl(ctx, &expanded)
-		case "dbus":
-			dr = r.runDbus(ctx, &expanded)
-		case "vnc":
-			dr = r.runVnc(ctx, &expanded)
-		case "mcp":
-			dr = r.runMcp(ctx, &expanded)
+		case "cdp", "wl", "dbus", "vnc", "mcp":
+			if r.SkipHostContainerVerbs {
+				dr.Status = TestSkip
+				dr.Message = "host-container verb unreachable on a nested-in-VM pod (covered by the direct-pod bed)"
+				break
+			}
+			switch kind {
+			case "cdp":
+				dr = r.runCdp(ctx, &expanded)
+			case "wl":
+				dr = r.runWl(ctx, &expanded)
+			case "dbus":
+				dr = r.runDbus(ctx, &expanded)
+			case "vnc":
+				dr = r.runVnc(ctx, &expanded)
+			case "mcp":
+				dr = r.runMcp(ctx, &expanded)
+			}
 		case "record":
 			dr = r.runRecord(ctx, &expanded)
 		case "spice":

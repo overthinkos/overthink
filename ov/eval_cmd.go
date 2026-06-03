@@ -457,12 +457,20 @@ func (c *EvalLiveCmd) runVm() error {
 	// (${HOST_PORT:N}, ${CONTAINER_IP}) can't resolve through the chain
 	// (HasRuntime=false) and SKIP — they are covered by the direct pod beds.
 	baked := &LabelEvalSet{}
+	var nestedPodDistros []string
+	nestedPodInVM := false
 	if nestedLeaf != nil && nestedLeaf.Target == "pod" && nestedLeaf.Image != "" {
 		if rt, rterr := ResolveRuntime(); rterr == nil {
 			if ref, rferr := resolveImageRefForEnsure(nestedLeaf.Image, uf.ProjectConfig(), dir); rferr == nil {
 				if pmeta, merr := ExtractMetadata(rt.RunEngine, ref); merr == nil && pmeta != nil && pmeta.Eval != nil {
 					baked = pmeta.Eval
 					resolver = ResolveEvalVarsBuild(pmeta)
+					// package_map: must resolve against the POD image's distro
+					// (e.g. arch → openssh), not the VM guest's — else the
+					// distro-specific name falls back to the wrong default and
+					// the package check reports installed=false.
+					nestedPodDistros = pmeta.Distro
+					nestedPodInVM = true
 				}
 			}
 		}
@@ -476,6 +484,13 @@ func (c *EvalLiveCmd) runVm() error {
 	runner := NewRunner(executor, resolver, RunModeLive)
 	runner.Image = c.Image
 	runner.Instance = c.Instance
+	if nestedPodDistros != nil {
+		runner.Distros = nestedPodDistros
+	}
+	// Host-side protocol verbs (cdp/wl/dbus/vnc/mcp) can't reach a nested-in-VM
+	// pod from the host `ov eval <verb>` subprocess — skip them (the direct-pod
+	// bed covers them against the same image).
+	runner.SkipHostContainerVerbs = nestedPodInVM
 	results := runner.Run(context.Background(), checks)
 
 	fmt.Fprintf(os.Stderr, "VM: ov-%s (ssh %s@%s:%d)\n", c.Image, user, host, port)

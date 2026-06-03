@@ -71,11 +71,19 @@ func TestRenderAurScriptPackages(t *testing.T) {
 		"another-pkg",
 		"/tmp/aur-pkgs",
 		"*.pkg.tar.zst",
+		// The DB refresh that keeps the (cached, stale) builder DB from
+		// resolving a makedepend to a mirror-rotated version (the go-1.26.3
+		// .sig 404). Mirrors build.yml's aur stage_template (R3).
+		"pacman -Syu --noconfirm",
 	}
 	for _, m := range mustContain {
 		if !strings.Contains(out, m) {
 			t.Errorf("aur script missing %q:\n%s", m, out)
 		}
+	}
+	// The refresh MUST precede yay's makedepend resolution, or it's useless.
+	if syncIdx, yayIdx := strings.Index(out, "pacman -Syu --noconfirm"), strings.Index(out, "yay -S"); syncIdx < 0 || yayIdx < 0 || syncIdx > yayIdx {
+		t.Errorf("pacman -Syu must come BEFORE yay -S (sync=%d yay=%d):\n%s", syncIdx, yayIdx, out)
 	}
 }
 

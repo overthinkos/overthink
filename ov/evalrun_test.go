@@ -381,3 +381,27 @@ func TestMatcher_AllOperators(t *testing.T) {
 		})
 	}
 }
+
+// SkipHostContainerVerbs makes the host-side protocol verbs (cdp/wl/dbus/vnc/mcp)
+// SKIP rather than fail — used for a nested-in-VM pod whose container isn't
+// host-resolvable. Without the flag they'd dispatch to a host `ov eval <verb>`
+// subprocess that errors "container not running". The direct-pod bed covers them.
+func TestRunner_SkipHostContainerVerbs(t *testing.T) {
+	for _, verb := range []Check{
+		{Mcp: "ping"},
+		{Cdp: "status"},
+		{Wl: "screenshot"},
+		{Dbus: "list"},
+		{Vnc: "status"},
+	} {
+		r, _ := newFakeRunner(t, RunModeLive)
+		r.SkipHostContainerVerbs = true
+		res := r.Run(context.Background(), []Check{verb})
+		if res[0].Status != TestSkip {
+			t.Errorf("verb %+v: expected TestSkip with SkipHostContainerVerbs, got %+v", verb, res[0])
+		}
+		if !strings.Contains(res[0].Message, "nested-in-VM") {
+			t.Errorf("verb %+v: expected nested-in-VM skip reason, got %q", verb, res[0].Message)
+		}
+	}
+}

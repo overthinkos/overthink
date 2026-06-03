@@ -1458,6 +1458,16 @@ func renderAurScript(s *BuilderStep, hostHome string) string {
 	b.WriteString("cp /etc/makepkg.conf /tmp/makepkg.conf\n")
 	b.WriteString("sed -i '/^OPTIONS/s/ debug/ !debug/' /tmp/makepkg.conf\n")
 	b.WriteString("chown user:user /tmp/makepkg.conf\n")
+	// Refresh the builder's pacman DB to current mirror state BEFORE yay
+	// resolves makedepends. The builder image bakes a sync DB at image-build
+	// time (the bootstrap `pacman -Sy` RUN caches), so a builder reused days
+	// later resolves a makedepend (e.g. `go`) to a version the mirror has since
+	// rotated out and the .pkg.tar.zst.sig 404s. A full `pacman -Syu` (never a
+	// partial `-Sy`, which Arch forbids) syncs it. We run as root (the builder
+	// script runs RunAsRoot=true). This MIRRORS the same refresh in build.yml's
+	// aur stage_template (the OCI path) — the two AUR build surfaces are parallel
+	// implementations, so the fix must live on BOTH (R3).
+	b.WriteString("pacman -Syu --noconfirm\n")
 	b.WriteString("sudo -u user -- yay -S --noconfirm --needed --builddir /tmp/aur-build --makepkgconf /tmp/makepkg.conf")
 	for _, p := range packages {
 		fmt.Fprintf(&b, " %s", shQuoteArg(p))

@@ -214,8 +214,16 @@ builder:
             {{.ManylinuxFix}}
             ENV PIXI_CACHE_DIR=/tmp/pixi-cache RATTLER_CACHE_DIR=/tmp/rattler-cache
             {{- if .HasBuildScript}}
-            RUN --mount=type=bind,from={{.LayerStage}},source=/{{.BuildScript}},target=/tmp/{{.BuildScript}} \
-                {{cacheMountsOwned .CacheMounts .UID .GID}}{{.InstallCmd}} && bash /tmp/{{.BuildScript}} && rm -f {{.Manifest}} pixi.lock
+            # build.sh is COPY'd (NOT bind-mounted) so its CONTENT is part of this
+            # stage's BuildKit cache key — editing build.sh (e.g. the pixelflux
+            # NVENC patch) MUST invalidate the compile. A
+            # `--mount=type=bind,from=<stage>,source=/build.sh` delivers the file
+            # but its content NEVER enters the RUN cache key (the key is parent-SHA
+            # + COPY'd manifest + RUN-text), so a changed build.sh silently reused
+            # a stale compiled artifact — the "new code not picked up" bug. COPY
+            # keys it exactly like pixi.toml / pixi.lock above.
+            COPY --chown={{.UID}}:{{.GID}} {{.CopySrc}}/{{.BuildScript}} /tmp/{{.BuildScript}}
+            RUN {{cacheMountsOwned .CacheMounts .UID .GID}}{{.InstallCmd}} && bash /tmp/{{.BuildScript}} && rm -f {{.Manifest}} pixi.lock
             {{- else}}
             RUN {{cacheMountsOwned .CacheMounts .UID .GID}}{{.InstallCmd}} && rm -f {{.Manifest}} pixi.lock
             {{- end}}

@@ -22,6 +22,60 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-03 — fix(build)!: deterministic CalVer — `calver.sh` derives the build identity from the HEAD commit, never the wall clock
+
+Completes #31. That change fixed the *runtime* readout — `OvVersion()` returns
+the stamped `BuildCalVer` or `"unknown"`, never the clock at invocation — but
+left the *build-time* stamp half-fixed: `pkg/arch/calver.sh` still wall-clocked a
+**dirty** working tree (`else` branch → `date -u`), justified as "successive dev
+rebuilds are monotonic." That residual wall clock was the real disease, and it
+manifested two ways on the operator's `cachyos-gpu` workstation:
+
+1. **Two builds of one commit disagreed.** `task build:ov` from a dirty tree
+   stamped `bin/ov` with the wall clock (e.g. `2026.154.1835`), while the
+   PKGBUILD's `pkgver()` ran `ov_calver` in a clean `git+file://` clone and got
+   the commit date (`2026.154.1250`) — so `pacman -Q overthink-git` and
+   `ov version` reported *different* versions for the *same* installed binary.
+   A deeper layer of the same defect: with `makepkg -e --noextract` the clone is
+   never created, so `pkgver()` fell through to its cwd (`pkg/arch/src`), which
+   sits **inside the `pkg/arch` submodule** — `git log` there resolved to the
+   *submodule's* HEAD, a different commit again. The version was being derived
+   from whichever git repo the cwd happened to land in.
+
+2. **A stale guest ov falsely sorted "newer."** The operator VM's
+   `/usr/local/bin/ov` was a pre-#31 binary (installed by the `ov` layer at an
+   earlier deploy, when `layers/ov/bin/ov` was stale) whose old `OvVersion()`
+   read the wall clock at *invocation* — so it reported an ever-advancing version
+   that always beat the host's. `syncOvIntoGuest`'s never-downgrade rule trusted
+   that fake "newer" number and kept the stale guest ov (which lacked
+   `ov deploy from-image`), so the nested-pod-in-VM deploy could not delegate to
+   the guest. A first attempt papered over this with a "trust marker"
+   capability-probe gate in `syncOvIntoGuest` — a band-aid on the *comparison*
+   that left the dishonest version in place. That gate was reverted; the version
+   reporting itself is the fix.
+
+**The fix is one rule applied at the single source of truth.** `ov_calver`
+(`pkg/arch/calver.sh`, shared R3 by `taskfiles/Build.yml` and the PKGBUILD) now
+derives the CalVer **only** from the HEAD commit's UTC date — identical for a
+clean tree and a dirty tree at the same commit, and a hard error outside a git
+work tree (never a silent wall-clock fallback). The PKGBUILD's `pkgver()` no
+longer re-derives the version at all in the dev path: it reads the pre-built
+binary's own `ov version` (the same `bin/ov` `build()` installs), so the pacman
+package version equals the installed binary's identity **by construction** —
+there is no parallel derivation that can drift. After the fix, `bin/ov`,
+`layers/ov/bin/ov`, `/usr/bin/ov`, and `pacman -Q overthink-git` all report one
+identical CalVer for a given commit. Because every guest ov is reinstalled
+unconditionally by the `ov` layer (`install /ctx/bin/ov /usr/local/bin/ov`) on
+each deploy, a re-deploy delivers a current, honestly-versioned, `from-image`-
+capable binary, and `syncOvIntoGuest`'s plain comparison is correct with no
+trust gate. Eval-coverage: `ov/calver_script_test.go` execs `calver.sh` in a
+hermetic temp git repo and asserts a dirty (modified-tracked) tree yields the
+same commit-date CalVer as a clean one — it fails against the old wall-clock
+branch. R10: build-determinism verified across all four artifacts +
+`eval-pod` / `eval-local` / `eval-k3s-vm` (the VM bed exercises
+`EnsureOvInGuest` → `syncOvIntoGuest` freshness with the new commit-date
+versions).
+
 ### 2026-06-03 — refactor(ov)!: `ov deploy add`/`del` join the unified `ResolveTarget` dispatch (no per-kind divergence) + `ov update` obeys explicit invocation
 
 Follow-on to the same-day `ov update` unification (next entry). That change

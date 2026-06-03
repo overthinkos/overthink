@@ -241,6 +241,22 @@ func (r *Runner) runOne(ctx context.Context, c *Check) EvalResult {
 			}
 		}
 	}
+	// Host-side protocol verbs (cdp/wl/dbus/vnc/mcp) delegate to an `ov eval
+	// <verb> <image>` subprocess that resolves the target container ON THE HOST.
+	// For a nested-in-VM pod the container lives inside the guest (reachable only
+	// via the NestedExecutor chain), so they can't run — SKIP (not fail), the
+	// same treatment as a ${HOST_PORT} check that can't resolve through the
+	// chain; the direct-pod bed covers these verbs. Hoisted ABOVE the eventually
+	// retry wrapper so the skip isn't retried for the check's `eventually:`
+	// window (which would time out and report failed, not skipped).
+	if r.SkipHostContainerVerbs && (c.Cdp != "" || c.Wl != "" || c.Dbus != "" || c.Vnc != "" || c.Mcp != "") {
+		result.Status = TestSkip
+		result.Message = "host-container verb unreachable on a nested-in-VM pod (covered by the direct-pod bed)"
+		result.Elapsed = time.Since(start)
+		result.Attempts = 1
+		result.TotalElapsed = result.Elapsed
+		return result
+	}
 
 	// `on:` multi-target dispatch. Swap executor + resolver + image for
 	// the duration of this check only; restore on return. When
@@ -330,24 +346,16 @@ func (r *Runner) runOne(ctx context.Context, c *Check) EvalResult {
 			dr = r.runAddr(ctx, &expanded)
 		case "matching":
 			dr = r.runMatching(ctx, &expanded)
-		case "cdp", "wl", "dbus", "vnc", "mcp":
-			if r.SkipHostContainerVerbs {
-				dr.Status = TestSkip
-				dr.Message = "host-container verb unreachable on a nested-in-VM pod (covered by the direct-pod bed)"
-				break
-			}
-			switch kind {
-			case "cdp":
-				dr = r.runCdp(ctx, &expanded)
-			case "wl":
-				dr = r.runWl(ctx, &expanded)
-			case "dbus":
-				dr = r.runDbus(ctx, &expanded)
-			case "vnc":
-				dr = r.runVnc(ctx, &expanded)
-			case "mcp":
-				dr = r.runMcp(ctx, &expanded)
-			}
+		case "cdp":
+			dr = r.runCdp(ctx, &expanded)
+		case "wl":
+			dr = r.runWl(ctx, &expanded)
+		case "dbus":
+			dr = r.runDbus(ctx, &expanded)
+		case "vnc":
+			dr = r.runVnc(ctx, &expanded)
+		case "mcp":
+			dr = r.runMcp(ctx, &expanded)
 		case "record":
 			dr = r.runRecord(ctx, &expanded)
 		case "spice":

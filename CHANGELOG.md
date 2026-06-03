@@ -22,6 +22,68 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-03 — fix(selkies,build,ov): real NVENC actually compiles + runs; build-system cache correctness; nested-pod eval
+
+Continuation of Cutover 2 (below). The 2026-06-02 work fixed *capture* (the
+`WLR_BACKENDS=headless` compositor fix) but the GPU stream still encoded on CPU
+x264 — pixelflux's NVENC init failed. RDD on the RTX-4080 bed drove this session's
+fixes, several of which were caught by the bed itself before landing:
+
+- **pixelflux NVENC init fixed (the headline).** pixelflux's real `NvencEncoder`
+  fetched its encode config with the DEPRECATED `NV_ENC_PRESET_LOW_LATENCY_HQ_GUID`
+  via the legacy `nvEncGetEncodePresetConfig` AND discarded the return value; on the
+  Ada-class RTX 4080 SUPER (driver 610.x) that preset yielded a zeroed config and
+  `nvEncInitializeEncoder` rejected it → silent CPU fallback (`Failed to init NVENC
+  … Falling back to CPU`). `ffmpeg -c:v h264_nvenc` encoded fine in the same pod,
+  isolating it to pixelflux's encoder build. Fix (`layers/selkies/build.sh` Patch
+  2d, `PIXELFLUX_NVENC=1` path): the modern `nvEncGetEncodePresetConfigEx(P4,
+  LOW_LATENCY)` + init `tuningInfo`, with both `NVENCSTATUS` returns CHECKED and
+  surfaced. `nvenc-sys` (NVENCAPI 11.1) already exposed the Ex fn + P-preset GUIDs +
+  tuningInfo — no dep bump. Proven on `eval-cachyos-gpu-vm`: the hardened
+  `selkies-encoder-active` check (hard-fails on a CPU fallback on a 0x10de node)
+  FAILED on the old pixelflux and PASSES on the Patch-2d build, same bed/GPU.
+
+- **build-system cache-correctness bug (why Patch 2d at first did nothing).** The
+  pixi builder `stage_template` delivered `build.sh` via
+  `--mount=type=bind,from=<layer>,source=/build.sh` — a bind-mount whose content is
+  NOT part of the RUN's BuildKit cache key. So editing `build.sh` (Patch 2d) never
+  invalidated the pixelflux compile; the stage cache-hit a stale pre-patch artifact
+  and "new code was silently not picked up." Fix (`build.yml`): COPY `build.sh` into
+  the stage (content-addressed, cache-keyed) like `pixi.toml`/`pixi.lock`. Now any
+  `build.sh` change busts the compile across every pixi+build.sh image. The deeper
+  smell — inline str-replace source patches in `build.sh` are fragile — is noted as
+  a follow-up: carry the patches as commits on the `overthinkos/pixelflux` fork and
+  clone the patched SHA, rather than str-replace anchors.
+
+- **AUR builder stale-DB 404 (both surfaces, R3).** `yay` resolved a makedepend
+  (`go`) to a version the mirror had rotated out (`go-2:1.26.3-1…sig` 404; mirror
+  served `1.26.4-1`) because the builder image bakes a stale `pacman -Sy` DB. Fix:
+  `pacman -Syu` before makedepend resolution in BOTH the OCI `aur` `stage_template`
+  (`build.yml`) and the host/VM `renderAurScript` (`ov/deploy_target_local.go`) —
+  the two parallel AUR-build surfaces.
+
+- **Nested-pod eval (`ov eval run` now evaluates nested children).** `ov eval run
+  <vm-bed>` deployed `nested: {child: target:pod}` children but never EVALUATED them.
+  `eval_bed_run.go` (`evalLiveTree`/`bedEvalLiveRefs`) now eval-lives the substrate
+  AND each nested child on both the initial and fresh-rebuild passes; `eval_cmd.go`
+  `runVm` runs the nested POD image's baked layer/image eval through the chain, with
+  `${HOME}`/`${USER}` + `package_map:` distro resolved from the POD image's metadata
+  (not the VM guest's), and SKIPS host-side protocol verbs (cdp/wl/dbus/vnc/mcp) that
+  can't reach an in-guest container; `deploy_chain.go` targets the in-guest LEAF
+  container name (`ov-<childKey>`, what `deployNestedPodsInGuest` deploys) for a
+  VM→pod hop, not the host-side `ov-<parent>_<child>` flatPath. This let the GPU
+  bed's selkies-kde pod be tested by the selkies layer's OWN baked checks (R3) —
+  retiring the cachyos bed's hand-rolled guest-side probes (incl. a false-green
+  `nested-selkies-kde-encoder`).
+
+- **RCA notes (no blind retries).** Two infra failures on the bed were RCA'd to
+  external/transient causes with positive evidence, not papered over: a corrupt
+  `cachyos.db` download (host keyring + a concurrent sibling bed both verified the
+  same DB as validly signed; pacman correctly rejected the bad copy; clean re-run
+  passed) and a stranded preempt-lease (from a manual `ov vm destroy` outside the
+  arbiter; the arbiter restored-then-couldn't-restop a mid-boot VM in 3m; resolved
+  by a clean stop, ~10s once booted).
+
 ### 2026-06-02 — feat(vm,selkies): persistent nested-pod-in-VM + real GPU NVENC selkies stream
 
 **Cutover 2.** A `target: vm` deploy's `nested: {child: target:pod}` now deploys

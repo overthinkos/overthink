@@ -56,8 +56,8 @@ func (t *AndroidUnifiedTarget) Add(ctx context.Context, dctx *DeployContext, pla
 
 // Del uninstalls the deploy's apk packages best-effort. The device itself
 // (the pod / remote endpoint) is left intact — its lifecycle belongs to
-// the pod deploy / the remote host. Body lifted from the former
-// runAndroidDel. Del's contract is node-free, so it re-resolves the entry
+// the pod deploy / the remote host. Body lifted from the former per-kind
+// android-del path. Del's contract is node-free, so it re-resolves the entry
 // from the deploy tree (matching every other kind's Del).
 func (t *AndroidUnifiedTarget) Del(ctx context.Context, opts DelOpts) error {
 	dir, err := os.Getwd()

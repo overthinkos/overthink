@@ -2,8 +2,8 @@ package main
 
 // deploy_add_shared.go — generic helpers shared across the per-kind
 // UnifiedDeployTarget.Add methods (R3). Each one captures a step that
-// was copy-pasted across the old runLocal / runVM / runContainer bodies;
-// now there is ONE implementation, called from local/vm/pod Add.
+// was copy-pasted across the old per-kind deploy bodies; now there is
+// ONE implementation, called from local/vm/pod Add.
 //
 // Ordering is load-bearing and preserved exactly:
 //   - secrets are injected into the plans BEFORE any Emit (a layer's

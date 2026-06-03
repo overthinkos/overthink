@@ -7,7 +7,7 @@ package main
 // (Capabilities, DeploymentNode, cluster) and emits a Kustomize tree.
 // Add wraps that with the ephemeral lifecycle hook; Del runs `kubectl
 // delete -k` then removes the tree. Bodies lifted from the former
-// runK8s / runK8sDel.
+// per-kind k8s add/del paths.
 //
 // K8sUnifiedTarget is NOT a LifecycleTarget — cluster lifecycle is
 // kubectl-managed outside ov.
@@ -102,7 +102,7 @@ func (t *K8sUnifiedTarget) Add(ctx context.Context, dctx *DeployContext, plans [
 
 // Del runs `kubectl delete -k <overlay>` then removes the kustomize tree
 // from disk. The ephemeral teardown hook fires before disk cleanup so it
-// can read the runtime metadata. Body lifted from the former runK8sDel.
+// can read the runtime metadata. Body lifted from the former per-kind k8s-del path.
 func (t *K8sUnifiedTarget) Del(ctx context.Context, opts DelOpts) error {
 	outDir, err := defaultK8sOutputDir()
 	if err != nil {

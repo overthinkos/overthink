@@ -609,6 +609,17 @@ func sortedNestedKeys(children map[string]*DeploymentNode) []string {
 func bedEvalLiveRefs(name string, children map[string]*DeploymentNode) []string {
 	refs := []string{name}
 	for _, k := range sortedNestedKeys(children) {
+		// A nested child gets its own `ov eval live <parent>.<child>` hop ONLY
+		// if it is an independently-resolvable venue (a pod/vm/local child with
+		// its own image/host that the chain can reach). A `target: android`
+		// child shares the parent pod's venue and has NO own image — its
+		// app-presence checks are baked into the parent's android-emulator-layer
+		// and already run in the parent ref. `ov eval live` has no android
+		// dotted-path branch, so a hop for it would wrongly resolve to a
+		// non-existent `ov-<parent>.device` container. Skip android children.
+		if c := children[k]; c != nil && c.Target == "android" {
+			continue
+		}
 		refs = append(refs, name+"."+k)
 	}
 	return refs

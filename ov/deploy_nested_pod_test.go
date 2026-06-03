@@ -166,3 +166,53 @@ func TestDeriveDeploymentName(t *testing.T) {
 		}
 	}
 }
+
+// TestMergeDeployConfigs_VMNestedSurvivesNestedlessOverlay locks the merge
+// invariant the VM target's nested-pod deploy relies on: a project VM deploy
+// that declares a `nested:` target:pod child, overlaid by a per-host operator
+// entry that carries its OWN per-host fields but NO `nested:` block, MUST keep
+// the project's nested child after merge. This is exactly the operator
+// workstation shape (~/.config/ov/deploy.yml's cachyos-gpu has
+// target/vm/preemptible but no nested:) that surfaced the failure: a whole-node
+// re-read of the operator deploy.yml (operator clobbering project) would drop
+// nested: and silently skip deployNestedPodsInGuest. VmUnifiedTarget.Add
+// consumes this merged node directly. The eval-bed keys (no operator overlay)
+// were never affected — which is why the bug hid behind a green pod bed. The
+// end-to-end consumption proof is the live `ov eval live cachyos-gpu.selkies-kde`
+// R10.
+func TestMergeDeployConfigs_VMNestedSurvivesNestedlessOverlay(t *testing.T) {
+	project := &DeployConfig{Deploy: map[string]DeploymentNode{
+		"cachyos-gpu": {
+			Target: "vm",
+			Vm:     "cachyos-gpu",
+			Nested: map[string]*DeploymentNode{
+				"selkies-kde": {Target: "pod", Image: "selkies-kde-nvidia"},
+			},
+		},
+	}}
+	// Operator per-host overlay: per-host field set, NO nested: block.
+	operator := &DeployConfig{Deploy: map[string]DeploymentNode{
+		"cachyos-gpu": {
+			Target:    "vm",
+			Vm:        "cachyos-gpu",
+			Lifecycle: "prod",
+		},
+	}}
+
+	merged := MergeDeployConfigs(project, operator)
+	node := merged.Deploy["cachyos-gpu"]
+
+	// The operator overlay's non-zero field won (proves the overlay DID merge,
+	// not that we merely read the project node)...
+	if node.Lifecycle != "prod" {
+		t.Errorf("operator Lifecycle not merged: got %q, want prod", node.Lifecycle)
+	}
+	// ...AND the project's nested child PASSED THROUGH the nestedless overlay.
+	// A whole-node replace (the old re-read bug shape) would drop it here.
+	if len(node.Nested) != 1 || node.Nested["selkies-kde"] == nil {
+		t.Fatalf("project nested: dropped by nestedless operator overlay: %#v", node.Nested)
+	}
+	if got := node.Nested["selkies-kde"].Image; got != "selkies-kde-nvidia" {
+		t.Errorf("nested child image: got %q, want selkies-kde-nvidia", got)
+	}
+}

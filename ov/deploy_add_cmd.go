@@ -1,18 +1,18 @@
 package main
 
 // deploy_add_cmd.go — `ov deploy add <name> [<ref>]` and
-// `ov deploy del <name>`. Thin wiring on top of the pieces already
-// built: BuildDeployPlan → {OCITarget, LocalDeployTarget,
-// PodDeployTarget}.
+// `ov deploy del <name>`. Generic wiring on top of the unified deploy
+// targets: this file does ref resolution, plan compilation, deployID
+// stamping, and dry-run printing, then routes through ResolveTarget →
+// target.Add / target.Del. There is NO per-kind dispatch switch — every
+// kind-specific construction + deploy lives behind its UnifiedDeployTarget
+// adapter (unified_targets_*.go), which consumes the dispatch-merged node
+// from the DeployContext (never re-reading it from disk).
 //
 // Name semantics:
-//   - literal "host" → deploy to the local machine via LocalDeployTarget
-//   - any other name → a named container deployment (ContainerDeploy
-//     + existing quadlet/podman machinery)
-//
-// Both commands defer the heavy lifting to the targets. This file is
-// just glue: ref resolution, plan compilation, target selection, and
-// flag passing.
+//   - literal "host" → deploy to the local machine (target: local)
+//   - any other name → a named container deployment (target: pod), or
+//     whatever target: the resolved deploy.yml node declares.
 
 import (
 	"context"
@@ -36,9 +36,9 @@ type DeployAddCmd struct {
 	Tag      string `long:"tag" help:"Image CalVer tag (empty = newest local CalVer resolved via the org.overthinkos.version OCI label)"`
 	DryRun   bool   `long:"dry-run" help:"Print the plan without executing"`
 	NodeOnly bool   `long:"node-only" help:"Dispatch only the named node; do not descend into nested children (children of a pod can't deploy until the pod is started)"`
-	Format string `long:"format" default:"table" enum:"table,json" help:"Output format for --dry-run"`
-	Pull   bool   `long:"pull" help:"Force re-fetch of remote refs / image pull"`
-	Verify bool   `long:"verify" help:"Re-run layer tests: on the host after install"`
+	Format   string `long:"format" default:"table" enum:"table,json" help:"Output format for --dry-run"`
+	Pull     bool   `long:"pull" help:"Force re-fetch of remote refs / image pull"`
+	Verify   bool   `long:"verify" help:"Re-run layer tests: on the host after install"`
 
 	// Host-only gates.
 	WithServices     bool   `long:"with-services" help:"Install systemd services (host target only)"`
@@ -67,9 +67,10 @@ type DeployDelCmd struct {
 	KeepImage       bool `long:"keep-image" help:"Don't remove the synthesized overlay image (container target only)"`
 	DryRun          bool `long:"dry-run" help:"Print the teardown plan without executing"`
 
-	// Runner is populated by runVmDel / runLocalDel etc. to route reverse
-	// ops to the right privilege context. Nil falls back to the local-exec
-	// path in reverse_ops.go. Not exposed as a Kong flag.
+	// Runner routes reverse ops to the right privilege context. It is
+	// carried onto the resolved LocalUnifiedTarget by Run before Del. Nil
+	// falls back to the local-exec path in reverse_ops.go. Not exposed as
+	// a Kong flag.
 	Runner ReverseRunner `kong:"-"`
 }
 
@@ -122,10 +123,9 @@ func (c *DeployAddCmd) Run() error {
 		}
 	}
 
-	// Walk pre-order. At each node, we dispatch using the existing
-	// target-specific runHost/runVM/runContainer helpers, with
-	// opts.ParentExec set to the executor derived from the parent
-	// chain.
+	// Walk pre-order. At each node, dispatchNode compiles plans and routes
+	// through ResolveTarget → target.Add, with opts.ParentExec set to the
+	// executor derived from the parent chain.
 	//
 	// When rootNode is nil (ref-based deploy with no deploy.yml entry
 	// e.g. `ov deploy add foo ./path/to/image.yml`) we fall through
@@ -140,9 +140,10 @@ func (c *DeployAddCmd) Run() error {
 	// explicitly afterwards via dotted-path `ov deploy add parent.child`.
 	//
 	// A VM root is ALSO dispatched node-only: its nested target:pod children
-	// deploy IN the guest (the host can't tree-walk a pod-in-VM), so runVM
-	// deploys them itself after the VM is up (deployNestedPodsInGuest). A host
-	// tree walk would wrongly try to deploy them locally / double-deploy.
+	// deploy IN the guest (the host can't tree-walk a pod-in-VM), so the VM
+	// target's Add deploys them itself after the VM is up
+	// (deployNestedPodsInGuest). A host tree walk would wrongly try to deploy
+	// them locally / double-deploy.
 	if c.NodeOnly || (rootNode != nil && (rootNode.Target == "vm" || strings.HasPrefix(resolvedPath, "vm:"))) {
 		return c.dispatchNode(resolvedPath, rootNode, parentExec, dir)
 	}
@@ -330,55 +331,65 @@ func (c *DeployAddCmd) dispatchNode(path string, node *DeploymentNode, parentExe
 		return c.printPlans(plans, opts)
 	}
 
-	// Target dispatch. Canonical target values: host|vm|pod|k8s.
-	// Legacy "container"/"kubernetes" normalized once here so all
-	// downstream code uses the new vocabulary.
-	switch target {
-	case "container":
-		target = "pod"
-	case "kubernetes":
-		target = "k8s"
+	// UNIFIED dispatch — every kind routes through ResolveTarget → the
+	// adapter's Add. There is no per-kind switch; the kind-specific
+	// construction + deploy lives behind each adapter's Add (which
+	// consumes the dispatch-merged node from dctx, never re-reading it
+	// from disk). classifyNodeTarget already normalized the legacy
+	// "container"/"kubernetes"/"host" spellings to canonical values.
+	//
+	// The deploy KEY is the node's identity. For a top-level deploy
+	// that's c.Name; for a nested node it's the dotted path. Adapters
+	// resolve any kind-specific name (the vm entity, the flattened pod
+	// container name) from that + the node.
+	deployName := c.Name
+	if path != "" {
+		deployName = path
 	}
-	switch target {
-	case "local":
-		return c.runLocal(node, plans, dir, opts)
-	case "vm":
-		// runVM keys off c.Name to resolve the VM entity.
-		//   Schema v3 plain name — node.Vm names the vm entity;
-		//                          rewrite c.Name to "vm:<vm_source>"
-		//                          for the legacy VM constructor path.
-		//   Nested vm child      — path has dots; use leaf.
-		//   Legacy user input    — "vm:<name>" already; leave.
-		saved := c.Name
-		switch {
-		case node != nil && node.Vm != "" && !strings.HasPrefix(c.Name, "vm:"):
-			c.Name = "vm:" + node.Vm
-		case strings.Contains(path, "."):
-			c.Name = "vm:" + pathLeaf(path)
-		}
-		// Pass the ORIGINAL deploy name (the bed key, e.g. eval-k3s-vm) —
-		// c.Name is now the rewritten "vm:<entity>" form, but runVM needs the
-		// deploy key to resolve the entry's env: for artifact rewrites.
-		err := c.runVM(saved, plans, dir, opts)
-		c.Name = saved
+
+	dctx := &DeployContext{
+		Node:       node,
+		Name:       deployName,
+		Dir:        dir,
+		Cfg:        cfg,
+		DistroCfg:  distroCfg,
+		BuilderCfg: builderCfg,
+		Base:       base,
+	}
+
+	// ResolveTarget needs a node carrying target:. For a ref-based deploy
+	// with no deploy.yml entry (node == nil), synthesize one from the
+	// classified target so `ov deploy add host ./x.yml` still resolves.
+	resolveNode := node
+	if resolveNode == nil {
+		resolveNode = &DeploymentNode{Target: target}
+	}
+
+	utgt, err := ResolveTarget(resolveNode, deployName)
+	if err != nil {
 		return err
-	case "k8s":
-		return c.runK8s(plans, dir, opts)
-	case "android":
-		return c.runAndroid(node, plans, dir, opts)
-	case "pod":
-		// Pod target (formerly container). runContainer uses c.Name
-		// as the pod name; nested pods flatten the dotted path.
-		saved := c.Name
+	}
+
+	// Carry the per-kind add-time inputs onto the adapter (the unified
+	// Add signature is uniform; kind-specific knobs live on the struct,
+	// matching how Del's gate flags are wired).
+	switch tt := utgt.(type) {
+	case *VmUnifiedTarget:
+		tt.NodeName = deployName
+		tt.NodeOnly = c.NodeOnly
+	case *PodUnifiedTarget:
+		// Nested pods flatten the dotted path into the container name;
+		// a top-level pod keeps the deploy key.
 		if path != "" {
-			c.Name = NestedContainerName(path)
+			tt.NodeName = NestedContainerName(path)
 		}
-		err := c.runContainer(plans, base, distroCfg, builderCfg, opts)
-		c.Name = saved
-		return err
-	default:
-		return fmt.Errorf("unknown target %q; want host|vm|pod|k8s|android", target)
+		tt.Tag = c.Tag
+		tt.Ref = c.Ref
+		tt.Disposable = c.Disposable
+		tt.Lifecycle = c.Lifecycle
 	}
+
+	return utgt.Add(context.Background(), dctx, plans, opts)
 }
 
 // classifyNodeTarget picks the target discriminator for a node. Uses
@@ -465,9 +476,11 @@ func deriveChildExecutorForPath(path string, node *DeploymentNode, parentExec De
 }
 
 // Run executes `ov deploy del`. Dispatch resolves the deployment node
-// (when present in deploy.yml) and routes via the target's Kind().
-// Legacy name-prefix routing (`host` literal, `vm:<name>`) still works
-// for ref-based deploys without a deploy.yml entry.
+// (when present in deploy.yml) and routes through ResolveTarget →
+// target.Del. Legacy name-prefix routing (`host` literal, `vm:<name>`)
+// still works for ref-based deploys without a deploy.yml entry: a node
+// is synthesized from the classified target so the resolver has a
+// target: to dispatch on.
 func (c *DeployDelCmd) Run() error {
 	paths, err := DefaultLedgerPaths()
 	if err != nil {
@@ -479,97 +492,70 @@ func (c *DeployDelCmd) Run() error {
 	}
 	defer lock.Release()
 
-	// Resolve target-kind: first check the deploy.yml tree for an
-	// explicit target:, else fall back to the name-prefix heuristic.
-	kind := c.resolveDelTargetKind()
-	switch kind {
-	case "local", "host":
-		return c.runLocalDel(paths)
-	case "vm":
-		if !strings.HasPrefix(c.Name, "vm:") {
-			// Schema v3: plain identifier — find the matching node's
-			// VmSource so runVmDel's legacy parseVmDeployName path works.
-			if cwd, _ := os.Getwd(); cwd != "" {
-				if tree, _ := resolveTreeRoot(cwd); tree != nil {
-					if node, ok := tree[c.Name]; ok && node.Vm != "" {
-						saved := c.Name
-						c.Name = "vm:" + node.Vm
-						err := c.runVmDel(paths)
-						c.Name = saved
-						return err
-					}
-				}
-			}
-		}
-		return c.runVmDel(paths)
-	case "pod":
-		return c.runContainerDel(paths)
-	case "k8s":
-		return c.runK8sDel(paths)
-	case "android":
-		return c.runAndroidDel(paths)
-	default:
-		return c.runContainerDel(paths)
+	node, kind := c.resolveDelNode()
+
+	// Build the gate-flag-bearing adapter. Del's signature is uniform
+	// (DelOpts only); kind-specific teardown gates live on the adapter.
+	utgt, err := ResolveTarget(node, c.Name)
+	if err != nil {
+		return err
 	}
+	switch tt := utgt.(type) {
+	case *LocalUnifiedTarget:
+		tt.KeepRepoChanges = c.KeepRepoChanges
+		tt.KeepServices = c.KeepServices
+		tt.RevRunner = c.Runner
+	case *VmUnifiedTarget:
+		tt.KeepRepoChanges = c.KeepRepoChanges
+		tt.KeepServices = c.KeepServices
+		// The VM ledger record + guest-side teardown key off "vm:<entity>"
+		// (VmDeployTarget.targetName). For a schema-v4 key whose `vm:`
+		// cross-ref names a different entity (e.g. eval-k3s-vm → vm: k3s-vm),
+		// rewrite the adapter's NodeName to the prefixed entity form so
+		// findVmDeployRecord / buildVmReverseRunner / removeVmDeployEntry
+		// resolve correctly. A legacy "vm:<name>" key passes through.
+		if !strings.HasPrefix(c.Name, "vm:") && node != nil && node.Vm != "" {
+			tt.NodeName = "vm:" + node.Vm
+		}
+	case *PodUnifiedTarget:
+		tt.KeepImage = c.KeepImage
+	}
+	_ = kind // kind is informational; the adapter type already encodes it.
+
+	return utgt.Del(context.Background(), DelOpts{
+		DryRun:    c.DryRun,
+		AssumeYes: c.AssumeYes,
+	})
 }
 
-// resolveDelTargetKind returns the canonical target kind
-// (host|vm|pod|k8s) for c.Name, using the deploy.yml tree when
-// available. Fallback: legacy name-prefix heuristic.
-func (c *DeployDelCmd) resolveDelTargetKind() string {
+// resolveDelNode resolves the DeploymentNode + canonical kind for a
+// `ov deploy del` invocation. Precedence:
+//   - literal "host" name → synthetic local node (legacy)
+//   - "vm:<name>" prefix  → synthetic vm node (legacy ref-based del)
+//   - deploy.yml entry    → the merged node, target normalized
+//   - no entry            → synthetic pod node (the default)
+//
+// The returned node always carries a non-empty Target so ResolveTarget
+// can dispatch — for ref-based deploys with no deploy.yml entry the node
+// is synthesized, preserving `ov deploy del host` / `ov deploy del
+// vm:<name>` without a stored entry.
+func (c *DeployDelCmd) resolveDelNode() (*DeploymentNode, string) {
 	if c.Name == "host" {
-		return "host"
+		return &DeploymentNode{Target: "local"}, "local"
 	}
 	if strings.HasPrefix(c.Name, "vm:") {
-		return "vm"
+		return &DeploymentNode{Target: "vm"}, "vm"
 	}
-	cwd, _ := os.Getwd()
-	if cwd != "" {
+	if cwd, _ := os.Getwd(); cwd != "" {
 		if tree, _ := resolveTreeRoot(cwd); tree != nil {
 			if node, ok := tree[c.Name]; ok && node.Target != "" {
-				switch node.Target {
-				case "container":
-					return "pod"
-				case "kubernetes":
-					return "k8s"
-				}
-				return node.Target
+				n := node
+				n.Target = canonicalTarget(node.Target)
+				return &n, n.Target
 			}
 		}
 	}
-	return "pod"
-}
-
-// runLocalDel is a thin wrapper that constructs a LocalUnifiedTarget
-// with this cmd's gate flags and delegates teardown to the unified
-// target's Del method (see unified_targets_host.go). The body lives on
-// LocalUnifiedTarget.Del so future dispatchers can call into
-// the same logic without going through DeployDelCmd.
-func (c *DeployDelCmd) runLocalDel(paths *LedgerPaths) error {
-	target := &LocalUnifiedTarget{
-		NodeName:        c.Name,
-		KeepRepoChanges: c.KeepRepoChanges,
-		KeepServices:    c.KeepServices,
-		RevRunner:       c.Runner,
-	}
-	return target.Del(context.Background(), DelOpts{
-		DryRun:    c.DryRun,
-		AssumeYes: c.AssumeYes,
-	})
-}
-
-// runContainerDel is a thin wrapper that constructs a PodUnifiedTarget
-// with this cmd's gate flags and delegates teardown to the unified
-// target's Del method (see unified_targets_pod.go).
-func (c *DeployDelCmd) runContainerDel(paths *LedgerPaths) error {
-	target := &PodUnifiedTarget{
-		NodeName:  c.Name,
-		KeepImage: c.KeepImage,
-	}
-	return target.Del(context.Background(), DelOpts{
-		DryRun:    c.DryRun,
-		AssumeYes: c.AssumeYes,
-	})
+	return &DeploymentNode{Target: "pod"}, "pod"
 }
 
 // findContainerDeploy locates the deploy record with matching Target.
@@ -813,7 +799,7 @@ func (c *DeployAddCmd) compileLayerPlans(ref *DeployRef, cfg *Config, distroCfg 
 	// local/host deploy onto an Arch/cachyos host auto-selects arch-builder
 	// (distro-keyed) exactly like a built image would — no command-specific
 	// divergence. This path previously seeded from cfg.Defaults.Builder only,
-	// which gave a cachyos host fedora-builder and left runLocal/execBuilder
+	// which gave a cachyos host fedora-builder and left the local deploy/execBuilder
 	// with the wrong builder when a layer's install needs cargo/npm/pixi/aur.
 	if cfg != nil {
 		img.Builder = cfg.resolveEffectiveBuilder(img.Name, img.Distro, img.Base, img.IsExternalBase, img.Builder)
@@ -837,238 +823,6 @@ func (c *DeployAddCmd) printPlans(plans []*InstallPlan, opts EmitOpts) error {
 	for _, p := range plans {
 		fmt.Println(DescribePlan(p))
 	}
-	return nil
-}
-
-// runLocal executes a target:local deployment. The destination is
-// selected by node.Host (Ansible-style):
-//   - "" or "local"   → ShellExecutor (direct local shell)
-//   - anything else   → SSHExecutor (ssh(1) reads ~/.ssh/config + agent)
-//
-// The optional `local: <name>` field references a kind:local template
-// whose layers + install_opts + env merge with this deployment's
-// overrides via the standard 3-tier precedence (CLI > deployment >
-// template). Nested local nodes inherit opts.ParentExec.
-func (c *DeployAddCmd) runLocal(node *DeploymentNode, plans []*InstallPlan, dir string, opts EmitOpts) error {
-	hostDistro, _ := DetectHostDistro()
-	tgt := &LocalDeployTarget{
-		HostHome:   os.Getenv("HOME"),
-		Distro:     hostDistro,
-		ProjectDir: dir,
-	}
-	// Resolve the kind:local template (when the deployment has a
-	// `local: <name>` ref) so its `images:` pre-pass + Eval/DeployEval
-	// reach the target. nil when the deployment uses inline
-	// add_layers: instead.
-	if node != nil && strings.TrimSpace(node.Local) != "" {
-		tgt.LocalSpec = findLocalSpec(dir, strings.TrimSpace(node.Local))
-	}
-	if cfg, cfgErr := LoadConfig(dir); cfgErr == nil {
-		tgt.Cfg = cfg
-	}
-	// Pick the executor via the shared selector (R3 — same logic
-	// ov eval live's runLocalEval uses). opts.ParentExec (nested
-	// local-target inside a container/VM) stays here: it's
-	// deploy-execution-specific, not a property of the node's host:.
-	var exec DeployExecutor = ShellExecutor{}
-	switch {
-	case opts.ParentExec != nil:
-		tgt.Executor = opts.ParentExec
-		exec = opts.ParentExec
-	default:
-		e, perr := rootExecutorForDeployNode(node)
-		if perr != nil {
-			return fmt.Errorf("deployment %q: %w", c.Name, perr)
-		}
-		exec = e
-		// Preserve prior behaviour: leave tgt.Executor unset (nil →
-		// LocalDeployTarget's internal ShellExecutor default) for host:local;
-		// set it only for a remote SSH venue.
-		if _, isShell := e.(ShellExecutor); !isShell {
-			tgt.Executor = e
-		}
-	}
-
-	// Resolve layer secret_requires / secret_accepts and inject them
-	// into each TaskStep's env BEFORE emission. Missing `secret_requires:`
-	// auto-generate a 32-byte hex token and persist to the credential
-	// store (see ensureLayerSecret in layer_secrets.go).
-	layerList, err := LayerForPlan(plans, dir, nil)
-	if err != nil {
-		return fmt.Errorf("loading layers for secret resolution: %w", err)
-	}
-	secretEnv := ResolveSecretForLayer(layerList)
-	InjectSecretsIntoPlans(plans, secretEnv)
-
-	// Collect env for artifact substitution — merges resolved secrets +
-	// any deploy.yml env: entries on this node.
-	artifactEnv := map[string]string{}
-	for k, v := range secretEnv {
-		artifactEnv[k] = v
-	}
-	if entry, ok := loadDeployConfigForRead("ov deploy add artifact-env").LookupKey(c.Name); ok {
-		for _, line := range entry.Env {
-			if idx := strings.Index(line, "="); idx > 0 {
-				artifactEnv[line[:idx]] = line[idx+1:]
-			}
-		}
-	}
-
-	if err := tgt.Emit(plans, opts); err != nil {
-		return err
-	}
-
-	// Retrieve layer artifacts (files the layer publishes back — e.g.
-	// kubeconfig from a k3s-server layer). Ignored when opts.DryRun.
-	if !opts.DryRun {
-		if err := RetrieveLayerArtifacts(context.Background(), exec, layerList, sanitizeDeployName(c.Name), artifactEnv, opts); err != nil {
-			return fmt.Errorf("retrieving layer artifacts: %w", err)
-		}
-		// k3s-server post-hook: merge retrieved kubeconfig into
-		// ~/.kube/config and write a ClusterProfile so the new cluster
-		// is immediately usable as an `ov deploy add --target kubernetes`
-		// destination. No-op when k3s-server isn't in the layer list.
-		if deployHasLayer(layerList, "k3s-server") {
-			if err := K3sPostProvision(c.Name); err != nil {
-				return fmt.Errorf("k3s post-provision: %w", err)
-			}
-		}
-	}
-
-	// --verify: run the deployment's deploy-scope eval probes on the venue we
-	// just deployed to (the same `exec`). Default (Verify=false) is a no-op, so
-	// normal deploys are unchanged. Reuses evalLocalDeployScope so `ov deploy
-	// add <local> --verify` sources + runs probes identically to
-	// `ov eval live <local>` (R3).
-	if opts.Verify && !opts.DryRun {
-		fails, verr := evalLocalDeployScope(dir, node, c.Name, "", "", nil, exec, "text")
-		if verr != nil {
-			return fmt.Errorf("deployment %q: --verify: %w", c.Name, verr)
-		}
-		if fails > 0 {
-			return fmt.Errorf("deployment %q: --verify: %d deploy-scope check(s) failed", c.Name, fails)
-		}
-	}
-	return nil
-}
-
-func (c *DeployAddCmd) runContainer(plans []*InstallPlan, base string, distroCfg *DistroConfig, builderCfg *BuilderConfig, opts EmitOpts) error {
-	// Ephemeral lifecycle hook (FIRST action — panic-safe TTL ordering).
-	// When the deploy is marked ephemeral, register the systemd
-	// transient timer + parent-detection metadata BEFORE any container
-	// build / quadlet emission. Pod-target ephemerals don't have a
-	// snapshot refcount (containers don't have backing chains), so
-	// the helper handles only timer + parent linkage in this path.
-	if node, ok := loadDeployConfigForRead("ov deploy add ephemeral-register").LookupKey(c.Name); ok && node.IsEphemeral() {
-		if _, regErr := RegisterEphemeralLifecycle(&node, c.Name); regErr != nil {
-			fmt.Fprintf(os.Stderr, "warning: ephemeral lifecycle registration: %v\n", regErr)
-		}
-	}
-
-	// Only the overlay build piece is implemented v1; the final
-	// container start (volumes, quadlet, traefik) is still routed
-	// through the existing `ov start` command.
-	// Build a Generator + ResolvedImage so the overlay's OCITarget can
-	// render tasks as RUN directives (not comments). Without these the
-	// overlay image would be byte-identical to the base image.
-	dir, _ := os.Getwd()
-	gen, _ := NewGenerator(dir, c.Tag, ResolveOpts{})
-	var resolvedImg *ResolvedImage
-	if gen != nil && gen.Images != nil {
-		resolvedImg = gen.Images[base]
-	}
-	// Resolve DistroDef from the BASE IMAGE's distro, not the operator
-	// host's. The overlay's SystemPackagesSteps render using the base
-	// image's package format (e.g. fedora → rpm for a fedora-ov-based
-	// overlay). Using the host distro produces "no distro definition
-	// for format rpm" when the operator runs on arch but the base
-	// image is fedora.
-	var podDistroDef *DistroDef
-	if resolvedImg != nil && len(resolvedImg.Distro) > 0 {
-		podDistroDef = resolveDistroDef(distroCfg, resolvedImg.Distro[0])
-	} else {
-		// Fallback to host context only when the base image's distro
-		// is unknown (shouldn't happen for any well-formed image).
-		podDistroDef = resolveDistroDef(distroCfg, detectHostContext().Distro)
-	}
-	// Build the BaseImage ref. With CalVer-only resolution, c.Tag
-	// defaults to empty — in that case resolve the newest local
-	// CalVer for this short name so the overlay Containerfile's
-	// `FROM <ref>` line gets a real tag (never a trailing colon).
-	var baseRef string
-	if c.Tag != "" {
-		baseRef = base + ":" + c.Tag
-	} else {
-		// ResolveNewestLocalCalVer returns the full "<registry>/<name>:<calver>"
-		// ref; fall back to bare short name on miss (EnsureImage will
-		// surface the error with a CalVer-specification hint).
-		engineForLookup := "podman"
-		if resolvedImg != nil && resolvedImg.Registry != "" {
-			engineForLookup = "podman"
-		}
-		if resolved, err := ResolveNewestLocalCalVer(engineForLookup, base); err == nil && resolved != "" {
-			baseRef = resolved
-		} else {
-			baseRef = base
-		}
-	}
-	tgt := &PodDeployTarget{
-		DeployName:    c.Name,
-		BaseImage:     baseRef,
-		DistroDef:     podDistroDef,
-		BuilderConfig: builderCfg,
-		Generator:     gen,
-		Image:         resolvedImg,
-	}
-	// Resolve + inject layer secrets (secret_requires) so the overlay
-	// Containerfile emits `export VAR=VALUE` before each task's bash
-	// body. Without this, layers like k3s-server fail at build with
-	// "K3S_CLUSTER_TOKEN: unbound variable". Missing `secret_requires:`
-	// auto-generate via ensureLayerSecret. Mirrors the runHost / runVM
-	// injection paths.
-	layerList, err := LayerForPlan(plans, dir, nil)
-	if err != nil {
-		return fmt.Errorf("loading layers for secret resolution: %w", err)
-	}
-	secretEnv := ResolveSecretForLayer(layerList)
-	InjectSecretsIntoPlans(plans, secretEnv)
-	// Thread ParentExec: when this container is a child of another
-	// deployment, the overlay build (if any) must run in the parent's
-	// venue. The target's own check rejects the combo with a clear
-	// error for cases we haven't wired yet (build-context transfer).
-	if opts.ParentExec != nil {
-		tgt.Executor = opts.ParentExec
-	}
-	if err := tgt.Emit(plans, opts); err != nil {
-		return err
-	}
-	// Persist classification flags into deploy.yml when the user
-	// passed --disposable / --lifecycle. saveDeployState merges onto
-	// any existing entry; SetDisposable / SetLifecycle gate whether
-	// we actually write each field (so an unrelated code path can't
-	// silently clear a prior explicit opt-in).
-	if c.Disposable || c.Lifecycle != "" {
-		// Image + Target are required by the 2026-05-12 require-image
-		// schema validator. Without them the next LoadDeployConfig
-		// would hard-fail on this entry, breaking every subsequent
-		// `ov` invocation. saveDeployState only writes these when the
-		// existing entry doesn't already declare them, so this is safe
-		// to populate unconditionally for the container/pod path
-		// reached here (runContainer dispatches to this code).
-		saveDeployState(c.Name, "", SaveDeployStateInput{
-			SetDisposable: c.Disposable,
-			Disposable:    c.Disposable,
-			SetLifecycle:  c.Lifecycle != "",
-			Lifecycle:     c.Lifecycle,
-			Image:         c.Ref,
-			Target:        "pod",
-		})
-		if c.Disposable {
-			fmt.Fprintln(os.Stderr, "Marked deploy disposable — `ov update` will act unattended on this deploy.")
-		}
-	}
-	fmt.Printf("Overlay image ready: %s\n", tgt.OverlayImageRef())
-	fmt.Println("To start the container, run: ov start " + c.Name)
 	return nil
 }
 

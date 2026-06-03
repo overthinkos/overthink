@@ -1,6 +1,7 @@
 package main
 
 import (
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -78,13 +79,13 @@ func TestResolveUpdateDeployNode(t *testing.T) {
 	})
 }
 
-// TestCheckUpdateDisposable guards the 2026-05-26 disposable-enforcement
-// fix on `ov update`. Before the fix, `ov update <image> -i <instance>`
-// destroyed + recreated the deploy without checking the disposable flag,
-// silently bypassing the operator's lockdown. After the fix the dispatch
-// refuses with a remediation message that mirrors /ov-internals:
-// disposable's sample refusal text.
-func TestCheckUpdateDisposable(t *testing.T) {
+// TestNoteUpdateDisposability guards #30: `ov update` NEVER refuses — it obeys
+// any explicit invocation on any target and merely prints a one-line
+// transparency note for a non-disposable one. Disposable/ephemeral targets get
+// NO note; non-disposable targets get a note naming the key + lifecycle. The
+// disposable flag now gates only the AI's autonomous destroy (CLAUDE.md R10) and
+// the eval-runner's unattended fresh-rebuild — not this human-driven verb.
+func TestNoteUpdateDisposability(t *testing.T) {
 	tDisposable := boolPtr(true)
 	fDisposable := boolPtr(false)
 	cases := []struct {
@@ -92,66 +93,79 @@ func TestCheckUpdateDisposable(t *testing.T) {
 		node     *DeploymentNode
 		image    string
 		instance string
-		wantErr  bool
-		want     []string // substrings expected in the error message
+		wantNote bool
+		want     []string // substrings expected in the note (when wantNote)
 	}{
 		{
-			name:    "explicit disposable true is allowed",
-			node:    &DeploymentNode{Disposable: tDisposable},
-			image:   "ok-pod",
-			wantErr: false,
+			name:     "explicit disposable true — no note",
+			node:     &DeploymentNode{Disposable: tDisposable},
+			image:    "ok-pod",
+			wantNote: false,
 		},
 		{
-			name:    "ephemeral implies disposable (no error)",
-			node:    &DeploymentNode{Ephemeral: &EphemeralLifetime{}},
-			image:   "scratch-pod",
-			wantErr: false,
+			name:     "ephemeral implies disposable — no note",
+			node:     &DeploymentNode{Ephemeral: &EphemeralLifetime{}},
+			image:    "scratch-pod",
+			wantNote: false,
 		},
 		{
-			name:    "absent disposable refuses",
-			node:    &DeploymentNode{},
-			image:   "prod-api",
-			wantErr: true,
-			want:    []string{"prod-api", "is not marked", "disposable: true", "lifecycle: (unset)"},
+			name:     "absent disposable — note, NOT a refusal",
+			node:     &DeploymentNode{},
+			image:    "prod-api",
+			wantNote: true,
+			want:     []string{"prod-api", "not marked", "disposable: true", "lifecycle: (unset)", "per your explicit"},
 		},
 		{
-			name:    "explicit disposable: false refuses",
-			node:    &DeploymentNode{Disposable: fDisposable, Lifecycle: "prod"},
-			image:   "locked-api",
-			wantErr: true,
-			want:    []string{"locked-api", "lifecycle: prod"},
+			name:     "explicit disposable: false — note",
+			node:     &DeploymentNode{Disposable: fDisposable, Lifecycle: "prod"},
+			image:    "locked-api",
+			wantNote: true,
+			want:     []string{"locked-api", "lifecycle: prod"},
 		},
 		{
 			name:     "instance form includes the slash key",
 			node:     &DeploymentNode{Disposable: fDisposable},
 			image:    "versa",
 			instance: "ecovoyage",
-			wantErr:  true,
-			want:     []string{"versa/ecovoyage", "ov deploy add versa/ecovoyage"},
+			wantNote: true,
+			want:     []string{"versa/ecovoyage"},
 		},
 		{
-			name:    "lifecycle dev alone does NOT authorize",
-			node:    &DeploymentNode{Lifecycle: "dev"},
-			image:   "dev-bench",
-			wantErr: true,
-			want:    []string{"dev-bench", "lifecycle: dev", "lifecycle tags alone do NOT authorize"},
+			name:     "lifecycle dev alone — note (ov update still obeys)",
+			node:     &DeploymentNode{Lifecycle: "dev"},
+			image:    "dev-bench",
+			wantNote: true,
+			want:     []string{"dev-bench", "lifecycle: dev"},
 		},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			err := checkUpdateDisposable(tc.node, tc.image, tc.instance)
-			if tc.wantErr {
-				if err == nil {
-					t.Fatalf("expected refusal, got nil")
+			// Capture stderr around the note (the only side effect; it returns
+			// nothing and never errors — that IS the point of #30).
+			old := os.Stderr
+			r, w, err := os.Pipe()
+			if err != nil {
+				t.Fatal(err)
+			}
+			os.Stderr = w
+			noteUpdateDisposability(tc.node, tc.image, tc.instance)
+			_ = w.Close()
+			os.Stderr = old
+			b, _ := io.ReadAll(r)
+			note := string(b)
+
+			if tc.wantNote {
+				if note == "" {
+					t.Fatalf("expected a transparency note, got none")
 				}
 				for _, sub := range tc.want {
-					if !strings.Contains(err.Error(), sub) {
-						t.Errorf("error %q missing substring %q", err.Error(), sub)
+					if !strings.Contains(note, sub) {
+						t.Errorf("note %q missing substring %q", note, sub)
 					}
 				}
-			} else if err != nil {
-				t.Errorf("expected nil, got %v", err)
+			} else if note != "" {
+				t.Errorf("expected NO note for a disposable target, got %q", note)
 			}
 		})
 	}

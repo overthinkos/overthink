@@ -313,7 +313,7 @@ func reverseRestoreEnabled(op ReverseOp, re ReverseExecutor) error {
 
 func reverseRemoveManaged(op ReverseOp, re ReverseExecutor) error {
 	// Managed-block removal happens at the session level, not per-op.
-	// This kind is present for completeness but the runLocalDel path
+	// This kind is present for completeness but LocalUnifiedTarget.Del
 	// calls RemoveManagedBlock directly when the last deploy is torn
 	// down.
 	return nil
@@ -361,8 +361,8 @@ func reverseCoprDisable(op ReverseOp, re ReverseExecutor) error {
 // a possibly DEBIAN_FRONTEND-prefixed argv (we strip the prefix and
 // set it as env instead).
 //
-// Dispatch: when re.reverseRunner() is non-nil (set by runVmDel,
-// potentially others in the future), delegates the command to the
+// Dispatch: when re.reverseRunner() is non-nil (set by the VM target's
+// Del, potentially others in the future), delegates the command to the
 // runner so it executes in the right context (remote VM over SSH,
 // etc.). Otherwise falls back to local `sudo <argv>`.
 func runSudoArgvReverse(argv []string, re ReverseExecutor) error {

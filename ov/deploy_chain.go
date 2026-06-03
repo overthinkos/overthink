@@ -12,7 +12,7 @@ import (
 // Pre-cutover (2026-04), four call sites built executor chains (or partial
 // chains) independently:
 //   - ov deploy add  → deriveChildExecutorForPath in deploy_add_cmd.go
-//   - ov eval live <name> → ad-hoc construction in eval_cmd.go runHost/runContainer/runVm
+//   - ov eval live <name> → ad-hoc executor construction in eval_cmd.go
 //   - ov eval live parent.child → resolveNestedNode + a *flat* VmTestExecutor
 //                            (silent single-hop bug — leaf tests ran on the
 //                            parent VM via SSH instead of inside the leaf pod)
@@ -198,16 +198,16 @@ func appendHopForFlatPath(chain DeployExecutor, node *DeploymentNode, flatPath, 
 // rootExecutorForDeployNode selects the ROOT DeployExecutor for a
 // `target: local` deployment node from its `host:` field — the single source
 // of truth for "where does a local deploy's work run?", shared by
-// `ov deploy add` (runLocal) and `ov eval live` (runLocalEval) so neither
-// re-implements the selection (R3):
+// `ov deploy add` (LocalUnifiedTarget.Add) and `ov eval live`
+// (runLocalEval) so neither re-implements the selection (R3):
 //
 //	host: ""  / "local"        → ShellExecutor{} (this machine, direct shell)
 //	host: "<user>@<machine>"   → &SSHExecutor{User, Host, Port, …}
 //	host: "<machine>" + user:  → SSHExecutor with User from node.User
 //
 // It does NOT handle the nested-inside-a-parent case (opts.ParentExec); that
-// stays in runLocal because it's deploy-execution-specific. Returns
-// ShellExecutor{} for a nil node.
+// stays in LocalUnifiedTarget.Add because it's deploy-execution-specific.
+// Returns ShellExecutor{} for a nil node.
 func rootExecutorForDeployNode(node *DeploymentNode) (DeployExecutor, error) {
 	if node == nil {
 		return ShellExecutor{}, nil

@@ -1,32 +1,58 @@
 package main
 
-// deploy_target_unified.go — forward-looking DeployTarget interface for
-// schema v3.
+// deploy_target_unified.go — the canonical DeployTarget interface.
 //
-// The legacy DeployTarget interface at install_plan.go:859 is the 2-method
-// contract (Name + Emit) that the four target implementers (host, vm,
-// container/pod, k8s) currently satisfy. This file defines the unified
-// replacement: UnifiedDeployTarget with real methods, plus LifecycleTarget
-// for the three live-runtime targets.
+// The legacy DeployTarget interface in install_plan.go is the 2-method
+// contract (Name + Emit) that the five target implementers (local, vm,
+// pod, k8s, android) satisfy at the IR-emission level. This file defines
+// the lifecycle-and-management contract layered on top: UnifiedDeployTarget
+// with the per-verb methods, plus LifecycleTarget for the live-runtime
+// targets.
 //
-// Rollout plan (from /home/atrawog/.claude/plans/can-you-have-a-recursive-axolotl.md):
-//   Phase 1 (this commit): interfaces + opts types defined alongside the
-//       legacy DeployTarget. Nothing uses them yet.
-//   Phase 2: each target implements UnifiedDeployTarget (Host/Vm/Pod/K8s)
-//       and LifecycleTarget (Host/Vm/Pod) as adapters to existing Emit
-//       bodies. ResolveTarget(name) returns UnifiedDeployTarget.
-//   Phase 3: every ov cmd dispatcher switches to ResolveTarget +
-//       UnifiedDeployTarget method calls.
-//   Phase 4-5: rename container → pod, kubernetes → k8s; delete legacy
-//       DeployTarget interface + per-cmd dispatch switches.
-//
-// Keeping both interfaces live during Phases 1-3 means existing call
-// sites keep compiling while new call sites adopt UnifiedDeployTarget
-// incrementally. Phase 5 deletes the legacy surface.
+// Every `ov deploy add` / `ov deploy del` / `ov update` dispatches through
+// ResolveTarget (unified_targets.go) → an UnifiedDeployTarget adapter. The
+// adapter CONSTRUCTS its live embedded legacy target (SSHExecutor + VmDeployTarget
+// for vm, Generator + PodDeployTarget for pod, LocalDeployTarget for local,
+// AndroidDeployTarget for android, K8sDeployTarget for k8s) from the DeployContext
+// it receives, then runs the kind-specific deploy. There is no per-kind dispatch
+// switch in the cmd files — the kind lives behind the adapter method.
 
 import (
 	"context"
 )
+
+// DeployContext carries everything an Add needs from the generic
+// dispatchNode pre-stage: the dispatch-merged DeploymentNode (the
+// project+operator field-level merge from resolveTreeRoot — the SINGLE
+// source of truth for node fields like Nested/Env/ephemeral/disposable,
+// NEVER re-read via loadDeployConfigForRead inside an Add), the deploy
+// name + project dir, the loaded image/distro/builder configs, and the
+// resolved primary base ref. One value threaded into every target.Add so
+// each adapter constructs its live embedded target without re-resolving
+// config that dispatchNode already loaded.
+type DeployContext struct {
+	// Node is the dispatch-merged DeploymentNode. nil for a ref-based
+	// deploy with no deploy.yml entry (e.g. `ov deploy add host ./x.yml`).
+	Node *DeploymentNode
+
+	// Name is the deploy key (the bed key / deploy.yml map key, e.g.
+	// "eval-k3s-vm"). Distinct from the kind:vm entity name (node.Vm).
+	Name string
+
+	// Dir is the project directory.
+	Dir string
+
+	// Cfg / DistroCfg / BuilderCfg are the configs loaded once by
+	// dispatchNode (loadConfigForDeploy). Reused by each Add so the
+	// construction matches what dispatchNode compiled plans against.
+	Cfg        *Config
+	DistroCfg  *DistroConfig
+	BuilderCfg *BuilderConfig
+
+	// Base is the resolved primary base — the image name for pod/k8s,
+	// or the deploy path for target-only kinds (local/vm/android).
+	Base string
+}
 
 // UnifiedDeployTarget is the unified contract all four deploy methods
 // (host, vm, pod, k8s) implement uniformly. Each method corresponds to
@@ -56,8 +82,10 @@ type UnifiedDeployTarget interface {
 
 	// Add applies the given plans to the target. Equivalent to
 	// `ov deploy add <name>`. Idempotent: re-applying the same plan
-	// is safe.
-	Add(ctx context.Context, plans []*InstallPlan, opts EmitOpts) error
+	// is safe. dctx carries the dispatch-merged node + loaded configs;
+	// the adapter constructs its live embedded target from it (never
+	// re-reading the node from disk — see DeployContext).
+	Add(ctx context.Context, dctx *DeployContext, plans []*InstallPlan, opts EmitOpts) error
 
 	// Del reverses every layer currently recorded for this target
 	// and removes the deploy record. Equivalent to `ov deploy del

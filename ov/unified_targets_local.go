@@ -1,15 +1,16 @@
 package main
 
-// unified_targets_host.go — C11 (Phase 3) implementations of
-// LocalUnifiedTarget's lifecycle and management methods.
+// unified_targets_local.go — LocalUnifiedTarget's Add + lifecycle and
+// management methods.
 //
-// Pattern: methods that map to existing CLI bodies (Del, Rebuild) are
-// extracted from their cmd-file homes into target methods; the cmd-file
-// entry points become thin wrappers that construct a LocalUnifiedTarget
-// and call its method. Methods that don't apply to the host target
-// (Start, Stop, Logs) return ErrNotSupportedOnHost — the host is always
-// running, has no separate journal we own, and isn't ours to "stop".
-// The pattern mirrors ErrNotSupportedOnK8s for k8s targets.
+//   - Add: constructs the live LocalDeployTarget, selects the executor
+//     (ShellExecutor for host:local, SSHExecutor otherwise), emits, and
+//     runs --verify.
+//   - Del / Rebuild: ledger teardown / re-apply over the existing ledger.
+//   - Methods that don't apply to the host target (Start, Stop, Logs)
+//     return ErrNotSupportedOnHost — the host is always running, has no
+//     separate journal we own, and isn't ours to "stop". The pattern
+//     mirrors ErrNotSupportedOnK8s for k8s targets.
 
 import (
 	"context"
@@ -44,8 +45,7 @@ func (e *hostReverseExec) reverseKeepRepoChanges() bool { return e.KeepRepoChang
 func (e *hostReverseExec) reverseKeepServices() bool    { return e.KeepServices }
 func (e *hostReverseExec) reverseRunner() ReverseRunner { return e.Runner }
 
-// Del tears down every host deploy in the ledger. Body extracted from
-// DeployDelCmd.runHostDel — the cmd-file path is now a thin wrapper.
+// Del tears down every host deploy in the ledger.
 //
 // Walks the deploys ledger, decrements layer refcounts, runs ReverseOps
 // for layers that drop to refcount=0, and removes deploy + layer
@@ -113,7 +113,7 @@ func (t *LocalUnifiedTarget) Del(ctx context.Context, opts DelOpts) error {
 
 // teardownHostDeploy reverses a single host deploy record. Free
 // function so LocalUnifiedTarget.Del can call it without a DeployDelCmd
-// instance — the legacy DeployDelCmd.tearDownDeploy now delegates here.
+// instance.
 func teardownHostDeploy(paths *LedgerPaths, rec *DeployRecord, hostHome string, re ReverseExecutor) error {
 	for _, layer := range rec.Layer {
 		layerRec, shouldRemove, err := RemoveLayerDeployment(paths, layer, rec.DeployID)
@@ -269,8 +269,7 @@ func (t *LocalUnifiedTarget) Shell(ctx context.Context, cmd []string) error {
 // from RebuildOpts is checked by the caller's disposable-classification
 // logic, so this method does not re-validate.
 //
-// This is the host-deploy rebuild path — the cmd-file
-// caller is now a thin wrapper.
+// This is the host-deploy rebuild path.
 func (t *LocalUnifiedTarget) Rebuild(ctx context.Context, opts RebuildOpts) error {
 	if opts.DryRun {
 		fmt.Printf("dry-run: ov deploy add %s\n", t.NodeName)
@@ -290,4 +289,92 @@ func (t *LocalUnifiedTarget) Stop(ctx context.Context) error {
 }
 func (t *LocalUnifiedTarget) Logs(ctx context.Context, opts LogsOpts) error {
 	return fmt.Errorf("host %q: %w", t.NodeName, ErrNotSupportedOnHost)
+}
+
+// Add applies a target:local deployment to its destination. Constructs
+// the live LocalDeployTarget (host distro + kind:local template + cfg),
+// selects the executor (opts.ParentExec for a nested local node, else
+// rootExecutorForDeployNode per node.Host: ShellExecutor for host:local,
+// SSHExecutor otherwise), injects layer secrets, emits, retrieves
+// artifacts, and runs --verify.
+//
+// node fields come from dctx.Node (the dispatch-merged node) — never
+// re-read from disk.
+func (t *LocalUnifiedTarget) Add(ctx context.Context, dctx *DeployContext, plans []*InstallPlan, opts EmitOpts) error {
+	node := dctx.Node
+	hostDistro, _ := DetectHostDistro()
+	tgt := &LocalDeployTarget{
+		HostHome:   os.Getenv("HOME"),
+		Distro:     hostDistro,
+		ProjectDir: dctx.Dir,
+	}
+	// Resolve the kind:local template (when the deployment has a
+	// `local: <name>` ref) so its `images:` pre-pass + Eval/DeployEval
+	// reach the target. nil when the deployment uses inline add_layers:.
+	if node != nil && strings.TrimSpace(node.Local) != "" {
+		tgt.LocalSpec = findLocalSpec(dctx.Dir, strings.TrimSpace(node.Local))
+	}
+	if dctx.Cfg != nil {
+		tgt.Cfg = dctx.Cfg
+	} else if cfg, cfgErr := LoadConfig(dctx.Dir); cfgErr == nil {
+		tgt.Cfg = cfg
+	}
+
+	// Pick the executor via the shared selector (R3 — same logic
+	// ov eval live's runLocalEval uses). opts.ParentExec (nested
+	// local-target inside a container/VM) stays here: it's
+	// deploy-execution-specific, not a property of the node's host:.
+	var exec DeployExecutor = ShellExecutor{}
+	switch {
+	case opts.ParentExec != nil:
+		tgt.Executor = opts.ParentExec
+		exec = opts.ParentExec
+	default:
+		e, perr := rootExecutorForDeployNode(node)
+		if perr != nil {
+			return fmt.Errorf("deployment %q: %w", dctx.Name, perr)
+		}
+		exec = e
+		// Preserve prior behaviour: leave tgt.Executor unset (nil →
+		// LocalDeployTarget's internal ShellExecutor default) for host:local;
+		// set it only for a remote SSH venue.
+		if _, isShell := e.(ShellExecutor); !isShell {
+			tgt.Executor = e
+		}
+	}
+
+	// Resolve layer secret_requires / secret_accepts and inject them into
+	// each TaskStep's env BEFORE emission (R3 shared helper).
+	layerList, secretEnv, err := prepareLayerSecrets(plans, dctx.Dir)
+	if err != nil {
+		return fmt.Errorf("loading layers for secret resolution: %w", err)
+	}
+
+	// artifactEnv = secretEnv overlaid with the merged node's env: lines.
+	artifactEnv := buildArtifactEnv(secretEnv, node)
+
+	if err := tgt.Emit(plans, opts); err != nil {
+		return err
+	}
+
+	// Retrieve layer artifacts + k3s post-hook (R3 shared helper). No-op
+	// under DryRun.
+	if err := retrieveArtifactsAndK3s(ctx, exec, layerList, dctx.Name, artifactEnv, opts); err != nil {
+		return fmt.Errorf("retrieving layer artifacts: %w", err)
+	}
+
+	// --verify: run the deployment's deploy-scope eval probes on the venue
+	// we just deployed to (the same `exec`). Default (Verify=false) is a
+	// no-op. Reuses evalLocalDeployScope so `ov deploy add <local> --verify`
+	// sources + runs probes identically to `ov eval live <local>` (R3).
+	if opts.Verify && !opts.DryRun {
+		fails, verr := evalLocalDeployScope(dctx.Dir, node, dctx.Name, "", "", nil, exec, "text")
+		if verr != nil {
+			return fmt.Errorf("deployment %q: --verify: %w", dctx.Name, verr)
+		}
+		if fails > 0 {
+			return fmt.Errorf("deployment %q: --verify: %d deploy-scope check(s) failed", dctx.Name, fails)
+		}
+	}
+	return nil
 }

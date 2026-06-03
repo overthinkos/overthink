@@ -2,41 +2,28 @@ package main
 
 // unified_targets.go — The unified deploy-target abstraction.
 //
-// Adds UnifiedDeployTarget/LifecycleTarget adapters for each of the
-// four legacy DeployTarget implementers (LocalDeployTarget,
-// VmDeployTarget, PodDeployTarget, K8sDeployTarget), plus the
+// UnifiedDeployTarget/LifecycleTarget adapters for each of the five
+// legacy DeployTarget implementers (LocalDeployTarget, VmDeployTarget,
+// PodDeployTarget, K8sDeployTarget, AndroidDeployTarget), plus the
 // ResolveTarget dispatcher.
 //
 // Each adapter wraps an existing legacy target via struct embedding.
 // Methods on the adapter take precedence over inherited legacy methods
-// (Go's outer-struct shadowing), so Name()/Kind()/Executor()/Add() can
-// be defined once here without touching the legacy files.
+// (Go's outer-struct shadowing), so Name()/Kind()/Executor()/Add() are
+// defined once here without touching the legacy files.
 //
-// Scope of this commit:
-//   - Kind()/Executor()/Add() are live: Add() delegates to the legacy
-//     Emit() body. Everything that already worked under the legacy
-//     interface keeps working when dispatched through the adapter.
-//   - Del()/Test()/Update() and the lifecycle methods (Start/Stop/
-//     Status/Logs/Shell/Rebuild) are STUBS that return a typed
-//     ErrNotYetImplemented sentinel. Phase 3 extracts the existing
-//     runLocalDel / runContainerDel / runVmDel / ov eval live / ov start /
-//     ov stop / etc. bodies from their cmd files into these methods.
-//   - ResolveTarget returns a concrete adapter given a DeploymentNode.
-//     For now, only legacy-compatible targets are instantiable; full
-//     construction (distro detection, builder resolver, SSH executor
-//     setup, etc.) still happens in the cmd files. ResolveTarget here
-//     is the shape; Phase 3 moves the construction logic inward.
+// Add()/Del()/Test()/Update() and the lifecycle methods (Start/Stop/
+// Status/Logs/Shell/Rebuild) are the canonical implementations: Add()
+// CONSTRUCTS its live embedded target from the DeployContext and runs
+// the kind-specific deploy; Del() walks the ledger / runs kubectl /
+// uninstalls apks per kind. ResolveTarget(node, name) returns the right
+// adapter; the cmd files (deploy_add_cmd.go) carry no per-kind dispatch
+// switch — they build the DeployContext and call target.Add / target.Del.
 
 import (
-	"context"
 	"errors"
 	"fmt"
 )
-
-// ErrNotYetImplemented is returned by adapter methods that Phase 2
-// hasn't filled in yet. Callers can `errors.Is(err, ErrNotYetImplemented)`
-// to fall back to the legacy cmd-file path during the transition.
-var ErrNotYetImplemented = errors.New("unified target method not yet implemented (Phase 3 extraction pending)")
 
 // ErrNotSupportedOnK8s is returned by lifecycle methods on the K8s
 // target. K8s cluster lifecycle is kubectl-managed outside ov; ov
@@ -66,7 +53,7 @@ type LocalUnifiedTarget struct {
 	// populated by the dispatcher from `ov deploy del --keep-…`.
 	// Forwarded to runReverseOps when Del runs. Default false → repo
 	// changes and packaged services ARE reversed (the destructive
-	// teardown path matches today's runLocalDel behavior).
+	// teardown path).
 	KeepRepoChanges bool
 	KeepServices    bool
 
@@ -86,9 +73,8 @@ func (t *LocalUnifiedTarget) Executor() DeployExecutor {
 	return t.LocalDeployTarget.exec()
 }
 
-func (t *LocalUnifiedTarget) Add(ctx context.Context, plans []*InstallPlan, opts EmitOpts) error {
-	return t.LocalDeployTarget.Emit(plans, opts)
-}
+// Add for the local target lives in unified_targets_local.go alongside
+// Del/Test/Update/Rebuild — it constructs the live LocalDeployTarget.
 
 // ---------------------------------------------------------------------------
 // VmUnifiedTarget — adapter over VmDeployTarget.
@@ -118,6 +104,12 @@ type VmUnifiedTarget struct {
 	// dispatcher from the persisted vm_state in deploy.yml. Nil →
 	// Del builds it itself from buildVmReverseRunner(NodeName).
 	RevRunner ReverseRunner
+
+	// NodeOnly mirrors `ov deploy add --node-only`: when true, Add does
+	// NOT descend into nested target:pod children (the caller deploys
+	// them explicitly afterwards via the dotted path). Set by the
+	// dispatcher from DeployAddCmd.NodeOnly.
+	NodeOnly bool
 }
 
 func (t *VmUnifiedTarget) Name() string { return t.NodeName }
@@ -129,9 +121,10 @@ func (t *VmUnifiedTarget) Executor() DeployExecutor {
 	return t.VmDeployTarget.Exec
 }
 
-func (t *VmUnifiedTarget) Add(ctx context.Context, plans []*InstallPlan, opts EmitOpts) error {
-	return t.VmDeployTarget.Emit(plans, opts)
-}
+// Add for the vm target lives in unified_targets_vm.go alongside
+// Del/Test/Update/Rebuild — it constructs the live VmDeployTarget
+// (ssh-config stanza + auto-boot + SSHExecutor) and deploys nested
+// pods from the merged dctx.Node.
 
 // ---------------------------------------------------------------------------
 // PodUnifiedTarget — adapter over PodDeployTarget.
@@ -158,6 +151,15 @@ type PodUnifiedTarget struct {
 	// `image:` field (or NodeName when absent). Empty → falls back to
 	// NodeName at Rebuild time.
 	BaseImageRef string
+
+	// Add-time inputs, set by the dispatcher from DeployAddCmd flags.
+	// Tag overrides the resolved CalVer; Ref is the user-supplied image
+	// ref (persisted into deploy.yml when --disposable/--lifecycle are
+	// set); Disposable / Lifecycle carry the classification opt-ins.
+	Tag        string
+	Ref        string
+	Disposable bool
+	Lifecycle  string
 }
 
 func (t *PodUnifiedTarget) Name() string { return t.NodeName }
@@ -169,9 +171,9 @@ func (t *PodUnifiedTarget) Executor() DeployExecutor {
 	return t.PodDeployTarget.exec()
 }
 
-func (t *PodUnifiedTarget) Add(ctx context.Context, plans []*InstallPlan, opts EmitOpts) error {
-	return t.PodDeployTarget.Emit(plans, opts)
-}
+// Add for the pod target lives in unified_targets_pod.go alongside
+// Del/Test/Update/Rebuild — it constructs the overlay PodDeployTarget
+// (Generator + ResolvedImage + base-image DistroDef + baseRef CalVer).
 
 // ---------------------------------------------------------------------------
 // K8sUnifiedTarget — adapter over K8sDeployTarget.
@@ -197,61 +199,89 @@ func (t *K8sUnifiedTarget) Kind() string { return "k8s" }
 // today; no code path exists).
 func (t *K8sUnifiedTarget) Executor() DeployExecutor { return nil }
 
-func (t *K8sUnifiedTarget) Add(ctx context.Context, plans []*InstallPlan, opts EmitOpts) error {
-	return t.K8sDeployTarget.Emit(plans, opts)
+// Add for the k8s target emits a Kustomize tree from (caps, node,
+// cluster) — it does NOT consume the InstallPlan IR (plans is ignored,
+// per K8sDeployTarget.Emit being a no-op). Body in unified_targets_k8s.go.
+//
+// Del / Test / Update for k8s also live in unified_targets_k8s.go.
+
+// ---------------------------------------------------------------------------
+// AndroidUnifiedTarget — adapter over AndroidDeployTarget.
+//
+// A target: android deploy installs its add_layer: layers' apk: packages
+// onto a kind:android DEVICE (an in-pod emulator or a remote adb endpoint).
+// Like K8s it only implements UnifiedDeployTarget (not LifecycleTarget) —
+// the device's lifecycle belongs to its pod deploy / the remote host, not
+// to the android deploy. Start/Stop/etc. are not meaningful here.
+// ---------------------------------------------------------------------------
+
+type AndroidUnifiedTarget struct {
+	*AndroidDeployTarget
+
+	// NodeName is the deploy.yml identifier.
+	NodeName string
 }
 
-func (t *K8sUnifiedTarget) Del(ctx context.Context, opts DelOpts) error {
-	return fmt.Errorf("k8s %q: %w", t.NodeName, ErrNotYetImplemented)
-}
-func (t *K8sUnifiedTarget) Test(ctx context.Context, checks []Check, opts TestOpts) error {
-	return fmt.Errorf("k8s %q: %w", t.NodeName, ErrNotYetImplemented)
-}
-func (t *K8sUnifiedTarget) Update(ctx context.Context, plans []*InstallPlan, opts UpdateOpts) error {
-	return fmt.Errorf("k8s %q: %w", t.NodeName, ErrNotYetImplemented)
-}
+func (t *AndroidUnifiedTarget) Name() string             { return t.NodeName }
+func (t *AndroidUnifiedTarget) Kind() string             { return "android" }
+func (t *AndroidUnifiedTarget) Executor() DeployExecutor { return nil }
+
+// Add / Del for the android target live in unified_targets_android.go —
+// Add resolves + readiness-gates the device then installs apks; Del
+// uninstalls them best-effort.
 
 // ---------------------------------------------------------------------------
 // ResolveTarget — the unified dispatcher.
 //
 // Looks up a deploy.yml node by name, validates that `target:` is set,
-// and returns the appropriate UnifiedDeployTarget adapter.
-//
-// Phase 2 scope: returns adapters with nil embedded legacy targets
-// when full construction (distro detection, SSH setup, etc.) is only
-// possible from the existing cmd-file entry points. Callers that need
-// a fully-live target still go through the legacy runHost/runVM/
-// runContainer paths during the Phase 2→3 transition. Once Phase 3
-// moves the construction logic into these adapters, ResolveTarget
-// becomes the canonical entry point.
+// and returns the appropriate UnifiedDeployTarget adapter. This is the
+// canonical entry point for every deploy verb (`ov deploy add` / `del`
+// and `ov update`). The returned adapter carries identity only; its Add
+// method CONSTRUCTS the live embedded target from the DeployContext.
 // ---------------------------------------------------------------------------
 
-// ResolveTarget returns the UnifiedDeployTarget for `name`. It loads
-// the node from the given UnifiedFile (or similar — TODO: plumb the
-// right loader signature in Phase 3) and dispatches on node.Target.
+// canonicalTarget normalizes the legacy target spellings to the
+// canonical vocabulary (local|vm|pod|k8s|android). "container" → "pod",
+// "kubernetes" → "k8s", "host" → "local". An empty value is left empty
+// so ResolveTarget can raise the missing-target error. The `ov migrate`
+// deploy step rewrites these on-disk; this normalization keeps the
+// resolver tolerant of in-flight configs.
+func canonicalTarget(target string) string {
+	switch target {
+	case "container":
+		return "pod"
+	case "kubernetes":
+		return "k8s"
+	case "host":
+		return "local"
+	}
+	return target
+}
+
+// ResolveTarget returns the UnifiedDeployTarget for `name`, dispatching
+// on the node's canonical target. The node MUST be the dispatch-merged
+// DeploymentNode (project+operator field merge from resolveTreeRoot) —
+// the adapter consumes node fields (Nested/Env/ephemeral/disposable)
+// directly and NEVER re-reads them from disk.
 //
 // Errors:
-//   - "no deployment X" — node absent from deploy.yml
+//   - "no deployment X" — node absent / nil
 //   - "X: missing required `target:`" — schema violation
-//   - "X: unknown target Y" — value not in host|vm|pod|k8s
+//   - "X: unknown target Y" — value not in local|vm|pod|k8s|android
 func ResolveTarget(node *DeploymentNode, name string) (UnifiedDeployTarget, error) {
 	if node == nil {
 		return nil, fmt.Errorf("no deployment %q; run `ov deploy list`", name)
 	}
 
-	// Schema v3 invariant: every deployment MUST carry target:.
-	// Phase 6's migrator sets it for legacy entries; after the
-	// cutover commit, missing target: is a hard error at load.
+	// Every deployment MUST carry target:. The migrator sets it for
+	// legacy entries; missing target: is a hard error at load.
 	if node.Target == "" {
 		return nil, fmt.Errorf("deployment %q missing required `target:` field "+
-			"(local|vm|pod|k8s); run `ov migrate`", name)
+			"(local|vm|pod|k8s|android); run `ov migrate`", name)
 	}
 
-	switch node.Target {
+	switch canonicalTarget(node.Target) {
 	case "local":
-		// Construction is enriched by the cmd-file dispatch path
-		// (distro detection, shell detection, executor selection from
-		// node.Host). The unified adapter just carries identity here.
 		return &LocalUnifiedTarget{NodeName: name}, nil
 
 	case "vm":
@@ -263,14 +293,15 @@ func ResolveTarget(node *DeploymentNode, name string) (UnifiedDeployTarget, erro
 		// NodeName when empty).
 		return &PodUnifiedTarget{NodeName: name, BaseImageRef: node.Image}, nil
 
-	case "k8s", "kubernetes":
-		// "kubernetes" is the legacy spelling; same pattern as
-		// container → pod.
+	case "k8s":
 		return &K8sUnifiedTarget{NodeName: name}, nil
+
+	case "android":
+		return &AndroidUnifiedTarget{NodeName: name}, nil
 
 	default:
 		return nil, fmt.Errorf("deployment %q: unknown target %q "+
-			"(want host|vm|pod|k8s)", name, node.Target)
+			"(want local|vm|pod|k8s|android)", name, node.Target)
 	}
 }
 
@@ -281,9 +312,11 @@ var (
 	_ UnifiedDeployTarget = (*VmUnifiedTarget)(nil)
 	_ UnifiedDeployTarget = (*PodUnifiedTarget)(nil)
 	_ UnifiedDeployTarget = (*K8sUnifiedTarget)(nil)
+	_ UnifiedDeployTarget = (*AndroidUnifiedTarget)(nil)
 
 	_ LifecycleTarget = (*LocalUnifiedTarget)(nil)
 	_ LifecycleTarget = (*VmUnifiedTarget)(nil)
 	_ LifecycleTarget = (*PodUnifiedTarget)(nil)
-	// K8sUnifiedTarget intentionally NOT in the LifecycleTarget set.
+	// K8sUnifiedTarget + AndroidUnifiedTarget intentionally NOT in the
+	// LifecycleTarget set (cluster / device lifecycle is external).
 )

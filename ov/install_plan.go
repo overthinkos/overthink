@@ -885,8 +885,8 @@ func (s *ApkInstallStep) Venue() Venue       { return VenueHostNative }
 func (s *ApkInstallStep) RequiresGate() Gate { return GateNone }
 
 // Reverse returns no ledger ops — Android teardown is not ledger-based.
-// `ov deploy del <android>` (runAndroidDel) re-resolves the deploy's apk
-// layers and `pm uninstall`s each package directly.
+// `ov deploy del <android>` (AndroidUnifiedTarget.Del) re-resolves the
+// deploy's apk layers and `pm uninstall`s each package directly.
 func (s *ApkInstallStep) Reverse() []ReverseOp { return nil }
 
 // RebootStep requests a reboot of the deploy target after this layer's steps.

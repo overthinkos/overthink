@@ -32,9 +32,12 @@ import (
 //   ~/.local/share/ov/vm/ov-arch/instance.yml:
 //     disposable: false
 //     lifecycle: long-running
-// and `ov update arch` will refuse with the standard refusal
-// message — no need to edit the project's deploy.yml or stash a
-// different lifecycle tag in version control.
+// and the AUTONOMOUS rebuild path (the eval-runner / R10 discipline)
+// then treats the domain as non-disposable and skips it — protecting
+// the experiment from an unattended destroy, with no need to edit the
+// project's deploy.yml or stash a different lifecycle tag in version
+// control. (An explicit `ov update arch` still obeys, printing a
+// transparency note: the disposable flag gates autonomy, not the verb.)
 type VmInstanceOverride struct {
 	// Disposable, when non-nil, overrides the upstream classification
 	// for the libvirt domain at this path. Pointer-typed to

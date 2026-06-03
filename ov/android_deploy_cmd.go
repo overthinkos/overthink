@@ -1,22 +1,20 @@
 package main
 
-// deploy_add_cmd_android.go — runAndroid / runAndroidDel: the kind:android
-// sibling of runK8s / runLocal / runVM. Wires the dispatch switch in
-// deploy_add_cmd.go.
+// android_deploy_cmd.go — shared kind:android helpers (device + apk
+// resolution) used by AndroidUnifiedTarget.Add / .Del (unified_targets_apk.go).
 //
 // A `target: android` deploy installs its layers' `apk:` packages onto a
 // kind:android DEVICE (an in-pod emulator or a remote adb endpoint). The
 // apps ride in on the deploy's add_layer: set — the SAME overlay mechanism
-// the local/vm targets use — so runAndroid receives the already-compiled
+// the local/vm targets use — so the android Add receives the already-compiled
 // plans and hands their ApkInstallStep entries to AndroidDeployTarget.
 //
 // The device must already be reachable (the emulator pod started, or the
-// endpoint's adb server up). runAndroid gates on sys.boot_completed before
-// installing — never a fixed sleep.
+// endpoint's adb server up). The android Add gates on sys.boot_completed
+// before installing — never a fixed sleep.
 
 import (
 	"fmt"
-	"os"
 	"strings"
 	"time"
 )
@@ -33,82 +31,6 @@ func findAndroidSpec(dir, name string) *AndroidSpec {
 		return nil
 	}
 	return uf.Android[name]
-}
-
-// runAndroid handles `ov deploy add <name>` for target: android entries.
-// plans are the compiled add_layer: plans (their ApkInstallStep entries are
-// what gets installed); base/layerSet are unused (kept for dispatch symmetry).
-func (c *DeployAddCmd) runAndroid(node *DeploymentNode, plans []*InstallPlan, dir string, opts EmitOpts) error {
-	if node == nil || node.Android == "" {
-		return fmt.Errorf("deploy %q: target=android requires `android:` (kind:android device reference)", c.Name)
-	}
-	spec := findAndroidSpec(dir, node.Android)
-	if spec == nil {
-		return fmt.Errorf("deploy %q: kind:android device %q not declared in the android: section", c.Name, node.Android)
-	}
-
-	// Dry-run prints the planned installs WITHOUT resolving (or requiring) a
-	// live device — the emulator pod may not be running yet.
-	if opts.DryRun {
-		fmt.Printf("[dry-run] android device %q (apk packages from add_layer: %v)\n", node.Android, node.AddLayer)
-		return (&AndroidDeployTarget{}).Emit(plans, opts)
-	}
-
-	dev, err := resolveAndroidDevice(spec, node, opts.Path)
-	if err != nil {
-		return fmt.Errorf("deploy %q: resolving android device %q: %w", c.Name, node.Android, err)
-	}
-
-	// Readiness gate — the emulator must have finished booting before pm
-	// install will accept packages. Poll sys.boot_completed (a real
-	// synchronization condition, never a fixed sleep).
-	if err := waitAndroidReady(dev, androidBootDeadline); err != nil {
-		return fmt.Errorf("deploy %q: %w", c.Name, err)
-	}
-
-	return (&AndroidDeployTarget{Device: dev}).Emit(plans, opts)
-}
-
-// runAndroidDel handles `ov deploy del <name>` for target: android entries.
-// Best-effort: re-resolve the deploy's apk packages and `pm uninstall` each
-// (idempotent). The device itself (the pod / remote endpoint) is left intact
-// — its lifecycle belongs to the pod deploy / the remote host.
-func (c *DeployDelCmd) runAndroidDel(paths *LedgerPaths) error {
-	_ = paths
-	dir, err := os.Getwd()
-	if err != nil {
-		return err
-	}
-	tree, _ := resolveTreeRoot(dir)
-	node, ok := tree[c.Name]
-	if !ok {
-		fmt.Fprintf(os.Stderr, "ov deploy del %s: no android deploy entry; nothing to uninstall\n", c.Name)
-		return nil
-	}
-	spec := findAndroidSpec(dir, node.Android)
-	if spec == nil {
-		return fmt.Errorf("deploy %q: kind:android device %q not declared", c.Name, node.Android)
-	}
-	dev, err := resolveAndroidDevice(spec, &node, c.Name)
-	if err != nil {
-		// Device gone (pod removed) — nothing to uninstall.
-		fmt.Fprintf(os.Stderr, "ov deploy del %s: android device not reachable (%v); skipping uninstall\n", c.Name, err)
-		return nil
-	}
-	pkgs := androidApkPackageIDs(&node, dir)
-	for _, pkg := range pkgs {
-		if c.DryRun {
-			fmt.Printf("[dry-run] android: would uninstall %s\n", pkg)
-			continue
-		}
-		out, err := dev.Uninstall(pkg)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "ov deploy del %s: uninstall %s: %v\n", c.Name, pkg, err)
-			continue
-		}
-		fmt.Printf("android: uninstalled %s: %s\n", pkg, out)
-	}
-	return nil
 }
 
 // androidApkPackageIDs re-resolves the deploy's add_layer: layers and

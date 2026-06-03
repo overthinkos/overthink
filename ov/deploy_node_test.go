@@ -141,8 +141,8 @@ func TestHasChildren(t *testing.T) {
 // the kind:local target fields: Local, User,
 // SSHArgs. Without these, target:local deployments authored in the project
 // deploy.yml lost their template ref + ssh overrides whenever resolveTreeRoot
-// merged via MergeDeployConfigs(projectDC, localDC), leaving runLocal with an
-// empty layer list and a silent no-op install.
+// merged via MergeDeployConfigs(projectDC, localDC), leaving the local deploy
+// with an empty layer list and a silent no-op install.
 //
 // Fixture name `ov-cachyos` matches the deployment key (renamed from `qc`
 // in the 2026-05 cross-kind name reuse cutover; the entry itself relocated to

@@ -351,8 +351,8 @@ func runEvalBed(exe, name string, node DeploymentNode, opts bedRunOpts) (*bedRun
 		// at a known-ready state. Best-effort: silent on timeout.
 		waitForVmSshReady(vmTemplate, 120*time.Second)
 		// Deploy the VM node's own layers AND its nested target:pod children.
-		// runVM applies the layers over SSH (incl. any kernel-driver reboot),
-		// then deploys each nested pod as a PERSISTENT in-guest quadlet via
+		// The VM target's Add applies the layers over SSH (incl. any kernel-driver
+		// reboot), then deploys each nested pod as a PERSISTENT in-guest quadlet via
 		// deployNestedPodsInGuest (build + cp-image into the guest + the guest's
 		// own project-free `ov deploy from-image`). The dispatch routes a VM root
 		// node-only (its pod children deploy in-guest, never via a host tree

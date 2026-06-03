@@ -249,7 +249,7 @@ func TestPersistBedDeployOverrides_SeedsPortBeforeConfig(t *testing.T) {
 		t.Errorf("bed image/target not seeded: got image=%q target=%q", entry.Image, entry.Target)
 	}
 	if entry.Disposable == nil || !*entry.Disposable {
-		t.Error("bed disposable not seeded (ov update would refuse the fresh-rebuild step)")
+		t.Error("bed disposable not seeded (the eval-runner requires it to authorize the unattended fresh-rebuild)")
 	}
 	// The sibling production deploy must be untouched (distinct key).
 	sib, ok := dc.Deploy["ollama"]
@@ -284,6 +284,31 @@ func TestBedEvalLiveRefs(t *testing.T) {
 	for i := range want {
 		if got[i] != want[i] {
 			t.Errorf("nested bed ref[%d]: got %q, want %q", i, got[i], want[i])
+		}
+	}
+
+	// Android child: a target:android nested child shares the parent pod's
+	// venue (its app-presence checks are baked into the parent's
+	// android-emulator-layer and run in the parent ref) and has NO own venue
+	// `ov eval live` can resolve — so it gets NO dotted hop, while a pod sibling
+	// still does. This is the eval-coverage gate for the e740430 defect: a hop
+	// for an android child wrongly resolved to a non-existent
+	// `ov-<parent>.device` container, failing every nested pod→android bed's R10.
+	androidNested := map[string]*DeploymentNode{
+		"web":    {Target: "pod"},
+		"device": {Target: "android"},
+	}
+	gotA := bedEvalLiveRefs("eval-android-emulator-pod", androidNested)
+	wantA := []string{
+		"eval-android-emulator-pod",
+		"eval-android-emulator-pod.web", // pod child kept; android "device" omitted
+	}
+	if len(gotA) != len(wantA) {
+		t.Fatalf("android bed: got %v, want %v (android child must be omitted)", gotA, wantA)
+	}
+	for i := range wantA {
+		if gotA[i] != wantA[i] {
+			t.Errorf("android bed ref[%d]: got %q, want %q", i, gotA[i], wantA[i])
 		}
 	}
 }

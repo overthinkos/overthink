@@ -1,42 +1,42 @@
 package main
 
-// unified_targets_vm.go — C12 (Phase 3) implementations of
-// VmUnifiedTarget's lifecycle and management methods.
+// unified_targets_vm.go — VmUnifiedTarget's Add + lifecycle and
+// management methods.
 //
-// Pattern mirrors C11's LocalUnifiedTarget extraction:
-//   - Methods that map to existing CLI bodies (Del, Rebuild) are
-//     extracted from their cmd-file homes; cmd-file entry points
-//     become thin wrappers.
+//   - Add: constructs the live VmDeployTarget (ssh-config stanza +
+//     auto-boot + SSHExecutor), emits the plans, and deploys nested
+//     target:pod children from the merged dctx.Node.Nested.
+//   - Del: walks the host ledger, runs guest-side ReverseOps over SSH,
+//     removes the deploy.yml vm: entry + managed ssh-config stanza.
 //   - Lifecycle methods that have a clean ov subcommand surface
-//     (Start, Stop, Shell, Logs) shell out via runOvSubcommand —
-//     same pattern rebuildVm + rebuildHostDeploy already used. The
+//     (Start, Stop, Shell, Logs) shell out via runOvSubcommand. The
 //     spawned child uses the same binary on $PATH, so a developer
 //     install picks up the local build automatically.
-//   - Test mirrors LocalUnifiedTarget.Test: a Runner over the target's
-//     SSHExecutor walks the supplied checks.
+//   - Test: a Runner over the target's SSHExecutor walks the checks.
 //   - Status reads ov vm list output for the specific VM.
 //
-// Unlike Host, every lifecycle method makes sense on a VM target:
+// Unlike Local, every lifecycle method makes sense on a VM target:
 // there's a real VM to start/stop/console-into. So no ErrNotSupportedOnVM
 // sentinel — every method has a meaningful body.
 
 import (
 	"context"
 	"fmt"
+	"net"
 	"os"
+	"path/filepath"
 	"strings"
+	"time"
 )
 
 // Del tears down a VM deploy: walks the host ledger, runs guest-side
 // ReverseOps over SSH (via sshReverseRunner), removes the deploy.yml
-// vm: entry. Body extracted from DeployDelCmd.runVmDel — the cmd-file
-// runVmDel is now a thin wrapper.
+// vm: entry.
 //
 // The SSHExecutor used for ReverseOps comes from buildVmReverseRunner
 // against the VM's persisted deploy state (deploy.yml's vm_state block).
-// The unified target doesn't carry that state directly; the caller (the
-// thin runVmDel wrapper) supplies a pre-built ReverseRunner via
-// VmUnifiedTarget.RevRunner so this method stays pure.
+// The dispatcher (DeployDelCmd.Run) may pre-build a ReverseRunner and
+// supply it via VmUnifiedTarget.RevRunner; when nil, Del builds it itself.
 func (t *VmUnifiedTarget) Del(ctx context.Context, opts DelOpts) error {
 	paths, err := DefaultLedgerPaths()
 	if err != nil {
@@ -72,7 +72,7 @@ func (t *VmUnifiedTarget) Del(ctx context.Context, opts DelOpts) error {
 
 	if t.RevRunner == nil {
 		// Caller didn't pre-build the runner — build it ourselves from
-		// the persisted deploy state. Path mirrors runVmDel's setup.
+		// the persisted deploy state.
 		runner, rerr := buildVmReverseRunner(t.NodeName)
 		if rerr != nil {
 			return fmt.Errorf("building VM reverse runner: %w", rerr)
@@ -107,7 +107,7 @@ func (t *VmUnifiedTarget) Del(ctx context.Context, opts DelOpts) error {
 		return fmt.Errorf("deleting deploy record: %w", derr)
 	}
 
-	// Ephemeral lifecycle teardown — same path runVmDel takes.
+	// Ephemeral lifecycle teardown.
 	if node, ok := loadDeployConfigForRead("vm target ephemeral-teardown").LookupKey(t.NodeName); ok && node.IsEphemeral() {
 		if tdErr := TeardownEphemeralLifecycle(&node, t.NodeName); tdErr != nil {
 			fmt.Fprintf(os.Stderr, "warning: ephemeral lifecycle teardown: %v\n", tdErr)
@@ -130,6 +130,9 @@ func (t *VmUnifiedTarget) Del(ctx context.Context, opts DelOpts) error {
 				fmt.Fprintf(os.Stderr, "note: ssh-config include cleanup: %v\n", rerr)
 			}
 		}
+	}
+	if !opts.DryRun {
+		fmt.Fprintf(os.Stderr, "Removed VM deploy %s\n", t.NodeName)
 	}
 	return nil
 }
@@ -332,4 +335,213 @@ func (t *VmUnifiedTarget) vmEntityName() string {
 // vmName() helper used by VmStartCmd et al.
 func (t *VmUnifiedTarget) vmDomainName() string {
 	return "ov-" + t.vmEntityName()
+}
+
+// vmEntityForAdd resolves the kind:vm entity name for an add. Prefers the
+// merged node's `vm:` cross-ref (the canonical mapping for a schema-v4
+// deploy where the key != entity, e.g. eval-k3s-vm → vm: k3s-vm); falls
+// back to stripping a legacy "vm:<name>" deploy-key prefix, then to the
+// leaf of a nested dotted path (stack.myvm → myvm).
+func vmEntityForAdd(node *DeploymentNode, name string) (string, error) {
+	if node != nil && node.Vm != "" {
+		return node.Vm, nil
+	}
+	if strings.HasPrefix(name, "vm:") {
+		return vmNameFromDeployName(name)
+	}
+	if strings.Contains(name, ".") {
+		return pathLeaf(name), nil
+	}
+	return "", fmt.Errorf("vm deploy %q: no `vm:` cross-ref and key is not a legacy vm:<name> form", name)
+}
+
+// Add brings a target:vm deployment online: resolves the kind:vm entity,
+// publishes the managed ssh-config stanza, builds an SSHExecutor (or
+// NestedExecutor under a parent), auto-boots the VM if unreachable,
+// constructs the live VmDeployTarget, emits the plans, retrieves layer
+// artifacts, deploys nested target:pod children IN the guest from the
+// MERGED dctx.Node.Nested, and writes back VmDeployState.
+//
+// THE CRUX: nested pods come from dctx.Node — the dispatch-merged node
+// (project+operator field merge from resolveTreeRoot). A whole-node
+// re-read of the operator deploy.yml would drop a project-declared
+// `nested:` under an operator overlay that omits it; consuming the merged
+// node is the one source of truth (R3).
+func (t *VmUnifiedTarget) Add(ctx context.Context, dctx *DeployContext, plans []*InstallPlan, opts EmitOpts) error {
+	node := dctx.Node
+	dir := dctx.Dir
+	deployName := dctx.Name
+
+	vmName, err := vmEntityForAdd(node, deployName)
+	if err != nil {
+		return err
+	}
+
+	// Load the kind:vm entity from overthink.yml.
+	uf, ok, err := LoadUnified(dir)
+	if err != nil {
+		return fmt.Errorf("loading overthink.yml: %w", err)
+	}
+	if !ok || uf.VM == nil {
+		return fmt.Errorf("deploy %q: no overthink.yml or no kind:vm entities declared", deployName)
+	}
+	spec, ok := uf.VM[vmName]
+	if !ok {
+		return fmt.Errorf("deploy %q: no kind:vm entity named %q in overthink.yml", deployName, vmName)
+	}
+
+	// Ephemeral lifecycle hook (FIRST action — panic-safe TTL ordering).
+	// Consumes the MERGED node (never a deploy.yml re-read).
+	registerEphemeralIfMarked(node, deployName)
+
+	// Load existing VmDeployState (RUNTIME state: instance-id, ssh_port,
+	// disk path) from deploy.yml. This is persistence written back by THIS
+	// path — not a node-field re-read — so it legitimately reads the
+	// operator deploy.yml entry keyed by the deploy name.
+	var state *VmDeployState
+	if dc := loadDeployConfigForRead("ov deploy add vm"); dc != nil {
+		if entry, exists := dc.Deploy[deployName]; exists && entry.VmState != nil {
+			state = entry.VmState
+		}
+	}
+	if state == nil {
+		state = &VmDeployState{}
+	}
+
+	// Resolve VM state dir (for SSH keys, NVRAM, persistent sockets).
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("resolving home dir: %w", err)
+	}
+	stateDir := filepath.Join(home, ".local", "share", "ov", "vm", "ov-"+vmName)
+
+	// Resolve SSH details.
+	sshUser := resolveVmSshUser(spec)
+	sshPort, err := resolveVmSshPort(spec, vmName)
+	if err != nil {
+		return err
+	}
+	sshKeyPath := filepath.Join(stateDir, "id_ed25519")
+	knownHostsPath := filepath.Join(stateDir, "known_hosts")
+
+	// Publish (or refresh) the managed ssh-config Host stanza for this VM
+	// and ensure the Include line is present in ~/.ssh/config. The alias
+	// keys off the unprefixed VM template name (vmName).
+	if err := WriteVmSshStanza(home, VmSshStanza{
+		Alias:          VmSshAlias(vmName),
+		Hostname:       "127.0.0.1",
+		Port:           sshPort,
+		User:           sshUser,
+		IdentityFile:   sshKeyPath,
+		KnownHostsFile: knownHostsPath,
+	}); err != nil {
+		return fmt.Errorf("publishing ssh-config stanza: %w", err)
+	}
+	if err := EnsureSshConfigInclude(home); err != nil {
+		return fmt.Errorf("ensuring ssh-config include: %w", err)
+	}
+
+	// Resolve key-injection state (persisted into VmDeployState for audit).
+	smbiosOn, cloudInitOn := ResolveKeyInjectionChannels(spec)
+
+	// Build the DeployExecutor against the managed ssh-config alias. For a
+	// nested VM, the same alias works inside the parent's venue.
+	alias := VmSshAlias(vmName)
+	var exec DeployExecutor = &SSHExecutor{
+		Host:           alias,
+		ConnectTimeout: 10,
+	}
+	if opts.ParentExec != nil {
+		exec = &NestedExecutor{
+			Parent: opts.ParentExec,
+			Jump:   NestedJump{Kind: JumpSSH, Target: alias},
+		}
+	}
+
+	// Build VmDeployTarget.
+	target := &VmDeployTarget{
+		Name:   "vm:" + vmName,
+		VMName: vmName,
+		Spec:   spec,
+		State:  state,
+		Exec:   exec,
+	}
+
+	// Resolve layer secrets + inject them into TaskSteps BEFORE emission
+	// (R3 shared helper).
+	layerList, secretEnv, err := prepareLayerSecrets(plans, dir)
+	if err != nil {
+		return fmt.Errorf("loading layers for secret resolution: %w", err)
+	}
+
+	// artifactEnv = secretEnv overlaid with the MERGED node's env: lines
+	// (R3 shared helper) — so rewrite rules like ${K3S_KUBECONFIG_SERVER}
+	// resolve to the declared value. This consumes dctx.Node directly,
+	// replacing the former mergeNodeEnv(pdc)/mergeNodeEnv(dc) re-read.
+	artifactEnv := buildArtifactEnv(secretEnv, node)
+
+	// Auto-boot integration: if the VM isn't reachable on its SSH port
+	// yet, `ov vm build` + `ov vm create` to boot it. TCP probe — fast.
+	// Skipped in DryRun, when nested, and when OV_DEPLOY_NO_AUTOBOOT is set.
+	if !opts.DryRun && opts.ParentExec == nil && os.Getenv("OV_DEPLOY_NO_AUTOBOOT") == "" {
+		sshAddr := fmt.Sprintf("127.0.0.1:%d", sshPort)
+		conn, dialErr := net.DialTimeout("tcp", sshAddr, 2*time.Second)
+		if dialErr != nil {
+			fmt.Fprintf(os.Stderr,
+				"VM %q not reachable on %s — auto-booting via `ov vm build %s` + `ov vm create %s` (set OV_DEPLOY_NO_AUTOBOOT=1 to skip)...\n",
+				vmName, sshAddr, vmName, vmName)
+			if bErr := runOvSubcommand("vm", "build", vmName); bErr != nil {
+				return fmt.Errorf("auto-boot: ov vm build %s: %w", vmName, bErr)
+			}
+			if cErr := runOvSubcommand("vm", "create", vmName); cErr != nil {
+				return fmt.Errorf("auto-boot: ov vm create %s: %w", vmName, cErr)
+			}
+		} else {
+			_ = conn.Close()
+		}
+	}
+
+	// Emit plans.
+	if err := target.Emit(plans, opts); err != nil {
+		return fmt.Errorf("VmDeployTarget.Emit: %w", err)
+	}
+
+	// Retrieve layer artifacts + k3s post-hook (R3 shared helper). Keyed by the
+	// VM-ENTITY name ("vm:<entity>"), NOT the deploy key: a k3s cluster hosted in
+	// a VM is identified by that VM (one cluster per VM, possibly reached by
+	// several beds/deploys), so its ClusterProfile + artifact cache must land
+	// under "vm-<entity>" — the name `cluster:` refs use (e.g. the eval-k3s-vm
+	// bed's `cluster: "vm-k3s-vm"`). Passing the deploy key here wrote the fresh
+	// kubeconfig under the wrong profile name, leaving the probe on a stale CA.
+	if err := retrieveArtifactsAndK3s(ctx, exec, layerList, "vm:"+vmName, artifactEnv, opts); err != nil {
+		return fmt.Errorf("retrieving layer artifacts: %w", err)
+	}
+
+	// Deploy nested target:pod children as persistent in-guest quadlets.
+	// Runs AFTER Emit (so the VM's own layers + any kernel-driver reboot
+	// are applied). Skipped on dry-run, nested VMs, and --node-only.
+	//
+	// The children come from the dispatch-merged dctx.Node — THE source
+	// of truth (R3).
+	if !opts.DryRun && opts.ParentExec == nil && !t.NodeOnly && node != nil && len(node.Nested) > 0 {
+		if err := deployNestedPodsInGuest(vmName, node, exec, opts); err != nil {
+			return fmt.Errorf("deploying nested pods in guest: %w", err)
+		}
+	}
+
+	// Write back updated VmDeployState to deploy.yml.
+	state.SshUser = sshUser
+	state.SshPort = sshPort
+	if state.Backend == "" {
+		state.Backend = "auto"
+	}
+	state.KeyInjectionResolved = &VmKeyInjectionResolved{SMBIOS: smbiosOn, CloudInit: cloudInitOn}
+	state.OvInstallStrategy = string(ResolveOvInstallStrategy(spec))
+
+	if err := saveVmDeployState(deployName, state, spec); err != nil {
+		return fmt.Errorf("persisting VmDeployState: %w", err)
+	}
+
+	fmt.Fprintf(os.Stderr, "Deployed %s (ssh: %s@127.0.0.1:%d)\n", deployName, sshUser, sshPort)
+	return nil
 }

@@ -68,17 +68,14 @@ func (c *UpdateCmd) dispatchByDeployTarget() error {
 		return err
 	}
 
-	// Enforce disposable-only autonomy: ov update destroys + recreates
-	// the deploy unattended, so the only authorization for that is an
-	// explicit `disposable: true` on the deploy entry (or `ephemeral:`,
-	// which implies disposability — see IsDisposable() + /ov-internals:
-	// disposable "the ephemeral exception"). Lifecycle tags alone do
-	// NOT authorize — this is the anti-derivation invariant. Refusing
-	// here protects shared-host production deploys from accidental
-	// destroy-on-update.
-	if err := checkUpdateDisposable(node, c.Image, c.Instance); err != nil {
-		return err
-	}
+	// `ov update` obeys an EXPLICIT invocation on ANY target — the tool is
+	// fully capable; the disposable-only constraint is a discipline on the AI's
+	// AUTONOMOUS action (CLAUDE.md R10 + /ov-internals:disposable) and on the
+	// eval-runner's unattended fresh-rebuild (validateEvalBeds), NOT a capability
+	// limit on this human-driven verb. For a non-disposable target we print a
+	// one-line transparency note (the operator may have mistyped a name) and
+	// proceed; we never refuse.
+	noteUpdateDisposability(node, c.Image, c.Instance)
 
 	// Normalize legacy target spellings before resolution. Empty / "container"
 	// both mean "pod" (the schema invariant requires target:, so empty is only
@@ -221,30 +218,29 @@ func rewriteQuadletImageLine(path, newRef string) error {
 	return nil
 }
 
-// checkUpdateDisposable enforces the disposable-only autonomy invariant
-// at the `ov update` entry point. Refuses with a remediation message
-// that mirrors `/ov-internals:disposable`'s sample refusal text when
-// the deploy node is not explicitly disposable (and not ephemeral —
-// see IsDisposable() for the implication chain).
+// noteUpdateDisposability prints a one-line transparency note when an EXPLICIT
+// `ov update` targets a deploy that is NOT marked `disposable: true` (and not
+// ephemeral — see IsDisposable() for the implication chain). It NEVER refuses:
+// `ov update` is a human-driven verb that obeys any explicit invocation on any
+// target. The `disposable:` flag remains load-bearing as the authorization for
+// the AI's AUTONOMOUS destroy + rebuild (CLAUDE.md R10) and for the eval-runner's
+// unattended fresh-rebuild (validateEvalBeds) — it just no longer gates this
+// command. The note lets an operator catch a mistyped name before the rebuild
+// proceeds.
 //
-// Cross-kind name reuse is permitted, so the user-facing key for the
-// remediation hint must include the instance suffix when present (the
-// deployKey form matches what's in deploy.yml and what the user typed).
-func checkUpdateDisposable(node *DeploymentNode, image, instance string) error {
+// Cross-kind name reuse is permitted, so the user-facing key includes the
+// instance suffix when present (the deployKey form matches deploy.yml + what the
+// operator typed).
+func noteUpdateDisposability(node *DeploymentNode, image, instance string) {
 	if node == nil || node.IsDisposable() {
-		return nil
+		return
 	}
 	key := deployKey(image, instance)
 	lifecycle := node.Lifecycle
 	if lifecycle == "" {
 		lifecycle = "(unset)"
 	}
-	addArg := image
-	if instance != "" {
-		addArg = key
-	}
-	return fmt.Errorf("ov update: %q is not marked `disposable: true` in deploy.yml (current lifecycle: %s).\n"+
-		"  `ov update` only acts on explicitly disposable deploys — lifecycle tags alone do NOT authorize autonomous destroy.\n"+
-		"  To opt in: edit deploy.yml and set `disposable: true` on the entry, or run: ov deploy add %s <ref> --disposable",
-		key, lifecycle, addArg)
+	fmt.Fprintf(os.Stderr,
+		"Note: %q is not marked `disposable: true` (lifecycle: %s); rebuilding it anyway per your explicit `ov update`.\n",
+		key, lifecycle)
 }

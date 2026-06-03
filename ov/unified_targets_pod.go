@@ -1,23 +1,21 @@
 package main
 
-// unified_targets_pod.go — C13 (Phase 3) implementations of
-// PodUnifiedTarget's lifecycle and management methods.
+// unified_targets_pod.go — PodUnifiedTarget's Add + lifecycle and
+// management methods.
 //
-// Pattern mirrors C11 (Host) and C12 (VM) extractions:
-//   - Del: extracted from DeployDelCmd.runContainerDel; cmd-file becomes
-//     a thin wrapper.
-//   - Rebuild: the pod rebuild path; cmd-
-//     file becomes a thin wrapper.
+//   - Add: builds the overlay image (Generator + PodDeployTarget) and
+//     persists the disposable/lifecycle classification.
+//   - Del: stops + removes the container deploy + overlay image + ledger.
+//   - Rebuild: the pod rebuild path (image build + eval + deploy + restart).
 //   - Lifecycle methods (Start, Stop, Status, Logs, Shell) shell out via
-//     runOvSubcommand to the existing CLI surfaces (ov start / ov stop /
-//     ov status / ov logs / ov shell). The spawned child uses the same
-//     binary on $PATH, so a developer install picks up the local build.
-//   - Test reuses the host pattern: a Runner over the target's executor
-//     walks deploy-scope checks. For pod targets the executor is a
-//     podman-exec wrapper.
-//   - Update shells out to `ov update` (today's image-update path).
+//     runOvSubcommand to the CLI surfaces (ov start / ov stop / ov status
+//     / ov logs / ov shell). The spawned child uses the same binary on
+//     $PATH, so a developer install picks up the local build.
+//   - Test runs deploy-scope checks via a Runner over the target's
+//     podman-exec executor.
+//   - Update shells out to `ov update` (the image-update path).
 //
-// Like VM (and unlike Host), every lifecycle method makes sense on a
+// Like VM (and unlike Local), every lifecycle method makes sense on a
 // pod target — no ErrNotSupportedOnPod sentinel needed.
 
 import (
@@ -28,9 +26,7 @@ import (
 )
 
 // Del stops + removes the container deploy, removes the overlay image
-// (unless KeepImage is set), and cleans up the ledger entry. Body
-// extracted from DeployDelCmd.runContainerDel — the cmd-file caller is
-// now a thin wrapper.
+// (unless KeepImage is set), and cleans up the ledger entry.
 //
 // KeepImage isn't on DelOpts (the unified type is uniform across kinds);
 // the dispatcher passes it via the target's KeepImage field instead.
@@ -262,5 +258,96 @@ func (t *PodUnifiedTarget) Rebuild(ctx context.Context, opts RebuildOpts) error 
 	if err := runOvSubcommand("start", t.NodeName); err != nil {
 		return fmt.Errorf("ov start %s: %w", t.NodeName, err)
 	}
+	return nil
+}
+
+// Add builds the pod (container) overlay: synthesizes a Containerfile
+// (FROM base + the add_layer: build steps) and a deterministic overlay
+// image. Constructs the live PodDeployTarget (Generator + ResolvedImage +
+// base-image DistroDef + baseRef CalVer), injects layer secrets, emits,
+// persists --disposable/--lifecycle, and prints the `ov start` hint.
+//
+// node fields come from dctx.Node (the dispatch-merged node) — the
+// ephemeral check consumes it directly rather than re-reading deploy.yml.
+func (t *PodUnifiedTarget) Add(ctx context.Context, dctx *DeployContext, plans []*InstallPlan, opts EmitOpts) error {
+	node := dctx.Node
+	dir := dctx.Dir
+	base := dctx.Base
+
+	// Ephemeral lifecycle hook (FIRST action — panic-safe TTL ordering).
+	// Consumes the MERGED node (never a deploy.yml re-read).
+	registerEphemeralIfMarked(node, t.NodeName)
+
+	// Build a Generator + ResolvedImage so the overlay's OCITarget renders
+	// tasks as RUN directives (not comments).
+	gen, _ := NewGenerator(dir, t.Tag, ResolveOpts{})
+	var resolvedImg *ResolvedImage
+	if gen != nil && gen.Images != nil {
+		resolvedImg = gen.Images[base]
+	}
+
+	// Resolve DistroDef from the BASE IMAGE's distro, not the operator
+	// host's — the overlay's SystemPackagesSteps render using the base
+	// image's package format (fedora → rpm).
+	var podDistroDef *DistroDef
+	if resolvedImg != nil && len(resolvedImg.Distro) > 0 {
+		podDistroDef = resolveDistroDef(dctx.DistroCfg, resolvedImg.Distro[0])
+	} else {
+		podDistroDef = resolveDistroDef(dctx.DistroCfg, detectHostContext().Distro)
+	}
+
+	// Build the BaseImage ref. With CalVer-only resolution, an empty Tag
+	// resolves to the newest local CalVer so the overlay's FROM line gets
+	// a real tag (never a trailing colon).
+	var baseRef string
+	if t.Tag != "" {
+		baseRef = base + ":" + t.Tag
+	} else if resolved, rerr := ResolveNewestLocalCalVer("podman", base); rerr == nil && resolved != "" {
+		baseRef = resolved
+	} else {
+		baseRef = base
+	}
+
+	tgt := &PodDeployTarget{
+		DeployName:    t.NodeName,
+		BaseImage:     baseRef,
+		DistroDef:     podDistroDef,
+		BuilderConfig: dctx.BuilderCfg,
+		Generator:     gen,
+		Image:         resolvedImg,
+	}
+
+	// Resolve + inject layer secrets so the overlay Containerfile emits
+	// `export VAR=VALUE` before each task body (R3 shared helper).
+	if _, _, err := prepareLayerSecrets(plans, dir); err != nil {
+		return fmt.Errorf("loading layers for secret resolution: %w", err)
+	}
+
+	// Thread ParentExec: when this container is a child of another
+	// deployment, the overlay build runs in the parent's venue.
+	if opts.ParentExec != nil {
+		tgt.Executor = opts.ParentExec
+	}
+	if err := tgt.Emit(plans, opts); err != nil {
+		return err
+	}
+
+	// Persist classification flags into deploy.yml when the user passed
+	// --disposable / --lifecycle.
+	if t.Disposable || t.Lifecycle != "" {
+		saveDeployState(t.NodeName, "", SaveDeployStateInput{
+			SetDisposable: t.Disposable,
+			Disposable:    t.Disposable,
+			SetLifecycle:  t.Lifecycle != "",
+			Lifecycle:     t.Lifecycle,
+			Image:         t.Ref,
+			Target:        "pod",
+		})
+		if t.Disposable {
+			fmt.Fprintln(os.Stderr, "Marked deploy disposable — `ov update` will act unattended on this deploy.")
+		}
+	}
+	fmt.Printf("Overlay image ready: %s\n", tgt.OverlayImageRef())
+	fmt.Println("To start the container, run: ov start " + t.NodeName)
 	return nil
 }

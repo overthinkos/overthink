@@ -200,7 +200,7 @@ func (d AndroidDevice) InstallFromHostApk(path string) (string, error) {
 }
 
 // Uninstall removes a package by id (idempotent — "not installed" is not an
-// error). Used by `ov eval adb uninstall` and runAndroidDel.
+// error). Used by `ov eval adb uninstall` and AndroidUnifiedTarget.Del.
 func (d AndroidDevice) Uninstall(pkg string) (string, error) {
 	dev, err := adbDeviceForAddr(d.AdbAddr, d.serial())
 	if err != nil {

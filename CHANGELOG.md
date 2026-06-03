@@ -22,6 +22,90 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-03 — refactor(ov)!: `ov deploy add`/`del` join the unified `ResolveTarget` dispatch (no per-kind divergence) + `ov update` obeys explicit invocation
+
+Follow-on to the same-day `ov update` unification (next entry). That change
+unified the `update` verb but left `ov deploy add`/`del` on five per-kind `run*`
+helpers (`runLocal` / `runVM` / `runContainer` / `runK8s` / `runAndroid` + their
+`*Del` siblings) behind a `switch target`, while the `UnifiedDeployTarget`
+abstraction sat half-finished (a documented "Phase 2 / Phase 3" split — shallow
+`Add` stubs that only called `Emit`, `ResolveTarget` returning nil-embedded
+targets). That coexistence is exactly the half-migrated state the cutover policy
+forbids, and it bred a real divergence-class bug: `runVM`, `runContainer`, and
+`runK8s` re-read the deploy node from disk (operator `deploy.yml` only, NOT the
+project+operator field-merge `resolveTreeRoot` produces), so a project-declared
+`nested:` block was silently dropped when the operator's per-host entry omitted
+it — the operator `cachyos-gpu` workstation never got its nested pod even though
+the project config declared one (eval beds, having no operator overlay, were
+unaffected — which is why the bug hid behind a green bed).
+
+Fix: `ov deploy add`/`del` now route through `ResolveTarget(node, name)` →
+`target.Add(ctx, dctx, plans, opts)` / `target.Del(ctx, opts)` for EVERY kind —
+no per-kind switch. Each `*UnifiedTarget.Add` constructs its live embedded target
+(the lifted `run*` body) and consumes the **dispatch-merged** `dctx.Node`, so the
+node-divergence bug class is structurally impossible: there is exactly one place
+the merged node enters each kind's deploy. The duplicated secret-injection /
+artifact-env / artifact-retrieval / ephemeral-register logic is hoisted to shared
+helpers (`prepareLayerSecrets` / `buildArtifactEnv` / `retrieveArtifactsAndK3s` /
+`registerEphemeralIfMarked`, ordering preserved: secrets injected before `Emit`).
+A new `AndroidUnifiedTarget` (filename `unified_targets_apk.go` — a `_android.go`
+suffix is a GOOS build constraint that silently excludes the file) carries the
+android deploy. Deleted: `runLocal`, `runVM`, `runContainer`, `runK8s`,
+`runAndroid`, `runLocalDel`, `runContainerDel`, `runVmDel`, `runK8sDel`,
+`runAndroidDel`, `resolveDelTargetKind`, `ErrNotYetImplemented`, and the two
+dispatch switches. Net −213 lines. The legacy no-`deploy.yml`-entry paths
+(`ov deploy add host ./x.yml`, `ov deploy del vm:<name>`) are preserved by
+synthesizing a node from the classified target.
+
+**`ov update` obeys explicit invocation on ANY target (#30):** `ov update` no
+longer REFUSES a non-`disposable: true` target. The `disposable:` flag is the
+authorization for the AI's AUTONOMOUS destroy + rebuild and the eval-runner's
+unattended fresh-rebuild — NOT a capability limit on a human-driven verb.
+`checkUpdateDisposable` (which refused) became `noteUpdateDisposability` (prints a
+one-line transparency note naming the deploy key + lifecycle, then proceeds).
+
+**Two defects R10 surfaced (fixed in-tree, R2):**
+
+- *k3s cluster-name regression (this cutover).* `VmUnifiedTarget.Add` passed the
+  deploy KEY to `retrieveArtifactsAndK3s`/`K3sPostProvision`, so a VM-hosted k3s
+  cluster's `ClusterProfile` landed under the bed/deploy name instead of the
+  VM-entity name `vm-<entity>` that `cluster:` refs use (e.g. `eval-k3s-vm`'s
+  `cluster: "vm-k3s-vm"`). The fresh kubeconfig went to the wrong profile, the
+  probe used a stale same-port profile, and every k8s check failed `x509:
+  certificate signed by unknown authority`. Fixed: pass `"vm:"+vmName` — a k3s
+  cluster in a VM is identified by that VM (one cluster per VM), so its profile +
+  artifact cache key on `vm-<entity>`.
+
+- *android `eval-live-device` (pre-existing `e740430`, surfaced once this cutover
+  fixed the earlier failure that masked it).* `bedEvalLiveRefs` emitted a per-child
+  `ov eval live <parent>.<child>` hop for EVERY nested child, but `EvalLiveCmd.Run`
+  has no android dotted-path branch, so a `target: android` child resolved to a
+  non-existent `ov-<parent>.device` container. Fixed: `bedEvalLiveRefs` skips
+  `target: android` children — they share the parent pod's venue and are verified
+  by the parent's baked `android-emulator-layer` checks, never a separate hop.
+  Added the android-child test case `e740430` lacked.
+
+**Part C (operator `cachyos-gpu` workstation → nested `selkies-kde-nvidia` pod)
+is the immediate-next cutover, NOT part of this one.** The disposable
+`eval-cachyos-gpu-vm` bed (fresh VM, fresh guest ov) is the R10 gate that PROVES
+the nested-pod-on-GPU mechanism this unification enables (nested `selkies-kde`
+32/0/0, `NVENC active`, survives fresh rebuild). The LIVE operator workstation
+migration is blocked on a SEPARATE, orthogonal `cachyos-gpu`-VM ov-provisioning
+issue: that VM's guest ov is rebuilt from a stale in-guest source on each deploy
+(no `ov deploy from-image`, advancing build-time CalVer), so the in-guest
+nested-pod deploy fails `unexpected argument from-image`, and `ov update --build`
+(which rebuilds the cloud_image VM disk, not the guest ov's source) does not
+refresh it. The guest-ov-provisioning fix + the live workstation migration are
+the next cutover.
+
+R10: all five `kind: eval` bed kinds green on the final binary (ov
+`2026.154.1647`) — `eval-pod` (pod), `eval-local` (local), `eval-k3s-vm`
+(vm+k8s), `eval-android-emulator-pod` (android), `eval-cachyos-gpu-vm`
+(vm+nested-pod, real NVENC). Process lessons re-learned: editing `ov/*.go` mid-bed-run
+trips the stale-binary freshness guard (R9) and aborts in-flight beds' `eval
+live` (Go must be frozen for the bed phase), and a `set -e` block on the left of
+`&&` has its `set -e` suppressed (check exit codes explicitly).
+
 ### 2026-06-03 — refactor(ov)!: `ov update` is one unified codepath for every kind (no per-kind divergence)
 
 RCA found `ov update` did NOT use the unified `LifecycleTarget.Rebuild`

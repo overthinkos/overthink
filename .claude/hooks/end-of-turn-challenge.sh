@@ -35,9 +35,12 @@ END-OF-TURN CHECK (soft — does not block). Confirm against CLAUDE.md
       it to "partial", or delete it, when the runner did not run (the
       2026-04-26 pattern — see CHANGELOG.md).
 
-  [ ] Cutover is ONE phase: every task complete, no transitional/half-migrated
-      state, no "Phase 2 TODO". `git grep` of any removed identifier returns
-      only CHANGELOG.md / migration help-text (R5).
+  [ ] Cutover is ONE phase + NO parked work (R2): every task complete, no
+      transitional/half-migrated state, no "Phase 2 TODO". Every issue surfaced
+      this turn is FIXED in-tree (blocking) or opened as its OWN immediate-next
+      cutover (non-blocking) — NEVER "follow-up / someday / your call later /
+      deferred". `git grep` of any removed identifier returns only CHANGELOG.md
+      / migration help-text (R5).
 
   [ ] Landing (only after R10 PASS): R10 PASS is the sole landing trigger and
       auto-lands per /ov-internals:git-workflow — ONE atomic commit per repo

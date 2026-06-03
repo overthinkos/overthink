@@ -24,7 +24,7 @@ import (
 //
 // Under opts.Nested the collector additionally polls sys.boot_completed on a
 // reachable device so the table distinguishes "adb online but still booting"
-// from "fully booted" — the same readiness condition runAndroid gates on.
+// from "fully booted" — the same readiness condition the android Add gates on.
 type AndroidCollector struct {
 	c *Collector
 }
@@ -159,8 +159,8 @@ func (a *AndroidCollector) collectOne(opts CollectOpts, dn androidDeployNode) De
 
 	// --nested: poll the kernel boot flag so a freshly-started emulator that
 	// has attached to adb but is still booting is distinguishable from one
-	// that has reached steady state. Same readiness condition runAndroid gates
-	// on; a single non-blocking getprop, never a sleep loop.
+	// that has reached steady state. Same readiness condition the android Add
+	// gates on; a single non-blocking getprop, never a sleep loop.
 	if opts.Nested && state == adb.StateOnline {
 		if out, err := d.RunCommand("getprop", "sys.boot_completed"); err == nil && strings.TrimSpace(out) == "1" {
 			row.Uptime = "boot_completed"

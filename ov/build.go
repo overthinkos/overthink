@@ -14,6 +14,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"text/template"
 	"time"
 
 	"golang.org/x/sync/errgroup"
@@ -380,6 +381,30 @@ func renderPacstrapExtraConf(p *PacstrapDef) string {
 	return b.String()
 }
 
+// renderRuntimePacmanConf renders the booted-guest /etc/pacman.conf for a
+// pacstrap distro. `runtime_pacman_conf` is a Go text/template evaluated
+// against the PacstrapDef, so the repo list is derived from the SINGLE
+// `extra_repo` source (`{{ range .ExtraRepos }}`) rather than a second
+// hand-maintained verbatim copy — eliminating the install-vs-runtime drift
+// that left a stale `cachyos-extra` (HTML-stub mirror) in one surface. The
+// template adds only the runtime-specific framing ([options] header + Arch
+// core/extra). A legacy verbatim config (no template actions) renders to
+// itself. Returns "" when unset; surfaces malformed-template errors.
+func renderRuntimePacmanConf(p *PacstrapDef) (string, error) {
+	if p == nil || strings.TrimSpace(p.RuntimePacmanConf) == "" {
+		return "", nil
+	}
+	tmpl, err := template.New("runtime_pacman_conf").Parse(p.RuntimePacmanConf)
+	if err != nil {
+		return "", fmt.Errorf("parsing runtime_pacman_conf template: %w", err)
+	}
+	var b strings.Builder
+	if err := tmpl.Execute(&b, p); err != nil {
+		return "", fmt.Errorf("rendering runtime_pacman_conf: %w", err)
+	}
+	return b.String(), nil
+}
+
 func (c *BuildCmd) runPrivilegedBootstrap(engine, dir, imageName string, img *ResolvedImage) error {
 	if !strings.HasPrefix(img.From, "builder:") {
 		return nil
@@ -427,12 +452,13 @@ func (c *BuildCmd) runPrivilegedBootstrap(engine, dir, imageName string, img *Re
 	}
 
 	ctx := struct {
-		Distro          *DistroDef
-		Packages        []string
-		ExtraPacmanConf string
-		ExtraAptSources string
-		Arch            string
-		Variant         string
+		Distro            *DistroDef
+		Packages          []string
+		ExtraPacmanConf   string
+		RuntimePacmanConf string
+		ExtraAptSources   string
+		Arch              string
+		Variant           string
 	}{
 		Distro:   img.DistroDef,
 		Packages: bootstrapPackagesForImage(img),
@@ -440,8 +466,15 @@ func (c *BuildCmd) runPrivilegedBootstrap(engine, dir, imageName string, img *Re
 	// CachyOS et al. need extra repo blocks (+ an Architecture directive for
 	// microarch repos) injected into pacman.conf before pacstrap so the new
 	// packages resolve from the right repos. Shared with the VM bootstrap path.
+	// RuntimePacmanConf is rendered from the SAME extra_repo source (single
+	// source of truth) and written into the booted guest's /etc/pacman.conf.
 	if img.DistroDef != nil {
 		ctx.ExtraPacmanConf = renderPacstrapExtraConf(img.DistroDef.Pacstrap)
+		runtimeConf, rerr := renderRuntimePacmanConf(img.DistroDef.Pacstrap)
+		if rerr != nil {
+			return rerr
+		}
+		ctx.RuntimePacmanConf = runtimeConf
 	}
 	// Debian-family security/backports apt sources injected before stage-2.
 	if img.DistroDef.Debootstrap != nil && len(img.DistroDef.Debootstrap.ExtraRepos) > 0 {

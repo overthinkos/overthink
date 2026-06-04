@@ -89,12 +89,13 @@ func BuildBootstrapVM(
 
 	// --- Step 1: bootstrap a rootfs.tar.gz via the privileged builder. ---
 	rootfsCtx := struct {
-		Distro          *DistroDef
-		Packages        []string
-		ExtraPacmanConf string
-		ExtraAptSources string
-		Arch            string
-		Variant         string
+		Distro            *DistroDef
+		Packages          []string
+		ExtraPacmanConf   string
+		RuntimePacmanConf string
+		ExtraAptSources   string
+		Arch              string
+		Variant           string
 	}{
 		Distro:   distro,
 		Packages: append(append([]string{}, baseBootstrapPackages(distro)...), spec.Source.Package...),
@@ -107,6 +108,13 @@ func BuildBootstrapVM(
 	// bootstrap path — previously this path open-coded the loop and dropped
 	// SigLevel, breaking GPGME verification for SigLevel=Never repos.
 	rootfsCtx.ExtraPacmanConf = renderPacstrapExtraConf(distro.Pacstrap)
+	// The booted-guest runtime /etc/pacman.conf is rendered from the SAME
+	// extra_repo source (single source of truth — see renderRuntimePacmanConf).
+	runtimeConf, rerr := renderRuntimePacmanConf(distro.Pacstrap)
+	if rerr != nil {
+		return BootstrapVMResult{}, rerr
+	}
+	rootfsCtx.RuntimePacmanConf = runtimeConf
 	// Inject optional extra apt sources (security/backports) into
 	// /etc/apt/sources.list.d/ inside the chroot before stage-2 install.
 	if distro.Debootstrap != nil && len(distro.Debootstrap.ExtraRepos) > 0 {

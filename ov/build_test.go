@@ -515,13 +515,13 @@ func TestRenderPacstrapExtraConf(t *testing.T) {
 	}
 }
 
-// TestCachyosRuntimePacmanConf locks in the curated runtime /etc/pacman.conf the
-// cachyos pacstrap bootstrap writes into the rootfs — distinct from the install
-// config (ExtraRepos). Regression guard for the "config file /etc/pacman.conf
-// could not be read" deploy failure: pacstrap leaves the booted guest with no
-// working config, so RuntimePacmanConf MUST be present, carry the v3 repos, and
-// DELIBERATELY exclude cachyos-extra (no usable runtime DB). Single source of
-// truth — replaces the per-VM cloud-init write_files the cachyos VM entities had.
+// TestCachyosRuntimePacmanConf locks in the booted-guest /etc/pacman.conf the
+// cachyos pacstrap writes into the rootfs. Single-source guard: runtime_pacman_conf
+// is a TEMPLATE that derives its repo list from the one extra_repo source (no
+// second hand-maintained copy), so the install + runtime configs cannot drift.
+// Regression guard for the "config file /etc/pacman.conf could not be read"
+// deploy failure AND for the cachyos-extra HTML-stub repo (must be absent from
+// BOTH configs, by construction, now that extra_repo is the single source).
 func TestCachyosRuntimePacmanConf(t *testing.T) {
 	distroCfg, _, _, err := LoadBuildConfigForImage(repoRootDir(t))
 	if err != nil {
@@ -531,18 +531,31 @@ func TestCachyosRuntimePacmanConf(t *testing.T) {
 	if !ok || cachyos.Pacstrap == nil {
 		t.Fatal("cachyos distro / pacstrap missing from build.yml")
 	}
-	rc := cachyos.Pacstrap.RuntimePacmanConf
+	// Single source: the runtime config must DERIVE its repos from extra_repo
+	// (template), not hardcode a second copy.
+	if !strings.Contains(cachyos.Pacstrap.RuntimePacmanConf, ".ExtraRepos") {
+		t.Errorf("runtime_pacman_conf must derive its repo list from extra_repo via {{ range .ExtraRepos }} (single source), got:\n%s", cachyos.Pacstrap.RuntimePacmanConf)
+	}
+	// Render it the way the bootstrap paths do.
+	rc, err := renderRuntimePacmanConf(cachyos.Pacstrap)
+	if err != nil {
+		t.Fatalf("renderRuntimePacmanConf: %v", err)
+	}
 	if rc == "" {
-		t.Fatal("cachyos pacstrap runtime_pacman_conf is empty — guests boot with no /etc/pacman.conf and add_layer pac installs fail")
+		t.Fatal("rendered runtime_pacman_conf is empty — guests boot with no /etc/pacman.conf and add_layer pac installs fail")
 	}
 	for _, want := range []string{"[options]", "SigLevel = Never", "[cachyos-v3]", "[cachyos-core-v3]", "[cachyos]", "Include = /etc/pacman.d/mirrorlist"} {
 		if !strings.Contains(rc, want) {
-			t.Errorf("runtime_pacman_conf missing %q:\n%s", want, rc)
+			t.Errorf("rendered runtime_pacman_conf missing %q:\n%s", want, rc)
 		}
 	}
-	// The curation that distinguishes runtime from install config: cachyos-extra
-	// serves no usable DB at runtime, so a runtime `pacman -Sy` against it fails.
+	// cachyos-extra serves no usable DB (HTML stub). Removed from the single
+	// extra_repo source, it must be absent from BOTH the rendered runtime config
+	// AND the install config — the drift this cutover eliminated.
 	if strings.Contains(rc, "cachyos-extra") {
-		t.Errorf("runtime_pacman_conf must NOT include cachyos-extra (no usable runtime DB):\n%s", rc)
+		t.Errorf("runtime_pacman_conf must NOT include cachyos-extra:\n%s", rc)
+	}
+	if strings.Contains(renderPacstrapExtraConf(cachyos.Pacstrap), "cachyos-extra") {
+		t.Errorf("install (extra_repo) config must NOT include cachyos-extra either — single source of truth")
 	}
 }

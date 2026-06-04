@@ -22,6 +22,46 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-04 — fix(build): single-source the cachyos pacstrap repo config — runtime pacman.conf renders from extra_repo (no install-vs-runtime drift) (#47)
+
+**The bug + its root cause (duplication).** The `cachyos-extra` pacman repo
+serves an HTML directory listing, not a `.db` (confirmed live:
+`https://mirror.cachyos.org/repo/x86_64/cachyos-extra/cachyos-extra.db` →
+`Content-Type: text/html`). A prior fix removed it from the booted-guest
+`runtime_pacman_conf` — but **left it in the pacstrap-install `extra_repo`**.
+Root cause: the cachyos repo list was hand-maintained in **two** surfaces of
+`build.yml`'s cachyos `bootstrap:` — `extra_repo:` (structured, drives the
+pacstrap-chroot install config via `renderPacstrapExtraConf`) and
+`runtime_pacman_conf:` (a verbatim heredoc, the guest's `/etc/pacman.conf` for
+`add_layer` installs). Two copies → the fix landed in one and drifted in the
+other.
+
+**The fix — one repo source, both configs derived.** `extra_repo` is now the
+SINGLE cachyos-repo definition (with `cachyos-extra` removed, so it's gone from
+install AND runtime by construction). `runtime_pacman_conf` becomes a Go
+`text/template` evaluated against the `PacstrapDef` (`renderRuntimePacmanConf`,
+`ov/build.go`): its repo list comes from `{{ range .ExtraRepos }}`, and the
+template adds only the runtime-only framing (the `[options]` header + Arch
+`[core]/[extra]`). Mirrors the existing `ExtraPacmanConf` rendered-context-field
+pattern — the booted-guest config is now a rendered context field
+(`{{.RuntimePacmanConf}}`) in both bootstrap paths (`vm_bootstrap.go` +
+`build.go`'s `runPrivilegedBootstrap`), not a second verbatim copy. No build.yml
+schema change (the field stays a string, now a template) and no migration — a
+legacy verbatim `runtime_pacman_conf` with no template actions renders to itself.
+
+**Coverage.** `TestCachyosRuntimePacmanConf` now asserts the single source: the
+raw field must derive its repos via `{{ range .ExtraRepos }}`, the rendered
+output carries the v3 repos + `[options]`/`SigLevel = Never`/Arch `Include`, and
+`cachyos-extra` is absent from BOTH the rendered runtime config AND the install
+config (`renderPacstrapExtraConf`). `go test ./ov/...` green; `ov image validate`
+clean.
+
+**R10 (cross-repo B6).** The cachyos pacstrap is exercised only by the
+`eval-cachyos-vm` bed in `image/cachyos` (which pins main `@github`), so this
+producer change lands first + the consumer reconciles to the new tag; the
+authoritative R10 is `ov -C image/cachyos eval run eval-cachyos-vm` (pacstrap →
+boot → `add_layer` pac install against the rendered runtime config).
+
 ### 2026-06-04 — refactor(ov)!: every ov-only plural goes singular — OCI label contract + remaining authoring keys + full Go symmetry (#51)
 
 **Directive.** Following #50 (which made the layer parser hard-reject plural

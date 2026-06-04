@@ -1,5 +1,5 @@
 layer:
-    version: 2026.151.1142
+    version: 2026.155.1203
     name: k3s-server
     description: k3s control-plane (server) node — ships with ServiceLB, Traefik, local-path-provisioner enabled by default
     require:
@@ -188,6 +188,16 @@ layer:
           timeout: 180s
           stdout:
             contains: "Ready"
+        - id: addons-healthy
+          # Roll up Traefik + ServiceLB + local-path readiness BEFORE probing the
+          # IngressClass / StorageClass those addons register. Otherwise the class
+          # checks race the addon stack and see an empty list — and the verb exits 0
+          # on an empty list, so a `contains` matcher FAILS rather than waiting.
+          scope: deploy
+          k8s: addons
+          cluster: "${DEPLOY_NAME}"
+          timeout: 240s
+          exit_status: 0
         - id: traefik-ingressclass-default
           scope: deploy
           k8s: ingressclass
@@ -200,9 +210,3 @@ layer:
           cluster: "${DEPLOY_NAME}"
           stdout:
             contains: "local-path"
-        - id: addons-healthy
-          scope: deploy
-          k8s: addons
-          cluster: "${DEPLOY_NAME}"
-          timeout: 240s
-          exit_status: 0

@@ -273,9 +273,21 @@ func (t *VmUnifiedTarget) Shell(ctx context.Context, cmd []string) error {
 }
 
 // Rebuild destroys + (optionally) rebuilds the disk image + recreates +
-// starts the VM. This is the VM rebuild path. The
+// starts the VM, THEN re-applies the deploy node's layers to the fresh
+// guest via the shared deploy-add path — mirroring LocalUnifiedTarget.Rebuild
+// and PodUnifiedTarget.Rebuild, which both end in `ov deploy add <node>`.
+// Without that final step the guest would come back as a bare image with the
+// deploy node's add_layer: layers (and nested pods) gone, so a config change
+// would never take effect on rebuild. This is the VM rebuild path. The
 // disposable check is the caller's responsibility (the disposable
 // classification); this method does not re-validate.
+//
+// Ordering subtlety: `ov vm destroy` removes the libvirt/qemu domain but NOT
+// the guest ledger (deploy.yml's vm_state survives), and VmUnifiedTarget.Add —
+// the path `ov deploy add <node>` routes through (dispatchNode → ResolveTarget
+// → Add → VmDeployTarget.Emit) — already auto-boots/waits-for-SSH and is
+// idempotent over that ledger. So re-adding after create+start is the correct
+// shared-path reuse: no bespoke SSH-emit logic is duplicated into Rebuild (R3).
 func (t *VmUnifiedTarget) Rebuild(ctx context.Context, opts RebuildOpts) error {
 	name := t.vmEntityName()
 	if opts.DryRun {
@@ -285,6 +297,7 @@ func (t *VmUnifiedTarget) Rebuild(ctx context.Context, opts RebuildOpts) error {
 		}
 		fmt.Printf("dry-run: ov vm create %s\n", name)
 		fmt.Printf("dry-run: ov vm start %s\n", name)
+		fmt.Printf("dry-run: ov deploy add %s\n", t.NodeName)
 		return nil
 	}
 	// Destroy is best-effort — the VM may not exist yet on a first build.
@@ -299,14 +312,22 @@ func (t *VmUnifiedTarget) Rebuild(ctx context.Context, opts RebuildOpts) error {
 	}
 	stderr, startErr := runOvSubcommandCapture("vm", "start", name)
 	if startErr != nil {
-		if isBenignAlreadyRunning(stderr) {
-			return nil
+		if !isBenignAlreadyRunning(stderr) {
+			fmt.Fprint(os.Stderr, stderr)
+			return fmt.Errorf("ov vm start %s: %w", name, startErr)
 		}
+		// "already running" is the desired end state — fall through to the
+		// layer re-apply below.
+	} else if stderr != "" {
 		fmt.Fprint(os.Stderr, stderr)
-		return fmt.Errorf("ov vm start %s: %w", name, startErr)
 	}
-	if stderr != "" {
-		fmt.Fprint(os.Stderr, stderr)
+	// Re-apply the deploy node's layers (and nested pods) on the fresh guest.
+	// `ov deploy add <node>` routes through dispatchNode → ResolveTarget →
+	// VmUnifiedTarget.Add → VmDeployTarget.Emit, which SSHes in and applies the
+	// node's add_layer: layers idempotently — the SAME shared primitive
+	// LocalUnifiedTarget.Rebuild and PodUnifiedTarget.Rebuild call (R3).
+	if err := runOvSubcommand("deploy", "add", t.NodeName); err != nil {
+		return fmt.Errorf("ov deploy add %s: %w", t.NodeName, err)
 	}
 	return nil
 }

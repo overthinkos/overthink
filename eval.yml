@@ -1489,9 +1489,14 @@ eval:
             - {id: kv-k8s-wait-nodes, scope: deploy, k8s: "wait-nodes", cluster: "vm-k3s-vm", k8s_count: 1, timeout: "300s"}
             - {id: kv-k8s-pods, scope: deploy, k8s: pods, cluster: "vm-k3s-vm", namespace: kube-system}
             - {id: kv-k8s-wait-ready, scope: deploy, k8s: "wait-ready", cluster: "vm-k3s-vm", k8s_kind: Deployment, namespace: kube-system, name: coredns, timeout: "180s"}
-            - {id: kv-k8s-ingressclass-traefik, scope: deploy, k8s: ingressclass, cluster: "vm-k3s-vm"}
-            - {id: kv-k8s-storageclass-localpath, scope: deploy, k8s: storageclass, cluster: "vm-k3s-vm", stdout: {contains: "local-path"}}
+            # `addons` rolls up Traefik + ServiceLB + local-path readiness; it MUST gate
+            # the ingressclass/storageclass checks below, because those resources are
+            # registered BY the addon stack. Probing them before addons is Ready races
+            # the helm-install job / provisioner and returns an empty list — and the
+            # verb exits 0 on an empty list, so the `contains` matcher FAILS (not waits).
             - {id: kv-k8s-addons, scope: deploy, k8s: addons, cluster: "vm-k3s-vm"}
+            - {id: kv-k8s-ingressclass-traefik, scope: deploy, k8s: ingressclass, cluster: "vm-k3s-vm", stdout: {contains: "traefik"}}
+            - {id: kv-k8s-storageclass-localpath, scope: deploy, k8s: storageclass, cluster: "vm-k3s-vm", stdout: {contains: "local-path"}}
             - {id: kv-k8s-raw-version, scope: deploy, k8s: raw, cluster: "vm-k3s-vm", text: "version -o json"}
             - {id: kv-k8s-service-kubernetes, scope: deploy, k8s: service, cluster: "vm-k3s-vm", namespace: default, name: kubernetes}
             # --- command: ov-specific operator-side smoke ------------

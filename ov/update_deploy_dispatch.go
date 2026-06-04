@@ -89,8 +89,9 @@ func (c *UpdateCmd) dispatchByDeployTarget() error {
 	// ResolveTarget → LifecycleTarget.Rebuild path; there is no per-kind update
 	// code. Rebuild's contract is "redeploy the current artifact + restart"
 	// (and, with --build, rebuild the artifact first); each kind's adapter
-	// realizes it for its substrate (vm: destroy→create the domain; pod:
-	// deploy add→config→start; local: re-apply layers). k8s has no live runtime
+	// realizes it for its substrate (vm: destroy→create the domain, then
+	// re-apply the deploy node's layers via deploy add; pod: deploy
+	// add→config→start; local: re-apply layers). k8s has no live runtime
 	// to rebuild (it is applied out-of-band via kubectl) so it is deliberately
 	// NOT a LifecycleTarget and falls out here with a clear error.
 	target, err := ResolveTarget(node, deployName)

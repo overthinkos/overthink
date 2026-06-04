@@ -43,7 +43,11 @@ var runOvSubcommand = func(args ...string) error {
 // decides whether the captured text is a real error (print it) or a
 // benign signal (suppress). This keeps the update output clean when
 // the child's "error" is actually just "already running" or similar.
-func runOvSubcommandCapture(args ...string) (string, error) {
+//
+// A package var (like runOvSubcommand) so tests can stub the
+// child-process boundary — e.g. unified_targets_vm_test.go records the
+// `ov vm start` call without spawning ov.
+var runOvSubcommandCapture = func(args ...string) (string, error) {
 	exe := os.Args[0]
 	cmd := exec.Command(exe, args...)
 	cmd.Stdin = os.Stdin

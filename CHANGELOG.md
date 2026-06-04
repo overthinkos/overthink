@@ -22,6 +22,74 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-04 — fix(ov): `ov update <vm>` Rebuild re-applies layers like pod/local (#42)
+
+`VmUnifiedTarget.Rebuild` (`ov/unified_targets_vm.go`) was domain-recreate-only:
+best-effort `ov vm destroy` → (with `--build`) `ov vm build` → `ov vm create` →
+`ov vm start`, with NO layer-apply step. So after `ov update <vm>` on a
+disposable VM the guest came back as a bare image with the deploy node's
+`add_layer:` layers — and any nested pods — GONE. A config change (a newly-added
+layer, a new nested pod) silently never took effect on rebuild. This corrects
+the per-substrate Rebuild contract recorded in the 2026-06 "ov update unified
+Rebuild" entry below, which described the vm substrate as
+"destroy→create the domain, reuse disk unless `--build`" with no layer re-apply
+— that was the bug, not the intended contract.
+
+Fix: after the domain boots, `Rebuild` now calls
+`runOvSubcommand("deploy", "add", t.NodeName)` — the SAME shared layer-apply
+primitive `LocalUnifiedTarget.Rebuild` and `PodUnifiedTarget.Rebuild` already
+end in (R3). `ov deploy add <node>` routes through `dispatchNode → ResolveTarget
+→ VmUnifiedTarget.Add → VmDeployTarget.Emit`, which SSHes into the fresh guest
+and re-applies the node's `add_layer:` layers (and redeploys nested pods)
+idempotently over the surviving guest ledger (`ov vm destroy` removes the domain,
+not deploy.yml's `vm_state`). No bespoke SSH-emit logic is duplicated into
+Rebuild. The forward-looking contract is now uniform across all three live
+substrates: **vm/pod/local Rebuild all end in `ov deploy add <node>`**.
+
+Made `runOvSubcommandCapture` a package var (mirroring `runOvSubcommand`) so the
+`ov vm start` boundary is stubbable; new unit coverage
+(`TestVmUnifiedTarget_Rebuild_DryRun` ordering assertions +
+`TestVmUnifiedTarget_Rebuild_ReappliesLayers`) proves the recorded subcommand
+sequence ends in `deploy add <node>`. Doc drift corrected in
+`/ov-core:ov-update`, `/ov-vm:vm`, `/ov-internals:vm-deploy-target` (which also
+fixed a stale `rebuild.go` file reference → `ov/run_subcommand.go`), and the
+`update_deploy_dispatch.go` dispatch comment.
+
+This cutover also corrected `/ov-internals:disposable`'s `ov update <name>`
+section, which still documented the PRE-#30 behavior — claiming `ov update`
+*refuses* a non-disposable target — and listed two flags that don't exist
+(`--dry-run`, `--rebuild-image`). It now matches the code (`noteUpdateDisposability`,
+`ov/update_deploy_dispatch.go`): `ov update` NEVER refuses on disposability; for
+a non-disposable target it prints a one-line transparency note and proceeds.
+`disposable: true` is the authorization for the AI's AUTONOMOUS rebuild + the
+eval-runner's unattended fresh rebuild, NOT an `ov update` capability gate. The
+flag list now reflects the real surface (`--build`, `--tag`, `-i/--instance`,
+`--seed`/`--no-seed`/`--force-seed`/`--data-from`).
+
+A BLOCKING issue surfaced by #42's R10 was fixed in the same working tree (R2;
+RCA via `/ov-internals:root-cause-analyzer`): the `eval-k3s-vm` bed's
+`ov eval live` intermittently failed with empty `ingressclass`/`storageclass`
+output while the matching `default=true` checks passed in the same run. Root
+cause was a readiness race, NOT a #42 regression — the failing checks predate #42
+by weeks and #42 never touched `eval.yml`. The `ingressclass`/`storageclass`
+verbs are one-shot list operations that exit 0 on an EMPTY list, so a `contains`
+matcher run before the k3s addon stack (Traefik helm-install job + local-path
+provisioner) registered its IngressClass/StorageClass *fails rather than waits* —
+and the only readiness gate ahead of them (`wait-ready` on coredns) is unrelated
+to those resources. Fix (R4: a readiness primitive, never a sleep; R3: generic
+across both surfaces): reorder the existing `k8s: addons` roll-up gate — which
+BLOCKS until Traefik + ServiceLB + local-path are all Ready — to run BEFORE the
+class checks, in the `eval-k3s-vm` bed (`eval.yml`) AND in the `k3s-server`
+layer's own deploy-scope checks (`layers/k3s-server/layer.yml`), which carried
+the identical latent race (it passed only by timing luck). The bed's
+`kv-k8s-ingressclass-traefik` check also gained the `stdout: {contains: "traefik"}`
+matcher its storageclass sibling already had (it was previously vacuous — passing
+even on an absent ingressclass). The `k3s-server` layer `version:` was bumped, and
+the `/ov-kubernetes:eval-k8s` skill example reordered to teach gate-first ordering
+(its example had shown the racy order). Proven on a fresh COLD `ov update
+eval-k3s-vm --build` rebuild: `19 passed · 2 failed` before the reorder →
+`21 passed · 0 failed` after, on identical conditions.
+
 ### 2026-06-04 — feat(ov): generic config-driven builder — localpkg resolves its AUR-dep closure + the deploy-side format/builder/uninstall rendering reads `build.yml` host cells
 
 Two converged changes landed as ONE generic-builder cutover, motivated by the

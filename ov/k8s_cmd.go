@@ -97,10 +97,37 @@ func (f *k8sClusterFlags) restConfig() (*rest.Config, error) {
 	if kubeconfigPath != "" {
 		loadingRules.ExplicitPath = kubeconfigPath
 	}
-	overrides := &clientcmd.ConfigOverrides{}
-	if ctxName != "" {
-		overrides.CurrentContext = ctxName
+
+	// Validate the resolved context exists BEFORE handing off to the deferred
+	// client. Otherwise an empty or STALE current-context — e.g. a deleted k3s
+	// deploy whose ~/.kube/config entry was never cleaned up — surfaces only at
+	// the first API call as a cryptic dial / TLS / "context does not exist"
+	// error, or silently targets the wrong cluster. Load the raw kubeconfig and
+	// fail fast with an actionable message instead.
+	raw, err := loadingRules.Load()
+	if err != nil {
+		return nil, fmt.Errorf("loading kubeconfig: %w", err)
 	}
+	if ctxName == "" {
+		ctxName = raw.CurrentContext
+	}
+	if ctxName == "" {
+		return nil, fmt.Errorf("no kubeconfig context selected (no --cluster / --context, and the kubeconfig has no current-context); pass --cluster <name> or --context <ctx>")
+	}
+	if _, ok := raw.Contexts[ctxName]; !ok {
+		known := make([]string, 0, len(raw.Contexts))
+		for name := range raw.Contexts {
+			known = append(known, name)
+		}
+		sort.Strings(known)
+		avail := "none"
+		if len(known) > 0 {
+			avail = strings.Join(known, ", ")
+		}
+		return nil, fmt.Errorf("kubeconfig context %q does not exist (known: %s); pass --cluster <name> or --context <ctx> to select a valid one", ctxName, avail)
+	}
+
+	overrides := &clientcmd.ConfigOverrides{CurrentContext: ctxName}
 	return clientcmd.NewNonInteractiveDeferredLoadingClientConfig(loadingRules, overrides).ClientConfig()
 }
 

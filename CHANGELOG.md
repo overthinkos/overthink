@@ -22,6 +22,35 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-04 — fix(ov): `ov eval k8s` validates the resolved kubeconfig context up front (no stale-context fall-through) (#45)
+
+`k8sClusterFlags.restConfig()` resolved the target context
+(`--kubeconfig`/`--cluster`→K8sSpec/`--context`/current-context) and handed it
+straight to the deferred client without checking it exists. A STALE or empty
+current-context — e.g. a deleted k3s deploy whose `~/.kube/config` entry was
+never cleaned up — surfaced only at the first API call as a cryptic
+`dial tcp … no such host` / TLS / "context does not exist" error, or silently
+targeted the wrong cluster.
+
+**Fix** (`ov/k8s_cmd.go`): `restConfig()` now loads the raw kubeconfig, falls
+back to its current-context when no flag selects one, and **fails fast** with an
+actionable message before any connection: `kubeconfig context "X" does not exist
+(known: a, b, c); pass --cluster <name> or --context <ctx>` — or `no kubeconfig
+context selected …` when nothing resolves. Valid contexts pass through unchanged.
+
+**Coverage** (`ov/k8s_context_test.go`): valid-explicit / empty-→-current-context
+/ stale-rejected-early (asserts the error lists known contexts) / empty-kubeconfig.
+`go test ./ov/...` green.
+
+**R10:** `ov eval run eval-k3s-vm` PASS (6/6 ok: true, 98s) — the bed's
+`ov eval k8s` verbs resolve `--cluster ${DEPLOY_NAME}` through the validated
+`restConfig` against a real provisioned k3s cluster, confirming the validation
+leaves the happy path intact. No schema/submodule change; landed tag-only.
+
+*Separable follow-up:* `k3s_post.go` writes a kubeconfig context on provision but
+`ov deploy del` does not remove it, so stale contexts accumulate — its own
+cutover (the validation above now handles them gracefully).
+
 ### 2026-06-04 — fix(ov): kind-files migrator no longer re-splits an intentionally-inline overthink.yml (version-gate)
 
 `runMigrations` runs EVERY step on every `ov migrate` (each self-guards on

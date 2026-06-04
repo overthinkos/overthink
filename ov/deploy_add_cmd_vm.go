@@ -27,15 +27,21 @@ func deployNestedPodsInGuest(vmName string, node *DeploymentNode, exec DeployExe
 	if node == nil || len(node.Nested) == 0 {
 		return nil
 	}
-	// The guest's own `ov` runs the from-image deploy below. syncOvIntoGuest
-	// returns the right command: the guest's SYSTEM ov when it is current
-	// (>= host by CalVer — never shadowed, never downgraded), or a /tmp copy of
-	// the host binary (outside $PATH) when the guest's ov is absent or older. The
-	// guest venue is the same for every child, so resolve it once. See
-	// syncOvIntoGuest.
-	ovCmd, err := syncOvIntoGuest(context.Background(), exec, opts)
-	if err != nil {
-		return fmt.Errorf("resolving the ov command for guest %s: %w", vmName, err)
+	// The from-image delegation runs the HOST's OWN ov in the guest — not the
+	// guest's PATH ov. The host binary running this deploy is guaranteed current
+	// and from-image-capable; the guest's PATH ov may be a stale layer install
+	// (a @github-fetched ov layer ships no bin/ov, so its curl fallback installs
+	// a pre-from-image release). So deliver the host ov to a /tmp path OUTSIDE
+	// $PATH via putHostOvInGuest and invoke it by explicit path — NEVER shadowing
+	// the guest's canonical /usr/bin/ov (the overthink-git pacman package the
+	// localpkg step installs). The /tmp name embeds the host CalVer so repeated
+	// calls within one deploy reuse the same copy (idempotent). One delivery for
+	// every child (same guest venue), so do it once.
+	ovCmd := "/tmp/ov-" + OvVersion()
+	if !opts.DryRun {
+		if err := putHostOvInGuest(context.Background(), exec, ovCmd, false, opts); err != nil {
+			return fmt.Errorf("delivering host ov into guest %s for from-image delegation: %w", vmName, err)
+		}
 	}
 	for _, childKey := range sortedNestedKeys(node.Nested) {
 		child := node.Nested[childKey]
@@ -66,9 +72,8 @@ func deployNestedPodsInGuest(vmName string, node *DeploymentNode, exec DeployExe
 		// XDG_RUNTIME_DIR must be exported so the `systemctl --user` calls inside
 		// `ov deploy from-image` reach the lingering user bus over this non-login
 		// SSH session — the same pattern VmDeployTarget uses for user services.
-		// ovCmd is "ov" (the guest's own ov is current) or a temp path to a
-		// freshly-pushed host copy (the guest's ov was older) — see
-		// ensureFreshNestedOv above.
+		// ovCmd is the explicit /tmp path to the host's own ov delivered above
+		// (the from-image authority), never the guest's PATH ov.
 		script := fmt.Sprintf(
 			"sudo loginctl enable-linger \"$(id -un)\" >/dev/null 2>&1 || true\n"+
 				"export XDG_RUNTIME_DIR=\"/run/user/$(id -u)\"\n"+

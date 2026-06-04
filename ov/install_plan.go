@@ -172,6 +172,7 @@ const (
 	StepKindShellSnippet    StepKind = "ShellSnippet"
 	StepKindRepoChange      StepKind = "RepoChange"
 	StepKindApkInstall      StepKind = "ApkInstall"
+	StepKindLocalPkgInstall StepKind = "LocalPkgInstall"
 	StepKindReboot          StepKind = "Reboot"
 )
 
@@ -888,6 +889,58 @@ func (s *ApkInstallStep) RequiresGate() Gate { return GateNone }
 // `ov deploy del <android>` (AndroidUnifiedTarget.Del) re-resolves the
 // deploy's apk layers and `pm uninstall`s each package directly.
 func (s *ApkInstallStep) Reverse() []ReverseOp { return nil }
+
+// ---------------------------------------------------------------------------
+// LocalPkgInstallStep — build a bundled PKGBUILD on the host (makepkg) and
+// install the resulting `.pkg.tar.zst` onto a pac-based deploy target.
+// ---------------------------------------------------------------------------
+//
+// LocalPkgInstallStep is the IR form of a layer's `localpkg:` field — a
+// pointer at a bundled Arch PKGBUILD directory (relative to the layer dir or
+// the project root). It is the proper-package counterpart of the ov layer's
+// ad-hoc curl-a-binary `cmd:` task: on an Arch/CachyOS DEPLOY target the
+// package is built from the repo's bundled PKGBUILD on the HOST (`makepkg`),
+// the resulting artifact is transferred to the target, and `pacman -U`-installed
+// — so `ov` lands as the tracked `overthink-git` package at /usr/bin/ov rather
+// than an untracked binary at /usr/local/bin/ov.
+//
+// Like ApkInstallStep, the step is compiled REGARDLESS of target and each
+// DeployTarget decides whether to execute or skip:
+//   - LocalDeployTarget (Arch/CachyOS host) and VmDeployTarget (Arch/CachyOS
+//     guest) EXECUTE it (build on host → transfer → pacman -U on the target).
+//   - On a NON-pac deploy target the executor records a clean skip (a Fedora /
+//     Debian host has no pacman; the layer's own `cmd:` task curls the binary
+//     there as the documented fallback).
+//   - OCITarget SKIPS it — no makepkg in a container image build; the image
+//     bakes one self-contained binary via the layer's COPY/curl `cmd:` task.
+//   - AndroidDeployTarget / K8sDeployTarget SKIP it (no Arch package surface).
+//
+// The PKGBUILD location is resolved at EMIT time (not compile time), so the
+// step carries only the author's hint (`PkgbuildRef`) plus the layer's source
+// dir + the deploy project dir for the walk-up search. When no PKGBUILD is
+// found the step is a no-op (the layer's existing curl/COPY task is the
+// fallback).
+type LocalPkgInstallStep struct {
+	PkgbuildRef string // the layer's `localpkg:` value (e.g. "pkg/arch") — a hint, resolved at emit
+	LayerName   string
+	LayerDir    string // layer source dir — one anchor for the relative PKGBUILD search
+	ProjectDir  string // the deploy project dir (os.Getwd() at deploy time) — the other anchor
+}
+
+func (s *LocalPkgInstallStep) Kind() StepKind { return StepKindLocalPkgInstall }
+
+// Scope is system — installing a pacman package mutates global package state.
+func (s *LocalPkgInstallStep) Scope() Scope { return ScopeSystem }
+
+// Venue is host-native — makepkg runs on the host (like the aur builder), then
+// the artifact is shipped to the target and installed via pacman.
+func (s *LocalPkgInstallStep) Venue() Venue       { return VenueHostNative }
+func (s *LocalPkgInstallStep) RequiresGate() Gate { return GateNone }
+
+// Reverse returns no ledger ops — the package is the deploy substrate's own
+// pacman-tracked package, removed (if ever) via `pacman -R overthink-git` by
+// the operator, not by deploy teardown. Mirrors ApkInstallStep's empty Reverse.
+func (s *LocalPkgInstallStep) Reverse() []ReverseOp { return nil }
 
 // RebootStep requests a reboot of the deploy target after this layer's steps.
 // It is emitted (last in the layer) when a layer declares `reboot: true` —

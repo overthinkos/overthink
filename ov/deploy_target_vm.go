@@ -333,6 +333,15 @@ func (t *VmDeployTarget) emitPlan(ctx context.Context, plan *InstallPlan, opts E
 			// guest. Skip (a `target: android` deploy handles them).
 			fmt.Fprintf(os.Stderr, "VmDeployTarget: skipping apk install (layer=%s) — apk installs only on a kind:android device\n", s.LayerName)
 
+		case *LocalPkgInstallStep:
+			// Build the bundled PKGBUILD on the host (makepkg) and pacman -U the
+			// result INTO THE GUEST — the proper-package counterpart of the
+			// layer's curl/COPY cmd: task. Gated on the GUEST having pacman; a
+			// non-pac guest is a clean no-op (the layer's curl task installs ov).
+			if err := execLocalPkgInstall(ctx, t.Exec, s, venueHasPacman(ctx, t.Exec, opts), "vm:"+t.VMName, opts); err != nil {
+				return rec, err
+			}
+
 		case *RebootStep:
 			if err := t.execReboot(ctx, s, opts); err != nil {
 				return rec, err
@@ -782,42 +791,16 @@ func (t *VmDeployTarget) execBuilder(ctx context.Context, s *BuilderStep, plan *
 		return nil
 	}
 
-	// Ship the staging dir to the guest via tar+ssh and run pacman -U
-	// on the resulting files. Wrapping in a single shell pipeline keeps
-	// the transfer atomic — if scp succeeds but pacman fails, the
-	// operator can re-run and the staging dir's content is replaced
-	// idempotently (-U is the upgrade form; doesn't error on already-
-	// installed).
+	// Ship the built packages to the guest and pacman -U them via the SHARED
+	// transfer+install leg (R3) — the same primitive the localpkg step uses.
+	// `pacman -U` is the upgrade form, so a re-run after a partial failure
+	// replaces the staging content idempotently and never errors on
+	// already-installed.
 	matches, _ := filepath.Glob(filepath.Join(hostStage, "*.pkg.tar.zst"))
 	if len(matches) == 0 {
 		return fmt.Errorf("aur builder produced no .pkg.tar.zst in %s", hostStage)
 	}
-	guestStage := "/tmp/ov-aur-pkgs"
-	transferScript := fmt.Sprintf(`set -e
-mkdir -p %[1]s
-rm -f %[1]s/*.pkg.tar.zst 2>/dev/null || true
-`, guestStage)
-	if err := t.Exec.RunUser(ctx, transferScript, opts); err != nil {
-		return fmt.Errorf("preparing guest stage dir: %w", err)
-	}
-
-	// scp each package file. PutFile signature is
-	// (ctx, localPath, remotePath, mode, ownerRoot, opts) — the
-	// SSH executor turns this into scp + (optional) sudo install.
-	for _, m := range matches {
-		base := filepath.Base(m)
-		dest := filepath.Join(guestStage, base)
-		if err := t.Exec.PutFile(ctx, m, dest, 0o644, false, opts); err != nil {
-			return fmt.Errorf("scp %s: %w", base, err)
-		}
-	}
-
-	installScript := fmt.Sprintf("pacman -U --noconfirm %s/*.pkg.tar.zst", guestStage)
-	if err := t.Exec.RunSystem(ctx, installScript, opts); err != nil {
-		return fmt.Errorf("guest pacman -U: %w", err)
-	}
-
-	return nil
+	return transferAndPacmanInstall(ctx, t.Exec, matches, opts)
 }
 
 // resolveBuilderImage picks the builder image ref for a BuilderStep on a VM

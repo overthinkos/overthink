@@ -269,12 +269,14 @@ task build:ov         # on Arch: delegates to makepkg -si; elsewhere: portable i
 ov image build        # build everything
 ```
 
-**Arch / CachyOS / Manjaro** — install system-wide via `pacman`:
+**Arch / CachyOS / Manjaro** — install system-wide via `pacman`, building this
+repo's bundled `overthink-git` PKGBUILD (it is LOCAL-ONLY — NOT published to the
+AUR):
 
 ```bash
-yay -S overthink-git           # mirrors this repo's PKGBUILD
-# or build from this checkout:
-task build:ov                  # pre-installs AUR deps via your AUR helper, then runs makepkg -sefi in pkg/arch
+cd pkg/arch && makepkg -si     # build + pacman-install overthink-git from this repo
+# or, equivalently, from the repo root:
+task build:ov                  # pre-installs the AUR-only deps via your AUR helper, then runs makepkg -sefi in pkg/arch
 ```
 
 The PKGBUILD `pkgver()` derives the same CalVer

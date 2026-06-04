@@ -27,9 +27,10 @@ func TestOvVersion(t *testing.T) {
 }
 
 func TestHostOvIsNewer(t *testing.T) {
-	// hostOvIsNewer is the single CalVer arbiter shared by syncOvIntoGuest and
-	// ensureFreshNestedOv (R3). Strictly newer → true; equal-or-newer venue →
-	// false (never downgrade); unparseable venue → true; unparseable host → false.
+	// hostOvIsNewer is the CalVer arbiter syncOvIntoGuest uses to decide whether
+	// the EnsureOvInGuest auto/scp strategy adopts the guest's system ov or scp's
+	// a host copy. Strictly newer → true; equal-or-newer venue → false (never
+	// downgrade); unparseable venue → true; unparseable host → false.
 	tests := []struct {
 		name     string
 		host     string

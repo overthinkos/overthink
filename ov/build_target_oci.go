@@ -120,6 +120,13 @@ func (t *OCITarget) emitStep(step InstallStep, plan *InstallPlan) error {
 		// being built — there is no device at image-build time. Skip
 		// silently (the deploy-time AndroidDeployTarget executes it).
 		return nil
+	case *LocalPkgInstallStep:
+		// localpkg builds a host PKGBUILD with makepkg + pacman -U onto a
+		// DEPLOY target — there is no makepkg/pacman step in a container image
+		// build, and the image bakes one self-contained binary via the layer's
+		// COPY/curl cmd: task instead. Skip silently (Local/Vm deploy executes
+		// it). See LocalPkgInstallStep.
+		return nil
 	case *RebootStep:
 		// No machine to reboot during an image build — skip silently
 		// (a target:vm deploy of this layer performs the reboot).

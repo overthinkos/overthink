@@ -7,11 +7,12 @@ import (
 )
 
 // nestedRecordingExec is a DeployExecutor that records the RunUser scripts
-// deployNestedPodsInGuest issues (the in-guest `ov deploy from-image` calls), so
-// the test can assert the nested-pod-in-VM orchestration without a real guest.
+// deployNestedPodsInGuest issues (the in-guest `ov deploy from-image` calls) and
+// the PutFile destinations (the host-ov delivery), so the test can assert the
+// nested-pod-in-VM orchestration without a real guest.
 type nestedRecordingExec struct {
 	userScripts []string
-	captureOut  string // canned `ov version` probe output for ensureFreshNestedOv
+	putDests    []string // remote paths the host ov binary was delivered to
 }
 
 func (e *nestedRecordingExec) Venue() string                                     { return "nested-rec://test" }
@@ -23,14 +24,15 @@ func (e *nestedRecordingExec) RunUser(_ context.Context, script string, _ EmitOp
 func (e *nestedRecordingExec) RunBuilder(context.Context, BuilderRunOpts) ([]byte, error) {
 	return nil, nil
 }
-func (e *nestedRecordingExec) PutFile(context.Context, string, string, uint32, bool, EmitOpts) error {
+func (e *nestedRecordingExec) PutFile(_ context.Context, _, remotePath string, _ uint32, _ bool, _ EmitOpts) error {
+	e.putDests = append(e.putDests, remotePath)
 	return nil
 }
 func (e *nestedRecordingExec) GetFile(context.Context, string, bool, EmitOpts) ([]byte, error) {
 	return nil, nil
 }
 func (e *nestedRecordingExec) RunCapture(context.Context, string) (string, string, int, error) {
-	return e.captureOut, "", 0, nil
+	return "", "", 0, nil
 }
 func (e *nestedRecordingExec) Kind() string { return "nested-rec" }
 func (e *nestedRecordingExec) ResolveHome(context.Context, string) (string, error) {
@@ -55,16 +57,15 @@ func TestDeployNestedPodsInGuest_DeploysOnlyPodChildren(t *testing.T) {
 	}
 	defer func() { runOvSubcommand = orig }()
 
-	// Stamp the host ov identity and make the guest report the SAME CalVer, so
-	// the delegation-time freshness check (ensureFreshNestedOv) finds the guest
-	// ov current and delegates via "ov" (not a temp copy) — keeping this test
-	// focused on the only-pod-children orchestration. The freshness branches
-	// themselves are covered by TestEnsureFreshNestedOv.
+	// Stamp the host ov identity. The nested from-image delegation ALWAYS runs
+	// the HOST's own ov (delivered to /tmp/ov-<calver> via putHostOvInGuest),
+	// never the guest's PATH ov — the host binary is the from-image authority,
+	// and a /tmp path can't shadow the guest's pacman /usr/bin/ov.
 	savedVer := BuildCalVer
 	defer func() { BuildCalVer = savedVer }()
 	BuildCalVer = "2026.154.943"
 
-	exec := &nestedRecordingExec{captureOut: "2026.154.943"}
+	exec := &nestedRecordingExec{}
 	node := &DeploymentNode{
 		Nested: map[string]*DeploymentNode{
 			"selkies-kde": {Target: "pod", Image: "selkies-kde-nvidia"},
@@ -98,15 +99,34 @@ func TestDeployNestedPodsInGuest_DeploysOnlyPodChildren(t *testing.T) {
 		}
 	}
 
-	// Two in-guest from-image deploys (the persistent quadlets), sorted.
+	// The host ov was delivered into the guest at the explicit /tmp/ov-<calver>
+	// path (NOT shadowing the guest's pacman /usr/bin/ov) before any from-image
+	// deploy. One delivery for the whole batch (same guest venue).
+	wantOvPath := "/tmp/ov-2026.154.943"
+	if len(exec.putDests) == 0 {
+		t.Fatalf("host ov was never delivered into the guest (no PutFile)")
+	}
+	deliveredHostOv := false
+	for _, d := range exec.putDests {
+		if d == wantOvPath {
+			deliveredHostOv = true
+		}
+	}
+	if !deliveredHostOv {
+		t.Errorf("host ov not delivered to %s; PutFile dests = %v", wantOvPath, exec.putDests)
+	}
+
+	// Two in-guest from-image deploys (the persistent quadlets), sorted. Each
+	// invokes the delivered /tmp host ov by EXPLICIT PATH (the from-image
+	// authority), never the guest's PATH ov.
 	if len(exec.userScripts) != 2 {
 		t.Fatalf("expected 2 in-guest from-image deploys, got %d: %v", len(exec.userScripts), exec.userScripts)
 	}
-	if !strings.Contains(exec.userScripts[0], "ov deploy from-image localhost/ov-alpha-pod:latest alpha-pod") {
-		t.Errorf("script[0] missing alpha-pod from-image deploy: %q", exec.userScripts[0])
+	if !strings.Contains(exec.userScripts[0], wantOvPath+" deploy from-image localhost/ov-alpha-pod:latest alpha-pod") {
+		t.Errorf("script[0] missing alpha-pod from-image deploy via host /tmp ov: %q", exec.userScripts[0])
 	}
-	if !strings.Contains(exec.userScripts[1], "ov deploy from-image localhost/ov-selkies-kde:latest selkies-kde") {
-		t.Errorf("script[1] missing selkies-kde from-image deploy: %q", exec.userScripts[1])
+	if !strings.Contains(exec.userScripts[1], wantOvPath+" deploy from-image localhost/ov-selkies-kde:latest selkies-kde") {
+		t.Errorf("script[1] missing selkies-kde from-image deploy via host /tmp ov: %q", exec.userScripts[1])
 	}
 	// Lingering is enabled so the --user quadlet auto-starts at boot — the
 	// persistence property the bed's fresh-rebuild leg (guest reboot) proves.

@@ -270,6 +270,8 @@ func (t *LocalDeployTarget) execStep(step InstallStep, plan *InstallPlan, opts E
 		t.noteStep(rec, StepKindApkInstall, s.Scope(), VenueSkip,
 			fmt.Sprintf("layer=%s skipped: apk installs only on a kind:android device", s.LayerName), start)
 		return nil
+	case *LocalPkgInstallStep:
+		return t.execLocalPkg(s, plan, opts, rec, start)
 	case *RebootStep:
 		// Never reboot the operator's host unattended. Record a skip and
 		// warn — a host that needs a kernel module reloaded should be
@@ -987,6 +989,30 @@ func (t *LocalDeployTarget) execRepoChange(s *RepoChangeStep, plan *InstallPlan,
 	}
 	t.noteStep(rec, StepKindRepoChange, s.Scope(), s.Venue(), s.File, start)
 	rec.ReverseOps = append(rec.ReverseOps, s.Reverse()...)
+	return nil
+}
+
+// execLocalPkg builds the layer's bundled PKGBUILD on the host (makepkg) and
+// pacman -U-installs the result onto the deploy venue — the proper-package
+// counterpart of the layer's curl/COPY cmd: task (for the `ov` layer this lands
+// overthink-git at /usr/bin/ov instead of an untracked /usr/local/bin/ov).
+// Gated on the VENUE having pacman (an Arch/CachyOS host, or an Arch SSH host
+// for a `host: user@machine` local deploy); a non-pac venue or a missing
+// PKGBUILD is a clean no-op (the layer's curl task installs ov there). The
+// shared build+transfer+install body lives in localpkg.go (R3 — the VM target
+// calls the same execLocalPkgInstall).
+func (t *LocalDeployTarget) execLocalPkg(s *LocalPkgInstallStep, plan *InstallPlan, opts EmitOpts, rec *LayerRecord, start time.Time) error {
+	ctx := opts.ContextOrDefault()
+	arch := venueHasPacman(ctx, t.exec(), opts)
+	if err := execLocalPkgInstall(ctx, t.exec(), s, arch, t.Name(), opts); err != nil {
+		return err
+	}
+	venue := "host"
+	if !arch {
+		venue = "skipped (non-pac)"
+	}
+	t.noteStep(rec, StepKindLocalPkgInstall, s.Scope(), s.Venue(),
+		fmt.Sprintf("layer=%s pkgbuild=%s (%s)", s.LayerName, s.PkgbuildRef, venue), start)
 	return nil
 }
 

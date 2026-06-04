@@ -104,6 +104,17 @@ func BuildDeployPlan(layer *Layer, img *ResolvedImage, hostCtx HostContext) (*In
 	builderSteps := compileBuilderSteps(layer, img, hostCtx)
 	plan.Steps = append(plan.Steps, builderSteps...)
 
+	// 2.5. Bundled PKGBUILD (`localpkg:`) — build on the host + pacman -U on a
+	// pac deploy target. Emitted BEFORE the layer's tasks so the package is
+	// already installed when the layer's own `cmd:` task runs: the ov layer's
+	// task is pacman-aware (it does nothing when overthink-git is present and
+	// only curls a binary otherwise), so the package must land first or the
+	// curl branch shadows the proper /usr/bin/ov with a stale /usr/local/bin/ov.
+	// Skipped on image build (no makepkg in a container) and on non-pac targets.
+	if pkgStep := compileLocalPkgStep(layer); pkgStep != nil {
+		plan.Steps = append(plan.Steps, pkgStep)
+	}
+
 	// 3. Inline tasks (cmd / mkdir / copy / write / link / download / setcap).
 	taskSteps := compileTaskSteps(layer, img)
 	plan.Steps = append(plan.Steps, taskSteps...)
@@ -154,6 +165,28 @@ func compileApkStep(layer *Layer) InstallStep {
 		Packages:  append([]ApkPackageSpec(nil), apks...),
 		LayerName: layer.Name,
 		LayerDir:  layer.SourceDir,
+	}
+}
+
+// compileLocalPkgStep turns a layer's `localpkg:` field into a single
+// LocalPkgInstallStep, or nil if the layer declares none. Like compileApkStep
+// it is target-agnostic at compile time — the step carries the author's
+// PKGBUILD hint plus the layer dir AND the deploy project dir (os.Getwd, the
+// same handle compileServiceSteps reads) as the two anchors the emit-time
+// walk-up search uses to locate the PKGBUILD. Each DeployTarget decides whether
+// to build+install (Arch host / Arch guest), skip (image build, non-pac
+// targets, android, k8s).
+func compileLocalPkgStep(layer *Layer) InstallStep {
+	ref := layer.LocalPkg()
+	if ref == "" {
+		return nil
+	}
+	projectDir, _ := os.Getwd()
+	return &LocalPkgInstallStep{
+		PkgbuildRef: ref,
+		LayerName:   layer.Name,
+		LayerDir:    layer.SourceDir,
+		ProjectDir:  projectDir,
 	}
 }
 

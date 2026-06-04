@@ -2644,6 +2644,7 @@ func populateLayerFromYAML(layer *Layer, ly *LayerYAML) {
 	layer.vars = ly.Vars
 	layer.tasks = ly.Task
 	layer.apk = ly.Apk
+	layer.localpkg = ly.LocalPkg
 	layer.reboot = ly.Reboot
 	layer.shell = ly.Shell
 }

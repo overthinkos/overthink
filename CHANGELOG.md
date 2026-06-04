@@ -22,6 +22,64 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-04 — feat(ov): localpkg — Arch/CachyOS deploys install `ov` as the proper `overthink-git` package, not a curl'd binary
+
+Closes the `eval-cachyos-gpu-vm` coverage gap surfaced when the operator
+workstation migration hit `EXIT:80 ("unexpected argument from-image")`: the
+guest's `ov` was a stale curl'd `/usr/local/bin/ov` (the pinned
+`v2026.141.1600` release, pre-`from-image`) from the ov layer's `cmd:`
+fallback, shadowing any package binary on `$PATH`. RCA: on a VM/local Arch
+deploy nothing installed the real package first, so the `cmd:` curled a
+release.
+
+Fix — a deploy-substrate-specific package mechanism mirroring
+`apk:`/`ApkInstallStep`. A layer's `localpkg: <dir>` field (`ov/layers.go`)
+compiles to a `LocalPkgInstallStep` (`ov/install_plan.go`) at "step 2.5" of
+`BuildDeployPlan` (`ov/install_build.go`), BEFORE the layer's `cmd:`. On an
+Arch/pac deploy target (`target: local` on a pac host, `target: vm` into a pac
+guest) it builds the bundled `pkg/arch` PKGBUILD on the HOST via `makepkg -sf`
+(`ov/localpkg.go` `runMakepkgOnHost`, PKGDEST temp) and `pacman -U`s the result
+onto the target (`transferAndPacmanInstall` — the SHARED scp + `pacman -U` leg
+the AUR builder also uses, R3). `resolveLocalPkgDir` walks up from the deploy
+project dir, so a consumer nested under `image/<distro>` finds the superproject
+`pkg/arch`. Skipped at image build (no `makepkg` in a container —
+`build_target_oci.go`) and on any non-pac target. The ov layer's `cmd:` is now
+pacman-aware: if `overthink-git` is installed it does nothing (so `/usr/bin/ov`
+is never shadowed by a `/usr/local/bin/ov` curl); else `/ctx/bin/ov`; else the
+curl fallback (remote `@github` composition only). `overthink-git` is
+LOCAL-ONLY (`git+file://` source, not on the AUR), so the AUR builder cannot
+build it — hence host-`makepkg`.
+
+The same change hardened the host→guest ov delegation: `putHostOvInGuest`
+(`ov/ov_install.go`) is the single host→guest ov-delivery primitive (R3), and
+`deployNestedPodsInGuest` uses the host's own current, from-image-capable ov
+for the `ov deploy from-image` delegation — never the guest's PATH ov. The
+`eval-cachyos-gpu-vm` bed gained `ov-full` in `add_layer` + a
+`gpu-ov-proper-package` deploy check (`pacman -Q overthink-git` &&
+`command -v ov` == `/usr/bin/ov` && `ov deploy from-image --help`) that FAILS
+on the old curl path. Cross-repo B6: the producer (`layers/ov` + `ov/*.go`,
+pkg/arch docs) landed + tagged first, the cachyos `@github` pins reconciled to
+the tag, then the bed R10 against the pushed tag is the gate.
+
+### 2026-06-04 — feat(ov): per-host VM device overlay — host-specific GPU `<hostdev>` + shares move to the home `instance.yml`
+
+The committed `image/cachyos` `vm.yml` hardcoded this host's NVIDIA PCI
+`<hostdev>` (01:00.0 + .1) and `/home/atrawog` virtiofs shares for both the
+`cachyos-gpu` operator workstation and the `eval-cachyos-gpu-vm` bed — a PCI
+address + an operator-home path baked into version control. `VmInstanceOverride`
+(`ov/vm_instance_override.go`) gained a `libvirt: *LibvirtDomain` overlay field
++ `ApplyToVmSpec(spec)`: `runVmSpecCreate` loads
+`~/.local/share/ov/vm/<domain>/instance.yml` and merges its `devices.hostdevs`
++ `devices.filesystems` onto the `VmSpec` before `RenderDomainXML`.
+Host-specific device config now lives ONLY in the per-host home overlay
+(outside any git repo); the `kind: vm` entities are portable (no PCI address,
+no operator-home path committed). The overlay reuses the `kind: vm` `libvirt:`
+schema, so the block is identical to what `vm.yml` would carry. Proven on the
+`eval-cachyos-gpu-vm` R10 (9/9 steps incl. the fresh-rebuild leg): the portable
+`vm.yml` + the home overlay reached real GPU passthrough (the guest enumerated
+the RTX 4080) + the nested selkies-kde NVENC stream, and the preempted operator
+was restored.
+
 ### 2026-06-03 — fix(build)!: deterministic CalVer — `calver.sh` derives the build identity from the HEAD commit, never the wall clock
 
 Completes #31. That change fixed the *runtime* readout — `OvVersion()` returns

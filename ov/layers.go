@@ -249,15 +249,15 @@ func sortedEnvDeps(m map[string]EnvDependency) []EnvDependency {
 // Unknown top-level keys are captured as tag-based package sections
 // (e.g., "fedora:", "arch:", "fedora:43:", "debian,ubuntu:").
 type LayerYAML struct {
-	Version     string       `yaml:"version,omitempty"`     // CalVer version (YYYY.DDD.HHMM) of this layer definition
-	Description *Description `yaml:"description,omitempty"` // Gherkin-shaped self-description; replaces retired info:/status:
-	Layer      []string          `yaml:"layer,omitempty"`
-	Require    []string          `yaml:"require,omitempty"`
-	Engine     string            `yaml:"engine,omitempty"` // required run engine: "docker" or "" (any)
-	Env        map[string]string `yaml:"env,omitempty"`
-	PathAppend []string          `yaml:"path_append,omitempty"`
-	Port       []PortSpec        `yaml:"port,omitempty"`
-	Route      *RouteYAML        `yaml:"route,omitempty"`
+	Version     string            `yaml:"version,omitempty"`     // CalVer version (YYYY.DDD.HHMM) of this layer definition
+	Description *Description      `yaml:"description,omitempty"` // Gherkin-shaped self-description; replaces retired info:/status:
+	Layer       []string          `yaml:"layer,omitempty"`
+	Require     []string          `yaml:"require,omitempty"`
+	Engine      string            `yaml:"engine,omitempty"` // required run engine: "docker" or "" (any)
+	Env         map[string]string `yaml:"env,omitempty"`
+	PathAppend  []string          `yaml:"path_append,omitempty"`
+	Port        []PortSpec        `yaml:"port,omitempty"`
+	Route       *RouteYAML        `yaml:"route,omitempty"`
 	// Service is the unified service schema: a list of ServiceEntry.
 	// Each entry either reuses a packaged unit (use_packaged:) or
 	// defines a custom service (exec: ...).
@@ -271,7 +271,7 @@ type LayerYAML struct {
 	PortRelay     []int             `yaml:"port_relay,omitempty"`
 	SecretYAML    []SecretYAML      `yaml:"secret,omitempty"`
 	Data          []DataYAML        `yaml:"data,omitempty"`
-	EnvProvides   map[string]string `yaml:"env_provide,omitempty"`   // env vars provided to OTHER containers when this service is deployed
+	EnvProvides   map[string]string `yaml:"env_provide,omitempty"`    // env vars provided to OTHER containers when this service is deployed
 	EnvRequire    []EnvDependency   `yaml:"env_require,omitempty"`    // env vars this layer MUST have from the environment
 	EnvAccept     []EnvDependency   `yaml:"env_accept,omitempty"`     // env vars this layer CAN optionally use
 	SecretAccept  []EnvDependency   `yaml:"secret_accept,omitempty"`  // credential-store-backed env vars this layer CAN optionally use
@@ -297,6 +297,18 @@ type LayerYAML struct {
 	// deploy (every other target skips it). See android_spec.go ApkPackageSpec.
 	Apk []ApkPackageSpec `yaml:"apk,omitempty"`
 
+	// LocalPkg points at a bundled Arch PKGBUILD directory (relative to the
+	// layer dir or the project root, or absolute). On an Arch/CachyOS DEPLOY
+	// target (target:local on a pac host, target:vm into a pac guest) ov builds
+	// the package from this PKGBUILD on the HOST via makepkg and installs the
+	// resulting .pkg.tar.zst onto the target via pacman -U — delivering a
+	// pacman-tracked package instead of an ad-hoc binary. Compiled into a
+	// LocalPkgInstallStep; skipped at image build (no makepkg in a container)
+	// and on every non-pac target. The canonical user is the `ov` layer, whose
+	// localpkg points at the repo's pkg/arch (overthink-git). See
+	// LocalPkgInstallStep.
+	LocalPkg string `yaml:"localpkg,omitempty"`
+
 	// Reboot requests a reboot of the deploy target after this layer's
 	// steps (a trailing RebootStep). For kernel-module layers (e.g.
 	// nvidia-open-dkms) whose module only loads on a fresh boot with the
@@ -306,7 +318,7 @@ type LayerYAML struct {
 	Reboot bool `yaml:"reboot,omitempty"`
 
 	// Replaces root.yml / user.yml — see Task type and docs/plan.
-	Vars map[string]string `yaml:"var,omitempty"` // layer-local variables for ${VAR} substitution in tasks
+	Vars map[string]string `yaml:"var,omitempty"`  // layer-local variables for ${VAR} substitution in tasks
 	Task []Task            `yaml:"task,omitempty"` // ordered install operations
 
 	// Shell-init declarations: an intrinsic body (init/path_append/path/
@@ -339,8 +351,8 @@ type LayerYAML struct {
 	// Aggregated at image resolve time via AggregateLayerCapabilities.
 	// Replaces the magic image-level booleans (image.bootc, image.data_image)
 	// with a declarative layer-derived surface.
-	Capabilities         *LayerCapabilities `yaml:"capabilities,omitempty"`
-	RequiresCapability []string             `yaml:"requires_capability,omitempty"`
+	Capabilities       *LayerCapabilities `yaml:"capabilities,omitempty"`
+	RequiresCapability []string           `yaml:"requires_capability,omitempty"`
 
 	// Populated by custom UnmarshalYAML:
 	FormatSections map[string]*PackageSection `yaml:"-"` // format sections (rpm, deb, pac, aur, etc.)
@@ -371,9 +383,9 @@ var layerYAMLKnownFields = map[string]bool{
 	"vars": true, "task": true, "tests": true, "eval": true,
 	"artifact":     true,
 	"capabilities": true, "requires_capability": true,
-	"package":      true, "distro": true,
-	"apk":          true,
-	"shell":        true,
+	"package": true, "distro": true,
+	"apk":   true,
+	"shell": true,
 }
 
 // layerYAMLFormatNames caches known format names from build.yml for YAML parsing.
@@ -414,10 +426,10 @@ func derivePackageSectionsFromCalamares(layer *Layer, ly *LayerYAML) {
 	topPkgs := PackageNames(ly.Package)
 
 	distroToFormat := map[string]string{
-		"fedora":    "rpm",
-		"debian":    "deb",
-		"ubuntu":    "deb",
-		"arch": "pac",
+		"fedora": "rpm",
+		"debian": "deb",
+		"ubuntu": "deb",
+		"arch":   "pac",
 	}
 
 	ensureFormat := func(fmtName string) *PackageSection {
@@ -749,13 +761,13 @@ type RouteYAML struct {
 
 // Layer represents a layer directory and its contents
 type Layer struct {
-	Name              string
-	Path              string       // directory containing layer.yml
-	SourceDir         string       // anchor for relative file lookups (tasks.copy, data.src, install files); defaults to Path, overridden by layer.yml `directory:`
-	Version           string       // CalVer version from layer.yml
-	Description       *Description // Gherkin-shaped self-description (Feature/Narrative/Tag/Scenario)
-	Status            string       // derived from Description.Tag — working/testing/broken (empty = testing)
-	Info              string       // derived from Description.Feature+Narrative
+	Name        string
+	Path        string       // directory containing layer.yml
+	SourceDir   string       // anchor for relative file lookups (tasks.copy, data.src, install files); defaults to Path, overridden by layer.yml `directory:`
+	Version     string       // CalVer version from layer.yml
+	Description *Description // Gherkin-shaped self-description (Feature/Narrative/Tag/Scenario)
+	Status      string       // derived from Description.Tag — working/testing/broken (empty = testing)
+	Info        string       // derived from Description.Feature+Narrative
 	// Parse-time filesystem-probe caches: each caches a single fileExists /
 	// dirExists check against SourceDir performed once at scan time. These stay
 	// fields (a remote layer's cache dir may be evicted before they're read,
@@ -815,6 +827,7 @@ type Layer struct {
 	vars           map[string]string // layer-local variables (from layer.yml vars:)
 	tasks          []Task            // ordered install operations (from layer.yml tasks:)
 	apk            []ApkPackageSpec  // Android apps to install on a kind:android device (from layer.yml apk:)
+	localpkg       string            // bundled PKGBUILD dir to makepkg + pacman -U on an Arch deploy target (from layer.yml localpkg:)
 	reboot         bool              // reboot the deploy target after this layer (from layer.yml reboot:)
 	tests          []Check           // declarative checks (from layer.yml tests:)
 	artifacts      []LayerArtifact   // files to retrieve after setup (from layer.yml artifacts:)
@@ -1078,20 +1091,24 @@ func (l *Layer) HasContent() bool {
 // to be kept in lockstep with the field at every parse site). The filesystem
 // install-file probes (HasPixiToml/HasSrcDir/…) stay as cached fields; see the
 // Layer struct.
-func (l *Layer) HasEnv() bool            { return l.envConfig != nil }
-func (l *Layer) HasPorts() bool          { return len(l.portSpecs) > 0 }
-func (l *Layer) HasRoute() bool          { return l.route != nil }
-func (l *Layer) HasVolumes() bool        { return len(l.volumes) > 0 }
-func (l *Layer) HasAliases() bool        { return len(l.aliases) > 0 }
-func (l *Layer) HasExtract() bool        { return len(l.extract) > 0 }
-func (l *Layer) HasData() bool           { return len(l.data) > 0 }
-func (l *Layer) HasLibvirt() bool        { return len(l.libvirt) > 0 }
-func (l *Layer) HasTasks() bool          { return len(l.tasks) > 0 }
-func (l *Layer) HasApk() bool            { return len(l.apk) > 0 }
+func (l *Layer) HasEnv() bool     { return l.envConfig != nil }
+func (l *Layer) HasPorts() bool   { return len(l.portSpecs) > 0 }
+func (l *Layer) HasRoute() bool   { return l.route != nil }
+func (l *Layer) HasVolumes() bool { return len(l.volumes) > 0 }
+func (l *Layer) HasAliases() bool { return len(l.aliases) > 0 }
+func (l *Layer) HasExtract() bool { return len(l.extract) > 0 }
+func (l *Layer) HasData() bool    { return len(l.data) > 0 }
+func (l *Layer) HasLibvirt() bool { return len(l.libvirt) > 0 }
+func (l *Layer) HasTasks() bool   { return len(l.tasks) > 0 }
+func (l *Layer) HasApk() bool     { return len(l.apk) > 0 }
 
 // Apk returns the layer's Android app-install entries (the `apk:` package
 // format). Empty for non-Android layers.
 func (l *Layer) Apk() []ApkPackageSpec { return l.apk }
+
+// LocalPkg returns the layer's bundled-PKGBUILD pointer (the `localpkg:`
+// field), or "" when the layer declares none. See LocalPkgInstallStep.
+func (l *Layer) LocalPkg() string        { return l.localpkg }
 func (l *Layer) HasEnvProvides() bool    { return len(l.envProvides) > 0 }
 func (l *Layer) HasEnvRequires() bool    { return len(l.envRequires) > 0 }
 func (l *Layer) HasEnvAccepts() bool     { return len(l.envAccepts) > 0 }

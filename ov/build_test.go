@@ -514,3 +514,35 @@ func TestRenderPacstrapExtraConf(t *testing.T) {
 		t.Errorf("no SigLevel set → none should be emitted, got:\n%s", got)
 	}
 }
+
+// TestCachyosRuntimePacmanConf locks in the curated runtime /etc/pacman.conf the
+// cachyos pacstrap bootstrap writes into the rootfs — distinct from the install
+// config (ExtraRepos). Regression guard for the "config file /etc/pacman.conf
+// could not be read" deploy failure: pacstrap leaves the booted guest with no
+// working config, so RuntimePacmanConf MUST be present, carry the v3 repos, and
+// DELIBERATELY exclude cachyos-extra (no usable runtime DB). Single source of
+// truth — replaces the per-VM cloud-init write_files the cachyos VM entities had.
+func TestCachyosRuntimePacmanConf(t *testing.T) {
+	distroCfg, _, _, err := LoadBuildConfigForImage(repoRootDir(t))
+	if err != nil {
+		t.Fatalf("LoadBuildConfigForImage: %v", err)
+	}
+	cachyos, ok := distroCfg.Distro["cachyos"]
+	if !ok || cachyos.Pacstrap == nil {
+		t.Fatal("cachyos distro / pacstrap missing from build.yml")
+	}
+	rc := cachyos.Pacstrap.RuntimePacmanConf
+	if rc == "" {
+		t.Fatal("cachyos pacstrap runtime_pacman_conf is empty — guests boot with no /etc/pacman.conf and add_layer pac installs fail")
+	}
+	for _, want := range []string{"[options]", "SigLevel = Never", "[cachyos-v3]", "[cachyos-core-v3]", "[cachyos]", "Include = /etc/pacman.d/mirrorlist"} {
+		if !strings.Contains(rc, want) {
+			t.Errorf("runtime_pacman_conf missing %q:\n%s", want, rc)
+		}
+	}
+	// The curation that distinguishes runtime from install config: cachyos-extra
+	// serves no usable DB at runtime, so a runtime `pacman -Sy` against it fails.
+	if strings.Contains(rc, "cachyos-extra") {
+		t.Errorf("runtime_pacman_conf must NOT include cachyos-extra (no usable runtime DB):\n%s", rc)
+	}
+}

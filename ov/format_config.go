@@ -56,10 +56,23 @@ type DnfConfig struct {
 
 // PacstrapDef configures pacstrap-flavored bootstrap (Arch, CachyOS).
 type PacstrapDef struct {
-	BasePackages    []string         `yaml:"base_package,omitempty"`
-	KeyringInitCmd  string           `yaml:"keyring_init_cmd,omitempty"`
-	MirrorlistURL   string           `yaml:"mirrorlist_url,omitempty"`
-	ExtraRepos      []PacstrapRepo   `yaml:"extra_repo,omitempty"`
+	BasePackages   []string       `yaml:"base_package,omitempty"`
+	KeyringInitCmd string         `yaml:"keyring_init_cmd,omitempty"`
+	MirrorlistURL  string         `yaml:"mirrorlist_url,omitempty"`
+	ExtraRepos     []PacstrapRepo `yaml:"extra_repo,omitempty"`
+	// RuntimePacmanConf is the verbatim /etc/pacman.conf written into the
+	// bootstrapped rootfs (NOT the install config). pacstrap configures only the
+	// builder container's pacman.conf for the install; the booted guest is left
+	// with no working config, so a deploy that installs pac packages (add_layer)
+	// fails with "config file /etc/pacman.conf could not be read". When set, the
+	// shared pacstrap bootstrap template writes this content to
+	// {{.Target}}/etc/pacman.conf so every guest of this distro boots with a
+	// working pacman. Distinct from ExtraRepos (the install-time config) because
+	// the runtime repo set is deliberately curated (e.g. cachyos excludes the
+	// cachyos-extra repo, which serves no usable DB at runtime). Empty = leave
+	// whatever pacstrap installed. Single source of truth: replaces the per-VM
+	// cloud-init write_files: /etc/pacman.conf the cachyos VM entities duplicated.
+	RuntimePacmanConf string `yaml:"runtime_pacman_conf,omitempty"`
 }
 
 // PacstrapRepo describes an additional pacman repo (e.g. CachyOS repos)

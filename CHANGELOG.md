@@ -91,6 +91,24 @@ against main's landed tag per the B6 producer→consumer order. The companion
 `depends=` already declared `cloudflared-bin`/`gvisor-tap-vsock` (no new dep —
 #43 automates the manual `yay -S` the PKGBUILD comment had documented).
 
+**Follow-up in the same cutover — cachyos pacstrap emits a runtime
+`/etc/pacman.conf` (RCA from the consumer R10).** The `eval-cachyos-vm` consumer
+R10 FAILED at the `gocryptfs` pac install with `config file /etc/pacman.conf
+could not be read`: the cachyos pacstrap bootstrap configures only the builder
+container's pacman.conf for the install and leaves the booted guest without one,
+so any `add_layer` pac install fails. Only `cachyos-gpu-vm` + `cachyos-gpu` had
+worked around it, each carrying an identical hand-curated cloud-init
+`write_files: /etc/pacman.conf` (a 2-way duplication this cutover would have made
+3-way). Generic fix (R3, single source): a new per-distro
+`PacstrapDef.RuntimePacmanConf` (`build.yml`
+`distro.cachyos.pacstrap.runtime_pacman_conf`) carries the curated runtime config
+verbatim, and the shared pacstrap bootstrap template writes it into
+`{{.Target}}/etc/pacman.conf` after pacstrap when set; the per-VM `write_files`
+blocks are deleted from both VM entities. The runtime config is deliberately
+distinct from the install `extra_repo` (it excludes `cachyos-extra`, which serves
+no usable DB at runtime). Covered by `TestCachyosRuntimePacmanConf` + the
+re-run `eval-cachyos-vm` R10.
+
 ### 2026-06-04 — feat(ov): localpkg — Arch/CachyOS deploys install `ov` as the proper `overthink-git` package, not a curl'd binary
 
 Closes the `eval-cachyos-gpu-vm` coverage gap surfaced when the operator

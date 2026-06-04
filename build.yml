@@ -25,6 +25,16 @@ builder:
                     cat /etc/pacman.conf.extra >> /etc/pacman.conf
                     {{- end}}
                     pacstrap -K -G /target {{range .Packages}}{{.}} {{end}}
+                    {{- if .Distro.Pacstrap.RuntimePacmanConf}}
+                    # pacstrap configures only THIS container's pacman.conf for the
+                    # install; the booted guest is left without a working one. Write
+                    # the curated runtime config into the rootfs so add_layer pac
+                    # installs work in the guest (single source — replaces the per-VM
+                    # cloud-init write_files: /etc/pacman.conf the cachyos VMs used).
+                    cat > /target/etc/pacman.conf <<'OV_RUNTIME_PACMAN_CONF'
+                    {{.Distro.Pacstrap.RuntimePacmanConf}}
+                    OV_RUNTIME_PACMAN_CONF
+                    {{- end}}
                     tar -C /target --xattrs --xattrs-include='*' --acls -czf /out/rootfs.tar.gz .
     debootstrap:
         kind: bootstrap
@@ -593,6 +603,33 @@ distro:
                 - {name: cachyos-core-v3, server: "https://mirror.cachyos.org/repo/x86_64_v3/$repo", siglevel: "Never"}
                 - {name: cachyos, server: "https://mirror.cachyos.org/repo/$arch/$repo", siglevel: "Never"}
                 - {name: cachyos-extra, server: "https://mirror.cachyos.org/repo/$arch/$repo", siglevel: "Never"}
+            # The verbatim /etc/pacman.conf written into the bootstrapped rootfs
+            # (NOT the install config — extra_repo above). pacstrap leaves the booted
+            # guest with no working pacman.conf, so add_layer pac installs fail
+            # ("config file /etc/pacman.conf could not be read"). Curated runtime set:
+            # SigLevel Never (no keyring on disposable guests); cachyos-v3 +
+            # cachyos-core-v3 (x86_64_v3) + cachyos ($arch) + Arch core/extra.
+            # Deliberately NO cachyos-extra-v3 AND NO cachyos-extra: neither serves a
+            # usable DB at runtime (the v3 overlay 404s a malformed libyuv filed as
+            # plain x86_64 under the v3 path; cachyos-extra at $arch returns an HTML
+            # listing, not a .db). libyuv/gcc etc. resolve from Arch `extra`. This is
+            # the SINGLE source — the cachyos VM entities no longer carry a per-VM
+            # cloud-init write_files: /etc/pacman.conf.
+            runtime_pacman_conf: |
+                [options]
+                Architecture = x86_64 x86_64_v3
+                SigLevel = Never
+                ParallelDownloads = 5
+                [cachyos-v3]
+                Server = https://mirror.cachyos.org/repo/x86_64_v3/$repo
+                [cachyos-core-v3]
+                Server = https://mirror.cachyos.org/repo/x86_64_v3/$repo
+                [cachyos]
+                Server = https://mirror.cachyos.org/repo/$arch/$repo
+                [core]
+                Include = /etc/pacman.d/mirrorlist
+                [extra]
+                Include = /etc/pacman.d/mirrorlist
     debian:
         bootstrap:
             install_cmd: apt-get update && apt-get install -y --no-install-recommends

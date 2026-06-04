@@ -14,7 +14,7 @@ func (e *CycleError) Error() string {
 	return fmt.Sprintf("circular dependency: %s", strings.Join(e.Cycle, " -> "))
 }
 
-// ExpandLayer expands layer composition references (layers: field in layer.yml).
+// ExpandLayer expands layer composition references (layer: field in layer.yml).
 // For each layer that has IncludedLayers, recursively inserts them into the result.
 // Layers without content (no install files, no env/ports/etc.) are omitted.
 // Returns a flat, deduplicated layer list.
@@ -84,7 +84,7 @@ func ExpandLayer(requested []string, layers map[string]*Layer) ([]string, error)
 
 // ResolveLayerOrder resolves layer dependencies and returns them in topological order.
 // It takes the explicitly requested layers and the full layer map, then:
-// 1. Expands layer composition (layers: field)
+// 1. Expands layer composition (layer: field)
 // 2. Transitively resolves all dependencies
 // 3. Topologically sorts the result
 // 4. Returns layers in install order (dependencies before dependents)

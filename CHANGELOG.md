@@ -22,6 +22,79 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-04 — fix(ov): layer parser hard-rejects unknown top-level keys (strict singular enforcement) + close the silent-typo gap (#50)
+
+**Symptom that motivated this.** During #48, a `vscode` layer authored with
+`tasks:` (plural) and `vars:` (plural) built a layer that did *nothing* — the
+`code` binary never installed, `VSCODE_VERSION` was unbound — yet every
+validator and unit test stayed green. The keys were *silently dropped*: the
+`LayerYAML` struct's yaml tags are singular (`task:`, `var:`, …), and the
+`UnmarshalYAML` fallback routed every unrecognized top-level key to the
+build.yml-format / distro-tag sections and `continue`d on a decode miss. A
+plural typo therefore vanished without a trace, costing real R10 cycles to
+diagnose.
+
+**Root cause — three coupled defects.**
+
+1. **`knownFields` had drifted from the struct.** The fast-path allow-list
+   carried two *plural* entries that the struct never accepts (`env_provides`,
+   `vars`) and was missing two real singular fields (`localpkg`, `reboot`), so
+   the allow-list neither matched reality nor caught the typos it should have.
+2. **`UnmarshalYAML` silently swallowed unknown keys.** The tag-section branch
+   `continue`d on a failed decode or an empty `Package` list instead of
+   recording the key — so a genuine typo was indistinguishable from a real
+   distro tag.
+3. **A real latent bug had already slipped through.**
+   `layers/android-emulator-layer/layer.yml` declared `secret_accepts:`
+   (plural) — so the layer's `GOOGLE_ACCOUNT_EMAIL` / `GOOGLE_AAS_TOKEN`
+   credential declarations (for `apkeep`) were *never registered*. The strict
+   parser caught it the instant it landed.
+
+**The fix (hard cutover).**
+
+- **`ov/layers.go`** — `UnmarshalYAML` now collects every top-level key that is
+  neither a known field, a build.yml package format, nor a distro tag with a
+  `package:` list, and returns a **hard error** naming the offending key(s) with
+  a singular-typo remediation hint (`use the SINGULAR form: task: not tasks:,
+  var: not vars:, layer: not layers:, env_provide: not env_provides:`). The
+  `layerYAMLKnownFields` allow-list is realigned with the struct's singular yaml
+  tags (`env_provides`→`env_provide`, `vars`→`var`; `localpkg` + `reboot`
+  added). `hooks` and `capabilities` stay plural — they are genuinely
+  plural-valued config keys, not the silent-drop class.
+- **`ov/validate.go` + `ov/graph.go`** — the validator's "compose layer" error
+  string and the surrounding comments say `layer:` (singular), not `layers:`.
+- **`ov/layers_test.go`** — `TestLayerUnknownKeyRejected` proves the rejection
+  (plural `tasks:`/`vars:`/`layers:`/`secret_accepts:` all error with "unknown
+  top-level key"), the singular forms parse + populate, and a legitimate
+  `fedora:43` distro tag with a `package:` list still parses. The test fails
+  without the parser change — the eval-coverage gate.
+- **`layers/android-emulator-layer/layer.yml`** — `secret_accepts:` →
+  `secret_accept:` (the latent bug above).
+- **Docs (58 files in `plugins/` + the main `README.md`)** — every
+  plural→singular field reference swept to match the parser and the operator's
+  prefer-singular directive: the eight compound keys
+  (`env_provides`/`env_requires`/`env_accepts`/`secret_accepts`/`secret_requires`/`mcp_provides`/`mcp_requires`/`mcp_accepts`
+  → singular) plus `task`/`var`/`layer`/`require`/`port` field references and
+  the `/ov-image:layer` CLI examples (`ov layer set … port`/`require`).
+
+**No schema-version bump — this is *enforcement*, not a format change.** The
+plural→singular *format* change already shipped at schema `2026.130.1530`
+(the `field-singular` MigrationStep), whose `pluralToSingularYAMLKeys` table
+already covers the **complete** key set this parser rejects (including
+`secret_accepts`→`secret_accept`). The load-time gate forces `ov migrate` on
+any config older than HEAD, so a legacy config can never reach the strict
+parser un-singularized. The strict parser closes the *post-migration typo* gap
+(`ov migrate` is a one-shot transform; only a parse-time check is continuous).
+The set of *valid* keys is unchanged — only already-broken configs (whose
+plural keys were silently dropped) now fail loudly. Landed tag-only;
+`version:` stays at `2026.144.1443`.
+
+**Verification.** `go test ./ov/...` green (incl. the new test); `ov image
+validate` parses all layers across the main repo + all 8 submodules at EXIT=0
+with **zero warnings** (`validate` + `generate`); R10 `ov eval run eval-pod`
+**PASS** (8/8 steps `ok: true`, `total_seconds: 121`) — the strict parser
+parses, builds, deploys, and fresh-updates a real image without regression.
+
 ### 2026-06-04 — fix(vscode): version-pin VS Code direct from Microsoft, replacing the broken `visual-studio-code-bin` AUR (#48)
 
 The `vscode` layer's Arch side installed the AUR `visual-studio-code-bin`, whose

@@ -85,7 +85,7 @@ order — handling the hard parts so you (and your AI) don't have to.
   tasks (eight verbs: `cmd`/`mkdir`/`copy`/`write`/`link`/`download`/
   `setcap`/`build`), services (one unified `service:` list — see
   init-system polymorphism below), volumes, env, ports, eval probes,
-  `env_provides`/`env_requires`/`mcp_provides`/`mcp_accepts` for
+  `env_provide`/`env_require`/`mcp_provide`/`mcp_accept` for
   cross-container discovery, plus a `version:` CalVer.
   → `/ov-image:layer`.
 - **Image** (`kind: image`) — base + ordered layer list. Multi-stage
@@ -414,14 +414,14 @@ input.
   5900 + Pipewire audio. Browser pane at `:3000`.
 - **Per-image MCP servers** — `chrome-devtools-mcp` on `:9224`,
   `jupyter-mcp` at `:8888/mcp`, `marimo-mcp` at `:2718/mcp/server`,
-  nested `ov-mcp`. Declared via `mcp_provides:` and auto-discovered
+  nested `ov-mcp`. Declared via `mcp_provide:` and auto-discovered
   by consumers (Hermes, Claude Code) through `OV_MCP_SERVERS`.
-- **Auto service discovery** — a layer's `env_provides:` declares
+- **Auto service discovery** — a layer's `env_provide:` declares
   env vars with `{{.ContainerName}}` templates injected into every
   co-deployed container at `ov config` time. Deploy `ollama` and
   every other pod sees `OLLAMA_HOST=http://ov-ollama:11434`.
-  `mcp_provides:` works the same way for MCP URLs.
-  `env_requires:` / `env_accepts:` document consumer dependencies
+  `mcp_provide:` works the same way for MCP URLs.
+  `env_require:` / `env_accept:` document consumer dependencies
   so `ov config` warns early.
 
 → `/ov-core:start`, `/ov-core:logs`, `/ov-core:cmd`,
@@ -796,7 +796,7 @@ https://github.com/overthinkos/overthink.git`.
 every `ov` CLI leaf as an MCP tool (Streamable HTTP or stdio), so
 the agent reaches the full build / deploy / test surface over RPC.
 Per-image MCP servers (chrome-devtools-mcp, jupyter-mcp,
-marimo-mcp, ov-mcp) auto-discover via `mcp_provides:` when their
+marimo-mcp, ov-mcp) auto-discover via `mcp_provide:` when their
 containers are running.
 
 **Sub-agents, dynamic workflows, and agent teams.** Beyond skills, the

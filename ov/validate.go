@@ -110,7 +110,7 @@ func Validate(cfg *Config, layers map[string]*Layer, dir string, opts ResolveOpt
 
 	// Tunnel is a deploy-time concern (deploy.yml only) — not validated here.
 
-	// Validate layer composition (layers: field)
+	// Validate layer composition (layer: field)
 	validateLayerIncludes(layers, errs)
 
 	// Validate no circular dependencies in layers
@@ -467,9 +467,9 @@ func validateLayerReferences(cfg *Config, layers map[string]*Layer, errs *Valida
 // validateLayerContents validates each layer has required files
 func validateLayerContents(layers map[string]*Layer, errs *ValidationError) {
 	for name, layer := range layers {
-		// Layer must have at least one install file, a layers: field (composition), or data declarations
+		// Layer must have at least one install file, a layer: field (composition), or data declarations
 		if !layer.HasInstallFiles() && len(layer.IncludedLayer) == 0 && !layer.HasData() {
-			errs.Add("layer %q: must have at least one install file (layer.yml rpm/deb packages, root.yml, pixi.toml, pyproject.toml, environment.yml, package.json, Cargo.toml, or user.yml) or a layers: field", name)
+			errs.Add("layer %q: must have at least one install file (layer.yml rpm/deb packages, root.yml, pixi.toml, pyproject.toml, environment.yml, package.json, Cargo.toml, or user.yml) or a layer: field", name)
 		}
 
 		// `version:` is MANDATORY for the layer kind (optional for every other
@@ -623,7 +623,7 @@ func validateShellPath(layerName, field, p string, errs *ValidationError) {
 	}
 }
 
-// validateLayerIncludes validates layer composition (layers: field in layer.yml)
+// validateLayerIncludes validates layer composition (layer: field in layer.yml)
 func validateLayerIncludes(layers map[string]*Layer, errs *ValidationError) {
 	for name, layer := range layers {
 		if len(layer.IncludedLayer) == 0 {

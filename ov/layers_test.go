@@ -2,7 +2,10 @@ package main
 
 import (
 	"reflect"
+	"strings"
 	"testing"
+
+	"gopkg.in/yaml.v3"
 )
 
 func TestScanLayers(t *testing.T) {
@@ -16,6 +19,47 @@ func TestScanLayers(t *testing.T) {
 		if _, ok := layers[name]; !ok {
 			t.Errorf("missing layer %q", name)
 		}
+	}
+}
+
+func TestLayerUnknownKeyRejected(t *testing.T) {
+	// The parser HARD-ERRORS on an unknown top-level key (a plural/singular typo)
+	// instead of silently dropping it. Regression for #50 — the
+	// tasks:/vars:/layers:/secret_accepts: silent-drop that masked broken layers.
+	bad := map[string]string{
+		"tasks":          "name: t\ntasks:\n  - cmd: echo hi\n",
+		"vars":           "name: t\nvars:\n  FOO: bar\n",
+		"layers":         "name: t\nlayers:\n  - supervisord\n",
+		"secret_accepts": "name: t\nsecret_accepts:\n  - name: X\n",
+	}
+	for key, body := range bad {
+		t.Run("reject_"+key, func(t *testing.T) {
+			var ly LayerYAML
+			err := yaml.Unmarshal([]byte(body), &ly)
+			if err == nil {
+				t.Fatalf("expected error for unknown plural key %q, got nil", key)
+			}
+			if !strings.Contains(err.Error(), "unknown top-level key") {
+				t.Errorf("error for %q = %v, want 'unknown top-level key'", key, err)
+			}
+		})
+	}
+
+	// The SINGULAR forms must parse cleanly AND populate their fields.
+	good := "name: t\ntask:\n  - cmd: echo hi\nvar:\n  FOO: bar\nlayer:\n  - supervisord\nsecret_accept:\n  - name: X\n"
+	var ly LayerYAML
+	if err := yaml.Unmarshal([]byte(good), &ly); err != nil {
+		t.Fatalf("singular keys must parse, got error: %v", err)
+	}
+	if len(ly.Task) != 1 || ly.Vars["FOO"] != "bar" || len(ly.Layer) != 1 || len(ly.SecretAccept) != 1 {
+		t.Errorf("singular keys parsed but fields empty: task=%d var=%v layer=%v secret_accept=%d",
+			len(ly.Task), ly.Vars, ly.Layer, len(ly.SecretAccept))
+	}
+
+	// A valid distro tag carrying a package: list must still parse (not rejected).
+	var ly2 LayerYAML
+	if err := yaml.Unmarshal([]byte("name: t\nfedora:43:\n  package: [vim]\n"), &ly2); err != nil {
+		t.Fatalf("distro tag with package: must parse, got error: %v", err)
 	}
 }
 

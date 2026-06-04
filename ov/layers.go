@@ -377,15 +377,16 @@ var layerYAMLKnownFields = map[string]bool{
 	"volume": true, "alias": true, "extract": true, "security": true,
 	"libvirt": true, "hooks": true,
 	"port_relay": true, "secret": true, "data": true,
-	"env_provides": true, "env_require": true, "env_accept": true,
+	"env_provide": true, "env_require": true, "env_accept": true,
 	"secret_accept": true, "secret_require": true,
 	"mcp_provide": true, "mcp_require": true, "mcp_accept": true,
-	"vars": true, "task": true, "tests": true, "eval": true,
+	"var": true, "task": true, "tests": true, "eval": true,
 	"artifact":     true,
 	"capabilities": true, "requires_capability": true,
 	"package": true, "distro": true,
-	"apk":   true,
-	"shell": true,
+	"apk":      true,
+	"shell":    true,
+	"localpkg": true, "reboot": true,
 }
 
 // layerYAMLFormatNames caches known format names from build.yml for YAML parsing.
@@ -696,6 +697,7 @@ func (ly *LayerYAML) UnmarshalYAML(value *yaml.Node) error {
 	if value.Kind == yaml.MappingNode {
 		ly.FormatSections = make(map[string]*PackageSection)
 		ly.TagSections = make(map[string]*TagPkgConfig)
+		var unknownKeys []string
 		for i := 0; i < len(value.Content)-1; i += 2 {
 			key := value.Content[i].Value
 			if layerYAMLKnownFields[key] {
@@ -719,21 +721,26 @@ func (ly *LayerYAML) UnmarshalYAML(value *yaml.Node) error {
 					ly.FormatSections[key] = section
 				}
 			} else {
-				// Tag section: parse BOTH the typed struct (for Packages access)
-				// AND the raw map (for repos/options/keys passthrough to the
-				// install template). Same dual-decode pattern as FormatSections.
+				// Not a known field and not a build.yml format: the only valid
+				// remaining shape is a distro/version TAG section carrying a
+				// package: list (e.g. fedora:43:, debian,ubuntu:). Decode BOTH the
+				// typed struct (for Packages) and the raw map (repos/options
+				// passthrough). Anything that does NOT decode to a tag-with-
+				// packages is an unknown top-level key — almost always a
+				// plural/singular typo of a singular field (task:/var:/layer:) —
+				// collected for a hard error below instead of being silently
+				// dropped (which previously masked typos until a runtime surprise).
 				var cfg TagPkgConfig
+				var raw map[string]interface{}
 				if err := value.Content[i+1].Decode(&cfg); err != nil {
+					unknownKeys = append(unknownKeys, key)
 					continue
 				}
-				var raw map[string]interface{}
-				if err := value.Content[i+1].Decode(&raw); err != nil {
+				if err := value.Content[i+1].Decode(&raw); err != nil || len(cfg.Package) == 0 {
+					unknownKeys = append(unknownKeys, key)
 					continue
 				}
 				cfg.Raw = raw
-				if len(cfg.Package) == 0 {
-					continue
-				}
 				// Expand comma-separated keys (e.g., "debian,ubuntu")
 				parts := strings.Split(key, ",")
 				for _, part := range parts {
@@ -743,6 +750,10 @@ func (ly *LayerYAML) UnmarshalYAML(value *yaml.Node) error {
 					}
 				}
 			}
+		}
+
+		if len(unknownKeys) > 0 {
+			return fmt.Errorf("layer has unknown top-level key(s) %v — each is neither a known field, a build.yml package format, nor a distro tag with a package: list. This is almost always a plural/singular typo: use the SINGULAR form (task: not tasks:, var: not vars:, layer: not layers:, env_provide: not env_provides:). Run `ov migrate` for a legacy config", unknownKeys)
 		}
 	}
 

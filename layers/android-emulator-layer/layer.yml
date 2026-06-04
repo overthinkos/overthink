@@ -31,7 +31,7 @@ layer:
     # oauth_token via `apkeep -e <email> --oauth-token oauth2_4/…`. Resolved from
     # the credential store at ov config and injected as podman secrets — never
     # plaintext in deploy.yml / quadlet.
-    secret_accepts:
+    secret_accept:
         - name: GOOGLE_ACCOUNT_EMAIL
           description: "Google account email for the apkeep google-play source (opt-in)"
         - name: GOOGLE_AAS_TOKEN

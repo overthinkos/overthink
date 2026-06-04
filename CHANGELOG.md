@@ -22,6 +22,40 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-04 — fix(ov): kind-files migrator no longer re-splits an intentionally-inline overthink.yml (version-gate)
+
+`runMigrations` runs EVERY step on every `ov migrate` (each self-guards on
+idempotency, not on the config's version). The `kind-files` step (schema
+2026.125.2355) splits inline `image:`/`vm:` blocks into sibling files — but its
+guard ("does an inline block exist?") was too broad: it fired on
+`image/bootc`'s deliberately single-file `overthink.yml` (a supported terminal
+layout — CLAUDE.md: "both layouts load identically; … OR inlines them all in the
+one overthink.yml (e.g. bootc)"). The #51 cutover surfaced this — running
+`ov migrate` on bootc split its inline config into `image.yml`/`vm.yml`; it was
+reverted there and is fixed here.
+
+**Fix — a version-gate scoped to kind-files** (`ov/migrate_kind_files.go`):
+`MigrateKindFiles` now reads the config's current `version:` and is a no-op when
+it is at/past `kindFilesSchemaVersion` (2026.125.2355) — a config authored after
+the cutover chose its layout deliberately and must not be re-split; only an OLDER
+config has legacy inline that needs splitting. The gate is kind-files-specific by
+design: `field-singular` (which #51 extended) is idempotent and SHOULD re-run on
+configs past it (to singularize keys added to its table later), so a blanket
+framework-level version-gate is wrong — only the non-idempotent `kind-files`
+transform needs gating. `kindFilesSchemaVersion` is the single source for the
+version (referenced by both the gate and the registry step).
+
+**Coverage** (new `ov/migrate_kind_files_test.go`):
+`TestMigrateKindFiles_SkipsIntentionalInline` (a config at HEAD with inline
+`image:`/`vm:` is a no-op — fails without the gate) +
+`TestMigrateKindFiles_SplitsLegacyInline` (a pre-2026.125.2355 config still
+splits — the gate doesn't break the legacy migration). `go test ./ov/...` green.
+
+**Verification:** a real `ov migrate` on `image/bootc` (schema 2026.155.1801)
+reports "nothing to migrate" — the inline `overthink.yml` is untouched, no sibling
+files are created, and `ov image validate` passes. No schema bump (the fix changes
+when kind-files runs, not the schema); landed tag-only.
+
 ### 2026-06-04 — fix(build): single-source the cachyos pacstrap repo config — runtime pacman.conf renders from extra_repo (no install-vs-runtime drift) (#47)
 
 **The bug + its root cause (duplication).** The `cachyos-extra` pacman repo

@@ -35,6 +35,12 @@ type MigrateKindFilesResult struct {
 	NoChanges    bool
 }
 
+// kindFilesSchemaVersion is this step's schema CalVer (also its registry entry's
+// Version). The version-gate in MigrateKindFiles uses it to skip a config already
+// at/past kind-files — its inline layout is then INTENTIONAL (a supported terminal
+// layout, e.g. image/bootc), not legacy that needs splitting.
+var kindFilesSchemaVersion = mustCalVer("2026.125.2355")
+
 // MigrateKindFiles applies the cutover transforms to the project rooted at dir.
 // In dry-run mode no files are written.
 func MigrateKindFiles(dir string, dryRun bool) (MigrateKindFilesResult, error) {
@@ -55,6 +61,22 @@ func MigrateKindFiles(dir string, dryRun bool) (MigrateKindFilesResult, error) {
 	}
 	rootMap := rootDoc.Content[0]
 	rootChanged := false
+
+	// Version-gate: kind-files SPLITS legacy inline image:/vm: blocks into sibling
+	// files. But inline is a SUPPORTED TERMINAL layout (e.g. image/bootc) for any
+	// config authored AFTER this cutover's schema — only an OLDER config has legacy
+	// inline that needs splitting. runMigrations runs every step on every migrate,
+	// so without this gate the step re-splits an intentionally-inline config (the
+	// bug: `ov migrate` splitting image/bootc's single-file overthink.yml into
+	// image.yml/vm.yml). A config at/past kind-files chose its layout deliberately;
+	// leave it untouched. The kind:deployment→deploy rename is unaffected — no
+	// `kind: deployment` survives in a post-cutover config either.
+	if v := findMappingValue(rootMap, "version"); v != nil {
+		if cur, ok := ParseCalVer(strings.TrimSpace(v.Value)); ok && !cur.Less(kindFilesSchemaVersion) {
+			res.NoChanges = true
+			return res, nil
+		}
+	}
 
 	// Transform 1: extract image: from overthink.yml → image.yml.
 	imagePath := filepath.Join(dir, "image.yml")

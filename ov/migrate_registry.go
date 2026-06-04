@@ -109,7 +109,7 @@ func migrationSteps() []MigrationStep {
 			w, err := MigrateLocalImage(c.Dir, c.DryRun)
 			return len(w) > 0, err
 		}},
-		{mustCalVer("2026.125.2355"), "kind-files", false, func(c *MigrateContext) (bool, error) {
+		{kindFilesSchemaVersion, "kind-files", false, func(c *MigrateContext) (bool, error) {
 			if _, err := os.Stat(filepath.Join(c.Dir, "overthink.yml")); err != nil {
 				return false, nil // pre-unified tree; `unified` runs first and creates it
 			}

@@ -1536,6 +1536,27 @@ eval:
               stdout:
                 - contains: '"kind": "pod"'
                 - contains: eval-pod
+    # Disposable R10 for the vscode layer's Arch direct-download install path
+    # (the version-pin cutover that replaced the broken visual-studio-code-bin AUR).
+    # The vscode layer's baked build-scope eval (code-binary + code-version) runs at
+    # image + live scope here; this is the producer R10 in the main repo.
+    eval-vscode-pod:
+        target: pod
+        image: vscode-test
+        disposable: true
+        lifecycle: dev
+        port: [auto]
+        description:
+            feature: Arch vscode install (version-pinned MS download, sha256-verified) — replaces the broken visual-studio-code-bin AUR
+            tag: [working]
+        eval:
+            - id: status-shows-vscode-pod
+              scope: deploy
+              command: ov status --json
+              in_container: false
+              stdout:
+                - contains: '"kind": "pod"'
+                - contains: eval-vscode-pod
     eval-local:
         target: local
         local: eval-local

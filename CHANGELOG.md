@@ -22,6 +22,41 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-04 — fix(vscode): version-pin VS Code direct from Microsoft, replacing the broken `visual-studio-code-bin` AUR (#48)
+
+The `vscode` layer's Arch side installed the AUR `visual-studio-code-bin`, whose
+PKGBUILD periodically ships broken source files — commit `07f5a1e` (2026-06-04)
+un-gitignored three `*.in` resource files and committed them as empty 0-byte
+placeholders, so makepkg's validity check fails for every consumer (RCA-proven;
+it broke the live `cachyos-gpu` workstation restore — see the operator-restore
+incident). The fix removes the AUR dependency entirely: the Arch path now
+downloads a VERSION-PINNED VS Code tarball direct from Microsoft's official
+versioned URL (`https://update.code.visualstudio.com/<ver>/linux-x64/stable`)
+with a sha256 WE control (computed against the real 1.123.0 tarball,
+`2fdef947…`), self-gated to Arch via `command -v pacman` (Fedora keeps the
+unchanged MS-yum-repo `code` package), with the electron runtime libraries
+declared as `distro.arch.package:` (the set the AUR `depends=` auto-installed). A
+future VS Code bump is now a deliberate, sum-verified version change — never a
+silent upstream break.
+
+Eval-coverage: the `vscode` layer gained build-scope `eval:` checks
+(`code-binary` + `code-version`), and a disposable producer R10 vehicle was added
+in the main repo — a minimal `vscode-test` Arch pod image (`arch` base + the new
+generic `eval-keepalive` layer + `vscode`) backing the `eval-vscode-pod`
+`kind: eval` bed. The new `eval-keepalive` layer composes supervisord and adds a
+reusable `sleep infinity` service so a pod whose layer-under-test is a build-time
+install (no service of its own) still reaches steady-state for `ov eval
+live`/`run` AND supervisord gets a valid assembled `/etc/supervisord.conf` (its
+baked `supervisorctl pid` check needs one).
+
+R10 (`ov eval run eval-vscode-pod`, disposable pod, no GPU): PASS — 8/8 steps
+incl. the fresh-rebuild `update` step: `✓ /usr/bin/code`, `✓ code --version
+exit=0`, `✓ supervisorctl pid`, `✓ supervisorctl status keepalive`. The
+cross-repo consumer (`image/cachyos`) repoints its `@github .../vscode` pin to
+this layer's landed tag via `ov image reconcile` and re-adds vscode to the
+`cachyos-gpu` workstation (reverting the recovery-time TEMP removal), then
+`ov deploy add cachyos-gpu` reinstalls VS Code on the live workstation.
+
 ### 2026-06-04 — fix(ov): `ov update <vm>` Rebuild re-applies layers like pod/local (#42)
 
 `VmUnifiedTarget.Rebuild` (`ov/unified_targets_vm.go`) was domain-recreate-only:

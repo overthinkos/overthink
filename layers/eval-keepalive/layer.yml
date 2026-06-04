@@ -1,0 +1,24 @@
+layer:
+    version: 2026.155.1526
+    name: eval-keepalive
+    description: |
+        Minimal supervisord keepalive — a `sleep infinity` service so a pod whose
+        layer-under-test is a build-time install (no service of its own) still
+        reaches steady-state for `ov eval live` / `ov eval run`, AND supervisord
+        gets a valid /etc/supervisord.conf (its baked `supervisorctl pid` check
+        needs an assembled config, which only exists when some layer contributes a
+        service:). No extra packages — `sleep` is in coreutils on every base, so
+        this is distro-agnostic (arch/fedora/debian). Used by test images like
+        `vscode-test` that back a `kind: eval` pod bed.
+    layer:
+        - supervisord
+    service:
+        - name: keepalive
+          exec: /usr/bin/sleep infinity
+          restart: always
+    eval:
+        - id: keepalive-running
+          scope: deploy
+          command: supervisorctl status keepalive
+          stdout:
+            contains: RUNNING

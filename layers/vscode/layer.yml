@@ -1,19 +1,35 @@
 layer:
-    version: 2026.144.1443
+    version: 2026.155.1458
     name: vscode
+    var:
+        # VS Code is installed direct from Microsoft's VERSIONED URL with a sha256
+        # WE control (computed against the real tarball; a future bump is a
+        # deliberate, sum-verified version change). This deliberately does NOT use
+        # the AUR `visual-studio-code-bin`, whose PKGBUILD periodically ships broken
+        # source files (commit 07f5a1e shipped empty *.in placeholders, failing
+        # makepkg's validity check for every consumer). See CHANGELOG.md.
+        VSCODE_VERSION: "1.123.0"
+        VSCODE_SHA256: "2fdef947717befd2e06854cbe01e99b4898f7752f25e12269c38023e63b93c8f"
     distro:
         arch:
-            aur:
-                package:
-                    - visual-studio-code-bin
-                # AUR `replaces:` entries — pre-removed via `pacman -Rs --noconfirm`
-                # immediately before the `pacman -U` of the AUR build artifact.
-                # Required because `visual-studio-code-bin` and the official
-                # repo `code` package both own /usr/bin/code etc.; pacman aborts
-                # with "unresolvable package conflicts" otherwise. Idempotent —
-                # entries are skipped silently when the package isn't installed.
-                replace:
-                    - code
+            # VS Code (electron) runtime libraries — the set the AUR
+            # `visual-studio-code-bin` package declared as `depends`. Required
+            # because the direct-download tarball below ships only the app, not
+            # its system libs.
+            package:
+                - libxkbfile
+                - gnupg
+                - gtk3
+                - libsecret
+                - nss
+                - gcc-libs
+                - libnotify
+                - libxss
+                - glibc
+                - lsof
+                - shared-mime-info
+                - xdg-utils
+                - alsa-lib
         fedora:
             package:
                 - code
@@ -21,3 +37,42 @@ layer:
                 - name: code
                   url: "https://packages.microsoft.com/yumrepos/vscode"
                   gpgkey: "https://packages.microsoft.com/keys/microsoft.asc"
+    task:
+        # Arch/CachyOS install path. Self-gated to Arch via `command -v pacman`
+        # because task: bodies are NOT distro-scoped — on Fedora this is a no-op and
+        # the distro.fedora `code` package (same proprietary, Marketplace-enabled
+        # build, from the MS yum repo) installs instead. The download is content-
+        # cached (sha256-verified on both fetch and cache-hit), extracted to
+        # /opt/vscode, and symlinked to /usr/bin/code.
+        - cmd: |
+            command -v pacman >/dev/null 2>&1 || exit 0
+            set -eu
+            cache=/var/cache/ov-vscode
+            tarball="${cache}/code-${VSCODE_VERSION}.tar.gz"
+            mkdir -p "$cache"
+            if [ ! -f "$tarball" ] || ! printf '%s  %s\n' "$VSCODE_SHA256" "$tarball" | sha256sum -c - >/dev/null 2>&1; then
+              curl -fsSL "https://update.code.visualstudio.com/${VSCODE_VERSION}/linux-x64/stable" -o "${tarball}.part"
+              printf '%s  %s\n' "$VSCODE_SHA256" "${tarball}.part" | sha256sum -c -
+              mv -f "${tarball}.part" "$tarball"
+            fi
+            rm -rf /opt/vscode
+            mkdir -p /opt/vscode
+            tar -xzf "$tarball" -C /opt/vscode --strip-components=1
+            ln -sf /opt/vscode/bin/code /usr/bin/code
+          user: root
+          cache:
+            - /var/cache/ov-vscode
+    eval:
+        # eval-coverage gate (build-scope): proves VS Code installed on BOTH paths
+        # (Arch symlink → /opt/vscode; Fedora MS-repo package → /usr/bin/code).
+        # Would FAIL without this layer (no /usr/bin/code).
+        - id: code-binary
+          scope: build
+          file: /usr/bin/code
+          exists: true
+        - id: code-version
+          scope: build
+          command: /usr/bin/code --version
+          exit_status: 0
+          stdout:
+            matches: "^[0-9]+\\.[0-9]+\\.[0-9]+"

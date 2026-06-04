@@ -22,6 +22,75 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-04 — feat(ov): generic config-driven builder — localpkg resolves its AUR-dep closure + the deploy-side format/builder/uninstall rendering reads `build.yml` host cells
+
+Two converged changes landed as ONE generic-builder cutover, motivated by the
+operator-workstation restore (Cutover 2 Part C). After #41 (below) made
+`localpkg` install `ov` as the `overthink-git` package, the live operator deploy
+still failed at `pacman -U overthink-git`: its AUR-only runtime deps
+(`cloudflared-bin`, `gvisor-tap-vsock`) were unresolvable. The
+`eval-cachyos-gpu-vm` bed had passed only by **topo luck** — `cachyos-extras`
+pulled those deps before `ov-full`, so `pacman -U` succeeded without ever
+exercising dependency resolution.
+
+**#43 — localpkg resolves the built package's builder-resolvable dependency
+closure.** After `buildLocalPkgOnHost` (`ov/localpkg.go`) builds the PKGBUILD via
+makepkg, `resolveLocalPkgDeps` reads the built package's `.PKGINFO depends`
+(`pkgInfoDepends`/`parsePkgInfoDepends`; version constraints stripped via
+`stripDependConstraint`), intersects them with the host-foreign package set
+(`hostForeignPkgs` running the format's `foreign_query` = `pacman -Qmq`) to find
+the builder-only deps (`builderOnlyDeps`), builds THAT closure through the SAME
+`aur` builder (`buildDepPkgsOnHost`), and installs the package + its closure onto
+the target via the shared `transferAndInstallPkgs` (R3 — one transfer+install leg
+shared with the aur builder). A localpkg install no longer relies on another
+layer having pre-installed its AUR deps.
+
+**#44 — the deploy-side format/builder/uninstall rendering converged onto the
+config-driven `build.yml` machinery (the full generic builder workflow the
+operator asked for: "make the local builder generic enough to reuse ANY builder
+config and package format … easy to add additional kinds or package formats").**
+Previously `ov/deploy_target_local.go` carried a hand-written
+`renderFallbackPkgCmd` switch over rpm/deb/pac plus four per-builder renderers
+(`renderPixiScript`, `renderNpmScript`, `renderCargoScript`, `renderAurScript`),
+and `ov/deploy_target_vm.go` routed builders by NAME. All six are deleted
+(~180 lines) and replaced by config-driven renderers that read the SAME
+`build.yml` definitions the OCI build already consumed, differing only by phase
+cell:
+- `renderHostPackageCommand(distroCfg, step)` — renders the package install from
+  the distro format's `phase.install.host` cell (`FormatDef.PhaseTemplate(phase,
+  venue)` + `RenderTemplate`), the host-venue twin of the `container` cell.
+- `renderBuilderScript(step)` — renders any builder (pixi/npm/cargo/aur) from its
+  `phase.install.host` cell; `VmDeployTarget.execBuilder` now routes by OUTPUT
+  SHAPE (no `LocalPkg` + a host cell ⇒ home-artifact builder), not by builder
+  name.
+- `reversePackageRemove` keeps its name but its hardcoded format-switch is
+  replaced by `runScriptReverse` rendering each format's new `uninstall_template`
+  (`FormatDef.UninstallTemplate` → `ReverseOp.UninstallCmd`, populated by
+  `fillReverseUninstallCmds`).
+- `localpkg` itself is config-driven: the new `format.<fmt>.local_pkg:` block in
+  `build.yml` (`LocalPkgDef`: `pkg_glob`, `build_template`, `install_template`,
+  `foreign_query`, `probe`, `dep_constraint_ops`, `dep_builder`) supplies every
+  command, so adding a package format is a YAML-only change. `pac.local_pkg`
+  wires makepkg + `pacman -U` + `pacman -Qmq` + the `aur` dep builder.
+
+Net: build-mode (`OCITarget`) and deploy-mode (`LocalDeployTarget` /
+`VmDeployTarget`) read the same `build.yml` format/builder definitions, differing
+only by the `container` vs `host` phase cell — one machinery, no hardcoded
+package-format or builder literals on the deploy side.
+
+**Coverage + R10 (cross-repo B6).** A new dep-absent witness — `eval-cachyos-vm`
++ `ov-full` (NO `cachyos-extras`) — forces the closure resolution and asserts
+`pacman -Q` for `overthink-git` + `cloudflared-bin` + `gvisor-tap-vsock`; the
+check FAILS without #43. Producer (main) verified live on `eval-pod` /
+`eval-k3s-vm` / `eval-local` (the shared format-install + IR-walk machinery, all
+PASS); the localpkg-closure + host-builder paths are gated by the consumer
+(image/cachyos) R10 — `eval-cachyos-vm` (dep-absent localpkg) + `eval-cachyos-gpu-vm`
+(the full format + builders + localpkg + nested-pod + GPU operator mirror) — run
+against main's landed tag per the B6 producer→consumer order. The companion
+`pkg/arch` `pkgver` is synced to the cutover's `ov` build; `overthink-git`'s
+`depends=` already declared `cloudflared-bin`/`gvisor-tap-vsock` (no new dep —
+#43 automates the manual `yay -S` the PKGBUILD comment had documented).
+
 ### 2026-06-04 — feat(ov): localpkg — Arch/CachyOS deploys install `ov` as the proper `overthink-git` package, not a curl'd binary
 
 Closes the `eval-cachyos-gpu-vm` coverage gap surfaced when the operator

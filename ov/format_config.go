@@ -164,6 +164,82 @@ type FormatDef struct {
 	InstallTemplate string            `yaml:"install_template,omitempty"`
 	Phases          *PhaseSet         `yaml:"phase,omitempty"`
 	Validate        []FormatRule      `yaml:"validate,omitempty"`
+
+	// UninstallTemplate is the host-venue package-removal command rendered at
+	// deploy-teardown (reverse_ops.go reversePackageRemove). It is a Go
+	// text/template over an InstallContext (.Packages = the installed package
+	// names) so the removal command (dnf remove / apt purge / pacman -Rs) comes
+	// from config, never a hardcoded per-format switch. Empty for formats with
+	// no host teardown.
+	UninstallTemplate string `yaml:"uninstall_template,omitempty"`
+
+	// LocalPkg drives the layer `localpkg:` mechanism for this format —
+	// building a bundled package SOURCE dir on the host, installing the
+	// resulting package FILE(s) onto a deploy target, and resolving the
+	// built package's builder-resolvable dependency closure. It is the
+	// ONLY home for these operations: the format's `install_template:`
+	// describes installing REPO packages (from a layer's `package:` list),
+	// not building/installing a local source-built package file. Nil for
+	// formats that ship no localpkg support (rpm/deb today); populated for
+	// `pac` only. See LocalPkgDef.
+	LocalPkg *LocalPkgDef `yaml:"local_pkg,omitempty"`
+}
+
+// LocalPkgDef declares, per package format, how the `localpkg:` mechanism
+// builds and installs a SOURCE-built package — the config that the format's
+// repo-install templates cannot express. Every field is a Go text/template
+// (rendered via RenderTemplate) or a literal, so the localpkg executor carries
+// ZERO hardcoded package-manager / format strings: they all come from here.
+//
+// Template variables (LocalPkgContext):
+//   - BuildTemplate:   {{.SrcDir}}  {{.PkgDest}}            — build a source dir
+//   - InstallTemplate: {{.StageDir}} {{.Glob}}             — install package files
+//   - ForeignQuery / Probe: no variables (plain shell commands)
+//
+// Populated for `pac` in build.yml (makepkg / pacman -U / pacman -Qmq /
+// command -v pacman). The operator adds rpm/deb values later; ov writes NO
+// speculative rpm/deb values or code paths.
+type LocalPkgDef struct {
+	// PkgGlob is the built-package filename glob (e.g. "*.pkg.tar.zst" for
+	// pacman). Used both to collect build output and to match the staged
+	// files for the install command.
+	PkgGlob string `yaml:"pkg_glob"`
+
+	// BuildTemplate renders the host-side command that builds the package
+	// SOURCE directory into PkgGlob artifacts under {{.PkgDest}}. Variables:
+	// {{.SrcDir}} (the resolved source dir), {{.PkgDest}} (a per-build temp
+	// output dir). For pac: `cd {{.SrcDir}} && PKGDEST={{.PkgDest}} makepkg
+	// -sf --noconfirm`.
+	BuildTemplate string `yaml:"build_template"`
+
+	// InstallTemplate renders the target-venue command that installs the
+	// staged package files. Variables: {{.StageDir}} (the on-target staging
+	// dir), {{.Glob}} (PkgGlob). For pac: `pacman -U --noconfirm
+	// {{.StageDir}}/{{.Glob}}`. Runs via the executor's RunSystem (sudo).
+	InstallTemplate string `yaml:"install_template"`
+
+	// ForeignQuery is the host-side command listing FOREIGN packages —
+	// installed packages that no sync repo provides (the dep-closure
+	// discriminator: a source-built package's builder-only deps are
+	// foreign-installed on the build host by definition). One name per line.
+	// For pac: `pacman -Qmq`.
+	ForeignQuery string `yaml:"foreign_query"`
+
+	// Probe is the target-venue command that succeeds iff this package
+	// format's manager is present (gates whether the install leg runs).
+	// For pac: `command -v pacman`.
+	Probe string `yaml:"probe"`
+
+	// DepConstraintOps are the version-constraint operators that may follow
+	// a bare package name in a dependency spec, longest-first so `>=` matches
+	// before `>`. The dep-closure parser strips at the first match to recover
+	// the bare name. For pac: [">=", "<=", "=", ">", "<"].
+	DepConstraintOps []string `yaml:"dep_constraint_ops"`
+
+	// DepBuilder is the builder name (a key in build.yml `builder:`) used to
+	// BUILD the foreign dependency closure into installable package files.
+	// For pac the closure is AUR packages built via the `aur` builder.
+	DepBuilder string `yaml:"dep_builder"`
 }
 
 // PhaseSet carries three-phase templates for a format or builder.
@@ -389,6 +465,51 @@ func (dc *DistroConfig) AllFormatNames() []string {
 	return names
 }
 
+// PrimaryFormat returns the distro's primary package format — the single
+// source for "what package format does this resolved build.yml distro use".
+// The primary format is the one base-distro format among the distro's `Format`
+// map that is NOT a secondary builder format (`aur` is always secondary to
+// `pac`); among the base formats (rpm/deb/pac) a distro declares exactly one.
+// Returns "" when the distro declares no base format. Deterministic.
+func (d *DistroDef) PrimaryFormat() string {
+	if d == nil {
+		return ""
+	}
+	names := make([]string, 0, len(d.Format))
+	for name := range d.Format {
+		names = append(names, name)
+	}
+	sortStrings(names)
+	for _, name := range names {
+		if name == "aur" {
+			continue // secondary builder format, never primary
+		}
+		return name
+	}
+	return ""
+}
+
+// FindFormat returns the FormatDef for a format name (rpm/deb/pac/aur),
+// resolving distro `inherits:` chains. The first distro that defines the format
+// wins — a format's templates (install/uninstall, phase cells, cache mounts)
+// are identical across same-format distros (the format IS the package-manager
+// contract), so any distro's definition is the correct one for a host deploy
+// keyed purely on the package format. Returns nil when no distro defines it.
+// Used by the host-venue package install/uninstall renderers (the SAME FormatDef
+// the OCI container path reads via t.DistroDef.Format[name]).
+func (dc *DistroConfig) FindFormat(name string) *FormatDef {
+	if dc == nil {
+		return nil
+	}
+	for _, distro := range dc.Distro {
+		resolved := dc.resolveInherits(distro, 10)
+		if fd := resolved.Format[name]; fd != nil {
+			return fd
+		}
+	}
+	return nil
+}
+
 // ValidFormat returns true if any distro defines this format name.
 func (dc *DistroConfig) ValidFormat(name string) bool {
 	if dc == nil {
@@ -410,6 +531,44 @@ func indexOf(s string, c byte) int {
 		}
 	}
 	return -1
+}
+
+// LocalPkgFormat returns the format name and its LocalPkgDef for the format that
+// declares `local_pkg:` support on this distro, preferring `primaryFormat`
+// (the image's primary build format) when it carries one. Returns ("", nil)
+// when no format on this distro supports localpkg — the localpkg executor then
+// treats the step as a clean no-op (the layer's own curl/COPY fallback). This is
+// the single config-driven entry point that replaces every hardcoded
+// makepkg/pacman/glob literal: whichever format defines `local_pkg:` drives the
+// whole mechanism.
+func (d *DistroDef) LocalPkgFormat(primaryFormat string) (string, *LocalPkgDef) {
+	if d == nil {
+		return "", nil
+	}
+	// Try the caller's primary format, then the distro's own PrimaryFormat (the
+	// single source for "this distro's primary package format") when the caller
+	// gave no localpkg-capable hint.
+	for _, fmtName := range []string{primaryFormat, d.PrimaryFormat()} {
+		if fmtName == "" {
+			continue
+		}
+		if fd := d.Format[fmtName]; fd != nil && fd.LocalPkg != nil {
+			return fmtName, fd.LocalPkg
+		}
+	}
+	// Final fallback: any format on the distro that declares localpkg support
+	// (deterministic by sorted name so the choice is stable).
+	names := make([]string, 0, len(d.Format))
+	for name := range d.Format {
+		names = append(names, name)
+	}
+	sortStrings(names)
+	for _, name := range names {
+		if fd := d.Format[name]; fd != nil && fd.LocalPkg != nil {
+			return name, fd.LocalPkg
+		}
+	}
+	return "", nil
 }
 
 // --- Builder Config ---

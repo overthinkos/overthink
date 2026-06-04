@@ -5,11 +5,30 @@ import (
 	"testing"
 )
 
-// Tests for renderBuilderScript — the bash scripts that run inside
-// builder containers during host deploys.
+// Tests for renderBuilderScript — the bash scripts that run inside builder
+// containers during host/VM deploys. The scripts are now config-driven: they
+// render each builder's phase.install.host cell from the REAL build.yml, so
+// these are round-trip tests proving the YAML host cells produce the expected
+// shell (the faithful translation of the deleted render*Script Go helpers).
+
+// builderStepWithDef returns a BuilderStep carrying the resolved BuilderDef for
+// `name` loaded from the repo's real build.yml, so renderBuilderScript renders
+// the actual phase.install.host cell.
+func builderStepWithDef(t *testing.T, name string, raw map[string]interface{}) *BuilderStep {
+	t.Helper()
+	_, bc, _, err := LoadBuildConfigForImage(repoRootDir(t))
+	if err != nil {
+		t.Fatalf("LoadBuildConfigForImage: %v", err)
+	}
+	bDef := bc.Builder[name]
+	if bDef == nil {
+		t.Fatalf("builder %q not defined in build.yml", name)
+	}
+	return &BuilderStep{Builder: name, LayerName: "test-layer", BuilderDef: bDef, RawStageContext: raw}
+}
 
 func TestRenderPixiScript(t *testing.T) {
-	s := &BuilderStep{Builder: "pixi", LayerName: "pre-commit"}
+	s := builderStepWithDef(t, "pixi", nil)
 	out, err := renderBuilderScript(s, "/home/user")
 	if err != nil {
 		t.Fatalf("render: %v", err)
@@ -29,7 +48,7 @@ func TestRenderPixiScript(t *testing.T) {
 }
 
 func TestRenderNpmScript(t *testing.T) {
-	s := &BuilderStep{Builder: "npm", LayerName: "claude-code"}
+	s := builderStepWithDef(t, "npm", nil)
 	out, err := renderBuilderScript(s, "/home/user")
 	if err != nil {
 		t.Fatalf("render: %v", err)
@@ -43,7 +62,7 @@ func TestRenderNpmScript(t *testing.T) {
 }
 
 func TestRenderCargoScript(t *testing.T) {
-	s := &BuilderStep{Builder: "cargo", LayerName: "mytool"}
+	s := builderStepWithDef(t, "cargo", nil)
 	out, err := renderBuilderScript(s, "/home/user")
 	if err != nil {
 		t.Fatalf("render: %v", err)
@@ -54,13 +73,9 @@ func TestRenderCargoScript(t *testing.T) {
 }
 
 func TestRenderAurScriptPackages(t *testing.T) {
-	s := &BuilderStep{
-		Builder:   "aur",
-		LayerName: "weird-aur",
-		RawStageContext: map[string]interface{}{
-			"packages": []string{"some-pkg", "another-pkg"},
-		},
-	}
+	s := builderStepWithDef(t, "aur", map[string]interface{}{
+		"packages": []string{"some-pkg", "another-pkg"},
+	})
 	out, err := renderBuilderScript(s, "/home/user")
 	if err != nil {
 		t.Fatalf("render: %v", err)
@@ -88,9 +103,10 @@ func TestRenderAurScriptPackages(t *testing.T) {
 }
 
 func TestRenderBuilderScriptUnknownBuilder(t *testing.T) {
+	// A BuilderStep with no resolved BuilderDef (synthetic / unknown builder)
+	// has no host cell to render → error.
 	s := &BuilderStep{Builder: "nonexistent"}
-	_, err := renderBuilderScript(s, "/home/user")
-	if err == nil {
-		t.Fatalf("expected error for unknown builder")
+	if _, err := renderBuilderScript(s, "/home/user"); err == nil {
+		t.Fatalf("expected error for builder with no BuilderDef")
 	}
 }

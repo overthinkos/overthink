@@ -121,19 +121,25 @@ func TestHostDeployTargetDryRunSystemPackages(t *testing.T) {
 		Layers:   filepath.Join(home, "installed", "layers"),
 		LockFile: filepath.Join(home, "installed", ".lock"),
 	}
+	dc, _, _, err := LoadBuildConfigForImage(repoRootDir(t))
+	if err != nil {
+		t.Fatalf("LoadBuildConfigForImage: %v", err)
+	}
 	tgt := &LocalDeployTarget{
 		HostHome:    home,
 		LedgerPaths: paths,
 		Shell:       ShellBash,
+		DistroCfg:   dc,
 	}
 	plan := &InstallPlan{
 		Layer:    "ripgrep",
 		DeployID: "d-rg",
 		Steps: []InstallStep{
 			&SystemPackagesStep{
-				Format:   "rpm",
-				Phase:    PhaseInstall,
-				Packages: []string{"ripgrep"},
+				Format:            "rpm",
+				Phase:             PhaseInstall,
+				Packages:          []string{"ripgrep"},
+				RawInstallContext: map[string]interface{}{"package": []string{"ripgrep"}},
 			},
 		},
 	}
@@ -171,31 +177,90 @@ func TestRenderTaskCommandCmdWithCtx(t *testing.T) {
 	}
 }
 
-func TestRenderFallbackPkgCmd(t *testing.T) {
+// TestRenderHostPackageCommand proves the config-driven host install renderer
+// (renderHostPackageCommand) produces the EXACT shell the prior hardcoded
+// per-format renderer emitted, by rendering each format's phase.install.host
+// cell from the REAL build.yml — a faithful-translation round-trip.
+func TestRenderHostPackageCommand(t *testing.T) {
+	dc, _, _, err := LoadBuildConfigForImage(repoRootDir(t))
+	if err != nil {
+		t.Fatalf("LoadBuildConfigForImage: %v", err)
+	}
 	tests := []struct {
 		format   string
 		packages []string
 		want     string
 	}{
 		{"rpm", []string{"ripgrep", "fd-find"}, "dnf install -y ripgrep fd-find"},
-		// deb + pac: prefix database-refresh step before install. apt-get
-		// install + pacman -S do NOT auto-refresh, and a stale db causes
-		// 404 fetches when packages have been version-bumped upstream
-		// (live war-story 2026-05: nspr-4.38.2 fetched per stale db,
-		// upstream had moved to 4.39, fastly mirror returned 404; fix
-		// landed in the same cutover that added /ov-infrastructure:tailscale-up).
+		// deb + pac: the install cell also refreshes the package DB (apt-get
+		// update / pacman -Sy) — neither auto-refreshes, and a stale db 404s on
+		// version-bumped packages. pacman uses -Sy NOT -Syu (no surprise bulk
+		// upgrade of a running host).
 		{"deb", []string{"bat"}, "DEBIAN_FRONTEND=noninteractive apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y bat"},
 		{"pac", []string{"rg"}, "pacman -Sy --noconfirm --needed rg"},
 	}
 	for _, tc := range tests {
-		s := &SystemPackagesStep{Format: tc.format, Phase: PhaseInstall, Packages: tc.packages}
-		if got := renderFallbackPkgCmd(s); got != tc.want {
+		s := &SystemPackagesStep{
+			Format:            tc.format,
+			Phase:             PhaseInstall,
+			Packages:          tc.packages,
+			RawInstallContext: map[string]interface{}{"package": tc.packages},
+		}
+		got, err := renderHostPackageCommand(dc, s)
+		if err != nil {
+			t.Fatalf("%s: %v", tc.format, err)
+		}
+		if got != tc.want {
 			t.Errorf("%s → %q, want %q", tc.format, got, tc.want)
 		}
 	}
-	// Non-install phases should return empty.
+	// Non-install phases render nothing (no error).
 	s := &SystemPackagesStep{Format: "rpm", Phase: PhasePrepare, Packages: []string{"x"}}
-	if got := renderFallbackPkgCmd(s); got != "" {
-		t.Errorf("prepare phase returned %q, want empty", got)
+	if got, err := renderHostPackageCommand(dc, s); err != nil || got != "" {
+		t.Errorf("prepare phase = (%q, %v), want empty", got, err)
+	}
+	// Options are applied (faithful to the prior renderer which joined them).
+	opt := &SystemPackagesStep{
+		Format:            "pac",
+		Phase:             PhaseInstall,
+		Packages:          []string{"libyuv"},
+		Options:           []string{"--overwrite", "*"},
+		RawInstallContext: map[string]interface{}{"package": []string{"libyuv"}, "options": []string{"--overwrite", "*"}},
+	}
+	want := "pacman -Sy --noconfirm --needed --overwrite * libyuv"
+	if got, err := renderHostPackageCommand(dc, opt); err != nil || got != want {
+		t.Errorf("pac+options = (%q, %v), want %q", got, err, want)
+	}
+}
+
+// TestRenderHostUninstallTemplate proves each format's uninstall_template (the
+// config-driven package removal in reverse_ops.go) renders the exact command
+// the deleted reversePackageRemove switch produced.
+func TestRenderHostUninstallTemplate(t *testing.T) {
+	dc, _, _, err := LoadBuildConfigForImage(repoRootDir(t))
+	if err != nil {
+		t.Fatalf("LoadBuildConfigForImage: %v", err)
+	}
+	cases := []struct {
+		format   string
+		packages []string
+		want     string
+	}{
+		{"rpm", []string{"ripgrep", "fd-find"}, "dnf remove -y ripgrep fd-find"},
+		{"deb", []string{"bat"}, "DEBIAN_FRONTEND=noninteractive apt-get purge -y bat"},
+		{"pac", []string{"rg"}, "pacman -Rs --noconfirm rg"},
+	}
+	for _, tc := range cases {
+		fd := dc.FindFormat(tc.format)
+		if fd == nil || fd.UninstallTemplate == "" {
+			t.Fatalf("format %q has no uninstall_template", tc.format)
+		}
+		got, err := RenderTemplate(tc.format+"-uninstall", fd.UninstallTemplate, &InstallContext{Packages: tc.packages})
+		if err != nil {
+			t.Fatalf("%s: %v", tc.format, err)
+		}
+		if strings.TrimSpace(got) != tc.want {
+			t.Errorf("%s uninstall → %q, want %q", tc.format, strings.TrimSpace(got), tc.want)
+		}
 	}
 }

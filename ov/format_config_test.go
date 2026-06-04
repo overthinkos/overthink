@@ -284,3 +284,66 @@ func TestDnfConfigInherit(t *testing.T) {
 		t.Errorf("child's own Dnf should win, got %+v", got2.Dnf)
 	}
 }
+
+// TestDistroDefPrimaryFormat proves PrimaryFormat returns the base format
+// (rpm/deb/pac), skipping the secondary `aur` builder format, deterministically.
+func TestDistroDefPrimaryFormat(t *testing.T) {
+	arch := &DistroDef{Format: map[string]*FormatDef{"pac": {}, "aur": {}}}
+	if got := arch.PrimaryFormat(); got != "pac" {
+		t.Errorf("arch PrimaryFormat = %q, want pac (aur is secondary)", got)
+	}
+	fedora := &DistroDef{Format: map[string]*FormatDef{"rpm": {}}}
+	if got := fedora.PrimaryFormat(); got != "rpm" {
+		t.Errorf("fedora PrimaryFormat = %q, want rpm", got)
+	}
+	if got := (&DistroDef{Format: map[string]*FormatDef{"aur": {}}}).PrimaryFormat(); got != "" {
+		t.Errorf("aur-only PrimaryFormat = %q, want empty (no base format)", got)
+	}
+	if got := (*DistroDef)(nil).PrimaryFormat(); got != "" {
+		t.Errorf("nil PrimaryFormat = %q, want empty", got)
+	}
+}
+
+// TestFormatForDistroID proves the SINGLE distroIDToFormat table (consulted by
+// FormatHint) maps OS-release IDs to package formats.
+func TestFormatForDistroID(t *testing.T) {
+	cases := map[string]string{
+		"fedora": "rpm", "rhel": "rpm", "ubuntu": "deb", "debian": "deb",
+		"arch": "pac", "cachyos": "pac", "endeavouros": "pac", "unknown-distro": "",
+	}
+	for id, want := range cases {
+		if got := formatForDistroID(id); got != want {
+			t.Errorf("formatForDistroID(%q) = %q, want %q", id, got, want)
+		}
+	}
+	// FormatHint walks ID then ID_LIKE through the same table.
+	hd := &HostDistro{ID: "weird", IDLike: []string{"arch"}}
+	if got := hd.FormatHint(); got != "pac" {
+		t.Errorf("FormatHint via ID_LIKE = %q, want pac", got)
+	}
+}
+
+// TestDistroConfigFindFormat proves FindFormat resolves a format across distros
+// (inherits-aware) and that the real build.yml pac format carries the host cell.
+func TestDistroConfigFindFormat(t *testing.T) {
+	dc, _, _, err := LoadBuildConfigForImage(repoRootDir(t))
+	if err != nil {
+		t.Fatalf("LoadBuildConfigForImage: %v", err)
+	}
+	for _, f := range []string{"rpm", "deb", "pac"} {
+		fd := dc.FindFormat(f)
+		if fd == nil {
+			t.Errorf("FindFormat(%q) = nil, want a FormatDef", f)
+			continue
+		}
+		if fd.PhaseTemplate(PhaseInstall, VenueHostNative) == "" {
+			t.Errorf("format %q has no phase.install.host cell", f)
+		}
+		if fd.UninstallTemplate == "" {
+			t.Errorf("format %q has no uninstall_template", f)
+		}
+	}
+	if dc.FindFormat("nonexistent") != nil {
+		t.Error("FindFormat(nonexistent) should be nil")
+	}
+}

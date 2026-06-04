@@ -92,6 +92,12 @@ type LocalDeployTarget struct {
 	// used for any image-fetch logic.
 	Cfg        *Config
 	ProjectDir string
+
+	// DistroCfg is the resolved build.yml distro section. Used by the
+	// host-venue package renderer (renderSystemPackageCommand) to look up the
+	// format's phase.install.host template — the SAME config the OCI container
+	// path reads. Populated by the deploy dispatcher from dctx.DistroCfg.
+	DistroCfg *DistroConfig
 }
 
 // exec returns the configured executor, defaulting to a local one
@@ -230,6 +236,10 @@ func (t *LocalDeployTarget) recordLayer(rec *LayerRecord, plan *InstallPlan, opt
 	if opts.DryRun || plan.DeployID == "" {
 		return nil
 	}
+	// Render the config-driven package-uninstall command into each
+	// package-remove reverse op BEFORE persisting — the DistroConfig is in hand
+	// here; the later teardown (which reads the ledger) is not (R3 shared filler).
+	fillReverseUninstallCmds(rec.ReverseOps, t.DistroCfg)
 	// Route via the executor so nested host-deploys (host-target inside
 	// a VM / pod via SSH / podman exec) write the ledger on the substrate,
 	// not the operator's filesystem. Local executor → operator-side
@@ -441,50 +451,46 @@ func (t *LocalDeployTarget) execSystemPackages(s *SystemPackagesStep, plan *Inst
 	return nil
 }
 
-// renderSystemPackageCommand looks up the format's host-venue template
-// and renders it with the step's RawInstallContext. Returns "" when
-// there's no host rendering for this phase (no error — means skip).
+// renderSystemPackageCommand looks up the format's host-venue install template
+// and renders it with the step's RawInstallContext. Returns "" when there's no
+// host rendering for this phase (no error — means skip). Delegates to the shared
+// package-level renderer so LocalDeployTarget and VmDeployTarget render packages
+// through ONE config-driven path (R3).
 func (t *LocalDeployTarget) renderSystemPackageCommand(s *SystemPackagesStep) (string, error) {
-	// For host deploys we need the distro's FormatDef. Callers may pass
-	// it in via plan-merging; for the skeleton we rely on the installed
-	// DistroDef on the target.
-	// Absent a FormatDef reference, we fall back to a minimal inline
-	// renderer that joins packages with the format's default command.
-	cmd := renderFallbackPkgCmd(s)
-	if cmd == "" {
-		return "", fmt.Errorf("no host template for %s / %s", s.Format, s.Phase)
-	}
-	return cmd, nil
+	return renderHostPackageCommand(t.DistroCfg, s)
 }
 
-// renderFallbackPkgCmd renders a package-install command for a
-// SystemPackagesStep. Package-level so LocalDeployTarget AND VmDeployTarget
-// install packages through ONE code path. (The previous two copies drifted —
-// the VM copy applied `options:` to the pac install, the host copy dropped
-// them; the unified version applies options to all three formats.)
+// renderHostPackageCommand renders the host-venue package-install command for a
+// SystemPackagesStep from the format's build.yml phase.install.host cell — the
+// SAME PhaseTemplate + NewInstallContext + RenderTemplate path OCITarget uses
+// for the container venue (R3). No hardcoded dnf/apt/pacman dispatch: the format
+// (rpm/deb/pac) selects the template; the command is config-driven.
 //
-// Each format refreshes its package DB before install (apt-get update / pacman
-// -Sy — neither auto-refreshes, so a stale DB 404s on version-bumped packages;
-// dnf auto-refreshes via metadata_expire). pacman uses `-Sy` NOT `-Syu` — a DB
-// refresh is required for correctness, but a bulk system upgrade as a
-// side-effect of installing one tool is surprising on a running workstation.
-func renderFallbackPkgCmd(s *SystemPackagesStep) string {
+// Returns ("", nil) when the step is not an install-phase step, has no packages,
+// or the format declares no host cell — all "nothing to run", not errors. A
+// missing DistroConfig / format definition IS an error (the deploy can't honor
+// a package step it can't render).
+func renderHostPackageCommand(distroCfg *DistroConfig, s *SystemPackagesStep) (string, error) {
 	if s.Phase != PhaseInstall || len(s.Packages) == 0 {
-		return ""
+		return "", nil
 	}
-	opts := ""
-	if len(s.Options) > 0 {
-		opts = " " + strings.Join(s.Options, " ")
+	if distroCfg == nil {
+		return "", fmt.Errorf("no distro config for format %q host install", s.Format)
 	}
-	switch s.Format {
-	case "rpm":
-		return fmt.Sprintf("dnf install -y%s %s", opts, strings.Join(s.Packages, " "))
-	case "deb":
-		return fmt.Sprintf("DEBIAN_FRONTEND=noninteractive apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y%s %s", opts, strings.Join(s.Packages, " "))
-	case "pac":
-		return fmt.Sprintf("pacman -Sy --noconfirm --needed%s %s", opts, strings.Join(s.Packages, " "))
+	formatDef := distroCfg.FindFormat(s.Format)
+	if formatDef == nil {
+		return "", fmt.Errorf("no format %q in distro config", s.Format)
 	}
-	return ""
+	tmpl := formatDef.PhaseTemplate(PhaseInstall, VenueHostNative)
+	if tmpl == "" {
+		return "", nil // no host cell for this format → skip
+	}
+	ctx := NewInstallContext(s.RawInstallContext, formatDefCacheMountDefs(formatDef))
+	cmd, err := RenderTemplate(s.Format+"-host-install", tmpl, ctx)
+	if err != nil {
+		return "", fmt.Errorf("rendering %s host install template: %w", s.Format, err)
+	}
+	return strings.TrimSpace(cmd), nil
 }
 
 func (t *LocalDeployTarget) execBuilder(s *BuilderStep, plan *InstallPlan, opts EmitOpts, rec *LayerRecord, start time.Time) error {
@@ -503,13 +509,14 @@ func (t *LocalDeployTarget) execBuilder(s *BuilderStep, plan *InstallPlan, opts 
 		return fmt.Errorf("no builder image for %s (layer=%s); set --builder-image or define builder.%s in image.yml", s.Builder, s.LayerName, s.Builder)
 	}
 
-	// aur on non-Arch host: refuse cleanly.
-	if s.Builder == "aur" && t.Distro != nil {
-		hint := t.Distro.FormatHint()
-		if hint != "pac" {
-			return fmt.Errorf("aur layer %q requires an Arch Linux host (host is %q); cannot install .pkg.tar.zst via %s",
-				s.LayerName, t.Distro.ID, hint)
-		}
+	// aur builds package files that the venue installs via the format's
+	// package manager — gate on the format's local_pkg.probe (e.g.
+	// `command -v pacman`) succeeding on the VENUE, not a hardcoded
+	// distro/builder-name check. s.LocalPkg is set (the pac local_pkg block) only
+	// for the aur builder; nil for pixi/npm/cargo (no package-file install).
+	if s.LocalPkg != nil && !venueHasPkgManager(opts.ContextOrDefault(), t.exec(), s.LocalPkg, opts) {
+		return fmt.Errorf("builder %q (layer=%s) builds %s package files but the target has no %s package manager (local_pkg.probe %q failed); cannot install the built packages",
+			s.Builder, s.LayerName, s.LocalPkg.DepBuilder, s.LocalPkg.DepBuilder, s.LocalPkg.Probe)
 	}
 
 	bindMounts, err := UserScopeBindMounts(t.HostHome)
@@ -559,13 +566,12 @@ func (t *LocalDeployTarget) execBuilder(s *BuilderStep, plan *InstallPlan, opts 
 		// but triggers a `readlink \`\`: No such file or directory`
 		// crun bug on common podman 5.x / crun 1.27 combinations.
 		//
-		// AUR is a special case: yay/makepkg refuse root by design,
-		// so renderAurScript does the equivalent of the IMAGE BUILD
-		// path (build.yml builders.aur.stage_template) — starts as
-		// root, configures NOPASSWD for the unprivileged user, then
-		// drops to that user via `sudo -u` for the yay invocation.
-		// Result: yay runs as user (no root warnings), but yay's own
-		// internal `sudo pacman -U` for build deps works via NOPASSWD.
+		// AUR is a special case: yay/makepkg refuse root by design, so the
+		// aur builder's phase.install.host cell (build.yml builder.aur, the
+		// host analog of stage_template) starts as root, configures NOPASSWD
+		// for the unprivileged user, then drops to that user via `sudo -u` for
+		// the yay invocation. Result: yay runs as user (no root warnings), but
+		// yay's own internal `sudo pacman -U` for build deps works via NOPASSWD.
 		RunAsRoot: true,
 	})
 	if err != nil {
@@ -992,24 +998,26 @@ func (t *LocalDeployTarget) execRepoChange(s *RepoChangeStep, plan *InstallPlan,
 	return nil
 }
 
-// execLocalPkg builds the layer's bundled PKGBUILD on the host (makepkg) and
-// pacman -U-installs the result onto the deploy venue — the proper-package
-// counterpart of the layer's curl/COPY cmd: task (for the `ov` layer this lands
-// overthink-git at /usr/bin/ov instead of an untracked /usr/local/bin/ov).
-// Gated on the VENUE having pacman (an Arch/CachyOS host, or an Arch SSH host
-// for a `host: user@machine` local deploy); a non-pac venue or a missing
-// PKGBUILD is a clean no-op (the layer's curl task installs ov there). The
-// shared build+transfer+install body lives in localpkg.go (R3 — the VM target
-// calls the same execLocalPkgInstall).
+// execLocalPkg builds the layer's bundled package source on the host and
+// installs the result onto the deploy venue — the proper-package counterpart of
+// the layer's curl/COPY cmd: task (for the `ov` layer this lands overthink-git
+// at /usr/bin/ov instead of an untracked /usr/local/bin/ov). The build/install
+// commands, package glob, and probe all come from the package format's
+// `local_pkg:` config (config-driven). Gated on the VENUE having the format's
+// package manager (an Arch/CachyOS host, or an Arch SSH host for a
+// `host: user@machine` local deploy); an unsupported venue or a missing source
+// dir is a clean no-op (the layer's curl task installs it there). The shared
+// build+transfer+install body lives in localpkg.go (R3 — the VM target calls the
+// same execLocalPkgInstall).
 func (t *LocalDeployTarget) execLocalPkg(s *LocalPkgInstallStep, plan *InstallPlan, opts EmitOpts, rec *LayerRecord, start time.Time) error {
 	ctx := opts.ContextOrDefault()
-	arch := venueHasPacman(ctx, t.exec(), opts)
-	if err := execLocalPkgInstall(ctx, t.exec(), s, arch, t.Name(), opts); err != nil {
+	supported := venueHasPkgManager(ctx, t.exec(), s.LocalPkg, opts)
+	if err := execLocalPkgInstall(ctx, t.exec(), s, supported, t.Name(), opts); err != nil {
 		return err
 	}
 	venue := "host"
-	if !arch {
-		venue = "skipped (non-pac)"
+	if !supported {
+		venue = "skipped (unsupported package format)"
 	}
 	t.noteStep(rec, StepKindLocalPkgInstall, s.Scope(), s.Venue(),
 		fmt.Sprintf("layer=%s pkgbuild=%s (%s)", s.LayerName, s.PkgbuildRef, venue), start)
@@ -1327,190 +1335,39 @@ func (o EmitOpts) ContextOrDefault() context.Context {
 	return context.Background()
 }
 
-// renderBuilderScript turns a BuilderStep into the bash script that
-// runs inside the builder container. The script is the host-side
-// analog of the container stage_template: same commands, minus the
-// Dockerfile wrapping (FROM/RUN/USER/COPY directives).
-//
-// HOME, PIXI_CACHE_DIR, NPM_CONFIG_PREFIX, CARGO_HOME are injected by
-// BuilderRunOpts.Env before the script starts — the script itself
-// doesn't need to set them.
+// hostBuilderContext is the template context for a builder's
+// phase.install.host cell. Mirrors the data the deleted render*Script
+// helpers used: HOME/PIXI_CACHE_DIR/NPM_CONFIG_PREFIX/CARGO_HOME are injected
+// by BuilderRunOpts.Env (the cells read them as $HOME/$CARGO_HOME), so the only
+// template-visible datum is the package list (consumed by the aur cell).
+type hostBuilderContext struct {
+	HostHome string
+	Packages []string
+}
+
+// renderBuilderScript turns a BuilderStep into the bash script that runs inside
+// the builder container. It is the host-side analog of the container
+// stage_template, and is now fully config-driven: it renders the builder's
+// phase.install.host cell (build.yml builder.<name>.phase.install.host) via the
+// SAME RenderTemplate engine the OCI path uses for stage_template — no hardcoded
+// per-builder Go. HOME/PIXI_CACHE_DIR/NPM_CONFIG_PREFIX/CARGO_HOME are injected
+// by BuilderRunOpts.Env before the script starts.
 func renderBuilderScript(s *BuilderStep, hostHome string) (string, error) {
-	switch s.Builder {
-	case "pixi":
-		return renderPixiScript(s, hostHome), nil
-	case "npm":
-		return renderNpmScript(s, hostHome), nil
-	case "cargo":
-		return renderCargoScript(s, hostHome), nil
-	case "aur":
-		return renderAurScript(s, hostHome), nil
+	if s.BuilderDef == nil {
+		return "", fmt.Errorf("builder %q: no builder definition (BuilderDef unset)", s.Builder)
 	}
-	return "", fmt.Errorf("builder %q: no host script template", s.Builder)
-}
-
-// renderPixiScript replicates pixi's stage_template for host install.
-// The container path sets WORKDIR={{.Home}}, copies pixi.toml +
-// optional pixi.lock into it, then runs `pixi install` with cache
-// mounts. On the host, HOME + PIXI_CACHE_DIR come from BuilderRunOpts
-// and /work is the bind-mounted layer source (read-only). We copy the
-// manifest into $HOME, then run pixi.
-func renderPixiScript(s *BuilderStep, hostHome string) string {
-	manifest := "pixi.toml"
-	// Honor the layer's actual manifest file by checking /work
-	// filesystem — at runtime the script walks /work to find which
-	// manifest is present (pixi.toml / pyproject.toml / environment.yml).
-	var b strings.Builder
-	b.WriteString("set -e\n")
-	b.WriteString("cd \"$HOME\"\n")
-	// Pick the manifest file based on what's actually in /work.
-	b.WriteString("if [ -f /work/pixi.toml ]; then manifest=pixi.toml\n")
-	b.WriteString("elif [ -f /work/pyproject.toml ]; then manifest=pyproject.toml\n")
-	b.WriteString("elif [ -f /work/environment.yml ]; then manifest=environment.yml\n")
-	b.WriteString("else echo 'no pixi manifest found in /work' >&2; exit 1; fi\n")
-	b.WriteString("cp /work/$manifest $manifest\n")
-	b.WriteString("if [ -f /work/pixi.lock ]; then cp /work/pixi.lock pixi.lock; fi\n")
-	b.WriteString("# Ensure manylinux glibc requirement is present so cross-distro compat holds.\n")
-	b.WriteString("grep -q 'system-requirements' $manifest || printf '\\n[system-requirements]\\nlibc = { family = \"glibc\", version = \"2.39\" }\\n' >> $manifest\n")
-	// Install command varies by manifest — matches build.yml
-	// builder.pixi.install_commands.
-	b.WriteString("case \"$manifest\" in\n")
-	b.WriteString("  pixi.toml)\n")
-	b.WriteString("    if [ -f pixi.lock ]; then pixi install --frozen\n")
-	b.WriteString("    else pixi install; fi ;;\n")
-	b.WriteString("  pyproject.toml) pixi install --manifest-path pyproject.toml ;;\n")
-	b.WriteString("  environment.yml) pixi project import environment.yml && pixi install ;;\n")
-	b.WriteString("esac\n")
-	// Mirror the image build's pixi stage_template (build.yml builder.pixi:
-	// `{{.InstallCmd}} && bash /tmp/{{.BuildScript}}`): after `pixi install`, run
-	// the layer's build.sh if present. For selkies that build.sh is what compiles
-	// pixelflux (NVENC when the builder has CUDA) AND runs `selkies pip install`
-	// (which provides the `websockets` runtime dep). Without this the cross-host
-	// pixi env is bare (pixi.toml conda deps only) and the capture-server fails
-	// at `import websockets` / missing pixelflux. build.sh runs in $HOME (the
-	// pixi project) so its `pixi run` / env-relative installs land in
-	// ~/.pixi/envs/default, exactly as the image build does.
-	b.WriteString("if [ -f /work/build.sh ]; then bash /work/build.sh; fi\n")
-	b.WriteString("rm -f $manifest pixi.lock\n")
-	_ = manifest
-	return b.String()
-}
-
-// renderNpmScript matches build.yml builder.npm.stage_template: stage
-// package.json in a writable workdir, run npm install -g of its
-// dependencies. /tmp is used because $HOME on the LocalDeployTarget is
-// only partially bind-mounted (.cargo / .npm-global / .pixi / .cache/ov
-// — see UserScopeBindMounts) and the implicit parent directory inside
-// the builder pod is root-owned, so a `cd "$HOME" && cp ... package.json`
-// fails with Permission denied for the non-root user the builder runs as.
-func renderNpmScript(s *BuilderStep, hostHome string) string {
-	var b strings.Builder
-	b.WriteString("set -e\n")
-	b.WriteString("if [ ! -f /work/package.json ]; then echo 'no package.json in /work' >&2; exit 1; fi\n")
-	b.WriteString("STAGE=$(mktemp -d)\n")
-	b.WriteString("cp /work/package.json \"$STAGE/package.json\"\n")
-	b.WriteString("cd \"$STAGE\"\n")
-	// Same dependency extraction as build.yml:244 — read the deps map
-	// and turn it into `pkg@version` or `pkg` tokens for npm install -g.
-	b.WriteString("node -e 'var d=require(\"./package.json\").dependencies||{};for(var[n,v]of Object.entries(d))console.log(v===\"*\"?n:n+\"@\"+v)' | xargs -r npm install -g\n")
-	b.WriteString("rm -rf \"$STAGE\"\n")
-	return b.String()
-}
-
-// renderCargoScript replicates build.yml builder.cargo.install_template
-// (inline flavor) for host install. CARGO_HOME is set via env; we run
-// `cargo install --path /work --root $CARGO_HOME` so binaries land in
-// $HOME/.cargo/bin.
-func renderCargoScript(s *BuilderStep, hostHome string) string {
-	var b strings.Builder
-	b.WriteString("set -e\n")
-	b.WriteString("if [ ! -f /work/Cargo.toml ]; then echo 'no Cargo.toml in /work' >&2; exit 1; fi\n")
-	b.WriteString("cargo install --path /work --root \"$CARGO_HOME\"\n")
-	return b.String()
-}
-
-// renderAurScript replicates build.yml builder.aur.stage_template,
-// adapted for target:local BuilderRun (single-stage podman run instead
-// of multi-stage Containerfile).
-//
-// The script enters the container as root (BuilderRun RunAsRoot=true),
-// matching the IMAGE BUILD path's `USER root` directive. As root it
-// installs the SAME passwordless-sudo policy used on standard Arch
-// hosts (e.g. CachyOS / EndeavourOS): the `wheel` group gets
-// `NOPASSWD: ALL` via `/etc/sudoers.d/20-nopasswd-wheel`. The
-// arch-builder's `user` account is added to wheel idempotently.
-// Then the script drops to that user via `sudo -u user yay -S …`:
-//
-//   - yay/makepkg run as the unprivileged user (modern makepkg refuses
-//     root by design).
-//   - yay's own internal `sudo pacman -U` for build dependencies
-//     passes through the NOPASSWD-wheel policy.
-//
-// Mirroring the host's wheel-based pattern (instead of a per-user
-// rule) means the same convention works whether the image's
-// unprivileged account is "user", "builder", "ubuntu", etc. — anyone
-// in wheel is covered.
-//
-// Build outputs (.pkg.tar.zst) land in /tmp/aur-pkgs which is
-// bind-mounted to a host staging directory; the host's caller does
-// the final privileged `pacman -U` on the produced packages after
-// BuilderRun returns (see execBuilder).
-func renderAurScript(s *BuilderStep, hostHome string) string {
-	packages := extractStringSlice(s.RawStageContext, "packages")
-	var b strings.Builder
-	b.WriteString("set -e\n")
-	// Mirror the host's standard Arch passwordless-sudo pattern:
-	// `%wheel ALL=(ALL:ALL) NOPASSWD: ALL` in a sudoers.d drop-in.
-	b.WriteString("echo '%wheel ALL=(ALL:ALL) NOPASSWD: ALL' > /etc/sudoers.d/20-nopasswd-wheel\n")
-	b.WriteString("chmod 0440 /etc/sudoers.d/20-nopasswd-wheel\n")
-	// Ensure the unprivileged builder user is a member of wheel. The
-	// arch-builder image creates `user` (uid 1000) but does not
-	// add it to wheel by default. groupadd -f is idempotent.
-	b.WriteString("getent group wheel >/dev/null || groupadd wheel\n")
-	b.WriteString("usermod -aG wheel user\n")
-	// Verify membership; fail loudly if not (safer than silent).
-	b.WriteString("id -nG user | tr ' ' '\\n' | grep -qx wheel || { echo 'FATAL: user not in wheel group' >&2; exit 1; }\n")
-	// /tmp/aur-build is in-container only; chown to user so yay/makepkg
-	// (running via `sudo -u user`) can write into it. /tmp/aur-pkgs is
-	// bind-mounted from a host dir owned by the operator (rootless podman
-	// maps in-container uid 0 → host operator uid). Do NOT chown
-	// /tmp/aur-pkgs — chown'ing the bind mount changes ownership to an
-	// in-container user that maps to a host SUBUID, leaving the operator
-	// unable to read the directory after the container exits and ov's
-	// post-step `filepath.Glob` returns zero matches even though the
-	// artifact exists in the container's view.
-	b.WriteString("mkdir -p /tmp/aur-build\n")
-	b.WriteString("chown -R user:user /tmp/aur-build\n")
-	b.WriteString("cp /etc/makepkg.conf /tmp/makepkg.conf\n")
-	b.WriteString("sed -i '/^OPTIONS/s/ debug/ !debug/' /tmp/makepkg.conf\n")
-	b.WriteString("chown user:user /tmp/makepkg.conf\n")
-	// Refresh the builder's pacman DB to current mirror state BEFORE yay
-	// resolves makedepends. The builder image bakes a sync DB at image-build
-	// time (the bootstrap `pacman -Sy` RUN caches), so a builder reused days
-	// later resolves a makedepend (e.g. `go`) to a version the mirror has since
-	// rotated out and the .pkg.tar.zst.sig 404s. A full `pacman -Syu` (never a
-	// partial `-Sy`, which Arch forbids) syncs it. We run as root (the builder
-	// script runs RunAsRoot=true). This MIRRORS the same refresh in build.yml's
-	// aur stage_template (the OCI path) — the two AUR build surfaces are parallel
-	// implementations, so the fix must live on BOTH (R3).
-	b.WriteString("pacman -Syu --noconfirm\n")
-	b.WriteString("sudo -u user -- yay -S --noconfirm --needed --builddir /tmp/aur-build --makepkgconf /tmp/makepkg.conf")
-	for _, p := range packages {
-		fmt.Fprintf(&b, " %s", shQuoteArg(p))
+	tmpl := s.BuilderDef.PhaseTemplate(PhaseInstall, VenueHostNative)
+	if tmpl == "" {
+		return "", fmt.Errorf("builder %q: no phase.install.host template in build.yml", s.Builder)
 	}
-	b.WriteString("\n")
-	// Copy the built .pkg.tar.zst into the bind-mounted /tmp/aur-pkgs as
-	// in-container root. Rootless-podman maps that uid to the host
-	// operator, so the file lands on the host owned by the operator and
-	// is readable by ov's post-step glob. yay clones PKGBUILDs into
-	// ~/.cache/yay/<pkg>/ and makepkg writes the artifact there
-	// (yay 12.x overrides PKGDEST), so the find scans both yay's cache
-	// and --builddir to be robust across yay versions.
-	b.WriteString("mkdir -p /tmp/aur-pkgs\n")
-	b.WriteString("for src in /tmp/aur-build /home/user/.cache/yay /root/.cache/yay; do\n")
-	b.WriteString("  [ -d \"$src\" ] && find \"$src\" -name '*.pkg.tar.zst' -exec cp {} /tmp/aur-pkgs/ \\; 2>/dev/null || true\n")
-	b.WriteString("done\n")
-	b.WriteString("echo 'aur artifacts staged for host install:' >&2\n")
-	b.WriteString("ls -la /tmp/aur-pkgs/ >&2\n")
-	return b.String()
+	ctx := hostBuilderContext{
+		HostHome: hostHome,
+		Packages: extractStringSlice(s.RawStageContext, "packages"),
+	}
+	script, err := RenderTemplate(s.Builder+"-host", tmpl, ctx)
+	if err != nil {
+		return "", fmt.Errorf("rendering %s host builder template: %w", s.Builder, err)
+	}
+	return script, nil
 }
+

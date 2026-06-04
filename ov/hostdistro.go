@@ -150,19 +150,40 @@ func (hd *HostDistro) PrimaryTag() string {
 	return hd.Tags[0]
 }
 
-// FormatHint returns the best-guess format name (rpm/deb/pac) based on
-// the distro. Used by the compiler when the caller doesn't explicitly
-// know which format to pick for a host install.
+// distroIDToFormat is the SINGLE distro-OS-ID → package-format table. The host
+// heuristic (FormatHint, no build.yml in hand) and the config-derived
+// DistroDef.PrimaryFormat fallback both consult it, so the OS-ID → format
+// knowledge lives in exactly one place. Keys are /etc/os-release ID / ID_LIKE
+// values; the build.yml distro key (fedora/debian/arch) is the same token, so a
+// resolved DistroDef name resolves here too.
+var distroIDToFormat = map[string]string{
+	"fedora":     "rpm",
+	"rhel":       "rpm",
+	"centos":     "rpm",
+	"rocky":      "rpm",
+	"almalinux":  "rpm",
+	"debian":     "deb",
+	"ubuntu":     "deb",
+	"arch":       "pac",
+	"archarm":    "pac",
+	"manjaro":    "pac",
+	"endeavouros": "pac",
+	"cachyos":    "pac",
+}
+
+// formatForDistroID maps an /etc/os-release-style distro ID (or a build.yml
+// distro key) to its package format via the single distroIDToFormat table.
+// Returns "" for an unknown ID.
+func formatForDistroID(id string) string { return distroIDToFormat[id] }
+
+// FormatHint returns the best-guess format name (rpm/deb/pac) based on the
+// host distro's ID / ID_LIKE, via the single distroIDToFormat table. Used when
+// the caller has no build.yml DistroDef in hand (e.g. the synthetic host-adhoc
+// image). For a resolved DistroDef, prefer DistroDef.PrimaryFormat.
 func (hd *HostDistro) FormatHint() string {
-	// Check ID and ID_LIKE in order.
 	for _, id := range append([]string{hd.ID}, hd.IDLike...) {
-		switch id {
-		case "fedora", "rhel", "centos", "rocky", "almalinux":
-			return "rpm"
-		case "debian", "ubuntu":
-			return "deb"
-		case "arch", "archarm", "manjaro", "endeavouros":
-			return "pac"
+		if f := formatForDistroID(id); f != "" {
+			return f
 		}
 	}
 	return ""

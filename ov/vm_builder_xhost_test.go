@@ -26,23 +26,31 @@ func TestResolveBuilderImage(t *testing.T) {
 	}
 }
 
-// D3: npm/pixi/cargo are now routed to the cross-host home-artifact builder
-// (no longer skipped). Verified via the dry-run path so no podman is spawned.
+// D3: npm/pixi/cargo are routed to the cross-host home-artifact builder by
+// OUTPUT SHAPE (no LocalPkg + a phase.install.host cell), not by builder name.
+// Verified via the dry-run path so no podman is spawned. Builder defs come from
+// the REAL build.yml so the routing exercises the config-driven host cells.
 func TestVmExecBuilderRoutesHomeBuilders(t *testing.T) {
+	_, bc, _, err := LoadBuildConfigForImage(repoRootDir(t))
+	if err != nil {
+		t.Fatalf("LoadBuildConfigForImage: %v", err)
+	}
 	for _, b := range []string{"npm", "pixi", "cargo"} {
 		tgt := &VmDeployTarget{
 			Exec:                 &recordingExec{},
 			BuilderImageResolver: func(string) string { return "test-builder:latest" },
 		}
-		s := &BuilderStep{Builder: b, LayerName: "x", LayerDir: "/tmp/x"}
+		s := &BuilderStep{Builder: b, LayerName: "x", LayerDir: "/tmp/x", BuilderDef: bc.Builder[b]}
 		if err := tgt.execBuilder(context.Background(), s, &InstallPlan{}, EmitOpts{DryRun: true}); err != nil {
 			t.Errorf("execBuilder(%s) dry-run routed to home-artifact builder errored: %v", b, err)
 		}
 	}
 }
 
-// D3: an unknown builder honors --skip-incompatible, and hard-errors otherwise
-// with the supported-builder list.
+// D3: a builder with no phase.install.host cell (no resolved BuilderDef) honors
+// --skip-incompatible, and hard-errors otherwise pointing at the missing host
+// cell. Routing is by output shape (no LocalPkg → home-artifact path; no host
+// cell there → unsupported), not a hardcoded builder-name list.
 func TestVmExecBuilderUnknown(t *testing.T) {
 	tgt := &VmDeployTarget{Exec: &recordingExec{}}
 	s := &BuilderStep{Builder: "bogus", LayerName: "x"}
@@ -51,7 +59,7 @@ func TestVmExecBuilderUnknown(t *testing.T) {
 		t.Errorf("unknown builder with --skip-incompatible should be skipped, got %v", err)
 	}
 	err := tgt.execBuilder(context.Background(), s, &InstallPlan{}, EmitOpts{})
-	if err == nil || !strings.Contains(err.Error(), "aur, npm, pixi, cargo") {
-		t.Errorf("unknown builder without skip should error listing supported builders, got %v", err)
+	if err == nil || !strings.Contains(err.Error(), "phase.install.host") {
+		t.Errorf("unknown builder without skip should error pointing at the missing host cell, got %v", err)
 	}
 }

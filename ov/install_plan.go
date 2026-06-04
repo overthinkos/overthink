@@ -230,6 +230,15 @@ type ReverseOp struct {
 	Targets []string          `json:"targets,omitempty"` // package names, file paths, env names, …
 	Scope   Scope             `json:"scope,omitempty"`   // system vs user for disambiguation
 	Extra   map[string]string `json:"extra,omitempty"`   // op-specific details (e.g. unit name, layer name)
+
+	// UninstallCmd is the rendered host-venue package-removal command for a
+	// ReverseOpPackageRemove op, filled at record time from the format's
+	// uninstall_template (build.yml) by fillReverseUninstallCmds — the deploy
+	// target has the DistroConfig at install time, the teardown (which reads
+	// the persisted ledger) does not, so the command is rendered up front and
+	// persisted. reverse_ops.go runs it verbatim, so there is NO hardcoded
+	// per-format removal switch in the teardown path.
+	UninstallCmd string `json:"uninstall_cmd,omitempty"`
 }
 
 // ---------------------------------------------------------------------------
@@ -382,6 +391,23 @@ type BuilderStep struct {
 	// Builder-specific template context — the compiler populates this from
 	// the layer's manifest files + build.yml builder definition.
 	RawStageContext map[string]interface{}
+
+	// LocalPkg is the package format's localpkg contract, populated by the
+	// compiler for the `aur` builder only. The aur builder produces package
+	// files (.pkg.tar.zst) that the host/VM deploy targets install onto the
+	// venue via the SAME config-driven transfer+install leg the localpkg step
+	// uses (R3) — so the install command + package glob come from
+	// build.yml `pac.local_pkg`, never a hardcoded literal. Nil for
+	// pixi/npm/cargo (home-artifact builders, no package-file install).
+	LocalPkg *LocalPkgDef
+
+	// BuilderDef is the resolved build.yml builder definition for this builder
+	// (img.BuilderConfig.Builder[Builder]), populated by the compiler. The
+	// host-venue deploy targets render its phase.install.host cell via
+	// renderBuilderScript — the plain-shell analog of stage_template — so the
+	// host build script is config-driven, not hardcoded Go. nil only on
+	// synthetic test paths that don't supply a BuilderConfig.
+	BuilderDef *BuilderDef
 }
 
 func (s *BuilderStep) Kind() StepKind { return StepKindBuilder }
@@ -925,6 +951,37 @@ type LocalPkgInstallStep struct {
 	LayerName   string
 	LayerDir    string // layer source dir — one anchor for the relative PKGBUILD search
 	ProjectDir  string // the deploy project dir (os.Getwd() at deploy time) — the other anchor
+
+	// Format is the package-format name whose `local_pkg:` config drives this
+	// step (e.g. "pac"). "" when the target distro declares no localpkg-capable
+	// format — the executor then treats the step as a clean no-op.
+	Format string
+
+	// LocalPkg is the format's localpkg contract resolved from build.yml at
+	// compile time (DistroDef.LocalPkgFormat). It carries the build/install
+	// templates, package glob, foreign-deps query, probe command, and
+	// dependency-builder name — so the executor renders every package-manager
+	// command from config instead of hardcoding makepkg/pacman/glob literals.
+	// Nil when Format == "".
+	LocalPkg *LocalPkgDef
+
+	// BuilderImage is the resolved image for LocalPkg.DepBuilder
+	// (resolveBuilderImage(LocalPkg.DepBuilder, …) at compile time, mirroring
+	// BuilderStep.BuilderImage). It is the host-side builder used to build the
+	// package's builder-resolvable dependency closure: the built package's
+	// `depends=` may name packages no sync repo can satisfy under the install
+	// command, so those deps are built through this SAME builder and installed
+	// alongside the package. Empty when no dep builder resolves — the dep-build
+	// is then skipped (the layer's curl/COPY fallback still covers non-localpkg
+	// targets).
+	BuilderImage string
+
+	// DepBuilderDef is the resolved build.yml builder definition for
+	// LocalPkg.DepBuilder (the `aur` builder for pac), populated by the compiler
+	// alongside BuilderImage. buildDepPkgsOnHost sets it on the synthetic
+	// BuilderStep so renderBuilderScript resolves the dep builder's
+	// phase.install.host cell from config. Nil when no dep builder resolves.
+	DepBuilderDef *BuilderDef
 }
 
 func (s *LocalPkgInstallStep) Kind() StepKind { return StepKindLocalPkgInstall }

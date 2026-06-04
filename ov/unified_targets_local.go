@@ -307,6 +307,7 @@ func (t *LocalUnifiedTarget) Add(ctx context.Context, dctx *DeployContext, plans
 		HostHome:   os.Getenv("HOME"),
 		Distro:     hostDistro,
 		ProjectDir: dctx.Dir,
+		DistroCfg:  dctx.DistroCfg,
 	}
 	// Resolve the kind:local template (when the deployment has a
 	// `local: <name>` ref) so its `images:` pre-pass + Eval/DeployEval

@@ -127,6 +127,46 @@ builder:
         # partial `-Sy`, which Arch forbids) before resolving makedepends. Same
         # template drives the OCI AUR stage AND the cross-host VM aur builder
         # (deploy_target_vm.go), so this one refresh covers every AUR build (R3).
+        #
+        # Host-venue build script for target:local / target:vm deploys
+        # (BuilderRun runs it AS ROOT, RunAsRoot=true, matching the OCI USER root
+        # directive; /tmp/aur-pkgs is bind-mounted to a host staging dir).
+        # Faithful shell analog of stage_template:
+        #   - install the standard Arch passwordless-sudo policy (%wheel NOPASSWD)
+        #     and add the builder `user` to wheel, so yay/makepkg run unprivileged
+        #     (modern makepkg refuses root) while yay's internal `sudo pacman -U`
+        #     for makedepends passes through the NOPASSWD-wheel rule;
+        #   - patch a makepkg.conf copy to disable debug packages (the build user
+        #     can't write /etc directly);
+        #   - FULL `pacman -Syu` before resolving makedepends (stale-DB .sig 404 fix);
+        #   - drop to `user` for `yay -S … <packages>`;
+        #   - stage the produced .pkg.tar.zst into the bind-mounted /tmp/aur-pkgs
+        #     for the host caller's privileged install leg (transferAndInstallPkgs).
+        # The deploy targets do NOT chown /tmp/aur-pkgs here (rootless-podman maps
+        # in-container root → host operator, keeping the artifact host-readable);
+        # the localpkg dep-closure path adds its own backstop find + chown on top.
+        phase:
+            install:
+                host: |
+                    set -e
+                    echo '%wheel ALL=(ALL:ALL) NOPASSWD: ALL' > /etc/sudoers.d/20-nopasswd-wheel
+                    chmod 0440 /etc/sudoers.d/20-nopasswd-wheel
+                    getent group wheel >/dev/null || groupadd wheel
+                    usermod -aG wheel user
+                    id -nG user | tr ' ' '\n' | grep -qx wheel || { echo 'FATAL: user not in wheel group' >&2; exit 1; }
+                    mkdir -p /tmp/aur-build
+                    chown -R user:user /tmp/aur-build
+                    cp /etc/makepkg.conf /tmp/makepkg.conf
+                    sed -i '/^OPTIONS/s/ debug/ !debug/' /tmp/makepkg.conf
+                    chown user:user /tmp/makepkg.conf
+                    pacman -Syu --noconfirm
+                    sudo -u user -- yay -S --noconfirm --needed --builddir /tmp/aur-build --makepkgconf /tmp/makepkg.conf{{range .Packages}} {{shquote .}}{{end}}
+                    mkdir -p /tmp/aur-pkgs
+                    for src in /tmp/aur-build /home/user/.cache/yay /root/.cache/yay; do
+                      [ -d "$src" ] && find "$src" -name '*.pkg.tar.zst' -exec cp {} /tmp/aur-pkgs/ \; 2>/dev/null || true
+                    done
+                    echo 'aur artifacts staged for host install:' >&2
+                    ls -la /tmp/aur-pkgs/ >&2
         stage_template: |
             FROM {{.BuilderRef}} AS {{.StageName}}
             USER root
@@ -156,6 +196,16 @@ builder:
         inline: true
         cache_mount:
             - dst: /tmp/cargo-cache
+        # Host-venue build script for target:local / target:vm deploys
+        # (BuilderRun supplies CARGO_HOME via BuilderRunOpts.Env, /work is the
+        # bind-mounted layer source). `cargo install --path /work --root
+        # $CARGO_HOME` lands binaries in $HOME/.cargo/bin.
+        phase:
+            install:
+                host: |
+                    set -e
+                    if [ ! -f /work/Cargo.toml ]; then echo 'no Cargo.toml in /work' >&2; exit 1; fi
+                    cargo install --path /work --root "$CARGO_HOME"
         install_template: |
             RUN --mount=type=bind,from={{.LayerStage}},source=/,target=/ctx \
                 {{cacheMountsOwned .CacheMounts .UID .GID}}cargo install --path /ctx
@@ -164,6 +214,22 @@ builder:
             - package.json
         cache_mount:
             - dst: /tmp/npm-cache
+        # Host-venue build script for target:local / target:vm deploys. /tmp is
+        # used (not $HOME) because $HOME is only partially bind-mounted on the
+        # deploy targets (UserScopeBindMounts: .cargo / .npm-global / .pixi /
+        # .cache/ov) and the implicit parent dir inside the builder pod is
+        # root-owned, so `cd "$HOME" && cp package.json` would EACCES for the
+        # non-root build user. Same dependency extraction as stage_template.
+        phase:
+            install:
+                host: |
+                    set -e
+                    if [ ! -f /work/package.json ]; then echo 'no package.json in /work' >&2; exit 1; fi
+                    STAGE=$(mktemp -d)
+                    cp /work/package.json "$STAGE/package.json"
+                    cd "$STAGE"
+                    node -e 'var d=require("./package.json").dependencies||{};for(var[n,v]of Object.entries(d))console.log(v==="*"?n:n+"@"+v)' | xargs -r npm install -g
+                    rm -rf "$STAGE"
         stage_template: |
             FROM {{.BuilderRef}} AS {{.StageName}}
             USER {{.UID}}
@@ -227,6 +293,37 @@ builder:
             {{- else}}
             RUN {{cacheMountsOwned .CacheMounts .UID .GID}}{{.InstallCmd}} && rm -f {{.Manifest}} pixi.lock
             {{- end}}
+        # Host-venue build script for target:local / target:vm deploys
+        # (BuilderRun runs it inside the builder container with HOME +
+        # PIXI_CACHE_DIR/RATTLER_CACHE_DIR supplied via BuilderRunOpts.Env and
+        # /work bind-mounted to the layer source). The plain-shell analog of
+        # stage_template: detect the manifest in /work, copy it into $HOME,
+        # inject the manylinux glibc 2.39 system-requirement, run the
+        # manifest-appropriate pixi install, then run the layer's build.sh
+        # (pixelflux NVENC compile + `selkies pip install` for selkies) so the
+        # cross-host env matches the image build.
+        phase:
+            install:
+                host: |
+                    set -e
+                    cd "$HOME"
+                    if [ -f /work/pixi.toml ]; then manifest=pixi.toml
+                    elif [ -f /work/pyproject.toml ]; then manifest=pyproject.toml
+                    elif [ -f /work/environment.yml ]; then manifest=environment.yml
+                    else echo 'no pixi manifest found in /work' >&2; exit 1; fi
+                    cp /work/$manifest $manifest
+                    if [ -f /work/pixi.lock ]; then cp /work/pixi.lock pixi.lock; fi
+                    # Ensure manylinux glibc requirement is present so cross-distro compat holds.
+                    grep -q 'system-requirements' $manifest || printf '\n[system-requirements]\nlibc = { family = "glibc", version = "2.39" }\n' >> $manifest
+                    case "$manifest" in
+                      pixi.toml)
+                        if [ -f pixi.lock ]; then pixi install --frozen
+                        else pixi install; fi ;;
+                      pyproject.toml) pixi install --manifest-path pyproject.toml ;;
+                      environment.yml) pixi project import environment.yml && pixi install ;;
+                    esac
+                    if [ -f /work/build.sh ]; then bash /work/build.sh; fi
+                    rm -f $manifest pixi.lock
         install_command:
             environment.yml: pixi project import environment.yml && pixi install
             pixi.toml: pixi install
@@ -274,6 +371,49 @@ distro:
                     option: list
                     package: list
                     repo: list_of_maps
+                # Host-venue install cell for target:local / target:vm deploys.
+                # `-Sy` refreshes the DB (pacman never auto-refreshes; a stale DB
+                # 404s on a version-bumped package) but NOT `-Syu` — a bulk system
+                # upgrade as a side-effect of installing one tool is surprising on
+                # a running workstation. `--needed` skips already-current packages.
+                # The DB refresh stays in this single install cell because the
+                # deploy compiler only emits PhaseInstall steps (no prepare phase
+                # runs on the host), so splitting it out would never execute.
+                phase:
+                    install:
+                        host: |
+                            pacman -Sy --noconfirm --needed{{range .Options}} {{.}}{{end}}{{range .Packages}} {{.}}{{end}}
+                uninstall_template: |
+                    pacman -Rs --noconfirm{{range .Packages}} {{.}}{{end}}
+                # local_pkg drives the layer `localpkg:` mechanism (build a
+                # bundled PKGBUILD on the host, install the resulting package
+                # FILE onto a pac deploy target, resolve the built package's
+                # AUR-only dependency closure). These are operations the
+                # repo-install `install_template` above cannot express, so they
+                # live here as the format's localpkg contract. Every command is
+                # a Go text/template (or literal) so the localpkg executor
+                # carries no hardcoded makepkg/pacman/glob strings. Populated for
+                # `pac` only; rpm/deb add their own values when localpkg is
+                # wired for those formats.
+                local_pkg:
+                    pkg_glob: "*.pkg.tar.zst"
+                    # makepkg refuses to run as root and PKGDEST redirects the
+                    # built artifact into a per-build temp dir so the glob is
+                    # deterministic. -s installs makedepends, -f overwrites a
+                    # stale build. No -i (install is the target venue's job).
+                    build_template: |
+                        cd {{.SrcDir}} && PKGDEST={{.PkgDest}} makepkg -sf --noconfirm
+                    # pacman -U is the upgrade form, so re-installing the same
+                    # or a newer build never errors on already-installed.
+                    install_template: |
+                        pacman -U --noconfirm {{.StageDir}}/{{.Glob}}
+                    # Foreign packages = installed packages no sync repo
+                    # provides. A source-built package's AUR deps are
+                    # foreign-installed on the build host by definition.
+                    foreign_query: pacman -Qmq
+                    probe: command -v pacman
+                    dep_constraint_ops: [">=", "<=", "=", ">", "<"]
+                    dep_builder: aur
                 install_template: |
                     RUN {{cacheMounts .CacheMounts}} \
                     {{- range .Keys}}
@@ -476,6 +616,18 @@ distro:
                     option: list
                     package: list
                     repo: list_of_maps
+                # Host-venue install cell for target:local / target:vm deploys.
+                # `apt-get update` refreshes the index (apt never auto-refreshes)
+                # and stays in this single install cell — the deploy compiler only
+                # emits PhaseInstall steps, so a separate prepare phase would never
+                # run on the host. DEBIAN_FRONTEND=noninteractive prevents tzdata
+                # et al. from blocking on a prompt.
+                phase:
+                    install:
+                        host: |
+                            DEBIAN_FRONTEND=noninteractive apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y{{range .Options}} {{.}}{{end}}{{range .Packages}} {{.}}{{end}}
+                uninstall_template: |
+                    DEBIAN_FRONTEND=noninteractive apt-get purge -y{{range .Packages}} {{.}}{{end}}
                 install_template: |
                     RUN {{cacheMounts .CacheMounts}} \
                     {{- range .Repos}}
@@ -683,6 +835,18 @@ distro:
                     option: list
                     package: list
                     repo: list_of_maps
+                # Host-venue cells consumed by target:local / target:vm deploys
+                # (LocalDeployTarget / VmDeployTarget). install.host is the
+                # plain-shell analog of the install.container Containerfile RUN;
+                # uninstall_template is the deploy-teardown package removal
+                # (reverse_ops.go). dnf auto-refreshes metadata (metadata_expire)
+                # so no separate prepare.host DB-refresh is needed.
+                phase:
+                    install:
+                        host: |
+                            dnf install -y{{range .Options}} {{.}}{{end}}{{range .Packages}} {{.}}{{end}}
+                uninstall_template: |
+                    dnf remove -y{{range .Packages}} {{.}}{{end}}
                 install_template: |
                     RUN {{cacheMounts .CacheMounts}} \
                     {{- range .Repos}}{{if .rpm}}

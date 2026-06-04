@@ -367,14 +367,25 @@ func TestVmExecTaskCmdUsesSharedRenderer(t *testing.T) {
 
 // renderTaskCommand is the ONE shared task renderer; copy: is explicitly NOT
 // handled here (it must be staged via PutFile in execTask), and pac package
-// installs carry options: through (the divergence the consolidation fixed).
+// installs carry options: through (the divergence the consolidation fixed) —
+// now via the config-driven host install renderer reading build.yml.
 func TestSharedRenderersConsolidated(t *testing.T) {
 	if _, err := renderTaskCommand(&TaskStep{Task: &Task{Copy: "f"}}); err == nil {
 		t.Error("renderTaskCommand must reject copy: (staged via PutFile, not rendered)")
 	}
-	got := renderFallbackPkgCmd(&SystemPackagesStep{Format: "pac", Phase: PhaseInstall, Packages: []string{"libyuv"}, Options: []string{"--overwrite", "*"}})
-	if got != "pacman -Sy --noconfirm --needed --overwrite * libyuv" {
-		t.Errorf("pac options not applied by shared renderer: %q", got)
+	dc, _, _, err := LoadBuildConfigForImage(repoRootDir(t))
+	if err != nil {
+		t.Fatalf("LoadBuildConfigForImage: %v", err)
+	}
+	got, err := renderHostPackageCommand(dc, &SystemPackagesStep{
+		Format:            "pac",
+		Phase:             PhaseInstall,
+		Packages:          []string{"libyuv"},
+		Options:           []string{"--overwrite", "*"},
+		RawInstallContext: map[string]interface{}{"package": []string{"libyuv"}, "options": []string{"--overwrite", "*"}},
+	})
+	if err != nil || got != "pacman -Sy --noconfirm --needed --overwrite * libyuv" {
+		t.Errorf("pac options not applied by shared host renderer: %q (err %v)", got, err)
 	}
 }
 

@@ -158,6 +158,12 @@ var templateFuncs = template.FuncMap{
 	// printf is a template-accessible Sprintf.
 	"printf": fmt.Sprintf,
 
+	// shquote shell-quotes a single argument (delegates to shQuoteArg), so a
+	// host-venue builder/install template can emit a package or path argument
+	// safely. Used by the aur builder's phase.install.host cell to quote each
+	// AUR package name passed to yay.
+	"shquote": shQuoteArg,
+
 	// hasSuffix reports whether a string ends with the given suffix.
 	// Used by the rpm install template to distinguish a URL pointing at
 	// a `.repo` configuration file (consumable by `dnf5 config-manager

@@ -109,18 +109,45 @@ func reversePackageRemove(op ReverseOp, re ReverseExecutor) error {
 	if len(op.Targets) == 0 {
 		return nil
 	}
-	var argv []string
-	switch op.Format {
-	case "rpm":
-		argv = append([]string{"dnf", "remove", "-y"}, op.Targets...)
-	case "deb":
-		argv = append([]string{"DEBIAN_FRONTEND=noninteractive", "apt-get", "purge", "-y"}, op.Targets...)
-	case "pac":
-		argv = append([]string{"pacman", "-Rs", "--noconfirm"}, op.Targets...)
-	default:
-		return fmt.Errorf("reversePackageRemove: unknown format %q", op.Format)
+	// The removal command is rendered from the format's uninstall_template at
+	// record time (fillReverseUninstallCmds) and persisted in the op — no
+	// hardcoded per-format switch here. An empty command means the format
+	// declares no host uninstall_template, OR the op predates this field; either
+	// way there is nothing config-sanctioned to run.
+	cmd := strings.TrimSpace(op.UninstallCmd)
+	if cmd == "" {
+		return fmt.Errorf("reversePackageRemove: no uninstall command for format %q (format declares no uninstall_template?)", op.Format)
 	}
-	return runSudoArgvReverse(argv, re)
+	return runScriptReverse(cmd, re)
+}
+
+// fillReverseUninstallCmds renders the host-venue uninstall command for every
+// ReverseOpPackageRemove op in the slice from the format's uninstall_template
+// (build.yml), in place. Called at install/record time by LocalDeployTarget and
+// VmDeployTarget (R3 — one shared filler) when the DistroConfig is in hand, so
+// the persisted ledger op carries the exact removal command the teardown will
+// run. Ops whose format declares no uninstall_template, or whose format isn't in
+// the config, are left with an empty UninstallCmd (teardown then errors loudly
+// rather than silently running a wrong command).
+func fillReverseUninstallCmds(ops []ReverseOp, distroCfg *DistroConfig) {
+	if distroCfg == nil {
+		return
+	}
+	for i := range ops {
+		if ops[i].Kind != ReverseOpPackageRemove || ops[i].UninstallCmd != "" {
+			continue
+		}
+		fd := distroCfg.FindFormat(ops[i].Format)
+		if fd == nil || strings.TrimSpace(fd.UninstallTemplate) == "" {
+			continue
+		}
+		ctx := &InstallContext{Packages: append([]string(nil), ops[i].Targets...)}
+		rendered, err := RenderTemplate(ops[i].Format+"-uninstall", fd.UninstallTemplate, ctx)
+		if err != nil {
+			continue
+		}
+		ops[i].UninstallCmd = strings.TrimSpace(rendered)
+	}
 }
 
 func reversePixiEnvRemove(op ReverseOp, re ReverseExecutor) error {
@@ -413,6 +440,28 @@ func shellQuoteSimple(s string) string {
 		return s
 	}
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
+
+// runScriptReverse runs a bash snippet as root. Dispatches through the
+// ReverseRunner when present (VM teardown over SSH wraps with sudo); otherwise
+// executes locally via `sudo bash -lc <script>`. Used for the config-rendered
+// package-uninstall command, which is a full shell command line (it may carry an
+// env prefix like DEBIAN_FRONTEND=…) that bash parses directly.
+func runScriptReverse(script string, re ReverseExecutor) error {
+	if strings.TrimSpace(script) == "" {
+		return nil
+	}
+	if re.reverseDryRun() {
+		fmt.Fprintln(os.Stderr, "[dry-run] sudo bash -lc "+shellQuoteSimple(script))
+		return nil
+	}
+	if runner := re.reverseRunner(); runner != nil {
+		return runner.RunSystem(script)
+	}
+	cmd := exec.Command("sudo", "bash", "-lc", script)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
 }
 
 // runUserShellReverse runs a bash snippet as the deploy user (no sudo).

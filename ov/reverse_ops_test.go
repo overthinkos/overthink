@@ -93,8 +93,11 @@ func TestReverseOpsKeepRepoChangesFlag(t *testing.T) {
 func TestReverseOpsDryRunEmitsSudoMarkers(t *testing.T) {
 	// Capture stderr to verify dry-run text lands there.
 	re := &mockReverseExecutor{dryRun: true}
+	// UninstallCmd is the config-rendered removal command the deploy target
+	// fills (from the rpm format's uninstall_template) and persists in the
+	// ledger op — reverse_ops.go runs it verbatim, no per-format switch.
 	ops := []ReverseOp{
-		{Kind: ReverseOpPackageRemove, Format: "rpm", Targets: []string{"ripgrep"}},
+		{Kind: ReverseOpPackageRemove, Format: "rpm", Targets: []string{"ripgrep"}, UninstallCmd: "dnf remove -y ripgrep"},
 	}
 	r, w, _ := os.Pipe()
 	oldStderr := os.Stderr

@@ -67,6 +67,12 @@ type VmDeployTarget struct {
 	// at /home/<guest-user>, not the host operator's home), the env.d
 	// sourcing managed block, and the cross-host builder artifact transfer.
 	guestHome string
+
+	// DistroCfg is the resolved build.yml distro section. Used by
+	// execSystemPackages to render the format's phase.install.host template —
+	// the SAME config-driven path LocalDeployTarget + the OCI container path
+	// use (R3). Populated by the deploy dispatcher from dctx.DistroCfg.
+	DistroCfg *DistroConfig
 }
 
 // Name returns the target's display name.
@@ -231,6 +237,10 @@ func (t *VmDeployTarget) recordLayer(paths *LedgerPaths, rec *LayerRecord, plan 
 	if opts.DryRun || plan.DeployID == "" || rec == nil {
 		return nil
 	}
+	// Render the config-driven package-uninstall command into each
+	// package-remove reverse op BEFORE persisting — same shared filler the
+	// host target uses (R3); the guest teardown reads only the persisted ledger.
+	fillReverseUninstallCmds(rec.ReverseOps, t.DistroCfg)
 	return AddLayerDeploymentVia(t.Exec, paths, plan.Layer, plan.DeployID, func(existing *LayerRecord) {
 		existing.Version = rec.Version
 		existing.Steps = append(existing.Steps, rec.Steps...)
@@ -334,11 +344,12 @@ func (t *VmDeployTarget) emitPlan(ctx context.Context, plan *InstallPlan, opts E
 			fmt.Fprintf(os.Stderr, "VmDeployTarget: skipping apk install (layer=%s) — apk installs only on a kind:android device\n", s.LayerName)
 
 		case *LocalPkgInstallStep:
-			// Build the bundled PKGBUILD on the host (makepkg) and pacman -U the
-			// result INTO THE GUEST — the proper-package counterpart of the
-			// layer's curl/COPY cmd: task. Gated on the GUEST having pacman; a
-			// non-pac guest is a clean no-op (the layer's curl task installs ov).
-			if err := execLocalPkgInstall(ctx, t.Exec, s, venueHasPacman(ctx, t.Exec, opts), "vm:"+t.VMName, opts); err != nil {
+			// Build the package source on the host and install the result INTO
+			// THE GUEST — the proper-package counterpart of the layer's curl/COPY
+			// cmd: task. Gated (config-driven) on the GUEST having the format's
+			// package manager; an unsupported guest is a clean no-op (the layer's
+			// curl task installs it).
+			if err := execLocalPkgInstall(ctx, t.Exec, s, venueHasPkgManager(ctx, t.Exec, s.LocalPkg, opts), "vm:"+t.VMName, opts); err != nil {
 				return rec, err
 			}
 
@@ -452,17 +463,17 @@ func (t *VmDeployTarget) detectGuestShell(ctx context.Context) ShellKind {
 	}
 }
 
-// execSystemPackages runs the distro's package install command on the
-// guest. Currently uses the fallback renderer (dnf / apt-get / pacman);
-// the structured-template path is shared with LocalDeployTarget and
-// will be wired once per-distro FormatDefs are accessible from here.
+// execSystemPackages runs the distro's package install command on the guest.
+// Renders the format's phase.install.host template from build.yml via the SHARED
+// config-driven renderer (renderHostPackageCommand) — the SAME path
+// LocalDeployTarget uses and the same FormatDef the OCI container path reads (R3).
 func (t *VmDeployTarget) execSystemPackages(ctx context.Context, s *SystemPackagesStep, plan *InstallPlan, opts EmitOpts) error {
-	if s.Phase != PhaseInstall || len(s.Packages) == 0 {
-		return nil
+	cmd, err := renderHostPackageCommand(t.DistroCfg, s)
+	if err != nil {
+		return fmt.Errorf("VmDeployTarget: %w", err)
 	}
-	cmd := renderFallbackPkgCmd(s)
 	if cmd == "" {
-		return fmt.Errorf("VmDeployTarget: no package-install command for format %q", s.Format)
+		return nil
 	}
 	return t.Exec.RunSystem(ctx, cmd, opts)
 }
@@ -697,93 +708,41 @@ func (t *VmDeployTarget) execServiceCustom(ctx context.Context, s *ServiceCustom
 // Unknown builders honor --skip-incompatible (set by callers that legitimately
 // want to skip rpm:/deb:-only sections) and otherwise hard-error.
 func (t *VmDeployTarget) execBuilder(ctx context.Context, s *BuilderStep, plan *InstallPlan, opts EmitOpts) error {
-	switch s.Builder {
-	case "npm", "pixi", "cargo":
-		return t.execHomeArtifactBuilder(ctx, s, opts)
-	case "aur":
-		// handled inline below
-	default:
-		if opts.SkipIncompatible {
-			fmt.Fprintf(os.Stderr, "VmDeployTarget: skipping builder step %q (--skip-incompatible)\n", s.Builder)
-			return nil
+	// Route by OUTPUT shape, not builder name: a builder that produces package
+	// FILES carries the format's local_pkg contract (s.LocalPkg, set by the
+	// compiler for the aur builder) — those go through the build-on-host →
+	// transfer → package-install leg below. Everything else is a home-artifact
+	// builder (pixi/npm/cargo) whose ~/.pixi / ~/.npm-global / ~/.cargo output is
+	// tarred into the guest home. An unknown builder with neither shape has no
+	// host build script (renderBuilderScript errors on a nil BuilderDef cell);
+	// --skip-incompatible skips it.
+	if s.LocalPkg == nil {
+		if s.BuilderDef == nil || s.BuilderDef.PhaseTemplate(PhaseInstall, VenueHostNative) == "" {
+			if opts.SkipIncompatible {
+				fmt.Fprintf(os.Stderr, "VmDeployTarget: skipping builder step %q (--skip-incompatible)\n", s.Builder)
+				return nil
+			}
+			return fmt.Errorf("builder %q on VM target has no phase.install.host cell in build.yml (layer=%s). Run with --skip-incompatible to skip, or add the host cell.", s.Builder, s.LayerName)
 		}
-		return fmt.Errorf("builder %q on VM target is not supported (known: aur, npm, pixi, cargo). Run with --skip-incompatible to skip, or restructure the layer to use install: instead of builder:", s.Builder)
+		return t.execHomeArtifactBuilder(ctx, s, opts)
 	}
 
 	image, err := t.resolveBuilderImage(s, opts)
 	if err != nil {
 		return err
 	}
+	// Gate on the format's local_pkg.probe (e.g. `command -v pacman`) succeeding
+	// on the GUEST — config-driven, not a hardcoded distro/builder-name check.
+	if !venueHasPkgManager(ctx, t.Exec, s.LocalPkg, opts) {
+		return fmt.Errorf("builder %q (layer=%s) builds %s package files but the guest has no %s package manager (local_pkg.probe %q failed); cannot install the built packages",
+			s.Builder, s.LayerName, s.LocalPkg.DepBuilder, s.LocalPkg.DepBuilder, s.LocalPkg.Probe)
+	}
 
-	// Stage the .pkg.tar.zst output on the host. The builder writes
-	// here; we then ship it to the guest.
-	hostStage, err := os.MkdirTemp("", "ov-vm-aur-")
-	if err != nil {
-		return fmt.Errorf("aur staging mkdir: %w", err)
-	}
-	RegisterTempCleanup(hostStage)
-	defer func() { os.RemoveAll(hostStage); UnregisterTempCleanup(hostStage) }()
-
-	// Re-use the same builder-script renderer as LocalDeployTarget so
-	// the in-container build steps stay identical between host and
-	// VM deploys. The HOME we pass is the host's HOME — the builder
-	// container does HOME-remap internally via BuilderRunOpts.
-	hostHome, err := os.UserHomeDir()
-	if err != nil {
-		return fmt.Errorf("UserHomeDir: %w", err)
-	}
-	bindMounts, err := UserScopeBindMounts(hostHome)
-	if err != nil {
-		return err
-	}
-	bindMounts["/tmp/aur-pkgs"] = hostStage
-	envVars := UserScopeEnv(hostHome)
-
-	// renderAurScript is written to run AS ROOT inside the builder container
-	// (BuilderRun RunAsRoot=true, exactly like the local path): it installs the
-	// NOPASSWD-wheel sudoers (/etc/sudoers.d/20-nopasswd-wheel), adds `user` to
-	// wheel, then drops to `user` ITSELF via `sudo -u user` for the yay/makepkg
-	// build. So run it directly as root — do NOT pre-drop to `user`. A prior
-	// `su - user` wrapper double-dropped privileges, making renderAurScript's own
-	// root setup (writing the sudoers file, usermod) fail with "Permission
-	// denied" on every AUR layer of a VM deploy.
-	innerScript, err := renderBuilderScript(s, hostHome)
-	if err != nil {
-		return err
-	}
-	wrappedScript := "set -e\n" +
-		innerScript + "\n" +
-		"# Backstop find: yay -S installs the package and cleans up its\n" +
-		"# build tree, so renderAurScript's find may run after yay\n" +
-		"# already wiped /tmp/aur-build. Broaden the search if the\n" +
-		"# inner script's find produced nothing.\n" +
-		"if [ -z \"$(ls -A /tmp/aur-pkgs 2>/dev/null)\" ]; then\n" +
-		"  find / -name '*.pkg.tar.zst' 2>/dev/null -exec cp {} /tmp/aur-pkgs/ \\;\n" +
-		"fi\n" +
-		"# Rootless-podman userns fix: files created by container user\n" +
-		"# 1000 land in the host's subuid range and become unreadable to\n" +
-		"# the operator. chown to 0:0 — root in container maps to the\n" +
-		"# host user under rootless podman — so the bind-mount surface is\n" +
-		"# host-readable for the subsequent scp+pacman -U leg.\n" +
-		"chown -R 0:0 /tmp/aur-pkgs/\n"
-
-	out, err := BuilderRun(opts.ContextOrDefault(), BuilderRunOpts{
-		BuilderImage: image,
-		LayerDir:     s.LayerDir,
-		ScriptBody:   wrappedScript,
-		BindMounts:   bindMounts,
-		Env:          envVars,
-		HostHome:     hostHome,
-		DryRun:       opts.DryRun,
-		RunAsRoot:    true,
-	})
-	// Always surface the builder's stdout/stderr — the operator needs to
-	// see compile output to debug build failures, not just the bare exit
-	// status. (BuilderRun returns combined output; non-error path
-	// discards it by default.)
-	if len(out) > 0 {
-		os.Stderr.Write(out)
-	}
+	// Build the aur packages on the HOST through the SHARED host-side dep-build
+	// helper (R3) — the same primitive the localpkg step uses to build its
+	// dependency closure. The builder runs on the host (podman); the guest never
+	// needs a container runtime. The package glob comes from the format config.
+	matches, err := buildDepPkgsOnHost(ctx, s.LocalPkg, s.BuilderDef, image, extractStringSlice(s.RawStageContext, "packages"), s.LayerDir, opts)
 	if err != nil {
 		return fmt.Errorf("VM aur builder: %w", err)
 	}
@@ -791,16 +750,12 @@ func (t *VmDeployTarget) execBuilder(ctx context.Context, s *BuilderStep, plan *
 		return nil
 	}
 
-	// Ship the built packages to the guest and pacman -U them via the SHARED
-	// transfer+install leg (R3) — the same primitive the localpkg step uses.
-	// `pacman -U` is the upgrade form, so a re-run after a partial failure
-	// replaces the staging content idempotently and never errors on
-	// already-installed.
-	matches, _ := filepath.Glob(filepath.Join(hostStage, "*.pkg.tar.zst"))
-	if len(matches) == 0 {
-		return fmt.Errorf("aur builder produced no .pkg.tar.zst in %s", hostStage)
-	}
-	return transferAndPacmanInstall(ctx, t.Exec, matches, opts)
+	// Ship the built packages to the guest and install them via the SHARED,
+	// config-driven transfer+install leg (R3) — the same primitive the localpkg
+	// step uses. The install command (e.g. `pacman -U`) comes from the format's
+	// local_pkg.install_template and is the upgrade form, so a re-run after a
+	// partial failure replaces the staging content idempotently.
+	return transferAndInstallPkgs(ctx, t.Exec, s.LocalPkg, matches, opts)
 }
 
 // resolveBuilderImage picks the builder image ref for a BuilderStep on a VM

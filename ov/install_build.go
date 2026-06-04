@@ -111,7 +111,7 @@ func BuildDeployPlan(layer *Layer, img *ResolvedImage, hostCtx HostContext) (*In
 	// only curls a binary otherwise), so the package must land first or the
 	// curl branch shadows the proper /usr/bin/ov with a stale /usr/local/bin/ov.
 	// Skipped on image build (no makepkg in a container) and on non-pac targets.
-	if pkgStep := compileLocalPkgStep(layer); pkgStep != nil {
+	if pkgStep := compileLocalPkgStep(layer, img, hostCtx); pkgStep != nil {
 		plan.Steps = append(plan.Steps, pkgStep)
 	}
 
@@ -174,20 +174,46 @@ func compileApkStep(layer *Layer) InstallStep {
 // PKGBUILD hint plus the layer dir AND the deploy project dir (os.Getwd, the
 // same handle compileServiceSteps reads) as the two anchors the emit-time
 // walk-up search uses to locate the PKGBUILD. Each DeployTarget decides whether
-// to build+install (Arch host / Arch guest), skip (image build, non-pac
+// to build+install (localpkg-capable host/guest), skip (image build, non-pac
 // targets, android, k8s).
-func compileLocalPkgStep(layer *Layer) InstallStep {
+//
+// The localpkg mechanism is fully config-driven: the format's `local_pkg:`
+// block (resolved here via DistroDef.LocalPkgFormat, the SAME DistroDef the
+// system-package steps read) supplies the build/install templates, package
+// glob, foreign-deps query, probe, and dependency-builder name. BuilderImage is
+// resolved for that block's DepBuilder the same way builder steps resolve theirs
+// (resolveBuilderImage) so the executor can build the package's dependency
+// closure through the EXISTING builder before installing. When the distro
+// declares no localpkg-capable format, LocalPkg is nil and the executor skips;
+// when no dep builder resolves, BuilderImage is "" and the dep-build is skipped
+// with a clear log (the layer's own curl/COPY fallback still covers
+// non-localpkg targets).
+func compileLocalPkgStep(layer *Layer, img *ResolvedImage, hostCtx HostContext) InstallStep {
 	ref := layer.LocalPkg()
 	if ref == "" {
 		return nil
 	}
 	projectDir, _ := os.Getwd()
-	return &LocalPkgInstallStep{
+	step := &LocalPkgInstallStep{
 		PkgbuildRef: ref,
 		LayerName:   layer.Name,
 		LayerDir:    layer.SourceDir,
 		ProjectDir:  projectDir,
 	}
+	if img.DistroDef != nil {
+		fmtName, lp := img.DistroDef.LocalPkgFormat(img.Pkg)
+		if lp != nil {
+			step.Format = fmtName
+			step.LocalPkg = lp
+			if lp.DepBuilder != "" {
+				step.BuilderImage = resolveBuilderImage(lp.DepBuilder, img, hostCtx)
+				if img.BuilderConfig != nil {
+					step.DepBuilderDef = img.BuilderConfig.Builder[lp.DepBuilder]
+				}
+			}
+		}
+	}
+	return step
 }
 
 // MergePlan combines a list of per-layer plans into one whole-image
@@ -611,10 +637,11 @@ func compileBuilderSteps(layer *Layer, img *ResolvedImage, hostCtx HostContext) 
 			continue
 		}
 		step := &BuilderStep{
-			Builder:   bName,
-			LayerName: layer.Name,
-			LayerDir:  layer.SourceDir,
-			Phase:     PhaseInstall,
+			Builder:    bName,
+			LayerName:  layer.Name,
+			LayerDir:   layer.SourceDir,
+			Phase:      PhaseInstall,
+			BuilderDef: bDef,
 		}
 		step.BuilderImage = resolveBuilderImage(bName, img, hostCtx)
 		step.RawStageContext = collectBuilderContext(layer, bName, bDef, img)
@@ -622,12 +649,21 @@ func compileBuilderSteps(layer *Layer, img *ResolvedImage, hostCtx HostContext) 
 		// aur produces .pkg.tar.zst files in the container at /tmp/aur-pkgs/
 		// and we need to pull them out on the host target. The container
 		// (OCI) target ignores Artifacts — it uses COPY --from directly.
+		// The host/VM targets install those package files via the SAME
+		// config-driven transfer+install leg as the localpkg step, so carry
+		// the package format's localpkg contract (install command + glob)
+		// resolved from build.yml — no hardcoded pacman/glob in the executor.
 		if bName == "aur" {
 			step.Artifacts = []ArtifactRef{{
 				ContainerPath: "/tmp/aur-pkgs/",
 				HostPath:      "", // host-target populates at emit time (tmpdir)
 				Chown:         false,
 			}}
+			if img.DistroDef != nil {
+				if _, lp := img.DistroDef.LocalPkgFormat(img.Pkg); lp != nil {
+					step.LocalPkg = lp
+				}
+			}
 		}
 		out = append(out, step)
 	}

@@ -81,6 +81,36 @@ B6: the producer (main: ov/wl.go + kde-shell + kde-selkies) lands + tags first;
 `image/cachyos` reconciles its `@github` pins and runs the authoritative R10
 (`eval-selkies-kde-pod`) against the pushed tag.
 
+**Folded-in fix the R10 surfaced — supervised Chrome for both selkies flavors.**
+The first `eval-selkies-kde-pod` R10 (against the pushed producer tag) failed on
+two PRE-EXISTING, KWin-wl-unrelated checks: the Chrome CDP `/json/version` probe
+(EOF) and the selkies frame/VAAPI-encode probe (blank frame) — because Chrome was
+dead. RCA: Chrome was launched **fire-once and unsupervised** from each per-flavor
+compositor autostart (`labwc/autostart`, `kde-selkies/kde-selkies-session`), and a
+Chrome started during the nested compositor's startup-race **self-exits cleanly**
+(~39s, exit 0 — the window-less browser's sole window goes away on the early
+color-manager re-init) with nothing to relaunch it. The bed only ever "passed" by
+racing Chrome's brief alive window (the `chrome-cdp-version` check polls with
+`eventually:`); the from-clean R10 rebuild made the race fail deterministically.
+RDD on the live pod: a Chrome relaunched **post-settle stays up indefinitely** (a
+keep-alive-URL theory was disproven — `chrome-wrapper` drops positional args, so
+the cause is launch *timing*, not a missing URL). Per R2 (blocking the R10) + R3
+(one shared abstraction) the fix is a **supervised `[program:chrome]` in the
+shared `selkies-core` layer** (`restart: always`, `start_secs`/`start_retries` so
+the one startup-race exit resets the retry budget rather than tripping FATAL;
+`chrome-wrapper` self-polls for `wayland-0` so `autostart=true` is
+self-synchronizing) — both selkies autostarts drop their fire-once
+`chrome-wrapper &` launch. **SELKIES-ONLY:** `sway-browser-vnc` launches Chrome
+via `chrome-sway` (not `selkies-core`), is not pixelflux-nested, never hit the
+race, and is untouched. A `selkies-chrome-supervised-alive` deploy-scope `eval:`
+check (Chrome process + CDP responsive after a 25s settle) is added so this
+regression class fails loudly henceforth. Also fixed in passing: the KWin
+`wl: toplevel`/`windows` backend used `kdotool … getwindowname %@`, which errors
+(`Unknown command %@`) — corrected to `kdotool search ''` (lists window IDs).
+(The `/ov-selkies:chrome` skill still documents an unimplemented chrome-layer
+`[program:chrome]` + `chrome-crash-listener` circuit-breaker — a separate,
+pre-existing doc-accuracy follow-up, tracked as its own docs-only cutover.)
+
 ### 2026-06-04 — fix(ov): `ov eval k8s` validates the resolved kubeconfig context up front (no stale-context fall-through) (#45)
 
 `k8sClusterFlags.restConfig()` resolved the target context

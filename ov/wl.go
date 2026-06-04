@@ -410,10 +410,13 @@ func (c *WlWindowsCmd) Run() error {
 		return err
 	}
 
-	// KWin: wlr-foreign-toplevel is unavailable — list via kdotool (KWin
-	// scripting). Print window names, falling back to window IDs.
+	// KWin: wlr-foreign-toplevel is unavailable — list windows via kdotool (KWin
+	// scripting). `search ''` matches all windows and prints their IDs (one per
+	// line) — the KWin analogue of `wlrctl toplevel list`. (kdotool has no
+	// working batch name lookup — `getwindowname %@` errors with "Unknown command
+	// %@" — so the window IDs ARE the listing.)
 	if detectCompositor(venue.Exec) == "kwin" {
-		return execWlCmd(venue.Exec, "kdotool search '' getwindowname %@ 2>/dev/null || kdotool search ''")
+		return execWlCmd(venue.Exec, "kdotool search ''")
 	}
 
 	// Try wlrctl toplevel first (compositor-agnostic).
@@ -525,7 +528,9 @@ func (c *WlToplevelCmd) Run() error {
 		return err
 	}
 	if detectCompositor(venue.Exec) == "kwin" {
-		return execWlCmd(venue.Exec, "kdotool search '' getwindowname %@ 2>/dev/null || kdotool search ''")
+		// `kdotool search ''` lists all window IDs via KWin scripting — the KWin
+		// analogue of `wlrctl toplevel list` (no working batch name lookup).
+		return execWlCmd(venue.Exec, "kdotool search ''")
 	}
 	return execWlCmd(venue.Exec, "wlrctl toplevel list")
 }

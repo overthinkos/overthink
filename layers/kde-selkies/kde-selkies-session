@@ -34,23 +34,12 @@ export XKB_DEFAULT_VARIANT="${XKB_DEFAULT_VARIANT:-}"
 export XKB_DEFAULT_MODEL="${XKB_DEFAULT_MODEL:-pc105}"
 export XKB_DEFAULT_OPTIONS="${XKB_DEFAULT_OPTIONS:-}"
 
-# Launch Chrome (CDP) once kwin publishes the Plasma client socket. startplasma
-# (below) starts kwin_wayland, which renders into pixelflux's wayland-1 and
-# creates wayland-0 for Plasma's own clients; we poll for wayland-0 in the
-# background and launch chrome-wrapper into THAT display. This is the KDE
-# analogue of labwc's autostart (which runs chrome-wrapper once labwc is up) —
-# Chrome itself works headless under KDE (verified: CDP comes up); it simply was
-# never started in the Plasma session. Backgrounded BEFORE the exec so it
-# survives the exec into Plasma.
-(
-    client_sock="${XDG_RUNTIME_DIR:-/tmp}/wayland-0"
-    for _ in $(seq 1 120); do [ -e "$client_sock" ] && break; sleep 0.5; done
-    if [ -e "$client_sock" ]; then
-        WAYLAND_DISPLAY=wayland-0 chrome-wrapper --force-renderer-accessibility --no-first-run --start-maximized &
-    else
-        echo "kde-selkies-session: wayland-0 (Plasma client socket) never appeared; chrome not started" >&2
-    fi
-) &
+# Chrome (CDP) is NOT launched here — the supervised `[program:chrome]` service
+# in the selkies-core layer owns it for both selkies flavors. chrome-wrapper
+# polls for wayland-0 (the Plasma client socket startplasma-wayland creates
+# below) itself, and supervisord relaunches Chrome if it self-exits during the
+# nested compositor's startup-race (the former fire-once launch here had no such
+# relaunch, so Chrome stayed dead). See layers/selkies-core/layer.yml.
 
 # A private D-Bus session so this nested Plasma doesn't collide with the DRM
 # Plasma session's bus. startplasma-wayland brings up kwin_wayland + plasmashell.

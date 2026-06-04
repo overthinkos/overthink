@@ -1,5 +1,5 @@
 layer:
-    version: 2026.152.2006
+    version: 2026.155.2227
     name: labwc
     require:
         - dbus

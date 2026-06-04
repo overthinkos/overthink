@@ -1,5 +1,6 @@
-# Launch Chrome via chrome-wrapper. Matches every other compositor's
-# autostart pattern (sway) — chrome-wrapper handles
-# CDP flags, GPU detection, Windows-UA spoofing, and the
-# --user-data-dir contract.
-chrome-wrapper --force-renderer-accessibility --no-first-run --start-maximized &
+# Chrome (CDP) is NOT launched here — the supervised `[program:chrome]` service
+# in the selkies-core layer owns it for both selkies flavors. chrome-wrapper
+# polls for wayland-0 (labwc's client socket) itself, and supervisord relaunches
+# Chrome if it self-exits during the nested compositor's startup-race (the former
+# fire-once `chrome-wrapper &` here had no such relaunch, so Chrome stayed dead
+# once it self-exited). See layers/selkies-core/layer.yml.

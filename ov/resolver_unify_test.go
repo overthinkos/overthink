@@ -16,7 +16,7 @@ import "testing"
 func fixtureNamespacedProject(t *testing.T) (string, *Config) {
 	t.Helper()
 	root := t.TempDir()
-	writeFixture(t, root, "overthink.yml", `version: 2026.144.1443
+	writeFixture(t, root, "overthink.yml", `version: 2026.155.1801
 import:
   - sub: ./sub.yml
 image:
@@ -26,7 +26,7 @@ image:
     build: [rpm]
     layer: []
 `)
-	writeFixture(t, root, "sub.yml", `version: 2026.144.1443
+	writeFixture(t, root, "sub.yml", `version: 2026.155.1801
 image:
   widget:
     base: quay.io/fedora/fedora:43
@@ -123,7 +123,7 @@ func TestResolveAllImage_RequestedQualifiedTarget(t *testing.T) {
 // name-resolution concern, not a per-image collection concern.
 func TestWalkBaseChain_RootInternalOnly(t *testing.T) {
 	root := t.TempDir()
-	writeFixture(t, root, "overthink.yml", `version: 2026.144.1443
+	writeFixture(t, root, "overthink.yml", `version: 2026.155.1801
 import:
   - sub: ./sub.yml
 image:
@@ -143,7 +143,7 @@ image:
     build: [rpm]
     layer: []
 `)
-	writeFixture(t, root, "sub.yml", `version: 2026.144.1443
+	writeFixture(t, root, "sub.yml", `version: 2026.155.1801
 image:
   widget:
     base: quay.io/fedora/fedora:43

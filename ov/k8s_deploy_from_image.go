@@ -91,7 +91,7 @@ func DeployFromImage(opts DeployFromImageOpts) (string, error) {
 		DeploymentName: deployName,
 		Instance:       opts.Instance,
 		ImageRef:       opts.ImageRef,
-		Deploy:     dc,
+		Deploy:         dc,
 		Capabilities:   caps,
 		Cluster:        cluster,
 		OutputDir:      outDir,

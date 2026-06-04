@@ -1370,4 +1370,3 @@ func renderBuilderScript(s *BuilderStep, hostHome string) (string, error) {
 	}
 	return script, nil
 }
-

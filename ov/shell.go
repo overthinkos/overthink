@@ -124,17 +124,17 @@ func (c *ShellCmd) Run() error {
 	uid := meta.UID
 	gid := meta.GID
 	home := meta.Home
-	ports := meta.Ports
+	ports := meta.Port
 	security := meta.Security
 	network := meta.Network
 	deployEnv := meta.Env
 	var deployEnvFile string
 
 	cliVolumes := parseVolumeFlagsStandalone(c.VolumeFlag, c.Bind)
-	volumes, bindMounts := ResolveVolumeBacking(c.Image, c.Instance, meta.Volumes, mergeVolumeConfigs(deployVolumes, cliVolumes), meta.Home, rt.EncryptedStoragePath, rt.VolumesPath)
+	volumes, bindMounts := ResolveVolumeBacking(c.Image, c.Instance, meta.Volume, mergeVolumeConfigs(deployVolumes, cliVolumes), meta.Home, rt.EncryptedStoragePath, rt.VolumesPath)
 
-	envAccepts := meta.EnvAccepts
-	envRequires := meta.EnvRequires
+	envAccepts := meta.EnvAccept
+	envRequires := meta.EnvRequire
 	if meta.Registry != "" {
 		imageRef = resolveShellImageRef(meta.Registry, deployImageName, c.Tag)
 	}

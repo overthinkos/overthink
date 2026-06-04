@@ -73,10 +73,10 @@ func (c *WlScreenshotCmd) Run() error {
 
 	// Detect available screenshot tool.
 	var captureCmd string
-	if execWlCmdSilent(venue.Exec,"command -v pixelflux-screenshot >/dev/null 2>&1") == nil {
+	if execWlCmdSilent(venue.Exec, "command -v pixelflux-screenshot >/dev/null 2>&1") == nil {
 		// selkies-labwc: use pixelflux rendering pipeline capture.
 		captureCmd = "pixelflux-screenshot"
-	} else if execWlCmdSilent(venue.Exec,"command -v grim >/dev/null 2>&1") == nil {
+	} else if execWlCmdSilent(venue.Exec, "command -v grim >/dev/null 2>&1") == nil {
 		// sway-desktop: use grim (wlr-screencopy).
 		if c.Region != "" {
 			captureCmd = fmt.Sprintf("grim -g %s -", shellQuote(c.Region))
@@ -87,7 +87,7 @@ func (c *WlScreenshotCmd) Run() error {
 		return fmt.Errorf("no screenshot tool available (need pixelflux-screenshot or grim)")
 	}
 
-	data, err := captureWlCmd(venue.Exec,captureCmd)
+	data, err := captureWlCmd(venue.Exec, captureCmd)
 	if err != nil {
 		return fmt.Errorf("capturing screenshot: %w", err)
 	}
@@ -139,7 +139,7 @@ func (c *WlClickCmd) Run() error {
 
 	// Translate from window-relative coordinates to desktop coordinates via sway.
 	if c.FromSway != "" {
-		rect, err := FindWindowRect(venue.Exec,c.FromSway)
+		rect, err := FindWindowRect(venue.Exec, c.FromSway)
 		if err != nil {
 			return err
 		}
@@ -153,7 +153,7 @@ func (c *WlClickCmd) Run() error {
 	// XWayland windows may render at a different internal resolution than their
 	// sway-managed desktop size (e.g. fullscreened 1280x600 app on 1920x1080).
 	if c.FromX11 != "" {
-		rect, err := FindWindowRect(venue.Exec,c.FromX11)
+		rect, err := FindWindowRect(venue.Exec, c.FromX11)
 		if err != nil {
 			return err
 		}
@@ -176,7 +176,7 @@ func (c *WlClickCmd) Run() error {
 		"wlrctl pointer move -10000 -10000 && wlrctl pointer move %d %d && sleep 0.05 && wlrctl pointer click %s",
 		clickX, clickY, btn,
 	)
-	if err := execWlCmd(venue.Exec,shellCmd); err != nil {
+	if err := execWlCmd(venue.Exec, shellCmd); err != nil {
 		return fmt.Errorf("clicking at (%d, %d): %w", clickX, clickY, err)
 	}
 
@@ -198,7 +198,7 @@ func (c *WlTypeCmd) Run() error {
 	}
 
 	shellCmd := fmt.Sprintf("wtype -- %s", shellQuote(c.Text))
-	if err := execWlCmd(venue.Exec,shellCmd); err != nil {
+	if err := execWlCmd(venue.Exec, shellCmd); err != nil {
 		return fmt.Errorf("typing text: %w", err)
 	}
 
@@ -224,7 +224,7 @@ func (c *WlKeyCmd) Run() error {
 	}
 
 	shellCmd := fmt.Sprintf("wtype -k %s", shellQuote(c.KeyName))
-	if err := execWlCmd(venue.Exec,shellCmd); err != nil {
+	if err := execWlCmd(venue.Exec, shellCmd); err != nil {
 		return fmt.Errorf("pressing key %s: %w", c.KeyName, err)
 	}
 
@@ -250,7 +250,7 @@ func (c *WlMouseCmd) Run() error {
 		"wlrctl pointer move -10000 -10000 && wlrctl pointer move %d %d",
 		c.X, c.Y,
 	)
-	if err := execWlCmd(venue.Exec,shellCmd); err != nil {
+	if err := execWlCmd(venue.Exec, shellCmd); err != nil {
 		return fmt.Errorf("moving mouse to (%d, %d): %w", c.X, c.Y, err)
 	}
 
@@ -290,7 +290,7 @@ func (c *WlStatusCmd) Run() error {
 	tools := []string{"grim", "wtype", "wlrctl"}
 	for _, tool := range tools {
 		shellCmd := fmt.Sprintf("command -v %s >/dev/null 2>&1", tool)
-		if err := execWlCmdSilent(venue.Exec,shellCmd); err != nil {
+		if err := execWlCmdSilent(venue.Exec, shellCmd); err != nil {
 			fmt.Printf("%-12s not found\n", tool+":")
 		} else {
 			fmt.Printf("%-12s available\n", tool+":")
@@ -301,7 +301,7 @@ func (c *WlStatusCmd) Run() error {
 	extraTools := []string{"wl-copy", "wl-paste", "wlr-randr"}
 	for _, tool := range extraTools {
 		shellCmd := fmt.Sprintf("command -v %s >/dev/null 2>&1", tool)
-		if err := execWlCmdSilent(venue.Exec,shellCmd); err != nil {
+		if err := execWlCmdSilent(venue.Exec, shellCmd); err != nil {
 			fmt.Printf("%-12s not found\n", tool+":")
 		} else {
 			fmt.Printf("%-12s available\n", tool+":")
@@ -312,7 +312,7 @@ func (c *WlStatusCmd) Run() error {
 	x11tools := []string{"xdotool", "import", "xprop"}
 	for _, tool := range x11tools {
 		shellCmd := fmt.Sprintf("command -v %s >/dev/null 2>&1", tool)
-		if err := execWlCmdSilent(venue.Exec,shellCmd); err != nil {
+		if err := execWlCmdSilent(venue.Exec, shellCmd); err != nil {
 			fmt.Printf("%-12s not found\n", tool+":")
 		} else {
 			fmt.Printf("%-12s available\n", tool+":")
@@ -321,7 +321,7 @@ func (c *WlStatusCmd) Run() error {
 
 	// Check AT-SPI2 availability (use /usr/bin/python3 for system RPM packages).
 	atspiCheck := `/usr/bin/python3 -c "import gi; gi.require_version('Atspi','2.0')" 2>/dev/null`
-	if err := execWlCmdSilent(venue.Exec,atspiCheck); err != nil {
+	if err := execWlCmdSilent(venue.Exec, atspiCheck); err != nil {
 		fmt.Printf("%-12s not found\n", "atspi:")
 	} else {
 		fmt.Printf("%-12s available\n", "atspi:")
@@ -329,7 +329,7 @@ func (c *WlStatusCmd) Run() error {
 
 	// Get resolution: try sway first, fall back to wlr-randr.
 	gotResolution := false
-	data, err := captureSwaymsg(venue.Exec,"-t", "get_outputs")
+	data, err := captureSwaymsg(venue.Exec, "-t", "get_outputs")
 	if err == nil {
 		var outputs []struct {
 			Name        string `json:"name"`
@@ -347,7 +347,7 @@ func (c *WlStatusCmd) Run() error {
 
 	if !gotResolution {
 		// Fall back to wlr-randr (works on labwc, any wlroots compositor).
-		randrOut, randrErr := captureWlCmd(venue.Exec,"wlr-randr 2>/dev/null | head -3")
+		randrOut, randrErr := captureWlCmd(venue.Exec, "wlr-randr 2>/dev/null | head -3")
 		if randrErr == nil {
 			lines := strings.TrimSpace(string(randrOut))
 			if lines != "" {
@@ -363,10 +363,10 @@ func (c *WlStatusCmd) Run() error {
 
 	// Check XWayland status via process detection (more reliable than xprop).
 	xwCheck := `pgrep -f Xwayland >/dev/null 2>&1`
-	if execWlCmdSilent(venue.Exec,xwCheck) == nil {
+	if execWlCmdSilent(venue.Exec, xwCheck) == nil {
 		// XWayland running — count X11 client windows.
 		countCmd := `DISPLAY=:0 xdotool search --name "." 2>/dev/null | wc -l`
-		countOut, _ := captureWlCmd(venue.Exec,countCmd)
+		countOut, _ := captureWlCmd(venue.Exec, countCmd)
 		count := strings.TrimSpace(string(countOut))
 		if count == "" || count == "0" {
 			fmt.Printf("%-12s running (no X11 clients)\n", "xwayland:")
@@ -398,8 +398,8 @@ func (c *WlWindowsCmd) Run() error {
 	}
 
 	// Try wlrctl toplevel first (compositor-agnostic).
-	if err := execWlCmdSilent(venue.Exec,"command -v wlrctl >/dev/null 2>&1"); err == nil {
-		if err := execWlCmd(venue.Exec,"wlrctl toplevel list"); err == nil {
+	if err := execWlCmdSilent(venue.Exec, "command -v wlrctl >/dev/null 2>&1"); err == nil {
+		if err := execWlCmd(venue.Exec, "wlrctl toplevel list"); err == nil {
 			return nil
 		}
 	}
@@ -410,7 +410,7 @@ func (c *WlWindowsCmd) Run() error {
 		[ -n "$name" ] && printf "%s\t%s\n" "$wid" "$name"
 	done`
 
-	return execWlCmd(venue.Exec,shellCmd)
+	return execWlCmd(venue.Exec, shellCmd)
 }
 
 // WlFocusCmd focuses a window by title. Tries wlrctl toplevel (Wayland-native)
@@ -428,9 +428,9 @@ func (c *WlFocusCmd) Run() error {
 	}
 
 	// Try wlrctl toplevel focus (matches by app_id in wlrctl 0.2.2).
-	if execWlCmdSilent(venue.Exec,"command -v wlrctl >/dev/null 2>&1") == nil {
+	if execWlCmdSilent(venue.Exec, "command -v wlrctl >/dev/null 2>&1") == nil {
 		shellCmd := fmt.Sprintf("wlrctl toplevel focus %s", shellQuote(c.Target))
-		if execWlCmdSilent(venue.Exec,shellCmd) == nil {
+		if execWlCmdSilent(venue.Exec, shellCmd) == nil {
 			fmt.Fprintf(os.Stderr, "Focused window matching %q via wlrctl\n", c.Target)
 			return nil
 		}
@@ -441,7 +441,7 @@ func (c *WlFocusCmd) Run() error {
 		`export DISPLAY=:0 && xdotool search --name %s windowactivate 2>/dev/null || export DISPLAY=:0 && xdotool search --class %s windowactivate`,
 		shellQuote(c.Target), shellQuote(c.Target),
 	)
-	if err := execWlCmd(venue.Exec,shellCmd); err != nil {
+	if err := execWlCmd(venue.Exec, shellCmd); err != nil {
 		return fmt.Errorf("focusing window %q: %w", c.Target, err)
 	}
 
@@ -496,7 +496,7 @@ func (c *WlToplevelCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	return execWlCmd(venue.Exec,"wlrctl toplevel list")
+	return execWlCmd(venue.Exec, "wlrctl toplevel list")
 }
 
 // WlCloseCmd closes a window by title via wlrctl toplevel.
@@ -511,7 +511,7 @@ func (c *WlCloseCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	if err := wlrctlToplevel(venue.Exec,"close", c.Target); err != nil {
+	if err := wlrctlToplevel(venue.Exec, "close", c.Target); err != nil {
 		return fmt.Errorf("closing window %q: %w", c.Target, err)
 	}
 	fmt.Fprintf(os.Stderr, "Closed window matching %q\n", c.Target)
@@ -530,7 +530,7 @@ func (c *WlFullscreenCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	if err := wlrctlToplevel(venue.Exec,"fullscreen", c.Target); err != nil {
+	if err := wlrctlToplevel(venue.Exec, "fullscreen", c.Target); err != nil {
 		return fmt.Errorf("toggling fullscreen on %q: %w", c.Target, err)
 	}
 	fmt.Fprintf(os.Stderr, "Toggled fullscreen on window matching %q\n", c.Target)
@@ -549,7 +549,7 @@ func (c *WlMinimizeCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	if err := wlrctlToplevel(venue.Exec,"minimize", c.Target); err != nil {
+	if err := wlrctlToplevel(venue.Exec, "minimize", c.Target); err != nil {
 		return fmt.Errorf("toggling minimize on %q: %w", c.Target, err)
 	}
 	fmt.Fprintf(os.Stderr, "Toggled minimize on window matching %q\n", c.Target)
@@ -572,7 +572,7 @@ func (c *WlExecCmd) Run() error {
 	// Set DISPLAY=:0 for XWayland apps (like xterm) that need X11.
 	// Don't shellQuote — the command may contain args (e.g. "xterm -hold").
 	shellCmd := fmt.Sprintf("export DISPLAY=:0; %s &", c.Command)
-	if err := execWlCmd(venue.Exec,shellCmd); err != nil {
+	if err := execWlCmd(venue.Exec, shellCmd); err != nil {
 		return fmt.Errorf("launching %q: %w", c.Command, err)
 	}
 	fmt.Fprintf(os.Stderr, "Launched %q\n", c.Command)
@@ -608,7 +608,7 @@ func (c *WlResolutionCmd) Run() error {
 	output := c.Output
 	if output == "" {
 		// Auto-detect first output via wlr-randr.
-		data, err := captureWlCmd(venue.Exec,"wlr-randr 2>/dev/null | head -1")
+		data, err := captureWlCmd(venue.Exec, "wlr-randr 2>/dev/null | head -1")
 		if err == nil {
 			line := strings.TrimSpace(string(data))
 			if fields := strings.Fields(line); len(fields) > 0 {
@@ -622,7 +622,7 @@ func (c *WlResolutionCmd) Run() error {
 
 	shellCmd := fmt.Sprintf("wlr-randr --output %s --custom-mode %s",
 		shellQuote(output), shellQuote(c.Resolution))
-	if err := execWlCmd(venue.Exec,shellCmd); err != nil {
+	if err := execWlCmd(venue.Exec, shellCmd); err != nil {
 		return fmt.Errorf("setting resolution: %w", err)
 	}
 	fmt.Fprintf(os.Stderr, "Set %s to %s\n", output, c.Resolution)
@@ -691,7 +691,7 @@ func (c *WlKeyComboCmd) Run() error {
 		args = append(args, "-k", key)
 	}
 	shellCmd := "wtype " + strings.Join(args, " ")
-	if err := execWlCmd(venue.Exec,shellCmd); err != nil {
+	if err := execWlCmd(venue.Exec, shellCmd); err != nil {
 		return fmt.Errorf("sending key combo %s: %w", c.Keys, err)
 	}
 	fmt.Fprintf(os.Stderr, "Sent key combo %s\n", c.Keys)
@@ -724,7 +724,7 @@ func (c *WlDoubleClickCmd) Run() error {
 		"wlrctl pointer move -10000 -10000 && wlrctl pointer move %d %d && sleep 0.05 && wlrctl pointer click %s && sleep %s && wlrctl pointer click %s",
 		c.X, c.Y, btn, delayStr, btn,
 	)
-	if err := execWlCmd(venue.Exec,shellCmd); err != nil {
+	if err := execWlCmd(venue.Exec, shellCmd); err != nil {
 		return fmt.Errorf("double-clicking at (%d, %d): %w", c.X, c.Y, err)
 	}
 	fmt.Fprintf(os.Stderr, "Double-clicked %s at (%d, %d)\n", c.Button, c.X, c.Y)
@@ -774,7 +774,7 @@ func (c *WlScrollCmd) Run() error {
 		"wlrctl pointer move -10000 -10000 && wlrctl pointer move %d %d",
 		c.X, c.Y,
 	)
-	if err := execWlCmdSilent(venue.Exec,moveCmd); err != nil {
+	if err := execWlCmdSilent(venue.Exec, moveCmd); err != nil {
 		return fmt.Errorf("moving pointer to (%d, %d): %w", c.X, c.Y, err)
 	}
 
@@ -785,7 +785,7 @@ func (c *WlScrollCmd) Run() error {
 	}
 	scrollCmd := strings.Join(clickCmds, " && sleep 0.02 && ")
 
-	if err := execWlCmd(venue.Exec,scrollCmd); err != nil {
+	if err := execWlCmd(venue.Exec, scrollCmd); err != nil {
 		// Fall back to wtype Page_Up/Page_Down.
 		var keyName string
 		switch c.Direction {
@@ -799,7 +799,7 @@ func (c *WlScrollCmd) Run() error {
 		}
 		for range c.Amount {
 			keyCmd := fmt.Sprintf("wtype -k %s", keyName)
-			if err := execWlCmd(venue.Exec,keyCmd); err != nil {
+			if err := execWlCmd(venue.Exec, keyCmd); err != nil {
 				return fmt.Errorf("scroll fallback via wtype: %w", err)
 			}
 		}
@@ -849,7 +849,7 @@ func (c *WlDragCmd) Run() error {
 		"export DISPLAY=:0 && xdotool mousemove %d %d mousedown %d && sleep %s && xdotool mousemove %d %d mouseup %d",
 		c.X1, c.Y1, btnNum, delayStr, c.X2, c.Y2, btnNum,
 	)
-	if err := execWlCmd(venue.Exec,shellCmd); err != nil {
+	if err := execWlCmd(venue.Exec, shellCmd); err != nil {
 		return fmt.Errorf("dragging from (%d,%d) to (%d,%d): %w (requires XWayland)",
 			c.X1, c.Y1, c.X2, c.Y2, err)
 	}
@@ -883,20 +883,20 @@ func (c *WlClipboardCmd) Run() error {
 	switch c.Action {
 	case "get":
 		shellCmd := fmt.Sprintf("wl-paste%s 2>/dev/null", primaryFlag)
-		return execWlCmd(venue.Exec,shellCmd)
+		return execWlCmd(venue.Exec, shellCmd)
 	case "set":
 		if c.Text == "" {
 			return fmt.Errorf("text argument required for 'set' action")
 		}
 		shellCmd := fmt.Sprintf("printf '%%s' %s | wl-copy%s", shellQuote(c.Text), primaryFlag)
-		if err := execWlCmd(venue.Exec,shellCmd); err != nil {
+		if err := execWlCmd(venue.Exec, shellCmd); err != nil {
 			return fmt.Errorf("setting clipboard: %w", err)
 		}
 		fmt.Fprintf(os.Stderr, "Clipboard set (%d chars)\n", len(c.Text))
 		return nil
 	case "clear":
 		shellCmd := fmt.Sprintf("wl-copy%s --clear", primaryFlag)
-		if err := execWlCmd(venue.Exec,shellCmd); err != nil {
+		if err := execWlCmd(venue.Exec, shellCmd); err != nil {
 			return fmt.Errorf("clearing clipboard: %w", err)
 		}
 		fmt.Fprintf(os.Stderr, "Clipboard cleared\n")
@@ -922,7 +922,7 @@ func (c *WlXpropCmd) Run() error {
 	}
 
 	// Check if XWayland is running.
-	if execWlCmdSilent(venue.Exec,`pgrep -f Xwayland >/dev/null 2>&1`) != nil {
+	if execWlCmdSilent(venue.Exec, `pgrep -f Xwayland >/dev/null 2>&1`) != nil {
 		fmt.Fprintf(os.Stderr, "XWayland is not running (no X11 clients have been launched)\n")
 		fmt.Fprintf(os.Stderr, "Launch an X11 app first: ov eval wl exec <image> xterm\n")
 		return nil
@@ -937,7 +937,7 @@ func (c *WlXpropCmd) Run() error {
 			shellQuote(c.Target), shellQuote(c.Target), c.Target,
 		)
 	}
-	return execWlCmd(venue.Exec,shellCmd)
+	return execWlCmd(venue.Exec, shellCmd)
 }
 
 // WlGeometryCmd gets window geometry in a compositor-agnostic way.
@@ -955,7 +955,7 @@ func (c *WlGeometryCmd) Run() error {
 	}
 
 	// Try sway tree first (returns precise rect with x, y, width, height).
-	rect, err := FindWindowRect(venue.Exec,c.Target)
+	rect, err := FindWindowRect(venue.Exec, c.Target)
 	if err == nil {
 		out, _ := json.Marshal(map[string]int{
 			"x": rect.X, "y": rect.Y, "width": rect.Width, "height": rect.Height,
@@ -969,7 +969,7 @@ func (c *WlGeometryCmd) Run() error {
 		`export DISPLAY=:0 && WID=$(xdotool search --class %s 2>/dev/null | head -1 || xdotool search --name %s 2>/dev/null | head -1) && [ -n "$WID" ] && xdotool getwindowgeometry "$WID" 2>/dev/null`,
 		shellQuote(c.Target), shellQuote(c.Target),
 	)
-	data, err := captureWlCmd(venue.Exec,shellCmd)
+	data, err := captureWlCmd(venue.Exec, shellCmd)
 	if err == nil {
 		// Parse xdotool output: "Position: X,Y" and "Geometry: WxH"
 		var x, y, w, h int
@@ -999,7 +999,7 @@ func (c *WlGeometryCmd) Run() error {
 	}
 
 	// Last fallback: wlr-randr output geometry (for Wayland-native maximized windows).
-	randrOut, randrErr := captureWlCmd(venue.Exec,"wlr-randr 2>/dev/null")
+	randrOut, randrErr := captureWlCmd(venue.Exec, "wlr-randr 2>/dev/null")
 	if randrErr == nil {
 		for _, line := range strings.Split(string(randrOut), "\n") {
 			line = strings.TrimSpace(line)
@@ -1178,7 +1178,7 @@ func (c *WlAtspiCmd) Run() error {
 			`export DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=/tmp/dbus-session}" && %s`,
 			shellCmd,
 		)
-		return execWlCmd(venue.Exec,wrappedCmd)
+		return execWlCmd(venue.Exec, wrappedCmd)
 	default:
 		return fmt.Errorf("unknown atspi action %q (valid: tree, find, click)", c.Action)
 	}
@@ -1260,7 +1260,7 @@ func (c *WlSwayMsgCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	return execSwaymsg(venue.Exec,c.Command)
+	return execSwaymsg(venue.Exec, c.Command)
 }
 
 func (c *WlSwayTreeCmd) Run() error {
@@ -1268,7 +1268,7 @@ func (c *WlSwayTreeCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	return execSwaymsg(venue.Exec,"-t", "get_tree")
+	return execSwaymsg(venue.Exec, "-t", "get_tree")
 }
 
 func (c *WlSwayWorkspacesCmd) Run() error {
@@ -1276,7 +1276,7 @@ func (c *WlSwayWorkspacesCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	return execSwaymsg(venue.Exec,"-t", "get_workspaces")
+	return execSwaymsg(venue.Exec, "-t", "get_workspaces")
 }
 
 func (c *WlSwayOutputsCmd) Run() error {
@@ -1284,7 +1284,7 @@ func (c *WlSwayOutputsCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	return execSwaymsg(venue.Exec,"-t", "get_outputs")
+	return execSwaymsg(venue.Exec, "-t", "get_outputs")
 }
 
 func (c *WlSwayFocusCmd) Run() error {
@@ -1298,9 +1298,9 @@ func (c *WlSwayFocusCmd) Run() error {
 		if !strings.HasPrefix(criteria, "[") {
 			criteria = "[" + criteria + "]"
 		}
-		return execSwaymsg(venue.Exec,criteria+" focus")
+		return execSwaymsg(venue.Exec, criteria+" focus")
 	}
-	return execSwaymsg(venue.Exec,"focus", c.Target)
+	return execSwaymsg(venue.Exec, "focus", c.Target)
 }
 
 func (c *WlSwayMoveCmd) Run() error {
@@ -1311,9 +1311,9 @@ func (c *WlSwayMoveCmd) Run() error {
 	target := strings.Join(c.Target, " ")
 	if strings.HasPrefix(target, "workspace") {
 		ws := strings.TrimPrefix(target, "workspace ")
-		return execSwaymsg(venue.Exec,"move", "container", "to", "workspace", "number", ws)
+		return execSwaymsg(venue.Exec, "move", "container", "to", "workspace", "number", ws)
 	}
-	return execSwaymsg(venue.Exec,"move", target)
+	return execSwaymsg(venue.Exec, "move", target)
 }
 
 func (c *WlSwayResizeCmd) Run() error {
@@ -1327,7 +1327,7 @@ func (c *WlSwayResizeCmd) Run() error {
 		direction = "shrink"
 		amount = strings.TrimPrefix(amount, "-")
 	}
-	return execSwaymsg(venue.Exec,"resize", direction, c.Dimension, amount)
+	return execSwaymsg(venue.Exec, "resize", direction, c.Dimension, amount)
 }
 
 func (c *WlSwayKillCmd) Run() error {
@@ -1335,7 +1335,7 @@ func (c *WlSwayKillCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	return execSwaymsg(venue.Exec,"kill")
+	return execSwaymsg(venue.Exec, "kill")
 }
 
 func (c *WlSwayFloatingCmd) Run() error {
@@ -1343,7 +1343,7 @@ func (c *WlSwayFloatingCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	return execSwaymsg(venue.Exec,"floating", "toggle")
+	return execSwaymsg(venue.Exec, "floating", "toggle")
 }
 
 func (c *WlSwayLayoutCmd) Run() error {
@@ -1351,7 +1351,7 @@ func (c *WlSwayLayoutCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	return execSwaymsg(venue.Exec,"layout", c.Mode)
+	return execSwaymsg(venue.Exec, "layout", c.Mode)
 }
 
 func (c *WlSwayWorkspaceCmd) Run() error {
@@ -1359,7 +1359,7 @@ func (c *WlSwayWorkspaceCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	return execSwaymsg(venue.Exec,"workspace", "number", fmt.Sprintf("%d", c.Number))
+	return execSwaymsg(venue.Exec, "workspace", "number", fmt.Sprintf("%d", c.Number))
 }
 
 func (c *WlSwayReloadCmd) Run() error {
@@ -1367,7 +1367,7 @@ func (c *WlSwayReloadCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	return execSwaymsg(venue.Exec,"reload")
+	return execSwaymsg(venue.Exec, "reload")
 }
 
 // --- Sway IPC helpers ---

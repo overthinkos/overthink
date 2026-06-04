@@ -74,7 +74,7 @@ func TestPruneImagesByRetention_SharedID(t *testing.T) {
 			Names: append([]string(nil), allTags...),
 			Labels: map[string]string{
 				"org.overthinkos.image":   "eval-pod",
-				"org.overthinkos.version": "2026.144.1443", // content-stable across tags
+				"org.overthinkos.version": "2026.155.1801", // content-stable across tags
 			},
 		}
 	}

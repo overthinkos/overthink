@@ -25,14 +25,14 @@ import (
 // libvirtDomainXMLForImport is the subset of libvirt domain XML that
 // import maps onto VmSpec fields.
 type libvirtDomainXMLForImport struct {
-	XMLName  xml.Name                  `xml:"domain"`
-	Type     string                    `xml:"type,attr"`
-	Name     string                    `xml:"name"`
-	UUID     string                    `xml:"uuid"`
-	Memory   libvirtMemoryForImport    `xml:"memory"`
-	Vcpu     libvirtVcpuForImport      `xml:"vcpu"`
-	OS       libvirtOSForImport        `xml:"os"`
-	Devices  libvirtDevicesForImport   `xml:"devices"`
+	XMLName xml.Name                `xml:"domain"`
+	Type    string                  `xml:"type,attr"`
+	Name    string                  `xml:"name"`
+	UUID    string                  `xml:"uuid"`
+	Memory  libvirtMemoryForImport  `xml:"memory"`
+	Vcpu    libvirtVcpuForImport    `xml:"vcpu"`
+	OS      libvirtOSForImport      `xml:"os"`
+	Devices libvirtDevicesForImport `xml:"devices"`
 }
 
 type libvirtMemoryForImport struct {
@@ -45,8 +45,8 @@ type libvirtVcpuForImport struct {
 }
 
 type libvirtOSForImport struct {
-	Type    libvirtOSTypeForImport     `xml:"type"`
-	Loader  *libvirtOSLoaderForImport  `xml:"loader,omitempty"`
+	Type   libvirtOSTypeForImport    `xml:"type"`
+	Loader *libvirtOSLoaderForImport `xml:"loader,omitempty"`
 }
 
 type libvirtOSTypeForImport struct {

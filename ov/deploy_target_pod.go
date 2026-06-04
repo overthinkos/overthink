@@ -542,7 +542,9 @@ func (t *PodDeployTarget) RemoveOverlayImage(opts EmitOpts) error {
 // in the venue's filesystem view, not the host's.
 //
 // Example: parent has
-//   volumes: [{name: project, type: bind, host: /home/user/repo, path: /workspace}]
+//
+//	volumes: [{name: project, type: bind, host: /home/user/repo, path: /workspace}]
+//
 // then translateHostPathToVenue("/home/user/repo/layers/x", parent)
 // returns ("/workspace/layers/x", true).
 func translateHostPathToVenue(hostPath string, parent *DeploymentNode) (string, bool) {
@@ -569,4 +571,3 @@ func translateHostPathToVenue(hostPath string, parent *DeploymentNode) (string, 
 	}
 	return "", false
 }
-

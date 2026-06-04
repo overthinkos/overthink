@@ -157,18 +157,18 @@ func (hd *HostDistro) PrimaryTag() string {
 // values; the build.yml distro key (fedora/debian/arch) is the same token, so a
 // resolved DistroDef name resolves here too.
 var distroIDToFormat = map[string]string{
-	"fedora":     "rpm",
-	"rhel":       "rpm",
-	"centos":     "rpm",
-	"rocky":      "rpm",
-	"almalinux":  "rpm",
-	"debian":     "deb",
-	"ubuntu":     "deb",
-	"arch":       "pac",
-	"archarm":    "pac",
-	"manjaro":    "pac",
+	"fedora":      "rpm",
+	"rhel":        "rpm",
+	"centos":      "rpm",
+	"rocky":       "rpm",
+	"almalinux":   "rpm",
+	"debian":      "deb",
+	"ubuntu":      "deb",
+	"arch":        "pac",
+	"archarm":     "pac",
+	"manjaro":     "pac",
 	"endeavouros": "pac",
-	"cachyos":    "pac",
+	"cachyos":     "pac",
 }
 
 // formatForDistroID maps an /etc/os-release-style distro ID (or a build.yml

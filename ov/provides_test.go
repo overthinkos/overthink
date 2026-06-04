@@ -6,14 +6,14 @@ import (
 )
 
 func TestFilterOwnProvidesEnv(t *testing.T) {
-	entries := []EnvProvidesEntry{
+	entries := []EnvProvideEntry{
 		{Name: "OLLAMA_HOST", Value: "http://ov-ollama:11434", Source: "ollama"},
 		{Name: "PGHOST", Value: "ov-postgresql", Source: "postgresql"},
 		{Name: "CUSTOM", Value: "val", Source: "myimage"},
 	}
 
 	got := filterOwnProvides(entries, "ollama")
-	want := []EnvProvidesEntry{
+	want := []EnvProvideEntry{
 		{Name: "PGHOST", Value: "ov-postgresql", Source: "postgresql"},
 		{Name: "CUSTOM", Value: "val", Source: "myimage"},
 	}
@@ -23,7 +23,7 @@ func TestFilterOwnProvidesEnv(t *testing.T) {
 }
 
 func TestFilterOwnProvidesMCP(t *testing.T) {
-	entries := []MCPProvidesEntry{
+	entries := []MCPProvideEntry{
 		{Name: "jupyter", URL: "http://ov-jupyter:8888/mcp", Transport: "http", Source: "jupyter"},
 		{Name: "code-search", URL: "http://ov-search:3100/mcp", Transport: "http", Source: "search"},
 	}
@@ -35,7 +35,7 @@ func TestFilterOwnProvidesMCP(t *testing.T) {
 }
 
 func TestFilterOwnProvidesEmpty(t *testing.T) {
-	entries := []MCPProvidesEntry{
+	entries := []MCPProvideEntry{
 		{Name: "test", URL: "http://localhost", Source: "img"},
 	}
 	got := filterOwnProvides(entries, "")
@@ -45,7 +45,7 @@ func TestFilterOwnProvidesEmpty(t *testing.T) {
 }
 
 func TestRemoveBySource(t *testing.T) {
-	entries := []MCPProvidesEntry{
+	entries := []MCPProvideEntry{
 		{Name: "jupyter", URL: "http://ov-jupyter:8888/mcp", Source: "jupyter"},
 		{Name: "code-search", URL: "http://ov-search:3100/mcp", Source: "search"},
 	}
@@ -201,7 +201,7 @@ func TestPortMapFromMappings(t *testing.T) {
 }
 
 func TestPodAwareEnvProvides(t *testing.T) {
-	entries := []EnvProvidesEntry{
+	entries := []EnvProvideEntry{
 		{Name: "OLLAMA_HOST", Value: "http://ov-combined:11434", Source: "combined-image"},
 		{Name: "PGHOST", Value: "ov-postgresql", Source: "postgresql-image"},
 	}
@@ -223,7 +223,7 @@ func TestPodAwareEnvProvides(t *testing.T) {
 
 func TestPodAwareEnvProvidesLocalPrecedence(t *testing.T) {
 	// Both local and remote provide the same env var name
-	entries := []EnvProvidesEntry{
+	entries := []EnvProvideEntry{
 		{Name: "OLLAMA_HOST", Value: "http://ov-combined:11434", Source: "combined-image"},
 		{Name: "OLLAMA_HOST", Value: "http://ov-standalone:11434", Source: "standalone"},
 	}
@@ -239,7 +239,7 @@ func TestPodAwareEnvProvidesLocalPrecedence(t *testing.T) {
 
 func TestPodAwareEnvProvidesCrossContainer(t *testing.T) {
 	// Consumer is a different image — all entries are remote
-	entries := []EnvProvidesEntry{
+	entries := []EnvProvideEntry{
 		{Name: "OLLAMA_HOST", Value: "http://ov-ollama:11434", Source: "ollama-image"},
 	}
 
@@ -253,7 +253,7 @@ func TestPodAwareEnvProvidesCrossContainer(t *testing.T) {
 }
 
 func TestPodAwareMCPProvides(t *testing.T) {
-	entries := []MCPProvidesEntry{
+	entries := []MCPProvideEntry{
 		{Name: "jupyter", URL: "http://ov-combined:8888/mcp", Transport: "http", Source: "combined-image"},
 		{Name: "code-search", URL: "http://ov-search:3100/mcp", Transport: "http", Source: "search-image"},
 	}
@@ -275,7 +275,7 @@ func TestPodAwareMCPProvides(t *testing.T) {
 
 func TestPodAwareMCPProvidesLocalPrecedence(t *testing.T) {
 	// Both local and remote provide the same MCP server name
-	entries := []MCPProvidesEntry{
+	entries := []MCPProvideEntry{
 		{Name: "jupyter", URL: "http://ov-combined:8888/mcp", Transport: "http", Source: "combined-image"},
 		{Name: "jupyter", URL: "http://ov-standalone:8888/mcp", Transport: "http", Source: "standalone"},
 	}
@@ -291,7 +291,7 @@ func TestPodAwareMCPProvidesLocalPrecedence(t *testing.T) {
 
 func TestPodAwareMCPProvidesCrossContainer(t *testing.T) {
 	// Consumer is a different image — all entries are remote
-	entries := []MCPProvidesEntry{
+	entries := []MCPProvideEntry{
 		{Name: "jupyter", URL: "http://ov-jupyter:8888/mcp", Transport: "http", Source: "jupyter-image"},
 	}
 

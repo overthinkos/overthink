@@ -36,7 +36,7 @@ type K8sGenerateOpts struct {
 	DeploymentName string // map key from overthink.yml:deployments.images (base image name)
 	Instance       string // "" for the bare overlay; non-empty for image/instance
 	ImageRef       string // fully qualified image ref (registry/name:tag)
-	Deploy     DeploymentNode
+	Deploy         DeploymentNode
 	Capabilities   *Capabilities
 	Cluster        *K8sSpec
 	OutputDir      string // usually <projectDir>/.overthink/k8s
@@ -472,8 +472,8 @@ func generateContainerPorts(caps *Capabilities) []map[string]any {
 		return nil
 	}
 	var out []map[string]any
-	for _, p := range caps.Ports {
-		// caps.Ports entries look like "8080" or "8080/udp".
+	for _, p := range caps.Port {
+		// caps.Port entries look like "8080" or "8080/udp".
 		port := p
 		proto := "TCP"
 		if idx := strings.IndexByte(p, '/'); idx > 0 {
@@ -776,7 +776,7 @@ func resolveIngressPort(opts K8sGenerateOpts, portNameOrNumber string) int {
 	}
 	// Fall back to the first capability port.
 	if opts.Capabilities != nil {
-		for _, p := range opts.Capabilities.Ports {
+		for _, p := range opts.Capabilities.Port {
 			raw := p
 			if idx := strings.IndexByte(p, '/'); idx > 0 {
 				raw = p[:idx]

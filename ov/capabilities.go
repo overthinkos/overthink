@@ -34,13 +34,13 @@ type Capabilities = ImageMetadata
 // below and breaks the build.
 var CapabilityLabelMap = map[string]string{
 	// Identity
-	"Image":         LabelImage,
-	"Version":       LabelVersion,
-	"Registry":      LabelRegistry,
-	"Bootc":         LabelBootc,
-	"Status":        LabelStatus,
-	"Info":          LabelInfo,
-	"LayerVersions": LabelLayerVersions,
+	"Image":        LabelImage,
+	"Version":      LabelVersion,
+	"Registry":     LabelRegistry,
+	"Bootc":        LabelBootc,
+	"Status":       LabelStatus,
+	"Info":         LabelInfo,
+	"LayerVersion": LabelLayerVersion,
 
 	// Account
 	"UID":  LabelUID,
@@ -49,12 +49,12 @@ var CapabilityLabelMap = map[string]string{
 	"Home": LabelHome,
 
 	// Ports / volumes / aliases / routes
-	"Ports":      LabelPorts,
-	"PortProtos": LabelPortProtos,
-	"PortRelay":  LabelPortRelay,
-	"Volumes":    LabelVolumes,
-	"Aliases":    LabelAliases,
-	"Routes":     LabelRoutes,
+	"Port":      LabelPort,
+	"PortProto": LabelPortProto,
+	"PortRelay": LabelPortRelay,
+	"Volume":    LabelVolume,
+	"Alias":     LabelAlias,
+	"Route":     LabelRoute,
 
 	// Security
 	"Security": LabelSecurity,
@@ -66,42 +66,42 @@ var CapabilityLabelMap = map[string]string{
 
 	// Env / vars
 	"Env":        LabelEnv,
-	"EnvLayers":  LabelEnvLayers,
+	"EnvLayer":   LabelEnvLayer,
 	"PathAppend": LabelPathAppend,
 
 	// Init — auto-detected from layers (see init_config.go ResolveInitSystem).
 	// Engine moved to DeploymentNode in schema v4 (deploy-host choice).
 	"Init":         LabelInit,
-	"Services":     LabelServices,
+	"Service":      LabelService,
 	"ServiceNames": LabelInit, // per-init active names; baked alongside the init label
 
 	// Distro + build formats + builder provides
-	"Distro":       LabelPlatformDistro,
-	"BuildFormats": LabelPlatformFormats,
-	"Builder":      LabelBuilderUses,
-	"Builds":       LabelBuilderProvides,
+	"Distro":      LabelPlatformDistro,
+	"BuildFormat": LabelPlatformFormat,
+	"Builder":     LabelBuilderUse,
+	"Build":       LabelBuilderProvide,
 
 	// Hooks
-	"Hooks": LabelHooks,
+	"Hook": LabelHook,
 	// Vm / Libvirt removed in the VM hard-cutover (see labels.go).
 
 	// Skills (doc pointer)
-	"Skills": LabelSkills,
+	"Skill": LabelSkill,
 
 	// Data seeding
 	"DataEntries": LabelDataEntries,
 	"DataImage":   LabelDataImage,
 
 	// Env / secret / MCP dependency graph
-	"EnvProvides":    LabelEnvProvides,
-	"EnvRequires":    LabelEnvRequires,
-	"EnvAccepts":     LabelEnvAccepts,
-	"SecretAccepts":  LabelSecretAccepts,
-	"SecretRequires": LabelSecretRequires,
-	"Secrets":        LabelSecrets,
-	"MCPProvides":    LabelMCPProvides,
-	"MCPRequires":    LabelMCPRequires,
-	"MCPAccepts":     LabelMCPAccepts,
+	"EnvProvide":    LabelEnvProvide,
+	"EnvRequire":    LabelEnvRequire,
+	"EnvAccept":     LabelEnvAccept,
+	"SecretAccept":  LabelSecretAccept,
+	"SecretRequire": LabelSecretRequire,
+	"Secret":        LabelSecret,
+	"MCPProvide":    LabelMCPProvide,
+	"MCPRequire":    LabelMCPRequire,
+	"MCPAccept":     LabelMCPAccept,
 
 	// Declarative tests (image-level invariants + deploy defaults)
 	"Eval": LabelEval,

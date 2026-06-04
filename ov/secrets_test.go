@@ -8,7 +8,7 @@ import (
 )
 
 func TestCollectSecretsFromLabels(t *testing.T) {
-	labelSecrets := []LabelSecret{
+	labelSecrets := []LabelSecretEntry{
 		{Name: "api-key", Target: "/run/secrets/api_key", Env: "API_KEY"},
 		{Name: "vnc-password", Target: "/run/secrets/vnc_password"},
 	}
@@ -346,10 +346,10 @@ func TestCollectLayerSecretAcceptsHappyPath(t *testing.T) {
 	}
 
 	meta := &ImageMetadata{
-		SecretRequires: []EnvDependency{
+		SecretRequire: []EnvDependency{
 			{Name: "TEST_OV_CRED_REQUIRED", Description: "required"},
 		},
-		SecretAccepts: []EnvDependency{
+		SecretAccept: []EnvDependency{
 			{Name: "TEST_OV_CRED_ROUTEA", Description: "override", Key: "ov/api-key/routea"},
 			{Name: "TEST_OV_CRED_ROUTEB", Description: "default"},
 		},
@@ -439,10 +439,10 @@ func TestCollectLayerSecretAcceptsMissingRequired(t *testing.T) {
 	withIsolatedCredentialStore(t) // empty store
 
 	meta := &ImageMetadata{
-		SecretRequires: []EnvDependency{
+		SecretRequire: []EnvDependency{
 			{Name: "TEST_OV_CRED_REQUIRED", Description: "required"},
 		},
-		SecretAccepts: []EnvDependency{
+		SecretAccept: []EnvDependency{
 			{Name: "TEST_OV_CRED_OPT", Description: "optional"},
 		},
 	}
@@ -493,7 +493,7 @@ func TestCollectLayerSecretAcceptsEnvOverride(t *testing.T) {
 	t.Setenv("TEST_OV_CRED_IMPORTED", "from-env-synthetic")
 
 	meta := &ImageMetadata{
-		SecretAccepts: []EnvDependency{
+		SecretAccept: []EnvDependency{
 			{Name: "TEST_OV_CRED_IMPORTED", Description: "opt", Key: "ov/api-key/imported"},
 		},
 	}
@@ -528,13 +528,13 @@ func TestMergedSecretsIncludeCredentialBacked(t *testing.T) {
 	// A realistic openwebui-style metadata: one layer-owned webui-secret-key
 	// AND one credential-backed WEBUI_ADMIN_PASSWORD via secret_requires.
 	meta := &ImageMetadata{
-		Secrets: []LabelSecret{
+		Secret: []LabelSecretEntry{
 			{Name: "webui-secret-key", Target: "/run/secrets/webui_secret_key", Env: "WEBUI_SECRET_KEY"},
 		},
-		SecretRequires: []EnvDependency{
+		SecretRequire: []EnvDependency{
 			{Name: "TEST_OV_CRED_ADMIN_PASSWORD", Description: "synthetic admin password"},
 		},
-		SecretAccepts: []EnvDependency{
+		SecretAccept: []EnvDependency{
 			{Name: "TEST_OV_CRED_ROUTEA", Description: "synthetic optional", Key: "ov/api-key/routea"},
 		},
 	}
@@ -550,7 +550,7 @@ func TestMergedSecretsIncludeCredentialBacked(t *testing.T) {
 
 	// Mirror the merge that both Run() and updateAllDeployedQuadlets must
 	// perform: start with layer-owned, append credential-backed.
-	layerOwned := CollectSecretsFromLabels("openwebui", meta.Secrets)
+	layerOwned := CollectSecretsFromLabels("openwebui", meta.Secret)
 	credBacked, _ := CollectLayerSecretAccepts("openwebui", "", meta)
 	merged := append(layerOwned, credBacked...)
 

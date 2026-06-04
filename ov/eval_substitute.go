@@ -65,10 +65,10 @@ type SubstContext struct {
 
 	// Progressive-scoring phase state. Populated when score.progressive
 	// is true; zero-valued and ignored otherwise.
-	Phase         int    // 1-indexed current phase number
-	PhaseTotal    int    // total number of phases (== len(score.Recipe))
-	PhaseRecipes  string // comma-joined in-scope recipe names for this phase
-	PhaseIntro    string // pre-rendered "Phase N of M — Y new recipe(s) added: ..." preamble
+	Phase        int    // 1-indexed current phase number
+	PhaseTotal   int    // total number of phases (== len(score.Recipe))
+	PhaseRecipes string // comma-joined in-scope recipe names for this phase
+	PhaseIntro   string // pre-rendered "Phase N of M — Y new recipe(s) added: ..." preamble
 
 	// Deployment name the harness scores against (drives ${DEPLOYMENT})
 	Deploy string

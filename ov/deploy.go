@@ -1507,15 +1507,15 @@ func MergeDeployOntoMetadata(meta *ImageMetadata, dc *DeployConfig, deployName, 
 	}
 	// Port override semantics: prefer ResolvedPort (the persisted
 	// expansion of an "auto" sentinel) over Port. If neither is set,
-	// meta.Ports keeps its image-label value. If Port is set but still
+	// meta.Port keeps its image-label value. If Port is set but still
 	// contains "auto", the expansion didn't happen yet — ov config /
 	// ov update is responsible for running ExpandAutoPorts and writing
 	// ResolvedPort BEFORE this merge runs.
 	switch {
 	case overlay.ResolvedPort != nil:
-		meta.Ports = overlay.ResolvedPort
+		meta.Port = overlay.ResolvedPort
 	case overlay.Port != nil && !HasAutoPort(overlay.Port):
-		meta.Ports = overlay.Port
+		meta.Port = overlay.Port
 	}
 	if overlay.Env != nil {
 		meta.Env = overlay.Env
@@ -1578,7 +1578,7 @@ func MergeDeployOntoMetadata(meta *ImageMetadata, dc *DeployConfig, deployName, 
 			deployByName[ds.Name] = ds
 		}
 		// Override matching secrets from image labels with deploy.yml source config
-		for i, ls := range meta.Secrets {
+		for i, ls := range meta.Secret {
 			if _, ok := deployByName[ls.Name]; ok {
 				// Deploy.yml provides this secret — keep the label entry
 				// (the source override is used at provisioning time, not in the label)
@@ -1588,14 +1588,14 @@ func MergeDeployOntoMetadata(meta *ImageMetadata, dc *DeployConfig, deployName, 
 		// Add deploy-only secrets that aren't in the image labels
 		for _, ds := range overlay.Secret {
 			found := false
-			for _, ls := range meta.Secrets {
+			for _, ls := range meta.Secret {
 				if ls.Name == ds.Name {
 					found = true
 					break
 				}
 			}
 			if !found {
-				meta.Secrets = append(meta.Secrets, LabelSecret{
+				meta.Secret = append(meta.Secret, LabelSecretEntry{
 					Name:   ds.Name,
 					Target: "/run/secrets/" + ds.Name,
 				})
@@ -1649,9 +1649,9 @@ func scopeVolumesToDeployKey(meta *ImageMetadata, deployName, instance string) {
 	if newPrefix == oldPrefix {
 		return
 	}
-	for i := range meta.Volumes {
-		if rest := strings.TrimPrefix(meta.Volumes[i].VolumeName, oldPrefix); rest != meta.Volumes[i].VolumeName {
-			meta.Volumes[i].VolumeName = newPrefix + rest
+	for i := range meta.Volume {
+		if rest := strings.TrimPrefix(meta.Volume[i].VolumeName, oldPrefix); rest != meta.Volume[i].VolumeName {
+			meta.Volume[i].VolumeName = newPrefix + rest
 		}
 	}
 }
@@ -2085,7 +2085,7 @@ type SaveDeployStateInput struct {
 	// overwrite operator port overrides with image-label defaults.
 	// Writing Ports whenever input.Ports != nil would
 	// turn every config-recompute into a port-state reset because the
-	// caller always computes ports from `meta.Ports` (image-label
+	// caller always computes ports from `meta.Port` (image-label
 	// defaults pre-merged with deploy.yml). With SetPorts, the caller
 	// explicitly opts in to writing only when the operator passed
 	// `--port` flags. Same idiom as SetDisposable/SetLifecycle below.
@@ -2105,7 +2105,7 @@ type SaveDeployStateInput struct {
 	// Env and the existing persisted entry.Env before writing. Defense in
 	// depth for the §6 / Run() pipeline (MigratePlaintextEnvSecret and
 	// scrubSecretCLIEnv are the primary gates). Populated by the Run()
-	// call site from meta.SecretAccepts/SecretRequires.
+	// call site from meta.SecretAccept/SecretRequires.
 	SecretNames []string
 
 	// Disposable + Lifecycle — the classification fields
@@ -2155,7 +2155,7 @@ func saveDeployState(imageName, instance string, input SaveDeployStateInput) {
 		entry.Volume = input.Volume
 	}
 	// Ports gated on SetPorts: explicit opt-in required so a recompute
-	// path that always-passes computed `meta.Ports` doesn't silently
+	// path that always-passes computed `meta.Port` doesn't silently
 	// overwrite operator overrides. See SaveDeployStateInput.SetPorts
 	// docstring.
 	if input.SetPorts && input.Ports != nil {

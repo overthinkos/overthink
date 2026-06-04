@@ -18,7 +18,7 @@ type InitConfig struct {
 type InitDef struct {
 	// Detection: which layer.yml fields and file patterns trigger this init system
 	LayerFields  []string `yaml:"layer_field,omitempty"`
-	LayerFiles   []string `yaml:"layer_file,omitempty"`   // glob patterns (e.g., "*.service")
+	LayerFiles   []string `yaml:"layer_file,omitempty"`    // glob patterns (e.g., "*.service")
 	DependsLayer string   `yaml:"depends_layer,omitempty"` // layer name required in dependency chain
 	// RequiresCapabilities lists layer-aggregated capability names that
 	// must be present in the image composition for this init system to

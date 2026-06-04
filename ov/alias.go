@@ -310,7 +310,7 @@ func (c *AliasInstallCmd) Run() error {
 	if meta == nil {
 		return fmt.Errorf("image %s has no embedded metadata; rebuild with latest ov", imageRef)
 	}
-	aliases := meta.Aliases
+	aliases := meta.Alias
 
 	if len(aliases) == 0 {
 		fmt.Fprintf(os.Stderr, "No aliases defined for image %s\n", c.Image)

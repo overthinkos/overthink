@@ -40,23 +40,23 @@ import (
 //
 // The zero value is a usable empty result (no scenarios, no summary).
 type EvalRunResults struct {
-	Image     string                `yaml:"image,omitempty"`
-	Mode      string                `yaml:"mode,omitempty"` // "image" | "run"
-	Scenario []ScenarioEvalResult  `yaml:"scenario,omitempty"`
-	Summary   TestRunSummary        `yaml:"summary"`
+	Image    string               `yaml:"image,omitempty"`
+	Mode     string               `yaml:"mode,omitempty"` // "image" | "run"
+	Scenario []ScenarioEvalResult `yaml:"scenario,omitempty"`
+	Summary  TestRunSummary       `yaml:"summary"`
 }
 
 // ScenarioEvalResult is the evaluator's verdict for a single scenario
 // (one row of a LabelDescriptionSet after outline expansion). The caller
 // keys results by ScenarioID across iterations for plateau tracking.
 type ScenarioEvalResult struct {
-	ID           string             `yaml:"id"`
-	Origin       string             `yaml:"origin,omitempty"`
-	Name         string             `yaml:"name,omitempty"`
-	Tag         []string           `yaml:"tag,omitempty"`
-	Status       string             `yaml:"status"` // "pass" | "fail" | "skip" | "skipped"
-	PendingSteps int                `yaml:"pending_step"`
-	Step         []StepEvalResult   `yaml:"step,omitempty"`
+	ID           string           `yaml:"id"`
+	Origin       string           `yaml:"origin,omitempty"`
+	Name         string           `yaml:"name,omitempty"`
+	Tag          []string         `yaml:"tag,omitempty"`
+	Status       string           `yaml:"status"` // "pass" | "fail" | "skip" | "skipped"
+	PendingSteps int              `yaml:"pending_step"`
+	Step         []StepEvalResult `yaml:"step,omitempty"`
 	// SkippedReason is set when Status == "skipped" — the depends_on
 	// upstream that didn't pass. Format: "dep-unmet: <upstream-name>".
 	SkippedReason string `yaml:"skipped_reason,omitempty"`
@@ -223,10 +223,10 @@ func sortedCopy(m map[string]string) map[string]string {
 // because we sort them by key.
 func deepCloneScenario(s Scenario) Scenario {
 	c := Scenario{
-		Name:     s.Name,
+		Name:    s.Name,
 		Tag:     append([]string(nil), s.Tag...),
 		Step:    append([]Step(nil), s.Step...),
-		OnFail:   append([]Step(nil), s.OnFail...),
+		OnFail:  append([]Step(nil), s.OnFail...),
 		Example: nil,
 	}
 	if len(s.Example) > 0 {

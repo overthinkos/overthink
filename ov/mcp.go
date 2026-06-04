@@ -93,12 +93,12 @@ func (c *McpServersCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	if meta == nil || len(meta.MCPProvides) == 0 {
+	if meta == nil || len(meta.MCPProvide) == 0 {
 		return fmt.Errorf("image %q declares no mcp_provides", c.Image)
 	}
-	entries := make([]MCPProvidesEntry, 0, len(meta.MCPProvides))
-	for _, p := range meta.MCPProvides {
-		entries = append(entries, MCPProvidesEntry{
+	entries := make([]MCPProvideEntry, 0, len(meta.MCPProvide))
+	for _, p := range meta.MCPProvide {
+		entries = append(entries, MCPProvideEntry{
 			Name:      p.Name,
 			URL:       resolveContainerNameTemplate(p.URL, containerName),
 			Transport: p.Transport,
@@ -337,23 +337,23 @@ func (c *McpReadCmd) Run() error {
 // is safe to `defer` immediately; it tolerates a nil session on error paths.
 var mcpOpenSession = defaultMcpOpenSession
 
-func defaultMcpOpenSession(ctx context.Context, image, instance, wantName string) (*mcp.ClientSession, MCPProvidesEntry, func(), error) {
+func defaultMcpOpenSession(ctx context.Context, image, instance, wantName string) (*mcp.ClientSession, MCPProvideEntry, func(), error) {
 	engine, containerName, err := resolveContainer(image, instance)
 	if err != nil {
-		return nil, MCPProvidesEntry{}, func() {}, err
+		return nil, MCPProvideEntry{}, func() {}, err
 	}
 	imageRef, err := containerImageRef(engine, containerName)
 	if err != nil {
-		return nil, MCPProvidesEntry{}, func() {}, err
+		return nil, MCPProvideEntry{}, func() {}, err
 	}
 	meta, err := ExtractMetadata(engine, imageRef)
 	if err != nil {
-		return nil, MCPProvidesEntry{}, func() {}, err
+		return nil, MCPProvideEntry{}, func() {}, err
 	}
 
 	entry, err := resolveMCPEntry(meta, image, containerName, wantName)
 	if err != nil {
-		return nil, MCPProvidesEntry{}, func() {}, err
+		return nil, MCPProvideEntry{}, func() {}, err
 	}
 
 	inspection, err := InspectContainer(engine, containerName)

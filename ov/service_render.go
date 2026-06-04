@@ -73,9 +73,9 @@ type ServiceEntry struct {
 	// user service that must start WITH the logged-in graphical session (so it
 	// is NOT pulled at early user-manager start, before the session/portal
 	// exist). systemd-only; supervisord ignores it.
-	WantedBy         []string          `yaml:"wanted_by,omitempty"`
-	Stdout           string            `yaml:"stdout,omitempty"` // journal | file:<path> | none
-	StopTimeout      string            `yaml:"stop_timeout,omitempty"`
+	WantedBy    []string `yaml:"wanted_by,omitempty"`
+	Stdout      string   `yaml:"stdout,omitempty"` // journal | file:<path> | none
+	StopTimeout string   `yaml:"stop_timeout,omitempty"`
 
 	// Common to both paths
 	Scope     string            `yaml:"scope,omitempty"` // system | user; default system

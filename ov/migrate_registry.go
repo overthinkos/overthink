@@ -70,7 +70,7 @@ type MigrationStep struct {
 // closure references it, and the registry's last entry uses it as its Version,
 // so the two are guaranteed equal (asserted by TestRegistryHeadMatchesLatest).
 // Bump it — and append the matching MigrationStep — for each future cutover.
-var latestSchemaVersion = mustCalVer("2026.144.1443")
+var latestSchemaVersion = mustCalVer("2026.155.1801")
 
 // migrationSteps is the ordered registry. Chronological by git landing date
 // (see `git log --diff-filter=A` on each migrate_*.go), which is the order the
@@ -168,6 +168,19 @@ func migrationSteps() []MigrationStep {
 		// unversioned fetched layer rather than carrying a fallback). See CHANGELOG.md.
 		{mustCalVer("2026.144.1442"), "entity-version", false, func(c *MigrateContext) (bool, error) {
 			r, err := MigrateEntityVersion(c.Dir, latestSchemaVersion.String(), c.DryRun)
+			return len(r) > 0, err
+		}},
+		// 2026-06 singular-label cutover: the OCI label contract + the layer
+		// authoring keys went singular (hooks→hook, capabilities→capability,
+		// services→service, ports→port, …). The layer KEY renames are handled
+		// by the field-singular table (extended this cutover); this step
+		// rewrites the remaining label-STRING references a config can carry —
+		// build.yml init `label_key: org.overthinkos.service.<init>`, plus any
+		// forked `oci_label:` / eval label inspection. Baked image labels are
+		// re-emitted singular on the next `ov image build` (hard-cutover
+		// rebuild), not by config migration. See CHANGELOG.md.
+		{mustCalVer("2026.155.1800"), "singular-label", false, func(c *MigrateContext) (bool, error) {
+			r, err := MigrateSingularLabel(c.Dir, c.DryRun)
 			return len(r) > 0, err
 		}},
 		// HEAD — the schema stamp. Must stay LAST so LatestSchemaVersion picks it up

@@ -22,6 +22,88 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-04 — refactor(ov)!: every ov-only plural goes singular — OCI label contract + remaining authoring keys + full Go symmetry (#51)
+
+**Directive.** Following #50 (which made the layer parser hard-reject plural
+authoring keys), the operator asked to finish the job: *replace ALL plurals
+that aren't mapped to another schema's plural in a generated config (libvirt /
+cloud-init / Kubernetes) — including the OCI labels that are only used by `ov`
+itself — with singulars.* #50 had deliberately kept the `org.overthinkos.*`
+labels plural (treating them as an external contract); this cutover inverts
+that: those labels are `ov`'s own namespace (`ov` both emits and reads them),
+so they go singular too, with full Go-identifier symmetry.
+
+**The OCI label contract — singular (`ov/labels.go`, `ov/capabilities.go`).**
+~22 plural `org.overthinkos.*` label STRING VALUES went singular:
+`services→service`, `ports→port`, `volumes→volume`, `aliases→alias`,
+`hooks→hook`, `routes→route`, `secrets→secret`, `skills→skill`,
+`env_layers→env_layer`, `port_protos→port_proto`,
+`layer_versions→layer_version`, `platform.formats→platform.format`,
+`builder.uses→builder.use`, `builder.provides→builder.provide`, and the eight
+compound `env_*`/`secret_*`/`mcp_*` keys. Already-singular labels (`version`,
+`image`, `init`, `env`, `data`, `path_append`, `port_relay`, `platform.distro`,
+…) are untouched. The per-init service sub-label read string hardcoded at
+`labels.go` (`"org.overthinkos.service." + meta.Init`) and the `build.yml`
+init `label_key:` entries moved in lockstep.
+
+**Full Go symmetry.** The operator chose to rename the Go identifiers too, not
+just the wire strings — realigning a latent asymmetry where `ImageMetadata`
+carried plural fields (`Services`, `EnvProvides`) to mirror the old plural
+labels while the authoring `ImageConfig` was already singular (`config.go`).
+Renamed: every label const (`LabelServices→LabelService`, …), every
+`ImageMetadata` field (`.Services→.Service`, `.EnvProvides→.EnvProvide`, …),
+the `CapabilityLabelMap` keys, and the `EnvProvidesEntry`/`MCPProvidesEntry`
+types. The three label-entry types whose singular name would collide with a
+now-singular const (`LabelVolume`/`LabelRoute`/`LabelSecret`) were renamed to
+`Label<X>Entry` to free the const name — the only way Go permits a const and a
+type to coexist. `TestCapabilityLabelCompleteness` (reflects field→map) stays
+green. Genuinely-external field names stay plural — `ServiceNames`,
+`DataEntries`, `Distro`, and the runtime `status`/`tunnel`/`quadlet`
+`Ports`/`NetworkSettings.Ports` (podman's own schema).
+
+**Remaining authoring keys (inverts #50's keep-plural).** The two layer-level
+keys #50 left plural — `hooks:` and `capabilities:` — went singular
+(`hook:`/`capability:`) across the `LayerYAML` struct tags, `knownFields`, and
+the two in-repo layers that used them (`layers/github-runner`,
+`image/bootc/layers/bootc-config`). The lone `tags:` eval-scenario fixture →
+`tag:`.
+
+**Hard migration — schema `2026.144.1443` → `2026.155.1801`.** A schema/format
+change, so it bumps `LatestSchemaVersion()` and ships a migrator. The
+`field-singular` table (`ov/migrate_field_singular.go`) gained
+`hooks`/`capabilities`/`tags` (the canonical native-plural→singular table — one
+table, not two); a new `singular-label` `MigrationStep`
+(`ov/migrate_singular_label.go`) rewrites the remaining label-STRING references
+a config can carry (`build.yml` `label_key:`, plus any forked `oci_label:` /
+eval label inspection). Baked OCI labels inside built images cannot be migrated
+by config rewriting — they are re-emitted singular on the next `ov image build`
+(a hard-cutover rebuild). The main repo + all 8 `image/<distro>` submodules
+were stamped to the new schema. **Existing plural-labeled images read
+metadata-blind under the singular reader until rebuilt** — the operator rebuilds
+live deploys (`ov update --rebuild-image <name>`) at their convenience (no live
+workstation was rebuilt in this cutover, by operator choice).
+
+**Coverage.** `TestExtractMetadata_SingularLabels` (round-trips LITERAL
+singular keys — fails if any const regresses to plural),
+`TestLabelConstantsAreSingular` (pins every renamed const), and
+`TestMigrateSingularLabel` (build.yml `label_key` rewrite + idempotency), plus
+the existing completeness test. `go test ./ov/...` green.
+
+**Verification.** `ov image validate` EXIT 0 with **zero warnings** across the
+main repo + all 8 submodules (the whole `cachyos`-namespace import chain loads
+at the new schema). R10 `ov eval run eval-pod` **PASS** (8/8 `ok: true`,
+`total_seconds: 241`): the bed built the image with the new `ov` (emitting
+singular labels — the 165s build is the expected `ov`-layer cache cascade),
+deployed it (`ExtractMetadata` reading the singular labels), ran the live
+deploy probes (the `service.<init>` sub-label), and fresh-updated — proving the
+emit↔read round-trip end-to-end on a real image.
+
+*Out-of-scope note:* running `ov migrate` surfaced that the `kind-files`
+migrator would split `image/bootc`'s intentionally-inline `overthink.yml` into
+sibling files — contrary to the supported "bootc inlines them all" layout. That
+split was reverted (bootc keeps only its version stamp + the `capability:`
+rename); the `kind-files`-vs-inline interaction is a separate follow-up.
+
 ### 2026-06-04 — fix(ov): layer parser hard-rejects unknown top-level keys (strict singular enforcement) + close the silent-typo gap (#50)
 
 **Symptom that motivated this.** During #48, a `vscode` layer authored with

@@ -101,7 +101,7 @@ func TestResolveTestVarsRuntime(t *testing.T) {
 		Image: "redis-ml",
 		User:  "user",
 		Home:  "/home/user",
-		Volumes: []VolumeMount{
+		Volume: []VolumeMount{
 			{VolumeName: "ov-redis-ml-data", ContainerPath: "/data"},
 			{VolumeName: "ov-redis-ml-workspace", ContainerPath: "/workspace"},
 		},

@@ -2625,10 +2625,10 @@ func populateLayerFromYAML(layer *Layer, ly *LayerYAML) {
 	layer.data = ly.Data
 	layer.security = ly.Security
 	layer.libvirt = ly.Libvirt
-	layer.hooks = ly.Hooks
+	layer.hooks = ly.Hook
 	layer.tests = ly.Eval
 	layer.artifacts = ly.Artifact
-	layer.capabilities = ly.Capabilities
+	layer.capabilities = ly.Capability
 	layer.requiresCapabilities = ly.RequiresCapability
 	layer.PortRelayPorts = ly.PortRelay
 	layer.secrets = ly.SecretYAML

@@ -75,16 +75,16 @@ type EphemeralHandle struct {
 
 // RegisterEphemeralLifecycle is the entry point invoked at the start
 // of a deploy add for an ephemeral resource. Performs (in order):
-//   1. Generate unique instance ID (six-char hex).
-//   2. Resolve parent ephemeral from OV_EPHEMERAL_PARENT environment
-//      variable (nested-case detection).
-//   3. Compute effective TTL (clipped to parent's remaining TTL when
-//      nested).
-//   4. Register systemd transient timer that runs `ov deploy del
-//      <deployName> --force` after the TTL.
-//   5. Increment vm-target parent-snapshot refcount when applicable.
-//   6. Persist EphemeralRuntime into deploy.yml's vm_state.ephemeral
-//      (or pod_state / k8s_state for those targets).
+//  1. Generate unique instance ID (six-char hex).
+//  2. Resolve parent ephemeral from OV_EPHEMERAL_PARENT environment
+//     variable (nested-case detection).
+//  3. Compute effective TTL (clipped to parent's remaining TTL when
+//     nested).
+//  4. Register systemd transient timer that runs `ov deploy del
+//     <deployName> --force` after the TTL.
+//  5. Increment vm-target parent-snapshot refcount when applicable.
+//  6. Persist EphemeralRuntime into deploy.yml's vm_state.ephemeral
+//     (or pod_state / k8s_state for those targets).
 //
 // Returns the handle that should be passed to TeardownEphemeralLifecycle
 // at deploy del time.
@@ -155,11 +155,11 @@ func RegisterEphemeralLifecycle(node *DeploymentNode, deployName string) (*Ephem
 
 // TeardownEphemeralLifecycle is the entry point invoked at the end of
 // a deploy del for an ephemeral resource. Performs (in order):
-//   1. Recursively del nested children depth-first.
-//   2. Cancel the systemd transient timer.
-//   3. Decrement snapshot refcount (vm-target only).
-//   4. Decrement parent's child-refcount (nested case).
-//   5. Clear EphemeralRuntime from deploy.yml.
+//  1. Recursively del nested children depth-first.
+//  2. Cancel the systemd transient timer.
+//  3. Decrement snapshot refcount (vm-target only).
+//  4. Decrement parent's child-refcount (nested case).
+//  5. Clear EphemeralRuntime from deploy.yml.
 func TeardownEphemeralLifecycle(node *DeploymentNode, deployName string) error {
 	if node == nil || !node.IsEphemeral() {
 		return fmt.Errorf("TeardownEphemeralLifecycle: node %q is not marked ephemeral", deployName)
@@ -455,4 +455,3 @@ func teardownChildrenRec(dc *DeployConfig, parentID string, visited map[string]b
 	}
 	return nil
 }
-

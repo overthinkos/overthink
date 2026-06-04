@@ -38,9 +38,11 @@ import (
 // Use case: project deploy.yml's arch-vm has disposable: true. An
 // operator who wants to use the arch-vm bed for a long-running
 // experiment can write
-//   ~/.local/share/ov/vm/ov-arch/instance.yml:
-//     disposable: false
-//     lifecycle: long-running
+//
+//	~/.local/share/ov/vm/ov-arch/instance.yml:
+//	  disposable: false
+//	  lifecycle: long-running
+//
 // and the AUTONOMOUS rebuild path (the eval-runner / R10 discipline)
 // then treats the domain as non-disposable and skips it — protecting
 // the experiment from an unattended destroy, with no need to edit the

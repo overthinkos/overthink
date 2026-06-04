@@ -25,46 +25,46 @@ const (
 	LabelGID      = "org.overthinkos.gid"
 	LabelUser     = "org.overthinkos.user"
 	LabelHome     = "org.overthinkos.home"
-	LabelPorts    = "org.overthinkos.ports"
-	LabelVolumes  = "org.overthinkos.volumes"
-	LabelAliases  = "org.overthinkos.aliases"
+	LabelPort     = "org.overthinkos.port"
+	LabelVolume   = "org.overthinkos.volume"
+	LabelAlias    = "org.overthinkos.alias"
 	LabelSecurity = "org.overthinkos.security"
 	LabelNetwork  = "org.overthinkos.network"
 	// Schema v4: LabelTunnel / LabelDNS / LabelAcmeEmail / LabelEngine
 	// removed — these are deployment choices with no image-declaration
 	// meaning. Deploy-time values flow through DeploymentNode →
 	// ImageMetadata, not through OCI labels.
-	LabelEnv   = "org.overthinkos.env"
-	LabelHooks = "org.overthinkos.hooks"
+	LabelEnv  = "org.overthinkos.env"
+	LabelHook = "org.overthinkos.hook"
 	// LabelVm + LabelLibvirt: removed in the VM hard-cutover. VM specs
 	// now live in vm.yml as `kind: vm` entities; no longer embedded
 	// in container image OCI labels.
-	LabelRoutes          = "org.overthinkos.routes"
-	LabelInit            = "org.overthinkos.init"
-	LabelEnvLayers       = "org.overthinkos.env_layers"
-	LabelPathAppend      = "org.overthinkos.path_append"
-	LabelPortProtos      = "org.overthinkos.port_protos"
-	LabelPortRelay       = "org.overthinkos.port_relay"
-	LabelSkills          = "org.overthinkos.skills"
-	LabelStatus          = "org.overthinkos.status"
-	LabelInfo            = "org.overthinkos.info"
-	LabelLayerVersions   = "org.overthinkos.layer_versions"
-	LabelSecrets         = "org.overthinkos.secrets"
-	LabelPlatformDistro  = "org.overthinkos.platform.distro"
-	LabelPlatformFormats = "org.overthinkos.platform.formats"
-	LabelBuilderUses     = "org.overthinkos.builder.uses"
-	LabelBuilderProvides = "org.overthinkos.builder.provides"
-	LabelDataEntries     = "org.overthinkos.data"
-	LabelDataImage       = "org.overthinkos.data_image"
-	LabelEnvProvides     = "org.overthinkos.env_provides"
-	LabelEnvRequires     = "org.overthinkos.env_requires"
-	LabelEnvAccepts      = "org.overthinkos.env_accepts"
-	LabelSecretAccepts   = "org.overthinkos.secret_accepts"  // credential-store-backed env vars this image can optionally use
-	LabelSecretRequires  = "org.overthinkos.secret_requires" // credential-store-backed env vars this image must have
-	LabelMCPProvides     = "org.overthinkos.mcp_provides"
-	LabelMCPRequires     = "org.overthinkos.mcp_requires"
-	LabelMCPAccepts      = "org.overthinkos.mcp_accepts"
-	LabelEval            = "org.overthinkos.eval" // three-section test manifest (layer/image/deploy)
+	LabelRoute          = "org.overthinkos.route"
+	LabelInit           = "org.overthinkos.init"
+	LabelEnvLayer       = "org.overthinkos.env_layer"
+	LabelPathAppend     = "org.overthinkos.path_append"
+	LabelPortProto      = "org.overthinkos.port_proto"
+	LabelPortRelay      = "org.overthinkos.port_relay"
+	LabelSkill          = "org.overthinkos.skill"
+	LabelStatus         = "org.overthinkos.status"
+	LabelInfo           = "org.overthinkos.info"
+	LabelLayerVersion   = "org.overthinkos.layer_version"
+	LabelSecret         = "org.overthinkos.secret"
+	LabelPlatformDistro = "org.overthinkos.platform.distro"
+	LabelPlatformFormat = "org.overthinkos.platform.format"
+	LabelBuilderUse     = "org.overthinkos.builder.use"
+	LabelBuilderProvide = "org.overthinkos.builder.provide"
+	LabelDataEntries    = "org.overthinkos.data"
+	LabelDataImage      = "org.overthinkos.data_image"
+	LabelEnvProvide     = "org.overthinkos.env_provide"
+	LabelEnvRequire     = "org.overthinkos.env_require"
+	LabelEnvAccept      = "org.overthinkos.env_accept"
+	LabelSecretAccept   = "org.overthinkos.secret_accept"  // credential-store-backed env vars this image can optionally use
+	LabelSecretRequire  = "org.overthinkos.secret_require" // credential-store-backed env vars this image must have
+	LabelMCPProvide     = "org.overthinkos.mcp_provide"
+	LabelMCPRequire     = "org.overthinkos.mcp_require"
+	LabelMCPAccept      = "org.overthinkos.mcp_accept"
+	LabelEval           = "org.overthinkos.eval" // three-section test manifest (layer/image/deploy)
 	// LabelDescription — three-section Gherkin-shaped self-description for
 	// every `kind:` entity the image rolled up. Each section carries one
 	// LabeledDescription per contributing entity (layer/image/deploy).
@@ -72,10 +72,10 @@ const (
 	// via CollectDescriptions following the same base-chain walk as
 	// CollectEval. Subject to a 256 KiB soft cap with narrative truncation.
 	LabelDescription = "org.overthinkos.description"
-	// LabelServices — structured JSON array of CapabilityService (full
+	// LabelService — structured JSON array of CapabilityService (full
 	// per-entry spec, not just names). Source-less deploy (`ov deploy from-image`)
 	// reads this to reconstruct every service's config without the repo.
-	LabelServices = "org.overthinkos.services"
+	LabelService = "org.overthinkos.service"
 	// LabelShell — three-section JSON shell-init manifest.
 	// Each section (layer/image/deploy) carries an ordered list of
 	// ShellEntry contributions (origin = layer name / "image" / "deploy",
@@ -85,14 +85,14 @@ const (
 	LabelShell = "org.overthinkos.shell"
 )
 
-// LabelVolume represents a volume in the label JSON (short name form).
-type LabelVolume struct {
+// LabelVolumeEntry represents a volume in the label JSON (short name form).
+type LabelVolumeEntry struct {
 	Name string `json:"name"`
 	Path string `json:"path"`
 }
 
-// LabelRoute represents a traefik route in the label JSON.
-type LabelRoute struct {
+// LabelRouteEntry represents a traefik route in the label JSON.
+type LabelRouteEntry struct {
 	Host string `json:"host"`
 	Port int    `json:"port"`
 }
@@ -145,50 +145,50 @@ type ImageMetadata struct {
 	GID       int
 	User      string
 	Home      string
-	Ports     []string
-	Volumes   []VolumeMount
-	Aliases   []CollectedAlias
+	Port      []string
+	Volume    []VolumeMount
+	Alias     []CollectedAlias
 	Security  SecurityConfig
 	Network   string
 	Tunnel    *TunnelYAML // populated from deploy.yml overlay (not labels)
 	DNS       string
 	AcmeEmail string
 	Env       []string
-	Hooks     *HooksConfig
+	Hook      *HooksConfig
 	// Vm / Libvirt: removed in the VM hard-cutover. VM config lives on
 	// `kind: vm` entities in vm.yml (VmSpec / LibvirtDomain), not on
 	// container image OCI labels.
-	Routes         []LabelRoute
-	Init           string              // active init system name ("supervisord", "systemd", "")
-	Services       []CapabilityService // structured per-entry service specs (LabelServices); source-less deploy reads these
-	ServiceNames   []string            // per-init service names (LabelInit companion); used by `ov service status/restart`
-	EnvLayers      map[string]string
-	PathAppend     []string
-	Engine         string
-	PortProtos     map[int]string       // container port -> protocol ("http" or "tcp")
-	PortRelay      []int                // ports with socat relay (eth0 -> loopback)
-	Skills         string               // skill documentation URL
-	Status         string               // effective status (working, testing, broken)
-	Info           string               // aggregated status info
-	LayerVersions  map[string]string    // layer name -> CalVer version
-	Secrets        []LabelSecret        // secret requirements (metadata only, no values)
-	Distro         []string             // distro identity tags (org.overthinkos.platform.distro)
-	BuildFormats   []string             // package formats installed (org.overthinkos.platform.formats)
-	Builder        map[string]string    // format → builder image (org.overthinkos.builder.uses)
-	Builds         []string             // builder capability: formats this image can build (org.overthinkos.builder.provides)
-	DataEntries    []LabelDataEntry     // data staging entries for deploy-time provisioning
-	DataImage      bool                 // true if this is a data-only image (FROM scratch)
-	EnvProvides    map[string]string    // env vars provided to other containers (service discovery templates)
-	EnvRequires    []EnvDependency      // env vars image must have from the environment
-	EnvAccepts     []EnvDependency      // env vars image can optionally use
-	SecretAccepts  []EnvDependency      // credential-store-backed env vars image can optionally use
-	SecretRequires []EnvDependency      // credential-store-backed env vars image must have
-	MCPProvides    []MCPServerYAML      // MCP servers provided to other containers (service discovery templates)
-	MCPRequires    []EnvDependency      // MCP servers image must have from the environment
-	MCPAccepts     []EnvDependency      // MCP servers image can optionally use
-	Eval           *LabelEvalSet        // three-section (layer/image/deploy) declarative test spec
-	Description    *LabelDescriptionSet // three-section Gherkin-shaped self-description (layer/image/deploy)
-	Shell          *LabelShellSet       // three-section (layer/image/deploy) shell-init manifest (2026-05 cutover)
+	Route         []LabelRouteEntry
+	Init          string              // active init system name ("supervisord", "systemd", "")
+	Service       []CapabilityService // structured per-entry service specs (LabelService); source-less deploy reads these
+	ServiceNames  []string            // per-init service names (LabelInit companion); used by `ov service status/restart`
+	EnvLayer      map[string]string
+	PathAppend    []string
+	Engine        string
+	PortProto     map[int]string       // container port -> protocol ("http" or "tcp")
+	PortRelay     []int                // ports with socat relay (eth0 -> loopback)
+	Skill         string               // skill documentation URL
+	Status        string               // effective status (working, testing, broken)
+	Info          string               // aggregated status info
+	LayerVersion  map[string]string    // layer name -> CalVer version
+	Secret        []LabelSecretEntry   // secret requirements (metadata only, no values)
+	Distro        []string             // distro identity tags (org.overthinkos.platform.distro)
+	BuildFormat   []string             // package formats installed (org.overthinkos.platform.format)
+	Builder       map[string]string    // format → builder image (org.overthinkos.builder.use)
+	Build         []string             // builder capability: formats this image can build (org.overthinkos.builder.provide)
+	DataEntries   []LabelDataEntry     // data staging entries for deploy-time provisioning
+	DataImage     bool                 // true if this is a data-only image (FROM scratch)
+	EnvProvide    map[string]string    // env vars provided to other containers (service discovery templates)
+	EnvRequire    []EnvDependency      // env vars image must have from the environment
+	EnvAccept     []EnvDependency      // env vars image can optionally use
+	SecretAccept  []EnvDependency      // credential-store-backed env vars image can optionally use
+	SecretRequire []EnvDependency      // credential-store-backed env vars image must have
+	MCPProvide    []MCPServerYAML      // MCP servers provided to other containers (service discovery templates)
+	MCPRequire    []EnvDependency      // MCP servers image must have from the environment
+	MCPAccept     []EnvDependency      // MCP servers image can optionally use
+	Eval          *LabelEvalSet        // three-section (layer/image/deploy) declarative test spec
+	Description   *LabelDescriptionSet // three-section Gherkin-shaped self-description (layer/image/deploy)
+	Shell         *LabelShellSet       // three-section (layer/image/deploy) shell-init manifest (2026-05 cutover)
 }
 
 // LabelShellSet is the three-section JSON manifest carried in
@@ -297,20 +297,20 @@ func ExtractMetadata(engine, imageRef string) (*ImageMetadata, error) {
 	}
 
 	// Ports
-	if v := labels[LabelPorts]; v != "" {
-		if err := json.Unmarshal([]byte(v), &meta.Ports); err != nil {
-			return nil, fmt.Errorf("parsing %s: %w", LabelPorts, err)
+	if v := labels[LabelPort]; v != "" {
+		if err := json.Unmarshal([]byte(v), &meta.Port); err != nil {
+			return nil, fmt.Errorf("parsing %s: %w", LabelPort, err)
 		}
 	}
 
 	// Volumes
-	if v := labels[LabelVolumes]; v != "" {
-		var labelVols []LabelVolume
+	if v := labels[LabelVolume]; v != "" {
+		var labelVols []LabelVolumeEntry
 		if err := json.Unmarshal([]byte(v), &labelVols); err != nil {
-			return nil, fmt.Errorf("parsing %s: %w", LabelVolumes, err)
+			return nil, fmt.Errorf("parsing %s: %w", LabelVolume, err)
 		}
 		for _, lv := range labelVols {
-			meta.Volumes = append(meta.Volumes, VolumeMount{
+			meta.Volume = append(meta.Volume, VolumeMount{
 				VolumeName:    "ov-" + meta.Image + "-" + lv.Name,
 				ContainerPath: lv.Path,
 			})
@@ -318,9 +318,9 @@ func ExtractMetadata(engine, imageRef string) (*ImageMetadata, error) {
 	}
 
 	// Aliases
-	if v := labels[LabelAliases]; v != "" {
-		if err := json.Unmarshal([]byte(v), &meta.Aliases); err != nil {
-			return nil, fmt.Errorf("parsing %s: %w", LabelAliases, err)
+	if v := labels[LabelAlias]; v != "" {
+		if err := json.Unmarshal([]byte(v), &meta.Alias); err != nil {
+			return nil, fmt.Errorf("parsing %s: %w", LabelAlias, err)
 		}
 	}
 
@@ -342,12 +342,12 @@ func ExtractMetadata(engine, imageRef string) (*ImageMetadata, error) {
 	}
 
 	// Hooks
-	if v := labels[LabelHooks]; v != "" {
+	if v := labels[LabelHook]; v != "" {
 		var hooks HooksConfig
 		if err := json.Unmarshal([]byte(v), &hooks); err != nil {
-			return nil, fmt.Errorf("parsing %s: %w", LabelHooks, err)
+			return nil, fmt.Errorf("parsing %s: %w", LabelHook, err)
 		}
-		meta.Hooks = &hooks
+		meta.Hook = &hooks
 	}
 
 	// VM config + libvirt snippets: removed in the VM hard-cutover. No
@@ -355,9 +355,9 @@ func ExtractMetadata(engine, imageRef string) (*ImageMetadata, error) {
 	// `kind: vm` entities.
 
 	// Routes
-	if v := labels[LabelRoutes]; v != "" {
-		if err := json.Unmarshal([]byte(v), &meta.Routes); err != nil {
-			return nil, fmt.Errorf("parsing %s: %w", LabelRoutes, err)
+	if v := labels[LabelRoute]; v != "" {
+		if err := json.Unmarshal([]byte(v), &meta.Route); err != nil {
+			return nil, fmt.Errorf("parsing %s: %w", LabelRoute, err)
 		}
 	}
 
@@ -365,9 +365,9 @@ func ExtractMetadata(engine, imageRef string) (*ImageMetadata, error) {
 	meta.Init = labels[LabelInit]
 
 	// ServiceNames: read from init-specific label key
-	// The label key is stored as org.overthinkos.services.<init> (e.g., org.overthinkos.services.supervisord)
+	// The label key is stored as org.overthinkos.service.<init> (e.g., org.overthinkos.service.supervisord)
 	if meta.Init != "" {
-		svcLabel := "org.overthinkos.services." + meta.Init
+		svcLabel := "org.overthinkos.service." + meta.Init
 		if v := labels[svcLabel]; v != "" {
 			if err := json.Unmarshal([]byte(v), &meta.ServiceNames); err != nil {
 				return nil, fmt.Errorf("parsing %s: %w", svcLabel, err)
@@ -375,17 +375,17 @@ func ExtractMetadata(engine, imageRef string) (*ImageMetadata, error) {
 		}
 	}
 
-	// Services: full structured per-entry data (LabelServices).
-	if v := labels[LabelServices]; v != "" {
-		if err := json.Unmarshal([]byte(v), &meta.Services); err != nil {
-			return nil, fmt.Errorf("parsing %s: %w", LabelServices, err)
+	// Services: full structured per-entry data (LabelService).
+	if v := labels[LabelService]; v != "" {
+		if err := json.Unmarshal([]byte(v), &meta.Service); err != nil {
+			return nil, fmt.Errorf("parsing %s: %w", LabelService, err)
 		}
 	}
 
 	// Layer env vars
-	if v := labels[LabelEnvLayers]; v != "" {
-		if err := json.Unmarshal([]byte(v), &meta.EnvLayers); err != nil {
-			return nil, fmt.Errorf("parsing %s: %w", LabelEnvLayers, err)
+	if v := labels[LabelEnvLayer]; v != "" {
+		if err := json.Unmarshal([]byte(v), &meta.EnvLayer); err != nil {
+			return nil, fmt.Errorf("parsing %s: %w", LabelEnvLayer, err)
 		}
 	}
 
@@ -397,15 +397,15 @@ func ExtractMetadata(engine, imageRef string) (*ImageMetadata, error) {
 	}
 
 	// Port protocols
-	if v := labels[LabelPortProtos]; v != "" {
+	if v := labels[LabelPortProto]; v != "" {
 		var protos map[string]string
 		if err := json.Unmarshal([]byte(v), &protos); err != nil {
-			return nil, fmt.Errorf("parsing %s: %w", LabelPortProtos, err)
+			return nil, fmt.Errorf("parsing %s: %w", LabelPortProto, err)
 		}
-		meta.PortProtos = make(map[int]string)
+		meta.PortProto = make(map[int]string)
 		for k, v := range protos {
 			if p, err := strconv.Atoi(k); err == nil {
-				meta.PortProtos[p] = v
+				meta.PortProto[p] = v
 			}
 		}
 	}
@@ -418,23 +418,23 @@ func ExtractMetadata(engine, imageRef string) (*ImageMetadata, error) {
 	}
 
 	// Skills
-	meta.Skills = labels[LabelSkills]
+	meta.Skill = labels[LabelSkill]
 
 	// Status and info
 	meta.Status = labels[LabelStatus]
 	meta.Info = labels[LabelInfo]
 
 	// Layer versions
-	if v := labels[LabelLayerVersions]; v != "" {
-		if err := json.Unmarshal([]byte(v), &meta.LayerVersions); err != nil {
-			return nil, fmt.Errorf("parsing %s: %w", LabelLayerVersions, err)
+	if v := labels[LabelLayerVersion]; v != "" {
+		if err := json.Unmarshal([]byte(v), &meta.LayerVersion); err != nil {
+			return nil, fmt.Errorf("parsing %s: %w", LabelLayerVersion, err)
 		}
 	}
 
 	// Secrets
-	if v := labels[LabelSecrets]; v != "" {
-		if err := json.Unmarshal([]byte(v), &meta.Secrets); err != nil {
-			return nil, fmt.Errorf("parsing %s: %w", LabelSecrets, err)
+	if v := labels[LabelSecret]; v != "" {
+		if err := json.Unmarshal([]byte(v), &meta.Secret); err != nil {
+			return nil, fmt.Errorf("parsing %s: %w", LabelSecret, err)
 		}
 	}
 
@@ -446,23 +446,23 @@ func ExtractMetadata(engine, imageRef string) (*ImageMetadata, error) {
 	}
 
 	// Platform formats (package formats installed in this image: pac, rpm, pixi, …)
-	if v := labels[LabelPlatformFormats]; v != "" {
-		if err := json.Unmarshal([]byte(v), &meta.BuildFormats); err != nil {
-			return nil, fmt.Errorf("parsing %s: %w", LabelPlatformFormats, err)
+	if v := labels[LabelPlatformFormat]; v != "" {
+		if err := json.Unmarshal([]byte(v), &meta.BuildFormat); err != nil {
+			return nil, fmt.Errorf("parsing %s: %w", LabelPlatformFormat, err)
 		}
 	}
 
 	// Builder uses (consumer-side routing: format → builder-image name)
-	if v := labels[LabelBuilderUses]; v != "" {
+	if v := labels[LabelBuilderUse]; v != "" {
 		if err := json.Unmarshal([]byte(v), &meta.Builder); err != nil {
-			return nil, fmt.Errorf("parsing %s: %w", LabelBuilderUses, err)
+			return nil, fmt.Errorf("parsing %s: %w", LabelBuilderUse, err)
 		}
 	}
 
 	// Builder provides (producer-side capability: formats this image can build for others)
-	if v := labels[LabelBuilderProvides]; v != "" {
-		if err := json.Unmarshal([]byte(v), &meta.Builds); err != nil {
-			return nil, fmt.Errorf("parsing %s: %w", LabelBuilderProvides, err)
+	if v := labels[LabelBuilderProvide]; v != "" {
+		if err := json.Unmarshal([]byte(v), &meta.Build); err != nil {
+			return nil, fmt.Errorf("parsing %s: %w", LabelBuilderProvide, err)
 		}
 	}
 
@@ -479,58 +479,58 @@ func ExtractMetadata(engine, imageRef string) (*ImageMetadata, error) {
 	}
 
 	// Env provides (env vars for other containers, templates with {{.ContainerName}})
-	if v := labels[LabelEnvProvides]; v != "" {
-		if err := json.Unmarshal([]byte(v), &meta.EnvProvides); err != nil {
-			return nil, fmt.Errorf("parsing %s: %w", LabelEnvProvides, err)
+	if v := labels[LabelEnvProvide]; v != "" {
+		if err := json.Unmarshal([]byte(v), &meta.EnvProvide); err != nil {
+			return nil, fmt.Errorf("parsing %s: %w", LabelEnvProvide, err)
 		}
 	}
 
 	// Env requires (env vars this image must have)
-	if v := labels[LabelEnvRequires]; v != "" {
-		if err := json.Unmarshal([]byte(v), &meta.EnvRequires); err != nil {
-			return nil, fmt.Errorf("parsing %s: %w", LabelEnvRequires, err)
+	if v := labels[LabelEnvRequire]; v != "" {
+		if err := json.Unmarshal([]byte(v), &meta.EnvRequire); err != nil {
+			return nil, fmt.Errorf("parsing %s: %w", LabelEnvRequire, err)
 		}
 	}
 
 	// Env accepts (env vars this image can optionally use)
-	if v := labels[LabelEnvAccepts]; v != "" {
-		if err := json.Unmarshal([]byte(v), &meta.EnvAccepts); err != nil {
-			return nil, fmt.Errorf("parsing %s: %w", LabelEnvAccepts, err)
+	if v := labels[LabelEnvAccept]; v != "" {
+		if err := json.Unmarshal([]byte(v), &meta.EnvAccept); err != nil {
+			return nil, fmt.Errorf("parsing %s: %w", LabelEnvAccept, err)
 		}
 	}
 
 	// Secret requires (credential-store-backed env vars this image must have)
-	if v := labels[LabelSecretRequires]; v != "" {
-		if err := json.Unmarshal([]byte(v), &meta.SecretRequires); err != nil {
-			return nil, fmt.Errorf("parsing %s: %w", LabelSecretRequires, err)
+	if v := labels[LabelSecretRequire]; v != "" {
+		if err := json.Unmarshal([]byte(v), &meta.SecretRequire); err != nil {
+			return nil, fmt.Errorf("parsing %s: %w", LabelSecretRequire, err)
 		}
 	}
 
 	// Secret accepts (credential-store-backed env vars this image can optionally use)
-	if v := labels[LabelSecretAccepts]; v != "" {
-		if err := json.Unmarshal([]byte(v), &meta.SecretAccepts); err != nil {
-			return nil, fmt.Errorf("parsing %s: %w", LabelSecretAccepts, err)
+	if v := labels[LabelSecretAccept]; v != "" {
+		if err := json.Unmarshal([]byte(v), &meta.SecretAccept); err != nil {
+			return nil, fmt.Errorf("parsing %s: %w", LabelSecretAccept, err)
 		}
 	}
 
 	// MCP provides (MCP servers for other containers, templates with {{.ContainerName}})
-	if v := labels[LabelMCPProvides]; v != "" {
-		if err := json.Unmarshal([]byte(v), &meta.MCPProvides); err != nil {
-			return nil, fmt.Errorf("parsing %s: %w", LabelMCPProvides, err)
+	if v := labels[LabelMCPProvide]; v != "" {
+		if err := json.Unmarshal([]byte(v), &meta.MCPProvide); err != nil {
+			return nil, fmt.Errorf("parsing %s: %w", LabelMCPProvide, err)
 		}
 	}
 
 	// MCP requires (MCP servers this image must have)
-	if v := labels[LabelMCPRequires]; v != "" {
-		if err := json.Unmarshal([]byte(v), &meta.MCPRequires); err != nil {
-			return nil, fmt.Errorf("parsing %s: %w", LabelMCPRequires, err)
+	if v := labels[LabelMCPRequire]; v != "" {
+		if err := json.Unmarshal([]byte(v), &meta.MCPRequire); err != nil {
+			return nil, fmt.Errorf("parsing %s: %w", LabelMCPRequire, err)
 		}
 	}
 
 	// MCP accepts (MCP servers this image can optionally use)
-	if v := labels[LabelMCPAccepts]; v != "" {
-		if err := json.Unmarshal([]byte(v), &meta.MCPAccepts); err != nil {
-			return nil, fmt.Errorf("parsing %s: %w", LabelMCPAccepts, err)
+	if v := labels[LabelMCPAccept]; v != "" {
+		if err := json.Unmarshal([]byte(v), &meta.MCPAccept); err != nil {
+			return nil, fmt.Errorf("parsing %s: %w", LabelMCPAccept, err)
 		}
 	}
 

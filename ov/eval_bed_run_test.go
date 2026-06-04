@@ -275,7 +275,7 @@ func TestBedEvalLiveRefs(t *testing.T) {
 	got := bedEvalLiveRefs("eval-cachyos-gpu-vm", nested)
 	want := []string{
 		"eval-cachyos-gpu-vm",
-		"eval-cachyos-gpu-vm.cuda-pod",     // sorted before selkies-kde
+		"eval-cachyos-gpu-vm.cuda-pod", // sorted before selkies-kde
 		"eval-cachyos-gpu-vm.selkies-kde",
 	}
 	if len(got) != len(want) {

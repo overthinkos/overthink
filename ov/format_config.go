@@ -87,20 +87,20 @@ type PacstrapRepo struct {
 // DebootstrapDef configures debootstrap-flavored bootstrap (Debian, Ubuntu).
 //
 // Two-stage flow:
-//   1. `debootstrap --variant=<Variant> --components=<Components>
-//      --include=<IncludePackages,...> <Suite> /target <Mirror>`
-//      unpacks a minimal apt-aware rootfs.
-//   2. `chroot /target apt-get install -y <BasePackages>` lands the
-//      kernel, bootloader, sshd, cloud-init, and any other VM-class
-//      packages that aren't part of the minbase set.
+//  1. `debootstrap --variant=<Variant> --components=<Components>
+//     --include=<IncludePackages,...> <Suite> /target <Mirror>`
+//     unpacks a minimal apt-aware rootfs.
+//  2. `chroot /target apt-get install -y <BasePackages>` lands the
+//     kernel, bootloader, sshd, cloud-init, and any other VM-class
+//     packages that aren't part of the minbase set.
 type DebootstrapDef struct {
 	Suite           string            `yaml:"suite,omitempty"`
 	Mirror          string            `yaml:"mirror,omitempty"`
-	Variant         string            `yaml:"variant,omitempty"`           // default: minbase
-	Components      string            `yaml:"components,omitempty"`        // "main" (Debian) | "main universe" (Ubuntu)
-	IncludePackages []string          `yaml:"include_package,omitempty"`  // debootstrap --include=<csv>
-	BasePackages    []string          `yaml:"base_package,omitempty"`     // chroot apt-get install <list>
-	ExtraRepos      []DebootstrapRepo `yaml:"extra_repo,omitempty"`        // optional security/backports
+	Variant         string            `yaml:"variant,omitempty"`         // default: minbase
+	Components      string            `yaml:"components,omitempty"`      // "main" (Debian) | "main universe" (Ubuntu)
+	IncludePackages []string          `yaml:"include_package,omitempty"` // debootstrap --include=<csv>
+	BasePackages    []string          `yaml:"base_package,omitempty"`    // chroot apt-get install <list>
+	ExtraRepos      []DebootstrapRepo `yaml:"extra_repo,omitempty"`      // optional security/backports
 }
 
 // DebootstrapRepo describes an additional apt repo to inject into
@@ -172,7 +172,7 @@ type CacheMountDef struct {
 // Keeping both fields lets us migrate build.yml per-format one at a time
 // (Task 4 / 7 migrations) without breaking OCI output for the rest.
 type FormatDef struct {
-	CacheMount     []CacheMountDef   `yaml:"cache_mount"`
+	CacheMount      []CacheMountDef   `yaml:"cache_mount"`
 	SectionFields   map[string]string `yaml:"section_field"`
 	InstallTemplate string            `yaml:"install_template,omitempty"`
 	Phases          *PhaseSet         `yaml:"phase,omitempty"`
@@ -404,7 +404,7 @@ func (dc *DistroConfig) resolveInherits(def *DistroDef, maxDepth int) *DistroDef
 			Inherits:        def.Inherits,
 			Bootstrap:       def.Bootstrap,
 			Workarounds:     def.Workarounds,
-			Format:         formats,
+			Format:          formats,
 			BaseUser:        baseUser,
 			Pacstrap:        pacstrap,
 			Debootstrap:     debootstrap,
@@ -424,7 +424,7 @@ func (dc *DistroConfig) resolveInherits(def *DistroDef, maxDepth int) *DistroDef
 		Inherits:        def.Inherits,
 		Bootstrap:       resolved.Bootstrap,
 		Workarounds:     resolved.Workarounds,
-		Format:         formats,
+		Format:          formats,
 		BaseUser:        baseUser,
 		Pacstrap:        pacstrap,
 		Debootstrap:     debootstrap,
@@ -604,7 +604,7 @@ type BuilderDef struct {
 	DetectConfig    string            `yaml:"detect_config,omitempty"`
 	RequiresSrcDir  bool              `yaml:"requires_src_dir,omitempty"`
 	Inline          bool              `yaml:"inline,omitempty"`
-	CacheMount     []CacheMountDef   `yaml:"cache_mount"`
+	CacheMount      []CacheMountDef   `yaml:"cache_mount"`
 	Env             map[string]string `yaml:"env,omitempty"`
 	StageTemplate   string            `yaml:"stage_template,omitempty"`
 	InstallTemplate string            `yaml:"install_template,omitempty"`

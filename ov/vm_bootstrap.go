@@ -31,13 +31,13 @@ type BootstrapVMResult struct {
 const bootstrapRootfsExtractTar = `tar -C /mnt --xattrs --xattrs-include='*' --acls -xzf /in/rootfs.tar.gz`
 
 // BuildBootstrapVM creates a fresh VM disk by:
-//   1. Resolving the bootstrap builder + distro from build.yml
-//   2. Running the bootstrap builder via RunPrivileged (pacstrap /
-//      debootstrap / alpine-bootstrap → rootfs.tar.gz)
-//   3. Partitioning a sparse disk + extracting the rootfs + running
-//      the distro's bootloader install template inside chroot
-//   4. Converting raw → qcow2
-//   5. Rendering the cloud-init seed ISO when spec.CloudInit is set
+//  1. Resolving the bootstrap builder + distro from build.yml
+//  2. Running the bootstrap builder via RunPrivileged (pacstrap /
+//     debootstrap / alpine-bootstrap → rootfs.tar.gz)
+//  3. Partitioning a sparse disk + extracting the rootfs + running
+//     the distro's bootloader install template inside chroot
+//  4. Converting raw → qcow2
+//  5. Rendering the cloud-init seed ISO when spec.CloudInit is set
 //
 // Mirrors BuildCloudImage in shape so callers in vm_build.go can swap
 // implementations behind the source.kind discriminator.

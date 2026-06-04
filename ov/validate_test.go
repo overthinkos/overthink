@@ -1702,7 +1702,7 @@ func TestEnvVarNameToPodmanSecretSlug(t *testing.T) {
 func vLayers(m map[string]*Layer) map[string]*Layer {
 	for _, l := range m {
 		if l != nil && !l.Remote && l.Version == "" {
-			l.Version = "2026.144.1443"
+			l.Version = "2026.155.1801"
 		}
 	}
 	return m

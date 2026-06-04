@@ -197,7 +197,7 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	// Pre-expand "auto" port sentinels BEFORE MergeDeployOntoMetadata so
 	// that the merge sees a concrete list. ExpandAutoPorts walks the
 	// deploy entry's Port list; for each "auto" entry, it allocates one
-	// free host TCP port per image-declared container port (from meta.Ports
+	// free host TCP port per image-declared container port (from meta.Port
 	// AS LOADED FROM LABELS — before overlay merge). The expansion is
 	// persisted as ResolvedPort so subsequent ov start / ov logs / ov
 	// status see the same allocation. Re-allocation happens on the next
@@ -206,7 +206,7 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 		key := deployKey(c.Image, c.Instance)
 		overlay, hasOverlay := dc.Deploy[key]
 		if hasOverlay && HasAutoPort(overlay.Port) {
-			containerPorts, cpErr := containerPortsFromMappings(meta.Ports)
+			containerPorts, cpErr := containerPortsFromMappings(meta.Port)
 			if cpErr != nil {
 				return fmt.Errorf("resolving container ports for auto expansion: %w", cpErr)
 			}
@@ -229,7 +229,7 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	MergeDeployOntoMetadata(meta, dc, c.Image, c.Instance)
 
 	uid, gid := meta.UID, meta.GID
-	ports := meta.Ports
+	ports := meta.Port
 	security := meta.Security
 	network := meta.Network
 
@@ -245,7 +245,7 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	}
 
 	// Resolve volume backing from labels + deploy config
-	volumes, bindMounts := ResolveVolumeBacking(c.Image, c.Instance, meta.Volumes, deployVolumes, meta.Home, rt.EncryptedStoragePath, rt.VolumesPath)
+	volumes, bindMounts := ResolveVolumeBacking(c.Image, c.Instance, meta.Volume, deployVolumes, meta.Home, rt.EncryptedStoragePath, rt.VolumesPath)
 
 	// Re-resolve the canonical registry ref UNLESS the operator
 	// supplied an explicit ref via the deploy entry's `image:`
@@ -288,13 +288,13 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 
 	// Inject provides BEFORE env resolution so this image's own provides
 	// (pod case) and other images' provides are available in the quadlet.
-	if meta != nil && len(meta.EnvProvides) > 0 {
-		if _, injErr := injectEnvProvides(c.Image, c.Instance, meta.EnvProvides, portMap); injErr != nil {
+	if meta != nil && len(meta.EnvProvide) > 0 {
+		if _, injErr := injectEnvProvides(c.Image, c.Instance, meta.EnvProvide, portMap); injErr != nil {
 			fmt.Fprintf(os.Stderr, "Warning: could not inject env_provides: %v\n", injErr)
 		}
 	}
-	if meta != nil && len(meta.MCPProvides) > 0 {
-		if _, injErr := injectMCPProvides(c.Image, c.Instance, meta.MCPProvides, portMap); injErr != nil {
+	if meta != nil && len(meta.MCPProvide) > 0 {
+		if _, injErr := injectMCPProvides(c.Image, c.Instance, meta.MCPProvide, portMap); injErr != nil {
 			fmt.Fprintf(os.Stderr, "Warning: could not inject mcp_provides: %v\n", injErr)
 		}
 	}
@@ -322,7 +322,7 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	// instance consumer like `versa/ecovoyage` doesn't pick up the base
 	// `versa` deploy's provides, and vice versa.
 	ctrName := containerNameInstance(c.Image, c.Instance)
-	acceptedEnv := AcceptedEnvSet(meta.EnvAccepts, meta.EnvRequires)
+	acceptedEnv := AcceptedEnvSet(meta.EnvAccept, meta.EnvRequire)
 	globalEnv := dc.GlobalEnvForImage(deployKey(c.Image, c.Instance), ctrName, acceptedEnv)
 	envVars, envErr := ResolveEnvVars(globalEnv, meta.Env, "", workspaceBindHost(bindMounts), c.EnvFile, c.Env)
 	if envErr != nil {
@@ -331,8 +331,8 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	envVars = enrichNoProxy(envVars, dc.DeployedContainerNames())
 
 	// Enforce env_requires — hard error before writing anything
-	if meta != nil && len(meta.EnvRequires) > 0 {
-		if err := checkMissingEnvRequires(c.Image, meta.EnvRequires, envVars); err != nil {
+	if meta != nil && len(meta.EnvRequire) > 0 {
+		if err := checkMissingEnvRequires(c.Image, meta.EnvRequire, envVars); err != nil {
 			return err
 		}
 	}
@@ -397,14 +397,14 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	// Both flow into the same ProvisionPodmanSecrets call — the existing
 	// Secret=<name>,type=env,target=<var> emission at quadlet.go:100-106
 	// handles them identically at runtime.
-	layerOwnedSecrets := CollectSecretsFromLabels(c.Image, meta.Secrets)
+	layerOwnedSecrets := CollectSecretsFromLabels(c.Image, meta.Secret)
 	credBackedSecrets, secretResolutions := CollectLayerSecretAccepts(c.Image, c.Instance, meta)
 
 	// Enforce secret_requires — hard error before writing anything. Runs
 	// alongside checkMissingEnvRequires (handled later in env resolution).
 	// Plan §2.6 / §6.6.
-	if len(meta.SecretRequires) > 0 {
-		if err := checkMissingSecretRequires(c.Image, meta.SecretRequires, secretResolutions); err != nil {
+	if len(meta.SecretRequire) > 0 {
+		if err := checkMissingSecretRequires(c.Image, meta.SecretRequire, secretResolutions); err != nil {
 			return err
 		}
 	}
@@ -569,7 +569,7 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	// Ports: write only when the operator passed --port flags this run.
 	// Without SetPorts gating, `ov config <name>` (no flags) would
 	// silently overwrite operator port overrides with the merged
-	// `meta.Ports` value, since `ports` is computed from image labels
+	// `meta.Port` value, since `ports` is computed from image labels
 	// merged with deploy.yml — an idempotent recompute, not an explicit
 	// operator decision to set ports.
 	saveDeployState(c.Image, c.Instance, SaveDeployStateInput{
@@ -791,7 +791,7 @@ skipDataProvision:
 	// Run post_enable hooks from image labels
 	var hooks *HooksConfig
 	if meta != nil {
-		hooks = meta.Hooks
+		hooks = meta.Hook
 	}
 	if hooks != nil && hooks.PostEnable != "" {
 		ctrName := containerNameInstance(c.Image, c.Instance)
@@ -818,13 +818,13 @@ skipDataProvision:
 	}
 
 	// Warn about missing mcp_requires servers
-	if meta != nil && len(meta.MCPRequires) > 0 {
+	if meta != nil && len(meta.MCPRequire) > 0 {
 		dc := loadDeployConfigForRead("ov config mcp_requires check")
-		var mcpServers []MCPProvidesEntry
+		var mcpServers []MCPProvideEntry
 		if dc != nil && dc.Provides != nil {
 			mcpServers = podAwareMCPProvides(dc.Provides.MCP, deployKey(c.Image, c.Instance), containerNameInstance(c.Image, c.Instance))
 		}
-		warnMissingMCPRequires(c.Image, meta.MCPRequires, mcpServers)
+		warnMissingMCPRequires(c.Image, meta.MCPRequire, mcpServers)
 	}
 
 	return nil
@@ -1294,7 +1294,7 @@ func injectEnvProvides(imageName, instance string, envProvides map[string]string
 		tmpl := envProvides[key]
 		value := resolveTemplate(tmpl, ctrName, portMap)
 		source := deployKey(imageName, instance)
-		resolved := EnvProvidesEntry{
+		resolved := EnvProvideEntry{
 			Name:   key,
 			Value:  value,
 			Source: source,
@@ -1354,7 +1354,7 @@ func injectMCPProvides(imageName, instance string, mcpProvides []MCPServerYAML, 
 	changed := false
 
 	// Remove stale entries from this source (handles name changes on re-config)
-	var cleaned []MCPProvidesEntry
+	var cleaned []MCPProvideEntry
 	for _, e := range dc.Provides.MCP {
 		if e.Source != source {
 			cleaned = append(cleaned, e)
@@ -1375,7 +1375,7 @@ func injectMCPProvides(imageName, instance string, mcpProvides []MCPServerYAML, 
 		if instance != "" {
 			mcpName = mcp.Name + "-" + instance
 		}
-		resolved := MCPProvidesEntry{
+		resolved := MCPProvideEntry{
 			Name:      mcpName,
 			URL:       url,
 			Transport: transport,
@@ -1415,7 +1415,7 @@ func injectMCPProvides(imageName, instance string, mcpProvides []MCPServerYAML, 
 
 // warnMissingMCPRequires checks resolved MCP servers against required MCP dependencies
 // and prints warnings for any that are missing.
-func warnMissingMCPRequires(imageName string, requires []EnvDependency, mcpServers []MCPProvidesEntry) {
+func warnMissingMCPRequires(imageName string, requires []EnvDependency, mcpServers []MCPProvideEntry) {
 	resolved := make(map[string]bool, len(mcpServers))
 	for _, s := range mcpServers {
 		resolved[s.Name] = true
@@ -1581,7 +1581,7 @@ func updateAllDeployedQuadlets(rt *ResolvedRuntime, skipImage string) error {
 		// Resolve env vars with updated global env. Pass deployKey so an
 		// instance's quadlet doesn't pick up another instance's provides.
 		updateCtrName := containerNameInstance(imageName, instance)
-		updateAccepted := AcceptedEnvSet(meta.EnvAccepts, meta.EnvRequires)
+		updateAccepted := AcceptedEnvSet(meta.EnvAccept, meta.EnvRequire)
 		globalEnv := dc.GlobalEnvForImage(deployKey(imageName, instance), updateCtrName, updateAccepted)
 		envVars, err := ResolveEnvVars(globalEnv, meta.Env, "", "", "", nil)
 		if err != nil {
@@ -1603,7 +1603,7 @@ func updateAllDeployedQuadlets(rt *ResolvedRuntime, skipImage string) error {
 			deployVolumes = overlay.Volume
 			deploySidecars = overlay.Sidecar
 		}
-		volumes, bindMounts := ResolveVolumeBacking(imageName, instance, meta.Volumes, deployVolumes, meta.Home, rt.EncryptedStoragePath, rt.VolumesPath)
+		volumes, bindMounts := ResolveVolumeBacking(imageName, instance, meta.Volume, deployVolumes, meta.Home, rt.EncryptedStoragePath, rt.VolumesPath)
 
 		// Resolve env file
 		var quadletEnvFile string
@@ -1631,9 +1631,9 @@ func updateAllDeployedQuadlets(rt *ResolvedRuntime, skipImage string) error {
 
 		// Collect secrets from labels (for quadlet Secret= directives).
 		//
-		// Two sources: layer-owned secrets from meta.Secrets (existing, unchanged)
-		// and credential-backed secrets synthesized from meta.SecretAccepts /
-		// meta.SecretRequires (new in the credential-backed-secrets feature).
+		// Two sources: layer-owned secrets from meta.Secret (existing, unchanged)
+		// and credential-backed secrets synthesized from meta.SecretAccept /
+		// meta.SecretRequire (new in the credential-backed-secrets feature).
 		// Both flow through the same cfg.Secrets slice and the same Secret=
 		// emission at quadlet.go:100-106.
 		//
@@ -1643,7 +1643,7 @@ func updateAllDeployedQuadlets(rt *ResolvedRuntime, skipImage string) error {
 		// on missing env vars. Plan §2.3. See regression caught during the
 		// live-system testing session: ov-openwebui went FATAL after an
 		// `ov config immich-ml --update-all` wiped its credential Secret= lines.
-		provisioned := CollectSecretsFromLabels(imageName, meta.Secrets)
+		provisioned := CollectSecretsFromLabels(imageName, meta.Secret)
 		credBacked, credResolutions := CollectLayerSecretAccepts(imageName, instance, meta)
 		provisioned = append(provisioned, credBacked...)
 
@@ -1654,7 +1654,7 @@ func updateAllDeployedQuadlets(rt *ResolvedRuntime, skipImage string) error {
 		// crashloop on restart if the value is truly missing, which is the
 		// user-visible signal. For secret_requires this is strictly
 		// informational.
-		if len(meta.SecretRequires) > 0 {
+		if len(meta.SecretRequire) > 0 {
 			missing := 0
 			for _, r := range credResolutions {
 				if r.Required && !r.Resolved {
@@ -1707,7 +1707,7 @@ func updateAllDeployedQuadlets(rt *ResolvedRuntime, skipImage string) error {
 			Instance:        instance,
 			ImageRef:        imageRef,
 			Home:            meta.Home,
-			Ports:           meta.Ports,
+			Ports:           meta.Port,
 			Volumes:         volumes,
 			BindMounts:      bindMounts,
 			GPU:             detected.GPU,

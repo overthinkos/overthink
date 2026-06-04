@@ -261,4 +261,3 @@ func rewriteLegacyLocalImagesInFile(path, body string) (string, int) {
 	}
 	return strings.Join(lines, "\n"), len(blocks)
 }
-

@@ -112,7 +112,9 @@ func RenderCacheMountsAuto(mounts []CacheMountDef, uid, gid int, sep string, tra
 var templateFuncs = template.FuncMap{
 	"cacheMounts":      func(m []CacheMountDef) string { return RenderCacheMounts(m, -1, 0, " \\\n    ", false) },
 	"cacheMountsOwned": func(m []CacheMountDef, uid, gid int) string { return RenderCacheMounts(m, uid, gid, " \\\n    ", true) },
-	"cacheMountsAuto":  func(m []CacheMountDef, uid, gid int) string { return RenderCacheMountsAuto(m, uid, gid, " \\\n    ", false) },
+	"cacheMountsAuto": func(m []CacheMountDef, uid, gid int) string {
+		return RenderCacheMountsAuto(m, uid, gid, " \\\n    ", false)
+	},
 
 	// quote returns a shell-safe quoted string.
 	"quote": func(s interface{}) string {

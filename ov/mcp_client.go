@@ -12,7 +12,7 @@ import (
 // three concerns that the CLI leaves otherwise don't care about:
 //
 //  1. MCP-server discovery — resolving an image name to a single
-//     MCPProvidesEntry (name, URL, transport) via OCI labels + pod-aware
+//     MCPProvideEntry (name, URL, transport) via OCI labels + pod-aware
 //     localhost rewrite.
 //  2. Host reachability — OCI-label URLs use container-network hostnames
 //     (`http://ov-jupyter:8888/mcp`) that don't resolve from the host, so
@@ -22,26 +22,26 @@ import (
 //     constructors, so mapping "http"|""|"sse" → a Transport implementation
 //     is a small switch.
 
-// resolveMCPEntry picks the target MCPProvidesEntry for a given image.
+// resolveMCPEntry picks the target MCPProvideEntry for a given image.
 //
 // Inputs:
-//   - meta:     image metadata from ExtractMetadata (provides meta.MCPProvides)
+//   - meta:     image metadata from ExtractMetadata (provides meta.MCPProvide)
 //   - image:    logical image name (for pod-aware self-match)
 //   - ctrName:  running container name (for template substitution)
 //   - wantName: optional discriminator when the image provides multiple servers
 //
-// Returns a single MCPProvidesEntry with template fields resolved (no
+// Returns a single MCPProvideEntry with template fields resolved (no
 // {{.ContainerName}} left) and with same-image URLs rewritten to localhost
 // (pod-aware path). Matches the pattern used by injectMCPProvides at
 // ov config time.
-func resolveMCPEntry(meta *ImageMetadata, image, ctrName, wantName string) (MCPProvidesEntry, error) {
-	if meta == nil || len(meta.MCPProvides) == 0 {
-		return MCPProvidesEntry{}, fmt.Errorf("image %q declares no mcp_provides", image)
+func resolveMCPEntry(meta *ImageMetadata, image, ctrName, wantName string) (MCPProvideEntry, error) {
+	if meta == nil || len(meta.MCPProvide) == 0 {
+		return MCPProvideEntry{}, fmt.Errorf("image %q declares no mcp_provides", image)
 	}
 
-	entries := make([]MCPProvidesEntry, 0, len(meta.MCPProvides))
-	for _, p := range meta.MCPProvides {
-		entries = append(entries, MCPProvidesEntry{
+	entries := make([]MCPProvideEntry, 0, len(meta.MCPProvide))
+	for _, p := range meta.MCPProvide {
+		entries = append(entries, MCPProvideEntry{
 			Name:      p.Name,
 			URL:       resolveContainerNameTemplate(p.URL, ctrName),
 			Transport: p.Transport,
@@ -55,10 +55,10 @@ func resolveMCPEntry(meta *ImageMetadata, image, ctrName, wantName string) (MCPP
 
 // pickMCPEntry disambiguates by name. Empty wantName auto-picks when there
 // is exactly one entry; errors when there are multiple with a clear listing.
-func pickMCPEntry(entries []MCPProvidesEntry, wantName string) (MCPProvidesEntry, error) {
+func pickMCPEntry(entries []MCPProvideEntry, wantName string) (MCPProvideEntry, error) {
 	switch {
 	case len(entries) == 0:
-		return MCPProvidesEntry{}, fmt.Errorf("no mcp_provides entries to pick from")
+		return MCPProvideEntry{}, fmt.Errorf("no mcp_provides entries to pick from")
 	case wantName != "":
 		for _, e := range entries {
 			if e.Name == wantName {
@@ -69,7 +69,7 @@ func pickMCPEntry(entries []MCPProvidesEntry, wantName string) (MCPProvidesEntry
 		for i, e := range entries {
 			names[i] = e.Name
 		}
-		return MCPProvidesEntry{}, fmt.Errorf("no mcp_provides entry named %q (available: %s)", wantName, strings.Join(names, ", "))
+		return MCPProvideEntry{}, fmt.Errorf("no mcp_provides entry named %q (available: %s)", wantName, strings.Join(names, ", "))
 	case len(entries) == 1:
 		return entries[0], nil
 	default:
@@ -77,7 +77,7 @@ func pickMCPEntry(entries []MCPProvidesEntry, wantName string) (MCPProvidesEntry
 		for i, e := range entries {
 			names[i] = e.Name
 		}
-		return MCPProvidesEntry{}, fmt.Errorf("image provides multiple mcp servers; use --name (available: %s)", strings.Join(names, ", "))
+		return MCPProvideEntry{}, fmt.Errorf("image provides multiple mcp servers; use --name (available: %s)", strings.Join(names, ", "))
 	}
 }
 
@@ -156,7 +156,7 @@ func lookupHostPort(inspect *ContainerInspection, containerPort string) (string,
 // transport field is advisory ("http" / "sse" / ""); empty and "http" both
 // map to Streamable HTTP (the overthink default and what both the jupyter
 // and chrome-devtools MCP servers expose).
-func buildMCPTransport(entry MCPProvidesEntry) (mcp.Transport, error) {
+func buildMCPTransport(entry MCPProvideEntry) (mcp.Transport, error) {
 	switch strings.ToLower(entry.Transport) {
 	case "", "http", "streamable", "streamable-http":
 		return &mcp.StreamableClientTransport{Endpoint: entry.URL}, nil

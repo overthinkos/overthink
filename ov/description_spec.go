@@ -155,11 +155,11 @@ func (d *Description) UnmarshalJSON(data []byte) error {
 // UnmarshalYAML below accepts the legacy plural form for the duration of
 // the harness cutover migration window.
 type Scenario struct {
-	Name     string              `yaml:"name"                 json:"name"`
-	Tag      []string            `yaml:"tag,omitempty"        json:"tag,omitempty"`
-	Step     []Step              `yaml:"step"                 json:"step,omitempty"`
-	Example  []map[string]string `yaml:"example,omitempty"    json:"example,omitempty"`
-	OnFail   []Step              `yaml:"on_fail,omitempty"    json:"on_fail,omitempty"`
+	Name    string              `yaml:"name"                 json:"name"`
+	Tag     []string            `yaml:"tag,omitempty"        json:"tag,omitempty"`
+	Step    []Step              `yaml:"step"                 json:"step,omitempty"`
+	Example []map[string]string `yaml:"example,omitempty"    json:"example,omitempty"`
+	OnFail  []Step              `yaml:"on_fail,omitempty"    json:"on_fail,omitempty"`
 
 	// Setup steps run before Steps. A Setup failure aborts the scenario
 	// without running Steps but Teardown still runs. Use for fixture

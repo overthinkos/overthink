@@ -19,7 +19,7 @@ func TestPickMCPEntry_Empty(t *testing.T) {
 }
 
 func TestPickMCPEntry_SingleAutoPicks(t *testing.T) {
-	entries := []MCPProvidesEntry{{Name: "jupyter", URL: "http://x:8888/mcp"}}
+	entries := []MCPProvideEntry{{Name: "jupyter", URL: "http://x:8888/mcp"}}
 	got, err := pickMCPEntry(entries, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -30,7 +30,7 @@ func TestPickMCPEntry_SingleAutoPicks(t *testing.T) {
 }
 
 func TestPickMCPEntry_MultipleRequireName(t *testing.T) {
-	entries := []MCPProvidesEntry{
+	entries := []MCPProvideEntry{
 		{Name: "jupyter", URL: "http://x:8888/mcp"},
 		{Name: "chrome-devtools", URL: "http://x:9224/mcp"},
 	}
@@ -44,7 +44,7 @@ func TestPickMCPEntry_MultipleRequireName(t *testing.T) {
 }
 
 func TestPickMCPEntry_NamedMatch(t *testing.T) {
-	entries := []MCPProvidesEntry{
+	entries := []MCPProvideEntry{
 		{Name: "jupyter", URL: "http://x:8888/mcp"},
 		{Name: "chrome-devtools", URL: "http://x:9224/mcp"},
 	}
@@ -58,7 +58,7 @@ func TestPickMCPEntry_NamedMatch(t *testing.T) {
 }
 
 func TestPickMCPEntry_UnknownName(t *testing.T) {
-	entries := []MCPProvidesEntry{{Name: "jupyter", URL: "http://x:8888/mcp"}}
+	entries := []MCPProvideEntry{{Name: "jupyter", URL: "http://x:8888/mcp"}}
 	_, err := pickMCPEntry(entries, "bogus")
 	if err == nil || !strings.Contains(err.Error(), `named "bogus"`) {
 		t.Fatalf("expected unknown-name error, got %v", err)
@@ -193,7 +193,7 @@ func TestBuildMCPTransport(t *testing.T) {
 		{"websocket", "", true},
 	}
 	for _, tc := range cases {
-		tr, err := buildMCPTransport(MCPProvidesEntry{URL: "http://x", Transport: tc.transport})
+		tr, err := buildMCPTransport(MCPProvideEntry{URL: "http://x", Transport: tc.transport})
 		if tc.wantErr {
 			if err == nil {
 				t.Errorf("transport=%q: expected error, got %T", tc.transport, tr)

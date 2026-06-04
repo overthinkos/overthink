@@ -234,13 +234,13 @@ func (c *Collector) collectOne(ctx context.Context, snap *ContainerSnapshot) Dep
 		if ref != "" {
 			if meta, _ := ExtractMetadata(c.engine.Bin(), ref); meta != nil {
 				if len(cs.Ports) == 0 {
-					cs.Ports = parsePortStrings(meta.Ports)
+					cs.Ports = parsePortStrings(meta.Port)
 				}
 				if cs.Network == "" {
 					cs.Network = meta.Network
 				}
 				if len(cs.Volumes) == 0 {
-					for _, v := range meta.Volumes {
+					for _, v := range meta.Volume {
 						cs.Volumes = append(cs.Volumes,
 							fmt.Sprintf("%s -> %s", v.VolumeName, v.ContainerPath))
 					}

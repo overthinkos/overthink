@@ -760,8 +760,8 @@ func TunnelConfigFromMetadata(meta *ImageMetadata) *TunnelConfig {
 		ImageName: meta.Image,
 	}
 
-	hostPorts := parseHostPorts(meta.Ports)
-	hostToContainer := buildPortMapping(meta.Ports)
+	hostPorts := parseHostPorts(meta.Port)
+	hostToContainer := buildPortMapping(meta.Port)
 
 	// Determine public set
 	publicSet := make(map[int]bool)
@@ -801,7 +801,7 @@ func TunnelConfigFromMetadata(meta *ImageMetadata) *TunnelConfig {
 		if c, ok := hostToContainer[hp]; ok {
 			cp = c
 		}
-		proto := resolveProto(cp, meta.PortProtos)
+		proto := resolveProto(cp, meta.PortProto)
 		cfg.Ports = append(cfg.Ports, TunnelPort{
 			Port:        hp,
 			BackendPort: hp,

@@ -16,14 +16,14 @@ type TargetSpec struct {
 	Description string `yaml:"description,omitempty" json:"description,omitempty"`
 
 	// Calamares settings.conf core fields.
-	ModulesSearch []string             `yaml:"modules-search,omitempty" json:"modules-search,omitempty"`
-	Instances     []TargetInstance     `yaml:"instance,omitempty" json:"instances,omitempty"`
-	Sequence      *TargetSequence      `yaml:"sequence,omitempty" json:"sequence,omitempty"`
-	Branding      string               `yaml:"branding,omitempty" json:"branding,omitempty"`
-	PromptInstall bool                 `yaml:"prompt-install,omitempty" json:"prompt-install,omitempty"`
-	DontChroot    bool                 `yaml:"dont-chroot,omitempty" json:"dont-chroot,omitempty"`
-	OemSetup      bool                 `yaml:"oem-setup,omitempty" json:"oem-setup,omitempty"`
-	DisableCancel bool                 `yaml:"disable-cancel,omitempty" json:"disable-cancel,omitempty"`
+	ModulesSearch []string         `yaml:"modules-search,omitempty" json:"modules-search,omitempty"`
+	Instances     []TargetInstance `yaml:"instance,omitempty" json:"instances,omitempty"`
+	Sequence      *TargetSequence  `yaml:"sequence,omitempty" json:"sequence,omitempty"`
+	Branding      string           `yaml:"branding,omitempty" json:"branding,omitempty"`
+	PromptInstall bool             `yaml:"prompt-install,omitempty" json:"prompt-install,omitempty"`
+	DontChroot    bool             `yaml:"dont-chroot,omitempty" json:"dont-chroot,omitempty"`
+	OemSetup      bool             `yaml:"oem-setup,omitempty" json:"oem-setup,omitempty"`
+	DisableCancel bool             `yaml:"disable-cancel,omitempty" json:"disable-cancel,omitempty"`
 
 	// ov extensions: bind groups and images to the target.
 	Group []string `yaml:"group,omitempty" json:"group,omitempty"` // group names from the unified file

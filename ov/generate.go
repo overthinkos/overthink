@@ -847,12 +847,12 @@ func (g *Generator) generateDataImageContainerfile(imageName string, img *Resolv
 	// Volume labels (so ov config knows what volumes data targets)
 	volumes, _ := CollectImageVolume(g.Config, g.Layers, imageName, img.Home, nil)
 	if len(volumes) > 0 {
-		var labelVols []LabelVolume
+		var labelVols []LabelVolumeEntry
 		for _, v := range volumes {
 			shortName := strings.TrimPrefix(v.VolumeName, "ov-"+imageName+"-")
-			labelVols = append(labelVols, LabelVolume{Name: shortName, Path: v.ContainerPath})
+			labelVols = append(labelVols, LabelVolumeEntry{Name: shortName, Path: v.ContainerPath})
 		}
-		writeJSONLabel(&b, LabelVolumes, labelVols)
+		writeJSONLabel(&b, LabelVolume, labelVols)
 	}
 
 	// Layer versions
@@ -863,7 +863,7 @@ func (g *Generator) generateDataImageContainerfile(imageName string, img *Resolv
 			layerVersions[layerName] = layer.Version
 		}
 	}
-	writeJSONLabel(&b, LabelLayerVersions, layerVersions)
+	writeJSONLabel(&b, LabelLayerVersion, layerVersions)
 
 	b.WriteString("\n")
 
@@ -1754,14 +1754,14 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 	// Platform identity + builder-pool coordination labels.
 	// No serialized selector union — derive as ["all"] ∪ distro ∪ formats at read time.
 	writeJSONLabel(b, LabelPlatformDistro, img.Distro)
-	writeJSONLabel(b, LabelPlatformFormats, img.BuildFormats)
+	writeJSONLabel(b, LabelPlatformFormat, img.BuildFormats)
 	if len(img.Builder) > 0 {
-		writeJSONLabel(b, LabelBuilderUses, map[string]string(img.Builder))
+		writeJSONLabel(b, LabelBuilderUse, map[string]string(img.Builder))
 	}
-	writeJSONLabel(b, LabelBuilderProvides, img.BuilderCapabilities)
+	writeJSONLabel(b, LabelBuilderProvide, img.BuilderCapabilities)
 
 	// JSON array labels (omitted when empty)
-	writeJSONLabel(b, LabelPorts, img.Port)
+	writeJSONLabel(b, LabelPort, img.Port)
 
 	// Port protocols: collect from layer PortSpec declarations
 	portProtos := make(map[string]string)
@@ -1773,22 +1773,22 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 			}
 		}
 	}
-	writeJSONLabel(b, LabelPortProtos, portProtos)
+	writeJSONLabel(b, LabelPortProto, portProtos)
 
 	// Volumes: short form names (without ov-<image>- prefix)
 	volumes, _ := CollectImageVolume(g.Config, g.Layers, imageName, img.Home, nil)
 	if len(volumes) > 0 {
-		var labelVols []LabelVolume
+		var labelVols []LabelVolumeEntry
 		for _, v := range volumes {
 			shortName := strings.TrimPrefix(v.VolumeName, "ov-"+imageName+"-")
-			labelVols = append(labelVols, LabelVolume{Name: shortName, Path: v.ContainerPath})
+			labelVols = append(labelVols, LabelVolumeEntry{Name: shortName, Path: v.ContainerPath})
 		}
-		writeJSONLabel(b, LabelVolumes, labelVols)
+		writeJSONLabel(b, LabelVolume, labelVols)
 	}
 
 	// Aliases: collected from layers + image-level config
 	aliases, _ := CollectImageAlias(g.Config, g.Layers, imageName)
-	writeJSONLabel(b, LabelAliases, aliases)
+	writeJSONLabel(b, LabelAlias, aliases)
 
 	// Security: collected from layers + image config
 	security := CollectSecurity(g.Config, g.Layers, imageName)
@@ -1806,7 +1806,7 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 	// Hooks: collected from layers
 	hooks := CollectHooks(g.Config, g.Layers, imageName)
 	if hooks != nil {
-		writeJSONLabel(b, LabelHooks, hooks)
+		writeJSONLabel(b, LabelHook, hooks)
 	}
 
 	// Tests: three-section (layer/image/deploy) declarative manifest. Shipped
@@ -1884,9 +1884,9 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 						Events:           e.Events,
 						AutoStart:        e.AutoStart,
 						StartRetries:     e.StartRetries,
-						StartSec:        e.StartSecs,
+						StartSec:         e.StartSecs,
 						StopSignal:       e.StopSignal,
-						ExitCode:        e.ExitCode,
+						ExitCode:         e.ExitCode,
 						Priority:         e.Priority,
 						Init:             labelInitSystem,
 						Layer:            layerName,
@@ -1894,7 +1894,7 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 				}
 			}
 			if len(capServices) > 0 {
-				writeJSONLabel(b, LabelServices, capServices)
+				writeJSONLabel(b, LabelService, capServices)
 			}
 		}
 	}
@@ -1909,7 +1909,7 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 
 	// Secrets: collected from layers (metadata only, no values)
 	// Deduplicate by name+env composite key: same podman secret can inject into multiple env vars.
-	var labelSecrets []LabelSecret
+	var labelSecrets []LabelSecretEntry
 	secretSeen := make(map[string]bool)
 	for _, layerName := range layerOrder {
 		layer := g.Layers[layerName]
@@ -1923,7 +1923,7 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 			if target == "" {
 				target = "/run/secrets/" + s.Name
 			}
-			labelSecrets = append(labelSecrets, LabelSecret{
+			labelSecrets = append(labelSecrets, LabelSecretEntry{
 				Name:   s.Name,
 				Target: target,
 				Env:    s.Env,
@@ -1931,7 +1931,7 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 		}
 	}
 	if len(labelSecrets) > 0 {
-		writeJSONLabel(b, LabelSecrets, labelSecrets)
+		writeJSONLabel(b, LabelSecret, labelSecrets)
 	}
 
 	// Env provides: env vars provided to other containers (service discovery)
@@ -1945,7 +1945,7 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 		}
 	}
 	if len(envProvides) > 0 {
-		writeJSONLabel(b, LabelEnvProvides, envProvides)
+		writeJSONLabel(b, LabelEnvProvide, envProvides)
 	}
 
 	// Env requires: env vars image must have from the environment
@@ -1959,7 +1959,7 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 		}
 	}
 	if len(envRequiresMap) > 0 {
-		writeJSONLabel(b, LabelEnvRequires, sortedEnvDeps(envRequiresMap))
+		writeJSONLabel(b, LabelEnvRequire, sortedEnvDeps(envRequiresMap))
 	}
 
 	// Env accepts: env vars image can optionally use
@@ -1973,7 +1973,7 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 		}
 	}
 	if len(envAcceptsMap) > 0 {
-		writeJSONLabel(b, LabelEnvAccepts, sortedEnvDeps(envAcceptsMap))
+		writeJSONLabel(b, LabelEnvAccept, sortedEnvDeps(envAcceptsMap))
 	}
 
 	// Secret requires: credential-store-backed env vars image must have
@@ -1987,7 +1987,7 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 		}
 	}
 	if len(secretRequiresMap) > 0 {
-		writeJSONLabel(b, LabelSecretRequires, sortedEnvDeps(secretRequiresMap))
+		writeJSONLabel(b, LabelSecretRequire, sortedEnvDeps(secretRequiresMap))
 	}
 
 	// Secret accepts: credential-store-backed env vars image can optionally use
@@ -2001,7 +2001,7 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 		}
 	}
 	if len(secretAcceptsMap) > 0 {
-		writeJSONLabel(b, LabelSecretAccepts, sortedEnvDeps(secretAcceptsMap))
+		writeJSONLabel(b, LabelSecretAccept, sortedEnvDeps(secretAcceptsMap))
 	}
 
 	// MCP provides: MCP servers provided to other containers
@@ -2025,7 +2025,7 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 		for _, name := range names {
 			mcpProvides = append(mcpProvides, mcpProvidesMap[name])
 		}
-		writeJSONLabel(b, LabelMCPProvides, mcpProvides)
+		writeJSONLabel(b, LabelMCPProvide, mcpProvides)
 	}
 
 	// MCP requires: MCP servers image must have from the environment
@@ -2039,7 +2039,7 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 		}
 	}
 	if len(mcpRequiresMap) > 0 {
-		writeJSONLabel(b, LabelMCPRequires, sortedEnvDeps(mcpRequiresMap))
+		writeJSONLabel(b, LabelMCPRequire, sortedEnvDeps(mcpRequiresMap))
 	}
 
 	// MCP accepts: MCP servers image can optionally use
@@ -2053,22 +2053,22 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 		}
 	}
 	if len(mcpAcceptsMap) > 0 {
-		writeJSONLabel(b, LabelMCPAccepts, sortedEnvDeps(mcpAcceptsMap))
+		writeJSONLabel(b, LabelMCPAccept, sortedEnvDeps(mcpAcceptsMap))
 	}
 
 	// Routes: collected from layers
-	var routes []LabelRoute
+	var routes []LabelRouteEntry
 	for _, layerName := range layerOrder {
 		layer := g.Layers[layerName]
 		if layer.HasRoute() {
 			rc, err := layer.Route()
 			if err == nil && rc != nil {
 				port, _ := strconv.Atoi(rc.Port)
-				routes = append(routes, LabelRoute{Host: rc.Host, Port: port})
+				routes = append(routes, LabelRouteEntry{Host: rc.Host, Port: port})
 			}
 		}
 	}
-	writeJSONLabel(b, LabelRoutes, routes)
+	writeJSONLabel(b, LabelRoute, routes)
 
 	// Layer env vars: merged from all layers + builder runtime contributions.
 	// Both sources funnel into the same OCI labels so deploy-mode consumers
@@ -2086,7 +2086,7 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 	if len(envConfigs) > 0 {
 		merged := MergeEnvConfigs(envConfigs)
 		if len(merged.Vars) > 0 {
-			writeJSONLabel(b, LabelEnvLayers, merged.Vars)
+			writeJSONLabel(b, LabelEnvLayer, merged.Vars)
 		}
 		writeJSONLabel(b, LabelPathAppend, merged.PathAppend)
 	}
@@ -2095,7 +2095,7 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 	skillPath := filepath.Join(g.Dir, "plugins", "ov-images", "skills", imageName, "SKILL.md")
 	if _, err := os.Stat(skillPath); err == nil {
 		skillURL := fmt.Sprintf("https://github.com/overthinkos/overthink-plugins/blob/main/ov-images/skills/%s/SKILL.md", imageName)
-		b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelSkills, skillURL))
+		b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelSkill, skillURL))
 	}
 
 	// Status and info: aggregate worst status from image + layers using
@@ -2131,7 +2131,7 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 			layerVersions[layerName] = layer.Version
 		}
 	}
-	writeJSONLabel(b, LabelLayerVersions, layerVersions)
+	writeJSONLabel(b, LabelLayerVersion, layerVersions)
 
 	// Data entries: staging paths for deploy-time provisioning.
 	// Walk the full image chain (like CollectImageVolume) to include data

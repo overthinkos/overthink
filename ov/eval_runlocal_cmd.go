@@ -333,7 +333,7 @@ func runProgressiveHarness(
 	master := &FinalReport{
 		Schema:           1,
 		Score:            commonOpts.ScoreName,
-		Recipe:          append([]string(nil), score.Recipe...),
+		Recipe:           append([]string(nil), score.Recipe...),
 		Calver:           ComputeCalVer(),
 		RunID:            layout.RunID,
 		AI:               commonOpts.AIName,
@@ -393,7 +393,7 @@ func runProgressiveHarness(
 		master.Iterations = append(master.Iterations, phaseReport.Iterations...)
 		master.Phases = append(master.Phases, PhaseReport{
 			N:             n,
-			Recipe:       phaseRecipes,
+			Recipe:        phaseRecipes,
 			IterationsRun: phaseReport.IterationsRun,
 			ExitReason:    phaseReport.ExitReason,
 			Score:         phaseReport.BestScore,

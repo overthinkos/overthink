@@ -83,7 +83,7 @@ type HarnessScore struct {
 	// against in every iteration. Order is significant: scenarios
 	// concatenate in this order, and `${RECIPES}` renders blocks in
 	// this order. MUST be non-empty; duplicates are rejected.
-	Recipe   []string `yaml:"recipe,omitempty"`
+	Recipe []string `yaml:"recipe,omitempty"`
 
 	// Deployment names the running deployment the harness scores
 	// against. Required: the AI must `ov deploy add <Deployment> <ref>`

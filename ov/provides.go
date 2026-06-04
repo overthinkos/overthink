@@ -6,15 +6,15 @@ import (
 	"strings"
 )
 
-// EnvProvidesEntry is a resolved env_provides entry in deploy.yml.
-type EnvProvidesEntry struct {
+// EnvProvideEntry is a resolved env_provides entry in deploy.yml.
+type EnvProvideEntry struct {
 	Name   string `yaml:"name" json:"name"`
 	Value  string `yaml:"value" json:"value"`
 	Source string `yaml:"source" json:"source"`
 }
 
-// MCPProvidesEntry is a resolved mcp_provides entry in deploy.yml.
-type MCPProvidesEntry struct {
+// MCPProvideEntry is a resolved mcp_provides entry in deploy.yml.
+type MCPProvideEntry struct {
 	Name      string `yaml:"name" json:"name"`
 	URL       string `yaml:"url" json:"url"`
 	Transport string `yaml:"transport,omitempty" json:"transport,omitempty"`
@@ -23,8 +23,8 @@ type MCPProvidesEntry struct {
 
 // ProvidesConfig holds all resolved provides entries in deploy.yml.
 type ProvidesConfig struct {
-	Env []EnvProvidesEntry `yaml:"env,omitempty" json:"env,omitempty"`
-	MCP []MCPProvidesEntry `yaml:"mcp,omitempty" json:"mcp,omitempty"`
+	Env []EnvProvideEntry `yaml:"env,omitempty" json:"env,omitempty"`
+	MCP []MCPProvideEntry `yaml:"mcp,omitempty" json:"mcp,omitempty"`
 }
 
 // Named is the interface for provides entries (shared pipeline logic).
@@ -33,10 +33,10 @@ type Named interface {
 	GetSource() string
 }
 
-func (e EnvProvidesEntry) GetName() string   { return e.Name }
-func (e EnvProvidesEntry) GetSource() string { return e.Source }
-func (e MCPProvidesEntry) GetName() string   { return e.Name }
-func (e MCPProvidesEntry) GetSource() string { return e.Source }
+func (e EnvProvideEntry) GetName() string   { return e.Name }
+func (e EnvProvideEntry) GetSource() string { return e.Source }
+func (e MCPProvideEntry) GetName() string   { return e.Name }
+func (e MCPProvideEntry) GetSource() string { return e.Source }
 
 // filterOwnProvides removes entries injected by the given image (self-exclusion).
 // NOTE: No longer used in GlobalEnvForImage (replaced by podAwareEnvProvides).
@@ -67,8 +67,8 @@ func filterOwnProvides[T Named](entries []T, imageName string) []T {
 // base consumer's runtime env and trigger a second-order failure when
 // strings.ReplaceAll("ov-versa-ecovoyage", "ov-versa", "localhost") produces
 // the malformed hostname "localhost-ecovoyage". Exact match is correct.
-func podAwareEnvProvides(entries []EnvProvidesEntry, consumerKey, ctrName string) []EnvProvidesEntry {
-	var result []EnvProvidesEntry
+func podAwareEnvProvides(entries []EnvProvideEntry, consumerKey, ctrName string) []EnvProvideEntry {
+	var result []EnvProvideEntry
 	seen := map[string]bool{} // name → true if local entry added
 	// First pass: same-deploy entries with localhost rewrite
 	for _, e := range entries {
@@ -123,8 +123,8 @@ func removeByExactSource[T Named](entries []T, source string) ([]T, bool) {
 // Different-deploy entries keep their container hostname URLs. If both
 // local and remote share a name, local wins. See podAwareEnvProvides for
 // the rationale on exact-match vs prefix-match.
-func podAwareMCPProvides(entries []MCPProvidesEntry, consumerKey, ctrName string) []MCPProvidesEntry {
-	var result []MCPProvidesEntry
+func podAwareMCPProvides(entries []MCPProvideEntry, consumerKey, ctrName string) []MCPProvideEntry {
+	var result []MCPProvideEntry
 	seen := map[string]bool{} // name → true if local entry added
 	// First pass: same-deploy entries with localhost rewrite
 	for _, e := range entries {

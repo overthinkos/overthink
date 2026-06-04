@@ -44,5 +44,5 @@ type PodSpec struct {
 	// DeployTests are optional target-specific deploy-scope defaults.
 	// Default empty. Deployment-level tests overlay on top via
 	// MergeDeployEval.
-	DeployEval  []Check `yaml:"deploy_eval,omitempty"`
+	DeployEval []Check `yaml:"deploy_eval,omitempty"`
 }

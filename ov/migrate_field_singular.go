@@ -40,23 +40,31 @@ import (
 // §A.2 for the canonical table; the literal here is its codified form.
 var pluralToSingularYAMLKeys = map[string]string{
 	// §A.2.a — list-plurals
-	"includes":  "include",
-	"layers":    "layer",
-	"ports":     "port",
-	"volumes":   "volume",
-	"secrets":   "secret",
-	"aliases":   "alias",
+	"includes": "include",
+	"layers":   "layer",
+	"ports":    "port",
+	"volumes":  "volume",
+	"secrets":  "secret",
+	"aliases":  "alias",
 	// builds: → produce: is a SEMANTIC rename, not a pluralization
 	// removal. The naive singular `build:` would collide with the
 	// existing `build:` yaml tag in ImageConfig (BuildFormats). The
 	// downstream consumer assigns img.Produce to BuilderCapabilities, so
 	// `produce:` is the semantic fit.
-	"builds":   "produce",
-	"requires": "require",
+	"builds":    "produce",
+	"requires":  "require",
 	"tasks":     "task",
 	"artifacts": "artifact",
 	"packages":  "package",
 	"sidecars":  "sidecar",
+	// 2026-06 singular-label cutover: the layer parser now hard-rejects
+	// these as unknown keys (the OCI label contract + the LayerYAML fields
+	// went singular). hooks: / capabilities: are layer-level fields; tags:
+	// is the eval-scenario field. requires_capabilities (below) already
+	// singularizes longest-first, so `capabilities` is safe to add here.
+	"hooks":        "hook",
+	"capabilities": "capability",
+	"tags":         "tag",
 
 	// §A.2.b — map/namespace plurals
 	"images":      "image",
@@ -71,8 +79,8 @@ var pluralToSingularYAMLKeys = map[string]string{
 	// Check's `groups:` list to `group:` would collide. cloud-init's `groups:`
 	// is also kept plural for the same global-key reason. (Same class of
 	// semantic carve-out as addr/addrs below.)
-	"targets":     "target",
-	"modules":     "module",
+	"targets": "target",
+	"modules": "module",
 
 	// §A.2.c — compound plurals
 	"env_requires":          "env_require",
@@ -90,14 +98,14 @@ var pluralToSingularYAMLKeys = map[string]string{
 	"with_services":         "with_service",
 
 	// §A.2.d — domain plurals (overthink-native authoring keys)
-	"events":             "event",
-	"replicas":           "replica",
-	"ssh_args":           "ssh_arg",
-	"mounts":             "mount",
-	"snapshots":          "snapshot",
-	"repos":              "repo",
-	"subgroups":          "subgroup",
-// "addrs": "addr" — REVERTED: collides with existing addr: scalar field in evalspec.go (semantic carve-out)
+	"events":    "event",
+	"replicas":  "replica",
+	"ssh_args":  "ssh_arg",
+	"mounts":    "mount",
+	"snapshots": "snapshot",
+	"repos":     "repo",
+	"subgroups": "subgroup",
+	// "addrs": "addr" — REVERTED: collides with existing addr: scalar field in evalspec.go (semantic carve-out)
 	"phases":             "phase",
 	"steps":              "step",
 	"metrics":            "metric",

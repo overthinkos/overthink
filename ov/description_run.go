@@ -41,8 +41,8 @@ func runStepGroup(
 	// honoring Check.Count. Sub-index of -1 means no count (single step).
 	type stepUnit struct {
 		idxInGroup int
-		subIdx     int   // -1 if no count expansion
-		step       Step  // copy with Check potentially mutated for INDEX
+		subIdx     int  // -1 if no count expansion
+		step       Step // copy with Check potentially mutated for INDEX
 		stepID     string
 	}
 	var units []stepUnit
@@ -307,7 +307,7 @@ type ScenarioResult struct {
 	ScenarioID string       `json:"scenario_id"` // ScenarioID(origin, idx[, row])
 	Name       string       `json:"name"`        // post-substitution scenario name
 	Tag        []string     `json:"tag,omitempty"`
-	Setup      []StepResult `json:"setup,omitempty"`    // setup steps (Ext 5)
+	Setup      []StepResult `json:"setup,omitempty"` // setup steps (Ext 5)
 	Step       []StepResult `json:"step"`
 	Teardown   []StepResult `json:"teardown,omitempty"` // teardown steps (Ext 5; always run)
 	OnFail     []StepResult `json:"on_fail,omitempty"`

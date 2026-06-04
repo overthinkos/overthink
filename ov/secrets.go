@@ -72,9 +72,9 @@ type SecretYAML struct {
 	Env    string `yaml:"env,omitempty"`    // fallback env var name
 }
 
-// LabelSecret represents a secret requirement in an OCI image label.
+// LabelSecretEntry represents a secret requirement in an OCI image label.
 // Only metadata is stored — never the secret value.
-type LabelSecret struct {
+type LabelSecretEntry struct {
 	Name   string `json:"name"`
 	Target string `json:"target"`
 	Env    string `json:"env,omitempty"`
@@ -109,7 +109,7 @@ type CollectedSecret struct {
 }
 
 // CollectSecretsFromLabels reconstructs secrets from image label metadata.
-func CollectSecretsFromLabels(imageName string, labelSecrets []LabelSecret) []CollectedSecret {
+func CollectSecretsFromLabels(imageName string, labelSecrets []LabelSecretEntry) []CollectedSecret {
 	var secrets []CollectedSecret
 	for _, ls := range labelSecrets {
 		secrets = append(secrets, CollectedSecret{
@@ -372,10 +372,10 @@ func CollectLayerSecretAccepts(imageName, instance string, meta *ImageMetadata) 
 		}
 	}
 
-	for _, dep := range meta.SecretRequires {
+	for _, dep := range meta.SecretRequire {
 		resolveOne(dep, true)
 	}
-	for _, dep := range meta.SecretAccepts {
+	for _, dep := range meta.SecretAccept {
 		resolveOne(dep, false)
 	}
 

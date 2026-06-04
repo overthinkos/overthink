@@ -360,7 +360,7 @@ type LibvirtInput struct {
 
 type LibvirtUSB struct {
 	Model string `yaml:"model,omitempty"`
-	Port int    `yaml:"port,omitempty"`
+	Port  int    `yaml:"port,omitempty"`
 }
 
 type LibvirtRedirDev struct {

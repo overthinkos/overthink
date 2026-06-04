@@ -161,7 +161,7 @@ func (c *UpdateCmd) syncData(engine string, imageRef string, meta *ImageMetadata
 	// MergeDeployOntoMetadata) so syncData targets the deploy's OWN volumes,
 	// never a same-image sibling's.
 	scopeVolumesToDeployKey(newMeta, c.Image, c.Instance)
-	volumes, bindMounts := ResolveVolumeBacking(c.Image, c.Instance, newMeta.Volumes, imgDeploy.Volume,
+	volumes, bindMounts := ResolveVolumeBacking(c.Image, c.Instance, newMeta.Volume, imgDeploy.Volume,
 		newMeta.Home, rt.EncryptedStoragePath, rt.VolumesPath)
 	if len(bindMounts) == 0 && len(volumes) == 0 {
 		return
@@ -357,10 +357,10 @@ func (c *RemoveCmd) runPreRemoveHook(engine, containerName, imageName string) {
 		return
 	}
 	meta, metaErr := ExtractMetadata(engine, imageRef)
-	if metaErr != nil || meta == nil || meta.Hooks == nil || meta.Hooks.PreRemove == "" {
+	if metaErr != nil || meta == nil || meta.Hook == nil || meta.Hook.PreRemove == "" {
 		return
 	}
-	if err := RunHook(engine, containerName, meta.Hooks.PreRemove, c.Env); err != nil {
+	if err := RunHook(engine, containerName, meta.Hook.PreRemove, c.Env); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: pre_remove hook failed: %v\n", err)
 	}
 }

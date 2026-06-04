@@ -189,7 +189,7 @@ func buildTimeVars(meta *ImageMetadata, instance string) map[string]string {
 // For volume mapping, the layer-declared short name is recovered by
 // stripping the "ov-<image>-" prefix from the engine's full volume name.
 // Bind mounts without a named volume are cross-referenced by destination
-// path against meta.Volumes to recover the short name.
+// path against meta.Volume to recover the short name.
 func mergeRuntimeVars(env map[string]string, meta *ImageMetadata, c *ContainerInspection, deployName, instance string) {
 	if c == nil {
 		return
@@ -221,7 +221,7 @@ func mergeRuntimeVars(env map[string]string, meta *ImageMetadata, c *ContainerIn
 	// the image metadata so test vars resolve correctly under network: host.
 	if c.IsHostNetworked() {
 		if meta != nil {
-			for _, p := range meta.Ports {
+			for _, p := range meta.Port {
 				containerPort := p
 				if i := strings.IndexByte(p, ':'); i >= 0 {
 					containerPort = p[i+1:]
@@ -257,7 +257,7 @@ func mergeRuntimeVars(env map[string]string, meta *ImageMetadata, c *ContainerIn
 	// uniformly — same helper that data.go and volumes.go use.
 	destToShort := map[string]string{}
 	if meta != nil && meta.Image != "" {
-		for _, v := range meta.Volumes {
+		for _, v := range meta.Volume {
 			destToShort[v.ContainerPath] = BareVolumeName(v.VolumeName, meta.Image, instance)
 		}
 	}
@@ -265,7 +265,7 @@ func mergeRuntimeVars(env map[string]string, meta *ImageMetadata, c *ContainerIn
 		short := ""
 		if m.Name != "" && meta != nil && meta.Image != "" {
 			// c.Mounts are the container's ACTUAL (deploy-scoped) volume names,
-			// so strip by the deploy key, not the image. meta.Volumes above is
+			// so strip by the deploy key, not the image. meta.Volume above is
 			// image-label-named, so that loop keeps using meta.Image.
 			short = BareVolumeName(m.Name, deployName, instance)
 			if short == m.Name {

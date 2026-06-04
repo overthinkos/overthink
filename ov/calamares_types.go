@@ -81,12 +81,12 @@ type AURPackages struct {
 // variant (`debian-13`, `ubuntu-24.04`).
 type DistroPackages struct {
 	Package []PackageItem    `yaml:"package,omitempty" json:"package,omitempty"`
-	Copr     []string         `yaml:"copr,omitempty" json:"copr,omitempty"`       // fedora-only
+	Copr    []string         `yaml:"copr,omitempty" json:"copr,omitempty"`       // fedora-only
 	Repo    []map[string]any `yaml:"repo,omitempty" json:"repo,omitempty"`       // free-form per-distro repo blocks
 	Exclude []string         `yaml:"exclude,omitempty" json:"exclude,omitempty"` // package excludes
-	Options []string         `yaml:"option,omitempty" json:"options,omitempty"` // extra installer flags
+	Options []string         `yaml:"option,omitempty" json:"options,omitempty"`  // extra installer flags
 	Module  []string         `yaml:"module,omitempty" json:"module,omitempty"`   // dnf module enable
-	AUR      *AURPackages     `yaml:"aur,omitempty" json:"aur,omitempty"`         // arch-only
+	AUR     *AURPackages     `yaml:"aur,omitempty" json:"aur,omitempty"`         // arch-only
 
 	// Raw captures the entire YAML map for template rendering. Populated by
 	// the migrator and the parser in lockstep so install templates that read

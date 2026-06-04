@@ -37,10 +37,10 @@ func secretDeclaredOnImage(meta *ImageMetadata) map[string]bool {
 	if meta == nil {
 		return names
 	}
-	for _, dep := range meta.SecretRequires {
+	for _, dep := range meta.SecretRequire {
 		names[dep.Name] = true
 	}
-	for _, dep := range meta.SecretAccepts {
+	for _, dep := range meta.SecretAccept {
 		names[dep.Name] = true
 	}
 	return names
@@ -52,14 +52,14 @@ func secretDeclaredOnImage(meta *ImageMetadata) map[string]bool {
 // scrub in saveDeployState. Returns nil (not an empty slice) when meta has
 // no secret declarations — matches the rest of the omitempty-style API.
 func secretDepNames(meta *ImageMetadata) []string {
-	if meta == nil || (len(meta.SecretRequires) == 0 && len(meta.SecretAccepts) == 0) {
+	if meta == nil || (len(meta.SecretRequire) == 0 && len(meta.SecretAccept) == 0) {
 		return nil
 	}
-	names := make([]string, 0, len(meta.SecretRequires)+len(meta.SecretAccepts))
-	for _, dep := range meta.SecretRequires {
+	names := make([]string, 0, len(meta.SecretRequire)+len(meta.SecretAccept))
+	for _, dep := range meta.SecretRequire {
 		names = append(names, dep.Name)
 	}
-	for _, dep := range meta.SecretAccepts {
+	for _, dep := range meta.SecretAccept {
 		names = append(names, dep.Name)
 	}
 	return names
@@ -148,10 +148,10 @@ func MigratePlaintextEnvSecret(dc *DeployConfig, meta *ImageMetadata, image, ins
 	// Build a lookup from dep name → full EnvDependency so we can honor any
 	// `key:` override on the layer declaration.
 	depByName := map[string]EnvDependency{}
-	for _, dep := range meta.SecretRequires {
+	for _, dep := range meta.SecretRequire {
 		depByName[dep.Name] = dep
 	}
-	for _, dep := range meta.SecretAccepts {
+	for _, dep := range meta.SecretAccept {
 		depByName[dep.Name] = dep
 	}
 
@@ -211,10 +211,10 @@ func scrubSecretCLIEnv(cliEnv []string, meta *ImageMetadata) ([]string, int, err
 
 	depByName := map[string]EnvDependency{}
 	if meta != nil {
-		for _, dep := range meta.SecretRequires {
+		for _, dep := range meta.SecretRequire {
 			depByName[dep.Name] = dep
 		}
-		for _, dep := range meta.SecretAccepts {
+		for _, dep := range meta.SecretAccept {
 			depByName[dep.Name] = dep
 		}
 	}

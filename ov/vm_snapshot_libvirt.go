@@ -28,10 +28,10 @@ type snapshotDisksList struct {
 }
 
 type snapshotDisk struct {
-	Name     string             `xml:"name,attr"`
-	Snapshot string             `xml:"snapshot,attr"`
-	Source   *snapshotDiskSrc   `xml:"source,omitempty"`
-	Driver   *snapshotDiskDrvr  `xml:"driver,omitempty"`
+	Name     string            `xml:"name,attr"`
+	Snapshot string            `xml:"snapshot,attr"`
+	Source   *snapshotDiskSrc  `xml:"source,omitempty"`
+	Driver   *snapshotDiskDrvr `xml:"driver,omitempty"`
 }
 
 type snapshotDiskSrc struct {

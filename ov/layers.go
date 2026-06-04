@@ -267,7 +267,7 @@ type LayerYAML struct {
 	Extract       []ExtractYAML     `yaml:"extract,omitempty"`
 	Security      *SecurityConfig   `yaml:"security,omitempty"`
 	Libvirt       []string          `yaml:"libvirt,omitempty"`
-	Hooks         *HooksConfig      `yaml:"hooks,omitempty"`
+	Hook          *HooksConfig      `yaml:"hook,omitempty"`
 	PortRelay     []int             `yaml:"port_relay,omitempty"`
 	SecretYAML    []SecretYAML      `yaml:"secret,omitempty"`
 	Data          []DataYAML        `yaml:"data,omitempty"`
@@ -351,7 +351,7 @@ type LayerYAML struct {
 	// Aggregated at image resolve time via AggregateLayerCapabilities.
 	// Replaces the magic image-level booleans (image.bootc, image.data_image)
 	// with a declarative layer-derived surface.
-	Capabilities       *LayerCapabilities `yaml:"capabilities,omitempty"`
+	Capability         *LayerCapabilities `yaml:"capability,omitempty"`
 	RequiresCapability []string           `yaml:"requires_capability,omitempty"`
 
 	// Populated by custom UnmarshalYAML:
@@ -375,14 +375,14 @@ var layerYAMLKnownFields = map[string]bool{
 	"layer": true, "require": true, "engine": true, "env": true,
 	"path_append": true, "port": true, "route": true, "service": true,
 	"volume": true, "alias": true, "extract": true, "security": true,
-	"libvirt": true, "hooks": true,
+	"libvirt": true, "hook": true,
 	"port_relay": true, "secret": true, "data": true,
 	"env_provide": true, "env_require": true, "env_accept": true,
 	"secret_accept": true, "secret_require": true,
 	"mcp_provide": true, "mcp_require": true, "mcp_accept": true,
 	"var": true, "task": true, "tests": true, "eval": true,
-	"artifact":     true,
-	"capabilities": true, "requires_capability": true,
+	"artifact":   true,
+	"capability": true, "requires_capability": true,
 	"package": true, "distro": true,
 	"apk":      true,
 	"shell":    true,

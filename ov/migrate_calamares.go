@@ -37,7 +37,6 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-
 // distroForFormat maps a legacy format-section name to the distro names that
 // install via that format. AUR is a special case — it lives under the
 // archlinux distro as a sub-block, not as a parallel distro.
@@ -240,8 +239,8 @@ func migrateLayerBody(node *yaml.Node) bool {
 func collapsePackagesIntoDistros(node *yaml.Node) bool {
 	// Collect indices of legacy keys to remove + their parsed contents.
 	type collected struct {
-		distros []string                 // distros that get this entry's packages (e.g. rpm → [fedora])
-		isAUR   bool                     // when true, packages go under distros.archlinux.aur, not distros.archlinux
+		distros  []string // distros that get this entry's packages (e.g. rpm → [fedora])
+		isAUR    bool     // when true, packages go under distros.archlinux.aur, not distros.archlinux
 		packages []string
 		extras   map[string]*yaml.Node // copr, repos, exclude, options, modules
 	}
@@ -477,22 +476,22 @@ func collapsePackagesIntoDistros(node *yaml.Node) bool {
 // to whitelist legitimate per-distro tag sections instead of blacklisting
 // non-layer YAML keys (Taskfile / overthink.yml top-levels / etc.).
 var knownDistroNames = map[string]bool{
-	"fedora":     true,
-	"archlinux":  true,
-	"arch":       true,
-	"debian":     true,
-	"ubuntu":     true,
-	"alpine":     true,
-	"rocky":      true,
-	"almalinux":  true,
-	"opensuse":   true,
-	"suse":       true,
-	"centos":     true,
-	"rhel":       true,
+	"fedora":      true,
+	"archlinux":   true,
+	"arch":        true,
+	"debian":      true,
+	"ubuntu":      true,
+	"alpine":      true,
+	"rocky":       true,
+	"almalinux":   true,
+	"opensuse":    true,
+	"suse":        true,
+	"centos":      true,
+	"rhel":        true,
 	"oraclelinux": true,
 	"amazonlinux": true,
-	"gentoo":     true,
-	"nixos":      true,
+	"gentoo":      true,
+	"nixos":       true,
 }
 
 // classifyDistroTag returns the distro name(s) implied by a top-level key

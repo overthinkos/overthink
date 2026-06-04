@@ -189,7 +189,7 @@ func buildLocalPkgOnHost(ctx context.Context, lp *LocalPkgDef, srcDir string, op
 //
 // The staging tmpdir is registered for sweep but deliberately NOT defer-removed:
 // the caller owns the returned package files until install completes.
-func buildDepPkgsOnHost(ctx context.Context, lp *LocalPkgDef, bDef *BuilderDef, builderImage string, packages []string, layerDir string, opts EmitOpts) ([]string, error) {
+func buildDepPkgsOnHost(ctx context.Context, lp *LocalPkgDef, bDef *BuilderDef, builderImage string, packages []string, layerDir string, cfg *Config, projectDir string, opts EmitOpts) ([]string, error) {
 	if len(packages) == 0 {
 		return nil, nil
 	}
@@ -272,6 +272,12 @@ func buildDepPkgsOnHost(ctx context.Context, lp *LocalPkgDef, bDef *BuilderDef, 
 		HostHome:     hostHome,
 		DryRun:       opts.DryRun,
 		RunAsRoot:    true,
+		// Cfg + ProjectDir let BuilderRun's EnsureImagePresent run the
+		// namespace-aware ResolveImage, so a namespace-qualified builder ref
+		// (e.g. the cachyos project's aur builder `ov.arch-builder`) resolves to
+		// its concrete image — matching the aur-LAYER path (deploy_target_local.go).
+		Cfg:        cfg,
+		ProjectDir: projectDir,
 	})
 	// Always surface the builder's stdout/stderr — the operator needs to see
 	// compile output to debug build failures, not just the bare exit status.
@@ -504,7 +510,7 @@ func venueHasPkgManager(ctx context.Context, exec DeployExecutor, lp *LocalPkgDe
 // (the layer's own curl/COPY task covers it).
 //
 // venueName is used only for log lines (e.g. "host", "vm:cachyos-gpu").
-func execLocalPkgInstall(ctx context.Context, exec DeployExecutor, s *LocalPkgInstallStep, supported bool, venueName string, opts EmitOpts) error {
+func execLocalPkgInstall(ctx context.Context, exec DeployExecutor, s *LocalPkgInstallStep, supported bool, venueName string, cfg *Config, opts EmitOpts) error {
 	if s.LocalPkg == nil {
 		fmt.Fprintf(os.Stderr, "%s skip: localpkg %s (layer=%s) — target distro declares no localpkg-capable package format; the layer's curl/COPY task installs it instead\n",
 			venueName, s.PkgbuildRef, s.LayerName)
@@ -539,7 +545,7 @@ func execLocalPkgInstall(ctx context.Context, exec DeployExecutor, s *LocalPkgIn
 	// (NO hardcoded names), build it through the SAME builder (R3), and install
 	// the WHOLE closure in one install command so the deps satisfy the package's
 	// depends.
-	depPkgs, err := resolveLocalPkgDeps(ctx, s, pkgFiles, pkgDir, venueName, opts)
+	depPkgs, err := resolveLocalPkgDeps(ctx, s, pkgFiles, pkgDir, venueName, cfg, opts)
 	if err != nil {
 		return fmt.Errorf("localpkg %s (layer=%s): resolving dependency closure: %w", s.PkgbuildRef, s.LayerName, err)
 	}
@@ -564,7 +570,7 @@ func execLocalPkgInstall(ctx context.Context, exec DeployExecutor, s *LocalPkgIn
 // the format's ForeignQuery). Deps with no resolvable dep builder
 // (s.BuilderImage == "") are logged by name and NOT silently dropped (the
 // curl/COPY fallback still covers non-localpkg targets).
-func resolveLocalPkgDeps(ctx context.Context, s *LocalPkgInstallStep, pkgFiles []string, pkgDir, venueName string, opts EmitOpts) ([]string, error) {
+func resolveLocalPkgDeps(ctx context.Context, s *LocalPkgInstallStep, pkgFiles []string, pkgDir, venueName string, cfg *Config, opts EmitOpts) ([]string, error) {
 	lp := s.LocalPkg
 	// Union the depends across every built package (a split package may emit
 	// several), de-duplicated.
@@ -603,5 +609,5 @@ func resolveLocalPkgDeps(ctx context.Context, s *LocalPkgInstallStep, pkgFiles [
 
 	fmt.Fprintf(os.Stderr, "%s: building %d %s dependency package(s) %v for localpkg %s (layer=%s) via builder %s\n",
 		venueName, len(deps), lp.DepBuilder, deps, s.PkgbuildRef, s.LayerName, s.BuilderImage)
-	return buildDepPkgsOnHost(ctx, lp, s.DepBuilderDef, s.BuilderImage, deps, pkgDir, opts)
+	return buildDepPkgsOnHost(ctx, lp, s.DepBuilderDef, s.BuilderImage, deps, pkgDir, cfg, s.ProjectDir, opts)
 }

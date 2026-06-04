@@ -88,6 +88,22 @@ func BuilderRun(ctx context.Context, opts BuilderRunOpts) ([]byte, error) {
 	if engine == "" {
 		engine = "podman"
 	}
+
+	// `podman run` needs the CONCRETE storage key, not a namespace-qualified or
+	// short builder ref (e.g. the cachyos project's aur builder "ov.arch-builder"
+	// is not a podman image — podman reports "image not known"). Resolve it via
+	// the SAME resolver EnsureImagePresent uses for its present-check, then run
+	// podman against the resolved ref. EnsureImagePresent (below) is still called
+	// with the ORIGINAL ref so its resolve + pull + build-from-image.yml fallback
+	// for short names keeps working. resolveImageRefForEnsure is side-effect-free,
+	// so it is safe in the dry-run path too.
+	origImage := opts.BuilderImage
+	if opts.BuilderImage != "" {
+		if resolved, rerr := resolveImageRefForEnsure(opts.BuilderImage, opts.Cfg, opts.ProjectDir); rerr == nil && resolved != "" {
+			opts.BuilderImage = resolved
+		}
+	}
+
 	args := buildBuilderRunArgs(opts)
 
 	if opts.DryRun {
@@ -108,9 +124,9 @@ func BuilderRun(ctx context.Context, opts BuilderRunOpts) ([]byte, error) {
 	// failure falls back to a local `ov image build` when the image
 	// is project-buildable, instead of `podman run`'s implicit
 	// auto-pull blowing up with a stale auth error.
-	if opts.BuilderImage != "" {
-		if err := EnsureImagePresent(ctx, opts.BuilderImage, opts.Cfg, opts.ProjectDir); err != nil {
-			return nil, fmt.Errorf("BuilderRun: ensure %s: %w", opts.BuilderImage, err)
+	if origImage != "" {
+		if err := EnsureImagePresent(ctx, origImage, opts.Cfg, opts.ProjectDir); err != nil {
+			return nil, fmt.Errorf("BuilderRun: ensure %s: %w", origImage, err)
 		}
 	}
 

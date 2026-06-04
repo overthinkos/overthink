@@ -282,7 +282,7 @@ func TestVenueHasPkgManager(t *testing.T) {
 func TestExecLocalPkgInstall_SkipsUnsupported(t *testing.T) {
 	exec := &localPkgRecExec{}
 	s := &LocalPkgInstallStep{PkgbuildRef: "pkg/arch", LayerName: "ov", ProjectDir: t.TempDir(), Format: "pac", LocalPkg: testPacLocalPkgDef()}
-	if err := execLocalPkgInstall(context.Background(), exec, s, false /* supported */, "host", EmitOpts{}); err != nil {
+	if err := execLocalPkgInstall(context.Background(), exec, s, false /* supported */, "host", nil, EmitOpts{}); err != nil {
 		t.Fatalf("unsupported venue should be a clean no-op, got %v", err)
 	}
 	if len(exec.systemScripts) != 0 || len(exec.putDests) != 0 {
@@ -296,7 +296,7 @@ func TestExecLocalPkgInstall_SkipsUnsupported(t *testing.T) {
 func TestExecLocalPkgInstall_SkipsNilLocalPkg(t *testing.T) {
 	exec := &localPkgRecExec{}
 	s := &LocalPkgInstallStep{PkgbuildRef: "pkg/arch", LayerName: "ov", ProjectDir: t.TempDir()} // LocalPkg nil
-	if err := execLocalPkgInstall(context.Background(), exec, s, true, "host", EmitOpts{}); err != nil {
+	if err := execLocalPkgInstall(context.Background(), exec, s, true, "host", nil, EmitOpts{}); err != nil {
 		t.Fatalf("nil LocalPkg should be a clean no-op, got %v", err)
 	}
 	if len(exec.systemScripts) != 0 || len(exec.putDests) != 0 {
@@ -310,7 +310,7 @@ func TestExecLocalPkgInstall_SkipsNilLocalPkg(t *testing.T) {
 func TestExecLocalPkgInstall_SkipsMissingSource(t *testing.T) {
 	exec := &localPkgRecExec{}
 	s := &LocalPkgInstallStep{PkgbuildRef: "no/such/source", LayerName: "ov", ProjectDir: t.TempDir(), Format: "pac", LocalPkg: testPacLocalPkgDef()}
-	if err := execLocalPkgInstall(context.Background(), exec, s, true /* supported */, "host", EmitOpts{}); err != nil {
+	if err := execLocalPkgInstall(context.Background(), exec, s, true /* supported */, "host", nil, EmitOpts{}); err != nil {
 		t.Fatalf("missing source should be a clean no-op, got %v", err)
 	}
 	if len(exec.systemScripts) != 0 || len(exec.putDests) != 0 {
@@ -531,19 +531,19 @@ func TestBuildDepPkgsOnHost_EmptyAndDryRun(t *testing.T) {
 		t.Fatal("aur builder not defined in build.yml")
 	}
 	// Empty packages: pure no-op regardless of builder/dryrun — never shells out.
-	if pkgs, err := buildDepPkgsOnHost(context.Background(), lp, aurDef, "", nil, "", EmitOpts{}); err != nil || pkgs != nil {
+	if pkgs, err := buildDepPkgsOnHost(context.Background(), lp, aurDef, "", nil, "", nil, "", EmitOpts{}); err != nil || pkgs != nil {
 		t.Errorf("empty packages = (%v, %v), want (nil, nil)", pkgs, err)
 	}
 	// DryRun with packages + builder + def: no build, no error.
-	if pkgs, err := buildDepPkgsOnHost(context.Background(), lp, aurDef, "arch-builder:latest", []string{"cloudflared-bin"}, "", EmitOpts{DryRun: true}); err != nil || pkgs != nil {
+	if pkgs, err := buildDepPkgsOnHost(context.Background(), lp, aurDef, "arch-builder:latest", []string{"cloudflared-bin"}, "", nil, "", EmitOpts{DryRun: true}); err != nil || pkgs != nil {
 		t.Errorf("dry-run = (%v, %v), want (nil, nil)", pkgs, err)
 	}
 	// Packages but no builder image (live): hard error, never a silent drop.
-	if _, err := buildDepPkgsOnHost(context.Background(), lp, aurDef, "", []string{"cloudflared-bin"}, "", EmitOpts{}); err == nil {
+	if _, err := buildDepPkgsOnHost(context.Background(), lp, aurDef, "", []string{"cloudflared-bin"}, "", nil, "", EmitOpts{}); err == nil {
 		t.Error("buildDepPkgsOnHost with packages but no builder image should error")
 	}
 	// Packages + image but nil builder def: hard error.
-	if _, err := buildDepPkgsOnHost(context.Background(), lp, nil, "arch-builder:latest", []string{"cloudflared-bin"}, "", EmitOpts{}); err == nil {
+	if _, err := buildDepPkgsOnHost(context.Background(), lp, nil, "arch-builder:latest", []string{"cloudflared-bin"}, "", nil, "", EmitOpts{}); err == nil {
 		t.Error("buildDepPkgsOnHost with nil builder def should error")
 	}
 }

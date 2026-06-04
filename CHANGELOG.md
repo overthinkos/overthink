@@ -109,6 +109,28 @@ distinct from the install `extra_repo` (it excludes `cachyos-extra`, which serve
 no usable DB at runtime). Covered by `TestCachyosRuntimePacmanConf` + the
 re-run `eval-cachyos-vm` R10.
 
+**Follow-up #2 in the same cutover — the dep-closure builder resolves a
+namespace-qualified builder ref (RCA from the next consumer-R10 leg).** With
+`/etc/pacman.conf` fixed, the consumer R10 reached #43's dep-closure step and
+failed at `ensure-image "ov.arch-builder": ... not present locally, pull failed`:
+the cachyos project's `aur` builder is the namespace-qualified `ov.arch-builder`
+(main's `arch-builder` under the `ov` import namespace). RCA proved a
+missing-plumbing defect — the shared `buildDepPkgsOnHost` (`ov/localpkg.go`)
+called `BuilderRun` WITHOUT `Cfg`/`ProjectDir`, so `EnsureImagePresent` couldn't
+run the namespace-aware `ResolveImage` that the aur-LAYER path
+(`deploy_target_local.go`) already uses, and the namespaced ref never resolved to
+the locally-present `ghcr.io/overthinkos/arch-builder:<tag>`. Fix (R3, reuse the
+existing resolver), in two parts: (1) thread `*Config`+`projectDir` through
+`buildDepPkgsOnHost` ← `resolveLocalPkgDeps` ← `execLocalPkgInstall`, and add
+`Cfg`/`ProjectDir` fields to `VmDeployTarget` (populated from `dctx.Cfg`/`dctx.Dir`,
+mirroring `LocalDeployTarget`), so `EnsureImagePresent` runs the namespace-aware
+resolver; (2) `BuilderRun` then runs `podman run` against the RESOLVED concrete ref
+(`resolveImageRefForEnsure`) — a namespace-qualified or short ref is not a podman
+storage key, so `EnsureImagePresent` confirming presence was not enough on its own
+(`podman run ov.arch-builder` still said `image not known`). `EnsureImagePresent`
+is still called with the ORIGINAL ref so its pull / build-from-image.yml fallback
+keeps working. No new resolution code. Proven by the re-run `eval-cachyos-vm` R10.
+
 ### 2026-06-04 — feat(ov): localpkg — Arch/CachyOS deploys install `ov` as the proper `overthink-git` package, not a curl'd binary
 
 Closes the `eval-cachyos-gpu-vm` coverage gap surfaced when the operator

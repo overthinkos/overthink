@@ -460,12 +460,14 @@ func (t *VmUnifiedTarget) Add(ctx context.Context, dctx *DeployContext, plans []
 
 	// Build VmDeployTarget.
 	target := &VmDeployTarget{
-		Name:      "vm:" + vmName,
-		VMName:    vmName,
-		Spec:      spec,
-		State:     state,
-		Exec:      exec,
-		DistroCfg: dctx.DistroCfg,
+		Name:       "vm:" + vmName,
+		VMName:     vmName,
+		Spec:       spec,
+		State:      state,
+		Exec:       exec,
+		DistroCfg:  dctx.DistroCfg,
+		Cfg:        dctx.Cfg,
+		ProjectDir: dctx.Dir,
 	}
 
 	// Resolve layer secrets + inject them into TaskSteps BEFORE emission

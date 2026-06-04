@@ -73,6 +73,14 @@ type VmDeployTarget struct {
 	// the SAME config-driven path LocalDeployTarget + the OCI container path
 	// use (R3). Populated by the deploy dispatcher from dctx.DistroCfg.
 	DistroCfg *DistroConfig
+
+	// Cfg + ProjectDir mirror LocalDeployTarget: they let the host-side
+	// dep-closure builder (buildDepPkgsOnHost) thread them into BuilderRun's
+	// EnsureImagePresent, so a namespace-qualified builder ref (e.g. the cachyos
+	// project's aur builder `ov.arch-builder`) resolves to its concrete image.
+	// Populated by the deploy dispatcher from dctx.Cfg / dctx.Dir.
+	Cfg        *Config
+	ProjectDir string
 }
 
 // Name returns the target's display name.
@@ -349,7 +357,7 @@ func (t *VmDeployTarget) emitPlan(ctx context.Context, plan *InstallPlan, opts E
 			// cmd: task. Gated (config-driven) on the GUEST having the format's
 			// package manager; an unsupported guest is a clean no-op (the layer's
 			// curl task installs it).
-			if err := execLocalPkgInstall(ctx, t.Exec, s, venueHasPkgManager(ctx, t.Exec, s.LocalPkg, opts), "vm:"+t.VMName, opts); err != nil {
+			if err := execLocalPkgInstall(ctx, t.Exec, s, venueHasPkgManager(ctx, t.Exec, s.LocalPkg, opts), "vm:"+t.VMName, t.Cfg, opts); err != nil {
 				return rec, err
 			}
 
@@ -742,7 +750,7 @@ func (t *VmDeployTarget) execBuilder(ctx context.Context, s *BuilderStep, plan *
 	// helper (R3) — the same primitive the localpkg step uses to build its
 	// dependency closure. The builder runs on the host (podman); the guest never
 	// needs a container runtime. The package glob comes from the format config.
-	matches, err := buildDepPkgsOnHost(ctx, s.LocalPkg, s.BuilderDef, image, extractStringSlice(s.RawStageContext, "packages"), s.LayerDir, opts)
+	matches, err := buildDepPkgsOnHost(ctx, s.LocalPkg, s.BuilderDef, image, extractStringSlice(s.RawStageContext, "packages"), s.LayerDir, t.Cfg, t.ProjectDir, opts)
 	if err != nil {
 		return fmt.Errorf("VM aur builder: %w", err)
 	}

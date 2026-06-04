@@ -1,5 +1,5 @@
 layer:
-    version: 2026.152.2006
+    version: 2026.155.2119
     name: kde-shell
     description: |
         The SDDM-free KDE Plasma Wayland SESSION package set — the shared subset
@@ -40,6 +40,16 @@ layer:
                 - kcalc
                 - gwenview
                 - spectacle
+            aur:
+                # kdotool — the KWin window-management automation tool driving
+                # `ov eval wl` on KWin (the KWin analogue of wlroots' wlrctl). It
+                # talks to KWin via the scripting D-Bus API: search /
+                # windowactivate / windowminimize / windowclose / windowstate
+                # (fullscreen) / getwindowgeometry. Pointer + keyboard injection
+                # are NOT provided by kdotool (KWin scripting cannot synthesize
+                # input) — keyboard uses wtype, pointer is a separate cutover.
+                package:
+                    - kdotool
     eval:
         - id: plasma-desktop-installed
           package: plasma-desktop
@@ -58,4 +68,7 @@ layer:
           exists: true
         - id: konsole-binary
           file: /usr/bin/konsole
+          exists: true
+        - id: kdotool-binary
+          file: /usr/bin/kdotool
           exists: true

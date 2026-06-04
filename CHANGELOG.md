@@ -22,6 +22,65 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-04 — feat(eval): `ov eval wl` host-safe KWin/KDE parity (window-mgmt + keyboard + clipboard + screenshot), pointer + resolution deferred (#49)
+
+`ov eval wl` had full desktop-automation coverage on wlroots compositors (sway,
+labwc) but nothing on KWin — the compositor of the KDE-Plasma selkies flavor
+(`selkies-kde` / `kde-selkies`). This cutover brings KWin to the same level of
+eval support for every method group that has a **host-safe** backend, and
+explicitly defers the two that don't.
+
+**RDD found-and-discarded mechanisms (live `selkies-kde` KWin-6 / Plasma-Wayland
+pod).** Pointer injection was the hard part, and five candidate mechanisms were
+each disproven empirically before any code was written:
+`ydotool`/`/dev/uinput` leaks a virtual device into the **host** kernel evdev
+(the pod's `/proc/bus/input/devices` IS the host's — /proc is not namespaced — so
+ydotoold's device showed up host-side, 15→16 devices), which both disrupts the
+operator's real desktop and never reaches the pod's headless KWin;
+`org_kde_kwin_fake_input` was **removed in KWin 6** (not advertised as a Wayland
+global); the `org.freedesktop.portal.RemoteDesktop` portal (and `libei`/EIS via
+`ConnectToEIS`) is **approval-gated** — `CreateSession`/`SelectDevices` succeed
+but `Start` blocks on an approval dialog no headless session can answer (verified
+TIMEOUT); `xdotool`/XWayland is lazy/not running and XTEST→Wayland-window
+delivery is unproven. The only thing proven to inject host-safely into this KWin
+is selkies' own `selkies-capture-server`, whose path is internal/opaque.
+Resolution (`kscreen-doctor`) **hangs** on the headless Plasma session even with
+`kded6` + the kscreen module loaded (a `kde-output-management-v2` vs old-kwayland
+protocol mismatch in `KSC_KWayland.so`).
+
+**What landed (the host-safe 6/8).** `ov/wl.go` gained `detectCompositor` (KWin
+when `kwin_wayland` is PID-present, else wlroots) and per-method KWin routing:
+window management (toplevel / windows / focus / close / fullscreen / minimize /
+geometry) via **kdotool** (KWin scripting — `search` / `windowactivate` /
+`windowminimize` / `windowclose` / `windowstate --toggle FULLSCREEN` /
+`getwindowgeometry`); keyboard (type / key / key-combo) via `wtype`
+(`zwp_virtual_keyboard_v1`, which KWin implements); clipboard via `wl-clipboard`
+(KWin implements `wlr-data-control`); screenshot via `pixelflux`; atspi / exec /
+status unchanged. `wlShellCmd` now sources the **live compositor's** session env
+(`XDG_RUNTIME_DIR` / `WAYLAND_DISPLAY` / `DBUS_SESSION_BUS_ADDRESS`) from the
+running compositor process — load-bearing because the selkies-kde session runs
+`startplasma-wayland` under `dbus-run-session` on a random `/tmp/dbus-XXXXXX` bus
+that differs from the image-baked ENV, so kdotool's D-Bus would otherwise hit the
+wrong bus (also a strict improvement for sway/labwc). The `kdotool` AUR package
+is added to the `kde-shell` layer (KWin-only — no waste on labwc/sway).
+
+**What is deferred (their own future cutovers, NOT shipped here).** Pointer
+(click / mouse / scroll / drag) returns a clear, non-hanging "not supported on
+KWin" error naming the reason; the same for resolution. Both await dedicated
+RDD-first cutovers (pointer: reverse-engineer `selkies-capture-server`'s host-safe
+injection or configure portal auto-grant; resolution: the KWin output-protocol
+version alignment).
+
+**Coverage.** `ov/wl_kwin_test.go` unit-tests `detectCompositor`, the
+compositor-env-sourcing `wlShellCmd`, the kdotool search→action chain, and the
+KWin-pointer-unsupported error. `kde-selkies` gains deploy-scope `wl:` checks
+(`status` reports `compositor: kwin` + `kdotool: available`; `type`; `toplevel`;
+`clipboard` set→get round-trip) that run during `eval-selkies-kde-pod`'s
+`ov eval live` — proving the backends on the real nested KWin desktop. Cross-repo
+B6: the producer (main: ov/wl.go + kde-shell + kde-selkies) lands + tags first;
+`image/cachyos` reconciles its `@github` pins and runs the authoritative R10
+(`eval-selkies-kde-pod`) against the pushed tag.
+
 ### 2026-06-04 — fix(ov): `ov eval k8s` validates the resolved kubeconfig context up front (no stale-context fall-through) (#45)
 
 `k8sClusterFlags.restConfig()` resolved the target context

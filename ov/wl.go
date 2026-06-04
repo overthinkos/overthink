@@ -117,6 +117,9 @@ func (c *WlClickCmd) Run() error {
 	if err != nil {
 		return err
 	}
+	if detectCompositor(venue.Exec) == "kwin" {
+		return errKWinPointerUnsupported("click")
+	}
 
 	clickX, clickY := c.X, c.Y
 
@@ -245,6 +248,9 @@ func (c *WlMouseCmd) Run() error {
 	if err != nil {
 		return err
 	}
+	if detectCompositor(venue.Exec) == "kwin" {
+		return errKWinPointerUnsupported("mouse")
+	}
 
 	shellCmd := fmt.Sprintf(
 		"wlrctl pointer move -10000 -10000 && wlrctl pointer move %d %d",
@@ -286,8 +292,15 @@ func (c *WlStatusCmd) Run() error {
 		}
 	}
 
-	// Verbose per-tool availability.
-	tools := []string{"grim", "wtype", "wlrctl"}
+	// Report the running compositor — window-mgmt + pointer backends differ
+	// between KWin (kdotool) and wlroots (wlrctl).
+	comp := detectCompositor(venue.Exec)
+	fmt.Printf("%-12s %s\n", "compositor:", comp)
+
+	// Verbose per-tool availability. kdotool/kscreen-doctor are the KWin
+	// window-mgmt tools; grim/wlrctl/wlr-randr are the wlroots ones — each set
+	// reports "not found" on the other compositor, which is expected.
+	tools := []string{"grim", "wtype", "wlrctl", "kdotool", "pixelflux-screenshot"}
 	for _, tool := range tools {
 		shellCmd := fmt.Sprintf("command -v %s >/dev/null 2>&1", tool)
 		if err := execWlCmdSilent(venue.Exec, shellCmd); err != nil {
@@ -397,6 +410,12 @@ func (c *WlWindowsCmd) Run() error {
 		return err
 	}
 
+	// KWin: wlr-foreign-toplevel is unavailable — list via kdotool (KWin
+	// scripting). Print window names, falling back to window IDs.
+	if detectCompositor(venue.Exec) == "kwin" {
+		return execWlCmd(venue.Exec, "kdotool search '' getwindowname %@ 2>/dev/null || kdotool search ''")
+	}
+
 	// Try wlrctl toplevel first (compositor-agnostic).
 	if err := execWlCmdSilent(venue.Exec, "command -v wlrctl >/dev/null 2>&1"); err == nil {
 		if err := execWlCmd(venue.Exec, "wlrctl toplevel list"); err == nil {
@@ -425,6 +444,15 @@ func (c *WlFocusCmd) Run() error {
 	venue, err := resolveEvalVenue(c.Image, c.Instance)
 	if err != nil {
 		return err
+	}
+
+	// KWin: activate via kdotool (KWin scripting).
+	if detectCompositor(venue.Exec) == "kwin" {
+		if err := kdotoolSearchAction(venue.Exec, c.Target, "windowactivate"); err != nil {
+			return fmt.Errorf("focusing window %q via kdotool: %w", c.Target, err)
+		}
+		fmt.Fprintf(os.Stderr, "Focused window matching %q via kdotool\n", c.Target)
+		return nil
 	}
 
 	// Try wlrctl toplevel focus (matches by app_id in wlrctl 0.2.2).
@@ -496,6 +524,9 @@ func (c *WlToplevelCmd) Run() error {
 	if err != nil {
 		return err
 	}
+	if detectCompositor(venue.Exec) == "kwin" {
+		return execWlCmd(venue.Exec, "kdotool search '' getwindowname %@ 2>/dev/null || kdotool search ''")
+	}
 	return execWlCmd(venue.Exec, "wlrctl toplevel list")
 }
 
@@ -510,6 +541,13 @@ func (c *WlCloseCmd) Run() error {
 	venue, err := resolveEvalVenue(c.Image, c.Instance)
 	if err != nil {
 		return err
+	}
+	if detectCompositor(venue.Exec) == "kwin" {
+		if err := kdotoolSearchAction(venue.Exec, c.Target, "windowclose"); err != nil {
+			return fmt.Errorf("closing window %q via kdotool: %w", c.Target, err)
+		}
+		fmt.Fprintf(os.Stderr, "Closed window matching %q\n", c.Target)
+		return nil
 	}
 	if err := wlrctlToplevel(venue.Exec, "close", c.Target); err != nil {
 		return fmt.Errorf("closing window %q: %w", c.Target, err)
@@ -530,6 +568,13 @@ func (c *WlFullscreenCmd) Run() error {
 	if err != nil {
 		return err
 	}
+	if detectCompositor(venue.Exec) == "kwin" {
+		if err := kdotoolSearchAction(venue.Exec, c.Target, "windowstate", "--toggle", "FULLSCREEN"); err != nil {
+			return fmt.Errorf("toggling fullscreen on %q via kdotool: %w", c.Target, err)
+		}
+		fmt.Fprintf(os.Stderr, "Toggled fullscreen on window matching %q\n", c.Target)
+		return nil
+	}
 	if err := wlrctlToplevel(venue.Exec, "fullscreen", c.Target); err != nil {
 		return fmt.Errorf("toggling fullscreen on %q: %w", c.Target, err)
 	}
@@ -548,6 +593,13 @@ func (c *WlMinimizeCmd) Run() error {
 	venue, err := resolveEvalVenue(c.Image, c.Instance)
 	if err != nil {
 		return err
+	}
+	if detectCompositor(venue.Exec) == "kwin" {
+		if err := kdotoolSearchAction(venue.Exec, c.Target, "windowminimize"); err != nil {
+			return fmt.Errorf("toggling minimize on %q via kdotool: %w", c.Target, err)
+		}
+		fmt.Fprintf(os.Stderr, "Toggled minimize on window matching %q\n", c.Target)
+		return nil
 	}
 	if err := wlrctlToplevel(venue.Exec, "minimize", c.Target); err != nil {
 		return fmt.Errorf("toggling minimize on %q: %w", c.Target, err)
@@ -592,6 +644,9 @@ func (c *WlResolutionCmd) Run() error {
 	venue, err := resolveEvalVenue(c.Image, c.Instance)
 	if err != nil {
 		return err
+	}
+	if detectCompositor(venue.Exec) == "kwin" {
+		return fmt.Errorf("wl resolution: not supported on KWin (kscreen-doctor has no working backend on the headless Plasma session — it hangs; tracked as its own cutover). The selkies stream resolution is set at session start, not at runtime")
 	}
 
 	parts := strings.SplitN(c.Resolution, "x", 2)
@@ -713,6 +768,9 @@ func (c *WlDoubleClickCmd) Run() error {
 	if err != nil {
 		return err
 	}
+	if detectCompositor(venue.Exec) == "kwin" {
+		return errKWinPointerUnsupported("double-click")
+	}
 
 	btn := wlButton(c.Button)
 	if btn == "" {
@@ -767,6 +825,9 @@ func (c *WlScrollCmd) Run() error {
 	venue, err := resolveEvalVenue(c.Image, c.Instance)
 	if err != nil {
 		return err
+	}
+	if detectCompositor(venue.Exec) == "kwin" {
+		return errKWinPointerUnsupported("scroll")
 	}
 
 	// Move pointer to target position first via wlrctl.
@@ -830,6 +891,9 @@ func (c *WlDragCmd) Run() error {
 	venue, err := resolveEvalVenue(c.Image, c.Instance)
 	if err != nil {
 		return err
+	}
+	if detectCompositor(venue.Exec) == "kwin" {
+		return errKWinPointerUnsupported("drag")
 	}
 
 	btnNum := 1
@@ -952,6 +1016,14 @@ func (c *WlGeometryCmd) Run() error {
 	venue, err := resolveEvalVenue(c.Image, c.Instance)
 	if err != nil {
 		return err
+	}
+
+	// KWin: query geometry via kdotool (sway IPC + XWayland unavailable).
+	if detectCompositor(venue.Exec) == "kwin" {
+		if err := kdotoolSearchAction(venue.Exec, c.Target, "getwindowgeometry"); err != nil {
+			return fmt.Errorf("getting geometry of %q via kdotool: %w", c.Target, err)
+		}
+		return nil
 	}
 
 	// Try sway tree first (returns precise rect with x, y, width, height).
@@ -1512,12 +1584,57 @@ func wlrctlToplevel(ex DeployExecutor, action, target string) error {
 	return execWlCmdSilent(ex, shellCmd)
 }
 
-// wlShellCmd wraps a command with Wayland environment variable exports.
+// wlCompositorEnvPrelude sources the RUNNING compositor's real session
+// environment from its process before applying safe fallbacks. This is
+// load-bearing for KWin: the selkies-kde image runs `startplasma-wayland`
+// under `dbus-run-session`, which creates a RANDOM /tmp/dbus-XXXXXX session bus
+// (not the image-baked /tmp/dbus-session) and uses wayland-1 — so a D-Bus tool
+// like kdotool would otherwise talk to the wrong bus and never reach KWin.
+// Sourcing the live compositor's XDG_RUNTIME_DIR / WAYLAND_DISPLAY /
+// DBUS_SESSION_BUS_ADDRESS is also a strict improvement for sway/labwc (it picks
+// up their actual socket). Degrades to the historical fallbacks when pgrep or
+// the compositor process is unavailable.
+const wlCompositorEnvPrelude = `for __c in kwin_wayland sway labwc; do __p=$(pgrep -x "$__c" 2>/dev/null | head -1); [ -n "$__p" ] && break; done; ` +
+	`if [ -n "$__p" ] && [ -r /proc/$__p/environ ]; then eval "$(tr '\0' '\n' < /proc/$__p/environ | grep -E '^(XDG_RUNTIME_DIR|WAYLAND_DISPLAY|DBUS_SESSION_BUS_ADDRESS)=' | sed 's/^/export /')"; fi; ` +
+	`export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp}" WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-0}"`
+
+// wlShellCmd wraps a command with the compositor session environment (sourced
+// live from the running compositor, then defaulted).
 func wlShellCmd(cmd string) string {
-	return fmt.Sprintf(
-		`export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp}" WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-0}" && %s`,
-		cmd,
-	)
+	return fmt.Sprintf("%s && %s", wlCompositorEnvPrelude, cmd)
+}
+
+// detectCompositor reports which Wayland compositor is running on the venue:
+// "kwin" when KWin (KDE Plasma) is PID-present, else "wlroots" (sway / labwc).
+// Window management and pointer input differ fundamentally between the two —
+// wlroots exposes wlr-foreign-toplevel + wlr-virtual-pointer (driven by wlrctl),
+// while KWin exposes neither and is driven by kdotool (KWin scripting). The
+// probe runs raw (not via wlShellCmd) since it needs no Wayland env itself.
+func detectCompositor(ex DeployExecutor) string {
+	if venueRunSilent(ex, "pgrep -x kwin_wayland >/dev/null 2>&1") == nil {
+		return "kwin"
+	}
+	return "wlroots"
+}
+
+// errKWinPointerUnsupported is returned for pointer methods on KWin. KWin 6
+// advertises no host-safe injectable virtual-pointer protocol
+// (org_kde_kwin_fake_input was removed; the RemoteDesktop portal is
+// approval-gated headless; /dev/uinput leaks to the host) — so pointer input is
+// tracked as its own cutover rather than silently failing or hanging.
+func errKWinPointerUnsupported(method string) error {
+	return fmt.Errorf("wl %s: pointer injection is not supported on KWin (no host-safe backend; KWin 6 removed org_kde_kwin_fake_input and the RemoteDesktop portal is approval-gated). Window management, keyboard, clipboard, and screenshots ARE supported on KWin", method)
+}
+
+// kdotoolSearchAction chains a kdotool window query with an action verb:
+// `kdotool search --name <regex> <verb> [args]` operates on the first match.
+// Used for KWin focus/close/minimize/fullscreen/geometry.
+func kdotoolSearchAction(ex DeployExecutor, title, verb string, extra ...string) error {
+	cmd := fmt.Sprintf("kdotool search --name %s %s", shellQuote(title), verb)
+	if len(extra) > 0 {
+		cmd += " " + strings.Join(extra, " ")
+	}
+	return execWlCmd(ex, cmd)
 }
 
 // execWlCmd runs a Wayland tool command on the venue and streams output.

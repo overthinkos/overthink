@@ -1,5 +1,5 @@
 layer:
-    version: 2026.152.2006
+    version: 2026.155.2119
     name: kde-selkies
     description: |
         The KDE Plasma flavor PRIMITIVE for the selkies streaming desktop: runs a
@@ -75,3 +75,35 @@ layer:
           status: 200
           allow_insecure: true
           timeout: 10s
+        # `ov eval wl` KWin parity — proves the host-safe KWin automation backends
+        # work on the nested startplasma-wayland session, matching the wlroots
+        # (sway/labwc) coverage: window-management via kdotool, keyboard via wtype,
+        # clipboard via wl-clipboard, plus compositor detection. Pointer + resolution
+        # are intentionally NOT covered (no host-safe KWin backend — separate cutover;
+        # see ov/wl.go errKWinPointerUnsupported + the resolution guard).
+        - id: kde-wl-compositor-is-kwin
+          scope: deploy
+          wl: status
+          stdout:
+            - matches: "compositor: +kwin"
+            - matches: "kdotool: +available"
+        - id: kde-wl-keyboard-wtype
+          scope: deploy
+          wl: type
+          text: "ovkwin"
+        - id: kde-wl-toplevel-via-kdotool
+          scope: deploy
+          wl: toplevel
+          stdout:
+            - matches: "."
+        - id: kde-wl-clipboard-set
+          scope: deploy
+          wl: clipboard
+          action: set
+          text: "ovclip-kwin"
+        - id: kde-wl-clipboard-get
+          scope: deploy
+          wl: clipboard
+          action: get
+          stdout:
+            - contains: "ovclip-kwin"

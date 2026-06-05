@@ -1,12 +1,13 @@
 # Overthink
 
-**The container management experience for you and your AI.**
+**The container management experience for you and your Oompa-Loompas.**
 
 Describe what you need in a simple layer list, and `ov` composes it
 into optimized multi-stage container images — from an interactive
 dev shell to a running service to a systemd unit to a bootable VM,
-to an AI desktop running inside a sandbox. Works the same way
-whether you're at the keyboard or your AI agent is driving.
+to an Oompa-Loompa's desktop running inside a candybox. Works the
+same way whether you're at the keyboard or your Oompa-Loompas are
+driving.
 
 187 layers across this repo and its submodules. 53 image definitions
 (39 enabled by default). 2 VM definitions, 2 Android devices, and a
@@ -23,7 +24,7 @@ absolutely everything.*
 
 ## Table of contents
 
-- [What's in the knife](#whats-in-the-knife)
+- [What's in the chocolate factory](#whats-in-the-chocolate-factory)
 - [Core concepts](#core-concepts)
 - [Why Overthink?](#why-overthink)
 - [Install](#install)
@@ -33,7 +34,7 @@ absolutely everything.*
   - [Run](#run)
   - [Deploy](#deploy)
   - [Evaluate](#evaluate)
-  - [Author with AI](#author-with-ai)
+  - [Author with Oompa-Loompas](#author-with-oompa-loompas)
   - [Manage](#manage)
 - [Command reference](#command-reference)
 - [Catalogs](#catalogs)
@@ -42,11 +43,11 @@ absolutely everything.*
 - [Works with Claude Code](#works-with-claude-code)
 - [License](#license)
 
-## What's in the knife
+## What's in the chocolate factory
 
-`ov` is a Swiss-army knife. Each blade is a stage of the container
-lifecycle — **build, run, deploy, evaluate** — driven from one config
-and one mental model:
+`ov` is a Swiss Chocolate Factory. Each production line is a stage of
+the container lifecycle — **build, run, deploy, evaluate** — driven
+from one config and one mental model:
 
 | Reach for `ov` when you want to…                            | …and you get                                       | Stage                 |
 |-------------------------------------------------------------|----------------------------------------------------|-----------------------|
@@ -56,15 +57,15 @@ and one mental model:
 | prove a config actually works, end-to-end                   | `kind: eval`, `ov eval run`, baked `eval:` checks  | [Evaluate](#evaluate) |
 
 The same `ov` drives two further stages — it
-[authors layers and images with an AI in the loop](#author-with-ai)
+[authors layers and images with an Oompa-Loompa in the loop](#author-with-oompa-loompas)
 and [manages](#manage) the running lifecycle (cleanup, diagnostics,
 schema upgrades, runtime config).
 
 > One `candy.yml`, one image, one `deploy.yml`, and one `kind: eval`
 > bed drive all four stages — the build, the local run, the remote
 > deploy, and the test harness. The binary that wires them together is
-> also an MCP server, so your AI agent reaches every verb over the same
-> RPC.
+> also an MCP server, so your Oompa-Loompa reaches every verb over the
+> same RPC.
 
 ## Core concepts
 
@@ -79,7 +80,8 @@ Overthink treats container images as composable building blocks. Each
 **layer** is a self-contained unit; an **image** is an ordered list of
 layers on top of a base. `ov` resolves the dependency graph, generates
 multi-stage Containerfiles with cache mounts, and builds in the right
-order — handling the hard parts so you (and your AI) don't have to.
+order — handling the hard parts so you (and your Oompa-Loompas) don't
+have to.
 
 - **Layer** (`kind: candy` in `candy.yml`) — packages (per-distro),
   tasks (eight verbs: `cmd`/`mkdir`/`copy`/`write`/`link`/`download`/
@@ -94,14 +96,15 @@ order — handling the hard parts so you (and your AI) don't have to.
 
 ### Candyboxing
 
-Most tools secure an AI by taking candy away — fewer commands, no
-network, no package installs — which also takes away its ability to
-build and test anything real. Overthink flips that: it secures the
-*box* (a disposable, rootless container or VM with real isolation) and
-then hands your agent the whole candy store inside it — every tool,
-every layer, every `ov eval` probe, a real registry, a real GPU if you
-have one. A fully-stocked, throwaway workshop instead of a padded cell:
-the agent can do and prove far more, and a mistake costs one rebuild.
+Most tools secure an Oompa-Loompa by taking candy away — fewer
+commands, no network, no package installs — which also takes away its
+ability to build and test anything real. Overthink flips that: it
+secures the *box* (a disposable, rootless container or VM with real
+isolation) and then hands your Oompa-Loompa the whole candy store
+inside it — every tool, every layer, every `ov eval` probe, a real
+registry, a real GPU if you have one. A fully-stocked, throwaway
+chocolate room instead of a padded cell: the Oompa-Loompa can do and
+prove far more, and a mistake costs one rebuild.
 → CLAUDE.md "Candyboxing".
 
 ### Risk Driven Development (early)
@@ -111,10 +114,10 @@ high-risk assumption ride on "the docs say so." The riskiest unknown —
 whether a particular *combination* of layers, at their latest versions,
 actually builds and runs together — gets proven empirically on a
 disposable bed EARLY, before a design is built on it. `kind: eval` beds
-and `ov eval` make that proof cheap, for AI agents and humans alike:
-read the skill for the design intent, then confirm the high-risk parts
-against a real, running system. → CLAUDE.md "Risk Driven Development
-(RDD)".
+and `ov eval` make that proof cheap, for Oompa-Loompas and humans
+alike: read the skill for the design intent, then confirm the high-risk
+parts against a real, running system. → CLAUDE.md "Risk Driven
+Development (RDD)".
 
 ### Build → run → deploy → evaluate
 
@@ -131,7 +134,7 @@ flow through all of them:
   image or deployment works end-to-end.
 
 See [Lifecycle](#lifecycle) for the full verb families (plus
-authoring-with-AI and management).
+authoring-with-Oompa-Loompas and management).
 
 ### Schema kinds
 
@@ -150,7 +153,7 @@ discriminator in its file:
   operator's machine (or any ssh-reachable host) via the native
   package manager + systemd + shell profile. → `/ov-local:local-spec`.
 - **Android** (`kind: android`) — Android device: in-pod emulator
-  (via `image:`) or remote/physical adb endpoint. `apk:` is a layer
+  (via `box:`) or remote/physical adb endpoint. `apk:` is a layer
   package format scoped to Android targets. → `/ov-eval:android`.
 - **Deploy** (`kind: deploy`) — a named deployment of one of the
   kinds above to a `target:` (`pod` default, `vm`, `k8s`, `local`,
@@ -160,7 +163,7 @@ discriminator in its file:
 - **Eval** (`kind: eval`) — a *disposable* deploy used as an R10 test
   bed: `ov eval run <bed>` runs build → deploy → probe →
   fresh-update → tear-down. The `kind: recipe` / `kind: score` /
-  `kind: ai` overlays drive the AI-iteration harness on top.
+  `kind: ai` overlays drive the Oompa-Loompa-iteration harness on top.
   → `/ov-eval:eval`.
 
 ### Cross-cutting rules
@@ -205,22 +208,23 @@ that need `/dev/kvm` or virtualization access without blanket
 volumes, VNC or browser-streamed desktops, device permissions that
 don't compromise your host. Each is solvable — but solving them all
 at once, reliably, across images, is where things get hard. And if
-your AI agent has to build and manage these containers too, the
+your Oompa-Loompa has to build and manage these containers too, the
 complexity compounds.
 
 Overthink treats container images as composable building blocks (see
 [Core concepts](#core-concepts)) — handling the hard parts so you (and
-your AI) don't have to.
+your Oompa-Loompas) don't have to.
 
 **Testing and evaluating deployment configs is a first-class goal —
-for AI and humans.** A deploy config is only useful if you can prove it
-works. `ov` ships a goss-style declarative test framework (`eval:` checks
-baked into every image's OCI labels) plus disposable `kind: eval` test
-beds, so any image or deployment config is self-verifiable end-to-end.
-The same surface serves a human operator at the keyboard and an AI agent
-driving it: Claude Code sub-agents (`eval-bed-runner`, `deploy-verifier`)
-and dynamic workflows (`/verify-beds`, `/audit-deploy-configs`) run these
-beds to test and verify autonomously.
+for Oompa-Loompas and humans.** A deploy config is only useful if you
+can prove it works. `ov` ships a goss-style declarative test framework
+(`eval:` checks baked into every image's OCI labels) plus disposable
+`kind: eval` test beds, so any image or deployment config is
+self-verifiable end-to-end. The same surface serves a human operator
+at the keyboard and an Oompa-Loompa driving it: Claude Code sub-agents
+(`eval-bed-runner`, `deploy-verifier`) and dynamic workflows
+(`/verify-beds`, `/audit-deploy-configs`) run these beds to test and
+verify autonomously.
 → [Evaluate](#evaluate), `/ov-eval:eval`, `/ov-internals:agents`.
 
 **Rootless-first power-user images.** The four images carrying the
@@ -234,17 +238,19 @@ with zero additive capabilities via the surgical `unmask=/proc/*`
 security_opt from the `container-nesting` layer.
 → `/ov-distros:container-nesting`, `/ov-coder:fedora-coder`.
 
-**Sandboxed AI desktops.** Overthink flips the usual AI sandboxing
-model: instead of restricting what the AI can do, give it full
-access to a complete desktop (Chrome, Wayland compositor, dev tools,
-network services) and sandbox the *entire desktop* inside a
-container — candyboxing applied to a whole desktop (→ CLAUDE.md
-"Candyboxing"). `/ov-openclaw:openclaw-desktop` is the all-in-one CachyOS
-streaming desktop: Selkies desktop + openclaw-full gateway + AI
+**Sandboxed Oompa-Loompa desktops.** Overthink flips the usual
+Oompa-Loompa sandboxing model: instead of restricting what the
+Oompa-Loompa can do, give it full access to a complete desktop
+(Chrome, Wayland compositor, dev tools, network services) and sandbox
+the *entire desktop* inside a container — candyboxing applied to a
+whole desktop (→ CLAUDE.md "Candyboxing").
+`/ov-openclaw:openclaw-desktop` is the all-in-one CachyOS streaming
+desktop: Selkies desktop + openclaw-full gateway + Oompa-Loompa
 CLIs (claude-code, codex, gemini) + CPU ollama + nested `ov`. The
-AI (or the user) builds images, launches nested rootless pods, and
-creates libvirt VMs from a terminal inside the browser-accessible
-desktop — uid 1000, no `--privileged`, no added capabilities.
+Oompa-Loompa (or the user) builds images, launches nested rootless
+pods, and creates libvirt VMs from a terminal inside the
+browser-accessible desktop — uid 1000, no `--privileged`, no added
+capabilities.
 
 ## Install
 
@@ -340,12 +346,14 @@ share the same declarative inputs.
 > Declarative layer list → reproducible, fully-cached multi-stage
 > image.
 
-Each image declares a `base:`, an ordered `layer:` list, a `distro:`
+Each image declares a `base:`, an ordered `candy:` list, a `distro:`
 identity, and a `build:` set of package formats. The planner
 resolves the dependency graph, generates a multi-stage Containerfile
 with cache-mounted package archives + AUR srcdest + pixi/npm/cargo
 workdirs, and runs `podman build` (or `docker build` — switch with
-`ov settings set engine.build podman`). The emitted image carries
+`ov settings set engine.build podman`). Like conching chocolate, the
+planner grinds every candy smooth — deduplicated, ordered, and
+cache-warmed — before it sets into a box. The emitted image carries
 OCI labels for every capability it claims: `org.overthinkos.eval`,
 `org.overthinkos.init`, `org.overthinkos.version` (content-derived
 `EffectiveVersion`, stable across no-op rebuilds), `.ports`, etc.
@@ -354,15 +362,15 @@ Commands: `ov box build` (build), `ov box generate` (write
 `.build/` only), `ov box validate`, `ov box inspect`,
 `ov box list`, `ov box merge`, `ov box pull`,
 `ov box reconcile`. MCP-driven authoring — `ov box {set,
-add-layer, rm-layer, fetch, refresh, write, cat}`, `ov candy {set,
-add-rpm, add-deb, add-pac, add-aur}` — gives AI agents
+add-candy, rm-candy, fetch, refresh, write, cat}`, `ov candy {set,
+add-rpm, add-deb, add-pac, add-aur}` — gives Oompa-Loompas
 comment-preserving YAML edits over RPC.
 
 Cross-repo refs: `import:` items and layer references can name
 `@github.com/owner/repo:tag`. The resolver fetches every distinct
 `(repo, git-tag)` and arbitrates per per-entity `version:` — same
 `version:` across different git tags → silent (re-tag);
-different `version:` → warn once and use the newest. `ov image
+different `version:` → warn once and use the newest. `ov box
 reconcile` aligns the cross-repo pins when a layer's CalVer moves.
 
 → `/ov-build:build`, `/ov-build:generate`, `/ov-build:validate`,
@@ -460,7 +468,7 @@ discriminates where it lands:
   `ov deploy del host` reverses precisely what was applied.
   → `/ov-local:local-deploy`, `/ov-local:local-spec`.
 - **`target: android`** — `kind: android` device (in-pod emulator
-  via `image:` or remote adb endpoint via `adb: {host: …}`);
+  via `box:` or remote adb endpoint via `adb: {host: …}`);
   `apk:` packages installed by `apkeep` (Google Play) or pushed
   from committed `.apk` files via goadb. Nested `pod → android`
   mirrors `vm → k8s`. → `/ov-eval:android`, `/ov-eval:adb`.
@@ -523,11 +531,12 @@ infra/usage error (the eval never reached a verdict), `2` =
 checks failed. R10 automation treats `1` as "did not run",
 not "failed".
 
-**Agents drive these beds.** Claude Code sub-agents (`eval-bed-runner`,
-`deploy-verifier`) and dynamic workflows (`/verify-beds`,
-`/audit-deploy-configs`) run `ov eval run`/`live`/`image` against the
-existing beds and return verbatim pass/fail — the same disposable-bed
-verification, whether you run it or your agent does. → `/ov-internals:agents`.
+**Oompa-Loompas drive these beds.** Claude Code sub-agents
+(`eval-bed-runner`, `deploy-verifier`) and dynamic workflows
+(`/verify-beds`, `/audit-deploy-configs`) run `ov eval
+run`/`live`/`image` against the existing beds and return verbatim
+pass/fail — the same disposable-bed verification, whether you run it
+or your Oompa-Loompa does. → `/ov-internals:agents`.
 
 Eleven live-container probe verbs — authorable inline as
 declarative checks inside any `eval:` block (`cdp: eval`, `wl:
@@ -562,29 +571,31 @@ Gherkin-shaped descriptions on the same entries.
 `/ov-eval:record`, `/ov-eval:eval-k8s`, `/ov-eval:adb`,
 `/ov-eval:appium`, `/ov-eval:android`.
 
-### Author with AI
+### Author with Oompa-Loompas
 
-> AI in the loop, authoring and iterating on layers and images —
-> `ov`-specific.
+> Oompa-Loompas in the loop, authoring and iterating on layers and
+> images — `ov`-specific.
 
-The AI iteration harness sits on top of `kind: eval` and adds three
-overlay kinds:
+The Oompa-Loompa iteration harness sits on top of `kind: eval` and
+adds three overlay kinds:
 
-- **`kind: ai`** — reusable AI-CLI catalog (`claude`, `codex`,
-  `gemini`, …). Each entry declares a command, a version probe, an
-  output format (typically `stream-json`), and credential paths.
-  The harness parses each NDJSON line into `iteration[].runner_event`.
+- **`kind: ai`** — reusable Oompa-Loompa CLI catalog (`claude`,
+  `codex`, `gemini`, …). Each entry declares a command, a version
+  probe, an output format (typically `stream-json`), and credential
+  paths. The harness parses each NDJSON line into
+  `iteration[].runner_event`.
 - **`kind: recipe`** — deterministic test specification: scenarios,
   each with a `pod:` declaring the container its probes target.
-  Pure check catalogs and BDD descriptions; no AI involved here.
-- **`kind: score`** — runner config naming the AI, the target
-  `eval-sandbox`, the recipes, the plateau iteration count, the
-  prompt, and the watchdog timeout. `ov eval run <score>` runs the
-  multi-hour benchmark: AI reads scope (`ov eval scope`) + prior
-  tag (`ov eval last-tag`) + live results → rebuilds + redeploys →
-  harness re-scores → continues until plateau detection or the
-  watchdog fires. Progressive recipe disclosure means the AI sees
-  recipes one at a time as it earns them.
+  Pure check catalogs and BDD descriptions; no Oompa-Loompa involved
+  here.
+- **`kind: score`** — runner config naming the Oompa-Loompa, the
+  target `eval-sandbox`, the recipes, the plateau iteration count,
+  the prompt, and the watchdog timeout. `ov eval run <score>` runs
+  the multi-hour benchmark: the Oompa-Loompa reads scope
+  (`ov eval scope`) + prior tag (`ov eval last-tag`) + live results →
+  rebuilds + redeploys → harness re-scores → continues until plateau
+  detection or the watchdog fires. Progressive recipe disclosure
+  means the Oompa-Loompa sees recipes one at a time as it earns them.
 
 Cross-cutting: **`ov mcp serve`** is the MCP gateway. Every leaf
 Kong command auto-exposes as an MCP tool (Streamable HTTP or
@@ -642,8 +653,8 @@ gateway exposing the entire surface as MCP tools.
 | Area | Commands | Skill |
 |---|---|---|
 | **Image (build mode)** | `ov box {build, generate, validate, merge, new, inspect, list, pull, reconcile}` | `/ov-image:image` + `/ov-build:build`, `/ov-build:generate`, `/ov-build:validate`, `/ov-build:merge`, `/ov-build:new`, `/ov-build:inspect`, `/ov-build:list`, `/ov-build:pull`, `/ov-build:reconcile` |
-| **Image authoring (MCP-first)** | `ov box {set, add-layer, rm-layer, fetch, refresh, write, cat}` and `ov candy {set, add-rpm, add-deb, add-pac, add-aur}` | `/ov-image:image` "Authoring" + `/ov-image:layer` |
-| **Deployment** | `ov deploy {add, del, sync, from-image, export, import, show, reset, status, path}`; `ov config`; `ov start`, `ov stop`, `ov restart`, `ov update`, `ov remove` | `/ov-core:deploy`, `/ov-core:ov-config`, `/ov-core:start`, `/ov-core:stop`, `/ov-core:ov-update`, `/ov-core:remove`, `/ov-local:local-deploy`, `/ov-kubernetes:kubernetes`, `/ov-internals:vm-deploy-target` |
+| **Image authoring (MCP-first)** | `ov box {set, add-candy, rm-candy, fetch, refresh, write, cat}` and `ov candy {set, add-rpm, add-deb, add-pac, add-aur}` | `/ov-image:image` "Authoring" + `/ov-image:layer` |
+| **Deployment** | `ov deploy {add, del, sync, from-box, export, import, show, reset, status, path}`; `ov config`; `ov start`, `ov stop`, `ov restart`, `ov update`, `ov remove` | `/ov-core:deploy`, `/ov-core:ov-config`, `/ov-core:start`, `/ov-core:stop`, `/ov-core:ov-update`, `/ov-core:remove`, `/ov-local:local-deploy`, `/ov-kubernetes:kubernetes`, `/ov-internals:vm-deploy-target` |
 | **Runtime** | `ov shell`, `ov cmd`, `ov service`, `ov status`, `ov logs`, `ov tmux` | `/ov-core:shell`, `/ov-core:cmd`, `/ov-core:service`, `/ov-core:ov-status`, `/ov-core:logs`, `/ov-automation:tmux` |
 | **Test + probes** | `ov eval {image, live, run}` + the 11 live probe verbs (`cdp`, `wl`, `dbus`, `vnc`, `mcp`, `record`, `spice`, `libvirt`, `k8s`, `adb`, `appium`); `ov feature {list, pending, validate}` | `/ov-eval:eval`, `/ov-eval:cdp`, `/ov-eval:wl`, `/ov-eval:dbus`, `/ov-eval:vnc`, `/ov-eval:spice`, `/ov-eval:libvirt`, `/ov-eval:record`, `/ov-eval:eval-k8s`, `/ov-eval:adb`, `/ov-eval:appium` |
 | **MCP gateway** | `ov mcp {serve, ping, servers, list-tools, list-resources, list-prompts, call, read}` | `/ov-build:ov-mcp-cmd`, `/ov-tools:ov-mcp` |
@@ -686,7 +697,7 @@ not enumerations:
 - **Deploy-target catalog** — pod / vm / k8s / local / android.
   Each has a dedicated kind file.
 - **Eval bed catalog** (`eval.yml`) — `kind: eval` beds for R10,
-  plus `kind: recipe` / `score` / `ai` for the AI harness.
+  plus `kind: recipe` / `score` / `ai` for the Oompa-Loompa harness.
   → `/ov-eval:eval`.
 
 Layers used by only one image family are vendored in that
@@ -742,7 +753,7 @@ ov box new candy my-layer             # Scaffold the directory
 # Optionally add pixi.toml / package.json / Cargo.toml for auto-detected builders.
 
 # Add to an image's layer list in overthink.yml (or box.yml):
-#   layer: [..., my-layer]
+#   candy: [..., my-layer]
 
 ov box build my-image                 # Build it
 ov eval box my-image                  # Run the baked checks
@@ -794,8 +805,8 @@ https://github.com/overthinkos/overthink.git`.
 
 **MCP gateway as the universal channel.** `ov mcp serve` exposes
 every `ov` CLI leaf as an MCP tool (Streamable HTTP or stdio), so
-the agent reaches the full build / deploy / test surface over RPC.
-Per-image MCP servers (chrome-devtools-mcp, jupyter-mcp,
+the Oompa-Loompa reaches the full build / deploy / test surface over
+RPC. Per-image MCP servers (chrome-devtools-mcp, jupyter-mcp,
 marimo-mcp, ov-mcp) auto-discover via `mcp_provide:` when their
 containers are running.
 
@@ -807,8 +818,8 @@ beds and return verbatim proof, plus enforcers `root-cause-analyzer`,
 (`.claude/workflows/`) fan the work out — `/verify-beds` runs every
 `kind: eval` bed as the R10 gate, `/audit-deploy-configs` evaluates your
 deploy configs — and the same agent definitions reuse as **agent-team**
-teammates. Whether you drive `ov` from the keyboard or hand it to an AI,
-testing and verifying deployments uses the one surface.
+teammates. Whether you drive `ov` from the keyboard or hand it to an
+Oompa-Loompa, testing and verifying deployments uses the one surface.
 → `/ov-internals:agents`.
 
 See [CLAUDE.md](CLAUDE.md) for the complete system specification,

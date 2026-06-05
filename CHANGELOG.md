@@ -22,6 +22,51 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-05 — docs: Willy-Wonka README voice + finish the candy/box doc sweep
+
+A docs-only follow-up to the candy/box rebrand that does two things in one
+working tree (no runtime surface touched):
+
+- **Willy-Wonka voice for `README.md` + the `plugins/README.md` tagline.** The
+  generic operator/driver references to "AI" / "AI agent" / "agent" became
+  **Oompa-Loompa** ("your Oompa-Loompas are driving", "hands your Oompa-Loompa
+  the whole candy store", "Oompa-Loompas drive these beds"). The product and
+  technical terms were deliberately **kept verbatim**: every `Claude Code`
+  reference and link, the Claude Code primitives (`sub-agents`, `agent teams`,
+  `dynamic workflows`), the named agents (`eval-bed-runner`, `deploy-verifier`,
+  `root-cause-analyzer`, …), the `/ov-internals:agents` skill, the `k3s-agent`
+  layer, the SSH `agent-forwarding` layer, the SPICE `guest-agent` socket, and
+  the literal `kind: ai` schema discriminator (only its surrounding prose was
+  themed — the wire token is load-bearing). The Swiss-army-knife framing became
+  a **Swiss Chocolate Factory** ("each production line is a stage"); the section
+  heading **"What's in the knife" → "What's in the chocolate factory"** and
+  **"Author with AI" → "Author with Oompa-Loompas"** (TOC anchors + in-text
+  links updated to match). A **conching** metaphor was added to the Build
+  section ("Like conching chocolate, the planner grinds every candy smooth —
+  deduplicated, ordered, and cache-warmed — before it sets into a box"), and the
+  intro's "sandbox" became "candybox" to match the project's own vocabulary.
+  `plugins/README.md`'s `OpenClaw AI gateway` descriptor was kept as a precise
+  product-category term (a lookup index must stay searchable for an LLM gateway).
+- **Finished the candy/box doc sweep the rebrand's R5 grep missed.** The
+  candy/box rebrand's stale-reference sweep matched YAML/skill prose but left
+  eight references in `README.md` inline-code and line-wrapped tokens: the
+  `image:` selector on the `kind: android` device (×2 → `box:`), the image
+  composition `` `layer:` `` key and the code-block `layer: [...]` example (→
+  `candy:`), `ov box {... add-layer, rm-layer ...}` (×2 → `add-candy, rm-candy`),
+  `ov deploy from-image` (→ `from-box`), and a line-wrapped `ov image reconcile`
+  (→ `ov box reconcile`). The README had even contradicted itself — line 470 said
+  `from-box` while the command table said `from-image`, and the Troubleshooting
+  table said `ov box reconcile` while the Build section said `ov image
+  reconcile`. Each corrected token was verified against the landed `ov`
+  (`2026.156.453`): the real verbs are `ov deploy from-box` / `ov box
+  add-candy`/`rm-candy` / `ov box reconcile`, and the selector/composition fields
+  are `yaml:"box"` / `yaml:"candy"`.
+
+No schema change, no `version:` bump, no migration step — `README.md`,
+`plugins/README.md`, and this file are the only surfaces touched. The superproject
+push still carries a fresh per-push CalVer tag; `plugins` (no `overthink.yml`)
+stays tag-exempt.
+
 ### 2026-06-05 — feat(schema)!: candy/box rebrand — `layer:`→`candy:`, `image:`→`box:` (schema 2026.156.557)
 
 The two foundational schema kinds were renamed project-wide, making the

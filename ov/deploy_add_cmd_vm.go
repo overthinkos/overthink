@@ -32,14 +32,14 @@ func deployNestedPodsInGuest(vmName string, node *DeploymentNode, exec DeployExe
 	// and from-image-capable; the guest's PATH ov may be a stale layer install
 	// (a @github-fetched ov layer ships no bin/ov, so its curl fallback installs
 	// a pre-from-image release). So deliver the host ov to a /tmp path OUTSIDE
-	// $PATH via putHostOvInGuest and invoke it by explicit path — NEVER shadowing
+	// $PATH via putHostOvInVenue and invoke it by explicit path — NEVER shadowing
 	// the guest's canonical /usr/bin/ov (the overthink-git pacman package the
 	// localpkg step installs). The /tmp name embeds the host CalVer so repeated
 	// calls within one deploy reuse the same copy (idempotent). One delivery for
 	// every child (same guest venue), so do it once.
 	ovCmd := "/tmp/ov-" + OvVersion()
 	if !opts.DryRun {
-		if err := putHostOvInGuest(context.Background(), exec, ovCmd, false, opts); err != nil {
+		if err := putHostOvInVenue(context.Background(), exec, ovCmd, false, opts); err != nil {
 			return fmt.Errorf("delivering host ov into guest %s for from-image delegation: %w", vmName, err)
 		}
 	}

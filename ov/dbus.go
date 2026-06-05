@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strconv"
@@ -192,17 +193,16 @@ func dbusIntrospectLocal(dest, path string) error {
 // own `ov eval dbus notify .` so the call runs with the live session bus inside
 // the target — the same delegation pattern, now venue-agnostic (R3).
 func dbusNotifyRemoteStrict(ex DeployExecutor, title, body string) error {
-	// Try the native ov binary on the venue first.
-	if venueHasTool(ex, "ov") {
-		script := fmt.Sprintf("ov eval dbus notify . %s %s",
+	// Ensure an invokable ov on the venue — copying the host binary in when the
+	// image doesn't bake the ov layer (the generic copy-in mechanism), then
+	// delegate to it so the notify runs against the venue's own live session bus.
+	if ovCmd, err := EnsureOvInVenue(context.Background(), ex, EmitOpts{}); err == nil && ovCmd != "" {
+		script := fmt.Sprintf("%s eval dbus notify . %s %s", ovCmd,
 			deployShellQuote(title), deployShellQuote(body))
-		if err := venueRun(ex, script); err == nil {
+		if rerr := venueRun(ex, script); rerr == nil {
 			return nil
 		}
 		fmt.Fprintf(os.Stderr, "Warning: in-venue ov eval dbus failed, trying gdbus fallback\n")
-	} else {
-		fmt.Fprintf(os.Stderr, "Warning: ov binary not found on the target, falling back to gdbus\n"+
-			"  For native D-Bus support, add the 'ov' layer to your image.\n")
 	}
 
 	// Fallback: gdbus call on the venue.
@@ -220,19 +220,19 @@ func dbusNotifyRemoteStrict(ex DeployExecutor, title, body string) error {
 	return venueRun(ex, gdbusCmd)
 }
 
-// dbusCallRemote delegates a D-Bus call to the venue's ov binary.
+// dbusCallRemote delegates a D-Bus call to the venue's ov binary, copying the
+// host ov in when the image doesn't bake the ov layer (the generic copy-in).
 func dbusCallRemote(ex DeployExecutor, dest, path, method string, args []string) error {
-	if venueHasTool(ex, "ov") {
-		parts := []string{"ov", "eval", "dbus", "call", ".",
-			deployShellQuote(dest), deployShellQuote(path), deployShellQuote(method)}
-		for _, a := range args {
-			parts = append(parts, deployShellQuote(a))
-		}
-		return venueRun(ex, strings.Join(parts, " "))
+	ovCmd, err := EnsureOvInVenue(context.Background(), ex, EmitOpts{})
+	if err != nil || ovCmd == "" {
+		return fmt.Errorf("could not provide an invokable ov on the target %s for the D-Bus call: %v", ex.Venue(), err)
 	}
-	return fmt.Errorf("ov binary not found on the target %s\n"+
-		"  Generic D-Bus calls require the 'ov' layer.\n"+
-		"  For notifications only, 'gdbus' (from glib2) can be used as a fallback.", ex.Venue())
+	parts := []string{ovCmd, "eval", "dbus", "call", ".",
+		deployShellQuote(dest), deployShellQuote(path), deployShellQuote(method)}
+	for _, a := range args {
+		parts = append(parts, deployShellQuote(a))
+	}
+	return venueRun(ex, strings.Join(parts, " "))
 }
 
 // --- Argument parsing ---
@@ -311,6 +311,6 @@ func dbusNoBusError() error {
 }
 
 func dbusNoToolError(venue string) error {
-	return fmt.Errorf("cannot send D-Bus call — neither 'ov' nor 'gdbus' found on target %s\n"+
-		"  Add the 'ov' layer (native D-Bus) or ensure glib2 is installed (provides gdbus).", venue)
+	return fmt.Errorf("cannot send D-Bus call on target %s — ov could not be provided (copy-in failed) and 'gdbus' is not installed\n"+
+		"  Ensure glib2 is present (provides gdbus) for the fallback path.", venue)
 }

@@ -58,7 +58,7 @@ func TestDeployNestedPodsInGuest_DeploysOnlyPodChildren(t *testing.T) {
 	defer func() { runOvSubcommand = orig }()
 
 	// Stamp the host ov identity. The nested from-image delegation ALWAYS runs
-	// the HOST's own ov (delivered to /tmp/ov-<calver> via putHostOvInGuest),
+	// the HOST's own ov (delivered to /tmp/ov-<calver> via putHostOvInVenue),
 	// never the guest's PATH ov — the host binary is the from-image authority,
 	// and a /tmp path can't shadow the guest's pacman /usr/bin/ov.
 	savedVer := BuildCalVer

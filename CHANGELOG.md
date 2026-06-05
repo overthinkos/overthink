@@ -22,6 +22,50 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-05 — feat(ov): generic "copy ov into a running venue" mechanism (`EnsureOvInVenue`) — images need not bake the `ov` layer for transient in-container `ov`
+
+The VM-only host→guest ov delivery (`putHostOvInGuest` / `syncOvIntoGuest` /
+`EnsureOvInGuest` in `ov/ov_install.go`) was generalized into a venue-agnostic
+**`EnsureOvInVenue`** that copies the host's own `ov` binary
+(`os.Executable()`) into ANY running deployment — container (`podman cp`), VM /
+SSH host (`scp`), or the local host (`install`) — entirely through the existing
+`DeployExecutor.PutFile` abstraction, so one code path serves every substrate
+(R3). It is quiet (the caller decides what to print), idempotent (a still-good
+prior `/tmp/ov-<calver>` copy is verified and reused, never re-transferred), and
+never shadows a package-managed `ov` (delivery is to a non-`$PATH` `/tmp` path;
+a venue's own PATH `ov` is used as-is when it is current by CalVer). The
+functions were renamed (`putHostOvInGuest` → `putHostOvInVenue`,
+`syncOvIntoGuest` → `EnsureOvInVenue`); `EnsureOvInGuest` remains as the
+VM-deploy strategy wrapper (auto/scp/url/skip) on top.
+
+The EXPLICIT in-venue `ov` callers were wired to it: `dbusNotifyRemoteStrict`
+(`ov eval dbus notify`) and `dbusCallRemote` (`ov eval dbus call/list/introspect`)
+now COPY the host `ov` in when the venue lacks it, instead of hard-failing. Every
+"ov binary not found … add the 'ov' layer to your image" message was deleted
+(from `dbusNotifyRemoteStrict`, `dbusCallRemote`, AND `dbusNoToolError`) — copy-in
+provides `ov` automatically, so the only remaining hard failure is "ov could not
+be provided (copy-in failed) AND gdbus is not installed". The AUTOMATIC
+best-effort `sendVenueNotification` (fired on deploy/record/tmux) deliberately
+does NOT trigger the copy (it uses a baked `ov` or `gdbus` or skips) —
+transferring 27 MB into a container for a maybe-popup is not worth it, and
+desktops carry `gdbus` anyway.
+
+Two guarantees are explicit and tested: (1) **no PATH shadowing** — the copy
+goes to `/tmp/ov-<calver>` (outside `$PATH`) and is invoked by EXPLICIT path,
+never via a PATH lookup, so it can never shadow a package-manager `ov`
+(`/usr/bin/ov`), not even one installed later; (2) **the automatic CalVer check
+is never skipped** — a venue `ov` that is present and at least as new as the host
+is used as-is (no copy, no downgrade); the host binary is delivered ONLY when the
+venue `ov` is absent or strictly older.
+
+This is the enabling capability for dropping the baked `ov` layer from images
+that only needed it for transient in-container `ov` (the dbus delegation path):
+the binary is a 27 MB glibc-only Go executable that `podman cp`s into any
+glibc base and runs unchanged. Proven live on the disposable `selkies-kde-rdd`
+pod: with the in-container `ov` removed, `ov eval dbus list <pod>` copied the
+host binary in via `podman cp`, ran it, and returned the live D-Bus bus names
+(exit 0) with zero "missing ov layer" warning.
+
 ### 2026-06-05 — fix(migrate): `require-image` recognizes the rebranded `box:` key (no spurious warning on box-format pod deploys)
 
 The `require-image` migration step (`migrate_require_image.go`) checked only the

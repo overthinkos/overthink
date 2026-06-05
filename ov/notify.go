@@ -7,9 +7,12 @@ import (
 
 // sendVenueNotification sends a desktop notification on the venue (container /
 // VM / host). Best-effort: silently ignores all errors (no daemon, no dbus,
-// headless target). Delegates to the venue's own `ov eval dbus notify .` so the
-// notification reaches the live session bus inside the target, falling back to
-// gdbus — the same pattern as dbusNotifyRemoteStrict, now venue-agnostic (R3).
+// headless target). It delegates to a PRESENT `ov eval dbus notify .` when the
+// image bakes one, else falls back to gdbus (glib2). Being an automatic
+// side-effect (deploy / record / tmux), it deliberately does NOT trigger the
+// generic ov copy-in that the EXPLICIT `ov eval dbus notify`/`call` paths use —
+// transferring the 27 MB binary into a container just for a best-effort popup is
+// not worth it, and desktops carry gdbus anyway.
 func sendVenueNotification(ex DeployExecutor, title, body string) {
 	if venueHasTool(ex, "ov") {
 		script := fmt.Sprintf("ov eval dbus notify . %s %s",

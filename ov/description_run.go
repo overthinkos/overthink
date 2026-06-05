@@ -92,6 +92,23 @@ func runStepGroup(
 		}
 
 		if u.step.IsPending() {
+			// Agent Driven Development binding: a prose-only step (no
+			// embedded check verb) binds to the agent grader when one is
+			// set (`ov eval feature run` against a live deployment). The
+			// grader probes the target and returns a real pass/fail
+			// verdict with evidence — NOT "pending". Without a grader the
+			// step stays advisory: skip by default, fail under --strict.
+			if r.Grader != nil {
+				sr.Result = r.Grader.Grade(ctx, GraderRequest{
+					Feature:   r.GraderFeature,
+					Narrative: r.GraderNarrative,
+					Scenario:  r.GraderScenario,
+					Keyword:   keywordOf(&u.step),
+					Text:      u.step.KeywordText(),
+				})
+				results[slot] = stepGroupResult{Result: sr, Pending: 0}
+				return
+			}
 			status := TestSkip
 			msg := "pending (no verb bound)"
 			if strict {
@@ -230,6 +247,11 @@ func RunScenarios(ctx context.Context, r *Runner, set *LabelDescriptionSet, filt
 	var out []ScenarioResult
 	for _, sec := range [][]LabeledDescription{set.Layer, set.Image, set.Deploy} {
 		for _, ld := range sec {
+			// Carry this description's goal (feature/narrative) into the
+			// agent grader for any prose-only step in its scenarios (ADD).
+			// No-op when r.Grader is nil (the common path).
+			r.GraderFeature = ld.Description.Feature
+			r.GraderNarrative = ld.Description.Narrative
 			ordered, cyclicByName := topoSortDescription(ld.Description.Scenario)
 			for sIdx, scenario := range ordered {
 				if cyclicByName[scenario.Name] {
@@ -348,7 +370,9 @@ func runOneScenario(ctx context.Context, r *Runner, origin string, scenarioIdx i
 	// scenario and non-scenario runs.
 	orig := r.Scenario
 	r.Scenario = scenarioCtx
-	defer func() { r.Scenario = orig }()
+	origGraderScenario := r.GraderScenario
+	r.GraderScenario = es.Name
+	defer func() { r.Scenario = orig; r.GraderScenario = origGraderScenario }()
 
 	res := ScenarioResult{
 		Origin:     origin,

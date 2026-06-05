@@ -132,6 +132,27 @@ type Runner struct {
 	// variable-expansion env.
 	Scenario *ScenarioContext
 
+	// Grader, when set, judges a prose-only (pending) scenario step —
+	// one whose Given/When/Then carries no embedded Check verb — instead
+	// of the default skip/--strict-fail. The agent grader (eval_feature_grader.go)
+	// spawns the configured kind:ai CLI to probe the live target and
+	// return a pass/fail verdict with evidence. This is the Agent Driven
+	// Development (ADD) binding: a step binds to a deterministic check by
+	// embedding a verb, or to an agent by leaving the step prose-only.
+	//
+	// Nil under classical `tests:` runs, `ov eval recipe`, the harness
+	// loop, and `ov box feature run` (build-scope, no live target to
+	// probe) — those keep the existing skip/strict semantics unchanged.
+	// Set only by `ov eval feature run <deployment>` against a running
+	// deployment the agent can reach. GraderFeature / GraderNarrative /
+	// GraderScenario carry the goal context into each Grade call; they
+	// are set per-description / per-scenario by RunScenarios alongside
+	// the Scenario swap above.
+	Grader          StepGrader
+	GraderFeature   string
+	GraderNarrative string
+	GraderScenario  string
+
 	// TargetResolver, when set, is called to obtain a (resolver, exec)
 	// pair for a given `on:` target name. Enables multi-target scenarios
 	// (the `on:` step modifier). Classical `tests:` runs leave this nil

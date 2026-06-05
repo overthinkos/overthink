@@ -123,6 +123,19 @@ alike: read the skill for the design intent, then confirm the high-risk
 parts against a real, running system. → CLAUDE.md "Risk Driven
 Development (RDD)".
 
+### Agent Driven Development (acceptance)
+
+What an image is *supposed* to do is written down as runnable Gherkin
+scenarios on the layer that provides the behaviour — Feature/Narrative +
+Given/When/Then — and baked into the image as a label. A step that embeds
+a check verb is verified deterministically; a prose-only step is graded by
+an **agent** that probes the live deployment and judges pass/fail. Run them
+with `ov box feature run <image>` or `ov eval feature run <deployment>`,
+author them with `ov candy add-scenario`, or let the `ov eval run <score>`
+AI loop drive the implementation until they pass. The spec is the test, and
+agents both write it and grade it. → CLAUDE.md "Agent Driven Development
+(ADD)".
+
 ### Build → run → deploy → evaluate
 
 The container lifecycle is four verbs, and the same declarative inputs
@@ -590,8 +603,8 @@ adds three overlay kinds:
   `iteration[].runner_event`.
 - **`kind: recipe`** — deterministic test specification: scenarios,
   each with a `pod:` declaring the container its probes target.
-  Pure check catalogs and BDD descriptions; no agent involved
-  here.
+  Pure check catalogs and Gherkin scenario descriptions; no agent
+  involved here (the agent grader is opt-in via `ov eval feature run`).
 - **`kind: score`** — runner config naming the agent, the
   target `eval-sandbox`, the recipes, the plateau iteration count,
   the prompt, and the watchdog timeout. `ov eval run <score>` runs

@@ -63,10 +63,11 @@ func (e *EvalFailedError) Error() string {
 // self-evaluate) are the renamed `ov eval *` surface.
 type EvalCmd struct {
 	// Three primary modes
-	Image  EvalBoxCmd    `cmd:"" name:"box" help:"Pure-box eval (disposable container, build-scope checks)"`
-	Live   EvalLiveCmd   `cmd:"" help:"Full-stack eval against a running deployment"`
-	Run    EvalRunCmd    `cmd:"" help:"Run a kind:eval R10 bed (full sequence) or drive an AI through a kind:score's iteration cycles"`
-	Recipe EvalRecipeCmd `cmd:"" help:"Run a recipe's scenarios once (deterministic; no AI iteration)"`
+	Image   EvalBoxCmd     `cmd:"" name:"box" help:"Pure-box eval (disposable container, build-scope checks)"`
+	Live    EvalLiveCmd    `cmd:"" help:"Full-stack eval against a running deployment"`
+	Run     EvalRunCmd     `cmd:"" help:"Run a kind:eval R10 bed (full sequence) or drive an AI through a kind:score's iteration cycles"`
+	Recipe  EvalRecipeCmd  `cmd:"" help:"Run a recipe's scenarios once (deterministic; no AI iteration)"`
+	Feature EvalFeatureCmd `cmd:"" help:"Run a running deployment's baked Gherkin scenarios as acceptance tests; prose-only steps are agent-graded (Agent Driven Development)"`
 
 	// Live-container probe verbs (each requires a running target)
 	Cdp     CdpCmd     `cmd:"" help:"Chrome DevTools Protocol (open, list, click, eval)"`

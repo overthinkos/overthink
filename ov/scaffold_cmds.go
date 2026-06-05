@@ -252,11 +252,12 @@ func resolveProjectFile(projectDir, relPath string) (string, error) {
 // `ov candy …` — top-level group for editing candy manifest files
 
 type CandyCmd struct {
-	Set    CandySetCmd    `cmd:"" help:"Set a value in a candy manifest by dot-path"`
-	AddRpm CandyAddPkgCmd `cmd:"add-rpm" help:"Append packages to a layer's rpm.packages list"`
-	AddDeb CandyAddPkgCmd `cmd:"add-deb" help:"Append packages to a layer's deb.packages list"`
-	AddPac CandyAddPkgCmd `cmd:"add-pac" help:"Append packages to a layer's pac.packages list"`
-	AddAur CandyAddPkgCmd `cmd:"add-aur" help:"Append packages to a layer's aur.packages list"`
+	Set         CandySetCmd         `cmd:"" help:"Set a value in a candy manifest by dot-path"`
+	AddRpm      CandyAddPkgCmd      `cmd:"add-rpm" help:"Append packages to a layer's rpm.packages list"`
+	AddDeb      CandyAddPkgCmd      `cmd:"add-deb" help:"Append packages to a layer's deb.packages list"`
+	AddPac      CandyAddPkgCmd      `cmd:"add-pac" help:"Append packages to a layer's pac.packages list"`
+	AddAur      CandyAddPkgCmd      `cmd:"add-aur" help:"Append packages to a layer's aur.packages list"`
+	AddScenario CandyAddScenarioCmd `cmd:"add-scenario" help:"Append a Gherkin acceptance scenario to a layer's description (idempotent; Agent Driven Development)"`
 }
 
 type CandySetCmd struct {
@@ -274,13 +275,14 @@ func (c *CandySetCmd) Run() error {
 	if _, err := os.Stat(layerYml); err != nil {
 		return fmt.Errorf("candy %q not found at %s", c.Name, layerYml)
 	}
-	// Layer files are kind-keyed (`layer: {...}`), so a body-relative dot-path
-	// like `version` or `env.X` must descend into the `layer:` wrapper.
-	// Without this, SetByDotPath appends a stray top-level key (e.g. a second
-	// `version:`) and the loader then rejects the file as ambiguous.
+	// Candy manifests are kind-keyed under `candy:` (the layer kind key), so a
+	// body-relative dot-path like `version` or `env.X` must descend into the
+	// `candy:` wrapper. Without this, SetByDotPath appends a stray top-level
+	// key (e.g. a second `version:`) and the loader then rejects the file as
+	// ambiguous.
 	path := c.Path
-	if path != "layer" && !strings.HasPrefix(path, "layer.") {
-		path = "layer." + path
+	if path != "candy" && !strings.HasPrefix(path, "candy.") {
+		path = "candy." + path
 	}
 	return SetByDotPath(layerYml, path, c.Value)
 }
@@ -350,20 +352,16 @@ func appendLayerPackages(name, section string, pkgs []string) error {
 	if err := yaml.Unmarshal(data, &root); err != nil {
 		return fmt.Errorf("parsing %s: %w", layerYml, err)
 	}
-	doc := &root
-	if doc.Kind == yaml.DocumentNode && len(doc.Content) > 0 {
-		doc = doc.Content[0]
+	// Candy manifests are kind-keyed under `candy:` — package sections
+	// (rpm/deb/pac/aur) live INSIDE that wrapper, not at the document root.
+	candy, err := candyBodyNode(&root)
+	if err != nil {
+		return fmt.Errorf("%s: %w", layerYml, err)
 	}
-	if doc.Kind != yaml.MappingNode {
-		// Empty file or scalar root — synthesise a mapping.
-		doc.Kind = yaml.MappingNode
-		doc.Tag = "!!map"
-		doc.Content = nil
-	}
-	sectionNode := mappingChild(doc, section)
+	sectionNode := mappingChild(candy, section)
 	if sectionNode == nil {
 		sectionNode = &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
-		doc.Content = append(doc.Content,
+		candy.Content = append(candy.Content,
 			&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: section},
 			sectionNode,
 		)
@@ -395,6 +393,7 @@ func appendLayerPackages(name, section string, pkgs []string) error {
 		if existing[p] {
 			continue
 		}
+		existing[p] = true // dedupe within this call too, not just vs pre-existing
 		pkgsNode.Content = append(pkgsNode.Content,
 			&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: p},
 		)

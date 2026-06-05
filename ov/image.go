@@ -12,14 +12,15 @@ import (
 // case of ImagePullCmd, resolve registry/tag via overthink.yml and then fetch the
 // image into local storage so deploy-mode commands can read its OCI labels).
 type BoxCmd struct {
-	Build    BuildCmd    `cmd:"" help:"Build container images"`
-	Generate GenerateCmd `cmd:"" help:"Write .build/ (Containerfiles)"`
-	Inspect  InspectCmd  `cmd:"" help:"Print resolved config for an image (JSON)"`
-	List     ListCmd     `cmd:"" help:"List components from overthink.yml"`
-	Merge    MergeCmd    `cmd:"" help:"Merge small layers in a built container image"`
-	New      NewCmd      `cmd:"" help:"Scaffold new components"`
-	Pull     BoxPullCmd  `cmd:"" help:"Pull an image from its registry into local storage"`
-	Validate ValidateCmd `cmd:"" help:"Check overthink.yml + layers, exit 0 or 1"`
+	Build    BuildCmd      `cmd:"" help:"Build container images"`
+	Generate GenerateCmd   `cmd:"" help:"Write .build/ (Containerfiles)"`
+	Inspect  InspectCmd    `cmd:"" help:"Print resolved config for an image (JSON)"`
+	List     ListCmd       `cmd:"" help:"List components from overthink.yml"`
+	Merge    MergeCmd      `cmd:"" help:"Merge small layers in a built container image"`
+	New      NewCmd        `cmd:"" help:"Scaffold new components"`
+	Pull     BoxPullCmd    `cmd:"" help:"Pull an image from its registry into local storage"`
+	Validate ValidateCmd   `cmd:"" help:"Check overthink.yml + layers, exit 0 or 1"`
+	Feature  BoxFeatureCmd `cmd:"" help:"Run an image's baked Gherkin scenarios as acceptance tests against a disposable container (Agent Driven Development, build scope)"`
 
 	// Authoring verbs — added so the MCP tool surface (auto-reflected from
 	// Kong) can author a project from scratch over RPC.

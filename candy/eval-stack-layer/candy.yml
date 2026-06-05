@@ -17,6 +17,22 @@ candy:
             Both services are custom exec entries — fedora-minimal ships no systemd
             units for nc/sleep, so the layer is supervisord-only on container targets.
         tag: [working]
+        scenario:
+            # Agent Driven Development acceptance scenarios baked into this layer
+            # (they ride into the eval-pod image's org.overthinkos.description
+            # label). The first scenario's step is DETERMINISTIC (an embedded
+            # check verb → runs at build AND deploy scope); the second is
+            # PROSE-ONLY (no verb → agent-graded by `ov eval feature run
+            # eval-pod`, reported unbound/skip by build-scope
+            # `ov box feature run`).
+            - name: eval-stack-marker-present
+              step:
+                - then: the eval-stack marker file is present at /etc/eval-stack-marker
+                  file: /etc/eval-stack-marker
+                  exists: true
+            - name: eval-listener-reachable
+              step:
+                - then: the eval listener accepts a TCP connection on port 18794 from inside the deployment
     distro:
         fedora:
             package:

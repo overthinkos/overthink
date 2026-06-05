@@ -458,6 +458,20 @@ func runEvalBed(exe, name string, node DeploymentNode, opts bedRunOpts) (*bedRun
 		return fail("eval live %s: %w", name, err)
 	}
 
+	// Step 4b: Agent Driven Development acceptance — run the bed image's baked
+	// Gherkin scenarios (`description.scenario`) as acceptance tests. This is
+	// the opt-in scenario gate: a no-op PASS when the image bakes no scenarios,
+	// real coverage when it does. Run with --no-agent so the unattended bed
+	// sequence stays deterministic and free — the prose-step agent grader is
+	// exercised by an explicit `ov eval feature run <name>` (no --no-agent), not
+	// here. Pod beds only: VM/local deployments carry no image-baked
+	// description label to run.
+	if !isVM && !isLocal && image != "" {
+		if err := step("feature-run", []string{"eval", "feature", "run", name, "--no-agent"}); err != nil {
+			return fail("feature run %s: %w", name, err)
+		}
+	}
+
 	// Step 5: fresh-update re-verify (the R10 acceptance gate). Suppressed
 	// by --no-rebuild for fast smoke that exercises the dispatcher only.
 	if !opts.NoRebuild {
@@ -491,6 +505,15 @@ func runEvalBed(exe, name string, node DeploymentNode, opts bedRunOpts) (*bedRun
 			}
 			if err := evalLiveTree("eval-live-rebuild"); err != nil {
 				return fail("eval live (fresh rebuild) %s: %w", name, err)
+			}
+		}
+		// Re-run the bed image's baked scenarios on the fresh rebuild (pod
+		// beds) — the deterministic ADD acceptance gate against the new image.
+		// No-op pass when the image bakes no scenarios.
+		if !isVM && !isLocal && image != "" {
+			waitForContainerReady(name, 30*time.Second)
+			if err := step("feature-run-rebuild", []string{"eval", "feature", "run", name, "--no-agent"}); err != nil {
+				return fail("feature run (fresh rebuild) %s: %w", name, err)
 			}
 		}
 	}

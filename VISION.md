@@ -37,18 +37,25 @@ everything below pours out of it.
    truth.
    → CLAUDE.md "Risk Driven Development (RDD)", `/ov-eval:eval`.
 
-5. **A spoiled batch costs one rebuild.** Because the box is throwaway by
+5. **Every batch carries its tasting notes — and an agent to taste.** What a
+   candy should be is written down as runnable acceptance scenarios, not left to
+   opinion. A checklist verifies the measurable; for the subtle "is it actually
+   right?" an agent tastes the live batch with the full probe kit and judges.
+   The recipe IS the test — and an agent both writes it and grades it.
+   → CLAUDE.md "Agent Driven Development (ADD)", `/ov-eval:eval`.
+
+6. **A spoiled batch costs one rebuild.** Because the box is throwaway by
    explicit design, a wrong move is a single `ov update`, not an incident —
    which is exactly what lets autonomous iteration be *fearless* and *safe* at
    once. Disposability is the licence to be bold.
    → CLAUDE.md "Disposable-Only Autonomy", `/ov-internals:disposable`.
 
-6. **Conched smooth, cached warm.** Like conching chocolate, the planner grinds
+7. **Conched smooth, cached warm.** Like conching chocolate, the planner grinds
    every candy smooth — deduplicated, ordered, cache-warmed — before it sets
    into a box, so a build is reproducible and a no-op rebuild is free.
    → README "Build", `/ov-build:build`.
 
-7. **Every candy ships with its recipe card.** Every layer, image, and verb
+8. **Every candy ships with its recipe card.** Every layer, image, and verb
    carries a dedicated skill, so neither human nor agent ever has to guess
    what's in the vat before reaching in.
    → `plugins/README.md`.

@@ -22,6 +22,62 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-05 — feat(eval): Agent Driven Development (ADD) — a first-class pillar + `ov box/eval feature run` acceptance + the agent grader
+
+**Agent Driven Development (ADD)** became a named, co-equal pillar with RDD, and
+its mechanism — already ~80% present as the Gherkin `description:` model, the
+`org.overthinkos.description` OCI label, and the `kind: ai`/`recipe`/`score`
+loop — was completed into a lived workflow. An entity's intended behaviour is
+captured as executable Gherkin scenarios on the LAYER that provides it
+(Feature/Narrative + Given/When/Then), authored by a human or an agent, baked
+into the image, and verified on every build. ADD is the canonical BDD/Gherkin
+pattern, renamed throughout docs and code for the agent that drives it.
+
+What landed:
+
+- **The BIND contract — a step binds to its verifier BY SHAPE.** A scenario step
+  that embeds a check verb (`file`/`http`/`cdp`/`mcp`/`command`/…) is graded
+  DETERMINISTICALLY by the runner; a prose-only step (a `then:` with no verb)
+  binds to an AGENT. Routing is implicit by shape — no new authoring field, no
+  schema bump.
+- **`ov box feature run <image>`** (build scope, disposable container,
+  deterministic steps) and **`ov eval feature run <deployment>`** (deploy scope;
+  prose-only steps agent-graded against the live deployment; `--no-agent` for
+  deterministic-only CI). Both run an entity's baked `description.scenario`
+  source-less from the OCI label, reusing the shared `RunScenarios` engine + the
+  same target/var resolution as `ov eval box`/`live` (R3). These are the run
+  verbs `ov/description_cmd.go` always reserved alongside `ov feature
+  list/pending/validate`.
+- **The agent grader** (`ov/eval_feature_grader.go`): `Runner.Grader` dispatches
+  at the prose-step branch in `ov/description_run.go`; `AgentGrader` spawns the
+  configured `kind: ai` CLI ONCE (bounded; `RunAIOnce`, modelled on
+  `LocalCaptureVersion`), hands it the goal + step + live target + the `ov eval`
+  probe surface, and parses a `{"verdict":…}` JSON verdict (plain or
+  `stream-json`). An unparseable / timed-out / launch-failed grader FAILS the
+  step — never a silent pass.
+- **`ov candy add-scenario`** (and the auto-reflected `candy.add-scenario` MCP
+  tool): idempotent, comment-preserving append of a Gherkin scenario to a
+  layer's `description.scenario`.
+- **Opt-in gate**: `ov eval run <bed>` runs the bed image's deterministic
+  scenarios (`ov eval feature run --no-agent`) after eval-live and after the
+  fresh-rebuild — a no-op PASS when none are authored.
+- **Candy-authoring rename fix (R3/R5).** The box/candy rename had left the candy
+  authoring helpers assuming the pre-rename `layer:` kind key: `ov candy set`
+  prepended a stale `layer.` and `ov candy add-rpm/deb/pac/aur` wrote package
+  sections at the document root — both producing a stray key the loader ignores
+  while the real `candy:` body stayed unedited. A shared `candyBodyNode` helper
+  now descends into the `candy:` wrapper for all candy-authoring verbs;
+  `TestCandySet_DescendsIntoCandyWrapper` (which previously asserted the buggy
+  `layer:` behaviour) and a new `appendLayerPackages`/`appendLayerScenario`
+  regression test guard it.
+
+Standing rules (stated forward-looking in CLAUDE.md "Agent Driven Development
+(ADD)", `/ov-internals:strict-policy` "ADD", and `/ov-eval:eval`): the spec is
+the test; scenarios live on the behaviour's provider layer (one scenario covers
+every consuming image — R3); deterministic where a verb fits, agent-graded only
+for genuinely free-form behaviour; ADD is an OPT-IN runnable gate, never a
+mandate to author scenarios.
+
 ### 2026-06-05 — refactor(schema)!: generic kind-container YAML — flat configurable `discover:`, no hardcoded per-kind filenames
 
 YAML files are now GENERIC kind-containers routed by SHAPE: the loader keys each

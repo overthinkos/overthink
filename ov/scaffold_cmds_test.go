@@ -8,11 +8,13 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// TestLayerSet_DescendsIntoLayerWrapper guards the Bug-1 fix: `ov candy set`
-// edits layer.<dotpath> inside the kind-keyed `candy:` wrapper, never a stray
-// top-level key. Without the fix, setting `version` appended a second
-// top-level `version:`, which the loader rejects as ambiguous.
-func TestLayerSet_DescendsIntoLayerWrapper(t *testing.T) {
+// TestCandySet_DescendsIntoCandyWrapper guards that `ov candy set` edits
+// candy.<dotpath> INSIDE the kind-keyed `candy:` wrapper, never a stray
+// top-level key or a phantom `layer:` map. The box/candy rename moved the
+// layer kind key from `layer:` to `candy:`; before this fix the command still
+// prepended `layer.`, so setting `version` left the real candy.version stale
+// and appended a `layer:` map the loader ignores.
+func TestCandySet_DescendsIntoCandyWrapper(t *testing.T) {
 	dir := t.TempDir()
 	layerDir := filepath.Join(dir, "candy", "foo")
 	if err := os.MkdirAll(layerDir, 0o755); err != nil {
@@ -25,7 +27,7 @@ func TestLayerSet_DescendsIntoLayerWrapper(t *testing.T) {
 	t.Chdir(dir)
 
 	if err := (&CandySetCmd{Name: "foo", Path: "version", Value: "2026.2.2"}).Run(); err != nil {
-		t.Fatalf("LayerSetCmd.Run: %v", err)
+		t.Fatalf("CandySetCmd.Run: %v", err)
 	}
 
 	out, err := os.ReadFile(filepath.Join(layerDir, "candy.yml"))
@@ -39,17 +41,20 @@ func TestLayerSet_DescendsIntoLayerWrapper(t *testing.T) {
 	if _, hasTop := root["version"]; hasTop {
 		t.Fatalf("stray top-level version: introduced (the bug):\n%s", out)
 	}
-	layer, ok := root["layer"].(map[string]any)
+	if _, hasLayer := root["layer"]; hasLayer {
+		t.Fatalf("stray `layer:` wrapper introduced (pre-rename bug):\n%s", out)
+	}
+	candy, ok := root["candy"].(map[string]any)
 	if !ok {
 		t.Fatalf("candy: wrapper missing or wrong type:\n%s", out)
 	}
-	if got := layer["version"]; got != "2026.2.2" {
-		t.Fatalf("layer.version = %v, want 2026.2.2:\n%s", got, out)
+	if got := candy["version"]; got != "2026.2.2" {
+		t.Fatalf("candy.version = %v, want 2026.2.2:\n%s", got, out)
 	}
 
-	// An already-qualified path must not be double-prefixed (layer.layer.name).
-	if err := (&CandySetCmd{Name: "foo", Path: "layer.name", Value: "bar"}).Run(); err != nil {
-		t.Fatalf("LayerSetCmd.Run (layer.-prefixed): %v", err)
+	// An already-qualified path must not be double-prefixed (candy.candy.name).
+	if err := (&CandySetCmd{Name: "foo", Path: "candy.name", Value: "bar"}).Run(); err != nil {
+		t.Fatalf("CandySetCmd.Run (candy.-prefixed): %v", err)
 	}
 	out2, err := os.ReadFile(filepath.Join(layerDir, "candy.yml"))
 	if err != nil {
@@ -59,8 +64,8 @@ func TestLayerSet_DescendsIntoLayerWrapper(t *testing.T) {
 	if err := yaml.Unmarshal(out2, &root); err != nil {
 		t.Fatalf("re-parsing result 2: %v\n%s", err, out2)
 	}
-	layer, _ = root["layer"].(map[string]any)
-	if got := layer["name"]; got != "bar" {
-		t.Fatalf("layer.name = %v, want bar (layer.-prefixed path mishandled?):\n%s", got, out2)
+	candy, _ = root["candy"].(map[string]any)
+	if got := candy["name"]; got != "bar" {
+		t.Fatalf("candy.name = %v, want bar (candy.-prefixed path mishandled?):\n%s", got, out2)
 	}
 }

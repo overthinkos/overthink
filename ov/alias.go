@@ -19,7 +19,7 @@ const aliasMarker = "# ov-alias"
 func generateAliasScript(image, command string) string {
 	return fmt.Sprintf(`#!/bin/sh
 # ov-alias
-# image: %s
+# box: %s
 # command: %s
 _ov_q(){ printf "'"; printf '%%s' "$1" | sed "s/'/'\\\\''/g"; printf "' "; }
 c="%s"; for a in "$@"; do c="$c $(_ov_q "$a")"; done
@@ -108,8 +108,8 @@ func parseAliasScript(path string) (*AliasInfo, error) {
 		if line == aliasMarker {
 			hasMarker = true
 		}
-		if strings.HasPrefix(line, "# image: ") {
-			image = strings.TrimPrefix(line, "# image: ")
+		if strings.HasPrefix(line, "# box: ") {
+			image = strings.TrimPrefix(line, "# box: ")
 		}
 		if strings.HasPrefix(line, "# command: ") {
 			command = strings.TrimPrefix(line, "# command: ")
@@ -243,7 +243,7 @@ func (c *AliasAddCmd) Run() error {
 		return err
 	}
 
-	fmt.Fprintf(os.Stderr, "Created alias %s -> %s (image: %s)\n", c.Name, command, c.Image)
+	fmt.Fprintf(os.Stderr, "Created alias %s -> %s (box: %s)\n", c.Name, command, c.Image)
 	return nil
 }
 

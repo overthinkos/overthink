@@ -60,7 +60,7 @@ type PodDeployTarget struct {
 	// to "no Generator context" comments and the overlay contains no
 	// install logic — producing an image byte-identical to BaseImage.
 	Generator *Generator
-	Image     *ResolvedImage
+	Image     *ResolvedBox
 
 	// OverlayBuildDir is where the synthesized Containerfile + build
 	// context lives. Defaults to .build/overlay-<deploy-name>/.

@@ -24,7 +24,7 @@ import (
 // calverSchemaProjectFiles are the project-root files that carry a top-level
 // version: schema stamp (matching the per-file-stamp layout).
 var calverSchemaProjectFiles = []string{
-	"overthink.yml", "image.yml", "deploy.yml", "vm.yml", "vms.yml",
+	"overthink.yml", "box.yml", "deploy.yml", "vm.yml", "vms.yml",
 	"pod.yml", "k8s.yml", "local.yml", "eval.yml",
 }
 

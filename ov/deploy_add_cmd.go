@@ -30,7 +30,7 @@ type DeployAddCmd struct {
 	Ref  string `arg:"" optional:"" help:"Image or layer reference (local name, ./path.yml, or github.com/org/repo[/images/<n>|/layers/<n>][@ref])"`
 
 	// Layer overlays (repeatable).
-	AddLayer []string `long:"add-layer" help:"Extra layer to apply on top of the base image (repeatable)"`
+	AddLayer []string `long:"add-candy" help:"Extra layer to apply on top of the base image (repeatable)"`
 
 	// Plan-level flags.
 	Tag      string `long:"tag" help:"Image CalVer tag (empty = newest local CalVer resolved via the org.overthinkos.version OCI label)"`
@@ -264,7 +264,7 @@ func (c *DeployAddCmd) dispatchNode(path string, node *DeploymentNode, parentExe
 	// the wrong distro section and the overlay build fails. Only host/vm
 	// targets use syntheticHostImage / syntheticVmImage (handled inside
 	// compileLayerPlans).
-	var baseImg *ResolvedImage
+	var baseImg *ResolvedBox
 	if (target == "pod" || target == "k8s") && refStr != "" {
 		if baseResolved, rerr := cfg.ResolveImage(refStr, tag, dir, ResolveOpts{}); rerr == nil {
 			baseImg = baseResolved
@@ -649,11 +649,11 @@ func (c *DeployAddCmd) scanLayersForRef(ref *DeployRef, cfg *Config, dir string)
 	layerKey := ref.Name
 	if ref.Source == RefSourceRemote {
 		aug := *cfg
-		aug.Image = make(map[string]ImageConfig, len(cfg.Image)+1)
+		aug.Image = make(map[string]BoxConfig, len(cfg.Image)+1)
 		for k, v := range cfg.Image {
 			aug.Image[k] = v
 		}
-		aug.Image["__ov_addlayer_fetch__"] = ImageConfig{Layer: []string{ref.Raw}}
+		aug.Image["__ov_addlayer_fetch__"] = BoxConfig{Layer: []string{ref.Raw}}
 		scanCfg = &aug
 		layerKey = BareRef(ref.Raw)
 	}
@@ -727,7 +727,7 @@ func pruneContainerInitForSystemd(order []string, hostCtx HostContext) []string 
 // the provided *ResolvedImage as the compile context (so add_layers for
 // a pod/k8s deployment compile against the base image's distro/user
 // context, not the operator host's).
-func (c *DeployAddCmd) compileLayerPlansWithContext(ref *DeployRef, cfg *Config, distroCfg *DistroConfig, builderCfg *BuilderConfig, dir string, ctx *ResolvedImage) ([]*InstallPlan, string, []string, error) {
+func (c *DeployAddCmd) compileLayerPlansWithContext(ref *DeployRef, cfg *Config, distroCfg *DistroConfig, builderCfg *BuilderConfig, dir string, ctx *ResolvedBox) ([]*InstallPlan, string, []string, error) {
 	_ = builderCfg
 	layers, layerKey, err := c.scanLayersForRef(ref, cfg, dir)
 	if err != nil {
@@ -774,7 +774,7 @@ func (c *DeployAddCmd) compileLayerPlans(ref *DeployRef, cfg *Config, distroCfg 
 	// Pick the synthetic image template that matches the deploy target
 	// so `${USER}` in layer tasks resolves correctly: guest user for
 	// vm:<name>, host user for host/other targets.
-	var img *ResolvedImage
+	var img *ResolvedBox
 	if strings.HasPrefix(c.Name, "vm:") {
 		if vmName, perr := vmNameFromDeployName(c.Name); perr == nil {
 			if uf, ok, _ := LoadUnified(dir); ok && uf != nil && uf.VM != nil {
@@ -856,9 +856,9 @@ func detectHostContext() HostContext {
 // which would default to 0 — quietly routing the task through
 // ScopeSystem (sudo), installing user-scoped tooling like
 // `cargo install` to /root/.cargo/bin instead of $HOME/.cargo/bin.
-func syntheticHostImage() *ResolvedImage {
+func syntheticHostImage() *ResolvedBox {
 	hd, _ := DetectHostDistro()
-	img := &ResolvedImage{
+	img := &ResolvedBox{
 		Name:         "host-adhoc",
 		Home:         os.Getenv("HOME"),
 		User:         os.Getenv("USER"),
@@ -889,7 +889,7 @@ func syntheticHostImage() *ResolvedImage {
 // user (cloud-init's adopt path respects that). bootc VMs default to
 // root, in which case we fall back to the same syntheticHostImage()
 // semantics (System scope, no per-user path).
-func syntheticVmImage(spec *VmSpec) *ResolvedImage {
+func syntheticVmImage(spec *VmSpec) *ResolvedBox {
 	user := resolveVmSshUser(spec)
 	if user == "" || user == "root" {
 		img := syntheticHostImage()
@@ -898,7 +898,7 @@ func syntheticVmImage(spec *VmSpec) *ResolvedImage {
 		img.Home = "/root"
 		return img
 	}
-	img := &ResolvedImage{
+	img := &ResolvedBox{
 		Name:         "vm-adhoc",
 		User:         user,
 		UID:          1000,

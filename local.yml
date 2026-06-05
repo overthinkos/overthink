@@ -1,21 +1,20 @@
-version: 2026.155.1801
-
+version: 2026.156.557
 local:
-  # =================================================================
-  # eval-local — per-kind R10 smoke template for kind:local.
-  # Applied via the eval-local bed (kind:eval) in eval.yml. Single layer
-  # (eval-local-layer) drops a marker file the deploy-scope eval probe
-  # verifies on the host (not in a container).
-  # =================================================================
-  eval-local:
-    layer:
-      - eval-local-layer
-    description:
-      feature: Fast eval bed for kind:local layer-application smoke
-      narrative: Minimal kind:local template applying eval-local-layer to the operator's host.
-      tag: [working]
-    eval:
-      - id: eval-local-marker
-        scope: deploy
-        command: "test -f /etc/eval-local-marker"
-        in_container: false
+    # =================================================================
+    # eval-local — per-kind R10 smoke template for kind:local.
+    # Applied via the eval-local bed (kind:eval) in eval.yml. Single layer
+    # (eval-local-layer) drops a marker file the deploy-scope eval probe
+    # verifies on the host (not in a container).
+    # =================================================================
+    eval-local:
+        candy:
+            - eval-local-layer
+        description:
+            feature: Fast eval bed for kind:local layer-application smoke
+            narrative: Minimal kind:local template applying eval-local-layer to the operator's host.
+            tag: [working]
+        eval:
+            - id: eval-local-marker
+              scope: deploy
+              command: "test -f /etc/eval-local-marker"
+              in_container: false

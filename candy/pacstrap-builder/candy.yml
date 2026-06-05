@@ -1,0 +1,24 @@
+candy:
+    version: 2026.144.1443
+    name: pacstrap-builder
+    description: |
+        Tools needed to bootstrap an Arch-family rootfs from scratch via
+        pacstrap, partition a VM disk, and install grub for a bootable
+        Arch/CachyOS system. Used as the layer composition for the
+        arch-pacstrap-builder / cachyos-pacstrap-builder images,
+        which run as privileged containers under `ov image build` and
+        `ov vm build` for kind:bootstrap source kinds.
+    distro:
+        arch:
+            package:
+                - arch-install-scripts
+                - qemu-img
+                - dosfstools
+                - e2fsprogs
+                - xfsprogs
+                - btrfs-progs
+                - parted
+                - util-linux
+                - grub
+                - efibootmgr
+                - mkinitcpio

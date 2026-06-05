@@ -321,10 +321,10 @@ func runEvalBed(exe, name string, node DeploymentNode, opts bedRunOpts) (*bedRun
 	// Steps 1+2: image build + eval image (pod beds only; VM substrate is a
 	// cloud_image and kind:local has no image to build/disposable-eval).
 	if !isVM && !isLocal && image != "" {
-		if err := step("image-build", []string{"image", "build", image}); err != nil {
+		if err := step("image-build", []string{"box", "build", image}); err != nil {
 			return fail("image build %s: %w", image, err)
 		}
-		if err := step("eval-image", []string{"eval", "image", image}); err != nil {
+		if err := step("eval-image", []string{"eval", "box", image}); err != nil {
 			return fail("eval image %s: %w", image, err)
 		}
 	}

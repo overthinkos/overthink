@@ -85,7 +85,7 @@ func TestPodUnifiedTarget_Rebuild_DryRun(t *testing.T) {
 	}
 	// Without RebuildImage, the build/eval steps are skipped.
 	if err := target.Rebuild(context.Background(), RebuildOpts{DryRun: true, RebuildImage: false}); err != nil {
-		t.Errorf("Rebuild dry-run no-image: %v", err)
+		t.Errorf("Rebuild dry-run no-box: %v", err)
 	}
 }
 

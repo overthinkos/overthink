@@ -5,7 +5,7 @@ package main
 // simultaneously across multiple namespaces:
 //
 //   - layer (under layers/<name>/)
-//   - image: entry
+//   - box: entry
 //   - pod: entry
 //   - vm: entry
 //   - k8s: entry
@@ -15,7 +15,7 @@ package main
 // The unified loader does NOT enforce global uniqueness across these
 // namespaces — uniqueness is scoped to each kind. ov verbs disambiguate
 // by command context: `ov image build ov-cachyos` reaches into the
-// image: map, `ov vm create ov-cachyos` reaches into the vm: map, and
+// box: map, `ov vm create ov-cachyos` reaches into the vm: map, and
 // so on.
 
 import (
@@ -33,23 +33,23 @@ func TestCrossKindNameReuse_LoaderAcceptsAllKinds(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(dir, "layers", "ov-cachyos"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "layers", "ov-cachyos", "layer.yml"),
+	if err := os.WriteFile(filepath.Join(dir, "layers", "ov-cachyos", "candy.yml"),
 		[]byte("rpm:\n  packages: [example]\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	overthink := `version: 2026.155.1801
+	overthink := `version: 2026.156.557
 defaults:
   registry: ghcr.io/example
   build: [rpm]
 
-image:
+box:
   ov-cachyos:
     base: fedora
-    layer: [ov-cachyos]
+    candy: [ov-cachyos]
 
 pod:
   ov-cachyos:
-    image: ov-cachyos
+    box: ov-cachyos
 
 vm:
   ov-cachyos:
@@ -59,7 +59,7 @@ vm:
 
 local:
   ov-cachyos:
-    layer: [ov-cachyos]
+    candy: [ov-cachyos]
 
 deploy:
   ov-cachyos:
@@ -113,7 +113,7 @@ func TestCrossKindNameReuse_RetiredKeysRejected(t *testing.T) {
 	}{
 		{
 			name: "deployment.qc",
-			overthink: `version: 2026.155.1801
+			overthink: `version: 2026.156.557
 deploy:
   qc:
     target: local
@@ -124,7 +124,7 @@ deploy:
 		},
 		{
 			name: "deployment.cachyos-dx",
-			overthink: `version: 2026.155.1801
+			overthink: `version: 2026.156.557
 deploy:
   cachyos-dx:
     target: local
@@ -135,10 +135,10 @@ deploy:
 		},
 		{
 			name: "local.cachyos-dx",
-			overthink: `version: 2026.155.1801
+			overthink: `version: 2026.156.557
 local:
   cachyos-dx:
-    layer: [example]
+    candy: [example]
 `,
 			mustHint: "ov migrate",
 		},

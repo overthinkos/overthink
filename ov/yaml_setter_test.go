@@ -12,13 +12,13 @@ import (
 // are preserved.
 func TestSetByDotPath_ScalarReplacement(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "image.yml")
+	path := filepath.Join(dir, "box.yml")
 	original := `# Top-of-file authoring comment.
 defaults:
   # tag is the CalVer tag baked into images
   tag: nightly
   registry: ghcr.io/old
-image:
+box:
   hello:
     base: fedora
 `
@@ -51,17 +51,17 @@ image:
 // passing a YAML-encoded value.
 func TestSetByDotPath_ListValue(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "image.yml")
-	original := `image:
+	path := filepath.Join(dir, "box.yml")
+	original := `box:
   hello:
     base: fedora
-    layer:
+    candy:
       - sshd
 `
 	if err := os.WriteFile(path, []byte(original), 0o644); err != nil {
 		t.Fatalf("setup: %v", err)
 	}
-	if err := SetByDotPath(path, "image.hello.layer", "[supervisord, traefik]"); err != nil {
+	if err := SetByDotPath(path, "box.hello.candy", "[supervisord, traefik]"); err != nil {
 		t.Fatalf("SetByDotPath: %v", err)
 	}
 	got, _ := os.ReadFile(path)
@@ -79,7 +79,7 @@ func TestSetByDotPath_ListValue(t *testing.T) {
 // erroring out.
 func TestSetByDotPath_CreatesIntermediateMapping(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "image.yml")
+	path := filepath.Join(dir, "box.yml")
 	if err := os.WriteFile(path, []byte("defaults:\n  tag: nightly\n"), 0o644); err != nil {
 		t.Fatalf("setup: %v", err)
 	}
@@ -97,7 +97,7 @@ func TestSetByDotPath_CreatesIntermediateMapping(t *testing.T) {
 // to descend into a scalar should fail loudly.
 func TestSetByDotPath_RejectsScalarDescend(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "image.yml")
+	path := filepath.Join(dir, "box.yml")
 	if err := os.WriteFile(path, []byte("defaults:\n  tag: nightly\n"), 0o644); err != nil {
 		t.Fatalf("setup: %v", err)
 	}

@@ -14,7 +14,7 @@ func TestGlobalLayerOrder_PopularityTieBreaking(t *testing.T) {
 	}
 
 	// pixi is used by 2 images, nodejs by 1
-	images := map[string]*ResolvedImage{
+	images := map[string]*ResolvedBox{
 		"a": {Name: "a", Base: "ext:1", IsExternalBase: true, Layer: []string{"pixi", "python", "testapi"}},
 		"b": {Name: "b", Base: "ext:1", IsExternalBase: true, Layer: []string{"pixi", "nodejs"}},
 	}
@@ -49,7 +49,7 @@ func TestGlobalLayerOrder_RespectsDependencies(t *testing.T) {
 		"python": {Name: "python", Require: toLayerRefs([]string{"pixi"})},
 	}
 
-	images := map[string]*ResolvedImage{
+	images := map[string]*ResolvedBox{
 		"a": {Name: "a", Base: "ext:1", IsExternalBase: true, Layer: []string{"python"}},
 	}
 
@@ -69,7 +69,7 @@ func TestGlobalLayerOrder_RespectsDependencies(t *testing.T) {
 func TestGlobalLayerOrder_RespectsAuthoredListOrder(t *testing.T) {
 	// build-toolchain has NO `require: rpmfusion` (on Arch the codec -devel libs
 	// come from the distro repos, not RPM Fusion), but fedora-builder authors
-	// `layer: [rpmfusion, build-toolchain]` so rpmfusion MUST come first. Here
+	// `candy: [rpmfusion, build-toolchain]` so rpmfusion MUST come first. Here
 	// build-toolchain is the more popular layer (2 images) — which, before the
 	// authored-list-order fix, made the popularity tie-break place it ahead of
 	// rpmfusion (the exact bug that broke fedora-builder in a mixed
@@ -79,7 +79,7 @@ func TestGlobalLayerOrder_RespectsAuthoredListOrder(t *testing.T) {
 		"build-toolchain": {Name: "build-toolchain"},
 		"pixi":            {Name: "pixi"},
 	}
-	images := map[string]*ResolvedImage{
+	images := map[string]*ResolvedBox{
 		"fedora-builder": {Name: "fedora-builder", Base: "ext:1", IsExternalBase: true, Layer: []string{"rpmfusion", "build-toolchain"}},
 		"arch-builder":   {Name: "arch-builder", Base: "ext:2", IsExternalBase: true, Layer: []string{"build-toolchain", "pixi"}},
 	}
@@ -110,7 +110,7 @@ func TestGlobalLayerOrder_ConflictingListOrderFallsBack(t *testing.T) {
 		"x": {Name: "x"},
 		"y": {Name: "y"},
 	}
-	images := map[string]*ResolvedImage{
+	images := map[string]*ResolvedBox{
 		"a": {Name: "a", Base: "ext:1", IsExternalBase: true, Layer: []string{"x", "y"}},
 		"b": {Name: "b", Base: "ext:2", IsExternalBase: true, Layer: []string{"y", "x"}},
 	}
@@ -132,7 +132,7 @@ func TestAbsoluteLayerSequence_WithInternalBase(t *testing.T) {
 		"testapi": {Name: "testapi", Require: toLayerRefs([]string{"python"}), HasPixiToml: true},
 	}
 
-	images := map[string]*ResolvedImage{
+	images := map[string]*ResolvedBox{
 		"base": {Name: "base", Base: "ext:1", IsExternalBase: true, Layer: []string{"pixi"}},
 		"app":  {Name: "app", Base: "base", IsExternalBase: false, Layer: []string{"python", "testapi"}},
 	}
@@ -154,7 +154,7 @@ func TestComputeIntermediates_NoBranching(t *testing.T) {
 		"python": {Name: "python", Require: toLayerRefs([]string{"pixi"}), HasPixiToml: true},
 	}
 
-	images := map[string]*ResolvedImage{
+	images := map[string]*ResolvedBox{
 		"app": {
 			Name: "app", Base: "ext:1", IsExternalBase: true,
 			Layer: []string{"python"}, Tag: "v1", Registry: "r",
@@ -163,8 +163,8 @@ func TestComputeIntermediates_NoBranching(t *testing.T) {
 	}
 
 	cfg := &Config{
-		Defaults: ImageConfig{Registry: "r", Build: BuildFormats{"rpm"}},
-		Image:    map[string]ImageConfig{"app": {Layer: []string{"python"}}},
+		Defaults: BoxConfig{Registry: "r", Build: BuildFormats{"rpm"}},
+		Image:    map[string]BoxConfig{"app": {Layer: []string{"python"}}},
 	}
 
 	result, err := ComputeIntermediates(images, layers, cfg, "v1")
@@ -192,7 +192,7 @@ func TestComputeIntermediates_SimpleBranch(t *testing.T) {
 		"testapi": {Name: "testapi", Require: toLayerRefs([]string{"python"}), HasPixiToml: true},
 	}
 
-	images := map[string]*ResolvedImage{
+	images := map[string]*ResolvedBox{
 		"fedora": {
 			Name: "fedora", Base: "ext:1", IsExternalBase: true,
 			Layer: []string{}, Tag: "v1", Registry: "r",
@@ -211,8 +211,8 @@ func TestComputeIntermediates_SimpleBranch(t *testing.T) {
 	}
 
 	cfg := &Config{
-		Defaults: ImageConfig{Registry: "r", Build: BuildFormats{"rpm"}},
-		Image: map[string]ImageConfig{
+		Defaults: BoxConfig{Registry: "r", Build: BuildFormats{"rpm"}},
+		Image: map[string]BoxConfig{
 			"fedora": {Layer: []string{}},
 			"app1":   {Base: "fedora", Layer: []string{"python", "testapi"}},
 			"app2":   {Base: "fedora", Layer: []string{"nodejs"}},
@@ -253,7 +253,7 @@ func TestComputeIntermediates_SharedPrefix(t *testing.T) {
 		"openclaw":    {Name: "openclaw", Require: toLayerRefs([]string{"supervisord"}), HasPackageJson: true},
 	}
 
-	images := map[string]*ResolvedImage{
+	images := map[string]*ResolvedBox{
 		"fedora": {
 			Name: "fedora", Base: "ext:1", IsExternalBase: true,
 			Layer: []string{}, Tag: "v1", Registry: "r",
@@ -272,8 +272,8 @@ func TestComputeIntermediates_SharedPrefix(t *testing.T) {
 	}
 
 	cfg := &Config{
-		Defaults: ImageConfig{Registry: "r", Build: BuildFormats{"rpm"}},
-		Image: map[string]ImageConfig{
+		Defaults: BoxConfig{Registry: "r", Build: BuildFormats{"rpm"}},
+		Image: map[string]BoxConfig{
 			"fedora":      {Layer: []string{}},
 			"fedora-test": {Base: "fedora", Layer: []string{"testapi"}},
 			"openclaw":    {Base: "fedora", Layer: []string{"openclaw"}},
@@ -320,7 +320,7 @@ func TestComputeIntermediates_ExistingImageReuse(t *testing.T) {
 		"nodejs": {Name: "nodejs", Require: nil, tasks: []Task{{Cmd: "true"}}},
 	}
 
-	images := map[string]*ResolvedImage{
+	images := map[string]*ResolvedBox{
 		"fedora": {
 			Name: "fedora", Base: "ext:1", IsExternalBase: true,
 			Layer: []string{}, Tag: "v1", Registry: "r",
@@ -339,8 +339,8 @@ func TestComputeIntermediates_ExistingImageReuse(t *testing.T) {
 	}
 
 	cfg := &Config{
-		Defaults: ImageConfig{Registry: "r", Build: BuildFormats{"rpm"}},
-		Image: map[string]ImageConfig{
+		Defaults: BoxConfig{Registry: "r", Build: BuildFormats{"rpm"}},
+		Image: map[string]BoxConfig{
 			"fedora": {Layer: []string{}},
 			"app1":   {Base: "fedora", Layer: []string{"pixi"}},
 			"app2":   {Base: "fedora", Layer: []string{"nodejs"}},
@@ -375,7 +375,7 @@ func TestImageNeedsBuilder(t *testing.T) {
 		"tooling": {Name: "tooling", Require: nil, tasks: []Task{{Cmd: "true"}}},
 	}
 
-	images := map[string]*ResolvedImage{
+	images := map[string]*ResolvedBox{
 		"builder": {
 			Name: "builder", Base: "ext:1", IsExternalBase: true,
 			Layer: []string{"pixi", "nodejs", "tooling"},
@@ -428,7 +428,7 @@ func TestComputeIntermediates_RealisticConfig(t *testing.T) {
 		"openclaw":        {Name: "openclaw", Require: toLayerRefs([]string{"supervisord", "nodejs"}), HasPackageJson: true},
 	}
 
-	images := map[string]*ResolvedImage{
+	images := map[string]*ResolvedBox{
 		"builder": {
 			Name: "builder", Base: "quay.io/fedora/fedora:43", IsExternalBase: true,
 			Layer: []string{"pixi", "nodejs", "build-toolchain"}, Tag: "v1", Registry: "r",
@@ -452,8 +452,8 @@ func TestComputeIntermediates_RealisticConfig(t *testing.T) {
 	}
 
 	cfg := &Config{
-		Defaults: ImageConfig{Registry: "r", Build: BuildFormats{"rpm"}, Builder: BuilderMap{"pixi": "builder", "npm": "builder"}},
-		Image: map[string]ImageConfig{
+		Defaults: BoxConfig{Registry: "r", Build: BuildFormats{"rpm"}, Builder: BuilderMap{"pixi": "builder", "npm": "builder"}},
+		Image: map[string]BoxConfig{
 			"builder":     {Layer: []string{"pixi", "nodejs", "build-toolchain"}},
 			"fedora":      {Layer: []string{}},
 			"fedora-test": {Base: "fedora", Layer: []string{"traefik", "testapi"}},
@@ -527,7 +527,7 @@ func TestComputeIntermediates_NvidiaScenario(t *testing.T) {
 		"github-runner":   {Name: "github-runner", Require: toLayerRefs([]string{"supervisord"}), tasks: []Task{{Cmd: "true"}}},
 	}
 
-	images := map[string]*ResolvedImage{
+	images := map[string]*ResolvedBox{
 		"builder": {
 			Name: "builder", Base: "quay.io/fedora/fedora:43", IsExternalBase: true,
 			Layer: []string{"pixi", "nodejs", "build-toolchain"}, Tag: "v1", Registry: "r",
@@ -586,8 +586,8 @@ func TestComputeIntermediates_NvidiaScenario(t *testing.T) {
 	}
 
 	cfg := &Config{
-		Defaults: ImageConfig{Registry: "r", Build: BuildFormats{"rpm"}, Builder: BuilderMap{"pixi": "builder", "npm": "builder"}},
-		Image: map[string]ImageConfig{
+		Defaults: BoxConfig{Registry: "r", Build: BuildFormats{"rpm"}, Builder: BuilderMap{"pixi": "builder", "npm": "builder"}},
+		Image: map[string]BoxConfig{
 			"builder":      {Layer: []string{"pixi", "nodejs", "build-toolchain"}},
 			"fedora":       {Layer: []string{}},
 			"nvidia":       {Base: "fedora", Layer: []string{"cuda"}},
@@ -710,7 +710,7 @@ func TestComputeIntermediates_UserImageAtBranchPoint(t *testing.T) {
 		"webapp":      {Name: "webapp", Require: toLayerRefs([]string{"supervisord"}), tasks: []Task{{Cmd: "true"}}},
 	}
 
-	images := map[string]*ResolvedImage{
+	images := map[string]*ResolvedBox{
 		"fedora": {
 			Name: "fedora", Base: "ext:1", IsExternalBase: true,
 			Layer: []string{}, Tag: "v1", Registry: "r",
@@ -735,8 +735,8 @@ func TestComputeIntermediates_UserImageAtBranchPoint(t *testing.T) {
 	}
 
 	cfg := &Config{
-		Defaults: ImageConfig{Registry: "r", Build: BuildFormats{"rpm"}},
-		Image: map[string]ImageConfig{
+		Defaults: BoxConfig{Registry: "r", Build: BuildFormats{"rpm"}},
+		Image: map[string]BoxConfig{
 			"fedora": {Layer: []string{}},
 			"svbase": {Base: "fedora", Layer: []string{"supervisord"}},
 			"app1":   {Base: "svbase", Layer: []string{"testapi"}},
@@ -811,7 +811,7 @@ func TestComputeIntermediates_UserImageAsBranchIntermediate(t *testing.T) {
 		"D": {Name: "D", Require: toLayerRefs([]string{"B"}), tasks: []Task{{Cmd: "true"}}},
 	}
 
-	images := map[string]*ResolvedImage{
+	images := map[string]*ResolvedBox{
 		"base": {
 			Name: "base", Base: "ext:1", IsExternalBase: true,
 			Layer: []string{}, Tag: "v1", Registry: "r", FullTag: "r/base:v1", Pkg: "rpm",
@@ -832,8 +832,8 @@ func TestComputeIntermediates_UserImageAsBranchIntermediate(t *testing.T) {
 	}
 
 	cfg := &Config{
-		Defaults: ImageConfig{Registry: "r", Build: BuildFormats{"rpm"}},
-		Image: map[string]ImageConfig{
+		Defaults: BoxConfig{Registry: "r", Build: BuildFormats{"rpm"}},
+		Image: map[string]BoxConfig{
 			"base": {Layer: []string{}},
 			"mid":  {Base: "base", Layer: []string{"B"}},
 			"app1": {Base: "base", Layer: []string{"C"}},
@@ -905,7 +905,7 @@ func TestComputeIntermediates_PlatformInheritance(t *testing.T) {
 		"appB":        {Name: "appB", Require: toLayerRefs([]string{"supervisord"}), tasks: []Task{{Cmd: "true"}}},
 	}
 
-	images := map[string]*ResolvedImage{
+	images := map[string]*ResolvedBox{
 		"fedora": {
 			Name: "fedora", Base: "quay.io/fedora/fedora:43", IsExternalBase: true,
 			Layer: []string{}, Tag: "v1", Registry: "r", FullTag: "r/fedora:v1",
@@ -935,13 +935,13 @@ func TestComputeIntermediates_PlatformInheritance(t *testing.T) {
 	}
 
 	cfg := &Config{
-		Defaults: ImageConfig{
+		Defaults: BoxConfig{
 			Registry:  "r",
 			Build:     BuildFormats{"rpm"},
 			Builder:   BuilderMap{"pixi": "builder", "npm": "builder"},
 			Platforms: []string{"linux/amd64", "linux/arm64"},
 		},
-		Image: map[string]ImageConfig{
+		Image: map[string]BoxConfig{
 			"builder": {Layer: []string{"pixi"}},
 			"fedora":  {Layer: []string{}},
 			"nvidia":  {Base: "fedora", Layer: []string{"cuda"}, Platforms: []string{"linux/amd64"}},
@@ -1068,7 +1068,7 @@ func TestComputeIntermediates_PixiBoundNotExtracted(t *testing.T) {
 		"supervisord":      {Name: "supervisord", Require: toLayerRefs([]string{"python"}), HasPixiToml: true},
 	}
 
-	images := map[string]*ResolvedImage{
+	images := map[string]*ResolvedBox{
 		"builder": {
 			Name: "builder", Base: "quay.io/fedora/fedora:43", IsExternalBase: true,
 			Layer: []string{"pixi"}, Tag: "v1", Registry: "r",
@@ -1107,8 +1107,8 @@ func TestComputeIntermediates_PixiBoundNotExtracted(t *testing.T) {
 	}
 
 	cfg := &Config{
-		Defaults: ImageConfig{Registry: "r", Build: BuildFormats{"rpm"}, Builder: BuilderMap{"pixi": "builder", "npm": "builder"}},
-		Image: map[string]ImageConfig{
+		Defaults: BoxConfig{Registry: "r", Build: BuildFormats{"rpm"}, Builder: BuilderMap{"pixi": "builder", "npm": "builder"}},
+		Image: map[string]BoxConfig{
 			"builder":             {Layer: []string{"pixi"}},
 			"fedora":              {Layer: []string{}},
 			"nvidia":              {Base: "fedora", Layer: []string{"cuda"}},
@@ -1184,7 +1184,7 @@ func TestComputeIntermediates_InheritDistroFromParent(t *testing.T) {
 		"c": {Name: "c", tasks: []Task{{Cmd: "true"}}},
 	}
 
-	images := map[string]*ResolvedImage{
+	images := map[string]*ResolvedBox{
 		"fedora": {
 			Name: "fedora", Base: "ext:fedora", IsExternalBase: true,
 			Layer: []string{}, Tag: "v1", Registry: "r",
@@ -1216,12 +1216,12 @@ func TestComputeIntermediates_InheritDistroFromParent(t *testing.T) {
 	// Defaults explicitly use rpm to prove the fix: parent arch must
 	// win over these defaults in the auto-intermediate.
 	cfg := &Config{
-		Defaults: ImageConfig{
+		Defaults: BoxConfig{
 			Registry: "r",
 			Distro:   []string{"fedora"},
 			Build:    BuildFormats{"rpm"},
 		},
-		Image: map[string]ImageConfig{
+		Image: map[string]BoxConfig{
 			"fedora":   {Layer: []string{}},
 			"arch":     {Base: "ext:arch", Layer: []string{}},
 			"arch-a-b": {Base: "arch", Layer: []string{"a", "b"}},
@@ -1235,7 +1235,7 @@ func TestComputeIntermediates_InheritDistroFromParent(t *testing.T) {
 	}
 
 	// Find the auto-intermediate that contains layer "a" rooted at arch.
-	var archInter *ResolvedImage
+	var archInter *ResolvedBox
 	for _, img := range result {
 		if !img.Auto {
 			continue
@@ -1281,7 +1281,7 @@ func TestComputeIntermediates_UnionChildBuildFormats(t *testing.T) {
 		"c": {Name: "c", tasks: []Task{{Cmd: "true"}}},
 	}
 
-	images := map[string]*ResolvedImage{
+	images := map[string]*ResolvedBox{
 		"cachyos": {
 			Name: "cachyos", Base: "ext:cachyos", IsExternalBase: true,
 			Layer: []string{}, Tag: "v1", Registry: "r",
@@ -1305,12 +1305,12 @@ func TestComputeIntermediates_UnionChildBuildFormats(t *testing.T) {
 	}
 
 	cfg := &Config{
-		Defaults: ImageConfig{
+		Defaults: BoxConfig{
 			Registry: "r",
 			Distro:   []string{"fedora"},
 			Build:    BuildFormats{"rpm"},
 		},
-		Image: map[string]ImageConfig{
+		Image: map[string]BoxConfig{
 			"cachyos":     {Base: "ext:cachyos", Layer: []string{}},
 			"cachyos-a-b": {Base: "cachyos", Layer: []string{"a", "b"}},
 			"cachyos-a-c": {Base: "cachyos", Layer: []string{"a", "c"}},
@@ -1323,7 +1323,7 @@ func TestComputeIntermediates_UnionChildBuildFormats(t *testing.T) {
 	}
 
 	// Find the auto-intermediate that hoists layer "a" rooted at cachyos.
-	var inter *ResolvedImage
+	var inter *ResolvedBox
 	for _, img := range result {
 		if img.Auto && img.Base == "cachyos" {
 			inter = img
@@ -1353,7 +1353,7 @@ func TestComputeIntermediates_UnionChildBuildFormats(t *testing.T) {
 	}
 }
 
-func resultNames(m map[string]*ResolvedImage) []string {
+func resultNames(m map[string]*ResolvedBox) []string {
 	out := make([]string, 0, len(m))
 	for k := range m {
 		out = append(out, k)

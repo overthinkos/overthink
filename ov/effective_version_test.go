@@ -13,7 +13,7 @@ func TestComputeEffectiveVersions(t *testing.T) {
 		"a": {Name: "a", Version: "2026.100.0"},
 		"b": {Name: "b", Version: "2026.200.0"}, // newest layer
 	}
-	images := map[string]*ResolvedImage{
+	images := map[string]*ResolvedBox{
 		// dedicated version wins over the (newer) layer versions.
 		"dedicated": {Name: "dedicated", Version: "2026.50.0", Layer: []string{"a", "b"}, IsExternalBase: true, Base: "quay.io/x:1"},
 		// no dedicated version -> highest layer version (b = 2026.200.0).
@@ -42,7 +42,7 @@ func TestComputeEffectiveVersions(t *testing.T) {
 
 	// A layer bump propagates to a deriving image's identity.
 	layers["b"].Version = "2026.400.0"
-	g2 := &Generator{Images: map[string]*ResolvedImage{
+	g2 := &Generator{Images: map[string]*ResolvedBox{
 		"derived": {Name: "derived", Layer: []string{"a", "b"}, IsExternalBase: true, Base: "quay.io/x:1"},
 	}, Layers: layers}
 	if err := g2.computeEffectiveVersions(); err != nil {
@@ -54,7 +54,7 @@ func TestComputeEffectiveVersions(t *testing.T) {
 
 	// Hard error: layerless external-base image with no version (no fallback).
 	gErr := &Generator{
-		Images: map[string]*ResolvedImage{"orphan": {Name: "orphan", IsExternalBase: true, Base: "quay.io/x:1"}},
+		Images: map[string]*ResolvedBox{"orphan": {Name: "orphan", IsExternalBase: true, Base: "quay.io/x:1"}},
 		Layers: map[string]*Layer{},
 	}
 	if err := gErr.computeEffectiveVersions(); err == nil {

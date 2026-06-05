@@ -34,7 +34,7 @@ func TestResolveBootcImageRef_ShortNameResolvesToCalVer(t *testing.T) {
 	withLocalImages(t, []LocalImageInfo{
 		{
 			Names:  []string{"ghcr.io/overthinkos/fedora-bootc:2026.145.0900"},
-			Labels: map[string]string{LabelImage: "fedora-bootc", LabelVersion: "2026.145.0900"},
+			Labels: map[string]string{LabelBox: "fedora-bootc", LabelVersion: "2026.145.0900"},
 		},
 	})
 	got, err := resolveBootcImageRef("podman", "fedora-bootc")
@@ -57,7 +57,7 @@ func TestResolveBootcImageRef_ShortNameNotBuilt(t *testing.T) {
 	withLocalImages(t, []LocalImageInfo{
 		{
 			Names:  []string{"ghcr.io/overthinkos/something-else:2026.145.0900"},
-			Labels: map[string]string{LabelImage: "something-else"},
+			Labels: map[string]string{LabelBox: "something-else"},
 		},
 	})
 	_, err := resolveBootcImageRef("podman", "fedora-bootc")

@@ -1,0 +1,25 @@
+candy:
+    version: 2026.144.1443
+    name: unsloth-studio
+    require:
+        - cuda
+        - supervisord
+    candy:
+        - llama-cpp
+        - unsloth
+    env:
+        NVIDIA_PYTHON_PROJECT: "~/.pixi"
+        LD_LIBRARY_PATH: "/usr/lib64:$HOME/llama.cpp"
+    port:
+        - 8888
+        - 8000
+    volume:
+        - name: workspace
+          path: "/workspace"
+    service:
+        - name: unsloth-studio
+          exec: "pixi run start-studio"
+          restart: always
+          working_directory: "%(ENV_HOME)s"
+          enable: true
+          scope: system

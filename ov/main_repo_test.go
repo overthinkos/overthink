@@ -67,12 +67,12 @@ func TestOvRepo_FlagChdir(t *testing.T) {
 	}{
 		{
 			name: "long flag --repo with @ref",
-			args: []string{"--repo", "foo/bar@main", "image", "list", "images"},
+			args: []string{"--repo", "foo/bar@main", "box", "list", "boxes"},
 			env:  []string{"OV_REPO_CACHE=" + cacheRoot},
 		},
 		{
 			name: "env var OV_PROJECT_REPO",
-			args: []string{"image", "list", "images"},
+			args: []string{"box", "list", "boxes"},
 			env:  []string{"OV_REPO_CACHE=" + cacheRoot, "OV_PROJECT_REPO=foo/bar@main"},
 		},
 	}

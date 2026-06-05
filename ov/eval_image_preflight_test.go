@@ -37,7 +37,7 @@ func TestResolveImageRefForEnsure_ShortNameRequiresCfg(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for short name with nil cfg")
 	}
-	if !strings.Contains(err.Error(), "image.yml") {
+	if !strings.Contains(err.Error(), "box.yml") {
 		t.Errorf("error should mention image.yml, got: %v", err)
 	}
 }
@@ -48,7 +48,7 @@ func TestResolveImageRefForEnsure_ShortNameRequiresCfg(t *testing.T) {
 // `ghcr.io/overthinkos/arch-builder:<tag>` build locally on a
 // host with no ghcr.io credentials.
 func TestBuildableShortName_FullRefBasenameLookup(t *testing.T) {
-	cfg := &Config{Image: map[string]ImageConfig{
+	cfg := &Config{Image: map[string]BoxConfig{
 		"arch-builder":   {},
 		"fedora-builder": {},
 	}}
@@ -81,7 +81,7 @@ func TestBuildableShortName_NilCfg(t *testing.T) {
 // TestBuildableShortName_RemoteRef returns "" — remote refs use the
 // remote project's image.yml; local build is not applicable.
 func TestBuildableShortName_RemoteRef(t *testing.T) {
-	cfg := &Config{Image: map[string]ImageConfig{"x": {}}}
+	cfg := &Config{Image: map[string]BoxConfig{"x": {}}}
 	if got := buildableShortName("@github.com/owner/repo/x:tag", cfg); got != "" {
 		t.Errorf("expected '' for remote ref, got %q", got)
 	}

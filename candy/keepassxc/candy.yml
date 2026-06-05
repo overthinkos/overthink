@@ -1,0 +1,10 @@
+candy:
+    version: 2026.144.1443
+    name: keepassxc
+    description: KeePassXC password manager
+    package:
+        - keepassxc
+    eval:
+        - id: keepassxc-binary
+          command: test -x /usr/bin/keepassxc
+          exit_status: 0

@@ -17,7 +17,7 @@ func TestWriteContextIgnore(t *testing.T) {
 		Dir: dir,
 		Config: &Config{
 			// "image" duplicated to exercise dedup against author input.
-			Defaults: ImageConfig{ContextIgnore: []string{"image", ".eval", "image"}},
+			Defaults: BoxConfig{ContextIgnore: []string{"image", ".eval", "image"}},
 		},
 	}
 	if err := g.writeContextIgnore(); err != nil {

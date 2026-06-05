@@ -12,7 +12,7 @@ type RemoteImageContext struct {
 	Ref       ParsedRef
 	CacheDir  string
 	Config    *Config
-	Resolved  *ResolvedImage
+	Resolved  *ResolvedBox
 	Layers    map[string]*Layer
 	ImageRef  string // registry/name:tag for pull
 	ImageName string // short name (e.g. "openclaw-browser")

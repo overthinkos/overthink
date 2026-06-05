@@ -21,7 +21,7 @@ func TestLayerRef(t *testing.T) {
 		{"@github.com/org/repo/layers/cuda", "github.com/org/repo/layers/cuda", "", true},
 	}
 	for _, tt := range tests {
-		r := LayerRef{Raw: tt.raw}
+		r := CandyRef{Raw: tt.raw}
 		if got := r.Bare(); got != tt.bare {
 			t.Errorf("LayerRef{%q}.Bare() = %q, want %q", tt.raw, got, tt.bare)
 		}
@@ -34,7 +34,7 @@ func TestLayerRef(t *testing.T) {
 	}
 	// A resolved sibling key overrides Bare() but leaves Raw (and thus the
 	// transitive-fetch view) intact.
-	r := LayerRef{Raw: "ffmpeg", resolved: "github.com/org/repo/layers/ffmpeg"}
+	r := CandyRef{Raw: "ffmpeg", resolved: "github.com/org/repo/layers/ffmpeg"}
 	if r.Bare() != "github.com/org/repo/layers/ffmpeg" {
 		t.Errorf("resolved Bare() = %q", r.Bare())
 	}
@@ -194,7 +194,7 @@ func TestIsRemoteImageRef(t *testing.T) {
 	}{
 		{"ollama", false},
 		{"@github.com/org/repo/image", true},
-		{"@github.com/org/repo/image:v1.0.0", true},
+		{"@github.com/org/repo/box:v1.0.0", true},
 		{"github.com/org/repo/image", false}, // no @ prefix
 	}
 
@@ -208,17 +208,17 @@ func TestIsRemoteImageRef(t *testing.T) {
 
 func TestScanRemoteLayers(t *testing.T) {
 	dir := t.TempDir()
-	layersDir := filepath.Join(dir, "layers")
+	layersDir := filepath.Join(dir, "candy")
 	os.MkdirAll(filepath.Join(layersDir, "cuda"), 0755)
 	os.MkdirAll(filepath.Join(layersDir, "python-ml"), 0755)
 
-	os.WriteFile(filepath.Join(layersDir, "cuda", "layer.yml"), []byte("layer:\n  name: cuda\n  package:\n    - cuda-toolkit\n"), 0644)
-	os.WriteFile(filepath.Join(layersDir, "python-ml", "layer.yml"), []byte("layer:\n  name: python-ml\n  require:\n    - cuda\n"), 0644)
+	os.WriteFile(filepath.Join(layersDir, "cuda", "candy.yml"), []byte("candy:\n  name: cuda\n  package:\n    - cuda-toolkit\n"), 0644)
+	os.WriteFile(filepath.Join(layersDir, "python-ml", "candy.yml"), []byte("candy:\n  name: python-ml\n  require:\n    - cuda\n"), 0644)
 	os.WriteFile(filepath.Join(layersDir, "python-ml", "pixi.toml"), []byte("[project]\nname = \"python-ml\"\n"), 0644)
 
 	wantRefs := map[string]bool{
-		"github.com/overthinkos/ml-layers/layers/cuda":      true,
-		"github.com/overthinkos/ml-layers/layers/python-ml": true,
+		"github.com/overthinkos/ml-layers/candy/cuda":      true,
+		"github.com/overthinkos/ml-layers/candy/python-ml": true,
 	}
 	layers, err := ScanRemoteLayer(dir, "github.com/overthinkos/ml-layers", wantRefs)
 	if err != nil {
@@ -229,7 +229,7 @@ func TestScanRemoteLayers(t *testing.T) {
 		t.Fatalf("len(layers) = %d, want 2", len(layers))
 	}
 
-	cuda, ok := layers["github.com/overthinkos/ml-layers/layers/cuda"]
+	cuda, ok := layers["github.com/overthinkos/ml-layers/candy/cuda"]
 	if !ok {
 		t.Fatal("cuda layer not found")
 	}
@@ -242,18 +242,18 @@ func TestScanRemoteLayers(t *testing.T) {
 	if cuda.Name != "cuda" {
 		t.Errorf("cuda.Name = %q, want %q", cuda.Name, "cuda")
 	}
-	if cuda.SubPathPrefix != "layers/" {
-		t.Errorf("cuda.SubPathPrefix = %q, want %q", cuda.SubPathPrefix, "layers/")
+	if cuda.SubPathPrefix != "candy/" {
+		t.Errorf("cuda.SubPathPrefix = %q, want %q", cuda.SubPathPrefix, "candy/")
 	}
 
-	pyml := layers["github.com/overthinkos/ml-layers/layers/python-ml"]
+	pyml := layers["github.com/overthinkos/ml-layers/candy/python-ml"]
 	if !pyml.HasPixiToml {
 		t.Error("python-ml should have pixi.toml")
 	}
 	// A remote layer's plain-name sibling dep is qualified at scan time to the
 	// sibling's fully-qualified map key, so the dependency graph resolves it
 	// against the cuda layer fetched from the same repo (keyed identically).
-	wantDep := "github.com/overthinkos/ml-layers/layers/cuda"
+	wantDep := "github.com/overthinkos/ml-layers/candy/cuda"
 	if len(pyml.Require) != 1 || pyml.Require[0].Bare() != wantDep {
 		t.Errorf("python-ml.Require = %v, want [%s]", pyml.Require, wantDep)
 	}
@@ -282,11 +282,11 @@ func TestScanAllLayersNoRemote(t *testing.T) {
 
 func TestCollectRemoteRefs(t *testing.T) {
 	cfg := &Config{
-		Image: map[string]ImageConfig{
+		Image: map[string]BoxConfig{
 			"myapp": {
 				Layer: []string{
 					"pixi",
-					"@github.com/overthinkos/ml-layers/layers/cuda:v1.0.0",
+					"@github.com/overthinkos/ml-layers/candy/cuda:v1.0.0",
 				},
 			},
 		},
@@ -319,12 +319,12 @@ func TestCollectRemoteRefs(t *testing.T) {
 }
 
 func TestCollectRemoteRefsLocalTemplate(t *testing.T) {
-	// kind:local template layer: lists must feed the same remote-ref collection
-	// path as image layer: lists (regression guard for the 2026-05 CachyOS
+	// kind:local template candy: lists must feed the same remote-ref collection
+	// path as image candy: lists (regression guard for the 2026-05 CachyOS
 	// migration, where the ov-cachyos kind:local template composes 30 remote
 	// @-ref layers — previously invisible to CollectRemoteRefs).
 	cfg := &Config{
-		Image: map[string]ImageConfig{
+		Image: map[string]BoxConfig{
 			"myapp": {
 				Layer: []string{
 					"@github.com/overthinkos/overthink/layers/pixi:v1.0.0",
@@ -369,7 +369,7 @@ func TestCollectRemoteRefsOptsIncludeDisabled(t *testing.T) {
 	// disabled `debian-builder --include-disabled` would otherwise hit
 	// "unknown layer .../pixi" in computing global layer order.
 	cfg := &Config{
-		Image: map[string]ImageConfig{
+		Image: map[string]BoxConfig{
 			"debian-builder": {
 				Enabled: boolPtr(false),
 				Layer: []string{
@@ -402,7 +402,7 @@ func TestCollectRemoteRefsOptsIncludeDisabled(t *testing.T) {
 	}
 
 	// A DIFFERENT disabled image must stay filtered under the scoped opts.
-	cfg.Image["other-disabled"] = ImageConfig{
+	cfg.Image["other-disabled"] = BoxConfig{
 		Enabled: boolPtr(false),
 		Layer:   []string{"@github.com/myorg/other/layers/x:v3.0.0"},
 	}
@@ -428,8 +428,8 @@ func TestCollectRemoteRefsDefaultsBuilderTransitiveLayers(t *testing.T) {
 	// builder edge was actually followed (it was absent before the fix, because
 	// the raw per-image img.Builder these images carry is empty).
 	cfg := &Config{
-		Defaults: ImageConfig{Builder: BuilderMap{"pixi": "ov.fedora-builder"}},
-		Image: map[string]ImageConfig{
+		Defaults: BoxConfig{Builder: BuilderMap{"pixi": "ov.fedora-builder"}},
+		Image: map[string]BoxConfig{
 			"bazzite": {
 				Base:  "ghcr.io/ublue-os/bazzite:stable", // external base
 				Layer: []string{"@github.com/overthinkos/overthink/layers/foo:v1.0.0"},
@@ -438,7 +438,7 @@ func TestCollectRemoteRefsDefaultsBuilderTransitiveLayers(t *testing.T) {
 		},
 		Namespaces: map[string]*Config{
 			"ov": {
-				Image: map[string]ImageConfig{
+				Image: map[string]BoxConfig{
 					"fedora-builder": {
 						Base:    "quay.io/fedora/fedora:43",
 						Produce: []string{"pixi"},
@@ -479,7 +479,7 @@ func TestCollectRemoteRefsSameLayerBothTagsCollected(t *testing.T) {
 	// pickLayerVersion — see TestPickLayerVersion. Collection's job is just to
 	// fetch every distinct (repo, git-tag).
 	cfg := &Config{
-		Image: map[string]ImageConfig{
+		Image: map[string]BoxConfig{
 			"myapp": {
 				Layer: []string{
 					"@github.com/org/repo/layers/cuda:v2.0.0",
@@ -513,7 +513,7 @@ func TestCollectRemoteRefsSameLayerBothTagsCollected(t *testing.T) {
 func TestCollectRemoteRefsDifferentLayersSameRepo(t *testing.T) {
 	// Different layers from same repo at different versions should be OK
 	cfg := &Config{
-		Image: map[string]ImageConfig{
+		Image: map[string]BoxConfig{
 			"myapp": {
 				Layer: []string{
 					"@github.com/org/repo/layers/cuda:v1.0.0",
@@ -629,7 +629,7 @@ func TestRepoGitURL(t *testing.T) {
 
 func TestDiscoverRemoteLayers(t *testing.T) {
 	dir := t.TempDir()
-	layersDir := filepath.Join(dir, "layers")
+	layersDir := filepath.Join(dir, "candy")
 	os.MkdirAll(filepath.Join(layersDir, "beta"), 0755)
 	os.MkdirAll(filepath.Join(layersDir, "alpha"), 0755)
 	os.WriteFile(filepath.Join(layersDir, "README.md"), []byte("test"), 0644)
@@ -654,10 +654,10 @@ func TestLayerCopySource(t *testing.T) {
 		},
 	}
 
-	if got := g.layerCopySource("pixi"); got != "layers/pixi" {
-		t.Errorf("local layer: got %q, want %q", got, "layers/pixi")
+	if got := g.layerCopySource("pixi"); got != "candy/pixi" {
+		t.Errorf("local candy: got %q, want %q", got, "candy/pixi")
 	}
 	if got := g.layerCopySource("github.com/test/repo/layers/cuda"); got != ".build/_layers/cuda" {
-		t.Errorf("remote layer: got %q, want %q", got, ".build/_layers/cuda")
+		t.Errorf("remote candy: got %q, want %q", got, ".build/_layers/cuda")
 	}
 }

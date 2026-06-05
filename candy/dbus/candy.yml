@@ -1,0 +1,55 @@
+candy:
+    version: 2026.144.1443
+    name: dbus
+    require:
+        - supervisord
+    env:
+        DBUS_SESSION_BUS_ADDRESS: "unix:path=/tmp/dbus-session"
+    distro:
+        arch:
+            package:
+                - dbus
+        debian:
+            package:
+                - dbus
+        fedora:
+            package:
+                - dbus-daemon
+        ubuntu:
+            package:
+                - dbus
+    eval:
+        - id: dbus-daemon-binary
+          file: /usr/bin/dbus-daemon
+          exists: true
+        - id: dbus-daemon-package
+          package: dbus-daemon
+          package_map:
+            arch: dbus
+          installed: true
+        - id: dbus-session-env
+          scope: deploy
+          command: printenv DBUS_SESSION_BUS_ADDRESS
+          exit_status: 0
+          # Asserts the shape of a session-bus address (any unix:path= form),
+          # not a hardcoded path. The supervisord-spawned dbus-daemon binds to
+          # /tmp/dbus-session, but a `podman exec` shell honors XDG_RUNTIME_DIR
+          # PAM/login env and dbus's user-bus default at unix:path=/run/user/<UID>/bus
+          # when the deploy-scope probe enters the container. Both shapes
+          # represent a reachable session bus — the contract is "a session bus
+          # is set", not "the bus must live at this exact path".
+          stdout:
+            - contains: "unix:path="
+        - id: dbus-service-running
+          scope: deploy
+          service: dbus
+          running: true
+    service:
+        - name: dbus
+          exec: "dbus-daemon --session --nofork --address=unix:path=/tmp/dbus-session"
+          env:
+            XDG_RUNTIME_DIR: /tmp
+          restart: always
+          priority: 2
+          enable: true
+          scope: system

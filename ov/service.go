@@ -155,7 +155,7 @@ var wellKnownInitDefs = map[string]*InitDef{
 // wellKnownInitDefs. Errors when the init system is unrecognized — the
 // hint asks the operator to declare the init system in build.yml init:
 // (which honors arbitrary names at build time).
-func resolveInitDefFromMeta(meta *ImageMetadata) (*InitDef, error) {
+func resolveInitDefFromMeta(meta *BoxMetadata) (*InitDef, error) {
 	if def, ok := wellKnownInitDefs[meta.Init]; ok {
 		return def, nil
 	}

@@ -1,0 +1,74 @@
+candy:
+    version: 2026.144.1443
+    name: maplibre-versatiles-styler
+    description: "maplibre-versatiles-styler — TypeScript MapLibre GL JS control that adds an interactive sidebar widget for switching between VersaTiles style presets (colorful/eclipse/graybeard/…), editing color palettes, adjusting fonts/language, and exporting styles. Bundled locally from the npm package so the notebook's MapLibre cell can load the styler without depending on unpkg.com at runtime. Re-exported by the versatiles-frontend layer's http.server at /styler/."
+    require:
+        - supervisord
+    distro:
+        arch:
+            package:
+                - nodejs
+                - npm
+                - curl
+                - jq
+        fedora:
+            package:
+                - nodejs
+                - npm
+                - curl
+                - jq
+    task:
+        - mkdir: /opt/maplibre-versatiles-styler
+          user: root
+        # ---- maplibre-versatiles-styler UMD bundle ----
+        # Two-tier install identical to versatiles-style:
+        # tier 1 = GitHub release tarball if available, tier 2 = npm-
+        # install + copy the package's `dist/` directory. The package's
+        # npm entry exposes both an ES module and a UMD bundle; we ship
+        # both at /opt/maplibre-versatiles-styler/ so consumers can pick.
+        - cmd: |
+            set -euo pipefail
+            TMPDIR=$(mktemp -d)
+            cd "$TMPDIR"
+
+            # Tier 1: try a GitHub release asset
+            if curl -fsSL "https://api.github.com/repos/versatiles-org/maplibre-versatiles-styler/releases/latest" \
+                 | jq -r '.assets[].browser_download_url' \
+                 | grep -E '\.tar\.gz$' \
+                 | head -1 > tarball_url \
+               && [ -s tarball_url ]; then
+              ASSET=$(cat tarball_url)
+              echo "Installing maplibre-versatiles-styler from GitHub release: $ASSET"
+              curl -fsSL "$ASSET" -o styler.tar.gz
+              tar -xzf styler.tar.gz -C /opt/maplibre-versatiles-styler || \
+                tar -xzf styler.tar.gz -C /opt/maplibre-versatiles-styler --strip-components=1
+            else
+              # Tier 2: npm install + copy dist/
+              echo "Falling back to npm install maplibre-versatiles-styler"
+              npm install --prefix "$TMPDIR" maplibre-versatiles-styler --no-audit --no-fund
+              PKG="$TMPDIR/node_modules/maplibre-versatiles-styler"
+              # The package's prebuilt UMD bundle typically lives in dist/.
+              # Copy the whole package directory so all entry points
+              # (ESM, UMD, type-defs) are available regardless of which
+              # files the iframe references.
+              cp -r "$PKG/." /opt/maplibre-versatiles-styler/
+            fi
+
+            # Sanity: at least one bundled JS file present.
+            if ! find /opt/maplibre-versatiles-styler -maxdepth 4 -name '*.js' -size +1c | head -1 | grep -q .; then
+              echo "ERROR: no JS bundle found under /opt/maplibre-versatiles-styler after install" >&2
+              ls -la /opt/maplibre-versatiles-styler/
+              exit 1
+            fi
+
+            cd /
+            rm -rf "$TMPDIR" /root/.npm
+          user: root
+    eval:
+        # Build-scope: at least one non-empty JS bundle landed (entry-
+        # point filename varies across versions: `maplibre-versatiles-styler.umd.js`,
+        # `index.js`, `dist/index.js`, etc.; lenient match by extension).
+        - id: maplibre-versatiles-styler-bundle-present
+          command: |
+            find /opt/maplibre-versatiles-styler -maxdepth 4 -name '*.js' -size +1c | head -1 | grep -q .
+          exit_status: 0

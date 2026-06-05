@@ -77,7 +77,7 @@ func ResolveImageEngineForDeploy(imageName, instance, globalEngine string) strin
 
 // ResolveImageEngineFromMeta returns the engine from image metadata labels,
 // falling back to globalEngine if not set.
-func ResolveImageEngineFromMeta(meta *ImageMetadata, globalEngine string) string {
+func ResolveImageEngineFromMeta(meta *BoxMetadata, globalEngine string) string {
 	if meta != nil && meta.Engine != "" {
 		return meta.Engine
 	}

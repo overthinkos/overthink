@@ -18,7 +18,7 @@ import (
 // comment-preserving (yaml.v3 node API) and idempotent. Operates on the current
 // project (cwd; honors the top-level -C / --dir / OV_PROJECT_DIR). For a
 // multi-repo tree, run it per repo (e.g. `ov -C image/<name> image reconcile`).
-type ImageReconcileCmd struct {
+type BoxReconcileCmd struct {
 	DryRun bool `name:"dry-run" help:"Print the pin rewrites without modifying any file."`
 	Remote bool `help:"Align each repo's pins to its newest REMOTE tag (git ls-remote) instead of the newest already-referenced version."`
 }
@@ -27,7 +27,7 @@ type ImageReconcileCmd struct {
 // `@github` refs (overthink.yml + its flat-imported per-kind siblings).
 func reconcileCandidateFiles(dir string) []string {
 	names := []string{
-		"overthink.yml", "image.yml", "base.yml", "build.yml",
+		"overthink.yml", "box.yml", "base.yml", "build.yml",
 		"eval.yml", "local.yml", "pod.yml", "k8s.yml", "vm.yml", "deploy.yml",
 	}
 	var out []string
@@ -54,7 +54,7 @@ func walkScalars(n *yaml.Node, fn func(*yaml.Node)) {
 	}
 }
 
-func (c *ImageReconcileCmd) Run() error {
+func (c *BoxReconcileCmd) Run() error {
 	dir, err := os.Getwd()
 	if err != nil {
 		return err
@@ -170,7 +170,7 @@ func (c *ImageReconcileCmd) Run() error {
 }
 
 // targetVersion picks the version every pin of repo should align to.
-func (c *ImageReconcileCmd) targetVersion(repo string, vers map[string]bool) (string, error) {
+func (c *BoxReconcileCmd) targetVersion(repo string, vers map[string]bool) (string, error) {
 	if c.Remote {
 		latest, err := GitLatestTag(RepoGitURL(repo))
 		if err != nil {

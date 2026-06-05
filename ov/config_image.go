@@ -13,18 +13,18 @@ import (
 
 // ImageConfigCmd groups image configuration subcommands.
 // Default subcommand (no keyword): full setup (quadlet + secrets + enc).
-type ImageConfigCmd struct {
-	Mount   ImageConfigMountCmd   `cmd:"mount" help:"Mount encrypted volumes"`
-	Passwd  ImageConfigPasswdCmd  `cmd:"passwd" help:"Change gocryptfs password"`
-	Remove  ImageConfigRemoveCmd  `cmd:"remove" help:"Remove quadlet and disable service"`
-	Setup   ImageConfigSetupCmd   `cmd:"" default:"withargs" help:"Setup quadlet, secrets, and encrypted volumes"`
-	Status  ImageConfigStatusCmd  `cmd:"status" help:"Show encrypted volume status"`
-	Unmount ImageConfigUnmountCmd `cmd:"unmount" help:"Unmount encrypted volumes"`
+type BoxConfigCmd struct {
+	Mount   BoxConfigMountCmd   `cmd:"mount" help:"Mount encrypted volumes"`
+	Passwd  BoxConfigPasswdCmd  `cmd:"passwd" help:"Change gocryptfs password"`
+	Remove  BoxConfigRemoveCmd  `cmd:"remove" help:"Remove quadlet and disable service"`
+	Setup   BoxConfigSetupCmd   `cmd:"" default:"withargs" help:"Setup quadlet, secrets, and encrypted volumes"`
+	Status  BoxConfigStatusCmd  `cmd:"status" help:"Show encrypted volume status"`
+	Unmount BoxConfigUnmountCmd `cmd:"unmount" help:"Unmount encrypted volumes"`
 }
 
 // ImageConfigSetupCmd configures an image: generates quadlet, provisions secrets,
 // initializes and mounts encrypted volumes.
-type ImageConfigSetupCmd struct {
+type BoxConfigSetupCmd struct {
 	Image           string   `arg:"" optional:"" help:"Image name or remote ref (github.com/org/repo/image[@version])"`
 	Tag             string   `long:"tag" help:"Image CalVer tag (empty = newest local CalVer resolved via the org.overthinkos.version OCI label)"`
 	Build           bool     `long:"build" help:"Force local build instead of pulling from registry"`
@@ -60,7 +60,7 @@ type ImageConfigSetupCmd struct {
 	ExplicitRef string `kong:"-"`
 }
 
-func (c *ImageConfigSetupCmd) Run() error {
+func (c *BoxConfigSetupCmd) Run() error {
 	if c.ListSidecars {
 		cfg, err := LoadEmbeddedSidecarConfig()
 		if err != nil {
@@ -111,7 +111,7 @@ func (c *ImageConfigSetupCmd) Run() error {
 	return c.runConfig(rt)
 }
 
-func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
+func (c *BoxConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	var detected DetectedDevices
 	if !c.NoAutoDetect {
 		detected = DetectHostDevices()
@@ -984,7 +984,7 @@ func directPodmanArgs(qcfg QuadletConfig, bindMounts []ResolvedBindMount) []stri
 // companion services. Writes a marker file so lifecycle commands
 // (start/stop/status/logs/remove) can route to podman instead of
 // systemctl.
-func (c *ImageConfigSetupCmd) runConfigDirect(
+func (c *BoxConfigSetupCmd) runConfigDirect(
 	qcfg QuadletConfig,
 	bindMounts []ResolvedBindMount,
 	sidecars []ResolvedSidecar,
@@ -1030,54 +1030,54 @@ func (c *ImageConfigSetupCmd) runConfigDirect(
 }
 
 // ImageConfigStatusCmd shows encrypted volume status.
-type ImageConfigStatusCmd struct {
+type BoxConfigStatusCmd struct {
 	Image    string `arg:"" help:"Image name"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 }
 
-func (c *ImageConfigStatusCmd) Run() error {
+func (c *BoxConfigStatusCmd) Run() error {
 	return encStatus(c.Image, c.Instance)
 }
 
 // ImageConfigMountCmd mounts encrypted volumes.
-type ImageConfigMountCmd struct {
+type BoxConfigMountCmd struct {
 	Image    string `arg:"" help:"Image name"`
 	Volume   string `long:"volume" help:"Only mount this volume (by name)"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 }
 
-func (c *ImageConfigMountCmd) Run() error {
+func (c *BoxConfigMountCmd) Run() error {
 	return encMount(c.Image, c.Instance, c.Volume)
 }
 
 // ImageConfigUnmountCmd unmounts encrypted volumes.
-type ImageConfigUnmountCmd struct {
+type BoxConfigUnmountCmd struct {
 	Image    string `arg:"" help:"Image name"`
 	Volume   string `long:"volume" help:"Only unmount this volume (by name)"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 }
 
-func (c *ImageConfigUnmountCmd) Run() error {
+func (c *BoxConfigUnmountCmd) Run() error {
 	return encUnmount(c.Image, c.Instance, c.Volume)
 }
 
 // ImageConfigPasswdCmd changes the gocryptfs password.
-type ImageConfigPasswdCmd struct {
+type BoxConfigPasswdCmd struct {
 	Image    string `arg:"" help:"Image name"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 }
 
-func (c *ImageConfigPasswdCmd) Run() error {
+func (c *BoxConfigPasswdCmd) Run() error {
 	return encPasswd(c.Image, c.Instance)
 }
 
 // ImageConfigRemoveCmd removes a quadlet service (replaces ov disable).
-type ImageConfigRemoveCmd struct {
+type BoxConfigRemoveCmd struct {
 	Image    string `arg:"" help:"Image name or remote ref"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 }
 
-func (c *ImageConfigRemoveCmd) Run() error {
+func (c *BoxConfigRemoveCmd) Run() error {
 	rt, err := ResolveRuntime()
 	if err != nil {
 		return err
@@ -1142,7 +1142,7 @@ func (c *ImageConfigRemoveCmd) Run() error {
 }
 
 // parseVolumeFlags converts --volume, --bind, --encrypt flags into DeployVolumeConfig.
-func (c *ImageConfigSetupCmd) parseVolumeFlags() []DeployVolumeConfig {
+func (c *BoxConfigSetupCmd) parseVolumeFlags() []DeployVolumeConfig {
 	var configs []DeployVolumeConfig
 	seen := make(map[string]bool)
 
@@ -1200,7 +1200,7 @@ func (c *ImageConfigSetupCmd) parseVolumeFlags() []DeployVolumeConfig {
 // flags (when provided) into deploy.yml under this image's Security block. On
 // subsequent runs MergeDeployOntoMetadata picks them up automatically — no other
 // code path needs to know about the flags.
-func (c *ImageConfigSetupCmd) persistResourceCaps(dc **DeployConfig) error {
+func (c *BoxConfigSetupCmd) persistResourceCaps(dc **DeployConfig) error {
 	if c.MemoryMax == "" && c.MemoryHigh == "" && c.MemorySwapMax == "" && c.Cpus == "" {
 		return nil
 	}

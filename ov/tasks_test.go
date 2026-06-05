@@ -9,8 +9,8 @@ import (
 
 // testResolvedImage returns a ResolvedImage suitable for feeding the
 // task emitters. Uses fedora (rpm) by default with UID/GID 1000.
-func testResolvedImage() *ResolvedImage {
-	return &ResolvedImage{
+func testResolvedImage() *ResolvedBox {
+	return &ResolvedBox{
 		Name:         "test-img",
 		User:         "user",
 		UID:          1000,

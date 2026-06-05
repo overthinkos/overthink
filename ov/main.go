@@ -44,11 +44,11 @@ type CLI struct {
 	Alias       AliasCmd        `cmd:"" help:"Manage command aliases for container images"`
 	Clean       CleanCmd        `cmd:"" help:"Prune reusable build artifacts to defaults: retention (images, eval runs) + sweep one-time makepkg leftovers"`
 	Cmd         CmdCmd          `cmd:"" help:"Run a command in a running container (with notification)"`
-	Config      ImageConfigCmd  `cmd:"" help:"Configure image deployment (setup, secrets, encrypted volumes)"`
+	Config      BoxConfigCmd    `cmd:"" help:"Configure image deployment (setup, secrets, encrypted volumes)"`
 	Deploy      DeployCmd       `cmd:"" help:"Manage deploy.yml deployment overrides"`
 	Doctor      DoctorCmd       `cmd:"" help:"Show host dependency status"`
-	Image       ImageCmd        `cmd:"" help:"Build, generate, inspect, and pull container images (reads image.yml)"`
-	Layer       LayerCmd        `cmd:"" help:"Edit layer.yml files in the project's layers/ directory"`
+	Image       BoxCmd          `cmd:"" name:"box" help:"Build, generate, inspect, and pull container boxes (reads box.yml)"`
+	Layer       CandyCmd        `cmd:"" name:"candy" help:"Edit candy.yml files in the project's candy/ directory"`
 	Logs        LogsCmd         `cmd:"" help:"Show service container logs"`
 	Mcp         McpCmdGroup     `cmd:"" help:"Run an MCP server exposing the ov CLI as tools"`
 	Migrate     MigrateCmd      `cmd:"" help:"Migrate any overthink config up to the latest schema CalVer (single idempotent chain — no sub-verbs)"`
@@ -188,7 +188,7 @@ func (c *InspectCmd) runFromConfig(cfg *Config, dir string) error {
 			for _, p := range resolved.Platforms {
 				fmt.Println(p)
 			}
-		case "layers":
+		case "candy":
 			for _, l := range resolved.Layer {
 				fmt.Println(l)
 			}
@@ -303,8 +303,8 @@ func (c *InspectCmd) runFromConfig(cfg *Config, dir string) error {
 // ListCmd groups list subcommands
 type ListCmd struct {
 	Aliases  ListAliasesCmd  `cmd:"" help:"List layers that declare aliases"`
-	Images   ListImagesCmd   `cmd:"" help:"List images from image.yml"`
-	Layers   ListLayersCmd   `cmd:"" help:"List layers from the filesystem"`
+	Images   ListBoxesCmd    `cmd:"" name:"boxes" help:"List boxes from box.yml"`
+	Layers   ListCandiesCmd  `cmd:"" name:"candies" help:"List candies from the filesystem"`
 	Routes   ListRoutesCmd   `cmd:"" help:"List layers that declare a route"`
 	Services ListServicesCmd `cmd:"" help:"List layers that declare a service"`
 	Targets  ListTargetsCmd  `cmd:"" help:"List build targets in dependency order"`
@@ -312,9 +312,9 @@ type ListCmd struct {
 }
 
 // ListImagesCmd lists images from image.yml
-type ListImagesCmd struct{}
+type ListBoxesCmd struct{}
 
-func (c *ListImagesCmd) Run() error {
+func (c *ListBoxesCmd) Run() error {
 	dir, err := os.Getwd()
 	if err != nil {
 		return err
@@ -338,9 +338,9 @@ func (c *ListImagesCmd) Run() error {
 }
 
 // ListLayersCmd lists layers from filesystem
-type ListLayersCmd struct{}
+type ListCandiesCmd struct{}
 
-func (c *ListLayersCmd) Run() error {
+func (c *ListCandiesCmd) Run() error {
 	dir, err := os.Getwd()
 	if err != nil {
 		return err
@@ -524,17 +524,17 @@ func (c *ListVolumesCmd) Run() error {
 
 // NewCmd groups scaffolding subcommands
 type NewCmd struct {
-	Layer   NewLayerCmd   `cmd:"" help:"Scaffold a layer directory"`
+	Layer   NewCandyCmd   `cmd:"" name:"candy" help:"Scaffold a candy directory"`
 	Project NewProjectCmd `cmd:"" help:"Scaffold a fresh ov project (image.yml + build.yml ref + layers/)"`
-	Image   NewImageCmd   `cmd:"" help:"Add a new image entry to image.yml"`
+	Image   NewBoxCmd     `cmd:"" name:"box" help:"Add a new box entry to box.yml"`
 }
 
 // NewLayerCmd scaffolds a new layer
-type NewLayerCmd struct {
+type NewCandyCmd struct {
 	Name string `arg:"" help:"Layer name"`
 }
 
-func (c *NewLayerCmd) Run() error {
+func (c *NewCandyCmd) Run() error {
 	dir, err := os.Getwd()
 	if err != nil {
 		return err

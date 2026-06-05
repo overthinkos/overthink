@@ -16,7 +16,7 @@ import (
 // -----------------------------------------------------------------------------
 
 // DeployFromImageOpts carries the source-less-deploy inputs.
-type DeployFromImageOpts struct {
+type DeployFromBoxOpts struct {
 	Engine         string          // "podman" | "docker" (auto-detected if empty)
 	ImageRef       string          // fully-qualified registry/name:tag
 	DeploymentName string          // optional override; defaults to the basename of ImageRef without tag
@@ -31,7 +31,7 @@ type DeployFromImageOpts struct {
 // DeployFromImage performs the source-less deploy. Returns the absolute path
 // to the Kustomize overlay directory produced (the argument to
 // `kubectl apply -k`).
-func DeployFromImage(opts DeployFromImageOpts) (string, error) {
+func DeployFromImage(opts DeployFromBoxOpts) (string, error) {
 	if opts.ImageRef == "" {
 		return "", fmt.Errorf("image ref is required")
 	}

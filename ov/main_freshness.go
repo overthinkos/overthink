@@ -155,7 +155,7 @@ func findOvSourceRoot(start string) string {
 	cur := start
 	for i := 0; i < 12; i++ {
 		if statExists(filepath.Join(cur, "ov", "main.go")) &&
-			statExists(filepath.Join(cur, "image.yml")) {
+			statExists(filepath.Join(cur, "box.yml")) {
 			return cur
 		}
 		parent := filepath.Dir(cur)

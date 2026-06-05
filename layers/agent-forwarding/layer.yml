@@ -1,8 +1,0 @@
-layer:
-    version: 2026.144.1443
-    name: agent-forwarding
-    description: Agent forwarding support — GPG, SSH, and direnv for .secrets workflow
-    layer:
-        - gnupg
-        - direnv
-        - ssh-client

@@ -22,7 +22,7 @@ func TestCapabilityLabelCompleteness(t *testing.T) {
 func TestCapabilitiesIsImageMetadataAlias(t *testing.T) {
 	var c Capabilities
 	c.Image = "test"
-	var m ImageMetadata = c
+	var m BoxMetadata = c
 	if m.Image != "test" {
 		t.Errorf("alias lost field value: %q", m.Image)
 	}

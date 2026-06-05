@@ -23,7 +23,7 @@
 #  builder-layer refs pin to ecosystem tag v2026.144.2044. Run `ov image
 #  reconcile` to advance them together when a shared layer moves.
 version: 2026.143.844
-image:
+box:
     arch:
         version: 2026.144.1443
         # quay.io is the official Arch Linux registry mirror (same image content
@@ -51,11 +51,11 @@ image:
             - aur
     arch-builder:
         base: arch
-        layer:
-            - '@github.com/overthinkos/overthink/layers/pixi:v2026.144.2044'
-            - '@github.com/overthinkos/overthink/layers/nodejs:v2026.144.2044'
-            - '@github.com/overthinkos/overthink/layers/build-toolchain:v2026.144.2044'
-            - '@github.com/overthinkos/overthink/layers/yay:v2026.144.2044'
+        candy:
+            - '@github.com/overthinkos/overthink/candy/pixi:v2026.144.2044'
+            - '@github.com/overthinkos/overthink/candy/nodejs:v2026.144.2044'
+            - '@github.com/overthinkos/overthink/candy/build-toolchain:v2026.144.2044'
+            - '@github.com/overthinkos/overthink/candy/yay:v2026.144.2044'
         produce:
             - pixi
             - npm
@@ -74,9 +74,9 @@ image:
         # images set builder.pixi: ov.cuda-arch-builder, which builds this image as
         # an intermediate in the consumer's graph; a bare `cuda` would be an
         # "unknown layer" there (it's a main-repo layer, not the consumer's).
-        layer:
-            - '@github.com/overthinkos/overthink/layers/cuda:v2026.153.0916'
-            - '@github.com/overthinkos/overthink/layers/nvenc-headers:v2026.153.0916'
+        candy:
+            - '@github.com/overthinkos/overthink/candy/cuda:v2026.153.0916'
+            - '@github.com/overthinkos/overthink/candy/nvenc-headers:v2026.153.0916'
         produce:
             - pixi
             - npm
@@ -106,10 +106,10 @@ image:
         # same-image rpmfusion layer, breaking the builder. Putting rpmfusion in
         # the base removes that ordering dependency entirely.
         base: fedora-nonfree
-        layer:
-            - '@github.com/overthinkos/overthink/layers/pixi:v2026.144.2044'
-            - '@github.com/overthinkos/overthink/layers/nodejs:v2026.144.2044'
-            - '@github.com/overthinkos/overthink/layers/build-toolchain:v2026.144.2044'
+        candy:
+            - '@github.com/overthinkos/overthink/candy/pixi:v2026.144.2044'
+            - '@github.com/overthinkos/overthink/candy/nodejs:v2026.144.2044'
+            - '@github.com/overthinkos/overthink/candy/build-toolchain:v2026.144.2044'
         produce:
             - pixi
             - npm
@@ -127,5 +127,5 @@ image:
             cargo: fedora-builder
             npm: fedora-builder
             pixi: fedora-builder
-        layer:
-            - '@github.com/overthinkos/overthink/layers/rpmfusion:v2026.144.2044'
+        candy:
+            - '@github.com/overthinkos/overthink/candy/rpmfusion:v2026.144.2044'

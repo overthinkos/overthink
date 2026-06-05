@@ -1,0 +1,25 @@
+candy:
+    version: 2026.144.1443
+    name: eval-tier1-layer
+    description:
+        feature: bench-tier1 — marker file for harness tier1 scenarios
+        narrative: |
+            Writes /etc/ov-bench-marker containing the string "ov benchmark target",
+            satisfying the tier1-easy harness recipe.
+    task:
+        - mkdir: /etc
+          user: root
+          mode: "0755"
+        - write: /etc/ov-bench-marker
+          user: root
+          mode: "0644"
+          content: |
+            ov benchmark target
+    eval:
+        - id: tier1-marker-exists
+          file: /etc/ov-bench-marker
+          exists: true
+        - id: tier1-marker-content
+          file: /etc/ov-bench-marker
+          contains:
+            - ov benchmark target

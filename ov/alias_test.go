@@ -17,7 +17,7 @@ func TestGenerateAliasScript(t *testing.T) {
 	if !strings.Contains(script, aliasMarker) {
 		t.Error("script should contain ov-alias marker")
 	}
-	if !strings.Contains(script, "# image: openclaw") {
+	if !strings.Contains(script, "# box: openclaw") {
 		t.Error("script should contain image metadata")
 	}
 	if !strings.Contains(script, "# command: openclaw") {
@@ -125,7 +125,7 @@ func TestRemoveAliasScriptNotFound(t *testing.T) {
 
 func TestCollectImageAliases(t *testing.T) {
 	cfg := &Config{
-		Image: map[string]ImageConfig{
+		Image: map[string]BoxConfig{
 			"myapp": {Layer: []string{"svc"}},
 		},
 	}
@@ -150,7 +150,7 @@ func TestCollectImageAliases(t *testing.T) {
 
 func TestCollectImageAliasesImageOverridesLayer(t *testing.T) {
 	cfg := &Config{
-		Image: map[string]ImageConfig{
+		Image: map[string]BoxConfig{
 			"myapp": {
 				Layer: []string{"svc"},
 				Alias: []AliasConfig{{Name: "svc-cli", Command: "custom-cmd"}},
@@ -180,7 +180,7 @@ func TestCollectImageAliasesImageOverridesLayer(t *testing.T) {
 
 func TestCollectImageAliasesDefaultCommand(t *testing.T) {
 	cfg := &Config{
-		Image: map[string]ImageConfig{
+		Image: map[string]BoxConfig{
 			"myapp": {
 				Layer: []string{"svc"},
 				Alias: []AliasConfig{{Name: "mycli"}}, // no command

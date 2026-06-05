@@ -38,7 +38,7 @@ func writeFakeDeploy(t *testing.T, paths *LedgerPaths, deployID, image string, l
 // pass — the refcount logic decides when the layer record is removed.
 func writeFakeLayer(t *testing.T, paths *LedgerPaths, layer string, deployedBy []string) {
 	t.Helper()
-	rec := LayerRecord{
+	rec := CandyRecord{
 		Layer:      layer,
 		DeployedBy: deployedBy,
 	}

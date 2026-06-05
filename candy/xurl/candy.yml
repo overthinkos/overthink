@@ -1,0 +1,6 @@
+candy:
+    version: 2026.144.1443
+    name: xurl
+    description: X (Twitter) API CLI for posts, search, DMs, and media
+    require:
+        - nodejs

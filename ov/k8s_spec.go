@@ -13,7 +13,7 @@ package main
 // template from multiple deployments).
 type K8sSpec struct {
 	// Image is the kind:image name this workload runs. Required.
-	Image string `yaml:"image"`
+	Image string `yaml:"box"`
 
 	// --- Workload-level defaults ---
 

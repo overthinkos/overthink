@@ -218,7 +218,7 @@ func TestRebootStepInterface(t *testing.T) {
 }
 
 func TestBuildDeployPlanEmitsReboot(t *testing.T) {
-	img := &ResolvedImage{Name: "test-img", Distro: []string{"arch"}}
+	img := &ResolvedBox{Name: "test-img", Distro: []string{"arch"}}
 
 	// reboot:false → no RebootStep.
 	noReboot, err := BuildDeployPlan(&Layer{Name: "x", Version: "2026.1.1"}, img, HostContext{})

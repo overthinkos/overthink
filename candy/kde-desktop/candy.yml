@@ -1,0 +1,78 @@
+candy:
+    version: 2026.152.2006
+    name: kde-desktop
+    description: |
+        Bare-metal KDE Plasma desktop for a graphical workstation (host or VM
+        guest with a real GPU output). Composes the shared kde-shell layer (the
+        SDDM-free Plasma session: plasma-desktop deps-puller + core components +
+        curated apps) and adds the display-manager half: SDDM plus the
+        workstation-only extras that would only bloat the headless streaming pod
+        (system monitor, browser integration, firewall/thunderbolt KCMs, kwallet,
+        kdeconnect, bluetooth, partition tools, media players). The layer sets the
+        systemd default to graphical.target so a real GPU output lights up a KDE
+        login. CachyOS theming/settings live in the separate cachyos-kde-settings
+        layer (bare-metal seat only — NOT part of the headless streaming pod
+        path); audio in pipewire; fonts in desktop-fonts.
+
+        Only meaningful on a systemd target with a real display (bare host / VM
+        guest with GPU). On supervisord-init containers the sddm use_packaged
+        entry is skipped (warn) by design. For the headless streamed KDE pod use
+        selkies-kde-desktop, which composes kde-shell directly without SDDM.
+    require:
+        - dbus
+        - pipewire
+    candy:
+        # The SDDM-free Plasma session packages (kwin_wayland + plasmashell + the
+        # curated app set) are shared with the headless kde-selkies pod (R3).
+        - kde-shell
+    distro:
+        arch:
+            package:
+                # Display manager + the systemd graphical seat.
+                - sddm
+                # Workstation-only Plasma extras — deliberately NOT in kde-shell,
+                # so the headless selkies-kde streaming pod stays lean.
+                - plasma-systemmonitor
+                - plasma-browser-integration
+                - plasma-firewall
+                - plasma-thunderbolt
+                - kdeplasma-addons
+                - kwallet-pam
+                - kwalletmanager
+                - bluedevil
+                - kinfocenter
+                - xsettingsd
+                - filelight
+                - partitionmanager
+                - kdeconnect
+                - kdegraphics-thumbnailers
+                - ffmpegthumbs
+                - phonon-qt6-vlc
+                - haruna
+    task:
+        # A graphical workstation boots into the display manager. On a fresh
+        # systemd guest the default is often multi-user.target; flip it so SDDM
+        # starts a KDE login on the real GPU output. Tolerant of an image-build
+        # chroot (no running systemd).
+        - cmd: |
+            systemctl set-default graphical.target || true
+          user: root
+    service:
+        - name: sddm
+          use_packaged: sddm.service
+          enable: true
+          scope: system
+    eval:
+        - id: sddm-binary
+          file: /usr/bin/sddm
+          exists: true
+        - id: sddm-enabled
+          scope: deploy
+          service: sddm
+          enabled: true
+        - id: graphical-target-default
+          scope: deploy
+          command: systemctl get-default
+          exit_status: 0
+          stdout:
+            - matches: "graphical.target"

@@ -1,0 +1,40 @@
+candy:
+    version: 2026.144.1531
+    name: comfyui
+    require:
+        - cuda
+        - supervisord
+    distro:
+        arch:
+            package:
+                - aria2
+                - git-lfs
+        fedora:
+            package:
+                - aria2
+                - git-lfs
+    port:
+        - 8188
+    volume:
+        - name: comfyui
+          path: "~/ComfyUI"
+    task:
+        # Clone ComfyUI + the Manager into the workspace volume staging dir.
+        # || true on the main clone makes this idempotent if an earlier build left
+        # a partial clone (rare but observed in failed CI runs).
+        - cmd: |
+            git clone --depth 1 https://github.com/comfyanonymous/ComfyUI.git ${HOME}/ComfyUI || true
+            cd ${HOME}/ComfyUI
+            mkdir -p models/{checkpoints,clip,clip_vision,configs,controlnet}
+            mkdir -p models/{diffusers,diffusion_models,embeddings,gligen,hypernetworks,loras}
+            mkdir -p models/{photomaker,style_models,text_encoders,unet,upscale_models,vae,vae_approx}
+            mkdir -p custom_nodes output input user
+            git clone --depth 1 https://github.com/ltdrdata/ComfyUI-Manager.git ${HOME}/ComfyUI/custom_nodes/ComfyUI-Manager || true
+          user: "${USER}"
+    service:
+        - name: comfyui
+          exec: "python %(ENV_HOME)s/ComfyUI/main.py --listen 0.0.0.0"
+          restart: always
+          working_directory: "%(ENV_HOME)s/ComfyUI"
+          enable: true
+          scope: system

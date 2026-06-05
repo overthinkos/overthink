@@ -24,7 +24,7 @@ type AndroidSpec struct {
 	// Image names the kind:image that bakes the emulator (Android SDK +
 	// system image + adb + apkeep). In-pod source: apkeep runs inside the
 	// running pod and adb reaches the emulator via the pod. XOR Adb.
-	Image string `yaml:"image,omitempty"`
+	Image string `yaml:"box,omitempty"`
 
 	// Adb names a remote/physical adb endpoint (network host:port served by
 	// an adb server). Endpoint source: apkeep runs on the host and the APK

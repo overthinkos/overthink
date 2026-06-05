@@ -63,7 +63,7 @@ func retrieveOne(
 	ctx context.Context,
 	exec DeployExecutor,
 	layerName string,
-	a LayerArtifact,
+	a CandyArtifact,
 	deployName string,
 	envVars map[string]string,
 	opts EmitOpts,

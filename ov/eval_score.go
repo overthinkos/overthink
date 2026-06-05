@@ -40,7 +40,7 @@ import (
 //
 // The zero value is a usable empty result (no scenarios, no summary).
 type EvalRunResults struct {
-	Image    string               `yaml:"image,omitempty"`
+	Image    string               `yaml:"box,omitempty"`
 	Mode     string               `yaml:"mode,omitempty"` // "image" | "run"
 	Scenario []ScenarioEvalResult `yaml:"scenario,omitempty"`
 	Summary  TestRunSummary       `yaml:"summary"`

@@ -25,7 +25,7 @@ import (
 // `ssh guest 'ov deploy from-image <ref> <name>'` to bring a nested pod up as a
 // persistent quadlet (it survives reboot via the quadlet [Install] section once
 // the guest user has lingering enabled — the orchestrator handles that).
-type DeployFromImageCmd struct {
+type DeployFromBoxCmd struct {
 	Ref       string   `arg:"" help:"Full image ref (local or registry), e.g. ghcr.io/overthinkos/selkies-kde-nvidia:latest"`
 	Name      string   `arg:"" optional:"" help:"Deploy name (default: the image-ref basename without tag)"`
 	Instance  string   `short:"i" long:"instance" help:"Instance name"`
@@ -35,7 +35,7 @@ type DeployFromImageCmd struct {
 	Namespace string   `long:"namespace" help:"K8s namespace override (--cluster only)"`
 }
 
-func (c *DeployFromImageCmd) Run() error {
+func (c *DeployFromBoxCmd) Run() error {
 	if strings.TrimSpace(c.Ref) == "" {
 		return fmt.Errorf("ov deploy from-image: a full image <ref> is required")
 	}
@@ -47,7 +47,7 @@ func (c *DeployFromImageCmd) Run() error {
 	// K8s path: delegate to the existing source-less K8s deployer.
 	if c.Cluster != "" {
 		dir, _ := os.Getwd()
-		out, err := DeployFromImage(DeployFromImageOpts{
+		out, err := DeployFromImage(DeployFromBoxOpts{
 			ImageRef:       c.Ref,
 			DeploymentName: name,
 			Instance:       c.Instance,
@@ -69,7 +69,7 @@ func (c *DeployFromImageCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	icc := &ImageConfigSetupCmd{
+	icc := &BoxConfigSetupCmd{
 		Image:       name,
 		Instance:    c.Instance,
 		Env:         c.Env,

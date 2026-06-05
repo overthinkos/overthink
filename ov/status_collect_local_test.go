@@ -74,12 +74,12 @@ func TestLocalCollector_EmptyLedgerNoRows(t *testing.T) {
 // deployed_by sets — this is the real-world host case proven on live disk.
 func TestLocalCollector_SynthesizesFromLayerRecords(t *testing.T) {
 	paths := redirectLocalLedger(t, true)
-	writeLayer(t, paths, &LayerRecord{
+	writeLayer(t, paths, &CandyRecord{
 		Layer:      "ripgrep",
 		DeployedBy: []string{"deploy-A"},
 		DeployedAt: "2026-05-30T10:00:00Z",
 	})
-	writeLayer(t, paths, &LayerRecord{
+	writeLayer(t, paths, &CandyRecord{
 		Layer:      "uv",
 		DeployedBy: []string{"deploy-A", "deploy-B"},
 		DeployedAt: "2026-05-31T12:00:00Z",
@@ -136,7 +136,7 @@ func TestLocalCollector_DeployRecordUnionNoDoubleCount(t *testing.T) {
 	}
 	// A LayerRecord for the SAME deploy-id, plus one extra layer not in the
 	// deploy record's lists.
-	writeLayer(t, paths, &LayerRecord{
+	writeLayer(t, paths, &CandyRecord{
 		Layer:      "extra-layer",
 		DeployedBy: []string{"deploy-X"},
 		DeployedAt: "2026-05-29T09:00:00Z",
@@ -210,7 +210,7 @@ func TestLocalDeployLabel(t *testing.T) {
 }
 
 // writeLayer serializes a LayerRecord into the temp ledger's layers/ dir.
-func writeLayer(t *testing.T, paths *LedgerPaths, rec *LayerRecord) {
+func writeLayer(t *testing.T, paths *LedgerPaths, rec *CandyRecord) {
 	t.Helper()
 	if err := WriteLayerRecord(paths, rec); err != nil {
 		t.Fatalf("WriteLayerRecord(%s): %v", rec.Layer, err)

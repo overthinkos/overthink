@@ -1,0 +1,6 @@
+candy:
+  version: 2026.144.1443
+  name: nodejs
+  package:
+    - nodejs
+    - npm

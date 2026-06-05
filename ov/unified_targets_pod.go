@@ -237,7 +237,7 @@ func (t *PodUnifiedTarget) Rebuild(ctx context.Context, opts RebuildOpts) error 
 	}
 
 	if opts.RebuildImage {
-		if err := runOvSubcommand("image", "build", baseRef); err != nil {
+		if err := runOvSubcommand("box", "build", baseRef); err != nil {
 			return fmt.Errorf("ov image build %s: %w", baseRef, err)
 		}
 		if err := runOvSubcommand("eval", "image", baseRef); err != nil {
@@ -281,7 +281,7 @@ func (t *PodUnifiedTarget) Add(ctx context.Context, dctx *DeployContext, plans [
 	// Build a Generator + ResolvedImage so the overlay's OCITarget renders
 	// tasks as RUN directives (not comments).
 	gen, _ := NewGenerator(dir, t.Tag, ResolveOpts{})
-	var resolvedImg *ResolvedImage
+	var resolvedImg *ResolvedBox
 	if gen != nil && gen.Images != nil {
 		resolvedImg = gen.Images[base]
 	}

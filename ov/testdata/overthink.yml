@@ -1,8 +1,8 @@
-version: 2026.155.1801
+version: 2026.156.557
 import:
     - build.yml
     - images.yml
 discover:
-    layer:
-        - path: layers
+    candy:
+        - path: candy
           recursive: true

@@ -1,0 +1,109 @@
+candy:
+    version: 2026.155.2227
+    name: kde-selkies
+    description: |
+        The KDE Plasma flavor PRIMITIVE for the selkies streaming desktop: runs a
+        full KDE Plasma Wayland session (startplasma-wayland = kwin_wayland +
+        plasmashell) NESTED inside pixelflux's virtual compositor (wayland-1) via
+        kde-selkies-session, so the browser stream shows Plasma. This is the KDE
+        analogue of the labwc layer — the swappable nested-compositor seam.
+
+        Composes selkies (transport) + kde-shell (the SDDM-free Plasma session)
+        + pipewire (audio) — NO seat, NO SDDM, NO graphical.target. The
+        kde-selkies-session service uses supervisord's %(ENV_HOME)s syntax
+        (resolved for both supervisord pods and systemd-user targets by
+        service_render.go) and is started by a poll-for-wayland-1 service exactly
+        like labwc — the wrapper's socket poll IS the ordering primitive, so it
+        runs headless as a pod with no graphical-session.target. The encoder is
+        left UNSET so pixelflux auto-detects per host: NVENC on the NVIDIA flavor
+        (pixelflux built un-stubbed against the cuda-arch-builder), VA-API on the
+        AMD flavor, CPU x264 otherwise — so the SAME layer streams on every GPU
+        config (the encoder identity is asserted per-image in the GPU eval beds).
+
+        This streamed Plasma is the pixelflux virtual-framebuffer session —
+        intentionally distinct from any SDDM/Plasma DRM session a physical monitor
+        shows on a real GPU output (that is kde-desktop's job).
+    require:
+        - selkies
+        - kde-shell
+        - pipewire
+        - dbus
+    env:
+        SELKIES_FRAMERATE: "60"
+    task:
+        - mkdir: "${HOME}/.local/bin"
+          user: "${USER}"
+        - copy: kde-selkies-session
+          to: "${HOME}/.local/bin/kde-selkies-session"
+          mode: "0755"
+          user: "${USER}"
+    service:
+        # Nested KDE Plasma session, started after pixelflux (selkies, priority 8)
+        # has created wayland-1. The wrapper polls for the socket — so NO
+        # graphical-session.target / seat / SDDM ordering is needed (headless pod;
+        # identical contract to labwc-wrapper at the same priority).
+        - name: kde-selkies-session
+          exec: "%(ENV_HOME)s/.local/bin/kde-selkies-session"
+          restart: always
+          priority: 12
+          start_sec: 3
+          enable: true
+          # user scope: the nested Plasma session runs in the deploy user's
+          # session (session bus + XDG_RUNTIME_DIR from the user manager), so it
+          # finds pixelflux's wayland-1 at the same per-user runtime dir.
+          scope: user
+    eval:
+        - id: kde-selkies-session-wrapper
+          file: ${HOME}/.local/bin/kde-selkies-session
+          exists: true
+          mode: "0755"
+        # The nested Plasma session reaches steady-state without crash-looping —
+        # the headless-no-seat premise (RDD-1). Mirrors labwc-stable.
+        - id: kde-selkies-stable
+          scope: deploy
+          command: |
+            sleep 20
+            supervisorctl status kde-selkies-session
+          stdout:
+            - matches: "RUNNING"
+          in_container: true
+        # selkies web UI is live on :3000 (true on every GPU config; the encoder
+        # identity — NVENC / VA-API / x264 — is asserted per-image in the GPU beds).
+        - id: kde-selkies-stream-https
+          scope: deploy
+          http: https://127.0.0.1:${HOST_PORT:3000}/
+          status: 200
+          allow_insecure: true
+          timeout: 10s
+        # `ov eval wl` KWin parity — proves the host-safe KWin automation backends
+        # work on the nested startplasma-wayland session, matching the wlroots
+        # (sway/labwc) coverage: window-management via kdotool, keyboard via wtype,
+        # clipboard via wl-clipboard, plus compositor detection. Pointer + resolution
+        # are intentionally NOT covered (no host-safe KWin backend — separate cutover;
+        # see ov/wl.go errKWinPointerUnsupported + the resolution guard).
+        - id: kde-wl-compositor-is-kwin
+          scope: deploy
+          wl: status
+          stdout:
+            - matches: "compositor: +kwin"
+            - matches: "kdotool: +available"
+        - id: kde-wl-keyboard-wtype
+          scope: deploy
+          wl: type
+          text: "ovkwin"
+        - id: kde-wl-toplevel-via-kdotool
+          scope: deploy
+          wl: toplevel
+          stdout:
+            - matches: "."
+        - id: kde-wl-clipboard-set
+          scope: deploy
+          wl: clipboard
+          action: set
+          text: "ovclip-kwin"
+        - id: kde-wl-clipboard-get
+          scope: deploy
+          wl: clipboard
+          action: get
+          stdout:
+            - contains: "ovclip-kwin"

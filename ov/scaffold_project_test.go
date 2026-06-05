@@ -16,14 +16,14 @@ func TestScaffoldProject(t *testing.T) {
 	if err := ScaffoldProject(dir); err != nil {
 		t.Fatalf("ScaffoldProject: %v", err)
 	}
-	for _, p := range []string{"overthink.yml", "layers", ".gitignore"} {
+	for _, p := range []string{"overthink.yml", "candy", ".gitignore"} {
 		if _, err := os.Stat(filepath.Join(dir, p)); err != nil {
 			t.Errorf("expected %s to exist: %v", p, err)
 		}
 	}
 	// The scaffolder must NEVER write a per-kind image.yml — schema v4
 	// canonical authoring target is overthink.yml only.
-	if _, err := os.Stat(filepath.Join(dir, "image.yml")); err == nil {
+	if _, err := os.Stat(filepath.Join(dir, "box.yml")); err == nil {
 		t.Errorf("expected NO image.yml at scaffold root (schema v4); found one")
 	}
 	// Idempotency: re-scaffolding the same dir should fail (we never
@@ -54,12 +54,12 @@ func TestScaffoldProject_AddImageRoundtrip(t *testing.T) {
 		t.Errorf("scaffold's leading comment was destroyed by AddImage; overthink.yml=\n%s", data)
 	}
 	// Confirm the structure is parseable AND the image is present. The
-	// canonical singular `image:` key is what the scaffold emits.
+	// canonical singular `box:` key is what the scaffold emits.
 	var root struct {
 		Image map[string]struct {
 			Base   string   `yaml:"base"`
-			Layers []string `yaml:"layers"`
-		} `yaml:"image"`
+			Layers []string `yaml:"candy"`
+		} `yaml:"box"`
 	}
 	if err := yaml.Unmarshal(data, &root); err != nil {
 		t.Fatalf("re-parse: %v\n%s", err, data)

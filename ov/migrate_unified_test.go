@@ -40,6 +40,12 @@ image:
 	if err != nil {
 		t.Fatalf("MigrateUnified: %v", err)
 	}
+	// The full chain also runs candy-box-rename (a later step): layers/ → candy/,
+	// layer.yml → candy.yml, and the discover path — so the migrated tree loads
+	// and discovers under the current schema.
+	if _, err := MigrateBoxCandyRename(root, "", false); err != nil {
+		t.Fatalf("candy-box rename: %v", err)
+	}
 	// Expect root + build.yml + images.yml written.
 	if len(written) < 3 {
 		t.Errorf("written = %v, want ≥3 files", written)
@@ -108,8 +114,8 @@ func TestMigrateUnified_Monolithic(t *testing.T) {
 	if !strings.Contains(s, "distro:") {
 		t.Error("monolithic output missing distro:")
 	}
-	if !strings.Contains(s, "image:") {
-		t.Error("monolithic output missing image:")
+	if !strings.Contains(s, "box:") {
+		t.Error("monolithic output missing box:")
 	}
 }
 

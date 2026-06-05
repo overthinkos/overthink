@@ -32,7 +32,7 @@ import (
 // secretDeclaredOnImage returns the set of env var names an image declares
 // as credential-backed (secret_accepts or secret_requires). Returns a
 // non-nil empty set when meta is nil or has no secret declarations.
-func secretDeclaredOnImage(meta *ImageMetadata) map[string]bool {
+func secretDeclaredOnImage(meta *BoxMetadata) map[string]bool {
 	names := map[string]bool{}
 	if meta == nil {
 		return names
@@ -51,7 +51,7 @@ func secretDeclaredOnImage(meta *ImageMetadata) map[string]bool {
 // site to populate SaveDeployStateInput.SecretNames for the defense-in-depth
 // scrub in saveDeployState. Returns nil (not an empty slice) when meta has
 // no secret declarations — matches the rest of the omitempty-style API.
-func secretDepNames(meta *ImageMetadata) []string {
+func secretDepNames(meta *BoxMetadata) []string {
 	if meta == nil || (len(meta.SecretRequire) == 0 && len(meta.SecretAccept) == 0) {
 		return nil
 	}
@@ -101,7 +101,7 @@ func secretKeyForDep(dep EnvDependency) (service, key string) {
 // This is idempotent: running it a second time on a now-clean deploy.yml is
 // a no-op. Running it on a host that never had plaintext credentials is a
 // no-op.
-func MigratePlaintextEnvSecret(dc *DeployConfig, meta *ImageMetadata, image, instance string) (int, error) {
+func MigratePlaintextEnvSecret(dc *DeployConfig, meta *BoxMetadata, image, instance string) (int, error) {
 	if dc == nil || dc.Deploy == nil {
 		return 0, nil
 	}
@@ -200,7 +200,7 @@ func MigratePlaintextEnvSecret(dc *DeployConfig, meta *ImageMetadata, image, ins
 // Returns (cleaned []string, imported int, err). cleaned is the new -e list
 // (never nil — returns an empty slice when all entries were migrated);
 // imported is the number of credentials moved into the store.
-func scrubSecretCLIEnv(cliEnv []string, meta *ImageMetadata) ([]string, int, error) {
+func scrubSecretCLIEnv(cliEnv []string, meta *BoxMetadata) ([]string, int, error) {
 	if len(cliEnv) == 0 {
 		return cliEnv, 0, nil
 	}

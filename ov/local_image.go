@@ -148,7 +148,7 @@ func resolveLocalImageRef(engine, input string) (string, error) {
 	for _, img := range images {
 		labelCalVer := img.Labels[LabelVersion] // content-derived EffectiveVersion (primary key)
 		// Label-preferred: org.overthinkos.image equals the short name.
-		if img.Labels[LabelImage] == input && input != "" {
+		if img.Labels[LabelBox] == input && input != "" {
 			for _, n := range img.Names {
 				// label-CalVer is the PRIMARY ordering key; tag-CalVer (the
 				// per-build timestamp) is the TIEBREAKER that picks the newest

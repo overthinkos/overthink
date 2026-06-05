@@ -200,7 +200,7 @@ func (t *LocalDeployTarget) Emit(plans []*InstallPlan, opts EmitOpts) error {
 // emitPlan walks one plan's steps in IR order, batching by
 // (Scope, Venue) for efficient sudo/user/container execution.
 func (t *LocalDeployTarget) emitPlan(plan *InstallPlan, opts EmitOpts) error {
-	rec := &LayerRecord{
+	rec := &CandyRecord{
 		Layer:      plan.Layer,
 		Version:    plan.Version,
 		DeployedAt: time.Now().UTC().Format(time.RFC3339),
@@ -232,7 +232,7 @@ func (t *LocalDeployTarget) emitPlan(plan *InstallPlan, opts EmitOpts) error {
 // recordLayer writes the per-layer ledger entry and adds the deploy
 // to the refcount set. Idempotent across multiple deploys of the same
 // layer.
-func (t *LocalDeployTarget) recordLayer(rec *LayerRecord, plan *InstallPlan, opts EmitOpts) error {
+func (t *LocalDeployTarget) recordLayer(rec *CandyRecord, plan *InstallPlan, opts EmitOpts) error {
 	if opts.DryRun || plan.DeployID == "" {
 		return nil
 	}
@@ -244,7 +244,7 @@ func (t *LocalDeployTarget) recordLayer(rec *LayerRecord, plan *InstallPlan, opt
 	// a VM / pod via SSH / podman exec) write the ledger on the substrate,
 	// not the operator's filesystem. Local executor → operator-side
 	// (unchanged behaviour).
-	return AddLayerDeploymentVia(t.Executor, t.LedgerPaths, plan.Layer, plan.DeployID, func(existing *LayerRecord) {
+	return AddLayerDeploymentVia(t.Executor, t.LedgerPaths, plan.Layer, plan.DeployID, func(existing *CandyRecord) {
 		existing.Version = rec.Version
 		existing.Steps = append(existing.Steps, rec.Steps...)
 		existing.ReverseOps = append(existing.ReverseOps, rec.ReverseOps...)
@@ -252,7 +252,7 @@ func (t *LocalDeployTarget) recordLayer(rec *LayerRecord, plan *InstallPlan, opt
 }
 
 // execStep runs one step and records its reversal ops in rec.
-func (t *LocalDeployTarget) execStep(step InstallStep, plan *InstallPlan, opts EmitOpts, rec *LayerRecord) error {
+func (t *LocalDeployTarget) execStep(step InstallStep, plan *InstallPlan, opts EmitOpts, rec *CandyRecord) error {
 	start := time.Now().UTC()
 	switch s := step.(type) {
 	case *ShellHookStep:
@@ -300,7 +300,7 @@ func (t *LocalDeployTarget) execStep(step InstallStep, plan *InstallPlan, opts E
 // no-ops with a logged reason. UseDropin=true writes the file
 // outright; UseDropin=false applies replaceOrAppendManagedBlock to the
 // existing rc file under a per-layer fence pair.
-func (t *LocalDeployTarget) execShellSnippet(s *ShellSnippetStep, plan *InstallPlan, opts EmitOpts, rec *LayerRecord, start time.Time) error {
+func (t *LocalDeployTarget) execShellSnippet(s *ShellSnippetStep, plan *InstallPlan, opts EmitOpts, rec *CandyRecord, start time.Time) error {
 	if err := t.ensureShellProbe(opts); err != nil {
 		return err
 	}
@@ -415,7 +415,7 @@ func isFileNotFoundErr(err error) bool {
 // Step executors
 // ---------------------------------------------------------------------------
 
-func (t *LocalDeployTarget) execShellHook(s *ShellHookStep, plan *InstallPlan, opts EmitOpts, rec *LayerRecord, start time.Time) error {
+func (t *LocalDeployTarget) execShellHook(s *ShellHookStep, plan *InstallPlan, opts EmitOpts, rec *CandyRecord, start time.Time) error {
 	if opts.DryRun {
 		fmt.Fprintf(t.stderr(), "[dry-run] env.d/%s.env + managed block\n", s.LayerName)
 		t.noteStep(rec, StepKindShellHook, s.Scope(), s.Venue(), fmt.Sprintf("layer=%s", s.LayerName), start)
@@ -432,7 +432,7 @@ func (t *LocalDeployTarget) execShellHook(s *ShellHookStep, plan *InstallPlan, o
 	return nil
 }
 
-func (t *LocalDeployTarget) execSystemPackages(s *SystemPackagesStep, plan *InstallPlan, opts EmitOpts, rec *LayerRecord, start time.Time) error {
+func (t *LocalDeployTarget) execSystemPackages(s *SystemPackagesStep, plan *InstallPlan, opts EmitOpts, rec *CandyRecord, start time.Time) error {
 	cmd, err := t.renderSystemPackageCommand(s)
 	if err != nil {
 		return err
@@ -493,7 +493,7 @@ func renderHostPackageCommand(distroCfg *DistroConfig, s *SystemPackagesStep) (s
 	return strings.TrimSpace(cmd), nil
 }
 
-func (t *LocalDeployTarget) execBuilder(s *BuilderStep, plan *InstallPlan, opts EmitOpts, rec *LayerRecord, start time.Time) error {
+func (t *LocalDeployTarget) execBuilder(s *BuilderStep, plan *InstallPlan, opts EmitOpts, rec *CandyRecord, start time.Time) error {
 	// Builder image resolution mirrors VmDeployTarget.execBuilder:
 	//   1. EmitOpts.BuilderImageOverride (--builder-image flag)
 	//   2. BuilderStep.BuilderImage (compiled from image.yml)
@@ -614,7 +614,7 @@ func (t *LocalDeployTarget) execBuilder(s *BuilderStep, plan *InstallPlan, opts 
 	return nil
 }
 
-func (t *LocalDeployTarget) execTask(s *TaskStep, plan *InstallPlan, opts EmitOpts, rec *LayerRecord, start time.Time) error {
+func (t *LocalDeployTarget) execTask(s *TaskStep, plan *InstallPlan, opts EmitOpts, rec *CandyRecord, start time.Time) error {
 	if s.Task == nil {
 		return nil
 	}
@@ -924,7 +924,7 @@ func renderDownloadScript(task *Task, layerVars map[string]string) string {
 	return b.String()
 }
 
-func (t *LocalDeployTarget) execFile(s *FileStep, plan *InstallPlan, opts EmitOpts, rec *LayerRecord, start time.Time) error {
+func (t *LocalDeployTarget) execFile(s *FileStep, plan *InstallPlan, opts EmitOpts, rec *CandyRecord, start time.Time) error {
 	mode := fmt.Sprintf("%04o", s.Mode.Perm())
 	owner := ""
 	if s.Owner != "" && s.Owner != "root" {
@@ -945,7 +945,7 @@ func (t *LocalDeployTarget) execFile(s *FileStep, plan *InstallPlan, opts EmitOp
 	return nil
 }
 
-func (t *LocalDeployTarget) execServicePackaged(s *ServicePackagedStep, plan *InstallPlan, opts EmitOpts, rec *LayerRecord, start time.Time) error {
+func (t *LocalDeployTarget) execServicePackaged(s *ServicePackagedStep, plan *InstallPlan, opts EmitOpts, rec *CandyRecord, start time.Time) error {
 	// Query prior enabled state for restore-on-teardown.
 	s.PriorEnabled = systemctlIsEnabled(s.Unit, s.TargetScope)
 
@@ -966,7 +966,7 @@ func (t *LocalDeployTarget) execServicePackaged(s *ServicePackagedStep, plan *In
 	return nil
 }
 
-func (t *LocalDeployTarget) execServiceCustom(s *ServiceCustomStep, plan *InstallPlan, opts EmitOpts, rec *LayerRecord, start time.Time) error {
+func (t *LocalDeployTarget) execServiceCustom(s *ServiceCustomStep, plan *InstallPlan, opts EmitOpts, rec *CandyRecord, start time.Time) error {
 	if s.UnitPath == "" || s.UnitText == "" {
 		return fmt.Errorf("service %s: no unit text rendered (compile-time render skipped this entry; check that the layer's mixed-`service:` pair is well-formed)", s.Name)
 	}
@@ -987,7 +987,7 @@ func (t *LocalDeployTarget) execServiceCustom(s *ServiceCustomStep, plan *Instal
 	return nil
 }
 
-func (t *LocalDeployTarget) execRepoChange(s *RepoChangeStep, plan *InstallPlan, opts EmitOpts, rec *LayerRecord, start time.Time) error {
+func (t *LocalDeployTarget) execRepoChange(s *RepoChangeStep, plan *InstallPlan, opts EmitOpts, rec *CandyRecord, start time.Time) error {
 	cmd := fmt.Sprintf("mkdir -p %s && cat > %s <<'OV_REPO'\n%s\nOV_REPO",
 		shQuoteArg(filepath.Dir(s.File)), shQuoteArg(s.File), s.Content)
 	if err := t.runSystem(cmd, opts); err != nil {
@@ -1009,7 +1009,7 @@ func (t *LocalDeployTarget) execRepoChange(s *RepoChangeStep, plan *InstallPlan,
 // dir is a clean no-op (the layer's curl task installs it there). The shared
 // build+transfer+install body lives in localpkg.go (R3 — the VM target calls the
 // same execLocalPkgInstall).
-func (t *LocalDeployTarget) execLocalPkg(s *LocalPkgInstallStep, plan *InstallPlan, opts EmitOpts, rec *LayerRecord, start time.Time) error {
+func (t *LocalDeployTarget) execLocalPkg(s *LocalPkgInstallStep, plan *InstallPlan, opts EmitOpts, rec *CandyRecord, start time.Time) error {
 	ctx := opts.ContextOrDefault()
 	supported := venueHasPkgManager(ctx, t.exec(), s.LocalPkg, opts)
 	if err := execLocalPkgInstall(ctx, t.exec(), s, supported, t.Name(), t.Cfg, opts); err != nil {
@@ -1267,7 +1267,7 @@ func (t *LocalDeployTarget) logGated(step InstallStep, gate Gate, opts EmitOpts)
 	fmt.Fprintf(t.stderr(), "[skip] %s scope=%s requires --%s\n", step.Kind(), step.Scope(), gate)
 }
 
-func (t *LocalDeployTarget) noteStep(rec *LayerRecord, kind StepKind, scope Scope, venue Venue, summary string, start time.Time) {
+func (t *LocalDeployTarget) noteStep(rec *CandyRecord, kind StepKind, scope Scope, venue Venue, summary string, start time.Time) {
 	rec.Steps = append(rec.Steps, StepRecord{
 		Kind:        kind,
 		Scope:       scope,

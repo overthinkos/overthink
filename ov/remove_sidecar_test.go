@@ -27,7 +27,7 @@ func TestResolveSidecarNames(t *testing.T) {
 			deployYAML: `deploy:
   other:
     target: pod
-    image: other
+    box: other
 `,
 			image:    "missing",
 			instance: "",
@@ -38,7 +38,7 @@ func TestResolveSidecarNames(t *testing.T) {
 			deployYAML: `deploy:
   foo:
     target: pod
-    image: foo
+    box: foo
 `,
 			image:    "foo",
 			instance: "",
@@ -49,7 +49,7 @@ func TestResolveSidecarNames(t *testing.T) {
 			deployYAML: `deploy:
   foo:
     target: pod
-    image: foo
+    box: foo
     sidecar:
       tailscale: {}
 `,
@@ -62,7 +62,7 @@ func TestResolveSidecarNames(t *testing.T) {
 			deployYAML: `deploy:
   foo:
     target: pod
-    image: foo
+    box: foo
     sidecar:
       vault: {}
       tailscale: {}
@@ -76,7 +76,7 @@ func TestResolveSidecarNames(t *testing.T) {
 			deployYAML: `deploy:
   foo/inst1:
     target: pod
-    image: foo
+    box: foo
     sidecar:
       tailscale: {}
 `,

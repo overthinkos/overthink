@@ -13,7 +13,7 @@ android:
     # emulator via the pod. google_account names the credential-store secret
     # keys the apkeep google-play source reads (an AAS token, NOT a password).
     pixel9a-36:
-        image: android-emulator
+        box: android-emulator
         device: pixel_9a
         api_level: 36
         google_account:

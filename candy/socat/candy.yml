@@ -1,0 +1,35 @@
+candy:
+    version: 2026.144.1443
+    name: socat
+    description: Socket relay tool for VM console access and port relays
+    package:
+        - socat
+    distro:
+        arch:
+            package:
+                - iproute2
+        debian:
+            package:
+                - iproute2
+        fedora:
+            package:
+                - iproute
+        ubuntu:
+            package:
+                - iproute2
+    task:
+        - copy: relay-wrapper
+          to: /usr/local/bin/relay-wrapper
+          mode: "0755"
+          user: root
+    eval:
+        - id: socat-binary
+          file: /usr/bin/socat
+          exists: true
+        - id: socat-version
+          command: /usr/bin/socat -V
+          exit_status: 0
+        - id: relay-wrapper
+          file: /usr/local/bin/relay-wrapper
+          exists: true
+          mode: "0755"

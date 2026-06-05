@@ -18,10 +18,10 @@ func TestExtractMetadata_Tests(t *testing.T) {
 
 	testsBlob, err := json.Marshal(&LabelEvalSet{
 		Layer: []Check{
-			{File: "/usr/bin/redis-server", Exists: ptrBool(true), Origin: "layer:redis", Scope: "build"},
+			{File: "/usr/bin/redis-server", Exists: ptrBool(true), Origin: "candy:redis", Scope: "build"},
 		},
 		Image: []Check{
-			{Command: "supervisord -v", Origin: "image:redis-ml", Scope: "build"},
+			{Command: "supervisord -v", Origin: "box:redis-ml", Scope: "build"},
 		},
 		Deploy: []Check{
 			{
@@ -40,7 +40,7 @@ func TestExtractMetadata_Tests(t *testing.T) {
 	InspectLabels = func(engine, imageRef string) (map[string]string, error) {
 		return map[string]string{
 			LabelVersion: "1",
-			LabelImage:   "redis-ml",
+			LabelBox:     "redis-ml",
 			LabelEval:    string(testsBlob),
 		}, nil
 	}
@@ -86,7 +86,7 @@ func TestExtractMetadata_Tests_AbsentLabel(t *testing.T) {
 	defer func() { InspectLabels = orig }()
 
 	InspectLabels = func(engine, imageRef string) (map[string]string, error) {
-		return map[string]string{LabelVersion: "1", LabelImage: "x"}, nil
+		return map[string]string{LabelVersion: "1", LabelBox: "x"}, nil
 	}
 	meta, err := ExtractMetadata("podman", "x")
 	if err != nil {
@@ -105,7 +105,7 @@ func TestExtractMetadata_Tests_MalformedLabel(t *testing.T) {
 	InspectLabels = func(engine, imageRef string) (map[string]string, error) {
 		return map[string]string{
 			LabelVersion: "1",
-			LabelImage:   "x",
+			LabelBox:     "x",
 			LabelEval:    "{not valid json",
 		}, nil
 	}

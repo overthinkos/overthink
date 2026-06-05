@@ -1,7 +1,7 @@
 kind: local
 name: dev-workstation
 spec:
-  layer:
+  candy:
     - ripgrep
     - direnv
   install_opts:

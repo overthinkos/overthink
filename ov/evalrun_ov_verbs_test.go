@@ -51,11 +51,11 @@ func TestResolveLocalImageRef_ShortNameLabelMatch(t *testing.T) {
 	withLocalImages(t, []LocalImageInfo{
 		{
 			Names:  []string{"ghcr.io/overthinkos/jupyter:latest"},
-			Labels: map[string]string{LabelImage: "jupyter"},
+			Labels: map[string]string{LabelBox: "jupyter"},
 		},
 		{
 			Names:  []string{"ghcr.io/overthinkos/filebrowser:latest"},
-			Labels: map[string]string{LabelImage: "filebrowser"},
+			Labels: map[string]string{LabelBox: "filebrowser"},
 		},
 	})
 	got, err := resolveLocalImageRef("podman", "jupyter")
@@ -90,7 +90,7 @@ func TestResolveLocalImageRef_ShortNameLabelPreferredOverName(t *testing.T) {
 		},
 		{
 			Names:  []string{"ghcr.io/overthinkos/jupyter:v2"},
-			Labels: map[string]string{LabelImage: "jupyter"},
+			Labels: map[string]string{LabelBox: "jupyter"},
 		},
 	})
 	got, err := resolveLocalImageRef("podman", "jupyter")

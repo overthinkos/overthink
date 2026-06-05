@@ -345,7 +345,7 @@ func TestCollectLayerSecretAcceptsHappyPath(t *testing.T) {
 		t.Fatalf("seed routeb: %v", err)
 	}
 
-	meta := &ImageMetadata{
+	meta := &BoxMetadata{
 		SecretRequire: []EnvDependency{
 			{Name: "TEST_OV_CRED_REQUIRED", Description: "required"},
 		},
@@ -438,7 +438,7 @@ func TestCollectLayerSecretAcceptsHappyPath(t *testing.T) {
 func TestCollectLayerSecretAcceptsMissingRequired(t *testing.T) {
 	withIsolatedCredentialStore(t) // empty store
 
-	meta := &ImageMetadata{
+	meta := &BoxMetadata{
 		SecretRequire: []EnvDependency{
 			{Name: "TEST_OV_CRED_REQUIRED", Description: "required"},
 		},
@@ -492,7 +492,7 @@ func TestCollectLayerSecretAcceptsEnvOverride(t *testing.T) {
 
 	t.Setenv("TEST_OV_CRED_IMPORTED", "from-env-synthetic")
 
-	meta := &ImageMetadata{
+	meta := &BoxMetadata{
 		SecretAccept: []EnvDependency{
 			{Name: "TEST_OV_CRED_IMPORTED", Description: "opt", Key: "ov/api-key/imported"},
 		},
@@ -527,7 +527,7 @@ func TestMergedSecretsIncludeCredentialBacked(t *testing.T) {
 
 	// A realistic openwebui-style metadata: one layer-owned webui-secret-key
 	// AND one credential-backed WEBUI_ADMIN_PASSWORD via secret_requires.
-	meta := &ImageMetadata{
+	meta := &BoxMetadata{
 		Secret: []LabelSecretEntry{
 			{Name: "webui-secret-key", Target: "/run/secrets/webui_secret_key", Env: "WEBUI_SECRET_KEY"},
 		},

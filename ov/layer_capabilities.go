@@ -19,7 +19,7 @@ import (
 // (labels.go), which already round-trips through OCI labels. We do NOT
 // introduce a parallel runtime contract type; we just change the source
 // of truth from ImageConfig flags to layer aggregation.
-type LayerCapabilities struct {
+type CandyCapabilities struct {
 	PreserveUser       bool              `yaml:"preserve_user,omitempty"`
 	NeedsRootAfterInit bool              `yaml:"needs_root_after_init,omitempty"`
 	InitSystemHint     string            `yaml:"init_system_hint,omitempty"`
@@ -31,7 +31,7 @@ type LayerCapabilities struct {
 // order. It is populated onto ResolvedImage and consumed wherever code
 // previously read ImageConfig.Bootc, ImageConfig.DataImage, or the
 // init-system bootc parameter.
-type AggregatedLayerCaps struct {
+type AggregatedCandyCaps struct {
 	PreserveUser       bool
 	NeedsRootAfterInit bool
 	InitSystemHint     string
@@ -48,8 +48,8 @@ type AggregatedLayerCaps struct {
 // Returns an error if two layers declare conflicting values for the same
 // OCI label key — the conflict surfaces the bug rather than silently
 // picking a winner.
-func AggregateLayerCapabilities(layers map[string]*Layer, order []string) (*AggregatedLayerCaps, error) {
-	out := &AggregatedLayerCaps{
+func AggregateLayerCapabilities(layers map[string]*Layer, order []string) (*AggregatedCandyCaps, error) {
+	out := &AggregatedCandyCaps{
 		OCILabels: make(map[string]string),
 		Provided:  make(map[string]bool),
 	}
@@ -101,9 +101,9 @@ func AggregateLayerCapabilities(layers map[string]*Layer, order []string) (*Aggr
 // CheckRequiredCapabilities returns a sorted list of capability names
 // requested via `requires_capabilities:` on any layer in `order` but not
 // provided by the aggregated capabilities. Empty slice on success.
-func CheckRequiredCapabilities(layers map[string]*Layer, order []string, agg *AggregatedLayerCaps) []string {
+func CheckRequiredCapabilities(layers map[string]*Layer, order []string, agg *AggregatedCandyCaps) []string {
 	if agg == nil {
-		agg = &AggregatedLayerCaps{Provided: map[string]bool{}}
+		agg = &AggregatedCandyCaps{Provided: map[string]bool{}}
 	}
 	missing := make(map[string]bool)
 	for _, name := range order {

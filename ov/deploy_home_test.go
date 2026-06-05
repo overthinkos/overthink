@@ -51,7 +51,7 @@ func TestCompileShellHookStepDefersHome(t *testing.T) {
 			PathAppend: []string{"$HOME/.npm-global/bin"},
 		},
 	}
-	img := &ResolvedImage{Home: "/home/operator"}
+	img := &ResolvedBox{Home: "/home/operator"}
 	step := compileShellHookStep(layer, img)
 	if step == nil {
 		t.Fatal("compileShellHookStep returned nil")

@@ -1,0 +1,67 @@
+candy:
+    version: 2026.144.1443
+    name: eval-stack-layer
+    description:
+        feature: Combined kind:layer + kind:pod + DeployTarget smoke on top of eval-base-layer
+        narrative: |
+            The second (and final) layer of the eval-pod stack. In one layer it
+            proves three mechanisms the combined eval-pod bed
+            (`ov eval run eval-pod`) covers beyond the build smoke:
+              * layer composition order — asserts /etc/eval-base-marker (written by
+                the prior eval-base-layer) is still present;
+              * kind:pod runtime — runs `nc -lk 18794` under the configured init
+                system and probes the listening port (harness + in-container ss);
+              * DeployTarget rendering — runs `sleep infinity` under supervisord and
+                probes the service is running.
+            Installs ncat + iproute (port listener) + coreutils (sleep) + supervisor.
+            Both services are custom exec entries — fedora-minimal ships no systemd
+            units for nc/sleep, so the layer is supervisord-only on container targets.
+        tag: [working]
+    distro:
+        fedora:
+            package:
+                - iproute
+                - ncat
+                - coreutils
+                - supervisor
+    task:
+        - write: /etc/eval-stack-marker
+          user: root
+          mode: "0644"
+          content: |
+            eval-stack v1
+    service:
+        - name: eval-listener
+          exec: "/usr/bin/nc -lk 18794"
+          restart: always
+          priority: 20
+          autostart: true
+          enable: true
+          scope: system
+        - name: eval-sleep
+          exec: "/usr/bin/sleep infinity"
+          restart: always
+          priority: 20
+          autostart: true
+          enable: true
+          scope: system
+    eval:
+        - id: eval-stack-marker-exists
+          file: /etc/eval-stack-marker
+          exists: true
+        - id: eval-compose-order
+          file: /etc/eval-base-marker
+          exists: true
+        - id: eval-port-listening
+          scope: deploy
+          port: 18794
+          listening: true
+        - id: eval-ss-listening
+          scope: deploy
+          command: "ss -tlnp 2>/dev/null | grep ':18794'"
+          exit_status: 0
+          in_container: true
+        - id: eval-service-running
+          scope: deploy
+          service: eval-sleep
+          running: true

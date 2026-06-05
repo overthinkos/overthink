@@ -115,7 +115,7 @@ func (c *UpdateCmd) Run() error {
 
 // syncData merges data from the (new) image into bind-backed volumes.
 // Uses merge mode (cp -an) to add new files without overwriting existing user data.
-func (c *UpdateCmd) syncData(engine string, imageRef string, meta *ImageMetadata, rt *ResolvedRuntime) {
+func (c *UpdateCmd) syncData(engine string, imageRef string, meta *BoxMetadata, rt *ResolvedRuntime) {
 	// Re-extract metadata from the new image
 	newMeta, err := ExtractMetadata(engine, imageRef)
 	if err != nil || newMeta == nil {

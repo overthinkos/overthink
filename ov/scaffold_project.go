@@ -82,7 +82,7 @@ func ScaffoldProject(dir string) error {
 	if err := os.WriteFile(overthinkPath, []byte(seed), 0o644); err != nil {
 		return fmt.Errorf("writing overthink.yml: %w", err)
 	}
-	if err := os.MkdirAll(filepath.Join(dir, "layers"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(dir, DefaultCandyDir), 0o755); err != nil {
 		return fmt.Errorf("creating layers/: %w", err)
 	}
 	gitignorePath := filepath.Join(dir, ".gitignore")
@@ -112,7 +112,7 @@ func AddImage(dir, name, base string, layers []string) error {
 	if imagesNode == nil {
 		// Schema v4 canonical key is the singular `image:`. Append it
 		// when missing.
-		imagesKey = "image"
+		imagesKey = "box"
 		imagesNode = &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
 		doc.Content = append(doc.Content,
 			&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: imagesKey},
@@ -137,7 +137,7 @@ func AddImage(dir, name, base string, layers []string) error {
 			)
 		}
 		imgValue.Content = append(imgValue.Content,
-			&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "layers"},
+			&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "candy"},
 			layersNode,
 		)
 	}
@@ -159,11 +159,11 @@ func AddLayerToImage(dir, image, layer string) error {
 	if imgNode == nil {
 		return fmt.Errorf("image %q not found in overthink.yml", image)
 	}
-	layersNode := mappingChild(imgNode, "layers")
+	layersNode := mappingChild(imgNode, "candy")
 	if layersNode == nil {
 		layersNode = &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq"}
 		imgNode.Content = append(imgNode.Content,
-			&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "layers"},
+			&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "candy"},
 			layersNode,
 		)
 	}
@@ -190,7 +190,7 @@ func RemoveLayerFromImage(dir, image, layer string) error {
 	if imgNode == nil {
 		return fmt.Errorf("image %q not found in overthink.yml", image)
 	}
-	layersNode := mappingChild(imgNode, "layers")
+	layersNode := mappingChild(imgNode, "candy")
 	if layersNode == nil {
 		return nil
 	}
@@ -267,8 +267,8 @@ func mappingChild(m *yaml.Node, key string) *yaml.Node {
 // node is missing, returns ("", nil) so callers can append the
 // canonical singular form.
 func imagesMapNode(doc *yaml.Node) (string, *yaml.Node) {
-	if n := mappingChild(doc, "image"); n != nil {
-		return "image", n
+	if n := mappingChild(doc, "box"); n != nil {
+		return "box", n
 	}
 	if n := mappingChild(doc, "images"); n != nil {
 		return "images", n

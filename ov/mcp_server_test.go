@@ -55,10 +55,10 @@ func TestMcpServerSchema_CoreToolsPresent(t *testing.T) {
 	must := []string{
 		"version",
 		"status",
-		"image.build",
-		"image.inspect",
-		"image.list.images",
-		"image.list.layers",
+		"box.build",
+		"box.inspect",
+		"box.list.boxes",
+		"box.list.candies",
 		"settings.list",
 		"eval.live",
 		"eval.mcp.ping",
@@ -107,14 +107,14 @@ func TestMcpServerSchema_ReadOnlyFilter(t *testing.T) {
 	}
 
 	// Representative destructive tools must be gone.
-	for _, name := range []string{"remove", "config.mount", "secrets.set", "image.build"} {
+	for _, name := range []string{"remove", "config.mount", "secrets.set", "box.build"} {
 		if _, ok := restricted[name]; ok {
 			t.Errorf("read-only server should not expose %q", name)
 		}
 	}
 
 	// Representative read-only tools must still be present.
-	for _, name := range []string{"version", "status", "image.list.images", "image.inspect"} {
+	for _, name := range []string{"version", "status", "box.list.boxes", "box.inspect"} {
 		if _, ok := restricted[name]; !ok {
 			t.Errorf("read-only server should still expose %q", name)
 		}
@@ -124,11 +124,11 @@ func TestMcpServerSchema_ReadOnlyFilter(t *testing.T) {
 func TestMcpServerSchema_PositionalsAndFlags(t *testing.T) {
 	tools := toolIndex(t, false)
 
-	// image.inspect has one required positional ("image") plus --format and
+	// box.inspect has one required positional ("image") plus --format and
 	// --instance flags.
-	inspect, ok := tools["image.inspect"]
+	inspect, ok := tools["box.inspect"]
 	if !ok {
-		t.Fatalf("image.inspect missing")
+		t.Fatalf("box.inspect missing")
 	}
 	schema, ok := inspect.InputSchema.(map[string]any)
 	if !ok {
@@ -137,7 +137,7 @@ func TestMcpServerSchema_PositionalsAndFlags(t *testing.T) {
 	props, _ := schema["properties"].(map[string]any)
 	for _, want := range []string{"image", "format", "instance"} {
 		if _, ok := props[want]; !ok {
-			t.Errorf("image.inspect schema missing property %q", want)
+			t.Errorf("box.inspect schema missing property %q", want)
 		}
 	}
 	reqList, _ := schema["required"].([]string)
@@ -148,7 +148,7 @@ func TestMcpServerSchema_PositionalsAndFlags(t *testing.T) {
 		}
 	}
 	if !foundImage {
-		t.Errorf("image.inspect should require 'image' positional, required=%v", reqList)
+		t.Errorf("box.inspect should require 'image' positional, required=%v", reqList)
 	}
 }
 
@@ -212,7 +212,7 @@ func TestMcpServer_VersionRoundTrip(t *testing.T) {
 // TestMcpServer_InvalidArgumentReturnsToolError ensures that a missing required
 // positional surfaces as a tool error rather than a crash.
 func TestMcpServer_InvalidArgumentReturnsToolError(t *testing.T) {
-	// image.inspect requires an <image> positional. Omit it.
+	// box.inspect requires an <image> positional. Omit it.
 	stdout, stderr, err := captureAndRun([]string{"image", "inspect"})
 	if err == nil {
 		t.Errorf("expected error from inspect with no positional, got stdout=%q stderr=%q", stdout, stderr)
@@ -220,19 +220,19 @@ func TestMcpServer_InvalidArgumentReturnsToolError(t *testing.T) {
 }
 
 // TestMcpServer_ArgvReconstruction verifies argvFromJSON emits the correct
-// CLI args for a realistic tool call (image.inspect with --format and a
+// CLI args for a realistic tool call (box.inspect with --format and a
 // positional).
 func TestMcpServer_ArgvReconstruction(t *testing.T) {
 	k := buildTestKong(t)
 	var leaf *kong.Node
 	for _, l := range k.Model.Leaves(true) {
-		if leafPath(l) == "image.inspect" {
+		if leafPath(l) == "box.inspect" {
 			leaf = l
 			break
 		}
 	}
 	if leaf == nil {
-		t.Fatalf("image.inspect leaf not found")
+		t.Fatalf("box.inspect leaf not found")
 	}
 
 	posByProp := map[string]*kong.Positional{}

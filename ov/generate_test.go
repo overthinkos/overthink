@@ -17,7 +17,7 @@ func TestCollectBuilderRuntimeEnv_TriggeredEmitsRuntimeEnv(t *testing.T) {
 			"jupyter": {Name: "jupyter", HasPixiToml: true},
 		},
 	}
-	img := &ResolvedImage{
+	img := &ResolvedBox{
 		Home: "/home/user",
 		BuilderConfig: &BuilderConfig{
 			Builder: map[string]*BuilderDef{
@@ -52,7 +52,7 @@ func TestCollectBuilderRuntimeEnv_NotTriggered(t *testing.T) {
 			"chrome": {Name: "chrome"}, // no pixi.toml, no pyproject.toml
 		},
 	}
-	img := &ResolvedImage{
+	img := &ResolvedBox{
 		Home: "/home/user",
 		BuilderConfig: &BuilderConfig{
 			Builder: map[string]*BuilderDef{
@@ -83,7 +83,7 @@ func TestCollectBuilderRuntimeEnv_MultipleLayers(t *testing.T) {
 			"c": {Name: "c", HasPixiToml: true},
 		},
 	}
-	img := &ResolvedImage{
+	img := &ResolvedBox{
 		Home: "/home/user",
 		BuilderConfig: &BuilderConfig{
 			Builder: map[string]*BuilderDef{
@@ -105,7 +105,7 @@ func TestCollectBuilderRuntimeEnv_MultipleLayers(t *testing.T) {
 // BuilderConfig nil. Don't panic.
 func TestCollectBuilderRuntimeEnv_NilBuilderConfig(t *testing.T) {
 	g := &Generator{Layers: map[string]*Layer{"x": {Name: "x", HasPixiToml: true}}}
-	img := &ResolvedImage{Home: "/home/user", BuilderConfig: nil}
+	img := &ResolvedBox{Home: "/home/user", BuilderConfig: nil}
 	got := g.collectBuilderRuntimeEnv([]string{"x"}, img)
 	if got != nil {
 		t.Errorf("expected nil when BuilderConfig is nil, got %v", got)
@@ -114,7 +114,7 @@ func TestCollectBuilderRuntimeEnv_NilBuilderConfig(t *testing.T) {
 
 func TestResolveBaseImage_InternalUseCalVer(t *testing.T) {
 	g := &Generator{
-		Images: map[string]*ResolvedImage{
+		Images: map[string]*ResolvedBox{
 			"fedora": {
 				Name:           "fedora",
 				Base:           "quay.io/fedora/fedora:43",
@@ -166,7 +166,7 @@ func TestGenerateTraefikRoutes(t *testing.T) {
 		},
 	}
 
-	err := g.generateTraefikRoutes("test-image", []string{"traefik", "svc"}, &ResolvedImage{})
+	err := g.generateTraefikRoutes("test-image", []string{"traefik", "svc"}, &ResolvedBox{})
 	if err != nil {
 		t.Fatalf("generateTraefikRoutes() error = %v", err)
 	}
@@ -218,14 +218,14 @@ func TestGenerateRouteWithoutTraefik_NoTraefikRoutes(t *testing.T) {
 				route: &RouteConfig{Host: "svc.localhost", Port: "9090"},
 			},
 		},
-		Images: map[string]*ResolvedImage{
+		Images: map[string]*ResolvedBox{
 			"test-image": {
 				Name:           "test-image",
 				Base:           "quay.io/fedora/fedora:43",
 				IsExternalBase: true,
 				Registry:       "ghcr.io/test",
 				Tag:            "latest",
-				FullTag:        "ghcr.io/test/test-image:latest",
+				FullTag:        "ghcr.io/test/test-box:latest",
 				Layer:          []string{"svc"},
 				Pkg:            "rpm",
 				BuildFormats:   []string{"rpm"},
@@ -532,7 +532,7 @@ func TestAurInstallTemplate(t *testing.T) {
 
 func TestBuilderRefForFormat(t *testing.T) {
 	g := &Generator{
-		Images: map[string]*ResolvedImage{
+		Images: map[string]*ResolvedBox{
 			"arch-img": {
 				Builder: BuilderMap{"aur": "arch-builder", "pixi": "arch-builder"},
 			},
@@ -574,7 +574,7 @@ func TestWriteDataStaging_RemoteLayerUsesShortStageAlias(t *testing.T) {
 			fullKey: {Name: "notebook-templates", data: []DataYAML{{Src: "data/notebooks", Volume: "workspace"}}},
 		},
 	}
-	img := &ResolvedImage{UID: 1000, GID: 1000}
+	img := &ResolvedBox{UID: 1000, GID: 1000}
 	var b strings.Builder
 	g.writeDataStaging(&b, []string{fullKey}, img)
 	out := b.String()

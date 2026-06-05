@@ -16,23 +16,23 @@ import "testing"
 func fixtureNamespacedProject(t *testing.T) (string, *Config) {
 	t.Helper()
 	root := t.TempDir()
-	writeFixture(t, root, "overthink.yml", `version: 2026.155.1801
+	writeFixture(t, root, "overthink.yml", `version: 2026.156.557
 import:
   - sub: ./sub.yml
-image:
+box:
   app:
     base: quay.io/fedora/fedora:43
     distro: [fedora]
     build: [rpm]
-    layer: []
+    candy: []
 `)
-	writeFixture(t, root, "sub.yml", `version: 2026.155.1801
-image:
+	writeFixture(t, root, "sub.yml", `version: 2026.156.557
+box:
   widget:
     base: quay.io/fedora/fedora:43
     distro: [fedora]
     build: [rpm]
-    layer: []
+    candy: []
 `)
 	uf, _, err := LoadUnified(root)
 	if err != nil {
@@ -123,33 +123,33 @@ func TestResolveAllImage_RequestedQualifiedTarget(t *testing.T) {
 // name-resolution concern, not a per-image collection concern.
 func TestWalkBaseChain_RootInternalOnly(t *testing.T) {
 	root := t.TempDir()
-	writeFixture(t, root, "overthink.yml", `version: 2026.155.1801
+	writeFixture(t, root, "overthink.yml", `version: 2026.156.557
 import:
   - sub: ./sub.yml
-image:
+box:
   parent:
     base: quay.io/fedora/fedora:43
     distro: [fedora]
     build: [rpm]
-    layer: []
+    candy: []
   child:
     base: parent
     distro: [fedora]
     build: [rpm]
-    layer: []
+    candy: []
   nschild:
     base: sub.widget
     distro: [fedora]
     build: [rpm]
-    layer: []
+    candy: []
 `)
-	writeFixture(t, root, "sub.yml", `version: 2026.155.1801
-image:
+	writeFixture(t, root, "sub.yml", `version: 2026.156.557
+box:
   widget:
     base: quay.io/fedora/fedora:43
     distro: [fedora]
     build: [rpm]
-    layer: []
+    candy: []
 `)
 	uf, _, err := LoadUnified(root)
 	if err != nil {

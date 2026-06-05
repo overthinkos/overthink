@@ -233,6 +233,6 @@ func TestMergeDeployConfigs_VMNestedSurvivesNestedlessOverlay(t *testing.T) {
 		t.Fatalf("project nested: dropped by nestedless operator overlay: %#v", node.Nested)
 	}
 	if got := node.Nested["selkies-kde"].Image; got != "selkies-kde-nvidia" {
-		t.Errorf("nested child image: got %q, want selkies-kde-nvidia", got)
+		t.Errorf("nested child box: got %q, want selkies-kde-nvidia", got)
 	}
 }

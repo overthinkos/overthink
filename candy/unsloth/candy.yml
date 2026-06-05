@@ -1,0 +1,26 @@
+candy:
+    version: 2026.144.1443
+    name: unsloth
+    description: "Unsloth LLM fine-tuning (pip-only, requires pixi env from parent layer)"
+    env:
+        UNSLOTH_SKIP_LLAMA_CPP_INSTALL: "1"
+        HF_HOME: "~/.cache/huggingface"
+    volume:
+        - name: models
+          path: "~/.cache/huggingface"
+    alias:
+        - name: unsloth
+          command: unsloth
+    task:
+        # vLLM cu130 nightly wheel — runtime deps live in the parent layer's pixi.toml
+        - cmd: |
+            ~/.pixi/envs/default/bin/python -m pip install --no-deps \
+              'https://wheels.vllm.ai/f53fa26e05c476a43f6db048a9e3b43bcb2b72fb/vllm-0.19.1rc1.dev39%2Bgf53fa26e0.cu130-cp38-abi3-manylinux_2_35_x86_64.whl'
+          user: "${USER}"
+        # Patch vLLM _decompose_size_nodes bug (upstream: vllm-project/vllm#38360).
+        # File is delivered via the layer's `/ctx` bind-mount (declared
+        # implicitly by the `cmd` verb's cache-mount table — see
+        # /ov-build:layer "Cache Mounts"); the script is NOT in the
+        # container's CWD, so the absolute /ctx/ path is required.
+        - cmd: ~/.pixi/envs/default/bin/python /ctx/patch_vllm_size_nodes.py
+          user: "${USER}"

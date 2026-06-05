@@ -58,9 +58,9 @@ func TestLabelConstantsAreSingular(t *testing.T) {
 		{LabelSecret, "org.overthinkos.secret"},
 		{LabelService, "org.overthinkos.service"},
 		{LabelSkill, "org.overthinkos.skill"},
-		{LabelEnvLayer, "org.overthinkos.env_layer"},
+		{LabelEnvCandy, "org.overthinkos.env_candy"},
 		{LabelPortProto, "org.overthinkos.port_proto"},
-		{LabelLayerVersion, "org.overthinkos.layer_version"},
+		{LabelCandyVersion, "org.overthinkos.candy_version"},
 		{LabelPlatformFormat, "org.overthinkos.platform.format"},
 		{LabelBuilderUse, "org.overthinkos.builder.use"},
 		{LabelBuilderProvide, "org.overthinkos.builder.provide"},
@@ -85,7 +85,7 @@ func TestLabelConstantsAreSingular(t *testing.T) {
 func TestMigrateSingularLabel(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "overthink.yml"),
-		[]byte("version: 2026.155.1801\nimport:\n  - build.yml\n"), 0o644); err != nil {
+		[]byte("version: 2026.156.557\nimport:\n  - build.yml\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	bp := filepath.Join(dir, "build.yml")

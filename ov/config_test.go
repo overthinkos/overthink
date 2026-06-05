@@ -164,8 +164,8 @@ func TestResolveImageNotFound(t *testing.T) {
 // authored in overthink.yml never reaches the generator.
 func TestMergeImageConfig_BuildTunables(t *testing.T) {
 	// dst empty → fills from src (the path that dropped these fields).
-	dst := &ImageConfig{}
-	src := &ImageConfig{
+	dst := &BoxConfig{}
+	src := &BoxConfig{
 		Jobs:          intPtr(4),
 		PodmanJobs:    intPtr(0),
 		PodmanJobsCap: intPtr(8),
@@ -198,8 +198,8 @@ func TestMergeImageConfig_BuildTunables(t *testing.T) {
 	}
 
 	// dst already set → src must NOT override (per-field "dst wins if set").
-	dst2 := &ImageConfig{Jobs: intPtr(2), Cache: "registry"}
-	mergeImageConfig(dst2, &ImageConfig{Jobs: intPtr(9), Cache: "image"})
+	dst2 := &BoxConfig{Jobs: intPtr(2), Cache: "registry"}
+	mergeImageConfig(dst2, &BoxConfig{Jobs: intPtr(9), Cache: "image"})
 	if dst2.Jobs == nil || *dst2.Jobs != 2 {
 		t.Errorf("dst Jobs should win, got %v", dst2.Jobs)
 	}
@@ -238,13 +238,13 @@ func TestImageNames(t *testing.T) {
 
 func TestResolveImageBuilders(t *testing.T) {
 	cfg := &Config{
-		Defaults: ImageConfig{
+		Defaults: BoxConfig{
 			Registry:  "ghcr.io/test",
 			Build:     BuildFormats{"rpm"},
 			Platforms: []string{"linux/amd64"},
 			Builder:   BuilderMap{"pixi": "default-builder", "npm": "default-builder"},
 		},
-		Image: map[string]ImageConfig{
+		Image: map[string]BoxConfig{
 			"default-builder": {Layer: []string{}},
 			"custom-builder":  {Layer: []string{}},
 			"uses-default":    {Layer: []string{}},
@@ -276,8 +276,8 @@ func TestResolveImageBuilders(t *testing.T) {
 
 	// No defaults.builder → empty
 	cfg2 := &Config{
-		Defaults: ImageConfig{Build: BuildFormats{"rpm"}, Platforms: []string{"linux/amd64"}},
-		Image: map[string]ImageConfig{
+		Defaults: BoxConfig{Build: BuildFormats{"rpm"}, Platforms: []string{"linux/amd64"}},
+		Image: map[string]BoxConfig{
 			"app": {Layer: []string{}},
 		},
 	}
@@ -291,12 +291,12 @@ func TestResolveImageBuilders(t *testing.T) {
 
 	// Self-reference filtered out
 	cfg3 := &Config{
-		Defaults: ImageConfig{
+		Defaults: BoxConfig{
 			Build:     BuildFormats{"rpm"},
 			Platforms: []string{"linux/amd64"},
 			Builder:   BuilderMap{"pixi": "my-builder"},
 		},
-		Image: map[string]ImageConfig{
+		Image: map[string]BoxConfig{
 			"my-builder": {Layer: []string{}},
 		},
 	}
@@ -310,8 +310,8 @@ func TestResolveImageBuilders(t *testing.T) {
 
 	// Inheritance from base image
 	cfg4 := &Config{
-		Defaults: ImageConfig{Build: BuildFormats{"pac"}, Platforms: []string{"linux/amd64"}},
-		Image: map[string]ImageConfig{
+		Defaults: BoxConfig{Build: BuildFormats{"pac"}, Platforms: []string{"linux/amd64"}},
+		Image: map[string]BoxConfig{
 			"base-img":    {Build: BuildFormats{"pac"}, Layer: []string{}, Builder: BuilderMap{"aur": "aur-builder"}},
 			"aur-builder": {Layer: []string{}},
 			"child-img":   {Base: "base-img", Layer: []string{}},
@@ -328,13 +328,13 @@ func TestResolveImageBuilders(t *testing.T) {
 
 func TestResolveImagePorts(t *testing.T) {
 	cfg := &Config{
-		Defaults: ImageConfig{
+		Defaults: BoxConfig{
 			Registry:  "ghcr.io/test",
 			Build:     BuildFormats{"rpm"},
 			Platforms: []string{"linux/amd64"},
 			Port:      []string{"80:80"},
 		},
-		Image: map[string]ImageConfig{
+		Image: map[string]BoxConfig{
 			"with-ports":    {Layer: []string{}, Port: []string{"9090:9090"}},
 			"inherit-ports": {Layer: []string{}},
 			"no-ports":      {Layer: []string{}, Port: []string{}},
@@ -431,7 +431,7 @@ func TestEnabledField(t *testing.T) {
 	// Enabled images still work
 	_, err = cfg.ResolveImage("base", "test", testProjectDir(t), ResolveOpts{})
 	if err != nil {
-		t.Errorf("ResolveImage() unexpected error for enabled image: %v", err)
+		t.Errorf("ResolveImage() unexpected error for enabled box: %v", err)
 	}
 
 	// --include-disabled (global) reaches the disabled image
@@ -510,12 +510,12 @@ func TestResolveImageDistroBaseChain(t *testing.T) {
 	// Tests that distro: tags propagate through the entire base chain,
 	// not just the immediate parent.
 	cfg := &Config{
-		Defaults: ImageConfig{
+		Defaults: BoxConfig{
 			Registry:  "ghcr.io/test",
 			Build:     BuildFormats{"rpm"},
 			Platforms: []string{"linux/amd64"},
 		},
-		Image: map[string]ImageConfig{
+		Image: map[string]BoxConfig{
 			// Level 0: defines distro
 			"fedora": {
 				Base:   "quay.io/fedora/fedora:43",
@@ -567,11 +567,11 @@ func TestResolveImageDistroBaseChain(t *testing.T) {
 func TestResolveImageBuildBaseChain(t *testing.T) {
 	// Tests that build: formats propagate through the base chain.
 	cfg := &Config{
-		Defaults: ImageConfig{
+		Defaults: BoxConfig{
 			Registry:  "ghcr.io/test",
 			Platforms: []string{"linux/amd64"},
 		},
-		Image: map[string]ImageConfig{
+		Image: map[string]BoxConfig{
 			// Level 0: defines build
 			"arch": {
 				Base:  "docker.io/library/archlinux:latest",

@@ -1,0 +1,30 @@
+candy:
+    version: 2026.144.1443
+    name: debootstrap-builder
+    description: |
+        Tools needed to bootstrap a Debian-family rootfs from scratch via
+        debootstrap, partition a VM disk, and install grub-efi for a
+        bootable Debian/Ubuntu system. Used as the layer composition for
+        the debian-debootstrap-builder / ubuntu-debootstrap-builder
+        images, which run as privileged containers under
+        `ov image build` and `ov vm build` for kind:bootstrap source kinds.
+
+        Counterpart of layers/pacstrap-builder; both compose the same
+        disk-build toolchain (qemu-img + parted + mkfs + grub-efi) plus
+        the family-specific bootstrap tool.
+    package:
+        - debootstrap
+        - debian-archive-keyring
+        - ubuntu-keyring
+        - qemu-utils
+        - dosfstools
+        - e2fsprogs
+        - xfsprogs
+        - btrfs-progs
+        - parted
+        - util-linux
+        - grub-efi-amd64-bin
+        - grub-common
+        - efibootmgr
+        - mount
+        - ca-certificates

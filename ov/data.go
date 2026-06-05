@@ -97,7 +97,7 @@ var (
 // --mount type=image to expose the staging filesystem and a lightweight helper
 // image (busybox) to run cp. Bind-mount targets use the simpler podman
 // create + podman cp path.
-func provisionData(engine string, imageRef string, meta *ImageMetadata,
+func provisionData(engine string, imageRef string, meta *BoxMetadata,
 	bindMounts []ResolvedBindMount, namedVolumes []VolumeMount,
 	deployName, instance string, mode DataProvisionMode) (int, error) {
 
@@ -225,7 +225,7 @@ func provisionData(engine string, imageRef string, meta *ImageMetadata,
 // provisionFromRunnableImage copies data from a regular (runnable) image
 // by running a temporary container with cp. Dispatches on target.kind to
 // get the correct -v source and UserNS handling.
-func provisionFromRunnableImage(engine string, imageRef string, meta *ImageMetadata,
+func provisionFromRunnableImage(engine string, imageRef string, meta *BoxMetadata,
 	entry LabelDataEntry, target seedTarget, mode DataProvisionMode) error {
 
 	binary := EngineBinary(engine)

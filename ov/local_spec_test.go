@@ -11,10 +11,10 @@ import (
 // expected fields.
 func TestLoadUnified_LocalMap_Inline(t *testing.T) {
 	dir := t.TempDir()
-	src := `version: 2026.155.1801
+	src := `version: 2026.156.557
 local:
   dev-workstation:
-    layer: [ripgrep, direnv]
+    candy: [ripgrep, direnv]
     install_opts: {with_services: false, allow_repo_changes: true}
     env: [EDITOR=vim]
     description: {feature: Dev workstation, tag: [working]}
@@ -54,7 +54,7 @@ local:
 // on a deployment that still uses the legacy target:host spelling.
 func TestLoadUnified_RejectLegacyTargetHost(t *testing.T) {
 	dir := t.TempDir()
-	src := `version: 2026.155.1801
+	src := `version: 2026.156.557
 deploy:
   my-laptop:
     target: host

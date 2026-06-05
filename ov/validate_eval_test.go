@@ -22,7 +22,7 @@ func TestValidateTests_VerbDiscriminator(t *testing.T) {
 			{File: "/x", Port: 80}, // two verbs
 		}},
 	}
-	cfg := &Config{Image: map[string]ImageConfig{}}
+	cfg := &Config{Image: map[string]BoxConfig{}}
 	got := runValidateTests(t, cfg, layers)
 	if !strings.Contains(got, "no verb") {
 		t.Errorf("expected 'no verb' error: %s", got)
@@ -40,7 +40,7 @@ func TestValidateTests_NumericAndTimeout(t *testing.T) {
 			{Port: 6379, Timeout: "xxx"}, // bad duration
 		}},
 	}
-	cfg := &Config{Image: map[string]ImageConfig{}}
+	cfg := &Config{Image: map[string]BoxConfig{}}
 	got := runValidateTests(t, cfg, layers)
 	if !strings.Contains(got, "out of range") {
 		t.Errorf("expected range error: %s", got)
@@ -58,7 +58,7 @@ func TestValidateTests_RuntimeVarInBuildScope(t *testing.T) {
 			{Command: "redis-cli -p ${HOST_PORT:6379}"},
 		}},
 	}
-	cfg := &Config{Image: map[string]ImageConfig{}}
+	cfg := &Config{Image: map[string]BoxConfig{}}
 	got := runValidateTests(t, cfg, layers)
 	if !strings.Contains(got, "runtime-only variable") || !strings.Contains(got, "HOST_PORT:6379") {
 		t.Errorf("expected runtime-only variable error: %s", got)
@@ -72,7 +72,7 @@ func TestValidateTests_RuntimeVarInDeployScope(t *testing.T) {
 			{Command: "redis-cli -p ${HOST_PORT:6379}", Scope: "deploy"},
 		}},
 	}
-	cfg := &Config{Image: map[string]ImageConfig{}}
+	cfg := &Config{Image: map[string]BoxConfig{}}
 	got := runValidateTests(t, cfg, layers)
 	if got != "" {
 		t.Errorf("unexpected errors: %s", got)
@@ -84,7 +84,7 @@ func TestValidateTests_UnknownScope(t *testing.T) {
 	layers := map[string]*Layer{
 		"lyr": {Name: "lyr", tests: []Check{{File: "/x", Scope: "weird"}}},
 	}
-	cfg := &Config{Image: map[string]ImageConfig{}}
+	cfg := &Config{Image: map[string]BoxConfig{}}
 	got := runValidateTests(t, cfg, layers)
 	if !strings.Contains(got, "scope") {
 		t.Errorf("expected scope error: %s", got)
@@ -93,7 +93,7 @@ func TestValidateTests_UnknownScope(t *testing.T) {
 
 // ID collisions within image.Eval and across image.Eval ↔ DeployTests.
 func TestValidateTests_IDUniqueness_SameImage(t *testing.T) {
-	cfg := &Config{Image: map[string]ImageConfig{
+	cfg := &Config{Image: map[string]BoxConfig{
 		"img": {
 			Enabled: boolPtr(true),
 			Eval: []Check{
@@ -114,7 +114,7 @@ func TestValidateTests_IDUniqueness_CrossLayer(t *testing.T) {
 		"a": {Name: "a", tests: []Check{{ID: "same", File: "/a"}}},
 		"b": {Name: "b", tests: []Check{{ID: "same", File: "/b"}}},
 	}
-	cfg := &Config{Image: map[string]ImageConfig{
+	cfg := &Config{Image: map[string]BoxConfig{
 		"img": {Enabled: boolPtr(true), Layer: []string{"a", "b"}},
 	}}
 	got := runValidateTests(t, cfg, layers)
@@ -130,7 +130,7 @@ func TestValidateTests_UnknownMatcherOp(t *testing.T) {
 			{Command: "x", Stdout: MatcherList{{Op: "mystery", Value: "?"}}},
 		}},
 	}
-	cfg := &Config{Image: map[string]ImageConfig{}}
+	cfg := &Config{Image: map[string]BoxConfig{}}
 	got := runValidateTests(t, cfg, layers)
 	if !strings.Contains(got, "unsupported matcher op") {
 		t.Errorf("expected matcher op error: %s", got)
@@ -144,7 +144,7 @@ func TestValidateTests_McpRejectedInBuildScope(t *testing.T) {
 			{Mcp: "ping"}, // default scope at layer level is build
 		}},
 	}
-	cfg := &Config{Image: map[string]ImageConfig{}}
+	cfg := &Config{Image: map[string]BoxConfig{}}
 	got := runValidateTests(t, cfg, layers)
 	if !strings.Contains(got, "mcp:") || !strings.Contains(got, `scope:"deploy"`) {
 		t.Errorf("expected deploy-scope error for mcp: %s", got)
@@ -158,7 +158,7 @@ func TestValidateTests_McpCallRequiresTool(t *testing.T) {
 			{Mcp: "call", Scope: "deploy"}, // missing tool
 		}},
 	}
-	cfg := &Config{Image: map[string]ImageConfig{}}
+	cfg := &Config{Image: map[string]BoxConfig{}}
 	got := runValidateTests(t, cfg, layers)
 	if !strings.Contains(got, "mcp") || !strings.Contains(got, "tool") {
 		t.Errorf("expected mcp call tool-required error: %s", got)
@@ -172,7 +172,7 @@ func TestValidateTests_McpReadRequiresURI(t *testing.T) {
 			{Mcp: "read", Scope: "deploy"}, // missing uri
 		}},
 	}
-	cfg := &Config{Image: map[string]ImageConfig{}}
+	cfg := &Config{Image: map[string]BoxConfig{}}
 	got := runValidateTests(t, cfg, layers)
 	if !strings.Contains(got, "mcp") || !strings.Contains(got, "uri") {
 		t.Errorf("expected mcp read uri-required error: %s", got)
@@ -186,7 +186,7 @@ func TestValidateTests_McpUnknownMethod(t *testing.T) {
 			{Mcp: "bogus", Scope: "deploy"},
 		}},
 	}
-	cfg := &Config{Image: map[string]ImageConfig{}}
+	cfg := &Config{Image: map[string]BoxConfig{}}
 	got := runValidateTests(t, cfg, layers)
 	if !strings.Contains(got, "mcp: unknown method") {
 		t.Errorf("expected unknown method error: %s", got)
@@ -206,7 +206,7 @@ func TestValidateTests_McpClean(t *testing.T) {
 			{Mcp: "read", URI: "file:///x", Scope: "deploy"},
 		}},
 	}
-	cfg := &Config{Image: map[string]ImageConfig{}}
+	cfg := &Config{Image: map[string]BoxConfig{}}
 	got := runValidateTests(t, cfg, layers)
 	if got != "" {
 		t.Errorf("clean mcp fixture produced errors: %s", got)
@@ -222,7 +222,7 @@ func TestValidateTests_RecordRejectedInBuildScope(t *testing.T) {
 			{Record: "list"}, // default build scope
 		}},
 	}
-	got := runValidateTests(t, &Config{Image: map[string]ImageConfig{}}, layers)
+	got := runValidateTests(t, &Config{Image: map[string]BoxConfig{}}, layers)
 	if !strings.Contains(got, "record:") || !strings.Contains(got, `scope:"deploy"`) {
 		t.Errorf("expected deploy-scope error for record: %s", got)
 	}
@@ -234,7 +234,7 @@ func TestValidateTests_RecordStopRequiresArtifact(t *testing.T) {
 			{Record: "stop", Scope: "deploy"}, // missing artifact
 		}},
 	}
-	got := runValidateTests(t, &Config{Image: map[string]ImageConfig{}}, layers)
+	got := runValidateTests(t, &Config{Image: map[string]BoxConfig{}}, layers)
 	if !strings.Contains(got, "record") || !strings.Contains(got, "artifact") {
 		t.Errorf("expected record: stop artifact-required error: %s", got)
 	}
@@ -246,7 +246,7 @@ func TestValidateTests_RecordCmdRequiresText(t *testing.T) {
 			{Record: "cmd", Scope: "deploy"}, // missing text
 		}},
 	}
-	got := runValidateTests(t, &Config{Image: map[string]ImageConfig{}}, layers)
+	got := runValidateTests(t, &Config{Image: map[string]BoxConfig{}}, layers)
 	if !strings.Contains(got, "record") || !strings.Contains(got, "text") {
 		t.Errorf("expected record: cmd text-required error: %s", got)
 	}
@@ -261,7 +261,7 @@ func TestValidateTests_RecordClean(t *testing.T) {
 			{Record: "stop", Artifact: "/tmp/demo.cast", ArtifactMinBytes: 100, Scope: "deploy"},
 		}},
 	}
-	got := runValidateTests(t, &Config{Image: map[string]ImageConfig{}}, layers)
+	got := runValidateTests(t, &Config{Image: map[string]BoxConfig{}}, layers)
 	if got != "" {
 		t.Errorf("clean record fixture produced errors: %s", got)
 	}
@@ -271,7 +271,7 @@ func TestValidateTests_SpiceRejectedInBuildScope(t *testing.T) {
 	layers := map[string]*Layer{
 		"vm": {Name: "vm", tests: []Check{{Spice: "status"}}},
 	}
-	got := runValidateTests(t, &Config{Image: map[string]ImageConfig{}}, layers)
+	got := runValidateTests(t, &Config{Image: map[string]BoxConfig{}}, layers)
 	if !strings.Contains(got, "spice:") || !strings.Contains(got, `scope:"deploy"`) {
 		t.Errorf("expected deploy-scope error for spice: %s", got)
 	}
@@ -281,7 +281,7 @@ func TestValidateTests_SpiceTypeRequiresText(t *testing.T) {
 	layers := map[string]*Layer{
 		"vm": {Name: "vm", tests: []Check{{Spice: "type", Scope: "deploy"}}},
 	}
-	got := runValidateTests(t, &Config{Image: map[string]ImageConfig{}}, layers)
+	got := runValidateTests(t, &Config{Image: map[string]BoxConfig{}}, layers)
 	if !strings.Contains(got, "spice") || !strings.Contains(got, "text") {
 		t.Errorf("expected spice: type text-required error: %s", got)
 	}
@@ -291,7 +291,7 @@ func TestValidateTests_SpiceUnknownMethod(t *testing.T) {
 	layers := map[string]*Layer{
 		"vm": {Name: "vm", tests: []Check{{Spice: "bogus", Scope: "deploy"}}},
 	}
-	got := runValidateTests(t, &Config{Image: map[string]ImageConfig{}}, layers)
+	got := runValidateTests(t, &Config{Image: map[string]BoxConfig{}}, layers)
 	if !strings.Contains(got, "spice: unknown method") {
 		t.Errorf("expected spice unknown-method error: %s", got)
 	}
@@ -306,7 +306,7 @@ func TestValidateTests_SpiceClean(t *testing.T) {
 			{Spice: "key", KeyName: "Return", Scope: "deploy"},
 		}},
 	}
-	got := runValidateTests(t, &Config{Image: map[string]ImageConfig{}}, layers)
+	got := runValidateTests(t, &Config{Image: map[string]BoxConfig{}}, layers)
 	if got != "" {
 		t.Errorf("clean spice fixture produced errors: %s", got)
 	}
@@ -316,7 +316,7 @@ func TestValidateTests_LibvirtRejectedInBuildScope(t *testing.T) {
 	layers := map[string]*Layer{
 		"vm": {Name: "vm", tests: []Check{{Libvirt: "info"}}},
 	}
-	got := runValidateTests(t, &Config{Image: map[string]ImageConfig{}}, layers)
+	got := runValidateTests(t, &Config{Image: map[string]BoxConfig{}}, layers)
 	if !strings.Contains(got, "libvirt:") || !strings.Contains(got, `scope:"deploy"`) {
 		t.Errorf("expected deploy-scope error for libvirt: %s", got)
 	}
@@ -326,7 +326,7 @@ func TestValidateTests_LibvirtGuestExecRequiresCommand(t *testing.T) {
 	layers := map[string]*Layer{
 		"vm": {Name: "vm", tests: []Check{{Libvirt: "guest/exec", Scope: "deploy"}}},
 	}
-	got := runValidateTests(t, &Config{Image: map[string]ImageConfig{}}, layers)
+	got := runValidateTests(t, &Config{Image: map[string]BoxConfig{}}, layers)
 	if !strings.Contains(got, "libvirt") || !strings.Contains(got, "command") {
 		t.Errorf("expected libvirt: guest/exec command-required error: %s", got)
 	}
@@ -336,7 +336,7 @@ func TestValidateTests_LibvirtSnapshotCreateRequiresTarget(t *testing.T) {
 	layers := map[string]*Layer{
 		"vm": {Name: "vm", tests: []Check{{Libvirt: "snapshot/create", Scope: "deploy"}}},
 	}
-	got := runValidateTests(t, &Config{Image: map[string]ImageConfig{}}, layers)
+	got := runValidateTests(t, &Config{Image: map[string]BoxConfig{}}, layers)
 	if !strings.Contains(got, "libvirt") || !strings.Contains(got, "target") {
 		t.Errorf("expected libvirt: snapshot/create target-required error: %s", got)
 	}
@@ -346,7 +346,7 @@ func TestValidateTests_LibvirtUnknownMethod(t *testing.T) {
 	layers := map[string]*Layer{
 		"vm": {Name: "vm", tests: []Check{{Libvirt: "bogus", Scope: "deploy"}}},
 	}
-	got := runValidateTests(t, &Config{Image: map[string]ImageConfig{}}, layers)
+	got := runValidateTests(t, &Config{Image: map[string]BoxConfig{}}, layers)
 	if !strings.Contains(got, "libvirt: unknown method") {
 		t.Errorf("expected libvirt unknown-method error: %s", got)
 	}
@@ -365,7 +365,7 @@ func TestValidateTests_LibvirtClean(t *testing.T) {
 			{Libvirt: "send-key", KeyName: "ctrl alt F2", Scope: "deploy"},
 		}},
 	}
-	got := runValidateTests(t, &Config{Image: map[string]ImageConfig{}}, layers)
+	got := runValidateTests(t, &Config{Image: map[string]BoxConfig{}}, layers)
 	if got != "" {
 		t.Errorf("clean libvirt fixture produced errors: %s", got)
 	}
@@ -380,7 +380,7 @@ func TestValidateTests_Clean(t *testing.T) {
 			{Command: "redis-cli -p ${HOST_PORT:6379} ping", Scope: "deploy", InContainer: ptrBool(false)},
 		}},
 	}
-	cfg := &Config{Image: map[string]ImageConfig{
+	cfg := &Config{Image: map[string]BoxConfig{
 		"redis-ml": {
 			Enabled: boolPtr(true),
 			Layer:   []string{"redis"},
@@ -401,7 +401,7 @@ func TestValidateTests_Clean(t *testing.T) {
 // (the k3s-server "cluster: ${deploy_name}" class of bug). Uppercase is accepted,
 // and a lowercase ${var} in a shell command body is NOT flagged (legit bash var).
 func TestValidateTests_LowercaseEvalVarInClusterField(t *testing.T) {
-	cfg := &Config{Image: map[string]ImageConfig{}}
+	cfg := &Config{Image: map[string]BoxConfig{}}
 
 	bad := map[string]*Layer{
 		"lyr": {Name: "lyr", tests: []Check{

@@ -749,7 +749,7 @@ func ResolveTunnelConfig(t *TunnelYAML, imageName string, dns string, layers map
 // TunnelConfigFromMetadata creates a TunnelConfig from image label metadata.
 // Unlike ResolveTunnelConfig, this doesn't need layer access since the tunnel
 // configuration is already stored in the label.
-func TunnelConfigFromMetadata(meta *ImageMetadata) *TunnelConfig {
+func TunnelConfigFromMetadata(meta *BoxMetadata) *TunnelConfig {
 	if meta == nil || meta.Tunnel == nil {
 		return nil
 	}

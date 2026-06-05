@@ -266,13 +266,13 @@ func (c *BuildCmd) Run() error {
 // (`img.FullTag`, e.g. `ghcr.io/overthinkos/fedora:2026.114.1042`), and
 // short-name resolution goes through `ResolveNewestLocalCalVer` in
 // local_image.go via the `org.overthinkos.version` OCI label.
-func imageTags(name string, img *ResolvedImage, cfg *Config) []string {
+func imageTags(name string, img *ResolvedBox, cfg *Config) []string {
 	return []string{img.FullTag}
 }
 
 // mergeAfterBuild merges a single image if merge.auto is enabled.
 // Called immediately after building so child images inherit a merged base.
-func mergeAfterBuild(name string, img *ResolvedImage) {
+func mergeAfterBuild(name string, img *ResolvedBox) {
 	if img.Merge == nil || !img.Merge.Auto {
 		return
 	}
@@ -287,7 +287,7 @@ func mergeAfterBuild(name string, img *ResolvedImage) {
 // with concurrent ov generate overwrites on disk.
 // For Podman --push, the image is built locally (--manifest) without pushing;
 // push happens separately after merge in Run().
-func (c *BuildCmd) buildImage(engine, dir, name string, img *ResolvedImage, cfg *Config, platform, engineName, containerfileContent string) error {
+func (c *BuildCmd) buildImage(engine, dir, name string, img *ResolvedBox, cfg *Config, platform, engineName, containerfileContent string) error {
 	tags := imageTags(name, img, cfg)
 
 	// Pre-build phase for `from: builder:<name>` images: run the named
@@ -405,7 +405,7 @@ func renderRuntimePacmanConf(p *PacstrapDef) (string, error) {
 	return b.String(), nil
 }
 
-func (c *BuildCmd) runPrivilegedBootstrap(engine, dir, imageName string, img *ResolvedImage) error {
+func (c *BuildCmd) runPrivilegedBootstrap(engine, dir, imageName string, img *ResolvedBox) error {
 	if !strings.HasPrefix(img.From, "builder:") {
 		return nil
 	}
@@ -522,7 +522,7 @@ func (c *BuildCmd) runPrivilegedBootstrap(engine, dir, imageName string, img *Re
 // build path (image.yml `from: builder:<name>` consumers). Same dispatch
 // rules: Pacstrap.BasePackages for pacstrap-flavored, Debootstrap.BasePackages
 // for debootstrap-flavored.
-func bootstrapPackagesForImage(img *ResolvedImage) []string {
+func bootstrapPackagesForImage(img *ResolvedBox) []string {
 	if img.DistroDef == nil {
 		return nil
 	}
@@ -771,7 +771,7 @@ func detectRemoteIncludePassthrough(dir string, images []string) (string, bool) 
 		// Read the `import:` list generically (items are either bare strings —
 		// flat imports — or single-key `alias: ref` maps — namespaced imports).
 		Import []interface{}              `yaml:"import"`
-		Image  map[string]json.RawMessage `yaml:"image"`
+		Image  map[string]json.RawMessage `yaml:"box"`
 	}
 	if err := yaml.Unmarshal(data, &peek); err != nil {
 		return "", false
@@ -840,7 +840,7 @@ func (c *BuildCmd) buildRemote(ref string) error {
 
 // filterImage filters the build order to only include the requested images
 // and their dependencies.
-func filterImage(order []string, requested []string, images map[string]*ResolvedImage) ([]string, error) {
+func filterImage(order []string, requested []string, images map[string]*ResolvedBox) ([]string, error) {
 	// Validate requested images exist
 	for _, name := range requested {
 		if _, ok := images[name]; !ok {
@@ -888,7 +888,7 @@ func filterImage(order []string, requested []string, images map[string]*Resolved
 // CLI behaviour into the image. Skipped (with a one-line warning) when
 // `go` is not on PATH, so an end-user with a packaged ov install does
 // not see a hard error.
-func ensureOvBinaryFresh(dir string, images map[string]*ResolvedImage, requested []string) error {
+func ensureOvBinaryFresh(dir string, images map[string]*ResolvedBox, requested []string) error {
 	in := requested
 	if len(in) == 0 {
 		in = make([]string, 0, len(images))
@@ -916,7 +916,7 @@ func ensureOvBinaryFresh(dir string, images map[string]*ResolvedImage, requested
 		return nil
 	}
 
-	binPath := filepath.Join(dir, "layers", "ov", "bin", "ov")
+	binPath := filepath.Join(dir, DefaultCandyDir, "ov", "bin", "ov")
 	srcDir := filepath.Join(dir, "ov")
 
 	// Downstream workspaces (project trees that `include:` upstream

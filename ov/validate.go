@@ -304,7 +304,7 @@ func validateInitDependencies(cfg *Config, initCfg *InitConfig, layers map[strin
 		// Layer-derived caps replace the prior img.Bootc magic flag.
 		caps, _ := AggregateLayerCapabilities(layers, resolved)
 		if caps == nil {
-			caps = &AggregatedLayerCaps{Provided: map[string]bool{}}
+			caps = &AggregatedCandyCaps{Provided: map[string]bool{}}
 		}
 		isBootcFlavored := caps.PreserveUser
 		for initName, def := range initCfg.Init {
@@ -756,7 +756,7 @@ func validateBaseReferences(cfg *Config, errs *ValidationError) {
 func validateImageDAG(cfg *Config, layers map[string]*Layer, dir string, opts ResolveOpts, errs *ValidationError) {
 	calverTag := "test"
 	// Try to resolve images — some fields may be missing during basic validation
-	images := make(map[string]*ResolvedImage)
+	images := make(map[string]*ResolvedBox)
 	for name, img := range cfg.Image {
 		if !img.IsEnabled() && !opts.shouldIncludeDisabled(name) {
 			continue
@@ -939,7 +939,7 @@ var validBuildCacheModes = map[string]bool{
 // defaults; values are validated wherever they appear so a typo surfaces at
 // `ov image validate` rather than silently mis-driving a build.
 func validateBuildTunables(cfg *Config, errs *ValidationError) {
-	check := func(name string, ic ImageConfig) {
+	check := func(name string, ic BoxConfig) {
 		if ic.Jobs != nil && *ic.Jobs < 1 {
 			errs.Add("%s: jobs must be >= 1, got %d", name, *ic.Jobs)
 		}

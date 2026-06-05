@@ -17,14 +17,14 @@ import (
 // brings it up as a persistent quadlet — all offline, no registry.
 //
 // Idempotent: skips the transfer when the guest already has the image.
-type VmCpImageCmd struct {
+type VmCpBoxCmd struct {
 	VM       string `arg:"" help:"kind:vm entity name (uses its managed ov-<name> ssh alias)"`
 	Image    string `arg:"" help:"image ref (short name or full ref) present in host podman storage"`
 	As       string `long:"as" help:"after load, tag the image in the guest under this stable ref (e.g. localhost/ov-selkies-kde:latest)"`
 	Rootless bool   `long:"rootless" help:"load into the guest USER's rootless podman storage instead of root's — so a rootless --user quadlet (e.g. a nested-pod-in-VM deploy) can run it"`
 }
 
-func (c *VmCpImageCmd) Run() error {
+func (c *VmCpBoxCmd) Run() error {
 	ref := c.Image
 	// Resolve a short name (e.g. "cachyos.selkies-kde-nvidia") to a concrete local ref.
 	if !hostImageExists("podman", ref) {

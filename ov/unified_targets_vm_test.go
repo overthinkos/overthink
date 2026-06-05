@@ -178,14 +178,14 @@ func TestVmUnifiedTarget_Rebuild_DryRun(t *testing.T) {
 	// re-apply still runs (a config-only rebuild must still re-deploy).
 	out = captureVmStdout(t, func() {
 		if err := target.Rebuild(context.Background(), RebuildOpts{DryRun: true, RebuildImage: false}); err != nil {
-			t.Errorf("Rebuild dry-run no-image: %v", err)
+			t.Errorf("Rebuild dry-run no-box: %v", err)
 		}
 	})
 	if strings.Contains(out, "dry-run: ov vm build") {
-		t.Errorf("Rebuild dry-run no-image: should not emit `ov vm build` in:\n%s", out)
+		t.Errorf("Rebuild dry-run no-box: should not emit `ov vm build` in:\n%s", out)
 	}
 	if !strings.Contains(out, deployAdd) {
-		t.Errorf("Rebuild dry-run no-image: missing layer re-apply step %q in:\n%s", deployAdd, out)
+		t.Errorf("Rebuild dry-run no-box: missing layer re-apply step %q in:\n%s", deployAdd, out)
 	}
 }
 

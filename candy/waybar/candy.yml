@@ -1,0 +1,64 @@
+candy:
+    version: 2026.144.1443
+    name: waybar
+    require:
+        - sway
+    distro:
+        fedora:
+            package:
+                - waybar
+    task:
+        - mkdir: "${HOME}/.local/bin"
+          user: "${USER}"
+        - mkdir: "${HOME}/.config/waybar"
+          user: "${USER}"
+        - copy: waybar-wrapper
+          to: "${HOME}/.local/bin/waybar-wrapper"
+          mode: "0755"
+          user: "${USER}"
+        - copy: sway-autotile
+          to: "${HOME}/.local/bin/sway-autotile"
+          mode: "0755"
+          user: "${USER}"
+        - copy: config.json
+          to: "${HOME}/.config/waybar/config"
+          mode: "0644"
+          user: "${USER}"
+        - copy: style.css
+          to: "${HOME}/.config/waybar/style.css"
+          mode: "0644"
+          user: "${USER}"
+    eval:
+        - id: waybar-binary
+          file: /usr/bin/waybar
+          exists: true
+        - id: waybar-wrapper
+          file: ${HOME}/.local/bin/waybar-wrapper
+          exists: true
+        - id: waybar-config
+          file: ${HOME}/.config/waybar/config
+          exists: true
+        - id: sway-autotile-script
+          file: ${HOME}/.local/bin/sway-autotile
+          exists: true
+    service:
+        - name: waybar
+          exec: "%(ENV_HOME)s/.local/bin/waybar-wrapper"
+          env:
+            WAYLAND_DISPLAY: wayland-0
+            XDG_RUNTIME_DIR: /tmp
+          restart: always
+          priority: 15
+          start_sec: 0
+          enable: true
+          scope: system
+        - name: sway-autotile
+          exec: "%(ENV_HOME)s/.local/bin/sway-autotile"
+          env:
+            WAYLAND_DISPLAY: wayland-0
+            XDG_RUNTIME_DIR: /tmp
+          restart: always
+          priority: 16
+          start_sec: 0
+          enable: true
+          scope: system

@@ -9,7 +9,7 @@ import (
 // (flat root imports) and single-key maps (namespaced child imports).
 func TestImportList_Unmarshal(t *testing.T) {
 	root := t.TempDir()
-	writeFixture(t, root, "overthink.yml", `version: 2026.155.1801
+	writeFixture(t, root, "overthink.yml", `version: 2026.156.557
 import:
   - build.yml
   - sub: ./sub.yml
@@ -17,8 +17,8 @@ import:
 	writeFixture(t, root, "build.yml", `defaults:
   build: [rpm]
 `)
-	writeFixture(t, root, "sub.yml", `version: 2026.155.1801
-image:
+	writeFixture(t, root, "sub.yml", `version: 2026.156.557
+box:
   widget:
     base: quay.io/fedora/fedora:43
     distro: [fedora]
@@ -47,18 +47,18 @@ image:
 // qualified image ref through the projected Config.
 func TestResolveImageRef_Qualified(t *testing.T) {
 	root := t.TempDir()
-	writeFixture(t, root, "overthink.yml", `version: 2026.155.1801
+	writeFixture(t, root, "overthink.yml", `version: 2026.156.557
 import:
   - sub: ./sub.yml
-image:
+box:
   app:
     base: sub.widget
     distro: [fedora]
     build: [rpm]
-    layer: []
+    candy: []
 `)
-	writeFixture(t, root, "sub.yml", `version: 2026.155.1801
-image:
+	writeFixture(t, root, "sub.yml", `version: 2026.156.557
+box:
   widget:
     base: quay.io/fedora/fedora:43
     distro: [fedora]
@@ -99,7 +99,7 @@ image:
 // load-time error pointing at ov migrate.
 func TestLoadUnified_RejectInclude(t *testing.T) {
 	root := t.TempDir()
-	writeFixture(t, root, "overthink.yml", `version: 2026.155.1801
+	writeFixture(t, root, "overthink.yml", `version: 2026.156.557
 include:
   - build.yml
 `)
@@ -143,19 +143,19 @@ include:
 // cycle-broken at load (the shared resolved-ref cache).
 func TestImportNamespace_MutualCycle(t *testing.T) {
 	root := t.TempDir()
-	writeFixture(t, root, "overthink.yml", `version: 2026.155.1801
+	writeFixture(t, root, "overthink.yml", `version: 2026.156.557
 import:
   - sub: ./sub
-image:
+box:
   app:
     base: sub.widget
     distro: [fedora]
     build: [rpm]
 `)
-	writeFixture(t, root, "sub/overthink.yml", `version: 2026.155.1801
+	writeFixture(t, root, "sub/overthink.yml", `version: 2026.156.557
 import:
   - up: ../
-image:
+box:
   widget:
     base: quay.io/fedora/fedora:43
     distro: [fedora]
@@ -189,10 +189,10 @@ image:
 // combination the prior tests never exercised.
 func TestResolveNamespacedBase_BuilderRefRequalified(t *testing.T) {
 	root := t.TempDir()
-	writeFixture(t, root, "overthink.yml", `version: 2026.155.1801
+	writeFixture(t, root, "overthink.yml", `version: 2026.156.557
 import:
   - sub: ./sub
-image:
+box:
   app:
     base: sub.widget
     distro: [fedora]
@@ -203,21 +203,21 @@ image:
     build: [rpm]
     produce: [pixi]
 `)
-	writeFixture(t, root, "sub/overthink.yml", `version: 2026.155.1801
+	writeFixture(t, root, "sub/overthink.yml", `version: 2026.156.557
 import:
   - up: ../
-layer:
+candy:
   buildable:
     task:
       - cmd: "true"
-image:
+box:
   widget:
     base: quay.io/fedora/fedora:43
     distro: [fedora]
     build: [pac, aur]
     builder:
       pixi: up.archlike-builder
-    layer: [buildable]
+    candy: [buildable]
 `)
 	uf, _, err := LoadUnified(root)
 	if err != nil {
@@ -249,14 +249,14 @@ image:
 // — the exact bug that silently built a Fedora builder for cachyos images.
 func TestResolveBuilder_DistroKeyed_NoExplicitMap(t *testing.T) {
 	root := t.TempDir()
-	writeFixture(t, root, "overthink.yml", `version: 2026.155.1801
+	writeFixture(t, root, "overthink.yml", `version: 2026.156.557
 import:
   - sub: ./sub
 defaults:
   builder:
     pixi: fedora-builder
     npm: fedora-builder
-image:
+box:
   arch:
     base: quay.io/cachyos/cachyos:latest
     distro: [arch]
@@ -279,10 +279,10 @@ image:
   fedora-app:
     base: sub.fedora
 `)
-	writeFixture(t, root, "sub/overthink.yml", `version: 2026.155.1801
+	writeFixture(t, root, "sub/overthink.yml", `version: 2026.156.557
 import:
   - up: ../
-image:
+box:
   cachyos:
     base: quay.io/cachyos/cachyos:latest
     distro: [cachyos, arch]
@@ -322,7 +322,7 @@ image:
 	}
 }
 
-func keysOf(m map[string]*ResolvedImage) []string {
+func keysOf(m map[string]*ResolvedBox) []string {
 	ks := make([]string, 0, len(m))
 	for k := range m {
 		ks = append(ks, k)

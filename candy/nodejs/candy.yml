@@ -1,0 +1,67 @@
+candy:
+    version: 2026.144.1613
+    name: nodejs
+    env:
+        NPM_CONFIG_PREFIX: "~/.npm-global"
+        npm_config_cache: "~/.cache/npm"
+    path_append:
+        - "~/.npm-global/bin"
+    package:
+        - nodejs
+    distro:
+        arch:
+            package:
+                - npm
+        debian:
+            package:
+                - npm
+        fedora:
+            package:
+                - npm
+        ubuntu:
+            package:
+                - npm
+        ubuntu-24.04:
+            repo:
+                - name: nodesource
+                  url: "https://deb.nodesource.com/node_20.x"
+                  key: "https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key"
+                  suite: nodistro
+                  components: main
+    var:
+        PNPM_VERSION: "10.33.4"
+    task:
+        # pnpm standalone binary (self-contained — bundles its own node) into
+        # /usr/local/bin, on the default system PATH for every user incl. root
+        # (Immich runs pnpm as root). NOT a package.json: that triggers the npm
+        # multi-stage builder on this layer, which the builder images that COMPOSE
+        # nodejs (arch-builder/fedora-builder) cannot self-provide. pnpm's release
+        # asset tokens are x64/arm64 (match neither ${ARCH} nor ${BUILD_ARCH}).
+        - cmd: |
+            case "${BUILD_ARCH}" in
+              x86_64)  PNPM_ARCH="x64" ;;
+              aarch64) PNPM_ARCH="arm64" ;;
+              *) echo "Unsupported arch: ${BUILD_ARCH}"; exit 1 ;;
+            esac
+            curl -fsSL "https://github.com/pnpm/pnpm/releases/download/v${PNPM_VERSION}/pnpm-linux-${PNPM_ARCH}" -o /usr/local/bin/pnpm
+            chmod 0755 /usr/local/bin/pnpm
+          user: root
+    eval:
+        - id: node-binary
+          file: /usr/bin/node
+          exists: true
+        - id: node-version
+          command: /usr/bin/node --version
+          exit_status: 0
+        - id: npm-binary
+          file: /usr/bin/npm
+          exists: true
+        - id: npm-version
+          command: /usr/bin/npm --version
+          exit_status: 0
+        # pnpm is installed globally from package.json (npm -g) into ~/.npm-global/bin
+        # (on PATH via path_append) — Immich's source build + its packageManager
+        # (pnpm@10) require it.
+        - id: pnpm-available
+          command: pnpm --version
+          exit_status: 0

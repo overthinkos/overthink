@@ -197,7 +197,7 @@ func ResolveLayerOrder(requested []string, layers map[string]*Layer, parentLayer
 // ImageNeedsBuilder returns true if any of the image's own resolved layers
 // (excluding parent-provided) have pixi.toml, package.json, or Cargo.toml.
 // When layers is nil, falls back to unconditional builder dependency.
-func ImageNeedsBuilder(img *ResolvedImage, images map[string]*ResolvedImage, layers map[string]*Layer) bool {
+func ImageNeedsBuilder(img *ResolvedBox, images map[string]*ResolvedBox, layers map[string]*Layer) bool {
 	if layers == nil {
 		return true // conservative fallback
 	}
@@ -254,7 +254,7 @@ func ImageNeedsBuilder(img *ResolvedImage, images map[string]*ResolvedImage, lay
 // lands in one place. The 2026-05 cachyos / cachyos-pacstrap-builder regression
 // surfaced the bug exactly because three parallel dep walks had drifted out of
 // sync — the topo-sort knew the right order, the build runner did not.
-func imageDirectDeps(name string, img *ResolvedImage, images map[string]*ResolvedImage, includeFormatBuilders bool) []string {
+func imageDirectDeps(name string, img *ResolvedBox, images map[string]*ResolvedBox, includeFormatBuilders bool) []string {
 	var deps []string
 	if !img.IsExternalBase {
 		deps = append(deps, img.Base)
@@ -280,7 +280,7 @@ func imageDirectDeps(name string, img *ResolvedImage, images map[string]*Resolve
 // Images that reference other images via `base` create dependencies.
 // Each image's Builder field determines its builder dependency.
 // Pass layers to enable conditional builder dependency; nil for unconditional.
-func ResolveImageOrder(images map[string]*ResolvedImage, layers map[string]*Layer) ([]string, error) {
+func ResolveImageOrder(images map[string]*ResolvedBox, layers map[string]*Layer) ([]string, error) {
 	// Build adjacency list
 	// Edge from A to B means A depends on B (B must be built before A)
 	graph := make(map[string][]string)
@@ -419,7 +419,7 @@ func topoLevels(graph map[string][]string) ([][]string, error) {
 
 // ResolveImageLevels resolves image dependencies and returns them grouped by build level.
 // Images at the same level can be built concurrently.
-func ResolveImageLevels(images map[string]*ResolvedImage, layers map[string]*Layer) ([][]string, error) {
+func ResolveImageLevels(images map[string]*ResolvedBox, layers map[string]*Layer) ([][]string, error) {
 	graph := make(map[string][]string)
 	for name, img := range images {
 		graph[name] = imageDirectDeps(name, img, images, ImageNeedsBuilder(img, images, layers))
@@ -476,7 +476,7 @@ func findCycle(graph map[string][]string, inDegree map[string]int) []string {
 
 // LayerProvidedByImage returns the set of layers installed by an image
 // (including those inherited from parent images via base chain)
-func LayerProvidedByImage(imageName string, images map[string]*ResolvedImage, layers map[string]*Layer) (map[string]bool, error) {
+func LayerProvidedByImage(imageName string, images map[string]*ResolvedBox, layers map[string]*Layer) (map[string]bool, error) {
 	provided := make(map[string]bool)
 	visited := make(map[string]bool)
 

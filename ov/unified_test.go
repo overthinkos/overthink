@@ -35,15 +35,15 @@ func TestLoadUnified_AbsentFileReturnsNotPresent(t *testing.T) {
 
 func TestLoadUnified_BasicRoot(t *testing.T) {
 	root := t.TempDir()
-	writeFixture(t, root, "overthink.yml", `version: 2026.155.1801
+	writeFixture(t, root, "overthink.yml", `version: 2026.156.557
 defaults:
   registry: quay.io/example
   build: [rpm]
-image:
+box:
   fedora:
     base: quay.io/fedora/fedora:43
     distro: [fedora:43, fedora]
-    layer: [base]
+    candy: [base]
 `)
 	uf, present, err := LoadUnified(root)
 	if err != nil {
@@ -72,7 +72,7 @@ func TestLoadUnified_NewerSchemaRejectedWithUpdateHint(t *testing.T) {
 	// A version far past LatestSchemaVersion(): the binary is behind the
 	// config, so migrating cannot help — the user must update ov.
 	writeFixture(t, root, "overthink.yml", `version: 9999.141.1530
-image:
+box:
   fedora:
     base: quay.io/fedora/fedora:43
 `)
@@ -94,7 +94,7 @@ image:
 
 func TestLoadUnified_IncludesMerge(t *testing.T) {
 	root := t.TempDir()
-	writeFixture(t, root, "overthink.yml", `version: 2026.155.1801
+	writeFixture(t, root, "overthink.yml", `version: 2026.156.557
 import:
   - build.yml
   - images.yml
@@ -110,7 +110,7 @@ defaults:
 	writeFixture(t, root, "images.yml", `defaults:
   registry: included.example.com
   build: [rpm]
-image:
+box:
   fedora:
     base: quay.io/fedora/fedora:43
 `)
@@ -136,7 +136,7 @@ image:
 
 func TestLoadUnified_IncludeCycleDetected(t *testing.T) {
 	root := t.TempDir()
-	writeFixture(t, root, "overthink.yml", `version: 2026.155.1801
+	writeFixture(t, root, "overthink.yml", `version: 2026.156.557
 import: [a.yml]
 `)
 	writeFixture(t, root, "a.yml", `import: [b.yml]
@@ -154,24 +154,24 @@ import: [a.yml]
 
 func TestLoadUnified_MultiDocumentKindKeyed(t *testing.T) {
 	root := t.TempDir()
-	writeFixture(t, root, "overthink.yml", `version: 2026.155.1801
+	writeFixture(t, root, "overthink.yml", `version: 2026.156.557
 import: [bundle.yml]
 `)
 	writeFixture(t, root, "bundle.yml", `---
-layer:
+candy:
   name: chrome
   rpm:
     package: [chromium]
 ---
-layer:
+candy:
   name: firefox
   rpm:
     package: [firefox]
 ---
-image:
+box:
   name: browsers
   base: quay.io/fedora/fedora:43
-  layer: [chrome, firefox]
+  candy: [chrome, firefox]
 `)
 	uf, _, err := LoadUnified(root)
 	if err != nil {
@@ -190,14 +190,14 @@ image:
 
 func TestLoadUnified_AmbiguousDocRejected(t *testing.T) {
 	root := t.TempDir()
-	writeFixture(t, root, "overthink.yml", `version: 2026.155.1801
+	writeFixture(t, root, "overthink.yml", `version: 2026.156.557
 `)
-	writeFixture(t, root, "overthink.yml", `version: 2026.155.1801
+	writeFixture(t, root, "overthink.yml", `version: 2026.156.557
 import: [bundle.yml]
 `)
-	writeFixture(t, root, "bundle.yml", `layer:
+	writeFixture(t, root, "bundle.yml", `candy:
   name: broken
-image:
+box:
   name: broken-too
 `)
 	_, _, err := LoadUnified(root)
@@ -213,17 +213,17 @@ func TestLoadUnified_DiscoverLayers(t *testing.T) {
 	root := t.TempDir()
 	// Two traditional flat layer.yml files (without the kind-keyed wrapper —
 	// that's what scanLayer currently parses).
-	writeFixture(t, root, "layers/chrome/layer.yml", `version: "1"
+	writeFixture(t, root, "candy/chrome/candy.yml", `version: "1"
 rpm:
   package: [chromium]
 `)
-	writeFixture(t, root, "layers/firefox/layer.yml", `version: "1"
+	writeFixture(t, root, "candy/firefox/candy.yml", `version: "1"
 rpm:
   package: [firefox]
 `)
-	writeFixture(t, root, "overthink.yml", `version: 2026.155.1801
+	writeFixture(t, root, "overthink.yml", `version: 2026.156.557
 discover:
-  layer: [layers]
+  candy: [candy]
 `)
 	uf, _, err := LoadUnified(root)
 	if err != nil {
@@ -242,13 +242,13 @@ discover:
 
 func TestLoadUnified_DiscoverExplicitWinsOverDiscovered(t *testing.T) {
 	root := t.TempDir()
-	writeFixture(t, root, "layers/chrome/layer.yml", `version: "from-disk"
+	writeFixture(t, root, "candy/chrome/candy.yml", `version: "from-disk"
 rpm: { packages: [chromium] }
 `)
-	writeFixture(t, root, "overthink.yml", `version: 2026.155.1801
+	writeFixture(t, root, "overthink.yml", `version: 2026.156.557
 discover:
-  layer: [layers]
-layer:
+  candy: [candy]
+candy:
   chrome: { from: custom/chrome }
 `)
 	uf, _, err := LoadUnified(root)
@@ -269,9 +269,9 @@ layer:
 
 func TestLoadUnified_ScanSpecStringShorthand(t *testing.T) {
 	root := t.TempDir()
-	writeFixture(t, root, "overthink.yml", `version: 2026.155.1801
+	writeFixture(t, root, "overthink.yml", `version: 2026.156.557
 discover:
-  layer:
+  candy:
     - layers
     - { path: vendor, recursive: false }
 `)
@@ -306,7 +306,7 @@ discover:
 // (no stale references).
 func TestLoadUnified_DeploymentsSection(t *testing.T) {
 	root := t.TempDir()
-	writeFixture(t, root, "overthink.yml", `version: 2026.155.1801
+	writeFixture(t, root, "overthink.yml", `version: 2026.156.557
 deployments:
   openclaw:
     port: ["8080:80"]
@@ -326,9 +326,9 @@ deployments:
 
 func TestLoadUnified_ProjectConfig(t *testing.T) {
 	root := t.TempDir()
-	writeFixture(t, root, "overthink.yml", `version: 2026.155.1801
+	writeFixture(t, root, "overthink.yml", `version: 2026.156.557
 defaults: { registry: r.example.com }
-image:
+box:
   foo: { base: alpine }
 `)
 	uf, _, err := LoadUnified(root)

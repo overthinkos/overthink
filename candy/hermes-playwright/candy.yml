@@ -1,0 +1,31 @@
+candy:
+    version: 2026.144.1443
+    name: hermes-playwright
+    description: Playwright Chromium browser for Hermes Agent
+    require:
+        - hermes
+    env:
+        PLAYWRIGHT_BROWSERS_PATH: "/tmp/.cache/ms-playwright"
+    distro:
+        fedora:
+            package:
+                - alsa-lib
+                - at-spi2-core
+                - cups-libs
+                - gtk3
+                - libdrm
+                - libxkbcommon
+                - nss
+                - mesa-dri-drivers
+                - vulkan-loader
+                - libXcomposite
+                - libXdamage
+                - libXrandr
+                - pango
+                - cairo
+    security:
+        shm_size: "1g"
+    task:
+        # Install Chromium browser binary only (system deps handled by rpm packages)
+        - cmd: HOME=/tmp npx playwright install chromium
+          user: "${USER}"

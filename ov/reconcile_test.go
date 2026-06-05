@@ -15,13 +15,13 @@ func TestImageReconcile_NewestReferenced(t *testing.T) {
 	dir := t.TempDir()
 	yml := "" +
 		"# top comment\n" +
-		"version: 2026.155.1801\n" +
+		"version: 2026.156.557\n" +
 		"import:\n" +
 		"  - '@github.com/overthinkos/overthink/build.yml:v2026.141.1600'\n" +
-		"image:\n" +
+		"box:\n" +
 		"  selkies-desktop:\n" +
 		"    base: cachyos.cachyos\n" +
-		"    layer:\n" +
+		"    candy:\n" +
 		"      - '@github.com/overthinkos/overthink/layers/agent-forwarding:v2026.141.1600' # infra\n" +
 		"      - '@github.com/overthinkos/overthink/layers/selkies-desktop:v2026.144.0531'\n" +
 		"      - '@github.com/overthinkos/overthink/layers/dbus:v2026.141.1600'\n" +
@@ -37,7 +37,7 @@ func TestImageReconcile_NewestReferenced(t *testing.T) {
 	}
 	defer os.Chdir(cwd)
 
-	cmd := &ImageReconcileCmd{}
+	cmd := &BoxReconcileCmd{}
 	if err := cmd.Run(); err != nil {
 		t.Fatalf("reconcile: %v", err)
 	}
@@ -81,7 +81,7 @@ func TestImageReconcile_NewestReferenced(t *testing.T) {
 func TestImageReconcile_NoPins(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "overthink.yml"),
-		[]byte("version: 2026.155.1801\nimage:\n  foo:\n    base: fedora\n    layer: [agent-forwarding]\n"), 0o644); err != nil {
+		[]byte("version: 2026.156.557\nimage:\n  foo:\n    base: fedora\n    candy: [agent-forwarding]\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	cwd, _ := os.Getwd()
@@ -89,7 +89,7 @@ func TestImageReconcile_NoPins(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer os.Chdir(cwd)
-	if err := (&ImageReconcileCmd{}).Run(); err != nil {
+	if err := (&BoxReconcileCmd{}).Run(); err != nil {
 		t.Fatalf("reconcile no-pins: %v", err)
 	}
 }

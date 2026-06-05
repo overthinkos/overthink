@@ -24,7 +24,7 @@ func compilerTestProjectDir(t *testing.T) (string, func()) {
 	// Walk up from current to find image.yml.
 	dir := prev
 	for i := 0; i < 5; i++ {
-		if _, err := os.Stat(filepath.Join(dir, "image.yml")); err == nil {
+		if _, err := os.Stat(filepath.Join(dir, "box.yml")); err == nil {
 			if err := os.Chdir(dir); err != nil {
 				t.Fatalf("chdir %s: %v", dir, err)
 			}
@@ -40,7 +40,7 @@ func compilerTestProjectDir(t *testing.T) (string, func()) {
 // resolves the "fedora-coder" image. Returns nil, nil if fixtures can't
 // load (used to gracefully skip in CI environments that might not have
 // the fixture layers present).
-func loadCompilerFixtures(t *testing.T, imageName string) (*Config, *ResolvedImage, map[string]*Layer) {
+func loadCompilerFixtures(t *testing.T, imageName string) (*Config, *ResolvedBox, map[string]*Layer) {
 	t.Helper()
 	dir, _ := os.Getwd()
 	cfg, err := LoadConfig(dir)

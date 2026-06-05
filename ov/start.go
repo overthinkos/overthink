@@ -528,7 +528,7 @@ func resolveEntrypoint(initConfig *InitConfig, layers map[string]*Layer, layerOr
 // resolveEntrypointFromMeta determines the entrypoint from image metadata (runtime mode).
 // Uses well-known init system names; custom init systems declared via build.yml init: section are
 // only honored during build.
-func resolveEntrypointFromMeta(meta *ImageMetadata) []string {
+func resolveEntrypointFromMeta(meta *BoxMetadata) []string {
 	if meta.Init == "" {
 		return []string{"sleep", "infinity"}
 	}

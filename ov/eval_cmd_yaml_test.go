@@ -14,8 +14,8 @@ import (
 func TestEmitImageTestYAML_RoundTripsThroughParseOvTestOutput(t *testing.T) {
 	scenarios := []ScenarioResult{
 		{
-			Origin:     "layer:sshd",
-			ScenarioID: "desc:layer:sshd:0",
+			Origin:     "candy:sshd",
+			ScenarioID: "desc:candy:sshd:0",
 			Name:       "SSH server reachable",
 			Tag:        []string{"smoke"},
 			Status:     TestPass,
@@ -24,20 +24,20 @@ func TestEmitImageTestYAML_RoundTripsThroughParseOvTestOutput(t *testing.T) {
 				{
 					Keyword: "given",
 					Text:    "sshd is installed",
-					StepID:  "desc:layer:sshd:0:0",
+					StepID:  "desc:candy:sshd:0:0",
 					Result:  EvalResult{Verb: "package", Status: TestPass},
 				},
 				{
 					Keyword: "when",
 					Text:    "connecting",
-					StepID:  "desc:layer:sshd:0:1",
+					StepID:  "desc:candy:sshd:0:1",
 					Result:  EvalResult{Verb: "port", Status: TestPass},
 				},
 			},
 		},
 		{
-			Origin:     "layer:foo",
-			ScenarioID: "desc:layer:foo:0",
+			Origin:     "candy:foo",
+			ScenarioID: "desc:candy:foo:0",
 			Name:       "Foo service runs",
 			Status:     TestFail,
 			Pending:    1,
@@ -45,7 +45,7 @@ func TestEmitImageTestYAML_RoundTripsThroughParseOvTestOutput(t *testing.T) {
 				{
 					Keyword: "then",
 					Text:    "pending step",
-					StepID:  "desc:layer:foo:0:0",
+					StepID:  "desc:candy:foo:0:0",
 					Result:  EvalResult{Verb: "", Status: TestSkip},
 				},
 			},
@@ -58,7 +58,7 @@ func TestEmitImageTestYAML_RoundTripsThroughParseOvTestOutput(t *testing.T) {
 	}
 	// Sanity: the emitted YAML looks right.
 	out := buf.String()
-	if !strings.Contains(out, "image: ovbench/test:fedora-ov") {
+	if !strings.Contains(out, "box: ovbench/test:fedora-ov") {
 		t.Errorf("missing image line: %q", out)
 	}
 	if !strings.Contains(out, "mode: image") {
@@ -71,7 +71,7 @@ func TestEmitImageTestYAML_RoundTripsThroughParseOvTestOutput(t *testing.T) {
 		t.Fatalf("ParseOvTestOutput failed on emitted YAML: %v\n%s", err, out)
 	}
 	if parsed.Image != "ovbench/test:fedora-ov" {
-		t.Errorf("parsed image: %q", parsed.Image)
+		t.Errorf("parsed box: %q", parsed.Image)
 	}
 	if parsed.Mode != "image" {
 		t.Errorf("parsed mode: %q", parsed.Mode)
@@ -79,7 +79,7 @@ func TestEmitImageTestYAML_RoundTripsThroughParseOvTestOutput(t *testing.T) {
 	if len(parsed.Scenario) != 2 {
 		t.Fatalf("want 2 scenarios, got %d", len(parsed.Scenario))
 	}
-	if parsed.Scenario[0].ID != "desc:layer:sshd:0" {
+	if parsed.Scenario[0].ID != "desc:candy:sshd:0" {
 		t.Errorf("scenario[0].ID: %q", parsed.Scenario[0].ID)
 	}
 	if parsed.Scenario[0].Status != "pass" {

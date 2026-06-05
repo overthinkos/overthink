@@ -39,7 +39,7 @@ type OCITarget struct {
 	// Generator carries for emit-time rendering. Populated by callers
 	// before Emit when they want full task + builder rendering (not
 	// just the placeholder output). Safe to leave zero for tests.
-	Image            *ResolvedImage
+	Image            *ResolvedBox
 	BuildDir         string
 	ContextRelPrefix string
 	Generator        *Generator // used for emitTasks + builder stage rendering

@@ -1,0 +1,15 @@
+candy:
+    version: 2026.144.1443
+    name: wacli
+    description: WhatsApp CLI for message sending and history sync
+    require:
+        - golang
+    env:
+        GOPATH: "~/go"
+    path_append:
+        - "~/go/bin"
+    task:
+        - cmd: |
+            go install github.com/openclaw/wacli/cmd/wacli@latest
+            go clean -cache
+          user: "${USER}"

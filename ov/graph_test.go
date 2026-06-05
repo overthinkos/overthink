@@ -108,7 +108,7 @@ func TestResolveLayerOrderCycle(t *testing.T) {
 
 func TestResolveImageOrder(t *testing.T) {
 	// Create test images
-	images := map[string]*ResolvedImage{
+	images := map[string]*ResolvedBox{
 		"base": {
 			Name:           "base",
 			Base:           "quay.io/fedora/fedora:43",
@@ -158,7 +158,7 @@ func TestResolveImageOrder(t *testing.T) {
 }
 
 func TestResolveImageOrderWithBuilder(t *testing.T) {
-	images := map[string]*ResolvedImage{
+	images := map[string]*ResolvedBox{
 		"builder": {
 			Name:           "builder",
 			Base:           "quay.io/fedora/fedora:43",
@@ -214,7 +214,7 @@ func TestResolveImageOrderWithBootstrapBuilder(t *testing.T) {
 	// bootstrap-builder edge, the topo-sort would schedule cachyos before
 	// cachyos-pacstrap-builder and runPrivilegedBootstrap would fail at
 	// resolveLocalImageRef (build.go:294).
-	images := map[string]*ResolvedImage{
+	images := map[string]*ResolvedBox{
 		"arch": {
 			Name:           "arch",
 			Base:           "docker.io/library/archlinux:latest",
@@ -284,7 +284,7 @@ func TestResolveImageOrderWithBootstrapBuilder(t *testing.T) {
 
 func TestResolveImageOrderCycle(t *testing.T) {
 	// Create images with a cycle
-	images := map[string]*ResolvedImage{
+	images := map[string]*ResolvedBox{
 		"a": {Name: "a", Base: "b", IsExternalBase: false},
 		"b": {Name: "b", Base: "c", IsExternalBase: false},
 		"c": {Name: "c", Base: "a", IsExternalBase: false},
@@ -297,7 +297,7 @@ func TestResolveImageOrderCycle(t *testing.T) {
 }
 
 func TestLayersProvidedByImage(t *testing.T) {
-	images := map[string]*ResolvedImage{
+	images := map[string]*ResolvedBox{
 		"base": {
 			Name:           "base",
 			Base:           "quay.io/fedora/fedora:43",
@@ -566,7 +566,7 @@ func TestTopoLevels(t *testing.T) {
 }
 
 func TestResolveImageLevels(t *testing.T) {
-	images := map[string]*ResolvedImage{
+	images := map[string]*ResolvedBox{
 		"base": {
 			Name:           "base",
 			Base:           "quay.io/fedora/fedora:43",

@@ -12,10 +12,10 @@ func TestResolveDeployRefLocalImage(t *testing.T) {
 	dir := t.TempDir()
 	// Schema v4: ResolveDeployRef calls LoadUnified which reads
 	// overthink.yml as the entry point. Fixture must use the unified
-	// shape with version: 2026.155.1801 and the singular image: kind map.
+	// shape with version: 2026.156.557 and the singular box: kind map.
 	if err := os.WriteFile(filepath.Join(dir, "overthink.yml"), []byte(`
-version: 2026.155.1801
-image:
+version: 2026.156.557
+box:
   myimg:
     base: fedora
 `), 0644); err != nil {
@@ -32,11 +32,11 @@ image:
 
 func TestResolveDeployRefLocalLayer(t *testing.T) {
 	dir := t.TempDir()
-	lyrDir := filepath.Join(dir, "layers", "ripgrep")
+	lyrDir := filepath.Join(dir, "candy", "ripgrep")
 	if err := os.MkdirAll(lyrDir, 0755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(lyrDir, "layer.yml"), []byte(`
+	if err := os.WriteFile(filepath.Join(lyrDir, "candy.yml"), []byte(`
 rpm:
   package: [ripgrep]
 `), 0644); err != nil {
@@ -44,7 +44,7 @@ rpm:
 	}
 	// Also create overthink.yml so the local-name resolver has something
 	// to search — but we don't add "ripgrep" to it, so it's layer-only.
-	_ = os.WriteFile(filepath.Join(dir, "overthink.yml"), []byte("version: 2026.155.1801\nimage: {}\n"), 0644)
+	_ = os.WriteFile(filepath.Join(dir, "overthink.yml"), []byte("version: 2026.156.557\nimage: {}\n"), 0644)
 
 	got, err := ResolveDeployRef("ripgrep", dir)
 	if err != nil {
@@ -58,7 +58,7 @@ rpm:
 	}
 }
 
-// TestResolveDeployRefCrossKindNameReuse — same name in both image: and
+// TestResolveDeployRefCrossKindNameReuse — same name in both box: and
 // layers/ is permitted (cross-kind name reuse, 2026-05 cutover). The
 // primary `<ref>` resolver returns image-first; ResolveDeployRefAsLayer
 // (used by `--add-layer <ref>`) returns layer-first. Each kind remains
@@ -66,17 +66,17 @@ rpm:
 func TestResolveDeployRefCrossKindNameReuse(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "overthink.yml"), []byte(`
-version: 2026.155.1801
-image:
+version: 2026.156.557
+box:
   dup:
     base: fedora
 `), 0644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.MkdirAll(filepath.Join(dir, "layers", "dup"), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Join(dir, "candy", "dup"), 0755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "layers", "dup", "layer.yml"), []byte(`
+	if err := os.WriteFile(filepath.Join(dir, "candy", "dup", "candy.yml"), []byte(`
 rpm:
   package: [foo]
 `), 0644); err != nil {
@@ -104,7 +104,7 @@ rpm:
 
 func TestResolveDeployRefUnknownName(t *testing.T) {
 	dir := t.TempDir()
-	_ = os.WriteFile(filepath.Join(dir, "overthink.yml"), []byte("version: 2026.155.1801\nimage: {}\n"), 0644)
+	_ = os.WriteFile(filepath.Join(dir, "overthink.yml"), []byte("version: 2026.156.557\nimage: {}\n"), 0644)
 	_, err := ResolveDeployRef("nope", dir)
 	if err == nil {
 		t.Fatalf("expected not-found error, got nil")
@@ -117,7 +117,7 @@ func TestResolveDeployRefLocalPathImage(t *testing.T) {
 	if err := os.WriteFile(path, []byte(`
 defaults:
   registry: ghcr.io/example
-image:
+box:
   foo:
     base: fedora
 `), 0644); err != nil {
@@ -238,7 +238,7 @@ func TestClassifyYAMLFile(t *testing.T) {
 	layer := filepath.Join(dir, "lyr.yml")
 	unknown := filepath.Join(dir, "u.yml")
 
-	_ = os.WriteFile(image, []byte("images:\n  x: {}\n"), 0644)
+	_ = os.WriteFile(image, []byte("box:\n  x: {}\n"), 0644)
 	_ = os.WriteFile(layer, []byte("rpm:\n  packages: [a]\n"), 0644)
 	_ = os.WriteFile(unknown, []byte("foo: bar\n"), 0644)
 

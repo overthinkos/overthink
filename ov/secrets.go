@@ -328,7 +328,7 @@ type SecretResolution struct {
 // This function does NOT touch the podman secret store — that's the job of
 // ProvisionPodmanSecrets. It only reads from the credential store. No network
 // calls, no filesystem mutations, safe to run speculatively.
-func CollectLayerSecretAccepts(imageName, instance string, meta *ImageMetadata) (collected []CollectedSecret, resolutions []SecretResolution) {
+func CollectLayerSecretAccepts(imageName, instance string, meta *BoxMetadata) (collected []CollectedSecret, resolutions []SecretResolution) {
 	if meta == nil {
 		return nil, nil
 	}

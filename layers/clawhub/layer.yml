@@ -1,6 +1,0 @@
-layer:
-    version: 2026.144.1443
-    name: clawhub
-    description: ClawHub CLI for searching and installing OpenClaw skills
-    require:
-        - nodejs

@@ -19,7 +19,7 @@ type DeployCmd struct {
 	Add DeployAddCmd `cmd:"" help:"Apply a deploy: 'host' targets the local system; any other name targets a container"`
 	Del DeployDelCmd `cmd:"" help:"Tear down a deploy by name"`
 
-	FromImage DeployFromImageCmd `cmd:"" name:"from-image" help:"Source-less deploy from a built image's baked OCI labels (no overthink.yml project). Pod by default; --cluster targets K8s"`
+	FromImage DeployFromBoxCmd `cmd:"" name:"from-box" help:"Source-less deploy from a built image's baked OCI labels (no overthink.yml project). Pod by default; --cluster targets K8s"`
 
 	Export DeployExportCmd `cmd:"" help:"Export effective config as deploy.yml"`
 	Import DeployImportCmd `cmd:"" help:"Import deploy.yml file(s) into config"`

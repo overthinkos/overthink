@@ -70,10 +70,10 @@ func TestFindOvSourceRoot_DualMarker(t *testing.T) {
 	//     image.yml
 	//     ov/main.go
 	//   <root>/proj/sub/deeper/    ← deep cwd inside the source tree
-	mustWrite(t, filepath.Join(root, "image.yml"), "")
+	mustWrite(t, filepath.Join(root, "box.yml"), "")
 	proj := filepath.Join(root, "proj")
 	mustMkdir(t, filepath.Join(proj, "ov"))
-	mustWrite(t, filepath.Join(proj, "image.yml"), "")
+	mustWrite(t, filepath.Join(proj, "box.yml"), "")
 	mustWrite(t, filepath.Join(proj, "ov", "main.go"), "package main")
 	deep := filepath.Join(proj, "sub", "deeper")
 	mustMkdir(t, deep)

@@ -61,7 +61,7 @@ func TestMcpServeDefaultRepo_AutoFallback(t *testing.T) {
 }
 
 // runMcpServeListImages spawns `ov` with the given args, performs the MCP
-// stdio handshake, calls image.list.images, and returns the stringified
+// stdio handshake, calls box.list.boxes, and returns the stringified
 // tool result. Hermetic: uses caller-supplied env (typically pinning
 // OV_REPO_CACHE).
 func runMcpServeListImages(t *testing.T, bin, cwd string, extraEnv, args []string) string {
@@ -95,7 +95,7 @@ func runMcpServeListImages(t *testing.T, bin, cwd string, extraEnv, args []strin
 		}
 	}()
 
-	// Minimal MCP stdio handshake: initialize, then tools/call image.list.images.
+	// Minimal MCP stdio handshake: initialize, then tools/call box.list.boxes.
 	send := func(req map[string]any) {
 		b, _ := json.Marshal(req)
 		stdin.Write(b)
@@ -116,7 +116,7 @@ func runMcpServeListImages(t *testing.T, bin, cwd string, extraEnv, args []strin
 	send(map[string]any{
 		"jsonrpc": "2.0", "id": 2, "method": "tools/call",
 		"params": map[string]any{
-			"name":      "image.list.images",
+			"name":      "box.list.boxes",
 			"arguments": map[string]any{},
 		},
 	})

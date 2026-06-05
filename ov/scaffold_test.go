@@ -21,13 +21,13 @@ func TestScaffoldLayer(t *testing.T) {
 	}
 
 	// Check directory was created
-	layerDir := filepath.Join(tmpDir, "layers", "test-layer")
+	layerDir := filepath.Join(tmpDir, "candy", "test-layer")
 	if _, err := os.Stat(layerDir); os.IsNotExist(err) {
 		t.Error("layer directory was not created")
 	}
 
 	// Check layer.yml was created
-	layerYml := filepath.Join(layerDir, "layer.yml")
+	layerYml := filepath.Join(layerDir, "candy.yml")
 	if _, err := os.Stat(layerYml); os.IsNotExist(err) {
 		t.Error("layer.yml was not created")
 	}
@@ -42,7 +42,7 @@ func TestScaffoldLayerAlreadyExists(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	// Create layer directory
-	layerDir := filepath.Join(tmpDir, "layers", "existing")
+	layerDir := filepath.Join(tmpDir, "candy", "existing")
 	if err := os.MkdirAll(layerDir, 0755); err != nil {
 		t.Fatal(err)
 	}

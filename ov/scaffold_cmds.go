@@ -42,13 +42,13 @@ func (c *NewProjectCmd) Run() error {
 // ---------------------------------------------------------------------------
 // `ov image new image <name>`
 
-type NewImageCmd struct {
+type NewBoxCmd struct {
 	Name   string   `arg:"" help:"Name for the new image entry"`
 	Base   string   `long:"base" required:"" help:"Base image (URL like quay.io/... or another image name)"`
-	Layers []string `long:"layers" sep:"," help:"Comma-separated list of layer names to include"`
+	Layers []string `long:"candy" sep:"," help:"Comma-separated list of layer names to include"`
 }
 
-func (c *NewImageCmd) Run() error {
+func (c *NewBoxCmd) Run() error {
 	dir, err := os.Getwd()
 	if err != nil {
 		return err
@@ -63,12 +63,12 @@ func (c *NewImageCmd) Run() error {
 // ---------------------------------------------------------------------------
 // `ov image set <dotpath> <value>`
 
-type ImageSetCmd struct {
+type BoxSetCmd struct {
 	Path  string `arg:"" help:"Dot-path into overthink.yml (e.g. defaults.tag, image.foo.layers)"`
 	Value string `arg:"" help:"Value (parsed as YAML; use [a,b] for lists, {x: y} for maps)"`
 }
 
-func (c *ImageSetCmd) Run() error {
+func (c *BoxSetCmd) Run() error {
 	dir, err := os.Getwd()
 	if err != nil {
 		return err
@@ -83,12 +83,12 @@ func (c *ImageSetCmd) Run() error {
 // ---------------------------------------------------------------------------
 // `ov image add-layer <image> <layer>`
 
-type ImageAddLayerCmd struct {
+type BoxAddCandyCmd struct {
 	Image string `arg:"" help:"Name of the image in image.yml"`
 	Layer string `arg:"" help:"Name of the layer to append"`
 }
 
-func (c *ImageAddLayerCmd) Run() error {
+func (c *BoxAddCandyCmd) Run() error {
 	dir, err := os.Getwd()
 	if err != nil {
 		return err
@@ -99,12 +99,12 @@ func (c *ImageAddLayerCmd) Run() error {
 // ---------------------------------------------------------------------------
 // `ov image rm-layer <image> <layer>`
 
-type ImageRmLayerCmd struct {
+type BoxRmCandyCmd struct {
 	Image string `arg:"" help:"Name of the image in image.yml"`
 	Layer string `arg:"" help:"Name of the layer to remove"`
 }
 
-func (c *ImageRmLayerCmd) Run() error {
+func (c *BoxRmCandyCmd) Run() error {
 	dir, err := os.Getwd()
 	if err != nil {
 		return err
@@ -115,11 +115,11 @@ func (c *ImageRmLayerCmd) Run() error {
 // ---------------------------------------------------------------------------
 // `ov image fetch [<spec>]` and `ov image refresh [<spec>]`
 
-type ImageFetchCmd struct {
+type BoxFetchCmd struct {
 	Spec string `arg:"" optional:"" help:"Repo spec (default: 'default' → overthinkos/overthink)"`
 }
 
-func (c *ImageFetchCmd) Run() error {
+func (c *BoxFetchCmd) Run() error {
 	spec := c.Spec
 	if spec == "" {
 		spec = "default"
@@ -132,11 +132,11 @@ func (c *ImageFetchCmd) Run() error {
 	return nil
 }
 
-type ImageRefreshCmd struct {
+type BoxRefreshCmd struct {
 	Spec string `arg:"" optional:"" help:"Repo spec (default: 'default' → overthinkos/overthink)"`
 }
 
-func (c *ImageRefreshCmd) Run() error {
+func (c *BoxRefreshCmd) Run() error {
 	spec := c.Spec
 	if spec == "" {
 		spec = "default"
@@ -167,13 +167,13 @@ func (c *ImageRefreshCmd) Run() error {
 // ---------------------------------------------------------------------------
 // `ov image write <rel-path>` and `ov image cat <rel-path>`
 
-type ImageWriteCmd struct {
+type BoxWriteCmd struct {
 	Path    string `arg:"" help:"Path under the project root (relative; .. is rejected)"`
 	Content string `long:"content" help:"File content (mutually exclusive with --from-stdin)"`
 	FromIn  bool   `long:"from-stdin" help:"Read file content from stdin"`
 }
 
-func (c *ImageWriteCmd) Run() error {
+func (c *BoxWriteCmd) Run() error {
 	dir, err := os.Getwd()
 	if err != nil {
 		return err
@@ -204,11 +204,11 @@ func (c *ImageWriteCmd) Run() error {
 	return nil
 }
 
-type ImageCatCmd struct {
+type BoxCatCmd struct {
 	Path string `arg:"" help:"Path under the project root (relative; .. is rejected)"`
 }
 
-func (c *ImageCatCmd) Run() error {
+func (c *BoxCatCmd) Run() error {
 	dir, err := os.Getwd()
 	if err != nil {
 		return err
@@ -251,26 +251,26 @@ func resolveProjectFile(projectDir, relPath string) (string, error) {
 // ---------------------------------------------------------------------------
 // `ov layer …` — top-level group for editing layer.yml files
 
-type LayerCmd struct {
-	Set    LayerSetCmd    `cmd:"" help:"Set a value in layers/<name>/layer.yml by dot-path"`
-	AddRpm LayerAddPkgCmd `cmd:"add-rpm" help:"Append packages to a layer's rpm.packages list"`
-	AddDeb LayerAddPkgCmd `cmd:"add-deb" help:"Append packages to a layer's deb.packages list"`
-	AddPac LayerAddPkgCmd `cmd:"add-pac" help:"Append packages to a layer's pac.packages list"`
-	AddAur LayerAddPkgCmd `cmd:"add-aur" help:"Append packages to a layer's aur.packages list"`
+type CandyCmd struct {
+	Set    CandySetCmd    `cmd:"" help:"Set a value in layers/<name>/layer.yml by dot-path"`
+	AddRpm CandyAddPkgCmd `cmd:"add-rpm" help:"Append packages to a layer's rpm.packages list"`
+	AddDeb CandyAddPkgCmd `cmd:"add-deb" help:"Append packages to a layer's deb.packages list"`
+	AddPac CandyAddPkgCmd `cmd:"add-pac" help:"Append packages to a layer's pac.packages list"`
+	AddAur CandyAddPkgCmd `cmd:"add-aur" help:"Append packages to a layer's aur.packages list"`
 }
 
-type LayerSetCmd struct {
+type CandySetCmd struct {
 	Name  string `arg:"" help:"Layer name (under layers/)"`
 	Path  string `arg:"" help:"Dot-path into layer.yml (e.g. service.name, env.MY_VAR)"`
 	Value string `arg:"" help:"Value (parsed as YAML)"`
 }
 
-func (c *LayerSetCmd) Run() error {
+func (c *CandySetCmd) Run() error {
 	dir, err := os.Getwd()
 	if err != nil {
 		return err
 	}
-	layerYml := filepath.Join(dir, "layers", c.Name, "layer.yml")
+	layerYml := filepath.Join(dir, "candy", c.Name, "candy.yml")
 	if _, err := os.Stat(layerYml); err != nil {
 		return fmt.Errorf("layer %q not found at %s", c.Name, layerYml)
 	}
@@ -295,7 +295,7 @@ func (c *LayerSetCmd) Run() error {
 //
 // Implementation choice: instead of plumbing Kong context, we instantiate
 // four distinct concrete types so the section is hard-wired per type.
-type LayerAddPkgCmd struct {
+type CandyAddPkgCmd struct {
 	Name     string   `arg:"" help:"Layer name (under layers/)"`
 	Packages []string `arg:"" help:"Package names to append"`
 	// section is set by the parent group via aliases; default to rpm if
@@ -303,7 +303,7 @@ type LayerAddPkgCmd struct {
 	section string `kong:"-"`
 }
 
-func (c *LayerAddPkgCmd) Run() error {
+func (c *CandyAddPkgCmd) Run() error {
 	// Kong doesn't fill section based on which alias was used, so derive
 	// it from os.Args. This is a small runtime indirection but lets us
 	// share one struct across four nearly-identical commands.
@@ -341,7 +341,7 @@ func appendLayerPackages(name, section string, pkgs []string) error {
 	if err != nil {
 		return err
 	}
-	layerYml := filepath.Join(dir, "layers", name, "layer.yml")
+	layerYml := filepath.Join(dir, "candy", name, "candy.yml")
 	data, err := os.ReadFile(layerYml)
 	if err != nil {
 		return fmt.Errorf("reading %s: %w", layerYml, err)

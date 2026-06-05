@@ -1,0 +1,65 @@
+candy:
+    version: 2026.149.1210
+    name: cachyos-extras
+    description: |
+        The remaining host workstation tools not already covered by the ov dev
+        stack — the CLI/diagnostic/app gap from the CachyOS netinstall + the
+        operator's manual installs, reverse-resolved to top-level packages.
+        Excludes host-hardware/boot/firmware/network entries by design. accounts
+        service is here because SDDM/Plasma user management needs it.
+    require:
+        - yay
+    distro:
+        arch:
+            package:
+                # System / pacman tooling
+                - pacman-contrib
+                - pkgfile
+                - rebuild-detector
+                - paru
+                - plocate
+                # Diagnostics / monitors
+                - btop
+                - duf
+                - glances
+                - pv
+                # Editors / terminal / apps (host parity)
+                - micro
+                - nano
+                - nano-syntax-highlighting
+                - vim
+                - alacritty
+                - meld
+                - firefox
+                # Net / fs / mail
+                - inetutils
+                - nfs-utils
+                - syncthing
+                - s-nail
+                - unrar
+                # Desktop integration helpers
+                - accountsservice
+                - xdg-user-dirs
+                - xdg-utils
+                - python-defusedxml
+                - python-packaging
+            aur:
+                package:
+                    - cloudflared-bin
+                    - gvisor-tap-vsock
+    eval:
+        - id: btop-binary
+          file: /usr/bin/btop
+          exists: true
+        - id: syncthing-binary
+          file: /usr/bin/syncthing
+          exists: true
+        - id: paru-binary
+          file: /usr/bin/paru
+          exists: true
+        - id: accountsservice-installed
+          package: accountsservice
+          installed: true
+        - id: cloudflared-binary
+          command: command -v cloudflared
+          exit_status: 0

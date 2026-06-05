@@ -11,26 +11,26 @@ import (
 // ImageCmd groups build-mode commands that operate on image.yml (or, in the
 // case of ImagePullCmd, resolve registry/tag via image.yml and then fetch the
 // image into local storage so deploy-mode commands can read its OCI labels).
-type ImageCmd struct {
-	Build    BuildCmd     `cmd:"" help:"Build container images"`
-	Generate GenerateCmd  `cmd:"" help:"Write .build/ (Containerfiles)"`
-	Inspect  InspectCmd   `cmd:"" help:"Print resolved config for an image (JSON)"`
-	List     ListCmd      `cmd:"" help:"List components from image.yml"`
-	Merge    MergeCmd     `cmd:"" help:"Merge small layers in a built container image"`
-	New      NewCmd       `cmd:"" help:"Scaffold new components"`
-	Pull     ImagePullCmd `cmd:"" help:"Pull an image from its registry into local storage"`
-	Validate ValidateCmd  `cmd:"" help:"Check image.yml + layers, exit 0 or 1"`
+type BoxCmd struct {
+	Build    BuildCmd    `cmd:"" help:"Build container images"`
+	Generate GenerateCmd `cmd:"" help:"Write .build/ (Containerfiles)"`
+	Inspect  InspectCmd  `cmd:"" help:"Print resolved config for an image (JSON)"`
+	List     ListCmd     `cmd:"" help:"List components from image.yml"`
+	Merge    MergeCmd    `cmd:"" help:"Merge small layers in a built container image"`
+	New      NewCmd      `cmd:"" help:"Scaffold new components"`
+	Pull     BoxPullCmd  `cmd:"" help:"Pull an image from its registry into local storage"`
+	Validate ValidateCmd `cmd:"" help:"Check image.yml + layers, exit 0 or 1"`
 
 	// Authoring verbs — added so the MCP tool surface (auto-reflected from
 	// Kong) can author a project from scratch over RPC.
-	Set       ImageSetCmd       `cmd:"" help:"Set a value in image.yml by dot-path (e.g. images.foo.base fedora)"`
-	AddLayer  ImageAddLayerCmd  `cmd:"add-layer" help:"Append a layer to an image's layers: list (idempotent)"`
-	RmLayer   ImageRmLayerCmd   `cmd:"rm-layer" help:"Remove a layer from an image's layers: list"`
-	Fetch     ImageFetchCmd     `cmd:"" help:"Pre-prime the remote-repo cache (default: overthinkos/overthink)"`
-	Refresh   ImageRefreshCmd   `cmd:"" help:"Force re-clone of a remote project repo"`
-	Write     ImageWriteCmd     `cmd:"" help:"Write file contents under the project root (escape hatch for free-form files)"`
-	Cat       ImageCatCmd       `cmd:"" help:"Print file contents from under the project root"`
-	Reconcile ImageReconcileCmd `cmd:"" help:"Align cross-repo @github layer pins to the newest version (clears resolver newest-wins warnings)"`
+	Set       BoxSetCmd       `cmd:"" help:"Set a value in image.yml by dot-path (e.g. images.foo.base fedora)"`
+	AddLayer  BoxAddCandyCmd  `cmd:"" name:"add-candy" help:"Append a layer to an image's layers: list (idempotent)"`
+	RmLayer   BoxRmCandyCmd   `cmd:"" name:"rm-candy" help:"Remove a layer from an image's layers: list"`
+	Fetch     BoxFetchCmd     `cmd:"" help:"Pre-prime the remote-repo cache (default: overthinkos/overthink)"`
+	Refresh   BoxRefreshCmd   `cmd:"" help:"Force re-clone of a remote project repo"`
+	Write     BoxWriteCmd     `cmd:"" help:"Write file contents under the project root (escape hatch for free-form files)"`
+	Cat       BoxCatCmd       `cmd:"" help:"Print file contents from under the project root"`
+	Reconcile BoxReconcileCmd `cmd:"" help:"Align cross-repo @github layer pins to the newest version (clears resolver newest-wins warnings)"`
 }
 
 // ImagePullCmd fetches an image from its registry into the local container
@@ -42,13 +42,13 @@ type ImageCmd struct {
 //   - fully-qualified ref ("ghcr.io/...:v") — pulled as-is
 //   - remote ref ("@github.com/org/repo/image[:version]") — downloads the
 //     repo and pulls the registry ref from its image.yml
-type ImagePullCmd struct {
+type BoxPullCmd struct {
 	Image    string `arg:"" help:"Image name (short, resolved via image.yml), fully-qualified ref, or @github.com/org/repo/image[:version]"`
 	Tag      string `long:"tag" help:"Image CalVer tag when resolving a short name (empty = resolve from image.yml metadata or error with explicit guidance)"`
 	Platform string `long:"platform" help:"Target platform (default: host)"`
 }
 
-func (c *ImagePullCmd) Run() error {
+func (c *BoxPullCmd) Run() error {
 	// `ov image pull` is the operator-facing alias for the canonical
 	// EnsureImagePresent path: pull from registry, fall back to a
 	// local build when the identifier maps to a project image.yml
@@ -62,7 +62,7 @@ func (c *ImagePullCmd) Run() error {
 		// path picks up the requested tag.
 		if !looksLikeFullRef(c.Image) && !IsRemoteImageRef(StripURLScheme(c.Image)) {
 			if cfg == nil {
-				return fmt.Errorf("short name %q with --tag requires a project directory with image.yml", c.Image)
+				return fmt.Errorf("short name %q with --tag requires a project directory with box.yml", c.Image)
 			}
 			resolved, err := cfg.ResolveImage(c.Image, c.Tag, dir, ResolveOpts{})
 			if err != nil {

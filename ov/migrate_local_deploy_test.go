@@ -102,6 +102,12 @@ func TestMigrateLocalDeploy_FullExample(t *testing.T) {
 	if err != nil {
 		t.Fatalf("MigrateLocalDeploy: %v", err)
 	}
+	// The full chain also runs candy-box-rename (a later step), which renames
+	// the `image:` pod selectors to `box:`; apply it so the rewritten file
+	// loads under the current schema.
+	if _, err := rewriteBoxCandyFile(path, false); err != nil {
+		t.Fatalf("rewriteBoxCandyFile: %v", err)
+	}
 	if !changed {
 		t.Fatal("changed=false on legacy file")
 	}

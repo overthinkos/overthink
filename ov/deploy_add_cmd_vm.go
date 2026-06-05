@@ -56,7 +56,7 @@ func deployNestedPodsInGuest(vmName string, node *DeploymentNode, exec DeployExe
 		}
 		asRef := "localhost/ov-" + childKey + ":latest"
 		fmt.Fprintf(os.Stderr, "Deploying nested pod %s.%s (%s) as a persistent in-guest quadlet...\n", vmName, childKey, child.Image)
-		if err := runOvSubcommand("image", "build", child.Image); err != nil {
+		if err := runOvSubcommand("box", "build", child.Image); err != nil {
 			return fmt.Errorf("build nested image %s (%s): %w", childKey, child.Image, err)
 		}
 		// --rootless: load into the guest USER's podman storage, because the

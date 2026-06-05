@@ -10,7 +10,7 @@ func TestStripURLScheme(t *testing.T) {
 		{"https://github.com/org/repo/image", "github.com/org/repo/image"},
 		{"http://github.com/org/repo/image", "github.com/org/repo/image"},
 		{"github.com/org/repo/image", "github.com/org/repo/image"},
-		{"@github.com/org/repo/image:v1.0.0", "@github.com/org/repo/image:v1.0.0"},
+		{"@github.com/org/repo/box:v1.0.0", "@github.com/org/repo/box:v1.0.0"},
 		{"myimage", "myimage"},
 	}
 

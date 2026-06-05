@@ -77,7 +77,7 @@ func TestDeployConfigLookup_PresentAndAbsent(t *testing.T) {
 //
 // Pre-fix reproduction: `ov deploy add arch arch --disposable`
 // against a deploy.yml whose pre-existing entries lacked the required
-// `image:` field destroyed the entire file's content (provides section,
+// `box:` field destroyed the entire file's content (provides section,
 // other deploy entries) and wrote only the new disposable: true marker.
 func TestSaveDeployState_AbortOnInvalidExistingFile(t *testing.T) {
 	dir := t.TempDir()
@@ -86,7 +86,7 @@ func TestSaveDeployState_AbortOnInvalidExistingFile(t *testing.T) {
 		t.Fatalf("mkdir: %v", err)
 	}
 	// Pre-existing deploy.yml that fails validateDeployRequiresImage —
-	// `legacy-entry` is target:pod but lacks the required `image:`.
+	// `legacy-entry` is target:pod but lacks the required `box:`.
 	initialYAML := `provides:
     env:
         - name: SOME_URL
@@ -97,7 +97,7 @@ deploy:
         target: pod
     another-entry:
         target: pod
-        image: another
+        box: another
 `
 	path := filepath.Join(dir, "ov", "deploy.yml")
 	if err := os.WriteFile(path, []byte(initialYAML), 0600); err != nil {
@@ -138,7 +138,7 @@ func TestSaveDeployState_PersistsImageAndTargetForNewEntry(t *testing.T) {
 	initialYAML := `deploy:
     existing-deploy:
         target: pod
-        image: existing-image
+        box: existing-image
 `
 	path := filepath.Join(dir, "ov", "deploy.yml")
 	if err := os.WriteFile(path, []byte(initialYAML), 0600); err != nil {
@@ -181,7 +181,7 @@ func TestSaveDeployState_PersistsImageAndTargetForNewEntry(t *testing.T) {
 
 // TestSaveDeployState_DoesNotClobberExistingImageTarget pins the
 // "only set when entry doesn't already declare" semantics: if a
-// pre-existing entry already has image:/target:, a saveDeployState
+// pre-existing entry already has box:/target:, a saveDeployState
 // call with different Image/Target values MUST leave the existing
 // values alone (operator authority over agent re-derivation).
 func TestSaveDeployState_DoesNotClobberExistingImageTarget(t *testing.T) {
@@ -193,7 +193,7 @@ func TestSaveDeployState_DoesNotClobberExistingImageTarget(t *testing.T) {
 	initialYAML := `deploy:
     existing:
         target: pod
-        image: pinned-image-ref:1.2.3
+        box: pinned-image-ref:1.2.3
 `
 	path := filepath.Join(dir, "ov", "deploy.yml")
 	if err := os.WriteFile(path, []byte(initialYAML), 0600); err != nil {
@@ -281,15 +281,15 @@ func TestDeploymentNode_DisposableFalseRoundTrip(t *testing.T) {
 	src := `deploy:
     locked-pod:
         target: pod
-        image: foo
+        box: foo
         disposable: false
     open-pod:
         target: pod
-        image: bar
+        box: bar
         disposable: true
     bare-pod:
         target: pod
-        image: baz
+        box: baz
 `
 	path := filepath.Join(dir, "ov", "deploy.yml")
 	if err := os.WriteFile(path, []byte(src), 0o600); err != nil {
@@ -387,7 +387,7 @@ func TestRemoveVmDeployEntry_SelectiveAndIdempotent(t *testing.T) {
                 - nvidia-gpu
     web-app:
         target: pod
-        image: web-app
+        box: web-app
 `
 	path := filepath.Join(dir, "ov", "deploy.yml")
 	if err := os.WriteFile(path, []byte(initialYAML), 0600); err != nil {

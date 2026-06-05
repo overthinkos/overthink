@@ -1,0 +1,16 @@
+candy:
+    version: 2026.144.1443
+    name: yay
+    distro:
+        arch:
+            package:
+                - base-devel
+                - git
+    task:
+        # yay latest release — GitHub API lookup to find the URL for our arch.
+        # Uses BUILD_ARCH (uname-style) because yay release names use x86_64/aarch64.
+        - cmd: |
+            URL=$(curl -fsSL https://api.github.com/repos/Jguer/yay/releases/latest \
+              | grep -o "https://github.com/Jguer/yay/releases/download/[^\"]*_${BUILD_ARCH}.tar.gz")
+            curl -fsSL "$URL" | tar -xzf - -C /usr/local/bin --strip-components=1 --wildcards '*/yay'
+          user: root

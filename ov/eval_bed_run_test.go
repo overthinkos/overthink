@@ -214,7 +214,7 @@ func TestPersistBedDeployOverrides_SeedsPortBeforeConfig(t *testing.T) {
 	initialYAML := `deploy:
     ollama:
         target: pod
-        image: ollama
+        box: ollama
         port:
             - 11434:11434
 `

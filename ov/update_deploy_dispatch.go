@@ -119,7 +119,7 @@ func (c *UpdateCmd) dispatchByDeployTarget() error {
 // is needed because deploy-name equals image-name). The CalVer tag is
 // extracted from baseRef so the alias tracks the actual base content,
 // not wall-clock time.
-func bumpDeployAlias(runEngine, baseRef, deployName string, meta *ImageMetadata) (string, error) {
+func bumpDeployAlias(runEngine, baseRef, deployName string, meta *BoxMetadata) (string, error) {
 	calver, err := tagPart(baseRef)
 	if err != nil {
 		return "", err

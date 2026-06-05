@@ -185,9 +185,9 @@ func resolveLocalPath(ref, projectDir string) (*DeployRef, error) {
 	}
 	if info.IsDir() {
 		// A directory ref points at a layer directory (layers/<name>/).
-		path = filepath.Join(path, "layer.yml")
+		path = filepath.Join(path, "candy.yml")
 		if _, err := os.Stat(path); err != nil {
-			return nil, fmt.Errorf("ResolveDeployRef: directory %s has no layer.yml", ref)
+			return nil, fmt.Errorf("ResolveDeployRef: directory %s has no candy.yml", ref)
 		}
 	}
 	kind, err := classifyYAMLFile(path)
@@ -195,7 +195,7 @@ func resolveLocalPath(ref, projectDir string) (*DeployRef, error) {
 		return nil, err
 	}
 	name := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
-	if kind == RefKindLayer && filepath.Base(path) == "layer.yml" {
+	if kind == RefKindLayer && filepath.Base(path) == "candy.yml" {
 		name = filepath.Base(filepath.Dir(path))
 	}
 	return &DeployRef{
@@ -219,7 +219,7 @@ func classifyYAMLFile(path string) (RefKind, error) {
 		return "", fmt.Errorf("parsing %s: %w", path, err)
 	}
 	// Image-shaped: has `images:` (top-level), `base:`, or `defaults:` block.
-	for _, k := range []string{"images", "base", "defaults"} {
+	for _, k := range []string{"box", "base", "defaults"} {
 		if _, ok := top[k]; ok {
 			return RefKindImage, nil
 		}
@@ -227,7 +227,7 @@ func classifyYAMLFile(path string) (RefKind, error) {
 	// Layer-shaped: has any layer marker. This list roughly matches
 	// layer.yml's documented top-level fields; a YAML that has none of
 	// these keys is an error (we don't try to guess).
-	for _, k := range []string{"rpm", "deb", "pac", "aur", "tasks", "services", "service", "system_services", "layers", "depends", "env", "path_append", "description"} {
+	for _, k := range []string{"rpm", "deb", "pac", "aur", "tasks", "services", "service", "system_services", "candy", "depends", "env", "path_append", "description"} {
 		if _, ok := top[k]; ok {
 			return RefKindLayer, nil
 		}
@@ -239,9 +239,9 @@ func classifyYAMLFile(path string) (RefKind, error) {
 // a matching name. Cross-kind name reuse is permitted (since 2026-05);
 // preferKind decides precedence when the name exists in both kinds.
 func resolveLocalName(name, projectDir string, preferKind RefKind) (*DeployRef, error) {
-	imgYml := filepath.Join(projectDir, "image.yml")
+	imgYml := filepath.Join(projectDir, "box.yml")
 	imagesYml := filepath.Join(projectDir, "images.yml")
-	layersDir := filepath.Join(projectDir, "layers", name)
+	layersDir := filepath.Join(projectDir, DefaultCandyDir, name)
 
 	inImageYml := false
 	resolvedImgPath := imgYml
@@ -261,7 +261,7 @@ func resolveLocalName(name, projectDir string, preferKind RefKind) (*DeployRef, 
 	_ = imagesYml
 
 	inLayers := false
-	layerYML := filepath.Join(layersDir, "layer.yml")
+	layerYML := filepath.Join(layersDir, "candy.yml")
 	if info, err := os.Stat(layerYML); err == nil && !info.IsDir() {
 		inLayers = true
 	}

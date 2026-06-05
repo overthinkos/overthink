@@ -1,4 +1,4 @@
-version: 2026.155.1801
+version: 2026.156.557
 import:
     # Flat imports (root namespace) — this repo's own per-kind files + the
     # combined base.yml (arch + fedora stacks). eval.yml carries kind:ai/recipe/
@@ -6,7 +6,7 @@ import:
     # entities); operator deployments live in the per-host ~/.config/ov/deploy.yml.
     - eval.yml
     - local.yml
-    - image.yml
+    - box.yml
     - vm.yml
     - pod.yml
     - k8s.yml
@@ -34,8 +34,8 @@ import:
     # LAYERS stay in main (shared with openclaw-desktop) — only the images moved.
     - selkies: '@github.com/overthinkos/selkies:v2026.153.0757'
 discover:
-    layer:
-        - path: layers
+    candy:
+        - path: candy
           recursive: true
 defaults:
     platform:

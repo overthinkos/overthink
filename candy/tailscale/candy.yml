@@ -1,0 +1,36 @@
+candy:
+    version: 2026.144.1443
+    name: tailscale
+    description: Tailscale mesh VPN (tailscaled service)
+    package:
+        - tailscale
+    distro:
+        arch: {}
+        debian-13:
+            repo:
+                - name: tailscale
+                  url: "https://pkgs.tailscale.com/stable/debian"
+                  key: "https://pkgs.tailscale.com/stable/debian/trixie.noarmor.gpg"
+                  suite: trixie
+                  components: main
+        fedora:
+            repo:
+                - name: tailscale-stable
+                  url: "https://pkgs.tailscale.com/stable/fedora/tailscale.repo"
+        ubuntu-24.04:
+            repo:
+                - name: tailscale
+                  url: "https://pkgs.tailscale.com/stable/ubuntu"
+                  key: "https://pkgs.tailscale.com/stable/ubuntu/noble.noarmor.gpg"
+                  suite: noble
+                  components: main
+    task:
+        - cmd: systemctl enable tailscaled.service 2>/dev/null || true
+          user: root
+    eval:
+        - id: tailscale-binary
+          command: test -x /usr/bin/tailscale && test -x /usr/sbin/tailscaled
+          exit_status: 0
+        - id: tailscaled-unit-enabled
+          command: systemctl is-enabled tailscaled.service
+          exit_status: 0

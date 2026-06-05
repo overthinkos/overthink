@@ -1,0 +1,173 @@
+candy:
+    version: 2026.144.1443
+    name: debug-tools
+    description: "Debug toolkit for inspecting deployed services from inside the container — network probes (ip/ss/lsof/ping/dig/nc/socat/tcpdump/traceroute/mtr/wget), process inspection (ps/top/htop/pgrep/free/vmstat/strace/ltrace), file inspection (file/tree/xxd/vim/nano), system stats (iotop/iftop/sysstat), and session helpers (tmux/rsync/yq). Distro-agnostic: rpm/deb/pac sections cover Fedora/Debian/Ubuntu/Arch."
+    # Distro-specific package lists. Tool names diverge across distros
+    # (e.g. nmap-ncat vs ncat vs gnu-netcat) so per-distro lists are the
+    # honest authoring path — no synthetic "common" package list that
+    # would silently install nothing on the wrong distro.
+    distro:
+        fedora:
+            package:
+                # Process inspection
+                - procps-ng # ps, top, kill, pkill, pgrep, free, vmstat, watch
+                - htop
+                - iotop
+                - iftop
+                - strace
+                - ltrace
+                - sysstat # iostat, mpstat, pidstat, sar
+                # Network
+                - iproute # ip, ss, tc
+                - net-tools # netstat, ifconfig (deprecated but expected)
+                - bind-utils # dig, nslookup, host
+                - iputils # ping, ping6, tracepath, arping
+                - nmap-ncat # nc
+                - socat
+                - tcpdump
+                - traceroute
+                - mtr
+                - wget
+                - lsof
+                # File / text inspection
+                - file
+                - tree
+                - vim-enhanced # full vim (provides /usr/bin/vim + xxd via vim-common dep)
+                - nano
+                # Session helpers
+                - tmux
+                - rsync
+                - yq # YAML manipulator (Fedora ships a Python yq)
+        arch:
+            package:
+                - procps-ng
+                - htop
+                - iotop
+                - iftop
+                - strace
+                - ltrace
+                - sysstat
+                - iproute2
+                - net-tools
+                - bind-tools # dig, nslookup, host
+                - iputils
+                - openbsd-netcat # nc (Arch extra ships openbsd-netcat; gnu-netcat is AUR-only)
+                - socat
+                - tcpdump
+                - traceroute
+                - mtr
+                - wget
+                - lsof
+                - file
+                - tree
+                - vim
+                - nano
+                - tmux
+                - rsync
+                - go-yq # mikefarah/yq Go implementation
+        debian:
+            package:
+                - procps
+                - htop
+                - iotop
+                - iftop
+                - strace
+                - ltrace
+                - sysstat
+                - iproute2
+                - net-tools
+                - dnsutils # dig, nslookup, host
+                - iputils-ping
+                - ncat # nc
+                - socat
+                - tcpdump
+                - traceroute
+                - mtr-tiny
+                - wget
+                - lsof
+                - file
+                - tree
+                - vim
+                - nano
+                - tmux
+                - rsync
+                # yq omitted — Debian/Ubuntu ship it via snap; install via pixi
+                # if a yq workflow becomes essential.
+        ubuntu:
+            package:
+                - procps
+                - htop
+                - iotop
+                - iftop
+                - strace
+                - ltrace
+                - sysstat
+                - iproute2
+                - net-tools
+                - dnsutils
+                - iputils-ping
+                - ncat
+                - socat
+                - tcpdump
+                - traceroute
+                - mtr-tiny
+                - wget
+                - lsof
+                - file
+                - tree
+                - vim
+                - nano
+                - tmux
+                - rsync
+    eval:
+        # Build-scope: spot-check the headline binaries from each category.
+        # If a future package rename breaks one of these, the test fails
+        # loudly at build time instead of surprising operators in production.
+        - id: ps-binary
+          file: /usr/bin/ps
+          exists: true
+        - id: ss-binary
+          file: /usr/sbin/ss
+          exists: true
+        - id: lsof-binary
+          file: /usr/bin/lsof
+          exists: true
+        - id: ping-binary
+          command: command -v ping
+          exit_status: 0
+        - id: dig-binary
+          file: /usr/bin/dig
+          exists: true
+        - id: nc-binary
+          command: command -v nc
+          exit_status: 0
+        - id: tcpdump-binary
+          file: /usr/sbin/tcpdump
+          exists: true
+        - id: htop-binary
+          file: /usr/bin/htop
+          exists: true
+        - id: strace-binary
+          file: /usr/bin/strace
+          exists: true
+        - id: vim-binary
+          file: /usr/bin/vim
+          exists: true
+        - id: nano-binary
+          file: /usr/bin/nano
+          exists: true
+        - id: tmux-binary
+          file: /usr/bin/tmux
+          exists: true
+        - id: tree-binary
+          file: /usr/bin/tree
+          exists: true
+        - id: wget-binary
+          file: /usr/bin/wget
+          exists: true
+        - id: file-binary
+          file: /usr/bin/file
+          exists: true
+        - id: rsync-binary
+          file: /usr/bin/rsync
+          exists: true

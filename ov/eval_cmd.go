@@ -63,7 +63,7 @@ func (e *EvalFailedError) Error() string {
 // self-evaluate) are the renamed `ov eval *` surface.
 type EvalCmd struct {
 	// Three primary modes
-	Image  EvalImageCmd  `cmd:"" help:"Pure-image eval (disposable container, build-scope checks)"`
+	Image  EvalBoxCmd    `cmd:"" name:"box" help:"Pure-box eval (disposable container, build-scope checks)"`
 	Live   EvalLiveCmd   `cmd:"" help:"Full-stack eval against a running deployment"`
 	Run    EvalRunCmd    `cmd:"" help:"Run a kind:eval R10 bed (full sequence) or drive an AI through a kind:score's iteration cycles"`
 	Recipe EvalRecipeCmd `cmd:"" help:"Run a recipe's scenarios once (deterministic; no AI iteration)"`
@@ -707,13 +707,13 @@ func evalLocalDeployScope(dir string, node *DeploymentNode, image, instance, sec
 // Image references resolve purely against local container storage via
 // resolveLocalImageRef — never reads image.yml. Run `ov image pull <name>`
 // or `ov image build <name>` first if the image isn't in local storage yet.
-type EvalImageCmd struct {
+type EvalBoxCmd struct {
 	Image  string   `arg:"" help:"Image reference (full ref or short name resolved against local container storage; never reads image.yml)"`
 	Format string   `long:"format" default:"text" help:"Output format: text, json, tap, yaml"`
 	Filter []string `long:"filter" help:"Only run checks with these verbs (repeatable)"`
 }
 
-func (c *EvalImageCmd) Run() error {
+func (c *EvalBoxCmd) Run() error {
 	rt, err := ResolveRuntime()
 	if err != nil {
 		return err

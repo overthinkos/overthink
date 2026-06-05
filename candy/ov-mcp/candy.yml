@@ -1,0 +1,98 @@
+candy:
+    version: 2026.146.1000
+    name: ov-mcp
+    description: "MCP server exposing the full ov CLI as tools (Streamable HTTP on port 18765)"
+    candy:
+        - ov
+        - supervisord
+    port:
+        - 18765
+    mcp_provide:
+        - name: ov
+          url: "http://{{.ContainerName}}:18765/mcp"
+          transport: http
+    volume:
+        # Project checkout bind-mounted from the host so build-mode MCP tools
+        # (image.build, image.inspect, image.list.*) have access to image.yml +
+        # layers/. Deployers point this at their overthink repo via
+        # `ov config <image> --bind project=/path/to/overthink`. When absent or
+        # empty, the project-dir-dependent MCP tools return a clear error
+        # (`image.yml not found`); the session-wide tools (status, version,
+        # doctor, secrets, settings) continue to work.
+        #
+        # Volume name stays `project` (stable bind-mount API). In-container path
+        # is `/workspace` — a neutral term that works whether the image runs as
+        # root (HOME=/root) or uid 1000 (HOME=/home/user), and whether the
+        # contents are an overthink checkout or any other dev workspace.
+        - name: project
+          path: /workspace
+    env:
+        # Build-mode commands resolve image.yml via os.Getwd(); the -C / --dir /
+        # OV_PROJECT_DIR global in ov/main.go honours this before dispatch.
+        OV_PROJECT_DIR: "/workspace"
+    task:
+        # Ensure /workspace exists in the built image with world-writable
+        # permissions, so `ov version` (and any other cwd-sensitive command)
+        # can chdir successfully even when no bind-mount is attached. 0777 is
+        # the only mode that works for both root (fedora-coder) and user-1000
+        # (jupyter et al.) deployments without baking in a uid assumption.
+        - mkdir: /workspace
+          mode: "0777"
+          user: root
+    eval:
+        - id: ov-mcp-service
+          scope: deploy
+          service: ov-mcp
+          running: true
+        - id: ov-mcp-port
+          scope: deploy
+          addr: 127.0.0.1:${HOST_PORT:18765}
+          reachable: true
+          timeout: 5s
+        # MCP server exercised live via the in-repo MCP client (ov eval mcp).
+        # Confirms the server initialises and enumerates tools derived from the
+        # Kong CLI model. mcp_name: ov disambiguates on images that also expose
+        # other MCP servers (jupyter, chrome-devtools).
+        - id: mcp-ov-ping
+          scope: deploy
+          mcp: ping
+          mcp_name: ov
+          timeout: 10s
+        - id: mcp-ov-list-tools
+          scope: deploy
+          mcp: list-tools
+          mcp_name: ov
+          stdout:
+            - contains: image.build
+            - contains: status
+            - contains: version
+        # Live tool invocation — version is the safest non-destructive tool on
+        # the surface (zero arguments, zero side effects, deterministic output).
+        - id: mcp-ov-call-version
+          scope: deploy
+          mcp: call
+          tool: version
+          input: "{}"
+          mcp_name: ov
+          exit_status: 0
+          stdout:
+            - matches: "[0-9]{4}\\.[0-9]+"
+        # Build-mode tool invocation. image.list.images returns the project's
+        # own catalog when /workspace is bind-mounted to a project checkout, or
+        # the embedded fallback (overthinkos/overthink) when it is not — both
+        # are valid runtime modes. exit_status: 0 verifies the tool is callable
+        # in either mode; project-specific content assertions live on per-bed
+        # tests that pin the bind-mount, not on this layer-level check.
+        - id: mcp-ov-call-list-images
+          scope: deploy
+          mcp: call
+          tool: image.list.images
+          input: "{}"
+          mcp_name: ov
+          exit_status: 0
+    service:
+        - name: ov-mcp
+          exec: "/usr/local/bin/ov mcp serve --listen :18765"
+          restart: always
+          enable: true
+          scope: system

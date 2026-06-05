@@ -8,7 +8,7 @@ func TestValidateServiceNameFound(t *testing.T) {
 	// Test the service name lookup logic that validateServiceName uses internally.
 	// validateServiceName calls ExtractMetadata which reads container labels at runtime,
 	// so we test the lookup logic directly via ImageMetadata.Services.
-	meta := &ImageMetadata{
+	meta := &BoxMetadata{
 		Init:         "supervisord",
 		ServiceNames: []string{"traefik", "testapi"},
 	}
@@ -28,7 +28,7 @@ func TestValidateServiceNameFound(t *testing.T) {
 }
 
 func TestValidateServiceNameNotFound(t *testing.T) {
-	meta := &ImageMetadata{
+	meta := &BoxMetadata{
 		Init:         "supervisord",
 		ServiceNames: []string{"traefik", "testapi"},
 	}
@@ -47,7 +47,7 @@ func TestValidateServiceNameNotFound(t *testing.T) {
 }
 
 func TestValidateServiceNameEmpty(t *testing.T) {
-	meta := &ImageMetadata{
+	meta := &BoxMetadata{
 		Init:         "",
 		ServiceNames: nil,
 	}

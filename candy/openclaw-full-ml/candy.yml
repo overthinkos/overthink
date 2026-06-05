@@ -1,0 +1,8 @@
+candy:
+    version: 2026.144.1443
+    name: openclaw-full-ml
+    description: OpenClaw full + ML tools (whisper, sherpa-onnx-tts, CUDA)
+    candy:
+        - openclaw-full
+        - whisper
+        - sherpa-onnx

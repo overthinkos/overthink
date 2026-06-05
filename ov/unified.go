@@ -70,11 +70,11 @@ type UnifiedFile struct {
 	Distro   map[string]*DistroDef  `yaml:"distro,omitempty"`
 	Builder  map[string]*BuilderDef `yaml:"builder,omitempty"`
 	Init     map[string]*InitDef    `yaml:"init,omitempty"`
-	Defaults ImageConfig            `yaml:"defaults,omitempty"`
+	Defaults BoxConfig              `yaml:"defaults,omitempty"`
 	// Field-singular cutover (2026-05): legacy plural `Images yaml:"images"`
-	// deleted; the singular `Image yaml:"image"` is the canonical surface.
-	Image map[string]ImageConfig  `yaml:"image,omitempty"`
-	Layer map[string]*InlineLayer `yaml:"layer,omitempty"`
+	// deleted; the singular `Image yaml:"box"` is the canonical surface.
+	Image map[string]BoxConfig    `yaml:"box,omitempty"`
+	Layer map[string]*InlineCandy `yaml:"candy,omitempty"`
 	VM    map[string]*VmSpec      `yaml:"vm,omitempty"`
 	// Field-singular cutover: legacy `Deploys *DeploymentsSection
 	// yaml:"deployments"` deleted. The flat `Deploy yaml:"deploy"` map is
@@ -198,8 +198,8 @@ func (il ImportList) MarshalYAML() (interface{}, error) {
 // DiscoverConfig drives filesystem scans for standalone kind-keyed files. Each
 // sub-key is independent; a file with only `discover.layer:` is common.
 type DiscoverConfig struct {
-	Layer   []ScanSpec `yaml:"layer,omitempty"`
-	Image   []ScanSpec `yaml:"image,omitempty"`
+	Layer   []ScanSpec `yaml:"candy,omitempty"`
+	Image   []ScanSpec `yaml:"box,omitempty"`
 	Deploy  []ScanSpec `yaml:"deploy,omitempty"`
 	Builder []ScanSpec `yaml:"builder,omitempty"`
 	Distro  []ScanSpec `yaml:"distro,omitempty"`
@@ -252,16 +252,16 @@ func (s *ScanSpec) UnmarshalYAML(node *yaml.Node) error {
 // Mutually exclusive options: `from:` points at a directory to scan via the
 // existing scanLayer (no schema change), OR the inline body defines the layer
 // (same fields as layer.yml, flattened via yaml:",inline").
-type InlineLayer struct {
+type InlineCandy struct {
 	From      string `yaml:"from,omitempty"`
-	LayerYAML `yaml:",inline"`
+	CandyYAML `yaml:",inline"`
 }
 
 // UnmarshalYAML is required because LayerYAML has its own UnmarshalYAML —
 // yaml.v3's default ",inline" handling doesn't compose with a custom
 // unmarshaler on the embedded type. We read `from:` explicitly, then delegate
 // to LayerYAML for the body.
-func (il *InlineLayer) UnmarshalYAML(node *yaml.Node) error {
+func (il *InlineCandy) UnmarshalYAML(node *yaml.Node) error {
 	var own struct {
 		From string `yaml:"from"`
 	}
@@ -271,7 +271,7 @@ func (il *InlineLayer) UnmarshalYAML(node *yaml.Node) error {
 		// `from:` entries reference an external directory — no body decode.
 		return nil
 	}
-	return il.LayerYAML.UnmarshalYAML(node)
+	return il.CandyYAML.UnmarshalYAML(node)
 }
 
 // DeploymentsSection carries repo-shipped deployment defaults plus per-image
@@ -284,7 +284,7 @@ func (il *InlineLayer) UnmarshalYAML(node *yaml.Node) error {
 type DeploymentsSection struct {
 	Defaults *DeploymentNode           `yaml:"defaults,omitempty"`
 	Provides *ProvidesConfig           `yaml:"provides,omitempty"`
-	Image    map[string]DeploymentNode `yaml:"image,omitempty"`
+	Image    map[string]DeploymentNode `yaml:"box,omitempty"`
 }
 
 // -----------------------------------------------------------------------------
@@ -297,8 +297,8 @@ type DeploymentsSection struct {
 // -----------------------------------------------------------------------------
 
 type kindKeyedDoc struct {
-	Layer   *LayerDoc   `yaml:"layer,omitempty"`
-	Image   *ImageDoc   `yaml:"image,omitempty"`
+	Layer   *CandyDoc   `yaml:"candy,omitempty"`
+	Image   *BoxDoc     `yaml:"box,omitempty"`
 	Deploy  *DeployDoc  `yaml:"deploy,omitempty"`
 	Builder *BuilderDoc `yaml:"builder,omitempty"`
 	Distro  *DistroDoc  `yaml:"distro,omitempty"`
@@ -371,28 +371,28 @@ type AndroidDoc struct {
 
 // LayerDoc wraps a LayerYAML body with an explicit Name — the standalone form
 // authored in `layers/<name>/layer.yml` post-migration.
-type LayerDoc struct {
+type CandyDoc struct {
 	Name      string `yaml:"name"`
-	LayerYAML `yaml:",inline"`
+	CandyYAML `yaml:",inline"`
 }
 
 // UnmarshalYAML — same rationale as InlineLayer.UnmarshalYAML. The custom
 // unmarshaler on the embedded LayerYAML doesn't compose with ",inline", so we
 // extract Name ourselves and delegate the body to LayerYAML.
-func (ld *LayerDoc) UnmarshalYAML(node *yaml.Node) error {
+func (ld *CandyDoc) UnmarshalYAML(node *yaml.Node) error {
 	var own struct {
 		Name string `yaml:"name"`
 	}
 	_ = node.Decode(&own)
 	ld.Name = own.Name
-	return ld.LayerYAML.UnmarshalYAML(node)
+	return ld.CandyYAML.UnmarshalYAML(node)
 }
 
 // ImageDoc wraps a single ImageConfig with an explicit Name — the standalone
 // form authored in `images/<name>/image.yml` post-migration.
-type ImageDoc struct {
-	Name        string `yaml:"name"`
-	ImageConfig `yaml:",inline"`
+type BoxDoc struct {
+	Name      string `yaml:"name"`
+	BoxConfig `yaml:",inline"`
 }
 
 // DeployDoc wraps a single DeploymentNode.
@@ -440,8 +440,8 @@ type entityKind struct {
 }
 
 var entityKinds = []entityKind{
-	{Key: "layer", Filename: "layer.yml"},
-	{Key: "image", Filename: "image.yml"},
+	{Key: "candy", Filename: "candy.yml"},
+	{Key: "box", Filename: "box.yml"},
 	{Key: "deploy", Filename: "deploy.yml"},
 	{Key: "builder", Filename: "builder.yml"},
 	{Key: "distro", Filename: "distro.yml"},
@@ -869,7 +869,7 @@ func validateDeployRequiresImage(deploy map[string]DeploymentNode) error {
 		}
 		if node.Image == "" {
 			return fmt.Errorf(
-				"deploy entry %q lacks required `image:` field (2026-05-12 schema cutover — pod-target deploys must declare `image:` explicitly so the eval runner reads the operator's declared intent, not the running container's stale label).\n  Remediation: run `ov migrate` (one-shot, idempotent).",
+				"deploy entry %q lacks required `box:` field (2026-05-12 schema cutover — pod-target deploys must declare `box:` explicitly so the eval runner reads the operator's declared intent, not the running container's stale label).\n  Remediation: run `ov migrate` (one-shot, idempotent).",
 				name,
 			)
 		}
@@ -1109,8 +1109,8 @@ var rootShapeKeys = map[string]bool{
 	"provides": true,
 	// Field-singular cutover (2026-05): plurals collapsed.
 	"distro": true, "builder": true, "init": true,
-	"layer": true,
-	"image": true, "pod": true, "vm": true, "k8s": true, "local": true,
+	"candy": true,
+	"box": true, "pod": true, "vm": true, "k8s": true, "local": true,
 	"android": true,
 	"deploy":  true,
 	// 2026-04 harness cutover: `ai:` and `recipe:` are recognized as
@@ -1640,12 +1640,12 @@ func mergeInitMap(dst *map[string]*InitDef, src map[string]*InitDef) {
 	}
 }
 
-func mergeImageMap(dst *map[string]ImageConfig, src map[string]ImageConfig) {
+func mergeImageMap(dst *map[string]BoxConfig, src map[string]BoxConfig) {
 	if len(src) == 0 {
 		return
 	}
 	if *dst == nil {
-		*dst = make(map[string]ImageConfig)
+		*dst = make(map[string]BoxConfig)
 	}
 	for k, v := range src {
 		if _, exists := (*dst)[k]; !exists {
@@ -1654,12 +1654,12 @@ func mergeImageMap(dst *map[string]ImageConfig, src map[string]ImageConfig) {
 	}
 }
 
-func mergeLayerMap(dst *map[string]*InlineLayer, src map[string]*InlineLayer) {
+func mergeLayerMap(dst *map[string]*InlineCandy, src map[string]*InlineCandy) {
 	if len(src) == 0 {
 		return
 	}
 	if *dst == nil {
-		*dst = make(map[string]*InlineLayer)
+		*dst = make(map[string]*InlineCandy)
 	}
 	for k, v := range src {
 		if _, exists := (*dst)[k]; !exists {
@@ -1889,7 +1889,7 @@ func validateEvalBeds(uf *UnifiedFile) error {
 
 // mergeImageConfig preserves dst's already-set fields and fills only the
 // zero-valued ones from src. Used for merging Defaults blocks from includes.
-func mergeImageConfig(dst, src *ImageConfig) {
+func mergeImageConfig(dst, src *BoxConfig) {
 	if src == nil || dst == nil {
 		return
 	}
@@ -2026,23 +2026,23 @@ func mergeKindDoc(merged *UnifiedFile, kd *kindKeyedDoc, srcDir string) error {
 	switch {
 	case kd.Layer != nil:
 		if kd.Layer.Name == "" {
-			return fmt.Errorf("layer: missing name")
+			return fmt.Errorf("candy: missing name")
 		}
 		if merged.Layer == nil {
-			merged.Layer = map[string]*InlineLayer{}
+			merged.Layer = map[string]*InlineCandy{}
 		}
 		if _, exists := merged.Layer[kd.Layer.Name]; !exists {
-			merged.Layer[kd.Layer.Name] = &InlineLayer{LayerYAML: kd.Layer.LayerYAML}
+			merged.Layer[kd.Layer.Name] = &InlineCandy{CandyYAML: kd.Layer.CandyYAML}
 		}
 	case kd.Image != nil:
 		if kd.Image.Name == "" {
-			return fmt.Errorf("image: missing name")
+			return fmt.Errorf("box: missing name")
 		}
 		if merged.Image == nil {
-			merged.Image = map[string]ImageConfig{}
+			merged.Image = map[string]BoxConfig{}
 		}
 		if _, exists := merged.Image[kd.Image.Name]; !exists {
-			merged.Image[kd.Image.Name] = kd.Image.ImageConfig
+			merged.Image[kd.Image.Name] = kd.Image.BoxConfig
 		}
 	case kd.Deploy != nil:
 		if kd.Deploy.Name == "" {
@@ -2300,12 +2300,12 @@ func applyScanSpecsLayers(specs []ScanSpec, rootDir string, uf *UnifiedFile) err
 		if !filepath.IsAbs(scanPath) {
 			scanPath = filepath.Join(rootDir, scanPath)
 		}
-		dirs, err := findEntityDirs(scanPath, "layer.yml", s.Recursive)
+		dirs, err := findEntityDirs(scanPath, "candy.yml", s.Recursive)
 		if err != nil {
-			return fmt.Errorf("discover.layers %q: %w", s.Path, err)
+			return fmt.Errorf("discover.candy %q: %w", s.Path, err)
 		}
 		if uf.Layer == nil {
-			uf.Layer = map[string]*InlineLayer{}
+			uf.Layer = map[string]*InlineCandy{}
 		}
 		for _, d := range dirs {
 			name := filepath.Base(d)
@@ -2318,16 +2318,16 @@ func applyScanSpecsLayers(specs []ScanSpec, rootDir string, uf *UnifiedFile) err
 			if err != nil {
 				rel = d
 			}
-			uf.Layer[name] = &InlineLayer{From: rel}
+			uf.Layer[name] = &InlineCandy{From: rel}
 		}
 	}
 	return nil
 }
 
 func applyScanSpecsImages(specs []ScanSpec, rootDir string, uf *UnifiedFile) error {
-	return applyScanSpecsKindKeyed(specs, rootDir, "image.yml", func(doc *kindKeyedDoc, srcDir string) error {
+	return applyScanSpecsKindKeyed(specs, rootDir, "box.yml", func(doc *kindKeyedDoc, srcDir string) error {
 		if doc.Image == nil {
-			return fmt.Errorf("expected image: wrapper")
+			return fmt.Errorf("expected box: wrapper")
 		}
 		if doc.Image.Name == "" {
 			doc.Image.Name = filepath.Base(srcDir)
@@ -2441,7 +2441,7 @@ func (uf *UnifiedFile) projectConfigCached(cache map[*UnifiedFile]*Config) *Conf
 	}
 	images := uf.Image
 	if images == nil {
-		images = map[string]ImageConfig{}
+		images = map[string]BoxConfig{}
 	}
 	c := &Config{
 		Defaults: uf.Defaults,
@@ -2545,7 +2545,7 @@ func (uf *UnifiedFile) ProjectLayers(rootDir string) (map[string]*Layer, error) 
 // unified file. The effective Path is rootDir (the overthink.yml's dir);
 // SourceDir always equals Path (the `directory:` field was deleted in the
 // 2026-05 Calamares cutover).
-func synthesizeInlineLayer(name string, il *InlineLayer, rootDir string) (*Layer, error) {
+func synthesizeInlineLayer(name string, il *InlineCandy, rootDir string) (*Layer, error) {
 	// Use inline layer body as if it were a parsed layer.yml at rootDir.
 	layer := &Layer{
 		Name: name,
@@ -2555,7 +2555,7 @@ func synthesizeInlineLayer(name string, il *InlineLayer, rootDir string) (*Layer
 	// Populate fields the same way scanLayer does post-parse. We reuse the
 	// logic by duplicating the minimal set a test would notice; the full set
 	// can be factored out alongside Part G's refactor.
-	populateLayerFromYAML(layer, &il.LayerYAML)
+	populateLayerFromYAML(layer, &il.CandyYAML)
 	// Install-file detection against SourceDir.
 	layer.HasPixiToml = fileExists(filepath.Join(layer.SourceDir, "pixi.toml"))
 	layer.HasPyprojectToml = fileExists(filepath.Join(layer.SourceDir, "pyproject.toml"))
@@ -2578,7 +2578,7 @@ func synthesizeInlineLayer(name string, il *InlineLayer, rootDir string) (*Layer
 // inline path silently dropped artifacts/capabilities/requiresCapabilities/
 // shell and the unexported description.) The caller is responsible for the
 // install-file filesystem probes (HasPixiToml etc.) against SourceDir.
-func populateLayerFromYAML(layer *Layer, ly *LayerYAML) {
+func populateLayerFromYAML(layer *Layer, ly *CandyYAML) {
 	layer.Version = ly.Version
 	layer.Description = ly.Description
 	layer.Status = descriptionStatus(ly.Description)

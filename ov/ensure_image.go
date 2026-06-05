@@ -160,7 +160,7 @@ func resolveImageRefForEnsure(image string, cfg *Config, projectDir string) (str
 		return image, nil
 	}
 	if cfg == nil {
-		return "", fmt.Errorf("short name %q requires a project directory with image.yml", image)
+		return "", fmt.Errorf("short name %q requires a project directory with box.yml", image)
 	}
 	resolved, err := cfg.ResolveImage(image, "", projectDir, ResolveOpts{})
 	if err != nil {

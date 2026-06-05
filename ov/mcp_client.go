@@ -34,7 +34,7 @@ import (
 // {{.ContainerName}} left) and with same-image URLs rewritten to localhost
 // (pod-aware path). Matches the pattern used by injectMCPProvides at
 // ov config time.
-func resolveMCPEntry(meta *ImageMetadata, image, ctrName, wantName string) (MCPProvideEntry, error) {
+func resolveMCPEntry(meta *BoxMetadata, image, ctrName, wantName string) (MCPProvideEntry, error) {
 	if meta == nil || len(meta.MCPProvide) == 0 {
 		return MCPProvideEntry{}, fmt.Errorf("image %q declares no mcp_provides", image)
 	}

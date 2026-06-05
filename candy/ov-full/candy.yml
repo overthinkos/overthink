@@ -1,0 +1,18 @@
+candy:
+    version: 2026.144.1443
+    name: ov-full
+    description: |
+        Full ov toolchain (CLI + VM stack + crypto + console) — works
+        identically on container/pod targets and on host/local/bootc
+        targets via the unified `virtualization` layer's mixed-entry
+        `service:` pattern. The previous `ov-full-host` sibling was
+        deleted in the 2026-05 init-system-polymorphism cutover; ONE
+        `ov-full` is now the canonical composition for both contexts.
+        See CLAUDE.md "Init-system polymorphism via mixed `service:`
+        entries" for the rule and `/ov-infrastructure:virtualization` for
+        the worked example.
+    candy:
+        - ov
+        - virtualization
+        - gocryptfs
+        - socat

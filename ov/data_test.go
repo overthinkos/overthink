@@ -86,8 +86,8 @@ func (c *recordedCall) containsSubstring(s string) bool {
 	return false
 }
 
-func makeJupyterMeta(dataImage bool) *ImageMetadata {
-	return &ImageMetadata{
+func makeJupyterMeta(dataImage bool) *BoxMetadata {
+	return &BoxMetadata{
 		Image: "jupyter",
 		UID:   1000,
 		GID:   1000,
@@ -104,7 +104,7 @@ func makeJupyterMeta(dataImage bool) *ImageMetadata {
 
 func TestProvisionDataNoEntries(t *testing.T) {
 	fake := installFakeRunner(t)
-	meta := &ImageMetadata{Image: "jupyter"}
+	meta := &BoxMetadata{Image: "jupyter"}
 
 	n, err := provisionData("podman", "jupyter-img", meta, nil, nil, "jupyter", "", DataProvisionInitial)
 	if err != nil {
@@ -306,7 +306,7 @@ func TestProvisionDataMixed(t *testing.T) {
 		return []byte(mountDir + "\n"), nil
 	}
 
-	meta := &ImageMetadata{
+	meta := &BoxMetadata{
 		Image: "multi",
 		UID:   1000,
 		GID:   1000,
@@ -366,7 +366,7 @@ func TestProvisionDataUnknownVolumeWarns(t *testing.T) {
 	os.Stderr = w
 	t.Cleanup(func() { os.Stderr = oldStderr })
 
-	meta := &ImageMetadata{
+	meta := &BoxMetadata{
 		Image: "jupyter",
 		DataEntries: []LabelDataEntry{
 			{Volume: "typo-name", Staging: "/data/typo/", Layer: "notebook-templates"},
@@ -468,7 +468,7 @@ func TestProvisionDataScratchImageBindMount(t *testing.T) {
 			sawCp = true
 		}
 		if c.containsArg(SeederHelperImage) {
-			t.Errorf("scratch bind path must not use helper image: %v", c.args)
+			t.Errorf("scratch bind path must not use helper box: %v", c.args)
 		}
 	}
 	if !sawCreate {
@@ -482,7 +482,7 @@ func TestProvisionDataScratchImageBindMount(t *testing.T) {
 func TestProvisionDataEntryDestSubdir(t *testing.T) {
 	fake := installFakeRunner(t)
 	hostDir := t.TempDir()
-	meta := &ImageMetadata{
+	meta := &BoxMetadata{
 		Image: "jupyter",
 		UID:   1000,
 		GID:   1000,

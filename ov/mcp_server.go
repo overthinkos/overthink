@@ -75,25 +75,25 @@ var mcpDestructivePaths = map[string]bool{
 	"deploy.import": true,
 	"deploy.reset":  true,
 	// Image build/push/scaffold
-	"image.build":       true,
-	"image.merge":       true,
-	"image.new.layer":   true,
-	"image.new.project": true,
-	"image.new.image":   true,
+	"box.build":       true,
+	"box.merge":       true,
+	"box.new.candy":   true,
+	"box.new.project": true,
+	"box.new.box":   true,
 	// MCP-first authoring surface — mutates image.yml or filesystem.
 	// (image.fetch is idempotent + additive; image.cat is read-only — neither
 	// is listed.)
-	"image.set":       true,
-	"image.add-layer": true,
-	"image.rm-layer":  true,
-	"image.refresh":   true, // deletes + re-clones cache
-	"image.write":     true, // writes arbitrary file under project root
+	"box.set":       true,
+	"box.add-candy": true,
+	"box.rm-candy":  true,
+	"box.refresh":   true, // deletes + re-clones cache
+	"box.write":     true, // writes arbitrary file under project root
 	// Layer authoring — mutates layer.yml.
-	"layer.set":     true,
-	"layer.add-rpm": true,
-	"layer.add-deb": true,
-	"layer.add-pac": true,
-	"layer.add-aur": true,
+	"candy.set":     true,
+	"candy.add-rpm": true,
+	"candy.add-deb": true,
+	"candy.add-pac": true,
+	"candy.add-aur": true,
 	// Benchmark — run mutates workspace + rebuilds images; self-evaluate
 	// rebuilds images. Read-only siblings (scope, last-test-tag, list,
 	// list-runners, report) stay exposed.
@@ -202,7 +202,7 @@ var mcpRegisteredToolCount = func(*mcp.Server) int { return mcpLastRegisteredCou
 func (c *McpServeCmd) bootstrapProject() error {
 	// Case 1: image.yml exists in cwd (main() has already chdir'd if --dir
 	// or --repo was supplied, so cwd reflects all three origins).
-	if _, err := os.Stat("image.yml"); err == nil {
+	if _, err := os.Stat("box.yml"); err == nil {
 		return nil
 	}
 
@@ -275,7 +275,7 @@ func buildMcpServer(readOnly bool) (*mcp.Server, error) {
 // Kong → MCP tool schema
 // ---------------------------------------------------------------------------
 
-// leafPath returns a dotted command path like "image.build" from Kong's
+// leafPath returns a dotted command path like "box.build" from Kong's
 // space-separated Path() value.
 func leafPath(n *kong.Node) string {
 	return strings.ReplaceAll(n.Path(), " ", ".")

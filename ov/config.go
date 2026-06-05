@@ -9,8 +9,8 @@ import (
 
 // Config represents the image.yml configuration file
 type Config struct {
-	Defaults ImageConfig            `yaml:"defaults"`
-	Image    map[string]ImageConfig `yaml:"image"`
+	Defaults BoxConfig            `yaml:"defaults"`
+	Image    map[string]BoxConfig `yaml:"box"`
 	// Local carries kind:local templates so remote-ref collection +
 	// validation walk their layer: lists symmetrically with image layer
 	// lists (kind:local templates compose remote @-ref layers too). Populated
@@ -110,7 +110,7 @@ func (m BuilderMap) AllBuilder() []string {
 }
 
 // ImageConfig represents configuration for a single image or defaults
-type ImageConfig struct {
+type BoxConfig struct {
 	Enabled     *bool        `yaml:"enabled,omitempty"`
 	Version     string       `yaml:"version,omitempty"`     // CalVer version (YYYY.DDD.HHMM) of this image definition
 	Description *Description `yaml:"description,omitempty"` // Gherkin-shaped self-description; replaces retired info:/status:
@@ -126,7 +126,7 @@ type ImageConfig struct {
 	Registry              string        `yaml:"registry,omitempty"`
 	Distro                []string      `yaml:"distro,omitempty"` // distro tags ["fedora:43", "fedora"] — first-match for packages
 	Build                 BuildFormats  `yaml:"build,omitempty"`  // package formats ["rpm"] — all installed in order
-	Layer                 []string      `yaml:"layer,omitempty"`
+	Layer                 []string      `yaml:"candy,omitempty"`
 	Port                  []string      `yaml:"port,omitempty"`        // runtime port mappings ["host:container"]
 	User                  string        `yaml:"user,omitempty"`        // username (default: "user")
 	UID                   *int          `yaml:"uid,omitempty"`         // user ID (default: 1000)
@@ -183,7 +183,7 @@ type ImageConfig struct {
 }
 
 // IsEnabled returns true if the image is enabled (nil defaults to true)
-func (ic *ImageConfig) IsEnabled() bool {
+func (ic *BoxConfig) IsEnabled() bool {
 	if ic.Enabled == nil {
 		return true
 	}
@@ -196,7 +196,7 @@ func boolPtr(v bool) *bool {
 }
 
 // ResolvedImage represents a fully resolved image configuration
-type ResolvedImage struct {
+type ResolvedBox struct {
 	Name    string
 	Version string `json:"version,omitempty"` // authored per-entity CalVer (image.yml `version:`); optional
 	// EffectiveVersion is the content-derived identity emitted as the
@@ -274,7 +274,7 @@ type ResolvedImage struct {
 	// flags (Bootc, DataImage) with a layer-derived surface — those
 	// fields remain during the cutover transition and are removed in
 	// the same commit once consumers migrate to LayerCaps.
-	LayerCaps *AggregatedLayerCaps `json:"-"`
+	LayerCaps *AggregatedCandyCaps `json:"-"`
 
 	// Derived fields
 	IsExternalBase bool   // true if base is external OCI image, false if internal
@@ -284,7 +284,7 @@ type ResolvedImage struct {
 // SupportsTag returns true if this image has the given tag.
 // Tags include format (rpm, deb, pac), distro (fedora, arch),
 // version (fedora:43), and the implicit "all".
-func (img *ResolvedImage) SupportsTag(tag string) bool {
+func (img *ResolvedBox) SupportsTag(tag string) bool {
 	for _, t := range img.Tags {
 		if t == tag {
 			return true
@@ -294,7 +294,7 @@ func (img *ResolvedImage) SupportsTag(tag string) bool {
 }
 
 // SupportsBuild returns true if this image has the given build format.
-func (img *ResolvedImage) SupportsBuild(format string) bool {
+func (img *ResolvedBox) SupportsBuild(format string) bool {
 	for _, b := range img.BuildFormats {
 		if b == format {
 			return true
@@ -363,7 +363,7 @@ func (opts ResolveOpts) shouldIncludeDisabled(name string) bool {
 }
 
 // ResolveImage resolves a single image's configuration by applying defaults
-func (c *Config) ResolveImage(name string, calverTag string, dir string, opts ResolveOpts) (*ResolvedImage, error) {
+func (c *Config) ResolveImage(name string, calverTag string, dir string, opts ResolveOpts) (*ResolvedBox, error) {
 	// Namespace-aware entry: a qualified name (e.g. `ov.arch-builder`,
 	// `cachyos.cachyos`) resolves inside the Config of the namespace that
 	// owns it, where its base:/builder: refs are relative. This mirrors
@@ -390,7 +390,7 @@ func (c *Config) ResolveImage(name string, calverTag string, dir string, opts Re
 		return nil, fmt.Errorf("image %q is disabled (pass --include-disabled to operate on it without flipping authored config)", name)
 	}
 
-	resolved := &ResolvedImage{
+	resolved := &ResolvedBox{
 		Name:    name,
 		Version: img.Version,
 		Status:  descriptionStatus(img.Description),
@@ -629,8 +629,8 @@ func (c *Config) ResolveImage(name string, calverTag string, dir string, opts Re
 // extends the working set to images marked enabled: false (the build verb's
 // `--include-disabled` flag flips this for one-off operational rebuilds
 // without modifying authored config).
-func (c *Config) ResolveAllImage(calverTag string, dir string, opts ResolveOpts) (map[string]*ResolvedImage, error) {
-	resolved := make(map[string]*ResolvedImage)
+func (c *Config) ResolveAllImage(calverTag string, dir string, opts ResolveOpts) (map[string]*ResolvedBox, error) {
+	resolved := make(map[string]*ResolvedBox)
 	for name, img := range c.Image {
 		if !img.IsEnabled() && !opts.shouldIncludeDisabled(name) {
 			continue
@@ -777,7 +777,7 @@ func (c *Config) resolveEffectiveBuilder(name string, distro []string, base stri
 // default (whose per-image map is empty — e.g. bazzite/aurora -> ov.fedora-builder),
 // surfacing as "unknown layer" at generate time. Routing through this keeps the
 // FETCH set's builder edges in lockstep with the RESOLVE set's (resolveNamespacedBases).
-func (c *Config) effectiveBuilderForImage(name string, img ImageConfig) BuilderMap {
+func (c *Config) effectiveBuilderForImage(name string, img BoxConfig) BuilderMap {
 	base := "scratch"
 	isExternalBase := true
 	if img.From == "" && !img.DataImage {
@@ -906,7 +906,7 @@ func (c *Config) walkBaseChainBuild(baseName string) []string {
 // for a base reached across an import boundary, e.g. `cachyos.cachyos`).
 type baseChainNode struct {
 	Name string
-	Img  ImageConfig
+	Img  BoxConfig
 }
 
 // walkBaseChain walks imageName's ROOT-INTERNAL base-image chain and returns

@@ -50,7 +50,7 @@ and one mental model:
 
 | Reach for `ov` when you want to…                            | …and you get                                       | Stage                 |
 |-------------------------------------------------------------|----------------------------------------------------|-----------------------|
-| compose a reproducible image from a layer list              | `kind: image` / `kind: layer`, `ov image build`    | [Build](#build)       |
+| compose a reproducible image from a layer list              | `kind: box` / `kind: candy`, `ov box build`    | [Build](#build)       |
 | run one or more containers as a managed pod                 | `kind: pod`, `ov deploy add`, `ov start`           | [Run](#run)           |
 | apply the same layers to a host, VM, k8s, or Android device | `ov deploy add` + `target:`                        | [Deploy](#deploy)     |
 | prove a config actually works, end-to-end                   | `kind: eval`, `ov eval run`, baked `eval:` checks  | [Evaluate](#evaluate) |
@@ -60,7 +60,7 @@ The same `ov` drives two further stages — it
 and [manages](#manage) the running lifecycle (cleanup, diagnostics,
 schema upgrades, runtime config).
 
-> One `layer.yml`, one image, one `deploy.yml`, and one `kind: eval`
+> One `candy.yml`, one image, one `deploy.yml`, and one `kind: eval`
 > bed drive all four stages — the build, the local run, the remote
 > deploy, and the test harness. The binary that wires them together is
 > also an MCP server, so your AI agent reaches every verb over the same
@@ -81,14 +81,14 @@ layers on top of a base. `ov` resolves the dependency graph, generates
 multi-stage Containerfiles with cache mounts, and builds in the right
 order — handling the hard parts so you (and your AI) don't have to.
 
-- **Layer** (`kind: layer` in `layer.yml`) — packages (per-distro),
+- **Layer** (`kind: candy` in `candy.yml`) — packages (per-distro),
   tasks (eight verbs: `cmd`/`mkdir`/`copy`/`write`/`link`/`download`/
   `setcap`/`build`), services (one unified `service:` list — see
   init-system polymorphism below), volumes, env, ports, eval probes,
   `env_provide`/`env_require`/`mcp_provide`/`mcp_accept` for
   cross-container discovery, plus a `version:` CalVer.
   → `/ov-image:layer`.
-- **Image** (`kind: image`) — base + ordered layer list. Multi-stage
+- **Image** (`kind: box`) — base + ordered layer list. Multi-stage
   Containerfile, content-derived `org.overthinkos.version` OCI label,
   stable cache. → `/ov-image:image`.
 
@@ -121,7 +121,7 @@ against a real, running system. → CLAUDE.md "Risk Driven Development
 The container lifecycle is four verbs, and the same declarative inputs
 flow through all of them:
 
-- **Build** — a `kind: image` composes layers into a reproducible
+- **Build** — a `kind: box` composes layers into a reproducible
   multi-stage image.
 - **Run** — a `kind: pod` brings containers up as systemd-managed
   Podman quadlets.
@@ -167,7 +167,7 @@ discriminator in its file:
 
 **`overthink.yml` is the single project entry point.** Every other
 file is composed in via `import:` — a bare string for a flat
-same-repo import (`build.yml`, `image.yml`, `vm.yml`, `pod.yml`,
+same-repo import (`build.yml`, `box.yml`, `vm.yml`, `pod.yml`,
 `local.yml`, `android.yml`, `k8s.yml`, `eval.yml`), or a
 single-key `alias: ref` map for a namespaced cross-repo import (Go
 package-member semantics — `base: cachyos.cachyos`, fetched from
@@ -255,7 +255,7 @@ go install github.com/overthinkos/overthink/ov@latest
 ```
 
 This puts `ov` in your `$GOPATH/bin`. Create an `overthink.yml` and
-a `layers/` directory and you're done. Legacy projects (predating
+a `candy/` directory and you're done. Legacy projects (predating
 the unified schema, the `kind:` discriminators, or the singular
 field names) convert in one shot with `ov migrate` — a single
 idempotent chain to the latest CalVer schema. See `/ov-build:migrate`.
@@ -266,7 +266,7 @@ idempotent chain to the latest CalVer schema. See `/ov-build:migrate`.
 git clone --recurse-submodules https://github.com/overthinkos/overthink.git
 cd overthink
 task build:ov         # on Arch: delegates to makepkg -si; elsewhere: portable install to ~/.local/bin/ov
-ov image build        # build everything
+ov box build        # build everything
 ```
 
 **Arch / CachyOS / Manjaro** — install system-wide via `pacman`, building this
@@ -300,7 +300,7 @@ cd ov && go build -o ../bin/ov .
 
 ```bash
 # Build a single image
-ov image build fedora
+ov box build fedora
 
 # Build a CachyOS image (in submodule; ov resolves cross-repo refs)
 ov -C image/cachyos image build cachyos
@@ -309,14 +309,14 @@ ov -C image/cachyos image build cachyos
 ov shell fedora
 
 # Build and run a GPU-accelerated Jupyter server
-ov image build jupyter
+ov box build jupyter
 ov start jupyter
 
 # Configure as a systemd service (quadlet + secrets + encrypted volumes)
 ov config jupyter
 
 # Build a bootable VM disk image
-ov image build bazzite               # the kind:image
+ov box build bazzite               # the kind:image
 ov vm build  bazzite-bootc --type qcow2 # the kind:vm
 ov vm create bazzite-bootc
 
@@ -350,11 +350,11 @@ OCI labels for every capability it claims: `org.overthinkos.eval`,
 `org.overthinkos.init`, `org.overthinkos.version` (content-derived
 `EffectiveVersion`, stable across no-op rebuilds), `.ports`, etc.
 
-Commands: `ov image build` (build), `ov image generate` (write
-`.build/` only), `ov image validate`, `ov image inspect`,
-`ov image list`, `ov image merge`, `ov image pull`,
-`ov image reconcile`. MCP-driven authoring — `ov image {set,
-add-layer, rm-layer, fetch, refresh, write, cat}`, `ov layer {set,
+Commands: `ov box build` (build), `ov box generate` (write
+`.build/` only), `ov box validate`, `ov box inspect`,
+`ov box list`, `ov box merge`, `ov box pull`,
+`ov box reconcile`. MCP-driven authoring — `ov box {set,
+add-layer, rm-layer, fetch, refresh, write, cat}`, `ov candy {set,
 add-rpm, add-deb, add-pac, add-aur}` — gives AI agents
 comment-preserving YAML edits over RPC.
 
@@ -431,7 +431,7 @@ input.
 
 ### Deploy
 
-> The same `layer.yml` applied to a host, a remote ssh box, a VM, a
+> The same `candy.yml` applied to a host, a remote ssh box, a VM, a
 > k3s cluster, or an Android device.
 
 `ov deploy add <name> <ref>` is the unified verb; `target:`
@@ -455,7 +455,7 @@ discriminates where it lands:
   systemd units to the host filesystem. `host: local` (default)
   uses the local shell executor; `host: user@machine[:port]` (or a
   configured alias) re-execs `ov` over SSH. Per-machine overlays
-  via `add_layer:` in `~/.config/ov/deploy.yml`. Ledger at
+  via `add_candy:` in `~/.config/ov/deploy.yml`. Ledger at
   `~/.config/overthink/installed/` records every ReverseOp so
   `ov deploy del host` reverses precisely what was applied.
   → `/ov-local:local-deploy`, `/ov-local:local-spec`.
@@ -466,7 +466,7 @@ discriminates where it lands:
   mirrors `vm → k8s`. → `/ov-eval:android`, `/ov-eval:adb`.
 
 `ov deploy del`, `ov deploy sync` (apply K8s changes live),
-`ov deploy from-image` (source-less deploy from OCI labels), and
+`ov deploy from-box` (source-less deploy from OCI labels), and
 `ov update` complete the lifecycle. `ov update <name>` performs
 destroy + (optional rebuild) + create + start unattended *only*
 when the deploy carries `disposable: true`.
@@ -493,7 +493,7 @@ binds host `SSH_AUTH_SOCK` / `GPG_AGENT_SOCK` into the container.
 > Build → deploy → probe → fresh-update → tear down — disposable beds
 > with the same DSL as production deploys.
 
-Tests are first-class. Every `layer.yml` / `image.yml` /
+Tests are first-class. Every `candy.yml` / `box.yml` /
 `deploy.yml` can declare an `eval:` block of goss-style checks
 (files, packages, services, ports, processes, commands, HTTP, DNS,
 mounts, users, groups, kernel params, interfaces, matchers). Checks
@@ -503,7 +503,7 @@ image is self-testable without its source repo.
 
 Three execution modes:
 
-- **`ov eval image <image>`** — disposable `podman run --rm` of the
+- **`ov eval box <image>`** — disposable `podman run --rm` of the
   baked layer + image checks. Build-scope; no deploy state.
 - **`ov eval live <image>`** — runs all three sections against a
   *running* deployment, substituting deploy-time variables
@@ -633,7 +633,7 @@ auto-fallback to `overthinkos/overthink` when no project is wired
 ## Command reference
 
 The `ov` CLI has 29 top-level verbs across three modes with disjoint
-input sets — **build mode** (`ov image …` reads `overthink.yml`),
+input sets — **build mode** (`ov box …` reads `overthink.yml`),
 **test mode** (`ov eval …` reads OCI labels + `deploy.yml` overlays,
 never `overthink.yml`), and **deploy mode** (everything else reads
 OCI labels + `deploy.yml`) — plus the cross-mode `ov mcp serve`
@@ -641,8 +641,8 @@ gateway exposing the entire surface as MCP tools.
 
 | Area | Commands | Skill |
 |---|---|---|
-| **Image (build mode)** | `ov image {build, generate, validate, merge, new, inspect, list, pull, reconcile}` | `/ov-image:image` + `/ov-build:build`, `/ov-build:generate`, `/ov-build:validate`, `/ov-build:merge`, `/ov-build:new`, `/ov-build:inspect`, `/ov-build:list`, `/ov-build:pull`, `/ov-build:reconcile` |
-| **Image authoring (MCP-first)** | `ov image {set, add-layer, rm-layer, fetch, refresh, write, cat}` and `ov layer {set, add-rpm, add-deb, add-pac, add-aur}` | `/ov-image:image` "Authoring" + `/ov-image:layer` |
+| **Image (build mode)** | `ov box {build, generate, validate, merge, new, inspect, list, pull, reconcile}` | `/ov-image:image` + `/ov-build:build`, `/ov-build:generate`, `/ov-build:validate`, `/ov-build:merge`, `/ov-build:new`, `/ov-build:inspect`, `/ov-build:list`, `/ov-build:pull`, `/ov-build:reconcile` |
+| **Image authoring (MCP-first)** | `ov box {set, add-layer, rm-layer, fetch, refresh, write, cat}` and `ov candy {set, add-rpm, add-deb, add-pac, add-aur}` | `/ov-image:image` "Authoring" + `/ov-image:layer` |
 | **Deployment** | `ov deploy {add, del, sync, from-image, export, import, show, reset, status, path}`; `ov config`; `ov start`, `ov stop`, `ov restart`, `ov update`, `ov remove` | `/ov-core:deploy`, `/ov-core:ov-config`, `/ov-core:start`, `/ov-core:stop`, `/ov-core:ov-update`, `/ov-core:remove`, `/ov-local:local-deploy`, `/ov-kubernetes:kubernetes`, `/ov-internals:vm-deploy-target` |
 | **Runtime** | `ov shell`, `ov cmd`, `ov service`, `ov status`, `ov logs`, `ov tmux` | `/ov-core:shell`, `/ov-core:cmd`, `/ov-core:service`, `/ov-core:ov-status`, `/ov-core:logs`, `/ov-automation:tmux` |
 | **Test + probes** | `ov eval {image, live, run}` + the 11 live probe verbs (`cdp`, `wl`, `dbus`, `vnc`, `mcp`, `record`, `spice`, `libvirt`, `k8s`, `adb`, `appium`); `ov feature {list, pending, validate}` | `/ov-eval:eval`, `/ov-eval:cdp`, `/ov-eval:wl`, `/ov-eval:dbus`, `/ov-eval:vnc`, `/ov-eval:spice`, `/ov-eval:libvirt`, `/ov-eval:record`, `/ov-eval:eval-k8s`, `/ov-eval:adb`, `/ov-eval:appium` |
@@ -670,7 +670,7 @@ gateway exposing the entire surface as MCP tools.
 Content lives in the working tree and in the skill index — pointers,
 not enumerations:
 
-- **Layer library** (`layers/` + submodule `image/<distro>/layers/`,
+- **Layer library** (`candy/` + submodule `image/<distro>/candy/`,
   187 layers total). Foundation: `/ov-distros:*` (40 skills — base
   OS, GPU runtime, bootc, per-distro builders),
   `/ov-languages:*`, `/ov-infrastructure:*` (22), `/ov-tools:*`
@@ -678,7 +678,7 @@ not enumerations:
   `/ov-selkies:*` (40), `/ov-openclaw:*`, `/ov-versa:*`,
   `/ov-ollama:*`, `/ov-openwebui:*`, `/ov-comfyui:*`,
   `/ov-immich:*`, `/ov-hermes:*`, `/ov-filebrowser:*`.
-- **Image catalog** (`image.yml` + `image/*/image.yml`) — 53 images,
+- **Image catalog** (`box.yml` + `image/*/box.yml`) — 53 images,
   39 enabled by default. Same plugin namespaces; per-pod images
   carry an MCP server hint in `plugins/README.md`.
 - **VM catalog** (`vm.yml` + `image/cachyos/vm.yml`) — cloud_image
@@ -700,7 +700,7 @@ Layers used by only one image family are vendored in that
 `python-ml`, `jupyter-ml`, `unsloth-studio` bundle curated layer
 sets.
 
-**Data layers / data images** — `data:` block in `layer.yml` stages
+**Data layers / data images** — `data:` block in `candy.yml` stages
 files at `/data/<volume>/`; `ov config --bind <volume>` provisions
 them at deploy time; `ov update` merges new data non-destructively.
 `data_image: true` scratch-based images carry data + OCI labels,
@@ -718,7 +718,7 @@ not here.
 |---------|-----------|
 | Service won't start | `ov status <image>` then `ov logs <image>` (`/ov-core:ov-status`, `/ov-core:logs`) |
 | Quadlet out of sync with deploy.yml | `ov config <image> --update-all` (`/ov-core:ov-config`) |
-| Build cache stale | `ov image build --no-cache <image>` (`/ov-build:build`) |
+| Build cache stale | `ov box build --no-cache <image>` (`/ov-build:build`) |
 | Chrome stuck or crash-looping | `/ov-selkies:chrome` Resource Caps & Circuit Breaker section |
 | Encrypted volume locked at boot | `ov config mount` waits for keyring unlock automatically — zero CPU, event-driven (`/ov-automation:enc`) |
 | GPU not detected | `ov doctor` then `/ov-automation:udev` |
@@ -727,25 +727,25 @@ not here.
 | `ov vm build` fails: "no kind:vm entity in vm.yml" | Declare a `kind: vm` entity (`/ov-vm:vms-catalog`) |
 | SPICE console blank on cloud_image VM | Known `simpledrm → qxldrmfb` race under UEFI; switch to `firmware: bios` (`/ov-vm:arch`) |
 | `ov deploy add vm:<name>` errors "VM does not exist" | Run `ov vm create <name>` first — VM deploy is not auto-provisioning (`/ov-core:deploy`) |
-| Resolver "referenced at multiple versions" warning | `ov image reconcile` aligns the cross-repo `@github` pins (`/ov-build:reconcile`) |
-| `ov image pull` says "image is not available locally" | `ov image pull` accepts short name + project, fully-qualified ref, or `@github` remote ref. See `/ov-build:pull` |
+| Resolver "referenced at multiple versions" warning | `ov box reconcile` aligns the cross-repo `@github` pins (`/ov-build:reconcile`) |
+| `ov box pull` says "image is not available locally" | `ov box pull` accepts short name + project, fully-qualified ref, or `@github` remote ref. See `/ov-build:pull` |
 | Newer-than-binary config rejected at load | `ov migrate` brings the project to the latest schema CalVer (`/ov-build:migrate`) |
 | Schema/format change won't apply | `ov migrate` is idempotent; auto-invoked on remote-cache fetches |
 
 ## Adding a layer
 
 ```bash
-ov image new layer my-layer             # Scaffold the directory
-# Edit layers/my-layer/layer.yml        # Declare packages, deps, env, ports,
+ov box new candy my-layer             # Scaffold the directory
+# Edit candy/my-layer/candy.yml        # Declare packages, deps, env, ports,
 #                                       # services, eval probes, and tasks:
 #                                       # (see /ov-image:layer for the verb catalog)
 # Optionally add pixi.toml / package.json / Cargo.toml for auto-detected builders.
 
-# Add to an image's layer list in overthink.yml (or image.yml):
+# Add to an image's layer list in overthink.yml (or box.yml):
 #   layer: [..., my-layer]
 
-ov image build my-image                 # Build it
-ov eval image my-image                  # Run the baked checks
+ov box build my-image                 # Build it
+ov eval box my-image                  # Run the baked checks
 ```
 
 `/ov-image:layer` is the canonical reference for the eight `task:`
@@ -753,7 +753,7 @@ verbs (`cmd`, `mkdir`, `copy`, `write`, `link`, `download`,
 `setcap`, `build`), the unified `service:` schema, `vars:`
 substitution, YAML anchors, and execution-order rules.
 `/ov-eval:eval` covers the matcher forms, runtime variable table,
-gold-standard pattern (`layers/redis/layer.yml`), and the 10
+gold-standard pattern (`candy/redis/candy.yml`), and the 10
 authoring gotchas.
 
 ## Works with Claude Code

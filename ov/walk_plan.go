@@ -68,12 +68,12 @@ type StepExecutor interface {
 // pre-refactor behavior; in the long term, a type-check against the
 // set of known kinds at plan-build time should render this branch
 // dead.
-func WalkPlan(ctx context.Context, ex StepExecutor, plan *InstallPlan, opts EmitOpts) (*LayerRecord, error) {
+func WalkPlan(ctx context.Context, ex StepExecutor, plan *InstallPlan, opts EmitOpts) (*CandyRecord, error) {
 	if plan == nil {
 		return nil, fmt.Errorf("WalkPlan: nil plan")
 	}
 
-	rec := &LayerRecord{
+	rec := &CandyRecord{
 		Layer:      plan.Layer,
 		Version:    plan.Version,
 		DeployedAt: time.Now().UTC().Format(time.RFC3339),

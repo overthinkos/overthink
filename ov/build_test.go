@@ -182,7 +182,7 @@ func TestBuildPodmanPushArgs(t *testing.T) {
 }
 
 func TestFilterImages(t *testing.T) {
-	images := map[string]*ResolvedImage{
+	images := map[string]*ResolvedBox{
 		"fedora": {
 			Name:           "fedora",
 			IsExternalBase: true,
@@ -212,7 +212,7 @@ func TestFilterImages(t *testing.T) {
 }
 
 func TestFilterImagesUnknown(t *testing.T) {
-	images := map[string]*ResolvedImage{
+	images := map[string]*ResolvedBox{
 		"fedora": {Name: "fedora", IsExternalBase: true},
 	}
 	_, err := filterImage([]string{"fedora"}, []string{"nonexistent"}, images)
@@ -222,7 +222,7 @@ func TestFilterImagesUnknown(t *testing.T) {
 }
 
 func TestFilterImagesIncludesBuilder(t *testing.T) {
-	images := map[string]*ResolvedImage{
+	images := map[string]*ResolvedBox{
 		"builder": {
 			Name:           "builder",
 			IsExternalBase: true,
@@ -261,7 +261,7 @@ func TestFilterImagesIncludesBootstrapBuilder(t *testing.T) {
 	// `ov update --build versa` path silently skipped scheduling
 	// cachyos-pacstrap-builder, and runPrivilegedBootstrap then hard-failed
 	// at resolveLocalImageRef with "build the bootstrap_builder_image first".
-	images := map[string]*ResolvedImage{
+	images := map[string]*ResolvedBox{
 		"arch": {
 			Name:           "arch",
 			IsExternalBase: true,

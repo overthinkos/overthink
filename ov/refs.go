@@ -105,7 +105,7 @@ func BareRef(ref string) string {
 // bare map-key form (.Bare()) and the pinned version (.Version()) are DERIVED on
 // demand, so a ref's identity and its version can never drift apart. The
 // transitive fetch keys on .Raw; the dependency graph keys on .Bare().
-type LayerRef struct {
+type CandyRef struct {
 	Raw string // original ref, e.g. "@github.com/org/repo/layers/x:v1" or bare "x"
 	// resolved is the qualified layer-map key assigned when a freshly-fetched
 	// remote layer's plain-name sibling deps are qualified to
@@ -119,7 +119,7 @@ type LayerRef struct {
 // Bare returns the layer-map key (no @ prefix, no :version) — the form used for
 // dependency resolution and graph keying. After remote sibling-qualification it
 // is the qualified key; otherwise it derives from the original ref.
-func (r LayerRef) Bare() string {
+func (r CandyRef) Bare() string {
 	if r.resolved != "" {
 		return r.resolved
 	}
@@ -128,27 +128,27 @@ func (r LayerRef) Bare() string {
 
 // Version returns the pinned version (the ":vX" suffix), or "" for an unpinned
 // remote ref or a local (bare-name) ref.
-func (r LayerRef) Version() string { _, v := StripVersion(r.Raw); return v }
+func (r CandyRef) Version() string { _, v := StripVersion(r.Raw); return v }
 
 // IsRemote reports whether this is an @-prefixed remote ref.
-func (r LayerRef) IsRemote() bool { return IsRemoteLayerRef(r.Raw) }
+func (r CandyRef) IsRemote() bool { return IsRemoteLayerRef(r.Raw) }
 
 // toLayerRefs wraps raw ref strings (as parsed from layer.yml) into LayerRef
 // values. Returns nil for a nil/empty input so an absent list stays absent.
-func toLayerRefs(raw []string) []LayerRef {
+func toLayerRefs(raw []string) []CandyRef {
 	if len(raw) == 0 {
 		return nil
 	}
-	out := make([]LayerRef, len(raw))
+	out := make([]CandyRef, len(raw))
 	for i, s := range raw {
-		out[i] = LayerRef{Raw: s}
+		out[i] = CandyRef{Raw: s}
 	}
 	return out
 }
 
 // bareRefs returns the bare map-key form of each ref — for the consumers that
 // resolve a layer list against the layer map.
-func bareRefs(refs []LayerRef) []string {
+func bareRefs(refs []CandyRef) []string {
 	if len(refs) == 0 {
 		return nil
 	}

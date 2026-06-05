@@ -7,12 +7,12 @@ import (
 
 func TestValidateSuccess(t *testing.T) {
 	cfg := &Config{
-		Defaults: ImageConfig{
+		Defaults: BoxConfig{
 			Registry:  "ghcr.io/test",
 			Build:     BuildFormats{"rpm"},
 			Platforms: []string{"linux/amd64"},
 		},
-		Image: map[string]ImageConfig{
+		Image: map[string]BoxConfig{
 			"base": {Layer: []string{"pixi"}},
 		},
 	}
@@ -33,27 +33,27 @@ func TestValidateSuccess(t *testing.T) {
 func TestValidateBuildTunables(t *testing.T) {
 	cases := []struct {
 		name    string
-		ic      ImageConfig
+		ic      BoxConfig
 		wantErr string // substring; "" = expect no error
 	}{
-		{"all unset is valid", ImageConfig{}, ""},
-		{"valid full set", ImageConfig{Jobs: intPtr(4), PodmanJobs: intPtr(0), PodmanJobsCap: intPtr(8), Cache: "image", ContextIgnore: []string{"image", ".eval"}}, ""},
-		{"jobs zero rejected", ImageConfig{Jobs: intPtr(0)}, "jobs must be >= 1"},
-		{"jobs negative rejected", ImageConfig{Jobs: intPtr(-2)}, "jobs must be >= 1"},
-		{"podman_jobs negative rejected", ImageConfig{PodmanJobs: intPtr(-1)}, "podman_jobs must be >= 0"},
-		{"podman_jobs zero allowed (auto)", ImageConfig{PodmanJobs: intPtr(0)}, ""},
-		{"podman_jobs_cap zero rejected", ImageConfig{PodmanJobsCap: intPtr(0)}, "podman_jobs_cap must be >= 1"},
-		{"bad cache mode rejected", ImageConfig{Cache: "bogus"}, "cache must be one of"},
-		{"cache none allowed", ImageConfig{Cache: "none"}, ""},
-		{"empty context_ignore entry rejected", ImageConfig{ContextIgnore: []string{"image", "  "}}, "context_ignore[1] must not be empty"},
-		{"keep_images zero allowed (disabled)", ImageConfig{KeepImages: intPtr(0)}, ""},
-		{"keep_images negative rejected", ImageConfig{KeepImages: intPtr(-1)}, "keep_images must be >= 0"},
-		{"keep_eval_runs valid", ImageConfig{KeepEvalRuns: intPtr(10)}, ""},
-		{"keep_eval_runs negative rejected", ImageConfig{KeepEvalRuns: intPtr(-3)}, "keep_eval_runs must be >= 0"},
+		{"all unset is valid", BoxConfig{}, ""},
+		{"valid full set", BoxConfig{Jobs: intPtr(4), PodmanJobs: intPtr(0), PodmanJobsCap: intPtr(8), Cache: "image", ContextIgnore: []string{"image", ".eval"}}, ""},
+		{"jobs zero rejected", BoxConfig{Jobs: intPtr(0)}, "jobs must be >= 1"},
+		{"jobs negative rejected", BoxConfig{Jobs: intPtr(-2)}, "jobs must be >= 1"},
+		{"podman_jobs negative rejected", BoxConfig{PodmanJobs: intPtr(-1)}, "podman_jobs must be >= 0"},
+		{"podman_jobs zero allowed (auto)", BoxConfig{PodmanJobs: intPtr(0)}, ""},
+		{"podman_jobs_cap zero rejected", BoxConfig{PodmanJobsCap: intPtr(0)}, "podman_jobs_cap must be >= 1"},
+		{"bad cache mode rejected", BoxConfig{Cache: "bogus"}, "cache must be one of"},
+		{"cache none allowed", BoxConfig{Cache: "none"}, ""},
+		{"empty context_ignore entry rejected", BoxConfig{ContextIgnore: []string{"image", "  "}}, "context_ignore[1] must not be empty"},
+		{"keep_images zero allowed (disabled)", BoxConfig{KeepImages: intPtr(0)}, ""},
+		{"keep_images negative rejected", BoxConfig{KeepImages: intPtr(-1)}, "keep_images must be >= 0"},
+		{"keep_eval_runs valid", BoxConfig{KeepEvalRuns: intPtr(10)}, ""},
+		{"keep_eval_runs negative rejected", BoxConfig{KeepEvalRuns: intPtr(-3)}, "keep_eval_runs must be >= 0"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			cfg := &Config{Defaults: tc.ic, Image: map[string]ImageConfig{}}
+			cfg := &Config{Defaults: tc.ic, Image: map[string]BoxConfig{}}
 			errs := &ValidationError{}
 			validateBuildTunables(cfg, errs)
 			if tc.wantErr == "" {
@@ -74,10 +74,10 @@ func TestValidateBuildTunables(t *testing.T) {
 
 func TestValidateInvalidPkg(t *testing.T) {
 	cfg := &Config{
-		Defaults: ImageConfig{
+		Defaults: BoxConfig{
 			Build: BuildFormats{"invalid"},
 		},
-		Image: map[string]ImageConfig{},
+		Image: map[string]BoxConfig{},
 	}
 	layers := map[string]*Layer{}
 
@@ -92,7 +92,7 @@ func TestValidateInvalidPkg(t *testing.T) {
 
 func TestValidateMissingLayer(t *testing.T) {
 	cfg := &Config{
-		Image: map[string]ImageConfig{
+		Image: map[string]BoxConfig{
 			"test": {Layer: []string{"nonexistent"}},
 		},
 	}
@@ -109,7 +109,7 @@ func TestValidateMissingLayer(t *testing.T) {
 
 func TestValidateMissingLayerWithTypo(t *testing.T) {
 	cfg := &Config{
-		Image: map[string]ImageConfig{
+		Image: map[string]BoxConfig{
 			"test": {Layer: []string{"pixie"}}, // typo for "pixi"
 		},
 	}
@@ -128,7 +128,7 @@ func TestValidateMissingLayerWithTypo(t *testing.T) {
 
 func TestValidateLayerNoInstallFiles(t *testing.T) {
 	cfg := &Config{
-		Image: map[string]ImageConfig{},
+		Image: map[string]BoxConfig{},
 	}
 	layers := map[string]*Layer{
 		"empty": {Name: "empty"}, // no install files
@@ -145,7 +145,7 @@ func TestValidateLayerNoInstallFiles(t *testing.T) {
 
 func TestValidateCargoWithoutSrc(t *testing.T) {
 	cfg := &Config{
-		Image: map[string]ImageConfig{},
+		Image: map[string]BoxConfig{},
 	}
 	layers := map[string]*Layer{
 		"tool": {
@@ -166,7 +166,7 @@ func TestValidateCargoWithoutSrc(t *testing.T) {
 
 func TestValidateCoprWithoutPackages(t *testing.T) {
 	cfg := &Config{
-		Image: map[string]ImageConfig{},
+		Image: map[string]BoxConfig{},
 	}
 	layers := map[string]*Layer{
 		"layer": {
@@ -189,7 +189,7 @@ func TestValidateCoprWithoutPackages(t *testing.T) {
 
 func TestValidateReposWithoutPackages(t *testing.T) {
 	cfg := &Config{
-		Image: map[string]ImageConfig{},
+		Image: map[string]BoxConfig{},
 	}
 	layers := map[string]*Layer{
 		"layer": {
@@ -212,7 +212,7 @@ func TestValidateReposWithoutPackages(t *testing.T) {
 
 func TestValidateModulesWithoutPackages(t *testing.T) {
 	cfg := &Config{
-		Image: map[string]ImageConfig{},
+		Image: map[string]BoxConfig{},
 	}
 	layers := map[string]*Layer{
 		"layer": {
@@ -241,8 +241,8 @@ func TestValidateModulesWithoutPackages(t *testing.T) {
 
 func TestValidatePacPkgValue(t *testing.T) {
 	cfg := &Config{
-		Defaults: ImageConfig{Build: BuildFormats{"pac"}},
-		Image:    map[string]ImageConfig{},
+		Defaults: BoxConfig{Build: BuildFormats{"pac"}},
+		Image:    map[string]BoxConfig{},
 	}
 	layers := map[string]*Layer{}
 
@@ -254,10 +254,10 @@ func TestValidatePacPkgValue(t *testing.T) {
 
 func TestValidateInvalidPkgValue(t *testing.T) {
 	cfg := &Config{
-		Defaults: ImageConfig{
+		Defaults: BoxConfig{
 			Build: BuildFormats{"zypper"},
 		},
-		Image: map[string]ImageConfig{},
+		Image: map[string]BoxConfig{},
 	}
 	layers := map[string]*Layer{}
 
@@ -275,7 +275,7 @@ func TestValidateInvalidPkgValue(t *testing.T) {
 
 func TestValidatePacReposMissingName(t *testing.T) {
 	cfg := &Config{
-		Image: map[string]ImageConfig{},
+		Image: map[string]BoxConfig{},
 	}
 	layers := map[string]*Layer{
 		"layer": {
@@ -303,10 +303,10 @@ func TestValidateAurWithoutAurBuilder(t *testing.T) {
 	// builder per IR-compile time) but with no builder.aur configured —
 	// this is the legitimate failure case the validator must still catch.
 	cfg := &Config{
-		Defaults: ImageConfig{
+		Defaults: BoxConfig{
 			Build: BuildFormats{"pac", "aur"},
 		},
-		Image: map[string]ImageConfig{
+		Image: map[string]BoxConfig{
 			"arch-img": {
 				Base:  "arch:latest",
 				Build: BuildFormats{"pac", "aur"},
@@ -340,10 +340,10 @@ func TestValidateAurWithoutAurBuilder(t *testing.T) {
 // builder.aur on the Fedora consumer.
 func TestValidateAurOnFedoraImageNoError(t *testing.T) {
 	cfg := &Config{
-		Defaults: ImageConfig{
+		Defaults: BoxConfig{
 			Build: BuildFormats{"rpm"},
 		},
-		Image: map[string]ImageConfig{
+		Image: map[string]BoxConfig{
 			"fedora-img": {
 				Base:  "quay.io/fedora/fedora:43",
 				Build: BuildFormats{"rpm"},
@@ -372,10 +372,10 @@ func TestValidateAurOnFedoraImageNoError(t *testing.T) {
 // aur: section. The IR compiler skips aur, so the validator must skip it too.
 func TestValidateAurOnArchImageWithoutAurInBuildFormats(t *testing.T) {
 	cfg := &Config{
-		Defaults: ImageConfig{
+		Defaults: BoxConfig{
 			Build: BuildFormats{"pac"},
 		},
-		Image: map[string]ImageConfig{
+		Image: map[string]BoxConfig{
 			"arch-pac-only": {
 				Base:  "arch:latest",
 				Build: BuildFormats{"pac"},
@@ -406,10 +406,10 @@ func TestValidateAurOnArchImageWithoutAurInBuildFormats(t *testing.T) {
 // builders (aur).
 func TestValidatePixiBuilderUnconditional(t *testing.T) {
 	cfg := &Config{
-		Defaults: ImageConfig{
+		Defaults: BoxConfig{
 			Build: BuildFormats{"rpm"},
 		},
-		Image: map[string]ImageConfig{
+		Image: map[string]BoxConfig{
 			"fedora-img": {
 				Base:  "quay.io/fedora/fedora:43",
 				Build: BuildFormats{"rpm"},
@@ -435,7 +435,7 @@ func TestValidatePixiBuilderUnconditional(t *testing.T) {
 
 func TestValidateUnknownDependency(t *testing.T) {
 	cfg := &Config{
-		Image: map[string]ImageConfig{},
+		Image: map[string]BoxConfig{},
 	}
 	layers := map[string]*Layer{
 		"layer": {
@@ -456,8 +456,8 @@ func TestValidateUnknownDependency(t *testing.T) {
 
 func TestValidateImageCycle(t *testing.T) {
 	cfg := &Config{
-		Defaults: ImageConfig{Build: BuildFormats{"rpm"}},
-		Image: map[string]ImageConfig{
+		Defaults: BoxConfig{Build: BuildFormats{"rpm"}},
+		Image: map[string]BoxConfig{
 			"a": {Base: "b", Layer: []string{}},
 			"b": {Base: "c", Layer: []string{}},
 			"c": {Base: "a", Layer: []string{}},
@@ -476,7 +476,7 @@ func TestValidateImageCycle(t *testing.T) {
 
 func TestValidateLayerCycle(t *testing.T) {
 	cfg := &Config{
-		Image: map[string]ImageConfig{
+		Image: map[string]BoxConfig{
 			"test": {Layer: []string{"a"}},
 		},
 	}
@@ -497,8 +497,8 @@ func TestValidateLayerCycle(t *testing.T) {
 
 func TestValidateMultipleErrors(t *testing.T) {
 	cfg := &Config{
-		Defaults: ImageConfig{Build: BuildFormats{"invalid"}},
-		Image: map[string]ImageConfig{
+		Defaults: BoxConfig{Build: BuildFormats{"invalid"}},
+		Image: map[string]BoxConfig{
 			"test": {Layer: []string{"missing1", "missing2"}},
 		},
 	}
@@ -522,7 +522,7 @@ func TestValidateMultipleErrors(t *testing.T) {
 
 func TestValidateLayerPortsValid(t *testing.T) {
 	cfg := &Config{
-		Image: map[string]ImageConfig{},
+		Image: map[string]BoxConfig{},
 	}
 	layers := map[string]*Layer{
 		"web": {
@@ -541,7 +541,7 @@ func TestValidateLayerPortsValid(t *testing.T) {
 
 func TestValidateLayerPortsInvalid(t *testing.T) {
 	cfg := &Config{
-		Image: map[string]ImageConfig{},
+		Image: map[string]BoxConfig{},
 	}
 	layers := map[string]*Layer{
 		"web": {
@@ -563,7 +563,7 @@ func TestValidateLayerPortsInvalid(t *testing.T) {
 
 func TestValidateLayerPortsInvalidFromYAML(t *testing.T) {
 	cfg := &Config{
-		Image: map[string]ImageConfig{},
+		Image: map[string]BoxConfig{},
 	}
 	layers := map[string]*Layer{
 		"web": {
@@ -585,12 +585,12 @@ func TestValidateLayerPortsInvalidFromYAML(t *testing.T) {
 
 func TestValidateImagePortsValid(t *testing.T) {
 	cfg := &Config{
-		Defaults: ImageConfig{
+		Defaults: BoxConfig{
 			Registry:  "ghcr.io/test",
 			Build:     BuildFormats{"rpm"},
 			Platforms: []string{"linux/amd64"},
 		},
-		Image: map[string]ImageConfig{
+		Image: map[string]BoxConfig{
 			"test": {
 				Layer: []string{"web"},
 				Port:  []string{"8080:8080", "9090"},
@@ -609,7 +609,7 @@ func TestValidateImagePortsValid(t *testing.T) {
 
 func TestValidateImagePortsInvalid(t *testing.T) {
 	cfg := &Config{
-		Image: map[string]ImageConfig{
+		Image: map[string]BoxConfig{
 			"test": {
 				Layer: []string{"web"},
 				Port:  []string{"abc:8080"},
@@ -631,7 +631,7 @@ func TestValidateImagePortsInvalid(t *testing.T) {
 
 func TestValidateImagePortsBadFormat(t *testing.T) {
 	cfg := &Config{
-		Image: map[string]ImageConfig{
+		Image: map[string]BoxConfig{
 			"test": {
 				Layer: []string{"web"},
 				Port:  []string{"8080:9090:1234"},
@@ -653,7 +653,7 @@ func TestValidateImagePortsBadFormat(t *testing.T) {
 
 func TestValidateRouteMissingHost(t *testing.T) {
 	cfg := &Config{
-		Image: map[string]ImageConfig{},
+		Image: map[string]BoxConfig{},
 	}
 	layers := map[string]*Layer{
 		"svc": {
@@ -674,7 +674,7 @@ func TestValidateRouteMissingHost(t *testing.T) {
 
 func TestValidateRouteMissingPort(t *testing.T) {
 	cfg := &Config{
-		Image: map[string]ImageConfig{},
+		Image: map[string]BoxConfig{},
 	}
 	layers := map[string]*Layer{
 		"svc": {
@@ -695,7 +695,7 @@ func TestValidateRouteMissingPort(t *testing.T) {
 
 func TestValidateRouteInvalidPort(t *testing.T) {
 	cfg := &Config{
-		Image: map[string]ImageConfig{},
+		Image: map[string]BoxConfig{},
 	}
 	layers := map[string]*Layer{
 		"svc": {
@@ -717,8 +717,8 @@ func TestValidateRouteInvalidPort(t *testing.T) {
 func TestValidateRouteWithoutTraefik(t *testing.T) {
 	// Route without traefik is valid — routes are generic metadata consumed by traefik or tunnel
 	cfg := &Config{
-		Defaults: ImageConfig{Build: BuildFormats{"rpm"}},
-		Image: map[string]ImageConfig{
+		Defaults: BoxConfig{Build: BuildFormats{"rpm"}},
+		Image: map[string]BoxConfig{
 			"test": {Layer: []string{"svc"}},
 		},
 	}
@@ -738,12 +738,12 @@ func TestValidateRouteWithoutTraefik(t *testing.T) {
 
 func TestValidateRouteWithTraefik(t *testing.T) {
 	cfg := &Config{
-		Defaults: ImageConfig{
+		Defaults: BoxConfig{
 			Registry:  "ghcr.io/test",
 			Build:     BuildFormats{"rpm"},
 			Platforms: []string{"linux/amd64"},
 		},
-		Image: map[string]ImageConfig{
+		Image: map[string]BoxConfig{
 			"test": {Layer: []string{"traefik", "svc"}},
 		},
 	}
@@ -767,12 +767,12 @@ func TestValidateRouteWithTraefik(t *testing.T) {
 
 func TestValidateSkipsDisabledImages(t *testing.T) {
 	cfg := &Config{
-		Defaults: ImageConfig{
+		Defaults: BoxConfig{
 			Registry:  "ghcr.io/test",
 			Build:     BuildFormats{"rpm"},
 			Platforms: []string{"linux/amd64"},
 		},
-		Image: map[string]ImageConfig{
+		Image: map[string]BoxConfig{
 			"good": {Layer: []string{"pixi"}},
 			"bad-disabled": {
 				Enabled: boolPtr(false),
@@ -793,7 +793,7 @@ func TestValidateSkipsDisabledImages(t *testing.T) {
 
 func TestValidateVolumesValid(t *testing.T) {
 	cfg := &Config{
-		Image: map[string]ImageConfig{},
+		Image: map[string]BoxConfig{},
 	}
 	layers := map[string]*Layer{
 		"svc": {
@@ -811,7 +811,7 @@ func TestValidateVolumesValid(t *testing.T) {
 
 func TestValidateVolumesMissingName(t *testing.T) {
 	cfg := &Config{
-		Image: map[string]ImageConfig{},
+		Image: map[string]BoxConfig{},
 	}
 	layers := map[string]*Layer{
 		"svc": {
@@ -832,7 +832,7 @@ func TestValidateVolumesMissingName(t *testing.T) {
 
 func TestValidateVolumesMissingPath(t *testing.T) {
 	cfg := &Config{
-		Image: map[string]ImageConfig{},
+		Image: map[string]BoxConfig{},
 	}
 	layers := map[string]*Layer{
 		"svc": {
@@ -853,7 +853,7 @@ func TestValidateVolumesMissingPath(t *testing.T) {
 
 func TestValidateVolumesInvalidName(t *testing.T) {
 	cfg := &Config{
-		Image: map[string]ImageConfig{},
+		Image: map[string]BoxConfig{},
 	}
 	layers := map[string]*Layer{
 		"svc": {
@@ -874,7 +874,7 @@ func TestValidateVolumesInvalidName(t *testing.T) {
 
 func TestValidateVolumesDuplicate(t *testing.T) {
 	cfg := &Config{
-		Image: map[string]ImageConfig{},
+		Image: map[string]BoxConfig{},
 	}
 	layers := map[string]*Layer{
 		"svc": {
@@ -898,8 +898,8 @@ func TestValidateVolumesDuplicate(t *testing.T) {
 
 func TestValidateAliasesValid(t *testing.T) {
 	cfg := &Config{
-		Defaults: ImageConfig{Build: BuildFormats{"rpm"}},
-		Image: map[string]ImageConfig{
+		Defaults: BoxConfig{Build: BuildFormats{"rpm"}},
+		Image: map[string]BoxConfig{
 			"test": {
 				Layer: []string{"svc"},
 				Alias: []AliasConfig{{Name: "mycli", Command: "mycli-bin"}},
@@ -922,7 +922,7 @@ func TestValidateAliasesValid(t *testing.T) {
 
 func TestValidateAliasesMissingName(t *testing.T) {
 	cfg := &Config{
-		Image: map[string]ImageConfig{},
+		Image: map[string]BoxConfig{},
 	}
 	layers := map[string]*Layer{
 		"svc": {
@@ -943,7 +943,7 @@ func TestValidateAliasesMissingName(t *testing.T) {
 
 func TestValidateAliasesMissingCommand(t *testing.T) {
 	cfg := &Config{
-		Image: map[string]ImageConfig{},
+		Image: map[string]BoxConfig{},
 	}
 	layers := map[string]*Layer{
 		"svc": {
@@ -964,7 +964,7 @@ func TestValidateAliasesMissingCommand(t *testing.T) {
 
 func TestValidateAliasesDuplicate(t *testing.T) {
 	cfg := &Config{
-		Image: map[string]ImageConfig{},
+		Image: map[string]BoxConfig{},
 	}
 	layers := map[string]*Layer{
 		"svc": {
@@ -988,7 +988,7 @@ func TestValidateAliasesDuplicate(t *testing.T) {
 
 func TestValidateAliasesInvalidName(t *testing.T) {
 	cfg := &Config{
-		Image: map[string]ImageConfig{},
+		Image: map[string]BoxConfig{},
 	}
 	layers := map[string]*Layer{
 		"svc": {
@@ -1009,7 +1009,7 @@ func TestValidateAliasesInvalidName(t *testing.T) {
 
 func TestValidateImageAliasesDuplicate(t *testing.T) {
 	cfg := &Config{
-		Image: map[string]ImageConfig{
+		Image: map[string]BoxConfig{
 			"test": {
 				Layer: []string{"svc"},
 				Alias: []AliasConfig{
@@ -1034,10 +1034,10 @@ func TestValidateImageAliasesDuplicate(t *testing.T) {
 
 func TestValidateSelfBuilder(t *testing.T) {
 	cfg := &Config{
-		Defaults: ImageConfig{
+		Defaults: BoxConfig{
 			Build: BuildFormats{"rpm"},
 		},
-		Image: map[string]ImageConfig{
+		Image: map[string]BoxConfig{
 			"myimg": {
 				Layer:   []string{"pixi"},
 				Builder: BuilderMap{"pixi": "myimg"},
@@ -1060,11 +1060,11 @@ func TestValidateSelfBuilder(t *testing.T) {
 func TestValidateBuilderInheritedSelfNotError(t *testing.T) {
 	// Builder image inheriting defaults.builders that points to itself is NOT an error
 	cfg := &Config{
-		Defaults: ImageConfig{
+		Defaults: BoxConfig{
 			Build:   BuildFormats{"rpm"},
 			Builder: BuilderMap{"pixi": "builder", "npm": "builder"},
 		},
-		Image: map[string]ImageConfig{
+		Image: map[string]BoxConfig{
 			"builder": {Layer: []string{"pixi"}},
 		},
 	}
@@ -1080,10 +1080,10 @@ func TestValidateBuilderInheritedSelfNotError(t *testing.T) {
 
 func TestValidatePerImageBuilderNotFound(t *testing.T) {
 	cfg := &Config{
-		Defaults: ImageConfig{
+		Defaults: BoxConfig{
 			Build: BuildFormats{"rpm"},
 		},
-		Image: map[string]ImageConfig{
+		Image: map[string]BoxConfig{
 			"app": {
 				Layer:   []string{"pixi"},
 				Builder: BuilderMap{"pixi": "nonexistent"},
@@ -1129,8 +1129,8 @@ func TestIsValidPort(t *testing.T) {
 
 func TestValidateLayerWithIncludesNoInstallFiles(t *testing.T) {
 	cfg := &Config{
-		Defaults: ImageConfig{Build: BuildFormats{"rpm"}},
-		Image: map[string]ImageConfig{
+		Defaults: BoxConfig{Build: BuildFormats{"rpm"}},
+		Image: map[string]BoxConfig{
 			"test": {Layer: []string{"sway-desktop"}},
 		},
 	}
@@ -1148,7 +1148,7 @@ func TestValidateLayerWithIncludesNoInstallFiles(t *testing.T) {
 
 func TestValidateLayerIncludesCycle(t *testing.T) {
 	cfg := &Config{
-		Image: map[string]ImageConfig{},
+		Image: map[string]BoxConfig{},
 	}
 	layers := map[string]*Layer{
 		"a": {Name: "a", tasks: []Task{{Cmd: "true"}}, IncludedLayer: toLayerRefs([]string{"b"})},
@@ -1163,7 +1163,7 @@ func TestValidateLayerIncludesCycle(t *testing.T) {
 
 func TestValidateLayerIncludesMissing(t *testing.T) {
 	cfg := &Config{
-		Image: map[string]ImageConfig{},
+		Image: map[string]BoxConfig{},
 	}
 	layers := map[string]*Layer{
 		"desktop": {Name: "desktop", IncludedLayer: toLayerRefs([]string{"nonexistent"})},
@@ -1201,8 +1201,8 @@ func TestLevenshteinDistance(t *testing.T) {
 
 func TestValidatePortRelayValid(t *testing.T) {
 	cfg := &Config{
-		Defaults: ImageConfig{Build: BuildFormats{"rpm"}},
-		Image: map[string]ImageConfig{
+		Defaults: BoxConfig{Build: BuildFormats{"rpm"}},
+		Image: map[string]BoxConfig{
 			"test": {Layer: []string{"supervisord", "socat", "chrome"}},
 		},
 	}
@@ -1227,7 +1227,7 @@ func TestValidatePortRelayValid(t *testing.T) {
 
 func TestValidatePortRelayInvalidPort(t *testing.T) {
 	cfg := &Config{
-		Image: map[string]ImageConfig{},
+		Image: map[string]BoxConfig{},
 	}
 	layers := map[string]*Layer{
 		"svc": {
@@ -1250,7 +1250,7 @@ func TestValidatePortRelayInvalidPort(t *testing.T) {
 
 func TestValidatePortRelayNotInPorts(t *testing.T) {
 	cfg := &Config{
-		Image: map[string]ImageConfig{},
+		Image: map[string]BoxConfig{},
 	}
 	layers := map[string]*Layer{
 		"svc": {
@@ -1273,7 +1273,7 @@ func TestValidatePortRelayNotInPorts(t *testing.T) {
 
 func TestValidatePortRelayNoPorts(t *testing.T) {
 	cfg := &Config{
-		Image: map[string]ImageConfig{},
+		Image: map[string]BoxConfig{},
 	}
 	layers := map[string]*Layer{
 		"svc": {
@@ -1294,7 +1294,7 @@ func TestValidatePortRelayNoPorts(t *testing.T) {
 
 func TestValidatePortRelayDuplicate(t *testing.T) {
 	cfg := &Config{
-		Image: map[string]ImageConfig{},
+		Image: map[string]BoxConfig{},
 	}
 	layers := map[string]*Layer{
 		"svc": {
@@ -1317,7 +1317,7 @@ func TestValidatePortRelayDuplicate(t *testing.T) {
 
 func TestValidatePortRelayMissingSocat(t *testing.T) {
 	cfg := &Config{
-		Image: map[string]ImageConfig{
+		Image: map[string]BoxConfig{
 			"test": {Layer: []string{"chrome"}},
 		},
 	}
@@ -1348,7 +1348,7 @@ func TestValidatePortRelayMissingSocat(t *testing.T) {
 // directory.
 func TestValidateDataEntryUnknownVolume(t *testing.T) {
 	cfg := &Config{
-		Image: map[string]ImageConfig{
+		Image: map[string]BoxConfig{
 			"jupyter": {Layer: []string{"jupyter", "notebook-templates"}},
 		},
 	}
@@ -1386,12 +1386,12 @@ func TestValidateDataEntryUnknownVolume(t *testing.T) {
 // image's layer chain, Validate succeeds.
 func TestValidateDataEntryKnownVolume(t *testing.T) {
 	cfg := &Config{
-		Defaults: ImageConfig{
+		Defaults: BoxConfig{
 			Registry:  "ghcr.io/test",
 			Build:     BuildFormats{"rpm"},
 			Platforms: []string{"linux/amd64"},
 		},
-		Image: map[string]ImageConfig{
+		Image: map[string]BoxConfig{
 			"jupyter": {Layer: []string{"jupyter", "notebook-templates"}},
 		},
 	}
@@ -1437,7 +1437,7 @@ func secretDepsLayer(name string, opts func(l *Layer)) *Layer {
 // TestValidateSecretAcceptsHappyPath — valid secret_accepts entry with an
 // explicit Key override that matches the ov/<service>/<key> format. No errors.
 func TestValidateSecretAcceptsHappyPath(t *testing.T) {
-	cfg := &Config{Image: map[string]ImageConfig{}}
+	cfg := &Config{Image: map[string]BoxConfig{}}
 	layers := map[string]*Layer{
 		"svc": secretDepsLayer("svc", func(l *Layer) {
 			l.secretAccepts = []EnvDependency{
@@ -1453,7 +1453,7 @@ func TestValidateSecretAcceptsHappyPath(t *testing.T) {
 // TestValidateSecretRequiresMissingDescription — secret_requires entry with
 // empty description must be rejected (consistency with env_requires).
 func TestValidateSecretRequiresMissingDescription(t *testing.T) {
-	cfg := &Config{Image: map[string]ImageConfig{}}
+	cfg := &Config{Image: map[string]BoxConfig{}}
 	layers := map[string]*Layer{
 		"svc": secretDepsLayer("svc", func(l *Layer) {
 			l.secretRequires = []EnvDependency{
@@ -1473,7 +1473,7 @@ func TestValidateSecretRequiresMissingDescription(t *testing.T) {
 // TestValidateSecretAcceptsInvalidName — name with invalid chars must be
 // rejected by the env-var-name check.
 func TestValidateSecretAcceptsInvalidName(t *testing.T) {
-	cfg := &Config{Image: map[string]ImageConfig{}}
+	cfg := &Config{Image: map[string]BoxConfig{}}
 	layers := map[string]*Layer{
 		"svc": secretDepsLayer("svc", func(l *Layer) {
 			l.secretAccepts = []EnvDependency{
@@ -1493,7 +1493,7 @@ func TestValidateSecretAcceptsInvalidName(t *testing.T) {
 // TestValidateSecretAcceptsCollidesWithEnvAccepts — plan §4.4 rule 1: a name
 // cannot appear in both env_accepts and secret_accepts.
 func TestValidateSecretAcceptsCollidesWithEnvAccepts(t *testing.T) {
-	cfg := &Config{Image: map[string]ImageConfig{}}
+	cfg := &Config{Image: map[string]BoxConfig{}}
 	layers := map[string]*Layer{
 		"svc": secretDepsLayer("svc", func(l *Layer) {
 			l.envAccepts = []EnvDependency{
@@ -1516,7 +1516,7 @@ func TestValidateSecretAcceptsCollidesWithEnvAccepts(t *testing.T) {
 // TestValidateSecretRequiresCollidesWithEnvRequires — same collision check for
 // requires variants.
 func TestValidateSecretRequiresCollidesWithEnvRequires(t *testing.T) {
-	cfg := &Config{Image: map[string]ImageConfig{}}
+	cfg := &Config{Image: map[string]BoxConfig{}}
 	layers := map[string]*Layer{
 		"svc": secretDepsLayer("svc", func(l *Layer) {
 			l.envRequires = []EnvDependency{
@@ -1539,7 +1539,7 @@ func TestValidateSecretRequiresCollidesWithEnvRequires(t *testing.T) {
 // TestValidateSecretAcceptsCollidesWithSecretRequires — a name cannot appear
 // in both secret_accepts and secret_requires in the same layer.
 func TestValidateSecretAcceptsCollidesWithSecretRequires(t *testing.T) {
-	cfg := &Config{Image: map[string]ImageConfig{}}
+	cfg := &Config{Image: map[string]BoxConfig{}}
 	layers := map[string]*Layer{
 		"svc": secretDepsLayer("svc", func(l *Layer) {
 			l.secretRequires = []EnvDependency{
@@ -1563,7 +1563,7 @@ func TestValidateSecretAcceptsCollidesWithSecretRequires(t *testing.T) {
 // entry name cannot also be in env_provides. env_provides is for plaintext
 // service discovery URLs; credentials must not be advertised that way.
 func TestValidateSecretCollidesWithEnvProvides(t *testing.T) {
-	cfg := &Config{Image: map[string]ImageConfig{}}
+	cfg := &Config{Image: map[string]BoxConfig{}}
 	layers := map[string]*Layer{
 		"svc": secretDepsLayer("svc", func(l *Layer) {
 			l.envProvides = map[string]string{
@@ -1587,7 +1587,7 @@ func TestValidateSecretCollidesWithEnvProvides(t *testing.T) {
 // optional Key override must start with "ov/" to prevent layers from
 // exfiltrating unrelated user credentials.
 func TestValidateSecretAcceptsKeyMustStartWithOv(t *testing.T) {
-	cfg := &Config{Image: map[string]ImageConfig{}}
+	cfg := &Config{Image: map[string]BoxConfig{}}
 	layers := map[string]*Layer{
 		"svc": secretDepsLayer("svc", func(l *Layer) {
 			l.secretAccepts = []EnvDependency{
@@ -1614,7 +1614,7 @@ func TestValidateSecretAcceptsKeyValidFormats(t *testing.T) {
 		"ov/secret/immich-api-key",
 	}
 	for _, k := range cases {
-		cfg := &Config{Image: map[string]ImageConfig{}}
+		cfg := &Config{Image: map[string]BoxConfig{}}
 		layers := map[string]*Layer{
 			"svc": secretDepsLayer("svc", func(l *Layer) {
 				l.secretAccepts = []EnvDependency{
@@ -1640,7 +1640,7 @@ func TestValidateSecretAcceptsKeyInvalidFormats(t *testing.T) {
 		"ov/API-KEY/openrouter", // uppercase in service
 	}
 	for _, k := range cases {
-		cfg := &Config{Image: map[string]ImageConfig{}}
+		cfg := &Config{Image: map[string]BoxConfig{}}
 		layers := map[string]*Layer{
 			"svc": secretDepsLayer("svc", func(l *Layer) {
 				l.secretAccepts = []EnvDependency{
@@ -1659,7 +1659,7 @@ func TestValidateSecretAcceptsKeyInvalidFormats(t *testing.T) {
 // podman-secret slug (e.g., leading underscore → leading hyphen after
 // lowercase-kebab) must be rejected.
 func TestValidateSecretAcceptsInvalidSlug(t *testing.T) {
-	cfg := &Config{Image: map[string]ImageConfig{}}
+	cfg := &Config{Image: map[string]BoxConfig{}}
 	layers := map[string]*Layer{
 		"svc": secretDepsLayer("svc", func(l *Layer) {
 			l.secretAccepts = []EnvDependency{
@@ -1713,7 +1713,7 @@ func vLayers(m map[string]*Layer) map[string]*Layer {
 // an actionable message. (Uses a distinctly-named map so the vLayers wrap that
 // the other tests apply does not mask the error.)
 func TestValidateLayerMissingVersion(t *testing.T) {
-	cfg := &Config{Image: map[string]ImageConfig{}}
+	cfg := &Config{Image: map[string]BoxConfig{}}
 	badLayers := map[string]*Layer{
 		"noversion": {Name: "noversion", tasks: []Task{{Cmd: "true"}}},
 	}

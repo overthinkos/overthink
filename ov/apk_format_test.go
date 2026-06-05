@@ -99,7 +99,7 @@ func TestOCITargetSkipsApkInstall(t *testing.T) {
 // TestPopulateLayerApk verifies the layer.yml `apk:` field flows through the
 // populator onto the resolved Layer.
 func TestPopulateLayerApk(t *testing.T) {
-	ly := &LayerYAML{
+	ly := &CandyYAML{
 		Apk: []ApkPackageSpec{
 			{Package: "org.fdroid.fdroid", Source: "apk-pure", Arch: "x86_64"},
 		},

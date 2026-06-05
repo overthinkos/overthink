@@ -70,7 +70,7 @@ type MigrationStep struct {
 // closure references it, and the registry's last entry uses it as its Version,
 // so the two are guaranteed equal (asserted by TestRegistryHeadMatchesLatest).
 // Bump it — and append the matching MigrationStep — for each future cutover.
-var latestSchemaVersion = mustCalVer("2026.155.1801")
+var latestSchemaVersion = mustCalVer("2026.156.557")
 
 // migrationSteps is the ordered registry. Chronological by git landing date
 // (see `git log --diff-filter=A` on each migrate_*.go), which is the order the
@@ -182,6 +182,16 @@ func migrationSteps() []MigrationStep {
 		{mustCalVer("2026.155.1800"), "singular-label", false, func(c *MigrateContext) (bool, error) {
 			r, err := MigrateSingularLabel(c.Dir, c.DryRun)
 			return len(r) > 0, err
+		}},
+		// 2026-06 candy/box rebrand: the schema kinds `layer:`→`candy:` and
+		// `image:`→`box:` were renamed across the whole authoring surface — keys
+		// at every depth, the per-kind filenames (image.yml→box.yml,
+		// layer.yml→candy.yml), and the layers/→candy/ directory. This step
+		// renames the keys, the files, and the directory, and rewrites
+		// import:/discover: path references. See CHANGELOG.md.
+		{mustCalVer("2026.156.556"), "candy-box-rename", false, func(c *MigrateContext) (bool, error) {
+			w, err := MigrateBoxCandyRename(c.Dir, c.HostDeployPath, c.DryRun)
+			return len(w) > 0, err
 		}},
 		// HEAD — the schema stamp. Must stay LAST so LatestSchemaVersion picks it up
 		// and every versioned file lands on this CalVer. This is the integer→CalVer

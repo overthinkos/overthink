@@ -46,7 +46,7 @@ func CollectEval(cfg *Config, layers map[string]*Layer, imageName string) *Label
 			continue
 		}
 		for _, c := range layer.tests {
-			c.Origin = "layer:" + layerName
+			c.Origin = "candy:" + layerName
 			switch c.Scope {
 			case "deploy":
 				set.Deploy = append(set.Deploy, c)
@@ -60,7 +60,7 @@ func CollectEval(cfg *Config, layers map[string]*Layer, imageName string) *Label
 	// Image-level Tests (defaults to build scope) and DeployTests.
 	if img, ok := cfg.Image[imageName]; ok {
 		for _, c := range img.Eval {
-			c.Origin = "image:" + imageName
+			c.Origin = "box:" + imageName
 			switch c.Scope {
 			case "deploy":
 				set.Deploy = append(set.Deploy, c)

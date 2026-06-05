@@ -22,6 +22,59 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-05 — feat(schema)!: candy/box rebrand — `layer:`→`candy:`, `image:`→`box:` (schema 2026.156.557)
+
+The two foundational schema kinds were renamed project-wide, making the
+"candyboxing" metaphor literal: a **candy** (formerly a layer) composes into a
+**box** (formerly an image). The cutover spans every surface:
+
+- **Wire schema**: the YAML keys `image:`→`box:` and `layer:`→`candy:` (top-level
+  maps, the `kind: box`/`kind: candy` discriminators, the `candy:` composition
+  list on a box, the `box:` selector on pod/deploy/vm/k8s/android nodes,
+  `add_layer:`→`add_candy:`). Compound and external-schema keys that merely share
+  a prefix are preserved (`image_default`, `imagelabel`, `layer_field`,
+  `layer_file`), as is a sidecar's `image:` (a raw upstream OCI ref, not an
+  overthink box).
+- **Files + directory**: `image.yml`→`box.yml`, every `layer.yml`→`candy.yml`,
+  and the `layers/` directory→`candy/`.
+- **CLI**: `ov image`→`ov box`, `ov layer`→`ov candy`, plus `add-layer`→
+  `add-candy`, `rm-layer`→`rm-candy`, `new layer`→`new candy`, `from-image`→
+  `from-box`, `cp-image`→`cp-box`, `eval image`→`eval box`, `list images/layers`→
+  `list boxes/candies`, `--add-layer`→`--add-candy`.
+- **Go identifiers** (type-aware `gofmt -r`): `ImageConfig`→`BoxConfig`,
+  `LayerYAML`→`CandyYAML`, `ImageMetadata`→`BoxMetadata`, the `*Doc`/`*Cmd`/
+  `LayerRef`/`InlineLayer` siblings, and the command structs. Internal struct
+  *field* names (`.Layer`/`.Image`) and the generic OCI-image-artifact helper
+  types (`FetchedImage`, `ImageInfo`) were intentionally kept.
+- **OCI labels**: the `{layer, image, deploy}` section keys in
+  `org.overthinkos.tests`/`shell`/`description`→`{candy, box, deploy}`, and the
+  container-key consts `org.overthinkos.image`→`box`, `layer_version`→
+  `candy_version`, `env_layer`→`env_candy`, `data_image`→`data_box`. The presence
+  sentinel `org.overthinkos.version` is unchanged.
+- **Migration**: one idempotent `ov migrate` step (`candy-box-rename`,
+  `2026.156.556`) renames keys at every depth (handling the `candy:`-inside-
+  `candy:` collision), renames the files + directory, rewrites `import:`/
+  `discover:` paths, **and rewrites the `/layers/` segment inside remote
+  `@github.../layers/<name>:vTAG` refs to `/candy/`** so remote-cache
+  auto-migration of old-schema producer tags resolves to the renamed directory.
+  The host `~/.config/ov/deploy.yml` selectors migrate too.
+- **Configurable paths**: the candy directory is now centralized in a single
+  `DefaultCandyDir` constant (with the `discover:` block providing the
+  per-project override and `layerCopySource` honoring a `directory:` override),
+  removing the scattered hardcoded `layers/`/`candy/` literals.
+
+Lessons logged: `go build`/`go test` passed clean while three runtime bugs hid —
+Kong derives a command name from the *field* name (so `cmd:"box"` is ignored; the
+fix is `cmd:"" name:"box"`), `parseLayerYAML` had its own wrapper-key check
+separate from the struct tags, and the eval bed *runner* self-execs
+`ov image build`/`ov eval image` (the exit-80 build failure) — all caught only by
+running `ov box validate` and the live `eval-pod` R10 bed, never by unit tests.
+
+R10: `ov eval run eval-pod` passes end-to-end on the disposable bed (build → eval
+box → deploy → eval live → fresh `ov update` → teardown). Old configs migrate via
+the one idempotent `ov migrate`; a residual `image:`/`layer:` key now fails at
+load with a `Run: ov migrate` hint.
+
 ### 2026-06-04 — feat(eval): `ov eval wl` host-safe KWin/KDE parity (window-mgmt + keyboard + clipboard + screenshot), pointer + resolution deferred (#49)
 
 `ov eval wl` had full desktop-automation coverage on wlroots compositors (sway,

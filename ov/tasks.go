@@ -103,7 +103,7 @@ func shellAnsiQuote(s string) string {
 // For literal names: directive=<name>, chown="" (generator doesn't know the
 // uid/gid, and COPY --chown supports literal names too so we fall back to
 // --chown=<name>:<name> in that case).
-func resolveUserSpec(userField string, img *ResolvedImage) (directive, chown string) {
+func resolveUserSpec(userField string, img *ResolvedBox) (directive, chown string) {
 	u := strings.TrimSpace(userField)
 
 	// Special-case ${USER} to emit numeric UID directive (matches the
@@ -135,7 +135,7 @@ func resolveUserSpec(userField string, img *ResolvedImage) (directive, chown str
 // auto-exports (USER, UID, GID, HOME) in s. ARCH and BUILD_ARCH are NOT
 // substituted here — ARCH is delivered via ENV at layer-section top so
 // Docker's substitution handles it; BUILD_ARCH is shell-only (cmd/download).
-func taskSubstAutoExports(s string, img *ResolvedImage) string {
+func taskSubstAutoExports(s string, img *ResolvedBox) string {
 	if s == "" || img == nil {
 		return s
 	}
@@ -156,7 +156,7 @@ func taskSubstAutoExports(s string, img *ResolvedImage) string {
 
 // taskSubstPath resolves a destination/path field: runs auto-export
 // substitution and expands leading ~/ to ${HOME}'s resolved value.
-func taskSubstPath(p string, img *ResolvedImage) string {
+func taskSubstPath(p string, img *ResolvedBox) string {
 	if p == "" {
 		return p
 	}
@@ -252,7 +252,7 @@ func emitVarsEnv(b *strings.Builder, vars map[string]string) {
 // emitMkdirBatch emits a single RUN mkdir -p for a batch of adjacent
 // mkdir tasks that share the same user. When modes differ within the batch,
 // splits per-mode chmod at the tail of the single RUN.
-func emitMkdirBatch(b *strings.Builder, tasks []Task, img *ResolvedImage) {
+func emitMkdirBatch(b *strings.Builder, tasks []Task, img *ResolvedBox) {
 	if len(tasks) == 0 {
 		return
 	}
@@ -282,7 +282,7 @@ func emitMkdirBatch(b *strings.Builder, tasks []Task, img *ResolvedImage) {
 // emitCopy emits a COPY --from=<layer-stage> directive for an existing file
 // in the layer directory. No RUN required — BuildKit handles the file
 // transfer directly from the layer's scratch stage.
-func emitCopy(b *strings.Builder, t Task, layerStage string, img *ResolvedImage) {
+func emitCopy(b *strings.Builder, t Task, layerStage string, img *ResolvedBox) {
 	src := t.Copy // relative to layer dir; do not substitute (filesystem path at generate time)
 	dest := taskSubstPath(t.To, img)
 	mode := t.Mode
@@ -303,7 +303,7 @@ func emitCopy(b *strings.Builder, t Task, layerStage string, img *ResolvedImage)
 // relative path. layerStage here is the final build-stage name and srcPath
 // is the _inline/<layer>/<hash> path inside the build context (NOT from a
 // layer stage — inline content lives in the image's .build directory).
-func emitWrite(b *strings.Builder, t Task, srcPath string, img *ResolvedImage) {
+func emitWrite(b *strings.Builder, t Task, srcPath string, img *ResolvedBox) {
 	dest := taskSubstPath(t.Write, img)
 	mode := t.Mode
 	if mode == "" {
@@ -321,7 +321,7 @@ func emitWrite(b *strings.Builder, t Task, srcPath string, img *ResolvedImage) {
 
 // emitLinkBatch emits a single RUN with chained ln -sf for a batch of
 // adjacent link tasks sharing the same user.
-func emitLinkBatch(b *strings.Builder, tasks []Task, img *ResolvedImage) {
+func emitLinkBatch(b *strings.Builder, tasks []Task, img *ResolvedBox) {
 	if len(tasks) == 0 {
 		return
 	}
@@ -337,7 +337,7 @@ func emitLinkBatch(b *strings.Builder, tasks []Task, img *ResolvedImage) {
 // emitSetcapBatch emits a single RUN setcap … for a batch of adjacent
 // setcap tasks. strip (empty caps) and set (non-empty caps) are chained
 // via &&.
-func emitSetcapBatch(b *strings.Builder, tasks []Task, img *ResolvedImage) {
+func emitSetcapBatch(b *strings.Builder, tasks []Task, img *ResolvedBox) {
 	if len(tasks) == 0 {
 		return
 	}
@@ -360,7 +360,7 @@ func emitSetcapBatch(b *strings.Builder, tasks []Task, img *ResolvedImage) {
 // task's user: root → shared (sharing=locked), non-root → uid/gid-owned. The
 // cache-USE logic (sentinel guards, copy-into-place) lives in the task body;
 // this only emits the mount. Generic + config-driven — nothing layer-specific.
-func taskCacheMounts(t Task, img *ResolvedImage) []string {
+func taskCacheMounts(t Task, img *ResolvedBox) []string {
 	if len(t.Cache) == 0 {
 		return nil
 	}
@@ -380,7 +380,7 @@ func taskCacheMounts(t Task, img *ResolvedImage) []string {
 
 // emitDownload emits one RUN per download task: fetch to a content-addressed
 // /tmp/downloads cache, then extract. Honors layer-declared `cache:` mounts.
-func emitDownload(b *strings.Builder, t Task, img *ResolvedImage) error {
+func emitDownload(b *strings.Builder, t Task, img *ResolvedBox) error {
 	url := t.Download // no generate-time substitution — left for shell/ENV to handle
 	dest := taskSubstPath(t.To, img)
 	extract := strings.TrimSpace(t.Extract)
@@ -478,7 +478,7 @@ func emitDownload(b *strings.Builder, t Task, img *ResolvedImage) error {
 // bash directly — no ANSI-C $'...' quoting involved, which dash doesn't
 // understand and the OCI image format doesn't honor SHELL directives for.
 // BUILD_ARCH is injected as a shell var so tasks using ${BUILD_ARCH} work.
-func emitCmd(b *strings.Builder, t Task, layerStage string, img *ResolvedImage, userIsRoot bool) {
+func emitCmd(b *strings.Builder, t Task, layerStage string, img *ResolvedBox, userIsRoot bool) {
 	var mounts []string
 	mounts = append(mounts, fmt.Sprintf("--mount=type=bind,from=%s,source=/,target=/ctx", layerStage))
 
@@ -568,7 +568,7 @@ func taskCoalescesWith(current, next Task, currentVerb string) bool {
 // Returns the final USER after processing (so writeLayerSteps knows
 // whether to emit USER root for the layer boundary reset).
 // Returns an error if emission fails (only for download/write I/O).
-func (g *Generator) emitTasks(b *strings.Builder, layer *Layer, img *ResolvedImage, buildDir, contextRelPrefix, initialUser string) (string, error) {
+func (g *Generator) emitTasks(b *strings.Builder, layer *Layer, img *ResolvedBox, buildDir, contextRelPrefix, initialUser string) (string, error) {
 	if len(layer.tasks) == 0 && !g.layerHasImplicitBuild(layer, img) {
 		return initialUser, nil
 	}
@@ -707,6 +707,6 @@ func (g *Generator) emitTasks(b *strings.Builder, layer *Layer, img *ResolvedIma
 // builder auto-append. Phase 0: placeholder that returns false — builders
 // continue to run via the existing writeLayerSteps builder block. Phase 2
 // migrations will switch on this once explicit build: tasks appear.
-func (g *Generator) layerHasImplicitBuild(layer *Layer, img *ResolvedImage) bool {
+func (g *Generator) layerHasImplicitBuild(layer *Layer, img *ResolvedBox) bool {
 	return false
 }

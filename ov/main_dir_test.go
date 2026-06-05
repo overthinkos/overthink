@@ -36,9 +36,9 @@ func TestOvDir_FlagChdir(t *testing.T) {
 		args []string
 		env  []string
 	}{
-		{name: "short flag -C", args: []string{"-C", scratch, "image", "list", "images"}},
-		{name: "long flag --dir", args: []string{"--dir", scratch, "image", "list", "images"}},
-		{name: "env var OV_PROJECT_DIR", args: []string{"image", "list", "images"}, env: []string{"OV_PROJECT_DIR=" + scratch}},
+		{name: "short flag -C", args: []string{"-C", scratch, "box", "list", "boxes"}},
+		{name: "long flag --dir", args: []string{"--dir", scratch, "box", "list", "boxes"}},
+		{name: "env var OV_PROJECT_DIR", args: []string{"box", "list", "boxes"}, env: []string{"OV_PROJECT_DIR=" + scratch}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -107,7 +107,7 @@ func writeMinProject(t *testing.T, dir string) {
 	t.Helper()
 	// Post-unified-cutover: write overthink.yml (the unified format) instead
 	// of a legacy image.yml. LoadConfig reads overthink.yml exclusively.
-	overthinkYAML := `version: 2026.155.1801
+	overthinkYAML := `version: 2026.156.557
 defaults:
   registry: ghcr.io/test
   tag: latest
@@ -115,7 +115,7 @@ defaults:
     - linux/amd64
   build: [rpm]
 
-image:
+box:
   testimage:
     base: "quay.io/fedora/fedora:43"
     distro: ["fedora:43", fedora]

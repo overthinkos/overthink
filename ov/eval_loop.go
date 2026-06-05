@@ -264,7 +264,7 @@ func findOvForEval() string {
 var buildImageFn = func(ctx context.Context, repoDir, image, tag, logPath string) (time.Duration, error) {
 	start := time.Now()
 	cmd := exec.CommandContext(ctx, findOvForEval(), "-C", repoDir,
-		"image", "build", image, "--tag", tag)
+		"box", "build", image, "--tag", tag)
 	if logPath != "" {
 		f, err := os.Create(logPath)
 		if err == nil {
@@ -280,7 +280,7 @@ var buildImageFn = func(ctx context.Context, repoDir, image, tag, logPath string
 // runOvImageTestFn shells out to `ov image test <tag> --format yaml`.
 var runOvImageTestFn = func(ctx context.Context, tag string) ([]byte, time.Duration, error) {
 	start := time.Now()
-	cmd := exec.CommandContext(ctx, findOvForEval(), "image", "test", tag, "--format", "yaml")
+	cmd := exec.CommandContext(ctx, findOvForEval(), "eval", "box", tag, "--format", "yaml")
 	out, err := cmd.Output()
 	return out, time.Since(start), err
 }

@@ -60,7 +60,7 @@ type HostContext struct {
 // (from ResolveLayerOrder) and builds one plan per layer, then merges
 // them. Keeping one plan per layer makes refcounting trivial in the
 // ledger: each layer's teardown is independent.
-func BuildDeployPlan(layer *Layer, img *ResolvedImage, hostCtx HostContext) (*InstallPlan, error) {
+func BuildDeployPlan(layer *Layer, img *ResolvedBox, hostCtx HostContext) (*InstallPlan, error) {
 	if layer == nil {
 		return nil, fmt.Errorf("BuildDeployPlan: nil layer")
 	}
@@ -188,7 +188,7 @@ func compileApkStep(layer *Layer) InstallStep {
 // when no dep builder resolves, BuilderImage is "" and the dep-build is skipped
 // with a clear log (the layer's own curl/COPY fallback still covers
 // non-localpkg targets).
-func compileLocalPkgStep(layer *Layer, img *ResolvedImage, hostCtx HostContext) InstallStep {
+func compileLocalPkgStep(layer *Layer, img *ResolvedBox, hostCtx HostContext) InstallStep {
 	ref := layer.LocalPkg()
 	if ref == "" {
 		return nil
@@ -263,7 +263,7 @@ func computeDeployID(image string, layers, addLayers []string) string {
 // primaryDistroTag picks the distro tag this plan is materialized against.
 // For host compilation we use the host's detected distro; otherwise we
 // fall back to the image's first distro entry.
-func primaryDistroTag(img *ResolvedImage, hostCtx HostContext) string {
+func primaryDistroTag(img *ResolvedBox, hostCtx HostContext) string {
 	if hostCtx.Target == "host" && hostCtx.Distro != "" {
 		return hostCtx.Distro
 	}
@@ -289,7 +289,7 @@ func primaryDistroTag(img *ResolvedImage, hostCtx HostContext) string {
 // synthetic plan's Home was the host operator's home, so env.d on the guest
 // pointed at /home/<operator> instead of /home/<guest-user>. See
 // InstallPlan.ResolveHome.
-func compileShellHookStep(layer *Layer, img *ResolvedImage) *ShellHookStep {
+func compileShellHookStep(layer *Layer, img *ResolvedBox) *ShellHookStep {
 	envCfg, _ := layer.EnvConfig()
 	if envCfg == nil {
 		return nil
@@ -338,7 +338,7 @@ func compileShellHookStep(layer *Layer, img *ResolvedImage) *ShellHookStep {
 //     (UseDropin=true).
 //
 // Returns nil when the layer has no shell: block.
-func compileShellSnippetSteps(layer *Layer, img *ResolvedImage, hostCtx HostContext) []InstallStep {
+func compileShellSnippetSteps(layer *Layer, img *ResolvedBox, hostCtx HostContext) []InstallStep {
 	cfg := layer.Shell()
 	if cfg == nil {
 		return nil
@@ -502,7 +502,7 @@ func appendShellPathLines(body string, paths []string, shell, home string) strin
 // PhasePrepare on --allow-repo-changes. Current build.yml only has one
 // phase per format (the monolithic install_template); Task 4 will split
 // templates into phases. Until then, we emit everything as PhaseInstall.
-func compileSystemPackageSteps(layer *Layer, img *ResolvedImage, hostCtx HostContext) []InstallStep {
+func compileSystemPackageSteps(layer *Layer, img *ResolvedBox, hostCtx HostContext) []InstallStep {
 	if img.DistroDef == nil {
 		return nil
 	}
@@ -573,7 +573,7 @@ func buildSystemPackagesStep(format string, phase Phase, packages []string, raw 
 // resolved user is captured at compile time so the host target doesn't
 // need to re-resolve ${USER} later; CtxPath carries the layer's absolute
 // directory for /ctx/ substitution on the host.
-func compileTaskSteps(layer *Layer, img *ResolvedImage) []InstallStep {
+func compileTaskSteps(layer *Layer, img *ResolvedBox) []InstallStep {
 	if !layer.HasTasks() || len(layer.tasks) == 0 {
 		return nil
 	}
@@ -621,7 +621,7 @@ func compileTaskSteps(layer *Layer, img *ResolvedImage) []InstallStep {
 // compileBuilderSteps emits one BuilderStep per triggered multi-stage or
 // inline builder. Detection matches today's Generator.layerNeedsBuilder
 // logic: DetectFiles (pixi/npm/cargo) and DetectConfig (aur).
-func compileBuilderSteps(layer *Layer, img *ResolvedImage, hostCtx HostContext) []InstallStep {
+func compileBuilderSteps(layer *Layer, img *ResolvedBox, hostCtx HostContext) []InstallStep {
 	if img.BuilderConfig == nil {
 		return nil
 	}
@@ -693,7 +693,7 @@ func layerNeedsBuilderStep(layer *Layer, bDef *BuilderDef) bool {
 // resolveBuilderImage selects the builder image for a given builder name.
 // Priority: hostCtx override > image.Builder map > "" (caller must error
 // or fall back to a sensible default).
-func resolveBuilderImage(name string, img *ResolvedImage, hostCtx HostContext) string {
+func resolveBuilderImage(name string, img *ResolvedBox, hostCtx HostContext) string {
 	if hostCtx.BuilderImage != "" {
 		return hostCtx.BuilderImage
 	}
@@ -712,7 +712,7 @@ func resolveBuilderImage(name string, img *ResolvedImage, hostCtx HostContext) s
 // layer's Cargo.toml [[bin]] section, etc.). For now we capture names
 // derivable from layer.yml alone; the host target refines these at
 // execution time.
-func collectBuilderContext(layer *Layer, builderName string, bDef *BuilderDef, img *ResolvedImage) map[string]interface{} {
+func collectBuilderContext(layer *Layer, builderName string, bDef *BuilderDef, img *ResolvedBox) map[string]interface{} {
 	ctx := map[string]interface{}{
 		"layer":   layer.Name,
 		"builder": builderName,
@@ -814,7 +814,7 @@ func pixiDefaultEnvName(layer *Layer) string {
 // in three different places (the deleted VmDeployTarget lazy fallback,
 // the OCI build's per-entry routing, and the legacy nothing-rendered
 // path on LocalDeployTarget) into ONE compile-time filter.
-func compileServiceSteps(layer *Layer, img *ResolvedImage, hostCtx HostContext) []InstallStep {
+func compileServiceSteps(layer *Layer, img *ResolvedBox, hostCtx HostContext) []InstallStep {
 	var out []InstallStep
 	initIsSystemd := hostCtx.Target == "host" || hostCtx.Target == "vm"
 

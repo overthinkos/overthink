@@ -1,0 +1,14 @@
+candy:
+    version: 2026.144.1443
+    name: claude-code
+    require:
+        - nodejs
+    path_append:
+        - "~/.local/bin"
+    eval:
+        - id: claude-binary
+          file: ${HOME}/.npm-global/bin/claude
+          exists: true
+        - id: claude-version
+          command: ${HOME}/.npm-global/bin/claude --version
+          exit_status: 0

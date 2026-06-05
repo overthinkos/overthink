@@ -113,7 +113,7 @@ type EvalVarResolver struct {
 
 // ResolveEvalVarsBuild builds a variable map for build-time tests (no running
 // container). Only ImageMetadata-derived vars are populated.
-func ResolveEvalVarsBuild(meta *ImageMetadata) *EvalVarResolver {
+func ResolveEvalVarsBuild(meta *BoxMetadata) *EvalVarResolver {
 	env := buildTimeVars(meta, "" /* no instance at build time */)
 	return &EvalVarResolver{Env: env, HasRuntime: false}
 }
@@ -126,7 +126,7 @@ func ResolveEvalVarsBuild(meta *ImageMetadata) *EvalVarResolver {
 // On inspect failure the function still returns a resolver with the
 // build-time portion populated; HasRuntime is false and runtime-only vars
 // will be unresolved downstream.
-func ResolveEvalVarsRuntime(meta *ImageMetadata, deploy *DeploymentNode, engine, deployName, containerName, instance string) (*EvalVarResolver, error) {
+func ResolveEvalVarsRuntime(meta *BoxMetadata, deploy *DeploymentNode, engine, deployName, containerName, instance string) (*EvalVarResolver, error) {
 	_ = deploy // reserved for future per-deploy overrides; instance now arrives explicitly
 	env := buildTimeVars(meta, instance)
 
@@ -150,7 +150,7 @@ func ResolveEvalVarsRuntime(meta *ImageMetadata, deploy *DeploymentNode, engine,
 
 // buildTimeVars populates the ImageMetadata-derived subset of the variable
 // map. This is the only part of the map available at `ov eval image` time.
-func buildTimeVars(meta *ImageMetadata, instance string) map[string]string {
+func buildTimeVars(meta *BoxMetadata, instance string) map[string]string {
 	env := map[string]string{}
 	if meta == nil {
 		return env
@@ -190,7 +190,7 @@ func buildTimeVars(meta *ImageMetadata, instance string) map[string]string {
 // stripping the "ov-<image>-" prefix from the engine's full volume name.
 // Bind mounts without a named volume are cross-referenced by destination
 // path against meta.Volume to recover the short name.
-func mergeRuntimeVars(env map[string]string, meta *ImageMetadata, c *ContainerInspection, deployName, instance string) {
+func mergeRuntimeVars(env map[string]string, meta *BoxMetadata, c *ContainerInspection, deployName, instance string) {
 	if c == nil {
 		return
 	}

@@ -18,7 +18,7 @@ var ErrImageNotLocal = errors.New("image not found in local storage")
 // OCI label key constants (all namespaced under org.overthinkos.)
 const (
 	LabelVersion  = "org.overthinkos.version"
-	LabelImage    = "org.overthinkos.image"
+	LabelBox      = "org.overthinkos.box"
 	LabelRegistry = "org.overthinkos.registry"
 	LabelBootc    = "org.overthinkos.bootc"
 	LabelUID      = "org.overthinkos.uid"
@@ -41,21 +41,21 @@ const (
 	// in container image OCI labels.
 	LabelRoute          = "org.overthinkos.route"
 	LabelInit           = "org.overthinkos.init"
-	LabelEnvLayer       = "org.overthinkos.env_layer"
+	LabelEnvCandy       = "org.overthinkos.env_candy"
 	LabelPathAppend     = "org.overthinkos.path_append"
 	LabelPortProto      = "org.overthinkos.port_proto"
 	LabelPortRelay      = "org.overthinkos.port_relay"
 	LabelSkill          = "org.overthinkos.skill"
 	LabelStatus         = "org.overthinkos.status"
 	LabelInfo           = "org.overthinkos.info"
-	LabelLayerVersion   = "org.overthinkos.layer_version"
+	LabelCandyVersion   = "org.overthinkos.candy_version"
 	LabelSecret         = "org.overthinkos.secret"
 	LabelPlatformDistro = "org.overthinkos.platform.distro"
 	LabelPlatformFormat = "org.overthinkos.platform.format"
 	LabelBuilderUse     = "org.overthinkos.builder.use"
 	LabelBuilderProvide = "org.overthinkos.builder.provide"
 	LabelDataEntries    = "org.overthinkos.data"
-	LabelDataImage      = "org.overthinkos.data_image"
+	LabelDataBox        = "org.overthinkos.data_box"
 	LabelEnvProvide     = "org.overthinkos.env_provide"
 	LabelEnvRequire     = "org.overthinkos.env_require"
 	LabelEnvAccept      = "org.overthinkos.env_accept"
@@ -124,19 +124,19 @@ type CapabilityService struct {
 	ExitCode         string            `json:"exit_code,omitempty"`
 	Priority         int               `json:"priority,omitempty"`
 	Init             string            `json:"init,omitempty"`  // which init system owns this entry
-	Layer            string            `json:"layer,omitempty"` // source layer name
+	Layer            string            `json:"candy,omitempty"` // source layer name
 }
 
 // LabelDataEntry represents a data mapping stored in the org.overthinkos.data label.
 type LabelDataEntry struct {
 	Volume  string `json:"volume"`         // target volume name
 	Staging string `json:"staging"`        // path inside image (/data/<volume>/[dest/])
-	Layer   string `json:"layer"`          // source layer name
+	Layer   string `json:"candy"`          // source layer name
 	Dest    string `json:"dest,omitempty"` // optional subdirectory within volume
 }
 
 // ImageMetadata is the runtime-relevant config extracted from image labels.
-type ImageMetadata struct {
+type BoxMetadata struct {
 	Image     string
 	Version   string // org.overthinkos.version — content-derived EffectiveVersion (highest layer version, or the image's dedicated version:)
 	Registry  string
@@ -198,8 +198,8 @@ type ImageMetadata struct {
 // defaults baked at build time. The deploy.yml `shell:` overlay
 // merges into a separate runtime-only set via MergeDeployShell.
 type LabelShellSet struct {
-	Layer  []ShellEntry `json:"layer,omitempty"`
-	Image  []ShellEntry `json:"image,omitempty"`
+	Layer  []ShellEntry `json:"candy,omitempty"`
+	Image  []ShellEntry `json:"box,omitempty"`
 	Deploy []ShellEntry `json:"deploy,omitempty"`
 }
 
@@ -243,7 +243,7 @@ func defaultInspectLabels(engine, imageRef string) (map[string]string, error) {
 // ExtractMetadata reads OCI labels from a local image and returns parsed ImageMetadata.
 // Returns nil if the image has no org.overthinkos labels.
 // Returns ErrImageNotLocal wrapped with the image ref if the image is not in local storage.
-func ExtractMetadata(engine, imageRef string) (*ImageMetadata, error) {
+func ExtractMetadata(engine, imageRef string) (*BoxMetadata, error) {
 	labels, err := InspectLabels(engine, imageRef)
 	if err != nil {
 		if !LocalImageExists(engine, imageRef) {
@@ -264,8 +264,8 @@ func ExtractMetadata(engine, imageRef string) (*ImageMetadata, error) {
 	// Schema v4: DNS / AcmeEmail / Engine no longer read from OCI labels —
 	// they are deployment choices and flow onto ImageMetadata via
 	// MergeDeployOntoMetadata (deploy.yml → metadata).
-	meta := &ImageMetadata{
-		Image:    labels[LabelImage],
+	meta := &BoxMetadata{
+		Image:    labels[LabelBox],
 		Version:  version,
 		Registry: labels[LabelRegistry],
 		User:     labels[LabelUser],
@@ -383,9 +383,9 @@ func ExtractMetadata(engine, imageRef string) (*ImageMetadata, error) {
 	}
 
 	// Layer env vars
-	if v := labels[LabelEnvLayer]; v != "" {
+	if v := labels[LabelEnvCandy]; v != "" {
 		if err := json.Unmarshal([]byte(v), &meta.EnvLayer); err != nil {
-			return nil, fmt.Errorf("parsing %s: %w", LabelEnvLayer, err)
+			return nil, fmt.Errorf("parsing %s: %w", LabelEnvCandy, err)
 		}
 	}
 
@@ -425,9 +425,9 @@ func ExtractMetadata(engine, imageRef string) (*ImageMetadata, error) {
 	meta.Info = labels[LabelInfo]
 
 	// Layer versions
-	if v := labels[LabelLayerVersion]; v != "" {
+	if v := labels[LabelCandyVersion]; v != "" {
 		if err := json.Unmarshal([]byte(v), &meta.LayerVersion); err != nil {
-			return nil, fmt.Errorf("parsing %s: %w", LabelLayerVersion, err)
+			return nil, fmt.Errorf("parsing %s: %w", LabelCandyVersion, err)
 		}
 	}
 
@@ -474,7 +474,7 @@ func ExtractMetadata(engine, imageRef string) (*ImageMetadata, error) {
 	}
 
 	// Data image flag
-	if labels[LabelDataImage] == "true" {
+	if labels[LabelDataBox] == "true" {
 		meta.DataImage = true
 	}
 

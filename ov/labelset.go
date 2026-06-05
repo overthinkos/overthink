@@ -45,8 +45,8 @@ func (s *LabelSet) IsEmpty() bool {
 // org.overthinkos.tests OCI label: layer-contributed checks, image-level
 // checks, and deploy-default checks.
 type LabelEvalSet struct {
-	Layer  []Check `json:"layer,omitempty"`
-	Image  []Check `json:"image,omitempty"`
+	Layer  []Check `json:"candy,omitempty"`
+	Image  []Check `json:"box,omitempty"`
 	Deploy []Check `json:"deploy,omitempty"`
 }
 
@@ -67,8 +67,8 @@ func (s *LabelEvalSet) IsEmpty() bool {
 // Mirrors LabelEvalSet's shape so the collection + merge pipeline and
 // the reporting format can share a mental model.
 type LabelDescriptionSet struct {
-	Layer  []LabeledDescription `json:"layer,omitempty"`
-	Image  []LabeledDescription `json:"image,omitempty"`
+	Layer  []LabeledDescription `json:"candy,omitempty"`
+	Image  []LabeledDescription `json:"box,omitempty"`
 	Deploy []LabeledDescription `json:"deploy,omitempty"`
 }
 

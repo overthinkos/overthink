@@ -1,14 +1,14 @@
-version: 2026.155.1801
+version: 2026.156.557
 
 local:
   dev-workstation:
-    layer: [ripgrep, direnv]
+    candy: [ripgrep, direnv]
     install_opts: {with_services: false, allow_repo_changes: true}
     env: [EDITOR=vim]
     description: {feature: Dev workstation, tag: [working]}
 
   ci-runner:
-    layer: [ripgrep, pre-commit]
+    candy: [ripgrep, pre-commit]
     install_opts: {with_services: true, allow_root_tasks: true}
     description: {feature: CI runner profile, tag: [working]}
 
@@ -16,7 +16,7 @@ local:
     # Empty placeholder — `layers: []` is a load-time WARNING (allowed
     # for staged name reservation); a missing `layers:` field would be
     # a hard error.
-    layer: []
+    candy: []
     install_opts: {}
     description: {feature: ov-cachyos (placeholder), tag: [testing]}
 
@@ -25,7 +25,7 @@ deploy:
   my-laptop:
     target: local
     local: dev-workstation
-    add_layer: [sshkeys]
+    add_candy: [sshkeys]
 
   # Explicit "local" sentinel.
   my-laptop-explicit:

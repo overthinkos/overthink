@@ -1,0 +1,18 @@
+candy:
+    version: 2026.144.1443
+    name: fastfetch
+    description: Fast system information tool (neofetch successor)
+    distro:
+        arch:
+            package:
+                - fastfetch
+        fedora:
+            package:
+                - fastfetch
+    eval:
+        - id: fastfetch-binary
+          file: /usr/bin/fastfetch
+          exists: true
+        - id: fastfetch-package
+          package: fastfetch
+          installed: true

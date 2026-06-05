@@ -1,0 +1,343 @@
+candy:
+    version: 2026.153.2308
+    name: selkies
+    require:
+        - supervisord
+        - python
+        - pipewire
+    # pixelflux's Wayland backend (pixelflux_wayland.so) is dynamically linked
+    # against ffmpeg's libav* + libx264 — without them at runtime the backend fails
+    # to load (libx264.so.165: cannot open shared object file), pixelflux never
+    # creates its wayland-1 compositor, and labwc/chrome crash-loop. COMPOSE the
+    # ffmpeg layer (not merely `require:` it) so its packages are actually emitted
+    # into the final image — `require:` only orders deps that are composed
+    # elsewhere; `layers:` is what pulls a pure-package leaf in (the cachyos base
+    # had no transitive ffmpeg). The ffmpeg layer installs ffmpeg (arch: pulls
+    # x264 → libx264.so.165; fedora: negativo17), supplying every lib pixelflux
+    # links. R9: declare the runtime dep.
+    candy:
+        - ffmpeg
+    env:
+        LANG: "C.UTF-8"
+        PIXELFLUX_WAYLAND: "true"
+        PULSE_SERVER: "unix:/tmp/pulse/native"
+    port:
+        - "https+insecure:3000"
+    security:
+        shm_size: "1g"
+    volume:
+        - name: selkies-config
+          path: "~/.config/selkies"
+    distro:
+        arch:
+            package:
+                - wl-clipboard
+                - libice
+                - libsm
+                - libpulse
+                - libva-mesa-driver
+                - libva
+                - libva-utils
+                - procps-ng
+                - iproute2
+                - iputils
+                - strace
+                - htop
+                - file
+                - lsof
+                - openssl
+        fedora:
+            package:
+                - wl-clipboard
+                - libICE
+                - libSM
+                - pulseaudio-libs
+                - pulseaudio-utils
+                - mesa-va-drivers
+                - libva
+                - libva-utils
+                - procps-ng
+                - iproute
+                - iputils
+                - strace
+                - htop
+                - file
+                - lsof
+                # openssl required by the self-signed-cert task at line ~59.
+                # Previously assumed to be pulled in transitively from Fedora 43's
+                # base packages; a recent base-image refresh dropped it, breaking
+                # the selkies-desktop build chain. Declared explicitly to insulate
+                # against future base-image trimming.
+                - openssl
+    var:
+        TRAEFIK_VERSION: v3.4.0
+    task:
+        # Move pre-built Selkies web UI from the build-stage output into the system
+        # share directory. The build (pixi + build.sh) writes selkies-build/web into
+        # the build user's ~/.local/share — uid 1000, but the path differs by target:
+        # /home/user in a container build, /home/<deploy-user> on a host/VM cross-host
+        # build. Resolve it via getent (this cmd runs as root, so $HOME would be /root).
+        - cmd: |
+            SRCH="$(getent passwd 1000 | cut -d: -f6)"
+            mkdir -p /usr/local/share/selkies/web
+            cp -r "$SRCH"/.local/share/selkies-build/web/* /usr/local/share/selkies/web/
+            rm -rf "$SRCH"/.local/share/selkies-build
+          user: root
+        # Traefik binary (same version the dedicated traefik layer uses).
+        - download: "https://github.com/traefik/traefik/releases/download/${TRAEFIK_VERSION}/traefik_${TRAEFIK_VERSION}_linux_${ARCH}.tar.gz"
+          extract: tar.gz
+          to: /usr/local/bin
+          include: [traefik]
+          user: root
+        # Self-signed cert for HTTPS secure context (dev-only). openssl is genuinely
+        # procedural — stays in cmd: rather than a contrived write: pair.
+        - mkdir: /usr/local/share/selkies/certs
+          user: root
+        - cmd: |
+            openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 \
+              -keyout /usr/local/share/selkies/certs/selkies.key \
+              -out /usr/local/share/selkies/certs/selkies.crt \
+              -days 3650 -nodes \
+              -subj "/CN=selkies" \
+              -addext "subjectAltName=DNS:localhost,DNS:selkies.localhost,DNS:*.localhost,DNS:ov-selkies-desktop,IP:127.0.0.1"
+            chmod 644 /usr/local/share/selkies/certs/selkies.crt /usr/local/share/selkies/certs/selkies.key
+          user: root
+        # Traefik configs from the layer dir.
+        - copy: traefik.yml
+          to: /usr/local/share/selkies/traefik.yml
+          mode: "0644"
+          user: root
+        - copy: traefik-dynamic.yml
+          to: /usr/local/share/selkies/traefik-dynamic.yml
+          mode: "0644"
+          user: root
+        # User-phase setup: wrappers for the three services.
+        - mkdir: "${HOME}/.local/bin"
+          user: "${USER}"
+        - mkdir: "${HOME}/.config/selkies"
+          user: "${USER}"
+        # Dedicated selkies log dir — the `selkies` capture-server writes a
+        # rotating stdout/stderr log here (see its `stdout: file:` below), so
+        # capture/encoder failures are tailable instead of buried in the pod's
+        # interleaved container stdout.
+        - mkdir: "${HOME}/.local/share/selkies"
+          user: "${USER}"
+        - copy: selkies-wrapper
+          to: "${HOME}/.local/bin/selkies-wrapper"
+          mode: "0755"
+          user: "${USER}"
+        - copy: selkies-capture-server
+          to: "${HOME}/.local/bin/selkies-capture-server"
+          mode: "0755"
+          user: "${USER}"
+        - copy: selkies-fileserver
+          to: "${HOME}/.local/bin/selkies-fileserver"
+          mode: "0755"
+          user: "${USER}"
+    eval:
+        - id: selkies-wrapper
+          file: ${HOME}/.local/bin/selkies-wrapper
+          exists: true
+          mode: "0755"
+        - id: selkies-capture-server
+          file: ${HOME}/.local/bin/selkies-capture-server
+          exists: true
+        - id: selkies-fileserver
+          file: ${HOME}/.local/bin/selkies-fileserver
+          exists: true
+        - id: selkies-web-ui
+          file: /usr/local/share/selkies/web
+          filetype: directory
+        - id: selkies-cert
+          file: /usr/local/share/selkies/certs/selkies.crt
+          exists: true
+        - id: selkies-cert-key
+          file: /usr/local/share/selkies/certs/selkies.key
+          exists: true
+        - id: traefik-binary
+          file: /usr/local/bin/traefik
+          exists: true
+        # Pixelflux's Wayland backend (pixelflux_wayland.so) is dynamically linked
+        # against ffmpeg's libav* + libx264. If those runtime libs are absent from
+        # the final image the backend silently fails to load, pixelflux never
+        # creates wayland-1, and the whole desktop (labwc/chrome) crash-loops — while
+        # every OTHER probe (files/services/ports/https) still passes. This ldd check
+        # catches that class of missing-runtime-lib regression at BUILD scope
+        # (`ov eval image`) — no deploy or GPU needed. ldd exits 0 even when a lib is
+        # "not found", so the assertion is on the absence of that string.
+        - id: pixelflux-wayland-libs-resolvable
+          command: ldd ${HOME}/.pixi/envs/default/lib/python3.*/site-packages/pixelflux/pixelflux_wayland*.so
+          exit_status: 0
+          stdout:
+            - not_contains: "not found"
+        - id: selkies-service-running
+          scope: deploy
+          service: selkies
+          running: true
+        # supervisord reports the `selkies` program RUNNING even when pixelflux's
+        # Wayland backend failed to load — so service:running is not sufficient.
+        # Assert the compositor socket actually exists (pixelflux created wayland-1),
+        # the precondition for labwc/chrome to start. Poll for readiness.
+        - id: pixelflux-wayland-socket
+          scope: deploy
+          command: test -e /tmp/wayland-1
+          exit_status: 0
+          in_container: true
+          eventually: 60s
+          retry_interval: 3s
+        - id: traefik-service-running
+          scope: deploy
+          service: traefik
+          running: true
+        - id: selkies-port-reachable
+          scope: deploy
+          addr: 127.0.0.1:${HOST_PORT:3000}
+          reachable: true
+          timeout: 5s
+        - id: selkies-https
+          scope: deploy
+          http: https://127.0.0.1:${HOST_PORT:3000}/
+          status: 200
+          allow_insecure: true
+          timeout: 10s
+        - id: selkies-vaapi-encode
+          # Runtime encoder probe (R3: factored here from the per-bed
+          # eval-selkies-*-pod copies). pixelflux auto-selects the encoder from the
+          # host render node. On an AMD (0x1002) / Intel (0x8086) render node VAAPI
+          # H264 encode MUST be present, so this REQUIRES it (HARD-FAIL otherwise: a
+          # misconfigured DRINODE / broken libva silently drops to CPU x264 — the
+          # exact false-green this probe exists to catch). N/A is legitimate ONLY
+          # where no VAAPI-encode GPU exists (a CPU host, or the -nvidia flavor in a
+          # VM, which encodes via NVENC). NOTE: $DRINODE is referenced WITHOUT braces
+          # — ov's eval var resolver only substitutes ${UPPERCASE} forms and would
+          # otherwise treat ${DRINODE:-default} as one unresolvable variable and SKIP
+          # the whole check; braceless $DRINODE is left for the in-container shell.
+          scope: deploy
+          command: |
+            node="$DRINODE"
+            [ -n "$node" ] || node=$(ls -1 /dev/dri/renderD* 2>/dev/null | head -1)
+            [ -n "$node" ] || node=/dev/dri/renderD128
+            vendor=$(cat /sys/class/drm/$(basename "$node")/device/vendor 2>/dev/null)
+            if vainfo --display drm --device "$node" 2>/dev/null | grep -q "VAProfileH264.*VAEntrypointEncSlice"; then
+              echo "VAAPI-ENCODE-CAPABLE ($node vendor=$vendor)"
+            elif [ "$vendor" = "0x1002" ] || [ "$vendor" = "0x8086" ]; then
+              echo "FAIL: AMD/Intel GPU ($vendor) at $node but no VAAPI H264 encode — DRINODE misconfig / broken libva (CPU x264 fallback)"; exit 1
+            else
+              echo "VAAPI-N/A (no VAAPI-encode GPU at $node vendor=${vendor:-none} — NVENC/x264 path)"
+            fi
+          exit_status: 0
+          stdout:
+            - matches: "VAAPI-ENCODE-CAPABLE|VAAPI-N/A"
+        # Generic capture-content probe (R3: lives on the selkies layer so it
+        # runs on EVERY selkies image — AMD pod, NVIDIA pod-in-VM, CPU pod —
+        # via `ov eval live`, no per-bed re-implementation). A black/broken
+        # stream — dead compositor, silent encoder failure producing blank
+        # output — passes every file/port/https probe; THIS is the only check
+        # that proves real pixels reach the stream. Captures via the pixelflux
+        # capture bridge (pixelflux-screenshot writes PNG to STDOUT — it ignores
+        # path args, so redirect) and measures luma spread with ffmpeg
+        # signalstats: a uniform/black frame has YMIN==YMAX. Vendor-agnostic.
+        # Polls while the desktop session paints.
+        - id: selkies-frame-not-black
+          scope: deploy
+          command: |
+            rm -f /tmp/ov-frame.png
+            pixelflux-screenshot > /tmp/ov-frame.png 2>/dev/null
+            [ -s /tmp/ov-frame.png ] || { echo "no PNG captured yet"; exit 1; }
+            out=$(ffmpeg -hide_banner -i /tmp/ov-frame.png -vf "signalstats,metadata=print" -f null - 2>&1)
+            ymin=$(printf "%s" "$out" | grep -oE "YMIN=[0-9]+" | grep -oE "[0-9]+" | head -1); ymin=${ymin:-0}
+            ymax=$(printf "%s" "$out" | grep -oE "YMAX=[0-9]+" | grep -oE "[0-9]+" | head -1); ymax=${ymax:-0}
+            sp=$((ymax - ymin))
+            [ "$sp" -gt 24 ] && { echo "FRAME-NOT-BLACK (luma spread=$sp ymin=$ymin ymax=$ymax)"; exit 0; }
+            echo "frame still uniform (spread=$sp ymin=$ymin ymax=$ymax)"; exit 1
+          exit_status: 0
+          in_container: true
+          eventually: 90s
+          retry_interval: 5s
+          stdout:
+            - contains: "FRAME-NOT-BLACK"
+        # Generic encoder-SELECTION probe (R3: on the layer, runs everywhere).
+        # The danger it guards: pixelflux silently falling back to CPU x264 when
+        # a GPU encoder init fails (the exact pixelflux-NVENC bug build.sh Patch
+        # 2d fixes) — every other probe stays green while the stream burns CPU.
+        # Reads the dedicated selkies log and vendor-gates on the active render
+        # node: NVIDIA (0x10de) MUST be NVENC (a CPU-fallback marker is a HARD
+        # fail); AMD/Intel MUST NOT have fallen back to CPU (VAAPI *capability*
+        # is asserted separately by selkies-vaapi-encode); no GPU node is
+        # legitimately CPU x264. $DRINODE braceless (resolver only substitutes
+        # ${UPPERCASE} — ${DRINODE:-x} would SKIP the whole check).
+        - id: selkies-encoder-active
+          scope: deploy
+          command: |
+            home="$HOME"
+            [ -n "$home" ] || home=$(getent passwd "$(id -u)" 2>/dev/null | cut -d: -f6)
+            log="$home/.local/share/selkies/selkies.log"
+            [ -f "$log" ] || { echo "selkies log not present yet"; exit 1; }
+            node="$DRINODE"
+            [ -n "$node" ] || node=$(ls -1 /dev/dri/renderD* 2>/dev/null | head -1)
+            # Only trust a render node actually present in THIS container: a
+            # GPU-less (CPU) pod can still carry an injected DRINODE for a host
+            # device that was never mapped in — selkies itself then falls to
+            # software too, so treat it as no-GPU (the clean CPU x264 path).
+            [ -n "$node" ] && [ ! -e "$node" ] && node=""
+            vendor=""
+            [ -n "$node" ] && vendor=$(cat /sys/class/drm/$(basename "$node")/device/vendor 2>/dev/null)
+            if grep -qiE "Failed to init NVENC|Falling back to CPU|Using CPU Software Encoding|Mode: H264 \(CPU\)" "$log"; then
+              cpu_fallback=1
+            else
+              cpu_fallback=0
+            fi
+            case "$vendor" in
+              0x10de)
+                [ "$cpu_fallback" = "1" ] && { echo "FAIL: NVIDIA GPU ($node) but pixelflux fell back to CPU — NVENC not active. log tail:"; grep -iE "NVENC|CUDA|CPU|encoder" "$log" | tail -8; exit 1; }
+                grep -qiE "NVENC" "$log" || { echo "NVENC not initialized yet"; exit 1; }
+                echo "ENCODER-OK: NVENC active on NVIDIA $node"; exit 0 ;;
+              0x1002|0x8086)
+                [ "$cpu_fallback" = "1" ] && { echo "FAIL: AMD/Intel GPU ($node) but pixelflux fell back to CPU — hardware encode not selected. log tail:"; grep -iE "VAAPI|VA-API|CPU|encoder" "$log" | tail -8; exit 1; }
+                echo "ENCODER-OK: hardware encode selected on $node (VAAPI capability asserted by selkies-vaapi-encode)"; exit 0 ;;
+              *)
+                echo "ENCODER-OK: CPU x264 (no GPU render node — vendor=${vendor:-none})"; exit 0 ;;
+            esac
+          exit_status: 0
+          in_container: true
+          eventually: 90s
+          retry_interval: 5s
+          stdout:
+            - contains: "ENCODER-OK"
+    service:
+        - name: traefik
+          exec: "/usr/local/bin/traefik --configFile=/usr/local/share/selkies/traefik.yml"
+          restart: always
+          priority: 18
+          start_sec: 1
+          enable: true
+          scope: system
+        - name: selkies-fileserver
+          exec: "python3 %(ENV_HOME)s/.local/bin/selkies-fileserver"
+          restart: always
+          priority: 19
+          start_sec: 1
+          enable: true
+          # user scope: runs in the deploy user's session so $HOME + the session
+          # bus + XDG_RUNTIME_DIR are correct. supervisord ignores scope (renders
+          # the same INI), so the container is unchanged.
+          scope: user
+        - name: selkies
+          exec: "%(ENV_HOME)s/.local/bin/selkies-wrapper"
+          # Dedicated rotating log (supervisord expands %(ENV_HOME)s at runtime)
+          # so capture/encoder failures — a wlroots backend error, an NVENC init
+          # failure, a silent x264 fallback — are tailable via
+          # `supervisorctl tail selkies` / the file, not buried in the pod's
+          # interleaved container stdout.
+          stdout: "file:%(ENV_HOME)s/.local/share/selkies/selkies.log"
+          env:
+            PIXELFLUX_WAYLAND: true
+          restart: always
+          priority: 8
+          start_sec: 3
+          enable: true
+          # user scope: pixelflux needs the user session bus + per-user runtime
+          # dir (XDG_RUNTIME_DIR now from the init: /tmp in a container via the
+          # supervisord layer, /run/user/<uid> on a systemd VM via the user
+          # manager) — not a root system service. Container render is unchanged.
+          scope: user

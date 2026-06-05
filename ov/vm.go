@@ -28,7 +28,7 @@ type VmCmd struct {
 	Build    VmBuildCmd    `cmd:"" help:"Build QCOW2/RAW disk image from bootc container"`
 	Clone    VmCloneCmd    `cmd:"" help:"Clone a new VM from another VM's snapshot (writes a kind:vm declaration)"`
 	Console  VmConsoleCmd  `cmd:"" help:"Attach to VM serial console"`
-	CpImage  VmCpImageCmd  `cmd:"" name:"cp-image" help:"Load a host image into a running VM guest's podman storage"`
+	CpImage  VmCpBoxCmd    `cmd:"" name:"cp-box" help:"Load a host image into a running VM guest's podman storage"`
 	Create   VmCreateCmd   `cmd:"" help:"Create a VM from a disk image"`
 	Destroy  VmDestroyCmd  `cmd:"" help:"Remove VM definition and optionally delete disk"`
 	Gpu      VmGpuCmd      `cmd:"" help:"Inspect host VFIO/GPU-passthrough readiness (status, list)"`

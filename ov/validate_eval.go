@@ -298,7 +298,7 @@ func validMatcherOpList() []string {
 
 // validateTestIDUniqueness ensures IDs don't collide within Tests, within
 // DeployTests, or between Tests and DeployTests of the same image.
-func validateTestIDUniqueness(img ImageConfig, imgName string, errs *ValidationError) {
+func validateTestIDUniqueness(img BoxConfig, imgName string, errs *ValidationError) {
 	seen := map[string]string{} // id → first location
 	for i, c := range img.Eval {
 		if c.ID == "" {

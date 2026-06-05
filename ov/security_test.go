@@ -257,7 +257,7 @@ func TestCollectSecurityMergesCapsSmallest(t *testing.T) {
 		},
 	}
 	cfg := &Config{
-		Image: map[string]ImageConfig{
+		Image: map[string]BoxConfig{
 			"test": {Layer: []string{"big", "small"}},
 		},
 	}
@@ -282,7 +282,7 @@ func TestCollectSecurityImageOverridesCaps(t *testing.T) {
 		},
 	}
 	cfg := &Config{
-		Image: map[string]ImageConfig{
+		Image: map[string]BoxConfig{
 			"heavy": {
 				Layer:    []string{"chrome"},
 				Security: &SecurityConfig{MemoryMax: "16g"},

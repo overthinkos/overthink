@@ -18,7 +18,7 @@ type Generator struct {
 	Config         *Config
 	Layers         map[string]*Layer
 	Tag            string
-	Images         map[string]*ResolvedImage
+	Images         map[string]*ResolvedBox
 	BuildDir       string
 	Containerfiles map[string]string // cached content per image (used by ov build to pipe via stdin)
 	GlobalOrder    []string          // popularity-weighted global layer order for cache optimization
@@ -66,7 +66,7 @@ func (g *Generator) globalOrderForImage(imageLayers []string, parentLayers map[s
 }
 
 // resolveUserContext detects existing user in base image or uses configured values
-func (g *Generator) resolveUserContext(img *ResolvedImage) error {
+func (g *Generator) resolveUserContext(img *ResolvedBox) error {
 	if !img.IsExternalBase {
 		// Internal base - inherit from parent, but respect explicit overrides
 		parentImg := g.Images[img.Base]
@@ -785,7 +785,7 @@ func (g *Generator) generateContainerfile(imageName string) error {
 // generateDataImageContainerfile produces a minimal FROM scratch Containerfile
 // with only data staging COPY instructions and OCI labels. No runtime, no init,
 // no packages, no builder stages.
-func (g *Generator) generateDataImageContainerfile(imageName string, img *ResolvedImage, layerOrder []string, imageDir string) error {
+func (g *Generator) generateDataImageContainerfile(imageName string, img *ResolvedBox, layerOrder []string, imageDir string) error {
 	var b strings.Builder
 
 	b.WriteString(fmt.Sprintf("# .build/%s/Containerfile (generated -- do not edit)\n\n", imageName))
@@ -811,11 +811,11 @@ func (g *Generator) generateDataImageContainerfile(imageName string, img *Resolv
 	// EffectiveVersion (not the per-build tag) — see writeLabels.
 	b.WriteString("# Image metadata\n")
 	b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelVersion, img.EffectiveVersion))
-	b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelImage, imageName))
+	b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelBox, imageName))
 	if img.Registry != "" {
 		b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelRegistry, img.Registry))
 	}
-	b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelDataImage, "true"))
+	b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelDataBox, "true"))
 
 	// Data entries label
 	var dataEntries []LabelDataEntry
@@ -863,7 +863,7 @@ func (g *Generator) generateDataImageContainerfile(imageName string, img *Resolv
 			layerVersions[layerName] = layer.Version
 		}
 	}
-	writeJSONLabel(&b, LabelLayerVersion, layerVersions)
+	writeJSONLabel(&b, LabelCandyVersion, layerVersions)
 
 	b.WriteString("\n")
 
@@ -880,7 +880,7 @@ func (g *Generator) generateDataImageContainerfile(imageName string, img *Resolv
 // For internal bases, uses the exact CalVer tag so each image references
 // the precise version of its parent. Both Docker and Podman resolve local
 // images before pulling from registry.
-func (g *Generator) resolveBaseImage(img *ResolvedImage) string {
+func (g *Generator) resolveBaseImage(img *ResolvedBox) string {
 	if img.IsExternalBase {
 		return img.Base
 	}
@@ -928,7 +928,7 @@ func renderDnfConfWrite(d *DnfConfig) string {
 
 // writeBootstrap writes the bootstrap preamble for external base images.
 // All distro-specific behavior is driven by build.yml distro: section config.
-func (g *Generator) writeBootstrap(b *strings.Builder, img *ResolvedImage) {
+func (g *Generator) writeBootstrap(b *strings.Builder, img *ResolvedBox) {
 	b.WriteString("# Bootstrap\n")
 
 	// Resolve distro config for bootstrap commands
@@ -1019,7 +1019,7 @@ func escapeContainerfileEnvValue(v string) string {
 // Builder-triggered runtime env contributions (RuntimeEnv + PathContributions
 // on BuilderDef) are merged in alongside layer contributions — see
 // collectBuilderRuntimeEnv.
-func (g *Generator) writeLayerEnv(b *strings.Builder, layerOrder []string, img *ResolvedImage) {
+func (g *Generator) writeLayerEnv(b *strings.Builder, layerOrder []string, img *ResolvedBox) {
 	var configs []*EnvConfig
 
 	for _, layerName := range layerOrder {
@@ -1115,7 +1115,7 @@ func (g *Generator) writeExpose(b *strings.Builder, layerOrder []string) {
 
 // writeDataStaging emits COPY instructions for data layers into /data/<volume>/[dest/].
 // Data files are staged in the image for deploy-time provisioning by ov config / ov update.
-func (g *Generator) writeDataStaging(b *strings.Builder, layerOrder []string, img *ResolvedImage) {
+func (g *Generator) writeDataStaging(b *strings.Builder, layerOrder []string, img *ResolvedBox) {
 	hasData := false
 	for _, layerName := range layerOrder {
 		layer := g.Layers[layerName]
@@ -1157,7 +1157,7 @@ func (g *Generator) writeDataStaging(b *strings.Builder, layerOrder []string, im
 }
 
 // generateTraefikRoutes generates a traefik dynamic config YAML for route layers
-func (g *Generator) generateTraefikRoutes(imageName string, layerOrder []string, img *ResolvedImage) error {
+func (g *Generator) generateTraefikRoutes(imageName string, layerOrder []string, img *ResolvedBox) error {
 	var b strings.Builder
 
 	b.WriteString("# .build/" + imageName + "/traefik-routes.yml (generated -- do not edit)\n")
@@ -1346,7 +1346,7 @@ func mapToKeyValueSlice(m map[string]string) []KeyValue {
 // skipRootReset prevents emitting USER root after user-mode steps (used for the
 // last layer when no post-layer root steps follow).
 // Returns true if the layer ended in user mode.
-func (g *Generator) writeLayerSteps(b *strings.Builder, layerName string, img *ResolvedImage, skipRootReset bool) bool {
+func (g *Generator) writeLayerSteps(b *strings.Builder, layerName string, img *ResolvedBox, skipRootReset bool) bool {
 	layer := g.Layers[layerName]
 	stageName := layer.Name // short name used as scratch stage alias
 
@@ -1517,13 +1517,13 @@ func (g *Generator) writeLayerSteps(b *strings.Builder, layerName string, img *R
 // and build.yml builder: section templates rendered by buildStageContext + RenderTemplate.
 
 // expandBuilderPath replaces {{.Home}} placeholders in copy artifact paths.
-func expandBuilderPath(path string, img *ResolvedImage) string {
+func expandBuilderPath(path string, img *ResolvedBox) string {
 	path = strings.ReplaceAll(path, "{{.Home}}", img.Home)
 	return path
 }
 
 // layerNeedsBuilder checks if a layer triggers a builder's detection criteria.
-func (g *Generator) layerNeedsBuilder(img *ResolvedImage, layer *Layer, builderDef *BuilderDef) bool {
+func (g *Generator) layerNeedsBuilder(img *ResolvedBox, layer *Layer, builderDef *BuilderDef) bool {
 	for _, f := range builderDef.DetectFiles {
 		if layerHasFile(layer, f) {
 			return true
@@ -1578,7 +1578,7 @@ func buildFormatsInclude(formats []string, target string) bool {
 // the binary lived at ~/.pixi/envs/default/bin/jupyter. Threading via the
 // BUILDER means any image whose layers trigger pixi gets the contract
 // automatically.
-func (g *Generator) collectBuilderRuntimeEnv(layerOrder []string, img *ResolvedImage) []*EnvConfig {
+func (g *Generator) collectBuilderRuntimeEnv(layerOrder []string, img *ResolvedBox) []*EnvConfig {
 	if img == nil || img.BuilderConfig == nil {
 		return nil
 	}
@@ -1614,7 +1614,7 @@ func (g *Generator) collectBuilderRuntimeEnv(layerOrder []string, img *ResolvedI
 }
 
 // buildStageContext creates the template context for a builder's stage_template.
-func (g *Generator) buildStageContext(layer *Layer, builderName string, builderDef *BuilderDef, img *ResolvedImage, builderRef string) *BuildStageContext {
+func (g *Generator) buildStageContext(layer *Layer, builderName string, builderDef *BuilderDef, img *ResolvedBox, builderRef string) *BuildStageContext {
 	stageName := fmt.Sprintf("%s-%s-build", layer.Name, builderName)
 	ctx := &BuildStageContext{
 		BuilderRef:  builderRef,
@@ -1682,7 +1682,7 @@ func (g *Generator) buildStageContext(layer *Layer, builderName string, builderD
 
 // renderFormatInstallFromPackages renders install for a package list using the primary format's template.
 // Used for distro-override sections that only have packages (no repos, options, etc.).
-func (g *Generator) renderFormatInstallFromPackages(b *strings.Builder, packages []string, primaryFormat string, img *ResolvedImage) {
+func (g *Generator) renderFormatInstallFromPackages(b *strings.Builder, packages []string, primaryFormat string, img *ResolvedBox) {
 	if img.DistroDef == nil {
 		return
 	}
@@ -1702,7 +1702,7 @@ func (g *Generator) renderFormatInstallFromPackages(b *strings.Builder, packages
 
 // writeLabels emits OCI LABEL directives with all runtime-relevant metadata.
 // Every runtime config option is embedded so images are fully self-contained.
-func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder []string, img *ResolvedImage) {
+func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder []string, img *ResolvedBox) {
 	b.WriteString("# Image metadata\n")
 
 	// Always-present labels. org.overthinkos.version carries the image's
@@ -1713,7 +1713,7 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 	// prefers this label over the tag (local_image.go); it is also the
 	// "is this an ov image?" presence sentinel (ExtractMetadata).
 	b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelVersion, img.EffectiveVersion))
-	b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelImage, imageName))
+	b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelBox, imageName))
 	b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelUID, strconv.Itoa(img.UID)))
 	b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelGID, strconv.Itoa(img.GID)))
 	b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelUser, img.User))
@@ -2086,7 +2086,7 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 	if len(envConfigs) > 0 {
 		merged := MergeEnvConfigs(envConfigs)
 		if len(merged.Vars) > 0 {
-			writeJSONLabel(b, LabelEnvLayer, merged.Vars)
+			writeJSONLabel(b, LabelEnvCandy, merged.Vars)
 		}
 		writeJSONLabel(b, LabelPathAppend, merged.PathAppend)
 	}
@@ -2131,7 +2131,7 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 			layerVersions[layerName] = layer.Version
 		}
 	}
-	writeJSONLabel(b, LabelLayerVersion, layerVersions)
+	writeJSONLabel(b, LabelCandyVersion, layerVersions)
 
 	// Data entries: staging paths for deploy-time provisioning.
 	// Walk the full image chain (like CollectImageVolume) to include data
@@ -2183,7 +2183,7 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 	// Data image flag
 	imgConfig := g.Config.Image[imageName]
 	if imgConfig.DataImage {
-		b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelDataImage, "true"))
+		b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelDataBox, "true"))
 	}
 
 	b.WriteString("\n")
@@ -2418,18 +2418,18 @@ func (g *Generator) layerCopySource(layerRef string) string {
 	if layer.Remote {
 		return ".build/_layers/" + layer.Name
 	}
-	// If SourceDir matches the default layers/<layerRef>/ location, preserve
+	// If SourceDir matches the default candy/<layerRef>/ location, preserve
 	// the legacy path format (cheap, avoids filepath.Rel calls on hot path).
-	defaultDir := filepath.Join(g.Dir, "layers", layerRef)
+	defaultDir := filepath.Join(g.Dir, DefaultCandyDir, layerRef)
 	if layer.SourceDir == "" || layer.SourceDir == defaultDir {
-		return "layers/" + layerRef
+		return DefaultCandyDir + "/" + layerRef
 	}
 	// `directory:` override — resolve SourceDir relative to the build root.
 	rel, err := filepath.Rel(g.Dir, layer.SourceDir)
 	if err != nil || strings.HasPrefix(rel, "..") {
 		// Falling back to the default means the Containerfile will miss files
 		// from an out-of-tree SourceDir — validation should have caught this.
-		return "layers/" + layerRef
+		return DefaultCandyDir + "/" + layerRef
 	}
 	return rel
 }

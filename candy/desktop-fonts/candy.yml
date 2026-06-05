@@ -1,0 +1,39 @@
+candy:
+    version: 2026.144.1443
+    name: desktop-fonts
+    distro:
+        arch:
+            package:
+                - ttf-jetbrains-mono
+                - ttf-liberation
+                - ttf-nerd-fonts-symbols
+                - ttf-nerd-fonts-symbols-mono
+        fedora:
+            package:
+                - jetbrains-mono-fonts
+                - liberation-fonts
+                - nerd-fonts
+            copr:
+                - che/nerd-fonts
+    eval:
+        - id: jetbrains-mono-installed
+          package: jetbrains-mono-fonts
+          package_map:
+            arch: ttf-jetbrains-mono
+            fedora: jetbrains-mono-fonts
+          installed: true
+        # Fedora 43 split `liberation-fonts` into per-face packages — the dnf-level
+        # request is a virtual provides that resolves to `liberation-sans-fonts`.
+        # Arch ships the same faces under the single `ttf-liberation` package.
+        - id: liberation-sans-installed
+          package: liberation-sans-fonts
+          package_map:
+            arch: ttf-liberation
+            fedora: liberation-sans-fonts
+          installed: true
+        - id: nerd-fonts-installed
+          package: nerd-fonts
+          package_map:
+            arch: ttf-nerd-fonts-symbols
+            fedora: nerd-fonts
+          installed: true

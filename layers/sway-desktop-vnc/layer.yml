@@ -1,8 +1,0 @@
-layer:
-    version: 2026.144.1443
-    name: sway-desktop-vnc
-    layer:
-        - sway-desktop
-        - wayvnc
-    env:
-        WLR_RENDERER: "pixman"

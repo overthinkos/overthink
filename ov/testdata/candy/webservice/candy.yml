@@ -1,0 +1,26 @@
+candy:
+  version: 2026.144.1443
+  name: webservice
+  port:
+    - 8080
+    - 9090
+
+  port_relay:
+    - 8080
+
+  route:
+    host: webservice.localhost
+    port: 8080
+
+  volume:
+    - name: data
+      path: "~/.webservice"
+
+  alias:
+    - name: websvc
+      command: websvc-server
+
+  task:
+    - cmd: echo "setup webservice"
+      user: "${USER}"
+

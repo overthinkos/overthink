@@ -55,7 +55,7 @@ func newTrieNode(layer string) *trieNode {
 // GlobalLayerOrder computes a global topological order of all layers across
 // all enabled images, using popularity (number of images needing each layer)
 // as the primary tie-breaker and lexicographic as secondary.
-func GlobalLayerOrder(images map[string]*ResolvedImage, layers map[string]*Layer) ([]string, error) {
+func GlobalLayerOrder(images map[string]*ResolvedBox, layers map[string]*Layer) ([]string, error) {
 	// Count popularity: how many images need each layer (including transitive deps)
 	popularity := make(map[string]int)
 	for _, img := range images {
@@ -252,7 +252,7 @@ func sortByPopularity(s []string, popularity map[string]int) {
 
 // collectAllImageLayers returns the complete set of layers for an image,
 // including all layers inherited through the base chain.
-func collectAllImageLayers(imageName string, images map[string]*ResolvedImage, layers map[string]*Layer) []string {
+func collectAllImageLayers(imageName string, images map[string]*ResolvedBox, layers map[string]*Layer) []string {
 	seen := make(map[string]bool)
 	// walked is an IMAGE-visited guard for the base-chain recursion below. A
 	// base edge may form a cycle (A.base=B, B.base=A); that's caught + reported
@@ -293,7 +293,7 @@ func collectAllImageLayers(imageName string, images map[string]*ResolvedImage, l
 
 // AbsoluteLayerSequence returns an image's complete layer set (own + entire
 // base chain) as a subsequence of the global order.
-func AbsoluteLayerSequence(imageName string, images map[string]*ResolvedImage, layers map[string]*Layer, globalOrder []string) []string {
+func AbsoluteLayerSequence(imageName string, images map[string]*ResolvedBox, layers map[string]*Layer, globalOrder []string) []string {
 	allLayers := collectAllImageLayers(imageName, images, layers)
 	layerSet := make(map[string]bool, len(allLayers))
 	for _, l := range allLayers {
@@ -326,14 +326,14 @@ type siblingKey struct {
 // builds prefix tries of relative layer sequences within each sibling group,
 // creates intermediates at branching points, and returns updated images map.
 // User-defined images always take priority over auto-intermediates.
-func ComputeIntermediates(images map[string]*ResolvedImage, layers map[string]*Layer, cfg *Config, tag string) (map[string]*ResolvedImage, error) {
+func ComputeIntermediates(images map[string]*ResolvedBox, layers map[string]*Layer, cfg *Config, tag string) (map[string]*ResolvedBox, error) {
 	globalOrder, err := GlobalLayerOrder(images, layers)
 	if err != nil {
 		return nil, fmt.Errorf("computing global layer order: %w", err)
 	}
 
 	// Copy all existing images
-	result := make(map[string]*ResolvedImage)
+	result := make(map[string]*ResolvedBox)
 	for name, img := range images {
 		cp := *img
 		result[name] = &cp
@@ -423,7 +423,7 @@ func ComputeIntermediates(images map[string]*ResolvedImage, layers map[string]*L
 // branch points. The uid is the shared UID of this sibling group; it flows
 // through walkTrieScoped into createIntermediate so the emitted ENV PATH
 // references the correct HOME for this group's user context.
-func processSiblingGroup(parentName string, uid, defaultUID int, children []string, result, origImages map[string]*ResolvedImage, layers map[string]*Layer, cfg *Config, tag string, globalOrder []string, pixiBound map[string]bool) error {
+func processSiblingGroup(parentName string, uid, defaultUID int, children []string, result, origImages map[string]*ResolvedBox, layers map[string]*Layer, cfg *Config, tag string, globalOrder []string, pixiBound map[string]bool) error {
 	sortStrings(children)
 
 	// Get layers provided by parent
@@ -456,7 +456,7 @@ func processSiblingGroup(parentName string, uid, defaultUID int, children []stri
 
 // relativeLayerSequence returns an image's layers minus what the parent provides,
 // ordered according to the global layer order.
-func relativeLayerSequence(imageName string, parentProvided map[string]bool, images map[string]*ResolvedImage, layers map[string]*Layer, globalOrder []string, pixiBound map[string]bool) []string {
+func relativeLayerSequence(imageName string, parentProvided map[string]bool, images map[string]*ResolvedBox, layers map[string]*Layer, globalOrder []string, pixiBound map[string]bool) []string {
 	allLayers := collectAllImageLayers(imageName, images, layers)
 	layerSet := make(map[string]bool, len(allLayers))
 	for _, l := range allLayers {
@@ -476,7 +476,7 @@ func relativeLayerSequence(imageName string, parentProvided map[string]bool, ima
 // User-defined images at branch points are reused as intermediates without rebasing.
 // uid + defaultUID propagate from the sibling group so auto-intermediates
 // inherit the right user context and get UID-suffixed names when needed.
-func walkTrieScoped(node *trieNode, parentName string, uid, defaultUID int, result map[string]*ResolvedImage, origImages map[string]*ResolvedImage, layers map[string]*Layer, cfg *Config, tag string, globalOrder []string, pixiBound map[string]bool) error {
+func walkTrieScoped(node *trieNode, parentName string, uid, defaultUID int, result map[string]*ResolvedBox, origImages map[string]*ResolvedBox, layers map[string]*Layer, cfg *Config, tag string, globalOrder []string, pixiBound map[string]bool) error {
 	for _, childLayerName := range sortedKeys(node.children) {
 		child := node.children[childLayerName]
 
@@ -558,7 +558,7 @@ func collectSubtreeImages(node *trieNode) []string {
 // at the same trie position get distinct OCI tags (otherwise they'd collide
 // and one group's HOME-baked ENV would poison the other).
 // Appends -2, -3 etc. to avoid conflicts with existing or already-created images.
-func pickAutoName(pathLayers []string, parentName string, uid, defaultUID int, result, origImages map[string]*ResolvedImage) string {
+func pickAutoName(pathLayers []string, parentName string, uid, defaultUID int, result, origImages map[string]*ResolvedBox) string {
 	lastLayer := pathLayers[len(pathLayers)-1]
 	// Remote layer keys are fully-qualified paths
 	// ("github.com/overthinkos/overthink/layers/pixi"); reduce to the short
@@ -600,7 +600,7 @@ func pickAutoName(pathLayers []string, parentName string, uid, defaultUID int, r
 // uid is the sibling group's UID — it determines the intermediate's User/GID/Home
 // so HOME-relative env/path_append expansion matches the children that will
 // inherit from this intermediate.
-func createIntermediate(name, parentName string, uid int, pathLayers []string, consumerImages []string, result map[string]*ResolvedImage, origImages map[string]*ResolvedImage, cfg *Config, tag string, layers map[string]*Layer, globalOrder []string, pixiBound map[string]bool) {
+func createIntermediate(name, parentName string, uid int, pathLayers []string, consumerImages []string, result map[string]*ResolvedBox, origImages map[string]*ResolvedBox, cfg *Config, tag string, layers map[string]*Layer, globalOrder []string, pixiBound map[string]bool) {
 	ownLayers := computeOwnLayers(parentName, pathLayers, result, layers, globalOrder, pixiBound)
 
 	isExternalBase := false
@@ -731,7 +731,7 @@ func createIntermediate(name, parentName string, uid int, pathLayers []string, c
 		}
 	}
 
-	img := &ResolvedImage{
+	img := &ResolvedBox{
 		Name:           name,
 		Base:           parentName,
 		IsExternalBase: isExternalBase,
@@ -778,7 +778,7 @@ func createIntermediate(name, parentName string, uid int, pathLayers []string, c
 
 // computeOwnLayers determines which layers an intermediate needs to install
 // (pathLayers minus what the parent already provides).
-func computeOwnLayers(parentName string, pathLayers []string, result map[string]*ResolvedImage, layers map[string]*Layer, globalOrder []string, pixiBound map[string]bool) []string {
+func computeOwnLayers(parentName string, pathLayers []string, result map[string]*ResolvedBox, layers map[string]*Layer, globalOrder []string, pixiBound map[string]bool) []string {
 	parentProvided := make(map[string]bool)
 	if _, ok := result[parentName]; ok {
 		provided, err := LayerProvidedByImage(parentName, result, layers)
@@ -839,7 +839,7 @@ func addTransitiveDeps(layerName string, layers map[string]*Layer, needed map[st
 }
 
 // updateImageBase updates an image's Base to point to the given parent.
-func updateImageBase(imgName, parentName string, result map[string]*ResolvedImage) {
+func updateImageBase(imgName, parentName string, result map[string]*ResolvedBox) {
 	img, ok := result[imgName]
 	if !ok {
 		return

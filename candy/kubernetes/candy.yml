@@ -1,0 +1,67 @@
+candy:
+    version: 2026.144.1443
+    name: kubernetes
+    distro:
+        arch:
+            package:
+                - kubectl
+                - helm
+        fedora:
+            package:
+                - kubernetes-client
+                - helm
+    var:
+        K3D_VERSION: v5.8.3
+        KUBECTL_VERSION: v1.30.5
+    task:
+        # k3d is a standalone binary — no extract, just save + chmod.
+        - download: "https://github.com/k3d-io/k3d/releases/download/${K3D_VERSION}/k3d-linux-${ARCH}"
+          extract: none
+          to: /usr/bin/k3d
+          mode: "0755"
+          user: root
+        # kubectl: standalone binary from the official Kubernetes release mirror.
+        # Only runs when the rpm/pac kubectl package isn't already present (the
+        # Fedora/Arch paths use their distro's kubernetes-client / kubectl).
+        # Installs to /usr/bin/kubectl so the layer's tests (file /usr/bin/kubectl)
+        # work uniformly across all distros.
+        - cmd: |
+            if [ ! -x /usr/bin/kubectl ]; then
+              ARCH_TRIPLET="${ARCH:-$(dpkg --print-architecture 2>/dev/null || echo amd64)}"
+              curl -fsSL "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/${ARCH_TRIPLET}/kubectl" \
+                -o /usr/bin/kubectl
+              chmod 0755 /usr/bin/kubectl
+            fi
+          user: root
+        # Helm: official install script (works on every distro). Installs to
+        # /usr/local/bin/helm by default; symlink into /usr/bin/helm so the
+        # layer's tests pass uniformly. Runs only when the rpm/pac helm package
+        # isn't already present.
+        - cmd: |
+            if [ ! -x /usr/bin/helm ]; then
+              curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 -o /tmp/get-helm-3.sh
+              chmod 0755 /tmp/get-helm-3.sh
+              /tmp/get-helm-3.sh
+              rm -f /tmp/get-helm-3.sh
+              [ -x /usr/local/bin/helm ] && ln -sf /usr/local/bin/helm /usr/bin/helm || true
+            fi
+          user: root
+    eval:
+        - id: kubectl-binary
+          file: /usr/bin/kubectl
+          exists: true
+        - id: kubectl-version
+          command: /usr/bin/kubectl version --client
+          exit_status: 0
+        - id: helm-binary
+          file: /usr/bin/helm
+          exists: true
+        - id: helm-version
+          command: /usr/bin/helm version --short
+          exit_status: 0
+        - id: k3d-binary
+          file: /usr/bin/k3d
+          exists: true
+        - id: k3d-version
+          command: /usr/bin/k3d version
+          exit_status: 0

@@ -37,7 +37,7 @@ func testPacDistroDef() *DistroDef {
 // single LocalPkgInstallStep carrying the ref + anchors, and the config-driven
 // format/builder resolution; a layer with no localpkg: compiles to nothing.
 func TestCompileLocalPkgStep(t *testing.T) {
-	img := &ResolvedImage{
+	img := &ResolvedBox{
 		Name:      "ov-host",
 		Pkg:       "pac",
 		DistroDef: testPacDistroDef(),
@@ -72,12 +72,12 @@ func TestCompileLocalPkgStep(t *testing.T) {
 		t.Errorf("BuilderImage = %q, want the image's aur builder", pkg.BuilderImage)
 	}
 	// No aur builder → BuilderImage left "" (dep-build skipped with a clear log).
-	noBuilder := compileLocalPkgStep(l, &ResolvedImage{Name: "ov-host", Pkg: "pac", DistroDef: testPacDistroDef()}, hostCtx)
+	noBuilder := compileLocalPkgStep(l, &ResolvedBox{Name: "ov-host", Pkg: "pac", DistroDef: testPacDistroDef()}, hostCtx)
 	if pkg, ok := noBuilder.(*LocalPkgInstallStep); !ok || pkg.BuilderImage != "" || pkg.LocalPkg == nil {
 		t.Errorf("no aur builder should leave BuilderImage empty but keep LocalPkg, got %#v", noBuilder)
 	}
 	// Distro with no localpkg-capable format → LocalPkg nil (executor skips).
-	noFmt := compileLocalPkgStep(l, &ResolvedImage{Name: "ov-host", Pkg: "rpm", DistroDef: &DistroDef{Format: map[string]*FormatDef{"rpm": {}}}}, hostCtx)
+	noFmt := compileLocalPkgStep(l, &ResolvedBox{Name: "ov-host", Pkg: "rpm", DistroDef: &DistroDef{Format: map[string]*FormatDef{"rpm": {}}}}, hostCtx)
 	if pkg, ok := noFmt.(*LocalPkgInstallStep); !ok || pkg.LocalPkg != nil || pkg.Format != "" {
 		t.Errorf("distro without localpkg format should leave LocalPkg nil, got %#v", noFmt)
 	}
@@ -116,7 +116,7 @@ func TestBuildDeployPlanLocalPkgOrdering(t *testing.T) {
 			{Cmd: "echo install ov", User: "root"},
 		},
 	}
-	img := &ResolvedImage{Name: "host-adhoc", Home: "/root", User: "root"}
+	img := &ResolvedBox{Name: "host-adhoc", Home: "/root", User: "root"}
 	plan, err := BuildDeployPlan(l, img, HostContext{Target: "host", Distro: "arch"})
 	if err != nil {
 		t.Fatalf("BuildDeployPlan: %v", err)

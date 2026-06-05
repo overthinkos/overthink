@@ -241,7 +241,7 @@ func firstDeployID(plans []*InstallPlan) string {
 // t.Exec. Mirrors LocalDeployTarget.recordLayer's executor-routed
 // pattern (B6 fix) so VM deploys obey the same
 // zero-operator-side-effects invariant as nested host deploys.
-func (t *VmDeployTarget) recordLayer(paths *LedgerPaths, rec *LayerRecord, plan *InstallPlan, opts EmitOpts) error {
+func (t *VmDeployTarget) recordLayer(paths *LedgerPaths, rec *CandyRecord, plan *InstallPlan, opts EmitOpts) error {
 	if opts.DryRun || plan.DeployID == "" || rec == nil {
 		return nil
 	}
@@ -249,7 +249,7 @@ func (t *VmDeployTarget) recordLayer(paths *LedgerPaths, rec *LayerRecord, plan 
 	// package-remove reverse op BEFORE persisting — same shared filler the
 	// host target uses (R3); the guest teardown reads only the persisted ledger.
 	fillReverseUninstallCmds(rec.ReverseOps, t.DistroCfg)
-	return AddLayerDeploymentVia(t.Exec, paths, plan.Layer, plan.DeployID, func(existing *LayerRecord) {
+	return AddLayerDeploymentVia(t.Exec, paths, plan.Layer, plan.DeployID, func(existing *CandyRecord) {
 		existing.Version = rec.Version
 		existing.Steps = append(existing.Steps, rec.Steps...)
 		existing.ReverseOps = append(existing.ReverseOps, rec.ReverseOps...)
@@ -274,9 +274,9 @@ mkdir -p "$HOME/.config/overthink/env.d"
 // step-dispatch table but with SSH-wrapped execution. Collects
 // ReverseOps from each executed step so `ov deploy del vm:<name>` can
 // replay them in reverse order at teardown time.
-func (t *VmDeployTarget) emitPlan(ctx context.Context, plan *InstallPlan, opts EmitOpts) (*LayerRecord, error) {
+func (t *VmDeployTarget) emitPlan(ctx context.Context, plan *InstallPlan, opts EmitOpts) (*CandyRecord, error) {
 	fmt.Fprintf(os.Stderr, "\n--- plan: %s (layer=%s) ---\n", plan.DeployID, plan.Layer)
-	rec := &LayerRecord{
+	rec := &CandyRecord{
 		Layer:      plan.Layer,
 		Version:    plan.Version,
 		DeployedAt: time.Now().UTC().Format(time.RFC3339),

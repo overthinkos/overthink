@@ -7,42 +7,42 @@ defaults:
     registry: ghcr.io/test
     build:
         - rpm
-image:
+box:
     base:
-        layer:
+        candy:
             - pixi
     bazzite:
         base: ghcr.io/ublue-os/bazzite:stable
         bootc: true
         platform:
             - linux/amd64
-        layer:
+        candy:
             - custom-packages
     cuda:
         platform:
             - linux/amd64
-        layer:
+        candy:
             - pixi
             - cuda
     disabled-image:
         enabled: false
-        layer:
+        candy:
             - nonexistent-layer
     inference:
         base: ml-cuda
         tag: nightly
-        layer:
+        candy:
             - supervisord
             - ollama
     ml-cuda:
         base: cuda
-        layer:
+        candy:
             - python
             - ml-libs
     ubuntu-dev:
         base: ubuntu:24.04
         build:
             - deb
-        layer:
+        candy:
             - pixi
             - nodejs

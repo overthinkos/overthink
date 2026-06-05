@@ -170,8 +170,8 @@ func buildYamlFromFormatConfig(dir string) string {
 }
 
 type imageSections struct {
-	Defaults ImageConfig
-	Images   map[string]ImageConfig
+	Defaults BoxConfig
+	Images   map[string]BoxConfig
 }
 
 func readImageYaml(dir string) (*imageSections, error) {
@@ -183,8 +183,16 @@ func readImageYaml(dir string) (*imageSections, error) {
 	if err != nil {
 		return nil, err
 	}
+	// A pre-unified image.yml predates the candy/box rename and uses the legacy
+	// `image:`/`layer:` keys; normalize them to the current `box:`/`candy:`
+	// shape before decoding into the current structs.
+	var node yaml.Node
+	if err := yaml.Unmarshal(data, &node); err != nil {
+		return nil, err
+	}
+	renameBoxCandyKeys(&node)
 	var cfg Config
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
+	if err := node.Decode(&cfg); err != nil {
 		return nil, err
 	}
 	return &imageSections{
@@ -430,7 +438,7 @@ func rewriteServiceKeys(data []byte) []byte {
 // Small helpers.
 // -----------------------------------------------------------------------------
 
-func isZeroImageConfig(ic ImageConfig) bool {
+func isZeroImageConfig(ic BoxConfig) bool {
 	return ic.Base == "" && ic.Registry == "" && ic.Tag == "" && len(ic.Platforms) == 0 &&
 		len(ic.Distro) == 0 && len(ic.Build) == 0 && len(ic.Layer) == 0
 }

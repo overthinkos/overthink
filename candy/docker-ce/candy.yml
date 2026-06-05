@@ -1,0 +1,66 @@
+candy:
+    version: 2026.144.1443
+    name: docker-ce
+    distro:
+        arch:
+            package:
+                - containerd
+                - docker
+                - docker-buildx
+                - docker-compose
+        debian-13:
+            package:
+                - containerd.io
+                - docker-buildx-plugin
+                - docker-ce
+                - docker-ce-cli
+                - docker-compose-plugin
+            repo:
+                - name: docker-ce-debian
+                  url: "https://download.docker.com/linux/debian"
+                  key: "https://download.docker.com/linux/debian/gpg"
+                  suite: trixie
+                  components: stable
+        fedora:
+            package:
+                - containerd.io
+                - docker-buildx-plugin
+                - docker-ce
+                - docker-ce-cli
+                - docker-compose-plugin
+            repo:
+                - name: docker-ce-stable
+                  url: "https://download.docker.com/linux/fedora/docker-ce.repo"
+        ubuntu-24.04:
+            package:
+                - containerd.io
+                - docker-buildx-plugin
+                - docker-ce
+                - docker-ce-cli
+                - docker-compose-plugin
+            repo:
+                - name: docker-ce-ubuntu
+                  url: "https://download.docker.com/linux/ubuntu"
+                  key: "https://download.docker.com/linux/ubuntu/gpg"
+                  suite: noble
+                  components: stable
+    task:
+        # Load iptable_nat kernel module at boot (needed for docker networking)
+        - cmd: mkdir -p /etc/modules-load.d && echo "iptable_nat" >> /etc/modules-load.d/ip_tables.conf
+          user: root
+    eval:
+        - id: docker-binary
+          file: /usr/bin/docker
+          exists: true
+        - id: docker-version
+          command: /usr/bin/docker --version
+          exit_status: 0
+        - id: containerd-binary
+          file: /usr/bin/containerd
+          exists: true
+        - id: containerd-version
+          command: /usr/bin/containerd --version
+          exit_status: 0
+        - id: docker-compose-plugin
+          command: /usr/bin/docker compose version
+          exit_status: 0

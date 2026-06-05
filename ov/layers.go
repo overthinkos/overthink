@@ -89,7 +89,7 @@ type DataYAML struct {
 // ${ENV} expansion on the path. Optional `Rewrite` rules perform a literal
 // find/replace on the file contents before writing — used for rewriting
 // loopback addresses in kubeconfig files, etc.
-type LayerArtifact struct {
+type CandyArtifact struct {
 	// Name is a human-readable identifier (e.g. "kubeconfig"). Used in
 	// log messages and as a dedupe key when multiple layers in the same
 	// deploy declare overlapping artifacts.
@@ -111,7 +111,7 @@ type LayerArtifact struct {
 	// before writing. Evaluated in order. Typical use: rewrite
 	// "server: https://127.0.0.1:6443" in a kubeconfig to the VM's
 	// reachable hostname so the kubeconfig is usable from the operator.
-	Rewrite []LayerArtifactRewrite `yaml:"rewrite,omitempty" json:"rewrite,omitempty"`
+	Rewrite []CandyArtifactRewrite `yaml:"rewrite,omitempty" json:"rewrite,omitempty"`
 
 	// Optional is ignored when true and the file doesn't exist on the
 	// target. Default: required (missing file fails the deploy).
@@ -132,7 +132,7 @@ type LayerArtifact struct {
 }
 
 // LayerArtifactRewrite is a single find/replace pair.
-type LayerArtifactRewrite struct {
+type CandyArtifactRewrite struct {
 	Find    string `yaml:"find" json:"find"`
 	Replace string `yaml:"replace" json:"replace"`
 }
@@ -248,10 +248,10 @@ func sortedEnvDeps(m map[string]EnvDependency) []EnvDependency {
 // LayerYAML represents the parsed layer.yml file.
 // Unknown top-level keys are captured as tag-based package sections
 // (e.g., "fedora:", "arch:", "fedora:43:", "debian,ubuntu:").
-type LayerYAML struct {
+type CandyYAML struct {
 	Version     string            `yaml:"version,omitempty"`     // CalVer version (YYYY.DDD.HHMM) of this layer definition
 	Description *Description      `yaml:"description,omitempty"` // Gherkin-shaped self-description; replaces retired info:/status:
-	Layer       []string          `yaml:"layer,omitempty"`
+	Layer       []string          `yaml:"candy,omitempty"`
 	Require     []string          `yaml:"require,omitempty"`
 	Engine      string            `yaml:"engine,omitempty"` // required run engine: "docker" or "" (any)
 	Env         map[string]string `yaml:"env,omitempty"`
@@ -344,14 +344,14 @@ type LayerYAML struct {
 	// publish `/etc/rancher/k3s/k3s.yaml` back to `~/.cache/ov/clusters/
 	// <deploy>/kubeconfig.yaml` so the operator can `kubectl` the new
 	// cluster without manual scp. Generic — not k3s-specific.
-	Artifact []LayerArtifact `yaml:"artifact,omitempty"`
+	Artifact []CandyArtifact `yaml:"artifact,omitempty"`
 
 	// Capabilities are layer-contributed image-level facts (preserve_user,
 	// needs_root_after_init, init_system_hint, data_only, oci_labels).
 	// Aggregated at image resolve time via AggregateLayerCapabilities.
 	// Replaces the magic image-level booleans (image.bootc, image.data_image)
 	// with a declarative layer-derived surface.
-	Capability         *LayerCapabilities `yaml:"capability,omitempty"`
+	Capability         *CandyCapabilities `yaml:"capability,omitempty"`
 	RequiresCapability []string           `yaml:"requires_capability,omitempty"`
 
 	// Populated by custom UnmarshalYAML:
@@ -372,7 +372,7 @@ type LayerYAML struct {
 var layerYAMLKnownFields = map[string]bool{
 	"description": true, "version": true, "status": true,
 	"name": true, "from": true,
-	"layer": true, "require": true, "engine": true, "env": true,
+	"candy": true, "require": true, "engine": true, "env": true,
 	"path_append": true, "port": true, "route": true, "service": true,
 	"volume": true, "alias": true, "extract": true, "security": true,
 	"libvirt": true, "hook": true,
@@ -423,7 +423,7 @@ func SetFormatNames(dc *DistroConfig) {
 //   - `distros.arch.*`  → FormatSections["pac"]   + raw extras
 //   - `distros.arch.aur.*` → FormatSections["aur"]
 //   - `distros.<name>-<ver>.*` → TagSections["<name>:<ver>"] (dash → colon)
-func derivePackageSectionsFromCalamares(layer *Layer, ly *LayerYAML) {
+func derivePackageSectionsFromCalamares(layer *Layer, ly *CandyYAML) {
 	topPkgs := PackageNames(ly.Package)
 
 	distroToFormat := map[string]string{
@@ -682,14 +682,14 @@ func (t *Task) presentVerbs() []string {
 	return out
 }
 
-func (ly *LayerYAML) UnmarshalYAML(value *yaml.Node) error {
+func (ly *CandyYAML) UnmarshalYAML(value *yaml.Node) error {
 	// Use type alias to avoid infinite recursion
-	type layerYAMLAlias LayerYAML
+	type layerYAMLAlias CandyYAML
 	var alias layerYAMLAlias
 	if err := value.Decode(&alias); err != nil {
 		return err
 	}
-	*ly = LayerYAML(alias)
+	*ly = CandyYAML(alias)
 
 	// Capture unknown keys as format sections or tag sections.
 	// Keys matching build.yml distro format names → FormatSections (parsed as raw maps).
@@ -801,8 +801,8 @@ type Layer struct {
 	// map-key form (.Bare()) and pinned version (.Version()) are derived. One
 	// list per concern — no parallel bare/raw arrays (the duplication that
 	// split version off the ref and enabled the silent version-collision bug).
-	Require       []LayerRef // require: deps (ordering + resolution)
-	IncludedLayer []LayerRef // layer: composition refs (splicing)
+	Require       []CandyRef // require: deps (ordering + resolution)
+	IncludedLayer []CandyRef // layer: composition refs (splicing)
 
 	// Remote layer metadata
 	Remote        bool   // true if from a remote repo
@@ -841,12 +841,12 @@ type Layer struct {
 	localpkg       string            // bundled PKGBUILD dir to makepkg + pacman -U on an Arch deploy target (from layer.yml localpkg:)
 	reboot         bool              // reboot the deploy target after this layer (from layer.yml reboot:)
 	tests          []Check           // declarative checks (from layer.yml tests:)
-	artifacts      []LayerArtifact   // files to retrieve after setup (from layer.yml artifacts:)
+	artifacts      []CandyArtifact   // files to retrieve after setup (from layer.yml artifacts:)
 	shell          *ShellConfig      // shell-init declarations (from layer.yml shell:)
 
 	// Layer-contributed image-level facts (capabilities: block in layer.yml)
 	// and cross-layer requirement declarations (requires_capabilities:).
-	capabilities         *LayerCapabilities
+	capabilities         *CandyCapabilities
 	requiresCapabilities []string
 }
 
@@ -854,6 +854,12 @@ type Layer struct {
 // this loads overthink.yml via LoadUnified, applies discover:, and projects
 // the layers map. Legacy `layers/` directory scan remains as a fallback when
 // overthink.yml is absent (e.g., transitional test fixtures).
+// DefaultCandyDir is the single source of truth for the on-disk directory that
+// holds candy (layer) definitions. The discover: block overrides it per project
+// for discovery; write/resolve paths fall back to this default. Renaming the
+// candy directory project-wide is a one-line change here.
+const DefaultCandyDir = "candy"
+
 func ScanLayer(dir string) (map[string]*Layer, error) {
 	uf, present, err := LoadUnified(dir)
 	if err != nil {
@@ -871,7 +877,7 @@ func ScanLayer(dir string) (map[string]*Layer, error) {
 // legacyScanLayersDir is the pre-unified filesystem walk. Kept for test
 // fixtures (and the migration tool) that don't yet have an overthink.yml.
 func legacyScanLayersDir(dir string) (map[string]*Layer, error) {
-	layersDir := filepath.Join(dir, "layers")
+	layersDir := filepath.Join(dir, DefaultCandyDir)
 	entries, err := os.ReadDir(layersDir)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -896,11 +902,11 @@ func legacyScanLayersDir(dir string) (map[string]*Layer, error) {
 
 // parseLayerYAML reads and unmarshals a layer.yml file. Strict schema:
 //   - Empty / comment-only file → zero-value LayerYAML.
-//   - Single top-level `layer:` key → decode its body as LayerYAML (canonical form).
-//   - `layer:` + other top-level keys → error (ambiguous shape).
+//   - Single top-level `candy:` key → decode its body as LayerYAML (canonical form).
+//   - `candy:` + other top-level keys → error (ambiguous shape).
 //   - Multi-document stream → error (layer.yml is not a bundle file).
-//   - Flat form (no `layer:` wrapper) → error with migration hint.
-func parseLayerYAML(path string) (*LayerYAML, error) {
+//   - Flat form (no `candy:` wrapper) → error with migration hint.
+func parseLayerYAML(path string) (*CandyYAML, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
@@ -909,7 +915,7 @@ func parseLayerYAML(path string) (*LayerYAML, error) {
 	// Empty / comment-only guard.
 	trimmed := strings.TrimSpace(string(data))
 	if trimmed == "" {
-		return &LayerYAML{}, nil
+		return &CandyYAML{}, nil
 	}
 
 	// Field-singular cutover hard-rejection: any legacy plural top-level
@@ -938,7 +944,7 @@ func parseLayerYAML(path string) (*LayerYAML, error) {
 		docs = append(docs, node)
 	}
 	if len(docs) == 0 {
-		return &LayerYAML{}, nil
+		return &CandyYAML{}, nil
 	}
 	if len(docs) > 1 {
 		return nil, fmt.Errorf("%s: layer.yml is not a multi-document stream; bundle files belong in the unified overthink.yml", path)
@@ -960,21 +966,21 @@ func parseLayerYAML(path string) (*LayerYAML, error) {
 	for i := 0; i < len(inner.Content); i += 2 {
 		k := inner.Content[i].Value
 		keys = append(keys, k)
-		if k == "layer" {
+		if k == "candy" {
 			layerIdx = i + 1
 		}
 	}
 
 	if layerIdx >= 0 {
-		// Canonical kind-keyed form — `layer:` must be the only top-level key.
+		// Canonical kind-keyed form — `candy:` must be the only top-level key.
 		if len(keys) != 1 {
 			var other []string
 			for _, k := range keys {
-				if k != "layer" {
+				if k != "candy" {
 					other = append(other, k)
 				}
 			}
-			return nil, fmt.Errorf("%s: ambiguous — `layer:` wrapper present AND other top-level keys %v (pick one form)", path, other)
+			return nil, fmt.Errorf("%s: ambiguous — `candy:` wrapper present AND other top-level keys %v (pick one form)", path, other)
 		}
 		// 2026-05 Calamares cutover: hard-fail on legacy field shapes.
 		// Every legacy form has a one-shot remediation via `ov migrate`.
@@ -984,15 +990,15 @@ func parseLayerYAML(path string) (*LayerYAML, error) {
 				return nil, err
 			}
 		}
-		var ly LayerYAML
+		var ly CandyYAML
 		if err := body.Decode(&ly); err != nil {
 			return nil, fmt.Errorf("%s: %w", path, err)
 		}
 		return &ly, nil
 	}
 
-	// No `layer:` wrapper — legacy flat form. Reject with migration hint.
-	return nil, fmt.Errorf("%s: legacy flat layer.yml form is no longer accepted. Run `ov migrate` to convert to the canonical `layer:` kind-keyed form", path)
+	// No `candy:` wrapper — legacy flat form. Reject with migration hint.
+	return nil, fmt.Errorf("%s: legacy flat candy.yml form is no longer accepted. Run `ov migrate` to convert to the canonical `candy:` kind-keyed form", path)
 }
 
 // rejectLegacyLayerKeys is the 2026-05 Calamares-cutover hard-fail gate:
@@ -1040,8 +1046,8 @@ func scanLayer(path string, name string) (*Layer, error) {
 
 	// Parse layer.yml FIRST so `directory:` can redirect the anchor
 	// used by install-file detection and service-file globbing below.
-	var ly *LayerYAML
-	yamlPath := filepath.Join(path, "layer.yml")
+	var ly *CandyYAML
+	yamlPath := filepath.Join(path, "candy.yml")
 	if fileExists(yamlPath) {
 		parsed, err := parseLayerYAML(yamlPath)
 		if err != nil {
@@ -1350,7 +1356,7 @@ func (l *Layer) Secret() []SecretYAML {
 
 // Artifact returns the files this layer publishes back to the operator
 // after its setup completes (pre-populated from layer.yml artifact:).
-func (l *Layer) Artifact() []LayerArtifact {
+func (l *Layer) Artifact() []CandyArtifact {
 	return l.artifacts
 }
 
@@ -1651,7 +1657,7 @@ func ScanAllLayerWithConfigOpts(dir string, cfg *Config, opts ResolveOpts) (map[
 				// Enqueue this materialization's transitive deps. A plain-name dep
 				// is a same-repo sibling at the SAME git tag; an @-ref dep carries
 				// its own pinned repo/git-tag.
-				enqueueDep := func(dep LayerRef) error {
+				enqueueDep := func(dep CandyRef) error {
 					if dep.IsRemote() {
 						p := ParseRemoteRef(dep.Raw)
 						return enqueue(p.RepoPath, p.Version, dep.Bare())

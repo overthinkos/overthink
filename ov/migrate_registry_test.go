@@ -49,7 +49,7 @@ func TestMigrationStepNamesUnique(t *testing.T) {
 func TestMigrateCalverSchema_StampsAndIdempotent(t *testing.T) {
 	dir := t.TempDir()
 	overthink := filepath.Join(dir, "overthink.yml")
-	image := filepath.Join(dir, "image.yml")
+	image := filepath.Join(dir, "box.yml")
 	regWrite(t, overthink, "version: 4\nimage: {}\n")
 	regWrite(t, image, "# comment kept\nversion: 4\nimage: {}\n")
 
@@ -73,7 +73,7 @@ func TestMigrateCalverSchema_StampsAndIdempotent(t *testing.T) {
 	// Comment preservation (line-oriented rewrite).
 	body, _ := os.ReadFile(image)
 	if !strings.Contains(string(body), "# comment kept") {
-		t.Errorf("comment was lost in image.yml:\n%s", body)
+		t.Errorf("comment was lost in box.yml:\n%s", body)
 	}
 	// One backup per stamped file.
 	baks, _ := filepath.Glob(overthink + ".bak.*")

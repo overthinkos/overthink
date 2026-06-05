@@ -1,0 +1,9 @@
+candy:
+    version: 2026.144.1443
+    name: libnotify
+    require:
+        - dbus
+    distro:
+        fedora:
+            package:
+                - libnotify

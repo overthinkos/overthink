@@ -61,17 +61,17 @@ func leafName(ref string) string {
 // resolveImageRef resolves a (possibly qualified) image name to its ImageConfig
 // and the Config (namespace context) it lives in. Bare names resolve in c;
 // `ns.name` descends into c.Namespaces[ns] recursively.
-func (c *Config) resolveImageRef(ref string) (ImageConfig, *Config, bool) {
+func (c *Config) resolveImageRef(ref string) (BoxConfig, *Config, bool) {
 	if ns, rest, ok := splitNamespaceRef(ref); ok {
 		sub, ok := c.Namespaces[ns]
 		if !ok {
-			return ImageConfig{}, nil, false
+			return BoxConfig{}, nil, false
 		}
 		return sub.resolveImageRef(rest)
 	}
 	img, ok := c.Image[ref]
 	if !ok {
-		return ImageConfig{}, nil, false
+		return BoxConfig{}, nil, false
 	}
 	return img, c, true
 }
@@ -127,7 +127,7 @@ func (c *Config) resolveLocalRef(ref string) (*LocalSpec, bool) {
 // already-resolved local image set into `out` (keyed by the fully-qualified
 // name), resolving each within its own namespace context. Iterates to a fixpoint
 // because a pulled-in image may itself reference a (deeper) namespaced base.
-func (c *Config) resolveNamespacedBases(out map[string]*ResolvedImage, calverTag, dir string, opts ResolveOpts) error {
+func (c *Config) resolveNamespacedBases(out map[string]*ResolvedBox, calverTag, dir string, opts ResolveOpts) error {
 	for {
 		var todo []string
 		add := func(ref string) {
@@ -175,7 +175,7 @@ func (c *Config) resolveNamespacedBases(out map[string]*ResolvedImage, calverTag
 // (keyPrefix + descended namespaces + leaf). Re-keys the entry's own internal
 // base so the build graph references the fully-qualified ancestor, and recurses
 // to pull that ancestor too.
-func (c *Config) pullNamespacedImage(from *Config, ref, keyPrefix, calverTag, dir string, opts ResolveOpts, out map[string]*ResolvedImage) error {
+func (c *Config) pullNamespacedImage(from *Config, ref, keyPrefix, calverTag, dir string, opts ResolveOpts, out map[string]*ResolvedBox) error {
 	cur := from
 	curPrefix := keyPrefix
 	for {

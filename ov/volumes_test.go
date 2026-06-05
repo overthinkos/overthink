@@ -7,7 +7,7 @@ import (
 
 func TestCollectImageVolumesSimple(t *testing.T) {
 	cfg := &Config{
-		Image: map[string]ImageConfig{
+		Image: map[string]BoxConfig{
 			"myapp": {Layer: []string{"svc"}},
 		},
 	}
@@ -34,7 +34,7 @@ func TestCollectImageVolumesSimple(t *testing.T) {
 
 func TestCollectImageVolumesChain(t *testing.T) {
 	cfg := &Config{
-		Image: map[string]ImageConfig{
+		Image: map[string]BoxConfig{
 			"base":  {Layer: []string{"store"}},
 			"child": {Base: "base", Layer: []string{"app"}},
 		},
@@ -69,7 +69,7 @@ func TestCollectImageVolumesChain(t *testing.T) {
 
 func TestCollectImageVolumesDedup(t *testing.T) {
 	cfg := &Config{
-		Image: map[string]ImageConfig{
+		Image: map[string]BoxConfig{
 			"base":  {Layer: []string{"store"}},
 			"child": {Base: "base", Layer: []string{"override"}},
 		},
@@ -103,7 +103,7 @@ func TestCollectImageVolumesDedup(t *testing.T) {
 
 func TestCollectImageVolumesNoVolumes(t *testing.T) {
 	cfg := &Config{
-		Image: map[string]ImageConfig{
+		Image: map[string]BoxConfig{
 			"base": {Layer: []string{"plain"}},
 		},
 	}

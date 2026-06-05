@@ -8,7 +8,7 @@ import (
 
 // ScaffoldLayer creates a new layer directory with placeholder files
 func ScaffoldLayer(dir string, name string) error {
-	layerDir := filepath.Join(dir, "layers", name)
+	layerDir := filepath.Join(dir, DefaultCandyDir, name)
 
 	// Check if layer already exists
 	if _, err := os.Stat(layerDir); err == nil {
@@ -21,7 +21,7 @@ func ScaffoldLayer(dir string, name string) error {
 	}
 
 	// Create a placeholder layer.yml
-	layerYml := filepath.Join(layerDir, "layer.yml")
+	layerYml := filepath.Join(layerDir, "candy.yml")
 	layerContent := fmt.Sprintf("# %s layer config\nrpm:\n  packages:\n    # Add RPM packages here\n", name)
 	if err := os.WriteFile(layerYml, []byte(layerContent), 0644); err != nil {
 		return fmt.Errorf("creating layer.yml: %w", err)

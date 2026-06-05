@@ -29,7 +29,7 @@ func TestCollectTests_Sections(t *testing.T) {
 	}
 
 	cfg := &Config{
-		Image: map[string]ImageConfig{
+		Image: map[string]BoxConfig{
 			"redis-ml": {
 				Base:    "base",
 				Layer:   []string{"redis"},
@@ -59,18 +59,18 @@ func TestCollectTests_Sections(t *testing.T) {
 	if len(got.Layer) != 2 {
 		t.Fatalf("layer section has %d entries, want 2: %+v", len(got.Layer), got.Layer)
 	}
-	if got.Layer[0].Origin != "layer:redis" || got.Layer[0].Port != 6379 {
+	if got.Layer[0].Origin != "candy:redis" || got.Layer[0].Port != 6379 {
 		t.Errorf("layer[0] wrong: %+v", got.Layer[0])
 	}
 	if got.Layer[0].Scope != "build" {
 		t.Errorf("layer[0].scope should default to build, got %q", got.Layer[0].Scope)
 	}
-	if got.Layer[1].Origin != "layer:base" || got.Layer[1].File != "/etc/os-release" {
+	if got.Layer[1].Origin != "candy:base" || got.Layer[1].File != "/etc/os-release" {
 		t.Errorf("layer[1] wrong: %+v", got.Layer[1])
 	}
 
 	// Image section: supervisord -v
-	if len(got.Image) != 1 || got.Image[0].Origin != "image:redis-ml" || got.Image[0].Command != "supervisord -v" {
+	if len(got.Image) != 1 || got.Image[0].Origin != "box:redis-ml" || got.Image[0].Command != "supervisord -v" {
 		t.Errorf("image section wrong: %+v", got.Image)
 	}
 
@@ -80,7 +80,7 @@ func TestCollectTests_Sections(t *testing.T) {
 	}
 	origins := []string{got.Deploy[0].Origin, got.Deploy[1].Origin, got.Deploy[2].Origin}
 	// Order: layer-deploy entries first (in layer walk order), then image scope:deploy, then DeployTests.
-	wantOrigins := []string{"layer:redis", "image:redis-ml", "deploy-default"}
+	wantOrigins := []string{"candy:redis", "box:redis-ml", "deploy-default"}
 	if !reflect.DeepEqual(origins, wantOrigins) {
 		t.Errorf("deploy origins = %v, want %v", origins, wantOrigins)
 	}
@@ -93,7 +93,7 @@ func TestCollectTests_Sections(t *testing.T) {
 // No tests anywhere → nil (so the label is omitted from the image entirely).
 func TestCollectTests_EmptyReturnsNil(t *testing.T) {
 	layers := map[string]*Layer{"l": {Name: "l"}}
-	cfg := &Config{Image: map[string]ImageConfig{
+	cfg := &Config{Image: map[string]BoxConfig{
 		"i": {Enabled: boolPtr(true), Layer: []string{"l"}},
 	}}
 	if got := CollectEval(cfg, layers, "i"); got != nil {
@@ -108,7 +108,7 @@ func TestCollectTests_EmptyReturnsNil(t *testing.T) {
 // raw refs against the BareRef-keyed layer map, missed every one, silently
 // swallowed the resulting "unknown layer" error, and collected ZERO
 // layer-level checks — so every @github-ref-composed image shipped with
-// image-level checks only (e.g. a @github-ref-composed bootc image: 1 instead of ~77). The
+// image-level checks only (e.g. a @github-ref-composed bootc box: 1 instead of ~77). The
 // same chokepoint feeds CollectHooks/Shell/Descriptions/Security/Volumes/Alias,
 // so this single test guards the whole family.
 func TestCollectEval_RemoteRefLayersResolve(t *testing.T) {
@@ -122,7 +122,7 @@ func TestCollectEval_RemoteRefLayersResolve(t *testing.T) {
 		},
 	}
 	cfg := &Config{
-		Image: map[string]ImageConfig{
+		Image: map[string]BoxConfig{
 			"selkies-bootc": {
 				Enabled: boolPtr(true),
 				// RAW @github ref with :version — exactly as the submodule
@@ -142,8 +142,8 @@ func TestCollectEval_RemoteRefLayersResolve(t *testing.T) {
 	if got.Layer[0].File != "/usr/bin/tailscale" {
 		t.Errorf("collected wrong check: %+v", got.Layer[0])
 	}
-	if got.Layer[0].Origin != "layer:"+bareRef {
-		t.Errorf("origin = %q, want %q", got.Layer[0].Origin, "layer:"+bareRef)
+	if got.Layer[0].Origin != "candy:"+bareRef {
+		t.Errorf("origin = %q, want %q", got.Layer[0].Origin, "candy:"+bareRef)
 	}
 }
 
@@ -190,7 +190,7 @@ func TestLabelTests_JSONRoundTrip(t *testing.T) {
 				File:     "/usr/bin/redis-server",
 				Exists:   ptrBool(true),
 				Mode:     "0755",
-				Origin:   "layer:redis",
+				Origin:   "candy:redis",
 				Scope:    "build",
 				ID:       "redis-binary",
 				Contains: ContainsList{{Op: "contains", Value: "ELF"}},
@@ -198,12 +198,12 @@ func TestLabelTests_JSONRoundTrip(t *testing.T) {
 			{
 				Port:      6379,
 				Listening: ptrBool(true),
-				Origin:    "layer:redis",
+				Origin:    "candy:redis",
 				Scope:     "build",
 			},
 		},
 		Image: []Check{
-			{Command: "supervisord -v", Origin: "image:redis-ml", Scope: "build"},
+			{Command: "supervisord -v", Origin: "box:redis-ml", Scope: "build"},
 		},
 		Deploy: []Check{
 			{
@@ -243,7 +243,7 @@ func TestLabelTests_JSONRoundTrip(t *testing.T) {
 	}
 
 	// Origin annotation survives — critical for failure reports.
-	if parsed.Layer[0].Origin != "layer:redis" || parsed.Deploy[0].Origin != "deploy-default" {
+	if parsed.Layer[0].Origin != "candy:redis" || parsed.Deploy[0].Origin != "deploy-default" {
 		t.Errorf("origin annotations lost: layer[0]=%q deploy[0]=%q",
 			parsed.Layer[0].Origin, parsed.Deploy[0].Origin)
 	}

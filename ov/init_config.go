@@ -114,7 +114,7 @@ type ServiceCommandContext struct {
 
 // DetectLayerInit returns which init system names a layer triggers,
 // based on its layer.yml fields and file patterns.
-func (ic *InitConfig) DetectLayerInit(ly *LayerYAML, layerPath string) []string {
+func (ic *InitConfig) DetectLayerInit(ly *CandyYAML, layerPath string) []string {
 	if ic == nil {
 		return nil
 	}
@@ -131,7 +131,7 @@ func (ic *InitConfig) DetectLayerInit(ly *LayerYAML, layerPath string) []string 
 // detectsInit checks if a layer matches an init system's detection criteria.
 // Schema-driven: iterates the unified service: list + per-entry init routing
 // (IsPackaged → ServiceSchema.SupportsPackaged; custom exec → ServiceSchema.ServiceTemplate).
-func detectsInit(def *InitDef, ly *LayerYAML, layerPath string) bool {
+func detectsInit(def *InitDef, ly *CandyYAML, layerPath string) bool {
 	if ly == nil {
 		return false
 	}
@@ -193,7 +193,7 @@ func (ic *InitConfig) ResolveInitSystem(layers map[string]*Layer, layerOrder []s
 
 	caps, _ := AggregateLayerCapabilities(layers, layerOrder)
 	if caps == nil {
-		caps = &AggregatedLayerCaps{Provided: map[string]bool{}}
+		caps = &AggregatedCandyCaps{Provided: map[string]bool{}}
 	}
 
 	// Auto-detect: find the init system that layers trigger
@@ -252,7 +252,7 @@ func (ic *InitConfig) ActiveInit(layers map[string]*Layer, layerOrder []string) 
 
 	caps, _ := AggregateLayerCapabilities(layers, layerOrder)
 	if caps == nil {
-		caps = &AggregatedLayerCaps{Provided: map[string]bool{}}
+		caps = &AggregatedCandyCaps{Provided: map[string]bool{}}
 	}
 
 	result := make(map[string]*InitDef)
@@ -284,7 +284,7 @@ func (ic *InitConfig) ActiveInit(layers map[string]*Layer, layerOrder []string) 
 
 // initDefRequirementsMet reports whether the init definition's
 // RequiresCapabilities are all present in the aggregated caps.
-func initDefRequirementsMet(def *InitDef, caps *AggregatedLayerCaps) bool {
+func initDefRequirementsMet(def *InitDef, caps *AggregatedCandyCaps) bool {
 	if def == nil || len(def.RequiresCapability) == 0 {
 		return true
 	}

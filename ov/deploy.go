@@ -156,7 +156,7 @@ type DeploymentNode struct {
 	// Each entry is a DeployRef (local name / local YAML path /
 	// remote github ref). Same syntax as the command-line --add-layer
 	// flag.
-	AddLayer []string `yaml:"add_layer,omitempty"`
+	AddLayer []string `yaml:"add_candy,omitempty"`
 
 	// InstallOpts carries host-target-specific flags that would
 	// otherwise have to be passed on every command invocation.
@@ -167,7 +167,7 @@ type DeploymentNode struct {
 	// Image names a kind:image directly. Used for target: pod when no
 	// kind:pod template is needed (the common case), or as a legacy
 	// fallback for other targets during migration.
-	Image string `yaml:"image,omitempty"`
+	Image string `yaml:"box,omitempty"`
 
 	// Pod names a kind:pod template (image ref + sidecars + optional
 	// tests + shared env defaults). Only meaningful for target: pod.
@@ -1476,7 +1476,7 @@ func (dc *DeployConfig) OccupiedHostPorts(excludeKey string) map[int]bool {
 // off meta.Image would read whichever sibling deploy merely shares the image and
 // clobber this entry's explicit port:/env:/security: — e.g. a bed remapping
 // 45434:11434 would lose its port to a running same-image deploy on 11434.
-func MergeDeployOntoMetadata(meta *ImageMetadata, dc *DeployConfig, deployName, instance string) {
+func MergeDeployOntoMetadata(meta *BoxMetadata, dc *DeployConfig, deployName, instance string) {
 	// Volume isolation runs UNCONDITIONALLY (independent of any deploy.yml
 	// overlay), so every distinctly-named deploy gets its own volume namespace
 	// on the very first `ov config` and every run after — see
@@ -1640,7 +1640,7 @@ func deployStorageDir(deployKey, instance string) string {
 // No-op when the deploy's prefix already equals the image prefix (the common
 // `ov config <image>` base deploy), so that deploy's volume names never change.
 // Idempotent: re-running on already-scoped names is a no-op.
-func scopeVolumesToDeployKey(meta *ImageMetadata, deployName, instance string) {
+func scopeVolumesToDeployKey(meta *BoxMetadata, deployName, instance string) {
 	if meta == nil || deployName == "" {
 		return
 	}

@@ -34,7 +34,7 @@ func TestLayerUnknownKeyRejected(t *testing.T) {
 	}
 	for key, body := range bad {
 		t.Run("reject_"+key, func(t *testing.T) {
-			var ly LayerYAML
+			var ly CandyYAML
 			err := yaml.Unmarshal([]byte(body), &ly)
 			if err == nil {
 				t.Fatalf("expected error for unknown plural key %q, got nil", key)
@@ -46,8 +46,8 @@ func TestLayerUnknownKeyRejected(t *testing.T) {
 	}
 
 	// The SINGULAR forms must parse cleanly AND populate their fields.
-	good := "name: t\ntask:\n  - cmd: echo hi\nvar:\n  FOO: bar\nlayer:\n  - supervisord\nsecret_accept:\n  - name: X\n"
-	var ly LayerYAML
+	good := "name: t\ntask:\n  - cmd: echo hi\nvar:\n  FOO: bar\ncandy:\n  - supervisord\nsecret_accept:\n  - name: X\n"
+	var ly CandyYAML
 	if err := yaml.Unmarshal([]byte(good), &ly); err != nil {
 		t.Fatalf("singular keys must parse, got error: %v", err)
 	}
@@ -57,7 +57,7 @@ func TestLayerUnknownKeyRejected(t *testing.T) {
 	}
 
 	// A valid distro tag carrying a package: list must still parse (not rejected).
-	var ly2 LayerYAML
+	var ly2 CandyYAML
 	if err := yaml.Unmarshal([]byte("name: t\nfedora:43:\n  package: [vim]\n"), &ly2); err != nil {
 		t.Fatalf("distro tag with package: must parse, got error: %v", err)
 	}

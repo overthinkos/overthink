@@ -1,0 +1,24 @@
+candy:
+    version: 2026.144.1443
+    name: testapi
+    require:
+        - supervisord
+    port:
+        - 9090
+    route:
+        host: testapi.localhost
+        port: 9090
+    task:
+        - mkdir: "${HOME}/testapi"
+          user: "${USER}"
+        - copy: app.py
+          to: "${HOME}/testapi/app.py"
+          mode: "0644"
+          user: "${USER}"
+    service:
+        - name: testapi
+          exec: "/home/user/.pixi/envs/default/bin/uvicorn app:app --host 0.0.0.0 --port 9090"
+          restart: always
+          working_directory: /home/user/testapi
+          enable: true
+          scope: system

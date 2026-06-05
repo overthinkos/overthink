@@ -126,7 +126,7 @@ type DeployRecord struct {
 // (packages installed, files written, services enabled, env.d file
 // created, repo changes) so reversal doesn't need to re-compile the
 // plan from layer.yml.
-type LayerRecord struct {
+type CandyRecord struct {
 	Layer        string       `json:"layer"`
 	Version      string       `json:"version,omitempty"`
 	DeployedBy   []string     `json:"deployed_by"` // set of deploy IDs
@@ -180,7 +180,7 @@ func ReadDeployRecord(paths *LedgerPaths, id string) (*DeployRecord, error) {
 }
 
 // WriteLayerRecord serializes rec to layers/<layer>.json.
-func WriteLayerRecord(paths *LedgerPaths, rec *LayerRecord) error {
+func WriteLayerRecord(paths *LedgerPaths, rec *CandyRecord) error {
 	if err := paths.Ensure(); err != nil {
 		return err
 	}
@@ -189,7 +189,7 @@ func WriteLayerRecord(paths *LedgerPaths, rec *LayerRecord) error {
 }
 
 // ReadLayerRecord loads layers/<layer>.json; returns nil, nil if absent.
-func ReadLayerRecord(paths *LedgerPaths, layer string) (*LayerRecord, error) {
+func ReadLayerRecord(paths *LedgerPaths, layer string) (*CandyRecord, error) {
 	path := filepath.Join(paths.Layers, layer+".json")
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -198,7 +198,7 @@ func ReadLayerRecord(paths *LedgerPaths, layer string) (*LayerRecord, error) {
 		}
 		return nil, fmt.Errorf("ReadLayerRecord: %w", err)
 	}
-	var rec LayerRecord
+	var rec CandyRecord
 	if err := json.Unmarshal(data, &rec); err != nil {
 		return nil, fmt.Errorf("ReadLayerRecord: parsing %s: %w", path, err)
 	}
@@ -246,13 +246,13 @@ func writeJSONAtomic(path string, data interface{}) error {
 
 // AddLayerDeployment adds deployID to layer.DeployedBy and writes the
 // record. Used at install time.
-func AddLayerDeployment(paths *LedgerPaths, layerName, deployID string, update func(*LayerRecord)) error {
+func AddLayerDeployment(paths *LedgerPaths, layerName, deployID string, update func(*CandyRecord)) error {
 	rec, err := ReadLayerRecord(paths, layerName)
 	if err != nil {
 		return err
 	}
 	if rec == nil {
-		rec = &LayerRecord{
+		rec = &CandyRecord{
 			Layer:      layerName,
 			DeployedAt: time.Now().UTC().Format(time.RFC3339),
 		}
@@ -270,7 +270,7 @@ func AddLayerDeployment(paths *LedgerPaths, layerName, deployID string, update f
 // (recordAfter, shouldFullyRemove, error). When shouldFullyRemove is
 // true, the caller should perform the actual file/package/service
 // teardown and then delete the layer ledger entry.
-func RemoveLayerDeployment(paths *LedgerPaths, layerName, deployID string) (*LayerRecord, bool, error) {
+func RemoveLayerDeployment(paths *LedgerPaths, layerName, deployID string) (*CandyRecord, bool, error) {
 	rec, err := ReadLayerRecord(paths, layerName)
 	if err != nil {
 		return nil, false, err
@@ -320,7 +320,7 @@ func containsString(s []string, v string) bool {
 // ~/.config/overthink/installed/ — matching the install's actual
 // venue (arch-vm.arch-host writes in the arch VM guest; sway-pod with
 // nested pods writes in the parent pod; etc.).
-func AddLayerDeploymentVia(exec DeployExecutor, paths *LedgerPaths, layerName, deployID string, update func(*LayerRecord)) error {
+func AddLayerDeploymentVia(exec DeployExecutor, paths *LedgerPaths, layerName, deployID string, update func(*CandyRecord)) error {
 	if exec == nil {
 		return AddLayerDeployment(paths, layerName, deployID, update)
 	}
@@ -337,15 +337,15 @@ func AddLayerDeploymentVia(exec DeployExecutor, paths *LedgerPaths, layerName, d
 	// pass even when no DeployRecord has been written yet.
 	mkdirScript := "mkdir -p ~/.config/overthink/installed/layers ~/.config/overthink/installed/deploys"
 	data, err := exec.GetFile(ctx, remoteFile, false, EmitOpts{})
-	var rec *LayerRecord
+	var rec *CandyRecord
 	if err == nil && len(data) > 0 {
-		rec = &LayerRecord{}
+		rec = &CandyRecord{}
 		if jerr := json.Unmarshal(data, rec); jerr != nil {
 			rec = nil
 		}
 	}
 	if rec == nil {
-		rec = &LayerRecord{
+		rec = &CandyRecord{
 			Layer:      layerName,
 			DeployedAt: time.Now().UTC().Format(time.RFC3339),
 		}

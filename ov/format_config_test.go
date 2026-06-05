@@ -173,7 +173,7 @@ rpm:
   option:
     - --nogpgcheck
 `
-	var ly LayerYAML
+	var ly CandyYAML
 	if err := yaml.Unmarshal([]byte(yamlData), &ly); err != nil {
 		t.Fatalf("unmarshal error: %v", err)
 	}

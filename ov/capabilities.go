@@ -26,7 +26,7 @@ import (
 // contract loaded from OCI labels. Using a type alias keeps every existing
 // ImageMetadata consumer unchanged while letting new code (Part F K8s
 // generator, ov deploy from-image) use the canonical name.
-type Capabilities = ImageMetadata
+type Capabilities = BoxMetadata
 
 // CapabilityLabelMap names every OCI label that participates in the
 // capabilities contract. Maintained alongside ImageMetadata — adding a field
@@ -34,13 +34,13 @@ type Capabilities = ImageMetadata
 // below and breaks the build.
 var CapabilityLabelMap = map[string]string{
 	// Identity
-	"Image":        LabelImage,
+	"Image":        LabelBox,
 	"Version":      LabelVersion,
 	"Registry":     LabelRegistry,
 	"Bootc":        LabelBootc,
 	"Status":       LabelStatus,
 	"Info":         LabelInfo,
-	"LayerVersion": LabelLayerVersion,
+	"LayerVersion": LabelCandyVersion,
 
 	// Account
 	"UID":  LabelUID,
@@ -66,7 +66,7 @@ var CapabilityLabelMap = map[string]string{
 
 	// Env / vars
 	"Env":        LabelEnv,
-	"EnvLayer":   LabelEnvLayer,
+	"EnvLayer":   LabelEnvCandy,
 	"PathAppend": LabelPathAppend,
 
 	// Init — auto-detected from layers (see init_config.go ResolveInitSystem).
@@ -90,7 +90,7 @@ var CapabilityLabelMap = map[string]string{
 
 	// Data seeding
 	"DataEntries": LabelDataEntries,
-	"DataImage":   LabelDataImage,
+	"DataImage":   LabelDataBox,
 
 	// Env / secret / MCP dependency graph
 	"EnvProvide":    LabelEnvProvide,
@@ -141,7 +141,7 @@ var deployOnlyCapabilityFields = map[string]bool{
 // TestCapabilityLabelCompleteness to fail the build when a field is added
 // without a label mapping.
 func checkCapabilityLabelCompleteness() error {
-	rt := reflect.TypeOf(ImageMetadata{})
+	rt := reflect.TypeOf(BoxMetadata{})
 	var missing []string
 	for i := 0; i < rt.NumField(); i++ {
 		name := rt.Field(i).Name

@@ -27,7 +27,7 @@ type TargetSpec struct {
 
 	// ov extensions: bind groups and images to the target.
 	Group []string `yaml:"group,omitempty" json:"group,omitempty"` // group names from the unified file
-	Image []string `yaml:"image,omitempty" json:"image,omitempty"` // image names from the unified file
+	Image []string `yaml:"box,omitempty" json:"image,omitempty"`   // image names from the unified file
 }
 
 // TargetInstance mirrors Calamares' `instances:` entries — multiple

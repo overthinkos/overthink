@@ -68,6 +68,14 @@ everything below pours out of it.
 - **Hand the whole line to the agents.** Richer build → deploy → prove →
   iterate loops the agent runs end-to-end *inside* the candybox, with the human
   watching the floor rather than turning every crank.
+- **Verification becomes the cadence, not a checkpoint.** The long arc of
+  *prove it first* (Risk Driven Development) and *the spec is the test* (Agent
+  Driven Development) is a single loop: the agent writes down what a good candy
+  is as runnable scenarios, proves the riskiest unknowns on a live, disposable
+  batch *before* it commits to a recipe, and grades its own acceptance against
+  the running box — until *never trust, verify* is the factory's default rhythm,
+  woven through every batch, not a discipline anyone has to remember to apply.
+  → CLAUDE.md "Risk Driven Development (RDD)" + "Agent Driven Development (ADD)".
 - **A shared candy store.** Cross-repo, versioned candies and boxes (`@github`
   refs, content-derived versions) maturing into an ecosystem you *compose from*,
   not a pantry you restock by hand.

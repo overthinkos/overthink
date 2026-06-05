@@ -139,6 +139,18 @@ func MigrateRequireImage(cwd string, dryRun bool, includeHostFile bool) ([]Requi
 	return results, warnings, nil
 }
 
+// deployNodeImageRef returns a pod deploy entry's image reference, honoring
+// BOTH the current `box:` key (the candy/box rebrand) and the legacy `image:`
+// key (which the later box-rename migration step converts to `box:`). Either
+// one already satisfies the image-reference requirement, so require-image must
+// NOT warn/inject on a box-format pod deploy. Empty when neither is present.
+func deployNodeImageRef(valNode *yaml.Node) string {
+	if v := mapStringField(valNode, "box"); v != "" {
+		return v
+	}
+	return mapStringField(valNode, "image")
+}
+
 // migrateRequireImageOneFile reads path, walks its YAML node tree to
 // find every `deploy:` (or legacy `deployment:`) map, and injects
 // `image:` on each pod-target entry that lacks it. Returns the
@@ -191,7 +203,7 @@ func migrateRequireImageOneFile(path string, dryRun bool, extraImageNames map[st
 			if valNode.Kind != yaml.MappingNode {
 				continue
 			}
-			if img := mapStringField(valNode, "image"); img != "" {
+			if img := deployNodeImageRef(valNode); img != "" {
 				declaredImages[keyNode.Value] = img
 			}
 		}
@@ -211,7 +223,7 @@ func migrateRequireImageOneFile(path string, dryRun bool, extraImageNames map[st
 			if target != "" && target != "pod" {
 				continue
 			}
-			if mapStringField(valNode, "image") != "" {
+			if deployNodeImageRef(valNode) != "" {
 				continue
 			}
 			key := keyNode.Value

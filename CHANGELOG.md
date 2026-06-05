@@ -22,6 +22,24 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-05 — fix(migrate): `require-image` recognizes the rebranded `box:` key (no spurious warning on box-format pod deploys)
+
+The `require-image` migration step (`migrate_require_image.go`) checked only the
+legacy `image:` YAML key for a `target: pod` deploy's image reference. After the
+candy/box rebrand the key is `box:` (what `DeploymentNode.Image` reads via
+`yaml:"box"`), so every box-format pod deploy was treated as imageless — and when
+inference couldn't recover a name, `ov migrate` warned spuriously (e.g. the
+per-host `deploy.yml`'s `sway-browser-vnc`).
+
+Fixed with one `deployNodeImageRef` helper that honors BOTH `box:` (current) and
+`image:` (legacy, which the box-rename step converts), used at every site
+require-image looks for the image reference (the has-image guard + the
+sibling-inference map). A box-format pod deploy is now recognized as already
+carrying its reference — no warning, no injection. No schema change; the
+`require-image` step keeps its `2026.132.1009` CalVer. Proven by a unit test
+(box-format pod deploy → 0 warnings, 0 mutations) and a live `ov migrate` on the
+real per-host `deploy.yml` (the `sway-browser-vnc` warning is gone).
+
 ### 2026-06-05 — fix(migrate): `target-local` host-disambiguation is idempotent + scoped (stop stacking AMBIGUOUS comments on build templates)
 
 The `target-local` migration step's `host:` disambiguation

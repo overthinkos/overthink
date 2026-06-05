@@ -147,6 +147,38 @@ deploy:
 	}
 }
 
+// TestMigrateRequireImage_BoxKeyRecognized verifies a box-format pod deploy (the
+// current candy/box-rebrand schema) is recognized as ALREADY carrying its image
+// reference — no warning, no injection. Before the box-awareness fix the step
+// checked only the legacy `image:` key, so it warned spuriously on every `box:`
+// entry (e.g. the per-host deploy.yml's sway-browser-vnc).
+func TestMigrateRequireImage_BoxKeyRecognized(t *testing.T) {
+	dir := t.TempDir()
+	src := `
+deploy:
+    sway-browser-vnc:
+        target: pod
+        box: sway-browser-vnc
+    selkies-desktop:
+        target: pod
+        box: selkies-desktop
+`
+	path := filepath.Join(dir, "overthink.yml")
+	if err := os.WriteFile(path, []byte(src), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	results, warnings, err := MigrateRequireImage(dir, false, false)
+	if err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	if len(warnings) != 0 {
+		t.Errorf("box-format pod deploys must not warn (box: already supplies the image ref), got: %v", warnings)
+	}
+	if len(results) != 0 {
+		t.Errorf("box-format pod deploys must not be mutated (no image: injection), got: %+v", results)
+	}
+}
+
 // TestMigrateRequireImage_NonInferable_RaisesWarning verifies that a
 // deploy entry that doesn't match any inference rule produces a
 // warning rather than a silent skip or wrong injection.

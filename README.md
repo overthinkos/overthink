@@ -22,6 +22,10 @@ through carefully. Not quite the same as the English "overthink,"
 but let's be honest: `ov` really is trying its best to overthink
 absolutely everything.*
 
+> **New here?** [VISION.md](VISION.md) is the one-page thesis — why Overthink
+> secures the box and fills it with the whole candy store, and where the
+> factory is heading.
+
 ## Table of contents
 
 - [What's in the chocolate factory](#whats-in-the-chocolate-factory)
@@ -822,7 +826,8 @@ teammates. Whether you drive `ov` from the keyboard or hand it to an
 agent, testing and verifying deployments uses the one surface.
 → `/ov-internals:agents`.
 
-See [CLAUDE.md](CLAUDE.md) for the complete system specification,
+See [VISION.md](VISION.md) for the long-term thesis and direction,
+[CLAUDE.md](CLAUDE.md) for the complete system specification,
 [plugins/README.md](plugins/README.md) for the full skill index,
 and [CHANGELOG.md](CHANGELOG.md) for dated history (by policy,
 never duplicated here or in skills).

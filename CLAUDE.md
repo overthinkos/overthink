@@ -2,7 +2,7 @@
 
 Compose, build, deploy, and manage container images from a library of fully configurable layers. Built on a generic init system framework (`build.yml` → `init:` section) and `ov` (Go CLI). Designed to work equally well from the command line and from AI agents like Claude Code. Supports both Docker and Podman.
 
-See `README.md` for the user-facing feature overview and command reference, `plugins/README.md` for the full skill index. This file carries only **project-specific rules and mandates** — architectural descriptions belong in skills (the single source of truth).
+See `VISION.md` for the long-term thesis and direction, `README.md` for the user-facing feature overview and command reference, `plugins/README.md` for the full skill index. This file carries only **project-specific rules and mandates** — architectural descriptions belong in skills (the single source of truth).
 
 ---
 
@@ -699,6 +699,8 @@ Subagents/teammates load the full `CLAUDE.md` hierarchy from their working dir.
 ## Where things are documented
 
 See `plugins/README.md` for the full skill index (250+ skills). README.md carries the user-facing intro. All architecture / mode split / subsystem detail lives in skills — do not duplicate here.
+
+**Forward-looking thesis lives in `VISION.md`** (repo root). The long-term "why this exists and where it's going" — distilled from the philosophy pillars (Candyboxing, RDD, Disposable-Only Autonomy, "for you and your agents") — is stated there as ASPIRATION, in present-and-future tense. `VISION.md` never restates command usage (→ `README.md` / skills), architecture / subsystem detail (→ skills), or history (→ `CHANGELOG.md`); it links out to them. This makes the doc split five-way: rules → CLAUDE.md, features/commands → README.md, usage/architecture → skills, history → CHANGELOG.md, thesis/direction → VISION.md.
 
 **Historical content lives ONLY in `CHANGELOG.md`.** CLAUDE.md, README.md, `plugins/README.md`, and every `plugins/**/SKILL.md` describe the CURRENT state of the system — present tense, forward-looking. Any reference to a previous version, a past rename, a completed cutover or migration, a relocated / deleted / retired identifier, a "previously / formerly / was / no longer", or a dated change note goes in `CHANGELOG.md` (repo root) and NOWHERE else. When a cutover lands, append its narrative to `CHANGELOG.md` as the post-execution record; state the standing rules it establishes forward-looking here and in skills, with no history. `CHANGELOG.md` is the sanctioned "changelog context" named by R5's grep self-test.
 

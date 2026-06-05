@@ -22,6 +22,28 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-05 — docs: add VISION.md (long-term thesis + direction)
+
+A docs-only cutover adding a new top-level document, `VISION.md` — a tight
+one-page, chocolate-factory-voiced manifesto of the project's bet (candyboxing:
+secure the box, fill it with the whole candy store) and its long-term direction.
+It distills the thesis that until now lived only as *operating rules* scattered
+through `CLAUDE.md` (Candyboxing, Risk Driven Development, Disposable-Only
+Autonomy, "for you and your agents") into a standalone, forward-looking
+statement, and delegates all detail back out via pointers — it restates no
+command usage (→ README / skills), no architecture (→ skills), and no history
+(→ this file).
+
+The same cutover closes the doc-placement doctrine gap so the four-way split
+becomes five-way: rules → `CLAUDE.md`, features/commands → `README.md`,
+usage/architecture → skills, history → `CHANGELOG.md`, and now
+thesis/direction → `VISION.md`. `CLAUDE.md` ("Where things are documented" + the
+intro pointer), `README.md` (intro pointer + the bottom See-also block), and the
+`/ov-internals:skills` "CLAUDE.md vs Skills" taxonomy table each gained a
+`VISION.md` reference. No Go, no schema, no `version:` bump, no `ov migrate`
+step; the superproject push carries a fresh per-push CalVer tag, `plugins` is
+tag-exempt.
+
 ### 2026-06-05 — docs: replace the "Oompa-Loompa" naming with "agent"
 
 A docs-only follow-up to the Willy-Wonka README voice (the entry below): the

@@ -16,7 +16,7 @@ import "testing"
 func fixtureNamespacedProject(t *testing.T) (string, *Config) {
 	t.Helper()
 	root := t.TempDir()
-	writeFixture(t, root, "overthink.yml", `version: 2026.156.557
+	writeFixture(t, root, "overthink.yml", `version: 2026.156.1041
 import:
   - sub: ./sub.yml
 box:
@@ -26,7 +26,7 @@ box:
     build: [rpm]
     candy: []
 `)
-	writeFixture(t, root, "sub.yml", `version: 2026.156.557
+	writeFixture(t, root, "sub.yml", `version: 2026.156.1041
 box:
   widget:
     base: quay.io/fedora/fedora:43
@@ -90,7 +90,7 @@ func TestFindImageByLeaf(t *testing.T) {
 // TestResolveAllImage_RequestedQualifiedTarget guards the build-target path:
 // an explicitly-requested qualified image that is NOT a base/builder of any
 // root image must still land in the resolved set (so filterImage / the build
-// graph accept `ov image build sub.widget` and the ensure-image build-fallback
+// graph accept `ov box build sub.widget` and the ensure-image build-fallback
 // for a namespaced builder). Pre-fix it was absent.
 func TestResolveAllImage_RequestedQualifiedTarget(t *testing.T) {
 	root, cfg := fixtureNamespacedProject(t)
@@ -123,7 +123,7 @@ func TestResolveAllImage_RequestedQualifiedTarget(t *testing.T) {
 // name-resolution concern, not a per-image collection concern.
 func TestWalkBaseChain_RootInternalOnly(t *testing.T) {
 	root := t.TempDir()
-	writeFixture(t, root, "overthink.yml", `version: 2026.156.557
+	writeFixture(t, root, "overthink.yml", `version: 2026.156.1041
 import:
   - sub: ./sub.yml
 box:
@@ -143,7 +143,7 @@ box:
     build: [rpm]
     candy: []
 `)
-	writeFixture(t, root, "sub.yml", `version: 2026.156.557
+	writeFixture(t, root, "sub.yml", `version: 2026.156.1041
 box:
   widget:
     base: quay.io/fedora/fedora:43

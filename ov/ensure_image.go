@@ -5,15 +5,15 @@ package main
 // `EnsureImagePresent` is the single source of truth used by every
 // command that needs a container image present in local podman
 // storage: deploys (BuilderRun), the eval preflight, the operator-
-// facing `ov image pull` verb, and the engine-transfer path
+// facing `ov box pull` verb, and the engine-transfer path
 // (`EnsureImage` in transfer.go). One contract, one implementation,
 // one set of failure modes — no per-caller divergence (R3).
 //
-// Three input forms accepted, mirroring `ov image pull`:
+// Three input forms accepted, mirroring `ov box pull`:
 //
 //   - Short name (e.g. "eval-target") — resolved via `cfg.Image`
 //     to a registry ref, then pulled. Build-fallback uses the same
-//     short name as the input to `ov image build`.
+//     short name as the input to `ov box build`.
 //
 //   - Fully-qualified registry ref (e.g.
 //     "ghcr.io/overthinkos/eval-target:2026.124.1253") — pulled as-is.
@@ -27,13 +27,13 @@ package main
 //     "@github.com/overthinkos/overthink/eval-target:latest") —
 //     resolved via `ResolveRemoteImage` (operator-side repo download)
 //     to a registry ref, then pulled. No build fallback for remote
-//     refs (the remote repo's image.yml resolution already gave us
+//     refs (the remote repo's overthink.yml resolution already gave us
 //     the canonical ref).
 //
 // Algorithm:
 //   1. LocalImageExists short-circuit — already present, no-op.
 //   2. `podman pull <ref>` — preferred path.
-//   3. `ov image build <name>` — fallback when (a) the ref maps to a
+//   3. `ov box build <name>` — fallback when (a) the ref maps to a
 //      project image (short-name lookup or basename reverse-resolve),
 //      AND (b) the pull failed for any reason. Build is local; SSH
 //      executors are not in scope for this surface.
@@ -85,7 +85,7 @@ func EnsureImagePresent(ctx context.Context, image string, cfg *Config, projectD
 	}
 
 	// Fallback: remote ref → build from the cached @github.com/... repo
-	// using the same workflow as `ov image build @<ref>`.
+	// using the same workflow as `ov box build @<ref>`.
 	stripped := StripURLScheme(image)
 	if IsRemoteImageRef(stripped) {
 		if rctx, err := ResolveRemoteImage(stripped, ""); err == nil {
@@ -131,7 +131,7 @@ func EnsureImagePresent(ctx context.Context, image string, cfg *Config, projectD
 		return nil
 	}
 
-	return fmt.Errorf("ensure-image %q: not present locally, pull failed, and no buildable short-name match in image.yml — make the registry public, log in to the registry, or pre-build the image manually", image)
+	return fmt.Errorf("ensure-image %q: not present locally, pull failed, and no buildable short-name match in overthink.yml — make the registry public, log in to the registry, or pre-build the image manually", image)
 }
 
 // podmanTagAlias adds a second tag to an existing local image. Used to
@@ -160,11 +160,11 @@ func resolveImageRefForEnsure(image string, cfg *Config, projectDir string) (str
 		return image, nil
 	}
 	if cfg == nil {
-		return "", fmt.Errorf("short name %q requires a project directory with box.yml", image)
+		return "", fmt.Errorf("short name %q requires a project directory with overthink.yml", image)
 	}
 	resolved, err := cfg.ResolveImage(image, "", projectDir, ResolveOpts{})
 	if err != nil {
-		return "", fmt.Errorf("resolving %q via image.yml: %w", image, err)
+		return "", fmt.Errorf("resolving %q via overthink.yml: %w", image, err)
 	}
 	return resolveShellImageRef(resolved.Registry, resolved.Name, ""), nil
 }
@@ -173,7 +173,7 @@ func resolveImageRefForEnsure(image string, cfg *Config, projectDir string) (str
 // Same as resolveImageRefForEnsure EXCEPT remote
 // (@github.com/...) refs are walked through ResolveRemoteImage,
 // which performs the operator-side repo download and returns the
-// canonical registry ref declared in the remote project's image.yml.
+// canonical registry ref declared in the remote project's overthink.yml.
 func pullRefForEnsure(image string, cfg *Config, projectDir string) (string, error) {
 	stripped := StripURLScheme(image)
 	if IsRemoteImageRef(stripped) {
@@ -196,7 +196,7 @@ func podmanPullForEnsure(ctx context.Context, ref string) error {
 	return cmd.Run()
 }
 
-// buildableShortName returns the short name (project image.yml key)
+// buildableShortName returns the short name (project overthink.yml key)
 // that this identifier maps to, or "" when no fallback is possible.
 //
 // Algorithm:
@@ -210,7 +210,7 @@ func podmanPullForEnsure(ctx context.Context, ref string) error {
 //     lives at the root or under an imported namespace (e.g. the
 //     cachyos profile's `ov.arch-builder`).
 //   - Remote `@github.com/...` refs are skipped — the remote
-//     project's image.yml already determined the canonical ref;
+//     project's overthink.yml already determined the canonical ref;
 //     local build-fallback is not applicable.
 func buildableShortName(image string, cfg *Config) string {
 	if cfg == nil || cfg.Image == nil || image == "" {
@@ -239,7 +239,7 @@ func buildableShortName(image string, cfg *Config) string {
 	// Route through the single namespace-aware resolver. The basename may map
 	// to a root image (returned bare) OR to an image living in an imported
 	// namespace (returned qualified, e.g. `ov.arch-builder`). Both forms are
-	// buildable: ResolveImage and the `ov image build` target path are both
+	// buildable: ResolveImage and the `ov box build` target path are both
 	// namespace-aware, so the build-fallback can build a namespaced builder
 	// the same way it builds a root one.
 	if q, ok := cfg.findImageByLeaf(work); ok {

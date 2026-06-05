@@ -779,7 +779,7 @@ func (t *VmDeployTarget) resolveBuilderImage(s *BuilderStep, opts EmitOpts) (str
 		image = t.BuilderImageResolver(s.Builder)
 	}
 	if image == "" {
-		return "", fmt.Errorf("no builder image for %s (layer=%s); set --builder-image or define builder.%s in image.yml",
+		return "", fmt.Errorf("no builder image for %s (layer=%s); set --builder-image or define builder.%s in overthink.yml",
 			s.Builder, s.LayerName, s.Builder)
 	}
 	return image, nil

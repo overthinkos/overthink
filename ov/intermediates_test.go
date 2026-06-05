@@ -416,7 +416,7 @@ func TestImageNeedsBuilder(t *testing.T) {
 }
 
 func TestComputeIntermediates_RealisticConfig(t *testing.T) {
-	// Simplified version of the actual image.yml setup
+	// Simplified version of the actual overthink.yml setup
 	layers := map[string]*Layer{
 		"pixi":            {Name: "pixi", Require: nil, tasks: []Task{{Cmd: "true"}}},
 		"nodejs":          {Name: "nodejs", Require: nil, tasks: []Task{{Cmd: "true"}}},

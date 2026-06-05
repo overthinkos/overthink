@@ -126,20 +126,20 @@ func BuildDeployPlan(layer *Layer, img *ResolvedBox, hostCtx HostContext) (*Inst
 	svcSteps := compileServiceSteps(layer, img, hostCtx)
 	plan.Steps = append(plan.Steps, svcSteps...)
 
-	// 5. Shell-init snippets: layer.yml `shell:` block. Generic body +
+	// 5. Shell-init snippets: the candy manifest `shell:` block. Generic body +
 	// per-shell sub-blocks (bash/zsh/fish/sh). Selection rule: per-shell
 	// wins over generic with ${SHELL_NAME} substitution.
 	shellSteps := compileShellSnippetSteps(layer, img, hostCtx)
 	plan.Steps = append(plan.Steps, shellSteps...)
 
-	// 6. Android apps: layer.yml `apk:` package format. Compiled into ONE
+	// 6. Android apps: the candy manifest `apk:` package format. Compiled into ONE
 	// ApkInstallStep regardless of target; only AndroidDeployTarget executes
 	// it (every other target records a skip). See ApkInstallStep.
 	if apkStep := compileApkStep(layer); apkStep != nil {
 		plan.Steps = append(plan.Steps, apkStep)
 	}
 
-	// 7. Reboot: layer.yml `reboot: true`. Emitted LAST so the reboot
+	// 7. Reboot: the candy manifest `reboot: true`. Emitted LAST so the reboot
 	// follows every install step of this layer. Only VmDeployTarget acts
 	// on it (reboots the guest + waits); OCI/pod/k8s skip it (no machine
 	// at build time); LocalDeployTarget skips + warns (never reboots the
@@ -710,7 +710,7 @@ func resolveBuilderImage(name string, img *ResolvedBox, hostCtx HostContext) str
 // Reverse() method reads — best-effort; accurate env/binary detection
 // typically happens after the builder runs (binaries come from the
 // layer's Cargo.toml [[bin]] section, etc.). For now we capture names
-// derivable from layer.yml alone; the host target refines these at
+// derivable from the candy manifest alone; the host target refines these at
 // execution time.
 func collectBuilderContext(layer *Layer, builderName string, bDef *BuilderDef, img *ResolvedBox) map[string]interface{} {
 	ctx := map[string]interface{}{

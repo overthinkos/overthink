@@ -98,9 +98,9 @@ func (c *BoxConfigSetupCmd) Run() error {
 		return fmt.Errorf("image name is required")
 	}
 
-	// Remote refs (@github.com/...) are handled exclusively by `ov image pull`.
+	// Remote refs (@github.com/...) are handled exclusively by `ov box pull`.
 	if IsRemoteImageRef(StripURLScheme(c.Image)) {
-		return fmt.Errorf("remote refs are not accepted here; run 'ov image pull %s' first, then 'ov config <image-name>'", c.Image)
+		return fmt.Errorf("remote refs are not accepted here; run 'ov box pull %s' first, then 'ov config <image-name>'", c.Image)
 	}
 
 	// Canonicalize Pattern A "<base>/<instance>" so downstream code uses
@@ -386,10 +386,10 @@ func (c *BoxConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	// Two sources feed the provisioning step:
 	//
 	//  1. Layer-owned secrets (existing, unchanged): declared in
-	//     layer.yml `secrets:`, provisioned per-image, never rotated on
+	//     the candy manifest `secrets:`, provisioned per-image, never rotated on
 	//     config. Example: immich's db-password.
 	//  2. Credential-store-backed secrets (new in this release): declared
-	//     as secret_accepts/secret_requires on layer.yml, synthesized from
+	//     as secret_accepts/secret_requires on the candy manifest, synthesized from
 	//     image labels + the credential store. Plan §2.1–2.3. RotateOnConfig
 	//     is true so every ov config reconciles them with the latest
 	//     credential store value.

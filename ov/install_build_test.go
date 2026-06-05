@@ -14,14 +14,14 @@ import (
 
 // compilerTestProjectDir chdirs to the project root (the parent of ov/)
 // and returns a cleanup callback. The compiler tests rely on being able
-// to LoadConfig from image.yml, which only exists in the project root.
+// to LoadConfig from overthink.yml, which only exists in the project root.
 func compilerTestProjectDir(t *testing.T) (string, func()) {
 	t.Helper()
 	prev, err := os.Getwd()
 	if err != nil {
 		t.Fatalf("getwd: %v", err)
 	}
-	// Walk up from current to find image.yml.
+	// Walk up from current to find the project root (box.yml marker).
 	dir := prev
 	for i := 0; i < 5; i++ {
 		if _, err := os.Stat(filepath.Join(dir, "box.yml")); err == nil {
@@ -32,11 +32,11 @@ func compilerTestProjectDir(t *testing.T) (string, func()) {
 		}
 		dir = filepath.Dir(dir)
 	}
-	t.Skipf("image.yml not found walking up from %s; skipping", prev)
+	t.Skipf("project root not found walking up from %s; skipping", prev)
 	return "", func() {}
 }
 
-// loadCompilerFixtures loads image.yml + layers from the project and
+// loadCompilerFixtures loads overthink.yml + layers from the project and
 // resolves the "fedora-coder" image. Returns nil, nil if fixtures can't
 // load (used to gracefully skip in CI environments that might not have
 // the fixture layers present).

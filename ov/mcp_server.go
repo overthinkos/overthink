@@ -26,7 +26,7 @@ import (
 // The symmetric client lives in mcp.go / mcp_client.go and is built on the same
 // github.com/modelcontextprotocol/go-sdk. Layers that ship the `ov` binary
 // declare `mcp_provides: ov` to advertise this endpoint to consumers
-// (see layers/ov/layer.yml).
+// (see the `ov` layer's candy manifest).
 
 // Tool names that should not be exposed — the serve command itself (would be a
 // shell into itself), and the interactive help flag.
@@ -79,8 +79,8 @@ var mcpDestructivePaths = map[string]bool{
 	"box.merge":       true,
 	"box.new.candy":   true,
 	"box.new.project": true,
-	"box.new.box":   true,
-	// MCP-first authoring surface — mutates image.yml or filesystem.
+	"box.new.box":     true,
+	// MCP-first authoring surface — mutates overthink.yml or filesystem.
 	// (image.fetch is idempotent + additive; image.cat is read-only — neither
 	// is listed.)
 	"box.set":       true,
@@ -88,7 +88,7 @@ var mcpDestructivePaths = map[string]bool{
 	"box.rm-candy":  true,
 	"box.refresh":   true, // deletes + re-clones cache
 	"box.write":     true, // writes arbitrary file under project root
-	// Layer authoring — mutates layer.yml.
+	// Layer authoring — mutates the candy manifest.
 	"candy.set":     true,
 	"candy.add-rpm": true,
 	"candy.add-deb": true,
@@ -149,7 +149,7 @@ type McpServeCmd struct {
 	Path          string `long:"path" default:"/mcp" help:"HTTP path prefix for the MCP endpoint"`
 	Stdio         bool   `long:"stdio" help:"Use stdio transport instead of HTTP (for editor/LLM integration)"`
 	ReadOnly      bool   `long:"read-only" help:"Skip registration of tools that mutate state"`
-	NoDefaultRepo bool   `long:"no-default-repo" help:"Disable auto-fallback to overthinkos/overthink; require --dir / --repo / local image.yml"`
+	NoDefaultRepo bool   `long:"no-default-repo" help:"Disable auto-fallback to overthinkos/overthink; require --dir / --repo / local overthink.yml"`
 }
 
 func (c *McpServeCmd) Run() error {
@@ -186,7 +186,7 @@ var mcpRegisteredToolCount = func(*mcp.Server) int { return mcpLastRegisteredCou
 // designated exception, because an MCP server with no project is useless.
 //
 // Resolution order (after main() has already chdir'd for --dir/--repo if set):
-//  1. image.yml exists in cwd → use cwd (covers explicit --dir / OV_PROJECT_DIR
+//  1. overthink.yml exists in cwd → use cwd (covers explicit --dir / OV_PROJECT_DIR
 //     with a real checkout, --repo with a cloned cache, and ambient cwd).
 //  2. --no-default-repo → hard-fail with guidance.
 //  3. Otherwise → silently chdir into the overthinkos/overthink cache (the
@@ -197,10 +197,10 @@ var mcpRegisteredToolCount = func(*mcp.Server) int { return mcpLastRegisteredCou
 // Note: this deliberately does NOT early-return just because OV_PROJECT_DIR
 // is set. A pointed-at-but-empty /workspace (common: the dev has started the
 // container without `--bind project=<path>`) would otherwise leave the agent
-// staring at an image.yml-less directory with no recourse. Falling through to
+// staring at an overthink.yml-less directory with no recourse. Falling through to
 // the default repo makes `image.list.images` and friends work by default.
 func (c *McpServeCmd) bootstrapProject() error {
-	// Case 1: image.yml exists in cwd (main() has already chdir'd if --dir
+	// Case 1: overthink.yml exists in cwd (main() has already chdir'd if --dir
 	// or --repo was supplied, so cwd reflects all three origins).
 	if _, err := os.Stat("box.yml"); err == nil {
 		return nil
@@ -209,7 +209,7 @@ func (c *McpServeCmd) bootstrapProject() error {
 	// Case 2: opt-out flag set — hard-fail with guidance.
 	if c.NoDefaultRepo {
 		return fmt.Errorf("ov mcp serve: no project source found. " +
-			"Set OV_PROJECT_DIR / OV_PROJECT_REPO, pass --dir / --repo, or place an image.yml in cwd " +
+			"Set OV_PROJECT_DIR / OV_PROJECT_REPO, pass --dir / --repo, or place an overthink.yml in cwd " +
 			"(remove --no-default-repo to auto-fall back to overthinkos/overthink)")
 	}
 	// Case 3: auto-fallback to overthinkos/overthink.
@@ -221,9 +221,9 @@ func (c *McpServeCmd) bootstrapProject() error {
 		return fmt.Errorf("chdir to %s: %w", path, err)
 	}
 	// Name the reason so a confused dev reading server logs can trace it.
-	reason := "no image.yml in cwd"
+	reason := "no overthink.yml in cwd"
 	if dir := os.Getenv("OV_PROJECT_DIR"); dir != "" {
-		reason = fmt.Sprintf("OV_PROJECT_DIR=%s has no image.yml", dir)
+		reason = fmt.Sprintf("OV_PROJECT_DIR=%s has no overthink.yml", dir)
 	}
 	fmt.Fprintf(os.Stderr, "ov mcp: %s; falling back to default repo %s (%s)\n",
 		reason, DefaultProjectRepo, path)

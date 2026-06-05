@@ -12,7 +12,7 @@ import (
 // ErrImageNotLocal is returned when ExtractMetadata is called on an image
 // that is not present in the engine's local storage. Deploy-mode commands
 // unwrap this sentinel at the error boundary to render a recommendation
-// pointing users to `ov image pull`.
+// pointing users to `ov box pull`.
 var ErrImageNotLocal = errors.New("image not found in local storage")
 
 // OCI label key constants (all namespaced under org.overthinkos.)
@@ -80,7 +80,7 @@ const (
 	// Each section (layer/image/deploy) carries an ordered list of
 	// ShellEntry contributions (origin = layer name / "image" / "deploy",
 	// id, generic body, per-shell ByShell map). Source of truth for
-	// `ov image inspect`, `ov deploy from-image`, and the deploy.yml
+	// `ov box inspect`, `ov deploy from-image`, and the deploy.yml
 	// `shell:` overlay merge — same shape as LabelEval.
 	LabelShell = "org.overthinkos.shell"
 )
@@ -194,7 +194,7 @@ type BoxMetadata struct {
 // LabelShellSet is the three-section JSON manifest carried in
 // org.overthinkos.shell. Mirrors LabelEvalSet's bucketing — Layer
 // holds per-layer contributions (origin = layer name); Image holds
-// image.yml-level shell: declarations; Deploy holds deploy-scope
+// overthink.yml-level shell: declarations; Deploy holds deploy-scope
 // defaults baked at build time. The deploy.yml `shell:` overlay
 // merges into a separate runtime-only set via MergeDeployShell.
 type LabelShellSet struct {

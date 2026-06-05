@@ -511,7 +511,7 @@ func buildDomainXML(name, qcow2 string, ramMB, cpus, sshPort int, ports []string
       <model type='virtio'/>
 `, name, ramMB, cpus, qcow2))
 
-	// Port forwards: SSH mapping comes from image.yml `vm.ssh_port`
+	// Port forwards: SSH mapping comes from vm.yml `vm.ssh_port`
 	// (default 2222) — published ports from the image labels follow.
 	b.WriteString("      <portForward proto='tcp'>\n")
 	b.WriteString(fmt.Sprintf("        <range start='22' to='%d'/>\n", sshPort))

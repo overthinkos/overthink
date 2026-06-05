@@ -207,7 +207,7 @@ func TestResolveImageOrderWithBuilder(t *testing.T) {
 
 func TestResolveImageOrderWithBootstrapBuilder(t *testing.T) {
 	// Mirrors the cachyos / cachyos-pacstrap-builder pair (relocated to the
-	// overthinkos/cachyos submodule's image.yml in the 2026-05 CachyOS migration).
+	// overthinkos/cachyos submodule's overthink.yml in the 2026-05 CachyOS migration).
 	// `cachyos` is built `from: builder:pacstrap` with
 	// `bootstrap_builder_image: cachyos-pacstrap-builder`. A downstream
 	// image `app` consumes cachyos via `base: cachyos`. Without the

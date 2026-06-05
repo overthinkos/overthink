@@ -27,7 +27,7 @@ import (
 // dispatchByDeployTarget resolves c.Image as a deploy.yml entry and
 // invokes the target-specific update helper. Errors explicitly when:
 //
-//   - cwd has no deploy.yml (use 'ov image pull' for image-only refresh)
+//   - cwd has no deploy.yml (use 'ov box pull' for image-only refresh)
 //   - the name doesn't resolve to a deploy entry (same)
 //   - the deploy entry's `image:` field is empty for pod targets
 //     (config bug — deploy needs to know which image to refresh)
@@ -46,7 +46,7 @@ func resolveUpdateDeployNode(tree map[string]DeploymentNode, image, instance str
 	key := deployKey(image, instance)
 	node, _, err := ResolveNodePath(tree, key)
 	if err != nil || node == nil {
-		return nil, fmt.Errorf("no deploy named %q in deploy.yml. To refresh an image artifact only, use 'ov image pull %s'", key, image)
+		return nil, fmt.Errorf("no deploy named %q in deploy.yml. To refresh an image artifact only, use 'ov box pull %s'", key, image)
 	}
 	return node, nil
 }
@@ -61,7 +61,7 @@ func (c *UpdateCmd) dispatchByDeployTarget() error {
 		return fmt.Errorf("loading deploy tree from %s: %w", dir, err)
 	}
 	if tree == nil {
-		return fmt.Errorf("no deploy.yml found relative to %s; ov update requires a deploy name. To refresh an image artifact only, use 'ov image pull %s'", dir, c.Image)
+		return fmt.Errorf("no deploy.yml found relative to %s; ov update requires a deploy name. To refresh an image artifact only, use 'ov box pull %s'", dir, c.Image)
 	}
 	node, err := resolveUpdateDeployNode(tree, c.Image, c.Instance)
 	if err != nil {

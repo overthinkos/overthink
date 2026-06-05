@@ -7,7 +7,7 @@ import (
 )
 
 // TestEmitImageTestYAML_RoundTripsThroughParseOvTestOutput is the
-// load-bearing invariant: whatever `ov image test --format yaml`
+// load-bearing invariant: whatever `ov eval box --format yaml`
 // emits MUST parse cleanly via ParseOvTestOutput. Without this,
 // the benchmark scorer would silently mis-parse and classify
 // scenarios wrong.

@@ -16,7 +16,7 @@ type InitConfig struct {
 
 // InitDef defines an init system (supervisord, systemd, s6, etc.).
 type InitDef struct {
-	// Detection: which layer.yml fields and file patterns trigger this init system
+	// Detection: which candy manifest fields and file patterns trigger this init system
 	LayerFields  []string `yaml:"layer_field,omitempty"`
 	LayerFiles   []string `yaml:"layer_file,omitempty"`    // glob patterns (e.g., "*.service")
 	DependsLayer string   `yaml:"depends_layer,omitempty"` // layer name required in dependency chain
@@ -113,7 +113,7 @@ type ServiceCommandContext struct {
 }
 
 // DetectLayerInit returns which init system names a layer triggers,
-// based on its layer.yml fields and file patterns.
+// based on its candy manifest fields and file patterns.
 func (ic *InitConfig) DetectLayerInit(ly *CandyYAML, layerPath string) []string {
 	if ic == nil {
 		return nil
@@ -354,7 +354,7 @@ func (def *InitDef) RenderStageFragmentCopy(imageName, fileName string) (string,
 }
 
 // RenderFragmentTemplate was the legacy path that took raw-INI service
-// content from a layer.yml `service: |STRING|` and re-rendered it via an
+// content from a candy manifest `service: |STRING|` and re-rendered it via an
 // init-system template. Replaced by RenderService per F3 of the services
 // refactor — each ServiceEntry is rendered via ServiceSchema.ServiceTemplate.
 // Function deleted; fragment_template field removed from InitDef.

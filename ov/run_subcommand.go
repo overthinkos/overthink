@@ -4,7 +4,7 @@ package main
 // itself. Used by:
 //
 //   - UpdateCmd (commands.go) — dispatches to per-target update logic
-//     by shelling out to ov image build / ov stop / ov config / ov start
+//     by shelling out to ov box build / ov stop / ov config / ov start
 //   - The unified-target Update/Rebuild methods (unified_targets_*.go)
 //   - eval_kind_cmd.go — orchestrates per-kind R10 sequences
 //   - cycle.go — ov vm cycle / etc.

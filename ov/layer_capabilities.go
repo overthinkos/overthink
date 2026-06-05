@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-// LayerCapabilities is the per-layer YAML shape parsed from layer.yml
+// LayerCapabilities is the per-layer YAML shape parsed from the candy manifest
 // `capabilities:`. Layers contribute image-level facts that previously
 // hid behind magic image-level booleans (image.bootc, image.data_image).
 //

@@ -8,7 +8,7 @@ package main
 // into the generator. The IR defined here lifts the walk into structured
 // data so the same plan can be consumed by:
 //
-//   - OCITarget        → build-mode Containerfile emission (ov image build)
+//   - OCITarget        → build-mode Containerfile emission (ov box build)
 //   - ContainerDeploy  → deploy-mode overlay + quadlet (ov deploy add <name>)
 //   - LocalDeployTarget → deploy-mode host execution (ov deploy add host)
 //
@@ -18,7 +18,7 @@ package main
 // uniformly.
 //
 // This file defines only types and interfaces — no logic. The compiler that
-// turns layer.yml → InstallPlan lives in install_build.go; the emitters live
+// turns the candy manifest → InstallPlan lives in install_build.go; the emitters live
 // in build_target_oci.go / deploy_target_container.go / deploy_target_host.go.
 
 import (
@@ -130,7 +130,7 @@ func (v Venue) String() string {
 // rendered step belongs to. The phase lets targets treat repo-config
 // mutation (prepare) distinctly from package install — which is exactly
 // the granularity --allow-repo-changes gates. A single format section in
-// layer.yml typically emits three PhasePrepare/PhaseInstall/PhaseCleanup
+// the candy manifest typically emits three PhasePrepare/PhaseInstall/PhaseCleanup
 // steps, and the compiler tags each with the appropriate phase.
 type Phase int
 
@@ -223,7 +223,7 @@ const (
 )
 
 // ReverseOp is a single teardown action. Serialized into the ledger so
-// uninstall can reverse a deploy without re-reading layer.yml.
+// uninstall can reverse a deploy without re-reading the candy manifest.
 type ReverseOp struct {
 	Kind    ReverseOpKind     `json:"kind"`
 	Format  string            `json:"format,omitempty"`  // package format for package-remove (rpm/deb/pac)
@@ -275,11 +275,11 @@ type InstallStep interface {
 // SystemPackagesStep — rpm: / deb: / pac: package install.
 // ---------------------------------------------------------------------------
 
-// RepoSpec carries a structured repo entry from layer.yml. Matches the
+// RepoSpec carries a structured repo entry from the candy manifest. Matches the
 // existing raw shape used by templates in build.yml; the host target
 // reads this to decide whether --allow-repo-changes is required.
 type RepoSpec struct {
-	// Fields captured verbatim from layer.yml. Different formats use
+	// Fields captured verbatim from the candy manifest. Different formats use
 	// different subsets (rpm has url/id/key; deb has suite/components;
 	// pac has url/keys). Carried as map so the template-rendered host
 	// and container forms can pick what they need.
@@ -294,7 +294,7 @@ type SystemPackagesStep struct {
 	Format   string     // "rpm" | "deb" | "pac"
 	Phase    Phase      // PhasePrepare | PhaseInstall | PhaseCleanup
 	Packages []string   // package names (for Reverse)
-	Repos    []RepoSpec // repository entries from layer.yml (drives PhasePrepare)
+	Repos    []RepoSpec // repository entries from the candy manifest (drives PhasePrepare)
 	Options  []string   // format-specific install flags
 	Copr     []string   // RPM-only: COPR repos to enable/disable
 	Modules  []string   // RPM-only: DNF modules to enable
@@ -473,7 +473,7 @@ func (s *BuilderStep) Reverse() []ReverseOp {
 }
 
 // ---------------------------------------------------------------------------
-// TaskStep — one entry from layer.yml's tasks: list.
+// TaskStep — one entry from the candy manifest's tasks: list.
 // ---------------------------------------------------------------------------
 
 // TaskStep wraps a raw Task so the IR compiler doesn't have to transform
@@ -499,7 +499,7 @@ type TaskStep struct {
 	// ENV expands ${HOME}), so it is unaffected by this field.
 	To string
 
-	// LayerVars are the layer.yml `vars:` map propagated into the task
+	// LayerVars are the candy manifest `vars:` map propagated into the task
 	// script as exports. Build-time gets these via Containerfile ENV
 	// directives (emitVarsEnv); host/local-deploy time has no equivalent
 	// mechanism, so the renderer emits `export K=V` lines from this field.
@@ -599,7 +599,7 @@ func reverseFileKindFor(sc Scope) ReverseOpKind {
 // layer-declared file directives that aren't wrapped as tasks (e.g.
 // supervisord fragment assembly). Today's tasks.go handles most file
 // placement via TaskStep; FileStep exists for cases where the compiler
-// synthesizes file writes that weren't in layer.yml (e.g. service unit
+// synthesizes file writes that weren't in the candy manifest (e.g. service unit
 // files, managed-block contents).
 type FileStep struct {
 	Source    string      // path to source content (under layer dir or .build/_inline/)
@@ -775,7 +775,7 @@ func (s *ShellHookStep) Reverse() []ReverseOp {
 }
 
 // ---------------------------------------------------------------------------
-// ShellSnippetStep — per-layer per-shell init snippet for layer.yml `shell:`.
+// ShellSnippetStep — per-layer per-shell init snippet for the candy manifest `shell:`.
 // ---------------------------------------------------------------------------
 
 // ShellSnippetStep records a per-(layer, shell) init snippet emitted from

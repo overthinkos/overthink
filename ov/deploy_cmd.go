@@ -78,7 +78,7 @@ func (c *DeployExportCmd) exportAll() error {
 	dir, _ := os.Getwd()
 	cfg, err := LoadConfigRaw(dir)
 	if err != nil {
-		return fmt.Errorf("loading image.yml: %w", err)
+		return fmt.Errorf("loading overthink.yml: %w", err)
 	}
 	dc := ExportAllImage(cfg)
 	if len(c.Images) > 0 {

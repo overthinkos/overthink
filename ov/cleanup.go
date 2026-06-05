@@ -111,7 +111,7 @@ var sweepablePatterns = []string{
 
 // sweepSafetyFloor — temp must be at least this old before the sweep
 // considers it stale. Guards against racing with a concurrent `ov`
-// process that just created the temp (e.g. parallel `ov image build`
+// process that just created the temp (e.g. parallel `ov box build`
 // invocations).
 const sweepSafetyFloor = 5 * time.Minute
 

@@ -578,8 +578,8 @@ func TestValidateLayerPortsInvalidFromYAML(t *testing.T) {
 	if err == nil {
 		t.Error("expected error for invalid port number")
 	}
-	if !strings.Contains(err.Error(), "layer.yml ports") {
-		t.Errorf("expected layer.yml reference in error, got: %v", err)
+	if !strings.Contains(err.Error(), "candy manifest ports") {
+		t.Errorf("expected candy manifest reference in error, got: %v", err)
 	}
 }
 
@@ -1698,7 +1698,7 @@ func TestEnvVarNameToPodmanSecretSlug(t *testing.T) {
 // one, so a fixture map satisfies the mandatory-version rule
 // (validateLayerContents) without each literal repeating it — mirrors what
 // `ov migrate` (entity-version step) backfills in real configs. Remote layers
-// are left alone (their version comes from the fetched layer.yml).
+// are left alone (their version comes from the fetched candy manifest).
 func vLayers(m map[string]*Layer) map[string]*Layer {
 	for _, l := range m {
 		if l != nil && !l.Remote && l.Version == "" {

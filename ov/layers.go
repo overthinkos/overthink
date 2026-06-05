@@ -54,13 +54,13 @@ func (p *PortSpec) UnmarshalYAML(value *yaml.Node) error {
 	return fmt.Errorf("invalid port spec: expected scalar, got %v", value.Kind)
 }
 
-// VolumeYAML represents a volume declaration in layer.yml
+// VolumeYAML represents a volume declaration in the candy manifest
 type VolumeYAML struct {
 	Name string `yaml:"name"`
 	Path string `yaml:"path"`
 }
 
-// AliasYAML represents a command alias declaration in layer.yml
+// AliasYAML represents a command alias declaration in the candy manifest
 type AliasYAML struct {
 	Name    string `yaml:"name"`
 	Command string `yaml:"command"`
@@ -153,7 +153,7 @@ type EnvDependency struct {
 	Key         string `yaml:"key,omitempty" json:"key,omitempty"` // credential store path override (secret_* only), format "<service>/<key>", must start with "ov/"
 }
 
-// MCPServerYAML represents an MCP server declaration in layer.yml.
+// MCPServerYAML represents an MCP server declaration in the candy manifest.
 type MCPServerYAML struct {
 	Name      string `yaml:"name" json:"name"`
 	URL       string `yaml:"url" json:"url"`
@@ -161,7 +161,7 @@ type MCPServerYAML struct {
 }
 
 // ShellConfig represents a layer's shell-init declarations (the `shell:`
-// field in layer.yml). Mirrors the per-distro / per-package pattern: an
+// field in the candy manifest). Mirrors the per-distro / per-package pattern: an
 // intrinsic body (init, path_append, path, priority) plus per-shell
 // sub-blocks (bash, zsh, fish, sh) that override the intrinsic for that
 // shell. Selection rule applied at install time: per-shell ByShell entry
@@ -245,7 +245,7 @@ func sortedEnvDeps(m map[string]EnvDependency) []EnvDependency {
 	return out
 }
 
-// LayerYAML represents the parsed layer.yml file.
+// LayerYAML represents the parsed candy manifest file.
 // Unknown top-level keys are captured as tag-based package sections
 // (e.g., "fedora:", "arch:", "fedora:43:", "debian,ubuntu:").
 type CandyYAML struct {
@@ -324,7 +324,7 @@ type CandyYAML struct {
 	// Shell-init declarations: an intrinsic body (init/path_append/path/
 	// priority) plus per-shell sub-blocks (bash/zsh/fish/sh). Travels in
 	// the org.overthinkos.shell OCI label (layer section) and is applied
-	// at `ov image build` time (snippets land in /etc/profile.d/,
+	// at `ov box build` time (snippets land in /etc/profile.d/,
 	// /etc/fish/conf.d/) and at `ov deploy add` time on target:local /
 	// target:vm (managed-block in user rc files; per-layer drop-in for
 	// fish). See ShellConfig type and /ov-build:layer "Shell Init Surface".
@@ -359,7 +359,7 @@ type CandyYAML struct {
 	TagSections    map[string]*TagPkgConfig   `yaml:"-"` // distro/version tag sections
 }
 
-// layerYAMLKnownFields lists non-format top-level keys in layer.yml.
+// layerYAMLKnownFields lists non-format top-level keys in the candy manifest.
 // Unknown keys are routed to FormatSections (if matching a build.yml distro format)
 // or TagSections (otherwise).
 //
@@ -567,7 +567,7 @@ func derivePackageSectionsFromCalamares(layer *Layer, ly *CandyYAML) {
 	}
 }
 
-// PackageSection represents a generic format-specific package config in layer.yml.
+// PackageSection represents a generic format-specific package config in the candy manifest.
 // All fields from the YAML section are available in Raw for template rendering.
 type PackageSection struct {
 	FormatName string                 // "rpm", "deb", "pac", "aur", etc.
@@ -585,7 +585,7 @@ type TagPkgConfig struct {
 	Raw     map[string]interface{} `yaml:"-"`
 }
 
-// Task is a single install operation in layer.yml `tasks:` list.
+// Task is a single install operation in the candy manifest `tasks:` list.
 // Exactly one of the verb-discriminator fields (Cmd, Mkdir, Copy, Write,
 // Link, Download, Setcap, Build) must be non-empty — enforced by Kind().
 // The remaining fields are shared modifiers; validator enforces which
@@ -760,7 +760,7 @@ func (ly *CandyYAML) UnmarshalYAML(value *yaml.Node) error {
 	return nil
 }
 
-// RouteYAML represents a route declaration in layer.yml
+// RouteYAML represents a route declaration in the candy manifest
 type RouteYAML struct {
 	Host string `yaml:"host"`
 	Port int    `yaml:"port"`
@@ -773,9 +773,9 @@ type RouteYAML struct {
 // Layer represents a layer directory and its contents
 type Layer struct {
 	Name        string
-	Path        string       // directory containing layer.yml
-	SourceDir   string       // anchor for relative file lookups (tasks.copy, data.src, install files); defaults to Path, overridden by layer.yml `directory:`
-	Version     string       // CalVer version from layer.yml
+	Path        string       // directory containing the candy manifest
+	SourceDir   string       // anchor for relative file lookups (tasks.copy, data.src, install files); defaults to Path, overridden by the candy manifest's `directory:`
+	Version     string       // CalVer version from the candy manifest
 	Description *Description // Gherkin-shaped self-description (Feature/Narrative/Tag/Scenario)
 	Status      string       // derived from Description.Tag — working/testing/broken (empty = testing)
 	Info        string       // derived from Description.Feature+Narrative
@@ -791,7 +791,7 @@ type Layer struct {
 	HasPackageJson    bool
 	HasCargoToml      bool
 	HasSrcDir         bool
-	HasPixiLock       bool // layer.yml has a non-empty tasks: list
+	HasPixiLock       bool // the candy manifest has a non-empty tasks: list
 
 	// Init system detection (populated by PopulateLayerInitSystem)
 	InitSystems    map[string]bool // set of init system names this layer triggers
@@ -809,7 +809,7 @@ type Layer struct {
 	RepoPath      string // e.g. "github.com/overthinkos/overthink" (empty for local)
 	SubPathPrefix string // e.g. "layers/" — parent directory within the repo for sibling resolution
 
-	// Pre-populated from layer.yml
+	// Pre-populated from the candy manifest
 	formatSections map[string]*PackageSection // generic format sections (rpm, deb, pac, aur, etc.)
 	tagSections    map[string]*TagPkgConfig   // distro/version-specific package sections
 	ports          []string
@@ -834,17 +834,17 @@ type Layer struct {
 	mcpProvides    []MCPServerYAML   // MCP servers provided to other containers
 	mcpRequires    []EnvDependency   // MCP servers this layer must have
 	mcpAccepts     []EnvDependency   // MCP servers this layer can optionally use
-	engine         string            // required run engine from layer.yml ("docker", "podman", or "")
-	vars           map[string]string // layer-local variables (from layer.yml vars:)
-	tasks          []Task            // ordered install operations (from layer.yml tasks:)
-	apk            []ApkPackageSpec  // Android apps to install on a kind:android device (from layer.yml apk:)
-	localpkg       string            // bundled PKGBUILD dir to makepkg + pacman -U on an Arch deploy target (from layer.yml localpkg:)
-	reboot         bool              // reboot the deploy target after this layer (from layer.yml reboot:)
-	tests          []Check           // declarative checks (from layer.yml tests:)
-	artifacts      []CandyArtifact   // files to retrieve after setup (from layer.yml artifacts:)
-	shell          *ShellConfig      // shell-init declarations (from layer.yml shell:)
+	engine         string            // required run engine from the candy manifest ("docker", "podman", or "")
+	vars           map[string]string // layer-local variables (from the candy manifest vars:)
+	tasks          []Task            // ordered install operations (from the candy manifest tasks:)
+	apk            []ApkPackageSpec  // Android apps to install on a kind:android device (from the candy manifest apk:)
+	localpkg       string            // bundled PKGBUILD dir to makepkg + pacman -U on an Arch deploy target (from the candy manifest localpkg:)
+	reboot         bool              // reboot the deploy target after this layer (from the candy manifest reboot:)
+	tests          []Check           // declarative checks (from the candy manifest tests:)
+	artifacts      []CandyArtifact   // files to retrieve after setup (from the candy manifest artifacts:)
+	shell          *ShellConfig      // shell-init declarations (from the candy manifest shell:)
 
-	// Layer-contributed image-level facts (capabilities: block in layer.yml)
+	// Layer-contributed image-level facts (capabilities: block in the candy manifest)
 	// and cross-layer requirement declarations (requires_capabilities:).
 	capabilities         *CandyCapabilities
 	requiresCapabilities []string
@@ -859,6 +859,12 @@ type Layer struct {
 // for discovery; write/resolve paths fall back to this default. Renaming the
 // candy directory project-wide is a one-line change here.
 const DefaultCandyDir = "candy"
+
+// DefaultManifest is the single convenience default for the per-directory
+// discovery manifest filename. Every `discover[]` spec may override it via
+// `manifest:` in overthink.yml, so the filename is configurable, never a
+// baked-in requirement.
+const DefaultManifest = "candy.yml"
 
 func ScanLayer(dir string) (map[string]*Layer, error) {
 	uf, present, err := LoadUnified(dir)
@@ -891,7 +897,7 @@ func legacyScanLayersDir(dir string) (map[string]*Layer, error) {
 			continue
 		}
 		name := entry.Name()
-		layer, err := scanLayer(filepath.Join(layersDir, name), name)
+		layer, err := scanLayer(filepath.Join(layersDir, name), name, DefaultManifest)
 		if err != nil {
 			return nil, fmt.Errorf("scanning layer %s: %w", name, err)
 		}
@@ -900,11 +906,11 @@ func legacyScanLayersDir(dir string) (map[string]*Layer, error) {
 	return layers, nil
 }
 
-// parseLayerYAML reads and unmarshals a layer.yml file. Strict schema:
+// parseLayerYAML reads and unmarshals a candy manifest file. Strict schema:
 //   - Empty / comment-only file → zero-value LayerYAML.
 //   - Single top-level `candy:` key → decode its body as LayerYAML (canonical form).
 //   - `candy:` + other top-level keys → error (ambiguous shape).
-//   - Multi-document stream → error (layer.yml is not a bundle file).
+//   - Multi-document stream → error (the candy manifest is not a bundle file).
 //   - Flat form (no `candy:` wrapper) → error with migration hint.
 func parseLayerYAML(path string) (*CandyYAML, error) {
 	data, err := os.ReadFile(path)
@@ -947,7 +953,7 @@ func parseLayerYAML(path string) (*CandyYAML, error) {
 		return &CandyYAML{}, nil
 	}
 	if len(docs) > 1 {
-		return nil, fmt.Errorf("%s: layer.yml is not a multi-document stream; bundle files belong in the unified overthink.yml", path)
+		return nil, fmt.Errorf("%s: the candy manifest is not a multi-document stream; bundle files belong in the unified overthink.yml", path)
 	}
 
 	node := &docs[0]
@@ -1010,27 +1016,27 @@ func rejectLegacyLayerKeys(path string, body *yaml.Node) error {
 		key := body.Content[i].Value
 		switch key {
 		case "depends":
-			return fmt.Errorf("%s: layer.yml uses legacy `depends:` field. Run: ov migrate", path)
+			return fmt.Errorf("%s: the candy manifest uses legacy `depends:` field. Run: ov migrate", path)
 		case "rpm", "deb", "pac", "aur":
-			return fmt.Errorf("%s: layer.yml uses legacy `%s:` block at top level. Calamares-aligned schema uses unified top-level `packages:` + per-distro `distros:` map. Run: ov migrate", path, key)
+			return fmt.Errorf("%s: the candy manifest uses legacy `%s:` block at top level. Calamares-aligned schema uses unified top-level `packages:` + per-distro `distros:` map. Run: ov migrate", path, key)
 		case "directory":
-			return fmt.Errorf("%s: layer.yml uses legacy `directory:` field (removed in 2026-05 cutover). Run: ov migrate", path)
+			return fmt.Errorf("%s: the candy manifest uses legacy `directory:` field (removed in 2026-05 cutover). Run: ov migrate", path)
 		case "info":
-			return fmt.Errorf("%s: layer.yml uses legacy `info:` field (removed; use `description:`). Run: ov migrate", path)
+			return fmt.Errorf("%s: the candy manifest uses legacy `info:` field (removed; use `description:`). Run: ov migrate", path)
 		}
 		// Distro-tag sections like `debian:13:`, `ubuntu:24.04:`,
 		// `debian,ubuntu:` — only fire when the bare leading segment
 		// matches a known distro name (so we don't false-positive on
 		// arbitrary YAML keys with colons).
 		if d, isTag := classifyDistroTag(key); isTag && len(d) > 0 {
-			return fmt.Errorf("%s: layer.yml uses legacy distro tag section `%s:` at top level. Calamares-aligned schema nests distro overrides under `distros:`. Run: ov migrate", path, key)
+			return fmt.Errorf("%s: the candy manifest uses legacy distro tag section `%s:` at top level. Calamares-aligned schema nests distro overrides under `distros:`. Run: ov migrate", path, key)
 		}
 	}
 	return nil
 }
 
 // resolveLayerSourceDir was the resolver for the legacy `directory:` field on
-// layer.yml. The field was deleted in the 2026-05 Calamares cutover; the
+// the candy manifest. The field was deleted in the 2026-05 Calamares cutover; the
 // helper is now a no-op kept only for any external import that still calls
 // it. New code should use `path` directly.
 func resolveLayerSourceDir(path, _ string) string {
@@ -1038,20 +1044,23 @@ func resolveLayerSourceDir(path, _ string) string {
 }
 
 // scanLayer scans a single layer directory
-func scanLayer(path string, name string) (*Layer, error) {
+func scanLayer(path, name, manifest string) (*Layer, error) {
 	layer := &Layer{
 		Name: name,
 		Path: path,
 	}
 
-	// Parse layer.yml FIRST so `directory:` can redirect the anchor
+	// Parse the candy manifest FIRST so `directory:` can redirect the anchor
 	// used by install-file detection and service-file globbing below.
 	var ly *CandyYAML
-	yamlPath := filepath.Join(path, "candy.yml")
+	if manifest == "" {
+		manifest = DefaultManifest
+	}
+	yamlPath := filepath.Join(path, manifest)
 	if fileExists(yamlPath) {
 		parsed, err := parseLayerYAML(yamlPath)
 		if err != nil {
-			return nil, fmt.Errorf("parsing layer.yml: %w", err)
+			return nil, fmt.Errorf("parsing %s: %w", manifest, err)
 		}
 		ly = parsed
 	}
@@ -1175,7 +1184,7 @@ func (l *Layer) TagSection(tag string) *TagPkgConfig {
 	return l.tagSections[tag]
 }
 
-// EnvConfig returns the environment config (pre-populated from layer.yml)
+// EnvConfig returns the environment config (pre-populated from the candy manifest)
 func (l *Layer) EnvConfig() (*EnvConfig, error) {
 	if l.envConfig != nil {
 		return l.envConfig, nil
@@ -1183,7 +1192,7 @@ func (l *Layer) EnvConfig() (*EnvConfig, error) {
 	return nil, nil
 }
 
-// Ports returns the ports (pre-populated from layer.yml)
+// Ports returns the ports (pre-populated from the candy manifest)
 func (l *Layer) Port() ([]string, error) {
 	if l.ports != nil {
 		return l.ports, nil
@@ -1191,7 +1200,7 @@ func (l *Layer) Port() ([]string, error) {
 	return nil, nil
 }
 
-// PortSpecs returns the port specs with protocol info (pre-populated from layer.yml)
+// PortSpecs returns the port specs with protocol info (pre-populated from the candy manifest)
 func (l *Layer) PortSpecs() []PortSpec {
 	return l.portSpecs
 }
@@ -1281,7 +1290,7 @@ type RouteConfig struct {
 	Port string
 }
 
-// Route returns the route config (pre-populated from layer.yml)
+// Route returns the route config (pre-populated from the candy manifest)
 func (l *Layer) Route() (*RouteConfig, error) {
 	if l.route != nil {
 		return l.route, nil
@@ -1310,37 +1319,37 @@ func LayerNames(layers map[string]*Layer) []string {
 	return names
 }
 
-// Volume returns the volume declarations (pre-populated from layer.yml)
+// Volume returns the volume declarations (pre-populated from the candy manifest)
 func (l *Layer) Volume() []VolumeYAML {
 	return l.volumes
 }
 
-// Extract returns the extract declarations (pre-populated from layer.yml)
+// Extract returns the extract declarations (pre-populated from the candy manifest)
 func (l *Layer) Extract() []ExtractYAML {
 	return l.extract
 }
 
-// Data returns the data mappings (pre-populated from layer.yml)
+// Data returns the data mappings (pre-populated from the candy manifest)
 func (l *Layer) Data() []DataYAML {
 	return l.data
 }
 
-// Security returns the security config (pre-populated from layer.yml, nil if not set)
+// Security returns the security config (pre-populated from the candy manifest, nil if not set)
 func (l *Layer) Security() *SecurityConfig {
 	return l.security
 }
 
-// Libvirt returns the libvirt XML snippets (pre-populated from layer.yml)
+// Libvirt returns the libvirt XML snippets (pre-populated from the candy manifest)
 func (l *Layer) Libvirt() []string {
 	return l.libvirt
 }
 
-// Hooks returns the lifecycle hooks config (pre-populated from layer.yml, nil if not set)
+// Hooks returns the lifecycle hooks config (pre-populated from the candy manifest, nil if not set)
 func (l *Layer) Hooks() *HooksConfig {
 	return l.hooks
 }
 
-// Shell returns the shell-init declarations (pre-populated from layer.yml,
+// Shell returns the shell-init declarations (pre-populated from the candy manifest,
 // nil if not set). The returned config carries an intrinsic body (init,
 // path_append, path, priority) plus per-shell sub-blocks (bash/zsh/fish/
 // sh) in ByShell. Selection rule applied at install time — see
@@ -1349,28 +1358,28 @@ func (l *Layer) Shell() *ShellConfig {
 	return l.shell
 }
 
-// Secrets returns the secret declarations (pre-populated from layer.yml)
+// Secrets returns the secret declarations (pre-populated from the candy manifest)
 func (l *Layer) Secret() []SecretYAML {
 	return l.secrets
 }
 
 // Artifact returns the files this layer publishes back to the operator
-// after its setup completes (pre-populated from layer.yml artifact:).
+// after its setup completes (pre-populated from the candy manifest artifact:).
 func (l *Layer) Artifact() []CandyArtifact {
 	return l.artifacts
 }
 
-// EnvProvides returns env vars this layer provides to other containers (pre-populated from layer.yml)
+// EnvProvides returns env vars this layer provides to other containers (pre-populated from the candy manifest)
 func (l *Layer) EnvProvides() map[string]string {
 	return l.envProvides
 }
 
-// EnvRequires returns env vars this layer must have from the environment (pre-populated from layer.yml)
+// EnvRequires returns env vars this layer must have from the environment (pre-populated from the candy manifest)
 func (l *Layer) EnvRequire() []EnvDependency {
 	return l.envRequires
 }
 
-// EnvAccepts returns env vars this layer can optionally use (pre-populated from layer.yml)
+// EnvAccepts returns env vars this layer can optionally use (pre-populated from the candy manifest)
 func (l *Layer) EnvAccept() []EnvDependency {
 	return l.envAccepts
 }
@@ -1378,34 +1387,34 @@ func (l *Layer) EnvAccept() []EnvDependency {
 // SecretAccepts returns credential-store-backed env vars this layer can optionally use.
 // These entries flow through the credential store → podman secret → Secret=type=env quadlet
 // directive pipeline, never touching plaintext deploy.yml or quadlet Environment= lines.
-// Pre-populated from layer.yml.
+// Pre-populated from the candy manifest.
 func (l *Layer) SecretAccept() []EnvDependency {
 	return l.secretAccepts
 }
 
 // SecretRequires returns credential-store-backed env vars this layer MUST have.
 // Missing entries cause ov config to hard-fail with actionable remediation.
-// Pre-populated from layer.yml.
+// Pre-populated from the candy manifest.
 func (l *Layer) SecretRequire() []EnvDependency {
 	return l.secretRequires
 }
 
-// MCPProvides returns MCP servers this layer provides to other containers (pre-populated from layer.yml)
+// MCPProvides returns MCP servers this layer provides to other containers (pre-populated from the candy manifest)
 func (l *Layer) MCPProvide() []MCPServerYAML {
 	return l.mcpProvides
 }
 
-// MCPRequires returns MCP servers this layer must have from the environment (pre-populated from layer.yml)
+// MCPRequires returns MCP servers this layer must have from the environment (pre-populated from the candy manifest)
 func (l *Layer) MCPRequire() []EnvDependency {
 	return l.mcpRequires
 }
 
-// MCPAccepts returns MCP servers this layer can optionally use (pre-populated from layer.yml)
+// MCPAccepts returns MCP servers this layer can optionally use (pre-populated from the candy manifest)
 func (l *Layer) MCPAccept() []EnvDependency {
 	return l.mcpAccepts
 }
 
-// Engine returns the required run engine (pre-populated from layer.yml, "" if not set)
+// Engine returns the required run engine (pre-populated from the candy manifest, "" if not set)
 func (l *Layer) Engine() string {
 	return l.engine
 }
@@ -1432,7 +1441,7 @@ func VolumeLayer(layers map[string]*Layer) []*Layer {
 	return vols
 }
 
-// Alias returns the alias declarations (pre-populated from layer.yml)
+// Alias returns the alias declarations (pre-populated from the candy manifest)
 func (l *Layer) Alias() []AliasYAML {
 	return l.aliases
 }
@@ -1517,7 +1526,7 @@ func ScanRemoteLayer(repoDir string, repoPath string, wantRefs map[string]bool) 
 			return nil, fmt.Errorf("remote layer %s not found at %s", bareRef, layerDir)
 		}
 
-		layer, err := scanLayer(layerDir, name)
+		layer, err := scanLayer(layerDir, name, DefaultManifest)
 		if err != nil {
 			return nil, fmt.Errorf("scanning remote layer %s: %w", bareRef, err)
 		}
@@ -1542,7 +1551,7 @@ func ScanRemoteLayer(repoDir string, repoPath string, wantRefs map[string]bool) 
 
 // ScanAllLayer scans local layers and all remote layers, returning a merged map.
 // Local layers are keyed by short name, remote layers by fully-qualified path.
-// Remote refs are collected from @-prefixed refs in layer.yml and image.yml.
+// Remote refs are collected from @-prefixed refs in the candy manifest and overthink.yml.
 func ScanAllLayer(dir string) (map[string]*Layer, error) {
 	return ScanAllLayerWithConfig(dir, nil)
 }

@@ -66,7 +66,7 @@ var artifactValidatableMethods = map[string]bool{
 //     container with port mappings, which a disposable `podman run --rm`
 //     container doesn't expose the same way.
 //   - Method allowlists are hand-enumerated here so authoring errors surface
-//     at `ov image validate` time, not at test-run time. Drift between the
+//     at `ov box validate` time, not at test-run time. Drift between the
 //     CLI and the allowlist is a documentation issue — see /ov-internals:go for
 //     the maintenance rule.
 

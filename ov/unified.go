@@ -66,7 +66,7 @@ type UnifiedFile struct {
 	// map `alias: ref` (a namespaced child import — cross-repo entity
 	// cherry-pick, referenced qualified as `alias.entry`). See ImportList.
 	Import   ImportList             `yaml:"import,omitempty"`
-	Discover *DiscoverConfig        `yaml:"discover,omitempty"`
+	Discover DiscoverConfig         `yaml:"discover,omitempty"`
 	Distro   map[string]*DistroDef  `yaml:"distro,omitempty"`
 	Builder  map[string]*BuilderDef `yaml:"builder,omitempty"`
 	Init     map[string]*InitDef    `yaml:"init,omitempty"`
@@ -195,22 +195,13 @@ func (il ImportList) MarshalYAML() (interface{}, error) {
 	return seq, nil
 }
 
-// DiscoverConfig drives filesystem scans for standalone kind-keyed files. Each
-// sub-key is independent; a file with only `discover.layer:` is common.
-type DiscoverConfig struct {
-	Layer   []ScanSpec `yaml:"candy,omitempty"`
-	Image   []ScanSpec `yaml:"box,omitempty"`
-	Deploy  []ScanSpec `yaml:"deploy,omitempty"`
-	Builder []ScanSpec `yaml:"builder,omitempty"`
-	Distro  []ScanSpec `yaml:"distro,omitempty"`
-	Init    []ScanSpec `yaml:"init,omitempty"`
-	VM      []ScanSpec `yaml:"vm,omitempty"`
-	Cluster []ScanSpec `yaml:"cluster,omitempty"` // reserved for Part F
-	// Calamares-aligned kinds.
-	Group  []ScanSpec `yaml:"group,omitempty"`
-	Target []ScanSpec `yaml:"target,omitempty"`
-	Module []ScanSpec `yaml:"module,omitempty"`
-}
+// DiscoverConfig is a FLAT list of generic scan specs. Each spec scans a path
+// for directories containing its manifest; every discovered manifest is parsed
+// as a multi-document stream and routed by SHAPE (the kind-key it carries), so
+// one discover root can surface candies, boxes, deploys — any kind. There is no
+// kind dimension and no hardcoded path/filename: discovery is fully configured
+// in overthink.yml.
+type DiscoverConfig []ScanSpec
 
 // ScanSpec describes one discovery root. Accepts string shorthand
 // ("layers" → {Path: "layers", Recursive: true}) or the explicit object form
@@ -218,6 +209,9 @@ type DiscoverConfig struct {
 type ScanSpec struct {
 	Path      string `yaml:"path"`
 	Recursive bool   `yaml:"recursive"`
+	// Manifest is the per-directory manifest filename to look for. Empty
+	// defaults to DefaultManifest; configurable per spec in overthink.yml.
+	Manifest string `yaml:"manifest,omitempty"`
 }
 
 // UnmarshalYAML accepts the string shorthand where Recursive defaults to true,
@@ -226,6 +220,7 @@ func (s *ScanSpec) UnmarshalYAML(node *yaml.Node) error {
 	if node.Kind == yaml.ScalarNode {
 		s.Path = node.Value
 		s.Recursive = true
+		s.Manifest = DefaultManifest
 		return nil
 	}
 	// Object form — decode with `recursive` defaulting to true when absent.
@@ -235,6 +230,7 @@ func (s *ScanSpec) UnmarshalYAML(node *yaml.Node) error {
 	var raw struct {
 		Path      string `yaml:"path"`
 		Recursive *bool  `yaml:"recursive"`
+		Manifest  string `yaml:"manifest"`
 	}
 	if err := node.Decode(&raw); err != nil {
 		return err
@@ -245,16 +241,23 @@ func (s *ScanSpec) UnmarshalYAML(node *yaml.Node) error {
 	} else {
 		s.Recursive = *raw.Recursive
 	}
+	s.Manifest = raw.Manifest
+	if s.Manifest == "" {
+		s.Manifest = DefaultManifest
+	}
 	return nil
 }
 
 // InlineLayer is a layer declared inline in the unified file's `layers:` map.
 // Mutually exclusive options: `from:` points at a directory to scan via the
 // existing scanLayer (no schema change), OR the inline body defines the layer
-// (same fields as layer.yml, flattened via yaml:",inline").
+// (same fields as the candy manifest, flattened via yaml:",inline").
 type InlineCandy struct {
 	From      string `yaml:"from,omitempty"`
 	CandyYAML `yaml:",inline"`
+	// manifest carries the discovery manifest filename for a `From:` directory
+	// so ProjectLayers→scanLayer reads the right file. Not serialized.
+	manifest string
 }
 
 // UnmarshalYAML is required because LayerYAML has its own UnmarshalYAML —
@@ -370,7 +373,7 @@ type AndroidDoc struct {
 }
 
 // LayerDoc wraps a LayerYAML body with an explicit Name — the standalone form
-// authored in `layers/<name>/layer.yml` post-migration.
+// authored as a standalone candy manifest post-migration.
 type CandyDoc struct {
 	Name      string `yaml:"name"`
 	CandyYAML `yaml:",inline"`
@@ -389,7 +392,7 @@ func (ld *CandyDoc) UnmarshalYAML(node *yaml.Node) error {
 }
 
 // ImageDoc wraps a single ImageConfig with an explicit Name — the standalone
-// form authored in `images/<name>/image.yml` post-migration.
+// form authored as a standalone box doc post-migration.
 type BoxDoc struct {
 	Name      string `yaml:"name"`
 	BoxConfig `yaml:",inline"`
@@ -434,37 +437,16 @@ type VmDoc struct {
 // Entity kind table — drives scanner + router + merge path.
 // -----------------------------------------------------------------------------
 
-type entityKind struct {
-	Key      string // top-level YAML key in kind-keyed form
-	Filename string // canonical filename under discovery scan roots
-}
-
-var entityKinds = []entityKind{
-	{Key: "candy", Filename: "candy.yml"},
-	{Key: "box", Filename: "box.yml"},
-	{Key: "deploy", Filename: "deploy.yml"},
-	{Key: "builder", Filename: "builder.yml"},
-	{Key: "distro", Filename: "distro.yml"},
-	{Key: "init", Filename: "init.yml"},
-	// Schema v4 additions — first-class target template kinds. All
-	// singular. All authored in overthink.yml or in their convention
-	// files (pod.yml / vm.yml / k8s.yml / local.yml).
-	{Key: "pod", Filename: "pod.yml"},
-	{Key: "vm", Filename: "vm.yml"},
-	{Key: "k8s", Filename: "k8s.yml"},
-	{Key: "local", Filename: "local.yml"},
-	{Key: "android", Filename: "android.yml"},
-	// 2026-04 harness cutover: `ai:`, `recipe:` (pure spec) and
-	// `score:` (runner config referencing recipes) kinds. Convention
-	// file: eval.yml (carries all three kinds together).
-	{Key: "ai", Filename: "ai.yml"},
-	{Key: "recipe", Filename: "recipe.yml"},
-	{Key: "score", Filename: "score.yml"},
-	// 2026-05 Calamares cutover: `group:` (netinstall group),
-	// `target:` (settings.conf), `module:` (module.desc).
-	{Key: "group", Filename: "group.yml"},
-	{Key: "target", Filename: "target.yml"},
-	{Key: "module", Filename: "module.yml"},
+// kindKeys is the schema's kind vocabulary — the top-level keys that mark a
+// document as kind-keyed (vs root-shape). It exists ONLY for shape
+// classification (kindKeysSet). Files are generic kind-containers routed by
+// shape; there is no per-kind filename — discovery + every per-kind filename
+// are configured in overthink.yml, never baked into the code.
+var kindKeys = []string{
+	"candy", "box", "deploy", "builder", "distro", "init",
+	"pod", "vm", "k8s", "local", "android",
+	"ai", "recipe", "score",
+	"group", "target", "module",
 }
 
 // -----------------------------------------------------------------------------
@@ -1110,7 +1092,7 @@ var rootShapeKeys = map[string]bool{
 	// Field-singular cutover (2026-05): plurals collapsed.
 	"distro": true, "builder": true, "init": true,
 	"candy": true,
-	"box": true, "pod": true, "vm": true, "k8s": true, "local": true,
+	"box":   true, "pod": true, "vm": true, "k8s": true, "local": true,
 	"android": true,
 	"deploy":  true,
 	// 2026-04 harness cutover: `ai:` and `recipe:` are recognized as
@@ -1122,15 +1104,15 @@ var rootShapeKeys = map[string]bool{
 	// PROBE-LIST field never appears as a top-level document key, so this
 	// only ever matches the bed collection.
 	"eval": true,
-	// Calamares-aligned kinds (also used as DiscoverConfig field names).
+	// Calamares-aligned kinds.
 	"group": true, "target": true, "module": true,
 }
 
-// kindKeysSet mirrors entityKinds for O(1) lookup.
+// kindKeysSet mirrors kindKeys for O(1) lookup.
 var kindKeysSet = func() map[string]bool {
-	m := make(map[string]bool, len(entityKinds))
-	for _, k := range entityKinds {
-		m[k.Key] = true
+	m := make(map[string]bool, len(kindKeys))
+	for _, k := range kindKeys {
+		m[k] = true
 	}
 	return m
 }()
@@ -1496,18 +1478,8 @@ func mergeUnified(dst, src *UnifiedFile, srcDir string) {
 	// than to the eventual root file's directory. Without this, a
 	// downstream workspace that `include:`-s an upstream overthink.yml
 	// would look for upstream's `layers/` inside the workspace tree.
-	if src.Discover != nil {
-		if dst.Discover == nil {
-			dst.Discover = &DiscoverConfig{}
-		}
-		dst.Discover.Layer = append(dst.Discover.Layer, anchorScanSpecs(src.Discover.Layer, srcDir)...)
-		dst.Discover.Image = append(dst.Discover.Image, anchorScanSpecs(src.Discover.Image, srcDir)...)
-		dst.Discover.Deploy = append(dst.Discover.Deploy, anchorScanSpecs(src.Discover.Deploy, srcDir)...)
-		dst.Discover.Builder = append(dst.Discover.Builder, anchorScanSpecs(src.Discover.Builder, srcDir)...)
-		dst.Discover.Distro = append(dst.Discover.Distro, anchorScanSpecs(src.Discover.Distro, srcDir)...)
-		dst.Discover.Init = append(dst.Discover.Init, anchorScanSpecs(src.Discover.Init, srcDir)...)
-		dst.Discover.VM = append(dst.Discover.VM, anchorScanSpecs(src.Discover.VM, srcDir)...)
-		dst.Discover.Cluster = append(dst.Discover.Cluster, anchorScanSpecs(src.Discover.Cluster, srcDir)...)
+	if len(src.Discover) > 0 {
+		dst.Discover = append(dst.Discover, anchorScanSpecs(src.Discover, srcDir)...)
 	}
 	mergeDistroMap(&dst.Distro, src.Distro)
 	mergeBuilderMap(&dst.Builder, src.Builder)
@@ -1843,8 +1815,8 @@ func (uf *UnifiedFile) EvalBeds() map[string]DeploymentNode {
 // generic deploy validation (which already runs on the folded beds via
 // validateDeploymentTree → validateDeployRequiresImage, covering the pod
 // `image:` requirement). Runs at LOAD time so EVERY command that resolves a
-// bed (ov eval run, ov deploy add, ov config, ov image validate, …) sees the
-// same friendly error — not just `ov image validate`.
+// bed (ov eval run, ov deploy add, ov config, ov box validate, …) sees the
+// same friendly error — not just `ov box validate`.
 func validateEvalBeds(uf *UnifiedFile) error {
 	for name, node := range uf.Eval {
 		// Disposable is the sole authorization for the destroy+rebuild the
@@ -2217,35 +2189,30 @@ func mergeKindDoc(merged *UnifiedFile, kd *kindKeyedDoc, srcDir string) error {
 // Discovery scanner (Part D).
 // -----------------------------------------------------------------------------
 
-// ApplyDiscover walks every scan root on uf.Discover and registers any entity
-// files found, honoring the conflict rule "explicit map entries win over
-// discovered entries." scanRoot resolution is relative to rootDir (the dir
-// containing overthink.yml).
+// ApplyDiscover walks every flat scan spec on uf.Discover and registers any
+// entity found. Each spec scans its path for directories containing the spec's
+// manifest; every discovered manifest is routed by SHAPE. Conflict rule:
+// explicit map entries win over discovered entries. scanRoot resolution is
+// relative to rootDir (the dir containing overthink.yml).
 func (uf *UnifiedFile) ApplyDiscover(rootDir string) error {
-	if uf.Discover == nil {
-		return nil
-	}
-	cfg := uf.Discover
-	// Layers come first because downstream scans (images, deployments) don't
-	// interact with them here — this is purely deterministic order for error
-	// messages.
-	if err := applyScanSpecsLayers(cfg.Layer, rootDir, uf); err != nil {
-		return err
-	}
-	if err := applyScanSpecsImages(cfg.Image, rootDir, uf); err != nil {
-		return err
-	}
-	if err := applyScanSpecsDeploys(cfg.Deploy, rootDir, uf); err != nil {
-		return err
-	}
-	if err := applyScanSpecsBuilders(cfg.Builder, rootDir, uf); err != nil {
-		return err
-	}
-	if err := applyScanSpecsDistros(cfg.Distro, rootDir, uf); err != nil {
-		return err
-	}
-	if err := applyScanSpecsInits(cfg.Init, rootDir, uf); err != nil {
-		return err
+	for _, s := range uf.Discover {
+		manifest := s.Manifest
+		if manifest == "" {
+			manifest = DefaultManifest
+		}
+		scanPath := s.Path
+		if !filepath.IsAbs(scanPath) {
+			scanPath = filepath.Join(rootDir, scanPath)
+		}
+		dirs, err := findEntityDirs(scanPath, manifest, s.Recursive)
+		if err != nil {
+			return fmt.Errorf("discover %q: %w", s.Path, err)
+		}
+		for _, d := range dirs {
+			if err := uf.applyDiscoveredManifest(d, manifest, rootDir); err != nil {
+				return err
+			}
+		}
 	}
 	return nil
 }
@@ -2294,132 +2261,106 @@ func findEntityDirs(path, filename string, recursive bool) ([]string, error) {
 	return out, nil
 }
 
-func applyScanSpecsLayers(specs []ScanSpec, rootDir string, uf *UnifiedFile) error {
-	for _, s := range specs {
-		scanPath := s.Path
-		if !filepath.IsAbs(scanPath) {
-			scanPath = filepath.Join(rootDir, scanPath)
+// applyDiscoveredManifest loads one discovered manifest and routes every
+// document it contains by SHAPE — determined from the document's top-level
+// kind-key WITHOUT parsing the body. A candy-shaped doc registers a lazy
+// `From:` directory reference (scanLayer parses + validates the manifest and
+// resolves the layer's assets relative to its dir); every other shape decodes
+// and merges inline via mergeKindDoc. The conflict rule "explicit entry wins"
+// applies to discovered candies.
+func (uf *UnifiedFile) applyDiscoveredManifest(dir, manifest, rootDir string) error {
+	target := filepath.Join(dir, manifest)
+	data, err := os.ReadFile(target)
+	if err != nil {
+		return fmt.Errorf("reading %s: %w", target, err)
+	}
+	decoder := yaml.NewDecoder(strings.NewReader(string(data)))
+	for {
+		var node yaml.Node
+		if err := decoder.Decode(&node); err != nil {
+			if err.Error() == "EOF" {
+				break
+			}
+			return fmt.Errorf("%s: %w", target, err)
 		}
-		dirs, err := findEntityDirs(scanPath, "candy.yml", s.Recursive)
-		if err != nil {
-			return fmt.Errorf("discover.candy %q: %w", s.Path, err)
-		}
-		if uf.Layer == nil {
-			uf.Layer = map[string]*InlineCandy{}
-		}
-		for _, d := range dirs {
-			name := filepath.Base(d)
+		switch firstKindKey(&node) {
+		case "":
+			continue // empty / non-kind document — nothing to register
+		case "candy":
+			// Candy: register a lazy directory reference (name = dir base, as
+			// the legacy scanner did). scanLayer does the real parse later.
+			name := filepath.Base(dir)
+			if uf.Layer == nil {
+				uf.Layer = map[string]*InlineCandy{}
+			}
 			if _, exists := uf.Layer[name]; exists {
 				continue // explicit entry wins
 			}
-			// Represent as a `from:` entry pointing at the discovered dir.
-			// Downstream loader calls scanLayer(d, name) to populate a *Layer.
-			rel, err := filepath.Rel(rootDir, d)
-			if err != nil {
-				rel = d
+			rel, relErr := filepath.Rel(rootDir, dir)
+			if relErr != nil {
+				rel = dir
 			}
-			uf.Layer[name] = &InlineCandy{From: rel}
-		}
-	}
-	return nil
-}
-
-func applyScanSpecsImages(specs []ScanSpec, rootDir string, uf *UnifiedFile) error {
-	return applyScanSpecsKindKeyed(specs, rootDir, "box.yml", func(doc *kindKeyedDoc, srcDir string) error {
-		if doc.Image == nil {
-			return fmt.Errorf("expected box: wrapper")
-		}
-		if doc.Image.Name == "" {
-			doc.Image.Name = filepath.Base(srcDir)
-		}
-		return mergeKindDoc(uf, doc, srcDir)
-	})
-}
-
-func applyScanSpecsDeploys(specs []ScanSpec, rootDir string, uf *UnifiedFile) error {
-	return applyScanSpecsKindKeyed(specs, rootDir, "deploy.yml", func(doc *kindKeyedDoc, srcDir string) error {
-		if doc.Deploy == nil {
-			return fmt.Errorf("expected deployment: wrapper")
-		}
-		if doc.Deploy.Name == "" {
-			doc.Deploy.Name = filepath.Base(srcDir)
-		}
-		return mergeKindDoc(uf, doc, srcDir)
-	})
-}
-
-func applyScanSpecsBuilders(specs []ScanSpec, rootDir string, uf *UnifiedFile) error {
-	return applyScanSpecsKindKeyed(specs, rootDir, "builder.yml", func(doc *kindKeyedDoc, srcDir string) error {
-		if doc.Builder == nil {
-			return fmt.Errorf("expected builder: wrapper")
-		}
-		if doc.Builder.Name == "" {
-			doc.Builder.Name = filepath.Base(srcDir)
-		}
-		return mergeKindDoc(uf, doc, srcDir)
-	})
-}
-
-func applyScanSpecsDistros(specs []ScanSpec, rootDir string, uf *UnifiedFile) error {
-	return applyScanSpecsKindKeyed(specs, rootDir, "distro.yml", func(doc *kindKeyedDoc, srcDir string) error {
-		if doc.Distro == nil {
-			return fmt.Errorf("expected distro: wrapper")
-		}
-		if doc.Distro.Name == "" {
-			doc.Distro.Name = filepath.Base(srcDir)
-		}
-		return mergeKindDoc(uf, doc, srcDir)
-	})
-}
-
-func applyScanSpecsInits(specs []ScanSpec, rootDir string, uf *UnifiedFile) error {
-	return applyScanSpecsKindKeyed(specs, rootDir, "init.yml", func(doc *kindKeyedDoc, srcDir string) error {
-		if doc.Init == nil {
-			return fmt.Errorf("expected init: wrapper")
-		}
-		if doc.Init.Name == "" {
-			doc.Init.Name = filepath.Base(srcDir)
-		}
-		return mergeKindDoc(uf, doc, srcDir)
-	})
-}
-
-// applyScanSpecsKindKeyed is the generic body for images/deployments/builders/
-// distros/inits. Layers use applyScanSpecsLayers because the file format
-// currently differs (flat LayerYAML — the kind-keyed wrapping is introduced
-// by the migration in Part G).
-func applyScanSpecsKindKeyed(specs []ScanSpec, rootDir, filename string, perDir func(*kindKeyedDoc, string) error) error {
-	for _, s := range specs {
-		scanPath := s.Path
-		if !filepath.IsAbs(scanPath) {
-			scanPath = filepath.Join(rootDir, scanPath)
-		}
-		dirs, err := findEntityDirs(scanPath, filename, s.Recursive)
-		if err != nil {
-			return fmt.Errorf("discover %q: %w", s.Path, err)
-		}
-		for _, d := range dirs {
-			target := filepath.Join(d, filename)
-			data, err := os.ReadFile(target)
-			if err != nil {
-				return fmt.Errorf("reading %s: %w", target, err)
+			uf.Layer[name] = &InlineCandy{From: rel, manifest: manifest}
+		default:
+			// Any other kind: decode + merge inline, defaulting an empty entity
+			// name to the discovered directory's base.
+			var kd kindKeyedDoc
+			if err := node.Decode(&kd); err != nil {
+				return fmt.Errorf("%s: %w", target, err)
 			}
-			decoder := yaml.NewDecoder(strings.NewReader(string(data)))
-			for {
-				var kd kindKeyedDoc
-				if err := decoder.Decode(&kd); err != nil {
-					if err.Error() == "EOF" {
-						break
-					}
-					return fmt.Errorf("%s: %w", target, err)
-				}
-				if err := perDir(&kd, d); err != nil {
-					return fmt.Errorf("%s: %w", target, err)
-				}
+			defaultKindDocName(&kd, filepath.Base(dir))
+			if err := mergeKindDoc(uf, &kd, dir); err != nil {
+				return fmt.Errorf("%s: %w", target, err)
 			}
 		}
 	}
 	return nil
+}
+
+// firstKindKey returns the first top-level kind-key present in a document
+// (candy / box / deploy / …), or "" if none. It inspects keys only — the body
+// is never parsed — so discovery routes by shape without validating content.
+func firstKindKey(node *yaml.Node) string {
+	inner := node
+	if node.Kind == yaml.DocumentNode {
+		if len(node.Content) == 0 {
+			return ""
+		}
+		inner = node.Content[0]
+	}
+	if inner.Kind != yaml.MappingNode {
+		return ""
+	}
+	for i := 0; i+1 < len(inner.Content); i += 2 {
+		if kindKeysSet[inner.Content[i].Value] {
+			return inner.Content[i].Value
+		}
+	}
+	return ""
+}
+
+// defaultKindDocName fills an empty Name on whichever kind a discovered doc
+// carries, defaulting it to the discovered directory's base name (parity with
+// the legacy per-kind discovery scanners).
+func defaultKindDocName(kd *kindKeyedDoc, name string) {
+	switch {
+	case kd.Image != nil && kd.Image.Name == "":
+		kd.Image.Name = name
+	case kd.Deploy != nil && kd.Deploy.Name == "":
+		kd.Deploy.Name = name
+	case kd.Builder != nil && kd.Builder.Name == "":
+		kd.Builder.Name = name
+	case kd.Distro != nil && kd.Distro.Name == "":
+		kd.Distro.Name = name
+	case kd.Init != nil && kd.Init.Name == "":
+		kd.Init.Name = name
+	case kd.Pod != nil && kd.Pod.Name == "":
+		kd.Pod.Name = name
+	case kd.K8s != nil && kd.K8s.Name == "":
+		kd.K8s.Name = name
+	case kd.Local != nil && kd.Local.Name == "":
+		kd.Local.Name = name
+	}
 }
 
 // -----------------------------------------------------------------------------
@@ -2427,7 +2368,7 @@ func applyScanSpecsKindKeyed(specs []ScanSpec, rootDir, filename string, perDir 
 // existing loaders can become thin wrappers.
 // -----------------------------------------------------------------------------
 
-// ProjectConfig returns the *Config equivalent of uf (image.yml view).
+// ProjectConfig returns the *Config equivalent of uf (the box config view).
 func (uf *UnifiedFile) ProjectConfig() *Config {
 	return uf.projectConfigCached(map[*UnifiedFile]*Config{})
 }
@@ -2511,7 +2452,11 @@ func (uf *UnifiedFile) ProjectLayers(rootDir string) (map[string]*Layer, error) 
 			if !filepath.IsAbs(p) {
 				p = filepath.Join(rootDir, p)
 			}
-			layer, err := scanLayer(p, name)
+			manifest := il.manifest
+			if manifest == "" {
+				manifest = DefaultManifest
+			}
+			layer, err := scanLayer(p, name, manifest)
 			if err != nil {
 				return nil, fmt.Errorf("layer %q from %q: %w", name, il.From, err)
 			}
@@ -2546,7 +2491,7 @@ func (uf *UnifiedFile) ProjectLayers(rootDir string) (map[string]*Layer, error) 
 // SourceDir always equals Path (the `directory:` field was deleted in the
 // 2026-05 Calamares cutover).
 func synthesizeInlineLayer(name string, il *InlineCandy, rootDir string) (*Layer, error) {
-	// Use inline layer body as if it were a parsed layer.yml at rootDir.
+	// Use inline layer body as if it were a parsed candy manifest at rootDir.
 	layer := &Layer{
 		Name: name,
 		Path: rootDir,

@@ -17,13 +17,13 @@ import (
 var lowercaseEvalVarPattern = regexp.MustCompile(`\$\{[a-z][a-zA-Z0-9_]*\}`)
 
 // validateTests checks every declarative test spec in the project for
-// authoring errors before build time. Hooked into ov image validate.
+// authoring errors before build time. Hooked into ov box validate.
 //
 // Scope:
 //   - Layer-level tests (LayerYAML.Eval).
 //   - Image-level tests (ImageConfig.Eval, ImageConfig.DeployEval).
 //   - Deploy.yml tests are out of scope here because deploy.yml is loaded
-//     per-operator at runtime, not part of the image.yml validation pass.
+//     per-operator at runtime, not part of the overthink.yml validation pass.
 //
 // Validation rules:
 //  1. Exactly one verb discriminator is set per Check (enforced via Kind()).
@@ -75,8 +75,8 @@ func validateTests(cfg *Config, layers map[string]*Layer, errs *ValidationError)
 }
 
 // validateCheck runs per-check rules. effectiveScope is "build" or "deploy"
-// — for layer.yml tests: the Check's own Scope field (defaulting to
-// build); for image.yml deploy_tests: always "deploy".
+// — for candy manifest tests: the Check's own Scope field (defaulting to
+// build); for overthink.yml deploy_tests: always "deploy".
 func validateCheck(c *Check, loc, effectiveScope string, errs *ValidationError) {
 	verb, err := c.Kind()
 	if err != nil {
@@ -199,7 +199,7 @@ func validateOvVerb(c *Check, verb, loc, effectiveScope string, errs *Validation
 	}
 
 	// Deploy-scope only — these verbs need a running container with port
-	// mappings; build-scope (ov image test) correctly skips them at runtime.
+	// mappings; build-scope (ov eval box) correctly skips them at runtime.
 	if effectiveScope == "build" {
 		errs.Add("%s: %s: verb requires scope:\"deploy\" (needs a running container with port mappings)", loc, verb)
 	}

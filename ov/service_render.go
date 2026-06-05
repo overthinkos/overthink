@@ -2,7 +2,7 @@ package main
 
 // service_render.go — generic service schema + per-init-system renderer.
 //
-// Today's layer.yml has two separate service fields:
+// Today's candy manifest has two separate service fields:
 //   - service: (raw supervisord INI fragment — container-only)
 //   - system_services: (list of systemd unit names to enable)
 //
@@ -14,7 +14,7 @@ package main
 // in build.yml.
 //
 // This file declares the schema types, the rendering context, and the
-// template rendering helpers. It does NOT parse layer.yml — that
+// template rendering helpers. It does NOT parse the candy manifest — that
 // happens in layers.go alongside the rest of the LayerYAML unmarshaller.
 
 import (
@@ -25,7 +25,7 @@ import (
 	"text/template"
 )
 
-// ServiceEntry is one entry from layer.yml `services:` list.
+// ServiceEntry is one entry from the candy manifest `services:` list.
 //
 // Authoring examples:
 //

@@ -73,7 +73,7 @@ func Validate(cfg *Config, layers map[string]*Layer, dir string, opts ResolveOpt
 	// Validate env files
 	validateEnvFiles(layers, errs)
 
-	// Validate package config (rpm/deb/pac/aur sections in layer.yml)
+	// Validate package config (rpm/deb/pac/aur sections in the candy manifest)
 	validatePkgConfig(layers, errs)
 
 	// Validate image base references
@@ -168,8 +168,8 @@ func Validate(cfg *Config, layers map[string]*Layer, dir string, opts ResolveOpt
 		validateInitDependencies(cfg, defaultInitCfg, layers, errs)
 	}
 
-	// Validate declarative test specs (layer.yml, image.yml, deploy.yml
-	// tests: + image.yml deploy_tests:)
+	// Validate declarative test specs (the candy manifest, overthink.yml, deploy.yml
+	// tests: + overthink.yml deploy_tests:)
 	validateTests(cfg, layers, errs)
 
 	// Validate kind:local templates and target:local deployments.
@@ -469,7 +469,7 @@ func validateLayerContents(layers map[string]*Layer, errs *ValidationError) {
 	for name, layer := range layers {
 		// Layer must have at least one install file, a layer: field (composition), or data declarations
 		if !layer.HasInstallFiles() && len(layer.IncludedLayer) == 0 && !layer.HasData() {
-			errs.Add("layer %q: must have at least one install file (layer.yml rpm/deb packages, root.yml, pixi.toml, pyproject.toml, environment.yml, package.json, Cargo.toml, or user.yml) or a layer: field", name)
+			errs.Add("layer %q: must have at least one install file (candy manifest rpm/deb packages, root.yml, pixi.toml, pyproject.toml, environment.yml, package.json, Cargo.toml, or user.yml) or a layer: field", name)
 		}
 
 		// `version:` is MANDATORY for the layer kind (optional for every other
@@ -623,7 +623,7 @@ func validateShellPath(layerName, field, p string, errs *ValidationError) {
 	}
 }
 
-// validateLayerIncludes validates layer composition (layer: field in layer.yml)
+// validateLayerIncludes validates layer composition (layer: field in the candy manifest)
 func validateLayerIncludes(layers map[string]*Layer, errs *ValidationError) {
 	for name, layer := range layers {
 		if len(layer.IncludedLayer) == 0 {
@@ -694,7 +694,7 @@ func checkIncludeCycle(name string, layers map[string]*Layer, visited map[string
 	return nil
 }
 
-// validateEnvFiles validates env config from layer.yml
+// validateEnvFiles validates env config from the candy manifest
 func validateEnvFiles(layers map[string]*Layer, errs *ValidationError) {
 	for name, layer := range layers {
 		if !layer.HasEnv() {
@@ -706,14 +706,14 @@ func validateEnvFiles(layers map[string]*Layer, errs *ValidationError) {
 			continue
 		}
 
-		// PATH must not be set directly (use path_append in layer.yml)
+		// PATH must not be set directly (use path_append in the candy manifest)
 		if _, hasPath := cfg.Vars["PATH"]; hasPath {
-			errs.Add("layer %q layer.yml: use path_append instead of setting PATH in env", name)
+			errs.Add("layer %q candy manifest: use path_append instead of setting PATH in env", name)
 		}
 	}
 }
 
-// validatePkgConfig validates format-specific config in layer.yml.
+// validatePkgConfig validates format-specific config in the candy manifest.
 // Uses generic FormatSection access — no format-specific code.
 func validatePkgConfig(layers map[string]*Layer, errs *ValidationError) {
 	for name, layer := range layers {
@@ -724,21 +724,21 @@ func validatePkgConfig(layers map[string]*Layer, errs *ValidationError) {
 			// Validate repos entries have required fields
 			if repos := toMapSlice(section.Raw["repos"]); len(repos) > 0 {
 				if len(section.Packages) == 0 {
-					errs.Add("layer %q layer.yml: %s.repos requires %s.packages", name, formatName, formatName)
+					errs.Add("layer %q candy manifest: %s.repos requires %s.packages", name, formatName, formatName)
 				}
 				for _, repo := range repos {
 					repoName := fmt.Sprint(repo["name"])
 					if repoName == "" || repoName == "<nil>" {
-						errs.Add("layer %q layer.yml: %s.repos entry requires name", name, formatName)
+						errs.Add("layer %q candy manifest: %s.repos entry requires name", name, formatName)
 					}
 				}
 			}
 			// Validate copr/modules require packages
 			if copr := toStringSlice(section.Raw["copr"]); len(copr) > 0 && len(section.Packages) == 0 {
-				errs.Add("layer %q layer.yml: %s.copr requires %s.packages", name, formatName, formatName)
+				errs.Add("layer %q candy manifest: %s.copr requires %s.packages", name, formatName, formatName)
 			}
 			if modules := toStringSlice(section.Raw["modules"]); len(modules) > 0 && len(section.Packages) == 0 {
-				errs.Add("layer %q layer.yml: %s.modules requires %s.packages", name, formatName, formatName)
+				errs.Add("layer %q candy manifest: %s.modules requires %s.packages", name, formatName, formatName)
 			}
 		}
 	}
@@ -748,7 +748,7 @@ func validatePkgConfig(layers map[string]*Layer, errs *ValidationError) {
 func validateBaseReferences(cfg *Config, errs *ValidationError) {
 	// Base references can be:
 	// 1. External OCI images (always valid)
-	// 2. Names of other images in image.yml (validated by image DAG check)
+	// 2. Names of other images in overthink.yml (validated by image DAG check)
 	// No additional validation needed here
 }
 
@@ -777,7 +777,7 @@ func validateImageDAG(cfg *Config, layers map[string]*Layer, dir string, opts Re
 	// namespaced base — or that base's builder / bootstrap builder — that does
 	// not resolve. This is the automatic guard that catches namespace-ref leaks
 	// (e.g. a pulled base's `builder: ov.arch-builder` not re-qualified to
-	// `selkies.ov.arch-builder`) at `ov image validate` time, before a build hits
+	// `selkies.ov.arch-builder`) at `ov box validate` time, before a build hits
 	// it. The DAG check below can't run with dangling bases, so report + return.
 	if err := cfg.resolveNamespacedBases(images, calverTag, dir, opts); err != nil {
 		errs.Add("namespaced base resolution: %v", err)
@@ -798,7 +798,7 @@ func validateImageDAG(cfg *Config, layers map[string]*Layer, dir string, opts Re
 
 	// Resolve the GLOBAL layer order over the enriched image set (locals PLUS the
 	// namespace-pulled bases/builders above) — the SAME computation that
-	// `ov image generate`/`build` run (ComputeIntermediates → GlobalLayerOrder).
+	// `ov box generate`/`build` run (ComputeIntermediates → GlobalLayerOrder).
 	// validateLayerDAG only iterates cfg.Image, so a layer missing from a PULLED
 	// builder (e.g. an imported ov.fedora-builder's rpmfusion) slipped past
 	// validate yet failed generate; running it here restores validate↔generate
@@ -834,7 +834,7 @@ func validateLayerDAG(cfg *Config, layers map[string]*Layer, errs *ValidationErr
 
 // validatePort validates port declarations in layers and images
 func validatePort(cfg *Config, layers map[string]*Layer, errs *ValidationError) {
-	// Validate layer ports from layer.yml
+	// Validate layer ports from the candy manifest
 	for name, layer := range layers {
 		if !layer.HasPorts() {
 			continue
@@ -842,7 +842,7 @@ func validatePort(cfg *Config, layers map[string]*Layer, errs *ValidationError) 
 		ports, _ := layer.Port()
 		for _, port := range ports {
 			if !isValidPort(port) {
-				errs.Add("layer %q layer.yml ports: %q is not a valid port number (1-65535)", name, port)
+				errs.Add("layer %q candy manifest ports: %q is not a valid port number (1-65535)", name, port)
 			}
 		}
 	}
@@ -884,7 +884,7 @@ func validatePort(cfg *Config, layers map[string]*Layer, errs *ValidationError) 
 
 // validateRoutes validates route file declarations in layers
 func validateRoutes(cfg *Config, layers map[string]*Layer, errs *ValidationError) {
-	// Validate route config from layer.yml
+	// Validate route config from the candy manifest
 	for name, layer := range layers {
 		if !layer.HasRoute() {
 			continue
@@ -894,12 +894,12 @@ func validateRoutes(cfg *Config, layers map[string]*Layer, errs *ValidationError
 			continue
 		}
 		if route.Host == "" {
-			errs.Add("layer %q layer.yml route: missing required \"host\" field", name)
+			errs.Add("layer %q candy manifest route: missing required \"host\" field", name)
 		}
 		if route.Port == "" {
-			errs.Add("layer %q layer.yml route: missing required \"port\" field", name)
+			errs.Add("layer %q candy manifest route: missing required \"port\" field", name)
 		} else if !isValidPort(route.Port) {
-			errs.Add("layer %q layer.yml route: %q is not a valid port number (1-65535)", name, route.Port)
+			errs.Add("layer %q candy manifest route: %q is not a valid port number (1-65535)", name, route.Port)
 		}
 	}
 
@@ -937,7 +937,7 @@ var validBuildCacheModes = map[string]bool{
 // image entry: jobs >= 1, podman_jobs >= 0, podman_jobs_cap >= 1, cache in
 // the allow-list, and no empty context_ignore entries. These are project-wide
 // defaults; values are validated wherever they appear so a typo surfaces at
-// `ov image validate` rather than silently mis-driving a build.
+// `ov box validate` rather than silently mis-driving a build.
 func validateBuildTunables(cfg *Config, errs *ValidationError) {
 	check := func(name string, ic BoxConfig) {
 		if ic.Jobs != nil && *ic.Jobs < 1 {
@@ -986,16 +986,16 @@ func validateVolume(layers map[string]*Layer, errs *ValidationError) {
 		seen := make(map[string]bool)
 		for _, vol := range layer.Volume() {
 			if vol.Name == "" {
-				errs.Add("layer %q layer.yml volumes: missing required \"name\" field", name)
+				errs.Add("layer %q candy manifest volumes: missing required \"name\" field", name)
 			} else if !volumeNameRe.MatchString(vol.Name) {
-				errs.Add("layer %q layer.yml volumes: name %q must be lowercase alphanumeric with hyphens", name, vol.Name)
+				errs.Add("layer %q candy manifest volumes: name %q must be lowercase alphanumeric with hyphens", name, vol.Name)
 			} else if seen[vol.Name] {
-				errs.Add("layer %q layer.yml volumes: duplicate volume name %q", name, vol.Name)
+				errs.Add("layer %q candy manifest volumes: duplicate volume name %q", name, vol.Name)
 			} else {
 				seen[vol.Name] = true
 			}
 			if vol.Path == "" {
-				errs.Add("layer %q layer.yml volumes: missing required \"path\" field", name)
+				errs.Add("layer %q candy manifest volumes: missing required \"path\" field", name)
 			}
 		}
 	}
@@ -1011,16 +1011,16 @@ func validateAliases(cfg *Config, layers map[string]*Layer, errs *ValidationErro
 		seen := make(map[string]bool)
 		for _, a := range layer.Alias() {
 			if a.Name == "" {
-				errs.Add("layer %q layer.yml aliases: missing required \"name\" field", name)
+				errs.Add("layer %q candy manifest aliases: missing required \"name\" field", name)
 			} else if !aliasNameRe.MatchString(a.Name) {
-				errs.Add("layer %q layer.yml aliases: name %q must match [a-zA-Z0-9][a-zA-Z0-9._-]*", name, a.Name)
+				errs.Add("layer %q candy manifest aliases: name %q must match [a-zA-Z0-9][a-zA-Z0-9._-]*", name, a.Name)
 			} else if seen[a.Name] {
-				errs.Add("layer %q layer.yml aliases: duplicate alias name %q", name, a.Name)
+				errs.Add("layer %q candy manifest aliases: duplicate alias name %q", name, a.Name)
 			} else {
 				seen[a.Name] = true
 			}
 			if a.Command == "" {
-				errs.Add("layer %q layer.yml aliases: missing required \"command\" field for alias %q", name, a.Name)
+				errs.Add("layer %q candy manifest aliases: missing required \"command\" field for alias %q", name, a.Name)
 			}
 		}
 	}
@@ -1116,7 +1116,7 @@ func validateBuilders(cfg *Config, layers map[string]*Layer, builderCfg *Builder
 		}
 
 		// Resolve the image through the SINGLE canonical path (ResolveImage) —
-		// the SAME resolution `ov image build` / `generate` / `inspect` use — so
+		// the SAME resolution `ov box build` / `generate` / `inspect` use — so
 		// the effective builder map and build formats checked here are exactly
 		// what the build will see. This block previously RE-IMPLEMENTED builder +
 		// build-format resolution inline, which silently diverged from

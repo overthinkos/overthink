@@ -22,9 +22,9 @@ type StartCmd struct {
 }
 
 func (c *StartCmd) Run() error {
-	// Remote refs (@github.com/...) are handled exclusively by `ov image pull`.
+	// Remote refs (@github.com/...) are handled exclusively by `ov box pull`.
 	if IsRemoteImageRef(StripURLScheme(c.Image)) {
-		return fmt.Errorf("remote refs are not accepted here; run 'ov image pull %s' first, then 'ov start <image-name>'", c.Image)
+		return fmt.Errorf("remote refs are not accepted here; run 'ov box pull %s' first, then 'ov start <image-name>'", c.Image)
 	}
 	c.Image, c.Instance = canonicalizeDeployArg(c.Image, c.Instance)
 
@@ -82,7 +82,7 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 	// c.Image stays the deploy-KEY for container / quadlet / overlay lookups;
 	// only the image ref uses the resolved name.
 	deployImageName := resolveDeployImageName(c.Image, c.Instance)
-	// Resolve from image labels (+ deploy.yml overlay). No image.yml.
+	// Resolve from image labels (+ deploy.yml overlay). No overthink.yml.
 	imageRef := resolveShellImageRef("", deployImageName, c.Tag)
 	if err := EnsureImage(imageRef, rt); err != nil {
 		return err

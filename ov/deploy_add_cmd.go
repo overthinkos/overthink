@@ -919,7 +919,7 @@ func resolveDistroDef(cfg *DistroConfig, distroTag string) *DistroDef {
 	return cfg.ResolveDistro([]string{distroTag})
 }
 
-// loadConfigForDeploy loads image.yml + build.yml for the current
+// loadConfigForDeploy loads overthink.yml + build.yml for the current
 // project directory. Runs SetFormatNames as a side effect since the
 // layer scanner needs it.
 func loadConfigForDeploy(dir string) (*Config, *DistroConfig, *BuilderConfig, error) {

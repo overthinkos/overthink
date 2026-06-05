@@ -461,7 +461,7 @@ func TestEnabledField(t *testing.T) {
 
 // TestResolveOpts_ShouldIncludeDisabled covers the scoping helper used by
 // ResolveImage / ResolveAllImage / validateImageDAG. The scope semantics
-// matter for `ov image build <name> --include-disabled` so widening the
+// matter for `ov box build <name> --include-disabled` so widening the
 // working set doesn't surface unrelated disabled-image dep errors.
 func TestResolveOpts_ShouldIncludeDisabled(t *testing.T) {
 	cases := []struct {

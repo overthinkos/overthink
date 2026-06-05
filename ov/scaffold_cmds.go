@@ -16,7 +16,7 @@ import (
 // server in lockstep.
 
 // ---------------------------------------------------------------------------
-// `ov image new project <dir>`
+// `ov box new project <dir>`
 
 type NewProjectCmd struct {
 	Dir string `arg:"" help:"Directory to scaffold the project in (created if missing)"`
@@ -30,17 +30,17 @@ func (c *NewProjectCmd) Run() error {
 	fmt.Fprintln(os.Stderr, "Next steps:")
 	fmt.Fprintln(os.Stderr, "  # Wire a build.yml — copy from upstream, or reference a published release:")
 	fmt.Fprintln(os.Stderr, "  cp /path/to/overthink/build.yml "+c.Dir+"/")
-	fmt.Fprintln(os.Stderr, "  ov -C "+c.Dir+" image set defaults.format_config build.yml")
+	fmt.Fprintln(os.Stderr, "  ov -C "+c.Dir+" box set defaults.format_config build.yml")
 	fmt.Fprintln(os.Stderr, "  # Add an image, a layer, and build:")
-	fmt.Fprintln(os.Stderr, "  ov -C "+c.Dir+" image new image my-image --base quay.io/fedora/fedora:43 --layers my-layer")
-	fmt.Fprintln(os.Stderr, "  ov -C "+c.Dir+" image new layer my-layer")
-	fmt.Fprintln(os.Stderr, "  ov -C "+c.Dir+" layer add-rpm my-layer curl jq")
-	fmt.Fprintln(os.Stderr, "  ov -C "+c.Dir+" image build my-image")
+	fmt.Fprintln(os.Stderr, "  ov -C "+c.Dir+" box new box my-image --base quay.io/fedora/fedora:43 --candy my-layer")
+	fmt.Fprintln(os.Stderr, "  ov -C "+c.Dir+" box new candy my-layer")
+	fmt.Fprintln(os.Stderr, "  ov -C "+c.Dir+" candy add-rpm my-layer curl jq")
+	fmt.Fprintln(os.Stderr, "  ov -C "+c.Dir+" box build my-image")
 	return nil
 }
 
 // ---------------------------------------------------------------------------
-// `ov image new image <name>`
+// `ov box new box <name>`
 
 type NewBoxCmd struct {
 	Name   string   `arg:"" help:"Name for the new image entry"`
@@ -61,7 +61,7 @@ func (c *NewBoxCmd) Run() error {
 }
 
 // ---------------------------------------------------------------------------
-// `ov image set <dotpath> <value>`
+// `ov box set <dotpath> <value>`
 
 type BoxSetCmd struct {
 	Path  string `arg:"" help:"Dot-path into overthink.yml (e.g. defaults.tag, image.foo.layers)"`
@@ -75,16 +75,16 @@ func (c *BoxSetCmd) Run() error {
 	}
 	target := filepath.Join(dir, "overthink.yml")
 	if _, err := os.Stat(target); os.IsNotExist(err) {
-		return fmt.Errorf("overthink.yml not found in %s; run `ov image new project .` to scaffold or `ov migrate` to convert a legacy image.yml", dir)
+		return fmt.Errorf("overthink.yml not found in %s; run `ov box new project .` to scaffold or `ov migrate` to convert a legacy image.yml", dir)
 	}
 	return SetByDotPath(target, c.Path, c.Value)
 }
 
 // ---------------------------------------------------------------------------
-// `ov image add-layer <image> <layer>`
+// `ov box add-candy <image> <layer>`
 
 type BoxAddCandyCmd struct {
-	Image string `arg:"" help:"Name of the image in image.yml"`
+	Image string `arg:"" help:"Name of the image in overthink.yml"`
 	Layer string `arg:"" help:"Name of the layer to append"`
 }
 
@@ -97,10 +97,10 @@ func (c *BoxAddCandyCmd) Run() error {
 }
 
 // ---------------------------------------------------------------------------
-// `ov image rm-layer <image> <layer>`
+// `ov box rm-candy <image> <layer>`
 
 type BoxRmCandyCmd struct {
-	Image string `arg:"" help:"Name of the image in image.yml"`
+	Image string `arg:"" help:"Name of the image in overthink.yml"`
 	Layer string `arg:"" help:"Name of the layer to remove"`
 }
 
@@ -113,7 +113,7 @@ func (c *BoxRmCandyCmd) Run() error {
 }
 
 // ---------------------------------------------------------------------------
-// `ov image fetch [<spec>]` and `ov image refresh [<spec>]`
+// `ov box fetch [<spec>]` and `ov box refresh [<spec>]`
 
 type BoxFetchCmd struct {
 	Spec string `arg:"" optional:"" help:"Repo spec (default: 'default' → overthinkos/overthink)"`
@@ -165,7 +165,7 @@ func (c *BoxRefreshCmd) Run() error {
 }
 
 // ---------------------------------------------------------------------------
-// `ov image write <rel-path>` and `ov image cat <rel-path>`
+// `ov box write <rel-path>` and `ov box cat <rel-path>`
 
 type BoxWriteCmd struct {
 	Path    string `arg:"" help:"Path under the project root (relative; .. is rejected)"`
@@ -228,7 +228,7 @@ func (c *BoxCatCmd) Run() error {
 // resolveProjectFile turns a user-supplied relative path into an absolute
 // path under projectDir, rejecting absolute paths and any traversal that
 // would escape the project root. This is the one safety boundary for the
-// `ov image write` / `ov image cat` escape hatch — every path passes
+// `ov box write` / `ov box cat` escape hatch — every path passes
 // through here.
 func resolveProjectFile(projectDir, relPath string) (string, error) {
 	if relPath == "" {
@@ -249,10 +249,10 @@ func resolveProjectFile(projectDir, relPath string) (string, error) {
 }
 
 // ---------------------------------------------------------------------------
-// `ov layer …` — top-level group for editing layer.yml files
+// `ov candy …` — top-level group for editing candy manifest files
 
 type CandyCmd struct {
-	Set    CandySetCmd    `cmd:"" help:"Set a value in layers/<name>/layer.yml by dot-path"`
+	Set    CandySetCmd    `cmd:"" help:"Set a value in a candy manifest by dot-path"`
 	AddRpm CandyAddPkgCmd `cmd:"add-rpm" help:"Append packages to a layer's rpm.packages list"`
 	AddDeb CandyAddPkgCmd `cmd:"add-deb" help:"Append packages to a layer's deb.packages list"`
 	AddPac CandyAddPkgCmd `cmd:"add-pac" help:"Append packages to a layer's pac.packages list"`
@@ -261,7 +261,7 @@ type CandyCmd struct {
 
 type CandySetCmd struct {
 	Name  string `arg:"" help:"Layer name (under layers/)"`
-	Path  string `arg:"" help:"Dot-path into layer.yml (e.g. service.name, env.MY_VAR)"`
+	Path  string `arg:"" help:"Dot-path into the candy manifest (e.g. service.name, env.MY_VAR)"`
 	Value string `arg:"" help:"Value (parsed as YAML)"`
 }
 
@@ -270,9 +270,9 @@ func (c *CandySetCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	layerYml := filepath.Join(dir, "candy", c.Name, "candy.yml")
+	layerYml := filepath.Join(dir, DefaultCandyDir, c.Name, DefaultManifest)
 	if _, err := os.Stat(layerYml); err != nil {
-		return fmt.Errorf("layer %q not found at %s", c.Name, layerYml)
+		return fmt.Errorf("candy %q not found at %s", c.Name, layerYml)
 	}
 	// Layer files are kind-keyed (`layer: {...}`), so a body-relative dot-path
 	// like `version` or `env.X` must descend into the `layer:` wrapper.
@@ -312,7 +312,7 @@ func (c *CandyAddPkgCmd) Run() error {
 }
 
 // detectPkgSection looks at os.Args for "add-rpm" / "add-deb" / etc. and
-// returns the matching layer.yml section name. Defaults to "rpm" if none
+// returns the matching candy manifest section name. Defaults to "rpm" if none
 // is found (defensive — Kong should always have routed via one of them).
 func detectPkgSection(args []string) string {
 	for _, a := range args {
@@ -330,7 +330,7 @@ func detectPkgSection(args []string) string {
 	return "rpm"
 }
 
-// appendLayerPackages reads layers/<name>/layer.yml, appends packages to
+// appendLayerPackages reads the candy manifest, appends packages to
 // <section>.packages (creating the parent mappings as needed), and writes
 // back — preserving comments via the yaml.Node API.
 func appendLayerPackages(name, section string, pkgs []string) error {
@@ -341,7 +341,7 @@ func appendLayerPackages(name, section string, pkgs []string) error {
 	if err != nil {
 		return err
 	}
-	layerYml := filepath.Join(dir, "candy", name, "candy.yml")
+	layerYml := filepath.Join(dir, DefaultCandyDir, name, DefaultManifest)
 	data, err := os.ReadFile(layerYml)
 	if err != nil {
 		return fmt.Errorf("reading %s: %w", layerYml, err)

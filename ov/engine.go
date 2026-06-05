@@ -52,7 +52,7 @@ func ImageRuntime(rt *ResolvedRuntime, imageEngine string) *ResolvedRuntime {
 	return &rtCopy
 }
 
-// ResolveImageEngineFromDir resolves the run engine for an image using image.yml
+// ResolveImageEngineFromDir resolves the run engine for an image using overthink.yml
 // from the given directory. Falls back to globalEngine if no config is available.
 func ResolveImageEngineFromDir(dir, imageName, globalEngine string) string {
 	cfg, err := LoadConfig(dir)
@@ -67,7 +67,7 @@ func ResolveImageEngineFromDir(dir, imageName, globalEngine string) string {
 }
 
 // ResolveImageEngineForDeploy resolves the run engine from deploy.yml,
-// falling back to globalEngine. No image.yml dependency.
+// falling back to globalEngine. No overthink.yml dependency.
 func ResolveImageEngineForDeploy(imageName, instance, globalEngine string) string {
 	if entry, ok := loadDeployConfigForRead("ResolveImageEngineForDeploy").Lookup(imageName, instance); ok && entry.Engine != "" {
 		return entry.Engine

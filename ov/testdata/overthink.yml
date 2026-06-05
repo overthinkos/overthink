@@ -1,8 +1,8 @@
-version: 2026.156.557
+version: 2026.156.1041
 import:
     - build.yml
     - images.yml
 discover:
-    candy:
-        - path: candy
-          recursive: true
+    - path: candy
+      recursive: true
+      manifest: candy.yml

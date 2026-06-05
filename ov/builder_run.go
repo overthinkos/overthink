@@ -48,8 +48,8 @@ type BuilderRunOpts struct {
 	// Cfg + ProjectDir feed `EnsureImagePresent` so a builder image
 	// missing from local podman storage AND unavailable on the
 	// registry (401, network outage, image not yet pushed) falls
-	// back to a local `ov image build <basename>` when the basename
-	// matches a project image.yml entry. The canonical "every command
+	// back to a local `ov box build <basename>` when the basename
+	// matches a project overthink.yml entry. The canonical "every command
 	// uses one ensure path" contract — see ov/ensure_image.go.
 	Cfg        *Config
 	ProjectDir string
@@ -94,7 +94,7 @@ func BuilderRun(ctx context.Context, opts BuilderRunOpts) ([]byte, error) {
 	// is not a podman image — podman reports "image not known"). Resolve it via
 	// the SAME resolver EnsureImagePresent uses for its present-check, then run
 	// podman against the resolved ref. EnsureImagePresent (below) is still called
-	// with the ORIGINAL ref so its resolve + pull + build-from-image.yml fallback
+	// with the ORIGINAL ref so its resolve + pull + build-from-overthink.yml fallback
 	// for short names keeps working. resolveImageRefForEnsure is side-effect-free,
 	// so it is safe in the dry-run path too.
 	origImage := opts.BuilderImage
@@ -121,7 +121,7 @@ func BuilderRun(ctx context.Context, opts BuilderRunOpts) ([]byte, error) {
 	// Ensure the builder image is present in local podman storage
 	// before we hand it to `podman run`. Going through the canonical
 	// ensure path means a 401 / unreachable-registry / not-yet-pushed
-	// failure falls back to a local `ov image build` when the image
+	// failure falls back to a local `ov box build` when the image
 	// is project-buildable, instead of `podman run`'s implicit
 	// auto-pull blowing up with a stale auth error.
 	if origImage != "" {

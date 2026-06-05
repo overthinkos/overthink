@@ -118,7 +118,7 @@ func TestLayerNodejs(t *testing.T) {
 		t.Fatal("nodejs layer not found")
 	}
 
-	// Test package config from layer.yml via generic FormatSection
+	// Test package config from the candy manifest via generic FormatSection
 	rpm := nodejs.FormatSection("rpm")
 	if rpm == nil {
 		t.Fatal("nodejs should have rpm format section")

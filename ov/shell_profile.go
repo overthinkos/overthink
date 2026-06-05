@@ -3,7 +3,7 @@ package main
 // shell_profile.go — host-side shell profile integration.
 //
 // On `ov deploy add host`, each installed layer contributes a set of
-// env vars and PATH additions (from layer.yml's env: + path_append:).
+// env vars and PATH additions (from the candy manifest's env: + path_append:).
 // We materialize them as `~/.config/overthink/env.d/<layer>.env` files
 // and insert a managed block in the user's shell init so those files
 // get sourced at login.
@@ -146,7 +146,7 @@ func renderEnvdBody(layerName string, envVars map[string]string, pathAdd []strin
 // quotes. Only the four chars with special meaning inside POSIX-sh
 // double quotes need escaping: $ ` " \. We DON'T escape $ — the
 // caller wants $PATH to expand. So escape just the others. PATH
-// entries from layer.yml are absolute paths and won't contain those
+// entries from the candy manifest are absolute paths and won't contain those
 // characters in practice; this is purely defensive.
 func shDoubleQuotePath(v string) string {
 	r := strings.NewReplacer(`\`, `\\`, "`", "\\`", `"`, `\"`)

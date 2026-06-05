@@ -158,7 +158,7 @@ builder:
         # the localpkg dep-closure path adds its own backstop find + chown on top.
         phase:
             install:
-                host: |  # AMBIGUOUS — review: not a known kind:local template; treat as hostname or rename  # AMBIGUOUS — review: not a known kind:local template; treat as hostname or rename  # AMBIGUOUS — review: not a known kind:local template; treat as hostname or rename
+                host: |  # AMBIGUOUS — review: not a known kind:local template; treat as hostname or rename  # AMBIGUOUS — review: not a known kind:local template; treat as hostname or rename  # AMBIGUOUS — review: not a known kind:local template; treat as hostname or rename  # AMBIGUOUS — review: not a known kind:local template; treat as hostname or rename
                     set -e
                     echo '%wheel ALL=(ALL:ALL) NOPASSWD: ALL' > /etc/sudoers.d/20-nopasswd-wheel
                     chmod 0440 /etc/sudoers.d/20-nopasswd-wheel
@@ -213,7 +213,7 @@ builder:
         # $CARGO_HOME` lands binaries in $HOME/.cargo/bin.
         phase:
             install:
-                host: |  # AMBIGUOUS — review: not a known kind:local template; treat as hostname or rename  # AMBIGUOUS — review: not a known kind:local template; treat as hostname or rename  # AMBIGUOUS — review: not a known kind:local template; treat as hostname or rename
+                host: |  # AMBIGUOUS — review: not a known kind:local template; treat as hostname or rename  # AMBIGUOUS — review: not a known kind:local template; treat as hostname or rename  # AMBIGUOUS — review: not a known kind:local template; treat as hostname or rename  # AMBIGUOUS — review: not a known kind:local template; treat as hostname or rename
                     set -e
                     if [ ! -f /work/Cargo.toml ]; then echo 'no Cargo.toml in /work' >&2; exit 1; fi
                     cargo install --path /work --root "$CARGO_HOME"
@@ -233,7 +233,7 @@ builder:
         # non-root build user. Same dependency extraction as stage_template.
         phase:
             install:
-                host: |  # AMBIGUOUS — review: not a known kind:local template; treat as hostname or rename  # AMBIGUOUS — review: not a known kind:local template; treat as hostname or rename  # AMBIGUOUS — review: not a known kind:local template; treat as hostname or rename
+                host: |  # AMBIGUOUS — review: not a known kind:local template; treat as hostname or rename  # AMBIGUOUS — review: not a known kind:local template; treat as hostname or rename  # AMBIGUOUS — review: not a known kind:local template; treat as hostname or rename  # AMBIGUOUS — review: not a known kind:local template; treat as hostname or rename
                     set -e
                     if [ ! -f /work/package.json ]; then echo 'no package.json in /work' >&2; exit 1; fi
                     STAGE=$(mktemp -d)
@@ -315,7 +315,7 @@ builder:
         # cross-host env matches the image build.
         phase:
             install:
-                host: |  # AMBIGUOUS — review: not a known kind:local template; treat as hostname or rename  # AMBIGUOUS — review: not a known kind:local template; treat as hostname or rename  # AMBIGUOUS — review: not a known kind:local template; treat as hostname or rename
+                host: |  # AMBIGUOUS — review: not a known kind:local template; treat as hostname or rename  # AMBIGUOUS — review: not a known kind:local template; treat as hostname or rename  # AMBIGUOUS — review: not a known kind:local template; treat as hostname or rename  # AMBIGUOUS — review: not a known kind:local template; treat as hostname or rename
                     set -e
                     cd "$HOME"
                     if [ -f /work/pixi.toml ]; then manifest=pixi.toml
@@ -392,7 +392,7 @@ distro:
                 # runs on the host), so splitting it out would never execute.
                 phase:
                     install:
-                        host: |  # AMBIGUOUS — review: not a known kind:local template; treat as hostname or rename  # AMBIGUOUS — review: not a known kind:local template; treat as hostname or rename  # AMBIGUOUS — review: not a known kind:local template; treat as hostname or rename
+                        host: |  # AMBIGUOUS — review: not a known kind:local template; treat as hostname or rename  # AMBIGUOUS — review: not a known kind:local template; treat as hostname or rename  # AMBIGUOUS — review: not a known kind:local template; treat as hostname or rename  # AMBIGUOUS — review: not a known kind:local template; treat as hostname or rename
                             pacman -Sy --noconfirm --needed{{range .Options}} {{.}}{{end}}{{range .Packages}} {{.}}{{end}}
                 uninstall_template: |
                     pacman -Rs --noconfirm{{range .Packages}} {{.}}{{end}}
@@ -663,7 +663,7 @@ distro:
                 # et al. from blocking on a prompt.
                 phase:
                     install:
-                        host: |  # AMBIGUOUS — review: not a known kind:local template; treat as hostname or rename  # AMBIGUOUS — review: not a known kind:local template; treat as hostname or rename  # AMBIGUOUS — review: not a known kind:local template; treat as hostname or rename
+                        host: |  # AMBIGUOUS — review: not a known kind:local template; treat as hostname or rename  # AMBIGUOUS — review: not a known kind:local template; treat as hostname or rename  # AMBIGUOUS — review: not a known kind:local template; treat as hostname or rename  # AMBIGUOUS — review: not a known kind:local template; treat as hostname or rename
                             DEBIAN_FRONTEND=noninteractive apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y{{range .Options}} {{.}}{{end}}{{range .Packages}} {{.}}{{end}}
                 uninstall_template: |
                     DEBIAN_FRONTEND=noninteractive apt-get purge -y{{range .Packages}} {{.}}{{end}}
@@ -882,7 +882,7 @@ distro:
                 # so no separate prepare.host DB-refresh is needed.
                 phase:
                     install:
-                        host: |  # AMBIGUOUS — review: not a known kind:local template; treat as hostname or rename  # AMBIGUOUS — review: not a known kind:local template; treat as hostname or rename  # AMBIGUOUS — review: not a known kind:local template; treat as hostname or rename
+                        host: |  # AMBIGUOUS — review: not a known kind:local template; treat as hostname or rename  # AMBIGUOUS — review: not a known kind:local template; treat as hostname or rename  # AMBIGUOUS — review: not a known kind:local template; treat as hostname or rename  # AMBIGUOUS — review: not a known kind:local template; treat as hostname or rename
                             dnf install -y{{range .Options}} {{.}}{{end}}{{range .Packages}} {{.}}{{end}}
                 uninstall_template: |
                     dnf remove -y{{range .Packages}} {{.}}{{end}}

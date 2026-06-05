@@ -22,16 +22,16 @@ func TestIsFreshnessSafeVerb(t *testing.T) {
 		{"version", true},
 		{"help", true},
 		{"status", true},
-		{"image inspect foo", true}, // sub-verbs match by prefix
-		{"image list images", true},
-		{"image validate", true},
+		{"box inspect foo", true}, // sub-verbs match by prefix
+		{"box list boxes", true},
+		{"box validate", true},
 		{"deploy show foo", true},
 		{"secrets list", true},
 		{"settings show", true},
 
 		// Heavy verbs — must NOT be safe; freshness check applies.
-		{"image build foo", false},
-		{"image generate", false},
+		{"box build foo", false},
+		{"box generate", false},
 		{"deploy add foo bar", false},
 		{"rebuild versa", false},
 		{"start", false},
@@ -58,22 +58,22 @@ func TestIsFreshnessSafeVerb(t *testing.T) {
 
 // TestFindOvSourceRoot_DualMarker verifies the dual-marker requirement:
 // the function only returns a directory when BOTH ov/main.go AND
-// image.yml are present. A directory with only one of the two markers
+// overthink.yml are present. A directory with only one of the two markers
 // is NOT identified as an overthink source tree.
 func TestFindOvSourceRoot_DualMarker(t *testing.T) {
 	root := t.TempDir()
 
 	// Layout:
-	//   <root>/                    ← only image.yml; not a source tree
-	//     image.yml
+	//   <root>/                    ← only overthink.yml; not a source tree
+	//     overthink.yml
 	//   <root>/proj/               ← both markers; IS the source tree
-	//     image.yml
+	//     overthink.yml
 	//     ov/main.go
 	//   <root>/proj/sub/deeper/    ← deep cwd inside the source tree
-	mustWrite(t, filepath.Join(root, "box.yml"), "")
+	mustWrite(t, filepath.Join(root, "overthink.yml"), "")
 	proj := filepath.Join(root, "proj")
 	mustMkdir(t, filepath.Join(proj, "ov"))
-	mustWrite(t, filepath.Join(proj, "box.yml"), "")
+	mustWrite(t, filepath.Join(proj, "overthink.yml"), "")
 	mustWrite(t, filepath.Join(proj, "ov", "main.go"), "package main")
 	deep := filepath.Join(proj, "sub", "deeper")
 	mustMkdir(t, deep)

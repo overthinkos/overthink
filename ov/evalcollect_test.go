@@ -126,7 +126,7 @@ func TestCollectEval_RemoteRefLayersResolve(t *testing.T) {
 			"selkies-bootc": {
 				Enabled: boolPtr(true),
 				// RAW @github ref with :version — exactly as the submodule
-				// image.yml writes it.
+				// overthink.yml writes it.
 				Layer: []string{"@" + bareRef + ":v2026.141.1600"},
 			},
 		},

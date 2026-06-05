@@ -16,7 +16,7 @@ import (
 //
 // Why this exists — the 2026-05-09 cuda-cudnn incident:
 //
-//	A user ran `ov image build versa` against the system /usr/bin/ov
+//	A user ran `ov box build versa` against the system /usr/bin/ov
 //	binary that was 2 days old. The source tree at the same project root
 //	had a freshly-committed cache-mount fix (commit 230c5d4) emitting
 //	`--mount=type=cache,id=ov-var-cache-libdnf5,...`. The stale binary
@@ -34,8 +34,8 @@ import (
 //
 // Detection logic:
 //  1. Walk up from cwd until we find a directory containing BOTH
-//     ov/main.go AND image.yml — this identifies an overthink source
-//     tree unambiguously (other projects might have an image.yml, but
+//     ov/main.go AND overthink.yml — this identifies an overthink source
+//     tree unambiguously (other projects might have an overthink.yml, but
 //     only overthink has ov/main.go). If no source tree found, no
 //     enforcement (the binary is being run against a non-overthink
 //     project; nothing to compare against).
@@ -118,20 +118,20 @@ func CheckBinaryFreshness(verbPath string) {
 // verb only reads state and emits text, it's safe; if it writes files,
 // builds artifacts, or deploys, it must run on the current source.
 func isFreshnessSafeVerb(verbPath string) bool {
-	// Kong's ctx.Command() returns space-joined paths like "image build",
+	// Kong's ctx.Command() returns space-joined paths like "box build",
 	// "secrets gpg env", "version". Match by exact name OR by prefix
-	// (so "image inspect ..." matches "image inspect").
+	// (so "box inspect ..." matches "box inspect").
 	safePrefixes := []string{
 		"version",
 		"help",
-		"status",         // reads container state
-		"image inspect",  // reads image.yml + emits JSON
-		"image list",     // reads image.yml + emits text
-		"image validate", // reads image.yml + emits warnings (no writes)
-		"deploy show",    // reads deploy.yml
-		"deploy status",  // reads deploy state
-		"deploy path",    // prints a path
-		"secrets list",   // reads credential store
+		"status",        // reads container state
+		"box inspect",   // reads the project config + emits JSON
+		"box list",      // reads the project config + emits text
+		"box validate",  // reads the project config + emits warnings (no writes)
+		"deploy show",   // reads deploy.yml
+		"deploy status", // reads deploy state
+		"deploy path",   // prints a path
+		"secrets list",  // reads credential store
 		"secrets get",
 		"secrets path",
 		"settings show",
@@ -145,17 +145,17 @@ func isFreshnessSafeVerb(verbPath string) bool {
 }
 
 // findOvSourceRoot walks up from start looking for a directory that
-// contains BOTH ov/main.go AND image.yml. Returns the path to that
+// contains BOTH ov/main.go AND overthink.yml. Returns the path to that
 // directory, or empty string if no such ancestor exists within 12 levels.
 //
-// The dual-marker requirement (ov/main.go + image.yml) is what makes
-// this unambiguous: many projects have an image.yml; only overthink has
+// The dual-marker requirement (ov/main.go + overthink.yml) is what makes
+// this unambiguous: many projects have an overthink.yml; only overthink has
 // ov/main.go alongside it.
 func findOvSourceRoot(start string) string {
 	cur := start
 	for i := 0; i < 12; i++ {
 		if statExists(filepath.Join(cur, "ov", "main.go")) &&
-			statExists(filepath.Join(cur, "box.yml")) {
+			statExists(filepath.Join(cur, UnifiedFileName)) {
 			return cur
 		}
 		parent := filepath.Dir(cur)

@@ -99,8 +99,8 @@ func BareRef(ref string) string {
 	return strings.TrimPrefix(bare, "@")
 }
 
-// LayerRef is a single layer reference as authored in layer.yml `require:` /
-// `layer:` (or image.yml `layer:`). It carries the ORIGINAL ref string — with
+// LayerRef is a single layer reference as authored in the candy manifest `require:` /
+// `layer:` (or overthink.yml `layer:`). It carries the ORIGINAL ref string — with
 // any `@repo` prefix and `:version` suffix — as the single source of truth; the
 // bare map-key form (.Bare()) and the pinned version (.Version()) are DERIVED on
 // demand, so a ref's identity and its version can never drift apart. The
@@ -133,7 +133,7 @@ func (r CandyRef) Version() string { _, v := StripVersion(r.Raw); return v }
 // IsRemote reports whether this is an @-prefixed remote ref.
 func (r CandyRef) IsRemote() bool { return IsRemoteLayerRef(r.Raw) }
 
-// toLayerRefs wraps raw ref strings (as parsed from layer.yml) into LayerRef
+// toLayerRefs wraps raw ref strings (as parsed from the candy manifest) into LayerRef
 // values. Returns nil for a nil/empty input so an absent list stays absent.
 func toLayerRefs(raw []string) []CandyRef {
 	if len(raw) == 0 {
@@ -255,8 +255,8 @@ func CollectRemoteRefs(cfg *Config, layers map[string]*Layer) ([]RemoteDownload,
 	return CollectRemoteRefsOpts(cfg, layers, ResolveOpts{})
 }
 
-// CollectRemoteRefsOpts collects all unique remote refs from image.yml layer
-// lists and layer.yml depends/layers fields. Different layers from the same repo
+// CollectRemoteRefsOpts collects all unique remote refs from overthink.yml layer
+// lists and candy manifest depends/layers fields. Different layers from the same repo
 // can use different versions. Only the same bare ref at conflicting versions is
 // an error. Returns a list of RemoteDownload grouped by (repoPath, version).
 //
@@ -395,7 +395,7 @@ func CollectRemoteRefsOpts(cfg *Config, layers map[string]*Layer, opts ResolveOp
 		}
 	}
 
-	// Scan layer.yml require: and layer: fields
+	// Scan the candy manifest require: and layer: fields
 	for layerName, layer := range layers {
 		for _, dep := range layer.Require {
 			if err := addRef(dep.Raw, fmt.Sprintf("layer %s require", layerName)); err != nil {

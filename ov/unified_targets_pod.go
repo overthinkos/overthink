@@ -226,7 +226,7 @@ func (t *PodUnifiedTarget) Rebuild(ctx context.Context, opts RebuildOpts) error 
 
 	if opts.DryRun {
 		if opts.RebuildImage {
-			fmt.Printf("dry-run: ov image build %s\n", baseRef)
+			fmt.Printf("dry-run: ov box build %s\n", baseRef)
 			fmt.Printf("dry-run: ov eval image %s\n", baseRef)
 		}
 		fmt.Printf("dry-run: ov deploy add %s\n", t.NodeName)
@@ -238,7 +238,7 @@ func (t *PodUnifiedTarget) Rebuild(ctx context.Context, opts RebuildOpts) error 
 
 	if opts.RebuildImage {
 		if err := runOvSubcommand("box", "build", baseRef); err != nil {
-			return fmt.Errorf("ov image build %s: %w", baseRef, err)
+			return fmt.Errorf("ov box build %s: %w", baseRef, err)
 		}
 		if err := runOvSubcommand("eval", "image", baseRef); err != nil {
 			return fmt.Errorf("ov eval image %s: %w", baseRef, err)

@@ -148,7 +148,7 @@ func BuildBootstrapVM(
 	// resolution to a newest local CalVer tag — sudo podman won't auto-
 	// pull from registries that don't have the build.
 	// Resolve + auto-build the bootstrap builder image on demand (fully
-	// automatic — no manual `ov image build <builder>` prerequisite).
+	// automatic — no manual `ov box build <builder>` prerequisite).
 	builderRef := spec.Source.BuilderImage
 	rt, _ := ResolveRuntime()
 	engine := "podman"

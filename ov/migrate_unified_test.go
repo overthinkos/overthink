@@ -29,8 +29,9 @@ image:
     base: quay.io/fedora/fedora:43
     layer: [base]
 `)
-	writeFixture(t, root, "layers/chrome/layer.yml", `rpm:
-  package: [chromium]
+	writeFixture(t, root, "layers/chrome/layer.yml", `layer:
+  rpm:
+    package: [chromium]
 `)
 
 	// Run migration.

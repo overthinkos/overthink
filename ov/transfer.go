@@ -123,9 +123,9 @@ func TransferToRootful(imageRef string) error {
 //     engine != run engine AND the image is present in the build
 //     engine's storage.
 //  3. Canonical `EnsureImagePresent` — pulls from the registry and
-//     falls back to a local `ov image build <name>` when the ref maps
-//     to a project image.yml entry. This is the same code path
-//     BuilderRun, the eval preflight, and `ov image pull` all go
+//     falls back to a local `ov box build <name>` when the ref maps
+//     to a project overthink.yml entry. This is the same code path
+//     BuilderRun, the eval preflight, and `ov box pull` all go
 //     through (see ov/ensure_image.go).
 //
 // Returns ErrImageNotLocal (wrapped with the ref) only when ALL three

@@ -31,14 +31,14 @@ func TestResolveImageRefForEnsure_FullRef(t *testing.T) {
 }
 
 // TestResolveImageRefForEnsure_ShortNameRequiresCfg — short names
-// without a *Config error with a friendly message naming image.yml.
+// without a *Config error with a friendly message naming overthink.yml.
 func TestResolveImageRefForEnsure_ShortNameRequiresCfg(t *testing.T) {
 	_, err := resolveImageRefForEnsure("eval-target", nil, "")
 	if err == nil {
 		t.Fatal("expected error for short name with nil cfg")
 	}
-	if !strings.Contains(err.Error(), "box.yml") {
-		t.Errorf("error should mention image.yml, got: %v", err)
+	if !strings.Contains(err.Error(), "overthink.yml") {
+		t.Errorf("error should mention overthink.yml, got: %v", err)
 	}
 }
 
@@ -79,7 +79,7 @@ func TestBuildableShortName_NilCfg(t *testing.T) {
 }
 
 // TestBuildableShortName_RemoteRef returns "" — remote refs use the
-// remote project's image.yml; local build is not applicable.
+// remote project's overthink.yml; local build is not applicable.
 func TestBuildableShortName_RemoteRef(t *testing.T) {
 	cfg := &Config{Image: map[string]BoxConfig{"x": {}}}
 	if got := buildableShortName("@github.com/owner/repo/x:tag", cfg); got != "" {

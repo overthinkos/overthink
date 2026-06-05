@@ -236,9 +236,10 @@ func emitMonolithic(dir string, bs *buildSections, is *imageSections, ds *Deploy
 		uf.Deploy = ds.Deploy
 		uf.Provides = ds.Provides
 	}
-	// Auto-discover layers/ if present.
+	// Auto-discover layers/ if present (the legacy dir; later rename steps move
+	// it to candy/ + the manifest to candy.yml).
 	if dirExists(filepath.Join(dir, "layers")) {
-		uf.Discover = &DiscoverConfig{Layer: []ScanSpec{{Path: "layers", Recursive: true}}}
+		uf.Discover = DiscoverConfig{{Path: "layers", Recursive: true}}
 	}
 	return writeUnifiedFile(filepath.Join(dir, UnifiedFileName), uf, dryRun)
 }
@@ -310,7 +311,7 @@ func emitWithIncludes(dir string, bs *buildSections, is *imageSections, ds *Depl
 		root.Import[i] = ImportEntry{Ref: inc}
 	}
 	if dirExists(filepath.Join(dir, "layers")) {
-		root.Discover = &DiscoverConfig{Layer: []ScanSpec{{Path: "layers", Recursive: true}}}
+		root.Discover = DiscoverConfig{{Path: "layers", Recursive: true}}
 	}
 	p, err := writeUnifiedFile(filepath.Join(dir, UnifiedFileName), root, dryRun)
 	if err != nil {

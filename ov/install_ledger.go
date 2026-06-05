@@ -125,7 +125,7 @@ type DeployRecord struct {
 // LayerRecord is the per-layer ledger entry. Lists concrete artifacts
 // (packages installed, files written, services enabled, env.d file
 // created, repo changes) so reversal doesn't need to re-compile the
-// plan from layer.yml.
+// plan from the candy manifest.
 type CandyRecord struct {
 	Layer        string       `json:"layer"`
 	Version      string       `json:"version,omitempty"`

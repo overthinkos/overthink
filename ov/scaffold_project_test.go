@@ -21,10 +21,10 @@ func TestScaffoldProject(t *testing.T) {
 			t.Errorf("expected %s to exist: %v", p, err)
 		}
 	}
-	// The scaffolder must NEVER write a per-kind image.yml — schema v4
+	// The scaffolder must NEVER write a per-kind box.yml — schema v4
 	// canonical authoring target is overthink.yml only.
 	if _, err := os.Stat(filepath.Join(dir, "box.yml")); err == nil {
-		t.Errorf("expected NO image.yml at scaffold root (schema v4); found one")
+		t.Errorf("expected NO per-kind box.yml at scaffold root (schema v4); found one")
 	}
 	// Idempotency: re-scaffolding the same dir should fail (we never
 	// silently clobber an existing overthink.yml).

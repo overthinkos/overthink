@@ -23,7 +23,7 @@ type BootcVMResult struct {
 // registry. An internal kind:image short name (e.g. "fedora-bootc") resolves
 // against local podman storage to its newest CalVer tag via the shared
 // resolveLocalImageRef: ov is CalVer-only, so there is NO `:latest` fallback —
-// the bootc image must be built first (`ov image build <name>`), which is
+// the bootc image must be built first (`ov box build <name>`), which is
 // surfaced as an actionable error when it is missing.
 func resolveBootcImageRef(engine, image string) (string, error) {
 	if strings.Contains(image, "/") {
@@ -31,7 +31,7 @@ func resolveBootcImageRef(engine, image string) (string, error) {
 	}
 	resolved, err := resolveLocalImageRef(engine, image)
 	if err != nil {
-		return "", fmt.Errorf("resolving bootc image %q: %w (build it first with `ov image build %s`)", image, err, image)
+		return "", fmt.Errorf("resolving bootc image %q: %w (build it first with `ov box build %s`)", image, err, image)
 	}
 	return resolved, nil
 }

@@ -442,7 +442,7 @@ func (c *VmCreateCmd) createQemu(name, qcow2, ram string, cpus, sshPort int, por
 		fmt.Fprintf(os.Stderr, "Injecting SSH key via SMBIOS credential\n")
 	}
 
-	// Port forwarding: SSH mapping comes from image.yml `vm.ssh_port`
+	// Port forwarding: SSH mapping comes from vm.yml `vm.ssh_port`
 	// (default 2222) — published ports from the image labels follow.
 	hostfwds := fmt.Sprintf("hostfwd=tcp::%d-:22", sshPort)
 	for _, p := range ports {

@@ -2,7 +2,7 @@
 #  overthink.yml's `includes:` list. The schema kind discriminator is
 #  `kind: vm` for kind-keyed entries; root-shape map is `vm:` (this file).
 #  2026-05 kind-files cutover.
-version: 2026.156.557
+version: 2026.156.1041
 vm:
     vm:
         source:

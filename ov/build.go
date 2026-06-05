@@ -31,7 +31,7 @@ type BuildCmd struct {
 	NoCache         bool     `long:"no-cache" help:"Disable build cache entirely"`
 	Jobs            int      `long:"jobs" help:"Max concurrent image builds per DAG level (0=auto: defaults.jobs, else 4)" env:"OV_BUILD_JOBS"`
 	PodmanJobs      int      `long:"podman-jobs" help:"Stages per podman build (0=auto: min(NCPU, defaults.podman_jobs_cap))" env:"OV_PODMAN_JOBS"`
-	IncludeDisabled bool     `long:"include-disabled" help:"Build images with enabled: false in image.yml (does not modify the file). Use for one-off operational rebuilds without flipping authored config."`
+	IncludeDisabled bool     `long:"include-disabled" help:"Build images with enabled: false in overthink.yml (does not modify the file). Use for one-off operational rebuilds without flipping authored config."`
 
 	// podmanJobsCap is the resolved ceiling for the auto podman-jobs calc,
 	// sourced from defaults.podman_jobs_cap in Run() (0 → podmanJobsCapFallback).
@@ -43,7 +43,7 @@ type BuildCmd struct {
 // ensureBuilderImageBuilt resolves an internal builder-image name to its newest
 // local CalVer tag, BUILDING it on demand when it isn't in local storage. This
 // makes bootstrap image/VM builds fully automatic — no manual
-// `ov image build <builder>` prerequisite. A ref containing "/" (a full registry
+// `ov box build <builder>` prerequisite. A ref containing "/" (a full registry
 // ref) is returned unchanged. Shared by the kind:image bootstrap path
 // (BuildCmd) and the kind:vm bootstrap path (vm_bootstrap.go) — one helper, both
 // call sites.
@@ -84,7 +84,7 @@ func (c *BuildCmd) Run() error {
 	// (`include: ['@github.com/owner/repo/overthink.yml:ref']`) and the
 	// requested image isn't declared locally, delegate to buildRemote
 	// against `@github.com/owner/repo/<image>:ref`. This lets a
-	// downstream workspace `cd ~/Atrapub/ecovoyage && ov image build versa`
+	// downstream workspace `cd ~/Atrapub/ecovoyage && ov box build versa`
 	// transparently rebuild from upstream source without any flags. The
 	// workspace's deploy/eval overlays are picked up later by deploy-mode
 	// commands; image build doesn't need them.
@@ -93,8 +93,8 @@ func (c *BuildCmd) Run() error {
 	}
 
 	// Generate Containerfiles. --include-disabled flows through Generator
-	// so `ov image build <disabled-image> --include-disabled` reaches it
-	// without the operator having to flip enabled: false in image.yml.
+	// so `ov box build <disabled-image> --include-disabled` reaches it
+	// without the operator having to flip enabled: false in overthink.yml.
 	// When the user named specific images on the command line, scope the
 	// override to those names only — otherwise widening the working set
 	// would surface unrelated disabled-image dep errors (e.g. images that
@@ -107,7 +107,7 @@ func (c *BuildCmd) Run() error {
 		}
 	}
 	// Pass the explicit targets through so a qualified one (e.g.
-	// `ov image build ov.arch-builder`, or ensure-image's build-fallback for a
+	// `ov box build ov.arch-builder`, or ensure-image's build-fallback for a
 	// namespaced builder) is pulled into the resolved set even when it isn't a
 	// base/builder of any root image. Remote (`@github…`) refs were already
 	// dispatched to buildRemote above, so these are local names only.
@@ -411,7 +411,7 @@ func (c *BuildCmd) runPrivilegedBootstrap(engine, dir, imageName string, img *Re
 	}
 	builderName := strings.TrimPrefix(img.From, "builder:")
 	if img.BootstrapBuilderImage == "" {
-		return fmt.Errorf("image %s: from: builder:%s requires bootstrap_builder_image: in image.yml", imageName, builderName)
+		return fmt.Errorf("image %s: from: builder:%s requires bootstrap_builder_image: in overthink.yml", imageName, builderName)
 	}
 	if img.BuilderConfig == nil {
 		return fmt.Errorf("image %s: build.yml builder: section is empty", imageName)
@@ -515,11 +515,11 @@ func (c *BuildCmd) runPrivilegedBootstrap(engine, dir, imageName string, img *Re
 }
 
 // bootstrapPackagesForImage returns base + per-image bootstrap packages.
-// Per-image overrides aren't currently surfaced via image.yml; this
+// Per-image overrides aren't currently surfaced via overthink.yml; this
 // returns just the distro defaults for now.
 //
 // Mirrors baseBootstrapPackages in vm_bootstrap.go but at the OCI-image
-// build path (image.yml `from: builder:<name>` consumers). Same dispatch
+// build path (the box config `from: builder:<name>` consumers). Same dispatch
 // rules: Pacstrap.BasePackages for pacstrap-flavored, Debootstrap.BasePackages
 // for debootstrap-flavored.
 func bootstrapPackagesForImage(img *ResolvedBox) []string {
@@ -826,7 +826,7 @@ func (c *BuildCmd) buildRemote(ref string) error {
 	if tag == "" {
 		// ov is CalVer-only. A remote build with no explicit CalVer
 		// gets a fresh one at build time — matching the local
-		// `ov image build` behaviour (generate.go:ComputeCalVer).
+		// `ov box build` behaviour (generate.go:ComputeCalVer).
 		tag = ComputeCalVer()
 	}
 

@@ -8,7 +8,7 @@ package main
 // endpoint) onto which `apk` packages are installed by a `target: android`
 // deploy. The apps themselves are NOT a kind — `apk` is a package format
 // declared in layers like pac/aur/rpm/deb (see ApkPackageSpec + the
-// layer.yml `apk:` field), and an android deploy applies layers (their
+// candy manifest's `apk:` field), and an android deploy applies layers (their
 // `apk:` packages) onto the device via AndroidDeployTarget.
 //
 // Build-vs-runtime split: the Android system image + API level are baked

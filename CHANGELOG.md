@@ -22,6 +22,43 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-05 — refactor(schema)!: generic kind-container YAML — flat configurable `discover:`, no hardcoded per-kind filenames
+
+YAML files are now GENERIC kind-containers routed by SHAPE: the loader keys each
+document by its top-level kind-key, never by filename. A per-kind sibling file
+(`box.yml`, `candy.yml`, …) is a pure user convenience configured in
+`overthink.yml`'s `import:` / `discover:` — never required, assumed, or
+hardcoded. `overthink.yml` is the only YAML filename the code knows.
+
+**Loader (`ov/unified.go`).** `DiscoverConfig` collapses from a kind-keyed struct
+(`{candy: […], box: […], …}`) to a FLAT `[]ScanSpec` (`{path, recursive,
+manifest}`); the six per-kind `applyScanSpecs*` discovery functions collapse into
+one shape-routed `applyDiscoveredManifest` (`firstKindKey` routes a candy-shaped
+manifest to a lazy `From:` dir, every other shape to `mergeKindDoc`); the dead
+`entityKind.Filename` field is deleted (the kind vocabulary survives as
+`kindKeys` / `kindKeysSet` for shape classification only); the per-directory
+manifest filename comes from one overridable `DefaultManifest` const (`scanLayer`
+threads it through). The stray `"overthink.yml"` literal in `vm_import.go` folds
+into `UnifiedFileName`.
+
+**Schema / migration.** A new `discover-flatten` `MigrationStep` (HEAD bumped
+`2026.156.557` → `2026.156.1041`) rewrites the kind-keyed `discover:` map into the
+flat list, comment-preserving + idempotent. The main repo and the `image/arch`,
+`image/bootc`, `image/cachyos` submodule `overthink.yml`s migrate to the flat
+form. New loader tests assert a configurable manifest, non-candy shape-routing,
+and the flat-`discover:` round-trip.
+
+**Bundled rebrand cleanup** (the candy/box rebrand's incomplete R5 sweep, plus the
+agents-rename tagline): every stale `ov image …`→`ov box …` / `ov layer …`→`ov
+candy …` / `ov image test`→`ov eval box` command reference across `ov/*.go`
+(comments, error strings, help text); the freshness-guard **runtime regression**
+(`box inspect` / `list` / `validate` wrongly tripped the stale-binary guard
+because `main_freshness.go` still matched the old `image …` verb prefixes — the
+project-root marker is now `overthink.yml`, not `box.yml`); the `ov box new candy`
+scaffold now writes canonical kind-keyed content under the configurable manifest
+name; and the `for you and your agents` tagline (`CLAUDE.md` H1 + `ov --help`),
+so all tagline surfaces agree.
+
 ### 2026-06-05 — docs: add VISION.md (long-term thesis + direction)
 
 A docs-only cutover adding a new top-level document, `VISION.md` — a tight

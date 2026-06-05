@@ -41,7 +41,7 @@ func (p *PackageItem) UnmarshalYAML(node *yaml.Node) error {
 }
 
 // MarshalYAML emits the bare-scalar shorthand when only Name is set, otherwise
-// the object form. Keeps migrated layer.yml files concise where the long form
+// the object form. Keeps migrated candy manifest files concise where the long form
 // adds no value.
 func (p PackageItem) MarshalYAML() (interface{}, error) {
 	if p.Description == "" {

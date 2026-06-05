@@ -43,7 +43,7 @@ func ResolveRemoteImage(ref string, tag string) (*RemoteImageContext, error) {
 		return nil, fmt.Errorf("downloading %s:%s: %w", parsed.RepoPath, version, err)
 	}
 
-	// Load the remote image.yml
+	// Load the remote overthink.yml
 	cfg, err := LoadConfig(cachePath)
 	if err != nil {
 		return nil, fmt.Errorf("loading config from %s: %w", parsed.RepoPath, err)

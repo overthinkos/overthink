@@ -581,7 +581,7 @@ func (r *Runner) runPort(ctx context.Context, c *Check) EvalResult {
 	// dial from host.
 	if c.Reachable != nil || (c.Listening != nil && !*c.Listening) {
 		if r.Mode == RunModeImage {
-			return skipf(c, "host-side port check not meaningful under ov image test")
+			return skipf(c, "host-side port check not meaningful under ov eval box")
 		}
 		return r.dialPort(c)
 	}
@@ -647,7 +647,7 @@ func (r *Runner) dialPort(c *Check) EvalResult {
 // user's responsibility (drop into command: with kill -<sig>).
 func (r *Runner) runKill(ctx context.Context, c *Check) EvalResult {
 	if r.Mode == RunModeImage {
-		return skipf(c, "kill: not meaningful under ov image test")
+		return skipf(c, "kill: not meaningful under ov eval box")
 	}
 	pidStr := strings.TrimSpace(c.Kill)
 	if pidStr == "" {
@@ -715,7 +715,7 @@ func (r *Runner) runCommand(ctx context.Context, c *Check) EvalResult {
 			return failf(c, "background: true is host-side only (set in_container: false or from_host: true)")
 		}
 		if r.Mode == RunModeImage {
-			return skipf(c, "background command not meaningful under ov image test")
+			return skipf(c, "background command not meaningful under ov eval box")
 		}
 		cmd := exec.Command("sh", "-c", c.Command) // not CommandContext — survives ctx cancel
 		if err := cmd.Start(); err != nil {
@@ -740,7 +740,7 @@ func (r *Runner) runCommand(ctx context.Context, c *Check) EvalResult {
 		stdout, stderr, exit, err = r.Exec.RunCapture(ctx, wrapContainerCommand(c.Command))
 	} else {
 		if r.Mode == RunModeImage {
-			return skipf(c, "host-side command not meaningful under ov image test")
+			return skipf(c, "host-side command not meaningful under ov eval box")
 		}
 		cmd := exec.CommandContext(ctx, "sh", "-c", c.Command)
 		stdout, stderr, exit, err = runCaptureCmd(cmd)

@@ -253,7 +253,7 @@ func ContainerChain(engine, containerName string) DeployExecutor {
 
 // ImageChain builds a one-hop chain that runs commands inside a freshly-
 // spawned disposable container (`<engine> run --rm <imageRef> bash`).
-// Used by `ov image test --section image` to replace the deleted
+// Used by `ov eval box --section image` to replace the deleted
 // ImageExecutor — same semantics, expressed via the unified chain
 // primitive.
 //

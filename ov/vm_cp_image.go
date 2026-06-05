@@ -33,7 +33,7 @@ func (c *VmCpBoxCmd) Run() error {
 		}
 	}
 	if !hostImageExists("podman", ref) {
-		return fmt.Errorf("image %q not found in host podman storage — build it first (ov image build)", c.Image)
+		return fmt.Errorf("image %q not found in host podman storage — build it first (ov box build)", c.Image)
 	}
 	guest := sshParamsForVm(c.VM)
 	return TransferImageToGuest(context.Background(), guest, "podman", ref, c.As, c.Rootless, EmitOpts{})

@@ -348,7 +348,7 @@ func cleanMakepkgArtifacts(projectDir string, dryRun bool) []string {
 }
 
 // CleanCmd applies the configured retention now (the on-demand counterpart to
-// the auto-prune that runs after `ov image build` / `ov eval run`), and also
+// the auto-prune that runs after `ov box build` / `ov eval run`), and also
 // sweeps the one-time makepkg backlog.
 type CleanCmd struct {
 	DryRun bool `long:"dry-run" help:"Print everything that would be removed; touch nothing"`

@@ -10,8 +10,8 @@ import (
 )
 
 // scaffold_project.go — project-level authoring helpers used by the
-// `ov image new project`, `ov image new image`, `ov image add-layer`, and
-// `ov image rm-layer` commands. These exist primarily so the MCP tool
+// `ov box new project`, `ov box new box`, `ov box add-candy`, and
+// `ov box rm-candy` commands. These exist primarily so the MCP tool
 // surface can author a project from scratch over RPC, without the agent
 // needing direct filesystem access.
 //
@@ -213,7 +213,7 @@ func loadOverthinkYAMLNode(dir string) (*yaml.Node, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("overthink.yml not found in %s; run `ov image new project .` to scaffold or `ov migrate` to convert legacy image.yml", dir)
+			return nil, fmt.Errorf("overthink.yml not found in %s; run `ov box new project .` to scaffold or `ov migrate` to convert legacy image.yml", dir)
 		}
 		return nil, fmt.Errorf("reading overthink.yml: %w", err)
 	}

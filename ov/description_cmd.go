@@ -8,12 +8,12 @@ import (
 
 // FeatureCmd groups the `ov feature` authoring + inspection verbs.
 // Additional run-verbs live on EvalCmd / ImageCmd as Feature children
-// so that `ov eval feature run <deployment>` and `ov image feature run
+// so that `ov eval feature run <deployment>` and `ov box feature run
 // <image>` fit the existing test-command hierarchy.
 type FeatureCmd struct {
 	List     FeatureListCmd     `cmd:"list"     help:"Enumerate every kind: entity and the scenarios declared on its description: block"`
 	Pending  FeaturePendingCmd  `cmd:"pending"  help:"List steps with no bound Check (authoring gaps)"`
-	Validate FeatureValidateCmd `cmd:"validate" help:"Parse + binding consistency check for description: blocks (called by ov image validate)"`
+	Validate FeatureValidateCmd `cmd:"validate" help:"Parse + binding consistency check for description: blocks (called by ov box validate)"`
 }
 
 // FeatureListCmd: `ov feature list [<kind>]`. Walks the resolved
@@ -160,7 +160,7 @@ func (c *FeaturePendingCmd) Run() error {
 
 // FeatureValidateCmd: `ov feature validate [<entity>]`. Parses every
 // description: block and reports issues. Called automatically by
-// `ov image validate` as of the cutover.
+// `ov box validate` as of the cutover.
 type FeatureValidateCmd struct {
 	Entity string `arg:"" optional:"" help:"Entity identifier (e.g. layer:redis); default: all"`
 }

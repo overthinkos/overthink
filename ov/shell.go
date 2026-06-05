@@ -69,10 +69,10 @@ func (c *ShellCmd) Run() error {
 	// Set global forceTTY so buildShellArgs/buildExecArgs pick it up
 	forceTTY = c.TTY
 
-	// Remote refs (@github.com/...) are handled exclusively by `ov image pull`.
+	// Remote refs (@github.com/...) are handled exclusively by `ov box pull`.
 	// Users must pull first, then run shell on the short name.
 	if IsRemoteImageRef(StripURLScheme(c.Image)) {
-		return fmt.Errorf("remote refs are not accepted here; run 'ov image pull %s' first, then 'ov shell <image-name>'", c.Image)
+		return fmt.Errorf("remote refs are not accepted here; run 'ov box pull %s' first, then 'ov shell <image-name>'", c.Image)
 	}
 	c.Image, c.Instance = canonicalizeDeployArg(c.Image, c.Instance)
 
@@ -106,7 +106,7 @@ func (c *ShellCmd) Run() error {
 	// so no command diverges when key != image. c.Image stays the deploy-KEY;
 	// only the image ref uses the resolved name.
 	deployImageName := resolveDeployImageName(c.Image, c.Instance)
-	// Resolve from image labels (+ deploy.yml overlay). No image.yml.
+	// Resolve from image labels (+ deploy.yml overlay). No overthink.yml.
 	imageRef := resolveShellImageRef("", deployImageName, c.Tag)
 	if err := EnsureImage(imageRef, rt); err != nil {
 		return err

@@ -277,7 +277,7 @@ var buildImageFn = func(ctx context.Context, repoDir, image, tag, logPath string
 	return time.Since(start), err
 }
 
-// runOvImageTestFn shells out to `ov image test <tag> --format yaml`.
+// runOvImageTestFn shells out to `ov eval box <tag> --format yaml`.
 var runOvImageTestFn = func(ctx context.Context, tag string) ([]byte, time.Duration, error) {
 	start := time.Now()
 	cmd := exec.CommandContext(ctx, findOvForEval(), "eval", "box", tag, "--format", "yaml")
@@ -935,7 +935,7 @@ func runOneIteration(
 			iter.BuildFailure = true
 			iter.Score = priorScore(reportSoFar)
 			iter.Scenario = priorScenarios(reportSoFar)
-			fmt.Fprintf(opts.Stderr, "iter%d: ov image test: %v\n", k, testErr)
+			fmt.Fprintf(opts.Stderr, "iter%d: ov eval box: %v\n", k, testErr)
 			if err := commitIterationBestEffort(ctx, layout, k, iter, opts); err != nil {
 				fmt.Fprintf(opts.Stderr, "iter%d: commit: %v\n", k, err)
 			}

@@ -50,7 +50,7 @@ func TestResolveBootcImageRef_ShortNameResolvesToCalVer(t *testing.T) {
 }
 
 // TestResolveBootcImageRef_ShortNameNotBuilt proves a short name with no
-// matching local image yields an actionable error pointing at `ov image build`,
+// matching local image yields an actionable error pointing at `ov box build`,
 // instead of silently fabricating a `:latest` ref that bootc would then fail to
 // pull.
 func TestResolveBootcImageRef_ShortNameNotBuilt(t *testing.T) {
@@ -64,7 +64,7 @@ func TestResolveBootcImageRef_ShortNameNotBuilt(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for unbuilt bootc image, got nil")
 	}
-	if !strings.Contains(err.Error(), "ov image build fedora-bootc") {
-		t.Errorf("error = %q, want it to point at `ov image build fedora-bootc`", err.Error())
+	if !strings.Contains(err.Error(), "ov box build fedora-bootc") {
+		t.Errorf("error = %q, want it to point at `ov box build fedora-bootc`", err.Error())
 	}
 }

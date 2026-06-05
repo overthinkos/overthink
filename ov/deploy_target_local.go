@@ -49,7 +49,7 @@ type LocalDeployTarget struct {
 
 	// BuilderImageResolver maps a builder name to a concrete image ref
 	// for `podman run`. Caller supplies — typically derived from
-	// image.yml or --builder-image flag.
+	// overthink.yml or --builder-image flag.
 	BuilderImageResolver func(builderName string) string
 
 	// Shell is the user's login shell (detected via DetectLoginShell
@@ -88,7 +88,7 @@ type LocalDeployTarget struct {
 	LocalSpec *LocalSpec
 
 	// Cfg + ProjectDir are kept on the target for downstream callers
-	// that resolve layer.yml / image.yml during the plan walk. Not
+	// that resolve the candy manifest / overthink.yml during the plan walk. Not
 	// used for any image-fetch logic.
 	Cfg        *Config
 	ProjectDir string
@@ -496,7 +496,7 @@ func renderHostPackageCommand(distroCfg *DistroConfig, s *SystemPackagesStep) (s
 func (t *LocalDeployTarget) execBuilder(s *BuilderStep, plan *InstallPlan, opts EmitOpts, rec *CandyRecord, start time.Time) error {
 	// Builder image resolution mirrors VmDeployTarget.execBuilder:
 	//   1. EmitOpts.BuilderImageOverride (--builder-image flag)
-	//   2. BuilderStep.BuilderImage (compiled from image.yml)
+	//   2. BuilderStep.BuilderImage (compiled from overthink.yml)
 	//   3. t.BuilderImageResolver (rarely wired)
 	image := opts.BuilderImageOverride
 	if image == "" {
@@ -506,7 +506,7 @@ func (t *LocalDeployTarget) execBuilder(s *BuilderStep, plan *InstallPlan, opts 
 		image = t.BuilderImageResolver(s.Builder)
 	}
 	if image == "" {
-		return fmt.Errorf("no builder image for %s (layer=%s); set --builder-image or define builder.%s in image.yml", s.Builder, s.LayerName, s.Builder)
+		return fmt.Errorf("no builder image for %s (layer=%s); set --builder-image or define builder.%s in overthink.yml", s.Builder, s.LayerName, s.Builder)
 	}
 
 	// aur builds package files that the venue installs via the format's
@@ -789,7 +789,7 @@ func taskShellPreamble(s *TaskStep) string {
 // mode (applied to the resulting file or directory), env vars injected
 // during the download (used by install scripts).
 //
-// layerVars are exported alongside task.Env so layer.yml `vars:` keys
+// layerVars are exported alongside task.Env so the candy manifest `vars:` keys
 // referenced inside the download URL (e.g. ${K3D_VERSION}) resolve
 // correctly. Build-time gets these via Containerfile ENV; deploy-time
 // has no equivalent without this.
@@ -845,7 +845,7 @@ func renderDownloadScript(task *Task, layerVars map[string]string) string {
 	// BUILD_ARCH=$(uname -m) so download URLs can template the arch in
 	// shell-expansion form (e.g. `uv-${BUILD_ARCH}-unknown-linux-gnu.tar.gz`).
 	// Must match the container-build renderer in tasks.go which exports the
-	// same var — otherwise the same layer.yml download works at build time
+	// same var — otherwise the same candy manifest download works at build time
 	// but fails under `ov deploy add host/vm:<name>`.
 	//
 	// ARCH is the BuildKit-style triplet (amd64/arm64/arm) — same format

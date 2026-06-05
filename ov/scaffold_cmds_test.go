@@ -8,7 +8,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// TestLayerSet_DescendsIntoLayerWrapper guards the Bug-1 fix: `ov layer set`
+// TestLayerSet_DescendsIntoLayerWrapper guards the Bug-1 fix: `ov candy set`
 // edits layer.<dotpath> inside the kind-keyed `candy:` wrapper, never a stray
 // top-level key. Without the fix, setting `version` appended a second
 // top-level `version:`, which the loader rejects as ambiguous.

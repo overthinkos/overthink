@@ -11,7 +11,7 @@ import "fmt"
 // Section assignment:
 //   - Each layer's `shell:` (intrinsic + per-shell sub-blocks) → Layer.
 //   - Image-level `shell:` → Image.
-//   - Deploy-scope defaults from image.yml are not yet expressed —
+//   - Deploy-scope defaults from overthink.yml are not yet expressed —
 //     reserved for future use; today the Deploy section is filled at
 //     deploy time by MergeDeployShell from deploy.yml entries.
 //

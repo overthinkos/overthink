@@ -1,6 +1,6 @@
 package main
 
-// layer_secrets.go — resolver for layer.yml `secret_requires:` and
+// layer_secrets.go — resolver for the candy manifest `secret_requires:` and
 // `secret_accepts:` when a layer is being applied via host / vm / ssh deploy
 // targets (the non-container install-plan flow).
 //

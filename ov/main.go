@@ -24,13 +24,13 @@ type CLI struct {
 	Host string `long:"host" env:"OV_HOST" help:"Remote host (alias or user@host[:port]) to run this command on via SSH"`
 
 	// Dir is the project directory that every build-mode command resolves
-	// image.yml / layers/ / build.yml relative to. Default is the process
+	// overthink.yml / layers/ / build.yml relative to. Default is the process
 	// cwd. Useful for MCP servers and remote agents that run outside a
 	// project checkout — set OV_PROJECT_DIR or pass -C / --dir to point at
 	// a mounted project root. Build-mode commands call os.Getwd()
 	// unconditionally; when this flag is set, main() chdirs before Kong's
 	// ctx.Run() so every existing call site picks up the change.
-	Dir string `short:"C" long:"dir" env:"OV_PROJECT_DIR" help:"Project directory containing image.yml (default: cwd)" type:"path"`
+	Dir string `short:"C" long:"dir" env:"OV_PROJECT_DIR" help:"Project directory containing overthink.yml (default: cwd)" type:"path"`
 
 	// Repo points ov at a remote git repo as the project source instead
 	// of cwd / --dir. Spec is OWNER/REPO[@REF] (auto-prefixed with
@@ -39,7 +39,7 @@ type CLI struct {
 	// (~/.cache/ov/repos/...) and falls through into the existing --dir
 	// chdir block, so every os.Getwd() site Just Works. Mutually exclusive
 	// with --dir.
-	Repo string `long:"repo" env:"OV_PROJECT_REPO" placeholder:"OWNER/REPO[@REF]" help:"Read image.yml from a remote git repo (e.g. overthinkos/overthink). Use 'default' for overthinkos/overthink."`
+	Repo string `long:"repo" env:"OV_PROJECT_REPO" placeholder:"OWNER/REPO[@REF]" help:"Read overthink.yml from a remote git repo (e.g. overthinkos/overthink). Use 'default' for overthinkos/overthink."`
 
 	Alias       AliasCmd        `cmd:"" help:"Manage command aliases for container images"`
 	Clean       CleanCmd        `cmd:"" help:"Prune reusable build artifacts to defaults: retention (images, eval runs) + sweep one-time makepkg leftovers"`
@@ -47,7 +47,7 @@ type CLI struct {
 	Config      BoxConfigCmd    `cmd:"" help:"Configure image deployment (setup, secrets, encrypted volumes)"`
 	Deploy      DeployCmd       `cmd:"" help:"Manage deploy.yml deployment overrides"`
 	Doctor      DoctorCmd       `cmd:"" help:"Show host dependency status"`
-	Image       BoxCmd          `cmd:"" name:"box" help:"Build, generate, inspect, and pull container boxes (reads box.yml)"`
+	Image       BoxCmd          `cmd:"" name:"box" help:"Build, generate, inspect, and pull container boxes (reads overthink.yml)"`
 	Layer       CandyCmd        `cmd:"" name:"candy" help:"Edit candy.yml files in the project's candy/ directory"`
 	Logs        LogsCmd         `cmd:"" help:"Show service container logs"`
 	Mcp         McpCmdGroup     `cmd:"" help:"Run an MCP server exposing the ov CLI as tools"`
@@ -92,9 +92,9 @@ func (c *GenerateCmd) Run() error {
 	return gen.Generate()
 }
 
-// ValidateCmd validates image.yml and layers
+// ValidateCmd validates overthink.yml and layers
 type ValidateCmd struct {
-	IncludeDisabled bool `long:"include-disabled" help:"Include images with enabled: false in validation (does not modify image.yml)"`
+	IncludeDisabled bool `long:"include-disabled" help:"Include images with enabled: false in validation (does not modify overthink.yml)"`
 }
 
 func (c *ValidateCmd) Run() error {
@@ -135,7 +135,7 @@ type InspectCmd struct {
 	Image           string `arg:"" help:"Image name"`
 	Format          string `long:"format" help:"Output a single field instead of full JSON"`
 	Instance        string `short:"i" long:"instance" help:"Instance name"`
-	IncludeDisabled bool   `long:"include-disabled" help:"Operate on images with enabled: false (does not modify image.yml)"`
+	IncludeDisabled bool   `long:"include-disabled" help:"Operate on images with enabled: false (does not modify overthink.yml)"`
 }
 
 func (c *InspectCmd) Run() error {
@@ -223,7 +223,7 @@ func (c *InspectCmd) runFromConfig(cfg *Config, dir string) error {
 		case "tunnel":
 			// Schema v4: Tunnel moved off ImageConfig/ResolvedImage —
 			// deploy-only. Resolve from DeploymentNode.Tunnel via deploy.yml.
-			if overlay, ok := loadDeployConfigForRead("ov image inspect tunnel").Lookup(c.Image, c.Instance); ok && overlay.Tunnel != nil {
+			if overlay, ok := loadDeployConfigForRead("ov box inspect tunnel").Lookup(c.Image, c.Instance); ok && overlay.Tunnel != nil {
 				layers, err := ScanAllLayerWithConfig(dir, cfg)
 				if err == nil {
 					portProtos := make(map[int]string)
@@ -258,7 +258,7 @@ func (c *InspectCmd) runFromConfig(cfg *Config, dir string) error {
 			fmt.Println(engine)
 		case "bind_mounts":
 			// bind_mounts are now deploy-time only; show deploy.yml volume config
-			if overlay, ok := loadDeployConfigForRead("ov image inspect bind_mounts").Lookup(c.Image, c.Instance); ok {
+			if overlay, ok := loadDeployConfigForRead("ov box inspect bind_mounts").Lookup(c.Image, c.Instance); ok {
 				for _, dv := range overlay.Volume {
 					fmt.Printf("%s\t%s\t%s\t%s\n", dv.Name, dv.Host, dv.Path, dv.Type)
 				}
@@ -303,7 +303,7 @@ func (c *InspectCmd) runFromConfig(cfg *Config, dir string) error {
 // ListCmd groups list subcommands
 type ListCmd struct {
 	Aliases  ListAliasesCmd  `cmd:"" help:"List layers that declare aliases"`
-	Images   ListBoxesCmd    `cmd:"" name:"boxes" help:"List boxes from box.yml"`
+	Images   ListBoxesCmd    `cmd:"" name:"boxes" help:"List boxes from overthink.yml"`
 	Layers   ListCandiesCmd  `cmd:"" name:"candies" help:"List candies from the filesystem"`
 	Routes   ListRoutesCmd   `cmd:"" help:"List layers that declare a route"`
 	Services ListServicesCmd `cmd:"" help:"List layers that declare a service"`
@@ -311,7 +311,7 @@ type ListCmd struct {
 	Volumes  ListVolumesCmd  `cmd:"" help:"List layers that declare volumes"`
 }
 
-// ListImagesCmd lists images from image.yml
+// ListImagesCmd lists images from overthink.yml
 type ListBoxesCmd struct{}
 
 func (c *ListBoxesCmd) Run() error {
@@ -525,8 +525,8 @@ func (c *ListVolumesCmd) Run() error {
 // NewCmd groups scaffolding subcommands
 type NewCmd struct {
 	Layer   NewCandyCmd   `cmd:"" name:"candy" help:"Scaffold a candy directory"`
-	Project NewProjectCmd `cmd:"" help:"Scaffold a fresh ov project (image.yml + build.yml ref + layers/)"`
-	Image   NewBoxCmd     `cmd:"" name:"box" help:"Add a new box entry to box.yml"`
+	Project NewProjectCmd `cmd:"" help:"Scaffold a fresh ov project (overthink.yml + build.yml ref + layers/)"`
+	Image   NewBoxCmd     `cmd:"" name:"box" help:"Add a new box entry to overthink.yml"`
 }
 
 // NewLayerCmd scaffolds a new layer
@@ -694,7 +694,7 @@ func main() {
 	var cli CLI
 	ctx := kong.Parse(&cli,
 		kong.Name("ov"),
-		kong.Description("Overthink - the container management experience for you and your AI"),
+		kong.Description("Overthink - the container management experience for you and your agents"),
 		kong.UsageOnError(),
 	)
 

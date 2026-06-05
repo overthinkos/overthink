@@ -4,7 +4,7 @@ package main
 //
 // Exported surface:
 //   - ParseOvTestOutput(yaml) (*EvalRunResults, error)
-//       Parses the YAML emitted by `ov image test --format yaml`.
+//       Parses the YAML emitted by `ov eval box --format yaml`.
 //   - FingerprintScenario(s Scenario) string
 //       Canonical SHA256 of a Scenario. Whitespace/ordering insensitive.
 //   - FingerprintSet(set *LabelDescriptionSet) map[string]string
@@ -31,7 +31,7 @@ import (
 )
 
 // ---------------------------------------------------------------------------
-// `ov image test --format yaml` parser
+// `ov eval box --format yaml` parser
 // ---------------------------------------------------------------------------
 
 // EvalRunResults is the structured result of one `ov eval image` run,
@@ -74,7 +74,7 @@ type StepEvalResult struct {
 	Pending bool   `yaml:"pending,omitempty"`
 }
 
-// TestRunSummary mirrors the summary block emitted by `ov image test
+// TestRunSummary mirrors the summary block emitted by `ov eval box
 // --format yaml`. Totals are authoritative; the benchmark re-derives
 // per-status counts from Scenario but relies on Summary.Total as a
 // sanity check.
@@ -87,7 +87,7 @@ type TestRunSummary struct {
 
 // ParseOvTestOutput parses the byte slice emitted by
 //
-//	ov image test <tag> --format yaml
+//	ov eval box <tag> --format yaml
 //
 // into a *EvalRunResults. The parser is strict on shape (unknown
 // top-level keys produce errors) so drift in the producer's YAML shape
@@ -104,7 +104,7 @@ func ParseOvTestOutput(b []byte) (*EvalRunResults, error) {
 	dec := yaml.NewDecoder(strings.NewReader(string(b)))
 	dec.KnownFields(true) // strict on top-level keys
 	if err := dec.Decode(&r); err != nil {
-		return nil, fmt.Errorf("parse ov image test --format yaml: %w", err)
+		return nil, fmt.Errorf("parse ov eval box --format yaml: %w", err)
 	}
 	// The producer MAY omit summary; re-derive so downstream callers see
 	// consistent counts. When present, trust the producer.

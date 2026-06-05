@@ -10,16 +10,16 @@ import (
 
 // TestOvDir_FlagChdir verifies that -C / --dir / OV_PROJECT_DIR causes
 // main() to chdir before dispatching, so downstream os.Getwd() calls
-// (used by every build-mode command to locate image.yml) see the target
+// (used by every build-mode command to locate overthink.yml) see the target
 // directory. Covers three modes:
 //
 //  1. -C <path>  — short flag
 //  2. --dir <path> — long flag
 //  3. OV_PROJECT_DIR=<path> env var
 //
-// Uses `ov image list images` as the probe: it reads image.yml from the
+// Uses `ov box list boxes` as the probe: it reads overthink.yml from the
 // resolved project dir. If the binary fails to chdir, the command errors
-// with "reading image.yml: ... no such file or directory". A pass means
+// with "no overthink.yml found: ... no such file or directory". A pass means
 // chdir worked — the command listed the images from the scratch project.
 func TestOvDir_FlagChdir(t *testing.T) {
 	bin := buildOvBinary(t)
@@ -50,7 +50,7 @@ func TestOvDir_FlagChdir(t *testing.T) {
 				t.Fatalf("ov %s failed: %v\noutput: %s", strings.Join(tc.args, " "), err, out)
 			}
 			if !strings.Contains(string(out), "testimage") {
-				t.Errorf("ov image list images did not see the scratch project's image; output:\n%s", out)
+				t.Errorf("ov box list boxes did not see the scratch project's image; output:\n%s", out)
 			}
 		})
 	}
@@ -101,13 +101,13 @@ func buildOvBinary(t *testing.T) string {
 	return out
 }
 
-// writeMinProject materialises a minimal image.yml in dir so `ov image list
-// images` has something to parse. Mirrors the scaffold of a real project.
+// writeMinProject materialises a minimal overthink.yml in dir so `ov box list
+// boxes` has something to parse. Mirrors the scaffold of a real project.
 func writeMinProject(t *testing.T, dir string) {
 	t.Helper()
 	// Post-unified-cutover: write overthink.yml (the unified format) instead
 	// of a legacy image.yml. LoadConfig reads overthink.yml exclusively.
-	overthinkYAML := `version: 2026.156.557
+	overthinkYAML := `version: 2026.156.1041
 defaults:
   registry: ghcr.io/test
   tag: latest

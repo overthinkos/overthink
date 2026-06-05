@@ -35,7 +35,7 @@ func TestLoadUnified_AbsentFileReturnsNotPresent(t *testing.T) {
 
 func TestLoadUnified_BasicRoot(t *testing.T) {
 	root := t.TempDir()
-	writeFixture(t, root, "overthink.yml", `version: 2026.156.557
+	writeFixture(t, root, "overthink.yml", `version: 2026.156.1041
 defaults:
   registry: quay.io/example
   build: [rpm]
@@ -94,7 +94,7 @@ box:
 
 func TestLoadUnified_IncludesMerge(t *testing.T) {
 	root := t.TempDir()
-	writeFixture(t, root, "overthink.yml", `version: 2026.156.557
+	writeFixture(t, root, "overthink.yml", `version: 2026.156.1041
 import:
   - build.yml
   - images.yml
@@ -136,7 +136,7 @@ box:
 
 func TestLoadUnified_IncludeCycleDetected(t *testing.T) {
 	root := t.TempDir()
-	writeFixture(t, root, "overthink.yml", `version: 2026.156.557
+	writeFixture(t, root, "overthink.yml", `version: 2026.156.1041
 import: [a.yml]
 `)
 	writeFixture(t, root, "a.yml", `import: [b.yml]
@@ -154,7 +154,7 @@ import: [a.yml]
 
 func TestLoadUnified_MultiDocumentKindKeyed(t *testing.T) {
 	root := t.TempDir()
-	writeFixture(t, root, "overthink.yml", `version: 2026.156.557
+	writeFixture(t, root, "overthink.yml", `version: 2026.156.1041
 import: [bundle.yml]
 `)
 	writeFixture(t, root, "bundle.yml", `---
@@ -190,9 +190,9 @@ box:
 
 func TestLoadUnified_AmbiguousDocRejected(t *testing.T) {
 	root := t.TempDir()
-	writeFixture(t, root, "overthink.yml", `version: 2026.156.557
+	writeFixture(t, root, "overthink.yml", `version: 2026.156.1041
 `)
-	writeFixture(t, root, "overthink.yml", `version: 2026.156.557
+	writeFixture(t, root, "overthink.yml", `version: 2026.156.1041
 import: [bundle.yml]
 `)
 	writeFixture(t, root, "bundle.yml", `candy:
@@ -211,19 +211,20 @@ box:
 
 func TestLoadUnified_DiscoverLayers(t *testing.T) {
 	root := t.TempDir()
-	// Two traditional flat layer.yml files (without the kind-keyed wrapper —
-	// that's what scanLayer currently parses).
-	writeFixture(t, root, "candy/chrome/candy.yml", `version: "1"
-rpm:
-  package: [chromium]
+	// Canonical kind-keyed candy.yml manifests; discovery routes by shape.
+	writeFixture(t, root, "candy/chrome/candy.yml", `candy:
+  version: "1"
+  rpm:
+    package: [chromium]
 `)
-	writeFixture(t, root, "candy/firefox/candy.yml", `version: "1"
-rpm:
-  package: [firefox]
+	writeFixture(t, root, "candy/firefox/candy.yml", `candy:
+  version: "1"
+  rpm:
+    package: [firefox]
 `)
-	writeFixture(t, root, "overthink.yml", `version: 2026.156.557
+	writeFixture(t, root, "overthink.yml", `version: 2026.156.1041
 discover:
-  candy: [candy]
+  - candy
 `)
 	uf, _, err := LoadUnified(root)
 	if err != nil {
@@ -242,12 +243,13 @@ discover:
 
 func TestLoadUnified_DiscoverExplicitWinsOverDiscovered(t *testing.T) {
 	root := t.TempDir()
-	writeFixture(t, root, "candy/chrome/candy.yml", `version: "from-disk"
-rpm: { packages: [chromium] }
+	writeFixture(t, root, "candy/chrome/candy.yml", `candy:
+  version: "from-disk"
+  rpm: { packages: [chromium] }
 `)
-	writeFixture(t, root, "overthink.yml", `version: 2026.156.557
+	writeFixture(t, root, "overthink.yml", `version: 2026.156.1041
 discover:
-  candy: [candy]
+  - candy
 candy:
   chrome: { from: custom/chrome }
 `)
@@ -269,33 +271,88 @@ candy:
 
 func TestLoadUnified_ScanSpecStringShorthand(t *testing.T) {
 	root := t.TempDir()
-	writeFixture(t, root, "overthink.yml", `version: 2026.156.557
+	writeFixture(t, root, "overthink.yml", `version: 2026.156.1041
 discover:
-  candy:
-    - layers
-    - { path: vendor, recursive: false }
+  - layers
+  - { path: vendor, recursive: false }
 `)
 	uf, _, err := LoadUnified(root)
 	if err != nil {
 		t.Fatalf("LoadUnified: %v", err)
 	}
-	if uf.Discover == nil || len(uf.Discover.Layer) != 2 {
-		t.Fatalf("Discover.Layers = %#v, want 2 entries", uf.Discover)
+	if len(uf.Discover) != 2 {
+		t.Fatalf("Discover = %#v, want 2 entries", uf.Discover)
 	}
 	// Post-2026-05 "discover anchoring" cutover (commit 460fabb): scan
 	// specs are anchored to the including file's directory at merge time
 	// so a relative `- layers` entry inside an included overthink.yml
 	// resolves against THAT file's location, not the consumer's cwd. The
 	// test fixture lives at <tempdir>/overthink.yml, so the anchored path
-	// is filepath.Join(<tempdir>, "layers"). Asserting against the suffix
-	// keeps the test portable across tempdir layouts.
+	// is filepath.Join(<tempdir>, "layers").
 	wantLayers := filepath.Join(root, "layers")
 	wantVendor := filepath.Join(root, "vendor")
-	if uf.Discover.Layer[0].Path != wantLayers || !uf.Discover.Layer[0].Recursive {
-		t.Errorf("[0] = %+v, want {Path:%s Recursive:true}", uf.Discover.Layer[0], wantLayers)
+	if uf.Discover[0].Path != wantLayers || !uf.Discover[0].Recursive {
+		t.Errorf("[0] = %+v, want {Path:%s Recursive:true}", uf.Discover[0], wantLayers)
 	}
-	if uf.Discover.Layer[1].Path != wantVendor || uf.Discover.Layer[1].Recursive {
-		t.Errorf("[1] = %+v, want {Path:%s Recursive:false}", uf.Discover.Layer[1], wantVendor)
+	if uf.Discover[1].Path != wantVendor || uf.Discover[1].Recursive {
+		t.Errorf("[1] = %+v, want {Path:%s Recursive:false}", uf.Discover[1], wantVendor)
+	}
+	// The string shorthand and the object form both default Manifest to
+	// DefaultManifest (configurable per spec via `manifest:` in overthink.yml).
+	if uf.Discover[0].Manifest != DefaultManifest || uf.Discover[1].Manifest != DefaultManifest {
+		t.Errorf("Manifest defaults = %q,%q, want %q", uf.Discover[0].Manifest, uf.Discover[1].Manifest, DefaultManifest)
+	}
+}
+
+// TestLoadUnified_DiscoverConfigurableManifest proves the per-directory manifest
+// filename is fully configured in overthink.yml — discovery is told to look for
+// a CUSTOM manifest name under a CUSTOM path, with zero per-kind filename baked
+// into the loader.
+func TestLoadUnified_DiscoverConfigurableManifest(t *testing.T) {
+	root := t.TempDir()
+	writeFixture(t, root, "stuff/widget/thing.yml", `candy:
+  version: "1"
+  rpm:
+    package: [widget]
+`)
+	writeFixture(t, root, "overthink.yml", `version: 2026.156.1041
+discover:
+  - { path: stuff, recursive: true, manifest: thing.yml }
+`)
+	uf, _, err := LoadUnified(root)
+	if err != nil {
+		t.Fatalf("LoadUnified: %v", err)
+	}
+	if err := uf.ApplyDiscover(root); err != nil {
+		t.Fatalf("ApplyDiscover: %v", err)
+	}
+	if _, ok := uf.Layer["widget"]; !ok {
+		t.Error("configurable-manifest discovery did not find widget under manifest: thing.yml")
+	}
+}
+
+// TestLoadUnified_DiscoverRoutesNonCandyByShape proves a discovered manifest is
+// routed by SHAPE, not by a per-kind filename: a `box:`-shaped manifest found by
+// a generic discover spec merges as an image, not a candy.
+func TestLoadUnified_DiscoverRoutesNonCandyByShape(t *testing.T) {
+	root := t.TempDir()
+	writeFixture(t, root, "entities/myimg/entity.yml", `box:
+  name: myimg
+  base: quay.io/fedora/fedora:43
+`)
+	writeFixture(t, root, "overthink.yml", `version: 2026.156.1041
+discover:
+  - { path: entities, recursive: true, manifest: entity.yml }
+`)
+	uf, _, err := LoadUnified(root)
+	if err != nil {
+		t.Fatalf("LoadUnified: %v", err)
+	}
+	if err := uf.ApplyDiscover(root); err != nil {
+		t.Fatalf("ApplyDiscover: %v", err)
+	}
+	if _, ok := uf.Image["myimg"]; !ok {
+		t.Error("shape-routed discovery did not register the box: doc as an image")
 	}
 }
 
@@ -306,7 +363,7 @@ discover:
 // (no stale references).
 func TestLoadUnified_DeploymentsSection(t *testing.T) {
 	root := t.TempDir()
-	writeFixture(t, root, "overthink.yml", `version: 2026.156.557
+	writeFixture(t, root, "overthink.yml", `version: 2026.156.1041
 deployments:
   openclaw:
     port: ["8080:80"]
@@ -326,7 +383,7 @@ deployments:
 
 func TestLoadUnified_ProjectConfig(t *testing.T) {
 	root := t.TempDir()
-	writeFixture(t, root, "overthink.yml", `version: 2026.156.557
+	writeFixture(t, root, "overthink.yml", `version: 2026.156.1041
 defaults: { registry: r.example.com }
 box:
   foo: { base: alpine }

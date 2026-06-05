@@ -7,7 +7,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Config represents the image.yml configuration file
+// Config represents the overthink.yml configuration projection
 type Config struct {
 	Defaults BoxConfig            `yaml:"defaults"`
 	Image    map[string]BoxConfig `yaml:"box"`
@@ -56,7 +56,7 @@ type MergeConfig struct {
 	MaxTotalMB int  `yaml:"max_total_mb,omitempty"` // maximum total image size for merge (0 = no limit)
 }
 
-// AliasConfig represents a command alias in image.yml
+// AliasConfig represents a command alias in the box config
 type AliasConfig struct {
 	Name    string `yaml:"name"`
 	Command string `yaml:"command,omitempty"` // defaults to Name if empty
@@ -158,7 +158,7 @@ type BoxConfig struct {
 	Cache         string   `yaml:"cache,omitempty"`           // default build cache mode (image|registry|gha|none); flag --cache / env OV_BUILD_CACHE wins
 
 	// Reusable-artifact retention (project-wide; authored under defaults:).
-	// keep_images = newest CalVer tags to keep per image after `ov image build`;
+	// keep_images = newest CalVer tags to keep per image after `ov box build`;
 	// keep_eval_runs = newest run dirs to keep per bed/score after `ov eval run`.
 	// 0 (or absent → Go fallback 0) disables pruning. See `ov clean`.
 	KeepImages   *int `yaml:"keep_images,omitempty"`
@@ -175,8 +175,8 @@ type BoxConfig struct {
 	DeployEval []Check `yaml:"deploy_eval,omitempty"`
 
 	// Shell is an image-level shell-init contribution layered on top of
-	// what the included layers contribute. Same shape as the layer.yml
-	// `shell:` field — generic body + per-shell overrides. Travels in
+	// what the included layers contribute. Same shape as the candy
+	// manifest's `shell:` field — generic body + per-shell overrides. Travels in
 	// the org.overthinkos.shell OCI label under the Image section.
 	// 2026-05 cutover.
 	Shell *ShellConfig `yaml:"shell,omitempty"`
@@ -198,7 +198,7 @@ func boolPtr(v bool) *bool {
 // ResolvedImage represents a fully resolved image configuration
 type ResolvedBox struct {
 	Name    string
-	Version string `json:"version,omitempty"` // authored per-entity CalVer (image.yml `version:`); optional
+	Version string `json:"version,omitempty"` // authored per-entity CalVer (the box config `version:`); optional
 	// EffectiveVersion is the content-derived identity emitted as the
 	// org.overthinkos.version label: the dedicated Version if set, else the
 	// highest layer version across the full chain (computeEffectiveVersions in
@@ -328,20 +328,20 @@ func LoadConfigRaw(dir string) (*Config, error) {
 
 // ResolveOpts carries optional knobs for ResolveImage. Zero value is the
 // default behavior used by every code path EXCEPT the explicit operational
-// overrides on `ov image build/inspect/validate --include-disabled` —
+// overrides on `ov box build/inspect/validate --include-disabled` —
 // those set IncludeDisabled to bypass the `enabled: false` gate without
 // requiring the operator to flip authored config.
 //
 // IncludeDisabledNames scopes the override: when non-empty, ONLY images in
 // the set bypass the disabled check; other disabled images stay filtered.
-// Used by `ov image build <name> --include-disabled` so widening the
+// Used by `ov box build <name> --include-disabled` so widening the
 // working set doesn't surface unrelated disabled-image dep errors (e.g.
 // images with remote layers that aren't fetched yet). Empty + IncludeDisabled
 // = include every disabled image (the inspect/validate behavior).
 type ResolveOpts struct {
 	IncludeDisabled      bool            // skip the `enabled: false` check
 	IncludeDisabledNames map[string]bool // when non-empty, scope IncludeDisabled to these names only
-	// RequestedImages are the explicit build targets (`ov image build <name>`).
+	// RequestedImages are the explicit build targets (`ov box build <name>`).
 	// A qualified name here (e.g. `ov.arch-builder`) is pulled into the resolved
 	// set even when it isn't reachable as a base/builder of a root image — so a
 	// namespaced image can be an on-demand build target, not only a transitive
@@ -368,7 +368,7 @@ func (c *Config) ResolveImage(name string, calverTag string, dir string, opts Re
 	// `cachyos.cachyos`) resolves inside the Config of the namespace that
 	// owns it, where its base:/builder: refs are relative. This mirrors
 	// resolveImageRef's descent (namespace.go) so that EVERY ResolveImage
-	// caller — `ov image inspect/generate/merge/pull/validate`,
+	// caller — `ov box inspect/generate/merge/pull/validate`,
 	// ensure-image's build-fallback, `ov deploy add`/`ov update` — is
 	// namespace-aware through this single chokepoint instead of each
 	// re-implementing (or omitting) the descent. Additive: a bare name
@@ -384,7 +384,7 @@ func (c *Config) ResolveImage(name string, calverTag string, dir string, opts Re
 	}
 	img, ok := c.Image[name]
 	if !ok {
-		return nil, fmt.Errorf("image %q not found in image.yml", name)
+		return nil, fmt.Errorf("image %q not found in overthink.yml", name)
 	}
 	if !img.IsEnabled() && !opts.shouldIncludeDisabled(name) {
 		return nil, fmt.Errorf("image %q is disabled (pass --include-disabled to operate on it without flipping authored config)", name)
@@ -536,7 +536,7 @@ func (c *Config) ResolveImage(name string, calverTag string, dir string, opts Re
 	// MergeDeployOntoMetadata → ImageMetadata directly.
 
 	// VM configuration (disk_size, ram, cpus, firmware, libvirt, …) lives
-	// on `kind: vm` entities in vm.yml, NOT on image.yml entries. The
+	// on `kind: vm` entities in vm.yml, NOT on box: entries. The
 	// legacy ImageConfig.Vm / .Libvirt fields were removed in the VM
 	// hard-cutover; `bootc: true` on an image now only declares that the
 	// container image is bootc-bootable (for `ov vm build` to produce a
@@ -648,7 +648,7 @@ func (c *Config) ResolveAllImage(calverTag string, dir string, opts ResolveOpts)
 	// Pull in any explicitly-requested namespace-qualified targets BEFORE base
 	// resolution. resolveNamespacedBases is reachability-scoped (it only follows
 	// bases/builders of root images); an on-demand target like
-	// `ov image build ov.arch-builder` — or ensure-image's build-fallback for a
+	// `ov box build ov.arch-builder` — or ensure-image's build-fallback for a
 	// namespaced builder — must be pulled explicitly so it lands in the resolved
 	// map under its fully-qualified key. Pulling it FIRST lets the
 	// resolveNamespacedBases fixpoint below also collect the target's own
@@ -703,7 +703,7 @@ func intPtr(v int) *int {
 }
 
 // resolveVmConfig was removed in the VM hard-cutover. VM configuration
-// now lives on `kind: vm` entities in vm.yml (VmSpec); image.yml
+// now lives on `kind: vm` entities in vm.yml (VmSpec); box:
 // entries no longer carry vm: or libvirt: fields.
 
 // resolveEffectiveBuilder computes an image's effective builder map via the
@@ -726,7 +726,7 @@ func intPtr(v int) *int {
 // the boundary, so we key off the resolved distro and source the builder map
 // from a root-namespace image whose bare refs resolve HERE.
 //
-// EVERY builder-consuming path calls this — ResolveImage (image.yml images), the
+// EVERY builder-consuming path calls this — ResolveImage (box: images), the
 // synthetic host/VM image in `ov deploy add` (deploy_add_cmd.go), and the
 // remote-ref FETCH walk (effectiveBuilderForImage → CollectRemoteRefsOpts) — so
 // the resolution can never drift between commands and the fetch set stays in
@@ -843,7 +843,7 @@ func (c *Config) distroBuilderMap(distroTags []string) BuilderMap {
 	return nil
 }
 
-// walkBaseChainDistro walks the base chain through image.yml entries to find
+// walkBaseChainDistro walks the base chain through box: entries to find
 // the first ancestor with a distro: field set. Returns nil if no ancestor
 // defines distro tags or the chain reaches an external base image.
 func (c *Config) walkBaseChainDistro(baseName string) []string {
@@ -872,7 +872,7 @@ func (c *Config) walkBaseChainDistro(baseName string) []string {
 	}
 }
 
-// walkBaseChainBuild walks the base chain through image.yml entries to find
+// walkBaseChainBuild walks the base chain through box: entries to find
 // the first ancestor with a build: field set. Returns nil if no ancestor
 // defines build formats or the chain reaches an external base image.
 func (c *Config) walkBaseChainBuild(baseName string) []string {

@@ -1,4 +1,4 @@
-version: 2026.156.557
+version: 2026.156.1041
 import:
     # Flat imports (root namespace) — this repo's own per-kind files + the
     # combined base.yml (arch + fedora stacks). eval.yml carries kind:ai/recipe/
@@ -34,9 +34,9 @@ import:
     # LAYERS stay in main (shared with openclaw-desktop) — only the images moved.
     - selkies: '@github.com/overthinkos/selkies:v2026.153.0757'
 discover:
-    candy:
-        - path: candy
-          recursive: true
+    - path: candy
+      recursive: true
+      manifest: candy.yml
 defaults:
     platform:
         - linux/amd64

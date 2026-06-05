@@ -43,7 +43,7 @@ import (
 // description and every collection field on Description / Scenario uses
 // the singular form (`scenario:`, `tag:`). The UnmarshalYAML shim below
 // also accepts the legacy plural keys (`scenarios:`, `tags:`) for one
-// release of overlap; layer.yml files in this repo are migrated by
+// release of overlap; candy manifest files in this repo are migrated by
 // `ov migrate`.
 type Description struct {
 	Feature   string     `yaml:"feature"              json:"feature"`
@@ -57,7 +57,7 @@ type Description struct {
 //   - the canonical mapping form (feature + narrative + scenario)
 //   - a scalar shorthand (a single-line description that populates
 //     Feature only, leaving Scenario empty); preserves pre-existing
-//     `description: "..."` usage across layer.yml files
+//     `description: "..."` usage across candy manifest files
 //   - the legacy plural keys (`scenarios:`, `tags:`) — accept-both
 //     transitional shim removed at the close of the harness cutover
 //     once `ov migrate` has rewritten every consumer.
@@ -198,7 +198,7 @@ type Scenario struct {
 }
 
 // UnmarshalYAML accepts both `tag:` and the legacy `tags:` key during
-// the cutover migration window. Removed once every layer.yml has been
+// the cutover migration window. Removed once every candy manifest has been
 // rewritten by `ov migrate`.
 func (s *Scenario) UnmarshalYAML(node *yaml.Node) error {
 	if node.Kind != yaml.MappingNode {

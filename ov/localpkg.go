@@ -602,7 +602,7 @@ func resolveLocalPkgDeps(ctx context.Context, s *LocalPkgInstallStep, pkgFiles [
 	}
 
 	if s.BuilderImage == "" || s.DepBuilderDef == nil {
-		fmt.Fprintf(os.Stderr, "%s warn: localpkg %s (layer=%s) has %s-builder dependencies %v but no %s builder resolved — they will NOT be built; the install will fail unless they are already present on the target. Define builder.%s in image.yml to build them.\n",
+		fmt.Fprintf(os.Stderr, "%s warn: localpkg %s (layer=%s) has %s-builder dependencies %v but no %s builder resolved — they will NOT be built; the install will fail unless they are already present on the target. Define builder.%s in overthink.yml to build them.\n",
 			venueName, s.PkgbuildRef, s.LayerName, lp.DepBuilder, deps, lp.DepBuilder, lp.DepBuilder)
 		return nil, nil
 	}

@@ -162,7 +162,7 @@ func checkCapabilityLabelCompleteness() error {
 // from-image` (Part F.10): given only an engine + image ref, pull OCI labels
 // via inspect and produce a Capabilities struct. No overthink.yml, no source
 // repo access required. Errors propagate ErrImageNotLocal when appropriate
-// (caller can wrap with a "run ov image pull" hint).
+// (caller can wrap with a "run ov box pull" hint).
 func CapabilitiesFromLabels(engine, imageRef string) (*Capabilities, error) {
 	meta, err := ExtractMetadata(engine, imageRef)
 	if err != nil {

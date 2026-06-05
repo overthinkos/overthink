@@ -1,7 +1,7 @@
 package main
 
 // build_target_oci.go — OCITarget implements DeployTarget for Containerfile
-// emission (the "build mode" target used by `ov image build`).
+// emission (the "build mode" target used by `ov box build`).
 //
 // At this stage of the refactor, OCITarget is a thin walker over the
 // InstallPlan that delegates to the existing format/template rendering

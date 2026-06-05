@@ -7,7 +7,7 @@ package main
 // <ref> accepts four forms, auto-detected:
 //
 //   1. Local image name         "fedora-coder"
-//      Matches a top-level entry in image.yml.
+//      Matches a top-level entry in overthink.yml.
 //
 //   2. Local layer name         "pre-commit"
 //      Matches a directory in layers/.
@@ -19,12 +19,12 @@ package main
 //   4. Remote repo ref          "github.com/owner/repo[/images/<n>|/layers/<n>][@ref]"
 //      Matches "{host}/{org}/{repo}[/sub][@ref]" with a known host. The
 //      existing refs.go `@`-prefixed form is also accepted for backward
-//      compat with image.yml depends:/layers: already in the tree.
+//      compat with overthink.yml depends:/layers: already in the tree.
 //
 // Disambiguation rules (post 2026-05 cross-kind name reuse):
 //   - Any ref containing "/layers/" resolves to a layer.
 //   - Any ref containing "/images/" resolves to an image.
-//   - A local name found in BOTH image.yml and layers/ is permitted —
+//   - A local name found in BOTH overthink.yml and layers/ is permitted —
 //     each kind has its own namespace. Precedence is decided by the
 //     CALLER's context: ResolveDeployRef defaults to image-first
 //     (the primary `<ref>` positional almost always means "deploy
@@ -120,7 +120,7 @@ func resolveDeployRefWithPref(ref, projectDir string, preferKind RefKind) (*Depl
 		return resolveLocalPath(ref, projectDir)
 	}
 
-	// Forms 1 + 2: local name. Check image.yml AND layers/; cross-kind
+	// Forms 1 + 2: local name. Check overthink.yml AND layers/; cross-kind
 	// reuse permitted, preferKind decides which wins.
 	return resolveLocalName(ref, projectDir, preferKind)
 }
@@ -159,7 +159,7 @@ func resolveRemoteRef(ref string) (*DeployRef, error) {
 		kind = RefKindImage
 	default:
 		// A bare repo ref (no /layers/ or /images/) defaults to the
-		// project's image.yml, which is image-shaped. Existing tooling
+		// project's overthink.yml, which is image-shaped. Existing tooling
 		// treats such refs as project imports; we follow suit.
 		kind = RefKindImage
 	}
@@ -225,7 +225,7 @@ func classifyYAMLFile(path string) (RefKind, error) {
 		}
 	}
 	// Layer-shaped: has any layer marker. This list roughly matches
-	// layer.yml's documented top-level fields; a YAML that has none of
+	// the candy manifest's documented top-level fields; a YAML that has none of
 	// these keys is an error (we don't try to guess).
 	for _, k := range []string{"rpm", "deb", "pac", "aur", "tasks", "services", "service", "system_services", "candy", "depends", "env", "path_append", "description"} {
 		if _, ok := top[k]; ok {
@@ -246,8 +246,8 @@ func resolveLocalName(name, projectDir string, preferKind RefKind) (*DeployRef, 
 	inImageYml := false
 	resolvedImgPath := imgYml
 	// Schema v4: only overthink.yml is the entry point. Resolve image
-	// names through the unified loader (which pulls in includes like
-	// image.yml / images.yml transparently). No direct file reads here.
+	// names through the unified loader (which pulls in sibling per-kind
+	// files transparently). No direct file reads here.
 	if uf, ok, err := LoadUnified(projectDir); err == nil && ok && uf != nil {
 		// Namespace-aware presence check via the single resolver, so a qualified
 		// deploy ref (`ov deploy add ov.<image>`) resolves the same way every
@@ -289,7 +289,7 @@ func resolveLocalName(name, projectDir string, preferKind RefKind) (*DeployRef, 
 	case inImageYml && inLayers:
 		// Cross-kind name reuse — preferKind decides. Both kinds
 		// remain reachable via explicit paths (./layers/<name>/ or
-		// ./image.yml#<name>) or via ResolveDeployRefAsLayer.
+		// the box config file with a #<name> fragment) or via ResolveDeployRefAsLayer.
 		if preferKind == RefKindLayer {
 			return layerRef(), nil
 		}

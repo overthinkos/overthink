@@ -8,22 +8,22 @@ import (
 	"strings"
 )
 
-// ImageCmd groups build-mode commands that operate on image.yml (or, in the
-// case of ImagePullCmd, resolve registry/tag via image.yml and then fetch the
+// ImageCmd groups build-mode commands that operate on overthink.yml (or, in the
+// case of ImagePullCmd, resolve registry/tag via overthink.yml and then fetch the
 // image into local storage so deploy-mode commands can read its OCI labels).
 type BoxCmd struct {
 	Build    BuildCmd    `cmd:"" help:"Build container images"`
 	Generate GenerateCmd `cmd:"" help:"Write .build/ (Containerfiles)"`
 	Inspect  InspectCmd  `cmd:"" help:"Print resolved config for an image (JSON)"`
-	List     ListCmd     `cmd:"" help:"List components from image.yml"`
+	List     ListCmd     `cmd:"" help:"List components from overthink.yml"`
 	Merge    MergeCmd    `cmd:"" help:"Merge small layers in a built container image"`
 	New      NewCmd      `cmd:"" help:"Scaffold new components"`
 	Pull     BoxPullCmd  `cmd:"" help:"Pull an image from its registry into local storage"`
-	Validate ValidateCmd `cmd:"" help:"Check image.yml + layers, exit 0 or 1"`
+	Validate ValidateCmd `cmd:"" help:"Check overthink.yml + layers, exit 0 or 1"`
 
 	// Authoring verbs — added so the MCP tool surface (auto-reflected from
 	// Kong) can author a project from scratch over RPC.
-	Set       BoxSetCmd       `cmd:"" help:"Set a value in image.yml by dot-path (e.g. images.foo.base fedora)"`
+	Set       BoxSetCmd       `cmd:"" help:"Set a value in overthink.yml by dot-path (e.g. images.foo.base fedora)"`
 	AddLayer  BoxAddCandyCmd  `cmd:"" name:"add-candy" help:"Append a layer to an image's layers: list (idempotent)"`
 	RmLayer   BoxRmCandyCmd   `cmd:"" name:"rm-candy" help:"Remove a layer from an image's layers: list"`
 	Fetch     BoxFetchCmd     `cmd:"" help:"Pre-prime the remote-repo cache (default: overthinkos/overthink)"`
@@ -38,20 +38,20 @@ type BoxCmd struct {
 // input forms:
 //
 //   - short name (e.g. "jupyter")           — resolves registry + tag via
-//     image.yml (requires a project directory)
+//     overthink.yml (requires a project directory)
 //   - fully-qualified ref ("ghcr.io/...:v") — pulled as-is
 //   - remote ref ("@github.com/org/repo/image[:version]") — downloads the
-//     repo and pulls the registry ref from its image.yml
+//     repo and pulls the registry ref from its overthink.yml
 type BoxPullCmd struct {
-	Image    string `arg:"" help:"Image name (short, resolved via image.yml), fully-qualified ref, or @github.com/org/repo/image[:version]"`
-	Tag      string `long:"tag" help:"Image CalVer tag when resolving a short name (empty = resolve from image.yml metadata or error with explicit guidance)"`
+	Image    string `arg:"" help:"Image name (short, resolved via overthink.yml), fully-qualified ref, or @github.com/org/repo/image[:version]"`
+	Tag      string `long:"tag" help:"Image CalVer tag when resolving a short name (empty = resolve from overthink.yml metadata or error with explicit guidance)"`
 	Platform string `long:"platform" help:"Target platform (default: host)"`
 }
 
 func (c *BoxPullCmd) Run() error {
-	// `ov image pull` is the operator-facing alias for the canonical
+	// `ov box pull` is the operator-facing alias for the canonical
 	// EnsureImagePresent path: pull from registry, fall back to a
-	// local build when the identifier maps to a project image.yml
+	// local build when the identifier maps to a project overthink.yml
 	// entry. Same contract as BuilderRun, the eval preflight, and
 	// EnsureImage in transfer.go (R3, no per-command divergence).
 	dir, _ := os.Getwd()
@@ -62,7 +62,7 @@ func (c *BoxPullCmd) Run() error {
 		// path picks up the requested tag.
 		if !looksLikeFullRef(c.Image) && !IsRemoteImageRef(StripURLScheme(c.Image)) {
 			if cfg == nil {
-				return fmt.Errorf("short name %q with --tag requires a project directory with box.yml", c.Image)
+				return fmt.Errorf("short name %q with --tag requires a project directory with overthink.yml", c.Image)
 			}
 			resolved, err := cfg.ResolveImage(c.Image, c.Tag, dir, ResolveOpts{})
 			if err != nil {
@@ -77,7 +77,7 @@ func (c *BoxPullCmd) Run() error {
 
 // looksLikeFullRef returns true if the image ref contains a registry segment
 // (a "/" before any ":") — e.g. "ghcr.io/org/name:tag" — so it can be pulled
-// without image.yml resolution.
+// without overthink.yml resolution.
 func looksLikeFullRef(ref string) bool {
 	if strings.HasPrefix(ref, "@") {
 		return false
@@ -103,7 +103,7 @@ func FormatCLIError(err error) error {
 		// pull out the ref so we can render the recommendation.
 		msg := err.Error()
 		ref := strings.TrimPrefix(msg, ErrImageNotLocal.Error()+": ")
-		return fmt.Errorf("image %q is not available locally.\nRun 'ov image pull %s' to fetch it first", ref, ref)
+		return fmt.Errorf("image %q is not available locally.\nRun 'ov box pull %s' to fetch it first", ref, ref)
 	}
 	return err
 }

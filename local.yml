@@ -1,4 +1,4 @@
-version: 2026.156.557
+version: 2026.156.1041
 local:
     # =================================================================
     # eval-local — per-kind R10 smoke template for kind:local.

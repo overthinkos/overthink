@@ -14,7 +14,7 @@ func (e *CycleError) Error() string {
 	return fmt.Sprintf("circular dependency: %s", strings.Join(e.Cycle, " -> "))
 }
 
-// ExpandLayer expands layer composition references (layer: field in layer.yml).
+// ExpandLayer expands layer composition references (layer: field in the candy manifest).
 // For each layer that has IncludedLayers, recursively inserts them into the result.
 // Layers without content (no install files, no env/ports/etc.) are omitted.
 // Returns a flat, deduplicated layer list.
@@ -26,7 +26,7 @@ func ExpandLayer(requested []string, layers map[string]*Layer) ([]string, error)
 	var expand func(rawName string) error
 	expand = func(rawName string) error {
 		// BareRef-normalize every ref before lookup so callers that pass the
-		// RAW image.yml layer list (cfg.Image[...].Layer with @github.com/...
+		// RAW overthink.yml layer list (cfg.Image[...].Layer with @github.com/...
 		// :version refs) resolve against the BareRef-keyed layer map. This is
 		// the single chokepoint every ResolveLayerOrder caller funnels through,
 		// so one normalization here fixes all of them. It is idempotent for

@@ -705,10 +705,10 @@ func evalLocalDeployScope(dir string, node *DeploymentNode, image, instance, sec
 // a running deployment, use `ov eval live <name>`.
 //
 // Image references resolve purely against local container storage via
-// resolveLocalImageRef — never reads image.yml. Run `ov image pull <name>`
-// or `ov image build <name>` first if the image isn't in local storage yet.
+// resolveLocalImageRef — never reads overthink.yml. Run `ov box pull <name>`
+// or `ov box build <name>` first if the image isn't in local storage yet.
 type EvalBoxCmd struct {
-	Image  string   `arg:"" help:"Image reference (full ref or short name resolved against local container storage; never reads image.yml)"`
+	Image  string   `arg:"" help:"Image reference (full ref or short name resolved against local container storage; never reads overthink.yml)"`
 	Format string   `long:"format" default:"text" help:"Output format: text, json, tap, yaml"`
 	Filter []string `long:"filter" help:"Only run checks with these verbs (repeatable)"`
 }
@@ -773,7 +773,7 @@ func (c *EvalBoxCmd) Run() error {
 	return nil
 }
 
-// emitImageTestYAML writes the `ov image test --format yaml` payload
+// emitImageTestYAML writes the `ov eval box --format yaml` payload
 // that ParseOvTestOutput (benchmark_score.go) consumes. The shape is:
 //
 //	image: <ref>

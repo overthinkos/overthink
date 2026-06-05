@@ -20,7 +20,7 @@ import (
 
 // MergeCmd merges small layers in a built container image
 type MergeCmd struct {
-	Image      string `arg:"" optional:"" help:"Image name from image.yml"`
+	Image      string `arg:"" optional:"" help:"Image name from overthink.yml"`
 	All        bool   `long:"all" help:"Merge all images with merge.auto enabled"`
 	MaxMB      int    `long:"max-mb" help:"Maximum size of a merged layer (MB)"`
 	MaxTotalMB int    `long:"max-total-mb" help:"Maximum total image size for merge (MB, 0=no limit)"`
@@ -110,7 +110,7 @@ func (c *MergeCmd) runOne(cfg *Config, imageName string) error {
 		return err
 	}
 
-	// Determine max_mb: CLI flags -> image.yml -> default
+	// Determine max_mb: CLI flags -> the box config -> default
 	maxMB := defaultMaxMB
 	if resolved.Merge != nil && resolved.Merge.MaxMB > 0 {
 		maxMB = resolved.Merge.MaxMB
@@ -119,7 +119,7 @@ func (c *MergeCmd) runOne(cfg *Config, imageName string) error {
 		maxMB = c.MaxMB
 	}
 
-	// Determine max_total_mb: CLI flags -> image.yml -> default
+	// Determine max_total_mb: CLI flags -> the box config -> default
 	maxTotalMB := defaultMaxTotalMB
 	if resolved.Merge != nil && resolved.Merge.MaxTotalMB > 0 {
 		maxTotalMB = resolved.Merge.MaxTotalMB
@@ -223,7 +223,7 @@ func (c *MergeCmd) runOne(cfg *Config, imageName string) error {
 		// fully correct (every individual layer digest is valid). We
 		// surface a clearer diagnostic + an env-var hook to capture the
 		// failing tarball for future investigation.
-		return fmt.Errorf("post-build merge optimization failed (image is functional but unmerged): %w\n  Diagnostic: set OV_MERGE_KEEP_TMP=1 and re-run `ov image merge %s` to capture the failing /tmp/ov-merge-*.tar.\n  This is a known limitation against multi-stage RPM-installed images; the build itself succeeded and the image at this tag is correct.", err, imageRef)
+		return fmt.Errorf("post-build merge optimization failed (image is functional but unmerged): %w\n  Diagnostic: set OV_MERGE_KEEP_TMP=1 and re-run `ov box merge %s` to capture the failing /tmp/ov-merge-*.tar.\n  This is a known limitation against multi-stage RPM-installed images; the build itself succeeded and the image at this tag is correct.", err, imageRef)
 	}
 
 	newLayers, _ := newImg.Layers()

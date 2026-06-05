@@ -9,8 +9,8 @@ import (
 )
 
 // yaml_setter.go — generic comment-preserving dot-path setter for
-// image.yml and layer.yml. Used by `ov image set <dotpath> <value>` and
-// `ov layer set <name> <dotpath> <value>` so the MCP tool surface can
+// overthink.yml and the candy manifest. Used by `ov box set <dotpath> <value>` and
+// `ov candy set <name> <dotpath> <value>` so the MCP tool surface can
 // edit YAML config without a verb explosion (one verb per field) and
 // without an "expose every yaml writer" anti-pattern.
 //
@@ -22,13 +22,13 @@ import (
 //   images.foo.ports                → list (value parsed as YAML)
 //
 // The value is parsed as YAML, so:
-//   ov image set defaults.tag auto         → string "auto"
-//   ov image set images.foo.layers '[a,b]' → list of strings
-//   ov image set images.foo.ports '["8080:8080"]' → list with quoted item
+//   ov box set defaults.tag auto         → string "auto"
+//   ov box set images.foo.layers '[a,b]' → list of strings
+//   ov box set images.foo.ports '["8080:8080"]' → list with quoted item
 //
-// This deliberately does not try to model every layer.yml field as its
+// This deliberately does not try to model every candy manifest field as its
 // own verb. For free-form auxiliary files (pixi.toml, root.yml, scripts),
-// use `ov image write <path>` instead.
+// use `ov box write <path>` instead.
 
 // SetByDotPath edits the file at path, navigating into the YAML
 // structure via dotpath and replacing the leaf value with valueYAML

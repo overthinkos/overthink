@@ -90,7 +90,7 @@ type UnifiedDeployTarget interface {
 	// Del reverses every layer currently recorded for this target
 	// and removes the deploy record. Equivalent to `ov deploy del
 	// <name>`. Only recorded ReverseOps are replayed — never an
-	// ad-hoc computation from layer.yml.
+	// ad-hoc computation from the candy manifest.
 	Del(ctx context.Context, opts DelOpts) error
 
 	// Test runs the given deploy-scope checks against the live
@@ -214,7 +214,7 @@ type LogsOpts struct {
 // target MUST be marked `disposable: true` in deploy.yml — every
 // implementation asserts this before any destructive action.
 type RebuildOpts struct {
-	// RebuildImage forces an `ov image build` before redeploy. Off by
+	// RebuildImage forces an `ov box build` before redeploy. Off by
 	// default: rebuilds only the deployment, reusing the existing
 	// image ref.
 	RebuildImage bool

@@ -96,7 +96,7 @@ func TestOCITargetSkipsApkInstall(t *testing.T) {
 	}
 }
 
-// TestPopulateLayerApk verifies the layer.yml `apk:` field flows through the
+// TestPopulateLayerApk verifies the candy manifest `apk:` field flows through the
 // populator onto the resolved Layer.
 func TestPopulateLayerApk(t *testing.T) {
 	ly := &CandyYAML{

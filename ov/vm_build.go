@@ -217,7 +217,7 @@ func (c *VmBuildCmd) runVmSpecBuild(vmName string, spec *VmSpec, rt *ResolvedRun
 }
 
 // loadBuildYmlSections loads the project's build.yml distro: + builder:
-// blocks. Mirrors the loader path used by ov image build for the same
+// blocks. Mirrors the loader path used by ov box build for the same
 // data — bootstrap VM builds need the distro.<name>.pacstrap and
 // .bootloader templates plus the matching builder.<name> bootstrap
 // template.

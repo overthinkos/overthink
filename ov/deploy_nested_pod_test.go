@@ -84,9 +84,9 @@ func TestDeployNestedPodsInGuest_DeploysOnlyPodChildren(t *testing.T) {
 	// cp-image carries --rootless so the image lands in the guest USER's podman
 	// storage, which the --user from-image quadlet below reads.
 	wantOv := [][]string{
-		{"image", "build", "alpha-img"},
+		{"box", "build", "alpha-img"},
 		{"vm", "cp-image", "cachyos-gpu-vm", "alpha-img", "--as", "localhost/ov-alpha-pod:latest", "--rootless"},
-		{"image", "build", "selkies-kde-nvidia"},
+		{"box", "build", "selkies-kde-nvidia"},
 		{"vm", "cp-image", "cachyos-gpu-vm", "selkies-kde-nvidia", "--as", "localhost/ov-selkies-kde:latest", "--rootless"},
 	}
 	if len(ovCalls) != len(wantOv) {

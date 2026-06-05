@@ -1391,7 +1391,7 @@ func hasLegacyImagesKey(data []byte) bool {
 }
 
 // MergeDeployOverlay patches cfg.Image in-place with deployment overrides from deploy.yml.
-// Field-level replace: deploy.yml value fully replaces image.yml value.
+// Field-level replace: deploy.yml value fully replaces overthink.yml value.
 // Unknown images in deploy.yml are silently ignored.
 func MergeDeployOverlay(cfg *Config, dc *DeployConfig) {
 	if dc == nil || dc.Deploy == nil {

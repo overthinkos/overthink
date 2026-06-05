@@ -118,7 +118,7 @@ func appendCloudInitClean(existing []string) []string {
 //
 // Schema v4 (2026-05) makes overthink.yml the only canonical authoring
 // target. If overthink.yml is missing, errors with a remediation hint
-// pointing at `ov image new project` / `ov migrate`.
+// pointing at `ov box new project` / `ov migrate`.
 func writeVmCloneDeclaration(name, srcVm, srcSnap string, cloudInitClean bool) error {
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -127,7 +127,7 @@ func writeVmCloneDeclaration(name, srcVm, srcSnap string, cloudInitClean bool) e
 	target := filepath.Join(cwd, "overthink.yml")
 	if _, err := os.Stat(target); err != nil {
 		if os.IsNotExist(err) {
-			return fmt.Errorf("overthink.yml not found in %s; run `ov image new project .` first or `ov migrate` to convert legacy configs", cwd)
+			return fmt.Errorf("overthink.yml not found in %s; run `ov box new project .` first or `ov migrate` to convert legacy configs", cwd)
 		}
 		return fmt.Errorf("stat overthink.yml: %w", err)
 	}

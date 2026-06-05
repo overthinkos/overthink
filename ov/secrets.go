@@ -65,7 +65,7 @@ func generateAndStoreSecret(service, key string) (val, source string) {
 	return val, "auto-generated"
 }
 
-// SecretYAML represents a secret declaration in layer.yml.
+// SecretYAML represents a secret declaration in the candy manifest.
 type SecretYAML struct {
 	Name   string `yaml:"name"`             // unique secret name
 	Target string `yaml:"target,omitempty"` // container mount path (default: /run/secrets/<name>)
@@ -84,7 +84,7 @@ type LabelSecretEntry struct {
 //
 // Service, Key, and RotateOnConfig are populated by CollectLayerSecretAccepts
 // (added in a later step) for credential-store-backed secrets derived from
-// secret_accepts / secret_requires layer.yml entries. They are zero for
+// secret_accepts / secret_requires candy manifest entries. They are zero for
 // layer-owned secrets (the existing CollectSecretsFromLabels path), preserving
 // the current behavior.
 //
@@ -102,7 +102,7 @@ type CollectedSecret struct {
 	Target         string // container mount path
 	Env            string // env var name INSIDE the container (the name the app expects, e.g. TS_AUTHKEY)
 	HostEnv        string // env var name on the HOST to read the value from (templated for multi-tailnet; empty = same as Env)
-	SecretName     string // original secret name from layer.yml
+	SecretName     string // original secret name from the candy manifest
 	Service        string // credential store service override (empty = use default lookup)
 	Key            string // credential store key override (empty = use default lookup)
 	RotateOnConfig bool   // if true, bypass podmanSecretExists short-circuit (rotate on every ov config)
@@ -317,7 +317,7 @@ type SecretResolution struct {
 //
 //   - []CollectedSecret: one entry per secret whose value was successfully
 //     resolved (non-empty). Entries carry Service/Key overrides from the
-//     layer.yml `key:` field (default: ov/secret/<env-var-name>) and
+//     candy manifest `key:` field (default: ov/secret/<env-var-name>) and
 //     RotateOnConfig=true so every ov config reconciles them with the
 //     latest credential store value (see plan §2.3).
 //   - []SecretResolution: one entry per input spec, reporting the source

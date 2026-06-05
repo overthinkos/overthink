@@ -58,7 +58,7 @@ func rewriteSingularLabel(data []byte) ([]byte, bool) {
 // (the 2026-06 singular-label cutover). Idempotent: a second invocation on
 // the same tree returns nil. The baked OCI labels inside built images cannot
 // be migrated by config rewriting — they are re-emitted singular on the next
-// `ov image build` (a hard-cutover rebuild).
+// `ov box build` (a hard-cutover rebuild).
 func MigrateSingularLabel(dir string, dryRun bool) ([]string, error) {
 	files, err := discoverProjectYAMLs(dir)
 	if err != nil {

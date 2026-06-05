@@ -269,7 +269,7 @@ func validateVmCloudInit(name string, spec *VmSpec, errs *ValidationError) {
 	// CloudInit only meaningful for cloud_image OR bootc+cloud-init-layer.
 	if spec.Source.Kind == "bootc" {
 		// Can't verify layer membership from here (requires Config access).
-		// Full check lives in ov image validate's top-level wiring.
+		// Full check lives in ov box validate's top-level wiring.
 		// Per D13: warn via validator only when key_injection.cloud_init
 		// was explicitly requested (user intent to use cloud-init).
 		if spec.SSH != nil && spec.SSH.KeyInjection != nil &&

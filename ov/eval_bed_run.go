@@ -13,7 +13,7 @@ package main
 // Every parameter is read from the bed's DeploymentNode — there is NO
 // hardcoded bed table. The target kind selects the bring-up/tear-down path:
 //
-//	target: pod   → ov image build + ov eval image + ov deploy add +
+//	target: pod   → ov box build + ov eval image + ov deploy add +
 //	                ov config + ov start + ov eval live
 //	target: vm    → ov vm build + ov vm create + ov deploy add + ov eval
 //	                live (image build / eval image skipped — the substrate

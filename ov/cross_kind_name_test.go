@@ -14,7 +14,7 @@ package main
 //
 // The unified loader does NOT enforce global uniqueness across these
 // namespaces — uniqueness is scoped to each kind. ov verbs disambiguate
-// by command context: `ov image build ov-cachyos` reaches into the
+// by command context: `ov box build ov-cachyos` reaches into the
 // box: map, `ov vm create ov-cachyos` reaches into the vm: map, and
 // so on.
 
@@ -37,7 +37,7 @@ func TestCrossKindNameReuse_LoaderAcceptsAllKinds(t *testing.T) {
 		[]byte("rpm:\n  packages: [example]\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	overthink := `version: 2026.156.557
+	overthink := `version: 2026.156.1041
 defaults:
   registry: ghcr.io/example
   build: [rpm]
@@ -113,7 +113,7 @@ func TestCrossKindNameReuse_RetiredKeysRejected(t *testing.T) {
 	}{
 		{
 			name: "deployment.qc",
-			overthink: `version: 2026.156.557
+			overthink: `version: 2026.156.1041
 deploy:
   qc:
     target: local
@@ -124,7 +124,7 @@ deploy:
 		},
 		{
 			name: "deployment.cachyos-dx",
-			overthink: `version: 2026.156.557
+			overthink: `version: 2026.156.1041
 deploy:
   cachyos-dx:
     target: local
@@ -135,7 +135,7 @@ deploy:
 		},
 		{
 			name: "local.cachyos-dx",
-			overthink: `version: 2026.156.557
+			overthink: `version: 2026.156.1041
 local:
   cachyos-dx:
     candy: [example]

@@ -287,7 +287,7 @@ func TestLabelTestSet_IsEmpty(t *testing.T) {
 
 // JSON-side scalar shorthand for Matcher / MatcherList: mirrors the YAML
 // shorthand so hand-crafted OCI labels with `"stdout":"OK"` parse the
-// same way as `stdout: OK` in layer.yml.
+// same way as `stdout: OK` in the candy manifest.
 func TestMatcher_UnmarshalJSON_Shorthand(t *testing.T) {
 	cases := []struct {
 		name  string

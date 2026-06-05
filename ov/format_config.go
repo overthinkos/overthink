@@ -621,7 +621,7 @@ type BuilderDef struct {
 	// these paths are emitted into the final image's `ENV PATH=...` and
 	// the `org.overthinkos.path_append` OCI label by writeLayerEnv +
 	// emitLabels in generate.go. Authors can also add layer-level entries
-	// via layer.yml `path_append:` — both contribute to the same merged
+	// via the candy manifest `path_append:` — both contribute to the same merged
 	// PATH. Empty list means the builder doesn't contribute (aur installs
 	// to /usr/bin via pacman -U).
 	PathContributions []string `yaml:"path_contribution,omitempty"`

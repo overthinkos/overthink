@@ -112,8 +112,8 @@ func (g *Generator) resolveUserContext(img *ResolvedBox) error {
 }
 
 // NewGenerator creates a new generator. opts is propagated through Validate
-// + ResolveAllImage so `ov image build --include-disabled` reaches images
-// flagged enabled: false in image.yml (without modifying the file).
+// + ResolveAllImage so `ov box build --include-disabled` reaches images
+// flagged enabled: false in overthink.yml (without modifying the file).
 func NewGenerator(dir string, tag string, opts ResolveOpts) (*Generator, error) {
 	cfg, err := LoadConfig(dir)
 	if err != nil {
@@ -1362,7 +1362,7 @@ func (g *Generator) writeLayerSteps(b *strings.Builder, layerName string, img *R
 		emitVarsEnv(b, layer.vars)
 	}
 
-	// 1. System packages from layer.yml — fully config-driven.
+	// 1. System packages from the candy manifest — fully config-driven.
 	// Phase 1: Walk distro: tags — first matching section wins (override).
 	// Phase 2: If no distro match, walk build: formats — ALL matching sections installed in order.
 	distroMatched := false
@@ -1472,7 +1472,7 @@ func (g *Generator) writeLayerSteps(b *strings.Builder, layerName string, img *R
 		}
 	}
 
-	// 5. Shell-init snippets from layer.yml `shell:` block.
+	// 5. Shell-init snippets from the candy manifest `shell:` block.
 	// Reuses the InstallPlan compiler so the legacy generator and the
 	// new OCITarget path share one source of truth for selection-rule +
 	// destination resolution. We emit the resulting steps inline as
@@ -2393,7 +2393,7 @@ func (g *Generator) rewriteHeaderCopyForRemote(headerCopy string) (string, error
 // layerCopySource returns the COPY source path for a layer in the Containerfile,
 // relative to the build context root (g.Dir).
 //
-// For the common case (no `directory:` override in layer.yml), this returns
+// For the common case (no `directory:` override in the candy manifest), this returns
 // "layers/<layerRef>/" for local layers and ".build/_layers/<name>/" for remote
 // layers — identical to the legacy behavior.
 //

@@ -22,6 +22,25 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-05 — docs: replace the "Oompa-Loompa" naming with "agent"
+
+A docs-only follow-up to the Willy-Wonka README voice (the entry below): the
+playful **Oompa-Loompa** naming for the AI operator/driver was replaced with the
+plain term **agent** across `README.md` and the `plugins/README.md` tagline —
+"your agents are driving", "hands your agent the whole candy store",
+"**Agents drive these beds.**", and the **Author with agents** section heading
+(TOC + in-text anchors repointed to `#author-with-agents`). The rest of the
+chocolate-factory voice is **retained** per the request: the **Swiss Chocolate
+Factory** framing, the **conching** metaphor in Build, the **candybox** wording,
+and the **What's in the chocolate factory** heading all stay. The
+product/technical terms remain exactly as before (`Claude Code`, the Claude Code
+`sub-agents`/`agent teams`/`dynamic workflows`, the named agents, `k3s-agent`, the
+SSH `agent-forwarding` layer, the SPICE `guest-agent` socket, and the literal
+`kind: ai` discriminator). No schema change, no `version:` bump, no migration
+step — `README.md`, `plugins/README.md`, and this file are the only surfaces
+touched. The superproject push carries a fresh per-push CalVer tag; `plugins`
+(no `overthink.yml`) stays tag-exempt.
+
 ### 2026-06-05 — docs: Willy-Wonka README voice + finish the candy/box doc sweep
 
 A docs-only follow-up to the candy/box rebrand that does two things in one

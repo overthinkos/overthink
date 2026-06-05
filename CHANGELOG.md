@@ -22,6 +22,93 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-05 — feat(eval): cross-deployment probing — `on:` driver + `peer:` siblings + `${PEER_*}`, so ONE deployment tests ANOTHER
+
+`ov eval` gained **cross-deployment probing**: one deployment can act as a test
+DRIVER against a SEPARATE deployment as the SUBJECT — the canonical case being a
+**Chrome DRIVER pod that CDP-probes a separate web-server SUBJECT pod**, so a real
+browser tests the subject without baking Chrome into the subject image. "A
+different kind of deployment tests another kind" — pod→pod, local→pod, and local→VM.
+
+Three composable pieces, each at one seam:
+
+- **`on: <driver>`** (the existing `Check.On` step modifier, FINISHED) — dispatches
+  a probe against a named driver deployment instead of the subject. Its
+  `TargetResolver` now returns a fully-resolved per-target resolver
+  (`liveTargetResolver`, reusing `resolveEvalVenue` + `ResolveEvalVarsRuntime`) and
+  is wired into `ov eval live` (pod + VM + local paths) and beds — previously it was
+  harness-only with an empty resolver. For a `cdp:`/`vnc:`/`mcp:` check it connects
+  to the driver's endpoint; for `command:` it runs in the driver's venue.
+- **`peer:` siblings** (new `DeploymentNode.Peer`) — companion deployments brought
+  up ALONGSIDE the subject (pod peers on the shared `ov` net; `local`/`vm` peers
+  host-side), NOT nested inside it. `foldPeers` registers each peer as a top-level
+  addressable Deploy entry (inheriting the owner's disposability — no new autonomy);
+  `bringUpPeers`/`tearDownPeers` (`ov/deploy_peers.go`) shell out to the SAME
+  `ov config`/`ov start`/`ov remove` (pod) and `ov deploy add`/`ov deploy del`
+  (local/vm) verbs the deploy path uses, so a `kind: eval` bed and a `kind: deploy`
+  share ONE lifecycle (the bed runner inherits it). Peers are NEVER eval-live'd
+  (instruments, not subjects).
+- **`${PEER_HOST:name}` / `${PEER_ENDPOINT:name:port}`** (new, `ov/eval_peer.go`) —
+  cross-deployment address variables overlaid onto whatever resolver is active via
+  a single `Runner.PeerVars` injection point in `effectiveEnv` (so they work for
+  the primary, the `on:`-swapped, and harness resolvers alike). `${PEER_HOST}` is
+  the pod→pod container-DNS address (`ov-<name>`); `${PEER_ENDPOINT}` is the
+  host-vantage `127.0.0.1:NNNN` from the shared `resolveEvalEndpoint` — a pod's
+  auto-published port OR a VM's `ssh -L` forward over the managed `ov-<vm>` alias
+  (the VM branch `eval-k3s-vm` already used host-side) — so a `local`/host driver
+  reaches a pod OR a VM subject with no per-kind code. An unresolvable `${PEER_*}`
+  (the peer/subject is unreachable) **FAILS** the referencing check, never SKIPs
+  it (`filterPeerVars` in `runOne`) — a skip on an unreachable dependency would be
+  a fake pass, letting a bed go green when the cross-deployment probe never reached
+  its target; legitimate skips (`skip:`/`exclude_distros`/a build-scope deploy var)
+  are unaffected.
+
+A thin `chrome-headless` box (real `google-chrome --headless=new`, no compositor,
++ the proven `cdp-proxy`) is the reusable CDP driver. Three `kind: eval` beds prove
+the matrix on disposable targets: `eval-cross-pod-cdp` (pod→pod CDP via
+`${PEER_HOST}`), `eval-cross-local-http` (local→pod HTTP via `${PEER_ENDPOINT}`'s
+published-port branch), and `eval-cross-vm-http` (local→VM HTTP via
+`${PEER_ENDPOINT}`'s ssh-forward branch — the SAME check + resolver as the pod bed,
+only the subject kind differs, so cross-kind reach carries ZERO VM-specific eval code).
+
+**The VM cell is local→VM, not pod→VM.** `${PEER_ENDPOINT}` is a host-vantage
+`127.0.0.1` address a Chrome pod cannot route to (that loopback is the pod's own
+netns), and a rootless `qemu:///session` VM shares no L2 bridge with rootless pods —
+so the generic, no-hack VM driver runs host-side. The web-server VM (`web-vm`)
+exposes nothing on the host: `ssh.port_auto` allocates a free host SSH port and
+nginx:80 is reached through the SSH tunnel, never a host port-forward (strictly more
+secure). An earlier exploratory `host.containers.internal` / `network: host` pod→VM
+bridge was a reinvention that collided with operator services on a fixed port; it is gone.
+
+**RDD findings (proven on live beds before the design committed):** headless Chrome
+serves CDP with no compositor BUT requires `--remote-allow-origins='*'` (Chrome
+146+ rejects the CDP WebSocket otherwise — `cdp open` via HTTP works, `cdp text`
+fails); a `local`/host driver reaches a NAT'd VM's nginx through the existing
+`resolveEvalEndpoint` ssh-forward with no per-kind code. A latent generation bug
+surfaced + was fixed generically: the `org.overthinkos.info` LABEL was emitted `%q`
+(double-quoted), so a layer description mentioning `${PEER_HOST}` made buildah try
+to expand it and fail — it is now single-quoted like every JSON label.
+
+**A flag-drift teardown bug surfaced during the `eval-cross-vm-http` R10 and was
+fixed generically (R3).** The shared `tearDownPeers` ran `ov deploy del <peer>
+--yes`, but Kong renders `DeployDelCmd.AssumeYes` (whose `long:"yes"` tag is a Kong
+no-op in the separate-tag form) as `--assume-yes` — so `--yes` was rejected at
+arg-parse, the best-effort discard swallowed the error, and the peer LEAKED while
+the bed still scored PASS. The same class lived at FOUR pre-existing
+`ov deploy del <name> --force` call sites (ephemeral teardown, recursive child
+teardown, the systemd-run TTL safety-net timer, and orphan reaping) — every one
+silently mis-parsing. The generic fix routes ALL FIVE programmatic teardowns
+through one `deployDelArgv(name)` helper (the single source of truth for the valid
+`--assume-yes` flag), makes `tearDownPeers` WARN on a teardown failure instead of
+swallowing it, and adds a real-Kong-parse test asserting `--assume-yes`/`-y` accepted
+and `--yes`/`--force` rejected (the prior stub-based test asserted arg strings and
+never exercised flag parsing — which is how the drift shipped). The stale `--yes` in
+`/ov-core:deploy` examples was corrected too.
+
+`peer:` is a new authoring key shape, so the schema HEAD bumped to `2026.156.1531`
+(the `peer-field` step is additive — it transforms nothing, only raising HEAD so an
+older `ov` rejects a `peer:` config instead of silently dropping the key).
+
 ### 2026-06-05 — feat(eval): Agent Driven Development (ADD) — a first-class pillar + `ov box/eval feature run` acceptance + the agent grader
 
 **Agent Driven Development (ADD)** became a named, co-equal pillar with RDD, and

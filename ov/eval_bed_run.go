@@ -293,6 +293,9 @@ func runEvalBed(exe, name string, node DeploymentNode, opts bedRunOpts) (*bedRun
 			// (ov-<bed>-<vol>), never a production deploy's ov-<image>-<vol>.
 			_ = step("cleanup", []string{"remove", name, "--purge"})
 		}
+		// Tear down any sibling peer deployments (companion driver pods) the
+		// bed brought up alongside its root. Best-effort; never blocks teardown.
+		tearDownPeers(&node)
 	}
 
 	// fail is the SINGLE failure tail shared by every step: record the
@@ -376,6 +379,10 @@ func runEvalBed(exe, name string, node DeploymentNode, opts bedRunOpts) (*bedRun
 		// (a stale postgres volume would carry a stale password). Safe: a bed's
 		// volumes are isolated under its own deploy key, never production's.
 		_ = exec.Command(exe, "remove", name, "--purge").Run()
+		// Clear any sibling peers left over from a previous interrupted run
+		// (symmetry with the bed remove above) so kept-alive peer state never
+		// blocks a fresh deploy.
+		tearDownPeers(&node)
 		// Seed the per-host deploy.yml with the bed's project-declared
 		// deploy-shaped overrides (port / volume / env / tunnel / security /
 		// network) BEFORE ov config runs. The folded bed node is the source of
@@ -454,6 +461,15 @@ func runEvalBed(exe, name string, node DeploymentNode, opts bedRunOpts) (*bedRun
 	// first-run DB migration runs minutes before the API binds). stepReady
 	// polls eval-live until it passes or the deadline, so we wait for real
 	// readiness instead of racing a fixed sleep.
+	// Bring up sibling peers (companion DRIVER deployments — e.g. a Chrome pod)
+	// ALONGSIDE the substrate, ONCE, regardless of substrate kind (pod / vm /
+	// local) — the subject's `on: <peer>` checks drive through them. Peers are
+	// instruments, NEVER eval-live'd (excluded from bedEvalLiveRefs). The SAME
+	// bringUpPeers helper serves the operator deploy path (R3). One call, not
+	// one per kind.
+	if err := bringUpPeers(&node); err != nil {
+		return fail("bring up peers for %s: %w", name, err)
+	}
 	if err := evalLiveTree("eval-live"); err != nil {
 		return fail("eval live %s: %w", name, err)
 	}

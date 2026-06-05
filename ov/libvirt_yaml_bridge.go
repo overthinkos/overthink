@@ -1002,8 +1002,14 @@ func buildDefaultInterface(spec *VmSpec, rt VmRuntimeParams) libvirtxml.DomainIn
 			}
 			if len(ranges) > 0 {
 				out.PortForward = []libvirtxml.DomainInterfaceSourcePortForward{{
-					Proto:  "tcp",
-					Ranges: ranges,
+					Proto: "tcp",
+					// Bind host-side forwards to loopback ONLY (security): a VM
+					// port must never be exposed on 0.0.0.0 / the LAN — the same
+					// 127.0.0.1 default podman uses for published pod ports. Host
+					// tooling (ov vm ssh, ov deploy add vm:, host-net peers) reaches
+					// the VM via 127.0.0.1; nothing off-host can.
+					Address: vmForwardBindAddr,
+					Ranges:  ranges,
 				}}
 			}
 		}
@@ -1140,10 +1146,17 @@ func mapInterface(iface LibvirtInterface) libvirtxml.DomainInterface {
 		if iface.PortForwards[0].Proto != "" {
 			proto = iface.PortForwards[0].Proto
 		}
-		out.PortForward = []libvirtxml.DomainInterfaceSourcePortForward{{Proto: proto, Ranges: ranges}}
+		// Loopback-only bind (security) — see vmForwardBindAddr.
+		out.PortForward = []libvirtxml.DomainInterfaceSourcePortForward{{Proto: proto, Address: vmForwardBindAddr, Ranges: ranges}}
 	}
 	return out
 }
+
+// vmForwardBindAddr is the host address VM passt/user-mode port forwards bind to.
+// 127.0.0.1 (loopback) ONLY — a VM port is never exposed on 0.0.0.0 / the LAN,
+// mirroring podman's default 127.0.0.1 for published pod ports. Host tooling and
+// host-net peers reach the VM via loopback; nothing off-host can.
+const vmForwardBindAddr = "127.0.0.1"
 
 func mapChannel(ch LibvirtChannel, rt VmRuntimeParams) libvirtxml.DomainChannel {
 	out := libvirtxml.DomainChannel{}

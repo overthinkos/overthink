@@ -1,0 +1,25 @@
+candy:
+    version: 2026.156.1530
+    name: eval-cross-local-driver-layer
+    description:
+        feature: Minimal host (target:local) venue for a cross-deployment local DRIVER peer
+        narrative: |
+            Establishes a host venue for the eval-cross-local-http bed's local
+            DRIVER peer: a `command:` check with `on: <this>` runs on the host
+            against a SEPARATE pod SUBJECT (cross-kind — local driver, pod
+            subject). USER-level only (a marker under $HOME, no root/sudo/gates)
+            so bringUpPeers applies it unattended via `ov deploy add`.
+        tag: [working]
+    task:
+        - mkdir: "${HOME}/.cache"
+          user: "${USER}"
+        - write: "${HOME}/.cache/ov-cross-local-driver-marker"
+          user: "${USER}"
+          mode: "0644"
+          content: |
+            ov-cross-local-driver v1
+    eval:
+        - id: cross-local-driver-marker
+          scope: deploy
+          command: "test -f ${HOME}/.cache/ov-cross-local-driver-marker"
+          in_container: false

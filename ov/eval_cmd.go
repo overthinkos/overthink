@@ -214,7 +214,10 @@ func (c *EvalLiveCmd) Run() error {
 	runner.Image = c.Image
 	runner.Instance = c.Instance
 	runner.Distros = meta.Distro
-	results := runner.Run(context.Background(), checks)
+	// Cross-deployment probing (a check with `on: <driver>` reaching a SEPARATE
+	// subject via ${PEER_*}) is wired generically by RunLive — the ONE entry
+	// point every live-eval path shares (R3).
+	results := runner.RunLive(context.Background(), checks, c.Instance)
 
 	fmt.Fprintf(os.Stderr, "Image: %s (container: %s)\n", meta.Image, containerName)
 	fails := formatResults(results, c.Format)
@@ -492,7 +495,13 @@ func (c *EvalLiveCmd) runVm() error {
 	// pod from the host `ov eval <verb>` subprocess — skip them (the direct-pod
 	// bed covers them against the same image).
 	runner.SkipHostContainerVerbs = nestedPodInVM
-	results := runner.Run(context.Background(), checks)
+	// Cross-deployment probing for a VM subject (e.g. a host-net Chrome pod
+	// CDP-probing this VM's web server at 127.0.0.1:<passt-forward>) is wired
+	// generically by RunLive (R3). The on:-redirected cdp/wl/vnc/mcp verbs run
+	// host-side against the DRIVER (a host pod, reachable host-side),
+	// independent of SkipHostContainerVerbs (which gates only the VM's OWN
+	// nested-container verbs).
+	results := runner.RunLive(context.Background(), checks, c.Instance)
 
 	fmt.Fprintf(os.Stderr, "VM: ov-%s (ssh %s@%s:%d)\n", c.Image, user, host, port)
 	fails := formatResults(results, c.Format)
@@ -695,7 +704,9 @@ func evalLocalDeployScope(dir string, node *DeploymentNode, image, instance, sec
 	runner := NewRunner(exec, resolver, RunModeLive)
 	runner.Image = image
 	runner.Instance = instance
-	results := runner.Run(context.Background(), checks)
+	// Generic cross-deployment support (on: driver + ${PEER_*}) via the shared
+	// RunLive entry point — so a local-SUBJECT bed can drive a peer too (R3).
+	results := runner.RunLive(context.Background(), checks, instance)
 	return formatResults(results, format), nil
 }
 

@@ -27,7 +27,7 @@ import (
 //       pod_state / k8s_state Ephemeral block, returns a runtime
 //       handle. The timer-first ordering is panic-safe: even if the
 //       caller crashes mid-provisioning, the timer fires `ov deploy
-//       del <name> --force` after the TTL.
+//       del <name> --assume-yes` after the TTL.
 //
 //   TeardownEphemeralLifecycle(node, deployName, handle) error
 //       Called as the LAST action of run* after teardown completes.
@@ -81,7 +81,7 @@ type EphemeralHandle struct {
 //  3. Compute effective TTL (clipped to parent's remaining TTL when
 //     nested).
 //  4. Register systemd transient timer that runs `ov deploy del
-//     <deployName> --force` after the TTL.
+//     <deployName> --assume-yes` after the TTL.
 //  5. Increment vm-target parent-snapshot refcount when applicable.
 //  6. Persist EphemeralRuntime into deploy.yml's vm_state.ephemeral
 //     (or pod_state / k8s_state for those targets).
@@ -254,7 +254,7 @@ func newEphemeralID() (string, error) {
 }
 
 // registerTransientTimer creates a systemd-run --user --on-active=<ttl>
-// transient unit that fires `ov deploy del <deployName> --force` when
+// transient unit that fires `ov deploy del <deployName> --assume-yes` when
 // the TTL elapses. Returns the unit name (suitable for cancel).
 //
 // Falls back to a no-op when systemd-run is not available (best-effort
@@ -268,16 +268,12 @@ func registerTransientTimer(deployName string, ttl time.Duration) (string, error
 		return "", fmt.Errorf("locating ov binary: %w", err)
 	}
 	unitName := fmt.Sprintf("ov-deploy-del-%s-%d", sanitizeUnitName(deployName), time.Now().Unix())
-	args := []string{
+	args := append([]string{
 		"--user",
 		"--unit=" + unitName,
 		"--on-active=" + ttl.String(),
 		exe,
-		"deploy",
-		"del",
-		deployName,
-		"--force",
-	}
+	}, deployDelArgv(deployName)...)
 	cmd := exec.Command("systemd-run", args...)
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
@@ -439,14 +435,14 @@ func teardownChildrenRec(dc *DeployConfig, parentID string, visited map[string]b
 				return err
 			}
 		}
-		// Invoke `ov deploy del <child> --force`. We shell out so the
+		// Invoke `ov deploy del <child> --assume-yes`. We shell out so the
 		// child's full cleanup logic (including its own
 		// TeardownEphemeralLifecycle) runs.
 		exe, err := os.Executable()
 		if err != nil {
 			return err
 		}
-		cmd := exec.Command(exe, "deploy", "del", name, "--force")
+		cmd := exec.Command(exe, deployDelArgv(name)...)
 		cmd.Stderr = os.Stderr
 		cmd.Stdout = os.Stdout
 		if err := cmd.Run(); err != nil {

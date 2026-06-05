@@ -272,7 +272,8 @@ func TestRenderDomainXML_AutoSynthesizedDisk(t *testing.T) {
 		// Default user-mode interface + SSH forward via passt.
 		`<interface type="user">`,
 		`<backend type="passt">`,
-		`<portForward proto="tcp">`,
+		// host-only bind (security): VM forwards must never expose on 0.0.0.0/LAN.
+		`<portForward proto="tcp" address="127.0.0.1">`,
 		`<range start="2224" to="22">`,
 		// Auto-synthesized serial + console (emitted with type="pty").
 		`<serial type="pty">`,

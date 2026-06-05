@@ -70,7 +70,7 @@ type MigrationStep struct {
 // closure references it, and the registry's last entry uses it as its Version,
 // so the two are guaranteed equal (asserted by TestRegistryHeadMatchesLatest).
 // Bump it — and append the matching MigrationStep — for each future cutover.
-var latestSchemaVersion = mustCalVer("2026.156.1041")
+var latestSchemaVersion = mustCalVer("2026.156.1531")
 
 // migrationSteps is the ordered registry. Chronological by git landing date
 // (see `git log --diff-filter=A` on each migrate_*.go), which is the order the
@@ -202,6 +202,17 @@ func migrationSteps() []MigrationStep {
 		{mustCalVer("2026.156.1040"), "discover-flatten", false, func(c *MigrateContext) (bool, error) {
 			w, err := MigrateDiscoverFlatten(c.Dir, c.DryRun)
 			return len(w) > 0, err
+		}},
+		// 2026-06 cross-deployment `peer:` field: kind:eval beds + kind:deploy
+		// gained a `peer:` map of sibling companion deployments (a Chrome DRIVER
+		// pod CDP-probing a SEPARATE web SUBJECT, etc.). Purely ADDITIVE — a config
+		// without `peer:` is unchanged — so this step transforms nothing; it
+		// raises HEAD so an older `ov` REJECTS a `peer:`-using config (with a
+		// `Run: ov migrate` hint) instead of silently dropping the unknown key and
+		// never bringing the peer up. The calver-schema stamp re-stamps every
+		// file to the new HEAD. See CHANGELOG.md.
+		{mustCalVer("2026.156.1530"), "peer-field", false, func(c *MigrateContext) (bool, error) {
+			return false, nil
 		}},
 		// HEAD — the schema stamp. Must stay LAST so LatestSchemaVersion picks it up
 		// and every versioned file lands on this CalVer. This is the integer→CalVer

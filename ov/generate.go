@@ -2119,8 +2119,14 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 	resolvedStatus := resolveStatus(effectiveStatus)
 	b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelStatus, resolvedStatus))
 	if len(infoParts) > 0 {
-		combinedInfo := strings.Join(infoParts, "; ")
-		b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelInfo, combinedInfo))
+		// Collapse block-scalar newlines so the value is one valid LABEL line,
+		// then single-quote (NOT %q): a description may legitimately mention a
+		// ${VAR} (e.g. ${PEER_HOST:<subject>}), and the %q double-quoted form
+		// lets buildah try to expand it — which fails with "Unsupported modifier"
+		// on, e.g., the `<` in ${PEER_HOST:<subject>}. shellSingleQuote matches
+		// how every JSON label is emitted (no shell/Dockerfile expansion).
+		combinedInfo := strings.ReplaceAll(strings.Join(infoParts, "; "), "\n", " ")
+		b.WriteString(fmt.Sprintf("LABEL %s=%s\n", LabelInfo, shellSingleQuote(combinedInfo)))
 	}
 
 	// Layer versions: map of layer name -> CalVer for layers with version set

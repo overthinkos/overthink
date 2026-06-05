@@ -13,7 +13,7 @@ import (
 // purpose.
 //
 // Pure orphan detection — no race resolution. If a teardown is concurrently
-// in progress, the second `ov deploy del --force` no-ops on the already-
+// in progress, the second `ov deploy del --assume-yes` no-ops on the already-
 // removed pieces.
 type ReapOrphansCmd struct{}
 
@@ -45,7 +45,7 @@ func (c *ReapOrphansCmd) Run() error {
 	for _, name := range orphans {
 		fmt.Printf("reaping orphan %q ...\n", name)
 		exe, _ := os.Executable()
-		cmd := exec.Command(exe, "deploy", "del", name, "--force")
+		cmd := exec.Command(exe, deployDelArgv(name)...)
 		cmd.Stderr = os.Stderr
 		cmd.Stdout = os.Stdout
 		if err := cmd.Run(); err != nil {

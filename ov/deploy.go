@@ -346,6 +346,31 @@ type DeploymentNode struct {
 	// reference Inside is DERIVED from this tree at load time; authored
 	// `inside:` entries are rejected.
 	Nested map[string]*DeploymentNode `yaml:"nested,omitempty"`
+
+	// --- Sibling peers: companion deployments brought up alongside ---
+	//
+	// Peer are full DeploymentNodes brought up ALONGSIDE this node on the
+	// shared `ov` network — NOT nested inside it (contrast Nested, whose
+	// children run INSIDE this node's venue and are addressed by a dotted
+	// path). A peer is a companion INSTRUMENT — the canonical case is a
+	// Chrome driver pod that CDP-probes this web-server subject via a check
+	// with `on: <peer>`; peers are reachable by `${PEER_HOST:<name>}` over
+	// the shared net and are NEVER eval-live'd themselves (excluded from
+	// bedEvalLiveRefs). foldPeers registers each peer as a top-level,
+	// addressable Deploy entry at load time (inheriting this node's
+	// disposability) so the SAME `ov config`/`ov start`/`ov stop` verbs the
+	// deploy path already uses bring it up and tear it down — and a kind:eval
+	// bed inherits that lifecycle through its own `ov start <bed>` step.
+	// Used identically by kind:eval beds and kind:deploy deployments (one
+	// codebase). Peer keys MUST be globally unique + carry no `.` (same rule
+	// as Nested + bed names); the AUTHOR keeps peer host ports disjoint.
+	Peer map[string]*DeploymentNode `yaml:"peer,omitempty"`
+
+	// PeerOf, when set, names the deployment whose `peer:` block defined this
+	// (folded) entry. DERIVED by foldPeers — never authored. Marks the entry
+	// as a companion so it is brought up/torn down with its owner and is not
+	// enumerated as an independent bed.
+	PeerOf string `yaml:"-"`
 }
 
 // DeployShellOverlay is one entry in deploy.yml `shell:`. ID matches
@@ -641,7 +666,7 @@ type EphemeralLifetime struct {
 	// ephemeral. Parsed via time.ParseDuration ("30m", "2h", "90s").
 	// When empty (boolean-shorthand authoring), defaults to "1h".
 	// The value is the safety floor: a systemd transient timer fires
-	// `ov deploy del <name> --force` after this duration if all
+	// `ov deploy del <name> --assume-yes` after this duration if all
 	// higher-layer cleanup paths fail.
 	TTL string `yaml:"ttl,omitempty"`
 

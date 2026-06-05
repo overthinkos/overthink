@@ -186,6 +186,47 @@ type Runner struct {
 	// The field name is historical; semantically the floor is the
 	// run/benchmark start.
 	IterStartTime time.Time
+
+	// PeerVars carries pre-resolved cross-deployment address variables —
+	// ${PEER_HOST:name} and ${PEER_ENDPOINT:name:port} (eval_peer.go) — that
+	// let a driven probe (a check with `on: <driver>`) TARGET a SEPARATE
+	// SUBJECT deployment over the shared `ov` network or the host. Overlaid by
+	// effectiveEnv onto WHATEVER resolver is active (primary, on:-swapped, or a
+	// harness bucket), so cross-deployment addressing is identical across
+	// `ov eval live`, kind:eval beds, and recipes. Nil under classical runs
+	// with no ${PEER_*} refs (no overlay, behaviour unchanged).
+	PeerVars map[string]string
+	// peerCleanups tears down anything opened while resolving PeerVars (an
+	// ssh -L forward for a ${PEER_ENDPOINT} VM/host subject). Run via
+	// ClosePeers() — the eval command defers it at run end.
+	peerCleanups []func()
+}
+
+// ClosePeers tears down any resources opened while resolving ${PEER_*} address
+// variables (ssh -L forwards). Safe to call when none were opened.
+func (r *Runner) ClosePeers() {
+	for _, c := range r.peerCleanups {
+		if c != nil {
+			c()
+		}
+	}
+	r.peerCleanups = nil
+}
+
+// RunLive runs `checks` as a LIVE cross-deployment eval. It is the SINGLE entry
+// point every host-context live-eval path (a pod / VM / local SUBJECT) shares,
+// so cross-deployment support is wired generically in ONE place, never per kind
+// (R3). It wires the `on:` driver TargetResolver (liveTargetResolver resolves a
+// driver of ANY kind via resolveEvalVenue), pre-resolves the ${PEER_*} subject
+// addresses (applyPeerVars), runs, and tears down any peer endpoints opened.
+// The harness scorer (eval_runner_live.go) keeps its OWN resolver — it runs
+// against sandbox-NESTED pods, a genuinely different venue context, not a
+// duplicate of this host-context path.
+func (r *Runner) RunLive(ctx context.Context, checks []Check, instance string) []EvalResult {
+	r.TargetResolver = liveTargetResolver(instance)
+	applyPeerVars(r, checks, instance)
+	defer r.ClosePeers()
+	return r.Run(ctx, checks)
 }
 
 // NewRunner constructs a Runner with sensible defaults. Caller passes a
@@ -325,8 +366,20 @@ func (r *Runner) runOne(ctx context.Context, c *Check) EvalResult {
 	env := r.effectiveEnv()
 	missing := expanded.ExpandVars(env)
 	if len(missing) > 0 {
-		result.Status = TestSkip
-		result.Message = fmt.Sprintf("unresolved variables: %s", strings.Join(missing, ", "))
+		// An unresolved cross-deployment var (${PEER_HOST}/${PEER_ENDPOINT})
+		// means the peer/subject this probe targets is UNREACHABLE — the
+		// probe's whole premise failed, so the check FAILS. A SKIP there would
+		// be a fake pass (the bed must NOT go green on an unreachable peer).
+		// Other unresolved vars stay a legitimate SKIP: a deploy-only var under
+		// build scope, an unmounted volume — inputs that genuinely don't apply
+		// to this run, not a failed dependency.
+		if peerMissing := filterPeerVars(missing); len(peerMissing) > 0 {
+			result.Status = TestFail
+			result.Message = fmt.Sprintf("peer unreachable — unresolved cross-deployment variable(s): %s", strings.Join(peerMissing, ", "))
+		} else {
+			result.Status = TestSkip
+			result.Message = fmt.Sprintf("unresolved variables: %s", strings.Join(missing, ", "))
+		}
 		result.Elapsed = time.Since(start)
 		result.Attempts = 1
 		result.TotalElapsed = result.Elapsed
@@ -447,16 +500,27 @@ func (r *Runner) effectiveEnv() map[string]string {
 	if r.Resolver != nil {
 		base = r.Resolver.Env
 	}
-	if r.Scenario == nil {
+	if r.Scenario == nil && len(r.PeerVars) == 0 {
 		return base
 	}
-	// Copy-on-overlay so the resolver's shared Env map stays clean
-	// across scenarios.
-	env := make(map[string]string, len(base)+len(r.Scenario.Captures)+2)
+	// Copy-on-overlay so the resolver's shared Env map stays clean across
+	// scenarios. Cross-deployment ${PEER_*} addresses overlay first (they are
+	// per-run, target-independent), then scenario captures (which win on the
+	// rare key collision).
+	capN := 0
+	if r.Scenario != nil {
+		capN = len(r.Scenario.Captures)
+	}
+	env := make(map[string]string, len(base)+len(r.PeerVars)+capN+2)
 	for k, v := range base {
 		env[k] = v
 	}
-	r.Scenario.ApplyToEnv(env)
+	for k, v := range r.PeerVars {
+		env[k] = v
+	}
+	if r.Scenario != nil {
+		r.Scenario.ApplyToEnv(env)
+	}
 	return env
 }
 

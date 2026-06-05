@@ -1464,6 +1464,123 @@ eval:
               stdout:
                 - contains: '"kind": "pod"'
                 - contains: eval-pod
+    # Cross-deployment probing (pod→pod): a Chrome DRIVER pod (peer) CDP-probes
+    # this web-server SUBJECT pod over the shared `ov` network. Proves `on:` +
+    # ${PEER_HOST:<subject>} + peer: end-to-end — the canonical "a different kind
+    # of deployment tests another" case. The chrome peer is brought up ALONGSIDE
+    # the root by bringUpPeers (the shared deploy+eval lifecycle, R3); it is an
+    # instrument, never eval-live'd itself.
+    eval-cross-pod-cdp:
+        target: pod
+        box: web
+        disposable: true
+        lifecycle: dev
+        port: [auto] # auto-allocate free host ports (avoid fixed-port collisions)
+        peer:
+            chrome:
+                target: pod
+                box: chrome-headless
+                port: [auto] # chrome's CDP 9222 published so host-side `ov eval cdp` reaches it
+        description:
+            feature: Cross-deployment CDP — a Chrome driver pod probes a separate web subject pod
+            tag: [working]
+        eval:
+            # The subject's nginx fixture serves the marker on :8080.
+            - id: web-fixture-up
+              scope: deploy
+              http: http://127.0.0.1:${HOST_PORT:8080}/
+              status: 200
+              body:
+                - contains: ov-fixture-web-content-marker
+            # DRIVE: the chrome peer navigates a REAL browser to THIS subject over
+            # the shared `ov` net (${PEER_HOST:<subject>} → ov-<bed> container DNS).
+            - id: cdp-open-web-subject
+              scope: deploy
+              cdp: open
+              on: chrome
+              url: http://${PEER_HOST:eval-cross-pod-cdp}:8080
+              eventually: 45s
+              retry_interval: 3s
+            # ASSERT: the rendered page carries the subject's fixture marker —
+            # proof the cross-deployment CDP probe actually drove the browser.
+            - id: cdp-web-fixture-rendered
+              scope: deploy
+              cdp: text
+              on: chrome
+              tab: "1"
+              eventually: 30s
+              retry_interval: 3s
+              stdout:
+                - contains: ov-fixture-web-content-marker
+    # Cross-deployment probing ACROSS KINDS (local→VM): a LOCAL (host) DRIVER
+    # curls a web-server SUBJECT running in a VM. The driver reaches the guest's
+    # nginx :80 via ${PEER_ENDPOINT:<bed>:80} → resolveEvalEndpoint's VM branch →
+    # `ssh -L 127.0.0.1:<rand>:127.0.0.1:80` over the managed ov-web-vm alias —
+    # the SAME host-vantage resolver eval-cross-local-http uses for a pod subject;
+    # only the subject KIND differs (VM vs pod), so this is the cross-kind proof
+    # with ZERO VM-specific eval code. A pod driver can't reach a host-vantage
+    # 127.0.0.1 (its own netns), so the generic, no-hack VM driver runs host-side.
+    eval-cross-vm-http:
+        target: vm
+        vm: web-vm
+        disposable: true
+        lifecycle: dev
+        peer:
+            host-driver-vm:
+                target: local
+                local: eval-cross-local-driver
+        description:
+            feature: Cross-deployment across kinds — a local host driver HTTP-probes a web subject in a VM
+            tag: [working]
+        eval:
+            # DRIVE: the local (host) driver curls the VM's nginx through the
+            # ssh-forward (${PEER_ENDPOINT} → 127.0.0.1:<forwarded 80>), dispatched
+            # through the local peer's host venue (on:). The forward's local
+            # listener binds as soon as the VM SSH is up; curl retries via
+            # `eventually:` until cloud-init finishes bringing nginx up.
+            - id: local-driver-reaches-vm
+              scope: deploy
+              command: "curl -fsS http://${PEER_ENDPOINT:eval-cross-vm-http:80}/"
+              on: host-driver-vm
+              eventually: 90s
+              retry_interval: 5s
+              stdout:
+                - contains: ov-fixture-vm-content-marker
+    # Cross-deployment across kinds (local→pod): a LOCAL (host) DRIVER curls a
+    # web-server SUBJECT pod via its published port. Exercises a NON-pod peer
+    # bring-up (`ov deploy add` the local driver) + `on:`-to-host-venue dispatch +
+    # ${PEER_ENDPOINT} (host-vantage addressing of a pod subject).
+    eval-cross-local-http:
+        target: pod
+        box: web
+        disposable: true
+        lifecycle: dev
+        port: [auto]
+        peer:
+            host-driver:
+                target: local
+                local: eval-cross-local-driver
+        description:
+            feature: Cross-deployment across kinds — a local host driver HTTP-probes a web subject pod
+            tag: [working]
+        eval:
+            - id: web-fixture-up
+              scope: deploy
+              http: http://127.0.0.1:${HOST_PORT:8080}/
+              status: 200
+              body:
+                - contains: ov-fixture-web-content-marker
+            # DRIVE: the local (host) driver curls the web pod via its published
+            # port (${PEER_ENDPOINT} → 127.0.0.1:<published 8080>, reachable from
+            # the host), dispatched through the local peer's host venue (on:).
+            - id: local-driver-reaches-web
+              scope: deploy
+              command: "curl -fsS http://${PEER_ENDPOINT:eval-cross-local-http:8080}/"
+              on: host-driver
+              eventually: 30s
+              retry_interval: 3s
+              stdout:
+                - contains: ov-fixture-web-content-marker
     # Disposable R10 for the vscode layer's Arch direct-download install path
     # (the version-pin cutover that replaced the broken visual-studio-code-bin AUR).
     # The vscode layer's baked build-scope eval (code-binary + code-version) runs at

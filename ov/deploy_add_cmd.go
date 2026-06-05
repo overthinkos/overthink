@@ -74,6 +74,23 @@ type DeployDelCmd struct {
 	Runner ReverseRunner `kong:"-"`
 }
 
+// deployDelArgv returns the argv (everything AFTER the ov binary) for a
+// non-interactive `ov deploy del <name>`: the verb, the name, and the ONE valid
+// skip-confirmation flag. Every programmatic teardown builds its command through
+// this single helper — in-process (runOvSubcommand), out-of-process
+// (exec.Command), and the systemd-run TTL timer — so the flag can never drift
+// across call sites again.
+//
+// The flag is `--assume-yes`, NOT `--yes`/`--force`: DeployDelCmd.AssumeYes
+// renders as --assume-yes because Kong derives the long name from the FIELD
+// (the `long:"yes"` tag is a Kong no-op in the separate-tag form), with `-y` as
+// the short form. A `--yes`/`--force` drift — neither of which Kong accepts —
+// once aborted teardown at arg-parse and silently leaked the resource (see
+// CHANGELOG); the deploy-del-flag regression test guards this.
+func deployDelArgv(name string) []string {
+	return []string{"deploy", "del", name, "--assume-yes"}
+}
+
 // Run executes `ov deploy add`.
 //
 // For a schema-v2 config, c.Name may be a dotted path (foo.bar.baz)
@@ -148,12 +165,25 @@ func (c *DeployAddCmd) Run() error {
 		return c.dispatchNode(resolvedPath, rootNode, parentExec, dir)
 	}
 
-	return WalkDeploymentTree(resolvedPath, rootNode, parentExec, func(path string, node *DeploymentNode, parentExec DeployExecutor) (DeployExecutor, error) {
+	if err := WalkDeploymentTree(resolvedPath, rootNode, parentExec, func(path string, node *DeploymentNode, parentExec DeployExecutor) (DeployExecutor, error) {
 		if err := c.dispatchNode(path, node, parentExec, dir); err != nil {
 			return nil, err
 		}
 		return deriveChildExecutorForPath(path, node, parentExec)
-	})
+	}); err != nil {
+		return err
+	}
+
+	// Operator deploy path: bring up any sibling peers (companion deployments)
+	// ALONGSIDE the root on the shared `ov` network — the SAME bringUpPeers
+	// helper the kind:eval bed runner uses (R3). The bed runner takes its own
+	// `--node-only` path above and brings peers up itself after `ov start`, so
+	// peers are never double-deployed. A dry-run skips bring-up (nothing real
+	// was deployed to companion).
+	if c.DryRun {
+		return nil
+	}
+	return bringUpPeers(rootNode)
 }
 
 // dispatchNode compiles plans for a single node and runs the
@@ -521,6 +551,13 @@ func (c *DeployDelCmd) Run() error {
 		tt.KeepImage = c.KeepImage
 	}
 	_ = kind // kind is informational; the adapter type already encodes it.
+
+	// Tear down any sibling peers (companion deployments) FIRST — the reverse
+	// of bringUpPeers (root up → peers up; peers down → root down). Best-effort
+	// + the SAME helper the bed runner uses (R3). Skipped on a dry-run.
+	if !c.DryRun {
+		tearDownPeers(node)
+	}
 
 	return utgt.Del(context.Background(), DelOpts{
 		DryRun:    c.DryRun,

@@ -182,7 +182,7 @@ func RunEvalLive(ctx context.Context, deployment, scoreName string, scenarios []
 					return
 				}
 				fmt.Fprintf(os.Stderr, "score live: ephemeral wrap — ov deploy del %s\n", pod)
-				delCmd := exec.Command(exe, "deploy", "del", pod, "--force")
+				delCmd := exec.Command(exe, deployDelArgv(pod)...)
 				delCmd.Stderr = os.Stderr
 				delCmd.Stdout = os.Stdout
 				_ = delCmd.Run()
@@ -243,6 +243,13 @@ func RunEvalLive(ctx context.Context, deployment, scoreName string, scenarios []
 			// state-dependent allowlist artifactValidatableMethods).
 			runner.ValidateAiArtifacts = opts.ValidateAiArtifacts
 			runner.IterStartTime = opts.IterStartTime
+			// Cross-deployment ${PEER_HOST:name} addressing: resolve the DNS
+			// name of any peer/subject this bucket's scenarios reference, so a
+			// recipe can write `redis-cli -h ${PEER_HOST:redis}` declaratively
+			// instead of hardcoding `ov-redis`. ${PEER_ENDPOINT} (host-vantage)
+			// generally won't resolve a sandbox-nested pod and is left
+			// unresolved (SKIP) — recipes address nested peers by DNS.
+			applyPeerVarsScenarios(runner, bucket, "")
 		}
 
 		// Process scenarios sequentially within the bucket. The dep
@@ -356,6 +363,9 @@ func RunEvalLive(ctx context.Context, deployment, scoreName string, scenarios []
 				}
 			}
 			ephemeralCleanup(bucketFailed)
+		}
+		if runner != nil {
+			runner.ClosePeers()
 		}
 	}
 

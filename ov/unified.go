@@ -667,10 +667,21 @@ func LoadUnified(dir string) (*UnifiedFile, bool, error) {
 	if err := foldEvalBeds(merged); err != nil {
 		return nil, true, fmt.Errorf("%s: %w", root, err)
 	}
+	// Fold sibling peers (companion deployments) into the Deploy map as
+	// addressable top-level entries (inheriting the owner's disposability) so
+	// the SAME deploy verbs bring them up/down. Runs AFTER foldEvalBeds (so a
+	// bed's peers fold too) and BEFORE validateDeploymentTree (so folded peers
+	// get the same deploy validation).
+	if err := foldPeers(merged); err != nil {
+		return nil, true, fmt.Errorf("%s: %w", root, err)
+	}
 	if err := validateDeploymentTree(merged.Deploy); err != nil {
 		return nil, true, fmt.Errorf("%s: %w", root, err)
 	}
 	if err := validateEvalBeds(merged); err != nil {
+		return nil, true, fmt.Errorf("%s: %w", root, err)
+	}
+	if err := validatePeers(merged); err != nil {
 		return nil, true, fmt.Errorf("%s: %w", root, err)
 	}
 	if err := validatePreemptibleUnified(merged); err != nil {

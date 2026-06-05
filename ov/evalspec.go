@@ -772,6 +772,12 @@ var runtimeOnlyVarPrefixes = []string{
 	// a deploy-scope k8s check can address its own cluster generically via
 	// cluster: "${DEPLOY_NAME}". Resolved only against a live deployment.
 	"DEPLOY_NAME",
+	// Cross-deployment address vars (eval_peer.go): ${PEER_HOST:name} and
+	// ${PEER_ENDPOINT:name:port} let a driven probe (a check with `on:`) reach
+	// a SEPARATE subject deployment. Resolved only against running deployments,
+	// so a build-scope check must not reference them.
+	"PEER_HOST",
+	"PEER_ENDPOINT",
 }
 
 // IsRuntimeOnlyVar reports whether the given variable key (as returned by

@@ -1,0 +1,82 @@
+candy:
+    version: 2026.156.1447
+    name: chrome-headless
+    description: |
+        Headless Chrome CDP DRIVER for cross-deployment `ov eval`.
+
+        Runs the REAL google-chrome binary in --headless=new mode on
+        127.0.0.1:9223 — no Wayland compositor, no desktop (proven on rootless
+        podman: Chrome 149 serves /json/version headlessly). Composes
+        /ov-selkies:chrome-cdp so the cdp-proxy republishes CDP on 0.0.0.0:9222
+        with Host-header rewriting, making `ov eval cdp <this>` reachable from
+        the host.
+
+        The point: use this as a `peer:` DRIVER deployment that CDP-probes a
+        SEPARATE web-server SUBJECT — a check authored on the subject with
+        `on: <this-peer>` and `url: http://${PEER_HOST:<subject>}:<port>` drives
+        a real browser against the subject over the shared `ov` network, without
+        baking Chrome into the subject image. Container-only.
+    require:
+        - chrome
+        - supervisord
+    candy:
+        - chrome-cdp
+    task:
+        - mkdir: "${HOME}/.local/bin"
+          user: "${USER}"
+        - mkdir: "${HOME}/.chrome-headless"
+          user: "${USER}"
+        # Launch the REAL /usr/bin/google-chrome-stable, NOT the chrome-cdp
+        # wrapper symlinked into ~/.local/bin (which forces --ozone-platform=
+        # wayland and needs a compositor). write: content is verbatim bytes;
+        # ${HOME} expands at RUN time in bash, which is correct here.
+        - write: "${HOME}/.local/bin/chrome-headless-launch"
+          mode: "0755"
+          user: "${USER}"
+          content: |
+            #!/usr/bin/env bash
+            # Headless Chrome for cross-deployment CDP driving. CDP serves on
+            # 127.0.0.1:9223; the cdp-proxy (chrome-cdp) republishes it on
+            # 0.0.0.0:9222 with Host rewriting for host-side `ov eval cdp`.
+            # --remote-allow-origins='*' is REQUIRED: Chrome 146+ rejects the CDP
+            # WebSocket upgrade (text/eval/screenshot/click) when the Origin
+            # doesn't match, even though the HTTP /json endpoints (open/list) work
+            # without it. The chrome-cdp wrapper sets it; this launcher bypasses
+            # the wrapper, so it must set it itself.
+            exec /usr/bin/google-chrome-stable \
+              --headless=new \
+              --no-sandbox \
+              --disable-gpu \
+              --disable-dev-shm-usage \
+              --remote-allow-origins='*' \
+              --remote-debugging-address=127.0.0.1 \
+              --remote-debugging-port=9223 \
+              --user-data-dir="${HOME}/.chrome-headless" \
+              about:blank
+    service:
+        - name: chrome-headless
+          exec: "%(ENV_HOME)s/.local/bin/chrome-headless-launch"
+          restart: always
+          enable: true
+          scope: system
+    eval:
+        - id: chrome-headless-launch-script
+          file: ${HOME}/.local/bin/chrome-headless-launch
+          exists: true
+          mode: "0755"
+        - id: chrome-headless-service
+          scope: deploy
+          service: chrome-headless
+          running: true
+        - id: chrome-headless-cdp-version
+          scope: deploy
+          # cdp-proxy republishes the headless CDP endpoint on 9222; assert it
+          # answers /json/version with a real Chrome target (webSocketDebuggerUrl).
+          # Poll: Chrome's CDP endpoint binds a few seconds after the service starts.
+          http: http://127.0.0.1:${HOST_PORT:9222}/json/version
+          status: 200
+          timeout: 5s
+          eventually: 90s
+          retry_interval: 3s
+          body:
+            - contains: "webSocketDebuggerUrl"

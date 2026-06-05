@@ -1,4 +1,4 @@
-version: 2026.156.1041
+version: 2026.156.1531
 local:
     # =================================================================
     # eval-local — per-kind R10 smoke template for kind:local.
@@ -18,3 +18,15 @@ local:
               scope: deploy
               command: "test -f /etc/eval-local-marker"
               in_container: false
+    # =================================================================
+    # eval-cross-local-driver — host venue for the eval-cross-local-http bed's
+    # local DRIVER peer (cross-deployment, pod→ ... no: LOCAL driver → pod
+    # subject). USER-level only (no sudo), so bringUpPeers applies it unattended.
+    # =================================================================
+    eval-cross-local-driver:
+        candy:
+            - eval-cross-local-driver-layer
+        description:
+            feature: Host venue for a cross-deployment local DRIVER peer
+            narrative: Minimal kind:local template establishing a host venue an `on:` check drives.
+            tag: [working]

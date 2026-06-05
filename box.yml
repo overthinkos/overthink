@@ -2,7 +2,7 @@
 #  overthink.yml's `includes:` list. The schema kind discriminator is
 #  `kind: image` for kind-keyed entries; root-shape map is `image:` (this file).
 #  2026-05 kind-files cutover.
-version: 2026.156.1041
+version: 2026.156.1531
 box:
     comfyui:
         enabled: false
@@ -569,6 +569,15 @@ box:
             - web-layer
         port:
             - 8080:8080
+    # Headless Chrome CDP driver — the `peer:` instrument that CDP-probes a
+    # separate web subject (cross-deployment `ov eval`). See candy/chrome-headless.
+    chrome-headless:
+        base: fedora
+        candy:
+            - supervisord
+            - chrome-headless
+        port:
+            - 9222:9222
     tier1:
         enabled: false
         base: fedora

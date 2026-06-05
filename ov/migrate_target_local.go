@@ -137,6 +137,17 @@ func applyTargetLocalRewrites(src string, templates map[string]bool) string {
 			if rest == "" || strings.HasPrefix(rest, "#") {
 				continue
 			}
+			// A block/flow scalar value (host: | / host: > / host: {…} /
+			// host: […]) is STRUCTURED content — e.g. a `phase.install.host:`
+			// builder install-TEMPLATE block (build vocabulary), never a deploy
+			// destination. A real deploy `host:` is always a plain scalar (a
+			// hostname / user@host / template name), so a structured value is
+			// never disambiguated. (Omitting this guard wrongly stacked AMBIGUOUS
+			// comments onto build.yml's install templates — see CHANGELOG.)
+			if strings.HasPrefix(rest, "|") || strings.HasPrefix(rest, ">") ||
+				strings.HasPrefix(rest, "{") || strings.HasPrefix(rest, "[") {
+				continue
+			}
 			value := rest
 			if comment := strings.Index(rest, " #"); comment >= 0 {
 				value = strings.TrimSpace(rest[:comment])
@@ -148,8 +159,11 @@ func applyTargetLocalRewrites(src string, templates map[string]bool) string {
 				continue
 			}
 			if !isHostname && !templates[value] {
-				// Ambiguous — flag for review and leave the line as-is.
-				lines[i] = line + "  # AMBIGUOUS — review: not a known kind:local template; treat as hostname or rename"
+				// Ambiguous — flag for review (IDEMPOTENTLY) and leave the line
+				// as-is. Re-running migrate must never re-stack the marker.
+				if !strings.Contains(line, "# AMBIGUOUS — review:") {
+					lines[i] = line + "  # AMBIGUOUS — review: not a known kind:local template; treat as hostname or rename"
+				}
 				continue
 			}
 		}

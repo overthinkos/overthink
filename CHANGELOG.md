@@ -22,6 +22,37 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-05 — fix(migrate): `target-local` host-disambiguation is idempotent + scoped (stop stacking AMBIGUOUS comments on build templates)
+
+The `target-local` migration step's `host:` disambiguation
+(`applyTargetLocalRewrites`, `ov/migrate_target_local.go`) had two compounding
+defects, surfaced when the cross-deployment cutover's schema bump re-ran the
+migration chain:
+
+- **Over-broad match.** The line-oriented rule fired on ANY indented `host:` key
+  with no parent-context awareness — so it matched `phase.install.host:`, a
+  BUILD-vocabulary field (a builder install-phase TEMPLATE, authored as a block
+  scalar), not a deploy destination. For a `host: |` block scalar the extracted
+  value is `"|"`, which is neither hostname-like nor a known template, so it landed
+  in the "ambiguous" branch.
+- **Non-idempotent.** That branch appended a `# AMBIGUOUS — review:` comment to the
+  full line WITHOUT checking one was already present, so every `ov migrate` run
+  stacked another copy. `build.yml` had accumulated 4 repetitions on each of 7
+  `phase.install.host:` lines (28 total).
+
+Both fixed in `applyTargetLocalRewrites`: a deploy `host:` is always a plain scalar
+(hostname / user@host / template name), so a block/flow scalar value
+(`|` / `>` / `{` / `[`) is now skipped outright — the precise semantic guard that
+excludes every build install-TEMPLATE; and the AMBIGUOUS marker is appended only
+when not already present (idempotent). The 28 stacked comments were stripped from
+`build.yml` — a content-preserving cleanup, since the comments sat AFTER a `|`
+block-scalar indicator and YAML already ignored them. Proven by unit tests over
+both the pure rewriter and the full `MigrateTargetLocal` file-walking path (second
+pass reports zero changed files), the cleaned `build.yml` re-validated, and the
+`eval-pod` mechanism bed (build.yml's full build vocabulary still composes an
+image). No schema change (migration-logic fix); the `target-local` step keeps its
+`2026.123.114` CalVer.
+
 ### 2026-06-05 — feat(eval): cross-deployment probing — `on:` driver + `peer:` siblings + `${PEER_*}`, so ONE deployment tests ANOTHER
 
 `ov eval` gained **cross-deployment probing**: one deployment can act as a test

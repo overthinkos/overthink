@@ -1,7 +1,21 @@
 candy:
-    version: 2026.155.0001
+    version: 2026.156.1921
     name: ov
-    description: Overthink CLI (ov) binary
+    description: |
+        Full ov toolchain — the CLI binary + the VM stack (virtualization),
+        encrypted storage (gocryptfs), and console relay (socat) — composed into
+        ONE layer that works identically on container/pod, host/local, and
+        bootc/VM targets via the `virtualization` layer's mixed-entry `service:`
+        pattern. This is the single canonical `ov` layer: bake it where a
+        deployment needs a persistent on-`$PATH` ov or the full toolchain inside
+        (the `ov-mcp` server, the `*-ov` showcases, nested-pod orchestrators).
+        Images that only need transient in-container `ov` (the dbus delegation
+        path) need NOT bake it — the host copies `ov` in on demand
+        (`EnsureOvInVenue`; see `/ov-tools:ov`).
+    candy:
+        - virtualization
+        - gocryptfs
+        - socat
     distro:
         arch:
             package:

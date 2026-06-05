@@ -1,7 +1,7 @@
 candy:
-    version: 2026.144.1443
+    version: 2026.156.1921
     name: hermes-full
-    description: Hermes agent with AI CLIs, developer tools, DevOps tools, and ov
+    description: Hermes agent with AI CLIs, developer tools, and DevOps tools
     candy:
         - hermes
         - claude-code
@@ -10,5 +10,4 @@ candy:
         - forgecode
         - dev-tools
         - devops-tools
-        - ov
         - tmux

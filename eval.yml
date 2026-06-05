@@ -1086,7 +1086,82 @@ recipe:
                 - then: "a marker file written during the composition self-test is present"
                   file: /etc/ov-composition-selftest
                   exists: true
+    # ─────────────────────────────────────────────────────────────────────
+    # ov-cli-surface — the agent drives the ov MANAGEMENT command surface
+    # (box build → deploy/start → status) to stand up a pod it inspects. The
+    # deterministic eval-ov-selftest-pod bed asserts every command GROUP runs;
+    # this is the AI-driven companion proving an agent can OPERATE the CLI
+    # end-to-end against a real deployment.
+    # ─────────────────────────────────────────────────────────────────────
+    ov-cli-surface:
+        description:
+            feature: "An agent operates the ov management commands to build, deploy, and inspect a pod."
+            narrative: |
+                Feature: An agent operates the ov management command surface end-to-end.
+                  As an operator delegating to an agent,
+                  I want the agent to use `ov box build` to build the `os` image,
+                    `ov deploy add`/`ov start` to bring it up as a pod, and
+                    `ov status` to confirm it is running,
+                  So that the core management surface (build → deploy → status) is
+                    proven operable by a real agent against a real deployment.
+
+                  What must be true to pass this test:
+                    - A pod named `os` is running — the agent built it with
+                      `ov box build os` and started it with `ov start os` /
+                      `ov deploy add os os`.
+                    - The `supervisord` init process is running in the pod.
+                    - A file at `/etc/ov-os-marker` exists in the pod containing
+                      the literal string `ov-os-content-marker`, proving the agent
+                      built + deployed the real `os` image (not a stand-in).
+        scenario:
+            - name: ovcli-os-built-and-running
+              pod: os
+              step:
+                - then: "the os pod the agent built with `ov box build` + started with ov is running"
+                  process: supervisord
+                  running: true
+            - name: ovcli-os-marker-present
+              pod: os
+              step:
+                - then: "the built os image's predetermined marker file is present"
+                  file: /etc/ov-os-marker
+                  contains: ["ov-os-content-marker"]
 score:
+    # ─────────────────────────────────────────────────────────────────────
+    # ov-cli — AI eval of the ov MANAGEMENT command surface. Companion to the
+    # deterministic eval-ov-selftest-pod bed: where the bed asserts every
+    # command GROUP runs in-container, this proves an AGENT can OPERATE the
+    # build → deploy → status lifecycle end-to-end. A full convergence run is
+    # the multi-hour benchmark; the deterministic bed is the per-commit R10 gate.
+    # ─────────────────────────────────────────────────────────────────────
+    ov-cli:
+        description:
+            feature: "AI eval — an agent operates the ov management command surface (build → deploy → status) end-to-end."
+        pod: eval-sandbox
+        ai: [claude]
+        plateau_iteration: 3
+        progressive: false
+        note: false
+        mcp_endpoint: "http://localhost:18765/mcp"
+        env: {}
+        recipe:
+            - ov-cli-surface
+        prompt: |
+            == Where you are ==
+            Your cwd is /workspace — a fresh per-run clone of the Overthink
+            project, bind-mounted into this freshly-rebuilt ${TARGET_NAME}. You
+            have FULL sudo + nested podman + the `ov` CLI. Host services are
+            invisible; you cannot conflict with them.
+
+            == Score purpose ==
+            This score proves an agent can OPERATE the ov management command
+            surface end-to-end. Use `ov box build os` to build the `os` image,
+            then `ov deploy add os os` (or `ov start os`) to bring it up as a
+            running pod, and `ov status` to confirm it. The recipe's scenarios
+            assert the `os` pod is running with its predetermined marker file —
+            satisfy them by driving the real ov commands, not by hand-crafting
+            state. The full `ov` CLI + the MCP surface (`ov mcp serve` on
+            ${TARGET_NAME}) are available; how you satisfy the spec is your call.
     # ─────────────────────────────────────────────────────────────────────
     # Default benchmark — progressive verb-coverage curriculum across the
     # full `ov eval` surface. 8 phases, one recipe added per phase.
@@ -1370,7 +1445,7 @@ score:
 #                                     gogcli@latest, ffmpeg/sqlite arch coverage)
 #   eval-openclaw-desktop-pod (pod) — all-in-one: selkies desktop + openclaw-full
 #                                     (claude-code/codex/gemini) + CPU ollama +
-#                                     nested ov toolchain (ov-full+container-nesting)
+#                                     nested ov toolchain (ov+container-nesting)
 #
 # Zero-operator-side-effect: pod beds → rootless podman; eval-k3s-vm → libvirt
 # qcow2; eval-local → a disposable scratch dir. No test writes to ~/.local/bin,
@@ -1464,6 +1539,105 @@ eval:
               stdout:
                 - contains: '"kind": "pod"'
                 - contains: eval-pod
+    # ov self-test bed — the eval-coverage gate for "test ALL ov commands". The
+    # ov-selftest CachyOS image bakes the full ov toolchain (merged ov via ov-mcp
+    # + container-nesting + claude-code), so EVERY ov command group runs
+    # in-container: real happy-paths for the project-free groups
+    # (version/doctor/settings/secrets/vm/status) + `--help` for the groups that
+    # need a project/podman/network to run for real (box/deploy/eval/clean/
+    # migrate/feature/config) — every check is RDD-proven to exit 0 in a plain
+    # pod. The host-side mcp list-tools proves the WHOLE Kong command surface is
+    # exposed as tools by `ov mcp serve`. Each check FAILS without the toolchain.
+    eval-ov-selftest-pod:
+        target: pod
+        box: ov-selftest
+        disposable: true
+        lifecycle: dev
+        port: [auto] # auto-allocate free host ports (avoid fixed-port collisions)
+        description:
+            feature: ov self-test — every ov command group exercised in-container on the full toolchain
+            tag: [working]
+        eval:
+            # --- Real happy-path (project-free groups) ---
+            - id: ov-cli-version
+              scope: deploy
+              command: ov version
+              in_container: true
+              exit_status: 0
+              stdout:
+                - matches: "[0-9]{4}\\.[0-9]+"
+            - id: ov-cli-doctor
+              scope: deploy
+              command: ov doctor
+              in_container: true
+              exit_status: 0
+              stdout:
+                - contains: "ov doctor"
+            - id: ov-cli-settings
+              scope: deploy
+              command: ov settings list
+              in_container: true
+              exit_status: 0
+            - id: ov-cli-secrets
+              scope: deploy
+              command: ov secrets list
+              in_container: true
+              exit_status: 0
+            - id: ov-cli-vm
+              scope: deploy
+              command: ov vm list
+              in_container: true
+              exit_status: 0
+            - id: ov-cli-status
+              scope: deploy
+              command: ov status --json
+              in_container: true
+              exit_status: 0
+            # --- Command-group wiring (--help proves the group + subcommand tree) ---
+            - id: ov-cli-box-group
+              scope: deploy
+              command: ov box --help
+              in_container: true
+              exit_status: 0
+              stdout:
+                - contains: build
+            - id: ov-cli-deploy-group
+              scope: deploy
+              command: ov deploy --help
+              in_container: true
+              exit_status: 0
+            - id: ov-cli-eval-group
+              scope: deploy
+              command: ov eval --help
+              in_container: true
+              exit_status: 0
+              stdout:
+                - contains: live
+            - id: ov-cli-clean-group
+              scope: deploy
+              command: ov clean --help
+              in_container: true
+              exit_status: 0
+            - id: ov-cli-migrate-group
+              scope: deploy
+              command: ov migrate --help
+              in_container: true
+              exit_status: 0
+            - id: ov-cli-feature-group
+              scope: deploy
+              command: ov feature --help
+              in_container: true
+              exit_status: 0
+            - id: ov-cli-config-group
+              scope: deploy
+              command: ov config --help
+              in_container: true
+              exit_status: 0
+            # NB: the WHOLE Kong command surface exposed via `ov mcp serve` is
+            # proven by the ov-mcp layer's own deploy-scope mcp checks
+            # (mcp-ov-list-tools + mcp-ov-call-* assert box.build / box.list.boxes
+            # are live tools), which run here as part of this bed's eval-live — no
+            # duplicate surface check needed (R3).
     # Cross-deployment probing (pod→pod): a Chrome DRIVER pod (peer) CDP-probes
     # this web-server SUBJECT pod over the shared `ov` network. Proves `on:` +
     # ${PEER_HOST:<subject>} + peer: end-to-end — the canonical "a different kind
@@ -1744,7 +1918,7 @@ eval:
     # eval-openclaw-desktop-pod deploys the all-in-one openclaw-desktop image on
     # the CachyOS (Arch) base — the selkies streaming desktop fused with the
     # openclaw-full gateway/tool stack (claude-code/codex/gemini), a CPU ollama,
-    # and the full nested ov toolchain (ov-full + container-nesting + golang + gh).
+    # and the full nested ov toolchain (ov + container-nesting + golang + gh).
     # Ports are remapped into a free 340xx block to coexist with the
     # selkies/openclaw beds. The image-level eval (baked) carries the nested-
     # rootless posture + nested-podman + libvirt-session + ov version/doctor +
@@ -1758,7 +1932,7 @@ eval:
         lifecycle: dev
         port: [auto] # auto-allocate free host ports (avoid fixed-port collisions)
         description:
-            feature: "R10 bed for openclaw-desktop — the all-in-one CachyOS image fusing the selkies streaming desktop, the openclaw-full gateway+tools stack (claude-code/codex/gemini), a CPU ollama, and the full nested ov toolchain (ov-full + container-nesting + golang + gh). Exercises AUR google-chrome, the ollama binary tarball on a pac base, and nested rootless podman on one image."
+            feature: "R10 bed for openclaw-desktop — the all-in-one CachyOS image fusing the selkies streaming desktop, the openclaw-full gateway+tools stack (claude-code/codex/gemini), a CPU ollama, and the full nested ov toolchain (ov + container-nesting + golang + gh). Exercises AUR google-chrome, the ollama binary tarball on a pac base, and nested rootless podman on one image."
             tag: [testing]
         eval:
             # selkies desktop — AUR browser + the streaming UI is live

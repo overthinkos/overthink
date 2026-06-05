@@ -73,7 +73,7 @@ Consult this table BEFORE the first tool call of every task. If your task matche
 | bootc images / `bazzite` / `aurora` / `*-bootc` / `image/bootc` submodule | `/ov-distros:bazzite` + `/ov-distros:aurora` + `/ov-distros:bootc-base` + `/ov-vm:vm` |
 | "What does layer X do?" — language runtime | `/ov-languages:<name>` (python, python-ml, pixi) |
 | "What does layer X do?" — infrastructure service | `/ov-infrastructure:<name>` (postgresql, redis, k3s, traefik, supervisord, tailscale, gocryptfs, virtualization, dbus-layer, tmux-layer, …) |
-| "What does layer X do?" — CLI utility / ov binary | `/ov-tools:<name>` (ripgrep, himalaya, whisper, ov, ov-full, …) |
+| "What does layer X do?" — CLI utility / ov binary | `/ov-tools:<name>` (ripgrep, himalaya, whisper, ov, …) |
 | Skill authoring / skill maintenance | `/ov-internals:skills` |
 | `ov eval *` / `eval.yml` `recipe:`/`score:` / AI-agent scoring / `oveval/*` branches | `/ov-eval:eval` |
 | Sub-agents / dynamic workflows / agent teams / agent-lifecycle or commit-push gate hooks | `/ov-internals:agents` |

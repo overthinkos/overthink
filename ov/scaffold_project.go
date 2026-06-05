@@ -148,16 +148,14 @@ func AddImage(dir, name, base string, layers []string) error {
 	return saveOverthinkYAMLNode(dir, root)
 }
 
-// AddLayerToImage appends a layer to an existing image's `layers:` list.
-// Idempotent: if the layer is already in the list, this is a no-op.
+// AddLayerToImage appends a layer to an existing image's `candy:` list.
+// Idempotent: if the layer is already in the list, this is a no-op. The image
+// is resolved across overthink.yml AND its flat-imported per-kind files (box.yml),
+// and the edit is saved to the file where the image actually lives.
 func AddLayerToImage(dir, image, layer string) error {
-	root, err := loadOverthinkYAMLNode(dir)
+	root, imgNode, path, err := resolveImageNodeFile(dir, image)
 	if err != nil {
 		return err
-	}
-	imgNode := imageNode(root, image)
-	if imgNode == nil {
-		return fmt.Errorf("image %q not found in overthink.yml", image)
 	}
 	layersNode := mappingChild(imgNode, "candy")
 	if layersNode == nil {
@@ -175,20 +173,18 @@ func AddLayerToImage(dir, image, layer string) error {
 	layersNode.Content = append(layersNode.Content,
 		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: layer},
 	)
-	return saveOverthinkYAMLNode(dir, root)
+	return saveYAMLNodeFile(path, root)
 }
 
-// RemoveLayerFromImage removes the named layer from an image's `layers:`
+// RemoveLayerFromImage removes the named layer from an image's `candy:`
 // list. Errors out if the image does not exist; succeeds silently if the
-// layer is not present.
+// layer is not present. The image is resolved across overthink.yml AND its
+// flat-imported per-kind files (box.yml), and the edit is saved to the file
+// where the image actually lives.
 func RemoveLayerFromImage(dir, image, layer string) error {
-	root, err := loadOverthinkYAMLNode(dir)
+	root, imgNode, path, err := resolveImageNodeFile(dir, image)
 	if err != nil {
 		return err
-	}
-	imgNode := imageNode(root, image)
-	if imgNode == nil {
-		return fmt.Errorf("image %q not found in overthink.yml", image)
 	}
 	layersNode := mappingChild(imgNode, "candy")
 	if layersNode == nil {
@@ -202,7 +198,7 @@ func RemoveLayerFromImage(dir, image, layer string) error {
 		out = append(out, n)
 	}
 	layersNode.Content = out
-	return saveOverthinkYAMLNode(dir, root)
+	return saveYAMLNodeFile(path, root)
 }
 
 // ---------------------------------------------------------------------------
@@ -284,4 +280,72 @@ func imageNode(root *yaml.Node, name string) *yaml.Node {
 		return nil
 	}
 	return mappingChild(imagesNode, name)
+}
+
+// flatLocalImports returns the bare-string `import:` items that are LOCAL file
+// refs (same-repo per-kind files such as box.yml) — NOT @github refs and NOT
+// namespaced single-key-map imports. The authoring-edit verbs search these for
+// an image defined outside overthink.yml itself.
+func flatLocalImports(root *yaml.Node) []string {
+	doc := docContent(root)
+	imp := mappingChild(doc, "import")
+	if imp == nil || imp.Kind != yaml.SequenceNode {
+		return nil
+	}
+	var out []string
+	for _, item := range imp.Content {
+		if item.Kind == yaml.ScalarNode {
+			ref := strings.TrimSpace(item.Value)
+			if ref != "" && !strings.HasPrefix(ref, "@") {
+				out = append(out, ref)
+			}
+		}
+	}
+	return out
+}
+
+// resolveImageNodeFile finds the YAML file that DEFINES image `name` — either
+// overthink.yml itself or one of its flat-imported local per-kind files
+// (box.yml) — and returns that file's parsed node tree, the image's value node,
+// and the file path. The authoring-edit verbs (add-candy/rm-candy) mutate + save
+// that file, so they work on entries defined in imported per-kind files, not
+// only those inlined in overthink.yml.
+func resolveImageNodeFile(dir, name string) (*yaml.Node, *yaml.Node, string, error) {
+	ovRoot, err := loadOverthinkYAMLNode(dir)
+	if err != nil {
+		return nil, nil, "", err
+	}
+	if n := imageNode(ovRoot, name); n != nil {
+		return ovRoot, n, filepath.Join(dir, "overthink.yml"), nil
+	}
+	for _, ref := range flatLocalImports(ovRoot) {
+		p := filepath.Join(dir, ref)
+		data, rerr := os.ReadFile(p)
+		if rerr != nil {
+			continue
+		}
+		var froot yaml.Node
+		if yaml.Unmarshal(data, &froot) != nil {
+			continue
+		}
+		if n := imageNode(&froot, name); n != nil {
+			return &froot, n, p, nil
+		}
+	}
+	return nil, nil, "", fmt.Errorf("image %q not found in overthink.yml or its imported per-kind files", name)
+}
+
+// saveYAMLNodeFile marshals a node tree back to an arbitrary file path,
+// preserving comments + key order (the yaml.v3 Node round-trip). The generic
+// sibling of saveOverthinkYAMLNode, used when an edit targets a per-kind import
+// file rather than overthink.yml itself.
+func saveYAMLNodeFile(path string, root *yaml.Node) error {
+	data, err := yaml.Marshal(root)
+	if err != nil {
+		return fmt.Errorf("marshalling %s: %w", filepath.Base(path), err)
+	}
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		return fmt.Errorf("writing %s: %w", filepath.Base(path), err)
+	}
+	return nil
 }

@@ -328,7 +328,7 @@ func collapsePackagesIntoDistros(node *yaml.Node) bool {
 
 	// Compute intersection ONLY when every referenced distro has non-empty
 	// packages AND there are at least two distros to intersect across. The
-	// 2026-05 ov-full bug: original `rpm: [G,P], pac: [], deb: []` meant
+	// 2026-05 multi-distro package bug: original `rpm: [G,P], pac: [], deb: []` meant
 	// "install on fedora, intentionally NOTHING on arch/debian". Naively
 	// elevating fedora's packages to the top level would feed them to
 	// pacman/apt as well via the bridge — breaking the build with

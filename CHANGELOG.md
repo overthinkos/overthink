@@ -22,6 +22,46 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-05 — feat: consolidate `ov` — merge `ov-full` into `ov`, drop `ov` where unneeded, right-size the package deps, and test ALL ov commands
+
+The `ov` toolchain was split into a bare-binary `ov` layer and an `ov-full`
+composition (`ov + virtualization + gocryptfs + socat`). They are now ONE layer:
+**`ov` IS the full toolchain** — it composes `virtualization`/`gocryptfs`/`socat`
+itself, and `candy/ov-full` (plus the `/ov-coder:ov-full` skill) is DELETED. Bake
+`ov` only where a deployment needs a persistent on-`$PATH` ov or the full
+toolchain inside (the `ov-mcp` server, the `*-ov` showcases, nested-pod
+orchestrators); leaf service/desktop images that only needed transient
+in-container `ov` (the dbus delegation path) now DROP it entirely and rely on the
+generic copy-`ov`-into-a-running-venue mechanism (`EnsureOvInVenue`). `ov` was
+dropped from 14 main leaf boxes (comfyui/filebrowser/hermes-playwright/immich(-ml)
+/jupyter*/versa/ollama/openclaw/openwebui/unsloth-studio/mcp) + `hermes-full`;
+githubrunner/openclaw-desktop repoint `ov-full`→`ov`.
+
+`pkg/arch/PKGBUILD` (`overthink-git`) deps were right-sized to the rule "every
+cachyos/arch-REPO tool ov invokes is mandatory `depends=`, everything else
+optional": **Docker** (alternative engine), the **AUR-only** tools
+(`cloudflared-bin`, `gvisor-tap-vsock`), and the **GPU/k8s-situational** tools
+(`nvidia-utils`, `kubectl`) moved to `optdepends=`; the missing repo tools
+`libarchive` (bsdtar) + `iproute2` (ss) were added to `depends=`.
+
+The "test ALL ov commands" coverage is the new `ov-selftest` CachyOS image (full
+`ov` via `ov-mcp` + container-nesting + claude-code) and the
+**`eval-ov-selftest-pod`** kind:eval bed: one in-container happy-path check per ov
+command GROUP (version/doctor/settings/secrets/vm/status + box/deploy/eval/clean/
+migrate/feature/config) plus the `ov-mcp` layer's MCP tool-surface checks; the
+**`ov-cli`** kind:score + **`ov-cli-surface`** recipe are the AI-driven companion
+(an agent operates build→deploy→status end-to-end). Building this bed surfaced —
+and fixed (R2) — a pre-existing **image→box rebrand** staleness in `ov-mcp`'s
+baked eval checks (`image.build`/`image.list.images` → `box.build`/
+`box.list.boxes`); R5 confirmed those were the only two stale `image.*` MCP refs.
+
+Separately, `ov box add-candy`/`rm-candy` were fixed to resolve images defined in
+flat-imported per-kind files (`box.yml`), not only those inlined in
+`overthink.yml`: a shared `resolveImageNodeFile` (`ov/scaffold_project.go`)
+follows the `import:` list to the file where the image lives and edits THAT file,
+comment-preserving. Previously `ov box rm-candy <leaf> ov` errored "image not
+found in overthink.yml" for every box.yml-resident image.
+
 ### 2026-06-05 — feat(ov): generic "copy ov into a running venue" mechanism (`EnsureOvInVenue`) — images need not bake the `ov` layer for transient in-container `ov`
 
 The VM-only host→guest ov delivery (`putHostOvInGuest` / `syncOvIntoGuest` /

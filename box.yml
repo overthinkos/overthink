@@ -13,7 +13,6 @@ box:
             - agent-forwarding
             - comfyui
             - dbus
-            - ov
         port:
             - 8188:8188
     filebrowser:
@@ -22,7 +21,6 @@ box:
             - agent-forwarding
             - filebrowser
             - dbus
-            - ov
         port:
             - 8085:8080
         eval:
@@ -41,7 +39,7 @@ box:
         candy:
             - agent-forwarding
             - github-runner
-            - ov-full
+            - ov
             - dbus
         network: host
     hermes:
@@ -66,7 +64,6 @@ box:
             - hermes
             - hermes-playwright
             - dbus
-            - ov
     immich:
         enabled: false
         base: fedora-nonfree
@@ -81,7 +78,6 @@ box:
             - redis
             - immich
             - dbus
-            - ov
         port:
             - 2283:2283
     immich-ml:
@@ -100,7 +96,6 @@ box:
             - immich
             - immich-ml
             - dbus
-            - ov
         port:
             - 2283:2283
         eval:
@@ -126,7 +121,6 @@ box:
             - jupyter
             - notebook-templates
             - dbus
-            - ov
         port:
             - 8888:8888
         eval:
@@ -150,7 +144,6 @@ box:
             - jupyter-ml
             - notebook-templates
             - dbus
-            - ov
         port:
             - 8888:8888
     jupyter-ml-notebook:
@@ -167,7 +160,6 @@ box:
             - notebook-llm-on-supercomputers
             - notebook-openrouter
             - dbus
-            - ov
         port:
             - 8888:8888
     versa:
@@ -196,7 +188,6 @@ box:
             - notebook-graph # data layer: seeds /workspace/notebooks/gpu-libraries-demo.py — cuGraph/cuML/PyG/graphistry demo
             - debug-tools # network/process/file inspection toolkit for debugging the deployed services in this image
             - dbus
-            - ov
         port:
             - 2718:2718 # marimo edit + marimo MCP server (/mcp/server)
             - 28080:8080 # airflow api-server (host 8080 taken by traefik)
@@ -380,7 +371,6 @@ box:
             - agent-forwarding
             - ollama
             - dbus
-            - ov
         port:
             - 11434:11434
     openclaw:
@@ -390,7 +380,6 @@ box:
             - agent-forwarding
             - openclaw
             - dbus
-            - ov
         port:
             - 18789:18789
     openclaw-desktop:
@@ -412,12 +401,11 @@ box:
             - selkies-desktop
             - openclaw-full
             - ollama
-            - ov-full
+            - ov
             - container-nesting
             - golang
             - gh
             - dbus
-            - ov
         port:
             - 3000:3000
             - 9222:9222
@@ -509,7 +497,6 @@ box:
             - agent-forwarding
             - openwebui
             - dbus
-            - ov
         port:
             - 8080:8080
         eval:
@@ -531,7 +518,6 @@ box:
             - unsloth-studio
             - notebook-finetuning
             - dbus
-            - ov
         port:
             - 8888:8888
             - 8000:8000
@@ -554,6 +540,24 @@ box:
             - claude-code
             - ov-mcp
             - eval-target-layer
+        port:
+            - 18765:18765
+    # ov self-test image — the full ov toolchain on a CachyOS base. Backs the
+    # eval-ov-selftest-pod kind:eval bed, which exercises EVERY ov command group
+    # (version/status/doctor/settings/box list+inspect+validate/clean/migrate/
+    # secrets/vm/deploy/eval/mcp/feature) in-container. Full ov arrives via ov-mcp
+    # (now the full toolchain: binary + virtualization + gocryptfs + socat) so the
+    # vm/libvirt commands resolve; container-nesting enables nested `ov deploy`;
+    # claude-code is the driver for the ov-cli-surface AI score.
+    ov-selftest:
+        base: cachyos.cachyos
+        build:
+            - pac
+            - aur
+        candy:
+            - ov-mcp
+            - container-nesting
+            - claude-code
         port:
             - 18765:18765
     # ov eval `default` score — per-pod target images.
@@ -622,7 +626,6 @@ box:
             - jupyter
             - notebook-templates
             - dbus
-            - ov
         port:
             - 8888:8888
     # kubernetes-cluster: fake k8s API server (deploys as `k8s`).

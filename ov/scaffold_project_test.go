@@ -133,3 +133,55 @@ func TestRemoveLayerFromImage(t *testing.T) {
 		t.Errorf("tmux should remain; overthink.yml=\n%s", data)
 	}
 }
+
+// TestEditLayer_ImportedBoxFile verifies the authoring-edit verbs resolve an
+// image defined in a flat-imported per-kind file (box.yml) and save the edit
+// THERE — instead of erroring "image not found in overthink.yml". This is the
+// fix for `ov box rm-candy <leaf> ov` / `ov box add-candy` on images that live
+// in box.yml rather than inlined in overthink.yml.
+func TestEditLayer_ImportedBoxFile(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "overthink.yml"),
+		[]byte("version: 2026.156.0001\nimport:\n    - box.yml\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	boxPath := filepath.Join(dir, "box.yml")
+	if err := os.WriteFile(boxPath,
+		[]byte("box:\n    leafy:\n        base: fedora\n        candy:\n            - supervisord\n            - ov\n            - jupyter\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	candy := func() string {
+		data, _ := os.ReadFile(boxPath)
+		var m struct {
+			Box map[string]struct {
+				Candy []string `yaml:"candy"`
+			} `yaml:"box"`
+		}
+		_ = yaml.Unmarshal(data, &m)
+		return strings.Join(m.Box["leafy"].Candy, ",")
+	}
+
+	if err := RemoveLayerFromImage(dir, "leafy", "ov"); err != nil {
+		t.Fatalf("rm-candy on imported box.yml entry: %v", err)
+	}
+	if got := candy(); got != "supervisord,jupyter" {
+		t.Errorf("after rm-candy ov: candy = %q, want supervisord,jupyter", got)
+	}
+	// The edit must land in box.yml, NOT leak into overthink.yml.
+	ovData, _ := os.ReadFile(filepath.Join(dir, "overthink.yml"))
+	if strings.Contains(string(ovData), "leafy") {
+		t.Errorf("edit leaked into overthink.yml:\n%s", ovData)
+	}
+
+	if err := AddLayerToImage(dir, "leafy", "ripgrep"); err != nil {
+		t.Fatalf("add-candy on imported box.yml entry: %v", err)
+	}
+	if got := candy(); got != "supervisord,jupyter,ripgrep" {
+		t.Errorf("after add-candy ripgrep: candy = %q", got)
+	}
+
+	if err := RemoveLayerFromImage(dir, "nonexistent", "ov"); err == nil {
+		t.Error("expected error for a genuinely-missing image")
+	}
+}

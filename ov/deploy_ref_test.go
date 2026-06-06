@@ -178,6 +178,33 @@ func TestResolveDeployRefRemoteGitHubLegacy(t *testing.T) {
 	}
 }
 
+// TestResolveDeployRefRemoteCandy covers the post-2026-06-rebrand `candy/<n>`
+// subpath: a remote candy ref must classify as a LAYER (not an image), so
+// `ov deploy add --add-layer @github.../candy/ov:vTAG` (the form a kind:eval
+// bed's add_candy compiles to) is accepted instead of hitting the "remote image
+// refs are not supported" guard. Without the /candy/ classification this fails.
+func TestResolveDeployRefRemoteCandy(t *testing.T) {
+	ref := "@github.com/overthinkos/overthink/candy/ov:v2026.157.0427"
+	got, err := ResolveDeployRefAsLayer(ref, "")
+	if err != nil {
+		t.Fatalf("ResolveDeployRefAsLayer: %v", err)
+	}
+	if got.Kind != RefKindLayer {
+		t.Errorf("kind = %v, want layer (a candy/ ref is a layer)", got.Kind)
+	}
+	if got.Source != RefSourceRemote || got.Remote == nil || got.Remote.Name != "ov" {
+		t.Errorf("got = %+v, want remote layer named ov", got)
+	}
+	// And a box/<n> subpath classifies as an image.
+	img, err := ResolveDeployRef("@github.com/overthinkos/overthink/box/fedora-coder:v2026.157.0427", "")
+	if err != nil {
+		t.Fatalf("ResolveDeployRef(box): %v", err)
+	}
+	if img.Kind != RefKindImage {
+		t.Errorf("box/ ref kind = %v, want image", img.Kind)
+	}
+}
+
 func TestResolveDeployRefRemoteGitHubNewSyntax(t *testing.T) {
 	// New plan-approved syntax: no @ prefix, @ as version separator.
 	ref := "github.com/overthinkos/overthink/layers/ripgrep@main"

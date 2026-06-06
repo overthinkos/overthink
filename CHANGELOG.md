@@ -81,6 +81,40 @@ auto-resolve), `eval-fedora-vm` (NEW — rpm, on a Fedora Cloud VM), and the
 extended `eval-debian-debootstrap-vm` / `eval-ubuntu-debootstrap-vm` (deb,
 asserting tailscale arrives via the ov layer).
 
+**Three deploy-path bugs the R10 VM beds surfaced (and a misdiagnosis they
+corrected).** The first bed runs failed at `deploy add` with
+`pacman: command not found` (exit 127) on the debian/fedora guests — proving the
+localpkg/system-package install for non-arch VMs was never actually exercised
+before. Root cause (NOT the gocryptfs bare-`package:` the first pass guessed —
+that candy is correct, and a per-distro-sections "fix" would not have helped
+because the format is chosen by `img.BuildFormats`, not by which sections exist):
+(1) **`syntheticVmImage` hardcoded `Distro:["arch"]/Pkg:"pac"/BuildFormats:["pac"]`**
+for every non-root VM ("cloud_image today is arch" — a now-false comment), so a
+debian/fedora/ubuntu guest installed via `pacman`. Fixed to derive the guest's
+real distro + `PrimaryFormat()` from `VmSpec.Source.Distro` (debootstrap/pacstrap
+VMs) or `Source.BaseUser` (cloud_image VMs). (2) **The layer compiler only reached
+`syntheticVmImage` via the `vm:`-prefixed deploy NAME** — a `kind:eval` bed names
+its VM by the node's `vm:` cross-ref (`eval-fedora-vm`, not `vm:fedora-vm`), so it
+fell through to `syntheticHostImage` (host = cachyos → pac). Fixed with a
+`resolveVmEntity` helper (node.Vm wins; "vm:" prefix is the CLI fallback) feeding
+`c.vmEntity`. With both fixed, the deb beds advanced to a SECOND failure —
+`E: Unable to locate package tailscale` (exit 100): (3) the deb format's
+`phase.install.host` cell (the target:local / target:vm path) rendered only
+`apt-get install`, never the `{{- range .Repos}}` repo prelude its container
+`install_template` sibling has — so the ov layer's tailscale apt repo was never
+added on a VM deploy. Fixed by rendering repos (key dearmor + sources.list + ppa)
+in the deb host cell, and a same-key/same-type fix in `buildSystemPackagesStep`
+(it read `raw["repos"]` plural with a `[]interface{}` assertion; the canonical key
+is `repo` and the value is `[]map[string]any`, so `step.Repos` was always empty —
+matters for the PhasePrepare repo-gate). `curl` was added to the debian/ubuntu
+debootstrap `include_package` set (the repo prelude's key fetch needs it; the
+container build already had it from bootstrap). The rpm/pac host cells share the
+same repo-omission but no deployed layer declares an rpm/pac custom repo, so it is
+not exercised here — it is its own follow-up cutover (with a test layer that
+deploys an rpm/pac repo on a VM). Verified `eval-ov-vm` (pac) PASS, `eval-fedora-vm`
+(rpm) PASS, `eval-cachyos-vm` (pac) PASS on the fixed binary; the deb beds verified
+against the reconciled producer tag.
+
 ### 2026-06-05 — feat: consolidate `ov` — merge `ov-full` into `ov`, drop `ov` where unneeded, right-size the package deps, and test ALL ov commands
 
 The `ov` toolchain was split into a bare-binary `ov` layer and an `ov-full`

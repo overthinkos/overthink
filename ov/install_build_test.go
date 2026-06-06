@@ -288,3 +288,26 @@ func TestDescribePlanSummary(t *testing.T) {
 		t.Errorf("missing Task count: %s", out)
 	}
 }
+
+// TestBuildSystemPackagesStepRepos guards the repo-key fix in
+// buildSystemPackagesStep: repos are stored under the canonical "repo" key (what
+// derivePackageSectionsFromCalamares writes + NewInstallContext reads), as a
+// []map[string]any value. The prior code read raw["repos"] (plural) with a
+// []interface{} assertion, so step.Repos was ALWAYS empty and the PhasePrepare
+// repo-gate (SystemPackagesStep.RequiresGate) never saw a layer's repos.
+func TestBuildSystemPackagesStepRepos(t *testing.T) {
+	raw := map[string]interface{}{
+		"package": []string{"tailscale"},
+		"repo": []map[string]any{{
+			"name": "tailscale",
+			"url":  "https://pkgs.tailscale.com/stable/debian",
+		}},
+	}
+	step := buildSystemPackagesStep("deb", PhaseInstall, []string{"tailscale"}, raw, nil)
+	if len(step.Repos) != 1 {
+		t.Fatalf("step.Repos len = %d, want 1 (repo-key/type mismatch left it empty)", len(step.Repos))
+	}
+	if step.Repos[0].Raw["name"] != "tailscale" {
+		t.Errorf("repo name = %v, want tailscale", step.Repos[0].Raw["name"])
+	}
+}

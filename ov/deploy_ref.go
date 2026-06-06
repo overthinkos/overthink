@@ -16,14 +16,14 @@ package main
 //      Starts with "./" or "/"; ends with ".yml" or ".yaml". The file's
 //      top-level keys tell us whether it's an image or layer declaration.
 //
-//   4. Remote repo ref          "github.com/owner/repo[/images/<n>|/layers/<n>][@ref]"
+//   4. Remote repo ref          "github.com/owner/repo[/box/<n>|/candy/<n>][@ref]"
 //      Matches "{host}/{org}/{repo}[/sub][@ref]" with a known host. The
 //      existing refs.go `@`-prefixed form is also accepted for backward
-//      compat with overthink.yml depends:/layers: already in the tree.
+//      compat with overthink.yml import:/candy: already in the tree.
 //
-// Disambiguation rules (post 2026-05 cross-kind name reuse):
-//   - Any ref containing "/layers/" resolves to a layer.
-//   - Any ref containing "/images/" resolves to an image.
+// Disambiguation rules (post 2026-06 candy/box rebrand):
+//   - Any ref with a "candy/<n>" subpath resolves to a layer ("layers/" legacy).
+//   - Any ref with a "box/<n>" subpath resolves to an image ("images/" legacy).
 //   - A local name found in BOTH overthink.yml and layers/ is permitted —
 //     each kind has its own namespace. Precedence is decided by the
 //     CALLER's context: ResolveDeployRef defaults to image-first
@@ -148,19 +148,28 @@ func translateAtVersion(ref string) string {
 	return ref[:idx] + ":" + ref[idx+1:]
 }
 
+// refSubPathHas reports whether a remote-ref subpath contains a path segment
+// either as the leading component ("candy/ov") or an interior one ("x/candy/ov").
+func refSubPathHas(subPath, segment string) bool {
+	return strings.Contains(subPath, "/"+segment+"/") || strings.HasPrefix(subPath, segment+"/")
+}
+
 // resolveRemoteRef parses and classifies an @-prefixed remote ref.
 func resolveRemoteRef(ref string) (*DeployRef, error) {
 	parsed := ParseRemoteRef(ref)
 	kind := RefKindLayer
 	switch {
-	case strings.Contains(parsed.SubPath, "/layers/") || strings.HasPrefix(parsed.SubPath, "layers/"):
+	case refSubPathHas(parsed.SubPath, "candy") || refSubPathHas(parsed.SubPath, "layers"):
+		// `candy/<n>` is the post-rebrand layer subpath; `layers/<n>` is the
+		// legacy form kept for back-compat with old pins.
 		kind = RefKindLayer
-	case strings.Contains(parsed.SubPath, "/images/") || strings.HasPrefix(parsed.SubPath, "images/"):
+	case refSubPathHas(parsed.SubPath, "box") || refSubPathHas(parsed.SubPath, "images"):
+		// `box/<n>` is the post-rebrand image subpath; `images/<n>` is legacy.
 		kind = RefKindImage
 	default:
-		// A bare repo ref (no /layers/ or /images/) defaults to the
-		// project's overthink.yml, which is image-shaped. Existing tooling
-		// treats such refs as project imports; we follow suit.
+		// A bare repo ref (no candy//box/ subpath) defaults to the project's
+		// overthink.yml, which is image-shaped. Existing tooling treats such
+		// refs as project imports; we follow suit.
 		kind = RefKindImage
 	}
 	return &DeployRef{

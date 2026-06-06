@@ -77,6 +77,49 @@ func TestImageReconcile_NewestReferenced(t *testing.T) {
 	}
 }
 
+// TestImageReconcile_VendoredCandyRequires proves reconciliation is FULLY
+// automatic: a locally-vendored candy under candy/<n>/candy.yml that pins an
+// @github sibling dep in its require: list is aligned too — not just the
+// top-level files. Without the candy/ walk in reconcileCandidateFiles this ref
+// is never scanned, so it stays at the old version and the resolver keeps
+// warning. (Regression guard for the cachyos keepassxc-keyring case.)
+func TestImageReconcile_VendoredCandyRequires(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "overthink.yml"), []byte(
+		"version: 2026.157.311\n"+
+			"box:\n  foo:\n    base: cachyos.cachyos\n    candy:\n"+
+			"      - '@github.com/overthinkos/overthink/candy/gnupg:v2026.144.0531'\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	candyDir := filepath.Join(dir, "candy", "keepassxc-keyring")
+	if err := os.MkdirAll(candyDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(candyDir, "candy.yml"), []byte(
+		"candy:\n  name: keepassxc-keyring\n  version: 2026.157.311\n  require:\n"+
+			"    - '@github.com/overthinkos/overthink/candy/gnupg:v2026.141.1600' # vendored sibling\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cwd, _ := os.Getwd()
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chdir(cwd)
+	if err := (&BoxReconcileCmd{}).Run(); err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
+	got, _ := os.ReadFile(filepath.Join(candyDir, "candy.yml"))
+	if strings.Contains(string(got), "v2026.141.1600") {
+		t.Errorf("vendored candy require not reconciled (still v2026.141.1600):\n%s", got)
+	}
+	if !strings.Contains(string(got), "gnupg:v2026.144.0531") {
+		t.Errorf("vendored candy require not aligned to newest referenced:\n%s", got)
+	}
+	if !strings.Contains(string(got), "# vendored sibling") {
+		t.Errorf("vendored candy comment not preserved:\n%s", got)
+	}
+}
+
 // TestImageReconcile_NoPins: a project with no @github pins is a clean no-op.
 func TestImageReconcile_NoPins(t *testing.T) {
 	dir := t.TempDir()

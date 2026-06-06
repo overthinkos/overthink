@@ -55,6 +55,14 @@ type DeployAddCmd struct {
 	// (no derivation).
 	Disposable bool   `long:"disposable" help:"Mark this deploy disposable (authorizes autonomous ov update; writes disposable: true into deploy.yml)"`
 	Lifecycle  string `long:"lifecycle" help:"Informational tier tag (scratch|dev|test|qa|staging|prod|custom). NO effect on disposability — use --disposable for that."`
+
+	// vmEntity is the resolved kind:vm entity name this deploy targets,
+	// populated per-node by dispatchNode from the node's `vm:` cross-ref
+	// (kind:eval beds + deploy.yml target:vm entries) OR the "vm:<name>"
+	// deploy-key prefix (the CLI `ov deploy add vm:<name>` form). The layer
+	// compiler reads it to build plans against the GUEST's distro/format
+	// (apt/dnf), not the operator host's. Not a Kong flag.
+	vmEntity string `kong:"-"`
 }
 
 // DeployDelCmd implements `ov deploy del <name>`.
@@ -248,6 +256,14 @@ func (c *DeployAddCmd) dispatchNode(path string, node *DeploymentNode, parentExe
 	var layerSet []string
 
 	target := classifyNodeTarget(node, path)
+
+	// Resolve the kind:vm entity this node targets (if any) so the layer
+	// compiler builds plans against the GUEST's distro/format (apt/dnf on
+	// debian/fedora) rather than the operator host's (cachyos→pac). The
+	// `vm:` deploy-key prefix was the ONLY signal before — it missed every
+	// kind:eval bed and deploy.yml target:vm entry whose name isn't
+	// "vm:"-prefixed, routing them through syntheticHostImage → pacman.
+	c.vmEntity = resolveVmEntity(c.Name, node)
 
 	// Resolve a kind:local template, when referenced. Template fields
 	// (layers + install_opts + env) merge BENEATH deployment-level
@@ -808,16 +824,16 @@ func (c *DeployAddCmd) compileLayerPlans(ref *DeployRef, cfg *Config, distroCfg 
 	if err != nil {
 		return nil, "", nil, fmt.Errorf("resolving deps for %s: %w", ref.Name, err)
 	}
-	// Pick the synthetic image template that matches the deploy target
-	// so `${USER}` in layer tasks resolves correctly: guest user for
-	// vm:<name>, host user for host/other targets.
+	// Pick the synthetic image template that matches the deploy target so
+	// `${USER}` AND the package format resolve correctly: the guest user +
+	// guest distro/format for any VM target (c.vmEntity, set by dispatchNode
+	// from node.Vm or the "vm:" prefix), the operator host's for everything
+	// else.
 	var img *ResolvedBox
-	if strings.HasPrefix(c.Name, "vm:") {
-		if vmName, perr := vmNameFromDeployName(c.Name); perr == nil {
-			if uf, ok, _ := LoadUnified(dir); ok && uf != nil && uf.VM != nil {
-				if spec, present := uf.VM[vmName]; present {
-					img = syntheticVmImage(spec)
-				}
+	if c.vmEntity != "" {
+		if uf, ok, _ := LoadUnified(dir); ok && uf != nil && uf.VM != nil {
+			if spec, present := uf.VM[c.vmEntity]; present {
+				img = syntheticVmImage(spec, distroCfg)
 			}
 		}
 	}
@@ -913,6 +929,24 @@ func syntheticHostImage() *ResolvedBox {
 	return img
 }
 
+// resolveVmEntity returns the kind:vm entity a deploy targets, or "" when it
+// targets no VM. A node's explicit `vm:` cross-ref wins (kind:eval beds and
+// deploy.yml target:vm entries, whose names are NOT "vm:"-prefixed); otherwise
+// the "vm:<name>" deploy-key prefix (the CLI `ov deploy add vm:<name>` form).
+// This is the single signal the layer compiler uses to pick syntheticVmImage
+// over syntheticHostImage — the prefix alone missed bed/target:vm deploys.
+func resolveVmEntity(deployName string, node *DeploymentNode) string {
+	if node != nil && node.Vm != "" {
+		return node.Vm
+	}
+	if strings.HasPrefix(deployName, "vm:") {
+		if vmName, perr := vmNameFromDeployName(deployName); perr == nil {
+			return vmName
+		}
+	}
+	return ""
+}
+
 // syntheticVmImage returns a ResolvedImage tuned for `ov deploy add
 // vm:<name>` — the User/UID/GID/Home fields come from the VM spec's SSH
 // config (not the host's env), so `${USER}` in a layer's `user:` field
@@ -922,11 +956,20 @@ func syntheticHostImage() *ResolvedBox {
 // under the pre-commit layer ends up in /root/.cargo/bin/ instead of
 // /home/<user>/.cargo/bin/, and $HOME-anchored layer tests fail.
 //
+// The guest's distro + primary package format are resolved from the VM
+// spec (NOT hardcoded), so a layer deploy onto a debian/ubuntu/fedora VM
+// installs its packages — and the `ov` localpkg — through the guest's own
+// package manager (apt/dnf) instead of pacman. The distro key is the
+// bootstrap `distro:` field (debootstrap/pacstrap VMs) or, for cloud_image
+// VMs, the base_user (cloud images name the default account after the
+// distro: arch/debian/ubuntu/fedora); the format (pac/deb/rpm) comes from
+// the resolved DistroDef's PrimaryFormat.
+//
 // Cloud-image VMs conventionally use uid/gid 1000 for the first non-root
 // user (cloud-init's adopt path respects that). bootc VMs default to
 // root, in which case we fall back to the same syntheticHostImage()
 // semantics (System scope, no per-user path).
-func syntheticVmImage(spec *VmSpec) *ResolvedBox {
+func syntheticVmImage(spec *VmSpec, distroCfg *DistroConfig) *ResolvedBox {
 	user := resolveVmSshUser(spec)
 	if user == "" || user == "root" {
 		img := syntheticHostImage()
@@ -936,14 +979,24 @@ func syntheticVmImage(spec *VmSpec) *ResolvedBox {
 		return img
 	}
 	img := &ResolvedBox{
-		Name:         "vm-adhoc",
-		User:         user,
-		UID:          1000,
-		GID:          1000,
-		Home:         "/home/" + user,
-		Distro:       []string{"arch"}, // cloud_image today is arch; extend when more VM distros land.
-		Pkg:          "pac",
-		BuildFormats: []string{"pac"},
+		Name: "vm-adhoc",
+		User: user,
+		UID:  1000,
+		GID:  1000,
+		Home: "/home/" + user,
+	}
+	distroKey := spec.Source.Distro
+	if distroKey == "" {
+		distroKey = spec.Source.BaseUser
+	}
+	if distroKey != "" {
+		img.Distro = []string{distroKey}
+		if def := distroCfg.ResolveDistro(img.Distro); def != nil {
+			if pf := def.PrimaryFormat(); pf != "" {
+				img.Pkg = pf
+				img.BuildFormats = []string{pf}
+			}
+		}
 	}
 	return img
 }

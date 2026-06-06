@@ -233,6 +233,52 @@ func TestRenderHostPackageCommand(t *testing.T) {
 	}
 }
 
+// TestRenderHostPackageCommandDebRepo guards the deb host-cell repo fix: a layer
+// that declares a third-party `repo:` (e.g. the ov layer's tailscale repo on
+// deb-family) must have that repo added — key dearmor + sources.list — BEFORE
+// apt-get install on a target:local / target:vm deploy. The deb host cell
+// previously rendered only apt-get install, so `apt-get install tailscale`
+// failed with "Unable to locate package tailscale" on the debian/ubuntu VM beds
+// (the tailscale apt repo was never added). Loads the real build.yml, so a
+// regression in the deb phase.install.host template re-breaks this test.
+func TestRenderHostPackageCommandDebRepo(t *testing.T) {
+	dc, _, _, err := LoadBuildConfigForImage(repoRootDir(t))
+	if err != nil {
+		t.Fatalf("LoadBuildConfigForImage: %v", err)
+	}
+	s := &SystemPackagesStep{
+		Format:   "deb",
+		Phase:    PhaseInstall,
+		Packages: []string{"tailscale"},
+		RawInstallContext: map[string]interface{}{
+			"package": []string{"tailscale"},
+			// Production shape is []map[string]any (DistroPackages.Repo); the
+			// template's NewInstallContext.toMapSlice handles it.
+			"repo": []map[string]any{{
+				"name":       "tailscale",
+				"url":        "https://pkgs.tailscale.com/stable/debian",
+				"key":        "https://pkgs.tailscale.com/stable/debian/trixie.noarmor.gpg",
+				"suite":      "trixie",
+				"components": "main",
+			}},
+		},
+	}
+	got, err := renderHostPackageCommand(dc, s)
+	if err != nil {
+		t.Fatalf("renderHostPackageCommand: %v", err)
+	}
+	for _, want := range []string{
+		"gpg --dearmor -o /etc/apt/keyrings/tailscale.gpg",
+		"/etc/apt/sources.list.d/tailscale.list",
+		"signed-by=/etc/apt/keyrings/tailscale.gpg",
+		"apt-get install -y tailscale",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("deb host install missing %q in:\n%s", want, got)
+		}
+	}
+}
+
 // TestRenderHostUninstallTemplate proves each format's uninstall_template (the
 // config-driven package removal in reverse_ops.go) renders the exact command
 // the deleted reversePackageRemove switch produced.

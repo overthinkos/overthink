@@ -552,12 +552,15 @@ func buildSystemPackagesStep(format string, phase Phase, packages []string, raw 
 		Keys:              extractStringSlice(raw, "keys"),
 		RawInstallContext: raw,
 	}
-	if repoList, ok := raw["repos"].([]interface{}); ok {
-		for _, r := range repoList {
-			if m, ok := r.(map[string]interface{}); ok {
-				step.Repos = append(step.Repos, RepoSpec{Raw: m})
-			}
-		}
+	// Repos live under the canonical "repo" key — the schema YAML tag
+	// (DistroPackages.Repo `yaml:"repo"`), what derivePackageSectionsFromCalamares
+	// writes, and what NewInstallContext reads on the build path. Use toMapSlice
+	// so a []map[string]any value (the Calamares Repo shape) converts correctly:
+	// the prior `raw["repos"].([]interface{})` was wrong on BOTH the key (plural)
+	// and the type assertion, so step.Repos stayed empty and the deploy path never
+	// added a layer's apt/dnf repo (e.g. the ov layer's tailscale repo on deb).
+	for _, m := range toMapSlice(raw["repo"]) {
+		step.Repos = append(step.Repos, RepoSpec{Raw: m})
 	}
 	for _, cm := range cacheMounts {
 		step.CacheMount = append(step.CacheMount, CacheMountSpec{Dst: cm.Dst, Sharing: cm.Sharing})

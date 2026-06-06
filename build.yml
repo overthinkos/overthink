@@ -686,14 +686,29 @@ distro:
                         DEBIAN_FRONTEND=noninteractive apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y {{.StageDir}}/{{.Glob}}
                     probe: command -v apt-get
                 # Host-venue install cell for target:local / target:vm deploys.
-                # `apt-get update` refreshes the index (apt never auto-refreshes)
-                # and stays in this single install cell — the deploy compiler only
-                # emits PhaseInstall steps, so a separate prepare phase would never
-                # run on the host. DEBIAN_FRONTEND=noninteractive prevents tzdata
-                # et al. from blocking on a prompt.
+                # Mirrors the container install_template below: a layer's `repo:`
+                # blocks (key dearmor + sources.list + ppa) MUST be added BEFORE
+                # apt-get update so a package served only by a third-party repo
+                # (e.g. the ov layer's tailscale repo on deb-family) resolves —
+                # the deploy compiler emits a single PhaseInstall step, so the
+                # repo prelude lives in this same cell (no separate prepare phase
+                # runs on the host). `apt-get update` then refreshes the index
+                # (apt never auto-refreshes). DEBIAN_FRONTEND=noninteractive
+                # prevents tzdata et al. from blocking on a prompt.
                 phase:
                     install:
                         host: |
+                            {{- range .Repos}}
+                            {{- if .key}}
+                            mkdir -p /etc/apt/keyrings && curl -fsSL {{quote .key}} | gpg --dearmor -o {{default .signed_by (printf "/etc/apt/keyrings/%s.gpg" .name)}} && \
+                            {{- end}}
+                            {{- if .url}}
+                            echo "deb [{{if or .key .signed_by}}signed-by={{default .signed_by (printf "/etc/apt/keyrings/%s.gpg" .name)}}{{end}}] {{.url}} {{default .suite "stable"}}{{if eq (default .suite "stable") "/"}}{{else}} {{default .components "main"}}{{end}}" > /etc/apt/sources.list.d/{{.name}}.list && \
+                            {{- end}}
+                            {{- if .ppa}}
+                            add-apt-repository -y ppa:{{.ppa}} && \
+                            {{- end}}
+                            {{- end}}
                             DEBIAN_FRONTEND=noninteractive apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y{{range .Options}} {{.}}{{end}}{{range .Packages}} {{.}}{{end}}
                 uninstall_template: |
                     DEBIAN_FRONTEND=noninteractive apt-get purge -y{{range .Packages}} {{.}}{{end}}
@@ -721,6 +736,7 @@ distro:
             components: "main"
             include_package:
                 - ca-certificates
+                - curl
                 - gnupg
             base_package:
                 # systemd-sysv provides /sbin/init -> /lib/systemd/systemd.
@@ -996,6 +1012,7 @@ distro:
             components: "main,universe"
             include_package:
                 - ca-certificates
+                - curl
                 - gnupg
             base_package:
                 # systemd-sysv provides /sbin/init (see distro.debian).

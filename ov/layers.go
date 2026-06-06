@@ -297,17 +297,18 @@ type CandyYAML struct {
 	// deploy (every other target skips it). See android_spec.go ApkPackageSpec.
 	Apk []ApkPackageSpec `yaml:"apk,omitempty"`
 
-	// LocalPkg points at a bundled Arch PKGBUILD directory (relative to the
-	// layer dir or the project root, or absolute). On an Arch/CachyOS DEPLOY
-	// target (target:local on a pac host, target:vm into a pac guest) ov builds
-	// the package from this PKGBUILD on the HOST via makepkg and installs the
-	// resulting .pkg.tar.zst onto the target via pacman -U — delivering a
-	// pacman-tracked package instead of an ad-hoc binary. Compiled into a
-	// LocalPkgInstallStep; skipped at image build (no makepkg in a container)
-	// and on every non-pac target. The canonical user is the `ov` layer, whose
-	// localpkg points at the repo's pkg/arch (overthink-git). See
-	// LocalPkgInstallStep.
-	LocalPkg string `yaml:"localpkg,omitempty"`
+	// LocalPkg maps a package FORMAT (pac/rpm/deb) to a bundled native-package
+	// SOURCE directory (relative to the layer dir or the project root, or
+	// absolute). On a DEPLOY target ov picks the entry matching the target
+	// distro's package format, builds the package from that source on the HOST,
+	// and installs the result onto the target via the format's auto-resolving
+	// local-file install (pacman -U / dnf install / apt-get install) — delivering
+	// an OS-package-tracked binary instead of an ad-hoc curl. Compiled into a
+	// LocalPkgInstallStep; skipped at image build (no host package build in a
+	// container). The canonical user is the `ov` layer:
+	// {pac: pkg/arch, rpm: pkg/fedora, deb: pkg/debian}. A legacy scalar is
+	// rejected at load with an `ov migrate` hint. See LocalPkgInstallStep.
+	LocalPkg LocalPkgMap `yaml:"localpkg,omitempty"`
 
 	// Reboot requests a reboot of the deploy target after this layer's
 	// steps (a trailing RebootStep). For kernel-module layers (e.g.
@@ -838,7 +839,7 @@ type Layer struct {
 	vars           map[string]string // layer-local variables (from the candy manifest vars:)
 	tasks          []Task            // ordered install operations (from the candy manifest tasks:)
 	apk            []ApkPackageSpec  // Android apps to install on a kind:android device (from the candy manifest apk:)
-	localpkg       string            // bundled PKGBUILD dir to makepkg + pacman -U on an Arch deploy target (from the candy manifest localpkg:)
+	localpkg       map[string]string // per-format native-package source dirs (pac/rpm/deb → dir) from the candy manifest localpkg:
 	reboot         bool              // reboot the deploy target after this layer (from the candy manifest reboot:)
 	tests          []Check           // declarative checks (from the candy manifest tests:)
 	artifacts      []CandyArtifact   // files to retrieve after setup (from the candy manifest artifacts:)
@@ -1132,9 +1133,40 @@ func (l *Layer) HasApk() bool     { return len(l.apk) > 0 }
 // format). Empty for non-Android layers.
 func (l *Layer) Apk() []ApkPackageSpec { return l.apk }
 
-// LocalPkg returns the layer's bundled-PKGBUILD pointer (the `localpkg:`
-// field), or "" when the layer declares none. See LocalPkgInstallStep.
-func (l *Layer) LocalPkg() string        { return l.localpkg }
+// LocalPkg returns the layer's native-package SOURCE dir for the given package
+// FORMAT (pac/rpm/deb), or "" when the layer declares none for that format. See
+// LocalPkgInstallStep.
+func (l *Layer) LocalPkg(format string) string { return l.localpkg[format] }
+
+// LocalPkgFormats returns the package formats (pac/rpm/deb) for which the layer
+// declares a native-package source, sorted for deterministic iteration.
+func (l *Layer) LocalPkgFormats() []string {
+	out := make([]string, 0, len(l.localpkg))
+	for f := range l.localpkg {
+		out = append(out, f)
+	}
+	sortStrings(out)
+	return out
+}
+
+// LocalPkgMap maps a package format (pac/rpm/deb) to a native-package source
+// dir. Its UnmarshalYAML rejects the legacy scalar form with an `ov migrate`
+// hint (hard cutover — the field went per-format in 2026-06).
+type LocalPkgMap map[string]string
+
+// UnmarshalYAML accepts only the per-format mapping shape; a legacy scalar
+// (e.g. `localpkg: pkg/arch`) is a hard error pointing at `ov migrate`.
+func (m *LocalPkgMap) UnmarshalYAML(value *yaml.Node) error {
+	if value.Kind == yaml.ScalarNode {
+		return fmt.Errorf("localpkg: legacy scalar form %q rejected; localpkg is now a per-format map (e.g. {pac: pkg/arch, rpm: pkg/fedora, deb: pkg/debian}). Run `ov migrate`", value.Value)
+	}
+	var mm map[string]string
+	if err := value.Decode(&mm); err != nil {
+		return err
+	}
+	*m = mm
+	return nil
+}
 func (l *Layer) HasEnvProvides() bool    { return len(l.envProvides) > 0 }
 func (l *Layer) HasEnvRequires() bool    { return len(l.envRequires) > 0 }
 func (l *Layer) HasEnvAccepts() bool     { return len(l.envAccepts) > 0 }

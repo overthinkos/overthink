@@ -22,9 +22,20 @@ candy:
                 - portaudio
                 - opusfile
         debian:
+            # tailscale is a mandatory ov dep but is NOT in Debian main, so the
+            # .deb (pkg/debian) omits it; the ov layer supplies it for deb-family
+            # via the tailscale apt repo. arch/fedora get tailscale from their
+            # native package's deps instead, so it is deb-family-scoped here.
             package:
                 - libportaudio2
                 - libopusfile0
+                - tailscale
+            repo:
+                - name: tailscale
+                  url: "https://pkgs.tailscale.com/stable/debian"
+                  key: "https://pkgs.tailscale.com/stable/debian/trixie.noarmor.gpg"
+                  suite: trixie
+                  components: main
         fedora:
             package:
                 - portaudio
@@ -33,15 +44,26 @@ candy:
             package:
                 - libportaudio2
                 - libopusfile0
-    # On an Arch/CachyOS DEPLOY target (target:local on a pac host, target:vm
-    # into a pac guest) ov is installed as the proper `overthink-git` pacman
-    # package: built from the repo's bundled PKGBUILD on the HOST via makepkg,
-    # then pacman -U'd onto the target (LocalPkgInstallStep). The PKGBUILD lives
-    # at the SUPERPROJECT root's pkg/arch — resolved by walking UP from the deploy
-    # project dir, so a consumer nested under image/<distro> still finds it
-    # (../../pkg/arch). Skipped at image build (no makepkg in a container) and on
-    # any non-pac target; the cmd: task below is the fallback there.
-    localpkg: pkg/arch
+                - tailscale
+            repo:
+                - name: tailscale
+                  url: "https://pkgs.tailscale.com/stable/ubuntu"
+                  key: "https://pkgs.tailscale.com/stable/ubuntu/noble.noarmor.gpg"
+                  suite: noble
+                  components: main
+    # On a DEPLOY target ov is installed as the proper OS-tracked package for the
+    # target distro's format (LocalPkgInstallStep): pac → overthink-git built from
+    # pkg/arch via makepkg + pacman -U; rpm → overthink built from pkg/fedora via
+    # rpmbuild + dnf install; deb → overthink built from pkg/debian via
+    # dpkg-buildpackage + apt-get install. Each install AUTO-RESOLVES the package's
+    # dependencies from the target's repos. The sources live at the SUPERPROJECT
+    # root (pkg/<fmt>) — resolved by walking UP from the deploy project dir, so a
+    # consumer nested under image/<distro> still finds them. Skipped at image build
+    # (no host package build in a container); the cmd: task below is the fallback.
+    localpkg:
+        pac: pkg/arch
+        rpm: pkg/fedora
+        deb: pkg/debian
     task:
         # Install the ov binary. Resolution order:
         #   1. overthink-git already pacman-installed (the localpkg step ran first

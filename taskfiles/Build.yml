@@ -126,3 +126,44 @@ tasks:
     cmds:
       - install -D -m 0755 bin/ov "$HOME/.local/bin/ov"
       - echo "Installed to $HOME/.local/bin/ov"
+
+  binary:
+    desc: Build the ov binary to bin/ov (CalVer-stamped; NO host install)
+    dir: "{{.ROOT_DIR}}"
+    cmds:
+      - mkdir -p bin candy/ov/bin
+      - |
+        CALVER=$(bash pkg/arch/calver.sh)
+        cd ov && go build -ldflags "-X main.BuildCalVer=${CALVER}" -o ../bin/ov .
+      - cp bin/ov candy/ov/bin/ov
+
+  # Release-artifact builds — thin wrappers over `ov box pkg`, which builds each
+  # native package distro-natively (in a podman container) via the SAME build.yml
+  # local_pkg.build_template the deploy-time localpkg path uses (R3). Output → dist/.
+  pkg:arch:
+    desc: Build the ov .pkg.tar.zst release artifact into dist/
+    dir: "{{.ROOT_DIR}}"
+    deps: [binary]
+    cmds:
+      - bin/ov box pkg pac
+
+  pkg:fedora:
+    desc: Build the ov .rpm release artifact into dist/
+    dir: "{{.ROOT_DIR}}"
+    deps: [binary]
+    cmds:
+      - bin/ov box pkg rpm
+
+  pkg:debian:
+    desc: Build the ov .deb release artifact into dist/ (serves Debian + Ubuntu)
+    dir: "{{.ROOT_DIR}}"
+    deps: [binary]
+    cmds:
+      - bin/ov box pkg deb
+
+  pkg:all:
+    desc: Build every native package release artifact (.pkg.tar.zst/.rpm/.deb) into dist/
+    dir: "{{.ROOT_DIR}}"
+    deps: [binary]
+    cmds:
+      - bin/ov box pkg

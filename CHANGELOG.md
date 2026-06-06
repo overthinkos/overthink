@@ -22,6 +22,65 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-06 — feat: native OV packages for every supported distro (localpkg per-format map, uniform auto-resolve, rpm + deb)
+
+`ov` shipped exactly one native package — the Arch `pkg/arch/PKGBUILD`
+(`overthink-git`), wired into deploys by the layer field `localpkg: pkg/arch`.
+Fedora/Debian/Ubuntu fell back to a curl'd binary. This cutover makes `ov` a
+first-class native package on **all five base distros**: arch + cachyos
+(pacman, already present), **fedora (rpm, new)**, **debian + ubuntu (deb, new)**.
+
+**Per-format `localpkg` map (schema change).** The layer `localpkg:` field went
+from a single scalar (`pkg/arch`) to a per-format map
+`{pac: pkg/arch, rpm: pkg/fedora, deb: pkg/debian}`, so ONE `ov` layer carries a
+native-package SOURCE per distro format. `Layer.LocalPkg()` became
+`LocalPkg(format)`; `compileLocalPkgStep` resolves the target distro's format
+first, then picks the matching source. A new `localpkg-map` `ov migrate` step
+rewrites the legacy scalar to `{pac: <old>}`; the loader hard-rejects a scalar
+`localpkg:` (`LocalPkgMap.UnmarshalYAML`) with an `ov migrate` hint. Schema HEAD
+bumped to `2026.157.311`.
+
+**Uniform auto-resolve — the host-side dep-closure machinery is DELETED.** Every
+format's install command is now the package manager's native auto-resolving
+local-file install (`pacman -U` / `dnf install` / `apt-get install`), so the
+package's mandatory dependencies are pulled from the target's repos. The bespoke
+pac-only AUR dep-closure code (`resolveLocalPkgDeps`, `pkgInfoDepends`,
+`pkgInfoReader` (`bsdtar .PKGINFO`), the `depend =` parser, `hostForeignPkgs`,
+`builderOnlyDeps`) and the `LocalPkgDef.foreign_query` / `dep_constraint_ops`
+fields are removed — the prior consolidation already made the only AUR deps
+(`cloudflared-bin`, `gvisor-tap-vsock`) optional, so the closure was vestigial.
+`buildDepPkgsOnHost` + `transferAndInstallPkgs` stay (the aur-LAYER deploy path
+still uses them). The pac localpkg formerly built+installed those AUR optdeps via
+the dep-absent #43 witness; that witness now asserts plain `pacman -U`
+auto-resolution of the mandatory repo set instead (the optdeps are opt-in).
+
+**Zero distro-specific Go — everything in `build.yml`.** All package installation
+AND generation are 100% YAML-configured. `LocalPkgDef` gained a per-format
+`source_sentinel` (`PKGBUILD` / `*.spec` / `debian/control`) so `resolveLocalPkgDir`
+drops its hardcoded `PKGBUILD` literal; the rpm/deb `build_template`s build
+distro-natively in a podman container (host is CachyOS), the ov binary built on
+the host and bind-mounted in. `git grep` for package-manager literals in `ov/*.go`
+shows no distro-branching logic.
+
+**New package-source submodules.** `pkg/fedora` (`overthink.spec`) and
+`pkg/debian` (`debian/`) — separately publishable, mirroring `pkg/arch`. One deb
+source serves Debian + Ubuntu. The `.deb` deliberately OMITS tailscale (not in
+Debian main); the `ov` layer supplies tailscale for Debian/Ubuntu via the
+tailscale apt repo (deb-family-scoped). arch/fedora keep tailscale in their
+package deps (it is in their repos).
+
+**Downloadable release artifacts.** A new `ov box pkg [format…]` verb builds the
+standalone `.pkg.tar.zst`/`.rpm`/`.deb` into `dist/` through the SAME
+`build_template` the deploy-time localpkg path uses (R3) — `task pkg:arch|fedora|debian`
+wrap it, and `.github/workflows/release-packages.yml` attaches them on a
+`v<CalVer>` tag.
+
+**Coverage.** Go unit tests (per-format compile, sentinel resolution, scalar
+rejection, migration idempotency) + the VM beds `eval-cachyos-vm` (pac
+auto-resolve), `eval-fedora-vm` (NEW — rpm, on a Fedora Cloud VM), and the
+extended `eval-debian-debootstrap-vm` / `eval-ubuntu-debootstrap-vm` (deb,
+asserting tailscale arrives via the ov layer).
+
 ### 2026-06-05 — feat: consolidate `ov` — merge `ov-full` into `ov`, drop `ov` where unneeded, right-size the package deps, and test ALL ov commands
 
 The `ov` toolchain was split into a bare-binary `ov` layer and an `ov-full`

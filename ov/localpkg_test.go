@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"gopkg.in/yaml.v3"
 )
 
 // testPacLocalPkgDef returns a LocalPkgDef mirroring build.yml's `pac.local_pkg`
@@ -13,13 +15,12 @@ import (
 // exercise the SAME config-driven path the loader produces, without parsing YAML.
 func testPacLocalPkgDef() *LocalPkgDef {
 	return &LocalPkgDef{
-		PkgGlob:          "*.pkg.tar.zst",
-		BuildTemplate:    "cd {{.SrcDir}} && PKGDEST={{.PkgDest}} makepkg -sf --noconfirm",
-		InstallTemplate:  "pacman -U --noconfirm {{.StageDir}}/{{.Glob}}",
-		ForeignQuery:     "pacman -Qmq",
-		Probe:            "command -v pacman",
-		DepConstraintOps: []string{">=", "<=", "=", ">", "<"},
-		DepBuilder:       "aur",
+		PkgGlob:         "*.pkg.tar.zst",
+		SourceSentinel:  "PKGBUILD",
+		BuildTemplate:   "cd {{.SrcDir}} && PKGDEST={{.PkgDest}} makepkg -sf --noconfirm",
+		InstallTemplate: "pacman -U --noconfirm {{.StageDir}}/{{.Glob}}",
+		Probe:           "command -v pacman",
+		DepBuilder:      "aur",
 	}
 }
 
@@ -33,9 +34,10 @@ func testPacDistroDef() *DistroDef {
 	}
 }
 
-// TestCompileLocalPkgStep verifies a layer's `localpkg:` field compiles into a
-// single LocalPkgInstallStep carrying the ref + anchors, and the config-driven
-// format/builder resolution; a layer with no localpkg: compiles to nothing.
+// TestCompileLocalPkgStep verifies the per-format `localpkg:` map compiles into a
+// single LocalPkgInstallStep carrying the format-matched source ref + anchors +
+// the config-driven LocalPkg; a layer with no source for the target format, or a
+// distro with no localpkg-capable format, compiles to nothing.
 func TestCompileLocalPkgStep(t *testing.T) {
 	img := &ResolvedBox{
 		Name:      "ov-host",
@@ -44,14 +46,17 @@ func TestCompileLocalPkgStep(t *testing.T) {
 		Builder:   map[string]string{"aur": "ghcr.io/overthinkos/arch-builder:latest"},
 	}
 	hostCtx := HostContext{Target: "host", Distro: "arch"}
+
+	// A layer with no localpkg entry for the target format → nil.
 	if step := compileLocalPkgStep(&Layer{Name: "no-pkg"}, img, hostCtx); step != nil {
 		t.Errorf("layer with no localpkg: should compile to nil, got %T", step)
 	}
 
-	l := &Layer{Name: "ov", SourceDir: "/layers/ov", localpkg: "pkg/arch"}
+	// The ov layer's per-format map: pac resolves to pkg/arch.
+	l := &Layer{Name: "ov", SourceDir: "/layers/ov", localpkg: map[string]string{"pac": "pkg/arch", "rpm": "pkg/fedora", "deb": "pkg/debian"}}
 	step := compileLocalPkgStep(l, img, hostCtx)
 	if step == nil {
-		t.Fatal("compileLocalPkgStep returned nil for a layer with localpkg:")
+		t.Fatal("compileLocalPkgStep returned nil for a layer with a pac localpkg source")
 	}
 	pkg, ok := step.(*LocalPkgInstallStep)
 	if !ok {
@@ -67,19 +72,19 @@ func TestCompileLocalPkgStep(t *testing.T) {
 	if pkg.Format != "pac" || pkg.LocalPkg == nil || pkg.LocalPkg.PkgGlob != "*.pkg.tar.zst" {
 		t.Errorf("LocalPkg config not resolved from the pac format: Format=%q LocalPkg=%#v", pkg.Format, pkg.LocalPkg)
 	}
-	// BuilderImage is resolved for LocalPkg.DepBuilder (aur) via the image builder map.
-	if pkg.BuilderImage != "ghcr.io/overthinkos/arch-builder:latest" {
-		t.Errorf("BuilderImage = %q, want the image's aur builder", pkg.BuilderImage)
+
+	// Same layer on an rpm distro → picks the rpm source from the map.
+	rpmImg := &ResolvedBox{Name: "ov-fedora", Pkg: "rpm", DistroDef: &DistroDef{Format: map[string]*FormatDef{
+		"rpm": {LocalPkg: &LocalPkgDef{PkgGlob: "*.rpm", SourceSentinel: "*.spec", BuildTemplate: "x", InstallTemplate: "dnf install -y {{.StageDir}}/{{.Glob}}", Probe: "command -v dnf"}},
+	}}}
+	if rs, ok := compileLocalPkgStep(l, rpmImg, hostCtx).(*LocalPkgInstallStep); !ok || rs.Format != "rpm" || rs.PkgbuildRef != "pkg/fedora" {
+		t.Errorf("rpm distro should pick pkg/fedora via the format map, got %#v", compileLocalPkgStep(l, rpmImg, hostCtx))
 	}
-	// No aur builder → BuilderImage left "" (dep-build skipped with a clear log).
-	noBuilder := compileLocalPkgStep(l, &ResolvedBox{Name: "ov-host", Pkg: "pac", DistroDef: testPacDistroDef()}, hostCtx)
-	if pkg, ok := noBuilder.(*LocalPkgInstallStep); !ok || pkg.BuilderImage != "" || pkg.LocalPkg == nil {
-		t.Errorf("no aur builder should leave BuilderImage empty but keep LocalPkg, got %#v", noBuilder)
-	}
-	// Distro with no localpkg-capable format → LocalPkg nil (executor skips).
-	noFmt := compileLocalPkgStep(l, &ResolvedBox{Name: "ov-host", Pkg: "rpm", DistroDef: &DistroDef{Format: map[string]*FormatDef{"rpm": {}}}}, hostCtx)
-	if pkg, ok := noFmt.(*LocalPkgInstallStep); !ok || pkg.LocalPkg != nil || pkg.Format != "" {
-		t.Errorf("distro without localpkg format should leave LocalPkg nil, got %#v", noFmt)
+
+	// Distro with a format but NO localpkg block → nil (no native package).
+	noFmt := compileLocalPkgStep(l, &ResolvedBox{Name: "ov-x", Pkg: "rpm", DistroDef: &DistroDef{Format: map[string]*FormatDef{"rpm": {}}}}, hostCtx)
+	if noFmt != nil {
+		t.Errorf("distro without a localpkg-capable format should compile to nil, got %#v", noFmt)
 	}
 }
 
@@ -100,23 +105,23 @@ func TestLocalPkgInstallStepIR(t *testing.T) {
 		t.Errorf("RequiresGate() = %v, want GateNone", s.RequiresGate())
 	}
 	if s.Reverse() != nil {
-		t.Errorf("Reverse() = %v, want nil (pacman package is the substrate's own, not ledger-reversed)", s.Reverse())
+		t.Errorf("Reverse() = %v, want nil (OS package is the substrate's own, not ledger-reversed)", s.Reverse())
 	}
 }
 
 // TestBuildDeployPlanLocalPkgOrdering proves the localpkg step is emitted BEFORE
 // the layer's task steps in the compiled plan — load-bearing so the ov layer's
-// pacman-aware cmd: gate sees overthink-git already installed and does nothing
+// package-aware cmd: gate sees overthink already installed and does nothing
 // (instead of curling a /usr/local/bin/ov that shadows /usr/bin/ov).
 func TestBuildDeployPlanLocalPkgOrdering(t *testing.T) {
 	l := &Layer{
 		Name:     "ov",
-		localpkg: "pkg/arch",
+		localpkg: map[string]string{"pac": "pkg/arch"},
 		tasks: []Task{
 			{Cmd: "echo install ov", User: "root"},
 		},
 	}
-	img := &ResolvedBox{Name: "host-adhoc", Home: "/root", User: "root"}
+	img := &ResolvedBox{Name: "host-adhoc", Home: "/root", User: "root", Pkg: "pac", DistroDef: testPacDistroDef()}
 	plan, err := BuildDeployPlan(l, img, HostContext{Target: "host", Distro: "arch"})
 	if err != nil {
 		t.Fatalf("BuildDeployPlan: %v", err)
@@ -146,7 +151,7 @@ func TestBuildDeployPlanLocalPkgOrdering(t *testing.T) {
 }
 
 // TestOCITargetSkipsLocalPkg proves the localpkg step is SKIPPED at image build
-// (no makepkg in a container) — emitStep returns nil and emits nothing.
+// (no host package build in a container) — emitStep returns nil and emits nothing.
 func TestOCITargetSkipsLocalPkg(t *testing.T) {
 	tgt := &OCITarget{}
 	step := &LocalPkgInstallStep{PkgbuildRef: "pkg/arch", LayerName: "ov"}
@@ -158,14 +163,13 @@ func TestOCITargetSkipsLocalPkg(t *testing.T) {
 	}
 }
 
-// TestResolveLocalPkgDir covers PKGBUILD-location resolution across all four
-// branches: absolute, layer-relative, project-relative, and the walk-up search
-// (the operator path where `ov -C image/cachyos deploy add …` finds pkg/arch at
-// the superproject root ../../pkg/arch). A missing PKGBUILD returns "".
+// TestResolveLocalPkgDir covers source-dir resolution across the four branches
+// (absolute, layer-relative, project-relative, walk-up) AND the config-driven
+// per-format sentinel: PKGBUILD (plain file), *.spec (glob), debian/control
+// (sub-path). A missing sentinel returns "".
 func TestResolveLocalPkgDir(t *testing.T) {
 	root := t.TempDir()
-	// Lay out: <root>/pkg/arch/PKGBUILD  (superproject) and a nested project dir
-	// <root>/image/cachyos that does NOT contain pkg/arch directly.
+	// <root>/pkg/arch/PKGBUILD (superproject) and a nested project dir.
 	pkgArch := filepath.Join(root, "pkg", "arch")
 	if err := os.MkdirAll(pkgArch, 0o755); err != nil {
 		t.Fatal(err)
@@ -178,37 +182,82 @@ func TestResolveLocalPkgDir(t *testing.T) {
 		t.Fatal(err)
 	}
 	// A layer dir that bundles its OWN PKGBUILD (layer-relative branch).
-	layerWithPkg := filepath.Join(root, "layers", "mytool")
+	layerWithPkg := filepath.Join(root, "candy", "mytool")
 	if err := os.MkdirAll(filepath.Join(layerWithPkg, "arch"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(layerWithPkg, "arch", "PKGBUILD"), []byte("pkgname=mytool\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	// rpm source dir (sentinel is a *.spec glob) and deb source dir (sentinel is
+	// a debian/control sub-path) — proving the generic sentinel match.
+	pkgFedora := filepath.Join(root, "pkg", "fedora")
+	if err := os.MkdirAll(pkgFedora, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pkgFedora, "overthink.spec"), []byte("Name: overthink\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	pkgDebian := filepath.Join(root, "pkg", "debian", "debian")
+	if err := os.MkdirAll(pkgDebian, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pkgDebian, "control"), []byte("Source: overthink\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
-	// 1. Absolute ref.
-	if got := resolveLocalPkgDir(pkgArch, "", ""); got != pkgArch {
+	// 1. Absolute ref (PKGBUILD sentinel).
+	if got := resolveLocalPkgDir(pkgArch, "", "", "PKGBUILD"); got != pkgArch {
 		t.Errorf("absolute ref = %q, want %q", got, pkgArch)
 	}
 	// 2. Layer-relative.
-	if got := resolveLocalPkgDir("arch", layerWithPkg, root); got != filepath.Join(layerWithPkg, "arch") {
+	if got := resolveLocalPkgDir("arch", layerWithPkg, root, "PKGBUILD"); got != filepath.Join(layerWithPkg, "arch") {
 		t.Errorf("layer-relative = %q, want %q", got, filepath.Join(layerWithPkg, "arch"))
 	}
 	// 3. Project-relative (project dir == superproject root).
-	if got := resolveLocalPkgDir("pkg/arch", "/no/such/layer", root); got != pkgArch {
+	if got := resolveLocalPkgDir("pkg/arch", "/no/such/layer", root, "PKGBUILD"); got != pkgArch {
 		t.Errorf("project-relative = %q, want %q", got, pkgArch)
 	}
 	// 4. Walk-up: project dir is the nested image/cachyos; pkg/arch is two levels up.
-	if got := resolveLocalPkgDir("pkg/arch", "/no/such/layer", nestedProject); got != pkgArch {
+	if got := resolveLocalPkgDir("pkg/arch", "/no/such/layer", nestedProject, "PKGBUILD"); got != pkgArch {
 		t.Errorf("walk-up = %q, want %q (must find the superproject pkg/arch from a nested project dir)", got, pkgArch)
 	}
-	// 5. Missing PKGBUILD → "".
-	if got := resolveLocalPkgDir("does/not/exist", "/no/such/layer", nestedProject); got != "" {
-		t.Errorf("missing PKGBUILD = %q, want empty (no-op fallback)", got)
+	// 5. rpm glob sentinel (*.spec).
+	if got := resolveLocalPkgDir("pkg/fedora", "/no/such/layer", root, "*.spec"); got != pkgFedora {
+		t.Errorf("rpm *.spec sentinel = %q, want %q", got, pkgFedora)
 	}
-	// 6. Empty ref → "".
-	if got := resolveLocalPkgDir("", layerWithPkg, root); got != "" {
+	// 6. deb sub-path sentinel (debian/control).
+	wantDeb := filepath.Join(root, "pkg", "debian")
+	if got := resolveLocalPkgDir("pkg/debian", "/no/such/layer", root, "debian/control"); got != wantDeb {
+		t.Errorf("deb debian/control sentinel = %q, want %q", got, wantDeb)
+	}
+	// 7. Missing sentinel → "".
+	if got := resolveLocalPkgDir("does/not/exist", "/no/such/layer", nestedProject, "PKGBUILD"); got != "" {
+		t.Errorf("missing sentinel = %q, want empty (no-op fallback)", got)
+	}
+	// 8. Empty ref → "".
+	if got := resolveLocalPkgDir("", layerWithPkg, root, "PKGBUILD"); got != "" {
 		t.Errorf("empty ref = %q, want empty", got)
+	}
+	// 9. Empty sentinel → "" (never matches).
+	if got := resolveLocalPkgDir("pkg/arch", "", root, ""); got != "" {
+		t.Errorf("empty sentinel = %q, want empty", got)
+	}
+}
+
+// TestLocalPkgMapRejectsScalar proves the loader hard-rejects the legacy scalar
+// form with an `ov migrate` hint, and accepts the per-format map.
+func TestLocalPkgMapRejectsScalar(t *testing.T) {
+	var m LocalPkgMap
+	if err := yaml.Unmarshal([]byte("pkg/arch\n"), &m); err == nil || !strings.Contains(err.Error(), "ov migrate") {
+		t.Errorf("scalar localpkg should be rejected with an `ov migrate` hint, got %v", err)
+	}
+	m = nil
+	if err := yaml.Unmarshal([]byte("{pac: pkg/arch, rpm: pkg/fedora}\n"), &m); err != nil {
+		t.Fatalf("map form should decode, got %v", err)
+	}
+	if m["pac"] != "pkg/arch" || m["rpm"] != "pkg/fedora" {
+		t.Errorf("decoded map = %v", m)
 	}
 }
 
@@ -277,12 +326,11 @@ func TestVenueHasPkgManager(t *testing.T) {
 
 // TestExecLocalPkgInstall_SkipsUnsupported proves an unsupported venue is a
 // clean no-op: no build, no transfer, no install — the layer's curl/COPY task
-// installs it instead. `supported=false` is what the config-driven probe returns
-// on a non-pac venue.
+// installs it instead.
 func TestExecLocalPkgInstall_SkipsUnsupported(t *testing.T) {
 	exec := &localPkgRecExec{}
 	s := &LocalPkgInstallStep{PkgbuildRef: "pkg/arch", LayerName: "ov", ProjectDir: t.TempDir(), Format: "pac", LocalPkg: testPacLocalPkgDef()}
-	if err := execLocalPkgInstall(context.Background(), exec, s, false /* supported */, "host", nil, EmitOpts{}); err != nil {
+	if err := execLocalPkgInstall(context.Background(), exec, s, false /* supported */, "host", EmitOpts{}); err != nil {
 		t.Fatalf("unsupported venue should be a clean no-op, got %v", err)
 	}
 	if len(exec.systemScripts) != 0 || len(exec.putDests) != 0 {
@@ -296,7 +344,7 @@ func TestExecLocalPkgInstall_SkipsUnsupported(t *testing.T) {
 func TestExecLocalPkgInstall_SkipsNilLocalPkg(t *testing.T) {
 	exec := &localPkgRecExec{}
 	s := &LocalPkgInstallStep{PkgbuildRef: "pkg/arch", LayerName: "ov", ProjectDir: t.TempDir()} // LocalPkg nil
-	if err := execLocalPkgInstall(context.Background(), exec, s, true, "host", nil, EmitOpts{}); err != nil {
+	if err := execLocalPkgInstall(context.Background(), exec, s, true, "host", EmitOpts{}); err != nil {
 		t.Fatalf("nil LocalPkg should be a clean no-op, got %v", err)
 	}
 	if len(exec.systemScripts) != 0 || len(exec.putDests) != 0 {
@@ -310,7 +358,7 @@ func TestExecLocalPkgInstall_SkipsNilLocalPkg(t *testing.T) {
 func TestExecLocalPkgInstall_SkipsMissingSource(t *testing.T) {
 	exec := &localPkgRecExec{}
 	s := &LocalPkgInstallStep{PkgbuildRef: "no/such/source", LayerName: "ov", ProjectDir: t.TempDir(), Format: "pac", LocalPkg: testPacLocalPkgDef()}
-	if err := execLocalPkgInstall(context.Background(), exec, s, true /* supported */, "host", nil, EmitOpts{}); err != nil {
+	if err := execLocalPkgInstall(context.Background(), exec, s, true /* supported */, "host", EmitOpts{}); err != nil {
 		t.Fatalf("missing source should be a clean no-op, got %v", err)
 	}
 	if len(exec.systemScripts) != 0 || len(exec.putDests) != 0 {
@@ -346,156 +394,6 @@ func TestTransferAndInstallPkgs(t *testing.T) {
 	}
 }
 
-// TestStripDependConstraint covers the version-constraint-stripping cases the
-// package-metadata parser relies on, using the format's config-driven operator
-// set: each operator, bare name, and longest-op-wins (>= not >). NO hardcoded
-// overthink-specific names — pure string logic.
-func TestStripDependConstraint(t *testing.T) {
-	ops := testPacLocalPkgDef().DepConstraintOps
-	cases := []struct{ in, want string }{
-		{"cloudflared-bin", "cloudflared-bin"},   // bare name
-		{"glibc>=2.39", "glibc"},                 // >= stripped, not just >
-		{"foo<=1.0", "foo"},                      // <= stripped, not just <
-		{"bar=2.0", "bar"},                       // exact-version =
-		{"baz>1", "baz"},                         // >
-		{"qux<3", "qux"},                         // <
-		{"  spaced >= 1 ", "spaced"},             // surrounding + interior whitespace
-		{"gvisor-tap-vsock", "gvisor-tap-vsock"}, // hyphenated bare name
-	}
-	for _, c := range cases {
-		if got := stripDependConstraint(c.in, ops); got != c.want {
-			t.Errorf("stripDependConstraint(%q) = %q, want %q", c.in, got, c.want)
-		}
-	}
-	// Empty ops set → no stripping (bare name returned as-is, whitespace trimmed).
-	if got := stripDependConstraint("glibc>=2.39", nil); got != "glibc>=2.39" {
-		t.Errorf("empty ops should not strip: got %q", got)
-	}
-}
-
-// TestParsePkgInfoDepends proves the metadata parser extracts every `depend =`
-// line's bare name, strips version constraints (via the config-driven op set),
-// de-duplicates, ignores non-depend lines (pkgname, makedepend, optdepend,
-// blank), and preserves order.
-func TestParsePkgInfoDepends(t *testing.T) {
-	ops := testPacLocalPkgDef().DepConstraintOps
-	pkginfo := []byte(strings.Join([]string{
-		"# Generated by makepkg",
-		"pkgname = overthink-git",
-		"pkgver = 2026.155.0001-1",
-		"depend = cloudflared-bin",
-		"depend = gvisor-tap-vsock>=0.7",
-		"depend = git",
-		"depend = cloudflared-bin", // duplicate — must collapse
-		"makedepend = go",
-		"optdepend = something: only optional",
-		"",
-	}, "\n"))
-	got := parsePkgInfoDepends(pkginfo, ops)
-	want := []string{"cloudflared-bin", "gvisor-tap-vsock", "git"}
-	if len(got) != len(want) {
-		t.Fatalf("parsePkgInfoDepends = %v, want %v", got, want)
-	}
-	for i := range want {
-		if got[i] != want[i] {
-			t.Errorf("dep[%d] = %q, want %q (full: %v)", i, got[i], want[i], got)
-		}
-	}
-}
-
-// TestPkgInfoDepends_InjectedReader proves pkgInfoDepends routes through the
-// swappable pkgInfoReader var (no real bsdtar) and surfaces a reader error.
-func TestPkgInfoDepends_InjectedReader(t *testing.T) {
-	orig := pkgInfoReader
-	defer func() { pkgInfoReader = orig }()
-	ops := testPacLocalPkgDef().DepConstraintOps
-
-	pkgInfoReader = func(string) ([]byte, error) {
-		return []byte("depend = cloudflared-bin\ndepend = gvisor-tap-vsock=0.7\n"), nil
-	}
-	got, err := pkgInfoDepends("/tmp/overthink-git.pkg.tar.zst", ops)
-	if err != nil {
-		t.Fatalf("pkgInfoDepends: %v", err)
-	}
-	if len(got) != 2 || got[0] != "cloudflared-bin" || got[1] != "gvisor-tap-vsock" {
-		t.Errorf("pkgInfoDepends = %v, want [cloudflared-bin gvisor-tap-vsock]", got)
-	}
-
-	pkgInfoReader = func(string) ([]byte, error) { return nil, os.ErrPermission }
-	if _, err := pkgInfoDepends("/tmp/x.pkg.tar.zst", ops); err == nil {
-		t.Error("pkgInfoDepends should surface the reader error")
-	}
-}
-
-// TestBuilderOnlyDeps proves the builder-only intersection: a built package's
-// depends ∩ the host's foreign (builder-installed) packages. Repo deps (not in
-// the foreign set) are excluded; builder deps are kept in depends-order. The
-// discriminator is purely the foreign set — NO hardcoded package names.
-func TestBuilderOnlyDeps(t *testing.T) {
-	depends := []string{"cloudflared-bin", "git", "gvisor-tap-vsock", "glibc"}
-	foreign := map[string]bool{
-		"cloudflared-bin":  true, // AUR (foreign)
-		"gvisor-tap-vsock": true, // AUR (foreign)
-		"yay":              true, // foreign but not a dep of this pkg
-		// git + glibc are repo packages — absent from the foreign set.
-	}
-	got := builderOnlyDeps(depends, foreign)
-	want := []string{"cloudflared-bin", "gvisor-tap-vsock"}
-	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
-		t.Errorf("builderOnlyDeps = %v, want %v (order = depends order, repo deps excluded)", got, want)
-	}
-
-	// No depends → nil; no foreign overlap → nil.
-	if got := builderOnlyDeps(nil, foreign); got != nil {
-		t.Errorf("builderOnlyDeps(nil, …) = %v, want nil", got)
-	}
-	if got := builderOnlyDeps([]string{"git", "glibc"}, foreign); got != nil {
-		t.Errorf("builderOnlyDeps(repo-only) = %v, want nil", got)
-	}
-}
-
-// TestHostForeignPkgs_InjectedRunner proves hostForeignPkgs runs the
-// config-driven foreign-package query (LocalPkgDef.ForeignQuery) via the
-// swappable foreignPkgRunner var (no real pacman), trims blanks, surfaces a
-// runner error, and treats an empty query as the empty set.
-func TestHostForeignPkgs_InjectedRunner(t *testing.T) {
-	orig := foreignPkgRunner
-	defer func() { foreignPkgRunner = orig }()
-
-	var gotQuery string
-	foreignPkgRunner = func(query string) ([]byte, error) {
-		gotQuery = query
-		return []byte("cloudflared-bin\ngvisor-tap-vsock\n\n  yay  \n"), nil
-	}
-	set, err := hostForeignPkgs("pacman -Qmq")
-	if err != nil {
-		t.Fatalf("hostForeignPkgs: %v", err)
-	}
-	if gotQuery != "pacman -Qmq" {
-		t.Errorf("foreign query = %q, want the config-driven command", gotQuery)
-	}
-	for _, want := range []string{"cloudflared-bin", "gvisor-tap-vsock", "yay"} {
-		if !set[want] {
-			t.Errorf("foreign set missing %q: %v", want, set)
-		}
-	}
-	if set[""] {
-		t.Error("foreign set must not contain an empty-string entry from a blank line")
-	}
-
-	// Empty query → empty set, no error, no runner call.
-	called := false
-	foreignPkgRunner = func(string) ([]byte, error) { called = true; return nil, nil }
-	if s, err := hostForeignPkgs(""); err != nil || len(s) != 0 || called {
-		t.Errorf("empty query should yield empty set with no runner call: set=%v err=%v called=%v", s, err, called)
-	}
-
-	foreignPkgRunner = func(string) ([]byte, error) { return nil, os.ErrNotExist }
-	if _, err := hostForeignPkgs("pacman -Qmq"); err == nil {
-		t.Error("hostForeignPkgs should surface the runner error")
-	}
-}
-
 // TestBuildLocalPkgOnHost_DryRunAndEmpty proves the build leg renders the
 // CONFIG-DRIVEN build template (no hardcoded makepkg) and honors DryRun (no
 // shell-out), and that a nil/empty config errors rather than silently building.
@@ -516,10 +414,10 @@ func TestBuildLocalPkgOnHost_DryRunAndEmpty(t *testing.T) {
 	}
 }
 
-// TestBuildDepPkgsOnHost_EmptyAndDryRun proves the no-op contracts: empty
-// packages → (nil, nil) with no build; DryRun → (nil, nil) logging the plan; an
-// empty builder image (or nil builder def) with packages → error (never a
-// silent drop).
+// TestBuildDepPkgsOnHost_EmptyAndDryRun proves the no-op contracts of the
+// aur-LAYER dep-build helper: empty packages → (nil, nil) with no build; DryRun →
+// (nil, nil) logging the plan; an empty builder image (or nil builder def) with
+// packages → error (never a silent drop).
 func TestBuildDepPkgsOnHost_EmptyAndDryRun(t *testing.T) {
 	lp := testPacLocalPkgDef()
 	_, bc, _, err := LoadBuildConfigForImage(repoRootDir(t))
@@ -548,34 +446,43 @@ func TestBuildDepPkgsOnHost_EmptyAndDryRun(t *testing.T) {
 	}
 }
 
-// TestLocalPkgDef_RoundTripFromBuildYML proves the pac format in the repo's
-// build.yml actually carries the local_pkg block this code reads — guarding the
-// config-driven contract end to end (the build.yml field names and the Go struct
-// stay in lockstep). Loads the real build.yml via LoadBuildConfigForImage.
+// TestLocalPkgDef_RoundTripFromBuildYML proves the pac/rpm/deb formats in the
+// repo's build.yml carry a complete local_pkg block this code reads — guarding
+// the config-driven contract end to end. Loads the real build.yml.
 func TestLocalPkgDef_RoundTripFromBuildYML(t *testing.T) {
 	dc, _, _, err := LoadBuildConfigForImage(repoRootDir(t))
 	if err != nil {
 		t.Fatalf("LoadBuildConfigForImage: %v", err)
 	}
-	arch := dc.ResolveDistro([]string{"arch"})
-	if arch == nil {
-		t.Fatal("arch distro not found in build.yml")
+	check := func(distro, format string, wantDepBuilder bool) {
+		d := dc.ResolveDistro([]string{distro})
+		if d == nil {
+			t.Fatalf("%s distro not found in build.yml", distro)
+		}
+		fmtName, lp := d.LocalPkgFormat(format)
+		if fmtName != format || lp == nil {
+			t.Fatalf("%s %s format has no local_pkg block: fmt=%q lp=%#v", distro, format, fmtName, lp)
+		}
+		if lp.PkgGlob == "" || lp.SourceSentinel == "" || lp.BuildTemplate == "" || lp.InstallTemplate == "" || lp.Probe == "" {
+			t.Errorf("build.yml %s.%s.local_pkg is incomplete: %#v", distro, format, lp)
+		}
+		if wantDepBuilder && lp.DepBuilder == "" {
+			t.Errorf("%s.%s.local_pkg should declare dep_builder (aur-layer path): %#v", distro, format, lp)
+		}
 	}
-	fmtName, lp := arch.LocalPkgFormat("pac")
-	if fmtName != "pac" || lp == nil {
-		t.Fatalf("pac format has no local_pkg block: fmt=%q lp=%#v", fmtName, lp)
+	check("arch", "pac", true)
+	check("fedora", "rpm", false)
+	check("debian", "deb", false)
+	// cachyos inherits arch's pac format; ubuntu inherits debian's deb format.
+	if cachy := dc.ResolveDistro([]string{"cachyos"}); cachy != nil {
+		if _, clp := cachy.LocalPkgFormat("pac"); clp == nil {
+			t.Error("cachyos (inherits arch) should resolve the pac local_pkg block")
+		}
 	}
-	if lp.PkgGlob == "" || lp.BuildTemplate == "" || lp.InstallTemplate == "" ||
-		lp.ForeignQuery == "" || lp.Probe == "" || lp.DepBuilder == "" || len(lp.DepConstraintOps) == 0 {
-		t.Errorf("build.yml pac.local_pkg is incomplete: %#v", lp)
-	}
-	// cachyos inherits arch's pac format → must resolve the same localpkg block.
-	cachy := dc.ResolveDistro([]string{"cachyos"})
-	if cachy == nil {
-		t.Skip("cachyos distro not present; arch-only check already passed")
-	}
-	if _, clp := cachy.LocalPkgFormat("pac"); clp == nil {
-		t.Error("cachyos (inherits arch) should resolve the pac local_pkg block")
+	if ub := dc.ResolveDistro([]string{"ubuntu"}); ub != nil {
+		if _, ulp := ub.LocalPkgFormat("deb"); ulp == nil {
+			t.Error("ubuntu (inherits debian) should resolve the deb local_pkg block")
+		}
 	}
 }
 

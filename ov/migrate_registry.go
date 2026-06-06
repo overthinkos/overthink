@@ -70,7 +70,7 @@ type MigrationStep struct {
 // closure references it, and the registry's last entry uses it as its Version,
 // so the two are guaranteed equal (asserted by TestRegistryHeadMatchesLatest).
 // Bump it — and append the matching MigrationStep — for each future cutover.
-var latestSchemaVersion = mustCalVer("2026.156.1531")
+var latestSchemaVersion = mustCalVer("2026.157.0311")
 
 // migrationSteps is the ordered registry. Chronological by git landing date
 // (see `git log --diff-filter=A` on each migrate_*.go), which is the order the
@@ -213,6 +213,17 @@ func migrationSteps() []MigrationStep {
 		// file to the new HEAD. See CHANGELOG.md.
 		{mustCalVer("2026.156.1530"), "peer-field", false, func(c *MigrateContext) (bool, error) {
 			return false, nil
+		}},
+		// 2026-06 localpkg per-format map: the layer `localpkg:` field went from a
+		// single scalar (Arch-only) to a per-format map {pac:…, rpm:…, deb:…} so
+		// ONE ov layer carries a native-package SOURCE per distro format. This step
+		// rewrites a legacy scalar `localpkg: <dir>` to `localpkg: {pac: <dir>}`
+		// (the legacy value always targeted the Arch PKGBUILD). The loader
+		// hard-rejects the scalar form (LocalPkgMap.UnmarshalYAML) with an
+		// `ov migrate` hint. See CHANGELOG.md.
+		{mustCalVer("2026.157.0310"), "localpkg-map", false, func(c *MigrateContext) (bool, error) {
+			w, err := MigrateLocalpkgMap(c.Dir, c.DryRun)
+			return len(w) > 0, err
 		}},
 		// HEAD — the schema stamp. Must stay LAST so LatestSchemaVersion picks it up
 		// and every versioned file lands on this CalVer. This is the integer→CalVer

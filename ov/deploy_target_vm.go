@@ -357,7 +357,7 @@ func (t *VmDeployTarget) emitPlan(ctx context.Context, plan *InstallPlan, opts E
 			// cmd: task. Gated (config-driven) on the GUEST having the format's
 			// package manager; an unsupported guest is a clean no-op (the layer's
 			// curl task installs it).
-			if err := execLocalPkgInstall(ctx, t.Exec, s, venueHasPkgManager(ctx, t.Exec, s.LocalPkg, opts), "vm:"+t.VMName, t.Cfg, opts); err != nil {
+			if err := execLocalPkgInstall(ctx, t.Exec, s, venueHasPkgManager(ctx, t.Exec, s.LocalPkg, opts), "vm:"+t.VMName, opts); err != nil {
 				return rec, err
 			}
 

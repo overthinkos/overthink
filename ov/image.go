@@ -19,6 +19,7 @@ type BoxCmd struct {
 	Merge    MergeCmd      `cmd:"" help:"Merge small layers in a built container image"`
 	New      NewCmd        `cmd:"" help:"Scaffold new components"`
 	Pull     BoxPullCmd    `cmd:"" help:"Pull an image from its registry into local storage"`
+	Pkg      BoxPkgCmd     `cmd:"" help:"Build standalone native package artifacts (.pkg.tar.zst/.rpm/.deb) for a layer's localpkg sources into dist/"`
 	Validate ValidateCmd   `cmd:"" help:"Check overthink.yml + layers, exit 0 or 1"`
 	Feature  BoxFeatureCmd `cmd:"" help:"Run an image's baked Gherkin scenarios as acceptance tests against a disposable container (Agent Driven Development, build scope)"`
 

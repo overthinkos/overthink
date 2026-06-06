@@ -1797,6 +1797,38 @@ eval:
                 # the substrate renders via the kind discriminator + ledger source.
                 - contains: '"kind": "local"'
                 - contains: '"source": "ledger"'
+    # pac localpkg AUTO-RESOLVE witness against the LOCAL ov layer (no @github):
+    # deploys candy/ov to a disposable Arch Cloud VM, where the layer's localpkg
+    # builds the overthink-git package from pkg/arch (makepkg on the host) and
+    # `pacman -U`'s it onto the guest — pacman -U AUTO-RESOLVES the mandatory repo
+    # deps. This is main's own live proof of the localpkg DEPLOY path (the rpm/deb
+    # legs are proven by the fedora/debian/ubuntu submodule VM beds).
+    eval-ov-vm:
+        target: vm
+        vm: ov-vm
+        disposable: true
+        lifecycle: dev
+        add_candy:
+            - ov
+        install_opts:
+            allow_repo_changes: true
+            allow_root_tasks: true
+        eval:
+            - id: localpkg-pac-autoresolve
+              scope: deploy
+              description: ov installed as the overthink-git pacman package via localpkg, mandatory repo deps auto-resolved by pacman -U
+              command: |
+                pacman -Q overthink-git >/dev/null 2>&1 &&
+                pacman -Q podman >/dev/null 2>&1 &&
+                pacman -Q libvirt >/dev/null 2>&1 &&
+                pacman -Q tailscale >/dev/null 2>&1 &&
+                pacman -Q gocryptfs >/dev/null 2>&1 &&
+                test "$(command -v ov)" = /usr/bin/ov &&
+                ov version &&
+                echo LOCALPKG-PAC-AUTORESOLVE-OK
+              stdout:
+                - contains: LOCALPKG-PAC-AUTORESOLVE-OK
+              exit_status: 0
     eval-jupyter-pod:
         target: pod
         box: jupyter
@@ -1992,6 +2024,29 @@ vm:
                       backend: /dev/urandom
                 memballoon:
                     model: virtio
+    # Arch Cloud VM backing eval-ov-vm — the pac localpkg deploy witness. Plain
+    # disposable VM (no port forwards / k3s); ov is installed onto it by the bed's
+    # localpkg deploy, so the VM itself carries no overthink layers.
+    ov-vm:
+        source:
+            kind: cloud_image
+            url: https://fastly.mirror.pkgbuild.com/images/latest/Arch-Linux-x86_64-cloudimg.qcow2
+            checksum:
+                type: sha256
+            base_user: arch
+        backend: libvirt
+        disk_size: 20G
+        ram: 4G
+        cpu: 2
+        machine: q35
+        firmware: bios
+        ssh:
+            port_auto: true
+            key_source: generate
+        cloud_init:
+            timezone: UTC
+            package:
+                - sudo
 # =============================================================================
 # k8s: — kind:k8s entity resolving the kubectl context (cluster: "vm-k3s-vm")
 # that K3sPostProvision merged into ~/.kube/config during the eval-k3s-vm

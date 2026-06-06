@@ -207,51 +207,47 @@ type FormatDef struct {
 // Template variables (LocalPkgContext):
 //   - BuildTemplate:   {{.SrcDir}}  {{.PkgDest}}            — build a source dir
 //   - InstallTemplate: {{.StageDir}} {{.Glob}}             — install package files
-//   - ForeignQuery / Probe: no variables (plain shell commands)
+//   - Probe: no variables (plain shell command)
 //
-// Populated for `pac` in build.yml (makepkg / pacman -U / pacman -Qmq /
-// command -v pacman). The operator adds rpm/deb values later; ov writes NO
-// speculative rpm/deb values or code paths.
+// Populated for `pac` (makepkg / pacman -U), `rpm` (rpmbuild / dnf install), and
+// `deb` (dpkg-buildpackage / apt-get install). Every install command is the
+// format's AUTO-RESOLVING local-file install, so the package's dependencies are
+// satisfied from the target's repos — there is no dependency-closure builder.
 type LocalPkgDef struct {
 	// PkgGlob is the built-package filename glob (e.g. "*.pkg.tar.zst" for
-	// pacman). Used both to collect build output and to match the staged
-	// files for the install command.
+	// pacman, "*.rpm", "*.deb"). Used both to collect build output and to match
+	// the staged files for the install command.
 	PkgGlob string `yaml:"pkg_glob"`
+
+	// SourceSentinel is the filename (or glob) that marks a directory as this
+	// format's package SOURCE dir, used by resolveLocalPkgDir's walk-up search.
+	// For pac: "PKGBUILD"; rpm: "*.spec"; deb: "debian/control".
+	SourceSentinel string `yaml:"source_sentinel"`
 
 	// BuildTemplate renders the host-side command that builds the package
 	// SOURCE directory into PkgGlob artifacts under {{.PkgDest}}. Variables:
 	// {{.SrcDir}} (the resolved source dir), {{.PkgDest}} (a per-build temp
 	// output dir). For pac: `cd {{.SrcDir}} && PKGDEST={{.PkgDest}} makepkg
-	// -sf --noconfirm`.
+	// -sf --noconfirm`; rpm/deb shell out to a distro-matched builder container.
 	BuildTemplate string `yaml:"build_template"`
 
 	// InstallTemplate renders the target-venue command that installs the
 	// staged package files. Variables: {{.StageDir}} (the on-target staging
-	// dir), {{.Glob}} (PkgGlob). For pac: `pacman -U --noconfirm
-	// {{.StageDir}}/{{.Glob}}`. Runs via the executor's RunSystem (sudo).
+	// dir), {{.Glob}} (PkgGlob). The AUTO-RESOLVING local-file install for the
+	// format — pac: `pacman -U`; rpm: `dnf install -y`; deb: `apt-get install
+	// -y` — so the package's repo dependencies resolve automatically. Runs via
+	// the executor's RunSystem (sudo).
 	InstallTemplate string `yaml:"install_template"`
-
-	// ForeignQuery is the host-side command listing FOREIGN packages —
-	// installed packages that no sync repo provides (the dep-closure
-	// discriminator: a source-built package's builder-only deps are
-	// foreign-installed on the build host by definition). One name per line.
-	// For pac: `pacman -Qmq`.
-	ForeignQuery string `yaml:"foreign_query"`
 
 	// Probe is the target-venue command that succeeds iff this package
 	// format's manager is present (gates whether the install leg runs).
-	// For pac: `command -v pacman`.
+	// For pac: `command -v pacman`; rpm: `command -v dnf`; deb: `command -v apt-get`.
 	Probe string `yaml:"probe"`
 
-	// DepConstraintOps are the version-constraint operators that may follow
-	// a bare package name in a dependency spec, longest-first so `>=` matches
-	// before `>`. The dep-closure parser strips at the first match to recover
-	// the bare name. For pac: [">=", "<=", "=", ">", "<"].
-	DepConstraintOps []string `yaml:"dep_constraint_ops"`
-
-	// DepBuilder is the builder name (a key in build.yml `builder:`) used to
-	// BUILD the foreign dependency closure into installable package files.
-	// For pac the closure is AUR packages built via the `aur` builder.
+	// DepBuilder is the builder name (a key in build.yml `builder:`) used by the
+	// aur-LAYER deploy path to build a layer's `aur:` packages into installable
+	// files before installing them via InstallTemplate (the localpkg step itself
+	// auto-resolves and needs no builder). For pac: `aur`. Empty for rpm/deb.
 	DepBuilder string `yaml:"dep_builder"`
 }
 

@@ -6,23 +6,28 @@ package main
 //
 // This is the execution machinery behind LocalPkgInstallStep (the IR form of a
 // layer's `localpkg:` field). NOTHING here hardcodes a package-format command:
-// the build command, install command, package-file glob, foreign-deps query,
-// probe command, dependency-constraint operators, and dependency-builder name
-// all come from the resolved *LocalPkgDef (LocalPkgInstallStep.LocalPkg /
-// BuilderStep.LocalPkg), rendered through the EXISTING RenderTemplate engine
-// (format_template.go) — the same machinery the rest of the build pipeline uses.
+// the source-dir sentinel, build command, install command, package-file glob,
+// and probe command all come from the resolved *LocalPkgDef
+// (LocalPkgInstallStep.LocalPkg / BuilderStep.LocalPkg), rendered through the
+// EXISTING RenderTemplate engine (format_template.go) — the same machinery the
+// rest of the build pipeline uses. The install command is the format's
+// AUTO-RESOLVING local-file install (pacman -U / dnf install / apt-get install),
+// so the package's dependencies are satisfied from the target's repos and there
+// is no dependency-closure to pre-build.
 //
 // Pieces, each a shared primitive (R3):
 //
 //   1. resolveLocalPkgDir   — locate the package SOURCE directory from the
-//      author's hint + the layer/project anchors (walk-up search).
+//      author's hint + the layer/project anchors (walk-up search), keyed on the
+//      format's LocalPkgDef.SourceSentinel.
 //   2. buildLocalPkgOnHost  — render LocalPkgDef.BuildTemplate and run it on the
 //      HOST, returning the produced package-file paths (globbed via PkgGlob).
 //   3. transferAndInstallPkgs — the SHARED transfer+install leg: PutFile each
 //      package onto the target venue's filesystem (a local copy for the host
 //      ShellExecutor, scp for the SSHExecutor) then render+run
-//      LocalPkgDef.InstallTemplate via RunSystem. The SAME leg the aur builder
-//      uses (BuilderStep.LocalPkg) — both call this one helper.
+//      LocalPkgDef.InstallTemplate via RunSystem. The SAME leg the aur-LAYER
+//      deploy path uses (buildDepPkgsOnHost → transferAndInstallPkgs) — both
+//      call this one helper.
 
 import (
 	"context"
@@ -67,24 +72,26 @@ type localPkgInstallContext struct {
 // Returns "" when no PKGBUILD is found anywhere — the caller treats that as a
 // no-op (the layer's own curl/COPY task is the documented fallback).
 //
-// NB: the PKGBUILD sentinel is the pac source-dir marker; it is the one
-// format-specific filename retained here because it identifies the SOURCE dir
-// shape, not a package-manager command. (rpm/deb localpkg would key off their
-// own spec-file marker when wired; today only pac is wired.)
-func resolveLocalPkgDir(ref, layerDir, projectDir string) string {
+// The SOURCE-dir marker is the format's `source_sentinel` (PKGBUILD for pac,
+// *.spec for rpm, debian/control for deb), matched via filepath.Glob so a plain
+// filename, a sub-path, or a glob all work — no hardcoded format literal here.
+func resolveLocalPkgDir(ref, layerDir, projectDir, sentinel string) string {
 	if ref == "" {
 		return ""
 	}
-	hasPkgbuild := func(dir string) bool {
-		if dir == "" {
+	hasSentinel := func(dir string) bool {
+		if dir == "" || sentinel == "" {
 			return false
 		}
-		info, err := os.Stat(filepath.Join(dir, "PKGBUILD"))
-		return err == nil && !info.IsDir()
+		// filepath.Glob handles a plain filename (PKGBUILD), a sub-path
+		// (debian/control), and a glob (*.spec) uniformly: a meta-free pattern
+		// returns the single literal when it exists.
+		matches, err := filepath.Glob(filepath.Join(dir, sentinel))
+		return err == nil && len(matches) > 0
 	}
 
 	if filepath.IsAbs(ref) {
-		if hasPkgbuild(ref) {
+		if hasSentinel(ref) {
 			return ref
 		}
 		return ""
@@ -94,7 +101,7 @@ func resolveLocalPkgDir(ref, layerDir, projectDir string) string {
 		if base == "" {
 			continue
 		}
-		if cand := filepath.Join(base, ref); hasPkgbuild(cand) {
+		if cand := filepath.Join(base, ref); hasSentinel(cand) {
 			return cand
 		}
 	}
@@ -103,7 +110,7 @@ func resolveLocalPkgDir(ref, layerDir, projectDir string) string {
 	// projectDir.
 	dir := projectDir
 	for i := 0; dir != "" && i < 64; i++ {
-		if cand := filepath.Join(dir, ref); hasPkgbuild(cand) {
+		if cand := filepath.Join(dir, ref); hasSentinel(cand) {
 			return cand
 		}
 		parent := filepath.Dir(dir)
@@ -295,129 +302,6 @@ func buildDepPkgsOnHost(ctx context.Context, lp *LocalPkgDef, bDef *BuilderDef, 
 	return matches, nil
 }
 
-// pkgInfoDepends parses the bare runtime-dependency names from a built package
-// file's embedded metadata (`bsdtar -xOqf <pkg> .PKGINFO` for pacman packages).
-// Each `depend = <name>[<op><version>]` line yields one name; the version
-// constraint is stripped to the bare name using the format's
-// LocalPkgDef.DepConstraintOps. The package file is local (just built), so this
-// runs on the host. The bsdtar invocation is injected via the pkgInfoReader
-// package var so the pure parsing logic (parsePkgInfoDepends) is unit-testable
-// without shelling out.
-func pkgInfoDepends(pkgFile string, ops []string) ([]string, error) {
-	data, err := pkgInfoReader(pkgFile)
-	if err != nil {
-		return nil, fmt.Errorf("reading package metadata from %s: %w", filepath.Base(pkgFile), err)
-	}
-	return parsePkgInfoDepends(data, ops), nil
-}
-
-// pkgInfoReader extracts the dependency-carrying metadata bytes from a built
-// package file. Package var so tests inject canned content instead of running
-// bsdtar. (The .PKGINFO member name is the pacman package layout; rpm/deb
-// localpkg would swap this reader when wired — only pac is wired today.)
-var pkgInfoReader = func(pkgFile string) ([]byte, error) {
-	cmd := exec.Command("bsdtar", "-xOqf", pkgFile, ".PKGINFO")
-	return cmd.Output()
-}
-
-// parsePkgInfoDepends is the pure parser over raw metadata bytes — the
-// version-constraint-stripping logic, unit-testable in isolation. Returns the
-// bare dependency names in file order, de-duplicated. `ops` is the format's
-// LocalPkgDef.DepConstraintOps (version-constraint operators), so even the
-// constraint-stripping is config-driven.
-func parsePkgInfoDepends(pkginfo []byte, ops []string) []string {
-	var deps []string
-	seen := map[string]bool{}
-	for _, line := range strings.Split(string(pkginfo), "\n") {
-		line = strings.TrimSpace(line)
-		const prefix = "depend"
-		if !strings.HasPrefix(line, prefix) {
-			continue
-		}
-		rest := strings.TrimSpace(line[len(prefix):])
-		if !strings.HasPrefix(rest, "=") {
-			continue // not a `depend = …` line
-		}
-		val := strings.TrimSpace(rest[1:])
-		if val == "" {
-			continue
-		}
-		name := stripDependConstraint(val, ops)
-		if name == "" || seen[name] {
-			continue
-		}
-		seen[name] = true
-		deps = append(deps, name)
-	}
-	return deps
-}
-
-// stripDependConstraint reduces a `name[op version]` dependency spec to its
-// bare package name by cutting at the first version-constraint operator from
-// `ops`. `ops` must be ordered longest-first (so `>=` matches before `>`).
-func stripDependConstraint(spec string, ops []string) string {
-	idx := -1
-	for _, op := range ops {
-		if op == "" {
-			continue
-		}
-		if i := strings.Index(spec, op); i >= 0 && (idx < 0 || i < idx) {
-			idx = i
-		}
-	}
-	if idx < 0 {
-		return strings.TrimSpace(spec)
-	}
-	return strings.TrimSpace(spec[:idx])
-}
-
-// hostForeignPkgs returns the set of FOREIGN package names on the HOST — the
-// packages no sync repo provides (the dep-closure discriminator). The query
-// command comes from LocalPkgDef.ForeignQuery (e.g. `pacman -Qmq`), so this is
-// config-driven, not a hardcoded pacman literal. The command runner is injected
-// via the foreignPkgRunner package var so the intersection logic is
-// unit-testable.
-func hostForeignPkgs(query string) (map[string]bool, error) {
-	if strings.TrimSpace(query) == "" {
-		return map[string]bool{}, nil
-	}
-	out, err := foreignPkgRunner(query)
-	if err != nil {
-		return nil, fmt.Errorf("foreign-package query %q: %w", query, err)
-	}
-	set := map[string]bool{}
-	for _, line := range strings.Split(string(out), "\n") {
-		if name := strings.TrimSpace(line); name != "" {
-			set[name] = true
-		}
-	}
-	return set, nil
-}
-
-// foreignPkgRunner runs the format's foreign-package query under `bash -c`.
-// Package var so tests inject a canned foreign-package list instead of querying
-// a real package DB.
-var foreignPkgRunner = func(query string) ([]byte, error) {
-	return exec.Command("bash", "-c", query).Output()
-}
-
-// builderOnlyDeps returns the bare dependency names that the dependency builder
-// must build — the intersection of a built package's `depends` with the host's
-// FOREIGN-package set (a source-built package's builder-only deps are
-// foreign-installed on the build host by definition, while repo deps are not).
-// Pure (no I/O) so it is directly unit-testable; the callers feed it the two
-// probed inputs. Order follows `depends` (deterministic), de-duplicated by
-// pkgInfoDepends already.
-func builderOnlyDeps(depends []string, foreign map[string]bool) []string {
-	var out []string
-	for _, d := range depends {
-		if foreign[d] {
-			out = append(out, d)
-		}
-	}
-	return out
-}
-
 // transferAndInstallPkgs ships built package files onto a deploy target and
 // installs them by rendering LocalPkgDef.InstallTemplate. It is venue-agnostic
 // via the DeployExecutor: PutFile is a local filesystem copy for the host
@@ -510,7 +394,7 @@ func venueHasPkgManager(ctx context.Context, exec DeployExecutor, lp *LocalPkgDe
 // (the layer's own curl/COPY task covers it).
 //
 // venueName is used only for log lines (e.g. "host", "vm:cachyos-gpu").
-func execLocalPkgInstall(ctx context.Context, exec DeployExecutor, s *LocalPkgInstallStep, supported bool, venueName string, cfg *Config, opts EmitOpts) error {
+func execLocalPkgInstall(ctx context.Context, exec DeployExecutor, s *LocalPkgInstallStep, supported bool, venueName string, opts EmitOpts) error {
 	if s.LocalPkg == nil {
 		fmt.Fprintf(os.Stderr, "%s skip: localpkg %s (layer=%s) — target distro declares no localpkg-capable package format; the layer's curl/COPY task installs it instead\n",
 			venueName, s.PkgbuildRef, s.LayerName)
@@ -521,7 +405,7 @@ func execLocalPkgInstall(ctx context.Context, exec DeployExecutor, s *LocalPkgIn
 			venueName, s.PkgbuildRef, s.LayerName, s.Format)
 		return nil
 	}
-	pkgDir := resolveLocalPkgDir(s.PkgbuildRef, s.LayerDir, s.ProjectDir)
+	pkgDir := resolveLocalPkgDir(s.PkgbuildRef, s.LayerDir, s.ProjectDir, s.LocalPkg.SourceSentinel)
 	if pkgDir == "" {
 		fmt.Fprintf(os.Stderr, "%s skip: localpkg %s (layer=%s) — no package source found from layer dir %q or project dir %q; the layer's curl/COPY task installs it instead\n",
 			venueName, s.PkgbuildRef, s.LayerName, s.LayerDir, s.ProjectDir)
@@ -537,77 +421,8 @@ func execLocalPkgInstall(ctx context.Context, exec DeployExecutor, s *LocalPkgIn
 		return nil
 	}
 
-	// Resolve + build the built package's builder-resolvable dependency closure.
-	// The package's `depends=` may name packages that no sync repo can satisfy
-	// under the install command (e.g. AUR packages under `pacman -U`), so the
-	// install would fail "unable to satisfy dependency". Derive the closure
-	// GENERICALLY from the built package's metadata ∩ the host's foreign packages
-	// (NO hardcoded names), build it through the SAME builder (R3), and install
-	// the WHOLE closure in one install command so the deps satisfy the package's
-	// depends.
-	depPkgs, err := resolveLocalPkgDeps(ctx, s, pkgFiles, pkgDir, venueName, cfg, opts)
-	if err != nil {
-		return fmt.Errorf("localpkg %s (layer=%s): resolving dependency closure: %w", s.PkgbuildRef, s.LayerName, err)
-	}
-
-	// Install deps FIRST in the same install command so they satisfy the
-	// package's depends. append into a fresh slice — never mutate depPkgs.
-	installSet := make([]string, 0, len(depPkgs)+len(pkgFiles))
-	installSet = append(installSet, depPkgs...)
-	installSet = append(installSet, pkgFiles...)
-	return transferAndInstallPkgs(ctx, exec, s.LocalPkg, installSet, opts)
-}
-
-// resolveLocalPkgDeps computes a built package's builder-resolvable dependency
-// closure and builds it through the format's dependency builder, returning the
-// produced dep package paths (empty when there are no builder-only deps). It is
-// the dependency-resolution leg of execLocalPkgInstall, kept separate so the
-// build-vs-install ordering in the caller stays legible.
-//
-// The closure is derived GENERICALLY (no hardcoded package names): parse the
-// built package's `depends` from its metadata (using the format's
-// DepConstraintOps), intersect with the host's foreign packages (queried via
-// the format's ForeignQuery). Deps with no resolvable dep builder
-// (s.BuilderImage == "") are logged by name and NOT silently dropped (the
-// curl/COPY fallback still covers non-localpkg targets).
-func resolveLocalPkgDeps(ctx context.Context, s *LocalPkgInstallStep, pkgFiles []string, pkgDir, venueName string, cfg *Config, opts EmitOpts) ([]string, error) {
-	lp := s.LocalPkg
-	// Union the depends across every built package (a split package may emit
-	// several), de-duplicated.
-	var depends []string
-	seen := map[string]bool{}
-	for _, pf := range pkgFiles {
-		ds, err := pkgInfoDepends(pf, lp.DepConstraintOps)
-		if err != nil {
-			return nil, err
-		}
-		for _, d := range ds {
-			if !seen[d] {
-				seen[d] = true
-				depends = append(depends, d)
-			}
-		}
-	}
-	if len(depends) == 0 {
-		return nil, nil
-	}
-
-	foreign, err := hostForeignPkgs(lp.ForeignQuery)
-	if err != nil {
-		return nil, err
-	}
-	deps := builderOnlyDeps(depends, foreign)
-	if len(deps) == 0 {
-		return nil, nil
-	}
-
-	if s.BuilderImage == "" || s.DepBuilderDef == nil {
-		fmt.Fprintf(os.Stderr, "%s warn: localpkg %s (layer=%s) has %s-builder dependencies %v but no %s builder resolved — they will NOT be built; the install will fail unless they are already present on the target. Define builder.%s in overthink.yml to build them.\n",
-			venueName, s.PkgbuildRef, s.LayerName, lp.DepBuilder, deps, lp.DepBuilder, lp.DepBuilder)
-		return nil, nil
-	}
-
-	fmt.Fprintf(os.Stderr, "%s: building %d %s dependency package(s) %v for localpkg %s (layer=%s) via builder %s\n",
-		venueName, len(deps), lp.DepBuilder, deps, s.PkgbuildRef, s.LayerName, s.BuilderImage)
-	return buildDepPkgsOnHost(ctx, lp, s.DepBuilderDef, s.BuilderImage, deps, pkgDir, cfg, s.ProjectDir, opts)
+	// Transfer + install. The format's install command auto-resolves the
+	// package's dependencies from the target's repos (pacman -U / dnf install /
+	// apt-get install), so there is no dependency-closure to pre-build.
+	return transferAndInstallPkgs(ctx, exec, s.LocalPkg, pkgFiles, opts)
 }

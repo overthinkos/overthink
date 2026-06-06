@@ -15,7 +15,7 @@ func TestImageReconcile_NewestReferenced(t *testing.T) {
 	dir := t.TempDir()
 	yml := "" +
 		"# top comment\n" +
-		"version: 2026.156.1531\n" +
+		"version: 2026.157.311\n" +
 		"import:\n" +
 		"  - '@github.com/overthinkos/overthink/build.yml:v2026.141.1600'\n" +
 		"box:\n" +
@@ -81,7 +81,7 @@ func TestImageReconcile_NewestReferenced(t *testing.T) {
 func TestImageReconcile_NoPins(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "overthink.yml"),
-		[]byte("version: 2026.156.1531\nimage:\n  foo:\n    base: fedora\n    candy: [agent-forwarding]\n"), 0o644); err != nil {
+		[]byte("version: 2026.157.311\nimage:\n  foo:\n    base: fedora\n    candy: [agent-forwarding]\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	cwd, _ := os.Getwd()

@@ -29,3 +29,9 @@
 [submodule "image/selkies"]
 	path = image/selkies
 	url = git@github.com:overthinkos/selkies.git
+[submodule "pkg/fedora"]
+	path = pkg/fedora
+	url = git@github.com:overthinkos/overthink-fedora.git
+[submodule "pkg/debian"]
+	path = pkg/debian
+	url = git@github.com:overthinkos/overthink-debian.git

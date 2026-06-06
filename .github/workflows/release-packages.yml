@@ -1,0 +1,63 @@
+# Build the native `ov` package artifacts (.pkg.tar.zst / .rpm / .deb) on a
+# v<CalVer> tag push and attach them to the GitHub release. Each package is built
+# through the SAME `ov box pkg` verb + build.yml local_pkg.build_template used
+# locally (`task pkg:*`) and by the deploy-time localpkg path — one build
+# definition, distro-natively (rpm/deb in podman containers; pac via makepkg).
+name: release-packages
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  # rpm + deb build distro-natively inside podman containers, which are available
+  # on the ubuntu runner — no Fedora/Debian host needed.
+  rpm-deb:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: ov/go.mod
+      - name: Build .rpm and .deb
+        run: |
+          go -C ov build -ldflags "-X main.BuildCalVer=$(bash pkg/arch/calver.sh)" -o ../bin/ov .
+          bin/ov box pkg rpm deb
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+
+  # pac builds via makepkg, which refuses to run as root, so the Arch container
+  # job builds the binary + package as a dedicated unprivileged user.
+  pac:
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:latest
+    steps:
+      - name: Install toolchain
+        run: pacman -Sy --noconfirm --needed go git curl base-devel sudo
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+      - name: Build .pkg.tar.zst (makepkg as non-root)
+        run: |
+          useradd -m builder
+          chown -R builder:builder .
+          # git's dubious-ownership guard would otherwise reject the checkout.
+          sudo -u builder git config --global --add safe.directory '*'
+          sudo -u builder bash -c '
+            set -e
+            go -C ov build -ldflags "-X main.BuildCalVer=$(bash pkg/arch/calver.sh)" -o ../bin/ov .
+            bin/ov box pkg pac
+          '
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*

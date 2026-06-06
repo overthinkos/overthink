@@ -1012,7 +1012,7 @@ func (t *LocalDeployTarget) execRepoChange(s *RepoChangeStep, plan *InstallPlan,
 func (t *LocalDeployTarget) execLocalPkg(s *LocalPkgInstallStep, plan *InstallPlan, opts EmitOpts, rec *CandyRecord, start time.Time) error {
 	ctx := opts.ContextOrDefault()
 	supported := venueHasPkgManager(ctx, t.exec(), s.LocalPkg, opts)
-	if err := execLocalPkgInstall(ctx, t.exec(), s, supported, t.Name(), t.Cfg, opts); err != nil {
+	if err := execLocalPkgInstall(ctx, t.exec(), s, supported, t.Name(), opts); err != nil {
 		return err
 	}
 	venue := "host"

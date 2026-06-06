@@ -1,4 +1,4 @@
-version: 2026.156.1531
+version: 2026.157.311
 import:
     # Flat imports (root namespace) — this repo's own per-kind files + the
     # combined base.yml (arch + fedora stacks). eval.yml carries kind:ai/recipe/
@@ -63,6 +63,7 @@ defaults:
         - image
         - .eval
         - output
+        - dist
         - pkg
         - tests
         - .regression-snapshot

@@ -396,34 +396,33 @@ distro:
                             pacman -Sy --noconfirm --needed{{range .Options}} {{.}}{{end}}{{range .Packages}} {{.}}{{end}}
                 uninstall_template: |
                     pacman -Rs --noconfirm{{range .Packages}} {{.}}{{end}}
-                # local_pkg drives the layer `localpkg:` mechanism (build a
-                # bundled PKGBUILD on the host, install the resulting package
-                # FILE onto a pac deploy target, resolve the built package's
-                # AUR-only dependency closure). These are operations the
-                # repo-install `install_template` above cannot express, so they
-                # live here as the format's localpkg contract. Every command is
-                # a Go text/template (or literal) so the localpkg executor
-                # carries no hardcoded makepkg/pacman/glob strings. Populated for
-                # `pac` only; rpm/deb add their own values when localpkg is
-                # wired for those formats.
+                # local_pkg drives the layer `localpkg:` mechanism: build a
+                # bundled package SOURCE on the host, then install the resulting
+                # package FILE onto a pac deploy target via the AUTO-RESOLVING
+                # local install (pacman -U pulls the package's repo deps). Every
+                # command is a Go text/template (or literal) so the localpkg
+                # executor carries no hardcoded makepkg/pacman/glob strings. The
+                # rpm (distro.fedora) and deb (distro.debian) formats carry
+                # parallel blocks — ONE per-format contract, zero distro Go.
                 local_pkg:
                     pkg_glob: "*.pkg.tar.zst"
+                    # Marks a directory as the pac package SOURCE dir (walk-up search).
+                    source_sentinel: PKGBUILD
                     # makepkg refuses to run as root and PKGDEST redirects the
                     # built artifact into a per-build temp dir so the glob is
                     # deterministic. -s installs makedepends, -f overwrites a
                     # stale build. No -i (install is the target venue's job).
                     build_template: |
                         cd {{.SrcDir}} && PKGDEST={{.PkgDest}} makepkg -sf --noconfirm
-                    # pacman -U is the upgrade form, so re-installing the same
-                    # or a newer build never errors on already-installed.
+                    # pacman -U is the upgrade form AND auto-resolves the
+                    # package's repo dependencies, so re-installing never errors
+                    # on already-installed and the mandatory deps come in for free.
                     install_template: |
                         pacman -U --noconfirm {{.StageDir}}/{{.Glob}}
-                    # Foreign packages = installed packages no sync repo
-                    # provides. A source-built package's AUR deps are
-                    # foreign-installed on the build host by definition.
-                    foreign_query: pacman -Qmq
                     probe: command -v pacman
-                    dep_constraint_ops: [">=", "<=", "=", ">", "<"]
+                    # dep_builder drives the aur-LAYER deploy path (building a
+                    # layer's aur: packages); the localpkg install itself
+                    # auto-resolves and needs no closure builder.
                     dep_builder: aur
                 install_template: |
                     RUN {{cacheMounts .CacheMounts}} \
@@ -655,6 +654,37 @@ distro:
                     option: list
                     package: list
                     repo: list_of_maps
+                # localpkg for deb: build the .deb in a distro-matched debian
+                # container (the host is not Debian, so dpkg-buildpackage/debhelper
+                # run in-container for a distro-native package), then install it
+                # with `apt-get install` which AUTO-RESOLVES the package's repo
+                # deps. The ov binary is built on the host (prebuilt bin/ov, or a
+                # go-build fallback) and bind-mounted in. NO tailscale dep in the
+                # .deb (not in Debian main — the ov layer adds tailscale for deb).
+                local_pkg:
+                    pkg_glob: "*.deb"
+                    source_sentinel: debian/control
+                    build_template: |
+                        set -e
+                        SUPER=$(cd {{.SrcDir}}/../.. && pwd)
+                        mkdir -p "$SUPER/bin"
+                        [ -x "$SUPER/bin/ov" ] || (cd "$SUPER/ov" && CGO_ENABLED=1 go build -ldflags "-X main.BuildCalVer=$(bash "$SUPER/pkg/arch/calver.sh")" -o "$SUPER/bin/ov" .)
+                        podman run --rm -v {{.SrcDir}}:/src:ro -v "$SUPER/bin":/ovbin:ro -v {{.PkgDest}}:/out:Z docker.io/library/debian:13 bash -lc '
+                          set -e
+                          export DEBIAN_FRONTEND=noninteractive
+                          apt-get update -qq && apt-get install -y -qq build-essential debhelper >/dev/null
+                          cp -aT /src /tmp/src && cp /ovbin/ov /tmp/src/ov
+                          cd /tmp/src
+                          # Stamp the .deb version from the binary CalVer so each
+                          # build is upgradeable (a static changelog version would
+                          # make apt skip the reinstall on ov update).
+                          sed -i "1s/([^)]*)/($(/ovbin/ov version))/" debian/changelog
+                          dpkg-buildpackage -us -uc -b
+                          cp ../*.deb /out/
+                        '
+                    install_template: |
+                        DEBIAN_FRONTEND=noninteractive apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y {{.StageDir}}/{{.Glob}}
+                    probe: command -v apt-get
                 # Host-venue install cell for target:local / target:vm deploys.
                 # `apt-get update` refreshes the index (apt never auto-refreshes)
                 # and stays in this single install cell — the deploy compiler only
@@ -874,6 +904,29 @@ distro:
                     option: list
                     package: list
                     repo: list_of_maps
+                # localpkg for rpm: build the .rpm in a distro-matched fedora
+                # container (distro-native rpmbuild), then install it with
+                # `dnf install` which AUTO-RESOLVES the package's repo deps (all
+                # of ov's mandatory deps are in the Fedora repos, incl. tailscale).
+                # The ov binary is built on the host (prebuilt bin/ov, or a
+                # go-build fallback) and bind-mounted in; rpmbuild just packages it.
+                local_pkg:
+                    pkg_glob: "*.rpm"
+                    source_sentinel: "*.spec"
+                    build_template: |
+                        set -e
+                        SUPER=$(cd {{.SrcDir}}/../.. && pwd)
+                        mkdir -p "$SUPER/bin"
+                        [ -x "$SUPER/bin/ov" ] || (cd "$SUPER/ov" && CGO_ENABLED=1 go build -ldflags "-X main.BuildCalVer=$(bash "$SUPER/pkg/arch/calver.sh")" -o "$SUPER/bin/ov" .)
+                        podman run --rm -v {{.SrcDir}}:/src:ro -v "$SUPER/bin":/ovbin:ro -v {{.PkgDest}}:/out:Z docker.io/library/fedora:43 bash -lc '
+                          set -e
+                          dnf install -y -q rpm-build >/dev/null
+                          rpmbuild -bb --define "_topdir /tmp/rb" --define "ovbin /ovbin/ov" --define "ovver $(/ovbin/ov version)" /src/overthink.spec
+                          find /tmp/rb/RPMS -name "*.rpm" -exec install -Dm644 -t /out {} +
+                        '
+                    install_template: |
+                        dnf install -y {{.StageDir}}/{{.Glob}}
+                    probe: command -v dnf
                 # Host-venue cells consumed by target:local / target:vm deploys
                 # (LocalDeployTarget / VmDeployTarget). install.host is the
                 # plain-shell analog of the install.container Containerfile RUN;

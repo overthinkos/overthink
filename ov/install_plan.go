@@ -959,29 +959,13 @@ type LocalPkgInstallStep struct {
 
 	// LocalPkg is the format's localpkg contract resolved from build.yml at
 	// compile time (DistroDef.LocalPkgFormat). It carries the build/install
-	// templates, package glob, foreign-deps query, probe command, and
-	// dependency-builder name — so the executor renders every package-manager
-	// command from config instead of hardcoding makepkg/pacman/glob literals.
-	// Nil when Format == "".
+	// templates, package glob, source-dir sentinel, and probe command — so the
+	// executor renders every package-manager command from config instead of
+	// hardcoding build/install/glob literals. The install command auto-resolves
+	// the package's dependencies from the target's repos (pacman -U / dnf
+	// install / apt-get install), so there is no dep-closure builder. Nil when
+	// Format == "".
 	LocalPkg *LocalPkgDef
-
-	// BuilderImage is the resolved image for LocalPkg.DepBuilder
-	// (resolveBuilderImage(LocalPkg.DepBuilder, …) at compile time, mirroring
-	// BuilderStep.BuilderImage). It is the host-side builder used to build the
-	// package's builder-resolvable dependency closure: the built package's
-	// `depends=` may name packages no sync repo can satisfy under the install
-	// command, so those deps are built through this SAME builder and installed
-	// alongside the package. Empty when no dep builder resolves — the dep-build
-	// is then skipped (the layer's curl/COPY fallback still covers non-localpkg
-	// targets).
-	BuilderImage string
-
-	// DepBuilderDef is the resolved build.yml builder definition for
-	// LocalPkg.DepBuilder (the `aur` builder for pac), populated by the compiler
-	// alongside BuilderImage. buildDepPkgsOnHost sets it on the synthetic
-	// BuilderStep so renderBuilderScript resolves the dep builder's
-	// phase.install.host cell from config. Nil when no dep builder resolves.
-	DepBuilderDef *BuilderDef
 }
 
 func (s *LocalPkgInstallStep) Kind() StepKind { return StepKindLocalPkgInstall }

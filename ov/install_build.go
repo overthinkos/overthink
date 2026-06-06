@@ -189,31 +189,31 @@ func compileApkStep(layer *Layer) InstallStep {
 // with a clear log (the layer's own curl/COPY fallback still covers
 // non-localpkg targets).
 func compileLocalPkgStep(layer *Layer, img *ResolvedBox, hostCtx HostContext) InstallStep {
-	ref := layer.LocalPkg()
+	// The target distro must declare a localpkg-capable package format, AND the
+	// layer must point that format at a source dir. Resolve the format FIRST so
+	// the per-format `localpkg:` map picks the matching source (pac→pkg/arch,
+	// rpm→pkg/fedora, deb→pkg/debian). Either missing → no step (the layer's own
+	// curl/COPY task is the fallback on formats with no native package).
+	if img.DistroDef == nil {
+		return nil
+	}
+	fmtName, lp := img.DistroDef.LocalPkgFormat(img.Pkg)
+	if lp == nil {
+		return nil
+	}
+	ref := layer.LocalPkg(fmtName)
 	if ref == "" {
 		return nil
 	}
 	projectDir, _ := os.Getwd()
-	step := &LocalPkgInstallStep{
+	return &LocalPkgInstallStep{
 		PkgbuildRef: ref,
 		LayerName:   layer.Name,
 		LayerDir:    layer.SourceDir,
 		ProjectDir:  projectDir,
+		Format:      fmtName,
+		LocalPkg:    lp,
 	}
-	if img.DistroDef != nil {
-		fmtName, lp := img.DistroDef.LocalPkgFormat(img.Pkg)
-		if lp != nil {
-			step.Format = fmtName
-			step.LocalPkg = lp
-			if lp.DepBuilder != "" {
-				step.BuilderImage = resolveBuilderImage(lp.DepBuilder, img, hostCtx)
-				if img.BuilderConfig != nil {
-					step.DepBuilderDef = img.BuilderConfig.Builder[lp.DepBuilder]
-				}
-			}
-		}
-	}
-	return step
 }
 
 // MergePlan combines a list of per-layer plans into one whole-image

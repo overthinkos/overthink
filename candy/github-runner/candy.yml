@@ -1,87 +1,92 @@
 candy:
-    version: 2026.144.1443
+    version: 2026.157.1657
     name: github-runner
     require:
         - supervisord
+        # Rootless nested podman/buildah/skopeo + subuid/subgid layout +
+        # newuidmap/newgidmap file-caps + containers/storage/policy configs all
+        # come from container-nesting. This layer carries only the
+        # runner-specific pieces (R3 — no duplication).
+        - container-nesting
     distro:
-        fedora:
+        arch:
             package:
-                - skopeo
+                # Runner toolchain (podman/buildah/skopeo/crun/fuse-overlayfs are
+                # provided by container-nesting).
                 - jq
-                - libcap
-                - util-linux-script
-                - osbuild-selinux
-                - systemd-container
-                - openssh-clients
-                - cloud-utils-growpart
-                - podman
-                - buildah
-                - golang
                 - git
-                - qemu-user-static-aarch64
+                - go
+                - cloud-guest-utils            # growpart
+                - qemu-user-static             # aarch64 cross-arch CI (binfmt)
+                - qemu-user-static-binfmt
+                - cosign                       # repo package (replaces binary download)
+                # .NET runtime deps for the actions-runner binary — the runner's
+                # bundled installdependencies.sh has no Arch branch, so its native
+                # deps are declared explicitly here. (libz is NOT listed: CachyOS
+                # ships zlib-ng-compat, which Provides zlib/libz.so — an explicit
+                # `zlib` is an unresolvable conflict with it.)
+                - icu
+                - krb5
+                - openssl
+                - libunwind
+                - lttng-ust
     volume:
         - name: state
-          path: /opt/actions-runner
-        - name: storage
-          path: /var/lib/containers/storage
-    security:
-        privileged: true
+          path: ~/actions-runner
     env:
-        RUNNER_ALLOW_RUNASROOT: "1"
-        RUNNER_WORK_DIR: "/opt/actions-runner/_work"
+        RUNNER_WORK_DIR: "${HOME}/actions-runner/_work"
         RUNNER_GROUP: "Default"
-        OV_BUILD_ENGINE: "podman"
-        OV_RUN_ENGINE: "podman"
+    env_accept:
+        - name: RUNNER_ORG
+          description: "GitHub org/user to register the runner with (e.g. overthinkos). Pass via: ov config githubrunner -e RUNNER_ORG=<org>"
+    secret_accept:
+        - name: RUNNER_TOKEN
+          description: "Short-lived GitHub Actions runner registration token (gh api -X POST /orgs/<org>/actions/runners/registration-token). Credential-store backed; never written to deploy.yml or the quadlet."
+    var:
+        RUNNER_VERSION: "2.334.0"
     hook:
+        # Registration only runs when a token is supplied — so a disposable bed
+        # (no token) deploys the image without registering, and a stale token is
+        # a clean no-op rather than an error.
         post_enable: |
+            [ -z "${RUNNER_TOKEN:-}" ] && { echo "RUNNER_TOKEN empty — skipping runner registration"; exit 0; }
             : "${RUNNER_NAME:=${OV_CONTAINER_NAME:-runner}}"
             : "${RUNNER_LABELS:=overthink}"
-            /opt/actions-runner/config.sh --unattended \
+            "${HOME}/actions-runner/config.sh" --unattended \
               --url "https://github.com/${RUNNER_ORG}" \
               --token "${RUNNER_TOKEN}" \
               --name "${RUNNER_NAME}" \
               --labels "${RUNNER_LABELS}" \
               --replace --work _work
         pre_remove: |
-            /opt/actions-runner/config.sh remove \
+            [ -z "${RUNNER_TOKEN:-}" ] && { echo "RUNNER_TOKEN empty — skipping deregistration"; exit 0; }
+            "${HOME}/actions-runner/config.sh" remove \
               --token "${RUNNER_TOKEN}"
     task:
-        # GitHub Actions runner binary — pinned to the latest stable tag at build time
+        # GitHub Actions runner — pinned, declarative download (content-addressed
+        # cache, reproducible). The runner self-updates against GitHub at runtime,
+        # so a pinned base version is correct. Installed under $HOME (uid 1000),
+        # not root-owned /opt. The download runs as root because the shared
+        # /tmp/downloads content-cache mount is root-owned; the extracted tree is
+        # chowned back to uid 1000 below so the rootless runner can write
+        # _work/.runner/.credentials at runtime.
+        - mkdir: "${HOME}/actions-runner"
+          user: "${USER}"
+        - download: "https://github.com/actions/runner/releases/download/v${RUNNER_VERSION}/actions-runner-linux-x64-${RUNNER_VERSION}.tar.gz"
+          extract: tar.gz
+          to: "${HOME}/actions-runner"
+          user: root
         - cmd: |
-            ARCH=$(uname -m)
-            case "$ARCH" in
-              x86_64) ;;
-              *) echo "Unsupported architecture: $ARCH" >&2; exit 1;;
-            esac
-            VERSION=$(curl -s https://api.github.com/repos/actions/runner/releases/latest | grep '"tag_name":' | sed -E 's/.*"v([^"]+)".*/\1/')
-            curl -fsSL "https://github.com/actions/runner/releases/download/v${VERSION}/actions-runner-linux-x64-${VERSION}.tar.gz" -o /tmp/actions-runner.tar.gz
-            mkdir -p /opt/actions-runner
-            tar xzf /tmp/actions-runner.tar.gz -C /opt/actions-runner
-            rm /tmp/actions-runner.tar.gz
-            cd /opt/actions-runner && ./bin/installdependencies.sh || true
-            chmod +x /opt/actions-runner/run.sh /opt/actions-runner/config.sh
+            rh=$(getent passwd 1000 | cut -d: -f6)
+            chown -R 1000:1000 "${rh}/actions-runner"
           user: root
-        # cosign — pinned version
-        - download: "https://github.com/sigstore/cosign/releases/download/v3.0.2/cosign-linux-${ARCH}"
-          extract: none
-          to: /usr/local/bin/cosign
-          mode: "0755"
-          user: root
-        # File capabilities for rootless container support
-        - setcap: /usr/bin/newuidmap
-          caps: "cap_setuid=ep"
-        - setcap: /usr/bin/newgidmap
-          caps: "cap_setgid=ep"
-        # subuid/subgid for rootless podman inside the runner container
-        - cmd: |
-            echo "root:100000:65536" >> /etc/subuid
-            echo "root:100000:65536" >> /etc/subgid
-          user: root
-        # Registry mirror for ghcr.io (host mirror at 127.0.0.1:5000)
-        - mkdir: /etc/containers/registries.conf.d
-          user: root
-        - write: /etc/containers/registries.conf.d/ghcr-mirror.conf
-          user: root
+        # Registry mirror for ghcr.io (host pull-through cache at 127.0.0.1:5000;
+        # falls back to ghcr.io directly if absent). Rootless podman prefers
+        # ~/.config/containers over /etc/containers.
+        - mkdir: "${HOME}/.config/containers/registries.conf.d"
+          user: "${USER}"
+        - write: "${HOME}/.config/containers/registries.conf.d/ghcr-mirror.conf"
+          user: "${USER}"
           mode: "0644"
           content: |
             [[registry]]
@@ -92,8 +97,69 @@ candy:
             insecure = true
     service:
         - name: github-runner
-          exec: /opt/actions-runner/run.sh
+          exec: "%(ENV_HOME)s/actions-runner/run.sh"
           restart: always
-          working_directory: /opt/actions-runner
+          working_directory: "%(ENV_HOME)s/actions-runner"
           enable: true
           scope: system
+    eval:
+        # --- build scope: the composition actually works (run the binaries) ---
+        # config.sh executes the .NET Runner binary → proves the icu/krb5/.NET
+        # native deps resolved on cachyos (the key cachyos-port signal).
+        - id: gr-runner-config-runs
+          command: "${HOME}/actions-runner/config.sh --version"
+          exit_status: 0
+        - id: gr-runner-run-sh
+          file: "${HOME}/actions-runner/run.sh"
+          exists: true
+        - id: gr-cosign
+          command: cosign version
+          exit_status: 0
+        - id: gr-skopeo
+          command: skopeo --version
+          exit_status: 0
+        - id: gr-buildah
+          command: buildah --version
+          exit_status: 0
+        - id: gr-go
+          command: go version
+          exit_status: 0
+        - id: gr-git
+          command: git --version
+          exit_status: 0
+        - id: gr-qemu-aarch64
+          file: /usr/bin/qemu-aarch64-static
+          exists: true
+        - id: gr-go-pkg
+          package: golang
+          package_map:
+            arch: go
+          installed: true
+        - id: gr-icu-pkg
+          package: icu
+          installed: true
+        # --- deploy scope: rootless runtime state ---
+        # Runs as uid 1000 (NOT root) — the whole point of the rootless cutover.
+        - id: gr-rootless-uid
+          scope: deploy
+          command: id
+          stdout:
+            - contains: "uid=1000"
+        # Rootless nested podman works (no mount_too_revealing EPERM).
+        - id: gr-nested-podman-info
+          scope: deploy
+          command: podman info
+          exit_status: 0
+        - id: gr-nested-podman-run
+          scope: deploy
+          command: "podman run --rm quay.io/libpod/alpine:latest true"
+          exit_status: 0
+        - id: gr-ghcr-mirror
+          scope: deploy
+          file: "${HOME}/.config/containers/registries.conf.d/ghcr-mirror.conf"
+          exists: true
+        - id: gr-newuidmap-cap
+          scope: deploy
+          command: getcap /usr/bin/newuidmap
+          stdout:
+            - contains: cap_setuid

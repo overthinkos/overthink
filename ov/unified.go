@@ -59,6 +59,14 @@ const MaxIncludeDepth = 8
 // `ov migrate` for the one-shot migration from v1.
 type UnifiedFile struct {
 	Version string `yaml:"version,omitempty"`
+	// Repo is this project's canonical repo identity (e.g.
+	// "github.com/overthinkos/overthink"). Optional; only meaningful on the ROOT
+	// file. It lets the import-namespace loader break mutual-import cycles by
+	// repo identity: a transitive import of THIS repo (at ANY pinned version)
+	// resolves to the local working tree instead of fetching a divergent pinned
+	// snapshot, so the root's namespace pins win. When unset, the loader falls
+	// back to `git remote origin` inference (see ns_identity.go).
+	Repo string `yaml:"repo,omitempty"`
 	// Import is the SINGLE composition statement (the legacy `include:` key
 	// was deleted in the 2026-05 import-namespace cutover). A list whose
 	// items are either a bare string (flat import into THIS root namespace —
@@ -628,7 +636,17 @@ func LoadUnified(dir string) (*UnifiedFile, bool, error) {
 	}
 	merged := &UnifiedFile{}
 	visited := map[string]bool{}
-	if err := loadUnifiedInto(root, merged, visited, 0, map[string]*UnifiedFile{}); err != nil {
+	nsCache := map[string]*UnifiedFile{}
+	// Register the local root under its repo identity so a transitive import of
+	// THIS repo (at any pinned version) cycle-breaks to the working tree (root's
+	// namespace pins win — see ns_identity.go). Seeded BEFORE the load and never
+	// popped, so it matches anywhere in the import graph. "" (no `repo:`, no git
+	// origin) → no registration → version-keyed behavior, as before.
+	loadingRepos := map[string]*UnifiedFile{}
+	if rootID := rootRepoIdentity(dir); rootID != "" {
+		loadingRepos[rootID] = merged
+	}
+	if err := loadUnifiedInto(root, merged, visited, 0, nsCache, loadingRepos); err != nil {
 		return nil, true, err
 	}
 	normalizeV4Aliases(merged)
@@ -908,7 +926,7 @@ func validateDeploymentName(name, parentPath string) error {
 // merged/visited (root namespace); namespaced imports mount an isolated child
 // UnifiedFile under merged.Namespaces via the shared nsCache (cycle-broken).
 // Cycle-safe within a namespace via the visited set; across namespaces via nsCache.
-func loadUnifiedInto(path string, merged *UnifiedFile, visited map[string]bool, depth int, nsCache map[string]*UnifiedFile) error {
+func loadUnifiedInto(path string, merged *UnifiedFile, visited map[string]bool, depth int, nsCache, loadingRepos map[string]*UnifiedFile) error {
 	if depth > MaxIncludeDepth {
 		return fmt.Errorf("include depth exceeded %d at %s", MaxIncludeDepth, path)
 	}
@@ -988,7 +1006,7 @@ func loadUnifiedInto(path string, merged *UnifiedFile, visited map[string]bool, 
 			if err != nil {
 				return fmt.Errorf("%s: import %q: %w", abs, imp.Ref, err)
 			}
-			if err := loadUnifiedInto(incPath, merged, visited, depth+1, nsCache); err != nil {
+			if err := loadUnifiedInto(incPath, merged, visited, depth+1, nsCache, loadingRepos); err != nil {
 				return err
 			}
 			continue
@@ -997,7 +1015,7 @@ func loadUnifiedInto(path string, merged *UnifiedFile, visited map[string]bool, 
 		if err := validateNamespaceAlias(imp.Namespace); err != nil {
 			return fmt.Errorf("%s: import %q: %w", abs, imp.Ref, err)
 		}
-		sub, err := loadNamespaceCached(imp.Ref, base, nsCache)
+		sub, err := loadNamespaceCached(imp.Ref, base, nsCache, loadingRepos)
 		if err != nil {
 			return fmt.Errorf("%s: import %s (%q): %w", abs, imp.Namespace, imp.Ref, err)
 		}
@@ -1054,20 +1072,41 @@ func canonicalRef(ref, baseDir string) (key, path string, err error) {
 // (including the intentional main<->cachyos mutual import) by recording an
 // in-progress node BEFORE recursing. A whole-repo ref (empty sub-path) resolves
 // to its overthink.yml.
-func loadNamespaceCached(ref, baseDir string, nsCache map[string]*UnifiedFile) (*UnifiedFile, error) {
+func loadNamespaceCached(ref, baseDir string, nsCache, loadingRepos map[string]*UnifiedFile) (*UnifiedFile, error) {
+	// Cycle-break by REPO IDENTITY (not pinned version), BEFORE any fetch: if
+	// this ref targets a repo already being loaded up the stack (the root or an
+	// ancestor namespace), resolve to that in-progress node. This terminates the
+	// intentional mutual import (main <-> cachyos) even when the loop's pins
+	// diverge — a transitive back-reference to an in-progress repo at a DIFFERENT
+	// pinned version resolves to the in-progress node instead of fetching a
+	// divergent (possibly stale-schema) snapshot. See ns_identity.go.
+	repoID := nsRepoIdentity(ref, baseDir)
+	if repoID != "" {
+		if existing, ok := loadingRepos[repoID]; ok {
+			return existing, nil
+		}
+	}
 	key, path, err := canonicalRef(ref, baseDir)
 	if err != nil {
 		return nil, err
 	}
 	if existing, ok := nsCache[key]; ok {
-		return existing, nil
+		return existing, nil // version-keyed diamond memo (dedup identical refs)
 	}
 	if info, statErr := os.Stat(path); statErr == nil && info.IsDir() {
 		path = filepath.Join(path, UnifiedFileName)
 	}
 	sub := &UnifiedFile{}
-	nsCache[key] = sub // in-progress marker BEFORE recursing (cycle break)
-	if err := loadUnifiedInto(path, sub, map[string]bool{}, 0, nsCache); err != nil {
+	nsCache[key] = sub // version-keyed memo entry (persists across the whole load)
+	if repoID != "" {
+		// Stack-scoped in-progress (ancestor) marker for the identity cycle-break
+		// above: pushed before recursing, popped after, so two SIBLING imports of
+		// the same repo at different versions still each load — only a genuine
+		// back-edge (an ancestor still on the stack) short-circuits.
+		loadingRepos[repoID] = sub
+		defer delete(loadingRepos, repoID)
+	}
+	if err := loadUnifiedInto(path, sub, map[string]bool{}, 0, nsCache, loadingRepos); err != nil {
 		return nil, err
 	}
 	return sub, nil
@@ -1098,7 +1137,7 @@ const (
 // Plural spellings (images:/vms:) are legacy; classifyDoc rejects them
 // with a migration hint.
 var rootShapeKeys = map[string]bool{
-	"version": true, "import": true, "discover": true, "defaults": true,
+	"version": true, "repo": true, "import": true, "discover": true, "defaults": true,
 	"provides": true,
 	// Field-singular cutover (2026-05): plurals collapsed.
 	"distro": true, "builder": true, "init": true,
@@ -1482,6 +1521,11 @@ func normalizeV4Aliases(u *UnifiedFile) {
 func mergeUnified(dst, src *UnifiedFile, srcDir string) {
 	if src.Version != "" && dst.Version == "" {
 		dst.Version = src.Version
+	}
+	// Root-wins: the root file (merged first) defines the project's repo
+	// identity; a flat import declaring `repo:` never overrides it.
+	if src.Repo != "" && dst.Repo == "" {
+		dst.Repo = src.Repo
 	}
 	// Discover entries concatenate (not overwrite). Resolve relative
 	// paths to absolute against srcDir so an included file's discover

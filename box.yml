@@ -32,8 +32,10 @@ box:
               scope: deploy
               filetype: directory
     githubrunner:
-        enabled: false
-        base: fedora
+        enabled: true
+        base: cachyos.cachyos
+        build:
+            - pac
         platform:
             - linux/amd64
         candy:
@@ -41,6 +43,10 @@ box:
             - github-runner
             - ov
             - dbus
+            - container-nesting
+        # No uid/user override and NO image-level security: block → resolves to
+        # container-nesting's rootless posture (cap_add:[], unmask=/proc/*,
+        # /dev/fuse, /dev/net/tun) at uid 1000. Same shape as openclaw-desktop.
         network: host
     hermes:
         base: fedora

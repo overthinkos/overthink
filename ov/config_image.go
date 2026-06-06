@@ -804,7 +804,11 @@ skipDataProvision:
 			fmt.Fprintf(os.Stderr, "Warning: failed to start %s for post_enable hook: %v\n", svc, err)
 		} else {
 			engine := EngineBinary(rt.RunEngine)
-			if err := RunHook(engine, ctrName, hooks.PostEnable, c.Env); err != nil {
+			// Pass credential-backed secrets (secret_accept/require) to the hook
+			// explicitly — they're scrubbed from c.Env and not reliably inherited
+			// from the container's type=env secrets by `podman exec`.
+			hookEnv := append(append([]string{}, c.Env...), resolveHookSecretEnv(c.Image, c.Instance, meta)...)
+			if err := RunHook(engine, ctrName, hooks.PostEnable, hookEnv); err != nil {
 				fmt.Fprintf(os.Stderr, "Warning: post_enable hook failed: %v\n", err)
 			}
 		}

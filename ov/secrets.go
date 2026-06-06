@@ -382,6 +382,29 @@ func CollectLayerSecretAccepts(imageName, instance string, meta *BoxMetadata) (c
 	return collected, resolutions
 }
 
+// resolveHookSecretEnv returns `NAME=value` entries for every secret_accept /
+// secret_require value that resolves from the credential store, so lifecycle
+// hooks (post_enable / pre_remove) receive credential-backed secrets EXPLICITLY
+// via `podman exec -e`. This is load-bearing: the CLI `-e` form of these secrets
+// is scrubbed from c.Env by scrubSecretCLIEnv (never plaintext in deploy.yml),
+// and a podman `type=env` secret is not reliably inherited by `podman exec`, so
+// a hook that consumes a secret (e.g. github-runner's registration token) would
+// otherwise never see it. Generic across every hook+secret layer (R3); inert
+// (returns nil) when the image declares no secrets or none resolve.
+func resolveHookSecretEnv(imageName, instance string, meta *BoxMetadata) []string {
+	collected, _ := CollectLayerSecretAccepts(imageName, instance, meta)
+	var env []string
+	for _, s := range collected {
+		if s.Env == "" {
+			continue
+		}
+		if val, _ := resolveSecretValue(s, imageName, instance); val != "" {
+			env = append(env, s.Env+"="+val)
+		}
+	}
+	return env
+}
+
 // credServiceForSecret maps well-known env vars to credential services.
 func credServiceForSecret(envVar string) string {
 	switch envVar {

@@ -1859,6 +1859,19 @@ eval:
         description:
             feature: "R10 bed for versa — exercises the full OSM analytics + vector-tile pipeline (quackosm PBF→GeoParquet, tippecanoe→PMTiles, martin serve, maputnik editor) plus the marimo MCP server (10 read-only notebook-inspection tools) plus the marimo-team/learn curriculum import surface plus the polars-st/geopolars/geoarrow/lonboard geospatial extensions. The 2026-05 cutover replaced an 8-element explicit port list + 4-entry env block with `port: [auto]` and per-producing-layer env_provides templates. Followup 2026-05-12: removed the airflow MCP wrapper (no Airflow-3 v2 release of mcp-server-apache-airflow exists); consumers drive Airflow via direct REST /api/v2 calls."
             tag: [testing]
+    eval-githubrunner-pod:
+        target: pod
+        box: githubrunner
+        disposable: true
+        lifecycle: dev
+        # No port: — the runner has no listening service (host net, outbound only).
+        # No RUNNER_TOKEN/RUNNER_ORG → the guarded post_enable no-ops, so the bed
+        # proves the rootless CachyOS composition WITHOUT GitHub registration.
+        # Inherits the github-runner + container-nesting baked eval: checks
+        # (functional binary runs + the rootless nested-podman proof).
+        description:
+            feature: "R10 bed proving the rootless CachyOS githubrunner composition — runs the actions-runner config.sh (.NET/icu deps resolved), cosign/skopeo/buildah/go, rootless nested podman at uid 1000 (unmask=/proc/*, zero caps), newuidmap file-caps, ghcr mirror — WITHOUT GitHub registration (no token → guarded hooks no-op)."
+            tag: [working]
     eval-android-emulator-pod:
         target: pod
         box: android-emulator

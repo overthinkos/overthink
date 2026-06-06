@@ -22,6 +22,82 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-06 — feat: migrate the github runner to CachyOS, fully rootless
+
+The `githubrunner` image moved from Fedora to **CachyOS** (`base: cachyos.cachyos`,
+`build: [pac]`) and from a root / `privileged: true` container to a **genuinely
+rootless** one (uid 1000, zero added capabilities) — aligning the image with what
+its skill docs already claimed (`uid=1000, no cap_add`) but the layer had drifted
+away from. It is also fully modernized to current best practices.
+
+- **Rootless via `container-nesting`** (now composed directly): `box.yml` carries
+  no uid/user/privileged override, so the image resolves to `cap_add:[]`,
+  `security_opt:[unmask=/proc/*]`, devices `/dev/fuse` + `/dev/net/tun`. CI jobs
+  get rootless nested podman/buildah/skopeo at uid 1000.
+- **Arch packages** replace the Fedora set; `golang→go`, `cloud-utils-growpart→
+  cloud-guest-utils`, `qemu-user-static` + `qemu-user-static-binfmt` (aarch64
+  cross-arch CI — parity with the old `qemu-user-static-aarch64`), `cosign` as a
+  repo package (was a binary download). The actions-runner's .NET native deps are
+  declared explicitly (`icu`/`krb5`/`openssl`/`libunwind`/`lttng-ust`) since its
+  bundled `installdependencies.sh` has no Arch branch. `libz` is intentionally NOT
+  listed — CachyOS ships `zlib-ng-compat` which Provides zlib, and an explicit
+  `zlib` is an unresolvable conflict (caught on a live build — RDD).
+- **Declarative `task:`** replaced the build-time shell script: the runner tarball
+  is a pinned `download:` (v2.334.0) to `${HOME}/actions-runner`, root-extracted
+  (the shared download cache is root-owned) then `chown -R`ed to uid 1000 so the
+  rootless runner can write `_work`/`.credentials`. The duplicate
+  skopeo/podman/buildah/libcap, the subuid/subgid + setcap tasks, and
+  `RUNNER_ALLOW_RUNASROOT` were dropped (provided by `container-nesting` or
+  unneeded rootless).
+- **Token mechanism (credential-backed):** `RUNNER_TOKEN` is a `secret_accept`
+  (never plaintext in deploy.yml/quadlet); `RUNNER_ORG` an `env_accept`; the
+  `post_enable`/`pre_remove` hooks skip when the token is empty (so a token-less
+  deploy — an eval bed — comes up without registering). A new generic
+  `resolveHookSecretEnv` (`ov/secrets.go`) delivers credential-backed secrets to
+  lifecycle hooks **explicitly** via `podman exec -e` at the `post_enable` /
+  `pre_remove` call sites — the value is scrubbed from `c.Env` (never plaintext)
+  and a podman `type=env` secret is not reliably inherited by `podman exec`, so
+  the hook would otherwise never see it. Benefits every hook+secret layer (R3).
+- **New `eval-githubrunner-pod` R10 bed** proves the rootless composition WITHOUT
+  GitHub registration. Verified: `ov box build` → `ov eval box` (42 passed/0
+  failed) → `ov eval run eval-githubrunner-pod` PASS (10 steps; the deploy-scope
+  `eval-live` 50 passed/0 failed includes `id`→uid 1000 and a real rootless nested
+  `podman run --rm quay.io/libpod/alpine:latest true`).
+
+The live single-instance registration with the `overthinkos` org is the operator's
+step (it needs a `gh` token with `admin:org` to mint a registration token):
+`ov config githubrunner -e RUNNER_ORG=overthinkos -e RUNNER_TOKEN=$(gh api -X POST
+/orgs/overthinkos/actions/runners/registration-token --jq .token)` then
+`ov start githubrunner`.
+
+### 2026-06-06 — fix: import-namespace mutual-import cycle-break by repo identity
+
+`ov`'s unified-config loader broke the intentional main↔cachyos (and
+↔nvidia/↔selkies) mutual import only when every pin in the loop converged on the
+same version. A divergent transitive `ov:` back-reference — e.g. local main →
+`cachyos@v2026.157.1600` → `ov:overthink@v2026.157.0650` →
+`cachyos@v2026.146.0754` — was treated as a foreign repo, fetched, and recursed
+into; the older snapshot's pre-migration `discover:` **map** then failed to decode
+(`cannot unmarshal !!map into DiscoverConfig`), making every cachyos-based image
+(`githubrunner`, `versa`) unloadable with a current binary.
+
+The cycle-break now keys by **repo identity, not pinned version** (`ov/ns_identity.go`):
+`loadNamespaceCached` checks a stack-scoped `loadingRepos` (repoID → in-progress
+node) BEFORE any fetch, alongside the version-keyed `nsCache` diamond memo;
+`LoadUnified` registers the local root under its repo identity (a new optional
+`repo:` field in `overthink.yml`, else inferred from `git remote origin`). So a
+transitive import of an in-progress repo — above all the root's own repo —
+resolves to the in-progress node instead of fetching a divergent (possibly
+stale-schema) snapshot: **the importing project's namespace pins win**. The stale
+`@github` import pins (cachyos/nvidia/selkies) were also bumped to
+`v2026.157.1600` to match the submodules. (The fatal load additionally required
+purging several corrupt locally-cached `@overthink:*` clones that were missing
+their `candy/` dirs — environmental, no repo change.)
+
+Covered by `TestImportNamespace_DivergentVersionMutualCycle` + `TestNsRepoIdentity`.
+Verified: `go test ./...` green; `ov box validate` exit 0 with zero warnings (was
+a fatal load error).
+
 ### 2026-06-06 — docs: rebrand the top-level docs to "The Candy Factory" (VISION wording)
 
 A documentation-only cutover that finished carrying the candy-factory voice and

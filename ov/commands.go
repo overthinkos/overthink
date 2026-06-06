@@ -360,7 +360,10 @@ func (c *RemoveCmd) runPreRemoveHook(engine, containerName, imageName string) {
 	if metaErr != nil || meta == nil || meta.Hook == nil || meta.Hook.PreRemove == "" {
 		return
 	}
-	if err := RunHook(engine, containerName, meta.Hook.PreRemove, c.Env); err != nil {
+	// Pass credential-backed secrets (secret_accept/require) to the hook
+	// explicitly — scrubbed from c.Env, not reliably inherited via podman exec.
+	hookEnv := append(append([]string{}, c.Env...), resolveHookSecretEnv(imageName, c.Instance, meta)...)
+	if err := RunHook(engine, containerName, meta.Hook.PreRemove, hookEnv); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: pre_remove hook failed: %v\n", err)
 	}
 }

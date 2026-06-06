@@ -115,6 +115,26 @@ deploys an rpm/pac repo on a VM). Verified `eval-ov-vm` (pac) PASS, `eval-fedora
 (rpm) PASS, `eval-cachyos-vm` (pac) PASS on the fixed binary; the deb beds verified
 against the reconciled producer tag.
 
+**Two more the deb beds surfaced against the pushed tag (B6 iterate).** With the
+host-cell repo fix in, `eval-debian-debootstrap-vm` advanced through deploy +
+eval-live (tailscale INSTALLED via the repo) and failed only at the `ov update`
+fresh-rebuild: `gpg: cannot open '/dev/tty'` — `gpg --dearmor -o <keyring>` is
+NOT idempotent; on a re-deploy the keyring already exists and gpg prompts to
+overwrite, which dies over tty-less SSH. Fixed with `gpg --batch --yes --dearmor`
+in BOTH the deb host cell AND the deb container `install_template` (R3). And
+`eval-ubuntu-debootstrap-vm` failed at the FIRST `apt-get update` with
+`Suites: UNAVAILABLE` — cloud-init's apt module shells out to the `lsb_release`
+COMMAND to fill the deb822 `ubuntu.sources` `$RELEASE`; the debootstrap rootfs had
+`/etc/os-release` + `/etc/lsb-release` with `noble` but NOT the `lsb-release`
+package, so `util.lsb_release()` returned codename `UNAVAILABLE` and every Ubuntu
+mirror 404'd. Fixed by adding `lsb-release` to the ubuntu debootstrap
+`base_package`. (A latent non-blocker the same run exposed: candy/ov declares the
+tailscale `repo:` under BOTH `distro.debian` and `distro.ubuntu`, which collapse
+into the one `deb` PackageSection via first-writer-wins + random Go map order, so
+a deb deploy picks debian's OR ubuntu's tailscale repo non-deterministically —
+both install `tailscale`, so the bed passes either way; making the deb-family repo
+selection distro-deterministic is its own follow-up cutover.)
+
 ### 2026-06-05 — feat: consolidate `ov` — merge `ov-full` into `ov`, drop `ov` where unneeded, right-size the package deps, and test ALL ov commands
 
 The `ov` toolchain was split into a bare-binary `ov` layer and an `ov-full`

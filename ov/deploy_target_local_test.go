@@ -268,7 +268,10 @@ func TestRenderHostPackageCommandDebRepo(t *testing.T) {
 		t.Fatalf("renderHostPackageCommand: %v", err)
 	}
 	for _, want := range []string{
-		"gpg --dearmor -o /etc/apt/keyrings/tailscale.gpg",
+		// --batch --yes makes the dearmor idempotent: on an `ov update`
+		// re-deploy the keyring already exists, and a bare `gpg --dearmor -o`
+		// prompts to overwrite -> opens /dev/tty -> fails over tty-less SSH.
+		"gpg --batch --yes --dearmor -o /etc/apt/keyrings/tailscale.gpg",
 		"/etc/apt/sources.list.d/tailscale.list",
 		"signed-by=/etc/apt/keyrings/tailscale.gpg",
 		"apt-get install -y tailscale",

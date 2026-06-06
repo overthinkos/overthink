@@ -700,7 +700,7 @@ distro:
                         host: |
                             {{- range .Repos}}
                             {{- if .key}}
-                            mkdir -p /etc/apt/keyrings && curl -fsSL {{quote .key}} | gpg --dearmor -o {{default .signed_by (printf "/etc/apt/keyrings/%s.gpg" .name)}} && \
+                            mkdir -p /etc/apt/keyrings && curl -fsSL {{quote .key}} | gpg --batch --yes --dearmor -o {{default .signed_by (printf "/etc/apt/keyrings/%s.gpg" .name)}} && \
                             {{- end}}
                             {{- if .url}}
                             echo "deb [{{if or .key .signed_by}}signed-by={{default .signed_by (printf "/etc/apt/keyrings/%s.gpg" .name)}}{{end}}] {{.url}} {{default .suite "stable"}}{{if eq (default .suite "stable") "/"}}{{else}} {{default .components "main"}}{{end}}" > /etc/apt/sources.list.d/{{.name}}.list && \
@@ -716,7 +716,7 @@ distro:
                     RUN {{cacheMounts .CacheMounts}} \
                     {{- range .Repos}}
                     {{- if .key}}
-                        curl -fsSL {{quote .key}} | gpg --dearmor -o {{default .signed_by (printf "/etc/apt/keyrings/%s.gpg" .name)}} && \
+                        curl -fsSL {{quote .key}} | gpg --batch --yes --dearmor -o {{default .signed_by (printf "/etc/apt/keyrings/%s.gpg" .name)}} && \
                     {{- end}}
                     {{- if .url}}
                         echo "deb [{{if or .key .signed_by}}signed-by={{default .signed_by (printf "/etc/apt/keyrings/%s.gpg" .name)}}{{end}}] {{.url}} {{default .suite "stable"}}{{if eq (default .suite "stable") "/"}}{{else}} {{default .components "main"}}{{end}}" > /etc/apt/sources.list.d/{{.name}}.list && \
@@ -1027,6 +1027,13 @@ distro:
                 - openssh-server
                 - sudo
                 - cloud-init
+                # lsb-release: cloud-init's apt module shells out to the
+                # `lsb_release` COMMAND to fill the deb822 ubuntu.sources Suites
+                # ($RELEASE). /etc/os-release + /etc/lsb-release alone are NOT
+                # enough — without the command, util.lsb_release() returns
+                # codename "UNAVAILABLE" and apt-get update fails with
+                # "UNAVAILABLE Release does not have a Release file".
+                - lsb-release
                 - qemu-guest-agent
                 - systemd-resolved
                 - systemd-timesyncd

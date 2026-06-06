@@ -100,41 +100,34 @@ have to.
 
 ### Candyboxing
 
-Most tools secure an agent by taking candy away — fewer
-commands, no network, no package installs — which also takes away its
-ability to build and test anything real. Overthink flips that: it
-secures the *box* (a disposable, rootless container or VM with real
-isolation) and then hands your agent the whole candy store
-inside it — every tool, every layer, every `ov eval` probe, a real
-registry, a real GPU if you have one. A fully-stocked, throwaway
-chocolate room instead of a padded cell: the agent can do and
-prove far more, and a mistake costs one rebuild.
-→ CLAUDE.md "Candyboxing".
+Secure the *box* — a disposable, rootless container or VM with real,
+kernel-enforced isolation — then hand your agent the whole candy store
+inside it: every `ov` verb, every layer, every `ov eval` probe, a real
+registry, a real GPU. Far more capability than a locked-down sandbox, and
+a mistake costs one rebuild.
+→ [VISION.md](VISION.md) (why), CLAUDE.md "Candyboxing" (the rule),
+`/ov-internals:disposable` (the lifecycle boundary).
 
 ### Risk Driven Development (early)
 
-Documentation drifts and code has bugs, so Overthink never lets a
-high-risk assumption ride on "the docs say so." The riskiest unknown —
-whether a particular *combination* of layers, at their latest versions,
-actually builds and runs together — gets proven empirically on a
-disposable bed EARLY, before a design is built on it. `kind: eval` beds
-and `ov eval` make that proof cheap, for agents and humans
-alike: read the skill for the design intent, then confirm the high-risk
-parts against a real, running system. → CLAUDE.md "Risk Driven
-Development (RDD)".
+Prove the riskiest unknown — above all whether a particular *combination*
+of layers, at their latest versions, actually builds and runs together —
+empirically on a disposable `kind: eval` bed EARLY, before a design rests
+on it. `ov eval` makes that proof cheap, for agents and humans alike.
+→ [VISION.md](VISION.md) (why), CLAUDE.md "Risk Driven Development (RDD)"
+(the rule), `/ov-eval:eval` (usage).
 
 ### Agent Driven Development (acceptance)
 
-What an image is *supposed* to do is written down as runnable Gherkin
-scenarios on the layer that provides the behaviour — Feature/Narrative +
-Given/When/Then — and baked into the image as a label. A step that embeds
-a check verb is verified deterministically; a prose-only step is graded by
-an **agent** that probes the live deployment and judges pass/fail. Run them
-with `ov box feature run <image>` or `ov eval feature run <deployment>`,
-author them with `ov candy add-scenario`, or let the `ov eval run <score>`
-AI loop drive the implementation until they pass. The spec is the test, and
-agents both write it and grade it. → CLAUDE.md "Agent Driven Development
-(ADD)".
+What an image is *supposed* to do is written as runnable Gherkin scenarios
+on the layer that provides the behaviour, baked into the image as a label.
+A step with a check verb is verified deterministically; a prose-only step
+is graded by an **agent** probing the live deployment. Author with
+`ov candy add-scenario`, run with `ov box feature run` /
+`ov eval feature run`, or let the `ov eval run <score>` AI loop drive it to
+green. The spec is the test, and agents both write it and grade it.
+→ [VISION.md](VISION.md) (why), CLAUDE.md "Agent Driven Development (ADD)"
+(the rule), `/ov-eval:eval` (usage).
 
 ### Build → run → deploy → evaluate
 
@@ -233,16 +226,12 @@ Overthink treats container images as composable building blocks (see
 your agents) don't have to.
 
 **Testing and evaluating deployment configs is a first-class goal —
-for agents and humans.** A deploy config is only useful if you
-can prove it works. `ov` ships a goss-style declarative test framework
-(`eval:` checks baked into every image's OCI labels) plus disposable
-`kind: eval` test beds, so any image or deployment config is
-self-verifiable end-to-end. The same surface serves a human operator
-at the keyboard and an agent driving it: Claude Code sub-agents
-(`eval-bed-runner`, `deploy-verifier`) and dynamic workflows
-(`/verify-beds`, `/audit-deploy-configs`) run these beds to test and
-verify autonomously.
-→ [Evaluate](#evaluate), `/ov-eval:eval`, `/ov-internals:agents`.
+for agents and humans.** A deploy config is only useful if you can prove
+it works, so any image or deployment is self-verifiable end-to-end — the
+same surface whether a human drives it at the keyboard or an agent drives
+it autonomously. See [Evaluate](#evaluate) for the framework and
+[Works with Claude Code](#works-with-claude-code) for the agents and
+workflows. → `/ov-eval:eval`, `/ov-internals:agents`.
 
 **Rootless-first power-user images.** The four images carrying the
 full `ov` toolchain (`fedora-coder`, `fedora-ov`, `arch-ov`,
@@ -255,19 +244,13 @@ with zero additive capabilities via the surgical `unmask=/proc/*`
 security_opt from the `container-nesting` layer.
 → `/ov-distros:container-nesting`, `/ov-coder:fedora-coder`.
 
-**Sandboxed agent desktops.** Overthink flips the usual
-agent sandboxing model: instead of restricting what the
-agent can do, give it full access to a complete desktop
-(Chrome, Wayland compositor, dev tools, network services) and sandbox
-the *entire desktop* inside a container — candyboxing applied to a
-whole desktop (→ CLAUDE.md "Candyboxing").
-`/ov-openclaw:openclaw-desktop` is the all-in-one CachyOS streaming
-desktop: Selkies desktop + openclaw-full gateway + agent
-CLIs (claude-code, codex, gemini) + CPU ollama + nested `ov`. The
-agent (or the user) builds images, launches nested rootless
-pods, and creates libvirt VMs from a terminal inside the
-browser-accessible desktop — uid 1000, no `--privileged`, no added
-capabilities.
+**Sandboxed agent desktops.** [Candyboxing](#candyboxing) applied to a
+whole desktop: `/ov-openclaw:openclaw-desktop` is the all-in-one CachyOS
+streaming desktop — Selkies desktop + openclaw-full gateway + agent CLIs
+(claude-code, codex, gemini) + CPU ollama + nested `ov`. The agent (or the
+user) builds images, launches nested rootless pods, and creates libvirt
+VMs from a terminal inside the browser-accessible desktop — uid 1000, no
+`--privileged`, no added capabilities.
 
 ## Install
 
@@ -585,7 +568,7 @@ Gherkin-shaped descriptions on the same entries.
 
 → `/ov-eval:eval`, `/ov-eval:cdp`, `/ov-eval:wl`, `/ov-eval:dbus`,
 `/ov-eval:vnc`, `/ov-eval:spice`, `/ov-eval:libvirt`,
-`/ov-eval:record`, `/ov-eval:eval-k8s`, `/ov-eval:adb`,
+`/ov-eval:record`, `/ov-kubernetes:eval-k8s`, `/ov-eval:adb`,
 `/ov-eval:appium`, `/ov-eval:android`.
 
 ### Author with agents
@@ -621,7 +604,7 @@ stdio), so Claude Code, Codex, or any MCP client drives the full
 auto-fallback to `overthinkos/overthink` when no project is wired
 (opt out with `--no-default-repo`).
 
-→ `/ov-eval:eval`, `/ov-build:ov-mcp-cmd`, `/ov-tools:ov-mcp`,
+→ `/ov-eval:eval`, `/ov-build:ov-mcp-cmd`, `/ov-coder:ov-mcp`,
 `/ov-coder:claude-code`, `/ov-coder:codex`, `/ov-coder:gemini`.
 
 ### Manage
@@ -673,8 +656,8 @@ gateway exposing the entire surface as MCP tools.
 | **Image authoring (MCP-first)** | `ov box {set, add-candy, rm-candy, fetch, refresh, write, cat}` and `ov candy {set, add-rpm, add-deb, add-pac, add-aur}` | `/ov-image:image` "Authoring" + `/ov-image:layer` |
 | **Deployment** | `ov deploy {add, del, sync, from-box, export, import, show, reset, status, path}`; `ov config`; `ov start`, `ov stop`, `ov restart`, `ov update`, `ov remove` | `/ov-core:deploy`, `/ov-core:ov-config`, `/ov-core:start`, `/ov-core:stop`, `/ov-core:ov-update`, `/ov-core:remove`, `/ov-local:local-deploy`, `/ov-kubernetes:kubernetes`, `/ov-internals:vm-deploy-target` |
 | **Runtime** | `ov shell`, `ov cmd`, `ov service`, `ov status`, `ov logs`, `ov tmux` | `/ov-core:shell`, `/ov-core:cmd`, `/ov-core:service`, `/ov-core:ov-status`, `/ov-core:logs`, `/ov-automation:tmux` |
-| **Test + probes** | `ov eval {image, live, run}` + the 11 live probe verbs (`cdp`, `wl`, `dbus`, `vnc`, `mcp`, `record`, `spice`, `libvirt`, `k8s`, `adb`, `appium`); `ov feature {list, pending, validate}` | `/ov-eval:eval`, `/ov-eval:cdp`, `/ov-eval:wl`, `/ov-eval:dbus`, `/ov-eval:vnc`, `/ov-eval:spice`, `/ov-eval:libvirt`, `/ov-eval:record`, `/ov-eval:eval-k8s`, `/ov-eval:adb`, `/ov-eval:appium` |
-| **MCP gateway** | `ov mcp {serve, ping, servers, list-tools, list-resources, list-prompts, call, read}` | `/ov-build:ov-mcp-cmd`, `/ov-tools:ov-mcp` |
+| **Test + probes** | `ov eval {image, live, run}` + the 11 live probe verbs (`cdp`, `wl`, `dbus`, `vnc`, `mcp`, `record`, `spice`, `libvirt`, `k8s`, `adb`, `appium`); `ov feature {list, pending, validate}` | `/ov-eval:eval`, `/ov-eval:cdp`, `/ov-eval:wl`, `/ov-eval:dbus`, `/ov-eval:vnc`, `/ov-eval:spice`, `/ov-eval:libvirt`, `/ov-eval:record`, `/ov-kubernetes:eval-k8s`, `/ov-eval:adb`, `/ov-eval:appium` |
+| **MCP gateway** | `ov mcp {serve, ping, servers, list-tools, list-resources, list-prompts, call, read}` | `/ov-build:ov-mcp-cmd`, `/ov-coder:ov-mcp` |
 | **VM** | `ov vm {build, create, start, stop, destroy, snapshot, clone, console, ssh, import, list}` | `/ov-vm:vm`, `/ov-vm:vms-catalog`, `/ov-internals:vm-deploy-target` |
 | **Schema migration** | `ov migrate` (single idempotent chain) | `/ov-build:migrate` |
 | **Secrets & config** | `ov secrets`, `ov settings`, `ov alias`, `ov udev` | `/ov-build:secrets`, `/ov-build:settings`, `/ov-automation:alias`, `/ov-automation:udev` |
@@ -840,10 +823,10 @@ agent, testing and verifying deployments uses the one surface.
 → `/ov-internals:agents`.
 
 See [VISION.md](VISION.md) for the long-term thesis and direction,
-[CLAUDE.md](CLAUDE.md) for the complete system specification,
-[plugins/README.md](plugins/README.md) for the full skill index,
-and [CHANGELOG.md](CHANGELOG.md) for dated history (by policy,
-never duplicated here or in skills).
+[CLAUDE.md](CLAUDE.md) for the project's rules and mandates,
+[plugins/README.md](plugins/README.md) for the full skill index (usage
+and architecture live in the skills), and [CHANGELOG.md](CHANGELOG.md)
+for dated history (by policy, never duplicated here or in skills).
 
 ## License
 

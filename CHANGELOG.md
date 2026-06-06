@@ -22,6 +22,58 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-06 — docs: restructure README + CLAUDE.md, de-dup within/across, enforce the five-way doc split, fix skill refs
+
+A documentation-only cutover that made `README.md` and `CLAUDE.md` obey the
+five-way doc-role split (rules → CLAUDE.md, features/commands → README.md,
+usage/architecture → skills, history → CHANGELOG.md, thesis → VISION.md) that
+both `VISION.md`'s footer and CLAUDE.md's "Where things are documented" already
+codified but neither top-level doc fully honored.
+
+**CLAUDE.md (786 → 433 lines), heading-preserving full restructure.** Reordered
+into a clean arc — R0 (skills first) → the philosophy pillars (Candyboxing /
+RDD / ADD / Prioritize Clean Architecture, in VISION's order, as the *why*) →
+the Ground Truth Rules R1–R10 with the Disposable-Only Autonomy + R10 block
+placed immediately after R1–R9 so the ten rules read together → the cutover +
+post-execution process → a Key Rules technical index → AI Attribution → Where
+things are documented. De-duplication removed the redundant *restatements*
+without changing any rule's normative meaning: the triple-stated R3/R4/R5 (Ground
+Truth Rules + "Prioritize Clean Architecture" sub-paragraphs + cutover
+anti-patterns) collapsed to one canonical statement each plus pointers; the two
+near-identical gate checklists ("End-of-turn" + "post-execution") merged into one
+**Acceptance checklist** (the union of every distinct check, grouped
+verify / acceptance / land); the "Agents, Workflows & Teams", "Hard Cutover by
+Default", and "Post-Execution Policies" sections trimmed to their mandate plus a
+pointer to the skill that already owns the operational detail
+(`/ov-internals:agents`, `/ov-internals:cutover-policy`,
+`/ov-internals:git-workflow`, `/ov-internals:strict-policy`); the "Key Rules"
+mega-list split so the entries that duplicated a dedicated section became one-line
+pointers while the genuinely-unique technical rules stayed in full. R0 and R10
+emphasis was left intact, and every section name that skills/README quote
+(`Candyboxing`, `Risk Driven Development (RDD)`, `Agent Driven Development (ADD)`,
+`AI Attribution`, `Post-Execution Policies`, `Hard Cutover by Default`, `Ground
+Truth Rules`, `Prioritize Clean Architecture Above All Else`, `Where things are
+documented`, `Key Rules`, `Agents, Workflows & Teams`) plus the quoted Key-Rules
+phrases (`Init-system polymorphism via mixed service: entries`, `Cross-kind name
+reuse is permitted and encouraged`, `Deploy fetches NOTHING speculative`) and the
+three "Prioritize Clean Architecture" sub-labels were preserved verbatim so no
+skill cross-reference broke.
+
+**README.md (850 → 833 lines).** The "Core concepts" Candyboxing / RDD / ADD
+blurbs were trimmed to crisp what-you-get + which-command/kind feature
+descriptions that link out (`→ VISION.md` for the why, `CLAUDE.md "<section>"`
+for the rule, the relevant skill for usage) instead of re-narrating VISION's
+thesis prose. "Why Overthink?" stopped re-explaining candyboxing and
+re-describing the eval/agents surface (those link to the Candyboxing concept,
+[Evaluate], and [Works with Claude Code]). The footer doc-map was aligned to the
+five-way split.
+
+**Skill-reference bugs fixed.** A 297-skill cross-check of every `/ov-…:…`
+reference in both files surfaced two broken refs in README, both fixed:
+`/ov-eval:eval-k8s` → `/ov-kubernetes:eval-k8s` (the form CLAUDE.md already
+used) and `/ov-tools:ov-mcp` → `/ov-coder:ov-mcp` (the nested ov MCP server
+skill), each in two places.
+
 ### 2026-06-06 — feat: generic + deterministic Debian/Ubuntu (and all distro+version) package/repo resolution — the distro-specificity cascade
 
 A `candy.yml` layer declared packages per distro under the `distro:` map. The

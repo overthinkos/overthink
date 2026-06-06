@@ -182,7 +182,7 @@ func TestValidateCoprWithoutPackages(t *testing.T) {
 	if err == nil {
 		t.Error("expected error for rpm.copr without rpm.packages")
 	}
-	if !strings.Contains(err.Error(), "rpm.copr requires rpm.packages") {
+	if !strings.Contains(err.Error(), "rpm.copr requires packages") {
 		t.Errorf("unexpected error: %v", err)
 	}
 }
@@ -196,16 +196,16 @@ func TestValidateReposWithoutPackages(t *testing.T) {
 			Name:  "layer",
 			tasks: []Task{{Cmd: "true"}}, // needs some install file
 			formatSections: map[string]*PackageSection{
-				"rpm": {FormatName: "rpm", Raw: map[string]interface{}{"repos": []interface{}{map[string]interface{}{"name": "test", "url": "http://example.com"}}}},
+				"rpm": {FormatName: "rpm", Raw: map[string]interface{}{"repo": []interface{}{map[string]interface{}{"name": "test", "url": "http://example.com"}}}},
 			},
 		},
 	}
 
 	err := Validate(cfg, vLayers(layers), testProjectDir(t), ResolveOpts{})
 	if err == nil {
-		t.Error("expected error for rpm.repos without rpm.packages")
+		t.Error("expected error for rpm.repo without packages")
 	}
-	if !strings.Contains(err.Error(), "rpm.repos requires rpm.packages") {
+	if !strings.Contains(err.Error(), "rpm.repo requires packages") {
 		t.Errorf("unexpected error: %v", err)
 	}
 }
@@ -228,7 +228,7 @@ func TestValidateModulesWithoutPackages(t *testing.T) {
 	if err == nil {
 		t.Error("expected error for rpm.modules without rpm.packages")
 	}
-	if !strings.Contains(err.Error(), "rpm.modules requires rpm.packages") {
+	if !strings.Contains(err.Error(), "rpm.modules requires packages") {
 		t.Errorf("unexpected error: %v", err)
 	}
 }
@@ -283,7 +283,7 @@ func TestValidatePacReposMissingName(t *testing.T) {
 			formatSections: map[string]*PackageSection{
 				"pac": {FormatName: "pac", Packages: []string{"pkg"}, Raw: map[string]interface{}{
 					"packages": []interface{}{"pkg"},
-					"repos":    []interface{}{map[string]interface{}{"server": "https://example.com"}},
+					"repo":     []interface{}{map[string]interface{}{"server": "https://example.com"}},
 				}},
 			},
 		},

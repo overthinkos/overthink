@@ -1,5 +1,5 @@
 candy:
-    version: 2026.144.1443
+    version: 2026.157.1134
     name: dev-tools
     package:
         - bat
@@ -77,19 +77,12 @@ candy:
             option:
                 - "--setopt=tsflags=noscripts"
         ubuntu:
-            package:
-                - android-sdk-platform-tools
-                - bridge-utils
-                - debootstrap
-                - fastfetch
-                - fd-find
-                - libfuse-dev
-                - libfuse3-dev
-                - qemu-system-x86
-                - qemu-user-static
-                - qemu-utils
-                - shellcheck
-        ubuntu-24.04:
+            # fastfetch is NOT in Ubuntu noble main (Debian trixie + Fedora + Arch
+            # ship it under the same name). Under the distro-specificity cascade,
+            # packages UNION across the matching chain ([ubuntu:24.04, ubuntu]) —
+            # cascade cannot SUBTRACT — so fastfetch must simply never appear on
+            # any ubuntu level (express the exclusion structurally, not by a
+            # version override that a broader level would re-add).
             package:
                 - android-sdk-platform-tools
                 - bridge-utils
@@ -120,16 +113,16 @@ candy:
         - id: bat-binary
           file: /usr/bin/bat
           exists: true
-        # fastfetch is not in Ubuntu 24.04 noble main (Debian 13 trixie ships it
-        # under the same name, as does Fedora/Arch). Skip the probe on Ubuntu
-        # 24.04 — the ubuntu:24.04 tag section in this layer deliberately drops
-        # fastfetch from the package list on that distro. exclude_distros: is
-        # honored by ov/testrun.go; matches any of the image's distro tags.
+        # fastfetch is not in Ubuntu noble main (Debian trixie + Fedora + Arch
+        # ship it under the same name). The ubuntu section deliberately omits it
+        # (the cascade cannot subtract, so it is absent on EVERY ubuntu level) —
+        # skip the probe on ubuntu. exclude_distro matches any of the image's
+        # distro tags, so the bare `ubuntu` tag covers ubuntu:24.04 and beyond.
         - id: fastfetch-binary
           file: /usr/bin/fastfetch
           exists: true
           exclude_distro:
-            - ubuntu:24.04
+            - ubuntu
         - id: neovim-binary
           file: /usr/bin/nvim
           exists: true

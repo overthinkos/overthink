@@ -14,7 +14,15 @@ type DistroConfig struct {
 
 // DistroDef defines distro-specific bootstrap, workarounds, and package formats.
 type DistroDef struct {
-	Inherits    string                `yaml:"inherits,omitempty"`
+	Inherits string `yaml:"inherits,omitempty"`
+	// Version is the canonical distro version (e.g. "13" for debian, "24.04" for
+	// ubuntu, "43" for fedora) — the single source for synthesizing the
+	// per-version tag chain ([<distro>:<version>, <distro>]) on a target that
+	// carries only a bare distro name (notably a VM deploy via syntheticVmImage,
+	// where no image-authored distro: tag supplies the version). Empty for rolling
+	// distros (arch/cachyos). Image builds already carry the version in their own
+	// distro: tags. Inherited child-wins via resolveInherits. See distroTagChain.
+	Version     string                `yaml:"version,omitempty"`
 	Bootstrap   BootstrapDef          `yaml:"bootstrap"`
 	Workarounds []string              `yaml:"workaround,omitempty"`
 	Format      map[string]*FormatDef `yaml:"format,omitempty"`
@@ -388,6 +396,10 @@ func (dc *DistroConfig) resolveInherits(def *DistroDef, maxDepth int) *DistroDef
 	if dnf == nil {
 		dnf = resolved.Dnf
 	}
+	version := def.Version
+	if version == "" {
+		version = resolved.Version
+	}
 
 	if def.Bootstrap.InstallCmd != "" {
 		// Child has its own bootstrap. Merge inherited optional sub-blocks
@@ -398,6 +410,7 @@ func (dc *DistroConfig) resolveInherits(def *DistroDef, maxDepth int) *DistroDef
 		}
 		merged := &DistroDef{
 			Inherits:        def.Inherits,
+			Version:         version,
 			Bootstrap:       def.Bootstrap,
 			Workarounds:     def.Workarounds,
 			Format:          formats,
@@ -418,6 +431,7 @@ func (dc *DistroConfig) resolveInherits(def *DistroDef, maxDepth int) *DistroDef
 	}
 	merged := &DistroDef{
 		Inherits:        def.Inherits,
+		Version:         version,
 		Bootstrap:       resolved.Bootstrap,
 		Workarounds:     resolved.Workarounds,
 		Format:          formats,
@@ -472,6 +486,23 @@ func (dc *DistroConfig) AllFormatNames() []string {
 	}
 	sortStrings(names)
 	return names
+}
+
+// distroTagChain builds the most-specific-first distro tag chain used by the
+// cascade resolver: [<distro>:<version>, <distro>] when a canonical version is
+// known (e.g. ["ubuntu:24.04", "ubuntu"]), or just [<distro>] for a rolling
+// distro with no version (arch/cachyos). It is the single helper that gives VM
+// deploys the same per-version reach image builds get from their authored
+// distro: tags — syntheticVmImage uses it so a target:vm deploy of an ubuntu
+// guest can select an `ubuntu-24.04` tag section, not only the bare `ubuntu` one.
+func distroTagChain(distro, version string) []string {
+	if distro == "" {
+		return nil
+	}
+	if version == "" {
+		return []string{distro}
+	}
+	return []string{distro + ":" + version, distro}
 }
 
 // PrimaryFormat returns the distro's primary package format — the single

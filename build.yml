@@ -632,6 +632,9 @@ distro:
                 [extra]
                 Include = /etc/pacman.d/mirrorlist
     debian:
+        # Canonical version — feeds distroTagChain([debian:13, debian]) so a
+        # target:vm deploy reaches per-version tag sections (the deb VM beds).
+        version: "13"
         bootstrap:
             install_cmd: apt-get update && apt-get install -y --no-install-recommends
             package:
@@ -883,6 +886,9 @@ distro:
                 UUID=${ESP_UUID}   /boot/efi  vfat  rw,relatime,fmask=0022,dmask=0022,codepage=437,iocharset=ascii,shortname=mixed,utf8,nofail  0 2
                 FSTAB
     fedora:
+        # Canonical version — feeds distroTagChain([fedora:43, fedora]) on a
+        # target:vm deploy so per-version tag sections are reachable.
+        version: "43"
         bootstrap:
             install_cmd: dnf install -y --setopt=install_weak_deps=False
             package:
@@ -995,6 +1001,9 @@ distro:
                     {{- end}}
     ubuntu:
         inherits: debian
+        # Ubuntu sets its OWN version (child-wins over debian's "13"), so
+        # distroTagChain yields [ubuntu:24.04, ubuntu] on a target:vm deploy.
+        version: "24.04"
         bootstrap:
             install_cmd: ""
             package: []

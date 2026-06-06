@@ -37,7 +37,7 @@ import (
 type LedgerPaths struct {
 	Root     string // ~/.config/overthink/installed
 	Deploys  string // <Root>/deploys/
-	Layers   string // <Root>/candy/
+	Layers   string // <Root>/layers/
 	LockFile string // <Root>/.lock
 }
 
@@ -328,14 +328,22 @@ func AddLayerDeploymentVia(exec DeployExecutor, paths *LedgerPaths, layerName, d
 		return AddLayerDeployment(paths, layerName, deployID, update)
 	}
 	ctx := context.Background()
-	// Substrate ledger path: ~/.config/overthink/installed/candy/<name>.json
-	// — ~ resolves in the substrate shell, not operator shell.
-	remoteFile := "~/.config/overthink/installed/candy/" + layerName + ".json"
-	// Create BOTH installed/layers and installed/deploys so the full
-	// ledger directory tree (matching Ensure()) exists on the substrate.
-	// Ensures bed tests like `test -d ~/.config/overthink/installed/deploys`
-	// pass even when no DeployRecord has been written yet.
-	mkdirScript := "mkdir -p ~/.config/overthink/installed/layers ~/.config/overthink/installed/deploys"
+	// Substrate ledger dirs. The layers-dir basename stays `layers` (NOT `candy`)
+	// — it must match DefaultLedgerPaths.Layers and the path the local reader
+	// expects (the box/candy rebrand deliberately preserved this on-disk ledger
+	// path). Single-source layersDir/deploysDir so the write target and the mkdir
+	// can NEVER diverge again (the rebrand's bug was exactly that divergence —
+	// write went to installed/candy/ while mkdir created installed/layers/, so the
+	// write failed on every fresh substrate). `~` resolves in the substrate shell.
+	const installedRoot = "~/.config/overthink/installed"
+	layersDir := installedRoot + "/layers"
+	deploysDir := installedRoot + "/deploys"
+	remoteFile := layersDir + "/" + layerName + ".json"
+	// Create BOTH installed/layers and installed/deploys so the full ledger
+	// directory tree (matching Ensure()) exists on the substrate — ensures bed
+	// tests like `test -d ~/.config/overthink/installed/deploys` pass even when no
+	// DeployRecord has been written yet.
+	mkdirScript := "mkdir -p " + layersDir + " " + deploysDir
 	data, err := exec.GetFile(ctx, remoteFile, false, EmitOpts{})
 	var rec *CandyRecord
 	if err == nil && len(data) > 0 {

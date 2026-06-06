@@ -253,10 +253,10 @@ func resolveProjectFile(projectDir, relPath string) (string, error) {
 
 type CandyCmd struct {
 	Set         CandySetCmd         `cmd:"" help:"Set a value in a candy manifest by dot-path"`
-	AddRpm      CandyAddPkgCmd      `cmd:"add-rpm" help:"Append packages to a layer's rpm.packages list"`
-	AddDeb      CandyAddPkgCmd      `cmd:"add-deb" help:"Append packages to a layer's deb.packages list"`
-	AddPac      CandyAddPkgCmd      `cmd:"add-pac" help:"Append packages to a layer's pac.packages list"`
-	AddAur      CandyAddPkgCmd      `cmd:"add-aur" help:"Append packages to a layer's aur.packages list"`
+	AddRpm      CandyAddPkgCmd      `cmd:"add-rpm" help:"Append packages to a layer's distro.fedora.package list"`
+	AddDeb      CandyAddPkgCmd      `cmd:"add-deb" help:"Append packages to a layer's shared distro.'debian,ubuntu'.package list"`
+	AddPac      CandyAddPkgCmd      `cmd:"add-pac" help:"Append packages to a layer's distro.arch.package list"`
+	AddAur      CandyAddPkgCmd      `cmd:"add-aur" help:"Append packages to a layer's distro.arch.aur.package list"`
 	AddScenario CandyAddScenarioCmd `cmd:"add-scenario" help:"Append a Gherkin acceptance scenario to a layer's description (idempotent; Agent Driven Development)"`
 }
 
@@ -332,12 +332,28 @@ func detectPkgSection(args []string) string {
 	return "rpm"
 }
 
-// appendLayerPackages reads the candy manifest, appends packages to
-// <section>.packages (creating the parent mappings as needed), and writes
-// back — preserving comments via the yaml.Node API.
+// sectionDistroPath maps an add-<fmt> section name to the `distro:` map path its
+// packages land under in the cascade schema. Packages live ONLY under the
+// `distro:` map now — `add-rpm`→fedora, `add-pac`→arch, `add-aur`→arch.aur, and
+// `add-deb`→the shared `debian,ubuntu` compound (the common case; per-distro or
+// per-version overrides are authored with `ov candy set distro.<tag>.package`).
+var sectionDistroPath = map[string][]string{
+	"rpm": {"distro", "fedora"},
+	"deb": {"distro", "debian,ubuntu"},
+	"pac": {"distro", "arch"},
+	"aur": {"distro", "arch", "aur"},
+}
+
+// appendLayerPackages reads the candy manifest, appends packages to the
+// `distro:` map section the add-<fmt> command targets (creating the parent
+// mappings as needed), and writes back — preserving comments via the yaml.Node API.
 func appendLayerPackages(name, section string, pkgs []string) error {
 	if len(pkgs) == 0 {
 		return fmt.Errorf("no packages specified")
+	}
+	path, ok := sectionDistroPath[section]
+	if !ok {
+		return fmt.Errorf("unknown package section %q", section)
 	}
 	dir, err := os.Getwd()
 	if err != nil {
@@ -352,25 +368,21 @@ func appendLayerPackages(name, section string, pkgs []string) error {
 	if err := yaml.Unmarshal(data, &root); err != nil {
 		return fmt.Errorf("parsing %s: %w", layerYml, err)
 	}
-	// Candy manifests are kind-keyed under `candy:` — package sections
-	// (rpm/deb/pac/aur) live INSIDE that wrapper, not at the document root.
+	// Candy manifests are kind-keyed under `candy:`; package declarations live
+	// under the `distro:` map inside that wrapper (distro.<name>[.aur].package).
 	candy, err := candyBodyNode(&root)
 	if err != nil {
 		return fmt.Errorf("%s: %w", layerYml, err)
 	}
-	sectionNode := mappingChild(candy, section)
-	if sectionNode == nil {
-		sectionNode = &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
-		candy.Content = append(candy.Content,
-			&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: section},
-			sectionNode,
-		)
+	sectionNode := candy
+	for _, key := range path {
+		sectionNode = ensureMappingChild(sectionNode, key)
 	}
-	pkgsNode := mappingChild(sectionNode, "packages")
+	pkgsNode := mappingChild(sectionNode, "package")
 	if pkgsNode == nil {
 		pkgsNode = &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq"}
 		sectionNode.Content = append(sectionNode.Content,
-			&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "packages"},
+			&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "package"},
 			pkgsNode,
 		)
 	} else if pkgsNode.Kind != yaml.SequenceNode {

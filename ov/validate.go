@@ -713,33 +713,45 @@ func validateEnvFiles(layers map[string]*Layer, errs *ValidationError) {
 	}
 }
 
-// validatePkgConfig validates format-specific config in the candy manifest.
-// Uses generic FormatSection access — no format-specific code.
+// validatePkgConfig validates per-distro/format package config in the candy
+// manifest. Packages live in per-distro tag sections (debian, ubuntu, debian:13,
+// …) plus the always-included top-level base; the only format section is `aur`.
+// repo/copr/module entries are meaningful only when the layer installs packages,
+// but a repo may sit on one distro level while the package it serves sits at the
+// top-level base (the nodesource pattern) — so the "requires packages" gate is
+// the WHOLE-LAYER union (HasAnyPackages), not the single section. Repo entries
+// must carry a name. The canonical repo key is `repo` (singular) — what
+// derivePackageSectionsFromCalamares writes and DistroPackages.Repo unmarshals.
 func validatePkgConfig(layers map[string]*Layer, errs *ValidationError) {
+	validateRaw := func(name, label string, raw map[string]interface{}, layerHasPkgs bool) {
+		if raw == nil {
+			return
+		}
+		if repos := toMapSlice(raw["repo"]); len(repos) > 0 {
+			if !layerHasPkgs {
+				errs.Add("layer %q candy manifest: %s.repo requires packages (none declared anywhere in the layer)", name, label)
+			}
+			for _, repo := range repos {
+				repoName := fmt.Sprint(repo["name"])
+				if repoName == "" || repoName == "<nil>" {
+					errs.Add("layer %q candy manifest: %s.repo entry requires name", name, label)
+				}
+			}
+		}
+		if copr := toStringSlice(raw["copr"]); len(copr) > 0 && !layerHasPkgs {
+			errs.Add("layer %q candy manifest: %s.copr requires packages", name, label)
+		}
+		if modules := toStringSlice(raw["modules"]); len(modules) > 0 && !layerHasPkgs {
+			errs.Add("layer %q candy manifest: %s.modules requires packages", name, label)
+		}
+	}
 	for name, layer := range layers {
+		hasPkgs := layer.HasAnyPackages()
+		for tag, cfg := range layer.tagSections {
+			validateRaw(name, "distro."+tag, cfg.Raw, hasPkgs)
+		}
 		for formatName, section := range layer.formatSections {
-			if section.Raw == nil {
-				continue
-			}
-			// Validate repos entries have required fields
-			if repos := toMapSlice(section.Raw["repos"]); len(repos) > 0 {
-				if len(section.Packages) == 0 {
-					errs.Add("layer %q candy manifest: %s.repos requires %s.packages", name, formatName, formatName)
-				}
-				for _, repo := range repos {
-					repoName := fmt.Sprint(repo["name"])
-					if repoName == "" || repoName == "<nil>" {
-						errs.Add("layer %q candy manifest: %s.repos entry requires name", name, formatName)
-					}
-				}
-			}
-			// Validate copr/modules require packages
-			if copr := toStringSlice(section.Raw["copr"]); len(copr) > 0 && len(section.Packages) == 0 {
-				errs.Add("layer %q candy manifest: %s.copr requires %s.packages", name, formatName, formatName)
-			}
-			if modules := toStringSlice(section.Raw["modules"]); len(modules) > 0 && len(section.Packages) == 0 {
-				errs.Add("layer %q candy manifest: %s.modules requires %s.packages", name, formatName, formatName)
-			}
+			validateRaw(name, formatName, section.Raw, hasPkgs)
 		}
 	}
 }
@@ -1455,8 +1467,8 @@ func validatePackagedServices(cfg *Config, layers map[string]*Layer, errs *Valid
 				errs.Add("layer %q: service[%d] use_packaged %q must be a unit name (no paths or spaces)", name, i, unit)
 			}
 		}
-		if layerHasPackaged(layer) && !layer.HasFormatPackages() {
-			errs.Add("layer %q: use_packaged entries require layer format packages that provide those units", name)
+		if layerHasPackaged(layer) && !layer.HasAnyPackages() {
+			errs.Add("layer %q: use_packaged entries require layer packages (distro tag sections or top-level package:) that provide those units", name)
 		}
 	}
 

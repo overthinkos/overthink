@@ -160,13 +160,11 @@ import: [bundle.yml]
 	writeFixture(t, root, "bundle.yml", `---
 candy:
   name: chrome
-  rpm:
-    package: [chromium]
+  package: [chromium]
 ---
 candy:
   name: firefox
-  rpm:
-    package: [firefox]
+  package: [firefox]
 ---
 box:
   name: browsers
@@ -214,13 +212,11 @@ func TestLoadUnified_DiscoverLayers(t *testing.T) {
 	// Canonical kind-keyed candy.yml manifests; discovery routes by shape.
 	writeFixture(t, root, "candy/chrome/candy.yml", `candy:
   version: "1"
-  rpm:
-    package: [chromium]
+  package: [chromium]
 `)
 	writeFixture(t, root, "candy/firefox/candy.yml", `candy:
   version: "1"
-  rpm:
-    package: [firefox]
+  package: [firefox]
 `)
 	writeFixture(t, root, "overthink.yml", `version: 2026.157.311
 discover:
@@ -245,7 +241,7 @@ func TestLoadUnified_DiscoverExplicitWinsOverDiscovered(t *testing.T) {
 	root := t.TempDir()
 	writeFixture(t, root, "candy/chrome/candy.yml", `candy:
   version: "from-disk"
-  rpm: { packages: [chromium] }
+  package: [chromium]
 `)
 	writeFixture(t, root, "overthink.yml", `version: 2026.157.311
 discover:
@@ -312,8 +308,7 @@ func TestLoadUnified_DiscoverConfigurableManifest(t *testing.T) {
 	root := t.TempDir()
 	writeFixture(t, root, "stuff/widget/thing.yml", `candy:
   version: "1"
-  rpm:
-    package: [widget]
+  package: [widget]
 `)
 	writeFixture(t, root, "overthink.yml", `version: 2026.157.311
 discover:

@@ -22,6 +22,124 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-06 — feat: generic + deterministic Debian/Ubuntu (and all distro+version) package/repo resolution — the distro-specificity cascade
+
+A `candy.yml` layer declared packages per distro under the `distro:` map. The
+post-parse bridge `derivePackageSectionsFromCalamares` mapped **bare** distro
+keys to a shared package-FORMAT section (`debian`→deb, `ubuntu`→deb,
+`fedora`→rpm, `arch`→pac). Because Debian AND Ubuntu both fed the single `deb`
+format section, three defects followed:
+
+1. **Non-deterministic repo (the trigger).** `mergeRaw` was first-writer-wins
+   over Go's randomized map iteration, so when debian and ubuntu declared
+   *different* repos (`candy/ov`'s tailscale: `…/debian trixie` vs `…/ubuntu
+   noble`) the emitted `.list` suite was random run-to-run — a Debian deploy
+   could land the `noble` repo. Reachable on real VM deploys.
+2. **Package cross-contamination.** `addPackages` UNIONED debian's and ubuntu's
+   package lists into the one `deb` section, so genuinely different package
+   *names* per distro were unexpressible.
+3. **VM deploys couldn't reach per-version sections.** `syntheticVmImage` set
+   `img.Distro` to a single bare name, so a `target: vm` deploy never selected
+   `ubuntu-24.04`.
+
+Plus a documentation/implementation drift: `/ov-image:layer` documented
+top-level `rpm:`/`deb:` package-format keys and top-level `debian:13:` /
+`debian,ubuntu:` tag keys as canonical, but a census found **0 real uses** —
+the real surface was the `distro:` map (106 layers).
+
+**The cutover** makes the `distro:` map the SINGLE package surface and resolves
+it via a most-specific-first CASCADE:
+
+- **Parser** (`derivePackageSectionsFromCalamares`): every `distro:` key — bare
+  (`debian`), versioned (`debian-13`→`debian:13`), or compound (`debian,ubuntu`
+  split into one tag each) — routes to a per-distro/version TAG section. NO
+  distro key feeds a shared format section anymore (each distro owns its own
+  section, so two distros sharing a package format can never race — the
+  determinism fix). The arch `aur:` sub-block keeps its dedicated `aur` build
+  format. Top-level `package:` is recorded on `layer.topPackages` and folded at
+  RESOLVE time (folding it at parse was the contamination source). Sorted
+  iteration makes derive deterministic regardless of map order. `CandyYAML.
+  UnmarshalYAML` is now typo-detection only — the top-level format/tag-key parse
+  branches (and the `FormatSections`/`TagSections` fields) are deleted; a stray
+  `rpm:`/`debian:13:` is a hard load error pointing at `ov migrate`.
+- **Resolver — ONE shared `resolveCascadePackages`, build AND deploy.** The
+  single cascade resolver walks `img.Distro` most-specific → least, plus the
+  top-level base. Packages UNION (deduped); `repo`/`copr`/`option`/`exclude`/
+  `module` resolve most-specific-wins; emits the image's primary format. Both
+  `compileSystemPackageSteps` (deploy compiler) AND `generate.go`'s
+  Containerfile emitter (image build) call it — so build and deploy can NEVER
+  diverge. **This corrected a latent split the cutover surfaced:** the image-BUILD
+  path had its OWN duplicate "Phase 1 first-match-STOP + Phase 2 format-section"
+  resolution that read only `TagSection`/`FormatSection` and **silently dropped
+  every layer's top-level `package:` list** (proven on a real generate: nodejs's
+  `[nodejs, npm]` vanished from `fedora-builder`) AND used override (not union)
+  semantics — so a build and a deploy of the same layer disagreed. The duplicate
+  Phase1/Phase2 + the now-dead `renderFormatInstallFromPackages` are deleted (R3);
+  the two-phase first-match-STOP is gone everywhere. fedora/arch reach their
+  packages via the bare-distro tag.
+- **Version chain parity:** `DistroDef.Version` (build.yml `distro.debian.
+  version: "13"`, `ubuntu: "24.04"`, `fedora: "43"`; child-wins via
+  `resolveInherits`) feeds the new `distroTagChain(distro, version)` helper, so a
+  `target: vm` deploy synthesizes the same `[<distro>:<version>, <distro>]` chain
+  an image build carries — per-version selection reachable on both. The ubuntu
+  image chains dropped their hand-authored `debian` 3rd level (`image/ubuntu/
+  box.yml`) to stay symmetric with `distroTagChain`'s `[ubuntu:24.04, ubuntu]` —
+  safe because zero layers are debian-only (every deb-family layer carries an
+  explicit `ubuntu` section), and cascade-union would otherwise re-add
+  debian-only packages onto ubuntu.
+
+**Cascade cannot SUBTRACT.** Because packages union across the chain, a specific
+level cannot remove a package a broader level added — exclusions are expressed
+structurally. `candy/dev-tools` kept `fastfetch` (absent from Ubuntu's repos)
+only under `debian`+`fedora`+`arch`, never `ubuntu`; the redundant `ubuntu-24.04`
+section + the `exclude_distro: [ubuntu:24.04]` eval were deleted (now
+`exclude_distro: [ubuntu]`). `candy/gh`'s byte-identical debian+ubuntu repo
+collapsed to one compound `debian,ubuntu:` section. `candy/nodejs`'s
+`ubuntu-24.04` repo-only section — silently dropped by the old Phase-1-skip — now
+resolves the nodesource repo (a latent bug the cascade fixes).
+
+**Validation:** `validatePkgConfig` now reads the canonical `repo` key (the old
+`repos`-plural check was dead for real layers), validates TAG sections (where
+packages now live), and gates `repo`/`copr`/`module` on the whole-layer package
+union (so the nodesource pattern — repo on one level, package on another — is
+legal). The `use_packaged` service check uses `HasAnyPackages` (packages moved
+from format → tag sections). The `ov candy add-rpm`/`add-deb`/`add-pac`/`add-aur`
+editor commands were retargeted to write under the `distro:` map (`add-rpm`→
+`distro.fedora`, `add-deb`→the shared `debian,ubuntu` compound, `add-pac`→
+`distro.arch`, `add-aur`→`distro.arch.aur`) — they previously wrote the now-
+rejected top-level form.
+
+**No new migration step / no schema bump.** The existing `calamares` step
+(2026.123.1351) already rewrites every legacy top-level form (format keys +
+colon/compound tags) into the `distro:` map — RDD-verified — and `ov migrate`
+runs the whole chain idempotently regardless of a config's current version, so a
+new `distro-cascade` step would duplicate it (R3), and the authoring schema (the
+`distro:` map) is unchanged, so a version bump (which would needlessly trip the
+`@github` cache-migration trap and force every user to re-migrate) is not
+warranted.
+
+**Blocking issue surfaced + fixed (R2).** The deb VM beds initially FAILED — not
+on the cascade (tailscale installed from `…/debian trixie` ✓) but on the deploy
+LEDGER: `VmDeployTarget` wrote `~/.config/overthink/installed/candy/<layer>.json`
+while the mkdir created `installed/layers/`, so the write failed on every fresh
+substrate. RCA: the box/candy rebrand sweep (commit c788cc7) over-rebranded the
+ledger WRITE path `layers`→`candy` but left the mkdir + `DefaultLedgerPaths` +
+the local reader at `layers` — violating that cutover's own "preserve the
+on-disk `installed/layers` ledger path" decision; the rebrand's R10 never ran the
+deb VM beds, so this cutover's R10 surfaced it. Fixed in `ov/install_ledger.go`
+by single-sourcing the layers/deploys dirs in `AddLayerDeploymentVia` so the
+write target and the mkdir can never diverge again (R3/R4), restoring the
+canonical `installed/layers` path.
+
+**Proof.** Go unit tests (`ov/distro_cascade_test.go`): parser routing, cascade
+union + most-specific-wins, a 50-iteration determinism guard (debian→trixie,
+ubuntu→noble under shuffled map order), `distroTagChain`, `DistroDef.Version`
+inheritance, and the calamares migration safety net. Real `ov box generate`:
+`image/debian` emits `…/debian trixie`, `image/ubuntu` emits `…/ubuntu noble` —
+deterministic per-distro, both `ov box validate` clean (zero warnings). The
+`eval-debian-debootstrap-vm` / `eval-ubuntu-debootstrap-vm` beds gained explicit
+suite witnesses (`tailscale-repo-suite-debian-trixie` / `…-ubuntu-noble`).
+
 ### 2026-06-06 — docs: complete the box/candy rebrand sweep (stale `ov image`/`ov layer`/`image.yml`/`layer.yml`/`layers/` references)
 
 The `image`→`box` / `layer`→`candy` rebrand had landed in the code + config

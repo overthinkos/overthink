@@ -1362,67 +1362,54 @@ func (g *Generator) writeLayerSteps(b *strings.Builder, layerName string, img *R
 		emitVarsEnv(b, layer.vars)
 	}
 
-	// 1. System packages from the candy manifest — fully config-driven.
-	// Phase 1: Walk distro: tags — first matching section wins (override).
-	// Phase 2: If no distro match, walk build: formats — ALL matching sections installed in order.
-	distroMatched := false
-	for _, tag := range img.Distro {
-		tagCfg := layer.TagSection(tag)
-		if tagCfg == nil || len(tagCfg.Package) == 0 {
-			continue
-		}
-		// Route through the primary format's full install_template so tag
-		// sections get the same schema (repos, options, keys) as `deb:` /
-		// `rpm:` / `pac:`. Falls back to the packages-only path if no
-		// Raw map was populated (legacy tag sections).
-		if img.DistroDef != nil {
-			if formatDef := img.DistroDef.Format[img.Pkg]; formatDef != nil && tagCfg.Raw != nil {
-				ctx := NewInstallContext(tagCfg.Raw, formatDef.CacheMount)
-				rendered, err := RenderTemplate(img.Pkg+"-tag-install", formatDef.InstallTemplate, ctx)
-				if err == nil {
-					b.WriteString(rendered)
-					distroMatched = true
-					break
-				}
+	// 1. System packages — resolved by THE shared distro-specificity cascade
+	// (resolveCascadePackages — the SAME resolver the deploy path uses, so build
+	// and deploy can never diverge). It folds the layer's top-level `package:`
+	// base, unions every matching distro tag section over img.Distro, and
+	// resolves repo/options/etc. most-specific-wins. Emits the PRIMARY format
+	// (img.Pkg) install; non-primary build formats (the `aur` builder) emit from
+	// their own format section below.
+	if pkgs, raw, matched := resolveCascadePackages(layer, img); (matched || len(pkgs) > 0) && img.DistroDef != nil {
+		if formatDef := img.DistroDef.Format[img.Pkg]; formatDef != nil {
+			ctx := NewInstallContext(raw, formatDef.CacheMount)
+			if rendered, err := RenderTemplate(img.Pkg+"-install", formatDef.InstallTemplate, ctx); err == nil {
+				b.WriteString(rendered)
 			}
 		}
-		g.renderFormatInstallFromPackages(b, tagCfg.Package, img.Pkg, img)
-		distroMatched = true
-		break
 	}
 
-	if !distroMatched {
-		for _, format := range img.BuildFormats {
-			section := layer.FormatSection(format)
-			if section == nil || len(section.Packages) == 0 {
-				continue
+	// Non-primary build formats (e.g. `aur` for build: [pac, aur]) are secondary
+	// BUILD formats consumed by a multi-stage builder, NOT distro package tags, so
+	// they emit from their own format section (the cascade above owns img.Pkg).
+	for _, format := range img.BuildFormats {
+		if format == img.Pkg {
+			continue // primary format handled by the cascade above
+		}
+		section := layer.FormatSection(format)
+		if section == nil || len(section.Packages) == 0 {
+			continue
+		}
+		if img.DistroDef == nil || img.DistroDef.Format == nil {
+			continue
+		}
+		formatDef := img.DistroDef.Format[format]
+		if formatDef == nil {
+			continue
+		}
+		if builderDef, ok := img.BuilderConfig.Builder[format]; ok && !builderDef.Inline {
+			// Format with builder: use the format's install_template (e.g., aur COPY + pacman -U)
+			ctx := &InstallContext{
+				CacheMounts: formatDef.CacheMount,
+				Packages:    section.Packages,
+				StageName:   fmt.Sprintf("%s-%s-build", layer.Name, format),
 			}
-			if img.DistroDef == nil || img.DistroDef.Format == nil {
-				continue
+			if rendered, err := RenderTemplate(format+"-install", formatDef.InstallTemplate, ctx); err == nil {
+				b.WriteString(rendered)
 			}
-			formatDef := img.DistroDef.Format[format]
-			if formatDef == nil {
-				continue
-			}
-			// Check if this format has a builder (multi-stage install step)
-			if builderDef, ok := img.BuilderConfig.Builder[format]; ok && !builderDef.Inline {
-				// Format with builder: use the format's install_template (e.g., aur COPY + pacman -U)
-				ctx := &InstallContext{
-					CacheMounts: formatDef.CacheMount,
-					Packages:    section.Packages,
-					StageName:   fmt.Sprintf("%s-%s-build", layer.Name, format),
-				}
-				rendered, err := RenderTemplate(format+"-install", formatDef.InstallTemplate, ctx)
-				if err == nil {
-					b.WriteString(rendered)
-				}
-			} else {
-				// Regular format: render install template
-				ctx := NewInstallContext(section.Raw, formatDef.CacheMount)
-				rendered, err := RenderTemplate(format+"-install", formatDef.InstallTemplate, ctx)
-				if err == nil {
-					b.WriteString(rendered)
-				}
+		} else {
+			ctx := NewInstallContext(section.Raw, formatDef.CacheMount)
+			if rendered, err := RenderTemplate(format+"-install", formatDef.InstallTemplate, ctx); err == nil {
+				b.WriteString(rendered)
 			}
 		}
 	}
@@ -1678,26 +1665,6 @@ func (g *Generator) buildStageContext(layer *Layer, builderName string, builderD
 	}
 
 	return ctx
-}
-
-// renderFormatInstallFromPackages renders install for a package list using the primary format's template.
-// Used for distro-override sections that only have packages (no repos, options, etc.).
-func (g *Generator) renderFormatInstallFromPackages(b *strings.Builder, packages []string, primaryFormat string, img *ResolvedBox) {
-	if img.DistroDef == nil {
-		return
-	}
-	formatDef := img.DistroDef.Format[primaryFormat]
-	if formatDef == nil {
-		return
-	}
-	ctx := &InstallContext{
-		CacheMounts: formatDef.CacheMount,
-		Packages:    packages,
-	}
-	rendered, err := RenderTemplate(primaryFormat+"-tag-install", formatDef.InstallTemplate, ctx)
-	if err == nil {
-		b.WriteString(rendered)
-	}
 }
 
 // writeLabels emits OCI LABEL directives with all runtime-relevant metadata.

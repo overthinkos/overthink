@@ -62,9 +62,9 @@ func TestAppendLayerScenario_UnderCandyWrapper(t *testing.T) {
 	}
 }
 
-// TestAppendLayerPackages_UnderCandyWrapper is the regression guard for the
-// box/candy-rename fix: package sections must be created INSIDE `candy:`, never
-// as a stray top-level `rpm:` the loader would ignore.
+// TestAppendLayerPackages_UnderCandyWrapper guards that add-<fmt> writes packages
+// INSIDE `candy:` under the canonical `distro:` map (add-rpm → distro.fedora.package),
+// never as a stray top-level key the loader would now reject.
 func TestAppendLayerPackages_UnderCandyWrapper(t *testing.T) {
 	dir := t.TempDir()
 	layerDir := filepath.Join(dir, "candy", "foo")
@@ -86,15 +86,22 @@ func TestAppendLayerPackages_UnderCandyWrapper(t *testing.T) {
 		t.Fatalf("re-parse: %v\n%s", err, data)
 	}
 	if _, stray := root["rpm"]; stray {
-		t.Fatalf("stray top-level rpm: introduced (the rename bug)\n%s", data)
+		t.Fatalf("stray top-level rpm: introduced\n%s", data)
+	}
+	if _, stray := root["distro"]; stray {
+		t.Fatalf("stray top-level distro: introduced (must be under candy:)\n%s", data)
 	}
 	candy := root["candy"].(map[string]any)
-	rpm, ok := candy["rpm"].(map[string]any)
+	distro, ok := candy["distro"].(map[string]any)
 	if !ok {
-		t.Fatalf("candy.rpm missing\n%s", data)
+		t.Fatalf("candy.distro missing\n%s", data)
 	}
-	pkgs := rpm["packages"].([]any)
+	fedora, ok := distro["fedora"].(map[string]any)
+	if !ok {
+		t.Fatalf("candy.distro.fedora missing (add-rpm → distro.fedora)\n%s", data)
+	}
+	pkgs := fedora["package"].([]any)
 	if len(pkgs) != 1 || pkgs[0] != "ripgrep" { // deduped
-		t.Fatalf("want [ripgrep] (deduped), got %v", pkgs)
+		t.Fatalf("want distro.fedora.package=[ripgrep] (deduped), got %v", pkgs)
 	}
 }

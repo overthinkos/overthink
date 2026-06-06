@@ -56,10 +56,20 @@ func TestLayerUnknownKeyRejected(t *testing.T) {
 			len(ly.Task), ly.Vars, ly.Layer, len(ly.SecretAccept))
 	}
 
-	// A valid distro tag carrying a package: list must still parse (not rejected).
+	// Packages live ONLY under the `distro:` map — a top-level distro-tag key
+	// (`fedora:43:`) is no longer a package surface and is rejected as an unknown
+	// key (see TestLegacyTopLevelFormatKeyRejected for the full set).
 	var ly2 CandyYAML
-	if err := yaml.Unmarshal([]byte("name: t\nfedora:43:\n  package: [vim]\n"), &ly2); err != nil {
-		t.Fatalf("distro tag with package: must parse, got error: %v", err)
+	if err := yaml.Unmarshal([]byte("name: t\nfedora:43:\n  package: [vim]\n"), &ly2); err == nil {
+		t.Fatal("top-level distro-tag key fedora:43: must be rejected (use the distro: map)")
+	}
+	// The distro: map form parses cleanly and routes to a tag section.
+	var ly3 CandyYAML
+	if err := yaml.Unmarshal([]byte("name: t\ndistro:\n  fedora-43:\n    package: [vim]\n"), &ly3); err != nil {
+		t.Fatalf("distro: map with fedora-43 must parse, got error: %v", err)
+	}
+	if ly3.Distro["fedora-43"] == nil || len(ly3.Distro["fedora-43"].Package) != 1 {
+		t.Errorf("distro.fedora-43 not parsed: %+v", ly3.Distro)
 	}
 }
 
@@ -118,29 +128,17 @@ func TestLayerNodejs(t *testing.T) {
 		t.Fatal("nodejs layer not found")
 	}
 
-	// Test package config from the candy manifest via generic FormatSection
-	rpm := nodejs.FormatSection("rpm")
-	if rpm == nil {
-		t.Fatal("nodejs should have rpm format section")
+	// nodejs declares ONLY a top-level package: list (no distro: overrides), so it
+	// becomes the always-included BASE (layer.TopPackages) that the cascade
+	// resolver folds in for EVERY distro. It is not a format/tag section.
+	if !reflect.DeepEqual(nodejs.TopPackages(), []string{"nodejs", "npm"}) {
+		t.Errorf("nodejs.TopPackages() = %v, want [nodejs npm]", nodejs.TopPackages())
 	}
-	if !reflect.DeepEqual(rpm.Packages, []string{"nodejs", "npm"}) {
-		t.Errorf("FormatSection(rpm).Packages = %v, want [nodejs npm]", rpm.Packages)
+	if nodejs.FormatSection("rpm") != nil || nodejs.FormatSection("deb") != nil || nodejs.FormatSection("pac") != nil {
+		t.Error("nodejs should have no format sections (top-level packages are the base, not a format section)")
 	}
-
-	deb := nodejs.FormatSection("deb")
-	if deb == nil {
-		t.Fatal("nodejs should have deb format section")
-	}
-	if !reflect.DeepEqual(deb.Packages, []string{"nodejs", "npm"}) {
-		t.Errorf("FormatSection(deb).Packages = %v, want [nodejs npm]", deb.Packages)
-	}
-
-	pac := nodejs.FormatSection("pac")
-	if pac == nil {
-		t.Fatal("nodejs should have pac format section")
-	}
-	if !reflect.DeepEqual(pac.Packages, []string{"nodejs", "npm"}) {
-		t.Errorf("FormatSection(pac).Packages = %v, want [nodejs npm]", pac.Packages)
+	if nodejs.TagSection("fedora") != nil || nodejs.TagSection("debian") != nil {
+		t.Error("nodejs should have no tag sections (no distro: map authored)")
 	}
 }
 
@@ -155,25 +153,30 @@ func TestLayerPacTool(t *testing.T) {
 		t.Fatal("pac-tool layer not found")
 	}
 
-	// Test pac config via generic FormatSection
-	pac := pacTool.FormatSection("pac")
-	if pac == nil {
-		t.Fatal("pac-tool should have pac format section")
+	// pac-tool declares distro.arch → the per-distro "arch" TAG section (bare
+	// distro keys route to tag sections now, not a shared format section). The
+	// arch.aur sub-block keeps its dedicated "aur" FORMAT section.
+	arch := pacTool.TagSection("arch")
+	if arch == nil {
+		t.Fatal("pac-tool should have an arch tag section")
 	}
-	if !reflect.DeepEqual(pac.Packages, []string{"neovim", "ripgrep"}) {
-		t.Errorf("FormatSection(pac).Packages = %v, want [neovim ripgrep]", pac.Packages)
+	if !reflect.DeepEqual(arch.Package, []string{"neovim", "ripgrep"}) {
+		t.Errorf("TagSection(arch).Package = %v, want [neovim ripgrep]", arch.Package)
+	}
+	if pacTool.FormatSection("pac") != nil {
+		t.Error("pac-tool should have no pac format section (distro.arch → tag section)")
 	}
 	// Test raw fields accessible for templates
-	repos := toMapSlice(pac.Raw["repo"])
+	repos := toMapSlice(arch.Raw["repo"])
 	if len(repos) != 1 {
-		t.Errorf("pac repos count = %d, want 1", len(repos))
+		t.Errorf("arch repos count = %d, want 1", len(repos))
 	}
-	options := toStringSlice(pac.Raw["options"])
+	options := toStringSlice(arch.Raw["options"])
 	if !reflect.DeepEqual(options, []string{"--needed"}) {
-		t.Errorf("pac options = %v, want [--needed]", options)
+		t.Errorf("arch options = %v, want [--needed]", options)
 	}
 
-	// Test aur config via generic FormatSection
+	// Test aur config via generic FormatSection (aur stays a build-format section)
 	aur := pacTool.FormatSection("aur")
 	if aur == nil {
 		t.Fatal("pac-tool should have aur format section")

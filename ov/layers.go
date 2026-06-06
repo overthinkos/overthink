@@ -354,10 +354,6 @@ type CandyYAML struct {
 	// with a declarative layer-derived surface.
 	Capability         *CandyCapabilities `yaml:"capability,omitempty"`
 	RequiresCapability []string           `yaml:"requires_capability,omitempty"`
-
-	// Populated by custom UnmarshalYAML:
-	FormatSections map[string]*PackageSection `yaml:"-"` // format sections (rpm, deb, pac, aur, etc.)
-	TagSections    map[string]*TagPkgConfig   `yaml:"-"` // distro/version tag sections
 }
 
 // layerYAMLKnownFields lists non-format top-level keys in the candy manifest.
@@ -408,32 +404,53 @@ func SetFormatNames(dc *DistroConfig) {
 	}
 }
 
-// derivePackageSectionsFromCalamares populates layer.formatSections and
-// layer.tagSections from the post-2026-05 Calamares-aligned top-level
-// `packages:` + `distros:` map. Transitional bridge so the existing
-// install-template renderer (build.go / generate.go) keeps working without
-// per-renderer changes during the cutover. Same root data flows through;
-// only the YAML surface changed.
+// derivePackageSectionsFromCalamares is the SOLE populator of a layer's package
+// surface from the Calamares-aligned top-level `package:` + `distro:` map. Every
+// `distro:` key — bare (`debian`), versioned (`debian-13`), or compound
+// (`debian,ubuntu` / `debian-13,ubuntu-24.04`) — routes to one or more per-distro
+// TAG sections keyed in colon form (`debian`, `debian:13`). NO distro key ever
+// feeds a shared FORMAT section: that collapse (debian + ubuntu both → the one
+// `deb` format section) is exactly what made repo selection non-deterministic
+// (first-writer-wins over Go's randomized map order) and unioned divergent
+// package lists across distros. With per-distro tag sections, each distro owns
+// its own section, so two distros that share a package format can never race.
 //
-// Mapping rules:
-//   - Top-level `packages:` flows into every format section that any
-//     `distros:` entry triggers (the intersection layer).
-//   - `distros.fedora.*`     → FormatSections["rpm"]   + raw extras
-//   - `distros.debian.*`     → FormatSections["deb"]   + raw extras
-//   - `distros.ubuntu.*`     → FormatSections["deb"]   (unioned with debian)
-//   - `distros.arch.*`  → FormatSections["pac"]   + raw extras
-//   - `distros.arch.aur.*` → FormatSections["aur"]
-//   - `distros.<name>-<ver>.*` → TagSections["<name>:<ver>"] (dash → colon)
+// The top-level `package:` list is the always-included BASE; it is recorded on
+// layer.topPackages and folded at RESOLVE time (compileSystemPackageSteps), NOT
+// here — folding it into every section at parse time is what cross-contaminated
+// debian/ubuntu before this cutover.
+//
+// The arch `aur:` sub-block keeps its dedicated `aur` FORMAT section: aur is a
+// real secondary BUILD format the aur builder consumes, not a distro tag.
+//
+// Distro keys are iterated in sorted order so a pathological double-definition of
+// the same tag (e.g. a `debian,ubuntu` compound plus a standalone `debian`)
+// resolves deterministically; the validator rejects genuinely conflicting extras.
+//
+// Mapping:
+//   distro.fedora.*          → tagSections["fedora"]
+//   distro.debian.*          → tagSections["debian"]
+//   distro.ubuntu.*          → tagSections["ubuntu"]
+//   distro.arch.*            → tagSections["arch"]   (+ arch.aur.* → formatSections["aur"])
+//   distro.debian-13.*       → tagSections["debian:13"]   (dash → colon)
+//   distro."debian,ubuntu".* → tagSections["debian"] + tagSections["ubuntu"]
 func derivePackageSectionsFromCalamares(layer *Layer, ly *CandyYAML) {
-	topPkgs := PackageNames(ly.Package)
+	layer.topPackages = PackageNames(ly.Package)
 
-	distroToFormat := map[string]string{
-		"fedora": "rpm",
-		"debian": "deb",
-		"ubuntu": "deb",
-		"arch":   "pac",
+	ensureTag := func(tagKey string) *TagPkgConfig {
+		if layer.tagSections == nil {
+			layer.tagSections = map[string]*TagPkgConfig{}
+		}
+		cfg := layer.tagSections[tagKey]
+		if cfg == nil {
+			cfg = &TagPkgConfig{Raw: map[string]interface{}{}}
+			layer.tagSections[tagKey] = cfg
+		}
+		if cfg.Raw == nil {
+			cfg.Raw = map[string]interface{}{}
+		}
+		return cfg
 	}
-
 	ensureFormat := func(fmtName string) *PackageSection {
 		if layer.formatSections == nil {
 			layer.formatSections = map[string]*PackageSection{}
@@ -448,122 +465,76 @@ func derivePackageSectionsFromCalamares(layer *Layer, ly *CandyYAML) {
 		}
 		return ps
 	}
-
-	addPackages := func(ps *PackageSection, pkgs []string) {
+	// addPackages unions pkgs into *dst (dedup, first-seen order).
+	addPackages := func(dst *[]string, pkgs []string) {
 		seen := map[string]bool{}
-		for _, p := range ps.Packages {
+		for _, p := range *dst {
 			seen[p] = true
 		}
 		for _, p := range pkgs {
 			if !seen[p] {
-				ps.Packages = append(ps.Packages, p)
+				*dst = append(*dst, p)
 				seen[p] = true
 			}
 		}
-		// Reflect into Raw so install templates that read .Raw.packages
-		// (rather than .Packages directly) see the same list.
-		ps.Raw["package"] = ps.Packages
 	}
-	mergeRaw := func(ps *PackageSection, key string, val interface{}) {
-		if val == nil {
-			return
-		}
-		// Skip overwriting populated Raw entries; first writer wins.
-		if _, exists := ps.Raw[key]; !exists {
-			ps.Raw[key] = val
+	// setRaw records a non-nil extra (repo/copr/options/exclude/module) into a
+	// section's Raw. Within ONE distro level it's a plain assign; cross-level
+	// most-specific-wins is the resolver's job (compileSystemPackageSteps).
+	setRaw := func(raw map[string]interface{}, key string, val interface{}) {
+		if val != nil {
+			raw[key] = val
 		}
 	}
 
-	// Walk distros. Versioned keys (debian-13 etc.) feed TagSections.
-	for distroKey, dp := range ly.Distro {
+	// Sorted iteration → deterministic regardless of Go map order.
+	distroKeys := make([]string, 0, len(ly.Distro))
+	for k := range ly.Distro {
+		distroKeys = append(distroKeys, k)
+	}
+	sortStrings(distroKeys)
+
+	for _, distroKey := range distroKeys {
+		dp := ly.Distro[distroKey]
 		if dp == nil {
 			continue
 		}
-		// Versioned form (e.g. debian-13, ubuntu-24.04) → tag section.
-		if i := strings.IndexByte(distroKey, '-'); i > 0 {
-			bare := distroKey[:i]
-			version := distroKey[i+1:]
-			if knownDistroNames[bare] {
-				tagKey := bare + ":" + version
-				if layer.tagSections == nil {
-					layer.tagSections = map[string]*TagPkgConfig{}
-				}
-				cfg := layer.tagSections[tagKey]
-				if cfg == nil {
-					cfg = &TagPkgConfig{Raw: map[string]interface{}{}}
-					layer.tagSections[tagKey] = cfg
-				}
-				cfg.Package = append(cfg.Package, PackageNames(dp.Package)...)
-				if cfg.Raw == nil {
-					cfg.Raw = map[string]interface{}{}
-				}
-				if cfg.Raw["package"] == nil {
-					cfg.Raw["package"] = cfg.Package
-				}
-				if dp.Repo != nil {
-					cfg.Raw["repo"] = dp.Repo
-				}
-				if dp.Copr != nil {
-					cfg.Raw["copr"] = dp.Copr
-				}
-				if dp.Options != nil {
-					cfg.Raw["options"] = dp.Options
-				}
-				if dp.Exclude != nil {
-					cfg.Raw["exclude"] = dp.Exclude
-				}
-				if dp.Module != nil {
-					cfg.Raw["module"] = dp.Module
-				}
+		// Split compound keys (`debian,ubuntu` / `debian-13,ubuntu-24.04`); each
+		// part becomes its own tag section carrying this entry's shared content.
+		for _, part := range strings.Split(distroKey, ",") {
+			part = strings.TrimSpace(part)
+			if part == "" {
 				continue
 			}
-		}
-
-		fmtName, ok := distroToFormat[distroKey]
-		if !ok {
-			continue
-		}
-		ps := ensureFormat(fmtName)
-		// Top-level packages contribute once; track via the helper's seen set.
-		if len(topPkgs) > 0 {
-			addPackages(ps, topPkgs)
-		}
-		addPackages(ps, PackageNames(dp.Package))
-		if dp.Copr != nil {
-			mergeRaw(ps, "copr", dp.Copr)
-		}
-		if dp.Repo != nil {
-			mergeRaw(ps, "repo", dp.Repo)
-		}
-		if dp.Exclude != nil {
-			mergeRaw(ps, "exclude", dp.Exclude)
-		}
-		if dp.Options != nil {
-			mergeRaw(ps, "options", dp.Options)
-		}
-		if dp.Module != nil {
-			mergeRaw(ps, "module", dp.Module)
-		}
-		// AUR sub-block under arch.
-		if distroKey == "arch" && dp.AUR != nil {
-			aurPS := ensureFormat("aur")
-			addPackages(aurPS, PackageNames(dp.AUR.Package))
-			if dp.AUR.Options != nil {
-				mergeRaw(aurPS, "options", dp.AUR.Options)
+			// Validate + canonicalize: bare `debian` stays `debian`; versioned
+			// `debian-13` → colon-form tag key `debian:13` (matches img.Distro tags).
+			bare := part
+			tagKey := part
+			if i := strings.IndexByte(part, '-'); i > 0 {
+				bare = part[:i]
+				tagKey = part[:i] + ":" + part[i+1:]
 			}
-			if dp.AUR.Replaces != nil {
-				mergeRaw(aurPS, "replaces", dp.AUR.Replaces)
+			if !knownDistroNames[bare] {
+				// Unrecognized distro key — skip (a typo never matches an
+				// img.Distro tag; the validator surfaces it).
+				continue
 			}
-		}
-	}
-
-	// Top-level packages without any distros entries: feed all known formats
-	// so the install templates pick them up regardless of the resolved image's
-	// distro. Only fires when `distros:` is empty (single-format author intent).
-	if len(ly.Distro) == 0 && len(topPkgs) > 0 {
-		for _, fmtName := range []string{"rpm", "deb", "pac"} {
-			ps := ensureFormat(fmtName)
-			addPackages(ps, topPkgs)
+			cfg := ensureTag(tagKey)
+			addPackages(&cfg.Package, PackageNames(dp.Package))
+			cfg.Raw["package"] = cfg.Package
+			setRaw(cfg.Raw, "repo", dp.Repo)
+			setRaw(cfg.Raw, "copr", dp.Copr)
+			setRaw(cfg.Raw, "options", dp.Options)
+			setRaw(cfg.Raw, "exclude", dp.Exclude)
+			setRaw(cfg.Raw, "module", dp.Module)
+			// arch AUR sub-block → dedicated aur FORMAT section (a real build format).
+			if bare == "arch" && dp.AUR != nil {
+				aurPS := ensureFormat("aur")
+				addPackages(&aurPS.Packages, PackageNames(dp.AUR.Package))
+				aurPS.Raw["package"] = aurPS.Packages
+				setRaw(aurPS.Raw, "options", dp.AUR.Options)
+				setRaw(aurPS.Raw, "replaces", dp.AUR.Replaces)
+			}
 		}
 	}
 }
@@ -692,69 +663,24 @@ func (ly *CandyYAML) UnmarshalYAML(value *yaml.Node) error {
 	}
 	*ly = CandyYAML(alias)
 
-	// Capture unknown keys as format sections or tag sections.
-	// Keys matching build.yml distro format names → FormatSections (parsed as raw maps).
-	// All other unknown keys → TagSections (parsed as {packages: [...]}).
+	// Validate top-level keys. Package declarations live ONLY under the `distro:`
+	// map now (see derivePackageSectionsFromCalamares); the legacy top-level
+	// package-format keys (`rpm:`/`deb:`/`pac:`/`aur:`) and top-level distro-tag
+	// keys (`debian:13:`, `debian,ubuntu:`) are gone. Any remaining unknown
+	// top-level key is almost always a plural/singular typo of a singular field —
+	// collect for a hard error rather than silently dropping it (which masked
+	// typos until a runtime surprise).
 	if value.Kind == yaml.MappingNode {
-		ly.FormatSections = make(map[string]*PackageSection)
-		ly.TagSections = make(map[string]*TagPkgConfig)
 		var unknownKeys []string
 		for i := 0; i < len(value.Content)-1; i += 2 {
 			key := value.Content[i].Value
 			if layerYAMLKnownFields[key] {
 				continue // handled by standard YAML decoder
 			}
-
-			if layerYAMLFormatNames[key] {
-				// Format section: parse as raw map for template rendering
-				var raw map[string]interface{}
-				if err := value.Content[i+1].Decode(&raw); err != nil {
-					continue
-				}
-				section := &PackageSection{
-					FormatName: key,
-					Raw:        raw,
-				}
-				if pkgs, ok := raw["package"]; ok {
-					section.Packages = toStringSlice(pkgs)
-				}
-				if len(section.Packages) > 0 {
-					ly.FormatSections[key] = section
-				}
-			} else {
-				// Not a known field and not a build.yml format: the only valid
-				// remaining shape is a distro/version TAG section carrying a
-				// package: list (e.g. fedora:43:, debian,ubuntu:). Decode BOTH the
-				// typed struct (for Packages) and the raw map (repos/options
-				// passthrough). Anything that does NOT decode to a tag-with-
-				// packages is an unknown top-level key — almost always a
-				// plural/singular typo of a singular field (task:/var:/layer:) —
-				// collected for a hard error below instead of being silently
-				// dropped (which previously masked typos until a runtime surprise).
-				var cfg TagPkgConfig
-				var raw map[string]interface{}
-				if err := value.Content[i+1].Decode(&cfg); err != nil {
-					unknownKeys = append(unknownKeys, key)
-					continue
-				}
-				if err := value.Content[i+1].Decode(&raw); err != nil || len(cfg.Package) == 0 {
-					unknownKeys = append(unknownKeys, key)
-					continue
-				}
-				cfg.Raw = raw
-				// Expand comma-separated keys (e.g., "debian,ubuntu")
-				parts := strings.Split(key, ",")
-				for _, part := range parts {
-					part = strings.TrimSpace(part)
-					if part != "" {
-						ly.TagSections[part] = &cfg
-					}
-				}
-			}
+			unknownKeys = append(unknownKeys, key)
 		}
-
 		if len(unknownKeys) > 0 {
-			return fmt.Errorf("layer has unknown top-level key(s) %v — each is neither a known field, a build.yml package format, nor a distro tag with a package: list. This is almost always a plural/singular typo: use the SINGULAR form (task: not tasks:, var: not vars:, layer: not layers:, env_provide: not env_provides:). Run `ov migrate` for a legacy config", unknownKeys)
+			return fmt.Errorf("layer has unknown top-level key(s) %v — each is neither a known field nor part of the `distro:` package map. This is almost always a plural/singular typo: use the SINGULAR form (task: not tasks:, var: not vars:, candy: not layers:, env_provide: not env_provides:). A legacy top-level package format (rpm:/deb:/pac:/aur:/debian:13:/debian,ubuntu:) is no longer accepted — run `ov migrate`", unknownKeys)
 		}
 	}
 
@@ -811,8 +737,9 @@ type Layer struct {
 	SubPathPrefix string // e.g. "candy/" — parent directory within the repo for sibling resolution
 
 	// Pre-populated from the candy manifest
-	formatSections map[string]*PackageSection // generic format sections (rpm, deb, pac, aur, etc.)
-	tagSections    map[string]*TagPkgConfig   // distro/version-specific package sections
+	formatSections map[string]*PackageSection // generic format sections (only `aur` now — the arch AUR build format)
+	tagSections    map[string]*TagPkgConfig   // per-distro/version package sections (debian, ubuntu, debian:13, …) — the sole package surface
+	topPackages    []string                   // top-level package: — the always-included BASE, folded at RESOLVE time (never at parse — that cross-contaminated debian/ubuntu)
 	ports          []string
 	portSpecs      []PortSpec // full PortSpec data with protocol info
 	envConfig      *EnvConfig
@@ -1098,10 +1025,31 @@ func scanLayer(path, name, manifest string) (*Layer, error) {
 
 // HasInstallFiles returns true if the layer has at least one install file
 func (l *Layer) HasInstallFiles() bool {
-	return l.HasFormatPackages() ||
+	return l.HasFormatPackages() || l.HasTagPackages() || len(l.topPackages) > 0 ||
 		l.HasPixiToml || l.HasPyprojectToml || l.HasEnvironmentYml ||
 		l.HasPackageJson || l.HasCargoToml ||
 		l.HasTasks() || l.HasApk()
+}
+
+// HasTagPackages reports whether any per-distro/version tag section declares
+// packages (the per-distro package surface that bare/versioned `distro:` keys
+// produce).
+func (l *Layer) HasTagPackages() bool {
+	for _, s := range l.tagSections {
+		if len(s.Package) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// HasAnyPackages reports whether the layer declares ANY OS packages across all
+// surfaces: per-distro/version tag sections, the always-included top-level
+// package: base, or a format section (aur). Used where the question is "does
+// this layer install packages at all?" (e.g. the use_packaged service check) —
+// must not be narrowed to format sections, which now hold only aur.
+func (l *Layer) HasAnyPackages() bool {
+	return l.HasTagPackages() || len(l.topPackages) > 0 || l.HasFormatPackages()
 }
 
 // HasContent returns true if the layer has install files or any configuration
@@ -1215,6 +1163,13 @@ func (l *Layer) TagSection(tag string) *TagPkgConfig {
 	}
 	return l.tagSections[tag]
 }
+
+// TopPackages returns the layer's top-level package: list — the always-included
+// BASE that the cascade resolver folds in for EVERY resolved format, regardless
+// of which distro/version tag sections match. Folding it here (at resolve time)
+// rather than into every section at parse time is what keeps debian and ubuntu
+// from cross-contaminating each other's package lists.
+func (l *Layer) TopPackages() []string { return l.topPackages }
 
 // EnvConfig returns the environment config (pre-populated from the candy manifest)
 func (l *Layer) EnvConfig() (*EnvConfig, error) {

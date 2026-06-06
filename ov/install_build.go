@@ -502,38 +502,80 @@ func appendShellPathLines(body string, paths []string, shell, home string) strin
 // PhasePrepare on --allow-repo-changes. Current build.yml only has one
 // phase per format (the monolithic install_template); Task 4 will split
 // templates into phases. Until then, we emit everything as PhaseInstall.
+// compileSystemPackageSteps resolves a layer's package surface for an image via
+// the distro-specificity CASCADE and emits ONE SystemPackagesStep for the
+// image's primary format. img.Distro is the most-specific-first tag chain
+// (e.g. [debian:13, debian] or [ubuntu:24.04, ubuntu]); the layer's top-level
+// package: list (layer.TopPackages) is the always-included BASE.
+//
+//   - packages = UNION of the base + every matching tag section's packages
+//     (dedup), so a shared package at one level plus extras at another accumulate.
+//   - repo/copr/options/exclude/module = the MOST-SPECIFIC matching level that
+//     declares the field wins (a version's repo overrides the bare distro's).
+//
+// img.Distro is most-specific-first, so iterating it in REVERSE (least → most
+// specific) and letting later writes win yields most-specific-wins for the Raw
+// extras while packages union regardless of order. fedora/arch reach their
+// packages via the bare-distro tag (img.Distro = [fedora] / [arch]); there is no
+// format-section fallback — the deb collapse that caused non-deterministic repo
+// selection is gone (per-distro tag sections never share a mutable section).
 func compileSystemPackageSteps(layer *Layer, img *ResolvedBox, hostCtx HostContext) []InstallStep {
 	if img.DistroDef == nil {
 		return nil
 	}
-
-	// Phase 1: distro tag section
-	for _, tag := range img.Distro {
-		tagCfg := layer.TagSection(tag)
-		if tagCfg == nil || len(tagCfg.Package) == 0 {
-			continue
-		}
-		formatDef := img.DistroDef.Format[img.Pkg]
-		if formatDef == nil {
-			return nil
-		}
-		return []InstallStep{buildSystemPackagesStep(img.Pkg, PhaseInstall, tagCfg.Package, tagCfg.Raw, formatDef.CacheMount)}
+	formatDef := img.DistroDef.Format[img.Pkg]
+	if formatDef == nil {
+		return nil
 	}
-
-	// Phase 2: format sections in build_formats order
-	var steps []InstallStep
-	for _, format := range img.BuildFormats {
-		section := layer.FormatSection(format)
-		if section == nil || len(section.Packages) == 0 {
-			continue
-		}
-		formatDef := img.DistroDef.Format[format]
-		if formatDef == nil {
-			continue
-		}
-		steps = append(steps, buildSystemPackagesStep(format, PhaseInstall, section.Packages, section.Raw, formatDef.CacheMount))
+	pkgs, raw, matched := resolveCascadePackages(layer, img)
+	if !matched && len(pkgs) == 0 {
+		return nil
 	}
-	return steps
+	return []InstallStep{buildSystemPackagesStep(img.Pkg, PhaseInstall, pkgs, raw, formatDef.CacheMount)}
+}
+
+// resolveCascadePackages is THE single distro-specificity cascade resolver,
+// shared by EVERY package-emitting path — the deploy compiler
+// (compileSystemPackageSteps) AND the image-build Containerfile emitter
+// (generate.go writeLayerSteps). There is exactly one resolution so build and
+// deploy can never diverge.
+//
+// It computes the primary-format package set for a layer on an image: the
+// layer's top-level `package:` BASE, UNION every matching distro tag section
+// walked most-specific-first over img.Distro (deduped), with the Raw extras
+// repo/copr/options/exclude/module resolved MOST-SPECIFIC-WINS. Returns the
+// package list, the rendered Raw install context (including the unioned
+// `package` list), and whether any tag section matched.
+func resolveCascadePackages(layer *Layer, img *ResolvedBox) (pkgs []string, raw map[string]interface{}, matched bool) {
+	seen := map[string]bool{}
+	add := func(in []string) {
+		for _, p := range in {
+			if p != "" && !seen[p] {
+				pkgs = append(pkgs, p)
+				seen[p] = true
+			}
+		}
+	}
+	// Always-included base first (stable ordering).
+	add(layer.TopPackages())
+
+	raw = map[string]interface{}{}
+	for i := len(img.Distro) - 1; i >= 0; i-- { // least → most specific
+		cfg := layer.TagSection(img.Distro[i])
+		if cfg == nil {
+			continue
+		}
+		matched = true
+		add(cfg.Package)
+		// Most-specific level writes last → wins for each Raw extra.
+		for _, k := range []string{"repo", "copr", "options", "exclude", "module"} {
+			if v, ok := cfg.Raw[k]; ok && v != nil {
+				raw[k] = v
+			}
+		}
+	}
+	raw["package"] = pkgs
+	return pkgs, raw, matched
 }
 
 // buildSystemPackagesStep constructs a SystemPackagesStep from a

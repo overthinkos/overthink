@@ -1,6 +1,7 @@
 package main
 
 import (
+	"strings"
 	"testing"
 
 	"gopkg.in/yaml.v3"
@@ -155,50 +156,28 @@ func TestBuilderNames(t *testing.T) {
 	}
 }
 
-func TestDynamicFormatSectionParsing(t *testing.T) {
-	// Ensure format names are registered for YAML parsing
+// TestLegacyTopLevelFormatKeyRejected guards the hard cutover: the legacy
+// top-level package-format keys (`rpm:`/`deb:`/`pac:`) — and top-level distro-tag
+// keys (`debian:13:`, `debian,ubuntu:`) — are no longer a package surface. Package
+// declarations live ONLY under the `distro:` map. A stray top-level `rpm:` is now
+// an unknown-key error pointing at `ov migrate`, not a silently-parsed section.
+func TestLegacyTopLevelFormatKeyRejected(t *testing.T) {
 	SetFormatNames(testDistroConfig())
 
-	// Test that YAML with format sections parses into FormatSections
-	yamlData := `
-rpm:
-  package:
-    - vim
-    - git
-  copr:
-    - owner/repo
-  repo:
-    - name: test
-      url: https://example.com/repo
-  option:
-    - --nogpgcheck
-`
-	var ly CandyYAML
-	if err := yaml.Unmarshal([]byte(yamlData), &ly); err != nil {
-		t.Fatalf("unmarshal error: %v", err)
-	}
-
-	section, ok := ly.FormatSections["rpm"]
-	if !ok {
-		t.Fatal("expected rpm format section")
-	}
-	if section.FormatName != "rpm" {
-		t.Errorf("FormatName = %q, want rpm", section.FormatName)
-	}
-	if len(section.Packages) != 2 {
-		t.Errorf("Packages count = %d, want 2", len(section.Packages))
-	}
-	if section.Raw == nil {
-		t.Fatal("Raw is nil")
-	}
-	if _, ok := section.Raw["copr"]; !ok {
-		t.Error("Raw missing copr field")
-	}
-	if _, ok := section.Raw["repo"]; !ok {
-		t.Error("Raw missing repo field")
-	}
-	if _, ok := section.Raw["option"]; !ok {
-		t.Error("Raw missing option field")
+	for _, tc := range []struct{ name, yaml string }{
+		{"format-key", "rpm:\n  package:\n    - vim\n"},
+		{"colon-tag", "debian:13:\n  package:\n    - vim\n"},
+		{"compound-tag", "debian,ubuntu:\n  package:\n    - vim\n"},
+	} {
+		var ly CandyYAML
+		err := yaml.Unmarshal([]byte(tc.yaml), &ly)
+		if err == nil {
+			t.Errorf("%s: expected an unknown-top-level-key error for legacy form, got nil", tc.name)
+			continue
+		}
+		if !strings.Contains(err.Error(), "ov migrate") {
+			t.Errorf("%s: error %q should point at `ov migrate`", tc.name, err.Error())
+		}
 	}
 }
 

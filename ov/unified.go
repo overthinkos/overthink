@@ -2544,12 +2544,10 @@ func populateLayerFromYAML(layer *Layer, ly *CandyYAML) {
 	layer.IncludedLayer = toLayerRefs(ly.Layer)
 
 	layer.service = ly.Service
-	layer.formatSections = ly.FormatSections
-	if layer.formatSections == nil {
-		layer.formatSections = make(map[string]*PackageSection)
-	}
-	layer.tagSections = ly.TagSections
-	// 2026-05 Calamares cutover: derive format/tag sections from packages: + distros:.
+	// derivePackageSectionsFromCalamares is the SOLE populator of the package
+	// surface (layer.tagSections + layer.topPackages, plus the arch `aur` format
+	// section) from package: + distro:. There is no top-level format/tag-key
+	// parse path anymore — the `distro:` map is the only package surface.
 	if len(ly.Package) > 0 || len(ly.Distro) > 0 {
 		derivePackageSectionsFromCalamares(layer, ly)
 	}

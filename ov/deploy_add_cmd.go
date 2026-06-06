@@ -990,12 +990,17 @@ func syntheticVmImage(spec *VmSpec, distroCfg *DistroConfig) *ResolvedBox {
 		distroKey = spec.Source.BaseUser
 	}
 	if distroKey != "" {
-		img.Distro = []string{distroKey}
-		if def := distroCfg.ResolveDistro(img.Distro); def != nil {
+		if def := distroCfg.ResolveDistro([]string{distroKey}); def != nil {
+			// Full most-specific-first chain (e.g. [ubuntu:24.04, ubuntu]) so a
+			// target:vm deploy reaches per-version tag sections, not only the bare
+			// distro tag — image/VM parity for the distro-cascade resolver.
+			img.Distro = distroTagChain(distroKey, def.Version)
 			if pf := def.PrimaryFormat(); pf != "" {
 				img.Pkg = pf
 				img.BuildFormats = []string{pf}
 			}
+		} else {
+			img.Distro = []string{distroKey}
 		}
 	}
 	return img

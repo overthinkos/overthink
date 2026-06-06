@@ -71,6 +71,11 @@ dist/
 # version-controlled source).
 .eval/
 
+# Syncthing conflict copies — created when the Syncthing-synced project tree
+# diverges on two machines (e.g. a file is edited while a stale copy replicates
+# in). Per-machine, ephemeral, resolved by hand — never version-controlled.
+*.sync-conflict-*
+
 # Screenshots and temporary images
 *.png
 *.jpg

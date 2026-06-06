@@ -1,5 +1,5 @@
 candy:
-    version: 2026.144.1613
+    version: 2026.157.1257
     name: nodejs
     env:
         NPM_CONFIG_PREFIX: "~/.npm-global"
@@ -21,13 +21,14 @@ candy:
         ubuntu:
             package:
                 - npm
-        ubuntu-24.04:
-            repo:
-                - name: nodesource
-                  url: "https://deb.nodesource.com/node_20.x"
-                  key: "https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key"
-                  suite: nodistro
-                  components: main
+        # No ubuntu-24.04 nodesource override: under the distro-specificity
+        # cascade a versioned section's repo is now actually applied (it was
+        # Phase-1-skipped before, so it never took effect), and installing
+        # `npm` (Ubuntu) alongside nodesource's `nodejs` (which bundles its own
+        # npm) yields conflicting node-* deps — broken packages. Ubuntu ships a
+        # compatible nodejs+npm pair from its own repos; use it. A deliberate
+        # NodeSource upgrade would DROP the separate `npm` (nodesource bundles it)
+        # rather than add a repo that fights the base package.
     var:
         PNPM_VERSION: "10.33.4"
     task:

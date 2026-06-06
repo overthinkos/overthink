@@ -95,8 +95,13 @@ only under `debian`+`fedora`+`arch`, never `ubuntu`; the redundant `ubuntu-24.04
 section + the `exclude_distro: [ubuntu:24.04]` eval were deleted (now
 `exclude_distro: [ubuntu]`). `candy/gh`'s byte-identical debian+ubuntu repo
 collapsed to one compound `debian,ubuntu:` section. `candy/nodejs`'s
-`ubuntu-24.04` repo-only section — silently dropped by the old Phase-1-skip — now
-resolves the nodesource repo (a latent bug the cascade fixes).
+`ubuntu-24.04` nodesource repo-only section was DELETED: reviving it (the
+cascade now applies repo-only versioned sections that the old Phase-1-skip
+dropped) installed nodesource's `nodejs` alongside Ubuntu's separately-listed
+`npm`, yielding conflicting `node-*` deps and a broken ubuntu-coder build — the
+consumer R10 (full ubuntu-coder build) caught it. Ubuntu's own compatible
+nodejs+npm pair is used instead; the dead repo is gone (a deliberate NodeSource
+upgrade would drop the separate npm, not fight the base package).
 
 **Validation:** `validatePkgConfig` now reads the canonical `repo` key (the old
 `repos`-plural check was dead for real layers), validates TAG sections (where

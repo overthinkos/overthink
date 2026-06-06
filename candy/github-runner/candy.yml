@@ -1,5 +1,5 @@
 candy:
-    version: 2026.157.1657
+    version: 2026.157.1917
     name: github-runner
     require:
         - supervisord
@@ -30,6 +30,16 @@ candy:
                 - openssl
                 - libunwind
                 - lttng-ust
+                # ov-host runtime deps that complete the `ov` PKGBUILD `depends=`
+                # set ON THE RUNNER, so the release-packages CI job builds the pac
+                # artifact NATIVELY here: with every dep already installed,
+                # `makepkg -sf` resolves them all and never shells out to
+                # `sudo pacman` (the rootless runner has no passwordless sudo).
+                # The rest of depends= is provided by the ov/virtualization layers.
+                - slirp4netns                  # rootless podman networking fallback
+                - libisoburn                   # xorriso — VM NoCloud seed-ISO builder
+                - cdrtools                     # genisoimage/mkisofs seed-ISO fallback
+                - swtpm                        # software TPM 2.0 for VM guests
     volume:
         - name: state
           path: ~/actions-runner
@@ -137,6 +147,21 @@ candy:
           installed: true
         - id: gr-icu-pkg
           package: icu
+          installed: true
+        # ov-host runtime deps completing the `ov` PKGBUILD depends= set, so the
+        # release-packages CI job builds the pac artifact natively (makepkg needs
+        # no sudo when every dep is present). FAIL without the package: additions.
+        - id: gr-pkgbuild-dep-slirp4netns
+          package: slirp4netns
+          installed: true
+        - id: gr-pkgbuild-dep-libisoburn
+          package: libisoburn
+          installed: true
+        - id: gr-pkgbuild-dep-cdrtools
+          package: cdrtools
+          installed: true
+        - id: gr-pkgbuild-dep-swtpm
+          package: swtpm
           installed: true
         # --- deploy scope: rootless runtime state ---
         # Runs as uid 1000 (NOT root) — the whole point of the rootless cutover.

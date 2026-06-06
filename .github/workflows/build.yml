@@ -1,9 +1,0 @@
-# Deprecated 2026-04-27 — image publishing moved to `task push`.
-#
-# This workflow used to auto-build and push every image to
-# ghcr.io/overthinkos on every push to main. That coupled CI
-# state to the registry contents in ways that made stale
-# artifacts hard to reason about. Run `task push` from a clean
-# working tree when you want to republish.
-#
-# See Taskfile.yml `push` task and CLAUDE.md for the new flow.

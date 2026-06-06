@@ -1,6 +1,6 @@
-# Overthink — The Container Management Experience for You and Your Agents
+# Overthink — The Candy Factory for You and Your Agents
 
-Compose, build, deploy, and manage container images from a library of fully configurable layers. Built on a generic init system framework (`build.yml` → `init:` section) and `ov` (Go CLI). Designed to work equally well from the command line and from AI agents like Claude Code. Supports both Docker and Podman.
+Secure the box, then fill it with the whole candy store: compose, build, deploy, and manage **boxes** (container images) from a library of fully configurable **candies** (layers). Built on a generic init system framework (`build.yml` → `init:` section) and `ov` (Go CLI). Designed to work equally well from the command line and from AI agents like Claude Code — for you *and* your agents. Supports both Docker and Podman.
 
 See `VISION.md` for the long-term thesis and direction, `README.md` for the user-facing feature overview and command reference, `plugins/README.md` for the full skill index. This file carries only **project-specific rules and mandates** — architectural and usage detail lives in skills (the single source of truth). The full five-way doc split is in **Where things are documented** at the end.
 
@@ -48,8 +48,8 @@ Consult this table BEFORE the first tool call of every task. If your task matche
 | `ov eval adb <method>` / Android Debug Bridge from host (devices, shell, install, getprop, screencap, logcat, wait-for-device) | `/ov-eval:adb` + `/ov-eval:eval` |
 | `ov eval appium <method>` / Android UI automation / W3C WebDriver / APK install via mobile:installApp / session lifecycle / element introspection (get-text/get-attribute/clear/find-all/source) / per-class sugar groups (`gesture-*`/`app-*`/`key-*`/`device-*`) / generic WebDriver escape hatch (`execute`/`raw`) | `/ov-eval:appium` + `/ov-eval:eval` |
 | `kind: android` device / `target: android` deploy / `apk:` package format in layers / installing Android apps declaratively / remote-or-emulator adb endpoint / nested `pod → android` | `/ov-eval:android` + `/ov-core:deploy` |
-| Editing `candy.yml`, layer authoring, layer tasks/services | `/ov-image:layer` |
-| Editing `box.yml`, image composition | `/ov-image:image` |
+| Editing `candy.yml`, candy authoring, candy tasks/services | `/ov-image:layer` |
+| Editing `box.yml`, box composition | `/ov-image:image` |
 | `ov box build` / `ov box generate` / Containerfile | `/ov-build:build` + `/ov-build:generate` + `/ov-internals:generate-source` |
 | `ov box validate` / schema error | `/ov-build:validate` |
 | `ov clean` / build-artifact retention / `keep_images` / `keep_eval_runs` / image-tag pruning / `.eval` run cleanup | `/ov-core:clean` |
@@ -66,16 +66,16 @@ Consult this table BEFORE the first tool call of every task. If your task matche
 | OCI labels / capabilities contract | `/ov-internals:capabilities` |
 | VmSpec / libvirt / cloud-init / OVMF internals | `/ov-internals:vm-spec` (+ renderer skills as needed) |
 | Unexpected failure / error / anomaly | `/ov-internals:root-cause-analyzer` agent (BEFORE any fix) |
-| "What does layer X do?" / "What's in image X?" — pod-specific | `/ov-jupyter:<name>`, `/ov-coder:<name>`, `/ov-selkies:<name>`, `/ov-openclaw:<name>`, `/ov-ollama:<name>`, `/ov-openwebui:<name>`, `/ov-comfyui:<name>`, `/ov-immich:<name>`, `/ov-hermes:<name>`, `/ov-filebrowser:<name>` |
-| "What does layer X do?" / "What's in image X?" — base distros / GPU runtime / bootc | `/ov-distros:<name>` (archlinux, fedora, debian, ubuntu, cachyos, nvidia, cuda, rocm, bootc-base, …) |
+| "What does candy X do?" / "What's in box X?" — pod-specific | `/ov-jupyter:<name>`, `/ov-coder:<name>`, `/ov-selkies:<name>`, `/ov-openclaw:<name>`, `/ov-ollama:<name>`, `/ov-openwebui:<name>`, `/ov-comfyui:<name>`, `/ov-immich:<name>`, `/ov-hermes:<name>`, `/ov-filebrowser:<name>` |
+| "What does candy X do?" / "What's in box X?" — base distros / GPU runtime / bootc | `/ov-distros:<name>` (archlinux, fedora, debian, ubuntu, cachyos, nvidia, cuda, rocm, bootc-base, …) |
 | CachyOS images / `cachyos*` / `ov-cachyos` workstation profile / `image/cachyos` submodule | `/ov-distros:cachyos` + `/ov-vm:cachyos` + `/ov-local:ov-cachyos` |
 | Debian images / `debian*` / `image/debian` submodule | `/ov-distros:debian` + `/ov-distros:debian-builder` + `/ov-distros:debian-debootstrap` + `/ov-coder:debian-coder` + `/ov-vm:debian` |
 | Ubuntu images / `ubuntu*` / `image/ubuntu` submodule | `/ov-distros:ubuntu` + `/ov-distros:ubuntu-builder` + `/ov-distros:ubuntu-debootstrap` + `/ov-coder:ubuntu-coder` + `/ov-vm:ubuntu` |
 | Fedora images / `fedora*` / `image/fedora` submodule / `fedora-base.yml` | `/ov-distros:fedora` + `/ov-distros:fedora-builder` + `/ov-distros:fedora-nonfree` + `/ov-coder:fedora-coder` + `/ov-distros:fedora-ov` + `/ov-distros:fedora-test` |
 | bootc images / `bazzite` / `aurora` / `*-bootc` / `image/bootc` submodule | `/ov-distros:bazzite` + `/ov-distros:aurora` + `/ov-distros:bootc-base` + `/ov-vm:vm` |
-| "What does layer X do?" — language runtime | `/ov-languages:<name>` (python, python-ml, pixi) |
-| "What does layer X do?" — infrastructure service | `/ov-infrastructure:<name>` (postgresql, redis, k3s, traefik, supervisord, tailscale, gocryptfs, virtualization, dbus-layer, tmux-layer, …) |
-| "What does layer X do?" — CLI utility / ov binary | `/ov-tools:<name>` (ripgrep, himalaya, whisper, ov, …) |
+| "What does candy X do?" — language runtime | `/ov-languages:<name>` (python, python-ml, pixi) |
+| "What does candy X do?" — infrastructure service | `/ov-infrastructure:<name>` (postgresql, redis, k3s, traefik, supervisord, tailscale, gocryptfs, virtualization, dbus-layer, tmux-layer, …) |
+| "What does candy X do?" — CLI utility / ov binary | `/ov-tools:<name>` (ripgrep, himalaya, whisper, ov, …) |
 | Skill authoring / skill maintenance | `/ov-internals:skills` |
 | `ov eval *` / `eval.yml` `recipe:`/`score:` / AI-agent scoring / `oveval/*` branches | `/ov-eval:eval` |
 | Sub-agents / dynamic workflows / agent teams / agent-lifecycle or commit-push gate hooks | `/ov-internals:agents` |
@@ -104,11 +104,11 @@ The next four sections are the **philosophy pillars** — the reasoning the Grou
 
 ## Candyboxing
 
-Overthink is built around **candyboxing**, not sandboxing. A classical sandbox secures an AI by RESTRICTING the candy: strip the toolset, deny the network, forbid package installs, whitelist a handful of commands — and in doing so it cripples what the agent can actually build, deploy, and TEST. Candyboxing inverts that: secure the BOX as a whole — a disposable container / VM / eval bed with a hardened, kernel-enforced boundary — and then fill it with the ENTIRE candy store. Inside its box the AI gets every `ov` verb, every MCP server, the whole layer library, every `ov eval` probe (cdp/wl/dbus/vnc/mcp/adb/appium/k8s), real package managers, real GPU runtimes — the full toolkit a capable engineer would have, with nothing held back.
+Overthink is built around **candyboxing**, not sandboxing. A classical sandbox secures an AI by RESTRICTING the candy: strip the toolset, deny the network, forbid package installs, whitelist a handful of commands — and in doing so it cripples what the agent can actually build, deploy, and TEST. Candyboxing inverts that: secure the BOX as a whole — a disposable container / VM / eval bed with a hardened, kernel-enforced boundary — and then fill it with the ENTIRE candy store. Inside its box the AI gets every `ov` verb, every MCP server, the whole candy library, every `ov eval` probe (cdp/wl/dbus/vnc/mcp/adb/appium/k8s), real package managers, real GPU runtimes — the full toolkit a capable engineer would have, with nothing held back.
 
 **The box is secured as a whole — at the boundary, never per-tool.** The isolation is real and kernel-enforced, not a command whitelist: rootless podman + user namespaces (uid 1000, zero added capabilities, no `--privileged`; see `/ov-distros:container-nesting`), VM/KVM isolation via libvirt `qemu:///session` (`/ov-vm:vm`, `/ov-infrastructure:virtualization`), gocryptfs-encrypted volumes with keyring-isolated keys (`/ov-infrastructure:gocryptfs`, `/ov-automation:enc`), tailscale-scoped networking (`/ov-infrastructure:tailscale`), and the `disposable: true` lifecycle boundary that makes destroy + rebuild fearless (`/ov-internals:disposable`). You don't trust the tools; you trust the walls.
 
-**Why a full candy store, not a locked cabinet.** An AI that cannot install a package, reach a registry, build an image, or run a real deploy cannot VALIDATE a real composition — it can only guess. Candyboxing is what makes Risk Driven Development cheap and honest: the bed is fully stocked, so the AI builds the actual image, deploys the actual layers, and `ov eval`s the actual running system (RDD), and it is disposable, so a wrong move costs one `ov update`, not an incident (Disposable-Only Autonomy). The generosity is the point — it is what "Overthink" means: hand the agent an over-provisioned environment, not a minimal one, and contain it at the boundary.
+**Why a full candy store, not a locked cabinet.** An AI that cannot install a package, reach a registry, build an image, or run a real deploy cannot VALIDATE a real composition — it can only guess. Candyboxing is what makes Risk Driven Development cheap and honest: the bed is fully stocked, so the AI builds the actual box, deploys the actual candies, and `ov eval`s the actual running system (RDD), and it is disposable, so a wrong move costs one `ov update`, not an incident (Disposable-Only Autonomy). The generosity is the point — it is what "Overthink" means: hand the agent an over-provisioned environment, not a minimal one, and contain it at the boundary.
 
 **Candyboxing composes with R0 and the safety rules — it does not loosen them.** A full candy store inside the box is NOT permission to act outside it: autonomous destroy is still gated on an explicit `disposable: true` (Disposable-Only Autonomy), outward-facing / hard-to-reverse actions still require authorization, and skills-first (R0) still governs HOW the AI uses the candy. Candyboxing widens what the AI may freely reach for INSIDE a secured, disposable boundary; it never widens the boundary itself.
 
@@ -122,21 +122,21 @@ Overthink is built around **Risk Driven Development (RDD)**: ALWAYS validate ANY
 
 **Risk — not documentation status — is the trigger.**
 
-- **Low-risk / recoverable** (orientation: "roughly what does this layer do"): the skill lookup suffices. Do NOT burn a bed on it, and do NOT add defensive complexity "to be safe" — that over-caution is failure mode 2 below.
+- **Low-risk / recoverable** (orientation: "roughly what does this candy do"): the skill lookup suffices. Do NOT burn a bed on it, and do NOT add defensive complexity "to be safe" — that over-caution is failure mode 2 below.
 - **High-risk** (being wrong invalidates the plan, is costly or hard to reverse, or would send RCA down a false trail): validate it on a live bed REGARDLESS of what a skill, CLAUDE.md, or the code asserts.
 
 | Assumption | Risk if wrong | How RDD settles it |
 |---|---|---|
-| "Roughly what does layer X do?" (orientation) | Low, recoverable | Skill lookup (R0) — no bed |
-| "Layer X behaves EXACTLY as documented, and my plan depends on it" | High | Validate on a live bed — the skill may be stale |
+| "Roughly what does candy X do?" (orientation) | Low, recoverable | Skill lookup (R0) — no bed |
+| "Candy X behaves EXACTLY as documented, and my plan depends on it" | High | Validate on a live bed — the skill may be stale |
 | "The code does X, so my change is safe" | High | Run it — code has bugs; the emitted artifact / live run is the arbiter (R8/R9) |
-| "These layers, at their latest versions, compose & run together" | High (no skill can certify) | Build + deploy + `ov eval` EARLY |
+| "These candies, at their latest versions, compose & run together" | High (no skill can certify) | Build + deploy + `ov eval` EARLY |
 
-**The archetypal high-risk unknown: composition.** The single highest, least-documented risk in a layer-composition system is whether a SPECIFIC combination of layers — especially at the LATEST currently-available versions the resolver picks (newest-wins) — actually builds, deploys, and reaches steady-state TOGETHER. No skill can certify a never-composed combination. Build it, deploy it, and `ov eval` it EARLY, before the plan rests on the assumption that it works.
+**The archetypal high-risk unknown: composition.** The single highest, least-documented risk in a candy-composition system is whether a SPECIFIC combination of candies — especially at the LATEST currently-available versions the resolver picks (newest-wins) — actually builds, deploys, and reaches steady-state TOGETHER. No skill can certify a never-composed combination. Build it, deploy it, and `ov eval` it EARLY, before the plan rests on the assumption that it works.
 
 **RDD prevents three failure modes:**
 
-1. **A wrong high-risk assumption baked into the design** — "the skill says X" / "the code does Y" / "these layers compose" / "the newest version is drop-in" treated as proven; every task built on it inherits the defect when reality differs from the stale doc or buggy code.
+1. **A wrong high-risk assumption baked into the design** — "the skill says X" / "the code does Y" / "these candies compose" / "the newest version is drop-in" treated as proven; every task built on it inherits the defect when reality differs from the stale doc or buggy code.
 2. **Unnecessary caution / over-engineering** — guards, fallbacks, or pinned-back versions added against a danger a real check would have disproven. (For a low-risk item, spinning up a bed at all is the same waste in process form.)
 3. **Erroneous root-cause analysis** — diagnosing from speculation or from a stale doc / code reading instead of a real bed run. RDD front-loads the evidence so R1's RCA reasons from a real failure, not a guess.
 
@@ -151,7 +151,7 @@ Overthink is built around **Agent Driven Development (ADD)**: every entity's int
 **The binding contract — a step binds to its verifier BY SHAPE.** A scenario step that embeds a check verb (`file:`/`http:`/`cdp:`/`mcp:`/`command:`/…) binds to a DETERMINISTIC check the runner executes. A prose-only step (a `then:` with no verb) binds to an AGENT: `ov eval feature run <deployment>` spawns the configured `kind: ai` CLI, which probes the live deployment with the full `ov eval` surface and returns a pass/fail verdict with evidence (an unparseable/timed-out grader FAILS the step — never a silent pass). No glue code: the "step definition" is either a declarative check or an agent.
 
 **The lived loop — Specify → Bind → Run → Iterate → Bake → Gate.**
-1. **Specify** — author the goal + scenarios on the LAYER that provides the behaviour: `ov candy add-scenario <layer> <name> --given/--when/--then` (idempotent; auto-exposed as the `candy.add-scenario` MCP tool) or edit the `description:` block.
+1. **Specify** — author the goal + scenarios on the CANDY that provides the behaviour: `ov candy add-scenario <layer> <name> --given/--when/--then` (idempotent; auto-exposed as the `candy.add-scenario` MCP tool) or edit the `description:` block.
 2. **Bind** — embed a check verb (deterministic) or leave the step prose (agent-graded). `ov feature pending <entity>` lists the still-prose steps (the authoring gaps).
 3. **Run** — `ov box feature run <image>` (build scope: deterministic steps against a disposable container; prose steps report unbound) or `ov eval feature run <deployment>` (deploy scope: deterministic + agent-graded prose; `--no-agent` for deterministic-only CI).
 4. **Iterate** — drive red→green by hand, OR autonomously: `ov eval run <score>` is the plateau-bounded AI loop that writes the implementation until the scenarios pass (the deepest sense of "agent-driven").
@@ -160,7 +160,7 @@ Overthink is built around **Agent Driven Development (ADD)**: every entity's int
 
 **ADD composes with RDD, R10, and candyboxing — it does not duplicate them.** RDD proves the risky ASSUMPTIONS a behaviour rests on; ADD specifies WHAT the correct behaviour is and drives (human or agent) to it; R10 proves it on a fresh rebuild. Three points on the same *never trust, verify* arc — RDD before the edit, ADD as the spec, R10 as the final proof. The agent grader runs inside the secured, disposable box (candyboxing) with the full `ov eval` probe surface.
 
-**ADD prevents three failure modes:** (1) ambiguous acceptance — "done" with no executable definition of correct behaviour; (2) prose that never runs — a `then:` that documents intent but verifies nothing (the agent grader makes free-form behaviour executable); (3) per-image test drift — scenarios live on the LAYER that provides the behaviour, so ONE scenario covers every image that composes the layer (no per-image copy — R3).
+**ADD prevents three failure modes:** (1) ambiguous acceptance — "done" with no executable definition of correct behaviour; (2) prose that never runs — a `then:` that documents intent but verifies nothing (the agent grader makes free-form behaviour executable); (3) per-box test drift — scenarios live on the CANDY that provides the behaviour, so ONE scenario covers every box that composes the candy (no per-box copy — R3).
 
 ADD is a co-equal pillar with RDD and an OPT-IN runnable gate: where an entity authors scenarios they run and must pass; where it authors none, nothing is forced. See `/ov-internals:strict-policy` "ADD" and `/ov-eval:eval`.
 
@@ -273,7 +273,7 @@ Before saying "done", run the unified **Acceptance checklist** in **Post-Executi
 - **Running `ov` to verify, at any stage, as often as useful.** `ov box build`, `ov update`, `ov eval run`, `ov vm create`, `ov start` against a `disposable: true` target — in parallel or in the background — are ENCOURAGED throughout the cutover. **Verify before you change — Risk Driven Development** (the proactive twin of R1): validate every HIGH-RISK assumption + error diagnosis on a live bed BEFORE editing, so you are never disproven hours later. Only the COMMIT is gated (on the full final-code test); running the beds to verify is not.
 - **Cheap smoke-confirmation between tasks.** `go build` / `go test` / `ov box validate` after each task is good hygiene. It is NOT the acceptance gate. The acceptance gate is the FULL-STACK R10 run against the final code.
 
-**Why R10 exists.** Full-stack R10 verification at the end of the cutover is not ceremonial — it's the ONLY way to catch issues that a complicated migration may have introduced: a migration command that missed a field, a struct rename that left a stale reference in a code path unit tests don't exercise, a layer composition that quietly produces a different effective image. Only a fresh `ov update <disposable>` + `ov eval live <disposable>` exercises every code path the cutover touched. R10 assumes the migration introduced unseen regressions and flushes them out.
+**Why R10 exists.** Full-stack R10 verification at the end of the cutover is not ceremonial — it's the ONLY way to catch issues that a complicated migration may have introduced: a migration command that missed a field, a struct rename that left a stale reference in a code path unit tests don't exercise, a candy composition that quietly produces a different effective image. Only a fresh `ov update <disposable>` + `ov eval live <disposable>` exercises every code path the cutover touched. R10 assumes the migration introduced unseen regressions and flushes them out.
 
 **The workflow:** split into TASKS, not phases (N tasks ≠ N phases — a 15-task cutover is still ONE phase, ONE commit; marking a task `completed` is a TODO signal, never a commit signal). Implement all tasks in the same working tree (transitional aliases deleted before the end). Verify continuously, but gate the COMMIT on the full final-code R10. Fail the cutover if any verification fails — fix in the same tree, re-run everything, never "the rest is Phase 2." The single idempotent `ov migrate` command transforms legacy configs in-place; residual legacy fields raise hard load-time errors with a remediation hint. Full step-by-step: `/ov-internals:cutover-policy`; `ov migrate` surface: `/ov-build:migrate`.
 
@@ -322,7 +322,7 @@ R10 failure is NOT a stopping point — it's a return-to-implementation signal. 
 Before declaring the turn done — this single checklist merges end-of-turn verification with the landing gate. Every YES:
 
 **Discipline & verification**
-- [ ] RDD: every HIGH-RISK assumption proven EARLY on a `disposable: true` bed (above all whether this layer composition at its latest versions builds/deploys/runs together) — none carried into the final code on the strength of a (possibly stale) skill / CLAUDE.md / code reading alone? (Low-risk orientation is an R0 lookup.)
+- [ ] RDD: every HIGH-RISK assumption proven EARLY on a `disposable: true` bed (above all whether this candy composition at its latest versions builds/deploys/runs together) — none carried into the final code on the strength of a (possibly stale) skill / CLAUDE.md / code reading alone? (Low-risk orientation is an R0 lookup.)
 - [ ] `/ov-internals:root-cause-analyzer` ran on every failure / warning / anomaly observed during the session (R1)?
 - [ ] Every issue surfaced during the session fixed in this cutover or explicitly escalated (R2)?
 - [ ] `git grep` on every removed identifier returns ONLY `CHANGELOG.md` / migration-help-text context (R5)?
@@ -379,7 +379,7 @@ This is the index of project-specific technical rules. Each philosophy / process
 
 **Technical rules (stated in full here):**
 
-- **Lowercase-hyphenated names** for layers and images.
+- **Lowercase-hyphenated names** for candies and boxes.
 - **Cross-kind name reuse is permitted and encouraged.** A single name (e.g. `ov-cachyos`) MAY exist simultaneously as a layer (`candy/<name>/`), an `image:` entry, a `pod:` entry, a `vm:` entry, a `k8s:` entry, a `local:` entry, AND a `deploy:` entry. Uniqueness is scoped to each kind. Verbs disambiguate by command context: `ov box build ov-cachyos` resolves to `image.ov-cachyos`; `ov vm create ov-cachyos` to `vm.ov-cachyos`; `ov update ov-cachyos` to `deploy.ov-cachyos`. The unified loader does NOT enforce global uniqueness across kinds; `ResolveDeployRef` chooses image-first when the same name exists as both an image and a layer (use `--add-candy <name>` for the layer-first path). See `/ov-image:layer`, `/ov-image:image`, `/ov-local:local-spec`, `/ov-core:deploy`, `/ov-build:validate`.
 - **`overthink.yml` is the only canonical authoring target.** Every `ov` authoring/scaffolding verb (`ov box set`, `ov box new project`, `ov box new image`, `ov box add-candy`, `ov box rm-candy`, `ov vm import`, `ov vm update`, `ov vm clone`) writes to `overthink.yml`. Per-kind files (`box.yml`, `vm.yml`, `pod.yml`, `k8s.yml`, `local.yml`, `deploy.yml`) remain valid as flat `import:` items in `overthink.yml` but are NEVER the default authoring target. Missing `overthink.yml` → hard error pointing at `ov box new project .` or `ov migrate`.
 - **Init-system polymorphism via mixed `service:` entries.** A layer that needs a service running under both supervisord (container/pod targets) and systemd (host / bootc / VM targets) declares BOTH forms in ONE `service:` list — same `name:`, one entry with `use_packaged: <unit>.service` (or `<unit>.socket`), the other with custom `exec:`. The init system at deploy time renders only the matching form. **NEVER** create a `<name>-host` or `<name>-pod` sibling layer to express target polymorphism — it duplicates packages and eval probes and inevitably drifts. Canonical worked examples: `/ov-coder:sshd` (mixed), `/ov-infrastructure:virtualization` (mixed), `/ov-infrastructure:postgresql` (use_packaged-only). See `/ov-image:layer` "Service Declaration" + "Anti-pattern: `<name>-host` / `<name>-pod` sibling layers".
@@ -428,6 +428,6 @@ The doc split is **five-way** — each layer has ONE owner; the others link to i
 
 - **Rules & mandates → `CLAUDE.md`** (this file): R0–R10, the philosophy pillars as operational mandates, the cutover + post-execution process, and the Key Rules technical index.
 - **Features & command reference → `README.md`**: the user-facing intro and the build → run → deploy → evaluate command surface.
-- **Usage & architecture → skills** (`plugins/README.md` is the full index, 290+ skills): every layer, image, verb, and subsystem. The single source of truth for *how*.
+- **Usage & architecture → skills** (`plugins/README.md` is the full index, 290+ skills): every candy, box, verb, and subsystem. The single source of truth for *how*.
 - **Thesis & direction → `VISION.md`** (repo root): the long-term "why this exists and where it's going", distilled from the philosophy pillars (Candyboxing, RDD, Agent Driven Development, Disposable-Only Autonomy, "for you and your agents"), stated as ASPIRATION in present-and-future tense.
 - **History → `CHANGELOG.md`** (repo root): every dated change, past rename, completed cutover/migration, relocated/deleted/retired identifier, and "previously / formerly / was". CLAUDE.md, README.md, `plugins/README.md`, and every `plugins/**/SKILL.md` describe the CURRENT state in present tense ONLY. When a cutover lands, append its narrative to `CHANGELOG.md`; state the standing rules it establishes forward-looking here and in skills, with no history. `CHANGELOG.md` is the sanctioned "changelog context" named by R5's grep self-test.

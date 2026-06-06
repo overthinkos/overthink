@@ -22,6 +22,54 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-06 — docs: rebrand the top-level docs to "The Candy Factory" (VISION wording)
+
+A documentation-only cutover that finished carrying the candy-factory voice and
+glossary from `VISION.md` into the top-level docs. The candy/box *machinery* had
+already landed in prior cutovers — the schema kinds `kind: candy` / `kind: box`,
+the `ov candy` / `ov box` verbs, the `candy.yml` / `box.yml` files — but the
+human-facing prose still led with the old tagline *"The Container Management
+Experience for You and Your Agents"* and still called the authoring entities
+"layers" and "images" where the schema and VISION already said candies and boxes.
+
+**The new tagline** is **"The Candy Factory for You and Your Agents"** — a
+parallel swap of the old one that keeps the "for you and your agents" audience
+phrase. It now leads `CLAUDE.md` (title + intro), `README.md` (subtitle + intro),
+`plugins/README.md`, and `pkg/arch/README.md`. After this cutover
+`grep -rin "container management" --include=*.md` returns zero live hits
+(CHANGELOG context excepted).
+
+**The rebrand rule (VISION's own discipline): glossary for the concept, literal
+for the artifact.** The Overthink-level *authoring* nouns were rebranded — a
+**layer** is a **candy** (`kind: candy`), an **image** is a **box** (`kind: box`),
+the secured disposable runtime is a **candybox**, a skill is a **recipe card** —
+while the *technical-artifact* terms were deliberately kept literal exactly where
+VISION keeps them: "container(s)" as the OCI/podman runtime substrate, "image" as
+the OCI artifact / OCI label / Containerfile output / base / multi-stage build,
+every `kind:` key, command name, flag, file path, OCI-label name, the
+`org.overthinkos.eval → {layer, image, deploy}` label-section keys, and every
+skill ID (`/ov-image:layer`, `/ov-image:image`). This was a per-occurrence
+semantic pass, never a blind replace.
+
+**Scope — top-level docs only.** `README.md` and `CLAUDE.md` got the full
+voice + glossary pass; `plugins/README.md` and `pkg/arch/README.md` got their
+tagline/framing lines aligned (light touch). In `CLAUDE.md` the branding (title +
+intro), the Candyboxing pillar, the dispatcher trigger descriptions, the RDD/ADD
+pillar entity nouns, the Key-Rules entity-naming, and the "Where things are
+documented" list were rebranded; the normative R1–R10 rule bodies and all
+OCI/Containerfile/command mechanics were left byte-for-meaning intact (verified
+by an adversarial meaning-preservation audit). Two stale stragglers surfaced in
+`README.md`'s Quickstart were fixed in the same change (R2): `ov image build` →
+`ov box build`, and the `# the kind:image` comment → `# the kind:box`.
+
+**Out of scope (declined tiers):** the conceptual prose of the 297 recipe-card
+skills (most of their ~6,800 "layer"/"image" mentions are literally-correct
+OCI/Containerfile terms) and renaming the leftover `/ov-image:layer` /
+`/ov-image:image` skill IDs (a 710-cross-reference identifier cutover). The
+dispatcher therefore still points "candy authoring" at the `/ov-image:layer`
+skill ID — an accepted boundary of this tier, not a stale reference (the skill ID
+is an opaque identifier, not prose).
+
 ### 2026-06-06 — docs: restructure README + CLAUDE.md, de-dup within/across, enforce the five-way doc split, fix skill refs
 
 A documentation-only cutover that made `README.md` and `CLAUDE.md` obey the

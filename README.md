@@ -1,21 +1,21 @@
 # Overthink
 
-**The container management experience for you and your agents.**
+**The candy factory for you and your agents.**
 
-Describe what you need in a simple layer list, and `ov` composes it
-into optimized multi-stage container images — from an interactive
-dev shell to a running service to a systemd unit to a bootable VM,
-to an agent's desktop running inside a candybox. Works the
+Describe what you need in a simple candy list, and `ov` composes it
+into optimized multi-stage **boxes** (container images) — from an
+interactive dev shell to a running service to a systemd unit to a
+bootable VM, to an agent's desktop running inside a candybox. Works the
 same way whether you're at the keyboard or your agents are
 driving.
 
-187 layers across this repo and its submodules. 53 image definitions
+187 candies across this repo and its submodules. 53 box definitions
 (39 enabled by default). 2 VM definitions, 2 Android devices, and a
 growing catalog of `kind: local` host templates and `kind: eval`
 test beds. Docker and Podman. `linux/amd64`. Fedora, Debian, Ubuntu,
-Arch, and CachyOS. One CLI: `ov` (29 top-level verbs). Every layer,
-image, VM, and command has a dedicated skill — ~290 skills across
-25 plugins. See `plugins/README.md` for the full index.
+Arch, and CachyOS. One CLI: `ov` (29 top-level verbs). Every candy,
+box, VM, and command has a dedicated recipe card (skill) — ~290 skills
+across 25 plugins. See `plugins/README.md` for the full index.
 
 *The name comes from the German "überdenken" — to think something
 through carefully. Not quite the same as the English "overthink,"
@@ -43,29 +43,29 @@ absolutely everything.*
 - [Command reference](#command-reference)
 - [Catalogs](#catalogs)
 - [Troubleshooting](#troubleshooting)
-- [Adding a layer](#adding-a-layer)
+- [Adding a candy](#adding-a-candy)
 - [Works with Claude Code](#works-with-claude-code)
 - [License](#license)
 
 ## What's in the chocolate factory
 
 `ov` is a Swiss Chocolate Factory. Each production line is a stage of
-the container lifecycle — **build, run, deploy, evaluate** — driven
+the lifecycle — **build, run, deploy, evaluate** — driven
 from one config and one mental model:
 
 | Reach for `ov` when you want to…                            | …and you get                                       | Stage                 |
 |-------------------------------------------------------------|----------------------------------------------------|-----------------------|
-| compose a reproducible image from a layer list              | `kind: box` / `kind: candy`, `ov box build`    | [Build](#build)       |
+| compose a reproducible box from a candy list                | `kind: box` / `kind: candy`, `ov box build`    | [Build](#build)       |
 | run one or more containers as a managed pod                 | `kind: pod`, `ov deploy add`, `ov start`           | [Run](#run)           |
-| apply the same layers to a host, VM, k8s, or Android device | `ov deploy add` + `target:`                        | [Deploy](#deploy)     |
+| apply the same candies to a host, VM, k8s, or Android device | `ov deploy add` + `target:`                        | [Deploy](#deploy)     |
 | prove a config actually works, end-to-end                   | `kind: eval`, `ov eval run`, baked `eval:` checks  | [Evaluate](#evaluate) |
 
 The same `ov` drives two further stages — it
-[authors layers and images with an agent in the loop](#author-with-agents)
+[authors candies and boxes with an agent in the loop](#author-with-agents)
 and [manages](#manage) the running lifecycle (cleanup, diagnostics,
 schema upgrades, runtime config).
 
-> One `candy.yml`, one image, one `deploy.yml`, and one `kind: eval`
+> One `candy.yml`, one box, one `deploy.yml`, and one `kind: eval`
 > bed drive all four stages — the build, the local run, the remote
 > deploy, and the test harness. The binary that wires them together is
 > also an MCP server, so your agent reaches every verb over the
@@ -74,27 +74,27 @@ schema upgrades, runtime config).
 ## Core concepts
 
 A handful of ideas recur everywhere. Four of them are the heart of
-Overthink — **layers & images**, **candyboxing**, **Risk Driven
+Overthink — **candies & boxes**, **candyboxing**, **Risk Driven
 Development**, and the **build → run → deploy → evaluate** lifecycle —
 and the rest is the schema vocabulary that ties them together.
 
-### Layers & images
+### Candies & boxes
 
-Overthink treats container images as composable building blocks. Each
-**layer** is a self-contained unit; an **image** is an ordered list of
-layers on top of a base. `ov` resolves the dependency graph, generates
+Overthink treats boxes (container images) as composable building
+blocks. Each **candy** is a self-contained unit; a **box** is an
+ordered list of candies on top of a base. `ov` resolves the dependency graph, generates
 multi-stage Containerfiles with cache mounts, and builds in the right
 order — handling the hard parts so you (and your agents) don't
 have to.
 
-- **Layer** (`kind: candy` in `candy.yml`) — packages (per-distro),
+- **Candy** (`kind: candy` in `candy.yml`) — packages (per-distro),
   tasks (eight verbs: `cmd`/`mkdir`/`copy`/`write`/`link`/`download`/
   `setcap`/`build`), services (one unified `service:` list — see
   init-system polymorphism below), volumes, env, ports, eval probes,
   `env_provide`/`env_require`/`mcp_provide`/`mcp_accept` for
   cross-container discovery, plus a `version:` CalVer.
   → `/ov-image:layer`.
-- **Image** (`kind: box`) — base + ordered layer list. Multi-stage
+- **Box** (`kind: box`) — base + ordered candy list. Multi-stage
   Containerfile, content-derived `org.overthinkos.version` OCI label,
   stable cache. → `/ov-image:image`.
 
@@ -102,7 +102,7 @@ have to.
 
 Secure the *box* — a disposable, rootless container or VM with real,
 kernel-enforced isolation — then hand your agent the whole candy store
-inside it: every `ov` verb, every layer, every `ov eval` probe, a real
+inside it: every `ov` verb, every candy, every `ov eval` probe, a real
 registry, a real GPU. Far more capability than a locked-down sandbox, and
 a mistake costs one rebuild.
 → [VISION.md](VISION.md) (why), CLAUDE.md "Candyboxing" (the rule),
@@ -111,7 +111,7 @@ a mistake costs one rebuild.
 ### Risk Driven Development (early)
 
 Prove the riskiest unknown — above all whether a particular *combination*
-of layers, at their latest versions, actually builds and runs together —
+of candies, at their latest versions, actually builds and runs together —
 empirically on a disposable `kind: eval` bed EARLY, before a design rests
 on it. `ov eval` makes that proof cheap, for agents and humans alike.
 → [VISION.md](VISION.md) (why), CLAUDE.md "Risk Driven Development (RDD)"
@@ -119,8 +119,8 @@ on it. `ov eval` makes that proof cheap, for agents and humans alike.
 
 ### Agent Driven Development (acceptance)
 
-What an image is *supposed* to do is written as runnable Gherkin scenarios
-on the layer that provides the behaviour, baked into the image as a label.
+What a box is *supposed* to do is written as runnable Gherkin scenarios
+on the candy that provides the behaviour, baked into the box as a label.
 A step with a check verb is verified deterministically; a prose-only step
 is graded by an **agent** probing the live deployment. Author with
 `ov candy add-scenario`, run with `ov box feature run` /
@@ -131,24 +131,24 @@ green. The spec is the test, and agents both write it and grade it.
 
 ### Build → run → deploy → evaluate
 
-The container lifecycle is four verbs, and the same declarative inputs
+The lifecycle is four verbs, and the same declarative inputs
 flow through all of them:
 
-- **Build** — a `kind: box` composes layers into a reproducible
+- **Build** — a `kind: box` composes candies into a reproducible
   multi-stage image.
 - **Run** — a `kind: pod` brings containers up as systemd-managed
   Podman quadlets.
-- **Deploy** — `ov deploy add` applies the same layers to a host, VM,
+- **Deploy** — `ov deploy add` applies the same candies to a host, VM,
   k8s cluster, or Android device via `target:`.
 - **Evaluate** — `kind: eval` beds and baked `eval:` checks prove any
-  image or deployment works end-to-end.
+  box or deployment works end-to-end.
 
 See [Lifecycle](#lifecycle) for the full verb families (plus
 authoring-with-agents and management).
 
 ### Schema kinds
 
-Beyond `layer` and `image`, the schema has these kinds — each a `kind:`
+Beyond `candy` and `box`, the schema has these kinds — each a `kind:`
 discriminator in its file:
 
 - **Pod** (`kind: pod`) — multi-container deploy shape: containers,
@@ -159,11 +159,11 @@ discriminator in its file:
   snapshot/console`. → `/ov-vm:vm`.
 - **K8s** (`kind: k8s`) — Kubernetes cluster (in-pod k3s or external)
   with provisioning + workload defaults. → `/ov-kubernetes:kubernetes`.
-- **Local** (`kind: local`) — host-side layer stack applied to the
+- **Local** (`kind: local`) — host-side candy stack applied to the
   operator's machine (or any ssh-reachable host) via the native
   package manager + systemd + shell profile. → `/ov-local:local-spec`.
 - **Android** (`kind: android`) — Android device: in-pod emulator
-  (via `box:`) or remote/physical adb endpoint. `apk:` is a layer
+  (via `box:`) or remote/physical adb endpoint. `apk:` is a candy
   package format scoped to Android targets. → `/ov-eval:android`.
 - **Deploy** (`kind: deploy`) — a named deployment of one of the
   kinds above to a `target:` (`pod` default, `vm`, `k8s`, `local`,
@@ -186,21 +186,21 @@ single-key `alias: ref` map for a namespaced cross-repo import (Go
 package-member semantics — `base: cachyos.cachyos`, fetched from
 `@github.com/owner/repo:tag` and cached under `~/.cache/ov/repos/`).
 
-**Init-system polymorphism — one place, no siblings.** A layer that
+**Init-system polymorphism — one place, no siblings.** A candy that
 needs the same service under supervisord (containers) and systemd
 (hosts / VMs / bootc) declares BOTH forms in one `service:` list,
 same `name:`, one entry with `use_packaged: <unit>.service`, another
 with custom `exec:`. The init system at deploy time picks the
 matching form. *Never* create a `<name>-host` / `<name>-pod` sibling
-layer for this. Canonical examples: `/ov-coder:sshd`,
+candy for this. Canonical examples: `/ov-coder:sshd`,
 `/ov-infrastructure:virtualization`, `/ov-infrastructure:postgresql`.
 
-**Distro + package-format dispatch.** Layer declares `distro:` tag
+**Distro + package-format dispatch.** A candy declares `distro:` tag
 sections (`fedora:43:` / `ubuntu:24.04:`) and package-format sections
-(`rpm:` / `deb:` / `pac:` / `aur:` / `apk:`). Image declares its
+(`rpm:` / `deb:` / `pac:` / `aur:` / `apk:`). A box declares its
 `distro:` identity and `build:` formats. Distro tag first-match wins;
 `build:` formats install in declared order. `fedora-coder` /
-`arch-coder` / `debian-coder` / `ubuntu-coder` share ~30 layers,
+`arch-coder` / `debian-coder` / `ubuntu-coder` share ~30 candies,
 differing only in package sections.
 
 **Disposability — explicit opt-in.** `disposable: true` on a
@@ -217,39 +217,39 @@ that need `/dev/kvm` or virtualization access without blanket
 `--privileged`, multiple services managed together, encrypted
 volumes, VNC or browser-streamed desktops, device permissions that
 don't compromise your host. Each is solvable — but solving them all
-at once, reliably, across images, is where things get hard. And if
+at once, reliably, across boxes, is where things get hard. And if
 your agent has to build and manage these containers too, the
 complexity compounds.
 
-Overthink treats container images as composable building blocks (see
+Overthink treats boxes as composable building blocks (see
 [Core concepts](#core-concepts)) — handling the hard parts so you (and
 your agents) don't have to.
 
 **Testing and evaluating deployment configs is a first-class goal —
 for agents and humans.** A deploy config is only useful if you can prove
-it works, so any image or deployment is self-verifiable end-to-end — the
+it works, so any box or deployment is self-verifiable end-to-end — the
 same surface whether a human drives it at the keyboard or an agent drives
 it autonomously. See [Evaluate](#evaluate) for the framework and
 [Works with Claude Code](#works-with-claude-code) for the agents and
 workflows. → `/ov-eval:eval`, `/ov-internals:agents`.
 
-**Rootless-first power-user images.** The four images carrying the
+**Rootless-first power-user boxes.** The four boxes carrying the
 full `ov` toolchain (`fedora-coder`, `fedora-ov`, `arch-ov`,
 `githubrunner`) all run as uid=1000 with passwordless sudo. Four
-cross-distro coder images (`/ov-coder:fedora-coder`/`arch-coder`/
-`debian-coder`/`ubuntu-coder`) share ~30 layers, differing only in
+cross-distro coder boxes (`/ov-coder:fedora-coder`/`arch-coder`/
+`debian-coder`/`ubuntu-coder`) share ~30 candies, differing only in
 package sections and how the uid-1000 user lands (create vs. adopt
 mode). Rootless nested containers and rootless libvirt VMs work
 with zero additive capabilities via the surgical `unmask=/proc/*`
-security_opt from the `container-nesting` layer.
+security_opt from the `container-nesting` candy.
 → `/ov-distros:container-nesting`, `/ov-coder:fedora-coder`.
 
 **Sandboxed agent desktops.** [Candyboxing](#candyboxing) applied to a
 whole desktop: `/ov-openclaw:openclaw-desktop` is the all-in-one CachyOS
 streaming desktop — Selkies desktop + openclaw-full gateway + agent CLIs
 (claude-code, codex, gemini) + CPU ollama + nested `ov`. The agent (or the
-user) builds images, launches nested rootless pods, and creates libvirt
-VMs from a terminal inside the browser-accessible desktop — uid 1000, no
+user) builds boxes, launches nested rootless pods, and creates libvirt
+VMs from a terminal inside the browser-accessible candybox desktop — uid 1000, no
 `--privileged`, no added capabilities.
 
 ## Install
@@ -266,7 +266,7 @@ the unified schema, the `kind:` discriminators, or the singular
 field names) convert in one shot with `ov migrate` — a single
 idempotent chain to the latest CalVer schema. See `/ov-build:migrate`.
 
-**Full project bootstrap** (to build images from this repo):
+**Full project bootstrap** (to build boxes from this repo):
 
 ```bash
 git clone --recurse-submodules https://github.com/overthinkos/overthink.git
@@ -305,11 +305,11 @@ cd ov && go build -o ../bin/ov .
 ## Quickstart
 
 ```bash
-# Build a single image
+# Build a single box
 ov box build fedora
 
-# Build a CachyOS image (in submodule; ov resolves cross-repo refs)
-ov -C image/cachyos image build cachyos
+# Build a CachyOS box (in submodule; ov resolves cross-repo refs)
+ov -C image/cachyos box build cachyos
 
 # Drop into an interactive shell
 ov shell fedora
@@ -322,11 +322,11 @@ ov start jupyter
 ov config jupyter
 
 # Build a bootable VM disk image
-ov box build bazzite               # the kind:image
+ov box build bazzite               # the kind:box
 ov vm build  bazzite-bootc --type qcow2 # the kind:vm
 ov vm create bazzite-bootc
 
-# Apply layers directly to your workstation (no container)
+# Apply candies directly to your workstation (no container)
 ov deploy add host ripgrep
 ov deploy add host fedora-coder --with-services --yes
 ov deploy del host                  # reverses everything via ReverseOps + ledger
@@ -343,10 +343,10 @@ share the same declarative inputs.
 
 ### Build
 
-> Declarative layer list → reproducible, fully-cached multi-stage
+> Declarative candy list → reproducible, fully-cached multi-stage
 > image.
 
-Each image declares a `base:`, an ordered `candy:` list, a `distro:`
+Each box declares a `base:`, an ordered `candy:` list, a `distro:`
 identity, and a `build:` set of package formats. The planner
 resolves the dependency graph, generates a multi-stage Containerfile
 with cache-mounted package archives + AUR srcdest + pixi/npm/cargo
@@ -366,12 +366,12 @@ add-candy, rm-candy, fetch, refresh, write, cat}`, `ov candy {set,
 add-rpm, add-deb, add-pac, add-aur}` — gives agents
 comment-preserving YAML edits over RPC.
 
-Cross-repo refs: `import:` items and layer references can name
+Cross-repo refs: `import:` items and candy references can name
 `@github.com/owner/repo:tag`. The resolver fetches every distinct
 `(repo, git-tag)` and arbitrates per per-entity `version:` — same
 `version:` across different git tags → silent (re-tag);
 different `version:` → warn once and use the newest. `ov box
-reconcile` aligns the cross-repo pins when a layer's CalVer moves.
+reconcile` aligns the cross-repo pins when a candy's CalVer moves.
 
 → `/ov-build:build`, `/ov-build:generate`, `/ov-build:validate`,
 `/ov-build:inspect`, `/ov-build:reconcile`, `/ov-image:image`,
@@ -391,9 +391,9 @@ auto-restart on failure, start on login. `ov stop`, `ov restart`,
 (drive the inner supervisord) operate it; `ov remove` deletes the
 quadlet and containers.
 
-Images with multiple co-resident services in one container use
+Boxes with multiple co-resident services in one container use
 supervisord as their init (declared via the same unified `service:`
-list); images that deploy as separate containers get one quadlet
+list); boxes that deploy as separate containers get one quadlet
 each in a shared pod. Either way, the same `service:` schema is the
 input.
 
@@ -415,16 +415,16 @@ input.
   unmount, status, passwd}`.
 - **GPU access** — NVIDIA via CDI (`gpu.nvidia.com` annotation);
   ROCm for AMD; `ov udev install/remove` writes the host-side
-  rules. CUDA toolkit + cuDNN + ONNX Runtime in the `cuda` layer.
+  rules. CUDA toolkit + cuDNN + ONNX Runtime in the `cuda` candy.
 - **Wayland desktop streaming** — the Selkies family
   (`selkies-labwc`, `sway-desktop`, `sway-browser-vnc`) bundles a
   Wayland compositor (sway or labwc) + Chrome + `wayvnc` on port
   5900 + Pipewire audio. Browser pane at `:3000`.
-- **Per-image MCP servers** — `chrome-devtools-mcp` on `:9224`,
+- **Per-box MCP servers** — `chrome-devtools-mcp` on `:9224`,
   `jupyter-mcp` at `:8888/mcp`, `marimo-mcp` at `:2718/mcp/server`,
   nested `ov-mcp`. Declared via `mcp_provide:` and auto-discovered
   by consumers (Hermes, Claude Code) through `OV_MCP_SERVERS`.
-- **Auto service discovery** — a layer's `env_provide:` declares
+- **Auto service discovery** — a candy's `env_provide:` declares
   env vars with `{{.ContainerName}}` templates injected into every
   co-deployed container at `ov config` time. Deploy `ollama` and
   every other pod sees `OLLAMA_HOST=http://ov-ollama:11434`.
@@ -446,20 +446,20 @@ input.
 discriminates where it lands:
 
 - **`target: pod`** (default) — Podman + quadlet, as in [Run](#run).
-- **`target: vm`** — libvirt + QEMU. Layers are applied *inside* the
+- **`target: vm`** — libvirt + QEMU. Candies are applied *inside* the
   booted VM over SSH via the same InstallPlan IR. `ov vm build`
   (bootc → QCOW2/RAW), `ov vm create/destroy/start/stop`, `ov vm
   clone` (snapshot fork), `ov vm snapshot`, `ov vm console`. The
   managed `~/.config/ov/ssh_config` fragment gets a `Host
   ov-<vmname>` stanza written on `ov vm create`.
   → `/ov-vm:vm`, `/ov-internals:vm-deploy-target`.
-- **`target: k8s`** — Kustomize tree applied to k3s in-pod (layer
+- **`target: k8s`** — Kustomize tree applied to k3s in-pod (candy
   triplet `/ov-infrastructure:k3s` + `k3s-server` + `k3s-agent`) or
   to an external cluster. `K3S_CLUSTER_TOKEN` auto-generated on
   first deploy via `ensureLayerSecret` and shared with every joining
   agent — zero operator setup. → `/ov-kubernetes:kubernetes`,
   `/ov-infrastructure:k3s`.
-- **`target: local`** — applies the layers' packages / files /
+- **`target: local`** — applies the candies' packages / files /
   systemd units to the host filesystem. `host: local` (default)
   uses the local shell executor; `host: user@machine[:port]` (or a
   configured alias) re-execs `ov` over SSH. Per-machine overlays
@@ -486,10 +486,10 @@ FdoSecrets) → config-file fallback (`~/.config/ov/config.yml`,
 `.secrets` file: `ov secrets gpg env` decrypts in memory when
 direnv loads the project; no plaintext on disk. Manage with `ov
 secrets gpg {env, show, set, unset, edit, encrypt, recipients,
-import-key, export-key, setup, doctor}`. Layer-private secrets
+import-key, export-key, setup, doctor}`. Candy-private secrets
 (like `K3S_CLUSTER_TOKEN`) get auto-provisioned via
 `ensureLayerSecret` and stored under `ov/secret/<key>` in the
-Secret Service. **Agent forwarding** — the `agent-forwarding` layer
+Secret Service. **Agent forwarding** — the `agent-forwarding` candy
 binds host `SSH_AUTH_SOCK` / `GPG_AGENT_SOCK` into the container.
 → `/ov-build:secrets`.
 
@@ -507,7 +507,7 @@ Tests are first-class. Every `candy.yml` / `box.yml` /
 mounts, users, groups, kernel params, interfaces, matchers). Checks
 bake into a three-section OCI label
 (`org.overthinkos.eval` → `{layer, image, deploy}`) so any pulled
-image is self-testable without its source repo.
+box is self-testable without its source repo.
 
 Three execution modes:
 
@@ -573,8 +573,8 @@ Gherkin-shaped descriptions on the same entries.
 
 ### Author with agents
 
-> Agents in the loop, authoring and iterating on layers and
-> images — `ov`-specific.
+> Agents in the loop, authoring and iterating on candies and
+> boxes — `ov`-specific.
 
 The agent iteration harness sits on top of `kind: eval` and
 adds three overlay kinds:
@@ -630,7 +630,7 @@ auto-fallback to `overthinkos/overthink` when no project is wired
 - `ov tmux {ls, attach}` — drive tmux sessions inside containers.
 - `ov ssh tunnel {spice, vnc, …}` — forward SPICE/VNC/unix sockets
   from a remote libvirt host to the local machine.
-- `ov alias install` — register image-scoped shell aliases
+- `ov alias install` — register box-scoped shell aliases
   (bash/zsh/fish) so `<image>` on the host transparently runs
   inside the container.
 - `ov udev install/remove` — host-side udev rules for GPU device
@@ -652,8 +652,8 @@ gateway exposing the entire surface as MCP tools.
 
 | Area | Commands | Skill |
 |---|---|---|
-| **Image (build mode)** | `ov box {build, generate, validate, merge, new, inspect, list, pull, reconcile}` | `/ov-image:image` + `/ov-build:build`, `/ov-build:generate`, `/ov-build:validate`, `/ov-build:merge`, `/ov-build:new`, `/ov-build:inspect`, `/ov-build:list`, `/ov-build:pull`, `/ov-build:reconcile` |
-| **Image authoring (MCP-first)** | `ov box {set, add-candy, rm-candy, fetch, refresh, write, cat}` and `ov candy {set, add-rpm, add-deb, add-pac, add-aur}` | `/ov-image:image` "Authoring" + `/ov-image:layer` |
+| **Box (build mode)** | `ov box {build, generate, validate, merge, new, inspect, list, pull, reconcile}` | `/ov-image:image` + `/ov-build:build`, `/ov-build:generate`, `/ov-build:validate`, `/ov-build:merge`, `/ov-build:new`, `/ov-build:inspect`, `/ov-build:list`, `/ov-build:pull`, `/ov-build:reconcile` |
+| **Box authoring (MCP-first)** | `ov box {set, add-candy, rm-candy, fetch, refresh, write, cat}` and `ov candy {set, add-rpm, add-deb, add-pac, add-aur}` | `/ov-image:image` "Authoring" + `/ov-image:layer` |
 | **Deployment** | `ov deploy {add, del, sync, from-box, export, import, show, reset, status, path}`; `ov config`; `ov start`, `ov stop`, `ov restart`, `ov update`, `ov remove` | `/ov-core:deploy`, `/ov-core:ov-config`, `/ov-core:start`, `/ov-core:stop`, `/ov-core:ov-update`, `/ov-core:remove`, `/ov-local:local-deploy`, `/ov-kubernetes:kubernetes`, `/ov-internals:vm-deploy-target` |
 | **Runtime** | `ov shell`, `ov cmd`, `ov service`, `ov status`, `ov logs`, `ov tmux` | `/ov-core:shell`, `/ov-core:cmd`, `/ov-core:service`, `/ov-core:ov-status`, `/ov-core:logs`, `/ov-automation:tmux` |
 | **Test + probes** | `ov eval {image, live, run}` + the 11 live probe verbs (`cdp`, `wl`, `dbus`, `vnc`, `mcp`, `record`, `spice`, `libvirt`, `k8s`, `adb`, `appium`); `ov feature {list, pending, validate}` | `/ov-eval:eval`, `/ov-eval:cdp`, `/ov-eval:wl`, `/ov-eval:dbus`, `/ov-eval:vnc`, `/ov-eval:spice`, `/ov-eval:libvirt`, `/ov-eval:record`, `/ov-kubernetes:eval-k8s`, `/ov-eval:adb`, `/ov-eval:appium` |
@@ -681,16 +681,16 @@ gateway exposing the entire surface as MCP tools.
 Content lives in the working tree and in the skill index — pointers,
 not enumerations:
 
-- **Layer library** (`candy/` + submodule `image/<distro>/candy/`,
-  187 layers total). Foundation: `/ov-distros:*` (40 skills — base
+- **Candy library** (`candy/` + submodule `image/<distro>/candy/`,
+  187 candies total). Foundation: `/ov-distros:*` (40 skills — base
   OS, GPU runtime, bootc, per-distro builders),
   `/ov-languages:*`, `/ov-infrastructure:*` (22), `/ov-tools:*`
   (19). Per-pod: `/ov-jupyter:*`, `/ov-coder:*` (33),
   `/ov-selkies:*` (40), `/ov-openclaw:*`, `/ov-versa:*`,
   `/ov-ollama:*`, `/ov-openwebui:*`, `/ov-comfyui:*`,
   `/ov-immich:*`, `/ov-hermes:*`, `/ov-filebrowser:*`.
-- **Image catalog** (`box.yml` + `image/*/box.yml`) — 53 images,
-  39 enabled by default. Same plugin namespaces; per-pod images
+- **Box catalog** (`box.yml` + `image/*/box.yml`) — 53 boxes,
+  39 enabled by default. Same plugin namespaces; per-pod boxes
   carry an MCP server hint in `plugins/README.md`.
 - **VM catalog** (`vm.yml` + `image/cachyos/vm.yml`) — cloud_image
   + bootc entries. → `/ov-vm:vms-catalog`.
@@ -700,21 +700,21 @@ not enumerations:
   plus `kind: recipe` / `score` / `ai` for the agent harness.
   → `/ov-eval:eval`.
 
-Layers used by only one image family are vendored in that
+Candies used by only one box family are vendored in that
 `image/<distro>` submodule (e.g. bootc-exclusive set in
 `image/bootc`, `ghostty`/`keepassxc-keyring` in `image/cachyos`,
-`arch-*-test` fixtures in `image/arch`). Shared layers are pulled by
+`arch-*-test` fixtures in `image/arch`). Shared candies are pulled by
 `@github` ref.
 
-**Composition meta-layers** — `sway-desktop`, `sway-desktop-vnc`,
+**Composition meta-candies** — `sway-desktop`, `sway-desktop-vnc`,
 `selkies-desktop`, `bootc-base`, `openclaw-full`, `openclaw-full-ml`,
-`python-ml`, `jupyter-ml`, `unsloth-studio` bundle curated layer
+`python-ml`, `jupyter-ml`, `unsloth-studio` bundle curated candy
 sets.
 
-**Data layers / data images** — `data:` block in `candy.yml` stages
+**Data candies / data boxes** — `data:` block in `candy.yml` stages
 files at `/data/<volume>/`; `ov config --bind <volume>` provisions
 them at deploy time; `ov update` merges new data non-destructively.
-`data_image: true` scratch-based images carry data + OCI labels,
+`data_image: true` scratch-based boxes carry data + OCI labels,
 consumed via `ov config --data-from <data-image>`.
 
 See `plugins/README.md` for the authoritative skill index and
@@ -743,17 +743,17 @@ not here.
 | Newer-than-binary config rejected at load | `ov migrate` brings the project to the latest schema CalVer (`/ov-build:migrate`) |
 | Schema/format change won't apply | `ov migrate` is idempotent; auto-invoked on remote-cache fetches |
 
-## Adding a layer
+## Adding a candy
 
 ```bash
-ov box new candy my-layer             # Scaffold the directory
-# Edit candy/my-layer/candy.yml        # Declare packages, deps, env, ports,
+ov box new candy my-candy             # Scaffold the directory
+# Edit candy/my-candy/candy.yml        # Declare packages, deps, env, ports,
 #                                       # services, eval probes, and tasks:
 #                                       # (see /ov-image:layer for the verb catalog)
 # Optionally add pixi.toml / package.json / Cargo.toml for auto-detected builders.
 
-# Add to an image's layer list in overthink.yml (or box.yml):
-#   candy: [..., my-layer]
+# Add to a box's candy list in overthink.yml (or box.yml):
+#   candy: [..., my-candy]
 
 ov box build my-image                 # Build it
 ov eval box my-image                  # Run the baked checks
@@ -772,8 +772,8 @@ authoring gotchas.
 Overthink works hand-in-hand with
 [Claude Code](https://claude.com/claude-code). The bundled
 [plugins/](plugins/) directory provides skills that teach Claude
-how to compose, build, deploy, and manage your container images.
-Every layer, every image, every command has a dedicated skill.
+how to compose, build, deploy, and manage your boxes.
+Every candy, every box, every command has a dedicated skill.
 
 **Quick setup** — add this to your project's `.claude/settings.json`:
 
@@ -806,7 +806,7 @@ https://github.com/overthinkos/overthink.git`.
 **MCP gateway as the universal channel.** `ov mcp serve` exposes
 every `ov` CLI leaf as an MCP tool (Streamable HTTP or stdio), so
 the agent reaches the full build / deploy / test surface over
-RPC. Per-image MCP servers (chrome-devtools-mcp, jupyter-mcp,
+RPC. Per-box MCP servers (chrome-devtools-mcp, jupyter-mcp,
 marimo-mcp, ov-mcp) auto-discover via `mcp_provide:` when their
 containers are running.
 

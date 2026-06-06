@@ -135,6 +135,22 @@ a deb deploy picks debian's OR ubuntu's tailscale repo non-deterministically —
 both install `tailscale`, so the bed passes either way; making the deb-family repo
 selection distro-deterministic is its own follow-up cutover.)
 
+**Third — virtualization's deb list named an Ubuntu-nonexistent package.** With
+apt usable, `eval-ubuntu-debootstrap-vm` then failed at the `virtualization` layer
+with `E: Unable to locate package libvirt-daemon-driver-network`. Debian's
+`libvirt-daemon-system` Depends on the modular `libvirt-daemon-driver-network`
+(pulled transitively), but Ubuntu noble ships NO such separate package — it is
+bundled into `libvirt-daemon-system`. The candy listed it explicitly in BOTH the
+`debian` and `ubuntu` deb sections (which union into the one `deb` format section,
+so even the author's correct `ubuntu-24.04` tag override was bypassed — the
+synthetic VM image carries `["ubuntu"]` with no version tag, so Phase-1 tag
+sections aren't reached; same root collapse as the tailscale-repo note above).
+Fix: drop the explicit `libvirt-daemon-driver-network` from the deb-family
+sections (verified via `podman run debian:13/ubuntu:24.04 apt-cache depends`: it
+is a transitive Depends on Debian, nonexistent-but-bundled on Ubuntu; fedora's rpm
+section keeps it). `eval-debian-debootstrap-vm`, `eval-fedora-vm`,
+`eval-cachyos-vm` PASS at v2026.157.0634; the deb beds re-verified after this fix.
+
 ### 2026-06-05 — feat: consolidate `ov` — merge `ov-full` into `ov`, drop `ov` where unneeded, right-size the package deps, and test ALL ov commands
 
 The `ov` toolchain was split into a bare-binary `ov` layer and an `ov-full`

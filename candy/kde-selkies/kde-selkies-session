@@ -39,7 +39,7 @@ export XKB_DEFAULT_OPTIONS="${XKB_DEFAULT_OPTIONS:-}"
 # polls for wayland-0 (the Plasma client socket startplasma-wayland creates
 # below) itself, and supervisord relaunches Chrome if it self-exits during the
 # nested compositor's startup-race (the former fire-once launch here had no such
-# relaunch, so Chrome stayed dead). See layers/selkies-core/layer.yml.
+# relaunch, so Chrome stayed dead). See candy/selkies-core/candy.yml.
 
 # A private D-Bus session so this nested Plasma doesn't collide with the DRM
 # Plasma session's bus. startplasma-wayland brings up kwin_wayland + plasmashell.

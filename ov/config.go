@@ -320,7 +320,7 @@ func LoadConfigRaw(dir string) (*Config, error) {
 		return nil, fmt.Errorf("loading overthink.yml: %w", err)
 	}
 	if !present {
-		return nil, fmt.Errorf("no overthink.yml found in %s (run `ov migrate` to convert legacy image.yml/build.yml/deploy.yml)", dir)
+		return nil, fmt.Errorf("no overthink.yml found in %s (run `ov migrate` to convert legacy box.yml/build.yml/deploy.yml)", dir)
 	}
 	cfg := uf.ProjectConfig()
 	return cfg, nil

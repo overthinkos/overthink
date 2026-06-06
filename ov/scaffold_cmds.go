@@ -75,7 +75,7 @@ func (c *BoxSetCmd) Run() error {
 	}
 	target := filepath.Join(dir, "overthink.yml")
 	if _, err := os.Stat(target); os.IsNotExist(err) {
-		return fmt.Errorf("overthink.yml not found in %s; run `ov box new project .` to scaffold or `ov migrate` to convert a legacy image.yml", dir)
+		return fmt.Errorf("overthink.yml not found in %s; run `ov box new project .` to scaffold or `ov migrate` to convert a legacy box.yml", dir)
 	}
 	return SetByDotPath(target, c.Path, c.Value)
 }
@@ -261,7 +261,7 @@ type CandyCmd struct {
 }
 
 type CandySetCmd struct {
-	Name  string `arg:"" help:"Layer name (under layers/)"`
+	Name  string `arg:"" help:"Layer name (under candy/)"`
 	Path  string `arg:"" help:"Dot-path into the candy manifest (e.g. service.name, env.MY_VAR)"`
 	Value string `arg:"" help:"Value (parsed as YAML)"`
 }
@@ -298,7 +298,7 @@ func (c *CandySetCmd) Run() error {
 // Implementation choice: instead of plumbing Kong context, we instantiate
 // four distinct concrete types so the section is hard-wired per type.
 type CandyAddPkgCmd struct {
-	Name     string   `arg:"" help:"Layer name (under layers/)"`
+	Name     string   `arg:"" help:"Layer name (under candy/)"`
 	Packages []string `arg:"" help:"Package names to append"`
 	// section is set by the parent group via aliases; default to rpm if
 	// somehow invoked directly.

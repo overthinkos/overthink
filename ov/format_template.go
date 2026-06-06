@@ -212,7 +212,7 @@ type BuildStageContext struct {
 	BuilderRef     string
 	StageName      string
 	LayerStage     string // scratch stage name for COPY --from
-	CopySrc        string // build context path for layer files (e.g., "layers/python")
+	CopySrc        string // build context path for layer files (e.g., "candy/python")
 	UID            int
 	GID            int
 	Home           string

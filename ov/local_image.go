@@ -118,7 +118,7 @@ func parseLocalImagesJSON(out []byte) ([]LocalImageInfo, error) {
 
 // resolveLocalImageRef resolves a user-supplied image reference against the
 // engine's local storage — never reads overthink.yml. Used by test-mode commands
-// (ov eval live, ov eval image) so they stay within the test-mode input set.
+// (ov eval live, ov eval box) so they stay within the test-mode input set.
 //
 // For full refs (registry prefix present) it validates the image exists
 // locally and passes through unchanged. For short names it resolves via

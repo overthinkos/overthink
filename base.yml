@@ -2,7 +2,7 @@
 #  (`arch` + `arch-builder`) and the Fedora stack (`fedora` + `fedora-builder` +
 #  `fedora-nonfree`). Combined from the former arch-base.yml + fedora-base.yml in
 #  the 2026-05 import-namespace cutover. There is exactly ONE copy of each
-#  definition — they are NOT also in image.yml — so there is no duplication.
+#  definition — they are NOT also in box.yml — so there is no duplication.
 #
 #  Flat-imported by this repo's overthink.yml (root namespace) AND by the
 #  overthinkos/{arch,fedora,bootc} submodules (which import it under the `ov`
@@ -12,7 +12,7 @@
 #
 #  Every builder/nonfree layer: list uses github references (not plain names) so
 #  the SAME file resolves both locally (root namespace) and remotely (the `ov`
-#  namespace in a submodule that has no layers/ of its own). github references
+#  namespace in a submodule that has no candy/ of its own). github references
 #  everywhere, one definition. The shared builder-layer refs (pixi / nodejs /
 #  build-toolchain / yay / rpmfusion) pin to one recent ecosystem tag so a
 #  consumer that also references a changed layer (e.g. nodejs) resolves it to a
@@ -20,7 +20,7 @@
 #  reference to a given layer agrees on that layer's own version:.
 #
 #  version: is the SCHEMA CalVer (bumped by the per-kind-versioning cutover); the
-#  builder-layer refs pin to ecosystem tag v2026.144.2044. Run `ov image
+#  builder-layer refs pin to ecosystem tag v2026.144.2044. Run `ov box
 #  reconcile` to advance them together when a shared layer moves.
 version: 2026.143.844
 box:

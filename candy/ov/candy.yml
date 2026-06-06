@@ -23,7 +23,7 @@ candy:
                 - opusfile
         debian:
             # tailscale is a mandatory ov dep but is NOT in Debian main, so the
-            # .deb (pkg/debian) omits it; the ov layer supplies it for deb-family
+            # .deb (pkg/debian) omits it; the ov candy supplies it for deb-family
             # via the tailscale apt repo. arch/fedora get tailscale from their
             # native package's deps instead, so it is deb-family-scoped here.
             package:

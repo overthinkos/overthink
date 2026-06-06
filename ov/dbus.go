@@ -194,7 +194,7 @@ func dbusIntrospectLocal(dest, path string) error {
 // the target — the same delegation pattern, now venue-agnostic (R3).
 func dbusNotifyRemoteStrict(ex DeployExecutor, title, body string) error {
 	// Ensure an invokable ov on the venue — copying the host binary in when the
-	// image doesn't bake the ov layer (the generic copy-in mechanism), then
+	// image doesn't bake the ov candy (the generic copy-in mechanism), then
 	// delegate to it so the notify runs against the venue's own live session bus.
 	if ovCmd, err := EnsureOvInVenue(context.Background(), ex, EmitOpts{}); err == nil && ovCmd != "" {
 		script := fmt.Sprintf("%s eval dbus notify . %s %s", ovCmd,
@@ -221,7 +221,7 @@ func dbusNotifyRemoteStrict(ex DeployExecutor, title, body string) error {
 }
 
 // dbusCallRemote delegates a D-Bus call to the venue's ov binary, copying the
-// host ov in when the image doesn't bake the ov layer (the generic copy-in).
+// host ov in when the image doesn't bake the ov candy (the generic copy-in).
 func dbusCallRemote(ex DeployExecutor, dest, path, method string, args []string) error {
 	ovCmd, err := EnsureOvInVenue(context.Background(), ex, EmitOpts{})
 	if err != nil || ovCmd == "" {

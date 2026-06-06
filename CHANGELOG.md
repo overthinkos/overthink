@@ -22,6 +22,32 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-06 — docs: complete the box/candy rebrand sweep (stale `ov image`/`ov layer`/`image.yml`/`layer.yml`/`layers/` references)
+
+The `image`→`box` / `layer`→`candy` rebrand had landed in the code + config
+(`box.yml`, `candy/`, `ov box`/`ov candy`/`ov eval box` commands, the
+`migrate_box_candy_rename` step) but left ~350 stale references in the plugins
+skills, root docs, code comments, help strings, and config descriptions. This
+sweep replaces the unambiguous ov-entity TOKENS — `ov image …`→`ov box …`
+(incl. `list images`→`list boxes`, `list layers`→`list candies`,
+`new image`→`new box`, `new layer`→`new candy`, `add-layer`→`add-candy`,
+`rm-layer`→`rm-candy`), `ov layer …`→`ov candy …`, `ov eval image`→`ov eval box`,
+the MCP tool names (`image.list.images`→`box.list.boxes`, `image.set`→`box.set`,
+`layer.add-rpm`→`candy.add-rpm`, …), `image.yml`→`box.yml`, `layer.yml`→`candy.yml`,
+`layers/`→`candy/`, and the legacy remote-ref subpath `/images/<n>`→`/box/<n>`.
+
+DELIBERATELY PRESERVED (legitimate, not stale): the `org.overthinkos.image` OCI
+label, the `ov/image.go` source filename, the deploy `image:` cross-ref field, the
+`--add-layer` CLI flag, bare "image"/"layer" prose (OCI images are real), the
+`migrate_*.go` migration code + the `/ov-build:migrate` skill (which narrate the
+legacy→new rename), the `deploy_ref.go` legacy-compat classifier (accepts both
+`images/`+`box/` and `layers/`+`candy/`), the runtime `installed/layers` ledger
+path, and external cloud-image URLs (`pkgbuild.com/images/…`). The one code
+behavior touch: `eval_clone.go` mirrored a nonexistent `layers/ov/bin` into score
+clones — corrected to the canonical `candy/ov/bin` (the dir the 2026-06-06 localpkg
+beds proved is the real on-disk ov-binary path). Verified: `go build`/`vet`/`test`
+clean, `ov box validate` zero warnings, R5 grep clean across plugins + superproject.
+
 ### 2026-06-06 — feat: native OV packages for every supported distro (localpkg per-format map, uniform auto-resolve, rpm + deb)
 
 `ov` shipped exactly one native package — the Arch `pkg/arch/PKGBUILD`

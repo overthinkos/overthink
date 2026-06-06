@@ -561,9 +561,9 @@ func collectSubtreeImages(node *trieNode) []string {
 func pickAutoName(pathLayers []string, parentName string, uid, defaultUID int, result, origImages map[string]*ResolvedBox) string {
 	lastLayer := pathLayers[len(pathLayers)-1]
 	// Remote layer keys are fully-qualified paths
-	// ("github.com/overthinkos/overthink/layers/pixi"); reduce to the short
+	// ("github.com/overthinkos/overthink/candy/pixi"); reduce to the short
 	// layer name so the intermediate gets a valid, slash-free OCI image name
-	// ("arch-pixi", not "arch-github.com/.../layers/pixi" — the latter is a
+	// ("arch-pixi", not "arch-github.com/.../candy/pixi" — the latter is a
 	// malformed ref that crashes buildah's content-summary on COPY/FROM). Local
 	// layer keys are already short, so this is a no-op for them.
 	if i := strings.LastIndex(lastLayer, "/"); i >= 0 {

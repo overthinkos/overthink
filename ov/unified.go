@@ -23,9 +23,9 @@ var namespaceAliasRe = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
 // A single `overthink.yml` (+ optional companion files via `includes:`) carries
 // everything today's four files carry:
 //   - build.yml    → distros: + builders: + inits:
-//   - image.yml    → defaults: + images:
+//   - box.yml    → defaults: + images:
 //   - deploy.yml   → deployments:
-//   - layer.yml    → layers: map entries, or discovered via discover.layers:
+//   - candy.yml    → layers: map entries, or discovered via discover.layers:
 //
 // Design is described in /home/atrawog/.claude/plans/can-you-make-a-deep-cerf.md.
 // Key properties:
@@ -1488,7 +1488,7 @@ func mergeUnified(dst, src *UnifiedFile, srcDir string) {
 	// roots remain anchored to the included file's directory rather
 	// than to the eventual root file's directory. Without this, a
 	// downstream workspace that `include:`-s an upstream overthink.yml
-	// would look for upstream's `layers/` inside the workspace tree.
+	// would look for upstream's `candy/` inside the workspace tree.
 	if len(src.Discover) > 0 {
 		dst.Discover = append(dst.Discover, anchorScanSpecs(src.Discover, srcDir)...)
 	}

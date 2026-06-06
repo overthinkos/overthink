@@ -24,7 +24,7 @@ type CLI struct {
 	Host string `long:"host" env:"OV_HOST" help:"Remote host (alias or user@host[:port]) to run this command on via SSH"`
 
 	// Dir is the project directory that every build-mode command resolves
-	// overthink.yml / layers/ / build.yml relative to. Default is the process
+	// overthink.yml / candy/ / build.yml relative to. Default is the process
 	// cwd. Useful for MCP servers and remote agents that run outside a
 	// project checkout — set OV_PROJECT_DIR or pass -C / --dir to point at
 	// a mounted project root. Build-mode commands call os.Getwd()
@@ -525,7 +525,7 @@ func (c *ListVolumesCmd) Run() error {
 // NewCmd groups scaffolding subcommands
 type NewCmd struct {
 	Layer   NewCandyCmd   `cmd:"" name:"candy" help:"Scaffold a candy directory"`
-	Project NewProjectCmd `cmd:"" help:"Scaffold a fresh ov project (overthink.yml + build.yml ref + layers/)"`
+	Project NewProjectCmd `cmd:"" help:"Scaffold a fresh ov project (overthink.yml + build.yml ref + candy/)"`
 	Image   NewBoxCmd     `cmd:"" name:"box" help:"Add a new box entry to overthink.yml"`
 }
 

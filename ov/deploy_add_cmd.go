@@ -27,7 +27,7 @@ import (
 // DeployAddCmd implements `ov deploy add <name> [<ref>]`.
 type DeployAddCmd struct {
 	Name string `arg:"" help:"Deploy name ('host' for local system; any other string is a container deploy name)"`
-	Ref  string `arg:"" optional:"" help:"Image or layer reference (local name, ./path.yml, or github.com/org/repo[/images/<n>|/layers/<n>][@ref])"`
+	Ref  string `arg:"" optional:"" help:"Image or layer reference (local name, ./path.yml, or github.com/org/repo[/box/<n>|/candy/<n>][@ref])"`
 
 	// Layer overlays (repeatable).
 	AddLayer []string `long:"add-candy" help:"Extra layer to apply on top of the base image (repeatable)"`
@@ -153,7 +153,7 @@ func (c *DeployAddCmd) Run() error {
 	// executor derived from the parent chain.
 	//
 	// When rootNode is nil (ref-based deploy with no deploy.yml entry
-	// e.g. `ov deploy add foo ./path/to/image.yml`) we fall through
+	// e.g. `ov deploy add foo ./path/to/box.yml`) we fall through
 	// to the single-dispatch path.
 	if rootNode == nil {
 		return c.dispatchNode(resolvedPath, nil, nil, dir)
@@ -446,7 +446,7 @@ func (c *DeployAddCmd) dispatchNode(path string, node *DeploymentNode, parentExe
 // on-disk.
 //
 // For ref-based deploys with no deploy.yml entry (e.g. `ov deploy add
-// foo ./image.yml` where foo isn't declared), the deploy name itself
+// foo ./box.yml` where foo isn't declared), the deploy name itself
 // is the hint: literal `host` → host target; anything else → pod.
 // The legacy `vm:<name>` name-prefix heuristic was removed — VM
 // deploys are now always tree-backed with explicit target:vm.
@@ -685,14 +685,14 @@ func (c *DeployAddCmd) compilePlans(ref *DeployRef, cfg *Config, distroCfg *Dist
 		return c.compileImagePlans(ref, cfg, distroCfg, builderCfg, dir)
 	}
 	// Local AND remote layer refs flow here — scanLayersForRef fetches a
-	// remote `--add-layer @host/org/repo/layers/<name>:ver` (and its deps)
+	// remote `--add-layer @host/org/repo/candy/<name>:ver` (and its deps)
 	// on demand, so deploy add of remote layers is fully automatic.
 	return c.compileLayerPlans(ref, cfg, distroCfg, builderCfg, dir)
 }
 
 // scanLayersForRef scans the layer set needed to compile `ref`, returning the
 // layer map plus the map KEY for ref. A LOCAL layer ref keys by its short name.
-// A REMOTE ref (`@host/org/repo/layers/<name>:ver`) is fetched + scanned with
+// A REMOTE ref (`@host/org/repo/candy/<name>:ver`) is fetched + scanned with
 // its transitive deps — by augmenting cfg with a synthetic image that carries
 // the ref, so the existing CollectRemoteRefs/ScanAllLayer machinery pulls it —
 // and keys by its bare ref. This makes `ov deploy add --add-layer <remote>`

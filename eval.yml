@@ -1212,7 +1212,7 @@ score:
             source repository — the full git tree (with submodules
             initialized), the `ov` CLI binary, and every layer, image,
             pod, VM, and Kubernetes cluster definition the project
-            already ships (`layers/`, `image.yml`, `pod.yml`, `vm.yml`,
+            already ships (`candy/`, `box.yml`, `pod.yml`, `vm.yml`,
             `k8s.yml`). Your session has the project's plugin skills
             loaded (`/ov-eval:eval`, `/ov-core:deploy`, `/ov-image:image`, `/ov-image:layer`,
             `/ov-build:build`, plus per-pod plugins (`/ov-jupyter:*`, `/ov-coder:*`, etc.) and foundation plugins (`/ov-distros:*`, `/ov-infrastructure:*`, `/ov-tools:*`), …). All of these
@@ -1359,7 +1359,7 @@ score:
             source repository — the full git tree (with submodules
             initialized), the `ov` CLI binary, and every layer, image,
             pod, VM, and Kubernetes cluster definition the project
-            already ships (`layers/`, `image.yml`, `pod.yml`, `vm.yml`,
+            already ships (`candy/`, `box.yml`, `pod.yml`, `vm.yml`,
             `k8s.yml`). Your session has the project's plugin skills
             loaded (`/ov-eval:eval`, `/ov-core:deploy`, `/ov-image:image`, `/ov-image:layer`,
             `/ov-build:build`, plus per-pod plugins (`/ov-jupyter:*`, `/ov-coder:*`, etc.) and foundation plugins (`/ov-distros:*`, `/ov-infrastructure:*`, `/ov-tools:*`), …). All of these
@@ -1797,7 +1797,7 @@ eval:
                 # the substrate renders via the kind discriminator + ledger source.
                 - contains: '"kind": "local"'
                 - contains: '"source": "ledger"'
-    # pac localpkg AUTO-RESOLVE witness against the LOCAL ov layer (no @github):
+    # pac localpkg AUTO-RESOLVE witness against the LOCAL ov candy (no @github):
     # deploys candy/ov to a disposable Arch Cloud VM, where the layer's localpkg
     # builds the overthink-git package from pkg/arch (makepkg on the host) and
     # `pacman -U`'s it onto the guest — pacman -U AUTO-RESOLVES the mandatory repo

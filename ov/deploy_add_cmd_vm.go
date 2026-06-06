@@ -30,7 +30,7 @@ func deployNestedPodsInGuest(vmName string, node *DeploymentNode, exec DeployExe
 	// The from-image delegation runs the HOST's OWN ov in the guest — not the
 	// guest's PATH ov. The host binary running this deploy is guaranteed current
 	// and from-image-capable; the guest's PATH ov may be a stale layer install
-	// (a @github-fetched ov layer ships no bin/ov, so its curl fallback installs
+	// (a @github-fetched ov candy ships no bin/ov, so its curl fallback installs
 	// a pre-from-image release). So deliver the host ov to a /tmp path OUTSIDE
 	// $PATH via putHostOvInVenue and invoke it by explicit path — NEVER shadowing
 	// the guest's canonical /usr/bin/ov (the overthink-git pacman package the

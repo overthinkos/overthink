@@ -67,7 +67,7 @@ candy:
         # http.server keeps the iframe's <script src> / glyphs URL
         # single-origin against the frontend service and avoids three
         # parallel http.server processes. The cp commands run AFTER the
-        # source layers' tasks have populated /opt/versatiles-* (image.yml
+        # source layers' tasks have populated /opt/versatiles-* (box.yml
         # layer order ensures correct dependency sequencing).
         - cmd: |
             set -euo pipefail

@@ -10,7 +10,7 @@ You are in the **Go CLI** source for `ov`.
   OCITarget pipeline (before touching `install_plan.go`, `install_build.go`,
   `build_target_oci.go`, `deploy_target_*.go`, `k8s_target.go`).
 - `/ov-internals:capabilities` — the OCI-label capability contract.
-- `/ov-internals:generate-source` — what `ov image generate` emits.
+- `/ov-internals:generate-source` — what `ov box generate` emits.
 - Plus the renderer skills (`/ov-internals:vm-spec`, `cloud-init-renderer`,
   `libvirt-renderer`, `ovmf`) when touching VM/cloud-init code.
 

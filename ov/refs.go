@@ -12,9 +12,9 @@ import (
 // Works for both layer refs and image refs.
 // Format: @host/org/repo/sub/path:version
 type ParsedRef struct {
-	Raw      string // original string, e.g. "@github.com/org/repo/layers/name:v1.0.0"
+	Raw      string // original string, e.g. "@github.com/org/repo/candy/name:v1.0.0"
 	RepoPath string // e.g. "github.com/org/repo"
-	SubPath  string // e.g. "layers/name" (path within repo)
+	SubPath  string // e.g. "candy/name" (path within repo)
 	Name     string // e.g. "name" (last segment)
 	Version  string // e.g. "v1.0.0"
 }
@@ -43,7 +43,7 @@ func IsRemoteImageRef(ref string) bool {
 }
 
 // ParseRemoteRef parses a remote reference into repo path, sub-path, name, and version.
-// e.g. "@github.com/org/repo/layers/name:v1.0.0" -> ParsedRef{RepoPath: "github.com/org/repo", SubPath: "layers/name", Name: "name", Version: "v1.0.0"}
+// e.g. "@github.com/org/repo/candy/name:v1.0.0" -> ParsedRef{RepoPath: "github.com/org/repo", SubPath: "candy/name", Name: "name", Version: "v1.0.0"}
 func ParseRemoteRef(ref string) *ParsedRef {
 	raw := ref
 
@@ -70,7 +70,7 @@ func ParseRemoteRef(ref string) *ParsedRef {
 }
 
 // splitRepoAndSubPath splits a ref into repo path (host/org/repo), sub-path, and name.
-// e.g. "github.com/org/repo/layers/name" -> ("github.com/org/repo", "layers/name", "name")
+// e.g. "github.com/org/repo/candy/name" -> ("github.com/org/repo", "candy/name", "name")
 // For short refs like "pixi", returns ("", "", "pixi").
 func splitRepoAndSubPath(ref string) (repoPath, subPath, name string) {
 	parts := strings.SplitN(ref, "/", 4) // [host, org, repo, sub/path]
@@ -106,7 +106,7 @@ func BareRef(ref string) string {
 // demand, so a ref's identity and its version can never drift apart. The
 // transitive fetch keys on .Raw; the dependency graph keys on .Bare().
 type CandyRef struct {
-	Raw string // original ref, e.g. "@github.com/org/repo/layers/x:v1" or bare "x"
+	Raw string // original ref, e.g. "@github.com/org/repo/candy/x:v1" or bare "x"
 	// resolved is the qualified layer-map key assigned when a freshly-fetched
 	// remote layer's plain-name sibling deps are qualified to
 	// "<repo>/<subpathprefix><name>" (qualifyRemoteSiblingDeps). Empty for every
@@ -208,7 +208,7 @@ func IsRepoCached(repoPath, version string) (bool, error) {
 
 // EnsureRepoDownloaded downloads the repo if not already cached.
 // Returns the cache path. Newly-downloaded caches are auto-migrated via
-// `MigrateUnified --rewrite-layers` so any legacy-form layer.yml files in
+// `MigrateUnified --rewrite-layers` so any legacy-form candy.yml files in
 // the remote are normalized to the canonical `layer: {name, ...}` form
 // before the runtime parses them. Already-cached repos are NOT re-migrated
 // (they were migrated on first download).
@@ -245,7 +245,7 @@ func EnsureRepoDownloaded(repoPath, version string) (string, error) {
 type RemoteDownload struct {
 	RepoPath string
 	Version  string
-	Refs     []string // bare refs to import (e.g. "github.com/org/repo/layers/name")
+	Refs     []string // bare refs to import (e.g. "github.com/org/repo/candy/name")
 }
 
 // CollectRemoteRefs is the default-opts wrapper (enabled images only) around

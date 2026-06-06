@@ -102,16 +102,16 @@ candy:
           # Replaced 2026-05-09 with the notebook-osm data layer which seeds
           # /workspace/notebooks/ via ov's data-layer machinery
           # (--userns=keep-id ensures user-owned files). See
-          # /ov-build:layer "Data layer" pattern + layers/notebook-templates/
+          # /ov-build:layer "Data layer" pattern + candy/notebook-templates/
           # for the canonical reference.
           #
           # Stub-out the rest of the prior inline content via a yaml comment-
           # block so the line-anchored grep / regex targets above don't trip
           # on stray fragments. The full notebook content lives at
-          # layers/notebook-osm/data/notebooks/osm-monaco-viz.py.
+          # candy/notebook-osm/data/notebooks/osm-monaco-viz.py.
           #
           # The full notebook body now lives at
-          # layers/notebook-osm/data/notebooks/osm-monaco-viz.py and is seeded
+          # candy/notebook-osm/data/notebooks/osm-monaco-viz.py and is seeded
           # via the notebook-osm data-only layer.
 
           user: "${USER}"
@@ -119,7 +119,7 @@ candy:
           mode: "0644"
           user: "${USER}"
           content: |
-            # ov-managed — set by layers/marimo/layer.yml at image-build time.
+            # ov-managed — set by candy/marimo/candy.yml at image-build time.
             # `auto_instantiate = true` makes the reactive cascade fire on
             # page open. Don't hand-edit; rebuild the image to change.
             [runtime]
@@ -158,7 +158,7 @@ candy:
           exists: true
           contains:
             - "auto_instantiate = true"
-        # NB: sample notebook check moved to layers/notebook-osm/ (data
+        # NB: sample notebook check moved to candy/notebook-osm/ (data
         # layer pattern). Deploy-scope check there asserts the seeded
         # file at ${VOLUME_CONTAINER_PATH:workspace}/notebooks/osm-monaco-viz.py.
         # Deploy-scope smoke — port reachable + HTTP 200 from marimo edit.

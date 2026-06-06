@@ -163,7 +163,7 @@ candy:
         # creates wayland-1, and the whole desktop (labwc/chrome) crash-loops — while
         # every OTHER probe (files/services/ports/https) still passes. This ldd check
         # catches that class of missing-runtime-lib regression at BUILD scope
-        # (`ov eval image`) — no deploy or GPU needed. ldd exits 0 even when a lib is
+        # (`ov eval box`) — no deploy or GPU needed. ldd exits 0 even when a lib is
         # "not found", so the assertion is on the absence of that string.
         - id: pixelflux-wayland-libs-resolvable
           command: ldd ${HOME}/.pixi/envs/default/lib/python3.*/site-packages/pixelflux/pixelflux_wayland*.so

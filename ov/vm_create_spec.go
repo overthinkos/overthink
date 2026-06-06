@@ -164,7 +164,7 @@ func (c *VmCreateCmd) runVmSpecCreate(vmName string, spec *VmSpec, backend strin
 			ensureBootAutostartPrereqs(vmDomainName)
 		}
 
-		// Inject any raw libvirt snippets from layers/spec.libvirt.snippets.
+		// Inject any raw libvirt snippets from candy/spec.libvirt.snippets.
 		if spec.Libvirt != nil && len(spec.Libvirt.Snippets) > 0 {
 			if err := InjectLibvirtXML(vmDomainName, spec.Libvirt.Snippets); err != nil {
 				fmt.Fprintf(os.Stderr, "Warning: libvirt snippet injection: %v\n", err)

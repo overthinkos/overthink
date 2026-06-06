@@ -27,4 +27,4 @@ tasks:
           exit 1
         fi
       - gh auth token | podman login ghcr.io -u "$(gh api /user --jq .login)" --password-stdin
-      - bin/ov image build --push
+      - bin/ov box build --push

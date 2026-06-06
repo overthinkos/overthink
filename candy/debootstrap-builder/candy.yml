@@ -7,9 +7,9 @@ candy:
         bootable Debian/Ubuntu system. Used as the layer composition for
         the debian-debootstrap-builder / ubuntu-debootstrap-builder
         images, which run as privileged containers under
-        `ov image build` and `ov vm build` for kind:bootstrap source kinds.
+        `ov box build` and `ov vm build` for kind:bootstrap source kinds.
 
-        Counterpart of layers/pacstrap-builder; both compose the same
+        Counterpart of candy/pacstrap-builder; both compose the same
         disk-build toolchain (qemu-img + parted + mkfs + grub-efi) plus
         the family-specific bootstrap tool.
     package:

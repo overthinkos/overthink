@@ -10,9 +10,9 @@ package main
 //      Matches a top-level entry in overthink.yml.
 //
 //   2. Local layer name         "pre-commit"
-//      Matches a directory in layers/.
+//      Matches a directory in candy/.
 //
-//   3. Local YAML path          "./my-image.yml" | "/abs/path/layer.yml"
+//   3. Local YAML path          "./my-box.yml" | "/abs/path/candy.yml"
 //      Starts with "./" or "/"; ends with ".yml" or ".yaml". The file's
 //      top-level keys tell us whether it's an image or layer declaration.
 //
@@ -22,9 +22,9 @@ package main
 //      compat with overthink.yml import:/candy: already in the tree.
 //
 // Disambiguation rules (post 2026-06 candy/box rebrand):
-//   - Any ref with a "candy/<n>" subpath resolves to a layer ("layers/" legacy).
+//   - Any ref with a "candy/<n>" subpath resolves to a layer ("candy/" legacy).
 //   - Any ref with a "box/<n>" subpath resolves to an image ("images/" legacy).
-//   - A local name found in BOTH overthink.yml and layers/ is permitted —
+//   - A local name found in BOTH overthink.yml and candy/ is permitted —
 //     each kind has its own namespace. Precedence is decided by the
 //     CALLER's context: ResolveDeployRef defaults to image-first
 //     (the primary `<ref>` positional almost always means "deploy
@@ -120,7 +120,7 @@ func resolveDeployRefWithPref(ref, projectDir string, preferKind RefKind) (*Depl
 		return resolveLocalPath(ref, projectDir)
 	}
 
-	// Forms 1 + 2: local name. Check overthink.yml AND layers/; cross-kind
+	// Forms 1 + 2: local name. Check overthink.yml AND candy/; cross-kind
 	// reuse permitted, preferKind decides which wins.
 	return resolveLocalName(ref, projectDir, preferKind)
 }
@@ -160,7 +160,7 @@ func resolveRemoteRef(ref string) (*DeployRef, error) {
 	kind := RefKindLayer
 	switch {
 	case refSubPathHas(parsed.SubPath, "candy") || refSubPathHas(parsed.SubPath, "layers"):
-		// `candy/<n>` is the post-rebrand layer subpath; `layers/<n>` is the
+		// `candy/<n>` is the post-rebrand layer subpath; `candy/<n>` is the
 		// legacy form kept for back-compat with old pins.
 		kind = RefKindLayer
 	case refSubPathHas(parsed.SubPath, "box") || refSubPathHas(parsed.SubPath, "images"):
@@ -193,7 +193,7 @@ func resolveLocalPath(ref, projectDir string) (*DeployRef, error) {
 		return nil, fmt.Errorf("ResolveDeployRef: cannot stat %s: %w", path, err)
 	}
 	if info.IsDir() {
-		// A directory ref points at a layer directory (layers/<name>/).
+		// A directory ref points at a layer directory (candy/<name>/).
 		path = filepath.Join(path, "candy.yml")
 		if _, err := os.Stat(path); err != nil {
 			return nil, fmt.Errorf("ResolveDeployRef: directory %s has no candy.yml", ref)
@@ -244,7 +244,7 @@ func classifyYAMLFile(path string) (RefKind, error) {
 	return "", fmt.Errorf("ResolveDeployRef: %s has no recognized image or layer keys", path)
 }
 
-// resolveLocalName checks the unified loader's images and layers/ for
+// resolveLocalName checks the unified loader's images and candy/ for
 // a matching name. Cross-kind name reuse is permitted (since 2026-05);
 // preferKind decides precedence when the name exists in both kinds.
 func resolveLocalName(name, projectDir string, preferKind RefKind) (*DeployRef, error) {
@@ -297,7 +297,7 @@ func resolveLocalName(name, projectDir string, preferKind RefKind) (*DeployRef, 
 	switch {
 	case inImageYml && inLayers:
 		// Cross-kind name reuse — preferKind decides. Both kinds
-		// remain reachable via explicit paths (./layers/<name>/ or
+		// remain reachable via explicit paths (./candy/<name>/ or
 		// the box config file with a #<name> fragment) or via ResolveDeployRefAsLayer.
 		if preferKind == RefKindLayer {
 			return layerRef(), nil

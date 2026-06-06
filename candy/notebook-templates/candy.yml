@@ -23,7 +23,7 @@ candy:
             Provisions a small set of starter .ipynb files into the workspace
             volume at deploy time so a fresh JupyterLab pod has runnable
             examples on first open. Data-only — no packages, no services. The
-            data: block copies layers/notebook-templates/data/notebooks/
+            data: block copies candy/notebook-templates/data/notebooks/
             into the volume's root; consumers (jupyter, jupyter-ml) compose
             this layer to ship the templates.
         scenario:

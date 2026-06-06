@@ -1711,7 +1711,7 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 	// across builds when no layer changed, so a child's FROM <base> SHA doesn't
 	// shift and cache-misses don't cascade. See effective_version.go. Resolution
 	// prefers this label over the tag (local_image.go); it is also the
-	// "is this an ov image?" presence sentinel (ExtractMetadata).
+	// "is this an ov box?" presence sentinel (ExtractMetadata).
 	b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelVersion, img.EffectiveVersion))
 	b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelBox, imageName))
 	b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelUID, strconv.Itoa(img.UID)))
@@ -2338,7 +2338,7 @@ func (g *Generator) createRemoteLayerCopies() error {
 func (g *Generator) remoteBuildConfigCacheRoot() string {
 	for _, l := range g.Layers {
 		if l.Remote && l.Path != "" {
-			suffix := filepath.Join(l.SubPathPrefix, l.Name) // e.g. "layers/pixi"
+			suffix := filepath.Join(l.SubPathPrefix, l.Name) // e.g. "candy/pixi"
 			if trimmed := strings.TrimSuffix(l.Path, suffix); trimmed != l.Path {
 				return strings.TrimRight(trimmed, string(filepath.Separator))
 			}
@@ -2400,11 +2400,11 @@ func (g *Generator) rewriteHeaderCopyForRemote(headerCopy string) (string, error
 // relative to the build context root (g.Dir).
 //
 // For the common case (no `directory:` override in the candy manifest), this returns
-// "layers/<layerRef>/" for local layers and ".build/_layers/<name>/" for remote
+// "candy/<layerRef>/" for local layers and ".build/_layers/<name>/" for remote
 // layers — identical to the legacy behavior.
 //
 // When the layer declares `directory:` and points SourceDir outside the default
-// layers/<name>/ location, the result is the build-root-relative path to
+// candy/<name>/ location, the result is the build-root-relative path to
 // SourceDir so that Containerfile COPY directives pick up files from the author's
 // chosen config directory.
 // layerMapKey returns the key under which a layer is stored in g.Layers: the

@@ -11,7 +11,7 @@ candy:
         # ${AIRFLOW_HOME}/airflow.db on first `db migrate`. Suitable for
         # single-node dev / R10 verification. For multi-node production, swap
         # in CeleryExecutor + Postgres + Valkey (those layers stayed available
-        # under layers/postgresql/ + layers/valkey/).
+        # under candy/postgresql/ + candy/valkey/).
         AIRFLOW__CORE__EXECUTOR: "LocalExecutor"
         AIRFLOW__CORE__LOAD_EXAMPLES: "False"
         AIRFLOW__API__PORT: "8080"
@@ -150,7 +150,7 @@ candy:
           # was extracted to a dag-osm-monaco data layer that seeded
           # /workspace/dags/ at deploy time. Both are gone: notebooks
           # now self-author DAGs at runtime via the Airflow REST API. The
-          # canonical example is layers/notebook-osm/data/notebooks/osm-monaco-viz.py
+          # canonical example is candy/notebook-osm/data/notebooks/osm-monaco-viz.py
           # which writes notebook_osm_pipeline.py into AIRFLOW__CORE__DAGS_FOLDER
           # and triggers it via POST /api/v2/dags/.../dagRuns.
     eval:

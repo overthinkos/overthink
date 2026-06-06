@@ -370,7 +370,7 @@ func (t *PodDeployTarget) buildOverlay(plans []*InstallPlan, overlayLayers []str
 	}
 
 	// Build context is the PROJECT ROOT (Generator.Dir), not the overlay
-	// build dir — the emitted Containerfile has `COPY layers/<name>/ /`
+	// build dir — the emitted Containerfile has `COPY candy/<name>/ /`
 	// paths that are relative to the project root, same as the full
 	// build (see generate.go:layerCopySource).
 	buildContext := dir
@@ -545,8 +545,8 @@ func (t *PodDeployTarget) RemoveOverlayImage(opts EmitOpts) error {
 //
 //	volumes: [{name: project, type: bind, host: /home/user/repo, path: /workspace}]
 //
-// then translateHostPathToVenue("/home/user/repo/layers/x", parent)
-// returns ("/workspace/layers/x", true).
+// then translateHostPathToVenue("/home/user/repo/candy/x", parent)
+// returns ("/workspace/candy/x", true).
 func translateHostPathToVenue(hostPath string, parent *DeploymentNode) (string, bool) {
 	if parent == nil || hostPath == "" {
 		return "", false

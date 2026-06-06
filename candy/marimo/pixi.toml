@@ -97,14 +97,14 @@ sqlglot = "*"
 
 # Postgres + Redis drivers were removed when airflow simplified to
 # SQLite + LocalExecutor (no external services). Add them back if you
-# compose layers/postgresql or layers/valkey alongside.
+# compose candy/postgresql or candy/valkey alongside.
 
 # === PyTorch CUDA 13 stack (general GPU ML beyond the curriculum) ===
 # Pinned to ==2.11.* so the PyG native-extension wheels below (built at
 # https://data.pyg.org/whl/torch-2.11.0+cu130.html) stay ABI-compatible.
 # Drift to torch 2.12+ would silently break torch_scatter / torch_sparse /
 # torch_cluster (the build-tag in their wheels is `pt211cu130`). When
-# bumping this pin, also update the URL in layers/marimo/build.sh.
+# bumping this pin, also update the URL in candy/marimo/build.sh.
 torch = { version = "==2.11.*", index = "https://download.pytorch.org/whl/cu130" }
 torchvision = { version = "*", index = "https://download.pytorch.org/whl/cu130" }
 torchaudio = { version = "*", index = "https://download.pytorch.org/whl/cu130" }
@@ -151,7 +151,7 @@ pytest = "*"
 # extensions (torch_scatter, torch_sparse, torch_cluster) ship as
 # Linux-cp313 wheels at a PyG-hosted HTML directory listing (NOT a
 # PEP 503 index), so pixi's `index =` syntax can't pull them — they
-# install via `pip --find-links` from layers/marimo/build.sh after
+# install via `pip --find-links` from candy/marimo/build.sh after
 # the pixi env settles. pyg-lib has only a Windows cp313 wheel
 # upstream, and torch-spline-conv has no cp313 wheel at all
 # (verified 2026-05). PyG works without them — they're optional
@@ -185,7 +185,7 @@ simpy = "*"
 # Latest airflow without celery/postgres/redis providers — the airflow
 # layer drops to SQLite metadata + in-process LocalExecutor for the
 # default marimo deployment. Add provider extras back if composing
-# with layers/postgresql + layers/valkey for multi-node.
+# with candy/postgresql + candy/valkey for multi-node.
 apache-airflow = "*"
 
 # === MCP framework for marimo's own server ===

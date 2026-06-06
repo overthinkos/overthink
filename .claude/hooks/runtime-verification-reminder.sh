@@ -22,7 +22,7 @@ memory > exploration. Your training is stale; the skill is current. Consult
 the Skill Dispatcher table in CLAUDE.md (R0) for the trigger -> skill map.
 
 R10 = THE RUNNER ACTUALLY RAN. A `--dry-run`, a green `go test`, an
-`ov image validate`, or a bed REBUILD without the eval run are NOT R10 — only
+`ov box validate`, or a bed REBUILD without the eval run are NOT R10 — only
 a real `ov eval run <bed>` / `ov eval live` against a fresh rebuild of a
 `disposable: true` target counts, with the output PASTED. Inflating the
 attribution tier above what the pasted proof supports is fraud; a known rule

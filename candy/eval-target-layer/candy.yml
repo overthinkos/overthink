@@ -8,7 +8,7 @@ candy:
             end-to-end against a real Claude Code runner. The single scenario
             below checks for a marker file the layer does NOT currently create,
             so baseline always fails. An AI solves it by adding a write: task
-            to this layer.yml that creates /etc/ov-bench-marker containing the
+            to this candy.yml that creates /etc/ov-bench-marker containing the
             string "ov benchmark target".
         tag: [bench, throwaway]
         scenario:
@@ -23,7 +23,7 @@ candy:
                   exists: true
                   contains:
                     - ov benchmark target
-    # Placeholder task. Exists only to satisfy `ov image validate`'s
+    # Placeholder task. Exists only to satisfy `ov box validate`'s
     # "layer must have at least one install artifact" rule. The AI's job
     # during `ov benchmark run` is to ADD a `write:` task here that
     # creates /etc/ov-bench-marker with the expected content.

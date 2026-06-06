@@ -881,10 +881,10 @@ func filterImage(order []string, requested []string, images map[string]*Resolved
 	return filtered, nil
 }
 
-// ensureOvBinaryFresh rebuilds layers/ov/bin/ov when any image whose
+// ensureOvBinaryFresh rebuilds candy/ov/bin/ov when any image whose
 // resolved layer chain includes the `ov` layer is in scope for the
 // current build. Without this, podman build would COPY whatever stale
-// binary happens to live at layers/ov/bin/ov — silently baking obsolete
+// binary happens to live at candy/ov/bin/ov — silently baking obsolete
 // CLI behaviour into the image. Skipped (with a one-line warning) when
 // `go` is not on PATH, so an end-user with a packaged ov install does
 // not see a hard error.
@@ -923,7 +923,7 @@ func ensureOvBinaryFresh(dir string, images map[string]*ResolvedBox, requested [
 	// overthink via `@github.com/...`) don't ship the ov Go source.
 	// Without ./ov to rebuild from, there's nothing to refresh — the
 	// embedded layer chain will use the cached upstream binary at
-	// <upstream-cache>/layers/ov/bin/ov which is already up-to-date
+	// <upstream-cache>/candy/ov/bin/ov which is already up-to-date
 	// relative to upstream's ov source.
 	if _, err := os.Stat(srcDir); os.IsNotExist(err) {
 		return nil
@@ -935,11 +935,11 @@ func ensureOvBinaryFresh(dir string, images map[string]*ResolvedBox, requested [
 	}
 
 	if _, err := exec.LookPath("go"); err != nil {
-		fmt.Fprintf(os.Stderr, "ov: warning: `go` not on PATH; skipping layers/ov/bin/ov rebuild (image will use existing binary)\n")
+		fmt.Fprintf(os.Stderr, "ov: warning: `go` not on PATH; skipping candy/ov/bin/ov rebuild (image will use existing binary)\n")
 		return nil
 	}
 
-	fmt.Fprintf(os.Stderr, "ov: rebuilding layers/ov/bin/ov from ./ov before image build\n")
+	fmt.Fprintf(os.Stderr, "ov: rebuilding candy/ov/bin/ov from ./ov before image build\n")
 	cmd := exec.Command("go", "build", "-o", binPath, ".")
 	cmd.Dir = srcDir
 	cmd.Stdout = os.Stderr

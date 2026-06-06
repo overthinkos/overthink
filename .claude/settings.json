@@ -11,7 +11,7 @@
     "allow": [
       "Bash(ov eval run:*)",
       "Bash(ov eval live:*)",
-      "Bash(ov eval image:*)",
+      "Bash(ov eval box:*)",
       "Bash(ov status:*)"
     ]
   },

@@ -38,9 +38,9 @@ func (e *EvalFailedError) Error() string {
 // EvalCmd is the unified `ov eval` command tree — declarative evaluation,
 // AI-driven iteration, and live-container probe verbs all under one
 // prefix. Three primary verbs (image / live / run) replace the old
-// `ov eval image` / `ov eval live <image>` / `ov eval run <score>` split:
+// `ov eval box` / `ov eval live <image>` / `ov eval run <score>` split:
 //
-//   - `ov eval image <image>` — pure-image artifact eval (disposable
+//   - `ov eval box <image>` — pure-image artifact eval (disposable
 //     container, build-scope checks only, no host port mapping, no
 //     volumes attached).
 //   - `ov eval live <name>` — full-stack eval against a running
@@ -536,7 +536,7 @@ func collectAddLayerDeployEval(uf *UnifiedFile, dir string, addLayers []string) 
 		return nil
 	}
 	// ScanAllLayerWithConfig (not ProjectLayers) — it includes the FILESYSTEM
-	// layers under layers/ discovered via `discover:`, where the shared
+	// layers under candy/ discovered via `discover:`, where the shared
 	// check-only layers live; ProjectLayers only sees inline `layer:` entries.
 	var cfg *Config
 	if uf != nil {
@@ -549,7 +549,7 @@ func collectAddLayerDeployEval(uf *UnifiedFile, dir string, addLayers []string) 
 	var out []Check
 	for _, ref := range addLayers {
 		// Only LOCAL (filesystem) layers contribute checks here — the shared
-		// check-only layers live in the project's layers/ dir. Remote @github
+		// check-only layers live in the project's candy/ dir. Remote @github
 		// layers are SKIPPED: they carry their own test context (and a re-scan
 		// can resolve a different cached version than what was deployed, which
 		// would surface checks the deployed version never defined).

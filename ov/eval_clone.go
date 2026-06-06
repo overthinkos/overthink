@@ -173,7 +173,7 @@ func CreateRunClone(ctx context.Context, l RunLayout) error {
 	}
 
 	// Mirror untracked working-tree artifacts the build needs.
-	for _, sub := range []string{"bin", "layers/ov/bin"} {
+	for _, sub := range []string{"bin", "candy/ov/bin"} {
 		src := filepath.Join(l.ProjectDir, sub)
 		st, err := os.Stat(src)
 		if err != nil || !st.IsDir() {

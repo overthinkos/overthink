@@ -164,7 +164,7 @@ candy:
           enable: true
     eval:
         # Build-scope tests: emitted config files exist and are sane. Run
-        # during `ov image test` — verifies the layer's setup did its job
+        # during `ov box test` — verifies the layer's setup did its job
         # before we start it.
         - id: k3s-config-file
           scope: build

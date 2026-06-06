@@ -1,6 +1,6 @@
 #!/bin/sh
 # Relay from eth0 interface to loopback on the same port.
-# Used by port_relay declarations in layer.yml.
+# Used by port_relay declarations in candy.yml.
 PORT="$1"
 if [ -z "$PORT" ]; then
     echo "Usage: relay-wrapper <port>" >&2

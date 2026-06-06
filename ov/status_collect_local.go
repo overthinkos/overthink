@@ -15,7 +15,7 @@ package main
 //                              its guest-side ledger; the host LocalDeployTarget
 //                              records at LAYER granularity only, so this dir is
 //                              typically EMPTY for plain host deploys.
-//   layers/<layer>.json        LayerRecord — written by EVERY local apply
+//   candy/<layer>.json        LayerRecord — written by EVERY local apply
 //                              (AddLayerDeploymentVia). `deployed_by` is the set
 //                              of deploy-ids that pulled this layer in; this is
 //                              the populated, authoritative source.
@@ -74,7 +74,7 @@ func (l *LocalCollector) Available(opts CollectOpts) bool {
 // Two passes over the ledger, unioned by deploy-id:
 //  1. deploys/<id>.json DeployRecords (explicit; written by VM-target local
 //     deploys and any future host DeployRecord write).
-//  2. layers/<layer>.json LayerRecords — every deploy-id in a layer's
+//  2. candy/<layer>.json LayerRecords — every deploy-id in a layer's
 //     deployed_by set that wasn't already covered by a DeployRecord gets a
 //     synthesized row from the layers that reference it.
 //
@@ -135,7 +135,7 @@ func (l *LocalCollector) Collect(ctx context.Context, opts CollectOpts) ([]Deplo
 		a.latest = newerTimestamp(a.latest, rec.DeployedAt)
 	}
 
-	// Pass 2: LayerRecords in layers/ — attribute each layer to every deploy-id
+	// Pass 2: LayerRecords in candy/ — attribute each layer to every deploy-id
 	// in its deployed_by set (synthesizing rows for deploy-ids with no
 	// DeployRecord, enriching the layer set of those that have one).
 	layerNames, err := ledgerJSONStems(paths.Layers)
@@ -180,7 +180,7 @@ func (l *LocalCollector) Collect(ctx context.Context, opts CollectOpts) ([]Deplo
 
 // ledgerJSONStems returns the base names (without the .json suffix) of every
 // *.json file directly under dir. A missing dir is not an error — it yields an
-// empty slice, so a host with a deploys/ dir but no layers/ dir (or vice
+// empty slice, so a host with a deploys/ dir but no candy/ dir (or vice
 // versa) collects cleanly.
 func ledgerJSONStems(dir string) ([]string, error) {
 	entries, err := os.ReadDir(dir)

@@ -76,7 +76,7 @@ const (
 
 	// JumpPodmanRun spawns a fresh disposable container per invocation
 	// via `podman run --rm <Target> bash`. Replaces the deleted
-	// ImageExecutor — `ov eval image` (build-section) uses this jump
+	// ImageExecutor — `ov eval box` (build-section) uses this jump
 	// to get the same "ephemeral image probe" semantics through the
 	// unified chain primitive. Each call starts a new container; state
 	// does NOT persist across calls.

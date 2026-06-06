@@ -81,7 +81,7 @@ var mcpDestructivePaths = map[string]bool{
 	"box.new.project": true,
 	"box.new.box":     true,
 	// MCP-first authoring surface — mutates overthink.yml or filesystem.
-	// (image.fetch is idempotent + additive; image.cat is read-only — neither
+	// (image.fetch is idempotent + additive; box.cat is read-only — neither
 	// is listed.)
 	"box.set":       true,
 	"box.add-candy": true,
@@ -199,7 +199,7 @@ var mcpRegisteredToolCount = func(*mcp.Server) int { return mcpLastRegisteredCou
 // is set. A pointed-at-but-empty /workspace (common: the dev has started the
 // container without `--bind project=<path>`) would otherwise leave the agent
 // staring at an overthink.yml-less directory with no recourse. Falling through to
-// the default repo makes `image.list.images` and friends work by default.
+// the default repo makes `box.list.boxes` and friends work by default.
 func (c *McpServeCmd) bootstrapProject() error {
 	// Case 1: overthink.yml exists in cwd (main() has already chdir'd if --dir
 	// or --repo was supplied, so cwd reflects all three origins).

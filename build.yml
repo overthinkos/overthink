@@ -269,7 +269,7 @@ builder:
         # Runtime env contract — emitted into the final image's ENV PATH +
         # the org.overthinkos.path_append / org.overthinkos.env_layer
         # OCI labels when any layer in the image triggers this builder.
-        # Used to live on layers/pixi/layer.yml; moved here in 2026-04-29
+        # Used to live on candy/pixi/candy.yml; moved here in 2026-04-29
         # so images that use pixi via pixi.toml-triggered builds (jupyter,
         # openwebui, immich-ml, …) get the env contract automatically
         # without needing pixi as a top-level layer for sibling-grouped
@@ -448,7 +448,7 @@ distro:
                         # alone isn't enough (i.e. cachyos rotates its master
                         # signing key without updating the bundled keyring
                         # package), the fix is to repin the cachyos base to a
-                        # newer cachyos-v3 digest in image/cachyos/image.yml —
+                        # newer cachyos-v3 digest in image/cachyos/box.yml —
                         # the upstream rebuild carries the updated keyring package.
                         (pacman-key --populate 2>/dev/null || true) && \
                         pacman -Syu --noconfirm
@@ -660,7 +660,7 @@ distro:
                 # with `apt-get install` which AUTO-RESOLVES the package's repo
                 # deps. The ov binary is built on the host (prebuilt bin/ov, or a
                 # go-build fallback) and bind-mounted in. NO tailscale dep in the
-                # .deb (not in Debian main — the ov layer adds tailscale for deb).
+                # .deb (not in Debian main — the ov candy adds tailscale for deb).
                 local_pkg:
                     pkg_glob: "*.deb"
                     source_sentinel: debian/control

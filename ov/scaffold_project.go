@@ -21,7 +21,7 @@ import (
 //
 // Schema v4 cutover (2026-05): every authoring verb defaults to
 // overthink.yml as the canonical root file. Legacy projects with a
-// per-kind image.yml at the project root must run `ov migrate`
+// per-kind box.yml at the project root must run `ov migrate`
 // first; the scaffolders error cleanly when overthink.yml is missing.
 
 // scaffoldOverthinkYAML is the seed overthink.yml written into a fresh
@@ -37,7 +37,7 @@ const scaffoldOverthinkYAML = `# overthink.yml — unified project root.
 #        format_config: "@github.com/overthinkos/overthink/build.yml:<tag>"
 #
 # Cross-kind name reuse is permitted — a single name (e.g. my-app) MAY
-# exist simultaneously as a layer (under layers/), an image: entry, a
+# exist simultaneously as a layer (under candy/), an image: entry, a
 # pod: entry, a vm: entry, a k8s: entry, a local: entry, AND a
 # deployment: entry. ov verbs disambiguate by command context.
 
@@ -83,7 +83,7 @@ func ScaffoldProject(dir string) error {
 		return fmt.Errorf("writing overthink.yml: %w", err)
 	}
 	if err := os.MkdirAll(filepath.Join(dir, DefaultCandyDir), 0o755); err != nil {
-		return fmt.Errorf("creating layers/: %w", err)
+		return fmt.Errorf("creating candy/: %w", err)
 	}
 	gitignorePath := filepath.Join(dir, ".gitignore")
 	if _, err := os.Stat(gitignorePath); os.IsNotExist(err) {
@@ -209,7 +209,7 @@ func loadOverthinkYAMLNode(dir string) (*yaml.Node, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("overthink.yml not found in %s; run `ov box new project .` to scaffold or `ov migrate` to convert legacy image.yml", dir)
+			return nil, fmt.Errorf("overthink.yml not found in %s; run `ov box new project .` to scaffold or `ov migrate` to convert legacy box.yml", dir)
 		}
 		return nil, fmt.Errorf("reading overthink.yml: %w", err)
 	}

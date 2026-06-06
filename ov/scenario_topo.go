@@ -61,7 +61,7 @@ func keyOf(sc Scenario) scenarioKey {
 // Scope: DependsOn is intra-recipe (validator-enforced). When the input
 // slice is the merged output of ResolveScoreRecipe, two recipes may
 // legitimately import a scenario with the same name from different
-// layers/images (e.g. both from-single-kind-selftest and
+// candy/images (e.g. both from-single-kind-selftest and
 // from-composition-selftest import "sshd-binary"). To handle this
 // without false-cycle errors, internal bookkeeping uses scenario INDEX
 // (unique by construction) and DependsOn names are resolved within the

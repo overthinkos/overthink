@@ -37,7 +37,7 @@ and aborts everyone's next build/deploy/eval (the lead rebuilds ov ONCE at the
 barrier). Detail: /ov-internals:agents "Speed levers".
 
 EDIT YOUR BED, DON'T RUN IT. Your job is your bed's SOURCE (bed-local edits) +
-short foreground checks (`ov eval image`, `ov image validate`) — NOT the full `ov
+short foreground checks (`ov eval box`, `ov box validate`) — NOT the full `ov
 eval run` (the LEAD owns that as a background task). The full live run — build ->
 eval image -> deploy -> eval live -> fresh ov update -> teardown — is the lead's;
 review/triage/RCA are auxiliary, never a substitute for it.

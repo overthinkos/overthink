@@ -70,5 +70,5 @@ defaults:
     cache: image # default build cache mode (image local read / registry read+write)
     # Reusable-artifact retention (auto-pruned at creation; also via `ov clean`).
     # 0 disables. See /ov-core:clean.
-    keep_images: 3 # newest CalVer tags to keep per image after `ov image build`
+    keep_images: 3 # newest CalVer tags to keep per image after `ov box build`
     keep_eval_runs: 3 # newest run dirs to keep per bed/score after `ov eval run`

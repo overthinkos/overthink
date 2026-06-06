@@ -333,7 +333,7 @@ type CandyYAML struct {
 
 	// Tests are declarative checks contributed by this layer. They travel
 	// in the org.overthinkos.tests OCI label (layer section) and run under
-	// `ov eval image` (build-time) and `ov eval live` (deploy-time).
+	// `ov eval box` (build-time) and `ov eval live` (deploy-time).
 	// See testspec.go for the Check type.
 	Eval []Check `yaml:"eval,omitempty"`
 
@@ -808,7 +808,7 @@ type Layer struct {
 	// Remote layer metadata
 	Remote        bool   // true if from a remote repo
 	RepoPath      string // e.g. "github.com/overthinkos/overthink" (empty for local)
-	SubPathPrefix string // e.g. "layers/" — parent directory within the repo for sibling resolution
+	SubPathPrefix string // e.g. "candy/" — parent directory within the repo for sibling resolution
 
 	// Pre-populated from the candy manifest
 	formatSections map[string]*PackageSection // generic format sections (rpm, deb, pac, aur, etc.)
@@ -853,7 +853,7 @@ type Layer struct {
 
 // ScanLayer returns all layers for the project at dir. Post-unified-cutover
 // this loads overthink.yml via LoadUnified, applies discover:, and projects
-// the layers map. Legacy `layers/` directory scan remains as a fallback when
+// the layers map. Legacy `candy/` directory scan remains as a fallback when
 // overthink.yml is absent (e.g., transitional test fixtures).
 // DefaultCandyDir is the single source of truth for the on-disk directory that
 // holds candy (layer) definitions. The discover: block overrides it per project
@@ -1519,7 +1519,7 @@ func (l *Layer) HasPypiDeps() bool {
 
 // ScanRemoteLayer scans specific layers from a downloaded remote repository.
 // Only imports layers whose bare refs are in the wantRefs set.
-// Bare refs use the full path format: "github.com/org/repo/layers/name".
+// Bare refs use the full path format: "github.com/org/repo/candy/name".
 // qualifyRemoteSiblingDeps records, for a freshly-scanned remote layer, the
 // fully-qualified "<repo>/<subpathprefix><dep>" map key of each plain-name
 // require:/layer: dep (the same form ScanRemoteLayer keys fetched siblings
@@ -1544,7 +1544,7 @@ func ScanRemoteLayer(repoDir string, repoPath string, wantRefs map[string]bool) 
 	layers := make(map[string]*Layer)
 
 	for bareRef := range wantRefs {
-		// Extract sub-path from bare ref: "github.com/org/repo/layers/name" -> "layers/name"
+		// Extract sub-path from bare ref: "github.com/org/repo/candy/name" -> "candy/name"
 		subPath := strings.TrimPrefix(bareRef, repoPath+"/")
 		layerDir := filepath.Join(repoDir, subPath)
 
@@ -1564,7 +1564,7 @@ func ScanRemoteLayer(repoDir string, repoPath string, wantRefs map[string]bool) 
 		}
 		layer.Remote = true
 		layer.RepoPath = repoPath
-		// Compute sub-path prefix for sibling dep resolution (e.g. "layers/")
+		// Compute sub-path prefix for sibling dep resolution (e.g. "candy/")
 		if idx := strings.LastIndex(subPath, "/"); idx != -1 {
 			layer.SubPathPrefix = subPath[:idx+1]
 		}

@@ -1030,7 +1030,7 @@ func vmDisplayDeviceAbsent(verb, stderr string) bool {
 
 func (r *Runner) runOvVerb(ctx context.Context, c *Check, verb, method string, allowlist map[string]methodSpec) EvalResult {
 	if r.Mode == RunModeImage {
-		return skipf(c, fmt.Sprintf("%s: %s requires a running container (skip under ov eval image)", verb, method))
+		return skipf(c, fmt.Sprintf("%s: %s requires a running container (skip under ov eval box)", verb, method))
 	}
 	if r.Image == "" {
 		return skipf(c, fmt.Sprintf("%s: %s runner has no image context (should not happen under ov eval)", verb, method))

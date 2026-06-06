@@ -10,7 +10,7 @@ package main
 //     .lock                          flock for concurrent sessions
 //     deploys/
 //       <deploy-id>.json             image + add_layers + layers list
-//     layers/
+//     candy/
 //       <layer-name>.json            per-layer steps + deployed_by set
 //
 // Refcounting lives in the layer files: `deployed_by` is the set of
@@ -37,7 +37,7 @@ import (
 type LedgerPaths struct {
 	Root     string // ~/.config/overthink/installed
 	Deploys  string // <Root>/deploys/
-	Layers   string // <Root>/layers/
+	Layers   string // <Root>/candy/
 	LockFile string // <Root>/.lock
 }
 
@@ -179,7 +179,7 @@ func ReadDeployRecord(paths *LedgerPaths, id string) (*DeployRecord, error) {
 	return &rec, nil
 }
 
-// WriteLayerRecord serializes rec to layers/<layer>.json.
+// WriteLayerRecord serializes rec to candy/<layer>.json.
 func WriteLayerRecord(paths *LedgerPaths, rec *CandyRecord) error {
 	if err := paths.Ensure(); err != nil {
 		return err
@@ -188,7 +188,7 @@ func WriteLayerRecord(paths *LedgerPaths, rec *CandyRecord) error {
 	return writeJSONAtomic(path, rec)
 }
 
-// ReadLayerRecord loads layers/<layer>.json; returns nil, nil if absent.
+// ReadLayerRecord loads candy/<layer>.json; returns nil, nil if absent.
 func ReadLayerRecord(paths *LedgerPaths, layer string) (*CandyRecord, error) {
 	path := filepath.Join(paths.Layers, layer+".json")
 	data, err := os.ReadFile(path)
@@ -216,7 +216,7 @@ func DeleteDeployRecord(paths *LedgerPaths, id string) error {
 	return nil
 }
 
-// DeleteLayerRecord removes layers/<layer>.json.
+// DeleteLayerRecord removes candy/<layer>.json.
 func DeleteLayerRecord(paths *LedgerPaths, layer string) error {
 	path := filepath.Join(paths.Layers, layer+".json")
 	err := os.Remove(path)
@@ -328,9 +328,9 @@ func AddLayerDeploymentVia(exec DeployExecutor, paths *LedgerPaths, layerName, d
 		return AddLayerDeployment(paths, layerName, deployID, update)
 	}
 	ctx := context.Background()
-	// Substrate ledger path: ~/.config/overthink/installed/layers/<name>.json
+	// Substrate ledger path: ~/.config/overthink/installed/candy/<name>.json
 	// — ~ resolves in the substrate shell, not operator shell.
-	remoteFile := "~/.config/overthink/installed/layers/" + layerName + ".json"
+	remoteFile := "~/.config/overthink/installed/candy/" + layerName + ".json"
 	// Create BOTH installed/layers and installed/deploys so the full
 	// ledger directory tree (matching Ensure()) exists on the substrate.
 	// Ensures bed tests like `test -d ~/.config/overthink/installed/deploys`

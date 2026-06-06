@@ -13,11 +13,11 @@ package main
 // Every parameter is read from the bed's DeploymentNode — there is NO
 // hardcoded bed table. The target kind selects the bring-up/tear-down path:
 //
-//	target: pod   → ov box build + ov eval image + ov deploy add +
+//	target: pod   → ov box build + ov eval box + ov deploy add +
 //	                ov config + ov start + ov eval live
 //	target: vm    → ov vm build + ov vm create + ov deploy add + ov eval
 //	                live (image build / eval image skipped — the substrate
-//	                is a cloud_image, not an ov image)
+//	                is a cloud_image, not an ov box)
 //	target: local → ov deploy add only (kind:local applies layers in place;
 //	                no container/VM to exec eval live against)
 //

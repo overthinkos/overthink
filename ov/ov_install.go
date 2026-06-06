@@ -151,7 +151,7 @@ func EnsureOvInGuest(
 //
 // The host binary is guaranteed current and from-image-capable: it is the binary
 // running this very deploy. That is the whole point — a venue's own PATH ov may
-// be a stale layer install (a @github-fetched ov layer ships no bin/ov, so its
+// be a stale layer install (a @github-fetched ov candy ships no bin/ov, so its
 // cmd: curls a pre-from-image release that reports the wall clock as its version)
 // and must never be trusted as the delegation binary.
 func putHostOvInVenue(ctx context.Context, exec DeployExecutor, remotePath string, ownerRoot bool, opts EmitOpts) error {

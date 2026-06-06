@@ -39,7 +39,7 @@ candy:
           # K3S_CLUSTER_TOKEN comes from the secrets injector;
           # K3S_SERVER_URL from deploy.yml env. Do not re-declare here.
         # 2. Emit the systemd unit directly (see the same note in
-        # layers/k3s-server/layer.yml — ov's service renderer isn't yet
+        # candy/k3s-server/candy.yml — ov's service renderer isn't yet
         # wired into host/VM deploy paths).
         - cmd: |
             set -euo pipefail

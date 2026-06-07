@@ -103,7 +103,7 @@ have to.
 Secure the *box* — a disposable, rootless container or VM with real,
 kernel-enforced isolation — then hand your agent the whole candy store
 inside it: every `ov` verb, every candy, every `ov eval` probe, a real
-registry, a real GPU. Far more capability than a locked-down sandbox, and
+system, a real GPU. Far more capability than a locked-down sandbox, and
 a mistake costs one rebuild.
 → [VISION.md](VISION.md) (why), CLAUDE.md "Candyboxing" (the rule),
 `/ov-internals:disposable` (the lifecycle boundary).

@@ -22,6 +22,49 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-08 — fix(vm-deploy): builder-cfg threading, dead cloud-init url removal, nested target:local deploy, ledger host-path rebrand
+
+Four VM-deploy/eval fixes surfaced (and R10-proven) by the `image/arch`
+`eval-arch-vm` bed (PASS 13/13 incl. the fresh-rebuild re-verification of the VM
+AND both nested children):
+
+1. **Builder cfg threading.** `deploy_target_vm.go execHomeArtifactBuilder` did
+   not pass `Cfg`/`ProjectDir` to `BuilderRun`, so `EnsureImagePresent` got
+   `cfg=nil` and rejected any namespace/short builder ref ("requires a project
+   directory with charly.yml"). Every VM bed with an npm/pixi/cargo `add_candy`
+   layer + a namespace builder ref broke. Now threads `t.Cfg`/`t.ProjectDir`
+   (mirrors `buildDepPkgsOnHost`), so `install_opts.builder_image:
+   charly.arch-builder` resolves newest-local / builds on-demand instead of a
+   pinned ghcr tag that goes stale.
+
+2. **Dead cloud-init `url` ov-install strategy DELETED.** The `url` strategy
+   curled a raw `charly-linux-${ARCH}` release binary that the localpkg cutover
+   removed — `OvBinaryURL` was never even set, so the path was already dead.
+   Removed the strategy end-to-end: the `composeRunCmd` curl-runcmd +
+   `OvBinaryURL`/`OvBinaryChecksum` runtime params (`cloud_init_render.go`), the
+   `OvInstallURL` const + dispatch case (`ov_install.go`), the
+   `VmOvInstall.URL`/`Checksum` fields (`cloud_init_types.go`), the validator
+   branch (`libvirt_validate.go`), the runtime-param setters (`vm_cloud_image.go`),
+   and the dead `VerifyOvBinaryChecksum` (`http_fetch.go`). Strategies are now
+   `auto`/`scp`/`skip`; charly is delivered post-boot by VmDeployTarget only.
+
+3. **Nested `target:local` children deploy in VM beds.** `eval_bed_run.go`'s VM
+   branch deployed the VM node's own layers + nested `target:pod` children
+   (`deployNestedPodsInGuest`) but never the nested `target:local` children — yet
+   `evalLiveTree` evaluated them, so they failed (un-deployed). The VM branch now
+   deploys each nested local child via the dotted-path dispatch (`charly deploy
+   add <bed>.<child>` → NestedExecutor → LocalDeployTarget over SSH), so a
+   host-overlay child (direnv) and a `target: local` layer bed (tailscale) apply
+   into the guest FS.
+
+4. **Rebrand completeness — runtime host paths.** The runtime still wrote the
+   guest ledger + env.d to `~/.config/overthink/{installed,env.d}/` — the
+   `~/.config/overthink → ~/.config/opencharly` rebrand (which `charly migrate`
+   already performs) had been missed in `install_ledger.go`, `deploy_target_vm.go`
+   (`ensureGuestLedgerDirs`), `shell_profile.go` (`EnvdDir`), `install_plan.go`,
+   `unified_targets_vm.go`, and the relevant comments + test fixtures. Now writes
+   `~/.config/opencharly/…`, matching the migrate and the deploy-scope eval probes.
+
 ### 2026-06-08 — feat(localpkg): image builds install the PUBLISHED OS package on every distro + fix the pac release CI
 
 The `charly` toolchain candy (and any future `localpkg:` candy) now installs as a

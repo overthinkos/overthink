@@ -29,14 +29,6 @@ type CloudInitRuntimeParams struct {
 	// channel state. When false the renderer emits no
 	// ssh_authorized_keys entries even if SSHPublicKey is populated.
 	InjectKeyViaCloudInit bool
-
-	// OvBinaryURL is the download URL when VmOvInstall.Strategy == "url".
-	// Empty for auto/scp/skip strategies.
-	OvBinaryURL string
-
-	// OvBinaryChecksum is the expected "sha256:<hex>" of the downloaded
-	// charly binary. Empty → no checksum verification runcmd is emitted.
-	OvBinaryChecksum string
 }
 
 // RenderCloudInit produces the three NoCloud seed ISO payloads from a
@@ -52,7 +44,8 @@ type CloudInitRuntimeParams struct {
 //     (if the key-injection channel is enabled AND SSHPublicKey != "")
 //  2. Minimum packages: {openssh, curl, tar} unioned with user's Packages
 //  3. Minimum runcmd: {systemctl enable --now sshd} prepended
-//  4. ov_install.strategy: url → curl runcmd; auto/scp/skip → nothing
+//  4. ov_install: NOT a cloud-init concern — VmDeployTarget delivers charly
+//     post-boot (auto/scp stage it; skip verifies). No charly download runcmd.
 //  5. VmCloudInit.Extra: raw cloud-config YAML appended as a second
 //     document (separated by ---) if non-empty
 func RenderCloudInit(spec *VmSpec, rt CloudInitRuntimeParams) (userData, metaData, networkConfig string, err error) {
@@ -122,7 +115,7 @@ func RenderCloudInit(spec *VmSpec, rt CloudInitRuntimeParams) (userData, metaDat
 		userMap["bootcmd"] = ci.BootCmd
 	}
 
-	runcmd := composeRunCmd(spec, ci, rt)
+	runcmd := composeRunCmd(spec, ci)
 	if len(runcmd) > 0 {
 		userMap["runcmd"] = runcmd
 	}
@@ -305,14 +298,15 @@ func composePackages(userPkgs []string, distro string) []string {
 	return out
 }
 
-// composeRunCmd prepends ov's minimum boot tasks, appends the user's
-// runcmd, and injects the ov_install URL download runcmd when
-// strategy == "url".
+// composeRunCmd prepends ov's minimum boot task (enable sshd) and appends the
+// user's runcmd. charly is NOT installed via cloud-init — VmDeployTarget
+// delivers it post-boot per ov_install.strategy (auto/scp stage the host binary;
+// skip verifies presence).
 //
 // The sshd unit name is distro-aware: `sshd` on Arch/Fedora,
 // `ssh` on Debian/Ubuntu (where the systemd unit is named `ssh.service`
 // — `sshd.service` is just a symlink that systemd refuses to enable).
-func composeRunCmd(spec *VmSpec, ci *VmCloudInit, rt CloudInitRuntimeParams) []interface{} {
+func composeRunCmd(spec *VmSpec, ci *VmCloudInit) []interface{} {
 	var runcmd []interface{}
 	sshUnit := "sshd"
 	switch spec.Source.Distro {
@@ -323,21 +317,6 @@ func composeRunCmd(spec *VmSpec, ci *VmCloudInit, rt CloudInitRuntimeParams) []i
 
 	for _, cmd := range ci.RunCmd {
 		runcmd = append(runcmd, cmd)
-	}
-
-	if ci.OvInstall != nil && ci.OvInstall.Strategy == "url" && rt.OvBinaryURL != "" {
-		// Download + chmod ov.
-		runcmd = append(runcmd,
-			fmt.Sprintf("curl -fL %s -o /usr/local/bin/charly", rt.OvBinaryURL),
-			"chmod +x /usr/local/bin/charly",
-		)
-		if rt.OvBinaryChecksum != "" {
-			// Verify sha256 before making executable; fail fast if bad.
-			runcmd = append(runcmd,
-				fmt.Sprintf("echo '%s  /usr/local/bin/charly' | sha256sum --check --status || (rm -f /usr/local/bin/charly; exit 1)",
-					strings.TrimPrefix(rt.OvBinaryChecksum, "sha256:")),
-			)
-		}
 	}
 
 	return runcmd

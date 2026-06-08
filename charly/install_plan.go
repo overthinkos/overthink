@@ -60,7 +60,7 @@ const (
 	ScopeUser
 
 	// ScopeUserProfile writes to the user's shell init surface:
-	// ~/.bashrc / ~/.zshenv / fish conf.d + ~/.config/overthink/env.d/.
+	// ~/.bashrc / ~/.zshenv / fish conf.d + ~/.config/opencharly/env.d/.
 	// Separate from ScopeUser because the host target has special handling
 	// (managed blocks, shell detection) and the OCI target renders these as
 	// ENV directives + path additions rather than file writes.
@@ -748,13 +748,13 @@ func (s *ServiceCustomStep) Reverse() []ReverseOp {
 // ShellHookStep records the env vars and PATH contributions a layer makes
 // to the user's shell environment. On the OCI target these translate to
 // `ENV K=V` directives in the Containerfile. On the host target they
-// become `~/.config/overthink/env.d/<layer>.env` plus a managed block in
+// become `~/.config/opencharly/env.d/<layer>.env` plus a managed block in
 // the user's shell init that sources the env.d directory.
 type ShellHookStep struct {
 	LayerName string
 	EnvVars   map[string]string
 	PathAdd   []string // already {{.Home}}-substituted to absolute paths
-	EnvFile   string   // computed path (~/.config/overthink/env.d/<layer>.env); populated at install
+	EnvFile   string   // computed path (~/.config/opencharly/env.d/<layer>.env); populated at install
 }
 
 func (s *ShellHookStep) Kind() StepKind     { return StepKindShellHook }

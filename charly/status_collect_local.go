@@ -4,7 +4,7 @@ package main
 //
 // `target: local` deployments (host filesystem applies via ShellExecutor,
 // and SSH applies via SSHExecutor) record themselves in the install ledger
-// at ~/.config/overthink/installed/ (see install_ledger.go). Unlike the pod
+// at ~/.config/opencharly/installed/ (see install_ledger.go). Unlike the pod
 // substrate — whose live truth is `podman ps` — the local substrate has no
 // running container to inspect; the ledger IS the authoritative state of
 // "what has been applied to this filesystem".

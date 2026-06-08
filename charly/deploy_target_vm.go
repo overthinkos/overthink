@@ -16,7 +16,7 @@ import (
 // instead of local `sudo bash -s`.
 //
 // Ledger writes land on the GUEST filesystem (under the guest user's
-// ~/.config/overthink/installed/), not the host's. Teardown runs in
+// ~/.config/opencharly/installed/), not the host's. Teardown runs in
 // the guest via SSH.
 //
 // See the approved plan D7.
@@ -167,7 +167,7 @@ func (t *VmDeployTarget) Emit(plans []*InstallPlan, opts EmitOpts) error {
 	//    the operator leaves garbage that survives `charly vm destroy` and
 	//    breaks the zero-operator-side-effects invariant (see B6). The
 	//    guest-side ledger path is still
-	//    `~/.config/overthink/installed/…`; it just resolves to the
+	//    `~/.config/opencharly/installed/…`; it just resolves to the
 	//    guest's HOME via the SSH executor.
 	paths, err := DefaultLedgerPaths()
 	if err != nil {
@@ -256,15 +256,15 @@ func (t *VmDeployTarget) recordLayer(paths *LedgerPaths, rec *CandyRecord, plan 
 	})
 }
 
-// ensureGuestLedgerDirs makes sure ~/.config/overthink/installed/ and
-// ~/.config/overthink/env.d/ exist in the guest. Without this, layer
+// ensureGuestLedgerDirs makes sure ~/.config/opencharly/installed/ and
+// ~/.config/opencharly/env.d/ exist in the guest. Without this, layer
 // record writes would fail on the first apply.
 func (t *VmDeployTarget) ensureGuestLedgerDirs(ctx context.Context, opts EmitOpts) error {
 	script := `
 set -e
-mkdir -p "$HOME/.config/overthink/installed/deploys"
-mkdir -p "$HOME/.config/overthink/installed/layers"
-mkdir -p "$HOME/.config/overthink/env.d"
+mkdir -p "$HOME/.config/opencharly/installed/deploys"
+mkdir -p "$HOME/.config/opencharly/installed/layers"
+mkdir -p "$HOME/.config/opencharly/env.d"
 `
 	return t.Exec.RunUser(ctx, script, opts)
 }
@@ -581,7 +581,7 @@ func (t *VmDeployTarget) execFile(ctx context.Context, s *FileStep, plan *Instal
 }
 
 // execShellHook writes the env.d file for a layer. Layer env vars end
-// up in ~/.config/overthink/env.d/<layer>.env on the guest; the managed
+// up in ~/.config/opencharly/env.d/<layer>.env on the guest; the managed
 // block in the guest user's shell init sources them.
 func (t *VmDeployTarget) execShellHook(ctx context.Context, s *ShellHookStep, plan *InstallPlan, opts EmitOpts) error {
 	// Shared env.d renderer (shell_profile.go renderEnvdBody) so VM and local
@@ -592,8 +592,8 @@ func (t *VmDeployTarget) execShellHook(ctx context.Context, s *ShellHookStep, pl
 	envDBody := renderEnvdBody(s.LayerName, s.EnvVars, s.PathAdd)
 	script := fmt.Sprintf(`
 set -e
-mkdir -p "$HOME/.config/overthink/env.d"
-cat > "$HOME/.config/overthink/env.d/%s.env" <<'CH_ENVD'
+mkdir -p "$HOME/.config/opencharly/env.d"
+cat > "$HOME/.config/opencharly/env.d/%s.env" <<'CH_ENVD'
 %s
 CH_ENVD
 `, s.LayerName, envDBody)
@@ -834,6 +834,17 @@ func (t *VmDeployTarget) execHomeArtifactBuilder(ctx context.Context, s *Builder
 		HostHome:     guestHome,
 		DryRun:       opts.DryRun,
 		RunAsRoot:    true,
+		// Thread Cfg + ProjectDir so BuilderRun's EnsureImagePresent can resolve
+		// a namespace-qualified / short builder ref (e.g. a bed's
+		// install_opts.builder_image: charly.arch-builder) to its concrete image —
+		// newest-local, or built on-demand from the project — instead of only
+		// accepting a full registry ref (which breaks when its tag is pruned or
+		// ghcr publishing is paused). Mirrors buildDepPkgsOnHost (localpkg.go), the
+		// aur-dep-closure builder path that already threads these. Without them,
+		// EnsureImagePresent gets cfg=nil and rejects any short/namespace ref with
+		// "requires a project directory with charly.yml".
+		Cfg:        t.Cfg,
+		ProjectDir: t.ProjectDir,
 	})
 	if len(out) > 0 {
 		os.Stderr.Write(out)

@@ -279,16 +279,10 @@ func validateVmCloudInit(name string, spec *VmSpec, errs *ValidationError) {
 	}
 	if ci.OvInstall != nil {
 		switch ci.OvInstall.Strategy {
-		case "", "auto", "scp", "url", "skip":
+		case "", "auto", "scp", "skip":
 			// OK
 		default:
-			errs.Add("vm %q: cloud_init.ov_install.strategy %q is unknown (want auto, scp, url, or skip)", name, ci.OvInstall.Strategy)
-		}
-		if ci.OvInstall.Strategy == "url" && ci.OvInstall.URL == "" {
-			errs.Add("vm %q: cloud_init.ov_install.strategy: url requires cloud_init.ov_install.url", name)
-		}
-		if ci.OvInstall.Checksum != "" && !strings.HasPrefix(ci.OvInstall.Checksum, "sha256:") {
-			errs.Add("vm %q: cloud_init.ov_install.checksum must have prefix 'sha256:'", name)
+			errs.Add("vm %q: cloud_init.ov_install.strategy %q is unknown (want auto, scp, or skip)", name, ci.OvInstall.Strategy)
 		}
 	}
 	for i, u := range ci.Users {

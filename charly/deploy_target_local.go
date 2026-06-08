@@ -35,7 +35,7 @@ type LocalDeployTarget struct {
 	HostHome string
 
 	// LedgerPaths points to the on-disk ledger. Defaults to
-	// ~/.config/overthink/installed/ when nil.
+	// ~/.config/opencharly/installed/ when nil.
 	LedgerPaths *LedgerPaths
 
 	// Distro is the detected host distro. Used for gating aur: on

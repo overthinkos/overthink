@@ -39,7 +39,7 @@ func TestHostDeployTargetDryRunShellHook(t *testing.T) {
 	}
 
 	// env.d file should exist.
-	envPath := filepath.Join(home, ".config", "overthink", "env.d", "uv.env")
+	envPath := filepath.Join(home, ".config", "opencharly", "env.d", "uv.env")
 	data, err := os.ReadFile(envPath)
 	if err != nil {
 		t.Fatalf("env.d file missing: %v", err)

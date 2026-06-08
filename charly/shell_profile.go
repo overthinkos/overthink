@@ -4,7 +4,7 @@ package main
 //
 // On `charly deploy add host`, each installed layer contributes a set of
 // env vars and PATH additions (from the candy manifest's env: + path_append:).
-// We materialize them as `~/.config/overthink/env.d/<layer>.env` files
+// We materialize them as `~/.config/opencharly/env.d/<layer>.env` files
 // and insert a managed block in the user's shell init so those files
 // get sourced at login.
 //
@@ -80,7 +80,7 @@ func getShellFromPasswd(_ string) string { return "" }
 
 // EnvdDir returns the directory where per-layer env files live.
 func EnvdDir(hostHome string) string {
-	return filepath.Join(hostHome, ".config", "overthink", "env.d")
+	return filepath.Join(hostHome, ".config", "opencharly", "env.d")
 }
 
 // EnvdFilePath returns the env file path for a given layer.

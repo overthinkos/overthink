@@ -6,7 +6,7 @@ package main
 // so a later `charly deploy del host …` can reverse the exact operations.
 // Layout:
 //
-//   ~/.config/overthink/installed/
+//   ~/.config/opencharly/installed/
 //     .lock                          flock for concurrent sessions
 //     deploys/
 //       <deploy-id>.json             image + add_layers + layers list
@@ -35,7 +35,7 @@ import (
 // LedgerPaths describes where ledger files live on disk. Extracted so
 // tests can redirect to a temp dir.
 type LedgerPaths struct {
-	Root     string // ~/.config/overthink/installed
+	Root     string // ~/.config/opencharly/installed
 	Deploys  string // <Root>/deploys/
 	Layers   string // <Root>/layers/
 	LockFile string // <Root>/.lock
@@ -48,7 +48,7 @@ func DefaultLedgerPaths() (*LedgerPaths, error) {
 	if err != nil {
 		return nil, fmt.Errorf("DefaultLedgerPaths: %w", err)
 	}
-	root := filepath.Join(home, ".config", "overthink", "installed")
+	root := filepath.Join(home, ".config", "opencharly", "installed")
 	return &LedgerPaths{
 		Root:     root,
 		Deploys:  filepath.Join(root, "deploys"),
@@ -317,7 +317,7 @@ func containsString(s []string, v string) bool {
 // is a non-local DeployExecutor (SSHExecutor / NestedExecutor), the
 // ledger file I/O goes through exec.GetFile + exec.RunSystem so the
 // ledger lands on the substrate's filesystem under the substrate's
-// ~/.config/overthink/installed/ — matching the install's actual
+// ~/.config/opencharly/installed/ — matching the install's actual
 // venue (arch-vm.arch-host writes in the arch VM guest; sway-pod with
 // nested pods writes in the parent pod; etc.).
 func AddLayerDeploymentVia(exec DeployExecutor, paths *LedgerPaths, layerName, deployID string, update func(*CandyRecord)) error {
@@ -335,13 +335,13 @@ func AddLayerDeploymentVia(exec DeployExecutor, paths *LedgerPaths, layerName, d
 	// can NEVER diverge again (the rebrand's bug was exactly that divergence —
 	// write went to installed/candy/ while mkdir created installed/layers/, so the
 	// write failed on every fresh substrate). `~` resolves in the substrate shell.
-	const installedRoot = "~/.config/overthink/installed"
+	const installedRoot = "~/.config/opencharly/installed"
 	layersDir := installedRoot + "/layers"
 	deploysDir := installedRoot + "/deploys"
 	remoteFile := layersDir + "/" + layerName + ".json"
 	// Create BOTH installed/layers and installed/deploys so the full ledger
 	// directory tree (matching Ensure()) exists on the substrate — ensures bed
-	// tests like `test -d ~/.config/overthink/installed/deploys` pass even when no
+	// tests like `test -d ~/.config/opencharly/installed/deploys` pass even when no
 	// DeployRecord has been written yet.
 	mkdirScript := "mkdir -p " + layersDir + " " + deploysDir
 	data, err := exec.GetFile(ctx, remoteFile, false, EmitOpts{})
@@ -387,8 +387,8 @@ func WriteDeployRecordVia(exec DeployExecutor, paths *LedgerPaths, rec *DeployRe
 		return WriteDeployRecord(paths, rec)
 	}
 	ctx := context.Background()
-	remoteFile := "~/.config/overthink/installed/deploys/" + rec.DeployID + ".json"
-	remoteDir := "~/.config/overthink/installed/deploys"
+	remoteFile := "~/.config/opencharly/installed/deploys/" + rec.DeployID + ".json"
+	remoteDir := "~/.config/opencharly/installed/deploys"
 	encoded, err := json.MarshalIndent(rec, "", "  ")
 	if err != nil {
 		return fmt.Errorf("WriteDeployRecordVia: marshal: %w", err)

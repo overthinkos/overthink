@@ -119,12 +119,6 @@ func BuildCloudImage(
 		InjectKeyViaCloudInit: cloudInitEnabled,
 	}
 
-	// Plumb ov_install.url into runtime params.
-	if spec.CloudInit != nil && spec.CloudInit.OvInstall != nil {
-		rt.OvBinaryURL = spec.CloudInit.OvInstall.URL
-		rt.OvBinaryChecksum = spec.CloudInit.OvInstall.Checksum
-	}
-
 	// --- Step 5: Render cloud-init. ---
 	userData, metaData, networkConfig, err := RenderCloudInit(spec, rt)
 	if err != nil {
@@ -185,10 +179,6 @@ func RegenerateSeedISO(spec *VmSpec, seedPath, vmStateDir string, existingState 
 		InstanceID:            instanceID,
 		Hostname:              hostname,
 		InjectKeyViaCloudInit: cloudInitEnabled,
-	}
-	if spec.CloudInit != nil && spec.CloudInit.OvInstall != nil {
-		rt.OvBinaryURL = spec.CloudInit.OvInstall.URL
-		rt.OvBinaryChecksum = spec.CloudInit.OvInstall.Checksum
 	}
 	userData, metaData, networkConfig, err := RenderCloudInit(spec, rt)
 	if err != nil {

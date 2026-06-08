@@ -364,6 +364,22 @@ func runEvalBed(exe, name string, node DeploymentNode, opts bedRunOpts) (*bedRun
 		if err := step("deploy-add", []string{"deploy", "add", name, vmTemplate}); err != nil {
 			return fail("deploy add %s: %w", name, err)
 		}
+		// deployNestedPodsInGuest (inside the VM deploy-add above) brings up
+		// nested target:pod children as in-guest quadlets, but it SKIPS
+		// target:local children (they carry no image — they apply layers in
+		// place). Deploy each nested local child via the dotted-path dispatch,
+		// which applies the child's local-deploy layers into the guest over the
+		// NestedExecutor (SSH). Without this, evalLiveTree below would eval an
+		// un-deployed child and fail. Mirrors the pod-bed nested-child loop.
+		for _, childKey := range sortedNestedKeys(node.Nested) {
+			child := node.Nested[childKey]
+			if child == nil || (child.Target != "local" && child.Target != "host") {
+				continue // pod children handled in-guest by deployNestedPodsInGuest
+			}
+			if err := step("deploy-"+childKey, []string{"deploy", "add", name + "." + childKey}); err != nil {
+				return fail("deploy nested local child %s.%s: %w", name, childKey, err)
+			}
+		}
 	} else {
 		// Pod beds → image ref; kind:local beds → local template ref.
 		ref := image

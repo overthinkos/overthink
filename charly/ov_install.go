@@ -8,14 +8,12 @@ import (
 )
 
 // OvInstallStrategy is the resolved strategy string after defaults.
-// Values: "auto" | "scp" | "url" | "skip". Empty input resolves to
-// "auto".
+// Values: "auto" | "scp" | "skip". Empty input resolves to "auto".
 type OvInstallStrategy string
 
 const (
 	OvInstallAuto OvInstallStrategy = "auto"
 	OvInstallScp  OvInstallStrategy = "scp"
-	OvInstallURL  OvInstallStrategy = "url"
 	OvInstallSkip OvInstallStrategy = "skip"
 )
 
@@ -30,7 +28,7 @@ func ResolveOvInstallStrategy(spec *VmSpec) OvInstallStrategy {
 	switch s {
 	case "":
 		return OvInstallAuto
-	case "auto", "scp", "url", "skip":
+	case "auto", "scp", "skip":
 		return OvInstallStrategy(s)
 	default:
 		// Validator should have caught this; defensive fallback.
@@ -104,7 +102,6 @@ func EnsureOvInVenue(ctx context.Context, exec DeployExecutor, opts EmitOpts) (s
 //	             (>= host by CalVer); ONLY when absent or older, deliver the host
 //	             charly to a /tmp path (no shadow). Routine updates are the package
 //	             manager's job.
-//	url        — verify `charly version` works (cloud-init runcmd did the curl)
 //	skip       — verify `command -v charly` exists; error if missing
 //
 // Returns an informational message on success suitable for printing at info
@@ -128,9 +125,6 @@ func EnsureOvInGuest(
 			return "guest charly is current (>= host); using the system charly (no scp)", nil
 		}
 		return fmt.Sprintf("guest charly absent/outdated; host charly provided at %s for deploy use", cmd), nil
-
-	case OvInstallURL:
-		return verifyOvPresent(ctx, exec, opts, "url")
 
 	case OvInstallSkip:
 		return verifyOvPresent(ctx, exec, opts, "skip")
@@ -175,9 +169,8 @@ func putHostOvInVenue(ctx context.Context, exec DeployExecutor, remotePath strin
 }
 
 // verifyOvPresent runs `command -v charly` in the guest and reports
-// whether the binary is already in place. Tail of the strategy
-// implementations for "url" (cloud-init did the download) and "skip"
-// (user-managed).
+// whether the binary is already in place. Tail of the "skip" strategy
+// (user-managed charly install).
 func verifyOvPresent(ctx context.Context, exec DeployExecutor, opts EmitOpts, strategy string) (string, error) {
 	// `charly version` (subcommand), not `charly --version`. Kong returns exit 80
 	// for unknown flags, which this check otherwise surfaces as a false

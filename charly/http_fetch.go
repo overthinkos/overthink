@@ -287,25 +287,6 @@ func humanBytes(n int64) string {
 		float64(n)/float64(div), "KMGTP"[exp])
 }
 
-// VerifyOvBinaryChecksum validates a downloaded `ov` binary against the
-// checksum declared in VmOvInstall.Checksum (when present). Used by the
-// cloud-init url strategy post-download — not the qcow2 path, but lives
-// here because the sha256 machinery is here.
-func VerifyOvBinaryChecksum(binaryPath, expected string) error {
-	if expected == "" {
-		return nil
-	}
-	want := normalizeSum(expected)
-	got, err := fileSHA256(binaryPath)
-	if err != nil {
-		return fmt.Errorf("hashing %s: %w", binaryPath, err)
-	}
-	if got != want {
-		return fmt.Errorf("charly binary checksum mismatch: expected %s, got %s", want, got)
-	}
-	return nil
-}
-
 // _ suppresses go vet unused-import concerns for strconv in some
 // build-tag configurations; retained for parity with sibling files.
 var _ = strconv.Itoa

@@ -126,7 +126,7 @@ func TestEnsureManagedBlockViaUsesGuestHome(t *testing.T) {
 	if rec.putDest != "/home/cachy/.bashrc" {
 		t.Errorf("PutFile dest = %q, want /home/cachy/.bashrc", rec.putDest)
 	}
-	if !strings.Contains(rec.putContent, "/home/cachy/.config/overthink/env.d") {
+	if !strings.Contains(rec.putContent, "/home/cachy/.config/opencharly/env.d") {
 		t.Errorf("managed block doesn't source the guest env.d dir:\n%s", rec.putContent)
 	}
 	if !strings.Contains(rec.putContent, "overthink:begin") {

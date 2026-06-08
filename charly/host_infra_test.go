@@ -346,16 +346,16 @@ func TestRenderEnvdBodyPathDoubleQuoted(t *testing.T) {
 // loop iterate once over the literal pattern, the `[ -r ]` test
 // fail, and no env files get sourced — leaving deployed layers'
 // PATH / NPM_CONFIG_PREFIX / etc. unset until the user manually
-// sourced ~/.config/overthink/env.d/*.env.
+// sourced ~/.config/opencharly/env.d/*.env.
 func TestManagedBlockBodyGlobUnquoted(t *testing.T) {
 	home := "/home/example"
 	body := ManagedBlockBody(ShellBash, home)
 	// The literal that used to be present and broke globbing:
-	if strings.Contains(body, `"/home/example/.config/overthink/env.d/*.env"`) {
+	if strings.Contains(body, `"/home/example/.config/opencharly/env.d/*.env"`) {
 		t.Errorf("managed block re-introduced the quoted-glob bug:\n%s", body)
 	}
 	// Unquoted path with the glob present:
-	if !strings.Contains(body, `for f in /home/example/.config/overthink/env.d/*.env`) {
+	if !strings.Contains(body, `for f in /home/example/.config/opencharly/env.d/*.env`) {
 		t.Errorf("managed block missing unquoted glob; got:\n%s", body)
 	}
 }

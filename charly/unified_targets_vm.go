@@ -97,7 +97,7 @@ func (t *VmUnifiedTarget) Del(ctx context.Context, opts DelOpts) error {
 		if rerr := runReverseOps(layerRec.ReverseOps, re); rerr != nil {
 			return fmt.Errorf("reversing layer %s: %w", layer, rerr)
 		}
-		_ = t.RevRunner.RunUser(fmt.Sprintf(`rm -f "$HOME/.config/overthink/env.d/%s.env"`, layer))
+		_ = t.RevRunner.RunUser(fmt.Sprintf(`rm -f "$HOME/.config/opencharly/env.d/%s.env"`, layer))
 		if derr := DeleteLayerRecord(paths, layer); derr != nil {
 			return fmt.Errorf("deleting layer record %s: %w", layer, derr)
 		}

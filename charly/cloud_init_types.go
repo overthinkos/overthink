@@ -117,27 +117,17 @@ type VmCloudInitMirrors struct {
 	Pacman []string `yaml:"pacman,omitempty"` // Arch: rewrites /etc/pacman.d/mirrorlist
 }
 
-// VmOvInstall controls how the charly binary lands in the guest.
-// Coordinated between the cloud-init renderer (which may add a
-// download runcmd for the "url" strategy) and VmDeployTarget
-// (which may scp the binary for "auto"/"scp").
-//
-// See D15. Default strategy is "auto" when the struct is nil.
+// VmOvInstall controls how the charly binary lands in the guest. charly is
+// delivered POST-BOOT by VmDeployTarget (EnsureOvInGuest) — never via
+// cloud-init. Default strategy is "auto" when the struct is nil.
 type VmOvInstall struct {
 	// Strategy is one of:
-	//   auto  — scp the local charly binary (os.Executable()) into the
-	//           guest post-boot via VmDeployTarget (default)
+	//   auto  — deliver the host charly binary (os.Executable()) into the
+	//           guest post-boot via VmDeployTarget, ONLY when the guest's
+	//           own charly is absent or older; a current package-managed
+	//           guest charly is preferred and never shadowed (default)
 	//   scp   — explicit form of auto
-	//   url   — cloud-init runcmd downloads charly from URL at first boot
-	//   skip  — user manages charly install themselves; VmDeployTarget
+	//   skip  — user manages the charly install themselves; VmDeployTarget
 	//           verifies presence only
 	Strategy string `yaml:"strategy,omitempty"`
-
-	// URL is the remote download path when Strategy == "url".
-	// Typically a GitHub release asset or internal artifact URL.
-	URL string `yaml:"url,omitempty"`
-
-	// Checksum verifies the downloaded binary when Strategy == "url".
-	// Format: "sha256:<hex>". Empty → no checksum verification.
-	Checksum string `yaml:"checksum,omitempty"`
 }

@@ -22,6 +22,39 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-08 — fix: R10-harden the main-repo rebrand (charly-layer eval + stale-shadow cleanup)
+
+Two defects surfaced and fixed while running the proper `charly eval run`
+bed R10 on the landed main-repo rebrand (Cutover 1). Each landed as its own
+atomic, R10-proven cutover.
+
+- **`charly`-layer eval check** (`candy/charly/candy.yml`, commit `106f768`,
+  tag `v2026.159.0513`). Cutover 1's sweep left the layer's `charly-binary`
+  eval check asserting the binary path matched `/(usr/bin|usr/local/bin)/ov` —
+  a regex that can never match `command -v charly`, so every image baking the
+  `charly` layer failed its layer-eval. Fixed the regex to `/charly`, swept the
+  remaining `ov` CLI references in the layer description + comments, and bumped
+  the layer `version:`. The `EnsureOvInVenue` Go identifier and the
+  `/charly-tools:ov` skill ref are intentionally retained (they belong to the
+  plugins rename). R10: `charly eval run eval-charly-selftest-pod` → PASS
+  (steps=10).
+
+- **Stale-shadow cleanup on package install** (`taskfiles/Build.yml`, commit
+  `c69d5d3`, tag `v2026.159.0514`). On Arch, `task build:charly` installs the
+  canonical `/usr/bin/charly` via the `opencharly-git` package but had never
+  removed a leftover *portable* `charly` in a higher-priority `$PATH` dir
+  (`~/.local/bin`, `/usr/local/bin`, …). The stale shadow won on `$PATH`, so the
+  `os.Executable` freshness guard (`charly/main_freshness.go`, behaving
+  correctly) kept tripping on it — while `task build:charly` refreshed only
+  `/usr/bin/charly`, never the shadow, leaving an unbreakable "rebuilt-but-still-
+  stale" loop. The package-install path now mirrors its existing legacy-package
+  cleanup: it removes every superseded, non-package-owned `charly` shadow in the
+  standard pre-`/usr/bin` `$PATH` dirs so the package binary is authoritative.
+  R10: `task build:charly` reduced PATH to a single canonical fresh
+  `/usr/bin/charly`; `charly eval run eval-local` → PASS (steps=4) against it
+  (with `eval-pod` PASS steps=10 + `eval-charly-selftest-pod` PASS steps=10 the
+  same session).
+
 ### 2026-06-08 — feat!: rebrand `ov`→`charly`, `overthink`→`opencharly`, OCI labels → `ai.opencharly.*` (main repo, Cutover 1)
 
 The CLI binary and the project name were rebranded. This is **Cutover 1 of a

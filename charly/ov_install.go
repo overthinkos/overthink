@@ -59,7 +59,7 @@ func ResolveOvInstallStrategy(spec *VmSpec) OvInstallStrategy {
 //	   (os.Executable(), guaranteed current and from-image-capable) is delivered
 //	   to a /tmp/charly-<calver> path. That path is OUTSIDE $PATH and is invoked by
 //	   EXPLICIT path, NEVER via a PATH lookup — so it can NOT shadow a
-//	   package-manager charly (e.g. the overthink-git /usr/bin/charly), not even one a
+//	   package-manager charly (e.g. the opencharly-git /usr/bin/charly), not even one a
 //	   package manager installs LATER: nothing puts the copy into a higher-PATH-
 //	   priority location than the package. The /tmp name embeds the host CalVer so
 //	   repeated calls reuse the same copy (idempotent — a still-good prior copy is

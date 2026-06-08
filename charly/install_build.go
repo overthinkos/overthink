@@ -107,7 +107,7 @@ func BuildDeployPlan(layer *Layer, img *ResolvedBox, hostCtx HostContext) (*Inst
 	// 2.5. Bundled PKGBUILD (`localpkg:`) — build on the host + pacman -U on a
 	// pac deploy target. Emitted BEFORE the layer's tasks so the package is
 	// already installed when the layer's own `cmd:` task runs: the charly layer's
-	// task is pacman-aware (it does nothing when overthink-git is present and
+	// task is pacman-aware (it does nothing when opencharly-git is present and
 	// only curls a binary otherwise), so the package must land first or the
 	// curl branch shadows the proper /usr/bin/charly with a stale /usr/local/bin/charly.
 	// Skipped on image build (no makepkg in a container) and on non-pac targets.

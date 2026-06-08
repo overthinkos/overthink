@@ -1,11 +1,11 @@
-# Build the native `ov` package artifacts (.pkg.tar.zst / .rpm / .deb) and attach
+# Build the native `charly` package artifacts (.pkg.tar.zst / .rpm / .deb) and attach
 # them to the GitHub release on a v<CalVer> tag push. Each package is built
-# through the SAME `ov box pkg` verb + build.yml local_pkg.build_template used
+# through the SAME `charly box pkg` verb + build.yml local_pkg.build_template used
 # locally (`task pkg:*`) and by the deploy-time localpkg path — one build
 # definition, distro-natively.
 #
 # Runs on the self-hosted CachyOS runner (labels: self-hosted, overthink) — an
-# Arch host carrying the full ov toolchain. So `pac` builds NATIVELY: makepkg as
+# Arch host carrying the full charly toolchain. So `pac` builds NATIVELY: makepkg as
 # the runner's uid 1000 (makepkg refuses root, which is exactly how the rootless
 # runner executes jobs), with no archlinux container and no sudo — every PKGBUILD
 # `depends=` is already installed on the runner, so `makepkg -sf` resolves them
@@ -34,8 +34,8 @@ jobs:
           fetch-depth: 0
       - name: Build .pkg.tar.zst (native makepkg, uid 1000)
         run: |
-          go -C ov build -ldflags "-X main.BuildCalVer=$(bash pkg/arch/calver.sh)" -o ../bin/ov .
-          bin/ov box pkg pac
+          go -C charly build -ldflags "-X main.BuildCalVer=$(bash pkg/arch/calver.sh)" -o ../bin/charly .
+          bin/charly box pkg pac
       - if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v3
         with:
@@ -50,8 +50,8 @@ jobs:
           fetch-depth: 0
       - name: Build .rpm and .deb
         run: |
-          go -C ov build -ldflags "-X main.BuildCalVer=$(bash pkg/arch/calver.sh)" -o ../bin/ov .
-          bin/ov box pkg rpm deb
+          go -C charly build -ldflags "-X main.BuildCalVer=$(bash pkg/arch/calver.sh)" -o ../bin/charly .
+          bin/charly box pkg rpm deb
       - if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v3
         with:

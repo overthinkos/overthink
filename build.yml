@@ -661,7 +661,7 @@ distro:
                 # container (the host is not Debian, so dpkg-buildpackage/debhelper
                 # run in-container for a distro-native package), then install it
                 # with `apt-get install` which AUTO-RESOLVES the package's repo
-                # deps. The charly binary is built on the host (prebuilt bin/ov, or a
+                # deps. The charly binary is built on the host (prebuilt bin/charly, or a
                 # go-build fallback) and bind-mounted in. NO tailscale dep in the
                 # .deb (not in Debian main — the charly candy adds tailscale for deb).
                 local_pkg:
@@ -671,7 +671,7 @@ distro:
                         set -e
                         SUPER=$(cd {{.SrcDir}}/../.. && pwd)
                         mkdir -p "$SUPER/bin"
-                        [ -x "$SUPER/bin/ov" ] || (cd "$SUPER/ov" && CGO_ENABLED=1 go build -ldflags "-X main.BuildCalVer=$(bash "$SUPER/pkg/arch/calver.sh")" -o "$SUPER/bin/ov" .)
+                        [ -x "$SUPER/bin/charly" ] || (cd "$SUPER/charly" && CGO_ENABLED=1 go build -ldflags "-X main.BuildCalVer=$(bash "$SUPER/pkg/arch/calver.sh")" -o "$SUPER/bin/charly" .)
                         podman run --rm -v {{.SrcDir}}:/src:ro -v "$SUPER/bin":/ovbin:ro -v {{.PkgDest}}:/out:Z docker.io/library/debian:13 bash -lc '
                           set -e
                           export DEBIAN_FRONTEND=noninteractive
@@ -930,7 +930,7 @@ distro:
                 # container (distro-native rpmbuild), then install it with
                 # `dnf install` which AUTO-RESOLVES the package's repo deps (all
                 # of ov's mandatory deps are in the Fedora repos, incl. tailscale).
-                # The charly binary is built on the host (prebuilt bin/ov, or a
+                # The charly binary is built on the host (prebuilt bin/charly, or a
                 # go-build fallback) and bind-mounted in; rpmbuild just packages it.
                 local_pkg:
                     pkg_glob: "*.rpm"
@@ -939,11 +939,11 @@ distro:
                         set -e
                         SUPER=$(cd {{.SrcDir}}/../.. && pwd)
                         mkdir -p "$SUPER/bin"
-                        [ -x "$SUPER/bin/ov" ] || (cd "$SUPER/ov" && CGO_ENABLED=1 go build -ldflags "-X main.BuildCalVer=$(bash "$SUPER/pkg/arch/calver.sh")" -o "$SUPER/bin/ov" .)
+                        [ -x "$SUPER/bin/charly" ] || (cd "$SUPER/charly" && CGO_ENABLED=1 go build -ldflags "-X main.BuildCalVer=$(bash "$SUPER/pkg/arch/calver.sh")" -o "$SUPER/bin/charly" .)
                         podman run --rm -v {{.SrcDir}}:/src:ro -v "$SUPER/bin":/ovbin:ro -v {{.PkgDest}}:/out:Z docker.io/library/fedora:43 bash -lc '
                           set -e
                           dnf install -y -q rpm-build >/dev/null
-                          rpmbuild -bb --define "_topdir /tmp/rb" --define "ovbin /ovbin/ov" --define "ovver $(/ovbin/charly version)" /src/opencharly.spec
+                          rpmbuild -bb --define "_topdir /tmp/rb" --define "ovbin /ovbin/charly" --define "ovver $(/ovbin/charly version)" /src/opencharly.spec
                           find /tmp/rb/RPMS -name "*.rpm" -exec install -Dm644 -t /out {} +
                         '
                     install_template: |

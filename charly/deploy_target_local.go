@@ -1000,7 +1000,7 @@ func (t *LocalDeployTarget) execRepoChange(s *RepoChangeStep, plan *InstallPlan,
 
 // execLocalPkg builds the layer's bundled package source on the host and
 // installs the result onto the deploy venue — the proper-package counterpart of
-// the layer's curl/COPY cmd: task (for the `ov` layer this lands overthink-git
+// the layer's curl/COPY cmd: task (for the `charly` layer this lands opencharly-git
 // at /usr/bin/charly instead of an untracked /usr/local/bin/charly). The build/install
 // commands, package glob, and probe all come from the package format's
 // `local_pkg:` config (config-driven). Gated on the VENUE having the format's

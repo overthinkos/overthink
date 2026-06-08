@@ -12,7 +12,7 @@ import (
 // pkg/arch/calver.sh derives the CalVer ONLY from the HEAD commit date, so EVERY
 // binary built from one commit reports the IDENTICAL `charly version` — a dirty
 // working-tree `task build:charly`, the clean git+file:// makepkg clone, an AUR
-// build. The single source of truth (ov_calver) is shared by taskfiles/Build.yml
+// build. The single source of truth (charly_calver) is shared by taskfiles/Build.yml
 // and the PKGBUILD's pkgver()+build(); this test guards the bash side that the Go
 // OvVersion()/ComputeCalVerAt path (version_test.go) cannot reach.
 //
@@ -35,7 +35,7 @@ func TestCalverScriptDeterministic(t *testing.T) {
 	dir := t.TempDir()
 	// A FIXED commit timestamp → a deterministic expected CalVer, independent of
 	// when the test runs. 2026-01-02 03:04:05 UTC → year 2026, day-of-year 2,
-	// HHMM 3*100+4 = 304 → "2026.2.304" (no leading zeros, matching ov_calver).
+	// HHMM 3*100+4 = 304 → "2026.2.304" (no leading zeros, matching charly_calver).
 	const fixedDate = "2026-01-02T03:04:05 +0000"
 	const want = "2026.2.304"
 
@@ -71,7 +71,7 @@ func TestCalverScriptDeterministic(t *testing.T) {
 
 	// Clean tree → commit date.
 	if got := calver(); got != want {
-		t.Fatalf("clean tree: ov_calver = %q, want %q", got, want)
+		t.Fatalf("clean tree: charly_calver = %q, want %q", got, want)
 	}
 	// Dirty the tree by MODIFYING A TRACKED file — an unstaged tracked change,
 	// exactly the shape of a dev `task build:charly` over edited ov/*.go that the old
@@ -82,11 +82,11 @@ func TestCalverScriptDeterministic(t *testing.T) {
 		t.Fatal(err)
 	}
 	if got := calver(); got != want {
-		t.Fatalf("dirty (modified-tracked) tree: ov_calver = %q, want %q — a dirty build must NOT wall-clock (the regression this guards)", got, want)
+		t.Fatalf("dirty (modified-tracked) tree: charly_calver = %q, want %q — a dirty build must NOT wall-clock (the regression this guards)", got, want)
 	}
 	// Stage the modification — `git diff --cached --quiet` → false; still HEAD date.
 	runGit(nil, "add", "a.txt")
 	if got := calver(); got != want {
-		t.Fatalf("staged tree: ov_calver = %q, want %q", got, want)
+		t.Fatalf("staged tree: charly_calver = %q, want %q", got, want)
 	}
 }

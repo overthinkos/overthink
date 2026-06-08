@@ -174,7 +174,7 @@ func TestResolveLocalPkgDir(t *testing.T) {
 	if err := os.MkdirAll(pkgArch, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(pkgArch, "PKGBUILD"), []byte("pkgname=overthink-git\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(pkgArch, "PKGBUILD"), []byte("pkgname=opencharly-git\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	nestedProject := filepath.Join(root, "image", "cachyos")
@@ -195,7 +195,7 @@ func TestResolveLocalPkgDir(t *testing.T) {
 	if err := os.MkdirAll(pkgFedora, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(pkgFedora, "overthink.spec"), []byte("Name: overthink\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(pkgFedora, "opencharly.spec"), []byte("Name: opencharly\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	pkgDebian := filepath.Join(root, "pkg", "debian", "debian")
@@ -372,7 +372,7 @@ func TestExecLocalPkgInstall_SkipsMissingSource(t *testing.T) {
 func TestTransferAndInstallPkgs(t *testing.T) {
 	exec := &localPkgRecExec{}
 	lp := testPacLocalPkgDef()
-	pkgs := []string{"/tmp/build/overthink-git-2026.155.0001-1-x86_64.pkg.tar.zst"}
+	pkgs := []string{"/tmp/build/opencharly-git-2026.155.0001-1-x86_64.pkg.tar.zst"}
 	if err := transferAndInstallPkgs(context.Background(), exec, lp, pkgs, EmitOpts{}); err != nil {
 		t.Fatalf("transferAndInstallPkgs: %v", err)
 	}

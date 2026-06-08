@@ -927,7 +927,7 @@ func (s *ApkInstallStep) Reverse() []ReverseOp { return nil }
 // ad-hoc curl-a-binary `cmd:` task: on an Arch/CachyOS DEPLOY target the
 // package is built from the repo's bundled PKGBUILD on the HOST (`makepkg`),
 // the resulting artifact is transferred to the target, and `pacman -U`-installed
-// — so `ov` lands as the tracked `overthink-git` package at /usr/bin/charly rather
+// — so `charly` lands as the tracked `opencharly-git` package at /usr/bin/charly rather
 // than an untracked binary at /usr/local/bin/charly.
 //
 // Like ApkInstallStep, the step is compiled REGARDLESS of target and each
@@ -979,7 +979,7 @@ func (s *LocalPkgInstallStep) Venue() Venue       { return VenueHostNative }
 func (s *LocalPkgInstallStep) RequiresGate() Gate { return GateNone }
 
 // Reverse returns no ledger ops — the package is the deploy substrate's own
-// pacman-tracked package, removed (if ever) via `pacman -R overthink-git` by
+// pacman-tracked package, removed (if ever) via `pacman -R opencharly-git` by
 // the operator, not by deploy teardown. Mirrors ApkInstallStep's empty Reverse.
 func (s *LocalPkgInstallStep) Reverse() []ReverseOp { return nil }
 

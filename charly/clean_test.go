@@ -175,7 +175,7 @@ func TestCleanMakepkgArtifacts(t *testing.T) {
 	arch := filepath.Join(root, "pkg", "arch")
 	mustMkdir(t, filepath.Join(arch, "src"))
 	mustMkdir(t, filepath.Join(arch, "pkg"))
-	mustWrite(t, filepath.Join(arch, "overthink-git-2026.1.1-1-x86_64.pkg.tar.zst"), "z")
+	mustWrite(t, filepath.Join(arch, "opencharly-git-2026.1.1-1-x86_64.pkg.tar.zst"), "z")
 	mustWrite(t, filepath.Join(arch, "build.log"), "l")
 	mustWrite(t, filepath.Join(arch, "PKGBUILD"), "keep") // must survive
 
@@ -184,7 +184,7 @@ func TestCleanMakepkgArtifacts(t *testing.T) {
 		t.Errorf("removed %d, want 4 (src, pkg, .zst, .log): %v", len(removed), removed)
 	}
 	assertGone(t, filepath.Join(arch, "src"))
-	assertGone(t, filepath.Join(arch, "overthink-git-2026.1.1-1-x86_64.pkg.tar.zst"))
+	assertGone(t, filepath.Join(arch, "opencharly-git-2026.1.1-1-x86_64.pkg.tar.zst"))
 	assertExists(t, filepath.Join(arch, "PKGBUILD"))
 }
 

@@ -33,7 +33,7 @@ func deployNestedPodsInGuest(vmName string, node *DeploymentNode, exec DeployExe
 	// (a @github-fetched charly candy ships no bin/charly, so its curl fallback installs
 	// a pre-from-image release). So deliver the host charly to a /tmp path OUTSIDE
 	// $PATH via putHostOvInVenue and invoke it by explicit path — NEVER shadowing
-	// the guest's canonical /usr/bin/charly (the overthink-git pacman package the
+	// the guest's canonical /usr/bin/charly (the opencharly-git pacman package the
 	// localpkg step installs). The /tmp name embeds the host CalVer so repeated
 	// calls within one deploy reuse the same copy (idempotent). One delivery for
 	// every child (same guest venue), so do it once.

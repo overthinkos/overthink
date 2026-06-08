@@ -206,6 +206,80 @@ func IsRepoCached(repoPath, version string) (bool, error) {
 	return true, nil
 }
 
+// RepoOverrideEnv configures RDD local-overrides: it points a remote `@github`
+// repo ref at a LOCAL working tree (Go-`replace`-style), so an UNCOMMITTED
+// candy / build.yml / charly.yml change can be built and `charly eval`'d by ANY
+// consumer — across submodule boundaries — BEFORE it is committed and pushed.
+// This is the supported "verify before you push to main" mechanism (no cache
+// hacks, no producer-first tag churn).
+//
+// Value: a comma-separated list of `repoPath=localDir` pairs. repoPath matches
+// the repo-root form every `@github` layer/namespace/image ref resolves through
+// (`github.com/<org>/<repo>`); a bare `<org>/<repo>` is accepted too (auto
+// `github.com/` prefix, same rule as `--repo`). Example:
+//
+//	CH_REPO_OVERRIDE=overthinkos/overthink=/home/me/oc-overthink \
+//	    charly -C image/ubuntu box build ubuntu-coder
+//
+// The matched directory resolves verbatim (leading `~/` expanded); the ref's
+// `:vTAG` is IGNORED — an override ALWAYS resolves to the dev's current tree.
+const RepoOverrideEnv = "CH_REPO_OVERRIDE"
+
+// normalizeOverrideRepoPath canonicalizes the LHS of a CH_REPO_OVERRIDE pair to
+// the repo-root form ParseRemoteRef yields, so `overthinkos/overthink` and
+// `github.com/overthinkos/overthink` both match (same auto-prefix rule as
+// normalizeRepoSpec in main_repo.go).
+func normalizeOverrideRepoPath(rp string) string {
+	rp = strings.TrimSpace(strings.TrimSuffix(rp, "/"))
+	if i := strings.Index(rp, "/"); i > 0 && !strings.Contains(rp[:i], ".") {
+		return "github.com/" + rp
+	}
+	return rp
+}
+
+// repoOverrideDir returns the configured local override directory for repoPath,
+// or ("", false, nil) when none applies. A malformed entry, a missing/empty
+// directory, or a non-directory target is a hard error — the override was set
+// deliberately, so a typo must fail loud rather than silently fall through to a
+// remote fetch.
+func repoOverrideDir(repoPath string) (string, bool, error) {
+	spec := strings.TrimSpace(os.Getenv(RepoOverrideEnv))
+	if spec == "" {
+		return "", false, nil
+	}
+	for _, pair := range strings.Split(spec, ",") {
+		pair = strings.TrimSpace(pair)
+		if pair == "" {
+			continue
+		}
+		eq := strings.LastIndex(pair, "=")
+		if eq < 0 {
+			return "", false, fmt.Errorf("%s: malformed entry %q (want repoPath=localDir)", RepoOverrideEnv, pair)
+		}
+		if normalizeOverrideRepoPath(pair[:eq]) != repoPath {
+			continue
+		}
+		dir := strings.TrimSpace(pair[eq+1:])
+		if dir == "" {
+			return "", false, fmt.Errorf("%s: empty directory for repo %q", RepoOverrideEnv, repoPath)
+		}
+		if strings.HasPrefix(dir, "~/") {
+			if home, err := os.UserHomeDir(); err == nil {
+				dir = filepath.Join(home, dir[2:])
+			}
+		}
+		info, err := os.Stat(dir)
+		if err != nil {
+			return "", false, fmt.Errorf("%s: override dir for %q not accessible: %w", RepoOverrideEnv, repoPath, err)
+		}
+		if !info.IsDir() {
+			return "", false, fmt.Errorf("%s: override for %q is not a directory: %s", RepoOverrideEnv, repoPath, dir)
+		}
+		return dir, true, nil
+	}
+	return "", false, nil
+}
+
 // EnsureRepoDownloaded downloads the repo if not already cached.
 // Returns the cache path. The cache is auto-migrated to the latest schema
 // CalVer via the project-only chain (RunProjectMigrations) on EVERY access —
@@ -216,6 +290,16 @@ func IsRepoCached(repoPath, version string) (bool, error) {
 // ~/.cache/charly) — carries the old schema/filename, so the current binary
 // would otherwise fail to find charly.yml. An already-current cache is a no-op.
 func EnsureRepoDownloaded(repoPath, version string) (string, error) {
+	// RDD local-override (CH_REPO_OVERRIDE): resolve a remote repo ref to a local
+	// working tree instead of fetching, so an uncommitted candy/build.yml change
+	// can be built + evaluated by any consumer before it is pushed. The override
+	// is the dev's LIVE tree — it is used verbatim and NEVER migrated (migration
+	// would mutate the working tree); the dev keeps it schema-current themselves.
+	if dir, ok, err := repoOverrideDir(repoPath); err != nil {
+		return "", err
+	} else if ok {
+		return dir, nil
+	}
 	cached, err := IsRepoCached(repoPath, version)
 	if err != nil {
 		return "", err

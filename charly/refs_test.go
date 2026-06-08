@@ -661,3 +661,88 @@ func TestLayerCopySource(t *testing.T) {
 		t.Errorf("remote candy: got %q, want %q", got, ".build/_layers/cuda")
 	}
 }
+
+// TestRepoOverrideDir covers the CH_REPO_OVERRIDE parser: exact + short-form
+// match, miss, multi-pair, and the loud-failure cases (malformed, missing dir,
+// non-directory). The RDD local-override is the supported "verify before push".
+func TestRepoOverrideDir(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "afile")
+	if err := os.WriteFile(file, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("unset", func(t *testing.T) {
+		t.Setenv(RepoOverrideEnv, "")
+		if d, ok, err := repoOverrideDir("github.com/overthinkos/overthink"); ok || d != "" || err != nil {
+			t.Fatalf("want empty/false/nil, got %q %v %v", d, ok, err)
+		}
+	})
+
+	t.Run("exact match", func(t *testing.T) {
+		t.Setenv(RepoOverrideEnv, "github.com/overthinkos/overthink="+dir)
+		d, ok, err := repoOverrideDir("github.com/overthinkos/overthink")
+		if err != nil || !ok || d != dir {
+			t.Fatalf("want %q/true/nil, got %q %v %v", dir, d, ok, err)
+		}
+	})
+
+	t.Run("short form auto-prefixes github.com", func(t *testing.T) {
+		t.Setenv(RepoOverrideEnv, "overthinkos/overthink="+dir)
+		d, ok, err := repoOverrideDir("github.com/overthinkos/overthink")
+		if err != nil || !ok || d != dir {
+			t.Fatalf("want %q/true/nil, got %q %v %v", dir, d, ok, err)
+		}
+	})
+
+	t.Run("non-matching repo falls through", func(t *testing.T) {
+		t.Setenv(RepoOverrideEnv, "github.com/other/repo="+dir)
+		if d, ok, err := repoOverrideDir("github.com/overthinkos/overthink"); ok || d != "" || err != nil {
+			t.Fatalf("want empty/false/nil, got %q %v %v", d, ok, err)
+		}
+	})
+
+	t.Run("second pair matches", func(t *testing.T) {
+		t.Setenv(RepoOverrideEnv, "github.com/a/b=/nope, overthinkos/overthink="+dir)
+		d, ok, err := repoOverrideDir("github.com/overthinkos/overthink")
+		if err != nil || !ok || d != dir {
+			t.Fatalf("want %q/true/nil, got %q %v %v", dir, d, ok, err)
+		}
+	})
+
+	t.Run("malformed entry errors", func(t *testing.T) {
+		t.Setenv(RepoOverrideEnv, "no-equals-sign")
+		if _, _, err := repoOverrideDir("github.com/overthinkos/overthink"); err == nil {
+			t.Fatal("want error for malformed entry, got nil")
+		}
+	})
+
+	t.Run("missing dir errors", func(t *testing.T) {
+		t.Setenv(RepoOverrideEnv, "overthinkos/overthink=/does/not/exist/anywhere")
+		if _, _, err := repoOverrideDir("github.com/overthinkos/overthink"); err == nil {
+			t.Fatal("want error for missing dir, got nil")
+		}
+	})
+
+	t.Run("non-directory errors", func(t *testing.T) {
+		t.Setenv(RepoOverrideEnv, "overthinkos/overthink="+file)
+		if _, _, err := repoOverrideDir("github.com/overthinkos/overthink"); err == nil {
+			t.Fatal("want error for non-directory target, got nil")
+		}
+	})
+}
+
+// TestEnsureRepoDownloaded_Override proves the override short-circuits the cache
+// + remote fetch entirely (offline: no network, ignores the :vTAG version) and
+// never migrates the dev's live tree.
+func TestEnsureRepoDownloaded_Override(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv(RepoOverrideEnv, "github.com/foo/bar="+dir)
+	got, err := EnsureRepoDownloaded("github.com/foo/bar", "v9999.1.1")
+	if err != nil {
+		t.Fatalf("override should resolve offline, got err: %v", err)
+	}
+	if got != dir {
+		t.Fatalf("want override dir %q, got %q", dir, got)
+	}
+}

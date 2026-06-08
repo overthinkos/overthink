@@ -1,16 +1,16 @@
 candy:
-    version: 2026.156.1921
+    version: 2026.159.0448
     name: charly
     description: |
         Full charly toolchain — the CLI binary + the VM stack (virtualization),
         encrypted storage (gocryptfs), and console relay (socat) — composed into
         ONE layer that works identically on container/pod, host/local, and
         bootc/VM targets via the `virtualization` layer's mixed-entry `service:`
-        pattern. This is the single canonical `ov` layer: bake it where a
+        pattern. This is the single canonical `charly` layer: bake it where a
         deployment needs a persistent on-`$PATH` charly or the full toolchain inside
         (the `charly-mcp` server, the `*-charly` showcases, nested-pod orchestrators).
-        Images that only need transient in-container `ov` (the dbus delegation
-        path) need NOT bake it — the host copies `ov` in on demand
+        Images that only need transient in-container `charly` (the dbus delegation
+        path) need NOT bake it — the host copies `charly` in on demand
         (`EnsureOvInVenue`; see `/charly-tools:ov`).
     candy:
         - virtualization
@@ -88,13 +88,13 @@ candy:
           user: root
     # The charly binary is at /usr/bin/charly (opencharly-git package, on an Arch deploy)
     # OR /usr/local/bin/charly (image build / non-pac deploy curl/COPY). Probe via
-    # PATH (`command -v ov`) so the eval passes regardless of which path placed it.
+    # PATH (`command -v charly`) so the eval passes regardless of which path placed it.
     eval:
         - id: charly-binary
           command: command -v charly
           exit_status: 0
           stdout:
-            - matches: "/(usr/bin|usr/local/bin)/ov"
+            - matches: "/(usr/bin|usr/local/bin)/charly"
         - id: charly-version
           command: charly version
           exit_status: 0

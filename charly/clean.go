@@ -119,7 +119,7 @@ func pruneImagesByRetention(engine string, keepN int, dryRun bool) ([]string, er
 	groups := map[string][]tagCand{}
 	seenRef := map[string]bool{}
 	for _, im := range imgs {
-		short := im.Labels["ai.opencharly.image"]
+		short := im.Labels[LabelBox]
 		if short == "" {
 			continue
 		}

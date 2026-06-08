@@ -8,18 +8,18 @@ candy:
             DRIVER peer: a `command:` check with `on: <this>` runs on the host
             against a SEPARATE pod SUBJECT (cross-kind — local driver, pod
             subject). USER-level only (a marker under $HOME, no root/sudo/gates)
-            so bringUpPeers applies it unattended via `ov deploy add`.
+            so bringUpPeers applies it unattended via `charly deploy add`.
         tag: [working]
     task:
         - mkdir: "${HOME}/.cache"
           user: "${USER}"
-        - write: "${HOME}/.cache/ov-cross-local-driver-marker"
+        - write: "${HOME}/.cache/charly-cross-local-driver-marker"
           user: "${USER}"
           mode: "0644"
           content: |
-            ov-cross-local-driver v1
+            charly-cross-local-driver v1
     eval:
         - id: cross-local-driver-marker
           scope: deploy
-          command: "test -f ${HOME}/.cache/ov-cross-local-driver-marker"
+          command: "test -f ${HOME}/.cache/charly-cross-local-driver-marker"
           in_container: false

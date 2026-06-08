@@ -1,10 +1,10 @@
 export const meta = {
   name: 'verify-beds',
   description:
-    'Full-live-test commit-gate fan-out over the existing kind:eval disposable beds, also usable for continuous verification throughout development: run `ov eval run <bed>` to completion (build → eval image → deploy → eval live → fresh ov update → teardown) and aggregate a verbatim pass/fail report. ALL beds run in PARALLEL via parallel(), bounded by the runtime’s documented 16-concurrent / 1000-total dynamic-workflow agent ceiling — KVM/libvirt are multi-tenant and podman builds distinct image tags concurrently. Beds skipped for a missing host prereq (libvirt session for a vm bed, /dev/kvm for android) are logged, never silently dropped.',
+    'Full-live-test commit-gate fan-out over the existing kind:eval disposable beds, also usable for continuous verification throughout development: run `charly eval run <bed>` to completion (build → eval image → deploy → eval live → fresh charly update → teardown) and aggregate a verbatim pass/fail report. ALL beds run in PARALLEL via parallel(), bounded by the runtime’s documented 16-concurrent / 1000-total dynamic-workflow agent ceiling — KVM/libvirt are multi-tenant and podman builds distinct image tags concurrently. Beds skipped for a missing host prereq (libvirt session for a vm bed, /dev/kvm for android) are logged, never silently dropped.',
   phases: [
     { title: 'Discover', detail: 'enumerate kind:eval beds + their target kind' },
-    { title: 'Run beds', detail: 'ov eval run <bed> per bed; return verbatim verdict' },
+    { title: 'Run beds', detail: 'charly eval run <bed> per bed; return verbatim verdict' },
   ],
 }
 
@@ -62,8 +62,8 @@ const BED_SCHEMA = {
 
 phase('Discover')
 const discoverPrompt = requested.length
-  ? `Read eval.yml and every image/*/overthink.yml in this project. For each of these bed names: ${requested.join(', ')} — return its kind:eval target kind (pod/vm/local). Return JSON {beds:[{bed,target}]}. Do NOT run anything.`
-  : 'Read eval.yml and every image/*/overthink.yml in this project. Return ALL kind:eval bed entities as JSON {beds:[{bed,target}]} where target is the entity .target field (pod/vm/local). Do NOT run anything.'
+  ? `Read eval.yml and every image/*/charly.yml in this project. For each of these bed names: ${requested.join(', ')} — return its kind:eval target kind (pod/vm/local). Return JSON {beds:[{bed,target}]}. Do NOT run anything.`
+  : 'Read eval.yml and every image/*/charly.yml in this project. Return ALL kind:eval bed entities as JSON {beds:[{bed,target}]} where target is the entity .target field (pod/vm/local). Do NOT run anything.'
 const discovered = await agent(discoverPrompt, { schema: DISCOVER_SCHEMA, label: 'discover-beds', phase: 'Discover' })
 const beds = (discovered && discovered.beds ? discovered.beds : []).filter(Boolean)
 
@@ -79,7 +79,7 @@ log(`Discovered ${beds.length} bed(s): running all in parallel (bounded + queued
 
 const runBed = (b) =>
   agent(
-    `You are the eval-bed runner. Run the kind:eval bed "${b.bed}" EXACTLY as \`ov eval run ${b.bed}\` — do NOT add any flags (no --no-rebuild/--keep/--on-*; that would shrink the R10 spec, CLAUDE.md Law 3.6). Capture stdout/stderr and the process exit code. Then read .eval/${b.bed}/<calver>/summary.yml for the per-step verdict and tail any failing step's .log. If a required host prereq is missing (libvirt user session for a vm bed, /dev/kvm for the android bed), set skippedPrereq=true and do NOT report it as a pass. Return the verbatim verdict — never summarize away a failure.`,
+    `You are the eval-bed runner. Run the kind:eval bed "${b.bed}" EXACTLY as \`charly eval run ${b.bed}\` — do NOT add any flags (no --no-rebuild/--keep/--on-*; that would shrink the R10 spec, CLAUDE.md Law 3.6). Capture stdout/stderr and the process exit code. Then read .eval/${b.bed}/<calver>/summary.yml for the per-step verdict and tail any failing step's .log. If a required host prereq is missing (libvirt user session for a vm bed, /dev/kvm for the android bed), set skippedPrereq=true and do NOT report it as a pass. Return the verbatim verdict — never summarize away a failure.`,
     { schema: BED_SCHEMA, label: `bed:${b.bed}`, phase: 'Run beds' }
   )
 

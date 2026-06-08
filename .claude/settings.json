@@ -9,10 +9,10 @@
   "teammateMode": "auto",
   "permissions": {
     "allow": [
-      "Bash(ov eval run:*)",
-      "Bash(ov eval live:*)",
-      "Bash(ov eval box:*)",
-      "Bash(ov status:*)"
+      "Bash(charly eval run:*)",
+      "Bash(charly eval live:*)",
+      "Bash(charly eval box:*)",
+      "Bash(charly status:*)"
     ]
   },
   "enabledPlugins": {

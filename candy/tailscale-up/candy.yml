@@ -3,7 +3,7 @@ candy:
     name: tailscale-up
     description: |
         Tailscale runtime wiring for target:local hosts. Starts tailscaled
-        (the /ov-infrastructure:tailscale layer only enables it, never --now,
+        (the /charly-infrastructure:tailscale layer only enables it, never --now,
         because that body also runs at image-build time where systemd isn't
         PID 1), sets --operator + --hostname so user-systemd ExecStartPost
         can run `tailscale serve` without sudo, and keeps the tailnet device
@@ -16,7 +16,7 @@ candy:
     task:
         - cmd: |
             set -eu
-            # Start the daemon. The /ov-infrastructure:tailscale layer's
+            # Start the daemon. The /charly-infrastructure:tailscale layer's
             # cmd task is `systemctl enable` only (no --now) because that
             # body also runs in image-build / bootc contexts where systemd
             # isn't PID 1 and --now would fail. Starting it here in the

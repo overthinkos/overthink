@@ -2,7 +2,7 @@ candy:
     version: 2026.149.1210
     name: cachyos-extras
     description: |
-        The remaining host workstation tools not already covered by the ov dev
+        The remaining host workstation tools not already covered by the charly dev
         stack — the CLI/diagnostic/app gap from the CachyOS netinstall + the
         operator's manual installs, reverse-resolved to top-level packages.
         Excludes host-hardware/boot/firmware/network entries by design. accounts

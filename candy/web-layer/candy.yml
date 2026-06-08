@@ -42,8 +42,8 @@ candy:
             </head>
             <body>
             <div class="box">
-            <h1>ov-fixture-web</h1>
-            <p>ov-fixture-web-content-marker</p>
+            <h1>charly-fixture-web</h1>
+            <p>charly-fixture-web-content-marker</p>
             <div>
             <span class="swatch" style="background:#e91e63"></span>
             <span class="swatch" style="background:#4caf50"></span>
@@ -102,4 +102,4 @@ candy:
           file: /srv/fixture/index.html
           exists: true
           contains:
-            - ov-fixture-web-content-marker
+            - charly-fixture-web-content-marker

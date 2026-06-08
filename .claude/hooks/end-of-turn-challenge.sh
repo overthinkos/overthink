@@ -23,8 +23,8 @@ END-OF-TURN CHECK (soft — does not block). Confirm against CLAUDE.md
       Above all: does this layer composition, at its latest versions,
       build/deploy/run together? (Low-risk orientation = an R0 lookup.)
 
-  [ ] R10 (if code/deploy was touched): a real `ov eval run <bed>` /
-      `ov eval live` ran against a FRESH rebuild of a `disposable: true`
+  [ ] R10 (if code/deploy was touched): a real `charly eval run <bed>` /
+      `charly eval live` ran against a FRESH rebuild of a `disposable: true`
       target AND its output is PASTED. A dry-run / unit-test / validate /
       bare rebuild is NOT R10. No scope-shrinking flags were added without
       explicit per-turn authorization (Law 3.6).
@@ -45,10 +45,10 @@ END-OF-TURN CHECK (soft — does not block). Confirm against CLAUDE.md
   [ ] Landing (only after R10 PASS): R10 PASS is the sole landing trigger and
       auto-lands per /ov-internals:git-workflow — ONE atomic commit per repo
       with the Assisted-by trailer, feat/ fast-forward-merged to main, a fresh
-      v<CalVer> tag on each overthink.yml repo, pushed. NEVER force-push
+      v<CalVer> tag on each charly.yml repo, pushed. NEVER force-push
       (no --force / --force-with-lease, any branch, any repo).
 
 If any box is unchecked and the cutover isn't done: KEEP WORKING (on
-`disposable: true` targets, `ov update`/`ov eval run` need no extra
+`disposable: true` targets, `charly update`/`charly eval run` need no extra
 permission). If genuinely stuck, stop with ONE specific actionable question.
 EOF

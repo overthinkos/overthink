@@ -1,5 +1,5 @@
-#  Per-kind file for `kind: android` device entries. Sibling of overthink.yml —
-#  imported via overthink.yml's `import:` list. The schema kind discriminator is
+#  Per-kind file for `kind: android` device entries. Sibling of charly.yml —
+#  imported via charly.yml's `import:` list. The schema kind discriminator is
 #  `kind: android` for kind-keyed entries; the root-shape map is `android:`
 #  (this file). A kind:android entity is an Android DEVICE substrate: an in-pod
 #  emulator (image:) or a remote/physical adb endpoint (adb:). A

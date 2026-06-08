@@ -1,0 +1,313 @@
+package main
+
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+// Integration-ish tests for BuildDeployPlan using the project's own
+// layer definitions. Not unit tests in the strict sense (they read
+// real YAML via LoadConfig + ScanAllLayerWithConfig) but they catch
+// compile-time regressions that pure unit tests can't.
+
+// compilerTestProjectDir chdirs to the project root (the parent of ov/)
+// and returns a cleanup callback. The compiler tests rely on being able
+// to LoadConfig from charly.yml, which only exists in the project root.
+func compilerTestProjectDir(t *testing.T) (string, func()) {
+	t.Helper()
+	prev, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	// Walk up from current to find the project root (box.yml marker).
+	dir := prev
+	for i := 0; i < 5; i++ {
+		if _, err := os.Stat(filepath.Join(dir, "box.yml")); err == nil {
+			if err := os.Chdir(dir); err != nil {
+				t.Fatalf("chdir %s: %v", dir, err)
+			}
+			return dir, func() { _ = os.Chdir(prev) }
+		}
+		dir = filepath.Dir(dir)
+	}
+	t.Skipf("project root not found walking up from %s; skipping", prev)
+	return "", func() {}
+}
+
+// loadCompilerFixtures loads charly.yml + layers from the project and
+// resolves the "fedora-coder" image. Returns nil, nil if fixtures can't
+// load (used to gracefully skip in CI environments that might not have
+// the fixture layers present).
+func loadCompilerFixtures(t *testing.T, imageName string) (*Config, *ResolvedBox, map[string]*Layer) {
+	t.Helper()
+	dir, _ := os.Getwd()
+	cfg, err := LoadConfig(dir)
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	// SetFormatNames must run before layer scanning so format sections
+	// (rpm:/deb:/pac:) are recognized. Post-unified-cutover LoadDefaultBuildConfig
+	// reads charly.yml directly.
+	{
+		_ = cfg
+		distroCfg, _, _, err := LoadDefaultBuildConfig(dir)
+		if err != nil {
+			t.Fatalf("LoadDefaultBuildConfig: %v", err)
+		}
+		SetFormatNames(distroCfg)
+	}
+	layers, err := ScanAllLayerWithConfig(dir, cfg)
+	if err != nil {
+		t.Fatalf("ScanAllLayerWithConfig: %v", err)
+	}
+	img, err := cfg.ResolveImage(imageName, "testing", dir, ResolveOpts{})
+	if err != nil {
+		t.Skipf("ResolveImage(%s): %v (fixture missing?)", imageName, err)
+	}
+	return cfg, img, layers
+}
+
+func TestBuildDeployPlanRipgrep(t *testing.T) {
+	_, cleanup := compilerTestProjectDir(t)
+	defer cleanup()
+
+	_, img, layers := loadCompilerFixtures(t, "fedora-coder")
+	ripgrep, ok := layers["ripgrep"]
+	if !ok {
+		t.Skip("ripgrep layer not present in fixtures")
+	}
+
+	plan, err := BuildDeployPlan(ripgrep, img, HostContext{})
+	if err != nil {
+		t.Fatalf("BuildDeployPlan: %v", err)
+	}
+
+	if plan.Layer != "ripgrep" {
+		t.Errorf("plan.Layer = %q, want ripgrep", plan.Layer)
+	}
+
+	// ripgrep is a pure rpm: package layer — expect exactly one
+	// SystemPackagesStep at PhaseInstall with the ripgrep package.
+	var pkgSteps []*SystemPackagesStep
+	for _, s := range plan.Steps {
+		if sp, ok := s.(*SystemPackagesStep); ok {
+			pkgSteps = append(pkgSteps, sp)
+		}
+	}
+	if len(pkgSteps) != 1 {
+		t.Fatalf("expected 1 SystemPackagesStep, got %d; full plan: %s",
+			len(pkgSteps), DescribePlan(plan))
+	}
+	if pkgSteps[0].Format != "rpm" {
+		t.Errorf("pkg format = %q, want rpm", pkgSteps[0].Format)
+	}
+	found := false
+	for _, p := range pkgSteps[0].Packages {
+		if p == "ripgrep" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("ripgrep package not in step packages: %v", pkgSteps[0].Packages)
+	}
+
+	// Install-phase pkg step must be ungated.
+	if got := pkgSteps[0].RequiresGate(); got != GateNone {
+		t.Errorf("install phase gate = %v, want none", got)
+	}
+
+	// Reverse op should uninstall ripgrep.
+	ops := pkgSteps[0].Reverse()
+	if len(ops) != 1 || ops[0].Kind != ReverseOpPackageRemove {
+		t.Errorf("Reverse ops = %+v, want [package-remove]", ops)
+	}
+}
+
+func TestBuildDeployPlanDevTools(t *testing.T) {
+	_, cleanup := compilerTestProjectDir(t)
+	defer cleanup()
+
+	_, img, layers := loadCompilerFixtures(t, "fedora-coder")
+	dt, ok := layers["dev-tools"]
+	if !ok {
+		t.Skip("dev-tools layer not present in fixtures")
+	}
+
+	plan, err := BuildDeployPlan(dt, img, HostContext{})
+	if err != nil {
+		t.Fatalf("BuildDeployPlan: %v", err)
+	}
+
+	// dev-tools has rpm: packages + a cmd: task.
+	var pkgCount, taskCount int
+	for _, s := range plan.Steps {
+		switch s.(type) {
+		case *SystemPackagesStep:
+			pkgCount++
+		case *TaskStep:
+			taskCount++
+		}
+	}
+	if pkgCount < 1 {
+		t.Errorf("expected ≥1 SystemPackagesStep, got %d; plan: %s",
+			pkgCount, DescribePlan(plan))
+	}
+	if taskCount < 1 {
+		t.Errorf("expected ≥1 TaskStep, got %d; plan: %s",
+			taskCount, DescribePlan(plan))
+	}
+}
+
+func TestBuildDeployPlanPixiLayer(t *testing.T) {
+	_, cleanup := compilerTestProjectDir(t)
+	defer cleanup()
+
+	_, img, layers := loadCompilerFixtures(t, "fedora-coder")
+	// pre-commit layer uses pixi builder (has pixi.toml).
+	pc, ok := layers["pre-commit"]
+	if !ok {
+		t.Skip("pre-commit layer not present in fixtures")
+	}
+	if !pc.HasPixiToml {
+		t.Skip("pre-commit doesn't have pixi.toml (fixture changed)")
+	}
+
+	plan, err := BuildDeployPlan(pc, img, HostContext{})
+	if err != nil {
+		t.Fatalf("BuildDeployPlan: %v", err)
+	}
+
+	var builders []*BuilderStep
+	for _, s := range plan.Steps {
+		if bs, ok := s.(*BuilderStep); ok {
+			builders = append(builders, bs)
+		}
+	}
+	if len(builders) == 0 {
+		t.Fatalf("expected a BuilderStep for pixi, got none; plan: %s",
+			DescribePlan(plan))
+	}
+	foundPixi := false
+	for _, b := range builders {
+		if b.Builder == "pixi" {
+			foundPixi = true
+			if b.Venue() != VenueContainerBuilder {
+				t.Errorf("pixi builder venue = %v, want container-builder", b.Venue())
+			}
+			if b.Scope() != ScopeUser {
+				t.Errorf("pixi builder scope = %v, want user", b.Scope())
+			}
+		}
+	}
+	if !foundPixi {
+		t.Errorf("no pixi BuilderStep in plan; plan: %s", DescribePlan(plan))
+	}
+}
+
+func TestComputeDeployIDDeterminism(t *testing.T) {
+	a := computeDeployID("fedora-coder", []string{"ripgrep", "uv"}, nil)
+	b := computeDeployID("fedora-coder", []string{"ripgrep", "uv"}, nil)
+	if a != b {
+		t.Errorf("deploy ID not deterministic: %s vs %s", a, b)
+	}
+	// Reordering layers changes the ID (layer order matters for reproducibility).
+	c := computeDeployID("fedora-coder", []string{"uv", "ripgrep"}, nil)
+	if a == c {
+		t.Errorf("expected different IDs for different layer orders, both got %s", a)
+	}
+	// Adding an overlay changes the ID.
+	d := computeDeployID("fedora-coder", []string{"ripgrep", "uv"}, []string{"my-extras"})
+	if a == d {
+		t.Errorf("expected different IDs with add_layers, both got %s", a)
+	}
+	if len(a) != 16 {
+		t.Errorf("deploy ID length = %d, want 16 (first 16 hex chars of sha256)", len(a))
+	}
+}
+
+func TestMergePlansOrderingAndID(t *testing.T) {
+	p1 := &InstallPlan{Layer: "ripgrep", Distro: "fedora:43", Steps: []InstallStep{
+		&SystemPackagesStep{Format: "rpm", Phase: PhaseInstall, Packages: []string{"ripgrep"}},
+	}}
+	p2 := &InstallPlan{Layer: "uv", Distro: "fedora:43", Steps: []InstallStep{
+		&TaskStep{LayerName: "uv", Task: &Task{Download: "https://…"}},
+	}}
+
+	merged := MergePlan([]*InstallPlan{p1, p2}, "fedora-coder", nil)
+	if merged.Image != "fedora-coder" {
+		t.Errorf("merged.Image = %q, want fedora-coder", merged.Image)
+	}
+	if len(merged.Steps) != 2 {
+		t.Errorf("merged.Steps len = %d, want 2", len(merged.Steps))
+	}
+	if merged.LayersIncluded[0] != "ripgrep" || merged.LayersIncluded[1] != "uv" {
+		t.Errorf("layer order wrong: %v", merged.LayersIncluded)
+	}
+	if merged.DeployID == "" {
+		t.Errorf("merged DeployID is empty")
+	}
+}
+
+func TestEnsureServiceSuffix(t *testing.T) {
+	tests := map[string]string{
+		"postgresql":         "postgresql.service",
+		"postgresql.service": "postgresql.service",
+		"foo.timer":          "foo.timer",
+		"foo.socket":         "foo.socket",
+		"":                   "",
+	}
+	for in, want := range tests {
+		if got := ensureServiceSuffix(in); got != want {
+			t.Errorf("ensureServiceSuffix(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestDescribePlanSummary(t *testing.T) {
+	p := &InstallPlan{
+		Layer:  "x",
+		Image:  "y",
+		Distro: "z",
+		Steps: []InstallStep{
+			&SystemPackagesStep{Format: "rpm", Phase: PhaseInstall},
+			&SystemPackagesStep{Format: "rpm", Phase: PhaseInstall},
+			&TaskStep{Task: &Task{Mkdir: "/x"}},
+		},
+	}
+	out := DescribePlan(p)
+	if !strings.Contains(out, "layer=x") {
+		t.Errorf("missing layer name in description: %s", out)
+	}
+	if !strings.Contains(out, "SystemPackages: 2") {
+		t.Errorf("missing SystemPackages count: %s", out)
+	}
+	if !strings.Contains(out, "Task: 1") {
+		t.Errorf("missing Task count: %s", out)
+	}
+}
+
+// TestBuildSystemPackagesStepRepos guards the repo-key fix in
+// buildSystemPackagesStep: repos are stored under the canonical "repo" key (what
+// derivePackageSectionsFromCalamares writes + NewInstallContext reads), as a
+// []map[string]any value. The prior code read raw["repos"] (plural) with a
+// []interface{} assertion, so step.Repos was ALWAYS empty and the PhasePrepare
+// repo-gate (SystemPackagesStep.RequiresGate) never saw a layer's repos.
+func TestBuildSystemPackagesStepRepos(t *testing.T) {
+	raw := map[string]interface{}{
+		"package": []string{"tailscale"},
+		"repo": []map[string]any{{
+			"name": "tailscale",
+			"url":  "https://pkgs.tailscale.com/stable/debian",
+		}},
+	}
+	step := buildSystemPackagesStep("deb", PhaseInstall, []string{"tailscale"}, raw, nil)
+	if len(step.Repos) != 1 {
+		t.Fatalf("step.Repos len = %d, want 1 (repo-key/type mismatch left it empty)", len(step.Repos))
+	}
+	if step.Repos[0].Raw["name"] != "tailscale" {
+		t.Errorf("repo name = %v, want tailscale", step.Repos[0].Raw["name"])
+	}
+}

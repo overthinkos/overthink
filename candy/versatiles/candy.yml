@@ -10,7 +10,7 @@ candy:
                 # curl + jq pull the GitHub-API release listing dynamically so
                 # the install step picks up whatever versatiles-rs version is
                 # current at build time (mirrors the pmtiles install in
-                # /ov-versa:osm-tools-layer). jq is already pulled by
+                # /charly-versa:osm-tools-layer). jq is already pulled by
                 # osm-tools so this is a soft dep; declared here for layer
                 # composability if osm-tools is ever removed.
                 - curl

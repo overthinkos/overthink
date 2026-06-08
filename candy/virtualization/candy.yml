@@ -114,7 +114,7 @@ candy:
     # qemu:///system access works without prompting. Harmless on
     # container deploys: libvirt group exists from the libvirt package
     # postinst, the user gets added, and qemu:///session (the default
-    # for in-container ov vm operations) doesn't consult the group at
+    # for in-container charly vm operations) doesn't consult the group at
     # all. Same task, both targets.
     task:
         - cmd: |
@@ -146,7 +146,7 @@ candy:
     # appears twice with the same `name:` — one entry rendered by
     # systemd-init (use_packaged), the other by supervisord-init
     # (custom exec). The init system picks at deploy time. The
-    # canonical reference for this pattern is `/ov-coder:sshd`.
+    # canonical reference for this pattern is `/charly-coder:sshd`.
     service:
         # ----- virtqemud -----
         # systemd render: enables the packaged socket+service unit so
@@ -158,7 +158,7 @@ candy:
         # supervisord render: foreground daemon (--timeout 0 keeps it
         # alive instead of self-exiting on idle). priority=5 places it
         # ahead of every desktop service. No `user=` directive — the
-        # daemon inherits supervisord's uid (root on fedora-ov/arch-ov,
+        # daemon inherits supervisord's uid (root on fedora-charly/arch-charly,
         # user on openclaw-desktop); qemu:///session keys off
         # $XDG_RUNTIME_DIR so both work.
         - name: virtqemud

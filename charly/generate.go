@@ -1,0 +1,2408 @@
+package main
+
+import (
+	"crypto/sha256"
+	"encoding/json"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"sort"
+	"strconv"
+	"strings"
+)
+
+// Generator holds state for generating build artifacts
+type Generator struct {
+	Dir            string
+	Config         *Config
+	Layers         map[string]*Layer
+	Tag            string
+	Images         map[string]*ResolvedBox
+	BuildDir       string
+	Containerfiles map[string]string // cached content per image (used by charly build to pipe via stdin)
+	GlobalOrder    []string          // popularity-weighted global layer order for cache optimization
+}
+
+// globalOrderForImage returns the layer order for an image by filtering the
+// global order to only include the image's needed layers. This ensures shared
+// layers appear in the same order across all images, maximizing cache reuse.
+func (g *Generator) globalOrderForImage(imageLayers []string, parentLayers map[string]bool) ([]string, error) {
+	// Resolve needed layers (expand composition + transitive deps)
+	needed, err := ResolveLayerOrder(imageLayers, g.Layers, parentLayers)
+	if err != nil {
+		return nil, err
+	}
+
+	neededSet := make(map[string]bool, len(needed))
+	for _, l := range needed {
+		neededSet[l] = true
+	}
+
+	// Filter global order to only include this image's needed layers
+	var order []string
+	for _, l := range g.GlobalOrder {
+		if neededSet[l] {
+			order = append(order, l)
+		}
+	}
+
+	// Safety: if global order is missing some needed layers (shouldn't happen),
+	// append them in their original order
+	for _, l := range needed {
+		found := false
+		for _, o := range order {
+			if o == l {
+				found = true
+				break
+			}
+		}
+		if !found {
+			order = append(order, l)
+		}
+	}
+
+	return order, nil
+}
+
+// resolveUserContext detects existing user in base image or uses configured values
+func (g *Generator) resolveUserContext(img *ResolvedBox) error {
+	if !img.IsExternalBase {
+		// Internal base - inherit from parent, but respect explicit overrides
+		parentImg := g.Images[img.Base]
+		origCfg := g.Config.Image[img.Name]
+
+		if origCfg.User == "" {
+			img.User = parentImg.User
+		}
+		if origCfg.UID == nil {
+			img.UID = parentImg.UID
+		}
+		if origCfg.GID == nil {
+			img.GID = parentImg.GID
+		}
+
+		// Resolve home directory
+		if img.User == "root" {
+			img.Home = "/root"
+		} else if origCfg.User == "" && origCfg.UID == nil {
+			img.Home = parentImg.Home
+		} else {
+			img.Home = fmt.Sprintf("/home/%s", img.User)
+		}
+		return nil
+	}
+
+	// External base - try to detect existing user at configured UID
+	userInfo, err := InspectImageUser(img.Base, img.UID)
+	if err != nil {
+		// Can't inspect, use configured defaults
+		return nil
+	}
+
+	if userInfo != nil {
+		// Found existing user - use their info
+		img.User = userInfo.Name
+		img.Home = userInfo.Home
+		img.GID = userInfo.GID
+	}
+	// else: no user found at UID, will create with configured values
+
+	return nil
+}
+
+// NewGenerator creates a new generator. opts is propagated through Validate
+// + ResolveAllImage so `charly box build --include-disabled` reaches images
+// flagged enabled: false in charly.yml (without modifying the file).
+func NewGenerator(dir string, tag string, opts ResolveOpts) (*Generator, error) {
+	cfg, err := LoadConfig(dir)
+	if err != nil {
+		return nil, err
+	}
+
+	// Load default build config early — needed for SetFormatNames before layer scanning.
+	// Post-unified-cutover this reads charly.yml directly (no format_config: pointer).
+	defaultDistroCfg, _, defaultInitCfg, err := LoadDefaultBuildConfig(dir)
+	if err != nil {
+		return nil, fmt.Errorf("loading default build config: %w", err)
+	}
+	SetFormatNames(defaultDistroCfg)
+
+	layers, err := ScanAllLayerWithConfigOpts(dir, cfg, opts)
+	if err != nil {
+		return nil, err
+	}
+
+	// Populate init systems on layers from build.yml config
+	PopulateLayerInitSystem(layers, defaultInitCfg)
+
+	if err := Validate(cfg, layers, dir, opts); err != nil {
+		return nil, err
+	}
+
+	// Compute CalVer if tag not specified
+	if tag == "" {
+		tag = ComputeCalVer()
+	}
+
+	images, err := cfg.ResolveAllImage(tag, dir, opts)
+	if err != nil {
+		return nil, err
+	}
+
+	// Compute and inject auto-intermediate images
+	updated, err := ComputeIntermediates(images, layers, cfg, tag)
+	if err != nil {
+		return nil, fmt.Errorf("computing intermediates: %w", err)
+	}
+	images = updated
+
+	// Compute global layer order for consistent cross-image ordering
+	globalOrder, err := GlobalLayerOrder(images, layers)
+	if err != nil {
+		return nil, fmt.Errorf("computing global layer order: %w", err)
+	}
+
+	g := &Generator{
+		Dir:            dir,
+		Config:         cfg,
+		Layers:         layers,
+		Tag:            tag,
+		Images:         images,
+		BuildDir:       filepath.Join(dir, ".build"),
+		Containerfiles: make(map[string]string),
+		GlobalOrder:    globalOrder,
+	}
+
+	// Derive each image's content-stable identity (ai.opencharly.version)
+	// from per-entity versions now that the base chain + auto-intermediates are
+	// materialized. See effective_version.go.
+	if err := g.computeEffectiveVersions(); err != nil {
+		return nil, err
+	}
+
+	return g, nil
+}
+
+// cleanStaleBuildDirs removes image directories in .build/ that don't correspond
+// to any enabled image, and removes leftover files like docker-bake.hcl.
+func (g *Generator) cleanStaleBuildDirs() error {
+	entries, err := os.ReadDir(g.BuildDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	for _, entry := range entries {
+		if entry.IsDir() {
+			name := entry.Name()
+			if _, exists := g.Images[name]; !exists {
+				path := filepath.Join(g.BuildDir, name)
+				if err := os.RemoveAll(path); err != nil {
+					return fmt.Errorf("removing stale dir %s: %w", path, err)
+				}
+				fmt.Fprintf(os.Stderr, "Removed stale build dir: .build/%s\n", name)
+			}
+		} else if entry.Name() == "docker-bake.hcl" {
+			// Remove leftover HCL file from pre-charly-build era
+			path := filepath.Join(g.BuildDir, entry.Name())
+			if err := os.Remove(path); err != nil {
+				return fmt.Errorf("removing stale file %s: %w", path, err)
+			}
+			fmt.Fprintf(os.Stderr, "Removed stale file: .build/%s\n", entry.Name())
+		}
+	}
+	return nil
+}
+
+// Generate generates all build artifacts
+func (g *Generator) Generate() error {
+	// Clean stale image directories from .build/ (leftovers from removed/renamed images)
+	if err := g.cleanStaleBuildDirs(); err != nil {
+		return fmt.Errorf("cleaning stale build dirs: %w", err)
+	}
+
+	// Create .build directory
+	if err := os.MkdirAll(g.BuildDir, 0755); err != nil {
+		return fmt.Errorf("creating .build directory: %w", err)
+	}
+
+	// Render the build-context ignore files (.containerignore + .dockerignore)
+	// from defaults.context_ignore. The context tar streams to the build
+	// engine on EVERY build regardless of cache state, so excluding heavy
+	// never-COPYed directories is the dominant warm-rebuild win.
+	if err := g.writeContextIgnore(); err != nil {
+		return fmt.Errorf("writing context ignore files: %w", err)
+	}
+
+	// Create symlinks for remote layers in .build/_layers/
+	if err := g.createRemoteLayerCopies(); err != nil {
+		return fmt.Errorf("creating remote layer symlinks: %w", err)
+	}
+
+	// Resolve image build order
+	order, err := ResolveImageOrder(g.Images, g.Layers)
+	if err != nil {
+		return fmt.Errorf("resolving image order: %w", err)
+	}
+
+	// Resolve user context for each image (in order, so parents are resolved first)
+	for _, name := range order {
+		if err := g.resolveUserContext(g.Images[name]); err != nil {
+			return fmt.Errorf("resolving user context for %s: %w", name, err)
+		}
+	}
+
+	// Generate Containerfile for each image
+	for _, name := range order {
+		if err := g.generateContainerfile(name); err != nil {
+			return fmt.Errorf("generating Containerfile for %s: %w", name, err)
+		}
+	}
+
+	return nil
+}
+
+// baselineContextIgnore is the always-excluded set written into the generated
+// .containerignore / .dockerignore regardless of project config. It combines
+// the universal VCS/binary excludes (formerly the static .containerignore)
+// with the cache-hygiene globs (formerly the static .dockerignore) that keep
+// editor and Python/Node cruft from busting the build cache. Project-specific
+// heavy directories are layered on top via defaults.context_ignore so a
+// third-party project with no context_ignore still gets sane defaults.
+var baselineContextIgnore = []string{
+	".git",
+	"bin",
+	"charly",
+	"*.md",
+	"**/__pycache__",
+	"**/*.pyc",
+	"**/*.pyo",
+	"**/*.egg-info",
+	"**/node_modules",
+	"**/.git",
+	"**/.DS_Store",
+	"**/*~",
+	"**/*.swp",
+	"**/*.swo",
+	"**/.pytest_cache",
+	"**/.mypy_cache",
+}
+
+// contextIgnoreFiles are the two engine-native build-context ignore files ov
+// generates. podman reads .containerignore (preferring it) or .dockerignore;
+// docker reads only .dockerignore. Emitting both from one source covers both
+// engines with no divergent hand-maintained dotfile.
+var contextIgnoreFiles = []string{".containerignore", ".dockerignore"}
+
+// writeContextIgnore renders the build-context exclude list
+// (baselineContextIgnore + defaults.context_ignore) into BOTH
+// .containerignore and .dockerignore at the project root (the build context
+// root). Single source of values, two render targets — keeps podman and
+// docker builds in lockstep without a hand-maintained dotfile. Insertion
+// order is deterministic (fixed baseline, then author-ordered config),
+// duplicates collapsed.
+func (g *Generator) writeContextIgnore() error {
+	seen := make(map[string]bool)
+	var patterns []string
+	add := func(p string) {
+		p = strings.TrimSpace(p)
+		if p == "" || seen[p] {
+			return
+		}
+		seen[p] = true
+		patterns = append(patterns, p)
+	}
+	for _, p := range baselineContextIgnore {
+		add(p)
+	}
+	if g.Config != nil {
+		for _, p := range g.Config.Defaults.ContextIgnore {
+			add(p)
+		}
+	}
+
+	var b strings.Builder
+	for _, name := range contextIgnoreFiles {
+		b.Reset()
+		fmt.Fprintf(&b, "# %s (generated -- do not edit; source: defaults.context_ignore in charly.yml)\n", name)
+		for _, p := range patterns {
+			b.WriteString(p)
+			b.WriteByte('\n')
+		}
+		if err := os.WriteFile(filepath.Join(g.Dir, name), []byte(b.String()), 0o644); err != nil {
+			return fmt.Errorf("writing %s: %w", name, err)
+		}
+	}
+	return nil
+}
+
+// generateContainerfile generates a Containerfile for a single image
+func (g *Generator) generateContainerfile(imageName string) error {
+	// Clean image build directory to remove stale files from previous generations
+	imageDir := filepath.Join(g.BuildDir, imageName)
+	if err := os.RemoveAll(imageDir); err != nil {
+		return err
+	}
+
+	img := g.Images[imageName]
+	var b strings.Builder
+
+	// Header
+	b.WriteString(fmt.Sprintf("# .build/%s/Containerfile (generated -- do not edit)\n\n", imageName))
+
+	// Resolve layer order for this image
+	var parentLayers map[string]bool
+	if !img.IsExternalBase {
+		var err error
+		parentLayers, err = LayerProvidedByImage(img.Base, g.Images, g.Layers)
+		if err != nil {
+			return err
+		}
+	}
+
+	layerOrder, err := g.globalOrderForImage(img.Layer, parentLayers)
+	if err != nil {
+		return err
+	}
+
+	// Data images: minimal FROM scratch with only data staging + labels
+	if img.DataImage {
+		return g.generateDataImageContainerfile(imageName, img, layerOrder, imageDir)
+	}
+
+	// ARG for base image must come first (before any FROM). For
+	// `from: builder:<name>` images the resolved base is "scratch" and
+	// the rootfs gets ADDed right after the FROM ${BASE_IMAGE} line below.
+	resolvedBase := g.resolveBaseImage(img)
+	b.WriteString(fmt.Sprintf("ARG BASE_IMAGE=%s\n\n", resolvedBase))
+
+	// Emit scratch stages for each layer
+	for _, layerName := range layerOrder {
+		layer := g.Layers[layerName]
+		stageName := layer.Name // use short name for stage alias
+		b.WriteString(fmt.Sprintf("FROM scratch AS %s\n", stageName))
+		b.WriteString(fmt.Sprintf("COPY %s/ /\n\n", g.layerCopySource(layerName)))
+	}
+
+	// Emit per-layer multi-stage build stages — fully config-driven from build.yml builder: section.
+	// Each builder in build.yml builder: section declares detect_files and/or detect_config.
+	// For each layer that matches, the builder's stage_template is rendered.
+	if img.BuilderConfig != nil {
+		// Process builders in deterministic order
+		builderNames := img.BuilderConfig.BuilderNames()
+		for _, builderName := range builderNames {
+			builderDef := img.BuilderConfig.Builder[builderName]
+			if builderDef.Inline {
+				continue // inline builders handled in writeLayerSteps
+			}
+			if builderDef.StageTemplate == "" {
+				continue
+			}
+			for _, layerName := range layerOrder {
+				layer := g.Layers[layerName]
+				if !g.layerNeedsBuilder(img, layer, builderDef) {
+					continue
+				}
+				builderRef := g.builderRefForFormat(imageName, builderName)
+				if builderRef == "" {
+					return fmt.Errorf("image %q: layer %q needs builder %q but no builders.%s configured", imageName, layerName, builderName, builderName)
+				}
+				ctx := g.buildStageContext(layer, builderName, builderDef, img, builderRef)
+				rendered, err := RenderTemplate(builderName+"-stage", builderDef.StageTemplate, ctx)
+				if err != nil {
+					return fmt.Errorf("image %q: rendering %s stage for layer %q: %w", imageName, builderName, layerName, err)
+				}
+				b.WriteString(rendered)
+				b.WriteString("\n")
+			}
+		}
+	}
+
+	// Emit extraction stages for layers with extract field
+	for _, layerName := range layerOrder {
+		layer := g.Layers[layerName]
+		if !layer.HasExtract() {
+			continue
+		}
+		for i, ext := range layer.Extract() {
+			stageName := fmt.Sprintf("%s-extract-%d", layerName, i)
+			b.WriteString(fmt.Sprintf("FROM %s AS %s\n\n", ext.Source, stageName))
+		}
+	}
+
+	// Aggregate layer-contributed capabilities once for this image. Cache
+	// onto ResolvedImage so downstream emit paths (and label emission)
+	// don't recompute.
+	caps, capsErr := AggregateLayerCapabilities(g.Layers, layerOrder)
+	if capsErr != nil {
+		return capsErr
+	}
+	img.LayerCaps = caps
+	if missing := CheckRequiredCapabilities(g.Layers, layerOrder, caps); len(missing) > 0 {
+		return LayerCapabilitiesError(g.Layers, layerOrder, missing)
+	}
+
+	// Detect active init systems from layers (driven by build.yml init: section config)
+	activeInits := make(map[string]*InitDef)
+	if img.InitConfig != nil {
+		activeInits = img.InitConfig.ActiveInit(g.Layers, layerOrder)
+	}
+	// Store init system on ResolvedImage for downstream use (labels, etc.)
+	if img.InitConfig != nil {
+		img.InitSystem, img.InitDef = img.InitConfig.ResolveInitSystem(g.Layers, layerOrder, "")
+	}
+
+	// Check if this image has route layers and traefik
+	hasRoutes := false
+	hasTraefik := false
+	for _, layerName := range layerOrder {
+		layer := g.Layers[layerName]
+		if layer.HasRoute() {
+			hasRoutes = true
+		}
+		if layerName == "traefik" {
+			hasTraefik = true
+		}
+	}
+
+	// Generate traefik routes only when traefik is actually present
+	if hasRoutes && hasTraefik {
+		if err := g.generateTraefikRoutes(imageName, layerOrder, img); err != nil {
+			return err
+		}
+		b.WriteString("FROM scratch AS traefik-routes\n")
+		b.WriteString(fmt.Sprintf("COPY .build/%s/traefik-routes.yml /routes.yml\n\n", imageName))
+	}
+
+	// Emit init system stages (fragment assembly or file copy)
+	// When a child image adds services, include parent-provided configs
+	// so the assembled config contains all services from the full chain.
+	//
+	// Track which init defs actually received fragment content. When a layer
+	// chain only contributes via `system_services:` (plain unit names), no
+	// fragment files are COPY'd into the scratch stage — emitting an empty
+	// `FROM scratch AS <stage>` plus the `assembly_template` RUN that bind-
+	// mounts from it would fail at build time with "no such file or directory".
+	initHasFragments := map[string]bool{}
+	for initName, def := range activeInits {
+		initLayerOrder := layerOrder
+		if !img.IsExternalBase {
+			full := collectAllImageLayers(imageName, g.Images, g.Layers)
+			if len(full) > 0 {
+				initLayerOrder = full
+			}
+		}
+		if err := g.generateInitFragments(imageName, initName, def, initLayerOrder); err != nil {
+			return err
+		}
+
+		// Pre-scan the layer chain to decide whether this init has any fragment
+		// content. If not, skip both the scratch stage emission and the
+		// assembly_template RUN (see second loop below).
+		hasFragments := false
+		for _, layerName := range initLayerOrder {
+			layer := g.Layers[layerName]
+			if def.Model == "fragment_assembly" && layer.HasInit(initName) {
+				hasFragments = true
+				break
+			}
+			if def.HasRelayTemplate() && len(layer.PortRelayPorts) > 0 {
+				hasFragments = true
+				break
+			}
+			if def.Model == "file_copy" && len(layer.ServiceFiles()) > 0 {
+				hasFragments = true
+				break
+			}
+		}
+		initHasFragments[initName] = hasFragments
+		if !hasFragments {
+			continue
+		}
+
+		// Emit scratch stage with COPY lines for fragments
+		b.WriteString(fmt.Sprintf("FROM scratch AS %s\n", def.StageName))
+		if def.StageHeaderCopy != "" {
+			headerCopy, err := g.rewriteHeaderCopyForRemote(def.StageHeaderCopy)
+			if err != nil {
+				return err
+			}
+			b.WriteString(headerCopy + "\n")
+		}
+		for i, layerName := range initLayerOrder {
+			layer := g.Layers[layerName]
+			// Service content fragments (fragment_assembly model)
+			if def.Model == "fragment_assembly" && layer.HasInit(initName) {
+				// Use the SHORT name (not the map key) — a remote layer's key is
+				// a slashed github ref that would create bogus nested dirs.
+				fileName := fmt.Sprintf("%02d-%s.conf", i+1, layer.Name)
+				copyLine, err := def.RenderStageFragmentCopy(imageName, fileName)
+				if err != nil {
+					return fmt.Errorf("rendering stage fragment copy for %s/%s: %w", initName, layerName, err)
+				}
+				b.WriteString(copyLine + "\n")
+			}
+			// Relay fragments
+			if def.HasRelayTemplate() && len(layer.PortRelayPorts) > 0 {
+				for _, port := range layer.PortRelayPorts {
+					confName := fmt.Sprintf("%02d-relay-%d.conf", i+1, port)
+					copyLine, err := def.RenderStageFragmentCopy(imageName, confName)
+					if err != nil {
+						return fmt.Errorf("rendering relay copy for %s/%s port %d: %w", initName, layerName, port, err)
+					}
+					b.WriteString(copyLine + "\n")
+				}
+			}
+			// File copy model: copy detected service files
+			if def.Model == "file_copy" && len(layer.ServiceFiles()) > 0 {
+				for _, svcPath := range layer.ServiceFiles() {
+					svcName := filepath.Base(svcPath)
+					copyLine, err := def.RenderStageFragmentCopy(imageName, svcName)
+					if err != nil {
+						return fmt.Errorf("rendering service file copy for %s/%s: %w", initName, layerName, err)
+					}
+					b.WriteString(copyLine + "\n")
+				}
+			}
+		}
+		b.WriteString("\n")
+	}
+
+	// Main image
+	b.WriteString("FROM ${BASE_IMAGE}\n\n")
+
+	// `from: builder:<name>` — import the pre-built rootfs tarball that
+	// was staged by runPrivilegedBuilders (see build.go preBuildHook).
+	// The path is relative to the project-root build context, so it
+	// dotted-out under .build/<image>/.
+	if strings.HasPrefix(img.From, "builder:") {
+		builderName := strings.TrimPrefix(img.From, "builder:")
+		b.WriteString(fmt.Sprintf("ADD .build/%s/%s.tar.gz /\n\n", imageName, builderName))
+	}
+
+	// Bootstrap preamble (only for external base images, and only when
+	// not coming from a builder rootfs — the bootstrap step expects an
+	// upstream package manager which from: scratch + ADD doesn't have
+	// pre-installed; that's handled by the builder's package set).
+	if img.IsExternalBase && !strings.HasPrefix(img.From, "builder:") {
+		g.writeBootstrap(&b, img)
+	} else if !strings.HasPrefix(img.From, "builder:") {
+		// Internal base - reset to root for layer processing
+		b.WriteString("USER root\n\n")
+	} else {
+		b.WriteString("USER root\n\n")
+	}
+
+	// Collect and write environment variables from layers
+	g.writeLayerEnv(&b, layerOrder, img)
+
+	// Emit EXPOSE directives for layer ports
+	g.writeExpose(&b, layerOrder)
+
+	// LABEL emission is deferred to the end of the final stage — see the
+	// writeLabels call after the final USER directive below. Putting LABELs
+	// last means a test/label edit only reruns the LABEL instructions
+	// themselves (metadata-only, ~0ms on disk) instead of invalidating the
+	// buildkit cache for every downstream RUN/COPY in a 100-step stack.
+
+	// Copy builder artifacts — fully config-driven from build.yml builder: section copy_artifacts/copy_binary
+	if img.BuilderConfig != nil {
+		builderNames := img.BuilderConfig.BuilderNames()
+		for _, builderName := range builderNames {
+			builderDef := img.BuilderConfig.Builder[builderName]
+			if builderDef.Inline || builderDef.StageTemplate == "" {
+				continue
+			}
+
+			// Find layers that triggered this builder
+			hasArtifacts := false
+			binaryCopied := false
+			for _, layerName := range layerOrder {
+				layer := g.Layers[layerName]
+				if !g.layerNeedsBuilder(img, layer, builderDef) {
+					continue
+				}
+				stageName := fmt.Sprintf("%s-%s-build", layer.Name, builderName)
+
+				// Copy artifacts
+				for _, art := range builderDef.CopyArtifacts {
+					if !hasArtifacts {
+						b.WriteString(fmt.Sprintf("# Copy %s artifacts\n", builderName))
+						hasArtifacts = true
+					}
+					src := expandBuilderPath(art.Src, img)
+					dst := expandBuilderPath(art.Dst, img)
+					if art.Chown {
+						b.WriteString(fmt.Sprintf("COPY --from=%s --chown=%d:%d %s %s\n", stageName, img.UID, img.GID, src, dst))
+					} else {
+						b.WriteString(fmt.Sprintf("COPY --from=%s %s %s\n", stageName, src, dst))
+					}
+				}
+
+				// Copy binary (only once, from first matching layer)
+				if builderDef.CopyBinary != nil && !binaryCopied {
+					b.WriteString(fmt.Sprintf("COPY --from=%s %s %s\n", stageName, builderDef.CopyBinary.Src, builderDef.CopyBinary.Dst))
+					binaryCopied = true
+				}
+			}
+			if hasArtifacts || binaryCopied {
+				b.WriteString("\n")
+			}
+		}
+	}
+
+	// Copy extracted files from multi-stage builds
+	hasExtract := false
+	for _, layerName := range layerOrder {
+		layer := g.Layers[layerName]
+		if !layer.HasExtract() {
+			continue
+		}
+		if !hasExtract {
+			b.WriteString("# Copy extracted files from Docker images\n")
+			b.WriteString("USER root\n")
+			hasExtract = true
+		}
+		for i, ext := range layer.Extract() {
+			stageName := fmt.Sprintf("%s-extract-%d", layerName, i)
+			b.WriteString(fmt.Sprintf("COPY --from=%s --chown=%d:%d %s %s\n",
+				stageName, img.UID, img.GID, ext.Path, ext.Dest))
+		}
+	}
+	if hasExtract {
+		b.WriteString("\n")
+	}
+
+	// Stage data files from data layers into /data/ for deploy-time provisioning
+	g.writeDataStaging(&b, layerOrder, img)
+
+	// Process each layer
+	// Post-layer steps (init assembly, traefik, bootc) run as root,
+	// so the last layer must reset to root only if such steps exist.
+	needsRootAfter := len(activeInits) > 0 || (hasRoutes && hasTraefik) || (caps != nil && caps.NeedsRootAfterInit)
+	inUserMode := false
+	for i, layerName := range layerOrder {
+		isLast := i == len(layerOrder)-1
+		inUserMode = g.writeLayerSteps(&b, layerName, img, isLast && !needsRootAfter)
+	}
+
+	// Assemble init system configs (driven by build.yml init: section templates)
+	for initName, def := range activeInits {
+		// assembly_template bind-mounts from the scratch stage emitted above;
+		// skip it when no fragments were contributed (stage was not emitted).
+		// system_enable_template and post_assembly_template are independent
+		// and still run below.
+		if initHasFragments[initName] {
+			assembly, err := def.RenderAssemblyTemplate()
+			if err != nil {
+				return fmt.Errorf("rendering assembly for %s: %w", initName, err)
+			}
+			if assembly != "" {
+				b.WriteString(assembly)
+				if !strings.HasSuffix(assembly, "\n") {
+					b.WriteString("\n")
+				}
+				b.WriteString("\n")
+			}
+		}
+
+		// System-level service enablement (e.g., systemctl enable sshd).
+		// Collect every use_packaged: entry across the layer chain — these
+		// are the distro-shipped systemd units the init system must enable.
+		var systemUnits []string
+		for _, layerName := range layerOrder {
+			layer := g.Layers[layerName]
+			for i := range layer.Service() {
+				entry := &layer.Service()[i]
+				if entry.IsPackaged() && entry.EffectiveScope() == "system" {
+					systemUnits = append(systemUnits, entry.UsePackaged)
+				}
+			}
+		}
+		sysEnable, err := def.RenderSystemEnableTemplate(systemUnits)
+		if err != nil {
+			return fmt.Errorf("rendering system enable for %s: %w", initName, err)
+		}
+		if sysEnable != "" {
+			b.WriteString(sysEnable)
+			if !strings.HasSuffix(sysEnable, "\n") {
+				b.WriteString("\n")
+			}
+			b.WriteString("\n")
+		}
+
+		// Post-assembly step (e.g., bootc container lint)
+		postAssembly, err := def.RenderPostAssemblyTemplate()
+		if err != nil {
+			return fmt.Errorf("rendering post-assembly for %s: %w", initName, err)
+		}
+		if postAssembly != "" {
+			b.WriteString(postAssembly)
+			if !strings.HasSuffix(postAssembly, "\n") {
+				b.WriteString("\n")
+			}
+			b.WriteString("\n")
+		}
+	}
+
+	// Copy traefik dynamic routes if needed
+	if hasRoutes && hasTraefik {
+		b.WriteString("# Traefik dynamic routes\n")
+		b.WriteString("COPY --from=traefik-routes /routes.yml /etc/traefik/dynamic/routes.yml\n\n")
+	}
+
+	// Final USER directive (use UID for robustness)
+	// Compositions that declare preserve_user (e.g. bootc-config) boot
+	// with systemd managing user sessions — the container USER directive
+	// is irrelevant. Other compositions reset to the unprivileged uid.
+	if caps != nil && caps.PreserveUser {
+		// leave as root — systemd handles user sessions
+	} else if !inUserMode || needsRootAfter {
+		b.WriteString(fmt.Sprintf("USER %d\n", img.UID))
+	}
+
+	// Emit image metadata labels LAST so test/label edits don't invalidate
+	// the buildkit cache for all upstream RUN/COPY steps. LABELs are pure
+	// metadata (attach to the final image manifest) and have no functional
+	// dependency on subsequent instructions — they're the ideal last-line
+	// of the Containerfile.
+	g.writeLabels(&b, imageName, layerOrder, img)
+
+	// imageDir was cleaned at the start of this function; ensure it exists
+	if err := os.MkdirAll(imageDir, 0755); err != nil {
+		return err
+	}
+
+	content := b.String()
+	g.Containerfiles[imageName] = content
+
+	containerfile := filepath.Join(imageDir, "Containerfile")
+	return os.WriteFile(containerfile, []byte(content), 0644)
+}
+
+// generateDataImageContainerfile produces a minimal FROM scratch Containerfile
+// with only data staging COPY instructions and OCI labels. No runtime, no init,
+// no packages, no builder stages.
+func (g *Generator) generateDataImageContainerfile(imageName string, img *ResolvedBox, layerOrder []string, imageDir string) error {
+	var b strings.Builder
+
+	b.WriteString(fmt.Sprintf("# .build/%s/Containerfile (generated -- do not edit)\n\n", imageName))
+	b.WriteString("FROM scratch\n\n")
+
+	// Scratch stages for layers that have data
+	for _, layerName := range layerOrder {
+		layer := g.Layers[layerName]
+		if !layer.HasData() {
+			continue
+		}
+		b.WriteString(fmt.Sprintf("FROM scratch AS %s\n", layer.Name))
+		b.WriteString(fmt.Sprintf("COPY %s/ /\n\n", g.layerCopySource(layerName)))
+	}
+
+	// Main image: just data staging + labels
+	b.WriteString("FROM scratch\n\n")
+
+	// Data staging COPY instructions
+	g.writeDataStaging(&b, layerOrder, img)
+
+	// Minimal labels (no init, no services, no ports). Content-derived
+	// EffectiveVersion (not the per-build tag) — see writeLabels.
+	b.WriteString("# Image metadata\n")
+	b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelVersion, img.EffectiveVersion))
+	b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelBox, imageName))
+	if img.Registry != "" {
+		b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelRegistry, img.Registry))
+	}
+	b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelDataBox, "true"))
+
+	// Data entries label
+	var dataEntries []LabelDataEntry
+	for _, layerName := range layerOrder {
+		layer := g.Layers[layerName]
+		if !layer.HasData() {
+			continue
+		}
+		for _, d := range layer.Data() {
+			staging := "/data/" + d.Volume + "/"
+			if d.Dest != "" {
+				staging += d.Dest
+				if !strings.HasSuffix(staging, "/") {
+					staging += "/"
+				}
+			}
+			dataEntries = append(dataEntries, LabelDataEntry{
+				Volume:  d.Volume,
+				Staging: staging,
+				Layer:   layerName,
+				Dest:    d.Dest,
+			})
+		}
+	}
+	if len(dataEntries) > 0 {
+		writeJSONLabel(&b, LabelDataEntries, dataEntries)
+	}
+
+	// Volume labels (so charly config knows what volumes data targets)
+	volumes, _ := CollectImageVolume(g.Config, g.Layers, imageName, img.Home, nil)
+	if len(volumes) > 0 {
+		var labelVols []LabelVolumeEntry
+		for _, v := range volumes {
+			shortName := strings.TrimPrefix(v.VolumeName, "charly-"+imageName+"-")
+			labelVols = append(labelVols, LabelVolumeEntry{Name: shortName, Path: v.ContainerPath})
+		}
+		writeJSONLabel(&b, LabelVolume, labelVols)
+	}
+
+	// Layer versions
+	layerVersions := make(map[string]string)
+	for _, layerName := range layerOrder {
+		layer := g.Layers[layerName]
+		if layer.Version != "" {
+			layerVersions[layerName] = layer.Version
+		}
+	}
+	writeJSONLabel(&b, LabelCandyVersion, layerVersions)
+
+	b.WriteString("\n")
+
+	// Write to disk
+	if err := os.MkdirAll(imageDir, 0755); err != nil {
+		return err
+	}
+	content := b.String()
+	g.Containerfiles[imageName] = content
+	return os.WriteFile(filepath.Join(imageDir, "Containerfile"), []byte(content), 0644)
+}
+
+// resolveBaseImage returns the full base image reference.
+// For internal bases, uses the exact CalVer tag so each image references
+// the precise version of its parent. Both Docker and Podman resolve local
+// images before pulling from registry.
+func (g *Generator) resolveBaseImage(img *ResolvedBox) string {
+	if img.IsExternalBase {
+		return img.Base
+	}
+	parentImg := g.Images[img.Base]
+	return parentImg.FullTag
+}
+
+// builderRefForFormat returns the full tag of the builder image for a given format,
+// or "" if no builder is configured for that format.
+func (g *Generator) builderRefForFormat(imageName, format string) string {
+	img := g.Images[imageName]
+	builder := img.Builder.BuilderFor(format)
+	if builder == "" || builder == imageName {
+		return ""
+	}
+	if builderImg, ok := g.Images[builder]; ok {
+		return builderImg.FullTag
+	}
+	return ""
+}
+
+// renderDnfConfWrite returns a bootstrap-RUN fragment that appends the
+// configured dnf download-speed knobs to /etc/dnf/dnf.conf, terminated with
+// ` && \` so it chains into the rest of the bootstrap RUN. Returns "" when the
+// distro has no dnf config or no knobs set (so non-dnf distros and unset
+// configs emit nothing). The keys land under the file's [main] section
+// (Fedora's stock dnf.conf is [main]-only).
+func renderDnfConfWrite(d *DnfConfig) string {
+	if d == nil {
+		return ""
+	}
+	var lines []string
+	if d.MaxParallelDownloads > 0 {
+		lines = append(lines, fmt.Sprintf("max_parallel_downloads=%d", d.MaxParallelDownloads))
+	}
+	if d.Fastestmirror {
+		lines = append(lines, "fastestmirror=True")
+	}
+	if len(lines) == 0 {
+		return ""
+	}
+	body := strings.Join(lines, "\\n") + "\\n"
+	return fmt.Sprintf("printf '%s' >> /etc/dnf/dnf.conf && \\\n    ", body)
+}
+
+// writeBootstrap writes the bootstrap preamble for external base images.
+// All distro-specific behavior is driven by build.yml distro: section config.
+func (g *Generator) writeBootstrap(b *strings.Builder, img *ResolvedBox) {
+	b.WriteString("# Bootstrap\n")
+
+	// Resolve distro config for bootstrap commands
+	var distroDef *DistroDef
+	if img.DistroConfig != nil {
+		distroDef = img.DistroConfig.ResolveDistro(img.Distro)
+	}
+
+	b.WriteString("RUN ")
+	// Cache mounts from distro config (or fall back to primary format's mounts)
+	var cacheMounts []CacheMountDef
+	if distroDef != nil {
+		cacheMounts = distroDef.Bootstrap.CacheMount
+	} else if img.DistroDef != nil {
+		if formatDef, ok := img.DistroDef.Format[img.Pkg]; ok {
+			cacheMounts = formatDef.CacheMount
+		}
+	}
+	b.WriteString(RenderCacheMounts(cacheMounts, -1, 0, " \\\n    ", true))
+
+	// dnf download tuning (max_parallel_downloads / fastestmirror) → written to
+	// /etc/dnf/dnf.conf BEFORE the bootstrap install, so it speeds up the
+	// bootstrap install itself AND every per-layer dnf install in this image
+	// and its descendants. Speed-only — never changes package selection.
+	if distroDef != nil {
+		b.WriteString(renderDnfConfWrite(distroDef.Dnf))
+	}
+
+	// Install bootstrap packages using distro's install command
+	if distroDef != nil && distroDef.Bootstrap.InstallCmd != "" && len(distroDef.Bootstrap.Package) > 0 {
+		b.WriteString(fmt.Sprintf("%s %s && \\\n    ", distroDef.Bootstrap.InstallCmd, strings.Join(distroDef.Bootstrap.Package, " ")))
+	}
+
+	// Apply distro-specific workarounds
+	if distroDef != nil {
+		for _, w := range distroDef.Workarounds {
+			b.WriteString(w + " && \\\n    ")
+		}
+	}
+
+	b.WriteString("{ [ -L /usr/local ] && mkdir -p \"$(readlink /usr/local)\"; mkdir -p /usr/local/bin; } && \\\n")
+	b.WriteString("    ARCH=$(uname -m) && \\\n")
+	b.WriteString("    case \"$ARCH\" in x86_64) ARCH=amd64;; aarch64) ARCH=arm64;; esac && \\\n")
+	b.WriteString("    curl -fsSL \"https://github.com/go-task/task/releases/latest/download/task_linux_${ARCH}.tar.gz\" | tar -xzf - -C /usr/local/bin task\n\n")
+
+	// User/group handling — two modes driven by resolved user_policy:
+	//   UserAdopted=true  → base image already ships this user at the
+	//                        declared uid/gid/home; skip creation.
+	//   UserAdopted=false → idempotent create (no-op if uid already taken;
+	//                        the policy layer blocks the collision case
+	//                        via auto/create semantics before we get here).
+	if img.UserAdopted {
+		b.WriteString(fmt.Sprintf("# User %s (uid=%d) adopted from base image (declared in build.yml distro.base_user) — no useradd needed\n\n", img.User, img.UID))
+	} else {
+		b.WriteString(fmt.Sprintf("RUN if ! getent passwd %d >/dev/null 2>&1; then \\\n", img.UID))
+		b.WriteString(fmt.Sprintf("      (getent group %d >/dev/null 2>&1 || groupadd -g %d %s) && \\\n", img.GID, img.GID, img.User))
+		b.WriteString(fmt.Sprintf("      useradd -m -u %d -g %d -s /bin/bash %s; \\\n", img.UID, img.GID, img.User))
+		b.WriteString("    fi\n\n")
+	}
+
+	// WORKDIR only - ENV comes from layer env files
+	b.WriteString(fmt.Sprintf("WORKDIR %s\n\n", img.Home))
+}
+
+// escapeContainerfileEnvValue prefixes `\` to every `$` so Docker's ENV-
+// value substitution treats the rest as literal text. The escape is
+// preserved through the shell invocations that consume the env value at
+// runtime (bash strips a single `\$` to `$` and substitutes the var as
+// expected). Without this escape, references like `${POSTGRES_PASSWORD}`
+// in env: block values get emptied by Docker at build time because
+// POSTGRES_PASSWORD is not a build arg — it's a runtime-injected secret.
+//
+// Special exception: leave `${PATH}` intact. The path-append code at the
+// PATH ENV directive depends on Docker substituting the parent layer's
+// PATH value during the build. PATH is the only ENV var charly knows is set
+// at every Containerfile build step (Dockerfile spec guarantees it).
+func escapeContainerfileEnvValue(v string) string {
+	// Replace $ with \$ EXCEPT in `${PATH}` references (rare but documented).
+	// Two-step: protect ${PATH}, escape, restore.
+	const sentinel = "\x00OV_PATH_REF\x00"
+	v = strings.ReplaceAll(v, "${PATH}", sentinel)
+	v = strings.ReplaceAll(v, "$", "\\$")
+	v = strings.ReplaceAll(v, sentinel, "${PATH}")
+	return v
+}
+
+// writeLayerEnv collects env configs from all layers and writes ENV directives.
+// Builder-triggered runtime env contributions (RuntimeEnv + PathContributions
+// on BuilderDef) are merged in alongside layer contributions — see
+// collectBuilderRuntimeEnv.
+func (g *Generator) writeLayerEnv(b *strings.Builder, layerOrder []string, img *ResolvedBox) {
+	var configs []*EnvConfig
+
+	for _, layerName := range layerOrder {
+		layer := g.Layers[layerName]
+		if layer.HasEnv() {
+			cfg, err := layer.EnvConfig()
+			if err == nil && cfg != nil {
+				configs = append(configs, cfg)
+			}
+		}
+	}
+
+	configs = append(configs, g.collectBuilderRuntimeEnv(layerOrder, img)...)
+
+	if len(configs) == 0 {
+		return
+	}
+
+	// Merge all configs
+	merged := MergeEnvConfigs(configs)
+
+	// Expand paths with home directory
+	expanded := ExpandEnvConfig(merged, img.Home)
+
+	// Write ENV directives
+	if len(expanded.Vars) > 0 || len(expanded.PathAppend) > 0 {
+		b.WriteString("# Layer environment variables\n")
+	}
+
+	// Sort keys for deterministic output (prevents Docker cache invalidation)
+	keys := make([]string, 0, len(expanded.Vars))
+	for key := range expanded.Vars {
+		keys = append(keys, key)
+	}
+	sortStrings(keys)
+	for _, key := range keys {
+		// Docker substitutes ${VAR} and $VAR in ENV values at build time
+		// using build args + previously-set ENVs. Layer-author-supplied
+		// values that reference RUNTIME-injected vars (e.g. POSTGRES_PASSWORD
+		// from a podman secret) would be silently emptied. Escape `$` so
+		// the references survive verbatim into the runtime container, where
+		// shell / *_CMD-style invocations resolve them properly.
+		// Build-arg-style refs (TARGETARCH, ARCH) aren't used in env: blocks
+		// — they're handled via ARG/ENV pairs inserted by emitVarsEnv —
+		// so blanket-escaping `$` is safe here.
+		b.WriteString(fmt.Sprintf("ENV %s=\"%s\"\n", key, escapeContainerfileEnvValue(expanded.Vars[key])))
+	}
+
+	// Append to PATH if there are path additions
+	if len(expanded.PathAppend) > 0 {
+		pathAdditions := strings.Join(expanded.PathAppend, ":")
+		b.WriteString(fmt.Sprintf("ENV PATH=\"%s:${PATH}\"\n", pathAdditions))
+	}
+
+	if len(expanded.Vars) > 0 || len(expanded.PathAppend) > 0 {
+		b.WriteString("\n")
+	}
+}
+
+// writeExpose collects ports from all layers, deduplicates, sorts, and emits EXPOSE directives
+func (g *Generator) writeExpose(b *strings.Builder, layerOrder []string) {
+	seen := make(map[string]bool)
+	var ports []string
+
+	for _, layerName := range layerOrder {
+		layer := g.Layers[layerName]
+		if !layer.HasPorts() {
+			continue
+		}
+		layerPorts, err := layer.Port()
+		if err != nil {
+			continue
+		}
+		for _, port := range layerPorts {
+			if !seen[port] {
+				seen[port] = true
+				ports = append(ports, port)
+			}
+		}
+	}
+
+	if len(ports) == 0 {
+		return
+	}
+
+	sortStrings(ports)
+	b.WriteString("# Exposed ports\n")
+	for _, port := range ports {
+		b.WriteString(fmt.Sprintf("EXPOSE %s\n", port))
+	}
+	b.WriteString("\n")
+}
+
+// writeDataStaging emits COPY instructions for data layers into /data/<volume>/[dest/].
+// Data files are staged in the image for deploy-time provisioning by charly config / charly update.
+func (g *Generator) writeDataStaging(b *strings.Builder, layerOrder []string, img *ResolvedBox) {
+	hasData := false
+	for _, layerName := range layerOrder {
+		layer := g.Layers[layerName]
+		if !layer.HasData() {
+			continue
+		}
+		if !hasData {
+			b.WriteString("# Data staging (for deploy-time provisioning into bind-backed volumes)\n")
+			hasData = true
+		}
+		for _, d := range layer.Data() {
+			// Source: layer scratch stage has the layer dir contents at /
+			// so data/notebooks/ in the layer dir becomes /data/notebooks/ in the scratch stage
+			srcPath := "/" + d.Src
+			if !strings.HasSuffix(srcPath, "/") {
+				srcPath += "/"
+			}
+
+			// Destination: /data/<volume>/[dest/]
+			dstPath := "/data/" + d.Volume + "/"
+			if d.Dest != "" {
+				dstPath += d.Dest
+				if !strings.HasSuffix(dstPath, "/") {
+					dstPath += "/"
+				}
+			}
+
+			// Use the short stage alias (layer.Name) to match `FROM scratch AS
+			// <layer.Name>` — for REMOTE layers layerName is the full @github map
+			// key, which is NOT a valid build-stage reference (podman would try to
+			// pull it as an image). Local layers: layerName == layer.Name (no-op).
+			b.WriteString(fmt.Sprintf("COPY --from=%s --chown=%d:%d %s %s\n",
+				layer.Name, img.UID, img.GID, srcPath, dstPath))
+		}
+	}
+	if hasData {
+		b.WriteString("\n")
+	}
+}
+
+// generateTraefikRoutes generates a traefik dynamic config YAML for route layers
+func (g *Generator) generateTraefikRoutes(imageName string, layerOrder []string, img *ResolvedBox) error {
+	var b strings.Builder
+
+	b.WriteString("# .build/" + imageName + "/traefik-routes.yml (generated -- do not edit)\n")
+	b.WriteString("http:\n")
+	b.WriteString("  routers:\n")
+
+	// Collect routes in layer order (deterministic)
+	type routeEntry struct {
+		name string
+		cfg  *RouteConfig
+	}
+	var routes []routeEntry
+	for _, layerName := range layerOrder {
+		layer := g.Layers[layerName]
+		if !layer.HasRoute() {
+			continue
+		}
+		route, err := layer.Route()
+		if err != nil || route == nil {
+			continue
+		}
+		routes = append(routes, routeEntry{name: layerName, cfg: route})
+	}
+
+	for _, r := range routes {
+		// Schema v4: DNS removed from ResolvedImage (deploy-only choice).
+		// Traefik route hostnames come from the layer's host declaration.
+		// Deploy-time DNS override via DeploymentNode.DNS applies separately.
+		host := r.cfg.Host
+
+		b.WriteString(fmt.Sprintf("    %s:\n", r.name))
+		b.WriteString(fmt.Sprintf("      rule: \"Host(`%s`)\"\n", host))
+		b.WriteString(fmt.Sprintf("      service: %s\n", r.name))
+		b.WriteString("      entryPoints:\n")
+		b.WriteString("        - websecure\n")
+		b.WriteString("      tls:\n")
+		b.WriteString("        certResolver: letsencrypt\n")
+	}
+
+	b.WriteString("  services:\n")
+	for _, r := range routes {
+		b.WriteString(fmt.Sprintf("    %s:\n", r.name))
+		b.WriteString("      loadBalancer:\n")
+		b.WriteString("        servers:\n")
+		b.WriteString(fmt.Sprintf("          - url: \"http://127.0.0.1:%s\"\n", r.cfg.Port))
+	}
+
+	imageDir := filepath.Join(g.BuildDir, imageName)
+	if err := os.MkdirAll(imageDir, 0755); err != nil {
+		return err
+	}
+
+	return os.WriteFile(filepath.Join(imageDir, "traefik-routes.yml"), []byte(b.String()), 0644)
+}
+
+// generateInitFragments writes init system config fragments to
+// .build/<image>/<fragmentDir>/. Schema-driven: iterates each layer's
+// service: list and renders every entry that binds to this init via
+// per-entry routing (use_packaged → systemd; custom exec → any init with
+// a service_template). No legacy raw-INI path.
+func (g *Generator) generateInitFragments(imageName, initName string, def *InitDef, layerOrder []string) error {
+	fragDir := filepath.Join(g.BuildDir, imageName, def.FragmentDir)
+	if err := os.MkdirAll(fragDir, 0755); err != nil {
+		return err
+	}
+
+	for i, layerName := range layerOrder {
+		layer := g.Layers[layerName]
+		idx := i + 1
+
+		if def.Model == "fragment_assembly" {
+			// Concatenate every service entry in this layer that binds to this init
+			// into ONE fragment file per layer, matching the Containerfile's
+			// stage_fragment_copy naming convention (NN-<layer>.conf).
+			var layerBuf strings.Builder
+			for j := range layer.Service() {
+				entry := &layer.Service()[j]
+				// Per-entry routing: only render entries this init can handle.
+				if entry.IsPackaged() {
+					if def.ServiceSchema == nil || !def.ServiceSchema.SupportsPackaged {
+						continue
+					}
+				} else {
+					if def.ServiceSchema == nil || def.ServiceSchema.ServiceTemplate == "" {
+						continue
+					}
+				}
+				ctx := ServiceRenderContext{
+					Name:             entry.Name,
+					Layer:            layerName,
+					Exec:             entry.Exec,
+					Env:              entry.Env,
+					EnvList:          mapToKeyValueSlice(entry.Env),
+					Restart:          entry.Restart,
+					WorkingDirectory: entry.WorkingDirectory,
+					User:             entry.User,
+					After:            entry.After,
+					Before:           entry.Before,
+					Stdout:           entry.Stdout,
+					StopTimeout:      entry.StopTimeout,
+					Scope:            entry.EffectiveScope(),
+				}
+				rendered, err := RenderService(entry, def, ctx)
+				if err != nil {
+					return fmt.Errorf("rendering service %s/%s/%s: %w", initName, layerName, entry.Name, err)
+				}
+				content := rendered.UnitText
+				if content == "" {
+					content = rendered.DropinText
+				}
+				if content == "" {
+					continue
+				}
+				if layerBuf.Len() > 0 && !strings.HasSuffix(layerBuf.String(), "\n\n") {
+					if !strings.HasSuffix(layerBuf.String(), "\n") {
+						layerBuf.WriteString("\n")
+					}
+					layerBuf.WriteString("\n")
+				}
+				layerBuf.WriteString(content)
+				if !strings.HasSuffix(content, "\n") {
+					layerBuf.WriteString("\n")
+				}
+			}
+			if layerBuf.Len() > 0 {
+				// Short name, not the slashed remote map key (see scratch-stage note).
+				fragFile := filepath.Join(fragDir, fmt.Sprintf("%02d-%s.conf", idx, layer.Name))
+				if err := os.WriteFile(fragFile, []byte(layerBuf.String()), 0644); err != nil {
+					return err
+				}
+			}
+		}
+
+		// Port relay fragments (unchanged — use layer position in filename to
+		// match Containerfile's stage_fragment_copy naming).
+		if def.HasRelayTemplate() && len(layer.PortRelayPorts) > 0 {
+			for _, port := range layer.PortRelayPorts {
+				content, err := def.RenderRelayTemplate(port, layerName, idx)
+				if err != nil {
+					return fmt.Errorf("rendering relay for %s/%s port %d: %w", initName, layerName, port, err)
+				}
+				confName := fmt.Sprintf("%02d-relay-%d.conf", idx, port)
+				fragFile := filepath.Join(fragDir, confName)
+				if err := os.WriteFile(fragFile, []byte(content), 0644); err != nil {
+					return err
+				}
+			}
+		}
+
+		// File copy model: copy detected service files (systemd *.service globs).
+		if def.Model == "file_copy" {
+			for _, svcPath := range layer.ServiceFiles() {
+				content, err := os.ReadFile(svcPath)
+				if err != nil {
+					return fmt.Errorf("reading service file %s: %w", svcPath, err)
+				}
+				destFile := filepath.Join(fragDir, filepath.Base(svcPath))
+				if err := os.WriteFile(destFile, content, 0644); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// mapToKeyValueSlice deterministically sorts a map into []KeyValue for
+// template iteration. Matches the existing ServiceRenderContext contract.
+func mapToKeyValueSlice(m map[string]string) []KeyValue {
+	if len(m) == 0 {
+		return nil
+	}
+	out := make([]KeyValue, 0, len(m))
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		out = append(out, KeyValue{Key: k, Value: m[k]})
+	}
+	return out
+}
+
+// writeLayerSteps writes the RUN steps for a single layer.
+// skipRootReset prevents emitting USER root after user-mode steps (used for the
+// last layer when no post-layer root steps follow).
+// Returns true if the layer ended in user mode.
+func (g *Generator) writeLayerSteps(b *strings.Builder, layerName string, img *ResolvedBox, skipRootReset bool) bool {
+	layer := g.Layers[layerName]
+	stageName := layer.Name // short name used as scratch stage alias
+
+	b.WriteString(fmt.Sprintf("# Layer: %s\n", layerName))
+
+	// Track if we've switched to user mode
+	asUser := false
+
+	// 0. ENV from vars: + ARCH (ARG TARGETARCH) — emitted once per layer
+	// before packages/tasks so Docker's variable substitution sees the
+	// values in subsequent directives (COPY dests, RUN commands, etc.).
+	if layer.HasTasks() || len(layer.vars) > 0 {
+		emitVarsEnv(b, layer.vars)
+	}
+
+	// 1. System packages — resolved by THE shared distro-specificity cascade
+	// (resolveCascadePackages — the SAME resolver the deploy path uses, so build
+	// and deploy can never diverge). It folds the layer's top-level `package:`
+	// base, unions every matching distro tag section over img.Distro, and
+	// resolves repo/options/etc. most-specific-wins. Emits the PRIMARY format
+	// (img.Pkg) install; non-primary build formats (the `aur` builder) emit from
+	// their own format section below.
+	if pkgs, raw, matched := resolveCascadePackages(layer, img); (matched || len(pkgs) > 0) && img.DistroDef != nil {
+		if formatDef := img.DistroDef.Format[img.Pkg]; formatDef != nil {
+			ctx := NewInstallContext(raw, formatDef.CacheMount)
+			if rendered, err := RenderTemplate(img.Pkg+"-install", formatDef.InstallTemplate, ctx); err == nil {
+				b.WriteString(rendered)
+			}
+		}
+	}
+
+	// Non-primary build formats (e.g. `aur` for build: [pac, aur]) are secondary
+	// BUILD formats consumed by a multi-stage builder, NOT distro package tags, so
+	// they emit from their own format section (the cascade above owns img.Pkg).
+	for _, format := range img.BuildFormats {
+		if format == img.Pkg {
+			continue // primary format handled by the cascade above
+		}
+		section := layer.FormatSection(format)
+		if section == nil || len(section.Packages) == 0 {
+			continue
+		}
+		if img.DistroDef == nil || img.DistroDef.Format == nil {
+			continue
+		}
+		formatDef := img.DistroDef.Format[format]
+		if formatDef == nil {
+			continue
+		}
+		if builderDef, ok := img.BuilderConfig.Builder[format]; ok && !builderDef.Inline {
+			// Format with builder: use the format's install_template (e.g., aur COPY + pacman -U)
+			ctx := &InstallContext{
+				CacheMounts: formatDef.CacheMount,
+				Packages:    section.Packages,
+				StageName:   fmt.Sprintf("%s-%s-build", layer.Name, format),
+			}
+			if rendered, err := RenderTemplate(format+"-install", formatDef.InstallTemplate, ctx); err == nil {
+				b.WriteString(rendered)
+			}
+		} else {
+			ctx := NewInstallContext(section.Raw, formatDef.CacheMount)
+			if rendered, err := RenderTemplate(format+"-install", formatDef.InstallTemplate, ctx); err == nil {
+				b.WriteString(rendered)
+			}
+		}
+	}
+
+	// 2a. tasks: list (new path — replaces both root.yml and user.yml).
+	// Validator rejects layers that have both tasks: and root.yml/user.yml.
+	if layer.HasTasks() {
+		imageName := img.Name
+		buildDir := filepath.Join(g.BuildDir, imageName)
+		contextRelPrefix := filepath.ToSlash(filepath.Join(".build", imageName))
+		finalUser, err := g.emitTasks(b, layer, img, buildDir, contextRelPrefix, "0")
+		if err != nil {
+			// Phase 0: log but continue; validator should catch this earlier.
+			b.WriteString(fmt.Sprintf("# emitTasks error: %v\n", err))
+		}
+		if finalUser != "0" && finalUser != "root" {
+			// Tasks ended in non-root state; reset for builders/user.yml that
+			// follow in existing code paths (they assume USER=root at entry).
+			b.WriteString("USER root\n")
+		}
+	}
+
+	// 4. Inline builders (cargo, etc.) — config-driven from build.yml builder: section
+	if img.BuilderConfig != nil {
+		for _, bName := range img.BuilderConfig.BuilderNames() {
+			bDef := img.BuilderConfig.Builder[bName]
+			if !bDef.Inline || bDef.InstallTemplate == "" {
+				continue
+			}
+			if !g.layerNeedsBuilder(img, layer, bDef) {
+				continue
+			}
+			if !asUser {
+				b.WriteString(fmt.Sprintf("USER %d\n", img.UID))
+				asUser = true
+			}
+			ctx := &BuildStageContext{
+				LayerStage:  stageName,
+				UID:         img.UID,
+				GID:         img.GID,
+				CacheMounts: bDef.CacheMount,
+			}
+			rendered, err := RenderTemplate(bName+"-inline", bDef.InstallTemplate, ctx)
+			if err == nil {
+				b.WriteString(rendered)
+			}
+		}
+	}
+
+	// 5. Shell-init snippets from the candy manifest `shell:` block.
+	// Reuses the InstallPlan compiler so the legacy generator and the
+	// new OCITarget path share one source of truth for selection-rule +
+	// destination resolution. We emit the resulting steps inline as
+	// RUN-heredoc directives (parallel to how OCITarget.emitShellSnippet
+	// renders them — same sha256-derived end-marker).
+	if shellSteps := compileShellSnippetSteps(layer, img, HostContext{}); len(shellSteps) > 0 {
+		// Shell snippets are root-owned system drop-ins; reset to root
+		// before emission so RUN runs as root.
+		if asUser {
+			b.WriteString("USER root\n")
+			asUser = false
+		}
+		for _, step := range shellSteps {
+			s, ok := step.(*ShellSnippetStep)
+			if !ok || s == nil || s.Snippet == "" {
+				continue
+			}
+			h := sha256.Sum256([]byte(s.Snippet))
+			marker := fmt.Sprintf("CH_SHELL_%s_%x", strings.ToUpper(s.Shell), h[:4])
+			fmt.Fprintf(b,
+				"RUN mkdir -p %s && cat > %s <<'%s'\n%s\n%s\n",
+				shellQuote(filepath.Dir(s.Destination)),
+				shellQuote(s.Destination),
+				marker,
+				s.Snippet,
+				marker,
+			)
+		}
+	}
+
+	// Reset to root for next layer (skip for last layer when no root steps follow)
+	if asUser && !skipRootReset {
+		b.WriteString("USER root\n")
+	}
+
+	b.WriteString("\n")
+	return asUser
+}
+
+// Old format-specific write functions removed — all generation is now
+// config-driven via build.yml distro: section format templates rendered by renderFormatInstall*
+// and build.yml builder: section templates rendered by buildStageContext + RenderTemplate.
+
+// expandBuilderPath replaces {{.Home}} placeholders in copy artifact paths.
+func expandBuilderPath(path string, img *ResolvedBox) string {
+	path = strings.ReplaceAll(path, "{{.Home}}", img.Home)
+	return path
+}
+
+// layerNeedsBuilder checks if a layer triggers a builder's detection criteria.
+func (g *Generator) layerNeedsBuilder(img *ResolvedBox, layer *Layer, builderDef *BuilderDef) bool {
+	for _, f := range builderDef.DetectFiles {
+		if layerHasFile(layer, f) {
+			return true
+		}
+	}
+	if builderDef.DetectConfig != "" {
+		section := layer.FormatSection(builderDef.DetectConfig)
+		if section != nil && len(section.Packages) > 0 {
+			// Distro-aware gate: a config-only detection (no DetectFiles
+			// match) means the builder is tightly coupled to a specific
+			// distro's install_template (e.g. arch.formats.aur runs
+			// `pacman -U`). The IR compiler (install_build.go:236-249)
+			// only emits install steps for formats in img.BuildFormats —
+			// so when the image's build modes don't include this format,
+			// the section is unreachable and the builder is not needed.
+			// Multi-distro layers can carry rpm: + pac: + aur: together
+			// without forcing every Fedora consumer to invoke
+			// arch-builder. Mirrors the validate.go validateBuilders
+			// gate (Section K-1).
+			if img != nil && !buildFormatsInclude(img.BuildFormats, builderDef.DetectConfig) {
+				return false
+			}
+			return true
+		}
+	}
+	return false
+}
+
+// buildFormatsInclude returns true if formats contains target.
+func buildFormatsInclude(formats []string, target string) bool {
+	for _, f := range formats {
+		if f == target {
+			return true
+		}
+	}
+	return false
+}
+
+// collectBuilderRuntimeEnv returns synthesised EnvConfig entries for every
+// builder triggered by any layer in layerOrder. Each builder contributes at
+// most one config — the same builder is not double-counted even when many
+// layers trigger it. Used by writeLayerEnv (Containerfile ENV emission) and
+// writeLabels (ai.opencharly.path_append + ai.opencharly.env_layers).
+//
+// The "runtime env contract" idea moved from the pixi LAYER to the pixi
+// BUILDER in 2026-04-29 because layer-level env: + path_append: only
+// reached an image when (a) the layer was a top-level entry on the image
+// or (b) sibling-grouped auto-intermediate inheritance carried it through.
+// Images using pixi via pixi.toml-triggered builds (jupyter, openwebui,
+// immich-ml, …) had neither, and ended up with /usr/local/bin:/usr/bin
+// at runtime — supervisord couldn't find `jupyter` in PATH, even though
+// the binary lived at ~/.pixi/envs/default/bin/jupyter. Threading via the
+// BUILDER means any image whose layers trigger pixi gets the contract
+// automatically.
+func (g *Generator) collectBuilderRuntimeEnv(layerOrder []string, img *ResolvedBox) []*EnvConfig {
+	if img == nil || img.BuilderConfig == nil {
+		return nil
+	}
+	var out []*EnvConfig
+	for _, builderName := range img.BuilderConfig.BuilderNames() {
+		def := img.BuilderConfig.Builder[builderName]
+		if def == nil {
+			continue
+		}
+		if len(def.RuntimeEnv) == 0 && len(def.PathContributions) == 0 {
+			continue
+		}
+		triggered := false
+		for _, layerName := range layerOrder {
+			layer, ok := g.Layers[layerName]
+			if !ok {
+				continue
+			}
+			if g.layerNeedsBuilder(img, layer, def) {
+				triggered = true
+				break
+			}
+		}
+		if !triggered {
+			continue
+		}
+		out = append(out, &EnvConfig{
+			Vars:       def.RuntimeEnv,
+			PathAppend: def.PathContributions,
+		})
+	}
+	return out
+}
+
+// buildStageContext creates the template context for a builder's stage_template.
+func (g *Generator) buildStageContext(layer *Layer, builderName string, builderDef *BuilderDef, img *ResolvedBox, builderRef string) *BuildStageContext {
+	stageName := fmt.Sprintf("%s-%s-build", layer.Name, builderName)
+	ctx := &BuildStageContext{
+		BuilderRef:  builderRef,
+		StageName:   stageName,
+		LayerStage:  layer.Name,
+		CopySrc:     g.layerCopySource(layerMapKey(layer)),
+		UID:         img.UID,
+		GID:         img.GID,
+		Home:        img.Home,
+		User:        img.User,
+		CacheMounts: builderDef.CacheMount,
+	}
+
+	// Resolve manifest and install command for file-detected builders (pixi)
+	if len(builderDef.InstallCommands) > 0 && len(builderDef.DetectFiles) > 0 {
+		manifest := ""
+		for _, f := range builderDef.DetectFiles {
+			if layerHasFile(layer, f) {
+				manifest = f
+				break
+			}
+		}
+		ctx.Manifest = manifest
+		ctx.HasLockFile = fileExists(filepath.Join(layer.SourceDir, manifest+".lock")) ||
+			(manifest == "pixi.toml" && layer.HasPixiLock)
+
+		// Select install command from builder config
+		if ctx.HasLockFile {
+			if cmd, ok := builderDef.InstallCommands[manifest+"+lock"]; ok {
+				ctx.InstallCmd = cmd
+			}
+		}
+		if ctx.InstallCmd == "" {
+			if cmd, ok := builderDef.InstallCommands[manifest]; ok {
+				ctx.InstallCmd = cmd
+			}
+		}
+	}
+
+	// Resolve manylinux fix template
+	if builderDef.ManylinuxFix != "" && ctx.Manifest != "" {
+		rendered, err := RenderTemplate(builderName+"-manylinux", builderDef.ManylinuxFix, ctx)
+		if err == nil {
+			ctx.ManylinuxFix = rendered
+		}
+	}
+
+	// Detect optional build script (runs in builder stage after install)
+	if builderDef.BuildScript != "" && layerHasFile(layer, builderDef.BuildScript) {
+		ctx.HasBuildScript = true
+		ctx.BuildScript = builderDef.BuildScript
+	}
+
+	// For config-detected builders (aur), extract packages/options from layer config
+	if builderDef.DetectConfig != "" {
+		section := layer.FormatSection(builderDef.DetectConfig)
+		if section != nil {
+			ctx.Packages = section.Packages
+			ctx.Options = toStringSlice(section.Raw["options"])
+		}
+	}
+
+	return ctx
+}
+
+// writeLabels emits OCI LABEL directives with all runtime-relevant metadata.
+// Every runtime config option is embedded so images are fully self-contained.
+func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder []string, img *ResolvedBox) {
+	b.WriteString("# Image metadata\n")
+
+	// Always-present labels. ai.opencharly.version carries the image's
+	// content-derived EffectiveVersion (its dedicated version:, else the highest
+	// layer version across the base chain) — NOT the per-build tag. It is stable
+	// across builds when no layer changed, so a child's FROM <base> SHA doesn't
+	// shift and cache-misses don't cascade. See effective_version.go. Resolution
+	// prefers this label over the tag (local_image.go); it is also the
+	// "is this an charly box?" presence sentinel (ExtractMetadata).
+	b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelVersion, img.EffectiveVersion))
+	b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelBox, imageName))
+	b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelUID, strconv.Itoa(img.UID)))
+	b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelGID, strconv.Itoa(img.GID)))
+	b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelUser, img.User))
+	b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelHome, img.Home))
+
+	// Conditional string labels (omitted when empty)
+	if img.Registry != "" {
+		b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelRegistry, img.Registry))
+	}
+	// Bootc-flavored compositions emit the internal round-trip label so
+	// deploy-time consumers (labels.go ExtractMetadata) continue to see
+	// meta.Bootc=true. The signal is layer-derived now (preserve_user)
+	// rather than img.Bootc.
+	if img.LayerCaps != nil && img.LayerCaps.PreserveUser {
+		b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelBootc, "true"))
+	}
+	// Layer-contributed OCI labels (capabilities.oci_labels). Includes
+	// dev.containers.bootc=true emitted from the bootc-config layer when its
+	// preserve_user capability is in the composition. Sorted for
+	// determinism so Containerfile diffs stay stable.
+	if img.LayerCaps != nil && len(img.LayerCaps.OCILabels) > 0 {
+		keys := make([]string, 0, len(img.LayerCaps.OCILabels))
+		for k := range img.LayerCaps.OCILabels {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			b.WriteString(fmt.Sprintf("LABEL %s=%q\n", k, img.LayerCaps.OCILabels[k]))
+		}
+	}
+	if img.Network != "" {
+		b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelNetwork, img.Network))
+	}
+	// Schema v4: LabelEngine / LabelDNS / LabelAcmeEmail removed —
+	// deployment choices, not image declarations. Deploy-time values
+	// flow through DeploymentNode → ImageMetadata.
+
+	// Platform identity + builder-pool coordination labels.
+	// No serialized selector union — derive as ["all"] ∪ distro ∪ formats at read time.
+	writeJSONLabel(b, LabelPlatformDistro, img.Distro)
+	writeJSONLabel(b, LabelPlatformFormat, img.BuildFormats)
+	if len(img.Builder) > 0 {
+		writeJSONLabel(b, LabelBuilderUse, map[string]string(img.Builder))
+	}
+	writeJSONLabel(b, LabelBuilderProvide, img.BuilderCapabilities)
+
+	// JSON array labels (omitted when empty)
+	writeJSONLabel(b, LabelPort, img.Port)
+
+	// Port protocols: collect from layer PortSpec declarations
+	portProtos := make(map[string]string)
+	for _, layerName := range layerOrder {
+		layer := g.Layers[layerName]
+		for _, ps := range layer.PortSpecs() {
+			if ps.Protocol != "" && ps.Protocol != "http" {
+				portProtos[strconv.Itoa(ps.Port)] = ps.Protocol
+			}
+		}
+	}
+	writeJSONLabel(b, LabelPortProto, portProtos)
+
+	// Volumes: short form names (without charly-<image>- prefix)
+	volumes, _ := CollectImageVolume(g.Config, g.Layers, imageName, img.Home, nil)
+	if len(volumes) > 0 {
+		var labelVols []LabelVolumeEntry
+		for _, v := range volumes {
+			shortName := strings.TrimPrefix(v.VolumeName, "charly-"+imageName+"-")
+			labelVols = append(labelVols, LabelVolumeEntry{Name: shortName, Path: v.ContainerPath})
+		}
+		writeJSONLabel(b, LabelVolume, labelVols)
+	}
+
+	// Aliases: collected from layers + image-level config
+	aliases, _ := CollectImageAlias(g.Config, g.Layers, imageName)
+	writeJSONLabel(b, LabelAlias, aliases)
+
+	// Security: collected from layers + image config
+	security := CollectSecurity(g.Config, g.Layers, imageName)
+	if security.Privileged || security.CgroupNS != "" || len(security.CapAdd) > 0 || len(security.Devices) > 0 || len(security.SecurityOpt) > 0 || len(security.GroupAdd) > 0 || security.ShmSize != "" || len(security.Mounts) > 0 {
+		writeJSONLabel(b, LabelSecurity, security)
+	}
+
+	// Tunnel config is a deploy-time concern — not written to image labels.
+	// Managed via deploy.yml only (charly config setup).
+
+	// Image-level env vars
+	imgCfg := g.Config.Image[imageName]
+	writeJSONLabel(b, LabelEnv, imgCfg.Env)
+
+	// Hooks: collected from layers
+	hooks := CollectHooks(g.Config, g.Layers, imageName)
+	if hooks != nil {
+		writeJSONLabel(b, LabelHook, hooks)
+	}
+
+	// Tests: three-section (layer/image/deploy) declarative manifest. Shipped
+	// so every pulled image is self-describing at all three levels. Local
+	// deploy.yml overlays (by id) are applied at charly eval live time, not here.
+	tests := CollectEval(g.Config, g.Layers, imageName)
+	if tests != nil {
+		writeJSONLabel(b, LabelEval, tests)
+	}
+
+	// Description: three-section Gherkin-shaped self-description.
+	// Replaces the retired LabelInfo/LabelStatus scalar labels. Local
+	// deploy.yml `description:` overlays merge at runtime via
+	// MergeDeployDescriptions, not here.
+	descriptions := CollectDescriptions(g.Config, g.Layers, imageName)
+	if descriptions != nil {
+		writeJSONLabel(b, LabelDescription, descriptions)
+	}
+
+	// Shell-init manifest: three-section JSON of per-(origin, shell)
+	// contributions. Layer entries come from each layer's `shell:`
+	// block (resolved via the selection rule); image entries from the
+	// image-level `shell:` (when present). Deploy-scope defaults baked
+	// here; local deploy.yml `shell:` overlays merge at deploy time
+	// via MergeDeployShell.
+	shellSet := CollectShell(g.Config, g.Layers, imageName)
+	if shellSet != nil && (len(shellSet.Layer) > 0 || len(shellSet.Image) > 0 || len(shellSet.Deploy) > 0) {
+		writeJSONLabel(b, LabelShell, shellSet)
+	}
+
+	// VM config + libvirt snippets labels removed in the hard-cutover.
+	// VM definitions live in vm.yml (`kind: vm` entities) as a
+	// separate artifact from the container image; container image OCI
+	// labels no longer describe VM boot parameters.
+
+	// Init system label: active init system name + per-init service list
+	if img.InitConfig != nil {
+		labelInitSystem, labelInitDef := img.InitConfig.ResolveInitSystem(g.Layers, layerOrder, "")
+		if labelInitSystem != "" && labelInitDef != nil {
+			b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelInit, labelInitSystem))
+			// Per-init service-name list (legacy layer-name summary; kept for
+			// `charly service status/restart` CLI ergonomics).
+			var serviceNames []string
+			for _, layerName := range layerOrder {
+				layer := g.Layers[layerName]
+				if layer.HasInit(labelInitSystem) {
+					serviceNames = append(serviceNames, layerName)
+				}
+			}
+			if labelInitDef.LabelKey != "" {
+				writeJSONLabel(b, labelInitDef.LabelKey, serviceNames)
+			}
+			// Structured per-entry service spec — source-less deploy reads
+			// this instead of relying on layer-yml access at deploy time.
+			var capServices []CapabilityService
+			for _, layerName := range layerOrder {
+				layer := g.Layers[layerName]
+				for i := range layer.Service() {
+					e := &layer.Service()[i]
+					capServices = append(capServices, CapabilityService{
+						Name:             e.Name,
+						Scope:            e.EffectiveScope(),
+						Enable:           e.Enable,
+						UsePackaged:      e.UsePackaged,
+						Exec:             e.Exec,
+						Env:              e.Env,
+						Restart:          e.Restart,
+						WorkingDirectory: e.WorkingDirectory,
+						User:             e.User,
+						After:            e.After,
+						Before:           e.Before,
+						Stdout:           e.Stdout,
+						StopTimeout:      e.StopTimeout,
+						Kind:             e.Kind,
+						Events:           e.Events,
+						AutoStart:        e.AutoStart,
+						StartRetries:     e.StartRetries,
+						StartSec:         e.StartSecs,
+						StopSignal:       e.StopSignal,
+						ExitCode:         e.ExitCode,
+						Priority:         e.Priority,
+						Init:             labelInitSystem,
+						Layer:            layerName,
+					})
+				}
+			}
+			if len(capServices) > 0 {
+				writeJSONLabel(b, LabelService, capServices)
+			}
+		}
+	}
+
+	// Port relay: collected from layers
+	var portRelay []int
+	for _, layerName := range layerOrder {
+		layer := g.Layers[layerName]
+		portRelay = append(portRelay, layer.PortRelayPorts...)
+	}
+	writeJSONLabel(b, LabelPortRelay, portRelay)
+
+	// Secrets: collected from layers (metadata only, no values)
+	// Deduplicate by name+env composite key: same podman secret can inject into multiple env vars.
+	var labelSecrets []LabelSecretEntry
+	secretSeen := make(map[string]bool)
+	for _, layerName := range layerOrder {
+		layer := g.Layers[layerName]
+		for _, s := range layer.Secret() {
+			key := s.Name + ":" + s.Env
+			if secretSeen[key] {
+				continue
+			}
+			secretSeen[key] = true
+			target := s.Target
+			if target == "" {
+				target = "/run/secrets/" + s.Name
+			}
+			labelSecrets = append(labelSecrets, LabelSecretEntry{
+				Name:   s.Name,
+				Target: target,
+				Env:    s.Env,
+			})
+		}
+	}
+	if len(labelSecrets) > 0 {
+		writeJSONLabel(b, LabelSecret, labelSecrets)
+	}
+
+	// Env provides: env vars provided to other containers (service discovery)
+	envProvides := make(map[string]string)
+	for _, layerName := range layerOrder {
+		layer := g.Layers[layerName]
+		if layer.HasEnvProvides() {
+			for k, v := range layer.EnvProvides() {
+				envProvides[k] = v
+			}
+		}
+	}
+	if len(envProvides) > 0 {
+		writeJSONLabel(b, LabelEnvProvide, envProvides)
+	}
+
+	// Env requires: env vars image must have from the environment
+	envRequiresMap := make(map[string]EnvDependency) // deduplicate by name, last wins
+	for _, layerName := range layerOrder {
+		layer := g.Layers[layerName]
+		if layer.HasEnvRequires() {
+			for _, dep := range layer.EnvRequire() {
+				envRequiresMap[dep.Name] = dep
+			}
+		}
+	}
+	if len(envRequiresMap) > 0 {
+		writeJSONLabel(b, LabelEnvRequire, sortedEnvDeps(envRequiresMap))
+	}
+
+	// Env accepts: env vars image can optionally use
+	envAcceptsMap := make(map[string]EnvDependency) // deduplicate by name, last wins
+	for _, layerName := range layerOrder {
+		layer := g.Layers[layerName]
+		if layer.HasEnvAccepts() {
+			for _, dep := range layer.EnvAccept() {
+				envAcceptsMap[dep.Name] = dep
+			}
+		}
+	}
+	if len(envAcceptsMap) > 0 {
+		writeJSONLabel(b, LabelEnvAccept, sortedEnvDeps(envAcceptsMap))
+	}
+
+	// Secret requires: credential-store-backed env vars image must have
+	secretRequiresMap := make(map[string]EnvDependency) // deduplicate by name, last wins
+	for _, layerName := range layerOrder {
+		layer := g.Layers[layerName]
+		if layer.HasSecretRequires() {
+			for _, dep := range layer.SecretRequire() {
+				secretRequiresMap[dep.Name] = dep
+			}
+		}
+	}
+	if len(secretRequiresMap) > 0 {
+		writeJSONLabel(b, LabelSecretRequire, sortedEnvDeps(secretRequiresMap))
+	}
+
+	// Secret accepts: credential-store-backed env vars image can optionally use
+	secretAcceptsMap := make(map[string]EnvDependency) // deduplicate by name, last wins
+	for _, layerName := range layerOrder {
+		layer := g.Layers[layerName]
+		if layer.HasSecretAccepts() {
+			for _, dep := range layer.SecretAccept() {
+				secretAcceptsMap[dep.Name] = dep
+			}
+		}
+	}
+	if len(secretAcceptsMap) > 0 {
+		writeJSONLabel(b, LabelSecretAccept, sortedEnvDeps(secretAcceptsMap))
+	}
+
+	// MCP provides: MCP servers provided to other containers
+	mcpProvidesMap := make(map[string]MCPServerYAML) // deduplicate by name, last wins
+	for _, layerName := range layerOrder {
+		layer := g.Layers[layerName]
+		if layer.HasMCPProvides() {
+			for _, mcp := range layer.MCPProvide() {
+				mcpProvidesMap[mcp.Name] = mcp
+			}
+		}
+	}
+	if len(mcpProvidesMap) > 0 {
+		// Sort by name for deterministic output
+		names := make([]string, 0, len(mcpProvidesMap))
+		for name := range mcpProvidesMap {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		mcpProvides := make([]MCPServerYAML, 0, len(names))
+		for _, name := range names {
+			mcpProvides = append(mcpProvides, mcpProvidesMap[name])
+		}
+		writeJSONLabel(b, LabelMCPProvide, mcpProvides)
+	}
+
+	// MCP requires: MCP servers image must have from the environment
+	mcpRequiresMap := make(map[string]EnvDependency) // deduplicate by name, last wins
+	for _, layerName := range layerOrder {
+		layer := g.Layers[layerName]
+		if layer.HasMCPRequires() {
+			for _, dep := range layer.MCPRequire() {
+				mcpRequiresMap[dep.Name] = dep
+			}
+		}
+	}
+	if len(mcpRequiresMap) > 0 {
+		writeJSONLabel(b, LabelMCPRequire, sortedEnvDeps(mcpRequiresMap))
+	}
+
+	// MCP accepts: MCP servers image can optionally use
+	mcpAcceptsMap := make(map[string]EnvDependency) // deduplicate by name, last wins
+	for _, layerName := range layerOrder {
+		layer := g.Layers[layerName]
+		if layer.HasMCPAccepts() {
+			for _, dep := range layer.MCPAccept() {
+				mcpAcceptsMap[dep.Name] = dep
+			}
+		}
+	}
+	if len(mcpAcceptsMap) > 0 {
+		writeJSONLabel(b, LabelMCPAccept, sortedEnvDeps(mcpAcceptsMap))
+	}
+
+	// Routes: collected from layers
+	var routes []LabelRouteEntry
+	for _, layerName := range layerOrder {
+		layer := g.Layers[layerName]
+		if layer.HasRoute() {
+			rc, err := layer.Route()
+			if err == nil && rc != nil {
+				port, _ := strconv.Atoi(rc.Port)
+				routes = append(routes, LabelRouteEntry{Host: rc.Host, Port: port})
+			}
+		}
+	}
+	writeJSONLabel(b, LabelRoute, routes)
+
+	// Layer env vars: merged from all layers + builder runtime contributions.
+	// Both sources funnel into the same OCI labels so deploy-mode consumers
+	// of `ai.opencharly.path_append` and `ai.opencharly.env_layers` see
+	// the full effective env regardless of whether it came from a layer's
+	// `env:`/`path_append:` or a builder's `runtime_env:`/`path_contributions:`.
+	var envConfigs []*EnvConfig
+	for _, layerName := range layerOrder {
+		layer := g.Layers[layerName]
+		if layer.envConfig != nil {
+			envConfigs = append(envConfigs, layer.envConfig)
+		}
+	}
+	envConfigs = append(envConfigs, g.collectBuilderRuntimeEnv(layerOrder, img)...)
+	if len(envConfigs) > 0 {
+		merged := MergeEnvConfigs(envConfigs)
+		if len(merged.Vars) > 0 {
+			writeJSONLabel(b, LabelEnvCandy, merged.Vars)
+		}
+		writeJSONLabel(b, LabelPathAppend, merged.PathAppend)
+	}
+
+	// Skills documentation URL
+	skillPath := filepath.Join(g.Dir, "plugins", "charly-images", "skills", imageName, "SKILL.md")
+	if _, err := os.Stat(skillPath); err == nil {
+		skillURL := fmt.Sprintf("https://github.com/overthinkos/overthink-plugins/blob/main/charly-images/skills/%s/SKILL.md", imageName)
+		b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelSkill, skillURL))
+	}
+
+	// Status and info: aggregate worst status from image + layers using
+	// Description.Tag (status word) and Description.Feature/Narrative
+	// (human-facing info). The legacy Status/Info scalar fields on
+	// authored configs were removed; ResolvedImage carries the derived
+	// pair (populated in ResolveImage from img.Description).
+	effectiveStatus := resolveStatus(img.Status)
+	var infoParts []string
+	if img.Info != "" {
+		infoParts = append(infoParts, img.Info)
+	}
+	for _, layerName := range layerOrder {
+		layer := g.Layers[layerName]
+		layerStatus := descriptionStatus(layer.Description)
+		effectiveStatus = worstStatus(effectiveStatus, layerStatus)
+		if li := descriptionInfo(layer.Description); li != "" && layerStatus != "working" {
+			infoParts = append(infoParts, layerName+": "+li)
+		}
+	}
+	resolvedStatus := resolveStatus(effectiveStatus)
+	b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelStatus, resolvedStatus))
+	if len(infoParts) > 0 {
+		// Collapse block-scalar newlines so the value is one valid LABEL line,
+		// then single-quote (NOT %q): a description may legitimately mention a
+		// ${VAR} (e.g. ${PEER_HOST:<subject>}), and the %q double-quoted form
+		// lets buildah try to expand it — which fails with "Unsupported modifier"
+		// on, e.g., the `<` in ${PEER_HOST:<subject>}. shellSingleQuote matches
+		// how every JSON label is emitted (no shell/Dockerfile expansion).
+		combinedInfo := strings.ReplaceAll(strings.Join(infoParts, "; "), "\n", " ")
+		b.WriteString(fmt.Sprintf("LABEL %s=%s\n", LabelInfo, shellSingleQuote(combinedInfo)))
+	}
+
+	// Layer versions: map of layer name -> CalVer for layers with version set
+	layerVersions := make(map[string]string)
+	for _, layerName := range layerOrder {
+		layer := g.Layers[layerName]
+		if layer.Version != "" {
+			layerVersions[layerName] = layer.Version
+		}
+	}
+	writeJSONLabel(b, LabelCandyVersion, layerVersions)
+
+	// Data entries: staging paths for deploy-time provisioning.
+	// Walk the full image chain (like CollectImageVolume) to include data
+	// entries from layers in parent/intermediate images.
+	var dataEntries []LabelDataEntry
+	seenDataLayers := make(map[string]bool)
+	current := imageName
+	for {
+		imgDef, ok := g.Config.Image[current]
+		if !ok {
+			break
+		}
+		resolved, _ := ResolveLayerOrder(imgDef.Layer, g.Layers, nil)
+		for _, layerName := range resolved {
+			if seenDataLayers[layerName] {
+				continue
+			}
+			seenDataLayers[layerName] = true
+			layer, ok := g.Layers[layerName]
+			if !ok || !layer.HasData() {
+				continue
+			}
+			for _, d := range layer.Data() {
+				staging := "/data/" + d.Volume + "/"
+				if d.Dest != "" {
+					staging += d.Dest
+					if !strings.HasSuffix(staging, "/") {
+						staging += "/"
+					}
+				}
+				dataEntries = append(dataEntries, LabelDataEntry{
+					Volume:  d.Volume,
+					Staging: staging,
+					Layer:   layerName,
+					Dest:    d.Dest,
+				})
+			}
+		}
+		if baseImg, isInternal := g.Config.Image[imgDef.Base]; isInternal && baseImg.IsEnabled() {
+			current = imgDef.Base
+		} else {
+			break
+		}
+	}
+	if len(dataEntries) > 0 {
+		writeJSONLabel(b, LabelDataEntries, dataEntries)
+	}
+
+	// Data image flag
+	imgConfig := g.Config.Image[imageName]
+	if imgConfig.DataImage {
+		b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelDataBox, "true"))
+	}
+
+	b.WriteString("\n")
+}
+
+// writeJSONLabel writes a JSON-encoded LABEL directive. Omits the label if the value is nil/empty.
+func writeJSONLabel[T any](b *strings.Builder, key string, value T) {
+	// Check for nil/empty slices and maps via JSON
+	data, err := json.Marshal(value)
+	if err != nil {
+		return
+	}
+	s := string(data)
+	if s == "null" || s == "[]" || s == "{}" {
+		return
+	}
+	// Wrap in single-quoted form with proper '\'' escaping so embedded single
+	// quotes (common inside test command strings like awk '{print $1}') don't
+	// terminate the LABEL value and trip podman's key=value parser.
+	b.WriteString(fmt.Sprintf("LABEL %s=%s\n", key, shellSingleQuote(s)))
+}
+
+// resolveStatus returns the effective status string. Empty defaults to "testing".
+// Accepts a single status word (working/testing/broken) — the legacy form
+// used by older callers. Prefer resolveStatusFromTags for new code that
+// reads from Description.Tag directly.
+func resolveStatus(s string) string {
+	if s == "" {
+		return "testing"
+	}
+	return s
+}
+
+// resolveStatusFromTags walks Description.Tag looking for a literal
+// status tag (working/testing/broken) and returns it. When none is
+// present, returns "testing" (the historic default).
+func resolveStatusFromTags(tags []string) string {
+	for _, t := range tags {
+		switch t {
+		case "working", "testing", "broken":
+			return t
+		}
+	}
+	return "testing"
+}
+
+// descriptionStatus is a thin wrapper that pulls the status tag out of
+// a Description value (returning "testing" when the description is nil
+// or carries no status-class tag). Centralizes the lookup so callers
+// don't reach into Description.Tag directly.
+func descriptionStatus(d *Description) string {
+	if d == nil {
+		return "testing"
+	}
+	return resolveStatusFromTags(d.Tag)
+}
+
+// descriptionInfo aggregates Description.Feature + Description.Narrative
+// into a single human-facing string (replacing the legacy Info field).
+func descriptionInfo(d *Description) string {
+	if d == nil {
+		return ""
+	}
+	switch {
+	case d.Feature != "" && d.Narrative != "":
+		return d.Feature + ": " + d.Narrative
+	case d.Feature != "":
+		return d.Feature
+	case d.Narrative != "":
+		return d.Narrative
+	}
+	return ""
+}
+
+// statusSeverity returns a numeric severity for status comparison.
+func statusSeverity(s string) int {
+	switch resolveStatus(s) {
+	case "working":
+		return 0
+	case "testing":
+		return 1
+	case "broken":
+		return 2
+	default:
+		return 1 // unknown treated as testing
+	}
+}
+
+// worstStatus returns the more severe of two status values.
+func worstStatus(a, b string) string {
+	if statusSeverity(b) > statusSeverity(a) {
+		return resolveStatus(b)
+	}
+	return resolveStatus(a)
+}
+
+// worstStatusFromTags picks the more severe of two tag lists, returning
+// the resolved status string ("working" / "testing" / "broken").
+func worstStatusFromTags(a, b []string) string {
+	return worstStatus(resolveStatusFromTags(a), resolveStatusFromTags(b))
+}
+
+// createRemoteLayerCopies copies remote layer directories into .build/_layers/
+// so that Docker/Podman can access them from the build context.
+// Uses hard copies instead of symlinks because Podman doesn't follow symlinks
+// that point outside the build context.
+func (g *Generator) createRemoteLayerCopies() error {
+	hasRemote := false
+	for _, layer := range g.Layers {
+		if layer.Remote {
+			hasRemote = true
+			break
+		}
+	}
+	if !hasRemote {
+		// Clean up _layers dir if it exists from a previous run
+		os.RemoveAll(filepath.Join(g.BuildDir, "_layers"))
+		return nil
+	}
+
+	layersDir := filepath.Join(g.BuildDir, "_layers")
+	// Remove and recreate to ensure clean state
+	os.RemoveAll(layersDir)
+	if err := os.MkdirAll(layersDir, 0755); err != nil {
+		return err
+	}
+
+	for ref, layer := range g.Layers {
+		if !layer.Remote {
+			continue
+		}
+		destPath := filepath.Join(layersDir, layer.Name)
+		cmd := exec.Command("cp", "-a", layer.Path, destPath)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			return fmt.Errorf("copying remote layer %s: %s: %w", ref, string(out), err)
+		}
+	}
+
+	return nil
+}
+
+// remoteBuildConfigCacheRoot derives the repo cache root that a remotely-included
+// build.yml was read from, by stripping the layer subpath off any remote layer's
+// cached Path (every remote layer + the remote build.yml share one repo@version
+// cache). Returns "" when the build-config is local (no remote layers).
+func (g *Generator) remoteBuildConfigCacheRoot() string {
+	for _, l := range g.Layers {
+		if l.Remote && l.Path != "" {
+			suffix := filepath.Join(l.SubPathPrefix, l.Name) // e.g. "candy/pixi"
+			if trimmed := strings.TrimSuffix(l.Path, suffix); trimmed != l.Path {
+				return strings.TrimRight(trimmed, string(filepath.Separator))
+			}
+		}
+	}
+	return ""
+}
+
+// materializeBuildConfigAsset ensures a build-config asset file (referenced by a
+// remotely-included build.yml — e.g. the init header_file) is available in the
+// build context. If the project ships the file locally (local build.yml), relPath
+// is returned unchanged. Otherwise the file is copied from the remote build-config
+// cache into .build/_buildconfig/<relPath> (gitignored, like .build/_layers/) and
+// the build-root-relative path is returned for use as a COPY source.
+func (g *Generator) materializeBuildConfigAsset(relPath string) (string, error) {
+	if relPath == "" {
+		return relPath, nil
+	}
+	if _, err := os.Stat(filepath.Join(g.Dir, relPath)); err == nil {
+		return relPath, nil // local build-config ships the asset; COPY works as-is
+	}
+	root := g.remoteBuildConfigCacheRoot()
+	if root == "" {
+		return relPath, nil // no remote source to pull from; leave as authored
+	}
+	srcAbs := filepath.Join(root, relPath)
+	if _, err := os.Stat(srcAbs); err != nil {
+		return relPath, nil // not in the remote cache either; leave as authored
+	}
+	destAbs := filepath.Join(g.BuildDir, "_buildconfig", relPath)
+	if err := os.MkdirAll(filepath.Dir(destAbs), 0755); err != nil {
+		return relPath, err
+	}
+	if out, err := exec.Command("cp", "-a", srcAbs, destAbs).CombinedOutput(); err != nil {
+		return relPath, fmt.Errorf("materializing build-config asset %s: %s: %w", relPath, string(out), err)
+	}
+	return filepath.ToSlash(filepath.Join(".build", "_buildconfig", relPath)), nil
+}
+
+// rewriteHeaderCopyForRemote rewrites a `COPY <src> <dst>` header directive so its
+// source points at a materialized build-config asset when the original src isn't in
+// the local build context. Plain 3-token COPY only; anything else passes through.
+func (g *Generator) rewriteHeaderCopyForRemote(headerCopy string) (string, error) {
+	fields := strings.Fields(headerCopy)
+	if len(fields) != 3 || fields[0] != "COPY" {
+		return headerCopy, nil
+	}
+	newSrc, err := g.materializeBuildConfigAsset(fields[1])
+	if err != nil {
+		return headerCopy, err
+	}
+	if newSrc == fields[1] {
+		return headerCopy, nil
+	}
+	return fmt.Sprintf("COPY %s %s", newSrc, fields[2]), nil
+}
+
+// layerCopySource returns the COPY source path for a layer in the Containerfile,
+// relative to the build context root (g.Dir).
+//
+// For the common case (no `directory:` override in the candy manifest), this returns
+// "candy/<layerRef>/" for local layers and ".build/_layers/<name>/" for remote
+// layers — identical to the legacy behavior.
+//
+// When the layer declares `directory:` and points SourceDir outside the default
+// candy/<name>/ location, the result is the build-root-relative path to
+// SourceDir so that Containerfile COPY directives pick up files from the author's
+// chosen config directory.
+// layerMapKey returns the key under which a layer is stored in g.Layers: the
+// fully-qualified remote ref (RepoPath/SubPathPrefix/Name) for remote layers,
+// the short name for local ones. Use this whenever code holds a *Layer but
+// needs to look it up (or pass its key to layerCopySource), since a remote
+// layer's short Name does NOT match its map key.
+func layerMapKey(layer *Layer) string {
+	if layer.Remote {
+		return layer.RepoPath + "/" + layer.SubPathPrefix + layer.Name
+	}
+	return layer.Name
+}
+
+func (g *Generator) layerCopySource(layerRef string) string {
+	layer := g.Layers[layerRef]
+	if layer.Remote {
+		return ".build/_layers/" + layer.Name
+	}
+	// If SourceDir matches the default candy/<layerRef>/ location, preserve
+	// the legacy path format (cheap, avoids filepath.Rel calls on hot path).
+	defaultDir := filepath.Join(g.Dir, DefaultCandyDir, layerRef)
+	if layer.SourceDir == "" || layer.SourceDir == defaultDir {
+		return DefaultCandyDir + "/" + layerRef
+	}
+	// `directory:` override — resolve SourceDir relative to the build root.
+	rel, err := filepath.Rel(g.Dir, layer.SourceDir)
+	if err != nil || strings.HasPrefix(rel, "..") {
+		// Falling back to the default means the Containerfile will miss files
+		// from an out-of-tree SourceDir — validation should have caught this.
+		return DefaultCandyDir + "/" + layerRef
+	}
+	return rel
+}

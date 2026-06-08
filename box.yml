@@ -1,5 +1,5 @@
-#  Per-kind file for image entries. Sibling of overthink.yml — included via
-#  overthink.yml's `includes:` list. The schema kind discriminator is
+#  Per-kind file for image entries. Sibling of charly.yml — included via
+#  charly.yml's `includes:` list. The schema kind discriminator is
 #  `kind: image` for kind-keyed entries; root-shape map is `image:` (this file).
 #  2026-05 kind-files cutover.
 version: 2026.157.311
@@ -24,7 +24,7 @@ box:
         port:
             - 8085:8080
         eval:
-            - command: test -x /usr/local/bin/filebrowser && test -x /usr/local/bin/ov && test -x /usr/bin/dbus-daemon
+            - command: test -x /usr/local/bin/filebrowser && test -x /usr/local/bin/charly && test -x /usr/bin/dbus-daemon
               id: filebrowser-composed-binaries
               exit_status: 0
             - file: ${VOLUME_CONTAINER_PATH:data}
@@ -41,7 +41,7 @@ box:
         candy:
             - agent-forwarding
             - github-runner
-            - ov
+            - charly
             - dbus
             - container-nesting
         # No uid/user override and NO image-level security: block → resolves to
@@ -203,7 +203,7 @@ box:
             - 8002:8002 # versatiles-frontend SPA (deploy.yml overrides host port to 28002)
             - 8090:8090 # versatiles serve HTTP (deploy.yml overrides host port to 28090)
         # Image-level deploy-scope eval probes — run AFTER every layer's
-        # eval block on `ov eval live versa`. The first probe is the
+        # eval block on `charly eval live versa`. The first probe is the
         # end-to-end driver: it triggers all 6 self-authored DAGs via
         # `marimo export ipynb`, waits for each to reach success, and
         # renders all cells server-side. Every subsequent probe verifies
@@ -225,7 +225,7 @@ box:
               command: wc -c < /tmp/notebook-run.ipynb
               in_container: true
               stdout:
-                - matches: "[1-9][0-9]{5,}" # >=100KB rendered ipynb (no anchors per /ov-eval:eval gotcha #6)
+                - matches: "[1-9][0-9]{5,}" # >=100KB rendered ipynb (no anchors per /charly-eval:eval gotcha #6)
             # Per-tile-source martin TileJSON reachability (4 sources).
             - id: versa-martin-monaco
               scope: deploy
@@ -267,7 +267,7 @@ box:
                 - matches: "[1-9][0-9]+" # any positive byte count (PBF non-empty)
             # DAG output artifact size probes (post-DAG existence + size).
             # No regex anchors — `wc -c` output ends with \n and Go's `$`
-            # doesn't match before newline (see /ov-eval:eval gotcha #6).
+            # doesn't match before newline (see /charly-eval:eval gotcha #6).
             # Thresholds match the actual post-DAG sizes the skill records
             # (~824 KB parquet, ~616 KB pmtiles after the post-2026-05
             # tippecanoe-config change, ~770 KB gtfs.zip) — all comfortably
@@ -391,7 +391,7 @@ box:
     openclaw-desktop:
         # All-in-one CachyOS power image: the selkies streaming desktop + the
         # openclaw-full gateway/tool stack (claude-code/codex/gemini included) +
-        # a CPU ollama + the full nested ov toolchain (build images, run nested
+        # a CPU ollama + the full nested charly toolchain (build images, run nested
         # rootless pods, launch rootless libvirt VMs from a terminal inside the
         # desktop). build:[pac,aur] is required for selkies' AUR google-chrome
         # + wlrctl.
@@ -407,7 +407,7 @@ box:
             - selkies-desktop
             - openclaw-full
             - ollama
-            - ov
+            - charly
             - container-nesting
             - golang
             - gh
@@ -424,8 +424,8 @@ box:
             - command: test -x /usr/bin/labwc && test -x /usr/bin/google-chrome-stable && test -x /usr/local/bin/traefik && test -x /usr/sbin/sshd
               id: openclaw-desktop-selkies-binaries
               exit_status: 0
-            - command: test -x /usr/bin/ollama && test -x /usr/local/bin/ov && test -x /usr/bin/gocryptfs && test -x /usr/bin/socat
-              id: openclaw-desktop-ov-ollama-binaries
+            - command: test -x /usr/bin/ollama && test -x /usr/local/bin/charly && test -x /usr/bin/gocryptfs && test -x /usr/bin/socat
+              id: openclaw-desktop-charly-ollama-binaries
               exit_status: 0
             - command: test -x /usr/bin/podman && test -x /usr/bin/buildah && test -x /usr/bin/skopeo && test -x /usr/bin/newuidmap && test -x /usr/bin/newgidmap
               id: openclaw-desktop-nested-binaries
@@ -465,12 +465,12 @@ box:
               scope: deploy
               in_container: true
               exit_status: 0
-            - command: ov version
-              id: openclaw-desktop-ov-version
+            - command: charly version
+              id: openclaw-desktop-charly-version
               scope: deploy
               in_container: true
-            - command: ov doctor
-              id: openclaw-desktop-ov-doctor
+            - command: charly doctor
+              id: openclaw-desktop-charly-doctor
               scope: deploy
               in_container: true
             # --- deploy scope: the three fused services are live ---
@@ -506,7 +506,7 @@ box:
         port:
             - 8080:8080
         eval:
-            - command: test -x ${HOME}/.local/bin/openwebui-entrypoint && test -x ${HOME}/.pixi/envs/default/bin/python && test -x /usr/local/bin/ov
+            - command: test -x ${HOME}/.local/bin/openwebui-entrypoint && test -x ${HOME}/.pixi/envs/default/bin/python && test -x /usr/local/bin/charly
               id: openwebui-composition
               exit_status: 0
             - command: printenv WEBUI_ADMIN_EMAIL
@@ -536,7 +536,7 @@ box:
             - valkey
         port:
             - 6379:6379
-    # Throwaway benchmark target used by `ov eval run eval-target`.
+    # Throwaway benchmark target used by `charly eval run eval-target`.
     # The eval-target layer ships a deliberately-failing BDD scenario
     # that an AI solves by adding a write: task. Fedora base + minimal
     # layer stack keeps per-iteration rebuild fast.
@@ -544,29 +544,29 @@ box:
         base: fedora
         candy:
             - claude-code
-            - ov-mcp
+            - charly-mcp
             - eval-target-layer
         port:
             - 18765:18765
-    # ov self-test image — the full ov toolchain on a CachyOS base. Backs the
-    # eval-ov-selftest-pod kind:eval bed, which exercises EVERY ov command group
+    # charly self-test image — the full charly toolchain on a CachyOS base. Backs the
+    # eval-charly-selftest-pod kind:eval bed, which exercises EVERY charly command group
     # (version/status/doctor/settings/box list+inspect+validate/clean/migrate/
-    # secrets/vm/deploy/eval/mcp/feature) in-container. Full ov arrives via ov-mcp
+    # secrets/vm/deploy/eval/mcp/feature) in-container. Full charly arrives via charly-mcp
     # (now the full toolchain: binary + virtualization + gocryptfs + socat) so the
-    # vm/libvirt commands resolve; container-nesting enables nested `ov deploy`;
-    # claude-code is the driver for the ov-cli-surface AI score.
-    ov-selftest:
+    # vm/libvirt commands resolve; container-nesting enables nested `charly deploy`;
+    # claude-code is the driver for the charly-cli-surface AI score.
+    charly-selftest:
         base: cachyos.cachyos
         build:
             - pac
             - aur
         candy:
-            - ov-mcp
+            - charly-mcp
             - container-nesting
             - claude-code
         port:
             - 18765:18765
-    # ov eval `default` score — per-pod target images.
+    # charly eval `default` score — per-pod target images.
     os:
         base: fedora
         candy:
@@ -580,7 +580,7 @@ box:
         port:
             - 8080:8080
     # Headless Chrome CDP driver — the `peer:` instrument that CDP-probes a
-    # separate web subject (cross-deployment `ov eval`). See candy/chrome-headless.
+    # separate web subject (cross-deployment `charly eval`). See candy/chrome-headless.
     chrome-headless:
         base: fedora
         candy:
@@ -647,33 +647,33 @@ box:
         base: fedora
         candy:
             - sshd
-    # phase5 selftest: minimal ov-only image for selftest-image pod.
+    # phase5 selftest: minimal charly-only image for selftest-image pod.
     selftest-image:
         base: fedora
         candy:
-            - ov
-    # phase6 selftest: combines sshd + ov + composition marker for composition-app pod.
+            - charly
+    # phase6 selftest: combines sshd + charly + composition marker for composition-app pod.
     composition-app:
         base: fedora
         candy:
             - sshd
-            - ov
+            - charly
             - eval-composition-layer
     # composition self-test SOURCE — a stable in-main image whose two
     # image-scope eval probes are consumed (read, filtered, re-run on the
     # selftest target pods) by the eval.yml `composition-import-selftest`
     # recipe's `from:` expander. Replaces the relocated `fedora-coder`. The
-    # keep probe (`composition-source-ov`) tests `ov` presence, which passes on
+    # keep probe (`composition-source-charly`) tests `charly` presence, which passes on
     # both the `selftest-image` and `composition-app` target pods (both ship the
-    # `ov` layer) AND on this image itself; `composition-source-marker` exists
+    # `charly` layer) AND on this image itself; `composition-source-marker` exists
     # only to exercise the `exclude:` filter (it is never imported/run).
     composition-source:
         base: fedora
         candy:
-            - ov
+            - charly
         eval:
-            - command: test -x /usr/local/bin/ov
-              id: composition-source-ov
+            - command: test -x /usr/local/bin/charly
+              id: composition-source-charly
               exit_status: 0
             - command: test -d /etc
               id: composition-source-marker
@@ -686,7 +686,7 @@ box:
     # kind:pod runtime (nc on :18794 + supervisord), and DeployTarget
     # rendering (supervisord sleep service). Together with the eval-local
     # kind:local template it smoke-tests every container-side kind path
-    # end-to-end via `ov eval run eval-pod`.
+    # end-to-end via `charly eval run eval-pod`.
     # =================================================================
     eval-pod:
         base: quay.io/fedora/fedora-minimal:43
@@ -696,7 +696,7 @@ box:
         produce: []
         description:
             feature: Combined fast eval fixture — image/layer/pod/DeployTarget mechanism smoke
-            narrative: Two-layer fedora-minimal image backing the eval-pod kind:eval bed (`ov eval run eval-pod`) — covers kind:image build, kind:layer composition order, kind:pod runtime (nc :18794 + supervisord), and DeployTarget rendering (supervisord sleep).
+            narrative: Two-layer fedora-minimal image backing the eval-pod kind:eval bed (`charly eval run eval-pod`) — covers kind:image build, kind:layer composition order, kind:pod runtime (nc :18794 + supervisord), and DeployTarget rendering (supervisord sleep).
             tag:
                 - working
         candy:
@@ -754,7 +754,7 @@ box:
                 Install apps either declaratively — a `kind: android` device + a
                 `target: android` deploy applies layers' `apk:` packages onto the
                 running emulator (apkeep in-pod) — or imperatively via the generic
-                `ov eval adb install-app` verb (both share one installer). apk
+                `charly eval adb install-app` verb (both share one installer). apk
                 sources: apk-pure default, google-play via an AAS-token secret.
                 CPU/RAM auto-size from the host at runtime.
                 Requires /dev/kvm + kvm-group passthrough for hardware acceleration;

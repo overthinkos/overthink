@@ -42,7 +42,7 @@ candy:
                 - spectacle
             aur:
                 # kdotool — the KWin window-management automation tool driving
-                # `ov eval wl` on KWin (the KWin analogue of wlroots' wlrctl). It
+                # `charly eval wl` on KWin (the KWin analogue of wlroots' wlrctl). It
                 # talks to KWin via the scripting D-Bus API: search /
                 # windowactivate / windowminimize / windowclose / windowstate
                 # (fullscreen) / getwindowgeometry. Pointer + keyboard injection

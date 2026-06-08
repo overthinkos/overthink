@@ -36,7 +36,7 @@ candy:
             set -euo pipefail
             # Driver installs per-user (writes ~/.appium/node_modules). JAVA_HOME
             # + ANDROID_HOME come from upstream layer ENV baked into the image.
-            export JAVA_HOME=/usr/lib/jvm/ov-jdk21
+            export JAVA_HOME=/usr/lib/jvm/charly-jdk21
             export ANDROID_HOME=/opt/android-sdk
             export PATH="$JAVA_HOME/bin:$PATH"
             /usr/bin/appium driver install uiautomator2
@@ -63,7 +63,7 @@ candy:
           env:
             ANDROID_HOME: /opt/android-sdk
             ANDROID_SDK_ROOT: /opt/android-sdk
-            JAVA_HOME: /usr/lib/jvm/ov-jdk21
+            JAVA_HOME: /usr/lib/jvm/charly-jdk21
             HOME: /home/user
           restart: always
           priority: 40

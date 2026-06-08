@@ -1,0 +1,79 @@
+version: 2026.159.3
+# Canonical repo identity. Lets the import-namespace loader break the
+# main <-> cachyos/nvidia/selkies mutual imports by repo identity: a transitive
+# `ov:` back-reference to this repo (at any pinned version) resolves to THIS
+# working tree, so the root's namespace pins win. See /charly-internals:go.
+repo: github.com/overthinkos/overthink
+import:
+    # Flat imports (root namespace) — this repo's own per-kind files + the
+    # combined base.yml (arch + fedora stacks). eval.yml carries kind:ai/recipe/
+    # score AND the kind:eval disposable R10 beds (+ supporting vm:/k8s:
+    # entities); operator deployments live in the per-host ~/.config/charly/deploy.yml.
+    - eval.yml
+    - local.yml
+    - box.yml
+    - vm.yml
+    - pod.yml
+    - k8s.yml
+    - android.yml
+    - build.yml
+    # arch + fedora base stacks (arch/arch-builder/fedora/fedora-builder/
+    # fedora-nonfree). Combined from arch-base.yml + fedora-base.yml in the
+    # 2026-05 import-namespace cutover.
+    - base.yml
+    # cachyos base image — owned by the overthinkos/cachyos submodule. Mounted
+    # under the `cachyos` import namespace and referenced as `cachyos.cachyos`
+    # (main's `versa` image is `base: cachyos.cachyos`). This is the deliberate
+    # main → cachyos coupling. The cachyos repo, in turn, imports this repo under
+    # the `charly` namespace for ov.arch-builder (mutual import; cycle-broken at load).
+    - cachyos: '@github.com/overthinkos/cachyos:v2026.157.1600'
+    # nvidia GPU base family — owned by the overthinkos/nvidia submodule. Mounted
+    # under the `nvidia` import namespace; main's GPU pod families (comfyui /
+    # jupyter-ml / jupyter-ml-notebook / ollama / unsloth-studio) root on
+    # `base: nvidia.nvidia`. Mutual import (the nvidia
+    # repo imports this one under the `charly` namespace); cycle-broken at load.
+    - nvidia: '@github.com/overthinkos/nvidia:v2026.157.1600'
+    # selkies / sway streaming-desktop family — owned by the overthinkos/selkies
+    # submodule (image/selkies). Mounted under the `selkies` import namespace;
+    # main's android-emulator roots on `base: selkies.selkies-labwc`. The desktop
+    # LAYERS stay in main (shared with openclaw-desktop) — only the images moved.
+    - selkies: '@github.com/overthinkos/selkies:v2026.157.1600'
+discover:
+    - path: candy
+      recursive: true
+      manifest: candy.yml
+defaults:
+    platform:
+        - linux/amd64
+    tag: auto
+    registry: ghcr.io/overthinkos
+    build:
+        - rpm
+    merge:
+        auto: false
+        max_mb: 128
+    builder:
+        cargo: fedora-builder
+        npm: fedora-builder
+        pixi: fedora-builder
+    # Build-speed tunables (project-wide). Precedence: CLI flag / env wins,
+    # then these defaults, then a built-in fallback. See /charly-build:build.
+    jobs: 4 # outer: concurrent IMAGE builds per DAG level (--jobs / CH_BUILD_JOBS)
+    podman_jobs: 0 # inner: stages per `podman build`; 0 = auto = min(NCPU, podman_jobs_cap)
+    podman_jobs_cap: 8 # ceiling for the auto calc — proven safe on podman 5.8.2 (20-run race gate)
+    # Heavy directories never COPYed by any Containerfile — merged into the
+    # generated .containerignore/.dockerignore on top of the built-in baseline
+    # (.git, bin, ov, *.md, editor/python/node cache-bust globs).
+    context_ignore:
+        - image
+        - .eval
+        - output
+        - dist
+        - pkg
+        - tests
+        - .regression-snapshot
+    cache: image # default build cache mode (image local read / registry read+write)
+    # Reusable-artifact retention (auto-pruned at creation; also via `charly clean`).
+    # 0 disables. See /charly-core:clean.
+    keep_images: 3 # newest CalVer tags to keep per image after `charly box build`
+    keep_eval_runs: 3 # newest run dirs to keep per bed/score after `charly eval run`

@@ -22,8 +22,8 @@ memory > exploration. Your training is stale; the skill is current. Consult
 the Skill Dispatcher table in CLAUDE.md (R0) for the trigger -> skill map.
 
 R10 = THE RUNNER ACTUALLY RAN. A `--dry-run`, a green `go test`, an
-`ov box validate`, or a bed REBUILD without the eval run are NOT R10 — only
-a real `ov eval run <bed>` / `ov eval live` against a fresh rebuild of a
+`charly box validate`, or a bed REBUILD without the eval run are NOT R10 — only
+a real `charly eval run <bed>` / `charly eval live` against a fresh rebuild of a
 `disposable: true` target counts, with the output PASTED. Inflating the
 attribution tier above what the pasted proof supports is fraud; a known rule
 violation forbids commit at ANY tier (fix in-tree or escalate — never
@@ -43,7 +43,7 @@ mid-plan stops are CLAUDE.md's narrow blockers (genuine design change,
 user-only credential/permission, destructive action outside authorization,
 R10 failure needing redesign) — not context/scope/time/"handoff".
 
-Drive the existing `ov eval` beds to test/verify (eval-bed-runner +
+Drive the existing `charly eval` beds to test/verify (eval-bed-runner +
 /verify-beds; deploy-verifier + /audit-deploy-configs). The COMMIT is gated on
 a full final-code bed test (pasted); run beds freely throughout to verify —
 only on `disposable: true`, no scope-shrinking flags. See /ov-internals:agents.

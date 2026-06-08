@@ -1,7 +1,7 @@
 export const meta = {
   name: 'triage-eval-failure',
   description:
-    'Competing-hypotheses RCA of a FAILED kind:eval bed run (CLAUDE.md R1). Fans out N independent root-cause hypotheses, validates EACH on the live disposable bed, cross-checks them adversarially, converges on the surviving root cause, and returns a concrete fix to apply before re-running the real bed. Use after `ov eval run <bed>` exits non-zero. Read-mostly probing on the bed; never edits source or commits.',
+    'Competing-hypotheses RCA of a FAILED kind:eval bed run (CLAUDE.md R1). Fans out N independent root-cause hypotheses, validates EACH on the live disposable bed, cross-checks them adversarially, converges on the surviving root cause, and returns a concrete fix to apply before re-running the real bed. Use after `charly eval run <bed>` exits non-zero. Read-mostly probing on the bed; never edits source or commits.',
   phases: [
     { title: 'Reproduce', detail: 'inspect the failing bed run + summary.yml/logs' },
     { title: 'Hypothesize', detail: 'N independent root-cause theories, each bed-validated' },
@@ -64,7 +64,7 @@ const N = 4
 const hyps = (await parallel(
   Array.from({ length: N }, (_unused, i) => () =>
     agent(
-      `You are root-cause hypothesis #${i + 1} for the failing kind:eval bed "${bed}". Symptom: ${repro && repro.observed ? repro.observed : '(see .eval logs)'}. Form ONE independent root-cause theory DISTINCT from the obvious first guess, then VALIDATE it against the LIVE bed (ov status/logs, ov eval live <bed> probes, podman inspect, read the emitted artifact) — set bedValidated=true only if you actually probed the live bed. Propose a concrete fix. Do NOT edit source, do NOT re-run ov eval run, do NOT commit.`,
+      `You are root-cause hypothesis #${i + 1} for the failing kind:eval bed "${bed}". Symptom: ${repro && repro.observed ? repro.observed : '(see .eval logs)'}. Form ONE independent root-cause theory DISTINCT from the obvious first guess, then VALIDATE it against the LIVE bed (charly status/logs, charly eval live <bed> probes, podman inspect, read the emitted artifact) — set bedValidated=true only if you actually probed the live bed. Propose a concrete fix. Do NOT edit source, do NOT re-run charly eval run, do NOT commit.`,
       { schema: HYPOTHESIS_SCHEMA, label: `hyp${i + 1}:${bed}`, phase: 'Hypothesize' }
     )
   )
@@ -89,6 +89,6 @@ return {
   survivingRootCauses: survivors.map((h) => ({ theory: h.theory, evidence: h.evidence, proposedFix: h.proposedFix })),
   allHypotheses: judged,
   note: survivors.length
-    ? 'Apply a surviving fix in the working tree, then re-run `ov eval run ' + bed + '` to confirm.'
-    : 'No hypothesis survived live-bed validation — gather more evidence (logs, ov eval live) before editing.',
+    ? 'Apply a surviving fix in the working tree, then re-run `charly eval run ' + bed + '` to confirm.'
+    : 'No hypothesis survived live-bed validation — gather more evidence (logs, charly eval live) before editing.',
 }

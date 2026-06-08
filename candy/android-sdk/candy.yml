@@ -5,7 +5,7 @@ candy:
         Android SDK installed from CachyOS/AUR packages under /opt/android-sdk:
         cmdline-tools (sdkmanager/avdmanager), platform-tools (adb), build-tools
         36 (aapt2), platform android-36, the emulator, and apkeep (the
-        by-package-name app downloader the `ov eval adb install-app` verb drives
+        by-package-name app downloader the `charly eval adb install-app` verb drives
         IN the pod). Every AUR package installs into /opt/android-sdk (verified
         PKGBUILD prefixes), so they coexist with the one sdkmanager-fetched
         component. The Android 16 (API 36, google_apis_playstore x86_64) SYSTEM
@@ -74,7 +74,7 @@ candy:
                     - android-emulator
     task:
         # apkeep — the by-package-name app downloader the host-side
-        # `ov eval adb install-app` verb runs IN this pod (apk-pure default,
+        # `charly eval adb install-app` verb runs IN this pod (apk-pure default,
         # google-play via AAS token). Installed from the upstream precompiled
         # x86_64 binary (apkeep ships a bare binary, no tarball → no extract);
         # the AUR Rust build fails to link ring/zstd-sys under lld --gc-sections.
@@ -92,11 +92,11 @@ candy:
         # in the persistent mount cannot short-circuit a new API/variant pull.
         - cmd: |
             set -euo pipefail
-            export JAVA_HOME=/usr/lib/jvm/ov-jdk21
+            export JAVA_HOME=/usr/lib/jvm/charly-jdk21
             export PATH="$JAVA_HOME/bin:/opt/android-sdk/cmdline-tools/latest/bin:$PATH"
-            SDK_CACHE=/var/cache/ov-android-sysimg
+            SDK_CACHE=/var/cache/charly-android-sysimg
             SYSIMG="system-images;android-${EMULATOR_API_LEVEL};${EMULATOR_IMG_TYPE};${EMULATOR_SYS_IMG}"
-            SENTINEL="${SDK_CACHE}/.ov-sysimg-complete-${EMULATOR_API_LEVEL}-${EMULATOR_IMG_TYPE}"
+            SENTINEL="${SDK_CACHE}/.charly-sysimg-complete-${EMULATOR_API_LEVEL}-${EMULATOR_IMG_TYPE}"
             if [ ! -f "${SENTINEL}" ]; then
               # Bounded for-loop emits enough y's for the license prompts without
               # the SIGPIPE that `yes | sdkmanager` triggers under pipefail.
@@ -108,7 +108,7 @@ candy:
             cp -a "${SDK_CACHE}/system-images/." /opt/android-sdk/system-images/
           user: root
           cache:
-            - /var/cache/ov-android-sysimg
+            - /var/cache/charly-android-sysimg
     eval:
         - id: sdkmanager-binary
           file: /opt/android-sdk/cmdline-tools/latest/bin/sdkmanager

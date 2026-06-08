@@ -1,5 +1,5 @@
-#  Per-kind file for vm entries. Sibling of overthink.yml — included via
-#  overthink.yml's `includes:` list. The schema kind discriminator is
+#  Per-kind file for vm entries. Sibling of charly.yml — included via
+#  charly.yml's `includes:` list. The schema kind discriminator is
 #  `kind: vm` for kind-keyed entries; root-shape map is `vm:` (this file).
 #  2026-05 kind-files cutover.
 version: 2026.157.311
@@ -29,7 +29,7 @@ vm:
             runcmd:
                 - "setenforce 0 || true"
                 - "sed -i 's/^SELINUX=.*/SELINUX=permissive/' /etc/selinux/config || true"
-                - "echo '10.89.0.1 ov-web' >> /etc/hosts"
+                - "echo '10.89.0.1 charly-web' >> /etc/hosts"
                 - "systemctl enable --now qemu-guest-agent"
                 - "for c in 21 33 46 82 124 196 208 220 1 5; do printf '\\033[48;5;%dm                    \\033[0m\\n' $c >> /dev/tty1; done || true"
         libvirt:
@@ -50,7 +50,7 @@ vm:
     # (eval-cross-vm-http): nginx serves a fixture marker on guest :80. A LOCAL
     # (host) DRIVER peer reaches it via ${PEER_ENDPOINT:eval-cross-vm-http:80} →
     # resolveEvalEndpoint's VM branch → `ssh -L 127.0.0.1:<rand>:127.0.0.1:80`
-    # over the managed ov-web-vm alias (the SAME host-vantage port resolver the
+    # over the managed charly-web-vm alias (the SAME host-vantage port resolver the
     # pod beds use; the guest's :80 is reached through the SSH tunnel, never
     # exposed on the host — strictly more secure than a host port-forward).
     # ssh.port_auto picks a free host SSH port (the existing auto-port mechanism);
@@ -83,7 +83,7 @@ vm:
             runcmd:
                 - "setenforce 0 || true"
                 - "sed -i 's/^SELINUX=.*/SELINUX=permissive/' /etc/selinux/config || true"
-                - "echo 'ov-fixture-vm-content-marker' > /usr/share/nginx/html/index.html"
+                - "echo 'charly-fixture-vm-content-marker' > /usr/share/nginx/html/index.html"
                 - "systemctl enable --now nginx"
                 - "systemctl enable --now qemu-guest-agent"
         libvirt:

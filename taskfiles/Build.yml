@@ -1,28 +1,28 @@
 version: '3'
 
 tasks:
-  ov:
-    desc: Build ov from source and install (portable; auto-detects distro)
+  charly:
+    desc: Build charly from source and install (portable; auto-detects distro)
     dir: "{{.ROOT_DIR}}"
     cmds:
-      - mkdir -p bin candy/ov/bin
-      # Stamp the binary's CalVer identity (`ov version` → main.BuildCalVer) at
+      - mkdir -p bin candy/charly/bin
+      # Stamp the binary's CalVer identity (`charly version` → main.BuildCalVer) at
       # build time, from the shared pkg/arch/calver.sh — ALWAYS the HEAD commit's
       # UTC date (deterministic: same commit → same version, whether the tree is
       # clean or dirty; the build clock is never consulted). Without this stamp
-      # `ov version` would read the wall clock at invocation — useless as a build
-      # identity / freshness signal. The copy into candy/ov/bin/ov carries the
-      # same stamp, so the `ov` layer (and every image/VM baking it) ships a
+      # `charly version` would read the wall clock at invocation — useless as a build
+      # identity / freshness signal. The copy into candy/charly/bin/charly carries the
+      # same stamp, so the `charly` layer (and every image/VM baking it) ships a
       # self-identifying binary, and the PKGBUILD's pkgver() reads this same
-      # binary's `ov version` so the pacman package can never disagree.
+      # binary's `charly version` so the pacman package can never disagree.
       - |
         CALVER=$(bash pkg/arch/calver.sh)
-        cd ov && go build -ldflags "-X main.BuildCalVer=${CALVER}" -o ../bin/ov .
-      - cp bin/ov candy/ov/bin/ov
+        cd charly && go build -ldflags "-X main.BuildCalVer=${CALVER}" -o ../bin/charly .
+      - cp bin/charly candy/charly/bin/charly
       - task: install
 
   install:
-    desc: Install ov for the current host (auto-detects distro; portable by default)
+    desc: Install charly for the current host (auto-detects distro; portable by default)
     dir: "{{.ROOT_DIR}}"
     cmds:
       - |
@@ -54,26 +54,26 @@ tasks:
                 echo "         Install an AUR helper, then re-run."
               fi
               cd pkg/arch
-              mkdir -p src/overthink-git
-              cp "{{.ROOT_DIR}}/LICENSE" src/overthink-git/LICENSE
-              # Auto-remove legacy ov-git / ov-git-debug packages if
-              # present. The PKGBUILD declares replaces=('ov-git'), but
-              # pacman -U (which makepkg -i invokes for local-file
-              # installs) does NOT honor `replaces=` — that field only
-              # fires during sync-database upgrades (pacman -Syu).
-              # Without this pre-step the install hits an interactive
-              # conflict prompt that --noconfirm answers "no" to, and
-              # the install fails with `unresolvable package conflicts`
-              # (for the main package) or `conflicting files` (for the
-              # debug sibling). Both must be removed together.
+              mkdir -p src/opencharly-git
+              cp "{{.ROOT_DIR}}/LICENSE" src/opencharly-git/LICENSE
+              # Auto-remove legacy ov-git / ov-git-debug / overthink-git
+              # packages if present. The PKGBUILD declares
+              # replaces=('overthink-git' 'ov-git'), but pacman -U (which
+              # makepkg -i invokes for local-file installs) does NOT honor
+              # `replaces=` — that field only fires during sync-database
+              # upgrades (pacman -Syu). Without this pre-step the install
+              # hits an interactive conflict prompt that --noconfirm answers
+              # "no" to, and the install fails with `unresolvable package
+              # conflicts` (for the main package) or `conflicting files`
+              # (for the debug sibling). Both must be removed together.
               LEGACY_PKGS=""
-              for pkg in ov-git ov-git-debug; do
+              for pkg in ov-git ov-git-debug overthink-git overthink-git-debug; do
                 if pacman -Q "$pkg" >/dev/null 2>&1; then
                   LEGACY_PKGS="$LEGACY_PKGS $pkg"
                 fi
               done
               if [ -n "$LEGACY_PKGS" ]; then
-                echo "Removing legacy package(s):$LEGACY_PKGS (renamed to overthink-git)..."
+                echo "Removing legacy package(s):$LEGACY_PKGS (renamed to opencharly-git)..."
                 sudo pacman -Rdd --noconfirm $LEGACY_PKGS
               fi
               makepkg -sefi --noconfirm
@@ -82,16 +82,16 @@ tasks:
               # makepkg's src/, pkg/, the built *.pkg.tar.zst, and *.log are pure
               # transient waste. Always removed immediately so pkg/arch doesn't
               # accumulate (war-story: 138 stale *.pkg.tar.zst = 1.3G). The
-              # `ov clean` verb sweeps these too. See /ov-core:clean.
+              # `charly clean` verb sweeps these too. See /charly-core:clean.
               rm -rf src pkg ./*.pkg.tar.zst ./*.log
               exit 0
             fi
             ;;
         esac
         # Non-Arch (Fedora, Bazzite, Ubuntu, Debian, ...) or Arch without makepkg:
-        # portable install to $HOME/.local/bin/ov.
-        install -D -m 0755 bin/ov "$HOME/.local/bin/ov"
-        echo "Installed portable binary to $HOME/.local/bin/ov"
+        # portable install to $HOME/.local/bin/charly.
+        install -D -m 0755 bin/charly "$HOME/.local/bin/charly"
+        echo "Installed portable binary to $HOME/.local/bin/charly"
         case ":$PATH:" in
           *":$HOME/.local/bin:"*) ;;
           *)
@@ -116,54 +116,54 @@ tasks:
           echo "WARNING: yay/paru not found — AUR deps must be pre-installed."
         fi
         cd pkg/arch
-        mkdir -p src/overthink-git
-        cp "{{.ROOT_DIR}}/LICENSE" src/overthink-git/LICENSE
+        mkdir -p src/opencharly-git
+        cp "{{.ROOT_DIR}}/LICENSE" src/opencharly-git/LICENSE
         makepkg -sefi --noconfirm
 
   install-portable:
-    desc: Force portable install to $HOME/.local/bin/ov (overrides distro detection)
+    desc: Force portable install to $HOME/.local/bin/charly (overrides distro detection)
     dir: "{{.ROOT_DIR}}"
     cmds:
-      - install -D -m 0755 bin/ov "$HOME/.local/bin/ov"
-      - echo "Installed to $HOME/.local/bin/ov"
+      - install -D -m 0755 bin/charly "$HOME/.local/bin/charly"
+      - echo "Installed to $HOME/.local/bin/charly"
 
   binary:
-    desc: Build the ov binary to bin/ov (CalVer-stamped; NO host install)
+    desc: Build the charly binary to bin/charly (CalVer-stamped; NO host install)
     dir: "{{.ROOT_DIR}}"
     cmds:
-      - mkdir -p bin candy/ov/bin
+      - mkdir -p bin candy/charly/bin
       - |
         CALVER=$(bash pkg/arch/calver.sh)
-        cd ov && go build -ldflags "-X main.BuildCalVer=${CALVER}" -o ../bin/ov .
-      - cp bin/ov candy/ov/bin/ov
+        cd charly && go build -ldflags "-X main.BuildCalVer=${CALVER}" -o ../bin/charly .
+      - cp bin/charly candy/charly/bin/charly
 
-  # Release-artifact builds — thin wrappers over `ov box pkg`, which builds each
+  # Release-artifact builds — thin wrappers over `charly box pkg`, which builds each
   # native package distro-natively (in a podman container) via the SAME build.yml
   # local_pkg.build_template the deploy-time localpkg path uses (R3). Output → dist/.
   pkg:arch:
-    desc: Build the ov .pkg.tar.zst release artifact into dist/
+    desc: Build the charly .pkg.tar.zst release artifact into dist/
     dir: "{{.ROOT_DIR}}"
     deps: [binary]
     cmds:
-      - bin/ov box pkg pac
+      - bin/charly box pkg pac
 
   pkg:fedora:
-    desc: Build the ov .rpm release artifact into dist/
+    desc: Build the charly .rpm release artifact into dist/
     dir: "{{.ROOT_DIR}}"
     deps: [binary]
     cmds:
-      - bin/ov box pkg rpm
+      - bin/charly box pkg rpm
 
   pkg:debian:
-    desc: Build the ov .deb release artifact into dist/ (serves Debian + Ubuntu)
+    desc: Build the charly .deb release artifact into dist/ (serves Debian + Ubuntu)
     dir: "{{.ROOT_DIR}}"
     deps: [binary]
     cmds:
-      - bin/ov box pkg deb
+      - bin/charly box pkg deb
 
   pkg:all:
     desc: Build every native package release artifact (.pkg.tar.zst/.rpm/.deb) into dist/
     dir: "{{.ROOT_DIR}}"
     deps: [binary]
     cmds:
-      - bin/ov box pkg
+      - bin/charly box pkg

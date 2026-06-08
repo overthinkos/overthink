@@ -13,7 +13,7 @@ candy:
             time. Producer 00_Ollama_Requests demonstrates the local-LLM
             HTTP API; consumers exercise specific patterns (chat, RAG,
             embeddings, tool calling). Pairs naturally with the
-            `ov-ollama:ollama` server layer for a self-contained local
+            `charly-ollama:ollama` server layer for a self-contained local
             LLM stack. Data-only — no packages, no services.
         scenario:
             - name: ollama notebooks land in the workspace volume

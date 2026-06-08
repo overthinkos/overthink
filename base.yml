@@ -4,14 +4,14 @@
 #  the 2026-05 import-namespace cutover. There is exactly ONE copy of each
 #  definition — they are NOT also in box.yml — so there is no duplication.
 #
-#  Flat-imported by this repo's overthink.yml (root namespace) AND by the
-#  overthinkos/{arch,fedora,bootc} submodules (which import it under the `ov`
+#  Flat-imported by this repo's charly.yml (root namespace) AND by the
+#  overthinkos/{arch,fedora,bootc} submodules (which import it under the `charly`
 #  namespace — `ov.arch`, `ov.fedora`, `ov.arch-builder`, …). The CachyOS base
 #  is NOT here: it is owned by the overthinkos/cachyos submodule and pulled back
 #  into this repo's `versa` image via the `cachyos` import namespace.
 #
 #  Every builder/nonfree layer: list uses github references (not plain names) so
-#  the SAME file resolves both locally (root namespace) and remotely (the `ov`
+#  the SAME file resolves both locally (root namespace) and remotely (the `charly`
 #  namespace in a submodule that has no candy/ of its own). github references
 #  everywhere, one definition. The shared builder-layer refs (pixi / nodejs /
 #  build-toolchain / yay / rpmfusion) pin to one recent ecosystem tag so a
@@ -20,7 +20,7 @@
 #  reference to a given layer agrees on that layer's own version:.
 #
 #  version: is the SCHEMA CalVer (bumped by the per-kind-versioning cutover); the
-#  builder-layer refs pin to ecosystem tag v2026.144.2044. Run `ov box
+#  builder-layer refs pin to ecosystem tag v2026.144.2044. Run `charly box
 #  reconcile` to advance them together when a shared layer moves.
 version: 2026.143.844
 box:

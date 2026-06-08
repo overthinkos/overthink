@@ -4,22 +4,22 @@ candy:
     description:
         feature: bench-tier1 — marker file for harness tier1 scenarios
         narrative: |
-            Writes /etc/ov-bench-marker containing the string "ov benchmark target",
+            Writes /etc/charly-bench-marker containing the string "charly benchmark target",
             satisfying the tier1-easy harness recipe.
     task:
         - mkdir: /etc
           user: root
           mode: "0755"
-        - write: /etc/ov-bench-marker
+        - write: /etc/charly-bench-marker
           user: root
           mode: "0644"
           content: |
-            ov benchmark target
+            charly benchmark target
     eval:
         - id: tier1-marker-exists
-          file: /etc/ov-bench-marker
+          file: /etc/charly-bench-marker
           exists: true
         - id: tier1-marker-content
-          file: /etc/ov-bench-marker
+          file: /etc/charly-bench-marker
           contains:
-            - ov benchmark target
+            - charly benchmark target

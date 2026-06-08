@@ -31,7 +31,7 @@ candy:
           eventually: 60s
           retry_interval: 2s
         # MCP server exercised live via github.com/modelcontextprotocol/go-sdk.
-        # Runs only under `ov eval live <image>` (deploy-scope). No `call` test — the
+        # Runs only under `charly eval live <image>` (deploy-scope). No `call` test — the
         # chrome-devtools tools need a live Chrome session; ping + tool-catalog are
         # safe non-destructive probes.
         # Readiness waits: the MCP server proxies to Chrome's CDP (--browser-url

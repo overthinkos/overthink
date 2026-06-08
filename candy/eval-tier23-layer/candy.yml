@@ -4,7 +4,7 @@ candy:
     description:
         feature: bench-tier23 — tier 2 + tier 3 in a shared pod
         narrative: |
-            Tier 2: HTTP server on port 8080 returning a body containing "ov benchmark".
+            Tier 2: HTTP server on port 8080 returning a body containing "charly benchmark".
             Tier 3: curl installed + persistent /srv/bench/version.txt.
             Both tiers share the same pod (harness-tier23).
     require: []
@@ -32,7 +32,7 @@ candy:
           content: |
             <!doctype html>
             <html><body>
-            <h1>ov benchmark</h1>
+            <h1>charly benchmark</h1>
             <p>tier2 + tier3 are happy.</p>
             </body></html>
     service:
@@ -63,4 +63,4 @@ candy:
           status: 200
           body:
             - contains:
-                - ov benchmark
+                - charly benchmark

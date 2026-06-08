@@ -20,7 +20,7 @@ candy:
         # Patch vLLM _decompose_size_nodes bug (upstream: vllm-project/vllm#38360).
         # File is delivered via the layer's `/ctx` bind-mount (declared
         # implicitly by the `cmd` verb's cache-mount table — see
-        # /ov-build:layer "Cache Mounts"); the script is NOT in the
+        # /charly-build:layer "Cache Mounts"); the script is NOT in the
         # container's CWD, so the absolute /ctx/ path is required.
         - cmd: ~/.pixi/envs/default/bin/python /ctx/patch_vllm_size_nodes.py
           user: "${USER}"

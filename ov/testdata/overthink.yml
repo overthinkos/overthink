@@ -1,8 +1,0 @@
-version: 2026.157.311
-import:
-    - build.yml
-    - images.yml
-discover:
-    - path: candy
-      recursive: true
-      manifest: candy.yml

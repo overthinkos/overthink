@@ -10,7 +10,7 @@ candy:
         LD_LIBRARY_PATH: "/usr/lib64"
         # Stable, well-known path for any AI agent (driving marimo via MCP) to
         # discover the marimo-team/skills bundle. Mirrors the Anthropic-style
-        # SKILL.md discovery used by overthink's own plugins/<plugin>/skills/.
+        # SKILL.md discovery used by opencharly's own plugins/<plugin>/skills/.
         MARIMO_SKILLS_DIR: "/opt/marimo-skills"
     distro:
         arch:
@@ -52,7 +52,7 @@ candy:
     # marimo runs `--mcp --mcp-allow-remote` (see service exec below), which
     # exposes its editor tools as an MCP HTTP server on the SAME port that
     # serves the notebook UI. Marimo's docs put the endpoint at /mcp/server
-    # (NOT /mcp — that's the convention for ov-mcp / jupyter-mcp / chrome-
+    # (NOT /mcp — that's the convention for charly-mcp / jupyter-mcp / chrome-
     # devtools-mcp). The mcp_provide URL must reflect the actual path.
     mcp_provide:
         - name: marimo
@@ -63,7 +63,7 @@ candy:
           path: "/workspace"
     task:
         # Workspace mount-point at filesystem root. Same pattern as the
-        # /ov-coder:ov-mcp layer's /workspace bind-mount target: created as
+        # /charly-coder:charly-mcp layer's /workspace bind-mount target: created as
         # root with mode 0777 so the unprivileged ${USER} process (and any
         # nested supervisord-spawned processes) can write into it without
         # baking in a uid assumption. Bind-mount target for the workspace
@@ -102,7 +102,7 @@ candy:
           # Replaced 2026-05-09 with the notebook-osm data layer which seeds
           # /workspace/notebooks/ via ov's data-layer machinery
           # (--userns=keep-id ensures user-owned files). See
-          # /ov-build:layer "Data layer" pattern + candy/notebook-templates/
+          # /charly-build:layer "Data layer" pattern + candy/notebook-templates/
           # for the canonical reference.
           #
           # Stub-out the rest of the prior inline content via a yaml comment-
@@ -119,7 +119,7 @@ candy:
           mode: "0644"
           user: "${USER}"
           content: |
-            # ov-managed — set by candy/marimo/candy.yml at image-build time.
+            # charly-managed — set by candy/marimo/candy.yml at image-build time.
             # `auto_instantiate = true` makes the reactive cascade fire on
             # page open. Don't hand-edit; rebuild the image to change.
             [runtime]
@@ -174,7 +174,7 @@ candy:
           timeout: 10s
         # Deploy-scope: marimo's --mcp server responds. The endpoint lives at
         # /mcp/server (per marimo docs) which is what mcp_provide above declares,
-        # so `ov eval mcp ping marimo --name marimo` resolves the URL correctly
+        # so `charly eval mcp ping marimo --name marimo` resolves the URL correctly
         # via the host-port rewriter.
         - id: mcp-marimo-ping
           scope: deploy

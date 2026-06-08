@@ -11,8 +11,8 @@ config files: `pixi.toml`, `package.json`, `Cargo.toml`, service files, …).
 - `/ov-image:image` — when composing candies into a box.
 - `/ov-eval:eval` — authoring the `eval:` declarative checks a candy ships.
 
-The `layer-validator` agent is a fast pre-edit sanity gate; `ov box validate`
-is the authoritative checker. Use the `ov candy …` editor verbs (comment-
+The `layer-validator` agent is a fast pre-edit sanity gate; `charly box validate`
+is the authoritative checker. Use the `charly candy …` editor verbs (comment-
 preserving) rather than hand-editing where possible.
 
 **Authoritative rules live in the repo-root `CLAUDE.md`** (one level up). R0–R10,

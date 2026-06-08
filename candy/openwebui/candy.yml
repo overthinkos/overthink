@@ -15,7 +15,7 @@ candy:
         ENABLE_VERSION_UPDATE_CHECK: "false"
     env_require:
         - name: WEBUI_ADMIN_EMAIL
-          description: "Admin account email (identifier, not a credential) — pass via: ov config openwebui -e WEBUI_ADMIN_EMAIL=you@example.com"
+          description: "Admin account email (identifier, not a credential) — pass via: charly config openwebui -e WEBUI_ADMIN_EMAIL=you@example.com"
     env_accept:
         - name: OLLAMA_HOST
           description: "Local Ollama server URL (auto-injected by ollama layer env_provides)"
@@ -23,25 +23,25 @@ candy:
           description: "OpenAI-compatible API base URL"
         - name: WEBUI_AUTH
           description: "Enable authentication (default: true)"
-        - name: OV_MCP_SERVERS
+        - name: CH_MCP_SERVERS
           description: "JSON array of MCP servers (auto-injected by mcp_provide layers)"
         - name: IMMICH_API_URL
           description: "Immich HTTP API URL (auto-injected by immich layer env_provides)"
     # Credential-store-backed env vars. Values live in the user's credential
     # backend (keyring/config) and are injected at runtime via podman
     # secrets (Secret=<name>,type=env,target=<var>). Never land in deploy.yml
-    # or the quadlet file as plaintext. See /ov-build:secrets and /ov-image:layer.
+    # or the quadlet file as plaintext. See /charly-build:secrets and /charly-image:layer.
     #
     # WEBUI_ADMIN_PASSWORD: auto-generated on first deploy as a 32-byte hex
     # random value via DefaultCredentialStore.Set (see ov/layer_secrets.go
     # ensureLayerSecret). To use the auto-generated password to log in for
     # the first time:
-    #   ov secrets get ov/secret WEBUI_ADMIN_PASSWORD
+    #   charly secrets get ov/secret WEBUI_ADMIN_PASSWORD
     # To override with a specific value before deploying:
-    #   ov secrets set ov/secret WEBUI_ADMIN_PASSWORD <password>
+    #   charly secrets set ov/secret WEBUI_ADMIN_PASSWORD <password>
     secret_require:
         - name: WEBUI_ADMIN_PASSWORD
-          description: "Initial admin account password for Open WebUI first-run setup. Auto-generated on first deploy; retrieve via `ov secrets get ov/secret WEBUI_ADMIN_PASSWORD`."
+          description: "Initial admin account password for Open WebUI first-run setup. Auto-generated on first deploy; retrieve via `charly secrets get ov/secret WEBUI_ADMIN_PASSWORD`."
     secret_accept:
         - name: OPENROUTER_API_KEY
           description: "API key for OpenRouter (maps to OPENAI_API_KEY with OpenRouter base URL)"

@@ -1,0 +1,513 @@
+package main
+
+import (
+	"bytes"
+	_ "embed"
+	"fmt"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+	"text/template"
+
+	"gopkg.in/yaml.v3"
+)
+
+//go:embed sidecar.yml
+var embeddedSidecarYAML []byte
+
+// SidecarDef is a sidecar container template (embedded in the charly binary or per-image override in deploy.yml).
+//
+// The `Parameter` field carries BOTH the template's parameter
+// declarations (sidecar.yml: each key maps to empty-string sentinel
+// for "required, must be supplied by deploy") AND the deploy.yml
+// override values (each key maps to the operator-chosen string).
+// After MergeSidecar, every required parameter must have a non-empty
+// value or ResolveSidecar errors out with a remediation hint.
+//
+// Example template (sidecar.yml):
+//
+//	sidecar:
+//	  tailscale:
+//	    parameter:
+//	      tailnet: ""   # empty = required, deploy must supply
+//
+// Example deploy.yml override:
+//
+//	sidecars:
+//	  tailscale:
+//	    parameter:
+//	      tailnet: armadillo-quail.ts.net
+type SidecarDef struct {
+	Description string            `yaml:"description,omitempty" json:"description,omitempty"`
+	Image       string            `yaml:"image,omitempty" json:"image,omitempty"`
+	Env         map[string]string `yaml:"env,omitempty" json:"env,omitempty"`
+	Parameter   map[string]string `yaml:"parameter,omitempty" json:"parameter,omitempty"`
+	Secret      []SidecarSecret   `yaml:"secret,omitempty" json:"secret,omitempty"`
+	Volume      []SidecarVolume   `yaml:"volume,omitempty" json:"volume,omitempty"`
+	Security    *SecurityConfig   `yaml:"security,omitempty" json:"security,omitempty"`
+}
+
+// SidecarSecret is a credential store secret injected as an env var into the sidecar.
+//
+// `Env` is the target env var name INSIDE the container (e.g. TS_AUTHKEY —
+// the name tailscale's binary expects).
+//
+// `EnvFrom` is an optional text/template expression that resolves to the
+// HOST-side env var name to read the value from. When empty, the host
+// env var name = Env (legacy single-tailnet behavior).
+//
+// Multi-tailnet usage: template against the resolved Parameter map of
+// the SidecarDef. The `tailnetEnvSuffix` template func normalizes a
+// MagicDNS suffix into a valid env-var-name fragment:
+//
+//	env_from: "TS_AUTHKEY_{{.Parameter.tailnet | tailnetEnvSuffix}}"
+//
+// With `Parameter.tailnet=armadillo-quail.ts.net`, EnvFrom renders to
+// `TS_AUTHKEY_ARMADILLO_QUAIL_TS_NET`. The operator stores per-tailnet
+// keys under that env name in `.secrets`:
+//
+//	charly secrets gpg set TS_AUTHKEY_ARMADILLO_QUAIL_TS_NET tskey-auth-XXXX
+//
+// direnv loads `.secrets` into the shell env; `charly config` reads the
+// resolved host env var via the standard credential-store chain
+// (env-var-first), and injects the value into the container as
+// `TS_AUTHKEY=<value>`.
+type SidecarSecret struct {
+	Name        string `yaml:"name" json:"name"`                                   // credential store key / podman secret name suffix
+	Env         string `yaml:"env" json:"env"`                                     // target env var in container (the name the app expects)
+	EnvFrom     string `yaml:"env_from,omitempty" json:"env_from,omitempty"`       // host-side env var name to read; text/template (empty = same as Env)
+	Description string `yaml:"description,omitempty" json:"description,omitempty"` // human-readable description
+}
+
+// SidecarKeyContext is the template input for SidecarSecret.EnvFrom rendering.
+// Exposes the resolved Parameter map as `.Parameter` (so templates can
+// reference {{.Parameter.tailnet}} etc.).
+type SidecarKeyContext struct {
+	Parameter map[string]string
+}
+
+// sidecarTemplateFuncs are the text/template funcs available inside
+// SidecarSecret.EnvFrom expressions. Centralized so both `renderSidecarEnvFrom`
+// and tests use the same set.
+var sidecarTemplateFuncs = template.FuncMap{
+	// tailnetEnvSuffix normalizes a MagicDNS suffix like "armadillo-quail.ts.net"
+	// into a valid env-var-name fragment "ARMADILLO_QUAIL_TS_NET" by uppercasing
+	// and replacing every non-alphanumeric character with '_'. Empty input → "".
+	"tailnetEnvSuffix": func(s string) string {
+		var b strings.Builder
+		b.Grow(len(s))
+		for _, r := range s {
+			switch {
+			case r >= 'a' && r <= 'z':
+				b.WriteRune(r - 32) // to upper
+			case r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
+				b.WriteRune(r)
+			default:
+				b.WriteRune('_')
+			}
+		}
+		return b.String()
+	},
+}
+
+// renderSidecarEnvFrom resolves the SidecarSecret.EnvFrom text/template against
+// the SidecarDef's Parameter map. Returns the resolved HOST-side env var name,
+// OR an error naming the missing required parameter.
+//
+// When SidecarSecret.EnvFrom is empty, falls back to the SidecarSecret.Env
+// value (legacy single-tailnet behavior: host env var name == container env
+// var name).
+func renderSidecarEnvFrom(s SidecarSecret, params map[string]string) (string, error) {
+	if s.EnvFrom == "" {
+		return s.Env, nil
+	}
+	// Pre-check: every {{.Parameter.X}} reference must resolve to a
+	// non-empty value. text/template's `missingkey=zero` only catches
+	// direct map misses, not values that pipe through a func to empty
+	// (e.g. `{{.Parameter.tailnet | tailnetEnvSuffix}}` with tailnet=""
+	// happily renders to "" — silently masking the missing parameter).
+	// Doing the check up-front gives a precise remediation hint.
+	for paramName := range extractParameterRefs(s.EnvFrom) {
+		v, ok := params[paramName]
+		if !ok || v == "" {
+			return "", fmt.Errorf("sidecar secret %q references parameter %q which is unset. "+
+				"Set `sidecars.<sidecar-name>.parameter.%s: <value>` in deploy.yml or run `charly migrate`",
+				s.Name, paramName, paramName)
+		}
+	}
+	tmpl, err := template.New("sidecar-env-from").Funcs(sidecarTemplateFuncs).Parse(s.EnvFrom)
+	if err != nil {
+		return "", fmt.Errorf("sidecar secret %q: parsing env_from template: %w", s.Name, err)
+	}
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, SidecarKeyContext{Parameter: params}); err != nil {
+		return "", fmt.Errorf("sidecar secret %q: rendering env_from template: %w", s.Name, err)
+	}
+	return buf.String(), nil
+}
+
+// extractParameterRefs scans the text/template string for {{.Parameter.<name>}}
+// references and returns the set of parameter names. Used by renderSidecarEnvFrom
+// to produce a useful error when a referenced parameter is unset.
+func extractParameterRefs(tmplStr string) map[string]struct{} {
+	out := map[string]struct{}{}
+	const marker = "{{.Parameter."
+	idx := 0
+	for {
+		i := strings.Index(tmplStr[idx:], marker)
+		if i < 0 {
+			break
+		}
+		start := idx + i + len(marker)
+		end := strings.IndexAny(tmplStr[start:], "}.| ")
+		if end < 0 {
+			break
+		}
+		name := tmplStr[start : start+end]
+		if name != "" {
+			out[name] = struct{}{}
+		}
+		idx = start + end
+	}
+	return out
+}
+
+// SidecarVolume is a named volume for a sidecar container.
+type SidecarVolume struct {
+	Name string `yaml:"name" json:"name"` // volume name suffix (full: charly-<image>-<sidecar>-<name>)
+	Path string `yaml:"path" json:"path"` // container mount path
+}
+
+// SidecarConfig is the parsed sidecar.yml structure.
+type SidecarConfig struct {
+	Sidecar map[string]SidecarDef `yaml:"sidecar"`
+}
+
+// ResolvedSidecar is a fully resolved sidecar ready for quadlet generation.
+type ResolvedSidecar struct {
+	Name     string            // sidecar key (e.g., "tailscale")
+	Image    string            // resolved OCI image ref
+	Env      map[string]string // merged env vars (sorted for deterministic output)
+	Secret   []CollectedSecret // provisioned podman secrets
+	Volume   []VolumeMount     // resolved named volumes
+	Security SecurityConfig    // merged security config
+}
+
+// LoadEmbeddedSidecarConfig parses the sidecar templates compiled into the charly binary.
+func LoadEmbeddedSidecarConfig() (*SidecarConfig, error) {
+	var cfg SidecarConfig
+	if err := yaml.Unmarshal(embeddedSidecarYAML, &cfg); err != nil {
+		return nil, fmt.Errorf("parsing embedded sidecar.yml: %w", err)
+	}
+	return &cfg, nil
+}
+
+// MergeSidecar merges sidecar definitions from base into overlay.
+// For each sidecar name:
+//   - image: overlay replaces if non-empty
+//   - env: map merge (overlay keys win, base keys preserved)
+//   - secrets: overlay replaces entirely
+//   - volumes: overlay replaces entirely
+//   - security: overlay replaces entirely
+//   - description: overlay replaces if non-empty
+//
+// Sidecars in base but not overlay are inherited.
+// Sidecars in overlay but not base are added.
+func MergeSidecar(base, overlay map[string]SidecarDef) map[string]SidecarDef {
+	if len(base) == 0 && len(overlay) == 0 {
+		return nil
+	}
+	if len(base) == 0 {
+		return overlay
+	}
+	if len(overlay) == 0 {
+		result := make(map[string]SidecarDef, len(base))
+		for k, v := range base {
+			result[k] = v
+		}
+		return result
+	}
+
+	result := make(map[string]SidecarDef, len(base)+len(overlay))
+
+	for name, baseDef := range base {
+		if overlayDef, ok := overlay[name]; ok {
+			result[name] = mergeSingleSidecar(baseDef, overlayDef)
+		} else {
+			result[name] = baseDef
+		}
+	}
+
+	for name, overlayDef := range overlay {
+		if _, ok := base[name]; !ok {
+			result[name] = overlayDef
+		}
+	}
+
+	return result
+}
+
+func mergeSingleSidecar(base, overlay SidecarDef) SidecarDef {
+	merged := base
+
+	if overlay.Description != "" {
+		merged.Description = overlay.Description
+	}
+	if overlay.Image != "" {
+		merged.Image = overlay.Image
+	}
+	if overlay.Secret != nil {
+		merged.Secret = overlay.Secret
+	}
+	if overlay.Volume != nil {
+		merged.Volume = overlay.Volume
+	}
+	if overlay.Security != nil {
+		merged.Security = overlay.Security
+	}
+
+	// Parameter — map merge: deploy keys win, template defaults preserved.
+	// The template uses empty-string sentinels ("") for required parameters;
+	// after merge, an empty value means the deploy didn't supply it, and
+	// renderSidecarEnvFrom raises a clear error at charly-config time.
+	if len(base.Parameter) > 0 || len(overlay.Parameter) > 0 {
+		mergedParam := make(map[string]string, len(base.Parameter)+len(overlay.Parameter))
+		for k, v := range base.Parameter {
+			mergedParam[k] = v
+		}
+		for k, v := range overlay.Parameter {
+			mergedParam[k] = v
+		}
+		merged.Parameter = mergedParam
+	}
+
+	if len(overlay.Env) > 0 {
+		mergedEnv := make(map[string]string, len(base.Env)+len(overlay.Env))
+		for k, v := range base.Env {
+			mergedEnv[k] = v
+		}
+		for k, v := range overlay.Env {
+			mergedEnv[k] = v
+		}
+		merged.Env = mergedEnv
+	}
+
+	return merged
+}
+
+// ResolveSidecar resolves sidecar definitions into generation-ready configs.
+// Resolves volume names (charly-<image>-<sidecar>-<vol>), collects secrets,
+// and renders each SidecarSecret.EnvFrom template against the merged
+// Parameter map. Missing required parameters surface as fmt.Errorf
+// returned via the error channel; callers must check it before proceeding.
+func ResolveSidecar(defs map[string]SidecarDef, imageName, instance string) ([]ResolvedSidecar, error) {
+	if len(defs) == 0 {
+		return nil, nil
+	}
+
+	names := make([]string, 0, len(defs))
+	for name := range defs {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	var resolved []ResolvedSidecar
+	for _, name := range names {
+		def := defs[name]
+		sc := ResolvedSidecar{
+			Name:  name,
+			Image: def.Image,
+			Env:   def.Env,
+		}
+
+		if def.Security != nil {
+			sc.Security = *def.Security
+		}
+
+		for _, v := range def.Volume {
+			volName := sidecarVolumeName(imageName, name, v.Name)
+			if instance != "" {
+				volName = sidecarVolumeName(imageName+"-"+instance, name, v.Name)
+			}
+			sc.Volume = append(sc.Volume, VolumeMount{
+				VolumeName:    volName,
+				ContainerPath: v.Path,
+			})
+		}
+
+		for _, s := range def.Secret {
+			secretName := sidecarSecretName(imageName, name, s.Name)
+			if instance != "" {
+				secretName = sidecarSecretName(imageName+"-"+instance, name, s.Name)
+			}
+			hostEnv, err := renderSidecarEnvFrom(s, def.Parameter)
+			if err != nil {
+				return nil, fmt.Errorf("sidecar %q: %w", name, err)
+			}
+			sc.Secret = append(sc.Secret, CollectedSecret{
+				Name:       secretName,
+				Env:        s.Env,
+				HostEnv:    hostEnv,
+				SecretName: s.Name,
+			})
+		}
+
+		resolved = append(resolved, sc)
+	}
+
+	return resolved, nil
+}
+
+// ResolveSidecarsForConfig merges embedded templates with deploy.yml overrides.
+// Only sidecars referenced in deploySidecars are included.
+func ResolveSidecarsForConfig(deploySidecars map[string]SidecarDef) (map[string]SidecarDef, error) {
+	if len(deploySidecars) == 0 {
+		return nil, nil
+	}
+
+	embedded, err := LoadEmbeddedSidecarConfig()
+	if err != nil {
+		return nil, err
+	}
+
+	var templates map[string]SidecarDef
+	if embedded != nil {
+		templates = embedded.Sidecar
+	}
+
+	// Merge: embedded templates + deploy.yml overrides
+	merged := MergeSidecar(templates, deploySidecars)
+
+	// Filter: only keep sidecars that are referenced in deploy.yml
+	filtered := make(map[string]SidecarDef, len(deploySidecars))
+	for name := range deploySidecars {
+		if def, ok := merged[name]; ok {
+			filtered[name] = def
+		}
+	}
+
+	if len(filtered) == 0 {
+		return nil, nil
+	}
+	return filtered, nil
+}
+
+// SidecarEnvKey returns all env var keys defined by attached sidecars.
+// Used to route CLI -e flags to sidecars vs the app container.
+func SidecarEnvKey(sidecars map[string]SidecarDef) map[string]string {
+	keys := make(map[string]string) // env key -> sidecar name
+	for scName, sc := range sidecars {
+		for k := range sc.Env {
+			keys[k] = scName
+		}
+		for _, s := range sc.Secret {
+			if s.Env != "" {
+				keys[s.Env] = scName
+			}
+		}
+	}
+	// Also include well-known TS_ prefix for tailscale sidecar
+	if _, ok := sidecars["tailscale"]; ok {
+		for _, k := range []string{"TS_HOSTNAME", "TS_EXTRA_ARGS", "TS_TAILSCALED_EXTRA_ARGS", "TS_DEBUG_FIREWALL_MODE", "TS_ROUTES", "TS_SERVE_CONFIG", "TS_LOGIN_SERVER"} {
+			keys[k] = "tailscale"
+		}
+	}
+	return keys
+}
+
+// --- Naming helpers ---
+
+func sidecarVolumeName(imageName, sidecarName, volumeName string) string {
+	return fmt.Sprintf("charly-%s-%s-%s", imageName, sidecarName, volumeName)
+}
+
+func sidecarSecretName(imageName, sidecarName, secretName string) string {
+	return fmt.Sprintf("charly-%s-%s-%s", imageName, sidecarName, secretName)
+}
+
+func SidecarContainerName(imageName, sidecarName string) string {
+	return containerName(imageName) + "-" + sidecarName
+}
+
+func SidecarContainerNameInstance(imageName, instance, sidecarName string) string {
+	return containerNameInstance(imageName, instance) + "-" + sidecarName
+}
+
+func PodName(imageName string) string {
+	return containerName(imageName)
+}
+
+func PodNameInstance(imageName, instance string) string {
+	return containerNameInstance(imageName, instance)
+}
+
+// findPodSidecarQuadlets returns the .container quadlets in qdir that belong
+// to the pod podName, identified by the load-bearing `Pod=<podName>.pod`
+// directive inside the quadlet's [Container] section. Filename-prefix
+// matching is NOT used because it collides with sibling instances of the
+// same image (e.g. charly-versa-ecovoyage.container is an instance of versa,
+// NOT a sidecar of pod charly-versa.pod). Only true pod members carry the
+// Pod= directive — sibling instances and standalone container deploys
+// do not. mainContainerFile (typically the main pod container's quadlet
+// filename) is excluded from the returned list because its lifecycle is
+// owned by the caller's main systemctl disable, not by the sidecar sweep.
+func findPodSidecarQuadlets(qdir, podName, mainContainerFile string) ([]string, error) {
+	expected := fmt.Sprintf("Pod=%s.pod", podName)
+	entries, err := os.ReadDir(qdir)
+	if err != nil {
+		return nil, err
+	}
+	var matches []string
+	for _, entry := range entries {
+		name := entry.Name()
+		if !strings.HasSuffix(name, ".container") {
+			continue
+		}
+		if name == mainContainerFile {
+			continue
+		}
+		content, rErr := os.ReadFile(filepath.Join(qdir, name))
+		if rErr != nil {
+			continue
+		}
+		for _, line := range strings.Split(string(content), "\n") {
+			if strings.TrimSpace(line) == expected {
+				matches = append(matches, name)
+				break
+			}
+		}
+	}
+	sort.Strings(matches)
+	return matches, nil
+}
+
+func HasTailscaleSidecar(sidecars map[string]SidecarDef) bool {
+	_, ok := sidecars["tailscale"]
+	return ok
+}
+
+func sidecarConfigDir() (string, error) {
+	configDir, err := os.UserConfigDir()
+	if err != nil {
+		return "", fmt.Errorf("determining config directory: %w", err)
+	}
+	return filepath.Join(configDir, "charly", "sidecar"), nil
+}
+
+func SortedSidecarEnv(env map[string]string) []string {
+	keys := make([]string, 0, len(env))
+	for k := range env {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	var result []string
+	for _, k := range keys {
+		result = append(result, k+"="+env[k])
+	}
+	return result
+}
+
+func IsSidecarEnvQuotable(val string) bool {
+	return strings.ContainsAny(val, `"{}[] `)
+}

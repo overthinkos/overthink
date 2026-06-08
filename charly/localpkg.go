@@ -1,0 +1,428 @@
+package main
+
+// localpkg.go — build a bundled package SOURCE dir on the host and install the
+// resulting package FILE onto a deploy target, fully driven by the package
+// format's `local_pkg:` config (build.yml `distro.<name>.format.<fmt>.local_pkg`).
+//
+// This is the execution machinery behind LocalPkgInstallStep (the IR form of a
+// layer's `localpkg:` field). NOTHING here hardcodes a package-format command:
+// the source-dir sentinel, build command, install command, package-file glob,
+// and probe command all come from the resolved *LocalPkgDef
+// (LocalPkgInstallStep.LocalPkg / BuilderStep.LocalPkg), rendered through the
+// EXISTING RenderTemplate engine (format_template.go) — the same machinery the
+// rest of the build pipeline uses. The install command is the format's
+// AUTO-RESOLVING local-file install (pacman -U / dnf install / apt-get install),
+// so the package's dependencies are satisfied from the target's repos and there
+// is no dependency-closure to pre-build.
+//
+// Pieces, each a shared primitive (R3):
+//
+//   1. resolveLocalPkgDir   — locate the package SOURCE directory from the
+//      author's hint + the layer/project anchors (walk-up search), keyed on the
+//      format's LocalPkgDef.SourceSentinel.
+//   2. buildLocalPkgOnHost  — render LocalPkgDef.BuildTemplate and run it on the
+//      HOST, returning the produced package-file paths (globbed via PkgGlob).
+//   3. transferAndInstallPkgs — the SHARED transfer+install leg: PutFile each
+//      package onto the target venue's filesystem (a local copy for the host
+//      ShellExecutor, scp for the SSHExecutor) then render+run
+//      LocalPkgDef.InstallTemplate via RunSystem. The SAME leg the aur-LAYER
+//      deploy path uses (buildDepPkgsOnHost → transferAndInstallPkgs) — both
+//      call this one helper.
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+)
+
+// localPkgGuestStage is the staging dir on the deploy target where the built
+// packages land before the format's install command runs. Shared by the
+// builder and localpkg paths so both clean up the same well-known location
+// idempotently. (A staging PATH, not a package-format string — venue-agnostic.)
+const localPkgGuestStage = "/tmp/charly-pkgs"
+
+// localPkgBuildContext is the template context for LocalPkgDef.BuildTemplate.
+type localPkgBuildContext struct {
+	SrcDir  string // resolved package source directory (the PKGBUILD dir for pac)
+	PkgDest string // per-build output dir the build writes package files into
+}
+
+// localPkgInstallContext is the template context for LocalPkgDef.InstallTemplate.
+type localPkgInstallContext struct {
+	StageDir string // on-target staging dir holding the transferred package files
+	Glob     string // LocalPkgDef.PkgGlob (e.g. "*.pkg.tar.zst")
+}
+
+// resolveLocalPkgDir locates the package SOURCE directory for a layer's
+// `localpkg:` hint. Resolution order, returning the first directory that
+// actually contains a `PKGBUILD` file:
+//
+//  1. absolute ref → used verbatim.
+//  2. <layerDir>/<ref>     — the source bundled alongside the layer.
+//  3. <projectDir>/<ref>   — relative to the deploy project dir (os.Getwd).
+//  4. walk UP from projectDir, trying <ancestor>/<ref> at each level — this is
+//     the operator path: `charly -C image/cachyos deploy add cachyos-gpu` has a
+//     project dir of image/cachyos while pkg/arch lives at the SUPERPROJECT
+//     root (../../pkg/arch). The walk finds it without the layer needing to
+//     know how deeply the consuming project is nested.
+//
+// Returns "" when no PKGBUILD is found anywhere — the caller treats that as a
+// no-op (the layer's own curl/COPY task is the documented fallback).
+//
+// The SOURCE-dir marker is the format's `source_sentinel` (PKGBUILD for pac,
+// *.spec for rpm, debian/control for deb), matched via filepath.Glob so a plain
+// filename, a sub-path, or a glob all work — no hardcoded format literal here.
+func resolveLocalPkgDir(ref, layerDir, projectDir, sentinel string) string {
+	if ref == "" {
+		return ""
+	}
+	hasSentinel := func(dir string) bool {
+		if dir == "" || sentinel == "" {
+			return false
+		}
+		// filepath.Glob handles a plain filename (PKGBUILD), a sub-path
+		// (debian/control), and a glob (*.spec) uniformly: a meta-free pattern
+		// returns the single literal when it exists.
+		matches, err := filepath.Glob(filepath.Join(dir, sentinel))
+		return err == nil && len(matches) > 0
+	}
+
+	if filepath.IsAbs(ref) {
+		if hasSentinel(ref) {
+			return ref
+		}
+		return ""
+	}
+	// Layer-relative, then project-relative.
+	for _, base := range []string{layerDir, projectDir} {
+		if base == "" {
+			continue
+		}
+		if cand := filepath.Join(base, ref); hasSentinel(cand) {
+			return cand
+		}
+	}
+	// Walk up from the project dir. filepath.Dir is idempotent at the root
+	// ("/" → "/"), so cap the loop to terminate even on an unrooted relative
+	// projectDir.
+	dir := projectDir
+	for i := 0; dir != "" && i < 64; i++ {
+		if cand := filepath.Join(dir, ref); hasSentinel(cand) {
+			return cand
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
+	}
+	return ""
+}
+
+// buildLocalPkgOnHost builds the package(s) defined by the source dir on the
+// HOST by rendering LocalPkgDef.BuildTemplate and returns the produced
+// package-file paths (globbed via LocalPkgDef.PkgGlob). The build output lands
+// in a per-call temp dir (passed as {{.PkgDest}}) so the glob is deterministic
+// and the source tree is never polluted.
+//
+// The build command (e.g. makepkg) comes ENTIRELY from config — this function
+// renders LocalPkgDef.BuildTemplate via the existing RenderTemplate engine and
+// runs it under `bash -c`, so there is no hardcoded makepkg/pacman literal here.
+//
+// The temp dir is registered for sweep but deliberately NOT defer-removed: the
+// caller owns the package files until install completes.
+func buildLocalPkgOnHost(ctx context.Context, lp *LocalPkgDef, srcDir string, opts EmitOpts) ([]string, error) {
+	if lp == nil {
+		return nil, fmt.Errorf("buildLocalPkgOnHost: nil LocalPkgDef")
+	}
+	pkgDest, err := os.MkdirTemp("", "charly-localpkg-")
+	if err != nil {
+		return nil, fmt.Errorf("localpkg build output tempdir: %w", err)
+	}
+	RegisterTempCleanup(pkgDest)
+
+	buildCmd, err := RenderTemplate("localpkg-build", lp.BuildTemplate, localPkgBuildContext{
+		SrcDir:  srcDir,
+		PkgDest: pkgDest,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("rendering localpkg build template: %w", err)
+	}
+	buildCmd = strings.TrimSpace(buildCmd)
+	if buildCmd == "" {
+		return nil, fmt.Errorf("localpkg build template rendered empty (format config missing build_template?)")
+	}
+
+	if opts.DryRun {
+		fmt.Fprintf(os.Stderr, "[dry-run] localpkg build (PKGDEST=%s): %s\n", pkgDest, buildCmd)
+		return nil, nil
+	}
+
+	cmd := exec.CommandContext(ctx, "bash", "-c", buildCmd)
+	cmd.Stdout = os.Stderr // surface build output (operator debugging) without polluting stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return nil, fmt.Errorf("localpkg build in %s: %w", srcDir, err)
+	}
+
+	matches, _ := filepath.Glob(filepath.Join(pkgDest, lp.PkgGlob))
+	if len(matches) == 0 {
+		return nil, fmt.Errorf("localpkg build in %s produced no %s in %s", srcDir, lp.PkgGlob, pkgDest)
+	}
+	return matches, nil
+}
+
+// buildDepPkgsOnHost builds an arbitrary set of dependency packages into
+// package files ON THE HOST (where podman is available) through the EXISTING
+// builder named by LocalPkgDef.DepBuilder (the `aur` builder for pac) and
+// returns the produced package paths. It is the BUILD half of the VM target's
+// aur `execBuilder` path factored out (R3): execBuilder now calls this and then
+// transferAndInstallPkgs, and the localpkg step calls it to build the package's
+// dependency closure. There is exactly ONE host-side dep-builder implementation
+// across the layer-aur path and the localpkg-dep-closure path.
+//
+// It synthesizes a BuilderStep{Builder:lp.DepBuilder, …} carrying the package
+// names in RawStageContext["packages"], renders the SAME renderBuilderScript the
+// container/local/VM builder paths use, wraps it with the same root
+// backstop-find + chown-to-0:0 (so the bind-mount surface is host-readable under
+// rootless podman), runs it via BuilderRun(RunAsRoot:true), surfaces output to
+// stderr, and globs the staging dir for LocalPkgDef.PkgGlob.
+//
+// Empty packages → (nil, nil): a no-op, never an error. On DryRun it logs the
+// plan and returns nil (no artifacts).
+//
+// The staging tmpdir is registered for sweep but deliberately NOT defer-removed:
+// the caller owns the returned package files until install completes.
+func buildDepPkgsOnHost(ctx context.Context, lp *LocalPkgDef, bDef *BuilderDef, builderImage string, packages []string, layerDir string, cfg *Config, projectDir string, opts EmitOpts) ([]string, error) {
+	if len(packages) == 0 {
+		return nil, nil
+	}
+	if lp == nil {
+		return nil, fmt.Errorf("buildDepPkgsOnHost: nil LocalPkgDef")
+	}
+	if builderImage == "" {
+		return nil, fmt.Errorf("buildDepPkgsOnHost: no %s builder image for packages %v", lp.DepBuilder, packages)
+	}
+	if bDef == nil {
+		return nil, fmt.Errorf("buildDepPkgsOnHost: no %s builder definition for packages %v", lp.DepBuilder, packages)
+	}
+
+	if opts.DryRun {
+		fmt.Fprintf(os.Stderr, "[dry-run] build %d dependency package(s) %v via %s builder %s\n",
+			len(packages), packages, lp.DepBuilder, builderImage)
+		return nil, nil
+	}
+
+	// Synthetic BuilderStep — the SAME shape compileBuilderSteps produces, so
+	// renderBuilderScript renders the identical build flow for this builder from
+	// its phase.install.host cell (config-driven).
+	step := &BuilderStep{
+		Builder:         lp.DepBuilder,
+		BuilderImage:    builderImage,
+		BuilderDef:      bDef,
+		LayerDir:        layerDir,
+		Phase:           PhaseInstall,
+		RawStageContext: map[string]interface{}{"packages": packages},
+	}
+
+	// Host staging dir bind-mounted as /tmp/aur-pkgs — the builder writes the
+	// package files here; we then glob them. RegisterTempCleanup sweeps it on
+	// exit; no defer-remove (caller owns the files until install completes).
+	hostStage, err := os.MkdirTemp("", "charly-pkgdep-")
+	if err != nil {
+		return nil, fmt.Errorf("dependency staging mkdir: %w", err)
+	}
+	RegisterTempCleanup(hostStage)
+
+	hostHome, err := os.UserHomeDir()
+	if err != nil {
+		return nil, fmt.Errorf("UserHomeDir: %w", err)
+	}
+	bindMounts, err := UserScopeBindMounts(hostHome)
+	if err != nil {
+		return nil, err
+	}
+	bindMounts["/tmp/aur-pkgs"] = hostStage
+	envVars := UserScopeEnv(hostHome)
+
+	// renderBuilderScript runs AS ROOT inside the builder (RunAsRoot=true): for
+	// aur it writes the NOPASSWD-wheel sudoers, adds `user` to wheel, then
+	// `sudo -u user`s the build. Run it directly as root — do NOT pre-drop.
+	innerScript, err := renderBuilderScript(step, hostHome)
+	if err != nil {
+		return nil, err
+	}
+	wrappedScript := "set -e\n" +
+		innerScript + "\n" +
+		"# Backstop find: the builder installs the package and cleans up its\n" +
+		"# build tree, so the inner script's find may run after the tree is\n" +
+		"# already wiped. Broaden the search if /tmp/aur-pkgs is still empty.\n" +
+		"if [ -z \"$(ls -A /tmp/aur-pkgs 2>/dev/null)\" ]; then\n" +
+		"  find / -name " + shQuoteArg(lp.PkgGlob) + " 2>/dev/null -exec cp {} /tmp/aur-pkgs/ \\;\n" +
+		"fi\n" +
+		"# Rootless-podman userns fix: files created by container user\n" +
+		"# 1000 land in the host's subuid range and become unreadable to\n" +
+		"# the operator. chown to 0:0 — root in container maps to the\n" +
+		"# host user under rootless podman — so the bind-mount surface is\n" +
+		"# host-readable for the subsequent transfer+install leg.\n" +
+		"chown -R 0:0 /tmp/aur-pkgs/\n"
+
+	out, err := BuilderRun(opts.ContextOrDefault(), BuilderRunOpts{
+		BuilderImage: builderImage,
+		LayerDir:     step.LayerDir,
+		ScriptBody:   wrappedScript,
+		BindMounts:   bindMounts,
+		Env:          envVars,
+		HostHome:     hostHome,
+		DryRun:       opts.DryRun,
+		RunAsRoot:    true,
+		// Cfg + ProjectDir let BuilderRun's EnsureImagePresent run the
+		// namespace-aware ResolveImage, so a namespace-qualified builder ref
+		// (e.g. the cachyos project's aur builder `ov.arch-builder`) resolves to
+		// its concrete image — matching the aur-LAYER path (deploy_target_local.go).
+		Cfg:        cfg,
+		ProjectDir: projectDir,
+	})
+	// Always surface the builder's stdout/stderr — the operator needs to see
+	// compile output to debug build failures, not just the bare exit status.
+	if len(out) > 0 {
+		os.Stderr.Write(out)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("%s builder: %w", lp.DepBuilder, err)
+	}
+
+	matches, _ := filepath.Glob(filepath.Join(hostStage, lp.PkgGlob))
+	if len(matches) == 0 {
+		return nil, fmt.Errorf("%s builder produced no %s in %s for packages %v", lp.DepBuilder, lp.PkgGlob, hostStage, packages)
+	}
+	return matches, nil
+}
+
+// transferAndInstallPkgs ships built package files onto a deploy target and
+// installs them by rendering LocalPkgDef.InstallTemplate. It is venue-agnostic
+// via the DeployExecutor: PutFile is a local filesystem copy for the host
+// ShellExecutor and an scp for the SSHExecutor, and RunSystem is local sudo vs
+// `ssh sudo`. One implementation serves BOTH the localpkg step (LocalDeployTarget
+// / VmDeployTarget) AND the builder's install leg (BuilderStep.LocalPkg), so
+// "ship packages to a venue and install them" has a single config-driven home
+// (R3).
+//
+// The staging dir is cleared before transfer so a re-run replaces stale content
+// idempotently; the format's install command (e.g. `pacman -U`) is expected to
+// be the upgrade form, so re-installing the same or a newer build never errors.
+func transferAndInstallPkgs(ctx context.Context, exec DeployExecutor, lp *LocalPkgDef, pkgFiles []string, opts EmitOpts) error {
+	if lp == nil {
+		return fmt.Errorf("transferAndInstallPkgs: nil LocalPkgDef")
+	}
+	if len(pkgFiles) == 0 {
+		return fmt.Errorf("transferAndInstallPkgs: no package files to install")
+	}
+
+	install, err := RenderTemplate("localpkg-install", lp.InstallTemplate, localPkgInstallContext{
+		StageDir: localPkgGuestStage,
+		Glob:     lp.PkgGlob,
+	})
+	if err != nil {
+		return fmt.Errorf("rendering localpkg install template: %w", err)
+	}
+	install = strings.TrimSpace(install)
+	if install == "" {
+		return fmt.Errorf("localpkg install template rendered empty (format config missing install_template?)")
+	}
+
+	if opts.DryRun {
+		fmt.Fprintf(os.Stderr, "[dry-run] transfer %d package(s) to %s and install on %s: %s\n",
+			len(pkgFiles), localPkgGuestStage, exec.Venue(), install)
+		return nil
+	}
+
+	prep := fmt.Sprintf("set -e\nmkdir -p %[1]s\nrm -f %[1]s/%[2]s 2>/dev/null || true\n",
+		localPkgGuestStage, lp.PkgGlob)
+	if err := exec.RunUser(ctx, prep, opts); err != nil {
+		return fmt.Errorf("preparing package staging dir on %s: %w", exec.Venue(), err)
+	}
+
+	for _, f := range pkgFiles {
+		dst := filepath.Join(localPkgGuestStage, filepath.Base(f))
+		// ownerRoot=false: /tmp staging is user-writable; the install command
+		// (RunSystem, sudo) reads it.
+		if err := exec.PutFile(ctx, f, dst, 0o644, false, opts); err != nil {
+			return fmt.Errorf("transferring package %s to %s: %w", filepath.Base(f), exec.Venue(), err)
+		}
+	}
+
+	if err := exec.RunSystem(ctx, install, opts); err != nil {
+		return fmt.Errorf("installing packages on %s: %w", exec.Venue(), err)
+	}
+	return nil
+}
+
+// venueHasPkgManager probes the actual deploy venue for the package format's
+// manager — the precondition for executing a LocalPkgInstallStep. The probe
+// command comes from LocalPkgDef.Probe (e.g. `command -v pacman`), so this is
+// config-driven, not a hardcoded pacman literal. Probing the VENUE (not the host
+// running ov) is what makes the gate correct for a VM deploy: the guest may be a
+// different distro than the operator host, and vice-versa. The executor is the
+// venue (ShellExecutor → host, SSHExecutor → guest), so one probe through it is
+// venue-accurate for both targets (R3). DryRun assumes true so the planner shows
+// the build+install it WOULD do. A nil LocalPkgDef, empty probe, probe error, or
+// non-matching venue returns false: charly never assumes a target can take a package.
+func venueHasPkgManager(ctx context.Context, exec DeployExecutor, lp *LocalPkgDef, opts EmitOpts) bool {
+	if lp == nil || strings.TrimSpace(lp.Probe) == "" {
+		return false
+	}
+	if opts.DryRun {
+		return true
+	}
+	probe := fmt.Sprintf("%s >/dev/null 2>&1 && echo yes || echo no", lp.Probe)
+	stdout, _, _, err := exec.RunCapture(ctx, probe)
+	if err != nil {
+		return false
+	}
+	return strings.TrimSpace(stdout) == "yes"
+}
+
+// execLocalPkgInstall is the shared body both LocalDeployTarget and
+// VmDeployTarget call for a LocalPkgInstallStep: resolve the package source dir,
+// build it on the host, then transfer+install onto the target venue. `supported`
+// gates whether the install leg runs (the venue's package manager must match the
+// step's format); an unsupported target or a missing source dir is a clean no-op
+// (the layer's own curl/COPY task covers it).
+//
+// venueName is used only for log lines (e.g. "host", "vm:cachyos-gpu").
+func execLocalPkgInstall(ctx context.Context, exec DeployExecutor, s *LocalPkgInstallStep, supported bool, venueName string, opts EmitOpts) error {
+	if s.LocalPkg == nil {
+		fmt.Fprintf(os.Stderr, "%s skip: localpkg %s (layer=%s) — target distro declares no localpkg-capable package format; the layer's curl/COPY task installs it instead\n",
+			venueName, s.PkgbuildRef, s.LayerName)
+		return nil
+	}
+	if !supported {
+		fmt.Fprintf(os.Stderr, "%s skip: localpkg %s (layer=%s) — target has no %s package manager; the layer's curl/COPY task installs it instead\n",
+			venueName, s.PkgbuildRef, s.LayerName, s.Format)
+		return nil
+	}
+	pkgDir := resolveLocalPkgDir(s.PkgbuildRef, s.LayerDir, s.ProjectDir, s.LocalPkg.SourceSentinel)
+	if pkgDir == "" {
+		fmt.Fprintf(os.Stderr, "%s skip: localpkg %s (layer=%s) — no package source found from layer dir %q or project dir %q; the layer's curl/COPY task installs it instead\n",
+			venueName, s.PkgbuildRef, s.LayerName, s.LayerDir, s.ProjectDir)
+		return nil
+	}
+	fmt.Fprintf(os.Stderr, "%s: building %s package (%s) from %s for layer %s\n",
+		venueName, strings.TrimSuffix(filepath.Base(pkgDir), "/"), s.Format, pkgDir, s.LayerName)
+	pkgFiles, err := buildLocalPkgOnHost(ctx, s.LocalPkg, pkgDir, opts)
+	if err != nil {
+		return fmt.Errorf("localpkg %s (layer=%s): %w", s.PkgbuildRef, s.LayerName, err)
+	}
+	if opts.DryRun {
+		return nil
+	}
+
+	// Transfer + install. The format's install command auto-resolves the
+	// package's dependencies from the target's repos (pacman -U / dnf install /
+	// apt-get install), so there is no dependency-closure to pre-build.
+	return transferAndInstallPkgs(ctx, exec, s.LocalPkg, pkgFiles, opts)
+}

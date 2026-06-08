@@ -99,7 +99,7 @@ candy:
               -out /usr/local/share/selkies/certs/selkies.crt \
               -days 3650 -nodes \
               -subj "/CN=selkies" \
-              -addext "subjectAltName=DNS:localhost,DNS:selkies.localhost,DNS:*.localhost,DNS:ov-selkies-desktop,IP:127.0.0.1"
+              -addext "subjectAltName=DNS:localhost,DNS:selkies.localhost,DNS:*.localhost,DNS:charly-selkies-desktop,IP:127.0.0.1"
             chmod 644 /usr/local/share/selkies/certs/selkies.crt /usr/local/share/selkies/certs/selkies.key
           user: root
         # Traefik configs from the layer dir.
@@ -163,7 +163,7 @@ candy:
         # creates wayland-1, and the whole desktop (labwc/chrome) crash-loops — while
         # every OTHER probe (files/services/ports/https) still passes. This ldd check
         # catches that class of missing-runtime-lib regression at BUILD scope
-        # (`ov eval box`) — no deploy or GPU needed. ldd exits 0 even when a lib is
+        # (`charly eval box`) — no deploy or GPU needed. ldd exits 0 even when a lib is
         # "not found", so the assertion is on the absence of that string.
         - id: pixelflux-wayland-libs-resolvable
           command: ldd ${HOME}/.pixi/envs/default/lib/python3.*/site-packages/pixelflux/pixelflux_wayland*.so
@@ -230,7 +230,7 @@ candy:
             - matches: "VAAPI-ENCODE-CAPABLE|VAAPI-N/A"
         # Generic capture-content probe (R3: lives on the selkies layer so it
         # runs on EVERY selkies image — AMD pod, NVIDIA pod-in-VM, CPU pod —
-        # via `ov eval live`, no per-bed re-implementation). A black/broken
+        # via `charly eval live`, no per-bed re-implementation). A black/broken
         # stream — dead compositor, silent encoder failure producing blank
         # output — passes every file/port/https probe; THIS is the only check
         # that proves real pixels reach the stream. Captures via the pixelflux
@@ -241,10 +241,10 @@ candy:
         - id: selkies-frame-not-black
           scope: deploy
           command: |
-            rm -f /tmp/ov-frame.png
-            pixelflux-screenshot > /tmp/ov-frame.png 2>/dev/null
-            [ -s /tmp/ov-frame.png ] || { echo "no PNG captured yet"; exit 1; }
-            out=$(ffmpeg -hide_banner -i /tmp/ov-frame.png -vf "signalstats,metadata=print" -f null - 2>&1)
+            rm -f /tmp/charly-frame.png
+            pixelflux-screenshot > /tmp/charly-frame.png 2>/dev/null
+            [ -s /tmp/charly-frame.png ] || { echo "no PNG captured yet"; exit 1; }
+            out=$(ffmpeg -hide_banner -i /tmp/charly-frame.png -vf "signalstats,metadata=print" -f null - 2>&1)
             ymin=$(printf "%s" "$out" | grep -oE "YMIN=[0-9]+" | grep -oE "[0-9]+" | head -1); ymin=${ymin:-0}
             ymax=$(printf "%s" "$out" | grep -oE "YMAX=[0-9]+" | grep -oE "[0-9]+" | head -1); ymax=${ymax:-0}
             sp=$((ymax - ymin))

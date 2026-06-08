@@ -1,15 +1,15 @@
 export const meta = {
   name: 'verify-status',
   description:
-    'Substrate-coverage fan-out for the unified `ov status` surface: for each deployment substrate (pod / vm / local / android) run `ov eval run <bed>` to completion (build → eval image → deploy → eval live → fresh ov update → teardown) on the bed that exercises that substrate, and aggregate a verbatim pass/fail report keyed on the bed\'s `status-shows-*` deploy-scope assertion (the check that proves `ov status --json` reports the right `kind` + nested tree for a live deployment). ALL beds run in PARALLEL via parallel(), bounded by the runtime\'s documented 16-concurrent / 1000-total dynamic-workflow agent ceiling — KVM/libvirt are multi-tenant and podman builds distinct image tags concurrently. A bed skipped for a missing host prereq (libvirt user session for the vm bed, /dev/kvm for the android bed) is logged, never silently dropped.',
+    'Substrate-coverage fan-out for the unified `charly status` surface: for each deployment substrate (pod / vm / local / android) run `charly eval run <bed>` to completion (build → eval image → deploy → eval live → fresh charly update → teardown) on the bed that exercises that substrate, and aggregate a verbatim pass/fail report keyed on the bed\'s `status-shows-*` deploy-scope assertion (the check that proves `charly status --json` reports the right `kind` + nested tree for a live deployment). ALL beds run in PARALLEL via parallel(), bounded by the runtime\'s documented 16-concurrent / 1000-total dynamic-workflow agent ceiling — KVM/libvirt are multi-tenant and podman builds distinct image tags concurrently. A bed skipped for a missing host prereq (libvirt user session for the vm bed, /dev/kvm for the android bed) is logged, never silently dropped.',
   phases: [
     { title: 'Discover', detail: 'emit the substrate→bed map {pod,vm,local,android}' },
-    { title: 'Verify', detail: 'ov eval run <bed> per substrate; return verbatim verdict incl. the status-shows-* assertion' },
+    { title: 'Verify', detail: 'charly eval run <bed> per substrate; return verbatim verdict incl. the status-shows-* assertion' },
   ],
 }
 
 // The fixed substrate→bed map. Each bed carries a `status-shows-*` deploy-scope
-// eval check that asserts `ov status --json` reports the correct `kind` (and,
+// eval check that asserts `charly status --json` reports the correct `kind` (and,
 // for android, the declared pod→android nested tree) for the live deployment.
 // One bed per substrate is the unit of coverage — distinct beds get distinct
 // container/VM/image names; the author gives each disjoint host ports (the
@@ -103,7 +103,7 @@ log(`Verifying ${beds.length} substrate bed(s) in parallel (bounded + queued by 
 
 const runBed = (b) =>
   agent(
-    `You are the eval-bed runner verifying the unified \`ov status\` surface for the "${b.substrate}" substrate. Run the kind:eval bed "${b.bed}" EXACTLY as \`ov eval run ${b.bed}\` — do NOT add any flags (no --no-rebuild/--keep/--on-*; that would shrink the R10 spec, CLAUDE.md Law 3.6). The bed's full R10 sequence (build → eval image → deploy → eval live → fresh ov update → teardown) runs the deploy-scope eval check "${b.check}", which asserts that \`ov status --json\` reports the correct substrate kind (and, for android, the declared pod→android nested tree) for the live deployment. Capture stdout/stderr and the process exit code. Read .eval/${b.bed}/<calver>/summary.yml for the per-step verdict, and extract the VERBATIM eval-live line for the "${b.check}" check into statusAssertion. Tail any failing step's .log into failingLogTail. If a required host prereq is missing (libvirt user session for the vm bed, /dev/kvm for the android bed), set skippedPrereq=true and do NOT report it as a pass. Set substrate="${b.substrate}". Return the verbatim verdict — never summarize away a failure.`,
+    `You are the eval-bed runner verifying the unified \`charly status\` surface for the "${b.substrate}" substrate. Run the kind:eval bed "${b.bed}" EXACTLY as \`charly eval run ${b.bed}\` — do NOT add any flags (no --no-rebuild/--keep/--on-*; that would shrink the R10 spec, CLAUDE.md Law 3.6). The bed's full R10 sequence (build → eval image → deploy → eval live → fresh charly update → teardown) runs the deploy-scope eval check "${b.check}", which asserts that \`charly status --json\` reports the correct substrate kind (and, for android, the declared pod→android nested tree) for the live deployment. Capture stdout/stderr and the process exit code. Read .eval/${b.bed}/<calver>/summary.yml for the per-step verdict, and extract the VERBATIM eval-live line for the "${b.check}" check into statusAssertion. Tail any failing step's .log into failingLogTail. If a required host prereq is missing (libvirt user session for the vm bed, /dev/kvm for the android bed), set skippedPrereq=true and do NOT report it as a pass. Set substrate="${b.substrate}". Return the verbatim verdict — never summarize away a failure.`,
     { schema: BED_SCHEMA, label: `status:${b.substrate}:${b.bed}`, phase: 'Verify' }
   )
 

@@ -5,7 +5,7 @@ candy:
         feature: harness-mcp-fixture — minimal Streamable-HTTP MCP server stub for harness phase 4
         narrative: |
             Implements the MCP Streamable HTTP protocol surface that
-            `ov eval mcp` probes: initialize, ping, tools/list, tools/call.
+            `charly eval mcp` probes: initialize, ping, tools/list, tools/call.
             Advertises three jupyter-named tools (list_notebooks, insert_cell,
             execute_cell) so the mcp-protocol-probe recipe's matchers all
             satisfy. Stdlib-only Python (no fastmcp install) keeps the image
@@ -36,7 +36,7 @@ candy:
             """Minimal MCP Streamable HTTP server stub.
 
             Implements just enough of the MCP 2025-11-25 protocol to satisfy
-            `ov eval mcp ping|list-tools|call <pod>`:
+            `charly eval mcp ping|list-tools|call <pod>`:
               - POST /mcp with JSON-RPC: initialize, notifications/initialized,
                 ping, tools/list, tools/call
               - GET /mcp -> 405 (client tolerates this)

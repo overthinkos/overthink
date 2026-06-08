@@ -6,7 +6,7 @@ candy:
         narrative: |
             The second (and final) layer of the eval-pod stack. In one layer it
             proves three mechanisms the combined eval-pod bed
-            (`ov eval run eval-pod`) covers beyond the build smoke:
+            (`charly eval run eval-pod`) covers beyond the build smoke:
               * layer composition order — asserts /etc/eval-base-marker (written by
                 the prior eval-base-layer) is still present;
               * kind:pod runtime — runs `nc -lk 18794` under the configured init
@@ -19,12 +19,12 @@ candy:
         tag: [working]
         scenario:
             # Agent Driven Development acceptance scenarios baked into this layer
-            # (they ride into the eval-pod image's org.overthinkos.description
+            # (they ride into the eval-pod image's ai.opencharly.description
             # label). The first scenario's step is DETERMINISTIC (an embedded
             # check verb → runs at build AND deploy scope); the second is
-            # PROSE-ONLY (no verb → agent-graded by `ov eval feature run
+            # PROSE-ONLY (no verb → agent-graded by `charly eval feature run
             # eval-pod`, reported unbound/skip by build-scope
-            # `ov box feature run`).
+            # `charly box feature run`).
             - name: eval-stack-marker-present
               step:
                 - then: the eval-stack marker file is present at /etc/eval-stack-marker

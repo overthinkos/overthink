@@ -5,7 +5,7 @@ candy:
         Google Chrome browser package. Cross-distro: pulls from Google's
         direct repo on RPM, AUR on Arch/CachyOS. No CDP scaffolding, no
         supervisord — for headless container CDP automation, compose
-        /ov-selkies:chrome-cdp on top.
+        /charly-selkies:chrome-cdp on top.
     env:
         CHROME_FLAGS: "--ozone-platform=wayland --enable-features=UseOzonePlatform,VaapiVideoDecodeLinuxGL,VaapiIgnoreDriverChecks"
     env_accept:

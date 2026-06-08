@@ -171,7 +171,7 @@ candy:
           file: /usr/local/bin/airflow-dag-processor.sh
           exists: true
           mode: "0755"
-        # NB: no static DAG file is baked or seeded by ov anymore. Notebooks
+        # NB: no static DAG file is baked or seeded by charly anymore. Notebooks
         # self-author DAGs at runtime; the JWT-issuance probe below is what
         # proves the path the notebook depends on actually works.
         # Deploy-scope: each daemon must reach RUNNING; init must EXIT 0; webserver UI 200.
@@ -210,7 +210,7 @@ candy:
         # osm-monaco-viz notebook's cell-3 POSTs /auth/token to get a bearer
         # token before triggering its self-authored DAG via /api/v2/dagRuns).
         # in_container: true so $AIRFLOW_ADMIN_PASSWORD is shell-expanded
-        # against the container env (the secret is injected by ov as an env
+        # against the container env (the secret is injected by charly as an env
         # var, never a file). A green check here is a guarantee that
         # admin/AIRFLOW_ADMIN_PASSWORD will succeed for any in-pod client.
         - id: airflow-jwt-issuance

@@ -11,7 +11,7 @@ candy:
         /dev/kvm device-passthrough declaration that round-trips through the OCI
         label into the quadlet. CPU/RAM are auto-sized from the host at runtime
         (start-emulator). Optional GOOGLE_ACCOUNT_EMAIL + GOOGLE_AAS_TOKEN secrets
-        feed the `ov eval adb install-app --source google-play` path.
+        feed the `charly eval adb install-app --source google-play` path.
     require:
         - android-sdk
         - appium-server
@@ -26,10 +26,10 @@ candy:
         # operator can still pin them explicitly via deploy.yml / -e to size down.
         ANDROID_AVD_HOME: "/home/user/.android/avd"
     # Optional, opt-in Google account credentials (absent = green). Used ONLY by
-    # the `ov eval adb install-app --source google-play` path (apkeep -e/-t). The
+    # the `charly eval adb install-app --source google-play` path (apkeep -e/-t). The
     # token is an apkeep AAS token (NOT a password) minted from a Google
     # oauth_token via `apkeep -e <email> --oauth-token oauth2_4/…`. Resolved from
-    # the credential store at ov config and injected as podman secrets — never
+    # the credential store at charly config and injected as podman secrets — never
     # plaintext in deploy.yml / quadlet.
     secret_accept:
         - name: GOOGLE_ACCOUNT_EMAIL
@@ -99,7 +99,7 @@ candy:
             EMULATOR_DEVICE: pixel_9a
             EMULATOR_IMG_TYPE: google_apis_playstore
             EMULATOR_SYS_IMG: x86_64
-            JAVA_HOME: /usr/lib/jvm/ov-jdk21
+            JAVA_HOME: /usr/lib/jvm/charly-jdk21
           restart: always
           priority: 30
           start_sec: 5
@@ -275,7 +275,7 @@ candy:
         - id: chrome-screencap
           scope: deploy
           adb: screencap
-          artifact: /tmp/ov-eval-chrome.png
+          artifact: /tmp/charly-eval-chrome.png
           artifact_min_bytes: 5000
         # ===================================================================
         # `apk:` PACKAGE FORMAT — apps installed declaratively onto the device
@@ -288,7 +288,7 @@ candy:
         #     (io.appium.android.apis) via goadb push from the android-apidemos
         #     layer.
         # These checks ASSERT the deploys' results (deploy-scope, so they only
-        # run under `ov eval live` after the nested deploys). F-Droid: unlike
+        # run under `charly eval live` after the nested deploys). F-Droid: unlike
         # Chrome it has no static-library dependency, so it sideloads cleanly
         # from APKPure as a single x86_64 .apk.
         # ===================================================================
@@ -341,7 +341,7 @@ candy:
           scope: deploy
           adb: install
           # adb: install reads `apk:` from the HOST filesystem (the host
-          # ov binary pushes via the ADB sync protocol). Path resolves
+          # charly binary pushes via the ADB sync protocol). Path resolves
           # against the project root.
           apk: ./tests/data/ApiDemos-debug.apk
           stdout:
@@ -367,7 +367,7 @@ candy:
         - id: adb-screencap-png-min-size
           scope: deploy
           adb: screencap
-          artifact: /tmp/ov-eval-adb-screencap.png
+          artifact: /tmp/charly-eval-adb-screencap.png
           artifact_min_bytes: 5000
         - id: adb-uninstall-apidemos
           scope: deploy
@@ -455,14 +455,14 @@ candy:
           appium: send-keys
           strategy: class-name
           selector: android.widget.EditText
-          text: ov-readback
+          text: charly-readback
         - id: av-textfields-readback
           scope: deploy
           appium: get-text
           strategy: class-name
           selector: android.widget.EditText
           stdout:
-            - contains: ov-readback
+            - contains: charly-readback
         # --- Controls/Buttons + Checkbox: tap toggles checked state ---
         - id: av-controls-open
           scope: deploy
@@ -711,7 +711,7 @@ candy:
         - id: appium-screenshot
           scope: deploy
           appium: screenshot
-          artifact: /tmp/ov-eval-appium-screenshot.png
+          artifact: /tmp/charly-eval-appium-screenshot.png
           artifact_min_bytes: 5000
         - id: appium-session-delete
           scope: deploy

@@ -3,11 +3,11 @@ candy:
     name: chrome-cdp
     description: |
         Chrome DevTools Protocol automation suite layered on top of
-        /ov-selkies:chrome. Ships chrome-wrapper (CDP flags + Windows-UA
+        /charly-selkies:chrome. Ships chrome-wrapper (CDP flags + Windows-UA
         spoofing + GPU detection), chrome-restart, browser-open, the
         cdp-proxy supervisord service (port 9222 → internal 9223), and the
         chrome-windows browser extension. Composes
-        /ov-selkies:chrome-devtools-mcp for the MCP server on port 9224.
+        /charly-selkies:chrome-devtools-mcp for the MCP server on port 9224.
 
         Use this layer in container streaming desktops (selkies-desktop,
         openclaw-*, sway-desktop)

@@ -2,13 +2,13 @@ candy:
     version: 2026.156.1447
     name: chrome-headless
     description: |
-        Headless Chrome CDP DRIVER for cross-deployment `ov eval`.
+        Headless Chrome CDP DRIVER for cross-deployment `charly eval`.
 
         Runs the REAL google-chrome binary in --headless=new mode on
         127.0.0.1:9223 — no Wayland compositor, no desktop (proven on rootless
         podman: Chrome 149 serves /json/version headlessly). Composes
-        /ov-selkies:chrome-cdp so the cdp-proxy republishes CDP on 0.0.0.0:9222
-        with Host-header rewriting, making `ov eval cdp <this>` reachable from
+        /charly-selkies:chrome-cdp so the cdp-proxy republishes CDP on 0.0.0.0:9222
+        with Host-header rewriting, making `charly eval cdp <this>` reachable from
         the host.
 
         The point: use this as a `peer:` DRIVER deployment that CDP-probes a
@@ -37,7 +37,7 @@ candy:
             #!/usr/bin/env bash
             # Headless Chrome for cross-deployment CDP driving. CDP serves on
             # 127.0.0.1:9223; the cdp-proxy (chrome-cdp) republishes it on
-            # 0.0.0.0:9222 with Host rewriting for host-side `ov eval cdp`.
+            # 0.0.0.0:9222 with Host rewriting for host-side `charly eval cdp`.
             # --remote-allow-origins='*' is REQUIRED: Chrome 146+ rejects the CDP
             # WebSocket upgrade (text/eval/screenshot/click) when the Origin
             # doesn't match, even though the HTTP /json endpoints (open/list) work

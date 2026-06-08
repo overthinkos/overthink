@@ -1,9 +1,9 @@
 export const meta = {
   name: 'audit-deploy-configs',
   description:
-    'Evaluate deployment configs — for AI agents and human operators. Runs `ov box validate` once (config correctness), then per target a read-only deploy-verifier pass (`ov eval box` for built images, `ov eval live` + `ov status` for running deploys) and aggregates a health report. NON-destructive: never builds, deploys, rebuilds, or tears down. For the destructive R10 bed gate use /verify-beds instead.',
+    'Evaluate deployment configs — for AI agents and human operators. Runs `charly box validate` once (config correctness), then per target a read-only deploy-verifier pass (`charly eval box` for built images, `charly eval live` + `charly status` for running deploys) and aggregates a health report. NON-destructive: never builds, deploys, rebuilds, or tears down. For the destructive R10 bed gate use /verify-beds instead.',
   phases: [
-    { title: 'Validate', detail: 'ov box validate — config + warnings' },
+    { title: 'Validate', detail: 'charly box validate — config + warnings' },
     { title: 'Discover', detail: 'enumerate target images/deploys to audit' },
     { title: 'Audit', detail: 'per-target read-only eval image/live + status' },
   ],
@@ -63,11 +63,11 @@ const HEALTH_SCHEMA = {
 // (CLAUDE.md zero-warnings gate) — surface them so the caller can clear them.
 phase('Validate')
 const validation = await agent(
-  'Run `ov box validate` in this project. Return {ok, warnings, errors} — list every warning and error verbatim. Do not build or deploy anything.',
-  { schema: VALIDATE_SCHEMA, label: 'ov box validate', phase: 'Validate' }
+  'Run `charly box validate` in this project. Return {ok, warnings, errors} — list every warning and error verbatim. Do not build or deploy anything.',
+  { schema: VALIDATE_SCHEMA, label: 'charly box validate', phase: 'Validate' }
 )
 if (validation && validation.warnings && validation.warnings.length) {
-  log(`ov box validate: ${validation.warnings.length} warning(s) — these block a clean R10 (zero-warnings gate).`)
+  log(`charly box validate: ${validation.warnings.length} warning(s) — these block a clean R10 (zero-warnings gate).`)
 }
 
 // Phase 2 — what to audit. Explicit args win; otherwise enumerate enabled images.
@@ -77,14 +77,14 @@ if (requested.length) {
   targets = requested.map((name) => ({ name, kind: 'image' }))
 } else {
   const discovered = await agent(
-    'Read overthink.yml / box.yml in this project. Return JSON {targets:[{name,kind}]} listing the ENABLED image short-names (kind "image") and any deploy names from a local deploy.yml (kind "deploy"). Do NOT run or build anything.',
+    'Read charly.yml / box.yml in this project. Return JSON {targets:[{name,kind}]} listing the ENABLED image short-names (kind "image") and any deploy names from a local deploy.yml (kind "deploy"). Do NOT run or build anything.',
     { schema: DISCOVER_SCHEMA, label: 'discover-targets', phase: 'Discover' }
   )
   targets = (discovered && discovered.targets ? discovered.targets : []).filter(Boolean)
 }
 
 if (!targets.length) {
-  log('No deploy targets discovered — only ov box validate ran.')
+  log('No deploy targets discovered — only charly box validate ran.')
   return { validation, targets: [] }
 }
 log(`Auditing ${targets.length} deploy target(s).`)
@@ -95,7 +95,7 @@ const results = (
   await parallel(
     targets.map((t) => () =>
       agent(
-        `You are the deploy-verifier (read-only — never build/deploy/rebuild/destroy). Evaluate the deploy config "${t.name}" (kind ${t.kind}). Run the probes that apply: \`ov eval box ${t.name}\` if a built image exists locally (use the full registry ref if the short name is ambiguous; report NOT-BUILT if absent), and \`ov eval live ${t.name}\` + \`ov status ${t.name}\` if it is currently deployed (report NOT-RUNNING if not). Return the health verdict with verbatim failing-check output — never hide a failed check.`,
+        `You are the deploy-verifier (read-only — never build/deploy/rebuild/destroy). Evaluate the deploy config "${t.name}" (kind ${t.kind}). Run the probes that apply: \`charly eval box ${t.name}\` if a built image exists locally (use the full registry ref if the short name is ambiguous; report NOT-BUILT if absent), and \`charly eval live ${t.name}\` + \`charly status ${t.name}\` if it is currently deployed (report NOT-RUNNING if not). Return the health verdict with verbatim failing-check output — never hide a failed check.`,
         { schema: HEALTH_SCHEMA, label: `audit:${t.name}`, phase: 'Audit' }
       )
     )

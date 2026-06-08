@@ -16,7 +16,7 @@ candy:
             at deploy time. Producer 00_OpenRouter_Basics demonstrates the
             API surface; consumers exercise specific use cases. Requires
             OPENROUTER_API_KEY at runtime — declared via env_require so
-            `ov config` warns at deploy time when the env var is unset.
+            `charly config` warns at deploy time when the env var is unset.
             Data-only — no packages, no services.
         scenario:
             - name: openrouter notebooks land in the workspace volume

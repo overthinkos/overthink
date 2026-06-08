@@ -5,13 +5,13 @@
 #   kind: score  — runner config (target eval-sandbox, AI, plateau, prompt)
 #                  referencing one or more recipes via `recipes:`
 #   kind: eval   — disposable R10 test beds (deploy-shaped), run with
-#                  `ov eval run <bed>`; the kind:eval section is at the
+#                  `charly eval run <bed>`; the kind:eval section is at the
 #                  END of this file, after score:.
 #
 # Architecture: the harness owns the eval-sandbox (rebuilt fresh per run);
 # the AI inside eval-sandbox owns everything else (image builds, deployments,
 # state edits). The harness scores the live state per recipe scenarios
-# after each iteration — `containerName := "ov-" + scenario.pod`,
+# after each iteration — `containerName := "charly-" + scenario.pod`,
 # `podman exec` against eval-sandbox's nested podman.
 #
 # Recipe authoring discipline (2026-04 cutover):
@@ -83,9 +83,9 @@ recipe:
 
                   What must be true to pass this test:
                     - A pod named `os` is running.
-                    - A file at `/etc/ov-os-marker` exists.
+                    - A file at `/etc/charly-os-marker` exists.
                     - That file contains the literal string
-                      `ov-os-content-marker`.
+                      `charly-os-content-marker`.
                     - The system package `bash` is installed in the pod.
                     - A process named `bash` is running in the pod.
                     - The user `root` is present in the user database with
@@ -99,20 +99,20 @@ recipe:
                     - The loopback interface `lo` is present and carries
                       the address `127.0.0.1/8`.
                     - An in-process matcher correctly resolves the literal
-                      string `ov-os-content-marker`.
+                      string `charly-os-content-marker`.
         scenario:
             - name: os-marker-file-exists
               pod: os
               step:
-                - then: "the predetermined marker file exists at /etc/ov-os-marker"
-                  file: /etc/ov-os-marker
+                - then: "the predetermined marker file exists at /etc/charly-os-marker"
+                  file: /etc/charly-os-marker
                   exists: true
             - name: os-marker-file-content
               pod: os
               step:
                 - then: "the marker file contains the predetermined content marker"
-                  file: /etc/ov-os-marker
-                  contains: ["ov-os-content-marker"]
+                  file: /etc/charly-os-marker
+                  contains: ["charly-os-content-marker"]
             - name: os-package-installed
               pod: os
               step:
@@ -159,8 +159,8 @@ recipe:
               pod: os
               step:
                 - then: "an in-process matcher resolves a literal predetermined string"
-                  matching: "ov-os-content-marker"
-                  contains: ["ov-os-content-marker"]
+                  matching: "charly-os-content-marker"
+                  contains: ["charly-os-content-marker"]
     # ─────────────────────────────────────────────────────────────────────
     # Phase 2 — network-and-http: produces web with a predetermined
     # content marker. Consumed by phase 6 (CDP/WL/VNC) and phase 7 (VM
@@ -188,10 +188,10 @@ recipe:
                       published port mapping.
                     - A GET request to its root URL returns HTTP 200 with a
                       body that contains the literal string
-                      `ov-web-content-marker`.
+                      `charly-web-content-marker`.
                     - A file at `/srv/fixture/index.html` exists in the pod
                       and contains the literal string
-                      `ov-web-content-marker`.
+                      `charly-web-content-marker`.
                     - A self-curl from inside the pod to its own port 8080
                       returns the same marker.
 
@@ -222,21 +222,21 @@ recipe:
                 - then: "GET / returns 200 with the predetermined content marker"
                   http: "http://localhost:8080/"
                   status: 200
-                  body: {contains: ["ov-web-content-marker"]}
+                  body: {contains: ["charly-web-content-marker"]}
             - name: web-content-file-on-disk
               pod: web
               step:
                 - then: "the served content file persists on disk with the predetermined marker"
                   file: /srv/fixture/index.html
                   exists: true
-                  contains: ["ov-web-content-marker"]
+                  contains: ["charly-web-content-marker"]
             - name: web-self-curl-returns-marker
               pod: web
               step:
                 - then: "a self-curl from inside the pod returns the predetermined marker"
                   command: "curl -fsS http://127.0.0.1:8080/"
                   exit_status: 0
-                  stdout: {contains: ["ov-web-content-marker"]}
+                  stdout: {contains: ["charly-web-content-marker"]}
     # ─────────────────────────────────────────────────────────────────────
     # Phase 3 — cross-pod-nonce-traffic: redis-server pod + redis-client pod
     # with HARNESS_NONCE-protected SET/GET across the pod boundary.
@@ -266,7 +266,7 @@ recipe:
                     - A pod named `redis-client` is running, with the
                       `redis-cli` command available on its PATH.
                     - From inside the `redis-client` pod, running
-                      `redis-cli -h ov-redis SET bench:${EVAL_NONCE_KEY}
+                      `redis-cli -h charly-redis SET bench:${EVAL_NONCE_KEY}
                       ${EVAL_NONCE_VALUE}` outputs `OK`.
                     - From inside the `redis` pod, running
                       `redis-cli get bench:${EVAL_NONCE_KEY}` outputs the
@@ -298,7 +298,7 @@ recipe:
               pod: redis-client
               step:
                 - then: "the client pod successfully writes the nonce-protected key into the data store"
-                  command: "redis-cli -h ov-redis SET bench:${EVAL_NONCE_KEY} ${EVAL_NONCE_VALUE}"
+                  command: "redis-cli -h charly-redis SET bench:${EVAL_NONCE_KEY} ${EVAL_NONCE_VALUE}"
                   stdout: {contains: [OK]}
             - name: redis-cross-pod-readback-on-server
               pod: redis
@@ -645,10 +645,10 @@ recipe:
                     - The D-Bus session bus on that pod lists the
                       `org.freedesktop.Notifications` service.
                     - Via CDP, the browser navigates to
-                      `http://ov-web:8080/` (the phase-2 fixture).
+                      `http://charly-web:8080/` (the phase-2 fixture).
                     - Via CDP `text` on tab 1, the loaded page's text
                       contains the literal string
-                      `ov-web-content-marker`.
+                      `charly-web-content-marker`.
                     - Via CDP `eval` on tab 1, the JavaScript expression
                       `1+1` returns `2`.
                     - A CDP screenshot of tab 1 produces a PNG file at
@@ -663,7 +663,7 @@ recipe:
                       `/tmp/vnc.png` of at least 5000 bytes, with image
                       dimensions ≥ 800×600, with non-uniform pixel content.
                     - A D-Bus notification with body
-                      `ov-dbus-notify-marker` succeeds.
+                      `charly-dbus-notify-marker` succeeds.
                     - A `record stop` produces an asciinema cast file at
                       `/tmp/session.cast` of at least 200 bytes containing
                       at least 5 event records.
@@ -700,7 +700,7 @@ recipe:
               step:
                 - then: "the desktop browser navigates to the upstream HTTP fixture URL via CDP"
                   cdp: open
-                  url: "http://ov-web:8080/"
+                  url: "http://charly-web:8080/"
                   exit_status: 0
             - name: desktop-cdp-extracts-web-marker
               pod: desktop
@@ -709,7 +709,7 @@ recipe:
                 - then: "CDP extracts the predetermined upstream content marker from the loaded page"
                   cdp: text
                   tab: "1"
-                  stdout: {contains: ["ov-web-content-marker"]}
+                  stdout: {contains: ["charly-web-content-marker"]}
             - name: desktop-cdp-eval-known-expression
               pod: desktop
               depends_on: [desktop-cdp-loads-web]
@@ -766,7 +766,7 @@ recipe:
               step:
                 - then: "a desktop notification can be sent with a predetermined body"
                   dbus: notify
-                  text: "ov-dbus-notify-marker"
+                  text: "charly-dbus-notify-marker"
                   exit_status: 0
             # Recording consumer — produces a known-shape artifact
             - name: desktop-record-cast-has-events
@@ -813,9 +813,9 @@ recipe:
                     - Inside the VM via guest/exec, running `uname -s`
                       outputs a string containing `Linux`.
                     - Inside the VM via guest/exec, running
-                      `curl -fsS http://ov-web:8080/` outputs a
+                      `curl -fsS http://charly-web:8080/` outputs a
                       response containing the literal string
-                      `ov-web-content-marker` (the marker served by
+                      `charly-web-content-marker` (the marker served by
                       the phase-2 web pod).
                     - `libvirt snapshot/list` against the VM exits with
                       status 0.
@@ -867,8 +867,8 @@ recipe:
               step:
                 - then: "from inside the VM, fetching the upstream HTTP fixture URL returns the predetermined marker"
                   libvirt: guest/exec
-                  command: "curl -fsS http://ov-web:8080/"
-                  stdout: {contains: ["ov-web-content-marker"]}
+                  command: "curl -fsS http://charly-web:8080/"
+                  stdout: {contains: ["charly-web-content-marker"]}
             - name: vm-snapshot-list
               pod: vm
               depends_on: [vm-libvirt-info]
@@ -927,13 +927,13 @@ recipe:
                       a `redis-server` process and a non-loopback TCP 6379
                       listener.
                     - From inside `inner-app-pod`, running
-                      `redis-cli -h ov-inner-app-pod_nested-redis-pod SET
+                      `redis-cli -h charly-inner-app-pod_nested-redis-pod SET
                       bench:${EVAL_NONCE_KEY} ${EVAL_NONCE_VALUE}`
                       outputs `OK`.
                     - From inside `nested-redis-pod`, running
                       `redis-cli get bench:${EVAL_NONCE_KEY}` outputs the
                       same `${EVAL_NONCE_VALUE}`.
-                    - From inside the VM, running `redis-cli -h ov-redis
+                    - From inside the VM, running `redis-cli -h charly-redis
                       ping` outputs `PONG` (the VM can reach the outermost
                       redis pod from phase 3).
 
@@ -991,7 +991,7 @@ recipe:
               depends_on: [nested-pod-listens-network]
               step:
                 - then: "the inner pod successfully writes the nonce-protected key on the nested data store"
-                  command: "redis-cli -h ov-inner-app-pod_nested-redis-pod SET bench:${EVAL_NONCE_KEY} ${EVAL_NONCE_VALUE}"
+                  command: "redis-cli -h charly-inner-app-pod_nested-redis-pod SET bench:${EVAL_NONCE_KEY} ${EVAL_NONCE_VALUE}"
                   stdout: {contains: [OK]}
             - name: nested-readback-on-deepest
               pod: nested-eval-vm.inner-app-pod.nested-redis-pod
@@ -1006,7 +1006,7 @@ recipe:
               depends_on: [vm-running]
               step:
                 - then: "the VM guest can reach the outermost data store from phase 3"
-                  command: "redis-cli -h ov-redis ping"
+                  command: "redis-cli -h charly-redis ping"
                   stdout: {contains: [PONG]}
     # ─────────────────────────────────────────────────────────────────────
     # SCAFFOLDING SELF-TEST — pulled out of the default score; lives in its
@@ -1047,7 +1047,7 @@ recipe:
                     - A pod named `composition-app` is running with:
                         - `/usr/sbin/sshd` present.
                         - `/usr/local/bin/ov` present and executable.
-                        - `/etc/ov-composition-selftest` present (this file
+                        - `/etc/charly-composition-selftest` present (this file
                           is verified by the hand-written scenario that
                           depends on the imported `sshd-binary` probe).
         from:
@@ -1062,7 +1062,7 @@ recipe:
               name: composition-source
               pod: selftest-image
               scope: [image]
-              select: [composition-source-ov]
+              select: [composition-source-charly]
               prefix: solo
             # Multi-kind composition onto the SAME pod, with filter pipeline.
             - kind: layer
@@ -1073,7 +1073,7 @@ recipe:
               name: composition-source
               pod: composition-app
               scope: [image]
-              select: [composition-source-ov, composition-source-marker]
+              select: [composition-source-charly, composition-source-marker]
               exclude: [composition-source-marker]
               prefix: img
         scenario:
@@ -1084,59 +1084,59 @@ recipe:
               depends_on: [sshd-binary]
               step:
                 - then: "a marker file written during the composition self-test is present"
-                  file: /etc/ov-composition-selftest
+                  file: /etc/charly-composition-selftest
                   exists: true
     # ─────────────────────────────────────────────────────────────────────
-    # ov-cli-surface — the agent drives the ov MANAGEMENT command surface
+    # charly-cli-surface — the agent drives the charly MANAGEMENT command surface
     # (box build → deploy/start → status) to stand up a pod it inspects. The
-    # deterministic eval-ov-selftest-pod bed asserts every command GROUP runs;
+    # deterministic eval-charly-selftest-pod bed asserts every command GROUP runs;
     # this is the AI-driven companion proving an agent can OPERATE the CLI
     # end-to-end against a real deployment.
     # ─────────────────────────────────────────────────────────────────────
-    ov-cli-surface:
+    charly-cli-surface:
         description:
-            feature: "An agent operates the ov management commands to build, deploy, and inspect a pod."
+            feature: "An agent operates the charly management commands to build, deploy, and inspect a pod."
             narrative: |
-                Feature: An agent operates the ov management command surface end-to-end.
+                Feature: An agent operates the charly management command surface end-to-end.
                   As an operator delegating to an agent,
-                  I want the agent to use `ov box build` to build the `os` image,
-                    `ov deploy add`/`ov start` to bring it up as a pod, and
-                    `ov status` to confirm it is running,
+                  I want the agent to use `charly box build` to build the `os` image,
+                    `charly deploy add`/`charly start` to bring it up as a pod, and
+                    `charly status` to confirm it is running,
                   So that the core management surface (build → deploy → status) is
                     proven operable by a real agent against a real deployment.
 
                   What must be true to pass this test:
                     - A pod named `os` is running — the agent built it with
-                      `ov box build os` and started it with `ov start os` /
-                      `ov deploy add os os`.
+                      `charly box build os` and started it with `charly start os` /
+                      `charly deploy add os os`.
                     - The `supervisord` init process is running in the pod.
-                    - A file at `/etc/ov-os-marker` exists in the pod containing
-                      the literal string `ov-os-content-marker`, proving the agent
+                    - A file at `/etc/charly-os-marker` exists in the pod containing
+                      the literal string `charly-os-content-marker`, proving the agent
                       built + deployed the real `os` image (not a stand-in).
         scenario:
             - name: ovcli-os-built-and-running
               pod: os
               step:
-                - then: "the os pod the agent built with `ov box build` + started with ov is running"
+                - then: "the os pod the agent built with `charly box build` + started with charly is running"
                   process: supervisord
                   running: true
             - name: ovcli-os-marker-present
               pod: os
               step:
                 - then: "the built os image's predetermined marker file is present"
-                  file: /etc/ov-os-marker
-                  contains: ["ov-os-content-marker"]
+                  file: /etc/charly-os-marker
+                  contains: ["charly-os-content-marker"]
 score:
     # ─────────────────────────────────────────────────────────────────────
-    # ov-cli — AI eval of the ov MANAGEMENT command surface. Companion to the
-    # deterministic eval-ov-selftest-pod bed: where the bed asserts every
+    # charly-cli — AI eval of the charly MANAGEMENT command surface. Companion to the
+    # deterministic eval-charly-selftest-pod bed: where the bed asserts every
     # command GROUP runs in-container, this proves an AGENT can OPERATE the
     # build → deploy → status lifecycle end-to-end. A full convergence run is
     # the multi-hour benchmark; the deterministic bed is the per-commit R10 gate.
     # ─────────────────────────────────────────────────────────────────────
-    ov-cli:
+    charly-cli:
         description:
-            feature: "AI eval — an agent operates the ov management command surface (build → deploy → status) end-to-end."
+            feature: "AI eval — an agent operates the charly management command surface (build → deploy → status) end-to-end."
         pod: eval-sandbox
         ai: [claude]
         plateau_iteration: 3
@@ -1145,31 +1145,31 @@ score:
         mcp_endpoint: "http://localhost:18765/mcp"
         env: {}
         recipe:
-            - ov-cli-surface
+            - charly-cli-surface
         prompt: |
             == Where you are ==
             Your cwd is /workspace — a fresh per-run clone of the Overthink
             project, bind-mounted into this freshly-rebuilt ${TARGET_NAME}. You
-            have FULL sudo + nested podman + the `ov` CLI. Host services are
+            have FULL sudo + nested podman + the `charly` CLI. Host services are
             invisible; you cannot conflict with them.
 
             == Score purpose ==
-            This score proves an agent can OPERATE the ov management command
-            surface end-to-end. Use `ov box build os` to build the `os` image,
-            then `ov deploy add os os` (or `ov start os`) to bring it up as a
-            running pod, and `ov status` to confirm it. The recipe's scenarios
+            This score proves an agent can OPERATE the charly management command
+            surface end-to-end. Use `charly box build os` to build the `os` image,
+            then `charly deploy add os os` (or `charly start os`) to bring it up as a
+            running pod, and `charly status` to confirm it. The recipe's scenarios
             assert the `os` pod is running with its predetermined marker file —
-            satisfy them by driving the real ov commands, not by hand-crafting
-            state. The full `ov` CLI + the MCP surface (`ov mcp serve` on
+            satisfy them by driving the real charly commands, not by hand-crafting
+            state. The full `charly` CLI + the MCP surface (`charly mcp serve` on
             ${TARGET_NAME}) are available; how you satisfy the spec is your call.
     # ─────────────────────────────────────────────────────────────────────
     # Default benchmark — progressive verb-coverage curriculum across the
-    # full `ov eval` surface. 8 phases, one recipe added per phase.
+    # full `charly eval` surface. 8 phases, one recipe added per phase.
     # ─────────────────────────────────────────────────────────────────────
     default:
         description:
-            feature: "Default benchmark — progressive verb-coverage curriculum across the full `ov eval` surface (system state → network → cross-pod → MCP → Kubernetes → desktop → VM → nested)."
-        pod: eval-sandbox # the AI-sandbox pod; harness runs iterations inside ov-<pod>
+            feature: "Default benchmark — progressive verb-coverage curriculum across the full `charly eval` surface (system state → network → cross-pod → MCP → Kubernetes → desktop → VM → nested)."
+        pod: eval-sandbox # the AI-sandbox pod; harness runs iterations inside charly-<pod>
         ai: [claude]
         plateau_iteration: 3
         progressive: true # curriculum-style: phase N adds recipe N
@@ -1210,12 +1210,12 @@ score:
 
             Your `/workspace` is a fresh per-run clone of the Overthink
             source repository — the full git tree (with submodules
-            initialized), the `ov` CLI binary, and every layer, image,
+            initialized), the `charly` CLI binary, and every layer, image,
             pod, VM, and Kubernetes cluster definition the project
             already ships (`candy/`, `box.yml`, `pod.yml`, `vm.yml`,
             `k8s.yml`). Your session has the project's plugin skills
-            loaded (`/ov-eval:eval`, `/ov-core:deploy`, `/ov-image:image`, `/ov-image:layer`,
-            `/ov-build:build`, plus per-pod plugins (`/ov-jupyter:*`, `/ov-coder:*`, etc.) and foundation plugins (`/ov-distros:*`, `/ov-infrastructure:*`, `/ov-tools:*`), …). All of these
+            loaded (`/charly-eval:eval`, `/charly-core:deploy`, `/charly-image:image`, `/charly-image:layer`,
+            `/charly-build:build`, plus per-pod plugins (`/charly-jupyter:*`, `/charly-coder:*`, etc.) and foundation plugins (`/charly-distros:*`, `/charly-infrastructure:*`, `/charly-tools:*`), …). All of these
             are available to be used if you decide to do so — they may
             be useful for most of the scenarios. The recipes specify
             what each pod must do; how you satisfy each specification
@@ -1255,7 +1255,7 @@ score:
             set of pod names; deploy a container with each name. Across recipes,
             multiple recipes may share a pod name (same container, more
             scenarios scored against it). Some recipes deploy "fixture pods"
-            whose hostnames (e.g. `ov-web`) are reached from later
+            whose hostnames (e.g. `charly-web`) are reached from later
             recipes' pods across the pod network — those fixtures must remain
             running across phases.
 
@@ -1303,7 +1303,7 @@ score:
                 declared `artifact:` path, with mtime ≥ iter start.
 
             == MANDATORY before exiting this iteration ==
-            Run `ov eval self-evaluate` and read its output BEFORE you
+            Run `charly eval self-evaluate` and read its output BEFORE you
             exit. It runs every in-scope probe against live systems via the
             SAME code path the harness scorer will invoke at iter end. The
             verdict it prints (pass / fail / skipped per scenario) is what
@@ -1357,12 +1357,12 @@ score:
 
             Your `/workspace` is a fresh per-run clone of the Overthink
             source repository — the full git tree (with submodules
-            initialized), the `ov` CLI binary, and every layer, image,
+            initialized), the `charly` CLI binary, and every layer, image,
             pod, VM, and Kubernetes cluster definition the project
             already ships (`candy/`, `box.yml`, `pod.yml`, `vm.yml`,
             `k8s.yml`). Your session has the project's plugin skills
-            loaded (`/ov-eval:eval`, `/ov-core:deploy`, `/ov-image:image`, `/ov-image:layer`,
-            `/ov-build:build`, plus per-pod plugins (`/ov-jupyter:*`, `/ov-coder:*`, etc.) and foundation plugins (`/ov-distros:*`, `/ov-infrastructure:*`, `/ov-tools:*`), …). All of these
+            loaded (`/charly-eval:eval`, `/charly-core:deploy`, `/charly-image:image`, `/charly-image:layer`,
+            `/charly-build:build`, plus per-pod plugins (`/charly-jupyter:*`, `/charly-coder:*`, etc.) and foundation plugins (`/charly-distros:*`, `/charly-infrastructure:*`, `/charly-tools:*`), …). All of these
             are available to be used if you decide to do so — they may
             be useful for most of the scenarios. The recipes specify
             what each pod must do; how you satisfy each specification
@@ -1418,11 +1418,11 @@ score:
 # full R10 acceptance sequence on any of them — build → eval image → deploy →
 # eval live → fresh update (R10 gate) → tear down — with:
 #
-#     ov eval run <bed>          # one bed
-#     ov eval run --all-beds     # every bed, name-sorted
+#     charly eval run <bed>          # one bed
+#     charly eval run --all-beds     # every bed, name-sorted
 #
 # `disposable: true` is the SOLE authorization for that unattended destroy +
-# rebuild (see /ov-internals:disposable). Naming: eval-<descriptor>-<kind>,
+# rebuild (see /charly-internals:disposable). Naming: eval-<descriptor>-<kind>,
 # dropping a redundant suffix when descriptor == kind AND the short form is
 # free (eval-local, eval-pod). The harness AI-sandbox pod is named
 # `eval-sandbox` (the score `pod:` target), kept disjoint from these beds.
@@ -1445,11 +1445,11 @@ score:
 #                                     gogcli@latest, ffmpeg/sqlite arch coverage)
 #   eval-openclaw-desktop-pod (pod) — all-in-one: selkies desktop + openclaw-full
 #                                     (claude-code/codex/gemini) + CPU ollama +
-#                                     nested ov toolchain (ov+container-nesting)
+#                                     nested charly toolchain (ov+container-nesting)
 #
 # Zero-operator-side-effect: pod beds → rootless podman; eval-k3s-vm → libvirt
 # qcow2; eval-local → a disposable scratch dir. No test writes to ~/.local/bin,
-# ~/.config/overthink, /etc, /usr, or any operator-side directory.
+# ~/.config/opencharly, /etc, /usr, or any operator-side directory.
 # =============================================================================
 eval:
     # eval-k3s-vm — disposable libvirt VM running k3s-server. Kubeconfig is
@@ -1502,16 +1502,16 @@ eval:
             - {id: kv-k8s-storageclass-localpath, scope: deploy, k8s: storageclass, cluster: "vm-k3s-vm", stdout: {contains: "local-path"}}
             - {id: kv-k8s-raw-version, scope: deploy, k8s: raw, cluster: "vm-k3s-vm", text: "version -o json"}
             - {id: kv-k8s-service-kubernetes, scope: deploy, k8s: service, cluster: "vm-k3s-vm", namespace: default, name: kubernetes}
-            # --- command: ov-specific operator-side smoke ------------
-            - {id: kv-ov-version, scope: deploy, command: "/tmp/ov-build/ov version || ov version", stdout: {matches: "[0-9]{4}\\.[0-9]+"}, in_container: false}
+            # --- command: charly-specific operator-side smoke ------------
+            - {id: kv-charly-version, scope: deploy, command: "/tmp/charly-build/charly version || charly version", stdout: {matches: "[0-9]{4}\\.[0-9]+"}, in_container: false}
             # --- matching: verb smoke --------------------------------
             - {id: kv-matching, scope: deploy, matching: "eval-k3s-vm up", contains: {contains: "k3s"}}
-            # eval-coverage gate for the unified `ov status` VM substrate: the
+            # eval-coverage gate for the unified `charly status` VM substrate: the
             # libvirt-domain row must render (host-side, via listOvDomains). Fails
             # if VMCollector regresses.
             - id: status-shows-vm
               scope: deploy
-              command: ov status --json
+              command: charly status --json
               in_container: false
               stdout:
                 - contains: '"kind": "vm"'
@@ -1530,116 +1530,116 @@ eval:
             feature: Combined fast pod bed — kind:image + kind:layer + kind:pod + DeployTarget mechanisms
             tag: [working]
         eval:
-            # eval-coverage gate for the unified `ov status` POD substrate: the
+            # eval-coverage gate for the unified `charly status` POD substrate: the
             # row + KIND discriminator must render. Fails if PodCollector regresses.
             - id: status-shows-pod
               scope: deploy
-              command: ov status --json
+              command: charly status --json
               in_container: false
               stdout:
                 - contains: '"kind": "pod"'
                 - contains: eval-pod
-    # ov self-test bed — the eval-coverage gate for "test ALL ov commands". The
-    # ov-selftest CachyOS image bakes the full ov toolchain (merged ov via ov-mcp
-    # + container-nesting + claude-code), so EVERY ov command group runs
+    # charly self-test bed — the eval-coverage gate for "test ALL charly commands". The
+    # charly-selftest CachyOS image bakes the full charly toolchain (merged charly via charly-mcp
+    # + container-nesting + claude-code), so EVERY charly command group runs
     # in-container: real happy-paths for the project-free groups
     # (version/doctor/settings/secrets/vm/status) + `--help` for the groups that
     # need a project/podman/network to run for real (box/deploy/eval/clean/
     # migrate/feature/config) — every check is RDD-proven to exit 0 in a plain
     # pod. The host-side mcp list-tools proves the WHOLE Kong command surface is
-    # exposed as tools by `ov mcp serve`. Each check FAILS without the toolchain.
-    eval-ov-selftest-pod:
+    # exposed as tools by `charly mcp serve`. Each check FAILS without the toolchain.
+    eval-charly-selftest-pod:
         target: pod
-        box: ov-selftest
+        box: charly-selftest
         disposable: true
         lifecycle: dev
         port: [auto] # auto-allocate free host ports (avoid fixed-port collisions)
         description:
-            feature: ov self-test — every ov command group exercised in-container on the full toolchain
+            feature: charly self-test — every charly command group exercised in-container on the full toolchain
             tag: [working]
         eval:
             # --- Real happy-path (project-free groups) ---
-            - id: ov-cli-version
+            - id: charly-cli-version
               scope: deploy
-              command: ov version
+              command: charly version
               in_container: true
               exit_status: 0
               stdout:
                 - matches: "[0-9]{4}\\.[0-9]+"
-            - id: ov-cli-doctor
+            - id: charly-cli-doctor
               scope: deploy
-              command: ov doctor
+              command: charly doctor
               in_container: true
               exit_status: 0
               stdout:
-                - contains: "ov doctor"
-            - id: ov-cli-settings
+                - contains: "charly doctor"
+            - id: charly-cli-settings
               scope: deploy
-              command: ov settings list
+              command: charly settings list
               in_container: true
               exit_status: 0
-            - id: ov-cli-secrets
+            - id: charly-cli-secrets
               scope: deploy
-              command: ov secrets list
+              command: charly secrets list
               in_container: true
               exit_status: 0
-            - id: ov-cli-vm
+            - id: charly-cli-vm
               scope: deploy
-              command: ov vm list
+              command: charly vm list
               in_container: true
               exit_status: 0
-            - id: ov-cli-status
+            - id: charly-cli-status
               scope: deploy
-              command: ov status --json
+              command: charly status --json
               in_container: true
               exit_status: 0
             # --- Command-group wiring (--help proves the group + subcommand tree) ---
-            - id: ov-cli-box-group
+            - id: charly-cli-box-group
               scope: deploy
-              command: ov box --help
+              command: charly box --help
               in_container: true
               exit_status: 0
               stdout:
                 - contains: build
-            - id: ov-cli-deploy-group
+            - id: charly-cli-deploy-group
               scope: deploy
-              command: ov deploy --help
+              command: charly deploy --help
               in_container: true
               exit_status: 0
-            - id: ov-cli-eval-group
+            - id: charly-cli-eval-group
               scope: deploy
-              command: ov eval --help
+              command: charly eval --help
               in_container: true
               exit_status: 0
               stdout:
                 - contains: live
-            - id: ov-cli-clean-group
+            - id: charly-cli-clean-group
               scope: deploy
-              command: ov clean --help
+              command: charly clean --help
               in_container: true
               exit_status: 0
-            - id: ov-cli-migrate-group
+            - id: charly-cli-migrate-group
               scope: deploy
-              command: ov migrate --help
+              command: charly migrate --help
               in_container: true
               exit_status: 0
-            - id: ov-cli-feature-group
+            - id: charly-cli-feature-group
               scope: deploy
-              command: ov feature --help
+              command: charly feature --help
               in_container: true
               exit_status: 0
-            - id: ov-cli-config-group
+            - id: charly-cli-config-group
               scope: deploy
-              command: ov config --help
+              command: charly config --help
               in_container: true
               exit_status: 0
-            # NB: the WHOLE Kong command surface exposed via `ov mcp serve` is
-            # proven by the ov-mcp layer's own deploy-scope mcp checks
-            # (mcp-ov-list-tools + mcp-ov-call-* assert box.build / box.list.boxes
+            # NB: the WHOLE Kong command surface exposed via `charly mcp serve` is
+            # proven by the charly-mcp layer's own deploy-scope mcp checks
+            # (mcp-charly-list-tools + mcp-charly-call-* assert box.build / box.list.boxes
             # are live tools), which run here as part of this bed's eval-live — no
             # duplicate surface check needed (R3).
     # Cross-deployment probing (pod→pod): a Chrome DRIVER pod (peer) CDP-probes
-    # this web-server SUBJECT pod over the shared `ov` network. Proves `on:` +
+    # this web-server SUBJECT pod over the shared `charly` network. Proves `on:` +
     # ${PEER_HOST:<subject>} + peer: end-to-end — the canonical "a different kind
     # of deployment tests another" case. The chrome peer is brought up ALONGSIDE
     # the root by bringUpPeers (the shared deploy+eval lifecycle, R3); it is an
@@ -1654,7 +1654,7 @@ eval:
             chrome:
                 target: pod
                 box: chrome-headless
-                port: [auto] # chrome's CDP 9222 published so host-side `ov eval cdp` reaches it
+                port: [auto] # chrome's CDP 9222 published so host-side `charly eval cdp` reaches it
         description:
             feature: Cross-deployment CDP — a Chrome driver pod probes a separate web subject pod
             tag: [working]
@@ -1665,9 +1665,9 @@ eval:
               http: http://127.0.0.1:${HOST_PORT:8080}/
               status: 200
               body:
-                - contains: ov-fixture-web-content-marker
+                - contains: charly-fixture-web-content-marker
             # DRIVE: the chrome peer navigates a REAL browser to THIS subject over
-            # the shared `ov` net (${PEER_HOST:<subject>} → ov-<bed> container DNS).
+            # the shared `charly` net (${PEER_HOST:<subject>} → charly-<bed> container DNS).
             - id: cdp-open-web-subject
               scope: deploy
               cdp: open
@@ -1685,11 +1685,11 @@ eval:
               eventually: 30s
               retry_interval: 3s
               stdout:
-                - contains: ov-fixture-web-content-marker
+                - contains: charly-fixture-web-content-marker
     # Cross-deployment probing ACROSS KINDS (local→VM): a LOCAL (host) DRIVER
     # curls a web-server SUBJECT running in a VM. The driver reaches the guest's
     # nginx :80 via ${PEER_ENDPOINT:<bed>:80} → resolveEvalEndpoint's VM branch →
-    # `ssh -L 127.0.0.1:<rand>:127.0.0.1:80` over the managed ov-web-vm alias —
+    # `ssh -L 127.0.0.1:<rand>:127.0.0.1:80` over the managed charly-web-vm alias —
     # the SAME host-vantage resolver eval-cross-local-http uses for a pod subject;
     # only the subject KIND differs (VM vs pod), so this is the cross-kind proof
     # with ZERO VM-specific eval code. A pod driver can't reach a host-vantage
@@ -1719,10 +1719,10 @@ eval:
               eventually: 90s
               retry_interval: 5s
               stdout:
-                - contains: ov-fixture-vm-content-marker
+                - contains: charly-fixture-vm-content-marker
     # Cross-deployment across kinds (local→pod): a LOCAL (host) DRIVER curls a
     # web-server SUBJECT pod via its published port. Exercises a NON-pod peer
-    # bring-up (`ov deploy add` the local driver) + `on:`-to-host-venue dispatch +
+    # bring-up (`charly deploy add` the local driver) + `on:`-to-host-venue dispatch +
     # ${PEER_ENDPOINT} (host-vantage addressing of a pod subject).
     eval-cross-local-http:
         target: pod
@@ -1743,7 +1743,7 @@ eval:
               http: http://127.0.0.1:${HOST_PORT:8080}/
               status: 200
               body:
-                - contains: ov-fixture-web-content-marker
+                - contains: charly-fixture-web-content-marker
             # DRIVE: the local (host) driver curls the web pod via its published
             # port (${PEER_ENDPOINT} → 127.0.0.1:<published 8080>, reachable from
             # the host), dispatched through the local peer's host venue (on:).
@@ -1754,7 +1754,7 @@ eval:
               eventually: 30s
               retry_interval: 3s
               stdout:
-                - contains: ov-fixture-web-content-marker
+                - contains: charly-fixture-web-content-marker
     # Disposable R10 for the vscode layer's Arch direct-download install path
     # (the version-pin cutover that replaced the broken visual-studio-code-bin AUR).
     # The vscode layer's baked build-scope eval (code-binary + code-version) runs at
@@ -1771,7 +1771,7 @@ eval:
         eval:
             - id: status-shows-vscode-pod
               scope: deploy
-              command: ov status --json
+              command: charly status --json
               in_container: false
               stdout:
                 - contains: '"kind": "pod"'
@@ -1786,45 +1786,45 @@ eval:
             feature: Fast local bed exercising kind:local layer application
             tag: [working]
         eval:
-            # eval-coverage gate for the unified `ov status` LOCAL substrate: the
+            # eval-coverage gate for the unified `charly status` LOCAL substrate: the
             # install-ledger row must render. Fails if LocalCollector regresses.
             - id: status-shows-local
               scope: deploy
-              command: ov status --json
+              command: charly status --json
               in_container: false
               stdout:
                 # local deploy-ids are content hashes (not the bed name), so assert
                 # the substrate renders via the kind discriminator + ledger source.
                 - contains: '"kind": "local"'
                 - contains: '"source": "ledger"'
-    # pac localpkg AUTO-RESOLVE witness against the LOCAL ov candy (no @github):
-    # deploys candy/ov to a disposable Arch Cloud VM, where the layer's localpkg
-    # builds the overthink-git package from pkg/arch (makepkg on the host) and
+    # pac localpkg AUTO-RESOLVE witness against the LOCAL charly candy (no @github):
+    # deploys candy/charly to a disposable Arch Cloud VM, where the layer's localpkg
+    # builds the opencharly-git package from pkg/arch (makepkg on the host) and
     # `pacman -U`'s it onto the guest — pacman -U AUTO-RESOLVES the mandatory repo
     # deps. This is main's own live proof of the localpkg DEPLOY path (the rpm/deb
     # legs are proven by the fedora/debian/ubuntu submodule VM beds).
-    eval-ov-vm:
+    eval-charly-vm:
         target: vm
-        vm: ov-vm
+        vm: charly-vm
         disposable: true
         lifecycle: dev
         add_candy:
-            - ov
+            - charly
         install_opts:
             allow_repo_changes: true
             allow_root_tasks: true
         eval:
             - id: localpkg-pac-autoresolve
               scope: deploy
-              description: ov installed as the overthink-git pacman package via localpkg, mandatory repo deps auto-resolved by pacman -U
+              description: charly installed as the opencharly-git pacman package via localpkg, mandatory repo deps auto-resolved by pacman -U
               command: |
-                pacman -Q overthink-git >/dev/null 2>&1 &&
+                pacman -Q opencharly-git >/dev/null 2>&1 &&
                 pacman -Q podman >/dev/null 2>&1 &&
                 pacman -Q libvirt >/dev/null 2>&1 &&
                 pacman -Q tailscale >/dev/null 2>&1 &&
                 pacman -Q gocryptfs >/dev/null 2>&1 &&
-                test "$(command -v ov)" = /usr/bin/ov &&
-                ov version &&
+                test "$(command -v ov)" = /usr/bin/charly &&
+                charly version &&
                 echo LOCALPKG-PAC-AUTORESOLVE-OK
               stdout:
                 - contains: LOCALPKG-PAC-AUTORESOLVE-OK
@@ -1852,7 +1852,7 @@ eval:
         box: versa
         disposable: true
         lifecycle: dev
-        # 2026-05 cutover: `port: [auto]` lets ov config allocate free host
+        # 2026-05 cutover: `port: [auto]` lets charly config allocate free host
         # ports at deploy time; the env_provides templates on the producer
         # layers substitute against the resolved expansion.
         port: [auto]
@@ -1883,7 +1883,7 @@ eval:
             - 35002:5037 # ADB server
             - 35003:2222 # SSH
         # Nested kind:android devices, deployed onto the STARTED emulator pod
-        # (the bed runner deploys nested children after `ov start`, then runs
+        # (the bed runner deploys nested children after `charly start`, then runs
         # eval-live). `device` is the in-pod emulator (apkeep in-pod installs
         # the android-test-apps layer's F-Droid); `device-net` addresses the
         # SAME emulator as a remote adb ENDPOINT (goadb push installs the
@@ -1905,19 +1905,19 @@ eval:
             feature: "R10 bed for android-emulator — Android 16 (API 36 x86_64 google_apis_playstore) emulator on pixel_9a with /dev/kvm passthrough, Selkies web UI on https://localhost:35000, Appium WebDriver on http://localhost:35001/wd/hub, ADB via ANDROID_ADB_SERVER_SOCKET=tcp:localhost:35002 adb devices. Play Store + GMS + Chrome preinstalled (asserted present + launchable). Nested kind:android devices install apps via the `apk:` package format: an in-pod emulator device installs F-Droid (apkeep in-pod), and a remote adb-ENDPOINT device installs the committed ApiDemos (goadb over the published 35002 port) — proving target:android + nested deployment for both device kinds. CPU/RAM auto-size from the host."
             tag: [testing]
         eval:
-            # eval-coverage gate for the unified `ov status` ANDROID substrate +
+            # eval-coverage gate for the unified `charly status` ANDROID substrate +
             # the nested-deploy tree: the android device row(s) must render, and
             # the nested structure must overlay under the emulator pod. Fails if
             # AndroidCollector or status_nested regress.
             - id: status-shows-android
               scope: deploy
-              command: ov status --json
+              command: charly status --json
               in_container: false
               stdout:
                 - contains: '"kind": "android"'
             - id: status-shows-nested
               scope: deploy
-              command: ov status --json
+              command: charly status --json
               in_container: false
               stdout:
                 # The pod→android nested tree renders as a JSON `nested:[…]`
@@ -1963,10 +1963,10 @@ eval:
     # eval-openclaw-desktop-pod deploys the all-in-one openclaw-desktop image on
     # the CachyOS (Arch) base — the selkies streaming desktop fused with the
     # openclaw-full gateway/tool stack (claude-code/codex/gemini), a CPU ollama,
-    # and the full nested ov toolchain (ov + container-nesting + golang + gh).
+    # and the full nested charly toolchain (charly + container-nesting + golang + gh).
     # Ports are remapped into a free 340xx block to coexist with the
     # selkies/openclaw beds. The image-level eval (baked) carries the nested-
-    # rootless posture + nested-podman + libvirt-session + ov version/doctor +
+    # rootless posture + nested-podman + libvirt-session + charly version/doctor +
     # the three services' liveness; this bed's deploy-scope probes assert the
     # cross-stack headline artifacts (AUR chrome, selkies HTTPS UI, the AI CLIs,
     # the ollama binary) actually landed on the running combined container.
@@ -1977,7 +1977,7 @@ eval:
         lifecycle: dev
         port: [auto] # auto-allocate free host ports (avoid fixed-port collisions)
         description:
-            feature: "R10 bed for openclaw-desktop — the all-in-one CachyOS image fusing the selkies streaming desktop, the openclaw-full gateway+tools stack (claude-code/codex/gemini), a CPU ollama, and the full nested ov toolchain (ov + container-nesting + golang + gh). Exercises AUR google-chrome, the ollama binary tarball on a pac base, and nested rootless podman on one image."
+            feature: "R10 bed for openclaw-desktop — the all-in-one CachyOS image fusing the selkies streaming desktop, the openclaw-full gateway+tools stack (claude-code/codex/gemini), a CPU ollama, and the full nested charly toolchain (charly + container-nesting + golang + gh). Exercises AUR google-chrome, the ollama binary tarball on a pac base, and nested rootless podman on one image."
             tag: [testing]
         eval:
             # selkies desktop — AUR browser + the streaming UI is live
@@ -2037,10 +2037,10 @@ vm:
                       backend: /dev/urandom
                 memballoon:
                     model: virtio
-    # Arch Cloud VM backing eval-ov-vm — the pac localpkg deploy witness. Plain
-    # disposable VM (no port forwards / k3s); ov is installed onto it by the bed's
-    # localpkg deploy, so the VM itself carries no overthink layers.
-    ov-vm:
+    # Arch Cloud VM backing eval-charly-vm — the pac localpkg deploy witness. Plain
+    # disposable VM (no port forwards / k3s); charly is installed onto it by the bed's
+    # localpkg deploy, so the VM itself carries no opencharly layers.
+    charly-vm:
         source:
             kind: cloud_image
             url: https://fastly.mirror.pkgbuild.com/images/latest/Arch-Linux-x86_64-cloudimg.qcow2

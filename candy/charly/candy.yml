@@ -1,0 +1,102 @@
+candy:
+    version: 2026.156.1921
+    name: charly
+    description: |
+        Full charly toolchain — the CLI binary + the VM stack (virtualization),
+        encrypted storage (gocryptfs), and console relay (socat) — composed into
+        ONE layer that works identically on container/pod, host/local, and
+        bootc/VM targets via the `virtualization` layer's mixed-entry `service:`
+        pattern. This is the single canonical `ov` layer: bake it where a
+        deployment needs a persistent on-`$PATH` charly or the full toolchain inside
+        (the `charly-mcp` server, the `*-charly` showcases, nested-pod orchestrators).
+        Images that only need transient in-container `ov` (the dbus delegation
+        path) need NOT bake it — the host copies `ov` in on demand
+        (`EnsureOvInVenue`; see `/charly-tools:ov`).
+    candy:
+        - virtualization
+        - gocryptfs
+        - socat
+    distro:
+        arch:
+            package:
+                - portaudio
+                - opusfile
+        debian:
+            # tailscale is a mandatory charly dep but is NOT in Debian main, so the
+            # .deb (pkg/debian) omits it; the charly candy supplies it for deb-family
+            # via the tailscale apt repo. arch/fedora get tailscale from their
+            # native package's deps instead, so it is deb-family-scoped here.
+            package:
+                - libportaudio2
+                - libopusfile0
+                - tailscale
+            repo:
+                - name: tailscale
+                  url: "https://pkgs.tailscale.com/stable/debian"
+                  key: "https://pkgs.tailscale.com/stable/debian/trixie.noarmor.gpg"
+                  suite: trixie
+                  components: main
+        fedora:
+            package:
+                - portaudio
+                - opusfile
+        ubuntu:
+            package:
+                - libportaudio2
+                - libopusfile0
+                - tailscale
+            repo:
+                - name: tailscale
+                  url: "https://pkgs.tailscale.com/stable/ubuntu"
+                  key: "https://pkgs.tailscale.com/stable/ubuntu/noble.noarmor.gpg"
+                  suite: noble
+                  components: main
+    # On a DEPLOY target charly is installed as the proper OS-tracked package for the
+    # target distro's format (LocalPkgInstallStep): pac → opencharly-git built from
+    # pkg/arch via makepkg + pacman -U; rpm → opencharly built from pkg/fedora via
+    # rpmbuild + dnf install; deb → opencharly built from pkg/debian via
+    # dpkg-buildpackage + apt-get install. Each install AUTO-RESOLVES the package's
+    # dependencies from the target's repos. The sources live at the SUPERPROJECT
+    # root (pkg/<fmt>) — resolved by walking UP from the deploy project dir, so a
+    # consumer nested under image/<distro> still finds them. Skipped at image build
+    # (no host package build in a container); the cmd: task below is the fallback.
+    localpkg:
+        pac: pkg/arch
+        rpm: pkg/fedora
+        deb: pkg/debian
+    task:
+        # Install the charly binary. Resolution order:
+        #   1. opencharly-git already pacman-installed (the localpkg step ran first
+        #      on an Arch deploy target) → do nothing. The package's /usr/bin/charly is
+        #      authoritative; we must NOT curl a /usr/local/bin/charly, which would
+        #      shadow it on $PATH with a stale, pacman-untracked binary.
+        #   2. /ctx/bin/charly present (`task build:ov` ships bin/charly in the layer dir,
+        #      image builds) → install it directly.
+        #   3. otherwise (remote github-ref composition: bin/charly is a gitignored
+        #      build artifact absent from a git clone) → download the published
+        #      release asset. Keeps the 38 MB binary out of git while making the
+        #      layer remote-composable.
+        - cmd: |
+            if command -v pacman >/dev/null 2>&1 && pacman -Q opencharly-git >/dev/null 2>&1; then
+              : # opencharly-git is the proper package at /usr/bin/charly — nothing to do
+            elif [ -f /ctx/bin/charly ]; then
+              install -m 0755 /ctx/bin/charly /usr/local/bin/charly
+            else
+              curl -fsSL "https://github.com/overthinkos/overthink/releases/download/v2026.141.1600/charly-linux-${ARCH}" -o /usr/local/bin/charly
+              chmod 0755 /usr/local/bin/charly
+            fi
+          user: root
+    # The charly binary is at /usr/bin/charly (opencharly-git package, on an Arch deploy)
+    # OR /usr/local/bin/charly (image build / non-pac deploy curl/COPY). Probe via
+    # PATH (`command -v ov`) so the eval passes regardless of which path placed it.
+    eval:
+        - id: charly-binary
+          command: command -v charly
+          exit_status: 0
+          stdout:
+            - matches: "/(usr/bin|usr/local/bin)/ov"
+        - id: charly-version
+          command: charly version
+          exit_status: 0
+          stdout:
+            - matches: "[0-9]{4}\\.[0-9]+"

@@ -3,7 +3,7 @@ candy:
     name: sshd
     env_accept:
         - name: SSH_AUTHORIZED_KEYS
-          description: "SSH public key(s) for authorized access (one per line). Set via: ov config <image> --ssh-key auto"
+          description: "SSH public key(s) for authorized access (one per line). Set via: charly config <image> --ssh-key auto"
     package:
         - sudo
     distro:
@@ -44,8 +44,8 @@ candy:
               echo "sshd layer: no uid-1000 account found — refusing to write sudoers" >&2
               exit 1
             fi
-            printf '%s ALL=(ALL) NOPASSWD: ALL\n' "$account" > /etc/sudoers.d/ov-user
-            chmod 0440 /etc/sudoers.d/ov-user
+            printf '%s ALL=(ALL) NOPASSWD: ALL\n' "$account" > /etc/sudoers.d/charly-user
+            chmod 0440 /etc/sudoers.d/charly-user
           user: root
     # Systemd service (bootc images)
     eval:
@@ -68,7 +68,7 @@ candy:
         # the rule's effect without needing to stat the file directly. Bootc images
         # keep USER=root (systemd handles user sessions), so drop to `user` first
         # when running as root so we always probe the uid=1000 sudoers entry.
-        - id: sudoers-ov-user
+        - id: sudoers-charly-user
           command: |
             if [ "$(id -u)" = "0" ]; then runuser -u user -- sudo -n -l; else sudo -n -l; fi
           exit_status: 0

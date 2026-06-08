@@ -1,5 +1,5 @@
-#  Shared build-config (builder/distro/init) for the overthink project.
-#  Extracted from overthink.yml (2026-05) so the overthinkos/arch
+#  Shared build-config (builder/distro/init) for the opencharly project.
+#  Extracted from charly.yml (2026-05) so the overthinkos/arch
 #  submodule can include it remotely
 #  (@github.com/overthinkos/overthink/build.yml:<tag>) while main
 #  includes it locally — single source of truth, no duplication.
@@ -32,9 +32,9 @@ builder:
                     # work in the guest. RuntimePacmanConf is RENDERED (Go) from the
                     # SAME extra_repo source as the install config — one repo list,
                     # no install-vs-runtime drift (see renderRuntimePacmanConf).
-                    cat > /target/etc/pacman.conf <<'OV_RUNTIME_PACMAN_CONF'
+                    cat > /target/etc/pacman.conf <<'CH_RUNTIME_PACMAN_CONF'
                     {{.RuntimePacmanConf}}
-                    OV_RUNTIME_PACMAN_CONF
+                    CH_RUNTIME_PACMAN_CONF
                     {{- end}}
                     tar -C /target --xattrs --xattrs-include='*' --acls -czf /out/rootfs.tar.gz .
     debootstrap:
@@ -91,12 +91,12 @@ builder:
                     # gid that maps to a DIFFERENT group on the Arch host, so
                     # without this the chroot resets the shared /dev/kvm to 0660
                     # with the wrong group — virtqemud then caches "no kvm" and
-                    # `ov vm create` fails with a misleading EFI-firmware error.
+                    # `charly vm create` fails with a misleading EFI-firmware error.
                     # The chroot never uses KVM. See CHANGELOG (2026-05 RCA).
                     for d in kvm vhost-net vhost-vsock; do
                       if [ -e "/target/dev/$d" ]; then
-                        : > "/tmp/ov-devshadow-$d"
-                        mount --bind "/tmp/ov-devshadow-$d" "/target/dev/$d"
+                        : > "/tmp/charly-devshadow-$d"
+                        mount --bind "/tmp/charly-devshadow-$d" "/target/dev/$d"
                       fi
                     done
                     chroot /target apt-get update
@@ -228,7 +228,7 @@ builder:
         # Host-venue build script for target:local / target:vm deploys. /tmp is
         # used (not $HOME) because $HOME is only partially bind-mounted on the
         # deploy targets (UserScopeBindMounts: .cargo / .npm-global / .pixi /
-        # .cache/ov) and the implicit parent dir inside the builder pod is
+        # .cache/charly) and the implicit parent dir inside the builder pod is
         # root-owned, so `cd "$HOME" && cp package.json` would EACCES for the
         # non-root build user. Same dependency extraction as stage_template.
         phase:
@@ -267,7 +267,7 @@ builder:
             PIXI_CACHE_DIR: /tmp/pixi-cache
             RATTLER_CACHE_DIR: /tmp/rattler-cache
         # Runtime env contract — emitted into the final image's ENV PATH +
-        # the org.overthinkos.path_append / org.overthinkos.env_layer
+        # the ai.opencharly.path_append / ai.opencharly.env_layer
         # OCI labels when any layer in the image triggers this builder.
         # Used to live on candy/pixi/candy.yml; moved here in 2026-04-29
         # so images that use pixi via pixi.toml-triggered builds (jupyter,
@@ -477,7 +477,7 @@ distro:
                 : > {{.Mnt}}/etc/vconsole.conf
                 # Arch's default systemd preset is `disable *`. Without
                 # explicit enablement, sshd / cloud-init / qemu-guest-agent
-                # never start on first boot, and `ov vm ssh` times out
+                # never start on first boot, and `charly vm ssh` times out
                 # during banner exchange because nothing is listening
                 # inside the guest. Enable them here so cloud-init can
                 # run on first boot and apply the seed-ISO user-data
@@ -517,7 +517,7 @@ distro:
                 # ds-identify defaults to MAYBE, the generator emits
                 # cloud-init.disabled, and cloud-init never runs.
                 mkdir -p {{.Mnt}}/etc/cloud/cloud.cfg.d
-                printf 'datasource_list: [ NoCloud ]\n' > {{.Mnt}}/etc/cloud/cloud.cfg.d/99-ov-noCloud.cfg
+                printf 'datasource_list: [ NoCloud ]\n' > {{.Mnt}}/etc/cloud/cloud.cfg.d/99-charly-noCloud.cfg
                 # Belt-and-suspenders: write /etc/cloud/ds-identify.cfg
                 # with `policy: enabled` so ds-identify ALWAYS enables
                 # cloud-init regardless of detection outcome — the seed
@@ -531,7 +531,7 @@ distro:
                 mkdir -p {{.Mnt}}/etc/systemd/network
                 printf '[Match]\nName=en* eth*\n[Network]\nDHCP=yes\n' > {{.Mnt}}/etc/systemd/network/20-wired.network
                 arch-chroot {{.Mnt}} grub-install --target=x86_64-efi \
-                  --efi-directory=/boot/efi --bootloader-id=ov --removable
+                  --efi-directory=/boot/efi --bootloader-id=charly --removable
                 arch-chroot {{.Mnt}} grub-mkconfig -o /boot/grub/grub.cfg
                 # Create the SSH login user account (NO key baked in).
                 # Per-VM SSH keys are delivered at boot via SMBIOS type 11
@@ -558,7 +558,7 @@ distro:
                 ESP_UUID=$(blkid -s UUID -o value "${LOOP}p1")
                 mkdir -p {{.Mnt}}/boot/efi
                 cat > {{.Mnt}}/etc/fstab <<FSTAB
-                # Generated by ov bootstrap-VM build.
+                # Generated by charly bootstrap-VM build.
                 #
                 # `nofail` on /boot/efi prevents systemd from blocking the
                 # boot sequence on the ESP mount. Without it, an ESP
@@ -661,9 +661,9 @@ distro:
                 # container (the host is not Debian, so dpkg-buildpackage/debhelper
                 # run in-container for a distro-native package), then install it
                 # with `apt-get install` which AUTO-RESOLVES the package's repo
-                # deps. The ov binary is built on the host (prebuilt bin/ov, or a
+                # deps. The charly binary is built on the host (prebuilt bin/ov, or a
                 # go-build fallback) and bind-mounted in. NO tailscale dep in the
-                # .deb (not in Debian main — the ov candy adds tailscale for deb).
+                # .deb (not in Debian main — the charly candy adds tailscale for deb).
                 local_pkg:
                     pkg_glob: "*.deb"
                     source_sentinel: debian/control
@@ -676,12 +676,12 @@ distro:
                           set -e
                           export DEBIAN_FRONTEND=noninteractive
                           apt-get update -qq && apt-get install -y -qq build-essential debhelper >/dev/null
-                          cp -aT /src /tmp/src && cp /ovbin/ov /tmp/src/ov
+                          cp -aT /src /tmp/src && cp /ovbin/charly /tmp/src/charly
                           cd /tmp/src
                           # Stamp the .deb version from the binary CalVer so each
                           # build is upgradeable (a static changelog version would
-                          # make apt skip the reinstall on ov update).
-                          sed -i "1s/([^)]*)/($(/ovbin/ov version))/" debian/changelog
+                          # make apt skip the reinstall on charly update).
+                          sed -i "1s/([^)]*)/($(/ovbin/charly version))/" debian/changelog
                           dpkg-buildpackage -us -uc -b
                           cp ../*.deb /out/
                         '
@@ -692,7 +692,7 @@ distro:
                 # Mirrors the container install_template below: a layer's `repo:`
                 # blocks (key dearmor + sources.list + ppa) MUST be added BEFORE
                 # apt-get update so a package served only by a third-party repo
-                # (e.g. the ov layer's tailscale repo on deb-family) resolves —
+                # (e.g. the charly layer's tailscale repo on deb-family) resolves —
                 # the deploy compiler emits a single PhaseInstall step, so the
                 # repo prelude lives in this same cell (no separate prepare phase
                 # runs on the host). `apt-get update` then refreshes the index
@@ -799,7 +799,7 @@ distro:
                 # priming it. Without this, ds-identify defaults to MAYBE
                 # and cloud-init may silently no-op.
                 mkdir -p {{.Mnt}}/etc/cloud/cloud.cfg.d
-                printf 'datasource_list: [ NoCloud ]\n' > {{.Mnt}}/etc/cloud/cloud.cfg.d/99-ov-nocloud.cfg
+                printf 'datasource_list: [ NoCloud ]\n' > {{.Mnt}}/etc/cloud/cloud.cfg.d/99-charly-nocloud.cfg
                 printf 'policy: enabled\n' > {{.Mnt}}/etc/cloud/ds-identify.cfg
                 # Default DHCP profile for any en*/eth* interface so
                 # systemd-networkd actually configures something at first
@@ -821,7 +821,7 @@ distro:
                 mount -t proc proc {{.Mnt}}/proc
                 mount --bind /sys {{.Mnt}}/sys
                 chroot {{.Mnt}} grub-install --target=x86_64-efi \
-                  --efi-directory=/boot/efi --bootloader-id=ov --removable
+                  --efi-directory=/boot/efi --bootloader-id=charly --removable
                 chroot {{.Mnt}} update-grub
                 # grub-mkconfig writes `root=/dev/loopXp2` into the
                 # kernel cmdline because /proc/mounts (even fresh-
@@ -877,7 +877,7 @@ distro:
                 ESP_UUID=$(blkid -s UUID -o value "${LOOP}p1")
                 mkdir -p {{.Mnt}}/boot/efi
                 cat > {{.Mnt}}/etc/fstab <<FSTAB
-                # Generated by ov bootstrap-VM build.
+                # Generated by charly bootstrap-VM build.
                 #
                 # `nofail` on /boot/efi prevents systemd from blocking the
                 # boot sequence on the ESP mount (mirrors the Arch
@@ -930,7 +930,7 @@ distro:
                 # container (distro-native rpmbuild), then install it with
                 # `dnf install` which AUTO-RESOLVES the package's repo deps (all
                 # of ov's mandatory deps are in the Fedora repos, incl. tailscale).
-                # The ov binary is built on the host (prebuilt bin/ov, or a
+                # The charly binary is built on the host (prebuilt bin/ov, or a
                 # go-build fallback) and bind-mounted in; rpmbuild just packages it.
                 local_pkg:
                     pkg_glob: "*.rpm"
@@ -943,7 +943,7 @@ distro:
                         podman run --rm -v {{.SrcDir}}:/src:ro -v "$SUPER/bin":/ovbin:ro -v {{.PkgDest}}:/out:Z docker.io/library/fedora:43 bash -lc '
                           set -e
                           dnf install -y -q rpm-build >/dev/null
-                          rpmbuild -bb --define "_topdir /tmp/rb" --define "ovbin /ovbin/ov" --define "ovver $(/ovbin/ov version)" /src/overthink.spec
+                          rpmbuild -bb --define "_topdir /tmp/rb" --define "ovbin /ovbin/ov" --define "ovver $(/ovbin/charly version)" /src/opencharly.spec
                           find /tmp/rb/RPMS -name "*.rpm" -exec install -Dm644 -t /out {} +
                         '
                     install_template: |
@@ -1096,7 +1096,7 @@ init:
             start: start {{.Service}}
             status: status
             stop: stop {{.Service}}
-        label_key: org.overthinkos.service.supervisord
+        label_key: ai.opencharly.service.supervisord
         service_schema:
             supports_packaged: false
             # Supervisord program/eventlistener template. Emits
@@ -1192,7 +1192,7 @@ init:
             start: --user start {{.Service}}
             status: --user status {{.Service}}
             stop: --user stop {{.Service}}
-        label_key: org.overthinkos.service.systemd
+        label_key: ai.opencharly.service.systemd
         # service_schema lets RenderService emit a full systemd unit at
         # DEPLOY time for target: vm / target: host custom service: entries
         # (used by VmDeployTarget.execServiceCustom →

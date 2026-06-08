@@ -4,18 +4,18 @@ candy:
     description:
         feature: bench-composition — marker for from-composition-selftest hand-written probe
         narrative: |
-            Writes /etc/ov-ov-composition-selftest, satisfying the
+            Writes /etc/charly-charly-composition-selftest, satisfying the
             composition-handwritten-probe scenario in from-composition-selftest.
     task:
         - mkdir: /etc
           user: root
           mode: "0755"
-        - write: /etc/ov-composition-selftest
+        - write: /etc/charly-composition-selftest
           user: root
           mode: "0644"
           content: |
-            ov composition selftest marker
+            charly composition selftest marker
     eval:
         - id: composition-marker-exists
-          file: /etc/ov-composition-selftest
+          file: /etc/charly-composition-selftest
           exists: true

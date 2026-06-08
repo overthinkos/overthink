@@ -18,13 +18,13 @@ candy:
     task:
         - mkdir: "${HOME}/.local/bin"
           user: "${USER}"
-        - copy: ov-overlay
-          to: "${HOME}/.local/bin/ov-overlay"
+        - copy: charly-overlay
+          to: "${HOME}/.local/bin/charly-overlay"
           mode: "0755"
           user: "${USER}"
     eval:
-        - id: ov-overlay-script
-          file: ${HOME}/.local/bin/ov-overlay
+        - id: charly-overlay-script
+          file: ${HOME}/.local/bin/charly-overlay
           exists: true
           mode: "0755"
         - id: gtk4-layer-shell-installed

@@ -7,7 +7,7 @@ candy:
             Used by the eval-local kind:local template to exercise the
             ShellExecutor + HostDeployTarget path. Marker file is written by
             a write: task; deploy-scope eval probe runs on the host (not in a
-            container) to verify the file is present after `ov deploy add`.
+            container) to verify the file is present after `charly deploy add`.
         tag: [working]
     task:
         - write: /etc/eval-local-marker

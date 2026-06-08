@@ -6,8 +6,8 @@ candy:
         pacstrap, partition a VM disk, and install grub for a bootable
         Arch/CachyOS system. Used as the layer composition for the
         arch-pacstrap-builder / cachyos-pacstrap-builder images,
-        which run as privileged containers under `ov box build` and
-        `ov vm build` for kind:bootstrap source kinds.
+        which run as privileged containers under `charly box build` and
+        `charly vm build` for kind:bootstrap source kinds.
     distro:
         arch:
             package:

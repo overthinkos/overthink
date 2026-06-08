@@ -4,8 +4,8 @@ candy:
     description:
         feature: os — predictable system-state fixture for harness phase 1
         narrative: |
-            Writes /etc/ov-os-marker containing the predetermined content
-            marker `ov-os-content-marker`, and registers a long-lived bash
+            Writes /etc/charly-os-marker containing the predetermined content
+            marker `charly-os-content-marker`, and registers a long-lived bash
             service so that `pgrep -x bash` succeeds. Combined with a fedora
             base + supervisord this satisfies every scenario in the
             single-pod-system-state recipe.
@@ -20,11 +20,11 @@ candy:
         - mkdir: /etc
           user: root
           mode: "0755"
-        - write: /etc/ov-os-marker
+        - write: /etc/charly-os-marker
           user: root
           mode: "0644"
           content: |
-            ov-os-content-marker
+            charly-os-content-marker
     service:
         - name: os-bash
           exec: "/usr/bin/bash -c 'while true; do sleep 60; done'"
@@ -34,12 +34,12 @@ candy:
           scope: system
     eval:
         - id: os-marker-exists
-          file: /etc/ov-os-marker
+          file: /etc/charly-os-marker
           exists: true
         - id: os-marker-content
-          file: /etc/ov-os-marker
+          file: /etc/charly-os-marker
           contains:
-            - ov-os-content-marker
+            - charly-os-content-marker
         - id: os-bash-installed
           package: bash
           installed: true

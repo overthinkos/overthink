@@ -30,7 +30,7 @@ candy:
                 - openssl
                 - libunwind
                 - lttng-ust
-                # ov-host runtime deps that complete the `ov` PKGBUILD `depends=`
+                # charly-host runtime deps that complete the `ov` PKGBUILD `depends=`
                 # set ON THE RUNNER, so the release-packages CI job builds the pac
                 # artifact NATIVELY here: with every dep already installed,
                 # `makepkg -sf` resolves them all and never shells out to
@@ -48,7 +48,7 @@ candy:
         RUNNER_GROUP: "Default"
     env_accept:
         - name: RUNNER_ORG
-          description: "GitHub org/user to register the runner with (e.g. overthinkos). Pass via: ov config githubrunner -e RUNNER_ORG=<org>"
+          description: "GitHub org/user to register the runner with (e.g. overthinkos). Pass via: charly config githubrunner -e RUNNER_ORG=<org>"
     secret_accept:
         - name: RUNNER_TOKEN
           description: "Short-lived GitHub Actions runner registration token (gh api -X POST /orgs/<org>/actions/runners/registration-token). Credential-store backed; never written to deploy.yml or the quadlet."
@@ -60,8 +60,8 @@ candy:
         # a clean no-op rather than an error.
         post_enable: |
             [ -z "${RUNNER_TOKEN:-}" ] && { echo "RUNNER_TOKEN empty — skipping runner registration"; exit 0; }
-            : "${RUNNER_NAME:=${OV_CONTAINER_NAME:-runner}}"
-            : "${RUNNER_LABELS:=overthink}"
+            : "${RUNNER_NAME:=${CH_CONTAINER_NAME:-runner}}"
+            : "${RUNNER_LABELS:=opencharly}"
             "${HOME}/actions-runner/config.sh" --unattended \
               --url "https://github.com/${RUNNER_ORG}" \
               --token "${RUNNER_TOKEN}" \
@@ -148,7 +148,7 @@ candy:
         - id: gr-icu-pkg
           package: icu
           installed: true
-        # ov-host runtime deps completing the `ov` PKGBUILD depends= set, so the
+        # charly-host runtime deps completing the `ov` PKGBUILD depends= set, so the
         # release-packages CI job builds the pac artifact natively (makepkg needs
         # no sudo when every dep is present). FAIL without the package: additions.
         - id: gr-pkgbuild-dep-slirp4netns

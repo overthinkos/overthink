@@ -87,8 +87,8 @@ candy:
         # namespace, reading these still requires CAP_SYS_ADMIN in the init
         # userns (which we don't have), so the actual info leak is minimal.
         #
-        # Images that genuinely want the old full-hammer posture (fedora-ov,
-        # arch-ov, githubrunner) assert `security: {cap_add: [ALL], security_opt:
+        # Images that genuinely want the old full-hammer posture (fedora-charly,
+        # arch-charly, githubrunner) assert `security: {cap_add: [ALL], security_opt:
         # [...]}` at the image level; ov/security.go unions onto this layer.
         security_opt:
             - unmask=/proc/*
@@ -101,8 +101,8 @@ candy:
             # that can mask later failures.
             - /dev/net/tun
     env:
-        OV_BUILD_ENGINE: "podman"
-        OV_RUN_ENGINE: "podman"
+        CH_BUILD_ENGINE: "podman"
+        CH_RUN_ENGINE: "podman"
         # These two env vars are the hidden contract that makes rootless-in-rootless
         # podman work without --privileged:
         #
@@ -123,7 +123,7 @@ candy:
         # rootless user namespace's visible subid window.
         #
         # Host delegates atrawog:100000:65536 via /etc/subuid → inside the outer
-        # container, that's mapped as subid 1-65535 (via ov shell's
+        # container, that's mapped as subid 1-65535 (via charly shell's
         # --userns=keep-id). So inner subid entries must live in 1-65535.
         #
         # Pattern (from quay.io/podman/stable):
@@ -201,7 +201,7 @@ candy:
           user: "${USER}"
           mode: "0644"
           content: *policy_json_content
-        # System-wide storage.conf (used by root images: fedora-ov/arch-ov/
+        # System-wide storage.conf (used by root images: fedora-charly/arch-charly/
         # githubrunner). fuse-overlayfs at /var/lib/containers/storage.
         - write: /etc/containers/storage.conf
           user: root

@@ -47,7 +47,7 @@ candy:
         - cmd: |
             command -v pacman >/dev/null 2>&1 || exit 0
             set -eu
-            cache=/var/cache/ov-vscode
+            cache=/var/cache/charly-vscode
             tarball="${cache}/code-${VSCODE_VERSION}.tar.gz"
             mkdir -p "$cache"
             if [ ! -f "$tarball" ] || ! printf '%s  %s\n' "$VSCODE_SHA256" "$tarball" | sha256sum -c - >/dev/null 2>&1; then
@@ -61,7 +61,7 @@ candy:
             ln -sf /opt/vscode/bin/code /usr/bin/code
           user: root
           cache:
-            - /var/cache/ov-vscode
+            - /var/cache/charly-vscode
     eval:
         # eval-coverage gate (build-scope): proves VS Code installed on BOTH paths
         # (Arch symlink → /opt/vscode; Fedora MS-repo package → /usr/bin/code).

@@ -75,7 +75,7 @@ candy:
           status: 200
           allow_insecure: true
           timeout: 10s
-        # `ov eval wl` KWin parity — proves the host-safe KWin automation backends
+        # `charly eval wl` KWin parity — proves the host-safe KWin automation backends
         # work on the nested startplasma-wayland session, matching the wlroots
         # (sway/labwc) coverage: window-management via kdotool, keyboard via wtype,
         # clipboard via wl-clipboard, plus compositor detection. Pointer + resolution

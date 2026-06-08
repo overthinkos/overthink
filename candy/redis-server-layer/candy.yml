@@ -6,7 +6,7 @@ candy:
         narrative: |
             Runs /usr/bin/redis-server (provided by valkey-compat-redis on Fedora 43)
             bound to 0.0.0.0:6379 with protected-mode off, so a sibling redis-client
-            pod on the shared `ov` network can SET/GET via `redis-cli -h ov-redis`.
+            pod on the shared `ov` network can SET/GET via `redis-cli -h charly-redis`.
     distro:
         fedora:
             package:

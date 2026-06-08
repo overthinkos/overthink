@@ -66,7 +66,7 @@ candy:
               echo "FAIL: /workspace is $fstype, expected virtiofs"
               exit 1
             fi
-            probe=/workspace/.ov-workspace-write-probe
+            probe=/workspace/.charly-workspace-write-probe
             if touch "$probe" 2>/dev/null && rm -f "$probe" 2>/dev/null; then
               echo "WORKSPACE-OK (virtiofs read-write at /workspace)"
             else

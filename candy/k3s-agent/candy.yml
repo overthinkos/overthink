@@ -10,7 +10,7 @@ candy:
     # (DefaultCredentialStore.Set) and the other reads the persisted
     # value — server and every agent automatically share the token with
     # zero operator setup. Override only when you need a specific value:
-    #   ov secrets set ov/secret/K3S_CLUSTER_TOKEN <value>
+    #   charly secrets set ov/secret/K3S_CLUSTER_TOKEN <value>
     secret_require:
         - name: K3S_CLUSTER_TOKEN
           description: Pre-shared token matching the cluster server's token. Auto-generated on first deploy; shared via the credential store.
@@ -76,7 +76,7 @@ candy:
           exists: true
           mode: "0600"
         # Deploy-scope: verify this node actually joined the cluster.
-        # Uses ov eval k8s wait-nodes --name <hostname> — the cluster flag
+        # Uses charly eval k8s wait-nodes --name <hostname> — the cluster flag
         # resolves to the sibling k3s-server's ClusterProfile (the operator
         # must name the cluster profile to match, e.g., via ${K3S_CLUSTER}).
         - id: agent-joined

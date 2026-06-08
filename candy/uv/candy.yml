@@ -11,7 +11,7 @@ candy:
           strip_components: 1
           to: /usr/local/bin
           user: root
-          # Explicit uninstall list so `ov deploy del` removes just the
+          # Explicit uninstall list so `charly deploy del` removes just the
           # binaries this archive drops in /usr/local/bin, not the whole
           # shared dir (which would wipe every system-local binary).
           uninstall:

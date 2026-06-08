@@ -1,18 +1,30 @@
 candy:
-    version: 2026.149.1500
+    version: 2026.159.1324
     name: supervisord
     # XDG_RUNTIME_DIR for the CONTAINER. A container has no logind /run/user/<uid>,
-    # so the per-user runtime dir is /tmp; supervisord (PID 1) + every program it
-    # starts inherit this image ENV. It lives HERE — on the container init layer —
-    # not hardcoded in each desktop/wayland layer, so that on a systemd target
-    # (host/vm) where this supervisord layer is pruned (systemd is the only init),
-    # the systemd user manager provides the correct /run/user/<uid> instead. This
-    # is what lets pipewire/selkies/the nested compositor reach the user session
-    # bus on a VM while keeping the container behavior unchanged.
+    # so we provide a per-user runtime dir; supervisord (PID 1) + every program it
+    # starts inherit this image ENV. It MUST be a per-user directory OWNED BY the
+    # running user at mode 0700 (the XDG Base Dir spec): the previous value "/tmp"
+    # (root-owned, sticky 1777) violated that on TWO fronts — (a) older
+    # podman/buildah (e.g. Ubuntu 24.04's 4.9.3) HARD-FAIL when XDG_RUNTIME_DIR is
+    # not owned by the current user (even for `--version`), and (b) wayland/pipewire
+    # warn that /tmp is not 0700. A dedicated /tmp/xdg-runtime, created 0700 and
+    # owned by the image user by the task below, satisfies both — generically, on
+    # EVERY distro. It lives HERE — on the container init layer — not hardcoded in
+    # each desktop/wayland layer, so that on a systemd target (host/vm) where this
+    # supervisord layer is pruned (systemd is the only init), the systemd user
+    # manager provides the real /run/user/<uid> instead. This is what lets
+    # pipewire/selkies/the nested compositor reach the user session bus.
     env:
-        XDG_RUNTIME_DIR: "/tmp"
+        XDG_RUNTIME_DIR: "/tmp/xdg-runtime"
     package:
         - supervisor
+    task:
+        # Per-user XDG_RUNTIME_DIR (see the env comment above): owned by the image
+        # user at 0700 so older podman/buildah and wayland/pipewire both accept it.
+        - mkdir: /tmp/xdg-runtime
+          user: "${USER}"
+          mode: "0700"
     eval:
         - id: supervisord-binary
           file: /usr/bin/supervisord

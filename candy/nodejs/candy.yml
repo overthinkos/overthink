@@ -1,5 +1,5 @@
 candy:
-    version: 2026.157.1257
+    version: 2026.159.1324
     name: nodejs
     env:
         NPM_CONFIG_PREFIX: "~/.npm-global"
@@ -19,16 +19,25 @@ candy:
             package:
                 - npm
         ubuntu:
-            package:
-                - npm
-        # No ubuntu-24.04 nodesource override: under the distro-specificity
-        # cascade a versioned section's repo is now actually applied (it was
-        # Phase-1-skipped before, so it never took effect), and installing
-        # `npm` (Ubuntu) alongside nodesource's `nodejs` (which bundles its own
-        # npm) yields conflicting node-* deps — broken packages. Ubuntu ships a
-        # compatible nodejs+npm pair from its own repos; use it. A deliberate
-        # NodeSource upgrade would DROP the separate `npm` (nodesource bundles it)
-        # rather than add a repo that fights the base package.
+            # Ubuntu 24.04 (noble) apt freezes nodejs at 18.19.1 — too old for the
+            # box's own npm CLIs (firebase requires node >=20; gemini-cli's undici
+            # needs the node>=20 global `File`; oracle's string-width needs the
+            # node>=20 unicode-sets `v` regex flag). Install nodejs from NodeSource
+            # (node 20.x): apt prefers its higher version over noble's 18. The base
+            # `package: [nodejs]` (top-level) supplies the package name; this section
+            # only adds the repo. The apt `npm` package is INTENTIONALLY omitted —
+            # NodeSource's nodejs BUNDLES npm at /usr/bin/npm, and installing the
+            # separate apt `npm` alongside it pulls conflicting node-* deps (broken
+            # packages). debian/fedora/arch keep their apt/dnf/pacman npm (their base
+            # node is already >=20). This is the deliberate "NodeSource upgrade that
+            # DROPS the separate npm" the prior note described — now required because
+            # the in-box CLIs outgrew noble's frozen node 18.
+            repo:
+                - name: nodesource
+                  url: "https://deb.nodesource.com/node_20.x"
+                  key: "https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key"
+                  suite: nodistro
+                  components: main
     var:
         PNPM_VERSION: "10.33.4"
     task:

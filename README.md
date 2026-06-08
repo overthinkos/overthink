@@ -93,10 +93,10 @@ have to.
   init-system polymorphism below), volumes, env, ports, eval probes,
   `env_provide`/`env_require`/`mcp_provide`/`mcp_accept` for
   cross-container discovery, plus a `version:` CalVer.
-  → `/ov-image:layer`.
+  → `/charly-image:layer`.
 - **Box** (`kind: box`) — base + ordered candy list. Multi-stage
   Containerfile, content-derived `ai.opencharly.version` OCI label,
-  stable cache. → `/ov-image:image`.
+  stable cache. → `/charly-image:image`.
 
 ### Candyboxing
 
@@ -106,7 +106,7 @@ inside it: every `ov` verb, every candy, every `charly eval` probe, a real
 system, a real GPU. Far more capability than a locked-down sandbox, and
 a mistake costs one rebuild.
 → [VISION.md](VISION.md) (why), CLAUDE.md "Candyboxing" (the rule),
-`/ov-internals:disposable` (the lifecycle boundary).
+`/charly-internals:disposable` (the lifecycle boundary).
 
 ### Risk Driven Development (early)
 
@@ -115,7 +115,7 @@ of candies, at their latest versions, actually builds and runs together —
 empirically on a disposable `kind: eval` bed EARLY, before a design rests
 on it. `charly eval` makes that proof cheap, for agents and humans alike.
 → [VISION.md](VISION.md) (why), CLAUDE.md "Risk Driven Development (RDD)"
-(the rule), `/ov-eval:eval` (usage).
+(the rule), `/charly-eval:eval` (usage).
 
 ### Agent Driven Development (acceptance)
 
@@ -127,7 +127,7 @@ is graded by an **agent** probing the live deployment. Author with
 `charly eval feature run`, or let the `charly eval run <score>` AI loop drive it to
 green. The spec is the test, and agents both write it and grade it.
 → [VISION.md](VISION.md) (why), CLAUDE.md "Agent Driven Development (ADD)"
-(the rule), `/ov-eval:eval` (usage).
+(the rule), `/charly-eval:eval` (usage).
 
 ### Build → run → deploy → evaluate
 
@@ -153,28 +153,28 @@ discriminator in its file:
 
 - **Pod** (`kind: pod`) — multi-container deploy shape: containers,
   sidecars, tunnels. Deployed as a Podman pod with a quadlet per
-  container. → `/ov-pod:pod`.
+  container. → `/charly-pod:pod`.
 - **VM** (`kind: vm`) — `source: {kind: cloud_image | bootc}`,
   disk/ram/cpu, libvirt+QEMU. `charly vm build/create/start/stop/clone/
-  snapshot/console`. → `/ov-vm:vm`.
+  snapshot/console`. → `/charly-vm:vm`.
 - **K8s** (`kind: k8s`) — Kubernetes cluster (in-pod k3s or external)
-  with provisioning + workload defaults. → `/ov-kubernetes:kubernetes`.
+  with provisioning + workload defaults. → `/charly-kubernetes:kubernetes`.
 - **Local** (`kind: local`) — host-side candy stack applied to the
   operator's machine (or any ssh-reachable host) via the native
-  package manager + systemd + shell profile. → `/ov-local:local-spec`.
+  package manager + systemd + shell profile. → `/charly-local:local-spec`.
 - **Android** (`kind: android`) — Android device: in-pod emulator
   (via `box:`) or remote/physical adb endpoint. `apk:` is a candy
-  package format scoped to Android targets. → `/ov-eval:android`.
+  package format scoped to Android targets. → `/charly-eval:android`.
 - **Deploy** (`kind: deploy`) — a named deployment of one of the
   kinds above to a `target:` (`pod` default, `vm`, `k8s`, `local`,
   `android`). Carries env overlays, port remaps, volume backings,
   sidecars, tunnels, secrets, and the `disposable: true` opt-in.
-  → `/ov-core:deploy`.
+  → `/charly-core:deploy`.
 - **Eval** (`kind: eval`) — a *disposable* deploy used as an R10 test
   bed: `charly eval run <bed>` runs build → deploy → probe →
   fresh-update → tear-down. The `kind: recipe` / `kind: score` /
   `kind: ai` overlays drive the agent-iteration harness on top.
-  → `/ov-eval:eval`.
+  → `/charly-eval:eval`.
 
 ### Cross-cutting rules
 
@@ -192,8 +192,8 @@ needs the same service under supervisord (containers) and systemd
 same `name:`, one entry with `use_packaged: <unit>.service`, another
 with custom `exec:`. The init system at deploy time picks the
 matching form. *Never* create a `<name>-host` / `<name>-pod` sibling
-candy for this. Canonical examples: `/ov-coder:sshd`,
-`/ov-infrastructure:virtualization`, `/ov-infrastructure:postgresql`.
+candy for this. Canonical examples: `/charly-coder:sshd`,
+`/charly-infrastructure:virtualization`, `/charly-infrastructure:postgresql`.
 
 **Distro + package-format dispatch.** A candy declares `distro:` tag
 sections (`fedora:43:` / `ubuntu:24.04:`) and package-format sections
@@ -207,7 +207,7 @@ differing only in package sections.
 `kind: deploy` is the *one and only* authorization for `charly update`'s
 autonomous destroy + rebuild. No hostname heuristic, no inference.
 Explicit-only is what makes `charly update <name>` safe on shared
-infrastructure. → `/ov-internals:disposable`.
+infrastructure. → `/charly-internals:disposable`.
 
 ## Why Overthink?
 
@@ -231,21 +231,21 @@ it works, so any box or deployment is self-verifiable end-to-end — the
 same surface whether a human drives it at the keyboard or an agent drives
 it autonomously. See [Evaluate](#evaluate) for the framework and
 [Works with Claude Code](#works-with-claude-code) for the agents and
-workflows. → `/ov-eval:eval`, `/ov-internals:agents`.
+workflows. → `/charly-eval:eval`, `/charly-internals:agents`.
 
 **Rootless-first power-user boxes.** The four boxes carrying the
 full `ov` toolchain (`fedora-coder`, `fedora-ov`, `arch-ov`,
 `githubrunner`) all run as uid=1000 with passwordless sudo. Four
-cross-distro coder boxes (`/ov-coder:fedora-coder`/`arch-coder`/
+cross-distro coder boxes (`/charly-coder:fedora-coder`/`arch-coder`/
 `debian-coder`/`ubuntu-coder`) share ~30 candies, differing only in
 package sections and how the uid-1000 user lands (create vs. adopt
 mode). Rootless nested containers and rootless libvirt VMs work
 with zero additive capabilities via the surgical `unmask=/proc/*`
 security_opt from the `container-nesting` candy.
-→ `/ov-distros:container-nesting`, `/ov-coder:fedora-coder`.
+→ `/charly-distros:container-nesting`, `/charly-coder:fedora-coder`.
 
 **Sandboxed agent desktops.** [Candyboxing](#candyboxing) applied to a
-whole desktop: `/ov-openclaw:openclaw-desktop` is the all-in-one CachyOS
+whole desktop: `/charly-openclaw:openclaw-desktop` is the all-in-one CachyOS
 streaming desktop — Selkies desktop + openclaw-full gateway + agent CLIs
 (claude-code, codex, gemini) + CPU ollama + nested `ov`. The agent (or the
 user) builds boxes, launches nested rootless pods, and creates libvirt
@@ -264,7 +264,7 @@ This puts `ov` in your `$GOPATH/bin`. Create an `charly.yml` and
 a `candy/` directory and you're done. Legacy projects (predating
 the unified schema, the `kind:` discriminators, or the singular
 field names) convert in one shot with `charly migrate` — a single
-idempotent chain to the latest CalVer schema. See `/ov-build:migrate`.
+idempotent chain to the latest CalVer schema. See `/charly-build:migrate`.
 
 **Full project bootstrap** (to build boxes from this repo):
 
@@ -373,9 +373,9 @@ Cross-repo refs: `import:` items and candy references can name
 different `version:` → warn once and use the newest. `charly box
 reconcile` aligns the cross-repo pins when a candy's CalVer moves.
 
-→ `/ov-build:build`, `/ov-build:generate`, `/ov-build:validate`,
-`/ov-build:inspect`, `/ov-build:reconcile`, `/ov-image:image`,
-`/ov-image:layer`, `/ov-internals:capabilities`.
+→ `/charly-build:build`, `/charly-build:generate`, `/charly-build:validate`,
+`/charly-build:inspect`, `/charly-build:reconcile`, `/charly-image:image`,
+`/charly-image:layer`, `/charly-internals:capabilities`.
 
 ### Run
 
@@ -427,15 +427,15 @@ input.
 - **Auto service discovery** — a candy's `env_provide:` declares
   env vars with `{{.ContainerName}}` templates injected into every
   co-deployed container at `charly config` time. Deploy `ollama` and
-  every other pod sees `OLLAMA_HOST=http://ov-ollama:11434`.
+  every other pod sees `OLLAMA_HOST=http://charly-ollama:11434`.
   `mcp_provide:` works the same way for MCP URLs.
   `env_require:` / `env_accept:` document consumer dependencies
   so `charly config` warns early.
 
-→ `/ov-core:start`, `/ov-core:logs`, `/ov-core:cmd`,
-`/ov-core:service`, `/ov-core:ov-status`, `/ov-automation:sidecar`,
-`/ov-automation:enc`, `/ov-automation:udev`, `/ov-pod:pod`,
-`/ov-selkies:selkies-desktop-layer`, `/ov-selkies:sway`.
+→ `/charly-core:start`, `/charly-core:logs`, `/charly-core:cmd`,
+`/charly-core:service`, `/charly-core:ov-status`, `/charly-automation:sidecar`,
+`/charly-automation:enc`, `/charly-automation:udev`, `/charly-pod:pod`,
+`/charly-selkies:selkies-desktop-layer`, `/charly-selkies:sway`.
 
 ### Deploy
 
@@ -452,13 +452,13 @@ discriminates where it lands:
   clone` (snapshot fork), `charly vm snapshot`, `charly vm console`. The
   managed `~/.config/charly/ssh_config` fragment gets a `Host
   ov-<vmname>` stanza written on `charly vm create`.
-  → `/ov-vm:vm`, `/ov-internals:vm-deploy-target`.
+  → `/charly-vm:vm`, `/charly-internals:vm-deploy-target`.
 - **`target: k8s`** — Kustomize tree applied to k3s in-pod (candy
-  triplet `/ov-infrastructure:k3s` + `k3s-server` + `k3s-agent`) or
+  triplet `/charly-infrastructure:k3s` + `k3s-server` + `k3s-agent`) or
   to an external cluster. `K3S_CLUSTER_TOKEN` auto-generated on
   first deploy via `ensureLayerSecret` and shared with every joining
-  agent — zero operator setup. → `/ov-kubernetes:kubernetes`,
-  `/ov-infrastructure:k3s`.
+  agent — zero operator setup. → `/charly-kubernetes:kubernetes`,
+  `/charly-infrastructure:k3s`.
 - **`target: local`** — applies the candies' packages / files /
   systemd units to the host filesystem. `host: local` (default)
   uses the local shell executor; `host: user@machine[:port]` (or a
@@ -466,12 +466,12 @@ discriminates where it lands:
   via `add_candy:` in `~/.config/charly/deploy.yml`. Ledger at
   `~/.config/opencharly/installed/` records every ReverseOp so
   `charly deploy del host` reverses precisely what was applied.
-  → `/ov-local:local-deploy`, `/ov-local:local-spec`.
+  → `/charly-local:local-deploy`, `/charly-local:local-spec`.
 - **`target: android`** — `kind: android` device (in-pod emulator
   via `box:` or remote adb endpoint via `adb: {host: …}`);
   `apk:` packages installed by `apkeep` (Google Play) or pushed
   from committed `.apk` files via goadb. Nested `pod → android`
-  mirrors `vm → k8s`. → `/ov-eval:android`, `/ov-eval:adb`.
+  mirrors `vm → k8s`. → `/charly-eval:android`, `/charly-eval:adb`.
 
 `charly deploy del`, `charly deploy sync` (apply K8s changes live),
 `charly deploy from-box` (source-less deploy from OCI labels), and
@@ -491,10 +491,10 @@ import-key, export-key, setup, doctor}`. Candy-private secrets
 `ensureLayerSecret` and stored under `ov/secret/<key>` in the
 Secret Service. **Agent forwarding** — the `agent-forwarding` candy
 binds host `SSH_AUTH_SOCK` / `GPG_AGENT_SOCK` into the container.
-→ `/ov-build:secrets`.
+→ `/charly-build:secrets`.
 
-→ `/ov-core:deploy`, `/ov-core:ov-config`, `/ov-core:ov-update`,
-`/ov-internals:disposable`, `/ov-vm:vms-catalog`.
+→ `/charly-core:deploy`, `/charly-core:ov-config`, `/charly-core:ov-update`,
+`/charly-internals:disposable`, `/charly-vm:vms-catalog`.
 
 ### Evaluate
 
@@ -536,7 +536,7 @@ not "failed".
 (`/verify-beds`, `/audit-deploy-configs`) run `charly eval
 run`/`live`/`image` against the existing beds and return verbatim
 pass/fail — the same disposable-bed verification, whether you run it
-or your agent does. → `/ov-internals:agents`.
+or your agent does. → `/charly-internals:agents`.
 
 Eleven live-container probe verbs — authorable inline as
 declarative checks inside any `eval:` block (`cdp: eval`, `wl:
@@ -566,10 +566,10 @@ getprop`, `appium: click`, …):
 `charly feature {list, pending, validate}` authors and validates
 Gherkin-shaped descriptions on the same entries.
 
-→ `/ov-eval:eval`, `/ov-eval:cdp`, `/ov-eval:wl`, `/ov-eval:dbus`,
-`/ov-eval:vnc`, `/ov-eval:spice`, `/ov-eval:libvirt`,
-`/ov-eval:record`, `/ov-kubernetes:eval-k8s`, `/ov-eval:adb`,
-`/ov-eval:appium`, `/ov-eval:android`.
+→ `/charly-eval:eval`, `/charly-eval:cdp`, `/charly-eval:wl`, `/charly-eval:dbus`,
+`/charly-eval:vnc`, `/charly-eval:spice`, `/charly-eval:libvirt`,
+`/charly-eval:record`, `/charly-kubernetes:eval-k8s`, `/charly-eval:adb`,
+`/charly-eval:appium`, `/charly-eval:android`.
 
 ### Author with agents
 
@@ -604,8 +604,8 @@ stdio), so Claude Code, Codex, or any MCP client drives the full
 auto-fallback to `overthinkos/opencharly` when no project is wired
 (opt out with `--no-default-repo`).
 
-→ `/ov-eval:eval`, `/ov-build:ov-mcp-cmd`, `/ov-coder:ov-mcp`,
-`/ov-coder:claude-code`, `/ov-coder:codex`, `/ov-coder:gemini`.
+→ `/charly-eval:eval`, `/charly-build:ov-mcp-cmd`, `/charly-coder:charly-mcp`,
+`/charly-coder:claude-code`, `/charly-coder:codex`, `/charly-coder:gemini`.
 
 ### Manage
 
@@ -636,10 +636,10 @@ auto-fallback to `overthinkos/opencharly` when no project is wired
 - `charly udev install/remove` — host-side udev rules for GPU device
   access (CDI symlinks).
 
-→ `/ov-core:clean`, `/ov-core:ov-doctor`, `/ov-core:ov-update`,
-`/ov-build:migrate`, `/ov-build:settings`, `/ov-core:ssh`,
-`/ov-automation:tmux`, `/ov-automation:alias`,
-`/ov-automation:udev`.
+→ `/charly-core:clean`, `/charly-core:ov-doctor`, `/charly-core:ov-update`,
+`/charly-build:migrate`, `/charly-build:settings`, `/charly-core:ssh`,
+`/charly-automation:tmux`, `/charly-automation:alias`,
+`/charly-automation:udev`.
 
 ## Command reference
 
@@ -652,16 +652,16 @@ gateway exposing the entire surface as MCP tools.
 
 | Area | Commands | Skill |
 |---|---|---|
-| **Box (build mode)** | `charly box {build, generate, validate, merge, new, inspect, list, pull, reconcile}` | `/ov-image:image` + `/ov-build:build`, `/ov-build:generate`, `/ov-build:validate`, `/ov-build:merge`, `/ov-build:new`, `/ov-build:inspect`, `/ov-build:list`, `/ov-build:pull`, `/ov-build:reconcile` |
-| **Box authoring (MCP-first)** | `charly box {set, add-candy, rm-candy, fetch, refresh, write, cat}` and `charly candy {set, add-rpm, add-deb, add-pac, add-aur}` | `/ov-image:image` "Authoring" + `/ov-image:layer` |
-| **Deployment** | `charly deploy {add, del, sync, from-box, export, import, show, reset, status, path}`; `charly config`; `charly start`, `charly stop`, `charly restart`, `charly update`, `charly remove` | `/ov-core:deploy`, `/ov-core:ov-config`, `/ov-core:start`, `/ov-core:stop`, `/ov-core:ov-update`, `/ov-core:remove`, `/ov-local:local-deploy`, `/ov-kubernetes:kubernetes`, `/ov-internals:vm-deploy-target` |
-| **Runtime** | `charly shell`, `charly cmd`, `charly service`, `charly status`, `charly logs`, `charly tmux` | `/ov-core:shell`, `/ov-core:cmd`, `/ov-core:service`, `/ov-core:ov-status`, `/ov-core:logs`, `/ov-automation:tmux` |
-| **Test + probes** | `charly eval {image, live, run}` + the 11 live probe verbs (`cdp`, `wl`, `dbus`, `vnc`, `mcp`, `record`, `spice`, `libvirt`, `k8s`, `adb`, `appium`); `charly feature {list, pending, validate}` | `/ov-eval:eval`, `/ov-eval:cdp`, `/ov-eval:wl`, `/ov-eval:dbus`, `/ov-eval:vnc`, `/ov-eval:spice`, `/ov-eval:libvirt`, `/ov-eval:record`, `/ov-kubernetes:eval-k8s`, `/ov-eval:adb`, `/ov-eval:appium` |
-| **MCP gateway** | `charly mcp {serve, ping, servers, list-tools, list-resources, list-prompts, call, read}` | `/ov-build:ov-mcp-cmd`, `/ov-coder:ov-mcp` |
-| **VM** | `charly vm {build, create, start, stop, destroy, snapshot, clone, console, ssh, import, list}` | `/ov-vm:vm`, `/ov-vm:vms-catalog`, `/ov-internals:vm-deploy-target` |
-| **Schema migration** | `charly migrate` (single idempotent chain) | `/ov-build:migrate` |
-| **Secrets & config** | `charly secrets`, `charly settings`, `charly alias`, `charly udev` | `/ov-build:secrets`, `/ov-build:settings`, `/ov-automation:alias`, `/ov-automation:udev` |
-| **Host & admin** | `charly doctor`, `charly clean`, `charly reap-orphans`, `charly ssh`, `charly version` | `/ov-core:ov-doctor`, `/ov-core:clean`, `/ov-core:ssh`, `/ov-core:ov-version` |
+| **Box (build mode)** | `charly box {build, generate, validate, merge, new, inspect, list, pull, reconcile}` | `/charly-image:image` + `/charly-build:build`, `/charly-build:generate`, `/charly-build:validate`, `/charly-build:merge`, `/charly-build:new`, `/charly-build:inspect`, `/charly-build:list`, `/charly-build:pull`, `/charly-build:reconcile` |
+| **Box authoring (MCP-first)** | `charly box {set, add-candy, rm-candy, fetch, refresh, write, cat}` and `charly candy {set, add-rpm, add-deb, add-pac, add-aur}` | `/charly-image:image` "Authoring" + `/charly-image:layer` |
+| **Deployment** | `charly deploy {add, del, sync, from-box, export, import, show, reset, status, path}`; `charly config`; `charly start`, `charly stop`, `charly restart`, `charly update`, `charly remove` | `/charly-core:deploy`, `/charly-core:ov-config`, `/charly-core:start`, `/charly-core:stop`, `/charly-core:ov-update`, `/charly-core:remove`, `/charly-local:local-deploy`, `/charly-kubernetes:kubernetes`, `/charly-internals:vm-deploy-target` |
+| **Runtime** | `charly shell`, `charly cmd`, `charly service`, `charly status`, `charly logs`, `charly tmux` | `/charly-core:shell`, `/charly-core:cmd`, `/charly-core:service`, `/charly-core:ov-status`, `/charly-core:logs`, `/charly-automation:tmux` |
+| **Test + probes** | `charly eval {image, live, run}` + the 11 live probe verbs (`cdp`, `wl`, `dbus`, `vnc`, `mcp`, `record`, `spice`, `libvirt`, `k8s`, `adb`, `appium`); `charly feature {list, pending, validate}` | `/charly-eval:eval`, `/charly-eval:cdp`, `/charly-eval:wl`, `/charly-eval:dbus`, `/charly-eval:vnc`, `/charly-eval:spice`, `/charly-eval:libvirt`, `/charly-eval:record`, `/charly-kubernetes:eval-k8s`, `/charly-eval:adb`, `/charly-eval:appium` |
+| **MCP gateway** | `charly mcp {serve, ping, servers, list-tools, list-resources, list-prompts, call, read}` | `/charly-build:ov-mcp-cmd`, `/charly-coder:charly-mcp` |
+| **VM** | `charly vm {build, create, start, stop, destroy, snapshot, clone, console, ssh, import, list}` | `/charly-vm:vm`, `/charly-vm:vms-catalog`, `/charly-internals:vm-deploy-target` |
+| **Schema migration** | `charly migrate` (single idempotent chain) | `/charly-build:migrate` |
+| **Secrets & config** | `charly secrets`, `charly settings`, `charly alias`, `charly udev` | `/charly-build:secrets`, `/charly-build:settings`, `/charly-automation:alias`, `/charly-automation:udev` |
+| **Host & admin** | `charly doctor`, `charly clean`, `charly reap-orphans`, `charly ssh`, `charly version` | `/charly-core:ov-doctor`, `/charly-core:clean`, `/charly-core:ssh`, `/charly-core:ov-version` |
 
 **Global flags** (apply to every command):
 
@@ -682,23 +682,23 @@ Content lives in the working tree and in the skill index — pointers,
 not enumerations:
 
 - **Candy library** (`candy/` + submodule `image/<distro>/candy/`,
-  187 candies total). Foundation: `/ov-distros:*` (40 skills — base
+  187 candies total). Foundation: `/charly-distros:*` (40 skills — base
   OS, GPU runtime, bootc, per-distro builders),
-  `/ov-languages:*`, `/ov-infrastructure:*` (22), `/ov-tools:*`
-  (19). Per-pod: `/ov-jupyter:*`, `/ov-coder:*` (33),
-  `/ov-selkies:*` (40), `/ov-openclaw:*`, `/ov-versa:*`,
-  `/ov-ollama:*`, `/ov-openwebui:*`, `/ov-comfyui:*`,
-  `/ov-immich:*`, `/ov-hermes:*`, `/ov-filebrowser:*`.
+  `/charly-languages:*`, `/charly-infrastructure:*` (22), `/charly-tools:*`
+  (19). Per-pod: `/charly-jupyter:*`, `/charly-coder:*` (33),
+  `/charly-selkies:*` (40), `/charly-openclaw:*`, `/charly-versa:*`,
+  `/charly-ollama:*`, `/charly-openwebui:*`, `/charly-comfyui:*`,
+  `/charly-immich:*`, `/charly-hermes:*`, `/charly-filebrowser:*`.
 - **Box catalog** (`box.yml` + `image/*/box.yml`) — 53 boxes,
   39 enabled by default. Same plugin namespaces; per-pod boxes
   carry an MCP server hint in `plugins/README.md`.
 - **VM catalog** (`vm.yml` + `image/cachyos/vm.yml`) — cloud_image
-  + bootc entries. → `/ov-vm:vms-catalog`.
+  + bootc entries. → `/charly-vm:vms-catalog`.
 - **Deploy-target catalog** — pod / vm / k8s / local / android.
   Each has a dedicated kind file.
 - **Eval bed catalog** (`eval.yml`) — `kind: eval` beds for R10,
   plus `kind: recipe` / `score` / `ai` for the agent harness.
-  → `/ov-eval:eval`.
+  → `/charly-eval:eval`.
 
 Candies used by only one box family are vendored in that
 `image/<distro>` submodule (e.g. bootc-exclusive set in
@@ -727,20 +727,20 @@ not here.
 
 | Symptom | First step |
 |---------|-----------|
-| Service won't start | `charly status <image>` then `charly logs <image>` (`/ov-core:ov-status`, `/ov-core:logs`) |
-| Quadlet out of sync with deploy.yml | `charly config <image> --update-all` (`/ov-core:ov-config`) |
-| Build cache stale | `charly box build --no-cache <image>` (`/ov-build:build`) |
-| Chrome stuck or crash-looping | `/ov-selkies:chrome` Resource Caps & Circuit Breaker section |
-| Encrypted volume locked at boot | `charly config mount` waits for keyring unlock automatically — zero CPU, event-driven (`/ov-automation:enc`) |
-| GPU not detected | `charly doctor` then `/ov-automation:udev` |
-| Tunnel not appearing on a new instance | Tunnel config is `deploy.yml`-only — add manually per instance (`/ov-core:deploy`) |
-| Service built fine but broken in production | `charly eval live <image>` runs the baked layer + image + deploy checks (`/ov-eval:eval`) |
-| `charly vm build` fails: "no kind:vm entity in vm.yml" | Declare a `kind: vm` entity (`/ov-vm:vms-catalog`) |
-| SPICE console blank on cloud_image VM | Known `simpledrm → qxldrmfb` race under UEFI; switch to `firmware: bios` (`/ov-vm:arch`) |
-| `charly deploy add vm:<name>` errors "VM does not exist" | Run `charly vm create <name>` first — VM deploy is not auto-provisioning (`/ov-core:deploy`) |
-| Resolver "referenced at multiple versions" warning | `charly box reconcile` aligns the cross-repo `@github` pins (`/ov-build:reconcile`) |
-| `charly box pull` says "image is not available locally" | `charly box pull` accepts short name + project, fully-qualified ref, or `@github` remote ref. See `/ov-build:pull` |
-| Newer-than-binary config rejected at load | `charly migrate` brings the project to the latest schema CalVer (`/ov-build:migrate`) |
+| Service won't start | `charly status <image>` then `charly logs <image>` (`/charly-core:ov-status`, `/charly-core:logs`) |
+| Quadlet out of sync with deploy.yml | `charly config <image> --update-all` (`/charly-core:ov-config`) |
+| Build cache stale | `charly box build --no-cache <image>` (`/charly-build:build`) |
+| Chrome stuck or crash-looping | `/charly-selkies:chrome` Resource Caps & Circuit Breaker section |
+| Encrypted volume locked at boot | `charly config mount` waits for keyring unlock automatically — zero CPU, event-driven (`/charly-automation:enc`) |
+| GPU not detected | `charly doctor` then `/charly-automation:udev` |
+| Tunnel not appearing on a new instance | Tunnel config is `deploy.yml`-only — add manually per instance (`/charly-core:deploy`) |
+| Service built fine but broken in production | `charly eval live <image>` runs the baked layer + image + deploy checks (`/charly-eval:eval`) |
+| `charly vm build` fails: "no kind:vm entity in vm.yml" | Declare a `kind: vm` entity (`/charly-vm:vms-catalog`) |
+| SPICE console blank on cloud_image VM | Known `simpledrm → qxldrmfb` race under UEFI; switch to `firmware: bios` (`/charly-vm:arch`) |
+| `charly deploy add vm:<name>` errors "VM does not exist" | Run `charly vm create <name>` first — VM deploy is not auto-provisioning (`/charly-core:deploy`) |
+| Resolver "referenced at multiple versions" warning | `charly box reconcile` aligns the cross-repo `@github` pins (`/charly-build:reconcile`) |
+| `charly box pull` says "image is not available locally" | `charly box pull` accepts short name + project, fully-qualified ref, or `@github` remote ref. See `/charly-build:pull` |
+| Newer-than-binary config rejected at load | `charly migrate` brings the project to the latest schema CalVer (`/charly-build:migrate`) |
 | Schema/format change won't apply | `charly migrate` is idempotent; auto-invoked on remote-cache fetches |
 
 ## Adding a candy
@@ -749,7 +749,7 @@ not here.
 charly box new candy my-candy             # Scaffold the directory
 # Edit candy/my-candy/candy.yml        # Declare packages, deps, env, ports,
 #                                       # services, eval probes, and tasks:
-#                                       # (see /ov-image:layer for the verb catalog)
+#                                       # (see /charly-image:layer for the verb catalog)
 # Optionally add pixi.toml / package.json / Cargo.toml for auto-detected builders.
 
 # Add to a box's candy list in charly.yml (or box.yml):
@@ -759,11 +759,11 @@ charly box build my-image                 # Build it
 charly eval box my-image                  # Run the baked checks
 ```
 
-`/ov-image:layer` is the canonical reference for the eight `task:`
+`/charly-image:layer` is the canonical reference for the eight `task:`
 verbs (`cmd`, `mkdir`, `copy`, `write`, `link`, `download`,
 `setcap`, `build`), the unified `service:` schema, `vars:`
 substitution, YAML anchors, and execution-order rules.
-`/ov-eval:eval` covers the matcher forms, runtime variable table,
+`/charly-eval:eval` covers the matcher forms, runtime variable table,
 gold-standard pattern (`candy/redis/candy.yml`), and the 10
 authoring gotchas.
 
@@ -780,18 +780,18 @@ Every candy, every box, every command has a dedicated skill.
 ```json
 {
   "enabledPlugins": {
-    "ov-core@ov-plugins": true,
-    "ov-build@ov-plugins": true,
-    "ov-eval@ov-plugins": true,
-    "ov-image@ov-plugins": true,
-    "ov-internals@ov-plugins": true,
-    "ov-distros@ov-plugins": true,
-    "ov-infrastructure@ov-plugins": true,
-    "ov-jupyter@ov-plugins": true,
-    "ov-coder@ov-plugins": true
+    "charly-core@charly-plugins": true,
+    "charly-build@charly-plugins": true,
+    "charly-eval@charly-plugins": true,
+    "charly-image@charly-plugins": true,
+    "charly-internals@charly-plugins": true,
+    "charly-distros@charly-plugins": true,
+    "charly-infrastructure@charly-plugins": true,
+    "charly-jupyter@charly-plugins": true,
+    "charly-coder@charly-plugins": true
   },
   "extraKnownMarketplaces": {
-    "ov-plugins": {
+    "charly-plugins": {
       "source": { "source": "directory", "path": "./plugins" }
     }
   }
@@ -820,7 +820,7 @@ beds and return verbatim proof, plus enforcers `root-cause-analyzer`,
 deploy configs — and the same agent definitions reuse as **agent-team**
 teammates. Whether you drive `ov` from the keyboard or hand it to an
 agent, testing and verifying deployments uses the one surface.
-→ `/ov-internals:agents`.
+→ `/charly-internals:agents`.
 
 See [VISION.md](VISION.md) for the long-term thesis and direction,
 [CLAUDE.md](CLAUDE.md) for the project's rules and mandates,

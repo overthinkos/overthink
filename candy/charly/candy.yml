@@ -1,5 +1,5 @@
 candy:
-    version: 2026.159.0448
+    version: 2026.159.0659
     name: charly
     description: |
         Full charly toolchain — the CLI binary + the VM stack (virtualization),
@@ -82,7 +82,7 @@ candy:
             elif [ -f /ctx/bin/charly ]; then
               install -m 0755 /ctx/bin/charly /usr/local/bin/charly
             else
-              curl -fsSL "https://github.com/overthinkos/overthink/releases/download/v2026.141.1600/charly-linux-${ARCH}" -o /usr/local/bin/charly
+              curl -fsSL "https://github.com/overthinkos/overthink/releases/latest/download/charly-linux-${ARCH}" -o /usr/local/bin/charly
               chmod 0755 /usr/local/bin/charly
             fi
           user: root

@@ -56,3 +56,31 @@ jobs:
         uses: softprops/action-gh-release@v3
         with:
           files: dist/*
+
+  # Raw static `charly-linux-<arch>` binaries — the asset the `charly` candy's
+  # curl-fallback fetches when composing the layer from a remote @github ref
+  # (where bin/charly is a gitignored build artifact absent from the clone).
+  # CGO_ENABLED=0 → a fully static binary that runs on any rootfs (incl. the
+  # pacstrap/debootstrap bootstrap roots) without a libc dependency. The candy's
+  # curl points at `releases/latest/download/`, so it always resolves to the
+  # newest release's asset — no per-release URL bump.
+  binary:
+    runs-on: [self-hosted, overthink]
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+          fetch-depth: 0
+      - name: Build static charly-linux-<arch> binaries
+        run: |
+          CALVER=$(bash pkg/arch/calver.sh)
+          for arch in amd64 arm64; do
+            CGO_ENABLED=0 GOOS=linux GOARCH="$arch" \
+              go -C charly build -ldflags "-X main.BuildCalVer=${CALVER}" -o "../charly-linux-${arch}" .
+          done
+      - if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v3
+        with:
+          files: |
+            charly-linux-amd64
+            charly-linux-arm64

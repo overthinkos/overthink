@@ -22,6 +22,20 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-08 — docs(git-workflow): harden against silently-dropped submodule pointer bumps
+
+Incident: landing Cutover 3d, the `git switch -c feat/main-doc-rebrand-3d` step
+re-materialized the `plugins` submodule at `main`'s recorded gitlink (8254095),
+silently discarding the **unstaged** working-tree bump to `f108f77` (the pushed
+Cutover 3c commit). The subsequent `git add plugins; git commit` staged nothing
+(the working tree had been reset), so the 3d commit `0d2b58d` shipped WITHOUT the
+pointer bump — the superproject still referenced the pre-3c plugins. Caught by the
+post-commit `git ls-tree HEAD plugins` check and fixed by a follow-up
+pointer-bump commit (`d27316d`, never a force-push). The `/charly-internals:git-workflow`
+B2 section now codifies the safeguard: bump the submodule pointer AFTER the branch
+switch, `git add` it, and VERIFY with `git diff --cached --submodule=short` before
+committing + `git ls-tree HEAD <sub>` after.
+
 ### 2026-06-08 — fix!: rebrand the `Description=Overthink` quadlet/systemd contract → `OpenCharly`
 
 A Cutover-1 functional miss: `charly` both EMITTED and PARSED

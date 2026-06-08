@@ -26,18 +26,18 @@ import:
     # (main's `versa` image is `base: cachyos.cachyos`). This is the deliberate
     # main → cachyos coupling. The cachyos repo, in turn, imports this repo under
     # the `charly` namespace for ov.arch-builder (mutual import; cycle-broken at load).
-    - cachyos: '@github.com/overthinkos/cachyos:v2026.157.1600'
+    - cachyos: '@github.com/overthinkos/cachyos:v2026.159.1504'
     # nvidia GPU base family — owned by the overthinkos/nvidia submodule. Mounted
     # under the `nvidia` import namespace; main's GPU pod families (comfyui /
     # jupyter-ml / jupyter-ml-notebook / ollama / unsloth-studio) root on
     # `base: nvidia.nvidia`. Mutual import (the nvidia
     # repo imports this one under the `charly` namespace); cycle-broken at load.
-    - nvidia: '@github.com/overthinkos/nvidia:v2026.157.1600'
+    - nvidia: '@github.com/overthinkos/nvidia:v2026.159.1457'
     # selkies / sway streaming-desktop family — owned by the overthinkos/selkies
     # submodule (image/selkies). Mounted under the `selkies` import namespace;
     # main's android-emulator roots on `base: selkies.selkies-labwc`. The desktop
     # LAYERS stay in main (shared with openclaw-desktop) — only the images moved.
-    - selkies: '@github.com/overthinkos/selkies:v2026.157.1600'
+    - selkies: '@github.com/overthinkos/selkies:v2026.159.1456'
 discover:
     - path: candy
       recursive: true

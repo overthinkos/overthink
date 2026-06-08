@@ -84,6 +84,29 @@ tasks:
               # accumulate (war-story: 138 stale *.pkg.tar.zst = 1.3G). The
               # `charly clean` verb sweeps these too. See /charly-core:clean.
               rm -rf src pkg ./*.pkg.tar.zst ./*.log
+              # The system package now owns the canonical /usr/bin/charly. Any
+              # other `charly` in a $PATH dir that PRECEDES /usr/bin (a prior
+              # `install-portable` run, a pre-package manual install to
+              # /usr/local/bin, a non-Arch build) SHADOWS it and goes stale.
+              # Because this path refreshes /usr/bin/charly but never the shadow,
+              # the os.Executable freshness guard (charly/main_freshness.go) keeps
+              # tripping on the stale shadow in an unbreakable loop —
+              # `task build:charly` reports success, yet the on-PATH binary stays
+              # old. Remove every superseded shadow so the package binary is
+              # authoritative. NEVER touch a file owned by another pacman package
+              # (only orphan/manual shadows are removed); sudo handles the
+              # root-owned system locations this path already escalates for.
+              for shadow in "$HOME/.local/bin/charly" "$HOME/bin/charly" /usr/local/bin/charly /usr/local/sbin/charly; do
+                [ -e "$shadow" ] || continue
+                [ "$shadow" -ef /usr/bin/charly ] && continue
+                pacman -Qo "$shadow" >/dev/null 2>&1 && continue
+                if [ -w "$shadow" ] && [ -w "$(dirname "$shadow")" ]; then
+                  rm -f "$shadow"
+                else
+                  sudo rm -f "$shadow"
+                fi
+                echo "Removed superseded charly shadow: $shadow (canonical /usr/bin/charly is the opencharly-git package)"
+              done
               exit 0
             fi
             ;;

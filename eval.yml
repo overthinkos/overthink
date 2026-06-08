@@ -1148,7 +1148,7 @@ score:
             - charly-cli-surface
         prompt: |
             == Where you are ==
-            Your cwd is /workspace — a fresh per-run clone of the Overthink
+            Your cwd is /workspace — a fresh per-run clone of the OpenCharly
             project, bind-mounted into this freshly-rebuilt ${TARGET_NAME}. You
             have FULL sudo + nested podman + the `charly` CLI. Host services are
             invisible; you cannot conflict with them.
@@ -1208,7 +1208,7 @@ score:
             podman + every package the recipes need. Host services are completely
             invisible; you cannot conflict with them.
 
-            Your `/workspace` is a fresh per-run clone of the Overthink
+            Your `/workspace` is a fresh per-run clone of the OpenCharly
             source repository — the full git tree (with submodules
             initialized), the `charly` CLI binary, and every layer, image,
             pod, VM, and Kubernetes cluster definition the project
@@ -1355,7 +1355,7 @@ score:
             nested podman + every package the recipes need. Host services are
             completely invisible; you cannot conflict with them.
 
-            Your `/workspace` is a fresh per-run clone of the Overthink
+            Your `/workspace` is a fresh per-run clone of the OpenCharly
             source repository — the full git tree (with submodules
             initialized), the `charly` CLI binary, and every layer, image,
             pod, VM, and Kubernetes cluster definition the project

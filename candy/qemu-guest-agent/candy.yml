@@ -32,7 +32,7 @@ candy:
           mode: "0755"
           content: |
             #!/bin/sh
-            # Overthink-managed qemu-ga fsfreeze hook dispatcher.
+            # OpenCharly-managed qemu-ga fsfreeze hook dispatcher.
             set -e
             command="$1"
             case "$command" in
@@ -52,7 +52,7 @@ candy:
           user: root
           mode: "0644"
           content: |
-            # Overthink: full guest-agent functionality. No RPCs are blocked
+            # OpenCharly: full guest-agent functionality. No RPCs are blocked
             # (guest-exec, guest-file-*, guest-fsfreeze-*, guest-set-* all work).
             [general]
             fsfreeze-hook=/etc/qemu/fsfreeze-hook

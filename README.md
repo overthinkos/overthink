@@ -1,8 +1,8 @@
-# Overthink
+# OpenCharly
 
 **The candy factory for you and your agents.**
 
-Describe what you need in a simple candy list, and `ov` composes it
+Describe what you need in a simple candy list, and `charly` composes it
 into optimized multi-stage **boxes** (container images) — from an
 interactive dev shell to a running service to a systemd unit to a
 bootable VM, to an agent's desktop running inside a candybox. Works the
@@ -13,16 +13,16 @@ driving.
 (39 enabled by default). 2 VM definitions, 2 Android devices, and a
 growing catalog of `kind: local` host templates and `kind: eval`
 test beds. Docker and Podman. `linux/amd64`. Fedora, Debian, Ubuntu,
-Arch, and CachyOS. One CLI: `ov` (29 top-level verbs). Every candy,
+Arch, and CachyOS. One CLI: `charly` (29 top-level verbs). Every candy,
 box, VM, and command has a dedicated recipe card (skill) — ~290 skills
 across 25 plugins. See `plugins/README.md` for the full index.
 
 *The name comes from the German "überdenken" — to think something
 through carefully. Not quite the same as the English "opencharly,"
-but let's be honest: `ov` really is trying its best to opencharly
+but let's be honest: `charly` really is trying its best to opencharly
 absolutely everything.*
 
-> **New here?** [VISION.md](VISION.md) is the one-page thesis — why Overthink
+> **New here?** [VISION.md](VISION.md) is the one-page thesis — why OpenCharly
 > secures the box and fills it with the whole candy store, and where the
 > factory is heading.
 
@@ -30,7 +30,7 @@ absolutely everything.*
 
 - [What's in the chocolate factory](#whats-in-the-chocolate-factory)
 - [Core concepts](#core-concepts)
-- [Why Overthink?](#why-opencharly)
+- [Why OpenCharly?](#why-opencharly)
 - [Install](#install)
 - [Quickstart](#quickstart)
 - [Lifecycle](#lifecycle)
@@ -49,18 +49,18 @@ absolutely everything.*
 
 ## What's in the chocolate factory
 
-`ov` is a Swiss Chocolate Factory. Each production line is a stage of
+`charly` is a Swiss Chocolate Factory. Each production line is a stage of
 the lifecycle — **build, run, deploy, evaluate** — driven
 from one config and one mental model:
 
-| Reach for `ov` when you want to…                            | …and you get                                       | Stage                 |
+| Reach for `charly` when you want to…                            | …and you get                                       | Stage                 |
 |-------------------------------------------------------------|----------------------------------------------------|-----------------------|
 | compose a reproducible box from a candy list                | `kind: box` / `kind: candy`, `charly box build`    | [Build](#build)       |
 | run one or more containers as a managed pod                 | `kind: pod`, `charly deploy add`, `charly start`           | [Run](#run)           |
 | apply the same candies to a host, VM, k8s, or Android device | `charly deploy add` + `target:`                        | [Deploy](#deploy)     |
 | prove a config actually works, end-to-end                   | `kind: eval`, `charly eval run`, baked `eval:` checks  | [Evaluate](#evaluate) |
 
-The same `ov` drives two further stages — it
+The same `charly` drives two further stages — it
 [authors candies and boxes with an agent in the loop](#author-with-agents)
 and [manages](#manage) the running lifecycle (cleanup, diagnostics,
 schema upgrades, runtime config).
@@ -74,15 +74,15 @@ schema upgrades, runtime config).
 ## Core concepts
 
 A handful of ideas recur everywhere. Four of them are the heart of
-Overthink — **candies & boxes**, **candyboxing**, **Risk Driven
+OpenCharly — **candies & boxes**, **candyboxing**, **Risk Driven
 Development**, and the **build → run → deploy → evaluate** lifecycle —
 and the rest is the schema vocabulary that ties them together.
 
 ### Candies & boxes
 
-Overthink treats boxes (container images) as composable building
+OpenCharly treats boxes (container images) as composable building
 blocks. Each **candy** is a self-contained unit; a **box** is an
-ordered list of candies on top of a base. `ov` resolves the dependency graph, generates
+ordered list of candies on top of a base. `charly` resolves the dependency graph, generates
 multi-stage Containerfiles with cache mounts, and builds in the right
 order — handling the hard parts so you (and your agents) don't
 have to.
@@ -102,7 +102,7 @@ have to.
 
 Secure the *box* — a disposable, rootless container or VM with real,
 kernel-enforced isolation — then hand your agent the whole candy store
-inside it: every `ov` verb, every candy, every `charly eval` probe, a real
+inside it: every `charly` verb, every candy, every `charly eval` probe, a real
 system, a real GPU. Far more capability than a locked-down sandbox, and
 a mistake costs one rebuild.
 → [VISION.md](VISION.md) (why), CLAUDE.md "Candyboxing" (the rule),
@@ -184,7 +184,7 @@ same-repo import (`build.yml`, `box.yml`, `vm.yml`, `pod.yml`,
 `local.yml`, `android.yml`, `k8s.yml`, `eval.yml`), or a
 single-key `alias: ref` map for a namespaced cross-repo import (Go
 package-member semantics — `base: cachyos.cachyos`, fetched from
-`@github.com/owner/repo:tag` and cached under `~/.cache/ov/repos/`).
+`@github.com/owner/repo:tag` and cached under `~/.cache/charly/repos/`).
 
 **Init-system polymorphism — one place, no siblings.** A candy that
 needs the same service under supervisord (containers) and systemd
@@ -209,7 +209,7 @@ autonomous destroy + rebuild. No hostname heuristic, no inference.
 Explicit-only is what makes `charly update <name>` safe on shared
 infrastructure. → `/charly-internals:disposable`.
 
-## Why Overthink?
+## Why OpenCharly?
 
 Containers are a great idea with rough edges. Real-world needs pile
 up fast: GPU passthrough with the right driver stack, containers
@@ -221,7 +221,7 @@ at once, reliably, across boxes, is where things get hard. And if
 your agent has to build and manage these containers too, the
 complexity compounds.
 
-Overthink treats boxes as composable building blocks (see
+OpenCharly treats boxes as composable building blocks (see
 [Core concepts](#core-concepts)) — handling the hard parts so you (and
 your agents) don't have to.
 
@@ -234,7 +234,7 @@ it autonomously. See [Evaluate](#evaluate) for the framework and
 workflows. → `/charly-eval:eval`, `/charly-internals:agents`.
 
 **Rootless-first power-user boxes.** The four boxes carrying the
-full `ov` toolchain (`fedora-coder`, `fedora-ov`, `arch-ov`,
+full `charly` toolchain (`fedora-coder`, `fedora-ov`, `arch-ov`,
 `githubrunner`) all run as uid=1000 with passwordless sudo. Four
 cross-distro coder boxes (`/charly-coder:fedora-coder`/`arch-coder`/
 `debian-coder`/`ubuntu-coder`) share ~30 candies, differing only in
@@ -247,7 +247,7 @@ security_opt from the `container-nesting` candy.
 **Sandboxed agent desktops.** [Candyboxing](#candyboxing) applied to a
 whole desktop: `/charly-openclaw:openclaw-desktop` is the all-in-one CachyOS
 streaming desktop — Selkies desktop + openclaw-full gateway + agent CLIs
-(claude-code, codex, gemini) + CPU ollama + nested `ov`. The agent (or the
+(claude-code, codex, gemini) + CPU ollama + nested `charly`. The agent (or the
 user) builds boxes, launches nested rootless pods, and creates libvirt
 VMs from a terminal inside the browser-accessible candybox desktop — uid 1000, no
 `--privileged`, no added capabilities.
@@ -260,7 +260,7 @@ VMs from a terminal inside the browser-accessible candybox desktop — uid 1000,
 go install github.com/overthinkos/overthink/ov@latest
 ```
 
-This puts `ov` in your `$GOPATH/bin`. Create an `charly.yml` and
+This puts `charly` in your `$GOPATH/bin`. Create an `charly.yml` and
 a `candy/` directory and you're done. Legacy projects (predating
 the unified schema, the `kind:` discriminators, or the singular
 field names) convert in one shot with `charly migrate` — a single
@@ -337,8 +337,8 @@ charly eval run eval-pod
 
 ## Lifecycle
 
-The same six stages cover everything `ov` does — **build, run, deploy,
-evaluate, author, manage**. Each maps to a family of `ov` verbs that
+The same six stages cover everything `charly` does — **build, run, deploy,
+evaluate, author, manage**. Each maps to a family of `charly` verbs that
 share the same declarative inputs.
 
 ### Build
@@ -410,7 +410,7 @@ input.
   support (HTTP / HTTPS / TCP / TLS / SSH / RDP / SMB).
 - **Encrypted volumes** — `--encrypt <vol>` or `type: encrypted`;
   gocryptfs masterkey provisioned into the Secret Service, mounted
-  via independent `ov-enc-<image>-<volume>.scope` systemd units
+  via independent `charly-enc-<image>-<volume>.scope` systemd units
   that survive container restart. Manage with `charly config {mount,
   unmount, status, passwd}`.
 - **GPU access** — NVIDIA via CDI (`gpu.nvidia.com` annotation);
@@ -422,8 +422,8 @@ input.
   5900 + Pipewire audio. Browser pane at `:3000`.
 - **Per-box MCP servers** — `chrome-devtools-mcp` on `:9224`,
   `jupyter-mcp` at `:8888/mcp`, `marimo-mcp` at `:2718/mcp/server`,
-  nested `ov-mcp`. Declared via `mcp_provide:` and auto-discovered
-  by consumers (Hermes, Claude Code) through `OV_MCP_SERVERS`.
+  nested `charly-mcp`. Declared via `mcp_provide:` and auto-discovered
+  by consumers (Hermes, Claude Code) through `CH_MCP_SERVERS`.
 - **Auto service discovery** — a candy's `env_provide:` declares
   env vars with `{{.ContainerName}}` templates injected into every
   co-deployed container at `charly config` time. Deploy `ollama` and
@@ -433,7 +433,7 @@ input.
   so `charly config` warns early.
 
 → `/charly-core:start`, `/charly-core:logs`, `/charly-core:cmd`,
-`/charly-core:service`, `/charly-core:ov-status`, `/charly-automation:sidecar`,
+`/charly-core:service`, `/charly-core:charly-status`, `/charly-automation:sidecar`,
 `/charly-automation:enc`, `/charly-automation:udev`, `/charly-pod:pod`,
 `/charly-selkies:selkies-desktop-layer`, `/charly-selkies:sway`.
 
@@ -462,7 +462,7 @@ discriminates where it lands:
 - **`target: local`** — applies the candies' packages / files /
   systemd units to the host filesystem. `host: local` (default)
   uses the local shell executor; `host: user@machine[:port]` (or a
-  configured alias) re-execs `ov` over SSH. Per-machine overlays
+  configured alias) re-execs `charly` over SSH. Per-machine overlays
   via `add_candy:` in `~/.config/charly/deploy.yml`. Ledger at
   `~/.config/opencharly/installed/` records every ReverseOp so
   `charly deploy del host` reverses precisely what was applied.
@@ -493,7 +493,7 @@ Secret Service. **Agent forwarding** — the `agent-forwarding` candy
 binds host `SSH_AUTH_SOCK` / `GPG_AGENT_SOCK` into the container.
 → `/charly-build:secrets`.
 
-→ `/charly-core:deploy`, `/charly-core:ov-config`, `/charly-core:ov-update`,
+→ `/charly-core:deploy`, `/charly-core:charly-config`, `/charly-core:charly-update`,
 `/charly-internals:disposable`, `/charly-vm:vms-catalog`.
 
 ### Evaluate
@@ -574,7 +574,7 @@ Gherkin-shaped descriptions on the same entries.
 ### Author with agents
 
 > Agents in the loop, authoring and iterating on candies and
-> boxes — `ov`-specific.
+> boxes — `charly`-specific.
 
 The agent iteration harness sits on top of `kind: eval` and
 adds three overlay kinds:
@@ -600,11 +600,11 @@ adds three overlay kinds:
 Cross-cutting: **`charly mcp serve`** is the MCP gateway. Every leaf
 Kong command auto-exposes as an MCP tool (Streamable HTTP or
 stdio), so Claude Code, Codex, or any MCP client drives the full
-`ov` surface over RPC. `--read-only` filters destructive tools;
+`charly` surface over RPC. `--read-only` filters destructive tools;
 auto-fallback to `overthinkos/opencharly` when no project is wired
 (opt out with `--no-default-repo`).
 
-→ `/charly-eval:eval`, `/charly-build:ov-mcp-cmd`, `/charly-coder:charly-mcp`,
+→ `/charly-eval:eval`, `/charly-build:charly-mcp-cmd`, `/charly-coder:charly-mcp`,
 `/charly-coder:claude-code`, `/charly-coder:codex`, `/charly-coder:gemini`.
 
 ### Manage
@@ -636,14 +636,14 @@ auto-fallback to `overthinkos/opencharly` when no project is wired
 - `charly udev install/remove` — host-side udev rules for GPU device
   access (CDI symlinks).
 
-→ `/charly-core:clean`, `/charly-core:ov-doctor`, `/charly-core:ov-update`,
+→ `/charly-core:clean`, `/charly-core:charly-doctor`, `/charly-core:charly-update`,
 `/charly-build:migrate`, `/charly-build:settings`, `/charly-core:ssh`,
 `/charly-automation:tmux`, `/charly-automation:alias`,
 `/charly-automation:udev`.
 
 ## Command reference
 
-The `ov` CLI has 29 top-level verbs across three modes with disjoint
+The `charly` CLI has 29 top-level verbs across three modes with disjoint
 input sets — **build mode** (`charly box …` reads `charly.yml`),
 **test mode** (`charly eval …` reads OCI labels + `deploy.yml` overlays,
 never `charly.yml`), and **deploy mode** (everything else reads
@@ -654,25 +654,25 @@ gateway exposing the entire surface as MCP tools.
 |---|---|---|
 | **Box (build mode)** | `charly box {build, generate, validate, merge, new, inspect, list, pull, reconcile}` | `/charly-image:image` + `/charly-build:build`, `/charly-build:generate`, `/charly-build:validate`, `/charly-build:merge`, `/charly-build:new`, `/charly-build:inspect`, `/charly-build:list`, `/charly-build:pull`, `/charly-build:reconcile` |
 | **Box authoring (MCP-first)** | `charly box {set, add-candy, rm-candy, fetch, refresh, write, cat}` and `charly candy {set, add-rpm, add-deb, add-pac, add-aur}` | `/charly-image:image` "Authoring" + `/charly-image:layer` |
-| **Deployment** | `charly deploy {add, del, sync, from-box, export, import, show, reset, status, path}`; `charly config`; `charly start`, `charly stop`, `charly restart`, `charly update`, `charly remove` | `/charly-core:deploy`, `/charly-core:ov-config`, `/charly-core:start`, `/charly-core:stop`, `/charly-core:ov-update`, `/charly-core:remove`, `/charly-local:local-deploy`, `/charly-kubernetes:kubernetes`, `/charly-internals:vm-deploy-target` |
-| **Runtime** | `charly shell`, `charly cmd`, `charly service`, `charly status`, `charly logs`, `charly tmux` | `/charly-core:shell`, `/charly-core:cmd`, `/charly-core:service`, `/charly-core:ov-status`, `/charly-core:logs`, `/charly-automation:tmux` |
+| **Deployment** | `charly deploy {add, del, sync, from-box, export, import, show, reset, status, path}`; `charly config`; `charly start`, `charly stop`, `charly restart`, `charly update`, `charly remove` | `/charly-core:deploy`, `/charly-core:charly-config`, `/charly-core:start`, `/charly-core:stop`, `/charly-core:charly-update`, `/charly-core:remove`, `/charly-local:local-deploy`, `/charly-kubernetes:kubernetes`, `/charly-internals:vm-deploy-target` |
+| **Runtime** | `charly shell`, `charly cmd`, `charly service`, `charly status`, `charly logs`, `charly tmux` | `/charly-core:shell`, `/charly-core:cmd`, `/charly-core:service`, `/charly-core:charly-status`, `/charly-core:logs`, `/charly-automation:tmux` |
 | **Test + probes** | `charly eval {image, live, run}` + the 11 live probe verbs (`cdp`, `wl`, `dbus`, `vnc`, `mcp`, `record`, `spice`, `libvirt`, `k8s`, `adb`, `appium`); `charly feature {list, pending, validate}` | `/charly-eval:eval`, `/charly-eval:cdp`, `/charly-eval:wl`, `/charly-eval:dbus`, `/charly-eval:vnc`, `/charly-eval:spice`, `/charly-eval:libvirt`, `/charly-eval:record`, `/charly-kubernetes:eval-k8s`, `/charly-eval:adb`, `/charly-eval:appium` |
-| **MCP gateway** | `charly mcp {serve, ping, servers, list-tools, list-resources, list-prompts, call, read}` | `/charly-build:ov-mcp-cmd`, `/charly-coder:charly-mcp` |
+| **MCP gateway** | `charly mcp {serve, ping, servers, list-tools, list-resources, list-prompts, call, read}` | `/charly-build:charly-mcp-cmd`, `/charly-coder:charly-mcp` |
 | **VM** | `charly vm {build, create, start, stop, destroy, snapshot, clone, console, ssh, import, list}` | `/charly-vm:vm`, `/charly-vm:vms-catalog`, `/charly-internals:vm-deploy-target` |
 | **Schema migration** | `charly migrate` (single idempotent chain) | `/charly-build:migrate` |
 | **Secrets & config** | `charly secrets`, `charly settings`, `charly alias`, `charly udev` | `/charly-build:secrets`, `/charly-build:settings`, `/charly-automation:alias`, `/charly-automation:udev` |
-| **Host & admin** | `charly doctor`, `charly clean`, `charly reap-orphans`, `charly ssh`, `charly version` | `/charly-core:ov-doctor`, `/charly-core:clean`, `/charly-core:ssh`, `/charly-core:ov-version` |
+| **Host & admin** | `charly doctor`, `charly clean`, `charly reap-orphans`, `charly ssh`, `charly version` | `/charly-core:charly-doctor`, `/charly-core:clean`, `/charly-core:ssh`, `/charly-core:charly-version` |
 
 **Global flags** (apply to every command):
 
-- `-C <dir>` / `--dir <dir>` / `OV_PROJECT_DIR=<dir>` — override the
+- `-C <dir>` / `--dir <dir>` / `CH_PROJECT_DIR=<dir>` — override the
   project directory.
-- `--repo <OWNER/REPO[@REF]>` / `OV_PROJECT_REPO=…` — read
+- `--repo <OWNER/REPO[@REF]>` / `CH_PROJECT_REPO=…` — read
   `charly.yml` from a remote git repo. Bare `owner/repo`
   auto-prefixes `github.com/`; the literal `default` expands to
-  `overthinkos/opencharly`. Cached in `~/.cache/ov/repos/`. Mutually
+  `overthinkos/opencharly`. Cached in `~/.cache/charly/repos/`. Mutually
   exclusive with `--dir`.
-- `--host <alias|user@machine[:port]>` / `OV_HOST=…` — re-exec the
+- `--host <alias|user@machine[:port]>` / `CH_HOST=…` — re-exec the
   command on a remote host over SSH. Commands marked LocalOnly
   (`settings`, `version`, `ssh tunnel`) always run locally.
 
@@ -727,8 +727,8 @@ not here.
 
 | Symptom | First step |
 |---------|-----------|
-| Service won't start | `charly status <image>` then `charly logs <image>` (`/charly-core:ov-status`, `/charly-core:logs`) |
-| Quadlet out of sync with deploy.yml | `charly config <image> --update-all` (`/charly-core:ov-config`) |
+| Service won't start | `charly status <image>` then `charly logs <image>` (`/charly-core:charly-status`, `/charly-core:logs`) |
+| Quadlet out of sync with deploy.yml | `charly config <image> --update-all` (`/charly-core:charly-config`) |
 | Build cache stale | `charly box build --no-cache <image>` (`/charly-build:build`) |
 | Chrome stuck or crash-looping | `/charly-selkies:chrome` Resource Caps & Circuit Breaker section |
 | Encrypted volume locked at boot | `charly config mount` waits for keyring unlock automatically — zero CPU, event-driven (`/charly-automation:enc`) |
@@ -769,7 +769,7 @@ authoring gotchas.
 
 ## Works with Claude Code
 
-Overthink works hand-in-hand with
+OpenCharly works hand-in-hand with
 [Claude Code](https://claude.com/claude-code). The bundled
 [plugins/](plugins/) directory provides skills that teach Claude
 how to compose, build, deploy, and manage your boxes.
@@ -804,10 +804,10 @@ plugins directory: `git clone --recurse-submodules
 https://github.com/overthinkos/overthink.git`.
 
 **MCP gateway as the universal channel.** `charly mcp serve` exposes
-every `ov` CLI leaf as an MCP tool (Streamable HTTP or stdio), so
+every `charly` CLI leaf as an MCP tool (Streamable HTTP or stdio), so
 the agent reaches the full build / deploy / test surface over
 RPC. Per-box MCP servers (chrome-devtools-mcp, jupyter-mcp,
-marimo-mcp, ov-mcp) auto-discover via `mcp_provide:` when their
+marimo-mcp, charly-mcp) auto-discover via `mcp_provide:` when their
 containers are running.
 
 **Sub-agents, dynamic workflows, and agent teams.** Beyond skills, the
@@ -818,7 +818,7 @@ beds and return verbatim proof, plus enforcers `root-cause-analyzer`,
 (`.claude/workflows/`) fan the work out — `/verify-beds` runs every
 `kind: eval` bed as the R10 gate, `/audit-deploy-configs` evaluates your
 deploy configs — and the same agent definitions reuse as **agent-team**
-teammates. Whether you drive `ov` from the keyboard or hand it to an
+teammates. Whether you drive `charly` from the keyboard or hand it to an
 agent, testing and verifying deployments uses the one surface.
 → `/charly-internals:agents`.
 

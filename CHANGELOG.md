@@ -22,6 +22,42 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-08 — feat!: entity-independent ov→charly doc rebrand — plugins (Cutover 3c) + main core-docs (Cutover 3d)
+
+Completed the **entity-INDEPENDENT** half of the documentation rebrand across the
+`plugins` submodule and the main core docs. "Entity-independent" = everything that
+depends only on the already-renamed CODE (the `charly` binary, the `charly-mcp` /
+`charly-enc` layers/scopes, the `CH_` env contract, the `charly-*` plugin
+namespace, the six `charly` CLI-verb skills). Done as a context-specific sweep
+(never a bare `\bov\b`), so entity names, Go identifiers, the `ov` import
+namespace, and `ov/secret`/`ov/api-key` keys were provably untouched.
+
+- **Cutover 3c — plugins** (`overthink-plugins` `8254095..f108f77`, tag-exempt).
+  Renamed the six CLI-verb skills (`ov-config`/`ov-version`/`ov-status`/`ov-doctor`/
+  `ov-update`/`ov-mcp-cmd` → `charly-*`): dir + frontmatter + all cross-refs.
+  Swept `OV_*`→`CH_*` (keeping the `OV_ROOT`/`OV_USER` heredoc sentinels),
+  backtick binary refs (`` `ov` ``→`` `charly` ``, keeping the `` `ov` `` import-namespace
+  refs), host paths (`~/.{config,cache,local/share}/ov`→`charly`), project name
+  (`Overthink`→`OpenCharly`), the `charly-mcp`/`charly-enc` prefixes, the plugin
+  namespace names (`ov-<plugin>`→`charly-<plugin>`, collision-safe), and the
+  marketplace.json/plugin.json descriptions.
+- **Cutover 3d — main core docs.** `CLAUDE.md` + `README.md` prose (`` `ov` ``→
+  `` `charly` ``, `Overthink`→`OpenCharly`, the README cross-refs to the renamed
+  verb skills), `eval.yml` score-prompt prose, `candy/charly/candy.yml`
+  (`/charly-tools:ov`→`/charly-tools:charly`), `candy/qemu-guest-agent` comments.
+  `VISION.md` was already brand-clean.
+
+**Deferred to Cutover 4** (the submodule rebrand, where the authoritative
+entity-rename map makes keep-vs-change unambiguous — NOT a split, a correct scope
+assignment): the `ov-cachyos`/`arch-ov`/`fedora-ov` entities + their skills, the
+`ov` import namespace (`ov.X` / `{ov:`), runtime-prefix examples for
+submodule-defined images/deploys, the `ov-sdk-complete`/`ov-autostart` sentinel
+filenames (pending code verification), and the `image/*/README.md` "Overthink"
+banners. **Also surfaced** (a Cutover-1 functional miss, its own R10-gated Go
+cutover): the `Description=Overthink <image>` quadlet/systemd emitter↔parser
+contract (`charly/quadlet*.go`, `status_collector.go`, `vm.go`, tests) + the
+`main.go` kong description.
+
 ### 2026-06-08 — fix: R10-harden the main-repo rebrand (charly-layer eval + stale-shadow cleanup)
 
 Two defects surfaced and fixed while running the proper `charly eval run`

@@ -213,7 +213,7 @@ func writeAutostartUserUnit(domainName string) error {
 		virsh = "virsh"
 	}
 	unit := fmt.Sprintf(`[Unit]
-Description=Overthink autostart for libvirt session domain %[1]s
+Description=OpenCharly autostart for libvirt session domain %[1]s
 After=default.target
 
 [Service]

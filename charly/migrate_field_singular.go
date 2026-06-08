@@ -359,7 +359,7 @@ func discoverProjectYAMLs(dir string) ([]string, error) {
 	}
 
 	// Standard project layout: walk layers/<name>/layer.yml. Every
-	// Overthink project has these by convention; we don't require an
+	// OpenCharly project has these by convention; we don't require an
 	// explicit discover: block.
 	if td := filepath.Join(abs, "layers"); statIsDir(td) {
 		if err := walkYAMLs(td, seen); err != nil {

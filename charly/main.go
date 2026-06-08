@@ -694,7 +694,7 @@ func main() {
 	var cli CLI
 	ctx := kong.Parse(&cli,
 		kong.Name("charly"),
-		kong.Description("Overthink - the container management experience for you and your agents"),
+		kong.Description("OpenCharly - the container management experience for you and your agents"),
 		kong.UsageOnError(),
 	)
 

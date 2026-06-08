@@ -22,6 +22,22 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-08 — fix!: rebrand the `Description=Overthink` quadlet/systemd contract → `OpenCharly`
+
+A Cutover-1 functional miss: `charly` both EMITTED and PARSED
+`Description=Overthink <image>` in the systemd/quadlet units it manages. The
+emitters (`quadlet.go`, `quadlet_pod.go`, `vm.go`), the `status_collector.go`
+parser (which identifies charly-managed quadlets by the `Description=Overthink `
+prefix), the `main.go` kong description, a `migrate_field_singular.go` comment,
+and the `quadlet_test.go`/`status_quadlet_test.go` fixtures all carried the old
+brand. Rebranded to `OpenCharly` in lockstep (emitter ↔ parser ↔ tests), so the
+contract stays internally consistent. Existing deployments keep their old
+`Description=Overthink` line until their next `charly update` (hard cutover —
+acceptable on disposable targets). R10: `charly eval run eval-pod` → PASS
+(steps=10) — the deploy emits `Description=OpenCharly`, and the bed's
+`status-shows-pod` check (`charly status --json`) parses it via the rebuilt
+collector, exercising both sides of the contract on a fresh rebuild.
+
 ### 2026-06-08 — feat!: entity-independent ov→charly doc rebrand — plugins (Cutover 3c) + main core-docs (Cutover 3d)
 
 Completed the **entity-INDEPENDENT** half of the documentation rebrand across the

@@ -59,7 +59,7 @@ func generateQuadlet(cfg QuadletConfig) string {
 		}
 	}
 	b.WriteString("[Unit]\n")
-	b.WriteString(fmt.Sprintf("Description=Overthink %s\n", desc))
+	b.WriteString(fmt.Sprintf("Description=OpenCharly %s\n", desc))
 	b.WriteString("After=network-online.target\n")
 	if cfg.Tunnel != nil && cfg.Tunnel.Provider == "cloudflare" {
 		tunnelSvc := tunnelServiceFilename(cfg.ImageName)

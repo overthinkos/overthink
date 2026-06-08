@@ -292,7 +292,7 @@ func (c *Collector) runProbes(ctx context.Context, snap *ContainerSnapshot) []To
 }
 
 // applyQuadletDescription fills snap.Image and snap.Instance from the
-// `Description=Overthink <image> (<instance>)` line of the matching quadlet
+// `Description=OpenCharly <image> (<instance>)` line of the matching quadlet
 // unit. Falls through to the joined `charly-*` name when the description isn't
 // present (legacy / hand-rolled units).
 func (c *Collector) applyQuadletDescription(snap *ContainerSnapshot) {
@@ -432,7 +432,7 @@ func parsePortStrings(ports []string) []PortMapping {
 }
 
 // parseQuadletDescription reads a `.container` quadlet file and returns
-// (image, instance) parsed from its `Description=Overthink <image>
+// (image, instance) parsed from its `Description=OpenCharly <image>
 // (<instance>)` line. ("", "") on missing/malformed file — callers fall back
 // to the filename-derived joined name.
 func parseQuadletDescription(unitPath string) (image, instance string) {
@@ -442,10 +442,10 @@ func parseQuadletDescription(unitPath string) (image, instance string) {
 	}
 	for _, line := range strings.Split(string(data), "\n") {
 		line = strings.TrimSpace(line)
-		if !strings.HasPrefix(line, "Description=Overthink ") {
+		if !strings.HasPrefix(line, "Description=OpenCharly ") {
 			continue
 		}
-		body := strings.TrimPrefix(line, "Description=Overthink ")
+		body := strings.TrimPrefix(line, "Description=OpenCharly ")
 		if open := strings.LastIndex(body, " ("); open != -1 && strings.HasSuffix(body, ")") {
 			image = strings.TrimSpace(body[:open])
 			instance = strings.TrimSpace(body[open+2 : len(body)-1])

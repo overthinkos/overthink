@@ -52,10 +52,10 @@ box:
     arch-builder:
         base: arch
         candy:
-            - '@github.com/overthinkos/overthink/candy/pixi:v2026.159.0609'
-            - '@github.com/overthinkos/overthink/candy/nodejs:v2026.159.0609'
-            - '@github.com/overthinkos/overthink/candy/build-toolchain:v2026.159.0609'
-            - '@github.com/overthinkos/overthink/candy/yay:v2026.159.0609'
+            - '@github.com/overthinkos/overthink/candy/pixi:v2026.159.1413'
+            - '@github.com/overthinkos/overthink/candy/nodejs:v2026.159.1413'
+            - '@github.com/overthinkos/overthink/candy/build-toolchain:v2026.159.1413'
+            - '@github.com/overthinkos/overthink/candy/yay:v2026.159.1413'
         produce:
             - pixi
             - npm
@@ -75,8 +75,8 @@ box:
         # an intermediate in the consumer's graph; a bare `cuda` would be an
         # "unknown layer" there (it's a main-repo layer, not the consumer's).
         candy:
-            - '@github.com/overthinkos/overthink/candy/cuda:v2026.159.0609'
-            - '@github.com/overthinkos/overthink/candy/nvenc-headers:v2026.159.0609'
+            - '@github.com/overthinkos/overthink/candy/cuda:v2026.159.1413'
+            - '@github.com/overthinkos/overthink/candy/nvenc-headers:v2026.159.1413'
         produce:
             - pixi
             - npm
@@ -107,9 +107,9 @@ box:
         # the base removes that ordering dependency entirely.
         base: fedora-nonfree
         candy:
-            - '@github.com/overthinkos/overthink/candy/pixi:v2026.159.0609'
-            - '@github.com/overthinkos/overthink/candy/nodejs:v2026.159.0609'
-            - '@github.com/overthinkos/overthink/candy/build-toolchain:v2026.159.0609'
+            - '@github.com/overthinkos/overthink/candy/pixi:v2026.159.1413'
+            - '@github.com/overthinkos/overthink/candy/nodejs:v2026.159.1413'
+            - '@github.com/overthinkos/overthink/candy/build-toolchain:v2026.159.1413'
         produce:
             - pixi
             - npm
@@ -128,4 +128,4 @@ box:
             npm: fedora-builder
             pixi: fedora-builder
         candy:
-            - '@github.com/overthinkos/overthink/candy/rpmfusion:v2026.159.0609'
+            - '@github.com/overthinkos/overthink/candy/rpmfusion:v2026.159.1413'

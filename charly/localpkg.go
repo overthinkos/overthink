@@ -426,3 +426,33 @@ func execLocalPkgInstall(ctx context.Context, exec DeployExecutor, s *LocalPkgIn
 	// apt-get install), so there is no dependency-closure to pre-build.
 	return transferAndInstallPkgs(ctx, exec, s.LocalPkg, pkgFiles, opts)
 }
+
+// renderLocalPkgImageRun returns the Containerfile `RUN` directive that, in an
+// IMAGE build, downloads a layer's PUBLISHED package (LocalPkgDef.DownloadTemplate,
+// with ${ARCH} resolved by BuildKit) into the staging dir and installs it via the
+// SAME dep-resolving InstallTemplate the deploy path uses — so the toolchain is
+// OS-tracked + its deps pulled from the image's repos, identical to a deploy
+// install. Returns "" (no directive) when the format declares no download_template
+// (the layer's own task: install is the fallback). Shared by OCITarget AND
+// generate.go writeLayerSteps so the image-build emission has ONE home (R3).
+func renderLocalPkgImageRun(lp *LocalPkgDef) (string, error) {
+	if lp == nil || strings.TrimSpace(lp.DownloadTemplate) == "" {
+		return "", nil
+	}
+	install, err := RenderTemplate("localpkg-install", lp.InstallTemplate, localPkgInstallContext{
+		StageDir: localPkgGuestStage,
+		Glob:     lp.PkgGlob,
+	})
+	if err != nil {
+		return "", fmt.Errorf("rendering localpkg install template: %w", err)
+	}
+	install = strings.TrimSpace(install)
+	if install == "" {
+		return "", fmt.Errorf("localpkg install template rendered empty (format config missing install_template?)")
+	}
+	// Download to a glob-matching filename (e.g. "*.rpm" → "pkg.rpm") so the
+	// install template's {{.StageDir}}/{{.Glob}} matches the downloaded file.
+	pkgFile := "pkg" + strings.TrimPrefix(lp.PkgGlob, "*")
+	return fmt.Sprintf("RUN mkdir -p %[1]s && curl -fsSL \"%[2]s\" -o %[1]s/%[3]s && %[4]s && rm -rf %[1]s\n",
+		localPkgGuestStage, lp.DownloadTemplate, pkgFile, install), nil
+}

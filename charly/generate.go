@@ -1414,6 +1414,27 @@ func (g *Generator) writeLayerSteps(b *strings.Builder, layerName string, img *R
 		}
 	}
 
+	// 2.5 localpkg: download + install the layer's PUBLISHED OS package in the
+	// IMAGE build — the same dep-resolving install the deploy LocalPkgInstallStep
+	// performs, but sourced from the format's published release asset
+	// (DownloadTemplate) since an image build has no host package-build step. This
+	// is what makes a localpkg layer (the `charly` toolchain) install as a proper,
+	// OS-tracked, dependency-resolving package on EVERY distro image — not a
+	// curl'd raw binary. compileLocalPkgStep resolves the target distro's
+	// localpkg-capable format and the layer's source for it; renderLocalPkgImageRun
+	// (shared with OCITarget — R3) emits "" when the format declares no
+	// download_template (the layer's own task: install is the fallback).
+	if step := compileLocalPkgStep(layer, img, HostContext{}); step != nil {
+		if s, ok := step.(*LocalPkgInstallStep); ok {
+			run, err := renderLocalPkgImageRun(s.LocalPkg)
+			if err != nil {
+				b.WriteString(fmt.Sprintf("# localpkg render error: %v\n", err))
+			} else {
+				b.WriteString(run)
+			}
+		}
+	}
+
 	// 2a. tasks: list (new path — replaces both root.yml and user.yml).
 	// Validator rejects layers that have both tasks: and root.yml/user.yml.
 	if layer.HasTasks() {

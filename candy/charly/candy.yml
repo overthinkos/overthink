@@ -1,5 +1,5 @@
 candy:
-    version: 2026.159.0659
+    version: 2026.159.0748
     name: charly
     description: |
         Full charly toolchain — the CLI binary + the VM stack (virtualization),
@@ -58,37 +58,25 @@ candy:
     # dpkg-buildpackage + apt-get install. Each install AUTO-RESOLVES the package's
     # dependencies from the target's repos. The sources live at the SUPERPROJECT
     # root (pkg/<fmt>) — resolved by walking UP from the deploy project dir, so a
-    # consumer nested under image/<distro> still finds them. Skipped at image build
-    # (no host package build in a container); the cmd: task below is the fallback.
+    # consumer nested under image/<distro> still finds them. An IMAGE build has no
+    # host-package-build step, so it DOWNLOADS the published package
+    # (format.<fmt>.local_pkg.download_template) and installs it via the same
+    # dep-resolving install command — same OS-tracked result, no curl'd raw binary.
     localpkg:
         pac: pkg/arch
         rpm: pkg/fedora
         deb: pkg/debian
-    task:
-        # Install the charly binary. Resolution order:
-        #   1. opencharly-git already pacman-installed (the localpkg step ran first
-        #      on an Arch deploy target) → do nothing. The package's /usr/bin/charly is
-        #      authoritative; we must NOT curl a /usr/local/bin/charly, which would
-        #      shadow it on $PATH with a stale, pacman-untracked binary.
-        #   2. /ctx/bin/charly present (`task build:charly` ships bin/charly in the layer dir,
-        #      image builds) → install it directly.
-        #   3. otherwise (remote github-ref composition: bin/charly is a gitignored
-        #      build artifact absent from a git clone) → download the published
-        #      release asset. Keeps the 38 MB binary out of git while making the
-        #      layer remote-composable.
-        - cmd: |
-            if command -v pacman >/dev/null 2>&1 && pacman -Q opencharly-git >/dev/null 2>&1; then
-              : # opencharly-git is the proper package at /usr/bin/charly — nothing to do
-            elif [ -f /ctx/bin/charly ]; then
-              install -m 0755 /ctx/bin/charly /usr/local/bin/charly
-            else
-              curl -fsSL "https://github.com/overthinkos/overthink/releases/latest/download/charly-linux-${ARCH}" -o /usr/local/bin/charly
-              chmod 0755 /usr/local/bin/charly
-            fi
-          user: root
-    # The charly binary is at /usr/bin/charly (opencharly-git package, on an Arch deploy)
-    # OR /usr/local/bin/charly (image build / non-pac deploy curl/COPY). Probe via
-    # PATH (`command -v charly`) so the eval passes regardless of which path placed it.
+    # No install task: the charly binary is installed by the `localpkg:` mechanism
+    # above — the proper OS package, dependency-resolving + OS-tracked, on EVERY
+    # distro. A DEPLOY target (target: local / vm) builds the format's source on
+    # the host and installs it (pacman -U / dnf install / apt-get install); an
+    # IMAGE build (OCITarget) downloads the PUBLISHED package
+    # (build.yml format.<fmt>.local_pkg.download_template → releases/latest/download/
+    # opencharly-${ARCH}.{pkg.tar.zst,rpm,deb}) and installs it the same way. One
+    # install path, no curl'd raw binary.
+    #
+    # The package lands the binary at /usr/bin/charly. Probe via PATH
+    # (`command -v charly`) so the eval passes regardless of which path placed it.
     eval:
         - id: charly-binary
           command: command -v charly

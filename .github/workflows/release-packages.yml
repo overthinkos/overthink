@@ -32,10 +32,23 @@ jobs:
         with:
           submodules: recursive
           fetch-depth: 0
+      # On a tag push actions/checkout leaves the repo in DETACHED HEAD with no
+      # local branch, so the makepkg git source (pkg/arch/PKGBUILD:
+      # `git+file://$(realpath …/../..)`) clones a repo whose `origin/HEAD` is
+      # unresolvable — makepkg's working-copy checkout then dies with
+      # "invalid reference: origin/HEAD" (the pac job's historical failure).
+      # Put HEAD back on a real branch so the source clone's origin/HEAD resolves.
+      # rpm/deb don't use makepkg's git source, so only pac needs this.
+      - name: Put HEAD on a branch (makepkg git source needs a resolvable origin/HEAD)
+        run: git checkout -B release-build
       - name: Build .pkg.tar.zst (native makepkg, uid 1000)
         run: |
           go -C charly build -ldflags "-X main.BuildCalVer=$(bash pkg/arch/calver.sh)" -o ../bin/charly .
           bin/charly box pkg pac
+          # Stable-named copy the charly candy's localpkg download_template fetches
+          # (releases/latest/download/opencharly-<arch>.pkg.tar.zst). Runner is amd64;
+          # exclude the makepkg -debug split package.
+          cp "$(ls -1 dist/*.pkg.tar.zst | grep -v -- '-debug' | head -1)" dist/opencharly-amd64.pkg.tar.zst
       - if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v3
         with:
@@ -52,35 +65,12 @@ jobs:
         run: |
           go -C charly build -ldflags "-X main.BuildCalVer=$(bash pkg/arch/calver.sh)" -o ../bin/charly .
           bin/charly box pkg rpm deb
+          # Stable-named copies the charly candy's localpkg download_template fetches
+          # (releases/latest/download/opencharly-<arch>.{rpm,deb}). Runner is amd64;
+          # exclude any -debuginfo/-debugsource split package.
+          cp "$(ls -1 dist/*.rpm | grep -v -- '-debug' | head -1)" dist/opencharly-amd64.rpm
+          cp "$(ls -1 dist/*.deb | head -1)" dist/opencharly-amd64.deb
       - if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v3
         with:
           files: dist/*
-
-  # Raw static `charly-linux-<arch>` binaries — the asset the `charly` candy's
-  # curl-fallback fetches when composing the layer from a remote @github ref
-  # (where bin/charly is a gitignored build artifact absent from the clone).
-  # CGO_ENABLED=0 → a fully static binary that runs on any rootfs (incl. the
-  # pacstrap/debootstrap bootstrap roots) without a libc dependency. The candy's
-  # curl points at `releases/latest/download/`, so it always resolves to the
-  # newest release's asset — no per-release URL bump.
-  binary:
-    runs-on: [self-hosted, overthink]
-    steps:
-      - uses: actions/checkout@v5
-        with:
-          submodules: recursive
-          fetch-depth: 0
-      - name: Build static charly-linux-<arch> binaries
-        run: |
-          CALVER=$(bash pkg/arch/calver.sh)
-          for arch in amd64 arm64; do
-            CGO_ENABLED=0 GOOS=linux GOARCH="$arch" \
-              go -C charly build -ldflags "-X main.BuildCalVer=${CALVER}" -o "../charly-linux-${arch}" .
-          done
-      - if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v3
-        with:
-          files: |
-            charly-linux-amd64
-            charly-linux-arm64

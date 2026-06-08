@@ -257,6 +257,16 @@ type LocalPkgDef struct {
 	// files before installing them via InstallTemplate (the localpkg step itself
 	// auto-resolves and needs no builder). For pac: `aur`. Empty for rpm/deb.
 	DepBuilder string `yaml:"dep_builder"`
+
+	// DownloadTemplate is the URL the IMAGE build (OCITarget) curl-fetches the
+	// PUBLISHED package file from, when a layer with a `localpkg:` map is baked
+	// into an image. Deploy targets BUILD the package on the host (BuildTemplate);
+	// an image build has no host-package-build step, so it downloads the release
+	// asset and installs it via the SAME dep-resolving InstallTemplate (so the
+	// charly toolchain is OS-tracked + its deps resolved, identically to deploy).
+	// `${ARCH}` (BuildKit amd64/arm64) is substituted at build time. Empty → the
+	// layer's own task: install is the fallback (the legacy behavior).
+	DownloadTemplate string `yaml:"download_template"`
 }
 
 // PhaseSet carries three-phase templates for a format or builder.

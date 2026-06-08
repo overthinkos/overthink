@@ -121,12 +121,12 @@ func (t *OCITarget) emitStep(step InstallStep, plan *InstallPlan) error {
 		// silently (the deploy-time AndroidDeployTarget executes it).
 		return nil
 	case *LocalPkgInstallStep:
-		// localpkg builds a host PKGBUILD with makepkg + pacman -U onto a
-		// DEPLOY target — there is no makepkg/pacman step in a container image
-		// build, and the image bakes one self-contained binary via the layer's
-		// COPY/curl cmd: task instead. Skip silently (Local/Vm deploy executes
-		// it). See LocalPkgInstallStep.
-		return nil
+		// In an image build there is no host-package-build step, so the layer's
+		// PUBLISHED package is downloaded from its release and installed via the
+		// SAME dep-resolving install_template the deploy path uses — so the
+		// toolchain is OS-tracked + its deps resolved (not a bare COPY'd binary).
+		// Needs LocalPkg.DownloadTemplate; absent → skip (layer's task: fallback).
+		return t.emitLocalPkgInstall(s)
 	case *RebootStep:
 		// No machine to reboot during an image build — skip silently
 		// (a target:vm deploy of this layer performs the reboot).
@@ -186,6 +186,22 @@ func (t *OCITarget) emitShellHook(s *ShellHookStep) error {
 // PhaseTemplate lookup so the new phase: path preempts the legacy
 // install_template when present. Falls back to legacy InstallTemplate
 // for the (install, container) cell.
+// emitLocalPkgInstall emits the image-build install of a layer's `localpkg:`
+// package: download the PUBLISHED package file (LocalPkg.DownloadTemplate, with
+// ${ARCH} resolved by BuildKit) into the staging dir, then run the SAME
+// dep-resolving InstallTemplate the deploy path uses (pacman -U / dnf install /
+// apt-get install). The toolchain is thus OS-tracked and its dependencies pulled
+// from the image's repos — identical to a deploy-target install. A nil LocalPkg
+// or empty DownloadTemplate is a clean no-op (the layer's own task: installs it).
+func (t *OCITarget) emitLocalPkgInstall(s *LocalPkgInstallStep) error {
+	run, err := renderLocalPkgImageRun(s.LocalPkg)
+	if err != nil {
+		return err
+	}
+	t.buf.WriteString(run)
+	return nil
+}
+
 func (t *OCITarget) emitSystemPackages(s *SystemPackagesStep) error {
 	if t.DistroDef == nil || t.DistroDef.Format == nil {
 		return fmt.Errorf("no distro definition for format %s", s.Format)

@@ -419,6 +419,10 @@ distro:
                     # on already-installed and the mandatory deps come in for free.
                     install_template: |
                         pacman -U --noconfirm {{.StageDir}}/{{.Glob}}
+                    # Image builds (OCITarget) have no host-package-build step, so they
+                    # curl the PUBLISHED package and install it via install_template above.
+                    # ${ARCH} (amd64/arm64) is resolved by BuildKit at build time.
+                    download_template: "https://github.com/overthinkos/overthink/releases/latest/download/opencharly-${ARCH}.pkg.tar.zst"
                     probe: command -v pacman
                     # dep_builder drives the aur-LAYER deploy path (building a
                     # layer's aur: packages); the localpkg install itself
@@ -687,6 +691,8 @@ distro:
                         '
                     install_template: |
                         DEBIAN_FRONTEND=noninteractive apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y {{.StageDir}}/{{.Glob}}
+                    # Image builds curl the PUBLISHED .deb + install via install_template above.
+                    download_template: "https://github.com/overthinkos/overthink/releases/latest/download/opencharly-${ARCH}.deb"
                     probe: command -v apt-get
                 # Host-venue install cell for target:local / target:vm deploys.
                 # Mirrors the container install_template below: a layer's `repo:`
@@ -948,6 +954,8 @@ distro:
                         '
                     install_template: |
                         dnf install -y {{.StageDir}}/{{.Glob}}
+                    # Image builds curl the PUBLISHED .rpm + install via install_template above.
+                    download_template: "https://github.com/overthinkos/overthink/releases/latest/download/opencharly-${ARCH}.rpm"
                     probe: command -v dnf
                 # Host-venue cells consumed by target:local / target:vm deploys
                 # (LocalDeployTarget / VmDeployTarget). install.host is the

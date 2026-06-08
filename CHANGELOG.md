@@ -22,6 +22,39 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-08 — feat(localpkg): image builds install the PUBLISHED OS package on every distro + fix the pac release CI
+
+The `charly` toolchain candy (and any future `localpkg:` candy) now installs as a
+PROPER, dependency-resolving, OS-tracked package in IMAGE builds, not a curl'd raw
+binary — matching what the deploy-time `LocalPkgInstallStep` already did on
+`target: local` / `target: vm`. An image build has no host package-build step, so
+it DOWNLOADS the published release asset
+(`build.yml format.<fmt>.local_pkg.download_template` →
+`releases/latest/download/opencharly-${ARCH}.{pkg.tar.zst,rpm,deb}`, `${ARCH}`
+resolved by BuildKit) and installs it through the SAME dep-resolving install
+command the deploy path uses (`pacman -U` / `dnf install` / `apt-get install`),
+so the package's repo dependencies come in for free. ONE shared emitter,
+`renderLocalPkgImageRun` (`charly/localpkg.go`), is called by BOTH the IR
+`OCITarget` (pod-overlay synthesis) AND `generate.go`'s `writeLayerSteps` (the
+`charly box build`/`generate` path) — the image-build localpkg emission has a
+single home (R3). `LocalPkgDef` gains the `download_template` field
+(`charly/format_config.go`); a format that declares none falls back to the layer's
+own `task:` install (the helper returns no directive). The `charly` candy's
+explicit curl/`task:` install block is DELETED — the `localpkg:` mechanism is now
+the single install path across pac/rpm/deb.
+
+Alongside, the `pac` job of `release-packages.yml` is fixed. It had been failing
+with `fatal: invalid reference: origin/HEAD`: on a tag push `actions/checkout`
+leaves the repo in DETACHED HEAD with no local branch, so makepkg's
+`git+file://$(realpath …/../..)` source (`pkg/arch/PKGBUILD`) clones a repo whose
+`origin/HEAD` is unresolvable and the working-copy checkout dies. Reproduced and
+fixed locally by putting HEAD back on a branch (`git checkout -B release-build`)
+before the makepkg build — rpm/deb don't use makepkg's git source, so only `pac`
+needs it. The workflow also now emits stable-named asset copies
+(`opencharly-amd64.{pkg.tar.zst,rpm,deb}`, excluding the `-debug` split packages)
+that the `download_template` fetches, and drops the superseded raw-binary
+(`charly-linux-<arch>`) job — the package IS the distributed artifact.
+
 ### 2026-06-08 — docs(git-workflow): harden against silently-dropped submodule pointer bumps
 
 Incident: landing Cutover 3d, the `git switch -c feat/main-doc-rebrand-3d` step

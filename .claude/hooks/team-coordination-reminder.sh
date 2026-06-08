@@ -7,11 +7,11 @@
 #
 # DOCTRINE: a LEAN POINTER, not a copy of the rules. The authoritative rule-set
 # (R0-R10, the bed-ownership parallel-testing model, the commit gate) lives in
-# CLAUDE.md + /ov-internals:agents. Re-stating it here only lets the two drift
-# apart. Point, don't duplicate. See /ov-internals:agents "Hooks doctrine".
+# CLAUDE.md + /charly-internals:agents. Re-stating it here only lets the two drift
+# apart. Point, don't duplicate. See /charly-internals:agents "Hooks doctrine".
 
 cat <<'EOF'
-OVERTHINK TEAM REMINDER (pointer — the rules live in CLAUDE.md + /ov-internals:agents):
+OVERTHINK TEAM REMINDER (pointer — the rules live in CLAUDE.md + /charly-internals:agents):
 
 R0 SKILLS FIRST. Each teammate loads the matching skill(s) via the Skill tool
 before reading source / running a command / editing a file. Teammates read
@@ -32,9 +32,9 @@ bed), a background agent, or (interactive tmux) a split-pane teammate. An
 IN-PROCESS teammate CANNOT own a bed — its bg dies on yield. No 600s/duration
 carve-out (600s is a Bash FOREGROUND cap, irrelevant to a backgrounded bed).
 Launch longest-pole-first (slow VM/desktop first, cheap pods overlapping). FREEZE
-ov/*.go during the bed phase — a Go edit mid-bed-run trips the freshness guard
+charly/*.go during the bed phase — a Go edit mid-bed-run trips the freshness guard
 and aborts everyone's next build/deploy/eval (the lead rebuilds charly ONCE at the
-barrier). Detail: /ov-internals:agents "Speed levers".
+barrier). Detail: /charly-internals:agents "Speed levers".
 
 EDIT YOUR BED, DON'T RUN IT. Your job is your bed's SOURCE (bed-local edits) +
 short foreground checks (`charly eval box`, `charly box validate`) — NOT the full `charly

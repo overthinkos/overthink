@@ -28,7 +28,7 @@ func deployNestedPodsInGuest(vmName string, node *DeploymentNode, exec DeployExe
 		return nil
 	}
 	// The from-image delegation runs the HOST's OWN charly in the guest — not the
-	// guest's PATH ov. The host binary running this deploy is guaranteed current
+	// guest's PATH charly. The host binary running this deploy is guaranteed current
 	// and from-image-capable; the guest's PATH charly may be a stale layer install
 	// (a @github-fetched charly candy ships no bin/charly, so its curl fallback installs
 	// a pre-from-image release). So deliver the host charly to a /tmp path OUTSIDE
@@ -73,7 +73,7 @@ func deployNestedPodsInGuest(vmName string, node *DeploymentNode, exec DeployExe
 		// `charly deploy from-image` reach the lingering user bus over this non-login
 		// SSH session — the same pattern VmDeployTarget uses for user services.
 		// ovCmd is the explicit /tmp path to the host's own charly delivered above
-		// (the from-image authority), never the guest's PATH ov.
+		// (the from-image authority), never the guest's PATH charly.
 		script := fmt.Sprintf(
 			"sudo loginctl enable-linger \"$(id -un)\" >/dev/null 2>&1 || true\n"+
 				"export XDG_RUNTIME_DIR=\"/run/user/$(id -u)\"\n"+

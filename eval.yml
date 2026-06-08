@@ -1043,10 +1043,10 @@ recipe:
                         - `/usr/local/bin/sshd-wrapper` present with mode
                           0755.
                     - A pod named `selftest-image` is running with:
-                        - `/usr/local/bin/ov` present and executable.
+                        - `/usr/local/bin/charly` present and executable.
                     - A pod named `composition-app` is running with:
                         - `/usr/sbin/sshd` present.
-                        - `/usr/local/bin/ov` present and executable.
+                        - `/usr/local/bin/charly` present and executable.
                         - `/etc/charly-composition-selftest` present (this file
                           is verified by the hand-written scenario that
                           depends on the imported `sshd-binary` probe).

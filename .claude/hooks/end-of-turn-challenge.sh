@@ -7,7 +7,7 @@
 # CLAUDE.md "End-of-turn checklist" + "Post-Execution Policies". This hook
 # only anchors the few self-checks most worth re-asking every turn and points
 # at the source. Deterministic enforcement (force-push, bad tier, --no-verify)
-# is in the PreToolUse gates, not here. See /ov-internals:agents "Hooks doctrine".
+# is in the PreToolUse gates, not here. See /charly-internals:agents "Hooks doctrine".
 
 cat <<'EOF'
 END-OF-TURN CHECK (soft — does not block). Confirm against CLAUDE.md
@@ -43,7 +43,7 @@ END-OF-TURN CHECK (soft — does not block). Confirm against CLAUDE.md
       / migration help-text (R5).
 
   [ ] Landing (only after R10 PASS): R10 PASS is the sole landing trigger and
-      auto-lands per /ov-internals:git-workflow — ONE atomic commit per repo
+      auto-lands per /charly-internals:git-workflow — ONE atomic commit per repo
       with the Assisted-by trailer, feat/ fast-forward-merged to main, a fresh
       v<CalVer> tag on each charly.yml repo, pushed. NEVER force-push
       (no --force / --force-with-lease, any branch, any repo).

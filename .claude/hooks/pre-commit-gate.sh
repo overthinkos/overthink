@@ -9,7 +9,7 @@
 # It does NOT judge whether the tier is JUSTIFIED by the proof — that is the
 # AI's job (testing-validator + the pasted-proof rule). Hooks gate mechanical
 # invariants; agents judge proof. See CLAUDE.md "Agents, Workflows & Teams"
-# (Hooks doctrine) + /ov-internals:agents.
+# (Hooks doctrine) + /charly-internals:agents.
 #
 # Fast path: only a git-commit-mentioning command reaches the analyzer.
 

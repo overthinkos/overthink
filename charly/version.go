@@ -21,7 +21,7 @@ import (
 // "different" but never "newer" — useless for deciding which charly to keep).
 var BuildCalVer string
 
-// OvVersion returns the CalVer identity of this `ov` binary. It is the stamped
+// OvVersion returns the CalVer identity of this `charly` binary. It is the stamped
 // BuildCalVer when present; otherwise "unknown" (an unstamped dev/test build —
 // ParseCalVer rejects it, so freshness comparisons treat it as older than every
 // real CalVer). It NEVER falls back to the wall clock: the clock identifies the
@@ -35,10 +35,10 @@ func OvVersion() string {
 }
 
 // hostOvIsNewer reports whether the host charly (identified by hostVer, normally
-// OvVersion()) is STRICTLY newer than a venue's ov, where venueVerOut is the raw
+// OvVersion()) is STRICTLY newer than a venue's charly, where venueVerOut is the raw
 // stdout of `charly version` run inside that venue (pod/VM). It is the single
 // CalVer-comparison arbiter shared by EnsureOvInGuest (boot-time install) and
-// the host→nested delegation path (R3), so both agree on "is the venue's ov
+// the host→nested delegation path (R3), so both agree on "is the venue's charly
 // stale?".
 //
 // Semantics:

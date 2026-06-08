@@ -118,7 +118,7 @@ func TestBuildDeployPlanLocalPkgOrdering(t *testing.T) {
 		Name:     "charly",
 		localpkg: map[string]string{"pac": "pkg/arch"},
 		tasks: []Task{
-			{Cmd: "echo install ov", User: "root"},
+			{Cmd: "echo install charly", User: "root"},
 		},
 	}
 	img := &ResolvedBox{Name: "host-adhoc", Home: "/root", User: "root", Pkg: "pac", DistroDef: testPacDistroDef()}

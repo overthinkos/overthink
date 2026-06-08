@@ -4,7 +4,7 @@ candy:
     description:
         feature: bench-composition — marker for from-composition-selftest hand-written probe
         narrative: |
-            Writes /etc/charly-charly-composition-selftest, satisfying the
+            Writes /etc/charly-composition-selftest, satisfying the
             composition-handwritten-probe scenario in from-composition-selftest.
     task:
         - mkdir: /etc

@@ -9,7 +9,7 @@
 # commands long after they were renamed). Keep this short; point, don't
 # duplicate. The
 # deterministic enforcement lives in the PreToolUse gates (pre-commit-gate.sh,
-# pre-push-gate.sh), not in walls of text here. See /ov-internals:agents
+# pre-push-gate.sh), not in walls of text here. See /charly-internals:agents
 # "Hooks doctrine".
 
 cat <<'EOF'
@@ -36,7 +36,7 @@ skills, CLAUDE.md, or current code as automatically correct (they drift). Load
 the skill first for intent (R0), but confirm high-risk claims — above all
 whether a layer composition at its latest versions builds/deploys/runs TOGETHER
 — on a real bed EARLY. "The docs say so" / "the code does X" / "it probably
-composes" are confessions for a high-risk call. See /ov-internals:strict-policy.
+composes" are confessions for a high-risk call. See /charly-internals:strict-policy.
 
 An approved plan runs end-to-end through R10 in ONE phase. The only valid
 mid-plan stops are CLAUDE.md's narrow blockers (genuine design change,
@@ -46,5 +46,5 @@ R10 failure needing redesign) — not context/scope/time/"handoff".
 Drive the existing `charly eval` beds to test/verify (eval-bed-runner +
 /verify-beds; deploy-verifier + /audit-deploy-configs). The COMMIT is gated on
 a full final-code bed test (pasted); run beds freely throughout to verify —
-only on `disposable: true`, no scope-shrinking flags. See /ov-internals:agents.
+only on `disposable: true`, no scope-shrinking flags. See /charly-internals:agents.
 EOF

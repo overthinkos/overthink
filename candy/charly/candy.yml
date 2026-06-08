@@ -70,7 +70,7 @@ candy:
         #      on an Arch deploy target) → do nothing. The package's /usr/bin/charly is
         #      authoritative; we must NOT curl a /usr/local/bin/charly, which would
         #      shadow it on $PATH with a stale, pacman-untracked binary.
-        #   2. /ctx/bin/charly present (`task build:ov` ships bin/charly in the layer dir,
+        #   2. /ctx/bin/charly present (`task build:charly` ships bin/charly in the layer dir,
         #      image builds) → install it directly.
         #   3. otherwise (remote github-ref composition: bin/charly is a gitignored
         #      build artifact absent from a git clone) → download the published

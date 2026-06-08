@@ -6,12 +6,12 @@
 #
 # Three-tier cascade: sidecar.yml template -> box.yml per-image -> deploy.yml per-machine
 #
-# When any sidecar is configured for an image, ov config generates:
+# When any sidecar is configured for an image, charly config generates:
 #   - <image>.pod           — Podman pod (shared network namespace, port mappings, bridge network)
 #   - <image>-<sidecar>.container — One per sidecar (runs in the pod)
 #   - <image>.container     — App container (modified: Pod= directive, no ports/network)
 #
-# Dual networking: the pod stays on the "ov" bridge (reachable by other ov containers)
+# Dual networking: the pod stays on the "charly" bridge (reachable by other charly containers)
 # while the Tailscale sidecar creates a tun interface for exit node routing.
 # --exit-node-allow-lan-access exempts bridge subnets so container-to-container
 # traffic stays on the bridge; only internet-bound traffic goes through the exit node.
@@ -24,14 +24,14 @@ sidecar:
     # sidecar MUST set `parameter.tailnet` to the target tailnet's
     # MagicDNS suffix (e.g. "armadillo-quail.ts.net"). The empty-string
     # sentinel below means "required, must be supplied by deploy" —
-    # ResolveSidecar errors out at `ov config` time with a remediation
-    # hint pointing at `ov migrate` if it's missing.
+    # ResolveSidecar errors out at `charly config` time with a remediation
+    # hint pointing at `charly migrate` if it's missing.
     #
     # Each tailnet's auth-key lives in `.secrets` (GPG-encrypted env
     # file, loaded by direnv) at the env var name resolved by the
     # `env_from:` template below. Operators store keys via:
-    #   ov secrets gpg set TS_AUTHKEY_<TAILNET-NORMALIZED> tskey-auth-XXXX
-    # See /ov-automation:sidecar "Multi-tailnet auth-key store".
+    #   charly secrets gpg set TS_AUTHKEY_<TAILNET-NORMALIZED> tskey-auth-XXXX
+    # See /charly-automation:sidecar "Multi-tailnet auth-key store".
     parameter:
       tailnet: ""
     env:
@@ -76,6 +76,6 @@ sidecar:
         #   parameter.tailnet=armadillo-quail.ts.net
         #   env_from -> TS_AUTHKEY_ARMADILLO_QUAIL_TS_NET
         # The operator then stores:
-        #   ov secrets gpg set TS_AUTHKEY_ARMADILLO_QUAIL_TS_NET tskey-auth-XXXX
+        #   charly secrets gpg set TS_AUTHKEY_ARMADILLO_QUAIL_TS_NET tskey-auth-XXXX
         env_from: "TS_AUTHKEY_{{.Parameter.tailnet | tailnetEnvSuffix}}"
         description: Tailscale auth key for the selected tailnet (per-tailnet env var)

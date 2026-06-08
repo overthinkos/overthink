@@ -16,22 +16,22 @@ Most other tools hand an agent a sandbox — and then spend their effort taking 
    → `plugins/README.md`.
 
 4. **Two tasters at one bench.** The same `charly` surface serves the human at the keyboard and the agent driving the line, with no second-class channel for either. Built for you *and* your agents, in the same breath.
-   → CLAUDE.md "Candyboxing", `/ov-internals:agents`.
+   → CLAUDE.md "Candyboxing", `/charly-internals:agents`.
 
 5. **Taste every batch before it ships — Risk Driven Development.** Recipe cards drift and vats spring leaks, so nothing high-stakes should ride on "the card says so." The riskiest question — *do these candies actually melt together at today's versions?* — gets proven on a real, disposable candybox first. Reality is the only ground truth. Risk Driven Development decides *what* to prove, and *when*: the riskiest unknown, first.
-   → CLAUDE.md "Risk Driven Development (RDD)", `/ov-eval:eval`.
+   → CLAUDE.md "Risk Driven Development (RDD)", `/charly-eval:eval`.
 
 6. **Write down what "good" means, and have an agent taste it — Agent Driven Development.** What a candybox should be is captured as runnable acceptance scenarios, not left to opinion. A checklist verifies the measurable; for the subtle "is it actually right?" an agent tastes the live batch with the full probe kit and judges. The recipe IS the test — and an agent is a first-class author of it and a first-class grader of it. Agent Driven Development is Risk Driven Development's co-equal twin: RDD proves the risky assumptions a behavior rests on; ADD pins down what correct behavior *is* and drives forward until the live batch passes.
-   → CLAUDE.md "Agent Driven Development (ADD)", `/ov-eval:eval`.
+   → CLAUDE.md "Agent Driven Development (ADD)", `/charly-eval:eval`.
 
 7. **Conched smooth — pass after pass until silk.** Running the eval loop down to the micrometer proves a candybox works; running the build → run → deploy → evaluate mantra *over and over again* makes it good. Like conching chocolate, every pass grinds the candy smoother — deduplicated, refined, dead code and band-aid fixes removed, yet another round of evals added, re-proven on a live deployment — until the candybox has proven itself and the candy is silk. The first box released for public consumption should taste like the finest milk chocolate ever, not like a rock sprayed with quick-drying brown paint.
-   → README "Build", "Build → run → deploy → evaluate", `/ov-build:build`.
+   → README "Build", "Build → run → deploy → evaluate", `/charly-build:build`.
 
 8. **A spoiled batch costs one rebuild.** All that conching is cheap because a candybox is throwaway by explicit design: a wrong move is just another lesson learned after a full root cause analysis of the underlying issues, not an incident that needs to be prevented at all costs in the future. That is exactly what lets autonomous iteration be *fearless* and *safe* at once — disposability is the license to be bold.
-   → CLAUDE.md "Disposable-Only Autonomy", `/ov-internals:disposable`.
+   → CLAUDE.md "Disposable-Only Autonomy", `/charly-internals:disposable`.
 
 9. **Free to forge a better candybox.** And when the box itself is wrong — wrong layers, a missing candy, a composition that won't melt together — the agent is always free to build a new and better one, never to make do with the wrong room. A candybox is just another recipe, and a throwaway one, so forging a fresh box costs no more than patching the wrong one. The freedom to build the *right* box is what makes the whole candy store usable.
-   → CLAUDE.md "Candyboxing", "Disposable-Only Autonomy", `/ov-internals:disposable`.
+   → CLAUDE.md "Candyboxing", "Disposable-Only Autonomy", `/charly-internals:disposable`.
 
 ## Where the factory is heading
 

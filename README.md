@@ -291,7 +291,7 @@ and `charly version` always agree. `depends=` covers the full runtime
 surface — `podman`/`docker`/`fuse-overlayfs`/`slirp4netns` for
 rootless containers, `qemu-full`/`libvirt`/`edk2-ovmf`/`swtpm` for
 `charly vm`, `gnupg`/`pinentry`/`libsecret`/`gocryptfs`/`tailscale` for
-secrets/encrypted volumes/tunnels, `go-task` so `task build:ov`
+secrets/encrypted volumes/tunnels, `go-task` so `task build:charly`
 works from any fresh checkout. The pacman post-install hook enables
 `docker.service` / `tailscaled.service` / `virtqemud.socket` and
 adds the user to the `docker` and `libvirt` groups automatically.

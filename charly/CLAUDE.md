@@ -4,14 +4,14 @@ You are in the **Go CLI** source for `ov`.
 
 **Load these skills FIRST (R0):**
 
-- `/ov-internals:go` — source structure, building the `ov` binary, running
+- `/charly-internals:go` — source structure, building the `ov` binary, running
   tests, adding/modifying commands.
-- `/ov-internals:install-plan` — the InstallPlan IR + DeployTarget /
+- `/charly-internals:install-plan` — the InstallPlan IR + DeployTarget /
   OCITarget pipeline (before touching `install_plan.go`, `install_build.go`,
   `build_target_oci.go`, `deploy_target_*.go`, `k8s_target.go`).
-- `/ov-internals:capabilities` — the OCI-label capability contract.
-- `/ov-internals:generate-source` — what `charly box generate` emits.
-- Plus the renderer skills (`/ov-internals:vm-spec`, `cloud-init-renderer`,
+- `/charly-internals:capabilities` — the OCI-label capability contract.
+- `/charly-internals:generate-source` — what `charly box generate` emits.
+- Plus the renderer skills (`/charly-internals:vm-spec`, `cloud-init-renderer`,
   `libvirt-renderer`, `ovmf`) when touching VM/cloud-init code.
 
 **Authoritative rules live in the repo-root `CLAUDE.md`** (one level up). R0–R10,

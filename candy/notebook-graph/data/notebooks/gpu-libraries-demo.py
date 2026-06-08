@@ -71,7 +71,7 @@ def _versions(
     })
     cuda_avail = torch.cuda.is_available()
     devices = torch.cuda.device_count()
-    # Last-expression-displays-value (see /ov-versa:marimo-layer).
+    # Last-expression-displays-value (see /charly-versa:marimo-layer).
     versions
     return versions, cuda_avail, devices
 

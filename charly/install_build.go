@@ -3,7 +3,7 @@ package main
 // install_build.go — the InstallPlan compiler.
 //
 // BuildDeployPlan walks a resolved image plus its layer set and produces
-// an InstallPlan (ov/install_plan.go) — the IR that both the OCI target
+// an InstallPlan (charly/install_plan.go) — the IR that both the OCI target
 // (Containerfile emission) and the host target (shell + podman execution)
 // consume.
 //

@@ -39,18 +39,18 @@ func ResolveOvInstallStrategy(spec *VmSpec) OvInstallStrategy {
 }
 
 // EnsureOvInVenue is the GENERIC "copy charly into a running system" mechanism: it
-// guarantees an invokable `ov` on ANY deployment venue — container (podman cp),
+// guarantees an invokable `charly` on ANY deployment venue — container (podman cp),
 // VM / SSH host (scp), or the local host (install) — and returns the command the
 // caller should use to invoke it. It is venue-agnostic because it works only
 // through the DeployExecutor abstraction (RunCapture to probe, PutFile to
 // deliver — cp / scp / podman cp per executor), so one code path serves every
-// substrate (R3). Used by every in-venue `ov` caller (dbus delegation, desktop
+// substrate (R3). Used by every in-venue `charly` caller (dbus delegation, desktop
 // notifications, the VM-deploy strategy wrapper, nested from-image delegation)
-// so an image need NOT bake the `ov` layer for those transient needs.
+// so an image need NOT bake the `charly` layer for those transient needs.
 //
 // Resolution (quiet — the caller decides what, if anything, to print):
 //
-//	1. The venue's SYSTEM charly (PATH `ov`, normally a package-managed binary kept
+//	1. The venue's SYSTEM charly (PATH `charly`, normally a package-managed binary kept
 //	   current by the package manager) is authoritative whenever it is at least
 //	   as new as the host's (CalVer — the true build identity, never a content
 //	   checksum). It is used as-is: NEVER shadowed, downgraded, or overwritten.
@@ -65,7 +65,7 @@ func ResolveOvInstallStrategy(spec *VmSpec) OvInstallStrategy {
 //	   repeated calls reuse the same copy (idempotent — a still-good prior copy is
 //	   verified and reused, never re-transferred).
 //
-// Returns "charly" (use the venue's PATH ov) or "/tmp/charly-<calver>" (the delivered
+// Returns "charly" (use the venue's PATH charly) or "/tmp/charly-<calver>" (the delivered
 // host copy). SweepStaleTemps reclaims leftover /tmp copies.
 func EnsureOvInVenue(ctx context.Context, exec DeployExecutor, opts EmitOpts) (string, error) {
 	hostVer := OvVersion()
@@ -88,7 +88,7 @@ func EnsureOvInVenue(ctx context.Context, exec DeployExecutor, opts EmitOpts) (s
 	}
 
 	// Venue charly absent or older → deliver the host binary at the /tmp path
-	// (outside $PATH; the system ov, if any, is left untouched).
+	// (outside $PATH; the system charly, if any, is left untouched).
 	if err := putHostOvInVenue(ctx, exec, tmp, false, opts); err != nil {
 		return "", err
 	}
@@ -105,7 +105,7 @@ func EnsureOvInVenue(ctx context.Context, exec DeployExecutor, opts EmitOpts) (s
 //	             charly to a /tmp path (no shadow). Routine updates are the package
 //	             manager's job.
 //	url        — verify `charly version` works (cloud-init runcmd did the curl)
-//	skip       — verify `command -v ov` exists; error if missing
+//	skip       — verify `command -v charly` exists; error if missing
 //
 // Returns an informational message on success suitable for printing at info
 // level (the deploy context wants the detail; transient callers like dbus stay
@@ -174,7 +174,7 @@ func putHostOvInVenue(ctx context.Context, exec DeployExecutor, remotePath strin
 	return nil
 }
 
-// verifyOvPresent runs `command -v ov` in the guest and reports
+// verifyOvPresent runs `command -v charly` in the guest and reports
 // whether the binary is already in place. Tail of the strategy
 // implementations for "url" (cloud-init did the download) and "skip"
 // (user-managed).

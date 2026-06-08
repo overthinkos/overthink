@@ -33,7 +33,7 @@ def _resolved_urls(os, pl):
     #     browser-side.
     #
     # When `port: [auto]` is set in deploy.yml, the host ports below
-    # rotate on each `ov update` — this cell is the easiest way to
+    # rotate on each `charly update` — this cell is the easiest way to
     # discover the current allocations without inspecting deploy.yml.
     _entries = [
         ("Airflow DAGs folder",                  "AIRFLOW_DAGS_DIR",            "/workspace/dags",                  "kernel"),
@@ -66,7 +66,7 @@ def _resolved_urls(os, pl):
     pmtiles_viewer        = _resolved["PMTILES_VIEWER_PUBLIC_URL"]
     # Bare `urls` as the LAST expression-statement before `return` —
     # marimo's cell-display semantics pick the last expression for
-    # the cell's output area (see /ov-versa:marimo-layer
+    # the cell's output area (see /charly-versa:marimo-layer
     # "Cell-display gotcha"). Placing it AFTER all assignments
     # avoids any ambiguity in marimo's AST-walk pass.
     urls
@@ -133,7 +133,7 @@ def __(mo, martin, versatiles_public, versatiles_assets, pmtiles_viewer):
         Server-side calls (notebook → Airflow API) use
         `AIRFLOW_API_INTERNAL_URL` (defaults to `http://localhost:8080`,
         works for same-pod airflow; override to e.g. `http://airflow-pod:8080`
-        for cross-pod topologies on the shared `ov` network).
+        for cross-pod topologies on the shared `charly` network).
         """
     )
     return
@@ -342,7 +342,7 @@ def __(Path, os, textwrap):
                 import urllib.request
                 import json as _json
                 source_name = pmtiles_path.rsplit("/", 1)[-1].rsplit(".", 1)[0]
-                with open("/tmp/ov-martin-restart.lock", "w") as _lock:
+                with open("/tmp/charly-martin-restart.lock", "w") as _lock:
                     fcntl.flock(_lock.fileno(), fcntl.LOCK_EX)
                     subprocess.run(
                         ["supervisorctl", "restart", "martin"],
@@ -557,7 +557,7 @@ def __(Path, os, textwrap):
                 import urllib.request
                 import json as _json
                 source_name = pmtiles_path.rsplit("/", 1)[-1].rsplit(".", 1)[0]
-                with open("/tmp/ov-martin-restart.lock", "w") as _lock:
+                with open("/tmp/charly-martin-restart.lock", "w") as _lock:
                     fcntl.flock(_lock.fileno(), fcntl.LOCK_EX)
                     subprocess.run(
                         ["supervisorctl", "restart", "martin"],
@@ -792,7 +792,7 @@ def __(Path, os, textwrap):
                 import urllib.request
                 import json as _json
                 source_name = pmtiles_path.rsplit("/", 1)[-1].rsplit(".", 1)[0]
-                with open("/tmp/ov-martin-restart.lock", "w") as _lock:
+                with open("/tmp/charly-martin-restart.lock", "w") as _lock:
                     fcntl.flock(_lock.fileno(), fcntl.LOCK_EX)
                     subprocess.run(
                         ["supervisorctl", "restart", "martin"],
@@ -937,7 +937,7 @@ def __(Path, os, textwrap):
                 import urllib.request
                 import json as _json
                 source_name = pmtiles_path.rsplit("/", 1)[-1].rsplit(".", 1)[0]
-                with open("/tmp/ov-martin-restart.lock", "w") as _lock:
+                with open("/tmp/charly-martin-restart.lock", "w") as _lock:
                     fcntl.flock(_lock.fileno(), fcntl.LOCK_EX)
                     subprocess.run(
                         ["supervisorctl", "restart", "martin"],
@@ -1075,7 +1075,7 @@ def __(Path, os, textwrap):
                 import socket
                 import time as _time
                 import urllib.request
-                with open("/tmp/ov-versatiles-restart.lock", "w") as _lock:
+                with open("/tmp/charly-versatiles-restart.lock", "w") as _lock:
                     fcntl.flock(_lock.fileno(), fcntl.LOCK_EX)
                     subprocess.run(
                         ["supervisorctl", "restart", "versatiles"],
@@ -1135,7 +1135,7 @@ def __(dag_files, dag_ids, os, requests, time):
     # Server-side: container-internal loopback by default. Override
     # AIRFLOW_API_INTERNAL_URL for cross-pod topologies (e.g. set
     # to "http://airflow-pod:8080" when airflow runs in a separate
-    # pod on the shared ov podman network).
+    # pod on the shared charly podman network).
     _api = os.environ.get("AIRFLOW_API_INTERNAL_URL", "http://localhost:8080")
     _pwd = os.environ["AIRFLOW_ADMIN_PASSWORD"]
 

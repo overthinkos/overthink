@@ -14,7 +14,7 @@ package main
 //
 // Inference rules (in order; the first that matches wins):
 //   1. `<base>/<instance>` deploy key → `image: <base>` (Pattern A
-//      from /ov-core:deploy "Two supported deploy patterns").
+//      from /charly-core:deploy "Two supported deploy patterns").
 //   2. `<base>-pod` deploy-key suffix → `image: <base>` (the
 //      established multi-pod convention; see project deploy.yml's
 //      jupyter-pod → image: jupyter, jupyter-ml-pod → image:
@@ -270,7 +270,7 @@ func migrateRequireImageOneFile(path string, dryRun bool, extraImageNames map[st
 			}
 
 			// Couldn't infer safely. Tell the operator.
-			warnings = append(warnings, fmt.Sprintf("%s: deploy entry %q has no `image:` field and migration cannot infer one — pick Pattern A (rename to <base>/<instance>) or Pattern B (declare explicit `image:` ref). See /ov-core:deploy 'Two supported deploy patterns'.", path, key))
+			warnings = append(warnings, fmt.Sprintf("%s: deploy entry %q has no `image:` field and migration cannot infer one — pick Pattern A (rename to <base>/<instance>) or Pattern B (declare explicit `image:` ref). See /charly-core:deploy 'Two supported deploy patterns'.", path, key))
 		}
 	}
 

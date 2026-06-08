@@ -24,7 +24,7 @@ box:
         port:
             - 8085:8080
         eval:
-            - command: test -x /usr/local/bin/filebrowser && test -x /usr/bin/charly && test -x /usr/bin/dbus-daemon
+            - command: test -x /usr/local/bin/filebrowser && test -x /usr/bin/dbus-daemon
               id: filebrowser-composed-binaries
               exit_status: 0
             - file: ${VOLUME_CONTAINER_PATH:data}
@@ -424,7 +424,7 @@ box:
             - command: test -x /usr/bin/labwc && test -x /usr/bin/google-chrome-stable && test -x /usr/local/bin/traefik && test -x /usr/sbin/sshd
               id: openclaw-desktop-selkies-binaries
               exit_status: 0
-            - command: test -x /usr/bin/ollama && test -x /usr/bin/charly && test -x /usr/bin/gocryptfs && test -x /usr/bin/socat
+            - command: test -x /usr/bin/ollama && test -x /usr/bin/gocryptfs && test -x /usr/bin/socat
               id: openclaw-desktop-charly-ollama-binaries
               exit_status: 0
             - command: test -x /usr/bin/podman && test -x /usr/bin/buildah && test -x /usr/bin/skopeo && test -x /usr/bin/newuidmap && test -x /usr/bin/newgidmap
@@ -506,7 +506,7 @@ box:
         port:
             - 8080:8080
         eval:
-            - command: test -x ${HOME}/.local/bin/openwebui-entrypoint && test -x ${HOME}/.pixi/envs/default/bin/python && test -x /usr/bin/charly
+            - command: test -x ${HOME}/.local/bin/openwebui-entrypoint && test -x ${HOME}/.pixi/envs/default/bin/python
               id: openwebui-composition
               exit_status: 0
             - command: printenv WEBUI_ADMIN_EMAIL
@@ -672,6 +672,11 @@ box:
         candy:
             - charly
         eval:
+            # NB: composition-source-charly is NOT a redundant presence check —
+            # it is the image-SECTION fixture the `composition-import-selftest`
+            # recipe imports by id (scope:[image], select:[composition-source-charly])
+            # to prove image-scope test import works. Distinct from the charly
+            # candy's layer-section `charly-binary`. Do not fold into the layer.
             - command: test -x /usr/bin/charly
               id: composition-source-charly
               exit_status: 0

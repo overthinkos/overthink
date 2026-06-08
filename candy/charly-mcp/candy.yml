@@ -92,7 +92,7 @@ candy:
           exit_status: 0
     service:
         - name: charly-mcp
-          exec: "/usr/local/bin/charly mcp serve --listen :18765"
+          exec: "/usr/bin/charly mcp serve --listen :18765"
           restart: always
           enable: true
           scope: system

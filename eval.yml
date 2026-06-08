@@ -1043,10 +1043,10 @@ recipe:
                         - `/usr/local/bin/sshd-wrapper` present with mode
                           0755.
                     - A pod named `selftest-image` is running with:
-                        - `/usr/local/bin/charly` present and executable.
+                        - `/usr/bin/charly` present and executable.
                     - A pod named `composition-app` is running with:
                         - `/usr/sbin/sshd` present.
-                        - `/usr/local/bin/charly` present and executable.
+                        - `/usr/bin/charly` present and executable.
                         - `/etc/charly-composition-selftest` present (this file
                           is verified by the hand-written scenario that
                           depends on the imported `sshd-binary` probe).
@@ -1823,7 +1823,7 @@ eval:
                 pacman -Q libvirt >/dev/null 2>&1 &&
                 pacman -Q tailscale >/dev/null 2>&1 &&
                 pacman -Q gocryptfs >/dev/null 2>&1 &&
-                test "$(command -v ov)" = /usr/bin/charly &&
+                test "$(command -v charly)" -ef /usr/bin/charly &&
                 charly version &&
                 echo LOCALPKG-PAC-AUTORESOLVE-OK
               stdout:

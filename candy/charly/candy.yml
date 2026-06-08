@@ -82,7 +82,13 @@ candy:
           command: command -v charly
           exit_status: 0
           stdout:
-            - matches: "/(usr/bin|usr/local/bin)/charly"
+            # Path-agnostic: the package installs to /usr/bin/charly, but on a
+            # usr-merged distro (Arch/CachyOS: /usr/sbin -> bin, /usr/sbin ahead
+            # of /usr/bin in PATH) `command -v` reports it via /usr/sbin — the
+            # SAME inode. Accept any /usr[/local]/{bin,sbin}/charly so the probe
+            # passes regardless of which PATH alias resolved it (RE2: no $ anchor,
+            # which wouldn't match the trailing newline).
+            - matches: "/usr/(local/)?s?bin/charly"
         - id: charly-version
           command: charly version
           exit_status: 0

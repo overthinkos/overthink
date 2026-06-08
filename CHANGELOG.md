@@ -55,6 +55,27 @@ needs it. The workflow also now emits stable-named asset copies
 that the `download_template` fetches, and drops the superseded raw-binary
 (`charly-linux-<arch>`) job — the package IS the distributed artifact.
 
+Fix-forward (caught by the consuming-image R10, `eval-charly-selftest-pod`): the
+install-path move from `/usr/local/bin/charly` (old curl path) to `/usr/bin/charly`
+(package path) had a blast radius beyond the candy itself. (1) The `charly-binary`
+eval check (`candy/charly/candy.yml`) asserted `command -v charly` ∈
+`/(usr/bin|usr/local/bin)/charly`, but on a usr-merged distro (Arch/CachyOS,
+`/usr/sbin → bin`, `/usr/sbin` ahead of `/usr/bin` in PATH) `command -v` reports
+`/usr/sbin/charly` — the same inode — so the regex was widened to
+`/usr/(local/)?s?bin/charly` (RE2-verified, no `$` anchor that would miss the
+trailing newline). (2) The `charly-mcp` service execed the now-absent
+`/usr/local/bin/charly mcp serve` and went `FATAL`, breaking the MCP endpoint →
+fixed to `/usr/bin/charly`. (3) The same stale path in four `box.yml` image checks
+(filebrowser / openclaw-desktop / openwebui / composition-source) and two
+`eval.yml` description-prose lines was swept to `/usr/bin/charly` (R3); the
+`eval-charly-vm` localpkg check `eval.yml` also had a stale `command -v ov`
+(rebrand leftover, R5) + a non-usr-merge-robust `=` test → fixed to
+`test "$(command -v charly)" -ef /usr/bin/charly`. All three packages install to
+`/usr/bin/charly` (pac/rpm/deb verified). Validated end-to-end: `eval-charly-selftest-pod`
+(pac, full 10-step bed incl fresh rebuild, eval-live 50/0 with MCP green),
+`composition-source` build+eval-box (rpm download+install, 13/0), and
+`eval-charly-vm` (vm-deploy localpkg, 6/6).
+
 ### 2026-06-08 — docs(git-workflow): harden against silently-dropped submodule pointer bumps
 
 Incident: landing Cutover 3d, the `git switch -c feat/main-doc-rebrand-3d` step

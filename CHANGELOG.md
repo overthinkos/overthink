@@ -22,6 +22,18 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-09 — docs(vision): add the crème-brûlée closing line
+
+VISION.md gains a one-paragraph closing flourish, set after "Where the factory is
+heading" and before the navigational footer: *we look forward to the day every
+agent asks for a blowtorch — not to wave it around, but to caramelize the top of a
+perfect crème brûlée.* It restates the candyboxing thesis as a sign-off — the
+blowtorch is precisely the kind of "dangerous" tool a restrictive sandbox would
+strip away; candyboxing hands over the whole candy store (blowtorch included)
+because the *room* is secured, and trusts what gets made inside the box. Italic,
+to bookend the opening `*The thesis behind Charly.*` tagline. Docs-only — no
+schema / `version:` change.
+
 ### 2026-06-09 — docs(vision): add Tenet 10 — factory-in-the-loop evaluation + nested candyboxing
 
 VISION.md gains a tenth tenet, **"The factory fits in a box, too — candyboxes all

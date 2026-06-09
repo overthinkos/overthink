@@ -45,6 +45,8 @@ Most other tools hand an agent a sandbox — and then spend their effort taking 
 - **A shared candy store.** Cross-repo, versioned candies and boxes (`@github` refs, content-derived versions) maturing into an ecosystem you *compose from*, not a pantry you restock by hand.
 - **The long bet.** As agents grow more capable, the winning environment is a fully-stocked candy store, not a tighter sandbox. Charly is built for that world — and built to still feel like a magic chocolate factory when it arrives.
 
+*And we are looking forward to the day every agent asks for a blowtorch — not to wave it around, but to caramelize the top of a perfect crème brûlée. Secure the room, hand over the whole candy store, blowtorch and all, and that is what comes out of the box.*
+
 ---
 
 *The factory floor is documented in [README.md](README.md); the house rules in [CLAUDE.md](CLAUDE.md); every candy and box has a recipe card in [plugins/README.md](plugins/README.md). Dated history lives — and only lives — in [CHANGELOG.md](CHANGELOG.md).*

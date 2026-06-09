@@ -24,9 +24,10 @@ import (
 // per-kind box.yml at the project root must run `charly migrate`
 // first; the scaffolders error cleanly when charly.yml is missing.
 
-// scaffoldCharlyYAML is the seed charly.yml written into a fresh
-// project. Uses the upstream build.yml via format_config remote ref so
-// the new project doesn't have to copy the canonical 1k-line build.yml.
+// scaffoldCharlyYAML is the seed charly.yml written into a fresh project. The
+// project is immediately usable — the default distro/builder/init/resource build
+// vocabulary is embedded in the charly binary (charly/build.yml), so there is no
+// build.yml to copy or format_config to wire.
 const scaffoldCharlyYAML = `# charly.yml — unified project root: the single file a project needs.
 # See https://github.com/overthinkos/overthink for documentation.
 #
@@ -144,8 +145,9 @@ func AddImage(dir, name, base string, layers []string) error {
 }
 
 // AddLayerToImage appends a layer to an existing image's `candy:` list.
-// Idempotent: if the layer is already in the list, this is a no-op. The image
-// is resolved across charly.yml AND its flat-imported per-kind files (box.yml),
+// Idempotent: if the layer is already in the list, this is a no-op. The box is
+// resolved across the discovered box/<name>/charly.yml, charly.yml, AND any
+// flat-imported per-kind file,
 // and the edit is saved to the file where the image actually lives.
 func AddLayerToImage(dir, image, layer string) error {
 	root, imgNode, path, err := resolveImageNodeFile(dir, image)
@@ -173,9 +175,9 @@ func AddLayerToImage(dir, image, layer string) error {
 
 // RemoveLayerFromImage removes the named layer from an image's `candy:`
 // list. Errors out if the image does not exist; succeeds silently if the
-// layer is not present. The image is resolved across charly.yml AND its
-// flat-imported per-kind files (box.yml), and the edit is saved to the file
-// where the image actually lives.
+// layer is not present. The box is resolved across the discovered
+// box/<name>/charly.yml, charly.yml, AND any flat-imported per-kind file, and
+// the edit is saved to the file where the box actually lives.
 func RemoveLayerFromImage(dir, image, layer string) error {
 	root, imgNode, path, err := resolveImageNodeFile(dir, image)
 	if err != nil {
@@ -299,12 +301,12 @@ func flatLocalImports(root *yaml.Node) []string {
 	return out
 }
 
-// resolveImageNodeFile finds the YAML file that DEFINES image `name` — either
-// charly.yml itself or one of its flat-imported local per-kind files
-// (box.yml) — and returns that file's parsed node tree, the image's value node,
-// and the file path. The authoring-edit verbs (add-candy/rm-candy) mutate + save
-// that file, so they work on entries defined in imported per-kind files, not
-// only those inlined in charly.yml.
+// resolveImageNodeFile finds the YAML file that DEFINES box `name` — the
+// discovered box/<name>/charly.yml (the canonical location), else charly.yml
+// itself, else one of its flat-imported local per-kind files — and returns that
+// file's parsed node tree, the box's value node, and the file path. The
+// authoring-edit verbs (add-candy/rm-candy) mutate + save that file, so they work
+// on boxes wherever they live, not only those inlined in charly.yml.
 func resolveImageNodeFile(dir, name string) (*yaml.Node, *yaml.Node, string, error) {
 	// Discovered per-box file box/<name>/charly.yml (the canonical location) — a
 	// kind-keyed `box:` doc whose value node is the box's inner mapping.

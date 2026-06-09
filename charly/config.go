@@ -256,7 +256,7 @@ type ResolvedBox struct {
 	// MergeDeployOntoMetadata.
 	Network string
 
-	// Build config (resolved per-image from format_config ref to build.yml)
+	// Build config (resolved per-image via charly.yml import: + the binary-embedded build vocabulary)
 	DistroConfig  *DistroConfig  `json:"-"` // distro section of build.yml
 	DistroDef     *DistroDef     `json:"-"` // resolved distro definition (cached)
 	BuilderConfig *BuilderConfig `json:"-"` // builder section of build.yml

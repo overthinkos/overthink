@@ -194,9 +194,9 @@ func (c *VmBuildCmd) runVmSpecBuild(vmName string, spec *VmSpec, rt *ResolvedRun
 		return nil
 
 	case "bootstrap":
-		// Resolve build.yml builder + distro configs. Loaded via the
-		// project's charly.yml format_config refs (handled internally
-		// by the runtime; here we look them up from the runtime).
+		// Resolve the builder + distro build vocabulary (from the project's
+		// charly.yml import: plus the binary-embedded default; handled internally
+		// by the runtime — here we look them up from the runtime).
 		distroCfg, builderCfg, err := loadBuildYmlSections()
 		if err != nil {
 			return fmt.Errorf("loading build.yml builder/distro sections: %w", err)

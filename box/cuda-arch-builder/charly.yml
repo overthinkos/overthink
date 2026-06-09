@@ -13,8 +13,8 @@ box:
     # an intermediate in the consumer's graph; a bare `cuda` would be an
     # "unknown layer" there (it's a main-repo layer, not the consumer's).
     candy:
-        - '@github.com/overthinkos/overthink/candy/cuda:v2026.160.1105'
-        - '@github.com/overthinkos/overthink/candy/nvenc-headers:v2026.160.1105'
+        - '@github.com/overthinkos/overthink/candy/cuda:v2026.160.2017'
+        - '@github.com/overthinkos/overthink/candy/nvenc-headers:v2026.160.2017'
     produce:
         - pixi
         - npm

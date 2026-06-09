@@ -20,17 +20,19 @@ var namespaceAliasRe = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
 // -----------------------------------------------------------------------------
 // Unified YAML Format — Parts B/C/D/E of the refactor plan.
 //
-// A single `charly.yml` (+ optional companion files via `includes:`) carries
-// everything today's four files carry:
-//   - build.yml    → distros: + builders: + inits:
-//   - box.yml    → defaults: + images:
-//   - deploy.yml   → deployments:
-//   - candy.yml    → layers: map entries, or discovered via discover.layers:
+// `charly.yml` is the ONE filename and the only file a project needs: the entry
+// point (import: + discover:) plus the inline kinds (vm/pod/k8s/eval/local/
+// android/deploy + any build-vocabulary overrides). Boxes and candies are
+// DISCOVERED per name as box/<name>/charly.yml and candy/<name>/charly.yml. The
+// default distro/builder/init/resource build vocabulary is embedded in the
+// binary (charly/build.yml, //go:embed); a project declares distro:/builder:/
+// init:/resource: only to extend or override it. Legacy per-kind files
+// (box.yml/vm.yml/...) still LOAD as flat `import:` items, never the canonical
+// layout.
 //
-// Design is described in /home/atrawog/.claude/plans/can-you-make-a-deep-cerf.md.
 // Key properties:
-//   - plural top-level keys (no kind:/apiVersion: discriminator at root);
-//   - includes: for file composition with deep-merge root-wins semantics;
+//   - singular kind keys, routed by SHAPE (the top-level kind-key), never by filename;
+//   - import: for composition — a flat root-merge string OR a namespaced child import;
 //   - discover: for recursive directory scan of kind-keyed standalone files;
 //   - every file is read as a multi-document YAML stream so bundles of
 //     kind-keyed entities (`---` separated) work naturally.

@@ -33,6 +33,9 @@ Most other tools hand an agent a sandbox — and then spend their effort taking 
 9. **Free to forge a better candybox.** And when the box itself is wrong — wrong layers, a missing candy, a composition that won't melt together — the agent is always free to build a new and better one, never to make do with the wrong room. A candybox is just another recipe, and a throwaway one, so forging a fresh box costs no more than patching the wrong one. The freedom to build the *right* box is what makes the whole candy store usable.
    → CLAUDE.md "Candyboxing", "Disposable-Only Autonomy", `/charly-internals:disposable`.
 
+10. **The factory fits in a box, too — candyboxes all the way down.** One of the molds a recipe can pour is the *factory itself*: the whole `charly` line, nested inside one of its own disposable candyboxes. The forging happens *one level in* — from inside that outer box the factory builds, deploys, and tastes *fresh* candyboxes on live deployments and melts the spoiled batches back down, never once leaving the room. A candybox forged inside a candybox: that nesting is the whole trick. And it runs as a loop — the entire build → run → deploy → evaluate pass turns inside the box, the evaluation verdict deciding the next one. That is *factory-in-the-loop evaluation*: the production line caught in its own feedback loop, tasting in the driver's seat. Because the outer box is as throwaway as the boxes it builds, the line proves and rebuilds itself fearlessly — a candybox that builds candyboxes is how verification becomes self-hosting.
+   → CLAUDE.md "Candyboxing", "Disposable-Only Autonomy", `/charly-eval:eval` (the `kind: eval` beds + the score loop), `/charly-internals:disposable`.
+
 ## Where the factory is heading
 
 - **Widen what one recipe can become.** The same declaration already pours into containers, VMs, k8s, hosts, and Android — the long arc is *more molds under one wrapper*, never more wrappers to learn.

@@ -22,6 +22,33 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-09 — docs(vision): add Tenet 10 — factory-in-the-loop evaluation + nested candyboxing
+
+VISION.md gains a tenth tenet, **"The factory fits in a box, too — candyboxes all
+the way down,"** naming two concepts the system already implements but the thesis
+had not yet stated explicitly:
+
+- **Nested candyboxing** — a candybox (a disposable, secured container / VM) can
+  be poured with the whole `charly` line and used to build, deploy, and prove
+  OTHER candyboxes inside it. This is exactly what a `kind: eval` bed is: its
+  first R10 step is `charly box build` *inside the bed* (nested podman + the full
+  layer/image library). A candybox that builds candyboxes.
+- **Factory-in-the-loop evaluation** — inside that boxed factory the full
+  build → run → deploy → evaluate loop runs with the evaluation *verdict* driving
+  each pass (the `charly eval run <score>` plateau-bounded loop; evaluation in the
+  driver's seat).
+
+The tenet is deliberately **taster-agnostic**: it never says whether a human or an
+agent operates the loop, because the factory-in-the-loop principle holds either
+way — what matters is that the verdict drives iteration, not who reads it. (Tenet
+4, "Two tasters at one bench," remains the place the human/agent duality is named;
+Tenet 10 stays above it.)
+
+Docs-only cutover — no Go / YAML / schema surface touched, so no `MigrationStep`
+and no `charly.yml` `version:` bump. Cross-references added to CLAUDE.md
+"Candyboxing" / "Disposable-Only Autonomy", `/charly-eval:eval` (the `kind: eval`
+beds + the score loop), and `/charly-internals:disposable`.
+
 ### 2026-06-09 — refactor(docs+eval): rename the pillar "Agent Driven Development (ADD)" → "Agent Driven Evaluation (ADE)"
 
 The fourth philosophy pillar — formerly **Agent Driven Development (ADD)** — is

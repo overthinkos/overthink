@@ -15,7 +15,7 @@ import (
 // calls (findItemByAttrsAcrossCollections + resolveTargetCollection).
 //
 // Naming convention: `TestGpgKeystore_*` so the suite is greppable from
-// `go test -run TestGpgKeystore ./ov/...`.
+// `go test -run TestGpgKeystore ./charly/...`.
 
 const (
 	testKeyID      = "5EA2283B420DE2B3"
@@ -54,7 +54,7 @@ func TestGpgKeystore_ReadFindsEntryInNonDefaultCollection(t *testing.T) {
 	f.aliasMap["default"] = defaultPath
 	f.collectionList = []dbus.ObjectPath{defaultPath, keepassPath}
 	f.labels[defaultPath] = "Login"
-	f.labels[keepassPath] = "hexaplant"
+	f.labels[keepassPath] = "opencharly"
 
 	// The GPG key lives in the KeePassXC collection (NOT the default one).
 	f.addItemWithAttrs(keepassPath,
@@ -70,8 +70,8 @@ func TestGpgKeystore_ReadFindsEntryInNonDefaultCollection(t *testing.T) {
 	if item != "/items/keepass/key1" {
 		t.Errorf("item path = %s, want /items/keepass/key1", item)
 	}
-	if label != "hexaplant" {
-		t.Errorf("served-from collection label = %q, want hexaplant", label)
+	if label != "opencharly" {
+		t.Errorf("served-from collection label = %q, want opencharly", label)
 	}
 }
 
@@ -83,7 +83,7 @@ func TestGpgKeystore_ReadByPartialAttrs(t *testing.T) {
 	const path = dbus.ObjectPath("/collections/keepass")
 	f.aliasMap["default"] = path
 	f.collectionList = []dbus.ObjectPath{path}
-	f.labels[path] = "hexaplant"
+	f.labels[path] = "opencharly"
 	f.addItemWithAttrs(path,
 		gpgKeyAttrs(testKeyID, "Andreas Trawoeger <atrawog@gmail.com>"),
 		"/items/k", []byte(testKeyArmored), "label")
@@ -162,18 +162,18 @@ func TestGpgKeystore_WriteRoutesToPreferLabelWhenDefaultBroken(t *testing.T) {
 	f.aliasMap["default"] = brokenDefault
 	f.collectionList = []dbus.ObjectPath{brokenDefault, keepass}
 	f.labels[brokenDefault] = "broken"
-	f.labels[keepass] = "hexaplant"
+	f.labels[keepass] = "opencharly"
 	f.healthErrs[brokenDefault] = errors.New("simulated I/O error")
 
-	target, label, err := resolveTargetCollection(f, "hexaplant")
+	target, label, err := resolveTargetCollection(f, "opencharly")
 	if err != nil {
 		t.Fatalf("resolveTargetCollection: %v", err)
 	}
 	if target != keepass {
 		t.Errorf("target = %s, want keepass %s", target, keepass)
 	}
-	if label != "hexaplant" {
-		t.Errorf("label = %q, want hexaplant", label)
+	if label != "opencharly" {
+		t.Errorf("label = %q, want opencharly", label)
 	}
 }
 
@@ -186,7 +186,7 @@ func TestGpgKeystore_AllCollectionsLockedReturnsInteractiveUnlock(t *testing.T) 
 	const path = dbus.ObjectPath("/collections/locked")
 	f.aliasMap["default"] = path
 	f.collectionList = []dbus.ObjectPath{path}
-	f.labels[path] = "hexaplant"
+	f.labels[path] = "opencharly"
 	f.unlockErrs[path] = ErrSSInteractiveUnlockRequired
 
 	_, _, err := resolveTargetCollection(f, "")
@@ -217,18 +217,18 @@ func TestGpgKeystore_DefaultAliasUnsetButPreferLabelMatches(t *testing.T) {
 	f := newFakeSSOps()
 	const keepass = dbus.ObjectPath("/collections/keepass")
 	f.collectionList = []dbus.ObjectPath{keepass}
-	f.labels[keepass] = "hexaplant"
+	f.labels[keepass] = "opencharly"
 	// no aliasMap entry: default is unset
 
-	target, label, err := resolveTargetCollection(f, "hexaplant")
+	target, label, err := resolveTargetCollection(f, "opencharly")
 	if err != nil {
 		t.Fatalf("resolveTargetCollection: %v", err)
 	}
 	if target != keepass {
 		t.Errorf("target = %s, want keepass %s", target, keepass)
 	}
-	if label != "hexaplant" {
-		t.Errorf("label = %q, want hexaplant", label)
+	if label != "opencharly" {
+		t.Errorf("label = %q, want opencharly", label)
 	}
 }
 
@@ -240,7 +240,7 @@ func TestGpgKeystore_PassphraseRoundTrip(t *testing.T) {
 	const path = dbus.ObjectPath("/collections/keepass")
 	f.aliasMap["default"] = path
 	f.collectionList = []dbus.ObjectPath{path}
-	f.labels[path] = "hexaplant"
+	f.labels[path] = "opencharly"
 
 	target, _, err := resolveTargetCollection(f, "")
 	if err != nil {
@@ -277,7 +277,7 @@ func TestGpgKeystore_ReplaceOnSameAttrs(t *testing.T) {
 	const path = dbus.ObjectPath("/collections/keepass")
 	f.aliasMap["default"] = path
 	f.collectionList = []dbus.ObjectPath{path}
-	f.labels[path] = "hexaplant"
+	f.labels[path] = "opencharly"
 
 	attrs := gpgPassphraseAttrs(testKeygrip)
 	first, err := f.createItem(path, attrs, []byte("old-passphrase"), "GPG Passphrase", true)
@@ -308,7 +308,7 @@ func TestGpgKeystore_DeleteItem(t *testing.T) {
 	f := newFakeSSOps()
 	const path = dbus.ObjectPath("/collections/keepass")
 	f.collectionList = []dbus.ObjectPath{path}
-	f.labels[path] = "hexaplant"
+	f.labels[path] = "opencharly"
 
 	attrs := gpgPassphraseAttrs(testKeygrip)
 	itemPath, err := f.createItem(path, attrs, []byte(testPassphrase), "lbl", true)
@@ -329,7 +329,7 @@ func TestGpgKeystore_ItemMetadata(t *testing.T) {
 	f := newFakeSSOps()
 	const path = dbus.ObjectPath("/collections/keepass")
 	f.collectionList = []dbus.ObjectPath{path}
-	f.labels[path] = "hexaplant"
+	f.labels[path] = "opencharly"
 
 	attrs := gpgKeyAttrs(testKeyID, "uid")
 	itemPath, err := f.createItem(path, attrs, []byte(testKeyArmored), "GPG Key entry", true)
@@ -355,7 +355,7 @@ func TestGpgKeystore_SearchItemsByAttrsReturnsAllMatches(t *testing.T) {
 	f := newFakeSSOps()
 	const path = dbus.ObjectPath("/collections/keepass")
 	f.collectionList = []dbus.ObjectPath{path}
-	f.labels[path] = "hexaplant"
+	f.labels[path] = "opencharly"
 
 	for i, keyid := range []string{"AAAA1111", "BBBB2222", "CCCC3333"} {
 		attrs := gpgKeyAttrs(keyid, "user-"+keyid)

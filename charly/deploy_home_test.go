@@ -129,7 +129,7 @@ func TestEnsureManagedBlockViaUsesGuestHome(t *testing.T) {
 	if !strings.Contains(rec.putContent, "/home/cachy/.config/opencharly/env.d") {
 		t.Errorf("managed block doesn't source the guest env.d dir:\n%s", rec.putContent)
 	}
-	if !strings.Contains(rec.putContent, "overthink:begin") {
+	if !strings.Contains(rec.putContent, "opencharly:begin") {
 		t.Errorf("managed block fence missing:\n%s", rec.putContent)
 	}
 }

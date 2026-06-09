@@ -26,8 +26,8 @@ func TestGenerateAliasScript(t *testing.T) {
 	if !strings.Contains(script, `exec charly shell openclaw -c "$c"`) {
 		t.Errorf("script should contain exec charly shell line, got:\n%s", script)
 	}
-	if !strings.Contains(script, `_ov_q()`) {
-		t.Error("script should contain _ov_q quoting helper")
+	if !strings.Contains(script, `_charly_q()`) {
+		t.Error("script should contain _charly_q quoting helper")
 	}
 	if strings.Contains(script, "_exec") {
 		t.Error("script should not contain _exec")
@@ -88,7 +88,7 @@ func TestRemoveAliasScript(t *testing.T) {
 	}
 }
 
-func TestRemoveAliasScriptNotOvAlias(t *testing.T) {
+func TestRemoveAliasScriptNotCharlyAlias(t *testing.T) {
 	dir := t.TempDir()
 
 	// Write a non-charly file

@@ -192,7 +192,7 @@ func validateServiceName(engine, containerName, serviceName string) error {
 		return fmt.Errorf("cannot read image metadata: %w", err)
 	}
 	if meta == nil {
-		return fmt.Errorf("no overthinkos metadata found for container %s", containerName)
+		return fmt.Errorf("no opencharly metadata found for container %s", containerName)
 	}
 	for _, s := range meta.ServiceNames {
 		if s == serviceName {

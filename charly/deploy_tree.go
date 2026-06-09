@@ -165,7 +165,7 @@ func deriveChildExecutor(node *DeploymentNode, parentExec DeployExecutor, deploy
 
 // containerChildExecutor wraps parentExec with a podman-exec jump
 // into the container spawned by this node. The container name
-// follows the `ov` convention of matching the deploy key — callers
+// follows the `charly` convention of matching the deploy key — callers
 // that need a custom name can set node.Engine or pass via the deploy
 // entry's naming.
 func containerChildExecutor(node *DeploymentNode, parentExec DeployExecutor) (DeployExecutor, error) {

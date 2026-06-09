@@ -26,7 +26,7 @@ import (
 )
 
 // ErrNotSupportedOnK8s is returned by lifecycle methods on the K8s
-// target. K8s cluster lifecycle is kubectl-managed outside ov; ov
+// target. K8s cluster lifecycle is kubectl-managed outside charly; charly
 // start/stop/status/logs/shell/rebuild have no meaning for a k8s
 // "deployment" in our schema.
 var ErrNotSupportedOnK8s = errors.New("lifecycle operation not supported on kubernetes target")

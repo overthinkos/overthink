@@ -5,14 +5,14 @@ import (
 	"testing"
 )
 
-// withMockLibvirtDomains swaps the package-level listLibvirtOvDomains for the
+// withMockLibvirtDomains swaps the package-level listLibvirtCharlyDomains for the
 // duration of fn, restoring the real implementation afterwards. Mirrors the
 // InspectContainer swap pattern in evalvars.go so tests need no live libvirt.
 func withMockLibvirtDomains(t *testing.T, domains []domainInfo, err error, fn func()) {
 	t.Helper()
-	prev := listLibvirtOvDomains
-	listLibvirtOvDomains = func() ([]domainInfo, error) { return domains, err }
-	defer func() { listLibvirtOvDomains = prev }()
+	prev := listLibvirtCharlyDomains
+	listLibvirtCharlyDomains = func() ([]domainInfo, error) { return domains, err }
+	defer func() { listLibvirtCharlyDomains = prev }()
 	fn()
 }
 

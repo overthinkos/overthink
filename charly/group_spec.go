@@ -2,7 +2,7 @@ package main
 
 // GroupSpec is the charly authoring shape for a Calamares-style "package group"
 // (the netinstall.yaml entry shape). A group is a named, hierarchical bundle
-// of packages with selection-state metadata, optionally referencing an ov
+// of packages with selection-state metadata, optionally referencing an charly
 // layer for install logic via the `requires:` list.
 //
 // All Calamares group fields appear at the top level so a Calamares parser
@@ -36,7 +36,7 @@ type GroupSpec struct {
 	// inline-only is supported (mirrors Calamares' usual netinstall.yaml).
 	Subgroup []*GroupSpec `yaml:"subgroup,omitempty" json:"subgroup,omitempty"`
 
-	// charly extension: group dependencies. Use the shorter `require:` for ov
+	// charly extension: group dependencies. Use the shorter `require:` for charly
 	// consistency.
 	Require []string `yaml:"require,omitempty" json:"require,omitempty"`
 }

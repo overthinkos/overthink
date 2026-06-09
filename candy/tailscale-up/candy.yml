@@ -31,7 +31,7 @@ candy:
             systemctl is-active --quiet tailscaled || exit 0
 
             # Operator: uid 1000 is the canonical human deploy user
-            # (matches the wheel-nopasswd layer and ov/deploy_target_local.go
+            # (matches the wheel-nopasswd layer and charly/deploy_target_local.go
             # renderBuilderScript). SUDO_USER is unreliable — runSudoShell calls
             # `sudo -n bash -s` without -E, so env_reset strips it under
             # default sudoers.

@@ -42,12 +42,12 @@ func TestNormalizeRepoSpec(t *testing.T) {
 	}
 }
 
-// TestOvRepo_FlagChdir verifies that --repo / CH_PROJECT_REPO drives main()
+// TestCharlyRepo_FlagChdir verifies that --repo / CHARLY_PROJECT_REPO drives main()
 // to chdir into the cache path before dispatching. Stays hermetic by
-// pre-populating CH_REPO_CACHE so EnsureRepoDownloaded short-circuits via
+// pre-populating CHARLY_REPO_CACHE so EnsureRepoDownloaded short-circuits via
 // IsRepoCached and never shells out to git.
-func TestOvRepo_FlagChdir(t *testing.T) {
-	bin := buildOvBinary(t)
+func TestCharlyRepo_FlagChdir(t *testing.T) {
+	bin := buildCharlyBinary(t)
 
 	cacheRoot := t.TempDir()
 	// Pre-seed cache at <root>/github.com/foo/bar@main/ with a valid project.
@@ -68,12 +68,12 @@ func TestOvRepo_FlagChdir(t *testing.T) {
 		{
 			name: "long flag --repo with @ref",
 			args: []string{"--repo", "foo/bar@main", "box", "list", "boxes"},
-			env:  []string{"CH_REPO_CACHE=" + cacheRoot},
+			env:  []string{"CHARLY_REPO_CACHE=" + cacheRoot},
 		},
 		{
-			name: "env var CH_PROJECT_REPO",
+			name: "env var CHARLY_PROJECT_REPO",
 			args: []string{"box", "list", "boxes"},
-			env:  []string{"CH_REPO_CACHE=" + cacheRoot, "CH_PROJECT_REPO=foo/bar@main"},
+			env:  []string{"CHARLY_REPO_CACHE=" + cacheRoot, "CHARLY_PROJECT_REPO=foo/bar@main"},
 		},
 	}
 	for _, tc := range cases {
@@ -92,9 +92,9 @@ func TestOvRepo_FlagChdir(t *testing.T) {
 	}
 }
 
-// TestOvRepo_DirConflict verifies --repo and --dir together fast-fail.
-func TestOvRepo_DirConflict(t *testing.T) {
-	bin := buildOvBinary(t)
+// TestCharlyRepo_DirConflict verifies --repo and --dir together fast-fail.
+func TestCharlyRepo_DirConflict(t *testing.T) {
+	bin := buildCharlyBinary(t)
 	scratch := t.TempDir()
 
 	cmd := exec.Command(bin, "--repo", "foo/bar@main", "--dir", scratch, "version")
@@ -108,10 +108,10 @@ func TestOvRepo_DirConflict(t *testing.T) {
 	}
 }
 
-// TestOvRepo_DefaultExpansion verifies that --repo default normalizes to
+// TestCharlyRepo_DefaultExpansion verifies that --repo default normalizes to
 // the canonical github.com/overthinkos/overthink path. Pure unit-level
 // check, exercised through normalizeRepoSpec to avoid live network.
-func TestOvRepo_DefaultExpansion(t *testing.T) {
+func TestCharlyRepo_DefaultExpansion(t *testing.T) {
 	repo, version := normalizeRepoSpec("default")
 	if repo != DefaultProjectRepo {
 		t.Errorf("default normalized to %q; want %q", repo, DefaultProjectRepo)

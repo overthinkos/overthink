@@ -142,7 +142,7 @@ func (t *OCITarget) emitStep(step InstallStep, plan *InstallPlan) error {
 // compileShellSnippetSteps based on hostCtx.Target).
 //
 // Uses a heredoc with a randomized end-marker to avoid collision with
-// snippet bodies that contain literal `OV_SNIPPET` on their own line.
+// snippet bodies that contain literal `CHARLY_SNIPPET` on their own line.
 // The container drop-in is always root-owned + 0644 — sourced by the
 // shell at user login, no need for execute bit.
 func (t *OCITarget) emitShellSnippet(s *ShellSnippetStep) error {
@@ -152,7 +152,7 @@ func (t *OCITarget) emitShellSnippet(s *ShellSnippetStep) error {
 	// Pick an end-marker derived from the snippet hash so a malicious or
 	// pathological body containing the literal marker can't break out.
 	h := sha256.Sum256([]byte(s.Snippet))
-	marker := fmt.Sprintf("CH_SHELL_%s_%x", strings.ToUpper(s.Shell), h[:4])
+	marker := fmt.Sprintf("CHARLY_SHELL_%s_%x", strings.ToUpper(s.Shell), h[:4])
 	fmt.Fprintf(&t.buf,
 		"RUN mkdir -p %s && cat > %s <<'%s'\n%s\n%s\n",
 		shellQuote(filepath.Dir(s.Destination)),
@@ -357,7 +357,7 @@ func (t *OCITarget) emitFile(s *FileStep) error {
 // file writes.
 func (t *OCITarget) emitServicePackaged(s *ServicePackagedStep) error {
 	if s.OverridesText != "" && s.OverridesPath != "" {
-		fmt.Fprintf(&t.buf, "RUN mkdir -p $(dirname %s) && cat > %s <<'OV_DROPIN'\n%s\nOV_DROPIN\n",
+		fmt.Fprintf(&t.buf, "RUN mkdir -p $(dirname %s) && cat > %s <<'CHARLY_DROPIN'\n%s\nCHARLY_DROPIN\n",
 			s.OverridesPath, s.OverridesPath, s.OverridesText)
 	}
 	if s.Enable {
@@ -389,7 +389,7 @@ func (t *OCITarget) emitServiceCustom(s *ServiceCustomStep) error {
 // the format install_template); it exists for layers that declare
 // explicit repo files via the structured schema.
 func (t *OCITarget) emitRepoChange(s *RepoChangeStep) error {
-	fmt.Fprintf(&t.buf, "RUN mkdir -p $(dirname %s) && cat > %s <<'OV_REPO'\n%s\nOV_REPO\n",
+	fmt.Fprintf(&t.buf, "RUN mkdir -p $(dirname %s) && cat > %s <<'CHARLY_REPO'\n%s\nCHARLY_REPO\n",
 		s.File, s.File, s.Content)
 	return nil
 }

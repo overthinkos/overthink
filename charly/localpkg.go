@@ -281,7 +281,7 @@ func buildDepPkgsOnHost(ctx context.Context, lp *LocalPkgDef, bDef *BuilderDef, 
 		RunAsRoot:    true,
 		// Cfg + ProjectDir let BuilderRun's EnsureImagePresent run the
 		// namespace-aware ResolveImage, so a namespace-qualified builder ref
-		// (e.g. the cachyos project's aur builder `ov.arch-builder`) resolves to
+		// (e.g. the cachyos project's aur builder `charly.arch-builder`) resolves to
 		// its concrete image — matching the aur-LAYER path (deploy_target_local.go).
 		Cfg:        cfg,
 		ProjectDir: projectDir,
@@ -365,7 +365,7 @@ func transferAndInstallPkgs(ctx context.Context, exec DeployExecutor, lp *LocalP
 // manager — the precondition for executing a LocalPkgInstallStep. The probe
 // command comes from LocalPkgDef.Probe (e.g. `command -v pacman`), so this is
 // config-driven, not a hardcoded pacman literal. Probing the VENUE (not the host
-// running ov) is what makes the gate correct for a VM deploy: the guest may be a
+// running charly) is what makes the gate correct for a VM deploy: the guest may be a
 // different distro than the operator host, and vice-versa. The executor is the
 // venue (ShellExecutor → host, SSHExecutor → guest), so one probe through it is
 // venue-accurate for both targets (R3). DryRun assumes true so the planner shows

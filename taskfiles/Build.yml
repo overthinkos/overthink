@@ -56,9 +56,9 @@ tasks:
               cd pkg/arch
               mkdir -p src/opencharly-git
               cp "{{.ROOT_DIR}}/LICENSE" src/opencharly-git/LICENSE
-              # Auto-remove legacy ov-git / ov-git-debug / overthink-git
+              # Auto-remove legacy ov-git / ov-git-debug / opencharly-git
               # packages if present. The PKGBUILD declares
-              # replaces=('overthink-git' 'ov-git'), but pacman -U (which
+              # replaces=('opencharly-git' 'ov-git'), but pacman -U (which
               # makepkg -i invokes for local-file installs) does NOT honor
               # `replaces=` — that field only fires during sync-database
               # upgrades (pacman -Syu). Without this pre-step the install
@@ -67,7 +67,7 @@ tasks:
               # conflicts` (for the main package) or `conflicting files`
               # (for the debug sibling). Both must be removed together.
               LEGACY_PKGS=""
-              for pkg in ov-git ov-git-debug overthink-git overthink-git-debug; do
+              for pkg in ov-git ov-git-debug opencharly-git opencharly-git-debug; do
                 if pacman -Q "$pkg" >/dev/null 2>&1; then
                   LEGACY_PKGS="$LEGACY_PKGS $pkg"
                 fi

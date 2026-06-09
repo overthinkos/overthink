@@ -35,7 +35,7 @@ type spiceConnectFlags struct {
 	Address  string `long:"address" help:"Bypass vm.yml lookup; host:port"`
 	Socket   string `long:"socket" help:"Bypass vm.yml lookup; UNIX socket path (spice+unix://)"`
 	Password string `long:"password" help:"SPICE password (for --address); empty = none"`
-	Uri      string `name:"uri" env:"CH_LIBVIRT_URI" help:"Libvirt URI (default: qemu:///session). Use qemu+ssh://[user@]host/session for remote hypervisors (auto-tunnels the display socket)."`
+	Uri      string `name:"uri" env:"CHARLY_LIBVIRT_URI" help:"Libvirt URI (default: qemu:///session). Use qemu+ssh://[user@]host/session for remote hypervisors (auto-tunnels the display socket)."`
 }
 
 // open resolves the SPICE endpoint for a VM and returns a connected

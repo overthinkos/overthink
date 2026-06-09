@@ -29,15 +29,15 @@ candy:
             - /dev/fuse
     # K3S_CLUSTER_TOKEN is the shared pre-shared token that authorizes
     # k3s-agent nodes to join this server. Auto-generated on first deploy
-    # — the resolver in ov/layer_secrets.go (ensureLayerSecret) generates
+    # — the resolver in charly/layer_secrets.go (ensureLayerSecret) generates
     # a 32-byte hex token via DefaultCredentialStore.Set the first time
     # this layer (or k3s-agent — same name) resolves the secret. Both
     # layers read the same persisted value on subsequent calls, so the
     # server and every agent automatically share the token without
     # operator setup. Override only when you need a specific value:
-    #   charly secrets set ov/secret/K3S_CLUSTER_TOKEN $(openssl rand -hex 32)
+    #   charly secrets set charly/secret/K3S_CLUSTER_TOKEN $(openssl rand -hex 32)
     # Retrieve the auto-generated value:
-    #   charly secrets get ov/secret K3S_CLUSTER_TOKEN
+    #   charly secrets get charly/secret K3S_CLUSTER_TOKEN
     secret_require:
         - name: K3S_CLUSTER_TOKEN
           description: Pre-shared token used by k3s-agent nodes to join the cluster. Auto-generated on first deploy; shared between k3s-server and every k3s-agent via the credential store.
@@ -60,7 +60,7 @@ candy:
           description: Optional full-URL override for the retrieved kubeconfig's server field (e.g. "https://127.0.0.1:16443" for a port-forwarded VM bed). Default falls back to "https://${K3S_SERVER_HOSTNAME}:6443".
     # The kubeconfig ends up at /etc/rancher/k3s/k3s.yaml after k3s boots.
     # We publish it back to the operator via the new artifacts: mechanism
-    # (ov/layer_artifacts.go), rewriting the server URL from 127.0.0.1 to
+    # (charly/layer_artifacts.go), rewriting the server URL from 127.0.0.1 to
     # the reachable K3S_SERVER_HOSTNAME so the retrieved kubeconfig works
     # directly from the operator's machine. Mode 0600 because kubeconfig
     # contains the cluster admin cert + key.
@@ -164,7 +164,7 @@ candy:
           enable: true
     eval:
         # Build-scope tests: emitted config files exist and are sane. Run
-        # during `charly box test` — verifies the layer's setup did its job
+        # during `charly eval box` — verifies the layer's setup did its job
         # before we start it.
         - id: k3s-config-file
           scope: build

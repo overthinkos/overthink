@@ -11,7 +11,7 @@ import (
 // K8sCollector is the kubernetes SubstrateCollector. It surfaces every
 // declared `target: k8s` deployment (from the folded charly.yml Deploy
 // map) as one DeploymentStatus row, reporting whether its Kustomize tree has
-// been generated under .overthink/k8s/<name>/ and which cluster/context the
+// been generated under .opencharly/k8s/<name>/ and which cluster/context the
 // referenced kind:k8s template points at.
 //
 // Provenance is Source="tree": k8s deploys do not run a container on this
@@ -33,7 +33,7 @@ func init() {
 func (k *K8sCollector) Kind() SubstrateKind { return SubstrateK8s }
 
 // Available reports true when this host has any k8s footprint: either the
-// .overthink/k8s tree directory exists, or at least one target:k8s deploy is
+// .opencharly/k8s tree directory exists, or at least one target:k8s deploy is
 // declared in the projected charly.yml. An absent unified projection plus
 // an absent tree dir means there is nothing to report — skipped silently.
 func (k *K8sCollector) Available(opts CollectOpts) bool {
@@ -46,7 +46,7 @@ func (k *K8sCollector) Available(opts CollectOpts) bool {
 }
 
 // Collect emits one row per declared target:k8s deploy. The flat view stats
-// .overthink/k8s/<name>/ (tree-present | not-generated) and reads
+// .opencharly/k8s/<name>/ (tree-present | not-generated) and reads
 // cluster/context from the referenced kind:k8s template. Under opts.Nested it
 // upgrades the status with a live cluster readiness probe.
 func (k *K8sCollector) Collect(ctx context.Context, opts CollectOpts) ([]DeploymentStatus, error) {
@@ -105,14 +105,14 @@ func (k *K8sCollector) Collect(ctx context.Context, opts CollectOpts) ([]Deploym
 	return rows, nil
 }
 
-// k8sTreeRoot returns <cwd>/.overthink/k8s — the canonical root that
+// k8sTreeRoot returns <cwd>/.opencharly/k8s — the canonical root that
 // defaultK8sOutputDir (deploy_add_cmd_k8s.go) emits Kustomize trees under.
 func k8sTreeRoot() (string, error) {
 	cwd, err := os.Getwd()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(cwd, ".overthink", "k8s"), nil
+	return filepath.Join(cwd, ".opencharly", "k8s"), nil
 }
 
 // k8sDeployEntries returns the names of every target:k8s deploy in the folded

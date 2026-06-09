@@ -186,7 +186,7 @@ func TestQuadletWithEncryptedBindMountsKeyring(t *testing.T) {
 		BindMounts: []ResolvedBindMount{
 			{Name: "secrets", HostPath: "/data/enc/charly-myapp-secrets/plain", ContPath: "/home/user/.secrets", Encrypted: true},
 		},
-		OvBin:           "/usr/local/bin/charly",
+		CharlyBin:       "/usr/local/bin/charly",
 		EncryptedMounts: true,
 		KeyringBackend:  true,
 	}
@@ -219,7 +219,7 @@ func TestQuadletWithEncryptedBindMountsNonKeyring(t *testing.T) {
 		BindMounts: []ResolvedBindMount{
 			{Name: "secrets", HostPath: "/data/enc/charly-myapp-secrets/plain", ContPath: "/home/user/.secrets", Encrypted: true},
 		},
-		OvBin:           "/usr/local/bin/charly",
+		CharlyBin:       "/usr/local/bin/charly",
 		EncryptedMounts: true,
 		KeyringBackend:  false, // config (non-keyring) backend
 	}

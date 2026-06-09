@@ -76,7 +76,7 @@ candy:
           stdout:
             - contains: "vchord.so"
     # No deploy-scope psql probe — the superuser name depends on the
-    # POSTGRES_USER env var, and ov's ${VAR} resolver can't pick up arbitrary
+    # POSTGRES_USER env var, and charly's ${VAR} resolver can't pick up arbitrary
     # container-env vars. Presence of vchord.control + the shared_preload_libraries
     # env var are together sufficient to prove the extension is installed and
     # registered. A functional "CREATE EXTENSION vchord" probe lives in the

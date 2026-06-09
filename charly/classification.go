@@ -30,7 +30,7 @@ package main
 //                         //   ("you may pause me, but bring me back"
 //                         //   vs "you may wipe me"). The claimant side
 //                         //   is requires_exclusive: [token...]. The
-//                         //   arbiter (ov/preempt.go) matches the two.
+//                         //   arbiter (charly/preempt.go) matches the two.
 //
 // Anti-derivation invariant (with one named exception):
 //   `lifecycle: dev` does NOT imply `disposable: true` — lifecycle is
@@ -68,7 +68,7 @@ type Classified interface {
 
 // Canonical lifecycle tag names documented for operators. These are
 // NOT enforced — the field is free-form string. They exist so skills
-// + error messages can recommend a small vocabulary, and so `ov
+// + error messages can recommend a small vocabulary, and so `charly
 // status --lifecycle <tier>` output is predictable when a project
 // sticks to the vocabulary.
 var CanonicalLifecycleTags = []string{

@@ -1,10 +1,10 @@
-# ov/ — signpost (not the rule-set)
+# charly/ — signpost (not the rule-set)
 
-You are in the **Go CLI** source for `ov`.
+You are in the **Go CLI** source for `charly`.
 
 **Load these skills FIRST (R0):**
 
-- `/charly-internals:go` — source structure, building the `ov` binary, running
+- `/charly-internals:go` — source structure, building the `charly` binary, running
   tests, adding/modifying commands.
 - `/charly-internals:install-plan` — the InstallPlan IR + DeployTarget /
   OCITarget pipeline (before touching `install_plan.go`, `install_build.go`,

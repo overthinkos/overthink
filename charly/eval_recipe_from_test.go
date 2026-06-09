@@ -82,7 +82,7 @@ func TestExpandFromImage(t *testing.T) {
 	uf := fxUnified()
 	uf.Image["arch-coder"] = BoxConfig{
 		Eval: []Check{
-			fxCheckCommand("arch-coder-ov", "test -x /usr/local/bin/charly"),
+			fxCheckCommand("arch-coder-charly", "test -x /usr/local/bin/charly"),
 		},
 		DeployEval: []Check{
 			fxCheckCommand("arch-coder-charly-version", "charly version"),

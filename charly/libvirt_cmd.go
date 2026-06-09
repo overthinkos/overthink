@@ -26,11 +26,11 @@ import (
 // libvirtURIFlag carries the --uri flag shared by every Libvirt
 // subcommand. Empty string means the local qemu:///session (default
 // behavior); qemu+ssh://[user@]host[:port]/session connects over SSH
-// via the SSH tunnel machinery in ov/ssh_tunnel.go.
+// via the SSH tunnel machinery in charly/ssh_tunnel.go.
 //
-// Also honored as the CH_LIBVIRT_URI environment variable.
+// Also honored as the CHARLY_LIBVIRT_URI environment variable.
 type libvirtURIFlag struct {
-	Uri string `name:"uri" env:"CH_LIBVIRT_URI" help:"Libvirt URI (default: qemu:///session). Use qemu+ssh://[user@]host/session for remote hypervisors."`
+	Uri string `name:"uri" env:"CHARLY_LIBVIRT_URI" help:"Libvirt URI (default: qemu:///session). Use qemu+ssh://[user@]host/session for remote hypervisors."`
 }
 
 // LibvirtCmd groups all libvirt-RPC test verbs.

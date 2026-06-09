@@ -93,7 +93,7 @@ func RunPrivileged(p PrivilegedRun) error {
 	// because the user namespace has no CAP_SYS_ADMIN equivalent for
 	// arbitrary bind mounts. `sudo podman` runs in the host namespace
 	// and bypasses that constraint.
-	bin := os.Getenv("CH_PRIV_RUNNER")
+	bin := os.Getenv("CHARLY_PRIV_RUNNER")
 	useSudo := false
 	if bin == "" {
 		bin = "podman"
@@ -129,7 +129,7 @@ func RunPrivileged(p PrivilegedRun) error {
 	cmd.Stdin = strings.NewReader(p.Script)
 	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
-	if os.Getenv("CH_PRIV_DEBUG") != "" {
+	if os.Getenv("CHARLY_PRIV_DEBUG") != "" {
 		fmt.Fprintf(os.Stderr, "+ %s %s\n", bin, strings.Join(args, " "))
 		fmt.Fprintln(os.Stderr, "--- script begin ---")
 		fmt.Fprintln(os.Stderr, p.Script)
@@ -181,7 +181,7 @@ func readEngineRootful() (string, error) {
 
 // renderBootstrapScript renders the install template for a privileged
 // bootstrap builder against a render context. The template's available
-// fields are documented at the call site (ov/build.go runPrivilegedBuilders).
+// fields are documented at the call site (charly/build.go runPrivilegedBuilders).
 func renderBootstrapScript(builder *BuilderDef, ctx interface{}) (string, error) {
 	tmpl := builder.PhaseTemplate(PhaseInstall, VenueContainerBuilder)
 	if tmpl == "" {

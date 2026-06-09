@@ -2,8 +2,47 @@ package main
 
 import (
 	"context"
+	"strings"
 	"testing"
 )
+
+// TestPodUnifiedTarget_Rebuild_RealInvocations is the regression guard for the
+// stale-internal-verb class: the pod rebuild path must invoke the CURRENT verb
+// names. The dry-run tests above only check the PRINTED lines; this stubs
+// runCharlySubcommand and asserts the ACTUAL argv. That gap is exactly how
+// `eval image` survived the image→box rebrand — the dry-run line and the error
+// string were renamed to `eval box`, but the real call kept the old verb and no
+// non-dry-run test exercised it.
+func TestPodUnifiedTarget_Rebuild_RealInvocations(t *testing.T) {
+	var calls [][]string
+	orig := runCharlySubcommand
+	runCharlySubcommand = func(args ...string) error {
+		calls = append(calls, append([]string(nil), args...))
+		return nil
+	}
+	defer func() { runCharlySubcommand = orig }()
+
+	target := &PodUnifiedTarget{NodeName: "eval-x-pod", BaseImageRef: "x"}
+	if err := target.Rebuild(context.Background(), RebuildOpts{DryRun: false, RebuildImage: true}); err != nil {
+		t.Fatalf("Rebuild: %v", err)
+	}
+	want := [][]string{
+		{"box", "build", "x"},
+		{"eval", "box", "x"}, // NOT "eval image" — the verb is registered as `eval box`
+		{"deploy", "add", "eval-x-pod"},
+		{"stop", "eval-x-pod"},
+		{"config", "eval-x-pod"},
+		{"start", "eval-x-pod"},
+	}
+	if len(calls) != len(want) {
+		t.Fatalf("got %d charly subcommands, want %d: %v", len(calls), len(want), calls)
+	}
+	for i, w := range want {
+		if strings.Join(calls[i], " ") != strings.Join(w, " ") {
+			t.Errorf("charly call %d = %v, want %v", i, calls[i], w)
+		}
+	}
+}
 
 // TestPodUnifiedTarget_Basics verifies the trivial accessor methods.
 func TestPodUnifiedTarget_Basics(t *testing.T) {
@@ -104,7 +143,7 @@ func TestPodUnifiedTarget_Rebuild_BaseRefFallback(t *testing.T) {
 
 // Status is exercised by the R10 live verification (paste in commit
 // message) — not by a unit test, because Status shells out via
-// captureOvStdout which uses os.Args[0]. Inside `go test` that's the
+// captureCharlyStdout which uses os.Args[0]. Inside `go test` that's the
 // test binary, which doesn't understand the "status --json" CLI verbs
 // and would hang or error spuriously. The other dry-run-able methods
 // (Update, Rebuild) are safe because they early-return before any

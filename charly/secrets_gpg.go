@@ -1312,7 +1312,7 @@ func (c *SecretsGpgSetupCmd) checkPrereqs() error {
 	// Optional — needed ONLY for KeePassXC Secret Service passphrase
 	// auto-retrieval (pinentry-qt links libsecret to look the GPG passphrase up
 	// in KeePassXC). Without them gpg still works: gpg-agent simply prompts via
-	// the configured GUI/TTY pinentry instead of auto-retrieving. ov's own
+	// the configured GUI/TTY pinentry instead of auto-retrieving. charly's own
 	// credential store does NOT use these at all — it speaks the Secret Service
 	// over D-Bus via the pure-Go go-keyring client. So a missing one is a note,
 	// never a setup failure (the old "install libsecret" hard-error was

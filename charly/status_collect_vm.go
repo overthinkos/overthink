@@ -7,14 +7,14 @@ import (
 )
 
 // VMCollector is the libvirt SubstrateCollector. It lists charly-* libvirt
-// domains via listOvDomains(), maps each domain to a DeploymentStatus
+// domains via listCharlyDomains(), maps each domain to a DeploymentStatus
 // stamped Kind=SubstrateVM, Source="libvirt", and enriches the row from the
 // matching target:vm deploy.yml entry's vm_state (SSH port/user, backend) when
 // one exists. A domain with no deploy entry still shows (Source:libvirt) — the
 // libvirt domain list is the source of truth for what is actually defined on
 // the host, deploy.yml is only enrichment.
 //
-// Only LIBVIRT-backed domains surface here: listOvDomains() queries the
+// Only LIBVIRT-backed domains surface here: listCharlyDomains() queries the
 // session daemon, so a VM booted via the qemu backend (pidfile-tracked, not a
 // libvirt domain) is not a VMCollector row. That matches `charly vm list`, where
 // libvirt domains and qemu pidfiles are two distinct probes.
@@ -22,19 +22,19 @@ type VMCollector struct {
 	c *Collector
 }
 
-// listLibvirtOvDomains lists charly-* libvirt domains. Swappable for tests
+// listLibvirtCharlyDomains lists charly-* libvirt domains. Swappable for tests
 // (mirrors InspectContainer in evalvars.go) so the table-driven test can mock
 // the libvirt listing without a live session daemon. The real implementation
 // connects to the local session daemon, lists, and disconnects.
-var listLibvirtOvDomains = defaultListLibvirtOvDomains
+var listLibvirtCharlyDomains = defaultListLibvirtCharlyDomains
 
-func defaultListLibvirtOvDomains() ([]domainInfo, error) {
+func defaultListLibvirtCharlyDomains() ([]domainInfo, error) {
 	conn, err := connectLibvirt("")
 	if err != nil {
 		return nil, err
 	}
 	defer conn.Close()
-	return conn.listOvDomains()
+	return conn.listCharlyDomains()
 }
 
 func init() {
@@ -63,7 +63,7 @@ func (v *VMCollector) Available(opts CollectOpts) bool {
 // Rows are NOT pre-sorted here — Collector.All sorts the merged set across all
 // substrates.
 func (v *VMCollector) Collect(ctx context.Context, opts CollectOpts) ([]DeploymentStatus, error) {
-	domains, err := listLibvirtOvDomains()
+	domains, err := listLibvirtCharlyDomains()
 	if err != nil {
 		return nil, err
 	}

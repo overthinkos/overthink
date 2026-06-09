@@ -4,7 +4,7 @@ package spice
 
 // Audio (playback/record) channels are DISABLED in this build. They are the
 // ONLY consumers of the opus + portaudio cgo bindings; gating them behind the
-// `spice_audio` build tag lets this library — and ov, which embeds it for the
+// `spice_audio` build tag lets this library — and charly, which embeds it for the
 // framebuffer / input / cursor / clipboard channels only and never touches
 // audio — link and RUN without libopus / libportaudio / libasound / libjack.
 // Build with `-tags spice_audio` (and install opusfile + portaudio) to enable

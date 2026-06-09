@@ -1,11 +1,14 @@
 package main
 
-import "testing"
+import (
+	"reflect"
+	"testing"
+)
 
 // TestSyntheticVmImageDistroFormat is the regression guard for the
 // non-arch VM deploy bug: syntheticVmImage used to hardcode
 // Distro:["arch"]/Pkg:"pac"/BuildFormats:["pac"] for EVERY non-root VM, so
-// a layer deploy (and the `ov` localpkg) onto a debian/ubuntu/fedora guest
+// a layer deploy (and the `charly` localpkg) onto a debian/ubuntu/fedora guest
 // ran `pacman` and failed with exit 127. The fix derives the guest's real
 // distro + primary package format from the VM spec — bootstrap `distro:` or
 // cloud_image `base_user:` — so apt/dnf is used on those guests.
@@ -13,10 +16,10 @@ import "testing"
 // Without the fix every row below would resolve Pkg="pac" and FAIL.
 func TestSyntheticVmImageDistroFormat(t *testing.T) {
 	distroCfg := &DistroConfig{Distro: map[string]*DistroDef{
-		"arch":    {Format: map[string]*FormatDef{"pac": {}, "aur": {}}},
-		"cachyos": {Inherits: "arch"},
+		"arch":    {Format: map[string]*FormatDef{"pac": {}, "aur": {Secondary: true}}},
+		"cachyos": {Inherits: "arch", InheritPackages: true}, // pulls arch package sections
 		"debian":  {Format: map[string]*FormatDef{"deb": {}}},
-		"ubuntu":  {Inherits: "debian"}, // inherits debian's deb format
+		"ubuntu":  {Inherits: "debian"}, // inherits debian's deb FORMAT, NOT its packages
 		"fedora":  {Format: map[string]*FormatDef{"rpm": {}}},
 	}}
 
@@ -25,42 +28,45 @@ func TestSyntheticVmImageDistroFormat(t *testing.T) {
 		spec       *VmSpec
 		wantUser   string
 		wantPkg    string
-		wantDistro string
+		wantDistro []string
 	}{
 		{
 			name:       "debian debootstrap (bootstrap distro)",
 			spec:       &VmSpec{Source: VmSource{Kind: "bootstrap", Distro: "debian"}, SSH: &VmSSH{User: "debian"}},
 			wantUser:   "debian",
 			wantPkg:    "deb",
-			wantDistro: "debian",
+			wantDistro: []string{"debian"},
 		},
 		{
 			name:       "ubuntu debootstrap (inherits debian -> deb)",
 			spec:       &VmSpec{Source: VmSource{Kind: "bootstrap", Distro: "ubuntu"}, SSH: &VmSSH{User: "ubuntu"}},
 			wantUser:   "ubuntu",
 			wantPkg:    "deb",
-			wantDistro: "ubuntu",
+			wantDistro: []string{"ubuntu"},
 		},
 		{
 			name:       "fedora cloud (base_user)",
 			spec:       &VmSpec{Source: VmSource{Kind: "cloud_image", BaseUser: "fedora"}},
 			wantUser:   "fedora",
 			wantPkg:    "rpm",
-			wantDistro: "fedora",
+			wantDistro: []string{"fedora"},
 		},
 		{
 			name:       "arch cloud (base_user)",
 			spec:       &VmSpec{Source: VmSource{Kind: "cloud_image", BaseUser: "arch"}},
 			wantUser:   "arch",
 			wantPkg:    "pac",
-			wantDistro: "arch",
+			wantDistro: []string{"arch"},
 		},
 		{
-			name:       "cachyos bootstrap (inherits arch -> pac, skips aur)",
+			// cachyos sets inherit_packages: true, so its VM distro chain expands
+			// to [cachyos, arch] — an `arch:` layer block reaches the cachyos VM.
+			// Pkg is still the resolved pac primary (aur is secondary, skipped).
+			name:       "cachyos bootstrap (inherit_packages -> [cachyos, arch], pac primary)",
 			spec:       &VmSpec{Source: VmSource{Kind: "bootstrap", Distro: "cachyos"}, SSH: &VmSSH{User: "cachyos"}},
 			wantUser:   "cachyos",
 			wantPkg:    "pac",
-			wantDistro: "cachyos",
+			wantDistro: []string{"cachyos", "arch"},
 		},
 	}
 
@@ -82,8 +88,8 @@ func TestSyntheticVmImageDistroFormat(t *testing.T) {
 			if len(img.BuildFormats) != 1 || img.BuildFormats[0] != tc.wantPkg {
 				t.Errorf("BuildFormats = %v, want [%q]", img.BuildFormats, tc.wantPkg)
 			}
-			if len(img.Distro) != 1 || img.Distro[0] != tc.wantDistro {
-				t.Errorf("Distro = %v, want [%q]", img.Distro, tc.wantDistro)
+			if !reflect.DeepEqual(img.Distro, tc.wantDistro) {
+				t.Errorf("Distro = %v, want %v (inherits chain must be appended)", img.Distro, tc.wantDistro)
 			}
 		})
 	}

@@ -6,7 +6,7 @@ package main
 // Schema v4: deploy-side K8s knobs (namespace, workload kind override,
 // patches, raw manifests) stay here. Cluster-wide policy (kubeconfig
 // context, admission policy, storage, ingress defaults, etc.) MOVED to
-// K8sSpec (kind:k8s template) in ov/k8s_spec.go. The Cluster string field
+// K8sSpec (kind:k8s template) in charly/k8s_spec.go. The Cluster string field
 // below is deprecated — use DeploymentNode.K8s (template ref) instead.
 // -----------------------------------------------------------------------------
 

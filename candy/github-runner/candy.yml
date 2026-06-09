@@ -16,10 +16,10 @@ candy:
                 - jq
                 - git
                 - go
-                - cloud-guest-utils            # growpart
-                - qemu-user-static             # aarch64 cross-arch CI (binfmt)
+                - cloud-guest-utils # growpart
+                - qemu-user-static # aarch64 cross-arch CI (binfmt)
                 - qemu-user-static-binfmt
-                - cosign                       # repo package (replaces binary download)
+                - cosign # repo package (replaces binary download)
                 # .NET runtime deps for the actions-runner binary — the runner's
                 # bundled installdependencies.sh has no Arch branch, so its native
                 # deps are declared explicitly here. (libz is NOT listed: CachyOS
@@ -30,16 +30,16 @@ candy:
                 - openssl
                 - libunwind
                 - lttng-ust
-                # charly-host runtime deps that complete the `ov` PKGBUILD `depends=`
+                # charly-host runtime deps that complete the `charly` PKGBUILD `depends=`
                 # set ON THE RUNNER, so the release-packages CI job builds the pac
                 # artifact NATIVELY here: with every dep already installed,
                 # `makepkg -sf` resolves them all and never shells out to
                 # `sudo pacman` (the rootless runner has no passwordless sudo).
-                # The rest of depends= is provided by the ov/virtualization layers.
-                - slirp4netns                  # rootless podman networking fallback
-                - libisoburn                   # xorriso — VM NoCloud seed-ISO builder
-                - cdrtools                     # genisoimage/mkisofs seed-ISO fallback
-                - swtpm                        # software TPM 2.0 for VM guests
+                # The rest of depends= is provided by the charly/virtualization layers.
+                - slirp4netns # rootless podman networking fallback
+                - libisoburn # xorriso — VM NoCloud seed-ISO builder
+                - cdrtools # genisoimage/mkisofs seed-ISO fallback
+                - swtpm # software TPM 2.0 for VM guests
     volume:
         - name: state
           path: ~/actions-runner
@@ -60,7 +60,7 @@ candy:
         # a clean no-op rather than an error.
         post_enable: |
             [ -z "${RUNNER_TOKEN:-}" ] && { echo "RUNNER_TOKEN empty — skipping runner registration"; exit 0; }
-            : "${RUNNER_NAME:=${CH_CONTAINER_NAME:-runner}}"
+            : "${RUNNER_NAME:=${CHARLY_CONTAINER_NAME:-runner}}"
             : "${RUNNER_LABELS:=opencharly}"
             "${HOME}/actions-runner/config.sh" --unattended \
               --url "https://github.com/${RUNNER_ORG}" \
@@ -148,7 +148,7 @@ candy:
         - id: gr-icu-pkg
           package: icu
           installed: true
-        # charly-host runtime deps completing the `ov` PKGBUILD depends= set, so the
+        # charly-host runtime deps completing the `charly` PKGBUILD depends= set, so the
         # release-packages CI job builds the pac artifact natively (makepkg needs
         # no sudo when every dep is present). FAIL without the package: additions.
         - id: gr-pkgbuild-dep-slirp4netns

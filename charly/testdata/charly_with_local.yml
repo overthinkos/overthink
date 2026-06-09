@@ -1,4 +1,4 @@
-version: 2026.159.3
+version: 2026.159.1912
 
 local:
   dev-workstation:
@@ -12,13 +12,13 @@ local:
     install_opts: {with_services: true, allow_root_tasks: true}
     description: {feature: CI runner profile, tag: [working]}
 
-  ov-cachyos:
+  charly-cachyos:
     # Empty placeholder — `layers: []` is a load-time WARNING (allowed
     # for staged name reservation); a missing `layers:` field would be
     # a hard error.
     candy: []
     install_opts: {}
-    description: {feature: ov-cachyos (placeholder), tag: [testing]}
+    description: {feature: charly-cachyos (placeholder), tag: [testing]}
 
 deploy:
   # Default — direct local exec (host: omitted == "local").

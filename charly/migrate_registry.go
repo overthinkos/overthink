@@ -70,7 +70,7 @@ type MigrationStep struct {
 // closure references it, and the registry's last entry uses it as its Version,
 // so the two are guaranteed equal (asserted by TestRegistryHeadMatchesLatest).
 // Bump it — and append the matching MigrationStep — for each future cutover.
-var latestSchemaVersion = mustCalVer("2026.159.0003")
+var latestSchemaVersion = mustCalVer("2026.159.1912")
 
 // migrationSteps is the ordered registry. Chronological by git landing date
 // (see `git log --diff-filter=A` on each migrate_*.go), which is the order the
@@ -93,16 +93,12 @@ func migrationSteps() []MigrationStep {
 			w, err := MigrateTargetLocal(c.Dir, c.DryRun)
 			return len(w) > 0, err
 		}},
-		{mustCalVer("2026.123.1351"), "calamares", false, func(c *MigrateContext) (bool, error) {
-			w, err := MigrateCalamares(c.Dir, c.DryRun)
-			return len(w) > 0, err
-		}},
 		{mustCalVer("2026.124.1942"), "shell-schema", false, func(c *MigrateContext) (bool, error) {
 			w, err := MigrateShellSchema(c.Dir, c.DryRun)
 			return len(w) > 0, err
 		}},
 		{mustCalVer("2026.125.702"), "ov-cachyos", true, func(c *MigrateContext) (bool, error) {
-			w, err := MigrateOvCachyos(c.Dir, c.DryRun)
+			w, err := MigrateCharlyCachyos(c.Dir, c.DryRun)
 			return len(w) > 0, err
 		}},
 		{mustCalVer("2026.125.1107"), "local-images", false, func(c *MigrateContext) (bool, error) {
@@ -239,6 +235,19 @@ func migrationSteps() []MigrationStep {
 		// rewrites to fetched repos. See CHANGELOG.md.
 		{mustCalVer("2026.159.0002"), "charly-rebrand", false, func(c *MigrateContext) (bool, error) {
 			w, err := MigrateCharlyRebrand(c)
+			return len(w) > 0, err
+		}},
+		// 2026-06 Cutover 4: finish the rebrand — CH_→CHARLY_ env, credential
+		// service prefix ov/→charly/ (incl. OS-keyring re-key), charly-first
+		// image names arch-charly→charly-arch / fedora-charly→charly-fedora, and
+		// the fish shell-init overthink.fish→opencharly.fish + markers.
+		// TouchesHost FALSE — the project-YAML rewrites (Phase A) must also run
+		// under the remote-cache auto-migration; the host transforms (Phase B:
+		// keyring re-key + shell-init relocation) are gated internally on
+		// ctx.HostDeployPath (empty under the project-only runner), mirroring
+		// charly-rebrand.
+		{mustCalVer("2026.159.1911"), "charly-cutover4", false, func(c *MigrateContext) (bool, error) {
+			w, err := MigrateCharlyCutover4(c)
 			return len(w) > 0, err
 		}},
 		// HEAD — the schema stamp. Must stay LAST so LatestSchemaVersion picks it up

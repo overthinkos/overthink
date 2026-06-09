@@ -10,7 +10,7 @@ package main
 // per-kind k8s add/del paths.
 //
 // K8sUnifiedTarget is NOT a LifecycleTarget — cluster lifecycle is
-// kubectl-managed outside ov.
+// kubectl-managed outside charly.
 
 import (
 	"context"

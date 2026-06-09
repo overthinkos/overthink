@@ -32,7 +32,7 @@ type SecretsCmdGroup struct {
 
 // SecretsListCmd lists credentials known to the active store.
 type SecretsListCmd struct {
-	Service string `arg:"" optional:"" help:"Service prefix filter (e.g., ov/vnc)"`
+	Service string `arg:"" optional:"" help:"Service prefix filter (e.g., charly/vnc)"`
 }
 
 func (c *SecretsListCmd) Run() error {
@@ -60,7 +60,7 @@ func (c *SecretsListCmd) Run() error {
 
 // SecretsGetCmd gets a credential value from the active store.
 type SecretsGetCmd struct {
-	Service string `arg:"" help:"Service name (e.g., ov/vnc)"`
+	Service string `arg:"" help:"Service name (e.g., charly/vnc)"`
 	Key     string `arg:"" help:"Entry key (e.g., my-image)"`
 }
 
@@ -81,7 +81,7 @@ func (c *SecretsGetCmd) Run() error {
 
 // SecretsSetCmd sets a credential in the active store.
 type SecretsSetCmd struct {
-	Service  string `arg:"" help:"Service name (e.g., ov/vnc)"`
+	Service  string `arg:"" help:"Service name (e.g., charly/vnc)"`
 	Key      string `arg:"" help:"Entry key (e.g., my-image)"`
 	Value    string `arg:"" optional:"" help:"Value to set (omit to prompt securely)"`
 	Generate bool   `long:"generate" help:"Generate random value and print to stdout"`
@@ -122,7 +122,7 @@ func (c *SecretsSetCmd) Run() error {
 
 // SecretsDeleteCmd deletes a credential from the active store.
 type SecretsDeleteCmd struct {
-	Service string `arg:"" help:"Service name (e.g., ov/vnc)"`
+	Service string `arg:"" help:"Service name (e.g., charly/vnc)"`
 	Key     string `arg:"" help:"Entry key"`
 }
 

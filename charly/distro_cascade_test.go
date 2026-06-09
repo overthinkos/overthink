@@ -1,10 +1,7 @@
 package main
 
 import (
-	"os"
-	"path/filepath"
 	"reflect"
-	"strings"
 	"testing"
 
 	"gopkg.in/yaml.v3"
@@ -47,6 +44,48 @@ func pkgStep(t *testing.T, steps []InstallStep) *SystemPackagesStep {
 		t.Fatalf("expected exactly 1 SystemPackagesStep, got %d", n)
 	}
 	return found
+}
+
+// fmtImg builds a minimal ResolvedBox with the given primary package format and
+// most-specific-first distro tag chain.
+func fmtImg(format string, chain ...string) *ResolvedBox {
+	return &ResolvedBox{
+		Pkg:       format,
+		Distro:    chain,
+		DistroDef: &DistroDef{Format: map[string]*FormatDef{format: {}}},
+	}
+}
+
+// TestCascade_FormatFamilyLevel proves the package-format FAMILY level
+// (`distro: deb:`/`pac:`/`rpm:`) applies to every distro of that format, while
+// distro-specific blocks stay scoped. This is the YAML-configured
+// deb/pac/rpm → distro → version hierarchy: a layer declares family-generic
+// packages ONCE under the format tag instead of duplicating per distro, and a
+// `pac:` block reaches arch AND cachyos with no Go-side distro inheritance.
+func TestCascade_FormatFamilyLevel(t *testing.T) {
+	// deb family: shared under `deb:`, debian-only under `debian:`.
+	debLayer := deriveLayer(t, "name: t\ndistro:\n  deb:\n    package: [shared]\n  debian:\n    package: [deb-only]\n")
+	debian := pkgStep(t, compileSystemPackageSteps(debLayer, fmtImg("deb", "debian:13", "debian"), HostContext{})).Packages
+	ubuntu := pkgStep(t, compileSystemPackageSteps(debLayer, fmtImg("deb", "ubuntu:24.04", "ubuntu"), HostContext{})).Packages
+	if !reflect.DeepEqual(debian, []string{"shared", "deb-only"}) {
+		t.Errorf("debian = %v, want [shared deb-only]", debian)
+	}
+	if !reflect.DeepEqual(ubuntu, []string{"shared"}) {
+		t.Errorf("ubuntu = %v, want [shared] ONLY — deb-only must NOT leak from the debian block", ubuntu)
+	}
+
+	// pac family: a single `pac:` block reaches BOTH arch and cachyos.
+	pacLayer := deriveLayer(t, "name: t\ndistro:\n  pac:\n    package: [sddm]\n")
+	arch := pkgStep(t, compileSystemPackageSteps(pacLayer, fmtImg("pac", "arch"), HostContext{})).Packages
+	cachyos := pkgStep(t, compileSystemPackageSteps(pacLayer, fmtImg("pac", "cachyos"), HostContext{})).Packages
+	if !reflect.DeepEqual(arch, []string{"sddm"}) || !reflect.DeepEqual(cachyos, []string{"sddm"}) {
+		t.Errorf("pac family: arch=%v cachyos=%v, want both [sddm]", arch, cachyos)
+	}
+
+	// cascadeTagChain order: distro chain, then format tag (least-specific) last.
+	if got := cascadeTagChain(fmtImg("pac", "cachyos")); !reflect.DeepEqual(got, []string{"cachyos", "pac"}) {
+		t.Errorf("cascadeTagChain = %v, want [cachyos pac]", got)
+	}
 }
 
 // --- Parser routing -------------------------------------------------------
@@ -255,38 +294,75 @@ func TestDistroDefVersionInherits(t *testing.T) {
 	}
 }
 
-// --- Migration safety net -------------------------------------------------
+// --- Package-cascade inheritance (cachyos pulls arch; ubuntu does NOT) -----
 
-// TestCalamares_MigratesLegacyFormsToDistroMap proves the EXISTING calamares
-// migrator converts every legacy top-level form (format keys + compound tags)
-// into the `distro:` map — so the parser's hard-cutover rejection of those forms
-// is backed by a real migration path (no new migrate step needed).
-func TestCalamares_MigratesLegacyFormsToDistroMap(t *testing.T) {
-	dir := t.TempDir()
-	layerDir := filepath.Join(dir, "layers", "legacy")
-	if err := os.MkdirAll(layerDir, 0o755); err != nil {
-		t.Fatal(err)
+// TestExpandPackageInheritance proves the YAML-driven asymmetry: a distro with
+// inherit_packages: true expands its cascade chain to include the inherits:
+// ancestor (cachyos → [cachyos, arch]) so an `arch:` layer block reaches it,
+// while a distro that only sets inherits: (ubuntu → debian) does NOT pull the
+// parent's package sections. No Go-side hardcoded inheritance table.
+func TestExpandPackageInheritance(t *testing.T) {
+	dc := &DistroConfig{Distro: map[string]*DistroDef{
+		"arch":    {Format: map[string]*FormatDef{"pac": {}, "aur": {Secondary: true}}},
+		"cachyos": {Inherits: "arch", InheritPackages: true},
+		"debian":  {Format: map[string]*FormatDef{"deb": {}}},
+		"ubuntu":  {Inherits: "debian"}, // format inheritance only
+		"fedora":  {Format: map[string]*FormatDef{"rpm": {}}},
+		// transitive opt-in: a grandchild flagged on each hop walks the whole chain
+		"cachyos-edge": {Inherits: "cachyos", InheritPackages: true},
+	}}
+	cases := []struct {
+		name string
+		in   []string
+		want []string
+	}{
+		{"cachyos pulls arch", []string{"cachyos"}, []string{"cachyos", "arch"}},
+		{"arch unchanged", []string{"arch"}, []string{"arch"}},
+		{"ubuntu does NOT pull debian", []string{"ubuntu"}, []string{"ubuntu"}},
+		{"debian unchanged", []string{"debian"}, []string{"debian"}},
+		{"fedora unchanged", []string{"fedora"}, []string{"fedora"}},
+		{"idempotent when ancestor authored", []string{"cachyos", "arch"}, []string{"cachyos", "arch"}},
+		{"versioned bare-name matched", []string{"cachyos:rolling", "cachyos"}, []string{"cachyos:rolling", "cachyos", "arch"}},
+		{"transitive multi-hop", []string{"cachyos-edge"}, []string{"cachyos-edge", "cachyos", "arch"}},
 	}
-	// True pre-calamares legacy form: plural `packages:` under format/compound keys.
-	legacy := "layer:\n  name: legacy\n  version: \"1\"\n  rpm:\n    packages: [vim-rpm]\n  deb:\n    packages: [vim-deb]\n  \"debian,ubuntu\":\n    packages: [shared]\n"
-	if err := os.WriteFile(filepath.Join(layerDir, "layer.yml"), []byte(legacy), 0o644); err != nil {
-		t.Fatal(err)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := dc.expandPackageInheritance(tc.in); !reflect.DeepEqual(got, tc.want) {
+				t.Errorf("expandPackageInheritance(%v) = %v, want %v", tc.in, got, tc.want)
+			}
+		})
 	}
-	if _, err := MigrateCalamares(dir, false); err != nil {
-		t.Fatalf("MigrateCalamares: %v", err)
+	// nil config returns input unchanged (no panic).
+	if got := (*DistroConfig)(nil).expandPackageInheritance([]string{"cachyos"}); !reflect.DeepEqual(got, []string{"cachyos"}) {
+		t.Errorf("nil dc must return input unchanged, got %v", got)
 	}
-	out, err := os.ReadFile(filepath.Join(layerDir, "layer.yml"))
-	if err != nil {
-		t.Fatal(err)
+}
+
+// --- Legacy-shape rejection (no migration; hard error) --------------------
+
+// TestRejectLegacyTopLevelFormatAndDistroKeys proves the candy-manifest guard
+// hard-errors on a package-format key or a per-distro tag section placed at the
+// candy root (they nest under `distro:`). The vocabulary is the DYNAMIC build
+// vocabulary registered from build.yml — no hardcoded format/distro list, and no
+// migration: these shapes are simply invalid.
+func TestRejectLegacyTopLevelFormatAndDistroKeys(t *testing.T) {
+	RegisterBuildVocabulary(testDistroConfig())
+	cases := []struct {
+		key  string
+		want bool
+	}{
+		// Vocabulary comes from testdata/build.yml: distros arch/debian/fedora/
+		// ubuntu, formats pac/aur/deb/rpm.
+		{"pac", true}, {"deb", true}, {"rpm", true}, {"aur", true},
+		{"debian", true}, {"debian:13", true}, {"debian,ubuntu", true},
+		{"arch", true}, {"fedora", true},
+		{"package", false}, {"distro", false}, {"service", false},
+		{"task", false}, {"description", false}, {"", false},
+		{"cachyos", false}, // not declared in the testdata fixture
 	}
-	s := string(out)
-	// Legacy top-level keys are gone; a distros map carries the packages per distro.
-	for _, want := range []string{"distros:", "fedora:", "debian:", "ubuntu:", "vim-rpm", "vim-deb", "shared"} {
-		if !strings.Contains(s, want) {
-			t.Errorf("migrated layer.yml missing %q\n--- got ---\n%s", want, s)
+	for _, tc := range cases {
+		if got := looksLikeDistroOrFormatKey(tc.key); got != tc.want {
+			t.Errorf("looksLikeDistroOrFormatKey(%q) = %v, want %v", tc.key, got, tc.want)
 		}
-	}
-	if strings.Contains(s, "\n  rpm:\n") || strings.Contains(s, "\n  deb:\n") {
-		t.Errorf("legacy top-level format keys survived migration:\n%s", s)
 	}
 }

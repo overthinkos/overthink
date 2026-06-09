@@ -115,7 +115,7 @@ func dbusNotifyLocal(title, body string) error {
 
 	obj := conn.Object("org.freedesktop.Notifications", "/org/freedesktop/Notifications")
 	call := obj.Call("org.freedesktop.Notifications.Notify", 0,
-		"charly",                      // app_name
+		"charly",                  // app_name
 		uint32(0),                 // replaces_id
 		"",                        // app_icon
 		title,                     // summary
@@ -196,8 +196,8 @@ func dbusNotifyRemoteStrict(ex DeployExecutor, title, body string) error {
 	// Ensure an invokable charly on the venue — copying the host binary in when the
 	// image doesn't bake the charly candy (the generic copy-in mechanism), then
 	// delegate to it so the notify runs against the venue's own live session bus.
-	if ovCmd, err := EnsureOvInVenue(context.Background(), ex, EmitOpts{}); err == nil && ovCmd != "" {
-		script := fmt.Sprintf("%s eval dbus notify . %s %s", ovCmd,
+	if charlyCmd, err := EnsureCharlyInVenue(context.Background(), ex, EmitOpts{}); err == nil && charlyCmd != "" {
+		script := fmt.Sprintf("%s eval dbus notify . %s %s", charlyCmd,
 			deployShellQuote(title), deployShellQuote(body))
 		if rerr := venueRun(ex, script); rerr == nil {
 			return nil
@@ -223,11 +223,11 @@ func dbusNotifyRemoteStrict(ex DeployExecutor, title, body string) error {
 // dbusCallRemote delegates a D-Bus call to the venue's charly binary, copying the
 // host charly in when the image doesn't bake the charly candy (the generic copy-in).
 func dbusCallRemote(ex DeployExecutor, dest, path, method string, args []string) error {
-	ovCmd, err := EnsureOvInVenue(context.Background(), ex, EmitOpts{})
-	if err != nil || ovCmd == "" {
+	charlyCmd, err := EnsureCharlyInVenue(context.Background(), ex, EmitOpts{})
+	if err != nil || charlyCmd == "" {
 		return fmt.Errorf("could not provide an invokable charly on the target %s for the D-Bus call: %v", ex.Venue(), err)
 	}
-	parts := []string{ovCmd, "eval", "dbus", "call", ".",
+	parts := []string{charlyCmd, "eval", "dbus", "call", ".",
 		deployShellQuote(dest), deployShellQuote(path), deployShellQuote(method)}
 	for _, a := range args {
 		parts = append(parts, deployShellQuote(a))

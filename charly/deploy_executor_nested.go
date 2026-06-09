@@ -327,7 +327,7 @@ func (n *NestedExecutor) GetFile(ctx context.Context, remotePath string, asRoot 
 // child shell with the script fed via stdin.
 //
 // Heredoc-delim uniqueness across nesting depths: the delim is
-// derived by counting how many `OV_NESTED_SCRIPT_EOF` tokens already
+// derived by counting how many `CHARLY_NESTED_SCRIPT_EOF` tokens already
 // appear in the inner script. A 3-deep chain stacks three heredocs,
 // each needing a DIFFERENT terminator — otherwise the OUTERMOST bash
 // terminates its heredoc on the first occurrence (the innermost
@@ -355,7 +355,7 @@ func wrapWithJump(jump NestedJump, script string, asRoot bool) (string, error) {
 	// already contains N copies of the base, from prior wrapWithJump
 	// invocations at deeper levels), append a counter suffix so the
 	// outer's open+close pair is distinct from every inner pair.
-	baseDelim := "OV_NESTED_SCRIPT_EOF"
+	baseDelim := "CHARLY_NESTED_SCRIPT_EOF"
 	delim := baseDelim
 	if n := strings.Count(script, baseDelim); n > 0 {
 		delim = fmt.Sprintf("%s_%d", baseDelim, n)

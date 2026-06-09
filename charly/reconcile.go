@@ -16,7 +16,7 @@ import (
 // pin of that repo is rewritten to ONE target version: the newest already-referenced version
 // (default) or the newest tag on the remote (`--remote`). Edits are
 // comment-preserving (yaml.v3 node API) and idempotent. Operates on the current
-// project (cwd; honors the top-level -C / --dir / CH_PROJECT_DIR). For a
+// project (cwd; honors the top-level -C / --dir / CHARLY_PROJECT_DIR). For a
 // multi-repo tree, run it per repo (e.g. `charly -C image/<name> image reconcile`).
 type BoxReconcileCmd struct {
 	DryRun bool `name:"dry-run" help:"Print the pin rewrites without modifying any file."`
@@ -79,7 +79,7 @@ func (c *BoxReconcileCmd) Run() error {
 	}
 	files := reconcileCandidateFiles(dir)
 	if len(files) == 0 {
-		return fmt.Errorf("no overthink project files found in %s (run from a project directory or use -C)", dir)
+		return fmt.Errorf("no opencharly project files found in %s (run from a project directory or use -C)", dir)
 	}
 
 	// Pass 1: collect, per repo, the set of pinned versions referenced anywhere.

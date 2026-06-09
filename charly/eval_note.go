@@ -8,7 +8,7 @@ package main
 //
 //   .harness/<score>/note/<run-id>.md   one file per run
 //
-// During a run, CH_EVAL_NOTES_FILE is set to the per-run path so
+// During a run, CHARLY_EVAL_NOTES_FILE is set to the per-run path so
 // the AI's `charly eval note append` (invoked from inside the per-run
 // clone, with cwd != the host project) writes to the OUTER per-run
 // file rather than a fresh per-clone copy that would die with the
@@ -31,7 +31,7 @@ import (
 // NotePath returns the absolute path of the notes file the current
 // caller should read/write.
 //
-//   - Inside an iteration, CH_EVAL_NOTES_FILE env is set to the
+//   - Inside an iteration, CHARLY_EVAL_NOTES_FILE env is set to the
 //     per-run notes file; honor the override.
 //   - Outside an iteration, return the most recent per-run notes
 //     file under <harness-root>/note/, or — if none yet — a stable
@@ -41,7 +41,7 @@ import (
 // Use NotePathForRun(layout) to compute the per-run path explicitly
 // inside the harness loop (where we know the run-id without env).
 func NotePath(projectDir, score string) string {
-	if override := os.Getenv("CH_EVAL_NOTES_FILE"); override != "" {
+	if override := os.Getenv("CHARLY_EVAL_NOTES_FILE"); override != "" {
 		return override
 	}
 	noteDir := filepath.Join(HarnessDataRoot(projectDir, score), "note")
@@ -56,7 +56,7 @@ func NotePath(projectDir, score string) string {
 // NotePathForRun returns the canonical per-run notes path under the
 // harness data root. Used by the harness loop (which knows the
 // run-id directly without env-var indirection) for both ${NOTES}
-// substitution snapshots and the CH_EVAL_NOTES_FILE export.
+// substitution snapshots and the CHARLY_EVAL_NOTES_FILE export.
 func NotePathForRun(harnessRoot, runID string) string {
 	return filepath.Join(harnessRoot, "note", runID+".md")
 }
@@ -110,7 +110,7 @@ func ReadNote(projectDir, score string) (string, error) {
 }
 
 // AppendNote writes one note to the per-run notes file. Requires
-// CH_EVAL_NOTES_FILE to be set (i.e., the caller is inside a
+// CHARLY_EVAL_NOTES_FILE to be set (i.e., the caller is inside a
 // harness iteration). Notes are run-scoped — ad-hoc seeding from
 // outside an iteration is intentionally unsupported.
 func AppendNote(projectDir, score, runID, iter, ai, text string) error {
@@ -120,9 +120,9 @@ func AppendNote(projectDir, score, runID, iter, ai, text string) error {
 	if strings.TrimSpace(text) == "" {
 		return fmt.Errorf("note append: text required (got empty/whitespace)")
 	}
-	path := os.Getenv("CH_EVAL_NOTES_FILE")
+	path := os.Getenv("CHARLY_EVAL_NOTES_FILE")
 	if path == "" {
-		return fmt.Errorf("note append: notes are run-scoped — only supported inside a harness iteration (no CH_EVAL_NOTES_FILE in env)")
+		return fmt.Errorf("note append: notes are run-scoped — only supported inside a harness iteration (no CHARLY_EVAL_NOTES_FILE in env)")
 	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return fmt.Errorf("note append: mkdir %s: %w", filepath.Dir(path), err)

@@ -22,7 +22,7 @@ else
 fi
 
 # Clean up stale sway IPC sockets from previous sway processes.
-# Supervisord restarts leave old sockets that confuse swaymsg, ov sway, and
+# Supervisord restarts leave old sockets that confuse swaymsg, charly sway, and
 # the resolution-setting logic below (ls picks oldest PID alphabetically).
 rm -f /tmp/sway-ipc.*.sock
 

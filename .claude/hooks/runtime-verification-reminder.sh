@@ -13,7 +13,7 @@
 # "Hooks doctrine".
 
 cat <<'EOF'
-OVERTHINK OPERATING REMINDER (pointer — the rules live in CLAUDE.md):
+OPENCHARLY OPERATING REMINDER (pointer — the rules live in CLAUDE.md):
 
 R0 SKILLS FIRST. Before you read source / grep / run a command / edit a file
 / launch an Agent, invoke the matching skill(s) via the Skill tool — ALL of

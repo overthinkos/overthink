@@ -35,7 +35,7 @@ import (
 //     TestArtifactValidatableMethods_MatchesArtifactProducingMethodSpecs.
 //
 //   - When validate_ai_artifacts is true AND the method is in this
-//     allowlist, runOvVerb skips subprocess execution and runs the
+//     allowlist, runCharlyVerb skips subprocess execution and runs the
 //     post-run validators (artifact_min_bytes / artifact_min_dimensions
 //     / artifact_not_uniform / artifact_min_cast_events) against the
 //     existing file at the recipe-declared `artifact:` path.
@@ -59,7 +59,7 @@ var artifactValidatableMethods = map[string]bool{
 // pipeline (Stdout/Stderr/ExitStatus + artifact size via ArtifactMinBytes).
 //
 // Architectural notes:
-//   - Host-side only: the test runner invokes the host `ov` binary, which
+//   - Host-side only: the test runner invokes the host `charly` binary, which
 //     internally connects to the container (CDP over TCP, WL via exec,
 //     D-Bus via delegation, VNC over TCP). No container-side test runner.
 //   - RunModeImage short-circuits with a skip: these verbs need a live
@@ -228,7 +228,7 @@ var mcpMethods = map[string]methodSpec{
 // sessions (asciinema terminal / pixelflux-record / wf-recorder desktop).
 // Container-only: resolveContainer does not know about VMs, so a `record:`
 // check on a `vm:<name>` deploy will fail at subprocess dispatch. Documented
-// in /ov:record; validator does not pre-filter by deploy kind.
+// in /charly:record; validator does not pre-filter by deploy kind.
 // ---------------------------------------------------------------------------
 
 var recordMethods = map[string]methodSpec{
@@ -319,7 +319,7 @@ var libvirtMethods = map[string]methodSpec{
 // adb methods — `charly eval adb <method>` speaks the ADB wire protocol to the
 // container's host-mapped adb-server port (5037 → host's HOST_PORT:5037).
 // Deploy-scope only; the runner shells out to `charly eval adb <method> <image>
-// [args]` via runOvVerb. Implementation lives in ov/adb.go.
+// [args]` via runCharlyVerb. Implementation lives in charly/adb.go.
 // ---------------------------------------------------------------------------
 
 var adbMethods = map[string]methodSpec{
@@ -342,7 +342,7 @@ var adbMethods = map[string]methodSpec{
 // tebeka/selenium SDK against the container's host-mapped 4723 port. Session
 // lifecycle (create / delete) persists to ~/.cache/charly/appium/sessions/
 // <image>[_<instance>].json so multi-step tests share a session efficiently.
-// Implementation in ov/appium.go + ov/appium_session.go.
+// Implementation in charly/appium.go + charly/appium_session.go.
 // ---------------------------------------------------------------------------
 
 var appiumMethods = map[string]methodSpec{
@@ -430,7 +430,7 @@ var k8sMethods = map[string]methodSpec{
 // k8s positional-arg builders — every method emits --cluster/--context/
 // --kubeconfig + its method-specific flags. Because k8s probes are run
 // against a cluster (not a container/image), the --image positional from
-// runOvVerb is still passed, but `charly eval k8s ...` ignores it by accepting
+// runCharlyVerb is still passed, but `charly eval k8s ...` ignores it by accepting
 // arbitrary trailing args under Kong's default catch-all policy.
 // ---------------------------------------------------------------------------
 
@@ -968,50 +968,50 @@ func posWaitForDevice(c *Check) []string {
 // ---------------------------------------------------------------------------
 
 func (r *Runner) runCdp(ctx context.Context, c *Check) EvalResult {
-	return r.runOvVerb(ctx, c, "cdp", c.Cdp, cdpMethods)
+	return r.runCharlyVerb(ctx, c, "cdp", c.Cdp, cdpMethods)
 }
 
 func (r *Runner) runWl(ctx context.Context, c *Check) EvalResult {
-	return r.runOvVerb(ctx, c, "wl", c.Wl, wlMethods)
+	return r.runCharlyVerb(ctx, c, "wl", c.Wl, wlMethods)
 }
 
 func (r *Runner) runDbus(ctx context.Context, c *Check) EvalResult {
-	return r.runOvVerb(ctx, c, "dbus", c.Dbus, dbusMethods)
+	return r.runCharlyVerb(ctx, c, "dbus", c.Dbus, dbusMethods)
 }
 
 func (r *Runner) runVnc(ctx context.Context, c *Check) EvalResult {
-	return r.runOvVerb(ctx, c, "vnc", c.Vnc, vncMethods)
+	return r.runCharlyVerb(ctx, c, "vnc", c.Vnc, vncMethods)
 }
 
 func (r *Runner) runMcp(ctx context.Context, c *Check) EvalResult {
-	return r.runOvVerb(ctx, c, "mcp", c.Mcp, mcpMethods)
+	return r.runCharlyVerb(ctx, c, "mcp", c.Mcp, mcpMethods)
 }
 
 func (r *Runner) runRecord(ctx context.Context, c *Check) EvalResult {
-	return r.runOvVerb(ctx, c, "record", c.Record, recordMethods)
+	return r.runCharlyVerb(ctx, c, "record", c.Record, recordMethods)
 }
 
 func (r *Runner) runSpice(ctx context.Context, c *Check) EvalResult {
-	return r.runOvVerb(ctx, c, "spice", c.Spice, spiceMethods)
+	return r.runCharlyVerb(ctx, c, "spice", c.Spice, spiceMethods)
 }
 
 func (r *Runner) runLibvirt(ctx context.Context, c *Check) EvalResult {
-	return r.runOvVerb(ctx, c, "libvirt", c.Libvirt, libvirtMethods)
+	return r.runCharlyVerb(ctx, c, "libvirt", c.Libvirt, libvirtMethods)
 }
 
 func (r *Runner) runK8s(ctx context.Context, c *Check) EvalResult {
-	return r.runOvVerb(ctx, c, "k8s", c.K8s, k8sMethods)
+	return r.runCharlyVerb(ctx, c, "k8s", c.K8s, k8sMethods)
 }
 
 func (r *Runner) runAdb(ctx context.Context, c *Check) EvalResult {
-	return r.runOvVerb(ctx, c, "adb", c.Adb, adbMethods)
+	return r.runCharlyVerb(ctx, c, "adb", c.Adb, adbMethods)
 }
 
 func (r *Runner) runAppium(ctx context.Context, c *Check) EvalResult {
-	return r.runOvVerb(ctx, c, "appium", c.Appium, appiumMethods)
+	return r.runCharlyVerb(ctx, c, "appium", c.Appium, appiumMethods)
 }
 
-// runOvVerb is the shared dispatch path: skip checks, method lookup,
+// runCharlyVerb is the shared dispatch path: skip checks, method lookup,
 // argv building, subprocess exec, matcher pipeline, optional artifact size
 // assertion. Returns the EvalResult directly.
 // vmDisplayDeviceAbsent reports whether a VM-display verb (spice/vnc) failed
@@ -1022,13 +1022,13 @@ func (r *Runner) runAppium(ctx context.Context, c *Check) EvalResult {
 // asserting on the disposable eval bed (which keeps a virtio/SPICE head) — one
 // shared layer, no operator/bed split (R3). The signal is the VM-target
 // resolver's own "VM <name> has no SPICE graphics device declared in vm.yml"
-// error (ov/vm_target.go), surfaced on the verb subprocess's stderr.
+// error (charly/vm_target.go), surfaced on the verb subprocess's stderr.
 func vmDisplayDeviceAbsent(verb, stderr string) bool {
 	return (verb == "spice" || verb == "vnc") &&
 		strings.Contains(stderr, "graphics device declared in vm.yml")
 }
 
-func (r *Runner) runOvVerb(ctx context.Context, c *Check, verb, method string, allowlist map[string]methodSpec) EvalResult {
+func (r *Runner) runCharlyVerb(ctx context.Context, c *Check, verb, method string, allowlist map[string]methodSpec) EvalResult {
 	if r.Mode == RunModeImage {
 		return skipf(c, fmt.Sprintf("%s: %s requires a running container (skip under charly eval box)", verb, method))
 	}
@@ -1038,7 +1038,7 @@ func (r *Runner) runOvVerb(ctx context.Context, c *Check, verb, method string, a
 
 	spec, ok := allowlist[method]
 	if !ok {
-		return failf(c, "%s: unknown method %q (see /ov:test for the allowlist)", verb, method)
+		return failf(c, "%s: unknown method %q (see /charly:test for the allowlist)", verb, method)
 	}
 
 	// Required-modifier check mirrors validate_tests.go but guards against
@@ -1114,11 +1114,11 @@ func (r *Runner) runOvVerb(ctx context.Context, c *Check, verb, method string, a
 		argv = append(argv, "-i", r.Instance)
 	}
 
-	ovBinary, err := findOvBinary()
+	charlyBinary, err := findCharlyBinary()
 	if err != nil {
 		return failf(c, "%s: %s: %v", verb, method, err)
 	}
-	cmd := exec.CommandContext(ctx, ovBinary, argv...)
+	cmd := exec.CommandContext(ctx, charlyBinary, argv...)
 	stdout, stderr, exit, execErr := runCaptureCmd(cmd)
 	if execErr != nil {
 		return failf(c, "%s: %s: execution error: %v", verb, method, execErr)
@@ -1171,7 +1171,7 @@ func (r *Runner) runOvVerb(ctx context.Context, c *Check, verb, method string, a
 }
 
 // runArtifactValidators is the shared post-validator pipeline used by
-// both code paths in runOvVerb: (a) after the harness's own subprocess
+// both code paths in runCharlyVerb: (a) after the harness's own subprocess
 // exec produced the file, and (b) after the freshness mtime gate
 // confirmed the AI's file is fresh in validate_ai_artifacts mode.
 // Returns nil on all-pass or the first validator's error.
@@ -1478,13 +1478,13 @@ func isZeroField(c *Check, name string) bool {
 	return false
 }
 
-// findOvBinary returns the absolute path to the `ov` binary the test runner
+// findCharlyBinary returns the absolute path to the `charly` binary the test runner
 // should spawn. Prefers /proc/self/exe (the currently-running binary so tests
 // invoke the same build that collected them), falling back to $PATH lookup.
 // Testability var for mocks.
-var findOvBinary = defaultFindOvBinary
+var findCharlyBinary = defaultFindCharlyBinary
 
-func defaultFindOvBinary() (string, error) {
+func defaultFindCharlyBinary() (string, error) {
 	if p, err := os.Executable(); err == nil && p != "" {
 		return p, nil
 	}

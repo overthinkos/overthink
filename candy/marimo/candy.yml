@@ -27,7 +27,7 @@ candy:
     # The marimo notebook (osm-monaco-viz.py) reads these vars at cell
     # evaluation time. Same-container provides (martin / airflow / versatiles
     # / versatiles-frontend live in the same pod as marimo) flow through
-    # the podAwareEnvProvides rewriting in ov/provides.go — host-side URLs
+    # the podAwareEnvProvides rewriting in charly/provides.go — host-side URLs
     # (PUBLIC_URL family) keep their 127.0.0.1:{{.HostPort N}} form because
     # they're consumed BY THE BROWSER, which lives outside the pod and
     # only sees the host-port mapping. The INTERNAL_URL (kernel-side Python
@@ -100,7 +100,7 @@ candy:
           # anti-pattern (in-image content shadowed by the workspace volume
           # at runtime, plus root-owned files when DAGs need user write).
           # Replaced 2026-05-09 with the notebook-osm data layer which seeds
-          # /workspace/notebooks/ via ov's data-layer machinery
+          # /workspace/notebooks/ via charly's data-layer machinery
           # (--userns=keep-id ensures user-owned files). See
           # /charly-build:layer "Data layer" pattern + candy/notebook-templates/
           # for the canonical reference.

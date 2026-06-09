@@ -1,4 +1,4 @@
-# tests/data — vendored test assets for `ov eval adb` + `ov eval appium`
+# tests/data — vendored test assets for `charly eval adb` + `charly eval appium`
 
 ## ApiDemos-debug.apk
 
@@ -28,7 +28,7 @@ sha256sum tests/data/ApiDemos-debug.apk
 
 ## api-demos-caps.json
 
-W3C WebDriver capabilities for `ov eval appium session-create` against
+W3C WebDriver capabilities for `charly eval appium session-create` against
 the ApiDemos APK on the eval-android-emulator-pod deploy. Uses the flat (non-
 alwaysMatch-wrapped) form — the appium session-create verb wraps it
 under W3C `alwaysMatch` automatically.
@@ -36,7 +36,7 @@ under W3C `alwaysMatch` automatically.
 Used by R10 step 8 (manual CLI smoke):
 
 ```bash
-ov eval appium session-create eval-android-emulator-pod \
+charly eval appium session-create eval-android-emulator-pod \
   --caps @tests/data/api-demos-caps.json
 ```
 

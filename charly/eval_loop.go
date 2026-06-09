@@ -191,30 +191,30 @@ type ScenarioVerdict struct {
 
 // FinalReport is the aggregate persisted to result-{calver}.yml.
 type FinalReport struct {
-	Schema           int               `yaml:"schema"`
-	Score            string            `yaml:"score"`
-	Recipe           []string          `yaml:"recipe,omitempty"`
-	Calver           string            `yaml:"calver"`
-	RunID            string            `yaml:"run_id"`
-	AI               string            `yaml:"ai"`
-	AIVersion        map[string]string `yaml:"ai_version,omitempty"`
-	Where            ReportWhere       `yaml:"where"`
-	TargetImage      string            `yaml:"target_image,omitempty"`
-	Tag              string            `yaml:"tag,omitempty"`
-	PlateauIteration int               `yaml:"plateau_iteration"`
-	MCPEndpoint      string            `yaml:"mcp_endpoint,omitempty"`
-	StartedUTC       string            `yaml:"started_utc"`
-	FinishedUTC      string            `yaml:"finished_utc"`
-	ExitReason       string            `yaml:"exit_reason"` // plateau | solved-all | interrupted | dry-run
-	IterationsRun    int               `yaml:"iterations_run"`
-	BestScore        int               `yaml:"best_score"`
-	BestIteration    int               `yaml:"best_iteration"`
-	OvharnessBranch  string            `yaml:"ovharness_branch,omitempty"`
-	Summary          ReportSummary     `yaml:"summary"`
-	Phases           []PhaseReport     `yaml:"phase,omitempty"`
-	PhasesCompleted  int               `yaml:"phases_completed,omitempty"`
-	Iterations       []IterationState  `yaml:"iteration,omitempty"`
-	FinalScenario    []ScenarioVerdict `yaml:"final_scenario,omitempty"`
+	Schema              int               `yaml:"schema"`
+	Score               string            `yaml:"score"`
+	Recipe              []string          `yaml:"recipe,omitempty"`
+	Calver              string            `yaml:"calver"`
+	RunID               string            `yaml:"run_id"`
+	AI                  string            `yaml:"ai"`
+	AIVersion           map[string]string `yaml:"ai_version,omitempty"`
+	Where               ReportWhere       `yaml:"where"`
+	TargetImage         string            `yaml:"target_image,omitempty"`
+	Tag                 string            `yaml:"tag,omitempty"`
+	PlateauIteration    int               `yaml:"plateau_iteration"`
+	MCPEndpoint         string            `yaml:"mcp_endpoint,omitempty"`
+	StartedUTC          string            `yaml:"started_utc"`
+	FinishedUTC         string            `yaml:"finished_utc"`
+	ExitReason          string            `yaml:"exit_reason"` // plateau | solved-all | interrupted | dry-run
+	IterationsRun       int               `yaml:"iterations_run"`
+	BestScore           int               `yaml:"best_score"`
+	BestIteration       int               `yaml:"best_iteration"`
+	CharlyharnessBranch string            `yaml:"ovharness_branch,omitempty"`
+	Summary             ReportSummary     `yaml:"summary"`
+	Phases              []PhaseReport     `yaml:"phase,omitempty"`
+	PhasesCompleted     int               `yaml:"phases_completed,omitempty"`
+	Iterations          []IterationState  `yaml:"iteration,omitempty"`
+	FinalScenario       []ScenarioVerdict `yaml:"final_scenario,omitempty"`
 }
 
 // PhaseReport summarizes one phase of a progressive run.
@@ -250,10 +250,10 @@ type ReportSummary struct {
 // Subprocess seams (test hooks)
 // ---------------------------------------------------------------------------
 
-// findOvForEval returns the path to the charly binary the harness
+// findCharlyForEval returns the path to the charly binary the harness
 // should re-invoke for sub-commands. Prefers os.Executable() so the
 // harness's own build is used.
-func findOvForEval() string {
+func findCharlyForEval() string {
 	if exe, err := os.Executable(); err == nil && exe != "" {
 		return exe
 	}
@@ -263,7 +263,7 @@ func findOvForEval() string {
 // buildImageFn builds the target image from the per-run repo into tag.
 var buildImageFn = func(ctx context.Context, repoDir, image, tag, logPath string) (time.Duration, error) {
 	start := time.Now()
-	cmd := exec.CommandContext(ctx, findOvForEval(), "-C", repoDir,
+	cmd := exec.CommandContext(ctx, findCharlyForEval(), "-C", repoDir,
 		"box", "build", image, "--tag", tag)
 	if logPath != "" {
 		f, err := os.Create(logPath)
@@ -277,10 +277,10 @@ var buildImageFn = func(ctx context.Context, repoDir, image, tag, logPath string
 	return time.Since(start), err
 }
 
-// runOvImageTestFn shells out to `charly eval box <tag> --format yaml`.
-var runOvImageTestFn = func(ctx context.Context, tag string) ([]byte, time.Duration, error) {
+// runCharlyImageTestFn shells out to `charly eval box <tag> --format yaml`.
+var runCharlyImageTestFn = func(ctx context.Context, tag string) ([]byte, time.Duration, error) {
 	start := time.Now()
-	cmd := exec.CommandContext(ctx, findOvForEval(), "eval", "box", tag, "--format", "yaml")
+	cmd := exec.CommandContext(ctx, findCharlyForEval(), "eval", "box", tag, "--format", "yaml")
 	out, err := cmd.Output()
 	return out, time.Since(start), err
 }
@@ -385,19 +385,19 @@ func mergeOsEnv(env map[string]string) []string {
 func RunHarness(ctx context.Context, opts HarnessOpts, layout RunLayout) (*FinalReport, error) {
 	started := time.Now().UTC()
 	report := &FinalReport{
-		Schema:           1,
-		Score:            opts.ScoreName,
-		Recipe:           append([]string(nil), opts.Recipe...),
-		Calver:           ComputeCalVer(),
-		RunID:            layout.RunID,
-		AI:               opts.AIName,
-		Where:            ReportWhere{Kind: opts.TargetKind, Name: opts.TargetName},
-		TargetImage:      opts.TargetImage,
-		Tag:              opts.Tag,
-		PlateauIteration: opts.PlateauIteration,
-		MCPEndpoint:      opts.MCPEndpoint,
-		OvharnessBranch:  layout.Branch,
-		StartedUTC:       started.Format(time.RFC3339),
+		Schema:              1,
+		Score:               opts.ScoreName,
+		Recipe:              append([]string(nil), opts.Recipe...),
+		Calver:              ComputeCalVer(),
+		RunID:               layout.RunID,
+		AI:                  opts.AIName,
+		Where:               ReportWhere{Kind: opts.TargetKind, Name: opts.TargetName},
+		TargetImage:         opts.TargetImage,
+		Tag:                 opts.Tag,
+		PlateauIteration:    opts.PlateauIteration,
+		MCPEndpoint:         opts.MCPEndpoint,
+		CharlyharnessBranch: layout.Branch,
+		StartedUTC:          started.Format(time.RFC3339),
 	}
 
 	plateauCounter := 0
@@ -874,7 +874,7 @@ func runOneIteration(
 	// MergedScenarios slice (with ${EVAL_NONCE_*} placeholders);
 	// scoring runs against ScoringScenarios with substituted values.
 	useRecipeScenarios := len(opts.ScoringScenarios) > 0
-	iterTagSuffix := fmt.Sprintf("oveval-%s-iter%d", layout.RunID, k)
+	iterTagSuffix := fmt.Sprintf("charlyeval-%s-iter%d", layout.RunID, k)
 	iterRef := fmt.Sprintf("ghcr.io/overthinkos/%s:%s", opts.TargetImage, iterTagSuffix)
 	var (
 		testOut             []byte
@@ -929,7 +929,7 @@ func runOneIteration(
 		}
 
 		testStart := time.Now()
-		out, _, testErr := runOvImageTestFn(ctx, iterRef)
+		out, _, testErr := runCharlyImageTestFn(ctx, iterRef)
 		iter.TestDuration = time.Since(testStart).String()
 		if testErr != nil {
 			iter.BuildFailure = true
@@ -950,7 +950,7 @@ func runOneIteration(
 	}
 
 	if parsed == nil {
-		p, err := ParseOvTestOutput(testOut)
+		p, err := ParseCharlyTestOutput(testOut)
 		if err != nil {
 			return iter, fmt.Errorf("parse test output: %w", err)
 		}
@@ -1420,7 +1420,7 @@ func printHarnessReport(w *os.File, r *FinalReport, format string) {
 	fmt.Fprintf(w, "harness: score=%s ai=%s exit=%s iterations=%d best=%d/%d\n",
 		r.Score, r.AI, r.ExitReason, r.IterationsRun, r.BestScore, r.Summary.Input)
 	fmt.Fprintf(w, "  result: .eval/%s/results/result-%s.yml\n", r.Score, r.Calver)
-	fmt.Fprintf(w, "  branch: %s\n", r.OvharnessBranch)
+	fmt.Fprintf(w, "  branch: %s\n", r.CharlyharnessBranch)
 }
 
 // ---------------------------------------------------------------------------
@@ -1443,20 +1443,20 @@ func renderRunnerInvocation(opts HarnessOpts, substCtx *SubstContext, promptText
 	if env == nil {
 		env = make(map[string]string)
 	}
-	env["CH_EVAL_RUN_ID"] = substCtx.RunID
-	env["CH_EVAL_ITERATION"] = fmt.Sprintf("%d", substCtx.Iteration)
-	env["CH_EVAL_SCORE"] = substCtx.ScoreName
-	env["CH_EVAL_AI"] = substCtx.AIName
-	env["CH_EVAL_TARGET_KIND"] = substCtx.TargetKind
-	env["CH_EVAL_TARGET_NAME"] = substCtx.TargetName
-	// CH_EVAL_PHASE is the 1-indexed phase number (0 when the score
+	env["CHARLY_EVAL_RUN_ID"] = substCtx.RunID
+	env["CHARLY_EVAL_ITERATION"] = fmt.Sprintf("%d", substCtx.Iteration)
+	env["CHARLY_EVAL_SCORE"] = substCtx.ScoreName
+	env["CHARLY_EVAL_AI"] = substCtx.AIName
+	env["CHARLY_EVAL_TARGET_KIND"] = substCtx.TargetKind
+	env["CHARLY_EVAL_TARGET_NAME"] = substCtx.TargetName
+	// CHARLY_EVAL_PHASE is the 1-indexed phase number (0 when the score
 	// is single-pass / non-progressive). `charly eval self-evaluate`
 	// uses this to resolve the in-scope recipes for the current phase
 	// the same way the orchestrator's scorer does.
-	env["CH_EVAL_PHASE"] = fmt.Sprintf("%d", substCtx.Phase)
+	env["CHARLY_EVAL_PHASE"] = fmt.Sprintf("%d", substCtx.Phase)
 	if opts.Score != nil && opts.Score.NotesEnabled() {
 		harnessRoot := HarnessDataRoot(opts.ProjectDir, opts.ScoreName)
-		env["CH_EVAL_NOTES_FILE"] = NotePathForRun(harnessRoot, substCtx.RunID)
+		env["CHARLY_EVAL_NOTES_FILE"] = NotePathForRun(harnessRoot, substCtx.RunID)
 	}
 	return argv, env
 }
@@ -1518,12 +1518,12 @@ func computeSummary(scenarios []ScenarioVerdict, total int) ReportSummary {
 // Scope-from-env — `charly eval scope` handler
 // ---------------------------------------------------------------------------
 
-// ResolveAndPrintScope reads CH_EVAL_RUN_ID from the environment,
+// ResolveAndPrintScope reads CHARLY_EVAL_RUN_ID from the environment,
 // locates the active scope.yml inside the per-run clone, and writes
 // its contents to out.
 func ResolveAndPrintScope(projectDir string, stdout *os.File) error {
 	var candidates []string
-	runID := os.Getenv("CH_EVAL_RUN_ID")
+	runID := os.Getenv("CHARLY_EVAL_RUN_ID")
 	if runID != "" {
 		candidates = append(candidates,
 			filepath.Join("/workspace", ".harness", runID, "repo", ".harness", "scope.yml"),
@@ -1542,20 +1542,20 @@ func ResolveAndPrintScope(projectDir string, stdout *os.File) error {
 	return fmt.Errorf("harness scope: no scope.yml found (tried %s)", strings.Join(candidates, ", "))
 }
 
-// ResolveLastTestTag reads CH_EVAL_RUN_ID + CH_EVAL_ITERATION
+// ResolveLastTestTag reads CHARLY_EVAL_RUN_ID + CHARLY_EVAL_ITERATION
 // from the environment and prints the prior iteration's image tag.
 func ResolveLastTestTag(targetImage string, stdout *os.File) error {
-	runID := os.Getenv("CH_EVAL_RUN_ID")
+	runID := os.Getenv("CHARLY_EVAL_RUN_ID")
 	if runID == "" {
-		return fmt.Errorf("harness: CH_EVAL_RUN_ID not set")
+		return fmt.Errorf("harness: CHARLY_EVAL_RUN_ID not set")
 	}
-	iterStr := os.Getenv("CH_EVAL_ITERATION")
+	iterStr := os.Getenv("CHARLY_EVAL_ITERATION")
 	var iter int
 	fmt.Sscanf(iterStr, "%d", &iter)
 	if iter <= 1 {
 		return fmt.Errorf("harness: no prior iteration on iter %d", iter)
 	}
-	tag := fmt.Sprintf("ghcr.io/overthinkos/%s:oveval-%s-iter%d", targetImage, runID, iter-1)
+	tag := fmt.Sprintf("ghcr.io/overthinkos/%s:charlyeval-%s-iter%d", targetImage, runID, iter-1)
 	fmt.Fprintln(stdout, tag)
 	return nil
 }

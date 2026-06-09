@@ -102,7 +102,7 @@ func TestQuadletSecretEnvDirectives(t *testing.T) {
 				Name:           "charly-openwebui-openrouter-api-key",
 				Env:            "OPENROUTER_API_KEY",
 				SecretName:     "OPENROUTER_API_KEY",
-				Service:        "ov/api-key",
+				Service:        "charly/api-key",
 				Key:            "openrouter",
 				RotateOnConfig: true,
 			},
@@ -110,7 +110,7 @@ func TestQuadletSecretEnvDirectives(t *testing.T) {
 				Name:           "charly-openwebui-webui-admin-password",
 				Env:            "WEBUI_ADMIN_PASSWORD",
 				SecretName:     "WEBUI_ADMIN_PASSWORD",
-				Service:        "ov/secret",
+				Service:        "charly/secret",
 				Key:            "WEBUI_ADMIN_PASSWORD",
 				RotateOnConfig: true,
 			},
@@ -170,7 +170,7 @@ func TestCredServiceForSecret(t *testing.T) {
 		want   string
 	}{
 		{"VNC_PASSWORD", CredServiceVNC},
-		{"CUSTOM_SECRET", "ov/secret"},
+		{"CUSTOM_SECRET", "charly/secret"},
 	}
 	for _, tt := range tests {
 		got := credServiceForSecret(tt.envVar)
@@ -216,7 +216,7 @@ func withIsolatedCredentialStore(t *testing.T) *ConfigFileStore {
 	RuntimeConfigPath = func() (string, error) {
 		return filepath.Join(dir, "config.yml"), nil
 	}
-	t.Setenv("CH_SECRET_BACKEND", "config")
+	t.Setenv("CHARLY_SECRET_BACKEND", "config")
 	// Defensive unsets: prevent any real credential in the outer shell from
 	// leaking into test assertions (which may print the resolved value).
 	for _, name := range []string{
@@ -232,29 +232,29 @@ func withIsolatedCredentialStore(t *testing.T) *ConfigFileStore {
 
 // TestResolveSecretValueServiceKeyOverride — the new Service/Key override
 // path on resolveSecretValue queries the credential store at the exact path
-// the layer author requested (via `key: ov/api-key/routea`) and returns the
+// the layer author requested (via `key: charly/api-key/routea`) and returns the
 // value verbatim. The default fallback chain is NOT used when both Service
 // and Key are set.
 //
-// Uses synthetic env var name (TEST_OV_CRED_ROUTEA_KEY) so an accidental
+// Uses synthetic env var name (TEST_CHARLY_CRED_ROUTEA_KEY) so an accidental
 // assertion-diff cannot print a real user credential from the outer shell.
 func TestResolveSecretValueServiceKeyOverride(t *testing.T) {
 	store := withIsolatedCredentialStore(t)
 
 	// Seed two distinct synthetic values at two different paths. The override
 	// path must win over the default path.
-	if err := store.Set("ov/api-key", "routea", "test-from-override"); err != nil {
-		t.Fatalf("Set ov/api-key/routea: %v", err)
+	if err := store.Set("charly/api-key", "routea", "test-from-override"); err != nil {
+		t.Fatalf("Set charly/api-key/routea: %v", err)
 	}
-	if err := store.Set("ov/secret", "TEST_OV_CRED_ROUTEA_KEY", "test-from-default"); err != nil {
-		t.Fatalf("Set ov/secret/TEST_OV_CRED_ROUTEA_KEY: %v", err)
+	if err := store.Set("charly/secret", "TEST_CHARLY_CRED_ROUTEA_KEY", "test-from-default"); err != nil {
+		t.Fatalf("Set charly/secret/TEST_CHARLY_CRED_ROUTEA_KEY: %v", err)
 	}
 
 	cs := CollectedSecret{
-		Name:           "charly-openwebui-test-ov-cred-routea-key",
-		Env:            "TEST_OV_CRED_ROUTEA_KEY",
-		SecretName:     "TEST_OV_CRED_ROUTEA_KEY",
-		Service:        "ov/api-key",
+		Name:           "charly-openwebui-test-charly-cred-routea-key",
+		Env:            "TEST_CHARLY_CRED_ROUTEA_KEY",
+		SecretName:     "TEST_CHARLY_CRED_ROUTEA_KEY",
+		Service:        "charly/api-key",
 		Key:            "routea",
 		RotateOnConfig: true,
 	}
@@ -279,14 +279,14 @@ func TestResolveSecretValueServiceKeyOverrideMissing(t *testing.T) {
 	// Seed only the default-chain path — the override path is empty. If the
 	// override branch falls through to the legacy chain, the test catches it
 	// by getting a non-empty value.
-	if err := store.Set("ov/secret", "TEST_OV_CRED_ROUTEB_KEY", "legacy-chain-value"); err != nil {
+	if err := store.Set("charly/secret", "TEST_CHARLY_CRED_ROUTEB_KEY", "legacy-chain-value"); err != nil {
 		t.Fatalf("Set default path: %v", err)
 	}
 
 	cs := CollectedSecret{
-		Env:            "TEST_OV_CRED_ROUTEB_KEY",
-		SecretName:     "TEST_OV_CRED_ROUTEB_KEY",
-		Service:        "ov/api-key",
+		Env:            "TEST_CHARLY_CRED_ROUTEB_KEY",
+		SecretName:     "TEST_CHARLY_CRED_ROUTEB_KEY",
+		Service:        "charly/api-key",
 		Key:            "routeb", // override path is empty in the seeded store
 		RotateOnConfig: true,
 	}
@@ -301,11 +301,11 @@ func TestResolveSecretValueServiceKeyOverrideMissing(t *testing.T) {
 
 // TestResolveSecretValueLegacyChainUnchanged — when Service/Key are both
 // empty, the legacy chain (used by layer-owned db-password secrets) still
-// works: env var → ov/secret/<podman-name> → ov/secret/<bare-name>.
+// works: env var → charly/secret/<podman-name> → charly/secret/<bare-name>.
 func TestResolveSecretValueLegacyChainUnchanged(t *testing.T) {
 	store := withIsolatedCredentialStore(t)
 
-	if err := store.Set("ov/secret", "charly-immich-db-password", "legacy-value"); err != nil {
+	if err := store.Set("charly/secret", "charly-immich-db-password", "legacy-value"); err != nil {
 		t.Fatalf("Set: %v", err)
 	}
 
@@ -327,31 +327,31 @@ func TestResolveSecretValueLegacyChainUnchanged(t *testing.T) {
 // correct naming, Service/Key parsed from the optional `key:` field, and
 // RotateOnConfig=true on every entry.
 //
-// Uses synthetic env var names (TEST_OV_CRED_*) to guarantee the test can
+// Uses synthetic env var names (TEST_CHARLY_CRED_*) to guarantee the test can
 // never resolve — and print in a failure diff — a real user credential.
 func TestCollectLayerSecretAcceptsHappyPath(t *testing.T) {
 	store := withIsolatedCredentialStore(t)
 
-	// Required: default key path (ov/secret/TEST_OV_CRED_REQUIRED)
-	if err := store.Set("ov/secret", "TEST_OV_CRED_REQUIRED", "required-val"); err != nil {
+	// Required: default key path (charly/secret/TEST_CHARLY_CRED_REQUIRED)
+	if err := store.Set("charly/secret", "TEST_CHARLY_CRED_REQUIRED", "required-val"); err != nil {
 		t.Fatalf("seed required: %v", err)
 	}
 	// Accepts with explicit key override
-	if err := store.Set("ov/api-key", "routea", "override-val"); err != nil {
+	if err := store.Set("charly/api-key", "routea", "override-val"); err != nil {
 		t.Fatalf("seed routea: %v", err)
 	}
 	// Accepts with default path
-	if err := store.Set("ov/secret", "TEST_OV_CRED_ROUTEB", "default-val"); err != nil {
+	if err := store.Set("charly/secret", "TEST_CHARLY_CRED_ROUTEB", "default-val"); err != nil {
 		t.Fatalf("seed routeb: %v", err)
 	}
 
 	meta := &BoxMetadata{
 		SecretRequire: []EnvDependency{
-			{Name: "TEST_OV_CRED_REQUIRED", Description: "required"},
+			{Name: "TEST_CHARLY_CRED_REQUIRED", Description: "required"},
 		},
 		SecretAccept: []EnvDependency{
-			{Name: "TEST_OV_CRED_ROUTEA", Description: "override", Key: "ov/api-key/routea"},
-			{Name: "TEST_OV_CRED_ROUTEB", Description: "default"},
+			{Name: "TEST_CHARLY_CRED_ROUTEA", Description: "override", Key: "charly/api-key/routea"},
+			{Name: "TEST_CHARLY_CRED_ROUTEB", Description: "default"},
 		},
 	}
 
@@ -369,40 +369,40 @@ func TestCollectLayerSecretAcceptsHappyPath(t *testing.T) {
 	}
 
 	// Find the override entry and verify Service/Key were parsed from the
-	// `key: ov/api-key/routea` override.
+	// `key: charly/api-key/routea` override.
 	var routea *CollectedSecret
 	for i, cs := range collected {
-		if cs.Env == "TEST_OV_CRED_ROUTEA" {
+		if cs.Env == "TEST_CHARLY_CRED_ROUTEA" {
 			routea = &collected[i]
 			break
 		}
 	}
 	if routea == nil {
-		t.Fatal("TEST_OV_CRED_ROUTEA not in collected")
+		t.Fatal("TEST_CHARLY_CRED_ROUTEA not in collected")
 	}
-	if routea.Service != "ov/api-key" {
-		t.Errorf("routea.Service = %q, want %q", routea.Service, "ov/api-key")
+	if routea.Service != "charly/api-key" {
+		t.Errorf("routea.Service = %q, want %q", routea.Service, "charly/api-key")
 	}
 	if routea.Key != "routea" {
 		t.Errorf("routea.Key = %q, want %q", routea.Key, "routea")
 	}
-	if routea.Name != "charly-openwebui-test-ov-cred-routea" {
-		t.Errorf("routea.Name = %q, want %q", routea.Name, "charly-openwebui-test-ov-cred-routea")
+	if routea.Name != "charly-openwebui-test-charly-cred-routea" {
+		t.Errorf("routea.Name = %q, want %q", routea.Name, "charly-openwebui-test-charly-cred-routea")
 	}
 
 	// Find the default-path entry and verify default Service/Key applied.
 	var routeb *CollectedSecret
 	for i, cs := range collected {
-		if cs.Env == "TEST_OV_CRED_ROUTEB" {
+		if cs.Env == "TEST_CHARLY_CRED_ROUTEB" {
 			routeb = &collected[i]
 			break
 		}
 	}
 	if routeb == nil {
-		t.Fatal("TEST_OV_CRED_ROUTEB not in collected")
+		t.Fatal("TEST_CHARLY_CRED_ROUTEB not in collected")
 	}
-	if routeb.Service != "ov/secret" || routeb.Key != "TEST_OV_CRED_ROUTEB" {
-		t.Errorf("routeb default routing = (%q, %q), want (ov/secret, TEST_OV_CRED_ROUTEB)", routeb.Service, routeb.Key)
+	if routeb.Service != "charly/secret" || routeb.Key != "TEST_CHARLY_CRED_ROUTEB" {
+		t.Errorf("routeb default routing = (%q, %q), want (charly/secret, TEST_CHARLY_CRED_ROUTEB)", routeb.Service, routeb.Key)
 	}
 
 	// All three resolutions must be Resolved=true
@@ -414,10 +414,10 @@ func TestCollectLayerSecretAcceptsHappyPath(t *testing.T) {
 			t.Errorf("resolution for %s is Resolved=false", r.Name)
 		}
 	}
-	// TEST_OV_CRED_REQUIRED must have Required=true
+	// TEST_CHARLY_CRED_REQUIRED must have Required=true
 	var req *SecretResolution
 	for i, r := range resolutions {
-		if r.Name == "TEST_OV_CRED_REQUIRED" {
+		if r.Name == "TEST_CHARLY_CRED_REQUIRED" {
 			req = &resolutions[i]
 			break
 		}
@@ -440,10 +440,10 @@ func TestCollectLayerSecretAcceptsMissingRequired(t *testing.T) {
 
 	meta := &BoxMetadata{
 		SecretRequire: []EnvDependency{
-			{Name: "TEST_OV_CRED_REQUIRED", Description: "required"},
+			{Name: "TEST_CHARLY_CRED_REQUIRED", Description: "required"},
 		},
 		SecretAccept: []EnvDependency{
-			{Name: "TEST_OV_CRED_OPT", Description: "optional"},
+			{Name: "TEST_CHARLY_CRED_OPT", Description: "optional"},
 		},
 	}
 
@@ -457,8 +457,8 @@ func TestCollectLayerSecretAcceptsMissingRequired(t *testing.T) {
 	}
 
 	want := []SecretResolution{
-		{Name: "TEST_OV_CRED_REQUIRED", Source: "default", Resolved: false, Required: true},
-		{Name: "TEST_OV_CRED_OPT", Source: "default", Resolved: false, Required: false},
+		{Name: "TEST_CHARLY_CRED_REQUIRED", Source: "default", Resolved: false, Required: true},
+		{Name: "TEST_CHARLY_CRED_OPT", Source: "default", Resolved: false, Required: false},
 	}
 	if !reflect.DeepEqual(resolutions, want) {
 		t.Errorf("resolutions mismatch\n got %+v\nwant %+v", resolutions, want)
@@ -481,7 +481,7 @@ func TestCollectLayerSecretAcceptsNilMeta(t *testing.T) {
 // touching the credential store. This is what makes `charly config -e FOO=val`
 // work for secret_accepts entries.
 //
-// Uses a synthetic env var name (TEST_OV_CRED_IMPORTED) — the credential
+// Uses a synthetic env var name (TEST_CHARLY_CRED_IMPORTED) — the credential
 // store is empty but t.Setenv seeds the process env, so the "env" source
 // wins. Importantly this test assertion never prints the resolved value
 // itself — the value is a test-controlled string ("from-env-synthetic") so
@@ -490,11 +490,11 @@ func TestCollectLayerSecretAcceptsNilMeta(t *testing.T) {
 func TestCollectLayerSecretAcceptsEnvOverride(t *testing.T) {
 	withIsolatedCredentialStore(t) // empty store
 
-	t.Setenv("TEST_OV_CRED_IMPORTED", "from-env-synthetic")
+	t.Setenv("TEST_CHARLY_CRED_IMPORTED", "from-env-synthetic")
 
 	meta := &BoxMetadata{
 		SecretAccept: []EnvDependency{
-			{Name: "TEST_OV_CRED_IMPORTED", Description: "opt", Key: "ov/api-key/imported"},
+			{Name: "TEST_CHARLY_CRED_IMPORTED", Description: "opt", Key: "charly/api-key/imported"},
 		},
 	}
 
@@ -532,19 +532,19 @@ func TestMergedSecretsIncludeCredentialBacked(t *testing.T) {
 			{Name: "webui-secret-key", Target: "/run/secrets/webui_secret_key", Env: "WEBUI_SECRET_KEY"},
 		},
 		SecretRequire: []EnvDependency{
-			{Name: "TEST_OV_CRED_ADMIN_PASSWORD", Description: "synthetic admin password"},
+			{Name: "TEST_CHARLY_CRED_ADMIN_PASSWORD", Description: "synthetic admin password"},
 		},
 		SecretAccept: []EnvDependency{
-			{Name: "TEST_OV_CRED_ROUTEA", Description: "synthetic optional", Key: "ov/api-key/routea"},
+			{Name: "TEST_CHARLY_CRED_ROUTEA", Description: "synthetic optional", Key: "charly/api-key/routea"},
 		},
 	}
 	// Seed only the credentials (the layer-owned webui-secret-key is
 	// auto-generated by ProvisionPodmanSecrets; we skip that path here by
 	// working at the collection layer).
-	if err := store.Set("ov/secret", "TEST_OV_CRED_ADMIN_PASSWORD", "admin-value"); err != nil {
+	if err := store.Set("charly/secret", "TEST_CHARLY_CRED_ADMIN_PASSWORD", "admin-value"); err != nil {
 		t.Fatalf("seed admin: %v", err)
 	}
-	if err := store.Set("ov/api-key", "routea", "route-value"); err != nil {
+	if err := store.Set("charly/api-key", "routea", "route-value"); err != nil {
 		t.Fatalf("seed routea: %v", err)
 	}
 
@@ -578,7 +578,7 @@ func TestMergedSecretsIncludeCredentialBacked(t *testing.T) {
 	// ProvisionPodmanSecrets bypasses the podmanSecretExists short-circuit
 	// on every charly config and re-creates the podman secret with the latest
 	// credential store value.
-	for _, name := range []string{"TEST_OV_CRED_ADMIN_PASSWORD", "TEST_OV_CRED_ROUTEA"} {
+	for _, name := range []string{"TEST_CHARLY_CRED_ADMIN_PASSWORD", "TEST_CHARLY_CRED_ROUTEA"} {
 		cs, ok := byEnv[name]
 		if !ok {
 			t.Errorf("%s (credential-backed) missing from merged slice", name)

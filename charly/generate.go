@@ -120,13 +120,13 @@ func NewGenerator(dir string, tag string, opts ResolveOpts) (*Generator, error) 
 		return nil, err
 	}
 
-	// Load default build config early — needed for SetFormatNames before layer scanning.
+	// Load default build config early — needed for RegisterBuildVocabulary before layer scanning.
 	// Post-unified-cutover this reads charly.yml directly (no format_config: pointer).
 	defaultDistroCfg, _, defaultInitCfg, err := LoadDefaultBuildConfig(dir)
 	if err != nil {
 		return nil, fmt.Errorf("loading default build config: %w", err)
 	}
-	SetFormatNames(defaultDistroCfg)
+	RegisterBuildVocabulary(defaultDistroCfg)
 
 	layers, err := ScanAllLayerWithConfigOpts(dir, cfg, opts)
 	if err != nil {
@@ -290,7 +290,7 @@ var baselineContextIgnore = []string{
 	"**/.mypy_cache",
 }
 
-// contextIgnoreFiles are the two engine-native build-context ignore files ov
+// contextIgnoreFiles are the two engine-native build-context ignore files charly
 // generates. podman reads .containerignore (preferring it) or .dockerignore;
 // docker reads only .dockerignore. Emitting both from one source covers both
 // engines with no divergent hand-maintained dotfile.
@@ -1008,7 +1008,7 @@ func (g *Generator) writeBootstrap(b *strings.Builder, img *ResolvedBox) {
 func escapeContainerfileEnvValue(v string) string {
 	// Replace $ with \$ EXCEPT in `${PATH}` references (rare but documented).
 	// Two-step: protect ${PATH}, escape, restore.
-	const sentinel = "\x00OV_PATH_REF\x00"
+	const sentinel = "\x00CHARLY_PATH_REF\x00"
 	v = strings.ReplaceAll(v, "${PATH}", sentinel)
 	v = strings.ReplaceAll(v, "$", "\\$")
 	v = strings.ReplaceAll(v, sentinel, "${PATH}")
@@ -1499,7 +1499,7 @@ func (g *Generator) writeLayerSteps(b *strings.Builder, layerName string, img *R
 				continue
 			}
 			h := sha256.Sum256([]byte(s.Snippet))
-			marker := fmt.Sprintf("CH_SHELL_%s_%x", strings.ToUpper(s.Shell), h[:4])
+			marker := fmt.Sprintf("CHARLY_SHELL_%s_%x", strings.ToUpper(s.Shell), h[:4])
 			fmt.Fprintf(b,
 				"RUN mkdir -p %s && cat > %s <<'%s'\n%s\n%s\n",
 				shellQuote(filepath.Dir(s.Destination)),

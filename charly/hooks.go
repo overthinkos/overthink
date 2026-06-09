@@ -66,7 +66,7 @@ func RunHook(engine, containerName, hookScript string, envVars []string) error {
 	}
 
 	args := []string{"exec"}
-	args = append(args, "-e", "CH_CONTAINER_NAME="+containerName)
+	args = append(args, "-e", "CHARLY_CONTAINER_NAME="+containerName)
 	for _, env := range envVars {
 		args = append(args, "-e", env)
 	}

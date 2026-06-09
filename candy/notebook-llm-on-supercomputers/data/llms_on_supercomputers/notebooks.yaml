@@ -1,5 +1,5 @@
 title: "LLMs on Supercomputers"
-description: "Comprehensive course covering prompt engineering, RAG, and fine-tuning. Adapted from TU Wien's AI Factory Austria training materials for Overthink containers."
+description: "Comprehensive course covering prompt engineering, RAG, and fine-tuning. Adapted from TU Wien's AI Factory Austria training materials for OpenCharly containers."
 order: 2
 
 subcategories:

@@ -3,7 +3,7 @@ package main
 // benchmark_score.go — scoring primitives for `charly eval`.
 //
 // Exported surface:
-//   - ParseOvTestOutput(yaml) (*EvalRunResults, error)
+//   - ParseCharlyTestOutput(yaml) (*EvalRunResults, error)
 //       Parses the YAML emitted by `charly eval box --format yaml`.
 //   - FingerprintScenario(s Scenario) string
 //       Canonical SHA256 of a Scenario. Whitespace/ordering insensitive.
@@ -85,7 +85,7 @@ type TestRunSummary struct {
 	Skip  int `yaml:"skip"`
 }
 
-// ParseOvTestOutput parses the byte slice emitted by
+// ParseCharlyTestOutput parses the byte slice emitted by
 //
 //	charly eval box <tag> --format yaml
 //
@@ -96,7 +96,7 @@ type TestRunSummary struct {
 // this reader.
 //
 // An empty byte slice is a usable "no scenarios" result, not an error.
-func ParseOvTestOutput(b []byte) (*EvalRunResults, error) {
+func ParseCharlyTestOutput(b []byte) (*EvalRunResults, error) {
 	if len(b) == 0 {
 		return &EvalRunResults{}, nil
 	}

@@ -25,7 +25,7 @@ candy:
           mode: "0644"
           content: |
             [Unit]
-            Description=Overthink workspace share (virtiofs)
+            Description=OpenCharly workspace share (virtiofs)
             # No After=local-fs.target: a .mount unit is implicitly ordered
             # Before=local-fs.target, so adding After= creates an ordering cycle
             # that systemd breaks non-deterministically (the mount silently fails

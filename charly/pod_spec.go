@@ -7,9 +7,9 @@ package main
 //
 // Declaration fields (ports, env, network, security, init, env_file,
 // services) DO NOT appear here — they are image declarations emitted as
-// OCI labels (see ov/generate.go:writeLabels + ov/labels.go). A kind:pod
+// OCI labels (see charly/generate.go:writeLabels + charly/labels.go). A kind:pod
 // template MUST NOT shadow them. A deployment overrides image declarations
-// via MergeDeployOntoMetadata (ov/deploy.go:630-737).
+// via MergeDeployOntoMetadata (charly/deploy.go:630-737).
 //
 // Most projects will have no kind:pod entries; the common case is a
 // kind:deployment with target:pod referencing an image directly via

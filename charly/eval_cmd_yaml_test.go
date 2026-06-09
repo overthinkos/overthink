@@ -6,12 +6,12 @@ import (
 	"testing"
 )
 
-// TestEmitImageTestYAML_RoundTripsThroughParseOvTestOutput is the
+// TestEmitImageTestYAML_RoundTripsThroughParseCharlyTestOutput is the
 // load-bearing invariant: whatever `charly eval box --format yaml`
-// emits MUST parse cleanly via ParseOvTestOutput. Without this,
+// emits MUST parse cleanly via ParseCharlyTestOutput. Without this,
 // the benchmark scorer would silently mis-parse and classify
 // scenarios wrong.
-func TestEmitImageTestYAML_RoundTripsThroughParseOvTestOutput(t *testing.T) {
+func TestEmitImageTestYAML_RoundTripsThroughParseCharlyTestOutput(t *testing.T) {
 	scenarios := []ScenarioResult{
 		{
 			Origin:     "candy:sshd",
@@ -53,12 +53,12 @@ func TestEmitImageTestYAML_RoundTripsThroughParseOvTestOutput(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	if err := emitImageTestYAML(&buf, "ovbench/test:fedora-ov", "", scenarios, nil); err != nil {
+	if err := emitImageTestYAML(&buf, "ovbench/test:charly-fedora", "", scenarios, nil); err != nil {
 		t.Fatalf("emit: %v", err)
 	}
 	// Sanity: the emitted YAML looks right.
 	out := buf.String()
-	if !strings.Contains(out, "box: ovbench/test:fedora-ov") {
+	if !strings.Contains(out, "box: ovbench/test:charly-fedora") {
 		t.Errorf("missing image line: %q", out)
 	}
 	if !strings.Contains(out, "mode: image") {
@@ -66,11 +66,11 @@ func TestEmitImageTestYAML_RoundTripsThroughParseOvTestOutput(t *testing.T) {
 	}
 
 	// Round-trip through the benchmark parser.
-	parsed, err := ParseOvTestOutput(buf.Bytes())
+	parsed, err := ParseCharlyTestOutput(buf.Bytes())
 	if err != nil {
-		t.Fatalf("ParseOvTestOutput failed on emitted YAML: %v\n%s", err, out)
+		t.Fatalf("ParseCharlyTestOutput failed on emitted YAML: %v\n%s", err, out)
 	}
-	if parsed.Image != "ovbench/test:fedora-ov" {
+	if parsed.Image != "ovbench/test:charly-fedora" {
 		t.Errorf("parsed box: %q", parsed.Image)
 	}
 	if parsed.Mode != "image" {
@@ -120,7 +120,7 @@ func TestEmitImageTestYAML_EmptyScenariosEmitsUsableYAML(t *testing.T) {
 	if err := emitImageTestYAML(&buf, "ref:tag", "", nil, nil); err != nil {
 		t.Fatal(err)
 	}
-	parsed, err := ParseOvTestOutput(buf.Bytes())
+	parsed, err := ParseCharlyTestOutput(buf.Bytes())
 	if err != nil {
 		t.Fatalf("parse empty: %v", err)
 	}

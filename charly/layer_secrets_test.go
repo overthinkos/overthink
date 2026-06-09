@@ -15,7 +15,7 @@ func setupIsolatedConfigStore(t *testing.T) (cleanup func()) {
 	RuntimeConfigPath = func() (string, error) {
 		return filepath.Join(dir, "config.yml"), nil
 	}
-	t.Setenv("CH_SECRET_BACKEND", "config")
+	t.Setenv("CHARLY_SECRET_BACKEND", "config")
 	resetDefaultStore()
 	return func() {
 		RuntimeConfigPath = defaultRuntimeConfigPath
@@ -29,7 +29,7 @@ func setupIsolatedConfigStore(t *testing.T) (cleanup func()) {
 func TestEnsureLayerSecret_PresentInStore(t *testing.T) {
 	defer setupIsolatedConfigStore(t)()
 
-	if err := DefaultCredentialStore().Set("ov/secret", "EXISTING_TOKEN", "preset-value"); err != nil {
+	if err := DefaultCredentialStore().Set("charly/secret", "EXISTING_TOKEN", "preset-value"); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 
@@ -71,7 +71,7 @@ func TestEnsureLayerSecret_RequiredMissingAutoGenerates(t *testing.T) {
 	}
 
 	// Persistence: the value must be retrievable via the same store.
-	stored, err := DefaultCredentialStore().Get("ov/secret", "K3S_CLUSTER_TOKEN")
+	stored, err := DefaultCredentialStore().Get("charly/secret", "K3S_CLUSTER_TOKEN")
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
@@ -122,21 +122,21 @@ func TestEnsureLayerSecret_OptionalMissingReturnsEmpty(t *testing.T) {
 	}
 
 	// Confirm nothing was written to the store either.
-	if stored, _ := DefaultCredentialStore().Get("ov/secret", "OPTIONAL_KEY"); stored != "" {
+	if stored, _ := DefaultCredentialStore().Get("charly/secret", "OPTIONAL_KEY"); stored != "" {
 		t.Errorf("optional missing leaked %q to store", stored)
 	}
 }
 
 // TestEnsureLayerSecret_CustomKeyRoutesToOverride verifies that the
-// `key:` override on EnvDependency (e.g., `key: ov/api-key/openrouter`)
+// `key:` override on EnvDependency (e.g., `key: charly/api-key/openrouter`)
 // routes the lookup AND the auto-gen persistence to the override
-// service/key pair, not the default ov/secret/<name>.
+// service/key pair, not the default charly/secret/<name>.
 func TestEnsureLayerSecret_CustomKeyRoutesToOverride(t *testing.T) {
 	defer setupIsolatedConfigStore(t)()
 
 	dep := EnvDependency{
 		Name: "MY_VAR_NAME",
-		Key:  "ov/api-key/openrouter",
+		Key:  "charly/api-key/openrouter",
 	}
 
 	val, source := ensureLayerSecret(dep, true)
@@ -145,11 +145,11 @@ func TestEnsureLayerSecret_CustomKeyRoutesToOverride(t *testing.T) {
 	}
 
 	// The auto-gen MUST persist at the override location, not at the default.
-	atOverride, _ := DefaultCredentialStore().Get("ov/api-key", "openrouter")
+	atOverride, _ := DefaultCredentialStore().Get("charly/api-key", "openrouter")
 	if atOverride != val {
-		t.Errorf("expected persistence at override (ov/api-key, openrouter), got %q (val=%q)", atOverride, val)
+		t.Errorf("expected persistence at override (charly/api-key, openrouter), got %q (val=%q)", atOverride, val)
 	}
-	atDefault, _ := DefaultCredentialStore().Get("ov/secret", "MY_VAR_NAME")
+	atDefault, _ := DefaultCredentialStore().Get("charly/secret", "MY_VAR_NAME")
 	if atDefault != "" {
 		t.Errorf("default location should be empty, got %q (key override leaked)", atDefault)
 	}
@@ -213,7 +213,7 @@ func TestResolveSecretsForLayers_TwoLayersSameSecret(t *testing.T) {
 		t.Fatalf("expected 44-char url-safe base64 token (Fernet-compatible), got %q", val)
 	}
 	// And the persisted store must have exactly that value.
-	stored, _ := DefaultCredentialStore().Get("ov/secret", "K3S_CLUSTER_TOKEN")
+	stored, _ := DefaultCredentialStore().Get("charly/secret", "K3S_CLUSTER_TOKEN")
 	if stored != val {
 		t.Errorf("server+agent token mismatch: env=%q stored=%q", val, stored)
 	}

@@ -77,7 +77,7 @@ type VmDeployTarget struct {
 	// Cfg + ProjectDir mirror LocalDeployTarget: they let the host-side
 	// dep-closure builder (buildDepPkgsOnHost) thread them into BuilderRun's
 	// EnsureImagePresent, so a namespace-qualified builder ref (e.g. the cachyos
-	// project's aur builder `ov.arch-builder`) resolves to its concrete image.
+	// project's aur builder `charly.arch-builder`) resolves to its concrete image.
 	// Populated by the deploy dispatcher from dctx.Cfg / dctx.Dir.
 	Cfg        *Config
 	ProjectDir string
@@ -90,8 +90,8 @@ func (t *VmDeployTarget) targetName() string { return "vm:" + t.VMName }
 //  1. Ensure VM is booted (callers typically run `charly vm create` first).
 //  2. Wait for SSH readiness (polls up to 120s).
 //  3. Wait for cloud-init to finish (cloud_image sources only).
-//  4. Ensure `ov` binary is present in the guest per
-//     VmOvInstall.Strategy.
+//  4. Ensure `charly` binary is present in the guest per
+//     VmCharlyInstall.Strategy.
 //  5. Ensure guest ledger dir exists.
 //
 // Then walks the plans identically to LocalDeployTarget, but with
@@ -122,7 +122,7 @@ func (t *VmDeployTarget) Emit(plans []*InstallPlan, opts EmitOpts) error {
 	//    cloud_image sources AND bootstrap (pacstrap/debootstrap) VMs whose
 	//    seed configures the guest on first boot. cloud-init regenerates the
 	//    SSH host keys + restarts sshd on first boot AFTER the initial sshd
-	//    start, so without this wait the EnsureOvInGuest scp below races that
+	//    start, so without this wait the EnsureCharlyInGuest scp below races that
 	//    restart ("kex Connection reset by peer"). Bootstrap VMs hit this just
 	//    as cloud_image VMs do — gating on cloud_image alone left bootstrap
 	//    deploys flaky on a cold first boot. (bootc guests with no cloud-init
@@ -136,8 +136,8 @@ func (t *VmDeployTarget) Emit(plans []*InstallPlan, opts EmitOpts) error {
 		}
 	}
 
-	// 3. Ensure charly binary is present in guest per VmOvInstall.Strategy.
-	msg, err := EnsureOvInGuest(ctx, t.Spec, t.Exec, opts)
+	// 3. Ensure charly binary is present in guest per VmCharlyInstall.Strategy.
+	msg, err := EnsureCharlyInGuest(ctx, t.Spec, t.Exec, opts)
 	if err != nil {
 		return fmt.Errorf("VmDeployTarget: ensure charly in guest: %w", err)
 	}
@@ -593,9 +593,9 @@ func (t *VmDeployTarget) execShellHook(ctx context.Context, s *ShellHookStep, pl
 	script := fmt.Sprintf(`
 set -e
 mkdir -p "$HOME/.config/opencharly/env.d"
-cat > "$HOME/.config/opencharly/env.d/%s.env" <<'CH_ENVD'
+cat > "$HOME/.config/opencharly/env.d/%s.env" <<'CHARLY_ENVD'
 %s
-CH_ENVD
+CHARLY_ENVD
 `, s.LayerName, envDBody)
 	return t.Exec.RunUser(ctx, script, opts)
 }
@@ -605,9 +605,9 @@ CH_ENVD
 func (t *VmDeployTarget) execRepoChange(ctx context.Context, s *RepoChangeStep, plan *InstallPlan, opts EmitOpts) error {
 	script := fmt.Sprintf(`
 set -e
-install -D -m0644 /dev/stdin %s <<'OV_REPO'
+install -D -m0644 /dev/stdin %s <<'CHARLY_REPO'
 %s
-OV_REPO
+CHARLY_REPO
 `, deployShellQuote(s.File), s.Content)
 	return t.Exec.RunSystem(ctx, script, opts)
 }
@@ -635,7 +635,7 @@ func (t *VmDeployTarget) execServicePackaged(ctx context.Context, s *ServicePack
 // "Unit ... does not exist". System-scope goes to /etc/systemd/system/ via sudo.
 // The matching daemon (user or system) is reloaded.
 func (t *VmDeployTarget) writeGuestUnitFile(ctx context.Context, path, content string, scope Scope, opts EmitOpts) error {
-	install := fmt.Sprintf("install -D -m0644 /dev/stdin %s <<'OV_UNIT'\n%s\nOV_UNIT\n", deployShellQuote(path), content)
+	install := fmt.Sprintf("install -D -m0644 /dev/stdin %s <<'CHARLY_UNIT'\n%s\nCHARLY_UNIT\n", deployShellQuote(path), content)
 	if scope == ScopeUser {
 		return t.Exec.RunUser(ctx, "set -e\n"+install+"export XDG_RUNTIME_DIR=\"/run/user/$(id -u)\"\nsystemctl --user daemon-reload || true\n", opts)
 	}
@@ -805,7 +805,7 @@ func (t *VmDeployTarget) execHomeArtifactBuilder(ctx context.Context, s *Builder
 	}
 	guestHome := t.guestHome
 	if guestHome == "" {
-		guestHome = "/home/ov" // dry-run placeholder; never written
+		guestHome = "/home/charly" // dry-run placeholder; never written
 	}
 
 	// Host staging dir mounted AS the guest home inside the builder, so the

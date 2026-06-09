@@ -223,7 +223,7 @@ func (c *MergeCmd) runOne(cfg *Config, imageName string) error {
 		// fully correct (every individual layer digest is valid). We
 		// surface a clearer diagnostic + an env-var hook to capture the
 		// failing tarball for future investigation.
-		return fmt.Errorf("post-build merge optimization failed (image is functional but unmerged): %w\n  Diagnostic: set CH_MERGE_KEEP_TMP=1 and re-run `charly box merge %s` to capture the failing /tmp/charly-merge-*.tar.\n  This is a known limitation against multi-stage RPM-installed images; the build itself succeeded and the image at this tag is correct.", err, imageRef)
+		return fmt.Errorf("post-build merge optimization failed (image is functional but unmerged): %w\n  Diagnostic: set CHARLY_MERGE_KEEP_TMP=1 and re-run `charly box merge %s` to capture the failing /tmp/charly-merge-*.tar.\n  This is a known limitation against multi-stage RPM-installed images; the build itself succeeded and the image at this tag is correct.", err, imageRef)
 	}
 
 	newLayers, _ := newImg.Layers()
@@ -656,7 +656,7 @@ func saveAndLoad(binary, ref string) (v1.Image, func(), error) {
 
 // saveImageToDaemon saves an image to the container engine via load.
 //
-// On failure, when CH_MERGE_KEEP_TMP=1 the temp tarball is left in /tmp
+// On failure, when CHARLY_MERGE_KEEP_TMP=1 the temp tarball is left in /tmp
 // for forensic inspection (path printed to stderr). Used to debug the
 // rare cases where podman load rejects a merged tar with EEXIST due to
 // duplicate-Name entries — the keep-on-fail diagnostic surfaces the
@@ -667,14 +667,14 @@ func saveImageToDaemon(img v1.Image, ref string, engine string) error {
 		return fmt.Errorf("creating temp file: %w", err)
 	}
 	RegisterTempCleanup(tmpFile.Name())
-	keepOnFail := os.Getenv("CH_MERGE_KEEP_TMP") == "1"
+	keepOnFail := os.Getenv("CHARLY_MERGE_KEEP_TMP") == "1"
 	loaded := false
 	defer func() {
 		if loaded || !keepOnFail {
 			os.Remove(tmpFile.Name())
 			UnregisterTempCleanup(tmpFile.Name())
 		} else {
-			fmt.Fprintf(os.Stderr, "CH_MERGE_KEEP_TMP=1: kept failing tarball at %s\n", tmpFile.Name())
+			fmt.Fprintf(os.Stderr, "CHARLY_MERGE_KEEP_TMP=1: kept failing tarball at %s\n", tmpFile.Name())
 		}
 	}()
 	defer tmpFile.Close()

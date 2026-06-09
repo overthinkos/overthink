@@ -22,6 +22,80 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-09 — refactor(rebrand)!: finish the `ov`→`charly` / `overthink`→`opencharly` cutover (Cutover 4)
+
+The fourth and final rebrand cutover zeroed out every in-scope `ov`/`overthink`
+residue Cutovers 1–3 left behind and folded in the architectural fixes the work
+surfaced. ONE atomic commit per repo, coordinated across the superproject + 8
+`image/*` submodules + `plugins` + 3 `pkg/*` packaging repos, landed at the
+shared ecosystem tag **`v2026.160.0856`**.
+
+**Rebrand surface (the residue → zero):** the env prefix collapsed to
+`CHARLY_*` (was `CH_*`/`OV_*`); the credential-service prefix re-keyed `ov/` →
+`charly/` (`charly/secret|enc|vnc|api-key|probe`, the keyring/addlayer probe
+consts) with the validator now hard-rejecting any non-`^charly/` key; ~50
+internal Go identifiers `Ov*` → `Charly*` (`runCharlySubcommand`,
+`runCharlyVerb`, `EnsureCharlyInVenue`, `CharlyVersion`, …) + the 3 `ov_*` Go
+files renamed (`charly_install.go`, `evalrun_charly_verbs.go`,
+`migrate_charly_cachyos.go`); `shell_profile.go` now writes `charly.fish` with
+`# charly:` markers; brand prose `overthink`/`Overthink` → `opencharly`/
+`OpenCharly`; project domains/emails → `opencharly.ai` / `atrawog@opencharly.ai`
+across `pkg/debian/control`, `pkg/fedora/opencharly.spec`. **KEPT load-bearing
+on `overthinkos`** (a separately-gated future org move): the `go.mod` module
+path, the 12 `.gitmodules` URLs, `ghcr.io/overthinkos`, `DefaultProjectRepo`,
+every `@github.com/overthinkos/*` pin, and the release-download URLs — renaming
+these now would break resolution against remotes that do not yet exist.
+
+**Vocabulary is now fully YAML-driven (no hardcoded `{rpm,deb,pac,aur}` in Go).**
+`build.yml` `format:`/`distro:` declarations are the single source of truth:
+`FormatDef.Secondary` marks `aur` secondary to `pac` (config-driven
+`PrimaryFormat()`, no `name=="aur"` special case); `RegisterBuildVocabulary(dc)`
+derives the distro/format vocabulary from the loaded `DistroConfig` at load
+time; the layer parser (`derivePackageSectionsFromCalamares`) is now
+**purely structural** — it consults no Go vocab list and defers correctness to
+the validator. Adding a new package format or distro is now a `build.yml` edit,
+not a code change.
+
+**`cachyos` ← `arch` package inheritance** via `build.yml`
+`inherit_packages: true` (`expandPackageInheritance` expands `cachyos` to
+`[cachyos, arch]`). The inheritance is **asymmetric** by design — `ubuntu` does
+NOT inherit `debian` (the Debian/Ubuntu split keeps them independent), but Arch
+and CachyOS share one package surface.
+
+**`migrate_calamares.go` DELETED** and replaced by the YAML-driven mechanisms
+above; the `calamares` migration step was dropped from the registry. A new
+`migrate_charly_cutover4` step (`CH_*`/`OV_*` → `CHARLY_*`, the first-ever
+credential-prefix re-key, host shell-profile + per-host deploy/config re-key)
+was appended and `LatestSchemaVersion()` bumped to **`2026.159.1912`** (the
+`calver-schema` stamp stays last; HEAD == `LatestSchemaVersion()` enforced).
+
+**Four rebrand regressions surfaced ONLY by live beds** (a renamed CLI verb with
+a stale internal caller or shell-string — invisible to `go test`, which even
+asserted the stale value in one case): `vm cp-image` → `cp-box`, `eval image` →
+`eval box` (`unified_targets_pod.go` real-invocation path, now guarded by
+`TestPodUnifiedTarget_Rebuild_RealInvocations`), `deploy from-image` →
+`from-box`, and the MCP server's `box.yml` → `charly.yml` project probe
+(`bootstrapProject` made non-fatal so project-free MCP tools still serve when the
+default-repo fetch fails).
+
+**`network.go` upstream-DNS pin.** Rootless-podman containers on a
+systemd-resolved host inherited the `127.0.0.53` stub resolver and hung on
+external DNS; `ensureNetworkUpstreamDNS` now reads the host's real upstream from
+`/run/systemd/resolve/resolv.conf` and injects it via
+`podman network update charly --dns-add`.
+
+**Coordinated cross-repo landing.** Because each `image/*` submodule consumes the
+main repo's centralized `build.yml` + candies via `@github`, and the main repo
+in turn consumes `cachyos`/`nvidia`/`selkies`, the rebrand is a mutual-dependency
+cycle: an image submodule pinned to a *pre-rebrand* main fails the new `^charly/`
+credential validator (`candy/immich: key "ov/api-key/immich"`). Every
+`@github.com/overthinkos/{overthink,cachyos,nvidia,selkies}` pin across all repos
+was therefore re-aligned to the single coordinated tag `v2026.160.0856`, and
+every `charly.yml`-bearing repo (main + 8 images) tagged at it. `plugins` and
+`pkg/*` carry no `charly.yml` and are tag-exempt.
+
+*Assisted-by: Claude (fully tested and validated)*
+
 ### 2026-06-08 — fix(vm-deploy): builder-cfg threading, dead cloud-init url removal, nested target:local deploy, ledger host-path rebrand
 
 Four VM-deploy/eval fixes surfaced (and R10-proven) by the `image/arch`

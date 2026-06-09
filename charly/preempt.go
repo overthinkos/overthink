@@ -120,20 +120,20 @@ func newResourceArbiter() *ResourceArbiter {
 	}
 }
 
-// envPreemptLeaseHeld is set by the OUTERMOST claim-bringing `ov` invocation
+// envPreemptLeaseHeld is set by the OUTERMOST claim-bringing `charly` invocation
 // (runEvalBed, or a standalone `charly vm create`/`charly start`) so that the nested
-// `ov` subprocesses it spawns (the bed's `charly vm create`/`charly deploy add`/
+// `charly` subprocesses it spawns (the bed's `charly vm create`/`charly deploy add`/
 // `charly vm destroy`, etc.) do NOT independently acquire or release the lease —
 // the owner manages it. An env channel, not config: it scopes to one process
-// tree, mirroring the codebase's existing env-as-IPC idioms (CH_PROJECT_DIR,
+// tree, mirroring the codebase's existing env-as-IPC idioms (CHARLY_PROJECT_DIR,
 // the nested-runtime keys).
-const envPreemptLeaseHeld = "CH_PREEMPT_LEASE"
+const envPreemptLeaseHeld = "CHARLY_PREEMPT_LEASE"
 
 // acquireExclusiveForClaimant acquires (or reuses) an exclusive-resource lease
 // for a claimant deploy that declares requires_exclusive — UNLESS an outer
 // orchestrator already owns one (envPreemptLeaseHeld set), in which case the
 // claim is already covered and this is a no-op. On a real acquire it marks the
-// environment so nested `ov` subprocesses skip re-acquiring. Returns a lease
+// environment so nested `charly` subprocesses skip re-acquiring. Returns a lease
 // whose Release()/ReleaseFailed() the caller must invoke (defer); a no-op
 // lease is safe to Release. transient=true for eval-bed claims (auto-released
 // at run end), false for persistent claims (charly vm create / charly start).

@@ -50,7 +50,7 @@ type BuilderRunOpts struct {
 	// registry (401, network outage, image not yet pushed) falls
 	// back to a local `charly box build <basename>` when the basename
 	// matches a project charly.yml entry. The canonical "every command
-	// uses one ensure path" contract — see ov/ensure_image.go.
+	// uses one ensure path" contract — see charly/ensure_image.go.
 	Cfg        *Config
 	ProjectDir string
 

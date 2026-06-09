@@ -55,7 +55,7 @@ type AIConfig struct {
 	// Set ProgressNoImprovementTimeout to "0s" to disable watchdog
 	// termination (e.g. for fully-unbounded development sessions); set
 	// ProgressCheckInterval to "0s" to disable periodic logging too.
-	// See plugins/ov/skills/harness/SKILL.md "Score-progress watchdog".
+	// See plugins/charly/skills/harness/SKILL.md "Score-progress watchdog".
 	ProgressCheckInterval        string `yaml:"progress_check_interval,omitempty"`
 	ProgressNoImprovementTimeout string `yaml:"progress_no_improvement_timeout,omitempty"`
 

@@ -94,7 +94,7 @@ func (d *spiceDriver) ClipboardGrabbed(sel spice.SpiceClipboardSelection, types 
 	d.clipWanted[sel] = types
 }
 func (d *spiceDriver) ClipboardFetch(sel spice.SpiceClipboardSelection, t spice.SpiceClipboardFormat) ([]byte, error) {
-	return nil, fmt.Errorf("overthink spice driver does not provide clipboard data")
+	return nil, fmt.Errorf("opencharly spice driver does not provide clipboard data")
 }
 func (d *spiceDriver) ClipboardRelease(sel spice.SpiceClipboardSelection) {
 	d.mu.Lock()

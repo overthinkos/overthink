@@ -1,5 +1,5 @@
 candy:
-    version: 2026.157.1134
+    version: 2026.159.1803
     name: dev-tools
     package:
         - bat
@@ -31,6 +31,7 @@ candy:
                 - fd
                 - fuse2
                 - fuse3
+                - gopls
                 - qemu-desktop
                 - shellcheck
         debian:
@@ -129,3 +130,15 @@ candy:
         - id: htop-binary
           file: /usr/bin/htop
           exists: true
+        # gopls (Go language server) — Go dev tooling for the coder/workstation
+        # profiles (charly-cachyos + the distro -coder boxes). Packaged on Arch as
+        # `gopls`; the cachyos coder profile is Arch-based. Other distros package
+        # it under different names / not at all, so the probe is Arch-scoped until
+        # those names are verified on their beds.
+        - id: gopls-binary
+          file: /usr/bin/gopls
+          exists: true
+          exclude_distro:
+            - debian
+            - ubuntu
+            - fedora

@@ -301,7 +301,7 @@ type DeploymentNode struct {
 
 	// RequiresExclusive is the CLAIMANT side: the named exclusive
 	// host-resource token(s) this deploy needs sole use of while it runs.
-	// Before bring-up, the resource arbiter (ov/preempt.go) finds every
+	// Before bring-up, the resource arbiter (charly/preempt.go) finds every
 	// RUNNING preemptible holder whose `holds:` intersects these tokens,
 	// gracefully stops them, records a crash-safe restore obligation, and
 	// restores them when this claim is released. A token with no declared
@@ -350,7 +350,7 @@ type DeploymentNode struct {
 	// --- Sibling peers: companion deployments brought up alongside ---
 	//
 	// Peer are full DeploymentNodes brought up ALONGSIDE this node on the
-	// shared `ov` network — NOT nested inside it (contrast Nested, whose
+	// shared `charly` network — NOT nested inside it (contrast Nested, whose
 	// children run INSIDE this node's venue and are addressed by a dotted
 	// path). A peer is a companion INSTRUMENT — the canonical case is a
 	// Chrome driver pod that CDP-probes this web-server subject via a check
@@ -881,7 +881,7 @@ type VmDeployState struct {
 	SshPort int `yaml:"ssh_port,omitempty"`
 
 	// SshUser is the guest account VmDeployTarget SSHes in as
-	// (distinct from the host user running ov).
+	// (distinct from the host user running charly).
 	SshUser string `yaml:"ssh_user,omitempty"`
 
 	// Backend is the VM backend used to boot this VM: "qemu" or
@@ -896,9 +896,9 @@ type VmDeployState struct {
 	// purposes.
 	KeyInjectionResolved *VmKeyInjectionResolved `yaml:"key_injection_resolved,omitempty"`
 
-	// OvInstallStrategy is the VmOvInstall.Strategy chosen at first
+	// CharlyInstallStrategy is the VmCharlyInstall.Strategy chosen at first
 	// apply: "auto", "scp", "url", or "skip". Informational.
-	OvInstallStrategy string `yaml:"ov_install_strategy,omitempty"`
+	CharlyInstallStrategy string `yaml:"charly_install_strategy,omitempty"`
 
 	// CloudInitRenderedDigest is the sha256 of the last rendered
 	// user-data (structured intent + applied defaults). Lets VmDeployTarget
@@ -980,7 +980,7 @@ type EphemeralRuntime struct {
 
 	// ParentEphemeral, when non-empty, is the ID of the outer
 	// ephemeral whose lifecycle wraps this one (nested case). Set
-	// from CH_EPHEMERAL_PARENT environment variable at Add time.
+	// from CHARLY_EPHEMERAL_PARENT environment variable at Add time.
 	ParentEphemeral string `yaml:"parent_ephemeral,omitempty"`
 
 	// ChildRefcount tracks nested ephemerals that name this one as
@@ -2148,7 +2148,7 @@ type SaveDeployStateInput struct {
 	// a value (don't clobber operator-authored refs on re-config).
 	// Without these, `charly deploy add foo bar --disposable` would write
 	// an entry that the validator then rejects on the next load —
-	// hard-failing every subsequent `ov` invocation.
+	// hard-failing every subsequent `charly` invocation.
 	Image  string
 	Target string
 }
@@ -2216,7 +2216,7 @@ func saveDeployState(imageName, instance string, input SaveDeployStateInput) {
 	}
 	// Classification fields: only written when the caller explicitly
 	// opts in via SetDisposable / SetLifecycle. This lets repeated
-	// saveDeployState calls from unrelated code paths (charly start, ov
+	// saveDeployState calls from unrelated code paths (charly start, charly
 	// config) leave a user-authored `disposable: true` in place.
 	if input.SetDisposable {
 		v := input.Disposable

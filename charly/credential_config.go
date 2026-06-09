@@ -10,8 +10,8 @@ import (
 // keys in VncPasswords. Order matters: longer prefixes first for correct
 // matching when services share a common prefix.
 var knownServicePrefixes = []string{
-	"ov/secret/",
-	"ov/enc/",
+	"charly/secret/",
+	"charly/enc/",
 }
 
 // ConfigFileStore implements CredentialStore using the existing plaintext
@@ -161,7 +161,7 @@ func PlaintextCredentialEntries(cfg *RuntimeConfig) []struct{ Service, Key, Valu
 
 // parseCompositeKey splits a VncPasswords map key into (service, key).
 // Composite keys are "service/key" where service may contain slashes
-// (e.g., "ov/secret/my-key" -> service="ov/secret", key="my-key").
+// (e.g., "charly/secret/my-key" -> service="charly/secret", key="my-key").
 // Non-composite keys are VNC passwords (e.g., "my-image" -> service=CredServiceVNC).
 func parseCompositeKey(compositeKey string) (service, key string) {
 	// Check known multi-slash service prefixes first

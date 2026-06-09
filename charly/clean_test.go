@@ -12,7 +12,7 @@ func img(id, name, short, version string) LocalImageInfo {
 		ID:    id,
 		Names: []string{name},
 		Labels: map[string]string{
-			"ai.opencharly.box":   short,
+			"ai.opencharly.box":     short,
 			"ai.opencharly.version": version,
 		},
 	}
@@ -73,7 +73,7 @@ func TestPruneImagesByRetention_SharedID(t *testing.T) {
 			ID:    "ccc", // all five tags share ONE image id
 			Names: append([]string(nil), allTags...),
 			Labels: map[string]string{
-				"ai.opencharly.box":   "eval-pod",
+				"ai.opencharly.box":     "eval-pod",
 				"ai.opencharly.version": "2026.155.1801", // content-stable across tags
 			},
 		}

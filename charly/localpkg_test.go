@@ -111,7 +111,7 @@ func TestLocalPkgInstallStepIR(t *testing.T) {
 
 // TestBuildDeployPlanLocalPkgOrdering proves the localpkg step is emitted BEFORE
 // the layer's task steps in the compiled plan — load-bearing so the charly layer's
-// package-aware cmd: gate sees overthink already installed and does nothing
+// package-aware cmd: gate sees charly already installed and does nothing
 // (instead of curling a /usr/local/bin/charly that shadows /usr/bin/charly).
 func TestBuildDeployPlanLocalPkgOrdering(t *testing.T) {
 	l := &Layer{
@@ -202,7 +202,7 @@ func TestResolveLocalPkgDir(t *testing.T) {
 	if err := os.MkdirAll(pkgDebian, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(pkgDebian, "control"), []byte("Source: overthink\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(pkgDebian, "control"), []byte("Source: opencharly\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 

@@ -36,5 +36,5 @@ func sendVenueNotification(ex DeployExecutor, title, body string) {
 		return
 	}
 
-	fmt.Fprintf(os.Stderr, "Warning: cannot send notification — neither 'ov' nor 'gdbus' found on target\n")
+	fmt.Fprintf(os.Stderr, "Warning: cannot send notification — neither 'charly' nor 'gdbus' found on target\n")
 }

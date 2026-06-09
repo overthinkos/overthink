@@ -61,14 +61,14 @@ candy:
     # Immich API key for programmatic access. Generated in the Immich web UI
     # after first-run setup, then stored once in the credential backend via:
     #
-    #   charly secrets set ov/api-key/immich <key>
+    #   charly secrets set charly/api-key/immich <key>
     #
     # openwebui and hermes declare the same secret_accept entry with the same
     # key path, so one `charly secrets set` populates all three consumers.
     secret_accept:
         - name: IMMICH_API_KEY
           description: "Immich API key for programmatic access (generated in the Immich admin UI after first-run)"
-          key: ov/api-key/immich
+          key: charly/api-key/immich
     volume:
         - name: library
           path: "~/.immich/library"

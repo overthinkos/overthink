@@ -20,7 +20,7 @@ import (
 // without decoding JSON; each leaf also supports --json for programmatic
 // use.
 //
-// The dispatcher pattern mirrors ov/dbus.go (parent struct + N leaf structs
+// The dispatcher pattern mirrors charly/dbus.go (parent struct + N leaf structs
 // with Run() methods + positional args + `-i` flag). Live-container wiring
 // (runMcp + method allowlist) lives in testrun_ov_verbs.go.
 
@@ -372,7 +372,7 @@ func defaultMcpOpenSession(ctx context.Context, image, instance, wantName string
 		return nil, entry, func() {}, err
 	}
 
-	client := mcp.NewClient(&mcp.Implementation{Name: "charly", Version: OvVersion()}, nil)
+	client := mcp.NewClient(&mcp.Implementation{Name: "charly", Version: CharlyVersion()}, nil)
 	sess, err := client.Connect(ctx, transport, nil)
 	if err != nil {
 		return nil, entry, func() {}, fmt.Errorf("mcp connect %s (%s): %w", entry.Name, entry.URL, err)

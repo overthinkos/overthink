@@ -12,7 +12,7 @@ import (
 // real YAML via LoadConfig + ScanAllLayerWithConfig) but they catch
 // compile-time regressions that pure unit tests can't.
 
-// compilerTestProjectDir chdirs to the project root (the parent of ov/)
+// compilerTestProjectDir chdirs to the project root (the parent of charly/)
 // and returns a cleanup callback. The compiler tests rely on being able
 // to LoadConfig from charly.yml, which only exists in the project root.
 func compilerTestProjectDir(t *testing.T) (string, func()) {
@@ -47,7 +47,7 @@ func loadCompilerFixtures(t *testing.T, imageName string) (*Config, *ResolvedBox
 	if err != nil {
 		t.Fatalf("LoadConfig: %v", err)
 	}
-	// SetFormatNames must run before layer scanning so format sections
+	// RegisterBuildVocabulary must run before layer scanning so format sections
 	// (rpm:/deb:/pac:) are recognized. Post-unified-cutover LoadDefaultBuildConfig
 	// reads charly.yml directly.
 	{
@@ -56,7 +56,7 @@ func loadCompilerFixtures(t *testing.T, imageName string) (*Config, *ResolvedBox
 		if err != nil {
 			t.Fatalf("LoadDefaultBuildConfig: %v", err)
 		}
-		SetFormatNames(distroCfg)
+		RegisterBuildVocabulary(distroCfg)
 	}
 	layers, err := ScanAllLayerWithConfig(dir, cfg)
 	if err != nil {

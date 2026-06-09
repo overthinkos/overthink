@@ -53,7 +53,7 @@ func (c *VmImportCmd) Run() error {
 		}
 		name := c.TargetName
 		if name == "" {
-			name = stripOvPrefix(c.Domain)
+			name = stripCharlyPrefix(c.Domain)
 		}
 		diffs, err := DiffImported(name, c.Domain)
 		if err != nil {
@@ -76,7 +76,7 @@ func (c *VmImportCmd) Run() error {
 		}
 		name := c.TargetName
 		if name == "" {
-			name = stripOvPrefix(c.Domain)
+			name = stripCharlyPrefix(c.Domain)
 		}
 		spec, err := UpdateImportedVm(name, c.Domain, c.ReplaceLibvirt)
 		if err != nil {
@@ -115,7 +115,7 @@ func (c *VmImportCmd) Run() error {
 		if len(domains) > 0 {
 			fmt.Fprintln(tw, "DOMAIN\tWOULD-IMPORT-AS")
 			for _, d := range domains {
-				fmt.Fprintf(tw, "%s\t%s\n", d, stripOvPrefix(d))
+				fmt.Fprintf(tw, "%s\t%s\n", d, stripCharlyPrefix(d))
 			}
 			fmt.Fprintln(tw, "")
 		}
@@ -174,9 +174,9 @@ func importOne(domainName, targetName string) error {
 	return nil
 }
 
-// stripOvPrefix removes a leading "charly-" if present (mirrors the
+// stripCharlyPrefix removes a leading "charly-" if present (mirrors the
 // default-target-name logic in ImportFromLibvirt).
-func stripOvPrefix(s string) string {
+func stripCharlyPrefix(s string) string {
 	const p = "charly-"
 	if len(s) > len(p) && s[:len(p)] == p {
 		return s[len(p):]

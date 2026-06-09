@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Capture a screenshot from pixelflux's rendering pipeline.
 
-Connects to the in-process capture server at /tmp/ov-capture.sock (started
+Connects to the in-process capture server at /tmp/charly-capture.sock (started
 by selkies-capture-server inside the selkies process). This captures the
 full composited desktop including all windows because the capture server
 shares pixelflux's global WaylandBackend.
@@ -17,7 +17,7 @@ import socket
 import struct
 import sys
 
-SOCK_PATH = "/tmp/ov-capture.sock"
+SOCK_PATH = "/tmp/charly-capture.sock"
 
 
 def status():

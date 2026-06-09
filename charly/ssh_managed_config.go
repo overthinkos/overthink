@@ -3,13 +3,13 @@ package main
 // ssh_managed_config.go — managed ssh-config fragment for VM aliases.
 //
 // `charly vm create` writes one Host stanza per VM into a managed file at
-// ~/.config/charly/ssh_config, fenced by the same `# overthink:begin` /
-// `# overthink:end` markers used elsewhere (see shell_profile.go for
+// ~/.config/charly/ssh_config, fenced by the same `# opencharly:begin` /
+// `# opencharly:end` markers used elsewhere (see shell_profile.go for
 // the primitive). The user's ~/.ssh/config gains a single `Include`
 // line (also inside a managed block) pointing at the fragment.
 //
 // After this is in place, `ssh charly-<vmname>` works directly from any
-// terminal — and ov's own SSHExecutor constructs
+// terminal — and charly's own SSHExecutor constructs
 // `&SSHExecutor{Host: "charly-"+vmName}` with no User/Port/Key, letting
 // ssh-config supply everything. Idempotent: writing an existing
 // stanza is a no-op; removing a non-existent one is a no-op.
@@ -162,7 +162,7 @@ func ListVmSshAliases(home string) ([]string, error) {
 }
 
 // VmSshAlias returns the canonical alias for a VM deployment name.
-// The "charly-" prefix namespaces overthink-managed aliases away from the
+// The "charly-" prefix namespaces opencharly-managed aliases away from the
 // user's own ssh-config Host entries.
 func VmSshAlias(vmName string) string {
 	return "charly-" + vmName

@@ -85,7 +85,7 @@ type DeployDelCmd struct {
 // deployDelArgv returns the argv (everything AFTER the charly binary) for a
 // non-interactive `charly deploy del <name>`: the verb, the name, and the ONE valid
 // skip-confirmation flag. Every programmatic teardown builds its command through
-// this single helper — in-process (runOvSubcommand), out-of-process
+// this single helper — in-process (runCharlySubcommand), out-of-process
 // (exec.Command), and the systemd-run TTL timer — so the flag can never drift
 // across call sites again.
 //
@@ -183,7 +183,7 @@ func (c *DeployAddCmd) Run() error {
 	}
 
 	// Operator deploy path: bring up any sibling peers (companion deployments)
-	// ALONGSIDE the root on the shared `ov` network — the SAME bringUpPeers
+	// ALONGSIDE the root on the shared `charly` network — the SAME bringUpPeers
 	// helper the kind:eval bed runner uses (R3). The bed runner takes its own
 	// `--node-only` path above and brings peers up itself after `charly start`, so
 	// peers are never double-deployed. A dry-run skips bring-up (nothing real
@@ -441,7 +441,7 @@ func (c *DeployAddCmd) dispatchNode(path string, node *DeploymentNode, parentExe
 // classifyNodeTarget picks the target discriminator for a node. Uses
 // node.Target when non-empty. Returns canonical target values
 // (host|vm|pod|k8s); legacy "container"/"kubernetes" spellings are
-// normalized to pod/k8s for transition compatibility — the `ov
+// normalized to pod/k8s for transition compatibility — the `charly
 // migrate deploy-v3` command converts them to the canonical values
 // on-disk.
 //
@@ -706,7 +706,7 @@ func (c *DeployAddCmd) scanLayersForRef(ref *DeployRef, cfg *Config, dir string)
 		for k, v := range cfg.Image {
 			aug.Image[k] = v
 		}
-		aug.Image["__ov_addlayer_fetch__"] = BoxConfig{Layer: []string{ref.Raw}}
+		aug.Image["__charly_addlayer_fetch__"] = BoxConfig{Layer: []string{ref.Raw}}
 		scanCfg = &aug
 		layerKey = BareRef(ref.Raw)
 	}
@@ -958,7 +958,7 @@ func resolveVmEntity(deployName string, node *DeploymentNode) string {
 //
 // The guest's distro + primary package format are resolved from the VM
 // spec (NOT hardcoded), so a layer deploy onto a debian/ubuntu/fedora VM
-// installs its packages — and the `ov` localpkg — through the guest's own
+// installs its packages — and the `charly` localpkg — through the guest's own
 // package manager (apt/dnf) instead of pacman. The distro key is the
 // bootstrap `distro:` field (debootstrap/pacstrap VMs) or, for cloud_image
 // VMs, the base_user (cloud images name the default account after the
@@ -993,8 +993,10 @@ func syntheticVmImage(spec *VmSpec, distroCfg *DistroConfig) *ResolvedBox {
 		if def := distroCfg.ResolveDistro([]string{distroKey}); def != nil {
 			// Full most-specific-first chain (e.g. [ubuntu:24.04, ubuntu]) so a
 			// target:vm deploy reaches per-version tag sections, not only the bare
-			// distro tag — image/VM parity for the distro-cascade resolver.
-			img.Distro = distroTagChain(distroKey, def.Version)
+			// distro tag — image/VM parity for the distro-cascade resolver. Then
+			// expand inherit_packages: ancestors (a cachyos VM → [cachyos, arch]
+			// so `arch:` layer blocks reach it), mirroring the image-resolve path.
+			img.Distro = distroCfg.expandPackageInheritance(distroTagChain(distroKey, def.Version))
 			if pf := def.PrimaryFormat(); pf != "" {
 				img.Pkg = pf
 				img.BuildFormats = []string{pf}
@@ -1015,7 +1017,7 @@ func resolveDistroDef(cfg *DistroConfig, distroTag string) *DistroDef {
 }
 
 // loadConfigForDeploy loads charly.yml + build.yml for the current
-// project directory. Runs SetFormatNames as a side effect since the
+// project directory. Runs RegisterBuildVocabulary as a side effect since the
 // layer scanner needs it.
 func loadConfigForDeploy(dir string) (*Config, *DistroConfig, *BuilderConfig, error) {
 	cfg, err := LoadConfig(dir)
@@ -1026,7 +1028,7 @@ func loadConfigForDeploy(dir string) (*Config, *DistroConfig, *BuilderConfig, er
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	SetFormatNames(distroCfg)
+	RegisterBuildVocabulary(distroCfg)
 	return cfg, distroCfg, builderCfg, nil
 }
 

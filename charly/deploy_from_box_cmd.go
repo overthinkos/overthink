@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-// DeployFromImageCmd implements `charly deploy from-image <ref> [name]` — a
+// DeployFromImageCmd implements `charly deploy from-box <ref> [name]` — a
 // SOURCE-LESS deploy driven entirely by an image's baked ai.opencharly.* OCI
 // labels, with NO charly.yml project. Two targets:
 //
@@ -17,12 +17,12 @@ import (
 //     runConfig core via ImageConfigSetupCmd.ExplicitRef — no quadlet logic is
 //     duplicated.
 //   - k8s (--cluster <name>): emit a Kustomize tree via the existing
-//     DeployFromImage (ov/k8s_deploy_from_image.go) — unifying the from-image
+//     DeployFromBox (charly/k8s_deploy_from_box.go) — unifying the from-box
 //     surface across both targets.
 //
 // This is the in-guest leg of the nested-pod-in-VM capability: a VM guest has
-// `ov` + a cp-image'd image but no project, so the host orchestrates
-// `ssh guest 'charly deploy from-image <ref> <name>'` to bring a nested pod up as a
+// `charly` + a cp-box'd image but no project, so the host orchestrates
+// `ssh guest 'charly deploy from-box <ref> <name>'` to bring a nested pod up as a
 // persistent quadlet (it survives reboot via the quadlet [Install] section once
 // the guest user has lingering enabled — the orchestrator handles that).
 type DeployFromBoxCmd struct {
@@ -31,13 +31,13 @@ type DeployFromBoxCmd struct {
 	Instance  string   `short:"i" long:"instance" help:"Instance name"`
 	Env       []string `short:"e" long:"env" sep:"none" help:"Set container env var (KEY=VALUE)"`
 	Port      []string `short:"p" help:"Remap host port (newHost:containerPort)"`
-	Cluster   string   `long:"cluster" help:"Target a K8s cluster profile instead of a local pod (emits Kustomize via the K8s from-image path)"`
+	Cluster   string   `long:"cluster" help:"Target a K8s cluster profile instead of a local pod (emits Kustomize via the K8s from-box path)"`
 	Namespace string   `long:"namespace" help:"K8s namespace override (--cluster only)"`
 }
 
 func (c *DeployFromBoxCmd) Run() error {
 	if strings.TrimSpace(c.Ref) == "" {
-		return fmt.Errorf("charly deploy from-image: a full image <ref> is required")
+		return fmt.Errorf("charly deploy from-box: a full image <ref> is required")
 	}
 	name := c.Name
 	if name == "" {
@@ -47,7 +47,7 @@ func (c *DeployFromBoxCmd) Run() error {
 	// K8s path: delegate to the existing source-less K8s deployer.
 	if c.Cluster != "" {
 		dir, _ := os.Getwd()
-		out, err := DeployFromImage(DeployFromBoxOpts{
+		out, err := DeployFromBox(DeployFromBoxOpts{
 			ImageRef:       c.Ref,
 			DeploymentName: name,
 			Instance:       c.Instance,
@@ -77,7 +77,7 @@ func (c *DeployFromBoxCmd) Run() error {
 		ExplicitRef: c.Ref,
 	}
 	if err := icc.Run(); err != nil {
-		return fmt.Errorf("from-image config %q: %w", name, err)
+		return fmt.Errorf("from-box config %q: %w", name, err)
 	}
 
 	// In direct mode (no systemd-user) runConfigDirect already launched the

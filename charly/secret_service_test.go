@@ -247,9 +247,9 @@ func TestFindItem_DefaultAliasHealthy(t *testing.T) {
 	f.aliasMap["default"] = defaultPath
 	f.collectionList = []dbus.ObjectPath{defaultPath}
 	f.labels[defaultPath] = "Login"
-	f.addItem(defaultPath, "ov/enc", "immich-ml", "/items/pw1")
+	f.addItem(defaultPath, "charly/enc", "immich-ml", "/items/pw1")
 
-	item, label, err := findItemAcrossCollections(f, "ov/enc", "immich-ml", "")
+	item, label, err := findItemAcrossCollections(f, "charly/enc", "immich-ml", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -272,19 +272,19 @@ func TestFindItem_DefaultAliasBroken_FallbackToIteration(t *testing.T) {
 	f.aliasMap["default"] = stub
 	f.collectionList = []dbus.ObjectPath{stub, real}
 	f.labels[stub] = ""
-	f.labels[real] = "hexaplant"
+	f.labels[real] = "opencharly"
 	f.healthErrs[stub] = errors.New("Input/output error") // broken stub
-	f.addItem(real, "ov/enc", "immich-ml", "/items/real-pw")
+	f.addItem(real, "charly/enc", "immich-ml", "/items/real-pw")
 
-	item, label, err := findItemAcrossCollections(f, "ov/enc", "immich-ml", "")
+	item, label, err := findItemAcrossCollections(f, "charly/enc", "immich-ml", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if item != "/items/real-pw" {
 		t.Errorf("item = %s, want /items/real-pw", item)
 	}
-	if label != "hexaplant" {
-		t.Errorf("label = %q, want hexaplant", label)
+	if label != "opencharly" {
+		t.Errorf("label = %q, want opencharly", label)
 	}
 }
 
@@ -296,23 +296,23 @@ func TestFindItem_DefaultAliasBroken_FallbackToIteration(t *testing.T) {
 func TestFindItem_PreferLabel_SelectsByLabel(t *testing.T) {
 	f := newFakeSSOps()
 	const aliasTarget = dbus.ObjectPath("/collections/default")
-	const labelTarget = dbus.ObjectPath("/collections/hexaplant")
+	const labelTarget = dbus.ObjectPath("/collections/opencharly")
 	f.aliasMap["default"] = aliasTarget
 	f.collectionList = []dbus.ObjectPath{aliasTarget, labelTarget}
 	f.labels[aliasTarget] = "Default"
-	f.labels[labelTarget] = "hexaplant"
+	f.labels[labelTarget] = "opencharly"
 	// Item only in the label collection, not in the default.
-	f.addItem(labelTarget, "ov/enc", "immich-ml", "/items/in-hexaplant")
+	f.addItem(labelTarget, "charly/enc", "immich-ml", "/items/in-opencharly")
 
-	item, label, err := findItemAcrossCollections(f, "ov/enc", "immich-ml", "hexaplant")
+	item, label, err := findItemAcrossCollections(f, "charly/enc", "immich-ml", "opencharly")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if item != "/items/in-hexaplant" {
-		t.Errorf("item = %s, want /items/in-hexaplant", item)
+	if item != "/items/in-opencharly" {
+		t.Errorf("item = %s, want /items/in-opencharly", item)
 	}
-	if label != "hexaplant" {
-		t.Errorf("label = %q, want hexaplant", label)
+	if label != "opencharly" {
+		t.Errorf("label = %q, want opencharly", label)
 	}
 }
 
@@ -327,7 +327,7 @@ func TestFindItem_AllCollectionsBroken_ReturnsAllBroken(t *testing.T) {
 	f.healthErrs[c1] = errors.New("I/O error")
 	f.healthErrs[c2] = errors.New("I/O error")
 
-	_, _, err := findItemAcrossCollections(f, "ov/enc", "immich-ml", "")
+	_, _, err := findItemAcrossCollections(f, "charly/enc", "immich-ml", "")
 	if !errors.Is(err, ErrSSAllBroken) {
 		t.Errorf("err = %v, want ErrSSAllBroken", err)
 	}
@@ -344,7 +344,7 @@ func TestFindItem_NotFoundAnywhere_ReturnsNotFound(t *testing.T) {
 	f.labels[c1] = "Login"
 	f.labels[c2] = "Work"
 
-	_, _, err := findItemAcrossCollections(f, "ov/enc", "immich-ml", "")
+	_, _, err := findItemAcrossCollections(f, "charly/enc", "immich-ml", "")
 	if !errors.Is(err, ErrSSNotFound) {
 		t.Errorf("err = %v, want ErrSSNotFound", err)
 	}
@@ -365,14 +365,14 @@ func TestFindItem_SearchErrorCountsAsBroken(t *testing.T) {
 	f.searchErrs[c1] = fmt.Errorf("I/O error")
 	// c2 is healthy but has no matching item
 
-	_, _, err := findItemAcrossCollections(f, "ov/enc", "immich-ml", "")
+	_, _, err := findItemAcrossCollections(f, "charly/enc", "immich-ml", "")
 	if !errors.Is(err, ErrSSNotFound) {
 		t.Errorf("err = %v, want ErrSSNotFound (at least one search succeeded)", err)
 	}
 
 	// Now make c2 also error
 	f.searchErrs[c2] = fmt.Errorf("I/O error")
-	_, _, err = findItemAcrossCollections(f, "ov/enc", "immich-ml", "")
+	_, _, err = findItemAcrossCollections(f, "charly/enc", "immich-ml", "")
 	if !errors.Is(err, ErrSSAllBroken) {
 		t.Errorf("err = %v, want ErrSSAllBroken (every search errored)", err)
 	}
@@ -389,7 +389,7 @@ func TestFindItem_UnlockFailureCountsAsBroken(t *testing.T) {
 	f.labels[c1] = "Login"
 	f.unlockErrs[c1] = errors.New("prompt required")
 
-	_, _, err := findItemAcrossCollections(f, "ov/enc", "immich-ml", "")
+	_, _, err := findItemAcrossCollections(f, "charly/enc", "immich-ml", "")
 	if !errors.Is(err, ErrSSAllBroken) {
 		t.Errorf("err = %v, want ErrSSAllBroken (unlock failed on only candidate)", err)
 	}
@@ -405,9 +405,9 @@ func TestFindItem_DefaultAliasUnsetButIterationFinds(t *testing.T) {
 	f.aliasMap["default"] = "" // unset (readAlias returns empty path, no error)
 	f.collectionList = []dbus.ObjectPath{c1}
 	f.labels[c1] = "Only"
-	f.addItem(c1, "ov/enc", "immich-ml", "/items/found")
+	f.addItem(c1, "charly/enc", "immich-ml", "/items/found")
 
-	item, label, err := findItemAcrossCollections(f, "ov/enc", "immich-ml", "")
+	item, label, err := findItemAcrossCollections(f, "charly/enc", "immich-ml", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -433,14 +433,14 @@ func TestFindItem_DefaultAliasDeduped(t *testing.T) {
 	f.aliasMap["default"] = real // resolves to the concrete path
 	f.collectionList = []dbus.ObjectPath{real}
 	f.labels[real] = "Login"
-	f.addItem(real, "ov/enc", "immich-ml", "/items/pw")
+	f.addItem(real, "charly/enc", "immich-ml", "/items/pw")
 
 	// If iteration happened twice, unlock would be called twice. We track
 	// that via a counter in a wrapper.
 	var unlockCount int
 	wrap := &countingOps{fakeSSOps: f, unlockCount: &unlockCount}
 
-	item, _, err := findItemAcrossCollections(wrap, "ov/enc", "immich-ml", "")
+	item, _, err := findItemAcrossCollections(wrap, "charly/enc", "immich-ml", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -463,7 +463,7 @@ func TestFindItem_LockedCollection_ReturnsInteractiveUnlock(t *testing.T) {
 	f.labels[c1] = "atrawog"
 	f.unlockErrs[c1] = fmt.Errorf("%w: %s", ErrSSInteractiveUnlockRequired, c1)
 
-	_, _, err := findItemAcrossCollections(f, "ov/enc", "immich-ml", "")
+	_, _, err := findItemAcrossCollections(f, "charly/enc", "immich-ml", "")
 	if !errors.Is(err, ErrSSInteractiveUnlockRequired) {
 		t.Errorf("err = %v, want ErrSSInteractiveUnlockRequired", err)
 	}
@@ -483,7 +483,7 @@ func TestFindItem_MixLockedAndBroken_ReturnsAllBroken(t *testing.T) {
 	f.unlockErrs[c1] = fmt.Errorf("%w: %s", ErrSSInteractiveUnlockRequired, c1)
 	f.unlockErrs[c2] = errors.New("I/O error")
 
-	_, _, err := findItemAcrossCollections(f, "ov/enc", "immich-ml", "")
+	_, _, err := findItemAcrossCollections(f, "charly/enc", "immich-ml", "")
 	if !errors.Is(err, ErrSSAllBroken) {
 		t.Errorf("err = %v, want ErrSSAllBroken (mix of locked + broken)", err)
 	}

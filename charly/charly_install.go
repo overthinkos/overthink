@@ -7,72 +7,72 @@ import (
 	"strings"
 )
 
-// OvInstallStrategy is the resolved strategy string after defaults.
+// CharlyInstallStrategy is the resolved strategy string after defaults.
 // Values: "auto" | "scp" | "skip". Empty input resolves to "auto".
-type OvInstallStrategy string
+type CharlyInstallStrategy string
 
 const (
-	OvInstallAuto OvInstallStrategy = "auto"
-	OvInstallScp  OvInstallStrategy = "scp"
-	OvInstallSkip OvInstallStrategy = "skip"
+	CharlyInstallAuto CharlyInstallStrategy = "auto"
+	CharlyInstallScp  CharlyInstallStrategy = "scp"
+	CharlyInstallSkip CharlyInstallStrategy = "skip"
 )
 
-// ResolveOvInstallStrategy reads spec.CloudInit.OvInstall and applies
+// ResolveCharlyInstallStrategy reads spec.CloudInit.CharlyInstall and applies
 // the default. Used by VmDeployTarget to decide which post-boot action
 // (if any) to perform for delivering the charly binary into the guest.
-func ResolveOvInstallStrategy(spec *VmSpec) OvInstallStrategy {
-	if spec == nil || spec.CloudInit == nil || spec.CloudInit.OvInstall == nil {
-		return OvInstallAuto
+func ResolveCharlyInstallStrategy(spec *VmSpec) CharlyInstallStrategy {
+	if spec == nil || spec.CloudInit == nil || spec.CloudInit.CharlyInstall == nil {
+		return CharlyInstallAuto
 	}
-	s := spec.CloudInit.OvInstall.Strategy
+	s := spec.CloudInit.CharlyInstall.Strategy
 	switch s {
 	case "":
-		return OvInstallAuto
+		return CharlyInstallAuto
 	case "auto", "scp", "skip":
-		return OvInstallStrategy(s)
+		return CharlyInstallStrategy(s)
 	default:
 		// Validator should have caught this; defensive fallback.
-		return OvInstallAuto
+		return CharlyInstallAuto
 	}
 }
 
-// EnsureOvInVenue is the GENERIC "copy charly into a running system" mechanism: it
+// EnsureCharlyInVenue is the GENERIC "copy charly into a running system" mechanism: it
 // guarantees an invokable `charly` on ANY deployment venue — container (podman cp),
 // VM / SSH host (scp), or the local host (install) — and returns the command the
 // caller should use to invoke it. It is venue-agnostic because it works only
 // through the DeployExecutor abstraction (RunCapture to probe, PutFile to
 // deliver — cp / scp / podman cp per executor), so one code path serves every
 // substrate (R3). Used by every in-venue `charly` caller (dbus delegation, desktop
-// notifications, the VM-deploy strategy wrapper, nested from-image delegation)
+// notifications, the VM-deploy strategy wrapper, nested from-box delegation)
 // so an image need NOT bake the `charly` layer for those transient needs.
 //
 // Resolution (quiet — the caller decides what, if anything, to print):
 //
-//	1. The venue's SYSTEM charly (PATH `charly`, normally a package-managed binary kept
-//	   current by the package manager) is authoritative whenever it is at least
-//	   as new as the host's (CalVer — the true build identity, never a content
-//	   checksum). It is used as-is: NEVER shadowed, downgraded, or overwritten.
-//	2. Otherwise — ONLY when the venue charly is ABSENT or strictly OLDER (the
-//	   automatic CalVer check is never skipped) — the host's OWN binary
-//	   (os.Executable(), guaranteed current and from-image-capable) is delivered
-//	   to a /tmp/charly-<calver> path. That path is OUTSIDE $PATH and is invoked by
-//	   EXPLICIT path, NEVER via a PATH lookup — so it can NOT shadow a
-//	   package-manager charly (e.g. the opencharly-git /usr/bin/charly), not even one a
-//	   package manager installs LATER: nothing puts the copy into a higher-PATH-
-//	   priority location than the package. The /tmp name embeds the host CalVer so
-//	   repeated calls reuse the same copy (idempotent — a still-good prior copy is
-//	   verified and reused, never re-transferred).
+//  1. The venue's SYSTEM charly (PATH `charly`, normally a package-managed binary kept
+//     current by the package manager) is authoritative whenever it is at least
+//     as new as the host's (CalVer — the true build identity, never a content
+//     checksum). It is used as-is: NEVER shadowed, downgraded, or overwritten.
+//  2. Otherwise — ONLY when the venue charly is ABSENT or strictly OLDER (the
+//     automatic CalVer check is never skipped) — the host's OWN binary
+//     (os.Executable(), guaranteed current and from-box-capable) is delivered
+//     to a /tmp/charly-<calver> path. That path is OUTSIDE $PATH and is invoked by
+//     EXPLICIT path, NEVER via a PATH lookup — so it can NOT shadow a
+//     package-manager charly (e.g. the opencharly-git /usr/bin/charly), not even one a
+//     package manager installs LATER: nothing puts the copy into a higher-PATH-
+//     priority location than the package. The /tmp name embeds the host CalVer so
+//     repeated calls reuse the same copy (idempotent — a still-good prior copy is
+//     verified and reused, never re-transferred).
 //
 // Returns "charly" (use the venue's PATH charly) or "/tmp/charly-<calver>" (the delivered
 // host copy). SweepStaleTemps reclaims leftover /tmp copies.
-func EnsureOvInVenue(ctx context.Context, exec DeployExecutor, opts EmitOpts) (string, error) {
-	hostVer := OvVersion()
+func EnsureCharlyInVenue(ctx context.Context, exec DeployExecutor, opts EmitOpts) (string, error) {
+	hostVer := CharlyVersion()
 	stdout, _, _, _ := exec.RunCapture(ctx,
 		`command -v charly >/dev/null 2>&1 && charly version 2>/dev/null || true`)
 	venueVer := strings.TrimSpace(stdout)
 
 	// Venue charly present AND equal-or-newer → use the system charly as-is.
-	if venueVer != "" && !hostOvIsNewer(hostVer, venueVer) {
+	if venueVer != "" && !hostCharlyIsNewer(hostVer, venueVer) {
 		return "charly", nil
 	}
 
@@ -87,18 +87,18 @@ func EnsureOvInVenue(ctx context.Context, exec DeployExecutor, opts EmitOpts) (s
 
 	// Venue charly absent or older → deliver the host binary at the /tmp path
 	// (outside $PATH; the system charly, if any, is left untouched).
-	if err := putHostOvInVenue(ctx, exec, tmp, false, opts); err != nil {
+	if err := putHostCharlyInVenue(ctx, exec, tmp, false, opts); err != nil {
 		return "", err
 	}
 	return tmp, nil
 }
 
-// EnsureOvInGuest is the VM-deploy strategy coordinator that VmDeployTarget calls
+// EnsureCharlyInGuest is the VM-deploy strategy coordinator that VmDeployTarget calls
 // after the guest is booted, sshd is up, and cloud-init has finished. It layers
-// the cloud-init `ov_install.strategy` policy on top of the generic
-// EnsureOvInVenue mechanism:
+// the cloud-init `charly_install.strategy` policy on top of the generic
+// EnsureCharlyInVenue mechanism:
 //
-//	auto / scp — EnsureOvInVenue: use the guest's system charly when current
+//	auto / scp — EnsureCharlyInVenue: use the guest's system charly when current
 //	             (>= host by CalVer); ONLY when absent or older, deliver the host
 //	             charly to a /tmp path (no shadow). Routine updates are the package
 //	             manager's job.
@@ -106,18 +106,18 @@ func EnsureOvInVenue(ctx context.Context, exec DeployExecutor, opts EmitOpts) (s
 //
 // Returns an informational message on success suitable for printing at info
 // level (the deploy context wants the detail; transient callers like dbus stay
-// quiet by calling EnsureOvInVenue directly).
-func EnsureOvInGuest(
+// quiet by calling EnsureCharlyInVenue directly).
+func EnsureCharlyInGuest(
 	ctx context.Context,
 	spec *VmSpec,
 	exec DeployExecutor,
 	opts EmitOpts,
 ) (string, error) {
-	strategy := ResolveOvInstallStrategy(spec)
+	strategy := ResolveCharlyInstallStrategy(spec)
 
 	switch strategy {
-	case OvInstallAuto, OvInstallScp:
-		cmd, err := EnsureOvInVenue(ctx, exec, opts)
+	case CharlyInstallAuto, CharlyInstallScp:
+		cmd, err := EnsureCharlyInVenue(ctx, exec, opts)
 		if err != nil {
 			return "", err
 		}
@@ -126,29 +126,29 @@ func EnsureOvInGuest(
 		}
 		return fmt.Sprintf("guest charly absent/outdated; host charly provided at %s for deploy use", cmd), nil
 
-	case OvInstallSkip:
-		return verifyOvPresent(ctx, exec, opts, "skip")
+	case CharlyInstallSkip:
+		return verifyCharlyPresent(ctx, exec, opts, "skip")
 
 	default:
-		return "", fmt.Errorf("unknown ov_install.strategy: %q", strategy)
+		return "", fmt.Errorf("unknown charly_install.strategy: %q", strategy)
 	}
 }
 
-// putHostOvInVenue delivers THIS process's OWN charly binary (os.Executable()) into
+// putHostCharlyInVenue delivers THIS process's OWN charly binary (os.Executable()) into
 // the venue at remotePath via the DeployExecutor's PutFile (cp for the local
 // host, scp for an SSH/VM venue, `podman cp` for a container) — the single
-// host→venue charly-delivery primitive (R3), used by EnsureOvInVenue (the generic
-// copy-in) AND by deployNestedPodsInGuest (the host→nested from-image
+// host→venue charly-delivery primitive (R3), used by EnsureCharlyInVenue (the generic
+// copy-in) AND by deployNestedPodsInGuest (the host→nested from-box
 // delegation). Callers deliver to a /tmp path with ownerRoot=false — a non-$PATH
 // copy that leaves a venue's own packaged charly untouched and un-shadowed; the
 // caller invokes the delivered binary by explicit path.
 //
-// The host binary is guaranteed current and from-image-capable: it is the binary
+// The host binary is guaranteed current and from-box-capable: it is the binary
 // running this very deploy. That is the whole point — a venue's own PATH charly may
 // be a stale layer install (a @github-fetched charly candy ships no bin/charly, so its
-// cmd: curls a pre-from-image release that reports the wall clock as its version)
+// cmd: curls a pre-from-box release that reports the wall clock as its version)
 // and must never be trusted as the delegation binary.
-func putHostOvInVenue(ctx context.Context, exec DeployExecutor, remotePath string, ownerRoot bool, opts EmitOpts) error {
+func putHostCharlyInVenue(ctx context.Context, exec DeployExecutor, remotePath string, ownerRoot bool, opts EmitOpts) error {
 	localPath, err := os.Executable()
 	if err != nil {
 		return fmt.Errorf("locating local charly via os.Executable(): %w", err)
@@ -168,10 +168,10 @@ func putHostOvInVenue(ctx context.Context, exec DeployExecutor, remotePath strin
 	return nil
 }
 
-// verifyOvPresent runs `command -v charly` in the guest and reports
+// verifyCharlyPresent runs `command -v charly` in the guest and reports
 // whether the binary is already in place. Tail of the "skip" strategy
 // (user-managed charly install).
-func verifyOvPresent(ctx context.Context, exec DeployExecutor, opts EmitOpts, strategy string) (string, error) {
+func verifyCharlyPresent(ctx context.Context, exec DeployExecutor, opts EmitOpts, strategy string) (string, error) {
 	// `charly version` (subcommand), not `charly --version`. Kong returns exit 80
 	// for unknown flags, which this check otherwise surfaces as a false
 	// "charly not present" error. The PKGBUILD installs to /usr/bin/charly, not
@@ -179,7 +179,7 @@ func verifyOvPresent(ctx context.Context, exec DeployExecutor, opts EmitOpts, st
 	script := `
 set -e
 if ! command -v charly >/dev/null 2>&1; then
-    echo "charly binary not present in guest (ov_install.strategy: ` + strategy + `)"
+    echo "charly binary not present in guest (charly_install.strategy: ` + strategy + `)"
     exit 1
 fi
 charly version

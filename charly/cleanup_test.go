@@ -116,7 +116,7 @@ func TestSweep_HeldByCurrentProcess_Kept(t *testing.T) {
 	}
 }
 
-func TestSweep_NonOvFile_Untouched(t *testing.T) {
+func TestSweep_NonCharlyFile_Untouched(t *testing.T) {
 	resetCleanupState(t)
 	// Doesn't match any sweepablePatterns prefix.
 	p := makeStaleTemp(t, "junk-", "9914-test.tar", 10*time.Minute)

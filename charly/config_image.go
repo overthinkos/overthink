@@ -53,7 +53,7 @@ type BoxConfigSetupCmd struct {
 
 	// ExplicitRef, when non-empty, bypasses the short-name → registry-ref
 	// resolution in runConfig and uses this exact image ref (a full local or
-	// registry ref). Set by `charly deploy from-image` for a source-less pod
+	// registry ref). Set by `charly deploy from-box` for a source-less pod
 	// deploy — quadlet config comes from the image's baked OCI labels with no
 	// charly.yml project. Image then carries the deploy-key/name only.
 	// Not a CLI flag (kong:"-").
@@ -138,10 +138,10 @@ func (c *BoxConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	// ghcr.io/overthinkos/arch:TAG, not bare short names).
 	var deployImageName, imageRef string
 	if c.ExplicitRef != "" {
-		// Source-less from-image deploy (`charly deploy from-image`): use the exact
+		// Source-less from-box deploy (`charly deploy from-box`): use the exact
 		// ref as-is; c.Image is the deploy-key/name only. No deploy.yml
 		// short-name resolution, no registry-ref composition — the image is
-		// already present locally (e.g. cp-image'd into a VM guest) and its
+		// already present locally (e.g. cp-box'd into a VM guest) and its
 		// quadlet config comes entirely from its baked OCI labels.
 		deployImageName = c.Image
 		imageRef = c.ExplicitRef
@@ -161,7 +161,7 @@ func (c *BoxConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 		return err
 	}
 	if meta == nil {
-		return fmt.Errorf("image %s has no embedded metadata; rebuild with latest ov", imageRef)
+		return fmt.Errorf("image %s has no embedded metadata; rebuild with latest charly", imageRef)
 	}
 
 	// Apply deploy.yml overrides onto label metadata
@@ -199,7 +199,7 @@ func (c *BoxConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	// deploy entry's Port list; for each "auto" entry, it allocates one
 	// free host TCP port per image-declared container port (from meta.Port
 	// AS LOADED FROM LABELS — before overlay merge). The expansion is
-	// persisted as ResolvedPort so subsequent charly start / charly logs / ov
+	// persisted as ResolvedPort so subsequent charly start / charly logs / charly
 	// status see the same allocation. Re-allocation happens on the next
 	// charly config / charly update where Port still contains "auto".
 	if dc != nil {
@@ -421,7 +421,7 @@ func (c *BoxConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 
 	// For quadlet, we use EnvironmentFile= instead of inline Environment= for file-sourced vars.
 	// Only pass CLI -e vars as inline Environment= entries.
-	ovBin, _ := os.Executable()
+	charlyBin, _ := os.Executable()
 	// Determine keyring backend from configured secret_backend setting, not runtime
 	// probe. At boot or when keyring is locked, DefaultCredentialStore() may return
 	// ConfigFileStore even though the user configured "keyring". The quadlet must
@@ -545,7 +545,7 @@ func (c *BoxConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 		Info:            meta.Info,
 		Entrypoint:      resolveEntrypointFromMeta(meta),
 		Secrets:         provisioned,
-		OvBin:           ovBin,
+		CharlyBin:       charlyBin,
 		EncryptedMounts: hasEncryptedBindMounts(bindMounts),
 		KeyringBackend:  isKeyring,
 		PodName:         podName,
@@ -587,7 +587,7 @@ func (c *BoxConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 		// Image + Target are required by the 2026-05-12 require-image
 		// validator (validateDeployRequiresImage). Without them, the entry
 		// `charly config` writes would be rejected by the loader on the next
-		// `ov` invocation, forcing an `charly migrate`. saveDeployState only
+		// `charly` invocation, forcing an `charly migrate`. saveDeployState only
 		// writes these when the existing entry doesn't already declare them
 		// (never clobbers operator-authored refs). charly config is exclusively
 		// a pod-deploy setup verb, so Target is always "pod"; Image is the
@@ -1235,9 +1235,9 @@ func (c *BoxConfigSetupCmd) persistResourceCaps(dc **DeployConfig) error {
 	return SaveDeployConfig(*dc)
 }
 
-// parseVolumeEnv parses CH_VOLUMES_<IMAGE> env var into DeployVolumeConfig.
+// parseVolumeEnv parses CHARLY_VOLUMES_<IMAGE> env var into DeployVolumeConfig.
 func parseVolumeEnv(imageName string) []DeployVolumeConfig {
-	envKey := "CH_VOLUMES_" + strings.ToUpper(strings.ReplaceAll(imageName, "-", "_"))
+	envKey := "CHARLY_VOLUMES_" + strings.ToUpper(strings.ReplaceAll(imageName, "-", "_"))
 	envVal := os.Getenv(envKey)
 	if envVal == "" {
 		return nil
@@ -1481,7 +1481,7 @@ func checkMissingEnvRequires(imageName string, requires []EnvDependency, resolve
 // classification) rather than a post-resolution env slice.
 //
 // The error message tells the user exactly which credential store path to
-// populate, following the `charly secrets set ov/<service>/<key> <value>` form.
+// populate, following the `charly secrets set charly/<service>/<key> <value>` form.
 func checkMissingSecretRequires(imageName string, requires []EnvDependency, resolutions []SecretResolution) error {
 	resolvedByName := make(map[string]bool, len(resolutions))
 	for _, r := range resolutions {
@@ -1670,7 +1670,7 @@ func updateAllDeployedQuadlets(rt *ResolvedRuntime, skipImage string) error {
 			}
 		}
 
-		ovBin, _ := os.Executable()
+		charlyBin, _ := os.Executable()
 		backend := resolveSecretBackend()
 		isKeyring := backend == "keyring" || backend == "auto" || backend == ""
 
@@ -1727,7 +1727,7 @@ func updateAllDeployedQuadlets(rt *ResolvedRuntime, skipImage string) error {
 			Info:            meta.Info,
 			Entrypoint:      resolveEntrypointFromMeta(meta),
 			Secrets:         provisioned,
-			OvBin:           ovBin,
+			CharlyBin:       charlyBin,
 			EncryptedMounts: hasEncryptedBindMounts(bindMounts),
 			KeyringBackend:  isKeyring,
 			PodName:         podName,

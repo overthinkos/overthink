@@ -123,14 +123,14 @@ func resolveEncPassphrase(imageName string, autoGenerate bool) (string, error) {
 		return pw, nil
 	}
 	// 2. Credential store (keyring / config)
-	if val, _ := ResolveCredential("", "ov/enc", imageName, ""); val != "" {
+	if val, _ := ResolveCredential("", "charly/enc", imageName, ""); val != "" {
 		return val, nil
 	}
 	// 3. Auto-generate if requested
 	if autoGenerate {
 		generated := generateRandomSecretToken(32)
 		store := DefaultCredentialStore()
-		if err := store.Set("ov/enc", imageName, generated); err != nil {
+		if err := store.Set("charly/enc", imageName, generated); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: could not persist enc passphrase for %s: %v\n", imageName, err)
 		}
 		fmt.Fprintf(os.Stderr, "Generated encryption passphrase for %s\n", imageName)
@@ -188,7 +188,7 @@ func resolveEncPassphraseForMount(imageName string) (string, error) {
 	}
 	backend := resolveSecretBackend()
 	resolver := func() (string, string) {
-		return ResolveCredential("", "ov/enc", imageName, "")
+		return ResolveCredential("", "charly/enc", imageName, "")
 	}
 	return resolveEncPassphraseForMountWithResolver(imageName, backend, resolver, resetDefaultCredentialStore, waitForKeyringUnlock)
 }
@@ -215,8 +215,8 @@ func resolveEncPassphraseForMountWithResolver(
 			return val, nil
 		}
 		return "", fmt.Errorf(
-			"encryption passphrase not found for ov/enc/%s (backend=%s, source=%s); "+
-				"store with `charly secrets set ov/enc %s` or switch backend with `charly settings set secret_backend auto`",
+			"encryption passphrase not found for charly/enc/%s (backend=%s, source=%s); "+
+				"store with `charly secrets set charly/enc %s` or switch backend with `charly settings set secret_backend auto`",
 			imageName, backend, src, imageName)
 	}
 
@@ -254,10 +254,10 @@ func resolveEncPassphraseForMountWithResolver(
 // actionable remediation hints.
 func encNotStoredError(imageName, backend, src string) error {
 	return fmt.Errorf(
-		"encryption passphrase not available for ov/enc/%s "+
+		"encryption passphrase not available for charly/enc/%s "+
 			"(backend=%s, source=%s). "+
 			"Remediation: run `charly doctor` to check keyring health, "+
-			"store with `charly secrets set ov/enc %s`, "+
+			"store with `charly secrets set charly/enc %s`, "+
 			"or switch backend with `charly settings set secret_backend config`",
 		imageName, backend, src, imageName)
 }
@@ -284,10 +284,10 @@ func retryUnavailable(
 		retryable := src == "locked" || src == "unavailable"
 		if !retryable || !time.Now().Before(deadline) {
 			return "", fmt.Errorf(
-				"encryption passphrase not available for ov/enc/%s after %d attempt(s) "+
+				"encryption passphrase not available for charly/enc/%s after %d attempt(s) "+
 					"(backend=%s, source=%s, waited up to %v). "+
 					"Remediation: run `charly doctor` to check keyring health, "+
-					"store with `charly secrets set ov/enc %s`, "+
+					"store with `charly secrets set charly/enc %s`, "+
 					"or switch backend with `charly settings set secret_backend config`",
 				imageName, attempt, backend, src, encMountDeadline, imageName)
 		}

@@ -1,6 +1,6 @@
 package main
 
-// LibvirtDomain is the overthink YAML-facing shape for the libvirt
+// LibvirtDomain is the opencharly YAML-facing shape for the libvirt
 // <domain> configuration (and the applicable-subset QEMU argv).
 //
 // vm.yml authors write this struct as the `libvirt:` stanza under a
@@ -10,7 +10,7 @@ package main
 //
 // The YAML shape is preserved verbatim from the prior LibvirtConfig
 // type — existing vm.yml files load unchanged. The rename reflects
-// the post-cutover architecture: the overthink YAML layer is a
+// the post-cutover architecture: the opencharly YAML layer is a
 // translation facade over libvirtxml, not an independent schema.
 //
 // Raw-XML escape hatches:

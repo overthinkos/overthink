@@ -10,7 +10,7 @@ package main
 //   1. Acquire .harness/<score>/.lock — per-target concurrency guard
 //   2. Resolve the score's `recipes:` to a merged scenario list
 //   3. Clone <project> -> <project>/.eval/<score>/runs/<run-id>/repo
-//   4. Create branch oveval/<run-id> + submodule init
+//   4. Create branch charlyeval/<run-id> + submodule init
 //   5. Synthesize the pre-AI baseline from the merged scenarios
 //   6. Drive RunHarness — the iteration state machine
 //   7. Push branch back to the bind-mounted/host project repo
@@ -331,19 +331,19 @@ func runProgressiveHarness(
 	}
 
 	master := &FinalReport{
-		Schema:           1,
-		Score:            commonOpts.ScoreName,
-		Recipe:           append([]string(nil), score.Recipe...),
-		Calver:           ComputeCalVer(),
-		RunID:            layout.RunID,
-		AI:               commonOpts.AIName,
-		Where:            ReportWhere{Kind: commonOpts.TargetKind, Name: commonOpts.TargetName},
-		TargetImage:      commonOpts.TargetImage,
-		Tag:              commonOpts.Tag,
-		PlateauIteration: commonOpts.PlateauIteration,
-		MCPEndpoint:      commonOpts.MCPEndpoint,
-		OvharnessBranch:  layout.Branch,
-		StartedUTC:       time.Now().UTC().Format(time.RFC3339),
+		Schema:              1,
+		Score:               commonOpts.ScoreName,
+		Recipe:              append([]string(nil), score.Recipe...),
+		Calver:              ComputeCalVer(),
+		RunID:               layout.RunID,
+		AI:                  commonOpts.AIName,
+		Where:               ReportWhere{Kind: commonOpts.TargetKind, Name: commonOpts.TargetName},
+		TargetImage:         commonOpts.TargetImage,
+		Tag:                 commonOpts.Tag,
+		PlateauIteration:    commonOpts.PlateauIteration,
+		MCPEndpoint:         commonOpts.MCPEndpoint,
+		CharlyharnessBranch: layout.Branch,
+		StartedUTC:          time.Now().UTC().Format(time.RFC3339),
 	}
 
 	phasesCompleted := 0

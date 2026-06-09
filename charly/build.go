@@ -27,16 +27,16 @@ type BuildCmd struct {
 	Push            bool     `long:"push" help:"Push to registry after building"`
 	Tag             string   `long:"tag" help:"Override tag (default: CalVer)"`
 	Platform        string   `long:"platform" help:"Target platform (default: host platform)"`
-	Cache           string   `long:"cache" help:"Build cache type: registry, image, gha, none (default: auto)" env:"CH_BUILD_CACHE"`
+	Cache           string   `long:"cache" help:"Build cache type: registry, image, gha, none (default: auto)" env:"CHARLY_BUILD_CACHE"`
 	NoCache         bool     `long:"no-cache" help:"Disable build cache entirely"`
-	Jobs            int      `long:"jobs" help:"Max concurrent image builds per DAG level (0=auto: defaults.jobs, else 4)" env:"CH_BUILD_JOBS"`
-	PodmanJobs      int      `long:"podman-jobs" help:"Stages per podman build (0=auto: min(NCPU, defaults.podman_jobs_cap))" env:"CH_PODMAN_JOBS"`
+	Jobs            int      `long:"jobs" help:"Max concurrent image builds per DAG level (0=auto: defaults.jobs, else 4)" env:"CHARLY_BUILD_JOBS"`
+	PodmanJobs      int      `long:"podman-jobs" help:"Stages per podman build (0=auto: min(NCPU, defaults.podman_jobs_cap))" env:"CHARLY_PODMAN_JOBS"`
 	IncludeDisabled bool     `long:"include-disabled" help:"Build images with enabled: false in charly.yml (does not modify the file). Use for one-off operational rebuilds without flipping authored config."`
 
 	// podmanJobsCap is the resolved ceiling for the auto podman-jobs calc,
 	// sourced from defaults.podman_jobs_cap in Run() (0 → podmanJobsCapFallback).
 	// Not a CLI flag — the cap is a project-wide config knob; per-build
-	// overrides go through --podman-jobs / CH_PODMAN_JOBS.
+	// overrides go through --podman-jobs / CHARLY_PODMAN_JOBS.
 	podmanJobsCap int
 }
 
@@ -107,7 +107,7 @@ func (c *BuildCmd) Run() error {
 		}
 	}
 	// Pass the explicit targets through so a qualified one (e.g.
-	// `charly box build ov.arch-builder`, or ensure-image's build-fallback for a
+	// `charly box build charly.arch-builder`, or ensure-image's build-fallback for a
 	// namespaced builder) is pulled into the resolved set even when it isn't a
 	// base/builder of any root image. Remote (`@github…`) refs were already
 	// dispatched to buildRemote above, so these are local names only.
@@ -135,7 +135,7 @@ func (c *BuildCmd) Run() error {
 		c.Cache = def.Cache
 	}
 
-	if err := ensureOvBinaryFresh(dir, gen.Images, c.Images); err != nil {
+	if err := ensureCharlyBinaryFresh(dir, gen.Images, c.Images); err != nil {
 		return fmt.Errorf("refreshing charly binary: %w", err)
 	}
 
@@ -582,12 +582,12 @@ func (c *BuildCmd) pushImage(dir string, tags []string) error {
 // absent from project config. The operative ceiling is
 // charly.yml `defaults.podman_jobs_cap`; this conservative constant just
 // keeps configs that don't declare the key on a safe value. The per-build
-// override is --podman-jobs / CH_PODMAN_JOBS. (See CHANGELOG.md for the
+// override is --podman-jobs / CHARLY_PODMAN_JOBS. (See CHANGELOG.md for the
 // podman-5.7.x blob-reuse SIGABRT race that originally motivated a hard cap.)
 const podmanJobsCapFallback = 4
 
 // jobsFallback is the outer image-level concurrency (images per DAG level)
-// used when neither --jobs / CH_BUILD_JOBS nor defaults.jobs is set.
+// used when neither --jobs / CHARLY_BUILD_JOBS nor defaults.jobs is set.
 const jobsFallback = 4
 
 // numCPU is a package-level alias for runtime.NumCPU so tests can inject
@@ -595,7 +595,7 @@ const jobsFallback = 4
 var numCPU = runtime.NumCPU
 
 // resolvePodmanJobs returns the --jobs value to pass to `podman build`.
-// An explicit override (>0, from --podman-jobs / CH_PODMAN_JOBS /
+// An explicit override (>0, from --podman-jobs / CHARLY_PODMAN_JOBS /
 // defaults.podman_jobs) wins. Otherwise the value is CPU-proportional,
 // capped at `cap` (defaults.podman_jobs_cap, else podmanJobsCapFallback):
 // min(numCPU(), cap). A cap < 1 falls back to podmanJobsCapFallback.
@@ -762,8 +762,8 @@ func detectRemoteIncludePassthrough(dir string, images []string) (string, bool) 
 		return "", false
 	}
 	imageName := images[0]
-	overthinkPath := filepath.Join(dir, UnifiedFileName)
-	data, err := os.ReadFile(overthinkPath)
+	unifiedPath := filepath.Join(dir, UnifiedFileName)
+	data, err := os.ReadFile(unifiedPath)
 	if err != nil {
 		return "", false
 	}
@@ -881,14 +881,14 @@ func filterImage(order []string, requested []string, images map[string]*Resolved
 	return filtered, nil
 }
 
-// ensureOvBinaryFresh rebuilds candy/charly/bin/charly when any image whose
+// ensureCharlyBinaryFresh rebuilds candy/charly/bin/charly when any image whose
 // resolved layer chain includes the `charly` layer is in scope for the
 // current build. Without this, podman build would COPY whatever stale
 // binary happens to live at candy/charly/bin/charly — silently baking obsolete
 // CLI behaviour into the image. Skipped (with a one-line warning) when
 // `go` is not on PATH, so an end-user with a packaged charly install does
 // not see a hard error.
-func ensureOvBinaryFresh(dir string, images map[string]*ResolvedBox, requested []string) error {
+func ensureCharlyBinaryFresh(dir string, images map[string]*ResolvedBox, requested []string) error {
 	in := requested
 	if len(in) == 0 {
 		in = make([]string, 0, len(images))
@@ -929,7 +929,7 @@ func ensureOvBinaryFresh(dir string, images map[string]*ResolvedBox, requested [
 		return nil
 	}
 
-	upToDate, err := ovBinaryUpToDate(binPath, srcDir)
+	upToDate, err := charlyBinaryUpToDate(binPath, srcDir)
 	if err == nil && upToDate {
 		return nil
 	}
@@ -947,10 +947,10 @@ func ensureOvBinaryFresh(dir string, images map[string]*ResolvedBox, requested [
 	return cmd.Run()
 }
 
-// ovBinaryUpToDate returns true when binPath exists and is newer than
+// charlyBinaryUpToDate returns true when binPath exists and is newer than
 // every .go file under srcDir. Returns (false, nil) for any file system
 // state that warrants a rebuild (missing binary, missing source dir).
-func ovBinaryUpToDate(binPath, srcDir string) (bool, error) {
+func charlyBinaryUpToDate(binPath, srcDir string) (bool, error) {
 	binStat, err := os.Stat(binPath)
 	if err != nil {
 		return false, nil

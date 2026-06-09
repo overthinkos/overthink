@@ -10,15 +10,15 @@ import (
 
 // deployNestedPodsInGuest deploys each nested target:pod child of a VM deploy
 // as a PERSISTENT in-guest quadlet — the nested-pod-in-VM capability. For each
-// child it (1) builds the child image on the host, (2) cp-images it into the
+// child it (1) builds the child image on the host, (2) cp-boxes it into the
 // guest as localhost/charly-<childKey>:latest (offline; preserves nothing but the
 // loaded ref), and (3) runs the guest's own project-free
-// `charly deploy from-image <ref> <childKey>` over SSH as the guest user — which
+// `charly deploy from-box <ref> <childKey>` over SSH as the guest user — which
 // generates + starts a quadlet from the image's baked OCI labels (ports,
 // services, GPU device auto-detected in the guest). `loginctl enable-linger`
 // makes the --user quadlet start at boot, so the pod survives a guest reboot.
 //
-// Idempotent: cp-image skips a present image; from-image re-applies cleanly on
+// Idempotent: cp-box skips a present image; from-box re-applies cleanly on
 // `charly update`. The host never needs the project for the child (the guest reads
 // the labels). nil node / no nested pods → no-op. Shared by
 // VmUnifiedTarget.Add (auto-deploy after Emit) and the dotted-path dispatch
@@ -27,20 +27,20 @@ func deployNestedPodsInGuest(vmName string, node *DeploymentNode, exec DeployExe
 	if node == nil || len(node.Nested) == 0 {
 		return nil
 	}
-	// The from-image delegation runs the HOST's OWN charly in the guest — not the
+	// The from-box delegation runs the HOST's OWN charly in the guest — not the
 	// guest's PATH charly. The host binary running this deploy is guaranteed current
-	// and from-image-capable; the guest's PATH charly may be a stale layer install
+	// and from-box-capable; the guest's PATH charly may be a stale layer install
 	// (a @github-fetched charly candy ships no bin/charly, so its curl fallback installs
-	// a pre-from-image release). So deliver the host charly to a /tmp path OUTSIDE
-	// $PATH via putHostOvInVenue and invoke it by explicit path — NEVER shadowing
+	// a pre-from-box release). So deliver the host charly to a /tmp path OUTSIDE
+	// $PATH via putHostCharlyInVenue and invoke it by explicit path — NEVER shadowing
 	// the guest's canonical /usr/bin/charly (the opencharly-git pacman package the
 	// localpkg step installs). The /tmp name embeds the host CalVer so repeated
 	// calls within one deploy reuse the same copy (idempotent). One delivery for
 	// every child (same guest venue), so do it once.
-	ovCmd := "/tmp/charly-" + OvVersion()
+	charlyCmd := "/tmp/charly-" + CharlyVersion()
 	if !opts.DryRun {
-		if err := putHostOvInVenue(context.Background(), exec, ovCmd, false, opts); err != nil {
-			return fmt.Errorf("delivering host charly into guest %s for from-image delegation: %w", vmName, err)
+		if err := putHostCharlyInVenue(context.Background(), exec, charlyCmd, false, opts); err != nil {
+			return fmt.Errorf("delivering host charly into guest %s for from-box delegation: %w", vmName, err)
 		}
 	}
 	for _, childKey := range sortedNestedKeys(node.Nested) {
@@ -56,29 +56,29 @@ func deployNestedPodsInGuest(vmName string, node *DeploymentNode, exec DeployExe
 		}
 		asRef := "localhost/charly-" + childKey + ":latest"
 		fmt.Fprintf(os.Stderr, "Deploying nested pod %s.%s (%s) as a persistent in-guest quadlet...\n", vmName, childKey, child.Image)
-		if err := runOvSubcommand("box", "build", child.Image); err != nil {
+		if err := runCharlySubcommand("box", "build", child.Image); err != nil {
 			return fmt.Errorf("build nested image %s (%s): %w", childKey, child.Image, err)
 		}
 		// --rootless: load into the guest USER's podman storage, because the
-		// from-image deploy below runs as the guest user (a --user quadlet) and
+		// from-box deploy below runs as the guest user (a --user quadlet) and
 		// reads the user's storage — a root-loaded image would be invisible to it.
-		if err := runOvSubcommand("vm", "cp-image", vmName, child.Image, "--as", asRef, "--rootless"); err != nil {
-			return fmt.Errorf("cp-image nested %s -> guest: %w", childKey, err)
+		if err := runCharlySubcommand("vm", "cp-box", vmName, child.Image, "--as", asRef, "--rootless"); err != nil {
+			return fmt.Errorf("cp-box nested %s -> guest: %w", childKey, err)
 		}
 		// Run as the guest user (--user quadlet). `sudo` escalates only the
-		// linger enable (the guest interactive user has sudo); the from-image
+		// linger enable (the guest interactive user has sudo); the from-box
 		// deploy itself runs unprivileged so the quadlet lands in the user's
 		// systemd, matching how the operator's interactive session runs it.
 		// XDG_RUNTIME_DIR must be exported so the `systemctl --user` calls inside
-		// `charly deploy from-image` reach the lingering user bus over this non-login
+		// `charly deploy from-box` reach the lingering user bus over this non-login
 		// SSH session — the same pattern VmDeployTarget uses for user services.
-		// ovCmd is the explicit /tmp path to the host's own charly delivered above
-		// (the from-image authority), never the guest's PATH charly.
+		// charlyCmd is the explicit /tmp path to the host's own charly delivered above
+		// (the from-box authority), never the guest's PATH charly.
 		script := fmt.Sprintf(
 			"sudo loginctl enable-linger \"$(id -un)\" >/dev/null 2>&1 || true\n"+
 				"export XDG_RUNTIME_DIR=\"/run/user/$(id -u)\"\n"+
-				"%s deploy from-image %s %s",
-			ovCmd, asRef, childKey)
+				"%s deploy from-box %s %s",
+			charlyCmd, asRef, childKey)
 		if err := exec.RunUser(context.Background(), script, opts); err != nil {
 			return fmt.Errorf("deploy nested pod %s in guest: %w", childKey, err)
 		}

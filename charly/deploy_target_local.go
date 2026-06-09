@@ -726,7 +726,7 @@ func renderTaskCommand(s *TaskStep) (string, error) {
 		if mode == "" {
 			mode = "0644"
 		}
-		return fmt.Sprintf("install -m%s /dev/stdin %s <<'OV_WRITE'\n%s\nOV_WRITE",
+		return fmt.Sprintf("install -m%s /dev/stdin %s <<'CHARLY_WRITE'\n%s\nCHARLY_WRITE",
 			mode, shDoubleQuote(task.Write), task.Content), nil
 	case task.Download != "":
 		return renderDownloadScript(task, s.LayerVars), nil
@@ -988,7 +988,7 @@ func (t *LocalDeployTarget) execServiceCustom(s *ServiceCustomStep, plan *Instal
 }
 
 func (t *LocalDeployTarget) execRepoChange(s *RepoChangeStep, plan *InstallPlan, opts EmitOpts, rec *CandyRecord, start time.Time) error {
-	cmd := fmt.Sprintf("mkdir -p %s && cat > %s <<'OV_REPO'\n%s\nOV_REPO",
+	cmd := fmt.Sprintf("mkdir -p %s && cat > %s <<'CHARLY_REPO'\n%s\nCHARLY_REPO",
 		shQuoteArg(filepath.Dir(s.File)), shQuoteArg(s.File), s.Content)
 	if err := t.runSystem(cmd, opts); err != nil {
 		return err
@@ -1040,9 +1040,9 @@ func (t *LocalDeployTarget) execLocalPkg(s *LocalPkgInstallStep, plan *InstallPl
 // script body as a password in tty-less / background contexts.
 func runSudoShell(script string, opts EmitOpts) error {
 	if opts.DryRun {
-		fmt.Fprintln(os.Stderr, "[dry-run] sudo -n bash <<OV_ROOT")
+		fmt.Fprintln(os.Stderr, "[dry-run] sudo -n bash <<CHARLY_ROOT")
 		fmt.Fprintln(os.Stderr, script)
-		fmt.Fprintln(os.Stderr, "OV_ROOT")
+		fmt.Fprintln(os.Stderr, "CHARLY_ROOT")
 		return nil
 	}
 	cmd := exec.Command("sudo", "-n", "bash", "-s")
@@ -1120,9 +1120,9 @@ func runSudoArgs(argv []string, opts EmitOpts) error {
 // runUserShell runs a script as the invoking user (no sudo).
 func runUserShell(script string, opts EmitOpts) error {
 	if opts.DryRun {
-		fmt.Fprintln(os.Stderr, "[dry-run] bash <<OV_USER")
+		fmt.Fprintln(os.Stderr, "[dry-run] bash <<CHARLY_USER")
 		fmt.Fprintln(os.Stderr, script)
-		fmt.Fprintln(os.Stderr, "OV_USER")
+		fmt.Fprintln(os.Stderr, "CHARLY_USER")
 		return nil
 	}
 	cmd := exec.Command("bash", "-s")
@@ -1241,7 +1241,7 @@ func writeUnitLikeFile(path, content string, scope Scope, opts EmitOpts) error {
 	// a LocalDeployTarget method), so it uses the package-level
 	// runSudoShell directly — writing system-scope unit files is a
 	// local-host-only operation, never a nested-venue one.
-	cmd := fmt.Sprintf("mkdir -p %s && cat > %s <<'OV_UNIT'\n%s\nOV_UNIT",
+	cmd := fmt.Sprintf("mkdir -p %s && cat > %s <<'CHARLY_UNIT'\n%s\nCHARLY_UNIT",
 		shQuoteArg(filepath.Dir(path)), shQuoteArg(path), content)
 	return runSudoShell(cmd, opts)
 }

@@ -21,8 +21,8 @@ func generateAliasScript(image, command string) string {
 # charly-alias
 # box: %s
 # command: %s
-_ov_q(){ printf "'"; printf '%%s' "$1" | sed "s/'/'\\\\''/g"; printf "' "; }
-c="%s"; for a in "$@"; do c="$c $(_ov_q "$a")"; done
+_charly_q(){ printf "'"; printf '%%s' "$1" | sed "s/'/'\\\\''/g"; printf "' "; }
+c="%s"; for a in "$@"; do c="$c $(_charly_q "$a")"; done
 exec charly shell %s -c "$c"
 `, image, command, command, image)
 }
@@ -308,7 +308,7 @@ func (c *AliasInstallCmd) Run() error {
 		return err
 	}
 	if meta == nil {
-		return fmt.Errorf("image %s has no embedded metadata; rebuild with latest ov", imageRef)
+		return fmt.Errorf("image %s has no embedded metadata; rebuild with latest charly", imageRef)
 	}
 	aliases := meta.Alias
 

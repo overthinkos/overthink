@@ -15,6 +15,17 @@ type DistroConfig struct {
 // DistroDef defines distro-specific bootstrap, workarounds, and package formats.
 type DistroDef struct {
 	Inherits string `yaml:"inherits,omitempty"`
+	// InheritPackages, when true on a distro that also sets `inherits:`, makes
+	// the parent distro's package sections cascade onto this distro — a layer's
+	// `distro: <parent>:` block applies when building/deploying this distro. The
+	// canonical case is cachyos (`inherits: arch`, `inherit_packages: true`): an
+	// `arch:` package block reaches cachyos because cachyos is ABI-compatible
+	// with arch. Defaults false: `inherits:` alone inherits formats + bootstrap
+	// but NOT package sections, so ubuntu (`inherits: debian`) does NOT pull
+	// debian-only sections (debian and ubuntu diverge per-package). It is the
+	// single YAML signal that drives package-cascade inheritance — there is no
+	// Go-side hardcoded distro-inheritance table. See expandPackageInheritance.
+	InheritPackages bool `yaml:"inherit_packages,omitempty"`
 	// Version is the canonical distro version (e.g. "13" for debian, "24.04" for
 	// ubuntu, "43" for fedora) — the single source for synthesizing the
 	// per-version tag chain ([<distro>:<version>, <distro>]) on a target that
@@ -185,6 +196,17 @@ type FormatDef struct {
 	InstallTemplate string            `yaml:"install_template,omitempty"`
 	Phases          *PhaseSet         `yaml:"phase,omitempty"`
 	Validate        []FormatRule      `yaml:"validate,omitempty"`
+
+	// Secondary marks a build format that is layered ON TOP of a distro's
+	// primary install format rather than BEING one — built via a builder and
+	// installed from the produced files (the canonical case is `aur`, built by
+	// the `aur` builder and installed with `pacman -U`). It is the YAML-declared
+	// replacement for the former Go-side `name == "aur"` special-case: a
+	// distro's PrimaryFormat() skips every Secondary format, and the layer
+	// parser only routes a secondary sub-block under a distro/format-family that
+	// declares it. Adding a new secondary build format is therefore a build.yml
+	// edit, not a code change. Defaults false (a primary install format).
+	Secondary bool `yaml:"secondary,omitempty"`
 
 	// UninstallTemplate is the host-venue package-removal command rendered at
 	// deploy-teardown (reverse_ops.go reversePackageRemove). It is a Go
@@ -515,12 +537,66 @@ func distroTagChain(distro, version string) []string {
 	return []string{distro + ":" + version, distro}
 }
 
+// bareDistroName strips an optional ":<version>" suffix from a distro tag,
+// returning the base distro name (`debian:13` → `debian`, `cachyos` → `cachyos`).
+func bareDistroName(tag string) string {
+	if i := indexOf(tag, ':'); i >= 0 {
+		return tag[:i]
+	}
+	return tag
+}
+
+// expandPackageInheritance appends, AFTER the authored distro tags, every
+// `inherits:` ancestor of a tag whose distro def opts into package inheritance
+// via `inherit_packages: true` — most-specific authored tags kept first,
+// ancestors appended as the least-specific levels. This is the SOLE driver of
+// package-cascade inheritance, sourced entirely from build.yml:
+//
+//   - cachyos (inherits arch, inherit_packages: true) → [cachyos, arch]: an
+//     `arch:` layer block reaches cachyos.
+//   - arch (no inherit_packages)                       → [arch]: unchanged.
+//   - ubuntu (inherits debian, no flag)                → [ubuntu]: debian
+//     package sections do NOT leak onto ubuntu.
+//
+// The walk is transitive (a grandparent flagged on each hop is followed) and
+// dedup-guarded against an already-present ancestor (a box that authored
+// `[cachyos, arch]` explicitly resolves to the same set). Versioned tags are
+// matched by bare name. Returns the input unchanged when dc is nil.
+func (dc *DistroConfig) expandPackageInheritance(tags []string) []string {
+	if dc == nil || len(tags) == 0 {
+		return tags
+	}
+	out := append([]string(nil), tags...)
+	seen := map[string]bool{}
+	for _, t := range tags {
+		seen[bareDistroName(t)] = true
+	}
+	for _, t := range tags {
+		name := bareDistroName(t)
+		for {
+			def := dc.Distro[name]
+			if def == nil || !def.InheritPackages || def.Inherits == "" {
+				break
+			}
+			parent := def.Inherits
+			if !seen[parent] {
+				out = append(out, parent)
+				seen[parent] = true
+			}
+			name = parent
+		}
+	}
+	return out
+}
+
 // PrimaryFormat returns the distro's primary package format — the single
 // source for "what package format does this resolved build.yml distro use".
 // The primary format is the one base-distro format among the distro's `Format`
-// map that is NOT a secondary builder format (`aur` is always secondary to
-// `pac`); among the base formats (rpm/deb/pac) a distro declares exactly one.
-// Returns "" when the distro declares no base format. Deterministic.
+// map that is NOT flagged `secondary: true` (the aur build format is always
+// secondary to the pac primary); among the base formats (rpm/deb/pac) a distro
+// declares exactly one. Returns "" when the distro declares no base format.
+// Deterministic. The secondary/primary distinction is read from the YAML
+// `secondary:` flag — there is no Go-side per-format-name special-case.
 func (d *DistroDef) PrimaryFormat() string {
 	if d == nil {
 		return ""
@@ -531,8 +607,8 @@ func (d *DistroDef) PrimaryFormat() string {
 	}
 	sortStrings(names)
 	for _, name := range names {
-		if name == "aur" {
-			continue // secondary builder format, never primary
+		if fd := d.Format[name]; fd != nil && fd.Secondary {
+			continue // secondary build format (declared in YAML), never primary
 		}
 		return name
 	}
@@ -776,7 +852,7 @@ func (bc *BuilderConfig) BuilderNames() []string {
 //
 // ResolveFormatConfigData has been removed. Build config resolution now goes
 // through LoadUnified — which reads charly.yml + includes: (local and
-// remote-ref). See ov/unified.go.
+// remote-ref). See charly/unified.go.
 
 // BuildFile is the on-disk schema of build.yml — three optional top-level
 // sections that map directly onto DistroConfig/BuilderConfig/InitConfig.

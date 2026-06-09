@@ -63,9 +63,9 @@ else
     export ENABLE_OLLAMA_API="false"
 fi
 
-# --- MCP Servers + Jupyter from OV_MCP_SERVERS ---
-if [ -n "${OV_MCP_SERVERS:-}" ]; then
-    eval "$(python3 - "$OV_MCP_SERVERS" "${CODE_EXECUTION_JUPYTER_AUTH_TOKEN:-}" <<'PYEOF'
+# --- MCP Servers + Jupyter from CHARLY_MCP_SERVERS ---
+if [ -n "${CHARLY_MCP_SERVERS:-}" ]; then
+    eval "$(python3 - "$CHARLY_MCP_SERVERS" "${CODE_EXECUTION_JUPYTER_AUTH_TOKEN:-}" <<'PYEOF'
 import sys, json
 
 mcp_json, jupyter_token = sys.argv[1], sys.argv[2]
@@ -73,7 +73,7 @@ mcp_json, jupyter_token = sys.argv[1], sys.argv[2]
 try:
     servers = json.loads(mcp_json)
 except json.JSONDecodeError:
-    print('echo "openwebui-entrypoint: warning: could not parse OV_MCP_SERVERS" >&2', flush=True)
+    print('echo "openwebui-entrypoint: warning: could not parse CHARLY_MCP_SERVERS" >&2', flush=True)
     sys.exit(0)
 
 # Build TOOL_SERVER_CONNECTIONS for Open WebUI
@@ -135,13 +135,13 @@ if [ -n "$MISSING" ]; then
     echo "WEBUI_ADMIN_PASSWORD is a credential-backed secret (declared in secret_require);" >&2
     echo "store it once in the credential backend and it flows in via a podman secret:" >&2
     echo "" >&2
-    echo "  ov secrets set ov/secret WEBUI_ADMIN_PASSWORD your-password" >&2
-    echo "  ov config openwebui -e WEBUI_ADMIN_EMAIL=you@example.com --update-all" >&2
+    echo "  charly secrets set charly/secret WEBUI_ADMIN_PASSWORD your-password" >&2
+    echo "  charly config openwebui -e WEBUI_ADMIN_EMAIL=you@example.com --update-all" >&2
     echo "" >&2
     echo "Or pass both via -e on first run — the password is auto-imported into" >&2
     echo "the credential backend and stripped from deploy.yml / the quadlet:" >&2
     echo "" >&2
-    echo "  ov config openwebui -e WEBUI_ADMIN_EMAIL=you@example.com -e WEBUI_ADMIN_PASSWORD=your-password" >&2
+    echo "  charly config openwebui -e WEBUI_ADMIN_EMAIL=you@example.com -e WEBUI_ADMIN_PASSWORD=your-password" >&2
     echo "" >&2
     exit 1
 fi

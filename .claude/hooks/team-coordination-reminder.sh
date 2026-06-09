@@ -11,7 +11,7 @@
 # apart. Point, don't duplicate. See /charly-internals:agents "Hooks doctrine".
 
 cat <<'EOF'
-OVERTHINK TEAM REMINDER (pointer — the rules live in CLAUDE.md + /charly-internals:agents):
+OPENCHARLY TEAM REMINDER (pointer — the rules live in CLAUDE.md + /charly-internals:agents):
 
 R0 SKILLS FIRST. Each teammate loads the matching skill(s) via the Skill tool
 before reading source / running a command / editing a file. Teammates read

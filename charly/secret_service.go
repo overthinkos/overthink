@@ -351,7 +351,7 @@ func findItemByAttrsAcrossCollections(c ssOps, attrs map[string]string, preferLa
 	}
 
 	// Priority 2: a collection with the preferred label (e.g. set via
-	// `charly settings set keyring_collection_label hexaplant`).
+	// `charly settings set keyring_collection_label opencharly`).
 	if preferLabel != "" {
 		if paths, err := c.collections(); err == nil {
 			for _, p := range paths {
@@ -447,7 +447,7 @@ func findItemByAttrsAcrossCollections(c ssOps, attrs map[string]string, preferLa
 // resolveTargetCollection picks the collection writes should land in. Same
 // priority as the read path (default alias → preferLabel → first healthy
 // unlocked collection) so writes co-locate with reads — a key written under
-// `keyring_collection_label: hexaplant` will be readable by a subsequent
+// `keyring_collection_label: opencharly` will be readable by a subsequent
 // findItemByAttrsAcrossCollections call with the same setting.
 //
 // Each candidate is unlocked first (non-interactive). Locked collections that

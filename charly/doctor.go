@@ -900,7 +900,7 @@ func checkKeyringIndexConsistency() []CheckResult {
 	var missing []string
 	for _, entry := range cfg.KeyringKeys {
 		// Index entries are stored as "<service>/<key>" where <service> may
-		// contain slashes (e.g. "ov/enc/immich-ml" = service:"ov/enc",
+		// contain slashes (e.g. "charly/enc/immich-ml" = service:"charly/enc",
 		// key:"immich-ml"). Reuse the canonical split from credential_config.
 		service, key := parseCompositeKey(entry)
 		if service == "" || key == "" {

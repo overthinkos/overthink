@@ -233,7 +233,7 @@ func TestHostUnifiedTarget_Rebuild_DryRun(t *testing.T) {
 	}
 	// We can't easily capture stdout in a unit test without a fixture,
 	// but the absence of a non-nil error confirms the dry-run path
-	// returns cleanly without calling runOvSubcommand.
+	// returns cleanly without calling runCharlySubcommand.
 }
 
 // TestHostReverseExec_AccessorPassthrough verifies the inline adapter

@@ -13,10 +13,10 @@ func TestResolveHookSecretEnv(t *testing.T) {
 	}
 
 	// A secret whose value resolves (here via the env-first chain) is surfaced.
-	t.Setenv("CH_TEST_HOOK_TOKEN", "tok-abc-123")
-	meta := &BoxMetadata{SecretAccept: []EnvDependency{{Name: "CH_TEST_HOOK_TOKEN"}}}
+	t.Setenv("CHARLY_TEST_HOOK_TOKEN", "tok-abc-123")
+	meta := &BoxMetadata{SecretAccept: []EnvDependency{{Name: "CHARLY_TEST_HOOK_TOKEN"}}}
 	got := resolveHookSecretEnv("img", "", meta)
-	want := "CH_TEST_HOOK_TOKEN=tok-abc-123"
+	want := "CHARLY_TEST_HOOK_TOKEN=tok-abc-123"
 	found := false
 	for _, e := range got {
 		if e == want {
@@ -28,7 +28,7 @@ func TestResolveHookSecretEnv(t *testing.T) {
 	}
 
 	// An unresolved secret is omitted entirely (never a leaked empty NAME=).
-	meta2 := &BoxMetadata{SecretAccept: []EnvDependency{{Name: "CH_TEST_HOOK_UNSET_XYZZY"}}}
+	meta2 := &BoxMetadata{SecretAccept: []EnvDependency{{Name: "CHARLY_TEST_HOOK_UNSET_XYZZY"}}}
 	if got := resolveHookSecretEnv("img", "", meta2); len(got) != 0 {
 		t.Fatalf("unresolved secret must be omitted, got %v", got)
 	}

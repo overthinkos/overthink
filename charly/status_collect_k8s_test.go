@@ -22,7 +22,7 @@ func k8sUnified(name, image, tmpl, ctx string) *UnifiedFile {
 	}
 }
 
-// TestK8sCollector_TreePresent builds a real .overthink/k8s/<name>/ tree under
+// TestK8sCollector_TreePresent builds a real .opencharly/k8s/<name>/ tree under
 // a temp cwd and asserts the collector emits one tree-present row stamped
 // Kind=k8s, Source=tree, with the template's kubeconfig context surfaced.
 func TestK8sCollector_TreePresent(t *testing.T) {
@@ -31,8 +31,8 @@ func TestK8sCollector_TreePresent(t *testing.T) {
 
 	const name, image, tmpl, ctx = "openclaw", "openclaw", "prod-cluster", "gke_prod"
 
-	// Craft the generated Kustomize tree at .overthink/k8s/<name>/base/.
-	baseDir := filepath.Join(dir, ".overthink", "k8s", name, "base")
+	// Craft the generated Kustomize tree at .opencharly/k8s/<name>/base/.
+	baseDir := filepath.Join(dir, ".opencharly", "k8s", name, "base")
 	if err := os.MkdirAll(baseDir, 0o755); err != nil {
 		t.Fatalf("mkdir tree: %v", err)
 	}

@@ -234,7 +234,7 @@ it autonomously. See [Evaluate](#evaluate) for the framework and
 workflows. → `/charly-eval:eval`, `/charly-internals:agents`.
 
 **Rootless-first power-user boxes.** The four boxes carrying the
-full `charly` toolchain (`fedora-coder`, `fedora-ov`, `arch-ov`,
+full `charly` toolchain (`fedora-coder`, `charly-fedora`, `charly-arch`,
 `githubrunner`) all run as uid=1000 with passwordless sudo. Four
 cross-distro coder boxes (`/charly-coder:fedora-coder`/`arch-coder`/
 `debian-coder`/`ubuntu-coder`) share ~30 candies, differing only in
@@ -257,7 +257,7 @@ VMs from a terminal inside the browser-accessible candybox desktop — uid 1000,
 **Recommended — Go install** (requires Go 1.25.3+):
 
 ```bash
-go install github.com/overthinkos/overthink/ov@latest
+go install github.com/overthinkos/overthink/charly@latest
 ```
 
 This puts `charly` in your `$GOPATH/bin`. Create an `charly.yml` and
@@ -399,7 +399,7 @@ input.
 
 - **Multiple instances** (`-i <instance>`) — every command takes
   `-i`; instances get distinct quadlet names
-  (`ov-<image>-<instance>.container`), `deploy.yml` entries
+  (`charly-<image>-<instance>.container`), `deploy.yml` entries
   (`<image>/<instance>`), and disambiguated MCP server names.
 - **Sidecars** (`--sidecar <name>`) — attach a Tailscale,
   cloudflare-tunnel, or other container template into a shared pod.
@@ -423,7 +423,7 @@ input.
 - **Per-box MCP servers** — `chrome-devtools-mcp` on `:9224`,
   `jupyter-mcp` at `:8888/mcp`, `marimo-mcp` at `:2718/mcp/server`,
   nested `charly-mcp`. Declared via `mcp_provide:` and auto-discovered
-  by consumers (Hermes, Claude Code) through `CH_MCP_SERVERS`.
+  by consumers (Hermes, Claude Code) through `CHARLY_MCP_SERVERS`.
 - **Auto service discovery** — a candy's `env_provide:` declares
   env vars with `{{.ContainerName}}` templates injected into every
   co-deployed container at `charly config` time. Deploy `ollama` and
@@ -451,7 +451,7 @@ discriminates where it lands:
   (bootc → QCOW2/RAW), `charly vm create/destroy/start/stop`, `charly vm
   clone` (snapshot fork), `charly vm snapshot`, `charly vm console`. The
   managed `~/.config/charly/ssh_config` fragment gets a `Host
-  ov-<vmname>` stanza written on `charly vm create`.
+  charly-<vmname>` stanza written on `charly vm create`.
   → `/charly-vm:vm`, `/charly-internals:vm-deploy-target`.
 - **`target: k8s`** — Kustomize tree applied to k3s in-pod (candy
   triplet `/charly-infrastructure:k3s` + `k3s-server` + `k3s-agent`) or
@@ -488,7 +488,7 @@ direnv loads the project; no plaintext on disk. Manage with `charly
 secrets gpg {env, show, set, unset, edit, encrypt, recipients,
 import-key, export-key, setup, doctor}`. Candy-private secrets
 (like `K3S_CLUSTER_TOKEN`) get auto-provisioned via
-`ensureLayerSecret` and stored under `ov/secret/<key>` in the
+`ensureLayerSecret` and stored under `charly/secret/<key>` in the
 Secret Service. **Agent forwarding** — the `agent-forwarding` candy
 binds host `SSH_AUTH_SOCK` / `GPG_AGENT_SOCK` into the container.
 → `/charly-build:secrets`.
@@ -601,7 +601,7 @@ Cross-cutting: **`charly mcp serve`** is the MCP gateway. Every leaf
 Kong command auto-exposes as an MCP tool (Streamable HTTP or
 stdio), so Claude Code, Codex, or any MCP client drives the full
 `charly` surface over RPC. `--read-only` filters destructive tools;
-auto-fallback to `overthinkos/opencharly` when no project is wired
+auto-fallback to `overthinkos/overthink` when no project is wired
 (opt out with `--no-default-repo`).
 
 → `/charly-eval:eval`, `/charly-build:charly-mcp-cmd`, `/charly-coder:charly-mcp`,
@@ -665,14 +665,14 @@ gateway exposing the entire surface as MCP tools.
 
 **Global flags** (apply to every command):
 
-- `-C <dir>` / `--dir <dir>` / `CH_PROJECT_DIR=<dir>` — override the
+- `-C <dir>` / `--dir <dir>` / `CHARLY_PROJECT_DIR=<dir>` — override the
   project directory.
-- `--repo <OWNER/REPO[@REF]>` / `CH_PROJECT_REPO=…` — read
+- `--repo <OWNER/REPO[@REF]>` / `CHARLY_PROJECT_REPO=…` — read
   `charly.yml` from a remote git repo. Bare `owner/repo`
   auto-prefixes `github.com/`; the literal `default` expands to
-  `overthinkos/opencharly`. Cached in `~/.cache/charly/repos/`. Mutually
+  `overthinkos/overthink`. Cached in `~/.cache/charly/repos/`. Mutually
   exclusive with `--dir`.
-- `--host <alias|user@machine[:port]>` / `CH_HOST=…` — re-exec the
+- `--host <alias|user@machine[:port]>` / `CHARLY_HOST=…` — re-exec the
   command on a remote host over SSH. Commands marked LocalOnly
   (`settings`, `version`, `ssh tunnel`) always run locally.
 

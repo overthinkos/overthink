@@ -259,7 +259,7 @@ func resolveLocalName(name, projectDir string, preferKind RefKind) (*DeployRef, 
 	// files transparently). No direct file reads here.
 	if uf, ok, err := LoadUnified(projectDir); err == nil && ok && uf != nil {
 		// Namespace-aware presence check via the single resolver, so a qualified
-		// deploy ref (`charly deploy add ov.<image>`) resolves the same way every
+		// deploy ref (`charly deploy add charly.<image>`) resolves the same way every
 		// other command resolves an image name. Bare names hit the root map
 		// exactly as the previous flat `uf.Image[name]` did.
 		if _, _, present := uf.ProjectConfig().resolveImageRef(name); present {

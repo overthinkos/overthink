@@ -126,7 +126,7 @@ func TransferToRootful(imageRef string) error {
 //     falls back to a local `charly box build <name>` when the ref maps
 //     to a project charly.yml entry. This is the same code path
 //     BuilderRun, the eval preflight, and `charly box pull` all go
-//     through (see ov/ensure_image.go).
+//     through (see charly/ensure_image.go).
 //
 // Returns ErrImageNotLocal (wrapped with the ref) only when ALL three
 // tiers fail.

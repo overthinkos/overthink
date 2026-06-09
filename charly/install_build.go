@@ -546,6 +546,28 @@ func compileSystemPackageSteps(layer *Layer, img *ResolvedBox, hostCtx HostConte
 // repo/copr/options/exclude/module resolved MOST-SPECIFIC-WINS. Returns the
 // package list, the rendered Raw install context (including the unioned
 // `package` list), and whether any tag section matched.
+// cascadeTagChain returns the full per-layer cascade tag chain MOST-SPECIFIC
+// FIRST: the image's distro chain (e.g. [debian:13, debian]) followed by the
+// package-format FAMILY tag (img.Pkg = deb/pac/rpm) as the LEAST-specific level.
+// A `distro: deb:` layer block therefore applies to EVERY deb-format distro
+// (debian + ubuntu + their versions), `pac:` to arch + cachyos, `rpm:` to
+// fedora — the family-generic level of the YAML-configured
+// deb/pac/rpm → distro → version hierarchy. img.Pkg is the build.yml-declared
+// primary package format, so the hierarchy lives entirely in YAML.
+//
+// Distro INHERITANCE is the complementary YAML mechanism: img.Distro is already
+// expanded (at resolve time, expandPackageInheritance) to include any
+// `inherit_packages: true` ancestor, so a cachyos image/VM carries [cachyos, …,
+// arch] and a `distro: arch:` block DOES reach cachyos — while ubuntu (no flag)
+// stays isolated from debian. Both knobs live entirely in build.yml.
+func cascadeTagChain(img *ResolvedBox) []string {
+	chain := append([]string(nil), img.Distro...)
+	if img.Pkg != "" {
+		chain = append(chain, img.Pkg)
+	}
+	return chain
+}
+
 func resolveCascadePackages(layer *Layer, img *ResolvedBox) (pkgs []string, raw map[string]interface{}, matched bool) {
 	seen := map[string]bool{}
 	add := func(in []string) {
@@ -560,8 +582,9 @@ func resolveCascadePackages(layer *Layer, img *ResolvedBox) (pkgs []string, raw 
 	add(layer.TopPackages())
 
 	raw = map[string]interface{}{}
-	for i := len(img.Distro) - 1; i >= 0; i-- { // least → most specific
-		cfg := layer.TagSection(img.Distro[i])
+	chain := cascadeTagChain(img)
+	for i := len(chain) - 1; i >= 0; i-- { // least → most specific: format → distro → version
+		cfg := layer.TagSection(chain[i])
 		if cfg == nil {
 			continue
 		}

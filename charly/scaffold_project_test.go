@@ -137,7 +137,7 @@ func TestRemoveLayerFromImage(t *testing.T) {
 // TestEditLayer_ImportedBoxFile verifies the authoring-edit verbs resolve an
 // image defined in a flat-imported per-kind file (box.yml) and save the edit
 // THERE — instead of erroring "image not found in charly.yml". This is the
-// fix for `charly box rm-candy <leaf> ov` / `charly box add-candy` on images that live
+// fix for `charly box rm-candy <leaf> charly` / `charly box add-candy` on images that live
 // in box.yml rather than inlined in charly.yml.
 func TestEditLayer_ImportedBoxFile(t *testing.T) {
 	dir := t.TempDir()
@@ -169,9 +169,9 @@ func TestEditLayer_ImportedBoxFile(t *testing.T) {
 		t.Errorf("after rm-candy charly: candy = %q, want supervisord,jupyter", got)
 	}
 	// The edit must land in box.yml, NOT leak into charly.yml.
-	ovData, _ := os.ReadFile(filepath.Join(dir, "charly.yml"))
-	if strings.Contains(string(ovData), "leafy") {
-		t.Errorf("edit leaked into charly.yml:\n%s", ovData)
+	charlyData, _ := os.ReadFile(filepath.Join(dir, "charly.yml"))
+	if strings.Contains(string(charlyData), "leafy") {
+		t.Errorf("edit leaked into charly.yml:\n%s", charlyData)
 	}
 
 	if err := AddLayerToImage(dir, "leafy", "ripgrep"); err != nil {

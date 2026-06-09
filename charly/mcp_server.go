@@ -17,16 +17,16 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// mcp_server.go turns the entire `ov` CLI into an MCP server. Every leaf Kong
+// mcp_server.go turns the entire `charly` CLI into an MCP server. Every leaf Kong
 // command becomes one MCP tool whose input schema is derived mechanically from
 // the command's flags and positional args. Tool-call handling re-invokes the
 // Kong CLI inside this same process (no fork/exec) so the server stays in lock-
 // step with the shell CLI.
 //
 // The symmetric client lives in mcp.go / mcp_client.go and is built on the same
-// github.com/modelcontextprotocol/go-sdk. Layers that ship the `ov` binary
-// declare `mcp_provides: ov` to advertise this endpoint to consumers
-// (see the `ov` layer's candy manifest).
+// github.com/modelcontextprotocol/go-sdk. Layers that ship the `charly` binary
+// declare `mcp_provides: charly` to advertise this endpoint to consumers
+// (see the `charly` layer's candy manifest).
 
 // Tool names that should not be exposed — the serve command itself (would be a
 // shell into itself), and the interactive help flag.
@@ -139,7 +139,7 @@ type McpCmdGroup struct {
 // McpServeCmd: `charly mcp serve`
 //
 // Note: this command does NOT define its own --repo flag. The top-level
-// `charly --repo OWNER/REPO mcp serve` (or env var CH_PROJECT_REPO) is the
+// `charly --repo OWNER/REPO mcp serve` (or env var CHARLY_PROJECT_REPO) is the
 // supported way to pin the project repo. main() resolves the repo and
 // chdirs before dispatching, so by the time bootstrapProject() runs, the
 // cwd is already inside the cached repo. We only need a flag here for the
@@ -187,7 +187,7 @@ var mcpRegisteredToolCount = func(*mcp.Server) int { return mcpLastRegisteredCou
 // designated exception, because an MCP server with no project is useless.
 //
 // Resolution order (after main() has already chdir'd for --dir/--repo if set):
-//  1. charly.yml exists in cwd → use cwd (covers explicit --dir / CH_PROJECT_DIR
+//  1. charly.yml exists in cwd → use cwd (covers explicit --dir / CHARLY_PROJECT_DIR
 //     with a real checkout, --repo with a cloned cache, and ambient cwd).
 //  2. --no-default-repo → hard-fail with guidance.
 //  3. Otherwise → silently chdir into the overthinkos/overthink cache (the
@@ -195,37 +195,49 @@ var mcpRegisteredToolCount = func(*mcp.Server) int { return mcpLastRegisteredCou
 //     the box, especially in container images like fedora-coder whose
 //     /workspace bind mount may be empty at first start).
 //
-// Note: this deliberately does NOT early-return just because CH_PROJECT_DIR
+// Note: this deliberately does NOT early-return just because CHARLY_PROJECT_DIR
 // is set. A pointed-at-but-empty /workspace (common: the dev has started the
 // container without `--bind project=<path>`) would otherwise leave the agent
 // staring at an charly.yml-less directory with no recourse. Falling through to
 // the default repo makes `box.list.boxes` and friends work by default.
 func (c *McpServeCmd) bootstrapProject() error {
-	// Case 1: charly.yml exists in cwd (main() has already chdir'd if --dir
-	// or --repo was supplied, so cwd reflects all three origins).
-	if _, err := os.Stat("box.yml"); err == nil {
+	// Case 1: charly.yml (the canonical project entry) exists in cwd (main()
+	// has already chdir'd if --dir or --repo was supplied, so cwd reflects all
+	// three origins).
+	if _, err := os.Stat("charly.yml"); err == nil {
 		return nil
 	}
 
 	// Case 2: opt-out flag set — hard-fail with guidance.
 	if c.NoDefaultRepo {
 		return fmt.Errorf("charly mcp serve: no project source found. " +
-			"Set CH_PROJECT_DIR / CH_PROJECT_REPO, pass --dir / --repo, or place an charly.yml in cwd " +
+			"Set CHARLY_PROJECT_DIR / CHARLY_PROJECT_REPO, pass --dir / --repo, or place an charly.yml in cwd " +
 			"(remove --no-default-repo to auto-fall back to overthinkos/overthink)")
 	}
-	// Case 3: auto-fallback to overthinkos/overthink.
+	// Case 3: best-effort auto-fallback to overthinkos/overthink. A FAILURE here
+	// — no network/DNS (an isolated disposable pod), an unreachable or private
+	// repo, an offline dev box — must NOT be fatal. Per the charly-mcp candy
+	// contract ("when absent or empty, the session-wide tools continue to
+	// work"), the server still binds and serves the project-free tools
+	// (version/status/doctor/secrets/settings); only the project-dependent
+	// tools then return a clear "no project" error. Returning the error here
+	// would crash-loop the supervisord service in any network-isolated pod.
+	reason := "no charly.yml in cwd"
+	if dir := os.Getenv("CHARLY_PROJECT_DIR"); dir != "" {
+		reason = fmt.Sprintf("CHARLY_PROJECT_DIR=%s has no charly.yml", dir)
+	}
 	path, err := ResolveProjectRepo("default")
 	if err != nil {
-		return fmt.Errorf("auto-fetching default project repo (%s): %w", DefaultProjectRepo, err)
+		fmt.Fprintf(os.Stderr, "charly mcp: %s and default repo %s is unreachable (%v); "+
+			"serving project-free tools only\n", reason, DefaultProjectRepo, err)
+		return nil
 	}
 	if err := os.Chdir(path); err != nil {
-		return fmt.Errorf("chdir to %s: %w", path, err)
+		fmt.Fprintf(os.Stderr, "charly mcp: %s; fetched default repo %s but cannot chdir (%v); "+
+			"serving project-free tools only\n", reason, path, err)
+		return nil
 	}
 	// Name the reason so a confused dev reading server logs can trace it.
-	reason := "no charly.yml in cwd"
-	if dir := os.Getenv("CH_PROJECT_DIR"); dir != "" {
-		reason = fmt.Sprintf("CH_PROJECT_DIR=%s has no charly.yml", dir)
-	}
 	fmt.Fprintf(os.Stderr, "charly mcp: %s; falling back to default repo %s (%s)\n",
 		reason, DefaultProjectRepo, path)
 	return nil
@@ -251,7 +263,7 @@ func buildMcpServer(readOnly bool) (*mcp.Server, error) {
 
 	server := mcp.NewServer(&mcp.Implementation{
 		Name:    "charly",
-		Version: OvVersion(),
+		Version: CharlyVersion(),
 	}, nil)
 
 	count := 0
@@ -458,7 +470,7 @@ func jsonTypeForKind(k reflect.Kind) string {
 
 // runMu serializes tool invocations because each handler captures os.Stdout
 // / os.Stderr for its duration. Running two in parallel would interleave
-// their output. `ov` commands do not benefit much from parallelism — most
+// their output. `charly` commands do not benefit much from parallelism — most
 // are I/O-bound shell-outs to podman/docker anyway.
 var runMu sync.Mutex
 
@@ -667,7 +679,7 @@ func sortedJSONKeys(m map[string]any) []string {
 //
 // Consequence: any charly command that writes via Go's builtin println() (which
 // goes to fd 2 bypassing os.Stderr), or that spawns a subprocess with the
-// parent's inherited fds, will leak output past this capture. The `ov`
+// parent's inherited fds, will leak output past this capture. The `charly`
 // codebase uses fmt.Println/Printf exclusively for user output; `println`
 // usage has been audited out in the commands invoked via the MCP surface.
 func captureAndRun(argv []string) (stdout, stderr string, err error) {

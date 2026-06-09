@@ -22,10 +22,10 @@ func TestResolveCredential_Default_vs_Unavailable(t *testing.T) {
 	t.Run("clean config backend returns default", func(t *testing.T) {
 		resetDefaultStore()
 		defer resetDefaultStore()
-		t.Setenv("CH_SECRET_BACKEND", "config")
+		t.Setenv("CHARLY_SECRET_BACKEND", "config")
 		defaultStoreProbeErr = nil
 
-		val, source := ResolveCredential("TEST_UNSET", "ov/enc", "nonexistent", "fallback")
+		val, source := ResolveCredential("TEST_UNSET", "charly/enc", "nonexistent", "fallback")
 		if source != "default" {
 			t.Errorf("source = %q, want %q", source, "default")
 		}
@@ -43,7 +43,7 @@ func TestResolveCredential_Default_vs_Unavailable(t *testing.T) {
 			defaultStoreProbeErr = nil
 			resetDefaultStore()
 		}()
-		t.Setenv("CH_SECRET_BACKEND", "config")
+		t.Setenv("CHARLY_SECRET_BACKEND", "config")
 
 		// Force DefaultCredentialStore() to materialize as ConfigFileStore
 		// (triggers sync.Once).
@@ -51,7 +51,7 @@ func TestResolveCredential_Default_vs_Unavailable(t *testing.T) {
 		// Simulate a probe failure captured during auto-dispatch.
 		defaultStoreProbeErr = errSimulatedProbeFail
 
-		val, source := ResolveCredential("TEST_UNSET", "ov/enc", "nonexistent", "fallback")
+		val, source := ResolveCredential("TEST_UNSET", "charly/enc", "nonexistent", "fallback")
 		if source != "unavailable" {
 			t.Errorf("source = %q, want %q", source, "unavailable")
 		}
@@ -79,7 +79,7 @@ func TestResolveCredential_Default_vs_Unavailable(t *testing.T) {
 			t.Fatalf("seeding config: %v", err)
 		}
 
-		t.Setenv("CH_SECRET_BACKEND", "config")
+		t.Setenv("CHARLY_SECRET_BACKEND", "config")
 		_ = DefaultCredentialStore()
 		defaultStoreProbeErr = errSimulatedProbeFail
 

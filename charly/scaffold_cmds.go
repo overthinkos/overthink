@@ -29,7 +29,7 @@ func (c *NewProjectCmd) Run() error {
 	fmt.Fprintf(os.Stderr, "Scaffolded project at %s\n", c.Dir)
 	fmt.Fprintln(os.Stderr, "Next steps:")
 	fmt.Fprintln(os.Stderr, "  # Wire a build.yml — copy from upstream, or reference a published release:")
-	fmt.Fprintln(os.Stderr, "  cp /path/to/overthink/build.yml "+c.Dir+"/")
+	fmt.Fprintln(os.Stderr, "  cp /path/to/opencharly/build.yml "+c.Dir+"/")
 	fmt.Fprintln(os.Stderr, "  charly -C "+c.Dir+" box set defaults.format_config build.yml")
 	fmt.Fprintln(os.Stderr, "  # Add an image, a layer, and build:")
 	fmt.Fprintln(os.Stderr, "  charly -C "+c.Dir+" box new box my-image --base quay.io/fedora/fedora:43 --candy my-layer")

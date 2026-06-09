@@ -55,7 +55,7 @@ type RunScoringOpts struct {
 
 // RunEvalLive scores `scenarios` against the live containers
 // they target via their `Pod` field. Returns a EvalRunResults shaped
-// like ParseOvTestOutput's, so the existing scorer (Classify,
+// like ParseCharlyTestOutput's, so the existing scorer (Classify,
 // fingerprints, summary) consumes it unchanged.
 //
 // Scenarios are grouped by their `Pod` field; each group runs against
@@ -236,7 +236,7 @@ func RunEvalLive(ctx context.Context, deployment, scoreName string, scenarios []
 			}
 			// Propagate score-level AI-artifact validation policy +
 			// iter-start freshness floor into the runner. The runner
-			// uses these in runOvVerb's artifact-producing branch to
+			// uses these in runCharlyVerb's artifact-producing branch to
 			// decide whether to re-execute the probe (default: yes,
 			// always) or validate the AI's iteration artifact (when
 			// the flag is set AND the verb/method is in the narrow

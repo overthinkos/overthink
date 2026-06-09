@@ -7,7 +7,7 @@ package main
 // EvalBed=true by foldEvalBeds) describing a disposable target. runEvalBed
 // drives the canonical sequence against it:
 //
-//	build → eval image → deploy add → config → start → eval live →
+//	build → eval box → deploy add → config → start → eval live →
 //	fresh update (R10 acceptance gate) → tear down
 //
 // Every parameter is read from the bed's DeploymentNode — there is NO
@@ -16,12 +16,12 @@ package main
 //	target: pod   → charly box build + charly eval box + charly deploy add +
 //	                charly config + charly start + charly eval live
 //	target: vm    → charly vm build + charly vm create + charly deploy add + charly eval
-//	                live (image build / eval image skipped — the substrate
+//	                live (image build / eval box skipped — the substrate
 //	                is a cloud_image, not an charly box)
 //	target: local → charly deploy add only (kind:local applies layers in place;
 //	                no container/VM to exec eval live against)
 //
-// The dispatcher SHELLS OUT to the same `ov` binary the caller invoked, so
+// The dispatcher SHELLS OUT to the same `charly` binary the caller invoked, so
 // each verb keeps its own validation, error reporting, and side effects —
 // no probe/build/deploy logic is re-implemented here.
 
@@ -166,11 +166,11 @@ func runEvalBed(exe, name string, node DeploymentNode, opts bedRunOpts) (*bedRun
 	// exclusive host resource (requires_exclusive — e.g. a passthrough GPU),
 	// gracefully stop any running preemptible holder of it BEFORE bring-up and
 	// restore it AFTER teardown. The lease is owned HERE (the outermost
-	// orchestrator) and CH_PREEMPT_LEASE suppresses the nested `charly vm create`/
+	// orchestrator) and CHARLY_PREEMPT_LEASE suppresses the nested `charly vm create`/
 	// `charly deploy add`/`charly vm destroy` subprocesses from touching it. The defer
 	// guarantees restore on EVERY exit path (success, failure, early return);
 	// crash-recovery beyond the defer is handled by the ledger + `charly preempt
-	// restore`. See ov/preempt.go.
+	// restore`. See charly/preempt.go.
 	lease, lerr := acquireExclusiveForClaimant(name, node, true)
 	if lerr != nil {
 		res.OK = false
@@ -321,14 +321,14 @@ func runEvalBed(exe, name string, node DeploymentNode, opts bedRunOpts) (*bedRun
 		return res, fmt.Errorf(format, args...)
 	}
 
-	// Steps 1+2: image build + eval image (pod beds only; VM substrate is a
+	// Steps 1+2: image build + eval box (pod beds only; VM substrate is a
 	// cloud_image and kind:local has no image to build/disposable-eval).
 	if !isVM && !isLocal && image != "" {
 		if err := step("image-build", []string{"box", "build", image}); err != nil {
 			return fail("image build %s: %w", image, err)
 		}
 		if err := step("eval-image", []string{"eval", "box", image}); err != nil {
-			return fail("eval image %s: %w", image, err)
+			return fail("eval box %s: %w", image, err)
 		}
 	}
 
@@ -356,8 +356,8 @@ func runEvalBed(exe, name string, node DeploymentNode, opts bedRunOpts) (*bedRun
 		// Deploy the VM node's own layers AND its nested target:pod children.
 		// The VM target's Add applies the layers over SSH (incl. any kernel-driver
 		// reboot), then deploys each nested pod as a PERSISTENT in-guest quadlet via
-		// deployNestedPodsInGuest (build + cp-image into the guest + the guest's
-		// own project-free `charly deploy from-image`). The dispatch routes a VM root
+		// deployNestedPodsInGuest (build + cp-box into the guest + the guest's
+		// own project-free `charly deploy from-box`). The dispatch routes a VM root
 		// node-only (its pod children deploy in-guest, never via a host tree
 		// walk), so no --node-only flag is needed and no separate image-transfer
 		// step is required.

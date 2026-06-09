@@ -20,17 +20,17 @@ type CLI struct {
 	//
 	// Commands marked LocalOnly (settings, version, ssh tunnel) are
 	// not re-execed — they always run on the local machine. See
-	// ov/host_exec.go for the exec dispatch.
-	Host string `long:"host" env:"CH_HOST" help:"Remote host (alias or user@host[:port]) to run this command on via SSH"`
+	// charly/host_exec.go for the exec dispatch.
+	Host string `long:"host" env:"CHARLY_HOST" help:"Remote host (alias or user@host[:port]) to run this command on via SSH"`
 
 	// Dir is the project directory that every build-mode command resolves
 	// charly.yml / candy/ / build.yml relative to. Default is the process
 	// cwd. Useful for MCP servers and remote agents that run outside a
-	// project checkout — set CH_PROJECT_DIR or pass -C / --dir to point at
+	// project checkout — set CHARLY_PROJECT_DIR or pass -C / --dir to point at
 	// a mounted project root. Build-mode commands call os.Getwd()
 	// unconditionally; when this flag is set, main() chdirs before Kong's
 	// ctx.Run() so every existing call site picks up the change.
-	Dir string `short:"C" long:"dir" env:"CH_PROJECT_DIR" help:"Project directory containing charly.yml (default: cwd)" type:"path"`
+	Dir string `short:"C" long:"dir" env:"CHARLY_PROJECT_DIR" help:"Project directory containing charly.yml (default: cwd)" type:"path"`
 
 	// Repo points charly at a remote git repo as the project source instead
 	// of cwd / --dir. Spec is OWNER/REPO[@REF] (auto-prefixed with
@@ -39,7 +39,7 @@ type CLI struct {
 	// (~/.cache/charly/repos/...) and falls through into the existing --dir
 	// chdir block, so every os.Getwd() site Just Works. Mutually exclusive
 	// with --dir.
-	Repo string `long:"repo" env:"CH_PROJECT_REPO" placeholder:"OWNER/REPO[@REF]" help:"Read charly.yml from a remote git repo (e.g. overthinkos/overthink). Use 'default' for overthinkos/overthink."`
+	Repo string `long:"repo" env:"CHARLY_PROJECT_REPO" placeholder:"OWNER/REPO[@REF]" help:"Read charly.yml from a remote git repo (e.g. overthinkos/overthink). Use 'default' for overthinkos/overthink."`
 
 	Alias       AliasCmd        `cmd:"" help:"Manage command aliases for container images"`
 	Clean       CleanCmd        `cmd:"" help:"Prune reusable build artifacts to defaults: retention (images, eval runs) + sweep one-time makepkg leftovers"`
@@ -51,7 +51,7 @@ type CLI struct {
 	Layer       CandyCmd        `cmd:"" name:"candy" help:"Edit candy.yml files in the project's candy/ directory"`
 	Logs        LogsCmd         `cmd:"" help:"Show service container logs"`
 	Mcp         McpCmdGroup     `cmd:"" help:"Run an MCP server exposing the charly CLI as tools"`
-	Migrate     MigrateCmd      `cmd:"" help:"Migrate any overthink config up to the latest schema CalVer (single idempotent chain — no sub-verbs)"`
+	Migrate     MigrateCmd      `cmd:"" help:"Migrate any opencharly config up to the latest schema CalVer (single idempotent chain — no sub-verbs)"`
 	Preempt     PreemptCmd      `cmd:"" help:"Inspect and recover exclusive-resource preemption leases (preemptible holders stopped to free a resource for a claimant)"`
 	ReapOrphans ReapOrphansCmd  `cmd:"reap-orphans" help:"Find ephemeral deployments whose underlying resource is gone and clean them up"`
 	Remove      RemoveCmd       `cmd:"" help:"Remove service container"`
@@ -108,14 +108,14 @@ func (c *ValidateCmd) Run() error {
 		return err
 	}
 
-	// Load default build config for SetFormatNames + init detection before layer scanning.
+	// Load default build config for RegisterBuildVocabulary + init detection before layer scanning.
 	var defaultInitCfg *InitConfig
 	{
 		distroCfg, _, initCfg, err := LoadDefaultBuildConfig(dir)
 		if err != nil {
 			return fmt.Errorf("loading default build config: %w", err)
 		}
-		SetFormatNames(distroCfg)
+		RegisterBuildVocabulary(distroCfg)
 		defaultInitCfg = initCfg
 	}
 
@@ -678,7 +678,7 @@ type VersionCmd struct{}
 
 func (c *VersionCmd) Run() error {
 	// The BINARY's identity (stamped at build time), NOT the wall clock.
-	fmt.Println(OvVersion())
+	fmt.Println(CharlyVersion())
 	return nil
 }
 
@@ -722,7 +722,7 @@ func main() {
 		cli.Dir = path
 	}
 
-	// Honour -C / --dir / CH_PROJECT_DIR (and --repo, after the resolver
+	// Honour -C / --dir / CHARLY_PROJECT_DIR (and --repo, after the resolver
 	// above) before dispatch. Chdir is the single-point intervention:
 	// every build-mode command reaches project files through os.Getwd(),
 	// so one chdir here propagates to all of them without touching 10+
@@ -734,7 +734,7 @@ func main() {
 		}
 	}
 
-	// Stale-binary guardrail: if cwd is inside an overthink source tree
+	// Stale-binary guardrail: if cwd is inside an opencharly source tree
 	// AND the source tree has .go files newer than this binary, abort
 	// with a clear error pointing at `task build:charly`. See
 	// CheckBinaryFreshness for the full rationale (CLAUDE.md R9 +

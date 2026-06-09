@@ -3,7 +3,7 @@ package main
 // deploy_peers.go — sibling `peer:` deployments: the ONE shared lifecycle.
 //
 // A DeploymentNode's `peer:` map declares companion deployments brought up
-// ALONGSIDE it on the shared `ov` network (NOT nested inside it). The canonical
+// ALONGSIDE it on the shared `charly` network (NOT nested inside it). The canonical
 // case is a Chrome driver pod that CDP-probes a web-server subject via a check
 // with `on: <peer>` (see eval_peer.go); peers are reachable by
 // `${PEER_HOST:<name>}` and are never eval-live'd themselves.
@@ -122,7 +122,7 @@ func sortedPeerKeys(peers map[string]*DeploymentNode) []string {
 }
 
 // bringUpPeers brings up every peer of `node` ALONGSIDE the (already-deployed)
-// owner, in deterministic order, on the shared `ov` network. Each peer is a
+// owner, in deterministic order, on the shared `charly` network. Each peer is a
 // folded top-level deploy entry, so bring-up reuses the standard pod pipeline
 // verbatim: persist the peer's declared deploy overrides (so its declared
 // `port:` actually publishes — `charly config` otherwise sources ports from image
@@ -143,13 +143,13 @@ func bringUpPeers(node *DeploymentNode) error {
 		persistBedDeployOverrides(peerKey, *peerNode)
 		if isPodPeer(peerNode) {
 			for _, step := range [][]string{{"config", peerKey}, {"start", peerKey}} {
-				if err := runOvSubcommand(step...); err != nil {
+				if err := runCharlySubcommand(step...); err != nil {
 					return fmt.Errorf("peer %q (%v): %w", peerKey, step, err)
 				}
 			}
 			waitForContainerReady(peerKey, 30*time.Second)
 		} else {
-			if err := runOvSubcommand("deploy", "add", peerKey); err != nil {
+			if err := runCharlySubcommand("deploy", "add", peerKey); err != nil {
 				return fmt.Errorf("peer %q (deploy add): %w", peerKey, err)
 			}
 		}
@@ -168,9 +168,9 @@ func tearDownPeers(node *DeploymentNode) {
 		peerNode := node.Peer[peerKey]
 		var err error
 		if isPodPeer(peerNode) {
-			err = runOvSubcommand("remove", peerKey, "--purge")
+			err = runCharlySubcommand("remove", peerKey, "--purge")
 		} else {
-			err = runOvSubcommand(deployDelArgv(peerKey)...)
+			err = runCharlySubcommand(deployDelArgv(peerKey)...)
 		}
 		if err != nil {
 			// Best-effort teardown never fails the owner's teardown — but a

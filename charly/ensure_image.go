@@ -1,6 +1,6 @@
 package main
 
-// ensure_image.go — THE CANONICAL ENSURE-IMAGE PATH for ov.
+// ensure_image.go — THE CANONICAL ENSURE-IMAGE PATH for charly.
 //
 // `EnsureImagePresent` is the single source of truth used by every
 // command that needs a container image present in local podman
@@ -208,7 +208,7 @@ func podmanPullForEnsure(ctx context.Context, ref string) error {
 //     This is what lets `ghcr.io/overthinkos/arch-builder:<tag>` fall
 //     back to building the project's `arch-builder` image whether it
 //     lives at the root or under an imported namespace (e.g. the
-//     cachyos profile's `ov.arch-builder`).
+//     cachyos profile's `charly.arch-builder`).
 //   - Remote `@github.com/...` refs are skipped — the remote
 //     project's charly.yml already determined the canonical ref;
 //     local build-fallback is not applicable.
@@ -238,7 +238,7 @@ func buildableShortName(image string, cfg *Config) string {
 	}
 	// Route through the single namespace-aware resolver. The basename may map
 	// to a root image (returned bare) OR to an image living in an imported
-	// namespace (returned qualified, e.g. `ov.arch-builder`). Both forms are
+	// namespace (returned qualified, e.g. `charly.arch-builder`). Both forms are
 	// buildable: ResolveImage and the `charly box build` target path are both
 	// namespace-aware, so the build-fallback can build a namespaced builder
 	// the same way it builds a root one.

@@ -32,7 +32,7 @@ func (c *StartCmd) Run() error {
 	// preempts the running holders of that resource (persistent lease —
 	// released by `charly stop`/`charly remove`). No-op when gated by an outer
 	// orchestrator or when this deploy claims nothing exclusive. See
-	// ov/preempt.go.
+	// charly/preempt.go.
 	if dc := loadDeployConfigForRead("charly start"); dc != nil {
 		key := deployKey(c.Image, c.Instance)
 		if node, ok := dc.Deploy[key]; ok && len(node.RequiredExclusive()) > 0 {
@@ -92,7 +92,7 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 		return err
 	}
 	if meta == nil {
-		return fmt.Errorf("image %s has no embedded metadata; rebuild with latest ov", imageRef)
+		return fmt.Errorf("image %s has no embedded metadata; rebuild with latest charly", imageRef)
 	}
 	engine = ResolveImageEngineFromMeta(meta, rt.RunEngine)
 	MergeDeployOntoMetadata(meta, dc, c.Image, c.Instance)
@@ -297,7 +297,7 @@ func (c *StopCmd) Run() error {
 // create a restart loop), else the container directly via the resolved engine
 // with a fallback to the other engine. It performs NO tunnel/unmount side
 // effects — callers layer those on. Shared by StopCmd.Run and the resource
-// arbiter (ov/preempt.go), whose preemption path wants a bare, reversible
+// arbiter (charly/preempt.go), whose preemption path wants a bare, reversible
 // service stop that leaves the holder's disk/container intact for restart.
 func stopPodService(imageName, instance string) error {
 	quadletActive, _ := quadletExistsInstance(imageName, instance)

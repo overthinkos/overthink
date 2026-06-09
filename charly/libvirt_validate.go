@@ -277,12 +277,12 @@ func validateVmCloudInit(name string, spec *VmSpec, errs *ValidationError) {
 			// Actual "cloud-init layer present" check is deferred.
 		}
 	}
-	if ci.OvInstall != nil {
-		switch ci.OvInstall.Strategy {
+	if ci.CharlyInstall != nil {
+		switch ci.CharlyInstall.Strategy {
 		case "", "auto", "scp", "skip":
 			// OK
 		default:
-			errs.Add("vm %q: cloud_init.ov_install.strategy %q is unknown (want auto, scp, or skip)", name, ci.OvInstall.Strategy)
+			errs.Add("vm %q: cloud_init.charly_install.strategy %q is unknown (want auto, scp, or skip)", name, ci.CharlyInstall.Strategy)
 		}
 	}
 	for i, u := range ci.Users {

@@ -788,8 +788,8 @@ func validateImageDAG(cfg *Config, layers map[string]*Layer, dir string, opts Re
 	// SURFACE a namespace-resolution error: an enabled image references a
 	// namespaced base — or that base's builder / bootstrap builder — that does
 	// not resolve. This is the automatic guard that catches namespace-ref leaks
-	// (e.g. a pulled base's `builder: ov.arch-builder` not re-qualified to
-	// `selkies.ov.arch-builder`) at `charly box validate` time, before a build hits
+	// (e.g. a pulled base's `builder: charly.arch-builder` not re-qualified to
+	// `selkies.charly.arch-builder`) at `charly box validate` time, before a build hits
 	// it. The DAG check below can't run with dangling bases, so report + return.
 	if err := cfg.resolveNamespacedBases(images, calverTag, dir, opts); err != nil {
 		errs.Add("namespaced base resolution: %v", err)
@@ -812,7 +812,7 @@ func validateImageDAG(cfg *Config, layers map[string]*Layer, dir string, opts Re
 	// namespace-pulled bases/builders above) — the SAME computation that
 	// `charly box generate`/`build` run (ComputeIntermediates → GlobalLayerOrder).
 	// validateLayerDAG only iterates cfg.Image, so a layer missing from a PULLED
-	// builder (e.g. an imported ov.fedora-builder's rpmfusion) slipped past
+	// builder (e.g. an imported charly.fedora-builder's rpmfusion) slipped past
 	// validate yet failed generate; running it here restores validate↔generate
 	// agreement so the gap is caught at validate time, not only at build time.
 	// Reached only on an acyclic DAG (the cycle guard above returned otherwise).
@@ -1069,7 +1069,7 @@ func validateBuilders(cfg *Config, layers map[string]*Layer, builderCfg *Builder
 		}
 		if builder != "" {
 			// Namespace-aware: a defaults builder ref may be qualified (e.g.
-			// `ov.fedora-builder`), resolving through an import namespace.
+			// `charly.fedora-builder`), resolving through an import namespace.
 			builderImg, _, exists := cfg.resolveImageRef(builder)
 			if !exists {
 				errs.Add("defaults.builder.%s: image %q not found", typ, builder)
@@ -1103,7 +1103,7 @@ func validateBuilders(cfg *Config, layers map[string]*Layer, builderCfg *Builder
 			}
 			if builder != "" {
 				// Namespace-aware: a builder ref may be qualified (e.g.
-				// `ov.arch-builder`), resolving through an import namespace.
+				// `charly.arch-builder`), resolving through an import namespace.
 				builderImg, _, exists := cfg.resolveImageRef(builder)
 				if !exists {
 					errs.Add("image %q: builder.%s references %q which is not found", imageName, typ, builder)
@@ -1994,10 +1994,10 @@ func validateDepEntries(layerName, section string, entries []EnvDependency, seen
 }
 
 // secretKeyPattern matches the optional Key field on secret_accepts /
-// secret_requires entries. Enforces <service>/<key> with an "ov/" prefix to
+// secret_requires entries. Enforces <service>/<key> with an "charly/" prefix to
 // prevent layers from exfiltrating unrelated user credentials (e.g.,
 // "aws/access-key") into a podman secret. Plan §2.7 / §4.4 rule 5.
-var secretKeyPattern = regexp.MustCompile(`^ov/[a-z0-9][a-z0-9-]*/[a-z0-9][a-z0-9_-]*$`)
+var secretKeyPattern = regexp.MustCompile(`^charly/[a-z0-9][a-z0-9-]*/[a-z0-9][a-z0-9_-]*$`)
 
 // podmanSecretSlugPattern matches the lowercase-kebab slug form used for
 // per-image podman secret names (charly-<image>-<slug>). Plan §4.4 rule 4.
@@ -2044,9 +2044,9 @@ func validateSecretDeps(layers map[string]*Layer, errs *ValidationError) {
 					errs.Add("layer %s: %s[%s] would produce invalid podman secret slug %q (must match %s)", name, section, dep.Name, slug, podmanSecretSlugPattern.String())
 				}
 				// Rule 5: optional Key override must match <service>/<key>
-				// with an ov/ prefix.
+				// with an charly/ prefix.
 				if dep.Key != "" && !secretKeyPattern.MatchString(dep.Key) {
-					errs.Add("layer %s: %s[%s] key %q must match %s — must start with \"ov/\" and be <service>/<key>", name, section, dep.Name, dep.Key, secretKeyPattern.String())
+					errs.Add("layer %s: %s[%s] key %q must match %s — must start with \"charly/\" and be <service>/<key>", name, section, dep.Name, dep.Key, secretKeyPattern.String())
 				}
 			}
 		}

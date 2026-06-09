@@ -8,13 +8,13 @@ import (
 )
 
 // TestBuildCmd_JobsEnvBindings verifies the Kong env bindings on the build
-// parallelism flags. CH_BUILD_JOBS → Jobs was missing before this cutover
-// (doc/code drift the build SKILL documented but the tag lacked); CH_PODMAN_JOBS
+// parallelism flags. CHARLY_BUILD_JOBS → Jobs was missing before this cutover
+// (doc/code drift the build SKILL documented but the tag lacked); CHARLY_PODMAN_JOBS
 // → PodmanJobs already existed. Both are asserted here so the bindings can't
 // silently regress.
 func TestBuildCmd_JobsEnvBindings(t *testing.T) {
-	t.Setenv("CH_BUILD_JOBS", "6")
-	t.Setenv("CH_PODMAN_JOBS", "9")
+	t.Setenv("CHARLY_BUILD_JOBS", "6")
+	t.Setenv("CHARLY_PODMAN_JOBS", "9")
 
 	var cli struct {
 		Build BuildCmd `cmd:""`
@@ -27,10 +27,10 @@ func TestBuildCmd_JobsEnvBindings(t *testing.T) {
 		t.Fatalf("parse: %v", err)
 	}
 	if cli.Build.Jobs != 6 {
-		t.Errorf("Jobs from CH_BUILD_JOBS = %d, want 6", cli.Build.Jobs)
+		t.Errorf("Jobs from CHARLY_BUILD_JOBS = %d, want 6", cli.Build.Jobs)
 	}
 	if cli.Build.PodmanJobs != 9 {
-		t.Errorf("PodmanJobs from CH_PODMAN_JOBS = %d, want 9", cli.Build.PodmanJobs)
+		t.Errorf("PodmanJobs from CHARLY_PODMAN_JOBS = %d, want 9", cli.Build.PodmanJobs)
 	}
 }
 

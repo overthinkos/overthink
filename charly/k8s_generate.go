@@ -39,7 +39,7 @@ type K8sGenerateOpts struct {
 	Deploy         DeploymentNode
 	Capabilities   *Capabilities
 	Cluster        *K8sSpec
-	OutputDir      string // usually <projectDir>/.overthink/k8s
+	OutputDir      string // usually <projectDir>/.opencharly/k8s
 }
 
 // GenerateK8sKustomize materializes the Kustomize tree on disk. Returns the

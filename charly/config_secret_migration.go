@@ -67,19 +67,21 @@ func secretDepNames(meta *BoxMetadata) []string {
 
 // secretKeyForDep returns the (service, key) tuple used to look up a secret
 // in the credential store. When the layer author set an explicit `key:
-// ov/api-key/openrouter` override, that's parsed into its two segments;
-// otherwise the default (ov/secret, dep.Name) is returned. The format is
+// charly/api-key/openrouter` override, that's parsed into its two segments;
+// otherwise the default (charly/secret, dep.Name) is returned. The format is
 // enforced by validateSecretDeps at build time, so this is purely a
 // structural split — no validation is re-run here.
 func secretKeyForDep(dep EnvDependency) (service, key string) {
 	if dep.Key != "" {
-		// Key format validated: ^ov/<service>/<key>$. Split after "ov/".
-		rest := dep.Key[3:]
-		if idx := strings.Index(rest, "/"); idx >= 0 {
-			return dep.Key[:3+idx], rest[idx+1:]
+		// Key format validated: ^charly/<service>/<key>$ — the service is
+		// everything before the final "/", the key is the last segment.
+		// (Mirrors the split in layer_secrets.go; LastIndex avoids any
+		// dependency on the literal prefix length.)
+		if idx := strings.LastIndex(dep.Key, "/"); idx >= 0 {
+			return dep.Key[:idx], dep.Key[idx+1:]
 		}
 	}
-	return "ov/secret", dep.Name
+	return "charly/secret", dep.Name
 }
 
 // MigratePlaintextEnvSecret scans dc.Deploy[deployKey(image, instance)].Env

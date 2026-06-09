@@ -58,7 +58,7 @@ func TestNormalizeRepoIdentity(t *testing.T) {
 // failure mode (the main<->cachyos mutual import where the loop's pins diverge)
 // and asserts the repo-identity cycle-break resolves it.
 //
-// Topology (mirrors local-main → cachyos@157.1600 → ov:overthink@157.0650 →
+// Topology (mirrors local-main → cachyos@157.1600 → charly:overthink@157.0650 →
 // cachyos@146.0754-OLD-SCHEMA):
 //
 //	local root (repo: github.com/o/root) → imports child@vA
@@ -73,7 +73,7 @@ func TestNormalizeRepoIdentity(t *testing.T) {
 // the broken child@vC are NEVER loaded.
 func TestImportNamespace_DivergentVersionMutualCycle(t *testing.T) {
 	cache := t.TempDir()
-	t.Setenv("CH_REPO_CACHE", cache)
+	t.Setenv("CHARLY_REPO_CACHE", cache)
 
 	seed := func(repoAtVer, body string) {
 		dir := filepath.Join(cache, repoAtVer)
@@ -86,7 +86,7 @@ func TestImportNamespace_DivergentVersionMutualCycle(t *testing.T) {
 	}
 
 	// child@vA imports the root back at a DIVERGENT version (vB).
-	seed("github.com/o/child@vA", `version: 2026.159.3
+	seed("github.com/o/child@vA", `version: 2026.159.1912
 import:
   - up: '@github.com/o/root:vB'
 box:
@@ -96,7 +96,7 @@ box:
     build: [rpm]
 `)
 	// root@vB pins a DIVERGENT child (vC) — must never be loaded under the fix.
-	seed("github.com/o/root@vB", `version: 2026.159.3
+	seed("github.com/o/root@vB", `version: 2026.159.1912
 import:
   - child: '@github.com/o/child:vC'
 `)
@@ -110,7 +110,7 @@ discover:
 
 	// Local root declares its identity explicitly and imports child@vA.
 	root := t.TempDir()
-	writeFixture(t, root, "charly.yml", `version: 2026.159.3
+	writeFixture(t, root, "charly.yml", `version: 2026.159.1912
 repo: github.com/o/root
 import:
   - child: '@github.com/o/child:vA'

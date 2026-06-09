@@ -128,7 +128,7 @@ deploy:
 // post-2026-05-16 require-image plumbing: when the caller passes
 // Image/Target on a brand-new entry, both must land in deploy.yml
 // alongside Disposable. Without this, the entry fails the require-image
-// validator on the next load and bricks every subsequent `ov` invocation.
+// validator on the next load and bricks every subsequent `charly` invocation.
 func TestSaveDeployState_PersistsImageAndTargetForNewEntry(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", dir)

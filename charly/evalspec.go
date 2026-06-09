@@ -50,8 +50,8 @@ type Check struct {
 	// validated against the CLI's subcommand surface. Dispatched by runCdp/
 	// runWl/runDbus/runVnc/runMcp/runRecord/runSpice/runLibvirt in
 	// testrun_ov_verbs.go via subprocess delegation to `charly eval <verb> <method>`.
-	// See /ov:test for authoring, /ov:cdp, /ov:wl, /ov:dbus, /ov:vnc, /ov:mcp,
-	// /ov:record, /ov:spice, /ov:libvirt for per-verb method semantics.
+	// See /charly:test for authoring, /charly:cdp, /charly:wl, /charly:dbus, /charly:vnc, /charly:mcp,
+	// /charly:record, /charly:spice, /charly:libvirt for per-verb method semantics.
 	Cdp     string `yaml:"cdp,omitempty"     json:"cdp,omitempty"`
 	Wl      string `yaml:"wl,omitempty"      json:"wl,omitempty"`
 	Dbus    string `yaml:"dbus,omitempty"    json:"dbus,omitempty"`
@@ -294,7 +294,7 @@ type Check struct {
 	Action                string   `yaml:"action,omitempty"             json:"action,omitempty"`                         // wl: atspi action (tree/find/click)
 	Query                 string   `yaml:"query,omitempty"              json:"query,omitempty"`                          // cdp: axtree filter / wl: atspi find query
 
-	// mcp-specific modifiers. See /ov:test "Method allowlist — mcp" for which
+	// mcp-specific modifiers. See /charly:test "Method allowlist — mcp" for which
 	// methods require which fields; enforcement in validate_tests.go.
 	McpName string `yaml:"mcp_name,omitempty" json:"mcp_name,omitempty"` // mcp: server name when image exposes multiple mcp_provides
 	Tool    string `yaml:"tool,omitempty"     json:"tool,omitempty"`     // mcp: tool name for the `call` method
@@ -387,10 +387,10 @@ func (c *Check) verbsSet() []string {
 	}
 	// Treat `command:` as a verb only when no charly-verb is set; otherwise it's
 	// a modifier (e.g. argv for libvirt:guest/exec).
-	hasOvVerb := c.Cdp != "" || c.Wl != "" || c.Dbus != "" || c.Vnc != "" ||
+	hasCharlyVerb := c.Cdp != "" || c.Wl != "" || c.Dbus != "" || c.Vnc != "" ||
 		c.Mcp != "" || c.Record != "" || c.Spice != "" || c.Libvirt != "" ||
 		c.K8s != "" || c.Adb != "" || c.Appium != ""
-	if c.Command != "" && !hasOvVerb {
+	if c.Command != "" && !hasCharlyVerb {
 		set = append(set, "command")
 	}
 	if c.HTTP != "" {
@@ -684,7 +684,7 @@ func (cl *ContainsList) UnmarshalYAML(node *yaml.Node) error {
 // ---------------------------------------------------------------------------
 // Variable expansion (extended grammar shared with tasks)
 //
-// The existing taskVarRefPattern in ov/tasks.go matches ${NAME}. Tests need
+// The existing taskVarRefPattern in charly/tasks.go matches ${NAME}. Tests need
 // parameterized refs like ${HOST_PORT:6379} and ${VOLUME_PATH:workspace} to
 // address deploy-time values. testVarRefPattern is the extended grammar;
 // it is a superset of the task pattern so task refs continue to work here.
@@ -693,7 +693,7 @@ func (cl *ContainsList) UnmarshalYAML(node *yaml.Node) error {
 // testVarRefPattern matches ${NAME} and ${NAME:arg} references. Group 1 is
 // the variable name; group 2 is the optional argument (empty when absent).
 //
-// Backward-compatible widening of taskVarRefPattern at ov/tasks.go.
+// Backward-compatible widening of taskVarRefPattern at charly/tasks.go.
 var testVarRefPattern = regexp.MustCompile(`\$\{([A-Z_][A-Z0-9_]*)(?::([^}]+))?\}`)
 
 // ExpandTestVars substitutes ${NAME} and ${NAME:arg} references using the

@@ -11,9 +11,9 @@ package main
 //     evalrun.go runOne; the harness path wires its own resolveScoringChain.
 //
 //  2. The ${PEER_*} address variables let the driven probe TARGET the subject
-//     over the shared `ov` network or the host:
+//     over the shared `charly` network or the host:
 //       ${PEER_HOST:name}          -> the subject deployment's container DNS
-//                                     name on the shared `ov` net (charly-<name>),
+//                                     name on the shared `charly` net (charly-<name>),
 //                                     the pod->pod address. Inspect-free + it
 //                                     verifies the subject is running.
 //       ${PEER_ENDPOINT:name:port} -> a host-reachable 127.0.0.1:NNNN for that
@@ -126,7 +126,7 @@ func resolvePeerVars(refs []string, instance string) (map[string]string, []func(
 		switch name {
 		case peerHostVar:
 			// arg is the deployment name. Resolve to the running container's
-			// DNS name on the shared `ov` net (charly-<name>); also verifies it
+			// DNS name on the shared `charly` net (charly-<name>); also verifies it
 			// is actually running.
 			if _, ctr, err := resolveContainer(arg, instance); err == nil {
 				vars[key] = ctr

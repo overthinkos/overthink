@@ -151,13 +151,13 @@ func validateCheck(c *Check, loc, effectiveScope string, errs *ValidationError) 
 	// running container with port mappings). The allowlists live in
 	// testrun_ov_verbs.go next to the dispatch logic so adding a new method
 	// means touching one file.
-	validateOvVerb(c, verb, loc, effectiveScope, errs)
+	validateCharlyVerb(c, verb, loc, effectiveScope, errs)
 }
 
-// validateOvVerb checks method-name allowlists, required modifiers, and
+// validateCharlyVerb checks method-name allowlists, required modifiers, and
 // deploy-scope enforcement for the cdp/wl/dbus/vnc/mcp verbs. No-op for
 // other verbs.
-func validateOvVerb(c *Check, verb, loc, effectiveScope string, errs *ValidationError) {
+func validateCharlyVerb(c *Check, verb, loc, effectiveScope string, errs *ValidationError) {
 	var (
 		method    string
 		allowlist map[string]methodSpec

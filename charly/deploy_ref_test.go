@@ -12,9 +12,9 @@ func TestResolveDeployRefLocalImage(t *testing.T) {
 	dir := t.TempDir()
 	// Schema v4: ResolveDeployRef calls LoadUnified which reads
 	// charly.yml as the entry point. Fixture must use the unified
-	// shape with version: 2026.159.3 and the singular box: kind map.
+	// shape with version: 2026.159.1912 and the singular box: kind map.
 	if err := os.WriteFile(filepath.Join(dir, "charly.yml"), []byte(`
-version: 2026.159.3
+version: 2026.159.1912
 box:
   myimg:
     base: fedora
@@ -44,7 +44,7 @@ rpm:
 	}
 	// Also create charly.yml so the local-name resolver has something
 	// to search — but we don't add "ripgrep" to it, so it's layer-only.
-	_ = os.WriteFile(filepath.Join(dir, "charly.yml"), []byte("version: 2026.159.3\nimage: {}\n"), 0644)
+	_ = os.WriteFile(filepath.Join(dir, "charly.yml"), []byte("version: 2026.159.1912\nimage: {}\n"), 0644)
 
 	got, err := ResolveDeployRef("ripgrep", dir)
 	if err != nil {
@@ -66,7 +66,7 @@ rpm:
 func TestResolveDeployRefCrossKindNameReuse(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "charly.yml"), []byte(`
-version: 2026.159.3
+version: 2026.159.1912
 box:
   dup:
     base: fedora
@@ -104,7 +104,7 @@ rpm:
 
 func TestResolveDeployRefUnknownName(t *testing.T) {
 	dir := t.TempDir()
-	_ = os.WriteFile(filepath.Join(dir, "charly.yml"), []byte("version: 2026.159.3\nimage: {}\n"), 0644)
+	_ = os.WriteFile(filepath.Join(dir, "charly.yml"), []byte("version: 2026.159.1912\nimage: {}\n"), 0644)
 	_, err := ResolveDeployRef("nope", dir)
 	if err == nil {
 		t.Fatalf("expected not-found error, got nil")
@@ -193,7 +193,7 @@ func TestResolveDeployRefRemoteCandy(t *testing.T) {
 		t.Errorf("kind = %v, want layer (a candy/ ref is a layer)", got.Kind)
 	}
 	if got.Source != RefSourceRemote || got.Remote == nil || got.Remote.Name != "charly" {
-		t.Errorf("got = %+v, want remote layer named ov", got)
+		t.Errorf("got = %+v, want remote layer named charly", got)
 	}
 	// And a box/<n> subpath classifies as an image.
 	img, err := ResolveDeployRef("@github.com/overthinkos/overthink/box/fedora-coder:v2026.157.0427", "")

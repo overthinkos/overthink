@@ -6,7 +6,7 @@ package main
 //
 // Unlike host target (which applies layers directly to the local filesystem)
 // or container target (which emits podman quadlets), k8s target produces a
-// Kustomize base + overlay tree under <dir>/.overthink/k8s/<name>/ — which
+// Kustomize base + overlay tree under <dir>/.opencharly/k8s/<name>/ — which
 // a subsequent `charly deploy sync` or `kubectl apply -k` applies to the cluster.
 // -----------------------------------------------------------------------------
 
@@ -31,7 +31,7 @@ type K8sDeployTarget struct {
 	Instance string
 
 	// OutputDir — where to emit the Kustomize tree. Defaults to
-	// <ProjectDir>/.overthink/k8s/<deployment-name>/.
+	// <ProjectDir>/.opencharly/k8s/<deployment-name>/.
 	OutputDir string
 }
 

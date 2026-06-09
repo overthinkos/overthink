@@ -12,10 +12,10 @@ import (
 // This is the "what can this image do, what does it need, what does it provide"
 // view baked into OCI labels at build time and read back at deploy time, with
 // no dependence on the source repo's charly.yml. The self-deploy invariant
-// (Part F.10: `charly deploy from-image`) depends on this list being complete.
+// (Part F.10: `charly deploy from-box`) depends on this list being complete.
 //
 // Storage note: today the on-disk representation of capabilities is the existing
-// ImageMetadata struct (ov/labels.go). Capabilities is an alias that fixes the
+// ImageMetadata struct (charly/labels.go). Capabilities is an alias that fixes the
 // naming + provides a label-completeness check + a typed helper for loading
 // from a pushed OCI image by ref alone. A future schema-level split of
 // ImageConfig into image.build: + image.capabilities: (which charly migrate
@@ -25,7 +25,7 @@ import (
 // Capabilities names the same data as ImageMetadata — it is the runtime
 // contract loaded from OCI labels. Using a type alias keeps every existing
 // ImageMetadata consumer unchanged while letting new code (Part F K8s
-// generator, charly deploy from-image) use the canonical name.
+// generator, charly deploy from-box) use the canonical name.
 type Capabilities = BoxMetadata
 
 // CapabilityLabelMap names every OCI label that participates in the
@@ -114,7 +114,7 @@ var CapabilityLabelMap = map[string]string{
 
 	// Shell-init manifest — three-section (layer/image/deploy) per-shell
 	// rc-snippet contributions. 2026-05 cutover. Read by `charly image
-	// inspect`, `charly deploy from-image`, and the deploy.yml `shell:`
+	// inspect`, `charly deploy from-box`, and the deploy.yml `shell:`
 	// overlay merge in MergeDeployShell.
 	"Shell": LabelShell,
 }
@@ -159,7 +159,7 @@ func checkCapabilityLabelCompleteness() error {
 }
 
 // CapabilitiesFromLabels is the source-less loader used by `charly deploy
-// from-image` (Part F.10): given only an engine + image ref, pull OCI labels
+// from-box` (Part F.10): given only an engine + image ref, pull OCI labels
 // via inspect and produce a Capabilities struct. No charly.yml, no source
 // repo access required. Errors propagate ErrImageNotLocal when appropriate
 // (caller can wrap with a "run charly box pull" hint).

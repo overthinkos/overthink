@@ -31,7 +31,7 @@ type SshTunnelCmd struct {
 
 // sshTunnelFlags is the shared flag surface.
 type sshTunnelFlags struct {
-	Uri string `name:"uri" env:"CH_LIBVIRT_URI" help:"Libvirt URI (default: qemu:///session). For a non-local hypervisor, use qemu+ssh://[user@]host/session."`
+	Uri string `name:"uri" env:"CHARLY_LIBVIRT_URI" help:"Libvirt URI (default: qemu:///session). For a non-local hypervisor, use qemu+ssh://[user@]host/session."`
 	Tcp bool   `name:"tcp" help:"Force a 127.0.0.1:<random> TCP forward even when the VM listens on a UNIX socket — for clients that don't speak spice+unix:// or vnc+unix://"`
 }
 

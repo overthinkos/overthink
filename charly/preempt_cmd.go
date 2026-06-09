@@ -8,7 +8,7 @@ import (
 )
 
 // PreemptCmd is the operator-facing surface over the resource arbiter
-// (ov/preempt.go): inspect active exclusive-resource leases and recover
+// (charly/preempt.go): inspect active exclusive-resource leases and recover
 // holders left stopped by a crashed claim.
 type PreemptCmd struct {
 	Status  PreemptStatusCmd  `cmd:"" help:"Show active resource-arbitration leases (which preemptible holders are stopped for which claimant) and flag stranded ones"`

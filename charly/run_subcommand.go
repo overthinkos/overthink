@@ -1,6 +1,6 @@
 package main
 
-// Internal helpers for invoking child `ov` processes from within ov
+// Internal helpers for invoking child `charly` processes from within charly
 // itself. Used by:
 //
 //   - UpdateCmd (commands.go) — dispatches to per-target update logic
@@ -21,15 +21,15 @@ import (
 	"strings"
 )
 
-// runOvSubcommand shells out to `charly <args…>` in the current working
+// runCharlySubcommand shells out to `charly <args…>` in the current working
 // directory, inheriting stdin/stdout/stderr. Uses the same charly binary
 // the caller invoked (via os.Args[0]) so update loops pick up the
 // local build-under-test automatically.
 //
 // A package var (not a plain func) so tests can stub the child-process
 // boundary — e.g. deploy_nested_pod_test.go records the image-build /
-// vm-cp-image calls deployNestedPodsInGuest makes without spawning ov.
-var runOvSubcommand = func(args ...string) error {
+// vm-cp-box calls deployNestedPodsInGuest makes without spawning charly.
+var runCharlySubcommand = func(args ...string) error {
 	exe := os.Args[0]
 	cmd := exec.Command(exe, args...)
 	cmd.Stdin = os.Stdin
@@ -38,16 +38,16 @@ var runOvSubcommand = func(args ...string) error {
 	return cmd.Run()
 }
 
-// runOvSubcommandCapture is like runOvSubcommand but captures stderr
+// runCharlySubcommandCapture is like runCharlySubcommand but captures stderr
 // into a buffer instead of mirroring it to os.Stderr. The caller
 // decides whether the captured text is a real error (print it) or a
 // benign signal (suppress). This keeps the update output clean when
 // the child's "error" is actually just "already running" or similar.
 //
-// A package var (like runOvSubcommand) so tests can stub the
+// A package var (like runCharlySubcommand) so tests can stub the
 // child-process boundary — e.g. unified_targets_vm_test.go records the
-// `charly vm start` call without spawning ov.
-var runOvSubcommandCapture = func(args ...string) (string, error) {
+// `charly vm start` call without spawning charly.
+var runCharlySubcommandCapture = func(args ...string) (string, error) {
 	exe := os.Args[0]
 	cmd := exec.Command(exe, args...)
 	cmd.Stdin = os.Stdin
@@ -58,10 +58,10 @@ var runOvSubcommandCapture = func(args ...string) (string, error) {
 	return buf.String(), err
 }
 
-// captureOvStdout captures the child's stdout (instead of stderr).
-// Sibling of runOvSubcommandCapture; used when the caller needs to
+// captureCharlyStdout captures the child's stdout (instead of stderr).
+// Sibling of runCharlySubcommandCapture; used when the caller needs to
 // parse `charly vm list` / `charly status` table output.
-func captureOvStdout(args ...string) (string, error) {
+func captureCharlyStdout(args ...string) (string, error) {
 	exe := os.Args[0]
 	cmd := exec.Command(exe, args...)
 	cmd.Stdin = os.Stdin

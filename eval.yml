@@ -38,8 +38,8 @@ ai:
         # tool_result / result). The harness parses each line, embeds it
         # into result-{calver}.yml under iteration[].runner_event, and tees
         # the raw NDJSON to .harness/<score>/runs/<run-id>/iter<k>/runner.ndjson
-        # for byte-exact debugging. See plugins/ov/skills/harness/SKILL.md
-        # "stream-json runner output" for the wire format.
+        # for byte-exact debugging. See /charly-eval:eval for the score
+        # runner and its stream-json wire format.
         command: [claude, -p, --verbose, --output-format, stream-json, --dangerously-skip-permissions, "${PROMPT}"]
         output_format: stream-json
         version_command: [claude, --version]
@@ -1321,7 +1321,7 @@ score:
 
             == When a source-code fix can't apply mid-run ==
             The harness loop runs as a long-lived Go process (PID inside
-            ${TARGET_NAME}). Source fixes you make to /workspace/ov/*.go and
+            ${TARGET_NAME}). Source fixes you make to /workspace/charly/*.go and
             rebuilds appear on disk via the bind-mount, BUT the running
             harness PID has the OLD binary mmap'd and CANNOT hot-reload Go
             code. Your fix takes effect on the NEXT harness run — not the
@@ -1405,7 +1405,7 @@ score:
 
             == When a source-code fix can't apply mid-run ==
             The harness loop runs as a long-lived Go process. Source fixes
-            to /workspace/ov/*.go appear on disk via the bind-mount but the
+            to /workspace/charly/*.go appear on disk via the bind-mount but the
             running harness PID has the OLD binary mmap'd and CANNOT
             hot-reload Go code. Your fix takes effect on the NEXT harness
             run, not the current one. Record the fix in your iteration
@@ -1415,7 +1415,7 @@ score:
 # =============================================================================
 # Each entry is a disposable deployment (a DeploymentNode), folded into the
 # Deploy map at load time so every deploy verb resolves it by name. Run the
-# full R10 acceptance sequence on any of them — build → eval image → deploy →
+# full R10 acceptance sequence on any of them — build → eval box → deploy →
 # eval live → fresh update (R10 gate) → tear down — with:
 #
 #     charly eval run <bed>          # one bed
@@ -1445,7 +1445,7 @@ score:
 #                                     gogcli@latest, ffmpeg/sqlite arch coverage)
 #   eval-openclaw-desktop-pod (pod) — all-in-one: selkies desktop + openclaw-full
 #                                     (claude-code/codex/gemini) + CPU ollama +
-#                                     nested charly toolchain (ov+container-nesting)
+#                                     nested charly toolchain (charly+container-nesting)
 #
 # Zero-operator-side-effect: pod beds → rootless podman; eval-k3s-vm → libvirt
 # qcow2; eval-local → a disposable scratch dir. No test writes to ~/.local/bin,
@@ -1507,7 +1507,7 @@ eval:
             # --- matching: verb smoke --------------------------------
             - {id: kv-matching, scope: deploy, matching: "eval-k3s-vm up", contains: {contains: "k3s"}}
             # eval-coverage gate for the unified `charly status` VM substrate: the
-            # libvirt-domain row must render (host-side, via listOvDomains). Fails
+            # libvirt-domain row must render (host-side, via listCharlyDomains). Fails
             # if VMCollector regresses.
             - id: status-shows-vm
               scope: deploy
@@ -1929,7 +1929,7 @@ eval:
                 - contains: '"nested"'
     # eval-openclaw-pod deploys the minimal headless openclaw gateway on the
     # CachyOS (Arch) base. Exercises the cachyos→arch-builder npm build of the
-    # openclaw package + the dbus/ov/socat/supervisord stack. The deploy-scope
+    # openclaw package + the dbus/charly/socat/supervisord stack. The deploy-scope
     # probe confirms the openclaw CLI binary landed under ~/.npm-global/bin.
     eval-openclaw-pod:
         target: pod
@@ -1938,7 +1938,7 @@ eval:
         lifecycle: dev
         port: [auto] # auto-allocate free host ports (avoid fixed-port collisions)
         description:
-            feature: "R10 bed for the minimal headless openclaw gateway on the CachyOS (Arch) base — exercises the cachyos→arch-builder npm build of the openclaw package plus the dbus/ov/socat/supervisord layer stack."
+            feature: "R10 bed for the minimal headless openclaw gateway on the CachyOS (Arch) base — exercises the cachyos→arch-builder npm build of the openclaw package plus the dbus/charly/socat/supervisord layer stack."
             tag: [testing]
         eval:
             - {id: eoc-pod-openclaw-binary, scope: deploy, file: "${HOME}/.npm-global/bin/openclaw", exists: true}
@@ -2028,7 +2028,7 @@ vm:
             timezone: UTC
             package:
                 - sudo
-            ov_install:
+            charly_install:
                 strategy: auto
         libvirt:
             devices:

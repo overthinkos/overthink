@@ -11,7 +11,7 @@ import (
 
 // Ensures Kind() returns the correct verb for each single-verb Check and
 // reports zero/multiple verbs as errors. The list-of-discriminators pattern
-// mirrors Task.Kind() at ov/layers.go.
+// mirrors Task.Kind() at charly/layers.go.
 func TestCheck_Kind(t *testing.T) {
 	tests := []struct {
 		name    string

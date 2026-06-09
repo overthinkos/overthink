@@ -16,13 +16,13 @@ package main
 //     is sourced by interactive shells directly AND by login shells via the
 //     default ~/.bash_profile, so the env.d block loads in the user's terminal.
 //   - zsh  → ~/.zshenv (sourced for every zsh invocation type).
-//   - fish → ~/.config/fish/conf.d/overthink.fish (conf.d is idiomatic).
+//   - fish → ~/.config/fish/conf.d/opencharly.fish (conf.d is idiomatic).
 //
 // Managed-block fence:
 //
-//   # overthink:begin (managed by ov; do not edit inside this block)
+//   # opencharly:begin (managed by charly; do not edit inside this block)
 //   <sourcing loop>
-//   # overthink:end
+//   # opencharly:end
 //
 // On `charly deploy del host`, if no layers remain deployed the managed
 // block is removed from the shell init file.
@@ -117,7 +117,7 @@ func RemoveEnvdFile(hostHome, layerName string) error {
 // runs (tests compare directly).
 func renderEnvdBody(layerName string, envVars map[string]string, pathAdd []string) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "# overthink env for layer %s — managed by ov; do not edit\n", layerName)
+	fmt.Fprintf(&b, "# opencharly env for layer %s — managed by charly; do not edit\n", layerName)
 	keys := make([]string, 0, len(envVars))
 	for k := range envVars {
 		keys = append(keys, k)
@@ -170,8 +170,8 @@ func shQuoteEnv(v string) string {
 // ---------------------------------------------------------------------------
 
 const (
-	managedBlockBegin = "# overthink:begin (managed by ov; do not edit inside this block)"
-	managedBlockEnd   = "# overthink:end"
+	managedBlockBegin = "# opencharly:begin (managed by charly; do not edit inside this block)"
+	managedBlockEnd   = "# opencharly:end"
 )
 
 // ManagedBlockBody returns the shell-specific loop that sources the
@@ -202,7 +202,7 @@ func ShellInitFilePath(shell ShellKind, hostHome string) string {
 	case ShellZsh:
 		return filepath.Join(hostHome, ".zshenv")
 	case ShellFish:
-		return filepath.Join(hostHome, ".config", "fish", "conf.d", "overthink.fish")
+		return filepath.Join(hostHome, ".config", "fish", "conf.d", "opencharly.fish")
 	case ShellBash:
 		// ~/.bashrc, NOT ~/.profile. A bash login shell sources the FIRST of
 		// ~/.bash_profile / ~/.bash_login / ~/.profile — so when ~/.bash_profile
@@ -290,16 +290,55 @@ func markersForTag(marker string) (begin, end string) {
 	if marker == "" {
 		return managedBlockBegin, managedBlockEnd
 	}
-	return fmt.Sprintf("# overthink:begin %s (managed by ov; do not edit inside this block)", marker),
-		fmt.Sprintf("# overthink:end %s", marker)
+	return fmt.Sprintf("# opencharly:begin %s (managed by charly; do not edit inside this block)", marker),
+		fmt.Sprintf("# opencharly:end %s", marker)
+}
+
+// stripLegacyOverthinkBlocks removes every managed block left by the
+// pre-rebrand binary — any region fenced by a `# overthink:begin` line
+// through the next `# overthink:end` line (global OR per-layer tagged).
+// charly maintains its own `# opencharly:` block, so a surviving
+// `# overthink:` block is dead weight: it also sources the relocated
+// ~/.config/overthink/env.d path, which no longer exists, so it errors on
+// every shell startup. Stripping it on every managed-block write makes
+// charly self-heal hosts carried over from the old binary, without the
+// operator running `charly migrate` first. No-op when no legacy block is
+// present (exact-string early return preserves the caller's idempotency).
+func stripLegacyOverthinkBlocks(existing string) string {
+	const legacyBegin, legacyEnd = "# overthink:begin", "# overthink:end"
+	if !strings.Contains(existing, legacyBegin) {
+		return existing
+	}
+	var out strings.Builder
+	scanner := bufio.NewScanner(strings.NewReader(existing))
+	inBlock := false
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.Contains(line, legacyBegin) {
+			inBlock = true
+			continue
+		}
+		if inBlock && strings.Contains(line, legacyEnd) {
+			inBlock = false
+			continue
+		}
+		if !inBlock {
+			out.WriteString(line + "\n")
+		}
+	}
+	// Trim leading/trailing blank lines a removed top/bottom block leaves
+	// behind, then guarantee a single trailing newline.
+	return strings.Trim(out.String(), "\n") + "\n"
 }
 
 // replaceOrAppendManagedBlock finds the begin/end fence pair (tagged
 // with `marker` — empty for the global block) in `existing` and replaces
 // its body; if the markers are absent, appends a fresh block at end-of-
 // file. Marker is required (use "" for the global block; non-empty for
-// per-layer blocks).
+// per-layer blocks). Any pre-rebrand `# overthink:` block is stripped first
+// so charly self-heals carried-over hosts (R3 — one helper, every caller).
 func replaceOrAppendManagedBlock(existing, body, marker string) string {
+	existing = stripLegacyOverthinkBlocks(existing)
 	begin, end := markersForTag(marker)
 	if strings.Contains(existing, begin) {
 		scanner := bufio.NewScanner(strings.NewReader(existing))
@@ -341,7 +380,10 @@ func replaceOrAppendManagedBlock(existing, body, marker string) string {
 // Host block) — otherwise every Host stanza in the included file is
 // gated on matching whatever Host block was open at the Include point.
 // Replace-in-place semantics are preserved when the markers already exist.
+// Any pre-rebrand `# overthink:` block is stripped first (R3 — same helper
+// the append path uses).
 func replaceOrPrependManagedBlock(existing, body, marker string) string {
+	existing = stripLegacyOverthinkBlocks(existing)
 	begin, end := markersForTag(marker)
 	if strings.Contains(existing, begin) {
 		// Same in-place replacement as replaceOrAppendManagedBlock.

@@ -1,7 +1,7 @@
 package main
 
 // labelset.go — unified envelope for the two three-section OCI label
-// payloads carried by every overthink image:
+// payloads carried by every opencharly image:
 //
 //   ai.opencharly.tests       → LabelEvalSet (declarative test manifest)
 //   ai.opencharly.description → LabelDescriptionSet (BDD self-description)

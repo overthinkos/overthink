@@ -1044,7 +1044,7 @@ func TestComputeIntermediates_PixiBoundNotExtracted(t *testing.T) {
 	// because it needs the pixi environment from the final image.
 	layers := map[string]*Layer{
 		"dbus":                {Name: "dbus", tasks: []Task{{Cmd: "true"}}},
-		"charly":                  {Name: "charly", tasks: []Task{{Cmd: "true"}}},
+		"charly":              {Name: "charly", tasks: []Task{{Cmd: "true"}}},
 		"llama-cpp":           {Name: "llama-cpp", tasks: []Task{{Cmd: "true"}}},
 		"unsloth":             {Name: "unsloth", tasks: []Task{{Cmd: "true"}}},
 		"notebook-templates":  {Name: "notebook-templates"},
@@ -1176,7 +1176,7 @@ func TestComputeIntermediates_PixiBoundNotExtracted(t *testing.T) {
 // `cfg.Defaults` even when the parent image explicitly overrode them. Fedora
 // is declared as build:[rpm] in defaults; arch overrides to build:[pac].
 // An arch-rooted intermediate must inherit [pac] + [arch], not fall
-// through to defaults. See root cause in ov/intermediates.go createIntermediate.
+// through to defaults. See root cause in charly/intermediates.go createIntermediate.
 func TestComputeIntermediates_InheritDistroFromParent(t *testing.T) {
 	layers := map[string]*Layer{
 		"a": {Name: "a", tasks: []Task{{Cmd: "true"}}},

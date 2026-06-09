@@ -37,7 +37,7 @@ func TestCrossKindNameReuse_LoaderAcceptsAllKinds(t *testing.T) {
 		[]byte("rpm:\n  packages: [example]\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	overthink := `version: 2026.159.3
+	cfgYAML := `version: 2026.159.1912
 defaults:
   registry: ghcr.io/example
   build: [rpm]
@@ -67,7 +67,7 @@ deploy:
     local: charly-cachyos
     host: local
 `
-	if err := os.WriteFile(filepath.Join(dir, "charly.yml"), []byte(overthink), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "charly.yml"), []byte(cfgYAML), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -107,13 +107,13 @@ deploy:
 //   - local.cachyos-dx        (kind:local namespace; same vintage)
 func TestCrossKindNameReuse_RetiredKeysRejected(t *testing.T) {
 	cases := []struct {
-		name      string
-		overthink string
-		mustHint  string
+		name     string
+		cfgYAML  string
+		mustHint string
 	}{
 		{
 			name: "deployment.qc",
-			overthink: `version: 2026.159.3
+			cfgYAML: `version: 2026.159.1912
 deploy:
   qc:
     target: local
@@ -124,7 +124,7 @@ deploy:
 		},
 		{
 			name: "deployment.cachyos-dx",
-			overthink: `version: 2026.159.3
+			cfgYAML: `version: 2026.159.1912
 deploy:
   cachyos-dx:
     target: local
@@ -135,7 +135,7 @@ deploy:
 		},
 		{
 			name: "local.cachyos-dx",
-			overthink: `version: 2026.159.3
+			cfgYAML: `version: 2026.159.1912
 local:
   cachyos-dx:
     candy: [example]
@@ -146,7 +146,7 @@ local:
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			dir := t.TempDir()
-			if err := os.WriteFile(filepath.Join(dir, "charly.yml"), []byte(tc.overthink), 0o644); err != nil {
+			if err := os.WriteFile(filepath.Join(dir, "charly.yml"), []byte(tc.cfgYAML), 0o644); err != nil {
 				t.Fatal(err)
 			}
 			_, _, err := LoadUnified(dir)
@@ -160,12 +160,12 @@ local:
 	}
 }
 
-// TestMigrateOvCachyos_Idempotent — running the consolidated migration
+// TestMigrateCharlyCachyos_Idempotent — running the consolidated migration
 // twice produces byte-identical output on the second pass. The
 // migration handles BOTH legacy keys (qc, cachyos-dx) AND moves the
 // matching kind:local template name. Migration is opportunistic per
 // file (missing files are not errors).
-func TestMigrateOvCachyos_Idempotent(t *testing.T) {
+func TestMigrateCharlyCachyos_Idempotent(t *testing.T) {
 	dir := t.TempDir()
 	deployYml := `# Top-level comment
 deploy:
@@ -183,15 +183,15 @@ deploy:
 	if err := os.WriteFile(path, []byte(deployYml), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := MigrateOvCachyos(dir, false); err != nil {
+	if _, err := MigrateCharlyCachyos(dir, false); err != nil {
 		t.Fatalf("first run: %v", err)
 	}
 	got, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !crossKindContains(string(got), "ov-cachyos:") {
-		t.Errorf("expected → ov-cachyos rename; got:\n%s", got)
+	if !crossKindContains(string(got), "charly-cachyos:") {
+		t.Errorf("expected → charly-cachyos rename; got:\n%s", got)
 	}
 	if crossKindContains(string(got), "\n    qc:\n") {
 		t.Errorf("residual `qc:` deployment key after rename:\n%s", got)
@@ -205,7 +205,7 @@ deploy:
 	first := string(got)
 
 	// Second run — should be byte-identical (idempotent).
-	if _, err := MigrateOvCachyos(dir, false); err != nil {
+	if _, err := MigrateCharlyCachyos(dir, false); err != nil {
 		t.Fatalf("second run: %v", err)
 	}
 	got2, _ := os.ReadFile(path)
@@ -215,7 +215,7 @@ deploy:
 }
 
 // crossKindContains is a tiny local substring helper used only by this
-// test file. The `contains` symbol is taken by ov/registry.go.
+// test file. The `contains` symbol is taken by charly/registry.go.
 func crossKindContains(s, substr string) bool {
 	for i := 0; i+len(substr) <= len(s); i++ {
 		if s[i:i+len(substr)] == substr {

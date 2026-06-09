@@ -327,8 +327,8 @@ func (c *VmCreateCmd) Run() error {
 	// deploy/eval node claims via requires_exclusive preempts the running
 	// holders of that resource (persistent lease — released by `charly vm stop`/
 	// `charly vm destroy`). No-op when an outer orchestrator already owns the lease
-	// (CH_PREEMPT_LEASE set, e.g. an eval bed run) or when no claimant node
-	// references this VM entity. See ov/preempt.go.
+	// (CHARLY_PREEMPT_LEASE set, e.g. an eval bed run) or when no claimant node
+	// references this VM entity. See charly/preempt.go.
 	if claimant, cnode, ok := lookupVMClaimant(c.Image); ok {
 		if _, perr := acquireExclusiveForClaimant(claimant, cnode, false); perr != nil {
 			return perr
@@ -511,7 +511,7 @@ func (c *VmStartCmd) Run() error {
 
 // startVM starts a previously-created VM by image+instance, dispatching by
 // backend (libvirt domain start / re-exec the stored qemu command). Shared
-// by VmStartCmd.Run and the resource arbiter (ov/preempt.go) so the holder-
+// by VmStartCmd.Run and the resource arbiter (charly/preempt.go) so the holder-
 // restart path runs the exact same lifecycle code as `charly vm start`.
 func startVM(image, instance string) error {
 	rt, err := ResolveRuntime()
@@ -592,7 +592,7 @@ func (c *VmStopCmd) Run() error {
 // graceful ACPI shutdown (disk + definition preserved — the "stopped, but
 // not depleted" semantic the resource arbiter relies on); force=true
 // destroys/kills it. Shared by VmStopCmd.Run and the resource arbiter
-// (ov/preempt.go), which always calls it with force=false so a preempted
+// (charly/preempt.go), which always calls it with force=false so a preempted
 // holder is gracefully shut down and remains restartable.
 func stopVM(image, instance string, force bool) error {
 	rt, err := ResolveRuntime()
@@ -801,7 +801,7 @@ func (c *VmListCmd) Run() error {
 	// libvirt probe
 	if conn, err := connectLibvirt(""); err == nil {
 		defer conn.Close()
-		domains, derr := conn.listOvDomains()
+		domains, derr := conn.listCharlyDomains()
 		if derr != nil {
 			probeNotes = append(probeNotes, fmt.Sprintf("(libvirt: listing failed: %v)", derr))
 		} else {
@@ -893,7 +893,7 @@ func (c *VmListCmd) runCleanOrphans() error {
 		return fmt.Errorf("connecting to libvirt: %w", err)
 	}
 	defer conn.Close()
-	domains, err := conn.listOvDomains()
+	domains, err := conn.listCharlyDomains()
 	if err != nil {
 		return fmt.Errorf("listing domains: %w", err)
 	}

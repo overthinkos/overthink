@@ -2,7 +2,7 @@ package main
 
 // YAML ↔ libvirt XML bridge.
 //
-// Converts overthink's YAML-facing LibvirtDomain (authored in vm.yml
+// Converts opencharly's YAML-facing LibvirtDomain (authored in vm.yml
 // as the `libvirt:` stanza) into libvirt.org/go/libvirtxml's Domain —
 // the type system used to marshal the actual libvirt domain XML.
 //
@@ -148,15 +148,15 @@ func BuildLibvirtDomainXML(spec *VmSpec, rt VmRuntimeParams) (*libvirtxml.Domain
 	return d, nil
 }
 
-// renderOvClassificationMetadata builds the innerxml for the
+// renderCharlyClassificationMetadata builds the innerxml for the
 // <metadata> element. libvirt stores metadata per-namespace (one
 // element per xmlns), so both fields share a single root
-// <ov:classification> element with attributes for disposable and
+// <charly:classification> element with attributes for disposable and
 // lifecycle. Round-trips cleanly through libvirt's
 // DomainGetXMLDesc / DomainDefineXML cycle.
-func renderOvClassificationMetadata(disposable bool, lifecycle string) string {
+func renderCharlyClassificationMetadata(disposable bool, lifecycle string) string {
 	var buf strings.Builder
-	buf.WriteString(`<ov:classification xmlns:ov="https://overthinkos.org/ns/ov/1.0"`)
+	buf.WriteString(`<charly:classification xmlns:charly="https://opencharly.ai/ns/charly/1.0"`)
 	buf.WriteString(` disposable="`)
 	if disposable {
 		buf.WriteString("true")

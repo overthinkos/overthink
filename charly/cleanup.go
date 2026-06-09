@@ -19,7 +19,7 @@ import (
 //      Closes the gap between "graceful exit (defer runs)" and "user
 //      hit Ctrl-C (defer doesn't run)".
 //
-//   2. SweepStaleTemps — at every fresh `ov` invocation, scan
+//   2. SweepStaleTemps — at every fresh `charly` invocation, scan
 //      `/tmp/charly-*` for known patterns and remove anything not held by
 //      a running process AND older than a safety floor. Closes the
 //      gap left by SIGKILL / OOM / kernel panic, none of which a
@@ -110,7 +110,7 @@ var sweepablePatterns = []string{
 }
 
 // sweepSafetyFloor — temp must be at least this old before the sweep
-// considers it stale. Guards against racing with a concurrent `ov`
+// considers it stale. Guards against racing with a concurrent `charly`
 // process that just created the temp (e.g. parallel `charly box build`
 // invocations).
 const sweepSafetyFloor = 5 * time.Minute

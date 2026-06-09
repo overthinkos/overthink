@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 )
 
 // ParsedRef represents a parsed remote reference with version.
@@ -168,9 +169,9 @@ func bareRefs(refs []CandyRef) []string {
 // the per-entity dedup + warn happens once, after fetch.
 
 // RepoCacheDir returns the cache directory for remote repos.
-// Uses $CH_REPO_CACHE env var if set, otherwise ~/.cache/charly/repos/
+// Uses $CHARLY_REPO_CACHE env var if set, otherwise ~/.cache/charly/repos/
 func RepoCacheDir() (string, error) {
-	if envDir := os.Getenv("CH_REPO_CACHE"); envDir != "" {
+	if envDir := os.Getenv("CHARLY_REPO_CACHE"); envDir != "" {
 		return envDir, nil
 	}
 	home, err := os.UserHomeDir()
@@ -218,14 +219,14 @@ func IsRepoCached(repoPath, version string) (bool, error) {
 // (`github.com/<org>/<repo>`); a bare `<org>/<repo>` is accepted too (auto
 // `github.com/` prefix, same rule as `--repo`). Example:
 //
-//	CH_REPO_OVERRIDE=overthinkos/overthink=/home/me/oc-overthink \
+//	CHARLY_REPO_OVERRIDE=overthinkos/overthink=/home/me/oc-overthink \
 //	    charly -C image/ubuntu box build ubuntu-coder
 //
 // The matched directory resolves verbatim (leading `~/` expanded); the ref's
 // `:vTAG` is IGNORED — an override ALWAYS resolves to the dev's current tree.
-const RepoOverrideEnv = "CH_REPO_OVERRIDE"
+const RepoOverrideEnv = "CHARLY_REPO_OVERRIDE"
 
-// normalizeOverrideRepoPath canonicalizes the LHS of a CH_REPO_OVERRIDE pair to
+// normalizeOverrideRepoPath canonicalizes the LHS of a CHARLY_REPO_OVERRIDE pair to
 // the repo-root form ParseRemoteRef yields, so `overthinkos/overthink` and
 // `github.com/overthinkos/overthink` both match (same auto-prefix rule as
 // normalizeRepoSpec in main_repo.go).
@@ -280,17 +281,41 @@ func repoOverrideDir(repoPath string) (string, bool, error) {
 	return "", false, nil
 }
 
+// autoMigratedRepos guards the remote-cache auto-migration against unbounded
+// re-entry. A project's migration chain calls LoadUnified (e.g. the target-local
+// step), which resolves @github refs and re-enters EnsureRepoDownloaded →
+// RunProjectMigrations. With a self- or mutual import (the main ↔ cachyos cycle),
+// and especially right after a LatestSchemaVersion bump (when EVERY cache reads
+// as behind-head), that recurses without bound. markRepoAutoMigrating returns
+// true exactly once per cache path per process, so each cache is auto-migrated at
+// most once and the cycle terminates — safe because the migration chain is
+// idempotent, so a single pass per process is sufficient.
+var (
+	autoMigratedRepos   = map[string]bool{}
+	autoMigratedReposMu sync.Mutex
+)
+
+func markRepoAutoMigrating(path string) bool {
+	autoMigratedReposMu.Lock()
+	defer autoMigratedReposMu.Unlock()
+	if autoMigratedRepos[path] {
+		return false
+	}
+	autoMigratedRepos[path] = true
+	return true
+}
+
 // EnsureRepoDownloaded downloads the repo if not already cached.
 // Returns the cache path. The cache is auto-migrated to the latest schema
 // CalVer via the project-only chain (RunProjectMigrations) on EVERY access —
 // cache HIT and fresh clone alike. Re-migrating a cache hit is required (and
 // safe, the chain being idempotent): a cache populated by an OLDER binary — or
-// relocated from a prior cache directory across a schema bump (e.g. the
-// ov→charly rebrand that renamed overthink.yml→charly.yml and ~/.cache/ov→
-// ~/.cache/charly) — carries the old schema/filename, so the current binary
-// would otherwise fail to find charly.yml. An already-current cache is a no-op.
+// relocated from a prior cache directory across a schema bump (a pre-rebrand
+// cache carries the legacy overthink.yml filename and an older schema) — so the
+// current binary would otherwise fail to find charly.yml. An already-current
+// cache is a no-op.
 func EnsureRepoDownloaded(repoPath, version string) (string, error) {
-	// RDD local-override (CH_REPO_OVERRIDE): resolve a remote repo ref to a local
+	// RDD local-override (CHARLY_REPO_OVERRIDE): resolve a remote repo ref to a local
 	// working tree instead of fetching, so an uncommitted candy/build.yml change
 	// can be built + evaluated by any consumer before it is pushed. The override
 	// is the dev's LIVE tree — it is used verbatim and NEVER migrated (migration
@@ -321,7 +346,7 @@ func EnsureRepoDownloaded(repoPath, version string) (string, error) {
 	// silent path. Project-only subset (HostDeployPath empty) so a remote fetch
 	// never mutates the user's per-host state — even the calver-schema stamp
 	// touches only the cache's project files.
-	if !cached || cacheBehindHead(path) {
+	if (!cached || cacheBehindHead(path)) && markRepoAutoMigrating(path) {
 		ctx := &MigrateContext{Dir: path, Out: io.Discard}
 		if _, err := RunProjectMigrations(ctx); err != nil {
 			return path, fmt.Errorf("auto-migrating remote cache %s: %w", path, err)
@@ -462,13 +487,13 @@ func CollectRemoteRefsOpts(cfg *Config, layers map[string]*Layer, opts ResolveOp
 		}
 		// Follow the base edge, plus builder edges when this image actually builds
 		// (a layerless base needs no builder). A namespaced builder (e.g.
-		// ov.fedora-builder) is BUILT as an intermediate in the consumer's graph,
+		// charly.fedora-builder) is BUILT as an intermediate in the consumer's graph,
 		// so its layers (rpmfusion, yay, …) must be fetched here — dropping the
 		// builder edge under-collects them ("unknown layer"). The builder edge
 		// follows the EFFECTIVE builder (effectiveBuilderForImage → the canonical
 		// resolveEffectiveBuilder), NOT the raw per-image img.Builder: an image
 		// whose builder comes from defaults.builder / the distro-keyed default
-		// (e.g. bazzite/aurora -> ov.fedora-builder, with no per-image builder:
+		// (e.g. bazzite/aurora -> charly.fedora-builder, with no per-image builder:
 		// block) has an EMPTY raw img.Builder, so reading it skipped the builder
 		// edge and under-collected its layers — the exact fetch/resolve lockstep
 		// break this walk exists to prevent. Qualified refs descend into the

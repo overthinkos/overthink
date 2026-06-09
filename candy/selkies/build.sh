@@ -156,7 +156,7 @@ print('Patched selkies.py: _shared_screen_captures cache prevents pixelflux Wayl
 # explicitly. Pixelflux never calls it. Every dmabuf Chrome commits (60fps
 # under active streaming) creates an EGL image via eglCreateImageKHR and
 # caches a GlesTexture + mmap region through /dev/dri/renderD128. Over 20 min
-# of real streaming on ov-selkies-desktop-82.23.94.69, /proc/<pid>/maps
+# of real streaming on charly-selkies-desktop-82.23.94.69, /proc/<pid>/maps
 # showed 1528 cached DRM mappings = 9 GB virtual address space and ~1.5 GB
 # cgroup shmem, with only 19 MB file_mapped. 12 OOM kills logged on that
 # instance.
@@ -382,7 +382,7 @@ new = '''            let loop_start_time = Instant::now();
             // smithay's GlesRenderer.dmabuf_cache grows unbounded because it
             // only evicts entries on explicit cleanup. Observed leak: 1528
             // cached imports, ~1.5 GB cgroup shmem, under 20 min of
-            // 1604x3056@60 streaming on ov-selkies-desktop-82.23.94.69.
+            // 1604x3056@60 streaming on charly-selkies-desktop-82.23.94.69.
             if let Some(renderer) = state.gles_renderer.as_mut() {
                 use smithay::backend::renderer::Renderer;
                 let _ = renderer.cleanup_texture_cache();

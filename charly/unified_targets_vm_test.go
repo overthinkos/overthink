@@ -190,28 +190,28 @@ func TestVmUnifiedTarget_Rebuild_DryRun(t *testing.T) {
 }
 
 // TestVmUnifiedTarget_Rebuild_ReappliesLayers exercises the real (non-dry-run)
-// Rebuild body through the stubbable runOvSubcommand seam and asserts the
+// Rebuild body through the stubbable runCharlySubcommand seam and asserts the
 // recorded subcommand sequence ends in `deploy add <node>` — the shared
 // layer-apply primitive LocalUnifiedTarget.Rebuild and PodUnifiedTarget.Rebuild
 // also call (R3). The #42 bug (domain-recreate only) would record no such call.
 func TestVmUnifiedTarget_Rebuild_ReappliesLayers(t *testing.T) {
 	var calls [][]string
-	origRun := runOvSubcommand
-	runOvSubcommand = func(args ...string) error {
+	origRun := runCharlySubcommand
+	runCharlySubcommand = func(args ...string) error {
 		calls = append(calls, append([]string(nil), args...))
 		return nil
 	}
-	defer func() { runOvSubcommand = origRun }()
+	defer func() { runCharlySubcommand = origRun }()
 
-	// `charly vm start` goes through runOvSubcommandCapture (real exec). Stub it
+	// `charly vm start` goes through runCharlySubcommandCapture (real exec). Stub it
 	// to return a benign "already running" so Rebuild falls through to the
 	// layer re-apply without spawning a real charly binary.
-	origCap := runOvSubcommandCapture
-	runOvSubcommandCapture = func(args ...string) (string, error) {
+	origCap := runCharlySubcommandCapture
+	runCharlySubcommandCapture = func(args ...string) (string, error) {
 		calls = append(calls, append([]string{"<capture>"}, args...))
 		return "domain is already running", nil
 	}
-	defer func() { runOvSubcommandCapture = origCap }()
+	defer func() { runCharlySubcommandCapture = origCap }()
 
 	target := &VmUnifiedTarget{
 		NodeName:       "k3s-vm",

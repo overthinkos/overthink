@@ -21,7 +21,7 @@ func TestReadNote_Empty(t *testing.T) {
 func TestAppendNote_HeaderAndOrdering(t *testing.T) {
 	dir := t.TempDir()
 	notesPath := filepath.Join(dir, ".eval", "rec", "note", "run-1.md")
-	t.Setenv("CH_EVAL_NOTES_FILE", notesPath)
+	t.Setenv("CHARLY_EVAL_NOTES_FILE", notesPath)
 
 	if err := AppendNote(dir, "rec", "run-1", "1", "claude", "first note"); err != nil {
 		t.Fatal(err)
@@ -49,15 +49,15 @@ func TestAppendNote_HeaderAndOrdering(t *testing.T) {
 
 func TestAppendNote_RequiresEnvVar(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("CH_EVAL_NOTES_FILE", "")
+	t.Setenv("CHARLY_EVAL_NOTES_FILE", "")
 	if err := AppendNote(dir, "r", "id", "1", "claude", "text"); err == nil {
-		t.Error("expected error when CH_EVAL_NOTES_FILE is unset")
+		t.Error("expected error when CHARLY_EVAL_NOTES_FILE is unset")
 	}
 }
 
 func TestAppendNote_RequiresText(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("CH_EVAL_NOTES_FILE", filepath.Join(dir, "notes.md"))
+	t.Setenv("CHARLY_EVAL_NOTES_FILE", filepath.Join(dir, "notes.md"))
 	if err := AppendNote(dir, "r", "id", "1", "claude", ""); err == nil {
 		t.Error("expected error for empty text")
 	}
@@ -68,7 +68,7 @@ func TestAppendNote_RequiresText(t *testing.T) {
 
 func TestAppendNote_RequiresScore(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("CH_EVAL_NOTES_FILE", filepath.Join(dir, "notes.md"))
+	t.Setenv("CHARLY_EVAL_NOTES_FILE", filepath.Join(dir, "notes.md"))
 	if err := AppendNote(dir, "", "id", "1", "claude", "text"); err == nil {
 		t.Error("expected error for empty score name")
 	}
@@ -76,7 +76,7 @@ func TestAppendNote_RequiresScore(t *testing.T) {
 
 func TestNotePath_DefaultsToScratchpad(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("CH_EVAL_NOTES_FILE", "")
+	t.Setenv("CHARLY_EVAL_NOTES_FILE", "")
 	got := NotePath(dir, "bench")
 	want := filepath.Join(dir, ".eval", "bench", "note", "scratchpad.md")
 	if got != want {
@@ -86,7 +86,7 @@ func TestNotePath_DefaultsToScratchpad(t *testing.T) {
 
 func TestNotePath_RespectsEnvOverride(t *testing.T) {
 	override := "/tmp/custom-notes.md"
-	t.Setenv("CH_EVAL_NOTES_FILE", override)
+	t.Setenv("CHARLY_EVAL_NOTES_FILE", override)
 	if got := NotePath("/proj", "bench"); got != override {
 		t.Errorf("env override ignored: got %q, want %q", got, override)
 	}

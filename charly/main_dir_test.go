@@ -8,21 +8,21 @@ import (
 	"testing"
 )
 
-// TestOvDir_FlagChdir verifies that -C / --dir / CH_PROJECT_DIR causes
+// TestCharlyDir_FlagChdir verifies that -C / --dir / CHARLY_PROJECT_DIR causes
 // main() to chdir before dispatching, so downstream os.Getwd() calls
 // (used by every build-mode command to locate charly.yml) see the target
 // directory. Covers three modes:
 //
 //  1. -C <path>  — short flag
 //  2. --dir <path> — long flag
-//  3. CH_PROJECT_DIR=<path> env var
+//  3. CHARLY_PROJECT_DIR=<path> env var
 //
 // Uses `charly box list boxes` as the probe: it reads charly.yml from the
 // resolved project dir. If the binary fails to chdir, the command errors
 // with "no charly.yml found: ... no such file or directory". A pass means
 // chdir worked — the command listed the images from the scratch project.
-func TestOvDir_FlagChdir(t *testing.T) {
-	bin := buildOvBinary(t)
+func TestCharlyDir_FlagChdir(t *testing.T) {
+	bin := buildCharlyBinary(t)
 
 	scratch := t.TempDir()
 	writeMinProject(t, scratch)
@@ -38,7 +38,7 @@ func TestOvDir_FlagChdir(t *testing.T) {
 	}{
 		{name: "short flag -C", args: []string{"-C", scratch, "box", "list", "boxes"}},
 		{name: "long flag --dir", args: []string{"--dir", scratch, "box", "list", "boxes"}},
-		{name: "env var CH_PROJECT_DIR", args: []string{"box", "list", "boxes"}, env: []string{"CH_PROJECT_DIR=" + scratch}},
+		{name: "env var CHARLY_PROJECT_DIR", args: []string{"box", "list", "boxes"}, env: []string{"CHARLY_PROJECT_DIR=" + scratch}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -56,10 +56,10 @@ func TestOvDir_FlagChdir(t *testing.T) {
 	}
 }
 
-// TestOvDir_Errors covers the error paths: non-existent directory, and a
+// TestCharlyDir_Errors covers the error paths: non-existent directory, and a
 // file (not a directory) passed to --dir.
-func TestOvDir_Errors(t *testing.T) {
-	bin := buildOvBinary(t)
+func TestCharlyDir_Errors(t *testing.T) {
+	bin := buildCharlyBinary(t)
 
 	scratch := t.TempDir()
 	notADir := filepath.Join(scratch, "not-a-dir")
@@ -88,10 +88,10 @@ func TestOvDir_Errors(t *testing.T) {
 	}
 }
 
-// buildOvBinary compiles charly into the test temp dir. Cached per-test via
+// buildCharlyBinary compiles charly into the test temp dir. Cached per-test via
 // t.TempDir. Go build is <1s on a warm module cache, well within test
 // budget.
-func buildOvBinary(t *testing.T) string {
+func buildCharlyBinary(t *testing.T) string {
 	t.Helper()
 	out := filepath.Join(t.TempDir(), "charly")
 	cmd := exec.Command("go", "build", "-o", out, ".")
@@ -107,7 +107,7 @@ func writeMinProject(t *testing.T, dir string) {
 	t.Helper()
 	// Post-unified-cutover: write charly.yml (the unified format) instead
 	// of a legacy image.yml. LoadConfig reads charly.yml exclusively.
-	overthinkYAML := `version: 2026.159.3
+	charlyYAML := `version: 2026.159.1912
 defaults:
   registry: ghcr.io/test
   tag: latest
@@ -120,7 +120,7 @@ box:
     base: "quay.io/fedora/fedora:43"
     distro: ["fedora:43", fedora]
 `
-	if err := os.WriteFile(filepath.Join(dir, "charly.yml"), []byte(overthinkYAML), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "charly.yml"), []byte(charlyYAML), 0644); err != nil {
 		t.Fatalf("writing charly.yml: %v", err)
 	}
 }

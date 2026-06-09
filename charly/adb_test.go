@@ -147,16 +147,16 @@ func TestPosInstallApp(t *testing.T) {
 	}
 }
 
-func TestValidateOvVerb_InstallAppRequiresAppId(t *testing.T) {
+func TestValidateCharlyVerb_InstallAppRequiresAppId(t *testing.T) {
 	// Missing app_id ⇒ validation error.
 	errs := &ValidationError{}
-	validateOvVerb(&Check{Adb: "install-app"}, "adb", "loc", "deploy", errs)
+	validateCharlyVerb(&Check{Adb: "install-app"}, "adb", "loc", "deploy", errs)
 	if !errs.HasErrors() {
 		t.Error("install-app without app_id should fail validation")
 	}
 	// With app_id ⇒ no error.
 	errs2 := &ValidationError{}
-	validateOvVerb(&Check{Adb: "install-app", AppId: "org.fdroid.fdroid"}, "adb", "loc", "deploy", errs2)
+	validateCharlyVerb(&Check{Adb: "install-app", AppId: "org.fdroid.fdroid"}, "adb", "loc", "deploy", errs2)
 	if errs2.HasErrors() {
 		t.Errorf("install-app with app_id should pass, got: %v", errs2.Errors)
 	}

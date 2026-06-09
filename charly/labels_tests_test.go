@@ -10,7 +10,7 @@ import (
 //
 // This is the read-side complement to TestLabelTests_JSONRoundTrip, which
 // only validates the marshaling path. Together they prove the contract
-// between writeLabels (ov/generate.go) and ExtractMetadata (ov/labels.go)
+// between writeLabels (charly/generate.go) and ExtractMetadata (charly/labels.go)
 // round-trips without data loss.
 func TestExtractMetadata_Tests(t *testing.T) {
 	orig := InspectLabels

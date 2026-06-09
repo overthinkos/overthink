@@ -76,7 +76,7 @@ func TestResolveDeployChain_VmInnerPod(t *testing.T) {
 	}
 	venue := chain.Venue()
 	// A pod nested in a VM guest is deployed STANDALONE by the guest's own
-	// `charly deploy from-image <ref> <childKey>` (deployNestedPodsInGuest), so the
+	// `charly deploy from-box <ref> <childKey>` (deployNestedPodsInGuest), so the
 	// in-guest container is "charly-<childKey>" (the leaf) — NOT the host-side
 	// "charly-<vm>_<inner>" flatPath the guest never sees. The chain must podman-exec
 	// the leaf name, or it targets a container that doesn't exist (the silent

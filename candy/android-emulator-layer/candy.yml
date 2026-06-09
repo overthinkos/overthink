@@ -17,7 +17,7 @@ candy:
         - appium-server
         - supervisord
     env:
-        EMULATOR_NAME: "ov_avd_36"
+        EMULATOR_NAME: "charly_avd_36"
         EMULATOR_API_LEVEL: "36"
         EMULATOR_DEVICE: "pixel_9a"
         # EMULATOR_MEMORY / EMULATOR_CORES are intentionally NOT set here — they
@@ -94,7 +94,7 @@ candy:
             ANDROID_HOME: /opt/android-sdk
             ANDROID_SDK_ROOT: /opt/android-sdk
             ANDROID_AVD_HOME: /home/user/.android/avd
-            EMULATOR_NAME: ov_avd_36
+            EMULATOR_NAME: charly_avd_36
             EMULATOR_API_LEVEL: "36"
             EMULATOR_DEVICE: pixel_9a
             EMULATOR_IMG_TYPE: google_apis_playstore
@@ -215,7 +215,7 @@ candy:
         # fired right after an app-start silently 404s (the test app is resumed but
         # hidden behind the dialog). sys.boot_completed is NECESSARY-BUT-NOT-SUFFICIENT
         # readiness — it fires before GMS quiesces. The first-class `adb:
-        # wait-ui-settled` verb (ov/adb.go) polls the focused window over goadb and
+        # wait-ui-settled` verb (charly/adb.go) polls the focused window over goadb and
         # dismisses any ANR dialog via KEYCODE_HOME until the UI is stable. It is
         # LOAD-INDEPENDENT (the ANR is GMS churn, not host load) and adapts to a
         # load-dilated churn purely via timeout:. All logic is typed Go over goadb —

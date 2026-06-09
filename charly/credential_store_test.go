@@ -59,7 +59,7 @@ func (m *mockStore) Name() string {
 func TestResolveCredentialEnvOverride(t *testing.T) {
 	t.Setenv("TEST_CRED_ENV", "from-env")
 
-	val, source := ResolveCredential("TEST_CRED_ENV", "ov/test", "key1", "fallback")
+	val, source := ResolveCredential("TEST_CRED_ENV", "charly/test", "key1", "fallback")
 	if val != "from-env" || source != "env" {
 		t.Errorf("expected (from-env, env), got (%s, %s)", val, source)
 	}
@@ -78,9 +78,9 @@ func TestResolveCredentialDefault(t *testing.T) {
 	resetDefaultStore()
 	defer resetDefaultStore()
 
-	t.Setenv("CH_SECRET_BACKEND", "config")
+	t.Setenv("CHARLY_SECRET_BACKEND", "config")
 
-	val, source := ResolveCredential("TEST_CRED_NONE", "ov/test", "nonexistent", "default-val")
+	val, source := ResolveCredential("TEST_CRED_NONE", "charly/test", "nonexistent", "default-val")
 	if val != "default-val" || source != "default" {
 		t.Errorf("expected (default-val, default), got (%s, %s)", val, source)
 	}
@@ -123,7 +123,7 @@ func TestConfigFileStoreRoundtrip(t *testing.T) {
 		t.Fatalf("List: %v", err)
 	}
 	if len(keys) != 1 || keys[0] != "my-image" {
-		t.Errorf("List(ov/vnc) = %v, want [my-image]", keys)
+		t.Errorf("List(charly/vnc) = %v, want [my-image]", keys)
 	}
 
 	// Delete
@@ -166,7 +166,7 @@ func TestPlaintextCredentialEntries(t *testing.T) {
 }
 
 func TestResolveSecretBackendEnv(t *testing.T) {
-	t.Setenv("CH_SECRET_BACKEND", "keyring")
+	t.Setenv("CHARLY_SECRET_BACKEND", "keyring")
 	if got := resolveSecretBackend(); got != "keyring" {
 		t.Errorf("resolveSecretBackend() = %q, want %q", got, "keyring")
 	}
@@ -185,7 +185,7 @@ func TestResolveSecretBackendConfig(t *testing.T) {
 		t.Fatalf("SaveRuntimeConfig: %v", err)
 	}
 
-	os.Unsetenv("CH_SECRET_BACKEND")
+	os.Unsetenv("CHARLY_SECRET_BACKEND")
 	if got := resolveSecretBackend(); got != "config" {
 		t.Errorf("resolveSecretBackend() = %q, want %q", got, "config")
 	}
@@ -198,13 +198,13 @@ func TestResolveSecretBackendDefault(t *testing.T) {
 	}
 	defer func() { RuntimeConfigPath = defaultRuntimeConfigPath }()
 
-	os.Unsetenv("CH_SECRET_BACKEND")
+	os.Unsetenv("CHARLY_SECRET_BACKEND")
 	if got := resolveSecretBackend(); got != "auto" {
 		t.Errorf("resolveSecretBackend() = %q, want %q", got, "auto")
 	}
 }
 
-// TestConfigFileStoreSecretRoundtrip verifies that "ov/secret" service
+// TestConfigFileStoreSecretRoundtrip verifies that "charly/secret" service
 // credentials stored via ConfigFileStore can be read back. This is a
 // regression test: before the fix, setConfigCredential stored these as
 // composite keys in VncPasswords, but lookupConfigCredential returned
@@ -221,39 +221,39 @@ func TestConfigFileStoreSecretRoundtrip(t *testing.T) {
 	// Store a secret (as charly config does for DB passwords)
 	secretName := "charly-immich-ml-db-password"
 	secretValue := "abc123def456"
-	if err := store.Set("ov/secret", secretName, secretValue); err != nil {
-		t.Fatalf("Set(ov/secret, %s): %v", secretName, err)
+	if err := store.Set("charly/secret", secretName, secretValue); err != nil {
+		t.Fatalf("Set(charly/secret, %s): %v", secretName, err)
 	}
 
 	// Read it back (this was broken before the fix — returned empty string)
-	got, err := store.Get("ov/secret", secretName)
+	got, err := store.Get("charly/secret", secretName)
 	if err != nil {
-		t.Fatalf("Get(ov/secret, %s): %v", secretName, err)
+		t.Fatalf("Get(charly/secret, %s): %v", secretName, err)
 	}
 	if got != secretValue {
-		t.Errorf("Get(ov/secret, %s) = %q, want %q", secretName, got, secretValue)
+		t.Errorf("Get(charly/secret, %s) = %q, want %q", secretName, got, secretValue)
 	}
 
 	// List should return the secret name
-	keys, err := store.List("ov/secret")
+	keys, err := store.List("charly/secret")
 	if err != nil {
-		t.Fatalf("List(ov/secret): %v", err)
+		t.Fatalf("List(charly/secret): %v", err)
 	}
 	if len(keys) != 1 || keys[0] != secretName {
-		t.Errorf("List(ov/secret) = %v, want [%s]", keys, secretName)
+		t.Errorf("List(charly/secret) = %v, want [%s]", keys, secretName)
 	}
 
 	// Delete and verify gone
-	if err := store.Delete("ov/secret", secretName); err != nil {
-		t.Fatalf("Delete(ov/secret, %s): %v", secretName, err)
+	if err := store.Delete("charly/secret", secretName); err != nil {
+		t.Fatalf("Delete(charly/secret, %s): %v", secretName, err)
 	}
-	got, _ = store.Get("ov/secret", secretName)
+	got, _ = store.Get("charly/secret", secretName)
 	if got != "" {
 		t.Errorf("Get after Delete = %q, want empty", got)
 	}
 }
 
-// TestConfigFileStoreVNCAndSecretIsolation verifies that VNC and ov/secret
+// TestConfigFileStoreVNCAndSecretIsolation verifies that VNC and charly/secret
 // credentials stored in the same underlying map don't interfere.
 func TestConfigFileStoreVNCAndSecretIsolation(t *testing.T) {
 	dir := t.TempDir()
@@ -268,20 +268,20 @@ func TestConfigFileStoreVNCAndSecretIsolation(t *testing.T) {
 	if err := store.Set(CredServiceVNC, "my-image", "vncpass"); err != nil {
 		t.Fatalf("Set VNC: %v", err)
 	}
-	if err := store.Set("ov/secret", "charly-my-image-db-password", "dbpass"); err != nil {
+	if err := store.Set("charly/secret", "charly-my-image-db-password", "dbpass"); err != nil {
 		t.Fatalf("Set secret: %v", err)
 	}
 
 	// VNC List should only show VNC keys (not composite secret keys)
 	vncKeys, _ := store.List(CredServiceVNC)
 	if len(vncKeys) != 1 || vncKeys[0] != "my-image" {
-		t.Errorf("List(ov/vnc) = %v, want [my-image]", vncKeys)
+		t.Errorf("List(charly/vnc) = %v, want [my-image]", vncKeys)
 	}
 
 	// Secret List should only show secret keys
-	secretKeys, _ := store.List("ov/secret")
+	secretKeys, _ := store.List("charly/secret")
 	if len(secretKeys) != 1 || secretKeys[0] != "charly-my-image-db-password" {
-		t.Errorf("List(ov/secret) = %v, want [charly-my-image-db-password]", secretKeys)
+		t.Errorf("List(charly/secret) = %v, want [charly-my-image-db-password]", secretKeys)
 	}
 
 	// Values should be independently retrievable
@@ -289,7 +289,7 @@ func TestConfigFileStoreVNCAndSecretIsolation(t *testing.T) {
 	if vncVal != "vncpass" {
 		t.Errorf("VNC Get = %q, want vncpass", vncVal)
 	}
-	secretVal, _ := store.Get("ov/secret", "charly-my-image-db-password")
+	secretVal, _ := store.Get("charly/secret", "charly-my-image-db-password")
 	if secretVal != "dbpass" {
 		t.Errorf("Secret Get = %q, want dbpass", secretVal)
 	}
@@ -300,8 +300,8 @@ func TestConfigFileStoreVNCAndSecretIsolation(t *testing.T) {
 func TestPlaintextCredentialEntriesCompositeKeys(t *testing.T) {
 	cfg := &RuntimeConfig{
 		VncPasswords: map[string]string{
-			"my-image":                        "vncpass",
-			"ov/secret/charly-immich-db-password": "dbpass",
+			"my-image": "vncpass",
+			"charly/secret/charly-immich-db-password": "dbpass",
 		},
 	}
 	entries := PlaintextCredentialEntries(cfg)
@@ -314,12 +314,12 @@ func TestPlaintextCredentialEntriesCompositeKeys(t *testing.T) {
 		switch e.Value {
 		case "vncpass":
 			if e.Service != CredServiceVNC || e.Key != "my-image" {
-				t.Errorf("VNC entry: service=%q key=%q, want ov/vnc/my-image", e.Service, e.Key)
+				t.Errorf("VNC entry: service=%q key=%q, want charly/vnc/my-image", e.Service, e.Key)
 			}
 			foundVNC = true
 		case "dbpass":
-			if e.Service != "ov/secret" || e.Key != "charly-immich-db-password" {
-				t.Errorf("Secret entry: service=%q key=%q, want ov/secret/charly-immich-db-password", e.Service, e.Key)
+			if e.Service != "charly/secret" || e.Key != "charly-immich-db-password" {
+				t.Errorf("Secret entry: service=%q key=%q, want charly/secret/charly-immich-db-password", e.Service, e.Key)
 			}
 			foundSecret = true
 		}

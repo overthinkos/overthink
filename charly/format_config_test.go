@@ -162,7 +162,7 @@ func TestBuilderNames(t *testing.T) {
 // declarations live ONLY under the `distro:` map. A stray top-level `rpm:` is now
 // an unknown-key error pointing at `charly migrate`, not a silently-parsed section.
 func TestLegacyTopLevelFormatKeyRejected(t *testing.T) {
-	SetFormatNames(testDistroConfig())
+	RegisterBuildVocabulary(testDistroConfig())
 
 	for _, tc := range []struct{ name, yaml string }{
 		{"format-key", "rpm:\n  package:\n    - vim\n"},
@@ -267,7 +267,7 @@ func TestDnfConfigInherit(t *testing.T) {
 // TestDistroDefPrimaryFormat proves PrimaryFormat returns the base format
 // (rpm/deb/pac), skipping the secondary `aur` builder format, deterministically.
 func TestDistroDefPrimaryFormat(t *testing.T) {
-	arch := &DistroDef{Format: map[string]*FormatDef{"pac": {}, "aur": {}}}
+	arch := &DistroDef{Format: map[string]*FormatDef{"pac": {}, "aur": {Secondary: true}}}
 	if got := arch.PrimaryFormat(); got != "pac" {
 		t.Errorf("arch PrimaryFormat = %q, want pac (aur is secondary)", got)
 	}
@@ -275,7 +275,7 @@ func TestDistroDefPrimaryFormat(t *testing.T) {
 	if got := fedora.PrimaryFormat(); got != "rpm" {
 		t.Errorf("fedora PrimaryFormat = %q, want rpm", got)
 	}
-	if got := (&DistroDef{Format: map[string]*FormatDef{"aur": {}}}).PrimaryFormat(); got != "" {
+	if got := (&DistroDef{Format: map[string]*FormatDef{"aur": {Secondary: true}}}).PrimaryFormat(); got != "" {
 		t.Errorf("aur-only PrimaryFormat = %q, want empty (no base format)", got)
 	}
 	if got := (*DistroDef)(nil).PrimaryFormat(); got != "" {

@@ -209,7 +209,7 @@ candy:
           # exact false-green this probe exists to catch). N/A is legitimate ONLY
           # where no VAAPI-encode GPU exists (a CPU host, or the -nvidia flavor in a
           # VM, which encodes via NVENC). NOTE: $DRINODE is referenced WITHOUT braces
-          # — ov's eval var resolver only substitutes ${UPPERCASE} forms and would
+          # — charly's eval var resolver only substitutes ${UPPERCASE} forms and would
           # otherwise treat ${DRINODE:-default} as one unresolvable variable and SKIP
           # the whole check; braceless $DRINODE is left for the in-container shell.
           scope: deploy

@@ -73,14 +73,14 @@ const (
 	// CollectEval. Subject to a 256 KiB soft cap with narrative truncation.
 	LabelDescription = "ai.opencharly.description"
 	// LabelService — structured JSON array of CapabilityService (full
-	// per-entry spec, not just names). Source-less deploy (`charly deploy from-image`)
+	// per-entry spec, not just names). Source-less deploy (`charly deploy from-box`)
 	// reads this to reconstruct every service's config without the repo.
 	LabelService = "ai.opencharly.service"
 	// LabelShell — three-section JSON shell-init manifest.
 	// Each section (layer/image/deploy) carries an ordered list of
 	// ShellEntry contributions (origin = layer name / "image" / "deploy",
 	// id, generic body, per-shell ByShell map). Source of truth for
-	// `charly box inspect`, `charly deploy from-image`, and the deploy.yml
+	// `charly box inspect`, `charly deploy from-box`, and the deploy.yml
 	// `shell:` overlay merge — same shape as LabelEval.
 	LabelShell = "ai.opencharly.shell"
 )
@@ -254,9 +254,9 @@ func ExtractMetadata(engine, imageRef string) (*BoxMetadata, error) {
 
 	version := labels[LabelVersion]
 	if version == "" {
-		// Empty ai.opencharly.version => not an overthink image (a plain
+		// Empty ai.opencharly.version => not an opencharly image (a plain
 		// registry base). This is the charly-vs-non-charly boundary, NOT a
-		// backward-compat shim: every overthink image always emits a
+		// backward-compat shim: every opencharly image always emits a
 		// non-empty EffectiveVersion.
 		return nil, nil
 	}

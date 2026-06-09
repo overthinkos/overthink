@@ -11,21 +11,21 @@ import (
 // The `import:` statement (see unified.go) mounts another project under a child
 // namespace (`import: [{cachyos: '@github.com/overthinkos/cachyos:vTAG'}]`).
 // Entries in that project are then referenced QUALIFIED — `base: cachyos.cachyos`,
-// `builder: {pixi: ov.arch-builder}` — rather than flat-merged into the importing
+// `builder: {pixi: charly.arch-builder}` — rather than flat-merged into the importing
 // project's global per-kind maps.
 //
 // Resolution is namespace-relative (Go package-member semantics): a bare ref
 // inside namespace `cachyos` resolves within cachyos first; a qualified ref
-// `ov.arch` inside cachyos descends into cachyos's own `ov` namespace. The
+// `charly.arch` inside cachyos descends into cachyos's own `charly` namespace. The
 // resolver below walks Config.Namespaces (projected from UnifiedFile.Namespaces).
 //
 // Inheritance across a namespace boundary:
 //   - distro:/build: are VALUES (tags, formats) → inherited across namespaces.
 //   - builder: is a map of REFS relative to the base's namespace → NOT copied
-//     across a boundary (a base-namespace-relative ref like `ov.arch-builder`
+//     across a boundary (a base-namespace-relative ref like `charly.arch-builder`
 //     would dangle in a consumer where that namespace doesn't exist).
 //     Instead, the consumer's builder is resolved DISTRO-KEYED in
-//     ResolveImage (ov/config.go:distroBuilderMap): an image's resolved
+//     ResolveImage (charly/config.go:distroBuilderMap): an image's resolved
 //     distro (which DOES cross the boundary) selects the builder map of the
 //     root-namespace image that owns that distro (e.g. base.yml's `arch` →
 //     arch-builder), whose bare refs resolve in the importing namespace. So a
@@ -89,7 +89,7 @@ func (c *Config) resolveImageRef(ref string) (BoxConfig, *Config, bool) {
 // build-fallback needs it because it only has the basename of a full registry
 // ref (e.g. `arch-builder` extracted from
 // `ghcr.io/overthinkos/arch-builder:<tag>`) and must find that the image lives
-// under the `ov` namespace to build it locally.
+// under the `charly` namespace to build it locally.
 func (c *Config) findImageByLeaf(leaf string) (string, bool) {
 	if leaf == "" {
 		return "", false
@@ -143,7 +143,7 @@ func (c *Config) resolveNamespacedBases(out map[string]*ResolvedBox, calverTag, 
 				add(ri.Base)
 			}
 			// Qualified builder refs (e.g. a submodule image's
-			// `builder: {pixi: ov.arch-builder}`) are pulled in so the generator
+			// `builder: {pixi: charly.arch-builder}`) are pulled in so the generator
 			// can resolve the builder stage's FROM — but ONLY for images that
 			// actually have layers to build. A layerless base (e.g. cachyos.cachyos)
 			// needs no builder, and its builder map is namespace-relative to ITS
@@ -205,9 +205,9 @@ func (c *Config) pullNamespacedImage(from *Config, ref, keyPrefix, calverTag, di
 	// Re-qualify EVERY by-name ref to another image that the build graph later
 	// resolves. A pulled image's refs are namespace-relative to `cur` (the
 	// namespace it was authored in); left untouched they get re-resolved from
-	// the ROOT config — where `cur`'s own namespaces (e.g. `ov`) don't exist —
+	// the ROOT config — where `cur`'s own namespaces (e.g. `charly`) don't exist —
 	// yielding `import namespace "charly" not found`. Prefixing with curPrefix
-	// (`ov.arch-builder` → `selkies.ov.arch-builder`) makes each ref resolvable
+	// (`charly.arch-builder` → `selkies.charly.arch-builder`) makes each ref resolvable
 	// from root AND matches the key pullNamespacedImage stores the target under.
 	//
 	// The set of by-name image refs is the SINGLE source of truth in

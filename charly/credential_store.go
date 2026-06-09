@@ -22,7 +22,7 @@ type CredentialStore interface {
 
 // Credential service name.
 const (
-	CredServiceVNC = "ov/vnc"
+	CredServiceVNC = "charly/vnc"
 )
 
 var (
@@ -183,7 +183,7 @@ func ResolveCredential(envVar, service, key, defaultVal string) (value, source s
 
 // resolveSecretBackend reads the secret_backend setting from env or config.
 func resolveSecretBackend() string {
-	if v := os.Getenv("CH_SECRET_BACKEND"); v != "" {
+	if v := os.Getenv("CHARLY_SECRET_BACKEND"); v != "" {
 		return v
 	}
 	cfg, err := LoadRuntimeConfig()

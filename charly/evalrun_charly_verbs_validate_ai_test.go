@@ -77,15 +77,15 @@ func TestArtifactValidatableMethods_MatchesArtifactProducingMethodSpecs(t *testi
 	}
 }
 
-// TestRunOvVerb_ValidateAi_AllowlistedMethod_FilePresent_FreshMtime_ValidatorsRun
+// TestRunCharlyVerb_ValidateAi_AllowlistedMethod_FilePresent_FreshMtime_ValidatorsRun
 // covers the happy path: flag set, allowlisted method, file present
 // with fresh mtime, validators succeed.
 //
 // Strategy: build a minimal Runner with ValidateAiArtifacts=true and
 // IterStartTime in the past, point a Check at a tempfile we just
 // wrote, run the artifact-validators path. This exercises the
-// "skip-subprocess + run-validators" branch directly via runOvVerb.
-func TestRunOvVerb_ValidateAi_AllowlistedMethod_FilePresent_FreshMtime_ValidatorsRun(t *testing.T) {
+// "skip-subprocess + run-validators" branch directly via runCharlyVerb.
+func TestRunCharlyVerb_ValidateAi_AllowlistedMethod_FilePresent_FreshMtime_ValidatorsRun(t *testing.T) {
 	tmp := t.TempDir()
 	cast := filepath.Join(tmp, "session.cast")
 	// Minimal valid asciinema cast: header object + 5 event arrays =
@@ -112,7 +112,7 @@ func TestRunOvVerb_ValidateAi_AllowlistedMethod_FilePresent_FreshMtime_Validator
 		ArtifactMinBytes:      50,
 		ArtifactMinCastEvents: 5,
 	}
-	res := r.runOvVerb(context.Background(), c, "record", "stop", recordMethods)
+	res := r.runCharlyVerb(context.Background(), c, "record", "stop", recordMethods)
 	if res.Status != TestPass {
 		t.Errorf("expected pass, got %s: %s", res.Status, res.Message)
 	}
@@ -121,9 +121,9 @@ func TestRunOvVerb_ValidateAi_AllowlistedMethod_FilePresent_FreshMtime_Validator
 	}
 }
 
-// TestRunOvVerb_ValidateAi_AllowlistedMethod_FileMissing_FailsActionable
+// TestRunCharlyVerb_ValidateAi_AllowlistedMethod_FileMissing_FailsActionable
 // covers the "AI never ran the probe" failure mode.
-func TestRunOvVerb_ValidateAi_AllowlistedMethod_FileMissing_FailsActionable(t *testing.T) {
+func TestRunCharlyVerb_ValidateAi_AllowlistedMethod_FileMissing_FailsActionable(t *testing.T) {
 	r := &Runner{
 		Mode:                RunModeLive,
 		Image:               "fixture-desktop",
@@ -136,7 +136,7 @@ func TestRunOvVerb_ValidateAi_AllowlistedMethod_FileMissing_FailsActionable(t *t
 		Artifact:         "/nonexistent/cdp.png",
 		ArtifactMinBytes: 100,
 	}
-	res := r.runOvVerb(context.Background(), c, "cdp", "screenshot", cdpMethods)
+	res := r.runCharlyVerb(context.Background(), c, "cdp", "screenshot", cdpMethods)
 	if res.Status != TestFail {
 		t.Fatalf("expected fail, got %s: %s", res.Status, res.Message)
 	}
@@ -148,10 +148,10 @@ func TestRunOvVerb_ValidateAi_AllowlistedMethod_FileMissing_FailsActionable(t *t
 	}
 }
 
-// TestRunOvVerb_ValidateAi_AllowlistedMethod_StaleMtime_FailsAntiDeception
+// TestRunCharlyVerb_ValidateAi_AllowlistedMethod_StaleMtime_FailsAntiDeception
 // covers the load-bearing freshness gate: a pre-staged file that
 // existed BEFORE the iter started must be rejected.
-func TestRunOvVerb_ValidateAi_AllowlistedMethod_StaleMtime_FailsAntiDeception(t *testing.T) {
+func TestRunCharlyVerb_ValidateAi_AllowlistedMethod_StaleMtime_FailsAntiDeception(t *testing.T) {
 	tmp := t.TempDir()
 	stale := filepath.Join(tmp, "stale.png")
 	if err := os.WriteFile(stale, make([]byte, 5000), 0o644); err != nil {
@@ -175,7 +175,7 @@ func TestRunOvVerb_ValidateAi_AllowlistedMethod_StaleMtime_FailsAntiDeception(t 
 		Artifact:         stale,
 		ArtifactMinBytes: 1000,
 	}
-	res := r.runOvVerb(context.Background(), c, "cdp", "screenshot", cdpMethods)
+	res := r.runCharlyVerb(context.Background(), c, "cdp", "screenshot", cdpMethods)
 	if res.Status != TestFail {
 		t.Fatalf("expected fail (anti-deception), got %s: %s", res.Status, res.Message)
 	}
@@ -187,7 +187,7 @@ func TestRunOvVerb_ValidateAi_AllowlistedMethod_StaleMtime_FailsAntiDeception(t 
 	}
 }
 
-// TestRunOvVerb_ValidateAi_AllowlistedMethod_PhaseBoundary_AcceptsCrossPhaseArtifact
+// TestRunCharlyVerb_ValidateAi_AllowlistedMethod_PhaseBoundary_AcceptsCrossPhaseArtifact
 // is the regression test for the R cutover. The freshness floor is
 // the BENCHMARK start, not the per-iter start: artifacts produced
 // legitimately in earlier phases (e.g. record/stop's cast file in
@@ -203,7 +203,7 @@ func TestRunOvVerb_ValidateAi_AllowlistedMethod_StaleMtime_FailsAntiDeception(t 
 // Test setup mirrors the real bug: artifact mtime is older than a
 // putative per-iter start, but newer than the benchmark/run start.
 // The MUST-PASS verdict here proves the run-start floor is in place.
-func TestRunOvVerb_ValidateAi_AllowlistedMethod_PhaseBoundary_AcceptsCrossPhaseArtifact(t *testing.T) {
+func TestRunCharlyVerb_ValidateAi_AllowlistedMethod_PhaseBoundary_AcceptsCrossPhaseArtifact(t *testing.T) {
 	tmp := t.TempDir()
 	cast := filepath.Join(tmp, "session.cast")
 	body := `{"version":2,"width":80,"height":24}` + "\n" +
@@ -238,17 +238,17 @@ func TestRunOvVerb_ValidateAi_AllowlistedMethod_PhaseBoundary_AcceptsCrossPhaseA
 		ArtifactMinBytes:      50,
 		ArtifactMinCastEvents: 5,
 	}
-	res := r.runOvVerb(context.Background(), c, "record", "stop", recordMethods)
+	res := r.runCharlyVerb(context.Background(), c, "record", "stop", recordMethods)
 	if res.Status != TestPass {
 		t.Errorf("phase-boundary cross-phase artifact MUST pass with run-start freshness floor; got %s: %s",
 			res.Status, res.Message)
 	}
 }
 
-// TestRunOvVerb_ValidateAi_AllowlistedMethod_StdoutMatcher_FailsActionable
+// TestRunCharlyVerb_ValidateAi_AllowlistedMethod_StdoutMatcher_FailsActionable
 // covers the "stdout matchers require re-execution" combination.
 // Without re-running the command there's no stdout to match against.
-func TestRunOvVerb_ValidateAi_AllowlistedMethod_StdoutMatcher_FailsActionable(t *testing.T) {
+func TestRunCharlyVerb_ValidateAi_AllowlistedMethod_StdoutMatcher_FailsActionable(t *testing.T) {
 	tmp := t.TempDir()
 	png := filepath.Join(tmp, "cdp.png")
 	if err := os.WriteFile(png, make([]byte, 5000), 0o644); err != nil {
@@ -268,7 +268,7 @@ func TestRunOvVerb_ValidateAi_AllowlistedMethod_StdoutMatcher_FailsActionable(t 
 		ArtifactMinBytes: 1000,
 		Stdout:           MatcherList{Matcher{Op: "contains", Value: "ok"}},
 	}
-	res := r.runOvVerb(context.Background(), c, "cdp", "screenshot", cdpMethods)
+	res := r.runCharlyVerb(context.Background(), c, "cdp", "screenshot", cdpMethods)
 	if res.Status != TestFail {
 		t.Fatalf("expected fail (stdout matcher incompatible), got %s: %s", res.Status, res.Message)
 	}

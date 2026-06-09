@@ -9,7 +9,7 @@ package main
 //   - Del: walks the host ledger, runs guest-side ReverseOps over SSH,
 //     removes the deploy.yml vm: entry + managed ssh-config stanza.
 //   - Lifecycle methods that have a clean charly subcommand surface
-//     (Start, Stop, Shell, Logs) shell out via runOvSubcommand. The
+//     (Start, Stop, Shell, Logs) shell out via runCharlySubcommand. The
 //     spawned child uses the same binary on $PATH, so a developer
 //     install picks up the local build automatically.
 //   - Test: a Runner over the target's SSHExecutor walks the checks.
@@ -216,12 +216,12 @@ func (t *VmUnifiedTarget) Update(ctx context.Context, plans []*InstallPlan, opts
 // process spawn matches the rebuildVm pattern; the spawned child uses
 // the same binary the parent was invoked from.
 func (t *VmUnifiedTarget) Start(ctx context.Context) error {
-	return runOvSubcommand("vm", "start", t.vmEntityName())
+	return runCharlySubcommand("vm", "start", t.vmEntityName())
 }
 
 // Stop graceful-shutdowns the VM via `charly vm stop`.
 func (t *VmUnifiedTarget) Stop(ctx context.Context) error {
-	return runOvSubcommand("vm", "stop", t.vmEntityName())
+	return runCharlySubcommand("vm", "stop", t.vmEntityName())
 }
 
 // Status reads `charly vm list` output and walks for this target's domain
@@ -231,7 +231,7 @@ func (t *VmUnifiedTarget) Stop(ctx context.Context) error {
 // yet). Returns "unknown" + the captured error on a real CLI failure.
 func (t *VmUnifiedTarget) Status(ctx context.Context) (StatusInfo, error) {
 	want := t.vmDomainName()
-	out, err := captureOvStdout("vm", "list")
+	out, err := captureCharlyStdout("vm", "list")
 	if err != nil {
 		return StatusInfo{State: "unknown"}, err
 	}
@@ -261,7 +261,7 @@ func (t *VmUnifiedTarget) Status(ctx context.Context) (StatusInfo, error) {
 // buffer and returns. Tail is currently ignored — console buffers
 // don't expose a per-line tail.
 func (t *VmUnifiedTarget) Logs(ctx context.Context, opts LogsOpts) error {
-	return runOvSubcommand("vm", "console", t.vmEntityName())
+	return runCharlySubcommand("vm", "console", t.vmEntityName())
 }
 
 // Shell sshes into the VM via `charly vm ssh`. With cmd, runs it non-
@@ -269,7 +269,7 @@ func (t *VmUnifiedTarget) Logs(ctx context.Context, opts LogsOpts) error {
 func (t *VmUnifiedTarget) Shell(ctx context.Context, cmd []string) error {
 	args := []string{"vm", "ssh", t.vmEntityName()}
 	args = append(args, cmd...)
-	return runOvSubcommand(args...)
+	return runCharlySubcommand(args...)
 }
 
 // Rebuild destroys + (optionally) rebuilds the disk image + recreates +
@@ -301,16 +301,16 @@ func (t *VmUnifiedTarget) Rebuild(ctx context.Context, opts RebuildOpts) error {
 		return nil
 	}
 	// Destroy is best-effort — the VM may not exist yet on a first build.
-	_ = runOvSubcommand("vm", "destroy", name)
+	_ = runCharlySubcommand("vm", "destroy", name)
 	if opts.RebuildImage {
-		if err := runOvSubcommand("vm", "build", name); err != nil {
+		if err := runCharlySubcommand("vm", "build", name); err != nil {
 			return fmt.Errorf("charly vm build %s: %w", name, err)
 		}
 	}
-	if err := runOvSubcommand("vm", "create", name); err != nil {
+	if err := runCharlySubcommand("vm", "create", name); err != nil {
 		return fmt.Errorf("charly vm create %s: %w", name, err)
 	}
-	stderr, startErr := runOvSubcommandCapture("vm", "start", name)
+	stderr, startErr := runCharlySubcommandCapture("vm", "start", name)
 	if startErr != nil {
 		if !isBenignAlreadyRunning(stderr) {
 			fmt.Fprint(os.Stderr, stderr)
@@ -326,7 +326,7 @@ func (t *VmUnifiedTarget) Rebuild(ctx context.Context, opts RebuildOpts) error {
 	// VmUnifiedTarget.Add → VmDeployTarget.Emit, which SSHes in and applies the
 	// node's add_layer: layers idempotently — the SAME shared primitive
 	// LocalUnifiedTarget.Rebuild and PodUnifiedTarget.Rebuild call (R3).
-	if err := runOvSubcommand("deploy", "add", t.NodeName); err != nil {
+	if err := runCharlySubcommand("deploy", "add", t.NodeName); err != nil {
 		return fmt.Errorf("charly deploy add %s: %w", t.NodeName, err)
 	}
 	return nil
@@ -506,18 +506,18 @@ func (t *VmUnifiedTarget) Add(ctx context.Context, dctx *DeployContext, plans []
 
 	// Auto-boot integration: if the VM isn't reachable on its SSH port
 	// yet, `charly vm build` + `charly vm create` to boot it. TCP probe — fast.
-	// Skipped in DryRun, when nested, and when CH_DEPLOY_NO_AUTOBOOT is set.
-	if !opts.DryRun && opts.ParentExec == nil && os.Getenv("CH_DEPLOY_NO_AUTOBOOT") == "" {
+	// Skipped in DryRun, when nested, and when CHARLY_DEPLOY_NO_AUTOBOOT is set.
+	if !opts.DryRun && opts.ParentExec == nil && os.Getenv("CHARLY_DEPLOY_NO_AUTOBOOT") == "" {
 		sshAddr := fmt.Sprintf("127.0.0.1:%d", sshPort)
 		conn, dialErr := net.DialTimeout("tcp", sshAddr, 2*time.Second)
 		if dialErr != nil {
 			fmt.Fprintf(os.Stderr,
-				"VM %q not reachable on %s — auto-booting via `charly vm build %s` + `charly vm create %s` (set CH_DEPLOY_NO_AUTOBOOT=1 to skip)...\n",
+				"VM %q not reachable on %s — auto-booting via `charly vm build %s` + `charly vm create %s` (set CHARLY_DEPLOY_NO_AUTOBOOT=1 to skip)...\n",
 				vmName, sshAddr, vmName, vmName)
-			if bErr := runOvSubcommand("vm", "build", vmName); bErr != nil {
+			if bErr := runCharlySubcommand("vm", "build", vmName); bErr != nil {
 				return fmt.Errorf("auto-boot: charly vm build %s: %w", vmName, bErr)
 			}
-			if cErr := runOvSubcommand("vm", "create", vmName); cErr != nil {
+			if cErr := runCharlySubcommand("vm", "create", vmName); cErr != nil {
 				return fmt.Errorf("auto-boot: charly vm create %s: %w", vmName, cErr)
 			}
 		} else {
@@ -560,7 +560,7 @@ func (t *VmUnifiedTarget) Add(ctx context.Context, dctx *DeployContext, plans []
 		state.Backend = "auto"
 	}
 	state.KeyInjectionResolved = &VmKeyInjectionResolved{SMBIOS: smbiosOn, CloudInit: cloudInitOn}
-	state.OvInstallStrategy = string(ResolveOvInstallStrategy(spec))
+	state.CharlyInstallStrategy = string(ResolveCharlyInstallStrategy(spec))
 
 	if err := saveVmDeployState(deployName, state, spec); err != nil {
 		return fmt.Errorf("persisting VmDeployState: %w", err)

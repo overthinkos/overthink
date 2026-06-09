@@ -75,9 +75,9 @@ func (e *SSHExecutor) Venue() string {
 // Wraps as `ssh vm 'sudo bash -s'` with the script fed on stdin.
 func (e *SSHExecutor) RunSystem(ctx context.Context, script string, opts EmitOpts) error {
 	if opts.DryRun {
-		fmt.Fprintln(os.Stderr, "[dry-run] ssh vm sudo bash -s <<OV_ROOT")
+		fmt.Fprintln(os.Stderr, "[dry-run] ssh vm sudo bash -s <<CHARLY_ROOT")
 		fmt.Fprintln(os.Stderr, script)
-		fmt.Fprintln(os.Stderr, "OV_ROOT")
+		fmt.Fprintln(os.Stderr, "CHARLY_ROOT")
 		return nil
 	}
 	args := e.sshBaseArgs()
@@ -93,9 +93,9 @@ func (e *SSHExecutor) RunSystem(ctx context.Context, script string, opts EmitOpt
 // (i.e. spec.SSH.User, the account SSHExecutor connects as).
 func (e *SSHExecutor) RunUser(ctx context.Context, script string, opts EmitOpts) error {
 	if opts.DryRun {
-		fmt.Fprintln(os.Stderr, "[dry-run] ssh vm bash -s <<OV_USER")
+		fmt.Fprintln(os.Stderr, "[dry-run] ssh vm bash -s <<CHARLY_USER")
 		fmt.Fprintln(os.Stderr, script)
-		fmt.Fprintln(os.Stderr, "OV_USER")
+		fmt.Fprintln(os.Stderr, "CHARLY_USER")
 		return nil
 	}
 	args := e.sshBaseArgs()
@@ -306,7 +306,7 @@ func (e *SSHExecutor) WaitForCloudInit(ctx context.Context) error {
 	// sshd AFTER the initial sshd start (i.e. after WaitForSSH already
 	// passed). That restart drops in-flight connections and resets the next
 	// one mid-key-exchange ("kex_exchange_identification: Connection reset by
-	// peer"), which otherwise fails the scp in EnsureOvInGuest. Retry until an
+	// peer"), which otherwise fails the scp in EnsureCharlyInGuest. Retry until an
 	// ssh connection SURVIVES `cloud-init status --wait` — that is the
 	// deterministic signal that cloud-init has settled and sshd is stable
 	// (not a sleep-and-pray). `|| true` tolerates a non-zero cloud-init result

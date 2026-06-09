@@ -216,9 +216,9 @@ func TestLayerCargoTool(t *testing.T) {
 }
 
 func TestHasInstallFiles(t *testing.T) {
-	// Format-section detection depends on SetFormatNames being called first
+	// Format-section detection depends on RegisterBuildVocabulary being called first
 	// (so unknown top-level keys get routed to FormatSections, not discarded).
-	SetFormatNames(testDistroConfig())
+	RegisterBuildVocabulary(testDistroConfig())
 
 	layers, err := ScanLayer("testdata")
 	if err != nil {

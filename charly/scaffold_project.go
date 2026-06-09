@@ -24,10 +24,10 @@ import (
 // per-kind box.yml at the project root must run `charly migrate`
 // first; the scaffolders error cleanly when charly.yml is missing.
 
-// scaffoldOverthinkYAML is the seed charly.yml written into a fresh
+// scaffoldCharlyYAML is the seed charly.yml written into a fresh
 // project. Uses the upstream build.yml via format_config remote ref so
 // the new project doesn't have to copy the canonical 1k-line build.yml.
-const scaffoldOverthinkYAML = `# charly.yml — unified project root.
+const scaffoldCharlyYAML = `# charly.yml — unified project root.
 # See https://github.com/overthinkos/overthink for documentation.
 #
 # Before building you must wire format_config to a build.yml — either:
@@ -74,12 +74,12 @@ func ScaffoldProject(dir string) error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("creating project directory: %w", err)
 	}
-	overthinkPath := filepath.Join(dir, "charly.yml")
-	if _, err := os.Stat(overthinkPath); err == nil {
-		return fmt.Errorf("charly.yml already exists at %s; refusing to overwrite", overthinkPath)
+	charlyPath := filepath.Join(dir, "charly.yml")
+	if _, err := os.Stat(charlyPath); err == nil {
+		return fmt.Errorf("charly.yml already exists at %s; refusing to overwrite", charlyPath)
 	}
-	seed := strings.ReplaceAll(scaffoldOverthinkYAML, "__SCHEMA_VERSION__", LatestSchemaVersion().String())
-	if err := os.WriteFile(overthinkPath, []byte(seed), 0o644); err != nil {
+	seed := strings.ReplaceAll(scaffoldCharlyYAML, "__SCHEMA_VERSION__", LatestSchemaVersion().String())
+	if err := os.WriteFile(charlyPath, []byte(seed), 0o644); err != nil {
 		return fmt.Errorf("writing charly.yml: %w", err)
 	}
 	if err := os.MkdirAll(filepath.Join(dir, DefaultCandyDir), 0o755); err != nil {
@@ -103,7 +103,7 @@ func AddImage(dir, name, base string, layers []string) error {
 	if name == "" {
 		return fmt.Errorf("image name must be specified")
 	}
-	root, err := loadOverthinkYAMLNode(dir)
+	root, err := loadCharlyYAMLNode(dir)
 	if err != nil {
 		return err
 	}
@@ -145,7 +145,7 @@ func AddImage(dir, name, base string, layers []string) error {
 		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: name},
 		imgValue,
 	)
-	return saveOverthinkYAMLNode(dir, root)
+	return saveCharlyYAMLNode(dir, root)
 }
 
 // AddLayerToImage appends a layer to an existing image's `candy:` list.
@@ -204,7 +204,7 @@ func RemoveLayerFromImage(dir, image, layer string) error {
 // ---------------------------------------------------------------------------
 // yaml.Node helpers — kept private to this file so the surface is small.
 
-func loadOverthinkYAMLNode(dir string) (*yaml.Node, error) {
+func loadCharlyYAMLNode(dir string) (*yaml.Node, error) {
 	path := filepath.Join(dir, "charly.yml")
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -220,7 +220,7 @@ func loadOverthinkYAMLNode(dir string) (*yaml.Node, error) {
 	return &root, nil
 }
 
-func saveOverthinkYAMLNode(dir string, root *yaml.Node) error {
+func saveCharlyYAMLNode(dir string, root *yaml.Node) error {
 	path := filepath.Join(dir, "charly.yml")
 	data, err := yaml.Marshal(root)
 	if err != nil {
@@ -311,14 +311,14 @@ func flatLocalImports(root *yaml.Node) []string {
 // that file, so they work on entries defined in imported per-kind files, not
 // only those inlined in charly.yml.
 func resolveImageNodeFile(dir, name string) (*yaml.Node, *yaml.Node, string, error) {
-	ovRoot, err := loadOverthinkYAMLNode(dir)
+	charlyRoot, err := loadCharlyYAMLNode(dir)
 	if err != nil {
 		return nil, nil, "", err
 	}
-	if n := imageNode(ovRoot, name); n != nil {
-		return ovRoot, n, filepath.Join(dir, "charly.yml"), nil
+	if n := imageNode(charlyRoot, name); n != nil {
+		return charlyRoot, n, filepath.Join(dir, "charly.yml"), nil
 	}
-	for _, ref := range flatLocalImports(ovRoot) {
+	for _, ref := range flatLocalImports(charlyRoot) {
 		p := filepath.Join(dir, ref)
 		data, rerr := os.ReadFile(p)
 		if rerr != nil {
@@ -337,7 +337,7 @@ func resolveImageNodeFile(dir, name string) (*yaml.Node, *yaml.Node, string, err
 
 // saveYAMLNodeFile marshals a node tree back to an arbitrary file path,
 // preserving comments + key order (the yaml.v3 Node round-trip). The generic
-// sibling of saveOverthinkYAMLNode, used when an edit targets a per-kind import
+// sibling of saveCharlyYAMLNode, used when an edit targets a per-kind import
 // file rather than charly.yml itself.
 func saveYAMLNodeFile(path string, root *yaml.Node) error {
 	data, err := yaml.Marshal(root)

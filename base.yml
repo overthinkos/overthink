@@ -6,7 +6,7 @@
 #
 #  Flat-imported by this repo's charly.yml (root namespace) AND by the
 #  overthinkos/{arch,fedora,bootc} submodules (which import it under the `charly`
-#  namespace — `ov.arch`, `ov.fedora`, `ov.arch-builder`, …). The CachyOS base
+#  namespace — `charly.arch`, `charly.fedora`, `charly.arch-builder`, …). The CachyOS base
 #  is NOT here: it is owned by the overthinkos/cachyos submodule and pulled back
 #  into this repo's `versa` image via the `cachyos` import namespace.
 #
@@ -52,10 +52,10 @@ box:
     arch-builder:
         base: arch
         candy:
-            - '@github.com/overthinkos/overthink/candy/pixi:v2026.159.1413'
-            - '@github.com/overthinkos/overthink/candy/nodejs:v2026.159.1413'
-            - '@github.com/overthinkos/overthink/candy/build-toolchain:v2026.159.1413'
-            - '@github.com/overthinkos/overthink/candy/yay:v2026.159.1413'
+            - '@github.com/overthinkos/overthink/candy/pixi:v2026.160.0856'
+            - '@github.com/overthinkos/overthink/candy/nodejs:v2026.160.0856'
+            - '@github.com/overthinkos/overthink/candy/build-toolchain:v2026.160.0856'
+            - '@github.com/overthinkos/overthink/candy/yay:v2026.160.0856'
         produce:
             - pixi
             - npm
@@ -71,12 +71,12 @@ box:
         base: arch-builder
         # @github-qualified (like arch-builder's own layers) so this builder
         # resolves when pulled CROSS-REPO — e.g. image/cachyos's selkies-*-nvidia
-        # images set builder.pixi: ov.cuda-arch-builder, which builds this image as
+        # images set builder.pixi: charly.cuda-arch-builder, which builds this image as
         # an intermediate in the consumer's graph; a bare `cuda` would be an
         # "unknown layer" there (it's a main-repo layer, not the consumer's).
         candy:
-            - '@github.com/overthinkos/overthink/candy/cuda:v2026.159.1413'
-            - '@github.com/overthinkos/overthink/candy/nvenc-headers:v2026.159.1413'
+            - '@github.com/overthinkos/overthink/candy/cuda:v2026.160.0856'
+            - '@github.com/overthinkos/overthink/candy/nvenc-headers:v2026.160.0856'
         produce:
             - pixi
             - npm
@@ -107,9 +107,9 @@ box:
         # the base removes that ordering dependency entirely.
         base: fedora-nonfree
         candy:
-            - '@github.com/overthinkos/overthink/candy/pixi:v2026.159.1413'
-            - '@github.com/overthinkos/overthink/candy/nodejs:v2026.159.1413'
-            - '@github.com/overthinkos/overthink/candy/build-toolchain:v2026.159.1413'
+            - '@github.com/overthinkos/overthink/candy/pixi:v2026.160.0856'
+            - '@github.com/overthinkos/overthink/candy/nodejs:v2026.160.0856'
+            - '@github.com/overthinkos/overthink/candy/build-toolchain:v2026.160.0856'
         produce:
             - pixi
             - npm
@@ -120,12 +120,12 @@ box:
         # (e.g. fedora-coder), and builder maps do NOT propagate transitively
         # through the base chain — nor across an import-namespace boundary. In
         # the main repo this is redundant with defaults.builder, but a submodule
-        # importing this as ov.fedora-nonfree declares no defaults.builder, so
+        # importing this as charly.fedora-nonfree declares no defaults.builder, so
         # consumers there inherit their builders from this map (qualified as
-        # ov.fedora-builder at the consumer site).
+        # charly.fedora-builder at the consumer site).
         builder:
             cargo: fedora-builder
             npm: fedora-builder
             pixi: fedora-builder
         candy:
-            - '@github.com/overthinkos/overthink/candy/rpmfusion:v2026.159.1413'
+            - '@github.com/overthinkos/overthink/candy/rpmfusion:v2026.160.0856'

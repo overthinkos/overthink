@@ -76,7 +76,7 @@ type EphemeralHandle struct {
 // RegisterEphemeralLifecycle is the entry point invoked at the start
 // of a deploy add for an ephemeral resource. Performs (in order):
 //  1. Generate unique instance ID (six-char hex).
-//  2. Resolve parent ephemeral from CH_EPHEMERAL_PARENT environment
+//  2. Resolve parent ephemeral from CHARLY_EPHEMERAL_PARENT environment
 //     variable (nested-case detection).
 //  3. Compute effective TTL (clipped to parent's remaining TTL when
 //     nested).
@@ -98,7 +98,7 @@ func RegisterEphemeralLifecycle(node *DeploymentNode, deployName string) (*Ephem
 		return nil, fmt.Errorf("generating ephemeral id: %w", err)
 	}
 
-	parentEph := os.Getenv("CH_EPHEMERAL_PARENT")
+	parentEph := os.Getenv("CHARLY_EPHEMERAL_PARENT")
 	ttl, err := effectiveTTL(node, parentEph)
 	if err != nil {
 		return nil, err

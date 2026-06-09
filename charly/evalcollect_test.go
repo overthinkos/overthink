@@ -104,7 +104,7 @@ func TestCollectTests_EmptyReturnsNil(t *testing.T) {
 // Regression: an image whose layer list uses RAW @github.com/...:version refs
 // (the submodule git-ref composition pattern used by image/bootc, image/fedora,
 // etc.) must still collect the referenced layers' eval blocks. Before the
-// BareRef chokepoint fix in ExpandLayer (ov/graph.go), CollectEval walked the
+// BareRef chokepoint fix in ExpandLayer (charly/graph.go), CollectEval walked the
 // raw refs against the BareRef-keyed layer map, missed every one, silently
 // swallowed the resulting "unknown layer" error, and collected ZERO
 // layer-level checks — so every @github-ref-composed image shipped with

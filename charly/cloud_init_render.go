@@ -44,7 +44,7 @@ type CloudInitRuntimeParams struct {
 //     (if the key-injection channel is enabled AND SSHPublicKey != "")
 //  2. Minimum packages: {openssh, curl, tar} unioned with user's Packages
 //  3. Minimum runcmd: {systemctl enable --now sshd} prepended
-//  4. ov_install: NOT a cloud-init concern — VmDeployTarget delivers charly
+//  4. charly_install: NOT a cloud-init concern — VmDeployTarget delivers charly
 //     post-boot (auto/scp stage it; skip verifies). No charly download runcmd.
 //  5. VmCloudInit.Extra: raw cloud-config YAML appended as a second
 //     document (separated by ---) if non-empty
@@ -266,7 +266,7 @@ func applySSHDefaults(entry map[string]interface{}, rt CloudInitRuntimeParams) {
 	}
 }
 
-// composePackages unions ov's minimum SSH+curl+tar package set with
+// composePackages unions charly's minimum SSH+curl+tar package set with
 // the user's declared packages, preserving the user's order for extras.
 //
 // The minimum SSH package name is distro-aware: `openssh` on
@@ -298,9 +298,9 @@ func composePackages(userPkgs []string, distro string) []string {
 	return out
 }
 
-// composeRunCmd prepends ov's minimum boot task (enable sshd) and appends the
+// composeRunCmd prepends charly's minimum boot task (enable sshd) and appends the
 // user's runcmd. charly is NOT installed via cloud-init — VmDeployTarget
-// delivers it post-boot per ov_install.strategy (auto/scp stage the host binary;
+// delivers it post-boot per charly_install.strategy (auto/scp stage the host binary;
 // skip verifies presence).
 //
 // The sshd unit name is distro-aware: `sshd` on Arch/Fedora,

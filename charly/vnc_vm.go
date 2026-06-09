@@ -33,7 +33,7 @@ type VncVmCmd struct {
 // vncVmFlags is the shared flag surface for every `charly eval vnc vm …`
 // verb. --uri follows the same convention as `charly eval libvirt --uri`.
 type vncVmFlags struct {
-	Uri string `name:"uri" env:"CH_LIBVIRT_URI" help:"Libvirt URI (default: qemu:///session)."`
+	Uri string `name:"uri" env:"CHARLY_LIBVIRT_URI" help:"Libvirt URI (default: qemu:///session)."`
 }
 
 // vmVncSession is a live VNC client plus any bridge listener + SSH

@@ -350,8 +350,8 @@ func ComputeIntermediates(images map[string]*ResolvedBox, layers map[string]*Lay
 		}
 	}
 	// Also exclude builders referenced by ANY image's builder map (not just
-	// defaults) — e.g. a submodule consumer's `builder: {pixi: ov.arch-builder}`.
-	// Without this, a pulled namespaced builder (ov.arch-builder) would be grouped
+	// defaults) — e.g. a submodule consumer's `builder: {pixi: charly.arch-builder}`.
+	// Without this, a pulled namespaced builder (charly.arch-builder) would be grouped
 	// with its consumers and factored into an intermediate it must itself build,
 	// producing a `builder -> intermediate -> builder` dependency cycle.
 	for _, img := range images {
@@ -372,7 +372,7 @@ func ComputeIntermediates(images map[string]*ResolvedBox, layers map[string]*Lay
 		if builderNames[name] {
 			continue
 		}
-		// Pulled namespace-qualified images (e.g. ov.arch, ov.arch-builder,
+		// Pulled namespace-qualified images (e.g. charly.arch, charly.arch-builder,
 		// cachyos.cachyos) are external/fixed dependencies, not local siblings —
 		// never factor them into local intermediates. (Local consumers that root
 		// ON them have unqualified names and ARE grouped by their qualified base.)
@@ -697,7 +697,7 @@ func createIntermediate(name, parentName string, uid int, pathLayers []string, c
 	// builder (so they agree — consumer-wins is a no-op vs parent-wins). In the
 	// import-namespace case the parent is a cross-namespace base (e.g.
 	// cachyos.cachyos) whose builder refs are relative to ITS namespace
-	// (`ov.arch-builder`) and do NOT resolve in this context; the consumers carry
+	// (`charly.arch-builder`) and do NOT resolve in this context; the consumers carry
 	// the correct context-local builder (`arch-builder`), so consumer-wins is what
 	// lets the hoisted AUR layer (chrome's google-chrome) find its builder instead
 	// of failing with "needs builder aur but no builders.aur configured".

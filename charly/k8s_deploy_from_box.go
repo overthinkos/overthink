@@ -8,7 +8,7 @@ import (
 // -----------------------------------------------------------------------------
 // Source-less K8s deploy — Part F.10.
 //
-// `charly deploy from-image <registry-ref> [name]` can deploy to K8s without any
+// `charly deploy from-box <registry-ref> [name]` can deploy to K8s without any
 // access to the repo's charly.yml. Capabilities come from the pushed OCI
 // image's ai.opencharly.* labels; runtime choices come from (per-machine
 // ~/.config/charly/deploy.yml, cluster profile). This proves the self-contained
@@ -24,14 +24,14 @@ type DeployFromBoxOpts struct {
 	ClusterName    string          // cluster profile name (ClusterProfile.Name)
 	Namespace      string          // optional override of cluster profile's default namespace
 	DeployOverlay  *DeploymentNode // optional: merged from ~/.config/charly/deploy.yml
-	OutputDir      string          // defaults to <cwd>/.overthink/k8s
+	OutputDir      string          // defaults to <cwd>/.opencharly/k8s
 	ProjectDir     string          // for looking up clusters/<name>.yaml
 }
 
-// DeployFromImage performs the source-less deploy. Returns the absolute path
+// DeployFromBox performs the source-less deploy. Returns the absolute path
 // to the Kustomize overlay directory produced (the argument to
 // `kubectl apply -k`).
-func DeployFromImage(opts DeployFromBoxOpts) (string, error) {
+func DeployFromBox(opts DeployFromBoxOpts) (string, error) {
 	if opts.ImageRef == "" {
 		return "", fmt.Errorf("image ref is required")
 	}
@@ -83,7 +83,7 @@ func DeployFromImage(opts DeployFromBoxOpts) (string, error) {
 	// 5. Resolve output dir.
 	outDir := opts.OutputDir
 	if outDir == "" {
-		outDir = filepath.Join(projectDir, ".overthink", "k8s")
+		outDir = filepath.Join(projectDir, ".opencharly", "k8s")
 	}
 
 	// 6. Generate.

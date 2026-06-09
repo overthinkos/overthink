@@ -31,7 +31,7 @@ type QuadletConfig struct {
 	Info            string              // status description
 	Secrets         []CollectedSecret   // container secrets (podman Secret= directives)
 	Entrypoint      []string            // init system entrypoint (e.g., ["supervisord", "-n", "-c", "/etc/supervisord.conf"])
-	OvBin           string              // absolute path to charly binary (for ExecStartPre)
+	CharlyBin       string              // absolute path to charly binary (for ExecStartPre)
 	EncryptedMounts bool                // true when any bind mount is encrypted
 	KeyringBackend  bool                // true when credential store is Secret Service (keyring)
 	PodName         string              // non-empty when this container belongs to a pod (sidecar mode)
@@ -220,12 +220,12 @@ func generateQuadlet(cfg QuadletConfig) string {
 	if q := formatCPUQuota(cfg.Security.Cpus); q != "" {
 		b.WriteString(fmt.Sprintf("CPUQuota=%s\n", q))
 	}
-	if cfg.EncryptedMounts && cfg.OvBin != "" {
+	if cfg.EncryptedMounts && cfg.CharlyBin != "" {
 		imgArg := cfg.ImageName
 		if cfg.Instance != "" {
 			imgArg = cfg.ImageName + " -i " + cfg.Instance
 		}
-		b.WriteString(fmt.Sprintf("ExecStartPre=%s config mount %s\n", cfg.OvBin, imgArg))
+		b.WriteString(fmt.Sprintf("ExecStartPre=%s config mount %s\n", cfg.CharlyBin, imgArg))
 		if cfg.KeyringBackend {
 			// Wait indefinitely for keyring unlock (PAM login)
 			b.WriteString("TimeoutStartSec=0\n")

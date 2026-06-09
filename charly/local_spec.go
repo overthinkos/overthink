@@ -47,7 +47,7 @@ type LocalSpec struct {
 	// Note: there is NO image-fetch surface on a kind:local template.
 	// Deploys apply layers (host packages + configs) only; container
 	// images required for `charly eval run` / `charly eval live` are ensured by the
-	// eval preflight (see ov/eval_image_preflight.go), sourced from the
+	// eval preflight (see charly/eval_image_preflight.go), sourced from the
 	// score's `target_image:` + scenario `pod:` declarations. The
 	// previous template-level `images:` field was removed in the
 	// 2026-05 deploy-fetch-narrowing cutover; legacy YAML carrying it

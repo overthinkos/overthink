@@ -253,7 +253,7 @@ func TestMcpServer_ArgvReconstruction(t *testing.T) {
 	}
 
 	input := map[string]any{
-		"image":  "fedora-ov",
+		"image":  "charly-fedora",
 		"format": "tag",
 	}
 	argv, err := argvFromJSON([]string{"image", "inspect"}, posOrder, posByProp, flagByProp, input)
@@ -268,8 +268,8 @@ func TestMcpServer_ArgvReconstruction(t *testing.T) {
 	if !strings.Contains(joined, "--format=tag") {
 		t.Errorf("argv missing --format=tag: %q", joined)
 	}
-	if !strings.Contains(joined, "fedora-ov") {
-		t.Errorf("argv missing positional fedora-ov: %q", joined)
+	if !strings.Contains(joined, "charly-fedora") {
+		t.Errorf("argv missing positional charly-fedora: %q", joined)
 	}
 }
 

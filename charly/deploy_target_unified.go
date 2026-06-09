@@ -107,7 +107,7 @@ type UnifiedDeployTarget interface {
 
 // LifecycleTarget extends UnifiedDeployTarget for live-runtime targets
 // (host, vm, pod). K8s does NOT implement this: its cluster lifecycle
-// is kubectl-managed outside ov. Commands that require a live runtime
+// is kubectl-managed outside charly. Commands that require a live runtime
 // (charly start/stop/status/logs/shell/rebuild) assert the interface and
 // error uniformly on k8s targets.
 type LifecycleTarget interface {

@@ -15,7 +15,7 @@ func TestImageReconcile_NewestReferenced(t *testing.T) {
 	dir := t.TempDir()
 	yml := "" +
 		"# top comment\n" +
-		"version: 2026.159.3\n" +
+		"version: 2026.159.1912\n" +
 		"import:\n" +
 		"  - '@github.com/overthinkos/overthink/build.yml:v2026.141.1600'\n" +
 		"box:\n" +
@@ -86,7 +86,7 @@ func TestImageReconcile_NewestReferenced(t *testing.T) {
 func TestImageReconcile_VendoredCandyRequires(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "charly.yml"), []byte(
-		"version: 2026.159.3\n"+
+		"version: 2026.159.1912\n"+
 			"box:\n  foo:\n    base: cachyos.cachyos\n    candy:\n"+
 			"      - '@github.com/overthinkos/overthink/candy/gnupg:v2026.144.0531'\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -96,7 +96,7 @@ func TestImageReconcile_VendoredCandyRequires(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(candyDir, "candy.yml"), []byte(
-		"candy:\n  name: keepassxc-keyring\n  version: 2026.159.3\n  require:\n"+
+		"candy:\n  name: keepassxc-keyring\n  version: 2026.159.1912\n  require:\n"+
 			"    - '@github.com/overthinkos/overthink/candy/gnupg:v2026.141.1600' # vendored sibling\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -124,7 +124,7 @@ func TestImageReconcile_VendoredCandyRequires(t *testing.T) {
 func TestImageReconcile_NoPins(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "charly.yml"),
-		[]byte("version: 2026.159.3\nimage:\n  foo:\n    base: fedora\n    candy: [agent-forwarding]\n"), 0o644); err != nil {
+		[]byte("version: 2026.159.1912\nimage:\n  foo:\n    base: fedora\n    candy: [agent-forwarding]\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	cwd, _ := os.Getwd()

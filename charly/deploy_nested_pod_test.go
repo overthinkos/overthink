@@ -7,7 +7,7 @@ import (
 )
 
 // nestedRecordingExec is a DeployExecutor that records the RunUser scripts
-// deployNestedPodsInGuest issues (the in-guest `charly deploy from-image` calls) and
+// deployNestedPodsInGuest issues (the in-guest `charly deploy from-box` calls) and
 // the PutFile destinations (the host-charly delivery), so the test can assert the
 // nested-pod-in-VM orchestration without a real guest.
 type nestedRecordingExec struct {
@@ -41,25 +41,25 @@ func (e *nestedRecordingExec) ResolveHome(context.Context, string) (string, erro
 
 // TestDeployNestedPodsInGuest_DeploysOnlyPodChildren proves the nested-pod-in-VM
 // capability's deploy orchestration: each nested target:pod child is built on the
-// host, cp-image'd into the guest as localhost/charly-<key>:latest, and brought up via
-// the guest's own project-free `charly deploy from-image <ref> <key>` as a PERSISTENT
+// host, cp-box'd into the guest as localhost/charly-<key>:latest, and brought up via
+// the guest's own project-free `charly deploy from-box <ref> <key>` as a PERSISTENT
 // (lingering) quadlet — in sorted order — while non-pod children (android/k8s) and
 // image-less entries are skipped. Without the capability the helper does not exist
 // / does nothing and these assertions fail; this is the eval-coverage gate for the
 // Go side of Cutover 2 (the live bed proves it end-to-end on the GPU VM).
 func TestDeployNestedPodsInGuest_DeploysOnlyPodChildren(t *testing.T) {
-	// Stub the child-process boundary: record build / vm-cp-image argv, no real ov.
-	var ovCalls [][]string
-	orig := runOvSubcommand
-	runOvSubcommand = func(args ...string) error {
-		ovCalls = append(ovCalls, append([]string(nil), args...))
+	// Stub the child-process boundary: record build / vm-cp-box argv, no real charly.
+	var charlyCalls [][]string
+	orig := runCharlySubcommand
+	runCharlySubcommand = func(args ...string) error {
+		charlyCalls = append(charlyCalls, append([]string(nil), args...))
 		return nil
 	}
-	defer func() { runOvSubcommand = orig }()
+	defer func() { runCharlySubcommand = orig }()
 
-	// Stamp the host charly identity. The nested from-image delegation ALWAYS runs
-	// the HOST's own charly (delivered to /tmp/charly-<calver> via putHostOvInVenue),
-	// never the guest's PATH charly — the host binary is the from-image authority,
+	// Stamp the host charly identity. The nested from-box delegation ALWAYS runs
+	// the HOST's own charly (delivered to /tmp/charly-<calver> via putHostCharlyInVenue),
+	// never the guest's PATH charly — the host binary is the from-box authority,
 	// and a /tmp path can't shadow the guest's pacman /usr/bin/charly.
 	savedVer := BuildCalVer
 	defer func() { BuildCalVer = savedVer }()
@@ -80,53 +80,53 @@ func TestDeployNestedPodsInGuest_DeploysOnlyPodChildren(t *testing.T) {
 	}
 
 	// Two pod children processed (alpha-pod, selkies-kde — sorted); each issues an
-	// image-build + a vm-cp-image → 4 charly subcommands, in this exact order. The
-	// cp-image carries --rootless so the image lands in the guest USER's podman
-	// storage, which the --user from-image quadlet below reads.
-	wantOv := [][]string{
+	// image-build + a vm-cp-box → 4 charly subcommands, in this exact order. The
+	// cp-box carries --rootless so the image lands in the guest USER's podman
+	// storage, which the --user from-box quadlet below reads.
+	wantCharly := [][]string{
 		{"box", "build", "alpha-img"},
-		{"vm", "cp-image", "cachyos-gpu-vm", "alpha-img", "--as", "localhost/charly-alpha-pod:latest", "--rootless"},
+		{"vm", "cp-box", "cachyos-gpu-vm", "alpha-img", "--as", "localhost/charly-alpha-pod:latest", "--rootless"},
 		{"box", "build", "selkies-kde-nvidia"},
-		{"vm", "cp-image", "cachyos-gpu-vm", "selkies-kde-nvidia", "--as", "localhost/charly-selkies-kde:latest", "--rootless"},
+		{"vm", "cp-box", "cachyos-gpu-vm", "selkies-kde-nvidia", "--as", "localhost/charly-selkies-kde:latest", "--rootless"},
 	}
-	if len(ovCalls) != len(wantOv) {
-		t.Fatalf("expected %d charly subcommands (build+cp-image × 2 pod children), got %d: %v",
-			len(wantOv), len(ovCalls), ovCalls)
+	if len(charlyCalls) != len(wantCharly) {
+		t.Fatalf("expected %d charly subcommands (build+cp-box × 2 pod children), got %d: %v",
+			len(wantCharly), len(charlyCalls), charlyCalls)
 	}
-	for i, want := range wantOv {
-		if strings.Join(ovCalls[i], " ") != strings.Join(want, " ") {
-			t.Errorf("charly call %d = %v, want %v", i, ovCalls[i], want)
+	for i, want := range wantCharly {
+		if strings.Join(charlyCalls[i], " ") != strings.Join(want, " ") {
+			t.Errorf("charly call %d = %v, want %v", i, charlyCalls[i], want)
 		}
 	}
 
 	// The host charly was delivered into the guest at the explicit /tmp/charly-<calver>
-	// path (NOT shadowing the guest's pacman /usr/bin/charly) before any from-image
+	// path (NOT shadowing the guest's pacman /usr/bin/charly) before any from-box
 	// deploy. One delivery for the whole batch (same guest venue).
-	wantOvPath := "/tmp/charly-2026.154.943"
+	wantCharlyPath := "/tmp/charly-2026.154.943"
 	if len(exec.putDests) == 0 {
 		t.Fatalf("host charly was never delivered into the guest (no PutFile)")
 	}
-	deliveredHostOv := false
+	deliveredHostCharly := false
 	for _, d := range exec.putDests {
-		if d == wantOvPath {
-			deliveredHostOv = true
+		if d == wantCharlyPath {
+			deliveredHostCharly = true
 		}
 	}
-	if !deliveredHostOv {
-		t.Errorf("host charly not delivered to %s; PutFile dests = %v", wantOvPath, exec.putDests)
+	if !deliveredHostCharly {
+		t.Errorf("host charly not delivered to %s; PutFile dests = %v", wantCharlyPath, exec.putDests)
 	}
 
-	// Two in-guest from-image deploys (the persistent quadlets), sorted. Each
-	// invokes the delivered /tmp host charly by EXPLICIT PATH (the from-image
-	// authority), never the guest's PATH ov.
+	// Two in-guest from-box deploys (the persistent quadlets), sorted. Each
+	// invokes the delivered /tmp host charly by EXPLICIT PATH (the from-box
+	// authority), never the guest's PATH charly.
 	if len(exec.userScripts) != 2 {
-		t.Fatalf("expected 2 in-guest from-image deploys, got %d: %v", len(exec.userScripts), exec.userScripts)
+		t.Fatalf("expected 2 in-guest from-box deploys, got %d: %v", len(exec.userScripts), exec.userScripts)
 	}
-	if !strings.Contains(exec.userScripts[0], wantOvPath+" deploy from-image localhost/charly-alpha-pod:latest alpha-pod") {
-		t.Errorf("script[0] missing alpha-pod from-image deploy via host /tmp ov: %q", exec.userScripts[0])
+	if !strings.Contains(exec.userScripts[0], wantCharlyPath+" deploy from-box localhost/charly-alpha-pod:latest alpha-pod") {
+		t.Errorf("script[0] missing alpha-pod from-box deploy via host /tmp charly: %q", exec.userScripts[0])
 	}
-	if !strings.Contains(exec.userScripts[1], wantOvPath+" deploy from-image localhost/charly-selkies-kde:latest selkies-kde") {
-		t.Errorf("script[1] missing selkies-kde from-image deploy via host /tmp ov: %q", exec.userScripts[1])
+	if !strings.Contains(exec.userScripts[1], wantCharlyPath+" deploy from-box localhost/charly-selkies-kde:latest selkies-kde") {
+		t.Errorf("script[1] missing selkies-kde from-box deploy via host /tmp charly: %q", exec.userScripts[1])
 	}
 	// Lingering is enabled so the --user quadlet auto-starts at boot — the
 	// persistence property the bed's fresh-rebuild leg (guest reboot) proves.
@@ -137,11 +137,11 @@ func TestDeployNestedPodsInGuest_DeploysOnlyPodChildren(t *testing.T) {
 	}
 
 	// The skipped children leave no trace anywhere.
-	var allOv string
-	for _, c := range ovCalls {
-		allOv += strings.Join(c, " ") + "\n"
+	var allCharly string
+	for _, c := range charlyCalls {
+		allCharly += strings.Join(c, " ") + "\n"
 	}
-	if strings.Contains(allOv, "android-emulator") {
+	if strings.Contains(allCharly, "android-emulator") {
 		t.Error("android child must NOT be built/loaded as an in-guest pod")
 	}
 	joinedScripts := strings.Join(exec.userScripts, "\n")
@@ -151,12 +151,12 @@ func TestDeployNestedPodsInGuest_DeploysOnlyPodChildren(t *testing.T) {
 }
 
 // TestDeployNestedPodsInGuest_NoNested is the no-op guard: a nil node or a node
-// with no nested children must touch nothing (no build, no cp-image, no deploy).
+// with no nested children must touch nothing (no build, no cp-box, no deploy).
 func TestDeployNestedPodsInGuest_NoNested(t *testing.T) {
-	ovCalls := 0
-	orig := runOvSubcommand
-	runOvSubcommand = func(args ...string) error { ovCalls++; return nil }
-	defer func() { runOvSubcommand = orig }()
+	charlyCalls := 0
+	orig := runCharlySubcommand
+	runCharlySubcommand = func(args ...string) error { charlyCalls++; return nil }
+	defer func() { runCharlySubcommand = orig }()
 
 	exec := &nestedRecordingExec{}
 	if err := deployNestedPodsInGuest("vm", nil, exec, EmitOpts{}); err != nil {
@@ -165,13 +165,13 @@ func TestDeployNestedPodsInGuest_NoNested(t *testing.T) {
 	if err := deployNestedPodsInGuest("vm", &DeploymentNode{}, exec, EmitOpts{}); err != nil {
 		t.Fatalf("empty nested: %v", err)
 	}
-	if ovCalls != 0 || len(exec.userScripts) != 0 {
-		t.Errorf("no-op expected, got %d charly calls + %d guest deploys", ovCalls, len(exec.userScripts))
+	if charlyCalls != 0 || len(exec.userScripts) != 0 {
+		t.Errorf("no-op expected, got %d charly calls + %d guest deploys", charlyCalls, len(exec.userScripts))
 	}
 }
 
 // TestDeriveDeploymentName covers the default-name derivation the source-less
-// `charly deploy from-image <ref>` (pod + k8s) uses when no explicit name is given:
+// `charly deploy from-box <ref>` (pod + k8s) uses when no explicit name is given:
 // strip the tag, take the last path component.
 func TestDeriveDeploymentName(t *testing.T) {
 	cases := []struct{ ref, want string }{

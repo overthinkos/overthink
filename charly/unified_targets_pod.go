@@ -8,7 +8,7 @@ package main
 //   - Del: stops + removes the container deploy + overlay image + ledger.
 //   - Rebuild: the pod rebuild path (image build + eval + deploy + restart).
 //   - Lifecycle methods (Start, Stop, Status, Logs, Shell) shell out via
-//     runOvSubcommand to the CLI surfaces (charly start / charly stop / charly status
+//     runCharlySubcommand to the CLI surfaces (charly start / charly stop / charly status
 //     / charly logs / charly shell). The spawned child uses the same binary on
 //     $PATH, so a developer install picks up the local build.
 //   - Test runs deploy-scope checks via a Runner over the target's
@@ -144,24 +144,24 @@ func (t *PodUnifiedTarget) Update(ctx context.Context, plans []*InstallPlan, opt
 		fmt.Printf("dry-run: charly update %s\n", t.NodeName)
 		return nil
 	}
-	return runOvSubcommand("update", t.NodeName)
+	return runCharlySubcommand("update", t.NodeName)
 }
 
 // Start brings the container deploy up via `charly start`.
 func (t *PodUnifiedTarget) Start(ctx context.Context) error {
-	return runOvSubcommand("start", t.NodeName)
+	return runCharlySubcommand("start", t.NodeName)
 }
 
 // Stop brings the container deploy down via `charly stop`.
 func (t *PodUnifiedTarget) Stop(ctx context.Context) error {
-	return runOvSubcommand("stop", t.NodeName)
+	return runCharlySubcommand("stop", t.NodeName)
 }
 
 // Status parses `charly status --json` output for this deploy's row. We use
 // the JSON form to avoid depending on the human table layout, which
 // changes more often than the JSON keys.
 func (t *PodUnifiedTarget) Status(ctx context.Context) (StatusInfo, error) {
-	out, err := captureOvStdout("status", "--json")
+	out, err := captureCharlyStdout("status", "--json")
 	if err != nil {
 		return StatusInfo{State: "unknown"}, err
 	}
@@ -199,7 +199,7 @@ func (t *PodUnifiedTarget) Logs(ctx context.Context, opts LogsOpts) error {
 	if opts.Tail > 0 {
 		args = append(args, "-n", fmt.Sprintf("%d", opts.Tail))
 	}
-	return runOvSubcommand(args...)
+	return runCharlySubcommand(args...)
 }
 
 // Shell opens an interactive shell in the container via `charly shell`.
@@ -207,7 +207,7 @@ func (t *PodUnifiedTarget) Logs(ctx context.Context, opts LogsOpts) error {
 func (t *PodUnifiedTarget) Shell(ctx context.Context, cmd []string) error {
 	args := []string{"shell", t.NodeName}
 	args = append(args, cmd...)
-	return runOvSubcommand(args...)
+	return runCharlySubcommand(args...)
 }
 
 // Rebuild follows the standard pod rebuild sequence: image rebuild
@@ -215,7 +215,7 @@ func (t *PodUnifiedTarget) Shell(ctx context.Context, cmd []string) error {
 // quadlet) → start. This is the pod rebuild path
 // — the cmd-file caller is now a thin wrapper.
 //
-// Per the existing rebuild semantics, `charly stop` is used (not `ov
+// Per the existing rebuild semantics, `charly stop` is used (not `charly
 // remove`) to preserve operator deploy.yml configuration during the
 // brief disruption window.
 func (t *PodUnifiedTarget) Rebuild(ctx context.Context, opts RebuildOpts) error {
@@ -237,25 +237,25 @@ func (t *PodUnifiedTarget) Rebuild(ctx context.Context, opts RebuildOpts) error 
 	}
 
 	if opts.RebuildImage {
-		if err := runOvSubcommand("box", "build", baseRef); err != nil {
+		if err := runCharlySubcommand("box", "build", baseRef); err != nil {
 			return fmt.Errorf("charly box build %s: %w", baseRef, err)
 		}
-		if err := runOvSubcommand("eval", "image", baseRef); err != nil {
+		if err := runCharlySubcommand("eval", "box", baseRef); err != nil {
 			return fmt.Errorf("charly eval box %s: %w", baseRef, err)
 		}
 	}
 
-	if err := runOvSubcommand("deploy", "add", t.NodeName); err != nil {
+	if err := runCharlySubcommand("deploy", "add", t.NodeName); err != nil {
 		return fmt.Errorf("charly deploy add %s: %w", t.NodeName, err)
 	}
 
-	_ = runOvSubcommand("stop", t.NodeName)
+	_ = runCharlySubcommand("stop", t.NodeName)
 
-	if err := runOvSubcommand("config", t.NodeName); err != nil {
+	if err := runCharlySubcommand("config", t.NodeName); err != nil {
 		return fmt.Errorf("charly config %s: %w", t.NodeName, err)
 	}
 
-	if err := runOvSubcommand("start", t.NodeName); err != nil {
+	if err := runCharlySubcommand("start", t.NodeName); err != nil {
 		return fmt.Errorf("charly start %s: %w", t.NodeName, err)
 	}
 	return nil

@@ -36,11 +36,11 @@ func TestIsFreshnessSafeVerb(t *testing.T) {
 		{"rebuild versa", false},
 		{"start", false},
 		{"update", false},
-		{"eval image foo", false},
+		{"eval box foo", false},
 		{"eval live foo", false},
 		{"vm create arch", false},
 		{"config foo", false},
-		{"secrets set ov/api-key foo bar", false},
+		{"secrets set charly/api-key foo bar", false},
 
 		// Edge case: empty verb (shouldn't happen in practice but the
 		// helper must be defensive).
@@ -56,11 +56,11 @@ func TestIsFreshnessSafeVerb(t *testing.T) {
 	}
 }
 
-// TestFindOvSourceRoot_DualMarker verifies the dual-marker requirement:
-// the function only returns a directory when BOTH ov/main.go AND
+// TestFindCharlySourceRoot_DualMarker verifies the dual-marker requirement:
+// the function only returns a directory when BOTH charly/main.go AND
 // charly.yml are present. A directory with only one of the two markers
-// is NOT identified as an overthink source tree.
-func TestFindOvSourceRoot_DualMarker(t *testing.T) {
+// is NOT identified as an opencharly source tree.
+func TestFindCharlySourceRoot_DualMarker(t *testing.T) {
 	root := t.TempDir()
 
 	// Layout:
@@ -68,7 +68,7 @@ func TestFindOvSourceRoot_DualMarker(t *testing.T) {
 	//     charly.yml
 	//   <root>/proj/               ← both markers; IS the source tree
 	//     charly.yml
-	//     ov/main.go
+	//     charly/main.go
 	//   <root>/proj/sub/deeper/    ← deep cwd inside the source tree
 	mustWrite(t, filepath.Join(root, "charly.yml"), "")
 	proj := filepath.Join(root, "proj")
@@ -89,22 +89,22 @@ func TestFindOvSourceRoot_DualMarker(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := findOvSourceRoot(tc.from)
+			got := findCharlySourceRoot(tc.from)
 			if got != tc.want {
-				t.Errorf("findOvSourceRoot(%q) = %q, want %q", tc.from, got, tc.want)
+				t.Errorf("findCharlySourceRoot(%q) = %q, want %q", tc.from, got, tc.want)
 			}
 		})
 	}
 }
 
-// TestFindOvSourceRoot_NoMarker confirms that a cwd outside any source
+// TestFindCharlySourceRoot_NoMarker confirms that a cwd outside any source
 // tree returns empty (skipping the check entirely — the binary may
 // validly run against arbitrary projects).
-func TestFindOvSourceRoot_NoMarker(t *testing.T) {
+func TestFindCharlySourceRoot_NoMarker(t *testing.T) {
 	root := t.TempDir()
-	got := findOvSourceRoot(root)
+	got := findCharlySourceRoot(root)
 	if got != "" {
-		t.Errorf("findOvSourceRoot(%q) = %q, want empty", root, got)
+		t.Errorf("findCharlySourceRoot(%q) = %q, want empty", root, got)
 	}
 }
 

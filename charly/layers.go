@@ -143,14 +143,14 @@ type CandyArtifactRewrite struct {
 //
 // The Key field is only meaningful for secret_accepts/secret_requires entries:
 // it optionally overrides the credential store lookup key. Default is
-// ("ov/secret", Name). When set, the format is "<service>/<key>" and must
-// start with "ov/" (enforced by validate.go to prevent exfiltration of
+// ("charly/secret", Name). When set, the format is "<service>/<key>" and must
+// start with "charly/" (enforced by validate.go to prevent exfiltration of
 // unrelated user credentials). See plan §2.7.
 type EnvDependency struct {
 	Name        string `yaml:"name" json:"name"`
 	Description string `yaml:"description" json:"description"`
 	Default     string `yaml:"default,omitempty" json:"default,omitempty"`
-	Key         string `yaml:"key,omitempty" json:"key,omitempty"` // credential store path override (secret_* only), format "<service>/<key>", must start with "ov/"
+	Key         string `yaml:"key,omitempty" json:"key,omitempty"` // credential store path override (secret_* only), format "<service>/<key>", must start with "charly/"
 }
 
 // MCPServerYAML represents an MCP server declaration in the candy manifest.
@@ -283,7 +283,7 @@ type CandyYAML struct {
 	// Calamares-aligned package surface (2026-05 cutover). The unified
 	// flat top-level `packages:` is the Calamares group / module package
 	// list shape. Per-distro overrides + format-specific extras (copr,
-	// repos, options, exclude, modules, arch AUR sub-block) live
+	// repos, options, exclude, modules, AUR sub-block) live
 	// under `distros:` keyed by distro name (or distro-version e.g.
 	// `debian-13`, `ubuntu-24.04`).
 	Package []PackageItem              `yaml:"package,omitempty"`
@@ -305,7 +305,7 @@ type CandyYAML struct {
 	// local-file install (pacman -U / dnf install / apt-get install) — delivering
 	// an OS-package-tracked binary instead of an ad-hoc curl. Compiled into a
 	// LocalPkgInstallStep; skipped at image build (no host package build in a
-	// container). The canonical user is the `ov` layer:
+	// container). The canonical user is the `charly` layer:
 	// {pac: pkg/arch, rpm: pkg/fedora, deb: pkg/debian}. A legacy scalar is
 	// rejected at load with an `charly migrate` hint. See LocalPkgInstallStep.
 	LocalPkg LocalPkgMap `yaml:"localpkg,omitempty"`
@@ -386,21 +386,42 @@ var layerYAMLKnownFields = map[string]bool{
 	"localpkg": true, "reboot": true,
 }
 
-// layerYAMLFormatNames caches known format names from build.yml for YAML parsing.
-// Must be populated by calling SetFormatNames before scanning layers.
-var layerYAMLFormatNames map[string]bool
+// The build vocabulary — the set of distro names and package-format names — is
+// NOT hardcoded in Go. It is DERIVED at load time from the project's build.yml
+// `distro:` section (the DistroConfig) by RegisterBuildVocabulary, which every
+// entry point calls before scanning layers. Adding a new distro or package
+// format is therefore purely a build.yml edit, with no code change.
+//
+// These caches are consumed ONLY by the candy-manifest shape guard
+// (looksLikeDistroOrFormatKey / rejectLegacyLayerKeys) to recognize a
+// package-format or per-distro section mistakenly placed at the candy root. The
+// FORWARD package parser (derivePackageSectionsFromCalamares) needs no
+// vocabulary at all — it routes every `distro:` sub-key structurally and lets
+// the cascade resolver match on the image's real img.Distro/img.Pkg.
+var (
+	// layerYAMLFormatNames = the union of every distro's declared package
+	// formats (rpm/deb/pac/aur/…), inherited chains resolved.
+	layerYAMLFormatNames map[string]bool
+	// layerYAMLDistroNames = every distro name declared in build.yml.
+	layerYAMLDistroNames map[string]bool
+)
 
-// SetFormatNames registers format names from a DistroConfig for layer YAML parsing.
-// Collects all format names across all distros (including inherited ones).
-// Must be called before ScanAllLayerWithConfig to ensure format sections
-// (e.g., rpm:, deb:) are correctly distinguished from tag sections.
-func SetFormatNames(dc *DistroConfig) {
+// RegisterBuildVocabulary derives the distro/format vocabulary from a
+// DistroConfig and caches it for the duration of the process. Sourced entirely
+// from build.yml, never from a Go constant. Safe to call repeatedly; a nil
+// config clears the caches (the shape guard then fails open — no false
+// positives).
+func RegisterBuildVocabulary(dc *DistroConfig) {
 	layerYAMLFormatNames = make(map[string]bool)
+	layerYAMLDistroNames = make(map[string]bool)
 	if dc == nil {
 		return
 	}
 	for _, name := range dc.AllFormatNames() {
 		layerYAMLFormatNames[name] = true
+	}
+	for name := range dc.Distro {
+		layerYAMLDistroNames[name] = true
 	}
 }
 
@@ -420,20 +441,29 @@ func SetFormatNames(dc *DistroConfig) {
 // here — folding it into every section at parse time is what cross-contaminated
 // debian/ubuntu before this cutover.
 //
-// The arch `aur:` sub-block keeps its dedicated `aur` FORMAT section: aur is a
-// real secondary BUILD format the aur builder consumes, not a distro tag.
+// An `aur:` sub-block (under ANY key — `arch:`, `cachyos:`, or the `pac:`
+// family) routes to its own dedicated `aur` FORMAT section: aur is a real
+// secondary BUILD format the aur builder consumes, not a distro tag. It is only
+// ever built when the image's config-derived build formats include `aur`.
+//
+// Parsing is purely STRUCTURAL — NO Go-side distro/format vocabulary is
+// consulted. A package-format family key (`pac:`/`deb:`/`rpm:`) routes to a tag
+// section matched at resolve time via the image's img.Pkg; a bare/versioned
+// distro key matches via img.Distro. Correctness of a key is the validator's
+// job; selection is the cascade resolver's.
 //
 // Distro keys are iterated in sorted order so a pathological double-definition of
 // the same tag (e.g. a `debian,ubuntu` compound plus a standalone `debian`)
 // resolves deterministically; the validator rejects genuinely conflicting extras.
 //
 // Mapping:
-//   distro.fedora.*          → tagSections["fedora"]
-//   distro.debian.*          → tagSections["debian"]
-//   distro.ubuntu.*          → tagSections["ubuntu"]
-//   distro.arch.*            → tagSections["arch"]   (+ arch.aur.* → formatSections["aur"])
-//   distro.debian-13.*       → tagSections["debian:13"]   (dash → colon)
-//   distro."debian,ubuntu".* → tagSections["debian"] + tagSections["ubuntu"]
+//
+//	distro.fedora.*          → tagSections["fedora"]
+//	distro.debian.*          → tagSections["debian"]
+//	distro.pac.*             → tagSections["pac"]   (family key, matched via img.Pkg)
+//	distro.arch.*            → tagSections["arch"]   (+ any .aur.* → formatSections["aur"])
+//	distro.debian-13.*       → tagSections["debian:13"]   (dash → colon)
+//	distro."debian,ubuntu".* → tagSections["debian"] + tagSections["ubuntu"]
 func derivePackageSectionsFromCalamares(layer *Layer, ly *CandyYAML) {
 	layer.topPackages = PackageNames(ly.Package)
 
@@ -506,19 +536,20 @@ func derivePackageSectionsFromCalamares(layer *Layer, ly *CandyYAML) {
 			if part == "" {
 				continue
 			}
-			// Validate + canonicalize: bare `debian` stays `debian`; versioned
-			// `debian-13` → colon-form tag key `debian:13` (matches img.Distro tags).
-			bare := part
+			// Canonicalize: bare `debian` stays `debian`; versioned `debian-13`
+			// → colon-form tag key `debian:13` (matches img.Distro tags).
 			tagKey := part
 			if i := strings.IndexByte(part, '-'); i > 0 {
-				bare = part[:i]
 				tagKey = part[:i] + ":" + part[i+1:]
 			}
-			if !knownDistroNames[bare] {
-				// Unrecognized distro key — skip (a typo never matches an
-				// img.Distro tag; the validator surfaces it).
-				continue
-			}
+			// Every key under `distro:` is, by the author's placement, a distro
+			// or package-format tag — so parsing is purely STRUCTURAL: each key
+			// becomes a tag section, with NO Go-side vocabulary list consulted.
+			// Correctness (is this a real distro/format?) is the validator's job,
+			// and SELECTION (which sections apply to THIS image) is the cascade
+			// resolver's, keyed on the image's real img.Distro + img.Pkg — e.g. a
+			// `pac:` family key is matched via img.Pkg, a bare `debian:` via
+			// img.Distro, a typo matches nothing and contributes nothing.
 			cfg := ensureTag(tagKey)
 			addPackages(&cfg.Package, PackageNames(dp.Package))
 			cfg.Raw["package"] = cfg.Package
@@ -527,8 +558,14 @@ func derivePackageSectionsFromCalamares(layer *Layer, ly *CandyYAML) {
 			setRaw(cfg.Raw, "options", dp.Options)
 			setRaw(cfg.Raw, "exclude", dp.Exclude)
 			setRaw(cfg.Raw, "module", dp.Module)
-			// arch AUR sub-block → dedicated aur FORMAT section (a real build format).
-			if bare == "arch" && dp.AUR != nil {
+			// A secondary build sub-block (an `aur:` block) routes to its own
+			// image-global FORMAT section, regardless of which distro/family key
+			// it sits under — pure structure, no `bare == "arch"` hardcode. The
+			// aur section is only ever BUILT when the image's config-derived
+			// build formats include `aur` (img.BuildFormats, from the DistroConfig
+			// — so a non-pac image silently ignores a stray aur block); the
+			// validator flags an aur block placed under a non-pac distro.
+			if dp.AUR != nil {
 				aurPS := ensureFormat("aur")
 				addPackages(&aurPS.Packages, PackageNames(dp.AUR.Package))
 				aurPS.Raw["package"] = aurPS.Packages
@@ -737,7 +774,7 @@ type Layer struct {
 	SubPathPrefix string // e.g. "candy/" — parent directory within the repo for sibling resolution
 
 	// Pre-populated from the candy manifest
-	formatSections map[string]*PackageSection // generic format sections (only `aur` now — the arch AUR build format)
+	formatSections map[string]*PackageSection // generic format sections (only `aur` now — the secondary AUR build format)
 	tagSections    map[string]*TagPkgConfig   // per-distro/version package sections (debian, ubuntu, debian:13, …) — the sole package surface
 	topPackages    []string                   // top-level package: — the always-included BASE, folded at RESOLVE time (never at parse — that cross-contaminated debian/ubuntu)
 	ports          []string
@@ -935,32 +972,63 @@ func parseLayerYAML(path string) (*CandyYAML, error) {
 	return nil, fmt.Errorf("%s: legacy flat candy.yml form is no longer accepted. Run `charly migrate` to convert to the canonical `candy:` kind-keyed form", path)
 }
 
-// rejectLegacyLayerKeys is the 2026-05 Calamares-cutover hard-fail gate:
-// every legacy field shape produces a clear error pointing at
-// `charly migrate`. Runs before standard YAML decoding so the user
-// sees the migration hint, not a generic "field not found" error.
+// rejectLegacyLayerKeys is the candy-manifest shape guard: a removed field name
+// (`depends`/`directory`/`info`) or a misplaced package-format / per-distro
+// section at the candy root produces a clear error describing the current
+// schema. Runs before standard YAML decoding so the user sees a precise message,
+// not a generic "field not found". The format/distro vocabulary it recognizes is
+// the DYNAMIC build vocabulary sourced from build.yml (RegisterBuildVocabulary) —
+// no hardcoded format/distro list, so a newly-added format or distro is caught
+// automatically.
 func rejectLegacyLayerKeys(path string, body *yaml.Node) error {
 	for i := 0; i+1 < len(body.Content); i += 2 {
 		key := body.Content[i].Value
 		switch key {
 		case "depends":
-			return fmt.Errorf("%s: the candy manifest uses legacy `depends:` field. Run: charly migrate", path)
-		case "rpm", "deb", "pac", "aur":
-			return fmt.Errorf("%s: the candy manifest uses legacy `%s:` block at top level. Calamares-aligned schema uses unified top-level `packages:` + per-distro `distros:` map. Run: charly migrate", path, key)
+			return fmt.Errorf("%s: candy manifest uses the removed `depends:` field — rename it to `require:`", path)
 		case "directory":
-			return fmt.Errorf("%s: the candy manifest uses legacy `directory:` field (removed in 2026-05 cutover). Run: charly migrate", path)
+			return fmt.Errorf("%s: candy manifest uses the removed `directory:` field — the layer directory is implicit", path)
 		case "info":
-			return fmt.Errorf("%s: the candy manifest uses legacy `info:` field (removed; use `description:`). Run: charly migrate", path)
+			return fmt.Errorf("%s: candy manifest uses the removed `info:` field — use `description:`", path)
 		}
-		// Distro-tag sections like `debian:13:`, `ubuntu:24.04:`,
-		// `debian,ubuntu:` — only fire when the bare leading segment
-		// matches a known distro name (so we don't false-positive on
-		// arbitrary YAML keys with colons).
-		if d, isTag := classifyDistroTag(key); isTag && len(d) > 0 {
-			return fmt.Errorf("%s: the candy manifest uses legacy distro tag section `%s:` at top level. Calamares-aligned schema nests distro overrides under `distros:`. Run: charly migrate", path, key)
+		// A package-format family key (pac:/deb:/rpm:/aur:) or a per-distro tag
+		// section (`debian:`, `debian:13:`, `debian,ubuntu:`) at the candy ROOT
+		// belongs UNDER the `distro:` map. Both vocabularies come from build.yml.
+		if looksLikeDistroOrFormatKey(key) {
+			return fmt.Errorf("%s: candy manifest places `%s:` at the top level — package-format and per-distro sections nest under the `distro:` map (e.g. `distro:\n  %s:\n    package: [...]`)", path, key, key)
 		}
 	}
 	return nil
+}
+
+// looksLikeDistroOrFormatKey reports whether a candy-manifest top-level key is a
+// package-format family name (pac/deb/rpm/aur) or a per-distro tag section
+// (`debian`, `debian:13`, `debian,ubuntu`) — shapes that nest under the `distro:`
+// map, never at the candy root. The vocabulary is the dynamic build vocabulary
+// registered from build.yml by RegisterBuildVocabulary; this helper holds no
+// hardcoded distro/format list. Returns false when the vocabulary is unregistered
+// (no false positives), leaving the explicit removed-field cases to fire.
+func looksLikeDistroOrFormatKey(key string) bool {
+	if key == "" {
+		return false
+	}
+	if layerYAMLFormatNames[key] {
+		return true
+	}
+	for _, part := range strings.Split(key, ",") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			return false
+		}
+		bare := part
+		if i := strings.IndexByte(part, ':'); i >= 0 {
+			bare = part[:i]
+		}
+		if !layerYAMLDistroNames[bare] {
+			return false
+		}
+	}
+	return true
 }
 
 // resolveLayerSourceDir was the resolver for the legacy `directory:` field on

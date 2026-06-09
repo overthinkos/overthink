@@ -123,9 +123,9 @@ func TestResolveLocalImageRef_ShortNameNoMatch(t *testing.T) {
 	}
 }
 
-// --- runOvVerb skip behavior + method allowlist tests ---
+// --- runCharlyVerb skip behavior + method allowlist tests ---
 
-func TestRunOvVerb_SkipsUnderImageTest(t *testing.T) {
+func TestRunCharlyVerb_SkipsUnderImageTest(t *testing.T) {
 	r, _ := newFakeRunner(t, RunModeImage)
 	r.Image = "jupyter"
 	res := r.Run(context.Background(), []Check{{Cdp: "status"}})
@@ -137,7 +137,7 @@ func TestRunOvVerb_SkipsUnderImageTest(t *testing.T) {
 	}
 }
 
-func TestRunOvVerb_UnknownMethodFails(t *testing.T) {
+func TestRunCharlyVerb_UnknownMethodFails(t *testing.T) {
 	r, _ := newFakeRunner(t, RunModeLive)
 	r.Image = "jupyter"
 	res := r.Run(context.Background(), []Check{{Cdp: "not-a-real-method"}})
@@ -148,49 +148,49 @@ func TestRunOvVerb_UnknownMethodFails(t *testing.T) {
 
 // --- §D validation tests ---
 
-func TestValidateOvVerb_UnknownMethodReportsError(t *testing.T) {
+func TestValidateCharlyVerb_UnknownMethodReportsError(t *testing.T) {
 	errs := &ValidationError{}
 	c := &Check{Cdp: "bogus"}
-	validateOvVerb(c, "cdp", "loc", "deploy", errs)
+	validateCharlyVerb(c, "cdp", "loc", "deploy", errs)
 	if !errs.HasErrors() || !strings.Contains(strings.Join(errs.Errors, "\n"), "unknown method") {
 		t.Errorf("expected unknown-method error, got: %+v", errs.Errors)
 	}
 }
 
-func TestValidateOvVerb_MissingRequiredModifier(t *testing.T) {
+func TestValidateCharlyVerb_MissingRequiredModifier(t *testing.T) {
 	errs := &ValidationError{}
 	// cdp: eval requires Tab + Expression — neither set.
 	c := &Check{Cdp: "eval"}
-	validateOvVerb(c, "cdp", "loc", "deploy", errs)
+	validateCharlyVerb(c, "cdp", "loc", "deploy", errs)
 	joined := strings.Join(errs.Errors, "\n")
 	if !strings.Contains(joined, "tab") || !strings.Contains(joined, "expression") {
 		t.Errorf("expected missing tab+expression errors, got: %v", errs.Errors)
 	}
 }
 
-func TestValidateOvVerb_BuildScopeRejected(t *testing.T) {
+func TestValidateCharlyVerb_BuildScopeRejected(t *testing.T) {
 	errs := &ValidationError{}
 	c := &Check{Cdp: "status"}
-	validateOvVerb(c, "cdp", "loc", "build", errs)
+	validateCharlyVerb(c, "cdp", "loc", "build", errs)
 	if !errs.HasErrors() || !strings.Contains(strings.Join(errs.Errors, "\n"), "scope:\"deploy\"") {
 		t.Errorf("expected deploy-scope-required error, got: %+v", errs.Errors)
 	}
 }
 
-func TestValidateOvVerb_ArtifactMethodMissingPath(t *testing.T) {
+func TestValidateCharlyVerb_ArtifactMethodMissingPath(t *testing.T) {
 	errs := &ValidationError{}
 	// wl: screenshot requires Artifact.
 	c := &Check{Wl: "screenshot"}
-	validateOvVerb(c, "wl", "loc", "deploy", errs)
+	validateCharlyVerb(c, "wl", "loc", "deploy", errs)
 	if !errs.HasErrors() || !strings.Contains(strings.Join(errs.Errors, "\n"), "artifact") {
 		t.Errorf("expected artifact-required error, got: %+v", errs.Errors)
 	}
 }
 
-func TestValidateOvVerb_ValidCheckNoErrors(t *testing.T) {
+func TestValidateCharlyVerb_ValidCheckNoErrors(t *testing.T) {
 	errs := &ValidationError{}
 	c := &Check{Cdp: "eval", Tab: "1", Expression: "document.title"}
-	validateOvVerb(c, "cdp", "loc", "deploy", errs)
+	validateCharlyVerb(c, "cdp", "loc", "deploy", errs)
 	if errs.HasErrors() {
 		t.Errorf("expected no errors for valid check, got: %+v", errs.Errors)
 	}

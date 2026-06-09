@@ -14,11 +14,11 @@ import (
 // K8sSpec/cluster) and emits a Kustomize tree.
 
 // defaultK8sOutputDir resolves the canonical output directory for
-// emitted kustomize trees. Mirrors DeployFromImage's default.
+// emitted kustomize trees. Mirrors DeployFromBox's default.
 func defaultK8sOutputDir() (string, error) {
 	cwd, err := os.Getwd()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(cwd, ".overthink", "k8s"), nil
+	return filepath.Join(cwd, ".opencharly", "k8s"), nil
 }

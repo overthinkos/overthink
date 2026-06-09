@@ -157,7 +157,7 @@ func podAwareMCPProvides(entries []MCPProvideEntry, consumerKey, ctrName string)
 //
 //   - Entries are only injected if acceptedEnv[name] is true.
 //   - nil acceptedEnv = no filtering (backward compat for remote images without labels).
-//   - MCP provides (CH_MCP_SERVERS) are always injected (standard discovery mechanism).
+//   - MCP provides (CHARLY_MCP_SERVERS) are always injected (standard discovery mechanism).
 //
 // `consumerKey` is the consumer's deploy.yml key — base image name (e.g.
 // "versa") for the default deploy, or image-with-instance (e.g.
@@ -184,7 +184,7 @@ func (dc *DeployConfig) GlobalEnvForImage(consumerKey, ctrName string, acceptedE
 		mcpEntries := podAwareMCPProvides(dc.Provides.MCP, consumerKey, ctrName)
 		if len(mcpEntries) > 0 {
 			mcpJSON, _ := json.Marshal(mcpEntries)
-			result = append(result, "CH_MCP_SERVERS="+string(mcpJSON))
+			result = append(result, "CHARLY_MCP_SERVERS="+string(mcpJSON))
 		}
 	}
 

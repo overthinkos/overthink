@@ -197,7 +197,7 @@ func TestNestedExecutor_ThreeLevelNesting_DelimitersUnique(t *testing.T) {
 	closeDelims := map[string]int{}
 	for _, line := range strings.Split(final, "\n") {
 		l := strings.TrimSpace(line)
-		if strings.HasPrefix(l, "OV_NESTED_SCRIPT_EOF") && !strings.Contains(l, " ") {
+		if strings.HasPrefix(l, "CHARLY_NESTED_SCRIPT_EOF") && !strings.Contains(l, " ") {
 			closeDelims[l]++
 		}
 	}

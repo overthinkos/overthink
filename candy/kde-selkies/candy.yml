@@ -80,7 +80,7 @@ candy:
         # (sway/labwc) coverage: window-management via kdotool, keyboard via wtype,
         # clipboard via wl-clipboard, plus compositor detection. Pointer + resolution
         # are intentionally NOT covered (no host-safe KWin backend — separate cutover;
-        # see ov/wl.go errKWinPointerUnsupported + the resolution guard).
+        # see charly/wl.go errKWinPointerUnsupported + the resolution guard).
         - id: kde-wl-compositor-is-kwin
           scope: deploy
           wl: status

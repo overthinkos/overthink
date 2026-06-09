@@ -143,7 +143,7 @@ func appendHopForFlatPath(chain DeployExecutor, node *DeploymentNode, flatPath, 
 		// Container name convention: "charly-<flat-path>" — matches quadlet
 		// emission, which deploys a HOST-side nested pod as "charly-<seg1>_<seg2>".
 		// EXCEPTION — a pod nested inside a VM guest: it is deployed by the
-		// guest's OWN `charly deploy from-image <ref> <childKey>`
+		// guest's OWN `charly deploy from-box <ref> <childKey>`
 		// (deployNestedPodsInGuest), so the in-guest container is "charly-<childKey>"
 		// (the leaf). The guest never sees the host-side bed/VM-entity prefix, so
 		// once the chain has crossed into a VM guest the podman-exec hop must

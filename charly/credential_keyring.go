@@ -63,8 +63,8 @@ func resetKeyringState() {
 // (freedesktop Secret Service on Linux, Keychain on macOS).
 type KeyringStore struct{}
 
-const keyringProbeService = "ov/probe"
-const keyringProbeKey = "__ov_keyring_probe__"
+const keyringProbeService = "charly/probe"
+const keyringProbeKey = "__charly_keyring_probe__"
 const keyringTimeout = 3 * time.Second
 
 // Probe tests whether the system keyring is usable.

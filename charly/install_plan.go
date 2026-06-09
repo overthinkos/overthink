@@ -789,7 +789,7 @@ func (s *ShellHookStep) Reverse() []ReverseOp {
 //     /etc/fish/conf.d/charly-<layer>.fish for fish).
 //   - LocalDeployTarget / VmDeployTarget: managed-block append to the
 //     user's rc file (~/.bashrc, ~/.zshrc, ~/.profile) keyed by
-//     `# overthink:begin <Marker>` fence; for fish, a per-layer drop-in at
+//     `# opencharly:begin <Marker>` fence; for fish, a per-layer drop-in at
 //     ~/.config/fish/conf.d/charly-<layer>.fish (no fence needed, file IS the
 //     unit). UseDropin discriminates the two paths.
 //   - K8sDeployTarget: skipped (no shell in pods).

@@ -46,7 +46,7 @@ func (e *EvalFailedError) Error() string {
 //   - `charly eval live <name>` — full-stack eval against a running
 //     deployment (pod / vm / host / k8s); runtime variables resolved.
 //   - `charly eval run <name>` — overloaded by the resolved kind: a
-//     kind:eval bed runs the full R10 sequence (build → eval image →
+//     kind:eval bed runs the full R10 sequence (build → eval box →
 //     deploy → eval live → fresh update → tear down); a kind:score
 //     drives an AI through iteration cycles. `--all-beds` runs every
 //     kind:eval bed. (Replaces the retired `charly eval kind <subkind>`,
@@ -455,7 +455,7 @@ func (c *EvalLiveCmd) runVm() error {
 	// nested pod's coverage its layers' OWN baked checks instead of a per-bed
 	// re-implementation (R3), and closes the gap where `charly eval run` deploys
 	// nested children (eval_bed_run.go) but never evaluated their baked checks.
-	// The pod image lives in HOST podman storage (built here, then cp-image'd
+	// The pod image lives in HOST podman storage (built here, then cp-box'd
 	// into the guest), so its eval label reads on the host. command/in_container
 	// checks run INSIDE the nested pod via the chain; deploy-runtime-var checks
 	// (${HOST_PORT:N}, ${CONTAINER_IP}) can't resolve through the chain
@@ -772,7 +772,7 @@ func (c *EvalBoxCmd) Run() error {
 	liveContainer := "" // PURE-IMAGE never has a live container
 	fmt.Fprintf(os.Stderr, "Image: %s\n", imageRef)
 
-	// YAML format emits the shape ParseOvTestOutput expects —
+	// YAML format emits the shape ParseCharlyTestOutput expects —
 	// this is the benchmark scorer's input format.
 	if c.Format == "yaml" {
 		return emitImageTestYAML(os.Stdout, imageRef, liveContainer, scenarioResults, results)
@@ -786,7 +786,7 @@ func (c *EvalBoxCmd) Run() error {
 }
 
 // emitImageTestYAML writes the `charly eval box --format yaml` payload
-// that ParseOvTestOutput (benchmark_score.go) consumes. The shape is:
+// that ParseCharlyTestOutput (benchmark_score.go) consumes. The shape is:
 //
 //	image: <ref>
 //	mode: image | run

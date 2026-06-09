@@ -129,15 +129,15 @@ func TestSortedPeerKeys(t *testing.T) {
 // TestTearDownPeers_RoutingAndOrder: tearDownPeers iterates peers in sorted
 // order and routes a pod peer to `charly remove --purge`, a non-pod peer to
 // `charly deploy del --assume-yes` — the same iteration/routing logic bringUpPeers
-// uses, verified here with the stubbable runOvSubcommand package var (no side
+// uses, verified here with the stubbable runCharlySubcommand package var (no side
 // effects). The flag itself is proven valid against real Kong parsing by
 // TestDeployDelArgv_KongAccepts (this stub-based test cannot — it never invokes
 // flag parsing, which is exactly how a `--yes`/`--force` drift once slipped through).
 func TestTearDownPeers_RoutingAndOrder(t *testing.T) {
-	orig := runOvSubcommand
-	defer func() { runOvSubcommand = orig }()
+	orig := runCharlySubcommand
+	defer func() { runCharlySubcommand = orig }()
 	var calls [][]string
-	runOvSubcommand = func(args ...string) error {
+	runCharlySubcommand = func(args ...string) error {
 		calls = append(calls, args)
 		return nil
 	}
@@ -157,10 +157,10 @@ func TestTearDownPeers_RoutingAndOrder(t *testing.T) {
 
 // TestTearDownPeers_NoPeersNoop: nothing happens when there are no peers.
 func TestTearDownPeers_NoPeersNoop(t *testing.T) {
-	orig := runOvSubcommand
-	defer func() { runOvSubcommand = orig }()
+	orig := runCharlySubcommand
+	defer func() { runCharlySubcommand = orig }()
 	called := false
-	runOvSubcommand = func(args ...string) error { called = true; return nil }
+	runCharlySubcommand = func(args ...string) error { called = true; return nil }
 	tearDownPeers(&DeploymentNode{})
 	if called {
 		t.Errorf("tearDownPeers ran a subcommand for a node with no peers")

@@ -45,7 +45,7 @@ func TestCheckKeyringIndexConsistency_NoBus(t *testing.T) {
 
 	// Seed a shadow index entry so the early-empty return doesn't fire.
 	cfg := &RuntimeConfig{
-		KeyringKeys: []string{"ov/enc/testimg"},
+		KeyringKeys: []string{"charly/enc/testimg"},
 	}
 	if err := SaveRuntimeConfig(cfg); err != nil {
 		t.Fatalf("seeding config: %v", err)

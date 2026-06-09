@@ -6,14 +6,14 @@ import (
 	"testing"
 )
 
-// TestOvUpdatePreservesPerHostDeployFields reproduces the operator's scenario
+// TestCharlyUpdatePreservesPerHostDeployFields reproduces the operator's scenario
 // through the ACTUAL `charly update <vm>` path: VmUnifiedTarget.Rebuild shells
 // `charly vm destroy` (removeVmDeployEntry) then `charly vm create` (saveVmDeployState).
 // The per-host entry carries `preemptible` (a LOCAL deploy property) + env +
 // tunnel; the destroy→create cycle must NOT clobber any of them. Against the
 // pre-fix removeVmDeployEntry (which delete()d the whole entry) this FAILS —
 // that was the root cause of the lost workstation preemptible.
-func TestOvUpdatePreservesPerHostDeployFields(t *testing.T) {
+func TestCharlyUpdatePreservesPerHostDeployFields(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", dir)
 	cfgDir := filepath.Join(dir, "charly")
@@ -116,7 +116,7 @@ func TestVmDestroyRemovesPureAutoEntry(t *testing.T) {
 func TestGatherDeployNodesPerHostWins(t *testing.T) {
 	proj := t.TempDir()
 	// Committed project: cachyos-gpu, NO preemptible.
-	projYml := `version: 2026.159.3
+	projYml := `version: 2026.159.1912
 deploy:
   cachyos-gpu:
     target: vm
@@ -131,7 +131,7 @@ deploy:
 	if err := os.MkdirAll(filepath.Join(cfg, "charly"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	hostYml := `version: 2026.159.3
+	hostYml := `version: 2026.159.1912
 deploy:
   cachyos-gpu:
     target: vm

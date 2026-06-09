@@ -7,7 +7,7 @@ package main
 // fetches NOTHING speculative"); container images that scenarios
 // spawn need to be present BEFORE the runner walks them. This file
 // owns the score → image-set discovery only — the actual ensure
-// logic lives in `ov/ensure_image.go::EnsureImagePresent`, the
+// logic lives in `charly/ensure_image.go::EnsureImagePresent`, the
 // canonical helper used by every command (R3).
 
 import (

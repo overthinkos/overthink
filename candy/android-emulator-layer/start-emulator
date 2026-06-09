@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-EMULATOR_NAME="${EMULATOR_NAME:-ov_avd_36}"
+EMULATOR_NAME="${EMULATOR_NAME:-charly_avd_36}"
 EMULATOR_API_LEVEL="${EMULATOR_API_LEVEL:-36}"
 EMULATOR_DEVICE="${EMULATOR_DEVICE:-pixel_9a}"
 EMULATOR_IMG_TYPE="${EMULATOR_IMG_TYPE:-google_apis_playstore}"

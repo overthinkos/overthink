@@ -211,13 +211,13 @@ type VmSource struct {
 	// --- Imported branch (Kind == "imported") ---
 	//
 	// LibvirtName is the libvirt domain name for the externally-managed
-	// VM. Often differs from ov's `charly-<vm>` prefixed naming convention,
+	// VM. Often differs from charly's `charly-<vm>` prefixed naming convention,
 	// because adoption preserves the upstream tool's name. Required when
 	// Kind == "imported".
 	LibvirtName string `yaml:"libvirt_name,omitempty"`
 
 	// DiskPath is the absolute path to the disk image file as recorded
-	// in the libvirt domain's `<disk source file=/>` element. ov
+	// in the libvirt domain's `<disk source file=/>` element. charly
 	// commands consult this for snapshot operations and clone-backing
 	// resolution; charly NEVER overwrites this file. Required when
 	// Kind == "imported".

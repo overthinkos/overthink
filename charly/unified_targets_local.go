@@ -24,9 +24,9 @@ import (
 
 // ErrNotSupportedOnHost is returned by lifecycle methods that have no
 // meaning on a host target. The host is always running (you can't
-// "start" or "stop" your own machine through ov); charly-managed log
+// "start" or "stop" your own machine through charly); charly-managed log
 // streams don't apply (logs of "the host" would be the system journal,
-// outside ov's contract). Mirrors ErrNotSupportedOnK8s.
+// outside charly's contract). Mirrors ErrNotSupportedOnK8s.
 var ErrNotSupportedOnHost = errors.New("lifecycle operation not supported on host target")
 
 // hostReverseExec is an inline ReverseExecutor adapter combining a
@@ -275,7 +275,7 @@ func (t *LocalUnifiedTarget) Rebuild(ctx context.Context, opts RebuildOpts) erro
 		fmt.Printf("dry-run: charly deploy add %s\n", t.NodeName)
 		return nil
 	}
-	return runOvSubcommand("deploy", "add", t.NodeName)
+	return runCharlySubcommand("deploy", "add", t.NodeName)
 }
 
 // Start, Stop, Logs: not applicable to the host target. The host is

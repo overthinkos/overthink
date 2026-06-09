@@ -14,7 +14,7 @@ import (
 // working-tree `task build:charly`, the clean git+file:// makepkg clone, an AUR
 // build. The single source of truth (charly_calver) is shared by taskfiles/Build.yml
 // and the PKGBUILD's pkgver()+build(); this test guards the bash side that the Go
-// OvVersion()/ComputeCalVerAt path (version_test.go) cannot reach.
+// CharlyVersion()/ComputeCalVerAt path (version_test.go) cannot reach.
 //
 // It FAILS against the prior wall-clock fallback: that stamped `date -u` for a
 // dirty tree, so a dirty build disagreed with a clean clone of the same commit
@@ -74,7 +74,7 @@ func TestCalverScriptDeterministic(t *testing.T) {
 		t.Fatalf("clean tree: charly_calver = %q, want %q", got, want)
 	}
 	// Dirty the tree by MODIFYING A TRACKED file — an unstaged tracked change,
-	// exactly the shape of a dev `task build:charly` over edited ov/*.go that the old
+	// exactly the shape of a dev `task build:charly` over edited charly/*.go that the old
 	// wall-clock branch detected (`git diff --quiet` → false) and stamped with the
 	// clock. The deterministic rule keeps the HEAD commit date. (An *untracked*
 	// file would NOT trip the old `git diff`, so it is not a valid guard input.)

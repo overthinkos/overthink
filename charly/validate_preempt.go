@@ -8,7 +8,7 @@ import (
 // Validation for the resource-arbitration ("preemptible") classification axis
 // — the holder-side `preemptible:` block and the claimant-side
 // `requires_exclusive:` list on a DeploymentNode. See classification.go +
-// ov/preempt.go. Mirrors validate_ephemeral.go.
+// charly/preempt.go. Mirrors validate_ephemeral.go.
 
 // ValidatePreemptibleOnNode checks one deploy node's preemptible +
 // requires_exclusive fields and accumulates problems into errs:

@@ -2,7 +2,7 @@
 #  charly.yml's `includes:` list. The schema kind discriminator is
 #  `kind: image` for kind-keyed entries; root-shape map is `image:` (this file).
 #  2026-05 kind-files cutover.
-version: 2026.157.311
+version: 2026.159.1912
 box:
     comfyui:
         enabled: false
@@ -745,7 +745,7 @@ box:
             - "9222:9222"
             - "9224:9224"
         env:
-            - EMULATOR_NAME=ov_avd_36
+            - EMULATOR_NAME=charly_avd_36
             - EMULATOR_API_LEVEL=36
             - EMULATOR_DEVICE=pixel_9a
         description:

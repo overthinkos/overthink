@@ -31,8 +31,8 @@ import (
 // so the caller can fall back to dep.Default if set.
 //
 // The Key field on an EnvDependency follows the format "<service>/<key>"
-// and must start with "ov/" (enforced by validate.go). When Key is empty,
-// the default lookup is service="ov/secret", key=Name.
+// and must start with "charly/" (enforced by validate.go). When Key is empty,
+// the default lookup is service="charly/secret", key=Name.
 //
 // Race-free across multiple layers declaring the same secret: the first
 // caller's store.Set lands in the active backend (keyring/config
@@ -40,7 +40,7 @@ import (
 // caller's ResolveCredential reads the persisted value. All callers in
 // one process share the cached singleton.
 func ensureLayerSecret(dep EnvDependency, required bool) (val, source string) {
-	service, key := "ov/secret", dep.Name
+	service, key := "charly/secret", dep.Name
 	if dep.Key != "" {
 		if idx := strings.LastIndex(dep.Key, "/"); idx > 0 {
 			service = dep.Key[:idx]

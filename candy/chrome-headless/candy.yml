@@ -14,7 +14,7 @@ candy:
         The point: use this as a `peer:` DRIVER deployment that CDP-probes a
         SEPARATE web-server SUBJECT — a check authored on the subject with
         `on: <this-peer>` and `url: http://${PEER_HOST:<subject>}:<port>` drives
-        a real browser against the subject over the shared `ov` network, without
+        a real browser against the subject over the shared `charly` network, without
         baking Chrome into the subject image. Container-only.
     require:
         - chrome

@@ -8,7 +8,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// mcp_client.go is the SDK-wrapper layer used by ov/mcp.go. It isolates
+// mcp_client.go is the SDK-wrapper layer used by charly/mcp.go. It isolates
 // three concerns that the CLI leaves otherwise don't care about:
 //
 //  1. MCP-server discovery — resolving an image name to a single
@@ -154,7 +154,7 @@ func lookupHostPort(inspect *ContainerInspection, containerPort string) (string,
 
 // buildMCPTransport constructs the SDK transport for a resolved entry. The
 // transport field is advisory ("http" / "sse" / ""); empty and "http" both
-// map to Streamable HTTP (the overthink default and what both the jupyter
+// map to Streamable HTTP (the opencharly default and what both the jupyter
 // and chrome-devtools MCP servers expose).
 func buildMCPTransport(entry MCPProvideEntry) (mcp.Transport, error) {
 	switch strings.ToLower(entry.Transport) {

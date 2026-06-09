@@ -21,23 +21,23 @@ import (
 // "different" but never "newer" — useless for deciding which charly to keep).
 var BuildCalVer string
 
-// OvVersion returns the CalVer identity of this `charly` binary. It is the stamped
+// CharlyVersion returns the CalVer identity of this `charly` binary. It is the stamped
 // BuildCalVer when present; otherwise "unknown" (an unstamped dev/test build —
 // ParseCalVer rejects it, so freshness comparisons treat it as older than every
 // real CalVer). It NEVER falls back to the wall clock: the clock identifies the
 // moment of invocation, not the binary, and that conflation is exactly the
 // defect this replaces.
-func OvVersion() string {
+func CharlyVersion() string {
 	if BuildCalVer != "" {
 		return BuildCalVer
 	}
 	return "unknown"
 }
 
-// hostOvIsNewer reports whether the host charly (identified by hostVer, normally
-// OvVersion()) is STRICTLY newer than a venue's charly, where venueVerOut is the raw
+// hostCharlyIsNewer reports whether the host charly (identified by hostVer, normally
+// CharlyVersion()) is STRICTLY newer than a venue's charly, where venueVerOut is the raw
 // stdout of `charly version` run inside that venue (pod/VM). It is the single
-// CalVer-comparison arbiter shared by EnsureOvInGuest (boot-time install) and
+// CalVer-comparison arbiter shared by EnsureCharlyInGuest (boot-time install) and
 // the host→nested delegation path (R3), so both agree on "is the venue's charly
 // stale?".
 //
@@ -49,7 +49,7 @@ func OvVersion() string {
 //     venue charly that is ahead of (or matches) the host.
 //   - host version unparseable → false: we cannot prove the host is newer, so we
 //     do NOT clobber a venue charly on an unprovable claim.
-func hostOvIsNewer(hostVer, venueVerOut string) bool {
+func hostCharlyIsNewer(hostVer, venueVerOut string) bool {
 	host, hostOK := ParseCalVer(strings.TrimSpace(hostVer))
 	if !hostOK {
 		return false
@@ -72,7 +72,7 @@ func hostOvIsNewer(hostVer, venueVerOut string) bool {
 //
 // NB: this is "what time is it NOW", used to TAG an artifact created at this
 // moment (image build tag, eval-run dir, deploy alias). It is NOT the identity
-// of the charly binary — that is OvVersion()/BuildCalVer. Never use ComputeCalVer()
+// of the charly binary — that is CharlyVersion()/BuildCalVer. Never use ComputeCalVer()
 // to report the running binary's version.
 func ComputeCalVer() string {
 	return ComputeCalVerAt(time.Now().UTC())

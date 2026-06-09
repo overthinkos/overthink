@@ -218,8 +218,8 @@ func FormatPortConflicts(conflicts []PortConflict, image string) string {
 		switch c.OwnerType {
 		case "charly-container":
 			// Extract image name from "charly-<image>" or "charly-<image>-<instance>"
-			ovImage := strings.TrimPrefix(c.Owner, "charly-")
-			fmt.Fprintf(&b, "    Fix: charly stop %s\n", ovImage)
+			charlyImage := strings.TrimPrefix(c.Owner, "charly-")
+			fmt.Fprintf(&b, "    Fix: charly stop %s\n", charlyImage)
 		case "container":
 			fmt.Fprintf(&b, "    Fix: podman stop %s\n", c.Owner)
 		default:

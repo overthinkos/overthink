@@ -131,7 +131,7 @@ func TestEncMount_NoShortCircuit_WhenOneUnmounted(t *testing.T) {
 	// Pin secret_backend to config AND set INVOCATION_ID so
 	// resolveEncPassphraseForMount takes the explicit-non-keyring-backend
 	// branch, which fails fast without prompting (no TTY access).
-	t.Setenv("CH_SECRET_BACKEND", "config")
+	t.Setenv("CHARLY_SECRET_BACKEND", "config")
 	t.Setenv("INVOCATION_ID", "test")
 	resetDefaultCredentialStore()
 	defer resetDefaultCredentialStore()

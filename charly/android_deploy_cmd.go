@@ -191,8 +191,8 @@ func resolveAndroidGoogleCreds(ga *AndroidGoogleAccount) (email, token string) {
 		}
 	}
 	store := DefaultCredentialStore()
-	email, _ = store.Get("ov/secret", emailKey)
-	token, _ = store.Get("ov/secret", tokenKey)
+	email, _ = store.Get("charly/secret", emailKey)
+	token, _ = store.Get("charly/secret", tokenKey)
 	return email, token
 }
 

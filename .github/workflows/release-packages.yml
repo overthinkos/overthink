@@ -4,7 +4,7 @@
 # locally (`task pkg:*`) and by the deploy-time localpkg path — one build
 # definition, distro-natively.
 #
-# Runs on the self-hosted CachyOS runner (labels: self-hosted, overthink) — an
+# Runs on the self-hosted CachyOS runner (labels: self-hosted, opencharly) — an
 # Arch host carrying the full charly toolchain. So `pac` builds NATIVELY: makepkg as
 # the runner's uid 1000 (makepkg refuses root, which is exactly how the rootless
 # runner executes jobs), with no archlinux container and no sudo — every PKGBUILD
@@ -26,7 +26,7 @@ permissions:
 
 jobs:
   pac:
-    runs-on: [self-hosted, overthink]
+    runs-on: [self-hosted, opencharly]
     steps:
       - uses: actions/checkout@v5
         with:
@@ -55,7 +55,7 @@ jobs:
           files: dist/*
 
   rpm-deb:
-    runs-on: [self-hosted, overthink]
+    runs-on: [self-hosted, opencharly]
     steps:
       - uses: actions/checkout@v5
         with:

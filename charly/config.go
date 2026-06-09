@@ -151,11 +151,11 @@ type BoxConfig struct {
 	// then these `defaults:` values, then a named Go fallback (see build.go
 	// jobsFallback / podmanJobsCapFallback). Pointers distinguish "unset"
 	// from a deliberate zero so the precedence chain is exact.
-	Jobs          *int     `yaml:"jobs,omitempty"`            // outer: concurrent IMAGE builds per DAG level (flag --jobs / env CH_BUILD_JOBS)
-	PodmanJobs    *int     `yaml:"podman_jobs,omitempty"`     // inner: stages per `podman build` (0 = auto; flag --podman-jobs / env CH_PODMAN_JOBS)
+	Jobs          *int     `yaml:"jobs,omitempty"`            // outer: concurrent IMAGE builds per DAG level (flag --jobs / env CHARLY_BUILD_JOBS)
+	PodmanJobs    *int     `yaml:"podman_jobs,omitempty"`     // inner: stages per `podman build` (0 = auto; flag --podman-jobs / env CHARLY_PODMAN_JOBS)
 	PodmanJobsCap *int     `yaml:"podman_jobs_cap,omitempty"` // ceiling for the auto podman-jobs calc: min(NCPU, cap)
 	ContextIgnore []string `yaml:"context_ignore,omitempty"`  // extra build-context excludes merged into the generated .containerignore/.dockerignore
-	Cache         string   `yaml:"cache,omitempty"`           // default build cache mode (image|registry|gha|none); flag --cache / env CH_BUILD_CACHE wins
+	Cache         string   `yaml:"cache,omitempty"`           // default build cache mode (image|registry|gha|none); flag --cache / env CHARLY_BUILD_CACHE wins
 
 	// Reusable-artifact retention (project-wide; authored under defaults:).
 	// keep_images = newest CalVer tags to keep per image after `charly box build`;
@@ -342,7 +342,7 @@ type ResolveOpts struct {
 	IncludeDisabled      bool            // skip the `enabled: false` check
 	IncludeDisabledNames map[string]bool // when non-empty, scope IncludeDisabled to these names only
 	// RequestedImages are the explicit build targets (`charly box build <name>`).
-	// A qualified name here (e.g. `ov.arch-builder`) is pulled into the resolved
+	// A qualified name here (e.g. `charly.arch-builder`) is pulled into the resolved
 	// set even when it isn't reachable as a base/builder of a root image — so a
 	// namespaced image can be an on-demand build target, not only a transitive
 	// base. Bare names are ignored here (they resolve through the root loop).
@@ -364,7 +364,7 @@ func (opts ResolveOpts) shouldIncludeDisabled(name string) bool {
 
 // ResolveImage resolves a single image's configuration by applying defaults
 func (c *Config) ResolveImage(name string, calverTag string, dir string, opts ResolveOpts) (*ResolvedBox, error) {
-	// Namespace-aware entry: a qualified name (e.g. `ov.arch-builder`,
+	// Namespace-aware entry: a qualified name (e.g. `charly.arch-builder`,
 	// `cachyos.cachyos`) resolves inside the Config of the namespace that
 	// owns it, where its base:/builder: refs are relative. This mirrors
 	// resolveImageRef's descent (namespace.go) so that EVERY ResolveImage
@@ -578,6 +578,10 @@ func (c *Config) ResolveImage(name string, calverTag string, dir string, opts Re
 	resolved.BuilderConfig = builderCfg
 	resolved.InitConfig = initCfg
 	if distroCfg != nil {
+		// Expand the package-cascade chain with any inherit_packages: ancestor
+		// (cachyos → [cachyos, arch]) so an `arch:` layer block reaches cachyos.
+		// Idempotent when the box already authored the ancestor explicitly.
+		resolved.Distro = distroCfg.expandPackageInheritance(resolved.Distro)
 		resolved.DistroDef = distroCfg.ResolveDistro(resolved.Distro)
 	}
 
@@ -648,7 +652,7 @@ func (c *Config) ResolveAllImage(calverTag string, dir string, opts ResolveOpts)
 	// Pull in any explicitly-requested namespace-qualified targets BEFORE base
 	// resolution. resolveNamespacedBases is reachability-scoped (it only follows
 	// bases/builders of root images); an on-demand target like
-	// `charly box build ov.arch-builder` — or ensure-image's build-fallback for a
+	// `charly box build charly.arch-builder` — or ensure-image's build-fallback for a
 	// namespaced builder — must be pulled explicitly so it lands in the resolved
 	// map under its fully-qualified key. Pulling it FIRST lets the
 	// resolveNamespacedBases fixpoint below also collect the target's own
@@ -721,8 +725,8 @@ func intPtr(v int) *int {
 //
 // Why distro-keyed and not base-inherited: a builder map holds
 // namespace-relative REFS, so it can't be copied across an import-namespace
-// boundary (a base's `ov.arch-builder` would dangle in a consumer where `ov.`
-// doesn't resolve — see ov/namespace.go). `distro:` IS a value and DOES cross
+// boundary (a base's `charly.arch-builder` would dangle in a consumer where `charly.`
+// doesn't resolve — see charly/namespace.go). `distro:` IS a value and DOES cross
 // the boundary, so we key off the resolved distro and source the builder map
 // from a root-namespace image whose bare refs resolve HERE.
 //
@@ -774,7 +778,7 @@ func (c *Config) resolveEffectiveBuilder(name string, distro []string, base stri
 // the remote-ref FETCH phase, before any ResolvedImage exists (and without the
 // dir/tag ResolveImage needs); reading the raw per-image img.Builder there
 // under-collected builders supplied by defaults.builder / the distro-keyed
-// default (whose per-image map is empty — e.g. bazzite/aurora -> ov.fedora-builder),
+// default (whose per-image map is empty — e.g. bazzite/aurora -> charly.fedora-builder),
 // surfacing as "unknown layer" at generate time. Routing through this keeps the
 // FETCH set's builder edges in lockstep with the RESOLVE set's (resolveNamespacedBases).
 func (c *Config) effectiveBuilderForImage(name string, img BoxConfig) BuilderMap {
@@ -809,7 +813,7 @@ func (c *Config) effectiveBuilderForImage(name string, img BoxConfig) BuilderMap
 // source image (e.g. base.yml's `arch`, distro [arch], builder arch-builder)
 // lives in THIS root namespace, so its bare builder refs resolve here — unlike
 // a base's namespace-relative builder map, which must NOT be copied across an
-// import-namespace boundary (see ov/namespace.go).
+// import-namespace boundary (see charly/namespace.go).
 //
 // distroTags is the image's resolved distro in priority order (most-specific
 // first, e.g. ["cachyos","arch"] or ["fedora:43","fedora"]); the first tag with

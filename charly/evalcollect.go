@@ -2,7 +2,7 @@ package main
 
 // CollectEval walks the base-image chain for imageName and gathers all
 // declarative checks into a three-section LabelEvalSet. The structure of
-// the walk mirrors CollectHooks (ov/hooks.go) — dedupe by layer name, step
+// the walk mirrors CollectHooks (charly/hooks.go) — dedupe by layer name, step
 // through internal bases until an external image is hit — so layer ordering
 // is consistent across every collected label.
 //

@@ -242,7 +242,7 @@ func mapNetworkToSpec(ifaces []libvirtInterfaceForImport, spec *VmSpec) {
 }
 
 // ListUnmanagedDomains returns libvirt domains that are NOT recorded
-// in ov's vm.yml (not yet imported).
+// in charly's vm.yml (not yet imported).
 func ListUnmanagedDomains() ([]string, error) {
 	conn, err := connectLibvirt(libvirtSessionURI)
 	if err != nil {
@@ -260,8 +260,8 @@ func ListUnmanagedDomains() ([]string, error) {
 	for _, d := range domains {
 		// Filter charly-managed domains (those with the charly- prefix that
 		// also appear in vm.yml).
-		ovName := strings.TrimPrefix(d.Name, "charly-")
-		if managed[ovName] || managed[d.Name] {
+		charlyName := strings.TrimPrefix(d.Name, "charly-")
+		if managed[charlyName] || managed[d.Name] {
 			continue
 		}
 		out = append(out, d.Name)

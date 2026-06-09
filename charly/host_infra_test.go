@@ -297,7 +297,7 @@ func TestEnsureAndRemoveManagedBlock(t *testing.T) {
 		t.Fatalf("EnsureManagedBlock: %v", err)
 	}
 	data, _ := os.ReadFile(path)
-	if !strings.Contains(string(data), "# overthink:begin") {
+	if !strings.Contains(string(data), "# opencharly:begin") {
 		t.Errorf("managed block not written; got:\n%s", data)
 	}
 
@@ -306,7 +306,7 @@ func TestEnsureAndRemoveManagedBlock(t *testing.T) {
 		t.Fatalf("second Ensure: %v", err)
 	}
 	data, _ = os.ReadFile(path)
-	count := strings.Count(string(data), "# overthink:begin")
+	count := strings.Count(string(data), "# opencharly:begin")
 	if count != 1 {
 		t.Errorf("managed block appeared %d times, want 1; got:\n%s", count, data)
 	}
@@ -315,7 +315,7 @@ func TestEnsureAndRemoveManagedBlock(t *testing.T) {
 		t.Fatalf("RemoveManagedBlock: %v", err)
 	}
 	data, _ = os.ReadFile(path)
-	if strings.Contains(string(data), "# overthink:begin") {
+	if strings.Contains(string(data), "# opencharly:begin") {
 		t.Errorf("managed block still present after remove; got:\n%s", data)
 	}
 }
@@ -368,7 +368,7 @@ func TestShellInitFilePath(t *testing.T) {
 		// ~/.bashrc to actually load in the user's terminal.
 		ShellBash: "/home/atrawog/.bashrc",
 		ShellZsh:  "/home/atrawog/.zshenv",
-		ShellFish: "/home/atrawog/.config/fish/conf.d/overthink.fish",
+		ShellFish: "/home/atrawog/.config/fish/conf.d/opencharly.fish",
 	}
 	for kind, want := range tests {
 		if got := ShellInitFilePath(kind, home); got != want {

@@ -17,7 +17,7 @@ package main
 //     Gherkin feature-file syntax. Cross-scenario deploy-level setup is
 //     a deploy concern, not a test concern.
 //   - Each scenario Step embeds Check inline, so every existing verb /
-//     matcher / modifier from ov/testspec.go works in scenarios unchanged.
+//     matcher / modifier from charly/testspec.go works in scenarios unchanged.
 
 import (
 	"encoding/json"

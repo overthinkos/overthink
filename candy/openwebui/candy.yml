@@ -23,7 +23,7 @@ candy:
           description: "OpenAI-compatible API base URL"
         - name: WEBUI_AUTH
           description: "Enable authentication (default: true)"
-        - name: CH_MCP_SERVERS
+        - name: CHARLY_MCP_SERVERS
           description: "JSON array of MCP servers (auto-injected by mcp_provide layers)"
         - name: IMMICH_API_URL
           description: "Immich HTTP API URL (auto-injected by immich layer env_provides)"
@@ -33,28 +33,28 @@ candy:
     # or the quadlet file as plaintext. See /charly-build:secrets and /charly-image:layer.
     #
     # WEBUI_ADMIN_PASSWORD: auto-generated on first deploy as a 32-byte hex
-    # random value via DefaultCredentialStore.Set (see ov/layer_secrets.go
+    # random value via DefaultCredentialStore.Set (see charly/layer_secrets.go
     # ensureLayerSecret). To use the auto-generated password to log in for
     # the first time:
-    #   charly secrets get ov/secret WEBUI_ADMIN_PASSWORD
+    #   charly secrets get charly/secret WEBUI_ADMIN_PASSWORD
     # To override with a specific value before deploying:
-    #   charly secrets set ov/secret WEBUI_ADMIN_PASSWORD <password>
+    #   charly secrets set charly/secret WEBUI_ADMIN_PASSWORD <password>
     secret_require:
         - name: WEBUI_ADMIN_PASSWORD
-          description: "Initial admin account password for Open WebUI first-run setup. Auto-generated on first deploy; retrieve via `charly secrets get ov/secret WEBUI_ADMIN_PASSWORD`."
+          description: "Initial admin account password for Open WebUI first-run setup. Auto-generated on first deploy; retrieve via `charly secrets get charly/secret WEBUI_ADMIN_PASSWORD`."
     secret_accept:
         - name: OPENROUTER_API_KEY
           description: "API key for OpenRouter (maps to OPENAI_API_KEY with OpenRouter base URL)"
-          key: ov/api-key/openrouter
+          key: charly/api-key/openrouter
         - name: OLLAMA_API_KEY
           description: "API key for Ollama Cloud inference"
-          key: ov/api-key/ollama
+          key: charly/api-key/ollama
         - name: OPENAI_API_KEY
           description: "Direct OpenAI API key"
-          key: ov/api-key/openai
+          key: charly/api-key/openai
         - name: IMMICH_API_KEY
           description: "Immich API key for programmatic access to the running immich instance"
-          key: ov/api-key/immich
+          key: charly/api-key/immich
     mcp_accept:
         - name: jupyter
           description: "JupyterLab CRDT MCP server for notebook manipulation"

@@ -275,9 +275,9 @@ func (c *EvalRunCmd) Run() error {
 					}
 				}
 				// Re-sync AI credentials (claude creds, etc.) into the
-				// freshly-restarted pod. Use the host's just-built ov
+				// freshly-restarted pod. Use the host's just-built charly
 				// binary so the sync logic itself is post-cutover.
-				credSync := exec.Command(findOvForEval(), "eval", "sync-credential", c.Name)
+				credSync := exec.Command(findCharlyForEval(), "eval", "sync-credential", c.Name)
 				credSync.Stdout = os.Stderr
 				credSync.Stderr = os.Stderr
 				if err := credSync.Run(); err != nil {
@@ -406,7 +406,7 @@ var evalPhaseRe = regexp.MustCompile(`^harness: phase (\d+)/\d+ —`)
 // `charly eval sync-credential <score>` from the host. Tests override to
 // record calls without spawning subprocesses.
 var phaseResyncFn = func(scoreName string, phase int) error {
-	cmd := exec.Command(findOvForEval(), "eval", "sync-credential", scoreName)
+	cmd := exec.Command(findCharlyForEval(), "eval", "sync-credential", scoreName)
 	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
@@ -495,11 +495,11 @@ func (c *EvalSyncCredCmd) Run() error { return c.RunActual() }
 type EvalScopeCmd struct{}
 
 func (c *EvalScopeCmd) Run() error {
-	score := os.Getenv("CH_EVAL_SCORE")
-	runID := os.Getenv("CH_EVAL_RUN_ID")
-	iter := os.Getenv("CH_EVAL_ITERATION")
+	score := os.Getenv("CHARLY_EVAL_SCORE")
+	runID := os.Getenv("CHARLY_EVAL_RUN_ID")
+	iter := os.Getenv("CHARLY_EVAL_ITERATION")
 	if score == "" || runID == "" || iter == "" {
-		return fmt.Errorf("charly eval scope: must run inside an iteration (CH_EVAL_SCORE/RUN_ID/ITERATION env required)")
+		return fmt.Errorf("charly eval scope: must run inside an iteration (CHARLY_EVAL_SCORE/RUN_ID/ITERATION env required)")
 	}
 	cwd, _ := os.Getwd()
 	path := fmt.Sprintf("%s/.eval/%s/runs/%s/iter%s/scope.yml", cwd, score, runID, iter)
@@ -515,8 +515,8 @@ func (c *EvalScopeCmd) Run() error {
 type EvalLastTagCmd struct{}
 
 func (c *EvalLastTagCmd) Run() error {
-	runID := os.Getenv("CH_EVAL_RUN_ID")
-	iter := os.Getenv("CH_EVAL_ITERATION")
+	runID := os.Getenv("CHARLY_EVAL_RUN_ID")
+	iter := os.Getenv("CHARLY_EVAL_ITERATION")
 	if runID == "" || iter == "" {
 		return fmt.Errorf("charly eval last-test-tag: must run inside an iteration")
 	}
@@ -525,7 +525,7 @@ func (c *EvalLastTagCmd) Run() error {
 	if k <= 1 {
 		return fmt.Errorf("charly eval last-test-tag: no prior iteration (k=%d)", k)
 	}
-	fmt.Printf("oveval-%s-iter%d\n", runID, k-1)
+	fmt.Printf("charlyeval-%s-iter%d\n", runID, k-1)
 	return nil
 }
 
@@ -560,12 +560,12 @@ func (c *EvalLastTagCmd) Run() error {
 type EvalSelfEvalCmd struct{}
 
 func (c *EvalSelfEvalCmd) Run() error {
-	score := os.Getenv("CH_EVAL_SCORE")
-	runID := os.Getenv("CH_EVAL_RUN_ID")
-	iter := os.Getenv("CH_EVAL_ITERATION")
-	phaseStr := os.Getenv("CH_EVAL_PHASE")
+	score := os.Getenv("CHARLY_EVAL_SCORE")
+	runID := os.Getenv("CHARLY_EVAL_RUN_ID")
+	iter := os.Getenv("CHARLY_EVAL_ITERATION")
+	phaseStr := os.Getenv("CHARLY_EVAL_PHASE")
 	if score == "" || runID == "" || iter == "" {
-		return fmt.Errorf("charly eval self-evaluate: must run inside an iteration (CH_EVAL_SCORE/RUN_ID/ITERATION env required)")
+		return fmt.Errorf("charly eval self-evaluate: must run inside an iteration (CHARLY_EVAL_SCORE/RUN_ID/ITERATION env required)")
 	}
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -743,16 +743,16 @@ type EvalNoteCmd struct {
 }
 
 type EvalNoteReadCmd struct {
-	Score string `arg:"" optional:"" help:"Score name (default: $CH_EVAL_SCORE)"`
+	Score string `arg:"" optional:"" help:"Score name (default: $CHARLY_EVAL_SCORE)"`
 }
 
 func (c *EvalNoteReadCmd) Run() error {
 	score := c.Score
 	if score == "" {
-		score = os.Getenv("CH_EVAL_SCORE")
+		score = os.Getenv("CHARLY_EVAL_SCORE")
 	}
 	if score == "" {
-		return fmt.Errorf("charly eval note read: score name required (pass as arg or set CH_EVAL_SCORE)")
+		return fmt.Errorf("charly eval note read: score name required (pass as arg or set CHARLY_EVAL_SCORE)")
 	}
 	dir, err := os.Getwd()
 	if err != nil {
@@ -780,9 +780,9 @@ func (c *EvalNoteAppendCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	runID := os.Getenv("CH_EVAL_RUN_ID")
-	iter := os.Getenv("CH_EVAL_ITERATION")
-	ai := os.Getenv("CH_EVAL_AI")
+	runID := os.Getenv("CHARLY_EVAL_RUN_ID")
+	iter := os.Getenv("CHARLY_EVAL_ITERATION")
+	ai := os.Getenv("CHARLY_EVAL_AI")
 	if iter == "" {
 		iter = "0"
 	}

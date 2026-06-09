@@ -28,8 +28,8 @@ candy:
           path: /workspace
     env:
         # Build-mode commands resolve box.yml via os.Getwd(); the -C / --dir /
-        # CH_PROJECT_DIR global in ov/main.go honours this before dispatch.
-        CH_PROJECT_DIR: "/workspace"
+        # CHARLY_PROJECT_DIR global in charly/main.go honours this before dispatch.
+        CHARLY_PROJECT_DIR: "/workspace"
     task:
         # Ensure /workspace exists in the built image with world-writable
         # permissions, so `charly version` (and any other cwd-sensitive command)
@@ -79,7 +79,7 @@ candy:
             - matches: "[0-9]{4}\\.[0-9]+"
         # Build-mode tool invocation. box.list.boxes returns the project's own
         # catalog when /workspace is bind-mounted to a project checkout, or the
-        # embedded fallback (overthinkos/opencharly) when it is not — both are
+        # embedded fallback (overthinkos/overthink) when it is not — both are
         # valid runtime modes. exit_status: 0 verifies the tool is callable in
         # either mode; project-specific content assertions live on per-bed tests
         # that pin the bind-mount, not on this layer-level check.

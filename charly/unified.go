@@ -105,7 +105,7 @@ type UnifiedFile struct {
 	// AI catalog (kind:ai), harness recipes (kind:recipe = pure spec),
 	// and harness scores (kind:score = runner config that references
 	// recipes). See ai_config.go, harness_recipe.go, harness_score_kind.go,
-	// /ov:harness.
+	// /charly:harness.
 	AI     map[string]*AIConfig      `yaml:"ai,omitempty"`
 	Recipe map[string]*HarnessRecipe `yaml:"recipe,omitempty"`
 	Score  map[string]*HarnessScore  `yaml:"score,omitempty"`
@@ -134,7 +134,7 @@ type UnifiedFile struct {
 	// time by loadUnifiedInto. Entries are referenced qualified, e.g.
 	// `base: cachyos.cachyos` resolves `cachyos` in Namespaces, then its
 	// Image["cachyos"]. Bare refs inside a namespace resolve within that
-	// namespace first (Go package-member semantics). See ov/namespace.go.
+	// namespace first (Go package-member semantics). See charly/namespace.go.
 	Namespaces map[string]*UnifiedFile `yaml:"-"`
 }
 
@@ -657,7 +657,7 @@ func LoadUnified(dir string) (*UnifiedFile, bool, error) {
 		// understands. `charly migrate` cannot help — migration only moves
 		// configs forward to THIS binary's HEAD, and the file is already
 		// past it. The binary itself is behind, so the only fix is to
-		// update ov. Hard-fail with that advice instead of letting a
+		// update charly. Hard-fail with that advice instead of letting a
 		// newer field shape silently mis-parse.
 		return nil, true, fmt.Errorf(
 			"%s: config schema %s is newer than this charly supports (max %s). Update charly (reinstall the latest opencharly package, or run 'task build:charly' from a fresh checkout)",

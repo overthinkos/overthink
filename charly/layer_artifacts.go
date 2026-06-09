@@ -10,7 +10,7 @@ package main
 // the operator-side destination. Missing-file handling depends on the
 // artifact's `optional:` flag.
 //
-// Called from ov/deploy_add_cmd.go after target.Emit succeeds and any
+// Called from charly/deploy_add_cmd.go after target.Emit succeeds and any
 // deploy-scope tests pass — this is the finalization step that ends a
 // successful `charly deploy add`.
 

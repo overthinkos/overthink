@@ -1435,13 +1435,13 @@ func secretDepsLayer(name string, opts func(l *Layer)) *Layer {
 }
 
 // TestValidateSecretAcceptsHappyPath — valid secret_accepts entry with an
-// explicit Key override that matches the ov/<service>/<key> format. No errors.
+// explicit Key override that matches the charly/<service>/<key> format. No errors.
 func TestValidateSecretAcceptsHappyPath(t *testing.T) {
 	cfg := &Config{Image: map[string]BoxConfig{}}
 	layers := map[string]*Layer{
 		"svc": secretDepsLayer("svc", func(l *Layer) {
 			l.secretAccepts = []EnvDependency{
-				{Name: "OPENROUTER_API_KEY", Description: "OpenRouter API key", Key: "ov/api-key/openrouter"},
+				{Name: "OPENROUTER_API_KEY", Description: "OpenRouter API key", Key: "charly/api-key/openrouter"},
 			}
 		}),
 	}
@@ -1583,10 +1583,10 @@ func TestValidateSecretCollidesWithEnvProvides(t *testing.T) {
 	}
 }
 
-// TestValidateSecretAcceptsKeyMustStartWithOv — plan §4.4 rule 5: the
-// optional Key override must start with "ov/" to prevent layers from
+// TestValidateSecretAcceptsKeyMustStartWithCharly — plan §4.4 rule 5: the
+// optional Key override must start with "charly/" to prevent layers from
 // exfiltrating unrelated user credentials.
-func TestValidateSecretAcceptsKeyMustStartWithOv(t *testing.T) {
+func TestValidateSecretAcceptsKeyMustStartWithCharly(t *testing.T) {
 	cfg := &Config{Image: map[string]BoxConfig{}}
 	layers := map[string]*Layer{
 		"svc": secretDepsLayer("svc", func(l *Layer) {
@@ -1597,7 +1597,7 @@ func TestValidateSecretAcceptsKeyMustStartWithOv(t *testing.T) {
 	}
 	err := Validate(cfg, vLayers(layers), testProjectDir(t), ResolveOpts{})
 	if err == nil {
-		t.Fatal("expected error when secret_accepts Key does not start with ov/")
+		t.Fatal("expected error when secret_accepts Key does not start with charly/")
 	}
 	if !strings.Contains(err.Error(), "must start with") {
 		t.Errorf("unexpected error: %v", err)
@@ -1605,13 +1605,13 @@ func TestValidateSecretAcceptsKeyMustStartWithOv(t *testing.T) {
 }
 
 // TestValidateSecretAcceptsKeyValidFormats — a handful of Key values that
-// should parse cleanly as <ov/service/key>.
+// should parse cleanly as <charly/service/key>.
 func TestValidateSecretAcceptsKeyValidFormats(t *testing.T) {
 	cases := []string{
-		"ov/api-key/openrouter",
-		"ov/secret/webui_admin_password",
-		"ov/api-key/openai",
-		"ov/secret/immich-api-key",
+		"charly/api-key/openrouter",
+		"charly/secret/webui_admin_password",
+		"charly/api-key/openai",
+		"charly/secret/immich-api-key",
 	}
 	for _, k := range cases {
 		cfg := &Config{Image: map[string]BoxConfig{}}
@@ -1632,12 +1632,12 @@ func TestValidateSecretAcceptsKeyValidFormats(t *testing.T) {
 // fail the secretKeyPattern check.
 func TestValidateSecretAcceptsKeyInvalidFormats(t *testing.T) {
 	cases := []string{
-		"openrouter",            // not <service>/<key>
-		"ov/",                   // empty key segment
-		"ov/api-key",            // only one segment after ov
-		"ov/api-key/",           // empty key segment
-		"ov//openrouter",        // empty service segment
-		"ov/API-KEY/openrouter", // uppercase in service
+		"openrouter",                // not <service>/<key>
+		"charly/",                   // empty key segment
+		"charly/api-key",            // only one segment after charly
+		"charly/api-key/",           // empty key segment
+		"charly//openrouter",        // empty service segment
+		"charly/API-KEY/openrouter", // uppercase in service
 	}
 	for _, k := range cases {
 		cfg := &Config{Image: map[string]BoxConfig{}}

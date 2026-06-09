@@ -15,9 +15,9 @@ func TestTopoSortByDeclarationOrder_DuplicateNamesAcrossRecipes(t *testing.T) {
 	scenarios := []Scenario{
 		{Name: "sshd-binary", Pod: "selftest-layer", SourceRecipe: "from-single-kind-selftest"},
 		{Name: "sshd-wrapper", Pod: "selftest-layer", SourceRecipe: "from-single-kind-selftest"},
-		{Name: "arch-coder-ov", Pod: "selftest-image", SourceRecipe: "from-single-kind-selftest"},
+		{Name: "arch-coder-charly", Pod: "selftest-image", SourceRecipe: "from-single-kind-selftest"},
 		{Name: "sshd-binary", Pod: "composition-app", SourceRecipe: "from-composition-selftest"},
-		{Name: "img-arch-coder-ov", Pod: "composition-app", SourceRecipe: "from-composition-selftest"},
+		{Name: "img-arch-coder-charly", Pod: "composition-app", SourceRecipe: "from-composition-selftest"},
 		{Name: "composition-handwritten-probe", Pod: "composition-app", SourceRecipe: "from-composition-selftest", DependsOn: []string{"sshd-binary"}},
 	}
 	got, err := topoSortByDeclarationOrder(scenarios)
@@ -56,8 +56,8 @@ func TestTopoSortByDeclarationOrder_DuplicateNamesAcrossRecipes(t *testing.T) {
 	wantNames := map[string]int{
 		"sshd-binary":                   2,
 		"sshd-wrapper":                  1,
-		"arch-coder-ov":                 1,
-		"img-arch-coder-ov":             1,
+		"arch-coder-charly":             1,
+		"img-arch-coder-charly":         1,
 		"composition-handwritten-probe": 1,
 	}
 	gotNames := map[string]int{}

@@ -6,7 +6,7 @@ package main
 // `charly eval`. Hermetic: speaks the Kubernetes API directly via the minimal
 // client-go subset (clientcmd + dynamic + apimachinery). No dependency on
 // an external kubectl on PATH. Cluster selection via --cluster <profile>
-// (ClusterProfile in ov/k8s_config.go), --context <ctx>, or --kubeconfig
+// (ClusterProfile in charly/k8s_config.go), --context <ctx>, or --kubeconfig
 // <path>. Output is line-oriented so declarative `k8s:` checks in layer
 // YAMLs can match against it with the existing stdout/contains/equals
 // matchers.

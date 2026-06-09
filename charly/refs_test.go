@@ -462,7 +462,7 @@ func TestCollectRemoteRefsDefaultsBuilderTransitiveLayers(t *testing.T) {
 	if found["github.com/overthinkos/overthink"] != "v1.0.0" {
 		t.Errorf("image's own layer not collected: overthink = %q", found["github.com/overthinkos/overthink"])
 	}
-	// The fix: ov.fedora-builder (from defaults.builder) is built as an
+	// The fix: charly.fedora-builder (from defaults.builder) is built as an
 	// intermediate, so its transitive layer's repo MUST be collected. Absent
 	// before the fix (raw img.Builder was empty) → "unknown layer" at generate.
 	if found["github.com/buildorg/build-layers"] != "v1.0.0" {
@@ -662,7 +662,7 @@ func TestLayerCopySource(t *testing.T) {
 	}
 }
 
-// TestRepoOverrideDir covers the CH_REPO_OVERRIDE parser: exact + short-form
+// TestRepoOverrideDir covers the CHARLY_REPO_OVERRIDE parser: exact + short-form
 // match, miss, multi-pair, and the loud-failure cases (malformed, missing dir,
 // non-directory). The RDD local-override is the supported "verify before push".
 func TestRepoOverrideDir(t *testing.T) {

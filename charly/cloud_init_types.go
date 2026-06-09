@@ -51,9 +51,9 @@ type VmCloudInit struct {
 	// Mirrors overrides distro package-manager mirror URLs.
 	Mirrors *VmCloudInitMirrors `yaml:"mirrors,omitempty"`
 
-	// OvInstall controls how the charly binary lands in the guest.
+	// CharlyInstall controls how the charly binary lands in the guest.
 	// Nil → strategy: auto (scp post-boot by VmDeployTarget).
-	OvInstall *VmOvInstall `yaml:"ov_install,omitempty"`
+	CharlyInstall *VmCharlyInstall `yaml:"charly_install,omitempty"`
 
 	// Extra is raw cloud-config YAML merged into the rendered
 	// user-data after the structured fields. Use only for long-tail
@@ -117,10 +117,10 @@ type VmCloudInitMirrors struct {
 	Pacman []string `yaml:"pacman,omitempty"` // Arch: rewrites /etc/pacman.d/mirrorlist
 }
 
-// VmOvInstall controls how the charly binary lands in the guest. charly is
-// delivered POST-BOOT by VmDeployTarget (EnsureOvInGuest) — never via
+// VmCharlyInstall controls how the charly binary lands in the guest. charly is
+// delivered POST-BOOT by VmDeployTarget (EnsureCharlyInGuest) — never via
 // cloud-init. Default strategy is "auto" when the struct is nil.
-type VmOvInstall struct {
+type VmCharlyInstall struct {
 	// Strategy is one of:
 	//   auto  — deliver the host charly binary (os.Executable()) into the
 	//           guest post-boot via VmDeployTarget, ONLY when the guest's

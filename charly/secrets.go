@@ -89,7 +89,7 @@ type LabelSecretEntry struct {
 // the current behavior.
 //
 //   - Service / Key: optional override for the ResolveCredential lookup.
-//     Defaults: Service="ov/secret", Key=SecretName. When set, these are
+//     Defaults: Service="charly/secret", Key=SecretName. When set, these are
 //     passed through resolveSecretValue to the credential store.
 //   - RotateOnConfig: if true, ProvisionPodmanSecrets bypasses the
 //     podmanSecretExists short-circuit and always rm+creates the podman
@@ -178,7 +178,7 @@ func ProvisionPodmanSecrets(engine, imageName, instance string, secrets []Collec
 					val = cached
 					source = "auto-generated"
 				} else {
-					val, source = generateAndStoreSecret("ov/secret", s.Name)
+					val, source = generateAndStoreSecret("charly/secret", s.Name)
 					promptedValues[s.Name] = val
 				}
 			} else if interactive {
@@ -201,7 +201,7 @@ func ProvisionPodmanSecrets(engine, imageName, instance string, secrets []Collec
 						continue
 					}
 					store := DefaultCredentialStore()
-					if storeErr := store.Set("ov/secret", s.Name, entered); storeErr != nil {
+					if storeErr := store.Set("charly/secret", s.Name, entered); storeErr != nil {
 						fmt.Fprintf(os.Stderr, "  Warning: could not persist secret '%s': %v\n", s.Name, storeErr)
 					}
 					promptedValues[s.Name] = entered
@@ -216,7 +216,7 @@ func ProvisionPodmanSecrets(engine, imageName, instance string, secrets []Collec
 				if s.Env != "" {
 					fmt.Fprintf(os.Stderr, "  %s=xxx charly config %s  (env var override)\n", s.Env, imageName)
 				}
-				fmt.Fprintf(os.Stderr, "  charly secrets set ov/secret %s\n\n", s.Name)
+				fmt.Fprintf(os.Stderr, "  charly secrets set charly/secret %s\n\n", s.Name)
 				continue
 			}
 		}
@@ -258,10 +258,10 @@ func SecretArgs(secrets []CollectedSecret) []string {
 // is queried exactly at (Service, Key) with the Env var as the env override.
 // This is the path used by secret_accepts / secret_requires entries
 // synthesized by CollectLayerSecretAccepts, where the layer author may have
-// set `key: ov/api-key/openrouter` to point at a shared credential namespace.
+// set `key: charly/api-key/openrouter` to point at a shared credential namespace.
 //
 // When Service/Key are unset, the default chain (used by layer-owned secrets)
-// applies: env var → ov/secret/<podman-name> → ov/secret/<bare-secret-name>.
+// applies: env var → charly/secret/<podman-name> → charly/secret/<bare-secret-name>.
 func resolveSecretValue(s CollectedSecret, imageName, instance string) (value, source string) {
 	// Explicit override from CollectLayerSecretAccepts: query exactly once at
 	// (Service, Key), allowing the Env var to win via ResolveCredential's
@@ -290,12 +290,12 @@ func resolveSecretValue(s CollectedSecret, imageName, instance string) (value, s
 			return val, src
 		}
 	}
-	// Try by full podman secret name (e.g. "charly-immich-db-password") — matches `charly secrets set ov/secret charly-immich-db-password`
-	if val, src := ResolveCredential("", "ov/secret", s.Name, ""); val != "" {
+	// Try by full podman secret name (e.g. "charly-immich-db-password") — matches `charly secrets set charly/secret charly-immich-db-password`
+	if val, src := ResolveCredential("", "charly/secret", s.Name, ""); val != "" {
 		return val, src
 	}
 	// Fallback: try by bare secret name (e.g. "db-password")
-	val, src := ResolveCredential("", "ov/secret", s.SecretName, "")
+	val, src := ResolveCredential("", "charly/secret", s.SecretName, "")
 	return val, src
 }
 
@@ -317,7 +317,7 @@ type SecretResolution struct {
 //
 //   - []CollectedSecret: one entry per secret whose value was successfully
 //     resolved (non-empty). Entries carry Service/Key overrides from the
-//     candy manifest `key:` field (default: ov/secret/<env-var-name>) and
+//     candy manifest `key:` field (default: charly/secret/<env-var-name>) and
 //     RotateOnConfig=true so every charly config reconciles them with the
 //     latest credential store value (see plan §2.3).
 //   - []SecretResolution: one entry per input spec, reporting the source
@@ -335,15 +335,16 @@ func CollectLayerSecretAccepts(imageName, instance string, meta *BoxMetadata) (c
 
 	resolveOne := func(dep EnvDependency, required bool) {
 		// Parse the optional Key override (<service>/<key> form, validated
-		// at build time by validateSecretDeps). Default is ov/secret/<name>.
-		service := "ov/secret"
+		// at build time by validateSecretDeps). Default is charly/secret/<name>.
+		service := "charly/secret"
 		key := dep.Name
 		if dep.Key != "" {
-			// Key format is already validated (must match ^ov/.../...$).
-			// Split on the first '/' after the "ov/" prefix.
-			if idx := strings.Index(dep.Key[3:], "/"); idx >= 0 {
-				service = dep.Key[:3+idx]
-				key = dep.Key[3+idx+1:]
+			// Key format is already validated (must match ^charly/.../...$).
+			// Service is everything before the final '/', key is the last
+			// segment (LastIndex avoids depending on the literal prefix length).
+			if idx := strings.LastIndex(dep.Key, "/"); idx >= 0 {
+				service = dep.Key[:idx]
+				key = dep.Key[idx+1:]
 			}
 		}
 
@@ -411,7 +412,7 @@ func credServiceForSecret(envVar string) string {
 	case "VNC_PASSWORD":
 		return CredServiceVNC
 	default:
-		return "ov/secret"
+		return "charly/secret"
 	}
 }
 

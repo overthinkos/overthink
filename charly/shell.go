@@ -116,7 +116,7 @@ func (c *ShellCmd) Run() error {
 		return err
 	}
 	if meta == nil {
-		return fmt.Errorf("image %s has no embedded metadata; rebuild with latest ov", imageRef)
+		return fmt.Errorf("image %s has no embedded metadata; rebuild with latest charly", imageRef)
 	}
 	engine = ResolveImageEngineFromMeta(meta, rt.RunEngine)
 	MergeDeployOntoMetadata(meta, dc, c.Image, c.Instance)

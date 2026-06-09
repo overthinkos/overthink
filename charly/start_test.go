@@ -150,12 +150,12 @@ func TestBuildStartArgsWithEnvVars(t *testing.T) {
 }
 
 func TestBuildStartArgsNoSupervisord(t *testing.T) {
-	args := buildStartArgs("podman", "ghcr.io/overthinkos/fedora-ov:latest", 0, 0, nil, "charly-fedora-ov", nil, nil, false, "127.0.0.1", nil, SecurityConfig{}, []string{"sleep", "infinity"}, "/workspace")
+	args := buildStartArgs("podman", "ghcr.io/overthinkos/charly-fedora:latest", 0, 0, nil, "charly-charly-fedora", nil, nil, false, "127.0.0.1", nil, SecurityConfig{}, []string{"sleep", "infinity"}, "/workspace")
 	want := []string{
 		"podman", "run", "-d", "--rm",
-		"--name", "charly-fedora-ov",
+		"--name", "charly-charly-fedora",
 		"-w", "/workspace",
-		"ghcr.io/overthinkos/fedora-ov:latest",
+		"ghcr.io/overthinkos/charly-fedora:latest",
 		"sleep", "infinity",
 	}
 	if !reflect.DeepEqual(args, want) {

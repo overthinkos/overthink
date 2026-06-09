@@ -1,16 +1,16 @@
 #!/usr/bin/python3
-"""ov-overlay — Wayland overlay daemon/client using gtk4-layer-shell.
+"""charly-overlay — Wayland overlay daemon/client using gtk4-layer-shell.
 
 Dual-mode script:
-  ov-overlay daemon              Start the overlay daemon (GTK4 event loop + socket listener)
-  ov-overlay show --type text    Send a show command to the running daemon
-  ov-overlay hide --name foo     Hide a specific overlay
-  ov-overlay hide --all          Hide all overlays
-  ov-overlay list                List active overlays (JSON)
-  ov-overlay status              Check daemon health
+  charly-overlay daemon              Start the overlay daemon (GTK4 event loop + socket listener)
+  charly-overlay show --type text    Send a show command to the running daemon
+  charly-overlay hide --name foo     Hide a specific overlay
+  charly-overlay hide --all          Hide all overlays
+  charly-overlay list                List active overlays (JSON)
+  charly-overlay status              Check daemon health
 
 The daemon manages multiple named overlay windows on the Wayland OVERLAY layer
-using gtk4-layer-shell. It listens on /tmp/ov-overlay.sock for JSON-line commands.
+using gtk4-layer-shell. It listens on /tmp/charly-overlay.sock for JSON-line commands.
 """
 
 import argparse
@@ -21,7 +21,7 @@ import sys
 import threading
 import time
 
-SOCK_PATH = "/tmp/ov-overlay.sock"
+SOCK_PATH = "/tmp/charly-overlay.sock"
 
 # ---------------------------------------------------------------------------
 # Client mode: connect to daemon, send command, print response
@@ -156,7 +156,7 @@ def run_daemon(args):
 
     class OverlayDaemon:
         def __init__(self):
-            self.app = Gtk.Application(application_id="com.overthink.overlay")
+            self.app = Gtk.Application(application_id="ai.opencharly.overlay")
             self.overlays = {}  # name -> {"window": Gtk.Window, "type": str, "timeout_id": int|None}
             self.app.connect("activate", self.on_activate)
             self.server_sock = None
@@ -181,7 +181,7 @@ def run_daemon(args):
             self.keeper.set_default_size(1, 1)
             Gtk4LayerShell.init_for_window(self.keeper)
             Gtk4LayerShell.set_layer(self.keeper, Gtk4LayerShell.Layer.BACKGROUND)
-            Gtk4LayerShell.set_namespace(self.keeper, "ov-overlay-keeper")
+            Gtk4LayerShell.set_namespace(self.keeper, "charly-overlay-keeper")
             Gtk4LayerShell.set_keyboard_mode(self.keeper, Gtk4LayerShell.KeyboardMode.NONE)
             self.keeper.set_opacity(0)
             self.keeper.present()
@@ -254,7 +254,7 @@ def run_daemon(args):
             win = Gtk.Window(application=self.app)
             Gtk4LayerShell.init_for_window(win)
             Gtk4LayerShell.set_layer(win, Gtk4LayerShell.Layer.OVERLAY)
-            Gtk4LayerShell.set_namespace(win, "ov-overlay-%s" % name)
+            Gtk4LayerShell.set_namespace(win, "charly-overlay-%s" % name)
             Gtk4LayerShell.set_keyboard_mode(win, Gtk4LayerShell.KeyboardMode.NONE)
 
             # Position / anchoring
@@ -587,7 +587,7 @@ def run_daemon(args):
 # ---------------------------------------------------------------------------
 
 def main():
-    parser = argparse.ArgumentParser(prog="ov-overlay", description="Wayland overlay daemon/client")
+    parser = argparse.ArgumentParser(prog="charly-overlay", description="Wayland overlay daemon/client")
     sub = parser.add_subparsers(dest="command")
 
     # daemon

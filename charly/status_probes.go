@@ -52,7 +52,7 @@ var (
 	guestProbes = []GuestProbe{
 		supervisordProbe{},
 		dbusProbe{},
-		ovProbe{},
+		charlyProbe{},
 		wlProbe{},
 		swayProbe{},
 	}
@@ -139,21 +139,21 @@ func (dbusProbe) Parse(stdout string) ToolStatus {
 	return ts
 }
 
-type ovProbe struct{}
+type charlyProbe struct{}
 
-func (ovProbe) Name() string { return "charly" }
-func (ovProbe) Snippet() string {
+func (charlyProbe) Name() string { return "charly" }
+func (charlyProbe) Snippet() string {
 	return `command -v charly >/dev/null 2>&1 || exit 0
-echo OV=1
+echo CHARLY=1
 charly version 2>/dev/null || true`
 }
-func (ovProbe) Parse(stdout string) ToolStatus {
+func (charlyProbe) Parse(stdout string) ToolStatus {
 	ts := ToolStatus{Name: "charly", Status: "-"}
-	if !strings.Contains(stdout, "OV=1") {
+	if !strings.Contains(stdout, "CHARLY=1") {
 		return ts
 	}
 	ts.Status = "ok"
-	body := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(stdout), "OV=1"))
+	body := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(stdout), "CHARLY=1"))
 	if body != "" {
 		ts.Detail = body
 	}

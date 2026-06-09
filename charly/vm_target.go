@@ -160,13 +160,13 @@ func (t *VmTarget) EnsureRunning() error {
 // IsSocket / SocketPath are set when the resolved <listen> element
 // is `<listen type='socket'/>`. Host / Port are set for TCP-exposed
 // listeners. The two are mutually exclusive — libvirt picks the
-// first listener when there are several on one <graphics>, but ov
+// first listener when there are several on one <graphics>, but charly
 // always prefers the socket when present (matches virt-manager's
 // auto-forwarding behavior).
 //
 // TunnelNeeded is true when the VmTarget was resolved over a remote
 // libvirt URI (qemu+ssh://…); callers must open an SSH-forwarded
-// local endpoint via ov/ssh_tunnel.go before dialing.
+// local endpoint via charly/ssh_tunnel.go before dialing.
 type DisplayEndpoint struct {
 	Kind         string // "spice" | "vnc"
 	IsSocket     bool

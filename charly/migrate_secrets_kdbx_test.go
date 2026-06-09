@@ -123,12 +123,12 @@ func TestSecretsCLI_ConfigBackendRoundTrip(t *testing.T) {
 	cleanup := setupIsolatedConfigStore(t)
 	defer cleanup()
 
-	set := &SecretsSetCmd{Service: "ov/secret", Key: "R10_PROBE", Value: "hello"}
+	set := &SecretsSetCmd{Service: "charly/secret", Key: "R10_PROBE", Value: "hello"}
 	if err := set.Run(); err != nil {
 		t.Fatalf("set: %v", err)
 	}
 
-	val, err := DefaultCredentialStore().Get("ov/secret", "R10_PROBE")
+	val, err := DefaultCredentialStore().Get("charly/secret", "R10_PROBE")
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
@@ -142,7 +142,7 @@ func TestSecretsCLI_ConfigBackendRoundTrip(t *testing.T) {
 	}
 	found := false
 	for _, n := range names {
-		if n.Service == "ov/secret" && n.Key == "R10_PROBE" {
+		if n.Service == "charly/secret" && n.Key == "R10_PROBE" {
 			found = true
 		}
 	}

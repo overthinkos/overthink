@@ -8,7 +8,7 @@ import (
 
 // recordingExecutor is a DeployExecutor that returns a single canned RunCapture
 // stdout (the guest's `charly version` probe output) and records every PutFile call,
-// so EnsureOvInVenue's decision (use the system charly vs deliver a /tmp copy) can be
+// so EnsureCharlyInVenue's decision (use the system charly vs deliver a /tmp copy) can be
 // asserted without a real pod/VM. Distinct from evalrun_test.go's fakeExecutor.
 //
 // tmpExists models the idempotency probe ("/tmp/charly-<calver> version"): when
@@ -61,11 +61,11 @@ func (e *recordingExecutor) ResolveHome(_ context.Context, _ string) (string, er
 	return "/home/fake", nil
 }
 
-// TestEnsureOvInVenue covers the generic venue-agnostic charly resolver: use the
+// TestEnsureCharlyInVenue covers the generic venue-agnostic charly resolver: use the
 // venue's SYSTEM charly when it is current (>= host by CalVer; never shadow, never
 // downgrade); deliver the host binary to a /tmp path (outside $PATH) ONLY when
 // the venue charly is absent or older.
-func TestEnsureOvInVenue(t *testing.T) {
+func TestEnsureCharlyInVenue(t *testing.T) {
 	saved := BuildCalVer
 	defer func() { BuildCalVer = saved }()
 	BuildCalVer = "2026.154.1000" // host identity
@@ -85,12 +85,12 @@ func TestEnsureOvInVenue(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ex := &recordingExecutor{captureOut: tt.captureOut}
-			cmd, err := EnsureOvInVenue(context.Background(), ex, EmitOpts{})
+			cmd, err := EnsureCharlyInVenue(context.Background(), ex, EmitOpts{})
 			if err != nil {
-				t.Fatalf("EnsureOvInVenue: %v", err)
+				t.Fatalf("EnsureCharlyInVenue: %v", err)
 			}
 			if cmd != tt.wantCmd {
-				t.Errorf("ovCmd = %q, want %q", cmd, tt.wantCmd)
+				t.Errorf("charlyCmd = %q, want %q", cmd, tt.wantCmd)
 			}
 			gotPush := false
 			for _, p := range ex.putFiles {
@@ -104,7 +104,7 @@ func TestEnsureOvInVenue(t *testing.T) {
 					}
 				}
 				if p.remote == "/usr/local/bin/charly" {
-					t.Errorf("must NEVER write /usr/local/bin/charly (shadows the system ov); got %+v", p)
+					t.Errorf("must NEVER write /usr/local/bin/charly (shadows the system charly); got %+v", p)
 				}
 			}
 			if gotPush != tt.wantPush {
@@ -114,21 +114,21 @@ func TestEnsureOvInVenue(t *testing.T) {
 	}
 }
 
-// TestEnsureOvInVenue_Idempotent verifies that when a prior /tmp copy already
+// TestEnsureCharlyInVenue_Idempotent verifies that when a prior /tmp copy already
 // exists and runs (the venue charly is absent, but /tmp/charly-<calver> is present), the
 // resolver reuses it WITHOUT re-transferring the 27 MB binary.
-func TestEnsureOvInVenue_Idempotent(t *testing.T) {
+func TestEnsureCharlyInVenue_Idempotent(t *testing.T) {
 	saved := BuildCalVer
 	defer func() { BuildCalVer = saved }()
 	BuildCalVer = "2026.154.1000"
 
 	ex := &recordingExecutor{captureOut: "", tmpExists: true} // venue charly absent, prior /tmp copy present
-	cmd, err := EnsureOvInVenue(context.Background(), ex, EmitOpts{})
+	cmd, err := EnsureCharlyInVenue(context.Background(), ex, EmitOpts{})
 	if err != nil {
-		t.Fatalf("EnsureOvInVenue: %v", err)
+		t.Fatalf("EnsureCharlyInVenue: %v", err)
 	}
 	if cmd != "/tmp/charly-2026.154.1000" {
-		t.Errorf("ovCmd = %q, want the reused /tmp path", cmd)
+		t.Errorf("charlyCmd = %q, want the reused /tmp path", cmd)
 	}
 	if len(ex.putFiles) != 0 {
 		t.Errorf("reused prior copy must NOT re-transfer; got PutFile calls %+v", ex.putFiles)

@@ -21,7 +21,7 @@ Architecture:
     selkies process (existing capture)
         └── WebSocket :8081 broadcasts H.264 frames + Opus audio
             └── This bridge (internal WebSocket client)
-                └── Unix socket /tmp/ov-capture.sock
+                └── Unix socket /tmp/charly-capture.sock
                     ├── pixelflux-screenshot (SCREENSHOT → PNG)
                     └── pixelflux-record (STREAM → continuous H.264)
 
@@ -29,7 +29,7 @@ The bridge filters binary messages by H.264 NAL start codes, dropping Opus
 audio packets (prefixed 0x01 0x00 by selkies). Audio for recording is
 captured separately via PulseAudio, not through this bridge.
 
-Protocol on /tmp/ov-capture.sock:
+Protocol on /tmp/charly-capture.sock:
     SCREENSHOT\n  → 4-byte length + PNG data (or 0 + reason string on failure)
     STREAM\n      → continuous (4-byte length + raw H.264 frame data)
     STATUS\n      → 4-byte length + JSON status
@@ -52,7 +52,7 @@ import sys
 import threading
 import time
 
-SOCK_PATH = "/tmp/ov-capture.sock"
+SOCK_PATH = "/tmp/charly-capture.sock"
 WS_URL_CONTROLLER = "ws://localhost:8081/"
 WS_URL_VIEWER = "ws://localhost:8081/#shared"
 

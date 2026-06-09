@@ -30,7 +30,7 @@ type RuntimeConfig struct {
 	KeyringKeys            []string          `yaml:"keyring_keys,omitempty"`             // Shadow index: names of keys stored in keyring (no values)
 	KeyringCollectionLabel string            `yaml:"keyring_collection_label,omitempty"` // Preferred Secret Service collection label; empty means use default alias then iterate.
 	// HostAliases maps short names (e.g. "o") to SSH targets (e.g.
-	// "atrawog@o.atrawog.org"). Consulted by ov's --host flag when
+	// "atrawog@o.atrawog.org"). Consulted by charly's --host flag when
 	// re-execing commands on remote machines. Set via
 	// `charly settings set hosts.<alias> <ssh-target>`.
 	HostAliases map[string]string `yaml:"host_aliases,omitempty"`
@@ -171,17 +171,17 @@ func ResolveRuntime() (*ResolvedRuntime, error) {
 	}
 
 	rt := &ResolvedRuntime{
-		BuildEngine:          resolveValue(os.Getenv("CH_BUILD_ENGINE"), cfg.Engine.Build, "auto"),
-		RunEngine:            resolveValue(os.Getenv("CH_RUN_ENGINE"), cfg.Engine.Run, "auto"),
-		Rootful:              resolveValue(os.Getenv("CH_ENGINE_ROOTFUL"), cfg.Engine.Rootful, "auto"),
-		RunMode:              resolveValue(os.Getenv("CH_RUN_MODE"), cfg.RunMode, "auto"),
-		AutoEnable:           resolveAutoEnable(os.Getenv("CH_AUTO_ENABLE"), cfg.AutoEnable),
-		BindAddress:          resolveValue(os.Getenv("CH_BIND_ADDRESS"), cfg.BindAddress, "127.0.0.1"),
-		EncryptedStoragePath: resolveEncryptedStoragePath(os.Getenv("CH_ENCRYPTED_STORAGE_PATH"), cfg.EncryptedStoragePath),
-		VolumesPath:          resolveVolumesPath(os.Getenv("CH_VOLUMES_PATH"), cfg.VolumesPath),
-		ForwardGpgAgent:      resolveAutoEnable(os.Getenv("CH_FORWARD_GPG_AGENT"), cfg.ForwardGpgAgent),
-		ForwardSshAgent:      resolveAutoEnable(os.Getenv("CH_FORWARD_SSH_AGENT"), cfg.ForwardSshAgent),
-		VmBackend:            resolveValue(os.Getenv("CH_VM_BACKEND"), cfg.Vm.Backend, "auto"),
+		BuildEngine:          resolveValue(os.Getenv("CHARLY_BUILD_ENGINE"), cfg.Engine.Build, "auto"),
+		RunEngine:            resolveValue(os.Getenv("CHARLY_RUN_ENGINE"), cfg.Engine.Run, "auto"),
+		Rootful:              resolveValue(os.Getenv("CHARLY_ENGINE_ROOTFUL"), cfg.Engine.Rootful, "auto"),
+		RunMode:              resolveValue(os.Getenv("CHARLY_RUN_MODE"), cfg.RunMode, "auto"),
+		AutoEnable:           resolveAutoEnable(os.Getenv("CHARLY_AUTO_ENABLE"), cfg.AutoEnable),
+		BindAddress:          resolveValue(os.Getenv("CHARLY_BIND_ADDRESS"), cfg.BindAddress, "127.0.0.1"),
+		EncryptedStoragePath: resolveEncryptedStoragePath(os.Getenv("CHARLY_ENCRYPTED_STORAGE_PATH"), cfg.EncryptedStoragePath),
+		VolumesPath:          resolveVolumesPath(os.Getenv("CHARLY_VOLUMES_PATH"), cfg.VolumesPath),
+		ForwardGpgAgent:      resolveAutoEnable(os.Getenv("CHARLY_FORWARD_GPG_AGENT"), cfg.ForwardGpgAgent),
+		ForwardSshAgent:      resolveAutoEnable(os.Getenv("CHARLY_FORWARD_SSH_AGENT"), cfg.ForwardSshAgent),
+		VmBackend:            resolveValue(os.Getenv("CHARLY_VM_BACKEND"), cfg.Vm.Backend, "auto"),
 	}
 
 	// Auto-detect engines
@@ -731,14 +731,14 @@ func ListConfigValues() ([]configKeySource, error) {
 
 	// Resolve auto_enable separately since it's a bool pointer
 	autoEnableEntry := func() configKeySource {
-		envVal := os.Getenv("CH_AUTO_ENABLE")
+		envVal := os.Getenv("CHARLY_AUTO_ENABLE")
 		if envVal != "" {
 			resolved := "false"
 			if envVal == "true" || envVal == "1" {
 				resolved = "true"
 			}
-			source := "env (CH_AUTO_ENABLE)"
-			if DotenvLoaded("CH_AUTO_ENABLE") {
+			source := "env (CHARLY_AUTO_ENABLE)"
+			if DotenvLoaded("CHARLY_AUTO_ENABLE") {
 				source = "env (.env)"
 			}
 			return configKeySource{Key: "auto_enable", Value: resolved, Source: source}
@@ -783,10 +783,10 @@ func ListConfigValues() ([]configKeySource, error) {
 
 	// Resolve vm.cpus separately since it's an int
 	vmCpusEntry := func() configKeySource {
-		envVal := os.Getenv("CH_VM_CPUS")
+		envVal := os.Getenv("CHARLY_VM_CPUS")
 		if envVal != "" {
-			source := "env (CH_VM_CPUS)"
-			if DotenvLoaded("CH_VM_CPUS") {
+			source := "env (CHARLY_VM_CPUS)"
+			if DotenvLoaded("CHARLY_VM_CPUS") {
 				source = "env (.env)"
 			}
 			return configKeySource{Key: "vm.cpus", Value: envVal, Source: source}
@@ -798,25 +798,25 @@ func ListConfigValues() ([]configKeySource, error) {
 	}
 
 	out := []configKeySource{
-		resolve("engine.build", "CH_BUILD_ENGINE", cfg.Engine.Build, "auto"),
-		resolve("engine.run", "CH_RUN_ENGINE", cfg.Engine.Run, "auto"),
-		resolve("engine.rootful", "CH_ENGINE_ROOTFUL", cfg.Engine.Rootful, "auto"),
-		resolve("run_mode", "CH_RUN_MODE", cfg.RunMode, "auto"),
+		resolve("engine.build", "CHARLY_BUILD_ENGINE", cfg.Engine.Build, "auto"),
+		resolve("engine.run", "CHARLY_RUN_ENGINE", cfg.Engine.Run, "auto"),
+		resolve("engine.rootful", "CHARLY_ENGINE_ROOTFUL", cfg.Engine.Rootful, "auto"),
+		resolve("run_mode", "CHARLY_RUN_MODE", cfg.RunMode, "auto"),
 		autoEnableEntry(),
-		resolve("bind_address", "CH_BIND_ADDRESS", cfg.BindAddress, "127.0.0.1"),
-		resolve("encrypted_storage_path", "CH_ENCRYPTED_STORAGE_PATH", cfg.EncryptedStoragePath, defaultStoragePath),
-		resolve("volumes_path", "CH_VOLUMES_PATH", cfg.VolumesPath, defaultVolumesPath),
-		resolve("secret_backend", "CH_SECRET_BACKEND", cfg.SecretBackend, "auto"),
-		resolve("keyring_collection_label", "CH_KEYRING_COLLECTION_LABEL", cfg.KeyringCollectionLabel, ""),
-		boolEntry("forward_gpg_agent", "CH_FORWARD_GPG_AGENT", cfg.ForwardGpgAgent, "true"),
-		boolEntry("forward_ssh_agent", "CH_FORWARD_SSH_AGENT", cfg.ForwardSshAgent, "true"),
-		resolve("vm.backend", "CH_VM_BACKEND", cfg.Vm.Backend, "auto"),
-		resolve("vm.disk_size", "CH_VM_DISK_SIZE", cfg.Vm.DiskSize, "10 GiB"),
-		resolve("vm.root_size", "CH_VM_ROOT_SIZE", cfg.Vm.RootSize, ""),
-		resolve("vm.ram", "CH_VM_RAM", cfg.Vm.Ram, "4G"),
+		resolve("bind_address", "CHARLY_BIND_ADDRESS", cfg.BindAddress, "127.0.0.1"),
+		resolve("encrypted_storage_path", "CHARLY_ENCRYPTED_STORAGE_PATH", cfg.EncryptedStoragePath, defaultStoragePath),
+		resolve("volumes_path", "CHARLY_VOLUMES_PATH", cfg.VolumesPath, defaultVolumesPath),
+		resolve("secret_backend", "CHARLY_SECRET_BACKEND", cfg.SecretBackend, "auto"),
+		resolve("keyring_collection_label", "CHARLY_KEYRING_COLLECTION_LABEL", cfg.KeyringCollectionLabel, ""),
+		boolEntry("forward_gpg_agent", "CHARLY_FORWARD_GPG_AGENT", cfg.ForwardGpgAgent, "true"),
+		boolEntry("forward_ssh_agent", "CHARLY_FORWARD_SSH_AGENT", cfg.ForwardSshAgent, "true"),
+		resolve("vm.backend", "CHARLY_VM_BACKEND", cfg.Vm.Backend, "auto"),
+		resolve("vm.disk_size", "CHARLY_VM_DISK_SIZE", cfg.Vm.DiskSize, "10 GiB"),
+		resolve("vm.root_size", "CHARLY_VM_ROOT_SIZE", cfg.Vm.RootSize, ""),
+		resolve("vm.ram", "CHARLY_VM_RAM", cfg.Vm.Ram, "4G"),
 		vmCpusEntry(),
-		resolve("vm.rootfs", "CH_VM_ROOTFS", cfg.Vm.Rootfs, "ext4"),
-		resolve("vm.transport", "CH_VM_TRANSPORT", cfg.Vm.Transport, ""),
+		resolve("vm.rootfs", "CHARLY_VM_ROOTFS", cfg.Vm.Rootfs, "ext4"),
+		resolve("vm.transport", "CHARLY_VM_TRANSPORT", cfg.Vm.Transport, ""),
 	}
 	// Append host aliases (dynamic keys — one per map entry).
 	for name, target := range cfg.HostAliases {

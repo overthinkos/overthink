@@ -19,7 +19,7 @@ import (
 )
 
 // appium.go implements `charly eval appium …` — the host-side Appium
-// WebDriver client. The host `ov` binary connects to the container's
+// WebDriver client. The host `charly` binary connects to the container's
 // host-published Appium port (container :4723 → host's HOST_PORT:4723,
 // e.g. 35001 on eval-android-emulator-pod) using github.com/tebeka/selenium
 // (W3C WebDriver client, talks Appium 2.x and 3.x because W3C is stable).

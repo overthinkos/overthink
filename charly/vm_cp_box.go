@@ -8,12 +8,12 @@ import (
 	"strings"
 )
 
-// VmCpImageCmd loads a locally-built container image into a running VM guest's
+// VmCpBoxCmd loads a locally-built container image into a running VM guest's
 // podman storage via `podman save | scp | podman load`. This is the host→guest
 // delivery path for images that are NOT on a registry — the case the
 // nested-pod-in-VM capability hits: deployNestedPodsInGuest host-builds a nested
-// pod's image (e.g. `cachyos.selkies-kde-nvidia`), cp-images it in as
-// `localhost/charly-<child>:latest`, then the guest's own `charly deploy from-image`
+// pod's image (e.g. `cachyos.selkies-kde-nvidia`), cp-boxes it in as
+// `localhost/charly-<child>:latest`, then the guest's own `charly deploy from-box`
 // brings it up as a persistent quadlet — all offline, no registry.
 //
 // Idempotent: skips the transfer when the guest already has the image.
@@ -55,7 +55,7 @@ func hostImageExists(engine, ref string) bool {
 //     --device nvidia.com/gpu=all` consumer that needs /dev/nvidia* via root.
 //   - rootless == true  → the SSH user's ROOTLESS storage (`podman`, no sudo).
 //     This is what the nested-pod-in-VM deploy needs: deployNestedPodsInGuest
-//     brings the pod up with the guest user's own `charly deploy from-image` (a
+//     brings the pod up with the guest user's own `charly deploy from-box` (a
 //     --user quadlet), which reads the USER's podman storage — so the image must
 //     land there, not in root's. Rootless GPU works via CDI (/dev/nvidia* are
 //     world-rw; the nvidia-driver layer's boot service writes a world-readable
@@ -93,10 +93,10 @@ func TransferImageToGuest(ctx context.Context, de DeployExecutor, hostEngine, re
 	// Verified idempotency.
 	if guestHasImage(ctx, de, probeRef, rootless) {
 		if !guestImageCorrupt(ctx, de, probeRef, rootless) {
-			fmt.Fprintf(os.Stderr, "cp-image: guest already has %s (verified intact) — skipping transfer\n", probeRef)
+			fmt.Fprintf(os.Stderr, "cp-box: guest already has %s (verified intact) — skipping transfer\n", probeRef)
 			return nil
 		}
-		fmt.Fprintf(os.Stderr, "cp-image: guest %s is present but corrupt (torn overlay) — re-loading\n", probeRef)
+		fmt.Fprintf(os.Stderr, "cp-box: guest %s is present but corrupt (torn overlay) — re-loading\n", probeRef)
 		removeGuestImages(ctx, de, rootless, probeRef, ref)
 	}
 
@@ -114,22 +114,22 @@ func TransferImageToGuest(ctx context.Context, de DeployExecutor, hostEngine, re
 		return err
 	}
 	if guestImageCorrupt(ctx, de, probeRef, rootless) {
-		fmt.Fprintf(os.Stderr, "cp-image: load produced a corrupt %s — re-streaming once\n", probeRef)
+		fmt.Fprintf(os.Stderr, "cp-box: load produced a corrupt %s — re-streaming once\n", probeRef)
 		removeGuestImages(ctx, de, rootless, probeRef, ref)
 		if err := streamLoadAndTag(ctx, sshExec, de, hostEngine, ref, as, rootless, opts); err != nil {
 			return err
 		}
 		if guestImageCorrupt(ctx, de, probeRef, rootless) {
-			return fmt.Errorf("cp-image: %s is still corrupt in guest storage after a clean re-load — transfer unreliable", probeRef)
+			return fmt.Errorf("cp-box: %s is still corrupt in guest storage after a clean re-load — transfer unreliable", probeRef)
 		}
 	}
-	fmt.Fprintf(os.Stderr, "cp-image: %s is now in guest storage (verified intact)\n", probeRef)
+	fmt.Fprintf(os.Stderr, "cp-box: %s is now in guest storage (verified intact)\n", probeRef)
 	return nil
 }
 
 // podmanCmd returns the guest podman invocation prefix for the chosen storage:
 // "podman" (the SSH user's rootless storage) when rootless, else "sudo podman"
-// (root storage). Used everywhere cp-image touches guest podman so root/rootless
+// (root storage). Used everywhere cp-box touches guest podman so root/rootless
 // stays consistent across the load, the integrity probe, and the tag.
 func podmanCmd(rootless bool) string {
 	if rootless {
@@ -180,7 +180,7 @@ func removeGuestImages(ctx context.Context, de DeployExecutor, rootless bool, re
 // (when `as` is set) tags the loaded ref under that stable name. Disk-backed on
 // the guest (podman extracts into /var/lib/containers), so no tmpfs limit.
 func streamLoadAndTag(ctx context.Context, sshExec *SSHExecutor, de DeployExecutor, hostEngine, ref, as string, rootless bool, opts EmitOpts) error {
-	fmt.Fprintf(os.Stderr, "cp-image: streaming %s into guest podman (save | ssh load)...\n", ref)
+	fmt.Fprintf(os.Stderr, "cp-box: streaming %s into guest podman (save | ssh load)...\n", ref)
 	var sshArgs []string
 	if rootless {
 		sshArgs = append(sshExec.sshBaseArgs(), "podman", "load")
@@ -191,25 +191,25 @@ func streamLoadAndTag(ctx context.Context, sshExec *SSHExecutor, de DeployExecut
 	load := osExecCommand(ctx, "ssh", sshArgs...)
 	pipe, err := save.StdoutPipe()
 	if err != nil {
-		return fmt.Errorf("cp-image: stdout pipe: %w", err)
+		return fmt.Errorf("cp-box: stdout pipe: %w", err)
 	}
 	load.Stdin = pipe
 	load.Stdout = os.Stderr
 	load.Stderr = os.Stderr
 	save.Stderr = os.Stderr
 	if err := load.Start(); err != nil {
-		return fmt.Errorf("cp-image: start ssh load: %w", err)
+		return fmt.Errorf("cp-box: start ssh load: %w", err)
 	}
 	if err := save.Start(); err != nil {
-		return fmt.Errorf("cp-image: start %s save: %w", hostEngine, err)
+		return fmt.Errorf("cp-box: start %s save: %w", hostEngine, err)
 	}
 	saveErr := save.Wait()
 	loadErr := load.Wait()
 	if saveErr != nil {
-		return fmt.Errorf("cp-image: %s save %s: %w", hostEngine, ref, saveErr)
+		return fmt.Errorf("cp-box: %s save %s: %w", hostEngine, ref, saveErr)
 	}
 	if loadErr != nil {
-		return fmt.Errorf("cp-image: guest podman load: %w", loadErr)
+		return fmt.Errorf("cp-box: guest podman load: %w", loadErr)
 	}
 	if as != "" {
 		// Tag in the SAME storage the load targeted: as the user (RunUser +
@@ -222,7 +222,7 @@ func streamLoadAndTag(ctx context.Context, sshExec *SSHExecutor, de DeployExecut
 			tagErr = de.RunSystem(ctx, "sudo podman tag "+deployShellQuote(ref)+" "+deployShellQuote(as), opts)
 		}
 		if tagErr != nil {
-			return fmt.Errorf("cp-image: guest podman tag %s -> %s: %w", ref, as, tagErr)
+			return fmt.Errorf("cp-box: guest podman tag %s -> %s: %w", ref, as, tagErr)
 		}
 	}
 	return nil

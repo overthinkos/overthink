@@ -368,8 +368,8 @@ func AddLayerDeploymentVia(exec DeployExecutor, paths *LedgerPaths, layerName, d
 	if err != nil {
 		return fmt.Errorf("AddLayerDeploymentVia: marshal: %w", err)
 	}
-	script := mkdirScript + " && cat > " + remoteFile + " <<'OV_LEDGER_EOF'\n" +
-		string(encoded) + "\nOV_LEDGER_EOF\n"
+	script := mkdirScript + " && cat > " + remoteFile + " <<'CHARLY_LEDGER_EOF'\n" +
+		string(encoded) + "\nCHARLY_LEDGER_EOF\n"
 	if runErr := exec.RunUser(ctx, script, EmitOpts{}); runErr != nil {
 		return fmt.Errorf("AddLayerDeploymentVia: write via executor: %w", runErr)
 	}
@@ -393,7 +393,7 @@ func WriteDeployRecordVia(exec DeployExecutor, paths *LedgerPaths, rec *DeployRe
 	if err != nil {
 		return fmt.Errorf("WriteDeployRecordVia: marshal: %w", err)
 	}
-	script := "mkdir -p " + remoteDir + " && cat > " + remoteFile + " <<'OV_LEDGER_EOF'\n" +
-		string(encoded) + "\nOV_LEDGER_EOF\n"
+	script := "mkdir -p " + remoteDir + " && cat > " + remoteFile + " <<'CHARLY_LEDGER_EOF'\n" +
+		string(encoded) + "\nCHARLY_LEDGER_EOF\n"
 	return exec.RunUser(ctx, script, EmitOpts{})
 }

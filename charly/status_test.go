@@ -322,8 +322,8 @@ func TestDbusProbe_NotPresent(t *testing.T) {
 	}
 }
 
-func TestOvProbe_Present(t *testing.T) {
-	got := ovProbe{}.Parse("OV=1\n2026.05.02-1234\n")
+func TestCharlyProbe_Present(t *testing.T) {
+	got := charlyProbe{}.Parse("CHARLY=1\n2026.05.02-1234\n")
 	if got.Status != "ok" || got.Detail != "2026.05.02-1234" {
 		t.Errorf("got %+v", got)
 	}

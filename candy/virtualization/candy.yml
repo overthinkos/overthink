@@ -158,7 +158,7 @@ candy:
         # supervisord render: foreground daemon (--timeout 0 keeps it
         # alive instead of self-exiting on idle). priority=5 places it
         # ahead of every desktop service. No `user=` directive — the
-        # daemon inherits supervisord's uid (root on fedora-charly/arch-charly,
+        # daemon inherits supervisord's uid (root on charly-fedora/charly-arch,
         # user on openclaw-desktop); qemu:///session keys off
         # $XDG_RUNTIME_DIR so both work.
         - name: virtqemud

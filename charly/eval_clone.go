@@ -4,7 +4,7 @@ package main
 //
 // The harness's per-target driver clones the project's bind-mounted
 // /workspace (or $PWD on host targets) into a per-run scratch dir on a
-// fresh oveval/<run-id> branch. Per-iteration commits land in that
+// fresh charlyeval/<run-id> branch. Per-iteration commits land in that
 // clone. At end of run the branch pushes back to the project repo for
 // an audit trail.
 //
@@ -44,7 +44,7 @@ type RunLayout struct {
 	HarnessRoot string // <ProjectDir>/.eval/<score>
 	RunDir      string // <HarnessRoot>/runs/<run-id>
 	RepoDir     string // <HarnessRoot>/runs/<run-id>/repo (per-run clone)
-	Branch      string // "oveval/<run-id>"
+	Branch      string // "charlyeval/<run-id>"
 	// Phase, when > 0, segregates iteration dirs under
 	// <RunDir>/phase<Phase>/iter<k>/. Set by the progressive caller
 	// before each phase-RunHarness call. Zero = single-phase
@@ -70,7 +70,7 @@ func NewRunLayout(projectDir, score, runID string) RunLayout {
 		HarnessRoot: root,
 		RunDir:      runDir,
 		RepoDir:     filepath.Join(runDir, "repo"),
-		Branch:      "oveval/" + runID,
+		Branch:      "charlyeval/" + runID,
 	}
 }
 
@@ -121,7 +121,7 @@ func (l RunLayout) NoteDir() string {
 }
 
 // CreateRunClone creates a per-run scratch clone at l.RepoDir on a
-// fresh branch oveval/<run-id>. Source: l.ProjectDir.
+// fresh branch charlyeval/<run-id>. Source: l.ProjectDir.
 func CreateRunClone(ctx context.Context, l RunLayout) error {
 	if err := os.MkdirAll(l.RunDir, 0o755); err != nil {
 		return fmt.Errorf("create run dir %s: %w", l.RunDir, err)
@@ -163,7 +163,7 @@ func CreateRunClone(ctx context.Context, l RunLayout) error {
 	}
 
 	for _, kv := range [][2]string{
-		{"user.email", "eval@overthinkos.local"},
+		{"user.email", "eval@opencharly.local"},
 		{"user.name", "charly eval"},
 	} {
 		c := exec.CommandContext(ctx, "git", "-C", l.RepoDir, "config", kv[0], kv[1])
@@ -302,7 +302,7 @@ func ListRuns(ctx context.Context, projectDir string) ([]RunSummary, error) {
 			if st, err := os.Stat(filepath.Join(s.RunDir, "repo")); err == nil && st.IsDir() {
 				s.HasRepo = true
 			}
-			s.BranchExists = branchExists(ctx, projectDir, "oveval/"+runID)
+			s.BranchExists = branchExists(ctx, projectDir, "charlyeval/"+runID)
 			s.StartedUTC = parseRunIDTimestamp(runID)
 			out = append(out, s)
 		}

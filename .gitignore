@@ -51,7 +51,6 @@ deploy.local.yml
 .build/
 bin/
 charly/charly
-charly/ov
 output/
 dist/
 

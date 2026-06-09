@@ -54,7 +54,7 @@ func TestHostDeployTargetDryRunShellHook(t *testing.T) {
 	if err != nil {
 		t.Fatalf("~/.bashrc missing: %v", err)
 	}
-	if !strings.Contains(string(profile), "# overthink:begin") {
+	if !strings.Contains(string(profile), "# opencharly:begin") {
 		t.Errorf("managed block not inserted:\n%s", profile)
 	}
 

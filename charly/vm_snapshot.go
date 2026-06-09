@@ -108,7 +108,7 @@ func snapshotsDir(vmName string) (string, error) {
 // explicit override; this helper is for the registry's own bookkeeping.
 func vmDiskPath(vmName string) (string, error) {
 	// Per-VM disk dir used by the charly vm build cloud_image / bootc / bootstrap
-	// paths. (See ov/vm_create_spec.go which resolves the same per-VM
+	// paths. (See charly/vm_create_spec.go which resolves the same per-VM
 	// output/qcow2/<vm>/disk.qcow2.)
 	cwd, err := os.Getwd()
 	if err != nil {

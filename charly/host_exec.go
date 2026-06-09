@@ -22,7 +22,7 @@ import (
 // invocation to a remote machine via SSH. False when:
 //   - cli.Host is empty
 //   - the top-level command path starts with one of the LocalOnly
-//     commands (settings, version, ssh) — these manage the LOCAL ov
+//     commands (settings, version, ssh) — these manage the LOCAL charly
 //     installation and must not be re-execed.
 //
 // `cmdPath` is the space-separated path reported by Kong (e.g.
@@ -46,7 +46,7 @@ func shouldReexecForHost(cli *CLI, cmdPath string) bool {
 // local path flags (--dir/-C, --repo), then invokes
 // `ssh <resolved-target> charly <rest of argv>`. Stdin/stdout/stderr are
 // piped straight through. The returned exit code is whatever `ssh`
-// exits with (which propagates the remote `ov` exit code).
+// exits with (which propagates the remote `charly` exit code).
 func ReexecOverSSH(cli *CLI) int {
 	target, err := resolveHostAlias(cli.Host)
 	if err != nil {

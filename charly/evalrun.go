@@ -190,7 +190,7 @@ type Runner struct {
 	// PeerVars carries pre-resolved cross-deployment address variables —
 	// ${PEER_HOST:name} and ${PEER_ENDPOINT:name:port} (eval_peer.go) — that
 	// let a driven probe (a check with `on: <driver>`) TARGET a SEPARATE
-	// SUBJECT deployment over the shared `ov` network or the host. Overlaid by
+	// SUBJECT deployment over the shared `charly` network or the host. Overlaid by
 	// effectiveEnv onto WHATEVER resolver is active (primary, on:-swapped, or a
 	// harness bucket), so cross-deployment addressing is identical across
 	// `charly eval live`, kind:eval beds, and recipes. Nil under classical runs
@@ -326,7 +326,7 @@ func (r *Runner) runOne(ctx context.Context, c *Check) EvalResult {
 	// stay as-is.
 	//
 	// 2026-05: also swap r.Image so cdp/wl/vnc/mcp/etc dispatch
-	// (runOvVerb at evalrun_ov_verbs.go:709 reads r.Image to build
+	// (runCharlyVerb at evalrun_ov_verbs.go:709 reads r.Image to build
 	// `charly eval <verb> <method> <image> ...` argv) routes against the
 	// on-named pod, not the scenario's default pod. Without this swap,
 	// `cdp: open` with `on: sway-browser-vnc-concurrency-test` was

@@ -23,8 +23,8 @@ import (
 //	emitted the old form WITHOUT `id=`, which broke buildah's cross-build
 //	cache reuse, forcing a full re-download of cuda-cudnn (462 MiB) over
 //	a 50 KiB/s mirror — 90 minutes burned. The bug was undetectable from
-//	the build log alone; only `which ov` + `stat /usr/bin/charly` versus
-//	`stat ./ov/ov` revealed the mismatch.
+//	the build log alone; only `which charly` + `stat /usr/bin/charly` versus
+//	`stat ./charly/charly` revealed the mismatch.
 //
 //	Per CLAUDE.md R9 ("After pushing code, explicitly rebuild on the
 //	target and verify charly version. If the version is old, the fix under
@@ -34,13 +34,13 @@ import (
 //
 // Detection logic:
 //  1. Walk up from cwd until we find a directory containing BOTH
-//     ov/main.go AND charly.yml — this identifies an overthink source
-//     tree unambiguously (other projects might have an charly.yml, but
-//     only overthink has ov/main.go). If no source tree found, no
-//     enforcement (the binary is being run against a non-overthink
+//     charly/main.go AND charly.yml — this identifies an opencharly source
+//     tree unambiguously (other projects might have a charly.yml, but
+//     only opencharly has charly/main.go). If no source tree found, no
+//     enforcement (the binary is being run against a non-opencharly
 //     project; nothing to compare against).
 //  2. Stat the running binary via os.Executable().
-//  3. Walk every .go file under <sourceRoot>/ov/, find the newest mtime.
+//  3. Walk every .go file under <sourceRoot>/charly/, find the newest mtime.
 //  4. If newest source mtime > binary mtime + 60s slack, the binary is
 //     stale. Emit a detailed error and exit 1.
 //
@@ -56,12 +56,12 @@ import (
 // itself. Heavyweight verbs (image build, image generate, deploy,
 // rebuild, eval, ...) enforce the check.
 //
-// Bypass: CH_SKIP_FRESHNESS_CHECK=1 disables the check entirely. Use
+// Bypass: CHARLY_SKIP_FRESHNESS_CHECK=1 disables the check entirely. Use
 // this for CI runs where the binary is intentionally pinned to a
 // specific build, for testing pre-built images, or as an emergency
 // override. NOT recommended for routine development.
 func CheckBinaryFreshness(verbPath string) {
-	if os.Getenv("CH_SKIP_FRESHNESS_CHECK") != "" {
+	if os.Getenv("CHARLY_SKIP_FRESHNESS_CHECK") != "" {
 		return
 	}
 	if isFreshnessSafeVerb(verbPath) {
@@ -81,7 +81,7 @@ func CheckBinaryFreshness(verbPath string) {
 	if err != nil {
 		return
 	}
-	sourceRoot := findOvSourceRoot(cwd)
+	sourceRoot := findCharlySourceRoot(cwd)
 	if sourceRoot == "" {
 		return
 	}
@@ -109,7 +109,7 @@ func CheckBinaryFreshness(verbPath string) {
 	fmt.Fprintf(os.Stderr, "90 minutes re-downloading 462 MiB because /usr/bin/charly predated\n")
 	fmt.Fprintf(os.Stderr, "the cache-mount fix at commit 230c5d4.\n\n")
 	fmt.Fprintf(os.Stderr, "Fix:    cd %s && task build:charly\n", sourceRoot)
-	fmt.Fprintf(os.Stderr, "Bypass: export CH_SKIP_FRESHNESS_CHECK=1   (NOT recommended)\n")
+	fmt.Fprintf(os.Stderr, "Bypass: export CHARLY_SKIP_FRESHNESS_CHECK=1   (NOT recommended)\n")
 	os.Exit(1)
 }
 
@@ -144,14 +144,14 @@ func isFreshnessSafeVerb(verbPath string) bool {
 	return false
 }
 
-// findOvSourceRoot walks up from start looking for a directory that
-// contains BOTH ov/main.go AND charly.yml. Returns the path to that
+// findCharlySourceRoot walks up from start looking for a directory that
+// contains BOTH charly/main.go AND charly.yml. Returns the path to that
 // directory, or empty string if no such ancestor exists within 12 levels.
 //
-// The dual-marker requirement (ov/main.go + charly.yml) is what makes
-// this unambiguous: many projects have an charly.yml; only overthink has
-// ov/main.go alongside it.
-func findOvSourceRoot(start string) string {
+// The dual-marker requirement (charly/main.go + charly.yml) is what makes
+// this unambiguous: many projects have a charly.yml; only opencharly has
+// charly/main.go alongside it.
+func findCharlySourceRoot(start string) string {
 	cur := start
 	for i := 0; i < 12; i++ {
 		if statExists(filepath.Join(cur, "charly", "main.go")) &&

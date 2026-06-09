@@ -9,7 +9,7 @@ import (
 // (flat root imports) and single-key maps (namespaced child imports).
 func TestImportList_Unmarshal(t *testing.T) {
 	root := t.TempDir()
-	writeFixture(t, root, "charly.yml", `version: 2026.159.3
+	writeFixture(t, root, "charly.yml", `version: 2026.159.1912
 import:
   - build.yml
   - sub: ./sub.yml
@@ -17,7 +17,7 @@ import:
 	writeFixture(t, root, "build.yml", `defaults:
   build: [rpm]
 `)
-	writeFixture(t, root, "sub.yml", `version: 2026.159.3
+	writeFixture(t, root, "sub.yml", `version: 2026.159.1912
 box:
   widget:
     base: quay.io/fedora/fedora:43
@@ -47,7 +47,7 @@ box:
 // qualified image ref through the projected Config.
 func TestResolveImageRef_Qualified(t *testing.T) {
 	root := t.TempDir()
-	writeFixture(t, root, "charly.yml", `version: 2026.159.3
+	writeFixture(t, root, "charly.yml", `version: 2026.159.1912
 import:
   - sub: ./sub.yml
 box:
@@ -57,7 +57,7 @@ box:
     build: [rpm]
     candy: []
 `)
-	writeFixture(t, root, "sub.yml", `version: 2026.159.3
+	writeFixture(t, root, "sub.yml", `version: 2026.159.1912
 box:
   widget:
     base: quay.io/fedora/fedora:43
@@ -99,7 +99,7 @@ box:
 // load-time error pointing at charly migrate.
 func TestLoadUnified_RejectInclude(t *testing.T) {
 	root := t.TempDir()
-	writeFixture(t, root, "charly.yml", `version: 2026.159.3
+	writeFixture(t, root, "charly.yml", `version: 2026.159.1912
 include:
   - build.yml
 `)
@@ -143,7 +143,7 @@ include:
 // cycle-broken at load (the shared resolved-ref cache).
 func TestImportNamespace_MutualCycle(t *testing.T) {
 	root := t.TempDir()
-	writeFixture(t, root, "charly.yml", `version: 2026.159.3
+	writeFixture(t, root, "charly.yml", `version: 2026.159.1912
 import:
   - sub: ./sub
 box:
@@ -152,7 +152,7 @@ box:
     distro: [fedora]
     build: [rpm]
 `)
-	writeFixture(t, root, "sub/charly.yml", `version: 2026.159.3
+	writeFixture(t, root, "sub/charly.yml", `version: 2026.159.1912
 import:
   - up: ../
 box:
@@ -183,13 +183,13 @@ box:
 //	import namespace "up" not found (resolving "up.archlike-builder")
 //
 // because the builder ref was re-resolved from root (no `up` namespace there).
-// Mirrors the real selkies-labwc (`builder: ov.arch-builder`) consumed by main's
+// Mirrors the real selkies-labwc (`builder: charly.arch-builder`) consumed by main's
 // android-emulator (`base: selkies.selkies-labwc`). The shape — a namespaced base
 // with BOTH buildable layers AND a namespace-relative builder map — is the exact
 // combination the prior tests never exercised.
 func TestResolveNamespacedBase_BuilderRefRequalified(t *testing.T) {
 	root := t.TempDir()
-	writeFixture(t, root, "charly.yml", `version: 2026.159.3
+	writeFixture(t, root, "charly.yml", `version: 2026.159.1912
 import:
   - sub: ./sub
 box:
@@ -203,7 +203,7 @@ box:
     build: [rpm]
     produce: [pixi]
 `)
-	writeFixture(t, root, "sub/charly.yml", `version: 2026.159.3
+	writeFixture(t, root, "sub/charly.yml", `version: 2026.159.1912
 import:
   - up: ../
 candy:
@@ -249,7 +249,7 @@ box:
 // — the exact bug that silently built a Fedora builder for cachyos images.
 func TestResolveBuilder_DistroKeyed_NoExplicitMap(t *testing.T) {
 	root := t.TempDir()
-	writeFixture(t, root, "charly.yml", `version: 2026.159.3
+	writeFixture(t, root, "charly.yml", `version: 2026.159.1912
 import:
   - sub: ./sub
 defaults:
@@ -279,7 +279,7 @@ box:
   fedora-app:
     base: sub.fedora
 `)
-	writeFixture(t, root, "sub/charly.yml", `version: 2026.159.3
+	writeFixture(t, root, "sub/charly.yml", `version: 2026.159.1912
 import:
   - up: ../
 box:

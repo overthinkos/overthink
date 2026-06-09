@@ -14,11 +14,11 @@ import (
 
 // TestMcpServeDefaultRepo_AutoFallback verifies that `charly mcp serve --stdio`,
 // when started in an empty directory with no project env vars, auto-falls
-// back to overthinkos/overthink. Stays hermetic by setting CH_REPO_CACHE
+// back to overthinkos/overthink. Stays hermetic by setting CHARLY_REPO_CACHE
 // to a pre-populated temp dir so EnsureRepoDownloaded short-circuits via
 // IsRepoCached and never shells out to git.
 func TestMcpServeDefaultRepo_AutoFallback(t *testing.T) {
-	bin := buildOvBinary(t)
+	bin := buildCharlyBinary(t)
 
 	cacheRoot := t.TempDir()
 	cachedRepo := filepath.Join(cacheRoot, "github.com", "overthinkos", "overthink@main")
@@ -27,15 +27,15 @@ func TestMcpServeDefaultRepo_AutoFallback(t *testing.T) {
 	}
 	writeMinProject(t, cachedRepo)
 
-	// Start in an empty dir; no CH_PROJECT_DIR, no CH_PROJECT_REPO.
+	// Start in an empty dir; no CHARLY_PROJECT_DIR, no CHARLY_PROJECT_REPO.
 	startCwd := t.TempDir()
 
 	// Sub-test 1 — case 2 (top-level --repo wires through main() chdir,
-	// then bootstrapProject() sees CH_PROJECT_REPO is set and does nothing).
-	// Hermetic via CH_REPO_CACHE pointing at the pre-populated stub.
+	// then bootstrapProject() sees CHARLY_PROJECT_REPO is set and does nothing).
+	// Hermetic via CHARLY_REPO_CACHE pointing at the pre-populated stub.
 	t.Run("top_level_repo_flag", func(t *testing.T) {
 		out := runMcpServeListImages(t, bin, startCwd,
-			[]string{"CH_REPO_CACHE=" + cacheRoot, "CH_PROJECT_REPO=overthinkos/overthink@main"},
+			[]string{"CHARLY_REPO_CACHE=" + cacheRoot, "CHARLY_PROJECT_REPO=overthinkos/overthink@main"},
 			[]string{"mcp", "serve", "--stdio"})
 		if !strings.Contains(out, "testimage") {
 			t.Errorf("expected testimage from cached repo; output:\n%s", out)
@@ -46,7 +46,7 @@ func TestMcpServeDefaultRepo_AutoFallback(t *testing.T) {
 	t.Run("no_default_repo_hard_fail", func(t *testing.T) {
 		cmd := exec.Command(bin, "mcp", "serve", "--stdio", "--no-default-repo")
 		cmd.Dir = startCwd
-		// Intentionally drop CH_PROJECT_DIR/CH_PROJECT_REPO from env.
+		// Intentionally drop CHARLY_PROJECT_DIR/CHARLY_PROJECT_REPO from env.
 		cmd.Env = sanitizedEnv()
 		// Send a no-op then close stdin to let the server exit.
 		cmd.Stdin = strings.NewReader("")
@@ -60,10 +60,10 @@ func TestMcpServeDefaultRepo_AutoFallback(t *testing.T) {
 	})
 }
 
-// runMcpServeListImages spawns `ov` with the given args, performs the MCP
+// runMcpServeListImages spawns `charly` with the given args, performs the MCP
 // stdio handshake, calls box.list.boxes, and returns the stringified
 // tool result. Hermetic: uses caller-supplied env (typically pinning
-// CH_REPO_CACHE).
+// CHARLY_REPO_CACHE).
 func runMcpServeListImages(t *testing.T, bin, cwd string, extraEnv, args []string) string {
 	t.Helper()
 	cmd := exec.Command(bin, args...)
@@ -161,12 +161,12 @@ func runMcpServeListImages(t *testing.T, bin, cwd string, extraEnv, args []strin
 	}
 }
 
-// sanitizedEnv returns os.Environ minus any CH_PROJECT_DIR / CH_PROJECT_REPO
+// sanitizedEnv returns os.Environ minus any CHARLY_PROJECT_DIR / CHARLY_PROJECT_REPO
 // inherited from the test harness, so each subtest controls these cleanly.
 func sanitizedEnv() []string {
 	var out []string
 	for _, e := range os.Environ() {
-		if strings.HasPrefix(e, "CH_PROJECT_DIR=") || strings.HasPrefix(e, "CH_PROJECT_REPO=") {
+		if strings.HasPrefix(e, "CHARLY_PROJECT_DIR=") || strings.HasPrefix(e, "CHARLY_PROJECT_REPO=") {
 			continue
 		}
 		out = append(out, e)

@@ -5,30 +5,30 @@ import (
 	"time"
 )
 
-func TestOvVersion(t *testing.T) {
-	// OvVersion reports the binary's STAMPED identity (BuildCalVer), never the
+func TestCharlyVersion(t *testing.T) {
+	// CharlyVersion reports the binary's STAMPED identity (BuildCalVer), never the
 	// wall clock. Save/restore the package var around the test.
 	saved := BuildCalVer
 	defer func() { BuildCalVer = saved }()
 
 	BuildCalVer = "2026.154.943"
-	if got := OvVersion(); got != "2026.154.943" {
-		t.Errorf("stamped OvVersion() = %q, want 2026.154.943", got)
+	if got := CharlyVersion(); got != "2026.154.943" {
+		t.Errorf("stamped CharlyVersion() = %q, want 2026.154.943", got)
 	}
 
 	BuildCalVer = ""
-	if got := OvVersion(); got != "unknown" {
-		t.Errorf("unstamped OvVersion() = %q, want %q", got, "unknown")
+	if got := CharlyVersion(); got != "unknown" {
+		t.Errorf("unstamped CharlyVersion() = %q, want %q", got, "unknown")
 	}
 	// "unknown" must be rejected by ParseCalVer so freshness treats it as oldest.
-	if _, ok := ParseCalVer(OvVersion()); ok {
-		t.Errorf("ParseCalVer(%q) parsed ok; an unstamped build must sort as oldest", OvVersion())
+	if _, ok := ParseCalVer(CharlyVersion()); ok {
+		t.Errorf("ParseCalVer(%q) parsed ok; an unstamped build must sort as oldest", CharlyVersion())
 	}
 }
 
-func TestHostOvIsNewer(t *testing.T) {
-	// hostOvIsNewer is the CalVer arbiter EnsureOvInVenue uses to decide whether
-	// the EnsureOvInGuest auto/scp strategy adopts the guest's system charly or scp's
+func TestHostCharlyIsNewer(t *testing.T) {
+	// hostCharlyIsNewer is the CalVer arbiter EnsureCharlyInVenue uses to decide whether
+	// the EnsureCharlyInGuest auto/scp strategy adopts the guest's system charly or scp's
 	// a host copy. Strictly newer → true; equal-or-newer venue → false (never
 	// downgrade); unparseable venue → true; unparseable host → false.
 	tests := []struct {
@@ -49,8 +49,8 @@ func TestHostOvIsNewer(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := hostOvIsNewer(tt.host, tt.venue); got != tt.expected {
-				t.Errorf("hostOvIsNewer(%q, %q) = %v, want %v", tt.host, tt.venue, got, tt.expected)
+			if got := hostCharlyIsNewer(tt.host, tt.venue); got != tt.expected {
+				t.Errorf("hostCharlyIsNewer(%q, %q) = %v, want %v", tt.host, tt.venue, got, tt.expected)
 			}
 		})
 	}

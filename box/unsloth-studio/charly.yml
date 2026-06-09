@@ -1,6 +1,5 @@
 box:
     name: unsloth-studio
-    enabled: false
     base: fedora.nvidia
     platform:
         - linux/amd64

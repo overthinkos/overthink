@@ -1,6 +1,5 @@
 box:
     name: immich
-    enabled: false
     base: fedora-nonfree
     platform:
         - linux/amd64

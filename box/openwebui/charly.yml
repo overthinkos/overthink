@@ -1,6 +1,5 @@
 box:
     name: openwebui
-    enabled: false
     base: fedora
     candy:
         - agent-forwarding

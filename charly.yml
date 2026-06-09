@@ -17,7 +17,7 @@ import:
     # namespace; main's GPU pod families (comfyui / jupyter-ml / jupyter-ml-notebook
     # / ollama / unsloth-studio) root on `base: fedora.nvidia`. Mutual import (the
     # fedora repo imports this one under the `charly` namespace); cycle-broken at load.
-    - fedora: '@github.com/overthinkos/fedora:v2026.160.2229'
+    - fedora: '@github.com/overthinkos/fedora:v2026.160.2246'
 discover:
     - path: box
       recursive: true

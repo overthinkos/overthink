@@ -1,6 +1,5 @@
 box:
     name: tier23
-    enabled: false
     base: fedora
     candy:
         - supervisord

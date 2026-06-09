@@ -22,6 +22,25 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-10 — chore(images): enable all previously-disabled boxes
+
+Removed the `enabled: false` flag from all 12 previously-disabled boxes so they
+enter the default build / validate / generate working set:
+
+- **main**: `tier1`, `tier23`, `redis`, `valkey-test`, `comfyui`, `immich`,
+  `hermes-playwright`, `openwebui`, `unsloth-studio`, `ollama`,
+  `jupyter-ml-notebook`.
+- **image/fedora**: `python-ml`.
+
+No box content changed — only working-set membership. Verified: `charly box
+validate` + `charly box generate` exit 0 with zero errors / zero warnings on
+both repos, so every newly-enabled box resolves its layer chain and emits a
+valid Containerfile (generate now emits the 12 it previously skipped — the
+eval-coverage that fails without this change). Full per-box image builds were
+NOT run (the GPU images — comfyui / ollama / unsloth-studio / immich /
+jupyter-ml-notebook / python-ml — are multi-GB, hours each); the verification is
+resolution + Containerfile generation, not a built artifact per box.
+
 ### 2026-06-10 — feat(images)!: drop the bootc submodule; fold the nvidia + selkies images into their base-distro submodules
 
 Three image-only submodules were removed from the superproject, shrinking the

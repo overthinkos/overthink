@@ -1,6 +1,5 @@
 box:
     name: comfyui
-    enabled: false
     base: fedora.nvidia
     platform:
         - linux/amd64

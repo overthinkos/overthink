@@ -1,6 +1,5 @@
 box:
     name: hermes-playwright
-    enabled: false
     base: fedora
     candy:
         - agent-forwarding

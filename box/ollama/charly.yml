@@ -1,6 +1,5 @@
 box:
     name: ollama
-    enabled: false
     base: fedora.nvidia
     platform:
         - linux/amd64

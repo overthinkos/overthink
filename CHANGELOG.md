@@ -22,6 +22,30 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-09 — docs(vision): thesis-voice refinements (tagline, intro, tenets 1/6/9/10, closing)
+
+A round of authorial refinements to VISION.md's voice, reconciled on top of the
+mantra-unification cutover (the edits were drafted against the pre-unification
+version, so they were re-applied onto current main rather than merged raw):
+
+- **Tagline** → *"The thesis behind the candybox."*
+- **Intro** rewritten — Charly "builds a whole candy store and treats the agent to
+  a whole candy factory, ready to produce every candy imaginable."
+- **Tenet 1** — "KVM-isolated VMs" → "isolated VMs".
+- **Tenet 6** — dropped the "the recipe IS the test / first-class author & grader"
+  sentence (the point is carried by the RDD/ADE co-equal-twin sentence after it).
+- **Tenet 9** — "wrong mix of candies" / "the wrong box" / "what makes the whole
+  candy store a pleasure to work in".
+- **Tenet 10** — trimmed "never once leaving the room"; "caught in" → "being part
+  of" its own feedback loop.
+- **Closing line** — leaner: "not to wave it around or hurt anyone, but to
+  caramelize the top of a perfect crème brûlée."
+
+The single `build → deploy → prove → iterate` mantra (Tenet 7) is preserved.
+Incidental slips fixed during reconciliation: `Candystore` → `candy store`,
+`treats … with` → `treats … to`, `make the every candybox` → `make every
+candybox`. Docs-only — no `MigrationStep`, no `charly.yml` `version:` bump.
+
 ### 2026-06-09 — docs(vision): proofread + unify the build → deploy → prove → iterate mantra
 
 A grammar/spelling/flow pass over VISION.md. The prose was already clean — no

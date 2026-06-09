@@ -1,12 +1,12 @@
 # OpenCharly — The Vision
 
-*The thesis behind Charly.*
+*The thesis behind the candybox.*
 
-Most other tools hand an agent a sandbox — and then spend their effort taking things *away*: fewer commands, no network, no installs, safety bought by stripping the candy out, and most of the capability lost with it. Charly does the opposite. It builds a **candybox** with real, kernel-enforced walls, throws the doors open, and fills the room with the **whole candy store**.
+Most other tools hand an agent a sandbox — and then spend their effort taking things *away*: fewer commands, no network, no installs, safety bought by stripping the candy out, and most of the capability lost with it. Charly does the opposite. It builds a whole candy store and treats the agent to a whole candy factory, ready to produce every candy imaginable.
 
 ## The tenets
 
-1. **Secure the room, not the candy.** Safety lives at the boundary of a candybox — rootless containers, KVM-isolated VMs, encrypted volumes — never in a shrunken toolset. A walled room you can hand over *completely* beats an empty sandbox you keep narrowing.
+1. **Secure the room, not the candy.** Safety lives at the boundary of a candybox — rootless containers, isolated VMs, encrypted volumes — never in a shrunken toolset. A walled room you can hand over *completely* beats an empty sandbox you keep narrowing.
    → CLAUDE.md "Candyboxing".
 
 2. **One recipe, many boxes.** A single declarative recipe — candies stacked into a box — pours into every mold: an interactive shell, a managed pod, a host workstation, a k8s cluster, a bootable VM, an Android device. Write the recipe once; let `charly` set it in whatever shape the moment needs.
@@ -21,7 +21,7 @@ Most other tools hand an agent a sandbox — and then spend their effort taking 
 5. **Taste every batch before it ships — Risk Driven Development.** Recipe cards drift and vats spring leaks, so nothing high-stakes should ride on "the card says so." The riskiest question — *do these candies actually melt together at today's versions?* — gets proven on a real, disposable candybox first. Reality is the only ground truth. Risk Driven Development decides *what* to prove, and *when*: the riskiest unknown, first.
    → CLAUDE.md "Risk Driven Development (RDD)", `/charly-eval:eval`.
 
-6. **Write down what "good" means, and have an agent taste it — Agent Driven Evaluation.** What a candybox should be is captured as runnable acceptance scenarios, not left to opinion. A checklist verifies the measurable; for the subtle "is it actually right?" an agent tastes the live batch with the full probe kit and judges. The recipe IS the test — and an agent is a first-class author and grader of it. Agent Driven Evaluation is Risk Driven Development's co-equal twin: RDD proves the risky assumptions a behavior rests on; ADE pins down what correct behavior *is* and grades the live batch against it.
+6. **Write down what "good" means, and have an agent taste it — Agent Driven Evaluation.** What a candybox should be is captured as runnable acceptance scenarios, not left to opinion. A checklist verifies the measurable; for the subtle "is it actually right?" an agent tastes the live batch with the full probe kit and judges. Agent Driven Evaluation is Risk Driven Development's co-equal twin: RDD proves the risky assumptions a behavior rests on; ADE pins down what correct behavior *is* and grades the live batch against it.
    → CLAUDE.md "Agent Driven Evaluation (ADE)", `/charly-eval:eval`.
 
 7. **Conched smooth — pass after pass until silk.** Running the eval loop down to the micrometer proves a candybox works; running the build → deploy → prove → iterate mantra *over and over again* makes it good. Like conching chocolate, every pass grinds the candy smoother — deduplicated, refined, dead code and band-aid fixes removed, yet another round of evals added, re-proven on a live deployment — until the candybox has proven itself and the candy is silk. The first box released for public consumption should taste like the finest milk chocolate ever, not like a rock sprayed with quick-drying brown paint.
@@ -30,10 +30,10 @@ Most other tools hand an agent a sandbox — and then spend their effort taking 
 8. **A spoiled batch costs one rebuild.** All that conching is cheap because a candybox is throwaway by explicit design: a wrong move is just another lesson learned after a full root-cause analysis of the underlying issues, not an incident that needs to be prevented at all costs in the future. That is exactly what lets autonomous iteration be *fearless* and *safe* at once — disposability is the license to be bold.
    → CLAUDE.md "Disposable-Only Autonomy", `/charly-internals:disposable`.
 
-9. **Free to forge a better candybox.** And when the box itself is wrong — wrong layers, a missing candy, a composition that won't melt together — the agent is always free to build a new and better one, never to make do with the wrong room. A candybox is just another recipe, and a throwaway one, so forging a fresh box costs no more than patching the wrong one. The freedom to build the *right* box is what makes the whole candy store usable.
+9. **Free to forge a better candybox.** And when the box itself is wrong — wrong mix of candies, a missing candy, a composition that won't melt together — the agent is always free to build a new and better one, never to make do with the wrong box. A candybox is just another recipe, and a throwaway one, so forging a fresh box costs no more than patching the wrong one. The freedom to make every candybox perfect is what makes the whole candy store a pleasure to work in.
    → CLAUDE.md "Candyboxing", "Disposable-Only Autonomy", `/charly-internals:disposable`.
 
-10. **The factory fits in a box, too — candyboxes all the way down.** One of the molds a recipe can pour into is the *factory itself*: the whole `charly` line, nested inside one of its own disposable candyboxes. The forging happens *one level in* — from inside that outer box the factory builds, deploys, and tastes *fresh* candyboxes on live deployments and melts the spoiled batches back down, never once leaving the room. A candybox forged inside a candybox: that nesting is the whole trick. And it runs as a loop — the entire pass turns inside the box, the evaluation verdict deciding the next one. That is *factory-in-the-loop evaluation*: the production line caught in its own feedback loop, tasting in the driver's seat. Because the outer box is as throwaway as the boxes it builds, the line proves and rebuilds itself fearlessly — a candybox that builds candyboxes is how verification becomes self-hosting.
+10. **The factory fits in a box, too — candyboxes all the way down.** One of the molds a recipe can pour into is the *factory itself*: the whole `charly` line, nested inside one of its own disposable candyboxes. The forging happens *one level in* — from inside that outer box the factory builds, deploys, and tastes *fresh* candyboxes on live deployments and melts the spoiled batches back down. A candybox forged inside a candybox: that nesting is the whole trick. And it runs as a loop — the entire pass turns inside the box, the evaluation verdict deciding the next one. That is *factory-in-the-loop evaluation*: the production line being part of its own feedback loop, tasting in the driver's seat. Because the outer box is as throwaway as the boxes it builds, the line proves and rebuilds itself fearlessly — a candybox that builds candyboxes is how verification becomes self-hosting.
    → CLAUDE.md "Candyboxing", "Disposable-Only Autonomy", `/charly-eval:eval` (the `kind: eval` beds + the score loop), `/charly-internals:disposable`.
 
 ## Where the factory is heading
@@ -45,7 +45,7 @@ Most other tools hand an agent a sandbox — and then spend their effort taking 
 - **A shared candy store.** Cross-repo, versioned candies and boxes (`@github` refs, content-derived versions) maturing into an ecosystem you *compose from*, not a pantry you restock by hand.
 - **The long bet.** As agents grow more capable, the winning environment is a fully-stocked candy store, not a tighter sandbox. Charly is built for that world — and built to still feel like a magic chocolate factory when it arrives.
 
-*And we are looking forward to the day every agent asks for a blowtorch — not to wave it around, but to caramelize the top of a perfect crème brûlée. Secure the room, hand over the whole candy store, blowtorch and all, and that is what comes out of the box.*
+*And we are looking forward to the day every agent asks for a blowtorch — not to wave it around or hurt anyone, but to caramelize the top of a perfect crème brûlée.*
 
 ---
 

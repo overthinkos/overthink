@@ -22,6 +22,77 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-09 — feat(resource): auto-allocate an NVIDIA GPU `<hostdev>` for GPU-requiring VMs (Cutover 5)
+
+A `target: vm` deploy/eval-bed that needs a physical GPU declares
+`requires_exclusive: [nvidia-gpu]`. Before this cutover that token ONLY drove
+the preempt arbiter (`preempt.go`) and was fully decoupled from the GPU
+`<hostdev>` passthrough — the device had to be hand-authored: run
+`charly vm gpu list`, copy the emitted block, paste it into the per-host overlay
+`~/.local/share/charly/vm/<domain>/instance.yml`. With no overlay,
+`eval-cachyos-gpu-vm` booted GPU-less and its nested NVENC checks failed. Per the
+operator directive — *"if a resource is required either add it automatically or
+fail hard"* — `charly vm create` now does it automatically.
+
+**New YAML-configurable `resource:` kind** (the token→hardware-selector map; the
+selector lives in config, never hardcoded in Go). In `build.yml`:
+
+```yaml
+resource:
+  nvidia-gpu:
+    gpu:
+      vendor: "0x10de"   # PCI vendor DetectVFIO matches
+```
+
+`resource:` registers in the unified loader exactly like the other build-vocab
+kinds (`kindKeys` / `rootShapeKeys` / `UnifiedFile.Resource` / `ResourceDoc` /
+`mergeResourceMap` / a `mergeKindDoc` case). It is additive + optional — configs
+without it load unchanged, so NO migration step and NO `LatestSchemaVersion`
+bump (mirrors the autostart-field precedent).
+
+**Auto-allocation at `charly vm create`** (`gpu_allocate.go`,
+`autoAllocateExclusiveGPUs`). The create path already resolves the claimant node
+(`lookupVMClaimant`) for preempt arbitration; that node's
+`requires_exclusive` tokens are now also mapped against `resource:`. For a token
+with a `gpu:` selector, charly: defers to any operator-authored `<hostdev>`
+(committed `vm.yml` OR `instance.yml` — no double-inject, no re-detection);
+requires `backend: libvirt` (a PCI `<hostdev>` does not render under qemu); then
+`DetectVFIO()` + `selectGPUByVendor` → on a hit, persists the whole IOMMU-group
+hostdev block into the per-host `instance.yml` (visible + stable, with a
+provenance header comment) and folds it into the override `ApplyToVmSpec`
+injects; on a miss, **FAILS HARD** naming the token + vendor. `selectGPUByVendor`
++ `vfioGpuToHostdevs` are reused by the existing `charly vm gpu list` text emitter
+(`renderHostdevsBlock` now formats the shared structured builder — R3, no
+drift). Validation (`validate_preempt.go`): a `gpu:` selector requires a
+non-empty vendor; a `target: vm` GPU claimant pinned to `backend: qemu` errors at
+load.
+
+**Blocking fix folded in (R5, R3) — selkies wayland-socket eval check.** The
+first R10 run surfaced one failing check: `candy/selkies` asserted
+`test -e /tmp/wayland-1`, but commit `038f6b6` (2026-06-08) moved
+`XDG_RUNTIME_DIR` from `/tmp` → `/tmp/xdg-runtime` and the session wrappers
+tracked it (`${XDG_RUNTIME_DIR:-/tmp}/wayland-1`) while this eval check was the
+lone straggler left at the hardcoded `/tmp` path — broken on EVERY selkies pod
+since that cutover, surfaced first by this GPU bed. The check now uses braceless
+`$XDG_RUNTIME_DIR` (image ENV, inherited by the exec shell) with a `/tmp`
+fallback, matching the wrappers. RCA confirmed the GPU passthrough itself was
+healthy (kwin_wayland + NVENC live on the RTX 4080); the socket existed at
+`/tmp/xdg-runtime/wayland-1` all along.
+
+Live-proven on the host's RTX 4080 (`10de:2702`, IOMMU group 13): a single
+`charly vm create cachyos-gpu-vm` auto-allocated both group functions
+(`0000:01:00.0` + `0000:01:00.1`) and wrote the instance.yml block, with zero
+manual `charly vm gpu list` step. R10 on the disposable `eval-cachyos-gpu-vm`
+bed PASSED all 9 steps including the fresh-`charly update` rebuild gate (nested
+selkies eval: 96 passed · 0 failed · 14 skipped). Scope: VM passthrough only
+(the RTX 4080 is vfio-bound = VM-only; pod GPU keeps the existing AMD
+`renderD128` auto-detect). The 14 skips are nested-in-VM host-container verbs
+(cdp/wl/mcp + `${HOST_PORT}` addr/http) that the runner currently cannot route
+through the VM chain (`evalrun.go` `SkipHostContainerVerbs`) — a separate,
+deliberate limitation addressed in its own follow-up cutover, not a regression.
+
+*Assisted-by: Claude (fully tested and validated)*
+
 ### 2026-06-09 — refactor(rebrand)!: finish the `ov`→`charly` / `overthink`→`opencharly` cutover (Cutover 4)
 
 The fourth and final rebrand cutover zeroed out every in-scope `ov`/`overthink`

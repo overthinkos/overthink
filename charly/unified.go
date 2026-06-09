@@ -128,6 +128,12 @@ type UnifiedFile struct {
 	Target map[string]*TargetSpec `yaml:"target,omitempty"`
 	Module map[string]*ModuleSpec `yaml:"module,omitempty"`
 
+	// Resource (kind:resource) — exclusive host-resource definitions: a token
+	// name (matching requires_exclusive: / preemptible.holds:) → an optional
+	// hardware selector (e.g. gpu.vendor) that drives GPU auto-allocation at
+	// `charly vm create`. Build-vocab VALUE map, flat-imported from build.yml.
+	Resource map[string]*ResourceDef `yaml:"resource,omitempty"`
+
 	// Namespaces holds child namespaces mounted by namespaced `import:`
 	// entries (alias → fully-resolved isolated UnifiedFile). NOT authored
 	// directly and NOT flat-merged into the root maps — populated at load
@@ -328,6 +334,8 @@ type kindKeyedDoc struct {
 	Group  *GroupDoc  `yaml:"group,omitempty"`
 	Target *TargetDoc `yaml:"target,omitempty"`
 	Module *ModuleDoc `yaml:"module,omitempty"`
+	// Exclusive host-resource definition (GPU auto-allocation vocabulary).
+	Resource *ResourceDoc `yaml:"resource,omitempty"`
 }
 
 // AIDoc wraps a single AIConfig with an explicit Name — the kind:ai
@@ -455,6 +463,7 @@ var kindKeys = []string{
 	"pod", "vm", "k8s", "local", "android",
 	"ai", "recipe", "score",
 	"group", "target", "module",
+	"resource",
 }
 
 // -----------------------------------------------------------------------------
@@ -1156,6 +1165,10 @@ var rootShapeKeys = map[string]bool{
 	"eval": true,
 	// Calamares-aligned kinds.
 	"group": true, "target": true, "module": true,
+	// Exclusive host-resource vocabulary (token -> hardware selector) driving
+	// GPU auto-allocation. Build-vocab VALUE map, like distro:; flat-imported
+	// from build.yml into the root namespace.
+	"resource": true,
 }
 
 // kindKeysSet mirrors kindKeys for O(1) lookup.
@@ -1552,6 +1565,7 @@ func mergeUnified(dst, src *UnifiedFile, srcDir string) {
 	mergeGroupMap(&dst.Group, src.Group)
 	mergeTargetMap(&dst.Target, src.Target)
 	mergeModuleMap(&dst.Module, src.Module)
+	mergeResourceMap(&dst.Resource, src.Resource)
 	mergeDeployMaps(&dst.Deploy, src.Deploy)
 	mergeDeployMaps(&dst.Eval, src.Eval)
 	if dst.Provides == nil && src.Provides != nil {
@@ -1659,6 +1673,22 @@ func mergeInitMap(dst *map[string]*InitDef, src map[string]*InitDef) {
 	}
 	if *dst == nil {
 		*dst = make(map[string]*InitDef)
+	}
+	for k, v := range src {
+		if _, exists := (*dst)[k]; !exists {
+			(*dst)[k] = v
+		}
+	}
+}
+
+// mergeResourceMap merges exclusive host-resource definitions (kind:resource).
+// Root-wins, like the other build-vocab maps.
+func mergeResourceMap(dst *map[string]*ResourceDef, src map[string]*ResourceDef) {
+	if len(src) == 0 {
+		return
+	}
+	if *dst == nil {
+		*dst = make(map[string]*ResourceDef)
 	}
 	for k, v := range src {
 		if _, exists := (*dst)[k]; !exists {
@@ -2113,6 +2143,17 @@ func mergeKindDoc(merged *UnifiedFile, kd *kindKeyedDoc, srcDir string) error {
 		if _, exists := merged.Init[kd.Init.Name]; !exists {
 			initDef := kd.Init.InitDef
 			merged.Init[kd.Init.Name] = &initDef
+		}
+	case kd.Resource != nil:
+		if kd.Resource.Name == "" {
+			return fmt.Errorf("resource: missing name")
+		}
+		if merged.Resource == nil {
+			merged.Resource = map[string]*ResourceDef{}
+		}
+		if _, exists := merged.Resource[kd.Resource.Name]; !exists {
+			resDef := kd.Resource.ResourceDef
+			merged.Resource[kd.Resource.Name] = &resDef
 		}
 	case kd.VM != nil:
 		if kd.VM.Name == "" {

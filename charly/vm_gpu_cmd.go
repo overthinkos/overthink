@@ -123,22 +123,21 @@ func (c *VmGpuListCmd) Run() error {
 
 // renderHostdevsBlock emits a `hostdevs:` YAML fragment (managed='yes') covering
 // every device in the IOMMU group. managed='yes' lets libvirt auto-bind each
-// function to vfio-pci on VM start and re-bind the host driver on stop.
+// function to vfio-pci on VM start and re-bind the host driver on stop. It is a
+// text view over vfioGpuToHostdevs (gpu_allocate.go) — the SINGLE builder of
+// which devices + PCI fields — so this `charly vm gpu list` output and the
+// create-time auto-allocation can never diverge (R3).
 func renderHostdevsBlock(members []VFIOPCIDevice) string {
 	var b strings.Builder
 	b.WriteString("hostdevs:\n")
-	for _, m := range members {
-		dom, bus, slot, fn, ok := parsePCIAddr(m.Addr)
-		if !ok {
-			continue
-		}
+	for _, h := range vfioGpuToHostdevs(members) {
 		b.WriteString("  - type: pci\n")
 		b.WriteString("    managed: \"yes\"\n")
 		b.WriteString("    source:\n")
-		fmt.Fprintf(&b, "      domain: %q\n", dom)
-		fmt.Fprintf(&b, "      bus: %q\n", bus)
-		fmt.Fprintf(&b, "      slot: %q\n", slot)
-		fmt.Fprintf(&b, "      function: %q\n", fn)
+		fmt.Fprintf(&b, "      domain: %q\n", h.Source["domain"])
+		fmt.Fprintf(&b, "      bus: %q\n", h.Source["bus"])
+		fmt.Fprintf(&b, "      slot: %q\n", h.Source["slot"])
+		fmt.Fprintf(&b, "      function: %q\n", h.Source["function"])
 	}
 	return b.String()
 }

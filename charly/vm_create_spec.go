@@ -15,7 +15,7 @@ import (
 // resolved backend. Pre-conditions: `charly vm build <vm-name>` has run,
 // placing disk.qcow2 (+ seed.iso for cloud_image sources) under the per-VM
 // disk dir output/qcow2/<vm>/.
-func (c *VmCreateCmd) runVmSpecCreate(vmName string, spec *VmSpec, backend string) error {
+func (c *VmCreateCmd) runVmSpecCreate(vmName string, spec *VmSpec, backend string, claimantNode *DeploymentNode, resources map[string]*ResourceDef) error {
 	name := vmName
 	if c.Instance != "" {
 		name = vmName + "-" + c.Instance
@@ -30,6 +30,15 @@ func (c *VmCreateCmd) runVmSpecCreate(vmName string, spec *VmSpec, backend strin
 	ovr, err := LoadVmInstanceOverride(vmDomainName)
 	if err != nil {
 		return fmt.Errorf("loading instance override for %s: %w", vmDomainName, err)
+	}
+	// GPU auto-allocation: when the claimant (the deploy/bed that references
+	// this VM via requires_exclusive) needs a build.yml `resource:` GPU and no
+	// hostdev is already configured, detect a matching card, persist its
+	// <hostdev> block into this domain's instance.yml, and fold it into ovr —
+	// or FAIL HARD if the required card is absent. See gpu_allocate.go.
+	ovr, err = autoAllocateExclusiveGPUs(spec, ovr, claimantNode, resources, vmDomainName, backend)
+	if err != nil {
+		return err
 	}
 	ovr.ApplyToVmSpec(spec)
 

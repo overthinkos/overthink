@@ -70,8 +70,47 @@ func validatePreemptibleUnified(uf *UnifiedFile) error {
 	for name, node := range uf.Deploy {
 		ValidatePreemptibleOnNode(name, &node, errs)
 	}
+	validateResourceDefs(uf, errs)
 	if errs.HasErrors() {
 		return fmt.Errorf("preemptible / requires_exclusive validation:\n  %s", errs.Error())
 	}
 	return nil
+}
+
+// validateResourceDefs checks the build.yml `resource:` vocabulary and its
+// interaction with VM-targeted claimants:
+//
+//   - a `gpu:` selector MUST carry a non-empty vendor (auto-allocation matches
+//     DetectVFIO's reported PCI vendor against it);
+//   - a `target: vm` claimant requiring a GPU resource needs `backend: libvirt`
+//     on its VM entity — a PCI <hostdev> does not render under the qemu backend,
+//     so auto-allocation would silently fail at create time.
+func validateResourceDefs(uf *UnifiedFile, errs *ValidationError) {
+	for name, rdef := range uf.Resource {
+		if rdef == nil {
+			continue
+		}
+		if rdef.Gpu != nil && strings.TrimSpace(rdef.Gpu.Vendor) == "" {
+			errs.Add("resource %q: `gpu.vendor` is required (e.g. \"0x10de\" for NVIDIA) — it is the PCI vendor auto-allocation matches", name)
+		}
+	}
+	if len(uf.Resource) == 0 {
+		return
+	}
+	for name, node := range uf.Deploy {
+		if node.Target != "vm" {
+			continue
+		}
+		if _, _, ok := requiredGPUResource(&node, uf.Resource); !ok {
+			continue
+		}
+		vmName := node.Vm
+		if vmName == "" {
+			base, _ := parseDeployKey(name)
+			vmName = base
+		}
+		if spec := uf.VM[vmName]; spec != nil && spec.Backend == "qemu" {
+			errs.Add("deploy %q requires an auto-allocated GPU but its VM %q pins `backend: qemu` — GPU passthrough needs `backend: libvirt` (PCI <hostdev> does not render under qemu)", name, vmName)
+		}
+	}
 }

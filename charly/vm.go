@@ -329,8 +329,9 @@ func (c *VmCreateCmd) Run() error {
 	// `charly vm destroy`). No-op when an outer orchestrator already owns the lease
 	// (CHARLY_PREEMPT_LEASE set, e.g. an eval bed run) or when no claimant node
 	// references this VM entity. See charly/preempt.go.
-	if claimant, cnode, ok := lookupVMClaimant(c.Image); ok {
-		if _, perr := acquireExclusiveForClaimant(claimant, cnode, false); perr != nil {
+	claimant, claimantNode, hasClaimant := lookupVMClaimant(c.Image)
+	if hasClaimant {
+		if _, perr := acquireExclusiveForClaimant(claimant, claimantNode, false); perr != nil {
 			return perr
 		}
 	}
@@ -343,8 +344,12 @@ func (c *VmCreateCmd) Run() error {
 	// absent, so the pin was silently dropped; now it is honored.)
 	dir, _ := os.Getwd()
 	var spec *VmSpec
-	if uf, ok, ufErr := LoadUnified(dir); ufErr == nil && ok && uf.VM != nil {
-		spec = uf.VM[c.Image]
+	var resources map[string]*ResourceDef
+	if uf, ok, ufErr := LoadUnified(dir); ufErr == nil && ok {
+		if uf.VM != nil {
+			spec = uf.VM[c.Image]
+		}
+		resources = uf.Resource
 	}
 	backend, err := resolveVmBackend(vmConfiguredBackend(c.Image, rt.VmBackend))
 	if err != nil {
@@ -354,7 +359,12 @@ func (c *VmCreateCmd) Run() error {
 		// VmSpec-driven create pipeline: RenderDomain for libvirt,
 		// RenderQemuArgv for qemu. Uses output/qcow2/{disk,seed} produced
 		// by `charly vm build` (the cloud_image branch of vm_build.go).
-		return c.runVmSpecCreate(c.Image, spec, backend)
+		// claimantNode + resources drive GPU auto-allocation (gpu_allocate.go).
+		var claimantPtr *DeploymentNode
+		if hasClaimant {
+			claimantPtr = &claimantNode
+		}
+		return c.runVmSpecCreate(c.Image, spec, backend, claimantPtr, resources)
 	}
 
 	// Reached here = image is not a `kind: vm` entity, AND the legacy

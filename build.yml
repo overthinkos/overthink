@@ -4,6 +4,20 @@
 #  (@github.com/overthinkos/overthink/build.yml:<tag>) while main
 #  includes it locally — single source of truth, no duplication.
 version: 2026.141.1600
+
+# Exclusive host-resource vocabulary: maps an arbitration token (used by a
+# deploy/bed's `requires_exclusive:` and a holder's `preemptible.holds:`) to a
+# hardware selector. A `gpu:` selector lets `charly vm create` AUTO-ALLOCATE the
+# matching PCI <hostdev> for a GPU-requiring VM (detect -> persist into the
+# per-host instance.yml -> inject) — or FAIL HARD when no matching card is
+# present. The selector lives here in YAML, never hardcoded in Go: adding a
+# resource is a config edit. See /charly-internals:disposable (resource axis),
+# /charly-vm:vm (GPU passthrough), /charly-core:deploy (requires_exclusive).
+resource:
+    nvidia-gpu:
+        gpu:
+            vendor: "0x10de"   # NVIDIA — DetectVFIO matches this PCI vendor id
+
 builder:
     pacstrap:
         kind: bootstrap

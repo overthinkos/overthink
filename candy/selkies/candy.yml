@@ -178,9 +178,18 @@ candy:
         # Wayland backend failed to load — so service:running is not sufficient.
         # Assert the compositor socket actually exists (pixelflux created wayland-1),
         # the precondition for labwc/chrome to start. Poll for readiness.
+        # The socket lives at $XDG_RUNTIME_DIR/wayland-1 — the session wrappers
+        # (kde-selkies-session, labwc-wrapper, sway-wrapper) all open
+        # ${XDG_RUNTIME_DIR:-/tmp}/wayland-1, so this check tracks the same path.
+        # XDG_RUNTIME_DIR is an image ENV (supervisord layer: /tmp/xdg-runtime),
+        # inherited by the exec shell. Braceless $XDG_RUNTIME_DIR is left for the
+        # in-container shell (ov's resolver substitutes only ${braces}); the || /tmp
+        # fallback covers any image that doesn't set it.
         - id: pixelflux-wayland-socket
           scope: deploy
-          command: test -e /tmp/wayland-1
+          command: |
+            d="$XDG_RUNTIME_DIR"; [ -n "$d" ] || d=/tmp
+            test -e "$d/wayland-1"
           exit_status: 0
           in_container: true
           eventually: 60s

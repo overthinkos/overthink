@@ -24,32 +24,32 @@ type BoxReconcileCmd struct {
 }
 
 // reconcileCandidateFiles returns the versioned YAML files in dir that may carry
-// `@github` refs (charly.yml + its flat-imported per-kind siblings).
+// `@github` refs. charly.yml is the single entry point (it carries the namespaced
+// @github imports and every inline kind); the per-box and per-candy charly.yml
+// manifests under the discovered box/ and candy/ directories carry the rest.
 func reconcileCandidateFiles(dir string) []string {
 	seen := map[string]struct{}{}
-	for _, n := range []string{
-		"charly.yml", "box.yml", "base.yml", "build.yml",
-		"eval.yml", "local.yml", "pod.yml", "k8s.yml", "vm.yml", "deploy.yml",
-	} {
-		if p := filepath.Join(dir, n); fileExists(p) {
-			seen[filepath.Clean(p)] = struct{}{}
-		}
+	if p := filepath.Join(dir, UnifiedFileName); fileExists(p) {
+		seen[filepath.Clean(p)] = struct{}{}
 	}
-	// Also scan every YAML under candy/ (the layer directory). A locally-vendored
-	// candy can pin @github sibling deps in its require:/layers: lists (e.g. the
-	// cachyos keepassxc-keyring layer), and those must be aligned too — otherwise
-	// reconciliation is not FULLY automatic and the resolver still warns about a
-	// version it cannot reach from the top-level files. filepath.Walk on a missing
-	// candy/ is a clean no-op (the root err arm returns nil).
-	filepath.Walk(filepath.Join(dir, "candy"), func(p string, info os.FileInfo, err error) error {
-		if err != nil || info == nil || info.IsDir() {
+	// Scan every YAML under the discovered box/ and candy/ directories. A
+	// per-box charly.yml can pin a @github `base:`, and a per-candy charly.yml can
+	// pin @github deps in its require:/layer: lists (e.g. the cachyos
+	// keepassxc-keyring layer); both must be aligned too — otherwise reconciliation
+	// is not FULLY automatic and the resolver still warns about a version it cannot
+	// reach from the entry point. filepath.Walk on a missing directory is a clean
+	// no-op (the root err arm returns nil).
+	for _, sub := range []string{DefaultBoxDir, DefaultCandyDir} {
+		filepath.Walk(filepath.Join(dir, sub), func(p string, info os.FileInfo, err error) error {
+			if err != nil || info == nil || info.IsDir() {
+				return nil
+			}
+			if ext := filepath.Ext(p); ext == ".yml" || ext == ".yaml" {
+				seen[filepath.Clean(p)] = struct{}{}
+			}
 			return nil
-		}
-		if ext := filepath.Ext(p); ext == ".yml" || ext == ".yaml" {
-			seen[filepath.Clean(p)] = struct{}{}
-		}
-		return nil
-	})
+		})
+	}
 	out := make([]string, 0, len(seen))
 	for p := range seen {
 		out = append(out, p)

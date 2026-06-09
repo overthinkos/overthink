@@ -1,0 +1,22 @@
+box:
+    # arch-builder + CUDA toolkit + NVENC SDK headers, so multi-stage builders
+    # (pixi/cargo) can compile GPU-encode code — notably pixelflux's nvenc-sys
+    # (real NvencEncoder) for the cachyos-gpu GPU streaming desktop. The stock
+    # arch-builder has no CUDA, so selkies' build.sh keeps the NVENC stub there
+    # (container selkies-desktop is unchanged); pointing a build at this builder
+    # flips on real GPU encode. Build-time only.
+    name: cuda-arch-builder
+    base: arch-builder
+    # @github-qualified (like arch-builder's own layers) so this builder
+    # resolves when pulled CROSS-REPO — e.g. image/cachyos's selkies-*-nvidia
+    # images set builder.pixi: charly.cuda-arch-builder, which builds this image as
+    # an intermediate in the consumer's graph; a bare `cuda` would be an
+    # "unknown layer" there (it's a main-repo layer, not the consumer's).
+    candy:
+        - '@github.com/overthinkos/overthink/candy/cuda:v2026.160.1105'
+        - '@github.com/overthinkos/overthink/candy/nvenc-headers:v2026.160.1105'
+    produce:
+        - pixi
+        - npm
+        - cargo
+        - aur

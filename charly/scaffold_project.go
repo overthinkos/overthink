@@ -27,21 +27,27 @@ import (
 // scaffoldCharlyYAML is the seed charly.yml written into a fresh
 // project. Uses the upstream build.yml via format_config remote ref so
 // the new project doesn't have to copy the canonical 1k-line build.yml.
-const scaffoldCharlyYAML = `# charly.yml — unified project root.
+const scaffoldCharlyYAML = `# charly.yml — unified project root: the single file a project needs.
 # See https://github.com/overthinkos/overthink for documentation.
 #
-# Before building you must wire format_config to a build.yml — either:
-#   1. Copy build.yml from the overthinkos/overthink repo and point at it:
-#        format_config: build.yml
-#   2. Reference a published release remotely:
-#        format_config: "@github.com/overthinkos/overthink/build.yml:<tag>"
+# Box (image) and candy (layer) definitions are DISCOVERED per name:
+#   box/<name>/charly.yml   — one box per directory
+#   candy/<name>/charly.yml — one candy per directory
+# The default distro/builder/init build vocabulary is EMBEDDED in the charly
+# binary; declare distro:/builder:/init:/resource: here only to EXTEND or
+# OVERRIDE it.
 #
-# Cross-kind name reuse is permitted — a single name (e.g. my-app) MAY
-# exist simultaneously as a layer (under candy/), an image: entry, a
-# pod: entry, a vm: entry, a k8s: entry, a local: entry, AND a
-# deployment: entry. charly verbs disambiguate by command context.
+# Cross-kind name reuse is permitted — a single name (e.g. my-app) MAY exist
+# simultaneously as a candy, a box, a pod, a vm, a k8s, a local, AND a deploy
+# entry. charly verbs disambiguate by command context.
 
 version: __SCHEMA_VERSION__
+
+discover:
+  - path: box
+    recursive: true
+  - path: candy
+    recursive: true
 
 defaults:
   registry: ghcr.io/example
@@ -49,9 +55,6 @@ defaults:
   platforms:
     - linux/amd64
   build: [rpm]
-  # format_config: build.yml          # ← uncomment after you've placed build.yml here
-
-image: {}
 `
 
 // scaffoldGitignore keeps the build artefact dir + common scratch files
@@ -74,13 +77,16 @@ func ScaffoldProject(dir string) error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("creating project directory: %w", err)
 	}
-	charlyPath := filepath.Join(dir, "charly.yml")
+	charlyPath := filepath.Join(dir, UnifiedFileName)
 	if _, err := os.Stat(charlyPath); err == nil {
 		return fmt.Errorf("charly.yml already exists at %s; refusing to overwrite", charlyPath)
 	}
 	seed := strings.ReplaceAll(scaffoldCharlyYAML, "__SCHEMA_VERSION__", LatestSchemaVersion().String())
 	if err := os.WriteFile(charlyPath, []byte(seed), 0o644); err != nil {
 		return fmt.Errorf("writing charly.yml: %w", err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, DefaultBoxDir), 0o755); err != nil {
+		return fmt.Errorf("creating box/: %w", err)
 	}
 	if err := os.MkdirAll(filepath.Join(dir, DefaultCandyDir), 0o755); err != nil {
 		return fmt.Errorf("creating candy/: %w", err)
@@ -94,38 +100,22 @@ func ScaffoldProject(dir string) error {
 	return nil
 }
 
-// AddImage appends a new image entry to charly.yml under the given
-// dir. Existing entries are not touched. The base argument is the value
-// of the image's `base:` field (either an external URL or the name of
-// another image in charly.yml). If layers is non-nil it populates
-// the image's `layers:` list.
+// AddImage writes a new box to its discovered per-box file box/<name>/charly.yml
+// (a kind-keyed `box:` doc). The base argument is the value of the box's `base:`
+// field (an external URL or the name of another box). If layers is non-nil it
+// populates the box's `candy:` list. Errors if box/<name>/charly.yml exists.
 func AddImage(dir, name, base string, layers []string) error {
 	if name == "" {
-		return fmt.Errorf("image name must be specified")
+		return fmt.Errorf("box name must be specified")
 	}
-	root, err := loadCharlyYAMLNode(dir)
-	if err != nil {
-		return err
+	dest := filepath.Join(dir, DefaultBoxDir, name, UnifiedFileName)
+	if fileExists(dest) {
+		return fmt.Errorf("box %q already exists at %s", name, dest)
 	}
-	doc := docContent(root)
-	imagesKey, imagesNode := imagesMapNode(doc)
-	if imagesNode == nil {
-		// Schema v4 canonical key is the singular `image:`. Append it
-		// when missing.
-		imagesKey = "box"
-		imagesNode = &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
-		doc.Content = append(doc.Content,
-			&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: imagesKey},
-			imagesNode,
-		)
-	}
-	// Reset to block style if the existing node was `{}` flow.
-	imagesNode.Style = 0
-	if mappingChild(imagesNode, name) != nil {
-		return fmt.Errorf("image %q already exists in charly.yml", name)
-	}
-	imgValue := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
-	imgValue.Content = append(imgValue.Content,
+	inner := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
+	inner.Content = append(inner.Content,
+		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "name"},
+		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: name},
 		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "base"},
 		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: base},
 	)
@@ -136,16 +126,21 @@ func AddImage(dir, name, base string, layers []string) error {
 				&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: l},
 			)
 		}
-		imgValue.Content = append(imgValue.Content,
+		inner.Content = append(inner.Content,
 			&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "candy"},
 			layersNode,
 		)
 	}
-	imagesNode.Content = append(imagesNode.Content,
-		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: name},
-		imgValue,
+	wrapper := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
+	wrapper.Content = append(wrapper.Content,
+		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "box"},
+		inner,
 	)
-	return saveCharlyYAMLNode(dir, root)
+	doc := &yaml.Node{Kind: yaml.DocumentNode, Content: []*yaml.Node{wrapper}}
+	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
+		return fmt.Errorf("creating box directory: %w", err)
+	}
+	return saveYAMLNodeFile(dest, doc)
 }
 
 // AddLayerToImage appends a layer to an existing image's `candy:` list.
@@ -205,7 +200,7 @@ func RemoveLayerFromImage(dir, image, layer string) error {
 // yaml.Node helpers — kept private to this file so the surface is small.
 
 func loadCharlyYAMLNode(dir string) (*yaml.Node, error) {
-	path := filepath.Join(dir, "charly.yml")
+	path := filepath.Join(dir, UnifiedFileName)
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -221,7 +216,7 @@ func loadCharlyYAMLNode(dir string) (*yaml.Node, error) {
 }
 
 func saveCharlyYAMLNode(dir string, root *yaml.Node) error {
-	path := filepath.Join(dir, "charly.yml")
+	path := filepath.Join(dir, UnifiedFileName)
 	data, err := yaml.Marshal(root)
 	if err != nil {
 		return fmt.Errorf("marshalling charly.yml: %w", err)
@@ -311,12 +306,25 @@ func flatLocalImports(root *yaml.Node) []string {
 // that file, so they work on entries defined in imported per-kind files, not
 // only those inlined in charly.yml.
 func resolveImageNodeFile(dir, name string) (*yaml.Node, *yaml.Node, string, error) {
+	// Discovered per-box file box/<name>/charly.yml (the canonical location) — a
+	// kind-keyed `box:` doc whose value node is the box's inner mapping.
+	boxFile := filepath.Join(dir, DefaultBoxDir, name, UnifiedFileName)
+	if data, rerr := os.ReadFile(boxFile); rerr == nil {
+		var froot yaml.Node
+		if yaml.Unmarshal(data, &froot) == nil {
+			if rm := docRootMapping(&froot); rm != nil {
+				if inner := nodeMapValue(rm, "box"); inner != nil && inner.Kind == yaml.MappingNode {
+					return &froot, inner, boxFile, nil
+				}
+			}
+		}
+	}
 	charlyRoot, err := loadCharlyYAMLNode(dir)
 	if err != nil {
 		return nil, nil, "", err
 	}
 	if n := imageNode(charlyRoot, name); n != nil {
-		return charlyRoot, n, filepath.Join(dir, "charly.yml"), nil
+		return charlyRoot, n, filepath.Join(dir, UnifiedFileName), nil
 	}
 	for _, ref := range flatLocalImports(charlyRoot) {
 		p := filepath.Join(dir, ref)

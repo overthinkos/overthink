@@ -1,0 +1,13 @@
+box:
+    name: jupyter-ml
+    enabled: true
+    base: nvidia.nvidia
+    platform:
+        - linux/amd64
+    candy:
+        - agent-forwarding
+        - jupyter-ml
+        - notebook-templates
+        - dbus
+    port:
+        - 8888:8888

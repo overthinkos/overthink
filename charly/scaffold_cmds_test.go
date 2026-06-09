@@ -21,7 +21,7 @@ func TestCandySet_DescendsIntoCandyWrapper(t *testing.T) {
 		t.Fatal(err)
 	}
 	const start = "candy:\n  name: foo\n  version: 2026.1.1\n"
-	if err := os.WriteFile(filepath.Join(layerDir, "candy.yml"), []byte(start), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(layerDir, UnifiedFileName), []byte(start), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	t.Chdir(dir)
@@ -30,7 +30,7 @@ func TestCandySet_DescendsIntoCandyWrapper(t *testing.T) {
 		t.Fatalf("CandySetCmd.Run: %v", err)
 	}
 
-	out, err := os.ReadFile(filepath.Join(layerDir, "candy.yml"))
+	out, err := os.ReadFile(filepath.Join(layerDir, UnifiedFileName))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -56,7 +56,7 @@ func TestCandySet_DescendsIntoCandyWrapper(t *testing.T) {
 	if err := (&CandySetCmd{Name: "foo", Path: "candy.name", Value: "bar"}).Run(); err != nil {
 		t.Fatalf("CandySetCmd.Run (candy.-prefixed): %v", err)
 	}
-	out2, err := os.ReadFile(filepath.Join(layerDir, "candy.yml"))
+	out2, err := os.ReadFile(filepath.Join(layerDir, UnifiedFileName))
 	if err != nil {
 		t.Fatal(err)
 	}

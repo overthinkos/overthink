@@ -212,8 +212,8 @@ func TestScanRemoteLayers(t *testing.T) {
 	os.MkdirAll(filepath.Join(layersDir, "cuda"), 0755)
 	os.MkdirAll(filepath.Join(layersDir, "python-ml"), 0755)
 
-	os.WriteFile(filepath.Join(layersDir, "cuda", "candy.yml"), []byte("candy:\n  name: cuda\n  package:\n    - cuda-toolkit\n"), 0644)
-	os.WriteFile(filepath.Join(layersDir, "python-ml", "candy.yml"), []byte("candy:\n  name: python-ml\n  require:\n    - cuda\n"), 0644)
+	os.WriteFile(filepath.Join(layersDir, "cuda", "charly.yml"), []byte("candy:\n  name: cuda\n  package:\n    - cuda-toolkit\n"), 0644)
+	os.WriteFile(filepath.Join(layersDir, "python-ml", "charly.yml"), []byte("candy:\n  name: python-ml\n  require:\n    - cuda\n"), 0644)
 	os.WriteFile(filepath.Join(layersDir, "python-ml", "pixi.toml"), []byte("[project]\nname = \"python-ml\"\n"), 0644)
 
 	wantRefs := map[string]bool{

@@ -151,8 +151,20 @@ func TestLoadBuilderConfigFromFile(t *testing.T) {
 func TestBuilderNames(t *testing.T) {
 	_, builderCfg, _, _ := LoadBuildConfigForImage(testdataDir)
 	names := builderCfg.BuilderNames()
-	if len(names) != 4 {
-		t.Errorf("expected 4 builder names, got %d: %v", len(names), names)
+	// The embedded default build vocabulary contributes its builders too
+	// (debootstrap/pacstrap beyond testdata's pixi/npm/cargo/aur), so assert the
+	// testdata builders are PRESENT rather than pinning an exact count.
+	for _, want := range []string{"pixi", "npm", "cargo", "aur"} {
+		found := false
+		for _, n := range names {
+			if n == want {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("builder %q missing from %v", want, names)
+		}
 	}
 }
 

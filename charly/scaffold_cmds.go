@@ -73,7 +73,7 @@ func (c *BoxSetCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	target := filepath.Join(dir, "charly.yml")
+	target := filepath.Join(dir, UnifiedFileName)
 	if _, err := os.Stat(target); os.IsNotExist(err) {
 		return fmt.Errorf("charly.yml not found in %s; run `charly box new project .` to scaffold or `charly migrate` to convert a legacy box.yml", dir)
 	}
@@ -271,7 +271,7 @@ func (c *CandySetCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	layerYml := filepath.Join(dir, DefaultCandyDir, c.Name, DefaultManifest)
+	layerYml := filepath.Join(dir, DefaultCandyDir, c.Name, UnifiedFileName)
 	if _, err := os.Stat(layerYml); err != nil {
 		return fmt.Errorf("candy %q not found at %s", c.Name, layerYml)
 	}
@@ -359,7 +359,7 @@ func appendLayerPackages(name, section string, pkgs []string) error {
 	if err != nil {
 		return err
 	}
-	layerYml := filepath.Join(dir, DefaultCandyDir, name, DefaultManifest)
+	layerYml := filepath.Join(dir, DefaultCandyDir, name, UnifiedFileName)
 	data, err := os.ReadFile(layerYml)
 	if err != nil {
 		return fmt.Errorf("reading %s: %w", layerYml, err)

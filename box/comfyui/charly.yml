@@ -1,0 +1,12 @@
+box:
+    name: comfyui
+    enabled: false
+    base: nvidia.nvidia
+    platform:
+        - linux/amd64
+    candy:
+        - agent-forwarding
+        - comfyui
+        - dbus
+    port:
+        - 8188:8188

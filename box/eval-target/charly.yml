@@ -1,0 +1,13 @@
+box:
+    # Throwaway benchmark target used by `charly eval run eval-target`.
+    # The eval-target layer ships a deliberately-failing BDD scenario
+    # that an AI solves by adding a write: task. Fedora base + minimal
+    # layer stack keeps per-iteration rebuild fast.
+    name: eval-target
+    base: fedora
+    candy:
+        - claude-code
+        - charly-mcp
+        - eval-target-layer
+    port:
+        - 18765:18765

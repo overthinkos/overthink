@@ -21,10 +21,10 @@ func compilerTestProjectDir(t *testing.T) (string, func()) {
 	if err != nil {
 		t.Fatalf("getwd: %v", err)
 	}
-	// Walk up from current to find the project root (box.yml marker).
+	// Walk up from current to find the project root (charly.yml marker).
 	dir := prev
 	for i := 0; i < 5; i++ {
-		if _, err := os.Stat(filepath.Join(dir, "box.yml")); err == nil {
+		if _, err := os.Stat(filepath.Join(dir, UnifiedFileName)); err == nil {
 			if err := os.Chdir(dir); err != nil {
 				t.Fatalf("chdir %s: %v", dir, err)
 			}

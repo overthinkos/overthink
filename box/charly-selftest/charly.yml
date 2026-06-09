@@ -1,0 +1,19 @@
+box:
+    # charly self-test image — the full charly toolchain on a CachyOS base. Backs the
+    # eval-charly-selftest-pod kind:eval bed, which exercises EVERY charly command group
+    # (version/status/doctor/settings/box list+inspect+validate/clean/migrate/
+    # secrets/vm/deploy/eval/mcp/feature) in-container. Full charly arrives via charly-mcp
+    # (now the full toolchain: binary + virtualization + gocryptfs + socat) so the
+    # vm/libvirt commands resolve; container-nesting enables nested `charly deploy`;
+    # claude-code is the driver for the charly-cli-surface AI score.
+    name: charly-selftest
+    base: cachyos.cachyos
+    build:
+        - pac
+        - aur
+    candy:
+        - charly-mcp
+        - container-nesting
+        - claude-code
+    port:
+        - 18765:18765

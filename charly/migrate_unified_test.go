@@ -34,65 +34,52 @@ image:
     package: [chromium]
 `)
 
-	// Run migration.
-	written, err := MigrateUnified(MigrateUnifiedOpts{
-		Dir: root,
-	})
+	// Run the FULL project migration chain to HEAD (unified → candy-box-rename →
+	// charly-rebrand → single-filename → calver-schema): the legacy image.yml +
+	// layers/<n>/layer.yml become box/<n>/charly.yml + candy/<n>/charly.yml, and the
+	// tree is stamped to the current schema so it loads + discovers.
+	ctx, err := NewMigrateContext(root, false)
 	if err != nil {
-		t.Fatalf("MigrateUnified: %v", err)
+		t.Fatalf("NewMigrateContext: %v", err)
 	}
-	// The full chain also runs candy-box-rename (a later step): layers/ → candy/,
-	// layer.yml → candy.yml, and the discover path — so the migrated tree loads
-	// and discovers under the current schema.
-	if _, err := MigrateBoxCandyRename(root, "", false); err != nil {
-		t.Fatalf("candy-box rename: %v", err)
-	}
-	// ... and charly-rebrand (the final pre-stamp step) renames overthink.yml →
-	// charly.yml so the tree loads under the current UnifiedFileName.
-	if _, err := MigrateCharlyRebrand(&MigrateContext{Dir: root}); err != nil {
-		t.Fatalf("charly-rebrand: %v", err)
-	}
-	// Expect root + build.yml + images.yml written.
-	if len(written) < 3 {
-		t.Errorf("written = %v, want ≥3 files", written)
+	if _, err := RunProjectMigrations(ctx); err != nil {
+		t.Fatalf("RunProjectMigrations: %v", err)
 	}
 
-	// Root file contains includes + discover.
+	// The single entry point is charly.yml; the custom build.yml stays imported (it
+	// overrides the embedded default vocabulary) and discover: scans box + candy.
 	rootData, err := os.ReadFile(filepath.Join(root, UnifiedFileName))
 	if err != nil {
 		t.Fatalf("read root: %v", err)
 	}
 	s := string(rootData)
 	if !strings.Contains(s, "import:") {
-		t.Error("root overthink.yml missing import:")
+		t.Error("root charly.yml missing import:")
 	}
 	if !strings.Contains(s, "build.yml") {
-		t.Error("includes missing build.yml")
-	}
-	if !strings.Contains(s, "images.yml") {
-		t.Error("includes missing images.yml")
+		t.Error("custom build.yml import dropped (should be kept — it overrides the embed)")
 	}
 	if !strings.Contains(s, "discover:") {
-		t.Error("root missing discover:")
+		t.Error("root charly.yml missing discover:")
 	}
 
-	// Round-trip: LoadUnified + ApplyDiscover should see the migrated fedora
-	// image, the fedora distro, and the discovered chrome layer.
-	uf, _, err := LoadUnified(root)
+	// LoadUnified runs discovery internally, so it sees the migrated fedora box,
+	// the fedora distro, and the discovered chrome candy.
+	uf, present, err := LoadUnified(root)
 	if err != nil {
 		t.Fatalf("LoadUnified: %v", err)
 	}
+	if !present {
+		t.Fatal("charly.yml not present after migration")
+	}
 	if _, ok := uf.Image["fedora"]; !ok {
-		t.Error("LoadUnified lost images.fedora after migration")
+		t.Error("LoadUnified lost the fedora box after migration")
 	}
 	if _, ok := uf.Distro["fedora"]; !ok {
-		t.Error("LoadUnified lost distros.fedora after migration")
-	}
-	if err := uf.ApplyDiscover(root); err != nil {
-		t.Fatalf("ApplyDiscover: %v", err)
+		t.Error("LoadUnified lost the fedora distro after migration")
 	}
 	if _, ok := uf.Layer["chrome"]; !ok {
-		t.Error("ApplyDiscover didn't pick up layers/chrome")
+		t.Error("discovery didn't pick up candy/chrome after migration")
 	}
 }
 

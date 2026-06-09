@@ -1,0 +1,7 @@
+box:
+    # charly eval `default` score — per-pod target images.
+    name: os
+    base: fedora
+    candy:
+        - supervisord
+        - os-layer

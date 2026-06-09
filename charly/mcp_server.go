@@ -204,7 +204,7 @@ func (c *McpServeCmd) bootstrapProject() error {
 	// Case 1: charly.yml (the canonical project entry) exists in cwd (main()
 	// has already chdir'd if --dir or --repo was supplied, so cwd reflects all
 	// three origins).
-	if _, err := os.Stat("charly.yml"); err == nil {
+	if _, err := os.Stat(UnifiedFileName); err == nil {
 		return nil
 	}
 

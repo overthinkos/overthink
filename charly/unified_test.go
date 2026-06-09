@@ -35,7 +35,7 @@ func TestLoadUnified_AbsentFileReturnsNotPresent(t *testing.T) {
 
 func TestLoadUnified_BasicRoot(t *testing.T) {
 	root := t.TempDir()
-	writeFixture(t, root, "charly.yml", `version: 2026.159.1912
+	writeFixture(t, root, "charly.yml", `version: 2026.160.1301
 defaults:
   registry: quay.io/example
   build: [rpm]
@@ -94,7 +94,7 @@ box:
 
 func TestLoadUnified_IncludesMerge(t *testing.T) {
 	root := t.TempDir()
-	writeFixture(t, root, "charly.yml", `version: 2026.159.1912
+	writeFixture(t, root, "charly.yml", `version: 2026.160.1301
 import:
   - build.yml
   - images.yml
@@ -136,7 +136,7 @@ box:
 
 func TestLoadUnified_IncludeCycleDetected(t *testing.T) {
 	root := t.TempDir()
-	writeFixture(t, root, "charly.yml", `version: 2026.159.1912
+	writeFixture(t, root, "charly.yml", `version: 2026.160.1301
 import: [a.yml]
 `)
 	writeFixture(t, root, "a.yml", `import: [b.yml]
@@ -154,7 +154,7 @@ import: [a.yml]
 
 func TestLoadUnified_MultiDocumentKindKeyed(t *testing.T) {
 	root := t.TempDir()
-	writeFixture(t, root, "charly.yml", `version: 2026.159.1912
+	writeFixture(t, root, "charly.yml", `version: 2026.160.1301
 import: [bundle.yml]
 `)
 	writeFixture(t, root, "bundle.yml", `---
@@ -188,9 +188,9 @@ box:
 
 func TestLoadUnified_AmbiguousDocRejected(t *testing.T) {
 	root := t.TempDir()
-	writeFixture(t, root, "charly.yml", `version: 2026.159.1912
+	writeFixture(t, root, "charly.yml", `version: 2026.160.1301
 `)
-	writeFixture(t, root, "charly.yml", `version: 2026.159.1912
+	writeFixture(t, root, "charly.yml", `version: 2026.160.1301
 import: [bundle.yml]
 `)
 	writeFixture(t, root, "bundle.yml", `candy:
@@ -210,15 +210,15 @@ box:
 func TestLoadUnified_DiscoverLayers(t *testing.T) {
 	root := t.TempDir()
 	// Canonical kind-keyed candy.yml manifests; discovery routes by shape.
-	writeFixture(t, root, "candy/chrome/candy.yml", `candy:
+	writeFixture(t, root, "candy/chrome/charly.yml", `candy:
   version: "1"
   package: [chromium]
 `)
-	writeFixture(t, root, "candy/firefox/candy.yml", `candy:
+	writeFixture(t, root, "candy/firefox/charly.yml", `candy:
   version: "1"
   package: [firefox]
 `)
-	writeFixture(t, root, "charly.yml", `version: 2026.159.1912
+	writeFixture(t, root, "charly.yml", `version: 2026.160.1301
 discover:
   - candy
 `)
@@ -239,11 +239,11 @@ discover:
 
 func TestLoadUnified_DiscoverExplicitWinsOverDiscovered(t *testing.T) {
 	root := t.TempDir()
-	writeFixture(t, root, "candy/chrome/candy.yml", `candy:
+	writeFixture(t, root, "candy/chrome/charly.yml", `candy:
   version: "from-disk"
   package: [chromium]
 `)
-	writeFixture(t, root, "charly.yml", `version: 2026.159.1912
+	writeFixture(t, root, "charly.yml", `version: 2026.160.1301
 discover:
   - candy
 candy:
@@ -267,7 +267,7 @@ candy:
 
 func TestLoadUnified_ScanSpecStringShorthand(t *testing.T) {
 	root := t.TempDir()
-	writeFixture(t, root, "charly.yml", `version: 2026.159.1912
+	writeFixture(t, root, "charly.yml", `version: 2026.160.1301
 discover:
   - layers
   - { path: vendor, recursive: false }
@@ -293,10 +293,10 @@ discover:
 	if uf.Discover[1].Path != wantVendor || uf.Discover[1].Recursive {
 		t.Errorf("[1] = %+v, want {Path:%s Recursive:false}", uf.Discover[1], wantVendor)
 	}
-	// The string shorthand and the object form both default Manifest to
-	// DefaultManifest (configurable per spec via `manifest:` in charly.yml).
-	if uf.Discover[0].Manifest != DefaultManifest || uf.Discover[1].Manifest != DefaultManifest {
-		t.Errorf("Manifest defaults = %q,%q, want %q", uf.Discover[0].Manifest, uf.Discover[1].Manifest, DefaultManifest)
+	// The string shorthand and the object form both default Manifest to the
+	// single unified filename (configurable per spec via `manifest:` in charly.yml).
+	if uf.Discover[0].Manifest != UnifiedFileName || uf.Discover[1].Manifest != UnifiedFileName {
+		t.Errorf("Manifest defaults = %q,%q, want %q", uf.Discover[0].Manifest, uf.Discover[1].Manifest, UnifiedFileName)
 	}
 }
 
@@ -310,7 +310,7 @@ func TestLoadUnified_DiscoverConfigurableManifest(t *testing.T) {
   version: "1"
   package: [widget]
 `)
-	writeFixture(t, root, "charly.yml", `version: 2026.159.1912
+	writeFixture(t, root, "charly.yml", `version: 2026.160.1301
 discover:
   - { path: stuff, recursive: true, manifest: thing.yml }
 `)
@@ -335,7 +335,7 @@ func TestLoadUnified_DiscoverRoutesNonCandyByShape(t *testing.T) {
   name: myimg
   base: quay.io/fedora/fedora:43
 `)
-	writeFixture(t, root, "charly.yml", `version: 2026.159.1912
+	writeFixture(t, root, "charly.yml", `version: 2026.160.1301
 discover:
   - { path: entities, recursive: true, manifest: entity.yml }
 `)
@@ -358,7 +358,7 @@ discover:
 // (no stale references).
 func TestLoadUnified_DeploymentsSection(t *testing.T) {
 	root := t.TempDir()
-	writeFixture(t, root, "charly.yml", `version: 2026.159.1912
+	writeFixture(t, root, "charly.yml", `version: 2026.160.1301
 deployments:
   openclaw:
     port: ["8080:80"]
@@ -378,7 +378,7 @@ deployments:
 
 func TestLoadUnified_ProjectConfig(t *testing.T) {
 	root := t.TempDir()
-	writeFixture(t, root, "charly.yml", `version: 2026.159.1912
+	writeFixture(t, root, "charly.yml", `version: 2026.160.1301
 defaults: { registry: r.example.com }
 box:
   foo: { base: alpine }

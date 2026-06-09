@@ -44,7 +44,7 @@ func (c *CandyAddScenarioCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	layerYml := filepath.Join(dir, DefaultCandyDir, c.Name, DefaultManifest)
+	layerYml := filepath.Join(dir, DefaultCandyDir, c.Name, UnifiedFileName)
 	added, err := appendLayerScenario(layerYml, c.Scenario, c.Given, c.When, c.Then, c.Tag, c.Pod)
 	if err != nil {
 		return err

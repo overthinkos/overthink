@@ -87,7 +87,7 @@ multi-stage Containerfiles with cache mounts, and builds in the right
 order — handling the hard parts so you (and your agents) don't
 have to.
 
-- **Candy** (`kind: candy` in `candy.yml`) — packages (per-distro),
+- **Candy** (`kind: candy` in `candy/<name>/charly.yml`) — packages (per-distro),
   tasks (eight verbs: `cmd`/`mkdir`/`copy`/`write`/`link`/`download`/
   `setcap`/`build`), services (one unified `service:` list — see
   init-system polymorphism below), volumes, env, ports, eval probes,
@@ -689,7 +689,7 @@ not enumerations:
   `/charly-selkies:*` (40), `/charly-openclaw:*`, `/charly-versa:*`,
   `/charly-ollama:*`, `/charly-openwebui:*`, `/charly-comfyui:*`,
   `/charly-immich:*`, `/charly-hermes:*`, `/charly-filebrowser:*`.
-- **Box catalog** (`box.yml` + `image/*/box.yml`) — 53 boxes,
+- **Box catalog** (discovered `box/<name>/charly.yml` across the repo + submodules) — 53 boxes,
   39 enabled by default. Same plugin namespaces; per-pod boxes
   carry an MCP server hint in `plugins/README.md`.
 - **VM catalog** (`vm.yml` + `image/cachyos/vm.yml`) — cloud_image
@@ -747,12 +747,12 @@ not here.
 
 ```bash
 charly box new candy my-candy             # Scaffold the directory
-# Edit candy/my-candy/candy.yml        # Declare packages, deps, env, ports,
+# Edit candy/my-candy/charly.yml        # Declare packages, deps, env, ports,
 #                                       # services, eval probes, and tasks:
 #                                       # (see /charly-image:layer for the verb catalog)
 # Optionally add pixi.toml / package.json / Cargo.toml for auto-detected builders.
 
-# Add to a box's candy list in charly.yml (or box.yml):
+# Add to a box's candy list in box/<name>/charly.yml:
 #   candy: [..., my-candy]
 
 charly box build my-image                 # Build it
@@ -764,7 +764,7 @@ verbs (`cmd`, `mkdir`, `copy`, `write`, `link`, `download`,
 `setcap`, `build`), the unified `service:` schema, `vars:`
 substitution, YAML anchors, and execution-order rules.
 `/charly-eval:eval` covers the matcher forms, runtime variable table,
-gold-standard pattern (`candy/redis/candy.yml`), and the 10
+gold-standard pattern (`candy/redis/charly.yml`), and the 10
 authoring gotchas.
 
 ## Works with Claude Code

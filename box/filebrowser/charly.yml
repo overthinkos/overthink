@@ -1,0 +1,17 @@
+box:
+    name: filebrowser
+    base: fedora
+    candy:
+        - agent-forwarding
+        - filebrowser
+        - dbus
+    port:
+        - 8085:8080
+    eval:
+        - command: test -x /usr/local/bin/filebrowser && test -x /usr/bin/dbus-daemon
+          id: filebrowser-composed-binaries
+          exit_status: 0
+        - file: ${VOLUME_CONTAINER_PATH:data}
+          id: filebrowser-volumes-exist
+          scope: deploy
+          filetype: directory

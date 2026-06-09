@@ -358,7 +358,7 @@ func TestRejectLegacyTopLevelFormatAndDistroKeys(t *testing.T) {
 		{"arch", true}, {"fedora", true},
 		{"package", false}, {"distro", false}, {"service", false},
 		{"task", false}, {"description", false}, {"", false},
-		{"cachyos", false}, // not declared in the testdata fixture
+		{"cachyos", true}, // now provided by the embedded default build vocabulary
 	}
 	for _, tc := range cases {
 		if got := looksLikeDistroOrFormatKey(tc.key); got != tc.want {

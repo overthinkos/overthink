@@ -1,0 +1,7 @@
+box:
+    # tier4-redis: client pod with redis-cli only (deploys as `redis-client`).
+    name: redis-client
+    base: fedora
+    candy:
+        - supervisord
+        - redis-client-layer

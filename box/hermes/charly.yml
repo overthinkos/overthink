@@ -1,0 +1,15 @@
+box:
+    name: hermes
+    base: fedora
+    candy:
+        - agent-forwarding
+        - hermes-full
+        - dbus
+    eval:
+        - command: test -x ${HOME}/.npm-global/bin/claude && test -x ${HOME}/.npm-global/bin/codex && test -x ${HOME}/.npm-global/bin/gemini && test -x ${HOME}/.pixi/envs/default/bin/hermes
+          id: hermes-all-clis-present
+          exit_status: 0
+        - service: hermes
+          id: hermes-service-up
+          scope: deploy
+          running: true

@@ -194,9 +194,9 @@ func resolveLocalPath(ref, projectDir string) (*DeployRef, error) {
 	}
 	if info.IsDir() {
 		// A directory ref points at a layer directory (candy/<name>/).
-		path = filepath.Join(path, "candy.yml")
+		path = filepath.Join(path, UnifiedFileName)
 		if _, err := os.Stat(path); err != nil {
-			return nil, fmt.Errorf("ResolveDeployRef: directory %s has no candy.yml", ref)
+			return nil, fmt.Errorf("ResolveDeployRef: directory %s has no %s", ref, UnifiedFileName)
 		}
 	}
 	kind, err := classifyYAMLFile(path)
@@ -204,7 +204,7 @@ func resolveLocalPath(ref, projectDir string) (*DeployRef, error) {
 		return nil, err
 	}
 	name := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
-	if kind == RefKindLayer && filepath.Base(path) == "candy.yml" {
+	if kind == RefKindLayer && filepath.Base(path) == UnifiedFileName {
 		name = filepath.Base(filepath.Dir(path))
 	}
 	return &DeployRef{
@@ -248,8 +248,7 @@ func classifyYAMLFile(path string) (RefKind, error) {
 // a matching name. Cross-kind name reuse is permitted (since 2026-05);
 // preferKind decides precedence when the name exists in both kinds.
 func resolveLocalName(name, projectDir string, preferKind RefKind) (*DeployRef, error) {
-	imgYml := filepath.Join(projectDir, "box.yml")
-	imagesYml := filepath.Join(projectDir, "images.yml")
+	imgYml := filepath.Join(projectDir, UnifiedFileName)
 	layersDir := filepath.Join(projectDir, DefaultCandyDir, name)
 
 	inImageYml := false
@@ -267,10 +266,9 @@ func resolveLocalName(name, projectDir string, preferKind RefKind) (*DeployRef, 
 			resolvedImgPath = imgYml
 		}
 	}
-	_ = imagesYml
 
 	inLayers := false
-	layerYML := filepath.Join(layersDir, "candy.yml")
+	layerYML := filepath.Join(layersDir, UnifiedFileName)
 	if info, err := os.Stat(layerYML); err == nil && !info.IsDir() {
 		inLayers = true
 	}
@@ -309,6 +307,6 @@ func resolveLocalName(name, projectDir string, preferKind RefKind) (*DeployRef, 
 		return layerRef(), nil
 	}
 
-	return nil, fmt.Errorf("ResolveDeployRef: %q not found as image in %s or %s or layer in %s",
-		name, imgYml, imagesYml, layersDir)
+	return nil, fmt.Errorf("ResolveDeployRef: %q not found as image in %s or layer in %s",
+		name, imgYml, layersDir)
 }

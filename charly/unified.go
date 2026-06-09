@@ -224,7 +224,7 @@ type ScanSpec struct {
 	Path      string `yaml:"path"`
 	Recursive bool   `yaml:"recursive"`
 	// Manifest is the per-directory manifest filename to look for. Empty
-	// defaults to DefaultManifest; configurable per spec in charly.yml.
+	// defaults to UnifiedFileName; configurable per spec in charly.yml.
 	Manifest string `yaml:"manifest,omitempty"`
 }
 
@@ -234,7 +234,7 @@ func (s *ScanSpec) UnmarshalYAML(node *yaml.Node) error {
 	if node.Kind == yaml.ScalarNode {
 		s.Path = node.Value
 		s.Recursive = true
-		s.Manifest = DefaultManifest
+		s.Manifest = UnifiedFileName
 		return nil
 	}
 	// Object form — decode with `recursive` defaulting to true when absent.
@@ -257,7 +257,7 @@ func (s *ScanSpec) UnmarshalYAML(node *yaml.Node) error {
 	}
 	s.Manifest = raw.Manifest
 	if s.Manifest == "" {
-		s.Manifest = DefaultManifest
+		s.Manifest = UnifiedFileName
 	}
 	return nil
 }
@@ -1035,6 +1035,25 @@ func loadUnifiedInto(path string, merged *UnifiedFile, visited map[string]bool, 
 			return fmt.Errorf("%s: import namespace %q bound to two different refs", abs, imp.Namespace)
 		}
 		merged.Namespaces[imp.Namespace] = sub
+	}
+	// At a project boundary (depth 0 = the root file OR a namespace root) every
+	// import is now merged, so run discovery here — the SINGLE site for ALL
+	// consumers (box config, layers, deploy). discover: scans each spec and
+	// registers discovered entities by SHAPE (candies AND boxes AND any other
+	// kind). Historically only the layer-loading path called ApplyDiscover, so a
+	// discovered `box:` dir never reached ProjectConfig/Config.Image; routing
+	// it through the loader fixes box-via-discover uniformly.
+	if depth == 0 {
+		if err := merged.ApplyDiscover(base); err != nil {
+			return fmt.Errorf("%s: %w", abs, err)
+		}
+		// Fill any distro/builder/init/resource vocabulary the project did NOT
+		// declare from the binary-embedded default build.yml (project-wins; see
+		// applyEmbeddedBuildDefaults). Runs for the root AND every namespace, so
+		// a project needs no build.yml of its own.
+		if err := applyEmbeddedBuildDefaults(merged); err != nil {
+			return fmt.Errorf("%s: %w", abs, err)
+		}
 	}
 	return nil
 }
@@ -2294,7 +2313,7 @@ func (uf *UnifiedFile) ApplyDiscover(rootDir string) error {
 	for _, s := range uf.Discover {
 		manifest := s.Manifest
 		if manifest == "" {
-			manifest = DefaultManifest
+			manifest = UnifiedFileName
 		}
 		scanPath := s.Path
 		if !filepath.IsAbs(scanPath) {
@@ -2318,7 +2337,12 @@ func (uf *UnifiedFile) ApplyDiscover(rootDir string) error {
 // children of path are considered.
 func findEntityDirs(path, filename string, recursive bool) ([]string, error) {
 	if !dirExists(path) {
-		return nil, fmt.Errorf("discover path %q does not exist", path)
+		// A discover path that doesn't exist yields zero entities — NOT an
+		// error. discover: is universally applied at load now (not just on the
+		// layer path), and a project may legitimately declare a uniform
+		// `discover: [box, candy]` while carrying only one of the directories
+		// (e.g. a distro submodule with boxes but no candy/ of its own).
+		return nil, nil
 	}
 	var out []string
 	if !recursive {
@@ -2550,7 +2574,7 @@ func (uf *UnifiedFile) ProjectLayers(rootDir string) (map[string]*Layer, error) 
 			}
 			manifest := il.manifest
 			if manifest == "" {
-				manifest = DefaultManifest
+				manifest = UnifiedFileName
 			}
 			layer, err := scanLayer(p, name, manifest)
 			if err != nil {

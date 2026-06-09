@@ -12,9 +12,9 @@ func TestResolveDeployRefLocalImage(t *testing.T) {
 	dir := t.TempDir()
 	// Schema v4: ResolveDeployRef calls LoadUnified which reads
 	// charly.yml as the entry point. Fixture must use the unified
-	// shape with version: 2026.159.1912 and the singular box: kind map.
+	// shape with version: 2026.160.1301 and the singular box: kind map.
 	if err := os.WriteFile(filepath.Join(dir, "charly.yml"), []byte(`
-version: 2026.159.1912
+version: 2026.160.1301
 box:
   myimg:
     base: fedora
@@ -36,15 +36,15 @@ func TestResolveDeployRefLocalLayer(t *testing.T) {
 	if err := os.MkdirAll(lyrDir, 0755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(lyrDir, "candy.yml"), []byte(`
-rpm:
+	if err := os.WriteFile(filepath.Join(lyrDir, "charly.yml"), []byte(`
+candy:
   package: [ripgrep]
 `), 0644); err != nil {
 		t.Fatal(err)
 	}
 	// Also create charly.yml so the local-name resolver has something
 	// to search — but we don't add "ripgrep" to it, so it's layer-only.
-	_ = os.WriteFile(filepath.Join(dir, "charly.yml"), []byte("version: 2026.159.1912\nimage: {}\n"), 0644)
+	_ = os.WriteFile(filepath.Join(dir, "charly.yml"), []byte("version: 2026.160.1301\nimage: {}\n"), 0644)
 
 	got, err := ResolveDeployRef("ripgrep", dir)
 	if err != nil {
@@ -66,7 +66,7 @@ rpm:
 func TestResolveDeployRefCrossKindNameReuse(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "charly.yml"), []byte(`
-version: 2026.159.1912
+version: 2026.160.1301
 box:
   dup:
     base: fedora
@@ -76,8 +76,8 @@ box:
 	if err := os.MkdirAll(filepath.Join(dir, "candy", "dup"), 0755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "candy", "dup", "candy.yml"), []byte(`
-rpm:
+	if err := os.WriteFile(filepath.Join(dir, "candy", "dup", "charly.yml"), []byte(`
+candy:
   package: [foo]
 `), 0644); err != nil {
 		t.Fatal(err)
@@ -104,7 +104,7 @@ rpm:
 
 func TestResolveDeployRefUnknownName(t *testing.T) {
 	dir := t.TempDir()
-	_ = os.WriteFile(filepath.Join(dir, "charly.yml"), []byte("version: 2026.159.1912\nimage: {}\n"), 0644)
+	_ = os.WriteFile(filepath.Join(dir, "charly.yml"), []byte("version: 2026.160.1301\nimage: {}\n"), 0644)
 	_, err := ResolveDeployRef("nope", dir)
 	if err == nil {
 		t.Fatalf("expected not-found error, got nil")

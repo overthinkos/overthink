@@ -1,0 +1,6 @@
+box:
+    # phase5 selftest: minimal charly-only image for selftest-image pod.
+    name: selftest-image
+    base: fedora
+    candy:
+        - charly

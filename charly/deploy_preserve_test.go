@@ -116,7 +116,7 @@ func TestVmDestroyRemovesPureAutoEntry(t *testing.T) {
 func TestGatherDeployNodesPerHostWins(t *testing.T) {
 	proj := t.TempDir()
 	// Committed project: cachyos-gpu, NO preemptible.
-	projYml := `version: 2026.159.1912
+	projYml := `version: 2026.160.1301
 deploy:
   cachyos-gpu:
     target: vm
@@ -131,7 +131,7 @@ deploy:
 	if err := os.MkdirAll(filepath.Join(cfg, "charly"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	hostYml := `version: 2026.159.1912
+	hostYml := `version: 2026.160.1301
 deploy:
   cachyos-gpu:
     target: vm

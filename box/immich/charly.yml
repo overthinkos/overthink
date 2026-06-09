@@ -1,0 +1,17 @@
+box:
+    name: immich
+    enabled: false
+    base: fedora-nonfree
+    platform:
+        - linux/amd64
+    candy:
+        - agent-forwarding
+        - nodejs
+        - supervisord
+        - postgresql
+        - vectorchord
+        - redis
+        - immich
+        - dbus
+    port:
+        - 2283:2283

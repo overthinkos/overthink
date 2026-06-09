@@ -496,7 +496,10 @@ func repoRootDir(t *testing.T) string {
 		t.Fatal(err)
 	}
 	for i := 0; i < 16; i++ {
-		if _, err := os.Stat(filepath.Join(dir, "build.yml")); err == nil {
+		// The repo root holds the unified charly.yml entry point. build.yml is no
+		// longer a reliable marker — it's embedded in the binary, and the charly/
+		// source dir carries the embed-source build.yml.
+		if _, err := os.Stat(filepath.Join(dir, UnifiedFileName)); err == nil {
 			return dir
 		}
 		parent := filepath.Dir(dir)
@@ -505,6 +508,6 @@ func repoRootDir(t *testing.T) string {
 		}
 		dir = parent
 	}
-	t.Skip("build.yml not found walking up from test cwd; skipping round-trip")
+	t.Skip("charly.yml not found walking up from test cwd; skipping round-trip")
 	return ""
 }

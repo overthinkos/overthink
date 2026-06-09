@@ -46,33 +46,38 @@ func TestScaffoldProject_AddImageRoundtrip(t *testing.T) {
 	if err := AddImage(dir, "hello", "quay.io/fedora/fedora:43", []string{"sshd"}); err != nil {
 		t.Fatalf("AddImage: %v", err)
 	}
-	data, err := os.ReadFile(filepath.Join(dir, "charly.yml"))
+	// The scaffold's charly.yml leading comment is untouched — AddImage writes a
+	// separate discovered per-box file box/hello/charly.yml.
+	rootData, err := os.ReadFile(filepath.Join(dir, "charly.yml"))
 	if err != nil {
-		t.Fatalf("read: %v", err)
+		t.Fatalf("read charly.yml: %v", err)
 	}
-	if !strings.Contains(string(data), "charly.yml — unified project root.") {
-		t.Errorf("scaffold's leading comment was destroyed by AddImage; charly.yml=\n%s", data)
+	if !strings.Contains(string(rootData), "unified project root") {
+		t.Errorf("scaffold's leading comment was destroyed; charly.yml=\n%s", rootData)
 	}
-	// Confirm the structure is parseable AND the image is present. The
-	// canonical singular `box:` key is what the scaffold emits.
-	var root struct {
-		Image map[string]struct {
+	// AddImage writes box/hello/charly.yml as a kind-keyed `box:` doc.
+	data, err := os.ReadFile(filepath.Join(dir, "box", "hello", "charly.yml"))
+	if err != nil {
+		t.Fatalf("read box/hello/charly.yml: %v", err)
+	}
+	var doc struct {
+		Box struct {
+			Name   string   `yaml:"name"`
 			Base   string   `yaml:"base"`
 			Layers []string `yaml:"candy"`
 		} `yaml:"box"`
 	}
-	if err := yaml.Unmarshal(data, &root); err != nil {
+	if err := yaml.Unmarshal(data, &doc); err != nil {
 		t.Fatalf("re-parse: %v\n%s", err, data)
 	}
-	got, ok := root.Image["hello"]
-	if !ok {
-		t.Fatalf("hello image missing; charly.yml=\n%s", data)
+	if doc.Box.Name != "hello" {
+		t.Fatalf("box name = %q; want hello\n%s", doc.Box.Name, data)
 	}
-	if got.Base != "quay.io/fedora/fedora:43" {
-		t.Errorf("base = %q; want quay.io/fedora/fedora:43", got.Base)
+	if doc.Box.Base != "quay.io/fedora/fedora:43" {
+		t.Errorf("base = %q; want quay.io/fedora/fedora:43", doc.Box.Base)
 	}
-	if len(got.Layers) != 1 || got.Layers[0] != "sshd" {
-		t.Errorf("layers = %v; want [sshd]", got.Layers)
+	if len(doc.Box.Layers) != 1 || doc.Box.Layers[0] != "sshd" {
+		t.Errorf("candy = %v; want [sshd]", doc.Box.Layers)
 	}
 }
 
@@ -94,7 +99,7 @@ func TestAddLayerToImage(t *testing.T) {
 	if err := AddLayerToImage(dir, "hello", "tmux"); err != nil {
 		t.Fatalf("AddLayerToImage tmux: %v", err)
 	}
-	data, _ := os.ReadFile(filepath.Join(dir, "charly.yml"))
+	data, _ := os.ReadFile(filepath.Join(dir, "box", "hello", "charly.yml"))
 	// sshd should appear exactly once, tmux exactly once.
 	if got := strings.Count(string(data), "- sshd"); got != 1 {
 		t.Errorf("sshd appears %d times; want 1\n%s", got, data)
@@ -125,12 +130,12 @@ func TestRemoveLayerFromImage(t *testing.T) {
 	if err := RemoveLayerFromImage(dir, "ghost", "sshd"); err == nil {
 		t.Errorf("expected error for missing image; got nil")
 	}
-	data, _ := os.ReadFile(filepath.Join(dir, "charly.yml"))
+	data, _ := os.ReadFile(filepath.Join(dir, "box", "hello", "charly.yml"))
 	if strings.Contains(string(data), "sshd") {
-		t.Errorf("sshd should be removed; charly.yml=\n%s", data)
+		t.Errorf("sshd should be removed; box/hello/charly.yml=\n%s", data)
 	}
 	if !strings.Contains(string(data), "tmux") {
-		t.Errorf("tmux should remain; charly.yml=\n%s", data)
+		t.Errorf("tmux should remain; box/hello/charly.yml=\n%s", data)
 	}
 }
 

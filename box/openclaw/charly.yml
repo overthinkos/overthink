@@ -1,0 +1,10 @@
+box:
+    name: openclaw
+    enabled: true
+    base: cachyos.cachyos
+    candy:
+        - agent-forwarding
+        - openclaw
+        - dbus
+    port:
+        - 18789:18789

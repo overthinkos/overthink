@@ -26,8 +26,8 @@ func TestScaffoldLayer(t *testing.T) {
 		t.Error("layer directory was not created")
 	}
 
-	// Check the candy manifest was created
-	layerYml := filepath.Join(layerDir, "candy.yml")
+	// Check the candy manifest was created (the single charly.yml filename)
+	layerYml := filepath.Join(layerDir, UnifiedFileName)
 	if _, err := os.Stat(layerYml); os.IsNotExist(err) {
 		t.Error("candy manifest was not created")
 	}

@@ -27,9 +27,11 @@ func TestBootstrapTarPreservesFileCaps(t *testing.T) {
 	// 2. Every `tar … --xattrs` line in build.yml's bootstrap builders must also
 	//    carry --xattrs-include (create side; defensive + symmetric with extract).
 	//    A generic scan so any future bootstrap tar is caught too.
-	data, err := os.ReadFile("../build.yml")
+	// build.yml is the binary's embedded build-vocabulary source, now living in
+	// the charly/ package dir (same dir as this test), not the repo root.
+	data, err := os.ReadFile("build.yml")
 	if err != nil {
-		t.Fatalf("reading ../build.yml: %v", err)
+		t.Fatalf("reading build.yml: %v", err)
 	}
 	for i, line := range strings.Split(string(data), "\n") {
 		if strings.Contains(line, "tar ") && strings.Contains(line, "--xattrs") &&

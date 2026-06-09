@@ -1,0 +1,8 @@
+box:
+    # phase6 selftest: combines sshd + charly + composition marker for composition-app pod.
+    name: composition-app
+    base: fedora
+    candy:
+        - sshd
+        - charly
+        - eval-composition-layer

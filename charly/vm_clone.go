@@ -124,7 +124,7 @@ func writeVmCloneDeclaration(name, srcVm, srcSnap string, cloudInitClean bool) e
 	if err != nil {
 		return err
 	}
-	target := filepath.Join(cwd, "charly.yml")
+	target := filepath.Join(cwd, UnifiedFileName)
 	if _, err := os.Stat(target); err != nil {
 		if os.IsNotExist(err) {
 			return fmt.Errorf("charly.yml not found in %s; run `charly box new project .` first or `charly migrate` to convert legacy configs", cwd)

@@ -1,0 +1,201 @@
+box:
+    name: versa
+    enabled: true
+    base: cachyos.cachyos
+    build:
+        - pac
+    platform:
+        - linux/amd64
+    candy:
+        - agent-forwarding
+        - nvidia # GPU runtime (nvidia-utils + nvidia-container-toolkit) — formerly via base: nvidia
+        - cuda # CUDA toolkit (cuda + cudnn from Arch extra repo) — formerly via base: nvidia
+        - marimo # marimo notebook + MCP server (--mcp), Polars-GPU/cuDF, geospatial, marimo-team/skills
+        - airflow # Airflow 3.x LocalExecutor (no upstream MCP wrapper supports /api/v2 — removed 2026-05; consumers drive Airflow via direct REST /api/v2 calls)
+        - osm-tools # tippecanoe + gdal + martin (PMTiles tile server) + pmtiles CLI
+        - maputnik # MapLibre style editor (built from npm source, served by python -m http.server)
+        - pmtiles-viewer # protomaps/PMTiles /app SPA — visual inspector for PMTiles archives (port 8001)
+        - shortbread # systemed/tilemaker + shortbread-tilemaker Lua config — generates shortbread-schema vector tiles from OSM PBF
+        - versatiles-style # @versatiles/style MapLibre style generator (bundled to /opt/versatiles-style/, re-exported via versatiles-frontend's http.server at /style/)
+        - versatiles-fonts # SDF font glyphs (Noto Sans + 9 others) bundled to /opt/versatiles-fonts/, re-exported at /fonts/
+        - maplibre-versatiles-styler # interactive MapLibre control widget bundled to /opt/maplibre-versatiles-styler/, re-exported at /styler/
+        - versatiles # versatiles-rs CLI + `versatiles serve` supervisord service on port 8090 (host-mapped 28090) — convert/serve for .versatiles/.pmtiles/.mbtiles
+        - versatiles-frontend # versatiles-org/versatiles-frontend SPA (port 8002) — visual tile-content explorer; also re-exports versatiles-style/fonts/styler at /style/, /fonts/, /styler/
+        - notebook-osm # data layer: seeds /workspace/notebooks/osm-monaco-viz.py (notebook self-authors its DAG at runtime)
+        - notebook-graph # data layer: seeds /workspace/notebooks/gpu-libraries-demo.py — cuGraph/cuML/PyG/graphistry demo
+        - debug-tools # network/process/file inspection toolkit for debugging the deployed services in this image
+        - dbus
+    port:
+        - 2718:2718 # marimo edit + marimo MCP server (/mcp/server)
+        - 28080:8080 # airflow api-server (host 8080 taken by traefik)
+        - 3000:3000 # martin tile server (deploy.yml overrides host port to 23000)
+        - 8000:8000 # maputnik static editor (deploy.yml overrides host port to 28000)
+        - 8001:8001 # pmtiles-viewer SPA (deploy.yml overrides host port to 28001)
+        - 8002:8002 # versatiles-frontend SPA (deploy.yml overrides host port to 28002)
+        - 8090:8090 # versatiles serve HTTP (deploy.yml overrides host port to 28090)
+    # Image-level deploy-scope eval probes — run AFTER every layer's
+    # eval block on `charly eval live versa`. The first probe is the
+    # end-to-end driver: it triggers all 6 self-authored DAGs via
+    # `marimo export ipynb`, waits for each to reach success, and
+    # renders all cells server-side. Every subsequent probe verifies
+    # a post-DAG artifact or per-tile-source endpoint.
+    deploy_eval:
+        # End-to-end: render the notebook (triggers all 6 DAGs).
+        - id: versa-notebook-export
+          scope: deploy
+          command: |
+            ${HOME}/.pixi/envs/default/bin/marimo export ipynb \
+              /workspace/notebooks/osm-monaco-viz.py \
+              --include-outputs --sort topological \
+              -o /tmp/notebook-run.ipynb -f
+          in_container: true
+          exit_status: 0
+          timeout: 600s
+        - id: versa-notebook-size
+          scope: deploy
+          command: wc -c < /tmp/notebook-run.ipynb
+          in_container: true
+          stdout:
+            - matches: "[1-9][0-9]{5,}" # >=100KB rendered ipynb (no anchors per /charly-eval:eval gotcha #6)
+        # Per-tile-source martin TileJSON reachability (4 sources).
+        - id: versa-martin-monaco
+          scope: deploy
+          http: "http://127.0.0.1:${HOST_PORT:3000}/monaco"
+          status: 200
+          body:
+            - contains: "tilejson"
+            - contains: "vector_layers"
+        - id: versa-martin-monaco-gpqtiles
+          scope: deploy
+          http: "http://127.0.0.1:${HOST_PORT:3000}/monaco-gpqtiles"
+          status: 200
+          body:
+            - contains: "tilejson"
+        - id: versa-martin-monaco-duckdb-mvt
+          scope: deploy
+          http: "http://127.0.0.1:${HOST_PORT:3000}/monaco-duckdb-mvt"
+          status: 200
+          body:
+            - contains: "tilejson"
+        - id: versa-martin-monaco-duckdb-freestiler
+          scope: deploy
+          http: "http://127.0.0.1:${HOST_PORT:3000}/monaco-duckdb-freestiler"
+          status: 200
+          body:
+            - contains: "tilejson"
+        # Versatiles serve shortbread tile — zoom 0/0/0 exists in every
+        # tilemaker output, including Monaco at low zoom. Probe at zoom 0
+        # rather than 14 (zoom-14 tiles only exist where data actually
+        # falls; Monaco's bounds may not cover a specific 14/8521/5963
+        # cell after a fresh tilemaker run).
+        - id: versa-versatiles-shortbread-tile
+          scope: deploy
+          command: |
+            curl -fsSI "http://127.0.0.1:${HOST_PORT:8090}/tiles/monaco-shortbread/0/0/0.pbf" \
+              | awk 'BEGIN{IGNORECASE=1} /^content-length:/ {gsub("\r",""); print $2}'
+          in_container: false
+          stdout:
+            - matches: "[1-9][0-9]+" # any positive byte count (PBF non-empty)
+        # DAG output artifact size probes (post-DAG existence + size).
+        # No regex anchors — `wc -c` output ends with \n and Go's `$`
+        # doesn't match before newline (see /charly-eval:eval gotcha #6).
+        # Thresholds match the actual post-DAG sizes the skill records
+        # (~824 KB parquet, ~616 KB pmtiles after the post-2026-05
+        # tippecanoe-config change, ~770 KB gtfs.zip) — all comfortably
+        # above 100 KB which the [1-9][0-9]{5,} substring asserts.
+        - id: versa-artifact-parquet
+          scope: deploy
+          command: wc -c < /workspace/tiles/work/monaco.parquet
+          in_container: true
+          stdout:
+            - matches: "[1-9][0-9]{5,}" # >=100KB
+        - id: versa-artifact-pmtiles
+          scope: deploy
+          command: wc -c < /workspace/tiles/pmtiles/monaco.pmtiles
+          in_container: true
+          stdout:
+            - matches: "[1-9][0-9]{5,}" # >=100KB
+        - id: versa-artifact-gtfs
+          scope: deploy
+          command: wc -c < /workspace/gtfs/raw/monaco.gtfs.zip
+          in_container: true
+          stdout:
+            - matches: "[1-9][0-9]{5,}" # >=100KB
+        # Catches the silent-versatiles-fallback masking: the
+        # existing versa-versatiles-shortbread-tile probe HEAD-checks
+        # /tiles/monaco-shortbread/0/0/0.pbf and returns a non-empty
+        # body even when the local monaco-shortbread.pmtiles is
+        # missing — versatiles' multi-source serve falls through to
+        # the always-on remote osm.versatiles container. Asserting
+        # on file size catches the file-missing state directly. The
+        # shortbread DAG (in cell 4 of osm-monaco-viz.py) used to
+        # race the OSM DAG's atomic PBF rename and produced no
+        # output; the wait-on-parquet fix landed alongside this
+        # probe so a regression of the race surfaces here.
+        - id: versa-artifact-shortbread
+          scope: deploy
+          command: wc -c < /workspace/tiles/shortbread/monaco-shortbread.pmtiles
+          in_container: true
+          stdout:
+            - matches: "[1-9][0-9]{5,}" # >=100KB
+        # GPU libraries demo (cuGraph / cuML / PyG / graphistry).
+        # versa-graph-imports asserts that all four library
+        # families load + GPU is visible. versa-graph-cugraph-pagerank
+        # exercises the nx-cugraph backend on the karate graph
+        # (cuGraph 26.4 removed cugraph.datasets; nx_cugraph is the
+        # idiomatic accelerator path). versa-graph-notebook-export +
+        # versa-graph-notebook-size run the whole demo notebook
+        # end-to-end via marimo's headless ipynb-export, matching
+        # the versa-notebook-export pattern.
+        - id: versa-graph-imports
+          scope: deploy
+          command: |
+            ${HOME}/.pixi/envs/default/bin/python -c '
+            import cugraph, cuml, nx_cugraph, pylibcugraph
+            import torch_geometric, torch_scatter, torch_sparse, torch_cluster
+            import graphistry, torch
+            print(f"cugraph={cugraph.__version__}")
+            print(f"cuml={cuml.__version__}")
+            print(f"pyg={torch_geometric.__version__}")
+            print(f"torch_scatter={torch_scatter.__version__}")
+            print(f"graphistry={graphistry.__version__}")
+            print(f"cuda_devices={torch.cuda.device_count()}")
+            '
+          in_container: true
+          stdout:
+            - matches: "cugraph=[0-9]+"
+            - matches: "cuml=[0-9]+"
+            - matches: "pyg=[0-9]+"
+            - matches: "torch_scatter=[0-9]+"
+            - matches: "graphistry=[0-9]+"
+            - matches: "cuda_devices=[1-9]"
+        - id: versa-graph-cugraph-pagerank
+          scope: deploy
+          command: |
+            ${HOME}/.pixi/envs/default/bin/python -c '
+            import networkx as nx
+            G = nx.karate_club_graph()
+            pr = nx.pagerank(G, backend="cugraph")
+            print(f"pr_rows={len(pr)}")
+            print(f"pr_top_node={max(pr, key=pr.get)}")
+            '
+          in_container: true
+          stdout:
+            - matches: "pr_rows=[1-9][0-9]+"
+            - matches: "pr_top_node=[0-9]+"
+        - id: versa-graph-notebook-export
+          scope: deploy
+          command: |
+            ${HOME}/.pixi/envs/default/bin/marimo export ipynb \
+              /workspace/notebooks/gpu-libraries-demo.py \
+              --include-outputs --sort topological \
+              -o /tmp/gpu-demo.ipynb -f
+          in_container: true
+          exit_status: 0
+          timeout: 600s
+        - id: versa-graph-notebook-size
+          scope: deploy
+          command: wc -c < /tmp/gpu-demo.ipynb
+          in_container: true
+          stdout:
+            - matches: "[1-9][0-9]{4,}" # >=10KB rendered ipynb (matches the 18KB observed live)

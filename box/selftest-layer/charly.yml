@@ -1,0 +1,6 @@
+box:
+    # phase5 selftest: minimal sshd-only image for selftest-layer pod.
+    name: selftest-layer
+    base: fedora
+    candy:
+        - sshd

@@ -1,0 +1,27 @@
+box:
+    # =================================================================
+    # eval-pod — combined fast R10 mechanism fixture (fedora-minimal:43).
+    # Two layers cover four pipeline mechanisms in one disposable bed:
+    # kind:image build (markers), kind:layer composition order
+    # (eval-stack-layer asserts eval-base-layer's marker survived),
+    # kind:pod runtime (nc on :18794 + supervisord), and DeployTarget
+    # rendering (supervisord sleep service). Together with the eval-local
+    # kind:local template it smoke-tests every container-side kind path
+    # end-to-end via `charly eval run eval-pod`.
+    # =================================================================
+    name: eval-pod
+    base: quay.io/fedora/fedora-minimal:43
+    distro:
+        - fedora:43
+        - fedora
+    produce: []
+    description:
+        feature: Combined fast eval fixture — image/layer/pod/DeployTarget mechanism smoke
+        narrative: Two-layer fedora-minimal image backing the eval-pod kind:eval bed (`charly eval run eval-pod`) — covers kind:image build, kind:layer composition order, kind:pod runtime (nc :18794 + supervisord), and DeployTarget rendering (supervisord sleep).
+        tag:
+            - working
+    candy:
+        - eval-base-layer
+        - eval-stack-layer
+    port:
+        - 18794:18794

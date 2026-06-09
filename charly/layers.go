@@ -825,11 +825,16 @@ type Layer struct {
 // candy directory project-wide is a one-line change here.
 const DefaultCandyDir = "candy"
 
-// DefaultManifest is the single convenience default for the per-directory
-// discovery manifest filename. Every `discover[]` spec may override it via
-// `manifest:` in charly.yml, so the filename is configurable, never a
-// baked-in requirement.
-const DefaultManifest = "candy.yml"
+// DefaultBoxDir is the on-disk directory that holds box (image) definitions,
+// discovered per-box as <DefaultBoxDir>/<name>/<UnifiedFileName>. Symmetric with
+// DefaultCandyDir; the discover: block overrides it per project.
+const DefaultBoxDir = "box"
+
+// The per-directory discovery manifest filename is the ONE filename the code
+// knows — UnifiedFileName ("charly.yml", defined in unified.go). There is no
+// separate manifest constant: a project's root file, every discovered box, and
+// every discovered candy all use the single charly.yml name. Each `discover[]`
+// spec may still override it via `manifest:` in charly.yml.
 
 func ScanLayer(dir string) (map[string]*Layer, error) {
 	uf, present, err := LoadUnified(dir)
@@ -862,7 +867,7 @@ func legacyScanLayersDir(dir string) (map[string]*Layer, error) {
 			continue
 		}
 		name := entry.Name()
-		layer, err := scanLayer(filepath.Join(layersDir, name), name, DefaultManifest)
+		layer, err := scanLayer(filepath.Join(layersDir, name), name, UnifiedFileName)
 		if err != nil {
 			return nil, fmt.Errorf("scanning layer %s: %w", name, err)
 		}
@@ -1050,7 +1055,7 @@ func scanLayer(path, name, manifest string) (*Layer, error) {
 	// used by install-file detection and service-file globbing below.
 	var ly *CandyYAML
 	if manifest == "" {
-		manifest = DefaultManifest
+		manifest = UnifiedFileName
 	}
 	yamlPath := filepath.Join(path, manifest)
 	if fileExists(yamlPath) {
@@ -1581,7 +1586,7 @@ func ScanRemoteLayer(repoDir string, repoPath string, wantRefs map[string]bool) 
 			return nil, fmt.Errorf("remote layer %s not found at %s", bareRef, layerDir)
 		}
 
-		layer, err := scanLayer(layerDir, name, DefaultManifest)
+		layer, err := scanLayer(layerDir, name, UnifiedFileName)
 		if err != nil {
 			return nil, fmt.Errorf("scanning remote layer %s: %w", bareRef, err)
 		}

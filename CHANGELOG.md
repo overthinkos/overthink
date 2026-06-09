@@ -22,6 +22,51 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-09 — feat(schema)!: single-filename cutover — charly.yml is the only filename for box + candy, build vocabulary embedded in the binary
+
+The single-filename cutover (`charly migrate` step `single-filename`, schema
+`2026.160.1300`; HEAD bumped to `2026.160.1301`). `charly.yml` becomes the ONE
+filename that holds box and candy definitions, and the only file a project needs.
+
+**What changed, project-side (applied by `charly migrate` to all 9 charly-projects
+— the main repo + every `image/<distro>` submodule):**
+
+- **Boxes are discovered per-box dirs.** Every `box:` entry in `box.yml` / `base.yml`
+  (and an inline `box:` map in `charly.yml`, e.g. the bootc submodule) is split into
+  `box/<name>/charly.yml` (a kind-keyed `box:` doc), discovered the same way candies are.
+- **Candy manifests rename** `candy/<name>/candy.yml` → `candy/<name>/charly.yml`.
+- **Per-kind files fold in.** `vm.yml` / `pod.yml` / `k8s.yml` / `eval.yml` /
+  `local.yml` / `android.yml` move their kind keys into `charly.yml`'s root mapping;
+  the files are deleted.
+- **`discover:`** is rewritten to scan BOTH `box/` and `candy/` with the single default
+  manifest (`charly.yml`); the folded per-kind files + `build.yml` are removed from `import:`.
+
+**Embedded build vocabulary (mirrors `sidecar.yml`).** The canonical `build.yml`
+(`distro:`/`builder:`/`init:`/`resource:` vocabulary) moved to `charly/build.yml` and is
+`//go:embed`'d into the binary (`embed_build.go`, mirroring `sidecar.go`'s
+`embeddedSidecarYAML` + `LoadEmbeddedSidecarConfig`). It is merged as the LOWEST-priority
+base via `applyEmbeddedBuildDefaults` (the existing gap-filling `mergeDistroMap` /
+`mergeBuilderMap` / `mergeInitMap` / `mergeResourceMap`, project-wins by construction —
+the same base/overlay relationship as `MergeSidecar`). A project EXTENDS or OVERRIDES the
+vocabulary by declaring its own `distro:`/`builder:`/`init:`/`resource:` entries inline in
+`charly.yml` or in an imported vocab file; a project that customizes nothing needs no
+`build.yml` at all. The `single-filename` migrator drops the `build.yml` import (a flat
+local `build.yml` byte-matching the embed is deleted; a customized one is left imported; a
+remote `@github.../build.yml:vTAG` ref is dropped). `format_config:` was already vestigial
+and its stale mentions are swept.
+
+**Go side.** `DefaultManifest` is deleted and unified into `UnifiedFileName` ("charly.yml")
+— the ONE YAML filename the code knows; every bare-string straggler (`deploy_ref.go`,
+`reconcile.go`, scaffold/mcp/vm-clone) routes to the constant, guarded by
+`TestNoHardcodedYAMLFilenames`. `ApplyDiscover` now runs in the unified loader's main path
+(`loadUnifiedInto` depth-0 boundary, for the root AND every namespace), so a discovered
+`box:` doc reaches `ProjectConfig` (previously only the layer-loading path discovered, so
+box-via-discover never registered). `findEntityDirs` treats a missing discover path as a
+no-op (a project may carry `discover: [box, candy]` while owning only one directory). The
+scaffolders (`box new project`/`new box`/`new candy`) emit the new layout.
+
+Assisted-by: Claude (fully tested and validated)
+
 ### 2026-06-09 — docs(vision): thesis-voice refinements (tagline, intro, tenets 1/6/9/10, closing)
 
 A round of authorial refinements to VISION.md's voice, reconciled on top of the

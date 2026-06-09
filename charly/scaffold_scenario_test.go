@@ -71,7 +71,7 @@ func TestAppendLayerPackages_UnderCandyWrapper(t *testing.T) {
 	if err := os.MkdirAll(layerDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(layerDir, "candy.yml"),
+	if err := os.WriteFile(filepath.Join(layerDir, UnifiedFileName),
 		[]byte("candy:\n  name: foo\n  version: 2026.1.1\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -80,7 +80,7 @@ func TestAppendLayerPackages_UnderCandyWrapper(t *testing.T) {
 	if err := appendLayerPackages("foo", "rpm", []string{"ripgrep", "ripgrep"}); err != nil {
 		t.Fatalf("appendLayerPackages: %v", err)
 	}
-	data, _ := os.ReadFile(filepath.Join(layerDir, "candy.yml"))
+	data, _ := os.ReadFile(filepath.Join(layerDir, UnifiedFileName))
 	var root map[string]any
 	if err := yaml.Unmarshal(data, &root); err != nil {
 		t.Fatalf("re-parse: %v\n%s", err, data)

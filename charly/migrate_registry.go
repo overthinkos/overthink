@@ -70,7 +70,7 @@ type MigrationStep struct {
 // closure references it, and the registry's last entry uses it as its Version,
 // so the two are guaranteed equal (asserted by TestRegistryHeadMatchesLatest).
 // Bump it — and append the matching MigrationStep — for each future cutover.
-var latestSchemaVersion = mustCalVer("2026.159.1912")
+var latestSchemaVersion = mustCalVer("2026.160.1301")
 
 // migrationSteps is the ordered registry. Chronological by git landing date
 // (see `git log --diff-filter=A` on each migrate_*.go), which is the order the
@@ -248,6 +248,17 @@ func migrationSteps() []MigrationStep {
 		// charly-rebrand.
 		{mustCalVer("2026.159.1911"), "charly-cutover4", false, func(c *MigrateContext) (bool, error) {
 			w, err := MigrateCharlyCutover4(c)
+			return len(w) > 0, err
+		}},
+		// 2026-06 single-filename cutover: charly.yml is the ONE filename for box +
+		// candy definitions, and the only file a project needs. Boxes split out of
+		// box.yml/base.yml (and an inline box: map) into box/<name>/charly.yml; candy
+		// manifests rename candy.yml->charly.yml; vm/pod/k8s/eval/local/android fold
+		// into charly.yml's root; the build.yml import is dropped (vocabulary embedded
+		// in the binary). TouchesHost false — runs under remote-cache auto-migration so
+		// a fetched remote's candy manifests rename too.
+		{mustCalVer("2026.160.1300"), "single-filename", false, func(c *MigrateContext) (bool, error) {
+			w, err := MigrateSingleFilename(c.Dir, c.HostDeployPath, c.DryRun)
 			return len(w) > 0, err
 		}},
 		// HEAD — the schema stamp. Must stay LAST so LatestSchemaVersion picks it up

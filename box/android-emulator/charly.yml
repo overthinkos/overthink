@@ -1,0 +1,62 @@
+box:
+    name: android-emulator
+    base: selkies.selkies-labwc
+    platform:
+        - linux/amd64
+    candy:
+        - nodejs
+        - java-openjdk
+        - android-sdk
+        - appium-server
+        - android-emulator-layer
+    port:
+        - "3000:3000"
+        - "4723:4723"
+        - "5037:5037"
+        - "2222:2222"
+        # Inherited from the selkies-desktop layer chain — chrome-cdp
+        # publishes 9222 (Chrome DevTools Protocol) and chrome-devtools-mcp
+        # publishes 9224 (Streamable HTTP MCP). The mcp-provides OCI label
+        # baked into selkies-desktop expects these ports published; declare
+        # them here so inherited eval probes resolve correctly.
+        - "9222:9222"
+        - "9224:9224"
+    env:
+        - EMULATOR_NAME=charly_avd_36
+        - EMULATOR_API_LEVEL=36
+        - EMULATOR_DEVICE=pixel_9a
+    description:
+        feature: |
+            Android 16 (API 36, Google Play x86_64) emulator on pixel_9a on top
+            of the selkies-desktop streaming chain. The google_apis_playstore
+            image ships Play Store + Google Play services (GMS) + Google Chrome
+            PREINSTALLED. Browser UI on https://localhost:3000 (Selkies WebRTC),
+            Appium WebDriver on :4723, ADB server on :5037 (set
+            ANDROID_ADB_SERVER_SOCKET=tcp:localhost:5037 to drive from host).
+            Install apps either declaratively — a `kind: android` device + a
+            `target: android` deploy applies layers' `apk:` packages onto the
+            running emulator (apkeep in-pod) — or imperatively via the generic
+            `charly eval adb install-app` verb (both share one installer). apk
+            sources: apk-pure default, google-play via an AAS-token secret.
+            CPU/RAM auto-size from the host at runtime.
+            Requires /dev/kvm + kvm-group passthrough for hardware acceleration;
+            the layer declares this via security.devices so the quadlet
+            auto-emits AddDevice=/dev/kvm.
+        tag: [testing]
+    eval:
+        - id: image-emulator-binary
+          file: /opt/android-sdk/emulator/emulator
+          exists: true
+        - id: image-adb-binary
+          file: /opt/android-sdk/platform-tools/adb
+          exists: true
+        - id: image-appium-binary
+          file: /usr/bin/appium
+          exists: true
+        - id: image-java-binary
+          file: /usr/bin/java
+          exists: true
+        - id: image-start-emulator-script
+          file: /usr/local/bin/start-emulator
+          exists: true
+          mode: "0755"

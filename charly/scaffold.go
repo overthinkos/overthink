@@ -21,16 +21,16 @@ func ScaffoldLayer(dir string, name string) error {
 	}
 
 	// Create a placeholder candy manifest in the canonical kind-keyed form,
-	// named via the single configurable default (DefaultManifest).
-	layerYml := filepath.Join(layerDir, DefaultManifest)
+	// named via the single configurable default (UnifiedFileName).
+	layerYml := filepath.Join(layerDir, UnifiedFileName)
 	layerContent := fmt.Sprintf("# %s candy config\ncandy:\n  rpm:\n    packages:\n      # Add RPM packages here\n", name)
 	if err := os.WriteFile(layerYml, []byte(layerContent), 0644); err != nil {
-		return fmt.Errorf("creating %s: %w", DefaultManifest, err)
+		return fmt.Errorf("creating %s: %w", UnifiedFileName, err)
 	}
 
 	fmt.Printf("Created layer at %s\n", layerDir)
 	fmt.Println("Files created:")
-	fmt.Println("  candy.yml - Layer config (rpm/deb packages, depends, env, ports, route, service)")
+	fmt.Println("  charly.yml - Candy config (rpm/deb packages, require, env, ports, route, service)")
 	fmt.Println()
 	fmt.Println("Optional files you can add:")
 	fmt.Println("  root.yml        - Custom root install task")

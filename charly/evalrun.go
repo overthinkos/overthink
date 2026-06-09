@@ -125,7 +125,7 @@ type Runner struct {
 	// of the default skip/--strict-fail. The agent grader (eval_feature_grader.go)
 	// spawns the configured kind:ai CLI to probe the live target and
 	// return a pass/fail verdict with evidence. This is the Agent Driven
-	// Development (ADD) binding: a step binds to a deterministic check by
+	// Evaluation (ADE) binding: a step binds to a deterministic check by
 	// embedding a verb, or to an agent by leaving the step prose-only.
 	//
 	// Nil under classical `tests:` runs, `charly eval recipe`, the harness

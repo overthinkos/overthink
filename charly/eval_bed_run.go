@@ -490,7 +490,7 @@ func runEvalBed(exe, name string, node DeploymentNode, opts bedRunOpts) (*bedRun
 		return fail("eval live %s: %w", name, err)
 	}
 
-	// Step 4b: Agent Driven Development acceptance — run the bed image's baked
+	// Step 4b: Agent Driven Evaluation acceptance — run the bed image's baked
 	// Gherkin scenarios (`description.scenario`) as acceptance tests. This is
 	// the opt-in scenario gate: a no-op PASS when the image bakes no scenarios,
 	// real coverage when it does. Run with --no-agent so the unattended bed
@@ -540,7 +540,7 @@ func runEvalBed(exe, name string, node DeploymentNode, opts bedRunOpts) (*bedRun
 			}
 		}
 		// Re-run the bed image's baked scenarios on the fresh rebuild (pod
-		// beds) — the deterministic ADD acceptance gate against the new image.
+		// beds) — the deterministic ADE acceptance gate against the new image.
 		// No-op pass when the image bakes no scenarios.
 		if !isVM && !isLocal && image != "" {
 			waitForContainerReady(name, 30*time.Second)

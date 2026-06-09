@@ -22,6 +22,53 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-09 — refactor(docs+eval): rename the pillar "Agent Driven Development (ADD)" → "Agent Driven Evaluation (ADE)"
+
+The fourth philosophy pillar — formerly **Agent Driven Development (ADD)** — is
+renamed to **Agent Driven Evaluation (ADE)**, aligning the name with what the
+pillar has always been: the spec IS the test, and agents are first-class AUTHORS
+*and* GRADERS of it. The abbreviation moves `ADD → ADE` in lockstep (kept, not
+dropped). ONE atomic cross-repo rename sweep (R5): no schema / API / CLI surface
+changed (the command names `charly box feature run`, `charly eval feature run`,
+`charly candy add-scenario` are untouched), so there is NO `MigrationStep` and NO
+`charly.yml` `version:` bump.
+
+Swept in the same change:
+- **Docs** — the CLAUDE.md pillar section + R0 dispatcher row + Key-Rules pointer
+  + the doc-map pillar enumeration; VISION.md (pillar 6 + the "verification
+  cadence" arc); README.md (the "acceptance" section heading + cross-ref). The
+  development-loop framing was reframed to center evaluation/grading ("the AI
+  loop that writes the implementation until the scenarios pass" → "the AI loop
+  whose evaluation verdicts drive each iteration"; "drives (human or agent) to
+  it" → "grades against it"), per the operator's intent for the new name.
+- **Skills** — `/charly-eval:eval`, `/charly-internals:strict-policy` (section
+  label `## ADD.` → `## ADE.`, parallel to `## RDD.`), `/charly-internals:disposable`,
+  `/charly-image:layer`, including every quoted cross-reference to the renamed
+  section anchors.
+- **Go** — the agent grader's system-prompt string (`eval_feature_grader.go`:
+  "…grader for Agent Driven Evaluation."), four Kong `--help` strings
+  (`charly eval feature`, `charly eval feature run`, `charly box feature`,
+  `charly candy add-scenario`), and the file-header / binding comments across
+  `eval_feature_run.go`, `eval_feature_grader.go`, `description_run.go`,
+  `eval_bed_run.go`, `evalrun.go`, `scaffold_cmds.go`, `scaffold_scenario.go`.
+  A new `TestBuildGraderPrompt_PillarName` is the eval-coverage gate — it FAILS
+  on the retired name and passes on the new one.
+- **Config** — the `eval-stack-layer` candy.yml scenario comment.
+
+NOT touched (R5 false positives, deliberately left verbatim): the Dockerfile
+`ADD` instruction comments in `config.go` / `build.go` / `generate.go` /
+`format_config.go`, the verb "ADD" in the container-nesting + migrate skills and
+the `eval-target-layer` candy.yml, and the historical mentions in this CHANGELOG
+— this file is the sanctioned home for the old name, and existing entries are
+preserved verbatim (history is not rewritten).
+
+Verified: `go test ./...`, `charly box validate` (zero warnings), the R5 grep
+self-test (`git grep "Agent Driven Development"` returns only CHANGELOG), and an
+R10 run of the `eval-pod` disposable bed including `charly eval feature run
+eval-pod`, which drives the `kind: ai` grader through the renamed system prompt.
+
+*Assisted-by: Claude (fully tested and validated)*
+
 ### 2026-06-09 — feat(eval): nested-in-VM pod probes run IN the guest — eliminate the 14 skips (Cutover 6)
 
 The `eval-cachyos-gpu-vm` bed's nested `selkies-kde` eval reported `96 passed · 0

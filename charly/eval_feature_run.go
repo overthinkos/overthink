@@ -1,6 +1,6 @@
 package main
 
-// eval_feature_run.go — the Agent Driven Development (ADD) acceptance
+// eval_feature_run.go — the Agent Driven Evaluation (ADE) acceptance
 // runners: `charly box feature run <image>` and `charly eval feature run <deployment>`.
 //
 // These run an entity's OWN baked Gherkin scenarios (the `description.scenario`
@@ -150,7 +150,7 @@ func (c *BoxFeatureRunCmd) Run() error {
 
 // EvalFeatureCmd groups `charly eval feature run` under the live-eval hierarchy.
 type EvalFeatureCmd struct {
-	Run EvalFeatureRunCmd `cmd:"" help:"Run a running deployment's baked Gherkin scenarios as acceptance tests; prose-only steps are agent-graded (Agent Driven Development)"`
+	Run EvalFeatureRunCmd `cmd:"" help:"Run a running deployment's baked Gherkin scenarios as acceptance tests; prose-only steps are agent-graded (Agent Driven Evaluation)"`
 }
 
 // EvalFeatureRunCmd: `charly eval feature run <deployment>`. Deploy-scope

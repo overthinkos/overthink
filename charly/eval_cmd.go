@@ -67,7 +67,7 @@ type EvalCmd struct {
 	Live    EvalLiveCmd    `cmd:"" help:"Full-stack eval against a running deployment"`
 	Run     EvalRunCmd     `cmd:"" help:"Run a kind:eval R10 bed (full sequence) or drive an AI through a kind:score's iteration cycles"`
 	Recipe  EvalRecipeCmd  `cmd:"" help:"Run a recipe's scenarios once (deterministic; no AI iteration)"`
-	Feature EvalFeatureCmd `cmd:"" help:"Run a running deployment's baked Gherkin scenarios as acceptance tests; prose-only steps are agent-graded (Agent Driven Development)"`
+	Feature EvalFeatureCmd `cmd:"" help:"Run a running deployment's baked Gherkin scenarios as acceptance tests; prose-only steps are agent-graded (Agent Driven Evaluation)"`
 
 	// Live-container probe verbs (each requires a running target)
 	Cdp     CdpCmd     `cmd:"" help:"Chrome DevTools Protocol (open, list, click, eval)"`

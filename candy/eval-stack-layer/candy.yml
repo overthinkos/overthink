@@ -18,7 +18,7 @@ candy:
             units for nc/sleep, so the layer is supervisord-only on container targets.
         tag: [working]
         scenario:
-            # Agent Driven Development acceptance scenarios baked into this layer
+            # Agent Driven Evaluation acceptance scenarios baked into this layer
             # (they ride into the eval-pod image's ai.opencharly.description
             # label). The first scenario's step is DETERMINISTIC (an embedded
             # check verb → runs at build AND deploy scope); the second is

@@ -43,7 +43,7 @@ Consult this table BEFORE the first tool call of every task. If your task matche
 | Editing `local.yml` / authoring `kind: local` templates | `/charly-local:local-spec` |
 | Managed `~/.config/charly/ssh_config` fragment / `charly vm create` writes Host stanza | `/charly-vm:vm` + `/charly-local:local-deploy` |
 | `charly eval run <bed>` (kind:eval R10 bed) / authoring `kind: eval` beds in `eval.yml` / `charly eval live` / `charly eval cdp/wl/dbus/vnc/mcp/record/spice/libvirt` | `/charly-eval:eval` |
-| Agent Driven Development (ADD) / `charly box feature run` / `charly eval feature run` / `charly feature list/pending/validate` / `charly candy add-scenario` / `description:` Gherkin scenarios / the agent grader for prose steps | `/charly-eval:eval` + `/charly-internals:strict-policy` |
+| Agent Driven Evaluation (ADE) / `charly box feature run` / `charly eval feature run` / `charly feature list/pending/validate` / `charly candy add-scenario` / `description:` Gherkin scenarios / the agent grader for prose steps | `/charly-eval:eval` + `/charly-internals:strict-policy` |
 | `charly eval k8s <verb>` / cluster probes | `/charly-kubernetes:eval-k8s` |
 | `charly eval adb <method>` / Android Debug Bridge from host (devices, shell, install, getprop, screencap, logcat, wait-for-device) | `/charly-eval:adb` + `/charly-eval:eval` |
 | `charly eval appium <method>` / Android UI automation / W3C WebDriver / APK install via mobile:installApp / session lifecycle / element introspection (get-text/get-attribute/clear/find-all/source) / per-class sugar groups (`gesture-*`/`app-*`/`key-*`/`device-*`) / generic WebDriver escape hatch (`execute`/`raw`) | `/charly-eval:appium` + `/charly-eval:eval` |
@@ -144,9 +144,9 @@ R1 is reactive (RCA after failure), RDD is proactive (prove the riskiest unknown
 
 The cheapest moment to discover a doc is stale, code is buggy, or a composition breaks is before you build the plan on it — on a disposable bed, not after commit.
 
-## Agent Driven Development (ADD)
+## Agent Driven Evaluation (ADE)
 
-OpenCharly is built around **Agent Driven Development (ADD)**: every entity's intended behaviour is captured as executable Gherkin scenarios (a `description:` block — Feature / Narrative + Given/When/Then steps), authored by you OR your agents, baked into the image as the `ai.opencharly.description` OCI label, and verified on every build. The spec IS the test; agents are first-class AUTHORS of it and first-class GRADERS of it. ADD is the canonical Gherkin acceptance-testing pattern, named for the agent that drives it — the natural fit for a system built "for you and your agents".
+OpenCharly is built around **Agent Driven Evaluation (ADE)**: every entity's intended behaviour is captured as executable Gherkin scenarios (a `description:` block — Feature / Narrative + Given/When/Then steps), authored by you OR your agents, baked into the image as the `ai.opencharly.description` OCI label, and verified on every build. The spec IS the test; agents are first-class AUTHORS of it and first-class GRADERS of it. ADE is the canonical Gherkin acceptance-testing pattern, named for the agent that drives the evaluation — the natural fit for a system built "for you and your agents".
 
 **The binding contract — a step binds to its verifier BY SHAPE.** A scenario step that embeds a check verb (`file:`/`http:`/`cdp:`/`mcp:`/`command:`/…) binds to a DETERMINISTIC check the runner executes. A prose-only step (a `then:` with no verb) binds to an AGENT: `charly eval feature run <deployment>` spawns the configured `kind: ai` CLI, which probes the live deployment with the full `charly eval` surface and returns a pass/fail verdict with evidence (an unparseable/timed-out grader FAILS the step — never a silent pass). No glue code: the "step definition" is either a declarative check or an agent.
 
@@ -154,15 +154,15 @@ OpenCharly is built around **Agent Driven Development (ADD)**: every entity's in
 1. **Specify** — author the goal + scenarios on the CANDY that provides the behaviour: `charly candy add-scenario <layer> <name> --given/--when/--then` (idempotent; auto-exposed as the `candy.add-scenario` MCP tool) or edit the `description:` block.
 2. **Bind** — embed a check verb (deterministic) or leave the step prose (agent-graded). `charly feature pending <entity>` lists the still-prose steps (the authoring gaps).
 3. **Run** — `charly box feature run <image>` (build scope: deterministic steps against a disposable container; prose steps report unbound) or `charly eval feature run <deployment>` (deploy scope: deterministic + agent-graded prose; `--no-agent` for deterministic-only CI).
-4. **Iterate** — drive red→green by hand, OR autonomously: `charly eval run <score>` is the plateau-bounded AI loop that writes the implementation until the scenarios pass (the deepest sense of "agent-driven").
+4. **Iterate** — drive red→green by hand, OR autonomously: `charly eval run <score>` is the plateau-bounded AI loop whose evaluation verdicts drive each iteration until every scenario passes (evaluation in the driver's seat).
 5. **Bake** — `charly box build` bakes goal + scenarios into `ai.opencharly.description`; the artifact carries its own runnable acceptance spec (source-less `charly box`/`charly eval feature run` against a pulled image).
 6. **Gate** — `charly eval run <bed>` runs the bed image's deterministic scenarios as an opt-in acceptance gate (a no-op PASS when none are authored).
 
-**ADD composes with RDD, R10, and candyboxing — it does not duplicate them.** RDD proves the risky ASSUMPTIONS a behaviour rests on; ADD specifies WHAT the correct behaviour is and drives (human or agent) to it; R10 proves it on a fresh rebuild. Three points on the same *never trust, verify* arc — RDD before the edit, ADD as the spec, R10 as the final proof. The agent grader runs inside the secured, disposable box (candyboxing) with the full `charly eval` probe surface.
+**ADE composes with RDD, R10, and candyboxing — it does not duplicate them.** RDD proves the risky ASSUMPTIONS a behaviour rests on; ADE specifies WHAT the correct behaviour is and grades (human or agent) against it; R10 proves it on a fresh rebuild. Three points on the same *never trust, verify* arc — RDD before the edit, ADE as the spec, R10 as the final proof. The agent grader runs inside the secured, disposable box (candyboxing) with the full `charly eval` probe surface.
 
-**ADD prevents three failure modes:** (1) ambiguous acceptance — "done" with no executable definition of correct behaviour; (2) prose that never runs — a `then:` that documents intent but verifies nothing (the agent grader makes free-form behaviour executable); (3) per-box test drift — scenarios live on the CANDY that provides the behaviour, so ONE scenario covers every box that composes the candy (no per-box copy — R3).
+**ADE prevents three failure modes:** (1) ambiguous acceptance — "done" with no executable definition of correct behaviour; (2) prose that never runs — a `then:` that documents intent but verifies nothing (the agent grader makes free-form behaviour executable); (3) per-box test drift — scenarios live on the CANDY that provides the behaviour, so ONE scenario covers every box that composes the candy (no per-box copy — R3).
 
-ADD is a co-equal pillar with RDD and an OPT-IN runnable gate: where an entity authors scenarios they run and must pass; where it authors none, nothing is forced. See `/charly-internals:strict-policy` "ADD" and `/charly-eval:eval`.
+ADE is a co-equal pillar with RDD and an OPT-IN runnable gate: where an entity authors scenarios they run and must pass; where it authors none, nothing is forced. See `/charly-internals:strict-policy` "ADE" and `/charly-eval:eval`.
 
 ## Prioritize Clean Architecture Above All Else
 
@@ -369,7 +369,7 @@ This is the index of project-specific technical rules. Each philosophy / process
 - **Engineering discipline → runtime verification → acceptance** → **Ground Truth Rules** R1–R5 (RCA / no-deferral / no-duplication / no-workarounds / hard-cutover) before R6–R9 before R10. Operationalized in `/charly-internals:strict-policy`.
 - **Candyboxing, not sandboxing** → the **Candyboxing** pillar.
 - **Risk Driven Development (RDD)** → the **Risk Driven Development (RDD)** pillar — never trust, verify.
-- **Agent Driven Development (ADD)** → the **Agent Driven Development (ADD)** pillar — the spec is the test; agents author and grade it.
+- **Agent Driven Evaluation (ADE)** → the **Agent Driven Evaluation (ADE)** pillar — the spec is the test; agents author and grade it.
 - **Hard cutover by default** → **Hard Cutover by Default** + `/charly-internals:cutover-policy`.
 - **Branch-per-change, R10-gated auto-landing, NEVER force-push** → **Post-Execution Policies** + `/charly-internals:git-workflow`.
 - **Tag every push with a fresh CalVer timestamp** → **Post-Execution Policies** (`v$(date -u +%Y).$((10#$(date -u +%j))).$(date -u +%H%M)`, day-of-year NOT zero-padded; ONE immutable add-only tag per push; INDEPENDENT of the `charly.yml` `version:` schema field — and a YAML schema/format change does BOTH: raise `LatestSchemaVersion()` via a `MigrationStep` AND carry the fresh tag on the landing push; `plugins`/`pkg/arch` are tag-exempt). Detail: `/charly-internals:git-workflow`, `/charly-build:migrate`.
@@ -429,5 +429,5 @@ The doc split is **five-way** — each layer has ONE owner; the others link to i
 - **Rules & mandates → `CLAUDE.md`** (this file): R0–R10, the philosophy pillars as operational mandates, the cutover + post-execution process, and the Key Rules technical index.
 - **Features & command reference → `README.md`**: the user-facing intro and the build → run → deploy → evaluate command surface.
 - **Usage & architecture → skills** (`plugins/README.md` is the full index, 290+ skills): every candy, box, verb, and subsystem. The single source of truth for *how*.
-- **Thesis & direction → `VISION.md`** (repo root): the long-term "why this exists and where it's going", distilled from the philosophy pillars (Candyboxing, RDD, Agent Driven Development, Disposable-Only Autonomy, "for you and your agents"), stated as ASPIRATION in present-and-future tense.
+- **Thesis & direction → `VISION.md`** (repo root): the long-term "why this exists and where it's going", distilled from the philosophy pillars (Candyboxing, RDD, Agent Driven Evaluation, Disposable-Only Autonomy, "for you and your agents"), stated as ASPIRATION in present-and-future tense.
 - **History → `CHANGELOG.md`** (repo root): every dated change, past rename, completed cutover/migration, relocated/deleted/retired identifier, and "previously / formerly / was". CLAUDE.md, README.md, `plugins/README.md`, and every `plugins/**/SKILL.md` describe the CURRENT state in present tense ONLY. When a cutover lands, append its narrative to `CHANGELOG.md`; state the standing rules it establishes forward-looking here and in skills, with no history. `CHANGELOG.md` is the sanctioned "changelog context" named by R5's grep self-test.

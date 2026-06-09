@@ -193,3 +193,19 @@ func TestScenarioFailCount(t *testing.T) {
 		t.Fatalf("scenarioFailCount = %d, want 2", got)
 	}
 }
+
+// --- buildGraderPrompt ---------------------------------------------------
+
+// TestBuildGraderPrompt_PillarName is the eval-coverage gate for the pillar
+// rename: the grader's system prompt names the pillar, and it must read
+// "Agent Driven Evaluation" — never the retired "Agent Driven Development".
+// This assertion FAILS on the pre-rename string and PASSES after.
+func TestBuildGraderPrompt_PillarName(t *testing.T) {
+	prompt := buildGraderPrompt(GraderRequest{Keyword: "Then", Text: "the port answers"}, "eval-pod", "")
+	if !strings.Contains(prompt, "Agent Driven Evaluation") {
+		t.Fatalf("grader prompt must name the pillar 'Agent Driven Evaluation'; got:\n%s", prompt)
+	}
+	if strings.Contains(prompt, "Agent Driven Development") {
+		t.Fatalf("grader prompt still names the retired pillar 'Agent Driven Development':\n%s", prompt)
+	}
+}

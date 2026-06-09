@@ -117,7 +117,7 @@ on it. `charly eval` makes that proof cheap, for agents and humans alike.
 → [VISION.md](VISION.md) (why), CLAUDE.md "Risk Driven Development (RDD)"
 (the rule), `/charly-eval:eval` (usage).
 
-### Agent Driven Development (acceptance)
+### Agent Driven Evaluation (acceptance)
 
 What a box is *supposed* to do is written as runnable Gherkin scenarios
 on the candy that provides the behaviour, baked into the box as a label.
@@ -126,7 +126,7 @@ is graded by an **agent** probing the live deployment. Author with
 `charly candy add-scenario`, run with `charly box feature run` /
 `charly eval feature run`, or let the `charly eval run <score>` AI loop drive it to
 green. The spec is the test, and agents both write it and grade it.
-→ [VISION.md](VISION.md) (why), CLAUDE.md "Agent Driven Development (ADD)"
+→ [VISION.md](VISION.md) (why), CLAUDE.md "Agent Driven Evaluation (ADE)"
 (the rule), `/charly-eval:eval` (usage).
 
 ### Build → run → deploy → evaluate

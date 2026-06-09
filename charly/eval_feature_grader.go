@@ -1,8 +1,8 @@
 package main
 
-// eval_feature_grader.go — the Agent Driven Development (ADD) agent grader.
+// eval_feature_grader.go — the Agent Driven Evaluation (ADE) agent grader.
 //
-// ADD binds each Gherkin scenario step to a verifier BY SHAPE: a step that
+// ADE binds each Gherkin scenario step to a verifier BY SHAPE: a step that
 // embeds a check verb (file/http/cdp/mcp/command/…) is graded
 // DETERMINISTICALLY by the runner; a prose-only step (a given/when/then with
 // no verb) binds to an AGENT — this grader. The grader spawns the configured
@@ -119,7 +119,7 @@ func (g *AgentGrader) Grade(ctx context.Context, req GraderRequest) EvalResult {
 // contract the parser expects back.
 func buildGraderPrompt(req GraderRequest, target, instance string) string {
 	var b strings.Builder
-	b.WriteString("You are an acceptance-test grader for Agent Driven Development. ")
+	b.WriteString("You are an acceptance-test grader for Agent Driven Evaluation. ")
 	b.WriteString("Decide, from real evidence, whether ONE behaviour holds on a running deployment.\n\n")
 	if strings.TrimSpace(req.Feature) != "" {
 		b.WriteString("Feature (the goal): " + req.Feature + "\n")

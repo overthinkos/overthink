@@ -92,7 +92,7 @@ func runStepGroup(
 		}
 
 		if u.step.IsPending() {
-			// Agent Driven Development binding: a prose-only step (no
+			// Agent Driven Evaluation binding: a prose-only step (no
 			// embedded check verb) binds to the agent grader when one is
 			// set (`charly eval feature run` against a live deployment). The
 			// grader probes the target and returns a real pass/fail
@@ -248,7 +248,7 @@ func RunScenarios(ctx context.Context, r *Runner, set *LabelDescriptionSet, filt
 	for _, sec := range [][]LabeledDescription{set.Layer, set.Image, set.Deploy} {
 		for _, ld := range sec {
 			// Carry this description's goal (feature/narrative) into the
-			// agent grader for any prose-only step in its scenarios (ADD).
+			// agent grader for any prose-only step in its scenarios (ADE).
 			// No-op when r.Grader is nil (the common path).
 			r.GraderFeature = ld.Description.Feature
 			r.GraderNarrative = ld.Description.Narrative

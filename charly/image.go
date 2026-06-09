@@ -21,7 +21,7 @@ type BoxCmd struct {
 	Pull     BoxPullCmd    `cmd:"" help:"Pull an image from its registry into local storage"`
 	Pkg      BoxPkgCmd     `cmd:"" help:"Build standalone native package artifacts (.pkg.tar.zst/.rpm/.deb) for a layer's localpkg sources into dist/"`
 	Validate ValidateCmd   `cmd:"" help:"Check charly.yml + layers, exit 0 or 1"`
-	Feature  BoxFeatureCmd `cmd:"" help:"Run an image's baked Gherkin scenarios as acceptance tests against a disposable container (Agent Driven Development, build scope)"`
+	Feature  BoxFeatureCmd `cmd:"" help:"Run an image's baked Gherkin scenarios as acceptance tests against a disposable container (Agent Driven Evaluation, build scope)"`
 
 	// Authoring verbs — added so the MCP tool surface (auto-reflected from
 	// Kong) can author a project from scratch over RPC.

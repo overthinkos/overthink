@@ -288,6 +288,28 @@ func resolveNestedNode(roots map[string]DeploymentNode, path string) *Deployment
 // poll (WaitForCloudInit carries its own internal 5-minute bound).
 const vmEvalReadyWaitSeconds = 120
 
+// guestNestedEvalCmd builds the `charly eval live <pod>` command that runVm runs
+// IN the guest (over SSH) to evaluate a nested-in-VM pod as a direct pod. The
+// host's --format/--section/--filter/-i selectors pass through unchanged so the
+// guest produces the same report shape the host would. Args are single-quoted
+// (shellSingleQuote) since they cross an `ssh ... bash -c` boundary.
+func guestNestedEvalCmd(guestPod, format, section string, filter []string, instance string) string {
+	if format == "" {
+		format = "text"
+	}
+	cmd := "charly eval live " + shellSingleQuote(guestPod) + " --format " + shellSingleQuote(format)
+	if section != "" {
+		cmd += " --section " + shellSingleQuote(section)
+	}
+	for _, f := range filter {
+		cmd += " --filter " + shellSingleQuote(f)
+	}
+	if instance != "" {
+		cmd += " -i " + shellSingleQuote(instance)
+	}
+	return cmd
+}
+
 func (c *EvalLiveCmd) runVm() error {
 	dir, _ := os.Getwd()
 	uf, _, err := LoadUnified(dir)
@@ -448,37 +470,44 @@ func (c *EvalLiveCmd) runVm() error {
 	}
 	resolver := &EvalVarResolver{Env: env, HasRuntime: true}
 
-	// Nested POD leaf: run the pod IMAGE's baked layer/image eval (e.g. the
-	// selkies layer's encoder + frame checks) through the chain executor, with
-	// ${HOME}/${USER}/${UID}/${IMAGE} resolved from the POD image's OCI
-	// metadata — NOT the VM guest's, whose user/home differ. This makes a
-	// nested pod's coverage its layers' OWN baked checks instead of a per-bed
-	// re-implementation (R3), and closes the gap where `charly eval run` deploys
-	// nested children (eval_bed_run.go) but never evaluated their baked checks.
-	// The pod image lives in HOST podman storage (built here, then cp-box'd
-	// into the guest), so its eval label reads on the host. command/in_container
-	// checks run INSIDE the nested pod via the chain; deploy-runtime-var checks
-	// (${HOST_PORT:N}, ${CONTAINER_IP}) can't resolve through the chain
-	// (HasRuntime=false) and SKIP — they are covered by the direct pod beds.
-	baked := &LabelEvalSet{}
-	var nestedPodDistros []string
-	nestedPodInVM := false
-	if nestedLeaf != nil && nestedLeaf.Target == "pod" && nestedLeaf.Image != "" {
-		if rt, rterr := ResolveRuntime(); rterr == nil {
-			if ref, rferr := resolveImageRefForEnsure(nestedLeaf.Image, uf.ProjectConfig(), dir); rferr == nil {
-				if pmeta, merr := ExtractMetadata(rt.RunEngine, ref); merr == nil && pmeta != nil && pmeta.Eval != nil {
-					baked = pmeta.Eval
-					resolver = ResolveEvalVarsBuild(pmeta)
-					// package_map: must resolve against the POD image's distro
-					// (e.g. arch → openssh), not the VM guest's — else the
-					// distro-specific name falls back to the wrong default and
-					// the package check reports installed=false.
-					nestedPodDistros = pmeta.Distro
-					nestedPodInVM = true
-				}
-			}
+	// Nested-in-VM POD leaf: delegate the pod's eval to the guest `charly`. FROM
+	// THE GUEST the nested pod is a DIRECT pod — guest-local podman, ports on
+	// guest localhost, the guest `charly` binary (installed by EnsureCharlyInGuest
+	// at deploy time) — so the already-working direct-pod path runs the protocol
+	// verbs (cdp/wl/dbus/vnc/mcp) AND resolves ${HOST_PORT} addr/http natively.
+	// Those are exactly the checks the HOST chain cannot reach across the VM
+	// boundary (they would SKIP). The guest reads the SAME baked checks from the
+	// cp-box'd pod image, so the check set is identical; only the
+	// previously-unreachable probes now actually execute. The readiness gate above
+	// already confirmed the guest is up + cloud-init settled. Every other eval
+	// path (direct pods, the VM itself, host, on:-redirected cross-deployment
+	// probes against a host driver) is unchanged — they never enter this branch.
+	if nestedLeaf != nil && nestedLeaf.Target == "pod" {
+		parts := strings.Split(c.Image, ".")
+		guestPod := parts[len(parts)-1]
+		guestCmd := guestNestedEvalCmd(guestPod, c.Format, c.Section, c.Filter, c.Instance)
+		vmSSH := &SSHExecutor{Host: VmSshAlias(vmName), ConnectTimeout: 10}
+		fmt.Fprintf(os.Stderr, "VM: charly-%s — nested pod %q evaluated IN the guest (%s)\n", c.Image, guestPod, VmSshAlias(vmName))
+		stdout, stderr, exit, rerr := vmSSH.RunCapture(context.Background(), guestCmd)
+		if stdout != "" {
+			fmt.Print(stdout)
 		}
+		if stderr != "" {
+			fmt.Fprint(os.Stderr, stderr)
+		}
+		if rerr != nil {
+			return fmt.Errorf("delegating nested-pod eval to guest %q: %w", vmName, rerr)
+		}
+		if exit == EvalCheckFailExitCode {
+			return &EvalFailedError{Failed: 1}
+		}
+		if exit != 0 {
+			return fmt.Errorf("nested-pod eval in guest %q exited %d", vmName, exit)
+		}
+		return nil
 	}
+
+	baked := &LabelEvalSet{}
 	checks := collectChecksForRun(baked, tests, c.Section, c.Filter)
 	if len(checks) == 0 {
 		fmt.Fprintln(os.Stderr, "No checks to run after filtering.")
@@ -488,19 +517,6 @@ func (c *EvalLiveCmd) runVm() error {
 	runner := NewRunner(executor, resolver, RunModeLive)
 	runner.Image = c.Image
 	runner.Instance = c.Instance
-	if nestedPodDistros != nil {
-		runner.Distros = nestedPodDistros
-	}
-	// Host-side protocol verbs (cdp/wl/dbus/vnc/mcp) can't reach a nested-in-VM
-	// pod from the host `charly eval <verb>` subprocess — skip them (the direct-pod
-	// bed covers them against the same image).
-	runner.SkipHostContainerVerbs = nestedPodInVM
-	// Cross-deployment probing for a VM subject (e.g. a host-net Chrome pod
-	// CDP-probing this VM's web server at 127.0.0.1:<passt-forward>) is wired
-	// generically by RunLive (R3). The on:-redirected cdp/wl/vnc/mcp verbs run
-	// host-side against the DRIVER (a host pod, reachable host-side),
-	// independent of SkipHostContainerVerbs (which gates only the VM's OWN
-	// nested-container verbs).
 	results := runner.RunLive(context.Background(), checks, c.Instance)
 
 	fmt.Fprintf(os.Stderr, "VM: charly-%s (ssh %s@%s:%d)\n", c.Image, user, host, port)

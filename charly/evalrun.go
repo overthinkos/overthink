@@ -109,18 +109,6 @@ type Runner struct {
 	// distros (e.g. openssh-server on Fedora vs openssh on Arch).
 	Distros []string
 
-	// SkipHostContainerVerbs skips the protocol verbs (cdp/wl/dbus/vnc/mcp)
-	// that delegate to a host-side `charly eval <verb> <image>` subprocess, which
-	// resolves the target container by name ON THE HOST. For a nested-in-VM pod
-	// the container lives inside the guest (reached only via the NestedExecutor
-	// chain), so those verbs error "container not running" — they SKIP instead,
-	// the same treatment as ${HOST_PORT}-based addr/http checks that can't
-	// resolve through the chain. Chain-reachable checks
-	// (file/package/service/command/in_container) still run inside the nested
-	// pod. Set by runVm for a nested-pod leaf; the direct-pod bed covers these
-	// verbs against the same image.
-	SkipHostContainerVerbs bool
-
 	// Scenario carries the BDD scenario context when the runner is
 	// driving a description: scenario (from description_run.go). Nil
 	// under classical `tests:` runs — captures/${SCENARIO_ID}/etc. stay
@@ -303,23 +291,6 @@ func (r *Runner) runOne(ctx context.Context, c *Check) EvalResult {
 			}
 		}
 	}
-	// Host-side protocol verbs (cdp/wl/dbus/vnc/mcp) delegate to an `charly eval
-	// <verb> <image>` subprocess that resolves the target container ON THE HOST.
-	// For a nested-in-VM pod the container lives inside the guest (reachable only
-	// via the NestedExecutor chain), so they can't run — SKIP (not fail), the
-	// same treatment as a ${HOST_PORT} check that can't resolve through the
-	// chain; the direct-pod bed covers these verbs. Hoisted ABOVE the eventually
-	// retry wrapper so the skip isn't retried for the check's `eventually:`
-	// window (which would time out and report failed, not skipped).
-	if r.SkipHostContainerVerbs && (c.Cdp != "" || c.Wl != "" || c.Dbus != "" || c.Vnc != "" || c.Mcp != "") {
-		result.Status = TestSkip
-		result.Message = "host-container verb unreachable on a nested-in-VM pod (covered by the direct-pod bed)"
-		result.Elapsed = time.Since(start)
-		result.Attempts = 1
-		result.TotalElapsed = result.Elapsed
-		return result
-	}
-
 	// `on:` multi-target dispatch. Swap executor + resolver + image for
 	// the duration of this check only; restore on return. When
 	// r.TargetResolver is nil (classical tests: path), Resolver+Exec

@@ -143,7 +143,16 @@ func (c *BoxConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 		// short-name resolution, no registry-ref composition — the image is
 		// already present locally (e.g. cp-box'd into a VM guest) and its
 		// quadlet config comes entirely from its baked OCI labels.
-		deployImageName = c.Image
+		//
+		// PERSIST THE FULL REF (not the deploy key) as the deploy.yml `box:`
+		// value, so the deploy is self-describing: a later project-FREE command
+		// — `charly eval live <name>`, `charly status`, `charly config <name>` on a host
+		// with no charly.yml (e.g. a VM guest, where the nested-pod eval is
+		// delegated) — resolves the image straight from local storage (full refs
+		// pass through resolveImageRefForEnsure unchanged) instead of failing
+		// with "short name requires a project directory with charly.yml". The
+		// deploy KEY stays c.Image for container/quadlet/secret naming.
+		deployImageName = c.ExplicitRef
 		imageRef = c.ExplicitRef
 	} else {
 		deployImageName = resolveDeployImageName(c.Image, c.Instance)

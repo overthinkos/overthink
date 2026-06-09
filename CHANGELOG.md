@@ -22,6 +22,46 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-09 — feat(eval): nested-in-VM pod probes run IN the guest — eliminate the 14 skips (Cutover 6)
+
+The `eval-cachyos-gpu-vm` bed's nested `selkies-kde` eval reported `96 passed · 0
+failed · 14 skipped`. Operator directive: *"there is no reason nested pod testing
+can't work."* The 14 skips were real coverage holes from a long-standing
+deliberate limitation (NOT a regression): a pod nested in a VM ran its eval via
+the HOST through a NestedExecutor chain, but three host-vantage mechanisms could
+not cross the VM boundary and SKIPPED — the protocol verbs (cdp/wl/dbus/vnc/mcp,
+which shell out to a host `charly eval <verb>` subprocess resolving the container
+on the HOST's podman) and `${HOST_PORT}` addr/http (resolved via HOST `podman
+inspect`).
+
+**Fix — delegate the nested-in-VM pod's eval to the guest `charly`.** FROM THE
+GUEST the nested pod is a DIRECT pod (guest-local podman, ports on guest
+localhost, the guest `charly` installed by `EnsureCharlyInGuest`), so the
+already-working direct-pod path runs cdp/wl/mcp + `${HOST_PORT}` natively.
+`charly eval live <vm>.<pod>` now runs `charly eval live <pod>` in the guest over
+SSH (`runVm` → `guestNestedEvalCmd` → `SSHExecutor.RunCapture`) and propagates the
+guest's report + exit code; the guest reads the SAME baked checks from the
+cp-box'd image, so the check set is identical and only the previously-unreachable
+probes now execute. The superseded `Runner.SkipHostContainerVerbs` field + skip
+branch + test are deleted (R5). Every other eval path (direct pods, the VM
+itself, host, `on:`-redirected cross-deployment probes) is unchanged.
+
+**Blocking fix folded in — `charly deploy from-box` deploys are now
+self-describing.** Delegation surfaced a pre-existing gap: `from-box` recorded the
+deploy.yml `box:` as the deploy KEY (a short name), persisting the full
+`ExplicitRef` only into the quadlet — so a later project-FREE command in the guest
+(`charly eval live <name>`) failed with *"short name … requires a project directory
+with charly.yml."* `from-box` now persists the full ref as the deploy's `box:`
+(`config_image.go`), so `charly eval live` / `status` / `config` resolve it straight
+from local storage with no `charly.yml` (the labels-only-deploy promise). The
+deploy KEY stays the name for container/quadlet/secret naming.
+
+Live-proven: the guest `charly eval live selkies-kde` (box → full ref) ran the
+formerly-skipped wl/mcp/`${HOST_PORT}` probes and reported **110 passed · 0 failed
+· 0 skipped**. R10: `eval-cachyos-gpu-vm` on the real RTX 4080.
+
+*Assisted-by: Claude (fully tested and validated)*
+
 ### 2026-06-09 — feat(resource): auto-allocate an NVIDIA GPU `<hostdev>` for GPU-requiring VMs (Cutover 5)
 
 A `target: vm` deploy/eval-bed that needs a physical GPU declares

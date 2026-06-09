@@ -22,6 +22,32 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-09 — docs(vision): proofread + unify the build → deploy → prove → iterate mantra
+
+A grammar/spelling/flow pass over VISION.md. The prose was already clean — no
+spelling mistakes — so the change is small and surgical:
+
+- **Loop mantra unified and stated once.** VISION.md previously spelled the
+  iteration loop three different ways in prose (`build → run → deploy → evaluate`
+  in Tenets 7 and 10, `build → deploy → prove → iterate` on the "Hand the whole
+  line to the agents" arc). It now spells the *mantra* — **`build → deploy → prove
+  → iterate`** — exactly ONCE, in Tenet 7 (the "pass after pass until silk"
+  iteration tenet), and refers to it as "the loop" / "the pass" everywhere else
+  (Tenet 10, the heading bullet). The mantra is the philosophical throughline;
+  it is deliberately distinct from README.md's concrete-CLI
+  `build → run → deploy → evaluate` lifecycle section (whose verbs map to real
+  commands — there is no `charly prove` verb), which is left untouched. VISION's
+  two citations of that README section are accurate pointers and remain.
+- **Grammar.** Tenet 10: "molds a recipe can pour" → "molds a recipe can pour
+  **into**" (consistency with Tenet 2's "pours into every mold"). Tenet 8: "root
+  cause analysis" → "root-cause analysis" (compound modifier, matching the
+  project's `root-cause-analyzer`).
+- **Flow.** Tenet 6: "a first-class author of it and a first-class grader of it" →
+  "a first-class author and grader of it".
+
+Docs-only cutover — no Go / YAML / schema surface, so no `MigrationStep` and no
+`charly.yml` `version:` bump.
+
 ### 2026-06-09 — docs(vision): add the crème-brûlée closing line
 
 VISION.md gains a one-paragraph closing flourish, set after "Where the factory is

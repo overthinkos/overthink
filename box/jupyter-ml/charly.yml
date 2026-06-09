@@ -1,7 +1,7 @@
 box:
     name: jupyter-ml
     enabled: true
-    base: nvidia.nvidia
+    base: fedora.nvidia
     platform:
         - linux/amd64
     candy:

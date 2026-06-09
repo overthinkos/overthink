@@ -22,6 +22,53 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-10 — feat(images)!: drop the bootc submodule; fold the nvidia + selkies images into their base-distro submodules
+
+Three image-only submodules were removed from the superproject, shrinking the
+`image/` set from 8 to 5 (`arch`, `cachyos`, `debian`, `fedora`, `ubuntu`).
+
+- **`image/bootc` (`overthinkos/bootc`) deleted entirely.** Gone with it: the
+  boxes `bazzite` + `aurora`; the 8 local candies `bootc-base`, `bootc-config`,
+  `copr-desktop`, `desktop-apps`, `os-config`, `os-system-files`, `ujust`,
+  `vr-streaming`; and the VMs `aurora-bootc` + `bazzite-bootc`. The submodule was
+  fully isolated (nothing outside it referenced it), so the drop breaks nothing.
+  The bootc *capability* in `charly` is unchanged — there is simply no shipped
+  bootc box anymore (declare your own `bootc: true` box + `source.kind: bootc` VM).
+- **`image/nvidia` (`overthinkos/nvidia`) removed; its boxes folded into
+  `image/fedora`.** The Fedora GPU base `nvidia` (`base: charly.fedora-nonfree`
+  + the `nvidia`/`cuda` candies, unchanged) and the disabled `python-ml` box now
+  live in the `overthinkos/fedora` submodule. Main's GPU pod families (`comfyui`,
+  `jupyter-ml`, `jupyter-ml-notebook`, `ollama`, `unsloth-studio`) repoint from
+  `base: nvidia.nvidia` to `base: fedora.nvidia`. This introduces a NEW
+  **main ↔ fedora mutual import** (main mounts `overthinkos/fedora` under the
+  `fedora` namespace; fedora imports main under `charly`), cycle-broken at load by
+  repo identity — `image/fedora/charly.yml` gains an explicit
+  `repo: github.com/overthinkos/fedora`. The relocated `nvidia` box is
+  byte-identical to its former self: `charly box generate` emits the same FROM
+  chain and the same `ghcr.io/overthinkos/nvidia` image (the resolve key label
+  changes `nvidia.nvidia` → `fedora.nvidia`; nothing else).
+- **`image/selkies` (`overthinkos/selkies`) removed; its boxes split by base
+  distro.** `selkies-labwc` (CPU streaming desktop) → `image/cachyos`
+  (`base: cachyos.cachyos` → local `base: cachyos`), joining its GPU sibling
+  `selkies-labwc-nvidia` already there. `sway-browser-vnc` → `image/fedora`
+  (`base: charly.fedora`, unchanged). Main's `android-emulator` repoints
+  `base: selkies.selkies-labwc` → `base: cachyos.selkies-labwc`. The two R10 beds
+  follow their boxes (`eval-selkies-labwc-pod` → cachyos, `eval-sway-browser-vnc-pod`
+  → fedora). The selkies/sway *candies/layers* stay in main (shared with
+  openclaw-desktop); only the images moved.
+
+Main's `import:` drops the `nvidia` + `selkies` namespaces and gains `fedora`;
+`main ↔ cachyos` + `main ↔ fedora` are now the only mutual imports. No schema
+change (no migration step, no `version:` bump) — this is a content + git
+restructure; each affected charly-project repo earns a fresh per-push CalVer tag.
+
+R10: both relocated streaming beds passed the full sequence on fresh rebuilds
+(`eval-selkies-labwc-pod` ok 691s, `eval-sway-browser-vnc-pod` ok 635s — build →
+eval-image → deploy → eval-live → fresh-update → teardown); the relocated `nvidia`
+GPU base built clean and `charly eval box`'d 12/12; main `charly box validate` +
+`generate` ran zero-errors / zero-warnings with the three submodules gone and
+every repointed `base:` resolving (`fedora.nvidia`, `cachyos.selkies-labwc`).
+
 ### 2026-06-09 — refactor(validate): drop the cross-image port-overlap NOTE
 
 `charly box validate` / `charly box generate` no longer print the advisory

@@ -1,27 +1,23 @@
 version: 2026.160.1301
 # Canonical repo identity. Lets the import-namespace loader break the
-# main <-> cachyos/nvidia/selkies mutual imports by repo identity: a transitive
+# main <-> cachyos/fedora mutual imports by repo identity: a transitive
 # `charly:` back-reference to this repo (at any pinned version) resolves to THIS
 # working tree, so the root's namespace pins win. See /charly-internals:go.
 repo: github.com/overthinkos/overthink
 import:
-    # cachyos base image — owned by the overthinkos/cachyos submodule. Mounted
-    # under the `cachyos` import namespace and referenced as `cachyos.cachyos`
-    # (main's `versa` image is `base: cachyos.cachyos`). This is the deliberate
-    # main → cachyos coupling. The cachyos repo, in turn, imports this repo under
-    # the `charly` namespace for charly.arch-builder (mutual import; cycle-broken at load).
-    - cachyos: '@github.com/overthinkos/cachyos:v2026.160.2017'
-    # nvidia GPU base family — owned by the overthinkos/nvidia submodule. Mounted
-    # under the `nvidia` import namespace; main's GPU pod families (comfyui /
-    # jupyter-ml / jupyter-ml-notebook / ollama / unsloth-studio) root on
-    # `base: nvidia.nvidia`. Mutual import (the nvidia
-    # repo imports this one under the `charly` namespace); cycle-broken at load.
-    - nvidia: '@github.com/overthinkos/nvidia:v2026.160.2017'
-    # selkies / sway streaming-desktop family — owned by the overthinkos/selkies
-    # submodule (image/selkies). Mounted under the `selkies` import namespace;
-    # main's android-emulator roots on `base: selkies.selkies-labwc`. The desktop
-    # LAYERS stay in main (shared with openclaw-desktop) — only the images moved.
-    - selkies: '@github.com/overthinkos/selkies:v2026.160.2017'
+    # cachyos base image + the CachyOS selkies/sway streaming-desktop images —
+    # owned by the overthinkos/cachyos submodule. Mounted under the `cachyos`
+    # import namespace: main's `versa` is `base: cachyos.cachyos` and
+    # `android-emulator` is `base: cachyos.selkies-labwc`. The cachyos repo, in
+    # turn, imports this repo under the `charly` namespace for charly.arch-builder
+    # (mutual import; cycle-broken at load).
+    - cachyos: '@github.com/overthinkos/cachyos:v2026.160.2229'
+    # Fedora GPU base family (nvidia / python-ml) + the sway-browser-vnc desktop —
+    # owned by the overthinkos/fedora submodule. Mounted under the `fedora` import
+    # namespace; main's GPU pod families (comfyui / jupyter-ml / jupyter-ml-notebook
+    # / ollama / unsloth-studio) root on `base: fedora.nvidia`. Mutual import (the
+    # fedora repo imports this one under the `charly` namespace); cycle-broken at load.
+    - fedora: '@github.com/overthinkos/fedora:v2026.160.2229'
 discover:
     - path: box
       recursive: true

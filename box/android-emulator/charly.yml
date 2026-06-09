@@ -1,6 +1,6 @@
 box:
     name: android-emulator
-    base: selkies.selkies-labwc
+    base: cachyos.selkies-labwc
     platform:
         - linux/amd64
     candy:

@@ -67,12 +67,11 @@ Consult this table BEFORE the first tool call of every task. If your task matche
 | VmSpec / libvirt / cloud-init / OVMF internals | `/charly-internals:vm-spec` (+ renderer skills as needed) |
 | Unexpected failure / error / anomaly | `/charly-internals:root-cause-analyzer` agent (BEFORE any fix) |
 | "What does candy X do?" / "What's in box X?" — pod-specific | `/charly-jupyter:<name>`, `/charly-coder:<name>`, `/charly-selkies:<name>`, `/charly-openclaw:<name>`, `/charly-ollama:<name>`, `/charly-openwebui:<name>`, `/charly-comfyui:<name>`, `/charly-immich:<name>`, `/charly-hermes:<name>`, `/charly-filebrowser:<name>` |
-| "What does candy X do?" / "What's in box X?" — base distros / GPU runtime / bootc | `/charly-distros:<name>` (archlinux, fedora, debian, ubuntu, cachyos, nvidia, cuda, rocm, bootc-base, …) |
+| "What does candy X do?" / "What's in box X?" — base distros / GPU runtime | `/charly-distros:<name>` (archlinux, fedora, debian, ubuntu, cachyos, nvidia, cuda, rocm, …) |
 | CachyOS images / `cachyos*` / `charly-cachyos` workstation profile / `image/cachyos` submodule | `/charly-distros:cachyos` + `/charly-vm:cachyos` + `/charly-local:charly-cachyos` |
 | Debian images / `debian*` / `image/debian` submodule | `/charly-distros:debian` + `/charly-distros:debian-builder` + `/charly-distros:debian-debootstrap` + `/charly-coder:debian-coder` + `/charly-vm:debian` |
 | Ubuntu images / `ubuntu*` / `image/ubuntu` submodule | `/charly-distros:ubuntu` + `/charly-distros:ubuntu-builder` + `/charly-distros:ubuntu-debootstrap` + `/charly-coder:ubuntu-coder` + `/charly-vm:ubuntu` |
-| Fedora images / `fedora*` / `image/fedora` submodule / `fedora-base.yml` | `/charly-distros:fedora` + `/charly-distros:fedora-builder` + `/charly-distros:fedora-nonfree` + `/charly-coder:fedora-coder` + `/charly-distros:charly-fedora` + `/charly-distros:fedora-test` |
-| bootc images / `bazzite` / `aurora` / `*-bootc` / `image/bootc` submodule | `/charly-distros:bazzite` + `/charly-distros:aurora` + `/charly-distros:bootc-base` + `/charly-vm:vm` |
+| Fedora images / `fedora*` / `image/fedora` submodule (incl. the GPU base `nvidia` / `python-ml` + `sway-browser-vnc`) | `/charly-distros:fedora` + `/charly-distros:fedora-builder` + `/charly-distros:fedora-nonfree` + `/charly-coder:fedora-coder` + `/charly-distros:charly-fedora` + `/charly-distros:fedora-test` + `/charly-distros:nvidia` |
 | "What does candy X do?" — language runtime | `/charly-languages:<name>` (python, python-ml, pixi) |
 | "What does candy X do?" — infrastructure service | `/charly-infrastructure:<name>` (postgresql, redis, k3s, traefik, supervisord, tailscale, gocryptfs, virtualization, dbus-layer, tmux-layer, …) |
 | "What does candy X do?" — CLI utility / charly binary | `/charly-tools:<name>` (ripgrep, himalaya, whisper, charly, …) |

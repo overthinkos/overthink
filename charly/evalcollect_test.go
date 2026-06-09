@@ -102,13 +102,13 @@ func TestCollectTests_EmptyReturnsNil(t *testing.T) {
 }
 
 // Regression: an image whose layer list uses RAW @github.com/...:version refs
-// (the submodule git-ref composition pattern used by image/bootc, image/fedora,
+// (the submodule git-ref composition pattern used by image/fedora, image/cachyos,
 // etc.) must still collect the referenced layers' eval blocks. Before the
 // BareRef chokepoint fix in ExpandLayer (charly/graph.go), CollectEval walked the
 // raw refs against the BareRef-keyed layer map, missed every one, silently
 // swallowed the resulting "unknown layer" error, and collected ZERO
 // layer-level checks — so every @github-ref-composed image shipped with
-// image-level checks only (e.g. a @github-ref-composed bootc box: 1 instead of ~77). The
+// image-level checks only (e.g. a @github-ref-composed desktop box: 1 instead of ~77). The
 // same chokepoint feeds CollectHooks/Shell/Descriptions/Security/Volumes/Alias,
 // so this single test guards the whole family.
 func TestCollectEval_RemoteRefLayersResolve(t *testing.T) {

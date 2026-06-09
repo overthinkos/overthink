@@ -321,10 +321,10 @@ charly start jupyter
 # Configure as a systemd service (quadlet + secrets + encrypted volumes)
 charly config jupyter
 
-# Build a bootable VM disk image
-charly box build bazzite               # the kind:box
-charly vm build  bazzite-bootc --type qcow2 # the kind:vm
-charly vm create bazzite-bootc
+# Build a bootable VM disk image from a bootc box
+charly box build <my-bootc-box>             # a kind:box with bootc: true
+charly vm build  <my-bootc-vm> --type qcow2 # a kind:vm with source.kind: bootc
+charly vm create <my-bootc-vm>
 
 # Apply candies directly to your workstation (no container)
 charly deploy add host ripgrep
@@ -701,13 +701,12 @@ not enumerations:
   → `/charly-eval:eval`.
 
 Candies used by only one box family are vendored in that
-`image/<distro>` submodule (e.g. bootc-exclusive set in
-`image/bootc`, `ghostty`/`keepassxc-keyring` in `image/cachyos`,
-`arch-*-test` fixtures in `image/arch`). Shared candies are pulled by
-`@github` ref.
+`image/<distro>` submodule (e.g. `ghostty`/`keepassxc-keyring` in
+`image/cachyos`, `arch-*-test` fixtures in `image/arch`). Shared
+candies are pulled by `@github` ref.
 
 **Composition meta-candies** — `sway-desktop`, `sway-desktop-vnc`,
-`selkies-desktop`, `bootc-base`, `openclaw-full`, `openclaw-full-ml`,
+`selkies-desktop`, `openclaw-full`, `openclaw-full-ml`,
 `python-ml`, `jupyter-ml`, `unsloth-studio` bundle curated candy
 sets.
 

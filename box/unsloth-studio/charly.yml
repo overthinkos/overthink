@@ -1,7 +1,7 @@
 box:
     name: unsloth-studio
     enabled: false
-    base: nvidia.nvidia
+    base: fedora.nvidia
     platform:
         - linux/amd64
     candy:

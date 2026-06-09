@@ -20,15 +20,6 @@
 [submodule "image/fedora"]
 	path = image/fedora
 	url = git@github.com:overthinkos/fedora.git
-[submodule "image/bootc"]
-	path = image/bootc
-	url = git@github.com:overthinkos/bootc.git
-[submodule "image/nvidia"]
-	path = image/nvidia
-	url = git@github.com:overthinkos/nvidia.git
-[submodule "image/selkies"]
-	path = image/selkies
-	url = git@github.com:overthinkos/selkies.git
 [submodule "pkg/fedora"]
 	path = pkg/fedora
 	url = git@github.com:overthinkos/overthink-fedora.git

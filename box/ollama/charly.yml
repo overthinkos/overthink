@@ -1,7 +1,7 @@
 box:
     name: ollama
     enabled: false
-    base: nvidia.nvidia
+    base: fedora.nvidia
     platform:
         - linux/amd64
     candy:

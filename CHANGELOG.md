@@ -22,6 +22,20 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-09 — refactor(validate): drop the cross-image port-overlap NOTE
+
+`charly box validate` / `charly box generate` no longer print the advisory
+`Note: images "X", "Y" share host port N (only one can run at a time, or use
+deploy.yml to remap)` line. Two images declaring the same canonical host port in
+`box.yml` (3000, 9222, …) is BY DESIGN — deploy time remaps via `deploy.yml` or
+`port: [auto]` — so the note was pure noise on every validate/generate run. The
+emitter `validatePortOverlap` (and its sole helper `formatImageList`) is deleted
+from `charly/validate.go`; it only wrote to stderr and never touched the
+validation result or the generated Containerfiles, so the removal is purely
+subtractive (no schema change, no `version:` bump). Verified: `go test ./...`
+green; a live `charly box validate` + `charly box generate` exit 0 with zero
+"share host port" notes and the emitted Containerfiles unchanged.
+
 ### 2026-06-09 — feat(schema)!: single-filename cutover — charly.yml is the only filename for box + candy, build vocabulary embedded in the binary
 
 The single-filename cutover (`charly migrate` step `single-filename`, schema

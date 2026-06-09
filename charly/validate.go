@@ -134,9 +134,6 @@ func Validate(cfg *Config, layers map[string]*Layer, dir string, opts ResolveOpt
 	// Validate port_relay declarations
 	validatePortRelay(cfg, layers, errs)
 
-	// Warn about cross-image port overlaps
-	validatePortOverlap(cfg, errs)
-
 	// Validate status fields
 	validateStatus(cfg, layers, errs)
 
@@ -1731,39 +1728,6 @@ func min(a, b, c int) int {
 		return b
 	}
 	return c
-}
-
-// validatePortOverlap warns when multiple enabled images share the same host port.
-func validatePortOverlap(cfg *Config, errs *ValidationError) {
-	portUsers := make(map[int][]string) // host port -> image names
-	for imageName, img := range cfg.Image {
-		if !img.IsEnabled() {
-			continue
-		}
-		for _, portMapping := range img.Port {
-			hostPort, err := ParseHostPort(portMapping)
-			if err != nil {
-				continue
-			}
-			portUsers[hostPort] = append(portUsers[hostPort], imageName)
-		}
-	}
-	for port, names := range portUsers {
-		if len(names) < 2 {
-			continue
-		}
-		sort.Strings(names)
-		fmt.Fprintf(os.Stderr, "Note: images %s share host port %d (only one can run at a time, or use deploy.yml to remap)\n", formatImageList(names), port)
-	}
-}
-
-// formatImageList formats a list of image names for display.
-func formatImageList(names []string) string {
-	quoted := make([]string, len(names))
-	for i, n := range names {
-		quoted[i] = fmt.Sprintf("%q", n)
-	}
-	return strings.Join(quoted, ", ")
 }
 
 // validStatuses lists the allowed status values (empty string also accepted as "testing").

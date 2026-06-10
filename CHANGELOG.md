@@ -22,6 +22,19 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-10 — docs: `image:`(OCI) vs `box:`(candybox) — main repo + box/fedora (Phase 1 cont.)
+
+Extends the Phase-1 docs sweep into the main repo + a submodule. `CLAUDE.md`'s
+"Cross-kind name reuse" rule: an `image:` entry → a `box:` entry; `charly box build` →
+`box.<name>`; `ResolveDeployRef` chooses **box-first** when a box and a candy share a name
+(`--add-candy` for the candy-first path). `candy/selkies` + `candy/container-nesting`
+comments: `` `layers:` `` → `` `candy:` ``, "root images:" → "root boxes:". `box/fedora`'s
+eval-pod bed descriptions: `kind:image`/`kind:layer` → `kind:box`/`kind:candy` (compact,
+scalar-safe form — the spaced `kind: box` would break the plain-scalar `feature:`/
+`narrative:` values). box/fedora re-tagged `v2026.161.0954`; main re-pins fedora + bumps
+the gitlink. Remaining: the Go `Image*`→`Box` identifier rename + Go comments (Phase 2,
+R10-gated).
+
 ### 2026-06-10 — docs: make the `image:`(OCI) vs `box:`(candybox) distinction clear in the skills (Phase 1)
 
 Per the disambiguation rule **`image:` = an upstream/OCI Docker image, `box:` = a charly

@@ -16,7 +16,7 @@ import:
     # main↔cachyos / main↔fedora mutual cycles are dissolved.
     - arch: '@github.com/overthinkos/arch:v2026.161.0830'
     - cachyos: '@github.com/overthinkos/cachyos:v2026.161.0830'
-    - fedora: '@github.com/overthinkos/fedora:v2026.161.0830'
+    - fedora: '@github.com/overthinkos/fedora:v2026.161.0954'
 # Main owns NO boxes after the 2026-06 box inversion — only the shared candy
 # library + the inline eval/vm/local/k8s orchestration. Discover candies only.
 discover:

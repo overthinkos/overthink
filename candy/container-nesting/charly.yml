@@ -201,7 +201,7 @@ candy:
           user: "${USER}"
           mode: "0644"
           content: *policy_json_content
-        # System-wide storage.conf (used by root images: charly-fedora/charly-arch/
+        # System-wide storage.conf (used by root boxes: charly-fedora/charly-arch/
         # githubrunner). fuse-overlayfs at /var/lib/containers/storage.
         - write: /etc/containers/storage.conf
           user: root

@@ -11,7 +11,7 @@ candy:
     # creates its wayland-1 compositor, and labwc/chrome crash-loop. COMPOSE the
     # ffmpeg layer (not merely `require:` it) so its packages are actually emitted
     # into the final image — `require:` only orders deps that are composed
-    # elsewhere; `layers:` is what pulls a pure-package leaf in (the cachyos base
+    # elsewhere; `candy:` is what pulls a pure-package leaf in (the cachyos base
     # had no transitive ffmpeg). The ffmpeg layer installs ffmpeg (arch: pulls
     # x264 → libx264.so.165; fedora: negativo17), supplying every lib pixelflux
     # links. R9: declare the runtime dep.

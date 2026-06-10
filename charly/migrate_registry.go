@@ -70,7 +70,7 @@ type MigrationStep struct {
 // closure references it, and the registry's last entry uses it as its Version,
 // so the two are guaranteed equal (asserted by TestRegistryHeadMatchesLatest).
 // Bump it — and append the matching MigrationStep — for each future cutover.
-var latestSchemaVersion = mustCalVer("2026.160.1301")
+var latestSchemaVersion = mustCalVer("2026.161.1301")
 
 // migrationSteps is the ordered registry. Chronological by git landing date
 // (see `git log --diff-filter=A` on each migrate_*.go), which is the order the
@@ -259,6 +259,20 @@ func migrationSteps() []MigrationStep {
 		// a fetched remote's candy manifests rename too.
 		{mustCalVer("2026.160.1300"), "single-filename", false, func(c *MigrateContext) (bool, error) {
 			w, err := MigrateSingleFilename(c.Dir, c.HostDeployPath, c.DryRun)
+			return len(w) > 0, err
+		}},
+		// 2026-06 recipe-section-values cutover: finish the candy/box rebrand's
+		// DATA VALUES. The 2026.156 candy-box-rename renamed the kind
+		// discriminators but missed the eval-harness recipe `from[i].kind:`
+		// selector and `from[i].scope:` section-filter list, which still used
+		// "layer"/"image". This step rewrites those VALUES (layer→candy,
+		// image→box), scoped to `from:` sequence items so a builder `kind: layer`
+		// and a check-level `scope: build|deploy` are never touched. The eval label
+		// WIRE keys were already candy/box; the new code hard-rejects a recipe
+		// `kind: layer` ("invalid kind ... (one of: candy, box, pod, vm)"), so this
+		// migration is mandatory. TouchesHost false. See CHANGELOG.md.
+		{mustCalVer("2026.161.1300"), "recipe-section-values", false, func(c *MigrateContext) (bool, error) {
+			w, err := MigrateRecipeSectionValues(c.Dir, c.DryRun)
 			return len(w) > 0, err
 		}},
 		// HEAD — the schema stamp. Must stay LAST so LatestSchemaVersion picks it up

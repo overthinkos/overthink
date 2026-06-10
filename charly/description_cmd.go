@@ -19,7 +19,7 @@ type FeatureCmd struct {
 // FeatureListCmd: `charly feature list [<kind>]`. Walks the resolved
 // project config and prints each entity's description summary.
 type FeatureListCmd struct {
-	Kind string `arg:"" optional:"" help:"Restrict to one kind (layer|image|pod|vm|k8s|host|deployment). Default: all."`
+	Kind string `arg:"" optional:"" help:"Restrict to one kind (candy|box). Default: all."`
 }
 
 // Run executes `charly feature list`.
@@ -39,18 +39,18 @@ func (c *FeatureListCmd) Run() error {
 
 	filter := strings.ToLower(strings.TrimSpace(c.Kind))
 
-	if filter == "" || filter == "layer" {
+	if filter == "" || filter == "candy" {
 		for name, layer := range layers {
 			if layer == nil {
 				continue
 			}
-			summarizeDesc("layer", name, layer.Description)
+			summarizeDesc("candy", name, layer.Description)
 		}
 	}
-	if filter == "" || filter == "image" {
+	if filter == "" || filter == "box" {
 		for name, img := range cfg.Box {
 			if img.Description != nil {
-				summarizeDesc("image", name, img.Description)
+				summarizeDesc("box", name, img.Description)
 			}
 		}
 	}
@@ -149,11 +149,11 @@ func (c *FeaturePendingCmd) Run() error {
 
 	for name, layer := range layers {
 		if layer != nil {
-			scan("layer", name, layer.Description)
+			scan("candy", name, layer.Description)
 		}
 	}
 	for name, img := range cfg.Box {
-		scan("image", name, img.Description)
+		scan("box", name, img.Description)
 	}
 	return nil
 }
@@ -197,11 +197,11 @@ func (c *FeatureValidateCmd) Run() error {
 
 	for name, layer := range layers {
 		if layer != nil {
-			validate("layer", name, layer.Description)
+			validate("candy", name, layer.Description)
 		}
 	}
 	for name, img := range cfg.Box {
-		validate("image", name, img.Description)
+		validate("box", name, img.Description)
 	}
 
 	if len(errs) > 0 {

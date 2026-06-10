@@ -54,7 +54,7 @@ type HarnessRecipeFrom struct {
 }
 
 // recipeFromKinds enumerates the valid `kind:` discriminator values.
-var recipeFromKinds = []string{"layer", "image", "pod", "vm"}
+var recipeFromKinds = []string{"candy", "box", "pod", "vm"}
 
 // ExpandRecipeFrom resolves every `from:` directive on the recipe into
 // synthetic scenarios appended to recipe.Scenario. The recipe's existing
@@ -193,7 +193,7 @@ func validateFromEntryShape(recipeName string, idx int, from HarnessRecipeFrom) 
 	}
 	for _, s := range from.Scope {
 		switch s {
-		case "layer", "image", "deploy":
+		case "candy", "box", "deploy":
 		default:
 			return fmt.Errorf("recipe %q: from[%d] (kind=%s name=%q): invalid scope value %q (one of: layer, image, deploy)",
 				recipeName, idx, from.Kind, from.Name, s)
@@ -205,7 +205,7 @@ func validateFromEntryShape(recipeName string, idx int, from HarnessRecipeFrom) 
 	case "description":
 		// Only layer/image carry descriptions today. pod/vm
 		// descriptions could be added later but are absent.
-		if from.Kind != "layer" && from.Kind != "image" {
+		if from.Kind != "candy" && from.Kind != "box" {
 			return fmt.Errorf("recipe %q: from[%d] (kind=%s name=%q): source=description is only valid for kind=layer or kind=image (pod and vm don't carry description: blocks)",
 				recipeName, idx, from.Kind, from.Name)
 		}
@@ -229,7 +229,7 @@ func (f HarnessRecipeFrom) sourceEffective() string {
 // description; image kinds walk the layer chain via CollectDescriptions.
 func collectScenariosForFromDescription(uf *UnifiedFile, layers map[string]*Layer, from HarnessRecipeFrom) ([]Scenario, error) {
 	switch from.Kind {
-	case "layer":
+	case "candy":
 		layer, ok := layers[from.Name]
 		if !ok {
 			return nil, fmt.Errorf("layer %q not found (available: %s)", from.Name, sortedMapKeys(layers))
@@ -239,7 +239,7 @@ func collectScenariosForFromDescription(uf *UnifiedFile, layers map[string]*Laye
 		}
 		return append([]Scenario(nil), layer.Description.Scenario...), nil
 
-	case "image":
+	case "box":
 		// Namespace-aware: a recipe may import from an image that lives in an
 		// imported submodule (e.g. `fedora.composition-source` after the box
 		// inversion). resolveBoxRef descends into the namespace and returns
@@ -323,14 +323,14 @@ func scenarioImportName(prefix, name string) string {
 // the underlying image baked in.
 func collectChecksForFrom(uf *UnifiedFile, layers map[string]*Layer, from HarnessRecipeFrom) ([]Check, error) {
 	switch from.Kind {
-	case "layer":
+	case "candy":
 		layer, ok := layers[from.Name]
 		if !ok {
 			return nil, fmt.Errorf("layer %q not found (available: %s)", from.Name, sortedMapKeys(layers))
 		}
 		out := make([]Check, 0, len(layer.tests))
 		for _, c := range layer.tests {
-			c.Origin = "layer:" + from.Name
+			c.Origin = "candy:" + from.Name
 			if c.Scope == "" {
 				c.Scope = "build"
 			}
@@ -338,7 +338,7 @@ func collectChecksForFrom(uf *UnifiedFile, layers map[string]*Layer, from Harnes
 		}
 		return out, nil
 
-	case "image":
+	case "box":
 		// Namespace-aware (see the kind:image case in collectScenariosForFromDescription).
 		cfg := uf.ProjectConfig()
 		_, nsCfg, ok := cfg.resolveBoxRef(from.Name)
@@ -425,7 +425,7 @@ func filterByScope(checks []Check, allowed []string) []Check {
 	out := make([]Check, 0, len(checks))
 	for _, c := range checks {
 		// Scope on a check is "build" or "deploy". The author-facing
-		// scope filter values are "layer" / "image" / "deploy".
+		// scope filter values are "candy" / "box" / "deploy".
 		// The Origin annotation tells us which section the check came
 		// from (layer:* for layer, image:* / pod:* / vm:* / deploy-default
 		// for the entity itself). Map back to the author's vocabulary:
@@ -443,13 +443,13 @@ func scopeSection(c Check) string {
 	if c.Scope == "deploy" {
 		return "deploy"
 	}
-	if strings.HasPrefix(c.Origin, "layer:") {
-		return "layer"
+	if strings.HasPrefix(c.Origin, "candy:") {
+		return "candy"
 	}
-	// image/pod/vm-direct build-scope checks all bucket as "image" for
-	// filter purposes — they ship in the image's "Image" section of the
+	// box/pod/vm-direct build-scope checks all bucket as "box" for
+	// filter purposes — they ship in the box's "Box" section of the
 	// LabelEvalSet.
-	return "image"
+	return "box"
 }
 
 // filterDropLiveOnly removes checks that use a verb requiring live-

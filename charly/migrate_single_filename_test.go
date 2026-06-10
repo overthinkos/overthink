@@ -137,7 +137,7 @@ vm:
 // clobber the already-single-filename candy-only discover back to [box, candy].
 func TestMigrateSingleFilename_CandyOnlyDiscoverPreserved(t *testing.T) {
 	dir := t.TempDir()
-	writeFixture(t, dir, "charly.yml", `version: 2026.160.1301
+	writeFixture(t, dir, "charly.yml", `version: 2026.161.1301
 discover:
   - path: candy
     recursive: true

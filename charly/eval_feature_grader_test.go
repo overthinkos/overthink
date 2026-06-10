@@ -130,7 +130,7 @@ func (g *stubGrader) Grade(_ context.Context, req GraderRequest) EvalResult {
 func proseScenarioSet() *LabelDescriptionSet {
 	return &LabelDescriptionSet{
 		Layer: []LabeledDescription{{
-			Origin: "layer:x",
+			Origin: "candy:x",
 			Description: Description{
 				Feature:   "the gizmo works",
 				Narrative: "as an operator...",

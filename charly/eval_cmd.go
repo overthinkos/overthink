@@ -112,7 +112,7 @@ type EvalLiveCmd struct {
 	Instance string   `short:"i" long:"instance" help:"Instance name"`
 	Format   string   `long:"format" default:"text" help:"Output format: text, json, tap"`
 	Filter   []string `long:"filter" help:"Only run checks with these verbs (repeatable)"`
-	Section  string   `long:"section" help:"Only run this section: layer, image, or deploy"`
+	Section  string   `long:"section" help:"Only run this section: candy, box, or deploy"`
 }
 
 func (c *EvalLiveCmd) Run() error {
@@ -767,7 +767,7 @@ func (c *EvalBoxCmd) Run() error {
 	resolver := ResolveEvalVarsBuild(meta)
 	mode := RunModeImage
 
-	checks := gatherSections(meta.Eval, nil /* no local overlay at build time */, []string{"layer", "image"})
+	checks := gatherSections(meta.Eval, nil /* no local overlay at build time */, []string{"candy", "box"})
 	checks = filterByVerb(checks, c.Filter)
 	if len(checks) == 0 {
 		fmt.Fprintln(os.Stderr, "No checks to run after filtering.")
@@ -859,7 +859,7 @@ func emitImageTestYAML(w io.Writer, imageRef, liveContainer string, scenarios []
 // collectChecksForRun is the full charly-test assembly: all three label sections
 // + the local deploy overlay, with optional section/verb filtering.
 func collectChecksForRun(baked *LabelEvalSet, local []Check, section string, filter []string) []Check {
-	sections := []string{"layer", "image", "deploy"}
+	sections := []string{"candy", "box", "deploy"}
 	if section != "" {
 		sections = []string{section}
 	}
@@ -873,9 +873,9 @@ func gatherSections(baked *LabelEvalSet, local []Check, sections []string) []Che
 	var out []Check
 	for _, s := range sections {
 		switch s {
-		case "layer":
+		case "candy":
 			out = append(out, baked.Layer...)
-		case "image":
+		case "box":
 			out = append(out, baked.Box...)
 		case "deploy":
 			out = append(out, MergeDeployEval(baked.Deploy, local)...)

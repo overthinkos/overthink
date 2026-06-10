@@ -346,7 +346,7 @@ func validateCollectedIDUniqueness(cfg *Config, layers map[string]*Layer, imgNam
 			}
 		}
 	}
-	checkSection("layer", set.Layer)
-	checkSection("image", set.Box)
+	checkSection("candy", set.Layer)
+	checkSection("box", set.Box)
 	checkSection("deploy", set.Deploy)
 }

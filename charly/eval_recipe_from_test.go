@@ -53,7 +53,7 @@ func TestExpandFromLayer(t *testing.T) {
 	}
 	recipe := &HarnessRecipe{
 		From: []HarnessRecipeFrom{
-			{Kind: "layer", Name: "sshd", Pod: "selftest"},
+			{Kind: "candy", Name: "sshd", Pod: "selftest"},
 		},
 	}
 	if err := ExpandRecipeFrom(uf, layers, "test", recipe); err != nil {
@@ -91,7 +91,7 @@ func TestExpandFromImage(t *testing.T) {
 	layers := map[string]*Layer{}
 	recipe := &HarnessRecipe{
 		From: []HarnessRecipeFrom{
-			{Kind: "image", Name: "arch-coder", Pod: "selftest-img"},
+			{Kind: "box", Name: "arch-coder", Pod: "selftest-img"},
 		},
 	}
 	if err := ExpandRecipeFrom(uf, layers, "test", recipe); err != nil {
@@ -157,8 +157,8 @@ func TestMultiKindComposition(t *testing.T) {
 	}
 	recipe := &HarnessRecipe{
 		From: []HarnessRecipeFrom{
-			{Kind: "layer", Name: "layer-a", Pod: "container-x"},
-			{Kind: "image", Name: "img-a", Pod: "container-x"},
+			{Kind: "candy", Name: "layer-a", Pod: "container-x"},
+			{Kind: "box", Name: "img-a", Pod: "container-x"},
 			{Kind: "pod", Name: "pod-a", Pod: "container-y"},
 		},
 		Scenario: []Scenario{
@@ -220,7 +220,7 @@ func TestSelectExcludeFilterPipeline(t *testing.T) {
 	recipe := &HarnessRecipe{
 		From: []HarnessRecipeFrom{
 			{
-				Kind: "layer", Name: "l", Pod: "p",
+				Kind: "candy", Name: "l", Pod: "p",
 				Select:  []string{"a", "b", "c"}, // first allow
 				Exclude: []string{"b"},           // then deny
 			},
@@ -249,7 +249,7 @@ func TestLiveOnlyVerbsDroppedByDefault(t *testing.T) {
 	}
 	recipe := &HarnessRecipe{
 		From: []HarnessRecipeFrom{
-			{Kind: "layer", Name: "l", Pod: "p"},
+			{Kind: "candy", Name: "l", Pod: "p"},
 		},
 	}
 	if err := ExpandRecipeFrom(uf, layers, "test", recipe); err != nil {
@@ -267,7 +267,7 @@ func TestEmptyAfterFilterIsError(t *testing.T) {
 	}
 	recipe := &HarnessRecipe{
 		From: []HarnessRecipeFrom{
-			{Kind: "layer", Name: "l", Pod: "p", Select: []string{"nonexistent"}},
+			{Kind: "candy", Name: "l", Pod: "p", Select: []string{"nonexistent"}},
 		},
 	}
 	err := ExpandRecipeFrom(uf, layers, "test", recipe)
@@ -285,7 +285,7 @@ func TestUnknownEntityError(t *testing.T) {
 	uf := fxUnified()
 	recipe := &HarnessRecipe{
 		From: []HarnessRecipeFrom{
-			{Kind: "layer", Name: "nope", Pod: "p"},
+			{Kind: "candy", Name: "nope", Pod: "p"},
 		},
 	}
 	err := ExpandRecipeFrom(uf, map[string]*Layer{}, "test", recipe)
@@ -313,7 +313,7 @@ func TestNamingCollisionError(t *testing.T) {
 	}
 	recipe := &HarnessRecipe{
 		From: []HarnessRecipeFrom{
-			{Kind: "layer", Name: "l", Pod: "p"},
+			{Kind: "candy", Name: "l", Pod: "p"},
 		},
 		Scenario: []Scenario{
 			{Name: "dup", Pod: "p", Step: []Step{{Then: "x", Check: fxCheckFile("x", "/x")}}},
@@ -332,7 +332,7 @@ func TestPrefixDisambiguatesCollision(t *testing.T) {
 	}
 	recipe := &HarnessRecipe{
 		From: []HarnessRecipeFrom{
-			{Kind: "layer", Name: "l", Pod: "p", Prefix: "lp"},
+			{Kind: "candy", Name: "l", Pod: "p", Prefix: "lp"},
 		},
 		Scenario: []Scenario{
 			{Name: "dup", Pod: "p", Step: []Step{{Then: "x", Check: fxCheckFile("x", "/x")}}},
@@ -364,7 +364,7 @@ func TestImportedScenarioCountEqualsCheckCount(t *testing.T) {
 	}
 	recipe := &HarnessRecipe{
 		From: []HarnessRecipeFrom{
-			{Kind: "layer", Name: "l", Pod: "p"},
+			{Kind: "candy", Name: "l", Pod: "p"},
 		},
 		Scenario: []Scenario{
 			{Name: "extra1", Pod: "p", Step: []Step{{Then: "x", Check: fxCheckFile("x", "/x")}}},
@@ -398,7 +398,7 @@ func TestImportedScenarioStepShape(t *testing.T) {
 	}
 	recipe := &HarnessRecipe{
 		From: []HarnessRecipeFrom{
-			{Kind: "layer", Name: "l", Pod: "p"},
+			{Kind: "candy", Name: "l", Pod: "p"},
 		},
 	}
 	if err := ExpandRecipeFrom(uf, layers, "test", recipe); err != nil {
@@ -422,7 +422,7 @@ func TestIdempotentExpansion(t *testing.T) {
 	uf := fxUnified()
 	layers := map[string]*Layer{"l": fxLayer("l", []Check{fxCheckFile("a", "/a")})}
 	recipe := &HarnessRecipe{
-		From: []HarnessRecipeFrom{{Kind: "layer", Name: "l", Pod: "p"}},
+		From: []HarnessRecipeFrom{{Kind: "candy", Name: "l", Pod: "p"}},
 	}
 	if err := ExpandRecipeFrom(uf, layers, "test", recipe); err != nil {
 		t.Fatalf("first call: %v", err)
@@ -446,7 +446,7 @@ func TestScopeFilterDeployOnly(t *testing.T) {
 	}
 	recipe := &HarnessRecipe{
 		From: []HarnessRecipeFrom{
-			{Kind: "image", Name: "i", Pod: "p", Scope: []string{"deploy"}},
+			{Kind: "box", Name: "i", Pod: "p", Scope: []string{"deploy"}},
 		},
 	}
 	if err := ExpandRecipeFrom(uf, map[string]*Layer{}, "test", recipe); err != nil {

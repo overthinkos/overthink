@@ -45,7 +45,7 @@ func CollectDescriptions(cfg *Config, layers map[string]*Layer, boxName string) 
 			continue
 		}
 		set.Layer = append(set.Layer, LabeledDescription{
-			Origin:      "layer:" + layerName,
+			Origin:      "candy:" + layerName,
 			Description: *layer.Description,
 		})
 	}
@@ -53,7 +53,7 @@ func CollectDescriptions(cfg *Config, layers map[string]*Layer, boxName string) 
 	// Image-level description.
 	if img, ok := cfg.Box[boxName]; ok && img.Description != nil {
 		set.Box = append(set.Box, LabeledDescription{
-			Origin:      "image:" + boxName,
+			Origin:      "box:" + boxName,
 			Description: *img.Description,
 		})
 	}

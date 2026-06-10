@@ -22,6 +22,43 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-10 — feat(migrate)!: finish the candy/box rebrand's section-filter VALUES (recipe `from.kind`/`scope`, eval sections, origins, `RefKind`)
+
+The last unfinished tail of the candy/box rebrand. The 2026.156 candy-box-rename
+renamed the kind DISCRIMINATORS (`layer:`→`candy:`, `image:`→`box:`) and the eval
+label WIRE keys (`json:"candy"`/`json:"box"`) — but left the INTERNAL section-filter
+string VALUES and a config surface still using `layer`/`image`:
+
+- **Code values → candy/box** (`charly/`): the eval section-filter literals
+  (`gatherSections`/`collectChecksForRun` `case "layer"`→`"candy"` / `case "image"`→
+  `"box"`, the `--section` flag values), the recipe `from.kind` + section `scope`
+  matching (`eval_recipe_from.go` `recipeFromKinds`, the `case` arms), the baked-label
+  ORIGIN prefixes (`"layer:"`→`"candy:"`, `"image:"`→`"box:"` in `description_collect.go`
+  / `shellcollect.go` / `eval_recipe_from.go`), the `RefKind` VALUES
+  (`RefKindBox = "box"`, `RefKindLayer`→`RefKindCandy = "candy"`), and the
+  `charly feature list --kind` filter (`candy`/`box`). KEPT (separate axes): the
+  `cache: image` build-cache mode, the eval-output `mode: image|run`
+  (`RunModeImage`), the `NestedExecutor` venue `"image"`, the `BuilderDef.Kind:
+  "layer"` builder type, and every OCI/k8s/podman `"image"`.
+- **MigrationStep `recipe-section-values`** (`charly/migrate_recipe_section_values.go`):
+  rewrites recipe `from[i].kind` (`layer`→`candy`, `image`→`box`) and `from[i].scope`
+  section lists, SCOPED to `from:` sequence items (`from:` is recipe-exclusive in the
+  schema) so a builder `kind: layer` and a check-level `scope: build|deploy` are never
+  touched. Comment-preserving (yaml.v3 node API); idempotent; proven by
+  `TestMigrateRecipeSectionValues` (asserts the negatives — builder/check untouched).
+  Raises schema HEAD `2026.160.1301`→`2026.161.1301`; the load-time gate hard-rejects an
+  un-migrated recipe (`invalid kind "layer" (one of: candy, box, pod, vm)`).
+- **Re-stamp**: `charly migrate` re-stamped main's `charly.yml` (recipe values +
+  HEAD) and all 5 distro submodules (`charly.yml` HEAD stamp). HEAD-CalVer test
+  fixtures bumped. Skills updated (`/charly-eval:eval`, `/charly-internals:capabilities`,
+  `/charly-internals:go`): the three-section `{layer, image, deploy}` → `{candy, box,
+  deploy}`, `--section` values, origin annotations.
+
+R10: `charly eval run eval-pod` on the fresh-built binary (exercises the section
+iteration via `eval box`/`live`/`feature run` + loads the re-stamped configs which
+validate the recipe `from.kind` at load). `go test ./...` + `go vet` + `charly box
+validate` (zero-warnings) green; the migrator RDD-proven on a fixture.
+
 ### 2026-06-10 — refactor(charly)!: Go `Image*`→`Box*` identifier rename — candybox-meaning only, OCI `Image*` kept (Phase 2)
 
 The Phase-2 follow-through to the `image:`(OCI) vs `box:`(candybox) docs sweep:

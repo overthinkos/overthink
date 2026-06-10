@@ -107,7 +107,7 @@ func writeMinProject(t *testing.T, dir string) {
 	t.Helper()
 	// Post-unified-cutover: write charly.yml (the unified format) instead
 	// of a legacy image.yml. LoadConfig reads charly.yml exclusively.
-	charlyYAML := `version: 2026.160.1301
+	charlyYAML := `version: 2026.161.1301
 defaults:
   registry: ghcr.io/test
   tag: latest

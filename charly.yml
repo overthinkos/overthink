@@ -1,4 +1,4 @@
-version: 2026.160.1301
+version: 2026.161.1301
 # Canonical repo identity. After the 2026-06 box inversion main imports the three
 # active distro submodules (arch / cachyos / fedora) ONE-DIRECTIONALLY to reference
 # their relocated boxes; the submodules no longer import main as a namespace (they
@@ -14,9 +14,9 @@ import:
     # (import: []) and cachyos imports the `arch` namespace; none imports main back
     # (they reach main's shared candies via @github refs), so the former
     # main↔cachyos / main↔fedora mutual cycles are dissolved.
-    - arch: '@github.com/overthinkos/arch:v2026.161.0830'
-    - cachyos: '@github.com/overthinkos/cachyos:v2026.161.0830'
-    - fedora: '@github.com/overthinkos/fedora:v2026.161.0954'
+    - arch: '@github.com/overthinkos/arch:v2026.161.1152'
+    - cachyos: '@github.com/overthinkos/cachyos:v2026.161.1152'
+    - fedora: '@github.com/overthinkos/fedora:v2026.161.1152'
 # Main owns NO boxes after the 2026-06 box inversion — only the shared candy
 # library + the inline eval/vm/local/k8s orchestration. Discover candies only.
 discover:
@@ -503,7 +503,7 @@ recipe:
                       HTTP endpoints, post-cutover regression scenarios)
                       passes against the `mcp` pod.
         from:
-            - kind: image
+            - kind: box
               name: fedora.jupyter
               pod: mcp
               skip_live_only: false
@@ -1190,26 +1190,26 @@ recipe:
         from:
             # Per-kind expansion in isolation onto dedicated pods (distinct
             # prefix to avoid collisions with the composition-pod imports below).
-            - kind: layer
+            - kind: candy
               name: sshd
               pod: selftest-layer
               select: [sshd-binary, sshd-wrapper]
               prefix: solo
-            - kind: image
+            - kind: box
               name: fedora.composition-source
               pod: selftest-image
-              scope: [image]
+              scope: [box]
               select: [composition-source-charly]
               prefix: solo
             # Multi-kind composition onto the SAME pod, with filter pipeline.
-            - kind: layer
+            - kind: candy
               name: sshd
               pod: composition-app
               select: [sshd-binary]
-            - kind: image
+            - kind: box
               name: fedora.composition-source
               pod: composition-app
-              scope: [image]
+              scope: [box]
               select: [composition-source-charly, composition-source-marker]
               exclude: [composition-source-marker]
               prefix: img

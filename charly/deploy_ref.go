@@ -47,8 +47,8 @@ import (
 type RefKind string
 
 const (
-	RefKindBox   RefKind = "image"
-	RefKindLayer RefKind = "layer"
+	RefKindBox   RefKind = "box"
+	RefKindCandy RefKind = "candy"
 )
 
 // RefSource classifies where the ref's content lives.
@@ -63,7 +63,7 @@ const (
 // DeployRef is a parsed `<image-or-layer-ref>` ready to be loaded.
 type DeployRef struct {
 	Raw    string     // original input
-	Kind   RefKind    // image or layer
+	Kind   RefKind    // box or candy
 	Source RefSource  // local-name | local-path | remote
 	Name   string     // resolved short name (ripgrep, fedora-coder, etc.)
 	Path   string     // absolute path to the relevant YAML; populated for local-name + local-path
@@ -89,7 +89,7 @@ func ResolveDeployRef(ref, projectDir string) (*DeployRef, error) {
 // user has explicitly asked for a layer overlay; if the same name
 // exists as both an image and a layer, layer wins.
 func ResolveDeployRefAsLayer(ref, projectDir string) (*DeployRef, error) {
-	return resolveDeployRefWithPref(ref, projectDir, RefKindLayer)
+	return resolveDeployRefWithPref(ref, projectDir, RefKindCandy)
 }
 
 // resolveDeployRefWithPref is the shared implementation; preferKind
@@ -157,12 +157,12 @@ func refSubPathHas(subPath, segment string) bool {
 // resolveRemoteRef parses and classifies an @-prefixed remote ref.
 func resolveRemoteRef(ref string) (*DeployRef, error) {
 	parsed := ParseRemoteRef(ref)
-	kind := RefKindLayer
+	kind := RefKindCandy
 	switch {
 	case refSubPathHas(parsed.SubPath, "candy") || refSubPathHas(parsed.SubPath, "layers"):
 		// `candy/<n>` is the post-rebrand layer subpath; `candy/<n>` is the
 		// legacy form kept for back-compat with old pins.
-		kind = RefKindLayer
+		kind = RefKindCandy
 	case refSubPathHas(parsed.SubPath, "box") || refSubPathHas(parsed.SubPath, "images"):
 		// `box/<n>` is the post-rebrand image subpath; `images/<n>` is legacy.
 		kind = RefKindBox
@@ -204,7 +204,7 @@ func resolveLocalPath(ref, projectDir string) (*DeployRef, error) {
 		return nil, err
 	}
 	name := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
-	if kind == RefKindLayer && filepath.Base(path) == UnifiedFileName {
+	if kind == RefKindCandy && filepath.Base(path) == UnifiedFileName {
 		name = filepath.Base(filepath.Dir(path))
 	}
 	return &DeployRef{
@@ -238,7 +238,7 @@ func classifyYAMLFile(path string) (RefKind, error) {
 	// these keys is an error (we don't try to guess).
 	for _, k := range []string{"rpm", "deb", "pac", "aur", "tasks", "services", "service", "system_services", "candy", "depends", "env", "path_append", "description"} {
 		if _, ok := top[k]; ok {
-			return RefKindLayer, nil
+			return RefKindCandy, nil
 		}
 	}
 	return "", fmt.Errorf("ResolveDeployRef: %s has no recognized image or layer keys", path)
@@ -285,7 +285,7 @@ func resolveLocalName(name, projectDir string, preferKind RefKind) (*DeployRef, 
 	layerRef := func() *DeployRef {
 		return &DeployRef{
 			Raw:    name,
-			Kind:   RefKindLayer,
+			Kind:   RefKindCandy,
 			Source: RefSourceLocalName,
 			Name:   name,
 			Path:   layerYML,
@@ -297,7 +297,7 @@ func resolveLocalName(name, projectDir string, preferKind RefKind) (*DeployRef, 
 		// Cross-kind name reuse — preferKind decides. Both kinds
 		// remain reachable via explicit paths (./candy/<name>/ or
 		// the box config file with a #<name> fragment) or via ResolveDeployRefAsLayer.
-		if preferKind == RefKindLayer {
+		if preferKind == RefKindCandy {
 			return layerRef(), nil
 		}
 		return imageRef(), nil

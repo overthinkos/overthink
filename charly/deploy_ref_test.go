@@ -12,9 +12,9 @@ func TestResolveDeployRefLocalImage(t *testing.T) {
 	dir := t.TempDir()
 	// Schema v4: ResolveDeployRef calls LoadUnified which reads
 	// charly.yml as the entry point. Fixture must use the unified
-	// shape with version: 2026.160.1301 and the singular box: kind map.
+	// shape with version: 2026.161.1301 and the singular box: kind map.
 	if err := os.WriteFile(filepath.Join(dir, "charly.yml"), []byte(`
-version: 2026.160.1301
+version: 2026.161.1301
 box:
   myimg:
     base: fedora
@@ -44,13 +44,13 @@ candy:
 	}
 	// Also create charly.yml so the local-name resolver has something
 	// to search — but we don't add "ripgrep" to it, so it's layer-only.
-	_ = os.WriteFile(filepath.Join(dir, "charly.yml"), []byte("version: 2026.160.1301\nimage: {}\n"), 0644)
+	_ = os.WriteFile(filepath.Join(dir, "charly.yml"), []byte("version: 2026.161.1301\nimage: {}\n"), 0644)
 
 	got, err := ResolveDeployRef("ripgrep", dir)
 	if err != nil {
 		t.Fatalf("ResolveDeployRef: %v", err)
 	}
-	if got.Kind != RefKindLayer || got.Source != RefSourceLocalName {
+	if got.Kind != RefKindCandy || got.Source != RefSourceLocalName {
 		t.Errorf("unexpected parse: %+v", got)
 	}
 	if got.Name != "ripgrep" {
@@ -66,7 +66,7 @@ candy:
 func TestResolveDeployRefCrossKindNameReuse(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "charly.yml"), []byte(`
-version: 2026.160.1301
+version: 2026.161.1301
 box:
   dup:
     base: fedora
@@ -97,14 +97,14 @@ candy:
 	if err != nil {
 		t.Fatalf("ResolveDeployRefAsLayer: %v", err)
 	}
-	if got.Kind != RefKindLayer {
+	if got.Kind != RefKindCandy {
 		t.Errorf("add-layer ref: kind = %v, want layer (layer-first precedence)", got.Kind)
 	}
 }
 
 func TestResolveDeployRefUnknownName(t *testing.T) {
 	dir := t.TempDir()
-	_ = os.WriteFile(filepath.Join(dir, "charly.yml"), []byte("version: 2026.160.1301\nimage: {}\n"), 0644)
+	_ = os.WriteFile(filepath.Join(dir, "charly.yml"), []byte("version: 2026.161.1301\nimage: {}\n"), 0644)
 	_, err := ResolveDeployRef("nope", dir)
 	if err == nil {
 		t.Fatalf("expected not-found error, got nil")
@@ -149,7 +149,7 @@ rpm:
 	if err != nil {
 		t.Fatalf("ResolveDeployRef: %v", err)
 	}
-	if got.Kind != RefKindLayer {
+	if got.Kind != RefKindCandy {
 		t.Errorf("kind = %v, want layer", got.Kind)
 	}
 }
@@ -161,7 +161,7 @@ func TestResolveDeployRefRemoteGitHubLegacy(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ResolveDeployRef: %v", err)
 	}
-	if got.Kind != RefKindLayer {
+	if got.Kind != RefKindCandy {
 		t.Errorf("kind = %v, want layer", got.Kind)
 	}
 	if got.Source != RefSourceRemote {
@@ -189,7 +189,7 @@ func TestResolveDeployRefRemoteCandy(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ResolveDeployRefAsLayer: %v", err)
 	}
-	if got.Kind != RefKindLayer {
+	if got.Kind != RefKindCandy {
 		t.Errorf("kind = %v, want layer (a candy/ ref is a layer)", got.Kind)
 	}
 	if got.Source != RefSourceRemote || got.Remote == nil || got.Remote.Name != "charly" {
@@ -212,7 +212,7 @@ func TestResolveDeployRefRemoteGitHubNewSyntax(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ResolveDeployRef: %v", err)
 	}
-	if got.Kind != RefKindLayer {
+	if got.Kind != RefKindCandy {
 		t.Errorf("kind = %v, want layer", got.Kind)
 	}
 	if got.Remote.Version != "main" {
@@ -272,7 +272,7 @@ func TestClassifyYAMLFile(t *testing.T) {
 	if k, err := classifyYAMLFile(image); err != nil || k != RefKindBox {
 		t.Errorf("image file: kind=%v err=%v, want image nil", k, err)
 	}
-	if k, err := classifyYAMLFile(layer); err != nil || k != RefKindLayer {
+	if k, err := classifyYAMLFile(layer); err != nil || k != RefKindCandy {
 		t.Errorf("layer file: kind=%v err=%v, want layer nil", k, err)
 	}
 	if _, err := classifyYAMLFile(unknown); err == nil {

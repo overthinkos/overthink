@@ -118,7 +118,7 @@ func TestValidateTests_IDUniqueness_CrossLayer(t *testing.T) {
 		"img": {Enabled: boolPtr(true), Layer: []string{"a", "b"}},
 	}}
 	got := runValidateTests(t, cfg, layers)
-	if !strings.Contains(got, "duplicate id") || !strings.Contains(got, "layer") {
+	if !strings.Contains(got, "duplicate id") || !strings.Contains(got, "candy") {
 		t.Errorf("expected cross-layer duplicate-id error: %s", got)
 	}
 }

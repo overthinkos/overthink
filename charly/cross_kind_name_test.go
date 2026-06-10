@@ -37,7 +37,7 @@ func TestCrossKindNameReuse_LoaderAcceptsAllKinds(t *testing.T) {
 		[]byte("rpm:\n  packages: [example]\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	cfgYAML := `version: 2026.160.1301
+	cfgYAML := `version: 2026.161.1301
 defaults:
   registry: ghcr.io/example
   build: [rpm]
@@ -113,7 +113,7 @@ func TestCrossKindNameReuse_RetiredKeysRejected(t *testing.T) {
 	}{
 		{
 			name: "deployment.qc",
-			cfgYAML: `version: 2026.160.1301
+			cfgYAML: `version: 2026.161.1301
 deploy:
   qc:
     target: local
@@ -124,7 +124,7 @@ deploy:
 		},
 		{
 			name: "deployment.cachyos-dx",
-			cfgYAML: `version: 2026.160.1301
+			cfgYAML: `version: 2026.161.1301
 deploy:
   cachyos-dx:
     target: local
@@ -135,7 +135,7 @@ deploy:
 		},
 		{
 			name: "local.cachyos-dx",
-			cfgYAML: `version: 2026.160.1301
+			cfgYAML: `version: 2026.161.1301
 local:
   cachyos-dx:
     candy: [example]

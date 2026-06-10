@@ -77,8 +77,8 @@ const (
 	// reads this to reconstruct every service's config without the repo.
 	LabelService = "ai.opencharly.service"
 	// LabelShell — three-section JSON shell-init manifest.
-	// Each section (layer/image/deploy) carries an ordered list of
-	// ShellEntry contributions (origin = layer name / "image" / "deploy",
+	// Each section (candy/box/deploy) carries an ordered list of
+	// ShellEntry contributions (origin = candy name / "box" / "deploy",
 	// id, generic body, per-shell ByShell map). Source of truth for
 	// `charly box inspect`, `charly deploy from-box`, and the deploy.yml
 	// `shell:` overlay merge — same shape as LabelEval.
@@ -205,7 +205,7 @@ type LabelShellSet struct {
 
 // ShellEntry is one origin's full shell-init contribution. ID is the
 // stable handle for deploy.yml overlay keying ("<origin>" or
-// "<origin>:<shell>"). Origin = layer name / "image" / "deploy".
+// "<origin>:<shell>"). Origin = candy name / "box" / "deploy".
 // Generic body + per-shell ByShell map mirror the in-memory
 // ShellConfig struct.
 type ShellEntry struct {

@@ -22,6 +22,20 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-10 — fix(scaffold): repair `charly box new project`/`new candy` to emit loadable current-schema configs
+
+`charly box new candy` wrote a stub with a top-level `rpm:` key the current loader REJECTS (packages moved under the `distro:` map in the localpkg-map / single-canonical-surface migration) and missing the mandatory `version:` — so a freshly-scaffolded candy broke the WHOLE project's load (`candy has unknown top-level key(s) [rpm]`). `charly box new project` wrote a stale plural `platforms:` key (the field-singular migration made it `platform:`), warning on every load. And the `box new project` "Next steps" guidance + the `/charly-build:new` skill pointed at a `build.yml` to copy (it's embedded in the binary now), a `--candy`/`--layers` flag (it's `--candies`), and an `images:`/`layers:` output shape (a box is a discovered `box/<name>/charly.yml` with `box: {candy: […]}`).
+
+- **scaffold.go**: candy stub → `candy: {name, version: <ComputeCalVer>}` + an `add-rpm` hint comment. Loads cleanly; `charly candy add-rpm`/`add-deb`/`add-pac`/`add-aur` build the `distro.<x>.package` section on demand.
+- **scaffold_project.go**: `platforms:` → `platform:`.
+- **scaffold_cmds.go**: the project "Next steps" output → embedded-vocabulary note (no `build.yml` to copy), candy-before-box ordering, `--candies`, and a consistent `my-box`.
+- **validate.go**: the no-install-source error message `candy manifest rpm/deb packages` → `candy manifest distro: packages`.
+- **/charly-build:new skill**: `--layers`→`--candies`, the box-output example (`box: {name, base, candy}`), and the scaffold-stub description synced to the current shape.
+
+Verified: `go test ./...` green; the tool's OWN "Next steps" guidance runs end-to-end (`box new project` → `new candy` → `add-rpm` → `new box --candies` → `validate` exit 0). Bug fix — no schema change.
+
+Known-separate (NOT fixed here — its own future cutover): a legacy `images:`-map per-host `deploy.yml` (pre-2026.128 format) isn't fully migrated by `charly migrate` — the `local-deploy` step (128) reads `HostDeployPath`, which Cutover E retargeted to `charly.yml`, but the legacy file isn't renamed `deploy.yml`→`charly.yml` until step 161, so the `images:`→`deploy:` host conversion never fires on it. Near-unreachable; its fix is a high-risk migration-chain change.
+
 ### 2026-06-10 — refactor(strings): finish syncing user-facing strings + stale comment file-refs with current names
 
 Following the Go-comment sync, this closes the remaining stale SELF-REFERENCES the comment scope didn't cover — the behavior-affecting STRING surface plus a few stale file-name comments from OTHER renames.

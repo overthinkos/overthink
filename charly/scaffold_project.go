@@ -53,7 +53,7 @@ discover:
 defaults:
   registry: ghcr.io/example
   tag: auto
-  platforms:
+  platform:
     - linux/amd64
   build: [rpm]
 `

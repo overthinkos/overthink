@@ -23,14 +23,14 @@ func ScaffoldCandy(dir string, name string) error {
 	// Create a placeholder candy manifest in the canonical kind-keyed form,
 	// named via the single configurable default (UnifiedFileName).
 	candyYml := filepath.Join(candyDir, UnifiedFileName)
-	candyContent := fmt.Sprintf("# %s candy config\ncandy:\n  rpm:\n    packages:\n      # Add RPM packages here\n", name)
+	candyContent := fmt.Sprintf("# %s candy config\ncandy:\n  name: %s\n  version: %s\n  # Add packages:  charly candy add-rpm %s <pkg>   (also add-deb / add-pac / add-aur)\n  # Or add task:/env:/service:/require: — see the candy authoring guide.\n", name, name, ComputeCalVer(), name)
 	if err := os.WriteFile(candyYml, []byte(candyContent), 0644); err != nil {
 		return fmt.Errorf("creating %s: %w", UnifiedFileName, err)
 	}
 
 	fmt.Printf("Created candy at %s\n", candyDir)
 	fmt.Println("Files created:")
-	fmt.Println("  charly.yml - Candy config (rpm/deb packages, require, env, ports, route, service)")
+	fmt.Println("  charly.yml - Candy config (distro packages, require, env, port, route, service)")
 	fmt.Println()
 	fmt.Println("Optional files you can add:")
 	fmt.Println("  root.yml        - Custom root install task")

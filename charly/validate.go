@@ -471,7 +471,7 @@ func validateCandyContents(layers map[string]*Candy, errs *ValidationError) {
 	for name, layer := range layers {
 		// Candy must have at least one install file, a candy: field (composition), or data declarations
 		if !layer.HasInstallFiles() && len(layer.IncludedCandy) == 0 && !layer.HasData() {
-			errs.Add("candy %q: must have at least one install file (candy manifest rpm/deb packages, root.yml, pixi.toml, pyproject.toml, environment.yml, package.json, Cargo.toml, or user.yml) or a candy: field", name)
+			errs.Add("candy %q: must have at least one install file (candy manifest distro: packages, root.yml, pixi.toml, pyproject.toml, environment.yml, package.json, Cargo.toml, or user.yml) or a candy: field", name)
 		}
 
 		// `version:` is MANDATORY for the candy kind (optional for every other

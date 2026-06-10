@@ -28,14 +28,12 @@ func (c *NewProjectCmd) Run() error {
 	}
 	fmt.Fprintf(os.Stderr, "Scaffolded project at %s\n", c.Dir)
 	fmt.Fprintln(os.Stderr, "Next steps:")
-	fmt.Fprintln(os.Stderr, "  # Wire a build.yml — copy from upstream, or reference a published release:")
-	fmt.Fprintln(os.Stderr, "  cp /path/to/opencharly/build.yml "+c.Dir+"/")
-	fmt.Fprintln(os.Stderr, "  charly -C "+c.Dir+" box set defaults.format_config build.yml")
-	fmt.Fprintln(os.Stderr, "  # Add a box, a candy, and build:")
-	fmt.Fprintln(os.Stderr, "  charly -C "+c.Dir+" box new box my-box --base quay.io/fedora/fedora:43 --candy my-candy")
+	fmt.Fprintln(os.Stderr, "  # The distro/builder/init build vocabulary is embedded — declare distro:/builder:/init: only to override it.")
+	fmt.Fprintln(os.Stderr, "  # Add a candy, populate it, wire it into a box, then build:")
 	fmt.Fprintln(os.Stderr, "  charly -C "+c.Dir+" box new candy my-candy")
 	fmt.Fprintln(os.Stderr, "  charly -C "+c.Dir+" candy add-rpm my-candy curl jq")
-	fmt.Fprintln(os.Stderr, "  charly -C "+c.Dir+" box build my-image")
+	fmt.Fprintln(os.Stderr, "  charly -C "+c.Dir+" box new box my-box --base quay.io/fedora/fedora:43 --candies my-candy")
+	fmt.Fprintln(os.Stderr, "  charly -C "+c.Dir+" box build my-box")
 	return nil
 }
 

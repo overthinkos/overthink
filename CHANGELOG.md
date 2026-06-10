@@ -22,6 +22,44 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-10 — docs: comprehensive PROSE sweep image→box / layer→candy across the whole skill corpus
+
+The final consistency axis: where the prior docs-sync made the skills *factually*
+correct (code-refs, commands, labels, fields), this sweep normalizes the remaining
+PROSE terminology to the candy/box vocabulary. Run via 4 parallel audit agents over
+disjoint areas (distros / infra+tools+lang+local+automation / pod-apps / core-eng +
+root docs), each cross-checking against the code with a strict zero-false-positive,
+keep-all-OCI rule.
+
+**~226 files, ~1900 line-for-line swaps.** Renamed (PROSE only, where it clearly means
+a charly candybox / candy): "the `<name>` image"→"the `<name>` box" for every charly
+box (nvidia, jupyter, fedora-coder, …); the box-meaning "layer"→"candy" ("the redis
+layer"→"the redis candy", "sibling layer"→"sibling candy", "candy authoring"); and the
+structural headers (`## Image Properties`→`## Box Properties`, `## Full Layer Stack`→
+`## Full Candy Stack`, `## Key Layers`→`## Key Candies`, `## Used In Images`→`## Used In
+Boxes`, `## Related Images/Layers`→`## Related Boxes/Candies`, the `# Box:`/`# Candy:`
+titles + `| Box |`/`| Candy |` table labels).
+
+**KEPT (verified, zero false positives)** — every genuine OCI/Docker reference: `base
+image`, registry refs (ghcr.io/quay.io/docker.io), "the built image", "image tag/ref",
+`charly box pull` (the *command*) fetching "an image", bootc/disk/container images,
+merge/build/multi-stage *layers*, `COPY --from=<stage>`, `metalayer`/`meta-layer`
+(coined term); every Go identifier in backticks (`Layer`, `LayerEvalSet`,
+`pickLayerVersion`, `writeLayerSteps`, `image.Image`, `ImageRef`); the `<image>` CLI
+placeholder; skill slugs (`/charly-image:layer`, `…-layer`); the `layer-validator` agent
+name; migration-history terminology in the migrate skill; and every ambiguous
+"image"/"layer" left untouched. Cross-refs to two renamed `/charly-image:layer` headings
+(`sibling candies`, `Mixed entries in one candy`) updated in lockstep. Docs-only —
+acceptance via the non-runtime standards (R5 grep self-test, markdown integrity,
+adversarial red-flag scan for OCI mis-conversions — all clean).
+
+NOTE — the Go `Layer*` identifiers (the `Layer` struct, `LayerEvalSet`,
+`ScanAllLayerWithConfig`, the eval `Layer` section field json:"candy") are deliberately
+KEPT: the candy/box rebrand renamed the SCHEMA/wire `layer:`→`candy:` but kept the
+internal Go `Layer*` names (the symmetric image→box Go rename was Phase 2; a parallel
+`Layer*`→`Candy*` Go-identifier rename of those core build/eval types remains the one
+un-done structural axis — a separate Phase-2-scale cutover, not attempted here).
+
 ### 2026-06-10 — refactor(charly)!: reconcile the eval-box mode value image→box + Phase-2-missed `Image` cmd fields + stale type-comment R5
 
 The last image→box Go identifiers the prior cutovers missed:

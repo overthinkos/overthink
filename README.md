@@ -65,7 +65,7 @@ The same `charly` drives two further stages — it
 and [manages](#manage) the running lifecycle (cleanup, diagnostics,
 schema upgrades, runtime config).
 
-> One `charly.yml`, one box, one `deploy.yml`, and one `kind: eval`
+> One `charly.yml`, one box, one per-host `charly.yml` overlay, and one `kind: eval`
 > bed drive all four stages — the build, the local run, the remote
 > deploy, and the test harness. The binary that wires them together is
 > also an MCP server, so your agent reaches every verb over the
@@ -404,7 +404,7 @@ input.
 
 - **Multiple instances** (`-i <instance>`) — every command takes
   `-i`; instances get distinct quadlet names
-  (`charly-<image>-<instance>.container`), `deploy.yml` entries
+  (`charly-<image>-<instance>.container`), `charly.yml` entries
   (`<image>/<instance>`), and disambiguated MCP server names.
 - **Sidecars** (`--sidecar <name>`) — attach a Tailscale,
   cloudflare-tunnel, or other container template into a shared pod.
@@ -468,7 +468,7 @@ discriminates where it lands:
   systemd units to the host filesystem. `host: local` (default)
   uses the local shell executor; `host: user@machine[:port]` (or a
   configured alias) re-execs `charly` over SSH. Per-machine overlays
-  via `add_candy:` in `~/.config/charly/deploy.yml`. Ledger at
+  via `add_candy:` in `~/.config/charly/charly.yml`. Ledger at
   `~/.config/opencharly/installed/` records every ReverseOp so
   `charly deploy del host` reverses precisely what was applied.
   → `/charly-local:local-deploy`, `/charly-local:local-spec`.
@@ -507,7 +507,7 @@ binds host `SSH_AUTH_SOCK` / `GPG_AGENT_SOCK` into the container.
 > with the same DSL as production deploys.
 
 Tests are first-class. Every `charly.yml` (box + candy) /
-`deploy.yml` can declare an `eval:` block of goss-style checks
+`charly.yml` can declare an `eval:` block of goss-style checks
 (files, packages, services, ports, processes, commands, HTTP, DNS,
 mounts, users, groups, kernel params, interfaces, matchers). Checks
 bake into a three-section OCI label
@@ -650,9 +650,9 @@ auto-fallback to `overthinkos/overthink` when no project is wired
 
 The `charly` CLI has 29 top-level verbs across three modes with disjoint
 input sets — **build mode** (`charly box …` reads `charly.yml`),
-**test mode** (`charly eval …` reads OCI labels + `deploy.yml` overlays,
+**test mode** (`charly eval …` reads OCI labels + `charly.yml` overlays,
 never `charly.yml`), and **deploy mode** (everything else reads
-OCI labels + `deploy.yml`) — plus the cross-mode `charly mcp serve`
+OCI labels + `charly.yml`) — plus the cross-mode `charly mcp serve`
 gateway exposing the entire surface as MCP tools.
 
 | Area | Commands | Skill |
@@ -732,12 +732,12 @@ not here.
 | Symptom | First step |
 |---------|-----------|
 | Service won't start | `charly status <image>` then `charly logs <image>` (`/charly-core:charly-status`, `/charly-core:logs`) |
-| Quadlet out of sync with deploy.yml | `charly config <image> --update-all` (`/charly-core:charly-config`) |
+| Quadlet out of sync with charly.yml | `charly config <image> --update-all` (`/charly-core:charly-config`) |
 | Build cache stale | `charly box build --no-cache <image>` (`/charly-build:build`) |
 | Chrome stuck or crash-looping | `/charly-selkies:chrome` Resource Caps & Circuit Breaker section |
 | Encrypted volume locked at boot | `charly config mount` waits for keyring unlock automatically — zero CPU, event-driven (`/charly-automation:enc`) |
 | GPU not detected | `charly doctor` then `/charly-automation:udev` |
-| Tunnel not appearing on a new instance | Tunnel config is `deploy.yml`-only — add manually per instance (`/charly-core:deploy`) |
+| Tunnel not appearing on a new instance | Tunnel config is `charly.yml`-only — add manually per instance (`/charly-core:deploy`) |
 | Service built fine but broken in production | `charly eval live <image>` runs the baked layer + image + deploy checks (`/charly-eval:eval`) |
 | `charly vm build` fails: "no kind:vm entity in vm.yml" | Declare a `kind: vm` entity (`/charly-vm:vms-catalog`) |
 | SPICE console blank on cloud_image VM | Known `simpledrm → qxldrmfb` race under UEFI; switch to `firmware: bios` (`/charly-vm:arch`) |

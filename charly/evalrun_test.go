@@ -145,7 +145,7 @@ func TestRunner_PortVerb_NotListening(t *testing.T) {
 }
 
 func TestRunner_PortVerb_ReachableSkipUnderImageTest(t *testing.T) {
-	r, _ := newFakeRunner(t, RunModeImage)
+	r, _ := newFakeRunner(t, RunModeBox)
 	// Reachable attribute triggers host-side dial → skipped under image test.
 	res := r.Run(context.Background(), []Check{{Port: 6379, Reachable: ptrBool(true)}})
 	if res[0].Status != TestSkip {

@@ -156,13 +156,13 @@ func TestResolveImageNotFound(t *testing.T) {
 	}
 }
 
-// TestMergeImageConfig_BuildTunables guards the regression where new
+// TestMergeBoxConfig_BuildTunables guards the regression where new
 // BoxConfig fields are silently dropped during the unified loader's
 // defaults: merge because mergeBoxConfig is a hand-maintained field-by-field
 // merger. The build-speed tunables (jobs / podman_jobs / podman_jobs_cap /
 // context_ignore / cache) MUST survive the merge, or defaults.context_ignore
 // authored in charly.yml never reaches the generator.
-func TestMergeImageConfig_BuildTunables(t *testing.T) {
+func TestMergeBoxConfig_BuildTunables(t *testing.T) {
 	// dst empty → fills from src (the path that dropped these fields).
 	dst := &BoxConfig{}
 	src := &BoxConfig{

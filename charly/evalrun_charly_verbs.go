@@ -62,7 +62,7 @@ var artifactValidatableMethods = map[string]bool{
 //   - Host-side only: the test runner invokes the host `charly` binary, which
 //     internally connects to the container (CDP over TCP, WL via exec,
 //     D-Bus via delegation, VNC over TCP). No container-side test runner.
-//   - RunModeImage short-circuits with a skip: these verbs need a live
+//   - RunModeBox short-circuits with a skip: these verbs need a live
 //     container with port mappings, which a disposable `podman run --rm`
 //     container doesn't expose the same way.
 //   - Method allowlists are hand-enumerated here so authoring errors surface
@@ -1029,7 +1029,7 @@ func vmDisplayDeviceAbsent(verb, stderr string) bool {
 }
 
 func (r *Runner) runCharlyVerb(ctx context.Context, c *Check, verb, method string, allowlist map[string]methodSpec) EvalResult {
-	if r.Mode == RunModeImage {
+	if r.Mode == RunModeBox {
 		return skipf(c, fmt.Sprintf("%s: %s requires a running container (skip under charly eval box)", verb, method))
 	}
 	if r.Box == "" {

@@ -12,9 +12,9 @@ import (
 // TestVmSpec_DisposableRoundTrip / TestVmSpec_LifecycleAloneDoesNotAuthorize
 // tests moved to the DeploymentNode-level equivalents below.
 
-// TestDeployImageConfig_DisposableRoundTrip — same invariants for
+// TestDeployBoxConfig_DisposableRoundTrip — same invariants for
 // the container-deploy side.
-func TestDeployImageConfig_DisposableRoundTrip(t *testing.T) {
+func TestDeployBoxConfig_DisposableRoundTrip(t *testing.T) {
 	yamlStr := `
 disposable: true
 lifecycle: dev
@@ -31,9 +31,9 @@ lifecycle: dev
 	}
 }
 
-// TestDeployImageConfig_LifecycleAloneDoesNotAuthorize — container
+// TestDeployBoxConfig_LifecycleAloneDoesNotAuthorize — container
 // mirror of the critical anti-derivation test.
-func TestDeployImageConfig_LifecycleAloneDoesNotAuthorize(t *testing.T) {
+func TestDeployBoxConfig_LifecycleAloneDoesNotAuthorize(t *testing.T) {
 	yamlStr := `lifecycle: dev`
 	var c DeploymentNode
 	if err := yaml.Unmarshal([]byte(yamlStr), &c); err != nil {

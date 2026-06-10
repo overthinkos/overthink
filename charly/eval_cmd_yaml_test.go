@@ -59,9 +59,9 @@ func TestEmitImageTestYAML_RoundTripsThroughParseCharlyTestOutput(t *testing.T) 
 	// Sanity: the emitted YAML looks right.
 	out := buf.String()
 	if !strings.Contains(out, "box: ovbench/test:charly-fedora") {
-		t.Errorf("missing image line: %q", out)
+		t.Errorf("missing box line: %q", out)
 	}
-	if !strings.Contains(out, "mode: image") {
+	if !strings.Contains(out, "mode: box") {
 		t.Errorf("missing mode: %q", out)
 	}
 
@@ -73,7 +73,7 @@ func TestEmitImageTestYAML_RoundTripsThroughParseCharlyTestOutput(t *testing.T) 
 	if parsed.Box != "ovbench/test:charly-fedora" {
 		t.Errorf("parsed box: %q", parsed.Box)
 	}
-	if parsed.Mode != "image" {
+	if parsed.Mode != "box" {
 		t.Errorf("parsed mode: %q", parsed.Mode)
 	}
 	if len(parsed.Scenario) != 2 {

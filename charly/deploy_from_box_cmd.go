@@ -14,7 +14,7 @@ import (
 //   - pod (default): generate + enable a podman quadlet from the image's labels
 //     (ports, services, volumes, env, GPU auto-detect via DetectHostDevices),
 //     then start the resulting systemd-user service. Reuses the project-free
-//     runConfig core via ImageConfigSetupCmd.ExplicitRef — no quadlet logic is
+//     runConfig core via BoxConfigSetupCmd.ExplicitRef — no quadlet logic is
 //     duplicated.
 //   - k8s (--cluster <name>): emit a Kustomize tree via the existing
 //     DeployFromBox (charly/k8s_deploy_from_box.go) — unifying the from-box

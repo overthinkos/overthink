@@ -22,6 +22,30 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-10 — refactor(charly)!: reconcile the eval-box mode value image→box + Phase-2-missed `Image` cmd fields + stale type-comment R5
+
+The last image→box Go identifiers the prior cutovers missed:
+- **eval mode** `RunModeImage`→`RunModeBox` + the emitted result-YAML `mode: "image"`→
+  `mode: "box"` (the `charly eval box` mode; `EvalBoxCmd` was already renamed). The
+  `mode` value is generated test output (no user config), and the YAML string is never
+  functionally matched (only the Go enum `r.Mode == RunModeBox` is), so this is a
+  behavior-neutral rename — no MigrationStep. Parser/emitter/tests changed in lockstep.
+- **3 Kong subcommand fields** `Image <Cmd>`→`Box <Cmd>` that Phase-2's field grep
+  missed (it filtered on `string`/`map`/`[]` types, skipping `Cmd`-typed fields):
+  `CLI.Image BoxCmd`, `EvalCmd.Image EvalBoxCmd`, `NewCmd.Image NewBoxCmd` — all
+  `name:"box"`. Renamed via gopls.
+- **Stale type-comment R5** (candy/box-rebrand leftovers in code comments — the types
+  were renamed but the comments lagged): `ImageConfig*Cmd`→`BoxConfig*Cmd`,
+  `EvalImageCmd`→`EvalBoxCmd`, `LayerAddPkgCmd`→`CandyAddPkgCmd`, `DeployImageConfig`→
+  `DeploymentNode`, plus the box-meaning prose in those comments.
+
+Skill R5: `/charly-internals:go` `RunModeImage`→`RunModeBox`, `r.Image`/`Runner.Image`/
+`meta.Image`→`.Box`, `Image EvalBoxCmd`→`Box EvalBoxCmd`, `ai.opencharly.image`→
+`ai.opencharly.box`. Verified: zero box-meaning `Image` identifiers remain in the Go
+code (all surviving `Image*` are OCI artifact/registry/render). R10: `charly eval run
+eval-pod` (exercises `charly eval box`=RunModeBox + the renamed `box` cmd dispatch);
+`go test ./...` + `go vet` green.
+
 ### 2026-06-10 — docs: sync all skills + root docs with the current code (post box-inversion / Phase-2 / section-values)
 
 A comprehensive docs-sync sweep bringing every skill + root doc in line with the

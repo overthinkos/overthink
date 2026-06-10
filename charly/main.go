@@ -47,7 +47,7 @@ type CLI struct {
 	Config      BoxConfigCmd    `cmd:"" help:"Configure box deployment (setup, secrets, encrypted volumes)"`
 	Deploy      DeployCmd       `cmd:"" help:"Manage deploy.yml deployment overrides"`
 	Doctor      DoctorCmd       `cmd:"" help:"Show host dependency status"`
-	Image       BoxCmd          `cmd:"" name:"box" help:"Build, generate, inspect, and pull container boxes (reads charly.yml)"`
+	Box       BoxCmd          `cmd:"" name:"box" help:"Build, generate, inspect, and pull container boxes (reads charly.yml)"`
 	Layer       CandyCmd        `cmd:"" name:"candy" help:"Edit candy.yml files in the project's candy/ directory"`
 	Logs        LogsCmd         `cmd:"" help:"Show service container logs"`
 	Mcp         McpCmdGroup     `cmd:"" help:"Run an MCP server exposing the charly CLI as tools"`
@@ -526,7 +526,7 @@ func (c *ListVolumesCmd) Run() error {
 type NewCmd struct {
 	Layer   NewCandyCmd   `cmd:"" name:"candy" help:"Scaffold a candy directory"`
 	Project NewProjectCmd `cmd:"" help:"Scaffold a fresh charly project (charly.yml + build.yml ref + candy/)"`
-	Image   NewBoxCmd     `cmd:"" name:"box" help:"Add a new box entry to charly.yml"`
+	Box   NewBoxCmd     `cmd:"" name:"box" help:"Add a new box entry to charly.yml"`
 }
 
 // NewLayerCmd scaffolds a new layer

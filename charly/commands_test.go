@@ -7,15 +7,15 @@ import (
 	"testing"
 )
 
-// TestImageConfigSetupCmd_DirectModeAllowed — the 2026-04-27 cutover
+// TestBoxConfigSetupCmd_DirectModeAllowed — the 2026-04-27 cutover
 // added direct-mode support to `charly config`. The pre-cutover version of
-// this test (TestImageConfigSetupCmd_DirectModeError) asserted that
+// this test (TestBoxConfigSetupCmd_DirectModeError) asserted that
 // direct mode hard-errored at the run_mode gate; that gate is now a
 // switch that accepts both modes. The setup command will still fail
 // downstream of the gate (no real image, no podman), but the failure
 // must NOT be the "run_mode=quadlet" gate error. Anything else means
 // the gate accepted direct mode as expected.
-func TestImageConfigSetupCmd_DirectModeAllowed(t *testing.T) {
+func TestBoxConfigSetupCmd_DirectModeAllowed(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.yml")
 
@@ -38,10 +38,10 @@ func TestImageConfigSetupCmd_DirectModeAllowed(t *testing.T) {
 	}
 }
 
-// TestImageConfigRemoveCmd_DirectModeAllowed — same logic for remove.
+// TestBoxConfigRemoveCmd_DirectModeAllowed — same logic for remove.
 // Direct-mode remove should NOT hit the run_mode gate; it routes
 // through the direct-deploy branch (podman stop + rm + marker cleanup).
-func TestImageConfigRemoveCmd_DirectModeAllowed(t *testing.T) {
+func TestBoxConfigRemoveCmd_DirectModeAllowed(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.yml")
 

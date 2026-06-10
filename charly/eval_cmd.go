@@ -63,7 +63,7 @@ func (e *EvalFailedError) Error() string {
 // self-evaluate) are the renamed `charly eval *` surface.
 type EvalCmd struct {
 	// Three primary modes
-	Image   EvalBoxCmd     `cmd:"" name:"box" help:"Pure-box eval (disposable container, build-scope checks)"`
+	Box   EvalBoxCmd     `cmd:"" name:"box" help:"Pure-box eval (disposable container, build-scope checks)"`
 	Live    EvalLiveCmd    `cmd:"" help:"Full-stack eval against a running deployment"`
 	Run     EvalRunCmd     `cmd:"" help:"Run a kind:eval R10 bed (full sequence) or drive an AI through a kind:score's iteration cycles"`
 	Recipe  EvalRecipeCmd  `cmd:"" help:"Run a recipe's scenarios once (deterministic; no AI iteration)"`
@@ -726,7 +726,7 @@ func evalLocalDeployScope(dir string, node *DeploymentNode, image, instance, sec
 	return formatResults(results, format), nil
 }
 
-// EvalImageCmd runs PURE-IMAGE eval against a disposable container.
+// EvalBoxCmd runs PURE-BOX eval against a disposable container.
 // Build-scope checks only (layer + image sections). Deploy-scope checks
 // are skipped — they require a running deployment with port mappings,
 // volumes, and resolved runtime variables. For full-stack eval against
@@ -765,7 +765,7 @@ func (c *EvalBoxCmd) Run() error {
 	// sections only. The mode is explicit; no autodetect, no fallback.
 	executor := ImageChain(rt.RunEngine, imageRef)
 	resolver := ResolveEvalVarsBuild(meta)
-	mode := RunModeImage
+	mode := RunModeBox
 
 	checks := gatherSections(meta.Eval, nil /* no local overlay at build time */, []string{"candy", "box"})
 	checks = filterByVerb(checks, c.Filter)
@@ -810,7 +810,7 @@ func (c *EvalBoxCmd) Run() error {
 //	  - id, origin, name, tags, status, pending_steps, steps[]
 //	summary: { total, pass, fail, skip }
 func emitImageTestYAML(w io.Writer, imageRef, liveContainer string, scenarios []ScenarioResult, _ []EvalResult) error {
-	mode := "image"
+	mode := "box"
 	if liveContainer != "" {
 		mode = "run"
 	}

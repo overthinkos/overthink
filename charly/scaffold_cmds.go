@@ -287,7 +287,7 @@ func (c *CandySetCmd) Run() error {
 	return SetByDotPath(layerYml, path, c.Value)
 }
 
-// LayerAddPkgCmd is shared between add-rpm/add-deb/add-pac/add-aur. The
+// CandyAddPkgCmd is shared between add-rpm/add-deb/add-pac/add-aur. The
 // section name is derived from the Kong command name at runtime. Since
 // Kong dispatches to the *same* struct type for all four, we determine
 // "which section" via a back-channel: each command instance is its own

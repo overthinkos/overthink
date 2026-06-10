@@ -118,7 +118,7 @@ func workspaceBindHost(bindMounts []ResolvedBindMount) string {
 }
 
 // parseVolumeFlagsStandalone converts --volume and --bind CLI flags into DeployVolumeConfig.
-// Extracted from ImageConfigSetupCmd.parseVolumeFlags for reuse in shell/start.
+// Extracted from BoxConfigSetupCmd.parseVolumeFlags for reuse in shell/start.
 func parseVolumeFlagsStandalone(volumeFlags, bindFlags []string) []DeployVolumeConfig {
 	var configs []DeployVolumeConfig
 	seen := make(map[string]bool)

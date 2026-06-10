@@ -138,13 +138,13 @@ func (r *Runner) runProcess(ctx context.Context, c *Check) EvalResult {
 }
 
 // runDNS uses the charly process's resolver (host-side) under RunModeLive, and
-// `getent hosts` inside the container under RunModeImage.
+// `getent hosts` inside the container under RunModeBox.
 func (r *Runner) runDNS(ctx context.Context, c *Check) EvalResult {
 	wantResolvable := true
 	if c.Resolvable != nil {
 		wantResolvable = *c.Resolvable
 	}
-	if r.Mode == RunModeImage {
+	if r.Mode == RunModeBox {
 		probe := fmt.Sprintf(`getent hosts %s >/dev/null 2>&1`, shellSingleQuote(c.DNS))
 		_, _, exit, err := r.Exec.RunCapture(ctx, probe)
 		if err != nil {
@@ -317,13 +317,13 @@ func (r *Runner) runMount(ctx context.Context, c *Check) EvalResult {
 }
 
 // runAddr: host-side TCP dial (under RunModeLive) or `nc -z`
-// (under RunModeImage).
+// (under RunModeBox).
 func (r *Runner) runAddr(ctx context.Context, c *Check) EvalResult {
 	wantReachable := true
 	if c.Reachable != nil {
 		wantReachable = *c.Reachable
 	}
-	if r.Mode == RunModeImage {
+	if r.Mode == RunModeBox {
 		host, port := splitHostPort(c.Addr)
 		probe := fmt.Sprintf(`nc -z -w %d %s %s 2>/dev/null`, 3, shellSingleQuote(host), shellSingleQuote(port))
 		_, _, exit, err := r.Exec.RunCapture(ctx, probe)

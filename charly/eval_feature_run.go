@@ -130,7 +130,7 @@ func (c *BoxFeatureRunCmd) Run() error {
 		return fmt.Errorf("parsing --tag: %w", err)
 	}
 
-	runner := NewRunner(ImageChain(rt.RunEngine, imageRef), ResolveEvalVarsBuild(meta), RunModeImage)
+	runner := NewRunner(ImageChain(rt.RunEngine, imageRef), ResolveEvalVarsBuild(meta), RunModeBox)
 	runner.Distros = meta.Distro
 	// Build scope: no live target to probe, so no grader — prose-only steps
 	// stay advisory (skip, or fail under --strict).

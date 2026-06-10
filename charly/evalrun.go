@@ -64,14 +64,14 @@ type EvalResult struct {
 //
 //   - RunModeLive: charly eval live — against a running container. In-container
 //     probes via Exec; host-side verbs (http/dns/addr) from the charly process.
-//   - RunModeImage: charly eval box — against a disposable container
+//   - RunModeBox: charly eval box — against a disposable container
 //     (podman run --rm). All probes via Exec; host-side reachability is
 //     not meaningful and those checks are skipped.
 type RunMode int
 
 const (
 	RunModeLive RunMode = iota
-	RunModeImage
+	RunModeBox
 )
 
 // Executor + ContainerExecutor + ImageExecutor + VmTestExecutor were
@@ -93,7 +93,7 @@ const (
 //
 // Image and Instance are the user-supplied names under RunModeLive, used to
 // build CLI invocations for the cdp/wl/dbus/vnc verbs (testrun_ov_verbs.go).
-// They are empty under RunModeImage, which causes those verbs to skip
+// They are empty under RunModeBox, which causes those verbs to skip
 // with a clear message — they need a running container with port mappings.
 type Runner struct {
 	Exec        DeployExecutor
@@ -221,7 +221,7 @@ func (r *Runner) RunLive(ctx context.Context, checks []Check, instance string) [
 // DeployExecutor appropriate for the mode — typically the chain returned
 // by ResolveDeployChain (deploy_chain.go). For RunModeLive probes against
 // a single running container, that's NestedExecutor{Parent: Local, Jump:
-// PodmanExec{charly-name}}; for RunModeImage, ImageChain(engine, ref).
+// PodmanExec{charly-name}}; for RunModeBox, ImageChain(engine, ref).
 func NewRunner(exec DeployExecutor, resolver *EvalVarResolver, mode RunMode) *Runner {
 	return &Runner{
 		Exec:        exec,
@@ -625,7 +625,7 @@ func normalizeFiletype(s string) string {
 // Routing rules:
 //   - listening: true (default when unset) → probe via Exec (container-internal)
 //   - reachable/from-host semantics → dial 127.0.0.1:<HOST_PORT:N> from host
-//     (only meaningful in RunModeLive; RunModeImage skips with reason)
+//     (only meaningful in RunModeLive; RunModeBox skips with reason)
 func (r *Runner) runPort(ctx context.Context, c *Check) EvalResult {
 	wantListening := true
 	if c.Listening != nil {
@@ -636,7 +636,7 @@ func (r *Runner) runPort(ctx context.Context, c *Check) EvalResult {
 	// HOST_PORT substitution already performed, or Reachable explicitly set),
 	// dial from host.
 	if c.Reachable != nil || (c.Listening != nil && !*c.Listening) {
-		if r.Mode == RunModeImage {
+		if r.Mode == RunModeBox {
 			return skipf(c, "host-side port check not meaningful under charly eval box")
 		}
 		return r.dialPort(c)
@@ -702,7 +702,7 @@ func (r *Runner) dialPort(c *Check) EvalResult {
 // Host-side only. Like Background, in-container PID kill is the
 // user's responsibility (drop into command: with kill -<sig>).
 func (r *Runner) runKill(ctx context.Context, c *Check) EvalResult {
-	if r.Mode == RunModeImage {
+	if r.Mode == RunModeBox {
 		return skipf(c, "kill: not meaningful under charly eval box")
 	}
 	pidStr := strings.TrimSpace(c.Kill)
@@ -770,7 +770,7 @@ func (r *Runner) runCommand(ctx context.Context, c *Check) EvalResult {
 		if inContainer {
 			return failf(c, "background: true is host-side only (set in_container: false or from_host: true)")
 		}
-		if r.Mode == RunModeImage {
+		if r.Mode == RunModeBox {
 			return skipf(c, "background command not meaningful under charly eval box")
 		}
 		cmd := exec.Command("sh", "-c", c.Command) // not CommandContext — survives ctx cancel
@@ -795,7 +795,7 @@ func (r *Runner) runCommand(ctx context.Context, c *Check) EvalResult {
 	if inContainer {
 		stdout, stderr, exit, err = r.Exec.RunCapture(ctx, wrapContainerCommand(c.Command))
 	} else {
-		if r.Mode == RunModeImage {
+		if r.Mode == RunModeBox {
 			return skipf(c, "host-side command not meaningful under charly eval box")
 		}
 		cmd := exec.CommandContext(ctx, "sh", "-c", c.Command)
@@ -829,11 +829,11 @@ func (r *Runner) runCommand(ctx context.Context, c *Check) EvalResult {
 // against Status/Body/Headers.
 //
 // Under RunModeLive the request goes from the charly process (outside-in
-// reachability). Under RunModeImage the request is issued from inside
+// reachability). Under RunModeBox the request is issued from inside
 // the disposable container via curl (the container may have no network
 // reachability from the host, so host-side is wrong there).
 func (r *Runner) runHTTP(ctx context.Context, c *Check) EvalResult {
-	if r.Mode == RunModeImage {
+	if r.Mode == RunModeBox {
 		return r.runHTTPInContainer(ctx, c)
 	}
 	return r.runHTTPFromHost(ctx, c)

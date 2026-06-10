@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-// ImageConfigCmd groups image configuration subcommands.
+// BoxConfigCmd groups box configuration subcommands.
 // Default subcommand (no keyword): full setup (quadlet + secrets + enc).
 type BoxConfigCmd struct {
 	Mount   BoxConfigMountCmd   `cmd:"mount" help:"Mount encrypted volumes"`
@@ -22,7 +22,7 @@ type BoxConfigCmd struct {
 	Unmount BoxConfigUnmountCmd `cmd:"unmount" help:"Unmount encrypted volumes"`
 }
 
-// ImageConfigSetupCmd configures an image: generates quadlet, provisions secrets,
+// BoxConfigSetupCmd configures a box: generates quadlet, provisions secrets,
 // initializes and mounts encrypted volumes.
 type BoxConfigSetupCmd struct {
 	Box             string   `arg:"" optional:"" help:"Box name or remote ref (github.com/org/repo/box[@version])"`
@@ -1042,7 +1042,7 @@ func (c *BoxConfigSetupCmd) runConfigDirect(
 	return nil
 }
 
-// ImageConfigStatusCmd shows encrypted volume status.
+// BoxConfigStatusCmd shows encrypted volume status.
 type BoxConfigStatusCmd struct {
 	Box      string `arg:"" help:"Box name"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
@@ -1052,7 +1052,7 @@ func (c *BoxConfigStatusCmd) Run() error {
 	return encStatus(c.Box, c.Instance)
 }
 
-// ImageConfigMountCmd mounts encrypted volumes.
+// BoxConfigMountCmd mounts encrypted volumes.
 type BoxConfigMountCmd struct {
 	Box      string `arg:"" help:"Box name"`
 	Volume   string `long:"volume" help:"Only mount this volume (by name)"`
@@ -1063,7 +1063,7 @@ func (c *BoxConfigMountCmd) Run() error {
 	return encMount(c.Box, c.Instance, c.Volume)
 }
 
-// ImageConfigUnmountCmd unmounts encrypted volumes.
+// BoxConfigUnmountCmd unmounts encrypted volumes.
 type BoxConfigUnmountCmd struct {
 	Box      string `arg:"" help:"Box name"`
 	Volume   string `long:"volume" help:"Only unmount this volume (by name)"`
@@ -1074,7 +1074,7 @@ func (c *BoxConfigUnmountCmd) Run() error {
 	return encUnmount(c.Box, c.Instance, c.Volume)
 }
 
-// ImageConfigPasswdCmd changes the gocryptfs password.
+// BoxConfigPasswdCmd changes the gocryptfs password.
 type BoxConfigPasswdCmd struct {
 	Box      string `arg:"" help:"Box name"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
@@ -1084,7 +1084,7 @@ func (c *BoxConfigPasswdCmd) Run() error {
 	return encPasswd(c.Box, c.Instance)
 }
 
-// ImageConfigRemoveCmd removes a quadlet service (replaces charly disable).
+// BoxConfigRemoveCmd removes a quadlet service (replaces charly disable).
 type BoxConfigRemoveCmd struct {
 	Box      string `arg:"" help:"Box name or remote ref"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`

@@ -126,11 +126,11 @@ func TestResolveLocalImageRef_ShortNameNoMatch(t *testing.T) {
 // --- runCharlyVerb skip behavior + method allowlist tests ---
 
 func TestRunCharlyVerb_SkipsUnderImageTest(t *testing.T) {
-	r, _ := newFakeRunner(t, RunModeImage)
+	r, _ := newFakeRunner(t, RunModeBox)
 	r.Box = "jupyter"
 	res := r.Run(context.Background(), []Check{{Cdp: "status"}})
 	if len(res) != 1 || res[0].Status != TestSkip {
-		t.Fatalf("expected skip under RunModeImage, got %+v", res[0])
+		t.Fatalf("expected skip under RunModeBox, got %+v", res[0])
 	}
 	if !strings.Contains(res[0].Message, "requires a running container") {
 		t.Errorf("expected message mentioning running container, got %q", res[0].Message)

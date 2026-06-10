@@ -74,10 +74,10 @@ if (validation && validation.warnings && validation.warnings.length) {
 phase('Discover')
 let targets
 if (requested.length) {
-  targets = requested.map((name) => ({ name, kind: 'image' }))
+  targets = requested.map((name) => ({ name, kind: 'box' }))
 } else {
   const discovered = await agent(
-    'Read charly.yml / box.yml in this project. Return JSON {targets:[{name,kind}]} listing the ENABLED image short-names (kind "image") and any deploy names from a local deploy.yml (kind "deploy"). Do NOT run or build anything.',
+    'Read charly.yml in this project. Return JSON {targets:[{name,kind}]} listing the ENABLED box short-names (kind "box") and any deploy names from a local deploy.yml (kind "deploy"). Do NOT run or build anything.',
     { schema: DISCOVER_SCHEMA, label: 'discover-targets', phase: 'Discover' }
   )
   targets = (discovered && discovered.targets ? discovered.targets : []).filter(Boolean)

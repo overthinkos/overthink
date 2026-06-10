@@ -22,6 +22,48 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-10 — docs: sync all skills + root docs with the current code (post box-inversion / Phase-2 / section-values)
+
+A comprehensive docs-sync sweep bringing every skill + root doc in line with the
+current code after the session's cutovers (box inversion, Phase-2 `Image*`→`Box*`
+Go rename, single-filename, candy/box rebrand, recipe-section-values). The
+per-cutover R5 sweeps had handled most of it; this pass caught the residual drift —
+especially in the MAIN-repo docs (the plugins-only sweeps never touched them) and in
+skills outside the per-cutover scope.
+
+Found + fixed (verified against `charly/*.go`):
+- **Root docs** (`README.md`, `CLAUDE.md`, `VISION.md`): `candy.yml`→`charly.yml` as
+  the authoring filename; the eval three-section label `{layer, image, deploy}`→
+  `{candy, box, deploy}`; `charly eval image`→`charly eval box`; candy/box prose
+  ("Sibling-layer"→"Sibling-candy", "Every `layer`"→"Every `candy`", android
+  `image:`→`box:`); the `build.yml`-import / embedded-vocabulary tension.
+- **Skill code-references** (drift from the Phase-2 + section-values renames):
+  `EvalImageCmd`→`EvalBoxCmd`, `ImageConfigCmd`→`BoxConfigCmd`, `MergePlans`→
+  `MergePlan`, `ScanAllLayersWithConfig`→`ScanAllLayerWithConfig`, `ResolveAllImages`→
+  `ResolveAllBox`, `EmitLabels`→`writeLabels`/`writeJSONLabel`, `DeployImageConfig`→
+  `DeploymentNode`/`K8sGenerateOpts`, the scaffold command structs
+  (`NewImageCmd…`→`NewBoxCmd…`, `LayerAddPkgCmd`→`CandyAddPkgCmd`), `{Layer, Image,
+  Deploy}`→`{Layer, Box, Deploy}`; line-number drifts re-anchored.
+- **Schema/label/field VALUES** across ALL skills: `ai.opencharly.image`→
+  `ai.opencharly.box` (label renamed), `add_layers:`/`add_layer:`→`add_candy:`
+  (deploy.yml field), `box list images`/`layers`→`boxes`/`candies`, the deploy/eval
+  skills' pod cross-ref `image:`→`box:` + k8s `cluster:`→`k8s:` (prose lagged the YAML
+  examples), the migrate skill's stale HEAD `2026.160.1301`→`2026.161.1301` + the
+  MISSING `recipe-section-values` chain row.
+- **`.claude/workflows/audit-deploy-configs.js`**: stale discover prompt (`box.yml`,
+  `kind "image"`)→`charly.yml`, `kind "box"`.
+- **Distro skills** (conservative pass): box-meaning section headers (`## Image
+  Properties`→`## Box Properties`, `## Full Layer Stack`→`## Full Candy Stack`, …)
+  and "the `<name>` image"→"the `<name>` box" where `<name>` is a charly box.
+
+KEPT (verified): every genuine OCI-image/registry/base-image/builder reference, the
+`<image>` CLI placeholder convention, migration-history filenames in the migrate
+skill, the `Image:` eval banner literal, "legacy per-kind files still load" notes.
+Run via 3 parallel audit agents (root docs / core-eng skills / eval-deploy-distro
+skills) cross-checked against the code, then a comprehensive R5 grep self-test
+(zero residuals) + markdown-integrity pass. Docs+automation only — no Go, schema, or
+`charly.yml` runtime surface; acceptance via the non-runtime standards.
+
 ### 2026-06-10 — feat(migrate)!: finish the candy/box rebrand's section-filter VALUES (recipe `from.kind`/`scope`, eval sections, origins, `RefKind`)
 
 The last unfinished tail of the candy/box rebrand. The 2026.156 candy-box-rename

@@ -12,7 +12,7 @@ Most other tools hand an agent a sandbox — and then spend their effort taking 
 2. **One recipe, many boxes.** A single declarative recipe — candies stacked into a box — pours into every mold: an interactive shell, a managed pod, a host workstation, a k8s cluster, a bootable VM, an Android device. Write the recipe once; let `charly` set it in whatever shape the moment needs.
    → README "Build → run → deploy → evaluate".
 
-3. **Every candy ships with its recipe card.** Every candy, image, and verb carries a dedicated skill, so nothing in the candy store is a mystery — neither human nor agent ever has to guess what a piece does, how it's made, or how it should taste.
+3. **Every candy ships with its recipe card.** Every candy, box, and verb carries a dedicated skill, so nothing in the candy store is a mystery — neither human nor agent ever has to guess what a piece does, how it's made, or how it should taste.
    → `plugins/README.md`.
 
 4. **Two tasters at one bench.** The same `charly` surface serves the human at the keyboard and the agent driving the line, with no second-class channel for either. Built for you *and* your agents, in the same breath.

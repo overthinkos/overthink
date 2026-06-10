@@ -65,7 +65,7 @@ The same `charly` drives two further stages — it
 and [manages](#manage) the running lifecycle (cleanup, diagnostics,
 schema upgrades, runtime config).
 
-> One `candy.yml`, one box, one `deploy.yml`, and one `kind: eval`
+> One `charly.yml`, one box, one `deploy.yml`, and one `kind: eval`
 > bed drive all four stages — the build, the local run, the remote
 > deploy, and the test harness. The binary that wires them together is
 > also an MCP server, so your agent reaches every verb over the
@@ -178,10 +178,15 @@ discriminator in its file:
 
 ### Cross-cutting rules
 
-**`charly.yml` is the single project entry point.** Every other
-file is composed in via `import:` — a bare string for a flat
-same-repo import (`build.yml`, `box.yml`, `vm.yml`, `pod.yml`,
-`local.yml`, `android.yml`, `k8s.yml`, `eval.yml`), or a
+**`charly.yml` is the single project entry point.** Boxes are
+discovered as `box/<name>/charly.yml`, candies as
+`candy/<name>/charly.yml`, and the remaining kinds
+(`vm`/`pod`/`k8s`/`eval`/`local`/`android`) live inline in
+`charly.yml`'s root; the distro/builder/init/resource build
+vocabulary is embedded in the `charly` binary. `import:` composes
+other files or repos — a bare string for a flat same-repo import
+(legacy per-kind files like `box.yml` / `vm.yml` still load this
+way, but are no longer the canonical layout), or a
 single-key `alias: ref` map for a namespaced cross-repo import (Go
 package-member semantics — `base: cachyos.cachyos`, fetched from
 `@github.com/owner/repo:tag` and cached under `~/.cache/charly/repos/`).
@@ -439,7 +444,7 @@ input.
 
 ### Deploy
 
-> The same `candy.yml` applied to a host, a remote ssh box, a VM, a
+> The same `charly.yml` applied to a host, a remote ssh box, a VM, a
 > k3s cluster, or an Android device.
 
 `charly deploy add <name> <ref>` is the unified verb; `target:`
@@ -501,12 +506,12 @@ binds host `SSH_AUTH_SOCK` / `GPG_AGENT_SOCK` into the container.
 > Build → deploy → probe → fresh-update → tear down — disposable beds
 > with the same DSL as production deploys.
 
-Tests are first-class. Every `candy.yml` / `box.yml` /
+Tests are first-class. Every `charly.yml` (box + candy) /
 `deploy.yml` can declare an `eval:` block of goss-style checks
 (files, packages, services, ports, processes, commands, HTTP, DNS,
 mounts, users, groups, kernel params, interfaces, matchers). Checks
 bake into a three-section OCI label
-(`ai.opencharly.eval` → `{layer, image, deploy}`) so any pulled
+(`ai.opencharly.eval` → `{candy, box, deploy}`) so any pulled
 box is self-testable without its source repo.
 
 Three execution modes:
@@ -520,7 +525,7 @@ Three execution modes:
   rebindings.
 - **`charly eval run <bed>`** — the canonical R10 acceptance gate.
   Picks a `kind: eval` bed in `eval.yml` (a disposable deploy
-  carrying `disposable: true`) and runs build → eval image → deploy
+  carrying `disposable: true`) and runs build → eval box → deploy
   → eval live → fresh `charly update` → eval live again → teardown.
   Pick the bed whose kind matches what you changed: `eval-pod`,
   `eval-local`, `eval-k3s-vm`, `eval-android-emulator-pod`.
@@ -534,7 +539,7 @@ not "failed".
 **Agents drive these beds.** Claude Code sub-agents
 (`eval-bed-runner`, `deploy-verifier`) and dynamic workflows
 (`/verify-beds`, `/audit-deploy-configs`) run `charly eval
-run`/`live`/`image` against the existing beds and return verbatim
+run`/`live`/`box` against the existing beds and return verbatim
 pass/fail — the same disposable-bed verification, whether you run it
 or your agent does. → `/charly-internals:agents`.
 
@@ -656,7 +661,7 @@ gateway exposing the entire surface as MCP tools.
 | **Box authoring (MCP-first)** | `charly box {set, add-candy, rm-candy, fetch, refresh, write, cat}` and `charly candy {set, add-rpm, add-deb, add-pac, add-aur}` | `/charly-image:image` "Authoring" + `/charly-image:layer` |
 | **Deployment** | `charly deploy {add, del, sync, from-box, export, import, show, reset, status, path}`; `charly config`; `charly start`, `charly stop`, `charly restart`, `charly update`, `charly remove` | `/charly-core:deploy`, `/charly-core:charly-config`, `/charly-core:start`, `/charly-core:stop`, `/charly-core:charly-update`, `/charly-core:remove`, `/charly-local:local-deploy`, `/charly-kubernetes:kubernetes`, `/charly-internals:vm-deploy-target` |
 | **Runtime** | `charly shell`, `charly cmd`, `charly service`, `charly status`, `charly logs`, `charly tmux` | `/charly-core:shell`, `/charly-core:cmd`, `/charly-core:service`, `/charly-core:charly-status`, `/charly-core:logs`, `/charly-automation:tmux` |
-| **Test + probes** | `charly eval {image, live, run}` + the 11 live probe verbs (`cdp`, `wl`, `dbus`, `vnc`, `mcp`, `record`, `spice`, `libvirt`, `k8s`, `adb`, `appium`); `charly feature {list, pending, validate}` | `/charly-eval:eval`, `/charly-eval:cdp`, `/charly-eval:wl`, `/charly-eval:dbus`, `/charly-eval:vnc`, `/charly-eval:spice`, `/charly-eval:libvirt`, `/charly-eval:record`, `/charly-kubernetes:eval-k8s`, `/charly-eval:adb`, `/charly-eval:appium` |
+| **Test + probes** | `charly eval {box, live, run}` + the 11 live probe verbs (`cdp`, `wl`, `dbus`, `vnc`, `mcp`, `record`, `spice`, `libvirt`, `k8s`, `adb`, `appium`); `charly feature {list, pending, validate}` | `/charly-eval:eval`, `/charly-eval:cdp`, `/charly-eval:wl`, `/charly-eval:dbus`, `/charly-eval:vnc`, `/charly-eval:spice`, `/charly-eval:libvirt`, `/charly-eval:record`, `/charly-kubernetes:eval-k8s`, `/charly-eval:adb`, `/charly-eval:appium` |
 | **MCP gateway** | `charly mcp {serve, ping, servers, list-tools, list-resources, list-prompts, call, read}` | `/charly-build:charly-mcp-cmd`, `/charly-coder:charly-mcp` |
 | **VM** | `charly vm {build, create, start, stop, destroy, snapshot, clone, console, ssh, import, list}` | `/charly-vm:vm`, `/charly-vm:vms-catalog`, `/charly-internals:vm-deploy-target` |
 | **Schema migration** | `charly migrate` (single idempotent chain) | `/charly-build:migrate` |
@@ -710,7 +715,7 @@ candies are pulled by `@github` ref.
 `python-ml`, `jupyter-ml`, `unsloth-studio` bundle curated candy
 sets.
 
-**Data candies / data boxes** — `data:` block in `candy.yml` stages
+**Data candies / data boxes** — `data:` block in `charly.yml` stages
 files at `/data/<volume>/`; `charly config --bind <volume>` provisions
 them at deploy time; `charly update` merges new data non-destructively.
 `data_image: true` scratch-based boxes carry data + OCI labels,

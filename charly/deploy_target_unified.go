@@ -32,10 +32,10 @@ import (
 // config that dispatchNode already loaded.
 type DeployContext struct {
 	// Node is the dispatch-merged DeploymentNode. nil for a ref-based
-	// deploy with no deploy.yml entry (e.g. `charly deploy add host ./x.yml`).
+	// deploy with no charly.yml entry (e.g. `charly deploy add host ./x.yml`).
 	Node *DeploymentNode
 
-	// Name is the deploy key (the bed key / deploy.yml map key, e.g.
+	// Name is the deploy key (the bed key / charly.yml map key, e.g.
 	// "eval-k3s-vm"). Distinct from the kind:vm entity name (node.Vm).
 	Name string
 
@@ -59,8 +59,8 @@ type DeployContext struct {
 // an `charly deploy …` subcommand, so the dispatcher in resolve_target.go
 // can route purely on target.Kind() without per-cmd switches.
 type UnifiedDeployTarget interface {
-	// Name is the deployment's identifier from deploy.yml (e.g.
-	// "arch-vm", "sway-pod"). Unique within a deploy.yml.
+	// Name is the deployment's identifier from charly.yml (e.g.
+	// "arch-vm", "sway-pod"). Unique within a charly.yml.
 	Name() string
 
 	// Kind returns one of "host" | "vm" | "pod" | "k8s".
@@ -211,7 +211,7 @@ type LogsOpts struct {
 }
 
 // RebuildOpts parameterizes the rebuild path of `charly update`. Per /charly-internals:disposable, the
-// target MUST be marked `disposable: true` in deploy.yml — every
+// target MUST be marked `disposable: true` in charly.yml — every
 // implementation asserts this before any destructive action.
 type RebuildOpts struct {
 	// RebuildImage forces an `charly box build` before redeploy. Off by

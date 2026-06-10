@@ -16,11 +16,11 @@ import (
 //go:embed sidecar.yml
 var embeddedSidecarYAML []byte
 
-// SidecarDef is a sidecar container template (embedded in the charly binary or per-image override in deploy.yml).
+// SidecarDef is a sidecar container template (embedded in the charly binary or per-image override in charly.yml).
 //
 // The `Parameter` field carries BOTH the template's parameter
 // declarations (sidecar.yml: each key maps to empty-string sentinel
-// for "required, must be supplied by deploy") AND the deploy.yml
+// for "required, must be supplied by deploy") AND the charly.yml
 // override values (each key maps to the operator-chosen string).
 // After MergeSidecar, every required parameter must have a non-empty
 // value or ResolveSidecar errors out with a remediation hint.
@@ -32,7 +32,7 @@ var embeddedSidecarYAML []byte
 //	    parameter:
 //	      tailnet: ""   # empty = required, deploy must supply
 //
-// Example deploy.yml override:
+// Example charly.yml override:
 //
 //	sidecars:
 //	  tailscale:
@@ -132,7 +132,7 @@ func renderSidecarEnvFrom(s SidecarSecret, params map[string]string) (string, er
 		v, ok := params[paramName]
 		if !ok || v == "" {
 			return "", fmt.Errorf("sidecar secret %q references parameter %q which is unset. "+
-				"Set `sidecars.<sidecar-name>.parameter.%s: <value>` in deploy.yml or run `charly migrate`",
+				"Set `sidecars.<sidecar-name>.parameter.%s: <value>` in charly.yml or run `charly migrate`",
 				s.Name, paramName, paramName)
 		}
 	}
@@ -359,7 +359,7 @@ func ResolveSidecar(defs map[string]SidecarDef, boxName, instance string) ([]Res
 	return resolved, nil
 }
 
-// ResolveSidecarsForConfig merges embedded templates with deploy.yml overrides.
+// ResolveSidecarsForConfig merges embedded templates with charly.yml overrides.
 // Only sidecars referenced in deploySidecars are included.
 func ResolveSidecarsForConfig(deploySidecars map[string]SidecarDef) (map[string]SidecarDef, error) {
 	if len(deploySidecars) == 0 {
@@ -376,10 +376,10 @@ func ResolveSidecarsForConfig(deploySidecars map[string]SidecarDef) (map[string]
 		templates = embedded.Sidecar
 	}
 
-	// Merge: embedded templates + deploy.yml overrides
+	// Merge: embedded templates + charly.yml overrides
 	merged := MergeSidecar(templates, deploySidecars)
 
-	// Filter: only keep sidecars that are referenced in deploy.yml
+	// Filter: only keep sidecars that are referenced in charly.yml
 	filtered := make(map[string]SidecarDef, len(deploySidecars))
 	for name := range deploySidecars {
 		if def, ok := merged[name]; ok {

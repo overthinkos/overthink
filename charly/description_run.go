@@ -214,7 +214,7 @@ func substituteIndex(c *Check, indexVar string, idx int) *Check {
 }
 
 // RunScenarios executes every scenario in `descriptions` (already
-// collected into a LabelDescriptionSet and merged with deploy.yml
+// collected into a LabelDescriptionSet and merged with charly.yml
 // overlays) against the supplied runner, returning scenario-level
 // results for reporting.
 //

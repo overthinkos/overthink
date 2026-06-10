@@ -68,7 +68,7 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 		EnsureCDI()
 	}
 
-	// Load deploy.yml for volume backing config + later use (env merge,
+	// Load charly.yml for volume backing config + later use (env merge,
 	// sidecar check, agent forwarding, metadata overlay).
 	dc := loadDeployConfigForRead("charly start")
 	var deployVolumes []DeployVolumeConfig
@@ -82,7 +82,7 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 	// c.Image stays the deploy-KEY for container / quadlet / overlay lookups;
 	// only the image ref uses the resolved name.
 	deployBoxName := resolveDeployBoxName(c.Box, c.Instance)
-	// Resolve from image labels (+ deploy.yml overlay). No charly.yml.
+	// Resolve from image labels (+ charly.yml overlay). No charly.yml.
 	imageRef := resolveShellImageRef("", deployBoxName, c.Tag)
 	if err := EnsureImage(imageRef, rt); err != nil {
 		return err
@@ -99,7 +99,7 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 
 	// Sidecars require quadlet mode (pod networking is only available via quadlet)
 	if overlay, ok := dc.Lookup(c.Box, c.Instance); ok && len(overlay.Sidecar) > 0 {
-		return fmt.Errorf("image %s has sidecars configured in deploy.yml; use 'charly config %s && charly start %s' (sidecars require quadlet mode)", c.Box, c.Box, c.Box)
+		return fmt.Errorf("image %s has sidecars configured in charly.yml; use 'charly config %s && charly start %s' (sidecars require quadlet mode)", c.Box, c.Box, c.Box)
 	}
 
 	uid := meta.UID
@@ -155,7 +155,7 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 		return netErr
 	}
 
-	// Apply port overrides from --port flags and persist to deploy.yml
+	// Apply port overrides from --port flags and persist to charly.yml
 	if len(c.Port) > 0 {
 		ports, err = ApplyPortOverrides(ports, c.Port)
 		if err != nil {
@@ -204,7 +204,7 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 	fmt.Println(containerID)
 	fmt.Fprintf(os.Stderr, "Started %s as %s\n", name, containerID)
 
-	// Start tunnel if configured (deploy.yml-only; labels never carry tunnel).
+	// Start tunnel if configured (charly.yml-only; labels never carry tunnel).
 	if meta.Tunnel != nil {
 		tc := TunnelConfigFromMetadata(meta)
 		if tc != nil {
@@ -447,7 +447,7 @@ func (c *RestartCmd) Run() error {
 func stopTunnelForImage(boxName, instance string) {
 	var tc *TunnelConfig
 
-	// Tunnel config comes from deploy.yml (overlaid onto BoxMetadata).
+	// Tunnel config comes from charly.yml (overlaid onto BoxMetadata).
 	ctrName := containerNameInstance(boxName, instance)
 	imageRef := containerImage("podman", ctrName)
 	if imageRef != "" {

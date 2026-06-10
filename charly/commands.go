@@ -42,7 +42,7 @@ func (c *LogsCmd) Run() error {
 		return nil
 	}
 
-	// Resolve per-image engine from deploy.yml
+	// Resolve per-image engine from charly.yml
 	runEngine := ResolveBoxEngineForDeploy(boxName, c.Instance, rt.RunEngine)
 	engine := EngineBinary(runEngine)
 	name := containerNameInstance(boxName, c.Instance)
@@ -65,7 +65,7 @@ func (c *LogsCmd) Run() error {
 // the service to pick up the new image.
 //
 // This verb handles the destroy-free update path for every target. The
-// first arg accepts EITHER a deploy name (looked up in deploy.yml —
+// first arg accepts EITHER a deploy name (looked up in charly.yml —
 // VM/local/pod targets all dispatch from here) OR a bare image name
 // (for direct image updates not tied to a deploy).
 //
@@ -76,7 +76,7 @@ func (c *LogsCmd) Run() error {
 // "Any config changes should be done via charly config only" — this verb
 // updates ARTIFACTS, charly config updates CONFIG.
 type UpdateCmd struct {
-	Box       string `arg:"" help:"Deploy name (resolved via deploy.yml) OR box name. For deploys, the target's update strategy is auto-selected (pod=systemctl restart with new image; vm=in-guest layer re-apply; local=idempotent re-apply)."`
+	Box       string `arg:"" help:"Deploy name (resolved via charly.yml) OR box name. For deploys, the target's update strategy is auto-selected (pod=systemctl restart with new image; vm=in-guest layer re-apply; local=idempotent re-apply)."`
 	Tag       string `long:"tag" help:"Image CalVer tag (empty = newest local CalVer resolved via the ai.opencharly.version OCI label)"`
 	Build     bool   `long:"build" help:"Force local build instead of pulling from registry"`
 	Instance  string `short:"i" long:"instance" help:"Instance name for running multiple containers of the same box"`
@@ -98,7 +98,7 @@ var updateCmdBuildFn = func(image, tag string) error {
 }
 
 // Run dispatches `charly update <name>` to the target-specific update
-// helper. The argument MUST resolve to a deploy entry in deploy.yml
+// helper. The argument MUST resolve to a deploy entry in charly.yml
 // (project + user-overlay merged). There is NO legacy fall-through to
 // "treat the argument as an image name" — to refresh an image artifact
 // without restarting any deploy, use `charly box pull <name>`.
@@ -179,7 +179,7 @@ func (c *UpdateCmd) syncData(engine string, imageRef string, meta *BoxMetadata, 
 		return
 	}
 
-	// Update deploy.yml with new data source
+	// Update charly.yml with new data source
 	if seeded > 0 {
 		for i := range imgDeploy.Volume {
 			for _, entry := range dataMeta.DataEntries {
@@ -191,7 +191,7 @@ func (c *UpdateCmd) syncData(engine string, imageRef string, meta *BoxMetadata, 
 		}
 		dc.Deploy[deployKey(c.Box, c.Instance)] = imgDeploy
 		if err := SaveDeployConfig(dc); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: could not save data source to deploy.yml: %v\n", err)
+			fmt.Fprintf(os.Stderr, "Warning: could not save data source to charly.yml: %v\n", err)
 		}
 		fmt.Fprintf(os.Stderr, "Synced data for %d volume(s)\n", seeded)
 	}
@@ -202,7 +202,7 @@ type RemoveCmd struct {
 	Box        string   `arg:"" help:"Box name or remote ref"`
 	Instance   string   `short:"i" long:"instance" help:"Instance name for running multiple containers of the same box"`
 	Purge      bool     `long:"purge" help:"Also remove named volumes"`
-	KeepDeploy bool     `name:"keep-deploy" help:"Keep deploy.yml entry for this box"`
+	KeepDeploy bool     `name:"keep-deploy" help:"Keep charly.yml entry for this box"`
 	Env        []string `short:"e" long:"env" sep:"none" help:"Set env var for hooks (KEY=VALUE)"`
 }
 
@@ -221,7 +221,7 @@ func (c *RemoveCmd) Run() error {
 		return err
 	}
 
-	// Resolve per-image engine from deploy.yml
+	// Resolve per-image engine from charly.yml
 	runEngine := ResolveBoxEngineForDeploy(boxName, c.Instance, rt.RunEngine)
 	engine := EngineBinary(runEngine)
 	containerName := containerNameInstance(boxName, c.Instance)
@@ -252,8 +252,8 @@ func (c *RemoveCmd) Run() error {
 		}
 
 		// Remove sidecar .container files (exact-name match, no prefix
-		// glob). Sources sidecar names from deploy.yml — see
-		// resolveSidecarNames for why deploy.yml is authoritative.
+		// glob). Sources sidecar names from charly.yml — see
+		// resolveSidecarNames for why charly.yml is authoritative.
 		sidecarNames := resolveSidecarNames(boxName, c.Instance)
 		podBase := PodNameInstance(boxName, c.Instance)
 		for _, sc := range sidecarNames {
@@ -403,7 +403,7 @@ func resolveBoxName(box string) string {
 }
 
 // resolveSidecarNames returns the sorted set of sidecar key names
-// attached to this deploy via deploy.yml. deploy.yml is the
+// attached to this deploy via charly.yml. charly.yml is the
 // authoritative source because sidecars only become attached via
 // `charly config --sidecar <name>` which writes them into the deploy
 // entry's `sidecar:` map. Image OCI labels carry sidecar TEMPLATES

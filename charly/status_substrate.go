@@ -21,7 +21,7 @@ const (
 type CollectOpts struct {
 	IncludeAll bool          // mirrors --all
 	Nested     bool          // mirrors --nested (live multi-hop probing of nested children + live k8s)
-	Deploy     *DeployConfig // ~/.config/charly/deploy.yml (may be nil)
+	Deploy     *DeployConfig // ~/.config/charly/charly.yml (may be nil)
 	Unified    *UnifiedFile  // charly.yml projection incl. folded kind:eval beds (may be nil)
 	Engine     *EngineClient // shared podman/docker client
 	Quadlet    string        // quadlet dir

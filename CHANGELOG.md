@@ -22,6 +22,51 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-10 — refactor!: unify the per-host `deploy.yml` onto `charly.yml` + collapse the bespoke deploy-config machinery (schema cutover)
+
+The last config that did NOT load through the one unified loader: the per-host deploy
+overlay `~/.config/charly/deploy.yml`, which used a bespoke `LoadDeployConfig` parser.
+It now loads through **`LoadUnified(~/.config/charly)` + `ProjectDeployConfig()`** — the
+SAME `charly.yml`/`LoadUnified` path as every project config — and the file is renamed
+`deploy.yml` → `charly.yml`.
+
+**Zero structural gap, zero mode-purity risk.** `DeployConfig` is just `{Provides,
+Deploy}` — both fields already exist identically on `UnifiedFile`, and
+`UnifiedFile.ProjectDeployConfig()` already bridged them. Mode purity (build-mode never
+bakes the per-host overlay into images) is preserved by **path**, not filename:
+build-mode `LoadConfig`→`LoadUnified` always reads the PROJECT cwd, never
+`~/.config/charly` — the two `charly.yml` files live in disjoint directories.
+
+**Cleanup the unification enabled** (verified against the live code, not the explore
+agents' over-claims): `LoadDeployConfig` collapses to a thin wrapper (the bespoke
+`yaml.Unmarshal` + the live `hasLegacyImagesKey` check are gone — the unified loader's
+version gate + `RejectLegacyPluralKeys` + `rejectLegacy*` subsume them; the function
+stays for migration replay). The **dead** `MergeDeployOverlay` (0 call sites) is deleted.
+The ephemeral→disposable auto-promotion + ephemeral/vm-naming validators — previously
+LoadDeployConfig-only — are consolidated into `validateEphemeralUnified` in the unified
+deploy-validation path (R3), so a PROJECT `charly.yml`'s inline `deploy:` entries get
+them too (closing a latent asymmetry). `SaveDeployConfig` now writes a unified-shaped
+file with the HEAD `version:` stamp.
+
+**Verified load-bearing, KEPT:** the `DeployConfig` type (the merge/save unit, 51 uses),
+`loadDeployConfigForRead`/`loadDeployConfigForWrite`/`LoadDeployFile`, the live mergers,
+and the hard-reject migration-enforcement gates (cutover-policy REQUIRES them — not
+removable shims).
+
+**Migration + safety.** New `host-charly-yml` MigrationStep (2026.161.1554, TouchesHost):
+renames `deploy.yml` → `charly.yml` AND **prepends a `version:` line** (per-host configs
+predate per-file versioning, so they have none — and `stampVersionField`/calver-schema
+only rewrites an existing line, never adds one; without this the renamed file failed the
+loader gate with `found ""`). A load-time host-file guard hard-errors `Run: charly
+migrate` if a stale `deploy.yml` is still present. HEAD bumped
+2026.161.1502→2026.161.1555 → the standard 6-repo re-stamp cascade.
+
+`go test ./...` green (the per-host fixtures gained `version:` stamps — the unified gate,
+which the bespoke parser never enforced); new `TestMigrateHostCharlyYml`. R10
+`charly -C box/fedora eval run eval-pod` PASS — deploy-add/config/start/update read+write
+the per-host overlay through the new unified load/save. RDD proved the round-trip + the
+real `~/.config/charly/charly.yml` migration in place.
+
 ### 2026-06-10 — refactor!: rename the init-system vocabulary keys `layer_field`/`layer_file`/`depends_layer` → `candy_field`/`candy_file`/`depends_candy` (schema cutover)
 
 The candy/box rebrand's last `layer`-spelled user-facing WIRE: the three init-system

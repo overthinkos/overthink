@@ -24,7 +24,8 @@ func TestResolveSidecarNames(t *testing.T) {
 	}{
 		{
 			name: "no entry — returns nil",
-			deployYAML: `deploy:
+			deployYAML: `version: 2026.161.1555
+deploy:
   other:
     target: pod
     box: other
@@ -35,7 +36,8 @@ func TestResolveSidecarNames(t *testing.T) {
 		},
 		{
 			name: "entry without sidecars — returns nil",
-			deployYAML: `deploy:
+			deployYAML: `version: 2026.161.1555
+deploy:
   foo:
     target: pod
     box: foo
@@ -46,7 +48,8 @@ func TestResolveSidecarNames(t *testing.T) {
 		},
 		{
 			name: "entry with one sidecar — single-name slice",
-			deployYAML: `deploy:
+			deployYAML: `version: 2026.161.1555
+deploy:
   foo:
     target: pod
     box: foo
@@ -59,7 +62,8 @@ func TestResolveSidecarNames(t *testing.T) {
 		},
 		{
 			name: "entry with multiple sidecars — sorted",
-			deployYAML: `deploy:
+			deployYAML: `version: 2026.161.1555
+deploy:
   foo:
     target: pod
     box: foo
@@ -73,7 +77,8 @@ func TestResolveSidecarNames(t *testing.T) {
 		},
 		{
 			name: "Pattern-A instance entry with sidecar",
-			deployYAML: `deploy:
+			deployYAML: `version: 2026.161.1555
+deploy:
   foo/inst1:
     target: pod
     box: foo
@@ -93,7 +98,7 @@ func TestResolveSidecarNames(t *testing.T) {
 			if err := os.MkdirAll(filepath.Join(dir, "charly"), 0700); err != nil {
 				t.Fatalf("creating charly config dir: %v", err)
 			}
-			if err := os.WriteFile(filepath.Join(dir, "charly", "deploy.yml"), []byte(tc.deployYAML), 0600); err != nil {
+			if err := os.WriteFile(filepath.Join(dir, "charly", "charly.yml"), []byte(tc.deployYAML), 0600); err != nil {
 				t.Fatalf("writing deploy.yml: %v", err)
 			}
 

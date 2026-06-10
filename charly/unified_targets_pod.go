@@ -216,7 +216,7 @@ func (t *PodUnifiedTarget) Shell(ctx context.Context, cmd []string) error {
 // — the cmd-file caller is now a thin wrapper.
 //
 // Per the existing rebuild semantics, `charly stop` is used (not `charly
-// remove`) to preserve operator deploy.yml configuration during the
+// remove`) to preserve operator charly.yml configuration during the
 // brief disruption window.
 func (t *PodUnifiedTarget) Rebuild(ctx context.Context, opts RebuildOpts) error {
 	baseRef := t.BaseImageRef
@@ -268,14 +268,14 @@ func (t *PodUnifiedTarget) Rebuild(ctx context.Context, opts RebuildOpts) error 
 // persists --disposable/--lifecycle, and prints the `charly start` hint.
 //
 // node fields come from dctx.Node (the dispatch-merged node) — the
-// ephemeral check consumes it directly rather than re-reading deploy.yml.
+// ephemeral check consumes it directly rather than re-reading charly.yml.
 func (t *PodUnifiedTarget) Add(ctx context.Context, dctx *DeployContext, plans []*InstallPlan, opts EmitOpts) error {
 	node := dctx.Node
 	dir := dctx.Dir
 	base := dctx.Base
 
 	// Ephemeral lifecycle hook (FIRST action — panic-safe TTL ordering).
-	// Consumes the MERGED node (never a deploy.yml re-read).
+	// Consumes the MERGED node (never a charly.yml re-read).
 	registerEphemeralIfMarked(node, t.NodeName)
 
 	// Build a Generator + ResolvedBox so the overlay's OCITarget renders
@@ -332,7 +332,7 @@ func (t *PodUnifiedTarget) Add(ctx context.Context, dctx *DeployContext, plans [
 		return err
 	}
 
-	// Persist classification flags into deploy.yml when the user passed
+	// Persist classification flags into charly.yml when the user passed
 	// --disposable / --lifecycle.
 	if t.Disposable || t.Lifecycle != "" {
 		saveDeployState(t.NodeName, "", SaveDeployStateInput{

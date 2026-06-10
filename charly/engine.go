@@ -66,7 +66,7 @@ func ResolveBoxEngineFromDir(dir, boxName, globalEngine string) string {
 	return ResolveBoxEngine(cfg, layers, boxName, globalEngine)
 }
 
-// ResolveBoxEngineForDeploy resolves the run engine from deploy.yml,
+// ResolveBoxEngineForDeploy resolves the run engine from charly.yml,
 // falling back to globalEngine. No charly.yml dependency.
 func ResolveBoxEngineForDeploy(boxName, instance, globalEngine string) string {
 	if entry, ok := loadDeployConfigForRead("ResolveBoxEngineForDeploy").Lookup(boxName, instance); ok && entry.Engine != "" {

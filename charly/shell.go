@@ -93,7 +93,7 @@ func (c *ShellCmd) Run() error {
 		EnsureCDI()
 	}
 
-	// Load deploy.yml for volume backing config + later use (env merge,
+	// Load charly.yml for volume backing config + later use (env merge,
 	// agent forwarding, metadata overlay).
 	dc := loadDeployConfigForRead("charly shell")
 	var deployVolumes []DeployVolumeConfig
@@ -106,7 +106,7 @@ func (c *ShellCmd) Run() error {
 	// so no command diverges when key != image. c.Image stays the deploy-KEY;
 	// only the image ref uses the resolved name.
 	deployBoxName := resolveDeployBoxName(c.Box, c.Instance)
-	// Resolve from image labels (+ deploy.yml overlay). No charly.yml.
+	// Resolve from image labels (+ charly.yml overlay). No charly.yml.
 	imageRef := resolveShellImageRef("", deployBoxName, c.Tag)
 	if err := EnsureImage(imageRef, rt); err != nil {
 		return err

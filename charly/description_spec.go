@@ -405,7 +405,7 @@ func (s *Step) IsPending() bool {
 // LabelDescriptionSet is the three-section structure embedded in the
 // ai.opencharly.description OCI label: layer-contributed descriptions
 // (one per layer), image-level description (one), deploy-default
-// description (one — usually from deploy.yml overlays).
+// description (one — usually from charly.yml overlays).
 //
 // Mirrors LabelEvalSet's shape so the collection + merge pipeline and
 // the reporting format can share a mental model.
@@ -612,7 +612,7 @@ func sortedExampleKeys(m map[string]string) []string {
 // Scenario-ID / Step-ID synthesis
 // ---------------------------------------------------------------------------
 
-// ScenarioID returns the stable identifier used both for deploy.yml
+// ScenarioID returns the stable identifier used both for charly.yml
 // overlay merge lookups and for ${SCENARIO_ID} substitution in step
 // text and artifact paths.
 //

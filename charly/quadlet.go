@@ -86,7 +86,7 @@ func generateQuadlet(cfg QuadletConfig) string {
 	// A bind mount that targets the same container path as a named
 	// volume is an OVERRIDE — emit only the bind, drop the named
 	// volume. Without this filter, podman rejects the unit at start
-	// time with "duplicate mount destination" (e.g. when deploy.yml
+	// time with "duplicate mount destination" (e.g. when charly.yml
 	// pins a `project` volume to a host bind at /workspace and the
 	// image's volume label also declares the named `project` volume
 	// at /workspace).

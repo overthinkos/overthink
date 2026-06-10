@@ -6,14 +6,14 @@ import (
 	"strings"
 )
 
-// EnvProvideEntry is a resolved env_provides entry in deploy.yml.
+// EnvProvideEntry is a resolved env_provides entry in charly.yml.
 type EnvProvideEntry struct {
 	Name   string `yaml:"name" json:"name"`
 	Value  string `yaml:"value" json:"value"`
 	Source string `yaml:"source" json:"source"`
 }
 
-// MCPProvideEntry is a resolved mcp_provides entry in deploy.yml.
+// MCPProvideEntry is a resolved mcp_provides entry in charly.yml.
 type MCPProvideEntry struct {
 	Name      string `yaml:"name" json:"name"`
 	URL       string `yaml:"url" json:"url"`
@@ -21,7 +21,7 @@ type MCPProvideEntry struct {
 	Source    string `yaml:"source" json:"source"`
 }
 
-// ProvidesConfig holds all resolved provides entries in deploy.yml.
+// ProvidesConfig holds all resolved provides entries in charly.yml.
 type ProvidesConfig struct {
 	Env []EnvProvideEntry `yaml:"env,omitempty" json:"env,omitempty"`
 	MCP []MCPProvideEntry `yaml:"mcp,omitempty" json:"mcp,omitempty"`
@@ -60,7 +60,7 @@ func filterOwnProvides[T Named](entries []T, boxName string) []T {
 // keep their container hostname URLs. If both local and remote share a name,
 // local wins.
 //
-// `consumerKey` is the deploy.yml map key — base image name (e.g. "versa") or
+// `consumerKey` is the charly.yml map key — base image name (e.g. "versa") or
 // image-with-instance (e.g. "versa/ecovoyage"). Using prefix-match here is a
 // bug: `isSameBaseBox("versa/ecovoyage", "versa")` returns true (deletion
 // semantics), which would let another instance's env_provides leak into the
@@ -159,7 +159,7 @@ func podAwareMCPProvides(entries []MCPProvideEntry, consumerKey, ctrName string)
 //   - nil acceptedEnv = no filtering (backward compat for remote images without labels).
 //   - MCP provides (CHARLY_MCP_SERVERS) are always injected (standard discovery mechanism).
 //
-// `consumerKey` is the consumer's deploy.yml key — base image name (e.g.
+// `consumerKey` is the consumer's charly.yml key — base image name (e.g.
 // "versa") for the default deploy, or image-with-instance (e.g.
 // "versa/ecovoyage") for a named instance. Callers must construct this
 // via `deployKey(image, instance)` so cross-instance provides (e.g. another

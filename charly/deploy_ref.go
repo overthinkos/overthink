@@ -1,7 +1,7 @@
 package main
 
 // deploy_ref.go — unified image/layer reference resolver for
-// `charly deploy add <name> <ref>`, `--add-layer <ref>`, and deploy.yml
+// `charly deploy add <name> <ref>`, `--add-layer <ref>`, and charly.yml
 // image:/add_layers: fields.
 //
 // <ref> accepts four forms, auto-detected:

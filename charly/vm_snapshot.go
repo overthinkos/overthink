@@ -42,7 +42,7 @@ type SnapshotRegistry struct {
 
 // SnapshotEntry is one snapshot record. Mirrors VmSnapshotState plus
 // on-disk-only fields (the registry is internal; VmSnapshotState is the
-// deploy.yml-facing mirror).
+// charly.yml-facing mirror).
 type SnapshotEntry struct {
 	// Name uniquely identifies the snapshot within this VM.
 	Name string `json:"name"`
@@ -494,7 +494,7 @@ func LookupSnapshot(vmName, snapName string) (*SnapshotEntry, error) {
 }
 
 // MirrorSnapshotsToDeployState copies the registry into a slice of
-// VmSnapshotState records suitable for embedding in deploy.yml's
+// VmSnapshotState records suitable for embedding in charly.yml's
 // vm_state. Sorted by name for stable diffs.
 func MirrorSnapshotsToDeployState(vmName string) ([]VmSnapshotState, error) {
 	entries, err := ListSnapshots(vmName)

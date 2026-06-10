@@ -35,7 +35,8 @@ func TestEncMount_ShortCircuit_AllMounted(t *testing.T) {
 	// short-circuit and triggering a hang in resolveEncPassphraseForMount.
 	dir := t.TempDir()
 	deployPath := filepath.Join(dir, "deploy.yml")
-	deployYAML := `deploy:
+	deployYAML := `version: 2026.161.1555
+deploy:
   testimg:
     target: pod
     box: testimg
@@ -56,7 +57,7 @@ func TestEncMount_ShortCircuit_AllMounted(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(dir, "charly"), 0700); err != nil {
 		t.Fatalf("creating charly config dir: %v", err)
 	}
-	if err := os.Rename(deployPath, filepath.Join(dir, "charly", "deploy.yml")); err != nil {
+	if err := os.Rename(deployPath, filepath.Join(dir, "charly", "charly.yml")); err != nil {
 		t.Fatalf("moving deploy.yml: %v", err)
 	}
 
@@ -103,7 +104,8 @@ func TestEncMount_NoShortCircuit_WhenOneUnmounted(t *testing.T) {
 	}
 
 	dir := t.TempDir()
-	deployYAML := `deploy:
+	deployYAML := `version: 2026.161.1555
+deploy:
   testimg:
     target: pod
     box: testimg
@@ -119,7 +121,7 @@ func TestEncMount_NoShortCircuit_WhenOneUnmounted(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(dir, "charly"), 0700); err != nil {
 		t.Fatalf("creating charly config dir: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "charly", "deploy.yml"), []byte(deployYAML), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "charly", "charly.yml"), []byte(deployYAML), 0600); err != nil {
 		t.Fatalf("writing deploy.yml: %v", err)
 	}
 	for _, vol := range []string{"vol-a", "vol-b"} {

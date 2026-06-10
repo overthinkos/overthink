@@ -38,10 +38,10 @@ type BoxConfigSetupCmd struct {
 	VolumeFlag      []string `long:"volume" short:"v" help:"Configure volume backing (name:type[:path]). Type: volume|bind|encrypted"`
 	Bind            []string `long:"bind" help:"Shorthand: configure volume as bind mount (name or name=path)"`
 	Encrypt         []string `long:"encrypt" help:"Shorthand: configure volume as encrypted (gocryptfs)"`
-	MemoryMax       string   `long:"memory-max" help:"Cgroup memory.max hard OOM limit (e.g. 6g, 500m). Persists to deploy.yml."`
-	MemoryHigh      string   `long:"memory-high" help:"Cgroup memory.high soft limit — reclaim pressure before OOM. Persists to deploy.yml."`
-	MemorySwapMax   string   `long:"memory-swap-max" help:"Cgroup memory.swap.max ceiling. Persists to deploy.yml."`
-	Cpus            string   `long:"cpus" help:"CPU quota in cores (e.g. 2.5 for 2.5 cores). Persists to deploy.yml."`
+	MemoryMax       string   `long:"memory-max" help:"Cgroup memory.max hard OOM limit (e.g. 6g, 500m). Persists to charly.yml."`
+	MemoryHigh      string   `long:"memory-high" help:"Cgroup memory.high soft limit — reclaim pressure before OOM. Persists to charly.yml."`
+	MemorySwapMax   string   `long:"memory-swap-max" help:"Cgroup memory.swap.max ceiling. Persists to charly.yml."`
+	Cpus            string   `long:"cpus" help:"CPU quota in cores (e.g. 2.5 for 2.5 cores). Persists to charly.yml."`
 	Seed            bool     `long:"seed" default:"true" negatable:"" help:"Seed bind-backed volumes with data from image (default: true)"`
 	ForceSeed       bool     `long:"force-seed" help:"Re-seed even if target directory is not empty"`
 	DataFrom        string   `long:"data-from" help:"Seed data from this data image instead of the target image"`
@@ -105,7 +105,7 @@ func (c *BoxConfigSetupCmd) Run() error {
 
 	// Canonicalize Pattern A "<base>/<instance>" so downstream code uses
 	// the (image, instance) split — without this, MergeDeployOntoMetadata
-	// looks up the wrong deploy.yml key and drops port/env overlays.
+	// looks up the wrong charly.yml key and drops port/env overlays.
 	c.Box, c.Instance = canonicalizeDeployArg(c.Box, c.Instance)
 
 	return c.runConfig(rt)
@@ -120,18 +120,18 @@ func (c *BoxConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 
 	// Pattern B (arbitrary deploy-key + version-pin) lookup —
 	// /charly-core:deploy "Two supported deploy patterns". If `c.Image`
-	// (the positional arg) names a deploy.yml entry with an
+	// (the positional arg) names a charly.yml entry with an
 	// explicit `image:` field, use that as the ref the rest of the
 	// pipeline pulls/inspects. Critically c.Image is NOT mutated:
 	// it remains the deploy-key for container-name / quadlet-name
-	// / secret-name / deploy.yml-key composition. Pre-2026-05-12
+	// / secret-name / charly.yml-key composition. Pre-2026-05-12
 	// the arg was always treated as a kind:image short-name; this
 	// split lets the deploy-key and the image-ref diverge.
 	// Resolve the deploy key to its declared image short-name via THE shared
 	// resolver (deploy.go resolveDeployBoxName) that config / start / shell
 	// / eval live all use, so they never diverge. Falls back to the key for
 	// the key==image convention. c.Image stays the deploy-KEY for container /
-	// quadlet / secret / deploy.yml-key composition; only the image ref and
+	// quadlet / secret / charly.yml-key composition; only the image ref and
 	// the persisted `image:` field (below) use the resolved name. Routing the
 	// short name through resolveShellImageRef yields a full local-CalVer ref
 	// podman storage knows (storage is keyed by full registry refs like
@@ -139,12 +139,12 @@ func (c *BoxConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	var deployBoxName, imageRef string
 	if c.ExplicitRef != "" {
 		// Source-less from-box deploy (`charly deploy from-box`): use the exact
-		// ref as-is; c.Image is the deploy-key/name only. No deploy.yml
+		// ref as-is; c.Image is the deploy-key/name only. No charly.yml
 		// short-name resolution, no registry-ref composition — the image is
 		// already present locally (e.g. cp-box'd into a VM guest) and its
 		// quadlet config comes entirely from its baked OCI labels.
 		//
-		// PERSIST THE FULL REF (not the deploy key) as the deploy.yml `box:`
+		// PERSIST THE FULL REF (not the deploy key) as the charly.yml `box:`
 		// value, so the deploy is self-describing: a later project-FREE command
 		// — `charly eval live <name>`, `charly status`, `charly config <name>` on a host
 		// with no charly.yml (e.g. a VM guest, where the nested-pod eval is
@@ -173,12 +173,12 @@ func (c *BoxConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 		return fmt.Errorf("image %s has no embedded metadata; rebuild with latest charly", imageRef)
 	}
 
-	// Apply deploy.yml overrides onto label metadata
+	// Apply charly.yml overrides onto label metadata
 	dc := loadDeployConfigForRead("charly config")
 
 	// One-time migration: move any plaintext credentials that live in
-	// deploy.yml's env: list from the legacy -e flow into the credential
-	// store, and clean them out of deploy.yml on disk. Runs BEFORE
+	// charly.yml's env: list from the legacy -e flow into the credential
+	// store, and clean them out of charly.yml on disk. Runs BEFORE
 	// MergeDeployOntoMetadata so the cleaned deploy state is what gets
 	// merged into meta. Idempotent no-op after the first successful run.
 	// Plan §2.4.
@@ -197,7 +197,7 @@ func (c *BoxConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	}
 
 	// Persist any --memory-max / --memory-high / --memory-swap-max / --cpus
-	// flags into deploy.yml so they survive across runs, and so that
+	// flags into charly.yml so they survive across runs, and so that
 	// MergeDeployOntoMetadata picks them up below on this run.
 	if err := c.persistResourceCaps(&dc); err != nil {
 		return fmt.Errorf("persisting resource caps: %w", err)
@@ -242,7 +242,7 @@ func (c *BoxConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	security := meta.Security
 	network := meta.Network
 
-	// Parse volume flags into deploy volume configs (CLI > env > deploy.yml)
+	// Parse volume flags into deploy volume configs (CLI > env > charly.yml)
 	deployVolumes := c.parseVolumeFlags()
 	if len(deployVolumes) == 0 {
 		deployVolumes = parseVolumeEnv(c.Box)
@@ -326,7 +326,7 @@ func (c *BoxConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 		}
 	}
 
-	// Resolve env vars from global provides + labels + deploy.yml + CLI.
+	// Resolve env vars from global provides + labels + charly.yml + CLI.
 	// Pass deployKey (image-with-instance) — NOT bare c.Image — so an
 	// instance consumer like `versa/ecovoyage` doesn't pick up the base
 	// `versa` deploy's provides, and vice versa.
@@ -351,7 +351,7 @@ func (c *BoxConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	if c.EnvFile != "" {
 		quadletEnvFile, _ = filepath.Abs(c.EnvFile)
 	}
-	// Check deploy.yml env_file
+	// Check charly.yml env_file
 	if quadletEnvFile == "" && dc != nil {
 		if overlay, ok := dc.Deploy[deployKey(c.Box, c.Instance)]; ok && overlay.EnvFile != "" {
 			quadletEnvFile = expandHostHome(overlay.EnvFile)
@@ -438,7 +438,7 @@ func (c *BoxConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	backend := resolveSecretBackend()
 	isKeyring := backend == "keyring" || backend == "auto" || backend == ""
 
-	// Resolve sidecars: embedded templates + deploy.yml + --sidecar flags
+	// Resolve sidecars: embedded templates + charly.yml + --sidecar flags
 	var deploySidecars map[string]SidecarDef
 	if dc != nil {
 		if overlay, ok := dc.Deploy[deployKey(c.Box, c.Instance)]; ok {
@@ -483,10 +483,10 @@ func (c *BoxConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 				appEnv = append(appEnv, e)
 			}
 		}
-		// Replace c.Env with app-only env vars (sidecar vars saved to deploy.yml)
+		// Replace c.Env with app-only env vars (sidecar vars saved to charly.yml)
 		c.Env = appEnv
 
-		// Resolve: embedded templates + deploy.yml overrides
+		// Resolve: embedded templates + charly.yml overrides
 		var resolveErr error
 		mergedSidecarDefs, resolveErr = ResolveSidecarsForConfig(deploySidecars)
 		if resolveErr != nil {
@@ -564,14 +564,14 @@ func (c *BoxConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	// Suppress file-sourced env vars if using EnvFile (avoid duplication).
 	// Keep CLI -e flags + provides env vars + auto-detected env vars as inline env.
 	// Provides vars (from env_provides) are NOT in the env file — they're resolved
-	// at charly config time from deploy.yml and must remain as inline Environment= entries.
+	// at charly config time from charly.yml and must remain as inline Environment= entries.
 	if quadletEnvFile != "" {
 		qcfg.Env = append([]string{}, globalEnv...)
 		qcfg.Env = append(qcfg.Env, c.Env...)
 		qcfg.Env = appendAutoDetectedEnv(qcfg.Env, detected)
 	}
 
-	// Persist deployment state to deploy.yml (source of truth).
+	// Persist deployment state to charly.yml (source of truth).
 	// SecretNames is passed as the defense-in-depth list that
 	// saveDeployState uses to scrub any plaintext credential that slipped
 	// through the Run() pipeline — see deploy.go:saveDeployState docstring.
@@ -579,7 +579,7 @@ func (c *BoxConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	// Without SetPorts gating, `charly config <name>` (no flags) would
 	// silently overwrite operator port overrides with the merged
 	// `meta.Port` value, since `ports` is computed from image labels
-	// merged with deploy.yml — an idempotent recompute, not an explicit
+	// merged with charly.yml — an idempotent recompute, not an explicit
 	// operator decision to set ports.
 	saveDeployState(c.Box, c.Instance, SaveDeployStateInput{
 		Ports:       ports,
@@ -773,7 +773,7 @@ func (c *BoxConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 				return fmt.Errorf("data provisioning: %w", err)
 			}
 
-			// Update deploy.yml with seeded state
+			// Update charly.yml with seeded state
 			if seeded > 0 {
 				if dc == nil {
 					dc = &DeployConfig{Deploy: make(map[string]DeploymentNode)}
@@ -789,7 +789,7 @@ func (c *BoxConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 				}
 				dc.Deploy[deployKey(c.Box, c.Instance)] = imgDeploy
 				if err := SaveDeployConfig(dc); err != nil {
-					fmt.Fprintf(os.Stderr, "Warning: could not save data seeded state to deploy.yml: %v\n", err)
+					fmt.Fprintf(os.Stderr, "Warning: could not save data seeded state to charly.yml: %v\n", err)
 				}
 				fmt.Fprintf(os.Stderr, "Provisioned data for %d volume(s)\n", seeded)
 			}
@@ -1210,7 +1210,7 @@ func (c *BoxConfigSetupCmd) parseVolumeFlags() []DeployVolumeConfig {
 }
 
 // persistResourceCaps writes the --memory-max/--memory-high/--memory-swap-max/--cpus
-// flags (when provided) into deploy.yml under this image's Security block. On
+// flags (when provided) into charly.yml under this image's Security block. On
 // subsequent runs MergeDeployOntoMetadata picks them up automatically — no other
 // code path needs to know about the flags.
 func (c *BoxConfigSetupCmd) persistResourceCaps(dc **DeployConfig) error {
@@ -1277,7 +1277,7 @@ func parseVolumeEnv(boxName string) []DeployVolumeConfig {
 	return configs
 }
 
-// injectEnvProvides resolves env_provides templates and stores them in deploy.yml provides.env.
+// injectEnvProvides resolves env_provides templates and stores them in charly.yml provides.env.
 // Returns true if any env vars were added or changed.
 //
 // portMap is a {containerPort -> hostPort} lookup used by resolveTemplate
@@ -1344,7 +1344,7 @@ func injectEnvProvides(boxName, instance string, envProvides map[string]string, 
 	return changed, nil
 }
 
-// injectMCPProvides resolves mcp_provides templates and adds them to deploy.yml.
+// injectMCPProvides resolves mcp_provides templates and adds them to charly.yml.
 // Returns true if any servers were added or changed.
 //
 // portMap is a {containerPort -> hostPort} lookup used by resolveTemplate
@@ -1474,7 +1474,7 @@ func checkMissingEnvRequires(boxName string, requires []EnvDependency, resolvedE
 		}
 		fmt.Fprintf(os.Stderr, "  %s%s\n", dep.Name, desc)
 	}
-	fmt.Fprintf(os.Stderr, "\nSet them with -e flags, --env-file, or deploy.yml env:\n\n")
+	fmt.Fprintf(os.Stderr, "\nSet them with -e flags, --env-file, or charly.yml env:\n\n")
 	fmt.Fprintf(os.Stderr, "  charly config %s", boxName)
 	for _, dep := range missing {
 		fmt.Fprintf(os.Stderr, " -e %s=...", dep.Name)
@@ -1586,7 +1586,7 @@ func updateAllDeployedQuadlets(rt *ResolvedRuntime, skipBox string) error {
 			continue
 		}
 
-		// Apply deploy.yml overrides (instance-aware). Key by the deploy-key
+		// Apply charly.yml overrides (instance-aware). Key by the deploy-key
 		// base (boxName from parseDeployKey), not meta.Image — a bed /
 		// Pattern-B entry carries a key distinct from its baked image label.
 		MergeDeployOntoMetadata(meta, dc, boxName, instance)
@@ -1693,13 +1693,13 @@ func updateAllDeployedQuadlets(rt *ResolvedRuntime, skipBox string) error {
 		// the operator's deliberate Image= choice survives the env-
 		// refresh pass intact.
 
-		// Resolve tunnel config from metadata (includes deploy.yml overrides)
+		// Resolve tunnel config from metadata (includes charly.yml overrides)
 		var tunnelCfg *TunnelConfig
 		if meta.Tunnel != nil {
 			tunnelCfg = TunnelConfigFromMetadata(meta)
 		}
 
-		// Resolve sidecars from deploy.yml for pod mode
+		// Resolve sidecars from charly.yml for pod mode
 		var resolvedSidecars []ResolvedSidecar
 		podName := ""
 		if len(deploySidecars) > 0 {

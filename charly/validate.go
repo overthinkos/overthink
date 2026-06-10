@@ -108,7 +108,7 @@ func Validate(cfg *Config, layers map[string]*Candy, dir string, opts ResolveOpt
 	// Validate DNS and ACME email
 	validateDNS(cfg, errs)
 
-	// Tunnel is a deploy-time concern (deploy.yml only) — not validated here.
+	// Tunnel is a deploy-time concern (charly.yml only) — not validated here.
 
 	// Validate layer composition (layer: field)
 	validateCandyIncludes(layers, errs)
@@ -165,7 +165,7 @@ func Validate(cfg *Config, layers map[string]*Candy, dir string, opts ResolveOpt
 		validateInitDependencies(cfg, defaultInitCfg, layers, errs)
 	}
 
-	// Validate declarative test specs (the candy manifest, charly.yml, deploy.yml
+	// Validate declarative test specs (the candy manifest, charly.yml, charly.yml
 	// tests: + charly.yml deploy_tests:)
 	validateTests(cfg, layers, errs)
 
@@ -1991,7 +1991,7 @@ func validateSecretDeps(layers map[string]*Candy, errs *ValidationError) {
 
 		// Build a set of env_provides keys for the collision check (rule 2).
 		// env_provides values use {{.ContainerName}} templating and land in
-		// deploy.yml plaintext — a credential-backed env var with the same
+		// charly.yml plaintext — a credential-backed env var with the same
 		// name would be ambiguous and defeat the point of the split.
 		envProvidesKeys := map[string]bool{}
 		for key := range layer.EnvProvides() {

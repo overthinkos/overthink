@@ -22,7 +22,8 @@ func TestCharlyUpdatePreservesPerHostDeployFields(t *testing.T) {
 	}
 	// Per-host overlay keyed as `charly vm destroy`/`charly vm create` key it (vm:<name>):
 	// preemptible + env + tunnel — operator-authored local state.
-	yml := `deploy:
+	yml := `version: 2026.161.1555
+deploy:
   vm:cachyos-gpu:
     target: vm
     vm: cachyos-gpu
@@ -37,7 +38,7 @@ func TestCharlyUpdatePreservesPerHostDeployFields(t *testing.T) {
       instance_id: original-uuid
       ssh_port: 2222
 `
-	if err := os.WriteFile(filepath.Join(cfgDir, "deploy.yml"), []byte(yml), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(cfgDir, "charly.yml"), []byte(yml), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -85,7 +86,8 @@ func TestVmDestroyRemovesPureAutoEntry(t *testing.T) {
 	if err := os.MkdirAll(cfgDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	yml := `deploy:
+	yml := `version: 2026.161.1555
+deploy:
   vm:eval-cachyos-gpu-vm:
     target: vm
     vm: eval-cachyos-gpu-vm
@@ -93,7 +95,7 @@ func TestVmDestroyRemovesPureAutoEntry(t *testing.T) {
       instance_id: bed-uuid
       ssh_port: 12227
 `
-	if err := os.WriteFile(filepath.Join(cfgDir, "deploy.yml"), []byte(yml), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(cfgDir, "charly.yml"), []byte(yml), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if err := removeVmDeployEntry("vm:eval-cachyos-gpu-vm"); err != nil {
@@ -116,7 +118,7 @@ func TestVmDestroyRemovesPureAutoEntry(t *testing.T) {
 func TestGatherDeployNodesPerHostWins(t *testing.T) {
 	proj := t.TempDir()
 	// Committed project: cachyos-gpu, NO preemptible.
-	projYml := `version: 2026.161.1502
+	projYml := `version: 2026.161.1555
 deploy:
   cachyos-gpu:
     target: vm
@@ -131,7 +133,7 @@ deploy:
 	if err := os.MkdirAll(filepath.Join(cfg, "charly"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	hostYml := `version: 2026.161.1502
+	hostYml := `version: 2026.161.1555
 deploy:
   cachyos-gpu:
     target: vm
@@ -139,7 +141,7 @@ deploy:
     preemptible:
       holds: [nvidia-gpu]
 `
-	if err := os.WriteFile(filepath.Join(cfg, "charly", "deploy.yml"), []byte(hostYml), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(cfg, "charly", "charly.yml"), []byte(hostYml), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	t.Chdir(proj)

@@ -13,7 +13,7 @@ package main
 //
 //   - Layer-defined descriptions → Layer section
 //   - Image-level description → Image section
-//   - Deploy-node descriptions (from deploy.yml overlay) → Deploy section
+//   - Deploy-node descriptions (from charly.yml overlay) → Deploy section
 //     (added later by MergeDeployDescriptions when applicable)
 //
 // Scenarios within a Description are already scope-tagged via the
@@ -64,7 +64,7 @@ func CollectDescriptions(cfg *Config, layers map[string]*Candy, boxName string) 
 	return set
 }
 
-// MergeDeployDescriptions adds a local deploy.yml description onto a
+// MergeDeployDescriptions adds a local charly.yml description onto a
 // label-baked LabelDescriptionSet's Deploy section. Mirrors
 // MergeDeployEval semantics but at Description-level (the finest
 // granularity for description overlays is per-deploy-entity — if the

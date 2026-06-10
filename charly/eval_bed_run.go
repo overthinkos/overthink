@@ -113,7 +113,7 @@ const (
 	bedEvalReadyInterval = 15 * time.Second
 )
 
-// persistBedDeployOverrides seeds the per-host deploy.yml with a kind:eval
+// persistBedDeployOverrides seeds the per-host charly.yml with a kind:eval
 // bed's project-declared deploy-shaped fields (port / volume / env / tunnel /
 // security / network) plus its disposable/lifecycle classification, BEFORE the
 // bed's `charly config` step runs. The folded bed node is the source of truth, but
@@ -399,7 +399,7 @@ func runEvalBed(exe, name string, node DeploymentNode, opts bedRunOpts) (*bedRun
 		// (symmetry with the bed remove above) so kept-alive peer state never
 		// blocks a fresh deploy.
 		tearDownPeers(&node)
-		// Seed the per-host deploy.yml with the bed's project-declared
+		// Seed the per-host charly.yml with the bed's project-declared
 		// deploy-shaped overrides (port / volume / env / tunnel / security /
 		// network) BEFORE charly config runs. The folded bed node is the source of
 		// truth, but charly deploy add / charly config otherwise source those fields

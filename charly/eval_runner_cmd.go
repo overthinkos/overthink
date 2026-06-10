@@ -239,7 +239,7 @@ func (c *EvalRunCmd) Run() error {
 	//
 	// We deliberately do NOT go through a full redeploy here: that regenerates
 	// the systemd quadlet via `charly config`, and the current generator
-	// emits the image's default named volume AND the deploy.yml bind
+	// emits the image's default named volume AND the charly.yml bind
 	// override at the same mount path (a pre-existing dedup bug). Going
 	// through systemctl restart uses the existing on-disk quadlet
 	// unchanged.

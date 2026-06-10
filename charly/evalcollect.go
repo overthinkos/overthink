@@ -82,7 +82,7 @@ func CollectEval(cfg *Config, layers map[string]*Candy, boxName string) *LabelEv
 	return set
 }
 
-// MergeDeployOverlay applies local deploy.yml test entries onto a label-baked
+// MergeDeployEval applies local per-host charly.yml test entries onto a label-baked
 // deploy section. Merge rules (as specified in the plan):
 //
 //  1. Local entries with an id: that matches a baked entry's id: replace it.

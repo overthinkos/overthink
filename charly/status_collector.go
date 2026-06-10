@@ -13,7 +13,7 @@ import (
 )
 
 // Collector orchestrates one charly-status invocation. Loop-invariant work
-// (deploy.yml load, quadlet dir lookup, runtime resolution) happens once at
+// (charly.yml load, quadlet dir lookup, runtime resolution) happens once at
 // construction; per-container work runs in a worker pool with a NumCPU*2 cap.
 type Collector struct {
 	rt      *ResolvedRuntime
@@ -24,7 +24,7 @@ type Collector struct {
 }
 
 // NewCollector wires up the runtime + engine + cached deploy + quadlet dir.
-// Errors are surfaced for the runtime/engine resolve; deploy.yml validation
+// Errors are surfaced for the runtime/engine resolve; charly.yml validation
 // failures degrade gracefully (a stderr warning, deploy lookups skipped).
 func NewCollector(rt *ResolvedRuntime) (*Collector, error) {
 	c := &Collector{
@@ -32,8 +32,8 @@ func NewCollector(rt *ResolvedRuntime) (*Collector, error) {
 		engine: NewEngineClient(rt.RunEngine),
 	}
 	if dc, err := LoadDeployConfig(); err != nil {
-		fmt.Fprintf(os.Stderr, "WARNING: deploy.yml has validation errors:\n  %v\n", err)
-		fmt.Fprintln(os.Stderr, "(showing image-label-driven results below; resolve the errors to see deploy.yml-driven state)")
+		fmt.Fprintf(os.Stderr, "WARNING: charly.yml has validation errors:\n  %v\n", err)
+		fmt.Fprintln(os.Stderr, "(showing image-label-driven results below; resolve the errors to see charly.yml-driven state)")
 		fmt.Fprintln(os.Stderr, "")
 	} else {
 		c.deploy = dc
@@ -198,7 +198,7 @@ func (c *Collector) collectOne(ctx context.Context, snap *ContainerSnapshot) Dep
 	// container is bound to RIGHT NOW. This is the source of truth that
 	// distinguishes a `--bind` / `--encrypt` deploy override from the
 	// OCI-label default volume backing. Pre-cutover behavior fell through
-	// to the deploy.yml volume names + image-label fallback — both of
+	// to the charly.yml volume names + image-label fallback — both of
 	// which describe what SHOULD be mounted, not what IS, and missed the
 	// "FUSE-via-`<cipher>/plain`" case that triggered the immich
 	// 2026-04-18 incident's misdiagnosis.
@@ -206,7 +206,7 @@ func (c *Collector) collectOne(ctx context.Context, snap *ContainerSnapshot) Dep
 		cs.Volumes = formatLiveMounts(snap.Mounts)
 	}
 
-	// deploy.yml enrichment — preferred for tunnel; only fills ports when
+	// charly.yml enrichment — preferred for tunnel; only fills ports when
 	// runtime didn't. Volume fallback only fires when live mounts are
 	// unavailable (stopped container).
 	if dn, ok := c.lookupDeploy(snap.Box, snap.Instance, snap.Name); ok {
@@ -337,7 +337,7 @@ func (c *Collector) enabledQuadlets(seen map[string]bool) []ContainerSnapshot {
 	return out
 }
 
-// lookupDeploy resolves the deploy.yml entry for one image+instance. Tries
+// lookupDeploy resolves the charly.yml entry for one image+instance. Tries
 // the canonical deployKey() shape first, then a few legacy fallbacks for
 // bed-rolled keys (joined container name minus charly- prefix).
 func (c *Collector) lookupDeploy(box, instance, joinedContainerName string) (DeploymentNode, bool) {
@@ -407,7 +407,7 @@ func statusFromState(state string) string {
 	}
 }
 
-// parsePortStrings converts a deploy.yml / image-label []string ports list
+// parsePortStrings converts a charly.yml / image-label []string ports list
 // to []PortMapping using the canonical ParsePortMapping. Unparseable entries
 // log loudly to stderr (matches the existing behaviour for tunnel ports).
 func parsePortStrings(ports []string) []PortMapping {

@@ -114,13 +114,13 @@ var CapabilityLabelMap = map[string]string{
 
 	// Shell-init manifest — three-section (layer/image/deploy) per-shell
 	// rc-snippet contributions. 2026-05 cutover. Read by `charly image
-	// inspect`, `charly deploy from-box`, and the deploy.yml `shell:`
+	// inspect`, `charly deploy from-box`, and the charly.yml `shell:`
 	// overlay merge in MergeDeployShell.
 	"Shell": LabelShell,
 }
 
 // deployOnlyCapabilityFields are BoxMetadata fields that are NOT baked
-// as OCI labels by design — they're populated from deploy.yml overlays
+// as OCI labels by design — they're populated from charly.yml overlays
 // (or deploy-host config) and have no image-declaration meaning. The
 // completeness check exempts them from CapabilityLabelMap mapping.
 //

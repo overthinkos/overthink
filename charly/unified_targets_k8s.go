@@ -23,12 +23,12 @@ import (
 // Add emits a Kustomize tree for a target:k8s deployment and (with
 // --apply) runs `kubectl apply -k`. plans is ignored (k8s doesn't
 // consume the IR). node fields come from dctx.Node (the dispatch-merged
-// node) — including the ephemeral check, never a deploy.yml re-read.
+// node) — including the ephemeral check, never a charly.yml re-read.
 func (t *K8sUnifiedTarget) Add(ctx context.Context, dctx *DeployContext, plans []*InstallPlan, opts EmitOpts) error {
 	_ = plans
 	node := dctx.Node
 	if node == nil {
-		return fmt.Errorf("deploy %q: no deployment entry in deploy.yml", t.NodeName)
+		return fmt.Errorf("deploy %q: no deployment entry in charly.yml", t.NodeName)
 	}
 
 	// Ephemeral lifecycle hook (FIRST action). Consumes the MERGED node.
@@ -126,7 +126,7 @@ func (t *K8sUnifiedTarget) Del(ctx context.Context, opts DelOpts) error {
 		fmt.Fprintf(os.Stderr, "note: no kustomize tree at %s; skipping kubectl delete\n", overlayPath)
 	}
 
-	// Ephemeral lifecycle teardown. Read from deploy.yml here (teardown
+	// Ephemeral lifecycle teardown. Read from charly.yml here (teardown
 	// runs without a dispatch-merged node in hand — Del's contract is
 	// node-free), matching every other kind's Del.
 	if node, ok := loadDeployConfigForRead("charly deploy del k8s ephemeral-teardown").LookupKey(t.NodeName); ok && node.IsEphemeral() {

@@ -220,13 +220,13 @@ func resolveVmSshPort(spec *VmSpec, vmName string) (int, error) {
 }
 
 // saveVmDeployState writes the updated VmDeployState into
-// ~/.config/charly/deploy.yml for the given deploy name. Idempotent —
+// ~/.config/charly/charly.yml for the given deploy name. Idempotent —
 // overwrites the images.<name>.vm_state block.
 func saveVmDeployState(deployName string, state *VmDeployState, spec *VmSpec) error {
-	// Load existing deploy.yml (or start fresh).
+	// Load existing charly.yml (or start fresh).
 	dc, err := LoadDeployConfig()
 	if err != nil {
-		return fmt.Errorf("loading deploy.yml: %w", err)
+		return fmt.Errorf("loading charly.yml: %w", err)
 	}
 	if dc == nil {
 		dc = &DeployConfig{}
@@ -255,7 +255,7 @@ func saveVmDeployState(deployName string, state *VmDeployState, spec *VmSpec) er
 	return SaveDeployConfig(dc)
 }
 
-// removeVmDeployEntry strips images.<deployName> from deploy.yml.
+// removeVmDeployEntry strips images.<deployName> from charly.yml.
 func removeVmDeployEntry(deployName string) error {
 	dc, err := LoadDeployConfig()
 	if err != nil {

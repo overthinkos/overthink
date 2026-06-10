@@ -124,7 +124,7 @@ func LoadWorkspaceEnv(workspace string) ([]string, error) {
 func ResolveEnvVars(globalEnv []string, deployEnv []string, deployEnvFile string, envDir string, cliEnvFile string, cliEnv []string) ([]string, error) {
 	var all []string
 
-	// 0. Global env vars from deploy.yml (lowest priority — service discovery)
+	// 0. Global env vars from charly.yml (lowest priority — service discovery)
 	all = append(all, globalEnv...)
 
 	// 1. Per-image deploy config env vars

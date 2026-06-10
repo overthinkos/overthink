@@ -10,10 +10,10 @@ import (
 // This file implements the two pre-resolution helpers for the credential-
 // backed secrets feature (plan §2.4 and §2.5):
 //
-//  1. MigratePlaintextEnvSecret — scans an image's existing deploy.yml env:
+//  1. MigratePlaintextEnvSecret — scans an image's existing charly.yml env:
 //     list for entries that are now declared as secret_accepts/secret_requires
 //     on the image, moves those values into the credential store, removes
-//     them from deploy.yml, and writes a deploy.yml.bak.<unix-timestamp>
+//     them from charly.yml, and writes a charly.yml.bak.<unix-timestamp>
 //     backup before the first mutation. Gives existing deployments an
 //     automatic one-time upgrade with a rollback point preserved.
 //
@@ -27,7 +27,7 @@ import (
 // Both helpers are pure library code — they read and write via the
 // CredentialStore interface and the DeployConfigPath hook, so tests can
 // drive them against a temp directory without touching the user's real
-// deploy.yml or keyring.
+// charly.yml or keyring.
 
 // secretDeclaredOnBox returns the set of env var names an image declares
 // as credential-backed (secret_accepts or secret_requires). Returns a
@@ -90,17 +90,17 @@ func secretKeyForDep(dep EnvDependency) (service, key string) {
 //
 //   - writes VAL into the credential store at the layer-declared (service, key)
 //   - removes KEY=VAL from the in-memory dc.Env slice
-//   - creates a deploy.yml.bak.<unix-timestamp> backup before the first
+//   - creates a charly.yml.bak.<unix-timestamp> backup before the first
 //     mutation (one backup per call, even if multiple entries are migrated)
 //   - persists the cleaned dc via SaveDeployConfig
 //   - logs a per-entry informational notice to stderr
 //
 // Returns (migrated int, err error) where migrated is the number of entries
-// moved from deploy.yml to the credential store. Returns zero migrated when
+// moved from charly.yml to the credential store. Returns zero migrated when
 // dc is nil, meta has no secret declarations, or no matching entries exist —
 // in all those cases the function is a safe no-op.
 //
-// This is idempotent: running it a second time on a now-clean deploy.yml is
+// This is idempotent: running it a second time on a now-clean charly.yml is
 // a no-op. Running it on a host that never had plaintext credentials is a
 // no-op.
 func MigratePlaintextEnvSecret(dc *DeployConfig, meta *BoxMetadata, image, instance string) (int, error) {
@@ -140,11 +140,11 @@ func MigratePlaintextEnvSecret(dc *DeployConfig, meta *BoxMetadata, image, insta
 		return 0, nil
 	}
 
-	// Backup deploy.yml before any mutation, so the user has a rollback
+	// Backup charly.yml before any mutation, so the user has a rollback
 	// point. One backup per call regardless of how many entries are moved.
 	backupPath, err := writeDeployBackup()
 	if err != nil {
-		return 0, fmt.Errorf("writing deploy.yml backup before migration: %w", err)
+		return 0, fmt.Errorf("writing charly.yml backup before migration: %w", err)
 	}
 
 	// Build a lookup from dep name → full EnvDependency so we can honor any
@@ -169,12 +169,12 @@ func MigratePlaintextEnvSecret(dc *DeployConfig, meta *BoxMetadata, image, insta
 			staying = append(staying, p.depName+"="+p.value)
 			continue
 		}
-		fmt.Fprintf(os.Stderr, "Migrated plaintext %s from deploy.yml to credential store (%s/%s)\n", p.depName, service, credKey)
+		fmt.Fprintf(os.Stderr, "Migrated plaintext %s from charly.yml to credential store (%s/%s)\n", p.depName, service, credKey)
 		migrated++
 	}
 
 	if migrated == 0 {
-		// Nothing actually moved (all Set calls failed). The deploy.yml is
+		// Nothing actually moved (all Set calls failed). The charly.yml is
 		// unchanged, so the backup we wrote is redundant but harmless.
 		return 0, nil
 	}
@@ -182,9 +182,9 @@ func MigratePlaintextEnvSecret(dc *DeployConfig, meta *BoxMetadata, image, insta
 	entry.Env = staying
 	dc.Deploy[key] = entry
 	if err := SaveDeployConfig(dc); err != nil {
-		return migrated, fmt.Errorf("persisting cleaned deploy.yml after migration: %w (backup at %s)", err, backupPath)
+		return migrated, fmt.Errorf("persisting cleaned charly.yml after migration: %w (backup at %s)", err, backupPath)
 	}
-	fmt.Fprintf(os.Stderr, "Backed up previous deploy.yml to %s (rollback: mv %s %s)\n", backupPath, backupPath, deployConfigPathOrEmpty())
+	fmt.Fprintf(os.Stderr, "Backed up previous charly.yml to %s (rollback: mv %s %s)\n", backupPath, backupPath, deployConfigPathOrEmpty())
 	return migrated, nil
 }
 
@@ -247,9 +247,9 @@ func scrubSecretCLIEnv(cliEnv []string, meta *BoxMetadata) ([]string, int, error
 	return cleaned, imported, nil
 }
 
-// writeDeployBackup copies the current deploy.yml (if it exists) to
-// deploy.yml.bak.<unix-timestamp> and returns the backup path. Returns
-// (empty, nil) when there's no deploy.yml to back up — a first-time run is
+// writeDeployBackup copies the current charly.yml (if it exists) to
+// charly.yml.bak.<unix-timestamp> and returns the backup path. Returns
+// (empty, nil) when there's no charly.yml to back up — a first-time run is
 // not an error. The .bak file is written with 0600 to match the original.
 //
 // Reuses the pattern from ConfigMigrateSecretsCmd in credential_store.go:290

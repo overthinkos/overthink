@@ -22,7 +22,7 @@ type K8sDeployTarget struct {
 	Capabilities *Capabilities
 
 	// Deployment — the merged deployment spec (charly.yml:deployments.<name>
-	// + ~/.config/charly/deploy.yml overlay).
+	// + ~/.config/charly/charly.yml overlay).
 	Deploy DeploymentNode
 
 	// Instance — blank for the bare image name; otherwise the instance name

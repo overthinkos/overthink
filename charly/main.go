@@ -45,7 +45,7 @@ type CLI struct {
 	Clean       CleanCmd        `cmd:"" help:"Prune reusable build artifacts to defaults: retention (images, eval runs) + sweep one-time makepkg leftovers"`
 	Cmd         CmdCmd          `cmd:"" help:"Run a command in a running container (with notification)"`
 	Config      BoxConfigCmd    `cmd:"" help:"Configure box deployment (setup, secrets, encrypted volumes)"`
-	Deploy      DeployCmd       `cmd:"" help:"Manage deploy.yml deployment overrides"`
+	Deploy      DeployCmd       `cmd:"" help:"Manage charly.yml deployment overrides"`
 	Doctor      DoctorCmd       `cmd:"" help:"Show host dependency status"`
 	Box       BoxCmd          `cmd:"" name:"box" help:"Build, generate, inspect, and pull container boxes (reads charly.yml)"`
 	Candy       CandyCmd        `cmd:"" name:"candy" help:"Edit candy.yml files in the project's candy/ directory"`
@@ -222,7 +222,7 @@ func (c *InspectCmd) runFromConfig(cfg *Config, dir string) error {
 			}
 		case "tunnel":
 			// Schema v4: Tunnel moved off BoxConfig/ResolvedBox —
-			// deploy-only. Resolve from DeploymentNode.Tunnel via deploy.yml.
+			// deploy-only. Resolve from DeploymentNode.Tunnel via charly.yml.
 			if overlay, ok := loadDeployConfigForRead("charly box inspect tunnel").Lookup(c.Box, c.Instance); ok && overlay.Tunnel != nil {
 				layers, err := ScanAllCandyWithConfig(dir, cfg)
 				if err == nil {
@@ -257,7 +257,7 @@ func (c *InspectCmd) runFromConfig(cfg *Config, dir string) error {
 			}
 			fmt.Println(engine)
 		case "bind_mounts":
-			// bind_mounts are now deploy-time only; show deploy.yml volume config
+			// bind_mounts are now deploy-time only; show charly.yml volume config
 			if overlay, ok := loadDeployConfigForRead("charly box inspect bind_mounts").Lookup(c.Box, c.Instance); ok {
 				for _, dv := range overlay.Volume {
 					fmt.Printf("%s\t%s\t%s\t%s\n", dv.Name, dv.Host, dv.Path, dv.Type)

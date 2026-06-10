@@ -14,7 +14,7 @@ import (
 // sibling to the SSH key, NVRAM, and console socket already kept
 // there. The presence of this file lets an operator override the
 // project-level VM classification for their specific instance
-// without modifying the project's deploy.yml or vm.yml.
+// without modifying the project's charly.yml or vm.yml.
 //
 // The override carries `disposable:` / `lifecycle:` (the two fields
 // that gate `charly update <vm-entity>`) AND a `libvirt:` block — a
@@ -35,7 +35,7 @@ import (
 // absent → use upstream classification" from "field set to false →
 // override-explicit no". A bare bool would conflate the two.
 //
-// Use case: project deploy.yml's arch-vm has disposable: true. An
+// Use case: project charly.yml's arch-vm has disposable: true. An
 // operator who wants to use the arch-vm bed for a long-running
 // experiment can write
 //
@@ -46,7 +46,7 @@ import (
 // and the AUTONOMOUS rebuild path (the eval-runner / R10 discipline)
 // then treats the domain as non-disposable and skips it — protecting
 // the experiment from an unattended destroy, with no need to edit the
-// project's deploy.yml or stash a different lifecycle tag in version
+// project's charly.yml or stash a different lifecycle tag in version
 // control. (An explicit `charly update arch` still obeys, printing a
 // transparency note: the disposable flag gates autonomy, not the verb.)
 type VmInstanceOverride struct {

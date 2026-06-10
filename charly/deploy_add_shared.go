@@ -85,7 +85,7 @@ func retrieveArtifactsAndK3s(ctx context.Context, exec DeployExecutor, candyList
 // registerEphemeralIfMarked runs the ephemeral lifecycle registration
 // (systemd transient timer + parent-detection) when the dispatch-merged
 // node is ephemeral. FIRST action in vm/pod/k8s Add (panic-safe TTL
-// ordering). Consumes the merged node — does NOT re-read deploy.yml.
+// ordering). Consumes the merged node — does NOT re-read charly.yml.
 // Registration failure is logged (not fatal), matching the prior run*
 // behavior; the returned error is always nil today but kept for symmetry.
 func registerEphemeralIfMarked(node *DeploymentNode, name string) {

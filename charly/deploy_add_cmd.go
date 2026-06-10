@@ -12,7 +12,7 @@ package main
 // Name semantics:
 //   - literal "host" → deploy to the local machine (target: local)
 //   - any other name → a named container deployment (target: pod), or
-//     whatever target: the resolved deploy.yml node declares.
+//     whatever target: the resolved charly.yml node declares.
 
 import (
 	"context"
@@ -49,16 +49,16 @@ type DeployAddCmd struct {
 	AssumeYes        bool   `long:"yes" short:"y" help:"Assume yes; implies all allow-* gates plus skip sudo preflight"`
 
 	// Disposable + lifecycle classification (see /charly-internals:disposable).
-	// --disposable writes `disposable: true` into the deploy.yml
+	// --disposable writes `disposable: true` into the charly.yml
 	// entry and authorizes autonomous `charly update`. --lifecycle writes
 	// the informational tier tag; it has NO effect on disposability
 	// (no derivation).
-	Disposable bool   `long:"disposable" help:"Mark this deploy disposable (authorizes autonomous charly update; writes disposable: true into deploy.yml)"`
+	Disposable bool   `long:"disposable" help:"Mark this deploy disposable (authorizes autonomous charly update; writes disposable: true into charly.yml)"`
 	Lifecycle  string `long:"lifecycle" help:"Informational tier tag (scratch|dev|test|qa|staging|prod|custom). NO effect on disposability — use --disposable for that."`
 
 	// vmEntity is the resolved kind:vm entity name this deploy targets,
 	// populated per-node by dispatchNode from the node's `vm:` cross-ref
-	// (kind:eval beds + deploy.yml target:vm entries) OR the "vm:<name>"
+	// (kind:eval beds + charly.yml target:vm entries) OR the "vm:<name>"
 	// deploy-key prefix (the CLI `charly deploy add vm:<name>` form). The layer
 	// compiler reads it to build plans against the GUEST's distro/format
 	// (apt/dnf), not the operator host's. Not a Kong flag.
@@ -152,7 +152,7 @@ func (c *DeployAddCmd) Run() error {
 	// through ResolveTarget → target.Add, with opts.ParentExec set to the
 	// executor derived from the parent chain.
 	//
-	// When rootNode is nil (ref-based deploy with no deploy.yml entry
+	// When rootNode is nil (ref-based deploy with no charly.yml entry
 	// e.g. `charly deploy add foo ./path/to/box.yml`) we fall through
 	// to the single-dispatch path.
 	if rootNode == nil {
@@ -203,7 +203,7 @@ func (c *DeployAddCmd) Run() error {
 // target's logging can identify which node is executing.
 //
 // node is the resolved DeploymentNode; nil when the caller provided
-// an explicit ref (Ref != "") with no matching deploy.yml entry.
+// an explicit ref (Ref != "") with no matching charly.yml entry.
 //
 // parentExec is the DeployExecutor of the enclosing environment; nil
 // at the root. Non-nil means "this node is a child of something" —
@@ -214,7 +214,7 @@ func (c *DeployAddCmd) dispatchNode(path string, node *DeploymentNode, parentExe
 	opts.Path = path
 	// Note: opts.ParentNode is populated by the walker when available.
 
-	// Per-node field overlays from the deploy.yml entry. On the root
+	// Per-node field overlays from the charly.yml entry. On the root
 	// this matches the pre-v2 behavior; on children we must reload
 	// fields from the child node (not c.Name's top-level entry).
 	refStr := c.Ref
@@ -233,7 +233,7 @@ func (c *DeployAddCmd) dispatchNode(path string, node *DeploymentNode, parentExe
 	}
 	if refStr == "" {
 		if node == nil {
-			return fmt.Errorf("charly deploy add: no <ref> and deploy.yml has no entry for %q", path)
+			return fmt.Errorf("charly deploy add: no <ref> and charly.yml has no entry for %q", path)
 		}
 		// Schema v3: prefer the explicit `image:` cross-ref when set,
 		// so deployment names like "sway-pod" don't need to match an
@@ -261,7 +261,7 @@ func (c *DeployAddCmd) dispatchNode(path string, node *DeploymentNode, parentExe
 	// compiler builds plans against the GUEST's distro/format (apt/dnf on
 	// debian/fedora) rather than the operator host's (cachyos→pac). The
 	// `vm:` deploy-key prefix was the ONLY signal before — it missed every
-	// kind:eval bed and deploy.yml target:vm entry whose name isn't
+	// kind:eval bed and charly.yml target:vm entry whose name isn't
 	// "vm:"-prefixed, routing them through syntheticHostBox → pacman.
 	c.vmEntity = resolveVmEntity(c.Name, node)
 
@@ -404,7 +404,7 @@ func (c *DeployAddCmd) dispatchNode(path string, node *DeploymentNode, parentExe
 	}
 
 	// ResolveTarget needs a node carrying target:. For a ref-based deploy
-	// with no deploy.yml entry (node == nil), synthesize one from the
+	// with no charly.yml entry (node == nil), synthesize one from the
 	// classified target so `charly deploy add host ./x.yml` still resolves.
 	resolveNode := node
 	if resolveNode == nil {
@@ -445,7 +445,7 @@ func (c *DeployAddCmd) dispatchNode(path string, node *DeploymentNode, parentExe
 // migrate deploy-v3` command converts them to the canonical values
 // on-disk.
 //
-// For ref-based deploys with no deploy.yml entry (e.g. `charly deploy add
+// For ref-based deploys with no charly.yml entry (e.g. `charly deploy add
 // foo ./box.yml` where foo isn't declared), the deploy name itself
 // is the hint: literal `host` → host target; anything else → pod.
 // The legacy `vm:<name>` name-prefix heuristic was removed — VM
@@ -522,9 +522,9 @@ func deriveChildExecutorForPath(path string, node *DeploymentNode, parentExec De
 }
 
 // Run executes `charly deploy del`. Dispatch resolves the deployment node
-// (when present in deploy.yml) and routes through ResolveTarget →
+// (when present in charly.yml) and routes through ResolveTarget →
 // target.Del. Legacy name-prefix routing (`host` literal, `vm:<name>`)
-// still works for ref-based deploys without a deploy.yml entry: a node
+// still works for ref-based deploys without a charly.yml entry: a node
 // is synthesized from the classified target so the resolver has a
 // target: to dispatch on.
 func (c *DeployDelCmd) Run() error {
@@ -585,11 +585,11 @@ func (c *DeployDelCmd) Run() error {
 // `charly deploy del` invocation. Precedence:
 //   - literal "host" name → synthetic local node (legacy)
 //   - "vm:<name>" prefix  → synthetic vm node (legacy ref-based del)
-//   - deploy.yml entry    → the merged node, target normalized
+//   - charly.yml entry    → the merged node, target normalized
 //   - no entry            → synthetic pod node (the default)
 //
 // The returned node always carries a non-empty Target so ResolveTarget
-// can dispatch — for ref-based deploys with no deploy.yml entry the node
+// can dispatch — for ref-based deploys with no charly.yml entry the node
 // is synthesized, preserving `charly deploy del host` / `charly deploy del
 // vm:<name>` without a stored entry.
 func (c *DeployDelCmd) resolveDelNode() (*DeploymentNode, string) {
@@ -931,7 +931,7 @@ func syntheticHostBox() *ResolvedBox {
 
 // resolveVmEntity returns the kind:vm entity a deploy targets, or "" when it
 // targets no VM. A node's explicit `vm:` cross-ref wins (kind:eval beds and
-// deploy.yml target:vm entries, whose names are NOT "vm:"-prefixed); otherwise
+// charly.yml target:vm entries, whose names are NOT "vm:"-prefixed); otherwise
 // the "vm:<name>" deploy-key prefix (the CLI `charly deploy add vm:<name>` form).
 // This is the single signal the layer compiler uses to pick syntheticVmBox
 // over syntheticHostBox — the prefix alone missed bed/target:vm deploys.

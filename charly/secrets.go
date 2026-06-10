@@ -387,7 +387,7 @@ func CollectCandySecretAccepts(boxName, instance string, meta *BoxMetadata) (col
 // secret_require value that resolves from the credential store, so lifecycle
 // hooks (post_enable / pre_remove) receive credential-backed secrets EXPLICITLY
 // via `podman exec -e`. This is load-bearing: the CLI `-e` form of these secrets
-// is scrubbed from c.Env by scrubSecretCLIEnv (never plaintext in deploy.yml),
+// is scrubbed from c.Env by scrubSecretCLIEnv (never plaintext in charly.yml),
 // and a podman `type=env` secret is not reliably inherited by `podman exec`, so
 // a hook that consumes a secret (e.g. github-runner's registration token) would
 // otherwise never see it. Generic across every hook+secret layer (R3); inert

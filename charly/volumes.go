@@ -168,7 +168,7 @@ func parseVolumeFlagsStandalone(volumeFlags, bindFlags []string) []DeployVolumeC
 	return configs
 }
 
-// mergeVolumeConfigs merges CLI overrides onto deploy.yml volume configs.
+// mergeVolumeConfigs merges CLI overrides onto charly.yml volume configs.
 // CLI overrides win by name.
 func mergeVolumeConfigs(base, overrides []DeployVolumeConfig) []DeployVolumeConfig {
 	if len(overrides) == 0 {

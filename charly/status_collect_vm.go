@@ -9,10 +9,10 @@ import (
 // VMCollector is the libvirt SubstrateCollector. It lists charly-* libvirt
 // domains via listCharlyDomains(), maps each domain to a DeploymentStatus
 // stamped Kind=SubstrateVM, Source="libvirt", and enriches the row from the
-// matching target:vm deploy.yml entry's vm_state (SSH port/user, backend) when
+// matching target:vm charly.yml entry's vm_state (SSH port/user, backend) when
 // one exists. A domain with no deploy entry still shows (Source:libvirt) — the
 // libvirt domain list is the source of truth for what is actually defined on
-// the host, deploy.yml is only enrichment.
+// the host, charly.yml is only enrichment.
 //
 // Only LIBVIRT-backed domains surface here: listCharlyDomains() queries the
 // session daemon, so a VM booted via the qemu backend (pidfile-tracked, not a

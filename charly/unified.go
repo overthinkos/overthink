@@ -53,10 +53,10 @@ const MaxIncludeDepth = 8
 // UnifiedFile is the full schema of a single unified-format YAML document.
 // Every field is optional — a file with only `distros:` is valid (typical for
 // a build.yml-style include); a file with only `deployments:` is valid (typical
-// for a deploy.yml-style include); etc.
+// for a charly.yml-style include); etc.
 //
-// Schema version 2 consolidates the legacy vms.yml + deploy.yml split into one
-// deploy.yml file carrying both `vm:` (singular) and `deployments:` at the
+// Schema version 2 consolidates the legacy vms.yml + charly.yml split into one
+// charly.yml file carrying both `vm:` (singular) and `deployments:` at the
 // root. The top-level `vm:` key replaces the legacy `vms:` (plural). See
 // `charly migrate` for the one-shot migration from v1.
 type UnifiedFile struct {
@@ -295,7 +295,7 @@ func (il *InlineCandy) UnmarshalYAML(node *yaml.Node) error {
 
 // DeploymentsSection carries repo-shipped deployment defaults plus per-image
 // deployment entries. Matches the two-tier deploy model: this block is the
-// authored/in-repo defaults; ~/.config/charly/deploy.yml is the per-machine overlay.
+// authored/in-repo defaults; ~/.config/charly/charly.yml is the per-machine overlay.
 // DeploymentsSection — RETIRED by the field-singular cutover (2026-05).
 // UnifiedFile.Deploy is now a flat map; UnifiedFile.Provides moved to
 // root level. The type definition is kept (not deleted) because
@@ -580,7 +580,7 @@ func rejectLegacyLocalSurface(root string, merged *UnifiedFile) error {
 // `marimo-ml-pod` reference (image key, deployment key, or `image:`
 // cross-ref). The 2026-04 cutover renamed the image + deploy entry to
 // `marimo`; the 2026-05 cutover then renamed `marimo` → `versa`. This
-// guard ensures users on an outdated personal deploy.yml STILL on
+// guard ensures users on an outdated personal charly.yml STILL on
 // marimo-ml see a remediation hint pointing at the current canonical
 // (`versa`) rather than silently picking up the wrong image at
 // `charly update` time.
@@ -702,6 +702,14 @@ func LoadUnified(dir string) (*UnifiedFile, bool, error) {
 	// bed's peers fold too) and BEFORE validateDeploymentTree (so folded peers
 	// get the same deploy validation).
 	if err := foldPeers(merged); err != nil {
+		return nil, true, fmt.Errorf("%s: %w", root, err)
+	}
+	// Auto-promote disposable on ephemeral entries + validate the ephemeral /
+	// vm-naming invariants. Consolidated here from the old per-host-only
+	// LoadDeployConfig (R3 — one path), so the project charly.yml's inline
+	// deploy: entries get the same promotion + checks. Runs after the folds so
+	// folded beds/peers are covered, before validateDeploymentTree.
+	if err := validateEphemeralUnified(merged); err != nil {
 		return nil, true, fmt.Errorf("%s: %w", root, err)
 	}
 	if err := validateDeploymentTree(merged.Deploy); err != nil {
@@ -925,7 +933,7 @@ func validateDeploymentName(name, parentPath string) error {
 	}
 	if strings.Contains(name, ".") {
 		return fmt.Errorf(
-			"deployment key %q contains '.' — the character is reserved for dotted-path addressing (charly deploy add a.b.c). Rename this entry in deploy.yml",
+			"deployment key %q contains '.' — the character is reserved for dotted-path addressing (charly deploy add a.b.c). Rename this entry in charly.yml",
 			full,
 		)
 	}
@@ -2546,7 +2554,7 @@ func (uf *UnifiedFile) ProjectInitConfig() *InitConfig {
 }
 
 // ProjectDeployConfig returns the *DeployConfig equivalent (deployments: section
-// of the authored file, independent of any per-machine ~/.config/charly/deploy.yml
+// of the authored file, independent of any per-machine ~/.config/charly/charly.yml
 // which remains loaded separately by LoadDeployConfig).
 func (uf *UnifiedFile) ProjectDeployConfig() *DeployConfig {
 	if uf == nil || (len(uf.Deploy) == 0 && uf.Provides == nil) {

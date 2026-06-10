@@ -51,7 +51,7 @@ package main
 // Classified is the small contract a config struct implements so the
 // charly CLI can ask "are you disposable?" / "are you ephemeral?" /
 // "what lifecycle tag do you carry?" without caring whether the
-// underlying struct is VmSpec (vm.yml), DeploymentNode (deploy.yml),
+// underlying struct is VmSpec (vm.yml), DeploymentNode (charly.yml),
 // or a per-instance override.
 //
 // IsDisposable returns true when the config carries `disposable: true`

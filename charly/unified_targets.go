@@ -44,7 +44,7 @@ var ErrNotSupportedOnK8s = errors.New("lifecycle operation not supported on kube
 type LocalUnifiedTarget struct {
 	*LocalDeployTarget
 
-	// NodeName is the deployment identifier from deploy.yml. Distinct
+	// NodeName is the deployment identifier from charly.yml. Distinct
 	// from the legacy LocalDeployTarget.Name() which returns the kind
 	// ("host"). UnifiedDeployTarget.Name() returns this.
 	NodeName string
@@ -83,7 +83,7 @@ func (t *LocalUnifiedTarget) Executor() DeployExecutor {
 type VmUnifiedTarget struct {
 	*VmDeployTarget
 
-	// NodeName is the deploy.yml identifier (e.g. "arch-vm"). Distinct
+	// NodeName is the charly.yml identifier (e.g. "arch-vm"). Distinct
 	// from VmDeployTarget.Name ("vm:" + VMName legacy) and
 	// VmDeployTarget.VMName (the underlying kind:vm entity name).
 	NodeName string
@@ -101,7 +101,7 @@ type VmUnifiedTarget struct {
 
 	// RevRunner is the ReverseRunner used by guest-side ReverseOp
 	// teardown. Typically an *sshReverseRunner constructed by the
-	// dispatcher from the persisted vm_state in deploy.yml. Nil →
+	// dispatcher from the persisted vm_state in charly.yml. Nil →
 	// Del builds it itself from buildVmReverseRunner(NodeName).
 	RevRunner ReverseRunner
 
@@ -136,7 +136,7 @@ func (t *VmUnifiedTarget) Executor() DeployExecutor {
 type PodUnifiedTarget struct {
 	*PodDeployTarget
 
-	// NodeName is the deploy.yml identifier (e.g. "sway-pod"). The
+	// NodeName is the charly.yml identifier (e.g. "sway-pod"). The
 	// legacy PodDeployTarget.DeployName holds the same string;
 	// we duplicate here for adapter-level symmetry with Host/Vm.
 	NodeName string
@@ -147,14 +147,14 @@ type PodUnifiedTarget struct {
 	KeepImage bool
 
 	// BaseImageRef is the image ref the rebuild's image-build/eval
-	// steps target. Set by the dispatcher from the deploy.yml node's
+	// steps target. Set by the dispatcher from the charly.yml node's
 	// `image:` field (or NodeName when absent). Empty → falls back to
 	// NodeName at Rebuild time.
 	BaseImageRef string
 
 	// Add-time inputs, set by the dispatcher from DeployAddCmd flags.
 	// Tag overrides the resolved CalVer; Ref is the user-supplied image
-	// ref (persisted into deploy.yml when --disposable/--lifecycle are
+	// ref (persisted into charly.yml when --disposable/--lifecycle are
 	// set); Disposable / Lifecycle carry the classification opt-ins.
 	Tag        string
 	Ref        string
@@ -186,7 +186,7 @@ func (t *PodUnifiedTarget) Executor() DeployExecutor {
 type K8sUnifiedTarget struct {
 	*K8sDeployTarget
 
-	// NodeName is the deploy.yml identifier (e.g. "k8s-cluster").
+	// NodeName is the charly.yml identifier (e.g. "k8s-cluster").
 	NodeName string
 }
 
@@ -218,7 +218,7 @@ func (t *K8sUnifiedTarget) Executor() DeployExecutor { return nil }
 type AndroidUnifiedTarget struct {
 	*AndroidDeployTarget
 
-	// NodeName is the deploy.yml identifier.
+	// NodeName is the charly.yml identifier.
 	NodeName string
 }
 
@@ -233,7 +233,7 @@ func (t *AndroidUnifiedTarget) Executor() DeployExecutor { return nil }
 // ---------------------------------------------------------------------------
 // ResolveTarget — the unified dispatcher.
 //
-// Looks up a deploy.yml node by name, validates that `target:` is set,
+// Looks up a charly.yml node by name, validates that `target:` is set,
 // and returns the appropriate UnifiedDeployTarget adapter. This is the
 // canonical entry point for every deploy verb (`charly deploy add` / `del`
 // and `charly update`). The returned adapter carries identity only; its Add
@@ -289,7 +289,7 @@ func ResolveTarget(node *DeploymentNode, name string) (UnifiedDeployTarget, erro
 
 	case "pod":
 		// BaseImageRef is the image the rebuild's build/eval steps target;
-		// node.Image is the deploy.yml `image:` field (Rebuild falls back to
+		// node.Image is the charly.yml `image:` field (Rebuild falls back to
 		// NodeName when empty).
 		return &PodUnifiedTarget{NodeName: name, BaseImageRef: node.Box}, nil
 

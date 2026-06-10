@@ -792,7 +792,7 @@ func defaultAskPassword(id, prompt string) (string, error) {
 	return strings.TrimRight(string(out), "\n"), nil
 }
 
-// loadEncryptedVolume loads encrypted volume configs from deploy.yml for an image.
+// loadEncryptedVolume loads encrypted volume configs from charly.yml for an image.
 // Returns the deploy volume configs with type=encrypted and the encrypted storage path.
 func loadEncryptedVolume(boxName, instance string) ([]DeployVolumeConfig, string, error) {
 	rt, err := ResolveRuntime()

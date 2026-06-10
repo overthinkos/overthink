@@ -6,7 +6,7 @@ package main
 // For container deploys, the same InstallPlan produced by
 // BuildDeployPlan is consumed by two sub-systems:
 //
-//   1. Overlay Containerfile synthesis — when the deploy.yml has
+//   1. Overlay Containerfile synthesis — when the charly.yml has
 //      `add_layers:` entries, we generate a new Containerfile that
 //      inherits FROM the base image and applies the extra layers'
 //      install steps on top. The overlay image is then passed to the
@@ -38,7 +38,7 @@ import (
 // PodDeployTarget applies an InstallPlan as a container.
 type PodDeployTarget struct {
 	// DeployName is the name under which this container is known in
-	// deploy.yml and in the systemd-quadlet layer.
+	// charly.yml and in the systemd-quadlet layer.
 	DeployName string
 
 	// BaseImage is the image ref the overlay inherits from. May be the
@@ -388,13 +388,13 @@ func (t *PodDeployTarget) buildOverlay(plans []*InstallPlan, overlayCandies []st
 	// exec.CommandContext call. On a NestedExecutor the command runs
 	// in the parent venue — translate host-side paths (Containerfile,
 	// build context) to venue-side paths via the parent's bind-mount
-	// mappings declared in deploy.yml. Pre-C10 this errored out
+	// mappings declared in charly.yml. Pre-C10 this errored out
 	// unconditionally; with the path translator we can continue when
 	// the parent venue has the project tree bind-mounted.
 	if nested, ok := t.Executor.(*NestedExecutor); ok && nested != nil {
 		venuePath, ok := translateHostPathToVenue(buildContext, opts.ParentNode)
 		if !ok {
-			return fmt.Errorf("PodDeployTarget: nested container overlay build inside %s requires the project tree at %s to be bind-mounted into the parent venue (set `volumes: [{name: project, type: bind, host: %s, path: /workspace}]` on the parent deploy.yml entry, then re-run)", nested.Venue(), buildContext, buildContext)
+			return fmt.Errorf("PodDeployTarget: nested container overlay build inside %s requires the project tree at %s to be bind-mounted into the parent venue (set `volumes: [{name: project, type: bind, host: %s, path: /workspace}]` on the parent charly.yml entry, then re-run)", nested.Venue(), buildContext, buildContext)
 		}
 		venueBuildContext = venuePath
 		// The Containerfile lives inside the build context, so its

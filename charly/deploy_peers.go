@@ -136,7 +136,7 @@ func bringUpPeers(node *DeploymentNode) error {
 	}
 	for _, peerKey := range sortedPeerKeys(node.Peer) {
 		peerNode := node.Peer[peerKey]
-		// Seed the per-host deploy.yml with the peer's deploy-shaped overrides
+		// Seed the per-host charly.yml with the peer's deploy-shaped overrides
 		// (port / volume / env / security / network) so its declared port:
 		// publishes to the host — the cross-deployment cdp/vnc/mcp probe reaches
 		// the driver via that host-published port.

@@ -1446,7 +1446,7 @@ func (l *Candy) EnvAccept() []EnvDependency {
 
 // SecretAccepts returns credential-store-backed env vars this layer can optionally use.
 // These entries flow through the credential store → podman secret → Secret=type=env quadlet
-// directive pipeline, never touching plaintext deploy.yml or quadlet Environment= lines.
+// directive pipeline, never touching plaintext charly.yml or quadlet Environment= lines.
 // Pre-populated from the candy manifest.
 func (l *Candy) SecretAccept() []EnvDependency {
 	return l.secretAccepts

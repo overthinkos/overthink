@@ -20,7 +20,7 @@ package main
 //             tests / a description.
 //   - Image:  the image's own image-level entries.
 //   - Deploy: deploy-scope entries (build-time defaults baked into
-//             the image; deploy.yml overlays merge into this section
+//             the image; charly.yml overlays merge into this section
 //             at test/run time, not here).
 
 // LabelSet is the Go-side aggregate of an image's two three-section
@@ -62,7 +62,7 @@ func (s *LabelEvalSet) IsEmpty() bool {
 // LabelDescriptionSet is the three-section structure embedded in the
 // ai.opencharly.description OCI label: layer-contributed descriptions
 // (one per layer), image-level description (one), deploy-default
-// description (one — usually from deploy.yml overlays).
+// description (one — usually from charly.yml overlays).
 //
 // Mirrors LabelEvalSet's shape so the collection + merge pipeline and
 // the reporting format can share a mental model.

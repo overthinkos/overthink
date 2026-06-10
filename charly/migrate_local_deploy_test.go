@@ -238,7 +238,12 @@ func TestMigrateLocalDeploy_FullExample(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(dir, "xdg", "charly"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Rename(path, filepath.Join(dir, "xdg", "charly", "deploy.yml")); err != nil {
+	// Simulate the rest of the migrate chain that runs after MigrateLocalDeploy:
+	// calver-schema stamps the file to HEAD and host-charly-yml renames it to
+	// charly.yml — both required before LoadDeployConfig (the unified path) accepts it.
+	migrated, _ := os.ReadFile(path)
+	migrated = []byte(strings.Replace(string(migrated), "version: 4", "version: "+LatestSchemaVersion().String(), 1))
+	if err := os.WriteFile(filepath.Join(dir, "xdg", "charly", "charly.yml"), migrated, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	dc, err := LoadDeployConfig()
@@ -332,8 +337,8 @@ func TestLoadDeployConfig_LegacySchemaErrors(t *testing.T) {
 		t.Fatal("LoadDeployConfig accepted legacy schema; want error")
 	}
 	msg := err.Error()
-	if !strings.Contains(msg, "legacy top-level `images:`") {
-		t.Errorf("error message missing legacy-key hint: %s", msg)
+	if !strings.Contains(msg, "legacy `deploy.yml` filename") {
+		t.Errorf("error message missing legacy-filename hint: %s", msg)
 	}
 	if !strings.Contains(msg, "charly migrate") {
 		t.Errorf("error message missing remediation command: %s", msg)

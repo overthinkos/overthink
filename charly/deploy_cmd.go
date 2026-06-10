@@ -8,28 +8,28 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// DeployCmd manages deployments and deploy.yml overrides.
+// DeployCmd manages deployments and charly.yml overrides.
 //
 // The `add` and `del` subcommands (added in the BuildTarget refactor)
 // apply an image/layer plan to a target: either a container (named
 // anything) or the local host (literal name "host"). The existing
 // config-management subcommands (export/import/show/reset/path/status)
-// remain unchanged — they manipulate deploy.yml itself.
+// remain unchanged — they manipulate charly.yml itself.
 type DeployCmd struct {
 	Add DeployAddCmd `cmd:"" help:"Apply a deploy: 'host' targets the local system; any other name targets a container"`
 	Del DeployDelCmd `cmd:"" help:"Tear down a deploy by name"`
 
 	FromImage DeployFromBoxCmd `cmd:"" name:"from-box" help:"Source-less deploy from a built image's baked OCI labels (no charly.yml project). Pod by default; --cluster targets K8s"`
 
-	Export DeployExportCmd `cmd:"" help:"Export effective config as deploy.yml"`
-	Import DeployImportCmd `cmd:"" help:"Import deploy.yml file(s) into config"`
-	Path   DeployPathCmd   `cmd:"" help:"Print deploy.yml file path"`
-	Reset  DeployResetCmd  `cmd:"" help:"Remove deploy.yml overrides"`
-	Show   DeployShowCmd   `cmd:"" help:"Show current deploy.yml overrides"`
-	Status DeployStatusCmd `cmd:"" help:"Show sync status between deploy.yml and quadlet files"`
+	Export DeployExportCmd `cmd:"" help:"Export effective config as charly.yml"`
+	Import DeployImportCmd `cmd:"" help:"Import charly.yml file(s) into config"`
+	Path   DeployPathCmd   `cmd:"" help:"Print charly.yml file path"`
+	Reset  DeployResetCmd  `cmd:"" help:"Remove charly.yml overrides"`
+	Show   DeployShowCmd   `cmd:"" help:"Show current charly.yml overrides"`
+	Status DeployStatusCmd `cmd:"" help:"Show sync status between charly.yml and quadlet files"`
 }
 
-// DeployShowCmd displays the current deploy.yml content.
+// DeployShowCmd displays the current charly.yml content.
 type DeployShowCmd struct {
 	Box      string `arg:"" optional:"" help:"Show overrides for a specific box"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
@@ -41,7 +41,7 @@ func (c *DeployShowCmd) Run() error {
 		return err
 	}
 	if dc == nil || len(dc.Deploy) == 0 {
-		fmt.Println("No deploy.yml configured")
+		fmt.Println("No charly.yml configured")
 		return nil
 	}
 
@@ -93,7 +93,7 @@ func (c *DeployExportCmd) exportOverrides() error {
 		return err
 	}
 	if dc == nil || len(dc.Deploy) == 0 {
-		fmt.Fprintln(os.Stderr, "No deploy.yml overrides to export")
+		fmt.Fprintln(os.Stderr, "No charly.yml overrides to export")
 		return nil
 	}
 	if len(c.Boxes) > 0 {
@@ -117,10 +117,10 @@ func (c *DeployExportCmd) output(dc *DeployConfig) error {
 	return marshalToStdout(dc)
 }
 
-// DeployImportCmd loads deploy.yml file(s) into ~/.config/charly/deploy.yml.
+// DeployImportCmd loads charly.yml file(s) into ~/.config/charly/charly.yml.
 type DeployImportCmd struct {
 	Files   []string `arg:"" help:"Deploy YAML files to import (merged left-to-right)"`
-	Replace bool     `help:"Replace entire deploy.yml instead of merging with existing"`
+	Replace bool     `help:"Replace entire charly.yml instead of merging with existing"`
 	Box     string   `long:"box" help:"Import only this box's config"`
 }
 
@@ -180,7 +180,7 @@ func (c *DeployImportCmd) Run() error {
 	return nil
 }
 
-// DeployResetCmd removes deploy.yml overrides.
+// DeployResetCmd removes charly.yml overrides.
 type DeployResetCmd struct {
 	Box      string `arg:"" optional:"" help:"Box to reset (omit to clear all)"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
@@ -188,19 +188,19 @@ type DeployResetCmd struct {
 
 func (c *DeployResetCmd) Run() error {
 	if c.Box == "" {
-		// Clear entire deploy.yml
+		// Clear entire charly.yml
 		path, err := DeployConfigPath()
 		if err != nil {
 			return err
 		}
 		if err := os.Remove(path); err != nil {
 			if os.IsNotExist(err) {
-				fmt.Println("No deploy.yml to remove")
+				fmt.Println("No charly.yml to remove")
 				return nil
 			}
 			return err
 		}
-		fmt.Println("Removed deploy.yml")
+		fmt.Println("Removed charly.yml")
 		return nil
 	}
 
@@ -225,7 +225,7 @@ func (c *DeployResetCmd) Run() error {
 		// No images left — remove the file
 		path, _ := DeployConfigPath()
 		os.Remove(path)
-		fmt.Printf("Removed overrides for %q (deploy.yml now empty, removed)\n", key)
+		fmt.Printf("Removed overrides for %q (charly.yml now empty, removed)\n", key)
 		return nil
 	}
 
@@ -236,7 +236,7 @@ func (c *DeployResetCmd) Run() error {
 	return nil
 }
 
-// DeployPathCmd prints the deploy.yml file path.
+// DeployPathCmd prints the charly.yml file path.
 type DeployPathCmd struct{}
 
 func (c *DeployPathCmd) Run() error {
@@ -248,7 +248,7 @@ func (c *DeployPathCmd) Run() error {
 	return nil
 }
 
-// DeployStatusCmd shows sync status between deploy.yml and quadlet files.
+// DeployStatusCmd shows sync status between charly.yml and quadlet files.
 type DeployStatusCmd struct{}
 
 func (c *DeployStatusCmd) Run() error {
@@ -289,22 +289,22 @@ func (c *DeployStatusCmd) Run() error {
 	}
 
 	if len(deployToStem) == 0 && len(quadletBoxes) == 0 {
-		fmt.Println("No deploy.yml entries and no quadlet files found")
+		fmt.Println("No charly.yml entries and no quadlet files found")
 		return nil
 	}
 
-	// Stale deploy.yml entries (no quadlet)
+	// Stale charly.yml entries (no quadlet)
 	for key, stem := range deployToStem {
 		if !quadletBoxes[stem] {
-			fmt.Printf("%-40s deploy.yml: yes  quadlet: no   (stale config)\n", key)
+			fmt.Printf("%-40s charly.yml: yes  quadlet: no   (stale config)\n", key)
 		}
 	}
 	// Both exist or quadlet only
 	for stem := range quadletBoxes {
 		if key, ok := stemToDeploy[stem]; ok {
-			fmt.Printf("%-40s deploy.yml: yes  quadlet: yes  (ok)\n", key)
+			fmt.Printf("%-40s charly.yml: yes  quadlet: yes  (ok)\n", key)
 		} else {
-			fmt.Printf("%-40s deploy.yml: no   quadlet: yes  (no overrides)\n", stem)
+			fmt.Printf("%-40s charly.yml: no   quadlet: yes  (no overrides)\n", stem)
 		}
 	}
 

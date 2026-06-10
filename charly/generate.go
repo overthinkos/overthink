@@ -1785,7 +1785,7 @@ func (g *Generator) writeLabels(b *strings.Builder, boxName string, candyOrder [
 	}
 
 	// Tunnel config is a deploy-time concern — not written to image labels.
-	// Managed via deploy.yml only (charly config setup).
+	// Managed via charly.yml only (charly config setup).
 
 	// Image-level env vars
 	imgCfg := g.Config.Box[boxName]
@@ -1799,7 +1799,7 @@ func (g *Generator) writeLabels(b *strings.Builder, boxName string, candyOrder [
 
 	// Tests: three-section (layer/image/deploy) declarative manifest. Shipped
 	// so every pulled image is self-describing at all three levels. Local
-	// deploy.yml overlays (by id) are applied at charly eval live time, not here.
+	// charly.yml overlays (by id) are applied at charly eval live time, not here.
 	tests := CollectEval(g.Config, g.Candies, boxName)
 	if tests != nil {
 		writeJSONLabel(b, LabelEval, tests)
@@ -1807,7 +1807,7 @@ func (g *Generator) writeLabels(b *strings.Builder, boxName string, candyOrder [
 
 	// Description: three-section Gherkin-shaped self-description.
 	// Replaces the retired LabelInfo/LabelStatus scalar labels. Local
-	// deploy.yml `description:` overlays merge at runtime via
+	// charly.yml `description:` overlays merge at runtime via
 	// MergeDeployDescriptions, not here.
 	descriptions := CollectDescriptions(g.Config, g.Candies, boxName)
 	if descriptions != nil {
@@ -1818,7 +1818,7 @@ func (g *Generator) writeLabels(b *strings.Builder, boxName string, candyOrder [
 	// contributions. Layer entries come from each layer's `shell:`
 	// block (resolved via the selection rule); image entries from the
 	// image-level `shell:` (when present). Deploy-scope defaults baked
-	// here; local deploy.yml `shell:` overlays merge at deploy time
+	// here; local charly.yml `shell:` overlays merge at deploy time
 	// via MergeDeployShell.
 	shellSet := CollectShell(g.Config, g.Candies, boxName)
 	if shellSet != nil && (len(shellSet.Candy) > 0 || len(shellSet.Box) > 0 || len(shellSet.Deploy) > 0) {

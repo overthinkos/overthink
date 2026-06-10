@@ -70,7 +70,7 @@ type MigrationStep struct {
 // closure references it, and the registry's last entry uses it as its Version,
 // so the two are guaranteed equal (asserted by TestRegistryHeadMatchesLatest).
 // Bump it — and append the matching MigrationStep — for each future cutover.
-var latestSchemaVersion = mustCalVer("2026.161.1502")
+var latestSchemaVersion = mustCalVer("2026.161.1555")
 
 // migrationSteps is the ordered registry. Chronological by git landing date
 // (see `git log --diff-filter=A` on each migrate_*.go), which is the order the
@@ -284,6 +284,14 @@ func migrationSteps() []MigrationStep {
 		{mustCalVer("2026.161.1501"), "init-candy-keys", false, func(c *MigrateContext) (bool, error) {
 			w, err := MigrateInitCandyKeys(c.Dir, c.DryRun)
 			return len(w) > 0, err
+		}},
+		// 2026-06 host-charly-yml: rename the per-host deploy overlay
+		// ~/.config/charly/deploy.yml → charly.yml so it loads through the SAME
+		// unified loader as every project charly.yml (Cutover E). Retargets
+		// ctx.HostDeployPath so the trailing calver-schema stamp lands on the
+		// renamed file. TouchesHost — never runs under remote-cache auto-migration.
+		{mustCalVer("2026.161.1554"), "host-charly-yml", true, func(c *MigrateContext) (bool, error) {
+			return MigrateHostCharlyYml(c)
 		}},
 		// HEAD — the schema stamp. Must stay LAST so LatestSchemaVersion picks it up
 		// and every versioned file lands on this CalVer. This is the integer→CalVer

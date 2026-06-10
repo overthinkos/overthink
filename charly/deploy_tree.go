@@ -285,7 +285,7 @@ func NestedContainerName(path string) string {
 
 // resolveTreeRoot returns the DeploymentsSection's Images map from
 // the merged UnifiedFile + local overlay, ready for dotted-path
-// traversal. Handles the project deploy.yml + local overlay merge
+// traversal. Handles the project charly.yml + local overlay merge
 // the same way DeployAddCmd.Run does today.
 func resolveTreeRoot(dir string) (map[string]DeploymentNode, error) {
 	var projectDC *DeployConfig

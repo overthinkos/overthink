@@ -484,7 +484,7 @@ func (a *ResourceArbiter) Status() (*preemptLedger, []string, error) {
 // gatherDeployNodes returns every deploy node visible to the current
 // invocation: the current project's deploy map (committed charly.yml, which
 // includes folded kind:eval beds) as the BASE, with the operator's per-host
-// ~/.config/charly/deploy.yml overlay merged ON TOP. Keyed by deploy name.
+// ~/.config/charly/charly.yml overlay merged ON TOP. Keyed by deploy name.
 //
 // The per-host overlay WINS on a name clash — it carries local-only deploy
 // properties (above all `preemptible:`, a PER-HOST decision about whether THIS

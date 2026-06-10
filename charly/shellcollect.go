@@ -13,7 +13,7 @@ import "fmt"
 //   - Image-level `shell:` → Image.
 //   - Deploy-scope defaults from charly.yml are not yet expressed —
 //     reserved for future use; today the Deploy section is filled at
-//     deploy time by MergeDeployShell from deploy.yml entries.
+//     deploy time by MergeDeployShell from charly.yml entries.
 //
 // Returns nil if every section is empty.
 func CollectShell(cfg *Config, layers map[string]*Candy, boxName string) *LabelShellSet {
@@ -100,7 +100,7 @@ func shellConfigToEntry(cfg *ShellConfig, origin string) *ShellEntry {
 	return entry
 }
 
-// MergeDeployShell applies a deploy.yml `shell:` overlay onto a label-
+// MergeDeployShell applies a charly.yml `shell:` overlay onto a label-
 // baked LabelShellSet, returning a new merged set. Mirrors
 // MergeDeployEval semantics:
 //   - Entry with matching ID and skip:true → drop the matched entry.
@@ -138,7 +138,7 @@ func MergeDeployShell(baked *LabelShellSet, overlay []ShellEntry) *LabelShellSet
 // replaceShellEntryByID looks up entry.ID across the three sections of
 // `set` and either replaces (skip=false) or removes (skip=true). The
 // `skip` field on ShellEntry is encoded as zero priority + nil
-// Generic + nil ByShell when stored on disk; deploy.yml-side parsing
+// Generic + nil ByShell when stored on disk; charly.yml-side parsing
 // consumes a separate ShellOverlayEntry struct that carries Skip
 // explicitly. Here we treat any incoming entry whose Generic/ByShell
 // are both nil AND whose Origin is "deploy" or "" as a skip-by-id

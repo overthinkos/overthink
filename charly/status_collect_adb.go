@@ -11,7 +11,7 @@ import (
 // AndroidCollector is the kind:android SubstrateCollector. It enumerates every
 // declared `target: android` deploy node (top-level AND nested under a pod) from
 // the merged deploy set (charly.yml's folded kind:eval beds + ~/.config/charly/
-// deploy.yml), resolves each to a live AndroidDevice via resolveAndroidDevice,
+// charly.yml), resolves each to a live AndroidDevice via resolveAndroidDevice,
 // and probes the backing adb server's host:devices for online / offline. A node
 // whose device can't be resolved (emulator pod down, endpoint unreachable) is
 // reported as absent rather than aborting the command (graceful degradation —
@@ -67,7 +67,7 @@ type androidDeployNode struct {
 // collectAndroidDeployNodes is the SINGLE enumeration of every `target: android`
 // deploy node, shared by Available and Collect (no duplicated walk). It merges
 // the charly.yml projection (incl. folded kind:eval beds) with the local
-// deploy.yml — local wins per key, mirroring resolveTreeRoot's
+// charly.yml — local wins per key, mirroring resolveTreeRoot's
 // MergeDeployConfigs(projectDC, localDC) precedence — then pre-order walks every
 // root so nested devices are discovered with their full dotted path.
 func collectAndroidDeployNodes(opts CollectOpts) []androidDeployNode {

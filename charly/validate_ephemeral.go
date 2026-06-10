@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"strings"
 	"time"
 )
@@ -109,6 +110,38 @@ func ValidateEphemeralAcrossDeploy(dc *DeployConfig, errs *ValidationError) {
 	for name, node := range dc.Deploy {
 		ValidateEphemeralOnNode(name, &node, errs)
 	}
+}
+
+// validateEphemeralUnified is the unified-loader entry point for ephemeral
+// deploy handling (mirrors validatePreemptibleUnified): it auto-promotes
+// disposable:true on ephemeral entries and validates the ephemeral / vm-naming
+// invariants across a UnifiedFile's Deploy map. Both the project charly.yml's
+// inline deploy: entries AND the per-host ~/.config/charly/charly.yml flow
+// through here, so the promotion + checks apply once, one path (R3) — the old
+// LoadDeployConfig ran these only on the per-host file.
+func validateEphemeralUnified(uf *UnifiedFile) error {
+	if uf == nil {
+		return nil
+	}
+	// Auto-promote disposable:true on ephemeral entries — the one load-bearing
+	// exception to /charly-internals:disposable's anti-derivation rule
+	// (ephemeral STRENGTHENS the disposability contract; see classification.go).
+	for name, node := range uf.Deploy {
+		if node.IsEphemeral() && (node.Disposable == nil || !*node.Disposable) {
+			t := true
+			node.Disposable = &t
+			uf.Deploy[name] = node
+		}
+	}
+	errs := &ValidationError{}
+	for name, node := range uf.Deploy {
+		ValidateEphemeralOnNode(name, &node, errs)
+		ValidateVmNamingGuard(name, errs)
+	}
+	if errs.HasErrors() {
+		return fmt.Errorf("ephemeral / naming validation:\n  %s", errs.Error())
+	}
+	return nil
 }
 
 // (ValidationError is defined in validate.go; reused here.)

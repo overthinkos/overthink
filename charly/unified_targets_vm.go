@@ -7,7 +7,7 @@ package main
 //     auto-boot + SSHExecutor), emits the plans, and deploys nested
 //     target:pod children from the merged dctx.Node.Nested.
 //   - Del: walks the host ledger, runs guest-side ReverseOps over SSH,
-//     removes the deploy.yml vm: entry + managed ssh-config stanza.
+//     removes the charly.yml vm: entry + managed ssh-config stanza.
 //   - Lifecycle methods that have a clean charly subcommand surface
 //     (Start, Stop, Shell, Logs) shell out via runCharlySubcommand. The
 //     spawned child uses the same binary on $PATH, so a developer
@@ -30,11 +30,11 @@ import (
 )
 
 // Del tears down a VM deploy: walks the host ledger, runs guest-side
-// ReverseOps over SSH (via sshReverseRunner), removes the deploy.yml
+// ReverseOps over SSH (via sshReverseRunner), removes the charly.yml
 // vm: entry.
 //
 // The SSHExecutor used for ReverseOps comes from buildVmReverseRunner
-// against the VM's persisted deploy state (deploy.yml's vm_state block).
+// against the VM's persisted deploy state (charly.yml's vm_state block).
 // The dispatcher (DeployDelCmd.Run) may pre-build a ReverseRunner and
 // supply it via VmUnifiedTarget.RevRunner; when nil, Del builds it itself.
 func (t *VmUnifiedTarget) Del(ctx context.Context, opts DelOpts) error {
@@ -48,9 +48,9 @@ func (t *VmUnifiedTarget) Del(ctx context.Context, opts DelOpts) error {
 	}
 	if rec == nil {
 		// No ledger record → nothing to reverse on the guest. Still
-		// clean up the deploy.yml entry if present.
+		// clean up the charly.yml entry if present.
 		if entryErr := removeVmDeployEntry(t.NodeName); entryErr != nil {
-			fmt.Fprintf(os.Stderr, "note: deploy.yml cleanup: %v\n", entryErr)
+			fmt.Fprintf(os.Stderr, "note: charly.yml cleanup: %v\n", entryErr)
 		}
 		fmt.Fprintf(os.Stderr, "No VM deploy ledger entry for %s (already torn down?)\n", t.NodeName)
 		return nil
@@ -115,7 +115,7 @@ func (t *VmUnifiedTarget) Del(ctx context.Context, opts DelOpts) error {
 	}
 
 	if rerr := removeVmDeployEntry(t.NodeName); rerr != nil {
-		fmt.Fprintf(os.Stderr, "note: deploy.yml cleanup: %v\n", rerr)
+		fmt.Fprintf(os.Stderr, "note: charly.yml cleanup: %v\n", rerr)
 	}
 
 	// Remove the VM's managed ssh-config Host stanza. When this was the
@@ -283,7 +283,7 @@ func (t *VmUnifiedTarget) Shell(ctx context.Context, cmd []string) error {
 // classification); this method does not re-validate.
 //
 // Ordering subtlety: `charly vm destroy` removes the libvirt/qemu domain but NOT
-// the guest ledger (deploy.yml's vm_state survives), and VmUnifiedTarget.Add —
+// the guest ledger (charly.yml's vm_state survives), and VmUnifiedTarget.Add —
 // the path `charly deploy add <node>` routes through (dispatchNode → ResolveTarget
 // → Add → VmDeployTarget.Emit) — already auto-boots/waits-for-SSH and is
 // idempotent over that ledger. So re-adding after create+start is the correct
@@ -334,7 +334,7 @@ func (t *VmUnifiedTarget) Rebuild(ctx context.Context, opts RebuildOpts) error {
 
 // vmEntityName returns the name to pass to `charly vm <verb>` — the
 // kind:vm entity name. Defaults to NodeName; when VmDeployTarget is
-// embedded with a populated VMName, prefers that (the deploy.yml
+// embedded with a populated VMName, prefers that (the charly.yml
 // node's `vm:` cross-ref is the canonical mapping).
 func (t *VmUnifiedTarget) vmEntityName() string {
 	if t.VmDeployTarget != nil && t.VMName != "" {
@@ -385,7 +385,7 @@ func vmEntityForAdd(node *DeploymentNode, name string) (string, error) {
 //
 // THE CRUX: nested pods come from dctx.Node — the dispatch-merged node
 // (project+operator field merge from resolveTreeRoot). A whole-node
-// re-read of the operator deploy.yml would drop a project-declared
+// re-read of the operator charly.yml would drop a project-declared
 // `nested:` under an operator overlay that omits it; consuming the merged
 // node is the one source of truth (R3).
 func (t *VmUnifiedTarget) Add(ctx context.Context, dctx *DeployContext, plans []*InstallPlan, opts EmitOpts) error {
@@ -412,13 +412,13 @@ func (t *VmUnifiedTarget) Add(ctx context.Context, dctx *DeployContext, plans []
 	}
 
 	// Ephemeral lifecycle hook (FIRST action — panic-safe TTL ordering).
-	// Consumes the MERGED node (never a deploy.yml re-read).
+	// Consumes the MERGED node (never a charly.yml re-read).
 	registerEphemeralIfMarked(node, deployName)
 
 	// Load existing VmDeployState (RUNTIME state: instance-id, ssh_port,
-	// disk path) from deploy.yml. This is persistence written back by THIS
+	// disk path) from charly.yml. This is persistence written back by THIS
 	// path — not a node-field re-read — so it legitimately reads the
-	// operator deploy.yml entry keyed by the deploy name.
+	// operator charly.yml entry keyed by the deploy name.
 	var state *VmDeployState
 	if dc := loadDeployConfigForRead("charly deploy add vm"); dc != nil {
 		if entry, exists := dc.Deploy[deployName]; exists && entry.VmState != nil {
@@ -553,7 +553,7 @@ func (t *VmUnifiedTarget) Add(ctx context.Context, dctx *DeployContext, plans []
 		}
 	}
 
-	// Write back updated VmDeployState to deploy.yml.
+	// Write back updated VmDeployState to charly.yml.
 	state.SshUser = sshUser
 	state.SshPort = sshPort
 	if state.Backend == "" {

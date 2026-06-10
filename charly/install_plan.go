@@ -1042,7 +1042,7 @@ type InstallPlan struct {
 
 	// Provenance — used by teardown and status.
 	CandiesIncluded []string          // ordered layer names this plan composes (for whole-image merges)
-	AddCandies      []string          // layers added on top via deploy.yml add_layers: (for provenance)
+	AddCandies      []string          // layers added on top via charly.yml add_layers: (for provenance)
 	BuilderImage   string            // selected builder image for VenueContainerBuilder steps
 	Meta           map[string]string // free-form metadata (builder image, glibc version, …)
 }

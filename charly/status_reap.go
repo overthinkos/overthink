@@ -7,7 +7,7 @@ import (
 )
 
 // ReapOrphansCmd finds and cleans up orphaned ephemeral deployments —
-// entries whose deploy.yml ledger says "active" but whose underlying engine
+// entries whose charly.yml ledger says "active" but whose underlying engine
 // resource (libvirt domain, podman container, k8s namespace) is gone. Lifted
 // out of the old `charly status --reap-orphans` flag so StatusCmd stays single-
 // purpose.
@@ -20,10 +20,10 @@ type ReapOrphansCmd struct{}
 func (c *ReapOrphansCmd) Run() error {
 	dc, err := LoadDeployConfig()
 	if err != nil {
-		return fmt.Errorf("loading deploy.yml: %w", err)
+		return fmt.Errorf("loading charly.yml: %w", err)
 	}
 	if dc == nil {
-		fmt.Println("no deploy.yml; nothing to reap")
+		fmt.Println("no charly.yml; nothing to reap")
 		return nil
 	}
 	var orphans []string

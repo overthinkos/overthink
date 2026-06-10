@@ -33,7 +33,7 @@ type VmDeployTarget struct {
 	Spec *VmSpec
 
 	// State is the persisted deploy state for this VM. Written back to
-	// deploy.yml after a successful Emit.
+	// charly.yml after a successful Emit.
 	State *VmDeployState
 
 	// Exec is the DeployExecutor wired to the guest (typically an

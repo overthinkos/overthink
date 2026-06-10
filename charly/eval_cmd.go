@@ -99,7 +99,7 @@ type EvalCmd struct {
 // EvalLiveCmd runs tests against a running service — the deploy-time entry point.
 //
 //   - Extracts the image's three-section LabelEvalSet from OCI labels.
-//   - Applies the local deploy.yml tests overlay (merge by id:).
+//   - Applies the local charly.yml tests overlay (merge by id:).
 //   - Resolves ${…} variables using meta + deploy + podman-inspect of the
 //     running container.
 //   - Executes the merged spec (container-internal verbs via exec; host-side
@@ -118,7 +118,7 @@ type EvalLiveCmd struct {
 func (c *EvalLiveCmd) Run() error {
 	// VM dispatch: if the name matches a vm.yml entity, route the test run
 	// through SSH instead of podman exec. VM deploys don't have an OCI image
-	// to pull labels from, so tests come exclusively from the deploy.yml
+	// to pull labels from, so tests come exclusively from the charly.yml
 	// overlay. This keeps the same declarative `tests:` authoring surface
 	// working for `charly deploy add vm:<name>` flows, and also works for bare VMs
 	// created via `charly vm create` before `charly deploy add` has been run.
@@ -278,7 +278,7 @@ func resolveNestedNode(roots map[string]DeploymentNode, path string) *Deployment
 // Connection resolution order:
 //  1. Start from VmSpec defaults (resolveVmSshUser / resolveVmSshPort / the
 //     conventional key path under ~/.local/share/charly/vm/charly-<name>/).
-//  2. Overlay any VmState-materialized fields from deploy.yml (user, port,
+//  2. Overlay any VmState-materialized fields from charly.yml (user, port,
 //     key path) so VMs whose layers have been applied via `charly deploy add vm:`
 //     honor the exact state the deploy wrote.
 //
@@ -350,9 +350,9 @@ func (c *EvalLiveCmd) runVm() error {
 	}
 
 	// Two deploy sources for VMs:
-	//   - project-level: charly.yml / deploy.yml `deployments.images["vm:<name>"]`
+	//   - project-level: charly.yml / charly.yml `deployments.images["vm:<name>"]`
 	//     → holds the authored `tests:` list (part of the repo).
-	//   - per-machine:   ~/.config/charly/deploy.yml `images["vm:<name>"]`
+	//   - per-machine:   ~/.config/charly/charly.yml `images["vm:<name>"]`
 	//     → holds VmState written by `charly deploy add vm:<name>` and any local
 	//       overrides/additions.
 	//
@@ -612,7 +612,7 @@ func (c *EvalLiveCmd) isLocalTarget() bool {
 //
 // Local deploys carry no OCI image labels, so there is no layer/image test
 // section — checks come from the resolved kind:local template's `eval:` (base)
-// merged with the deploy entry's `eval:` and the per-host deploy.yml overlay
+// merged with the deploy entry's `eval:` and the per-host charly.yml overlay
 // (id-based replace/append, same as everywhere). Host-context vars only: no
 // HOST_PORT:<N> / CONTAINER_IP (host services bind real ports; faking a port
 // mapping would be wrong).
@@ -677,7 +677,7 @@ func (c *EvalLiveCmd) runLocalEval() error {
 
 // evalLocalDeployScope collects a local deployment's deploy-scope checks —
 // kind:local template `eval:` (base) merged with the deploy entry `eval:`
-// (extends/overrides) and the per-host deploy.yml overlay — and runs them on
+// (extends/overrides) and the per-host charly.yml overlay — and runs them on
 // `exec`. Shared by `charly eval live <local>` (runLocalEval) and
 // `charly deploy add <local> --verify` (LocalDeployTarget) so the two surfaces
 // source + run probes identically (R3). Host-context vars only (no

@@ -11,7 +11,7 @@ import (
 // `charly deploy from-box <registry-ref> [name]` can deploy to K8s without any
 // access to the repo's charly.yml. Capabilities come from the pushed OCI
 // image's ai.opencharly.* labels; runtime choices come from (per-machine
-// ~/.config/charly/deploy.yml, cluster profile). This proves the self-contained
+// ~/.config/charly/charly.yml, cluster profile). This proves the self-contained
 // image invariant from Part G.
 // -----------------------------------------------------------------------------
 
@@ -23,7 +23,7 @@ type DeployFromBoxOpts struct {
 	Instance       string          // optional "image/instance" suffix
 	ClusterName    string          // cluster profile name (ClusterProfile.Name)
 	Namespace      string          // optional override of cluster profile's default namespace
-	DeployOverlay  *DeploymentNode // optional: merged from ~/.config/charly/deploy.yml
+	DeployOverlay  *DeploymentNode // optional: merged from ~/.config/charly/charly.yml
 	OutputDir      string          // defaults to <cwd>/.opencharly/k8s
 	ProjectDir     string          // for looking up clusters/<name>.yaml
 }

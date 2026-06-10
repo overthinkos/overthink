@@ -87,7 +87,8 @@ func TestSaveDeployState_AbortOnInvalidExistingFile(t *testing.T) {
 	}
 	// Pre-existing deploy.yml that fails validateDeployRequiresBox —
 	// `legacy-entry` is target:pod but lacks the required `box:`.
-	initialYAML := `provides:
+	initialYAML := `version: 2026.161.1555
+provides:
     env:
         - name: SOME_URL
           value: http://example/api
@@ -99,7 +100,7 @@ deploy:
         target: pod
         box: another
 `
-	path := filepath.Join(dir, "charly", "deploy.yml")
+	path := filepath.Join(dir, "charly", "charly.yml")
 	if err := os.WriteFile(path, []byte(initialYAML), 0600); err != nil {
 		t.Fatalf("write initial: %v", err)
 	}
@@ -135,12 +136,13 @@ func TestSaveDeployState_PersistsImageAndTargetForNewEntry(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(dir, "charly"), 0700); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
-	initialYAML := `deploy:
+	initialYAML := `version: 2026.161.1555
+deploy:
     existing-deploy:
         target: pod
         box: existing-image
 `
-	path := filepath.Join(dir, "charly", "deploy.yml")
+	path := filepath.Join(dir, "charly", "charly.yml")
 	if err := os.WriteFile(path, []byte(initialYAML), 0600); err != nil {
 		t.Fatalf("write initial: %v", err)
 	}
@@ -190,12 +192,13 @@ func TestSaveDeployState_DoesNotClobberExistingImageTarget(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(dir, "charly"), 0700); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
-	initialYAML := `deploy:
+	initialYAML := `version: 2026.161.1555
+deploy:
     existing:
         target: pod
         box: pinned-image-ref:1.2.3
 `
-	path := filepath.Join(dir, "charly", "deploy.yml")
+	path := filepath.Join(dir, "charly", "charly.yml")
 	if err := os.WriteFile(path, []byte(initialYAML), 0600); err != nil {
 		t.Fatalf("write initial: %v", err)
 	}
@@ -256,7 +259,7 @@ func TestSaveDeployConfig_AtomicWriteLeavesNoTempLeftover(t *testing.T) {
 		}
 	}
 	// File mode is 0600 (matches the original os.WriteFile(0600) contract).
-	info, err := os.Stat(filepath.Join(dir, "charly", "deploy.yml"))
+	info, err := os.Stat(filepath.Join(dir, "charly", "charly.yml"))
 	if err != nil {
 		t.Fatalf("stat: %v", err)
 	}
@@ -278,7 +281,8 @@ func TestDeploymentNode_DisposableFalseRoundTrip(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(dir, "charly"), 0o700); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
-	src := `deploy:
+	src := `version: 2026.161.1555
+deploy:
     locked-pod:
         target: pod
         box: foo
@@ -291,7 +295,7 @@ func TestDeploymentNode_DisposableFalseRoundTrip(t *testing.T) {
         target: pod
         box: baz
 `
-	path := filepath.Join(dir, "charly", "deploy.yml")
+	path := filepath.Join(dir, "charly", "charly.yml")
 	if err := os.WriteFile(path, []byte(src), 0o600); err != nil {
 		t.Fatalf("write: %v", err)
 	}
@@ -372,7 +376,8 @@ func TestRemoveVmDeployEntry_SelectiveAndIdempotent(t *testing.T) {
 	}
 	// Seed: the disposable bed VM to remove, plus a running preemptible
 	// operator workstation and an unrelated pod deploy that must both survive.
-	initialYAML := `deploy:
+	initialYAML := `version: 2026.161.1555
+deploy:
     vm:k3s-vm:
         target: vm
         vm: k3s-vm
@@ -389,7 +394,7 @@ func TestRemoveVmDeployEntry_SelectiveAndIdempotent(t *testing.T) {
         target: pod
         box: web-app
 `
-	path := filepath.Join(dir, "charly", "deploy.yml")
+	path := filepath.Join(dir, "charly", "charly.yml")
 	if err := os.WriteFile(path, []byte(initialYAML), 0600); err != nil {
 		t.Fatalf("write initial: %v", err)
 	}

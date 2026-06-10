@@ -23,7 +23,7 @@ import (
 //   RegisterEphemeralLifecycle(node, deployName) (*EphemeralRuntime, error)
 //       Called as the FIRST action of run* before any target work.
 //       Registers a systemd transient timer, increments snapshot
-//       refcount (vm-target only), populates deploy.yml's vm_state /
+//       refcount (vm-target only), populates charly.yml's vm_state /
 //       pod_state / k8s_state Ephemeral block, returns a runtime
 //       handle. The timer-first ordering is panic-safe: even if the
 //       caller crashes mid-provisioning, the timer fires `charly deploy
@@ -33,10 +33,10 @@ import (
 //       Called as the LAST action of run* after teardown completes.
 //       Recursively dels nested children depth-first, cancels the
 //       transient timer, decrements snapshot refcount, removes
-//       deploy.yml lifecycle metadata.
+//       charly.yml lifecycle metadata.
 //
 // State persistence: lifecycle metadata lives in
-// deploy.yml.deployment.<name>.vm_state.ephemeral (or pod_state /
+// charly.yml.deployment.<name>.vm_state.ephemeral (or pod_state /
 // k8s_state when those blocks exist). Symmetric across targets — the
 // helper writes through a target-agnostic path.
 
@@ -47,7 +47,7 @@ type EphemeralHandle struct {
 	// ID is the six-char random hex identifier.
 	ID string
 
-	// DeployName is the deploy.yml entry name.
+	// DeployName is the charly.yml entry name.
 	DeployName string
 
 	// InstanceName is the rendered NamingPattern result.
@@ -83,7 +83,7 @@ type EphemeralHandle struct {
 //  4. Register systemd transient timer that runs `charly deploy del
 //     <deployName> --assume-yes` after the TTL.
 //  5. Increment vm-target parent-snapshot refcount when applicable.
-//  6. Persist EphemeralRuntime into deploy.yml's vm_state.ephemeral
+//  6. Persist EphemeralRuntime into charly.yml's vm_state.ephemeral
 //     (or pod_state / k8s_state for those targets).
 //
 // Returns the handle that should be passed to TeardownEphemeralLifecycle
@@ -140,7 +140,7 @@ func RegisterEphemeralLifecycle(node *DeploymentNode, deployName string) (*Ephem
 		handle.ParentSnapshot = node.FromSnapshot
 	}
 
-	// Step 6: persist EphemeralRuntime into deploy.yml.
+	// Step 6: persist EphemeralRuntime into charly.yml.
 	if err := persistEphemeralRuntime(deployName, handle); err != nil {
 		fmt.Fprintf(os.Stderr, "warning: persisting ephemeral runtime: %v\n", err)
 	}
@@ -159,7 +159,7 @@ func RegisterEphemeralLifecycle(node *DeploymentNode, deployName string) (*Ephem
 //  2. Cancel the systemd transient timer.
 //  3. Decrement snapshot refcount (vm-target only).
 //  4. Decrement parent's child-refcount (nested case).
-//  5. Clear EphemeralRuntime from deploy.yml.
+//  5. Clear EphemeralRuntime from charly.yml.
 func TeardownEphemeralLifecycle(node *DeploymentNode, deployName string) error {
 	if node == nil || !node.IsEphemeral() {
 		return fmt.Errorf("TeardownEphemeralLifecycle: node %q is not marked ephemeral", deployName)
@@ -187,7 +187,7 @@ func TeardownEphemeralLifecycle(node *DeploymentNode, deployName string) error {
 		_ = bumpParentChildRefcount(node.VmState.Ephemeral.ParentEphemeral, -1)
 	}
 
-	// Step 5: clear EphemeralRuntime from deploy.yml.
+	// Step 5: clear EphemeralRuntime from charly.yml.
 	if err := clearEphemeralRuntime(deployName); err != nil {
 		fmt.Fprintf(os.Stderr, "warning: clearing ephemeral runtime: %v\n", err)
 	}
@@ -302,7 +302,7 @@ func sanitizeUnitName(s string) string {
 	return r
 }
 
-// persistEphemeralRuntime writes the EphemeralHandle into deploy.yml's
+// persistEphemeralRuntime writes the EphemeralHandle into charly.yml's
 // vm_state.ephemeral (or pod_state / k8s_state for those targets).
 func persistEphemeralRuntime(deployName string, h *EphemeralHandle) error {
 	dc, err := LoadDeployConfig()
@@ -375,12 +375,12 @@ func bumpParentChildRefcount(parentID string, delta int) error {
 	return nil
 }
 
-// lookupEphemeralByID scans deploy.yml for the ephemeral with the
+// lookupEphemeralByID scans charly.yml for the ephemeral with the
 // given ID. Used for nested TTL clipping.
 func lookupEphemeralByID(id string) (*EphemeralRuntime, error) {
 	dc, err := LoadDeployConfig()
 	if err != nil || dc == nil {
-		return nil, fmt.Errorf("loading deploy.yml: %w", err)
+		return nil, fmt.Errorf("loading charly.yml: %w", err)
 	}
 	for _, node := range dc.Deploy {
 		if node.VmState == nil || node.VmState.Ephemeral == nil {
@@ -396,7 +396,7 @@ func lookupEphemeralByID(id string) (*EphemeralRuntime, error) {
 // teardownChildren recursively dels nested ephemerals whose parent is
 // the deploy with the given name's ephemeral ID. Depth-first; visited-
 // set guards against cycles (which would only occur via manual
-// deploy.yml editing).
+// charly.yml editing).
 func teardownChildren(deployName string) error {
 	dc, err := LoadDeployConfig()
 	if err != nil || dc == nil {

@@ -211,14 +211,15 @@ func TestPersistBedDeployOverrides_SeedsPortBeforeConfig(t *testing.T) {
 		t.Fatalf("mkdir: %v", err)
 	}
 	// A pre-existing unrelated deploy must survive the seed (merge, not clobber).
-	initialYAML := `deploy:
+	initialYAML := `version: 2026.161.1555
+deploy:
     ollama:
         target: pod
         box: ollama
         port:
             - 11434:11434
 `
-	path := filepath.Join(dir, "charly", "deploy.yml")
+	path := filepath.Join(dir, "charly", "charly.yml")
 	if err := os.WriteFile(path, []byte(initialYAML), 0600); err != nil {
 		t.Fatalf("write initial: %v", err)
 	}

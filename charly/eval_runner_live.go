@@ -146,7 +146,7 @@ func RunEvalLive(ctx context.Context, deployment, scoreName string, scenarios []
 	// tree by ResolveDeployChain to build multi-hop executor chains. Flat
 	// pod names (e.g. "redis") that aren't in the tree fall through to
 	// ContainerChain — same single-hop semantics as the pre-cutover code.
-	// A nil tree (no project deploy.yml in cwd) is fine: the fallback path
+	// A nil tree (no project charly.yml in cwd) is fine: the fallback path
 	// kicks in for every scenario.
 	cwd, _ := os.Getwd()
 	deployRoots, _ := resolveTreeRoot(cwd)
@@ -158,7 +158,7 @@ func RunEvalLive(ctx context.Context, deployment, scoreName string, scenarios []
 		pod := bucket[0].Pod
 
 		// Ephemeral lifecycle wrapping. When the bucket's pod resolves
-		// to a deploy.yml entry with ephemeral: set, run `charly deploy add`
+		// to a charly.yml entry with ephemeral: set, run `charly deploy add`
 		// before the scenarios and `charly deploy del` after — the eval
 		// runner becomes a thin scenario-driver around the standard
 		// deploy verbs. Same code path the user invokes interactively;
@@ -482,7 +482,7 @@ func stableScenarioIDsByKey(scenarios []Scenario) map[scenarioKey]string {
 //   - pod is a flat name OR not in the tree → ContainerChain
 //     (single-hop into "charly-<pod>"); preserves the pre-cutover behaviour.
 //
-// A nil tree (no deploy.yml in cwd) always falls through to ContainerChain
+// A nil tree (no charly.yml in cwd) always falls through to ContainerChain
 // — the harness loop running inside harness sandbox with no nested infra still
 // scores flat pods exactly like before.
 func resolveScoringChain(roots map[string]DeploymentNode, pod string) (DeployExecutor, error) {
@@ -598,7 +598,7 @@ func RenderRecipeScenariosYAML(scenarios []Scenario) string {
 }
 
 // isEphemeralDeploy reports whether the named pod resolves to a
-// deploy.yml entry marked ephemeral. Used by RunEvalLive to wrap
+// charly.yml entry marked ephemeral. Used by RunEvalLive to wrap
 // scenario buckets with deploy add/del.
 func isEphemeralDeploy(roots map[string]DeploymentNode, pod string) bool {
 	if pod == "" {

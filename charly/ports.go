@@ -279,7 +279,7 @@ func ApplyPortOverrides(ports []string, overrides []string) ([]string, error) {
 	return result, nil
 }
 
-// SavePortOverride writes port overrides to deploy.yml for persistence.
+// SavePortOverride writes port overrides to charly.yml for persistence.
 func SavePortOverride(box, instance string, ports []string) error {
 	dc, err := loadDeployConfigForWrite("SavePortOverride")
 	if err != nil {
@@ -318,7 +318,7 @@ func containerPortsFromMappings(mappings []string) ([]int, error) {
 
 // IsAutoPort reports whether a port-list entry is the literal "auto" sentinel.
 // Authors write `port: [auto]` (or `port: [auto, "8443:443"]` to mix
-// auto-allocation with explicit pins) in deploy.yml.
+// auto-allocation with explicit pins) in charly.yml.
 func IsAutoPort(mapping string) bool {
 	return strings.TrimSpace(mapping) == "auto"
 }
@@ -390,7 +390,7 @@ func AllocateAutoPorts(containerPorts []int, occupied map[int]bool) ([]ParsedPor
 // same as `port: [auto]`).
 //
 // Returns the expanded list and a flag indicating whether expansion
-// happened (caller can persist the result back to deploy.yml as
+// happened (caller can persist the result back to charly.yml as
 // `resolved_port:`).
 func ExpandAutoPorts(ports []string, containerPorts []int, occupied map[int]bool) ([]string, bool, error) {
 	if !HasAutoPort(ports) {

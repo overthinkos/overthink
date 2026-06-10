@@ -659,7 +659,7 @@ func (r *Runner) runPort(ctx context.Context, c *Check) EvalResult {
 
 // dialPort attempts a TCP dial on 127.0.0.1:<port> from the host. Used for
 // deploy-scope reachability checks where ${HOST_PORT:N} has been substituted
-// into the Port field. If the Port was remapped by deploy.yml, the substituted
+// into the Port field. If the Port was remapped by charly.yml, the substituted
 // value is what we'll dial.
 func (r *Runner) dialPort(c *Check) EvalResult {
 	addr := fmt.Sprintf("127.0.0.1:%d", c.Port)

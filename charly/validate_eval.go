@@ -22,8 +22,9 @@ var lowercaseEvalVarPattern = regexp.MustCompile(`\$\{[a-z][a-zA-Z0-9_]*\}`)
 // Scope:
 //   - Layer-level tests (CandyYAML.Eval).
 //   - Image-level tests (BoxConfig.Eval, BoxConfig.DeployEval).
-//   - Deploy.yml tests are out of scope here because deploy.yml is loaded
-//     per-operator at runtime, not part of the charly.yml validation pass.
+//   - Per-host charly.yml tests are out of scope here because that overlay is
+//     loaded per-operator at runtime, not part of the project charly.yml
+//     validation pass.
 //
 // Validation rules:
 //  1. Exactly one verb discriminator is set per Check (enforced via Kind()).
@@ -32,7 +33,7 @@ var lowercaseEvalVarPattern = regexp.MustCompile(`\$\{[a-z][a-zA-Z0-9_]*\}`)
 //  4. All ${NAME[:arg]} references are legitimate: scope:"build" checks
 //     may not reference runtime-only variables.
 //  5. ID uniqueness within a single section (layer/image/deploy) so
-//     deploy.yml overrides are unambiguous.
+//     charly.yml overrides are unambiguous.
 //  6. ExitStatus / Port / UID / GID sanity (non-negative).
 //  7. Matcher operator is a known one.
 func validateTests(cfg *Config, layers map[string]*Candy, errs *ValidationError) {

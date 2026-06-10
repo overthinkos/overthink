@@ -24,10 +24,10 @@ import (
 	"strings"
 )
 
-// dispatchByDeployTarget resolves c.Image as a deploy.yml entry and
+// dispatchByDeployTarget resolves c.Image as a charly.yml entry and
 // invokes the target-specific update helper. Errors explicitly when:
 //
-//   - cwd has no deploy.yml (use 'charly box pull' for image-only refresh)
+//   - cwd has no charly.yml (use 'charly box pull' for image-only refresh)
 //   - the name doesn't resolve to a deploy entry (same)
 //   - the deploy entry's `image:` field is empty for pod targets
 //     (config bug — deploy needs to know which image to refresh)
@@ -46,7 +46,7 @@ func resolveUpdateDeployNode(tree map[string]DeploymentNode, image, instance str
 	key := deployKey(image, instance)
 	node, _, err := ResolveNodePath(tree, key)
 	if err != nil || node == nil {
-		return nil, fmt.Errorf("no deploy named %q in deploy.yml. To refresh an image artifact only, use 'charly box pull %s'", key, image)
+		return nil, fmt.Errorf("no deploy named %q in charly.yml. To refresh an image artifact only, use 'charly box pull %s'", key, image)
 	}
 	return node, nil
 }
@@ -61,7 +61,7 @@ func (c *UpdateCmd) dispatchByDeployTarget() error {
 		return fmt.Errorf("loading deploy tree from %s: %w", dir, err)
 	}
 	if tree == nil {
-		return fmt.Errorf("no deploy.yml found relative to %s; charly update requires a deploy name. To refresh an image artifact only, use 'charly box pull %s'", dir, c.Box)
+		return fmt.Errorf("no charly.yml found relative to %s; charly update requires a deploy name. To refresh an image artifact only, use 'charly box pull %s'", dir, c.Box)
 	}
 	node, err := resolveUpdateDeployNode(tree, c.Box, c.Instance)
 	if err != nil {
@@ -230,7 +230,7 @@ func rewriteQuadletImageLine(path, newRef string) error {
 // proceeds.
 //
 // Cross-kind name reuse is permitted, so the user-facing key includes the
-// instance suffix when present (the deployKey form matches deploy.yml + what the
+// instance suffix when present (the deployKey form matches charly.yml + what the
 // operator typed).
 func noteUpdateDisposability(node *DeploymentNode, image, instance string) {
 	if node == nil || node.IsDisposable() {

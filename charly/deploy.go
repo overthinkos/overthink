@@ -12,7 +12,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// DeployConfig represents per-machine deployment overrides (~/.config/charly/deploy.yml).
+// DeployConfig represents per-machine deployment overrides (~/.config/charly/charly.yml).
 // Only runtime/deployment fields are supported — build-time fields are structurally excluded.
 //
 // Schema v4: the top-level map key is `deployment:` (singular, flat). The
@@ -24,7 +24,7 @@ type DeployConfig struct {
 }
 
 // DeploymentNode is one node in the deployments tree declared in
-// deploy.yml. Every deployment is a node; each node may carry zero or
+// charly.yml. Every deployment is a node; each node may carry zero or
 // more `children:` that run inside its environment. The node's Target
 // discriminator picks the DeployTarget that owns execution:
 //
@@ -373,7 +373,7 @@ type DeploymentNode struct {
 	PeerOf string `yaml:"-"`
 }
 
-// DeployShellOverlay is one entry in deploy.yml `shell:`. ID matches
+// DeployShellOverlay is one entry in charly.yml `shell:`. ID matches
 // a baked LabelShell entry's ID for replace/skip; absent ID makes the
 // entry a fresh deploy-scope contribution. Skip:true drops the matched
 // baked entry. The body fields (Init, PathAppend, Path, Priority,
@@ -390,7 +390,7 @@ type DeployShellOverlay struct {
 	ByShell    map[string]*ShellSpec `yaml:"-"` // populated by UnmarshalYAML for bash/zsh/fish/sh keys
 }
 
-// UnmarshalYAML two-pass parses a deploy.yml shell-overlay entry,
+// UnmarshalYAML two-pass parses a charly.yml shell-overlay entry,
 // recognising both the intrinsic fields and the per-shell allowlist
 // keys (bash/zsh/fish/sh) — same pattern as ShellConfig.UnmarshalYAML.
 // Unknown non-allowlist keys raise a hard error so authors don't
@@ -429,7 +429,7 @@ func (o *DeployShellOverlay) UnmarshalYAML(value *yaml.Node) error {
 	return nil
 }
 
-// ToShellEntry converts a deploy.yml overlay into the LabelShell
+// ToShellEntry converts a charly.yml overlay into the LabelShell
 // ShellEntry shape consumed by MergeDeployShell.
 func (o *DeployShellOverlay) ToShellEntry() ShellEntry {
 	entry := ShellEntry{
@@ -475,7 +475,7 @@ func (c DeploymentNode) IsDisposable() bool {
 }
 
 // IsEphemeral reports whether this deploy is marked ephemeral
-// (`ephemeral:` field present in deploy.yml). Equivalent to
+// (`ephemeral:` field present in charly.yml). Equivalent to
 // `c.Ephemeral != nil`. The presence of the field is the marker; the
 // block's contents (TTL, keep_on_failure, naming_pattern) parameterize
 // the lifecycle.
@@ -708,7 +708,7 @@ func (e *EphemeralLifetime) UnmarshalYAML(node *yaml.Node) error {
 			e.boolForm = true
 			return nil
 		case "false", "no", "off", "":
-			// "false" is equivalent to absence. The deploy.yml
+			// "false" is equivalent to absence. The charly.yml
 			// loader's nil check still holds, but honor a literal
 			// `ephemeral: false` by leaving fields zero. The caller
 			// must check whether boolForm was set; in practice the
@@ -909,7 +909,7 @@ type VmDeployState struct {
 
 	// Snapshots is the set of snapshots known to charly for this VM (mode
 	// + libvirt name + disk path + creation time + refcount). Acts as
-	// a deploy.yml-side mirror of the per-VM registry.json so other
+	// a charly.yml-side mirror of the per-VM registry.json so other
 	// commands can interrogate snapshot state without filesystem
 	// access. Maintained by `charly vm snapshot create/delete/promote`.
 	Snapshots []VmSnapshotState `yaml:"snapshot,omitempty"`
@@ -925,7 +925,7 @@ type VmDeployState struct {
 	Ephemeral *EphemeralRuntime `yaml:"ephemeral,omitempty"`
 }
 
-// VmSnapshotState records one snapshot in deploy.yml's vm_state mirror.
+// VmSnapshotState records one snapshot in charly.yml's vm_state mirror.
 // The authoritative store is the per-VM `registry.json` on disk; this
 // mirror lets `charly status` / `charly deploy show` report state without
 // filesystem reads.
@@ -1015,9 +1015,9 @@ type VmKeyInjectionResolved struct {
 	CloudInit bool `yaml:"cloud_init"`
 }
 
-// InstallOptsConfig holds deploy.yml install_opts settings for a host
+// InstallOptsConfig holds charly.yml install_opts settings for a host
 // deploy. Mirrors the command-line flags on DeployAddCmd so a user can
-// pin their choices in deploy.yml instead of repeating them.
+// pin their choices in charly.yml instead of repeating them.
 type InstallOptsConfig struct {
 	WithServices     bool   `yaml:"with_service,omitempty"`
 	AllowRepoChanges bool   `yaml:"allow_repo_changes,omitempty"`
@@ -1028,7 +1028,7 @@ type InstallOptsConfig struct {
 }
 
 // ApplyTo merges install_opts settings into an EmitOpts. CLI flags
-// still win — deploy.yml provides defaults, not overrides. Nil
+// still win — charly.yml provides defaults, not overrides. Nil
 // receiver is a no-op.
 func (o *InstallOptsConfig) ApplyTo(opts EmitOpts) EmitOpts {
 	if o == nil {
@@ -1109,7 +1109,7 @@ type DeployProbes struct {
 	Startup   *Check `yaml:"startup,omitempty"`
 }
 
-// deployKey returns the deploy.yml map key for an image, optionally qualified by instance.
+// deployKey returns the charly.yml map key for an image, optionally qualified by instance.
 // Base images use just the image name; instances use "image/instance".
 func deployKey(boxName, instance string) string {
 	if instance == "" {
@@ -1152,7 +1152,7 @@ func canonicalizeDeployArg(arg, instance string) (box, inst string) {
 	return parseDeployKey(arg)
 }
 
-// parseDeployKey splits a deploy.yml map key back into image name and instance.
+// parseDeployKey splits a charly.yml map key back into image name and instance.
 // "selkies-desktop" → ("selkies-desktop", "")
 // "selkies-desktop/foo" → ("selkies-desktop", "foo")
 func parseDeployKey(key string) (boxName, instance string) {
@@ -1163,7 +1163,7 @@ func parseDeployKey(key string) (boxName, instance string) {
 }
 
 // resolveDeployKeyToBox maps a deploy-key name to the `image:` field of
-// its deploy entry. User (~/.config/charly/deploy.yml) wins over project
+// its deploy entry. User (~/.config/charly/charly.yml) wins over project
 // (charly.yml/eval.yml) — the same precedence the eval runner and
 // `charly config` use. Returns "" when no entry declares an image for the key
 // (caller decides the fallback). Implements the Pattern-B (arbitrary
@@ -1308,77 +1308,52 @@ func defaultDeployConfigPath() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("determining config directory: %w", err)
 	}
-	return filepath.Join(configDir, "charly", "deploy.yml"), nil
+	return filepath.Join(configDir, "charly", "charly.yml"), nil
 }
 
-// LoadDeployConfig reads the deploy overlay file. Returns nil, nil if the file doesn't exist.
+// LoadDeployConfig reads the per-host deploy overlay (~/.config/charly/charly.yml)
+// through the unified loader — the SAME LoadUnified path as every project
+// charly.yml. Returns nil, nil if the file doesn't exist.
+//
+// Every transform the old bespoke parser did — the `images:` legacy-key reject,
+// the deployment-tree / required-box: / preemptible / ephemeral-naming
+// validation, and the ephemeral→disposable auto-promotion — now runs INSIDE
+// LoadUnified (its version gate + RejectLegacyPluralKeys + the deploy-validation
+// block subsume the legacy check; the ephemeral/naming validators + promotion
+// were consolidated there so a PROJECT charly.yml's inline deploy: entries get
+// them too — R3, one path).
 func LoadDeployConfig() (*DeployConfig, error) {
 	path, err := DeployConfigPath()
 	if err != nil {
 		return nil, nil
 	}
+	configDir := filepath.Dir(path)
 
-	data, err := os.ReadFile(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("reading %s: %w", path, err)
-	}
-
-	// Detect legacy schema (`images:` at top level instead of `deploy:`).
-	// yaml.Unmarshal into DeployConfig would silently drop unknown root
-	// keys, so a pre-cutover file with `images:` would parse to an empty
-	// DeployConfig.Deploy map — and downstream commands ("charly deploy show",
-	// "charly config status", quadlet generation) would all behave as if
-	// nothing was configured. Critically, encrypted-volume entries declared
-	// under the legacy `bind_mounts:` field would be invisible to
-	// loadEncryptedVolume, so encryption guarantees would silently
-	// disappear. Fail loud at load time instead, with a remediation hint.
-	if hasLegacyImagesKey(data) {
+	// Host-file-existence guard: a host still on the legacy `deploy.yml`
+	// filename would otherwise silently lose its overlay (LoadUnified reads
+	// charly.yml only when the project is already at HEAD). Fail loud with the
+	// migration hint — mirrors the old hasLegacyImagesKey safety.
+	if legacy := filepath.Join(configDir, "deploy.yml"); fileExists(legacy) && !fileExists(path) {
 		return nil, fmt.Errorf(
-			"deploy.yml at %s: legacy top-level `images:` field detected — run `charly migrate` to convert; the field was renamed to `deploy:` in the 2026-04 unified-config cutover (encryption guarantees disappear silently otherwise)",
-			path,
+			"per-host deploy overlay at %s uses the legacy `deploy.yml` filename — run `charly migrate` to rename it to charly.yml (the unified per-host config)",
+			legacy,
 		)
 	}
 
-	var dc DeployConfig
-	if err := yaml.Unmarshal(data, &dc); err != nil {
-		return nil, fmt.Errorf("parsing %s: %w", path, err)
+	uf, ok, err := LoadUnified(configDir)
+	if err != nil {
+		return nil, err
 	}
-
-	// Auto-promote disposable: true on ephemeral entries (the one
-	// load-bearing exception to /charly-internals:disposable's anti-derivation
-	// rule — ephemeral STRENGTHENS the disposability contract; see
-	// classification.go for the rationale).
-	for name, node := range dc.Deploy {
-		if node.IsEphemeral() && (node.Disposable == nil || !*node.Disposable) {
-			t := true
-			node.Disposable = &t
-			dc.Deploy[name] = node
-		}
+	if !ok {
+		return nil, nil
 	}
-
-	// Validate ephemeral / clone / imported / naming invariants. Errors
-	// here are surfaced at load time with a clear remediation hint.
-	verrs := &ValidationError{}
-	ValidateEphemeralAcrossDeploy(&dc, verrs)
-	ValidatePreemptibleAcrossDeploy(&dc, verrs)
-	for name := range dc.Deploy {
-		ValidateVmNamingGuard(name, verrs)
+	// A present-but-empty config still returns a non-nil DeployConfig (matching
+	// the old bespoke parser), so callers that range/index dc.Deploy without a
+	// nil guard keep working after an overlay's last entry is removed.
+	if dc := uf.ProjectDeployConfig(); dc != nil {
+		return dc, nil
 	}
-	if verrs.HasErrors() {
-		return nil, fmt.Errorf("deploy.yml validation:\n  %s", verrs.Error())
-	}
-
-	// Hard-required image: field on every target: pod deploy entry
-	// (2026-05-12 schema cutover). See validateDeployRequiresBox
-	// for the rationale + remediation hint.
-	if err := validateDeployRequiresBox(dc.Deploy); err != nil {
-		return nil, fmt.Errorf("deploy.yml at %s: %w", path, err)
-	}
-
-	return &dc, nil
+	return &DeployConfig{}, nil
 }
 
 // hasLegacyImagesKey reports whether the raw YAML body has a top-level
@@ -1415,48 +1390,6 @@ func hasLegacyImagesKey(data []byte) bool {
 	return hasImages && !hasDeploy
 }
 
-// MergeDeployOverlay patches cfg.Image in-place with deployment overrides from deploy.yml.
-// Field-level replace: deploy.yml value fully replaces charly.yml value.
-// Unknown images in deploy.yml are silently ignored.
-func MergeDeployOverlay(cfg *Config, dc *DeployConfig) {
-	if dc == nil || dc.Deploy == nil {
-		return
-	}
-
-	for name, overlay := range dc.Deploy {
-		img, ok := cfg.Box[name]
-		if !ok {
-			continue // silently ignore unknown images
-		}
-
-		if overlay.Version != "" {
-			img.Version = overlay.Version
-		}
-		if overlay.Description != nil {
-			img.Description = overlay.Description
-		}
-		// Schema v4: Tunnel / DNS / AcmeEmail / Engine removed from
-		// BoxConfig — overlay copies for those removed. Values flow
-		// through MergeDeployOntoMetadata → BoxMetadata instead.
-		if overlay.Port != nil {
-			img.Port = overlay.Port
-		}
-		if overlay.Env != nil {
-			img.Env = overlay.Env
-		}
-		if overlay.EnvFile != "" {
-			img.EnvFile = overlay.EnvFile
-		}
-		if overlay.Security != nil {
-			img.Security = overlay.Security
-		}
-		if overlay.Network != "" {
-			img.Network = overlay.Network
-		}
-		cfg.Box[name] = img
-	}
-}
-
 // OccupiedHostPorts returns the set of host ports already published by
 // any deployment in dc except the named one (`excludeKey` is typically
 // the deploy key for the entry currently being expanded — we want to
@@ -1489,11 +1422,11 @@ func (dc *DeployConfig) OccupiedHostPorts(excludeKey string) map[int]bool {
 	return out
 }
 
-// MergeDeployOntoMetadata applies a deploy.yml entry's overrides (ports, env,
-// security, tunnel, secrets, …) onto label-derived image metadata. Field-level
-// replace semantics, same as MergeDeployOverlay.
+// MergeDeployOntoMetadata applies a per-host charly.yml entry's overrides (ports,
+// env, security, tunnel, secrets, …) onto label-derived image metadata.
+// Field-level replace semantics.
 //
-// The overlay entry is keyed by deployName — the deploy.yml key base the caller
+// The overlay entry is keyed by deployName — the charly.yml key base the caller
 // is operating on (the bed / instance / Pattern-B name), NOT meta.Image (the
 // baked ai.opencharly.image short-name). For a plain deploy the two coincide,
 // but a kind:eval bed or a Pattern-B deploy carries a key distinct from its
@@ -1502,7 +1435,7 @@ func (dc *DeployConfig) OccupiedHostPorts(excludeKey string) map[int]bool {
 // clobber this entry's explicit port:/env:/security: — e.g. a bed remapping
 // 45434:11434 would lose its port to a running same-image deploy on 11434.
 func MergeDeployOntoMetadata(meta *BoxMetadata, dc *DeployConfig, deployName, instance string) {
-	// Volume isolation runs UNCONDITIONALLY (independent of any deploy.yml
+	// Volume isolation runs UNCONDITIONALLY (independent of any charly.yml
 	// overlay), so every distinctly-named deploy gets its own volume namespace
 	// on the very first `charly config` and every run after — see
 	// scopeVolumesToDeployKey.
@@ -1596,13 +1529,13 @@ func MergeDeployOntoMetadata(meta *BoxMetadata, dc *DeployConfig, deployName, in
 	if overlay.Engine != "" {
 		meta.Engine = overlay.Engine
 	}
-	// Merge deploy.yml secrets onto image label secrets
+	// Merge charly.yml secrets onto image label secrets
 	if overlay.Secret != nil {
 		deployByName := make(map[string]DeploySecretConfig, len(overlay.Secret))
 		for _, ds := range overlay.Secret {
 			deployByName[ds.Name] = ds
 		}
-		// Override matching secrets from image labels with deploy.yml source config
+		// Override matching secrets from image labels with charly.yml source config
 		for i, ls := range meta.Secret {
 			if _, ok := deployByName[ls.Name]; ok {
 				// Deploy.yml provides this secret — keep the label entry
@@ -1682,7 +1615,7 @@ func scopeVolumesToDeployKey(meta *BoxMetadata, deployName, instance string) {
 }
 
 // ResolveVolumeBacking splits image volumes into named volumes and bind mounts
-// based on deploy.yml volume configuration.
+// based on charly.yml volume configuration.
 // Volumes without a deploy override remain as named volumes.
 // Volumes with type=bind or type=encrypted become ResolvedBindMount.
 // Deploy-only volumes (with Path set, not in labels) are also supported.
@@ -1772,7 +1705,7 @@ func ResolveVolumeBacking(boxName, instance string, labelVolumes []VolumeMount, 
 	return volumes, bindMounts
 }
 
-// LoadDeployFile reads a deploy.yml from an arbitrary path.
+// LoadDeployFile reads a charly.yml from an arbitrary path.
 func LoadDeployFile(path string) (*DeployConfig, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -1785,7 +1718,7 @@ func LoadDeployFile(path string) (*DeployConfig, error) {
 	return &dc, nil
 }
 
-// SaveDeployConfig writes a DeployConfig to the standard deploy.yml
+// SaveDeployConfig writes a DeployConfig to the standard charly.yml
 // path. Uses tempfile + os.Rename for atomic write — defense in depth
 // against partial writes truncating the prior file (primary guard is
 // loadDeployConfigForWrite's error propagation; this catches any
@@ -1799,11 +1732,26 @@ func SaveDeployConfig(dc *DeployConfig) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 		return fmt.Errorf("creating config directory: %w", err)
 	}
-	data, err := yaml.Marshal(dc)
+	if dc == nil {
+		dc = &DeployConfig{}
+	}
+	// Write a unified-shaped per-host charly.yml: the HEAD `version:` stamp lets
+	// a re-load through LoadUnified pass the schema gate, and `deploy:` /
+	// `provides:` route by shape exactly like a project charly.yml.
+	stamped := struct {
+		Version  string                    `yaml:"version"`
+		Provides *ProvidesConfig           `yaml:"provides,omitempty"`
+		Deploy   map[string]DeploymentNode `yaml:"deploy"`
+	}{
+		Version:  LatestSchemaVersion().String(),
+		Provides: dc.Provides,
+		Deploy:   dc.Deploy,
+	}
+	data, err := yaml.Marshal(&stamped)
 	if err != nil {
 		return fmt.Errorf("marshaling deploy config: %w", err)
 	}
-	tmp, err := os.CreateTemp(filepath.Dir(path), ".deploy.yml.tmp.*")
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".charly.yml.tmp.*")
 	if err != nil {
 		return fmt.Errorf("creating temp file: %w", err)
 	}
@@ -1834,7 +1782,7 @@ func SaveDeployConfig(dc *DeployConfig) error {
 // (zero, false) when the entry is absent. Safe to call on a nil
 // *DeployConfig — lets callers chain
 // `loadDeployConfigForRead(...).Lookup(deployName, instance)` without a
-// separate nil check. deployName is the deploy.yml key base the caller is
+// separate nil check. deployName is the charly.yml key base the caller is
 // operating on (typically c.Image), NOT the baked image short-name — for a
 // kind:eval bed or Pattern-B deploy the two differ. Pass the deploy key, never
 // a value derived from an image label (see MergeDeployOntoMetadata).
@@ -1846,7 +1794,7 @@ func (dc *DeployConfig) Lookup(deployName, instance string) (DeploymentNode, boo
 	return entry, ok
 }
 
-// LookupKey looks up a deploy entry by its full deploy.yml key (e.g.
+// LookupKey looks up a deploy entry by its full charly.yml key (e.g.
 // "foo", "foo/instance", "vm:name"). Safe on nil receiver.
 func (dc *DeployConfig) LookupKey(key string) (DeploymentNode, bool) {
 	if dc == nil {
@@ -1856,13 +1804,13 @@ func (dc *DeployConfig) LookupKey(key string) (DeploymentNode, bool) {
 	return entry, ok
 }
 
-// loadDeployConfigForRead loads deploy.yml for read-only consumption.
+// loadDeployConfigForRead loads charly.yml for read-only consumption.
 // Unlike the historical `dc, _ := LoadDeployConfig()` pattern (silently
 // discards validation errors → caller proceeds with nil → feature
 // degrades invisibly), this helper SURFACES the load error as a stderr
 // warning while still returning nil — preserving the existing caller
 // nil-check contract but giving the operator visibility into why a
-// command behaved as if deploy.yml were absent.
+// command behaved as if charly.yml were absent.
 //
 // Sibling of loadDeployConfigForWrite — the write variant returns an
 // error and callers MUST abort; the read variant returns nil and
@@ -1874,13 +1822,13 @@ func (dc *DeployConfig) LookupKey(key string) (DeploymentNode, bool) {
 func loadDeployConfigForRead(context string) *DeployConfig {
 	dc, err := LoadDeployConfig()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: %s: deploy.yml unavailable for read: %v\n", context, err)
+		fmt.Fprintf(os.Stderr, "Warning: %s: charly.yml unavailable for read: %v\n", context, err)
 		return nil
 	}
 	return dc
 }
 
-// loadDeployConfigForWrite loads deploy.yml for mutation. Unlike the
+// loadDeployConfigForWrite loads charly.yml for mutation. Unlike the
 // historical `dc, _ := LoadDeployConfig()` pattern (silently discards
 // validation errors → writer constructs an empty config → SaveDeployConfig
 // truncates the file), this helper PROPAGATES the load error so writers
@@ -1889,7 +1837,7 @@ func loadDeployConfigForRead(context string) *DeployConfig {
 // Cautionary tale: pre-2026-05-16 the `charly deploy add --disposable` write
 // path discarded the load error. The 2026-05-12 require-image schema
 // cutover widened the set of conditions under which LoadDeployConfig
-// returns an error; once any pre-existing deploy.yml entry failed
+// returns an error; once any pre-existing charly.yml entry failed
 // validation, the next `charly deploy add` constructed a fresh empty
 // DeployConfig containing only the new entry and truncated the on-disk
 // file. The user's `provides:` block and unrelated deploy entries
@@ -1902,7 +1850,7 @@ func loadDeployConfigForRead(context string) *DeployConfig {
 func loadDeployConfigForWrite(context string) (*DeployConfig, error) {
 	dc, err := LoadDeployConfig()
 	if err != nil {
-		return nil, fmt.Errorf("%s: refusing to write — deploy.yml load failed: %w", context, err)
+		return nil, fmt.Errorf("%s: refusing to write — charly.yml load failed: %w", context, err)
 	}
 	if dc == nil {
 		dc = &DeployConfig{Deploy: make(map[string]DeploymentNode)}
@@ -1992,9 +1940,9 @@ func RemoveBoxDeploy(dc *DeployConfig, boxName string) {
 	}
 }
 
-// cleanDeployEntry removes an image's entry from deploy.yml (best-effort).
+// cleanDeployEntry removes an image's entry from charly.yml (best-effort).
 // Also removes global service env vars that were injected by this image.
-// If deploy.yml becomes empty after removal, the file is deleted.
+// If charly.yml becomes empty after removal, the file is deleted.
 func cleanDeployEntry(boxName, instance string) {
 	dc, err := LoadDeployConfig()
 	if err != nil || dc == nil {
@@ -2074,10 +2022,10 @@ func cleanDeployEntry(boxName, instance string) {
 			os.Remove(path)
 		}
 	} else if err := SaveDeployConfig(dc); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: could not clean deploy.yml: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Warning: could not clean charly.yml: %v\n", err)
 		return
 	}
-	fmt.Fprintf(os.Stderr, "Cleaned deploy.yml entry for %s\n", key)
+	fmt.Fprintf(os.Stderr, "Cleaned charly.yml entry for %s\n", key)
 }
 
 // appendOrReplaceEnv adds or replaces an env var entry (KEY=VALUE) in a slice.
@@ -2104,14 +2052,14 @@ func envKey(entry string) string {
 // SaveDeployStateInput holds the deployment parameters to persist.
 type SaveDeployStateInput struct {
 	Ports []string
-	// SetPorts gates whether Ports is written to deploy.yml at all.
+	// SetPorts gates whether Ports is written to charly.yml at all.
 	// This ensures `charly config <name>`
 	// (without --port flags) and `charly update <name>` no longer silently
 	// overwrite operator port overrides with image-label defaults.
 	// Writing Ports whenever input.Ports != nil would
 	// turn every config-recompute into a port-state reset because the
 	// caller always computes ports from `meta.Port` (image-label
-	// defaults pre-merged with deploy.yml). With SetPorts, the caller
+	// defaults pre-merged with charly.yml). With SetPorts, the caller
 	// explicitly opts in to writing only when the operator passed
 	// `--port` flags. Same idiom as SetDisposable/SetLifecycle below.
 	SetPorts bool
@@ -2153,7 +2101,7 @@ type SaveDeployStateInput struct {
 	Target string
 }
 
-// saveDeployState persists deployment parameters to deploy.yml (best-effort).
+// saveDeployState persists deployment parameters to charly.yml (best-effort).
 // Merges onto any existing entry to preserve fields from charly deploy import.
 //
 // Defense-in-depth: any env entry whose key matches a name in input.SecretNames
@@ -2165,7 +2113,7 @@ type SaveDeployStateInput struct {
 func saveDeployState(boxName, instance string, input SaveDeployStateInput) {
 	dc, err := loadDeployConfigForWrite("saveDeployState")
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: could not save to deploy.yml: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Warning: could not save to charly.yml: %v\n", err)
 		return
 	}
 	key := deployKey(boxName, instance)
@@ -2232,7 +2180,7 @@ func saveDeployState(boxName, instance string, input SaveDeployStateInput) {
 	// write `<key>: {}`, materializing an empty entry that masks any
 	// matching entry from the project charly.yml deploy block (see
 	// 2026-05 RCA: charly update did NOT directly do this, but the latent
-	// shape was real and the user's deploy.yml ended up empty by some
+	// shape was real and the user's charly.yml ended up empty by some
 	// path we couldn't fully reconstruct — this guard makes the entire
 	// regression class structurally impossible).
 	if reflect.DeepEqual(entry, DeploymentNode{}) {
@@ -2240,7 +2188,7 @@ func saveDeployState(boxName, instance string, input SaveDeployStateInput) {
 	}
 	dc.Deploy[key] = entry
 	if err := SaveDeployConfig(dc); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: could not save to deploy.yml: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Warning: could not save to charly.yml: %v\n", err)
 	}
 }
 

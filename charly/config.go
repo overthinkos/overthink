@@ -171,7 +171,7 @@ type BoxConfig struct {
 
 	// DeployTests are image-author-supplied deploy-level defaults. All
 	// entries default to scope: deploy and land in the deploy section of
-	// the OCI label; local deploy.yml can override them by id.
+	// the OCI label; local charly.yml can override them by id.
 	DeployEval []Check `yaml:"deploy_eval,omitempty"`
 
 	// Shell is an image-level shell-init contribution layered on top of
@@ -304,9 +304,9 @@ func (img *ResolvedBox) SupportsBuild(format string) bool {
 }
 
 // LoadConfig reads charly.yml and returns the Config (defaults + images)
-// projection. Mode purity preserved: this never merges deploy.yml content.
-// Deploy-mode commands must call LoadDeployConfig + MergeDeployOverlay
-// explicitly.
+// projection. Mode purity preserved: this reads the PROJECT charly.yml only and
+// never merges the per-host charly.yml overlay. Deploy-mode commands must call
+// LoadDeployConfig + MergeDeployOntoMetadata explicitly.
 func LoadConfig(dir string) (*Config, error) {
 	return LoadConfigRaw(dir)
 }

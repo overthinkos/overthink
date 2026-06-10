@@ -674,7 +674,7 @@ type VmDestroyCmd struct {
 	Box        string `arg:"" help:"Box name"`
 	Instance   string `short:"i" long:"instance" help:"Instance name"`
 	Disk       bool   `long:"disk" help:"Also delete the QCOW2 disk image"`
-	KeepDeploy bool   `long:"keep-deploy" help:"Keep the deploy.yml vm:<name> entry (default: remove it, like 'charly remove' for pods)"`
+	KeepDeploy bool   `long:"keep-deploy" help:"Keep the charly.yml vm:<name> entry (default: remove it, like 'charly remove' for pods)"`
 }
 
 func (c *VmDestroyCmd) Run() error {
@@ -708,7 +708,7 @@ func (c *VmDestroyCmd) Run() error {
 		dom, err := conn.lookupDomain(name)
 		if err != nil {
 			// Already gone (or never defined) — idempotent: fall through to the
-			// deploy.yml + ssh-config cleanup below so a lingering config whose
+			// charly.yml + ssh-config cleanup below so a lingering config whose
 			// domain is already destroyed is still removed (otherwise the entry
 			// can never be cleaned once the domain is gone).
 			fmt.Fprintf(os.Stderr, "VM %s already destroyed (or not defined)\n", name)
@@ -768,7 +768,7 @@ func (c *VmDestroyCmd) Run() error {
 		fmt.Fprintf(os.Stderr, "Deleted disk images in %s\n", qcow2Dir)
 	}
 
-	// Remove the deploy.yml vm:<name> entry — the inverse of the saveVmDeployState
+	// Remove the charly.yml vm:<name> entry — the inverse of the saveVmDeployState
 	// that `charly deploy add vm:<name>` (and the ssh.port_auto vm-create persist)
 	// wrote. Destroying the VM removes the deployment, so its config must not
 	// linger; this is what made disposable eval-bed VM entries accumulate (the
@@ -777,7 +777,7 @@ func (c *VmDestroyCmd) Run() error {
 	if !c.KeepDeploy {
 		deployName := "vm:" + deployKey(c.Box, c.Instance)
 		if err := removeVmDeployEntry(deployName); err != nil {
-			fmt.Fprintf(os.Stderr, "note: deploy.yml entry cleanup (%s): %v\n", deployName, err)
+			fmt.Fprintf(os.Stderr, "note: charly.yml entry cleanup (%s): %v\n", deployName, err)
 		}
 	}
 

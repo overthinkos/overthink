@@ -80,7 +80,7 @@ const (
 	// Each section (candy/box/deploy) carries an ordered list of
 	// ShellEntry contributions (origin = candy name / "box" / "deploy",
 	// id, generic body, per-shell ByShell map). Source of truth for
-	// `charly box inspect`, `charly deploy from-box`, and the deploy.yml
+	// `charly box inspect`, `charly deploy from-box`, and the charly.yml
 	// `shell:` overlay merge — same shape as LabelEval.
 	LabelShell = "ai.opencharly.shell"
 )
@@ -150,7 +150,7 @@ type BoxMetadata struct {
 	Alias     []CollectedAlias
 	Security  SecurityConfig
 	Network   string
-	Tunnel    *TunnelYAML // populated from deploy.yml overlay (not labels)
+	Tunnel    *TunnelYAML // populated from charly.yml overlay (not labels)
 	DNS       string
 	AcmeEmail string
 	Env       []string
@@ -195,7 +195,7 @@ type BoxMetadata struct {
 // ai.opencharly.shell. Mirrors LabelEvalSet's bucketing — Layer
 // holds per-layer contributions (origin = layer name); Image holds
 // charly.yml-level shell: declarations; Deploy holds deploy-scope
-// defaults baked at build time. The deploy.yml `shell:` overlay
+// defaults baked at build time. The charly.yml `shell:` overlay
 // merges into a separate runtime-only set via MergeDeployShell.
 type LabelShellSet struct {
 	Candy  []ShellEntry `json:"candy,omitempty"`
@@ -204,7 +204,7 @@ type LabelShellSet struct {
 }
 
 // ShellEntry is one origin's full shell-init contribution. ID is the
-// stable handle for deploy.yml overlay keying ("<origin>" or
+// stable handle for charly.yml overlay keying ("<origin>" or
 // "<origin>:<shell>"). Origin = candy name / "box" / "deploy".
 // Generic body + per-shell ByShell map mirror the in-memory
 // ShellConfig struct.
@@ -263,7 +263,7 @@ func ExtractMetadata(engine, imageRef string) (*BoxMetadata, error) {
 
 	// Schema v4: DNS / AcmeEmail / Engine no longer read from OCI labels —
 	// they are deployment choices and flow onto BoxMetadata via
-	// MergeDeployOntoMetadata (deploy.yml → metadata).
+	// MergeDeployOntoMetadata (charly.yml → metadata).
 	meta := &BoxMetadata{
 		Box:      labels[LabelBox],
 		Version:  version,
@@ -331,7 +331,7 @@ func ExtractMetadata(engine, imageRef string) (*BoxMetadata, error) {
 		}
 	}
 
-	// Tunnel config is a deploy-time concern — read from deploy.yml only.
+	// Tunnel config is a deploy-time concern — read from charly.yml only.
 	// Label is no longer written or read.
 
 	// Env

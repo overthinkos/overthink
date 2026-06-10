@@ -48,7 +48,7 @@ func ValidatePreemptibleOnNode(name string, node *DeploymentNode, errs *Validati
 	}
 }
 
-// ValidatePreemptibleAcrossDeploy validates every node in a deploy.yml config
+// ValidatePreemptibleAcrossDeploy validates every node in a charly.yml config
 // (the operator-deploy load path). Accumulates into errs.
 func ValidatePreemptibleAcrossDeploy(dc *DeployConfig, errs *ValidationError) {
 	if dc == nil {

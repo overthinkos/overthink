@@ -114,7 +114,7 @@ func findHostPort(insp *ContainerInspection, containerPort int) (int, error) {
 			return port, nil
 		}
 	}
-	return 0, fmt.Errorf("container port %d not published on host (NetworkSettings.Ports has no binding); declare `ports: [%d]` on the image or publish via deploy.yml `port:`", containerPort, containerPort)
+	return 0, fmt.Errorf("container port %d not published on host (NetworkSettings.Ports has no binding); declare `ports: [%d]` on the image or publish via charly.yml `port:`", containerPort, containerPort)
 }
 
 // ---------------------------------------------------------------------------

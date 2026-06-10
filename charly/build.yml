@@ -1115,7 +1115,7 @@ init:
             redirect_stderr=true
         stage_name: supervisord-conf
         stage_header_copy: COPY templates/supervisord.header.conf /supervisor/00-header.conf
-        stage_fragment_copy: COPY .build/{{.ImageName}}/{{.FragmentDir}}/{{.FileName}} /supervisor/{{.FileName}}
+        stage_fragment_copy: COPY .build/{{.BoxName}}/{{.FragmentDir}}/{{.FileName}} /supervisor/{{.FileName}}
         assembly_template: |
             # Assemble supervisord.conf
             # chmod 0644 explicitly — relying on umask yields 0600 on Arch (breaks
@@ -1213,7 +1213,7 @@ init:
         model: file_copy
         fragment_dir: systemd
         stage_name: systemd-services
-        stage_fragment_copy: COPY .build/{{.ImageName}}/{{.FragmentDir}}/{{.FileName}} /systemd/{{.FileName}}
+        stage_fragment_copy: COPY .build/{{.BoxName}}/{{.FragmentDir}}/{{.FileName}} /systemd/{{.FileName}}
         assembly_template: |
             # Install systemd user services
             RUN --mount=type=bind,from=systemd-services,source=/systemd,target=/systemd \

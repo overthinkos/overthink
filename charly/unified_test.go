@@ -58,7 +58,7 @@ box:
 	if uf.Defaults.Registry != "quay.io/example" {
 		t.Errorf("Defaults.Registry = %q, want quay.io/example", uf.Defaults.Registry)
 	}
-	fedora, ok := uf.Image["fedora"]
+	fedora, ok := uf.Box["fedora"]
 	if !ok {
 		t.Fatal("images.fedora missing")
 	}
@@ -129,7 +129,7 @@ box:
 	if uf.Distro["fedora"] == nil {
 		t.Error("Distros.fedora missing")
 	}
-	if _, ok := uf.Image["fedora"]; !ok {
+	if _, ok := uf.Box["fedora"]; !ok {
 		t.Error("Images.fedora missing")
 	}
 }
@@ -181,7 +181,7 @@ box:
 	if _, ok := uf.Layer["firefox"]; !ok {
 		t.Error("layers.firefox missing")
 	}
-	if _, ok := uf.Image["browsers"]; !ok {
+	if _, ok := uf.Box["browsers"]; !ok {
 		t.Error("images.browsers missing")
 	}
 }
@@ -346,7 +346,7 @@ discover:
 	if err := uf.ApplyDiscover(root); err != nil {
 		t.Fatalf("ApplyDiscover: %v", err)
 	}
-	if _, ok := uf.Image["myimg"]; !ok {
+	if _, ok := uf.Box["myimg"]; !ok {
 		t.Error("shape-routed discovery did not register the box: doc as an image")
 	}
 }
@@ -391,7 +391,7 @@ box:
 	if cfg.Defaults.Registry != "r.example.com" {
 		t.Errorf("Defaults.Registry = %q", cfg.Defaults.Registry)
 	}
-	if cfg.Image["foo"].Base != "alpine" {
-		t.Errorf("Images.foo.Base = %q", cfg.Image["foo"].Base)
+	if cfg.Box["foo"].Base != "alpine" {
+		t.Errorf("Images.foo.Base = %q", cfg.Box["foo"].Base)
 	}
 }

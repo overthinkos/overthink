@@ -6,7 +6,7 @@ import (
 )
 
 func TestAndroidSpec_IsEndpoint(t *testing.T) {
-	img := &AndroidSpec{Image: "android-emulator"}
+	img := &AndroidSpec{Box: "android-emulator"}
 	if img.IsEndpoint() {
 		t.Error("image-source device should not be an endpoint")
 	}

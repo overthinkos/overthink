@@ -9,13 +9,13 @@ import (
 // RemoteImageContext holds the resolved state of a remote image reference.
 // It contains everything needed to pull/build and run the image.
 type RemoteImageContext struct {
-	Ref       ParsedRef
-	CacheDir  string
-	Config    *Config
-	Resolved  *ResolvedBox
-	Layers    map[string]*Layer
-	ImageRef  string // registry/name:tag for pull
-	ImageName string // short name (e.g. "openclaw-browser")
+	Ref      ParsedRef
+	CacheDir string
+	Config   *Config
+	Resolved *ResolvedBox
+	Layers   map[string]*Layer
+	ImageRef string // registry/name:tag for pull
+	BoxName  string // short name (e.g. "openclaw-browser")
 }
 
 // ResolveRemoteImage resolves a remote image reference to a full context.
@@ -51,7 +51,7 @@ func ResolveRemoteImage(ref string, tag string) (*RemoteImageContext, error) {
 
 	// Resolve the image
 	calverTag := ComputeCalVer()
-	resolved, err := cfg.ResolveImage(parsed.Name, calverTag, cachePath, ResolveOpts{})
+	resolved, err := cfg.ResolveBox(parsed.Name, calverTag, cachePath, ResolveOpts{})
 	if err != nil {
 		return nil, fmt.Errorf("resolving image %q in %s: %w", parsed.Name, parsed.RepoPath, err)
 	}
@@ -66,13 +66,13 @@ func ResolveRemoteImage(ref string, tag string) (*RemoteImageContext, error) {
 	imageRef := resolveShellImageRef(resolved.Registry, resolved.Name, tag)
 
 	return &RemoteImageContext{
-		Ref:       *parsed,
-		CacheDir:  cachePath,
-		Config:    cfg,
-		Resolved:  resolved,
-		Layers:    layers,
-		ImageRef:  imageRef,
-		ImageName: parsed.Name,
+		Ref:      *parsed,
+		CacheDir: cachePath,
+		Config:   cfg,
+		Resolved: resolved,
+		Layers:   layers,
+		ImageRef: imageRef,
+		BoxName:  parsed.Name,
 	}, nil
 }
 
@@ -87,8 +87,8 @@ func (ctx *RemoteImageContext) BuildImage(rt *ResolvedRuntime, tag string) error
 	}
 
 	buildCmd := &BuildCmd{
-		Images: []string{ctx.ImageName},
-		Tag:    tag,
+		Boxes: []string{ctx.BoxName},
+		Tag:   tag,
 	}
 	origDir, _ := os.Getwd()
 	if err := os.Chdir(ctx.CacheDir); err != nil {
@@ -101,13 +101,13 @@ func (ctx *RemoteImageContext) BuildImage(rt *ResolvedRuntime, tag string) error
 
 // ContainerName returns the container name for a remote image.
 func (ctx *RemoteImageContext) ContainerName() string {
-	return containerName(ctx.ImageName)
+	return containerName(ctx.BoxName)
 }
 
 // CollectVolumes collects volumes for the remote image.
 func (ctx *RemoteImageContext) CollectVolumes() ([]VolumeMount, error) {
-	return CollectImageVolume(
-		ctx.Config, ctx.Layers, ctx.ImageName,
+	return CollectBoxVolume(
+		ctx.Config, ctx.Layers, ctx.BoxName,
 		ctx.Resolved.Home,
 		nil,
 	)

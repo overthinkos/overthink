@@ -53,7 +53,7 @@ func BuildBootcVM(
 	if spec.Source.Kind != "bootc" {
 		return BootcVMResult{}, fmt.Errorf("BuildBootcVM called with source.kind=%q (expected bootc)", spec.Source.Kind)
 	}
-	if spec.Source.Image == "" {
+	if spec.Source.Box == "" {
 		return BootcVMResult{}, fmt.Errorf("source.image is required for bootc VMs")
 	}
 	if spec.DiskSize == "" {
@@ -74,7 +74,7 @@ func BuildBootcVM(
 
 	// Resolve the bootc image ref (full ref → as-is; internal short name →
 	// newest local CalVer tag; NO `:latest` fallback — see resolveBootcImageRef).
-	imageRef, err := resolveBootcImageRef(engine, spec.Source.Image)
+	imageRef, err := resolveBootcImageRef(engine, spec.Source.Box)
 	if err != nil {
 		return BootcVMResult{}, err
 	}

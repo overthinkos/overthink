@@ -5,11 +5,11 @@ import (
 	"testing"
 )
 
-// Covers the build-time subset: every ImageMetadata field that should populate
+// Covers the build-time subset: every BoxMetadata field that should populate
 // into Env, and negative checks for runtime-only vars (must not be present).
 func TestResolveTestVarsBuild(t *testing.T) {
 	meta := &BoxMetadata{
-		Image:     "redis-ml",
+		Box:       "redis-ml",
 		User:      "user",
 		Home:      "/home/user",
 		UID:       1000,
@@ -98,9 +98,9 @@ func TestResolveTestVarsRuntime(t *testing.T) {
 	}
 
 	meta := &BoxMetadata{
-		Image: "redis-ml",
-		User:  "user",
-		Home:  "/home/user",
+		Box:  "redis-ml",
+		User: "user",
+		Home: "/home/user",
 		Volume: []VolumeMount{
 			{VolumeName: "charly-redis-ml-data", ContainerPath: "/data"},
 			{VolumeName: "charly-redis-ml-workspace", ContainerPath: "/workspace"},
@@ -161,7 +161,7 @@ func TestResolveTestVarsRuntime_InspectFails(t *testing.T) {
 		return nil, errStub("inspect failed")
 	}
 
-	meta := &BoxMetadata{Image: "jupyter", User: "user", Home: "/home/user"}
+	meta := &BoxMetadata{Box: "jupyter", User: "user", Home: "/home/user"}
 	r, err := ResolveEvalVarsRuntime(meta, nil, "podman", "jupyter", "charly-jupyter", "")
 	if err == nil {
 		t.Fatal("expected error from failed inspect")
@@ -193,7 +193,7 @@ func TestRuntimeVars_DockerBridgeIP(t *testing.T) {
 			},
 		}, nil
 	}
-	r, _ := ResolveEvalVarsRuntime(&BoxMetadata{Image: "foo"}, nil, "docker", "foo", "foo", "")
+	r, _ := ResolveEvalVarsRuntime(&BoxMetadata{Box: "foo"}, nil, "docker", "foo", "foo", "")
 	if r.Env["CONTAINER_IP"] != "172.17.0.2" {
 		t.Errorf("docker-style top-level IP not picked up: %v", r.Env)
 	}
@@ -215,7 +215,7 @@ func TestResolver_EndToEndExpansion(t *testing.T) {
 			},
 		}, nil
 	}
-	r, err := ResolveEvalVarsRuntime(&BoxMetadata{Image: "redis", User: "u", Home: "/home/u"}, nil, "podman", "redis", "charly-redis", "")
+	r, err := ResolveEvalVarsRuntime(&BoxMetadata{Box: "redis", User: "u", Home: "/home/u"}, nil, "podman", "redis", "charly-redis", "")
 	if err != nil {
 		t.Fatalf("unexpected: %v", err)
 	}
@@ -245,14 +245,14 @@ func TestResolveTestVarsRuntime_DeployName(t *testing.T) {
 	InspectContainer = func(engine, name string) (*ContainerInspection, error) {
 		return &ContainerInspection{Name: "/charly-x"}, nil
 	}
-	r, err := ResolveEvalVarsRuntime(&BoxMetadata{Image: "x"}, nil, "podman", "redis-ml", "charly-x", "")
+	r, err := ResolveEvalVarsRuntime(&BoxMetadata{Box: "x"}, nil, "podman", "redis-ml", "charly-x", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if got := r.Env["DEPLOY_NAME"]; got != "redis-ml" {
 		t.Errorf("DEPLOY_NAME = %q, want redis-ml", got)
 	}
-	r2, _ := ResolveEvalVarsRuntime(&BoxMetadata{Image: "x"}, nil, "podman", "vm:k3s-vm", "charly-x", "")
+	r2, _ := ResolveEvalVarsRuntime(&BoxMetadata{Box: "x"}, nil, "podman", "vm:k3s-vm", "charly-x", "")
 	if got := r2.Env["DEPLOY_NAME"]; got != "vm-k3s-vm" {
 		t.Errorf("DEPLOY_NAME = %q, want vm-k3s-vm", got)
 	}

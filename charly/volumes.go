@@ -11,14 +11,14 @@ type VolumeMount struct {
 	ContainerPath string // e.g. "/home/user/.openclaw" (~ expanded)
 }
 
-// CollectImageVolume resolves all volumes for an image by traversing the
+// CollectBoxVolume resolves all volumes for an image by traversing the
 // full image chain (image → base → base's base) and collecting volume
 // declarations from all layers. Volumes are deduplicated by name (first
 // declaration wins — outermost image takes priority).
-func CollectImageVolume(cfg *Config, layers map[string]*Layer, imageName string, home string, excludeNames map[string]bool) ([]VolumeMount, error) {
+func CollectBoxVolume(cfg *Config, layers map[string]*Layer, boxName string, home string, excludeNames map[string]bool) ([]VolumeMount, error) {
 	// Collect all layer names from the image chain (outermost first)
 	var allLayerNames []string
-	for _, node := range cfg.walkBaseChain(imageName) {
+	for _, node := range cfg.walkBaseChain(boxName) {
 		// Resolve layers for this image (includes transitive deps)
 		resolved, err := ResolveLayerOrder(node.Img.Layer, layers, nil)
 		if err != nil {
@@ -41,7 +41,7 @@ func CollectImageVolume(cfg *Config, layers map[string]*Layer, imageName string,
 			}
 			seen[vol.Name] = true
 			mounts = append(mounts, VolumeMount{
-				VolumeName:    "charly-" + imageName + "-" + vol.Name,
+				VolumeName:    "charly-" + boxName + "-" + vol.Name,
 				ContainerPath: expandHome(vol.Path, home),
 			})
 		}
@@ -79,13 +79,13 @@ func expandHome(path, home string) string {
 //
 // Returns the input unchanged when no prefix matches — callers can detect
 // "not a managed volume name" by checking equality with the input.
-func BareVolumeName(volumeName, imageName, instance string) string {
+func BareVolumeName(volumeName, boxName, instance string) string {
 	if instance != "" {
-		if p := "charly-" + imageName + "-" + instance + "-"; strings.HasPrefix(volumeName, p) {
+		if p := "charly-" + boxName + "-" + instance + "-"; strings.HasPrefix(volumeName, p) {
 			return volumeName[len(p):]
 		}
 	}
-	if p := "charly-" + imageName + "-"; strings.HasPrefix(volumeName, p) {
+	if p := "charly-" + boxName + "-"; strings.HasPrefix(volumeName, p) {
 		return volumeName[len(p):]
 	}
 	return volumeName
@@ -93,9 +93,9 @@ func BareVolumeName(volumeName, imageName, instance string) string {
 
 // resolveWorkingDir returns the container working directory.
 // Prefers the "workspace" volume's container path if declared, else home.
-func resolveWorkingDir(volumes []VolumeMount, bindMounts []ResolvedBindMount, home, imageName, instance string) string {
+func resolveWorkingDir(volumes []VolumeMount, bindMounts []ResolvedBindMount, home, boxName, instance string) string {
 	for _, v := range volumes {
-		if BareVolumeName(v.VolumeName, imageName, instance) == "workspace" {
+		if BareVolumeName(v.VolumeName, boxName, instance) == "workspace" {
 			return v.ContainerPath
 		}
 	}

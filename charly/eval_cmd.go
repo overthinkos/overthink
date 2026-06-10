@@ -108,7 +108,7 @@ type EvalCmd struct {
 // The command exits non-zero on any failed check. Skipped checks (missing
 // runtime context, skip: true, id-override with skip) do not fail the run.
 type EvalLiveCmd struct {
-	Image    string   `arg:"" help:"Image name"`
+	Box      string   `arg:"" help:"Box name"`
 	Instance string   `short:"i" long:"instance" help:"Instance name"`
 	Format   string   `long:"format" default:"text" help:"Output format: text, json, tap"`
 	Filter   []string `long:"filter" help:"Only run checks with these verbs (repeatable)"`
@@ -134,7 +134,7 @@ func (c *EvalLiveCmd) Run() error {
 		return c.runLocalEval()
 	}
 
-	engine, containerName, err := resolveContainer(c.Image, c.Instance)
+	engine, containerName, err := resolveContainer(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -147,7 +147,7 @@ func (c *EvalLiveCmd) Run() error {
 	// image. The cutover deletes that fallback: the eval runner now
 	// inspects what the operator declared, not what the container
 	// happens to be running. The hard-required `image:` field
-	// (validateDeployRequiresImage in unified.go / deploy.go) guarantees
+	// (validateDeployRequiresBox in unified.go / deploy.go) guarantees
 	// this lookup always finds a non-empty value.
 	dir, _ := os.Getwd()
 	var localTests []Check
@@ -157,32 +157,32 @@ func (c *EvalLiveCmd) Run() error {
 	if uf, ok, _ := LoadUnified(dir); ok && uf != nil {
 		projectCfg = uf.ProjectConfig()
 		if pc := uf.ProjectDeployConfig(); pc != nil {
-			if entry, ok := pc.Deploy[c.Image]; ok {
+			if entry, ok := pc.Deploy[c.Box]; ok {
 				projectTests = entry.Eval
 			}
 		}
 	}
 	dc := loadDeployConfigForRead("charly eval live")
 	if dc != nil {
-		if entry, ok := dc.Deploy[deployKey(c.Image, c.Instance)]; ok {
+		if entry, ok := dc.Deploy[deployKey(c.Box, c.Instance)]; ok {
 			localTests = entry.Eval
 			deployOverlay = &entry
-		} else if entry, ok := dc.Deploy[c.Image]; ok {
+		} else if entry, ok := dc.Deploy[c.Box]; ok {
 			localTests = entry.Eval
 			deployOverlay = &entry
 		}
 	}
 
 	// Resolve the deploy key → declared image short-name via THE shared
-	// resolver (deploy.go resolveDeployImageName) — the same one charly config /
+	// resolver (deploy.go resolveDeployBoxName) — the same one charly config /
 	// start / shell use. This used to be an inline operator-then-project
 	// copy, which is exactly how `charly eval live` diverged from `charly config`
 	// for kind:eval beds where key != image (eval-jupyter-pod → jupyter).
 	// deployOverlay (loaded above) is still consulted for the tests overlay
 	// + runtime var resolution. The hard-required `image:` field
-	// (validateDeployRequiresImage) guarantees a real image for every pod
+	// (validateDeployRequiresBox) guarantees a real image for every pod
 	// deploy, so the resolver returns the declared image, never the key.
-	imageRef := resolveDeployImageName(c.Image, c.Instance)
+	imageRef := resolveDeployBoxName(c.Box, c.Instance)
 	// Short names (e.g. `versa`) need to be resolved to a fully-
 	// qualified registry ref before ExtractMetadata can read OCI
 	// labels. Full refs and remote refs pass through unchanged. The
@@ -190,7 +190,7 @@ func (c *EvalLiveCmd) Run() error {
 	// ensure_image.go.
 	resolvedRef, err := resolveImageRefForEnsure(imageRef, projectCfg, dir)
 	if err != nil {
-		return fmt.Errorf("resolving deploy image %q: %w", imageRef, err)
+		return fmt.Errorf("resolving deploy box %q: %w", imageRef, err)
 	}
 	meta, err := ExtractMetadata(engine, resolvedRef)
 	if err != nil {
@@ -201,7 +201,7 @@ func (c *EvalLiveCmd) Run() error {
 		return nil
 	}
 	localTests = MergeDeployEval(projectTests, localTests)
-	resolver, _ := ResolveEvalVarsRuntime(meta, deployOverlay, engine, c.Image, containerName, c.Instance)
+	resolver, _ := ResolveEvalVarsRuntime(meta, deployOverlay, engine, c.Box, containerName, c.Instance)
 
 	// Compose the final check list: layer + image + merged deploy.
 	checks := collectChecksForRun(meta.Eval, localTests, c.Section, c.Filter)
@@ -211,7 +211,7 @@ func (c *EvalLiveCmd) Run() error {
 	}
 
 	runner := NewRunner(ContainerChain(engine, containerName), resolver, RunModeLive)
-	runner.Image = c.Image
+	runner.Box = c.Box
 	runner.Instance = c.Instance
 	runner.Distros = meta.Distro
 	// Cross-deployment probing (a check with `on: <driver>` reaching a SEPARATE
@@ -219,7 +219,7 @@ func (c *EvalLiveCmd) Run() error {
 	// point every live-eval path shares (R3).
 	results := runner.RunLive(context.Background(), checks, c.Instance)
 
-	fmt.Fprintf(os.Stderr, "Image: %s (container: %s)\n", meta.Image, containerName)
+	fmt.Fprintf(os.Stderr, "Image: %s (container: %s)\n", meta.Box, containerName)
 	fails := formatResults(results, c.Format)
 	if fails > 0 {
 		return &EvalFailedError{Failed: fails}
@@ -244,7 +244,7 @@ func (c *EvalLiveCmd) isVmTarget() bool {
 	// Shared classifier (eval_venue.go) — also drives resolveEvalVenue for
 	// the interactive verbs, so `charly eval live <vm>` and `charly eval wl <vm>`
 	// agree on what is a VM target (R3).
-	_, isVM := evalVmTarget(uf, c.Image)
+	_, isVM := evalVmTarget(uf, c.Box)
 	return isVM
 }
 
@@ -323,18 +323,18 @@ func (c *EvalLiveCmd) runVm() error {
 	//   (c) a dotted path "parent.child" where `parent` is a target:vm
 	//       deployment and `child` is a nested node whose tests run in
 	//       the parent's SSH substrate.
-	vmName := c.Image
+	vmName := c.Box
 	var nestedLeaf *DeploymentNode
 	if uf.Deploy != nil {
-		if entry, ok := uf.Deploy[c.Image]; ok && entry.Target == "vm" && entry.Vm != "" {
+		if entry, ok := uf.Deploy[c.Box]; ok && entry.Target == "vm" && entry.Vm != "" {
 			vmName = entry.Vm
-		} else if idx := strings.Index(c.Image, "."); idx > 0 {
-			root := c.Image[:idx]
+		} else if idx := strings.Index(c.Box, "."); idx > 0 {
+			root := c.Box[:idx]
 			if parent, present := uf.Deploy[root]; present && parent.Target == "vm" {
 				if parent.Vm != "" {
 					vmName = parent.Vm
 				}
-				nestedLeaf = resolveNestedNode(uf.Deploy, c.Image)
+				nestedLeaf = resolveNestedNode(uf.Deploy, c.Box)
 			}
 		}
 	}
@@ -374,13 +374,13 @@ func (c *EvalLiveCmd) runVm() error {
 		projectTests = nestedLeaf.Eval
 		addLayers = nestedLeaf.AddLayer
 	} else if pc := uf.ProjectDeployConfig(); pc != nil {
-		if entry, ok := findVmDeployNode(pc.Deploy, c.Image, vmName); ok {
+		if entry, ok := findVmDeployNode(pc.Deploy, c.Box, vmName); ok {
 			projectTests = entry.Eval
 			addLayers = entry.AddLayer
 		}
 	}
 	if dc := loadDeployConfigForRead("charly eval vm"); dc != nil {
-		if entry, ok := findVmDeployNode(dc.Deploy, c.Image, vmName); ok {
+		if entry, ok := findVmDeployNode(dc.Deploy, c.Box, vmName); ok {
 			localTests = entry.Eval
 			if entry.VmState != nil {
 				if entry.VmState.SshUser != "" {
@@ -416,9 +416,9 @@ func (c *EvalLiveCmd) runVm() error {
 	// so leaf tests run inside the leaf's actual venue. Pre-cutover this
 	// path was silently single-hop SSH — `command: id` for a pod-in-vm
 	// leaf returned the VM's user, not the inner pod's.
-	if strings.Contains(c.Image, ".") {
+	if strings.Contains(c.Box, ".") {
 		if roots, _ := resolveTreeRoot(dir); roots != nil {
-			if _, chain, chainErr := ResolveDeployChain(roots, c.Image, ShellExecutor{}); chainErr == nil && chain != nil {
+			if _, chain, chainErr := ResolveDeployChain(roots, c.Box, ShellExecutor{}); chainErr == nil && chain != nil {
 				executor = chain
 			}
 		}
@@ -445,11 +445,11 @@ func (c *EvalLiveCmd) runVm() error {
 	}
 
 	env := map[string]string{
-		"IMAGE":          c.Image,
+		"IMAGE":          c.Box,
 		"INSTANCE":       c.Instance,
 		"HOST_PORT:22":   strconv.Itoa(port),
 		"CONTAINER_IP":   host,
-		"CONTAINER_NAME": "charly-" + c.Image,
+		"CONTAINER_NAME": "charly-" + c.Box,
 		"USER":           user,
 		"HOME":           "/home/" + user,
 		// VM_HOSTDEV_COUNT = how many <hostdev> passthrough devices THIS VM's
@@ -483,11 +483,11 @@ func (c *EvalLiveCmd) runVm() error {
 	// path (direct pods, the VM itself, host, on:-redirected cross-deployment
 	// probes against a host driver) is unchanged — they never enter this branch.
 	if nestedLeaf != nil && nestedLeaf.Target == "pod" {
-		parts := strings.Split(c.Image, ".")
+		parts := strings.Split(c.Box, ".")
 		guestPod := parts[len(parts)-1]
 		guestCmd := guestNestedEvalCmd(guestPod, c.Format, c.Section, c.Filter, c.Instance)
 		vmSSH := &SSHExecutor{Host: VmSshAlias(vmName), ConnectTimeout: 10}
-		fmt.Fprintf(os.Stderr, "VM: charly-%s — nested pod %q evaluated IN the guest (%s)\n", c.Image, guestPod, VmSshAlias(vmName))
+		fmt.Fprintf(os.Stderr, "VM: charly-%s — nested pod %q evaluated IN the guest (%s)\n", c.Box, guestPod, VmSshAlias(vmName))
 		stdout, stderr, exit, rerr := vmSSH.RunCapture(context.Background(), guestCmd)
 		if stdout != "" {
 			fmt.Print(stdout)
@@ -515,11 +515,11 @@ func (c *EvalLiveCmd) runVm() error {
 	}
 
 	runner := NewRunner(executor, resolver, RunModeLive)
-	runner.Image = c.Image
+	runner.Box = c.Box
 	runner.Instance = c.Instance
 	results := runner.RunLive(context.Background(), checks, c.Instance)
 
-	fmt.Fprintf(os.Stderr, "VM: charly-%s (ssh %s@%s:%d)\n", c.Image, user, host, port)
+	fmt.Fprintf(os.Stderr, "VM: charly-%s (ssh %s@%s:%d)\n", c.Box, user, host, port)
 	fails := formatResults(results, c.Format)
 	if fails > 0 {
 		return &EvalFailedError{Failed: fails}
@@ -600,7 +600,7 @@ func (c *EvalLiveCmd) isLocalTarget() bool {
 		return false
 	}
 	// Shared classifier (eval_venue.go), same as isVmTarget (R3).
-	_, isLocal := evalLocalTarget(uf, c.Image)
+	_, isLocal := evalLocalTarget(uf, c.Box)
 	return isLocal
 }
 
@@ -625,35 +625,35 @@ func (c *EvalLiveCmd) runLocalEval() error {
 
 	// Resolve the target node (leaf for a dotted path; the entry otherwise)
 	// and the root-segment node (whose host: selects the chain's root venue).
-	dotted := strings.Contains(c.Image, ".")
+	dotted := strings.Contains(c.Box, ".")
 	var node, rootNode *DeploymentNode
 	if uf.Deploy != nil {
 		if dotted {
-			node = resolveNestedNode(uf.Deploy, c.Image)
-			root := c.Image[:strings.Index(c.Image, ".")]
+			node = resolveNestedNode(uf.Deploy, c.Box)
+			root := c.Box[:strings.Index(c.Box, ".")]
 			if entry, ok := uf.Deploy[root]; ok {
 				rn := entry
 				rootNode = &rn
 			}
-		} else if entry, ok := uf.Deploy[c.Image]; ok {
+		} else if entry, ok := uf.Deploy[c.Box]; ok {
 			n := entry
 			node = &n
 			rootNode = &n
 		}
 	}
 	if node == nil {
-		return fmt.Errorf("eval live: local deployment %q not found", c.Image)
+		return fmt.Errorf("eval live: local deployment %q not found", c.Box)
 	}
 
 	// Select the root venue from the root node's host:, then compose nested
 	// hops for a dotted path through the shared ResolveDeployChain.
 	executor, err := rootExecutorForDeployNode(rootNode)
 	if err != nil {
-		return fmt.Errorf("eval live %q: %w", c.Image, err)
+		return fmt.Errorf("eval live %q: %w", c.Box, err)
 	}
 	if dotted {
 		if roots, _ := resolveTreeRoot(dir); roots != nil {
-			if _, chain, chainErr := ResolveDeployChain(roots, c.Image, executor); chainErr == nil && chain != nil {
+			if _, chain, chainErr := ResolveDeployChain(roots, c.Box, executor); chainErr == nil && chain != nil {
 				executor = chain
 			}
 		}
@@ -663,9 +663,9 @@ func (c *EvalLiveCmd) runLocalEval() error {
 	if _, isShell := executor.(ShellExecutor); !isShell {
 		venue = executor.Venue()
 	}
-	fmt.Fprintf(os.Stderr, "Local deploy: %s [%s]\n", c.Image, venue)
+	fmt.Fprintf(os.Stderr, "Local deploy: %s [%s]\n", c.Box, venue)
 
-	fails, err := evalLocalDeployScope(dir, node, c.Image, c.Instance, c.Section, c.Filter, executor, c.Format)
+	fails, err := evalLocalDeployScope(dir, node, c.Box, c.Instance, c.Section, c.Filter, executor, c.Format)
 	if err != nil {
 		return err
 	}
@@ -718,7 +718,7 @@ func evalLocalDeployScope(dir string, node *DeploymentNode, image, instance, sec
 		return 0, nil
 	}
 	runner := NewRunner(exec, resolver, RunModeLive)
-	runner.Image = image
+	runner.Box = image
 	runner.Instance = instance
 	// Generic cross-deployment support (on: driver + ${PEER_*}) via the shared
 	// RunLive entry point — so a local-SUBJECT bed can drive a peer too (R3).
@@ -814,7 +814,7 @@ func emitImageTestYAML(w io.Writer, imageRef, liveContainer string, scenarios []
 	if liveContainer != "" {
 		mode = "run"
 	}
-	out := EvalRunResults{Image: imageRef, Mode: mode}
+	out := EvalRunResults{Box: imageRef, Mode: mode}
 	for _, sr := range scenarios {
 		tr := ScenarioEvalResult{
 			ID:           sr.ScenarioID,
@@ -876,7 +876,7 @@ func gatherSections(baked *LabelEvalSet, local []Check, sections []string) []Che
 		case "layer":
 			out = append(out, baked.Layer...)
 		case "image":
-			out = append(out, baked.Image...)
+			out = append(out, baked.Box...)
 		case "deploy":
 			out = append(out, MergeDeployEval(baked.Deploy, local)...)
 		}

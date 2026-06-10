@@ -15,10 +15,10 @@ import (
 //   - strings: last-layer-wins (deterministic via topological order)
 //   - oci_labels map: union; key collision with conflicting values is a hard error
 //
-// The aggregated values populate the existing ImageMetadata surface
+// The aggregated values populate the existing BoxMetadata surface
 // (labels.go), which already round-trips through OCI labels. We do NOT
 // introduce a parallel runtime contract type; we just change the source
-// of truth from ImageConfig flags to layer aggregation.
+// of truth from BoxConfig flags to layer aggregation.
 type CandyCapabilities struct {
 	PreserveUser       bool              `yaml:"preserve_user,omitempty"`
 	NeedsRootAfterInit bool              `yaml:"needs_root_after_init,omitempty"`
@@ -28,8 +28,8 @@ type CandyCapabilities struct {
 }
 
 // AggregatedLayerCaps is the output of walking all layers in resolution
-// order. It is populated onto ResolvedImage and consumed wherever code
-// previously read ImageConfig.Bootc, ImageConfig.DataImage, or the
+// order. It is populated onto ResolvedBox and consumed wherever code
+// previously read BoxConfig.Bootc, BoxConfig.DataImage, or the
 // init-system bootc parameter.
 type AggregatedCandyCaps struct {
 	PreserveUser       bool

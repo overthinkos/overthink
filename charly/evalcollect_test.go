@@ -29,7 +29,7 @@ func TestCollectTests_Sections(t *testing.T) {
 	}
 
 	cfg := &Config{
-		Image: map[string]BoxConfig{
+		Box: map[string]BoxConfig{
 			"redis-ml": {
 				Base:    "base",
 				Layer:   []string{"redis"},
@@ -70,8 +70,8 @@ func TestCollectTests_Sections(t *testing.T) {
 	}
 
 	// Image section: supervisord -v
-	if len(got.Image) != 1 || got.Image[0].Origin != "box:redis-ml" || got.Image[0].Command != "supervisord -v" {
-		t.Errorf("image section wrong: %+v", got.Image)
+	if len(got.Box) != 1 || got.Box[0].Origin != "box:redis-ml" || got.Box[0].Command != "supervisord -v" {
+		t.Errorf("image section wrong: %+v", got.Box)
 	}
 
 	// Deploy section: layer scope-deploy, image scope-deploy, DeployTests.
@@ -93,7 +93,7 @@ func TestCollectTests_Sections(t *testing.T) {
 // No tests anywhere → nil (so the label is omitted from the image entirely).
 func TestCollectTests_EmptyReturnsNil(t *testing.T) {
 	layers := map[string]*Layer{"l": {Name: "l"}}
-	cfg := &Config{Image: map[string]BoxConfig{
+	cfg := &Config{Box: map[string]BoxConfig{
 		"i": {Enabled: boolPtr(true), Layer: []string{"l"}},
 	}}
 	if got := CollectEval(cfg, layers, "i"); got != nil {
@@ -122,7 +122,7 @@ func TestCollectEval_RemoteRefLayersResolve(t *testing.T) {
 		},
 	}
 	cfg := &Config{
-		Image: map[string]BoxConfig{
+		Box: map[string]BoxConfig{
 			"selkies-bootc": {
 				Enabled: boolPtr(true),
 				// RAW @github ref with :version — exactly as the submodule
@@ -202,7 +202,7 @@ func TestLabelTests_JSONRoundTrip(t *testing.T) {
 				Scope:     "build",
 			},
 		},
-		Image: []Check{
+		Box: []Check{
 			{Command: "supervisord -v", Origin: "box:redis-ml", Scope: "build"},
 		},
 		Deploy: []Check{
@@ -230,9 +230,9 @@ func TestLabelTests_JSONRoundTrip(t *testing.T) {
 	}
 
 	// Per-section length parity.
-	if len(parsed.Layer) != 2 || len(parsed.Image) != 1 || len(parsed.Deploy) != 1 {
+	if len(parsed.Layer) != 2 || len(parsed.Box) != 1 || len(parsed.Deploy) != 1 {
 		t.Fatalf("section lengths changed: layer=%d image=%d deploy=%d",
-			len(parsed.Layer), len(parsed.Image), len(parsed.Deploy))
+			len(parsed.Layer), len(parsed.Box), len(parsed.Deploy))
 	}
 
 	// Spot-check a matcher survives the round-trip intact — including the

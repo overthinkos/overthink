@@ -101,7 +101,7 @@ type Runner struct {
 	Mode        RunMode
 	HTTPClient  *http.Client
 	DialTimeout time.Duration
-	Image       string
+	Box         string
 	Instance    string
 	// Distros is the image's distro tag list (e.g. ["fedora:43", "fedora"]
 	// or ["arch"]). Used by the `package:` verb's PackageMap resolution
@@ -303,7 +303,7 @@ func (r *Runner) runOne(ctx context.Context, c *Check) EvalResult {
 	// `cdp: open` with `on: sway-browser-vnc-concurrency-test` was
 	// silently dispatched against the scenario's jupyter pod and
 	// failed at unknown-image.
-	origExec, origResolver, origImage := r.Exec, r.Resolver, r.Image
+	origExec, origResolver, origImage := r.Exec, r.Resolver, r.Box
 	if c.On != "" && r.TargetResolver != nil {
 		newResolver, newExec, terr := r.TargetResolver(c.On)
 		if terr != nil {
@@ -320,11 +320,11 @@ func (r *Runner) runOne(ctx context.Context, c *Check) EvalResult {
 		if newResolver != nil {
 			r.Resolver = newResolver
 		}
-		r.Image = c.On
+		r.Box = c.On
 		defer func() {
 			r.Exec = origExec
 			r.Resolver = origResolver
-			r.Image = origImage
+			r.Box = origImage
 		}()
 	}
 

@@ -9,15 +9,15 @@ import (
 
 // CmdCmd runs a single command in a running container with optional notification.
 type CmdCmd struct {
-	Image    string `arg:"" help:"Image name"`
+	Box      string `arg:"" help:"Box name"`
 	Command  string `arg:"" help:"Command to execute"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 	Notify   bool   `long:"notify" negatable:"" default:"true" help:"Send desktop notification on completion (--no-notify to disable)"`
 }
 
 func (c *CmdCmd) Run() error {
-	c.Image, c.Instance = canonicalizeDeployArg(c.Image, c.Instance)
-	engine, name, err := resolveContainer(c.Image, c.Instance)
+	c.Box, c.Instance = canonicalizeDeployArg(c.Box, c.Instance)
+	engine, name, err := resolveContainer(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -26,14 +26,14 @@ func (c *CmdCmd) Run() error {
 	rt, rtErr := ResolveRuntime()
 	var agentEnv []string
 	if rtErr == nil {
-		var deployImage *DeploymentNode
-		if overlay, ok := loadDeployConfigForRead("charly cmd").Lookup(c.Image, c.Instance); ok {
-			deployImage = &overlay
+		var deployBox *DeploymentNode
+		if overlay, ok := loadDeployConfigForRead("charly cmd").Lookup(c.Box, c.Instance); ok {
+			deployBox = &overlay
 		}
 		// Use host user's home as a reasonable default for GPG socket path.
 		// For exec, sockets are already mounted — this only affects env vars.
 		hostHome, _ := os.UserHomeDir()
-		agentFwd := ResolveAgentForwarding(rt, deployImage, hostHome)
+		agentFwd := ResolveAgentForwarding(rt, deployBox, hostHome)
 		agentEnv = agentFwd.Env
 	}
 

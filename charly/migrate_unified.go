@@ -200,7 +200,7 @@ func readImageYaml(dir string) (*imageSections, error) {
 	}
 	return &imageSections{
 		Defaults: cfg.Defaults,
-		Images:   cfg.Image,
+		Images:   cfg.Box,
 	}, nil
 }
 
@@ -233,7 +233,7 @@ func emitMonolithic(dir string, bs *buildSections, is *imageSections, ds *Deploy
 	}
 	if is != nil {
 		uf.Defaults = is.Defaults
-		uf.Image = is.Images
+		uf.Box = is.Images
 	}
 	if ds != nil {
 		uf.Deploy = ds.Deploy
@@ -274,10 +274,10 @@ func emitWithIncludes(dir string, bs *buildSections, is *imageSections, ds *Depl
 
 	// image.yml → images.yml (new name keeps meaning clear; supports forward-migration).
 	imagesPath := filepath.Join(dir, "images.yml")
-	if is != nil && (len(is.Images) > 0 || !isZeroImageConfig(is.Defaults)) {
+	if is != nil && (len(is.Images) > 0 || !isZeroBoxConfig(is.Defaults)) {
 		imgOut := &UnifiedFile{
 			Defaults: is.Defaults,
-			Image:    is.Images,
+			Box:      is.Images,
 		}
 		p, err := writeUnifiedFile(imagesPath, imgOut, dryRun)
 		if err != nil {
@@ -442,7 +442,7 @@ func rewriteServiceKeys(data []byte) []byte {
 // Small helpers.
 // -----------------------------------------------------------------------------
 
-func isZeroImageConfig(ic BoxConfig) bool {
+func isZeroBoxConfig(ic BoxConfig) bool {
 	return ic.Base == "" && ic.Registry == "" && ic.Tag == "" && len(ic.Platforms) == 0 &&
 		len(ic.Distro) == 0 && len(ic.Build) == 0 && len(ic.Layer) == 0
 }

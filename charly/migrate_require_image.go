@@ -9,7 +9,7 @@ package main
 // running container's image ref via `containerImageRef`, which read
 // stale OCI labels off volume-pinned containers and dropped any
 // probes added after the seed image. The new validator
-// (validateDeployRequiresImage) hard-errors at load time when the
+// (validateDeployRequiresBox) hard-errors at load time when the
 // field is missing — this command is the one-shot remediation.
 //
 // Inference rules (in order; the first that matches wins):
@@ -71,7 +71,7 @@ func MigrateRequireImage(cwd string, dryRun bool, includeHostFile bool) ([]Requi
 	// a project without overthink.yml just gets an empty set.
 	projectImages := map[string]bool{}
 	if uf, ok, _ := LoadUnified(cwd); ok && uf != nil {
-		for name := range uf.Image {
+		for name := range uf.Box {
 			projectImages[name] = true
 		}
 	}
@@ -187,9 +187,9 @@ func migrateRequireImageOneFile(path string, dryRun bool, extraImageNames map[st
 	// caller-supplied extra set (project-wide images known to the
 	// orchestrator) so the per-host file can apply rule 3 even when
 	// its own document lists no kind:image entries.
-	imageNames := collectImageNames(root)
+	boxNames := collectImageNames(root)
 	for name := range extraImageNames {
-		imageNames[name] = true
+		boxNames[name] = true
 	}
 
 	// Build the deploy-name → already-declared-image mapping so we
@@ -251,7 +251,7 @@ func migrateRequireImageOneFile(path string, dryRun bool, extraImageNames map[st
 			}
 
 			// Inference rule 3: deploy key matches a kind:image entity.
-			if imageNames[key] {
+			if boxNames[key] {
 				if injectImageField(valNode, key) {
 					mutated = true
 					changes = append(changes, fmt.Sprintf("injected image: %q on %q (key matches kind:image entry)", key, key))

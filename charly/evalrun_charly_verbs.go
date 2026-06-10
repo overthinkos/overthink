@@ -87,10 +87,10 @@ type methodSpec struct {
 	required []string
 	posArgs  func(c *Check) []string
 	artifact bool
-	// skipImage = true means the verb operates against a cluster or other
+	// skipBox = true means the verb operates against a cluster or other
 	// non-image target, so the usual image/deploy-name positional must NOT
 	// be appended between the method path and posArgs. Used by k8s verbs.
-	skipImage bool
+	skipBox bool
 }
 
 // ---------------------------------------------------------------------------
@@ -409,21 +409,21 @@ var appiumMethods = map[string]methodSpec{
 }
 
 // k8s methods all run against a cluster, not an image/container, so
-// skipImage=true across the board.
+// skipBox=true across the board.
 var k8sMethods = map[string]methodSpec{
-	"nodes":          {path: []string{"k8s", "nodes"}, posArgs: posK8sCluster, skipImage: true},
-	"wait-nodes":     {path: []string{"k8s", "wait-nodes"}, posArgs: posK8sWaitNodes, skipImage: true},
-	"pods":           {path: []string{"k8s", "pods"}, posArgs: posK8sPods, skipImage: true},
-	"wait-ready":     {path: []string{"k8s", "wait-ready"}, required: []string{"Kind", "Name"}, posArgs: posK8sWaitReady, skipImage: true},
-	"ingress":        {path: []string{"k8s", "ingress"}, posArgs: posK8sNamespaceOpt, skipImage: true},
-	"ingressclass":   {path: []string{"k8s", "ingressclass"}, posArgs: posK8sCluster, skipImage: true},
-	"storageclass":   {path: []string{"k8s", "storageclass"}, posArgs: posK8sCluster, skipImage: true},
-	"service":        {path: []string{"k8s", "service"}, posArgs: posK8sNamespaceOpt, skipImage: true},
-	"lb-external-ip": {path: []string{"k8s", "lb-external-ip"}, required: []string{"Namespace", "Name"}, posArgs: posK8sLbExternal, skipImage: true},
-	"addons":         {path: []string{"k8s", "addons"}, posArgs: posK8sAddons, skipImage: true},
-	"apply":          {path: []string{"k8s", "apply"}, required: []string{"Manifest"}, posArgs: posK8sApply, skipImage: true},
-	"delete":         {path: []string{"k8s", "delete"}, required: []string{"Manifest"}, posArgs: posK8sApply, skipImage: true},
-	"raw":            {path: []string{"k8s", "raw"}, required: []string{"Resource"}, posArgs: posK8sRaw, skipImage: true},
+	"nodes":          {path: []string{"k8s", "nodes"}, posArgs: posK8sCluster, skipBox: true},
+	"wait-nodes":     {path: []string{"k8s", "wait-nodes"}, posArgs: posK8sWaitNodes, skipBox: true},
+	"pods":           {path: []string{"k8s", "pods"}, posArgs: posK8sPods, skipBox: true},
+	"wait-ready":     {path: []string{"k8s", "wait-ready"}, required: []string{"Kind", "Name"}, posArgs: posK8sWaitReady, skipBox: true},
+	"ingress":        {path: []string{"k8s", "ingress"}, posArgs: posK8sNamespaceOpt, skipBox: true},
+	"ingressclass":   {path: []string{"k8s", "ingressclass"}, posArgs: posK8sCluster, skipBox: true},
+	"storageclass":   {path: []string{"k8s", "storageclass"}, posArgs: posK8sCluster, skipBox: true},
+	"service":        {path: []string{"k8s", "service"}, posArgs: posK8sNamespaceOpt, skipBox: true},
+	"lb-external-ip": {path: []string{"k8s", "lb-external-ip"}, required: []string{"Namespace", "Name"}, posArgs: posK8sLbExternal, skipBox: true},
+	"addons":         {path: []string{"k8s", "addons"}, posArgs: posK8sAddons, skipBox: true},
+	"apply":          {path: []string{"k8s", "apply"}, required: []string{"Manifest"}, posArgs: posK8sApply, skipBox: true},
+	"delete":         {path: []string{"k8s", "delete"}, required: []string{"Manifest"}, posArgs: posK8sApply, skipBox: true},
+	"raw":            {path: []string{"k8s", "raw"}, required: []string{"Resource"}, posArgs: posK8sRaw, skipBox: true},
 }
 
 // ---------------------------------------------------------------------------
@@ -1032,7 +1032,7 @@ func (r *Runner) runCharlyVerb(ctx context.Context, c *Check, verb, method strin
 	if r.Mode == RunModeImage {
 		return skipf(c, fmt.Sprintf("%s: %s requires a running container (skip under charly eval box)", verb, method))
 	}
-	if r.Image == "" {
+	if r.Box == "" {
 		return skipf(c, fmt.Sprintf("%s: %s runner has no image context (should not happen under charly eval)", verb, method))
 	}
 
@@ -1101,16 +1101,16 @@ func (r *Runner) runCharlyVerb(ctx context.Context, c *Check, verb, method strin
 	}
 
 	// Build argv: ["eval"] + spec.path + [image?] + spec.posArgs(c) + ["-i", instance]
-	// spec.skipImage=true elides the image/deploy-name positional (used by
+	// spec.skipBox=true elides the image/deploy-name positional (used by
 	// k8s verbs that operate against a cluster instead of an image).
 	argv := append([]string{"eval"}, spec.path...)
-	if !spec.skipImage {
-		argv = append(argv, r.Image)
+	if !spec.skipBox {
+		argv = append(argv, r.Box)
 	}
 	if spec.posArgs != nil {
 		argv = append(argv, spec.posArgs(c)...)
 	}
-	if r.Instance != "" && !spec.skipImage {
+	if r.Instance != "" && !spec.skipBox {
 		argv = append(argv, "-i", r.Instance)
 	}
 

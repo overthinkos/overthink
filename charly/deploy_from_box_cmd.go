@@ -70,7 +70,7 @@ func (c *DeployFromBoxCmd) Run() error {
 		return err
 	}
 	icc := &BoxConfigSetupCmd{
-		Image:       name,
+		Box:         name,
 		Instance:    c.Instance,
 		Env:         c.Env,
 		Port:        c.Port,

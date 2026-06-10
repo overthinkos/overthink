@@ -26,81 +26,81 @@ func TestCdpCmdStructure(t *testing.T) {
 	_ = cmd.Wait
 	_ = cmd.Raw
 
-	open := CdpOpenCmd{Image: "test", URL: "https://example.com", Instance: "inst"}
-	if open.Image != "test" || open.URL != "https://example.com" || open.Instance != "inst" {
+	open := CdpOpenCmd{Box: "test", URL: "https://example.com", Instance: "inst"}
+	if open.Box != "test" || open.URL != "https://example.com" || open.Instance != "inst" {
 		t.Error("CdpOpenCmd fields not set correctly")
 	}
 
-	list := CdpListCmd{Image: "test", Instance: "inst"}
-	if list.Image != "test" || list.Instance != "inst" {
+	list := CdpListCmd{Box: "test", Instance: "inst"}
+	if list.Box != "test" || list.Instance != "inst" {
 		t.Error("CdpListCmd fields not set correctly")
 	}
 
-	close := CdpCloseCmd{Image: "test", TabID: "abc123", Instance: "inst"}
-	if close.Image != "test" || close.TabID != "abc123" || close.Instance != "inst" {
+	close := CdpCloseCmd{Box: "test", TabID: "abc123", Instance: "inst"}
+	if close.Box != "test" || close.TabID != "abc123" || close.Instance != "inst" {
 		t.Error("CdpCloseCmd fields not set correctly")
 	}
 }
 
 func TestCdpTextCmdStructure(t *testing.T) {
-	cmd := CdpTextCmd{Image: "chrome", TabID: "tab1", Instance: "dev"}
-	if cmd.Image != "chrome" || cmd.TabID != "tab1" || cmd.Instance != "dev" {
+	cmd := CdpTextCmd{Box: "chrome", TabID: "tab1", Instance: "dev"}
+	if cmd.Box != "chrome" || cmd.TabID != "tab1" || cmd.Instance != "dev" {
 		t.Error("CdpTextCmd fields not set correctly")
 	}
 }
 
 func TestCdpHtmlCmdStructure(t *testing.T) {
-	cmd := CdpHtmlCmd{Image: "chrome", TabID: "tab1", Instance: "dev"}
-	if cmd.Image != "chrome" || cmd.TabID != "tab1" || cmd.Instance != "dev" {
+	cmd := CdpHtmlCmd{Box: "chrome", TabID: "tab1", Instance: "dev"}
+	if cmd.Box != "chrome" || cmd.TabID != "tab1" || cmd.Instance != "dev" {
 		t.Error("CdpHtmlCmd fields not set correctly")
 	}
 }
 
 func TestCdpUrlCmdStructure(t *testing.T) {
-	cmd := CdpUrlCmd{Image: "chrome", TabID: "tab1", Instance: "dev"}
-	if cmd.Image != "chrome" || cmd.TabID != "tab1" || cmd.Instance != "dev" {
+	cmd := CdpUrlCmd{Box: "chrome", TabID: "tab1", Instance: "dev"}
+	if cmd.Box != "chrome" || cmd.TabID != "tab1" || cmd.Instance != "dev" {
 		t.Error("CdpUrlCmd fields not set correctly")
 	}
 }
 
 func TestCdpScreenshotCmdStructure(t *testing.T) {
-	cmd := CdpScreenshotCmd{Image: "chrome", TabID: "tab1", File: "out.png", Instance: "dev"}
-	if cmd.Image != "chrome" || cmd.TabID != "tab1" || cmd.File != "out.png" || cmd.Instance != "dev" {
+	cmd := CdpScreenshotCmd{Box: "chrome", TabID: "tab1", File: "out.png", Instance: "dev"}
+	if cmd.Box != "chrome" || cmd.TabID != "tab1" || cmd.File != "out.png" || cmd.Instance != "dev" {
 		t.Error("CdpScreenshotCmd fields not set correctly")
 	}
 }
 
 func TestCdpClickCmdStructure(t *testing.T) {
-	cmd := CdpClickCmd{Image: "chrome", TabID: "tab1", Selector: "#btn", Instance: "dev"}
-	if cmd.Image != "chrome" || cmd.TabID != "tab1" || cmd.Selector != "#btn" || cmd.Instance != "dev" {
+	cmd := CdpClickCmd{Box: "chrome", TabID: "tab1", Selector: "#btn", Instance: "dev"}
+	if cmd.Box != "chrome" || cmd.TabID != "tab1" || cmd.Selector != "#btn" || cmd.Instance != "dev" {
 		t.Error("CdpClickCmd fields not set correctly")
 	}
 }
 
 func TestCdpTypeCmdStructure(t *testing.T) {
-	cmd := CdpTypeCmd{Image: "chrome", TabID: "tab1", Selector: "#input", Text: "hello", Instance: "dev"}
-	if cmd.Image != "chrome" || cmd.TabID != "tab1" || cmd.Selector != "#input" || cmd.Text != "hello" || cmd.Instance != "dev" {
+	cmd := CdpTypeCmd{Box: "chrome", TabID: "tab1", Selector: "#input", Text: "hello", Instance: "dev"}
+	if cmd.Box != "chrome" || cmd.TabID != "tab1" || cmd.Selector != "#input" || cmd.Text != "hello" || cmd.Instance != "dev" {
 		t.Error("CdpTypeCmd fields not set correctly")
 	}
 }
 
 func TestCdpEvalCmdStructure(t *testing.T) {
-	cmd := CdpEvalCmd{Image: "chrome", TabID: "tab1", Expression: "1+1", Instance: "dev"}
-	if cmd.Image != "chrome" || cmd.TabID != "tab1" || cmd.Expression != "1+1" || cmd.Instance != "dev" {
+	cmd := CdpEvalCmd{Box: "chrome", TabID: "tab1", Expression: "1+1", Instance: "dev"}
+	if cmd.Box != "chrome" || cmd.TabID != "tab1" || cmd.Expression != "1+1" || cmd.Instance != "dev" {
 		t.Error("CdpEvalCmd fields not set correctly")
 	}
 }
 
 func TestCdpWaitCmdStructure(t *testing.T) {
-	cmd := CdpWaitCmd{Image: "chrome", TabID: "tab1", Selector: ".loaded", Instance: "dev", Timeout: 10 * time.Second}
-	if cmd.Image != "chrome" || cmd.TabID != "tab1" || cmd.Selector != ".loaded" || cmd.Instance != "dev" || cmd.Timeout != 10*time.Second {
+	cmd := CdpWaitCmd{Box: "chrome", TabID: "tab1", Selector: ".loaded", Instance: "dev", Timeout: 10 * time.Second}
+	if cmd.Box != "chrome" || cmd.TabID != "tab1" || cmd.Selector != ".loaded" || cmd.Instance != "dev" || cmd.Timeout != 10*time.Second {
 		t.Error("CdpWaitCmd fields not set correctly")
 	}
 }
 
 func TestCdpRawCmdStructure(t *testing.T) {
-	cmd := CdpRawCmd{Image: "chrome", TabID: "tab1", Method: "Page.navigate", Params: `{"url":"https://example.com"}`, Instance: "dev"}
-	if cmd.Image != "chrome" || cmd.TabID != "tab1" || cmd.Method != "Page.navigate" || cmd.Params != `{"url":"https://example.com"}` || cmd.Instance != "dev" {
+	cmd := CdpRawCmd{Box: "chrome", TabID: "tab1", Method: "Page.navigate", Params: `{"url":"https://example.com"}`, Instance: "dev"}
+	if cmd.Box != "chrome" || cmd.TabID != "tab1" || cmd.Method != "Page.navigate" || cmd.Params != `{"url":"https://example.com"}` || cmd.Instance != "dev" {
 		t.Error("CdpRawCmd fields not set correctly")
 	}
 }
@@ -249,11 +249,11 @@ func TestCdpClickWlFlag(t *testing.T) {
 func TestCdpAxtreeCmd(t *testing.T) {
 	// Verify the CdpAxtreeCmd struct exists and has expected fields.
 	cmd := CdpAxtreeCmd{
-		Image: "test",
+		Box:   "test",
 		TabID: "tab1",
 		Query: "button",
 	}
-	if cmd.Image != "test" || cmd.TabID != "tab1" || cmd.Query != "button" {
+	if cmd.Box != "test" || cmd.TabID != "tab1" || cmd.Query != "button" {
 		t.Error("CdpAxtreeCmd fields not set correctly")
 	}
 }

@@ -8,18 +8,18 @@ import (
 
 // resolveContainer resolves engine + container name, verifying the container is running.
 // Use "." as image name for local mode (returns empty engine and name).
-func resolveContainer(image, instance string) (engine, name string, err error) {
-	if image == "." {
+func resolveContainer(box, instance string) (engine, name string, err error) {
+	if box == "." {
 		return "", "", nil
 	}
 	rt, err := ResolveRuntime()
 	if err != nil {
 		return "", "", err
 	}
-	imageName := resolveImageName(image)
-	runEngine := ResolveImageEngineForDeploy(imageName, instance, rt.RunEngine)
+	boxName := resolveBoxName(box)
+	runEngine := ResolveBoxEngineForDeploy(boxName, instance, rt.RunEngine)
 	engine = EngineBinary(runEngine)
-	name = containerNameInstance(imageName, instance)
+	name = containerNameInstance(boxName, instance)
 	if !containerRunning(engine, name) {
 		return "", "", fmt.Errorf("container %s is not running", name)
 	}

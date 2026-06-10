@@ -72,7 +72,7 @@ image:
 	if !present {
 		t.Fatal("charly.yml not present after migration")
 	}
-	if _, ok := uf.Image["fedora"]; !ok {
+	if _, ok := uf.Box["fedora"]; !ok {
 		t.Error("LoadUnified lost the fedora box after migration")
 	}
 	if _, ok := uf.Distro["fedora"]; !ok {

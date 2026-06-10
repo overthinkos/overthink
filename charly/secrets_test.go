@@ -55,9 +55,9 @@ func TestSecretArgs(t *testing.T) {
 
 func TestQuadletSecretDirectives(t *testing.T) {
 	cfg := QuadletConfig{
-		ImageName: "test-img",
-		ImageRef:  "ghcr.io/test/test-img:latest",
-		Home:      "/tmp",
+		BoxName:  "test-img",
+		ImageRef: "ghcr.io/test/test-img:latest",
+		Home:     "/tmp",
 		Secrets: []CollectedSecret{
 			{Name: "charly-test-img-api-key", Target: "/run/secrets/api_key"},
 			{Name: "charly-test-img-db-pass", Target: "/run/secrets/db_pass"},
@@ -92,11 +92,11 @@ func TestQuadletSecretDirectives(t *testing.T) {
 // Environment= line will fail this test.
 func TestQuadletSecretEnvDirectives(t *testing.T) {
 	cfg := QuadletConfig{
-		ImageName: "openwebui",
-		ImageRef:  "ghcr.io/overthinkos/openwebui:latest",
-		UID:       1000,
-		GID:       1000,
-		Env:       []string{"WEBUI_URL=http://localhost:8080"},
+		BoxName:  "openwebui",
+		ImageRef: "ghcr.io/overthinkos/openwebui:latest",
+		UID:      1000,
+		GID:      1000,
+		Env:      []string{"WEBUI_URL=http://localhost:8080"},
 		Secrets: []CollectedSecret{
 			{
 				Name:           "charly-openwebui-openrouter-api-key",

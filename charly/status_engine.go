@@ -29,7 +29,7 @@ type ContainerSnapshot struct {
 	Name        string        // "charly-selkies-desktop-185.52.136.164"
 	State       string        // "running" | "exited" | "created" | "paused" | "dead" | "removing"
 	Status      string        // human "Up 3 hours"
-	Image       string        // base image short-name (filled by Collector after parsing the quadlet description)
+	Box         string        // base image short-name (filled by Collector after parsing the quadlet description)
 	Instance    string        // optional instance suffix, ditto
 	NetworkMode string        // "host" | "bridge" | "container:<id>" | named network
 	Ports       []PortMapping // runtime mappings from `podman ps`

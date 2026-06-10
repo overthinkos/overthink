@@ -36,7 +36,7 @@ import (
 // charly config time.
 func resolveMCPEntry(meta *BoxMetadata, image, ctrName, wantName string) (MCPProvideEntry, error) {
 	if meta == nil || len(meta.MCPProvide) == 0 {
-		return MCPProvideEntry{}, fmt.Errorf("image %q declares no mcp_provides", image)
+		return MCPProvideEntry{}, fmt.Errorf("box %q declares no mcp_provides", image)
 	}
 
 	entries := make([]MCPProvideEntry, 0, len(meta.MCPProvide))

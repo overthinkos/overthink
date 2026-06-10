@@ -301,7 +301,7 @@ func mergeSingleSidecar(base, overlay SidecarDef) SidecarDef {
 // and renders each SidecarSecret.EnvFrom template against the merged
 // Parameter map. Missing required parameters surface as fmt.Errorf
 // returned via the error channel; callers must check it before proceeding.
-func ResolveSidecar(defs map[string]SidecarDef, imageName, instance string) ([]ResolvedSidecar, error) {
+func ResolveSidecar(defs map[string]SidecarDef, boxName, instance string) ([]ResolvedSidecar, error) {
 	if len(defs) == 0 {
 		return nil, nil
 	}
@@ -326,9 +326,9 @@ func ResolveSidecar(defs map[string]SidecarDef, imageName, instance string) ([]R
 		}
 
 		for _, v := range def.Volume {
-			volName := sidecarVolumeName(imageName, name, v.Name)
+			volName := sidecarVolumeName(boxName, name, v.Name)
 			if instance != "" {
-				volName = sidecarVolumeName(imageName+"-"+instance, name, v.Name)
+				volName = sidecarVolumeName(boxName+"-"+instance, name, v.Name)
 			}
 			sc.Volume = append(sc.Volume, VolumeMount{
 				VolumeName:    volName,
@@ -337,9 +337,9 @@ func ResolveSidecar(defs map[string]SidecarDef, imageName, instance string) ([]R
 		}
 
 		for _, s := range def.Secret {
-			secretName := sidecarSecretName(imageName, name, s.Name)
+			secretName := sidecarSecretName(boxName, name, s.Name)
 			if instance != "" {
-				secretName = sidecarSecretName(imageName+"-"+instance, name, s.Name)
+				secretName = sidecarSecretName(boxName+"-"+instance, name, s.Name)
 			}
 			hostEnv, err := renderSidecarEnvFrom(s, def.Parameter)
 			if err != nil {
@@ -418,28 +418,28 @@ func SidecarEnvKey(sidecars map[string]SidecarDef) map[string]string {
 
 // --- Naming helpers ---
 
-func sidecarVolumeName(imageName, sidecarName, volumeName string) string {
-	return fmt.Sprintf("charly-%s-%s-%s", imageName, sidecarName, volumeName)
+func sidecarVolumeName(boxName, sidecarName, volumeName string) string {
+	return fmt.Sprintf("charly-%s-%s-%s", boxName, sidecarName, volumeName)
 }
 
-func sidecarSecretName(imageName, sidecarName, secretName string) string {
-	return fmt.Sprintf("charly-%s-%s-%s", imageName, sidecarName, secretName)
+func sidecarSecretName(boxName, sidecarName, secretName string) string {
+	return fmt.Sprintf("charly-%s-%s-%s", boxName, sidecarName, secretName)
 }
 
-func SidecarContainerName(imageName, sidecarName string) string {
-	return containerName(imageName) + "-" + sidecarName
+func SidecarContainerName(boxName, sidecarName string) string {
+	return containerName(boxName) + "-" + sidecarName
 }
 
-func SidecarContainerNameInstance(imageName, instance, sidecarName string) string {
-	return containerNameInstance(imageName, instance) + "-" + sidecarName
+func SidecarContainerNameInstance(boxName, instance, sidecarName string) string {
+	return containerNameInstance(boxName, instance) + "-" + sidecarName
 }
 
-func PodName(imageName string) string {
-	return containerName(imageName)
+func PodName(boxName string) string {
+	return containerName(boxName)
 }
 
-func PodNameInstance(imageName, instance string) string {
-	return containerNameInstance(imageName, instance)
+func PodNameInstance(boxName, instance string) string {
+	return containerNameInstance(boxName, instance)
 }
 
 // findPodSidecarQuadlets returns the .container quadlets in qdir that belong

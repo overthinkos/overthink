@@ -17,10 +17,10 @@ func TestFoldPeers_FoldsTopLevelAndInheritsDisposability(t *testing.T) {
 	uf := &UnifiedFile{Deploy: map[string]DeploymentNode{
 		"eval-cross-pod-cdp": {
 			Target:     "pod",
-			Image:      "web",
+			Box:        "web",
 			Disposable: ptrBool(true),
 			Peer: map[string]*DeploymentNode{
-				"chrome": {Target: "pod", Image: "chrome-headless"},
+				"chrome": {Target: "pod", Box: "chrome-headless"},
 			},
 		},
 	}}
@@ -34,8 +34,8 @@ func TestFoldPeers_FoldsTopLevelAndInheritsDisposability(t *testing.T) {
 	if peer.PeerOf != "eval-cross-pod-cdp" {
 		t.Errorf("peer.PeerOf = %q, want eval-cross-pod-cdp", peer.PeerOf)
 	}
-	if peer.Image != "chrome-headless" {
-		t.Errorf("peer.Image = %q, want chrome-headless", peer.Image)
+	if peer.Box != "chrome-headless" {
+		t.Errorf("peer.Image = %q, want chrome-headless", peer.Box)
 	}
 	if !peer.IsDisposable() {
 		t.Errorf("folded peer should inherit the disposable owner's disposability")
@@ -48,8 +48,8 @@ func TestFoldPeers_NonDisposableOwnerDoesNotForceDisposable(t *testing.T) {
 	uf := &UnifiedFile{Deploy: map[string]DeploymentNode{
 		"prod": {
 			Target: "pod",
-			Image:  "web",
-			Peer:   map[string]*DeploymentNode{"sidecar": {Target: "pod", Image: "chrome-headless"}},
+			Box:    "web",
+			Peer:   map[string]*DeploymentNode{"sidecar": {Target: "pod", Box: "chrome-headless"}},
 		},
 	}}
 	if err := foldPeers(uf); err != nil {
@@ -64,8 +64,8 @@ func TestFoldPeers_NonDisposableOwnerDoesNotForceDisposable(t *testing.T) {
 // deploy/bed/peer entry is a hard error (globally-unique peer names).
 func TestFoldPeers_CollisionIsError(t *testing.T) {
 	uf := &UnifiedFile{Deploy: map[string]DeploymentNode{
-		"web": {Target: "pod", Image: "web"},
-		"bed": {Target: "pod", Image: "web", Peer: map[string]*DeploymentNode{"web": {Target: "pod", Image: "chrome-headless"}}},
+		"web": {Target: "pod", Box: "web"},
+		"bed": {Target: "pod", Box: "web", Peer: map[string]*DeploymentNode{"web": {Target: "pod", Box: "chrome-headless"}}},
 	}}
 	err := foldPeers(uf)
 	if err == nil || !strings.Contains(err.Error(), "collides") {
@@ -76,7 +76,7 @@ func TestFoldPeers_CollisionIsError(t *testing.T) {
 // TestFoldPeers_EmptyPeerIsError: a nil peer node is rejected.
 func TestFoldPeers_EmptyPeerIsError(t *testing.T) {
 	uf := &UnifiedFile{Deploy: map[string]DeploymentNode{
-		"bed": {Target: "pod", Image: "web", Peer: map[string]*DeploymentNode{"chrome": nil}},
+		"bed": {Target: "pod", Box: "web", Peer: map[string]*DeploymentNode{"chrome": nil}},
 	}}
 	if err := foldPeers(uf); err == nil {
 		t.Fatalf("expected an error for a nil peer node")
@@ -86,8 +86,8 @@ func TestFoldPeers_EmptyPeerIsError(t *testing.T) {
 // TestValidatePeers_BadTarget rejects an unsupported peer target kind.
 func TestValidatePeers_BadTarget(t *testing.T) {
 	uf := &UnifiedFile{Deploy: map[string]DeploymentNode{
-		"bed": {Target: "pod", Image: "web", Peer: map[string]*DeploymentNode{
-			"chrome": {Target: "bogus", Image: "chrome-headless"},
+		"bed": {Target: "pod", Box: "web", Peer: map[string]*DeploymentNode{
+			"chrome": {Target: "bogus", Box: "chrome-headless"},
 		}},
 	}}
 	if err := validatePeers(uf); err == nil || !strings.Contains(err.Error(), "unsupported target") {
@@ -99,8 +99,8 @@ func TestValidatePeers_BadTarget(t *testing.T) {
 // nested dotted-path addressing grammar.
 func TestValidatePeers_DottedKeyRejected(t *testing.T) {
 	uf := &UnifiedFile{Deploy: map[string]DeploymentNode{
-		"bed": {Target: "pod", Image: "web", Peer: map[string]*DeploymentNode{
-			"a.b": {Target: "pod", Image: "chrome-headless"},
+		"bed": {Target: "pod", Box: "web", Peer: map[string]*DeploymentNode{
+			"a.b": {Target: "pod", Box: "chrome-headless"},
 		}},
 	}}
 	if err := validatePeers(uf); err == nil {

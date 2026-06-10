@@ -102,7 +102,7 @@ func TestRunCharlyVerb_ValidateAi_AllowlistedMethod_FilePresent_FreshMtime_Valid
 
 	r := &Runner{
 		Mode:                RunModeLive,
-		Image:               "fixture-desktop",
+		Box:                 "fixture-desktop",
 		ValidateAiArtifacts: true,
 		IterStartTime:       time.Now().Add(-1 * time.Hour),
 	}
@@ -126,7 +126,7 @@ func TestRunCharlyVerb_ValidateAi_AllowlistedMethod_FilePresent_FreshMtime_Valid
 func TestRunCharlyVerb_ValidateAi_AllowlistedMethod_FileMissing_FailsActionable(t *testing.T) {
 	r := &Runner{
 		Mode:                RunModeLive,
-		Image:               "fixture-desktop",
+		Box:                 "fixture-desktop",
 		ValidateAiArtifacts: true,
 		IterStartTime:       time.Now().Add(-1 * time.Hour),
 	}
@@ -165,7 +165,7 @@ func TestRunCharlyVerb_ValidateAi_AllowlistedMethod_StaleMtime_FailsAntiDeceptio
 
 	r := &Runner{
 		Mode:                RunModeLive,
-		Image:               "fixture-desktop",
+		Box:                 "fixture-desktop",
 		ValidateAiArtifacts: true,
 		IterStartTime:       time.Now().Add(-30 * time.Minute), // iter started 30m ago, file is 2h old
 	}
@@ -228,7 +228,7 @@ func TestRunCharlyVerb_ValidateAi_AllowlistedMethod_PhaseBoundary_AcceptsCrossPh
 	// This MUST pass.
 	r := &Runner{
 		Mode:                RunModeLive,
-		Image:               "fixture-desktop",
+		Box:                 "fixture-desktop",
 		ValidateAiArtifacts: true,
 		IterStartTime:       time.Now().Add(-2 * time.Hour),
 	}
@@ -257,7 +257,7 @@ func TestRunCharlyVerb_ValidateAi_AllowlistedMethod_StdoutMatcher_FailsActionabl
 
 	r := &Runner{
 		Mode:                RunModeLive,
-		Image:               "fixture-desktop",
+		Box:                 "fixture-desktop",
 		ValidateAiArtifacts: true,
 		IterStartTime:       time.Now().Add(-1 * time.Hour),
 	}

@@ -56,8 +56,8 @@ type adbCommonFlags struct {
 //
 // The host port is read from podman's NetworkSettings.Ports — same source
 // of truth used by the eval test runner's HOST_PORT:N substitution.
-func adbDeviceFor(image, instance, serial string) (*adb.Device, error) {
-	engine, containerName, err := resolveContainer(image, instance)
+func adbDeviceFor(box, instance, serial string) (*adb.Device, error) {
+	engine, containerName, err := resolveContainer(box, instance)
 	if err != nil {
 		return nil, err
 	}
@@ -125,12 +125,12 @@ func findHostPort(insp *ContainerInspection, containerPort int) (int, error) {
 // emits one line per device in `<serial>\t<state>` form (matches the
 // `adb devices` CLI output without the header).
 type AdbDevicesCmd struct {
-	Image string `arg:"" help:"Image name (deploy address — instance via -i)"`
+	Box string `arg:"" help:"Box name (deploy address — instance via -i)"`
 	adbCommonFlags
 }
 
 func (c *AdbDevicesCmd) Run() error {
-	engine, containerName, err := resolveContainer(c.Image, c.Instance)
+	engine, containerName, err := resolveContainer(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -196,7 +196,7 @@ func adbStateString(s adb.DeviceState) string {
 // command on the device. The `--` delimiter is recommended in the runner's
 // posShellArgs builder so flags like `-l` aren't claimed by Kong.
 type AdbShellCmd struct {
-	Image   string   `arg:"" help:"Image name"`
+	Box     string   `arg:"" help:"Box name"`
 	Command []string `arg:"" passthrough:"" help:"Shell command + args"`
 	adbCommonFlags
 }
@@ -215,7 +215,7 @@ func (c *AdbShellCmd) Run() error {
 	if len(cmd) == 0 {
 		return fmt.Errorf("adb shell: empty command (use `charly eval adb shell <image> -- <cmd> [args...]`)")
 	}
-	dev, err := adbDeviceFor(c.Image, c.Instance, c.Serial)
+	dev, err := adbDeviceFor(c.Box, c.Instance, c.Serial)
 	if err != nil {
 		return err
 	}
@@ -235,8 +235,8 @@ func (c *AdbShellCmd) Run() error {
 // APK to the device and invokes `pm install`. Uses adb shell `pm install
 // <remote>` after streaming the APK via the sync protocol.
 type AdbInstallCmd struct {
-	Image string `arg:"" help:"Image name"`
-	Apk   string `long:"apk" required:"" help:"APK file path on host"`
+	Box string `arg:"" help:"Box name"`
+	Apk string `long:"apk" required:"" help:"APK file path on host"`
 	adbCommonFlags
 }
 
@@ -244,7 +244,7 @@ func (c *AdbInstallCmd) Run() error {
 	// Resolve the device's adb-server address (published 5037), then delegate
 	// to the SINGLE shared installer's committed-APK path (android_install.go)
 	// — the same goadb push the `apk:` format's committed entries use (R3).
-	addr, err := adbAddrFor(c.Image, c.Instance)
+	addr, err := adbAddrFor(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -259,8 +259,8 @@ func (c *AdbInstallCmd) Run() error {
 // adbAddrFor resolves the "127.0.0.1:<host-port>" adb-server address for a
 // running deploy's published 5037. Shared by the host-side install + the
 // AndroidDeployTarget in-pod device resolution.
-func adbAddrFor(image, instance string) (string, error) {
-	engine, containerName, err := resolveContainer(image, instance)
+func adbAddrFor(box, instance string) (string, error) {
+	engine, containerName, err := resolveContainer(box, instance)
 	if err != nil {
 		return "", err
 	}
@@ -306,7 +306,7 @@ func adbAddrForContainer(engine, containerName string) (string, error) {
 // [--source apk-pure|google-play|f-droid|huawei-app-gallery] [--arch x86_64]
 // [--app-version X]`.
 type AdbInstallAppCmd struct {
-	Image      string `arg:"" help:"Image name"`
+	Box        string `arg:"" help:"Box name"`
 	Package    string `long:"package" required:"" help:"App package id to fetch+install (e.g. org.fdroid.fdroid)"`
 	Source     string `long:"source" default:"apk-pure" enum:"apk-pure,google-play,f-droid,huawei-app-gallery" help:"apkeep download source"`
 	Arch       string `long:"arch" default:"x86_64" help:"apkeep -o arch= native ABI (apk-pure only; match the emulator)"`
@@ -315,7 +315,7 @@ type AdbInstallAppCmd struct {
 }
 
 func (c *AdbInstallAppCmd) Run() error {
-	engine, containerName, err := resolveContainer(c.Image, c.Instance)
+	engine, containerName, err := resolveContainer(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -342,13 +342,13 @@ func (c *AdbInstallAppCmd) Run() error {
 
 // AdbUninstallCmd: `charly eval adb uninstall <image> <package>`.
 type AdbUninstallCmd struct {
-	Image   string `arg:"" help:"Image name"`
+	Box     string `arg:"" help:"Box name"`
 	Package string `arg:"" help:"Package id (e.g. com.example.android.apis)"`
 	adbCommonFlags
 }
 
 func (c *AdbUninstallCmd) Run() error {
-	dev, err := adbDeviceFor(c.Image, c.Instance, c.Serial)
+	dev, err := adbDeviceFor(c.Box, c.Instance, c.Serial)
 	if err != nil {
 		return err
 	}
@@ -372,13 +372,13 @@ func (c *AdbUninstallCmd) Run() error {
 // system property and prints its value (trimmed). Use the bare
 // `charly eval adb shell <image> -- getprop` for the full property dump.
 type AdbGetpropCmd struct {
-	Image    string `arg:"" help:"Image name"`
+	Box      string `arg:"" help:"Box name"`
 	Property string `arg:"" help:"Property key (e.g. sys.boot_completed, ro.build.version.release)"`
 	adbCommonFlags
 }
 
 func (c *AdbGetpropCmd) Run() error {
-	dev, err := adbDeviceFor(c.Image, c.Instance, c.Serial)
+	dev, err := adbDeviceFor(c.Box, c.Instance, c.Serial)
 	if err != nil {
 		return err
 	}
@@ -400,13 +400,13 @@ func (c *AdbGetpropCmd) Run() error {
 // command interface (binary stdout would otherwise be mangled by line
 // processing).
 type AdbScreencapCmd struct {
-	Image    string `arg:"" help:"Image name"`
+	Box      string `arg:"" help:"Box name"`
 	Artifact string `long:"artifact" required:"" help:"Output PNG path on host"`
 	adbCommonFlags
 }
 
 func (c *AdbScreencapCmd) Run() error {
-	dev, err := adbDeviceFor(c.Image, c.Instance, c.Serial)
+	dev, err := adbDeviceFor(c.Box, c.Instance, c.Serial)
 	if err != nil {
 		return err
 	}
@@ -445,14 +445,14 @@ func (c *AdbScreencapCmd) Run() error {
 // the logcat filter spec (e.g. `MyApp:I *:S` to silence everything but
 // MyApp). Empty filter = unfiltered.
 type AdbLogcatTailCmd struct {
-	Image  string `arg:"" help:"Image name"`
+	Box    string `arg:"" help:"Box name"`
 	Lines  int    `long:"lines" default:"50" help:"Last N lines (0 = all)"`
 	Filter string `long:"filter" help:"logcat filter spec (e.g. \"MyApp:I *:S\")"`
 	adbCommonFlags
 }
 
 func (c *AdbLogcatTailCmd) Run() error {
-	dev, err := adbDeviceFor(c.Image, c.Instance, c.Serial)
+	dev, err := adbDeviceFor(c.Box, c.Instance, c.Serial)
 	if err != nil {
 		return err
 	}
@@ -490,12 +490,12 @@ func (c *AdbLogcatTailCmd) Run() error {
 // device to ATTACH (which an emulator does early in boot, well before
 // sys.boot_completed is true).
 type AdbWaitForDeviceCmd struct {
-	Image string `arg:"" help:"Image name"`
+	Box string `arg:"" help:"Box name"`
 	adbCommonFlags
 }
 
 func (c *AdbWaitForDeviceCmd) Run() error {
-	dev, err := adbDeviceFor(c.Image, c.Instance, c.Serial)
+	dev, err := adbDeviceFor(c.Box, c.Instance, c.Serial)
 	if err != nil {
 		return err
 	}
@@ -548,12 +548,12 @@ func parseCurrentFocus(dumpsysWindow string) string {
 // foreground window line. Use it to assert the foreground app (e.g. stdout
 // contains `io.appium.android.apis`) or to detect a stuck ANR dialog.
 type AdbCurrentFocusCmd struct {
-	Image string `arg:"" help:"Image name"`
+	Box string `arg:"" help:"Box name"`
 	adbCommonFlags
 }
 
 func (c *AdbCurrentFocusCmd) Run() error {
-	dev, err := adbDeviceFor(c.Image, c.Instance, c.Serial)
+	dev, err := adbDeviceFor(c.Box, c.Instance, c.Serial)
 	if err != nil {
 		return err
 	}
@@ -570,13 +570,13 @@ func (c *AdbCurrentFocusCmd) Run() error {
 // code). Generic input building block; wait-ui-settled uses the same call to
 // dismiss dialogs.
 type AdbKeyeventCmd struct {
-	Image string `arg:"" help:"Image name"`
-	Key   string `arg:"" help:"Key event (KEYCODE_HOME / KEYCODE_BACK / … or a numeric code)"`
+	Box string `arg:"" help:"Box name"`
+	Key string `arg:"" help:"Key event (KEYCODE_HOME / KEYCODE_BACK / … or a numeric code)"`
 	adbCommonFlags
 }
 
 func (c *AdbKeyeventCmd) Run() error {
-	dev, err := adbDeviceFor(c.Image, c.Instance, c.Serial)
+	dev, err := adbDeviceFor(c.Box, c.Instance, c.Serial)
 	if err != nil {
 		return err
 	}
@@ -601,12 +601,12 @@ func (c *AdbKeyeventCmd) Run() error {
 // the sufficient half. It runs entirely over goadb (no shell, no heredoc) and
 // adapts to host load via --timeout — a load-dilated churn just polls longer.
 type AdbWaitUiSettledCmd struct {
-	Image string `arg:"" help:"Image name"`
+	Box string `arg:"" help:"Box name"`
 	adbCommonFlags
 }
 
 func (c *AdbWaitUiSettledCmd) Run() error {
-	dev, err := adbDeviceFor(c.Image, c.Instance, c.Serial)
+	dev, err := adbDeviceFor(c.Box, c.Instance, c.Serial)
 	if err != nil {
 		return err
 	}

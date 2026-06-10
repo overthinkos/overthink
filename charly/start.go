@@ -9,12 +9,12 @@ import (
 
 // StartCmd launches a container with supervisord in the background
 type StartCmd struct {
-	Image           string   `arg:"" help:"Image name or remote ref (github.com/org/repo/image[@version])"`
+	Box             string   `arg:"" help:"Box name or remote ref (github.com/org/repo/box[@version])"`
 	Tag             string   `long:"tag" help:"Image CalVer tag (empty = newest local CalVer resolved via the ai.opencharly.version OCI label)"`
 	Build           bool     `long:"build" help:"Force local build instead of pulling from registry"`
 	Env             []string `short:"e" long:"env" sep:"none" help:"Set container env var (direct mode only)"`
 	EnvFile         string   `long:"env-file" help:"Load env vars from file (direct mode only)"`
-	Instance        string   `short:"i" long:"instance" help:"Instance name for running multiple containers of the same image"`
+	Instance        string   `short:"i" long:"instance" help:"Instance name for running multiple containers of the same box"`
 	Port            []string `short:"p" help:"Remap host port (direct mode only)"`
 	VolumeFlag      []string `long:"volume" short:"v" help:"Configure volume backing (name:type[:path])"`
 	Bind            []string `long:"bind" help:"Bind volume to host path (name or name=path)"`
@@ -23,10 +23,10 @@ type StartCmd struct {
 
 func (c *StartCmd) Run() error {
 	// Remote refs (@github.com/...) are handled exclusively by `charly box pull`.
-	if IsRemoteImageRef(StripURLScheme(c.Image)) {
-		return fmt.Errorf("remote refs are not accepted here; run 'charly box pull %s' first, then 'charly start <image-name>'", c.Image)
+	if IsRemoteImageRef(StripURLScheme(c.Box)) {
+		return fmt.Errorf("remote refs are not accepted here; run 'charly box pull %s' first, then 'charly start <image-name>'", c.Box)
 	}
-	c.Image, c.Instance = canonicalizeDeployArg(c.Image, c.Instance)
+	c.Box, c.Instance = canonicalizeDeployArg(c.Box, c.Instance)
 
 	// Resource arbitration: starting a pod deploy that claims requires_exclusive
 	// preempts the running holders of that resource (persistent lease —
@@ -34,7 +34,7 @@ func (c *StartCmd) Run() error {
 	// orchestrator or when this deploy claims nothing exclusive. See
 	// charly/preempt.go.
 	if dc := loadDeployConfigForRead("charly start"); dc != nil {
-		key := deployKey(c.Image, c.Instance)
+		key := deployKey(c.Box, c.Instance)
 		if node, ok := dc.Deploy[key]; ok && len(node.RequiredExclusive()) > 0 {
 			if _, perr := acquireExclusiveForClaimant(key, node, false); perr != nil {
 				return perr
@@ -72,7 +72,7 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 	// sidecar check, agent forwarding, metadata overlay).
 	dc := loadDeployConfigForRead("charly start")
 	var deployVolumes []DeployVolumeConfig
-	if overlay, ok := dc.Lookup(c.Image, c.Instance); ok {
+	if overlay, ok := dc.Lookup(c.Box, c.Instance); ok {
 		deployVolumes = overlay.Volume
 	}
 
@@ -81,9 +81,9 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 	// so no command diverges when key != image (kind:eval beds, Pattern B).
 	// c.Image stays the deploy-KEY for container / quadlet / overlay lookups;
 	// only the image ref uses the resolved name.
-	deployImageName := resolveDeployImageName(c.Image, c.Instance)
+	deployBoxName := resolveDeployBoxName(c.Box, c.Instance)
 	// Resolve from image labels (+ deploy.yml overlay). No charly.yml.
-	imageRef := resolveShellImageRef("", deployImageName, c.Tag)
+	imageRef := resolveShellImageRef("", deployBoxName, c.Tag)
 	if err := EnsureImage(imageRef, rt); err != nil {
 		return err
 	}
@@ -94,12 +94,12 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 	if meta == nil {
 		return fmt.Errorf("image %s has no embedded metadata; rebuild with latest charly", imageRef)
 	}
-	engine = ResolveImageEngineFromMeta(meta, rt.RunEngine)
-	MergeDeployOntoMetadata(meta, dc, c.Image, c.Instance)
+	engine = ResolveBoxEngineFromMeta(meta, rt.RunEngine)
+	MergeDeployOntoMetadata(meta, dc, c.Box, c.Instance)
 
 	// Sidecars require quadlet mode (pod networking is only available via quadlet)
-	if overlay, ok := dc.Lookup(c.Image, c.Instance); ok && len(overlay.Sidecar) > 0 {
-		return fmt.Errorf("image %s has sidecars configured in deploy.yml; use 'charly config %s && charly start %s' (sidecars require quadlet mode)", c.Image, c.Image, c.Image)
+	if overlay, ok := dc.Lookup(c.Box, c.Instance); ok && len(overlay.Sidecar) > 0 {
+		return fmt.Errorf("image %s has sidecars configured in deploy.yml; use 'charly config %s && charly start %s' (sidecars require quadlet mode)", c.Box, c.Box, c.Box)
 	}
 
 	uid := meta.UID
@@ -111,30 +111,30 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 	entrypoint := resolveEntrypointFromMeta(meta)
 
 	cliVolumes := parseVolumeFlagsStandalone(c.VolumeFlag, c.Bind)
-	volumes, bindMounts := ResolveVolumeBacking(c.Image, c.Instance, meta.Volume, mergeVolumeConfigs(deployVolumes, cliVolumes), meta.Home, rt.EncryptedStoragePath, rt.VolumesPath)
+	volumes, bindMounts := ResolveVolumeBacking(c.Box, c.Instance, meta.Volume, mergeVolumeConfigs(deployVolumes, cliVolumes), meta.Home, rt.EncryptedStoragePath, rt.VolumesPath)
 
 	envAccepts := meta.EnvAccept
 	envRequires := meta.EnvRequire
 	if meta.Registry != "" {
-		imageRef = resolveShellImageRef(meta.Registry, deployImageName, c.Tag)
+		imageRef = resolveShellImageRef(meta.Registry, deployBoxName, c.Tag)
 	}
 
 	// Auto-initialize and mount encrypted volumes if needed
-	if err := ensureEncryptedMounts(c.Image, c.Instance, false); err != nil {
+	if err := ensureEncryptedMounts(c.Box, c.Instance, false); err != nil {
 		return err
 	}
 
 	// Verify bind mounts
-	if err := verifyBindMounts(bindMounts, c.Image); err != nil {
+	if err := verifyBindMounts(bindMounts, c.Box); err != nil {
 		return err
 	}
 
 	// Resolve env vars from labels
 	deployEnv := meta.Env
 	var deployEnvFile string
-	startCtrName := containerNameInstance(c.Image, c.Instance)
+	startCtrName := containerNameInstance(c.Box, c.Instance)
 	startAccepted := AcceptedEnvSet(envAccepts, envRequires)
-	startGlobalEnv := dc.GlobalEnvForImage(deployKey(c.Image, c.Instance), startCtrName, startAccepted)
+	startGlobalEnv := dc.GlobalEnvForImage(deployKey(c.Box, c.Instance), startCtrName, startAccepted)
 	envVars, err := ResolveEnvVars(startGlobalEnv, deployEnv, deployEnvFile, workspaceBindHost(bindMounts), c.EnvFile, c.Env)
 	if err != nil {
 		return err
@@ -165,7 +165,7 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 		// (operator explicitly passed --port flags via charly start). Per
 		// the 2026-05-09 SaveDeployStateInput.SetPorts contract, ports
 		// are written ONLY on explicit operator opt-in.
-		saveDeployState(c.Image, c.Instance, SaveDeployStateInput{
+		saveDeployState(c.Box, c.Instance, SaveDeployStateInput{
 			Ports:    ports,
 			SetPorts: true,
 		})
@@ -173,22 +173,22 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 
 	// Pre-flight port conflict check
 	if conflicts := CheckPortAvailability(ports, rt.BindAddress, engine); len(conflicts) > 0 {
-		return fmt.Errorf("port conflicts detected:%s", FormatPortConflicts(conflicts, c.Image))
+		return fmt.Errorf("port conflicts detected:%s", FormatPortConflicts(conflicts, c.Box))
 	}
 
 	// Inject agent forwarding mounts and env (direct mode only)
-	var deployImage *DeploymentNode
-	if overlay, ok := dc.Lookup(c.Image, c.Instance); ok {
-		deployImage = &overlay
+	var deployBox *DeploymentNode
+	if overlay, ok := dc.Lookup(c.Box, c.Instance); ok {
+		deployBox = &overlay
 	}
-	agentFwd := ResolveAgentForwarding(rt, deployImage, home)
+	agentFwd := ResolveAgentForwarding(rt, deployBox, home)
 	for _, v := range agentFwd.Volumes {
 		security.Mounts = appendUnique(security.Mounts, v)
 	}
 	envVars = append(envVars, agentFwd.Env...)
 
-	name := containerNameInstance(c.Image, c.Instance)
-	workDir := resolveWorkingDir(volumes, bindMounts, home, c.Image, c.Instance)
+	name := containerNameInstance(c.Box, c.Instance)
+	workDir := resolveWorkingDir(volumes, bindMounts, home, c.Box, c.Instance)
 	args := buildStartArgs(engine, imageRef, uid, gid, ports, name, volumes, bindMounts, detected.GPU, rt.BindAddress, envVars, security, entrypoint, workDir, resolvedNetwork)
 
 	cmd := exec.Command(args[0], args[1:]...)
@@ -218,7 +218,7 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 }
 
 func (c *StartCmd) runQuadlet(rt *ResolvedRuntime) error {
-	exists, err := quadletExistsInstance(c.Image, c.Instance)
+	exists, err := quadletExistsInstance(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -228,8 +228,8 @@ func (c *StartCmd) runQuadlet(rt *ResolvedRuntime) error {
 	// of `systemctl --user start`. Encrypted-volume mounts are skipped
 	// in direct mode (those require systemd-run --scope, see
 	// runConfigDirect's warning path).
-	if !exists && IsDirectDeploy(c.Image, c.Instance) {
-		name := containerNameInstance(c.Image, c.Instance)
+	if !exists && IsDirectDeploy(c.Box, c.Instance) {
+		name := containerNameInstance(c.Box, c.Instance)
 		cmd := exec.Command("podman", "start", name)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
@@ -241,15 +241,15 @@ func (c *StartCmd) runQuadlet(rt *ResolvedRuntime) error {
 	}
 
 	if !exists {
-		return fmt.Errorf("not configured; run 'charly config %s' first", c.Image)
+		return fmt.Errorf("not configured; run 'charly config %s' first", c.Box)
 	}
 
 	// Mount encrypted volumes if needed (runtime concern, not config)
-	if err := ensureEncryptedMounts(c.Image, c.Instance, false); err != nil {
+	if err := ensureEncryptedMounts(c.Box, c.Instance, false); err != nil {
 		return err
 	}
 
-	svc := serviceNameInstance(c.Image, c.Instance)
+	svc := serviceNameInstance(c.Box, c.Instance)
 	cmd := exec.Command("systemctl", "--user", "start", svc)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -264,31 +264,31 @@ func (c *StartCmd) runQuadlet(rt *ResolvedRuntime) error {
 // should trigger quadlet regeneration (port maps, env vars, env file).
 // StopCmd stops a running container started by StartCmd
 type StopCmd struct {
-	Image    string `arg:"" help:"Image name or remote ref"`
-	Instance string `short:"i" long:"instance" help:"Instance name for running multiple containers of the same image"`
-	Unmount  bool   `long:"unmount" help:"After stopping, also tear down encrypted FUSE mounts and gocryptfs scope units (charly-enc-<image>-<volume>.scope) for this image"`
+	Box      string `arg:"" help:"Box name or remote ref"`
+	Instance string `short:"i" long:"instance" help:"Instance name for running multiple containers of the same box"`
+	Unmount  bool   `long:"unmount" help:"After stopping, also tear down encrypted FUSE mounts and gocryptfs scope units (charly-enc-<box>-<volume>.scope) for this box"`
 }
 
 func (c *StopCmd) Run() error {
-	c.Image, c.Instance = canonicalizeDeployArg(c.Image, c.Instance)
+	c.Box, c.Instance = canonicalizeDeployArg(c.Box, c.Instance)
 	// Releasing a persistent exclusive claim restores any holder this deploy
 	// preempted (no-op if no lease / gated by an outer orchestrator).
-	defer releaseExclusiveForClaimant(deployKey(c.Image, c.Instance))
+	defer releaseExclusiveForClaimant(deployKey(c.Box, c.Instance))
 	// Resolve the image name (handle remote refs)
-	imageName := c.Image
-	ref := StripURLScheme(c.Image)
+	boxName := c.Box
+	ref := StripURLScheme(c.Box)
 	if IsRemoteImageRef(ref) {
-		imageName = ParseRemoteRef(ref).Name
+		boxName = ParseRemoteRef(ref).Name
 	}
 
 	// Stop tunnel before stopping container (best-effort)
-	stopTunnelForImage(imageName, c.Instance)
+	stopTunnelForImage(boxName, c.Instance)
 
-	if err := stopPodService(imageName, c.Instance); err != nil {
+	if err := stopPodService(boxName, c.Instance); err != nil {
 		return err
 	}
 
-	stopUnmountIfRequested(c.Unmount, imageName, c.Instance)
+	stopUnmountIfRequested(c.Unmount, boxName, c.Instance)
 	return nil
 }
 
@@ -299,10 +299,10 @@ func (c *StopCmd) Run() error {
 // effects — callers layer those on. Shared by StopCmd.Run and the resource
 // arbiter (charly/preempt.go), whose preemption path wants a bare, reversible
 // service stop that leaves the holder's disk/container intact for restart.
-func stopPodService(imageName, instance string) error {
-	quadletActive, _ := quadletExistsInstance(imageName, instance)
+func stopPodService(boxName, instance string) error {
+	quadletActive, _ := quadletExistsInstance(boxName, instance)
 	if quadletActive {
-		svc := serviceNameInstance(imageName, instance)
+		svc := serviceNameInstance(boxName, instance)
 		cmd := exec.Command("systemctl", "--user", "stop", svc)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
@@ -317,9 +317,9 @@ func stopPodService(imageName, instance string) error {
 	if err != nil {
 		return err
 	}
-	runEngine := ResolveImageEngineForDeploy(imageName, instance, rt.RunEngine)
+	runEngine := ResolveBoxEngineForDeploy(boxName, instance, rt.RunEngine)
 	engine := EngineBinary(runEngine)
-	name := containerNameInstance(imageName, instance)
+	name := containerNameInstance(boxName, instance)
 
 	cmd := exec.Command(engine, "stop", name)
 	output, err := cmd.CombinedOutput()
@@ -348,10 +348,10 @@ func stopPodService(imageName, instance string) error {
 // the deployment's quadlet/container already exists (the holder was running
 // before preemption), so this is a plain service/container start, not a full
 // `charly start` re-config.
-func startPodService(imageName, instance string) error {
-	quadletActive, _ := quadletExistsInstance(imageName, instance)
+func startPodService(boxName, instance string) error {
+	quadletActive, _ := quadletExistsInstance(boxName, instance)
 	if quadletActive {
-		svc := serviceNameInstance(imageName, instance)
+		svc := serviceNameInstance(boxName, instance)
 		cmd := exec.Command("systemctl", "--user", "start", svc)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
@@ -366,9 +366,9 @@ func startPodService(imageName, instance string) error {
 	if err != nil {
 		return err
 	}
-	runEngine := ResolveImageEngineForDeploy(imageName, instance, rt.RunEngine)
+	runEngine := ResolveBoxEngineForDeploy(boxName, instance, rt.RunEngine)
 	engine := EngineBinary(runEngine)
-	name := containerNameInstance(imageName, instance)
+	name := containerNameInstance(boxName, instance)
 
 	cmd := exec.Command(engine, "start", name)
 	output, err := cmd.CombinedOutput()
@@ -384,11 +384,11 @@ func startPodService(imageName, instance string) error {
 // (matches the stopTunnelForImage pattern); failures emit a warning but
 // don't propagate, since the container has already stopped and the user
 // can retry the unmount manually with `charly config unmount <image>`.
-func stopUnmountIfRequested(want bool, imageName, instance string) {
+func stopUnmountIfRequested(want bool, boxName, instance string) {
 	if !want {
 		return
 	}
-	if err := encUnmount(imageName, instance, ""); err != nil {
+	if err := encUnmount(boxName, instance, ""); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: encrypted-volume unmount failed: %v\n", err)
 	}
 }
@@ -400,15 +400,15 @@ func stopUnmountIfRequested(want bool, imageName, instance string) {
 // silent stopped state that a manual stop+start sequence can produce when
 // start fails.
 type RestartCmd struct {
-	Image    string `arg:"" help:"Image name or remote ref"`
-	Instance string `short:"i" long:"instance" help:"Instance name for running multiple containers of the same image"`
+	Box      string `arg:"" help:"Box name or remote ref"`
+	Instance string `short:"i" long:"instance" help:"Instance name for running multiple containers of the same box"`
 }
 
 func (c *RestartCmd) Run() error {
-	imageName := c.Image
-	ref := StripURLScheme(c.Image)
+	boxName := c.Box
+	ref := StripURLScheme(c.Box)
 	if IsRemoteImageRef(ref) {
-		imageName = ParseRemoteRef(ref).Name
+		boxName = ParseRemoteRef(ref).Name
 	}
 
 	rt, err := ResolveRuntime()
@@ -416,9 +416,9 @@ func (c *RestartCmd) Run() error {
 		return err
 	}
 
-	quadletActive, _ := quadletExistsInstance(imageName, c.Instance)
+	quadletActive, _ := quadletExistsInstance(boxName, c.Instance)
 	if quadletActive {
-		svc := serviceNameInstance(imageName, c.Instance)
+		svc := serviceNameInstance(boxName, c.Instance)
 		cmd := exec.Command("systemctl", "--user", "restart", svc)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
@@ -430,9 +430,9 @@ func (c *RestartCmd) Run() error {
 	}
 
 	// Direct mode: delegate to engine restart.
-	runEngine := ResolveImageEngineForDeploy(imageName, c.Instance, rt.RunEngine)
+	runEngine := ResolveBoxEngineForDeploy(boxName, c.Instance, rt.RunEngine)
 	engine := EngineBinary(runEngine)
-	name := containerNameInstance(imageName, c.Instance)
+	name := containerNameInstance(boxName, c.Instance)
 
 	cmd := exec.Command(engine, "restart", name)
 	output, err := cmd.CombinedOutput()
@@ -444,17 +444,17 @@ func (c *RestartCmd) Run() error {
 }
 
 // stopTunnelForImage attempts to stop any tunnel for the given image (best-effort).
-func stopTunnelForImage(imageName, instance string) {
+func stopTunnelForImage(boxName, instance string) {
 	var tc *TunnelConfig
 
-	// Tunnel config comes from deploy.yml (overlaid onto ImageMetadata).
-	ctrName := containerNameInstance(imageName, instance)
+	// Tunnel config comes from deploy.yml (overlaid onto BoxMetadata).
+	ctrName := containerNameInstance(boxName, instance)
 	imageRef := containerImage("podman", ctrName)
 	if imageRef != "" {
 		meta, metaErr := ExtractMetadata("podman", imageRef)
 		if metaErr == nil && meta != nil {
 			dc := loadDeployConfigForRead("charly start tunnel merge")
-			MergeDeployOntoMetadata(meta, dc, imageName, instance)
+			MergeDeployOntoMetadata(meta, dc, boxName, instance)
 			if meta.Tunnel != nil {
 				tc = TunnelConfigFromMetadata(meta)
 			}
@@ -543,15 +543,15 @@ func resolveEntrypointFromMeta(meta *BoxMetadata) []string {
 // to `-` per the documented convention "container name is always
 // `charly-<key-with-slash-replaced-by-dash>`"; see /charly-core:deploy "Two
 // supported deploy patterns").
-func containerName(imageName string) string {
-	return "charly-" + strings.ReplaceAll(imageName, "/", "-")
+func containerName(boxName string) string {
+	return "charly-" + strings.ReplaceAll(boxName, "/", "-")
 }
 
 // containerNameInstance returns the container name with optional instance suffix.
-// Slashes in imageName are canonicalized to dashes — see containerName.
-func containerNameInstance(imageName, instance string) string {
+// Slashes in boxName are canonicalized to dashes — see containerName.
+func containerNameInstance(boxName, instance string) string {
 	if instance == "" {
-		return containerName(imageName)
+		return containerName(boxName)
 	}
-	return "charly-" + strings.ReplaceAll(imageName, "/", "-") + "-" + instance
+	return "charly-" + strings.ReplaceAll(boxName, "/", "-") + "-" + instance
 }

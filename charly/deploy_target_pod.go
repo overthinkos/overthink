@@ -60,7 +60,7 @@ type PodDeployTarget struct {
 	// to "no Generator context" comments and the overlay contains no
 	// install logic — producing an image byte-identical to BaseImage.
 	Generator *Generator
-	Image     *ResolvedBox
+	Box       *ResolvedBox
 
 	// OverlayBuildDir is where the synthesized Containerfile + build
 	// context lives. Defaults to .build/overlay-<deploy-name>/.
@@ -96,12 +96,12 @@ type PodDeployTarget struct {
 // runAppendBlock: the `RUN --mount=... cat >> /etc/supervisord.conf`
 // to place AFTER all overlay install tasks in the main image stage.
 func (t *PodDeployTarget) renderOverlayServices(overlayLayers []string) (string, string, error) {
-	if t.Generator == nil || t.Image == nil || t.Image.InitConfig == nil {
+	if t.Generator == nil || t.Box == nil || t.Box.InitConfig == nil {
 		return "", "", nil
 	}
-	layerOrder := append([]string{}, t.Image.Layer...)
+	layerOrder := append([]string{}, t.Box.Layer...)
 	layerOrder = append(layerOrder, overlayLayers...)
-	initName, initDef := t.Image.InitConfig.ResolveInitSystem(t.Generator.Layers, layerOrder, t.Image.InitSystem)
+	initName, initDef := t.Box.InitConfig.ResolveInitSystem(t.Generator.Layers, layerOrder, t.Box.InitSystem)
 	if initDef == nil || initDef.ServiceSchema == nil {
 		return "", "", nil
 	}
@@ -274,7 +274,7 @@ func (t *PodDeployTarget) buildOverlay(plans []*InstallPlan, overlayLayers []str
 		DistroDef:     t.DistroDef,
 		BuilderConfig: t.BuilderConfig,
 		Generator:     t.Generator,
-		Image:         t.Image,
+		Box:           t.Box,
 		BuildDir:      dir,
 	}
 	// Only emit for the overlay layers.
@@ -306,7 +306,7 @@ func (t *PodDeployTarget) buildOverlay(plans []*InstallPlan, overlayLayers []str
 	// placed inside the main image stage below. Uses the Generator's
 	// init-fragment pipeline (same path as the full image build).
 	var svcStage, svcAppend string
-	if t.Generator != nil && t.Image != nil {
+	if t.Generator != nil && t.Box != nil {
 		var svcErr error
 		svcStage, svcAppend, svcErr = t.renderOverlayServices(overlayLayers)
 		if svcErr != nil {

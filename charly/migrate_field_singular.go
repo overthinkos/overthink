@@ -48,7 +48,7 @@ var pluralToSingularYAMLKeys = map[string]string{
 	"aliases":  "alias",
 	// builds: → produce: is a SEMANTIC rename, not a pluralization
 	// removal. The naive singular `build:` would collide with the
-	// existing `build:` yaml tag in ImageConfig (BuildFormats). The
+	// existing `build:` yaml tag in BoxConfig (BuildFormats). The
 	// downstream consumer assigns img.Produce to BuilderCapabilities, so
 	// `produce:` is the semantic fit.
 	"builds":    "produce",

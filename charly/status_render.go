@@ -54,7 +54,7 @@ func RenderTable(w io.Writer, ss []DeploymentStatus) error {
 func renderTableRow(tw io.Writer, s DeploymentStatus, prefix string) {
 	fmt.Fprintf(tw, "%s\t%s%s\t%s\t%s\t%s\t%s\t%s\n",
 		cellKind(s.Kind),
-		prefix, cellImage(s),
+		prefix, cellBox(s),
 		s.Status,
 		cellPorts(s.Ports),
 		cellTunnel(s.Tunnel),
@@ -109,7 +109,7 @@ func RenderDetail(w io.Writer, s DeploymentStatus) error {
 		if i > 0 {
 			label = "       "
 		}
-		fmt.Fprintf(w, "%-10s %s %s (%s)\n", label, cellKind(child.Kind), cellImage(child), child.Status)
+		fmt.Fprintf(w, "%-10s %s %s (%s)\n", label, cellKind(child.Kind), cellBox(child), child.Status)
 	}
 	return nil
 }
@@ -142,10 +142,10 @@ func cellKind(k SubstrateKind) string {
 	return string(k)
 }
 
-// cellImage returns "image" or "image/instance". The slash-separated form
+// cellBox returns "image" or "image/instance". The slash-separated form
 // matches deployKey(): both deploy.yml and `charly ... -i <inst>` use it, so the
 // table label aligns with the operator's mental model.
-func cellImage(s DeploymentStatus) string {
+func cellBox(s DeploymentStatus) string {
 	if s.Instance == "" {
 		return s.Image
 	}

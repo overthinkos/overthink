@@ -25,28 +25,28 @@ type ResolvedBindMount struct {
 }
 
 // encryptedVolumeName returns the directory name for an encrypted volume: charly-<image>-<name>
-func encryptedVolumeName(imageName, name string) string {
-	return "charly-" + imageName + "-" + name
+func encryptedVolumeName(boxName, name string) string {
+	return "charly-" + boxName + "-" + name
 }
 
 // encryptedCipherDir returns the cipher directory path for an encrypted bind mount.
-func encryptedCipherDir(storagePath, imageName, name string) string {
-	return filepath.Join(storagePath, encryptedVolumeName(imageName, name), "cipher")
+func encryptedCipherDir(storagePath, boxName, name string) string {
+	return filepath.Join(storagePath, encryptedVolumeName(boxName, name), "cipher")
 }
 
 // encryptedPlainDir returns the plain (FUSE mount point) directory path.
-func encryptedPlainDir(storagePath, imageName, name string) string {
-	return filepath.Join(storagePath, encryptedVolumeName(imageName, name), "plain")
+func encryptedPlainDir(storagePath, boxName, name string) string {
+	return filepath.Join(storagePath, encryptedVolumeName(boxName, name), "plain")
 }
 
 // resolveEncVolumeDir returns the volume directory for an encrypted volume.
 // If the volume has an explicit Host path, use it directly.
 // Otherwise, use the global default: <storagePath>/charly-<image>-<name>.
-func resolveEncVolumeDir(vol DeployVolumeConfig, defaultStoragePath, imageName string) string {
+func resolveEncVolumeDir(vol DeployVolumeConfig, defaultStoragePath, boxName string) string {
 	if vol.Host != "" {
 		return expandHostHome(vol.Host)
 	}
-	return filepath.Join(defaultStoragePath, encryptedVolumeName(imageName, vol.Name))
+	return filepath.Join(defaultStoragePath, encryptedVolumeName(boxName, vol.Name))
 }
 
 // isEncryptedInitialized checks if gocryptfs has been initialized (gocryptfs.conf exists).
@@ -117,27 +117,27 @@ func encExtpassArgs(imageID string) ([]string, func()) {
 
 // resolveEncPassphrase resolves the gocryptfs passphrase for an image.
 // Resolution order: GOCRYPTFS_PASSWORD env var → credential store (keyring/config) → auto-generate or interactive prompt.
-func resolveEncPassphrase(imageName string, autoGenerate bool) (string, error) {
+func resolveEncPassphrase(boxName string, autoGenerate bool) (string, error) {
 	// 1. Test/CI override
 	if pw := os.Getenv("GOCRYPTFS_PASSWORD"); pw != "" {
 		return pw, nil
 	}
 	// 2. Credential store (keyring / config)
-	if val, _ := ResolveCredential("", "charly/enc", imageName, ""); val != "" {
+	if val, _ := ResolveCredential("", "charly/enc", boxName, ""); val != "" {
 		return val, nil
 	}
 	// 3. Auto-generate if requested
 	if autoGenerate {
 		generated := generateRandomSecretToken(32)
 		store := DefaultCredentialStore()
-		if err := store.Set("charly/enc", imageName, generated); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: could not persist enc passphrase for %s: %v\n", imageName, err)
+		if err := store.Set("charly/enc", boxName, generated); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: could not persist enc passphrase for %s: %v\n", boxName, err)
 		}
-		fmt.Fprintf(os.Stderr, "Generated encryption passphrase for %s\n", imageName)
+		fmt.Fprintf(os.Stderr, "Generated encryption passphrase for %s\n", boxName)
 		return generated, nil
 	}
 	// 4. Interactive prompt
-	return askPassword("charly-"+imageName, "Passphrase for charly-"+imageName+":")
+	return askPassword("charly-"+boxName, "Passphrase for charly-"+boxName+":")
 }
 
 // encMountDeadline bounds how long resolveEncPassphraseForMount will retry
@@ -182,15 +182,15 @@ var encMountProgressLogInterval = 1 * time.Hour
 // bounded at encMountDeadline; source="locked" waits indefinitely via DBus
 // signal subscription (zero CPU between events) until the user unlocks the
 // keyring; source="default" fails immediately.
-func resolveEncPassphraseForMount(imageName string) (string, error) {
+func resolveEncPassphraseForMount(boxName string) (string, error) {
 	if os.Getenv("INVOCATION_ID") == "" {
-		return resolveEncPassphrase(imageName, false)
+		return resolveEncPassphrase(boxName, false)
 	}
 	backend := resolveSecretBackend()
 	resolver := func() (string, string) {
-		return ResolveCredential("", "charly/enc", imageName, "")
+		return ResolveCredential("", "charly/enc", boxName, "")
 	}
-	return resolveEncPassphraseForMountWithResolver(imageName, backend, resolver, resetDefaultCredentialStore, waitForKeyringUnlock)
+	return resolveEncPassphraseForMountWithResolver(boxName, backend, resolver, resetDefaultCredentialStore, waitForKeyringUnlock)
 }
 
 // resolveEncPassphraseForMountWithResolver is the testable core of
@@ -202,10 +202,10 @@ func resolveEncPassphraseForMount(imageName string) (string, error) {
 // In production it is waitForKeyringUnlock (event-driven via DBus signals);
 // in tests it is a fake that returns immediately.
 func resolveEncPassphraseForMountWithResolver(
-	imageName, backend string,
+	boxName, backend string,
 	resolver func() (value, source string),
 	reset func(),
-	waiter func(ctx context.Context, imageName string, resolver func() (string, string), reset func()) (string, string, error),
+	waiter func(ctx context.Context, boxName string, resolver func() (string, string), reset func()) (string, string, error),
 ) (string, error) {
 	usesWaitingBackend := backend == "" || backend == "auto" || backend == "keyring"
 
@@ -217,7 +217,7 @@ func resolveEncPassphraseForMountWithResolver(
 		return "", fmt.Errorf(
 			"encryption passphrase not found for charly/enc/%s (backend=%s, source=%s); "+
 				"store with `charly secrets set charly/enc %s` or switch backend with `charly settings set secret_backend auto`",
-			imageName, backend, src, imageName)
+			boxName, backend, src, boxName)
 	}
 
 	// Initial probe.
@@ -228,7 +228,7 @@ func resolveEncPassphraseForMountWithResolver(
 
 	// source="default" is terminal — credential is not stored anywhere.
 	if src == "default" {
-		return "", encNotStoredError(imageName, backend, src)
+		return "", encNotStoredError(boxName, backend, src)
 	}
 
 	// source="locked" — keyring present but locked. Wait indefinitely via
@@ -236,36 +236,36 @@ func resolveEncPassphraseForMountWithResolver(
 	if src == "locked" && waiter != nil {
 		ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 		defer cancel()
-		v, src2, err := waiter(ctx, imageName, resolver, reset)
+		v, src2, err := waiter(ctx, boxName, resolver, reset)
 		if err != nil {
 			return "", fmt.Errorf("waiting for keyring unlock interrupted: %w", err)
 		}
 		if v != "" {
 			return v, nil
 		}
-		return "", encNotStoredError(imageName, backend, src2)
+		return "", encNotStoredError(boxName, backend, src2)
 	}
 
 	// source="unavailable" — transient backend probe failure. Bounded poll.
-	return retryUnavailable(imageName, backend, resolver, reset)
+	return retryUnavailable(boxName, backend, resolver, reset)
 }
 
 // encNotStoredError formats the terminal "credential not stored" error with
 // actionable remediation hints.
-func encNotStoredError(imageName, backend, src string) error {
+func encNotStoredError(boxName, backend, src string) error {
 	return fmt.Errorf(
 		"encryption passphrase not available for charly/enc/%s "+
 			"(backend=%s, source=%s). "+
 			"Remediation: run `charly doctor` to check keyring health, "+
 			"store with `charly secrets set charly/enc %s`, "+
 			"or switch backend with `charly settings set secret_backend config`",
-		imageName, backend, src, imageName)
+		boxName, backend, src, boxName)
 }
 
 // retryUnavailable polls the resolver with a bounded deadline for transient
 // backend-probe failures (source="unavailable").
 func retryUnavailable(
-	imageName, backend string,
+	boxName, backend string,
 	resolver func() (string, string),
 	reset func(),
 ) (string, error) {
@@ -289,11 +289,11 @@ func retryUnavailable(
 					"Remediation: run `charly doctor` to check keyring health, "+
 					"store with `charly secrets set charly/enc %s`, "+
 					"or switch backend with `charly settings set secret_backend config`",
-				imageName, attempt, backend, src, encMountDeadline, imageName)
+				boxName, attempt, backend, src, encMountDeadline, boxName)
 		}
 		fmt.Fprintf(os.Stderr,
 			"charly: waiting for credential store (charly-enc/%s, source=%s, attempt %d/%d)...\n",
-			imageName, src, attempt, maxAttempts)
+			boxName, src, attempt, maxAttempts)
 		time.Sleep(encMountPollPeriod)
 		if reset != nil {
 			reset()
@@ -307,28 +307,28 @@ func retryUnavailable(
 // with a periodic backstop re-probe as a safety net.
 func waitForKeyringUnlock(
 	ctx context.Context,
-	imageName string,
+	boxName string,
 	resolver func() (string, string),
 	reset func(),
 ) (string, string, error) {
 	conn, err := dbus.SessionBusPrivate()
 	if err != nil {
-		return waitForKeyringUnlockBackstopOnly(ctx, imageName, resolver, reset)
+		return waitForKeyringUnlockBackstopOnly(ctx, boxName, resolver, reset)
 	}
 	if err := conn.Auth(nil); err != nil {
 		conn.Close()
-		return waitForKeyringUnlockBackstopOnly(ctx, imageName, resolver, reset)
+		return waitForKeyringUnlockBackstopOnly(ctx, boxName, resolver, reset)
 	}
 	if err := conn.Hello(); err != nil {
 		conn.Close()
-		return waitForKeyringUnlockBackstopOnly(ctx, imageName, resolver, reset)
+		return waitForKeyringUnlockBackstopOnly(ctx, boxName, resolver, reset)
 	}
 	defer conn.Close()
 
 	matchRule := "type='signal',interface='org.freedesktop.DBus.Properties',member='PropertiesChanged',path_namespace='/org/freedesktop/secrets/collection'"
 	call := conn.BusObject().Call("org.freedesktop.DBus.AddMatch", 0, matchRule)
 	if call.Err != nil {
-		return waitForKeyringUnlockBackstopOnly(ctx, imageName, resolver, reset)
+		return waitForKeyringUnlockBackstopOnly(ctx, boxName, resolver, reset)
 	}
 
 	sigCh := make(chan *dbus.Signal, 16)
@@ -345,29 +345,29 @@ func waitForKeyringUnlock(
 
 	fmt.Fprintf(os.Stderr,
 		"charly: waiting for keyring unlock (charly-enc/%s, event-driven via DBus PropertiesChanged)\n",
-		imageName)
-	return waitForKeyringUnlockLoop(ctx, imageName, sigCh, resolver, reset)
+		boxName)
+	return waitForKeyringUnlockLoop(ctx, boxName, sigCh, resolver, reset)
 }
 
 // waitForKeyringUnlockBackstopOnly is the fallback when DBus signal
 // subscription fails. Polls at encMountSignalBackstop interval.
 func waitForKeyringUnlockBackstopOnly(
 	ctx context.Context,
-	imageName string,
+	boxName string,
 	resolver func() (string, string),
 	reset func(),
 ) (string, string, error) {
 	fmt.Fprintf(os.Stderr,
 		"charly: waiting for keyring unlock (charly-enc/%s, DBus signals unavailable — %v backstop only)\n",
-		imageName, encMountSignalBackstop)
-	return waitForKeyringUnlockLoop(ctx, imageName, nil, resolver, reset)
+		boxName, encMountSignalBackstop)
+	return waitForKeyringUnlockLoop(ctx, boxName, nil, resolver, reset)
 }
 
 // waitForKeyringUnlockLoop is the core select loop shared by both signal
 // and backstop-only modes. When sigCh is nil, only the backstop fires.
 func waitForKeyringUnlockLoop(
 	ctx context.Context,
-	imageName string,
+	boxName string,
 	sigCh <-chan *dbus.Signal,
 	resolver func() (string, string),
 	reset func(),
@@ -382,7 +382,7 @@ func waitForKeyringUnlockLoop(
 			return "", "", ctx.Err()
 		case sig, ok := <-sigCh:
 			if !ok {
-				return waitForKeyringUnlockBackstopOnly(ctx, imageName, resolver, reset)
+				return waitForKeyringUnlockBackstopOnly(ctx, boxName, resolver, reset)
 			}
 			if !isCollectionUnlockedSignal(sig) {
 				continue
@@ -402,7 +402,7 @@ func waitForKeyringUnlockLoop(
 			}
 			if time.Now().After(nextLog) {
 				fmt.Fprintf(os.Stderr,
-					"charly: still waiting for keyring unlock (charly-enc/%s)\n", imageName)
+					"charly: still waiting for keyring unlock (charly-enc/%s)\n", boxName)
 				nextLog = time.Now().Add(encMountProgressLogInterval)
 			}
 		}
@@ -411,17 +411,17 @@ func waitForKeyringUnlockLoop(
 
 // encInit initializes gocryptfs cipher directories for an image.
 // If volume is non-empty, only that volume is initialized.
-func encInit(imageName, instance, volume string) error {
-	mounts, storagePath, err := loadEncryptedVolume(imageName, instance)
+func encInit(boxName, instance, volume string) error {
+	mounts, storagePath, err := loadEncryptedVolume(boxName, instance)
 	if err != nil {
 		return err
 	}
 
-	passphrase, err := resolveEncPassphrase(imageName, false)
+	passphrase, err := resolveEncPassphrase(boxName, false)
 	if err != nil {
 		return err
 	}
-	extpassArgs, cleanup := encExtpassArgs("charly-" + imageName)
+	extpassArgs, cleanup := encExtpassArgs("charly-" + boxName)
 	defer cleanup()
 
 	for _, m := range mounts {
@@ -429,7 +429,7 @@ func encInit(imageName, instance, volume string) error {
 			continue
 		}
 
-		volDir := resolveEncVolumeDir(m, storagePath, deployStorageDir(imageName, instance))
+		volDir := resolveEncVolumeDir(m, storagePath, deployStorageDir(boxName, instance))
 		cipherDir := filepath.Join(volDir, "cipher")
 		plainDir := filepath.Join(volDir, "plain")
 
@@ -468,8 +468,8 @@ func encInit(imageName, instance, volume string) error {
 // store at all. This makes service restarts resilient to keyring breakage —
 // the most common operational case is "restart when everything is still
 // mounted", and it has no passphrase dependency.
-func encMount(imageName, instance, volume string) error {
-	mounts, storagePath, err := loadEncryptedVolume(imageName, instance)
+func encMount(boxName, instance, volume string) error {
+	mounts, storagePath, err := loadEncryptedVolume(boxName, instance)
 	if err != nil {
 		return err
 	}
@@ -483,22 +483,22 @@ func encMount(imageName, instance, volume string) error {
 			continue
 		}
 		requested++
-		volDir := resolveEncVolumeDir(m, storagePath, deployStorageDir(imageName, instance))
+		volDir := resolveEncVolumeDir(m, storagePath, deployStorageDir(boxName, instance))
 		plainDir := filepath.Join(volDir, "plain")
 		if isEncryptedMounted(plainDir) {
 			mounted++
 		}
 	}
 	if requested > 0 && mounted == requested {
-		fmt.Fprintf(os.Stderr, "All encrypted volumes for %s already mounted (%d/%d)\n", imageName, mounted, requested)
+		fmt.Fprintf(os.Stderr, "All encrypted volumes for %s already mounted (%d/%d)\n", boxName, mounted, requested)
 		return nil
 	}
 
-	passphrase, err := resolveEncPassphraseForMount(imageName)
+	passphrase, err := resolveEncPassphraseForMount(boxName)
 	if err != nil {
 		return err
 	}
-	extpassArgs, cleanup := encExtpassArgs("charly-" + imageName)
+	extpassArgs, cleanup := encExtpassArgs("charly-" + boxName)
 	defer cleanup()
 
 	for _, m := range mounts {
@@ -506,12 +506,12 @@ func encMount(imageName, instance, volume string) error {
 			continue
 		}
 
-		volDir := resolveEncVolumeDir(m, storagePath, deployStorageDir(imageName, instance))
+		volDir := resolveEncVolumeDir(m, storagePath, deployStorageDir(boxName, instance))
 		cipherDir := filepath.Join(volDir, "cipher")
 		plainDir := filepath.Join(volDir, "plain")
 
 		if !isEncryptedInitialized(cipherDir) {
-			return fmt.Errorf("encrypted volume %q not initialized; run 'charly config %s' first", m.Name, imageName)
+			return fmt.Errorf("encrypted volume %q not initialized; run 'charly config %s' first", m.Name, boxName)
 		}
 
 		if isEncryptedMounted(plainDir) {
@@ -524,7 +524,7 @@ func encMount(imageName, instance, volume string) error {
 		}
 
 		gcArgs := append(extpassArgs, "-allow_other", cipherDir, plainDir)
-		scopeUnit := fmt.Sprintf("charly-enc-%s-%s", deployStorageDir(imageName, instance), m.Name)
+		scopeUnit := fmt.Sprintf("charly-enc-%s-%s", deployStorageDir(boxName, instance), m.Name)
 		scopeArgs := append([]string{"--scope", "--user", "--unit=" + scopeUnit, "--", "gocryptfs"}, gcArgs...)
 		cmd := exec.Command("systemd-run", scopeArgs...)
 		cmd.Env = append(os.Environ(), "GOCRYPTFS_PASSWORD="+passphrase)
@@ -551,8 +551,8 @@ func encMount(imageName, instance, volume string) error {
 
 // encUnmount unmounts encrypted volumes for an image.
 // If volume is non-empty, only that volume is unmounted.
-func encUnmount(imageName, instance, volume string) error {
-	mounts, storagePath, err := loadEncryptedVolume(imageName, instance)
+func encUnmount(boxName, instance, volume string) error {
+	mounts, storagePath, err := loadEncryptedVolume(boxName, instance)
 	if err != nil {
 		return err
 	}
@@ -562,7 +562,7 @@ func encUnmount(imageName, instance, volume string) error {
 			continue
 		}
 
-		volDir := resolveEncVolumeDir(m, storagePath, deployStorageDir(imageName, instance))
+		volDir := resolveEncVolumeDir(m, storagePath, deployStorageDir(boxName, instance))
 		plainDir := filepath.Join(volDir, "plain")
 
 		if !isEncryptedMounted(plainDir) {
@@ -577,7 +577,7 @@ func encUnmount(imageName, instance, volume string) error {
 			return fmt.Errorf("unmounting %s: %w", m.Name, err)
 		}
 		// Stop the gocryptfs scope unit (gocryptfs may linger after fusermount)
-		scopeUnit := fmt.Sprintf("charly-enc-%s-%s.scope", deployStorageDir(imageName, instance), m.Name)
+		scopeUnit := fmt.Sprintf("charly-enc-%s-%s.scope", deployStorageDir(boxName, instance), m.Name)
 		exec.Command("systemctl", "--user", "stop", scopeUnit).Run() // best-effort
 		fmt.Fprintf(os.Stderr, "Unmounted %s\n", m.Name)
 	}
@@ -585,8 +585,8 @@ func encUnmount(imageName, instance, volume string) error {
 }
 
 // encStatus prints the status of encrypted bind mounts for an image.
-func encStatus(imageName, instance string) error {
-	mounts, storagePath, err := loadEncryptedVolume(imageName, instance)
+func encStatus(boxName, instance string) error {
+	mounts, storagePath, err := loadEncryptedVolume(boxName, instance)
 	if err != nil {
 		return err
 	}
@@ -598,7 +598,7 @@ func encStatus(imageName, instance string) error {
 
 	fmt.Printf("%-20s %-12s %-8s %s\n", "NAME", "INITIALIZED", "MOUNTED", "PATH")
 	for _, m := range mounts {
-		volDir := resolveEncVolumeDir(m, storagePath, deployStorageDir(imageName, instance))
+		volDir := resolveEncVolumeDir(m, storagePath, deployStorageDir(boxName, instance))
 		cipherDir := filepath.Join(volDir, "cipher")
 		plainDir := filepath.Join(volDir, "plain")
 
@@ -616,26 +616,26 @@ func encStatus(imageName, instance string) error {
 }
 
 // encPasswd changes the gocryptfs password for all encrypted volumes of an image.
-func encPasswd(imageName, instance string) error {
-	mounts, storagePath, err := loadEncryptedVolume(imageName, instance)
+func encPasswd(boxName, instance string) error {
+	mounts, storagePath, err := loadEncryptedVolume(boxName, instance)
 	if err != nil {
 		return err
 	}
 
 	if len(mounts) == 0 {
-		return fmt.Errorf("image %q has no encrypted bind mounts", imageName)
+		return fmt.Errorf("image %q has no encrypted bind mounts", boxName)
 	}
 
 	// All volumes must be unmounted before changing password
 	for _, m := range mounts {
-		volDir := resolveEncVolumeDir(m, storagePath, deployStorageDir(imageName, instance))
+		volDir := resolveEncVolumeDir(m, storagePath, deployStorageDir(boxName, instance))
 		plainDir := filepath.Join(volDir, "plain")
 		if isEncryptedMounted(plainDir) {
-			return fmt.Errorf("encrypted volume %q is still mounted; run 'charly config unmount %s' first", m.Name, imageName)
+			return fmt.Errorf("encrypted volume %q is still mounted; run 'charly config unmount %s' first", m.Name, boxName)
 		}
 	}
 
-	volID := "charly-" + imageName
+	volID := "charly-" + boxName
 
 	oldPass, err := askPassword(volID+"-old", "Current passphrase:")
 	if err != nil {
@@ -657,7 +657,7 @@ func encPasswd(imageName, instance string) error {
 	}
 
 	for _, m := range mounts {
-		volDir := resolveEncVolumeDir(m, storagePath, deployStorageDir(imageName, instance))
+		volDir := resolveEncVolumeDir(m, storagePath, deployStorageDir(boxName, instance))
 		cipherDir := filepath.Join(volDir, "cipher")
 
 		if !isEncryptedInitialized(cipherDir) {
@@ -695,15 +695,15 @@ func encPasswd(imageName, instance string) error {
 // Called by charly start to transparently handle encrypted volume setup without
 // requiring the user to run charly config init/mount manually first.
 // Resolves the enc passphrase once (keyring → config → interactive prompt).
-func ensureEncryptedMounts(imageName, instance string, autoGenerate bool) error {
-	mounts, storagePath, err := loadEncryptedVolume(imageName, instance)
+func ensureEncryptedMounts(boxName, instance string, autoGenerate bool) error {
+	mounts, storagePath, err := loadEncryptedVolume(boxName, instance)
 	if err != nil || len(mounts) == 0 {
 		return nil // no encrypted mounts configured
 	}
 
 	anyNotReady := false
 	for _, m := range mounts {
-		volDir := resolveEncVolumeDir(m, storagePath, deployStorageDir(imageName, instance))
+		volDir := resolveEncVolumeDir(m, storagePath, deployStorageDir(boxName, instance))
 		cipherDir := filepath.Join(volDir, "cipher")
 		plainDir := filepath.Join(volDir, "plain")
 		if !isEncryptedInitialized(cipherDir) || !isEncryptedMounted(plainDir) {
@@ -715,20 +715,20 @@ func ensureEncryptedMounts(imageName, instance string, autoGenerate bool) error 
 		return nil
 	}
 
-	passphrase, err := resolveEncPassphrase(imageName, autoGenerate)
+	passphrase, err := resolveEncPassphrase(boxName, autoGenerate)
 	if err != nil {
-		return fmt.Errorf("resolving enc passphrase for %s: %w", imageName, err)
+		return fmt.Errorf("resolving enc passphrase for %s: %w", boxName, err)
 	}
-	extpassArgs, cleanup := encExtpassArgs("charly-" + imageName)
+	extpassArgs, cleanup := encExtpassArgs("charly-" + boxName)
 	defer cleanup()
 
 	for _, m := range mounts {
-		volDir := resolveEncVolumeDir(m, storagePath, deployStorageDir(imageName, instance))
+		volDir := resolveEncVolumeDir(m, storagePath, deployStorageDir(boxName, instance))
 		cipherDir := filepath.Join(volDir, "cipher")
 		plainDir := filepath.Join(volDir, "plain")
 
 		if !isEncryptedInitialized(cipherDir) {
-			fmt.Fprintf(os.Stderr, "Initializing encrypted volume %s for %s...\n", m.Name, imageName)
+			fmt.Fprintf(os.Stderr, "Initializing encrypted volume %s for %s...\n", m.Name, boxName)
 			if err := os.MkdirAll(cipherDir, 0700); err != nil {
 				return fmt.Errorf("creating cipher dir for %s: %w", m.Name, err)
 			}
@@ -750,7 +750,7 @@ func ensureEncryptedMounts(imageName, instance string, autoGenerate bool) error 
 				return fmt.Errorf("creating plain dir for %s: %w", m.Name, err)
 			}
 			gcArgs := append(extpassArgs, "-allow_other", cipherDir, plainDir)
-			scopeUnit := fmt.Sprintf("charly-enc-%s-%s", imageName, m.Name)
+			scopeUnit := fmt.Sprintf("charly-enc-%s-%s", boxName, m.Name)
 			scopeArgs := append([]string{"--scope", "--user", "--unit=" + scopeUnit, "--", "gocryptfs"}, gcArgs...)
 			cmd := exec.Command("systemd-run", scopeArgs...)
 			cmd.Env = append(os.Environ(), "GOCRYPTFS_PASSWORD="+passphrase)
@@ -794,7 +794,7 @@ func defaultAskPassword(id, prompt string) (string, error) {
 
 // loadEncryptedVolume loads encrypted volume configs from deploy.yml for an image.
 // Returns the deploy volume configs with type=encrypted and the encrypted storage path.
-func loadEncryptedVolume(imageName, instance string) ([]DeployVolumeConfig, string, error) {
+func loadEncryptedVolume(boxName, instance string) ([]DeployVolumeConfig, string, error) {
 	rt, err := ResolveRuntime()
 	if err != nil {
 		return nil, "", err
@@ -816,7 +816,7 @@ func loadEncryptedVolume(imageName, instance string) ([]DeployVolumeConfig, stri
 		return nil, rt.EncryptedStoragePath, nil
 	}
 
-	overlay, ok := dc.Deploy[deployKey(imageName, instance)]
+	overlay, ok := dc.Deploy[deployKey(boxName, instance)]
 	if !ok {
 		return nil, rt.EncryptedStoragePath, nil
 	}
@@ -832,8 +832,8 @@ func loadEncryptedVolume(imageName, instance string) ([]DeployVolumeConfig, stri
 
 // encServiceFilename returns the systemd service filename for a legacy crypto companion unit.
 // Used only for cleanup of stale enc services from older charly versions.
-func encServiceFilename(imageName string) string {
-	return containerName(imageName) + "-enc.service"
+func encServiceFilename(boxName string) string {
+	return containerName(boxName) + "-enc.service"
 }
 
 // hasEncryptedBindMounts returns true if any bind mount is encrypted.
@@ -859,7 +859,7 @@ func hasEncryptedBindMounts(mounts []ResolvedBindMount) bool {
 // plain/ over a populated cipher tree and start writing plaintext on top.
 // The previous generic "not mounted" message was indistinguishable from
 // a fresh-setup state where no harm exists yet.
-func verifyBindMounts(mounts []ResolvedBindMount, imageName string) error {
+func verifyBindMounts(mounts []ResolvedBindMount, boxName string) error {
 	for _, m := range mounts {
 		if m.Encrypted {
 			if !isEncryptedMounted(m.HostPath) {
@@ -867,10 +867,10 @@ func verifyBindMounts(mounts []ResolvedBindMount, imageName string) error {
 				if cipherPopulatedPlainEmpty(cipherDir, m.HostPath) {
 					return fmt.Errorf(
 						"encrypted volume %q: cipher dir at %s is populated but plain mount at %s is empty — refusing to start (would write plaintext over encrypted data); run 'charly config mount %s' first",
-						m.Name, cipherDir, m.HostPath, imageName,
+						m.Name, cipherDir, m.HostPath, boxName,
 					)
 				}
-				return fmt.Errorf("encrypted bind mount %q for image %q is not mounted; run 'charly config mount %s' first", m.Name, imageName, imageName)
+				return fmt.Errorf("encrypted bind mount %q for image %q is not mounted; run 'charly config mount %s' first", m.Name, boxName, boxName)
 			}
 		} else {
 			info, err := os.Stat(m.HostPath)

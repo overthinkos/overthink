@@ -27,7 +27,7 @@ type LocalSpec struct {
 	InstallOpts *InstallOptsConfig `yaml:"install_opts,omitempty"`
 
 	// Env are environment variables set in the user's shell profile when
-	// the local install applies. Same format as ImageConfig.Env:
+	// the local install applies. Same format as BoxConfig.Env:
 	// []string{"KEY=VALUE", ...}. Deployment env adds to / overrides on
 	// key collision (deployment wins).
 	Env []string `yaml:"env,omitempty"`

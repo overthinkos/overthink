@@ -16,9 +16,9 @@ import (
 // the actual phase.install.host cell.
 func builderStepWithDef(t *testing.T, name string, raw map[string]interface{}) *BuilderStep {
 	t.Helper()
-	_, bc, _, err := LoadBuildConfigForImage(repoRootDir(t))
+	_, bc, _, err := LoadBuildConfigForBox(repoRootDir(t))
 	if err != nil {
-		t.Fatalf("LoadBuildConfigForImage: %v", err)
+		t.Fatalf("LoadBuildConfigForBox: %v", err)
 	}
 	bDef := bc.Builder[name]
 	if bDef == nil {

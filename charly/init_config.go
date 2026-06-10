@@ -97,7 +97,7 @@ type RelayContext struct {
 
 // StageFragmentContext is the template context for stage_fragment_copy rendering.
 type StageFragmentContext struct {
-	ImageName   string
+	BoxName     string
 	FragmentDir string
 	FileName    string
 }
@@ -324,7 +324,7 @@ func (def *InitDef) RenderManagementCommand(operation, serviceName string) (stri
 }
 
 // --- Loading ---
-// Init config is loaded as part of LoadBuildConfigForImage in format_config.go.
+// Init config is loaded as part of LoadBuildConfigForBox in format_config.go.
 // The `init:` section of build.yml is optional — absent/empty means no init system.
 
 // InitNames returns a sorted list of all init system names.
@@ -341,12 +341,12 @@ func (ic *InitConfig) InitNames() []string {
 }
 
 // RenderStageFragmentCopy renders the stage_fragment_copy template.
-func (def *InitDef) RenderStageFragmentCopy(imageName, fileName string) (string, error) {
+func (def *InitDef) RenderStageFragmentCopy(boxName, fileName string) (string, error) {
 	if def.StageFragmentCopy == "" {
 		return "", nil
 	}
 	ctx := StageFragmentContext{
-		ImageName:   imageName,
+		BoxName:     boxName,
 		FragmentDir: def.FragmentDir,
 		FileName:    fileName,
 	}

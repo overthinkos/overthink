@@ -131,8 +131,8 @@ func TestCellImage(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := cellImage(tt.in); got != tt.want {
-				t.Errorf("cellImage() = %q, want %q", got, tt.want)
+			if got := cellBox(tt.in); got != tt.want {
+				t.Errorf("cellBox() = %q, want %q", got, tt.want)
 			}
 		})
 	}
@@ -464,7 +464,7 @@ func TestCollector_CollectOne_UsesBaseImageForLabels(t *testing.T) {
 	}
 	snap := &ContainerSnapshot{
 		Name:        "charly-selkies-desktop-w",
-		Image:       "selkies-desktop",
+		Box:         "selkies-desktop",
 		Instance:    "w",
 		State:       "running",
 		Ports:       []PortMapping{{HostIP: "127.0.0.1", HostPort: 9240, CtrPort: 9222, Proto: "tcp"}},

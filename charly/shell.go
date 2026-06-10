@@ -52,14 +52,14 @@ var forceTTY bool
 
 // ShellCmd starts a bash shell in a container image
 type ShellCmd struct {
-	Image           string   `arg:"" help:"Image name or remote ref (github.com/org/repo/image[@version])"`
+	Box             string   `arg:"" help:"Box name or remote ref (github.com/org/repo/box[@version])"`
 	Tag             string   `long:"tag" help:"Image CalVer tag (empty = newest local CalVer resolved via the ai.opencharly.version OCI label)"`
 	Command         string   `short:"c" help:"Command to execute instead of interactive shell"`
 	Build           bool     `long:"build" help:"Force local build instead of pulling from registry"`
 	TTY             bool     `long:"tty" help:"Force TTY allocation (for automation tools that lack a real terminal)"`
 	Env             []string `short:"e" long:"env" sep:"none" help:"Set container env var (KEY=VALUE)"`
 	EnvFile         string   `long:"env-file" help:"Load env vars from file"`
-	Instance        string   `short:"i" long:"instance" help:"Instance name for running multiple containers of the same image"`
+	Instance        string   `short:"i" long:"instance" help:"Instance name for running multiple containers of the same box"`
 	VolumeFlag      []string `long:"volume" short:"v" help:"Configure volume backing (name:type[:path])"`
 	Bind            []string `long:"bind" help:"Bind volume to host path (name or name=path)"`
 	AutoDetectFlags `embed:""`
@@ -71,10 +71,10 @@ func (c *ShellCmd) Run() error {
 
 	// Remote refs (@github.com/...) are handled exclusively by `charly box pull`.
 	// Users must pull first, then run shell on the short name.
-	if IsRemoteImageRef(StripURLScheme(c.Image)) {
-		return fmt.Errorf("remote refs are not accepted here; run 'charly box pull %s' first, then 'charly shell <image-name>'", c.Image)
+	if IsRemoteImageRef(StripURLScheme(c.Box)) {
+		return fmt.Errorf("remote refs are not accepted here; run 'charly box pull %s' first, then 'charly shell <image-name>'", c.Box)
 	}
-	c.Image, c.Instance = canonicalizeDeployArg(c.Image, c.Instance)
+	c.Box, c.Instance = canonicalizeDeployArg(c.Box, c.Instance)
 
 	var detected DetectedDevices
 	if !c.NoAutoDetect {
@@ -97,7 +97,7 @@ func (c *ShellCmd) Run() error {
 	// agent forwarding, metadata overlay).
 	dc := loadDeployConfigForRead("charly shell")
 	var deployVolumes []DeployVolumeConfig
-	if overlay, ok := dc.Lookup(c.Image, c.Instance); ok {
+	if overlay, ok := dc.Lookup(c.Box, c.Instance); ok {
 		deployVolumes = overlay.Volume
 	}
 
@@ -105,9 +105,9 @@ func (c *ShellCmd) Run() error {
 	// resolver (deploy.go); the same one charly config / start / eval live use,
 	// so no command diverges when key != image. c.Image stays the deploy-KEY;
 	// only the image ref uses the resolved name.
-	deployImageName := resolveDeployImageName(c.Image, c.Instance)
+	deployBoxName := resolveDeployBoxName(c.Box, c.Instance)
 	// Resolve from image labels (+ deploy.yml overlay). No charly.yml.
-	imageRef := resolveShellImageRef("", deployImageName, c.Tag)
+	imageRef := resolveShellImageRef("", deployBoxName, c.Tag)
 	if err := EnsureImage(imageRef, rt); err != nil {
 		return err
 	}
@@ -118,8 +118,8 @@ func (c *ShellCmd) Run() error {
 	if meta == nil {
 		return fmt.Errorf("image %s has no embedded metadata; rebuild with latest charly", imageRef)
 	}
-	engine = ResolveImageEngineFromMeta(meta, rt.RunEngine)
-	MergeDeployOntoMetadata(meta, dc, c.Image, c.Instance)
+	engine = ResolveBoxEngineFromMeta(meta, rt.RunEngine)
+	MergeDeployOntoMetadata(meta, dc, c.Box, c.Instance)
 
 	uid := meta.UID
 	gid := meta.GID
@@ -131,35 +131,35 @@ func (c *ShellCmd) Run() error {
 	var deployEnvFile string
 
 	cliVolumes := parseVolumeFlagsStandalone(c.VolumeFlag, c.Bind)
-	volumes, bindMounts := ResolveVolumeBacking(c.Image, c.Instance, meta.Volume, mergeVolumeConfigs(deployVolumes, cliVolumes), meta.Home, rt.EncryptedStoragePath, rt.VolumesPath)
+	volumes, bindMounts := ResolveVolumeBacking(c.Box, c.Instance, meta.Volume, mergeVolumeConfigs(deployVolumes, cliVolumes), meta.Home, rt.EncryptedStoragePath, rt.VolumesPath)
 
 	envAccepts := meta.EnvAccept
 	envRequires := meta.EnvRequire
 	if meta.Registry != "" {
-		imageRef = resolveShellImageRef(meta.Registry, deployImageName, c.Tag)
+		imageRef = resolveShellImageRef(meta.Registry, deployBoxName, c.Tag)
 	}
 
-	shellCtrName := containerNameInstance(c.Image, c.Instance)
+	shellCtrName := containerNameInstance(c.Box, c.Instance)
 	shellAccepted := AcceptedEnvSet(envAccepts, envRequires)
-	shellGlobalEnv := dc.GlobalEnvForImage(deployKey(c.Image, c.Instance), shellCtrName, shellAccepted)
+	shellGlobalEnv := dc.GlobalEnvForImage(deployKey(c.Box, c.Instance), shellCtrName, shellAccepted)
 	envVars, err := ResolveEnvVars(shellGlobalEnv, deployEnv, deployEnvFile, workspaceBindHost(bindMounts), c.EnvFile, c.Env)
 	if err != nil {
 		return err
 	}
 
 	// Resolve agent forwarding (SSH/GPG socket mounts)
-	var deployImage *DeploymentNode
-	if overlay, ok := dc.Lookup(c.Image, c.Instance); ok {
-		deployImage = &overlay
+	var deployBox *DeploymentNode
+	if overlay, ok := dc.Lookup(c.Box, c.Instance); ok {
+		deployBox = &overlay
 	}
-	agentFwd := ResolveAgentForwarding(rt, deployImage, home)
+	agentFwd := ResolveAgentForwarding(rt, deployBox, home)
 
 	// If the container is already running, exec into it instead of starting a new one
-	name := containerNameInstance(c.Image, c.Instance)
+	name := containerNameInstance(c.Box, c.Instance)
 	if containerRunning(engine, name) {
 		// Exec path: inject env vars only (can't add volumes to running container)
 		execEnv := append(envVars, agentFwd.Env...)
-		workDir := resolveWorkingDir(volumes, bindMounts, home, c.Image, c.Instance)
+		workDir := resolveWorkingDir(volumes, bindMounts, home, c.Box, c.Instance)
 		args := buildExecArgs(engine, name, uid, gid, c.Command, execEnv, workDir)
 		enginePath, err := findExecutable(EngineBinary(engine))
 		if err != nil {
@@ -169,7 +169,7 @@ func (c *ShellCmd) Run() error {
 	}
 
 	// Verify bind mounts
-	if err := verifyBindMounts(bindMounts, c.Image); err != nil {
+	if err := verifyBindMounts(bindMounts, c.Box); err != nil {
 		return err
 	}
 
@@ -194,7 +194,7 @@ func (c *ShellCmd) Run() error {
 		return err
 	}
 
-	workDir := resolveWorkingDir(volumes, bindMounts, home, c.Image, c.Instance)
+	workDir := resolveWorkingDir(volumes, bindMounts, home, c.Box, c.Instance)
 	args := buildShellArgs(engine, imageRef, uid, gid, ports, volumes, bindMounts, detected.GPU, c.Command, rt.BindAddress, envVars, security, workDir, resolvedNetwork)
 
 	// Find engine binary

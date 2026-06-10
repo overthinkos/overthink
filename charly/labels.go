@@ -33,7 +33,7 @@ const (
 	// Schema v4: LabelTunnel / LabelDNS / LabelAcmeEmail / LabelEngine
 	// removed — these are deployment choices with no image-declaration
 	// meaning. Deploy-time values flow through DeploymentNode →
-	// ImageMetadata, not through OCI labels.
+	// BoxMetadata, not through OCI labels.
 	LabelEnv  = "ai.opencharly.env"
 	LabelHook = "ai.opencharly.hook"
 	// LabelVm + LabelLibvirt: removed in the VM hard-cutover. VM specs
@@ -135,9 +135,9 @@ type LabelDataEntry struct {
 	Dest    string `json:"dest,omitempty"` // optional subdirectory within volume
 }
 
-// ImageMetadata is the runtime-relevant config extracted from image labels.
+// BoxMetadata is the runtime-relevant config extracted from image labels.
 type BoxMetadata struct {
-	Image     string
+	Box       string
 	Version   string // ai.opencharly.version — content-derived EffectiveVersion (highest layer version, or the image's dedicated version:)
 	Registry  string
 	Bootc     bool
@@ -199,7 +199,7 @@ type BoxMetadata struct {
 // merges into a separate runtime-only set via MergeDeployShell.
 type LabelShellSet struct {
 	Layer  []ShellEntry `json:"candy,omitempty"`
-	Image  []ShellEntry `json:"box,omitempty"`
+	Box    []ShellEntry `json:"box,omitempty"`
 	Deploy []ShellEntry `json:"deploy,omitempty"`
 }
 
@@ -240,7 +240,7 @@ func defaultInspectLabels(engine, imageRef string) (map[string]string, error) {
 	return labels, nil
 }
 
-// ExtractMetadata reads OCI labels from a local image and returns parsed ImageMetadata.
+// ExtractMetadata reads OCI labels from a local image and returns parsed BoxMetadata.
 // Returns nil if the image has no ai.opencharly labels.
 // Returns ErrImageNotLocal wrapped with the image ref if the image is not in local storage.
 func ExtractMetadata(engine, imageRef string) (*BoxMetadata, error) {
@@ -262,10 +262,10 @@ func ExtractMetadata(engine, imageRef string) (*BoxMetadata, error) {
 	}
 
 	// Schema v4: DNS / AcmeEmail / Engine no longer read from OCI labels —
-	// they are deployment choices and flow onto ImageMetadata via
+	// they are deployment choices and flow onto BoxMetadata via
 	// MergeDeployOntoMetadata (deploy.yml → metadata).
 	meta := &BoxMetadata{
-		Image:    labels[LabelBox],
+		Box:      labels[LabelBox],
 		Version:  version,
 		Registry: labels[LabelRegistry],
 		User:     labels[LabelUser],
@@ -311,7 +311,7 @@ func ExtractMetadata(engine, imageRef string) (*BoxMetadata, error) {
 		}
 		for _, lv := range labelVols {
 			meta.Volume = append(meta.Volume, VolumeMount{
-				VolumeName:    "charly-" + meta.Image + "-" + lv.Name,
+				VolumeName:    "charly-" + meta.Box + "-" + lv.Name,
 				ContainerPath: lv.Path,
 			})
 		}

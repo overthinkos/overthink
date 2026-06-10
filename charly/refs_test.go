@@ -282,7 +282,7 @@ func TestScanAllLayersNoRemote(t *testing.T) {
 
 func TestCollectRemoteRefs(t *testing.T) {
 	cfg := &Config{
-		Image: map[string]BoxConfig{
+		Box: map[string]BoxConfig{
 			"myapp": {
 				Layer: []string{
 					"pixi",
@@ -324,7 +324,7 @@ func TestCollectRemoteRefsLocalTemplate(t *testing.T) {
 	// migration, where the charly-cachyos kind:local template composes 30 remote
 	// @-ref layers — previously invisible to CollectRemoteRefs).
 	cfg := &Config{
-		Image: map[string]BoxConfig{
+		Box: map[string]BoxConfig{
 			"myapp": {
 				Layer: []string{
 					"@github.com/overthinkos/overthink/layers/pixi:v1.0.0",
@@ -364,12 +364,12 @@ func TestCollectRemoteRefsOptsIncludeDisabled(t *testing.T) {
 	// A disabled image's remote layer refs must be collected when a
 	// `--include-disabled <name>` build scopes IncludeDisabled to that image —
 	// so the FETCH set (CollectRemoteRefsOpts) stays in lockstep with the
-	// RESOLVE set (ResolveAllImage/GlobalLayerOrder). Regression guard for the
+	// RESOLVE set (ResolveAllBox/GlobalLayerOrder). Regression guard for the
 	// 2026-05 deb-family split: no enabled debian image references `pixi`, so a
 	// disabled `debian-builder --include-disabled` would otherwise hit
 	// "unknown layer .../pixi" in computing global layer order.
 	cfg := &Config{
-		Image: map[string]BoxConfig{
+		Box: map[string]BoxConfig{
 			"debian-builder": {
 				Enabled: boolPtr(false),
 				Layer: []string{
@@ -402,7 +402,7 @@ func TestCollectRemoteRefsOptsIncludeDisabled(t *testing.T) {
 	}
 
 	// A DIFFERENT disabled image must stay filtered under the scoped opts.
-	cfg.Image["other-disabled"] = BoxConfig{
+	cfg.Box["other-disabled"] = BoxConfig{
 		Enabled: boolPtr(false),
 		Layer:   []string{"@github.com/myorg/other/layers/x:v3.0.0"},
 	}
@@ -420,8 +420,8 @@ func TestCollectRemoteRefsOptsIncludeDisabled(t *testing.T) {
 func TestCollectRemoteRefsDefaultsBuilderTransitiveLayers(t *testing.T) {
 	// An image whose builder comes from defaults.builder (a NAMESPACED builder,
 	// with NO per-image builder: block) must still have that builder's transitive
-	// layers fetched — collectImage follows the EFFECTIVE builder edge
-	// (effectiveBuilderForImage → resolveEffectiveBuilder), not the empty raw
+	// layers fetched — collectBox follows the EFFECTIVE builder edge
+	// (effectiveBuilderForBox → resolveEffectiveBuilder), not the empty raw
 	// img.Builder. Regression guard for the bazzite/aurora
 	// "unknown layer .../rpmfusion" under-collection: the builder's layer lives in
 	// a DISTINCT repo, so it appears in downloads ONLY if the defaults-supplied
@@ -429,7 +429,7 @@ func TestCollectRemoteRefsDefaultsBuilderTransitiveLayers(t *testing.T) {
 	// the raw per-image img.Builder these images carry is empty).
 	cfg := &Config{
 		Defaults: BoxConfig{Builder: BuilderMap{"pixi": "charly.fedora-builder"}},
-		Image: map[string]BoxConfig{
+		Box: map[string]BoxConfig{
 			"bazzite": {
 				Base:  "ghcr.io/ublue-os/bazzite:stable", // external base
 				Layer: []string{"@github.com/overthinkos/overthink/layers/foo:v1.0.0"},
@@ -438,7 +438,7 @@ func TestCollectRemoteRefsDefaultsBuilderTransitiveLayers(t *testing.T) {
 		},
 		Namespaces: map[string]*Config{
 			"charly": {
-				Image: map[string]BoxConfig{
+				Box: map[string]BoxConfig{
 					"fedora-builder": {
 						Base:    "quay.io/fedora/fedora:43",
 						Produce: []string{"pixi"},
@@ -479,7 +479,7 @@ func TestCollectRemoteRefsSameLayerBothTagsCollected(t *testing.T) {
 	// pickLayerVersion — see TestPickLayerVersion. Collection's job is just to
 	// fetch every distinct (repo, git-tag).
 	cfg := &Config{
-		Image: map[string]BoxConfig{
+		Box: map[string]BoxConfig{
 			"myapp": {
 				Layer: []string{
 					"@github.com/org/repo/layers/cuda:v2.0.0",
@@ -513,7 +513,7 @@ func TestCollectRemoteRefsSameLayerBothTagsCollected(t *testing.T) {
 func TestCollectRemoteRefsDifferentLayersSameRepo(t *testing.T) {
 	// Different layers from same repo at different versions should be OK
 	cfg := &Config{
-		Image: map[string]BoxConfig{
+		Box: map[string]BoxConfig{
 			"myapp": {
 				Layer: []string{
 					"@github.com/org/repo/layers/cuda:v1.0.0",

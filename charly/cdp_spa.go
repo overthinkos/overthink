@@ -121,7 +121,7 @@ func spaApplyScale(x, y int, sx, sy float64) (float64, float64) {
 
 // CdpSpaClickCmd clicks at canvas coordinates with SPA scaling correction.
 type CdpSpaClickCmd struct {
-	Image    string `arg:"" help:"Image name"`
+	Box      string `arg:"" help:"Box name"`
 	TabID    string `arg:"" help:"Tab ID (from cdp list)"`
 	X        int    `arg:"" help:"X coordinate (in canvas/CDP screenshot space)"`
 	Y        int    `arg:"" help:"Y coordinate (in canvas/CDP screenshot space)"`
@@ -131,7 +131,7 @@ type CdpSpaClickCmd struct {
 }
 
 func (c *CdpSpaClickCmd) Run() error {
-	client, err := connectTab(c.Image, c.TabID, c.Instance)
+	client, err := connectTab(c.Box, c.TabID, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -206,7 +206,7 @@ func (c *CdpSpaClickCmd) Run() error {
 
 // CdpSpaMouseCmd moves the pointer without clicking.
 type CdpSpaMouseCmd struct {
-	Image    string `arg:"" help:"Image name"`
+	Box      string `arg:"" help:"Box name"`
 	TabID    string `arg:"" help:"Tab ID"`
 	X        int    `arg:"" help:"X coordinate (canvas space)"`
 	Y        int    `arg:"" help:"Y coordinate (canvas space)"`
@@ -215,7 +215,7 @@ type CdpSpaMouseCmd struct {
 }
 
 func (c *CdpSpaMouseCmd) Run() error {
-	client, err := connectTab(c.Image, c.TabID, c.Instance)
+	client, err := connectTab(c.Box, c.TabID, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -257,14 +257,14 @@ func (c *CdpSpaMouseCmd) Run() error {
 // CdpSpaTypeCmd types text into the remote desktop via the SPA's overlayInput.
 // Uses CDP Input.dispatchKeyEvent which bypasses local compositor and Chrome shortcuts.
 type CdpSpaTypeCmd struct {
-	Image    string `arg:"" help:"Image name"`
+	Box      string `arg:"" help:"Box name"`
 	TabID    string `arg:"" help:"Tab ID"`
 	Text     string `arg:"" help:"Text to type"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 }
 
 func (c *CdpSpaTypeCmd) Run() error {
-	client, err := connectTab(c.Image, c.TabID, c.Instance)
+	client, err := connectTab(c.Box, c.TabID, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -298,14 +298,14 @@ func (c *CdpSpaTypeCmd) Run() error {
 
 // CdpSpaKeyCmd sends a single key press to the remote desktop via the SPA.
 type CdpSpaKeyCmd struct {
-	Image    string `arg:"" help:"Image name"`
+	Box      string `arg:"" help:"Box name"`
 	TabID    string `arg:"" help:"Tab ID"`
 	KeyName  string `arg:"" help:"Key name (Return, Escape, Tab, BackSpace, F1-F12, Up, Down, Left, Right, etc.)"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 }
 
 func (c *CdpSpaKeyCmd) Run() error {
-	client, err := connectTab(c.Image, c.TabID, c.Instance)
+	client, err := connectTab(c.Box, c.TabID, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -335,14 +335,14 @@ func (c *CdpSpaKeyCmd) Run() error {
 // CdpSpaKeyComboCmd sends a modifier key combination to the remote desktop.
 // This bypasses the local compositor and Chrome — Super+e, Ctrl+T, Alt+F4 all pass through.
 type CdpSpaKeyComboCmd struct {
-	Image    string `arg:"" help:"Image name"`
+	Box      string `arg:"" help:"Box name"`
 	TabID    string `arg:"" help:"Tab ID"`
 	Combo    string `arg:"" help:"Key combination (super+e, ctrl+t, alt+F4, ctrl+shift+t)"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 }
 
 func (c *CdpSpaKeyComboCmd) Run() error {
-	client, err := connectTab(c.Image, c.TabID, c.Instance)
+	client, err := connectTab(c.Box, c.TabID, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -414,13 +414,13 @@ func (c *CdpSpaKeyComboCmd) Run() error {
 
 // CdpSpaStatusCmd shows the SPA state.
 type CdpSpaStatusCmd struct {
-	Image    string `arg:"" help:"Image name"`
+	Box      string `arg:"" help:"Box name"`
 	TabID    string `arg:"" help:"Tab ID"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 }
 
 func (c *CdpSpaStatusCmd) Run() error {
-	client, err := connectTab(c.Image, c.TabID, c.Instance)
+	client, err := connectTab(c.Box, c.TabID, c.Instance)
 	if err != nil {
 		return err
 	}

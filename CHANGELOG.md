@@ -22,6 +22,69 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-10 — refactor(charly)!: Go `Image*`→`Box*` identifier rename — candybox-meaning only, OCI `Image*` kept (Phase 2)
+
+The Phase-2 follow-through to the `image:`(OCI) vs `box:`(candybox) docs sweep:
+rename **only** the candybox-meaning Go identifiers to `Box*`, KEEPING every
+OCI-image-meaning identifier as `Image*`. The disambiguation rule (verbatim user
+intent): **`image:` = an upstream Docker/OCI image (KEEP), `box:` = a charly
+candybox (rename)**. No schema change (the `box` yaml tag was already in place);
+this is a pure internal Go rename. Per the operator's "max consistency" choice,
+the sweep went all the way down to local variables and parameters.
+
+**Renamed → `Box*`** (semantic, via `gopls rename` for the overloaded `.Image`
+field + params, word-boundary `sed` for unique names): the central
+`Config.Image map[string]BoxConfig` field → `Config.Box`; ~170 struct + Kong-arg
+`Image` fields → `Box` (every `yaml:"box"` spec field, the CLI positional args);
+the box-graph / box-resolver functions (`resolveImageRef`→`resolveBoxRef`,
+`ImageNeedsBuilder`→`BoxNeedsBuilder`, `ResolveImageOrder`→`ResolveBoxOrder`,
+`ResolveImageLevels`, `LoadBuildConfigForImage`→`LoadBuildConfigForBox`,
+`pullNamespacedImage`→`pullNamespacedBox`, `ImageNames`→`BoxNames`,
+`ResolveImage`→`ResolveBox`, `mergeImageMap`/`mergeImageConfig`,
+`validateImageDAG`, `collectAllImageLayers`, `LayerProvidedByImage`,
+`ResolveImageEngine`→`ResolveBoxEngine`, `collectImage`→`collectBox`, the
+`scaffold_project` `AddImage`/`AddLayerToImage`/`RemoveLayerFromImage` family, …);
+the fields `ImageName`→`BoxName`, `Images`→`Boxes`, `RequestedImages`→`RequestedBoxes`,
+`RefKindImage`→`RefKindBox`, `trieNode.images`→`boxes`; local params/vars
+`imageName`→`boxName` (491), box-meaning `image`→`box` / `images`→`boxes`,
+`skipImage`/`imagePorts`/`origImages`/`consumerImages`/`deployImage(Name)`/
+`userImages`/`quadletImages`. Plus the user-facing surface: help strings
+(`"Image name"`→`"Box name"`, `github.com/org/repo/image`→`/box`), the
+`charly deploy import --image`→`--box` flag, box-meaning error strings
+(`"box %q not found in charly.yml"`, …), and the doc-comments on the renamed
+symbols. The MCP `box.inspect` tool positional is now `box` (derived from the
+renamed Kong field). `plugins` skills swept for the renamed identifiers (R5).
+
+**KEPT as `Image*`** (OCI artifact, registry ref, or stdlib): `imageRef`/`ImageRef`,
+`ImageExists`/`ImageInfo`/`InspectRemoteImage`, `v1.Image`, stdlib `image.Image`/`image.RGBA`,
+OCI labels, `clean.go`/`registry.go`/`merge.go`/`transfer.go`/`local_image.go`
+(podman storage), the `yaml/json:"image"` fields (sidecar/ledger/status-render),
+`buildImage`/`pushImage`/`imageTags`/`ensureBuilderImageBuilt` (build/push the
+artifact), `BuilderImage*`/`DataImage`/`BaseImage*`/`RebuildImage`/`RunModeImage`,
+the OCI-storage CLI args (`charly eval box`, `vm cp-box`), and the `--section`/
+`--kind` string *values* (`layer`/`image`/`deploy` — data, not identifiers; a
+separate schema concern). The stale `ImageMetadata`/`ImageConfig`/`ResolvedImage`/
+`ImageDoc` comment/test-name debris from the earlier candy/box rebrand was cleaned
+up to `BoxMetadata`/`BoxConfig`/`ResolvedBox`/`BoxDoc` (the types were already
+renamed; only the references lagged).
+
+**Two string-references the compiler + `gopls` could not see — caught by R10, not
+the green build** (the reason R8/R10 sit above a clean compile): (1) the
+reflection-keyed `CapabilityLabelMap` had a string key `"Image"` (the
+`BoxMetadata` field reflection round-trip that powers `charly deploy from-box`) →
+fixed to `"Box"`; (2) the embedded `charly/build.yml` supervisord + systemd init
+`stage_fragment_copy:` templates referenced the struct field by name as text —
+`COPY .build/{{.ImageName}}/…` → `{{.BoxName}}` — which broke Containerfile
+generation while `go build`/`go test` stayed green. Both found by running the real
+`eval-pod` bed.
+
+R10: `charly eval run eval-pod` (the combined `kind:box` build + `kind:candy`
+composition + `kind:pod` runtime + every DeployTarget rendering path mechanism
+bed) on the fresh-built binary — build → eval box → deploy → eval live → fresh
+update → teardown. `go test ./...` + `go vet` + `charly box validate`
+(zero-warnings) all green; R5 grep self-test clean (zero live renamed
+identifiers in code, plugins, or `.md`).
+
 ### 2026-06-10 — docs: `image:`(OCI) vs `box:`(candybox) — main repo + box/fedora (Phase 1 cont.)
 
 Extends the Phase-1 docs sweep into the main repo + a submodule. `CLAUDE.md`'s

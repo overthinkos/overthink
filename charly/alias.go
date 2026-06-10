@@ -16,7 +16,7 @@ const aliasMarker = "# charly-alias"
 
 // generateAliasScript produces the wrapper script content for a host command alias.
 // The wrapper builds a properly quoted command string and calls charly shell -c.
-func generateAliasScript(image, command string) string {
+func generateAliasScript(box, command string) string {
 	return fmt.Sprintf(`#!/bin/sh
 # charly-alias
 # box: %s
@@ -24,7 +24,7 @@ func generateAliasScript(image, command string) string {
 _charly_q(){ printf "'"; printf '%%s' "$1" | sed "s/'/'\\\\''/g"; printf "' "; }
 c="%s"; for a in "$@"; do c="$c $(_charly_q "$a")"; done
 exec charly shell %s -c "$c"
-`, image, command, command, image)
+`, box, command, command, box)
 }
 
 // writeAliasScript writes a wrapper script to dir/name with mode 0755.
@@ -59,7 +59,7 @@ func removeAliasScript(dir, name string) error {
 // AliasInfo holds parsed metadata from a wrapper script.
 type AliasInfo struct {
 	Name    string
-	Image   string
+	Box     string
 	Command string
 }
 
@@ -120,7 +120,7 @@ func parseAliasScript(path string) (*AliasInfo, error) {
 		return nil, nil
 	}
 
-	return &AliasInfo{Image: image, Command: command}, nil
+	return &AliasInfo{Box: image, Command: command}, nil
 }
 
 // CollectedAlias represents a resolved alias ready for installation.
@@ -129,13 +129,13 @@ type CollectedAlias struct {
 	Command string `json:"command"`
 }
 
-// CollectImageAlias gathers aliases from the image's own layers + image-level config.
+// CollectBoxAlias gathers aliases from the image's own layers + image-level config.
 // No base chain traversal — aliases are leaf-image specific.
 // Layer aliases come first; image-level overrides by name.
-func CollectImageAlias(cfg *Config, layers map[string]*Layer, imageName string) ([]CollectedAlias, error) {
-	img, ok := cfg.Image[imageName]
+func CollectBoxAlias(cfg *Config, layers map[string]*Layer, boxName string) ([]CollectedAlias, error) {
+	img, ok := cfg.Box[boxName]
 	if !ok {
-		return nil, fmt.Errorf("image %q not found in charly.yml", imageName)
+		return nil, fmt.Errorf("box %q not found in charly.yml", boxName)
 	}
 
 	// Resolve layers for this image (includes transitive deps)
@@ -202,13 +202,13 @@ type AliasCmd struct {
 	Install   AliasInstallCmd   `cmd:"" help:"Install default aliases from the candy + box config"`
 	List      AliasListCmd      `cmd:"" help:"List all installed aliases"`
 	Remove    AliasRemoveCmd    `cmd:"" help:"Remove an alias"`
-	Uninstall AliasUninstallCmd `cmd:"" help:"Remove all aliases for an image"`
+	Uninstall AliasUninstallCmd `cmd:"" help:"Remove all aliases for a box"`
 }
 
 // AliasAddCmd creates a single alias
 type AliasAddCmd struct {
 	Name    string `arg:"" help:"Alias name (command on host)"`
-	Image   string `arg:"" help:"Image name from charly.yml"`
+	Box     string `arg:"" help:"Box name from charly.yml"`
 	Command string `arg:"" optional:"" help:"Command inside container (default: alias name)"`
 	Dest    string `long:"dest" default:"" help:"Directory for wrapper scripts (default: ~/.local/bin)"`
 }
@@ -221,8 +221,8 @@ func (c *AliasAddCmd) Run() error {
 
 	// Validate the image exists locally. If not, surface the standard
 	// "charly box pull" recommendation via ErrImageNotLocal.
-	if !LocalImageExists(rt.RunEngine, c.Image) {
-		return fmt.Errorf("%w: %s", ErrImageNotLocal, c.Image)
+	if !LocalImageExists(rt.RunEngine, c.Box) {
+		return fmt.Errorf("%w: %s", ErrImageNotLocal, c.Box)
 	}
 
 	command := c.Command
@@ -239,11 +239,11 @@ func (c *AliasAddCmd) Run() error {
 		return fmt.Errorf("creating directory %s: %w", dest, err)
 	}
 
-	if err := writeAliasScript(dest, c.Name, c.Image, command); err != nil {
+	if err := writeAliasScript(dest, c.Name, c.Box, command); err != nil {
 		return err
 	}
 
-	fmt.Fprintf(os.Stderr, "Created alias %s -> %s (box: %s)\n", c.Name, command, c.Image)
+	fmt.Fprintf(os.Stderr, "Created alias %s -> %s (box: %s)\n", c.Name, command, c.Box)
 	return nil
 }
 
@@ -284,15 +284,15 @@ func (c *AliasListCmd) Run() error {
 	}
 
 	for _, a := range aliases {
-		fmt.Printf("%s\t%s\t%s\n", a.Name, a.Image, a.Command)
+		fmt.Printf("%s\t%s\t%s\n", a.Name, a.Box, a.Command)
 	}
 	return nil
 }
 
 // AliasInstallCmd installs all default aliases for an image
 type AliasInstallCmd struct {
-	Image string `arg:"" help:"Image name from charly.yml"`
-	Dest  string `long:"dest" default:"" help:"Directory for wrapper scripts (default: ~/.local/bin)"`
+	Box  string `arg:"" help:"Box name from charly.yml"`
+	Dest string `long:"dest" default:"" help:"Directory for wrapper scripts (default: ~/.local/bin)"`
 }
 
 func (c *AliasInstallCmd) Run() error {
@@ -301,8 +301,8 @@ func (c *AliasInstallCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	imageRef := resolveShellImageRef("", c.Image, "")
-	runEngine := ResolveImageEngineForDeploy(c.Image, "", rt.RunEngine)
+	imageRef := resolveShellImageRef("", c.Box, "")
+	runEngine := ResolveBoxEngineForDeploy(c.Box, "", rt.RunEngine)
 	meta, err := ExtractMetadata(runEngine, imageRef)
 	if err != nil {
 		return err
@@ -313,7 +313,7 @@ func (c *AliasInstallCmd) Run() error {
 	aliases := meta.Alias
 
 	if len(aliases) == 0 {
-		fmt.Fprintf(os.Stderr, "No aliases defined for image %s\n", c.Image)
+		fmt.Fprintf(os.Stderr, "No aliases defined for image %s\n", c.Box)
 		return nil
 	}
 
@@ -327,20 +327,20 @@ func (c *AliasInstallCmd) Run() error {
 	}
 
 	for _, a := range aliases {
-		if err := writeAliasScript(dest, a.Name, c.Image, a.Command); err != nil {
+		if err := writeAliasScript(dest, a.Name, c.Box, a.Command); err != nil {
 			return err
 		}
 		fmt.Fprintf(os.Stderr, "Installed %s -> %s\n", a.Name, a.Command)
 	}
 
-	fmt.Fprintf(os.Stderr, "Installed %d alias(es) for %s\n", len(aliases), c.Image)
+	fmt.Fprintf(os.Stderr, "Installed %d alias(es) for %s\n", len(aliases), c.Box)
 	return nil
 }
 
 // AliasUninstallCmd removes all aliases for an image
 type AliasUninstallCmd struct {
-	Image string `arg:"" help:"Image name from charly.yml"`
-	Dest  string `long:"dest" default:"" help:"Directory for wrapper scripts (default: ~/.local/bin)"`
+	Box  string `arg:"" help:"Box name from charly.yml"`
+	Dest string `long:"dest" default:"" help:"Directory for wrapper scripts (default: ~/.local/bin)"`
 }
 
 func (c *AliasUninstallCmd) Run() error {
@@ -356,7 +356,7 @@ func (c *AliasUninstallCmd) Run() error {
 
 	count := 0
 	for _, a := range aliases {
-		if a.Image == c.Image {
+		if a.Box == c.Box {
 			path := filepath.Join(dest, a.Name)
 			if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 				return fmt.Errorf("removing %s: %w", path, err)
@@ -366,7 +366,7 @@ func (c *AliasUninstallCmd) Run() error {
 		}
 	}
 
-	fmt.Fprintf(os.Stderr, "Removed %d alias(es) for %s\n", count, c.Image)
+	fmt.Fprintf(os.Stderr, "Removed %d alias(es) for %s\n", count, c.Box)
 	return nil
 }
 

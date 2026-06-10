@@ -8,7 +8,7 @@ func TestMergeKindDoc_Android(t *testing.T) {
 	merged := &UnifiedFile{}
 	kd := &kindKeyedDoc{Android: &AndroidDoc{
 		Name:        "pixel9a-36",
-		AndroidSpec: AndroidSpec{Image: "android-emulator", Device: "pixel_9a", ApiLevel: 36},
+		AndroidSpec: AndroidSpec{Box: "android-emulator", Device: "pixel_9a", ApiLevel: 36},
 	}}
 	if err := mergeKindDoc(merged, kd, "/tmp"); err != nil {
 		t.Fatalf("mergeKindDoc(android) err: %v", err)
@@ -17,7 +17,7 @@ func TestMergeKindDoc_Android(t *testing.T) {
 	if got == nil {
 		t.Fatal("kind:android doc not registered in merged.Android")
 	}
-	if got.Image != "android-emulator" || got.Device != "pixel_9a" || got.ApiLevel != 36 {
+	if got.Box != "android-emulator" || got.Device != "pixel_9a" || got.ApiLevel != 36 {
 		t.Errorf("android spec round-trip wrong: %+v", got)
 	}
 
@@ -29,13 +29,13 @@ func TestMergeKindDoc_Android(t *testing.T) {
 
 // TestMergeAndroidMap verifies the root-wins merge semantics for android: maps.
 func TestMergeAndroidMap(t *testing.T) {
-	dst := map[string]*AndroidSpec{"a": {Image: "keep"}}
-	src := map[string]*AndroidSpec{"a": {Image: "drop"}, "b": {Image: "add"}}
+	dst := map[string]*AndroidSpec{"a": {Box: "keep"}}
+	src := map[string]*AndroidSpec{"a": {Box: "drop"}, "b": {Box: "add"}}
 	mergeAndroidMap(&dst, src)
-	if dst["a"].Image != "keep" {
-		t.Errorf("existing entry should win: got %q", dst["a"].Image)
+	if dst["a"].Box != "keep" {
+		t.Errorf("existing entry should win: got %q", dst["a"].Box)
 	}
-	if dst["b"] == nil || dst["b"].Image != "add" {
+	if dst["b"] == nil || dst["b"].Box != "add" {
 		t.Errorf("new entry should be added: %+v", dst["b"])
 	}
 }
@@ -65,7 +65,7 @@ func TestValidateEvalBeds_Android(t *testing.T) {
 
 	// android bed referencing a defined device → ok.
 	uf3 := &UnifiedFile{
-		Android: map[string]*AndroidSpec{"dev": {Image: "android-emulator"}},
+		Android: map[string]*AndroidSpec{"dev": {Box: "android-emulator"}},
 		Eval: map[string]DeploymentNode{
 			"bed": {Target: "android", Android: "dev", Disposable: boolPtr(true)},
 		},

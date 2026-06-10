@@ -17,12 +17,12 @@ type ServiceCmd struct {
 
 // ServiceStatusCmd shows status of all services
 type ServiceStatusCmd struct {
-	Image    string `arg:"" help:"Image name"`
+	Box      string `arg:"" help:"Box name"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 }
 
 func (c *ServiceStatusCmd) Run() error {
-	engine, name, initDef, err := resolveServiceInit(c.Image, c.Instance)
+	engine, name, initDef, err := resolveServiceInit(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -31,13 +31,13 @@ func (c *ServiceStatusCmd) Run() error {
 
 // ServiceStartCmd starts a service
 type ServiceStartCmd struct {
-	Image    string `arg:"" help:"Image name"`
+	Box      string `arg:"" help:"Box name"`
 	Service  string `arg:"" help:"Service name"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 }
 
 func (c *ServiceStartCmd) Run() error {
-	engine, name, initDef, err := resolveServiceInit(c.Image, c.Instance)
+	engine, name, initDef, err := resolveServiceInit(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -49,13 +49,13 @@ func (c *ServiceStartCmd) Run() error {
 
 // ServiceStopCmd stops a service
 type ServiceStopCmd struct {
-	Image    string `arg:"" help:"Image name"`
+	Box      string `arg:"" help:"Box name"`
 	Service  string `arg:"" help:"Service name"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 }
 
 func (c *ServiceStopCmd) Run() error {
-	engine, name, initDef, err := resolveServiceInit(c.Image, c.Instance)
+	engine, name, initDef, err := resolveServiceInit(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -67,13 +67,13 @@ func (c *ServiceStopCmd) Run() error {
 
 // ServiceRestartCmd restarts a service
 type ServiceRestartCmd struct {
-	Image    string `arg:"" help:"Image name"`
+	Box      string `arg:"" help:"Box name"`
 	Service  string `arg:"" help:"Service name"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 }
 
 func (c *ServiceRestartCmd) Run() error {
-	engine, name, initDef, err := resolveServiceInit(c.Image, c.Instance)
+	engine, name, initDef, err := resolveServiceInit(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -84,15 +84,15 @@ func (c *ServiceRestartCmd) Run() error {
 }
 
 // resolveServiceInit resolves the container, engine, and init system for service management.
-func resolveServiceInit(image, instance string) (engine, containerName string, initDef *InitDef, err error) {
+func resolveServiceInit(box, instance string) (engine, containerName string, initDef *InitDef, err error) {
 	rt, err := ResolveRuntime()
 	if err != nil {
 		return "", "", nil, err
 	}
-	imageName := resolveImageName(image)
-	runEngine := ResolveImageEngineForDeploy(imageName, instance, rt.RunEngine)
+	boxName := resolveBoxName(box)
+	runEngine := ResolveBoxEngineForDeploy(boxName, instance, rt.RunEngine)
 	engine = EngineBinary(runEngine)
-	containerName = containerNameInstance(imageName, instance)
+	containerName = containerNameInstance(boxName, instance)
 	if !containerRunning(engine, containerName) {
 		return "", "", nil, fmt.Errorf("container %s is not running", containerName)
 	}

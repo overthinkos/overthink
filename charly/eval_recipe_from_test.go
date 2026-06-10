@@ -33,7 +33,7 @@ func fxCheckLiveOnly(id string) Check {
 func fxUnified() *UnifiedFile {
 	return &UnifiedFile{
 		Version: LatestSchemaVersion().String(),
-		Image:   map[string]BoxConfig{},
+		Box:     map[string]BoxConfig{},
 		Pod:     map[string]*PodSpec{},
 		VM:      map[string]*VmSpec{},
 		Recipe:  map[string]*HarnessRecipe{},
@@ -80,7 +80,7 @@ func TestExpandFromLayer(t *testing.T) {
 
 func TestExpandFromImage(t *testing.T) {
 	uf := fxUnified()
-	uf.Image["arch-coder"] = BoxConfig{
+	uf.Box["arch-coder"] = BoxConfig{
 		Eval: []Check{
 			fxCheckCommand("arch-coder-charly", "test -x /usr/local/bin/charly"),
 		},
@@ -146,7 +146,7 @@ func TestExpandFromVM(t *testing.T) {
 
 func TestMultiKindComposition(t *testing.T) {
 	uf := fxUnified()
-	uf.Image["img-a"] = BoxConfig{
+	uf.Box["img-a"] = BoxConfig{
 		Eval: []Check{fxCheckCommand("img-a-test", "true")},
 	}
 	uf.Pod["pod-a"] = &PodSpec{
@@ -440,7 +440,7 @@ func TestIdempotentExpansion(t *testing.T) {
 
 func TestScopeFilterDeployOnly(t *testing.T) {
 	uf := fxUnified()
-	uf.Image["i"] = BoxConfig{
+	uf.Box["i"] = BoxConfig{
 		Eval:       []Check{fxCheckCommand("img-build", "echo build")},
 		DeployEval: []Check{fxCheckCommand("img-deploy", "echo deploy")},
 	}

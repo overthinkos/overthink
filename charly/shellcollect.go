@@ -2,7 +2,7 @@ package main
 
 import "fmt"
 
-// CollectShell walks the base-image chain for imageName and gathers
+// CollectShell walks the base-image chain for boxName and gathers
 // per-(origin, shell) shell-init contributions into a three-section
 // LabelShellSet. Mirrors CollectEval / CollectHooks shape — dedupe by
 // layer name, walk internal bases until an external image, terminate
@@ -16,11 +16,11 @@ import "fmt"
 //     deploy time by MergeDeployShell from deploy.yml entries.
 //
 // Returns nil if every section is empty.
-func CollectShell(cfg *Config, layers map[string]*Layer, imageName string) *LabelShellSet {
+func CollectShell(cfg *Config, layers map[string]*Layer, boxName string) *LabelShellSet {
 	set := &LabelShellSet{}
 
 	var allLayerNames []string
-	for _, node := range cfg.walkBaseChain(imageName) {
+	for _, node := range cfg.walkBaseChain(boxName) {
 		resolved, err := ResolveLayerOrder(node.Img.Layer, layers, nil)
 		if err != nil {
 			break
@@ -46,17 +46,17 @@ func CollectShell(cfg *Config, layers map[string]*Layer, imageName string) *Labe
 		set.Layer = append(set.Layer, *entry)
 	}
 
-	if img, ok := cfg.Image[imageName]; ok {
+	if img, ok := cfg.Box[boxName]; ok {
 		if img.Shell != nil {
-			entry := shellConfigToEntry(img.Shell, "image:"+imageName)
+			entry := shellConfigToEntry(img.Shell, "image:"+boxName)
 			if entry != nil {
-				entry.ID = "image:" + imageName
-				set.Image = append(set.Image, *entry)
+				entry.ID = "image:" + boxName
+				set.Box = append(set.Box, *entry)
 			}
 		}
 	}
 
-	if len(set.Layer) == 0 && len(set.Image) == 0 && len(set.Deploy) == 0 {
+	if len(set.Layer) == 0 && len(set.Box) == 0 && len(set.Deploy) == 0 {
 		return nil
 	}
 	return set
@@ -114,7 +114,7 @@ func MergeDeployShell(baked *LabelShellSet, overlay []ShellEntry) *LabelShellSet
 	}
 	out := &LabelShellSet{
 		Layer:  append([]ShellEntry(nil), baked.Layer...),
-		Image:  append([]ShellEntry(nil), baked.Image...),
+		Box:    append([]ShellEntry(nil), baked.Box...),
 		Deploy: append([]ShellEntry(nil), baked.Deploy...),
 	}
 	if len(overlay) == 0 {
@@ -145,7 +145,7 @@ func MergeDeployShell(baked *LabelShellSet, overlay []ShellEntry) *LabelShellSet
 // signal — see DeployImageConfig.Shell parsing in deploy.go.
 func replaceShellEntryByID(set *LabelShellSet, e ShellEntry) bool {
 	skip := e.Generic == nil && len(e.ByShell) == 0
-	for _, bucket := range [...]*[]ShellEntry{&set.Layer, &set.Image, &set.Deploy} {
+	for _, bucket := range [...]*[]ShellEntry{&set.Layer, &set.Box, &set.Deploy} {
 		for i, b := range *bucket {
 			if b.ID != e.ID {
 				continue
@@ -171,7 +171,7 @@ func resolveDeploymentShellOverride(set *LabelShellSet) map[string]map[string]*S
 	if set == nil {
 		return out
 	}
-	for _, bucket := range [][]ShellEntry{set.Layer, set.Image, set.Deploy} {
+	for _, bucket := range [][]ShellEntry{set.Layer, set.Box, set.Deploy} {
 		for _, e := range bucket {
 			if _, ok := out[e.Origin]; !ok {
 				out[e.Origin] = map[string]*ShellSpec{}

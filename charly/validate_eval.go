@@ -21,7 +21,7 @@ var lowercaseEvalVarPattern = regexp.MustCompile(`\$\{[a-z][a-zA-Z0-9_]*\}`)
 //
 // Scope:
 //   - Layer-level tests (LayerYAML.Eval).
-//   - Image-level tests (ImageConfig.Eval, ImageConfig.DeployEval).
+//   - Image-level tests (BoxConfig.Eval, BoxConfig.DeployEval).
 //   - Deploy.yml tests are out of scope here because deploy.yml is loaded
 //     per-operator at runtime, not part of the charly.yml validation pass.
 //
@@ -48,7 +48,7 @@ func validateTests(cfg *Config, layers map[string]*Layer, errs *ValidationError)
 	}
 
 	// Image-level
-	for name, img := range cfg.Image {
+	for name, img := range cfg.Box {
 		if img.Enabled != nil && !*img.Enabled {
 			continue
 		}
@@ -347,6 +347,6 @@ func validateCollectedIDUniqueness(cfg *Config, layers map[string]*Layer, imgNam
 		}
 	}
 	checkSection("layer", set.Layer)
-	checkSection("image", set.Image)
+	checkSection("image", set.Box)
 	checkSection("deploy", set.Deploy)
 }

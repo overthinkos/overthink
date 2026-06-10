@@ -22,13 +22,13 @@ type TmuxCmd struct {
 // TmuxShellCmd creates or reattaches to a persistent shell session.
 // If the session exists, attaches. If not, creates it with bash and attaches.
 type TmuxShellCmd struct {
-	Image    string `arg:"" help:"Image name"`
+	Box      string `arg:"" help:"Box name"`
 	Session  string `short:"s" long:"session" default:"shell" help:"Session name (default: shell)"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 }
 
 func (c *TmuxShellCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Image, c.Instance)
+	venue, err := resolveEvalVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -39,7 +39,7 @@ func (c *TmuxShellCmd) Run() error {
 	// real TTY — inherently container-specific. For a VM the equivalent is an
 	// ssh -t session.
 	if !venue.IsContainer() {
-		return fmt.Errorf("interactive tmux shell requires a container target; for a VM use: charly vm ssh %s -- tmux new-session -A -s %s", c.Image, c.Session)
+		return fmt.Errorf("interactive tmux shell requires a container target; for a VM use: charly vm ssh %s -- tmux new-session -A -s %s", c.Box, c.Session)
 	}
 
 	enginePath, err := findExecutable(venue.Engine)
@@ -60,7 +60,7 @@ func (c *TmuxShellCmd) Run() error {
 
 // TmuxCmdCmd sends a command to an existing tmux session with notification.
 type TmuxCmdCmd struct {
-	Image    string `arg:"" help:"Image name"`
+	Box      string `arg:"" help:"Box name"`
 	Command  string `arg:"" help:"Command to send"`
 	Session  string `short:"s" long:"session" required:"" help:"Session name"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
@@ -68,7 +68,7 @@ type TmuxCmdCmd struct {
 }
 
 func (c *TmuxCmdCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Image, c.Instance)
+	venue, err := resolveEvalVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -76,7 +76,7 @@ func (c *TmuxCmdCmd) Run() error {
 		return err
 	}
 	if !tmuxHasSession(venue.Exec, c.Session) {
-		return fmt.Errorf("tmux session %q not found in %s (use 'charly tmux list' to see sessions)", c.Session, c.Image)
+		return fmt.Errorf("tmux session %q not found in %s (use 'charly tmux list' to see sessions)", c.Session, c.Box)
 	}
 
 	if err := sendTmuxCommand(venue.Exec, c.Session, c.Command); err != nil {
@@ -95,14 +95,14 @@ func (c *TmuxCmdCmd) Run() error {
 
 // TmuxRunCmd starts a command in a new detached tmux session.
 type TmuxRunCmd struct {
-	Image    string `arg:"" help:"Image name"`
+	Box      string `arg:"" help:"Box name"`
 	Command  string `arg:"" help:"Command to run in the session"`
 	Session  string `short:"s" long:"session" required:"" help:"Session name"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 }
 
 func (c *TmuxRunCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Image, c.Instance)
+	venue, err := resolveEvalVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -110,25 +110,25 @@ func (c *TmuxRunCmd) Run() error {
 		return err
 	}
 	if tmuxHasSession(venue.Exec, c.Session) {
-		return fmt.Errorf("tmux session %q already exists in %s (use 'charly tmux attach' or 'charly tmux kill')", c.Session, c.Image)
+		return fmt.Errorf("tmux session %q already exists in %s (use 'charly tmux attach' or 'charly tmux kill')", c.Session, c.Box)
 	}
 
 	if err := execTmux(venue.Exec, "new-session", "-d", "-s", c.Session, c.Command); err != nil {
 		return fmt.Errorf("starting tmux session: %w", err)
 	}
-	fmt.Fprintf(os.Stderr, "Started tmux session %q in %s\n", c.Session, c.Image)
+	fmt.Fprintf(os.Stderr, "Started tmux session %q in %s\n", c.Session, c.Box)
 	return nil
 }
 
 // TmuxAttachCmd attaches to an existing tmux session interactively.
 type TmuxAttachCmd struct {
-	Image    string `arg:"" help:"Image name"`
+	Box      string `arg:"" help:"Box name"`
 	Session  string `short:"s" long:"session" required:"" help:"Session name"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 }
 
 func (c *TmuxAttachCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Image, c.Instance)
+	venue, err := resolveEvalVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -136,10 +136,10 @@ func (c *TmuxAttachCmd) Run() error {
 		return err
 	}
 	if !tmuxHasSession(venue.Exec, c.Session) {
-		return fmt.Errorf("tmux session %q not found in %s (use 'charly tmux list' to see sessions)", c.Session, c.Image)
+		return fmt.Errorf("tmux session %q not found in %s (use 'charly tmux list' to see sessions)", c.Session, c.Box)
 	}
 	if !venue.IsContainer() {
-		return fmt.Errorf("interactive tmux attach requires a container target; for a VM use: charly vm ssh %s -- tmux attach -t %s", c.Image, c.Session)
+		return fmt.Errorf("interactive tmux attach requires a container target; for a VM use: charly vm ssh %s -- tmux attach -t %s", c.Box, c.Session)
 	}
 
 	enginePath, err := findExecutable(venue.Engine)
@@ -152,12 +152,12 @@ func (c *TmuxAttachCmd) Run() error {
 
 // TmuxListCmd lists active tmux sessions in a container.
 type TmuxListCmd struct {
-	Image    string `arg:"" help:"Image name"`
+	Box      string `arg:"" help:"Box name"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 }
 
 func (c *TmuxListCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Image, c.Instance)
+	venue, err := resolveEvalVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -167,7 +167,7 @@ func (c *TmuxListCmd) Run() error {
 
 	if err := execTmux(venue.Exec, "list-sessions"); err != nil {
 		// tmux returns error when no server/sessions exist — not a real error
-		fmt.Fprintf(os.Stderr, "No tmux sessions in %s\n", c.Image)
+		fmt.Fprintf(os.Stderr, "No tmux sessions in %s\n", c.Box)
 		return nil
 	}
 	return nil
@@ -175,19 +175,19 @@ func (c *TmuxListCmd) Run() error {
 
 // TmuxCaptureCmd captures pane output from a session.
 type TmuxCaptureCmd struct {
-	Image    string `arg:"" help:"Image name"`
+	Box      string `arg:"" help:"Box name"`
 	Session  string `short:"s" long:"session" required:"" help:"Session name"`
 	Lines    int    `short:"n" long:"lines" default:"0" help:"Number of history lines (0 = visible pane only)"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 }
 
 func (c *TmuxCaptureCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Image, c.Instance)
+	venue, err := resolveEvalVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
 	if !tmuxHasSession(venue.Exec, c.Session) {
-		return fmt.Errorf("tmux session %q not found in %s (use 'charly tmux list' to see sessions)", c.Session, c.Image)
+		return fmt.Errorf("tmux session %q not found in %s (use 'charly tmux list' to see sessions)", c.Session, c.Box)
 	}
 
 	args := []string{"capture-pane", "-t", c.Session, "-p"}
@@ -199,7 +199,7 @@ func (c *TmuxCaptureCmd) Run() error {
 
 // TmuxSendCmd sends keys to a running tmux session.
 type TmuxSendCmd struct {
-	Image    string   `arg:"" help:"Image name"`
+	Box      string   `arg:"" help:"Box name"`
 	Keys     []string `arg:"" help:"Keys to send (use tmux key names for special keys)"`
 	Session  string   `short:"s" long:"session" required:"" help:"Session name"`
 	Literal  bool     `short:"l" long:"literal" help:"Send keys literally (disable key name lookup)"`
@@ -208,12 +208,12 @@ type TmuxSendCmd struct {
 }
 
 func (c *TmuxSendCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Image, c.Instance)
+	venue, err := resolveEvalVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
 	if !tmuxHasSession(venue.Exec, c.Session) {
-		return fmt.Errorf("tmux session %q not found in %s (use 'charly tmux list' to see sessions)", c.Session, c.Image)
+		return fmt.Errorf("tmux session %q not found in %s (use 'charly tmux list' to see sessions)", c.Session, c.Box)
 	}
 
 	args := []string{"send-keys", "-t", c.Session}
@@ -229,13 +229,13 @@ func (c *TmuxSendCmd) Run() error {
 
 // TmuxKillCmd kills a tmux session.
 type TmuxKillCmd struct {
-	Image    string `arg:"" help:"Image name"`
+	Box      string `arg:"" help:"Box name"`
 	Session  string `short:"s" long:"session" required:"" help:"Session name"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 }
 
 func (c *TmuxKillCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Image, c.Instance)
+	venue, err := resolveEvalVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -243,7 +243,7 @@ func (c *TmuxKillCmd) Run() error {
 	if err := execTmux(venue.Exec, "kill-session", "-t", c.Session); err != nil {
 		return fmt.Errorf("killing tmux session %q: %w", c.Session, err)
 	}
-	fmt.Fprintf(os.Stderr, "Killed tmux session %q in %s\n", c.Session, c.Image)
+	fmt.Fprintf(os.Stderr, "Killed tmux session %q in %s\n", c.Session, c.Box)
 	return nil
 }
 

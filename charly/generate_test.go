@@ -114,7 +114,7 @@ func TestCollectBuilderRuntimeEnv_NilBuilderConfig(t *testing.T) {
 
 func TestResolveBaseImage_InternalUseCalVer(t *testing.T) {
 	g := &Generator{
-		Images: map[string]*ResolvedBox{
+		Boxes: map[string]*ResolvedBox{
 			"fedora": {
 				Name:           "fedora",
 				Base:           "quay.io/fedora/fedora:43",
@@ -135,13 +135,13 @@ func TestResolveBaseImage_InternalUseCalVer(t *testing.T) {
 	}
 
 	// External base should return the base as-is
-	got := g.resolveBaseImage(g.Images["fedora"])
+	got := g.resolveBaseImage(g.Boxes["fedora"])
 	if got != "quay.io/fedora/fedora:43" {
 		t.Errorf("resolveBaseImage(fedora) = %q, want external base", got)
 	}
 
 	// Internal base should return the parent's full CalVer tag
-	got = g.resolveBaseImage(g.Images["fedora-test"])
+	got = g.resolveBaseImage(g.Boxes["fedora-test"])
 	want := "ghcr.io/overthinkos/fedora:2026.46.1415"
 	if got != want {
 		t.Errorf("resolveBaseImage(fedora-test) = %q, want %q", got, want)
@@ -218,7 +218,7 @@ func TestGenerateRouteWithoutTraefik_NoTraefikRoutes(t *testing.T) {
 				route: &RouteConfig{Host: "svc.localhost", Port: "9090"},
 			},
 		},
-		Images: map[string]*ResolvedBox{
+		Boxes: map[string]*ResolvedBox{
 			"test-image": {
 				Name:           "test-image",
 				Base:           "quay.io/fedora/fedora:43",
@@ -532,7 +532,7 @@ func TestAurInstallTemplate(t *testing.T) {
 
 func TestBuilderRefForFormat(t *testing.T) {
 	g := &Generator{
-		Images: map[string]*ResolvedBox{
+		Boxes: map[string]*ResolvedBox{
 			"arch-img": {
 				Builder: BuilderMap{"aur": "arch-builder", "pixi": "arch-builder"},
 			},

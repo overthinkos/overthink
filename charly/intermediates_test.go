@@ -164,7 +164,7 @@ func TestComputeIntermediates_NoBranching(t *testing.T) {
 
 	cfg := &Config{
 		Defaults: BoxConfig{Registry: "r", Build: BuildFormats{"rpm"}},
-		Image:    map[string]BoxConfig{"app": {Layer: []string{"python"}}},
+		Box:      map[string]BoxConfig{"app": {Layer: []string{"python"}}},
 	}
 
 	result, err := ComputeIntermediates(images, layers, cfg, "v1")
@@ -212,7 +212,7 @@ func TestComputeIntermediates_SimpleBranch(t *testing.T) {
 
 	cfg := &Config{
 		Defaults: BoxConfig{Registry: "r", Build: BuildFormats{"rpm"}},
-		Image: map[string]BoxConfig{
+		Box: map[string]BoxConfig{
 			"fedora": {Layer: []string{}},
 			"app1":   {Base: "fedora", Layer: []string{"python", "testapi"}},
 			"app2":   {Base: "fedora", Layer: []string{"nodejs"}},
@@ -239,7 +239,7 @@ func TestComputeIntermediates_SimpleBranch(t *testing.T) {
 	// Verify all original images still exist
 	for name := range images {
 		if _, ok := result[name]; !ok {
-			t.Errorf("original image %q missing from result", name)
+			t.Errorf("original box %q missing from result", name)
 		}
 	}
 }
@@ -273,7 +273,7 @@ func TestComputeIntermediates_SharedPrefix(t *testing.T) {
 
 	cfg := &Config{
 		Defaults: BoxConfig{Registry: "r", Build: BuildFormats{"rpm"}},
-		Image: map[string]BoxConfig{
+		Box: map[string]BoxConfig{
 			"fedora":      {Layer: []string{}},
 			"fedora-test": {Base: "fedora", Layer: []string{"testapi"}},
 			"openclaw":    {Base: "fedora", Layer: []string{"openclaw"}},
@@ -340,7 +340,7 @@ func TestComputeIntermediates_ExistingImageReuse(t *testing.T) {
 
 	cfg := &Config{
 		Defaults: BoxConfig{Registry: "r", Build: BuildFormats{"rpm"}},
-		Image: map[string]BoxConfig{
+		Box: map[string]BoxConfig{
 			"fedora": {Layer: []string{}},
 			"app1":   {Base: "fedora", Layer: []string{"pixi"}},
 			"app2":   {Base: "fedora", Layer: []string{"nodejs"}},
@@ -395,22 +395,22 @@ func TestImageNeedsBuilder(t *testing.T) {
 	}
 
 	// pixi has root.yml only (no pixi.toml) → does NOT need builder
-	if ImageNeedsBuilder(images["base"], images, layers) {
+	if BoxNeedsBuilder(images["base"], images, layers) {
 		t.Error("base should not need builder (pixi has root.yml only, no pixi.toml)")
 	}
 
 	// app has python which has pixi.toml → NEEDS builder
-	if !ImageNeedsBuilder(images["app"], images, layers) {
+	if !BoxNeedsBuilder(images["app"], images, layers) {
 		t.Error("app should need builder (python has pixi.toml)")
 	}
 
 	// simple has tooling (root.yml only) → does NOT need builder
-	if ImageNeedsBuilder(images["simple"], images, layers) {
+	if BoxNeedsBuilder(images["simple"], images, layers) {
 		t.Error("simple should not need builder (tooling has root.yml only)")
 	}
 
 	// nil layers → conservative true
-	if !ImageNeedsBuilder(images["simple"], images, nil) {
+	if !BoxNeedsBuilder(images["simple"], images, nil) {
 		t.Error("nil layers should return true (conservative)")
 	}
 }
@@ -453,7 +453,7 @@ func TestComputeIntermediates_RealisticConfig(t *testing.T) {
 
 	cfg := &Config{
 		Defaults: BoxConfig{Registry: "r", Build: BuildFormats{"rpm"}, Builder: BuilderMap{"pixi": "builder", "npm": "builder"}},
-		Image: map[string]BoxConfig{
+		Box: map[string]BoxConfig{
 			"builder":     {Layer: []string{"pixi", "nodejs", "build-toolchain"}},
 			"fedora":      {Layer: []string{}},
 			"fedora-test": {Base: "fedora", Layer: []string{"traefik", "testapi"}},
@@ -475,14 +475,14 @@ func TestComputeIntermediates_RealisticConfig(t *testing.T) {
 	// All original images should still exist
 	for name := range images {
 		if _, ok := result[name]; !ok {
-			t.Errorf("original image %q missing from result", name)
+			t.Errorf("original box %q missing from result", name)
 		}
 	}
 
 	// The build order should not have cycles
-	order, err := ResolveImageOrder(result, layers)
+	order, err := ResolveBoxOrder(result, layers)
 	if err != nil {
-		t.Fatalf("ResolveImageOrder after intermediates: %v", err)
+		t.Fatalf("ResolveBoxOrder after intermediates: %v", err)
 	}
 	t.Logf("Build order: %v", order)
 
@@ -587,7 +587,7 @@ func TestComputeIntermediates_NvidiaScenario(t *testing.T) {
 
 	cfg := &Config{
 		Defaults: BoxConfig{Registry: "r", Build: BuildFormats{"rpm"}, Builder: BuilderMap{"pixi": "builder", "npm": "builder"}},
-		Image: map[string]BoxConfig{
+		Box: map[string]BoxConfig{
 			"builder":      {Layer: []string{"pixi", "nodejs", "build-toolchain"}},
 			"fedora":       {Layer: []string{}},
 			"nvidia":       {Base: "fedora", Layer: []string{"cuda"}},
@@ -687,14 +687,14 @@ func TestComputeIntermediates_NvidiaScenario(t *testing.T) {
 	// All original images should still exist
 	for name := range images {
 		if _, ok := result[name]; !ok {
-			t.Errorf("original image %q missing from result", name)
+			t.Errorf("original box %q missing from result", name)
 		}
 	}
 
 	// Build order should have no cycles
-	order, err := ResolveImageOrder(result, layers)
+	order, err := ResolveBoxOrder(result, layers)
 	if err != nil {
-		t.Fatalf("ResolveImageOrder after intermediates: %v", err)
+		t.Fatalf("ResolveBoxOrder after intermediates: %v", err)
 	}
 	t.Logf("Build order: %v", order)
 }
@@ -736,7 +736,7 @@ func TestComputeIntermediates_UserImageAtBranchPoint(t *testing.T) {
 
 	cfg := &Config{
 		Defaults: BoxConfig{Registry: "r", Build: BuildFormats{"rpm"}},
-		Image: map[string]BoxConfig{
+		Box: map[string]BoxConfig{
 			"fedora": {Layer: []string{}},
 			"svbase": {Base: "fedora", Layer: []string{"supervisord"}},
 			"app1":   {Base: "svbase", Layer: []string{"testapi"}},
@@ -833,7 +833,7 @@ func TestComputeIntermediates_UserImageAsBranchIntermediate(t *testing.T) {
 
 	cfg := &Config{
 		Defaults: BoxConfig{Registry: "r", Build: BuildFormats{"rpm"}},
-		Image: map[string]BoxConfig{
+		Box: map[string]BoxConfig{
 			"base": {Layer: []string{}},
 			"mid":  {Base: "base", Layer: []string{"B"}},
 			"app1": {Base: "base", Layer: []string{"C"}},
@@ -941,7 +941,7 @@ func TestComputeIntermediates_PlatformInheritance(t *testing.T) {
 			Builder:   BuilderMap{"pixi": "builder", "npm": "builder"},
 			Platforms: []string{"linux/amd64", "linux/arm64"},
 		},
-		Image: map[string]BoxConfig{
+		Box: map[string]BoxConfig{
 			"builder": {Layer: []string{"pixi"}},
 			"fedora":  {Layer: []string{}},
 			"nvidia":  {Base: "fedora", Layer: []string{"cuda"}, Platforms: []string{"linux/amd64"}},
@@ -1108,7 +1108,7 @@ func TestComputeIntermediates_PixiBoundNotExtracted(t *testing.T) {
 
 	cfg := &Config{
 		Defaults: BoxConfig{Registry: "r", Build: BuildFormats{"rpm"}, Builder: BuilderMap{"pixi": "builder", "npm": "builder"}},
-		Image: map[string]BoxConfig{
+		Box: map[string]BoxConfig{
 			"builder":             {Layer: []string{"pixi"}},
 			"fedora":              {Layer: []string{}},
 			"nvidia":              {Base: "fedora", Layer: []string{"cuda"}},
@@ -1159,14 +1159,14 @@ func TestComputeIntermediates_PixiBoundNotExtracted(t *testing.T) {
 	// All original images should still exist
 	for name := range images {
 		if _, ok := result[name]; !ok {
-			t.Errorf("original image %q missing from result", name)
+			t.Errorf("original box %q missing from result", name)
 		}
 	}
 
 	// Build order should have no cycles
-	order, err := ResolveImageOrder(result, layers)
+	order, err := ResolveBoxOrder(result, layers)
 	if err != nil {
-		t.Fatalf("ResolveImageOrder after intermediates: %v", err)
+		t.Fatalf("ResolveBoxOrder after intermediates: %v", err)
 	}
 	t.Logf("Build order: %v", order)
 }
@@ -1221,7 +1221,7 @@ func TestComputeIntermediates_InheritDistroFromParent(t *testing.T) {
 			Distro:   []string{"fedora"},
 			Build:    BuildFormats{"rpm"},
 		},
-		Image: map[string]BoxConfig{
+		Box: map[string]BoxConfig{
 			"fedora":   {Layer: []string{}},
 			"arch":     {Base: "ext:arch", Layer: []string{}},
 			"arch-a-b": {Base: "arch", Layer: []string{"a", "b"}},
@@ -1310,7 +1310,7 @@ func TestComputeIntermediates_UnionChildBuildFormats(t *testing.T) {
 			Distro:   []string{"fedora"},
 			Build:    BuildFormats{"rpm"},
 		},
-		Image: map[string]BoxConfig{
+		Box: map[string]BoxConfig{
 			"cachyos":     {Base: "ext:cachyos", Layer: []string{}},
 			"cachyos-a-b": {Base: "cachyos", Layer: []string{"a", "b"}},
 			"cachyos-a-c": {Base: "cachyos", Layer: []string{"a", "c"}},

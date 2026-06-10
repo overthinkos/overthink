@@ -61,9 +61,9 @@ func (c *UpdateCmd) dispatchByDeployTarget() error {
 		return fmt.Errorf("loading deploy tree from %s: %w", dir, err)
 	}
 	if tree == nil {
-		return fmt.Errorf("no deploy.yml found relative to %s; charly update requires a deploy name. To refresh an image artifact only, use 'charly box pull %s'", dir, c.Image)
+		return fmt.Errorf("no deploy.yml found relative to %s; charly update requires a deploy name. To refresh an image artifact only, use 'charly box pull %s'", dir, c.Box)
 	}
-	node, err := resolveUpdateDeployNode(tree, c.Image, c.Instance)
+	node, err := resolveUpdateDeployNode(tree, c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -75,7 +75,7 @@ func (c *UpdateCmd) dispatchByDeployTarget() error {
 	// limit on this human-driven verb. For a non-disposable target we print a
 	// one-line transparency note (the operator may have mistyped a name) and
 	// proceed; we never refuse.
-	noteUpdateDisposability(node, c.Image, c.Instance)
+	noteUpdateDisposability(node, c.Box, c.Instance)
 
 	// Normalize legacy target spellings before resolution. Empty / "container"
 	// both mean "pod" (the schema invariant requires target:, so empty is only
@@ -83,7 +83,7 @@ func (c *UpdateCmd) dispatchByDeployTarget() error {
 	if node.Target == "" || node.Target == "container" {
 		node.Target = "pod"
 	}
-	deployName := c.Image
+	deployName := c.Box
 
 	// UNIFIED dispatch — charly update for EVERY kind routes through the SAME
 	// ResolveTarget → LifecycleTarget.Rebuild path; there is no per-kind update

@@ -25,7 +25,7 @@ box:
 	if err != nil {
 		t.Fatalf("ResolveDeployRef: %v", err)
 	}
-	if got.Kind != RefKindImage || got.Source != RefSourceLocalName || got.Name != "myimg" {
+	if got.Kind != RefKindBox || got.Source != RefSourceLocalName || got.Name != "myimg" {
 		t.Errorf("unexpected parse: %+v", got)
 	}
 }
@@ -88,7 +88,7 @@ candy:
 	if err != nil {
 		t.Fatalf("ResolveDeployRef: %v", err)
 	}
-	if got.Kind != RefKindImage {
+	if got.Kind != RefKindBox {
 		t.Errorf("primary ref: kind = %v, want image (image-first precedence)", got.Kind)
 	}
 
@@ -127,7 +127,7 @@ box:
 	if err != nil {
 		t.Fatalf("ResolveDeployRef: %v", err)
 	}
-	if got.Kind != RefKindImage {
+	if got.Kind != RefKindBox {
 		t.Errorf("kind = %v, want image", got.Kind)
 	}
 	if got.Source != RefSourceLocalPath {
@@ -200,7 +200,7 @@ func TestResolveDeployRefRemoteCandy(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ResolveDeployRef(box): %v", err)
 	}
-	if img.Kind != RefKindImage {
+	if img.Kind != RefKindBox {
 		t.Errorf("box/ ref kind = %v, want image", img.Kind)
 	}
 }
@@ -226,7 +226,7 @@ func TestResolveDeployRefRemoteImage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ResolveDeployRef: %v", err)
 	}
-	if got.Kind != RefKindImage {
+	if got.Kind != RefKindBox {
 		t.Errorf("kind = %v, want image", got.Kind)
 	}
 }
@@ -239,7 +239,7 @@ func TestResolveDeployRefRemoteBareRepo(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ResolveDeployRef: %v", err)
 	}
-	if got.Kind != RefKindImage {
+	if got.Kind != RefKindBox {
 		t.Errorf("bare repo kind = %v, want image (default)", got.Kind)
 	}
 }
@@ -269,7 +269,7 @@ func TestClassifyYAMLFile(t *testing.T) {
 	_ = os.WriteFile(layer, []byte("rpm:\n  packages: [a]\n"), 0644)
 	_ = os.WriteFile(unknown, []byte("foo: bar\n"), 0644)
 
-	if k, err := classifyYAMLFile(image); err != nil || k != RefKindImage {
+	if k, err := classifyYAMLFile(image); err != nil || k != RefKindBox {
 		t.Errorf("image file: kind=%v err=%v, want image nil", k, err)
 	}
 	if k, err := classifyYAMLFile(layer); err != nil || k != RefKindLayer {

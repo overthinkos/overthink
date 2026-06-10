@@ -280,13 +280,13 @@ func ApplyPortOverrides(ports []string, overrides []string) ([]string, error) {
 }
 
 // SavePortOverride writes port overrides to deploy.yml for persistence.
-func SavePortOverride(image, instance string, ports []string) error {
+func SavePortOverride(box, instance string, ports []string) error {
 	dc, err := loadDeployConfigForWrite("SavePortOverride")
 	if err != nil {
 		return err
 	}
 
-	key := deployKey(image, instance)
+	key := deployKey(box, instance)
 	overlay := dc.Deploy[key]
 	overlay.Port = ports
 	dc.Deploy[key] = overlay

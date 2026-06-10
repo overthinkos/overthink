@@ -43,8 +43,8 @@ func (c *NewProjectCmd) Run() error {
 // `charly box new box <name>`
 
 type NewBoxCmd struct {
-	Name   string   `arg:"" help:"Name for the new image entry"`
-	Base   string   `long:"base" required:"" help:"Base image (URL like quay.io/... or another image name)"`
+	Name   string   `arg:"" help:"Name for the new box entry"`
+	Base   string   `long:"base" required:"" help:"Base image (URL like quay.io/... or another box name)"`
 	Layers []string `long:"candy" sep:"," help:"Comma-separated list of layer names to include"`
 }
 
@@ -53,7 +53,7 @@ func (c *NewBoxCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	if err := AddImage(dir, c.Name, c.Base, c.Layers); err != nil {
+	if err := AddBox(dir, c.Name, c.Base, c.Layers); err != nil {
 		return err
 	}
 	fmt.Fprintf(os.Stderr, "Added image %s to charly.yml\n", c.Name)
@@ -64,7 +64,7 @@ func (c *NewBoxCmd) Run() error {
 // `charly box set <dotpath> <value>`
 
 type BoxSetCmd struct {
-	Path  string `arg:"" help:"Dot-path into charly.yml (e.g. defaults.tag, image.foo.layers)"`
+	Path  string `arg:"" help:"Dot-path into charly.yml (e.g. defaults.tag, box.foo.candy)"`
 	Value string `arg:"" help:"Value (parsed as YAML; use [a,b] for lists, {x: y} for maps)"`
 }
 
@@ -84,7 +84,7 @@ func (c *BoxSetCmd) Run() error {
 // `charly box add-candy <image> <layer>`
 
 type BoxAddCandyCmd struct {
-	Image string `arg:"" help:"Name of the image in charly.yml"`
+	Box   string `arg:"" help:"Name of the box in charly.yml"`
 	Layer string `arg:"" help:"Name of the layer to append"`
 }
 
@@ -93,14 +93,14 @@ func (c *BoxAddCandyCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	return AddLayerToImage(dir, c.Image, c.Layer)
+	return AddLayerToBox(dir, c.Box, c.Layer)
 }
 
 // ---------------------------------------------------------------------------
 // `charly box rm-candy <image> <layer>`
 
 type BoxRmCandyCmd struct {
-	Image string `arg:"" help:"Name of the image in charly.yml"`
+	Box   string `arg:"" help:"Name of the box in charly.yml"`
 	Layer string `arg:"" help:"Name of the layer to remove"`
 }
 
@@ -109,7 +109,7 @@ func (c *BoxRmCandyCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	return RemoveLayerFromImage(dir, c.Image, c.Layer)
+	return RemoveLayerFromBox(dir, c.Box, c.Layer)
 }
 
 // ---------------------------------------------------------------------------

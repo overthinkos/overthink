@@ -79,7 +79,7 @@ deploy:
 		t.Fatal("LoadUnified returned ok=false")
 	}
 	// Every kind-keyed map must contain the shared name.
-	if _, present := uf.Image["charly-cachyos"]; !present {
+	if _, present := uf.Box["charly-cachyos"]; !present {
 		t.Error("image.charly-cachyos missing")
 	}
 	if _, present := uf.Pod["charly-cachyos"]; !present {

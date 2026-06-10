@@ -62,8 +62,8 @@ func TestWriteAndListAliasScripts(t *testing.T) {
 	if aliases[0].Name != "mycmd" {
 		t.Errorf("alias name = %q, want %q", aliases[0].Name, "mycmd")
 	}
-	if aliases[0].Image != "myimage" {
-		t.Errorf("alias image = %q, want %q", aliases[0].Image, "myimage")
+	if aliases[0].Box != "myimage" {
+		t.Errorf("alias image = %q, want %q", aliases[0].Box, "myimage")
 	}
 	if aliases[0].Command != "mycommand" {
 		t.Errorf("alias command = %q, want %q", aliases[0].Command, "mycommand")
@@ -125,7 +125,7 @@ func TestRemoveAliasScriptNotFound(t *testing.T) {
 
 func TestCollectImageAliases(t *testing.T) {
 	cfg := &Config{
-		Image: map[string]BoxConfig{
+		Box: map[string]BoxConfig{
 			"myapp": {Layer: []string{"svc"}},
 		},
 	}
@@ -137,20 +137,20 @@ func TestCollectImageAliases(t *testing.T) {
 		},
 	}
 
-	aliases, err := CollectImageAlias(cfg, layers, "myapp")
+	aliases, err := CollectBoxAlias(cfg, layers, "myapp")
 	if err != nil {
-		t.Fatalf("CollectImageAlias() error = %v", err)
+		t.Fatalf("CollectBoxAlias() error = %v", err)
 	}
 
 	want := []CollectedAlias{{Name: "svc-cli", Command: "svc-cli-bin"}}
 	if !reflect.DeepEqual(aliases, want) {
-		t.Errorf("CollectImageAlias() = %v, want %v", aliases, want)
+		t.Errorf("CollectBoxAlias() = %v, want %v", aliases, want)
 	}
 }
 
 func TestCollectImageAliasesImageOverridesLayer(t *testing.T) {
 	cfg := &Config{
-		Image: map[string]BoxConfig{
+		Box: map[string]BoxConfig{
 			"myapp": {
 				Layer: []string{"svc"},
 				Alias: []AliasConfig{{Name: "svc-cli", Command: "custom-cmd"}},
@@ -165,9 +165,9 @@ func TestCollectImageAliasesImageOverridesLayer(t *testing.T) {
 		},
 	}
 
-	aliases, err := CollectImageAlias(cfg, layers, "myapp")
+	aliases, err := CollectBoxAlias(cfg, layers, "myapp")
 	if err != nil {
-		t.Fatalf("CollectImageAlias() error = %v", err)
+		t.Fatalf("CollectBoxAlias() error = %v", err)
 	}
 
 	if len(aliases) != 1 {
@@ -180,7 +180,7 @@ func TestCollectImageAliasesImageOverridesLayer(t *testing.T) {
 
 func TestCollectImageAliasesDefaultCommand(t *testing.T) {
 	cfg := &Config{
-		Image: map[string]BoxConfig{
+		Box: map[string]BoxConfig{
 			"myapp": {
 				Layer: []string{"svc"},
 				Alias: []AliasConfig{{Name: "mycli"}}, // no command
@@ -194,9 +194,9 @@ func TestCollectImageAliasesDefaultCommand(t *testing.T) {
 		},
 	}
 
-	aliases, err := CollectImageAlias(cfg, layers, "myapp")
+	aliases, err := CollectBoxAlias(cfg, layers, "myapp")
 	if err != nil {
-		t.Fatalf("CollectImageAlias() error = %v", err)
+		t.Fatalf("CollectBoxAlias() error = %v", err)
 	}
 
 	if len(aliases) != 1 {

@@ -1,6 +1,6 @@
 package main
 
-// CollectEval walks the base-image chain for imageName and gathers all
+// CollectEval walks the base-image chain for boxName and gathers all
 // declarative checks into a three-section LabelEvalSet. The structure of
 // the walk mirrors CollectHooks (charly/hooks.go) — dedupe by layer name, step
 // through internal bases until an external image is hit — so layer ordering
@@ -19,15 +19,15 @@ package main
 //
 // Returns nil if every section is empty — callers (generate.go) skip label
 // emission in that case.
-func CollectEval(cfg *Config, layers map[string]*Layer, imageName string) *LabelEvalSet {
+func CollectEval(cfg *Config, layers map[string]*Layer, boxName string) *LabelEvalSet {
 	set := &LabelEvalSet{}
 
 	// Walk base-image chain the same way CollectHooks does: layer-order per
 	// level, then step into the internal base. Tracks visited images so we
-	// terminate cleanly on pathological cycles (validateImageDAG reports the
+	// terminate cleanly on pathological cycles (validateBoxDAG reports the
 	// cycle itself; we just refuse to infinite-loop on bad input here).
 	var allLayerNames []string
-	for _, node := range cfg.walkBaseChain(imageName) {
+	for _, node := range cfg.walkBaseChain(boxName) {
 		resolved, err := ResolveLayerOrder(node.Img.Layer, layers, nil)
 		if err != nil {
 			break
@@ -58,15 +58,15 @@ func CollectEval(cfg *Config, layers map[string]*Layer, imageName string) *Label
 	}
 
 	// Image-level Tests (defaults to build scope) and DeployTests.
-	if img, ok := cfg.Image[imageName]; ok {
+	if img, ok := cfg.Box[boxName]; ok {
 		for _, c := range img.Eval {
-			c.Origin = "box:" + imageName
+			c.Origin = "box:" + boxName
 			switch c.Scope {
 			case "deploy":
 				set.Deploy = append(set.Deploy, c)
 			default:
 				c.Scope = "build"
-				set.Image = append(set.Image, c)
+				set.Box = append(set.Box, c)
 			}
 		}
 		for _, c := range img.DeployEval {

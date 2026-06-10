@@ -109,11 +109,11 @@ type CollectedSecret struct {
 }
 
 // CollectSecretsFromLabels reconstructs secrets from image label metadata.
-func CollectSecretsFromLabels(imageName string, labelSecrets []LabelSecretEntry) []CollectedSecret {
+func CollectSecretsFromLabels(boxName string, labelSecrets []LabelSecretEntry) []CollectedSecret {
 	var secrets []CollectedSecret
 	for _, ls := range labelSecrets {
 		secrets = append(secrets, CollectedSecret{
-			Name:       "charly-" + imageName + "-" + ls.Name,
+			Name:       "charly-" + boxName + "-" + ls.Name,
 			Target:     ls.Target,
 			Env:        ls.Env,
 			SecretName: ls.Name,
@@ -124,7 +124,7 @@ func CollectSecretsFromLabels(imageName string, labelSecrets []LabelSecretEntry)
 
 // ProvisionPodmanSecrets creates podman secrets from the credential store.
 // Returns the secrets that were successfully provisioned and any that fell back to env vars.
-func ProvisionPodmanSecrets(engine, imageName, instance string, secrets []CollectedSecret, autoGenerate bool) (provisioned []CollectedSecret, fallbackEnv []string, err error) {
+func ProvisionPodmanSecrets(engine, boxName, instance string, secrets []CollectedSecret, autoGenerate bool) (provisioned []CollectedSecret, fallbackEnv []string, err error) {
 	if engine == "docker" {
 		fmt.Fprintln(os.Stderr, "NOTE: Docker secrets require Swarm mode (not available).")
 		fmt.Fprintln(os.Stderr, "Falling back to environment variable injection for secrets.")
@@ -135,7 +135,7 @@ func ProvisionPodmanSecrets(engine, imageName, instance string, secrets []Collec
 		// Fall back to env vars for all secrets
 		for _, s := range secrets {
 			if s.Env != "" {
-				val, _ := resolveSecretValue(s, imageName, instance)
+				val, _ := resolveSecretValue(s, boxName, instance)
 				if val != "" {
 					fallbackEnv = append(fallbackEnv, s.Env+"="+val)
 				}
@@ -170,7 +170,7 @@ func ProvisionPodmanSecrets(engine, imageName, instance string, secrets []Collec
 			continue
 		}
 
-		val, source := resolveSecretValue(s, imageName, instance)
+		val, source := resolveSecretValue(s, boxName, instance)
 		if val == "" {
 			if autoGenerate {
 				// Auto-generate: reuse if same podman secret name already generated
@@ -214,7 +214,7 @@ func ProvisionPodmanSecrets(engine, imageName, instance string, secrets []Collec
 				fmt.Fprintf(os.Stderr, "The container may fail to start properly.\n\n")
 				fmt.Fprintf(os.Stderr, "To set it:\n")
 				if s.Env != "" {
-					fmt.Fprintf(os.Stderr, "  %s=xxx charly config %s  (env var override)\n", s.Env, imageName)
+					fmt.Fprintf(os.Stderr, "  %s=xxx charly config %s  (env var override)\n", s.Env, boxName)
 				}
 				fmt.Fprintf(os.Stderr, "  charly secrets set charly/secret %s\n\n", s.Name)
 				continue
@@ -236,7 +236,7 @@ func ProvisionPodmanSecrets(engine, imageName, instance string, secrets []Collec
 	if len(provisioned) > 0 {
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Note: Secrets are mounted at /run/secrets/<name> inside the container.")
-		fmt.Fprintf(os.Stderr, "To update a secret after changing it: charly update %s\n", imageName)
+		fmt.Fprintf(os.Stderr, "To update a secret after changing it: charly update %s\n", boxName)
 	}
 
 	return provisioned, fallbackEnv, nil
@@ -262,7 +262,7 @@ func SecretArgs(secrets []CollectedSecret) []string {
 //
 // When Service/Key are unset, the default chain (used by layer-owned secrets)
 // applies: env var → charly/secret/<podman-name> → charly/secret/<bare-secret-name>.
-func resolveSecretValue(s CollectedSecret, imageName, instance string) (value, source string) {
+func resolveSecretValue(s CollectedSecret, boxName, instance string) (value, source string) {
 	// Explicit override from CollectLayerSecretAccepts: query exactly once at
 	// (Service, Key), allowing the Env var to win via ResolveCredential's
 	// env-first chain.
@@ -285,7 +285,7 @@ func resolveSecretValue(s CollectedSecret, imageName, instance string) (value, s
 		envLookup = s.HostEnv
 	}
 	if envLookup != "" {
-		val, src := ResolveCredential(envLookup, credServiceForSecret(s.Env), credKeyForSecret(imageName, instance), "")
+		val, src := ResolveCredential(envLookup, credServiceForSecret(s.Env), credKeyForSecret(boxName, instance), "")
 		if val != "" {
 			return val, src
 		}
@@ -328,7 +328,7 @@ type SecretResolution struct {
 // This function does NOT touch the podman secret store — that's the job of
 // ProvisionPodmanSecrets. It only reads from the credential store. No network
 // calls, no filesystem mutations, safe to run speculatively.
-func CollectLayerSecretAccepts(imageName, instance string, meta *BoxMetadata) (collected []CollectedSecret, resolutions []SecretResolution) {
+func CollectLayerSecretAccepts(boxName, instance string, meta *BoxMetadata) (collected []CollectedSecret, resolutions []SecretResolution) {
 	if meta == nil {
 		return nil, nil
 	}
@@ -349,7 +349,7 @@ func CollectLayerSecretAccepts(imageName, instance string, meta *BoxMetadata) (c
 		}
 
 		cs := CollectedSecret{
-			Name:           "charly-" + imageName + "-" + envVarNameToPodmanSecretSlug(dep.Name),
+			Name:           "charly-" + boxName + "-" + envVarNameToPodmanSecretSlug(dep.Name),
 			Target:         "", // type=env directive doesn't use Target
 			Env:            dep.Name,
 			SecretName:     dep.Name,
@@ -358,7 +358,7 @@ func CollectLayerSecretAccepts(imageName, instance string, meta *BoxMetadata) (c
 			RotateOnConfig: true,
 		}
 
-		val, src := resolveSecretValue(cs, imageName, instance)
+		val, src := resolveSecretValue(cs, boxName, instance)
 
 		res := SecretResolution{
 			Name:     dep.Name,
@@ -392,14 +392,14 @@ func CollectLayerSecretAccepts(imageName, instance string, meta *BoxMetadata) (c
 // a hook that consumes a secret (e.g. github-runner's registration token) would
 // otherwise never see it. Generic across every hook+secret layer (R3); inert
 // (returns nil) when the image declares no secrets or none resolve.
-func resolveHookSecretEnv(imageName, instance string, meta *BoxMetadata) []string {
-	collected, _ := CollectLayerSecretAccepts(imageName, instance, meta)
+func resolveHookSecretEnv(boxName, instance string, meta *BoxMetadata) []string {
+	collected, _ := CollectLayerSecretAccepts(boxName, instance, meta)
 	var env []string
 	for _, s := range collected {
 		if s.Env == "" {
 			continue
 		}
-		if val, _ := resolveSecretValue(s, imageName, instance); val != "" {
+		if val, _ := resolveSecretValue(s, boxName, instance); val != "" {
 			env = append(env, s.Env+"="+val)
 		}
 	}
@@ -417,11 +417,11 @@ func credServiceForSecret(envVar string) string {
 }
 
 // credKeyForSecret returns the credential key for an image/instance pair.
-func credKeyForSecret(imageName, instance string) string {
+func credKeyForSecret(boxName, instance string) string {
 	if instance != "" {
-		return imageName + "-" + instance
+		return boxName + "-" + instance
 	}
-	return imageName
+	return boxName
 }
 
 // podmanSecretExists checks whether a podman secret with the given name already exists.

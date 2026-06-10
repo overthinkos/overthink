@@ -61,7 +61,7 @@ func (c *SecretsListCmd) Run() error {
 // SecretsGetCmd gets a credential value from the active store.
 type SecretsGetCmd struct {
 	Service string `arg:"" help:"Service name (e.g., charly/vnc)"`
-	Key     string `arg:"" help:"Entry key (e.g., my-image)"`
+	Key     string `arg:"" help:"Entry key (e.g., my-box)"`
 }
 
 func (c *SecretsGetCmd) Run() error {
@@ -82,7 +82,7 @@ func (c *SecretsGetCmd) Run() error {
 // SecretsSetCmd sets a credential in the active store.
 type SecretsSetCmd struct {
 	Service  string `arg:"" help:"Service name (e.g., charly/vnc)"`
-	Key      string `arg:"" help:"Entry key (e.g., my-image)"`
+	Key      string `arg:"" help:"Entry key (e.g., my-box)"`
 	Value    string `arg:"" optional:"" help:"Value to set (omit to prompt securely)"`
 	Generate bool   `long:"generate" help:"Generate random value and print to stdout"`
 }

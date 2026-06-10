@@ -173,7 +173,7 @@ func (t *PodUnifiedTarget) Executor() DeployExecutor {
 
 // Add for the pod target lives in unified_targets_pod.go alongside
 // Del/Test/Update/Rebuild — it constructs the overlay PodDeployTarget
-// (Generator + ResolvedImage + base-image DistroDef + baseRef CalVer).
+// (Generator + ResolvedBox + base-image DistroDef + baseRef CalVer).
 
 // ---------------------------------------------------------------------------
 // K8sUnifiedTarget — adapter over K8sDeployTarget.
@@ -291,7 +291,7 @@ func ResolveTarget(node *DeploymentNode, name string) (UnifiedDeployTarget, erro
 		// BaseImageRef is the image the rebuild's build/eval steps target;
 		// node.Image is the deploy.yml `image:` field (Rebuild falls back to
 		// NodeName when empty).
-		return &PodUnifiedTarget{NodeName: name, BaseImageRef: node.Image}, nil
+		return &PodUnifiedTarget{NodeName: name, BaseImageRef: node.Box}, nil
 
 	case "k8s":
 		return &K8sUnifiedTarget{NodeName: name}, nil

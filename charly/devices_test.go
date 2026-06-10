@@ -80,7 +80,7 @@ func TestDetectedDevicesInSecurityArgs(t *testing.T) {
 
 func TestDetectedDevicesInQuadlet(t *testing.T) {
 	cfg := QuadletConfig{
-		ImageName:   "test",
+		BoxName:     "test",
 		ImageRef:    "test:latest",
 		Home:        "/workspace",
 		GPU:         true,
@@ -206,7 +206,7 @@ func TestAMDGPUGroupsIdempotent(t *testing.T) {
 
 func TestAMDGPUGroupsInQuadlet(t *testing.T) {
 	cfg := QuadletConfig{
-		ImageName:   "test-amd",
+		BoxName:     "test-amd",
 		ImageRef:    "test-amd:latest",
 		Home:        "/workspace",
 		GPU:         false,

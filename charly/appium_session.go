@@ -54,14 +54,14 @@ func appiumSessionsDir() (string, error) {
 // appiumSessionPath returns the per-deploy session-file path. Instance
 // suffix is "_<instance>" so the filename matches deploy-key conventions
 // (filesystem-safe; no slashes).
-func appiumSessionPath(image, instance string) (string, error) {
+func appiumSessionPath(box, instance string) (string, error) {
 	dir, err := appiumSessionsDir()
 	if err != nil {
 		return "", err
 	}
-	name := image
+	name := box
 	if instance != "" {
-		name = image + "_" + instance
+		name = box + "_" + instance
 	}
 	return filepath.Join(dir, name+".json"), nil
 }
@@ -70,8 +70,8 @@ func appiumSessionPath(image, instance string) (string, error) {
 // Returns (nil, nil) when the file doesn't exist — callers translate that
 // to a "no session — run session-create first" error message at the call
 // site for actionable context.
-func loadAppiumSession(image, instance string) (*AppiumSession, error) {
-	path, err := appiumSessionPath(image, instance)
+func loadAppiumSession(box, instance string) (*AppiumSession, error) {
+	path, err := appiumSessionPath(box, instance)
 	if err != nil {
 		return nil, err
 	}
@@ -112,8 +112,8 @@ func saveAppiumSession(sess *AppiumSession) error {
 }
 
 // deleteAppiumSession removes the session file (no error if absent).
-func deleteAppiumSession(image, instance string) error {
-	path, err := appiumSessionPath(image, instance)
+func deleteAppiumSession(box, instance string) error {
+	path, err := appiumSessionPath(box, instance)
 	if err != nil {
 		return err
 	}

@@ -162,7 +162,7 @@ type TunnelConfig struct {
 	Provider   string       // "tailscale" or "cloudflare"
 	TunnelName string       // cloudflare: tunnel name
 	Hostname   string       // cloudflare: default hostname (from image dns field)
-	ImageName  string       // for PID file naming
+	BoxName    string       // for PID file naming
 	Ports      []TunnelPort // all tunneled ports with access scope
 }
 
@@ -628,9 +628,9 @@ func createCloudflaredTunnel(name string) (string, error) {
 // canonical ParsePortMapping. Unparseable entries are reported on stderr —
 // silent skipping was the root cause of an unrelated bug where tunnel rules
 // vanished without a diagnostic.
-func parseHostPorts(imagePorts []string) []int {
+func parseHostPorts(boxPorts []string) []int {
 	var result []int
-	for _, mapping := range imagePorts {
+	for _, mapping := range boxPorts {
 		p, ok := ParsePortMapping(mapping)
 		if !ok {
 			fmt.Fprintf(os.Stderr,
@@ -645,9 +645,9 @@ func parseHostPorts(imagePorts []string) []int {
 
 // buildPortMapping builds a host→container port map from image port mappings.
 // Same loud-failure policy as parseHostPorts — see comment above.
-func buildPortMapping(imagePorts []string) map[int]int {
-	m := make(map[int]int, len(imagePorts))
-	for _, mapping := range imagePorts {
+func buildPortMapping(boxPorts []string) map[int]int {
+	m := make(map[int]int, len(boxPorts))
+	for _, mapping := range boxPorts {
 		p, ok := ParsePortMapping(mapping)
 		if !ok {
 			fmt.Fprintf(os.Stderr,
@@ -672,19 +672,19 @@ func resolveProto(containerPort int, portProtos map[int]string) string {
 
 // ResolveTunnelConfig resolves a TunnelYAML into a TunnelConfig with defaults applied.
 // portProtos maps container port -> protocol ("http" or "tcp") from layer PortSpec data.
-// imagePorts is the list of image port mappings (e.g. "18789:18789", "443:18789").
-func ResolveTunnelConfig(t *TunnelYAML, imageName string, dns string, layers map[string]*Layer, layerNames []string, portProtos map[int]string, imagePorts []string) *TunnelConfig {
+// boxPorts is the list of image port mappings (e.g. "18789:18789", "443:18789").
+func ResolveTunnelConfig(t *TunnelYAML, boxName string, dns string, layers map[string]*Layer, layerNames []string, portProtos map[int]string, boxPorts []string) *TunnelConfig {
 	if t == nil {
 		return nil
 	}
 
 	cfg := &TunnelConfig{
-		Provider:  t.Provider,
-		ImageName: imageName,
+		Provider: t.Provider,
+		BoxName:  boxName,
 	}
 
-	hostPorts := parseHostPorts(imagePorts)
-	hostToContainer := buildPortMapping(imagePorts)
+	hostPorts := parseHostPorts(boxPorts)
+	hostToContainer := buildPortMapping(boxPorts)
 
 	// Determine public set
 	publicSet := make(map[int]bool)
@@ -738,7 +738,7 @@ func ResolveTunnelConfig(t *TunnelYAML, imageName string, dns string, layers map
 	if cfg.Provider == "cloudflare" {
 		cfg.TunnelName = t.Tunnel
 		if cfg.TunnelName == "" {
-			cfg.TunnelName = "charly-" + imageName
+			cfg.TunnelName = "charly-" + boxName
 		}
 		cfg.Hostname = dns
 	}
@@ -756,8 +756,8 @@ func TunnelConfigFromMetadata(meta *BoxMetadata) *TunnelConfig {
 
 	t := meta.Tunnel
 	cfg := &TunnelConfig{
-		Provider:  t.Provider,
-		ImageName: meta.Image,
+		Provider: t.Provider,
+		BoxName:  meta.Box,
 	}
 
 	hostPorts := parseHostPorts(meta.Port)
@@ -815,7 +815,7 @@ func TunnelConfigFromMetadata(meta *BoxMetadata) *TunnelConfig {
 	if cfg.Provider == "cloudflare" {
 		cfg.TunnelName = t.Tunnel
 		if cfg.TunnelName == "" {
-			cfg.TunnelName = "charly-" + meta.Image
+			cfg.TunnelName = "charly-" + meta.Box
 		}
 		cfg.Hostname = meta.DNS
 	}

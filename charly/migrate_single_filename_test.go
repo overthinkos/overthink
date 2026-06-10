@@ -113,7 +113,7 @@ vm:
 		t.Fatal("charly.yml not present after migrate")
 	}
 	for _, name := range []string{"alpha", "beta", "arch"} {
-		if _, ok := uf.Image[name]; !ok {
+		if _, ok := uf.Box[name]; !ok {
 			t.Errorf("discovered box %q missing after migrate", name)
 		}
 	}

@@ -200,7 +200,7 @@ func TestResolveEncPassphraseForMount_Reset_IsCalledBetweenRetries(t *testing.T)
 func TestResolveEncPassphraseForMount_Locked_WaiterReturnsValue(t *testing.T) {
 	resolver := func() (string, string) { return "", "locked" }
 	waiterCalled := false
-	waiter := func(ctx context.Context, imageName string, r func() (string, string), reset func()) (string, string, error) {
+	waiter := func(ctx context.Context, boxName string, r func() (string, string), reset func()) (string, string, error) {
 		waiterCalled = true
 		return "the-secret", "keyring", nil
 	}
@@ -220,7 +220,7 @@ func TestResolveEncPassphraseForMount_Locked_WaiterReturnsValue(t *testing.T) {
 // returns context.Canceled — the function wraps and returns the error.
 func TestResolveEncPassphraseForMount_Locked_WaiterReturnsCtxCancelled(t *testing.T) {
 	resolver := func() (string, string) { return "", "locked" }
-	waiter := func(ctx context.Context, imageName string, r func() (string, string), reset func()) (string, string, error) {
+	waiter := func(ctx context.Context, boxName string, r func() (string, string), reset func()) (string, string, error) {
 		return "", "", context.Canceled
 	}
 	_, err := resolveEncPassphraseForMountWithResolver("testimg", "auto", resolver, nil, waiter)
@@ -236,7 +236,7 @@ func TestResolveEncPassphraseForMount_Locked_WaiterReturnsCtxCancelled(t *testin
 // keyring unlocks the credential isn't stored — terminal error.
 func TestResolveEncPassphraseForMount_Locked_WaiterReturnsDefault(t *testing.T) {
 	resolver := func() (string, string) { return "", "locked" }
-	waiter := func(ctx context.Context, imageName string, r func() (string, string), reset func()) (string, string, error) {
+	waiter := func(ctx context.Context, boxName string, r func() (string, string), reset func()) (string, string, error) {
 		return "", "default", nil
 	}
 	_, err := resolveEncPassphraseForMountWithResolver("testimg", "auto", resolver, nil, waiter)
@@ -258,7 +258,7 @@ func TestResolveEncPassphraseForMount_Unavailable_StillBounded(t *testing.T) {
 		return "", "unavailable"
 	}
 	waiterCalled := false
-	waiter := func(ctx context.Context, imageName string, r func() (string, string), reset func()) (string, string, error) {
+	waiter := func(ctx context.Context, boxName string, r func() (string, string), reset func()) (string, string, error) {
 		waiterCalled = true
 		return "", "", nil
 	}

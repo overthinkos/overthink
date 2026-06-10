@@ -373,9 +373,9 @@ func TestSharedRenderersConsolidated(t *testing.T) {
 	if _, err := renderTaskCommand(&TaskStep{Task: &Task{Copy: "f"}}); err == nil {
 		t.Error("renderTaskCommand must reject copy: (staged via PutFile, not rendered)")
 	}
-	dc, _, _, err := LoadBuildConfigForImage(repoRootDir(t))
+	dc, _, _, err := LoadBuildConfigForBox(repoRootDir(t))
 	if err != nil {
-		t.Fatalf("LoadBuildConfigForImage: %v", err)
+		t.Fatalf("LoadBuildConfigForBox: %v", err)
 	}
 	got, err := renderHostPackageCommand(dc, &SystemPackagesStep{
 		Format:            "pac",

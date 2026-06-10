@@ -32,13 +32,13 @@ box:
 		t.Errorf("flat import not merged: Defaults.Build = %v", uf.Defaults.Build)
 	}
 	// Namespaced import mounted under "sub", NOT flat-merged into root.
-	if _, leaked := uf.Image["widget"]; leaked {
+	if _, leaked := uf.Box["widget"]; leaked {
 		t.Error("namespaced entry leaked into root Image map")
 	}
 	if uf.Namespaces["sub"] == nil {
 		t.Fatal("namespace 'sub' not mounted")
 	}
-	if _, ok := uf.Namespaces["sub"].Image["widget"]; !ok {
+	if _, ok := uf.Namespaces["sub"].Box["widget"]; !ok {
 		t.Error("sub.widget missing from the 'sub' namespace")
 	}
 }
@@ -70,11 +70,11 @@ box:
 	}
 	cfg := uf.ProjectConfig()
 	// Bare local name resolves in root.
-	if _, _, ok := cfg.resolveImageRef("app"); !ok {
+	if _, _, ok := cfg.resolveBoxRef("app"); !ok {
 		t.Error("bare ref 'app' did not resolve in root")
 	}
 	// Qualified ref descends into the namespace.
-	wImg, wCfg, ok := cfg.resolveImageRef("sub.widget")
+	wImg, wCfg, ok := cfg.resolveBoxRef("sub.widget")
 	if !ok {
 		t.Fatal("qualified ref 'sub.widget' did not resolve")
 	}
@@ -86,9 +86,9 @@ box:
 	}
 	// app's base (sub.widget) must be classified INTERNAL (resolves via namespace),
 	// not mistaken for an external OCI URL.
-	ri, err := cfg.ResolveImage("app", "test", root, ResolveOpts{})
+	ri, err := cfg.ResolveBox("app", "test", root, ResolveOpts{})
 	if err != nil {
-		t.Fatalf("ResolveImage(app): %v", err)
+		t.Fatalf("ResolveBox(app): %v", err)
 	}
 	if ri.IsExternalBase {
 		t.Error("app.base = sub.widget should be IsExternalBase=false (resolved through namespace)")
@@ -174,7 +174,7 @@ box:
 // cross-namespace builder-ref leak. When the root consumes a namespaced base
 // (`app: base: sub.widget`) whose builder map references the base's OWN namespace
 // (`widget: builder: {pixi: up.archlike-builder}`, where sub imports root as `up`),
-// pullNamespacedImage must re-qualify that builder ref (`up.archlike-builder` ->
+// pullNamespacedBox must re-qualify that builder ref (`up.archlike-builder` ->
 // `sub.up.archlike-builder`) — exactly as it re-qualifies `base:` — so it resolves
 // from the root config and matches the key the builder image is pulled under.
 //
@@ -224,9 +224,9 @@ box:
 		t.Fatalf("LoadUnified: %v", err)
 	}
 	cfg := uf.ProjectConfig()
-	resolved, err := cfg.ResolveAllImage("test", root, ResolveOpts{})
+	resolved, err := cfg.ResolveAllBox("test", root, ResolveOpts{})
 	if err != nil {
-		t.Fatalf("ResolveAllImage must NOT fail when a namespaced base's builder ref points into the base's own namespace: %v", err)
+		t.Fatalf("ResolveAllBox must NOT fail when a namespaced base's builder ref points into the base's own namespace: %v", err)
 	}
 	w, ok := resolved["sub.widget"]
 	if !ok {
@@ -297,9 +297,9 @@ box:
 		t.Fatalf("LoadUnified: %v", err)
 	}
 	cfg := uf.ProjectConfig()
-	resolved, err := cfg.ResolveAllImage("test", root, ResolveOpts{})
+	resolved, err := cfg.ResolveAllBox("test", root, ResolveOpts{})
 	if err != nil {
-		t.Fatalf("ResolveAllImage: %v", err)
+		t.Fatalf("ResolveAllBox: %v", err)
 	}
 	app, ok := resolved["cachyos-app"]
 	if !ok {

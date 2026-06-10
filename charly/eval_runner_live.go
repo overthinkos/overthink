@@ -129,8 +129,8 @@ func RunEvalLive(ctx context.Context, deployment, scoreName string, scenarios []
 	idByKey := stableScenarioIDsByKey(scenarios)
 
 	out := &EvalRunResults{
-		Image: "score:" + scoreName,
-		Mode:  "run",
+		Box:  "score:" + scoreName,
+		Mode: "run",
 	}
 
 	// verdictByKey tracks the live status of each scenario as buckets
@@ -216,7 +216,7 @@ func RunEvalLive(ctx context.Context, deployment, scoreName string, scenarios []
 		if reachableErr == nil {
 			resolver := &EvalVarResolver{}
 			runner = NewRunner(chainExec, resolver, RunModeLive)
-			runner.Image = pod
+			runner.Box = pod
 			// Wire TargetResolver so per-step `on: <target>` overrides
 			// route the dispatch through a fresh chain for that target.
 			// Same resolveScoringChain logic as the scenario-level pod

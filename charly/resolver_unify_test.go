@@ -4,7 +4,7 @@ import "testing"
 
 // These tests pin the resolver-unification cutover: every command's
 // image/local name resolution must descend import namespaces through the ONE
-// namespace-aware mechanism (splitNamespaceRef / resolveImageRef), instead of a
+// namespace-aware mechanism (splitNamespaceRef / resolveBoxRef), instead of a
 // flat root-only `c.Image[name]` lookup that silently misses (or truncates at)
 // an imported namespace. Each test FAILS against the pre-cutover code.
 
@@ -42,15 +42,15 @@ box:
 }
 
 // TestResolveImage_QualifiedDelegates is the central-chokepoint guard:
-// ResolveImage must resolve a namespace-qualified name by delegating into the
+// ResolveBox must resolve a namespace-qualified name by delegating into the
 // owning namespace Config. Pre-fix, `c.Image["sub.widget"]` missed and this
 // returned "image \"sub.widget\" not found".
 func TestResolveImage_QualifiedDelegates(t *testing.T) {
 	root, cfg := fixtureNamespacedProject(t)
 
-	ri, err := cfg.ResolveImage("sub.widget", "test", root, ResolveOpts{})
+	ri, err := cfg.ResolveBox("sub.widget", "test", root, ResolveOpts{})
 	if err != nil {
-		t.Fatalf("ResolveImage(\"sub.widget\") must resolve via namespace delegation: %v", err)
+		t.Fatalf("ResolveBox(\"sub.widget\") must resolve via namespace delegation: %v", err)
 	}
 	if ri.Name != "widget" {
 		t.Errorf("resolved name = %q, want %q (leaf, resolved in the namespace context)", ri.Name, "widget")
@@ -60,12 +60,12 @@ func TestResolveImage_QualifiedDelegates(t *testing.T) {
 	}
 
 	// Bare names still resolve in root, unchanged.
-	if _, err := cfg.ResolveImage("app", "test", root, ResolveOpts{}); err != nil {
-		t.Errorf("bare ResolveImage(\"app\") regressed: %v", err)
+	if _, err := cfg.ResolveBox("app", "test", root, ResolveOpts{}); err != nil {
+		t.Errorf("bare ResolveBox(\"app\") regressed: %v", err)
 	}
 	// A genuinely-missing namespace still errors clearly.
-	if _, err := cfg.ResolveImage("nope.widget", "test", root, ResolveOpts{}); err == nil {
-		t.Error("ResolveImage(\"nope.widget\") should error: no such namespace")
+	if _, err := cfg.ResolveBox("nope.widget", "test", root, ResolveOpts{}); err == nil {
+		t.Error("ResolveBox(\"nope.widget\") should error: no such namespace")
 	}
 }
 
@@ -76,38 +76,38 @@ func TestResolveImage_QualifiedDelegates(t *testing.T) {
 func TestFindImageByLeaf(t *testing.T) {
 	_, cfg := fixtureNamespacedProject(t)
 
-	if got, ok := cfg.findImageByLeaf("app"); !ok || got != "app" {
-		t.Errorf("findImageByLeaf(\"app\") = %q,%v; want \"app\",true (root hit, bare)", got, ok)
+	if got, ok := cfg.findBoxByLeaf("app"); !ok || got != "app" {
+		t.Errorf("findBoxByLeaf(\"app\") = %q,%v; want \"app\",true (root hit, bare)", got, ok)
 	}
-	if got, ok := cfg.findImageByLeaf("widget"); !ok || got != "sub.widget" {
-		t.Errorf("findImageByLeaf(\"widget\") = %q,%v; want \"sub.widget\",true (namespaced hit, qualified)", got, ok)
+	if got, ok := cfg.findBoxByLeaf("widget"); !ok || got != "sub.widget" {
+		t.Errorf("findBoxByLeaf(\"widget\") = %q,%v; want \"sub.widget\",true (namespaced hit, qualified)", got, ok)
 	}
-	if got, ok := cfg.findImageByLeaf("absent"); ok {
-		t.Errorf("findImageByLeaf(\"absent\") = %q,true; want \"\",false", got)
+	if got, ok := cfg.findBoxByLeaf("absent"); ok {
+		t.Errorf("findBoxByLeaf(\"absent\") = %q,true; want \"\",false", got)
 	}
 }
 
 // TestResolveAllImage_RequestedQualifiedTarget guards the build-target path:
 // an explicitly-requested qualified image that is NOT a base/builder of any
-// root image must still land in the resolved set (so filterImage / the build
+// root image must still land in the resolved set (so filterBox / the build
 // graph accept `charly box build sub.widget` and the ensure-image build-fallback
 // for a namespaced builder). Pre-fix it was absent.
 func TestResolveAllImage_RequestedQualifiedTarget(t *testing.T) {
 	root, cfg := fixtureNamespacedProject(t)
 
 	// Without RequestedImages, sub.widget is not reachable, so not pulled.
-	base, err := cfg.ResolveAllImage("test", root, ResolveOpts{})
+	base, err := cfg.ResolveAllBox("test", root, ResolveOpts{})
 	if err != nil {
-		t.Fatalf("ResolveAllImage: %v", err)
+		t.Fatalf("ResolveAllBox: %v", err)
 	}
 	if _, present := base["sub.widget"]; present {
 		t.Fatal("sub.widget should NOT be in the resolved set without an explicit request (it is not a base of any root image)")
 	}
 
 	// With it requested, it is pulled under its fully-qualified key.
-	withReq, err := cfg.ResolveAllImage("test", root, ResolveOpts{RequestedImages: []string{"sub.widget"}})
+	withReq, err := cfg.ResolveAllBox("test", root, ResolveOpts{RequestedBoxes: []string{"sub.widget"}})
 	if err != nil {
-		t.Fatalf("ResolveAllImage(RequestedImages): %v", err)
+		t.Fatalf("ResolveAllBox(RequestedImages): %v", err)
 	}
 	if _, present := withReq["sub.widget"]; !present {
 		t.Errorf("requested qualified target sub.widget absent from resolved set (keys: %v)", keysOf(withReq))

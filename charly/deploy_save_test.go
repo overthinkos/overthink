@@ -35,16 +35,16 @@ func TestDeployConfigLookup_NilSafe(t *testing.T) {
 // deployKey (image/instance); LookupKey takes the raw deploy.yml key.
 func TestDeployConfigLookup_PresentAndAbsent(t *testing.T) {
 	dc := &DeployConfig{Deploy: map[string]DeploymentNode{
-		"foo":       {Target: "pod", Image: "foo"},
-		"foo/inst1": {Target: "pod", Image: "foo"},
+		"foo":       {Target: "pod", Box: "foo"},
+		"foo/inst1": {Target: "pod", Box: "foo"},
 		"vm:arch":   {Target: "vm"},
 	}}
 
 	// Lookup (image, instance) form.
-	if entry, ok := dc.Lookup("foo", ""); !ok || entry.Image != "foo" {
+	if entry, ok := dc.Lookup("foo", ""); !ok || entry.Box != "foo" {
 		t.Errorf("Lookup(foo, \"\") = (%+v, %v); want present", entry, ok)
 	}
-	if entry, ok := dc.Lookup("foo", "inst1"); !ok || entry.Image != "foo" {
+	if entry, ok := dc.Lookup("foo", "inst1"); !ok || entry.Box != "foo" {
 		t.Errorf("Lookup(foo, inst1) = (%+v, %v); want present", entry, ok)
 	}
 	if entry, ok := dc.Lookup("missing", ""); ok {
@@ -52,7 +52,7 @@ func TestDeployConfigLookup_PresentAndAbsent(t *testing.T) {
 	}
 
 	// LookupKey (raw deploy.yml key) form.
-	if entry, ok := dc.LookupKey("foo/inst1"); !ok || entry.Image != "foo" {
+	if entry, ok := dc.LookupKey("foo/inst1"); !ok || entry.Box != "foo" {
 		t.Errorf("LookupKey(foo/inst1) = (%+v, %v); want present", entry, ok)
 	}
 	if entry, ok := dc.LookupKey("vm:arch"); !ok || entry.Target != "vm" {
@@ -71,7 +71,7 @@ func TestDeployConfigLookup_PresentAndAbsent(t *testing.T) {
 
 // TestSaveDeployState_AbortOnInvalidExistingFile pins the post-2026-05-16
 // data-loss fix: when LoadDeployConfig returns an error (e.g. because
-// the file fails validateDeployRequiresImage), saveDeployState MUST
+// the file fails validateDeployRequiresBox), saveDeployState MUST
 // ABORT and leave the file byte-identical — not silently construct a
 // fresh empty config and truncate the on-disk file.
 //
@@ -85,7 +85,7 @@ func TestSaveDeployState_AbortOnInvalidExistingFile(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(dir, "charly"), 0700); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
-	// Pre-existing deploy.yml that fails validateDeployRequiresImage —
+	// Pre-existing deploy.yml that fails validateDeployRequiresBox —
 	// `legacy-entry` is target:pod but lacks the required `box:`.
 	initialYAML := `provides:
     env:
@@ -113,7 +113,7 @@ deploy:
 	saveDeployState("newimage", "", SaveDeployStateInput{
 		SetDisposable: true,
 		Disposable:    true,
-		Image:         "newimage",
+		Box:           "newimage",
 		Target:        "pod",
 	})
 
@@ -148,7 +148,7 @@ func TestSaveDeployState_PersistsImageAndTargetForNewEntry(t *testing.T) {
 	saveDeployState("newimage", "", SaveDeployStateInput{
 		SetDisposable: true,
 		Disposable:    true,
-		Image:         "newimage",
+		Box:           "newimage",
 		Target:        "pod",
 	})
 
@@ -168,8 +168,8 @@ func TestSaveDeployState_PersistsImageAndTargetForNewEntry(t *testing.T) {
 	if !ok {
 		t.Fatal("newimage entry not added")
 	}
-	if newEntry.Image != "newimage" {
-		t.Errorf("Image not persisted on new entry: got %q want %q", newEntry.Image, "newimage")
+	if newEntry.Box != "newimage" {
+		t.Errorf("Image not persisted on new entry: got %q want %q", newEntry.Box, "newimage")
 	}
 	if newEntry.Target != "pod" {
 		t.Errorf("Target not persisted on new entry: got %q want %q", newEntry.Target, "pod")
@@ -203,7 +203,7 @@ func TestSaveDeployState_DoesNotClobberExistingImageTarget(t *testing.T) {
 	saveDeployState("existing", "", SaveDeployStateInput{
 		SetDisposable: true,
 		Disposable:    true,
-		Image:         "would-clobber",
+		Box:           "would-clobber",
 		Target:        "vm",
 	})
 
@@ -212,8 +212,8 @@ func TestSaveDeployState_DoesNotClobberExistingImageTarget(t *testing.T) {
 		t.Fatalf("reload after save: %v", err)
 	}
 	entry := dc.Deploy["existing"]
-	if entry.Image != "pinned-image-ref:1.2.3" {
-		t.Errorf("Image clobbered: got %q want %q", entry.Image, "pinned-image-ref:1.2.3")
+	if entry.Box != "pinned-image-ref:1.2.3" {
+		t.Errorf("Image clobbered: got %q want %q", entry.Box, "pinned-image-ref:1.2.3")
 	}
 	if entry.Target != "pod" {
 		t.Errorf("Target clobbered: got %q want %q", entry.Target, "pod")
@@ -238,7 +238,7 @@ func TestSaveDeployConfig_AtomicWriteLeavesNoTempLeftover(t *testing.T) {
 		t.Fatalf("mkdir: %v", err)
 	}
 	dc := &DeployConfig{Deploy: map[string]DeploymentNode{
-		"foo": {Target: "pod", Image: "foo"},
+		"foo": {Target: "pod", Box: "foo"},
 	}}
 	if err := SaveDeployConfig(dc); err != nil {
 		t.Fatalf("SaveDeployConfig: %v", err)

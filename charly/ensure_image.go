@@ -108,7 +108,7 @@ func EnsureImagePresent(ctx context.Context, image string, cfg *Config, projectD
 	short := buildableShortName(image, cfg)
 	if short != "" {
 		fmt.Fprintf(os.Stderr, "ensure-image: building %s locally\n", short)
-		bcmd := &BuildCmd{Images: []string{short}, Jobs: 4}
+		bcmd := &BuildCmd{Boxes: []string{short}, Jobs: 4}
 		if berr := bcmd.Run(); berr != nil {
 			return fmt.Errorf("ensure-image %q: pull failed and local build failed: %w", image, berr)
 		}
@@ -119,7 +119,7 @@ func EnsureImagePresent(ctx context.Context, image string, cfg *Config, projectD
 		// `--pull=never` find the requested ref locally. Skipped when
 		// the input was already a short name (no pinned tag).
 		if cfg != nil {
-			if resolved, err := cfg.ResolveImage(short, "", projectDir, ResolveOpts{}); err == nil {
+			if resolved, err := cfg.ResolveBox(short, "", projectDir, ResolveOpts{}); err == nil {
 				produced := resolveShellImageRef(resolved.Registry, resolved.Name, "")
 				if produced != "" && produced != image && looksLikeFullRef(image) {
 					if terr := podmanTagAlias(ctx, produced, image); terr != nil {
@@ -162,7 +162,7 @@ func resolveImageRefForEnsure(image string, cfg *Config, projectDir string) (str
 	if cfg == nil {
 		return "", fmt.Errorf("short name %q requires a project directory with charly.yml", image)
 	}
-	resolved, err := cfg.ResolveImage(image, "", projectDir, ResolveOpts{})
+	resolved, err := cfg.ResolveBox(image, "", projectDir, ResolveOpts{})
 	if err != nil {
 		return "", fmt.Errorf("resolving %q via charly.yml: %w", image, err)
 	}
@@ -203,7 +203,7 @@ func podmanPullForEnsure(ctx context.Context, ref string) error {
 //   - Short names (no slash, no @prefix) are returned as-is when
 //     `cfg.Image[name]` exists.
 //   - Full registry refs have their basename (last path segment,
-//     before the tag) extracted and resolved via findImageByLeaf,
+//     before the tag) extracted and resolved via findBoxByLeaf,
 //     which searches the root image map AND every imported namespace.
 //     This is what lets `ghcr.io/overthinkos/arch-builder:<tag>` fall
 //     back to building the project's `arch-builder` image whether it
@@ -213,7 +213,7 @@ func podmanPullForEnsure(ctx context.Context, ref string) error {
 //     project's charly.yml already determined the canonical ref;
 //     local build-fallback is not applicable.
 func buildableShortName(image string, cfg *Config) string {
-	if cfg == nil || cfg.Image == nil || image == "" {
+	if cfg == nil || cfg.Box == nil || image == "" {
 		return ""
 	}
 	stripped := StripURLScheme(image)
@@ -239,10 +239,10 @@ func buildableShortName(image string, cfg *Config) string {
 	// Route through the single namespace-aware resolver. The basename may map
 	// to a root image (returned bare) OR to an image living in an imported
 	// namespace (returned qualified, e.g. `charly.arch-builder`). Both forms are
-	// buildable: ResolveImage and the `charly box build` target path are both
+	// buildable: ResolveBox and the `charly box build` target path are both
 	// namespace-aware, so the build-fallback can build a namespaced builder
 	// the same way it builds a root one.
-	if q, ok := cfg.findImageByLeaf(work); ok {
+	if q, ok := cfg.findBoxByLeaf(work); ok {
 		return q
 	}
 	return ""

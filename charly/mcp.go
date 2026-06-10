@@ -27,7 +27,7 @@ import (
 // McpCmd groups the seven `charly eval mcp …` leaves.
 type McpCmd struct {
 	Ping          McpPingCmd          `cmd:"" help:"Ping an MCP server (liveness check)"`
-	Servers       McpServersCmd       `cmd:"" help:"Enumerate MCP servers declared by an image (no dial)"`
+	Servers       McpServersCmd       `cmd:"" help:"Enumerate MCP servers declared by a box (no dial)"`
 	ListTools     McpListToolsCmd     `cmd:"list-tools" help:"List tools offered by an MCP server"`
 	ListResources McpListResourcesCmd `cmd:"list-resources" help:"List resources offered by an MCP server"`
 	ListPrompts   McpListPromptsCmd   `cmd:"list-prompts" help:"List prompts offered by an MCP server"`
@@ -40,7 +40,7 @@ type McpCmd struct {
 // ---------------------------------------------------------------------------
 
 type mcpCommonFlags struct {
-	Name     string        `long:"name" help:"Which mcp_provides entry to target when the image declares multiple"`
+	Name     string        `long:"name" help:"Which mcp_provides entry to target when the box declares multiple"`
 	Instance string        `short:"i" long:"instance" help:"Instance name"`
 	JSON     bool          `long:"json" help:"Emit SDK result as pretty-printed JSON instead of tab-separated text"`
 	Timeout  time.Duration `long:"timeout" default:"30s" help:"Per-operation timeout"`
@@ -52,7 +52,7 @@ type mcpCommonFlags struct {
 
 // McpPingCmd: `charly eval mcp ping <image>`
 type McpPingCmd struct {
-	Image string `arg:"" help:"Image name"`
+	Box string `arg:"" help:"Box name"`
 	mcpCommonFlags
 }
 
@@ -60,7 +60,7 @@ func (c *McpPingCmd) Run() error {
 	ctx, cancel := context.WithTimeout(context.Background(), c.Timeout)
 	defer cancel()
 
-	sess, _, closeFn, err := mcpOpenSession(ctx, c.Image, c.Instance, c.Name)
+	sess, _, closeFn, err := mcpOpenSession(ctx, c.Box, c.Instance, c.Name)
 	if err != nil {
 		return err
 	}
@@ -75,13 +75,13 @@ func (c *McpPingCmd) Run() error {
 
 // McpServersCmd: `charly eval mcp servers <image>` — discovery-only.
 type McpServersCmd struct {
-	Image    string `arg:"" help:"Image name"`
+	Box      string `arg:"" help:"Box name"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 	JSON     bool   `long:"json" help:"Emit as JSON array"`
 }
 
 func (c *McpServersCmd) Run() error {
-	engine, containerName, err := resolveContainer(c.Image, c.Instance)
+	engine, containerName, err := resolveContainer(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -94,7 +94,7 @@ func (c *McpServersCmd) Run() error {
 		return err
 	}
 	if meta == nil || len(meta.MCPProvide) == 0 {
-		return fmt.Errorf("image %q declares no mcp_provides", c.Image)
+		return fmt.Errorf("box %q declares no mcp_provides", c.Box)
 	}
 	entries := make([]MCPProvideEntry, 0, len(meta.MCPProvide))
 	for _, p := range meta.MCPProvide {
@@ -102,10 +102,10 @@ func (c *McpServersCmd) Run() error {
 			Name:      p.Name,
 			URL:       resolveContainerNameTemplate(p.URL, containerName),
 			Transport: p.Transport,
-			Source:    c.Image,
+			Source:    c.Box,
 		})
 	}
-	entries = podAwareMCPProvides(entries, c.Image, containerName)
+	entries = podAwareMCPProvides(entries, c.Box, containerName)
 
 	if c.JSON {
 		out, err := json.MarshalIndent(entries, "", "  ")
@@ -127,7 +127,7 @@ func (c *McpServersCmd) Run() error {
 
 // McpListToolsCmd: `charly eval mcp list-tools <image>`
 type McpListToolsCmd struct {
-	Image string `arg:"" help:"Image name"`
+	Box string `arg:"" help:"Box name"`
 	mcpCommonFlags
 }
 
@@ -135,7 +135,7 @@ func (c *McpListToolsCmd) Run() error {
 	ctx, cancel := context.WithTimeout(context.Background(), c.Timeout)
 	defer cancel()
 
-	sess, _, closeFn, err := mcpOpenSession(ctx, c.Image, c.Instance, c.Name)
+	sess, _, closeFn, err := mcpOpenSession(ctx, c.Box, c.Instance, c.Name)
 	if err != nil {
 		return err
 	}
@@ -166,7 +166,7 @@ func (c *McpListToolsCmd) Run() error {
 
 // McpListResourcesCmd: `charly eval mcp list-resources <image>`
 type McpListResourcesCmd struct {
-	Image string `arg:"" help:"Image name"`
+	Box string `arg:"" help:"Box name"`
 	mcpCommonFlags
 }
 
@@ -174,7 +174,7 @@ func (c *McpListResourcesCmd) Run() error {
 	ctx, cancel := context.WithTimeout(context.Background(), c.Timeout)
 	defer cancel()
 
-	sess, _, closeFn, err := mcpOpenSession(ctx, c.Image, c.Instance, c.Name)
+	sess, _, closeFn, err := mcpOpenSession(ctx, c.Box, c.Instance, c.Name)
 	if err != nil {
 		return err
 	}
@@ -205,7 +205,7 @@ func (c *McpListResourcesCmd) Run() error {
 
 // McpListPromptsCmd: `charly eval mcp list-prompts <image>`
 type McpListPromptsCmd struct {
-	Image string `arg:"" help:"Image name"`
+	Box string `arg:"" help:"Box name"`
 	mcpCommonFlags
 }
 
@@ -213,7 +213,7 @@ func (c *McpListPromptsCmd) Run() error {
 	ctx, cancel := context.WithTimeout(context.Background(), c.Timeout)
 	defer cancel()
 
-	sess, _, closeFn, err := mcpOpenSession(ctx, c.Image, c.Instance, c.Name)
+	sess, _, closeFn, err := mcpOpenSession(ctx, c.Box, c.Instance, c.Name)
 	if err != nil {
 		return err
 	}
@@ -244,7 +244,7 @@ func (c *McpListPromptsCmd) Run() error {
 
 // McpCallCmd: `charly eval mcp call <image> <tool> [args-json]`
 type McpCallCmd struct {
-	Image string `arg:"" help:"Image name"`
+	Box   string `arg:"" help:"Box name"`
 	Tool  string `arg:"" help:"Tool name (matches a name from list-tools)"`
 	Input string `arg:"" optional:"" help:"Tool arguments as a JSON object, e.g. '{\"path\":\"notebook.ipynb\"}'"`
 	mcpCommonFlags
@@ -261,7 +261,7 @@ func (c *McpCallCmd) Run() error {
 		}
 	}
 
-	sess, _, closeFn, err := mcpOpenSession(ctx, c.Image, c.Instance, c.Name)
+	sess, _, closeFn, err := mcpOpenSession(ctx, c.Box, c.Instance, c.Name)
 	if err != nil {
 		return err
 	}
@@ -290,8 +290,8 @@ func (c *McpCallCmd) Run() error {
 
 // McpReadCmd: `charly eval mcp read <image> <uri>`
 type McpReadCmd struct {
-	Image string `arg:"" help:"Image name"`
-	URI   string `arg:"" help:"Resource URI (match a URI from list-resources)"`
+	Box string `arg:"" help:"Box name"`
+	URI string `arg:"" help:"Resource URI (match a URI from list-resources)"`
 	mcpCommonFlags
 }
 
@@ -299,7 +299,7 @@ func (c *McpReadCmd) Run() error {
 	ctx, cancel := context.WithTimeout(context.Background(), c.Timeout)
 	defer cancel()
 
-	sess, _, closeFn, err := mcpOpenSession(ctx, c.Image, c.Instance, c.Name)
+	sess, _, closeFn, err := mcpOpenSession(ctx, c.Box, c.Instance, c.Name)
 	if err != nil {
 		return err
 	}

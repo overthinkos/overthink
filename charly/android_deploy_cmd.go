@@ -98,7 +98,7 @@ func resolveAndroidDevice(spec *AndroidSpec, node *DeploymentNode, path string) 
 		}, nil
 	}
 
-	if spec.Image == "" {
+	if spec.Box == "" {
 		return AndroidDevice{}, fmt.Errorf("kind:android device has neither image: nor adb:")
 	}
 
@@ -117,7 +117,7 @@ func resolveAndroidDevice(spec *AndroidSpec, node *DeploymentNode, path string) 
 		}
 	} else {
 		// Top-level — resolve the running container by the device's image.
-		eng, name, err := resolveContainer(spec.Image, "")
+		eng, name, err := resolveContainer(spec.Box, "")
 		if err != nil {
 			return AndroidDevice{}, err
 		}

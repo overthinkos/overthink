@@ -8,7 +8,7 @@ import (
 
 func TestGeneratePodQuadlet(t *testing.T) {
 	cfg := QuadletConfig{
-		ImageName:   "my-app",
+		BoxName:     "my-app",
 		Ports:       []string{"443:18789", "8080:8080"},
 		BindAddress: "127.0.0.1",
 		Network:     "charly",
@@ -42,9 +42,9 @@ func TestGeneratePodQuadlet(t *testing.T) {
 
 func TestGeneratePodQuadlet_Instance(t *testing.T) {
 	cfg := QuadletConfig{
-		ImageName: "my-app",
-		Instance:  "staging",
-		Ports:     []string{"443:18789"},
+		BoxName:  "my-app",
+		Instance: "staging",
+		Ports:    []string{"443:18789"},
 	}
 
 	content := generatePodQuadlet(cfg)
@@ -55,9 +55,9 @@ func TestGeneratePodQuadlet_Instance(t *testing.T) {
 
 func TestGeneratePodQuadlet_ShmSize(t *testing.T) {
 	cfg := QuadletConfig{
-		ImageName: "my-app",
-		Network:   "charly",
-		Security:  SecurityConfig{ShmSize: "1g"},
+		BoxName:  "my-app",
+		Network:  "charly",
+		Security: SecurityConfig{ShmSize: "1g"},
 	}
 	content := generatePodQuadlet(cfg)
 	if !strings.Contains(content, "PodmanArgs=--shm-size=1g") {
@@ -67,7 +67,7 @@ func TestGeneratePodQuadlet_ShmSize(t *testing.T) {
 
 func TestGenerateQuadlet_PodMode_NoShmSize(t *testing.T) {
 	cfg := QuadletConfig{
-		ImageName:  "my-app",
+		BoxName:    "my-app",
 		ImageRef:   "ghcr.io/overthinkos/my-app:latest",
 		Home:       "/home/user",
 		PodName:    "charly-my-app",
@@ -175,10 +175,10 @@ func TestGenerateSidecarQuadlet_NoAutoServeConfig(t *testing.T) {
 
 func TestGenerateQuadlet_PodMode(t *testing.T) {
 	cfg := QuadletConfig{
-		ImageName: "my-app",
-		ImageRef:  "ghcr.io/overthinkos/my-app:latest",
-		Home:      "/home/user",
-		Ports:     []string{"443:18789"},
+		BoxName:  "my-app",
+		ImageRef: "ghcr.io/overthinkos/my-app:latest",
+		Home:     "/home/user",
+		Ports:    []string{"443:18789"},
 		Volumes: []VolumeMount{
 			{VolumeName: "charly-my-app-data", ContainerPath: "/opt/data"},
 		},
@@ -213,7 +213,7 @@ func TestGenerateQuadlet_PodMode(t *testing.T) {
 
 func TestGenerateQuadlet_NonPodMode(t *testing.T) {
 	cfg := QuadletConfig{
-		ImageName:   "my-app",
+		BoxName:     "my-app",
 		ImageRef:    "ghcr.io/overthinkos/my-app:latest",
 		Home:        "/home/user",
 		Ports:       []string{"443:18789"},
@@ -245,7 +245,7 @@ func TestGenerateQuadlet_HostTunnelWithSidecar(t *testing.T) {
 	// The host tunnel handles port exposure on the host's tailnet;
 	// the sidecar handles exit node routing — they are independent.
 	cfg := QuadletConfig{
-		ImageName:   "my-app",
+		BoxName:     "my-app",
 		ImageRef:    "ghcr.io/overthinkos/my-app:latest",
 		Home:        "/home/user",
 		Ports:       []string{"443:18789"},

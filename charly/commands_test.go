@@ -29,7 +29,7 @@ func TestImageConfigSetupCmd_DirectModeAllowed(t *testing.T) {
 	os.Setenv("CHARLY_RUN_MODE", "direct")
 	defer os.Unsetenv("CHARLY_RUN_MODE")
 
-	cmd := &BoxConfigSetupCmd{Image: "fedora-test"}
+	cmd := &BoxConfigSetupCmd{Box: "fedora-test"}
 	err := cmd.Run()
 	// Some error is expected (image not pulled, etc.) but it must NOT
 	// be the run_mode=quadlet gate error.
@@ -54,7 +54,7 @@ func TestImageConfigRemoveCmd_DirectModeAllowed(t *testing.T) {
 	os.Setenv("CHARLY_RUN_MODE", "direct")
 	defer os.Unsetenv("CHARLY_RUN_MODE")
 
-	cmd := &BoxConfigRemoveCmd{Image: "fedora-test"}
+	cmd := &BoxConfigRemoveCmd{Box: "fedora-test"}
 	err := cmd.Run()
 	// Direct-mode remove of a non-existent deploy is best-effort —
 	// podman rm prints a warning but Run() returns nil. The pre-cutover

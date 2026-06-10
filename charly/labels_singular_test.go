@@ -10,7 +10,7 @@ import (
 
 // TestExtractMetadata_SingularLabels proves the 2026-06 singular-label
 // contract end-to-end on the read path: ExtractMetadata reads the SINGULAR
-// `ai.opencharly.*` keys into the renamed ImageMetadata fields. The keys are
+// `ai.opencharly.*` keys into the renamed BoxMetadata fields. The keys are
 // written as LITERAL strings (not via the consts), so if any label const ever
 // regresses to plural, ExtractMetadata — which reads via the const — won't find
 // the literal key and the field stays empty, failing this test.

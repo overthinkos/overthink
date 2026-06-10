@@ -128,8 +128,8 @@ type appiumCommonFlags struct {
 // appiumBaseURL resolves the running container's Appium server URL. Reads
 // HOST_PORT:4723 from podman inspect, prepends 127.0.0.1 + the configured
 // base path. Returns the URL ready to hand to selenium.NewRemote.
-func appiumBaseURL(image, instance, basePath string) (string, error) {
-	engine, containerName, err := resolveContainer(image, instance)
+func appiumBaseURL(box, instance, basePath string) (string, error) {
+	engine, containerName, err := resolveContainer(box, instance)
 	if err != nil {
 		return "", err
 	}
@@ -160,13 +160,13 @@ func appiumBaseURL(image, instance, basePath string) (string, error) {
 // endpoint that doesn't need a session — bypassing selenium.NewRemote keeps
 // it cheap and surfaces any HTTP transport problems directly.
 type AppiumStatusCmd struct {
-	Image string `arg:"" help:"Image name"`
+	Box string `arg:"" help:"Box name"`
 	appiumCommonFlags
 	Timeout time.Duration `long:"timeout" default:"10s" help:"HTTP timeout"`
 }
 
 func (c *AppiumStatusCmd) Run() error {
-	base, err := appiumBaseURL(c.Image, c.Instance, c.BasePath)
+	base, err := appiumBaseURL(c.Box, c.Instance, c.BasePath)
 	if err != nil {
 		return err
 	}
@@ -202,8 +202,8 @@ func (c *AppiumStatusCmd) Run() error {
 // avoid double-wrapping (the SDK adds its own `alwaysMatch` layer at
 // NewSession time; doubly-wrapping would silently fail caps matching).
 type AppiumSessionCreateCmd struct {
-	Image string `arg:"" help:"Image name"`
-	Caps  string `long:"caps" required:"" help:"W3C capabilities JSON. Use @path.json to read from file. The 'alwaysMatch' wrapper is optional — both forms work."`
+	Box  string `arg:"" help:"Box name"`
+	Caps string `long:"caps" required:"" help:"W3C capabilities JSON. Use @path.json to read from file. The 'alwaysMatch' wrapper is optional — both forms work."`
 	appiumCommonFlags
 }
 
@@ -226,15 +226,15 @@ func (c *AppiumSessionCreateCmd) Run() error {
 	if inner, ok := parsed["alwaysMatch"].(map[string]interface{}); ok {
 		parsed = inner
 	}
-	base, err := appiumBaseURL(c.Image, c.Instance, c.BasePath)
+	base, err := appiumBaseURL(c.Box, c.Instance, c.BasePath)
 	if err != nil {
 		return err
 	}
 	// Delete any previous session for this image+instance first (best
 	// effort — a stale file from a crashed run shouldn't block creation).
-	if prev, _ := loadAppiumSession(c.Image, c.Instance); prev != nil {
+	if prev, _ := loadAppiumSession(c.Box, c.Instance); prev != nil {
 		_ = appiumDeleteSessionRemote(base, prev.SessionID)
-		_ = deleteAppiumSession(c.Image, c.Instance)
+		_ = deleteAppiumSession(c.Box, c.Instance)
 	}
 	caps := selenium.Capabilities(parsed)
 	wd, err := selenium.NewRemote(caps, base)
@@ -249,7 +249,7 @@ func (c *AppiumSessionCreateCmd) Run() error {
 		SessionID: sid,
 		BaseURL:   base,
 		CreatedAt: time.Now().UTC(),
-		Image:     c.Image,
+		Image:     c.Box,
 		Instance:  c.Instance,
 		Caps:      parsed,
 	}
@@ -270,12 +270,12 @@ func (c *AppiumSessionCreateCmd) Run() error {
 // if the session file is missing. Errors during DELETE are warnings (the
 // server may have GC'd the session already) but the file is still removed.
 type AppiumSessionDeleteCmd struct {
-	Image string `arg:"" help:"Image name"`
+	Box string `arg:"" help:"Box name"`
 	appiumCommonFlags
 }
 
 func (c *AppiumSessionDeleteCmd) Run() error {
-	sess, err := loadAppiumSession(c.Image, c.Instance)
+	sess, err := loadAppiumSession(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -286,7 +286,7 @@ func (c *AppiumSessionDeleteCmd) Run() error {
 	if err := appiumDeleteSessionRemote(sess.BaseURL, sess.SessionID); err != nil {
 		fmt.Fprintf(os.Stderr, "warning: DELETE /session/%s: %v (continuing)\n", sess.SessionID, err)
 	}
-	if err := deleteAppiumSession(c.Image, c.Instance); err != nil {
+	if err := deleteAppiumSession(c.Box, c.Instance); err != nil {
 		return err
 	}
 	fmt.Println("deleted")
@@ -317,13 +317,13 @@ func appiumDeleteSessionRemote(base, sessionID string) error {
 // loadActiveSession is the shared "session must exist" helper used by all
 // non-lifecycle verbs. Returns a user-friendly error pointing at
 // session-create when the file is missing.
-func loadActiveSession(image, instance string) (*AppiumSession, error) {
-	sess, err := loadAppiumSession(image, instance)
+func loadActiveSession(box, instance string) (*AppiumSession, error) {
+	sess, err := loadAppiumSession(box, instance)
 	if err != nil {
 		return nil, err
 	}
 	if sess == nil {
-		return nil, fmt.Errorf("no Appium session for image %q (instance=%q) — run `charly eval appium session-create %s --caps <json>` first", image, instance, image)
+		return nil, fmt.Errorf("no Appium session for image %q (instance=%q) — run `charly eval appium session-create %s --caps <json>` first", box, instance, box)
 	}
 	return sess, nil
 }
@@ -599,8 +599,8 @@ func printW3CValue(result json.RawMessage, fallback string) {
 // makes the verb self-contained: no bind-mount and no external staging step
 // are required (the eval-android-emulator-pod bed mounts no host dir).
 type AppiumInstallAppCmd struct {
-	Image string `arg:"" help:"Image name"`
-	Apk   string `long:"apk" required:"" help:"APK path on the HOST (staged into the container automatically, like adb install)"`
+	Box string `arg:"" help:"Box name"`
+	Apk string `long:"apk" required:"" help:"APK path on the HOST (staged into the container automatically, like adb install)"`
 	appiumCommonFlags
 }
 
@@ -609,7 +609,7 @@ func (c *AppiumInstallAppCmd) Run() error {
 	if _, statErr := os.Stat(c.Apk); statErr != nil {
 		return fmt.Errorf("appium install-app: APK not found on host: %w", statErr)
 	}
-	sess, err := loadActiveSession(c.Image, c.Instance)
+	sess, err := loadActiveSession(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -617,7 +617,7 @@ func (c *AppiumInstallAppCmd) Run() error {
 	// server can read it via appPath. Same container the port resolution
 	// uses (resolveContainer), so this works wherever `appium: status`
 	// already works.
-	engine, containerName, err := resolveContainer(c.Image, c.Instance)
+	engine, containerName, err := resolveContainer(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -653,7 +653,7 @@ func (c *AppiumInstallAppCmd) Run() error {
 // appiumElementFlags is the shared element-targeting flag set for find / click /
 // send-keys / get-text / get-attribute / clear / find-all (R3: one definition).
 type appiumElementFlags struct {
-	Image    string `arg:"" help:"Image name"`
+	Box      string `arg:"" help:"Box name"`
 	Selector string `long:"selector" required:"" help:"Locator value"`
 	Strategy string `long:"strategy" default:"xpath" help:"Locator strategy: xpath, id, accessibility-id, class-name, android-uiautomator, name, css"`
 	Session  string `long:"session" help:"Override the persisted session id"`
@@ -663,13 +663,13 @@ type appiumElementFlags struct {
 // appiumSessionFlags is the shared image+session flag set for leaves that need
 // only an active session (source / back / app-current-* / device-* / key-*).
 type appiumSessionFlags struct {
-	Image   string `arg:"" help:"Image name"`
+	Box     string `arg:"" help:"Box name"`
 	Session string `long:"session" help:"Override the persisted session id"`
 	appiumCommonFlags
 }
 
 func (f *appiumSessionFlags) session() (*w3cSession, error) {
-	return resolveW3CSession(f.Image, f.Instance, f.Session)
+	return resolveW3CSession(f.Box, f.Instance, f.Session)
 }
 
 type AppiumFindCmd struct {
@@ -677,7 +677,7 @@ type AppiumFindCmd struct {
 }
 
 func (c *AppiumFindCmd) Run() error {
-	s, err := resolveW3CSession(c.Image, c.Instance, c.Session)
+	s, err := resolveW3CSession(c.Box, c.Instance, c.Session)
 	if err != nil {
 		return err
 	}
@@ -691,8 +691,8 @@ func (c *AppiumFindCmd) Run() error {
 
 // resolveW3CSession reads the session file unless an explicit --session
 // override was passed, and returns a w3cSession ready for operations.
-func resolveW3CSession(image, instance, override string) (*w3cSession, error) {
-	sess, err := loadActiveSession(image, instance)
+func resolveW3CSession(box, instance, override string) (*w3cSession, error) {
+	sess, err := loadActiveSession(box, instance)
 	if err != nil {
 		return nil, err
 	}
@@ -734,7 +734,7 @@ type AppiumClickCmd struct {
 }
 
 func (c *AppiumClickCmd) Run() error {
-	s, err := resolveW3CSession(c.Image, c.Instance, c.Session)
+	s, err := resolveW3CSession(c.Box, c.Instance, c.Session)
 	if err != nil {
 		return err
 	}
@@ -759,7 +759,7 @@ type AppiumSendKeysCmd struct {
 }
 
 func (c *AppiumSendKeysCmd) Run() error {
-	s, err := resolveW3CSession(c.Image, c.Instance, c.Session)
+	s, err := resolveW3CSession(c.Box, c.Instance, c.Session)
 	if err != nil {
 		return err
 	}
@@ -779,14 +779,14 @@ func (c *AppiumSendKeysCmd) Run() error {
 // ---------------------------------------------------------------------------
 
 type AppiumScreenshotCmd struct {
-	Image    string `arg:"" help:"Image name"`
+	Box      string `arg:"" help:"Box name"`
 	Artifact string `long:"artifact" required:"" help:"Output PNG path on host"`
 	Session  string `long:"session" help:"Override the persisted session id"`
 	appiumCommonFlags
 }
 
 func (c *AppiumScreenshotCmd) Run() error {
-	s, err := resolveW3CSession(c.Image, c.Instance, c.Session)
+	s, err := resolveW3CSession(c.Box, c.Instance, c.Session)
 	if err != nil {
 		return err
 	}
@@ -808,7 +808,7 @@ func (c *AppiumScreenshotCmd) Run() error {
 type AppiumGetTextCmd struct{ appiumElementFlags }
 
 func (c *AppiumGetTextCmd) Run() error {
-	s, err := resolveW3CSession(c.Image, c.Instance, c.Session)
+	s, err := resolveW3CSession(c.Box, c.Instance, c.Session)
 	if err != nil {
 		return err
 	}
@@ -830,7 +830,7 @@ type AppiumGetAttributeCmd struct {
 }
 
 func (c *AppiumGetAttributeCmd) Run() error {
-	s, err := resolveW3CSession(c.Image, c.Instance, c.Session)
+	s, err := resolveW3CSession(c.Box, c.Instance, c.Session)
 	if err != nil {
 		return err
 	}
@@ -849,7 +849,7 @@ func (c *AppiumGetAttributeCmd) Run() error {
 type AppiumClearCmd struct{ appiumElementFlags }
 
 func (c *AppiumClearCmd) Run() error {
-	s, err := resolveW3CSession(c.Image, c.Instance, c.Session)
+	s, err := resolveW3CSession(c.Box, c.Instance, c.Session)
 	if err != nil {
 		return err
 	}
@@ -867,7 +867,7 @@ func (c *AppiumClearCmd) Run() error {
 type AppiumFindAllCmd struct{ appiumElementFlags }
 
 func (c *AppiumFindAllCmd) Run() error {
-	s, err := resolveW3CSession(c.Image, c.Instance, c.Session)
+	s, err := resolveW3CSession(c.Box, c.Instance, c.Session)
 	if err != nil {
 		return err
 	}
@@ -917,7 +917,7 @@ func (c *AppiumBackCmd) Run() error {
 
 // appiumTargetFlags: element-or-coordinate target + direction/percent/params.
 type appiumTargetFlags struct {
-	Image     string `arg:"" help:"Image name"`
+	Box       string `arg:"" help:"Box name"`
 	Selector  string `long:"selector" help:"Locator value (element target)"`
 	Strategy  string `long:"strategy" default:"xpath" help:"Locator strategy"`
 	X         int    `long:"x" help:"X coordinate (when no --selector)"`
@@ -933,7 +933,7 @@ type appiumTargetFlags struct {
 // unless --params already carries the area form), merges direction/percent and
 // any extra --params, and invokes the named mobile: gesture.
 func runAppiumGesture(gesture, pastTense string, f *appiumTargetFlags) error {
-	s, err := resolveW3CSession(f.Image, f.Instance, f.Session)
+	s, err := resolveW3CSession(f.Box, f.Instance, f.Session)
 	if err != nil {
 		return err
 	}

@@ -43,8 +43,8 @@ func validateVmSource(name string, src *VmSource, errs *ValidationError) {
 			errs.Add("vm %q: source.kind == cloud_image requires source.url", name)
 		}
 		// Bootc-only fields should not appear here.
-		if src.Image != "" {
-			errs.Add("vm %q: source.image only valid when source.kind == bootc (got %q)", name, src.Kind)
+		if src.Box != "" {
+			errs.Add("vm %q: source.box only valid when source.kind == bootc (got %q)", name, src.Kind)
 		}
 		if src.Transport != "" {
 			errs.Add("vm %q: source.transport only valid when source.kind == bootc", name)
@@ -59,8 +59,8 @@ func validateVmSource(name string, src *VmSource, errs *ValidationError) {
 			errs.Add("vm %q: source.kernel_args only valid when source.kind == bootc", name)
 		}
 	case "bootc":
-		if src.Image == "" {
-			errs.Add("vm %q: source.kind == bootc requires source.image (references a kind:image entry)", name)
+		if src.Box == "" {
+			errs.Add("vm %q: source.kind == bootc requires source.box (references a kind:box entry)", name)
 		}
 		if src.URL != "" {
 			errs.Add("vm %q: source.url only valid when source.kind == cloud_image", name)
@@ -98,8 +98,8 @@ func validateVmSource(name string, src *VmSource, errs *ValidationError) {
 		if src.URL != "" {
 			errs.Add("vm %q: source.url only valid when source.kind == cloud_image", name)
 		}
-		if src.Image != "" {
-			errs.Add("vm %q: source.image only valid when source.kind == bootc", name)
+		if src.Box != "" {
+			errs.Add("vm %q: source.box only valid when source.kind == bootc", name)
 		}
 		if src.LibvirtName != "" || src.DiskPath != "" || src.DiskFormat != "" {
 			errs.Add("vm %q: source.libvirt_name/disk_path/disk_format only valid when source.kind == imported", name)
@@ -121,8 +121,8 @@ func validateVmSource(name string, src *VmSource, errs *ValidationError) {
 				errs.Add("vm %q: source.disk_format %q is not supported (want qcow2 or raw)", name, src.DiskFormat)
 			}
 		}
-		if src.URL != "" || src.Image != "" {
-			errs.Add("vm %q: source.url / source.image not valid when source.kind == imported", name)
+		if src.URL != "" || src.Box != "" {
+			errs.Add("vm %q: source.url / source.box not valid when source.kind == imported", name)
 		}
 		if src.FromVm != "" || src.FromSnapshot != "" {
 			errs.Add("vm %q: source.from_vm / source.from_snapshot only valid when source.kind == clone", name)
@@ -142,7 +142,7 @@ func validateVmSource(name string, src *VmSource, errs *ValidationError) {
 				errs.Add("vm %q: source.rootfs %q is not supported (want ext4, xfs, or btrfs)", name, src.Rootfs)
 			}
 		}
-		if src.URL != "" || src.Image != "" || src.Transport != "" {
+		if src.URL != "" || src.Box != "" || src.Transport != "" {
 			errs.Add("vm %q: source.url / source.image / source.transport are not valid when source.kind == bootstrap", name)
 		}
 	case "":

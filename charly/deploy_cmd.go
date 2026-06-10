@@ -31,7 +31,7 @@ type DeployCmd struct {
 
 // DeployShowCmd displays the current deploy.yml content.
 type DeployShowCmd struct {
-	Image    string `arg:"" optional:"" help:"Show overrides for a specific image"`
+	Box      string `arg:"" optional:"" help:"Show overrides for a specific box"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 }
 
@@ -45,11 +45,11 @@ func (c *DeployShowCmd) Run() error {
 		return nil
 	}
 
-	if c.Image != "" {
-		key := deployKey(c.Image, c.Instance)
+	if c.Box != "" {
+		key := deployKey(c.Box, c.Instance)
 		entry, ok := dc.Deploy[key]
 		if !ok {
-			fmt.Printf("No overrides for image %q\n", key)
+			fmt.Printf("No overrides for box %q\n", key)
 			return nil
 		}
 		// Print just this image's config
@@ -62,9 +62,9 @@ func (c *DeployShowCmd) Run() error {
 
 // DeployExportCmd exports the current effective runtime configuration.
 type DeployExportCmd struct {
-	Images []string `arg:"" optional:"" help:"Images to export (default: all with overrides)"`
+	Boxes  []string `arg:"" optional:"" help:"Boxes to export (default: all with overrides)"`
 	Output string   `short:"o" help:"Write to file instead of stdout"`
-	All    bool     `help:"Export all enabled images with all runtime fields"`
+	All    bool     `help:"Export all enabled boxes with all runtime fields"`
 }
 
 func (c *DeployExportCmd) Run() error {
@@ -80,9 +80,9 @@ func (c *DeployExportCmd) exportAll() error {
 	if err != nil {
 		return fmt.Errorf("loading charly.yml: %w", err)
 	}
-	dc := ExportAllImage(cfg)
-	if len(c.Images) > 0 {
-		dc = filterDeployImage(dc, c.Images)
+	dc := ExportAllBox(cfg)
+	if len(c.Boxes) > 0 {
+		dc = filterDeployBox(dc, c.Boxes)
 	}
 	return c.output(dc)
 }
@@ -96,8 +96,8 @@ func (c *DeployExportCmd) exportOverrides() error {
 		fmt.Fprintln(os.Stderr, "No deploy.yml overrides to export")
 		return nil
 	}
-	if len(c.Images) > 0 {
-		dc = filterDeployImage(dc, c.Images)
+	if len(c.Boxes) > 0 {
+		dc = filterDeployBox(dc, c.Boxes)
 	}
 	return c.output(dc)
 }
@@ -121,7 +121,7 @@ func (c *DeployExportCmd) output(dc *DeployConfig) error {
 type DeployImportCmd struct {
 	Files   []string `arg:"" help:"Deploy YAML files to import (merged left-to-right)"`
 	Replace bool     `help:"Replace entire deploy.yml instead of merging with existing"`
-	Image   string   `long:"image" help:"Import only this image's config"`
+	Box     string   `long:"box" help:"Import only this box's config"`
 }
 
 func (c *DeployImportCmd) Run() error {
@@ -152,22 +152,22 @@ func (c *DeployImportCmd) Run() error {
 	merged := MergeDeployConfigs(append([]*DeployConfig{base}, inputs...)...)
 
 	// Filter to single image if requested
-	if c.Image != "" {
-		entry, ok := merged.Deploy[c.Image]
+	if c.Box != "" {
+		entry, ok := merged.Deploy[c.Box]
 		if !ok {
-			return fmt.Errorf("image %q not found in input files", c.Image)
+			return fmt.Errorf("image %q not found in input files", c.Box)
 		}
 		// Preserve other images from existing config, replace only the target
 		if !c.Replace {
 			existing, _ := LoadDeployConfig()
 			if existing != nil {
-				existing.Deploy[c.Image] = entry
+				existing.Deploy[c.Box] = entry
 				merged = existing
 			} else {
-				merged = &DeployConfig{Deploy: map[string]DeploymentNode{c.Image: entry}}
+				merged = &DeployConfig{Deploy: map[string]DeploymentNode{c.Box: entry}}
 			}
 		} else {
-			merged = &DeployConfig{Deploy: map[string]DeploymentNode{c.Image: entry}}
+			merged = &DeployConfig{Deploy: map[string]DeploymentNode{c.Box: entry}}
 		}
 	}
 
@@ -182,12 +182,12 @@ func (c *DeployImportCmd) Run() error {
 
 // DeployResetCmd removes deploy.yml overrides.
 type DeployResetCmd struct {
-	Image    string `arg:"" optional:"" help:"Image to reset (omit to clear all)"`
+	Box      string `arg:"" optional:"" help:"Box to reset (omit to clear all)"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 }
 
 func (c *DeployResetCmd) Run() error {
-	if c.Image == "" {
+	if c.Box == "" {
 		// Clear entire deploy.yml
 		path, err := DeployConfigPath()
 		if err != nil {
@@ -209,17 +209,17 @@ func (c *DeployResetCmd) Run() error {
 		return err
 	}
 	if dc == nil {
-		fmt.Printf("No overrides for image %q\n", c.Image)
+		fmt.Printf("No overrides for box %q\n", c.Box)
 		return nil
 	}
 
-	key := deployKey(c.Image, c.Instance)
+	key := deployKey(c.Box, c.Instance)
 	if _, ok := dc.Deploy[key]; !ok {
-		fmt.Printf("No overrides for image %q\n", key)
+		fmt.Printf("No overrides for box %q\n", key)
 		return nil
 	}
 
-	RemoveImageDeploy(dc, key)
+	RemoveBoxDeploy(dc, key)
 
 	if len(dc.Deploy) == 0 {
 		// No images left — remove the file
@@ -259,16 +259,16 @@ func (c *DeployStatusCmd) Run() error {
 
 	// Enumerate quadlet files
 	qdir, qdirErr := quadletDir()
-	quadletImages := make(map[string]bool)
+	quadletBoxes := make(map[string]bool)
 	if qdirErr == nil {
 		entries, readErr := os.ReadDir(qdir)
 		if readErr == nil {
 			for _, e := range entries {
 				name := e.Name()
 				if strings.HasPrefix(name, "charly-") && strings.HasSuffix(name, ".container") {
-					imageName := strings.TrimSuffix(strings.TrimPrefix(name, "charly-"), ".container")
-					if imageName != "" {
-						quadletImages[imageName] = true
+					boxName := strings.TrimSuffix(strings.TrimPrefix(name, "charly-"), ".container")
+					if boxName != "" {
+						quadletBoxes[boxName] = true
 					}
 				}
 			}
@@ -288,19 +288,19 @@ func (c *DeployStatusCmd) Run() error {
 		}
 	}
 
-	if len(deployToStem) == 0 && len(quadletImages) == 0 {
+	if len(deployToStem) == 0 && len(quadletBoxes) == 0 {
 		fmt.Println("No deploy.yml entries and no quadlet files found")
 		return nil
 	}
 
 	// Stale deploy.yml entries (no quadlet)
 	for key, stem := range deployToStem {
-		if !quadletImages[stem] {
+		if !quadletBoxes[stem] {
 			fmt.Printf("%-40s deploy.yml: yes  quadlet: no   (stale config)\n", key)
 		}
 	}
 	// Both exist or quadlet only
-	for stem := range quadletImages {
+	for stem := range quadletBoxes {
 		if key, ok := stemToDeploy[stem]; ok {
 			fmt.Printf("%-40s deploy.yml: yes  quadlet: yes  (ok)\n", key)
 		} else {
@@ -322,7 +322,7 @@ func marshalToStdout(dc *DeployConfig) error {
 	return nil
 }
 
-func filterDeployImage(dc *DeployConfig, names []string) *DeployConfig {
+func filterDeployBox(dc *DeployConfig, names []string) *DeployConfig {
 	filtered := &DeployConfig{Deploy: make(map[string]DeploymentNode)}
 	for _, name := range names {
 		if entry, ok := dc.Deploy[name]; ok {

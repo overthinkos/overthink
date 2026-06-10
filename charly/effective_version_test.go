@@ -23,7 +23,7 @@ func TestComputeEffectiveVersions(t *testing.T) {
 		// layerless on an INTERNAL base -> recurse to the base's effective version.
 		"passthrough": {Name: "passthrough", Base: "barebase"},
 	}
-	g := &Generator{Images: images, Layers: layers}
+	g := &Generator{Boxes: images, Layers: layers}
 	if err := g.computeEffectiveVersions(); err != nil {
 		t.Fatalf("computeEffectiveVersions: %v", err)
 	}
@@ -42,19 +42,19 @@ func TestComputeEffectiveVersions(t *testing.T) {
 
 	// A layer bump propagates to a deriving image's identity.
 	layers["b"].Version = "2026.400.0"
-	g2 := &Generator{Images: map[string]*ResolvedBox{
+	g2 := &Generator{Boxes: map[string]*ResolvedBox{
 		"derived": {Name: "derived", Layer: []string{"a", "b"}, IsExternalBase: true, Base: "quay.io/x:1"},
 	}, Layers: layers}
 	if err := g2.computeEffectiveVersions(); err != nil {
 		t.Fatal(err)
 	}
-	if got := g2.Images["derived"].EffectiveVersion; got != "2026.400.0" {
+	if got := g2.Boxes["derived"].EffectiveVersion; got != "2026.400.0" {
 		t.Errorf("after layer bump: EffectiveVersion = %q, want 2026.400.0", got)
 	}
 
 	// Hard error: layerless external-base image with no version (no fallback).
 	gErr := &Generator{
-		Images: map[string]*ResolvedBox{"orphan": {Name: "orphan", IsExternalBase: true, Base: "quay.io/x:1"}},
+		Boxes:  map[string]*ResolvedBox{"orphan": {Name: "orphan", IsExternalBase: true, Base: "quay.io/x:1"}},
 		Layers: map[string]*Layer{},
 	}
 	if err := gErr.computeEffectiveVersions(); err == nil {

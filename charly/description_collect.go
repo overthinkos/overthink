@@ -1,6 +1,6 @@
 package main
 
-// CollectDescriptions walks the base-image chain for imageName and
+// CollectDescriptions walks the base-image chain for boxName and
 // gathers every kind: entity's description: block into a three-section
 // LabelDescriptionSet.
 //
@@ -22,11 +22,11 @@ package main
 // filter decides what actually runs per section.
 //
 // Returns nil if every section is empty.
-func CollectDescriptions(cfg *Config, layers map[string]*Layer, imageName string) *LabelDescriptionSet {
+func CollectDescriptions(cfg *Config, layers map[string]*Layer, boxName string) *LabelDescriptionSet {
 	set := &LabelDescriptionSet{}
 
 	var allLayerNames []string
-	for _, node := range cfg.walkBaseChain(imageName) {
+	for _, node := range cfg.walkBaseChain(boxName) {
 		resolved, err := ResolveLayerOrder(node.Img.Layer, layers, nil)
 		if err != nil {
 			break
@@ -51,9 +51,9 @@ func CollectDescriptions(cfg *Config, layers map[string]*Layer, imageName string
 	}
 
 	// Image-level description.
-	if img, ok := cfg.Image[imageName]; ok && img.Description != nil {
-		set.Image = append(set.Image, LabeledDescription{
-			Origin:      "image:" + imageName,
+	if img, ok := cfg.Box[boxName]; ok && img.Description != nil {
+		set.Box = append(set.Box, LabeledDescription{
+			Origin:      "image:" + boxName,
 			Description: *img.Description,
 		})
 	}

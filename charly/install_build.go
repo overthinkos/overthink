@@ -69,7 +69,7 @@ func BuildDeployPlan(layer *Layer, img *ResolvedBox, hostCtx HostContext) (*Inst
 	}
 
 	plan := &InstallPlan{
-		Image:          img.Name,
+		Box:            img.Name,
 		Version:        layer.Version,
 		Distro:         primaryDistroTag(img, hostCtx),
 		Layer:          layer.Name,
@@ -222,7 +222,7 @@ func compileLocalPkgStep(layer *Layer, img *ResolvedBox, hostCtx HostContext) In
 // preserving per-layer provenance for the ledger.
 func MergePlan(plans []*InstallPlan, image string, addLayers []string) *InstallPlan {
 	out := &InstallPlan{
-		Image:     image,
+		Box:       image,
 		AddLayers: append([]string(nil), addLayers...),
 	}
 	if len(plans) == 0 {
@@ -244,9 +244,9 @@ func MergePlan(plans []*InstallPlan, image string, addLayers []string) *InstallP
 // specific deploy (image + ordered layer set + add_layers). Used as the
 // ledger key so re-deploys of the same config are recognizable and
 // layer-refcount bookkeeping is stable.
-func computeDeployID(image string, layers, addLayers []string) string {
+func computeDeployID(box string, layers, addLayers []string) string {
 	h := sha256.New()
-	h.Write([]byte(image))
+	h.Write([]byte(box))
 	h.Write([]byte{0})
 	for _, l := range layers {
 		h.Write([]byte(l))
@@ -908,7 +908,7 @@ func compileServiceSteps(layer *Layer, img *ResolvedBox, hostCtx HostContext) []
 		if err != nil {
 			return false
 		}
-		_, _, initCfg, err := LoadBuildConfigForImage(dir)
+		_, _, initCfg, err := LoadBuildConfigForBox(dir)
 		if err != nil || initCfg == nil {
 			return false
 		}
@@ -1020,7 +1020,7 @@ func DescribePlan(p *InstallPlan) string {
 	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "Plan: layer=%s image=%s distro=%s steps=%d\n",
-		p.Layer, p.Image, p.Distro, len(p.Steps))
+		p.Layer, p.Box, p.Distro, len(p.Steps))
 	counts := map[StepKind]int{}
 	for _, s := range p.Steps {
 		counts[s.Kind()]++

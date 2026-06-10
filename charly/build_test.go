@@ -201,13 +201,13 @@ func TestFilterImages(t *testing.T) {
 	order := []string{"fedora", "ubuntu", "fedora-test"}
 
 	// Request only fedora-test — should pull in fedora as dependency
-	filtered, err := filterImage(order, []string{"fedora-test"}, images)
+	filtered, err := filterBox(order, []string{"fedora-test"}, images)
 	if err != nil {
-		t.Fatalf("filterImage() error: %v", err)
+		t.Fatalf("filterBox() error: %v", err)
 	}
 	want := []string{"fedora", "fedora-test"}
 	if !reflect.DeepEqual(filtered, want) {
-		t.Errorf("filterImage() = %v, want %v", filtered, want)
+		t.Errorf("filterBox() = %v, want %v", filtered, want)
 	}
 }
 
@@ -215,7 +215,7 @@ func TestFilterImagesUnknown(t *testing.T) {
 	images := map[string]*ResolvedBox{
 		"fedora": {Name: "fedora", IsExternalBase: true},
 	}
-	_, err := filterImage([]string{"fedora"}, []string{"nonexistent"}, images)
+	_, err := filterBox([]string{"fedora"}, []string{"nonexistent"}, images)
 	if err == nil {
 		t.Error("expected error for unknown image")
 	}
@@ -243,13 +243,13 @@ func TestFilterImagesIncludesBuilder(t *testing.T) {
 	order := []string{"builder", "fedora", "app"}
 
 	// Request only app — should pull in fedora (base) and builder
-	filtered, err := filterImage(order, []string{"app"}, images)
+	filtered, err := filterBox(order, []string{"app"}, images)
 	if err != nil {
-		t.Fatalf("filterImage() error: %v", err)
+		t.Fatalf("filterBox() error: %v", err)
 	}
 	want := []string{"builder", "fedora", "app"}
 	if !reflect.DeepEqual(filtered, want) {
-		t.Errorf("filterImage() = %v, want %v", filtered, want)
+		t.Errorf("filterBox() = %v, want %v", filtered, want)
 	}
 }
 
@@ -285,13 +285,13 @@ func TestFilterImagesIncludesBootstrapBuilder(t *testing.T) {
 
 	order := []string{"arch", "cachyos-pacstrap-builder", "cachyos", "app"}
 
-	filtered, err := filterImage(order, []string{"app"}, images)
+	filtered, err := filterBox(order, []string{"app"}, images)
 	if err != nil {
-		t.Fatalf("filterImage() error: %v", err)
+		t.Fatalf("filterBox() error: %v", err)
 	}
 	want := []string{"arch", "cachyos-pacstrap-builder", "cachyos", "app"}
 	if !reflect.DeepEqual(filtered, want) {
-		t.Errorf("filterImage() = %v, want %v", filtered, want)
+		t.Errorf("filterBox() = %v, want %v", filtered, want)
 	}
 }
 
@@ -523,9 +523,9 @@ func TestRenderPacstrapExtraConf(t *testing.T) {
 // deploy failure AND for the cachyos-extra HTML-stub repo (must be absent from
 // BOTH configs, by construction, now that extra_repo is the single source).
 func TestCachyosRuntimePacmanConf(t *testing.T) {
-	distroCfg, _, _, err := LoadBuildConfigForImage(repoRootDir(t))
+	distroCfg, _, _, err := LoadBuildConfigForBox(repoRootDir(t))
 	if err != nil {
-		t.Fatalf("LoadBuildConfigForImage: %v", err)
+		t.Fatalf("LoadBuildConfigForBox: %v", err)
 	}
 	cachyos, ok := distroCfg.Distro["cachyos"]
 	if !ok || cachyos.Pacstrap == nil {

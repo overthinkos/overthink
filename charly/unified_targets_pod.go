@@ -263,7 +263,7 @@ func (t *PodUnifiedTarget) Rebuild(ctx context.Context, opts RebuildOpts) error 
 
 // Add builds the pod (container) overlay: synthesizes a Containerfile
 // (FROM base + the add_layer: build steps) and a deterministic overlay
-// image. Constructs the live PodDeployTarget (Generator + ResolvedImage +
+// image. Constructs the live PodDeployTarget (Generator + ResolvedBox +
 // base-image DistroDef + baseRef CalVer), injects layer secrets, emits,
 // persists --disposable/--lifecycle, and prints the `charly start` hint.
 //
@@ -278,12 +278,12 @@ func (t *PodUnifiedTarget) Add(ctx context.Context, dctx *DeployContext, plans [
 	// Consumes the MERGED node (never a deploy.yml re-read).
 	registerEphemeralIfMarked(node, t.NodeName)
 
-	// Build a Generator + ResolvedImage so the overlay's OCITarget renders
+	// Build a Generator + ResolvedBox so the overlay's OCITarget renders
 	// tasks as RUN directives (not comments).
 	gen, _ := NewGenerator(dir, t.Tag, ResolveOpts{})
 	var resolvedImg *ResolvedBox
-	if gen != nil && gen.Images != nil {
-		resolvedImg = gen.Images[base]
+	if gen != nil && gen.Boxes != nil {
+		resolvedImg = gen.Boxes[base]
 	}
 
 	// Resolve DistroDef from the BASE IMAGE's distro, not the operator
@@ -314,7 +314,7 @@ func (t *PodUnifiedTarget) Add(ctx context.Context, dctx *DeployContext, plans [
 		DistroDef:     podDistroDef,
 		BuilderConfig: dctx.BuilderCfg,
 		Generator:     gen,
-		Image:         resolvedImg,
+		Box:           resolvedImg,
 	}
 
 	// Resolve + inject layer secrets so the overlay Containerfile emits
@@ -340,7 +340,7 @@ func (t *PodUnifiedTarget) Add(ctx context.Context, dctx *DeployContext, plans [
 			Disposable:    t.Disposable,
 			SetLifecycle:  t.Lifecycle != "",
 			Lifecycle:     t.Lifecycle,
-			Image:         t.Ref,
+			Box:           t.Ref,
 			Target:        "pod",
 		})
 		if t.Disposable {

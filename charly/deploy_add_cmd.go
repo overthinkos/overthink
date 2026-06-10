@@ -27,7 +27,7 @@ import (
 // DeployAddCmd implements `charly deploy add <name> [<ref>]`.
 type DeployAddCmd struct {
 	Name string `arg:"" help:"Deploy name ('host' for local system; any other string is a container deploy name)"`
-	Ref  string `arg:"" optional:"" help:"Image or layer reference (local name, ./path.yml, or github.com/org/repo[/box/<n>|/candy/<n>][@ref])"`
+	Ref  string `arg:"" optional:"" help:"Box or candy reference (local name, ./path.yml, or github.com/org/repo[/box/<n>|/candy/<n>][@ref])"`
 
 	// Layer overlays (repeatable).
 	AddLayer []string `long:"add-candy" help:"Extra layer to apply on top of the base image (repeatable)"`
@@ -239,8 +239,8 @@ func (c *DeployAddCmd) dispatchNode(path string, node *DeploymentNode, parentExe
 		// so deployment names like "sway-pod" don't need to match an
 		// image name. Falls back to the deploy key for legacy entries.
 		switch {
-		case node.Image != "":
-			refStr = node.Image
+		case node.Box != "":
+			refStr = node.Box
 		default:
 			refStr = pathLeaf(path)
 		}
@@ -262,7 +262,7 @@ func (c *DeployAddCmd) dispatchNode(path string, node *DeploymentNode, parentExe
 	// debian/fedora) rather than the operator host's (cachyos→pac). The
 	// `vm:` deploy-key prefix was the ONLY signal before — it missed every
 	// kind:eval bed and deploy.yml target:vm entry whose name isn't
-	// "vm:"-prefixed, routing them through syntheticHostImage → pacman.
+	// "vm:"-prefixed, routing them through syntheticHostBox → pacman.
 	c.vmEntity = resolveVmEntity(c.Name, node)
 
 	// Resolve a kind:local template, when referenced. Template fields
@@ -308,11 +308,11 @@ func (c *DeployAddCmd) dispatchNode(path string, node *DeploymentNode, parentExe
 	// IMAGE's context (distro=fedora, pkg=rpm, etc.) rather than the
 	// operator host's context — otherwise the layer's install tasks pick
 	// the wrong distro section and the overlay build fails. Only host/vm
-	// targets use syntheticHostImage / syntheticVmImage (handled inside
+	// targets use syntheticHostBox / syntheticVmBox (handled inside
 	// compileLayerPlans).
 	var baseImg *ResolvedBox
 	if (target == "pod" || target == "k8s") && refStr != "" {
-		if baseResolved, rerr := cfg.ResolveImage(refStr, tag, dir, ResolveOpts{}); rerr == nil {
+		if baseResolved, rerr := cfg.ResolveBox(refStr, tag, dir, ResolveOpts{}); rerr == nil {
 			baseImg = baseResolved
 			if distroCfg != nil {
 				baseImg.DistroDef = distroCfg.ResolveDistro(baseImg.Distro)
@@ -678,11 +678,11 @@ func (c *DeployAddCmd) emitOpts() EmitOpts {
 // For layer refs: compile a single plan. For remote refs: fetch and
 // proceed (remote fetch is handled by existing EnsureRepoDownloaded).
 func (c *DeployAddCmd) compilePlans(ref *DeployRef, cfg *Config, distroCfg *DistroConfig, builderCfg *BuilderConfig, dir string) ([]*InstallPlan, string, []string, error) {
-	if ref.Source == RefSourceRemote && ref.Kind == RefKindImage {
+	if ref.Source == RefSourceRemote && ref.Kind == RefKindBox {
 		return nil, "", nil, fmt.Errorf("remote image refs are not supported by deploy add (ref=%s)", ref.Raw)
 	}
-	if ref.Kind == RefKindImage {
-		return c.compileImagePlans(ref, cfg, distroCfg, builderCfg, dir)
+	if ref.Kind == RefKindBox {
+		return c.compileBoxPlans(ref, cfg, distroCfg, builderCfg, dir)
 	}
 	// Local AND remote layer refs flow here — scanLayersForRef fetches a
 	// remote `--add-layer @host/org/repo/candy/<name>:ver` (and its deps)
@@ -702,11 +702,11 @@ func (c *DeployAddCmd) scanLayersForRef(ref *DeployRef, cfg *Config, dir string)
 	layerKey := ref.Name
 	if ref.Source == RefSourceRemote {
 		aug := *cfg
-		aug.Image = make(map[string]BoxConfig, len(cfg.Image)+1)
-		for k, v := range cfg.Image {
-			aug.Image[k] = v
+		aug.Box = make(map[string]BoxConfig, len(cfg.Box)+1)
+		for k, v := range cfg.Box {
+			aug.Box[k] = v
 		}
-		aug.Image["__charly_addlayer_fetch__"] = BoxConfig{Layer: []string{ref.Raw}}
+		aug.Box["__charly_addlayer_fetch__"] = BoxConfig{Layer: []string{ref.Raw}}
 		scanCfg = &aug
 		layerKey = BareRef(ref.Raw)
 	}
@@ -720,10 +720,10 @@ func (c *DeployAddCmd) scanLayersForRef(ref *DeployRef, cfg *Config, dir string)
 	return layers, layerKey, nil
 }
 
-func (c *DeployAddCmd) compileImagePlans(ref *DeployRef, cfg *Config, distroCfg *DistroConfig, builderCfg *BuilderConfig, dir string) ([]*InstallPlan, string, []string, error) {
+func (c *DeployAddCmd) compileBoxPlans(ref *DeployRef, cfg *Config, distroCfg *DistroConfig, builderCfg *BuilderConfig, dir string) ([]*InstallPlan, string, []string, error) {
 	_ = distroCfg
 	_ = builderCfg
-	img, err := cfg.ResolveImage(ref.Name, c.Tag, dir, ResolveOpts{})
+	img, err := cfg.ResolveBox(ref.Name, c.Tag, dir, ResolveOpts{})
 	if err != nil {
 		return nil, "", nil, err
 	}
@@ -777,7 +777,7 @@ func pruneContainerInitForSystemd(order []string, hostCtx HostContext) []string 
 }
 
 // compileLayerPlansWithContext is the same as compileLayerPlans but uses
-// the provided *ResolvedImage as the compile context (so add_layers for
+// the provided *ResolvedBox as the compile context (so add_layers for
 // a pod/k8s deployment compile against the base image's distro/user
 // context, not the operator host's).
 func (c *DeployAddCmd) compileLayerPlansWithContext(ref *DeployRef, cfg *Config, distroCfg *DistroConfig, builderCfg *BuilderConfig, dir string, ctx *ResolvedBox) ([]*InstallPlan, string, []string, error) {
@@ -833,12 +833,12 @@ func (c *DeployAddCmd) compileLayerPlans(ref *DeployRef, cfg *Config, distroCfg 
 	if c.vmEntity != "" {
 		if uf, ok, _ := LoadUnified(dir); ok && uf != nil && uf.VM != nil {
 			if spec, present := uf.VM[c.vmEntity]; present {
-				img = syntheticVmImage(spec, distroCfg)
+				img = syntheticVmBox(spec, distroCfg)
 			}
 		}
 	}
 	if img == nil {
-		img = syntheticHostImage()
+		img = syntheticHostBox()
 	}
 	hostCtx := detectHostContext()
 	if distroCfg != nil {
@@ -848,7 +848,7 @@ func (c *DeployAddCmd) compileLayerPlans(ref *DeployRef, cfg *Config, distroCfg 
 		img.BuilderConfig = builderCfg
 	}
 	// Resolve the synthetic host/VM image's builder map through the SAME
-	// canonical method ResolveImage uses (resolveEffectiveBuilder), so a
+	// canonical method ResolveBox uses (resolveEffectiveBuilder), so a
 	// local/host deploy onto an Arch/cachyos host auto-selects arch-builder
 	// (distro-keyed) exactly like a built image would — no command-specific
 	// divergence. This path previously seeded from cfg.Defaults.Builder only,
@@ -899,7 +899,7 @@ func detectHostContext() HostContext {
 	}
 }
 
-// syntheticHostImage returns a minimal ResolvedImage suitable for
+// syntheticHostBox returns a minimal ResolvedBox suitable for
 // compiling a single-layer plan against the host. Used when the user
 // invokes `charly deploy add host <layer-ref>` without a containing image.
 //
@@ -909,7 +909,7 @@ func detectHostContext() HostContext {
 // which would default to 0 — quietly routing the task through
 // ScopeSystem (sudo), installing user-scoped tooling like
 // `cargo install` to /root/.cargo/bin instead of $HOME/.cargo/bin.
-func syntheticHostImage() *ResolvedBox {
+func syntheticHostBox() *ResolvedBox {
 	hd, _ := DetectHostDistro()
 	img := &ResolvedBox{
 		Name:         "host-adhoc",
@@ -933,8 +933,8 @@ func syntheticHostImage() *ResolvedBox {
 // targets no VM. A node's explicit `vm:` cross-ref wins (kind:eval beds and
 // deploy.yml target:vm entries, whose names are NOT "vm:"-prefixed); otherwise
 // the "vm:<name>" deploy-key prefix (the CLI `charly deploy add vm:<name>` form).
-// This is the single signal the layer compiler uses to pick syntheticVmImage
-// over syntheticHostImage — the prefix alone missed bed/target:vm deploys.
+// This is the single signal the layer compiler uses to pick syntheticVmBox
+// over syntheticHostBox — the prefix alone missed bed/target:vm deploys.
 func resolveVmEntity(deployName string, node *DeploymentNode) string {
 	if node != nil && node.Vm != "" {
 		return node.Vm
@@ -947,7 +947,7 @@ func resolveVmEntity(deployName string, node *DeploymentNode) string {
 	return ""
 }
 
-// syntheticVmImage returns a ResolvedImage tuned for `charly deploy add
+// syntheticVmBox returns a ResolvedBox tuned for `charly deploy add
 // vm:<name>` — the User/UID/GID/Home fields come from the VM spec's SSH
 // config (not the host's env), so `${USER}` in a layer's `user:` field
 // resolves to the GUEST user (e.g. `arch`) and task scope classification
@@ -967,12 +967,12 @@ func resolveVmEntity(deployName string, node *DeploymentNode) string {
 //
 // Cloud-image VMs conventionally use uid/gid 1000 for the first non-root
 // user (cloud-init's adopt path respects that). bootc VMs default to
-// root, in which case we fall back to the same syntheticHostImage()
+// root, in which case we fall back to the same syntheticHostBox()
 // semantics (System scope, no per-user path).
-func syntheticVmImage(spec *VmSpec, distroCfg *DistroConfig) *ResolvedBox {
+func syntheticVmBox(spec *VmSpec, distroCfg *DistroConfig) *ResolvedBox {
 	user := resolveVmSshUser(spec)
 	if user == "" || user == "root" {
-		img := syntheticHostImage()
+		img := syntheticHostBox()
 		img.Name = "vm-adhoc"
 		img.User = "root"
 		img.Home = "/root"

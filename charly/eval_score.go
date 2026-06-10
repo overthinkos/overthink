@@ -40,7 +40,7 @@ import (
 //
 // The zero value is a usable empty result (no scenarios, no summary).
 type EvalRunResults struct {
-	Image    string               `yaml:"box,omitempty"`
+	Box      string               `yaml:"box,omitempty"`
 	Mode     string               `yaml:"mode,omitempty"` // "image" | "run"
 	Scenario []ScenarioEvalResult `yaml:"scenario,omitempty"`
 	Summary  TestRunSummary       `yaml:"summary"`
@@ -254,7 +254,7 @@ func FingerprintSet(set *LabelDescriptionSet) map[string]string {
 	if set == nil {
 		return out
 	}
-	for _, sec := range [][]LabeledDescription{set.Layer, set.Image, set.Deploy} {
+	for _, sec := range [][]LabeledDescription{set.Layer, set.Box, set.Deploy} {
 		for _, ld := range sec {
 			for sIdx, scenario := range ld.Description.Scenario {
 				expanded := ExpandScenario(scenario)

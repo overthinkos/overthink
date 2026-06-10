@@ -7,7 +7,7 @@ import (
 func TestValidateServiceNameFound(t *testing.T) {
 	// Test the service name lookup logic that validateServiceName uses internally.
 	// validateServiceName calls ExtractMetadata which reads container labels at runtime,
-	// so we test the lookup logic directly via ImageMetadata.Services.
+	// so we test the lookup logic directly via BoxMetadata.Services.
 	meta := &BoxMetadata{
 		Init:         "supervisord",
 		ServiceNames: []string{"traefik", "testapi"},

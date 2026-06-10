@@ -173,8 +173,8 @@ func taskSubstPath(p string, img *ResolvedBox) string {
 // repeated calls with identical content are no-ops via content-addressed
 // filenames.
 //
-// buildDir is the absolute path to .build/<imageName>/.
-// contextRelPrefix is the build-context-relative prefix (e.g. ".build/<imageName>").
+// buildDir is the absolute path to .build/<boxName>/.
+// contextRelPrefix is the build-context-relative prefix (e.g. ".build/<boxName>").
 func stageInlineContent(buildDir, contextRelPrefix, layerName, content string) (string, error) {
 	sum := sha256.Sum256([]byte(content))
 	hexSum := hex.EncodeToString(sum[:])

@@ -41,8 +41,8 @@ type VmCmd struct {
 }
 
 // vmName returns the VM name for an image and optional instance.
-func vmName(image, instance string) string {
-	name := "charly-" + image
+func vmName(box, instance string) string {
+	name := "charly-" + box
 	if instance != "" {
 		name += "-" + instance
 	}
@@ -299,7 +299,7 @@ func vmDiskDir(vmName string) string {
 
 // VmCreateCmd creates a VM from a QCOW2 disk image.
 type VmCreateCmd struct {
-	Image           string `arg:"" help:"Image name"`
+	Box             string `arg:"" help:"Box name"`
 	Ram             string `long:"ram" help:"Override RAM size (e.g. 4G, 8192M)"`
 	Cpus            int    `long:"cpus" help:"Override CPU count"`
 	Instance        string `short:"i" long:"instance" help:"Instance name"`
@@ -329,7 +329,7 @@ func (c *VmCreateCmd) Run() error {
 	// `charly vm destroy`). No-op when an outer orchestrator already owns the lease
 	// (CHARLY_PREEMPT_LEASE set, e.g. an eval bed run) or when no claimant node
 	// references this VM entity. See charly/preempt.go.
-	claimant, claimantNode, hasClaimant := lookupVMClaimant(c.Image)
+	claimant, claimantNode, hasClaimant := lookupVMClaimant(c.Box)
 	if hasClaimant {
 		if _, perr := acquireExclusiveForClaimant(claimant, claimantNode, false); perr != nil {
 			return perr
@@ -347,11 +347,11 @@ func (c *VmCreateCmd) Run() error {
 	var resources map[string]*ResourceDef
 	if uf, ok, ufErr := LoadUnified(dir); ufErr == nil && ok {
 		if uf.VM != nil {
-			spec = uf.VM[c.Image]
+			spec = uf.VM[c.Box]
 		}
 		resources = uf.Resource
 	}
-	backend, err := resolveVmBackend(vmConfiguredBackend(c.Image, rt.VmBackend))
+	backend, err := resolveVmBackend(vmConfiguredBackend(c.Box, rt.VmBackend))
 	if err != nil {
 		return err
 	}
@@ -364,11 +364,11 @@ func (c *VmCreateCmd) Run() error {
 		if hasClaimant {
 			claimantPtr = &claimantNode
 		}
-		return c.runVmSpecCreate(c.Image, spec, backend, claimantPtr, resources)
+		return c.runVmSpecCreate(c.Box, spec, backend, claimantPtr, resources)
 	}
 
 	// Reached here = image is not a `kind: vm` entity, AND the legacy
-	// ImageConfig.Vm / OCI LabelVm fallback was removed in the VM
+	// BoxConfig.Vm / OCI LabelVm fallback was removed in the VM
 	// hard-cutover. Tell the user what to do.
 	_ = rt
 	_ = backend
@@ -378,7 +378,7 @@ func (c *VmCreateCmd) Run() error {
 			"      vm:\n"+
 			"        %s-bootc:\n"+
 			"          source: {kind: bootc, image: %s}\n",
-		c.Image, c.Image, c.Image)
+		c.Box, c.Box, c.Box)
 }
 
 func (c *VmCreateCmd) createLibvirt(name, qcow2, ram string, cpus, sshPort int, ports []string, sshPubKey string) error {
@@ -412,7 +412,7 @@ func (c *VmCreateCmd) createLibvirt(name, qcow2, ram string, cpus, sshPort int, 
 	}
 
 	fmt.Fprintf(os.Stderr, "Created VM %s (libvirt session)\n", name)
-	fmt.Fprintf(os.Stderr, "Console: charly vm console %s\n", c.Image)
+	fmt.Fprintf(os.Stderr, "Console: charly vm console %s\n", c.Box)
 	return nil
 }
 
@@ -481,7 +481,7 @@ func (c *VmCreateCmd) createQemu(name, qcow2, ram string, cpus, sshPort int, por
 
 	fmt.Fprintf(os.Stderr, "Created and started VM %s (QEMU)\n", name)
 	fmt.Fprintf(os.Stderr, "SSH: ssh -p 2222 root@localhost\n")
-	fmt.Fprintf(os.Stderr, "Console: charly vm console %s\n", c.Image)
+	fmt.Fprintf(os.Stderr, "Console: charly vm console %s\n", c.Box)
 	return nil
 }
 
@@ -511,30 +511,30 @@ func parseRAMtoMB(ram string) int {
 // --- VmStartCmd ---
 
 type VmStartCmd struct {
-	Image    string `arg:"" help:"Image name"`
+	Box      string `arg:"" help:"Box name"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 }
 
 func (c *VmStartCmd) Run() error {
-	return startVM(c.Image, c.Instance)
+	return startVM(c.Box, c.Instance)
 }
 
 // startVM starts a previously-created VM by image+instance, dispatching by
 // backend (libvirt domain start / re-exec the stored qemu command). Shared
 // by VmStartCmd.Run and the resource arbiter (charly/preempt.go) so the holder-
 // restart path runs the exact same lifecycle code as `charly vm start`.
-func startVM(image, instance string) error {
+func startVM(box, instance string) error {
 	rt, err := ResolveRuntime()
 	if err != nil {
 		return err
 	}
 
-	backend, err := resolveVmBackend(vmConfiguredBackend(image, rt.VmBackend))
+	backend, err := resolveVmBackend(vmConfiguredBackend(box, rt.VmBackend))
 	if err != nil {
 		return err
 	}
 
-	name := vmName(image, instance)
+	name := vmName(box, instance)
 
 	switch backend {
 	case "libvirt":
@@ -561,7 +561,7 @@ func startVM(image, instance string) error {
 		cmdFile := filepath.Join(stateDir, "command")
 		data, err := os.ReadFile(cmdFile)
 		if err != nil {
-			return fmt.Errorf("VM %s not found — run 'charly vm create %s' first", name, image)
+			return fmt.Errorf("VM %s not found — run 'charly vm create %s' first", name, box)
 		}
 		parts := strings.Fields(string(data))
 		if len(parts) < 2 {
@@ -581,18 +581,18 @@ func startVM(image, instance string) error {
 // --- VmStopCmd ---
 
 type VmStopCmd struct {
-	Image    string `arg:"" help:"Image name"`
+	Box      string `arg:"" help:"Box name"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 	Force    bool   `long:"force" help:"Force stop (destroy) instead of graceful shutdown"`
 }
 
 func (c *VmStopCmd) Run() error {
-	if err := stopVM(c.Image, c.Instance, c.Force); err != nil {
+	if err := stopVM(c.Box, c.Instance, c.Force); err != nil {
 		return err
 	}
 	// Releasing a persistent exclusive claim on this VM restores any holder it
 	// preempted (no-op if no lease / gated by an outer orchestrator).
-	if claimant, _, ok := lookupVMClaimant(c.Image); ok {
+	if claimant, _, ok := lookupVMClaimant(c.Box); ok {
 		releaseExclusiveForClaimant(claimant)
 	}
 	return nil
@@ -604,18 +604,18 @@ func (c *VmStopCmd) Run() error {
 // destroys/kills it. Shared by VmStopCmd.Run and the resource arbiter
 // (charly/preempt.go), which always calls it with force=false so a preempted
 // holder is gracefully shut down and remains restartable.
-func stopVM(image, instance string, force bool) error {
+func stopVM(box, instance string, force bool) error {
 	rt, err := ResolveRuntime()
 	if err != nil {
 		return err
 	}
 
-	backend, err := resolveVmBackend(vmConfiguredBackend(image, rt.VmBackend))
+	backend, err := resolveVmBackend(vmConfiguredBackend(box, rt.VmBackend))
 	if err != nil {
 		return err
 	}
 
-	name := vmName(image, instance)
+	name := vmName(box, instance)
 
 	switch backend {
 	case "libvirt":
@@ -671,7 +671,7 @@ func stopVM(image, instance string, force bool) error {
 // --- VmDestroyCmd ---
 
 type VmDestroyCmd struct {
-	Image      string `arg:"" help:"Image name"`
+	Box        string `arg:"" help:"Box name"`
 	Instance   string `short:"i" long:"instance" help:"Instance name"`
 	Disk       bool   `long:"disk" help:"Also delete the QCOW2 disk image"`
 	KeepDeploy bool   `long:"keep-deploy" help:"Keep the deploy.yml vm:<name> entry (default: remove it, like 'charly remove' for pods)"`
@@ -681,7 +681,7 @@ func (c *VmDestroyCmd) Run() error {
 	// Releasing a persistent exclusive claim on this VM restores any preempted
 	// holder once the claimant is gone (deferred so it runs on every exit;
 	// no-op if no lease / gated by an outer orchestrator).
-	if claimant, _, ok := lookupVMClaimant(c.Image); ok {
+	if claimant, _, ok := lookupVMClaimant(c.Box); ok {
 		defer releaseExclusiveForClaimant(claimant)
 	}
 
@@ -690,12 +690,12 @@ func (c *VmDestroyCmd) Run() error {
 		return err
 	}
 
-	backend, err := resolveVmBackend(vmConfiguredBackend(c.Image, rt.VmBackend))
+	backend, err := resolveVmBackend(vmConfiguredBackend(c.Box, rt.VmBackend))
 	if err != nil {
 		return err
 	}
 
-	name := vmName(c.Image, c.Instance)
+	name := vmName(c.Box, c.Instance)
 
 	switch backend {
 	case "libvirt":
@@ -763,7 +763,7 @@ func (c *VmDestroyCmd) Run() error {
 	if c.Disk {
 		// Remove only THIS VM's disk dir — never the shared parent (which
 		// would delete every other VM's disk too).
-		qcow2Dir := vmDiskDir(c.Image)
+		qcow2Dir := vmDiskDir(c.Box)
 		os.RemoveAll(qcow2Dir)
 		fmt.Fprintf(os.Stderr, "Deleted disk images in %s\n", qcow2Dir)
 	}
@@ -775,7 +775,7 @@ func (c *VmDestroyCmd) Run() error {
 	// bed cleanup tears down via `charly vm destroy`). --keep-deploy preserves it for
 	// a deliberate re-create, mirroring `charly remove --keep-deploy` for pods.
 	if !c.KeepDeploy {
-		deployName := "vm:" + deployKey(c.Image, c.Instance)
+		deployName := "vm:" + deployKey(c.Box, c.Instance)
 		if err := removeVmDeployEntry(deployName); err != nil {
 			fmt.Fprintf(os.Stderr, "note: deploy.yml entry cleanup (%s): %v\n", deployName, err)
 		}
@@ -945,7 +945,7 @@ func (c *VmListCmd) runCleanOrphans() error {
 // --- VmConsoleCmd ---
 
 type VmConsoleCmd struct {
-	Image    string `arg:"" help:"Image name"`
+	Box      string `arg:"" help:"Box name"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 }
 
@@ -955,12 +955,12 @@ func (c *VmConsoleCmd) Run() error {
 		return err
 	}
 
-	backend, err := resolveVmBackend(vmConfiguredBackend(c.Image, rt.VmBackend))
+	backend, err := resolveVmBackend(vmConfiguredBackend(c.Box, rt.VmBackend))
 	if err != nil {
 		return err
 	}
 
-	name := vmName(c.Image, c.Instance)
+	name := vmName(c.Box, c.Instance)
 
 	switch backend {
 	case "libvirt":
@@ -1115,7 +1115,7 @@ func generateSSHKeypair(dir string) (string, error) {
 // --- VmSshCmd ---
 
 type VmSshCmd struct {
-	Image    string   `arg:"" help:"Image name"`
+	Box      string   `arg:"" help:"Box name"`
 	Instance string   `short:"i" long:"instance" help:"Instance name"`
 	Port     int      `short:"p" long:"port" default:"2222" help:"SSH port on host"`
 	User     string   `short:"l" long:"user" default:"root" help:"SSH username"`
@@ -1128,7 +1128,7 @@ func (c *VmSshCmd) Run() error {
 	if c.Port == 2222 {
 		if dir, derr := os.Getwd(); derr == nil {
 			if uf, ok, ufErr := LoadUnified(dir); ufErr == nil && ok && uf.VM != nil {
-				if spec, hit := uf.VM[c.Image]; hit && spec.SSH != nil && spec.SSH.Port != 0 {
+				if spec, hit := uf.VM[c.Box]; hit && spec.SSH != nil && spec.SSH.Port != 0 {
 					c.Port = spec.SSH.Port
 				}
 			}
@@ -1150,7 +1150,7 @@ func (c *VmSshCmd) Run() error {
 	}
 
 	// Auto-detect generated SSH key from VM state dir
-	name := vmName(c.Image, c.Instance)
+	name := vmName(c.Box, c.Instance)
 	if dir, err := vmDir(); err == nil {
 		keyPath := filepath.Join(dir, name, "id_ed25519")
 		if _, err := os.Stat(keyPath); err == nil {

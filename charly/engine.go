@@ -17,13 +17,13 @@ func EngineBinary(engine string) string {
 	}
 }
 
-// ResolveImageEngine returns the run engine for a specific image.
-// Schema v4: ImageConfig.Engine removed (deploy-only choice). Priority is
+// ResolveBoxEngine returns the run engine for a specific image.
+// Schema v4: BoxConfig.Engine removed (deploy-only choice). Priority is
 // now: layer engine requirements > global default. Deploy-time overrides
-// come from DeploymentNode.Engine via ResolveImageEngineForDeploy /
-// ResolveImageEngineFromMeta.
-func ResolveImageEngine(cfg *Config, layers map[string]*Layer, imageName string, globalRunEngine string) string {
-	img, ok := cfg.Image[imageName]
+// come from DeploymentNode.Engine via ResolveBoxEngineForDeploy /
+// ResolveBoxEngineFromMeta.
+func ResolveBoxEngine(cfg *Config, layers map[string]*Layer, boxName string, globalRunEngine string) string {
+	img, ok := cfg.Box[boxName]
 	if !ok {
 		return globalRunEngine
 	}
@@ -52,9 +52,9 @@ func ImageRuntime(rt *ResolvedRuntime, imageEngine string) *ResolvedRuntime {
 	return &rtCopy
 }
 
-// ResolveImageEngineFromDir resolves the run engine for an image using charly.yml
+// ResolveBoxEngineFromDir resolves the run engine for an image using charly.yml
 // from the given directory. Falls back to globalEngine if no config is available.
-func ResolveImageEngineFromDir(dir, imageName, globalEngine string) string {
+func ResolveBoxEngineFromDir(dir, boxName, globalEngine string) string {
 	cfg, err := LoadConfig(dir)
 	if err != nil {
 		return globalEngine
@@ -63,21 +63,21 @@ func ResolveImageEngineFromDir(dir, imageName, globalEngine string) string {
 	if err != nil {
 		return globalEngine
 	}
-	return ResolveImageEngine(cfg, layers, imageName, globalEngine)
+	return ResolveBoxEngine(cfg, layers, boxName, globalEngine)
 }
 
-// ResolveImageEngineForDeploy resolves the run engine from deploy.yml,
+// ResolveBoxEngineForDeploy resolves the run engine from deploy.yml,
 // falling back to globalEngine. No charly.yml dependency.
-func ResolveImageEngineForDeploy(imageName, instance, globalEngine string) string {
-	if entry, ok := loadDeployConfigForRead("ResolveImageEngineForDeploy").Lookup(imageName, instance); ok && entry.Engine != "" {
+func ResolveBoxEngineForDeploy(boxName, instance, globalEngine string) string {
+	if entry, ok := loadDeployConfigForRead("ResolveBoxEngineForDeploy").Lookup(boxName, instance); ok && entry.Engine != "" {
 		return entry.Engine
 	}
 	return globalEngine
 }
 
-// ResolveImageEngineFromMeta returns the engine from image metadata labels,
+// ResolveBoxEngineFromMeta returns the engine from image metadata labels,
 // falling back to globalEngine if not set.
-func ResolveImageEngineFromMeta(meta *BoxMetadata, globalEngine string) string {
+func ResolveBoxEngineFromMeta(meta *BoxMetadata, globalEngine string) string {
 	if meta != nil && meta.Engine != "" {
 		return meta.Engine
 	}

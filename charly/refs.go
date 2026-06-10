@@ -404,7 +404,7 @@ func CollectRemoteRefs(cfg *Config, layers map[string]*Layer) ([]RemoteDownload,
 // opts gates the disabled-image walk: a disabled image's layer refs are
 // collected when opts.shouldIncludeDisabled(name) is true (i.e. a
 // `--include-disabled <name>` build). This keeps the remote-ref FETCH set in
-// lockstep with the RESOLVE set walked by ResolveAllImage / GlobalLayerOrder —
+// lockstep with the RESOLVE set walked by ResolveAllBox / GlobalLayerOrder —
 // the same shouldIncludeDisabled predicate gates both. Without it, a disabled
 // named image lands in the build working set but its remote layers are never
 // fetched/registered, surfacing as "unknown layer" while computing global layer
@@ -465,8 +465,8 @@ func CollectRemoteRefsOpts(cfg *Config, layers map[string]*Layer, opts ResolveOp
 	// invariant (tracker) then correctly — but spuriously — rejected. The
 	// per-(Config,name) `collected` set also breaks the main<->cachyos cycle.
 	collected := map[*Config]map[string]bool{}
-	var collectImage func(c *Config, name string) error
-	collectImage = func(c *Config, name string) error {
+	var collectBox func(c *Config, name string) error
+	collectBox = func(c *Config, name string) error {
 		seen := collected[c]
 		if seen == nil {
 			seen = map[string]bool{}
@@ -476,7 +476,7 @@ func CollectRemoteRefsOpts(cfg *Config, layers map[string]*Layer, opts ResolveOp
 			return nil
 		}
 		seen[name] = true
-		img, ok := c.Image[name]
+		img, ok := c.Box[name]
 		if !ok {
 			return nil // external OCI base or unknown name — no layers to collect
 		}
@@ -490,7 +490,7 @@ func CollectRemoteRefsOpts(cfg *Config, layers map[string]*Layer, opts ResolveOp
 		// charly.fedora-builder) is BUILT as an intermediate in the consumer's graph,
 		// so its layers (rpmfusion, yay, …) must be fetched here — dropping the
 		// builder edge under-collects them ("unknown layer"). The builder edge
-		// follows the EFFECTIVE builder (effectiveBuilderForImage → the canonical
+		// follows the EFFECTIVE builder (effectiveBuilderForBox → the canonical
 		// resolveEffectiveBuilder), NOT the raw per-image img.Builder: an image
 		// whose builder comes from defaults.builder / the distro-keyed default
 		// (e.g. bazzite/aurora -> charly.fedora-builder, with no per-image builder:
@@ -504,11 +504,11 @@ func CollectRemoteRefsOpts(cfg *Config, layers map[string]*Layer, opts ResolveOp
 			edges = append(edges, img.Base)
 		}
 		if len(img.Layer) > 0 {
-			edges = append(edges, c.effectiveBuilderForImage(name, img).AllBuilder()...)
+			edges = append(edges, c.effectiveBuilderForBox(name, img).AllBuilder()...)
 		}
 		for _, ref := range edges {
-			if _, tc, ok := c.resolveImageRef(ref); ok {
-				if err := collectImage(tc, leafName(ref)); err != nil {
+			if _, tc, ok := c.resolveBoxRef(ref); ok {
+				if err := collectBox(tc, leafName(ref)); err != nil {
 					return err
 				}
 			}
@@ -516,11 +516,11 @@ func CollectRemoteRefsOpts(cfg *Config, layers map[string]*Layer, opts ResolveOp
 		return nil
 	}
 	if cfg != nil {
-		for imgName, img := range cfg.Image {
+		for imgName, img := range cfg.Box {
 			if !img.IsEnabled() && !opts.shouldIncludeDisabled(imgName) {
 				continue
 			}
-			if err := collectImage(cfg, imgName); err != nil {
+			if err := collectBox(cfg, imgName); err != nil {
 				return nil, err
 			}
 		}

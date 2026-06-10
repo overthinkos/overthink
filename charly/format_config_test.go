@@ -8,7 +8,7 @@ import (
 )
 
 func TestLoadDistroConfigFromFile(t *testing.T) {
-	distroCfg, _, _, err := LoadBuildConfigForImage(testdataDir)
+	distroCfg, _, _, err := LoadBuildConfigForBox(testdataDir)
 	if err != nil {
 		t.Fatalf("loading distro config: %v", err)
 	}
@@ -114,7 +114,7 @@ func TestValidFormat(t *testing.T) {
 }
 
 func TestLoadBuilderConfigFromFile(t *testing.T) {
-	_, builderCfg, _, err := LoadBuildConfigForImage(testdataDir)
+	_, builderCfg, _, err := LoadBuildConfigForBox(testdataDir)
 	if err != nil {
 		t.Fatalf("loading builder config: %v", err)
 	}
@@ -149,7 +149,7 @@ func TestLoadBuilderConfigFromFile(t *testing.T) {
 }
 
 func TestBuilderNames(t *testing.T) {
-	_, builderCfg, _, _ := LoadBuildConfigForImage(testdataDir)
+	_, builderCfg, _, _ := LoadBuildConfigForBox(testdataDir)
 	names := builderCfg.BuilderNames()
 	// The embedded default build vocabulary contributes its builders too
 	// (debootstrap/pacstrap beyond testdata's pixi/npm/cargo/aur), so assert the
@@ -214,9 +214,9 @@ func TestAurBuilderDetectConfig(t *testing.T) {
 func TestLoadBuildConfigForImageFallback(t *testing.T) {
 	// Post-unified-cutover there is no per-image / per-default fallback — the
 	// unified loader reads charly.yml in the project directory. This test
-	// now verifies that reading via LoadBuildConfigForImage(dir) produces the
+	// now verifies that reading via LoadBuildConfigForBox(dir) produces the
 	// same config twice (i.e., is deterministic and idempotent).
-	distroCfg, builderCfg, _, err := LoadBuildConfigForImage(testdataDir)
+	distroCfg, builderCfg, _, err := LoadBuildConfigForBox(testdataDir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -227,7 +227,7 @@ func TestLoadBuildConfigForImageFallback(t *testing.T) {
 		t.Error("expected builder config from charly.yml")
 	}
 
-	distroCfg2, _, _, err := LoadBuildConfigForImage(testdataDir)
+	distroCfg2, _, _, err := LoadBuildConfigForBox(testdataDir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -317,9 +317,9 @@ func TestFormatForDistroID(t *testing.T) {
 // TestDistroConfigFindFormat proves FindFormat resolves a format across distros
 // (inherits-aware) and that the real build.yml pac format carries the host cell.
 func TestDistroConfigFindFormat(t *testing.T) {
-	dc, _, _, err := LoadBuildConfigForImage(repoRootDir(t))
+	dc, _, _, err := LoadBuildConfigForBox(repoRootDir(t))
 	if err != nil {
-		t.Fatalf("LoadBuildConfigForImage: %v", err)
+		t.Fatalf("LoadBuildConfigForBox: %v", err)
 	}
 	for _, f := range []string{"rpm", "deb", "pac"} {
 		fd := dc.FindFormat(f)

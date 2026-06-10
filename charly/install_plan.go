@@ -1032,7 +1032,7 @@ func (s *ApkInstallStep) PackageIDs() []string {
 type InstallPlan struct {
 	// Identity — populated by the compiler.
 	DeployID string // per-deploy unique ID (hash of image + add_layers list)
-	Image    string // deployable image name (or layer name for single-layer deploys)
+	Box      string // deployable image name (or layer name for single-layer deploys)
 	Version  string // layer/image CalVer version
 	Distro   string // resolved host distro tag, e.g. "fedora:43"
 	Layer    string // layer name when this plan is for a single layer; "" for whole-image merges

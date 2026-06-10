@@ -9,7 +9,7 @@ import (
 
 func TestGenerateQuadlet(t *testing.T) {
 	cfg := QuadletConfig{
-		ImageName:   "fedora-test",
+		BoxName:     "fedora-test",
 		ImageRef:    "ghcr.io/overthinkos/fedora-test:latest",
 		Home:        "/home/user",
 		Ports:       []string{"8000:8000", "8080:8080"},
@@ -48,7 +48,7 @@ WantedBy=default.target
 
 func TestGenerateQuadletNoPorts(t *testing.T) {
 	cfg := QuadletConfig{
-		ImageName:   "fedora",
+		BoxName:     "fedora",
 		ImageRef:    "ghcr.io/overthinkos/fedora:latest",
 		Home:        "/tmp",
 		Ports:       nil,
@@ -70,7 +70,7 @@ func TestGenerateQuadletNoPorts(t *testing.T) {
 
 func TestGenerateQuadletSinglePort(t *testing.T) {
 	cfg := QuadletConfig{
-		ImageName:   "myapp",
+		BoxName:     "myapp",
 		ImageRef:    "myapp:latest",
 		Home:        "/home/user",
 		Ports:       []string{"9090"},
@@ -90,7 +90,7 @@ func TestGenerateQuadletSinglePort(t *testing.T) {
 
 func TestGenerateQuadletWithVolumes(t *testing.T) {
 	cfg := QuadletConfig{
-		ImageName:   "openclaw",
+		BoxName:     "openclaw",
 		ImageRef:    "ghcr.io/overthinkos/openclaw:latest",
 		Home:        "/home/user",
 		Ports:       []string{"18789:18789"},
@@ -115,7 +115,7 @@ func TestGenerateQuadletWithVolumes(t *testing.T) {
 
 func TestGenerateQuadletWithGPU(t *testing.T) {
 	cfg := QuadletConfig{
-		ImageName:   "ollama",
+		BoxName:     "ollama",
 		ImageRef:    "ghcr.io/overthinkos/ollama:latest",
 		Home:        "/home/user",
 		GPU:         true,
@@ -131,7 +131,7 @@ func TestGenerateQuadletWithGPU(t *testing.T) {
 
 func TestGenerateQuadletWithoutGPU(t *testing.T) {
 	cfg := QuadletConfig{
-		ImageName:   "fedora",
+		BoxName:     "fedora",
 		ImageRef:    "ghcr.io/overthinkos/fedora:latest",
 		Home:        "/home/user",
 		GPU:         false,
@@ -147,7 +147,7 @@ func TestGenerateQuadletWithoutGPU(t *testing.T) {
 
 func TestGenerateQuadletWithLANBindAddress(t *testing.T) {
 	cfg := QuadletConfig{
-		ImageName:   "fedora-test",
+		BoxName:     "fedora-test",
 		ImageRef:    "ghcr.io/overthinkos/fedora-test:latest",
 		Home:        "/home/user",
 		Ports:       []string{"8000:8000", "8080"},
@@ -258,7 +258,7 @@ func TestQuadletExists(t *testing.T) {
 
 func TestGenerateQuadletWithTailscalePublic(t *testing.T) {
 	cfg := QuadletConfig{
-		ImageName:   "myapp",
+		BoxName:     "myapp",
 		ImageRef:    "ghcr.io/test/myapp:latest",
 		Home:        "/home/user",
 		Ports:       []string{"443:8080"},
@@ -283,7 +283,7 @@ func TestGenerateQuadletWithTailscalePublic(t *testing.T) {
 
 func TestGenerateQuadletWithTailscalePublicCustomPort(t *testing.T) {
 	cfg := QuadletConfig{
-		ImageName:   "myapp",
+		BoxName:     "myapp",
 		ImageRef:    "ghcr.io/test/myapp:latest",
 		Home:        "/home/user",
 		BindAddress: "127.0.0.1",
@@ -307,7 +307,7 @@ func TestGenerateQuadletWithTailscalePublicCustomPort(t *testing.T) {
 
 func TestGenerateQuadletWithTailscalePrivate(t *testing.T) {
 	cfg := QuadletConfig{
-		ImageName:   "immich-ml",
+		BoxName:     "immich-ml",
 		ImageRef:    "ghcr.io/overthinkos/immich-ml:latest",
 		Home:        "/home/user",
 		Ports:       []string{"2283:2283"},
@@ -336,7 +336,7 @@ func TestGenerateQuadletWithTailscalePrivate(t *testing.T) {
 func TestGenerateQuadletWithTailscaleExplicitRemap(t *testing.T) {
 	// Explicit BackendPort: listen on 443, proxy to 2283.
 	cfg := QuadletConfig{
-		ImageName:   "myapp",
+		BoxName:     "myapp",
 		ImageRef:    "ghcr.io/test/myapp:latest",
 		Home:        "/home/user",
 		BindAddress: "127.0.0.1",
@@ -399,7 +399,7 @@ func TestGenerateQuadletPublishPortPreservesIPPrefix(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := QuadletConfig{
-				ImageName:   "myapp",
+				BoxName:     "myapp",
 				ImageRef:    "ghcr.io/test/myapp:latest",
 				Home:        "/home/user",
 				Ports:       tt.ports,
@@ -418,7 +418,7 @@ func TestGenerateQuadletPublishPortPreservesIPPrefix(t *testing.T) {
 
 func TestGenerateQuadletWithHTTPSInsecureBackend(t *testing.T) {
 	cfg := QuadletConfig{
-		ImageName:   "selkies-app",
+		BoxName:     "selkies-app",
 		ImageRef:    "ghcr.io/test/selkies:latest",
 		Home:        "/home/user",
 		BindAddress: "127.0.0.1",
@@ -446,7 +446,7 @@ func TestGenerateQuadletWithHTTPSInsecureBackend(t *testing.T) {
 
 func TestGenerateQuadletWithTLSTerminatedTCP(t *testing.T) {
 	cfg := QuadletConfig{
-		ImageName:   "ssh-server",
+		BoxName:     "ssh-server",
 		ImageRef:    "ghcr.io/test/ssh:latest",
 		Home:        "/home/user",
 		BindAddress: "127.0.0.1",
@@ -470,7 +470,7 @@ func TestGenerateQuadletWithTLSTerminatedTCP(t *testing.T) {
 
 func TestGenerateQuadletWithCloudflareTunnelNoExecPost(t *testing.T) {
 	cfg := QuadletConfig{
-		ImageName:   "myapp",
+		BoxName:     "myapp",
 		ImageRef:    "ghcr.io/test/myapp:latest",
 		Home:        "/home/user",
 		BindAddress: "127.0.0.1",
@@ -494,9 +494,9 @@ func TestGenerateQuadletWithCloudflareTunnelNoExecPost(t *testing.T) {
 
 func TestGenerateTunnelUnit(t *testing.T) {
 	cfg := QuadletConfig{
-		ImageName: "immich",
-		ImageRef:  "ghcr.io/test/immich:latest",
-		Home:      "/home/user",
+		BoxName:  "immich",
+		ImageRef: "ghcr.io/test/immich:latest",
+		Home:     "/home/user",
 		Tunnel: &TunnelConfig{
 			Provider:   "cloudflare",
 			TunnelName: "charly-immich",
@@ -531,8 +531,8 @@ func TestGenerateTunnelUnit(t *testing.T) {
 
 func TestGenerateTunnelUnitNilTunnel(t *testing.T) {
 	cfg := QuadletConfig{
-		ImageName: "myapp",
-		Tunnel:    nil,
+		BoxName: "myapp",
+		Tunnel:  nil,
 	}
 
 	got := generateTunnelUnit(cfg)
@@ -561,7 +561,7 @@ func TestTunnelServiceFilename(t *testing.T) {
 
 func TestGenerateQuadletWithNetwork(t *testing.T) {
 	cfg := QuadletConfig{
-		ImageName:   "githubrunner",
+		BoxName:     "githubrunner",
 		ImageRef:    "ghcr.io/overthinkos/githubrunner:latest",
 		Home:        "/home/user",
 		BindAddress: "127.0.0.1",
@@ -581,7 +581,7 @@ func TestGenerateQuadletWithNetwork(t *testing.T) {
 
 func TestGenerateQuadletWithoutNetwork(t *testing.T) {
 	cfg := QuadletConfig{
-		ImageName:   "fedora",
+		BoxName:     "fedora",
 		ImageRef:    "ghcr.io/overthinkos/fedora:latest",
 		Home:        "/home/user",
 		BindAddress: "127.0.0.1",
@@ -596,7 +596,7 @@ func TestGenerateQuadletWithoutNetwork(t *testing.T) {
 
 func TestGenerateQuadletWithEnvVars(t *testing.T) {
 	cfg := QuadletConfig{
-		ImageName:   "githubrunner",
+		BoxName:     "githubrunner",
 		ImageRef:    "ghcr.io/overthinkos/githubrunner:latest",
 		Home:        "/home/user",
 		BindAddress: "127.0.0.1",
@@ -615,7 +615,7 @@ func TestGenerateQuadletWithEnvVars(t *testing.T) {
 
 func TestGenerateQuadletWithEnvFile(t *testing.T) {
 	cfg := QuadletConfig{
-		ImageName:   "githubrunner",
+		BoxName:     "githubrunner",
 		ImageRef:    "ghcr.io/overthinkos/githubrunner:latest",
 		Home:        "/home/user",
 		BindAddress: "127.0.0.1",
@@ -631,7 +631,7 @@ func TestGenerateQuadletWithEnvFile(t *testing.T) {
 
 func TestGenerateQuadletWithInstance(t *testing.T) {
 	cfg := QuadletConfig{
-		ImageName:   "githubrunner",
+		BoxName:     "githubrunner",
 		ImageRef:    "ghcr.io/overthinkos/githubrunner:latest",
 		Home:        "/home/user",
 		BindAddress: "127.0.0.1",

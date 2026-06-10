@@ -45,7 +45,7 @@ func deployNestedPodsInGuest(vmName string, node *DeploymentNode, exec DeployExe
 	}
 	for _, childKey := range sortedNestedKeys(node.Nested) {
 		child := node.Nested[childKey]
-		if child == nil || child.Image == "" {
+		if child == nil || child.Box == "" {
 			continue
 		}
 		switch child.Target {
@@ -55,14 +55,14 @@ func deployNestedPodsInGuest(vmName string, node *DeploymentNode, exec DeployExe
 			continue // android / k8s / vm children are not in-guest pods
 		}
 		asRef := "localhost/charly-" + childKey + ":latest"
-		fmt.Fprintf(os.Stderr, "Deploying nested pod %s.%s (%s) as a persistent in-guest quadlet...\n", vmName, childKey, child.Image)
-		if err := runCharlySubcommand("box", "build", child.Image); err != nil {
-			return fmt.Errorf("build nested image %s (%s): %w", childKey, child.Image, err)
+		fmt.Fprintf(os.Stderr, "Deploying nested pod %s.%s (%s) as a persistent in-guest quadlet...\n", vmName, childKey, child.Box)
+		if err := runCharlySubcommand("box", "build", child.Box); err != nil {
+			return fmt.Errorf("build nested image %s (%s): %w", childKey, child.Box, err)
 		}
 		// --rootless: load into the guest USER's podman storage, because the
 		// from-box deploy below runs as the guest user (a --user quadlet) and
 		// reads the user's storage — a root-loaded image would be invisible to it.
-		if err := runCharlySubcommand("vm", "cp-box", vmName, child.Image, "--as", asRef, "--rootless"); err != nil {
+		if err := runCharlySubcommand("vm", "cp-box", vmName, child.Box, "--as", asRef, "--rootless"); err != nil {
 			return fmt.Errorf("cp-box nested %s -> guest: %w", childKey, err)
 		}
 		// Run as the guest user (--user quadlet). `sudo` escalates only the

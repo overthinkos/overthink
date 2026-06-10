@@ -52,7 +52,7 @@ func (t *K8sUnifiedTarget) Add(ctx context.Context, dctx *DeployContext, plans [
 	}
 
 	// Resolve image + capabilities.
-	imageRef := node.Image
+	imageRef := node.Box
 	if imageRef == "" {
 		imageRef = t.NodeName
 	}

@@ -13,13 +13,13 @@ func nestedUnified(parent string) *UnifiedFile {
 		Deploy: map[string]DeploymentNode{
 			parent: {
 				Target: "pod",
-				Image:  "android-emulator",
+				Box:    "android-emulator",
 				Nested: map[string]*DeploymentNode{
 					"device":     {Target: "android", Android: "pixel9a-36", AddLayer: []string{"android-test-apps"}},
 					"device-net": {Target: "android", Android: "pixel9a-endpoint", AddLayer: []string{"android-apidemos"}},
 				},
 			},
-			"some-flat-pod": {Target: "pod", Image: "redis"},
+			"some-flat-pod": {Target: "pod", Box: "redis"},
 		},
 	}
 }
@@ -122,7 +122,7 @@ func TestNestedOverlay_MovesFlatPodRow(t *testing.T) {
 				Target: "vm",
 				Vm:     "stack-vm",
 				Nested: map[string]*DeploymentNode{
-					"web": {Target: "pod", Image: "nginx"},
+					"web": {Target: "pod", Box: "nginx"},
 				},
 			},
 		},

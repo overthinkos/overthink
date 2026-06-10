@@ -29,10 +29,10 @@ import (
 // drive them against a temp directory without touching the user's real
 // deploy.yml or keyring.
 
-// secretDeclaredOnImage returns the set of env var names an image declares
+// secretDeclaredOnBox returns the set of env var names an image declares
 // as credential-backed (secret_accepts or secret_requires). Returns a
 // non-nil empty set when meta is nil or has no secret declarations.
-func secretDeclaredOnImage(meta *BoxMetadata) map[string]bool {
+func secretDeclaredOnBox(meta *BoxMetadata) map[string]bool {
 	names := map[string]bool{}
 	if meta == nil {
 		return names
@@ -107,7 +107,7 @@ func MigratePlaintextEnvSecret(dc *DeployConfig, meta *BoxMetadata, image, insta
 	if dc == nil || dc.Deploy == nil {
 		return 0, nil
 	}
-	declared := secretDeclaredOnImage(meta)
+	declared := secretDeclaredOnBox(meta)
 	if len(declared) == 0 {
 		return 0, nil
 	}
@@ -206,7 +206,7 @@ func scrubSecretCLIEnv(cliEnv []string, meta *BoxMetadata) ([]string, int, error
 	if len(cliEnv) == 0 {
 		return cliEnv, 0, nil
 	}
-	declared := secretDeclaredOnImage(meta)
+	declared := secretDeclaredOnBox(meta)
 	if len(declared) == 0 {
 		return cliEnv, 0, nil
 	}

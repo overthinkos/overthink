@@ -242,13 +242,13 @@ func collectScenariosForFromDescription(uf *UnifiedFile, layers map[string]*Laye
 	case "image":
 		// Namespace-aware: a recipe may import from an image that lives in an
 		// imported submodule (e.g. `fedora.composition-source` after the box
-		// inversion). resolveImageRef descends into the namespace and returns
+		// inversion). resolveBoxRef descends into the namespace and returns
 		// that namespace's Config; CollectDescriptions then walks the chain in
 		// the right Config keyed by the leaf name. Bare refs resolve locally.
 		cfg := uf.ProjectConfig()
-		_, nsCfg, ok := cfg.resolveImageRef(from.Name)
+		_, nsCfg, ok := cfg.resolveBoxRef(from.Name)
 		if !ok {
-			return nil, fmt.Errorf("image %q not found (available: %s)", from.Name, sortedImageNames(uf))
+			return nil, fmt.Errorf("box %q not found (available: %s)", from.Name, sortedBoxNames(uf))
 		}
 		set := CollectDescriptions(nsCfg, layers, leafName(from.Name))
 		if set == nil {
@@ -257,7 +257,7 @@ func collectScenariosForFromDescription(uf *UnifiedFile, layers map[string]*Laye
 		// Flatten the three sections into one slice. Authors who want
 		// section-specific behaviour can use kind: layer instead.
 		var out []Scenario
-		for _, sec := range [][]LabeledDescription{set.Layer, set.Image, set.Deploy} {
+		for _, sec := range [][]LabeledDescription{set.Layer, set.Box, set.Deploy} {
 			for _, ld := range sec {
 				out = append(out, ld.Description.Scenario...)
 			}
@@ -341,9 +341,9 @@ func collectChecksForFrom(uf *UnifiedFile, layers map[string]*Layer, from Harnes
 	case "image":
 		// Namespace-aware (see the kind:image case in collectScenariosForFromDescription).
 		cfg := uf.ProjectConfig()
-		_, nsCfg, ok := cfg.resolveImageRef(from.Name)
+		_, nsCfg, ok := cfg.resolveBoxRef(from.Name)
 		if !ok {
-			return nil, fmt.Errorf("image %q not found (available: %s)", from.Name, sortedImageNames(uf))
+			return nil, fmt.Errorf("box %q not found (available: %s)", from.Name, sortedBoxNames(uf))
 		}
 		set := CollectEval(nsCfg, layers, leafName(from.Name))
 		if set == nil {
@@ -351,9 +351,9 @@ func collectChecksForFrom(uf *UnifiedFile, layers map[string]*Layer, from Harnes
 		}
 		// Flatten the three sections into one slice; the scope filter
 		// step downstream picks which sections to keep.
-		out := make([]Check, 0, len(set.Layer)+len(set.Image)+len(set.Deploy))
+		out := make([]Check, 0, len(set.Layer)+len(set.Box)+len(set.Deploy))
 		out = append(out, set.Layer...)
-		out = append(out, set.Image...)
+		out = append(out, set.Box...)
 		out = append(out, set.Deploy...)
 		return out, nil
 
@@ -364,12 +364,12 @@ func collectChecksForFrom(uf *UnifiedFile, layers map[string]*Layer, from Harnes
 		}
 		// If the pod wraps an image, walk the image's layer chain too.
 		var out []Check
-		if pod.Image != "" {
-			if _, hasImage := uf.Image[pod.Image]; hasImage {
+		if pod.Box != "" {
+			if _, hasImage := uf.Box[pod.Box]; hasImage {
 				cfg := uf.ProjectConfig()
-				if set := CollectEval(cfg, layers, pod.Image); set != nil {
+				if set := CollectEval(cfg, layers, pod.Box); set != nil {
 					out = append(out, set.Layer...)
-					out = append(out, set.Image...)
+					out = append(out, set.Box...)
 					out = append(out, set.Deploy...)
 				}
 			}
@@ -599,9 +599,9 @@ func sortedMapKeys(m map[string]*Layer) string {
 	return strings.Join(keys, ", ")
 }
 
-func sortedImageNames(uf *UnifiedFile) string {
-	keys := make([]string, 0, len(uf.Image))
-	for k := range uf.Image {
+func sortedBoxNames(uf *UnifiedFile) string {
+	keys := make([]string, 0, len(uf.Box))
+	for k := range uf.Box {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)

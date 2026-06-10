@@ -420,9 +420,9 @@ func TestBuildLocalPkgOnHost_DryRunAndEmpty(t *testing.T) {
 // packages → error (never a silent drop).
 func TestBuildDepPkgsOnHost_EmptyAndDryRun(t *testing.T) {
 	lp := testPacLocalPkgDef()
-	_, bc, _, err := LoadBuildConfigForImage(repoRootDir(t))
+	_, bc, _, err := LoadBuildConfigForBox(repoRootDir(t))
 	if err != nil {
-		t.Fatalf("LoadBuildConfigForImage: %v", err)
+		t.Fatalf("LoadBuildConfigForBox: %v", err)
 	}
 	aurDef := bc.Builder["aur"]
 	if aurDef == nil {
@@ -450,9 +450,9 @@ func TestBuildDepPkgsOnHost_EmptyAndDryRun(t *testing.T) {
 // repo's build.yml carry a complete local_pkg block this code reads — guarding
 // the config-driven contract end to end. Loads the real build.yml.
 func TestLocalPkgDef_RoundTripFromBuildYML(t *testing.T) {
-	dc, _, _, err := LoadBuildConfigForImage(repoRootDir(t))
+	dc, _, _, err := LoadBuildConfigForBox(repoRootDir(t))
 	if err != nil {
-		t.Fatalf("LoadBuildConfigForImage: %v", err)
+		t.Fatalf("LoadBuildConfigForBox: %v", err)
 	}
 	check := func(distro, format string, wantDepBuilder bool) {
 		d := dc.ResolveDistro([]string{distro})

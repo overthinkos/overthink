@@ -613,7 +613,7 @@ func podIsRunning(base, instance string) bool {
 	}
 	engine := "podman"
 	if rt, err := ResolveRuntime(); err == nil {
-		engine = EngineBinary(ResolveImageEngineForDeploy(base, instance, rt.RunEngine))
+		engine = EngineBinary(ResolveBoxEngineForDeploy(base, instance, rt.RunEngine))
 	}
 	name := containerNameInstance(base, instance)
 	out, err := exec.Command(engine, "inspect", "--format", "{{.State.Running}}", name).CombinedOutput()

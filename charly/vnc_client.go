@@ -136,7 +136,7 @@ func (c *VNCClient) handshake(password string) error {
 		}
 	case 2: // VNC auth
 		if password == "" {
-			return fmt.Errorf("VNC server requires authentication; run `charly eval vnc passwd <image>` to set a password")
+			return fmt.Errorf("VNC server requires authentication; run `charly eval vnc passwd <box>` to set a password")
 		}
 		if err := c.vncAuth(password); err != nil {
 			return err
@@ -325,7 +325,7 @@ func (c *VNCClient) vencryptHandshake(password string) error {
 	case vencryptTLSVnc, vencryptX509Vnc:
 		// VNC DES challenge-response inside TLS.
 		if password == "" {
-			return fmt.Errorf("VNC server requires authentication; run `charly eval vnc passwd <image>` to set a password")
+			return fmt.Errorf("VNC server requires authentication; run `charly eval vnc passwd <box>` to set a password")
 		}
 		if err := c.vncAuth(password); err != nil {
 			return err
@@ -340,7 +340,7 @@ func (c *VNCClient) vencryptHandshake(password string) error {
 	case vencryptTLSPlain, vencryptX509Plain:
 		// Plain username/password inside TLS.
 		if password == "" {
-			return fmt.Errorf("VNC server requires authentication; run `charly eval vnc passwd <image>` to set a password")
+			return fmt.Errorf("VNC server requires authentication; run `charly eval vnc passwd <box>` to set a password")
 		}
 		username := "user"
 		if err := binary.Write(c.conn, binary.BigEndian, uint32(len(username))); err != nil {
@@ -944,33 +944,33 @@ func (c *VNCClient) decodeZRLETile(img *image.RGBA, tx, ty, tw, th, cpLen int) e
 // host-reachable endpoint for the in-venue VNC port 5900 (an ssh -L forward for
 // VM/ssh venues). The caller transfers ownership to the VNCClient, which closes
 // the forward on Close.
-func resolveVNCEndpoint(image, instance string) (*EvalEndpoint, error) {
-	venue, err := resolveEvalVenue(image, instance)
+func resolveVNCEndpoint(box, instance string) (*EvalEndpoint, error) {
+	venue, err := resolveEvalVenue(box, instance)
 	if err != nil {
 		return nil, err
 	}
 	return resolveEvalEndpoint(venue, 5900)
 }
 
-func resolveVNCPassword(imageName, instance string) string {
+func resolveVNCPassword(boxName, instance string) string {
 	// Try instance-specific key first, then image-level key
 	if instance != "" {
-		key := imageName + "-" + instance
+		key := boxName + "-" + instance
 		val, _ := ResolveCredential("VNC_PASSWORD", CredServiceVNC, key, "")
 		if val != "" {
 			return val
 		}
 	}
-	val, _ := ResolveCredential("VNC_PASSWORD", CredServiceVNC, imageName, "")
+	val, _ := ResolveCredential("VNC_PASSWORD", CredServiceVNC, boxName, "")
 	return val
 }
 
-func connectVNC(image, instance string) (*VNCClient, error) {
-	ep, err := resolveVNCEndpoint(image, instance)
+func connectVNC(box, instance string) (*VNCClient, error) {
+	ep, err := resolveVNCEndpoint(box, instance)
 	if err != nil {
 		return nil, err
 	}
-	password := resolveVNCPassword(resolveImageName(image), instance)
+	password := resolveVNCPassword(resolveBoxName(box), instance)
 	client, err := NewVNCClient(ep.Addr, password)
 	if err != nil {
 		ep.Close()
@@ -980,8 +980,8 @@ func connectVNC(image, instance string) (*VNCClient, error) {
 	return client, nil
 }
 
-func connectVNCScreenshot(image, instance string) (image.Image, uint16, uint16, error) {
-	client, err := connectVNC(image, instance)
+func connectVNCScreenshot(box, instance string) (image.Image, uint16, uint16, error) {
+	client, err := connectVNC(box, instance)
 	if err != nil {
 		return nil, 0, 0, err
 	}

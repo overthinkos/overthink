@@ -234,7 +234,7 @@ func liveDeployVarResolver(name, instance string, venue *EvalVenue) *EvalVarReso
 			deployOverlay = &entry
 		}
 	}
-	imageRef := resolveDeployImageName(name, instance)
+	imageRef := resolveDeployBoxName(name, instance)
 	resolvedRef, err := resolveImageRefForEnsure(imageRef, projectCfg, dir)
 	if err != nil {
 		return &EvalVarResolver{}

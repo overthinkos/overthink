@@ -7,7 +7,7 @@ import (
 
 func TestCollectImageVolumesSimple(t *testing.T) {
 	cfg := &Config{
-		Image: map[string]BoxConfig{
+		Box: map[string]BoxConfig{
 			"myapp": {Layer: []string{"svc"}},
 		},
 	}
@@ -19,22 +19,22 @@ func TestCollectImageVolumesSimple(t *testing.T) {
 		},
 	}
 
-	mounts, err := CollectImageVolume(cfg, layers, "myapp", "/home/user", nil)
+	mounts, err := CollectBoxVolume(cfg, layers, "myapp", "/home/user", nil)
 	if err != nil {
-		t.Fatalf("CollectImageVolume() error = %v", err)
+		t.Fatalf("CollectBoxVolume() error = %v", err)
 	}
 
 	want := []VolumeMount{
 		{VolumeName: "charly-myapp-data", ContainerPath: "/home/user/.myapp"},
 	}
 	if !reflect.DeepEqual(mounts, want) {
-		t.Errorf("CollectImageVolume() =\n  %v\nwant\n  %v", mounts, want)
+		t.Errorf("CollectBoxVolume() =\n  %v\nwant\n  %v", mounts, want)
 	}
 }
 
 func TestCollectImageVolumesChain(t *testing.T) {
 	cfg := &Config{
-		Image: map[string]BoxConfig{
+		Box: map[string]BoxConfig{
 			"base":  {Layer: []string{"store"}},
 			"child": {Base: "base", Layer: []string{"app"}},
 		},
@@ -52,9 +52,9 @@ func TestCollectImageVolumesChain(t *testing.T) {
 		},
 	}
 
-	mounts, err := CollectImageVolume(cfg, layers, "child", "/home/user", nil)
+	mounts, err := CollectBoxVolume(cfg, layers, "child", "/home/user", nil)
 	if err != nil {
-		t.Fatalf("CollectImageVolume() error = %v", err)
+		t.Fatalf("CollectBoxVolume() error = %v", err)
 	}
 
 	// Should have volumes from both child and base image layers
@@ -63,13 +63,13 @@ func TestCollectImageVolumesChain(t *testing.T) {
 		{VolumeName: "charly-child-models", ContainerPath: "/home/user/.models"},
 	}
 	if !reflect.DeepEqual(mounts, want) {
-		t.Errorf("CollectImageVolume() =\n  %v\nwant\n  %v", mounts, want)
+		t.Errorf("CollectBoxVolume() =\n  %v\nwant\n  %v", mounts, want)
 	}
 }
 
 func TestCollectImageVolumesDedup(t *testing.T) {
 	cfg := &Config{
-		Image: map[string]BoxConfig{
+		Box: map[string]BoxConfig{
 			"base":  {Layer: []string{"store"}},
 			"child": {Base: "base", Layer: []string{"override"}},
 		},
@@ -87,9 +87,9 @@ func TestCollectImageVolumesDedup(t *testing.T) {
 		},
 	}
 
-	mounts, err := CollectImageVolume(cfg, layers, "child", "/home/user", nil)
+	mounts, err := CollectBoxVolume(cfg, layers, "child", "/home/user", nil)
 	if err != nil {
-		t.Fatalf("CollectImageVolume() error = %v", err)
+		t.Fatalf("CollectBoxVolume() error = %v", err)
 	}
 
 	// First declaration wins (outermost image)
@@ -103,7 +103,7 @@ func TestCollectImageVolumesDedup(t *testing.T) {
 
 func TestCollectImageVolumesNoVolumes(t *testing.T) {
 	cfg := &Config{
-		Image: map[string]BoxConfig{
+		Box: map[string]BoxConfig{
 			"base": {Layer: []string{"plain"}},
 		},
 	}
@@ -111,9 +111,9 @@ func TestCollectImageVolumesNoVolumes(t *testing.T) {
 		"plain": {Name: "plain", tasks: []Task{{Cmd: "true"}}},
 	}
 
-	mounts, err := CollectImageVolume(cfg, layers, "base", "/home/user", nil)
+	mounts, err := CollectBoxVolume(cfg, layers, "base", "/home/user", nil)
 	if err != nil {
-		t.Fatalf("CollectImageVolume() error = %v", err)
+		t.Fatalf("CollectBoxVolume() error = %v", err)
 	}
 	if len(mounts) != 0 {
 		t.Errorf("expected 0 mounts, got %v", mounts)

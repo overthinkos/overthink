@@ -86,28 +86,28 @@ func TestMergeDeployOntoMetadata_KeyedByDeployNameNotImage(t *testing.T) {
 	dc := &DeployConfig{
 		Deploy: map[string]DeploymentNode{
 			"ollama":                  {Port: []string{"11434:11434"}},
-			"eval-cachyos-ollama-pod": {Image: "ollama", Port: []string{"45434:11434"}},
+			"eval-cachyos-ollama-pod": {Box: "ollama", Port: []string{"45434:11434"}},
 		},
 	}
 
 	// Bed: deploy key differs from the baked image short-name. The merge must
 	// resolve the bed's OWN entry, not the sibling "ollama" deploy.
-	bedMeta := &BoxMetadata{Image: "ollama", Port: []string{"11434:11434"}}
+	bedMeta := &BoxMetadata{Box: "ollama", Port: []string{"11434:11434"}}
 	MergeDeployOntoMetadata(bedMeta, dc, "eval-cachyos-ollama-pod", "")
 	if len(bedMeta.Port) != 1 || bedMeta.Port[0] != "45434:11434" {
 		t.Errorf("bed merge: got Ports=%v, want [45434:11434] (must not pick up sibling 'ollama' deploy or the image default)", bedMeta.Port)
 	}
 
 	// Plain deploy: key == image short-name. Resolves its own entry as before.
-	plainMeta := &BoxMetadata{Image: "ollama", Port: []string{"9999:11434"}}
+	plainMeta := &BoxMetadata{Box: "ollama", Port: []string{"9999:11434"}}
 	MergeDeployOntoMetadata(plainMeta, dc, "ollama", "")
 	if len(plainMeta.Port) != 1 || plainMeta.Port[0] != "11434:11434" {
 		t.Errorf("plain merge: got Ports=%v, want [11434:11434]", plainMeta.Port)
 	}
 
 	// Instance deploy: "<base>/<instance>" key form resolves correctly.
-	dc.Deploy["selkies/work"] = DeploymentNode{Image: "selkies", Port: []string{"3001:3000"}}
-	instMeta := &BoxMetadata{Image: "selkies", Port: []string{"3000:3000"}}
+	dc.Deploy["selkies/work"] = DeploymentNode{Box: "selkies", Port: []string{"3001:3000"}}
+	instMeta := &BoxMetadata{Box: "selkies", Port: []string{"3000:3000"}}
 	MergeDeployOntoMetadata(instMeta, dc, "selkies", "work")
 	if len(instMeta.Port) != 1 || instMeta.Port[0] != "3001:3000" {
 		t.Errorf("instance merge: got Ports=%v, want [3001:3000]", instMeta.Port)
@@ -125,7 +125,7 @@ func TestMergeDeployOntoMetadata_KeyedByDeployNameNotImage(t *testing.T) {
 func TestMergeDeployOntoMetadata_VolumesScopedToDeployKey(t *testing.T) {
 	const vol = "charly-immich-ml-pgdata"
 	mk := func() *BoxMetadata {
-		return &BoxMetadata{Image: "immich-ml", Volume: []VolumeMount{{VolumeName: vol, ContainerPath: "/data"}}}
+		return &BoxMetadata{Box: "immich-ml", Volume: []VolumeMount{{VolumeName: vol, ContainerPath: "/data"}}}
 	}
 	for _, tc := range []struct {
 		name       string

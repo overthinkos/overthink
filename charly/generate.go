@@ -18,16 +18,16 @@ type Generator struct {
 	Config         *Config
 	Layers         map[string]*Layer
 	Tag            string
-	Images         map[string]*ResolvedBox
+	Boxes          map[string]*ResolvedBox
 	BuildDir       string
 	Containerfiles map[string]string // cached content per image (used by charly build to pipe via stdin)
 	GlobalOrder    []string          // popularity-weighted global layer order for cache optimization
 }
 
-// globalOrderForImage returns the layer order for an image by filtering the
+// globalOrderForBox returns the layer order for an image by filtering the
 // global order to only include the image's needed layers. This ensures shared
 // layers appear in the same order across all images, maximizing cache reuse.
-func (g *Generator) globalOrderForImage(imageLayers []string, parentLayers map[string]bool) ([]string, error) {
+func (g *Generator) globalOrderForBox(imageLayers []string, parentLayers map[string]bool) ([]string, error) {
 	// Resolve needed layers (expand composition + transitive deps)
 	needed, err := ResolveLayerOrder(imageLayers, g.Layers, parentLayers)
 	if err != nil {
@@ -69,8 +69,8 @@ func (g *Generator) globalOrderForImage(imageLayers []string, parentLayers map[s
 func (g *Generator) resolveUserContext(img *ResolvedBox) error {
 	if !img.IsExternalBase {
 		// Internal base - inherit from parent, but respect explicit overrides
-		parentImg := g.Images[img.Base]
-		origCfg := g.Config.Image[img.Name]
+		parentImg := g.Boxes[img.Base]
+		origCfg := g.Config.Box[img.Name]
 
 		if origCfg.User == "" {
 			img.User = parentImg.User
@@ -112,7 +112,7 @@ func (g *Generator) resolveUserContext(img *ResolvedBox) error {
 }
 
 // NewGenerator creates a new generator. opts is propagated through Validate
-// + ResolveAllImage so `charly box build --include-disabled` reaches images
+// + ResolveAllBox so `charly box build --include-disabled` reaches images
 // flagged enabled: false in charly.yml (without modifying the file).
 func NewGenerator(dir string, tag string, opts ResolveOpts) (*Generator, error) {
 	cfg, err := LoadConfig(dir)
@@ -145,7 +145,7 @@ func NewGenerator(dir string, tag string, opts ResolveOpts) (*Generator, error) 
 		tag = ComputeCalVer()
 	}
 
-	images, err := cfg.ResolveAllImage(tag, dir, opts)
+	images, err := cfg.ResolveAllBox(tag, dir, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -168,7 +168,7 @@ func NewGenerator(dir string, tag string, opts ResolveOpts) (*Generator, error) 
 		Config:         cfg,
 		Layers:         layers,
 		Tag:            tag,
-		Images:         images,
+		Boxes:          images,
 		BuildDir:       filepath.Join(dir, ".build"),
 		Containerfiles: make(map[string]string),
 		GlobalOrder:    globalOrder,
@@ -197,7 +197,7 @@ func (g *Generator) cleanStaleBuildDirs() error {
 	for _, entry := range entries {
 		if entry.IsDir() {
 			name := entry.Name()
-			if _, exists := g.Images[name]; !exists {
+			if _, exists := g.Boxes[name]; !exists {
 				path := filepath.Join(g.BuildDir, name)
 				if err := os.RemoveAll(path); err != nil {
 					return fmt.Errorf("removing stale dir %s: %w", path, err)
@@ -242,14 +242,14 @@ func (g *Generator) Generate() error {
 	}
 
 	// Resolve image build order
-	order, err := ResolveImageOrder(g.Images, g.Layers)
+	order, err := ResolveBoxOrder(g.Boxes, g.Layers)
 	if err != nil {
-		return fmt.Errorf("resolving image order: %w", err)
+		return fmt.Errorf("resolving box order: %w", err)
 	}
 
 	// Resolve user context for each image (in order, so parents are resolved first)
 	for _, name := range order {
-		if err := g.resolveUserContext(g.Images[name]); err != nil {
+		if err := g.resolveUserContext(g.Boxes[name]); err != nil {
 			return fmt.Errorf("resolving user context for %s: %w", name, err)
 		}
 	}
@@ -339,37 +339,37 @@ func (g *Generator) writeContextIgnore() error {
 }
 
 // generateContainerfile generates a Containerfile for a single image
-func (g *Generator) generateContainerfile(imageName string) error {
+func (g *Generator) generateContainerfile(boxName string) error {
 	// Clean image build directory to remove stale files from previous generations
-	imageDir := filepath.Join(g.BuildDir, imageName)
+	imageDir := filepath.Join(g.BuildDir, boxName)
 	if err := os.RemoveAll(imageDir); err != nil {
 		return err
 	}
 
-	img := g.Images[imageName]
+	img := g.Boxes[boxName]
 	var b strings.Builder
 
 	// Header
-	b.WriteString(fmt.Sprintf("# .build/%s/Containerfile (generated -- do not edit)\n\n", imageName))
+	b.WriteString(fmt.Sprintf("# .build/%s/Containerfile (generated -- do not edit)\n\n", boxName))
 
 	// Resolve layer order for this image
 	var parentLayers map[string]bool
 	if !img.IsExternalBase {
 		var err error
-		parentLayers, err = LayerProvidedByImage(img.Base, g.Images, g.Layers)
+		parentLayers, err = LayerProvidedByBox(img.Base, g.Boxes, g.Layers)
 		if err != nil {
 			return err
 		}
 	}
 
-	layerOrder, err := g.globalOrderForImage(img.Layer, parentLayers)
+	layerOrder, err := g.globalOrderForBox(img.Layer, parentLayers)
 	if err != nil {
 		return err
 	}
 
 	// Data images: minimal FROM scratch with only data staging + labels
 	if img.DataImage {
-		return g.generateDataImageContainerfile(imageName, img, layerOrder, imageDir)
+		return g.generateDataImageContainerfile(boxName, img, layerOrder, imageDir)
 	}
 
 	// ARG for base image must come first (before any FROM). For
@@ -405,14 +405,14 @@ func (g *Generator) generateContainerfile(imageName string) error {
 				if !g.layerNeedsBuilder(img, layer, builderDef) {
 					continue
 				}
-				builderRef := g.builderRefForFormat(imageName, builderName)
+				builderRef := g.builderRefForFormat(boxName, builderName)
 				if builderRef == "" {
-					return fmt.Errorf("image %q: layer %q needs builder %q but no builders.%s configured", imageName, layerName, builderName, builderName)
+					return fmt.Errorf("image %q: layer %q needs builder %q but no builders.%s configured", boxName, layerName, builderName, builderName)
 				}
 				ctx := g.buildStageContext(layer, builderName, builderDef, img, builderRef)
 				rendered, err := RenderTemplate(builderName+"-stage", builderDef.StageTemplate, ctx)
 				if err != nil {
-					return fmt.Errorf("image %q: rendering %s stage for layer %q: %w", imageName, builderName, layerName, err)
+					return fmt.Errorf("image %q: rendering %s stage for layer %q: %w", boxName, builderName, layerName, err)
 				}
 				b.WriteString(rendered)
 				b.WriteString("\n")
@@ -433,7 +433,7 @@ func (g *Generator) generateContainerfile(imageName string) error {
 	}
 
 	// Aggregate layer-contributed capabilities once for this image. Cache
-	// onto ResolvedImage so downstream emit paths (and label emission)
+	// onto ResolvedBox so downstream emit paths (and label emission)
 	// don't recompute.
 	caps, capsErr := AggregateLayerCapabilities(g.Layers, layerOrder)
 	if capsErr != nil {
@@ -449,7 +449,7 @@ func (g *Generator) generateContainerfile(imageName string) error {
 	if img.InitConfig != nil {
 		activeInits = img.InitConfig.ActiveInit(g.Layers, layerOrder)
 	}
-	// Store init system on ResolvedImage for downstream use (labels, etc.)
+	// Store init system on ResolvedBox for downstream use (labels, etc.)
 	if img.InitConfig != nil {
 		img.InitSystem, img.InitDef = img.InitConfig.ResolveInitSystem(g.Layers, layerOrder, "")
 	}
@@ -469,11 +469,11 @@ func (g *Generator) generateContainerfile(imageName string) error {
 
 	// Generate traefik routes only when traefik is actually present
 	if hasRoutes && hasTraefik {
-		if err := g.generateTraefikRoutes(imageName, layerOrder, img); err != nil {
+		if err := g.generateTraefikRoutes(boxName, layerOrder, img); err != nil {
 			return err
 		}
 		b.WriteString("FROM scratch AS traefik-routes\n")
-		b.WriteString(fmt.Sprintf("COPY .build/%s/traefik-routes.yml /routes.yml\n\n", imageName))
+		b.WriteString(fmt.Sprintf("COPY .build/%s/traefik-routes.yml /routes.yml\n\n", boxName))
 	}
 
 	// Emit init system stages (fragment assembly or file copy)
@@ -489,12 +489,12 @@ func (g *Generator) generateContainerfile(imageName string) error {
 	for initName, def := range activeInits {
 		initLayerOrder := layerOrder
 		if !img.IsExternalBase {
-			full := collectAllImageLayers(imageName, g.Images, g.Layers)
+			full := collectAllBoxLayers(boxName, g.Boxes, g.Layers)
 			if len(full) > 0 {
 				initLayerOrder = full
 			}
 		}
-		if err := g.generateInitFragments(imageName, initName, def, initLayerOrder); err != nil {
+		if err := g.generateInitFragments(boxName, initName, def, initLayerOrder); err != nil {
 			return err
 		}
 
@@ -538,7 +538,7 @@ func (g *Generator) generateContainerfile(imageName string) error {
 				// Use the SHORT name (not the map key) — a remote layer's key is
 				// a slashed github ref that would create bogus nested dirs.
 				fileName := fmt.Sprintf("%02d-%s.conf", i+1, layer.Name)
-				copyLine, err := def.RenderStageFragmentCopy(imageName, fileName)
+				copyLine, err := def.RenderStageFragmentCopy(boxName, fileName)
 				if err != nil {
 					return fmt.Errorf("rendering stage fragment copy for %s/%s: %w", initName, layerName, err)
 				}
@@ -548,7 +548,7 @@ func (g *Generator) generateContainerfile(imageName string) error {
 			if def.HasRelayTemplate() && len(layer.PortRelayPorts) > 0 {
 				for _, port := range layer.PortRelayPorts {
 					confName := fmt.Sprintf("%02d-relay-%d.conf", i+1, port)
-					copyLine, err := def.RenderStageFragmentCopy(imageName, confName)
+					copyLine, err := def.RenderStageFragmentCopy(boxName, confName)
 					if err != nil {
 						return fmt.Errorf("rendering relay copy for %s/%s port %d: %w", initName, layerName, port, err)
 					}
@@ -559,7 +559,7 @@ func (g *Generator) generateContainerfile(imageName string) error {
 			if def.Model == "file_copy" && len(layer.ServiceFiles()) > 0 {
 				for _, svcPath := range layer.ServiceFiles() {
 					svcName := filepath.Base(svcPath)
-					copyLine, err := def.RenderStageFragmentCopy(imageName, svcName)
+					copyLine, err := def.RenderStageFragmentCopy(boxName, svcName)
 					if err != nil {
 						return fmt.Errorf("rendering service file copy for %s/%s: %w", initName, layerName, err)
 					}
@@ -579,7 +579,7 @@ func (g *Generator) generateContainerfile(imageName string) error {
 	// dotted-out under .build/<image>/.
 	if strings.HasPrefix(img.From, "builder:") {
 		builderName := strings.TrimPrefix(img.From, "builder:")
-		b.WriteString(fmt.Sprintf("ADD .build/%s/%s.tar.gz /\n\n", imageName, builderName))
+		b.WriteString(fmt.Sprintf("ADD .build/%s/%s.tar.gz /\n\n", boxName, builderName))
 	}
 
 	// Bootstrap preamble (only for external base images, and only when
@@ -768,7 +768,7 @@ func (g *Generator) generateContainerfile(imageName string) error {
 	// metadata (attach to the final image manifest) and have no functional
 	// dependency on subsequent instructions — they're the ideal last-line
 	// of the Containerfile.
-	g.writeLabels(&b, imageName, layerOrder, img)
+	g.writeLabels(&b, boxName, layerOrder, img)
 
 	// imageDir was cleaned at the start of this function; ensure it exists
 	if err := os.MkdirAll(imageDir, 0755); err != nil {
@@ -776,7 +776,7 @@ func (g *Generator) generateContainerfile(imageName string) error {
 	}
 
 	content := b.String()
-	g.Containerfiles[imageName] = content
+	g.Containerfiles[boxName] = content
 
 	containerfile := filepath.Join(imageDir, "Containerfile")
 	return os.WriteFile(containerfile, []byte(content), 0644)
@@ -785,10 +785,10 @@ func (g *Generator) generateContainerfile(imageName string) error {
 // generateDataImageContainerfile produces a minimal FROM scratch Containerfile
 // with only data staging COPY instructions and OCI labels. No runtime, no init,
 // no packages, no builder stages.
-func (g *Generator) generateDataImageContainerfile(imageName string, img *ResolvedBox, layerOrder []string, imageDir string) error {
+func (g *Generator) generateDataImageContainerfile(boxName string, img *ResolvedBox, layerOrder []string, imageDir string) error {
 	var b strings.Builder
 
-	b.WriteString(fmt.Sprintf("# .build/%s/Containerfile (generated -- do not edit)\n\n", imageName))
+	b.WriteString(fmt.Sprintf("# .build/%s/Containerfile (generated -- do not edit)\n\n", boxName))
 	b.WriteString("FROM scratch\n\n")
 
 	// Scratch stages for layers that have data
@@ -811,7 +811,7 @@ func (g *Generator) generateDataImageContainerfile(imageName string, img *Resolv
 	// EffectiveVersion (not the per-build tag) — see writeLabels.
 	b.WriteString("# Image metadata\n")
 	b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelVersion, img.EffectiveVersion))
-	b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelBox, imageName))
+	b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelBox, boxName))
 	if img.Registry != "" {
 		b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelRegistry, img.Registry))
 	}
@@ -845,11 +845,11 @@ func (g *Generator) generateDataImageContainerfile(imageName string, img *Resolv
 	}
 
 	// Volume labels (so charly config knows what volumes data targets)
-	volumes, _ := CollectImageVolume(g.Config, g.Layers, imageName, img.Home, nil)
+	volumes, _ := CollectBoxVolume(g.Config, g.Layers, boxName, img.Home, nil)
 	if len(volumes) > 0 {
 		var labelVols []LabelVolumeEntry
 		for _, v := range volumes {
-			shortName := strings.TrimPrefix(v.VolumeName, "charly-"+imageName+"-")
+			shortName := strings.TrimPrefix(v.VolumeName, "charly-"+boxName+"-")
 			labelVols = append(labelVols, LabelVolumeEntry{Name: shortName, Path: v.ContainerPath})
 		}
 		writeJSONLabel(&b, LabelVolume, labelVols)
@@ -872,7 +872,7 @@ func (g *Generator) generateDataImageContainerfile(imageName string, img *Resolv
 		return err
 	}
 	content := b.String()
-	g.Containerfiles[imageName] = content
+	g.Containerfiles[boxName] = content
 	return os.WriteFile(filepath.Join(imageDir, "Containerfile"), []byte(content), 0644)
 }
 
@@ -884,19 +884,19 @@ func (g *Generator) resolveBaseImage(img *ResolvedBox) string {
 	if img.IsExternalBase {
 		return img.Base
 	}
-	parentImg := g.Images[img.Base]
+	parentImg := g.Boxes[img.Base]
 	return parentImg.FullTag
 }
 
 // builderRefForFormat returns the full tag of the builder image for a given format,
 // or "" if no builder is configured for that format.
-func (g *Generator) builderRefForFormat(imageName, format string) string {
-	img := g.Images[imageName]
+func (g *Generator) builderRefForFormat(boxName, format string) string {
+	img := g.Boxes[boxName]
 	builder := img.Builder.BuilderFor(format)
-	if builder == "" || builder == imageName {
+	if builder == "" || builder == boxName {
 		return ""
 	}
-	if builderImg, ok := g.Images[builder]; ok {
+	if builderImg, ok := g.Boxes[builder]; ok {
 		return builderImg.FullTag
 	}
 	return ""
@@ -1157,10 +1157,10 @@ func (g *Generator) writeDataStaging(b *strings.Builder, layerOrder []string, im
 }
 
 // generateTraefikRoutes generates a traefik dynamic config YAML for route layers
-func (g *Generator) generateTraefikRoutes(imageName string, layerOrder []string, img *ResolvedBox) error {
+func (g *Generator) generateTraefikRoutes(boxName string, layerOrder []string, img *ResolvedBox) error {
 	var b strings.Builder
 
-	b.WriteString("# .build/" + imageName + "/traefik-routes.yml (generated -- do not edit)\n")
+	b.WriteString("# .build/" + boxName + "/traefik-routes.yml (generated -- do not edit)\n")
 	b.WriteString("http:\n")
 	b.WriteString("  routers:\n")
 
@@ -1183,7 +1183,7 @@ func (g *Generator) generateTraefikRoutes(imageName string, layerOrder []string,
 	}
 
 	for _, r := range routes {
-		// Schema v4: DNS removed from ResolvedImage (deploy-only choice).
+		// Schema v4: DNS removed from ResolvedBox (deploy-only choice).
 		// Traefik route hostnames come from the layer's host declaration.
 		// Deploy-time DNS override via DeploymentNode.DNS applies separately.
 		host := r.cfg.Host
@@ -1205,7 +1205,7 @@ func (g *Generator) generateTraefikRoutes(imageName string, layerOrder []string,
 		b.WriteString(fmt.Sprintf("          - url: \"http://127.0.0.1:%s\"\n", r.cfg.Port))
 	}
 
-	imageDir := filepath.Join(g.BuildDir, imageName)
+	imageDir := filepath.Join(g.BuildDir, boxName)
 	if err := os.MkdirAll(imageDir, 0755); err != nil {
 		return err
 	}
@@ -1218,8 +1218,8 @@ func (g *Generator) generateTraefikRoutes(imageName string, layerOrder []string,
 // service: list and renders every entry that binds to this init via
 // per-entry routing (use_packaged → systemd; custom exec → any init with
 // a service_template). No legacy raw-INI path.
-func (g *Generator) generateInitFragments(imageName, initName string, def *InitDef, layerOrder []string) error {
-	fragDir := filepath.Join(g.BuildDir, imageName, def.FragmentDir)
+func (g *Generator) generateInitFragments(boxName, initName string, def *InitDef, layerOrder []string) error {
+	fragDir := filepath.Join(g.BuildDir, boxName, def.FragmentDir)
 	if err := os.MkdirAll(fragDir, 0755); err != nil {
 		return err
 	}
@@ -1438,9 +1438,9 @@ func (g *Generator) writeLayerSteps(b *strings.Builder, layerName string, img *R
 	// 2a. tasks: list (new path — replaces both root.yml and user.yml).
 	// Validator rejects layers that have both tasks: and root.yml/user.yml.
 	if layer.HasTasks() {
-		imageName := img.Name
-		buildDir := filepath.Join(g.BuildDir, imageName)
-		contextRelPrefix := filepath.ToSlash(filepath.Join(".build", imageName))
+		boxName := img.Name
+		buildDir := filepath.Join(g.BuildDir, boxName)
+		contextRelPrefix := filepath.ToSlash(filepath.Join(".build", boxName))
 		finalUser, err := g.emitTasks(b, layer, img, buildDir, contextRelPrefix, "0")
 		if err != nil {
 			// Phase 0: log but continue; validator should catch this earlier.
@@ -1690,7 +1690,7 @@ func (g *Generator) buildStageContext(layer *Layer, builderName string, builderD
 
 // writeLabels emits OCI LABEL directives with all runtime-relevant metadata.
 // Every runtime config option is embedded so images are fully self-contained.
-func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder []string, img *ResolvedBox) {
+func (g *Generator) writeLabels(b *strings.Builder, boxName string, layerOrder []string, img *ResolvedBox) {
 	b.WriteString("# Image metadata\n")
 
 	// Always-present labels. ai.opencharly.version carries the image's
@@ -1701,7 +1701,7 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 	// prefers this label over the tag (local_image.go); it is also the
 	// "is this an charly box?" presence sentinel (ExtractMetadata).
 	b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelVersion, img.EffectiveVersion))
-	b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelBox, imageName))
+	b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelBox, boxName))
 	b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelUID, strconv.Itoa(img.UID)))
 	b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelGID, strconv.Itoa(img.GID)))
 	b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelUser, img.User))
@@ -1737,7 +1737,7 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 	}
 	// Schema v4: LabelEngine / LabelDNS / LabelAcmeEmail removed —
 	// deployment choices, not image declarations. Deploy-time values
-	// flow through DeploymentNode → ImageMetadata.
+	// flow through DeploymentNode → BoxMetadata.
 
 	// Platform identity + builder-pool coordination labels.
 	// No serialized selector union — derive as ["all"] ∪ distro ∪ formats at read time.
@@ -1764,22 +1764,22 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 	writeJSONLabel(b, LabelPortProto, portProtos)
 
 	// Volumes: short form names (without charly-<image>- prefix)
-	volumes, _ := CollectImageVolume(g.Config, g.Layers, imageName, img.Home, nil)
+	volumes, _ := CollectBoxVolume(g.Config, g.Layers, boxName, img.Home, nil)
 	if len(volumes) > 0 {
 		var labelVols []LabelVolumeEntry
 		for _, v := range volumes {
-			shortName := strings.TrimPrefix(v.VolumeName, "charly-"+imageName+"-")
+			shortName := strings.TrimPrefix(v.VolumeName, "charly-"+boxName+"-")
 			labelVols = append(labelVols, LabelVolumeEntry{Name: shortName, Path: v.ContainerPath})
 		}
 		writeJSONLabel(b, LabelVolume, labelVols)
 	}
 
 	// Aliases: collected from layers + image-level config
-	aliases, _ := CollectImageAlias(g.Config, g.Layers, imageName)
+	aliases, _ := CollectBoxAlias(g.Config, g.Layers, boxName)
 	writeJSONLabel(b, LabelAlias, aliases)
 
 	// Security: collected from layers + image config
-	security := CollectSecurity(g.Config, g.Layers, imageName)
+	security := CollectSecurity(g.Config, g.Layers, boxName)
 	if security.Privileged || security.CgroupNS != "" || len(security.CapAdd) > 0 || len(security.Devices) > 0 || len(security.SecurityOpt) > 0 || len(security.GroupAdd) > 0 || security.ShmSize != "" || len(security.Mounts) > 0 {
 		writeJSONLabel(b, LabelSecurity, security)
 	}
@@ -1788,11 +1788,11 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 	// Managed via deploy.yml only (charly config setup).
 
 	// Image-level env vars
-	imgCfg := g.Config.Image[imageName]
+	imgCfg := g.Config.Box[boxName]
 	writeJSONLabel(b, LabelEnv, imgCfg.Env)
 
 	// Hooks: collected from layers
-	hooks := CollectHooks(g.Config, g.Layers, imageName)
+	hooks := CollectHooks(g.Config, g.Layers, boxName)
 	if hooks != nil {
 		writeJSONLabel(b, LabelHook, hooks)
 	}
@@ -1800,7 +1800,7 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 	// Tests: three-section (layer/image/deploy) declarative manifest. Shipped
 	// so every pulled image is self-describing at all three levels. Local
 	// deploy.yml overlays (by id) are applied at charly eval live time, not here.
-	tests := CollectEval(g.Config, g.Layers, imageName)
+	tests := CollectEval(g.Config, g.Layers, boxName)
 	if tests != nil {
 		writeJSONLabel(b, LabelEval, tests)
 	}
@@ -1809,7 +1809,7 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 	// Replaces the retired LabelInfo/LabelStatus scalar labels. Local
 	// deploy.yml `description:` overlays merge at runtime via
 	// MergeDeployDescriptions, not here.
-	descriptions := CollectDescriptions(g.Config, g.Layers, imageName)
+	descriptions := CollectDescriptions(g.Config, g.Layers, boxName)
 	if descriptions != nil {
 		writeJSONLabel(b, LabelDescription, descriptions)
 	}
@@ -1820,8 +1820,8 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 	// image-level `shell:` (when present). Deploy-scope defaults baked
 	// here; local deploy.yml `shell:` overlays merge at deploy time
 	// via MergeDeployShell.
-	shellSet := CollectShell(g.Config, g.Layers, imageName)
-	if shellSet != nil && (len(shellSet.Layer) > 0 || len(shellSet.Image) > 0 || len(shellSet.Deploy) > 0) {
+	shellSet := CollectShell(g.Config, g.Layers, boxName)
+	if shellSet != nil && (len(shellSet.Layer) > 0 || len(shellSet.Box) > 0 || len(shellSet.Deploy) > 0) {
 		writeJSONLabel(b, LabelShell, shellSet)
 	}
 
@@ -2080,17 +2080,17 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 	}
 
 	// Skills documentation URL
-	skillPath := filepath.Join(g.Dir, "plugins", "charly-images", "skills", imageName, "SKILL.md")
+	skillPath := filepath.Join(g.Dir, "plugins", "charly-images", "skills", boxName, "SKILL.md")
 	if _, err := os.Stat(skillPath); err == nil {
-		skillURL := fmt.Sprintf("https://github.com/overthinkos/overthink-plugins/blob/main/charly-images/skills/%s/SKILL.md", imageName)
+		skillURL := fmt.Sprintf("https://github.com/overthinkos/overthink-plugins/blob/main/charly-images/skills/%s/SKILL.md", boxName)
 		b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelSkill, skillURL))
 	}
 
 	// Status and info: aggregate worst status from image + layers using
 	// Description.Tag (status word) and Description.Feature/Narrative
 	// (human-facing info). The legacy Status/Info scalar fields on
-	// authored configs were removed; ResolvedImage carries the derived
-	// pair (populated in ResolveImage from img.Description).
+	// authored configs were removed; ResolvedBox carries the derived
+	// pair (populated in ResolveBox from img.Description).
 	effectiveStatus := resolveStatus(img.Status)
 	var infoParts []string
 	if img.Info != "" {
@@ -2128,13 +2128,13 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 	writeJSONLabel(b, LabelCandyVersion, layerVersions)
 
 	// Data entries: staging paths for deploy-time provisioning.
-	// Walk the full image chain (like CollectImageVolume) to include data
+	// Walk the full image chain (like CollectBoxVolume) to include data
 	// entries from layers in parent/intermediate images.
 	var dataEntries []LabelDataEntry
 	seenDataLayers := make(map[string]bool)
-	current := imageName
+	current := boxName
 	for {
-		imgDef, ok := g.Config.Image[current]
+		imgDef, ok := g.Config.Box[current]
 		if !ok {
 			break
 		}
@@ -2164,7 +2164,7 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 				})
 			}
 		}
-		if baseImg, isInternal := g.Config.Image[imgDef.Base]; isInternal && baseImg.IsEnabled() {
+		if baseImg, isInternal := g.Config.Box[imgDef.Base]; isInternal && baseImg.IsEnabled() {
 			current = imgDef.Base
 		} else {
 			break
@@ -2175,7 +2175,7 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 	}
 
 	// Data image flag
-	imgConfig := g.Config.Image[imageName]
+	imgConfig := g.Config.Box[boxName]
 	if imgConfig.DataImage {
 		b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelDataBox, "true"))
 	}

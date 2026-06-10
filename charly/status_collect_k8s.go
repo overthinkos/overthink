@@ -136,8 +136,8 @@ func k8sDeployEntries(uf *UnifiedFile) []string {
 // K8sUnifiedTarget.Add: the node's explicit Image, falling back to the
 // deploy name.
 func k8sImageRef(name string, node DeploymentNode) string {
-	if node.Image != "" {
-		return node.Image
+	if node.Box != "" {
+		return node.Box
 	}
 	return name
 }

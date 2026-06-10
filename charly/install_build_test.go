@@ -40,7 +40,7 @@ func compilerTestProjectDir(t *testing.T) (string, func()) {
 // resolves the "fedora-coder" image. Returns nil, nil if fixtures can't
 // load (used to gracefully skip in CI environments that might not have
 // the fixture layers present).
-func loadCompilerFixtures(t *testing.T, imageName string) (*Config, *ResolvedBox, map[string]*Layer) {
+func loadCompilerFixtures(t *testing.T, boxName string) (*Config, *ResolvedBox, map[string]*Layer) {
 	t.Helper()
 	dir, _ := os.Getwd()
 	cfg, err := LoadConfig(dir)
@@ -62,9 +62,9 @@ func loadCompilerFixtures(t *testing.T, imageName string) (*Config, *ResolvedBox
 	if err != nil {
 		t.Fatalf("ScanAllLayerWithConfig: %v", err)
 	}
-	img, err := cfg.ResolveImage(imageName, "testing", dir, ResolveOpts{})
+	img, err := cfg.ResolveBox(boxName, "testing", dir, ResolveOpts{})
 	if err != nil {
-		t.Skipf("ResolveImage(%s): %v (fixture missing?)", imageName, err)
+		t.Skipf("ResolveBox(%s): %v (fixture missing?)", boxName, err)
 	}
 	return cfg, img, layers
 }
@@ -237,8 +237,8 @@ func TestMergePlansOrderingAndID(t *testing.T) {
 	}}
 
 	merged := MergePlan([]*InstallPlan{p1, p2}, "fedora-coder", nil)
-	if merged.Image != "fedora-coder" {
-		t.Errorf("merged.Image = %q, want fedora-coder", merged.Image)
+	if merged.Box != "fedora-coder" {
+		t.Errorf("merged.Image = %q, want fedora-coder", merged.Box)
 	}
 	if len(merged.Steps) != 2 {
 		t.Errorf("merged.Steps len = %d, want 2", len(merged.Steps))
@@ -269,7 +269,7 @@ func TestEnsureServiceSuffix(t *testing.T) {
 func TestDescribePlanSummary(t *testing.T) {
 	p := &InstallPlan{
 		Layer:  "x",
-		Image:  "y",
+		Box:    "y",
 		Distro: "z",
 		Steps: []InstallStep{
 			&SystemPackagesStep{Format: "rpm", Phase: PhaseInstall},

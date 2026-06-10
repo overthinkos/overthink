@@ -127,7 +127,7 @@ func TestResolveLocalImageRef_ShortNameNoMatch(t *testing.T) {
 
 func TestRunCharlyVerb_SkipsUnderImageTest(t *testing.T) {
 	r, _ := newFakeRunner(t, RunModeImage)
-	r.Image = "jupyter"
+	r.Box = "jupyter"
 	res := r.Run(context.Background(), []Check{{Cdp: "status"}})
 	if len(res) != 1 || res[0].Status != TestSkip {
 		t.Fatalf("expected skip under RunModeImage, got %+v", res[0])
@@ -139,7 +139,7 @@ func TestRunCharlyVerb_SkipsUnderImageTest(t *testing.T) {
 
 func TestRunCharlyVerb_UnknownMethodFails(t *testing.T) {
 	r, _ := newFakeRunner(t, RunModeLive)
-	r.Image = "jupyter"
+	r.Box = "jupyter"
 	res := r.Run(context.Background(), []Check{{Cdp: "not-a-real-method"}})
 	if res[0].Status != TestFail || !strings.Contains(res[0].Message, "unknown method") {
 		t.Errorf("expected unknown-method failure, got %+v", res[0])

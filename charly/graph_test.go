@@ -131,9 +131,9 @@ func TestResolveImageOrder(t *testing.T) {
 		},
 	}
 
-	order, err := ResolveImageOrder(images, nil)
+	order, err := ResolveBoxOrder(images, nil)
 	if err != nil {
-		t.Fatalf("ResolveImageOrder() error = %v", err)
+		t.Fatalf("ResolveBoxOrder() error = %v", err)
 	}
 
 	// Check that dependencies come before dependents
@@ -178,9 +178,9 @@ func TestResolveImageOrderWithBuilder(t *testing.T) {
 		},
 	}
 
-	order, err := ResolveImageOrder(images, nil)
+	order, err := ResolveBoxOrder(images, nil)
 	if err != nil {
-		t.Fatalf("ResolveImageOrder() error = %v", err)
+		t.Fatalf("ResolveBoxOrder() error = %v", err)
 	}
 
 	indexOf := func(name string) int {
@@ -238,9 +238,9 @@ func TestResolveImageOrderWithBootstrapBuilder(t *testing.T) {
 		},
 	}
 
-	order, err := ResolveImageOrder(images, nil)
+	order, err := ResolveBoxOrder(images, nil)
 	if err != nil {
-		t.Fatalf("ResolveImageOrder() error = %v", err)
+		t.Fatalf("ResolveBoxOrder() error = %v", err)
 	}
 
 	indexOf := func(name string) int {
@@ -262,10 +262,10 @@ func TestResolveImageOrderWithBootstrapBuilder(t *testing.T) {
 		t.Errorf("arch must come before cachyos-pacstrap-builder (base dep), got order %v", order)
 	}
 
-	// Same property must hold for ResolveImageLevels (concurrent-build mode).
-	levels, err := ResolveImageLevels(images, nil)
+	// Same property must hold for ResolveBoxLevels (concurrent-build mode).
+	levels, err := ResolveBoxLevels(images, nil)
 	if err != nil {
-		t.Fatalf("ResolveImageLevels() error = %v", err)
+		t.Fatalf("ResolveBoxLevels() error = %v", err)
 	}
 	levelOf := func(name string) int {
 		for i, level := range levels {
@@ -290,7 +290,7 @@ func TestResolveImageOrderCycle(t *testing.T) {
 		"c": {Name: "c", Base: "a", IsExternalBase: false},
 	}
 
-	_, err := ResolveImageOrder(images, nil)
+	_, err := ResolveBoxOrder(images, nil)
 	if err == nil {
 		t.Error("expected cycle error, got nil")
 	}
@@ -321,35 +321,35 @@ func TestLayersProvidedByImage(t *testing.T) {
 	layers := map[string]*Layer{} // not used, just for type
 
 	tests := []struct {
-		name      string
-		imageName string
-		want      map[string]bool
+		name    string
+		boxName string
+		want    map[string]bool
 	}{
 		{
-			name:      "base image",
-			imageName: "base",
-			want:      map[string]bool{"pixi": true},
+			name:    "base image",
+			boxName: "base",
+			want:    map[string]bool{"pixi": true},
 		},
 		{
-			name:      "cuda inherits from base",
-			imageName: "cuda",
-			want:      map[string]bool{"pixi": true, "cuda": true},
+			name:    "cuda inherits from base",
+			boxName: "cuda",
+			want:    map[string]bool{"pixi": true, "cuda": true},
 		},
 		{
-			name:      "ml-cuda inherits from cuda",
-			imageName: "ml-cuda",
-			want:      map[string]bool{"pixi": true, "cuda": true, "python": true, "ml-libs": true},
+			name:    "ml-cuda inherits from cuda",
+			boxName: "ml-cuda",
+			want:    map[string]bool{"pixi": true, "cuda": true, "python": true, "ml-libs": true},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := LayerProvidedByImage(tt.imageName, images, layers)
+			got, err := LayerProvidedByBox(tt.boxName, images, layers)
 			if err != nil {
-				t.Fatalf("LayerProvidedByImage() error = %v", err)
+				t.Fatalf("LayerProvidedByBox() error = %v", err)
 			}
 			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("LayerProvidedByImage() = %v, want %v", got, tt.want)
+				t.Errorf("LayerProvidedByBox() = %v, want %v", got, tt.want)
 			}
 		})
 	}
@@ -594,9 +594,9 @@ func TestResolveImageLevels(t *testing.T) {
 		},
 	}
 
-	levels, err := ResolveImageLevels(images, nil)
+	levels, err := ResolveBoxLevels(images, nil)
 	if err != nil {
-		t.Fatalf("ResolveImageLevels() error = %v", err)
+		t.Fatalf("ResolveBoxLevels() error = %v", err)
 	}
 
 	// Level 0: base, cuda (no deps)

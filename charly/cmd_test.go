@@ -4,7 +4,7 @@ import "testing"
 
 func TestCmdResolveContainerFails(t *testing.T) {
 	cmd := CmdCmd{
-		Image:   "nonexistent-image",
+		Box:     "nonexistent-image",
 		Command: "echo hello",
 	}
 	err := cmd.Run()
@@ -15,7 +15,7 @@ func TestCmdResolveContainerFails(t *testing.T) {
 
 func TestCmdWithInstance(t *testing.T) {
 	cmd := CmdCmd{
-		Image:    "nonexistent-image",
+		Box:      "nonexistent-image",
 		Command:  "echo hello",
 		Instance: "test-instance",
 	}

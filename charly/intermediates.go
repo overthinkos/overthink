@@ -42,7 +42,7 @@ func pixiBoundLayers(layers map[string]*Layer) map[string]bool {
 type trieNode struct {
 	layer    string               // layer at this position ("" for root)
 	children map[string]*trieNode // layer name → child node
-	images   []string             // user-defined images terminating here
+	boxes    []string             // user-defined images terminating here
 }
 
 func newTrieNode(layer string) *trieNode {
@@ -55,16 +55,16 @@ func newTrieNode(layer string) *trieNode {
 // GlobalLayerOrder computes a global topological order of all layers across
 // all enabled images, using popularity (number of images needing each layer)
 // as the primary tie-breaker and lexicographic as secondary.
-func GlobalLayerOrder(images map[string]*ResolvedBox, layers map[string]*Layer) ([]string, error) {
+func GlobalLayerOrder(boxes map[string]*ResolvedBox, layers map[string]*Layer) ([]string, error) {
 	// Count popularity: how many images need each layer (including transitive deps)
 	popularity := make(map[string]int)
-	for _, img := range images {
+	for _, img := range boxes {
 		resolved, err := ResolveLayerOrder(img.Layer, layers, nil)
 		if err != nil {
 			return nil, fmt.Errorf("resolving layers for image %q: %w", img.Name, err)
 		}
 		// Also include layers from the base chain
-		allLayers := collectAllImageLayers(img.Name, images, layers)
+		allLayers := collectAllBoxLayers(img.Name, boxes, layers)
 		// Merge resolved with allLayers
 		seen := make(map[string]bool)
 		for _, l := range allLayers {
@@ -154,7 +154,7 @@ func GlobalLayerOrder(images map[string]*ResolvedBox, layers map[string]*Layer) 
 	// AND metalayer `layers:` (IncludedLayer) lists. Non-node entries (pure-
 	// composition metalayers with no RUN steps) are skipped by addListOrderEdge,
 	// so only content layers are constrained.
-	for _, img := range images {
+	for _, img := range boxes {
 		addListEdges(img.Layer)
 	}
 	for name := range popularity {
@@ -250,13 +250,13 @@ func sortByPopularity(s []string, popularity map[string]int) {
 	}
 }
 
-// collectAllImageLayers returns the complete set of layers for an image,
+// collectAllBoxLayers returns the complete set of layers for an image,
 // including all layers inherited through the base chain.
-func collectAllImageLayers(imageName string, images map[string]*ResolvedBox, layers map[string]*Layer) []string {
+func collectAllBoxLayers(boxName string, boxes map[string]*ResolvedBox, layers map[string]*Layer) []string {
 	seen := make(map[string]bool)
 	// walked is an IMAGE-visited guard for the base-chain recursion below. A
 	// base edge may form a cycle (A.base=B, B.base=A); that's caught + reported
-	// by ResolveImageOrder, but without this guard the walk recurses a cyclic
+	// by ResolveBoxOrder, but without this guard the walk recurses a cyclic
 	// chain until the stack overflows. Re-visiting a base also can't add new
 	// layers (its layers were collected on the first visit), so skipping it is
 	// correct for the acyclic case too.
@@ -269,7 +269,7 @@ func collectAllImageLayers(imageName string, images map[string]*ResolvedBox, lay
 			return
 		}
 		walked[name] = true
-		img, ok := images[name]
+		img, ok := boxes[name]
 		if !ok {
 			return
 		}
@@ -287,14 +287,14 @@ func collectAllImageLayers(imageName string, images map[string]*ResolvedBox, lay
 			}
 		}
 	}
-	walk(imageName)
+	walk(boxName)
 	return result
 }
 
 // AbsoluteLayerSequence returns an image's complete layer set (own + entire
 // base chain) as a subsequence of the global order.
-func AbsoluteLayerSequence(imageName string, images map[string]*ResolvedBox, layers map[string]*Layer, globalOrder []string) []string {
-	allLayers := collectAllImageLayers(imageName, images, layers)
+func AbsoluteLayerSequence(boxName string, boxes map[string]*ResolvedBox, layers map[string]*Layer, globalOrder []string) []string {
+	allLayers := collectAllBoxLayers(boxName, boxes, layers)
 	layerSet := make(map[string]bool, len(allLayers))
 	for _, l := range allLayers {
 		layerSet[l] = true
@@ -326,15 +326,15 @@ type siblingKey struct {
 // builds prefix tries of relative layer sequences within each sibling group,
 // creates intermediates at branching points, and returns updated images map.
 // User-defined images always take priority over auto-intermediates.
-func ComputeIntermediates(images map[string]*ResolvedBox, layers map[string]*Layer, cfg *Config, tag string) (map[string]*ResolvedBox, error) {
-	globalOrder, err := GlobalLayerOrder(images, layers)
+func ComputeIntermediates(boxes map[string]*ResolvedBox, layers map[string]*Layer, cfg *Config, tag string) (map[string]*ResolvedBox, error) {
+	globalOrder, err := GlobalLayerOrder(boxes, layers)
 	if err != nil {
 		return nil, fmt.Errorf("computing global layer order: %w", err)
 	}
 
 	// Copy all existing images
 	result := make(map[string]*ResolvedBox)
-	for name, img := range images {
+	for name, img := range boxes {
 		cp := *img
 		result[name] = &cp
 	}
@@ -354,7 +354,7 @@ func ComputeIntermediates(images map[string]*ResolvedBox, layers map[string]*Lay
 	// Without this, a pulled namespaced builder (charly.arch-builder) would be grouped
 	// with its consumers and factored into an intermediate it must itself build,
 	// producing a `builder -> intermediate -> builder` dependency cycle.
-	for _, img := range images {
+	for _, img := range boxes {
 		for _, builder := range img.Builder {
 			if builder != "" {
 				builderNames[builder] = true
@@ -368,7 +368,7 @@ func ComputeIntermediates(images map[string]*ResolvedBox, layers map[string]*Lay
 
 	// Group images by (Base, UID). See siblingKey docstring for rationale.
 	siblingGroups := make(map[siblingKey][]string)
-	for name, img := range images {
+	for name, img := range boxes {
 		if builderNames[name] {
 			continue
 		}
@@ -385,9 +385,9 @@ func ComputeIntermediates(images map[string]*ResolvedBox, layers map[string]*Lay
 
 	// Process internal-base groups in topological order (parents before children)
 	// so auto-intermediates from parent groups are visible when processing child groups
-	imageOrder, err := ResolveImageOrder(images, layers)
+	imageOrder, err := ResolveBoxOrder(boxes, layers)
 	if err != nil {
-		return nil, fmt.Errorf("resolving image order: %w", err)
+		return nil, fmt.Errorf("resolving box order: %w", err)
 	}
 
 	processed := make(map[siblingKey]bool)
@@ -399,7 +399,7 @@ func ComputeIntermediates(images map[string]*ResolvedBox, layers map[string]*Lay
 				continue
 			}
 			processed[k] = true
-			if err := processSiblingGroup(k.base, k.uid, defaultUID, children, result, images, layers, cfg, tag, globalOrder, pixiBound); err != nil {
+			if err := processSiblingGroup(k.base, k.uid, defaultUID, children, result, boxes, layers, cfg, tag, globalOrder, pixiBound); err != nil {
 				return nil, err
 			}
 		}
@@ -410,7 +410,7 @@ func ComputeIntermediates(images map[string]*ResolvedBox, layers map[string]*Lay
 		if processed[k] || len(children) < 2 {
 			continue
 		}
-		if err := processSiblingGroup(k.base, k.uid, defaultUID, children, result, images, layers, cfg, tag, globalOrder, pixiBound); err != nil {
+		if err := processSiblingGroup(k.base, k.uid, defaultUID, children, result, boxes, layers, cfg, tag, globalOrder, pixiBound); err != nil {
 			return nil, err
 		}
 	}
@@ -423,13 +423,13 @@ func ComputeIntermediates(images map[string]*ResolvedBox, layers map[string]*Lay
 // branch points. The uid is the shared UID of this sibling group; it flows
 // through walkTrieScoped into createIntermediate so the emitted ENV PATH
 // references the correct HOME for this group's user context.
-func processSiblingGroup(parentName string, uid, defaultUID int, children []string, result, origImages map[string]*ResolvedBox, layers map[string]*Layer, cfg *Config, tag string, globalOrder []string, pixiBound map[string]bool) error {
+func processSiblingGroup(parentName string, uid, defaultUID int, children []string, result, origBoxes map[string]*ResolvedBox, layers map[string]*Layer, cfg *Config, tag string, globalOrder []string, pixiBound map[string]bool) error {
 	sortStrings(children)
 
 	// Get layers provided by parent
 	parentProvided := make(map[string]bool)
 	if _, ok := result[parentName]; ok {
-		provided, err := LayerProvidedByImage(parentName, result, layers)
+		provided, err := LayerProvidedByBox(parentName, result, layers)
 		if err == nil {
 			parentProvided = provided
 		}
@@ -448,16 +448,16 @@ func processSiblingGroup(parentName string, uid, defaultUID int, children []stri
 			}
 			node = child
 		}
-		node.images = append(node.images, childName)
+		node.boxes = append(node.boxes, childName)
 	}
 
-	return walkTrieScoped(root, parentName, uid, defaultUID, result, origImages, layers, cfg, tag, globalOrder, pixiBound)
+	return walkTrieScoped(root, parentName, uid, defaultUID, result, origBoxes, layers, cfg, tag, globalOrder, pixiBound)
 }
 
 // relativeLayerSequence returns an image's layers minus what the parent provides,
 // ordered according to the global layer order.
-func relativeLayerSequence(imageName string, parentProvided map[string]bool, images map[string]*ResolvedBox, layers map[string]*Layer, globalOrder []string, pixiBound map[string]bool) []string {
-	allLayers := collectAllImageLayers(imageName, images, layers)
+func relativeLayerSequence(boxName string, parentProvided map[string]bool, boxes map[string]*ResolvedBox, layers map[string]*Layer, globalOrder []string, pixiBound map[string]bool) []string {
+	allLayers := collectAllBoxLayers(boxName, boxes, layers)
 	layerSet := make(map[string]bool, len(allLayers))
 	for _, l := range allLayers {
 		layerSet[l] = true
@@ -476,7 +476,7 @@ func relativeLayerSequence(imageName string, parentProvided map[string]bool, ima
 // User-defined images at branch points are reused as intermediates without rebasing.
 // uid + defaultUID propagate from the sibling group so auto-intermediates
 // inherit the right user context and get UID-suffixed names when needed.
-func walkTrieScoped(node *trieNode, parentName string, uid, defaultUID int, result map[string]*ResolvedBox, origImages map[string]*ResolvedBox, layers map[string]*Layer, cfg *Config, tag string, globalOrder []string, pixiBound map[string]bool) error {
+func walkTrieScoped(node *trieNode, parentName string, uid, defaultUID int, result map[string]*ResolvedBox, origBoxes map[string]*ResolvedBox, layers map[string]*Layer, cfg *Config, tag string, globalOrder []string, pixiBound map[string]bool) error {
 	for _, childLayerName := range sortedKeys(node.children) {
 		child := node.children[childLayerName]
 
@@ -485,7 +485,7 @@ func walkTrieScoped(node *trieNode, parentName string, uid, defaultUID int, resu
 		current := child
 		pathLayers = append(pathLayers, childLayerName)
 
-		for len(current.children) == 1 && len(current.images) == 0 {
+		for len(current.children) == 1 && len(current.boxes) == 0 {
 			for layerName, next := range current.children {
 				pathLayers = append(pathLayers, layerName)
 				current = next
@@ -493,61 +493,61 @@ func walkTrieScoped(node *trieNode, parentName string, uid, defaultUID int, resu
 		}
 
 		// current is at a branch point, leaf, or has terminal images
-		isBranch := len(current.children) >= 2 || (len(current.children) >= 1 && len(current.images) > 0)
+		isBranch := len(current.children) >= 2 || (len(current.children) >= 1 && len(current.boxes) > 0)
 		isLeaf := len(current.children) == 0
 
 		if isBranch {
 			// Count user-defined images at this branch point
-			var userImages []string
-			for _, img := range current.images {
-				if _, isOrig := origImages[img]; isOrig {
-					userImages = append(userImages, img)
+			var userBoxes []string
+			for _, img := range current.boxes {
+				if _, isOrig := origBoxes[img]; isOrig {
+					userBoxes = append(userBoxes, img)
 				}
 			}
 
-			if len(userImages) == 1 && len(current.images) == 1 {
+			if len(userBoxes) == 1 && len(current.boxes) == 1 {
 				// Single user image at branch: use it as intermediate, preserve its Base
-				intermediateName := userImages[0]
-				if err := walkTrieScoped(current, intermediateName, uid, defaultUID, result, origImages, layers, cfg, tag, globalOrder, pixiBound); err != nil {
+				intermediateName := userBoxes[0]
+				if err := walkTrieScoped(current, intermediateName, uid, defaultUID, result, origBoxes, layers, cfg, tag, globalOrder, pixiBound); err != nil {
 					return err
 				}
 			} else {
 				// 0 or 2+ user images: create auto-intermediate
-				intermediateName := pickAutoName(pathLayers, parentName, uid, defaultUID, result, origImages)
+				intermediateName := pickAutoName(pathLayers, parentName, uid, defaultUID, result, origBoxes)
 				// Every terminal image in this subtree will base (directly or
 				// transitively) on this intermediate, so it must carry the UNION
 				// of their build formats / distro tags — a layer hoisted here whose
 				// package section is keyed on a format only the consumers declare
 				// would otherwise be silently dropped. See createIntermediate.
-				consumerImages := collectSubtreeImages(current)
-				createIntermediate(intermediateName, parentName, uid, pathLayers, consumerImages, result, origImages, cfg, tag, layers, globalOrder, pixiBound)
+				consumerBoxes := collectSubtreeBoxes(current)
+				createIntermediate(intermediateName, parentName, uid, pathLayers, consumerBoxes, result, origBoxes, cfg, tag, layers, globalOrder, pixiBound)
 				// Rebase all terminal images to this intermediate
-				for _, imgName := range current.images {
-					updateImageBase(imgName, intermediateName, result)
+				for _, imgName := range current.boxes {
+					updateBoxBase(imgName, intermediateName, result)
 				}
-				if err := walkTrieScoped(current, intermediateName, uid, defaultUID, result, origImages, layers, cfg, tag, globalOrder, pixiBound); err != nil {
+				if err := walkTrieScoped(current, intermediateName, uid, defaultUID, result, origBoxes, layers, cfg, tag, globalOrder, pixiBound); err != nil {
 					return err
 				}
 			}
 		} else if isLeaf {
 			// Terminal images at leaf — rebase to current parent
-			for _, imgName := range current.images {
-				updateImageBase(imgName, parentName, result)
+			for _, imgName := range current.boxes {
+				updateBoxBase(imgName, parentName, result)
 			}
 		}
 	}
 	return nil
 }
 
-// collectSubtreeImages returns every terminal user image in the subtree rooted
+// collectSubtreeBoxes returns every terminal user image in the subtree rooted
 // at node — the images terminating at node plus all images in descendant nodes.
 // These are exactly the images that will base, directly or transitively, on an
 // auto-intermediate created at this node, so they define the union of build
 // formats / distro tags the intermediate must carry (see createIntermediate).
-func collectSubtreeImages(node *trieNode) []string {
-	out := append([]string(nil), node.images...)
+func collectSubtreeBoxes(node *trieNode) []string {
+	out := append([]string(nil), node.boxes...)
 	for _, child := range node.children {
-		out = append(out, collectSubtreeImages(child)...)
+		out = append(out, collectSubtreeBoxes(child)...)
 	}
 	return out
 }
@@ -558,7 +558,7 @@ func collectSubtreeImages(node *trieNode) []string {
 // at the same trie position get distinct OCI tags (otherwise they'd collide
 // and one group's HOME-baked ENV would poison the other).
 // Appends -2, -3 etc. to avoid conflicts with existing or already-created images.
-func pickAutoName(pathLayers []string, parentName string, uid, defaultUID int, result, origImages map[string]*ResolvedBox) string {
+func pickAutoName(pathLayers []string, parentName string, uid, defaultUID int, result, origBoxes map[string]*ResolvedBox) string {
 	lastLayer := pathLayers[len(pathLayers)-1]
 	// Remote layer keys are fully-qualified paths
 	// ("github.com/overthinkos/overthink/candy/pixi"); reduce to the short
@@ -586,7 +586,7 @@ func pickAutoName(pathLayers []string, parentName string, uid, defaultUID int, r
 	name := baseName
 	suffix := 2
 	for {
-		if _, exists := origImages[name]; !exists {
+		if _, exists := origBoxes[name]; !exists {
 			if _, exists := result[name]; !exists {
 				return name
 			}
@@ -600,7 +600,7 @@ func pickAutoName(pathLayers []string, parentName string, uid, defaultUID int, r
 // uid is the sibling group's UID — it determines the intermediate's User/GID/Home
 // so HOME-relative env/path_append expansion matches the children that will
 // inherit from this intermediate.
-func createIntermediate(name, parentName string, uid int, pathLayers []string, consumerImages []string, result map[string]*ResolvedBox, origImages map[string]*ResolvedBox, cfg *Config, tag string, layers map[string]*Layer, globalOrder []string, pixiBound map[string]bool) {
+func createIntermediate(name, parentName string, uid int, pathLayers []string, consumerBoxes []string, result map[string]*ResolvedBox, origBoxes map[string]*ResolvedBox, cfg *Config, tag string, layers map[string]*Layer, globalOrder []string, pixiBound map[string]bool) {
 	ownLayers := computeOwnLayers(parentName, pathLayers, result, layers, globalOrder, pixiBound)
 
 	isExternalBase := false
@@ -652,10 +652,10 @@ func createIntermediate(name, parentName string, uid int, pathLayers []string, c
 	for _, d := range inheritedDistro {
 		distroSeen[d] = true
 	}
-	for _, cname := range consumerImages {
+	for _, cname := range consumerBoxes {
 		c, ok := result[cname]
 		if !ok {
-			c, ok = origImages[cname]
+			c, ok = origBoxes[cname]
 		}
 		if !ok {
 			continue
@@ -705,7 +705,7 @@ func createIntermediate(name, parentName string, uid int, pathLayers []string, c
 	for k, v := range cfg.Defaults.Builder {
 		builderMap[k] = v
 	}
-	// Distro-keyed default — the SAME mechanism ResolveImage /
+	// Distro-keyed default — the SAME mechanism ResolveBox /
 	// resolveEffectiveBuilder use: a cachyos/Arch intermediate seeds
 	// arch-builder from the root-namespace distro image, so it never falls back
 	// to the Fedora default even before the consumer-wins merge below (which
@@ -718,10 +718,10 @@ func createIntermediate(name, parentName string, uid int, pathLayers []string, c
 			builderMap[k] = v
 		}
 	}
-	for _, cname := range consumerImages {
+	for _, cname := range consumerBoxes {
 		c, ok := result[cname]
 		if !ok {
-			c, ok = origImages[cname]
+			c, ok = origBoxes[cname]
 		}
 		if !ok {
 			continue
@@ -781,7 +781,7 @@ func createIntermediate(name, parentName string, uid int, pathLayers []string, c
 func computeOwnLayers(parentName string, pathLayers []string, result map[string]*ResolvedBox, layers map[string]*Layer, globalOrder []string, pixiBound map[string]bool) []string {
 	parentProvided := make(map[string]bool)
 	if _, ok := result[parentName]; ok {
-		provided, err := LayerProvidedByImage(parentName, result, layers)
+		provided, err := LayerProvidedByBox(parentName, result, layers)
 		if err == nil {
 			parentProvided = provided
 		}
@@ -838,8 +838,8 @@ func addTransitiveDeps(layerName string, layers map[string]*Layer, needed map[st
 	}
 }
 
-// updateImageBase updates an image's Base to point to the given parent.
-func updateImageBase(imgName, parentName string, result map[string]*ResolvedBox) {
+// updateBoxBase updates an image's Base to point to the given parent.
+func updateBoxBase(imgName, parentName string, result map[string]*ResolvedBox) {
 	img, ok := result[imgName]
 	if !ok {
 		return

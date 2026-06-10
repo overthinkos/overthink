@@ -96,12 +96,12 @@ func MigrateLocalDeploy(path string, dryRun bool) (bool, []string, error) {
 
 	deploy := make(map[string]any, len(images))
 	var summary []string
-	imageNames := make([]string, 0, len(images))
+	boxNames := make([]string, 0, len(images))
 	for name := range images {
-		imageNames = append(imageNames, name)
+		boxNames = append(boxNames, name)
 	}
-	sort.Strings(imageNames)
-	for _, name := range imageNames {
+	sort.Strings(boxNames)
+	for _, name := range boxNames {
 		entryAny := images[name]
 		entry, ok := entryAny.(map[string]any)
 		if !ok {
@@ -112,7 +112,7 @@ func MigrateLocalDeploy(path string, dryRun bool) (bool, []string, error) {
 		// on every target:pod entry). In the legacy schema the
 		// images:<name>: map was the image-name-keyed deploy by
 		// construction, so name IS the image — exactly the value
-		// validateDeployRequiresImage expects.
+		// validateDeployRequiresBox expects.
 		if _, has := newEntry["image"]; !has {
 			newEntry["image"] = name
 		}

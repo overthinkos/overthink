@@ -48,7 +48,7 @@ func (c *FeatureListCmd) Run() error {
 		}
 	}
 	if filter == "" || filter == "image" {
-		for name, img := range cfg.Image {
+		for name, img := range cfg.Box {
 			if img.Description != nil {
 				summarizeDesc("image", name, img.Description)
 			}
@@ -152,7 +152,7 @@ func (c *FeaturePendingCmd) Run() error {
 			scan("layer", name, layer.Description)
 		}
 	}
-	for name, img := range cfg.Image {
+	for name, img := range cfg.Box {
 		scan("image", name, img.Description)
 	}
 	return nil
@@ -200,7 +200,7 @@ func (c *FeatureValidateCmd) Run() error {
 			validate("layer", name, layer.Description)
 		}
 	}
-	for name, img := range cfg.Image {
+	for name, img := range cfg.Box {
 		validate("image", name, img.Description)
 	}
 

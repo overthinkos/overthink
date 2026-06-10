@@ -55,7 +55,7 @@ func NewCollector(rt *ResolvedRuntime) (*Collector, error) {
 // All collects status across every registered deployment substrate (pod / vm /
 // k8s / local / android). It builds one read-only CollectOpts, fans the
 // available collectors out across a NumCPU*2-bounded goroutine pool, merges
-// their rows, applies the nested overlay, and sorts by (Kind, cellImage).
+// their rows, applies the nested overlay, and sorts by (Kind, cellBox).
 //
 // A collector returning an error logs a WARNING to stderr and contributes no
 // rows (graceful degradation) — it NEVER aborts the whole command. The pod
@@ -122,7 +122,7 @@ func (c *Collector) All(ctx context.Context, includeAll, nested bool) ([]Deploym
 		if results[i].Kind != results[j].Kind {
 			return results[i].Kind < results[j].Kind
 		}
-		return cellImage(results[i]) < cellImage(results[j])
+		return cellBox(results[i]) < cellBox(results[j])
 	})
 	return results, nil
 }
@@ -131,10 +131,10 @@ func (c *Collector) All(ctx context.Context, includeAll, nested bool) ([]Deploym
 // container, no need for the worker pool. Pod-scoped: the `charly status <image>`
 // detail path covers the podman/docker substrate.
 func (c *Collector) Single(ctx context.Context, image, instance string) (DeploymentStatus, error) {
-	imageName := resolveImageName(image)
-	runEngine := ResolveImageEngineForDeploy(imageName, instance, c.rt.RunEngine)
+	boxName := resolveBoxName(image)
+	runEngine := ResolveBoxEngineForDeploy(boxName, instance, c.rt.RunEngine)
 	engine := NewEngineClient(runEngine)
-	containerName := containerNameInstance(imageName, instance)
+	containerName := containerNameInstance(boxName, instance)
 
 	// Build a snapshot for this single container (bounded engine call surface).
 	snapshots, _ := engine.SnapshotAll(true)
@@ -150,7 +150,7 @@ func (c *Collector) Single(ctx context.Context, image, instance string) (Deploym
 		// systemd / quadlet path determine its lifecycle state.
 		stub := ContainerSnapshot{
 			Name:     containerName,
-			Image:    imageName,
+			Box:      boxName,
 			Instance: instance,
 		}
 		snap = &stub
@@ -159,7 +159,7 @@ func (c *Collector) Single(ctx context.Context, image, instance string) (Deploym
 		// applyQuadletDescription may fall back to the joined name if the
 		// quadlet description is missing. The single-image path knows the
 		// caller-supplied (image, instance) authoritatively, so prefer that.
-		snap.Image = imageName
+		snap.Box = boxName
 		snap.Instance = instance
 	}
 
@@ -169,7 +169,7 @@ func (c *Collector) Single(ctx context.Context, image, instance string) (Deploym
 	// podman, consult systemd/quadlet to distinguish stopped vs failed vs
 	// enabled vs not configured.
 	if cs.Status == "" || cs.Status == "stopped" {
-		cs.Status = c.resolveSystemdState(imageName, instance)
+		cs.Status = c.resolveSystemdState(boxName, instance)
 	}
 	return cs, nil
 }
@@ -182,7 +182,7 @@ func (c *Collector) collectOne(ctx context.Context, snap *ContainerSnapshot) Dep
 	cs := DeploymentStatus{
 		Kind:      SubstratePod,
 		Source:    "podman",
-		Image:     snap.Image,
+		Image:     snap.Box,
 		Instance:  snap.Instance,
 		Status:    statusFromState(snap.State),
 		Uptime:    snap.Status,
@@ -209,7 +209,7 @@ func (c *Collector) collectOne(ctx context.Context, snap *ContainerSnapshot) Dep
 	// deploy.yml enrichment — preferred for tunnel; only fills ports when
 	// runtime didn't. Volume fallback only fires when live mounts are
 	// unavailable (stopped container).
-	if dn, ok := c.lookupDeploy(snap.Image, snap.Instance, snap.Name); ok {
+	if dn, ok := c.lookupDeploy(snap.Box, snap.Instance, snap.Name); ok {
 		if cs.Tunnel == "" && dn.Tunnel != nil {
 			cs.Tunnel = formatTunnelSummary(dn.Tunnel)
 		}
@@ -229,8 +229,8 @@ func (c *Collector) collectOne(ctx context.Context, snap *ContainerSnapshot) Dep
 	// Image-label fallback for stopped/enabled rows (and any running row
 	// that had no published ports). Use the BASE image name from the
 	// snapshot, not the joined container name.
-	if (len(cs.Ports) == 0 || len(cs.Volumes) == 0 || cs.Network == "") && snap.Image != "" {
-		ref, _ := ResolveNewestLocalCalVer(c.engine.Bin(), snap.Image)
+	if (len(cs.Ports) == 0 || len(cs.Volumes) == 0 || cs.Network == "") && snap.Box != "" {
+		ref, _ := ResolveNewestLocalCalVer(c.engine.Bin(), snap.Box)
 		if ref != "" {
 			if meta, _ := ExtractMetadata(c.engine.Bin(), ref); meta != nil {
 				if len(cs.Ports) == 0 {
@@ -297,14 +297,14 @@ func (c *Collector) runProbes(ctx context.Context, snap *ContainerSnapshot) []To
 // present (legacy / hand-rolled units).
 func (c *Collector) applyQuadletDescription(snap *ContainerSnapshot) {
 	joined := strings.TrimPrefix(snap.Name, "charly-")
-	snap.Image = joined
+	snap.Box = joined
 	snap.Instance = ""
 	if c.quadlet == "" {
 		return
 	}
 	img, inst := parseQuadletDescription(filepath.Join(c.quadlet, snap.Name+".container"))
 	if img != "" {
-		snap.Image = img
+		snap.Box = img
 		snap.Instance = inst
 	}
 }
@@ -330,7 +330,7 @@ func (c *Collector) enabledQuadlets(seen map[string]bool) []ContainerSnapshot {
 		out = append(out, ContainerSnapshot{
 			Name:     joined,
 			State:    "enabled",
-			Image:    image,
+			Box:      image,
 			Instance: instance,
 		})
 	}
@@ -340,15 +340,15 @@ func (c *Collector) enabledQuadlets(seen map[string]bool) []ContainerSnapshot {
 // lookupDeploy resolves the deploy.yml entry for one image+instance. Tries
 // the canonical deployKey() shape first, then a few legacy fallbacks for
 // bed-rolled keys (joined container name minus charly- prefix).
-func (c *Collector) lookupDeploy(image, instance, joinedContainerName string) (DeploymentNode, bool) {
+func (c *Collector) lookupDeploy(box, instance, joinedContainerName string) (DeploymentNode, bool) {
 	if c.deploy == nil || c.deploy.Deploy == nil {
 		return DeploymentNode{}, false
 	}
-	if image != "" {
-		if dn, ok := c.deploy.Deploy[deployKey(image, instance)]; ok {
+	if box != "" {
+		if dn, ok := c.deploy.Deploy[deployKey(box, instance)]; ok {
 			return dn, true
 		}
-		if dn, ok := c.deploy.Deploy[image]; ok && instance == "" {
+		if dn, ok := c.deploy.Deploy[box]; ok && instance == "" {
 			return dn, true
 		}
 	}
@@ -362,11 +362,11 @@ func (c *Collector) lookupDeploy(image, instance, joinedContainerName string) (D
 // resolveSystemdState consults systemctl + the quadlet dir to decide whether
 // a non-podman-listed deployment is stopped, failed, enabled, or not
 // configured. Used by Single().
-func (c *Collector) resolveSystemdState(image, instance string) string {
+func (c *Collector) resolveSystemdState(box, instance string) string {
 	if c.rt.RunMode != "quadlet" {
 		return "stopped"
 	}
-	svc := serviceNameInstance(image, instance)
+	svc := serviceNameInstance(box, instance)
 	out, err := exec.Command("systemctl", "--user", "is-active", svc).Output()
 	if err == nil {
 		switch strings.TrimSpace(string(out)) {
@@ -378,7 +378,7 @@ func (c *Collector) resolveSystemdState(image, instance string) string {
 			return "stopped"
 		}
 	}
-	exists, _ := quadletExistsInstance(image, instance)
+	exists, _ := quadletExistsInstance(box, instance)
 	if exists {
 		return "enabled"
 	}
@@ -435,7 +435,7 @@ func parsePortStrings(ports []string) []PortMapping {
 // (image, instance) parsed from its `Description=OpenCharly <image>
 // (<instance>)` line. ("", "") on missing/malformed file — callers fall back
 // to the filename-derived joined name.
-func parseQuadletDescription(unitPath string) (image, instance string) {
+func parseQuadletDescription(unitPath string) (box, instance string) {
 	data, err := os.ReadFile(unitPath)
 	if err != nil {
 		return "", ""
@@ -447,9 +447,9 @@ func parseQuadletDescription(unitPath string) (image, instance string) {
 		}
 		body := strings.TrimPrefix(line, "Description=OpenCharly ")
 		if open := strings.LastIndex(body, " ("); open != -1 && strings.HasSuffix(body, ")") {
-			image = strings.TrimSpace(body[:open])
+			box = strings.TrimSpace(body[:open])
 			instance = strings.TrimSpace(body[open+2 : len(body)-1])
-			return image, instance
+			return box, instance
 		}
 		return strings.TrimSpace(body), ""
 	}

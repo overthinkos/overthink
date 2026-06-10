@@ -23,7 +23,7 @@ import (
 
 // BuildCmd builds container images
 type BuildCmd struct {
-	Images          []string `arg:"" optional:"" help:"Images to build (default: all enabled). Supports remote refs (github.com/org/repo/image[@version])"`
+	Boxes           []string `arg:"" optional:"" help:"Boxes to build (default: all enabled). Supports remote refs (github.com/org/repo/box[@version])"`
 	Push            bool     `long:"push" help:"Push to registry after building"`
 	Tag             string   `long:"tag" help:"Override tag (default: CalVer)"`
 	Platform        string   `long:"platform" help:"Target platform (default: host platform)"`
@@ -31,7 +31,7 @@ type BuildCmd struct {
 	NoCache         bool     `long:"no-cache" help:"Disable build cache entirely"`
 	Jobs            int      `long:"jobs" help:"Max concurrent image builds per DAG level (0=auto: defaults.jobs, else 4)" env:"CHARLY_BUILD_JOBS"`
 	PodmanJobs      int      `long:"podman-jobs" help:"Stages per podman build (0=auto: min(NCPU, defaults.podman_jobs_cap))" env:"CHARLY_PODMAN_JOBS"`
-	IncludeDisabled bool     `long:"include-disabled" help:"Build images with enabled: false in charly.yml (does not modify the file). Use for one-off operational rebuilds without flipping authored config."`
+	IncludeDisabled bool     `long:"include-disabled" help:"Build boxes with enabled: false in charly.yml (does not modify the file). Use for one-off operational rebuilds without flipping authored config."`
 
 	// podmanJobsCap is the resolved ceiling for the auto podman-jobs calc,
 	// sourced from defaults.podman_jobs_cap in Run() (0 → podmanJobsCapFallback).
@@ -55,7 +55,7 @@ func ensureBuilderImageBuilt(engine, builderRef string) (string, error) {
 		return resolved, nil
 	}
 	fmt.Fprintf(os.Stderr, "Builder image %q not in local storage — building it automatically...\n", builderRef)
-	bc := &BuildCmd{Images: []string{builderRef}, IncludeDisabled: true}
+	bc := &BuildCmd{Boxes: []string{builderRef}, IncludeDisabled: true}
 	if err := bc.Run(); err != nil {
 		return "", fmt.Errorf("auto-building builder image %q: %w", builderRef, err)
 	}
@@ -68,7 +68,7 @@ func ensureBuilderImageBuilt(engine, builderRef string) (string, error) {
 
 func (c *BuildCmd) Run() error {
 	// Check if any image arg is a remote ref
-	for _, img := range c.Images {
+	for _, img := range c.Boxes {
 		ref := StripURLScheme(img)
 		if IsRemoteImageRef(ref) {
 			return c.buildRemote(ref)
@@ -88,7 +88,7 @@ func (c *BuildCmd) Run() error {
 	// transparently rebuild from upstream source without any flags. The
 	// workspace's deploy/eval overlays are picked up later by deploy-mode
 	// commands; image build doesn't need them.
-	if remoteRef, ok := detectRemoteIncludePassthrough(dir, c.Images); ok {
+	if remoteRef, ok := detectRemoteIncludePassthrough(dir, c.Boxes); ok {
 		return c.buildRemote(remoteRef)
 	}
 
@@ -100,9 +100,9 @@ func (c *BuildCmd) Run() error {
 	// would surface unrelated disabled-image dep errors (e.g. images that
 	// declare remote layers not yet fetched into the cache).
 	resolveOpts := ResolveOpts{IncludeDisabled: c.IncludeDisabled}
-	if c.IncludeDisabled && len(c.Images) > 0 {
-		resolveOpts.IncludeDisabledNames = make(map[string]bool, len(c.Images))
-		for _, name := range c.Images {
+	if c.IncludeDisabled && len(c.Boxes) > 0 {
+		resolveOpts.IncludeDisabledNames = make(map[string]bool, len(c.Boxes))
+		for _, name := range c.Boxes {
 			resolveOpts.IncludeDisabledNames[name] = true
 		}
 	}
@@ -111,7 +111,7 @@ func (c *BuildCmd) Run() error {
 	// namespaced builder) is pulled into the resolved set even when it isn't a
 	// base/builder of any root image. Remote (`@github…`) refs were already
 	// dispatched to buildRemote above, so these are local names only.
-	resolveOpts.RequestedImages = c.Images
+	resolveOpts.RequestedBoxes = c.Boxes
 	gen, err := NewGenerator(dir, c.Tag, resolveOpts)
 	if err != nil {
 		return err
@@ -135,7 +135,7 @@ func (c *BuildCmd) Run() error {
 		c.Cache = def.Cache
 	}
 
-	if err := ensureCharlyBinaryFresh(dir, gen.Images, c.Images); err != nil {
+	if err := ensureCharlyBinaryFresh(dir, gen.Boxes, c.Boxes); err != nil {
 		return fmt.Errorf("refreshing charly binary: %w", err)
 	}
 
@@ -153,18 +153,18 @@ func (c *BuildCmd) Run() error {
 		platform = hostPlatform()
 	}
 
-	if len(c.Images) > 0 {
+	if len(c.Boxes) > 0 {
 		// Filtered build: use sequential order
-		order, err := ResolveImageOrder(gen.Images, gen.Layers)
+		order, err := ResolveBoxOrder(gen.Boxes, gen.Layers)
 		if err != nil {
 			return err
 		}
-		order, err = filterImage(order, c.Images, gen.Images)
+		order, err = filterBox(order, c.Boxes, gen.Boxes)
 		if err != nil {
 			return err
 		}
 		for _, name := range order {
-			img := gen.Images[name]
+			img := gen.Boxes[name]
 			content := gen.Containerfiles[name]
 			if err := c.buildImage(engine, dir, name, img, gen.Config, platform, rt.BuildEngine, content); err != nil {
 				return fmt.Errorf("building %s: %w", name, err)
@@ -173,7 +173,7 @@ func (c *BuildCmd) Run() error {
 		}
 	} else {
 		// Full build: use level-based parallelism
-		levels, err := ResolveImageLevels(gen.Images, gen.Layers)
+		levels, err := ResolveBoxLevels(gen.Boxes, gen.Layers)
 		if err != nil {
 			return err
 		}
@@ -189,7 +189,7 @@ func (c *BuildCmd) Run() error {
 			if len(level) == 1 {
 				// Single image, no need for goroutine overhead
 				name := level[0]
-				img := gen.Images[name]
+				img := gen.Boxes[name]
 				content := gen.Containerfiles[name]
 				if err := c.buildImage(engine, dir, name, img, gen.Config, platform, rt.BuildEngine, content); err != nil {
 					return fmt.Errorf("building %s: %w", name, err)
@@ -200,7 +200,7 @@ func (c *BuildCmd) Run() error {
 
 				for _, name := range level {
 					name := name
-					img := gen.Images[name]
+					img := gen.Boxes[name]
 					content := gen.Containerfiles[name]
 					g.Go(func() error {
 						if err := c.buildImage(engine, dir, name, img, gen.Config, platform, rt.BuildEngine, content); err != nil {
@@ -218,26 +218,26 @@ func (c *BuildCmd) Run() error {
 			// Merge this level before building the next so children
 			// start from a merged (fewer-layer) base image.
 			for _, name := range level {
-				mergeAfterBuild(name, gen.Images[name])
+				mergeAfterBuild(name, gen.Boxes[name])
 			}
 		}
 	}
 
 	// Push after merge (Podman only; Docker buildx pushes during build)
 	if c.Push && rt.BuildEngine == "podman" {
-		order, err := ResolveImageOrder(gen.Images, gen.Layers)
+		order, err := ResolveBoxOrder(gen.Boxes, gen.Layers)
 		if err != nil {
 			return err
 		}
-		if len(c.Images) > 0 {
-			order, err = filterImage(order, c.Images, gen.Images)
+		if len(c.Boxes) > 0 {
+			order, err = filterBox(order, c.Boxes, gen.Boxes)
 			if err != nil {
 				return err
 			}
 		}
 		fmt.Fprintf(os.Stderr, "\n=== Pushing images ===\n")
 		for _, name := range order {
-			img := gen.Images[name]
+			img := gen.Boxes[name]
 			tags := imageTags(name, img, gen.Config)
 			if err := c.pushImage(dir, tags); err != nil {
 				return err
@@ -276,7 +276,7 @@ func mergeAfterBuild(name string, img *ResolvedBox) {
 	if img.Merge == nil || !img.Merge.Auto {
 		return
 	}
-	mergeCmd := &MergeCmd{Image: name, Tag: ""}
+	mergeCmd := &MergeCmd{Box: name, Tag: ""}
 	if err := mergeCmd.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: merge %s: %v\n", name, err)
 	}
@@ -329,7 +329,7 @@ func (c *BuildCmd) buildImage(engine, dir, name string, img *ResolvedBox, cfg *C
 //
 // Skipped (returns nil) when img.From is not a builder ref. Errors when
 // the builder is missing, isn't kind: bootstrap, or doesn't have a
-// resolved BuilderImage on the ResolvedImage.
+// resolved BuilderImage on the ResolvedBox.
 // pacstrapMicroarchRe matches pacman microarchitecture-level tokens (e.g.
 // x86_64_v3) embedded in a repo Server URL. CachyOS's cachyos-v3 repos serve
 // such packages; pacman rejects them unless the matching token is in
@@ -405,33 +405,33 @@ func renderRuntimePacmanConf(p *PacstrapDef) (string, error) {
 	return b.String(), nil
 }
 
-func (c *BuildCmd) runPrivilegedBootstrap(engine, dir, imageName string, img *ResolvedBox) error {
+func (c *BuildCmd) runPrivilegedBootstrap(engine, dir, boxName string, img *ResolvedBox) error {
 	if !strings.HasPrefix(img.From, "builder:") {
 		return nil
 	}
 	builderName := strings.TrimPrefix(img.From, "builder:")
 	if img.BootstrapBuilderImage == "" {
-		return fmt.Errorf("image %s: from: builder:%s requires bootstrap_builder_image: in charly.yml", imageName, builderName)
+		return fmt.Errorf("image %s: from: builder:%s requires bootstrap_builder_image: in charly.yml", boxName, builderName)
 	}
 	if img.BuilderConfig == nil {
-		return fmt.Errorf("image %s: build.yml builder: section is empty", imageName)
+		return fmt.Errorf("image %s: build.yml builder: section is empty", boxName)
 	}
 	builder, ok := img.BuilderConfig.Builder[builderName]
 	if !ok {
-		return fmt.Errorf("image %s: builder %q is not declared in build.yml", imageName, builderName)
+		return fmt.Errorf("image %s: builder %q is not declared in build.yml", boxName, builderName)
 	}
 	if !builder.IsBootstrap() {
-		return fmt.Errorf("image %s: builder %q is not kind: bootstrap (got kind=%q)", imageName, builderName, builder.Kind)
+		return fmt.Errorf("image %s: builder %q is not kind: bootstrap (got kind=%q)", boxName, builderName, builder.Kind)
 	}
 	if img.DistroDef == nil {
-		return fmt.Errorf("image %s: distro %v has no resolved DistroDef", imageName, img.Distro)
+		return fmt.Errorf("image %s: distro %v has no resolved DistroDef", boxName, img.Distro)
 	}
 
 	output := builder.OutputArtifact
 	if output == "" {
 		output = "/out/rootfs.tar.gz"
 	}
-	outDest := filepath.Join(dir, ".build", imageName, fmt.Sprintf("%s.tar.gz", builderName))
+	outDest := filepath.Join(dir, ".build", boxName, fmt.Sprintf("%s.tar.gz", builderName))
 
 	// Skip rebuild when the staged tarball is already present and the
 	// builder image hash hasn't changed. Cheap stat is enough for now;
@@ -461,7 +461,7 @@ func (c *BuildCmd) runPrivilegedBootstrap(engine, dir, imageName string, img *Re
 		Variant           string
 	}{
 		Distro:   img.DistroDef,
-		Packages: bootstrapPackagesForImage(img),
+		Packages: bootstrapPackagesForBox(img),
 	}
 	// CachyOS et al. need extra repo blocks (+ an Architecture directive for
 	// microarch repos) injected into pacman.conf before pacstrap so the new
@@ -498,23 +498,23 @@ func (c *BuildCmd) runPrivilegedBootstrap(engine, dir, imageName string, img *Re
 
 	script, err := renderBootstrapScript(builder, ctx)
 	if err != nil {
-		return fmt.Errorf("rendering bootstrap script for %s: %w", imageName, err)
+		return fmt.Errorf("rendering bootstrap script for %s: %w", boxName, err)
 	}
 
-	fmt.Fprintf(os.Stderr, "\n--- Bootstrap (%s) for %s ---\n", builderName, imageName)
+	fmt.Fprintf(os.Stderr, "\n--- Bootstrap (%s) for %s ---\n", builderName, boxName)
 	if err := RunPrivileged(PrivilegedRun{
 		Image:      builderRef,
 		Script:     script,
 		OutputPath: output,
 		OutputDest: outDest,
 	}); err != nil {
-		return fmt.Errorf("running %s for %s: %w", builderName, imageName, err)
+		return fmt.Errorf("running %s for %s: %w", builderName, boxName, err)
 	}
 	fmt.Fprintf(os.Stderr, "Wrote %s\n", outDest)
 	return nil
 }
 
-// bootstrapPackagesForImage returns base + per-image bootstrap packages.
+// bootstrapPackagesForBox returns base + per-image bootstrap packages.
 // Per-image overrides aren't currently surfaced via charly.yml; this
 // returns just the distro defaults for now.
 //
@@ -522,7 +522,7 @@ func (c *BuildCmd) runPrivilegedBootstrap(engine, dir, imageName string, img *Re
 // build path (the box config `from: builder:<name>` consumers). Same dispatch
 // rules: Pacstrap.BasePackages for pacstrap-flavored, Debootstrap.BasePackages
 // for debootstrap-flavored.
-func bootstrapPackagesForImage(img *ResolvedBox) []string {
+func bootstrapPackagesForBox(img *ResolvedBox) []string {
 	if img.DistroDef == nil {
 		return nil
 	}
@@ -757,11 +757,11 @@ func hostPlatform() string {
 // one include, (b) it's a remote @github.com/...charly.yml ref,
 // (c) the user asked for a single image, and (d) the workspace
 // charly.yml has no local `image:` entry of that name.
-func detectRemoteIncludePassthrough(dir string, images []string) (string, bool) {
-	if len(images) != 1 {
+func detectRemoteIncludePassthrough(dir string, boxes []string) (string, bool) {
+	if len(boxes) != 1 {
 		return "", false
 	}
-	imageName := images[0]
+	boxName := boxes[0]
 	unifiedPath := filepath.Join(dir, UnifiedFileName)
 	data, err := os.ReadFile(unifiedPath)
 	if err != nil {
@@ -771,7 +771,7 @@ func detectRemoteIncludePassthrough(dir string, images []string) (string, bool) 
 		// Read the `import:` list generically (items are either bare strings —
 		// flat imports — or single-key `alias: ref` maps — namespaced imports).
 		Import []interface{}              `yaml:"import"`
-		Image  map[string]json.RawMessage `yaml:"box"`
+		Box    map[string]json.RawMessage `yaml:"box"`
 	}
 	if err := yaml.Unmarshal(data, &peek); err != nil {
 		return "", false
@@ -789,7 +789,7 @@ func detectRemoteIncludePassthrough(dir string, images []string) (string, bool) 
 		return "", false
 	}
 	// If the image is declared locally, keep the normal local path.
-	if _, hasLocal := peek.Image[imageName]; hasLocal {
+	if _, hasLocal := peek.Box[boxName]; hasLocal {
 		return "", false
 	}
 	inc := stringImports[0]
@@ -813,7 +813,7 @@ func detectRemoteIncludePassthrough(dir string, images []string) (string, bool) 
 	}
 	repoRoot := pathPart[:slashIdx]
 	// Synthesize @github.com/owner/repo/<image>[:ref].
-	ref := "@" + repoRoot + "/" + imageName
+	ref := "@" + repoRoot + "/" + boxName
 	if version != "" {
 		ref += ":" + version
 	}
@@ -838,23 +838,23 @@ func (c *BuildCmd) buildRemote(ref string) error {
 	return ctx.BuildImage(nil, tag)
 }
 
-// filterImage filters the build order to only include the requested images
+// filterBox filters the build order to only include the requested images
 // and their dependencies.
-func filterImage(order []string, requested []string, images map[string]*ResolvedBox) ([]string, error) {
+func filterBox(order []string, requested []string, boxes map[string]*ResolvedBox) ([]string, error) {
 	// Validate requested images exist
 	for _, name := range requested {
-		if _, ok := images[name]; !ok {
+		if _, ok := boxes[name]; !ok {
 			return nil, fmt.Errorf("unknown image %q", name)
 		}
 	}
 
 	// Collect requested images and their transitive deps (Base + format builders +
-	// BootstrapBuilderImage). Routed through imageDirectDeps in graph.go so this
-	// walker stays in lockstep with ResolveImageOrder + ResolveImageLevels — see
+	// BootstrapBuilderImage). Routed through boxDirectDeps in graph.go so this
+	// walker stays in lockstep with ResolveBoxOrder + ResolveBoxLevels — see
 	// the helper's docstring for the rationale (2026-05 cachyos-pacstrap-builder
 	// regression). includeFormatBuilders=true here unconditionally because filtered
 	// build sets must always include format-builder images that the requested
-	// targets need at build time, regardless of ImageNeedsBuilder.
+	// targets need at build time, regardless of BoxNeedsBuilder.
 	needed := make(map[string]bool)
 	var addDeps func(name string)
 	addDeps = func(name string) {
@@ -862,8 +862,8 @@ func filterImage(order []string, requested []string, images map[string]*Resolved
 			return
 		}
 		needed[name] = true
-		img := images[name]
-		for _, dep := range imageDirectDeps(name, img, images, true) {
+		img := boxes[name]
+		for _, dep := range boxDirectDeps(name, img, boxes, true) {
 			addDeps(dep)
 		}
 	}
@@ -888,17 +888,17 @@ func filterImage(order []string, requested []string, images map[string]*Resolved
 // CLI behaviour into the image. Skipped (with a one-line warning) when
 // `go` is not on PATH, so an end-user with a packaged charly install does
 // not see a hard error.
-func ensureCharlyBinaryFresh(dir string, images map[string]*ResolvedBox, requested []string) error {
+func ensureCharlyBinaryFresh(dir string, boxes map[string]*ResolvedBox, requested []string) error {
 	in := requested
 	if len(in) == 0 {
-		in = make([]string, 0, len(images))
-		for name := range images {
+		in = make([]string, 0, len(boxes))
+		for name := range boxes {
 			in = append(in, name)
 		}
 	}
 	needs := false
 	for _, name := range in {
-		img, ok := images[name]
+		img, ok := boxes[name]
 		if !ok {
 			continue
 		}

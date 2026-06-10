@@ -40,7 +40,7 @@ func TestFilterOwnProvidesEmpty(t *testing.T) {
 	}
 	got := filterOwnProvides(entries, "")
 	if len(got) != 1 {
-		t.Errorf("filterOwnProvides with empty imageName should return all entries")
+		t.Errorf("filterOwnProvides with empty boxName should return all entries")
 	}
 }
 

@@ -163,7 +163,10 @@ func TestAutoAllocate_MissFailsHard(t *testing.T) {
 func TestAutoAllocate_OperatorHostdevWins(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	orig := DetectVFIO
-	DetectVFIO = func() VFIOReport { t.Fatal("DetectVFIO must NOT run when a hostdev is already configured"); return VFIOReport{} }
+	DetectVFIO = func() VFIOReport {
+		t.Fatal("DetectVFIO must NOT run when a hostdev is already configured")
+		return VFIOReport{}
+	}
 	defer func() { DetectVFIO = orig }()
 
 	// vm.yml already committed a hostdev → auto-allocation defers, no detect.

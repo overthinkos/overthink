@@ -157,7 +157,7 @@ func TestVerifyBindMountsEncryptedMounted(t *testing.T) {
 
 func TestQuadletWithBindMounts(t *testing.T) {
 	cfg := QuadletConfig{
-		ImageName:   "myapp",
+		BoxName:     "myapp",
 		ImageRef:    "ghcr.io/test/myapp:latest",
 		Home:        "/home/user/project",
 		BindAddress: "127.0.0.1",
@@ -179,7 +179,7 @@ func TestQuadletWithBindMounts(t *testing.T) {
 
 func TestQuadletWithEncryptedBindMountsKeyring(t *testing.T) {
 	cfg := QuadletConfig{
-		ImageName:   "myapp",
+		BoxName:     "myapp",
 		ImageRef:    "ghcr.io/test/myapp:latest",
 		Home:        "/home/user/project",
 		BindAddress: "127.0.0.1",
@@ -212,7 +212,7 @@ func TestQuadletWithEncryptedBindMountsKeyring(t *testing.T) {
 
 func TestQuadletWithEncryptedBindMountsNonKeyring(t *testing.T) {
 	cfg := QuadletConfig{
-		ImageName:   "myapp",
+		BoxName:     "myapp",
 		ImageRef:    "ghcr.io/test/myapp:latest",
 		Home:        "/home/user/project",
 		BindAddress: "127.0.0.1",
@@ -242,7 +242,7 @@ func TestQuadletWithEncryptedBindMountsNonKeyring(t *testing.T) {
 
 func TestQuadletWithoutEncryptedMounts(t *testing.T) {
 	cfg := QuadletConfig{
-		ImageName:   "myapp",
+		BoxName:     "myapp",
 		ImageRef:    "ghcr.io/test/myapp:latest",
 		Home:        "/home/user/project",
 		BindAddress: "127.0.0.1",
@@ -356,7 +356,7 @@ func TestCryptoPasswdRequiresUnmount(t *testing.T) {
 	isEncryptedMounted = func(plainDir string) bool { return true }
 	defer func() { isEncryptedMounted = origMounted }()
 
-	imageName := "myapp"
+	boxName := "myapp"
 	// We can't call encPasswd() directly because loadEncryptedVolume needs deploy.yml,
 	// so test the logic by simulating what encPasswd() does.
 	mounts := []DeployVolumeConfig{
@@ -365,9 +365,9 @@ func TestCryptoPasswdRequiresUnmount(t *testing.T) {
 	storagePath := "/data/enc"
 
 	for _, m := range mounts {
-		plainDir := encryptedPlainDir(storagePath, imageName, m.Name)
+		plainDir := encryptedPlainDir(storagePath, boxName, m.Name)
 		if isEncryptedMounted(plainDir) {
-			err := fmt.Errorf("encrypted volume %q is still mounted; run 'charly config unmount %s' first", m.Name, imageName)
+			err := fmt.Errorf("encrypted volume %q is still mounted; run 'charly config unmount %s' first", m.Name, boxName)
 			if !strings.Contains(err.Error(), "still mounted") {
 				t.Errorf("expected 'still mounted' in error, got: %v", err)
 			}

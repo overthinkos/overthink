@@ -55,14 +55,14 @@ type CdpCmd struct {
 
 // CdpAxtreeCmd retrieves the Chrome accessibility tree via CDP.
 type CdpAxtreeCmd struct {
-	Image    string `arg:"" help:"Image name (use . for local)"`
+	Box      string `arg:"" help:"Box name (use . for local)"`
 	TabID    string `arg:"" help:"Tab ID (from browser list)"`
 	Query    string `arg:"" optional:"" help:"Filter by name or role substring"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 }
 
 func (c *CdpAxtreeCmd) Run() error {
-	client, err := connectTab(c.Image, c.TabID, c.Instance)
+	client, err := connectTab(c.Box, c.TabID, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -116,14 +116,14 @@ func (c *CdpAxtreeCmd) Run() error {
 
 // CdpStatusCmd checks if CDP is reachable.
 type CdpStatusCmd struct {
-	Image    string `arg:"" help:"Image name (use . for local)"`
+	Box      string `arg:"" help:"Box name (use . for local)"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 }
 
 func (c *CdpStatusCmd) Run() error {
 	// Resolve a host-reachable DevTools endpoint (an ssh -L forward for VM/ssh
 	// venues) and probe /json/version — venue-agnostic.
-	devtoolsURL, ep, _, err := cdpDevTools(c.Image, c.Instance)
+	devtoolsURL, ep, _, err := cdpDevTools(c.Box, c.Instance)
 	if err != nil {
 		fmt.Printf("CDP:       unreachable\n")
 		fmt.Printf("Detail:    %v\n", err)
@@ -143,13 +143,13 @@ func (c *CdpStatusCmd) Run() error {
 
 // CdpOpenCmd opens a URL in the container's Chrome browser
 type CdpOpenCmd struct {
-	Image    string `arg:"" help:"Image name (use . for local)"`
+	Box      string `arg:"" help:"Box name (use . for local)"`
 	URL      string `arg:"" help:"URL to open"`
 	Instance string `short:"i" long:"instance" help:"Instance name for multi-instance containers"`
 }
 
 func (c *CdpOpenCmd) Run() error {
-	devtoolsURL, ep, venue, err := cdpDevTools(c.Image, c.Instance)
+	devtoolsURL, ep, venue, err := cdpDevTools(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -165,7 +165,7 @@ func (c *CdpOpenCmd) Run() error {
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return diagnoseCDP(venue.Engine, venue.Name, c.Image, fmt.Errorf("opening URL in Chrome: %w", err))
+		return diagnoseCDP(venue.Engine, venue.Name, c.Box, fmt.Errorf("opening URL in Chrome: %w", err))
 	}
 	defer resp.Body.Close()
 
@@ -180,7 +180,7 @@ func (c *CdpOpenCmd) Run() error {
 
 // CdpListCmd lists open Chrome browser tabs
 type CdpListCmd struct {
-	Image    string `arg:"" help:"Image name (use . for local)"`
+	Box      string `arg:"" help:"Box name (use . for local)"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 }
 
@@ -194,7 +194,7 @@ type devToolsTab struct {
 }
 
 func (c *CdpListCmd) Run() error {
-	devtoolsURL, ep, venue, err := cdpDevTools(c.Image, c.Instance)
+	devtoolsURL, ep, venue, err := cdpDevTools(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -203,7 +203,7 @@ func (c *CdpListCmd) Run() error {
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Get(devtoolsURL + "/json")
 	if err != nil {
-		return diagnoseCDP(venue.Engine, venue.Name, c.Image, fmt.Errorf("failed to connect to Chrome DevTools: %w", err))
+		return diagnoseCDP(venue.Engine, venue.Name, c.Box, fmt.Errorf("failed to connect to Chrome DevTools: %w", err))
 	}
 	defer resp.Body.Close()
 
@@ -231,13 +231,13 @@ func (c *CdpListCmd) Run() error {
 
 // CdpCloseCmd closes a Chrome browser tab
 type CdpCloseCmd struct {
-	Image    string `arg:"" help:"Image name (use . for local)"`
+	Box      string `arg:"" help:"Box name (use . for local)"`
 	TabID    string `arg:"" help:"Tab ID to close (from browser list)"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 }
 
 func (c *CdpCloseCmd) Run() error {
-	devtoolsURL, ep, venue, err := cdpDevTools(c.Image, c.Instance)
+	devtoolsURL, ep, venue, err := cdpDevTools(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -263,8 +263,8 @@ func (c *CdpCloseCmd) Run() error {
 // port mapping, or an ssh -L forward for VM/ssh venues. The caller MUST close
 // the returned endpoint when done; for the persistent-WebSocket path the
 // CDPClient takes ownership and closes it on Close.
-func cdpDevTools(image, instance string) (devtoolsURL string, ep *EvalEndpoint, venue *EvalVenue, err error) {
-	venue, err = resolveEvalVenue(image, instance)
+func cdpDevTools(box, instance string) (devtoolsURL string, ep *EvalEndpoint, venue *EvalVenue, err error) {
+	venue, err = resolveEvalVenue(box, instance)
 	if err != nil {
 		return "", nil, nil, err
 	}
@@ -325,8 +325,8 @@ func resolveTabWS(devtoolsURL, tabID string) (string, error) {
 
 // connectTab resolves container -> devtools URL -> tab WS URL -> CDPClient.
 // On connection failure, runs CDP diagnostics to help identify the cause.
-func connectTab(image, tabID, instance string) (*CDPClient, error) {
-	devtoolsURL, ep, venue, err := cdpDevTools(image, instance)
+func connectTab(box, tabID, instance string) (*CDPClient, error) {
+	devtoolsURL, ep, venue, err := cdpDevTools(box, instance)
 	if err != nil {
 		return nil, err
 	}
@@ -334,13 +334,13 @@ func connectTab(image, tabID, instance string) (*CDPClient, error) {
 	wsURL, err := resolveTabWS(devtoolsURL, tabID)
 	if err != nil {
 		ep.Close()
-		return nil, diagnoseCDP(venue.Engine, venue.Name, image, err)
+		return nil, diagnoseCDP(venue.Engine, venue.Name, box, err)
 	}
 
 	client, err := NewCDPClient(wsURL)
 	if err != nil {
 		ep.Close()
-		return nil, diagnoseCDP(venue.Engine, venue.Name, image, err)
+		return nil, diagnoseCDP(venue.Engine, venue.Name, box, err)
 	}
 	// The CDPClient owns the forward for the life of the WebSocket.
 	client.endpoint = ep
@@ -395,13 +395,13 @@ func cdpEvaluate(client *CDPClient, expression string) (string, error) {
 
 // CdpTextCmd gets the page text content of a tab.
 type CdpTextCmd struct {
-	Image    string `arg:"" help:"Image name (use . for local)"`
+	Box      string `arg:"" help:"Box name (use . for local)"`
 	TabID    string `arg:"" help:"Tab ID (from browser list)"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 }
 
 func (c *CdpTextCmd) Run() error {
-	client, err := connectTab(c.Image, c.TabID, c.Instance)
+	client, err := connectTab(c.Box, c.TabID, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -417,13 +417,13 @@ func (c *CdpTextCmd) Run() error {
 
 // CdpHtmlCmd gets the page HTML of a tab.
 type CdpHtmlCmd struct {
-	Image    string `arg:"" help:"Image name (use . for local)"`
+	Box      string `arg:"" help:"Box name (use . for local)"`
 	TabID    string `arg:"" help:"Tab ID (from browser list)"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 }
 
 func (c *CdpHtmlCmd) Run() error {
-	client, err := connectTab(c.Image, c.TabID, c.Instance)
+	client, err := connectTab(c.Box, c.TabID, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -439,13 +439,13 @@ func (c *CdpHtmlCmd) Run() error {
 
 // CdpUrlCmd gets the current page URL and title of a tab.
 type CdpUrlCmd struct {
-	Image    string `arg:"" help:"Image name (use . for local)"`
+	Box      string `arg:"" help:"Box name (use . for local)"`
 	TabID    string `arg:"" help:"Tab ID (from browser list)"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 }
 
 func (c *CdpUrlCmd) Run() error {
-	client, err := connectTab(c.Image, c.TabID, c.Instance)
+	client, err := connectTab(c.Box, c.TabID, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -471,14 +471,14 @@ func (c *CdpUrlCmd) Run() error {
 
 // CdpScreenshotCmd captures a screenshot from a tab.
 type CdpScreenshotCmd struct {
-	Image    string `arg:"" help:"Image name (use . for local)"`
+	Box      string `arg:"" help:"Box name (use . for local)"`
 	TabID    string `arg:"" help:"Tab ID (from browser list)"`
 	File     string `arg:"" optional:"" default:"screenshot.png" help:"Output file path"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 }
 
 func (c *CdpScreenshotCmd) Run() error {
-	client, err := connectTab(c.Image, c.TabID, c.Instance)
+	client, err := connectTab(c.Box, c.TabID, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -522,7 +522,7 @@ func (c *CdpScreenshotCmd) Run() error {
 
 // CdpClickCmd clicks an element by CSS selector.
 type CdpClickCmd struct {
-	Image    string `arg:"" help:"Image name (use . for local)"`
+	Box      string `arg:"" help:"Box name (use . for local)"`
 	TabID    string `arg:"" help:"Tab ID (from browser list)"`
 	Selector string `arg:"" help:"CSS selector of element to click"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
@@ -531,7 +531,7 @@ type CdpClickCmd struct {
 }
 
 func (c *CdpClickCmd) Run() error {
-	client, err := connectTab(c.Image, c.TabID, c.Instance)
+	client, err := connectTab(c.Box, c.TabID, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -572,7 +572,7 @@ func (c *CdpClickCmd) Run() error {
 		}
 		desktopX := uint16(coords.X + offset.ScreenX)
 		desktopY := uint16(coords.Y + offset.ScreenY + offset.ChromeHeight)
-		vncClient, err := connectVNC(c.Image, c.Instance)
+		vncClient, err := connectVNC(c.Box, c.Instance)
 		if err != nil {
 			return fmt.Errorf("connecting to VNC: %w", err)
 		}
@@ -593,7 +593,7 @@ func (c *CdpClickCmd) Run() error {
 		}
 		desktopX := int(coords.X + offset.ScreenX)
 		desktopY := int(coords.Y + offset.ScreenY + offset.ChromeHeight)
-		venue, err := resolveEvalVenue(c.Image, c.Instance)
+		venue, err := resolveEvalVenue(c.Box, c.Instance)
 		if err != nil {
 			return fmt.Errorf("resolving venue for WL click: %w", err)
 		}
@@ -648,7 +648,7 @@ func (c *CdpClickCmd) Run() error {
 
 // CdpTypeCmd types text into an input field.
 type CdpTypeCmd struct {
-	Image    string `arg:"" help:"Image name (use . for local)"`
+	Box      string `arg:"" help:"Box name (use . for local)"`
 	TabID    string `arg:"" help:"Tab ID (from browser list)"`
 	Selector string `arg:"" help:"CSS selector of input field"`
 	Text     string `arg:"" help:"Text to type"`
@@ -656,7 +656,7 @@ type CdpTypeCmd struct {
 }
 
 func (c *CdpTypeCmd) Run() error {
-	client, err := connectTab(c.Image, c.TabID, c.Instance)
+	client, err := connectTab(c.Box, c.TabID, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -715,14 +715,14 @@ func cdpDispatchKeyEvent(client *CDPClient, eventType, key string) error {
 
 // CdpEvalCmd evaluates a JavaScript expression in a tab.
 type CdpEvalCmd struct {
-	Image      string `arg:"" help:"Image name from charly.yml"`
+	Box        string `arg:"" help:"Box name from charly.yml"`
 	TabID      string `arg:"" help:"Tab ID (from browser list)"`
 	Expression string `arg:"" help:"JavaScript expression to evaluate"`
 	Instance   string `short:"i" long:"instance" help:"Instance name"`
 }
 
 func (c *CdpEvalCmd) Run() error {
-	client, err := connectTab(c.Image, c.TabID, c.Instance)
+	client, err := connectTab(c.Box, c.TabID, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -738,7 +738,7 @@ func (c *CdpEvalCmd) Run() error {
 
 // CdpWaitCmd waits for an element to appear in the page.
 type CdpWaitCmd struct {
-	Image    string        `arg:"" help:"Image name from charly.yml"`
+	Box      string        `arg:"" help:"Box name from charly.yml"`
 	TabID    string        `arg:"" help:"Tab ID (from browser list)"`
 	Selector string        `arg:"" help:"CSS selector to wait for"`
 	Instance string        `short:"i" long:"instance" help:"Instance name"`
@@ -746,7 +746,7 @@ type CdpWaitCmd struct {
 }
 
 func (c *CdpWaitCmd) Run() error {
-	client, err := connectTab(c.Image, c.TabID, c.Instance)
+	client, err := connectTab(c.Box, c.TabID, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -773,7 +773,7 @@ func (c *CdpWaitCmd) Run() error {
 
 // CdpRawCmd sends a raw CDP command to a tab.
 type CdpRawCmd struct {
-	Image    string `arg:"" help:"Image name (use . for local)"`
+	Box      string `arg:"" help:"Box name (use . for local)"`
 	TabID    string `arg:"" help:"Tab ID (from browser list)"`
 	Method   string `arg:"" help:"CDP method (e.g. Page.navigate)"`
 	Params   string `arg:"" optional:"" help:"JSON params"`
@@ -781,7 +781,7 @@ type CdpRawCmd struct {
 }
 
 func (c *CdpRawCmd) Run() error {
-	client, err := connectTab(c.Image, c.TabID, c.Instance)
+	client, err := connectTab(c.Box, c.TabID, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -844,7 +844,7 @@ func cdpGetWindowOffset(client *CDPClient) (windowOffset, error) {
 
 // CdpCoordsCmd shows element coordinates in both viewport and desktop coordinate systems.
 type CdpCoordsCmd struct {
-	Image    string `arg:"" help:"Image name (use . for local)"`
+	Box      string `arg:"" help:"Box name (use . for local)"`
 	TabID    string `arg:"" help:"Tab ID (from browser list)"`
 	Selector string `arg:"" help:"CSS selector of element"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
@@ -852,7 +852,7 @@ type CdpCoordsCmd struct {
 }
 
 func (c *CdpCoordsCmd) Run() error {
-	client, err := connectTab(c.Image, c.TabID, c.Instance)
+	client, err := connectTab(c.Box, c.TabID, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -905,7 +905,7 @@ func (c *CdpCoordsCmd) Run() error {
 
 	// Get sway-based desktop offset (only meaningful on a wlroots/sway venue;
 	// resolves via the shared venue so it works for container or VM).
-	venue, err := resolveEvalVenue(c.Image, c.Instance)
+	venue, err := resolveEvalVenue(c.Box, c.Instance)
 	if err == nil && venue.Exec != nil {
 		swayRect, err := FindWindowRect(venue.Exec, c.AppID)
 		if err != nil {

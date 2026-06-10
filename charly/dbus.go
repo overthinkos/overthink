@@ -20,17 +20,17 @@ type DbusCmd struct {
 
 // DbusNotifyCmd sends a desktop notification via org.freedesktop.Notifications.
 type DbusNotifyCmd struct {
-	Image    string `arg:"" help:"Image name (use . for local)"`
+	Box      string `arg:"" help:"Box name (use . for local)"`
 	Title    string `arg:"" help:"Notification title"`
 	Body     string `arg:"" optional:"" default:"" help:"Notification body"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 }
 
 func (c *DbusNotifyCmd) Run() error {
-	if c.Image == "." {
+	if c.Box == "." {
 		return dbusNotifyLocal(c.Title, c.Body)
 	}
-	venue, err := resolveEvalVenue(c.Image, c.Instance)
+	venue, err := resolveEvalVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -39,7 +39,7 @@ func (c *DbusNotifyCmd) Run() error {
 
 // DbusCallCmd makes a generic D-Bus method call.
 type DbusCallCmd struct {
-	Image    string   `arg:"" help:"Image name (use . for local)"`
+	Box      string   `arg:"" help:"Box name (use . for local)"`
 	Dest     string   `arg:"" help:"D-Bus service name (e.g. org.freedesktop.Notifications)"`
 	Path     string   `arg:"" help:"Object path (e.g. /org/freedesktop/Notifications)"`
 	Method   string   `arg:"" help:"Interface.Method (e.g. org.freedesktop.Notifications.Notify)"`
@@ -48,10 +48,10 @@ type DbusCallCmd struct {
 }
 
 func (c *DbusCallCmd) Run() error {
-	if c.Image == "." {
+	if c.Box == "." {
 		return dbusCallLocal(c.Dest, c.Path, c.Method, c.Args)
 	}
-	venue, err := resolveEvalVenue(c.Image, c.Instance)
+	venue, err := resolveEvalVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -60,15 +60,15 @@ func (c *DbusCallCmd) Run() error {
 
 // DbusListCmd lists available D-Bus services.
 type DbusListCmd struct {
-	Image    string `arg:"" help:"Image name (use . for local)"`
+	Box      string `arg:"" help:"Box name (use . for local)"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 }
 
 func (c *DbusListCmd) Run() error {
-	if c.Image == "." {
+	if c.Box == "." {
 		return dbusListLocal()
 	}
-	venue, err := resolveEvalVenue(c.Image, c.Instance)
+	venue, err := resolveEvalVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -78,17 +78,17 @@ func (c *DbusListCmd) Run() error {
 
 // DbusIntrospectCmd introspects a D-Bus service object.
 type DbusIntrospectCmd struct {
-	Image    string `arg:"" help:"Image name (use . for local)"`
+	Box      string `arg:"" help:"Box name (use . for local)"`
 	Dest     string `arg:"" help:"D-Bus service name"`
 	Path     string `arg:"" help:"Object path"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 }
 
 func (c *DbusIntrospectCmd) Run() error {
-	if c.Image == "." {
+	if c.Box == "." {
 		return dbusIntrospectLocal(c.Dest, c.Path)
 	}
-	venue, err := resolveEvalVenue(c.Image, c.Instance)
+	venue, err := resolveEvalVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}

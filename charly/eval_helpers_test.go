@@ -6,7 +6,7 @@ import (
 )
 
 // testdataDir is the project directory used by test fixtures. Tests read
-// build config via LoadBuildConfigForImage(testdataDir) which goes through
+// build config via LoadBuildConfigForBox(testdataDir) which goes through
 // the unified loader (charly.yml + includes).
 const testdataDir = "testdata"
 
@@ -17,7 +17,7 @@ const testBuildConfigRef = testdataDir
 
 // testDistroConfig returns the default DistroConfig from testdata fixtures for tests.
 func testDistroConfig() *DistroConfig {
-	distroCfg, _, _, err := LoadBuildConfigForImage(testdataDir)
+	distroCfg, _, _, err := LoadBuildConfigForBox(testdataDir)
 	if err != nil {
 		panic("failed to load distro config from testdata: " + err.Error())
 	}
@@ -32,7 +32,7 @@ func testDistroDef(tags ...string) *DistroDef {
 
 // testBuilderCfg returns the default BuilderConfig from testdata fixtures for tests.
 func testBuilderCfg() *BuilderConfig {
-	_, builderCfg, _, err := LoadBuildConfigForImage(testdataDir)
+	_, builderCfg, _, err := LoadBuildConfigForBox(testdataDir)
 	if err != nil {
 		panic("failed to load builder config from testdata: " + err.Error())
 	}
@@ -41,7 +41,7 @@ func testBuilderCfg() *BuilderConfig {
 
 // testProjectDir writes a minimal valid charly.yml (+ build.yml) to a
 // tmpdir and returns its path. Use when a test needs a real project dir
-// argument for Validate / ResolveImage calls that no longer tolerate dir="".
+// argument for Validate / ResolveBox calls that no longer tolerate dir="".
 // The emitted project has fedora + arch + debian + ubuntu distros and
 // a pixi builder — enough to cover most fixture Configs without error.
 func testProjectDir(t interface {

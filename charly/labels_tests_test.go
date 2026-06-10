@@ -6,7 +6,7 @@ import (
 )
 
 // Exercises the full OCI-label read path for the tests manifest:
-// InspectLabels → ExtractMetadata → ImageMetadata.Eval.
+// InspectLabels → ExtractMetadata → BoxMetadata.Eval.
 //
 // This is the read-side complement to TestLabelTests_JSONRoundTrip, which
 // only validates the marshaling path. Together they prove the contract
@@ -20,7 +20,7 @@ func TestExtractMetadata_Tests(t *testing.T) {
 		Layer: []Check{
 			{File: "/usr/bin/redis-server", Exists: ptrBool(true), Origin: "candy:redis", Scope: "build"},
 		},
-		Image: []Check{
+		Box: []Check{
 			{Command: "supervisord -v", Origin: "box:redis-ml", Scope: "build"},
 		},
 		Deploy: []Check{
@@ -59,8 +59,8 @@ func TestExtractMetadata_Tests(t *testing.T) {
 	if len(meta.Eval.Layer) != 1 || meta.Eval.Layer[0].File != "/usr/bin/redis-server" {
 		t.Errorf("layer section wrong: %+v", meta.Eval.Layer)
 	}
-	if len(meta.Eval.Image) != 1 || meta.Eval.Image[0].Command != "supervisord -v" {
-		t.Errorf("image section wrong: %+v", meta.Eval.Image)
+	if len(meta.Eval.Box) != 1 || meta.Eval.Box[0].Command != "supervisord -v" {
+		t.Errorf("image section wrong: %+v", meta.Eval.Box)
 	}
 	if len(meta.Eval.Deploy) != 1 {
 		t.Fatalf("deploy section wrong: %+v", meta.Eval.Deploy)

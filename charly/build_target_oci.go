@@ -35,11 +35,11 @@ type OCITarget struct {
 	// render multi-stage builders when the IR contains BuilderStep.
 	BuilderConfig *BuilderConfig
 
-	// Image, BuildDir, ContextRelPrefix mirror the state the legacy
+	// Box, BuildDir, ContextRelPrefix mirror the state the legacy
 	// Generator carries for emit-time rendering. Populated by callers
 	// before Emit when they want full task + builder rendering (not
 	// just the placeholder output). Safe to leave zero for tests.
-	Image            *ResolvedBox
+	Box              *ResolvedBox
 	BuildDir         string
 	ContextRelPrefix string
 	Generator        *Generator // used for emitTasks + builder stage rendering
@@ -76,8 +76,8 @@ func (t *OCITarget) emitPlan(plan *InstallPlan, opts EmitOpts) error {
 	// Resolve the deferred {{.Home}} token in home-bearing step fields to
 	// the image's runtime home. For an OCI build (and the pod-overlay build
 	// that reuses OCITarget) img.Home IS the home the baked paths run under.
-	if t.Image != nil {
-		plan.ResolveHome(t.Image.Home)
+	if t.Box != nil {
+		plan.ResolveHome(t.Box.Home)
 	}
 	fmt.Fprintf(&t.buf, "# Layer: %s\n", plan.Layer)
 	for _, step := range plan.Steps {
@@ -241,7 +241,7 @@ func (t *OCITarget) emitBuilder(s *BuilderStep, plan *InstallPlan) error {
 	if !ok || bDef == nil {
 		return fmt.Errorf("builder %q: not defined in BuilderConfig", s.Builder)
 	}
-	if t.Image == nil {
+	if t.Box == nil {
 		fmt.Fprintf(&t.buf, "# Builder: %s (layer=%s) — skipped, no Image context\n",
 			s.Builder, s.LayerName)
 		return nil
@@ -259,8 +259,8 @@ func (t *OCITarget) emitBuilder(s *BuilderStep, plan *InstallPlan) error {
 	if bDef.Inline {
 		ctx := &BuildStageContext{
 			LayerStage:  layer.Name,
-			UID:         t.Image.UID,
-			GID:         t.Image.GID,
+			UID:         t.Box.UID,
+			GID:         t.Box.GID,
 			CacheMounts: bDef.CacheMount,
 		}
 		rendered, err := RenderTemplate(s.Builder+"-inline", bDef.InstallTemplate, ctx)
@@ -269,7 +269,7 @@ func (t *OCITarget) emitBuilder(s *BuilderStep, plan *InstallPlan) error {
 		}
 		// Switch USER to the image user for inline builder steps; matches
 		// legacy generate.go:1184-1187.
-		fmt.Fprintf(&t.buf, "USER %d\n", t.Image.UID)
+		fmt.Fprintf(&t.buf, "USER %d\n", t.Box.UID)
 		t.buf.WriteString(rendered)
 		return nil
 	}
@@ -284,10 +284,10 @@ func (t *OCITarget) emitBuilder(s *BuilderStep, plan *InstallPlan) error {
 		return nil
 	}
 	builderRef := ""
-	if t.Image.Builder != nil {
-		builderRef = t.Image.Builder[s.Builder]
+	if t.Box.Builder != nil {
+		builderRef = t.Box.Builder[s.Builder]
 	}
-	ctx := t.Generator.buildStageContext(layer, s.Builder, bDef, t.Image, builderRef)
+	ctx := t.Generator.buildStageContext(layer, s.Builder, bDef, t.Box, builderRef)
 	if ctx == nil {
 		return fmt.Errorf("buildStageContext returned nil for %s", s.Builder)
 	}
@@ -308,7 +308,7 @@ func (t *OCITarget) emitTask(s *TaskStep) error {
 	// Single-task emission delegates to the same emitTasks that
 	// writeLayerSteps calls, but for one task at a time via a synthetic
 	// single-element layer.tasks slice. Requires Generator + Image.
-	if t.Generator == nil || t.Image == nil {
+	if t.Generator == nil || t.Box == nil {
 		kind, _ := s.Task.Kind()
 		fmt.Fprintf(&t.buf, "# Task: %s (layer=%s) — no Generator context\n",
 			kind, s.LayerName)
@@ -325,7 +325,7 @@ func (t *OCITarget) emitTask(s *TaskStep) error {
 	layer.tasks = []Task{*s.Task}
 	defer func() { layer.tasks = saved }()
 
-	_, err := t.Generator.emitTasks(&t.buf, layer, t.Image, t.BuildDir, t.ContextRelPrefix, "0")
+	_, err := t.Generator.emitTasks(&t.buf, layer, t.Box, t.BuildDir, t.ContextRelPrefix, "0")
 	return err
 }
 

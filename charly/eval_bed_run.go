@@ -136,7 +136,7 @@ func persistBedDeployOverrides(name string, node DeploymentNode) {
 		Tunnel:        node.Tunnel,
 		Security:      node.Security,
 		Network:       node.Network,
-		Image:         node.Image,
+		Box:           node.Box,
 		Target:        node.Target,
 		SetDisposable: true,
 		Disposable:    node.IsDisposable(),
@@ -151,7 +151,7 @@ func persistBedDeployOverrides(name string, node DeploymentNode) {
 func runEvalBed(exe, name string, node DeploymentNode, opts bedRunOpts) (*bedRunResult, error) {
 	isVM := node.Target == "vm"
 	isLocal := node.Target == "local"
-	image := node.Image
+	image := node.Box
 	vmTemplate := node.Vm
 	localRef := node.Local
 

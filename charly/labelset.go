@@ -26,7 +26,7 @@ package main
 // LabelSet is the Go-side aggregate of an image's two three-section
 // label payloads. Used by call sites that want to pass both around
 // together (validators, MCP-style introspection); the existing
-// per-label fields (ImageMetadata.Eval, ImageMetadata.Description)
+// per-label fields (BoxMetadata.Eval, BoxMetadata.Description)
 // remain the canonical access points for code that only needs one.
 type LabelSet struct {
 	Eval         *LabelEvalSet        `json:"eval,omitempty"`
@@ -46,7 +46,7 @@ func (s *LabelSet) IsEmpty() bool {
 // checks, and deploy-default checks.
 type LabelEvalSet struct {
 	Layer  []Check `json:"candy,omitempty"`
-	Image  []Check `json:"box,omitempty"`
+	Box    []Check `json:"box,omitempty"`
 	Deploy []Check `json:"deploy,omitempty"`
 }
 
@@ -56,7 +56,7 @@ func (s *LabelEvalSet) IsEmpty() bool {
 	if s == nil {
 		return true
 	}
-	return len(s.Layer) == 0 && len(s.Image) == 0 && len(s.Deploy) == 0
+	return len(s.Layer) == 0 && len(s.Box) == 0 && len(s.Deploy) == 0
 }
 
 // LabelDescriptionSet is the three-section structure embedded in the
@@ -68,7 +68,7 @@ func (s *LabelEvalSet) IsEmpty() bool {
 // the reporting format can share a mental model.
 type LabelDescriptionSet struct {
 	Layer  []LabeledDescription `json:"candy,omitempty"`
-	Image  []LabeledDescription `json:"box,omitempty"`
+	Box    []LabeledDescription `json:"box,omitempty"`
 	Deploy []LabeledDescription `json:"deploy,omitempty"`
 }
 
@@ -87,5 +87,5 @@ func (s *LabelDescriptionSet) IsEmpty() bool {
 	if s == nil {
 		return true
 	}
-	return len(s.Layer) == 0 && len(s.Image) == 0 && len(s.Deploy) == 0
+	return len(s.Layer) == 0 && len(s.Box) == 0 && len(s.Deploy) == 0
 }

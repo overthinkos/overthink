@@ -16,13 +16,13 @@ import (
 func androidBedUnified() *UnifiedFile {
 	return &UnifiedFile{
 		Android: map[string]*AndroidSpec{
-			"pixel9a-36":       {Image: "android-emulator"},
+			"pixel9a-36":       {Box: "android-emulator"},
 			"pixel9a-endpoint": {Adb: &AndroidAdbEndpoint{Host: "127.0.0.1:1"}, Serial: "emulator-5554"},
 		},
 		Deploy: map[string]DeploymentNode{
 			"eval-android-emulator-pod": {
 				Target: "pod",
-				Image:  "android-emulator",
+				Box:    "android-emulator",
 				Nested: map[string]*DeploymentNode{
 					"device": {
 						Target:   "android",
@@ -37,7 +37,7 @@ func androidBedUnified() *UnifiedFile {
 				},
 			},
 			// A plain pod deploy with no android children — must not contribute.
-			"some-pod": {Target: "pod", Image: "whatever"},
+			"some-pod": {Target: "pod", Box: "whatever"},
 		},
 	}
 }
@@ -56,7 +56,7 @@ func TestAndroidCollector_AvailableFalseWhenNoAndroidDeploy(t *testing.T) {
 		t.Error("Available() = true, want false with no declared android deploy")
 	}
 	// A unified with only a plain pod deploy is still unavailable.
-	uf := &UnifiedFile{Deploy: map[string]DeploymentNode{"x": {Target: "pod", Image: "y"}}}
+	uf := &UnifiedFile{Deploy: map[string]DeploymentNode{"x": {Target: "pod", Box: "y"}}}
 	if a.Available(CollectOpts{Unified: uf}) {
 		t.Error("Available() = true, want false when no target:android node exists")
 	}
@@ -110,7 +110,7 @@ func TestCollectAndroidDeployNodes_DeployYamlWinsPerKey(t *testing.T) {
 	}
 	// deploy.yml flips "phone" to a pod target — the android node must disappear.
 	local := &DeployConfig{Deploy: map[string]DeploymentNode{
-		"phone": {Target: "pod", Image: "x"},
+		"phone": {Target: "pod", Box: "x"},
 	}}
 	nodes := collectAndroidDeployNodes(CollectOpts{Unified: uf, Deploy: local})
 	if len(nodes) != 0 {

@@ -29,7 +29,7 @@ func TestGenerateBuildPath_FoldsTopPackagesAndCascade(t *testing.T) {
 		BuildDir: tmpDir,
 		Config:   &Config{},
 		Layers:   map[string]*Layer{"pkglayer": layer},
-		Images: map[string]*ResolvedBox{
+		Boxes: map[string]*ResolvedBox{
 			"deb-image": {
 				Name:           "deb-image",
 				Base:           "debian:13",

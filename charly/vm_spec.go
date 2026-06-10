@@ -161,10 +161,10 @@ type VmSource struct {
 
 	// --- Bootc branch ---
 
-	// Image is the kind:image entry name (or full OCI tag) that this
+	// Box is the kind:image entry name (or full OCI tag) that this
 	// bootc VM was built from. `bootc install to-disk` reads the image
 	// by ref during VM disk construction.
-	Image string `yaml:"box,omitempty"`
+	Box string `yaml:"box,omitempty"`
 
 	// Transport controls how `bootc install` reads the container image:
 	//   registry            — pull from the image's registry

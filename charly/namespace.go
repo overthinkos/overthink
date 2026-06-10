@@ -25,7 +25,7 @@ import (
 //     across a boundary (a base-namespace-relative ref like `charly.arch-builder`
 //     would dangle in a consumer where that namespace doesn't exist).
 //     Instead, the consumer's builder is resolved DISTRO-KEYED in
-//     ResolveImage (charly/config.go:distroBuilderMap): an image's resolved
+//     ResolveBox (charly/config.go:distroBuilderMap): an image's resolved
 //     distro (which DOES cross the boundary) selects the builder map of the
 //     root-namespace image that owns that distro (e.g. base.yml's `arch` →
 //     arch-builder), whose bare refs resolve in the importing namespace. So a
@@ -45,7 +45,7 @@ func splitNamespaceRef(ref string) (ns, rest string, ok bool) {
 
 // leafName strips every namespace prefix from a (possibly qualified) ref,
 // returning the final member name — e.g. "charly.arch-builder" -> "arch-builder",
-// "a.b.c" -> "c", bare "fedora" -> "fedora". Paired with resolveImageRef's
+// "a.b.c" -> "c", bare "fedora" -> "fedora". Paired with resolveBoxRef's
 // returned namespace Config, it gives the key under which the resolved entity
 // lives in that Config's Image map.
 func leafName(ref string) string {
@@ -58,43 +58,43 @@ func leafName(ref string) string {
 	}
 }
 
-// resolveImageRef resolves a (possibly qualified) image name to its ImageConfig
+// resolveBoxRef resolves a (possibly qualified) box name to its BoxConfig
 // and the Config (namespace context) it lives in. Bare names resolve in c;
 // `ns.name` descends into c.Namespaces[ns] recursively.
-func (c *Config) resolveImageRef(ref string) (BoxConfig, *Config, bool) {
+func (c *Config) resolveBoxRef(ref string) (BoxConfig, *Config, bool) {
 	if ns, rest, ok := splitNamespaceRef(ref); ok {
 		sub, ok := c.Namespaces[ns]
 		if !ok {
 			return BoxConfig{}, nil, false
 		}
-		return sub.resolveImageRef(rest)
+		return sub.resolveBoxRef(rest)
 	}
-	img, ok := c.Image[ref]
+	img, ok := c.Box[ref]
 	if !ok {
 		return BoxConfig{}, nil, false
 	}
 	return img, c, true
 }
 
-// findImageByLeaf searches for an image whose leaf (unqualified) name equals
+// findBoxByLeaf searches for an image whose leaf (unqualified) name equals
 // `leaf` — first in c's own root image map, then recursively in each imported
 // namespace (deterministic alias order). Returns the fully-qualified ref under
 // which the image is reachable from c (bare for a root hit, `ns.<...>` for a
 // namespaced hit), or ok=false when no image with that leaf exists anywhere in
 // the namespace tree.
 //
-// This is the DISCOVERY dual of resolveImageRef: resolveImageRef resolves a
-// KNOWN qualified ref by descent, whereas findImageByLeaf discovers the
+// This is the DISCOVERY dual of resolveBoxRef: resolveBoxRef resolves a
+// KNOWN qualified ref by descent, whereas findBoxByLeaf discovers the
 // qualification for a bare leaf that may live in a namespace. ensure-image's
 // build-fallback needs it because it only has the basename of a full registry
 // ref (e.g. `arch-builder` extracted from
 // `ghcr.io/overthinkos/arch-builder:<tag>`) and must find that the image lives
 // under the `charly` namespace to build it locally.
-func (c *Config) findImageByLeaf(leaf string) (string, bool) {
+func (c *Config) findBoxByLeaf(leaf string) (string, bool) {
 	if leaf == "" {
 		return "", false
 	}
-	if _, ok := c.Image[leaf]; ok {
+	if _, ok := c.Box[leaf]; ok {
 		return leaf, true
 	}
 	aliases := make([]string, 0, len(c.Namespaces))
@@ -103,7 +103,7 @@ func (c *Config) findImageByLeaf(leaf string) (string, bool) {
 	}
 	sort.Strings(aliases)
 	for _, ns := range aliases {
-		if q, ok := c.Namespaces[ns].findImageByLeaf(leaf); ok {
+		if q, ok := c.Namespaces[ns].findBoxByLeaf(leaf); ok {
 			return ns + "." + q, true
 		}
 	}
@@ -163,19 +163,19 @@ func (c *Config) resolveNamespacedBases(out map[string]*ResolvedBox, calverTag, 
 			if _, ok := out[qref]; ok {
 				continue
 			}
-			if err := c.pullNamespacedImage(c, qref, "", calverTag, dir, opts, out); err != nil {
+			if err := c.pullNamespacedBox(c, qref, "", calverTag, dir, opts, out); err != nil {
 				return err
 			}
 		}
 	}
 }
 
-// pullNamespacedImage resolves `ref` (possibly qualified, relative to base
+// pullNamespacedBox resolves `ref` (possibly qualified, relative to base
 // Config `from`) and stores it in `out` under its fully-qualified key
 // (keyPrefix + descended namespaces + leaf). Re-keys the entry's own internal
 // base so the build graph references the fully-qualified ancestor, and recurses
 // to pull that ancestor too.
-func (c *Config) pullNamespacedImage(from *Config, ref, keyPrefix, calverTag, dir string, opts ResolveOpts, out map[string]*ResolvedBox) error {
+func (c *Config) pullNamespacedBox(from *Config, ref, keyPrefix, calverTag, dir string, opts ResolveOpts, out map[string]*ResolvedBox) error {
 	cur := from
 	curPrefix := keyPrefix
 	for {
@@ -195,10 +195,10 @@ func (c *Config) pullNamespacedImage(from *Config, ref, keyPrefix, calverTag, di
 	if _, ok := out[fullKey]; ok {
 		return nil
 	}
-	if _, ok := cur.Image[ref]; !ok {
+	if _, ok := cur.Box[ref]; !ok {
 		return fmt.Errorf("imported image %q not found in namespace", fullKey)
 	}
-	ri, err := cur.ResolveImage(ref, calverTag, dir, opts)
+	ri, err := cur.ResolveBox(ref, calverTag, dir, opts)
 	if err != nil {
 		return fmt.Errorf("resolving imported image %q: %w", fullKey, err)
 	}
@@ -208,10 +208,10 @@ func (c *Config) pullNamespacedImage(from *Config, ref, keyPrefix, calverTag, di
 	// the ROOT config — where `cur`'s own namespaces (e.g. `charly`) don't exist —
 	// yielding `import namespace "charly" not found`. Prefixing with curPrefix
 	// (`charly.arch-builder` → `selkies.charly.arch-builder`) makes each ref resolvable
-	// from root AND matches the key pullNamespacedImage stores the target under.
+	// from root AND matches the key pullNamespacedBox stores the target under.
 	//
 	// The set of by-name image refs is the SINGLE source of truth in
-	// imageDirectDeps (graph.go): base + format builders + bootstrap builder.
+	// boxDirectDeps (graph.go): base + format builders + bootstrap builder.
 	// Keep this re-qualification in lockstep with that function — any new
 	// by-name image ref added there must be re-qualified here too.
 	requalify := func(r string) string {
@@ -237,5 +237,5 @@ func (c *Config) pullNamespacedImage(from *Config, ref, keyPrefix, calverTag, di
 	origBase := ri.Base
 	ri.Base = requalify(origBase)
 	out[fullKey] = ri
-	return c.pullNamespacedImage(cur, origBase, curPrefix, calverTag, dir, opts, out)
+	return c.pullNamespacedBox(cur, origBase, curPrefix, calverTag, dir, opts, out)
 }

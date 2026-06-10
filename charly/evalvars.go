@@ -112,7 +112,7 @@ type EvalVarResolver struct {
 }
 
 // ResolveEvalVarsBuild builds a variable map for build-time tests (no running
-// container). Only ImageMetadata-derived vars are populated.
+// container). Only BoxMetadata-derived vars are populated.
 func ResolveEvalVarsBuild(meta *BoxMetadata) *EvalVarResolver {
 	env := buildTimeVars(meta, "" /* no instance at build time */)
 	return &EvalVarResolver{Env: env, HasRuntime: false}
@@ -148,7 +148,7 @@ func ResolveEvalVarsRuntime(meta *BoxMetadata, deploy *DeploymentNode, engine, d
 	return &EvalVarResolver{Env: env, HasRuntime: true}, nil
 }
 
-// buildTimeVars populates the ImageMetadata-derived subset of the variable
+// buildTimeVars populates the BoxMetadata-derived subset of the variable
 // map. This is the only part of the map available at `charly eval box` time.
 func buildTimeVars(meta *BoxMetadata, instance string) map[string]string {
 	env := map[string]string{}
@@ -167,8 +167,8 @@ func buildTimeVars(meta *BoxMetadata, instance string) map[string]string {
 	if meta.GID != 0 {
 		env["GID"] = strconv.Itoa(meta.GID)
 	}
-	if meta.Image != "" {
-		env["IMAGE"] = meta.Image
+	if meta.Box != "" {
+		env["IMAGE"] = meta.Box
 	}
 	if meta.DNS != "" {
 		env["DNS"] = meta.DNS
@@ -256,14 +256,14 @@ func mergeRuntimeVars(env map[string]string, meta *BoxMetadata, c *ContainerInsp
 	// metadata's Volumes list. BareVolumeName handles both prefix forms
 	// uniformly — same helper that data.go and volumes.go use.
 	destToShort := map[string]string{}
-	if meta != nil && meta.Image != "" {
+	if meta != nil && meta.Box != "" {
 		for _, v := range meta.Volume {
-			destToShort[v.ContainerPath] = BareVolumeName(v.VolumeName, meta.Image, instance)
+			destToShort[v.ContainerPath] = BareVolumeName(v.VolumeName, meta.Box, instance)
 		}
 	}
 	for _, m := range c.Mounts {
 		short := ""
-		if m.Name != "" && meta != nil && meta.Image != "" {
+		if m.Name != "" && meta != nil && meta.Box != "" {
 			// c.Mounts are the container's ACTUAL (deploy-scoped) volume names,
 			// so strip by the deploy key, not the image. meta.Volume above is
 			// image-label-named, so that loop keeps using meta.Image.

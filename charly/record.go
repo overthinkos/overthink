@@ -19,7 +19,7 @@ type RecordCmd struct {
 
 // RecordStartCmd starts a recording session on the venue.
 type RecordStartCmd struct {
-	Image    string `arg:"" help:"Image name"`
+	Box      string `arg:"" help:"Box name"`
 	Name     string `short:"n" long:"name" default:"default" help:"Recording name"`
 	Mode     string `short:"m" long:"mode" enum:"terminal,desktop,auto" default:"auto" help:"Recording mode (terminal=asciinema, desktop=video)"`
 	Fps      int    `long:"fps" default:"30" help:"Frames per second (desktop mode)"`
@@ -28,7 +28,7 @@ type RecordStartCmd struct {
 }
 
 func (c *RecordStartCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Image, c.Instance)
+	venue, err := resolveEvalVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -39,7 +39,7 @@ func (c *RecordStartCmd) Run() error {
 	session := recordSessionName(c.Name)
 	if tmuxHasSession(venue.Exec, session) {
 		return fmt.Errorf("recording %q already active (session %s). Stop it first with: charly eval record stop %s -n %s",
-			c.Name, session, c.Image, c.Name)
+			c.Name, session, c.Box, c.Name)
 	}
 
 	// Determine recording mode and tool
@@ -87,7 +87,7 @@ func (c *RecordStartCmd) Run() error {
 
 	fmt.Fprintf(os.Stderr, "Recording started (mode: %s, tool: %s, session: %s)\n", mode, tool, session)
 	fmt.Fprintf(os.Stderr, "  Output: %s (on the target)\n", outFile)
-	fmt.Fprintf(os.Stderr, "  Stop with: charly eval record stop %s -n %s [-o local-file]\n", c.Image, c.Name)
+	fmt.Fprintf(os.Stderr, "  Stop with: charly eval record stop %s -n %s [-o local-file]\n", c.Box, c.Name)
 	return nil
 }
 
@@ -116,14 +116,14 @@ func (c *RecordStartCmd) resolveMode(ex DeployExecutor) (tool, mode string, err 
 
 // RecordStopCmd stops a recording session and optionally copies the output to the host.
 type RecordStopCmd struct {
-	Image    string `arg:"" help:"Image name"`
+	Box      string `arg:"" help:"Box name"`
 	Name     string `short:"n" long:"name" default:"default" help:"Recording name"`
 	Output   string `short:"o" long:"output" help:"Copy recording to this local path"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 }
 
 func (c *RecordStopCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Image, c.Instance)
+	venue, err := resolveEvalVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -131,7 +131,7 @@ func (c *RecordStopCmd) Run() error {
 	session := recordSessionName(c.Name)
 	if !tmuxHasSession(venue.Exec, session) {
 		return fmt.Errorf("no active recording %q (session %s not found). Use 'charly eval record list %s' to see active recordings",
-			c.Name, session, c.Image)
+			c.Name, session, c.Box)
 	}
 
 	// Read recording mode from metadata file
@@ -185,7 +185,7 @@ func (c *RecordStopCmd) Run() error {
 		}
 	} else {
 		fmt.Fprintf(os.Stderr, "Recording stopped. File on the target: %s\n", outFile)
-		fmt.Fprintf(os.Stderr, "  Copy with: charly eval record stop %s -n %s -o <local-path>\n", c.Image, c.Name)
+		fmt.Fprintf(os.Stderr, "  Copy with: charly eval record stop %s -n %s -o <local-path>\n", c.Box, c.Name)
 	}
 
 	return nil
@@ -193,12 +193,12 @@ func (c *RecordStopCmd) Run() error {
 
 // RecordListCmd lists active recording sessions.
 type RecordListCmd struct {
-	Image    string `arg:"" help:"Image name"`
+	Box      string `arg:"" help:"Box name"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 }
 
 func (c *RecordListCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Image, c.Instance)
+	venue, err := resolveEvalVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -206,7 +206,7 @@ func (c *RecordListCmd) Run() error {
 	// List tmux sessions with "record-" prefix
 	out, err := captureTmux(venue.Exec, "list-sessions", "-F", "#{session_name}")
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "No active recordings in %s\n", c.Image)
+		fmt.Fprintf(os.Stderr, "No active recordings in %s\n", c.Box)
 		return nil
 	}
 
@@ -219,7 +219,7 @@ func (c *RecordListCmd) Run() error {
 	}
 
 	if len(recordings) == 0 {
-		fmt.Fprintf(os.Stderr, "No active recordings in %s\n", c.Image)
+		fmt.Fprintf(os.Stderr, "No active recordings in %s\n", c.Box)
 		return nil
 	}
 
@@ -236,14 +236,14 @@ func (c *RecordListCmd) Run() error {
 
 // RecordCmdCmd sends a command to the recording's tmux session.
 type RecordCmdCmd struct {
-	Image    string `arg:"" help:"Image name"`
+	Box      string `arg:"" help:"Box name"`
 	Command  string `arg:"" help:"Command to send to the recording terminal"`
 	Name     string `short:"n" long:"name" default:"default" help:"Recording name"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 }
 
 func (c *RecordCmdCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Image, c.Instance)
+	venue, err := resolveEvalVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}

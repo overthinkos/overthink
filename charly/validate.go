@@ -80,7 +80,7 @@ func Validate(cfg *Config, layers map[string]*Layer, dir string, opts ResolveOpt
 	validateBaseReferences(cfg, errs)
 
 	// Validate no circular dependencies in images
-	validateImageDAG(cfg, layers, dir, opts, errs)
+	validateBoxDAG(cfg, layers, dir, opts, errs)
 
 	// Validate ports
 	validatePort(cfg, layers, errs)
@@ -286,7 +286,7 @@ func validateInitDependencies(cfg *Config, initCfg *InitConfig, layers map[strin
 		return
 	}
 
-	for imgName, img := range cfg.Image {
+	for imgName, img := range cfg.Box {
 		if img.Enabled != nil && !*img.Enabled {
 			continue
 		}
@@ -366,9 +366,9 @@ func validateInitDependencies(cfg *Config, initCfg *InitConfig, layers map[strin
 
 			// Also check base chain — dependency may be provided by a parent image
 			if !hasDepLayer {
-				images, resolveErr := cfg.ResolveAllImage("unused", ".", ResolveOpts{})
+				images, resolveErr := cfg.ResolveAllBox("unused", ".", ResolveOpts{})
 				if resolveErr == nil {
-					allLayers := collectAllImageLayers(imgName, images, layers)
+					allLayers := collectAllBoxLayers(imgName, images, layers)
 					for _, l := range allLayers {
 						if l == def.DependsLayer {
 							hasDepLayer = true
@@ -433,7 +433,7 @@ func validateBuildAndDistro(cfg *Config, distroCfg *DistroConfig, errs *Validati
 	validateBuild("defaults", cfg.Defaults.Build)
 
 	// Validate per-image
-	for name, img := range cfg.Image {
+	for name, img := range cfg.Box {
 		if !img.IsEnabled() {
 			continue
 		}
@@ -443,7 +443,7 @@ func validateBuildAndDistro(cfg *Config, distroCfg *DistroConfig, errs *Validati
 
 // validateLayerReferences ensures all layers referenced in images exist
 func validateLayerReferences(cfg *Config, layers map[string]*Layer, errs *ValidationError) {
-	for imageName, img := range cfg.Image {
+	for boxName, img := range cfg.Box {
 		if !img.IsEnabled() {
 			continue
 		}
@@ -452,13 +452,13 @@ func validateLayerReferences(cfg *Config, layers map[string]*Layer, errs *Valida
 			if _, ok := layers[layerName]; !ok {
 				if IsRemoteLayerRef(layerRef) {
 					parsed := ParseRemoteRef(layerRef)
-					errs.Add("image %q: remote layer %q not found (layer %q doesn't exist in %s)", imageName, layerRef, parsed.Name, parsed.RepoPath)
+					errs.Add("image %q: remote layer %q not found (layer %q doesn't exist in %s)", boxName, layerRef, parsed.Name, parsed.RepoPath)
 				} else {
 					suggestion := findSimilarName(layerName, LayerNames(layers))
 					if suggestion != "" {
-						errs.Add("image %q: layer %q not found (did you mean %q?)", imageName, layerName, suggestion)
+						errs.Add("image %q: layer %q not found (did you mean %q?)", boxName, layerName, suggestion)
 					} else {
-						errs.Add("image %q: layer %q not found", imageName, layerName)
+						errs.Add("image %q: layer %q not found", boxName, layerName)
 					}
 				}
 			}
@@ -766,16 +766,16 @@ func validateBaseReferences(cfg *Config, errs *ValidationError) {
 	// No additional validation needed here
 }
 
-// validateImageDAG checks for circular image dependencies
-func validateImageDAG(cfg *Config, layers map[string]*Layer, dir string, opts ResolveOpts, errs *ValidationError) {
+// validateBoxDAG checks for circular image dependencies
+func validateBoxDAG(cfg *Config, layers map[string]*Layer, dir string, opts ResolveOpts, errs *ValidationError) {
 	calverTag := "test"
 	// Try to resolve images — some fields may be missing during basic validation
 	images := make(map[string]*ResolvedBox)
-	for name, img := range cfg.Image {
+	for name, img := range cfg.Box {
 		if !img.IsEnabled() && !opts.shouldIncludeDisabled(name) {
 			continue
 		}
-		ri, err := cfg.ResolveImage(name, calverTag, dir, opts)
+		ri, err := cfg.ResolveBox(name, calverTag, dir, opts)
 		if err != nil {
 			// Skip images that can't resolve (e.g., missing build: field)
 			continue
@@ -798,7 +798,7 @@ func validateImageDAG(cfg *Config, layers map[string]*Layer, dir string, opts Re
 		return
 	}
 
-	_, orderErr := ResolveImageOrder(images, layers)
+	_, orderErr := ResolveBoxOrder(images, layers)
 	if orderErr != nil {
 		if cycleErr, ok := orderErr.(*CycleError); ok {
 			errs.Add("image dependency cycle: %s", strings.Join(cycleErr.Cycle, " -> "))
@@ -826,7 +826,7 @@ func validateImageDAG(cfg *Config, layers map[string]*Layer, dir string, opts Re
 // validateLayerDAG checks for circular layer dependencies
 func validateLayerDAG(cfg *Config, layers map[string]*Layer, errs *ValidationError) {
 	// Check each image's layers for cycles
-	for imageName, img := range cfg.Image {
+	for boxName, img := range cfg.Box {
 		if !img.IsEnabled() {
 			continue
 		}
@@ -838,9 +838,9 @@ func validateLayerDAG(cfg *Config, layers map[string]*Layer, errs *ValidationErr
 		_, err := ResolveLayerOrder(bareLayers, layers, nil)
 		if err != nil {
 			if cycleErr, ok := err.(*CycleError); ok {
-				errs.Add("image %q: layer dependency cycle: %s", imageName, strings.Join(cycleErr.Cycle, " -> "))
+				errs.Add("image %q: layer dependency cycle: %s", boxName, strings.Join(cycleErr.Cycle, " -> "))
 			} else {
-				errs.Add("image %q: layer resolution error: %v", imageName, err)
+				errs.Add("image %q: layer resolution error: %v", boxName, err)
 			}
 		}
 	}
@@ -886,7 +886,7 @@ func validatePort(cfg *Config, layers map[string]*Layer, errs *ValidationError) 
 	if len(cfg.Defaults.Port) > 0 {
 		validatePortMappings("defaults", cfg.Defaults.Port)
 	}
-	for name, img := range cfg.Image {
+	for name, img := range cfg.Box {
 		if !img.IsEnabled() {
 			continue
 		}
@@ -933,7 +933,7 @@ func validateMergeConfig(cfg *Config, errs *ValidationError) {
 	}
 
 	check("defaults", cfg.Defaults.Merge)
-	for name, img := range cfg.Image {
+	for name, img := range cfg.Box {
 		if !img.IsEnabled() {
 			continue
 		}
@@ -980,7 +980,7 @@ func validateBuildTunables(cfg *Config, errs *ValidationError) {
 	}
 
 	check("defaults", cfg.Defaults)
-	for name, img := range cfg.Image {
+	for name, img := range cfg.Box {
 		if !img.IsEnabled() {
 			continue
 		}
@@ -1040,7 +1040,7 @@ func validateAliases(cfg *Config, layers map[string]*Layer, errs *ValidationErro
 	}
 
 	// Validate image-level aliases
-	for imageName, img := range cfg.Image {
+	for boxName, img := range cfg.Box {
 		if !img.IsEnabled() {
 			continue
 		}
@@ -1050,11 +1050,11 @@ func validateAliases(cfg *Config, layers map[string]*Layer, errs *ValidationErro
 		seen := make(map[string]bool)
 		for _, a := range img.Alias {
 			if a.Name == "" {
-				errs.Add("image %q aliases: missing required \"name\" field", imageName)
+				errs.Add("image %q aliases: missing required \"name\" field", boxName)
 			} else if !aliasNameRe.MatchString(a.Name) {
-				errs.Add("image %q aliases: name %q must match [a-zA-Z0-9][a-zA-Z0-9._-]*", imageName, a.Name)
+				errs.Add("image %q aliases: name %q must match [a-zA-Z0-9][a-zA-Z0-9._-]*", boxName, a.Name)
 			} else if seen[a.Name] {
-				errs.Add("image %q aliases: duplicate alias name %q", imageName, a.Name)
+				errs.Add("image %q aliases: duplicate alias name %q", boxName, a.Name)
 			} else {
 				seen[a.Name] = true
 			}
@@ -1072,7 +1072,7 @@ func validateBuilders(cfg *Config, layers map[string]*Layer, builderCfg *Builder
 		if builder != "" {
 			// Namespace-aware: a defaults builder ref may be qualified (e.g.
 			// `charly.fedora-builder`), resolving through an import namespace.
-			builderImg, _, exists := cfg.resolveImageRef(builder)
+			builderImg, _, exists := cfg.resolveBoxRef(builder)
 			if !exists {
 				errs.Add("defaults.builder.%s: image %q not found", typ, builder)
 			} else if !builderImg.IsEnabled() {
@@ -1082,7 +1082,7 @@ func validateBuilders(cfg *Config, layers map[string]*Layer, builderCfg *Builder
 	}
 
 	// Validate each enabled image
-	for imageName, img := range cfg.Image {
+	for boxName, img := range cfg.Box {
 		if !img.IsEnabled() {
 			continue
 		}
@@ -1090,29 +1090,29 @@ func validateBuilders(cfg *Config, layers map[string]*Layer, builderCfg *Builder
 		// Validate builds: entries (capability declarations on builder images)
 		for _, b := range img.Produce {
 			if !builderCfg.ValidBuilderType(b) {
-				errs.Add("image %q: builds entry %q is not valid (known builders: %s)", imageName, b, strings.Join(builderCfg.BuilderNames(), ", "))
+				errs.Add("image %q: builds entry %q is not valid (known builders: %s)", boxName, b, strings.Join(builderCfg.BuilderNames(), ", "))
 			}
 		}
 
 		// Validate builder: entries (per-type builder assignments)
 		for typ, builder := range img.Builder {
 			if !builderCfg.ValidBuilderType(typ) {
-				errs.Add("image %q: builder.%s is not a valid build type (known builders: %s)", imageName, typ, strings.Join(builderCfg.BuilderNames(), ", "))
+				errs.Add("image %q: builder.%s is not a valid build type (known builders: %s)", boxName, typ, strings.Join(builderCfg.BuilderNames(), ", "))
 			}
-			if builder == imageName {
-				errs.Add("image %q: builder.%s cannot reference self", imageName, typ)
+			if builder == boxName {
+				errs.Add("image %q: builder.%s cannot reference self", boxName, typ)
 				continue
 			}
 			if builder != "" {
 				// Namespace-aware: a builder ref may be qualified (e.g.
 				// `charly.arch-builder`), resolving through an import namespace.
-				builderImg, _, exists := cfg.resolveImageRef(builder)
+				builderImg, _, exists := cfg.resolveBoxRef(builder)
 				if !exists {
-					errs.Add("image %q: builder.%s references %q which is not found", imageName, typ, builder)
+					errs.Add("image %q: builder.%s references %q which is not found", boxName, typ, builder)
 					continue
 				}
 				if !builderImg.IsEnabled() {
-					errs.Add("image %q: builder.%s references %q which is disabled", imageName, typ, builder)
+					errs.Add("image %q: builder.%s references %q which is disabled", boxName, typ, builder)
 					continue
 				}
 				// Check builder declares this capability
@@ -1124,24 +1124,24 @@ func validateBuilders(cfg *Config, layers map[string]*Layer, builderCfg *Builder
 					}
 				}
 				if len(builderImg.Produce) > 0 && !hasCapability {
-					errs.Add("image %q: builder.%s references %q which does not declare builds: [%s]", imageName, typ, builder, typ)
+					errs.Add("image %q: builder.%s references %q which does not declare builds: [%s]", boxName, typ, builder, typ)
 				}
 			}
 		}
 
-		// Resolve the image through the SINGLE canonical path (ResolveImage) —
+		// Resolve the image through the SINGLE canonical path (ResolveBox) —
 		// the SAME resolution `charly box build` / `generate` / `inspect` use — so
 		// the effective builder map and build formats checked here are exactly
 		// what the build will see. This block previously RE-IMPLEMENTED builder +
 		// build-format resolution inline, which silently diverged from
-		// ResolveImage (it missed the distro-keyed builder default, so a cachyos
+		// ResolveBox (it missed the distro-keyed builder default, so a cachyos
 		// image's auto-resolved arch-builder — including aur — was invisible to
 		// validation and produced a false "no builder.aur configured" error).
 		// One code path, no drift.
-		ri, rerr := cfg.ResolveImage(imageName, "test", dir, opts)
+		ri, rerr := cfg.ResolveBox(boxName, "test", dir, opts)
 		if rerr != nil {
 			// Can't resolve (e.g. a namespaced base unavailable during basic
-			// validation) — validateImageDAG surfaces resolution errors; skip
+			// validation) — validateBoxDAG surfaces resolution errors; skip
 			// the builder-needed check rather than false-positive on a
 			// half-resolved map.
 			continue
@@ -1199,7 +1199,7 @@ func validateBuilders(cfg *Config, layers map[string]*Layer, builderCfg *Builder
 					continue
 				}
 				if !resolved.HasBuilder(builderName) {
-					errs.Add("image %q: layer %q needs builder %q but no builder.%s configured", imageName, layerName, builderName, builderName)
+					errs.Add("image %q: layer %q needs builder %q but no builder.%s configured", boxName, layerName, builderName, builderName)
 				}
 			}
 		}
@@ -1207,7 +1207,7 @@ func validateBuilders(cfg *Config, layers map[string]*Layer, builderCfg *Builder
 }
 
 // validateDNS is a no-op in schema v4. DNS and AcmeEmail moved off
-// ImageConfig to DeploymentNode (they're deployment choices). Deploy-side
+// BoxConfig to DeploymentNode (they're deployment choices). Deploy-side
 // validation of these fields is handled by validateDeployConfig.
 func validateDNS(cfg *Config, errs *ValidationError) {
 	// intentionally empty — schema v4 removed image-level dns/acme_email
@@ -1218,7 +1218,7 @@ var tunnelNameRe = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9-]*$`)
 
 // validateTunnel validates tunnel configuration in defaults and images
 func validateTunnel(cfg *Config, layers map[string]*Layer, errs *ValidationError) {
-	check := func(name string, t *TunnelYAML, dns string, imagePorts []string, portProtos map[int]string) {
+	check := func(name string, t *TunnelYAML, dns string, boxPorts []string, portProtos map[int]string) {
 		if t == nil {
 			return
 		}
@@ -1274,13 +1274,13 @@ func validateTunnel(cfg *Config, layers map[string]*Layer, errs *ValidationError
 
 		// Build set of image host ports for existence checks
 		hostPortSet := make(map[int]bool)
-		for _, hp := range parseHostPorts(imagePorts) {
+		for _, hp := range parseHostPorts(boxPorts) {
 			hostPortSet[hp] = true
 		}
 
 		// Tailscale public port list validation
 		if t.Provider == "tailscale" {
-			hostToContainer := buildPortMapping(imagePorts)
+			hostToContainer := buildPortMapping(boxPorts)
 
 			for _, p := range t.Public.Ports {
 				if !ValidPublicPorts[p] {
@@ -1300,7 +1300,7 @@ func validateTunnel(cfg *Config, layers map[string]*Layer, errs *ValidationError
 
 			// Tailscale public: all — validate each non-TCP image port is a valid public port
 			if t.Public.All {
-				for _, hp := range parseHostPorts(imagePorts) {
+				for _, hp := range parseHostPorts(boxPorts) {
 					cp := hp
 					if c, ok := hostToContainer[hp]; ok {
 						cp = c
@@ -1332,12 +1332,12 @@ func validateTunnel(cfg *Config, layers map[string]*Layer, errs *ValidationError
 		if len(hostPortSet) > 0 {
 			for _, p := range t.Public.Ports {
 				if !hostPortSet[p] {
-					errs.Add("%s: public port %d not found in image ports", name, p)
+					errs.Add("%s: public port %d not found in box ports", name, p)
 				}
 			}
 			for p := range t.Public.PortMap {
 				if !hostPortSet[p] {
-					errs.Add("%s: public port %d not found in image ports", name, p)
+					errs.Add("%s: public port %d not found in box ports", name, p)
 				}
 			}
 			for _, p := range t.Private.Ports {
@@ -1351,7 +1351,7 @@ func validateTunnel(cfg *Config, layers map[string]*Layer, errs *ValidationError
 		if t.Provider == "cloudflare" {
 			publicCount := len(t.Public.Ports) + len(t.Public.PortMap)
 			if t.Public.All {
-				publicCount = len(imagePorts)
+				publicCount = len(boxPorts)
 			}
 			if publicCount > 1 && len(t.Public.PortMap) == 0 {
 				errs.Add("%s: multiple cloudflare ports need per-port hostnames; use map form", name)
@@ -1368,8 +1368,8 @@ func validateTunnel(cfg *Config, layers map[string]*Layer, errs *ValidationError
 
 		// Validate port schemes against provider capabilities
 		if portProtos != nil {
-			hostToContainer := buildPortMapping(imagePorts)
-			for _, hp := range parseHostPorts(imagePorts) {
+			hostToContainer := buildPortMapping(boxPorts)
+			for _, hp := range parseHostPorts(boxPorts) {
 				cp := hp
 				if c, ok := hostToContainer[hp]; ok {
 					cp = c
@@ -1388,7 +1388,7 @@ func validateTunnel(cfg *Config, layers map[string]*Layer, errs *ValidationError
 		}
 	}
 
-	// Schema v4: Tunnel / DNS moved off ImageConfig. Tunnel validation +
+	// Schema v4: Tunnel / DNS moved off BoxConfig. Tunnel validation +
 	// cross-image port conflict detection now apply at deploy-side (see
 	// validateDeployConfig), not at image-side. This image-side check is
 	// a no-op in v4 — the `check` helper is retained for deploy validation
@@ -1478,7 +1478,7 @@ func validatePackagedServices(cfg *Config, layers map[string]*Layer, errs *Valid
 	// the layer USER (i.e. non-bootc-flavored images). Only systemd-based
 	// compositions consume packaged units; supervisord, the container
 	// default init, can't.
-	for imageName, img := range cfg.Image {
+	for boxName, img := range cfg.Box {
 		if !img.IsEnabled() {
 			continue
 		}
@@ -1497,7 +1497,7 @@ func validatePackagedServices(cfg *Config, layers map[string]*Layer, errs *Valid
 			if !ok || !layerHasOrphanPackaged(layer) {
 				continue
 			}
-			fmt.Fprintf(os.Stderr, "Warning: image %q includes layer %q with a packaged-only service (no custom-exec sibling), but composition does not preserve_user (its systemd unit will be ignored)\n", imageName, bare)
+			fmt.Fprintf(os.Stderr, "Warning: image %q includes layer %q with a packaged-only service (no custom-exec sibling), but composition does not preserve_user (its systemd unit will be ignored)\n", boxName, bare)
 		}
 	}
 }
@@ -1621,11 +1621,11 @@ func validateEngineConfig(cfg *Config, layers map[string]*Layer, errs *Validatio
 		}
 	}
 
-	// Schema v4: ImageConfig.Engine removed (deploy-only choice).
+	// Schema v4: BoxConfig.Engine removed (deploy-only choice).
 	// Defaults.Engine + per-image Engine no longer exist. Layer-level
 	// conflict detection still applies below.
 
-	for imageName, img := range cfg.Image {
+	for boxName, img := range cfg.Box {
 		if !img.IsEnabled() {
 			continue
 		}
@@ -1654,7 +1654,7 @@ func validateEngineConfig(cfg *Config, layers map[string]*Layer, errs *Validatio
 				conflicts = append(conflicts, fmt.Sprintf("%s (from layer %s)", e, l))
 			}
 			sort.Strings(conflicts)
-			errs.Add("image %q: conflicting engine requirements: %s", imageName, strings.Join(conflicts, ", "))
+			errs.Add("image %q: conflicting engine requirements: %s", boxName, strings.Join(conflicts, ", "))
 		}
 	}
 }
@@ -1694,7 +1694,7 @@ func validatePortRelay(cfg *Config, layers map[string]*Layer, errs *ValidationEr
 	}
 
 	// Validate that images with port_relay layers include the socat layer
-	for imageName, img := range cfg.Image {
+	for boxName, img := range cfg.Box {
 		if !img.IsEnabled() {
 			continue
 		}
@@ -1717,7 +1717,7 @@ func validatePortRelay(cfg *Config, layers map[string]*Layer, errs *ValidationEr
 			}
 		}
 		if hasRelay && !hasSocat {
-			errs.Add("image %q: has port_relay layers but missing \"socat\" layer (add it to the image layers or as a dependency)", imageName)
+			errs.Add("image %q: has port_relay layers but missing \"socat\" layer (add it to the image layers or as a dependency)", boxName)
 		}
 	}
 }
@@ -1761,7 +1761,7 @@ func validateStatus(cfg *Config, layers map[string]*Layer, errs *ValidationError
 			}
 		}
 	}
-	for name, img := range cfg.Image {
+	for name, img := range cfg.Box {
 		if !img.IsEnabled() || img.Description == nil {
 			continue
 		}
@@ -1780,7 +1780,7 @@ func validateVersionFields(cfg *Config, layers map[string]*Layer, errs *Validati
 			errs.Add("layer %q: version must be CalVer format (YYYY.DDD.HHMM), got %q", name, layer.Version)
 		}
 	}
-	for name, img := range cfg.Image {
+	for name, img := range cfg.Box {
 		if !img.IsEnabled() {
 			continue
 		}
@@ -1831,7 +1831,7 @@ func validateDataLayers(cfg *Config, layers map[string]*Layer, errs *ValidationE
 	}
 
 	// Validate per-image constraints
-	for imgName, img := range cfg.Image {
+	for imgName, img := range cfg.Box {
 		if !img.IsEnabled() {
 			continue
 		}

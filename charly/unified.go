@@ -82,8 +82,8 @@ type UnifiedFile struct {
 	Init     map[string]*InitDef    `yaml:"init,omitempty"`
 	Defaults BoxConfig              `yaml:"defaults,omitempty"`
 	// Field-singular cutover (2026-05): legacy plural `Images yaml:"images"`
-	// deleted; the singular `Image yaml:"box"` is the canonical surface.
-	Image map[string]BoxConfig    `yaml:"box,omitempty"`
+	// deleted; the singular `Box yaml:"box"` is the canonical surface.
+	Box   map[string]BoxConfig    `yaml:"box,omitempty"`
 	Layer map[string]*InlineCandy `yaml:"candy,omitempty"`
 	VM    map[string]*VmSpec      `yaml:"vm,omitempty"`
 	// Field-singular cutover: legacy `Deploys *DeploymentsSection
@@ -303,7 +303,7 @@ func (il *InlineCandy) UnmarshalYAML(node *yaml.Node) error {
 type DeploymentsSection struct {
 	Defaults *DeploymentNode           `yaml:"defaults,omitempty"`
 	Provides *ProvidesConfig           `yaml:"provides,omitempty"`
-	Image    map[string]DeploymentNode `yaml:"box,omitempty"`
+	Box      map[string]DeploymentNode `yaml:"box,omitempty"`
 }
 
 // -----------------------------------------------------------------------------
@@ -409,7 +409,7 @@ func (ld *CandyDoc) UnmarshalYAML(node *yaml.Node) error {
 	return ld.CandyYAML.UnmarshalYAML(node)
 }
 
-// ImageDoc wraps a single ImageConfig with an explicit Name — the standalone
+// BoxDoc wraps a single BoxConfig with an explicit Name — the standalone
 // form authored as a standalone box doc post-migration.
 type BoxDoc struct {
 	Name      string `yaml:"name"`
@@ -588,7 +588,7 @@ func rejectLegacyMarimoMl(root string, merged *UnifiedFile) error {
 	if merged == nil {
 		return nil
 	}
-	if _, ok := merged.Image["marimo-ml"]; ok {
+	if _, ok := merged.Box["marimo-ml"]; ok {
 		return fmt.Errorf(
 			"%s: image entry %q is retired (2026-04 marimo-rename cutover, 2026-05 versa-rename cutover).\n  Renamed to `versa` (cross-kind name reuse). Run: charly migrate",
 			root, "marimo-ml")
@@ -603,7 +603,7 @@ func rejectLegacyMarimoMl(root string, merged *UnifiedFile) error {
 				"%s: deployment %q is retired (2026-04 marimo-rename cutover, 2026-05 versa-rename cutover).\n  Renamed to `versa` (cross-kind name reuse). Run: charly migrate",
 				root, name)
 		}
-		if node.Image == "marimo-ml" {
+		if node.Box == "marimo-ml" {
 			return fmt.Errorf(
 				"%s: deployment %q references retired image %q (2026-04 marimo-rename cutover, 2026-05 versa-rename cutover).\n  Renamed to `versa`. Run: charly migrate",
 				root, name, "marimo-ml")
@@ -860,13 +860,13 @@ func validateDeploymentTree(deploy map[string]DeploymentNode) error {
 			"deployment key \"cachyos-dx\" is retired (2026-05 init-system-polymorphism cutover).\n  Run: charly migrate",
 		)
 	}
-	if err := validateDeployRequiresImage(deploy); err != nil {
+	if err := validateDeployRequiresBox(deploy); err != nil {
 		return err
 	}
 	return nil
 }
 
-// validateDeployRequiresImage enforces the 2026-05-12 schema rule:
+// validateDeployRequiresBox enforces the 2026-05-12 schema rule:
 // every `target: pod` deploy entry MUST declare its `image:` field.
 // Pre-cutover the eval runner silently fell back to inspecting the
 // running container's image ref via `containerImageRef`, which read
@@ -883,13 +883,13 @@ func validateDeploymentTree(deploy map[string]DeploymentNode) error {
 // affected deploy and injects the field, inferring the value from
 // the deploy key (`<base>` for `<base>/<instance>` keys; the key
 // itself otherwise).
-func validateDeployRequiresImage(deploy map[string]DeploymentNode) error {
+func validateDeployRequiresBox(deploy map[string]DeploymentNode) error {
 	for name, node := range deploy {
 		target := node.Target
 		if target != "" && target != "pod" {
 			continue
 		}
-		if node.Image == "" {
+		if node.Box == "" {
 			return fmt.Errorf(
 				"deploy entry %q lacks required `box:` field (2026-05-12 schema cutover — pod-target deploys must declare `box:` explicitly so the eval runner reads the operator's declared intent, not the running container's stale label).\n  Remediation: run `charly migrate` (one-shot, idempotent).",
 				name,
@@ -1573,7 +1573,7 @@ func mergeUnified(dst, src *UnifiedFile, srcDir string) {
 	mergeDistroMap(&dst.Distro, src.Distro)
 	mergeBuilderMap(&dst.Builder, src.Builder)
 	mergeInitMap(&dst.Init, src.Init)
-	mergeImageMap(&dst.Image, src.Image)
+	mergeBoxMap(&dst.Box, src.Box)
 	mergeLayerMap(&dst.Layer, src.Layer)
 	mergeVmMap(&dst.VM, src.VM)
 	mergePodMap(&dst.Pod, src.Pod)
@@ -1593,7 +1593,7 @@ func mergeUnified(dst, src *UnifiedFile, srcDir string) {
 		dst.Provides = src.Provides
 	}
 	// Defaults: dst wins per-field if set.
-	mergeImageConfig(&dst.Defaults, &src.Defaults)
+	mergeBoxConfig(&dst.Defaults, &src.Defaults)
 }
 
 // anchorScanSpecs returns a copy of `specs` with every relative Path
@@ -1718,7 +1718,7 @@ func mergeResourceMap(dst *map[string]*ResourceDef, src map[string]*ResourceDef)
 	}
 }
 
-func mergeImageMap(dst *map[string]BoxConfig, src map[string]BoxConfig) {
+func mergeBoxMap(dst *map[string]BoxConfig, src map[string]BoxConfig) {
 	if len(src) == 0 {
 		return
 	}
@@ -1919,7 +1919,7 @@ func (uf *UnifiedFile) EvalBeds() map[string]DeploymentNode {
 
 // validateEvalBeds enforces the kind:eval bed-specific invariants beyond the
 // generic deploy validation (which already runs on the folded beds via
-// validateDeploymentTree → validateDeployRequiresImage, covering the pod
+// validateDeploymentTree → validateDeployRequiresBox, covering the pod
 // `image:` requirement). Runs at LOAD time so EVERY command that resolves a
 // bed (charly eval run, charly deploy add, charly config, charly box validate, …) sees the
 // same friendly error — not just `charly box validate`.
@@ -1935,7 +1935,7 @@ func validateEvalBeds(uf *UnifiedFile) error {
 		}
 		switch node.Target {
 		case "pod":
-			// image: presence enforced by validateDeployRequiresImage on the
+			// image: presence enforced by validateDeployRequiresBox on the
 			// folded Deploy entry — no duplicate check here.
 		case "vm":
 			if node.Vm == "" {
@@ -1965,9 +1965,9 @@ func validateEvalBeds(uf *UnifiedFile) error {
 	return nil
 }
 
-// mergeImageConfig preserves dst's already-set fields and fills only the
+// mergeBoxConfig preserves dst's already-set fields and fills only the
 // zero-valued ones from src. Used for merging Defaults blocks from includes.
-func mergeImageConfig(dst, src *BoxConfig) {
+func mergeBoxConfig(dst, src *BoxConfig) {
 	if src == nil || dst == nil {
 		return
 	}
@@ -2014,7 +2014,7 @@ func mergeImageConfig(dst, src *BoxConfig) {
 		dst.Init = src.Init
 	}
 	// Build-speed tunables (defaults: block) — carried through the same
-	// per-field "dst wins if set" merge as the rest of ImageConfig.
+	// per-field "dst wins if set" merge as the rest of BoxConfig.
 	if dst.Jobs == nil {
 		dst.Jobs = src.Jobs
 	}
@@ -2116,11 +2116,11 @@ func mergeKindDoc(merged *UnifiedFile, kd *kindKeyedDoc, srcDir string) error {
 		if kd.Image.Name == "" {
 			return fmt.Errorf("box: missing name")
 		}
-		if merged.Image == nil {
-			merged.Image = map[string]BoxConfig{}
+		if merged.Box == nil {
+			merged.Box = map[string]BoxConfig{}
 		}
-		if _, exists := merged.Image[kd.Image.Name]; !exists {
-			merged.Image[kd.Image.Name] = kd.Image.BoxConfig
+		if _, exists := merged.Box[kd.Image.Name]; !exists {
+			merged.Box[kd.Image.Name] = kd.Image.BoxConfig
 		}
 	case kd.Deploy != nil:
 		if kd.Deploy.Name == "" {
@@ -2502,13 +2502,13 @@ func (uf *UnifiedFile) projectConfigCached(cache map[*UnifiedFile]*Config) *Conf
 	if c, ok := cache[uf]; ok {
 		return c
 	}
-	images := uf.Image
+	images := uf.Box
 	if images == nil {
 		images = map[string]BoxConfig{}
 	}
 	c := &Config{
 		Defaults: uf.Defaults,
-		Image:    images,
+		Box:      images,
 		Local:    uf.Local,
 	}
 	cache[uf] = c // cache BEFORE recursing (cycle break)

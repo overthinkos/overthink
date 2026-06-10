@@ -10,7 +10,7 @@ import (
 // Config represents the charly.yml configuration projection
 type Config struct {
 	Defaults BoxConfig            `yaml:"defaults"`
-	Image    map[string]BoxConfig `yaml:"box"`
+	Box      map[string]BoxConfig `yaml:"box"`
 	// Local carries kind:local templates so remote-ref collection +
 	// validation walk their layer: lists symmetrically with image layer
 	// lists (kind:local templates compose remote @-ref layers too). Populated
@@ -109,7 +109,7 @@ func (m BuilderMap) AllBuilder() []string {
 	return builders
 }
 
-// ImageConfig represents configuration for a single image or defaults
+// BoxConfig represents configuration for a single box or defaults
 type BoxConfig struct {
 	Enabled     *bool        `yaml:"enabled,omitempty"`
 	Version     string       `yaml:"version,omitempty"`     // CalVer version (YYYY.DDD.HHMM) of this image definition
@@ -138,7 +138,7 @@ type BoxConfig struct {
 	Produce               []string      `yaml:"produce,omitempty"`     // what this builder image can produce (pixi, npm, cargo, aur). Renamed from `builds:` to avoid yaml key collision with the `build:` BuildFormats above (field-singular cutover, 2026-05).
 	// Schema v4: DNS / AcmeEmail / Tunnel / Engine removed — they are
 	// deployment choices with no declaration meaning. They live on
-	// DeploymentNode and flow through to consumers via ImageMetadata.
+	// DeploymentNode and flow through to consumers via BoxMetadata.
 	Env       []string        `yaml:"env,omitempty"`        // runtime env vars (KEY=VALUE) — declaration of vars the image consumes
 	EnvFile   string          `yaml:"env_file,omitempty"`   // path to env file for runtime injection
 	Security  *SecurityConfig `yaml:"security,omitempty"`   // container security options — declaration of required capabilities
@@ -195,7 +195,7 @@ func boolPtr(v bool) *bool {
 	return &v
 }
 
-// ResolvedImage represents a fully resolved image configuration
+// ResolvedBox represents a fully resolved box configuration
 type ResolvedBox struct {
 	Name    string
 	Version string `json:"version,omitempty"` // authored per-entity CalVer (the box config `version:`); optional
@@ -209,7 +209,7 @@ type ResolvedBox struct {
 	Status           string `json:"status,omitempty"` // effective status (worst of image + layers)
 	Info             string `json:"info,omitempty"`   // aggregated info from image + layers
 	Base             string // Resolved base (external OCI ref or internal image name)
-	// From mirrors ImageConfig.From after resolution. When non-empty
+	// From mirrors BoxConfig.From after resolution. When non-empty
 	// (e.g. "builder:pacstrap"), the generator emits FROM scratch +
 	// ADD <staged-rootfs.tar.gz> instead of FROM <base>.
 	From                  string
@@ -247,8 +247,8 @@ type ResolvedBox struct {
 	Auto bool // true for auto-generated intermediate images
 
 	// Schema v4: DNS / AcmeEmail / Tunnel / Engine removed from
-	// ResolvedImage — they are deployment choices with no declaration
-	// meaning. Consumers read them from ImageMetadata (post deploy-overlay)
+	// ResolvedBox — they are deployment choices with no declaration
+	// meaning. Consumers read them from BoxMetadata (post deploy-overlay)
 	// instead of from the resolved image config.
 
 	// Container network mode (e.g. "host", "none") — declaration of
@@ -269,7 +269,7 @@ type ResolvedBox struct {
 
 	// LayerCaps aggregates layer-contributed capabilities from this
 	// image's resolved layer composition (preserve_user, data_only,
-	// init_system_hint, oci_labels, etc.). Populated by ResolveImage
+	// init_system_hint, oci_labels, etc.). Populated by ResolveBox
 	// via AggregateLayerCapabilities. Replaces the magic image-level
 	// flags (Bootc, DataImage) with a layer-derived surface — those
 	// fields remain during the cutover transition and are removed in
@@ -326,7 +326,7 @@ func LoadConfigRaw(dir string) (*Config, error) {
 	return cfg, nil
 }
 
-// ResolveOpts carries optional knobs for ResolveImage. Zero value is the
+// ResolveOpts carries optional knobs for ResolveBox. Zero value is the
 // default behavior used by every code path EXCEPT the explicit operational
 // overrides on `charly box build/inspect/validate --include-disabled` —
 // those set IncludeDisabled to bypass the `enabled: false` gate without
@@ -341,12 +341,12 @@ func LoadConfigRaw(dir string) (*Config, error) {
 type ResolveOpts struct {
 	IncludeDisabled      bool            // skip the `enabled: false` check
 	IncludeDisabledNames map[string]bool // when non-empty, scope IncludeDisabled to these names only
-	// RequestedImages are the explicit build targets (`charly box build <name>`).
+	// RequestedBoxes are the explicit build targets (`charly box build <name>`).
 	// A qualified name here (e.g. `charly.arch-builder`) is pulled into the resolved
 	// set even when it isn't reachable as a base/builder of a root image — so a
 	// namespaced image can be an on-demand build target, not only a transitive
 	// base. Bare names are ignored here (they resolve through the root loop).
-	RequestedImages []string
+	RequestedBoxes []string
 }
 
 // shouldIncludeDisabled reports whether name's disabled gate should be
@@ -362,12 +362,12 @@ func (opts ResolveOpts) shouldIncludeDisabled(name string) bool {
 	return opts.IncludeDisabledNames[name]
 }
 
-// ResolveImage resolves a single image's configuration by applying defaults
-func (c *Config) ResolveImage(name string, calverTag string, dir string, opts ResolveOpts) (*ResolvedBox, error) {
+// ResolveBox resolves a single box's configuration by applying defaults
+func (c *Config) ResolveBox(name string, calverTag string, dir string, opts ResolveOpts) (*ResolvedBox, error) {
 	// Namespace-aware entry: a qualified name (e.g. `charly.arch-builder`,
 	// `cachyos.cachyos`) resolves inside the Config of the namespace that
 	// owns it, where its base:/builder: refs are relative. This mirrors
-	// resolveImageRef's descent (namespace.go) so that EVERY ResolveImage
+	// resolveBoxRef's descent (namespace.go) so that EVERY ResolveBox
 	// caller — `charly box inspect/generate/merge/pull/validate`,
 	// ensure-image's build-fallback, `charly deploy add`/`charly update` — is
 	// namespace-aware through this single chokepoint instead of each
@@ -380,11 +380,11 @@ func (c *Config) ResolveImage(name string, calverTag string, dir string, opts Re
 		if !found {
 			return nil, fmt.Errorf("import namespace %q not found (resolving image %q)", ns, name)
 		}
-		return sub.ResolveImage(rest, calverTag, dir, opts)
+		return sub.ResolveBox(rest, calverTag, dir, opts)
 	}
-	img, ok := c.Image[name]
+	img, ok := c.Box[name]
 	if !ok {
-		return nil, fmt.Errorf("image %q not found in charly.yml", name)
+		return nil, fmt.Errorf("box %q not found in charly.yml", name)
 	}
 	if !img.IsEnabled() && !opts.shouldIncludeDisabled(name) {
 		return nil, fmt.Errorf("image %q is disabled (pass --include-disabled to operate on it without flipping authored config)", name)
@@ -423,7 +423,7 @@ func (c *Config) ResolveImage(name string, calverTag string, dir string, opts Re
 
 		// Check if base is internal (another enabled image — local OR resolved
 		// through an import namespace, e.g. `cachyos.cachyos`) or external.
-		if baseImg, _, isInternal := c.resolveImageRef(resolved.Base); isInternal && baseImg.IsEnabled() {
+		if baseImg, _, isInternal := c.resolveBoxRef(resolved.Base); isInternal && baseImg.IsEnabled() {
 			resolved.IsExternalBase = false
 		} else {
 			resolved.IsExternalBase = true
@@ -523,9 +523,9 @@ func (c *Config) ResolveImage(name string, calverTag string, dir string, opts Re
 	}
 
 	// Builder resolution flows through the ONE canonical method so it can't
-	// diverge across commands (build/generate/inspect via ResolveImage,
+	// diverge across commands (build/generate/inspect via ResolveBox,
 	// `charly deploy add`'s synthetic host/VM image, and the remote-ref fetch walk
-	// via effectiveBuilderForImage all call resolveEffectiveBuilder).
+	// via effectiveBuilderForBox all call resolveEffectiveBuilder).
 	resolved.Builder = c.resolveEffectiveBuilder(name, resolved.Distro, resolved.Base, resolved.IsExternalBase, img.Builder)
 
 	// BuilderCapabilities: image-specific capability declaration, NOT inherited
@@ -533,11 +533,11 @@ func (c *Config) ResolveImage(name string, calverTag string, dir string, opts Re
 
 	// Schema v4: DNS / AcmeEmail / Tunnel / Engine no longer resolve from
 	// image config — they are deployment choices and flow through
-	// MergeDeployOntoMetadata → ImageMetadata directly.
+	// MergeDeployOntoMetadata → BoxMetadata directly.
 
 	// VM configuration (disk_size, ram, cpus, firmware, libvirt, …) lives
 	// on `kind: vm` entities in vm.yml, NOT on box: entries. The
-	// legacy ImageConfig.Vm / .Libvirt fields were removed in the VM
+	// legacy BoxConfig.Vm / .Libvirt fields were removed in the VM
 	// hard-cutover; `bootc: true` on an image now only declares that the
 	// container image is bootc-bootable (for `charly vm build` to produce a
 	// qcow2 via `bootc install to-disk`). To run that bootc image as a
@@ -570,7 +570,7 @@ func (c *Config) ResolveImage(name string, calverTag string, dir string, opts Re
 	// Resolve build config from charly.yml. Unconditional — caller must
 	// supply a project dir containing charly.yml. Tests that need
 	// in-memory-only resolution use testProjectDir(t).
-	distroCfg, builderCfg, initCfg, err := LoadBuildConfigForImage(dir)
+	distroCfg, builderCfg, initCfg, err := LoadBuildConfigForBox(dir)
 	if err != nil {
 		return nil, fmt.Errorf("image %s: %w", name, err)
 	}
@@ -629,17 +629,17 @@ func (c *Config) ResolveImage(name string, calverTag string, dir string, opts Re
 	return resolved, nil
 }
 
-// ResolveAllImage resolves all enabled images in the config. opts.IncludeDisabled
+// ResolveAllBox resolves all enabled images in the config. opts.IncludeDisabled
 // extends the working set to images marked enabled: false (the build verb's
 // `--include-disabled` flag flips this for one-off operational rebuilds
 // without modifying authored config).
-func (c *Config) ResolveAllImage(calverTag string, dir string, opts ResolveOpts) (map[string]*ResolvedBox, error) {
+func (c *Config) ResolveAllBox(calverTag string, dir string, opts ResolveOpts) (map[string]*ResolvedBox, error) {
 	resolved := make(map[string]*ResolvedBox)
-	for name, img := range c.Image {
+	for name, img := range c.Box {
 		if !img.IsEnabled() && !opts.shouldIncludeDisabled(name) {
 			continue
 		}
-		ri, err := c.ResolveImage(name, calverTag, dir, opts)
+		ri, err := c.ResolveBox(name, calverTag, dir, opts)
 		if err != nil {
 			return nil, err
 		}
@@ -657,16 +657,16 @@ func (c *Config) ResolveAllImage(calverTag string, dir string, opts ResolveOpts)
 	// map under its fully-qualified key. Pulling it FIRST lets the
 	// resolveNamespacedBases fixpoint below also collect the target's own
 	// transitive bases AND builders (it iterates the resolved set), so the build
-	// graph + filterImage have every dependency. Uses the SAME
-	// pullNamespacedImage path as the base pull.
-	for _, name := range opts.RequestedImages {
+	// graph + filterBox have every dependency. Uses the SAME
+	// pullNamespacedBox path as the base pull.
+	for _, name := range opts.RequestedBoxes {
 		if _, _, qualified := splitNamespaceRef(name); !qualified {
 			continue
 		}
 		if _, done := resolved[name]; done {
 			continue
 		}
-		if err := c.pullNamespacedImage(c, name, "", calverTag, dir, opts, resolved); err != nil {
+		if err := c.pullNamespacedBox(c, name, "", calverTag, dir, opts, resolved); err != nil {
 			return nil, err
 		}
 	}
@@ -676,10 +676,10 @@ func (c *Config) ResolveAllImage(calverTag string, dir string, opts ResolveOpts)
 	return resolved, nil
 }
 
-// ImageNames returns a sorted list of enabled image names
-func (c *Config) ImageNames() []string {
-	names := make([]string, 0, len(c.Image))
-	for name, img := range c.Image {
+// BoxNames returns a sorted list of enabled box names
+func (c *Config) BoxNames() []string {
+	names := make([]string, 0, len(c.Box))
+	for name, img := range c.Box {
 		if !img.IsEnabled() {
 			continue
 		}
@@ -730,9 +730,9 @@ func intPtr(v int) *int {
 // the boundary, so we key off the resolved distro and source the builder map
 // from a root-namespace image whose bare refs resolve HERE.
 //
-// EVERY builder-consuming path calls this — ResolveImage (box: images), the
+// EVERY builder-consuming path calls this — ResolveBox (box: images), the
 // synthetic host/VM image in `charly deploy add` (deploy_add_cmd.go), and the
-// remote-ref FETCH walk (effectiveBuilderForImage → CollectRemoteRefsOpts) — so
+// remote-ref FETCH walk (effectiveBuilderForBox → CollectRemoteRefsOpts) — so
 // the resolution can never drift between commands and the fetch set stays in
 // lockstep with the resolve set.
 func (c *Config) resolveEffectiveBuilder(name string, distro []string, base string, isExternalBase bool, imgBuilder BuilderMap) BuilderMap {
@@ -744,14 +744,14 @@ func (c *Config) resolveEffectiveBuilder(name string, distro []string, base stri
 		out[typ] = b
 	}
 	if !isExternalBase {
-		// DELIBERATELY flat (not resolveImageRef): a base's builder map is only
+		// DELIBERATELY flat (not resolveBoxRef): a base's builder map is only
 		// inherited when the base is ROOT-local. A namespace-qualified base
 		// (e.g. `cachyos.cachyos`) intentionally does NOT contribute its builder
 		// map here — builder: is a map of namespace-relative refs that would
 		// dangle in this consumer's namespace; the consumer instead gets its
 		// builder distro-keyed via distroBuilderMap above. So the qualified-base
 		// miss is correct, not a divergence bug. See namespace.go's header.
-		if baseImg, ok := c.Image[base]; ok {
+		if baseImg, ok := c.Box[base]; ok {
 			for typ, b := range baseImg.Builder {
 				out[typ] = b
 			}
@@ -768,20 +768,20 @@ func (c *Config) resolveEffectiveBuilder(name string, distro []string, base stri
 	return out
 }
 
-// effectiveBuilderForImage computes the builder image refs an image will build
-// against, from a RAW ImageConfig — the FETCH-path counterpart to ResolveImage's
+// effectiveBuilderForBox computes the builder image refs an image will build
+// against, from a RAW BoxConfig — the FETCH-path counterpart to ResolveBox's
 // resolved-value path. Both end at the ONE canonical resolveEffectiveBuilder;
 // this helper just supplies its inputs (base, is-external-base, distro) using the
-// SAME precedence + canonical helpers ResolveImage uses (Defaults fallback,
-// resolveImageRef for the internal/external line, walkBaseChainDistro for distro
-// inheritance). It exists because CollectRemoteRefsOpts.collectImage runs during
-// the remote-ref FETCH phase, before any ResolvedImage exists (and without the
-// dir/tag ResolveImage needs); reading the raw per-image img.Builder there
+// SAME precedence + canonical helpers ResolveBox uses (Defaults fallback,
+// resolveBoxRef for the internal/external line, walkBaseChainDistro for distro
+// inheritance). It exists because CollectRemoteRefsOpts.collectBox runs during
+// the remote-ref FETCH phase, before any ResolvedBox exists (and without the
+// dir/tag ResolveBox needs); reading the raw per-image img.Builder there
 // under-collected builders supplied by defaults.builder / the distro-keyed
 // default (whose per-image map is empty — e.g. bazzite/aurora -> charly.fedora-builder),
 // surfacing as "unknown layer" at generate time. Routing through this keeps the
 // FETCH set's builder edges in lockstep with the RESOLVE set's (resolveNamespacedBases).
-func (c *Config) effectiveBuilderForImage(name string, img BoxConfig) BuilderMap {
+func (c *Config) effectiveBuilderForBox(name string, img BoxConfig) BuilderMap {
 	base := "scratch"
 	isExternalBase := true
 	if img.From == "" && !img.DataImage {
@@ -792,7 +792,7 @@ func (c *Config) effectiveBuilderForImage(name string, img BoxConfig) BuilderMap
 		if base == "" {
 			base = "quay.io/fedora/fedora:43"
 		}
-		if baseImg, _, isInternal := c.resolveImageRef(base); isInternal && baseImg.IsEnabled() {
+		if baseImg, _, isInternal := c.resolveBoxRef(base); isInternal && baseImg.IsEnabled() {
 			isExternalBase = false
 		}
 	}
@@ -826,14 +826,14 @@ func (c *Config) distroBuilderMap(distroTags []string) BuilderMap {
 	if len(distroTags) == 0 {
 		return nil
 	}
-	names := make([]string, 0, len(c.Image))
-	for name := range c.Image {
+	names := make([]string, 0, len(c.Box))
+	for name := range c.Box {
 		names = append(names, name)
 	}
 	sort.Strings(names)
 	for _, tag := range distroTags {
 		for _, name := range names {
-			img := c.Image[name]
+			img := c.Box[name]
 			if len(img.Builder) == 0 {
 				continue
 			}
@@ -859,9 +859,9 @@ func (c *Config) walkBaseChainDistro(baseName string) []string {
 			return nil // cycle detected
 		}
 		seen[current] = true
-		// resolveImageRef crosses import namespaces (`cachyos.cachyos`); distro
+		// resolveBoxRef crosses import namespaces (`cachyos.cachyos`); distro
 		// is a VALUE so inheriting it across a namespace boundary is correct.
-		baseImg, sub, ok := cur.resolveImageRef(current)
+		baseImg, sub, ok := cur.resolveBoxRef(current)
 		if !ok || !baseImg.IsEnabled() {
 			return nil // external base or disabled
 		}
@@ -890,7 +890,7 @@ func (c *Config) walkBaseChainBuild(baseName string) []string {
 		seen[current] = true
 		// Crosses import namespaces; build: is a VALUE (format list), inherited
 		// across a namespace boundary like distro:.
-		baseImg, sub, ok := cur.resolveImageRef(current)
+		baseImg, sub, ok := cur.resolveBoxRef(current)
 		if !ok || !baseImg.IsEnabled() {
 			return nil // external base or disabled
 		}
@@ -913,11 +913,11 @@ type baseChainNode struct {
 	Img  BoxConfig
 }
 
-// walkBaseChain walks imageName's ROOT-INTERNAL base-image chain and returns
+// walkBaseChain walks boxName's ROOT-INTERNAL base-image chain and returns
 // the images in walk order (self first, then each internal base). It is the ONE
 // shared base-chain traversal used by every chain-walking collector
 // (CollectHooks / CollectEval / CollectShell / CollectDescription /
-// CollectImageVolume) — each previously re-implemented the identical
+// CollectBoxVolume) — each previously re-implemented the identical
 // `for { img := cfg.Image[current]; ...; current = img.Base }` loop (R3: one
 // implementation, no divergent copies), now cycle-safe for all of them.
 //
@@ -930,25 +930,25 @@ type baseChainNode struct {
 // Stopping at the namespace boundary (and at external / disabled / missing
 // bases) is the long-standing, semantically-correct per-image collection
 // behaviour — preserved here byte-for-byte. Namespace-AWARENESS belongs to
-// NAME resolution (ResolveImage / resolveImageRef / findImageByLeaf), not to
+// NAME resolution (ResolveBox / resolveBoxRef / findBoxByLeaf), not to
 // this per-image layer-collection walk; the distro/build VALUE walkers
 // (walkBaseChainDistro / walkBaseChainBuild) cross namespaces precisely because
 // those are inherited values, whereas layer contributions are not.
-func (c *Config) walkBaseChain(imageName string) []baseChainNode {
+func (c *Config) walkBaseChain(boxName string) []baseChainNode {
 	var out []baseChainNode
 	seen := make(map[string]bool)
-	current := imageName
+	current := boxName
 	for {
 		if current == "" || seen[current] {
 			break
 		}
 		seen[current] = true
-		img, ok := c.Image[current]
+		img, ok := c.Box[current]
 		if !ok {
 			break
 		}
 		out = append(out, baseChainNode{Name: current, Img: img})
-		baseImg, isInternal := c.Image[img.Base]
+		baseImg, isInternal := c.Box[img.Base]
 		if !isInternal || !baseImg.IsEnabled() {
 			break
 		}

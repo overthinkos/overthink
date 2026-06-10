@@ -20,7 +20,7 @@ import (
 
 // MergeCmd merges small layers in a built container image
 type MergeCmd struct {
-	Image      string `arg:"" optional:"" help:"Image name from charly.yml"`
+	Box        string `arg:"" optional:"" help:"Box name from charly.yml"`
 	All        bool   `long:"all" help:"Merge all images with merge.auto enabled"`
 	MaxMB      int    `long:"max-mb" help:"Maximum size of a merged layer (MB)"`
 	MaxTotalMB int    `long:"max-total-mb" help:"Maximum total image size for merge (MB, 0=no limit)"`
@@ -38,7 +38,7 @@ const defaultMaxMB = 128
 const defaultMaxTotalMB = 0 // 0 = no limit
 
 func (c *MergeCmd) Run() error {
-	if c.Image == "" && !c.All {
+	if c.Box == "" && !c.All {
 		return fmt.Errorf("specify an image name or use --all")
 	}
 
@@ -55,7 +55,7 @@ func (c *MergeCmd) Run() error {
 	if c.All {
 		return c.runAll(cfg)
 	}
-	return c.runOne(cfg, c.Image)
+	return c.runOne(cfg, c.Box)
 }
 
 // runAll merges all images that have merge.auto enabled.
@@ -70,13 +70,13 @@ func (c *MergeCmd) runAll(cfg *Config) error {
 		return err
 	}
 
-	images, err := cfg.ResolveAllImage("unused", dir, ResolveOpts{})
+	images, err := cfg.ResolveAllBox("unused", dir, ResolveOpts{})
 	if err != nil {
 		return err
 	}
 
 	// Merge in dependency order so base images are merged before children
-	order, err := ResolveImageOrder(images, layers)
+	order, err := ResolveBoxOrder(images, layers)
 	if err != nil {
 		return err
 	}
@@ -103,9 +103,9 @@ func (c *MergeCmd) runAll(cfg *Config) error {
 }
 
 // runOne merges a single image.
-func (c *MergeCmd) runOne(cfg *Config, imageName string) error {
+func (c *MergeCmd) runOne(cfg *Config, boxName string) error {
 	dir, _ := os.Getwd()
-	resolved, err := cfg.ResolveImage(imageName, "unused", dir, ResolveOpts{})
+	resolved, err := cfg.ResolveBox(boxName, "unused", dir, ResolveOpts{})
 	if err != nil {
 		return err
 	}

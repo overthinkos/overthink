@@ -16,8 +16,8 @@ package main
 // `image: <name>`. A kind:pod entry exists only when the operator needs
 // to add pod-specific extras that are reused across multiple deployments.
 type PodSpec struct {
-	// Image is the kind:image name this pod template wraps. Required.
-	Image string `yaml:"box"`
+	// Box is the kind:image name this pod template wraps. Required.
+	Box string `yaml:"box"`
 
 	// Sidecars are additional containers that accompany the main pod
 	// container. Genuinely pod-specific: only meaningful at pod deployment

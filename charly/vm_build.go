@@ -9,7 +9,7 @@ import (
 
 // VmBuildCmd builds a QCOW2/RAW disk image from a bootc container image.
 type VmBuildCmd struct {
-	Image     string `arg:"" help:"Bootc image name"`
+	Box       string `arg:"" help:"Bootc image name"`
 	Size      string `long:"size" help:"Override disk size (e.g. 20G, '20 GiB')"`
 	RootSize  string `long:"root-size" help:"Override root partition size (e.g. 10G)"`
 	Tag       string `long:"tag" help:"Image tag override"`
@@ -29,7 +29,7 @@ func (c *VmBuildCmd) Run() error {
 	}
 
 	// Parse image:tag format from positional arg
-	imageName, imageTag := parseImageArg(c.Image)
+	boxName, imageTag := parseImageArg(c.Box)
 
 	// charly is CalVer-only — if neither the positional arg nor --tag
 	// specifies a version, resolve to the newest local CalVer by
@@ -52,18 +52,18 @@ func (c *VmBuildCmd) Run() error {
 	}
 
 	// --- New kind:vm entity path (D1, D4, D12) ---
-	// When imageName matches a kind:vm entity in charly.yml, branch
+	// When boxName matches a kind:vm entity in charly.yml, branch
 	// into the VmSpec-driven build pipeline: cloud_image → fetch+
 	// resize+seed ISO; bootc → bootc install reading the bootc-branch
 	// fields from VmSpec.Source.
 	if uf, ok, ufErr := LoadUnified(dir); ufErr == nil && ok && uf.VM != nil {
-		if spec, hit := uf.VM[imageName]; hit {
-			return c.runVmSpecBuild(imageName, spec, rt)
+		if spec, hit := uf.VM[boxName]; hit {
+			return c.runVmSpecBuild(boxName, spec, rt)
 		}
 	}
 
-	// Reached here = no `kind: vm` entity matched imageName. The legacy
-	// ImageConfig.Vm / ImageConfig.Bootc fallback for VM builds was
+	// Reached here = no `kind: vm` entity matched boxName. The legacy
+	// BoxConfig.Vm / BoxConfig.Bootc fallback for VM builds was
 	// removed in the VM hard-cutover. Users must declare a `kind: vm`
 	// entity in vm.yml — paired with the bootc image if applicable.
 	_ = calverTag
@@ -76,7 +76,7 @@ func (c *VmBuildCmd) Run() error {
 			"            kind: bootc\n"+
 			"            image: %s\n"+
 			"          disk_size: 20G\n",
-		imageName, imageName, imageName)
+		boxName, boxName, boxName)
 }
 
 // createSparseFile creates a sparse file of the given size (e.g. "10G", "20G").
@@ -226,6 +226,6 @@ func loadBuildYmlSections() (*DistroConfig, *BuilderConfig, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	dc, bc, _, err := LoadBuildConfigForImage(dir)
+	dc, bc, _, err := LoadBuildConfigForBox(dir)
 	return dc, bc, err
 }

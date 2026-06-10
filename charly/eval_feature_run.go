@@ -94,7 +94,7 @@ func scenarioTagFilter(tag string) (*TagExpr, error) {
 // feature verbs). The run-verb lives here, per description_cmd.go's design
 // note, so it fits the existing build-mode command hierarchy.
 type BoxFeatureCmd struct {
-	Run BoxFeatureRunCmd `cmd:"" help:"Run an image's baked Gherkin scenarios against a disposable container (build scope; prose-only steps need a live deployment — see charly eval feature run)"`
+	Run BoxFeatureRunCmd `cmd:"" help:"Run a box's baked Gherkin scenarios against a disposable container (build scope; prose-only steps need a live deployment — see charly eval feature run)"`
 }
 
 // BoxFeatureRunCmd: `charly box feature run <image>`. Build-scope acceptance —
@@ -158,7 +158,7 @@ type EvalFeatureCmd struct {
 // steps run their embedded check; prose-only steps bind to the agent grader
 // (unless --no-agent), which probes the live deployment for evidence.
 type EvalFeatureRunCmd struct {
-	Image    string `arg:"" help:"Deployment name (an image-backed pod deployment)"`
+	Box      string `arg:"" help:"Deployment name (a box-backed pod deployment)"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 	Format   string `long:"format" default:"text" help:"Output format: text, json, tap, junit"`
 	Tag      string `long:"tag" help:"Only run scenarios matching this tag expression"`
@@ -169,7 +169,7 @@ type EvalFeatureRunCmd struct {
 }
 
 func (c *EvalFeatureRunCmd) Run() error {
-	engine, containerName, err := resolveContainer(c.Image, c.Instance)
+	engine, containerName, err := resolveContainer(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -183,10 +183,10 @@ func (c *EvalFeatureRunCmd) Run() error {
 	// Resolve the deploy key → declared image short-name via the shared
 	// resolver, then to a registry ref, then read its OCI labels — the same
 	// metadata path `charly eval live` uses (R3).
-	imageRef := resolveDeployImageName(c.Image, c.Instance)
+	imageRef := resolveDeployBoxName(c.Box, c.Instance)
 	resolvedRef, err := resolveImageRefForEnsure(imageRef, projectCfg, dir)
 	if err != nil {
-		return fmt.Errorf("resolving deploy image %q: %w", imageRef, err)
+		return fmt.Errorf("resolving deploy box %q: %w", imageRef, err)
 	}
 	meta, err := ExtractMetadata(engine, resolvedRef)
 	if err != nil {
@@ -201,13 +201,13 @@ func (c *EvalFeatureRunCmd) Run() error {
 	// container IP, env), same as `charly eval live`.
 	var deployOverlay *DeploymentNode
 	if dc := loadDeployConfigForRead("charly eval feature run"); dc != nil {
-		if entry, ok := dc.Deploy[deployKey(c.Image, c.Instance)]; ok {
+		if entry, ok := dc.Deploy[deployKey(c.Box, c.Instance)]; ok {
 			deployOverlay = &entry
-		} else if entry, ok := dc.Deploy[c.Image]; ok {
+		} else if entry, ok := dc.Deploy[c.Box]; ok {
 			deployOverlay = &entry
 		}
 	}
-	resolver, _ := ResolveEvalVarsRuntime(meta, deployOverlay, engine, c.Image, containerName, c.Instance)
+	resolver, _ := ResolveEvalVarsRuntime(meta, deployOverlay, engine, c.Box, containerName, c.Instance)
 
 	filter, err := scenarioTagFilter(c.Tag)
 	if err != nil {
@@ -215,7 +215,7 @@ func (c *EvalFeatureRunCmd) Run() error {
 	}
 
 	runner := NewRunner(ContainerChain(engine, containerName), resolver, RunModeLive)
-	runner.Image = c.Image
+	runner.Box = c.Box
 	runner.Instance = c.Instance
 	runner.Distros = meta.Distro
 
@@ -225,7 +225,7 @@ func (c *EvalFeatureRunCmd) Run() error {
 		if aerr != nil {
 			return aerr
 		}
-		runner.Grader = &AgentGrader{AI: ai, Target: c.Image, Instance: c.Instance, Timeout: c.Timeout}
+		runner.Grader = &AgentGrader{AI: ai, Target: c.Box, Instance: c.Instance, Timeout: c.Timeout}
 	}
 
 	results := RunScenarios(context.Background(), runner, meta.Description, filter, c.Strict)
@@ -234,7 +234,7 @@ func (c *EvalFeatureRunCmd) Run() error {
 	if c.NoAgent {
 		grading = "deterministic-only"
 	}
-	fmt.Fprintf(os.Stderr, "Feature run (deploy scope, %s): %s (container: %s)\n", grading, meta.Image, containerName)
+	fmt.Fprintf(os.Stderr, "Feature run (deploy scope, %s): %s (container: %s)\n", grading, meta.Box, containerName)
 	fails := reportScenarios(os.Stdout, results, c.Format)
 	if fails > 0 {
 		return &EvalFailedError{Failed: fails}

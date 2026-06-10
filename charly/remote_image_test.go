@@ -51,9 +51,9 @@ func TestResolveImageName(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		got := resolveImageName(tt.input)
+		got := resolveBoxName(tt.input)
 		if got != tt.want {
-			t.Errorf("resolveImageName(%q) = %q, want %q", tt.input, got, tt.want)
+			t.Errorf("resolveBoxName(%q) = %q, want %q", tt.input, got, tt.want)
 		}
 	}
 }

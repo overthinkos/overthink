@@ -47,7 +47,7 @@ import (
 type RefKind string
 
 const (
-	RefKindImage RefKind = "image"
+	RefKindBox   RefKind = "image"
 	RefKindLayer RefKind = "layer"
 )
 
@@ -81,7 +81,7 @@ type DeployRef struct {
 // image. For the `--add-layer` context where the user asked for a
 // layer specifically, use ResolveDeployRefAsLayer instead.
 func ResolveDeployRef(ref, projectDir string) (*DeployRef, error) {
-	return resolveDeployRefWithPref(ref, projectDir, RefKindImage)
+	return resolveDeployRefWithPref(ref, projectDir, RefKindBox)
 }
 
 // ResolveDeployRefAsLayer is the layer-preferring sibling of
@@ -165,12 +165,12 @@ func resolveRemoteRef(ref string) (*DeployRef, error) {
 		kind = RefKindLayer
 	case refSubPathHas(parsed.SubPath, "box") || refSubPathHas(parsed.SubPath, "images"):
 		// `box/<n>` is the post-rebrand image subpath; `images/<n>` is legacy.
-		kind = RefKindImage
+		kind = RefKindBox
 	default:
 		// A bare repo ref (no candy//box/ subpath) defaults to the project's
 		// charly.yml, which is image-shaped. Existing tooling treats such
 		// refs as project imports; we follow suit.
-		kind = RefKindImage
+		kind = RefKindBox
 	}
 	return &DeployRef{
 		Raw:    ref,
@@ -230,7 +230,7 @@ func classifyYAMLFile(path string) (RefKind, error) {
 	// Image-shaped: has `images:` (top-level), `base:`, or `defaults:` block.
 	for _, k := range []string{"box", "base", "defaults"} {
 		if _, ok := top[k]; ok {
-			return RefKindImage, nil
+			return RefKindBox, nil
 		}
 	}
 	// Layer-shaped: has any layer marker. This list roughly matches
@@ -261,7 +261,7 @@ func resolveLocalName(name, projectDir string, preferKind RefKind) (*DeployRef, 
 		// deploy ref (`charly deploy add charly.<image>`) resolves the same way every
 		// other command resolves an image name. Bare names hit the root map
 		// exactly as the previous flat `uf.Image[name]` did.
-		if _, _, present := uf.ProjectConfig().resolveImageRef(name); present {
+		if _, _, present := uf.ProjectConfig().resolveBoxRef(name); present {
 			inImageYml = true
 			resolvedImgPath = imgYml
 		}
@@ -276,7 +276,7 @@ func resolveLocalName(name, projectDir string, preferKind RefKind) (*DeployRef, 
 	imageRef := func() *DeployRef {
 		return &DeployRef{
 			Raw:    name,
-			Kind:   RefKindImage,
+			Kind:   RefKindBox,
 			Source: RefSourceLocalName,
 			Name:   name,
 			Path:   resolvedImgPath,

@@ -208,7 +208,7 @@ func (t *LocalUnifiedTarget) Status(ctx context.Context) (StatusInfo, error) {
 	}
 	deploys := 0
 	totalLayers := 0
-	var images []string
+	var boxes []string
 	for _, e := range entries {
 		if e.IsDir() {
 			continue
@@ -226,7 +226,7 @@ func (t *LocalUnifiedTarget) Status(ctx context.Context) (StatusInfo, error) {
 		}
 		deploys++
 		totalLayers += len(rec.Layer)
-		images = append(images, rec.Image)
+		boxes = append(boxes, rec.Image)
 	}
 	state := "stopped"
 	if deploys > 0 {
@@ -238,7 +238,7 @@ func (t *LocalUnifiedTarget) Status(ctx context.Context) (StatusInfo, error) {
 		Details: map[string]string{
 			"deploys": fmt.Sprintf("%d", deploys),
 			"layers":  fmt.Sprintf("%d", totalLayers),
-			"images":  strings.Join(images, ","),
+			"images":  strings.Join(boxes, ","),
 		},
 	}, nil
 }

@@ -31,9 +31,9 @@ func TestResolveBuilderImage(t *testing.T) {
 // Verified via the dry-run path so no podman is spawned. Builder defs come from
 // the REAL build.yml so the routing exercises the config-driven host cells.
 func TestVmExecBuilderRoutesHomeBuilders(t *testing.T) {
-	_, bc, _, err := LoadBuildConfigForImage(repoRootDir(t))
+	_, bc, _, err := LoadBuildConfigForBox(repoRootDir(t))
 	if err != nil {
-		t.Fatalf("LoadBuildConfigForImage: %v", err)
+		t.Fatalf("LoadBuildConfigForBox: %v", err)
 	}
 	for _, b := range []string{"npm", "pixi", "cargo"} {
 		tgt := &VmDeployTarget{

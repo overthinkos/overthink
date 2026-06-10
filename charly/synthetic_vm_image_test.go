@@ -6,7 +6,7 @@ import (
 )
 
 // TestSyntheticVmImageDistroFormat is the regression guard for the
-// non-arch VM deploy bug: syntheticVmImage used to hardcode
+// non-arch VM deploy bug: syntheticVmBox used to hardcode
 // Distro:["arch"]/Pkg:"pac"/BuildFormats:["pac"] for EVERY non-root VM, so
 // a layer deploy (and the `charly` localpkg) onto a debian/ubuntu/fedora guest
 // ran `pacman` and failed with exit 127. The fix derives the guest's real
@@ -72,7 +72,7 @@ func TestSyntheticVmImageDistroFormat(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			img := syntheticVmImage(tc.spec, distroCfg)
+			img := syntheticVmBox(tc.spec, distroCfg)
 			if img.User != tc.wantUser {
 				t.Errorf("User = %q, want %q", img.User, tc.wantUser)
 			}
@@ -99,8 +99,8 @@ func TestSyntheticVmImageDistroFormat(t *testing.T) {
 // a kind:eval bed (and any deploy.yml target:vm entry) names its VM via the
 // node's `vm:` cross-ref, NOT a "vm:"-prefixed deploy name. Before the fix the
 // layer compiler only recognized the "vm:" prefix, so a bed fell through to
-// syntheticHostImage (host distro → pac) and the deploy ran `pacman` on a
-// debian/fedora guest. resolveVmEntity must surface node.Vm so syntheticVmImage
+// syntheticHostBox (host distro → pac) and the deploy ran `pacman` on a
+// debian/fedora guest. resolveVmEntity must surface node.Vm so syntheticVmBox
 // is reached.
 func TestResolveVmEntity(t *testing.T) {
 	cases := []struct {
@@ -131,7 +131,7 @@ func TestSyntheticVmImageRootFallback(t *testing.T) {
 	distroCfg := &DistroConfig{Distro: map[string]*DistroDef{
 		"fedora": {Format: map[string]*FormatDef{"rpm": {}}},
 	}}
-	img := syntheticVmImage(&VmSpec{Source: VmSource{Kind: "bootc"}}, distroCfg)
+	img := syntheticVmBox(&VmSpec{Source: VmSource{Kind: "bootc"}}, distroCfg)
 	if img.User != "root" {
 		t.Errorf("User = %q, want root", img.User)
 	}

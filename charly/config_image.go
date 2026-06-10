@@ -25,13 +25,13 @@ type BoxConfigCmd struct {
 // ImageConfigSetupCmd configures an image: generates quadlet, provisions secrets,
 // initializes and mounts encrypted volumes.
 type BoxConfigSetupCmd struct {
-	Image           string   `arg:"" optional:"" help:"Image name or remote ref (github.com/org/repo/image[@version])"`
+	Box             string   `arg:"" optional:"" help:"Box name or remote ref (github.com/org/repo/box[@version])"`
 	Tag             string   `long:"tag" help:"Image CalVer tag (empty = newest local CalVer resolved via the ai.opencharly.version OCI label)"`
 	Build           bool     `long:"build" help:"Force local build instead of pulling from registry"`
 	Env             []string `short:"e" long:"env" sep:"none" help:"Set container env var (KEY=VALUE), merged with existing vars"`
 	Clean           bool     `short:"c" long:"clean" help:"Replace all env vars instead of merging (clean slate)"`
 	EnvFile         string   `long:"env-file" help:"Load env vars from file"`
-	Instance        string   `short:"i" long:"instance" help:"Instance name for running multiple containers of the same image"`
+	Instance        string   `short:"i" long:"instance" help:"Instance name for running multiple containers of the same box"`
 	Port            []string `short:"p" help:"Remap host port (newHost:containerPort, e.g., 5901:5900)"`
 	KeepMounted     bool     `long:"keep-mounted" help:"Keep encrypted volumes mounted after setup"`
 	Password        string   `long:"password" default:"auto" enum:"auto,manual" help:"auto: generate secrets (default), manual: prompt for each"`
@@ -45,7 +45,7 @@ type BoxConfigSetupCmd struct {
 	Seed            bool     `long:"seed" default:"true" negatable:"" help:"Seed bind-backed volumes with data from image (default: true)"`
 	ForceSeed       bool     `long:"force-seed" help:"Re-seed even if target directory is not empty"`
 	DataFrom        string   `long:"data-from" help:"Seed data from this data image instead of the target image"`
-	UpdateAll       bool     `long:"update-all" help:"Regenerate quadlets for all other deployed images to pick up env_provides changes"`
+	UpdateAll       bool     `long:"update-all" help:"Regenerate quadlets for all other deployed boxes to pick up env_provides changes"`
 	SshKey          string   `long:"ssh-key" help:"SSH public key: 'auto' (default ~/.ssh key), path to .pub file, 'generate', or 'none'"`
 	Sidecar         []string `long:"sidecar" help:"Attach sidecar (from built-in templates, e.g. 'tailscale')"`
 	ListSidecars    bool     `long:"list-sidecars" help:"List available sidecar templates and exit"`
@@ -94,19 +94,19 @@ func (c *BoxConfigSetupCmd) Run() error {
 		return fmt.Errorf("charly config requires run_mode=quadlet or direct (current: %s)", rt.RunMode)
 	}
 
-	if c.Image == "" {
+	if c.Box == "" {
 		return fmt.Errorf("image name is required")
 	}
 
 	// Remote refs (@github.com/...) are handled exclusively by `charly box pull`.
-	if IsRemoteImageRef(StripURLScheme(c.Image)) {
-		return fmt.Errorf("remote refs are not accepted here; run 'charly box pull %s' first, then 'charly config <image-name>'", c.Image)
+	if IsRemoteImageRef(StripURLScheme(c.Box)) {
+		return fmt.Errorf("remote refs are not accepted here; run 'charly box pull %s' first, then 'charly config <image-name>'", c.Box)
 	}
 
 	// Canonicalize Pattern A "<base>/<instance>" so downstream code uses
 	// the (image, instance) split — without this, MergeDeployOntoMetadata
 	// looks up the wrong deploy.yml key and drops port/env overlays.
-	c.Image, c.Instance = canonicalizeDeployArg(c.Image, c.Instance)
+	c.Box, c.Instance = canonicalizeDeployArg(c.Box, c.Instance)
 
 	return c.runConfig(rt)
 }
@@ -128,7 +128,7 @@ func (c *BoxConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	// the arg was always treated as a kind:image short-name; this
 	// split lets the deploy-key and the image-ref diverge.
 	// Resolve the deploy key to its declared image short-name via THE shared
-	// resolver (deploy.go resolveDeployImageName) that config / start / shell
+	// resolver (deploy.go resolveDeployBoxName) that config / start / shell
 	// / eval live all use, so they never diverge. Falls back to the key for
 	// the key==image convention. c.Image stays the deploy-KEY for container /
 	// quadlet / secret / deploy.yml-key composition; only the image ref and
@@ -136,7 +136,7 @@ func (c *BoxConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	// short name through resolveShellImageRef yields a full local-CalVer ref
 	// podman storage knows (storage is keyed by full registry refs like
 	// ghcr.io/overthinkos/arch:TAG, not bare short names).
-	var deployImageName, imageRef string
+	var deployBoxName, imageRef string
 	if c.ExplicitRef != "" {
 		// Source-less from-box deploy (`charly deploy from-box`): use the exact
 		// ref as-is; c.Image is the deploy-key/name only. No deploy.yml
@@ -152,14 +152,14 @@ func (c *BoxConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 		// pass through resolveImageRefForEnsure unchanged) instead of failing
 		// with "short name requires a project directory with charly.yml". The
 		// deploy KEY stays c.Image for container/quadlet/secret naming.
-		deployImageName = c.ExplicitRef
+		deployBoxName = c.ExplicitRef
 		imageRef = c.ExplicitRef
 	} else {
-		deployImageName = resolveDeployImageName(c.Image, c.Instance)
-		if deployImageName != c.Image {
-			fmt.Fprintf(os.Stderr, "config: deploy %q declares image: %q\n", c.Image, deployImageName)
+		deployBoxName = resolveDeployBoxName(c.Box, c.Instance)
+		if deployBoxName != c.Box {
+			fmt.Fprintf(os.Stderr, "config: deploy %q declares image: %q\n", c.Box, deployBoxName)
 		}
-		imageRef = resolveShellImageRef("", deployImageName, c.Tag)
+		imageRef = resolveShellImageRef("", deployBoxName, c.Tag)
 	}
 	podmanRT := &ResolvedRuntime{BuildEngine: rt.BuildEngine, RunEngine: "podman"}
 	if err := EnsureImage(imageRef, podmanRT); err != nil {
@@ -182,7 +182,7 @@ func (c *BoxConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	// MergeDeployOntoMetadata so the cleaned deploy state is what gets
 	// merged into meta. Idempotent no-op after the first successful run.
 	// Plan §2.4.
-	if _, err := MigratePlaintextEnvSecret(dc, meta, c.Image, c.Instance); err != nil {
+	if _, err := MigratePlaintextEnvSecret(dc, meta, c.Box, c.Instance); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: could not migrate plaintext env secrets: %v\n", err)
 	}
 
@@ -212,7 +212,7 @@ func (c *BoxConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	// status see the same allocation. Re-allocation happens on the next
 	// charly config / charly update where Port still contains "auto".
 	if dc != nil {
-		key := deployKey(c.Image, c.Instance)
+		key := deployKey(c.Box, c.Instance)
 		overlay, hasOverlay := dc.Deploy[key]
 		if hasOverlay && HasAutoPort(overlay.Port) {
 			containerPorts, cpErr := containerPortsFromMappings(meta.Port)
@@ -235,7 +235,7 @@ func (c *BoxConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 		}
 	}
 
-	MergeDeployOntoMetadata(meta, dc, c.Image, c.Instance)
+	MergeDeployOntoMetadata(meta, dc, c.Box, c.Instance)
 
 	uid, gid := meta.UID, meta.GID
 	ports := meta.Port
@@ -245,16 +245,16 @@ func (c *BoxConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	// Parse volume flags into deploy volume configs (CLI > env > deploy.yml)
 	deployVolumes := c.parseVolumeFlags()
 	if len(deployVolumes) == 0 {
-		deployVolumes = parseVolumeEnv(c.Image)
+		deployVolumes = parseVolumeEnv(c.Box)
 	}
 	if len(deployVolumes) == 0 && dc != nil {
-		if overlay, ok := dc.Deploy[deployKey(c.Image, c.Instance)]; ok {
+		if overlay, ok := dc.Deploy[deployKey(c.Box, c.Instance)]; ok {
 			deployVolumes = overlay.Volume
 		}
 	}
 
 	// Resolve volume backing from labels + deploy config
-	volumes, bindMounts := ResolveVolumeBacking(c.Image, c.Instance, meta.Volume, deployVolumes, meta.Home, rt.EncryptedStoragePath, rt.VolumesPath)
+	volumes, bindMounts := ResolveVolumeBacking(c.Box, c.Instance, meta.Volume, deployVolumes, meta.Home, rt.EncryptedStoragePath, rt.VolumesPath)
 
 	// Re-resolve the canonical registry ref UNLESS the operator
 	// supplied an explicit ref via the deploy entry's `image:`
@@ -265,7 +265,7 @@ func (c *BoxConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	// to that exact tag is the whole point, so don't substitute
 	// the deploy-key into a freshly-composed ref.
 	if meta.Registry != "" && !looksLikeFullRef(imageRef) && c.ExplicitRef == "" {
-		imageRef = resolveShellImageRef(meta.Registry, deployImageName, c.Tag)
+		imageRef = resolveShellImageRef(meta.Registry, deployBoxName, c.Tag)
 	}
 
 	// Resolve tunnel config from labels
@@ -298,12 +298,12 @@ func (c *BoxConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	// Inject provides BEFORE env resolution so this image's own provides
 	// (pod case) and other images' provides are available in the quadlet.
 	if meta != nil && len(meta.EnvProvide) > 0 {
-		if _, injErr := injectEnvProvides(c.Image, c.Instance, meta.EnvProvide, portMap); injErr != nil {
+		if _, injErr := injectEnvProvides(c.Box, c.Instance, meta.EnvProvide, portMap); injErr != nil {
 			fmt.Fprintf(os.Stderr, "Warning: could not inject env_provides: %v\n", injErr)
 		}
 	}
 	if meta != nil && len(meta.MCPProvide) > 0 {
-		if _, injErr := injectMCPProvides(c.Image, c.Instance, meta.MCPProvide, portMap); injErr != nil {
+		if _, injErr := injectMCPProvides(c.Box, c.Instance, meta.MCPProvide, portMap); injErr != nil {
 			fmt.Fprintf(os.Stderr, "Warning: could not inject mcp_provides: %v\n", injErr)
 		}
 	}
@@ -312,7 +312,7 @@ func (c *BoxConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 
 	// Resolve SSH key if --ssh-key was provided
 	if c.SshKey != "" {
-		cName := containerNameInstance(c.Image, c.Instance)
+		cName := containerNameInstance(c.Box, c.Instance)
 		sshDir, sshDirErr := containerSSHKeyDir(cName)
 		if sshDirErr != nil {
 			return sshDirErr
@@ -330,9 +330,9 @@ func (c *BoxConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	// Pass deployKey (image-with-instance) — NOT bare c.Image — so an
 	// instance consumer like `versa/ecovoyage` doesn't pick up the base
 	// `versa` deploy's provides, and vice versa.
-	ctrName := containerNameInstance(c.Image, c.Instance)
+	ctrName := containerNameInstance(c.Box, c.Instance)
 	acceptedEnv := AcceptedEnvSet(meta.EnvAccept, meta.EnvRequire)
-	globalEnv := dc.GlobalEnvForImage(deployKey(c.Image, c.Instance), ctrName, acceptedEnv)
+	globalEnv := dc.GlobalEnvForImage(deployKey(c.Box, c.Instance), ctrName, acceptedEnv)
 	envVars, envErr := ResolveEnvVars(globalEnv, meta.Env, "", workspaceBindHost(bindMounts), c.EnvFile, c.Env)
 	if envErr != nil {
 		return envErr
@@ -341,7 +341,7 @@ func (c *BoxConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 
 	// Enforce env_requires — hard error before writing anything
 	if meta != nil && len(meta.EnvRequire) > 0 {
-		if err := checkMissingEnvRequires(c.Image, meta.EnvRequire, envVars); err != nil {
+		if err := checkMissingEnvRequires(c.Box, meta.EnvRequire, envVars); err != nil {
 			return err
 		}
 	}
@@ -353,7 +353,7 @@ func (c *BoxConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	}
 	// Check deploy.yml env_file
 	if quadletEnvFile == "" && dc != nil {
-		if overlay, ok := dc.Deploy[deployKey(c.Image, c.Instance)]; ok && overlay.EnvFile != "" {
+		if overlay, ok := dc.Deploy[deployKey(c.Box, c.Instance)]; ok && overlay.EnvFile != "" {
 			quadletEnvFile = expandHostHome(overlay.EnvFile)
 		}
 	}
@@ -387,7 +387,7 @@ func (c *BoxConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 
 	// Pre-flight port conflict check (warning for config, not hard error)
 	if conflicts := CheckPortAvailability(ports, rt.BindAddress, rt.RunEngine); len(conflicts) > 0 {
-		fmt.Fprintf(os.Stderr, "Warning: port conflicts detected:%s", FormatPortConflicts(conflicts, c.Image))
+		fmt.Fprintf(os.Stderr, "Warning: port conflicts detected:%s", FormatPortConflicts(conflicts, c.Box))
 	}
 
 	// Collect and provision secrets from image labels.
@@ -406,21 +406,21 @@ func (c *BoxConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	// Both flow into the same ProvisionPodmanSecrets call — the existing
 	// Secret=<name>,type=env,target=<var> emission at quadlet.go:100-106
 	// handles them identically at runtime.
-	layerOwnedSecrets := CollectSecretsFromLabels(c.Image, meta.Secret)
-	credBackedSecrets, secretResolutions := CollectLayerSecretAccepts(c.Image, c.Instance, meta)
+	layerOwnedSecrets := CollectSecretsFromLabels(c.Box, meta.Secret)
+	credBackedSecrets, secretResolutions := CollectLayerSecretAccepts(c.Box, c.Instance, meta)
 
 	// Enforce secret_requires — hard error before writing anything. Runs
 	// alongside checkMissingEnvRequires (handled later in env resolution).
 	// Plan §2.6 / §6.6.
 	if len(meta.SecretRequire) > 0 {
-		if err := checkMissingSecretRequires(c.Image, meta.SecretRequire, secretResolutions); err != nil {
+		if err := checkMissingSecretRequires(c.Box, meta.SecretRequire, secretResolutions); err != nil {
 			return err
 		}
 	}
 
 	collectedSecrets := append(layerOwnedSecrets, credBackedSecrets...)
 	autoGen := c.Password == "auto"
-	provisioned, fallbackEnv, err := ProvisionPodmanSecrets(rt.RunEngine, c.Image, c.Instance, collectedSecrets, autoGen)
+	provisioned, fallbackEnv, err := ProvisionPodmanSecrets(rt.RunEngine, c.Box, c.Instance, collectedSecrets, autoGen)
 	if err != nil {
 		return err
 	}
@@ -441,7 +441,7 @@ func (c *BoxConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	// Resolve sidecars: embedded templates + deploy.yml + --sidecar flags
 	var deploySidecars map[string]SidecarDef
 	if dc != nil {
-		if overlay, ok := dc.Deploy[deployKey(c.Image, c.Instance)]; ok {
+		if overlay, ok := dc.Deploy[deployKey(c.Box, c.Instance)]; ok {
 			deploySidecars = overlay.Sidecar
 		}
 	}
@@ -494,7 +494,7 @@ func (c *BoxConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 		}
 		if len(mergedSidecarDefs) > 0 {
 			var rsErr error
-			resolvedSidecars, rsErr = ResolveSidecar(mergedSidecarDefs, c.Image, c.Instance)
+			resolvedSidecars, rsErr = ResolveSidecar(mergedSidecarDefs, c.Box, c.Instance)
 			if rsErr != nil {
 				return fmt.Errorf("resolving sidecars: %w", rsErr)
 			}
@@ -516,7 +516,7 @@ func (c *BoxConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	// Provision sidecar secrets as podman secrets
 	for i, sc := range resolvedSidecars {
 		if len(sc.Secret) > 0 {
-			scProvisioned, scFallback, scErr := ProvisionPodmanSecrets(rt.RunEngine, c.Image, c.Instance, sc.Secret, autoGen)
+			scProvisioned, scFallback, scErr := ProvisionPodmanSecrets(rt.RunEngine, c.Box, c.Instance, sc.Secret, autoGen)
 			if scErr != nil {
 				fmt.Fprintf(os.Stderr, "Warning: could not provision sidecar %s secrets: %v\n", sc.Name, scErr)
 			}
@@ -530,11 +530,11 @@ func (c *BoxConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	// When sidecars are present, set PodName to enable pod mode
 	podName := ""
 	if len(resolvedSidecars) > 0 {
-		podName = PodNameInstance(c.Image, c.Instance)
+		podName = PodNameInstance(c.Box, c.Instance)
 	}
 
 	qcfg := QuadletConfig{
-		ImageName:       c.Image,
+		BoxName:         c.Box,
 		ImageRef:        imageRef,
 		Home:            meta.Home,
 		Ports:           ports,
@@ -581,7 +581,7 @@ func (c *BoxConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	// `meta.Port` value, since `ports` is computed from image labels
 	// merged with deploy.yml — an idempotent recompute, not an explicit
 	// operator decision to set ports.
-	saveDeployState(c.Image, c.Instance, SaveDeployStateInput{
+	saveDeployState(c.Box, c.Instance, SaveDeployStateInput{
 		Ports:       ports,
 		SetPorts:    len(c.Port) > 0,
 		Env:         c.Env,
@@ -594,17 +594,17 @@ func (c *BoxConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 		Tunnel:      meta.Tunnel,
 		SecretNames: secretDepNames(meta),
 		// Image + Target are required by the 2026-05-12 require-image
-		// validator (validateDeployRequiresImage). Without them, the entry
+		// validator (validateDeployRequiresBox). Without them, the entry
 		// `charly config` writes would be rejected by the loader on the next
 		// `charly` invocation, forcing an `charly migrate`. saveDeployState only
 		// writes these when the existing entry doesn't already declare them
 		// (never clobbers operator-authored refs). charly config is exclusively
 		// a pod-deploy setup verb, so Target is always "pod"; Image is the
-		// RESOLVED image short-name (deployImageName), NOT the deploy key —
+		// RESOLVED image short-name (deployBoxName), NOT the deploy key —
 		// the key and the image diverge for kind:eval beds and Pattern-B
 		// deploys. Mirrors the fields set by the container path in
 		// deploy_add_cmd.go.
-		Image:  deployImageName,
+		Box:    deployBoxName,
 		Target: "pod",
 	})
 
@@ -628,7 +628,7 @@ func (c *BoxConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 		return fmt.Errorf("creating quadlet directory: %w", err)
 	}
 
-	qpath := filepath.Join(qdir, quadletFilenameInstance(c.Image, c.Instance))
+	qpath := filepath.Join(qdir, quadletFilenameInstance(c.Box, c.Instance))
 	if err := os.WriteFile(qpath, []byte(content), 0600); err != nil {
 		return fmt.Errorf("writing quadlet file: %w", err)
 	}
@@ -639,7 +639,7 @@ func (c *BoxConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	if len(resolvedSidecars) > 0 {
 		// Generate and write .pod file
 		podContent := generatePodQuadlet(qcfg)
-		podPath := filepath.Join(qdir, podQuadletFilenameInstance(c.Image, c.Instance))
+		podPath := filepath.Join(qdir, podQuadletFilenameInstance(c.Box, c.Instance))
 		if err := os.WriteFile(podPath, []byte(podContent), 0600); err != nil {
 			return fmt.Errorf("writing pod file: %w", err)
 		}
@@ -648,7 +648,7 @@ func (c *BoxConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 		// Generate and write sidecar .container files
 		for _, sc := range resolvedSidecars {
 			scContent := generateSidecarQuadlet(sc, podName)
-			scPath := filepath.Join(qdir, sidecarQuadletFilenameInstance(c.Image, c.Instance, sc.Name))
+			scPath := filepath.Join(qdir, sidecarQuadletFilenameInstance(c.Box, c.Instance, sc.Name))
 			if err := os.WriteFile(scPath, []byte(scContent), 0600); err != nil {
 				return fmt.Errorf("writing sidecar file for %s: %w", sc.Name, err)
 			}
@@ -666,7 +666,7 @@ func (c *BoxConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 			return fmt.Errorf("creating systemd user directory: %w", err)
 		}
 		tunnelContent := generateTunnelUnit(qcfg)
-		tunnelPath := filepath.Join(svcDir, tunnelServiceFilename(c.Image))
+		tunnelPath := filepath.Join(svcDir, tunnelServiceFilename(c.Box))
 		if err := os.WriteFile(tunnelPath, []byte(tunnelContent), 0644); err != nil {
 			return fmt.Errorf("writing tunnel service file: %w", err)
 		}
@@ -680,7 +680,7 @@ func (c *BoxConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 
 	// Clean up stale enc service from previous charly versions
 	if svcDir, svcErr := systemdUserDir(); svcErr == nil {
-		encPath := filepath.Join(svcDir, encServiceFilename(c.Image))
+		encPath := filepath.Join(svcDir, encServiceFilename(c.Box))
 		if _, statErr := os.Stat(encPath); statErr == nil {
 			os.Remove(encPath)
 			fmt.Fprintf(os.Stderr, "Removed stale %s\n", encPath)
@@ -696,7 +696,7 @@ func (c *BoxConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 
 	// Enable tunnel service so it auto-starts with the container
 	if tunnelCfg != nil && tunnelCfg.Provider == "cloudflare" {
-		enableCmd := exec.Command("systemctl", "--user", "enable", tunnelServiceFilename(c.Image))
+		enableCmd := exec.Command("systemctl", "--user", "enable", tunnelServiceFilename(c.Box))
 		if output, err := enableCmd.CombinedOutput(); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: could not enable tunnel service: %v\n%s", err, strings.TrimSpace(string(output)))
 		}
@@ -704,12 +704,12 @@ func (c *BoxConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 
 	// Initialize and mount encrypted volumes
 	if hasEncryptedBindMounts(bindMounts) {
-		if err := ensureEncryptedMounts(c.Image, c.Instance, autoGen); err != nil {
+		if err := ensureEncryptedMounts(c.Box, c.Instance, autoGen); err != nil {
 			return fmt.Errorf("setting up encrypted volumes: %w", err)
 		}
 		// Unmount after setup unless --keep-mounted
 		if !c.KeepMounted {
-			if err := encUnmount(c.Image, c.Instance, ""); err != nil {
+			if err := encUnmount(c.Box, c.Instance, ""); err != nil {
 				fmt.Fprintf(os.Stderr, "Warning: could not unmount encrypted volumes: %v\n", err)
 			}
 		}
@@ -723,7 +723,7 @@ func (c *BoxConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	if c.Seed && (len(bindMounts) > 0 || len(volumes) > 0) {
 		dataMeta := meta
 		dataRef := imageRef
-		dataEngine := ResolveImageEngineForDeploy(c.Image, c.Instance, rt.RunEngine)
+		dataEngine := ResolveBoxEngineForDeploy(c.Box, c.Instance, rt.RunEngine)
 
 		// Use external data image if --data-from specified
 		if c.DataFrom != "" {
@@ -768,7 +768,7 @@ func (c *BoxConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 			}
 
 			fmt.Fprintln(os.Stderr, "Provisioning data into volumes...")
-			seeded, err := provisionData(dataEngine, dataRef, dataMeta, bindMounts, volumes, c.Image, c.Instance, mode)
+			seeded, err := provisionData(dataEngine, dataRef, dataMeta, bindMounts, volumes, c.Box, c.Instance, mode)
 			if err != nil {
 				return fmt.Errorf("data provisioning: %w", err)
 			}
@@ -778,7 +778,7 @@ func (c *BoxConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 				if dc == nil {
 					dc = &DeployConfig{Deploy: make(map[string]DeploymentNode)}
 				}
-				imgDeploy := dc.Deploy[deployKey(c.Image, c.Instance)]
+				imgDeploy := dc.Deploy[deployKey(c.Box, c.Instance)]
 				for i := range imgDeploy.Volume {
 					for _, entry := range dataMeta.DataEntries {
 						if imgDeploy.Volume[i].Name == entry.Volume {
@@ -787,7 +787,7 @@ func (c *BoxConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 						}
 					}
 				}
-				dc.Deploy[deployKey(c.Image, c.Instance)] = imgDeploy
+				dc.Deploy[deployKey(c.Box, c.Instance)] = imgDeploy
 				if err := SaveDeployConfig(dc); err != nil {
 					fmt.Fprintf(os.Stderr, "Warning: could not save data seeded state to deploy.yml: %v\n", err)
 				}
@@ -803,8 +803,8 @@ skipDataProvision:
 		hooks = meta.Hook
 	}
 	if hooks != nil && hooks.PostEnable != "" {
-		ctrName := containerNameInstance(c.Image, c.Instance)
-		svc := serviceNameInstance(c.Image, c.Instance)
+		ctrName := containerNameInstance(c.Box, c.Instance)
+		svc := serviceNameInstance(c.Box, c.Instance)
 
 		start := exec.Command("systemctl", "--user", "start", svc)
 		start.Stdout = os.Stderr
@@ -816,7 +816,7 @@ skipDataProvision:
 			// Pass credential-backed secrets (secret_accept/require) to the hook
 			// explicitly — they're scrubbed from c.Env and not reliably inherited
 			// from the container's type=env secrets by `podman exec`.
-			hookEnv := append(append([]string{}, c.Env...), resolveHookSecretEnv(c.Image, c.Instance, meta)...)
+			hookEnv := append(append([]string{}, c.Env...), resolveHookSecretEnv(c.Box, c.Instance, meta)...)
 			if err := RunHook(engine, ctrName, hooks.PostEnable, hookEnv); err != nil {
 				fmt.Fprintf(os.Stderr, "Warning: post_enable hook failed: %v\n", err)
 			}
@@ -825,7 +825,7 @@ skipDataProvision:
 
 	// Regenerate quadlets for all other deployed images if --update-all
 	if c.UpdateAll {
-		if err := updateAllDeployedQuadlets(rt, deployKey(c.Image, c.Instance)); err != nil {
+		if err := updateAllDeployedQuadlets(rt, deployKey(c.Box, c.Instance)); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: could not update all quadlets: %v\n", err)
 		}
 	}
@@ -835,9 +835,9 @@ skipDataProvision:
 		dc := loadDeployConfigForRead("charly config mcp_requires check")
 		var mcpServers []MCPProvideEntry
 		if dc != nil && dc.Provides != nil {
-			mcpServers = podAwareMCPProvides(dc.Provides.MCP, deployKey(c.Image, c.Instance), containerNameInstance(c.Image, c.Instance))
+			mcpServers = podAwareMCPProvides(dc.Provides.MCP, deployKey(c.Box, c.Instance), containerNameInstance(c.Box, c.Instance))
 		}
-		warnMissingMCPRequires(c.Image, meta.MCPRequire, mcpServers)
+		warnMissingMCPRequires(c.Box, meta.MCPRequire, mcpServers)
 	}
 
 	return nil
@@ -867,19 +867,19 @@ func directDeployMarkerDir() (string, error) {
 }
 
 // directDeployMarkerPath returns the marker JSON path for a deploy.
-func directDeployMarkerPath(image, instance string) (string, error) {
+func directDeployMarkerPath(box, instance string) (string, error) {
 	dir, err := directDeployMarkerDir()
 	if err != nil {
 		return "", err
 	}
-	name := containerNameInstance(image, instance)
+	name := containerNameInstance(box, instance)
 	return filepath.Join(dir, name+".json"), nil
 }
 
 // IsDirectDeploy reports whether the named deploy was created in
 // direct mode (i.e. has a marker file). Used by lifecycle commands.
-func IsDirectDeploy(image, instance string) bool {
-	path, err := directDeployMarkerPath(image, instance)
+func IsDirectDeploy(box, instance string) bool {
+	path, err := directDeployMarkerPath(box, instance)
 	if err != nil {
 		return false
 	}
@@ -889,8 +889,8 @@ func IsDirectDeploy(image, instance string) bool {
 
 // readDirectDeployMarker loads a marker file (returns nil, nil when the
 // file doesn't exist — caller should treat that as "not a direct deploy").
-func readDirectDeployMarker(image, instance string) (*directDeployMarker, error) {
-	path, err := directDeployMarkerPath(image, instance)
+func readDirectDeployMarker(box, instance string) (*directDeployMarker, error) {
+	path, err := directDeployMarkerPath(box, instance)
 	if err != nil {
 		return nil, err
 	}
@@ -925,8 +925,8 @@ func writeDirectDeployMarker(m directDeployMarker) error {
 }
 
 // removeDirectDeployMarker removes the marker file (used by `charly remove`).
-func removeDirectDeployMarker(image, instance string) error {
-	path, err := directDeployMarkerPath(image, instance)
+func removeDirectDeployMarker(box, instance string) error {
+	path, err := directDeployMarkerPath(box, instance)
 	if err != nil {
 		return err
 	}
@@ -941,7 +941,7 @@ func removeDirectDeployMarker(image, instance string) error {
 // quadlet directive (see plan G.2 translation table); changes here
 // should match the corresponding generateQuadlet field handling.
 func directPodmanArgs(qcfg QuadletConfig, bindMounts []ResolvedBindMount) []string {
-	name := containerNameInstance(qcfg.ImageName, qcfg.Instance)
+	name := containerNameInstance(qcfg.BoxName, qcfg.Instance)
 	args := []string{"run", "-d",
 		"--name", name,
 		"--hostname", name,
@@ -1013,7 +1013,7 @@ func (c *BoxConfigSetupCmd) runConfigDirect(
 		fmt.Fprintf(os.Stderr, "Warning: encrypted bind mounts require systemd-run; encrypted volumes will not be initialized in direct mode.\n")
 	}
 
-	name := containerNameInstance(qcfg.ImageName, qcfg.Instance)
+	name := containerNameInstance(qcfg.BoxName, qcfg.Instance)
 	// Idempotent re-deploy: stop + remove any existing container with the
 	// same name. Errors are best-effort — if the container doesn't exist,
 	// `podman rm` returns non-zero and we ignore it.
@@ -1032,7 +1032,7 @@ func (c *BoxConfigSetupCmd) runConfigDirect(
 	// Persist marker for lifecycle commands.
 	if err := writeDirectDeployMarker(directDeployMarker{
 		ContainerName: name,
-		Image:         qcfg.ImageName,
+		Image:         qcfg.BoxName,
 		Instance:      qcfg.Instance,
 		ImageRef:      qcfg.ImageRef,
 		CreatedUTC:    time.Now().UTC().Format(time.RFC3339),
@@ -1044,49 +1044,49 @@ func (c *BoxConfigSetupCmd) runConfigDirect(
 
 // ImageConfigStatusCmd shows encrypted volume status.
 type BoxConfigStatusCmd struct {
-	Image    string `arg:"" help:"Image name"`
+	Box      string `arg:"" help:"Box name"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 }
 
 func (c *BoxConfigStatusCmd) Run() error {
-	return encStatus(c.Image, c.Instance)
+	return encStatus(c.Box, c.Instance)
 }
 
 // ImageConfigMountCmd mounts encrypted volumes.
 type BoxConfigMountCmd struct {
-	Image    string `arg:"" help:"Image name"`
+	Box      string `arg:"" help:"Box name"`
 	Volume   string `long:"volume" help:"Only mount this volume (by name)"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 }
 
 func (c *BoxConfigMountCmd) Run() error {
-	return encMount(c.Image, c.Instance, c.Volume)
+	return encMount(c.Box, c.Instance, c.Volume)
 }
 
 // ImageConfigUnmountCmd unmounts encrypted volumes.
 type BoxConfigUnmountCmd struct {
-	Image    string `arg:"" help:"Image name"`
+	Box      string `arg:"" help:"Box name"`
 	Volume   string `long:"volume" help:"Only unmount this volume (by name)"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 }
 
 func (c *BoxConfigUnmountCmd) Run() error {
-	return encUnmount(c.Image, c.Instance, c.Volume)
+	return encUnmount(c.Box, c.Instance, c.Volume)
 }
 
 // ImageConfigPasswdCmd changes the gocryptfs password.
 type BoxConfigPasswdCmd struct {
-	Image    string `arg:"" help:"Image name"`
+	Box      string `arg:"" help:"Box name"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 }
 
 func (c *BoxConfigPasswdCmd) Run() error {
-	return encPasswd(c.Image, c.Instance)
+	return encPasswd(c.Box, c.Instance)
 }
 
 // ImageConfigRemoveCmd removes a quadlet service (replaces charly disable).
 type BoxConfigRemoveCmd struct {
-	Image    string `arg:"" help:"Image name or remote ref"`
+	Box      string `arg:"" help:"Box name or remote ref"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 }
 
@@ -1096,18 +1096,18 @@ func (c *BoxConfigRemoveCmd) Run() error {
 		return err
 	}
 
-	imageName := resolveImageName(c.Image)
+	boxName := resolveBoxName(c.Box)
 
 	// Direct-mode removal: the deploy was created without a quadlet, so
 	// `systemctl --user disable` would fail. Stop + remove the container
 	// directly via podman, then drop the marker file.
-	if rt.RunMode == "direct" || IsDirectDeploy(imageName, c.Instance) {
-		name := containerNameInstance(imageName, c.Instance)
+	if rt.RunMode == "direct" || IsDirectDeploy(boxName, c.Instance) {
+		name := containerNameInstance(boxName, c.Instance)
 		_ = exec.Command("podman", "stop", name).Run()
 		if out, err := exec.Command("podman", "rm", "-f", name).CombinedOutput(); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: podman rm %s: %v\n%s", name, err, strings.TrimSpace(string(out)))
 		}
-		if err := removeDirectDeployMarker(imageName, c.Instance); err != nil {
+		if err := removeDirectDeployMarker(boxName, c.Instance); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: removing direct-mode marker: %v\n", err)
 		}
 		fmt.Fprintf(os.Stderr, "Removed %s (direct mode)\n", name)
@@ -1118,14 +1118,14 @@ func (c *BoxConfigRemoveCmd) Run() error {
 		return fmt.Errorf("charly config remove requires run_mode=quadlet or direct (current: %s)", rt.RunMode)
 	}
 
-	svc := serviceNameInstance(imageName, c.Instance)
+	svc := serviceNameInstance(boxName, c.Instance)
 	cmd := exec.Command("systemctl", "--user", "disable", "--now", svc)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	_ = cmd.Run()
 
 	// Also disable pod and sidecar services (best-effort)
-	podSvc := PodNameInstance(imageName, c.Instance) + "-pod.service"
+	podSvc := PodNameInstance(boxName, c.Instance) + "-pod.service"
 	disablePod := exec.Command("systemctl", "--user", "disable", "--now", podSvc)
 	_ = disablePod.Run()
 
@@ -1139,8 +1139,8 @@ func (c *BoxConfigRemoveCmd) Run() error {
 	// with sidecars but belong to an unrelated deploy). See
 	// findPodSidecarQuadlets in sidecar.go.
 	if qdir, qErr := quadletDir(); qErr == nil {
-		podName := PodNameInstance(imageName, c.Instance)
-		mainFile := containerNameInstance(imageName, c.Instance) + ".container"
+		podName := PodNameInstance(boxName, c.Instance)
+		mainFile := containerNameInstance(boxName, c.Instance) + ".container"
 		if sidecars, dErr := findPodSidecarQuadlets(qdir, podName, mainFile); dErr == nil {
 			for _, name := range sidecars {
 				scSvc := strings.TrimSuffix(name, ".container") + ".service"
@@ -1223,7 +1223,7 @@ func (c *BoxConfigSetupCmd) persistResourceCaps(dc **DeployConfig) error {
 	if (*dc).Deploy == nil {
 		(*dc).Deploy = make(map[string]DeploymentNode)
 	}
-	key := deployKey(c.Image, c.Instance)
+	key := deployKey(c.Box, c.Instance)
 	entry := (*dc).Deploy[key]
 	if entry.Security == nil {
 		entry.Security = &SecurityConfig{}
@@ -1245,8 +1245,8 @@ func (c *BoxConfigSetupCmd) persistResourceCaps(dc **DeployConfig) error {
 }
 
 // parseVolumeEnv parses CHARLY_VOLUMES_<IMAGE> env var into DeployVolumeConfig.
-func parseVolumeEnv(imageName string) []DeployVolumeConfig {
-	envKey := "CHARLY_VOLUMES_" + strings.ToUpper(strings.ReplaceAll(imageName, "-", "_"))
+func parseVolumeEnv(boxName string) []DeployVolumeConfig {
+	envKey := "CHARLY_VOLUMES_" + strings.ToUpper(strings.ReplaceAll(boxName, "-", "_"))
 	envVal := os.Getenv(envKey)
 	if envVal == "" {
 		return nil
@@ -1285,7 +1285,7 @@ func parseVolumeEnv(imageName string) []DeployVolumeConfig {
 // mapping list. nil is accepted (HostPort substitutions degrade to the
 // literal container port — only safe for layers that don't actually use
 // the placeholder).
-func injectEnvProvides(imageName, instance string, envProvides map[string]string, portMap map[int]int) (bool, error) {
+func injectEnvProvides(boxName, instance string, envProvides map[string]string, portMap map[int]int) (bool, error) {
 	if len(envProvides) == 0 {
 		return false, nil
 	}
@@ -1298,7 +1298,7 @@ func injectEnvProvides(imageName, instance string, envProvides map[string]string
 		dc.Provides = &ProvidesConfig{}
 	}
 
-	ctrName := containerNameInstance(imageName, instance)
+	ctrName := containerNameInstance(boxName, instance)
 	changed := false
 
 	// Sort keys for deterministic output
@@ -1306,7 +1306,7 @@ func injectEnvProvides(imageName, instance string, envProvides map[string]string
 	for _, key := range keys {
 		tmpl := envProvides[key]
 		value := resolveTemplate(tmpl, ctrName, portMap)
-		source := deployKey(imageName, instance)
+		source := deployKey(boxName, instance)
 		resolved := EnvProvideEntry{
 			Name:   key,
 			Value:  value,
@@ -1349,7 +1349,7 @@ func injectEnvProvides(imageName, instance string, envProvides map[string]string
 //
 // portMap is a {containerPort -> hostPort} lookup used by resolveTemplate
 // to substitute {{.HostPort N}} placeholders. nil is accepted.
-func injectMCPProvides(imageName, instance string, mcpProvides []MCPServerYAML, portMap map[int]int) (bool, error) {
+func injectMCPProvides(boxName, instance string, mcpProvides []MCPServerYAML, portMap map[int]int) (bool, error) {
 	if len(mcpProvides) == 0 {
 		return false, nil
 	}
@@ -1362,8 +1362,8 @@ func injectMCPProvides(imageName, instance string, mcpProvides []MCPServerYAML, 
 		dc.Provides = &ProvidesConfig{}
 	}
 
-	ctrName := containerNameInstance(imageName, instance)
-	source := deployKey(imageName, instance)
+	ctrName := containerNameInstance(boxName, instance)
+	source := deployKey(boxName, instance)
 	changed := false
 
 	// Remove stale entries from this source (handles name changes on re-config)
@@ -1428,7 +1428,7 @@ func injectMCPProvides(imageName, instance string, mcpProvides []MCPServerYAML, 
 
 // warnMissingMCPRequires checks resolved MCP servers against required MCP dependencies
 // and prints warnings for any that are missing.
-func warnMissingMCPRequires(imageName string, requires []EnvDependency, mcpServers []MCPProvideEntry) {
+func warnMissingMCPRequires(boxName string, requires []EnvDependency, mcpServers []MCPProvideEntry) {
 	resolved := make(map[string]bool, len(mcpServers))
 	for _, s := range mcpServers {
 		resolved[s.Name] = true
@@ -1439,14 +1439,14 @@ func warnMissingMCPRequires(imageName string, requires []EnvDependency, mcpServe
 			if desc != "" {
 				desc = " (" + desc + ")"
 			}
-			fmt.Fprintf(os.Stderr, "Warning: %s requires MCP server %s%s — not available\n", imageName, dep.Name, desc)
+			fmt.Fprintf(os.Stderr, "Warning: %s requires MCP server %s%s — not available\n", boxName, dep.Name, desc)
 		}
 	}
 }
 
 // checkMissingEnvRequires checks resolved env vars against required env dependencies.
 // Returns an error if any required vars are missing — charly config will abort.
-func checkMissingEnvRequires(imageName string, requires []EnvDependency, resolvedEnv []string) error {
+func checkMissingEnvRequires(boxName string, requires []EnvDependency, resolvedEnv []string) error {
 	// Build set of resolved env var names
 	resolved := make(map[string]bool, len(resolvedEnv))
 	for _, e := range resolvedEnv {
@@ -1466,7 +1466,7 @@ func checkMissingEnvRequires(imageName string, requires []EnvDependency, resolve
 		return nil
 	}
 
-	fmt.Fprintf(os.Stderr, "\nError: %s requires the following environment variable(s):\n\n", imageName)
+	fmt.Fprintf(os.Stderr, "\nError: %s requires the following environment variable(s):\n\n", boxName)
 	for _, dep := range missing {
 		desc := ""
 		if dep.Description != "" {
@@ -1475,12 +1475,12 @@ func checkMissingEnvRequires(imageName string, requires []EnvDependency, resolve
 		fmt.Fprintf(os.Stderr, "  %s%s\n", dep.Name, desc)
 	}
 	fmt.Fprintf(os.Stderr, "\nSet them with -e flags, --env-file, or deploy.yml env:\n\n")
-	fmt.Fprintf(os.Stderr, "  charly config %s", imageName)
+	fmt.Fprintf(os.Stderr, "  charly config %s", boxName)
 	for _, dep := range missing {
 		fmt.Fprintf(os.Stderr, " -e %s=...", dep.Name)
 	}
 	fmt.Fprintf(os.Stderr, "\n\n")
-	return fmt.Errorf("missing required environment variable(s) for %s", imageName)
+	return fmt.Errorf("missing required environment variable(s) for %s", boxName)
 }
 
 // checkMissingSecretRequires reports a hard-fail when any secret_requires
@@ -1491,7 +1491,7 @@ func checkMissingEnvRequires(imageName string, requires []EnvDependency, resolve
 //
 // The error message tells the user exactly which credential store path to
 // populate, following the `charly secrets set charly/<service>/<key> <value>` form.
-func checkMissingSecretRequires(imageName string, requires []EnvDependency, resolutions []SecretResolution) error {
+func checkMissingSecretRequires(boxName string, requires []EnvDependency, resolutions []SecretResolution) error {
 	resolvedByName := make(map[string]bool, len(resolutions))
 	for _, r := range resolutions {
 		if r.Resolved {
@@ -1509,7 +1509,7 @@ func checkMissingSecretRequires(imageName string, requires []EnvDependency, reso
 		return nil
 	}
 
-	fmt.Fprintf(os.Stderr, "\nError: %s requires the following credential-backed secret(s):\n\n", imageName)
+	fmt.Fprintf(os.Stderr, "\nError: %s requires the following credential-backed secret(s):\n\n", boxName)
 	for _, dep := range missing {
 		desc := ""
 		if dep.Description != "" {
@@ -1523,18 +1523,18 @@ func checkMissingSecretRequires(imageName string, requires []EnvDependency, reso
 		fmt.Fprintf(os.Stderr, "  charly secrets set %s %s <value>\n", service, key)
 	}
 	fmt.Fprintf(os.Stderr, "\nAlternatively, pass the value once via -e; it will be auto-imported:\n\n")
-	fmt.Fprintf(os.Stderr, "  charly config %s", imageName)
+	fmt.Fprintf(os.Stderr, "  charly config %s", boxName)
 	for _, dep := range missing {
 		fmt.Fprintf(os.Stderr, " -e %s=...", dep.Name)
 	}
 	fmt.Fprintf(os.Stderr, "\n\n")
-	return fmt.Errorf("missing required credential-backed secret(s) for %s", imageName)
+	return fmt.Errorf("missing required credential-backed secret(s) for %s", boxName)
 }
 
 // updateAllDeployedQuadlets regenerates quadlets for all other deployed images
 // to pick up global env changes. Lightweight: only regenerates the quadlet file,
 // does NOT re-provision secrets, encrypted volumes, or data.
-func updateAllDeployedQuadlets(rt *ResolvedRuntime, skipImage string) error {
+func updateAllDeployedQuadlets(rt *ResolvedRuntime, skipBox string) error {
 	dc, err := LoadDeployConfig()
 	if err != nil || dc == nil {
 		return nil
@@ -1542,23 +1542,23 @@ func updateAllDeployedQuadlets(rt *ResolvedRuntime, skipImage string) error {
 
 	var updated []string
 	for key := range dc.Deploy {
-		if key == skipImage {
+		if key == skipBox {
 			continue
 		}
-		imageName, instance := parseDeployKey(key)
+		boxName, instance := parseDeployKey(key)
 
 		// Check if quadlet file exists (only update deployed images)
 		qdir, err := quadletDir()
 		if err != nil {
 			continue
 		}
-		qpath := filepath.Join(qdir, quadletFilenameInstance(imageName, instance))
+		qpath := filepath.Join(qdir, quadletFilenameInstance(boxName, instance))
 		if _, err := os.Stat(qpath); os.IsNotExist(err) {
 			continue
 		}
 
 		// Image ref: PREFER the existing quadlet's Image= line over a
-		// fresh resolveShellImageRef("", imageName, "") lookup. The
+		// fresh resolveShellImageRef("", boxName, "") lookup. The
 		// fresh lookup walks all local images that carry the matching
 		// ai.opencharly.image label, which includes per-deploy alias
 		// re-tags (bumpDeployAlias in update_deploy_dispatch.go). When
@@ -1578,7 +1578,7 @@ func updateAllDeployedQuadlets(rt *ResolvedRuntime, skipImage string) error {
 		// operator-authorized way to move tags.
 		imageRef, _ := extractQuadletImageLine(qpath)
 		if imageRef == "" {
-			imageRef = resolveShellImageRef("", imageName, "")
+			imageRef = resolveShellImageRef("", boxName, "")
 		}
 		meta, err := ExtractMetadata("podman", imageRef)
 		if err != nil || meta == nil {
@@ -1587,15 +1587,15 @@ func updateAllDeployedQuadlets(rt *ResolvedRuntime, skipImage string) error {
 		}
 
 		// Apply deploy.yml overrides (instance-aware). Key by the deploy-key
-		// base (imageName from parseDeployKey), not meta.Image — a bed /
+		// base (boxName from parseDeployKey), not meta.Image — a bed /
 		// Pattern-B entry carries a key distinct from its baked image label.
-		MergeDeployOntoMetadata(meta, dc, imageName, instance)
+		MergeDeployOntoMetadata(meta, dc, boxName, instance)
 
 		// Resolve env vars with updated global env. Pass deployKey so an
 		// instance's quadlet doesn't pick up another instance's provides.
-		updateCtrName := containerNameInstance(imageName, instance)
+		updateCtrName := containerNameInstance(boxName, instance)
 		updateAccepted := AcceptedEnvSet(meta.EnvAccept, meta.EnvRequire)
-		globalEnv := dc.GlobalEnvForImage(deployKey(imageName, instance), updateCtrName, updateAccepted)
+		globalEnv := dc.GlobalEnvForImage(deployKey(boxName, instance), updateCtrName, updateAccepted)
 		envVars, err := ResolveEnvVars(globalEnv, meta.Env, "", "", "", nil)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: could not resolve env for %s: %v\n", key, err)
@@ -1616,7 +1616,7 @@ func updateAllDeployedQuadlets(rt *ResolvedRuntime, skipImage string) error {
 			deployVolumes = overlay.Volume
 			deploySidecars = overlay.Sidecar
 		}
-		volumes, bindMounts := ResolveVolumeBacking(imageName, instance, meta.Volume, deployVolumes, meta.Home, rt.EncryptedStoragePath, rt.VolumesPath)
+		volumes, bindMounts := ResolveVolumeBacking(boxName, instance, meta.Volume, deployVolumes, meta.Home, rt.EncryptedStoragePath, rt.VolumesPath)
 
 		// Resolve env file
 		var quadletEnvFile string
@@ -1656,8 +1656,8 @@ func updateAllDeployedQuadlets(rt *ResolvedRuntime, skipImage string) error {
 		// on missing env vars. Plan §2.3. See regression caught during the
 		// live-system testing session: charly-openwebui went FATAL after an
 		// `charly config immich-ml --update-all` wiped its credential Secret= lines.
-		provisioned := CollectSecretsFromLabels(imageName, meta.Secret)
-		credBacked, credResolutions := CollectLayerSecretAccepts(imageName, instance, meta)
+		provisioned := CollectSecretsFromLabels(boxName, meta.Secret)
+		credBacked, credResolutions := CollectLayerSecretAccepts(boxName, instance, meta)
 		provisioned = append(provisioned, credBacked...)
 
 		// Mirror Run()'s checkMissingSecretRequires — but downgrade to a
@@ -1684,7 +1684,7 @@ func updateAllDeployedQuadlets(rt *ResolvedRuntime, skipImage string) error {
 		isKeyring := backend == "keyring" || backend == "auto" || backend == ""
 
 		// NOTE: previously this block re-resolved imageRef via
-		// resolveShellImageRef(meta.Registry, imageName, "") — i.e. it
+		// resolveShellImageRef(meta.Registry, boxName, "") — i.e. it
 		// overwrote the operator-chosen Image= line at the LAST minute
 		// before emitting the quadlet. That fresh resolution is the
 		// exact cross-pollution path described in the comment near the
@@ -1706,17 +1706,17 @@ func updateAllDeployedQuadlets(rt *ResolvedRuntime, skipImage string) error {
 			mergedDefs, resolveErr := ResolveSidecarsForConfig(deploySidecars)
 			if resolveErr == nil && len(mergedDefs) > 0 {
 				var rsErr error
-				resolvedSidecars, rsErr = ResolveSidecar(mergedDefs, imageName, instance)
+				resolvedSidecars, rsErr = ResolveSidecar(mergedDefs, boxName, instance)
 				if rsErr != nil {
 					fmt.Fprintf(os.Stderr, "Warning: resolving sidecars for %s: %v\n", key, rsErr)
 					continue
 				}
-				podName = PodNameInstance(imageName, instance)
+				podName = PodNameInstance(boxName, instance)
 			}
 		}
 
 		qcfg := QuadletConfig{
-			ImageName:       imageName,
+			BoxName:         boxName,
 			Instance:        instance,
 			ImageRef:        imageRef,
 			Home:            meta.Home,
@@ -1759,13 +1759,13 @@ func updateAllDeployedQuadlets(rt *ResolvedRuntime, skipImage string) error {
 		// Regenerate pod and sidecar files when sidecars are configured
 		if len(resolvedSidecars) > 0 {
 			podContent := generatePodQuadlet(qcfg)
-			podPath := filepath.Join(qdir, podQuadletFilenameInstance(imageName, instance))
+			podPath := filepath.Join(qdir, podQuadletFilenameInstance(boxName, instance))
 			if err := os.WriteFile(podPath, []byte(podContent), 0600); err != nil {
 				fmt.Fprintf(os.Stderr, "Warning: could not update pod file for %s: %v\n", key, err)
 			}
 			for _, sc := range resolvedSidecars {
 				scContent := generateSidecarQuadlet(sc, podName)
-				scPath := filepath.Join(qdir, sidecarQuadletFilenameInstance(imageName, instance, sc.Name))
+				scPath := filepath.Join(qdir, sidecarQuadletFilenameInstance(boxName, instance, sc.Name))
 				if err := os.WriteFile(scPath, []byte(scContent), 0600); err != nil {
 					fmt.Fprintf(os.Stderr, "Warning: could not update sidecar file for %s/%s: %v\n", key, sc.Name, err)
 				}

@@ -164,10 +164,10 @@ type DeploymentNode struct {
 
 	// --- Schema-v4 template references (exactly one matching Target) ---
 
-	// Image names a kind:image directly. Used for target: pod when no
+	// Box names a kind:image directly. Used for target: pod when no
 	// kind:pod template is needed (the common case), or as a legacy
 	// fallback for other targets during migration.
-	Image string `yaml:"box,omitempty"`
+	Box string `yaml:"box,omitempty"`
 
 	// Pod names a kind:pod template (image ref + sidecars + optional
 	// tests + shared env defaults). Only meaningful for target: pod.
@@ -1111,11 +1111,11 @@ type DeployProbes struct {
 
 // deployKey returns the deploy.yml map key for an image, optionally qualified by instance.
 // Base images use just the image name; instances use "image/instance".
-func deployKey(imageName, instance string) string {
+func deployKey(boxName, instance string) string {
 	if instance == "" {
-		return imageName
+		return boxName
 	}
-	return imageName + "/" + instance
+	return boxName + "/" + instance
 }
 
 // canonicalizeDeployArg splits Pattern A "<base>/<instance>" CLI positional
@@ -1132,7 +1132,7 @@ func deployKey(imageName, instance string) string {
 // past the canonicalization boundary and downstream code conflates the
 // deploy key with the image short-name (see Bug 2/3 RCA notes —
 // MergeDeployOntoMetadata composes wrong key, port/env overlays drop).
-func canonicalizeDeployArg(arg, instance string) (image, inst string) {
+func canonicalizeDeployArg(arg, instance string) (box, inst string) {
 	if instance != "" || arg == "" {
 		return arg, instance
 	}
@@ -1155,39 +1155,39 @@ func canonicalizeDeployArg(arg, instance string) (image, inst string) {
 // parseDeployKey splits a deploy.yml map key back into image name and instance.
 // "selkies-desktop" → ("selkies-desktop", "")
 // "selkies-desktop/foo" → ("selkies-desktop", "foo")
-func parseDeployKey(key string) (imageName, instance string) {
+func parseDeployKey(key string) (boxName, instance string) {
 	if idx := strings.IndexByte(key, '/'); idx >= 0 {
 		return key[:idx], key[idx+1:]
 	}
 	return key, ""
 }
 
-// resolveDeployKeyToImage maps a deploy-key name to the `image:` field of
+// resolveDeployKeyToBox maps a deploy-key name to the `image:` field of
 // its deploy entry. User (~/.config/charly/deploy.yml) wins over project
 // (charly.yml/eval.yml) — the same precedence the eval runner and
 // `charly config` use. Returns "" when no entry declares an image for the key
 // (caller decides the fallback). Implements the Pattern-B (arbitrary
 // deploy-key + version-pin) and kind:eval-bed (key != image) lookups.
 // See /charly-core:deploy "Two supported deploy patterns".
-func resolveDeployKeyToImage(key, instance string) string {
+func resolveDeployKeyToBox(key, instance string) string {
 	if key == "" {
 		return ""
 	}
 	// User-side first.
-	if dc := loadDeployConfigForRead("resolveDeployKeyToImage"); dc != nil {
-		if entry, ok := dc.Deploy[deployKey(key, instance)]; ok && entry.Image != "" {
-			return entry.Image
+	if dc := loadDeployConfigForRead("resolveDeployKeyToBox"); dc != nil {
+		if entry, ok := dc.Deploy[deployKey(key, instance)]; ok && entry.Box != "" {
+			return entry.Box
 		}
-		if entry, ok := dc.Deploy[key]; ok && entry.Image != "" {
-			return entry.Image
+		if entry, ok := dc.Deploy[key]; ok && entry.Box != "" {
+			return entry.Box
 		}
 	}
 	// Project-level fallback.
 	if dir, err := os.Getwd(); err == nil {
 		if uf, ok, _ := LoadUnified(dir); ok && uf != nil {
 			if pc := uf.ProjectDeployConfig(); pc != nil {
-				if entry, ok := pc.Deploy[key]; ok && entry.Image != "" {
-					return entry.Image
+				if entry, ok := pc.Deploy[key]; ok && entry.Box != "" {
+					return entry.Box
 				}
 			}
 		}
@@ -1255,10 +1255,10 @@ func vmEntityForDeploy(deployName string) string {
 	return ""
 }
 
-// resolveDeployImageName is THE single deploy-key→image-name resolver used
+// resolveDeployBoxName is THE single deploy-key→image-name resolver used
 // by every deploy-mode command that starts from a deploy key (charly config /
 // start / shell / eval live). It returns the deploy entry's declared
-// `image:` (resolveDeployKeyToImage), falling back to the key itself when
+// `image:` (resolveDeployKeyToBox), falling back to the key itself when
 // no entry declares one (the key==image convention). Before this was
 // shared, `charly config` resolved key→image but `charly start`/`charly shell`/
 // `charly eval live` treated the key AS the image — so a kind:eval bed
@@ -1266,8 +1266,8 @@ func vmEntityForDeploy(deployName string) string {
 // different (wrong/unresolvable) image per command. `charly update` reaches the
 // same value via its already-resolved merged-tree node (node.Image), so it
 // reads that directly rather than re-loading config here.
-func resolveDeployImageName(key, instance string) string {
-	if img := resolveDeployKeyToImage(key, instance); img != "" {
+func resolveDeployBoxName(key, instance string) string {
+	if img := resolveDeployKeyToBox(key, instance); img != "" {
 		return img
 	}
 	return key
@@ -1294,9 +1294,9 @@ func (dc *DeployConfig) DeployedContainerNames() []string {
 	return names
 }
 
-// isSameBaseImage returns true if source is the same base image (with or without instance).
-func isSameBaseImage(source, imageName string) bool {
-	return source == imageName || strings.HasPrefix(source, imageName+"/")
+// isSameBaseBox returns true if source is the same base image (with or without instance).
+func isSameBaseBox(source, boxName string) bool {
+	return source == boxName || strings.HasPrefix(source, boxName+"/")
 }
 
 // DeployConfigPath returns the path to the deploy overlay file.
@@ -1372,9 +1372,9 @@ func LoadDeployConfig() (*DeployConfig, error) {
 	}
 
 	// Hard-required image: field on every target: pod deploy entry
-	// (2026-05-12 schema cutover). See validateDeployRequiresImage
+	// (2026-05-12 schema cutover). See validateDeployRequiresBox
 	// for the rationale + remediation hint.
-	if err := validateDeployRequiresImage(dc.Deploy); err != nil {
+	if err := validateDeployRequiresBox(dc.Deploy); err != nil {
 		return nil, fmt.Errorf("deploy.yml at %s: %w", path, err)
 	}
 
@@ -1424,7 +1424,7 @@ func MergeDeployOverlay(cfg *Config, dc *DeployConfig) {
 	}
 
 	for name, overlay := range dc.Deploy {
-		img, ok := cfg.Image[name]
+		img, ok := cfg.Box[name]
 		if !ok {
 			continue // silently ignore unknown images
 		}
@@ -1436,8 +1436,8 @@ func MergeDeployOverlay(cfg *Config, dc *DeployConfig) {
 			img.Description = overlay.Description
 		}
 		// Schema v4: Tunnel / DNS / AcmeEmail / Engine removed from
-		// ImageConfig — overlay copies for those removed. Values flow
-		// through MergeDeployOntoMetadata → ImageMetadata instead.
+		// BoxConfig — overlay copies for those removed. Values flow
+		// through MergeDeployOntoMetadata → BoxMetadata instead.
 		if overlay.Port != nil {
 			img.Port = overlay.Port
 		}
@@ -1453,7 +1453,7 @@ func MergeDeployOverlay(cfg *Config, dc *DeployConfig) {
 		if overlay.Network != "" {
 			img.Network = overlay.Network
 		}
-		cfg.Image[name] = img
+		cfg.Box[name] = img
 	}
 }
 
@@ -1670,7 +1670,7 @@ func scopeVolumesToDeployKey(meta *BoxMetadata, deployName, instance string) {
 		return
 	}
 	newPrefix := deployVolumePrefix(deployName, instance)
-	oldPrefix := "charly-" + meta.Image + "-"
+	oldPrefix := "charly-" + meta.Box + "-"
 	if newPrefix == oldPrefix {
 		return
 	}
@@ -1686,7 +1686,7 @@ func scopeVolumesToDeployKey(meta *BoxMetadata, deployName, instance string) {
 // Volumes without a deploy override remain as named volumes.
 // Volumes with type=bind or type=encrypted become ResolvedBindMount.
 // Deploy-only volumes (with Path set, not in labels) are also supported.
-func ResolveVolumeBacking(imageName, instance string, labelVolumes []VolumeMount, deployVolumes []DeployVolumeConfig, home string, encStoragePath string, volumesPath string) ([]VolumeMount, []ResolvedBindMount) {
+func ResolveVolumeBacking(boxName, instance string, labelVolumes []VolumeMount, deployVolumes []DeployVolumeConfig, home string, encStoragePath string, volumesPath string) ([]VolumeMount, []ResolvedBindMount) {
 	// Index deploy volume configs by name
 	deployByName := make(map[string]DeployVolumeConfig, len(deployVolumes))
 	for _, dv := range deployVolumes {
@@ -1701,7 +1701,7 @@ func ResolveVolumeBacking(imageName, instance string, labelVolumes []VolumeMount
 
 	for _, vol := range labelVolumes {
 		// Extract short name from the deploy-scoped prefix (charly-<deploy>-<name>).
-		shortName := strings.TrimPrefix(vol.VolumeName, deployVolumePrefix(imageName, instance))
+		shortName := strings.TrimPrefix(vol.VolumeName, deployVolumePrefix(boxName, instance))
 
 		dv, hasOverride := deployByName[shortName]
 		if hasOverride {
@@ -1716,13 +1716,13 @@ func ResolveVolumeBacking(imageName, instance string, labelVolumes []VolumeMount
 					hostPath = filepath.Join(expandHostHome(dv.Host), "plain")
 				} else {
 					// Global default, per-deploy: <encStoragePath>/charly-<deploy>-<name>/{cipher,plain}
-					hostPath = encryptedPlainDir(encStoragePath, deployStorageDir(imageName, instance), shortName)
+					hostPath = encryptedPlainDir(encStoragePath, deployStorageDir(boxName, instance), shortName)
 				}
 			} else if dv.Host != "" {
 				hostPath = expandHostHome(dv.Host)
 			} else {
 				// Auto path, per-deploy: <volumesPath>/<deploy>/<name>
-				hostPath = filepath.Join(volumesPath, deployStorageDir(imageName, instance), shortName)
+				hostPath = filepath.Join(volumesPath, deployStorageDir(boxName, instance), shortName)
 			}
 			bindMounts = append(bindMounts, ResolvedBindMount{
 				Name:      shortName,
@@ -1748,12 +1748,12 @@ func ResolveVolumeBacking(imageName, instance string, labelVolumes []VolumeMount
 				if dv.Host != "" {
 					hostPath = filepath.Join(expandHostHome(dv.Host), "plain")
 				} else {
-					hostPath = encryptedPlainDir(encStoragePath, deployStorageDir(imageName, instance), dv.Name)
+					hostPath = encryptedPlainDir(encStoragePath, deployStorageDir(boxName, instance), dv.Name)
 				}
 			} else if dv.Host != "" {
 				hostPath = expandHostHome(dv.Host)
 			} else {
-				hostPath = filepath.Join(volumesPath, deployStorageDir(imageName, instance), dv.Name)
+				hostPath = filepath.Join(volumesPath, deployStorageDir(boxName, instance), dv.Name)
 			}
 			bindMounts = append(bindMounts, ResolvedBindMount{
 				Name:      dv.Name,
@@ -1763,7 +1763,7 @@ func ResolveVolumeBacking(imageName, instance string, labelVolumes []VolumeMount
 			})
 		} else {
 			volumes = append(volumes, VolumeMount{
-				VolumeName:    deployVolumePrefix(imageName, instance) + dv.Name,
+				VolumeName:    deployVolumePrefix(boxName, instance) + dv.Name,
 				ContainerPath: containerPath,
 			})
 		}
@@ -1985,27 +1985,27 @@ func isAutoVmDeployEntry(entry DeploymentNode) bool {
 	return reflect.DeepEqual(probe, DeploymentNode{})
 }
 
-// RemoveImageDeploy removes an image's entry from a deploy config.
-func RemoveImageDeploy(dc *DeployConfig, imageName string) {
+// RemoveBoxDeploy removes an image's entry from a deploy config.
+func RemoveBoxDeploy(dc *DeployConfig, boxName string) {
 	if dc != nil && dc.Deploy != nil {
-		delete(dc.Deploy, imageName)
+		delete(dc.Deploy, boxName)
 	}
 }
 
 // cleanDeployEntry removes an image's entry from deploy.yml (best-effort).
 // Also removes global service env vars that were injected by this image.
 // If deploy.yml becomes empty after removal, the file is deleted.
-func cleanDeployEntry(imageName, instance string) {
+func cleanDeployEntry(boxName, instance string) {
 	dc, err := LoadDeployConfig()
 	if err != nil || dc == nil {
 		return
 	}
 
-	key := deployKey(imageName, instance)
+	key := deployKey(boxName, instance)
 	hasImage := false
 	if _, ok := dc.Deploy[key]; ok {
 		hasImage = true
-		RemoveImageDeploy(dc, key)
+		RemoveBoxDeploy(dc, key)
 	}
 
 	// Remove provides entries injected by this image/instance.
@@ -2036,26 +2036,26 @@ func cleanDeployEntry(imageName, instance string) {
 			hasOtherEntries := false
 			for k := range dc.Deploy {
 				base, _ := parseDeployKey(k)
-				if base == imageName {
+				if base == boxName {
 					hasOtherEntries = true
 					break
 				}
 			}
 			if !hasOtherEntries {
 				if len(dc.Provides.Env) > 0 {
-					cleaned, removed := removeBySource(dc.Provides.Env, imageName)
+					cleaned, removed := removeBySource(dc.Provides.Env, boxName)
 					if removed {
 						dc.Provides.Env = cleaned
 						removedProvides = true
-						fmt.Fprintf(os.Stderr, "Removed env provides from %s\n", imageName)
+						fmt.Fprintf(os.Stderr, "Removed env provides from %s\n", boxName)
 					}
 				}
 				if len(dc.Provides.MCP) > 0 {
-					cleaned, removed := removeBySource(dc.Provides.MCP, imageName)
+					cleaned, removed := removeBySource(dc.Provides.MCP, boxName)
 					if removed {
 						dc.Provides.MCP = cleaned
 						removedProvides = true
-						fmt.Fprintf(os.Stderr, "Removed MCP provides from %s\n", imageName)
+						fmt.Fprintf(os.Stderr, "Removed MCP provides from %s\n", boxName)
 					}
 				}
 			}
@@ -2142,14 +2142,14 @@ type SaveDeployStateInput struct {
 	SetLifecycle  bool
 	Lifecycle     string
 
-	// Image + Target — the schema-required fields per the 2026-05-12
-	// require-image cutover (validateDeployRequiresImage). Written
+	// Box + Target — the schema-required fields per the 2026-05-12
+	// require-image cutover (validateDeployRequiresBox). Written
 	// when non-empty AND when the existing entry doesn't already have
 	// a value (don't clobber operator-authored refs on re-config).
 	// Without these, `charly deploy add foo bar --disposable` would write
 	// an entry that the validator then rejects on the next load —
 	// hard-failing every subsequent `charly` invocation.
-	Image  string
+	Box    string
 	Target string
 }
 
@@ -2162,16 +2162,16 @@ type SaveDeployStateInput struct {
 // MigratePlaintextEnvSecret and scrubSecretCLIEnv in config_image.go:Run();
 // this scrub catches anything that slipped through (e.g., a future refactor
 // that adds a new code path writing into dc.Env). Matches plan §6.7.
-func saveDeployState(imageName, instance string, input SaveDeployStateInput) {
+func saveDeployState(boxName, instance string, input SaveDeployStateInput) {
 	dc, err := loadDeployConfigForWrite("saveDeployState")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: could not save to deploy.yml: %v\n", err)
 		return
 	}
-	key := deployKey(imageName, instance)
+	key := deployKey(boxName, instance)
 	entry := dc.Deploy[key] // preserve existing fields (tunnel, volumes, etc.)
-	if input.Image != "" && entry.Image == "" {
-		entry.Image = input.Image
+	if input.Box != "" && entry.Box == "" {
+		entry.Box = input.Box
 	}
 	if input.Target != "" && entry.Target == "" {
 		entry.Target = input.Target
@@ -2299,15 +2299,15 @@ func mergeEnvVars(existing, newVars []string) []string {
 	return result
 }
 
-// ExportAllImage exports all runtime-relevant fields for all enabled images in a Config.
-func ExportAllImage(cfg *Config) *DeployConfig {
+// ExportAllBox exports all runtime-relevant fields for all enabled images in a Config.
+func ExportAllBox(cfg *Config) *DeployConfig {
 	dc := &DeployConfig{Deploy: make(map[string]DeploymentNode)}
-	for name, img := range cfg.Image {
+	for name, img := range cfg.Box {
 		if !img.IsEnabled() {
 			continue
 		}
 		// Schema v4: Tunnel / DNS / AcmeEmail / Engine no longer sourced
-		// from ImageConfig (they're deploy-only).
+		// from BoxConfig (they're deploy-only).
 		entry := DeploymentNode{
 			Version:     img.Version,
 			Description: img.Description,

@@ -44,7 +44,7 @@ type CLI struct {
 	Alias       AliasCmd        `cmd:"" help:"Manage command aliases for container images"`
 	Clean       CleanCmd        `cmd:"" help:"Prune reusable build artifacts to defaults: retention (images, eval runs) + sweep one-time makepkg leftovers"`
 	Cmd         CmdCmd          `cmd:"" help:"Run a command in a running container (with notification)"`
-	Config      BoxConfigCmd    `cmd:"" help:"Configure image deployment (setup, secrets, encrypted volumes)"`
+	Config      BoxConfigCmd    `cmd:"" help:"Configure box deployment (setup, secrets, encrypted volumes)"`
 	Deploy      DeployCmd       `cmd:"" help:"Manage deploy.yml deployment overrides"`
 	Doctor      DoctorCmd       `cmd:"" help:"Show host dependency status"`
 	Image       BoxCmd          `cmd:"" name:"box" help:"Build, generate, inspect, and pull container boxes (reads charly.yml)"`
@@ -62,13 +62,13 @@ type CLI struct {
 	Shell       ShellCmd        `cmd:"" help:"Start a bash shell in a container image"`
 	Ssh         SshCmd          `cmd:"" help:"SSH helpers (tunnel SPICE/VNC/unix sockets from a remote libvirt host to the local machine)"`
 	Start       StartCmd        `cmd:"" help:"Start a container as a background service"`
-	Status      StatusCmd       `cmd:"" help:"Show service status (all if no image given)"`
+	Status      StatusCmd       `cmd:"" help:"Show service status (all if no box given)"`
 	Stop        StopCmd         `cmd:"" help:"Stop a running service container"`
-	Eval        EvalCmd         `cmd:"" help:"Evaluate images and deployments — pure-image (disposable), live (running deployment), AI-driven iteration, and live-container probe verbs (cdp/wl/dbus/vnc/mcp/spice/libvirt/record/k8s)"`
+	Eval        EvalCmd         `cmd:"" help:"Evaluate boxes and deployments — pure-box (disposable), live (running deployment), AI-driven iteration, and live-container probe verbs (cdp/wl/dbus/vnc/mcp/spice/libvirt/record/k8s)"`
 	Feature     FeatureCmd      `cmd:"" help:"Gherkin-shaped description authoring: list/pending/validate"`
 	Tmux        TmuxCmd         `cmd:"" help:"Manage tmux sessions inside running containers"`
 	Udev        UdevCmd         `cmd:"" help:"Manage udev rules for GPU device access in containers"`
-	Update      UpdateCmd       `cmd:"" help:"Update image and restart if active"`
+	Update      UpdateCmd       `cmd:"" help:"Update box and restart if active"`
 	Version     VersionCmd      `cmd:"" help:"Print computed CalVer tag"`
 	Vm          VmCmd           `cmd:"" help:"Manage virtual machines from bootc images"`
 }
@@ -94,7 +94,7 @@ func (c *GenerateCmd) Run() error {
 
 // ValidateCmd validates charly.yml and layers
 type ValidateCmd struct {
-	IncludeDisabled bool `long:"include-disabled" help:"Include images with enabled: false in validation (does not modify charly.yml)"`
+	IncludeDisabled bool `long:"include-disabled" help:"Include boxes with enabled: false in validation (does not modify charly.yml)"`
 }
 
 func (c *ValidateCmd) Run() error {
@@ -132,10 +132,10 @@ func (c *ValidateCmd) Run() error {
 
 // InspectCmd prints resolved config for an image
 type InspectCmd struct {
-	Image           string `arg:"" help:"Image name"`
+	Box             string `arg:"" help:"Box name"`
 	Format          string `long:"format" help:"Output a single field instead of full JSON"`
 	Instance        string `short:"i" long:"instance" help:"Instance name"`
-	IncludeDisabled bool   `long:"include-disabled" help:"Operate on images with enabled: false (does not modify charly.yml)"`
+	IncludeDisabled bool   `long:"include-disabled" help:"Operate on boxes with enabled: false (does not modify charly.yml)"`
 }
 
 func (c *InspectCmd) Run() error {
@@ -153,7 +153,7 @@ func (c *InspectCmd) Run() error {
 
 func (c *InspectCmd) runFromConfig(cfg *Config, dir string) error {
 	calverTag := ComputeCalVer()
-	resolved, err := cfg.ResolveImage(c.Image, calverTag, dir, ResolveOpts{IncludeDisabled: c.IncludeDisabled})
+	resolved, err := cfg.ResolveBox(c.Box, calverTag, dir, ResolveOpts{IncludeDisabled: c.IncludeDisabled})
 	if err != nil {
 		return err
 	}
@@ -201,7 +201,7 @@ func (c *InspectCmd) runFromConfig(cfg *Config, dir string) error {
 			if err != nil {
 				return err
 			}
-			volumes, err := CollectImageVolume(cfg, layers, c.Image, resolved.Home, nil)
+			volumes, err := CollectBoxVolume(cfg, layers, c.Box, resolved.Home, nil)
 			if err != nil {
 				return err
 			}
@@ -213,7 +213,7 @@ func (c *InspectCmd) runFromConfig(cfg *Config, dir string) error {
 			if err != nil {
 				return err
 			}
-			aliases, err := CollectImageAlias(cfg, layers, c.Image)
+			aliases, err := CollectBoxAlias(cfg, layers, c.Box)
 			if err != nil {
 				return err
 			}
@@ -221,13 +221,13 @@ func (c *InspectCmd) runFromConfig(cfg *Config, dir string) error {
 				fmt.Printf("%s\t%s\n", a.Name, a.Command)
 			}
 		case "tunnel":
-			// Schema v4: Tunnel moved off ImageConfig/ResolvedImage —
+			// Schema v4: Tunnel moved off BoxConfig/ResolvedBox —
 			// deploy-only. Resolve from DeploymentNode.Tunnel via deploy.yml.
-			if overlay, ok := loadDeployConfigForRead("charly box inspect tunnel").Lookup(c.Image, c.Instance); ok && overlay.Tunnel != nil {
+			if overlay, ok := loadDeployConfigForRead("charly box inspect tunnel").Lookup(c.Box, c.Instance); ok && overlay.Tunnel != nil {
 				layers, err := ScanAllLayerWithConfig(dir, cfg)
 				if err == nil {
 					portProtos := make(map[int]string)
-					tc := ResolveTunnelConfig(overlay.Tunnel, c.Image, "", layers, resolved.Layer, portProtos, resolved.Port)
+					tc := ResolveTunnelConfig(overlay.Tunnel, c.Box, "", layers, resolved.Layer, portProtos, resolved.Port)
 					if tc != nil && len(tc.Ports) > 0 {
 						fmt.Println("PORT\tACCESS\tPROTOCOL\tHOSTNAME")
 						for _, tp := range tc.Ports {
@@ -251,14 +251,14 @@ func (c *InspectCmd) runFromConfig(cfg *Config, dir string) error {
 			if err != nil {
 				return err
 			}
-			engine := ResolveImageEngine(cfg, layers, c.Image, "")
+			engine := ResolveBoxEngine(cfg, layers, c.Box, "")
 			if engine == "" {
 				engine = "(global default)"
 			}
 			fmt.Println(engine)
 		case "bind_mounts":
 			// bind_mounts are now deploy-time only; show deploy.yml volume config
-			if overlay, ok := loadDeployConfigForRead("charly box inspect bind_mounts").Lookup(c.Image, c.Instance); ok {
+			if overlay, ok := loadDeployConfigForRead("charly box inspect bind_mounts").Lookup(c.Box, c.Instance); ok {
 				for _, dv := range overlay.Volume {
 					fmt.Printf("%s\t%s\t%s\t%s\n", dv.Name, dv.Host, dv.Path, dv.Type)
 				}
@@ -276,7 +276,7 @@ func (c *InspectCmd) runFromConfig(cfg *Config, dir string) error {
 			if err != nil {
 				return err
 			}
-			set := CollectEval(cfg, layers, c.Image)
+			set := CollectEval(cfg, layers, c.Box)
 			if set == nil {
 				fmt.Println("{}")
 				return nil
@@ -303,7 +303,7 @@ func (c *InspectCmd) runFromConfig(cfg *Config, dir string) error {
 // ListCmd groups list subcommands
 type ListCmd struct {
 	Aliases  ListAliasesCmd  `cmd:"" help:"List layers that declare aliases"`
-	Images   ListBoxesCmd    `cmd:"" name:"boxes" help:"List boxes from charly.yml"`
+	Boxes    ListBoxesCmd    `cmd:"" name:"boxes" help:"List boxes from charly.yml"`
 	Layers   ListCandiesCmd  `cmd:"" name:"candies" help:"List candies from the filesystem"`
 	Routes   ListRoutesCmd   `cmd:"" help:"List layers that declare a route"`
 	Services ListServicesCmd `cmd:"" help:"List layers that declare a service"`
@@ -325,8 +325,8 @@ func (c *ListBoxesCmd) Run() error {
 		return err
 	}
 
-	for _, name := range cfg.ImageNames() {
-		img := cfg.Image[name]
+	for _, name := range cfg.BoxNames() {
+		img := cfg.Box[name]
 		status := descriptionStatus(img.Description)
 		if status != "working" {
 			fmt.Printf("%s [%s]\n", name, status)
@@ -390,7 +390,7 @@ func (c *ListTargetsCmd) Run() error {
 	}
 
 	calverTag := ComputeCalVer()
-	images, err := cfg.ResolveAllImage(calverTag, dir, ResolveOpts{})
+	images, err := cfg.ResolveAllBox(calverTag, dir, ResolveOpts{})
 	if err != nil {
 		return err
 	}
@@ -406,7 +406,7 @@ func (c *ListTargetsCmd) Run() error {
 		return err
 	}
 
-	order, err := ResolveImageOrder(images, layers)
+	order, err := ResolveBoxOrder(images, layers)
 	if err != nil {
 		return err
 	}

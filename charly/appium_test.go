@@ -12,7 +12,7 @@ import (
 // under the pre-fix code, which passed --apk straight through as an
 // in-container appPath and never stat'd the host filesystem.
 func TestAppiumInstallApp_MissingHostAPK(t *testing.T) {
-	c := &AppiumInstallAppCmd{Image: "no-such-image", Apk: "/nonexistent/does-not-exist.apk"}
+	c := &AppiumInstallAppCmd{Box: "no-such-image", Apk: "/nonexistent/does-not-exist.apk"}
 	err := c.Run()
 	if err == nil {
 		t.Fatal("expected error for missing host APK, got nil")

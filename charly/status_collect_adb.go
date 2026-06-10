@@ -131,8 +131,8 @@ func (a *AndroidCollector) collectOne(opts CollectOpts, dn androidDeployNode) De
 	row.Container = spec.EffectiveSerial()
 	if spec.IsEndpoint() {
 		row.Network = "endpoint " + spec.Adb.Host
-	} else if spec.Image != "" {
-		row.Network = "in-pod " + spec.Image
+	} else if spec.Box != "" {
+		row.Network = "in-pod " + spec.Box
 	}
 
 	dev, err := resolveAndroidDevice(spec, &dn.node, dn.path)

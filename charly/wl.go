@@ -58,7 +58,7 @@ type WlSwayCmd struct {
 // WlScreenshotCmd captures the desktop as a PNG image.
 // Auto-detects screenshot tool: pixelflux-screenshot (selkies) or grim (sway).
 type WlScreenshotCmd struct {
-	Image    string `arg:"" help:"Image name (use . for local)"`
+	Box      string `arg:"" help:"Box name (use . for local)"`
 	File     string `arg:"" optional:"" default:"screenshot.png" help:"Output file path"`
 	Output   string `long:"output" default:"HEADLESS-1" help:"Wayland output name"`
 	Region   string `long:"region" help:"Capture region as 'X,Y WxH'"`
@@ -66,7 +66,7 @@ type WlScreenshotCmd struct {
 }
 
 func (c *WlScreenshotCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Image, c.Instance)
+	venue, err := resolveEvalVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -102,7 +102,7 @@ func (c *WlScreenshotCmd) Run() error {
 
 // WlClickCmd sends a pointer click at the given absolute coordinates via wlrctl.
 type WlClickCmd struct {
-	Image    string `arg:"" help:"Image name (use . for local)"`
+	Box      string `arg:"" help:"Box name (use . for local)"`
 	X        int    `arg:"" help:"X coordinate"`
 	Y        int    `arg:"" help:"Y coordinate"`
 	Button   string `long:"button" default:"left" help:"Mouse button (left, right, middle)"`
@@ -113,7 +113,7 @@ type WlClickCmd struct {
 }
 
 func (c *WlClickCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Image, c.Instance)
+	venue, err := resolveEvalVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -125,7 +125,7 @@ func (c *WlClickCmd) Run() error {
 
 	// Translate from CDP viewport coordinates to desktop coordinates.
 	if c.FromCDP != "" {
-		client, err := connectTab(c.Image, c.FromCDP, c.Instance)
+		client, err := connectTab(c.Box, c.FromCDP, c.Instance)
 		if err != nil {
 			return fmt.Errorf("connecting to CDP tab %s for coordinate translation: %w", c.FromCDP, err)
 		}
@@ -189,13 +189,13 @@ func (c *WlClickCmd) Run() error {
 
 // WlTypeCmd sends keyboard input via wtype.
 type WlTypeCmd struct {
-	Image    string `arg:"" help:"Image name (use . for local)"`
+	Box      string `arg:"" help:"Box name (use . for local)"`
 	Text     string `arg:"" help:"Text to type"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 }
 
 func (c *WlTypeCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Image, c.Instance)
+	venue, err := resolveEvalVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -211,7 +211,7 @@ func (c *WlTypeCmd) Run() error {
 
 // WlKeyCmd sends a key press event via wtype.
 type WlKeyCmd struct {
-	Image    string `arg:"" help:"Image name (use . for local)"`
+	Box      string `arg:"" help:"Box name (use . for local)"`
 	KeyName  string `arg:"" help:"Key name (Return, Escape, Tab, etc.)"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 }
@@ -221,7 +221,7 @@ func (c *WlKeyCmd) Run() error {
 		return fmt.Errorf("unknown key %q (valid: %s)", c.KeyName, wlKeyNames())
 	}
 
-	venue, err := resolveEvalVenue(c.Image, c.Instance)
+	venue, err := resolveEvalVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -237,14 +237,14 @@ func (c *WlKeyCmd) Run() error {
 
 // WlMouseCmd moves the mouse pointer to absolute coordinates via wlrctl.
 type WlMouseCmd struct {
-	Image    string `arg:"" help:"Image name (use . for local)"`
+	Box      string `arg:"" help:"Box name (use . for local)"`
 	X        int    `arg:"" help:"X coordinate"`
 	Y        int    `arg:"" help:"Y coordinate"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 }
 
 func (c *WlMouseCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Image, c.Instance)
+	venue, err := resolveEvalVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -266,12 +266,12 @@ func (c *WlMouseCmd) Run() error {
 
 // WlStatusCmd checks Wayland desktop status and tool availability.
 type WlStatusCmd struct {
-	Image    string `arg:"" help:"Image name (use . for local)"`
+	Box      string `arg:"" help:"Box name (use . for local)"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 }
 
 func (c *WlStatusCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Image, c.Instance)
+	venue, err := resolveEvalVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -400,12 +400,12 @@ func (c *WlStatusCmd) Run() error {
 // WlWindowsCmd lists windows. Tries wlrctl toplevel (Wayland-native, works on
 // both sway and labwc) then falls back to xdotool (X11/XWayland).
 type WlWindowsCmd struct {
-	Image    string `arg:"" help:"Image name (use . for local)"`
+	Box      string `arg:"" help:"Box name (use . for local)"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 }
 
 func (c *WlWindowsCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Image, c.Instance)
+	venue, err := resolveEvalVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -438,13 +438,13 @@ func (c *WlWindowsCmd) Run() error {
 // WlFocusCmd focuses a window by title. Tries wlrctl toplevel (Wayland-native)
 // then falls back to xdotool (X11/XWayland).
 type WlFocusCmd struct {
-	Image    string `arg:"" help:"Image name (use . for local)"`
+	Box      string `arg:"" help:"Box name (use . for local)"`
 	Target   string `arg:"" help:"Window title substring or class to focus"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 }
 
 func (c *WlFocusCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Image, c.Instance)
+	venue, err := resolveEvalVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -518,12 +518,12 @@ func FindX11WindowGeometry(ex DeployExecutor, target string) (int, int, error) {
 // WlToplevelCmd lists Wayland toplevel windows via wlrctl.
 // Works on all wlroots compositors (sway, labwc).
 type WlToplevelCmd struct {
-	Image    string `arg:"" help:"Image name (use . for local)"`
+	Box      string `arg:"" help:"Box name (use . for local)"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 }
 
 func (c *WlToplevelCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Image, c.Instance)
+	venue, err := resolveEvalVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -537,13 +537,13 @@ func (c *WlToplevelCmd) Run() error {
 
 // WlCloseCmd closes a window by title via wlrctl toplevel.
 type WlCloseCmd struct {
-	Image    string `arg:"" help:"Image name (use . for local)"`
+	Box      string `arg:"" help:"Box name (use . for local)"`
 	Target   string `arg:"" help:"Window title substring to close"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 }
 
 func (c *WlCloseCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Image, c.Instance)
+	venue, err := resolveEvalVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -563,13 +563,13 @@ func (c *WlCloseCmd) Run() error {
 
 // WlFullscreenCmd toggles fullscreen on a window via wlrctl toplevel.
 type WlFullscreenCmd struct {
-	Image    string `arg:"" help:"Image name (use . for local)"`
+	Box      string `arg:"" help:"Box name (use . for local)"`
 	Target   string `arg:"" help:"Window title substring"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 }
 
 func (c *WlFullscreenCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Image, c.Instance)
+	venue, err := resolveEvalVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -589,13 +589,13 @@ func (c *WlFullscreenCmd) Run() error {
 
 // WlMinimizeCmd toggles minimize on a window via wlrctl toplevel.
 type WlMinimizeCmd struct {
-	Image    string `arg:"" help:"Image name (use . for local)"`
+	Box      string `arg:"" help:"Box name (use . for local)"`
 	Target   string `arg:"" help:"Window title substring"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 }
 
 func (c *WlMinimizeCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Image, c.Instance)
+	venue, err := resolveEvalVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -615,13 +615,13 @@ func (c *WlMinimizeCmd) Run() error {
 
 // WlExecCmd launches an application inside the container.
 type WlExecCmd struct {
-	Image    string `arg:"" help:"Image name (use . for local)"`
+	Box      string `arg:"" help:"Box name (use . for local)"`
 	Command  string `arg:"" help:"Command to execute"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 }
 
 func (c *WlExecCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Image, c.Instance)
+	venue, err := resolveEvalVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -639,14 +639,14 @@ func (c *WlExecCmd) Run() error {
 // WlResolutionCmd sets the output resolution via wlr-randr.
 // Works on all wlroots compositors (sway, labwc).
 type WlResolutionCmd struct {
-	Image      string `arg:"" help:"Image name (use . for local)"`
+	Box        string `arg:"" help:"Box name (use . for local)"`
 	Resolution string `arg:"" help:"Resolution (e.g. 1920x1080)"`
 	Output     string `short:"o" long:"output" default:"" help:"Output name (auto-detected if empty)"`
 	Instance   string `short:"i" long:"instance" help:"Instance name"`
 }
 
 func (c *WlResolutionCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Image, c.Instance)
+	venue, err := resolveEvalVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -693,7 +693,7 @@ func (c *WlResolutionCmd) Run() error {
 
 // WlKeyComboCmd sends a key combination (e.g. ctrl+c, alt+tab, ctrl+shift+t).
 type WlKeyComboCmd struct {
-	Image    string `arg:"" help:"Image name (use . for local)"`
+	Box      string `arg:"" help:"Box name (use . for local)"`
 	Keys     string `arg:"" help:"Key combination (e.g. ctrl+c, alt+tab, super+l)"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 }
@@ -735,7 +735,7 @@ func (c *WlKeyComboCmd) Run() error {
 		return err
 	}
 
-	venue, err := resolveEvalVenue(c.Image, c.Instance)
+	venue, err := resolveEvalVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -760,7 +760,7 @@ func (c *WlKeyComboCmd) Run() error {
 
 // WlDoubleClickCmd sends a double-click at absolute coordinates.
 type WlDoubleClickCmd struct {
-	Image    string `arg:"" help:"Image name (use . for local)"`
+	Box      string `arg:"" help:"Box name (use . for local)"`
 	X        int    `arg:"" help:"X coordinate"`
 	Y        int    `arg:"" help:"Y coordinate"`
 	Button   string `long:"button" default:"left" help:"Mouse button (left, right, middle)"`
@@ -769,7 +769,7 @@ type WlDoubleClickCmd struct {
 }
 
 func (c *WlDoubleClickCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Image, c.Instance)
+	venue, err := resolveEvalVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -797,7 +797,7 @@ func (c *WlDoubleClickCmd) Run() error {
 // WlScrollCmd scrolls at the given coordinates via xdotool (XWayland).
 // Button 4=up, 5=down, 6=left, 7=right in X11 convention.
 type WlScrollCmd struct {
-	Image     string `arg:"" help:"Image name (use . for local)"`
+	Box       string `arg:"" help:"Box name (use . for local)"`
 	X         int    `arg:"" help:"X coordinate"`
 	Y         int    `arg:"" help:"Y coordinate"`
 	Direction string `arg:"" help:"Scroll direction (up, down, left, right)"`
@@ -827,7 +827,7 @@ func (c *WlScrollCmd) Run() error {
 		return err
 	}
 
-	venue, err := resolveEvalVenue(c.Image, c.Instance)
+	venue, err := resolveEvalVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -882,7 +882,7 @@ func (c *WlScrollCmd) Run() error {
 // WlDragCmd performs a mouse drag from (x1,y1) to (x2,y2).
 // Experimental: requires XWayland (uses xdotool for press/release separation).
 type WlDragCmd struct {
-	Image    string `arg:"" help:"Image name (use . for local)"`
+	Box      string `arg:"" help:"Box name (use . for local)"`
 	X1       int    `arg:"" help:"Start X coordinate"`
 	Y1       int    `arg:"" help:"Start Y coordinate"`
 	X2       int    `arg:"" help:"End X coordinate"`
@@ -893,7 +893,7 @@ type WlDragCmd struct {
 }
 
 func (c *WlDragCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Image, c.Instance)
+	venue, err := resolveEvalVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -931,7 +931,7 @@ func (c *WlDragCmd) Run() error {
 
 // WlClipboardCmd reads or writes the Wayland clipboard via wl-clipboard.
 type WlClipboardCmd struct {
-	Image    string `arg:"" help:"Image name (use . for local)"`
+	Box      string `arg:"" help:"Box name (use . for local)"`
 	Action   string `arg:"" help:"Action: get, set, clear"`
 	Text     string `arg:"" optional:"" help:"Text to set (for 'set' action)"`
 	Primary  bool   `long:"primary" short:"p" help:"Use primary selection instead of clipboard"`
@@ -939,7 +939,7 @@ type WlClipboardCmd struct {
 }
 
 func (c *WlClipboardCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Image, c.Instance)
+	venue, err := resolveEvalVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -979,13 +979,13 @@ func (c *WlClipboardCmd) Run() error {
 
 // WlXpropCmd queries X11 window properties via xprop.
 type WlXpropCmd struct {
-	Image    string `arg:"" help:"Image name (use . for local)"`
+	Box      string `arg:"" help:"Box name (use . for local)"`
 	Target   string `arg:"" optional:"" help:"Window title or ID (default: active window)"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 }
 
 func (c *WlXpropCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Image, c.Instance)
+	venue, err := resolveEvalVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -1012,13 +1012,13 @@ func (c *WlXpropCmd) Run() error {
 // WlGeometryCmd gets window geometry in a compositor-agnostic way.
 // Tries sway tree first, then falls back to xdotool (XWayland).
 type WlGeometryCmd struct {
-	Image    string `arg:"" help:"Image name (use . for local)"`
+	Box      string `arg:"" help:"Box name (use . for local)"`
 	Target   string `arg:"" help:"Window title or class"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 }
 
 func (c *WlGeometryCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Image, c.Instance)
+	venue, err := resolveEvalVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -1101,7 +1101,7 @@ func (c *WlGeometryCmd) Run() error {
 
 // WlAtspiCmd queries the accessibility tree via AT-SPI2 (python3-pyatspi).
 type WlAtspiCmd struct {
-	Image    string `arg:"" help:"Image name (use . for local)"`
+	Box      string `arg:"" help:"Box name (use . for local)"`
 	Action   string `arg:"" help:"Action: tree, find, click"`
 	Query    string `arg:"" optional:"" help:"Search query (element name, role, or name:role)"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
@@ -1232,7 +1232,7 @@ else:
 `
 
 func (c *WlAtspiCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Image, c.Instance)
+	venue, err := resolveEvalVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -1264,76 +1264,76 @@ func (c *WlAtspiCmd) Run() error {
 // --- Sway subcommand structs ---
 
 type WlSwayMsgCmd struct {
-	Image    string `arg:"" help:"Image name (use . for local)"`
+	Box      string `arg:"" help:"Box name (use . for local)"`
 	Command  string `arg:"" help:"Sway command to execute"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 }
 
 type WlSwayTreeCmd struct {
-	Image    string `arg:"" help:"Image name (use . for local)"`
+	Box      string `arg:"" help:"Box name (use . for local)"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 }
 
 type WlSwayWorkspacesCmd struct {
-	Image    string `arg:"" help:"Image name (use . for local)"`
+	Box      string `arg:"" help:"Box name (use . for local)"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 }
 
 type WlSwayOutputsCmd struct {
-	Image    string `arg:"" help:"Image name (use . for local)"`
+	Box      string `arg:"" help:"Box name (use . for local)"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 }
 
 type WlSwayFocusCmd struct {
-	Image    string `arg:"" help:"Image name (use . for local)"`
+	Box      string `arg:"" help:"Box name (use . for local)"`
 	Target   string `arg:"" help:"Direction (left/right/up/down) or [criteria]"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 }
 
 type WlSwayMoveCmd struct {
-	Image    string   `arg:"" help:"Image name (use . for local)"`
+	Box      string   `arg:"" help:"Box name (use . for local)"`
 	Target   []string `arg:"" help:"Direction, 'scratchpad', or 'workspace N'"`
 	Instance string   `short:"i" long:"instance" help:"Instance name"`
 }
 
 type WlSwayResizeCmd struct {
-	Image     string `arg:"" help:"Image name (use . for local)"`
+	Box       string `arg:"" help:"Box name (use . for local)"`
 	Dimension string `arg:"" help:"Dimension: width or height"`
 	Amount    string `arg:"" help:"Amount (e.g. 10px, -10px, 5ppt)"`
 	Instance  string `short:"i" long:"instance" help:"Instance name"`
 }
 
 type WlSwayKillCmd struct {
-	Image    string `arg:"" help:"Image name (use . for local)"`
+	Box      string `arg:"" help:"Box name (use . for local)"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 }
 
 type WlSwayFloatingCmd struct {
-	Image    string `arg:"" help:"Image name (use . for local)"`
+	Box      string `arg:"" help:"Box name (use . for local)"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 }
 
 type WlSwayLayoutCmd struct {
-	Image    string `arg:"" help:"Image name (use . for local)"`
+	Box      string `arg:"" help:"Box name (use . for local)"`
 	Mode     string `arg:"" help:"Layout mode: tabbed, stacking, splitv, splith, toggle"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 }
 
 type WlSwayWorkspaceCmd struct {
-	Image    string `arg:"" help:"Image name (use . for local)"`
+	Box      string `arg:"" help:"Box name (use . for local)"`
 	Number   int    `arg:"" help:"Workspace number"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 }
 
 type WlSwayReloadCmd struct {
-	Image    string `arg:"" help:"Image name (use . for local)"`
+	Box      string `arg:"" help:"Box name (use . for local)"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 }
 
 // --- Sway subcommand Run methods ---
 
 func (c *WlSwayMsgCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Image, c.Instance)
+	venue, err := resolveEvalVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -1341,7 +1341,7 @@ func (c *WlSwayMsgCmd) Run() error {
 }
 
 func (c *WlSwayTreeCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Image, c.Instance)
+	venue, err := resolveEvalVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -1349,7 +1349,7 @@ func (c *WlSwayTreeCmd) Run() error {
 }
 
 func (c *WlSwayWorkspacesCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Image, c.Instance)
+	venue, err := resolveEvalVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -1357,7 +1357,7 @@ func (c *WlSwayWorkspacesCmd) Run() error {
 }
 
 func (c *WlSwayOutputsCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Image, c.Instance)
+	venue, err := resolveEvalVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -1365,7 +1365,7 @@ func (c *WlSwayOutputsCmd) Run() error {
 }
 
 func (c *WlSwayFocusCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Image, c.Instance)
+	venue, err := resolveEvalVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -1381,7 +1381,7 @@ func (c *WlSwayFocusCmd) Run() error {
 }
 
 func (c *WlSwayMoveCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Image, c.Instance)
+	venue, err := resolveEvalVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -1394,7 +1394,7 @@ func (c *WlSwayMoveCmd) Run() error {
 }
 
 func (c *WlSwayResizeCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Image, c.Instance)
+	venue, err := resolveEvalVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -1408,7 +1408,7 @@ func (c *WlSwayResizeCmd) Run() error {
 }
 
 func (c *WlSwayKillCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Image, c.Instance)
+	venue, err := resolveEvalVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -1416,7 +1416,7 @@ func (c *WlSwayKillCmd) Run() error {
 }
 
 func (c *WlSwayFloatingCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Image, c.Instance)
+	venue, err := resolveEvalVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -1424,7 +1424,7 @@ func (c *WlSwayFloatingCmd) Run() error {
 }
 
 func (c *WlSwayLayoutCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Image, c.Instance)
+	venue, err := resolveEvalVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -1432,7 +1432,7 @@ func (c *WlSwayLayoutCmd) Run() error {
 }
 
 func (c *WlSwayWorkspaceCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Image, c.Instance)
+	venue, err := resolveEvalVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -1440,7 +1440,7 @@ func (c *WlSwayWorkspaceCmd) Run() error {
 }
 
 func (c *WlSwayReloadCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Image, c.Instance)
+	venue, err := resolveEvalVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}

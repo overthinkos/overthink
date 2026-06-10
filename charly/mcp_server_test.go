@@ -124,7 +124,7 @@ func TestMcpServerSchema_ReadOnlyFilter(t *testing.T) {
 func TestMcpServerSchema_PositionalsAndFlags(t *testing.T) {
 	tools := toolIndex(t, false)
 
-	// box.inspect has one required positional ("image") plus --format and
+	// box.inspect has one required positional ("box") plus --format and
 	// --instance flags.
 	inspect, ok := tools["box.inspect"]
 	if !ok {
@@ -135,20 +135,20 @@ func TestMcpServerSchema_PositionalsAndFlags(t *testing.T) {
 		t.Fatalf("inspect schema wrong type: %T", inspect.InputSchema)
 	}
 	props, _ := schema["properties"].(map[string]any)
-	for _, want := range []string{"image", "format", "instance"} {
+	for _, want := range []string{"box", "format", "instance"} {
 		if _, ok := props[want]; !ok {
 			t.Errorf("box.inspect schema missing property %q", want)
 		}
 	}
 	reqList, _ := schema["required"].([]string)
-	foundImage := false
+	foundBox := false
 	for _, r := range reqList {
-		if r == "image" {
-			foundImage = true
+		if r == "box" {
+			foundBox = true
 		}
 	}
-	if !foundImage {
-		t.Errorf("box.inspect should require 'image' positional, required=%v", reqList)
+	if !foundBox {
+		t.Errorf("box.inspect should require 'box' positional, required=%v", reqList)
 	}
 }
 
@@ -212,8 +212,8 @@ func TestMcpServer_VersionRoundTrip(t *testing.T) {
 // TestMcpServer_InvalidArgumentReturnsToolError ensures that a missing required
 // positional surfaces as a tool error rather than a crash.
 func TestMcpServer_InvalidArgumentReturnsToolError(t *testing.T) {
-	// box.inspect requires an <image> positional. Omit it.
-	stdout, stderr, err := captureAndRun([]string{"image", "inspect"})
+	// box.inspect requires a <box> positional. Omit it.
+	stdout, stderr, err := captureAndRun([]string{"box", "inspect"})
 	if err == nil {
 		t.Errorf("expected error from inspect with no positional, got stdout=%q stderr=%q", stdout, stderr)
 	}
@@ -253,16 +253,16 @@ func TestMcpServer_ArgvReconstruction(t *testing.T) {
 	}
 
 	input := map[string]any{
-		"image":  "charly-fedora",
+		"box":    "charly-fedora",
 		"format": "tag",
 	}
-	argv, err := argvFromJSON([]string{"image", "inspect"}, posOrder, posByProp, flagByProp, input)
+	argv, err := argvFromJSON([]string{"box", "inspect"}, posOrder, posByProp, flagByProp, input)
 	if err != nil {
 		t.Fatalf("argvFromJSON: %v", err)
 	}
 
 	joined := strings.Join(argv, " ")
-	if !strings.Contains(joined, "image inspect") {
+	if !strings.Contains(joined, "box inspect") {
 		t.Errorf("argv missing command tokens: %q", joined)
 	}
 	if !strings.Contains(joined, "--format=tag") {

@@ -7,9 +7,9 @@ import (
 	"testing"
 )
 
-// testResolvedImage returns a ResolvedImage suitable for feeding the
+// testResolvedBox returns a ResolvedBox suitable for feeding the
 // task emitters. Uses fedora (rpm) by default with UID/GID 1000.
-func testResolvedImage() *ResolvedBox {
+func testResolvedBox() *ResolvedBox {
 	return &ResolvedBox{
 		Name:         "test-img",
 		User:         "user",
@@ -73,7 +73,7 @@ func TestTaskKind_MultipleVerbs(t *testing.T) {
 // --- Variable substitution ---
 
 func TestTaskSubstAutoExports(t *testing.T) {
-	img := testResolvedImage()
+	img := testResolvedBox()
 	cases := []struct {
 		in, want string
 	}{
@@ -94,7 +94,7 @@ func TestTaskSubstAutoExports(t *testing.T) {
 }
 
 func TestTaskSubstPath_TildeExpansion(t *testing.T) {
-	img := testResolvedImage()
+	img := testResolvedBox()
 	got := taskSubstPath("~/.local/bin", img)
 	if got != "/home/user/.local/bin" {
 		t.Errorf("tilde expansion: got %q", got)
@@ -116,7 +116,7 @@ func TestTaskUnresolvedRefs(t *testing.T) {
 // --- User resolution ---
 
 func TestResolveUserSpec(t *testing.T) {
-	img := testResolvedImage()
+	img := testResolvedBox()
 	cases := []struct {
 		in, wantDirective, wantChown string
 	}{
@@ -186,7 +186,7 @@ func TestEmitMkdirBatch_Coalesces(t *testing.T) {
 		{Mkdir: "/b", User: "root"},
 		{Mkdir: "/c", User: "root"},
 	}
-	emitMkdirBatch(&b, tasks, testResolvedImage())
+	emitMkdirBatch(&b, tasks, testResolvedBox())
 	out := b.String()
 	if !strings.Contains(out, "RUN mkdir -p /a /b /c") {
 		t.Errorf("expected coalesced mkdir, got:\n%s", out)
@@ -204,7 +204,7 @@ func TestEmitMkdirBatch_PerModeChmod(t *testing.T) {
 		{Mkdir: "/b"}, // default — no chmod
 		{Mkdir: "/c", Mode: "0700"},
 	}
-	emitMkdirBatch(&b, tasks, testResolvedImage())
+	emitMkdirBatch(&b, tasks, testResolvedBox())
 	out := b.String()
 	if !strings.Contains(out, "mkdir -p /a /b /c") {
 		t.Errorf("mkdir missing paths:\n%s", out)
@@ -218,7 +218,7 @@ func TestEmitCopy_WithChown(t *testing.T) {
 	var b strings.Builder
 	emitCopy(&b,
 		Task{Copy: "wrapper", To: "/home/user/.local/bin/wrapper", Mode: "0755", User: "${USER}"},
-		"my-layer", testResolvedImage(),
+		"my-layer", testResolvedBox(),
 	)
 	out := b.String()
 	if !strings.Contains(out, "--from=my-layer") {
@@ -239,7 +239,7 @@ func TestEmitCopy_RootNoChown(t *testing.T) {
 	var b strings.Builder
 	emitCopy(&b,
 		Task{Copy: "traefik.yml", To: "/etc/traefik/traefik.yml", Mode: "0644", User: "root"},
-		"traefik", testResolvedImage(),
+		"traefik", testResolvedBox(),
 	)
 	out := b.String()
 	if strings.Contains(out, "--chown") {
@@ -252,7 +252,7 @@ func TestEmitWrite_UsesStagedPath(t *testing.T) {
 	emitWrite(&b,
 		Task{Write: "/etc/foo.conf", Content: "body", Mode: "0644", User: "root"},
 		".build/img/_inline/lyr/abc123",
-		testResolvedImage(),
+		testResolvedBox(),
 	)
 	out := b.String()
 	if !strings.Contains(out, "COPY --chmod=0644 .build/img/_inline/lyr/abc123 /etc/foo.conf") {
@@ -270,7 +270,7 @@ func TestEmitLinkBatch(t *testing.T) {
 		{Link: "/usr/local/bin/node", Target: "/usr/bin/node-24"},
 		{Link: "/usr/local/bin/npm", Target: "/usr/bin/npm-24"},
 	}
-	emitLinkBatch(&b, tasks, testResolvedImage())
+	emitLinkBatch(&b, tasks, testResolvedBox())
 	out := b.String()
 	if !strings.Contains(out, "ln -sf /usr/bin/node-24 /usr/local/bin/node") {
 		t.Errorf("missing first link:\n%s", out)
@@ -289,7 +289,7 @@ func TestEmitSetcapBatch_StripAndSet(t *testing.T) {
 		{Setcap: "/usr/bin/sway"}, // strip
 		{Setcap: "/usr/bin/newuidmap", Caps: "cap_setuid=ep"},
 	}
-	emitSetcapBatch(&b, tasks, testResolvedImage())
+	emitSetcapBatch(&b, tasks, testResolvedBox())
 	out := b.String()
 	if !strings.Contains(out, "setcap -r /usr/bin/sway") {
 		t.Errorf("strip should use -r:\n%s", out)
@@ -311,7 +311,7 @@ func TestEmitDownload_TarGz(t *testing.T) {
 			To:       "/usr/local/bin",
 			Include:  []string{"app"},
 		},
-		testResolvedImage(),
+		testResolvedBox(),
 	)
 	if err != nil {
 		t.Fatalf("emitDownload: %v", err)
@@ -344,7 +344,7 @@ func TestEmitDownload_Sh(t *testing.T) {
 	var b strings.Builder
 	err := emitDownload(&b,
 		Task{Download: "https://sh.install", Extract: "sh", Env: map[string]string{"UV_INSTALL_DIR": "/usr/local/bin"}},
-		testResolvedImage(),
+		testResolvedBox(),
 	)
 	if err != nil {
 		t.Fatalf("emitDownload: %v", err)
@@ -378,7 +378,7 @@ func TestEmitDownload_CacheModifier(t *testing.T) {
 	if err := emitDownload(&b,
 		Task{Download: "https://x/app.zip", Extract: "zip", To: "/opt/app", User: "root",
 			Cache: []string{"/var/cache/app-build"}},
-		testResolvedImage()); err != nil {
+		testResolvedBox()); err != nil {
 		t.Fatalf("emitDownload: %v", err)
 	}
 	out := b.String()
@@ -391,7 +391,7 @@ func TestEmitDownload_CacheModifier(t *testing.T) {
 }
 
 func TestTaskCacheMounts_OwnershipByUser(t *testing.T) {
-	img := testResolvedImage() // UID/GID 1000 in the test fixture
+	img := testResolvedBox() // UID/GID 1000 in the test fixture
 	// root task → shared (sharing=locked), no uid in id
 	root := taskCacheMounts(Task{User: "root", Cache: []string{"/var/cache/x"}}, img)
 	if len(root) != 1 || !strings.Contains(root[0], "sharing=locked") || strings.Contains(root[0], "uid=") {
@@ -410,7 +410,7 @@ func TestTaskCacheMounts_OwnershipByUser(t *testing.T) {
 
 func TestEmitDownload_UnknownExtract(t *testing.T) {
 	var b strings.Builder
-	err := emitDownload(&b, Task{Download: "http://x", Extract: "rar"}, testResolvedImage())
+	err := emitDownload(&b, Task{Download: "http://x", Extract: "rar"}, testResolvedBox())
 	if err == nil {
 		t.Fatal("expected error for unknown extract")
 	}
@@ -420,7 +420,7 @@ func TestEmitCmd_RootCacheMounts(t *testing.T) {
 	var b strings.Builder
 	emitCmd(&b,
 		Task{Cmd: "echo hello", User: "root"},
-		"my-layer", testResolvedImage(), true,
+		"my-layer", testResolvedBox(), true,
 	)
 	out := b.String()
 	if !strings.Contains(out, "--mount=type=bind,from=my-layer") {
@@ -441,7 +441,7 @@ func TestEmitCmd_UserNpmCache(t *testing.T) {
 	var b strings.Builder
 	emitCmd(&b,
 		Task{Cmd: "xdg-settings default-browser foo", User: "${USER}"},
-		"my-layer", testResolvedImage(), false,
+		"my-layer", testResolvedBox(), false,
 	)
 	out := b.String()
 	if strings.Contains(out, "libdnf5") {
@@ -466,7 +466,7 @@ func TestEmitTasks_UserCoalescing(t *testing.T) {
 		{Mkdir: "/c", User: "root"}, // all root → single USER 0 header, one RUN
 	}}
 	var b strings.Builder
-	_, err := g.emitTasks(&b, layer, testResolvedImage(), dir, ".build/test-img", "0")
+	_, err := g.emitTasks(&b, layer, testResolvedBox(), dir, ".build/test-img", "0")
 	if err != nil {
 		t.Fatalf("emitTasks: %v", err)
 	}
@@ -489,7 +489,7 @@ func TestEmitTasks_UserSwitches(t *testing.T) {
 		{Mkdir: "/c", User: "${USER}"}, // coalesces with previous
 	}}
 	var b strings.Builder
-	_, err := g.emitTasks(&b, layer, testResolvedImage(), dir, ".build/test-img", "0")
+	_, err := g.emitTasks(&b, layer, testResolvedBox(), dir, ".build/test-img", "0")
 	if err != nil {
 		t.Fatalf("emitTasks: %v", err)
 	}
@@ -517,7 +517,7 @@ func TestEmitTasks_OrderPreserved(t *testing.T) {
 		{Mkdir: "/b", User: "root"},
 	}}
 	var b strings.Builder
-	_, err := g.emitTasks(&b, layer, testResolvedImage(), dir, ".build/test-img", "0")
+	_, err := g.emitTasks(&b, layer, testResolvedBox(), dir, ".build/test-img", "0")
 	if err != nil {
 		t.Fatalf("emitTasks: %v", err)
 	}
@@ -542,7 +542,7 @@ func TestEmitTasks_ParentDirAutoInsert(t *testing.T) {
 		{Copy: "traefik.yml", To: "/etc/traefik/traefik.yml", User: "root"},
 	}}
 	var b strings.Builder
-	_, err := g.emitTasks(&b, layer, testResolvedImage(), dir, ".build/test-img", "0")
+	_, err := g.emitTasks(&b, layer, testResolvedBox(), dir, ".build/test-img", "0")
 	if err != nil {
 		t.Fatalf("emitTasks: %v", err)
 	}
@@ -567,7 +567,7 @@ func TestEmitTasks_ParentDirSuppressedWhenDeclared(t *testing.T) {
 		{Copy: "bar", To: "/etc/foo/bar", User: "root"},
 	}}
 	var b strings.Builder
-	_, err := g.emitTasks(&b, layer, testResolvedImage(), dir, ".build/test-img", "0")
+	_, err := g.emitTasks(&b, layer, testResolvedBox(), dir, ".build/test-img", "0")
 	if err != nil {
 		t.Fatalf("emitTasks: %v", err)
 	}
@@ -586,7 +586,7 @@ func TestEmitTasks_WriteStagesContent(t *testing.T) {
 	}}
 	var b strings.Builder
 	buildDir := filepath.Join(dir, "test-img")
-	_, err := g.emitTasks(&b, layer, testResolvedImage(), buildDir, ".build/test-img", "0")
+	_, err := g.emitTasks(&b, layer, testResolvedBox(), buildDir, ".build/test-img", "0")
 	if err != nil {
 		t.Fatalf("emitTasks: %v", err)
 	}

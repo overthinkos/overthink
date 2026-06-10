@@ -13,22 +13,22 @@ import (
 
 // LogsCmd shows service container logs
 type LogsCmd struct {
-	Image    string `arg:"" help:"Image name or remote ref"`
+	Box      string `arg:"" help:"Box name or remote ref"`
 	Follow   bool   `short:"f" long:"follow" help:"Follow log output"`
-	Instance string `short:"i" long:"instance" help:"Instance name for running multiple containers of the same image"`
+	Instance string `short:"i" long:"instance" help:"Instance name for running multiple containers of the same box"`
 }
 
 func (c *LogsCmd) Run() error {
-	c.Image, c.Instance = canonicalizeDeployArg(c.Image, c.Instance)
+	c.Box, c.Instance = canonicalizeDeployArg(c.Box, c.Instance)
 	rt, err := ResolveRuntime()
 	if err != nil {
 		return err
 	}
 
-	imageName := resolveImageName(c.Image)
+	boxName := resolveBoxName(c.Box)
 
 	if rt.RunMode == "quadlet" {
-		svc := serviceNameInstance(imageName, c.Instance)
+		svc := serviceNameInstance(boxName, c.Instance)
 		args := []string{"--user", "-u", svc}
 		if c.Follow {
 			args = append(args, "-f")
@@ -43,9 +43,9 @@ func (c *LogsCmd) Run() error {
 	}
 
 	// Resolve per-image engine from deploy.yml
-	runEngine := ResolveImageEngineForDeploy(imageName, c.Instance, rt.RunEngine)
+	runEngine := ResolveBoxEngineForDeploy(boxName, c.Instance, rt.RunEngine)
 	engine := EngineBinary(runEngine)
-	name := containerNameInstance(imageName, c.Instance)
+	name := containerNameInstance(boxName, c.Instance)
 	args := []string{"logs"}
 	if c.Follow {
 		args = append(args, "-f")
@@ -76,10 +76,10 @@ func (c *LogsCmd) Run() error {
 // "Any config changes should be done via charly config only" — this verb
 // updates ARTIFACTS, charly config updates CONFIG.
 type UpdateCmd struct {
-	Image     string `arg:"" help:"Deploy name (resolved via deploy.yml) OR image name. For deploys, the target's update strategy is auto-selected (pod=systemctl restart with new image; vm=in-guest layer re-apply; local=idempotent re-apply)."`
+	Box       string `arg:"" help:"Deploy name (resolved via deploy.yml) OR box name. For deploys, the target's update strategy is auto-selected (pod=systemctl restart with new image; vm=in-guest layer re-apply; local=idempotent re-apply)."`
 	Tag       string `long:"tag" help:"Image CalVer tag (empty = newest local CalVer resolved via the ai.opencharly.version OCI label)"`
 	Build     bool   `long:"build" help:"Force local build instead of pulling from registry"`
-	Instance  string `short:"i" long:"instance" help:"Instance name for running multiple containers of the same image"`
+	Instance  string `short:"i" long:"instance" help:"Instance name for running multiple containers of the same box"`
 	Seed      bool   `long:"seed" default:"true" negatable:"" help:"Sync data from new image into bind-backed volumes (default: true)"`
 	ForceSeed bool   `long:"force-seed" help:"Overwrite existing data in volumes (default: only add new files)"`
 	DataFrom  string `long:"data-from" help:"Sync data from this data image instead"`
@@ -91,8 +91,8 @@ type UpdateCmd struct {
 var updateCmdBuildFn = func(image, tag string) error {
 	fmt.Fprintf(os.Stderr, "Building %s locally (--build requested)\n", image)
 	bc := &BuildCmd{
-		Images: []string{image},
-		Tag:    tag,
+		Boxes: []string{image},
+		Tag:   tag,
 	}
 	return bc.Run()
 }
@@ -106,10 +106,10 @@ var updateCmdBuildFn = func(image, tag string) error {
 // The dispatch keeps ZERO duplicate code paths and ZERO silent
 // fallbacks. Every branch fails fast with an actionable error message.
 func (c *UpdateCmd) Run() error {
-	if IsRemoteImageRef(StripURLScheme(c.Image)) {
-		return fmt.Errorf("remote refs are not accepted here; run 'charly box pull %s' first", c.Image)
+	if IsRemoteImageRef(StripURLScheme(c.Box)) {
+		return fmt.Errorf("remote refs are not accepted here; run 'charly box pull %s' first", c.Box)
 	}
-	c.Image, c.Instance = canonicalizeDeployArg(c.Image, c.Instance)
+	c.Box, c.Instance = canonicalizeDeployArg(c.Box, c.Instance)
 	return c.dispatchByDeployTarget()
 }
 
@@ -152,7 +152,7 @@ func (c *UpdateCmd) syncData(engine string, imageRef string, meta *BoxMetadata, 
 	if dc == nil {
 		return
 	}
-	imgDeploy, ok := dc.Deploy[deployKey(c.Image, c.Instance)]
+	imgDeploy, ok := dc.Deploy[deployKey(c.Box, c.Instance)]
 	if !ok {
 		return
 	}
@@ -160,8 +160,8 @@ func (c *UpdateCmd) syncData(engine string, imageRef string, meta *BoxMetadata, 
 	// Re-scope volume names to this deploy (syncData doesn't route through
 	// MergeDeployOntoMetadata) so syncData targets the deploy's OWN volumes,
 	// never a same-image sibling's.
-	scopeVolumesToDeployKey(newMeta, c.Image, c.Instance)
-	volumes, bindMounts := ResolveVolumeBacking(c.Image, c.Instance, newMeta.Volume, imgDeploy.Volume,
+	scopeVolumesToDeployKey(newMeta, c.Box, c.Instance)
+	volumes, bindMounts := ResolveVolumeBacking(c.Box, c.Instance, newMeta.Volume, imgDeploy.Volume,
 		newMeta.Home, rt.EncryptedStoragePath, rt.VolumesPath)
 	if len(bindMounts) == 0 && len(volumes) == 0 {
 		return
@@ -173,7 +173,7 @@ func (c *UpdateCmd) syncData(engine string, imageRef string, meta *BoxMetadata, 
 	}
 
 	fmt.Fprintln(os.Stderr, "Syncing data from new image...")
-	seeded, err := provisionData(engine, dataRef, dataMeta, bindMounts, volumes, c.Image, c.Instance, mode)
+	seeded, err := provisionData(engine, dataRef, dataMeta, bindMounts, volumes, c.Box, c.Instance, mode)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: data sync failed: %v\n", err)
 		return
@@ -189,7 +189,7 @@ func (c *UpdateCmd) syncData(engine string, imageRef string, meta *BoxMetadata, 
 				}
 			}
 		}
-		dc.Deploy[deployKey(c.Image, c.Instance)] = imgDeploy
+		dc.Deploy[deployKey(c.Box, c.Instance)] = imgDeploy
 		if err := SaveDeployConfig(dc); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: could not save data source to deploy.yml: %v\n", err)
 		}
@@ -199,22 +199,22 @@ func (c *UpdateCmd) syncData(engine string, imageRef string, meta *BoxMetadata, 
 
 // RemoveCmd removes a service container
 type RemoveCmd struct {
-	Image      string   `arg:"" help:"Image name or remote ref"`
-	Instance   string   `short:"i" long:"instance" help:"Instance name for running multiple containers of the same image"`
+	Box        string   `arg:"" help:"Box name or remote ref"`
+	Instance   string   `short:"i" long:"instance" help:"Instance name for running multiple containers of the same box"`
 	Purge      bool     `long:"purge" help:"Also remove named volumes"`
-	KeepDeploy bool     `name:"keep-deploy" help:"Keep deploy.yml entry for this image"`
+	KeepDeploy bool     `name:"keep-deploy" help:"Keep deploy.yml entry for this box"`
 	Env        []string `short:"e" long:"env" sep:"none" help:"Set env var for hooks (KEY=VALUE)"`
 }
 
 func (c *RemoveCmd) Run() error {
-	c.Image, c.Instance = canonicalizeDeployArg(c.Image, c.Instance)
+	c.Box, c.Instance = canonicalizeDeployArg(c.Box, c.Instance)
 	// Releasing a persistent exclusive claim restores any holder this deploy
 	// preempted (no-op if no lease / gated by an outer orchestrator).
-	defer releaseExclusiveForClaimant(deployKey(c.Image, c.Instance))
-	imageName := resolveImageName(c.Image)
+	defer releaseExclusiveForClaimant(deployKey(c.Box, c.Instance))
+	boxName := resolveBoxName(c.Box)
 
 	// Stop tunnel before removing container (best-effort)
-	stopTunnelForImage(imageName, c.Instance)
+	stopTunnelForImage(boxName, c.Instance)
 
 	rt, err := ResolveRuntime()
 	if err != nil {
@@ -222,15 +222,15 @@ func (c *RemoveCmd) Run() error {
 	}
 
 	// Resolve per-image engine from deploy.yml
-	runEngine := ResolveImageEngineForDeploy(imageName, c.Instance, rt.RunEngine)
+	runEngine := ResolveBoxEngineForDeploy(boxName, c.Instance, rt.RunEngine)
 	engine := EngineBinary(runEngine)
-	containerName := containerNameInstance(imageName, c.Instance)
+	containerName := containerNameInstance(boxName, c.Instance)
 
 	// Run pre_remove hooks (best-effort, before stopping)
-	c.runPreRemoveHook(engine, containerName, imageName)
+	c.runPreRemoveHook(engine, containerName, boxName)
 
 	if rt.RunMode == "quadlet" {
-		svc := serviceNameInstance(imageName, c.Instance)
+		svc := serviceNameInstance(boxName, c.Instance)
 		stop := exec.Command("systemctl", "--user", "stop", svc)
 		_ = stop.Run()
 
@@ -239,14 +239,14 @@ func (c *RemoveCmd) Run() error {
 			return err
 		}
 
-		qpath := filepath.Join(qdir, quadletFilenameInstance(imageName, c.Instance))
+		qpath := filepath.Join(qdir, quadletFilenameInstance(boxName, c.Instance))
 		if err := os.Remove(qpath); err != nil && !os.IsNotExist(err) {
 			return fmt.Errorf("removing quadlet file: %w", err)
 		}
 		fmt.Fprintf(os.Stderr, "Removed %s\n", qpath)
 
 		// Remove pod file if it exists (sidecar mode)
-		podPath := filepath.Join(qdir, podQuadletFilenameInstance(imageName, c.Instance))
+		podPath := filepath.Join(qdir, podQuadletFilenameInstance(boxName, c.Instance))
 		if err := os.Remove(podPath); err == nil {
 			fmt.Fprintf(os.Stderr, "Removed %s\n", podPath)
 		}
@@ -254,8 +254,8 @@ func (c *RemoveCmd) Run() error {
 		// Remove sidecar .container files (exact-name match, no prefix
 		// glob). Sources sidecar names from deploy.yml — see
 		// resolveSidecarNames for why deploy.yml is authoritative.
-		sidecarNames := resolveSidecarNames(imageName, c.Instance)
-		podBase := PodNameInstance(imageName, c.Instance)
+		sidecarNames := resolveSidecarNames(boxName, c.Instance)
+		podBase := PodNameInstance(boxName, c.Instance)
 		for _, sc := range sidecarNames {
 			scPath := filepath.Join(qdir, podBase+"-"+sc+".container")
 			if err := os.Remove(scPath); err == nil {
@@ -286,18 +286,18 @@ func (c *RemoveCmd) Run() error {
 		}
 
 		// Stop companion services before removing (best-effort)
-		stopTunnel := exec.Command("systemctl", "--user", "stop", tunnelServiceFilename(imageName))
+		stopTunnel := exec.Command("systemctl", "--user", "stop", tunnelServiceFilename(boxName))
 		_ = stopTunnel.Run()
-		stopEnc := exec.Command("systemctl", "--user", "stop", encServiceFilename(imageName))
+		stopEnc := exec.Command("systemctl", "--user", "stop", encServiceFilename(boxName))
 		_ = stopEnc.Run()
 
 		svcDir, svcDirErr := systemdUserDir()
 		if svcDirErr == nil {
-			tunnelPath := filepath.Join(svcDir, tunnelServiceFilename(imageName))
+			tunnelPath := filepath.Join(svcDir, tunnelServiceFilename(boxName))
 			if err := os.Remove(tunnelPath); err == nil {
 				fmt.Fprintf(os.Stderr, "Removed %s\n", tunnelPath)
 			}
-			encPath := filepath.Join(svcDir, encServiceFilename(imageName))
+			encPath := filepath.Join(svcDir, encServiceFilename(boxName))
 			if err := os.Remove(encPath); err == nil {
 				fmt.Fprintf(os.Stderr, "Removed %s\n", encPath)
 			}
@@ -313,24 +313,24 @@ func (c *RemoveCmd) Run() error {
 		// Clear any lingering failed state for main + companion services (best-effort)
 		for _, unit := range []string{
 			svc,
-			tunnelServiceFilename(imageName),
-			encServiceFilename(imageName),
+			tunnelServiceFilename(boxName),
+			encServiceFilename(boxName),
 		} {
 			rf := exec.Command("systemctl", "--user", "reset-failed", unit)
 			_ = rf.Run()
 		}
 
 		if c.Purge {
-			removeVolumes(engine, imageName, c.Instance)
+			removeVolumes(engine, boxName, c.Instance)
 		}
 		if !c.KeepDeploy {
-			cleanDeployEntry(imageName, c.Instance)
+			cleanDeployEntry(boxName, c.Instance)
 		}
 		return nil
 	}
 
 	// Direct mode: stop + rm
-	name := containerNameInstance(imageName, c.Instance)
+	name := containerNameInstance(boxName, c.Instance)
 
 	stop := exec.Command(engine, "stop", name)
 	_ = stop.Run()
@@ -341,17 +341,17 @@ func (c *RemoveCmd) Run() error {
 	fmt.Fprintf(os.Stderr, "Removed container %s\n", name)
 
 	if c.Purge {
-		removeVolumes(engine, imageName, c.Instance)
+		removeVolumes(engine, boxName, c.Instance)
 	}
 	if !c.KeepDeploy {
-		cleanDeployEntry(imageName, c.Instance)
+		cleanDeployEntry(boxName, c.Instance)
 	}
 	return nil
 }
 
 // runPreRemoveHook runs pre_remove hooks (best-effort). Reads hooks from
 // the running container's OCI labels.
-func (c *RemoveCmd) runPreRemoveHook(engine, containerName, imageName string) {
+func (c *RemoveCmd) runPreRemoveHook(engine, containerName, boxName string) {
 	imageRef := containerImage(engine, containerName)
 	if imageRef == "" {
 		return
@@ -362,7 +362,7 @@ func (c *RemoveCmd) runPreRemoveHook(engine, containerName, imageName string) {
 	}
 	// Pass credential-backed secrets (secret_accept/require) to the hook
 	// explicitly — scrubbed from c.Env, not reliably inherited via podman exec.
-	hookEnv := append(append([]string{}, c.Env...), resolveHookSecretEnv(imageName, c.Instance, meta)...)
+	hookEnv := append(append([]string{}, c.Env...), resolveHookSecretEnv(boxName, c.Instance, meta)...)
 	if err := RunHook(engine, containerName, meta.Hook.PreRemove, hookEnv); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: pre_remove hook failed: %v\n", err)
 	}
@@ -392,14 +392,14 @@ func containerImage(engine, containerName string) string {
 	return ref
 }
 
-// resolveImageName extracts the short image name from a ref that may be
-// a local image name or a remote ref (github.com/org/repo/image[@version]).
-func resolveImageName(image string) string {
-	ref := StripURLScheme(image)
+// resolveBoxName extracts the short box name from a ref that may be
+// a local box name or a remote ref (github.com/org/repo/box[@version]).
+func resolveBoxName(box string) string {
+	ref := StripURLScheme(box)
 	if IsRemoteImageRef(ref) {
 		return ParseRemoteRef(ref).Name
 	}
-	return image
+	return box
 }
 
 // resolveSidecarNames returns the sorted set of sidecar key names
@@ -409,12 +409,12 @@ func resolveImageName(image string) string {
 // entry's `sidecar:` map. Image OCI labels carry sidecar TEMPLATES
 // but not "which sidecars are attached to THIS deploy on THIS host".
 // Returns nil when nothing is attached.
-func resolveSidecarNames(imageName, instance string) []string {
+func resolveSidecarNames(boxName, instance string) []string {
 	dc, err := LoadDeployConfig()
 	if err != nil || dc == nil {
 		return nil
 	}
-	entry, ok := dc.Deploy[deployKey(imageName, instance)]
+	entry, ok := dc.Deploy[deployKey(boxName, instance)]
 	if !ok || len(entry.Sidecar) == 0 {
 		return nil
 	}

@@ -84,7 +84,7 @@ func TestEvalFailedError(t *testing.T) {
 func TestFoldEvalBeds_FoldsIntoDeploy(t *testing.T) {
 	uf := &UnifiedFile{
 		Eval: map[string]DeploymentNode{
-			"sample-pod-bed":   {Target: "pod", Image: "sample-image", Disposable: boolPtr(true)},
+			"sample-pod-bed":   {Target: "pod", Box: "sample-image", Disposable: boolPtr(true)},
 			"sample-vm-bed":    {Target: "vm", Vm: "sample-vm", Disposable: boolPtr(true)},
 			"sample-local-bed": {Target: "local", Local: "sample-local", Disposable: boolPtr(true)},
 		},
@@ -112,10 +112,10 @@ func TestFoldEvalBeds_FoldsIntoDeploy(t *testing.T) {
 func TestFoldEvalBeds_DisjointNameGuard(t *testing.T) {
 	uf := &UnifiedFile{
 		Deploy: map[string]DeploymentNode{
-			"clash": {Target: "pod", Image: "x"},
+			"clash": {Target: "pod", Box: "x"},
 		},
 		Eval: map[string]DeploymentNode{
-			"clash": {Target: "pod", Image: "y", Disposable: boolPtr(true)},
+			"clash": {Target: "pod", Box: "y", Disposable: boolPtr(true)},
 		},
 	}
 	err := foldEvalBeds(uf)
@@ -129,7 +129,7 @@ func TestFoldEvalBeds_DisjointNameGuard(t *testing.T) {
 func TestValidateEvalBeds_DisposableRequired(t *testing.T) {
 	uf := &UnifiedFile{
 		Eval: map[string]DeploymentNode{
-			"sample-pod-bed": {Target: "pod", Image: "sample-image"}, // not disposable
+			"sample-pod-bed": {Target: "pod", Box: "sample-image"}, // not disposable
 		},
 	}
 	err := validateEvalBeds(uf)
@@ -227,7 +227,7 @@ func TestPersistBedDeployOverrides_SeedsPortBeforeConfig(t *testing.T) {
 	// image default — exactly the eval-cachyos-ollama-pod shape.
 	bed := DeploymentNode{
 		Target:     "pod",
-		Image:      "ollama",
+		Box:        "ollama",
 		Port:       []string{"45434:11434"},
 		Disposable: boolPtr(true),
 		Lifecycle:  "dev",
@@ -245,8 +245,8 @@ func TestPersistBedDeployOverrides_SeedsPortBeforeConfig(t *testing.T) {
 	if len(entry.Port) != 1 || entry.Port[0] != "45434:11434" {
 		t.Errorf("bed port not seeded: got %v, want [45434:11434]", entry.Port)
 	}
-	if entry.Image != "ollama" || entry.Target != "pod" {
-		t.Errorf("bed image/target not seeded: got image=%q target=%q", entry.Image, entry.Target)
+	if entry.Box != "ollama" || entry.Target != "pod" {
+		t.Errorf("bed image/target not seeded: got image=%q target=%q", entry.Box, entry.Target)
 	}
 	if entry.Disposable == nil || !*entry.Disposable {
 		t.Error("bed disposable not seeded (the eval-runner requires it to authorize the unattended fresh-rebuild)")

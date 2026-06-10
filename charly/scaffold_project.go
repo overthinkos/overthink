@@ -101,11 +101,11 @@ func ScaffoldProject(dir string) error {
 	return nil
 }
 
-// AddImage writes a new box to its discovered per-box file box/<name>/charly.yml
+// AddBox writes a new box to its discovered per-box file box/<name>/charly.yml
 // (a kind-keyed `box:` doc). The base argument is the value of the box's `base:`
 // field (an external URL or the name of another box). If layers is non-nil it
 // populates the box's `candy:` list. Errors if box/<name>/charly.yml exists.
-func AddImage(dir, name, base string, layers []string) error {
+func AddBox(dir, name, base string, layers []string) error {
 	if name == "" {
 		return fmt.Errorf("box name must be specified")
 	}
@@ -144,13 +144,13 @@ func AddImage(dir, name, base string, layers []string) error {
 	return saveYAMLNodeFile(dest, doc)
 }
 
-// AddLayerToImage appends a layer to an existing image's `candy:` list.
+// AddLayerToBox appends a layer to an existing image's `candy:` list.
 // Idempotent: if the layer is already in the list, this is a no-op. The box is
 // resolved across the discovered box/<name>/charly.yml, charly.yml, AND any
 // flat-imported per-kind file,
 // and the edit is saved to the file where the image actually lives.
-func AddLayerToImage(dir, image, layer string) error {
-	root, imgNode, path, err := resolveImageNodeFile(dir, image)
+func AddLayerToBox(dir, image, layer string) error {
+	root, imgNode, path, err := resolveBoxNodeFile(dir, image)
 	if err != nil {
 		return err
 	}
@@ -173,13 +173,13 @@ func AddLayerToImage(dir, image, layer string) error {
 	return saveYAMLNodeFile(path, root)
 }
 
-// RemoveLayerFromImage removes the named layer from an image's `candy:`
+// RemoveLayerFromBox removes the named layer from an image's `candy:`
 // list. Errors out if the image does not exist; succeeds silently if the
 // layer is not present. The box is resolved across the discovered
 // box/<name>/charly.yml, charly.yml, AND any flat-imported per-kind file, and
 // the edit is saved to the file where the box actually lives.
-func RemoveLayerFromImage(dir, image, layer string) error {
-	root, imgNode, path, err := resolveImageNodeFile(dir, image)
+func RemoveLayerFromBox(dir, image, layer string) error {
+	root, imgNode, path, err := resolveBoxNodeFile(dir, image)
 	if err != nil {
 		return err
 	}
@@ -253,13 +253,13 @@ func mappingChild(m *yaml.Node, key string) *yaml.Node {
 	return nil
 }
 
-// imagesMapNode returns the images mapping node from a document and the
+// boxesMapNode returns the images mapping node from a document and the
 // key that addressed it ("image" or "images"). Schema v4 canonical key
 // is the singular "image:"; the plural "images:" is accepted for
 // legacy projects (it's an alias normalized by LoadUnified). When the
 // node is missing, returns ("", nil) so callers can append the
 // canonical singular form.
-func imagesMapNode(doc *yaml.Node) (string, *yaml.Node) {
+func boxesMapNode(doc *yaml.Node) (string, *yaml.Node) {
 	if n := mappingChild(doc, "box"); n != nil {
 		return "box", n
 	}
@@ -269,10 +269,10 @@ func imagesMapNode(doc *yaml.Node) (string, *yaml.Node) {
 	return "", nil
 }
 
-// imageNode returns the mapping node for the named image, or nil.
-func imageNode(root *yaml.Node, name string) *yaml.Node {
+// boxNode returns the mapping node for the named image, or nil.
+func boxNode(root *yaml.Node, name string) *yaml.Node {
 	doc := docContent(root)
-	_, imagesNode := imagesMapNode(doc)
+	_, imagesNode := boxesMapNode(doc)
 	if imagesNode == nil {
 		return nil
 	}
@@ -301,13 +301,13 @@ func flatLocalImports(root *yaml.Node) []string {
 	return out
 }
 
-// resolveImageNodeFile finds the YAML file that DEFINES box `name` — the
+// resolveBoxNodeFile finds the YAML file that DEFINES box `name` — the
 // discovered box/<name>/charly.yml (the canonical location), else charly.yml
 // itself, else one of its flat-imported local per-kind files — and returns that
 // file's parsed node tree, the box's value node, and the file path. The
 // authoring-edit verbs (add-candy/rm-candy) mutate + save that file, so they work
 // on boxes wherever they live, not only those inlined in charly.yml.
-func resolveImageNodeFile(dir, name string) (*yaml.Node, *yaml.Node, string, error) {
+func resolveBoxNodeFile(dir, name string) (*yaml.Node, *yaml.Node, string, error) {
 	// Discovered per-box file box/<name>/charly.yml (the canonical location) — a
 	// kind-keyed `box:` doc whose value node is the box's inner mapping.
 	boxFile := filepath.Join(dir, DefaultBoxDir, name, UnifiedFileName)
@@ -325,7 +325,7 @@ func resolveImageNodeFile(dir, name string) (*yaml.Node, *yaml.Node, string, err
 	if err != nil {
 		return nil, nil, "", err
 	}
-	if n := imageNode(charlyRoot, name); n != nil {
+	if n := boxNode(charlyRoot, name); n != nil {
 		return charlyRoot, n, filepath.Join(dir, UnifiedFileName), nil
 	}
 	for _, ref := range flatLocalImports(charlyRoot) {
@@ -338,11 +338,11 @@ func resolveImageNodeFile(dir, name string) (*yaml.Node, *yaml.Node, string, err
 		if yaml.Unmarshal(data, &froot) != nil {
 			continue
 		}
-		if n := imageNode(&froot, name); n != nil {
+		if n := boxNode(&froot, name); n != nil {
 			return &froot, n, p, nil
 		}
 	}
-	return nil, nil, "", fmt.Errorf("image %q not found in charly.yml or its imported per-kind files", name)
+	return nil, nil, "", fmt.Errorf("box %q not found in charly.yml or its imported per-kind files", name)
 }
 
 // saveYAMLNodeFile marshals a node tree back to an arbitrary file path,

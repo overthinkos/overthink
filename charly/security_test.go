@@ -257,7 +257,7 @@ func TestCollectSecurityMergesCapsSmallest(t *testing.T) {
 		},
 	}
 	cfg := &Config{
-		Image: map[string]BoxConfig{
+		Box: map[string]BoxConfig{
 			"test": {Layer: []string{"big", "small"}},
 		},
 	}
@@ -282,7 +282,7 @@ func TestCollectSecurityImageOverridesCaps(t *testing.T) {
 		},
 	}
 	cfg := &Config{
-		Image: map[string]BoxConfig{
+		Box: map[string]BoxConfig{
 			"heavy": {
 				Layer:    []string{"chrome"},
 				Security: &SecurityConfig{MemoryMax: "16g"},
@@ -300,9 +300,9 @@ func TestCollectSecurityImageOverridesCaps(t *testing.T) {
 
 func TestGenerateQuadletWithMemoryCaps(t *testing.T) {
 	cfg := QuadletConfig{
-		ImageName: "selkies-desktop",
-		ImageRef:  "ghcr.io/test/selkies-desktop:latest",
-		Home:      "/home/user",
+		BoxName:  "selkies-desktop",
+		ImageRef: "ghcr.io/test/selkies-desktop:latest",
+		Home:     "/home/user",
 		Security: SecurityConfig{
 			ShmSize:       "1g",
 			MemoryMax:     "6g",
@@ -414,10 +414,10 @@ func TestBuildShellArgsWithCapAdd(t *testing.T) {
 
 func TestGenerateQuadletWithPrivileged(t *testing.T) {
 	cfg := QuadletConfig{
-		ImageName: "runner",
-		ImageRef:  "ghcr.io/test/runner:latest",
-		Home:      "/workspace",
-		Security:  SecurityConfig{Privileged: true},
+		BoxName:  "runner",
+		ImageRef: "ghcr.io/test/runner:latest",
+		Home:     "/workspace",
+		Security: SecurityConfig{Privileged: true},
 	}
 	content := generateQuadlet(cfg)
 	if !containsLine(content, "PodmanArgs=--privileged") {
@@ -430,9 +430,9 @@ func TestGenerateQuadletWithPrivileged(t *testing.T) {
 
 func TestGenerateQuadletWithCapAdd(t *testing.T) {
 	cfg := QuadletConfig{
-		ImageName: "builder",
-		ImageRef:  "ghcr.io/test/builder:latest",
-		Home:      "/workspace",
+		BoxName:  "builder",
+		ImageRef: "ghcr.io/test/builder:latest",
+		Home:     "/workspace",
 		Security: SecurityConfig{
 			CapAdd:      []string{"SYS_ADMIN"},
 			Devices:     []string{"/dev/fuse"},

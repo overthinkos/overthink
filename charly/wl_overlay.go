@@ -20,7 +20,7 @@ type WlOverlayCmd struct {
 
 // WlOverlayShowCmd creates and displays an overlay.
 type WlOverlayShowCmd struct {
-	Image    string  `arg:"" help:"Image name (use . for local)"`
+	Box      string  `arg:"" help:"Box name (use . for local)"`
 	Type     string  `long:"type" required:"" enum:"text,lower-third,watermark,countdown,highlight,fade" help:"Overlay type"`
 	Text     string  `long:"text" help:"Text content"`
 	Subtitle string  `long:"subtitle" help:"Subtitle (lower-third)"`
@@ -38,7 +38,7 @@ type WlOverlayShowCmd struct {
 
 // WlOverlayHideCmd hides one or all overlays.
 type WlOverlayHideCmd struct {
-	Image    string `arg:"" help:"Image name (use . for local)"`
+	Box      string `arg:"" help:"Box name (use . for local)"`
 	Name     string `long:"name" default:"" help:"Overlay name to hide"`
 	All      bool   `long:"all" help:"Hide all overlays"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
@@ -46,18 +46,18 @@ type WlOverlayHideCmd struct {
 
 // WlOverlayListCmd lists active overlays.
 type WlOverlayListCmd struct {
-	Image    string `arg:"" help:"Image name (use . for local)"`
+	Box      string `arg:"" help:"Box name (use . for local)"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 }
 
 // WlOverlayStatusCmd checks if the overlay daemon is running.
 type WlOverlayStatusCmd struct {
-	Image    string `arg:"" help:"Image name (use . for local)"`
+	Box      string `arg:"" help:"Box name (use . for local)"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 }
 
 func (c *WlOverlayShowCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Image, c.Instance)
+	venue, err := resolveEvalVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -71,7 +71,7 @@ func (c *WlOverlayShowCmd) Run() error {
 }
 
 func (c *WlOverlayHideCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Image, c.Instance)
+	venue, err := resolveEvalVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -88,7 +88,7 @@ func (c *WlOverlayHideCmd) Run() error {
 }
 
 func (c *WlOverlayListCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Image, c.Instance)
+	venue, err := resolveEvalVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -96,7 +96,7 @@ func (c *WlOverlayListCmd) Run() error {
 }
 
 func (c *WlOverlayStatusCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Image, c.Instance)
+	venue, err := resolveEvalVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}

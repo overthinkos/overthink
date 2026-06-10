@@ -58,7 +58,7 @@ func TestCollectLibvirtSnippets(t *testing.T) {
 	// hard-cutover; image-level raw snippets now live on the paired
 	// kind:vm entity's spec.libvirt.snippets:).
 	cfg := &Config{
-		Image: map[string]BoxConfig{
+		Box: map[string]BoxConfig{
 			"test-image": {
 				Layer: []string{"layer-a", "layer-b"},
 			},
@@ -81,7 +81,7 @@ func TestCollectLibvirtSnippets(t *testing.T) {
 }
 
 func TestCollectLibvirtSnippets_NonexistentImage(t *testing.T) {
-	cfg := &Config{Image: map[string]BoxConfig{}}
+	cfg := &Config{Box: map[string]BoxConfig{}}
 	layers := map[string]*Layer{}
 	snippets := CollectLibvirtSnippets(cfg, layers, "nonexistent")
 	if snippets != nil {

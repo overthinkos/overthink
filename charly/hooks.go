@@ -15,9 +15,9 @@ type HooksConfig struct {
 
 // CollectHooks collects and concatenates hooks from all layers in an image's layer chain.
 // Hooks from multiple layers are concatenated in layer order.
-func CollectHooks(cfg *Config, layers map[string]*Layer, imageName string) *HooksConfig {
+func CollectHooks(cfg *Config, layers map[string]*Layer, boxName string) *HooksConfig {
 	var allLayerNames []string
-	for _, node := range cfg.walkBaseChain(imageName) {
+	for _, node := range cfg.walkBaseChain(boxName) {
 		resolved, err := ResolveLayerOrder(node.Img.Layer, layers, nil)
 		if err != nil {
 			break
@@ -81,10 +81,10 @@ func RunHook(engine, containerName, hookScript string, envVars []string) error {
 }
 
 // removeVolumes removes all named volumes matching the image/instance prefix.
-func removeVolumes(engine, imageName, instance string) {
+func removeVolumes(engine, boxName, instance string) {
 	// Same per-deploy prefix the create side uses (deployVolumePrefix), so purge
 	// removes exactly this deploy's volumes and never a same-image sibling's.
-	prefix := deployVolumePrefix(imageName, instance)
+	prefix := deployVolumePrefix(boxName, instance)
 
 	out, err := exec.Command(engine, "volume", "ls", "--format", "{{.Name}}", "--filter", "name="+prefix).Output()
 	if err != nil {

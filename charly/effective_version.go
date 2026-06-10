@@ -2,13 +2,13 @@ package main
 
 import "fmt"
 
-// computeEffectiveVersions assigns ResolvedImage.EffectiveVersion for every
+// computeEffectiveVersions assigns ResolvedBox.EffectiveVersion for every
 // image in the build graph. EffectiveVersion is the content-derived identity
 // emitted as the ai.opencharly.version OCI label:
 //
 //  1. the image's dedicated `version:` (img.Version) if set; else
 //  2. the highest layer `version:` across its full layer set
-//     (collectAllImageLayers spans the entire base chain, including
+//     (collectAllBoxLayers spans the entire base chain, including
 //     namespaced bases since img.Base is a fully-qualified key in g.Images);
 //     else
 //  3. the internal base image's EffectiveVersion (recurse); else
@@ -30,7 +30,7 @@ func (g *Generator) computeEffectiveVersions() error {
 		if v, ok := memo[name]; ok {
 			return v, nil
 		}
-		img, ok := g.Images[name]
+		img, ok := g.Boxes[name]
 		if !ok {
 			return "", fmt.Errorf("effective version: unknown image %q", name)
 		}
@@ -51,7 +51,7 @@ func (g *Generator) computeEffectiveVersions() error {
 		//    Layers are mandatory-versioned, so a layered image always resolves
 		//    here. compareCalVer orders YYYY.DDD.HHMM numerically.
 		best := ""
-		for _, ln := range collectAllImageLayers(name, g.Images, g.Layers) {
+		for _, ln := range collectAllBoxLayers(name, g.Boxes, g.Layers) {
 			l, ok := g.Layers[ln]
 			if !ok || l.Version == "" {
 				continue
@@ -81,7 +81,7 @@ func (g *Generator) computeEffectiveVersions() error {
 		return "", fmt.Errorf("image %q resolves no version: a layerless image on an external base needs a dedicated `version:`. Run: charly migrate", name)
 	}
 
-	for name, img := range g.Images {
+	for name, img := range g.Boxes {
 		v, err := compute(name)
 		if err != nil {
 			return err

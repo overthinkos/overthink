@@ -280,7 +280,7 @@ func buildDepPkgsOnHost(ctx context.Context, lp *LocalPkgDef, bDef *BuilderDef, 
 		DryRun:       opts.DryRun,
 		RunAsRoot:    true,
 		// Cfg + ProjectDir let BuilderRun's EnsureImagePresent run the
-		// namespace-aware ResolveImage, so a namespace-qualified builder ref
+		// namespace-aware ResolveBox, so a namespace-qualified builder ref
 		// (e.g. the cachyos project's aur builder `charly.arch-builder`) resolves to
 		// its concrete image — matching the aur-LAYER path (deploy_target_local.go).
 		Cfg:        cfg,

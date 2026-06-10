@@ -29,7 +29,7 @@ type DistroDef struct {
 	// Version is the canonical distro version (e.g. "13" for debian, "24.04" for
 	// ubuntu, "43" for fedora) — the single source for synthesizing the
 	// per-version tag chain ([<distro>:<version>, <distro>]) on a target that
-	// carries only a bare distro name (notably a VM deploy via syntheticVmImage,
+	// carries only a bare distro name (notably a VM deploy via syntheticVmBox,
 	// where no image-authored distro: tag supplies the version). Empty for rolling
 	// distros (arch/cachyos). Image builds already carry the version in their own
 	// distro: tags. Inherited child-wins via resolveInherits. See distroTagChain.
@@ -525,7 +525,7 @@ func (dc *DistroConfig) AllFormatNames() []string {
 // known (e.g. ["ubuntu:24.04", "ubuntu"]), or just [<distro>] for a rolling
 // distro with no version (arch/cachyos). It is the single helper that gives VM
 // deploys the same per-version reach image builds get from their authored
-// distro: tags — syntheticVmImage uses it so a target:vm deploy of an ubuntu
+// distro: tags — syntheticVmBox uses it so a target:vm deploy of an ubuntu
 // guest can select an `ubuntu-24.04` tag section, not only the bare `ubuntu` one.
 func distroTagChain(distro, version string) []string {
 	if distro == "" {
@@ -862,13 +862,13 @@ type BuildFile struct {
 	Init    map[string]*InitDef    `yaml:"init"`
 }
 
-// LoadBuildConfigForImage loads distro, builder, and init configs for the
+// LoadBuildConfigForBox loads distro, builder, and init configs for the
 // project at dir. Post-unified-cutover this reads from charly.yml (via
 // LoadUnified) rather than following a format_config: pointer.
 //
 // The init section is optional: projects without an `inits:` block return a
 // nil *InitConfig (no init system, no entrypoint beyond the base image default).
-func LoadBuildConfigForImage(dir string) (*DistroConfig, *BuilderConfig, *InitConfig, error) {
+func LoadBuildConfigForBox(dir string) (*DistroConfig, *BuilderConfig, *InitConfig, error) {
 	uf, present, err := LoadUnified(dir)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("loading charly.yml: %w", err)
@@ -883,5 +883,5 @@ func LoadBuildConfigForImage(dir string) (*DistroConfig, *BuilderConfig, *InitCo
 // Former call sites pass just the project directory; the legacy (defaultRef,
 // dir) two-argument form is gone.
 func LoadDefaultBuildConfig(dir string) (*DistroConfig, *BuilderConfig, *InitConfig, error) {
-	return LoadBuildConfigForImage(dir)
+	return LoadBuildConfigForBox(dir)
 }

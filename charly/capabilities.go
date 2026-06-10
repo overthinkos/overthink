@@ -15,26 +15,26 @@ import (
 // (Part F.10: `charly deploy from-box`) depends on this list being complete.
 //
 // Storage note: today the on-disk representation of capabilities is the existing
-// ImageMetadata struct (charly/labels.go). Capabilities is an alias that fixes the
+// BoxMetadata struct (charly/labels.go). Capabilities is an alias that fixes the
 // naming + provides a label-completeness check + a typed helper for loading
 // from a pushed OCI image by ref alone. A future schema-level split of
-// ImageConfig into image.build: + image.capabilities: (which charly migrate
+// BoxConfig into image.build: + image.capabilities: (which charly migrate
 // unified would emit) reuses this same type.
 // -----------------------------------------------------------------------------
 
-// Capabilities names the same data as ImageMetadata — it is the runtime
+// Capabilities names the same data as BoxMetadata — it is the runtime
 // contract loaded from OCI labels. Using a type alias keeps every existing
-// ImageMetadata consumer unchanged while letting new code (Part F K8s
+// BoxMetadata consumer unchanged while letting new code (Part F K8s
 // generator, charly deploy from-box) use the canonical name.
 type Capabilities = BoxMetadata
 
 // CapabilityLabelMap names every OCI label that participates in the
-// capabilities contract. Maintained alongside ImageMetadata — adding a field
-// to ImageMetadata without adding an entry here trips the completeness check
+// capabilities contract. Maintained alongside BoxMetadata — adding a field
+// to BoxMetadata without adding an entry here trips the completeness check
 // below and breaks the build.
 var CapabilityLabelMap = map[string]string{
 	// Identity
-	"Image":        LabelBox,
+	"Box":          LabelBox,
 	"Version":      LabelVersion,
 	"Registry":     LabelRegistry,
 	"Bootc":        LabelBootc,
@@ -108,7 +108,7 @@ var CapabilityLabelMap = map[string]string{
 
 	// Gherkin-shaped self-description — three-section (layer/image/deploy)
 	// LabelDescriptionSet. Replaces the single-scalar Info/Status pair in
-	// the BDD cutover; those remain on ImageMetadata during the additive
+	// the BDD cutover; those remain on BoxMetadata during the additive
 	// foundation phase and are removed in the hard-cutover commit.
 	"Description": LabelDescription,
 
@@ -119,14 +119,14 @@ var CapabilityLabelMap = map[string]string{
 	"Shell": LabelShell,
 }
 
-// deployOnlyCapabilityFields are ImageMetadata fields that are NOT baked
+// deployOnlyCapabilityFields are BoxMetadata fields that are NOT baked
 // as OCI labels by design — they're populated from deploy.yml overlays
 // (or deploy-host config) and have no image-declaration meaning. The
 // completeness check exempts them from CapabilityLabelMap mapping.
 //
 // This list codifies the schema v4 migration note on labels.go:33-36:
 // "Tunnel / DNS / AcmeEmail / Engine moved to DeploymentNode". The fields
-// stay on ImageMetadata because deploy-mode commands still consume them
+// stay on BoxMetadata because deploy-mode commands still consume them
 // after MergeDeployOntoMetadata runs — but they never round-trip through
 // OCI labels.
 var deployOnlyCapabilityFields = map[string]bool{
@@ -136,7 +136,7 @@ var deployOnlyCapabilityFields = map[string]bool{
 	"Engine":    true,
 }
 
-// checkCapabilityLabelCompleteness returns an error listing any ImageMetadata
+// checkCapabilityLabelCompleteness returns an error listing any BoxMetadata
 // exported field that lacks an entry in CapabilityLabelMap. Called from
 // TestCapabilityLabelCompleteness to fail the build when a field is added
 // without a label mapping.
@@ -153,7 +153,7 @@ func checkCapabilityLabelCompleteness() error {
 		}
 	}
 	if len(missing) > 0 {
-		return fmt.Errorf("ImageMetadata fields without CapabilityLabelMap entry: %v", missing)
+		return fmt.Errorf("BoxMetadata fields without CapabilityLabelMap entry: %v", missing)
 	}
 	return nil
 }

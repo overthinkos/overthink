@@ -70,8 +70,8 @@ func TestEmitImageTestYAML_RoundTripsThroughParseCharlyTestOutput(t *testing.T) 
 	if err != nil {
 		t.Fatalf("ParseCharlyTestOutput failed on emitted YAML: %v\n%s", err, out)
 	}
-	if parsed.Image != "ovbench/test:charly-fedora" {
-		t.Errorf("parsed box: %q", parsed.Image)
+	if parsed.Box != "ovbench/test:charly-fedora" {
+		t.Errorf("parsed box: %q", parsed.Box)
 	}
 	if parsed.Mode != "image" {
 		t.Errorf("parsed mode: %q", parsed.Mode)

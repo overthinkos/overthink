@@ -31,7 +31,7 @@ func ExpandLayer(requested []string, layers map[string]*Layer) ([]string, error)
 		// the single chokepoint every ResolveLayerOrder caller funnels through,
 		// so one normalization here fixes all of them. It is idempotent for
 		// already-bare names — local plain names and the build path's
-		// pre-normalized ResolvedImage.Layer (config.go: BareRef per ref) — so
+		// pre-normalized ResolvedBox.Layer (config.go: BareRef per ref) — so
 		// the build/install path is byte-unchanged. Without it the collectors
 		// that walk RAW cfg.Image[...].Layer (eval/hooks/shell/descriptions/
 		// security/volumes/alias/engine + validateInitDependencies) silently
@@ -194,10 +194,10 @@ func ResolveLayerOrder(requested []string, layers map[string]*Layer, parentLayer
 	return topoSort(graph)
 }
 
-// ImageNeedsBuilder returns true if any of the image's own resolved layers
+// BoxNeedsBuilder returns true if any of the image's own resolved layers
 // (excluding parent-provided) have pixi.toml, package.json, or Cargo.toml.
 // When layers is nil, falls back to unconditional builder dependency.
-func ImageNeedsBuilder(img *ResolvedBox, images map[string]*ResolvedBox, layers map[string]*Layer) bool {
+func BoxNeedsBuilder(img *ResolvedBox, boxes map[string]*ResolvedBox, layers map[string]*Layer) bool {
 	if layers == nil {
 		return true // conservative fallback
 	}
@@ -206,7 +206,7 @@ func ImageNeedsBuilder(img *ResolvedBox, images map[string]*ResolvedBox, layers 
 	var parentLayers map[string]bool
 	if !img.IsExternalBase {
 		var err error
-		parentLayers, err = LayerProvidedByImage(img.Base, images, layers)
+		parentLayers, err = LayerProvidedByBox(img.Base, boxes, layers)
 		if err != nil {
 			return true // conservative
 		}
@@ -235,7 +235,7 @@ func ImageNeedsBuilder(img *ResolvedBox, images map[string]*ResolvedBox, layers 
 	return false
 }
 
-// imageDirectDeps returns the direct image-build dependencies of img:
+// boxDirectDeps returns the direct image-build dependencies of img:
 //   - Base (when not an external OCI ref)
 //   - Builder.AllBuilder() format-builder images (only when includeFormatBuilders)
 //   - BootstrapBuilderImage (the `from: builder:pacstrap` / debootstrap source —
@@ -246,15 +246,15 @@ func ImageNeedsBuilder(img *ResolvedBox, images map[string]*ResolvedBox, layers 
 // Self-refs and refs to images not in the map (for builder + bootstrap builder)
 // are filtered out. Base is appended unconditionally when not external — the
 // existing invariant is that !IsExternalBase implies Base is in the map; if it
-// isn't, downstream code (filterImage's addDeps + topoSort) surfaces the bad
+// isn't, downstream code (filterBox's addDeps + topoSort) surfaces the bad
 // state via a different error path, not silent skipping.
 //
-// One helper, three callers (ResolveImageOrder, ResolveImageLevels, filterImage
+// One helper, three callers (ResolveBoxOrder, ResolveBoxLevels, filterBox
 // in build.go) so adding a future edge kind (e.g. RuntimeBuilder, LayerBuilder)
 // lands in one place. The 2026-05 cachyos / cachyos-pacstrap-builder regression
 // surfaced the bug exactly because three parallel dep walks had drifted out of
 // sync — the topo-sort knew the right order, the build runner did not.
-func imageDirectDeps(name string, img *ResolvedBox, images map[string]*ResolvedBox, includeFormatBuilders bool) []string {
+func boxDirectDeps(name string, img *ResolvedBox, boxes map[string]*ResolvedBox, includeFormatBuilders bool) []string {
 	var deps []string
 	if !img.IsExternalBase {
 		deps = append(deps, img.Base)
@@ -262,30 +262,30 @@ func imageDirectDeps(name string, img *ResolvedBox, images map[string]*ResolvedB
 	if includeFormatBuilders {
 		for _, builder := range img.Builder.AllBuilder() {
 			if builder != name {
-				if _, ok := images[builder]; ok {
+				if _, ok := boxes[builder]; ok {
 					deps = append(deps, builder)
 				}
 			}
 		}
 	}
 	if img.BootstrapBuilderImage != "" && img.BootstrapBuilderImage != name {
-		if _, ok := images[img.BootstrapBuilderImage]; ok {
+		if _, ok := boxes[img.BootstrapBuilderImage]; ok {
 			deps = append(deps, img.BootstrapBuilderImage)
 		}
 	}
 	return deps
 }
 
-// ResolveImageOrder resolves image dependencies and returns them in build order.
+// ResolveBoxOrder resolves image dependencies and returns them in build order.
 // Images that reference other images via `base` create dependencies.
 // Each image's Builder field determines its builder dependency.
 // Pass layers to enable conditional builder dependency; nil for unconditional.
-func ResolveImageOrder(images map[string]*ResolvedBox, layers map[string]*Layer) ([]string, error) {
+func ResolveBoxOrder(boxes map[string]*ResolvedBox, layers map[string]*Layer) ([]string, error) {
 	// Build adjacency list
 	// Edge from A to B means A depends on B (B must be built before A)
 	graph := make(map[string][]string)
-	for name, img := range images {
-		graph[name] = imageDirectDeps(name, img, images, ImageNeedsBuilder(img, images, layers))
+	for name, img := range boxes {
+		graph[name] = boxDirectDeps(name, img, boxes, BoxNeedsBuilder(img, boxes, layers))
 	}
 
 	return topoSort(graph)
@@ -417,12 +417,12 @@ func topoLevels(graph map[string][]string) ([][]string, error) {
 	return levels, nil
 }
 
-// ResolveImageLevels resolves image dependencies and returns them grouped by build level.
+// ResolveBoxLevels resolves image dependencies and returns them grouped by build level.
 // Images at the same level can be built concurrently.
-func ResolveImageLevels(images map[string]*ResolvedBox, layers map[string]*Layer) ([][]string, error) {
+func ResolveBoxLevels(boxes map[string]*ResolvedBox, layers map[string]*Layer) ([][]string, error) {
 	graph := make(map[string][]string)
-	for name, img := range images {
-		graph[name] = imageDirectDeps(name, img, images, ImageNeedsBuilder(img, images, layers))
+	for name, img := range boxes {
+		graph[name] = boxDirectDeps(name, img, boxes, BoxNeedsBuilder(img, boxes, layers))
 	}
 
 	return topoLevels(graph)
@@ -474,9 +474,9 @@ func findCycle(graph map[string][]string, inDegree map[string]int) []string {
 	return cyclePath
 }
 
-// LayerProvidedByImage returns the set of layers installed by an image
+// LayerProvidedByBox returns the set of layers installed by an image
 // (including those inherited from parent images via base chain)
-func LayerProvidedByImage(imageName string, images map[string]*ResolvedBox, layers map[string]*Layer) (map[string]bool, error) {
+func LayerProvidedByBox(boxName string, boxes map[string]*ResolvedBox, layers map[string]*Layer) (map[string]bool, error) {
 	provided := make(map[string]bool)
 	visited := make(map[string]bool)
 
@@ -487,7 +487,7 @@ func LayerProvidedByImage(imageName string, images map[string]*ResolvedBox, laye
 		}
 		visited[name] = true
 
-		img, ok := images[name]
+		img, ok := boxes[name]
 		if !ok {
 			return fmt.Errorf("image %q not found", name)
 		}
@@ -512,7 +512,7 @@ func LayerProvidedByImage(imageName string, images map[string]*ResolvedBox, laye
 		return nil
 	}
 
-	if err := collect(imageName); err != nil {
+	if err := collect(boxName); err != nil {
 		return nil, err
 	}
 

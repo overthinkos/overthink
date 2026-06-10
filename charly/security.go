@@ -13,10 +13,10 @@ import (
 // memory is safer). memory_max, memory_high, memory_swap_max, and cpus take
 // the smallest value (smallest-wins — a tighter cap is a smaller blast radius).
 // Image-level security (from charly.yml) overrides layer-level settings.
-func CollectSecurity(cfg *Config, layers map[string]*Layer, imageName string) SecurityConfig {
+func CollectSecurity(cfg *Config, layers map[string]*Layer, boxName string) SecurityConfig {
 	var merged SecurityConfig
 
-	img, ok := cfg.Image[imageName]
+	img, ok := cfg.Box[boxName]
 	if !ok {
 		return merged
 	}

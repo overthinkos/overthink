@@ -51,7 +51,7 @@ func (c *BoxPkgCmd) Run() error {
 	}
 
 	// Load the build config to resolve each format's local_pkg contract.
-	dc, _, _, err := LoadBuildConfigForImage(dir)
+	dc, _, _, err := LoadBuildConfigForBox(dir)
 	if err != nil {
 		return fmt.Errorf("loading build config: %w", err)
 	}

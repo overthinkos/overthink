@@ -23,7 +23,7 @@ func TestLoadConfig(t *testing.T) {
 	// Check images exist
 	expectedImages := []string{"base", "cuda", "ml-cuda", "inference", "ubuntu-dev", "bazzite"}
 	for _, name := range expectedImages {
-		if _, ok := cfg.Image[name]; !ok {
+		if _, ok := cfg.Box[name]; !ok {
 			t.Errorf("missing image %q", name)
 		}
 	}
@@ -37,7 +37,7 @@ func TestResolveImage(t *testing.T) {
 
 	tests := []struct {
 		name           string
-		imageName      string
+		boxName        string
 		calverTag      string
 		wantBase       string
 		wantIsExternal bool
@@ -48,7 +48,7 @@ func TestResolveImage(t *testing.T) {
 	}{
 		{
 			name:           "base image inherits defaults",
-			imageName:      "base",
+			boxName:        "base",
 			calverTag:      "2026.45.1415",
 			wantBase:       "quay.io/fedora/fedora:43",
 			wantIsExternal: true,
@@ -59,7 +59,7 @@ func TestResolveImage(t *testing.T) {
 		},
 		{
 			name:           "cuda overrides platforms",
-			imageName:      "cuda",
+			boxName:        "cuda",
 			calverTag:      "2026.45.1415",
 			wantBase:       "quay.io/fedora/fedora:43",
 			wantIsExternal: true,
@@ -70,7 +70,7 @@ func TestResolveImage(t *testing.T) {
 		},
 		{
 			name:           "ml-cuda has internal base",
-			imageName:      "ml-cuda",
+			boxName:        "ml-cuda",
 			calverTag:      "2026.45.1415",
 			wantBase:       "cuda",
 			wantIsExternal: false,
@@ -81,7 +81,7 @@ func TestResolveImage(t *testing.T) {
 		},
 		{
 			name:           "inference has pinned tag",
-			imageName:      "inference",
+			boxName:        "inference",
 			calverTag:      "2026.45.1415",
 			wantBase:       "ml-cuda",
 			wantIsExternal: false,
@@ -92,7 +92,7 @@ func TestResolveImage(t *testing.T) {
 		},
 		{
 			name:           "ubuntu-dev uses deb",
-			imageName:      "ubuntu-dev",
+			boxName:        "ubuntu-dev",
 			calverTag:      "2026.45.1415",
 			wantBase:       "ubuntu:24.04",
 			wantIsExternal: true,
@@ -103,7 +103,7 @@ func TestResolveImage(t *testing.T) {
 		},
 		{
 			name:           "bazzite is bootc",
-			imageName:      "bazzite",
+			boxName:        "bazzite",
 			calverTag:      "2026.45.1415",
 			wantBase:       "ghcr.io/ublue-os/bazzite:stable",
 			wantIsExternal: true,
@@ -116,9 +116,9 @@ func TestResolveImage(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			resolved, err := cfg.ResolveImage(tt.imageName, tt.calverTag, testProjectDir(t), ResolveOpts{})
+			resolved, err := cfg.ResolveBox(tt.boxName, tt.calverTag, testProjectDir(t), ResolveOpts{})
 			if err != nil {
-				t.Fatalf("ResolveImage() error = %v", err)
+				t.Fatalf("ResolveBox() error = %v", err)
 			}
 
 			if resolved.Base != tt.wantBase {
@@ -150,15 +150,15 @@ func TestResolveImageNotFound(t *testing.T) {
 		t.Fatalf("LoadConfig() error = %v", err)
 	}
 
-	_, err = cfg.ResolveImage("nonexistent", "2026.45.1415", testProjectDir(t), ResolveOpts{})
+	_, err = cfg.ResolveBox("nonexistent", "2026.45.1415", testProjectDir(t), ResolveOpts{})
 	if err == nil {
-		t.Error("ResolveImage() expected error for nonexistent image")
+		t.Error("ResolveBox() expected error for nonexistent image")
 	}
 }
 
 // TestMergeImageConfig_BuildTunables guards the regression where new
-// ImageConfig fields are silently dropped during the unified loader's
-// defaults: merge because mergeImageConfig is a hand-maintained field-by-field
+// BoxConfig fields are silently dropped during the unified loader's
+// defaults: merge because mergeBoxConfig is a hand-maintained field-by-field
 // merger. The build-speed tunables (jobs / podman_jobs / podman_jobs_cap /
 // context_ignore / cache) MUST survive the merge, or defaults.context_ignore
 // authored in charly.yml never reaches the generator.
@@ -174,7 +174,7 @@ func TestMergeImageConfig_BuildTunables(t *testing.T) {
 		KeepImages:    intPtr(5),
 		KeepEvalRuns:  intPtr(10),
 	}
-	mergeImageConfig(dst, src)
+	mergeBoxConfig(dst, src)
 	if dst.KeepImages == nil || *dst.KeepImages != 5 {
 		t.Errorf("KeepImages not merged from src: %v", dst.KeepImages)
 	}
@@ -199,7 +199,7 @@ func TestMergeImageConfig_BuildTunables(t *testing.T) {
 
 	// dst already set → src must NOT override (per-field "dst wins if set").
 	dst2 := &BoxConfig{Jobs: intPtr(2), Cache: "registry"}
-	mergeImageConfig(dst2, &BoxConfig{Jobs: intPtr(9), Cache: "image"})
+	mergeBoxConfig(dst2, &BoxConfig{Jobs: intPtr(9), Cache: "image"})
 	if dst2.Jobs == nil || *dst2.Jobs != 2 {
 		t.Errorf("dst Jobs should win, got %v", dst2.Jobs)
 	}
@@ -214,16 +214,16 @@ func TestImageNames(t *testing.T) {
 		t.Fatalf("LoadConfig() error = %v", err)
 	}
 
-	names := cfg.ImageNames()
+	names := cfg.BoxNames()
 	// 7 total images in testdata, but disabled-image is excluded
 	if len(names) != 6 {
-		t.Errorf("ImageNames() returned %d names, want 6: %v", len(names), names)
+		t.Errorf("BoxNames() returned %d names, want 6: %v", len(names), names)
 	}
 
 	// Should be sorted
 	for i := 0; i < len(names)-1; i++ {
 		if names[i] > names[i+1] {
-			t.Errorf("ImageNames() not sorted: %v", names)
+			t.Errorf("BoxNames() not sorted: %v", names)
 			break
 		}
 	}
@@ -231,7 +231,7 @@ func TestImageNames(t *testing.T) {
 	// disabled-image should not appear
 	for _, name := range names {
 		if name == "disabled-image" {
-			t.Error("ImageNames() should not include disabled-image")
+			t.Error("BoxNames() should not include disabled-image")
 		}
 	}
 }
@@ -244,7 +244,7 @@ func TestResolveImageBuilders(t *testing.T) {
 			Platforms: []string{"linux/amd64"},
 			Builder:   BuilderMap{"pixi": "default-builder", "npm": "default-builder"},
 		},
-		Image: map[string]BoxConfig{
+		Box: map[string]BoxConfig{
 			"default-builder": {Layer: []string{}},
 			"custom-builder":  {Layer: []string{}},
 			"uses-default":    {Layer: []string{}},
@@ -253,18 +253,18 @@ func TestResolveImageBuilders(t *testing.T) {
 	}
 
 	// Image with no explicit builder inherits defaults.builder
-	resolved, err := cfg.ResolveImage("uses-default", "test", testProjectDir(t), ResolveOpts{})
+	resolved, err := cfg.ResolveBox("uses-default", "test", testProjectDir(t), ResolveOpts{})
 	if err != nil {
-		t.Fatalf("ResolveImage() error = %v", err)
+		t.Fatalf("ResolveBox() error = %v", err)
 	}
 	if resolved.Builder.BuilderFor("pixi") != "default-builder" {
 		t.Errorf("Builder[pixi] = %q, want %q", resolved.Builder.BuilderFor("pixi"), "default-builder")
 	}
 
 	// Image with explicit builder overrides defaults per-type
-	resolved, err = cfg.ResolveImage("uses-custom", "test", testProjectDir(t), ResolveOpts{})
+	resolved, err = cfg.ResolveBox("uses-custom", "test", testProjectDir(t), ResolveOpts{})
 	if err != nil {
-		t.Fatalf("ResolveImage() error = %v", err)
+		t.Fatalf("ResolveBox() error = %v", err)
 	}
 	if resolved.Builder.BuilderFor("pixi") != "custom-builder" {
 		t.Errorf("Builder[pixi] = %q, want %q", resolved.Builder.BuilderFor("pixi"), "custom-builder")
@@ -277,13 +277,13 @@ func TestResolveImageBuilders(t *testing.T) {
 	// No defaults.builder → empty
 	cfg2 := &Config{
 		Defaults: BoxConfig{Build: BuildFormats{"rpm"}, Platforms: []string{"linux/amd64"}},
-		Image: map[string]BoxConfig{
+		Box: map[string]BoxConfig{
 			"app": {Layer: []string{}},
 		},
 	}
-	resolved, err = cfg2.ResolveImage("app", "test", testProjectDir(t), ResolveOpts{})
+	resolved, err = cfg2.ResolveBox("app", "test", testProjectDir(t), ResolveOpts{})
 	if err != nil {
-		t.Fatalf("ResolveImage() error = %v", err)
+		t.Fatalf("ResolveBox() error = %v", err)
 	}
 	if len(resolved.Builder) != 0 {
 		t.Errorf("Builder = %v, want empty", resolved.Builder)
@@ -296,13 +296,13 @@ func TestResolveImageBuilders(t *testing.T) {
 			Platforms: []string{"linux/amd64"},
 			Builder:   BuilderMap{"pixi": "my-builder"},
 		},
-		Image: map[string]BoxConfig{
+		Box: map[string]BoxConfig{
 			"my-builder": {Layer: []string{}},
 		},
 	}
-	resolved, err = cfg3.ResolveImage("my-builder", "test", testProjectDir(t), ResolveOpts{})
+	resolved, err = cfg3.ResolveBox("my-builder", "test", testProjectDir(t), ResolveOpts{})
 	if err != nil {
-		t.Fatalf("ResolveImage() error = %v", err)
+		t.Fatalf("ResolveBox() error = %v", err)
 	}
 	if resolved.Builder.HasBuilder("pixi") {
 		t.Errorf("Self-referencing builder should be filtered, got %v", resolved.Builder)
@@ -311,15 +311,15 @@ func TestResolveImageBuilders(t *testing.T) {
 	// Inheritance from base image
 	cfg4 := &Config{
 		Defaults: BoxConfig{Build: BuildFormats{"pac"}, Platforms: []string{"linux/amd64"}},
-		Image: map[string]BoxConfig{
+		Box: map[string]BoxConfig{
 			"base-img":    {Build: BuildFormats{"pac"}, Layer: []string{}, Builder: BuilderMap{"aur": "aur-builder"}},
 			"aur-builder": {Layer: []string{}},
 			"child-img":   {Base: "base-img", Layer: []string{}},
 		},
 	}
-	resolved, err = cfg4.ResolveImage("child-img", "test", testProjectDir(t), ResolveOpts{})
+	resolved, err = cfg4.ResolveBox("child-img", "test", testProjectDir(t), ResolveOpts{})
 	if err != nil {
-		t.Fatalf("ResolveImage() error = %v", err)
+		t.Fatalf("ResolveBox() error = %v", err)
 	}
 	if resolved.Builder.BuilderFor("aur") != "aur-builder" {
 		t.Errorf("Builder[aur] = %q, want %q (inherited from base)", resolved.Builder.BuilderFor("aur"), "aur-builder")
@@ -334,7 +334,7 @@ func TestResolveImagePorts(t *testing.T) {
 			Platforms: []string{"linux/amd64"},
 			Port:      []string{"80:80"},
 		},
-		Image: map[string]BoxConfig{
+		Box: map[string]BoxConfig{
 			"with-ports":    {Layer: []string{}, Port: []string{"9090:9090"}},
 			"inherit-ports": {Layer: []string{}},
 			"no-ports":      {Layer: []string{}, Port: []string{}},
@@ -342,27 +342,27 @@ func TestResolveImagePorts(t *testing.T) {
 	}
 
 	// Image with explicit ports
-	resolved, err := cfg.ResolveImage("with-ports", "test", testProjectDir(t), ResolveOpts{})
+	resolved, err := cfg.ResolveBox("with-ports", "test", testProjectDir(t), ResolveOpts{})
 	if err != nil {
-		t.Fatalf("ResolveImage() error = %v", err)
+		t.Fatalf("ResolveBox() error = %v", err)
 	}
 	if !reflect.DeepEqual(resolved.Port, []string{"9090:9090"}) {
 		t.Errorf("Ports = %v, want [9090:9090]", resolved.Port)
 	}
 
 	// Image inheriting default ports
-	resolved, err = cfg.ResolveImage("inherit-ports", "test", testProjectDir(t), ResolveOpts{})
+	resolved, err = cfg.ResolveBox("inherit-ports", "test", testProjectDir(t), ResolveOpts{})
 	if err != nil {
-		t.Fatalf("ResolveImage() error = %v", err)
+		t.Fatalf("ResolveBox() error = %v", err)
 	}
 	if !reflect.DeepEqual(resolved.Port, []string{"80:80"}) {
 		t.Errorf("Ports = %v, want [80:80]", resolved.Port)
 	}
 
 	// Image with empty ports (no inheritance since explicitly empty slice won't be set via JSON)
-	resolved, err = cfg.ResolveImage("no-ports", "test", testProjectDir(t), ResolveOpts{})
+	resolved, err = cfg.ResolveBox("no-ports", "test", testProjectDir(t), ResolveOpts{})
 	if err != nil {
-		t.Fatalf("ResolveImage() error = %v", err)
+		t.Fatalf("ResolveBox() error = %v", err)
 	}
 	// Empty slice in JSON becomes nil after unmarshal, but in Go struct it's []string{}
 	// When len == 0, we fall through to defaults
@@ -377,9 +377,9 @@ func TestFullTag(t *testing.T) {
 		t.Fatalf("LoadConfig() error = %v", err)
 	}
 
-	resolved, err := cfg.ResolveImage("base", "2026.45.1415", testProjectDir(t), ResolveOpts{})
+	resolved, err := cfg.ResolveBox("base", "2026.45.1415", testProjectDir(t), ResolveOpts{})
 	if err != nil {
-		t.Fatalf("ResolveImage() error = %v", err)
+		t.Fatalf("ResolveBox() error = %v", err)
 	}
 
 	want := "ghcr.io/test/base:2026.45.1415"
@@ -395,7 +395,7 @@ func TestEnabledField(t *testing.T) {
 	}
 
 	// disabled-image exists in raw config
-	disabledImg, ok := cfg.Image["disabled-image"]
+	disabledImg, ok := cfg.Box["disabled-image"]
 	if !ok {
 		t.Fatal("disabled-image not found in raw config")
 	}
@@ -403,45 +403,45 @@ func TestEnabledField(t *testing.T) {
 		t.Error("disabled-image should not be enabled")
 	}
 
-	// disabled-image is excluded from ImageNames()
-	for _, name := range cfg.ImageNames() {
+	// disabled-image is excluded from BoxNames()
+	for _, name := range cfg.BoxNames() {
 		if name == "disabled-image" {
-			t.Error("disabled-image should not appear in ImageNames()")
+			t.Error("disabled-image should not appear in BoxNames()")
 		}
 	}
 
-	// disabled-image is excluded from ResolveAllImage()
-	all, err := cfg.ResolveAllImage("test", testProjectDir(t), ResolveOpts{})
+	// disabled-image is excluded from ResolveAllBox()
+	all, err := cfg.ResolveAllBox("test", testProjectDir(t), ResolveOpts{})
 	if err != nil {
-		t.Fatalf("ResolveAllImage() error = %v", err)
+		t.Fatalf("ResolveAllBox() error = %v", err)
 	}
 	if _, ok := all["disabled-image"]; ok {
-		t.Error("disabled-image should not appear in ResolveAllImage()")
+		t.Error("disabled-image should not appear in ResolveAllBox()")
 	}
 
-	// ResolveImage returns error for disabled image
-	_, err = cfg.ResolveImage("disabled-image", "test", testProjectDir(t), ResolveOpts{})
+	// ResolveBox returns error for disabled image
+	_, err = cfg.ResolveBox("disabled-image", "test", testProjectDir(t), ResolveOpts{})
 	if err == nil {
-		t.Error("ResolveImage() should return error for disabled image")
+		t.Error("ResolveBox() should return error for disabled image")
 	}
 	if !strings.Contains(err.Error(), "disabled") {
 		t.Errorf("expected 'disabled' in error, got: %v", err)
 	}
 
 	// Enabled images still work
-	_, err = cfg.ResolveImage("base", "test", testProjectDir(t), ResolveOpts{})
+	_, err = cfg.ResolveBox("base", "test", testProjectDir(t), ResolveOpts{})
 	if err != nil {
-		t.Errorf("ResolveImage() unexpected error for enabled box: %v", err)
+		t.Errorf("ResolveBox() unexpected error for enabled box: %v", err)
 	}
 
 	// --include-disabled (global) reaches the disabled image
-	_, err = cfg.ResolveImage("disabled-image", "test", testProjectDir(t), ResolveOpts{IncludeDisabled: true})
+	_, err = cfg.ResolveBox("disabled-image", "test", testProjectDir(t), ResolveOpts{IncludeDisabled: true})
 	if err != nil {
-		t.Errorf("ResolveImage(IncludeDisabled=true) should succeed for disabled image, got: %v", err)
+		t.Errorf("ResolveBox(IncludeDisabled=true) should succeed for disabled image, got: %v", err)
 	}
 
 	// --include-disabled scoped to a different name still rejects
-	_, err = cfg.ResolveImage("disabled-image", "test", testProjectDir(t), ResolveOpts{
+	_, err = cfg.ResolveBox("disabled-image", "test", testProjectDir(t), ResolveOpts{
 		IncludeDisabled:      true,
 		IncludeDisabledNames: map[string]bool{"some-other-image": true},
 	})
@@ -450,7 +450,7 @@ func TestEnabledField(t *testing.T) {
 	}
 
 	// --include-disabled scoped to the requested name succeeds
-	_, err = cfg.ResolveImage("disabled-image", "test", testProjectDir(t), ResolveOpts{
+	_, err = cfg.ResolveBox("disabled-image", "test", testProjectDir(t), ResolveOpts{
 		IncludeDisabled:      true,
 		IncludeDisabledNames: map[string]bool{"disabled-image": true},
 	})
@@ -460,7 +460,7 @@ func TestEnabledField(t *testing.T) {
 }
 
 // TestResolveOpts_ShouldIncludeDisabled covers the scoping helper used by
-// ResolveImage / ResolveAllImage / validateImageDAG. The scope semantics
+// ResolveBox / ResolveAllBox / validateBoxDAG. The scope semantics
 // matter for `charly box build <name> --include-disabled` so widening the
 // working set doesn't surface unrelated disabled-image dep errors.
 func TestResolveOpts_ShouldIncludeDisabled(t *testing.T) {
@@ -515,7 +515,7 @@ func TestResolveImageDistroBaseChain(t *testing.T) {
 			Build:     BuildFormats{"rpm"},
 			Platforms: []string{"linux/amd64"},
 		},
-		Image: map[string]BoxConfig{
+		Box: map[string]BoxConfig{
 			// Level 0: defines distro
 			"fedora": {
 				Base:   "quay.io/fedora/fedora:43",
@@ -542,7 +542,7 @@ func TestResolveImageDistroBaseChain(t *testing.T) {
 
 	tests := []struct {
 		name       string
-		imageName  string
+		boxName    string
 		wantDistro []string
 	}{
 		{"level 0: defines distro", "fedora", []string{"fedora:43", "fedora"}},
@@ -553,9 +553,9 @@ func TestResolveImageDistroBaseChain(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			resolved, err := cfg.ResolveImage(tt.imageName, "test", testProjectDir(t), ResolveOpts{})
+			resolved, err := cfg.ResolveBox(tt.boxName, "test", testProjectDir(t), ResolveOpts{})
 			if err != nil {
-				t.Fatalf("ResolveImage() error = %v", err)
+				t.Fatalf("ResolveBox() error = %v", err)
 			}
 			if !reflect.DeepEqual(resolved.Distro, tt.wantDistro) {
 				t.Errorf("Distro = %v, want %v", resolved.Distro, tt.wantDistro)
@@ -571,7 +571,7 @@ func TestResolveImageBuildBaseChain(t *testing.T) {
 			Registry:  "ghcr.io/test",
 			Platforms: []string{"linux/amd64"},
 		},
-		Image: map[string]BoxConfig{
+		Box: map[string]BoxConfig{
 			// Level 0: defines build
 			"arch": {
 				Base:  "docker.io/library/archlinux:latest",
@@ -593,7 +593,7 @@ func TestResolveImageBuildBaseChain(t *testing.T) {
 
 	tests := []struct {
 		name      string
-		imageName string
+		boxName   string
 		wantBuild []string
 	}{
 		{"level 0: defines build", "arch", []string{"pac"}},
@@ -603,9 +603,9 @@ func TestResolveImageBuildBaseChain(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			resolved, err := cfg.ResolveImage(tt.imageName, "test", testProjectDir(t), ResolveOpts{})
+			resolved, err := cfg.ResolveBox(tt.boxName, "test", testProjectDir(t), ResolveOpts{})
 			if err != nil {
-				t.Fatalf("ResolveImage() error = %v", err)
+				t.Fatalf("ResolveBox() error = %v", err)
 			}
 			if !reflect.DeepEqual(resolved.BuildFormats, tt.wantBuild) {
 				t.Errorf("BuildFormats = %v, want %v", resolved.BuildFormats, tt.wantBuild)

@@ -41,13 +41,13 @@ func (e MCPProvideEntry) GetSource() string { return e.Source }
 // filterOwnProvides removes entries injected by the given image (self-exclusion).
 // NOTE: No longer used in GlobalEnvForImage (replaced by podAwareEnvProvides).
 // Kept for removeBySource and other callers that need strict exclusion.
-func filterOwnProvides[T Named](entries []T, imageName string) []T {
-	if imageName == "" {
+func filterOwnProvides[T Named](entries []T, boxName string) []T {
+	if boxName == "" {
 		return entries
 	}
 	var result []T
 	for _, e := range entries {
-		if e.GetSource() != imageName {
+		if e.GetSource() != boxName {
 			result = append(result, e)
 		}
 	}
@@ -62,7 +62,7 @@ func filterOwnProvides[T Named](entries []T, imageName string) []T {
 //
 // `consumerKey` is the deploy.yml map key — base image name (e.g. "versa") or
 // image-with-instance (e.g. "versa/ecovoyage"). Using prefix-match here is a
-// bug: `isSameBaseImage("versa/ecovoyage", "versa")` returns true (deletion
+// bug: `isSameBaseBox("versa/ecovoyage", "versa")` returns true (deletion
 // semantics), which would let another instance's env_provides leak into the
 // base consumer's runtime env and trigger a second-order failure when
 // strings.ReplaceAll("charly-versa-ecovoyage", "charly-versa", "localhost") produces
@@ -90,11 +90,11 @@ func podAwareEnvProvides(entries []EnvProvideEntry, consumerKey, ctrName string)
 
 // removeBySource removes all entries injected by the given image.
 // Returns the filtered list and whether anything was removed.
-func removeBySource[T Named](entries []T, imageName string) ([]T, bool) {
+func removeBySource[T Named](entries []T, boxName string) ([]T, bool) {
 	var result []T
 	removed := false
 	for _, e := range entries {
-		if isSameBaseImage(e.GetSource(), imageName) {
+		if isSameBaseBox(e.GetSource(), boxName) {
 			removed = true
 		} else {
 			result = append(result, e)

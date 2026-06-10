@@ -121,9 +121,9 @@ func TestHostDeployTargetDryRunSystemPackages(t *testing.T) {
 		Layers:   filepath.Join(home, "installed", "layers"),
 		LockFile: filepath.Join(home, "installed", ".lock"),
 	}
-	dc, _, _, err := LoadBuildConfigForImage(repoRootDir(t))
+	dc, _, _, err := LoadBuildConfigForBox(repoRootDir(t))
 	if err != nil {
-		t.Fatalf("LoadBuildConfigForImage: %v", err)
+		t.Fatalf("LoadBuildConfigForBox: %v", err)
 	}
 	tgt := &LocalDeployTarget{
 		HostHome:    home,
@@ -182,9 +182,9 @@ func TestRenderTaskCommandCmdWithCtx(t *testing.T) {
 // per-format renderer emitted, by rendering each format's phase.install.host
 // cell from the REAL build.yml — a faithful-translation round-trip.
 func TestRenderHostPackageCommand(t *testing.T) {
-	dc, _, _, err := LoadBuildConfigForImage(repoRootDir(t))
+	dc, _, _, err := LoadBuildConfigForBox(repoRootDir(t))
 	if err != nil {
-		t.Fatalf("LoadBuildConfigForImage: %v", err)
+		t.Fatalf("LoadBuildConfigForBox: %v", err)
 	}
 	tests := []struct {
 		format   string
@@ -242,9 +242,9 @@ func TestRenderHostPackageCommand(t *testing.T) {
 // (the tailscale apt repo was never added). Loads the real build.yml, so a
 // regression in the deb phase.install.host template re-breaks this test.
 func TestRenderHostPackageCommandDebRepo(t *testing.T) {
-	dc, _, _, err := LoadBuildConfigForImage(repoRootDir(t))
+	dc, _, _, err := LoadBuildConfigForBox(repoRootDir(t))
 	if err != nil {
-		t.Fatalf("LoadBuildConfigForImage: %v", err)
+		t.Fatalf("LoadBuildConfigForBox: %v", err)
 	}
 	s := &SystemPackagesStep{
 		Format:   "deb",
@@ -286,9 +286,9 @@ func TestRenderHostPackageCommandDebRepo(t *testing.T) {
 // config-driven package removal in reverse_ops.go) renders the exact command
 // the deleted reversePackageRemove switch produced.
 func TestRenderHostUninstallTemplate(t *testing.T) {
-	dc, _, _, err := LoadBuildConfigForImage(repoRootDir(t))
+	dc, _, _, err := LoadBuildConfigForBox(repoRootDir(t))
 	if err != nil {
-		t.Fatalf("LoadBuildConfigForImage: %v", err)
+		t.Fatalf("LoadBuildConfigForBox: %v", err)
 	}
 	cases := []struct {
 		format   string

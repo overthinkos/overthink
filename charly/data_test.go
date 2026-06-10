@@ -88,9 +88,9 @@ func (c *recordedCall) containsSubstring(s string) bool {
 
 func makeJupyterMeta(dataImage bool) *BoxMetadata {
 	return &BoxMetadata{
-		Image: "jupyter",
-		UID:   1000,
-		GID:   1000,
+		Box: "jupyter",
+		UID: 1000,
+		GID: 1000,
 		DataEntries: []LabelDataEntry{
 			{
 				Volume:  "workspace",
@@ -104,7 +104,7 @@ func makeJupyterMeta(dataImage bool) *BoxMetadata {
 
 func TestProvisionDataNoEntries(t *testing.T) {
 	fake := installFakeRunner(t)
-	meta := &BoxMetadata{Image: "jupyter"}
+	meta := &BoxMetadata{Box: "jupyter"}
 
 	n, err := provisionData("podman", "jupyter-img", meta, nil, nil, "jupyter", "", DataProvisionInitial)
 	if err != nil {
@@ -307,9 +307,9 @@ func TestProvisionDataMixed(t *testing.T) {
 	}
 
 	meta := &BoxMetadata{
-		Image: "multi",
-		UID:   1000,
-		GID:   1000,
+		Box: "multi",
+		UID: 1000,
+		GID: 1000,
 		DataEntries: []LabelDataEntry{
 			{Volume: "workspace", Staging: "/data/workspace/", Layer: "a"},
 			{Volume: "models", Staging: "/data/models/", Layer: "b"},
@@ -367,7 +367,7 @@ func TestProvisionDataUnknownVolumeWarns(t *testing.T) {
 	t.Cleanup(func() { os.Stderr = oldStderr })
 
 	meta := &BoxMetadata{
-		Image: "jupyter",
+		Box: "jupyter",
 		DataEntries: []LabelDataEntry{
 			{Volume: "typo-name", Staging: "/data/typo/", Layer: "notebook-templates"},
 		},
@@ -483,9 +483,9 @@ func TestProvisionDataEntryDestSubdir(t *testing.T) {
 	fake := installFakeRunner(t)
 	hostDir := t.TempDir()
 	meta := &BoxMetadata{
-		Image: "jupyter",
-		UID:   1000,
-		GID:   1000,
+		Box: "jupyter",
+		UID: 1000,
+		GID: 1000,
 		DataEntries: []LabelDataEntry{
 			{
 				Volume:  "workspace",

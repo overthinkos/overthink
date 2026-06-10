@@ -22,6 +22,23 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-10 — docs: make the `image:`(OCI) vs `box:`(candybox) distinction clear in the skills (Phase 1)
+
+Per the disambiguation rule **`image:` = an upstream/OCI Docker image, `box:` = a charly
+candybox**. The candy-box rebrand renamed the box-map key, the box composition field, the
+deps field, and the MCP/CLI verbs — but the skills were never swept. **179** `plugins`
+files updated: `images:` / `` `image:` entry `` / `` `image.<name>` `` / `kind:image` →
+`box:` / `box.`; `layers:` / `layer:` → `candy:`; `depends:` → `require:`; the MCP/CLI verb
+names `image.<verb>` → `box.<verb>` (`image.new.layer` → `box.new.candy`) and
+`layer.<verb>` → `candy.<verb>`; the box field paths `image.vm`/`bootc`/`libvirt`/
+`capabilities`/`deploy` → `box.<field>`; prose `Image-level`/`layer aliases`/`image-first`
+→ `Box-level`/`candy aliases`/`box-first`. **KEPT** (106 OCI-image refs): `base: <docker>`,
+the deploy/pod `image:` field, `builder_image:`/`cloud_image:`/`data_image:`, `BASE_IMAGE`,
+"an image", "system image". Verified: zero residual box-meaning `image` refs; OCI refs
+intact; no double-application; JSON valid. plugins `80d5e9e..07a1052`; main bumps the
+gitlink. **Phase 1 of 2** (docs); the Go `Image*`→`Box` identifier rename (candybox-meaning
+only, keeping OCI `Image*`) + the main-repo/submodule docs+comments are the remaining work.
+
 ### 2026-06-10 — docs: complete the single-filename rebrand sweep in the skills (`box.yml`/`candy.yml` → `charly.yml`)
 
 The single-filename cutover made `charly.yml` the ONE manifest

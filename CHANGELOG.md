@@ -22,6 +22,25 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-10 — fix(migrate): make single-filename `rewriteDiscover` idempotent for candy-only projects
+
+The single-filename migrator's `rewriteDiscover` clobbered a project's discover to
+`[box, candy]` whenever it wasn't EXACTLY that — so a real `charly migrate` on the
+main repo (whose discover is candy-only after the box inversion: it owns no boxes)
+would wrongly re-add a `box` discover path, re-introducing box discovery over the
+`box/<distro>` submodule roots. The idempotency guard `discoverIsBoxCandy` required
+exactly two specs (box AND candy); it is replaced by `discoverIsSingleFilenameForm`,
+which treats ANY flat scan-spec discover whose specs all use the `charly.yml`
+manifest (explicit or the default) as already-migrated — regardless of which / how
+many paths. A pre-single-filename discover still carries an explicit `candy.yml` /
+`box.yml` manifest (emitted by the earlier `discover-flatten` step), so it fails the
+check and IS rewritten to the box+candy default; only an already-single-filename
+discover is now a no-op. `charly migrate --dry-run` on main now reports "nothing to
+migrate" instead of "would apply single-filename" (the pre-existing artifact noted in
+the box-inversion entry below). No schema bump (a migrator idempotency fix); covered
+by `TestMigrateSingleFilename_CandyOnlyDiscoverPreserved`, proven on a live
+`charly migrate` of a candy-only fixture (no-op, no box path added).
+
 ### 2026-06-10 — refactor!: relocate the 5 distro submodule mounts `image/<distro>` → `box/<distro>`
 
 After the box inversion (below) the `image/` mount directory was misnamed: those

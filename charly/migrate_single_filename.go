@@ -376,7 +376,7 @@ func rewriteDiscover(rootMap *yaml.Node) bool {
 			want)
 		return true
 	}
-	if discoverIsBoxCandy(disc) {
+	if discoverIsSingleFilenameForm(disc) {
 		return false
 	}
 	*disc = *want
@@ -395,25 +395,32 @@ func buildDiscoverNode() *yaml.Node {
 	return &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq", Content: []*yaml.Node{mk("box"), mk("candy")}}
 }
 
-func discoverIsBoxCandy(disc *yaml.Node) bool {
-	if disc.Kind != yaml.SequenceNode || len(disc.Content) != 2 {
+// discoverIsSingleFilenameForm reports whether disc is ALREADY in the flat
+// single-filename form: a non-empty sequence of {path, ...} mappings, EVERY spec
+// using the charly.yml manifest (explicit, or unset = the charly.yml default).
+// It does NOT require any particular path set — a project may legitimately
+// discover only candy (it owns no boxes — e.g. the main repo after the box
+// inversion), only box, or both. A pre-single-filename discover carries an
+// explicit candy.yml / box.yml manifest (emitted by the discover-flatten step),
+// so it fails this check and IS rewritten to the box+candy default; an
+// already-migrated discover is a no-op — keeping the migration idempotent and
+// never clobbering a project's deliberate path set.
+func discoverIsSingleFilenameForm(disc *yaml.Node) bool {
+	if disc.Kind != yaml.SequenceNode || len(disc.Content) == 0 {
 		return false
 	}
-	paths := map[string]bool{}
 	for _, spec := range disc.Content {
 		if spec.Kind != yaml.MappingNode {
 			return false
 		}
-		pv := nodeMapValue(spec, "path")
-		if pv == nil {
+		if nodeMapValue(spec, "path") == nil {
 			return false
 		}
 		if mv := nodeMapValue(spec, "manifest"); mv != nil && mv.Value != UnifiedFileName {
-			return false
+			return false // a non-charly.yml manifest -> pre-single-filename
 		}
-		paths[pv.Value] = true
 	}
-	return paths["box"] && paths["candy"]
+	return true
 }
 
 // docRootMapping returns the root MappingNode of a parsed document, or nil.

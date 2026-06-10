@@ -131,6 +131,41 @@ vm:
 	}
 }
 
+// TestMigrateSingleFilename_CandyOnlyDiscoverPreserved proves the migration is
+// idempotent on a project that deliberately discovers ONLY candy (it owns no
+// boxes — e.g. the main repo after the box inversion). rewriteDiscover must NOT
+// clobber the already-single-filename candy-only discover back to [box, candy].
+func TestMigrateSingleFilename_CandyOnlyDiscoverPreserved(t *testing.T) {
+	dir := t.TempDir()
+	writeFixture(t, dir, "charly.yml", `version: 2026.160.1301
+discover:
+  - path: candy
+    recursive: true
+defaults:
+  registry: ghcr.io/example
+`)
+	writeFixture(t, dir, "candy/foo/charly.yml", `candy:
+  name: foo
+  version: 2026.144.1443
+`)
+
+	changed, err := MigrateSingleFilename(dir, "", false)
+	if err != nil {
+		t.Fatalf("MigrateSingleFilename: %v", err)
+	}
+	if len(changed) != 0 {
+		t.Errorf("candy-only project is not a no-op (rewriteDiscover clobbered the discover?): %v", changed)
+	}
+	root, _ := os.ReadFile(filepath.Join(dir, "charly.yml"))
+	rs := string(root)
+	if strings.Contains(rs, "path: box") {
+		t.Errorf("candy-only discover was clobbered to include a box path:\n%s", rs)
+	}
+	if !strings.Contains(rs, "path: candy") {
+		t.Errorf("candy discover path was lost:\n%s", rs)
+	}
+}
+
 // TestMigrateSingleFilename_InlineBoxSplit covers the bootc case: an inline box:
 // map in charly.yml is split into box/<name>/charly.yml and removed from the root.
 func TestMigrateSingleFilename_InlineBoxSplit(t *testing.T) {

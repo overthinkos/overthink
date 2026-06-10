@@ -14,9 +14,9 @@ import:
     # (import: []) and cachyos imports the `arch` namespace; none imports main back
     # (they reach main's shared candies via @github refs), so the former
     # main↔cachyos / main↔fedora mutual cycles are dissolved.
-    - arch: '@github.com/overthinkos/arch:v2026.161.0010'
-    - cachyos: '@github.com/overthinkos/cachyos:v2026.161.0053'
-    - fedora: '@github.com/overthinkos/fedora:v2026.161.0210'
+    - arch: '@github.com/overthinkos/arch:v2026.161.0830'
+    - cachyos: '@github.com/overthinkos/cachyos:v2026.161.0830'
+    - fedora: '@github.com/overthinkos/fedora:v2026.161.0830'
 # Main owns NO boxes after the 2026-06 box inversion — only the shared candy
 # library + the inline eval/vm/local/k8s orchestration. Discover candies only.
 discover:

@@ -22,6 +22,20 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-10 — docs: complete the `image/<distro>` → `box/<distro>` mount-rename sweep into the 5 distro submodules
+
+The mount-rename cutover (below) was superproject-only; the 5 distro submodule repos
+still described themselves as "mounted at `image/<distro>`" and gave
+`charly -C image/<distro> image build …` examples — broken twice over (the stale mount
+path AND the rebranded `charly image` verb, which is now `charly box`). Each
+submodule's signpost `CLAUDE.md` header, `README.md`, and `charly.yml` comments are
+swept to `box/<distro>` + `charly box <verb>` (`box/arch` also fixes a cross-repo
+`image/cachyos` reference in `cuda-arch-builder`'s comment). Each submodule is
+re-tagged `v2026.161.0830`; main re-pins its `arch`/`cachyos`/`fedora` `@github`
+imports and bumps all five gitlinks to the doc commits. Box content is byte-identical
+(comment-only), so `charly box validate` fetches the new tags and resolves
+zero-warnings. Completes the R5 obligation the mount rename deferred as separable.
+
 ### 2026-06-10 — refactor(migrate): consolidate the 7 dir-walk skip-lists into one submodule-aware helper
 
 Five project migrators (`legacy_local_images`, `migrate_local_images`,

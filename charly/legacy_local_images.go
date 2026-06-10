@@ -40,8 +40,7 @@ func scanLegacyLocalImagesBlocks(dir string) []LegacyImagesBlock {
 			return err
 		}
 		if info.IsDir() {
-			base := filepath.Base(path)
-			if base == ".git" || base == "node_modules" || base == ".build" || base == ".cache" || base == ".eval" || base == "plugins" {
+			if migrateSkipDir(path, dir) {
 				return filepath.SkipDir
 			}
 			return nil

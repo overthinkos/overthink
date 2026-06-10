@@ -86,8 +86,7 @@ func MigrateRequireImage(cwd string, dryRun bool, includeHostFile bool) ([]Requi
 			return err
 		}
 		if info.IsDir() {
-			base := filepath.Base(path)
-			if base == ".git" || base == "node_modules" || base == ".build" || base == ".cache" || base == ".eval" || base == "plugins" {
+			if migrateSkipDir(path, cwd) {
 				return filepath.SkipDir
 			}
 			return nil

@@ -26,10 +26,13 @@ func MigrateDescription(opts MigrateDescriptionOpts) ([]string, error) {
 			return werr
 		}
 		if info.IsDir() {
-			// Skip hidden / dependency dirs that shouldn't carry entity YAML.
-			name := info.Name()
-			if name == ".git" || name == ".build" || name == "node_modules" ||
-				name == "bin" || name == "vendor" || name == ".claude" {
+			// Skip the shared build-artifact / cache + nested-submodule set, plus
+			// bin/vendor/.claude which can't carry entity YAML either.
+			if migrateSkipDir(path, opts.Dir) {
+				return filepath.SkipDir
+			}
+			switch info.Name() {
+			case "bin", "vendor", ".claude":
 				return filepath.SkipDir
 			}
 			return nil

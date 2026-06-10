@@ -39,9 +39,9 @@ func MigrateTargetLocal(dir string, dryRun bool) ([]string, error) {
 			return err
 		}
 		if info.IsDir() {
-			// Skip vendor directories that aren't authored by the user.
-			base := filepath.Base(path)
-			if base == ".git" || base == "node_modules" || base == ".build" || base == ".cache" || base == ".eval" || base == "plugins" {
+			// Skip build-artifact / cache dirs + nested submodules (each migrates
+			// in its own repo) — not authored here.
+			if migrateSkipDir(path, dir) {
 				return filepath.SkipDir
 			}
 			return nil
@@ -193,8 +193,7 @@ func renameHostYmlFiles(dir string, dryRun bool) ([]string, error) {
 			return err
 		}
 		if info.IsDir() {
-			base := filepath.Base(path)
-			if base == ".git" || base == "node_modules" || base == ".build" || base == ".cache" || base == ".eval" || base == "plugins" {
+			if migrateSkipDir(path, dir) {
 				return filepath.SkipDir
 			}
 			return nil

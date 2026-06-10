@@ -22,6 +22,25 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-10 — refactor(migrate): consolidate the 7 dir-walk skip-lists into one submodule-aware helper
+
+Five project migrators (`legacy_local_images`, `migrate_local_images`,
+`migrate_require_image`, `migrate_target_local` ×2) hardcoded an identical
+`.git/node_modules/.build/.cache/.eval/plugins` dir-skip list and DESCENDED into
+git submodules (skipping only the literal `plugins`), so a superproject
+`charly migrate` would rewrite the `box/<distro>` submodules' own files. They — plus
+`migrate_description` and `migrate_entity_version` — now route through ONE shared
+`migrateSkipDir` (`charly/migrate_walk.go`): it skips the common build-artifact /
+cache dirs by name AND any nested git submodule by STRUCTURE (`isNestedGitRepo`,
+moved here from `migrate_entity_version.go`), with a walk-root guard so the
+project's own top-level files stay in scope. The hardcoded `plugins` / `image` dir
+names are gone — a submodule is skipped wherever it is mounted. Walkers with extra
+needs layer them on top (entity-version ALSO skips `output`/`testdata`; the
+description scaffolder ALSO skips `bin`/`vendor`/`.claude`). Proven on a live
+`charly migrate`: a legacy `target: host` in the ROOT migrates to `target: local`
+while the SAME in a `box/` submodule is left untouched (no `.bak`, never rewritten).
+No schema bump (a walk-correctness + R3 refactor); covered by `TestMigrateSkipDir`.
+
 ### 2026-06-10 — fix(migrate): make single-filename `rewriteDiscover` idempotent for candy-only projects
 
 The single-filename migrator's `rewriteDiscover` clobbered a project's discover to

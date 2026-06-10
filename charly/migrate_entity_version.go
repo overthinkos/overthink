@@ -55,22 +55,14 @@ func MigrateEntityVersion(cwd, seed string, dryRun bool) ([]EntityVersionResult,
 			return err
 		}
 		if info.IsDir() {
-			switch filepath.Base(path) {
-			// Skip build-artifact / foreign dirs + testdata (Go convention:
-			// hand-authored fixtures, never tool-rewritten).
-			case ".git", "node_modules", ".build", ".cache", ".eval", "output", "testdata":
+			if migrateSkipDir(path, cwd) {
 				return filepath.SkipDir
 			}
-			// Skip any NESTED git repo — a submodule checkout (plugins, the
-			// box/<distro> distro submodules, pkg/*) owns its OWN `charly migrate`
-			// (or remote-cache auto-migration when fetched), so the superproject
-			// migration must not descend into it. Detected generically by a
-			// nested `.git`, independent of WHERE a submodule is mounted (a
-			// hardcoded mount-name list would not survive a submodule mount
-			// relocation) — and a normal project's own box/<name> dirs (not git
-			// repos) are still walked.
-			// The cwd guard keeps the walk root's own `.git` in scope.
-			if path != cwd && isNestedGitRepo(path) {
+			// Backfilling a version: into a hand-authored Go test fixture (or a
+			// build-output dir) would corrupt it — entity-version skips
+			// output/testdata ON TOP OF the shared build-artifact + submodule set.
+			switch filepath.Base(path) {
+			case "output", "testdata":
 				return filepath.SkipDir
 			}
 			return nil
@@ -92,18 +84,6 @@ func MigrateEntityVersion(cwd, seed string, dryRun bool) ([]EntityVersionResult,
 	}
 	sort.Slice(results, func(i, j int) bool { return results[i].Path < results[j].Path })
 	return results, nil
-}
-
-// isNestedGitRepo reports whether dir is the root of a SEPARATE git repo — a
-// submodule checkout or a nested clone. Such a dir carries a `.git` entry: a
-// FILE (a `gitdir:` pointer) for a submodule or linked worktree, a DIR for a
-// plain clone. The superproject migration walker uses this to avoid descending
-// into a repo that owns its own `charly migrate`, regardless of where it is
-// mounted — so renaming a submodule mount never strands the skip, and a
-// normal project's own box/<name> box dirs (not git repos) are still migrated.
-func isNestedGitRepo(dir string) bool {
-	_, err := os.Stat(filepath.Join(dir, ".git"))
-	return err == nil
 }
 
 func migrateEntityVersionOneFile(path, seed string, dryRun bool) (*EntityVersionResult, error) {

@@ -14,7 +14,7 @@ import (
 //     Deploy section
 //   - image-level DeployTests → Deploy section with deploy-default origin
 func TestCollectTests_Sections(t *testing.T) {
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"redis": {
 			Name: "redis",
 			tests: []Check{
@@ -32,7 +32,7 @@ func TestCollectTests_Sections(t *testing.T) {
 		Box: map[string]BoxConfig{
 			"redis-ml": {
 				Base:    "base",
-				Layer:   []string{"redis"},
+				Candy:   []string{"redis"},
 				Enabled: boolPtr(true),
 				Eval: []Check{
 					{Command: "supervisord -v"},
@@ -44,7 +44,7 @@ func TestCollectTests_Sections(t *testing.T) {
 			},
 			"base": {
 				Enabled: boolPtr(true),
-				Layer:   []string{"base"},
+				Candy:   []string{"base"},
 			},
 		},
 	}
@@ -56,17 +56,17 @@ func TestCollectTests_Sections(t *testing.T) {
 
 	// Layer section: redis (port), base (file). base comes after redis because
 	// it's deeper in the chain (layer order within each level, then parent).
-	if len(got.Layer) != 2 {
-		t.Fatalf("layer section has %d entries, want 2: %+v", len(got.Layer), got.Layer)
+	if len(got.Candy) != 2 {
+		t.Fatalf("layer section has %d entries, want 2: %+v", len(got.Candy), got.Candy)
 	}
-	if got.Layer[0].Origin != "candy:redis" || got.Layer[0].Port != 6379 {
-		t.Errorf("layer[0] wrong: %+v", got.Layer[0])
+	if got.Candy[0].Origin != "candy:redis" || got.Candy[0].Port != 6379 {
+		t.Errorf("layer[0] wrong: %+v", got.Candy[0])
 	}
-	if got.Layer[0].Scope != "build" {
-		t.Errorf("layer[0].scope should default to build, got %q", got.Layer[0].Scope)
+	if got.Candy[0].Scope != "build" {
+		t.Errorf("layer[0].scope should default to build, got %q", got.Candy[0].Scope)
 	}
-	if got.Layer[1].Origin != "candy:base" || got.Layer[1].File != "/etc/os-release" {
-		t.Errorf("layer[1] wrong: %+v", got.Layer[1])
+	if got.Candy[1].Origin != "candy:base" || got.Candy[1].File != "/etc/os-release" {
+		t.Errorf("layer[1] wrong: %+v", got.Candy[1])
 	}
 
 	// Image section: supervisord -v
@@ -92,9 +92,9 @@ func TestCollectTests_Sections(t *testing.T) {
 
 // No tests anywhere → nil (so the label is omitted from the image entirely).
 func TestCollectTests_EmptyReturnsNil(t *testing.T) {
-	layers := map[string]*Layer{"l": {Name: "l"}}
+	layers := map[string]*Candy{"l": {Name: "l"}}
 	cfg := &Config{Box: map[string]BoxConfig{
-		"i": {Enabled: boolPtr(true), Layer: []string{"l"}},
+		"i": {Enabled: boolPtr(true), Candy: []string{"l"}},
 	}}
 	if got := CollectEval(cfg, layers, "i"); got != nil {
 		t.Errorf("expected nil, got %+v", got)
@@ -104,18 +104,18 @@ func TestCollectTests_EmptyReturnsNil(t *testing.T) {
 // Regression: an image whose layer list uses RAW @github.com/...:version refs
 // (the submodule git-ref composition pattern used by box/fedora, box/cachyos,
 // etc.) must still collect the referenced layers' eval blocks. Before the
-// BareRef chokepoint fix in ExpandLayer (charly/graph.go), CollectEval walked the
+// BareRef chokepoint fix in ExpandCandy (charly/graph.go), CollectEval walked the
 // raw refs against the BareRef-keyed layer map, missed every one, silently
 // swallowed the resulting "unknown layer" error, and collected ZERO
 // layer-level checks — so every @github-ref-composed image shipped with
 // image-level checks only (e.g. a @github-ref-composed desktop box: 1 instead of ~77). The
 // same chokepoint feeds CollectHooks/Shell/Descriptions/Security/Volumes/Alias,
 // so this single test guards the whole family.
-func TestCollectEval_RemoteRefLayersResolve(t *testing.T) {
+func TestCollectEval_RemoteRefCandiesResolve(t *testing.T) {
 	// Remote layers are keyed by their BareRef (no @ prefix, no :version
-	// suffix) — see ScanRemoteLayer in layers.go.
+	// suffix) — see ScanRemoteCandy in layers.go.
 	const bareRef = "github.com/overthinkos/overthink/layers/tailscale"
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		bareRef: {
 			Name:  "tailscale",
 			tests: []Check{{File: "/usr/bin/tailscale", Exists: ptrBool(true)}},
@@ -127,7 +127,7 @@ func TestCollectEval_RemoteRefLayersResolve(t *testing.T) {
 				Enabled: boolPtr(true),
 				// RAW @github ref with :version — exactly as the submodule
 				// charly.yml writes it.
-				Layer: []string{"@" + bareRef + ":v2026.141.1600"},
+				Candy: []string{"@" + bareRef + ":v2026.141.1600"},
 			},
 		},
 	}
@@ -136,14 +136,14 @@ func TestCollectEval_RemoteRefLayersResolve(t *testing.T) {
 	if got == nil {
 		t.Fatal("expected non-nil LabelEvalSet — the @github-ref layer's eval block was dropped (BareRef regression)")
 	}
-	if len(got.Layer) != 1 {
-		t.Fatalf("layer section has %d entries, want 1 (the tailscale check): %+v", len(got.Layer), got.Layer)
+	if len(got.Candy) != 1 {
+		t.Fatalf("layer section has %d entries, want 1 (the tailscale check): %+v", len(got.Candy), got.Candy)
 	}
-	if got.Layer[0].File != "/usr/bin/tailscale" {
-		t.Errorf("collected wrong check: %+v", got.Layer[0])
+	if got.Candy[0].File != "/usr/bin/tailscale" {
+		t.Errorf("collected wrong check: %+v", got.Candy[0])
 	}
-	if got.Layer[0].Origin != "candy:"+bareRef {
-		t.Errorf("origin = %q, want %q", got.Layer[0].Origin, "candy:"+bareRef)
+	if got.Candy[0].Origin != "candy:"+bareRef {
+		t.Errorf("origin = %q, want %q", got.Candy[0].Origin, "candy:"+bareRef)
 	}
 }
 
@@ -185,7 +185,7 @@ func TestMergeDeployTests(t *testing.T) {
 // ExtractMetadata parses — the two must stay round-trippable.
 func TestLabelTests_JSONRoundTrip(t *testing.T) {
 	original := &LabelEvalSet{
-		Layer: []Check{
+		Candy: []Check{
 			{
 				File:     "/usr/bin/redis-server",
 				Exists:   ptrBool(true),
@@ -230,9 +230,9 @@ func TestLabelTests_JSONRoundTrip(t *testing.T) {
 	}
 
 	// Per-section length parity.
-	if len(parsed.Layer) != 2 || len(parsed.Box) != 1 || len(parsed.Deploy) != 1 {
+	if len(parsed.Candy) != 2 || len(parsed.Box) != 1 || len(parsed.Deploy) != 1 {
 		t.Fatalf("section lengths changed: layer=%d image=%d deploy=%d",
-			len(parsed.Layer), len(parsed.Box), len(parsed.Deploy))
+			len(parsed.Candy), len(parsed.Box), len(parsed.Deploy))
 	}
 
 	// Spot-check a matcher survives the round-trip intact — including the
@@ -243,9 +243,9 @@ func TestLabelTests_JSONRoundTrip(t *testing.T) {
 	}
 
 	// Origin annotation survives — critical for failure reports.
-	if parsed.Layer[0].Origin != "candy:redis" || parsed.Deploy[0].Origin != "deploy-default" {
+	if parsed.Candy[0].Origin != "candy:redis" || parsed.Deploy[0].Origin != "deploy-default" {
 		t.Errorf("origin annotations lost: layer[0]=%q deploy[0]=%q",
-			parsed.Layer[0].Origin, parsed.Deploy[0].Origin)
+			parsed.Candy[0].Origin, parsed.Deploy[0].Origin)
 	}
 
 	// Parameterized variables in strings survive verbatim (must NOT be
@@ -255,16 +255,16 @@ func TestLabelTests_JSONRoundTrip(t *testing.T) {
 	}
 
 	// Pointer fields survive.
-	if parsed.Layer[0].Exists == nil || !*parsed.Layer[0].Exists {
-		t.Errorf("Exists *bool lost or changed: %v", parsed.Layer[0].Exists)
+	if parsed.Candy[0].Exists == nil || !*parsed.Candy[0].Exists {
+		t.Errorf("Exists *bool lost or changed: %v", parsed.Candy[0].Exists)
 	}
-	if parsed.Layer[1].Listening == nil || !*parsed.Layer[1].Listening {
+	if parsed.Candy[1].Listening == nil || !*parsed.Candy[1].Listening {
 		t.Errorf("Listening *bool lost or changed")
 	}
 
 	// Numeric fields survive.
-	if parsed.Layer[1].Port != 6379 {
-		t.Errorf("Port lost: %d", parsed.Layer[1].Port)
+	if parsed.Candy[1].Port != 6379 {
+		t.Errorf("Port lost: %d", parsed.Candy[1].Port)
 	}
 	if parsed.Deploy[0].Status != 200 {
 		t.Errorf("Status lost: %d", parsed.Deploy[0].Status)

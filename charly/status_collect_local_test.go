@@ -69,18 +69,18 @@ func TestLocalCollector_EmptyLedgerNoRows(t *testing.T) {
 	}
 }
 
-// A plain host LocalDeployTarget writes only LayerRecords (deploys/ stays
+// A plain host LocalDeployTarget writes only CandyRecords (deploys/ stays
 // empty). The collector must synthesize one row per deploy-id from the
 // deployed_by sets — this is the real-world host case proven on live disk.
-func TestLocalCollector_SynthesizesFromLayerRecords(t *testing.T) {
+func TestLocalCollector_SynthesizesFromCandyRecords(t *testing.T) {
 	paths := redirectLocalLedger(t, true)
-	writeLayer(t, paths, &CandyRecord{
-		Layer:      "ripgrep",
+	writeCandy(t, paths, &CandyRecord{
+		Candy:      "ripgrep",
 		DeployedBy: []string{"deploy-A"},
 		DeployedAt: "2026-05-30T10:00:00Z",
 	})
-	writeLayer(t, paths, &CandyRecord{
-		Layer:      "uv",
+	writeCandy(t, paths, &CandyRecord{
+		Candy:      "uv",
 		DeployedBy: []string{"deploy-A", "deploy-B"},
 		DeployedAt: "2026-05-31T12:00:00Z",
 	})
@@ -121,23 +121,23 @@ func TestLocalCollector_SynthesizesFromLayerRecords(t *testing.T) {
 }
 
 // An explicit DeployRecord (VM-target local deploy, or a future host write) is
-// honored; its layer set + add_layer merge, and a LayerRecord referencing the
+// honored; its layer set + add_layer merge, and a CandyRecord referencing the
 // same deploy-id must NOT create a second row.
 func TestLocalCollector_DeployRecordUnionNoDoubleCount(t *testing.T) {
 	paths := redirectLocalLedger(t, true)
 	if err := WriteDeployRecord(paths, &DeployRecord{
 		DeployID:   "deploy-X",
 		Target:     "vm:eval-arch-vm",
-		Layer:      []string{"base", "charly"},
-		AddLayer:   []string{"sshkeys"},
+		Candy:      []string{"base", "charly"},
+		AddCandy:   []string{"sshkeys"},
 		DeployedAt: "2026-05-29T08:00:00Z",
 	}); err != nil {
 		t.Fatalf("WriteDeployRecord: %v", err)
 	}
-	// A LayerRecord for the SAME deploy-id, plus one extra layer not in the
+	// A CandyRecord for the SAME deploy-id, plus one extra layer not in the
 	// deploy record's lists.
-	writeLayer(t, paths, &CandyRecord{
-		Layer:      "extra-layer",
+	writeCandy(t, paths, &CandyRecord{
+		Candy:      "extra-layer",
 		DeployedBy: []string{"deploy-X"},
 		DeployedAt: "2026-05-29T09:00:00Z",
 	})
@@ -209,10 +209,10 @@ func TestLocalDeployLabel(t *testing.T) {
 	}
 }
 
-// writeLayer serializes a LayerRecord into the temp ledger's layers/ dir.
-func writeLayer(t *testing.T, paths *LedgerPaths, rec *CandyRecord) {
+// writeCandy serializes a CandyRecord into the temp ledger's layers/ dir.
+func writeCandy(t *testing.T, paths *LedgerPaths, rec *CandyRecord) {
 	t.Helper()
-	if err := WriteLayerRecord(paths, rec); err != nil {
-		t.Fatalf("WriteLayerRecord(%s): %v", rec.Layer, err)
+	if err := WriteCandyRecord(paths, rec); err != nil {
+		t.Fatalf("WriteCandyRecord(%s): %v", rec.Candy, err)
 	}
 }

@@ -95,7 +95,7 @@ func makeJupyterMeta(dataImage bool) *BoxMetadata {
 			{
 				Volume:  "workspace",
 				Staging: "/data/workspace/",
-				Layer:   "notebook-templates",
+				Candy:   "notebook-templates",
 			},
 		},
 		DataImage: dataImage,
@@ -311,8 +311,8 @@ func TestProvisionDataMixed(t *testing.T) {
 		UID: 1000,
 		GID: 1000,
 		DataEntries: []LabelDataEntry{
-			{Volume: "workspace", Staging: "/data/workspace/", Layer: "a"},
-			{Volume: "models", Staging: "/data/models/", Layer: "b"},
+			{Volume: "workspace", Staging: "/data/workspace/", Candy: "a"},
+			{Volume: "models", Staging: "/data/models/", Candy: "b"},
 		},
 	}
 	bindMounts := []ResolvedBindMount{
@@ -369,7 +369,7 @@ func TestProvisionDataUnknownVolumeWarns(t *testing.T) {
 	meta := &BoxMetadata{
 		Box: "jupyter",
 		DataEntries: []LabelDataEntry{
-			{Volume: "typo-name", Staging: "/data/typo/", Layer: "notebook-templates"},
+			{Volume: "typo-name", Staging: "/data/typo/", Candy: "notebook-templates"},
 		},
 	}
 	bindMounts := []ResolvedBindMount{{Name: "workspace", HostPath: t.TempDir()}}
@@ -490,7 +490,7 @@ func TestProvisionDataEntryDestSubdir(t *testing.T) {
 			{
 				Volume:  "workspace",
 				Staging: "/data/workspace/course/",
-				Layer:   "notebook-course",
+				Candy:   "notebook-course",
 				Dest:    "course",
 			},
 		},

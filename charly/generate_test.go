@@ -13,7 +13,7 @@ import (
 // have `pixi.toml` — even if `pixi` is NOT a top-level layer.
 func TestCollectBuilderRuntimeEnv_TriggeredEmitsRuntimeEnv(t *testing.T) {
 	g := &Generator{
-		Layers: map[string]*Layer{
+		Candies: map[string]*Candy{
 			"jupyter": {Name: "jupyter", HasPixiToml: true},
 		},
 	}
@@ -48,7 +48,7 @@ func TestCollectBuilderRuntimeEnv_TriggeredEmitsRuntimeEnv(t *testing.T) {
 // would inherit pixi env even when it has no Python in it.
 func TestCollectBuilderRuntimeEnv_NotTriggered(t *testing.T) {
 	g := &Generator{
-		Layers: map[string]*Layer{
+		Candies: map[string]*Candy{
 			"chrome": {Name: "chrome"}, // no pixi.toml, no pyproject.toml
 		},
 	}
@@ -71,13 +71,13 @@ func TestCollectBuilderRuntimeEnv_NotTriggered(t *testing.T) {
 	}
 }
 
-// TestCollectBuilderRuntimeEnv_MultipleLayers verifies that even when
+// TestCollectBuilderRuntimeEnv_MultipleCandies verifies that even when
 // many layers trigger the same builder (a future Python-heavy image
 // where every layer has its own pixi.toml), the builder is counted
 // once — no duplicate ENV PATH entries.
-func TestCollectBuilderRuntimeEnv_MultipleLayers(t *testing.T) {
+func TestCollectBuilderRuntimeEnv_MultipleCandies(t *testing.T) {
 	g := &Generator{
-		Layers: map[string]*Layer{
+		Candies: map[string]*Candy{
 			"a": {Name: "a", HasPixiToml: true},
 			"b": {Name: "b", HasPixiToml: true},
 			"c": {Name: "c", HasPixiToml: true},
@@ -104,7 +104,7 @@ func TestCollectBuilderRuntimeEnv_MultipleLayers(t *testing.T) {
 // path through `LoadConfig` (test mode without build.yml) leaves
 // BuilderConfig nil. Don't panic.
 func TestCollectBuilderRuntimeEnv_NilBuilderConfig(t *testing.T) {
-	g := &Generator{Layers: map[string]*Layer{"x": {Name: "x", HasPixiToml: true}}}
+	g := &Generator{Candies: map[string]*Candy{"x": {Name: "x", HasPixiToml: true}}}
 	img := &ResolvedBox{Home: "/home/user", BuilderConfig: nil}
 	got := g.collectBuilderRuntimeEnv([]string{"x"}, img)
 	if got != nil {
@@ -153,7 +153,7 @@ func TestGenerateTraefikRoutes(t *testing.T) {
 
 	g := &Generator{
 		BuildDir: tmpDir,
-		Layers: map[string]*Layer{
+		Candies: map[string]*Candy{
 			"traefik": {
 				Name:  "traefik",
 				tasks: []Task{{Cmd: "true"}},
@@ -211,7 +211,7 @@ func TestGenerateRouteWithoutTraefik_NoTraefikRoutes(t *testing.T) {
 	g := &Generator{
 		BuildDir: tmpDir,
 		Config:   &Config{},
-		Layers: map[string]*Layer{
+		Candies: map[string]*Candy{
 			"svc": {
 				Name:  "svc",
 				tasks: []Task{{Cmd: "true"}},
@@ -226,7 +226,7 @@ func TestGenerateRouteWithoutTraefik_NoTraefikRoutes(t *testing.T) {
 				Registry:       "ghcr.io/test",
 				Tag:            "latest",
 				FullTag:        "ghcr.io/test/test-box:latest",
-				Layer:          []string{"svc"},
+				Candy:          []string{"svc"},
 				Pkg:            "rpm",
 				BuildFormats:   []string{"rpm"},
 				Tags:           []string{"all", "rpm"},
@@ -264,7 +264,7 @@ func TestGenerateInitFragments(t *testing.T) {
 	// generateInitFragments iterates them and calls RenderService per entry.
 	g := &Generator{
 		BuildDir: tmpDir,
-		Layers: map[string]*Layer{
+		Candies: map[string]*Candy{
 			"python": {
 				Name:  "python",
 				tasks: []Task{{Cmd: "true"}},
@@ -337,7 +337,7 @@ func TestGenerateRelayInitFragments(t *testing.T) {
 
 	g := &Generator{
 		BuildDir: tmpDir,
-		Layers: map[string]*Layer{
+		Candies: map[string]*Candy{
 			"socat": {
 				Name:  "socat",
 				tasks: []Task{{Cmd: "true"}},
@@ -561,16 +561,16 @@ func TestBuilderRefForFormat(t *testing.T) {
 	}
 }
 
-// TestWriteDataStaging_RemoteLayerUsesShortStageAlias is the regression for the
+// TestWriteDataStaging_RemoteCandyUsesShortStageAlias is the regression for the
 // 2026-05-24 cachyos-GPU cutover: a DATA layer fetched via a remote @github ref
 // is keyed in g.Layers by its FULL ref, but its `FROM scratch AS <name>` stage
 // uses the SHORT name (layer.Name). The data COPY --from must reference the short
 // alias, else podman fails with "no stage or image found" (it tries to pull the
 // full ref as an image). Local data layers are unaffected (key == Name).
-func TestWriteDataStaging_RemoteLayerUsesShortStageAlias(t *testing.T) {
+func TestWriteDataStaging_RemoteCandyUsesShortStageAlias(t *testing.T) {
 	fullKey := "github.com/overthinkos/overthink/layers/notebook-templates"
 	g := &Generator{
-		Layers: map[string]*Layer{
+		Candies: map[string]*Candy{
 			fullKey: {Name: "notebook-templates", data: []DataYAML{{Src: "data/notebooks", Volume: "workspace"}}},
 		},
 	}

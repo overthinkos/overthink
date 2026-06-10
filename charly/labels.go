@@ -124,14 +124,14 @@ type CapabilityService struct {
 	ExitCode         string            `json:"exit_code,omitempty"`
 	Priority         int               `json:"priority,omitempty"`
 	Init             string            `json:"init,omitempty"`  // which init system owns this entry
-	Layer            string            `json:"candy,omitempty"` // source layer name
+	Candy            string            `json:"candy,omitempty"` // source layer name
 }
 
 // LabelDataEntry represents a data mapping stored in the ai.opencharly.data label.
 type LabelDataEntry struct {
 	Volume  string `json:"volume"`         // target volume name
 	Staging string `json:"staging"`        // path inside image (/data/<volume>/[dest/])
-	Layer   string `json:"candy"`          // source layer name
+	Candy   string `json:"candy"`          // source layer name
 	Dest    string `json:"dest,omitempty"` // optional subdirectory within volume
 }
 
@@ -162,7 +162,7 @@ type BoxMetadata struct {
 	Init          string              // active init system name ("supervisord", "systemd", "")
 	Service       []CapabilityService // structured per-entry service specs (LabelService); source-less deploy reads these
 	ServiceNames  []string            // per-init service names (LabelInit companion); used by `charly service status/restart`
-	EnvLayer      map[string]string
+	EnvCandy      map[string]string
 	PathAppend    []string
 	Engine        string
 	PortProto     map[int]string       // container port -> protocol ("http" or "tcp")
@@ -170,7 +170,7 @@ type BoxMetadata struct {
 	Skill         string               // skill documentation URL
 	Status        string               // effective status (working, testing, broken)
 	Info          string               // aggregated status info
-	LayerVersion  map[string]string    // layer name -> CalVer version
+	CandyVersion  map[string]string    // layer name -> CalVer version
 	Secret        []LabelSecretEntry   // secret requirements (metadata only, no values)
 	Distro        []string             // distro identity tags (ai.opencharly.platform.distro)
 	BuildFormat   []string             // package formats installed (ai.opencharly.platform.format)
@@ -198,7 +198,7 @@ type BoxMetadata struct {
 // defaults baked at build time. The deploy.yml `shell:` overlay
 // merges into a separate runtime-only set via MergeDeployShell.
 type LabelShellSet struct {
-	Layer  []ShellEntry `json:"candy,omitempty"`
+	Candy  []ShellEntry `json:"candy,omitempty"`
 	Box    []ShellEntry `json:"box,omitempty"`
 	Deploy []ShellEntry `json:"deploy,omitempty"`
 }
@@ -384,7 +384,7 @@ func ExtractMetadata(engine, imageRef string) (*BoxMetadata, error) {
 
 	// Layer env vars
 	if v := labels[LabelEnvCandy]; v != "" {
-		if err := json.Unmarshal([]byte(v), &meta.EnvLayer); err != nil {
+		if err := json.Unmarshal([]byte(v), &meta.EnvCandy); err != nil {
 			return nil, fmt.Errorf("parsing %s: %w", LabelEnvCandy, err)
 		}
 	}
@@ -426,7 +426,7 @@ func ExtractMetadata(engine, imageRef string) (*BoxMetadata, error) {
 
 	// Layer versions
 	if v := labels[LabelCandyVersion]; v != "" {
-		if err := json.Unmarshal([]byte(v), &meta.LayerVersion); err != nil {
+		if err := json.Unmarshal([]byte(v), &meta.CandyVersion); err != nil {
 			return nil, fmt.Errorf("parsing %s: %w", LabelCandyVersion, err)
 		}
 	}

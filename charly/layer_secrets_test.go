@@ -23,10 +23,10 @@ func setupIsolatedConfigStore(t *testing.T) (cleanup func()) {
 	}
 }
 
-// TestEnsureLayerSecret_PresentInStore verifies that a value already
+// TestEnsureCandySecret_PresentInStore verifies that a value already
 // stored at (service, key) is returned as-is — no auto-generation,
 // no rewrite.
-func TestEnsureLayerSecret_PresentInStore(t *testing.T) {
+func TestEnsureCandySecret_PresentInStore(t *testing.T) {
 	defer setupIsolatedConfigStore(t)()
 
 	if err := DefaultCredentialStore().Set("charly/secret", "EXISTING_TOKEN", "preset-value"); err != nil {
@@ -34,7 +34,7 @@ func TestEnsureLayerSecret_PresentInStore(t *testing.T) {
 	}
 
 	dep := EnvDependency{Name: "EXISTING_TOKEN"}
-	val, source := ensureLayerSecret(dep, true)
+	val, source := ensureCandySecret(dep, true)
 
 	if val != "preset-value" {
 		t.Errorf("expected preset-value, got %q", val)
@@ -44,14 +44,14 @@ func TestEnsureLayerSecret_PresentInStore(t *testing.T) {
 	}
 }
 
-// TestEnsureLayerSecret_RequiredMissingAutoGenerates is the user's
+// TestEnsureCandySecret_RequiredMissingAutoGenerates is the user's
 // primary requested behavior: missing + required → 32-byte hex,
 // persisted to the active store.
-func TestEnsureLayerSecret_RequiredMissingAutoGenerates(t *testing.T) {
+func TestEnsureCandySecret_RequiredMissingAutoGenerates(t *testing.T) {
 	defer setupIsolatedConfigStore(t)()
 
 	dep := EnvDependency{Name: "K3S_CLUSTER_TOKEN"}
-	val, source := ensureLayerSecret(dep, true)
+	val, source := ensureCandySecret(dep, true)
 
 	if source != "auto-generated" {
 		t.Errorf("expected source=auto-generated, got %q", source)
@@ -80,23 +80,23 @@ func TestEnsureLayerSecret_RequiredMissingAutoGenerates(t *testing.T) {
 	}
 }
 
-// TestEnsureLayerSecret_IdempotentAcrossCalls verifies the race-free
+// TestEnsureCandySecret_IdempotentAcrossCalls verifies the race-free
 // invariant: a second resolver call (e.g., k3s-agent reading the
 // token after k3s-server's first-call auto-gen) returns the SAME
 // value, not a fresh regeneration.
-func TestEnsureLayerSecret_IdempotentAcrossCalls(t *testing.T) {
+func TestEnsureCandySecret_IdempotentAcrossCalls(t *testing.T) {
 	defer setupIsolatedConfigStore(t)()
 
 	dep := EnvDependency{Name: "SHARED_TOKEN"}
 
 	// First call — auto-generates + persists.
-	val1, source1 := ensureLayerSecret(dep, true)
+	val1, source1 := ensureCandySecret(dep, true)
 	if source1 != "auto-generated" {
 		t.Fatalf("first call expected auto-generated, got %q", source1)
 	}
 
 	// Second call — must read persisted value.
-	val2, source2 := ensureLayerSecret(dep, true)
+	val2, source2 := ensureCandySecret(dep, true)
 	if val1 != val2 {
 		t.Errorf("idempotency broken: first=%q, second=%q (regression: server+agent would mismatch)", val1, val2)
 	}
@@ -105,14 +105,14 @@ func TestEnsureLayerSecret_IdempotentAcrossCalls(t *testing.T) {
 	}
 }
 
-// TestEnsureLayerSecret_OptionalMissingReturnsEmpty verifies that
+// TestEnsureCandySecret_OptionalMissingReturnsEmpty verifies that
 // non-required deps (secret_accepts) do NOT auto-generate when missing.
 // Caller is responsible for falling back to dep.Default.
-func TestEnsureLayerSecret_OptionalMissingReturnsEmpty(t *testing.T) {
+func TestEnsureCandySecret_OptionalMissingReturnsEmpty(t *testing.T) {
 	defer setupIsolatedConfigStore(t)()
 
 	dep := EnvDependency{Name: "OPTIONAL_KEY"}
-	val, source := ensureLayerSecret(dep, false)
+	val, source := ensureCandySecret(dep, false)
 
 	if val != "" {
 		t.Errorf("expected empty value for optional+missing, got %q", val)
@@ -127,11 +127,11 @@ func TestEnsureLayerSecret_OptionalMissingReturnsEmpty(t *testing.T) {
 	}
 }
 
-// TestEnsureLayerSecret_CustomKeyRoutesToOverride verifies that the
+// TestEnsureCandySecret_CustomKeyRoutesToOverride verifies that the
 // `key:` override on EnvDependency (e.g., `key: charly/api-key/openrouter`)
 // routes the lookup AND the auto-gen persistence to the override
 // service/key pair, not the default charly/secret/<name>.
-func TestEnsureLayerSecret_CustomKeyRoutesToOverride(t *testing.T) {
+func TestEnsureCandySecret_CustomKeyRoutesToOverride(t *testing.T) {
 	defer setupIsolatedConfigStore(t)()
 
 	dep := EnvDependency{
@@ -139,7 +139,7 @@ func TestEnsureLayerSecret_CustomKeyRoutesToOverride(t *testing.T) {
 		Key:  "charly/api-key/openrouter",
 	}
 
-	val, source := ensureLayerSecret(dep, true)
+	val, source := ensureCandySecret(dep, true)
 	if source != "auto-generated" {
 		t.Fatalf("expected auto-generated, got %q", source)
 	}
@@ -155,18 +155,18 @@ func TestEnsureLayerSecret_CustomKeyRoutesToOverride(t *testing.T) {
 	}
 }
 
-// TestResolveLayerSecrets_RequiredAutoGen exercises the wrapper that
+// TestResolveCandySecrets_RequiredAutoGen exercises the wrapper that
 // the deploy-add path actually calls: a Layer with secret_requires
 // must always resolve (auto-gen guarantees non-empty values).
-func TestResolveLayerSecrets_RequiredAutoGen(t *testing.T) {
+func TestResolveCandySecrets_RequiredAutoGen(t *testing.T) {
 	defer setupIsolatedConfigStore(t)()
 
-	layer := &Layer{
+	layer := &Candy{
 		secretRequires: []EnvDependency{
 			{Name: "K3S_CLUSTER_TOKEN"},
 		},
 	}
-	env := ResolveLayerSecret(layer)
+	env := ResolveCandySecret(layer)
 	val, ok := env["K3S_CLUSTER_TOKEN"]
 	if !ok || val == "" {
 		t.Fatalf("expected K3S_CLUSTER_TOKEN to be resolved (auto-gen), got env=%v", env)
@@ -176,37 +176,37 @@ func TestResolveLayerSecrets_RequiredAutoGen(t *testing.T) {
 	}
 }
 
-// TestResolveLayerSecrets_OptionalDefaultFallback exercises the
+// TestResolveCandySecrets_OptionalDefaultFallback exercises the
 // secret_accepts path with a Default value: missing + optional →
 // dep.Default goes into env (not auto-gen).
-func TestResolveLayerSecrets_OptionalDefaultFallback(t *testing.T) {
+func TestResolveCandySecrets_OptionalDefaultFallback(t *testing.T) {
 	defer setupIsolatedConfigStore(t)()
 
-	layer := &Layer{
+	layer := &Candy{
 		secretAccepts: []EnvDependency{
 			{Name: "OPTIONAL_VAR", Default: "fallback-value"},
 		},
 	}
-	env := ResolveLayerSecret(layer)
+	env := ResolveCandySecret(layer)
 	if env["OPTIONAL_VAR"] != "fallback-value" {
 		t.Errorf("expected fallback-value, got %q", env["OPTIONAL_VAR"])
 	}
 }
 
-// TestResolveSecretsForLayers_TwoLayersSameSecret verifies the
+// TestResolveSecretsForCandies_TwoCandiesSameSecret verifies the
 // race-free invariant at the wrapper level: two layers (think
 // k3s-server + k3s-agent) declaring the same secret_requires
 // resolve to the SAME value.
-func TestResolveSecretsForLayers_TwoLayersSameSecret(t *testing.T) {
+func TestResolveSecretsForCandies_TwoCandiesSameSecret(t *testing.T) {
 	defer setupIsolatedConfigStore(t)()
 
-	server := &Layer{
+	server := &Candy{
 		secretRequires: []EnvDependency{{Name: "K3S_CLUSTER_TOKEN"}},
 	}
-	agent := &Layer{
+	agent := &Candy{
 		secretRequires: []EnvDependency{{Name: "K3S_CLUSTER_TOKEN"}},
 	}
-	env := ResolveSecretForLayer([]*Layer{server, agent})
+	env := ResolveSecretForCandy([]*Candy{server, agent})
 
 	val := env["K3S_CLUSTER_TOKEN"]
 	if val == "" || len(val) != 44 {

@@ -279,7 +279,7 @@ func TestLabelTestSet_IsEmpty(t *testing.T) {
 	if !empty.IsEmpty() {
 		t.Error("zero-value LabelEvalSet should be empty")
 	}
-	populated := &LabelEvalSet{Layer: []Check{{File: "/x"}}}
+	populated := &LabelEvalSet{Candy: []Check{{File: "/x"}}}
 	if populated.IsEmpty() {
 		t.Error("populated LabelEvalSet should not be empty")
 	}

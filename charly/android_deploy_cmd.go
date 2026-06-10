@@ -42,17 +42,17 @@ func androidApkPackageIDs(node *DeploymentNode, dir string) []string {
 	if err != nil {
 		return nil
 	}
-	layers, err := ScanAllLayerWithConfig(dir, cfg)
+	layers, err := ScanAllCandyWithConfig(dir, cfg)
 	if err != nil {
 		return nil
 	}
 	var ids []string
-	for _, ref := range node.AddLayer {
-		lref, err := ResolveDeployRefAsLayer(ref, dir)
+	for _, ref := range node.AddCandy {
+		lref, err := ResolveDeployRefAsCandy(ref, dir)
 		if err != nil {
 			continue
 		}
-		order, err := ResolveLayerOrder([]string{lref.Name}, layers, nil)
+		order, err := ResolveCandyOrder([]string{lref.Name}, layers, nil)
 		if err != nil {
 			continue
 		}

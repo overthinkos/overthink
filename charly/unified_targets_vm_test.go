@@ -189,12 +189,12 @@ func TestVmUnifiedTarget_Rebuild_DryRun(t *testing.T) {
 	}
 }
 
-// TestVmUnifiedTarget_Rebuild_ReappliesLayers exercises the real (non-dry-run)
+// TestVmUnifiedTarget_Rebuild_ReappliesCandies exercises the real (non-dry-run)
 // Rebuild body through the stubbable runCharlySubcommand seam and asserts the
 // recorded subcommand sequence ends in `deploy add <node>` — the shared
 // layer-apply primitive LocalUnifiedTarget.Rebuild and PodUnifiedTarget.Rebuild
 // also call (R3). The #42 bug (domain-recreate only) would record no such call.
-func TestVmUnifiedTarget_Rebuild_ReappliesLayers(t *testing.T) {
+func TestVmUnifiedTarget_Rebuild_ReappliesCandies(t *testing.T) {
 	var calls [][]string
 	origRun := runCharlySubcommand
 	runCharlySubcommand = func(args ...string) error {

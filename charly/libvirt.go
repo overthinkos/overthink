@@ -56,7 +56,7 @@ func isDeviceElement(snippet string) bool {
 
 // CollectLibvirtSnippets gathers libvirt XML snippets from all layers in an image
 // plus image-level snippets, deduplicating by exact string match.
-func CollectLibvirtSnippets(cfg *Config, layers map[string]*Layer, boxName string) []string {
+func CollectLibvirtSnippets(cfg *Config, layers map[string]*Candy, boxName string) []string {
 	seen := make(map[string]bool)
 	var snippets []string
 
@@ -74,9 +74,9 @@ func CollectLibvirtSnippets(cfg *Config, layers map[string]*Layer, boxName strin
 	if !ok {
 		return nil
 	}
-	for _, layerRef := range img.Layer {
-		layerName := BareRef(layerRef)
-		layer, ok := layers[layerName]
+	for _, candyRef := range img.Candy {
+		candyName := BareRef(candyRef)
+		layer, ok := layers[candyName]
 		if !ok || !layer.HasLibvirt() {
 			continue
 		}

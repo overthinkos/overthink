@@ -65,7 +65,7 @@ func (c *MergeCmd) runAll(cfg *Config) error {
 		return err
 	}
 
-	layers, err := ScanAllLayerWithConfig(dir, cfg)
+	layers, err := ScanAllCandyWithConfig(dir, cfg)
 	if err != nil {
 		return err
 	}
@@ -300,7 +300,7 @@ func whiteoutTarget(name string) (string, bool) {
 // cause "file exists" errors during overlay unpack).
 func mergeLayers(layers []v1.Layer) (v1.Layer, error) {
 	// Collect all entries, tracking insertion order and deduplicating by path.
-	// layerIdx tracks which layer last wrote each entry (for opaque whiteout handling).
+	// candyIdx tracks which layer last wrote each entry (for opaque whiteout handling).
 	entries := make(map[string]*tarEntry)
 	entryLayer := make(map[string]int) // path -> index of layer that last wrote it
 	var order []string
@@ -436,13 +436,13 @@ func executeMerge(img v1.Image, layers []v1.Layer, steps []MergeStep) (v1.Image,
 	// Map layer indices to history entries.
 	// History entries with EmptyLayer=true don't correspond to actual layers.
 	layerToHistory := make(map[int]int) // layer index -> history index
-	layerIdx := 0
+	candyIdx := 0
 	for histIdx, h := range history {
 		if !h.EmptyLayer {
-			if layerIdx < len(layers) {
-				layerToHistory[layerIdx] = histIdx
+			if candyIdx < len(layers) {
+				layerToHistory[candyIdx] = histIdx
 			}
-			layerIdx++
+			candyIdx++
 		}
 	}
 

@@ -13,7 +13,7 @@ import (
 // memory is safer). memory_max, memory_high, memory_swap_max, and cpus take
 // the smallest value (smallest-wins — a tighter cap is a smaller blast radius).
 // Image-level security (from charly.yml) overrides layer-level settings.
-func CollectSecurity(cfg *Config, layers map[string]*Layer, boxName string) SecurityConfig {
+func CollectSecurity(cfg *Config, layers map[string]*Candy, boxName string) SecurityConfig {
 	var merged SecurityConfig
 
 	img, ok := cfg.Box[boxName]
@@ -22,14 +22,14 @@ func CollectSecurity(cfg *Config, layers map[string]*Layer, boxName string) Secu
 	}
 
 	// Resolve full layer tree (including composing layers' sub-layers)
-	allLayers, err := ResolveLayerOrder(img.Layer, layers, nil)
+	allCandies, err := ResolveCandyOrder(img.Candy, layers, nil)
 	if err != nil {
-		allLayers = img.Layer // fall back to direct layers on error
+		allCandies = img.Candy // fall back to direct layers on error
 	}
 
 	// Collect from all layers
-	for _, layerName := range allLayers {
-		ly, ok := layers[layerName]
+	for _, candyName := range allCandies {
+		ly, ok := layers[candyName]
 		if !ok {
 			continue
 		}

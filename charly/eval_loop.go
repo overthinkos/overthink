@@ -1470,7 +1470,7 @@ func collectTagFingerprints(set *LabelDescriptionSet) map[string]string {
 	if set == nil {
 		return out
 	}
-	for _, sec := range [][]LabeledDescription{set.Layer, set.Box, set.Deploy} {
+	for _, sec := range [][]LabeledDescription{set.Candy, set.Box, set.Deploy} {
 		for _, ld := range sec {
 			for sIdx, scenario := range ld.Description.Scenario {
 				expanded := ExpandScenario(scenario)

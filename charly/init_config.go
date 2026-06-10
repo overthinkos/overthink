@@ -17,15 +17,15 @@ type InitConfig struct {
 // InitDef defines an init system (supervisord, systemd, s6, etc.).
 type InitDef struct {
 	// Detection: which candy manifest fields and file patterns trigger this init system
-	LayerFields  []string `yaml:"layer_field,omitempty"`
-	LayerFiles   []string `yaml:"layer_file,omitempty"`    // glob patterns (e.g., "*.service")
-	DependsLayer string   `yaml:"depends_layer,omitempty"` // layer name required in dependency chain
+	CandyFields  []string `yaml:"layer_field,omitempty"`
+	CandyFiles   []string `yaml:"layer_file,omitempty"`    // glob patterns (e.g., "*.service")
+	DependsCandy string   `yaml:"depends_layer,omitempty"` // layer name required in dependency chain
 	// RequiresCapabilities lists layer-aggregated capability names that
 	// must be present in the image composition for this init system to
 	// be selected. Replaces the previous RequiresBootc boolean — generic
 	// across any layer-contributed capability (preserve_user, data_only,
 	// gpu_required, ...). Empty means "no requirement, always eligible".
-	// Names match the keys used in AggregatedLayerCaps.Provided.
+	// Names match the keys used in AggregatedCandyCaps.Provided.
 	RequiresCapability []string `yaml:"requires_capability,omitempty"`
 
 	// Build model: "fragment_assembly" or "file_copy"
@@ -84,14 +84,14 @@ type ServiceSchemaDef struct {
 // FragmentContext is the template context for fragment_template rendering.
 type FragmentContext struct {
 	Content   string
-	LayerName string
+	CandyName string
 	Index     int
 }
 
 // RelayContext is the template context for relay_template rendering.
 type RelayContext struct {
 	Port      int
-	LayerName string
+	CandyName string
 	Index     int
 }
 
@@ -112,15 +112,15 @@ type ServiceCommandContext struct {
 	Service string
 }
 
-// DetectLayerInit returns which init system names a layer triggers,
+// DetectCandyInit returns which init system names a layer triggers,
 // based on its candy manifest fields and file patterns.
-func (ic *InitConfig) DetectLayerInit(ly *CandyYAML, layerPath string) []string {
+func (ic *InitConfig) DetectCandyInit(ly *CandyYAML, candyPath string) []string {
 	if ic == nil {
 		return nil
 	}
 	var result []string
 	for initName, def := range ic.Init {
-		if detectsInit(def, ly, layerPath) {
+		if detectsInit(def, ly, candyPath) {
 			result = append(result, initName)
 		}
 	}
@@ -131,13 +131,13 @@ func (ic *InitConfig) DetectLayerInit(ly *CandyYAML, layerPath string) []string 
 // detectsInit checks if a layer matches an init system's detection criteria.
 // Schema-driven: iterates the unified service: list + per-entry init routing
 // (IsPackaged → ServiceSchema.SupportsPackaged; custom exec → ServiceSchema.ServiceTemplate).
-func detectsInit(def *InitDef, ly *CandyYAML, layerPath string) bool {
+func detectsInit(def *InitDef, ly *CandyYAML, candyPath string) bool {
 	if ly == nil {
 		return false
 	}
 	// layer_fields: [service] gates schema-driven detection.
 	participatesInSchema := false
-	for _, field := range def.LayerFields {
+	for _, field := range def.CandyFields {
 		if field == "service" {
 			participatesInSchema = true
 			break
@@ -159,8 +159,8 @@ func detectsInit(def *InitDef, ly *CandyYAML, layerPath string) bool {
 	}
 
 	// layer_files: glob the layer dir (file_copy model — systemd *.service units).
-	for _, pattern := range def.LayerFiles {
-		matches, _ := filepath.Glob(filepath.Join(layerPath, pattern))
+	for _, pattern := range def.CandyFiles {
+		matches, _ := filepath.Glob(filepath.Join(candyPath, pattern))
 		if len(matches) > 0 {
 			return true
 		}
@@ -179,7 +179,7 @@ func detectsInit(def *InitDef, ly *CandyYAML, layerPath string) bool {
 // are also consulted for the bootc-prefer-systemd heuristic via
 // PreserveUser (the canonical signal that this is a bootc-flavored
 // composition).
-func (ic *InitConfig) ResolveInitSystem(layers map[string]*Layer, layerOrder []string, explicit string) (string, *InitDef) {
+func (ic *InitConfig) ResolveInitSystem(layers map[string]*Candy, candyOrder []string, explicit string) (string, *InitDef) {
 	if ic == nil {
 		return "", nil
 	}
@@ -191,15 +191,15 @@ func (ic *InitConfig) ResolveInitSystem(layers map[string]*Layer, layerOrder []s
 		}
 	}
 
-	caps, _ := AggregateLayerCapabilities(layers, layerOrder)
+	caps, _ := AggregateCandyCapabilities(layers, candyOrder)
 	if caps == nil {
 		caps = &AggregatedCandyCaps{Provided: map[string]bool{}}
 	}
 
 	// Auto-detect: find the init system that layers trigger
 	initHits := make(map[string]bool)
-	for _, layerName := range layerOrder {
-		layer, ok := layers[layerName]
+	for _, candyName := range candyOrder {
+		layer, ok := layers[candyName]
 		if !ok {
 			continue
 		}
@@ -245,19 +245,19 @@ func (ic *InitConfig) ResolveInitSystem(layers map[string]*Layer, layerOrder []s
 // ActiveInit returns all init systems that are active for the given image.
 // An image can have multiple active inits (e.g., supervisord + systemd on
 // bootc-flavored compositions).
-func (ic *InitConfig) ActiveInit(layers map[string]*Layer, layerOrder []string) map[string]*InitDef {
+func (ic *InitConfig) ActiveInit(layers map[string]*Candy, candyOrder []string) map[string]*InitDef {
 	if ic == nil {
 		return nil
 	}
 
-	caps, _ := AggregateLayerCapabilities(layers, layerOrder)
+	caps, _ := AggregateCandyCapabilities(layers, candyOrder)
 	if caps == nil {
 		caps = &AggregatedCandyCaps{Provided: map[string]bool{}}
 	}
 
 	result := make(map[string]*InitDef)
-	for _, layerName := range layerOrder {
-		layer, ok := layers[layerName]
+	for _, candyName := range candyOrder {
+		layer, ok := layers[candyName]
 		if !ok {
 			continue
 		}
@@ -360,13 +360,13 @@ func (def *InitDef) RenderStageFragmentCopy(boxName, fileName string) (string, e
 // Function deleted; fragment_template field removed from InitDef.
 
 // RenderRelayTemplate renders the relay_template for a port relay.
-func (def *InitDef) RenderRelayTemplate(port int, layerName string, index int) (string, error) {
+func (def *InitDef) RenderRelayTemplate(port int, candyName string, index int) (string, error) {
 	if def.RelayTemplate == "" {
 		return "", fmt.Errorf("init system has no relay_template")
 	}
 	ctx := RelayContext{
 		Port:      port,
-		LayerName: layerName,
+		CandyName: candyName,
 		Index:     index,
 	}
 	result, err := RenderTemplate("relay", def.RelayTemplate, ctx)

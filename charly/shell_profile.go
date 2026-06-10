@@ -84,19 +84,19 @@ func EnvdDir(hostHome string) string {
 }
 
 // EnvdFilePath returns the env file path for a given layer.
-func EnvdFilePath(hostHome, layerName string) string {
-	return filepath.Join(EnvdDir(hostHome), layerName+".env")
+func EnvdFilePath(hostHome, candyName string) string {
+	return filepath.Join(EnvdDir(hostHome), candyName+".env")
 }
 
 // WriteEnvdFile creates (or overwrites) the env.d entry for a layer.
 // Content is rendered from the ShellHookStep's EnvVars + PathAdd.
-func WriteEnvdFile(hostHome, layerName string, envVars map[string]string, pathAdd []string) (string, error) {
+func WriteEnvdFile(hostHome, candyName string, envVars map[string]string, pathAdd []string) (string, error) {
 	dir := EnvdDir(hostHome)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return "", fmt.Errorf("WriteEnvdFile mkdir: %w", err)
 	}
-	path := EnvdFilePath(hostHome, layerName)
-	body := renderEnvdBody(layerName, envVars, pathAdd)
+	path := EnvdFilePath(hostHome, candyName)
+	body := renderEnvdBody(candyName, envVars, pathAdd)
 	if err := os.WriteFile(path, []byte(body), 0644); err != nil {
 		return "", fmt.Errorf("WriteEnvdFile %s: %w", path, err)
 	}
@@ -104,8 +104,8 @@ func WriteEnvdFile(hostHome, layerName string, envVars map[string]string, pathAd
 }
 
 // RemoveEnvdFile deletes an env.d entry. Silently succeeds when absent.
-func RemoveEnvdFile(hostHome, layerName string) error {
-	err := os.Remove(EnvdFilePath(hostHome, layerName))
+func RemoveEnvdFile(hostHome, candyName string) error {
+	err := os.Remove(EnvdFilePath(hostHome, candyName))
 	if err != nil && !os.IsNotExist(err) {
 		return err
 	}
@@ -115,9 +115,9 @@ func RemoveEnvdFile(hostHome, layerName string) error {
 // renderEnvdBody produces a deterministic, shell-agnostic POSIX-sh
 // fragment. Sorted keys + path entries guarantee stable output across
 // runs (tests compare directly).
-func renderEnvdBody(layerName string, envVars map[string]string, pathAdd []string) string {
+func renderEnvdBody(candyName string, envVars map[string]string, pathAdd []string) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "# opencharly env for layer %s — managed by charly; do not edit\n", layerName)
+	fmt.Fprintf(&b, "# opencharly env for layer %s — managed by charly; do not edit\n", candyName)
 	keys := make([]string, 0, len(envVars))
 	for k := range envVars {
 		keys = append(keys, k)

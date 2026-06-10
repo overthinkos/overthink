@@ -40,7 +40,7 @@ var CapabilityLabelMap = map[string]string{
 	"Bootc":        LabelBootc,
 	"Status":       LabelStatus,
 	"Info":         LabelInfo,
-	"LayerVersion": LabelCandyVersion,
+	"CandyVersion": LabelCandyVersion,
 
 	// Account
 	"UID":  LabelUID,
@@ -66,7 +66,7 @@ var CapabilityLabelMap = map[string]string{
 
 	// Env / vars
 	"Env":        LabelEnv,
-	"EnvLayer":   LabelEnvCandy,
+	"EnvCandy":   LabelEnvCandy,
 	"PathAppend": LabelPathAppend,
 
 	// Init — auto-detected from layers (see init_config.go ResolveInitSystem).

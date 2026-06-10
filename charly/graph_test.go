@@ -5,70 +5,70 @@ import (
 	"testing"
 )
 
-func TestResolveLayerOrder(t *testing.T) {
+func TestResolveCandyOrder(t *testing.T) {
 	// Create test layers
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"pixi":    {Name: "pixi", Require: nil},
-		"python":  {Name: "python", Require: toLayerRefs([]string{"pixi"})},
-		"ml-libs": {Name: "ml-libs", Require: toLayerRefs([]string{"python"})},
+		"python":  {Name: "python", Require: toCandyRefs([]string{"pixi"})},
+		"ml-libs": {Name: "ml-libs", Require: toCandyRefs([]string{"python"})},
 		"nodejs":  {Name: "nodejs", Require: nil},
-		"web-ui":  {Name: "web-ui", Require: toLayerRefs([]string{"nodejs"})},
+		"web-ui":  {Name: "web-ui", Require: toCandyRefs([]string{"nodejs"})},
 	}
 
 	tests := []struct {
 		name         string
 		requested    []string
-		parentLayers map[string]bool
+		parentCandies map[string]bool
 		wantOrder    []string
 		wantErr      bool
 	}{
 		{
 			name:         "single layer no deps",
 			requested:    []string{"pixi"},
-			parentLayers: nil,
+			parentCandies: nil,
 			wantOrder:    []string{"pixi"},
 		},
 		{
 			name:         "layer with deps",
 			requested:    []string{"python"},
-			parentLayers: nil,
+			parentCandies: nil,
 			wantOrder:    []string{"pixi", "python"},
 		},
 		{
 			name:         "transitive deps",
 			requested:    []string{"ml-libs"},
-			parentLayers: nil,
+			parentCandies: nil,
 			wantOrder:    []string{"pixi", "python", "ml-libs"},
 		},
 		{
 			name:         "multiple independent layers",
 			requested:    []string{"pixi", "nodejs"},
-			parentLayers: nil,
+			parentCandies: nil,
 			wantOrder:    []string{"nodejs", "pixi"}, // sorted alphabetically
 		},
 		{
 			name:         "mixed deps",
 			requested:    []string{"ml-libs", "web-ui"},
-			parentLayers: nil,
+			parentCandies: nil,
 			wantOrder:    []string{"nodejs", "pixi", "python", "ml-libs", "web-ui"},
 		},
 		{
 			name:         "parent provides dep",
 			requested:    []string{"python"},
-			parentLayers: map[string]bool{"pixi": true},
+			parentCandies: map[string]bool{"pixi": true},
 			wantOrder:    []string{"python"}, // pixi excluded
 		},
 		{
 			name:         "unknown layer",
 			requested:    []string{"unknown"},
-			parentLayers: nil,
+			parentCandies: nil,
 			wantErr:      true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			order, err := ResolveLayerOrder(tt.requested, layers, tt.parentLayers)
+			order, err := ResolveCandyOrder(tt.requested, layers, tt.parentCandies)
 			if tt.wantErr {
 				if err == nil {
 					t.Error("expected error, got nil")
@@ -85,15 +85,15 @@ func TestResolveLayerOrder(t *testing.T) {
 	}
 }
 
-func TestResolveLayerOrderCycle(t *testing.T) {
+func TestResolveCandyOrderCycle(t *testing.T) {
 	// Create layers with a cycle: a -> b -> c -> a
-	layers := map[string]*Layer{
-		"a": {Name: "a", Require: toLayerRefs([]string{"b"})},
-		"b": {Name: "b", Require: toLayerRefs([]string{"c"})},
-		"c": {Name: "c", Require: toLayerRefs([]string{"a"})},
+	layers := map[string]*Candy{
+		"a": {Name: "a", Require: toCandyRefs([]string{"b"})},
+		"b": {Name: "b", Require: toCandyRefs([]string{"c"})},
+		"c": {Name: "c", Require: toCandyRefs([]string{"a"})},
 	}
 
-	_, err := ResolveLayerOrder([]string{"a"}, layers, nil)
+	_, err := ResolveCandyOrder([]string{"a"}, layers, nil)
 	if err == nil {
 		t.Error("expected cycle error, got nil")
 	}
@@ -296,29 +296,29 @@ func TestResolveImageOrderCycle(t *testing.T) {
 	}
 }
 
-func TestLayersProvidedByImage(t *testing.T) {
+func TestCandiesProvidedByImage(t *testing.T) {
 	images := map[string]*ResolvedBox{
 		"base": {
 			Name:           "base",
 			Base:           "quay.io/fedora/fedora:43",
 			IsExternalBase: true,
-			Layer:          []string{"pixi"},
+			Candy:          []string{"pixi"},
 		},
 		"cuda": {
 			Name:           "cuda",
 			Base:           "base",
 			IsExternalBase: false,
-			Layer:          []string{"cuda"},
+			Candy:          []string{"cuda"},
 		},
 		"ml-cuda": {
 			Name:           "ml-cuda",
 			Base:           "cuda",
 			IsExternalBase: false,
-			Layer:          []string{"python", "ml-libs"},
+			Candy:          []string{"python", "ml-libs"},
 		},
 	}
 
-	layers := map[string]*Layer{} // not used, just for type
+	layers := map[string]*Candy{} // not used, just for type
 
 	tests := []struct {
 		name    string
@@ -344,117 +344,117 @@ func TestLayersProvidedByImage(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := LayerProvidedByBox(tt.boxName, images, layers)
+			got, err := CandyProvidedByBox(tt.boxName, images, layers)
 			if err != nil {
-				t.Fatalf("LayerProvidedByBox() error = %v", err)
+				t.Fatalf("CandyProvidedByBox() error = %v", err)
 			}
 			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("LayerProvidedByBox() = %v, want %v", got, tt.want)
+				t.Errorf("CandyProvidedByBox() = %v, want %v", got, tt.want)
 			}
 		})
 	}
 }
 
-func TestExpandLayers(t *testing.T) {
-	layers := map[string]*Layer{
+func TestExpandCandies(t *testing.T) {
+	layers := map[string]*Candy{
 		"pipewire":     {Name: "pipewire", tasks: []Task{{Cmd: "true"}}},
 		"wayvnc":       {Name: "wayvnc", tasks: []Task{{Cmd: "true"}}},
 		"chrome":       {Name: "chrome", tasks: []Task{{Cmd: "true"}}},
 		"waybar":       {Name: "waybar", tasks: []Task{{Cmd: "true"}}},
-		"sway-desktop": {Name: "sway-desktop", IncludedLayer: toLayerRefs([]string{"pipewire", "wayvnc", "chrome", "waybar"})},
+		"sway-desktop": {Name: "sway-desktop", IncludedCandy: toCandyRefs([]string{"pipewire", "wayvnc", "chrome", "waybar"})},
 		"openclaw":     {Name: "openclaw", tasks: []Task{{Cmd: "true"}}},
 	}
 
 	// Basic expansion
-	result, err := ExpandLayer([]string{"openclaw", "sway-desktop"}, layers)
+	result, err := ExpandCandy([]string{"openclaw", "sway-desktop"}, layers)
 	if err != nil {
-		t.Fatalf("ExpandLayer() error: %v", err)
+		t.Fatalf("ExpandCandy() error: %v", err)
 	}
 	want := []string{"openclaw", "pipewire", "wayvnc", "chrome", "waybar"}
 	if !reflect.DeepEqual(result, want) {
-		t.Errorf("ExpandLayer() = %v, want %v", result, want)
+		t.Errorf("ExpandCandy() = %v, want %v", result, want)
 	}
 }
 
-func TestExpandLayersDedup(t *testing.T) {
-	layers := map[string]*Layer{
+func TestExpandCandiesDedup(t *testing.T) {
+	layers := map[string]*Candy{
 		"pipewire":     {Name: "pipewire", tasks: []Task{{Cmd: "true"}}},
 		"wayvnc":       {Name: "wayvnc", tasks: []Task{{Cmd: "true"}}},
-		"sway-desktop": {Name: "sway-desktop", IncludedLayer: toLayerRefs([]string{"pipewire", "wayvnc"})},
+		"sway-desktop": {Name: "sway-desktop", IncludedCandy: toCandyRefs([]string{"pipewire", "wayvnc"})},
 	}
 
 	// pipewire referenced directly AND via sway-desktop — should appear once
-	result, err := ExpandLayer([]string{"pipewire", "sway-desktop"}, layers)
+	result, err := ExpandCandy([]string{"pipewire", "sway-desktop"}, layers)
 	if err != nil {
-		t.Fatalf("ExpandLayer() error: %v", err)
+		t.Fatalf("ExpandCandy() error: %v", err)
 	}
 	want := []string{"pipewire", "wayvnc"}
 	if !reflect.DeepEqual(result, want) {
-		t.Errorf("ExpandLayer() = %v, want %v", result, want)
+		t.Errorf("ExpandCandy() = %v, want %v", result, want)
 	}
 }
 
-func TestExpandLayersNested(t *testing.T) {
-	layers := map[string]*Layer{
+func TestExpandCandiesNested(t *testing.T) {
+	layers := map[string]*Candy{
 		"pipewire":     {Name: "pipewire", tasks: []Task{{Cmd: "true"}}},
 		"wayvnc":       {Name: "wayvnc", tasks: []Task{{Cmd: "true"}}},
 		"chrome":       {Name: "chrome", tasks: []Task{{Cmd: "true"}}},
-		"vnc-stack":    {Name: "vnc-stack", IncludedLayer: toLayerRefs([]string{"pipewire", "wayvnc"})},
-		"browser-desk": {Name: "browser-desk", IncludedLayer: toLayerRefs([]string{"vnc-stack", "chrome"})},
+		"vnc-stack":    {Name: "vnc-stack", IncludedCandy: toCandyRefs([]string{"pipewire", "wayvnc"})},
+		"browser-desk": {Name: "browser-desk", IncludedCandy: toCandyRefs([]string{"vnc-stack", "chrome"})},
 	}
 
-	result, err := ExpandLayer([]string{"browser-desk"}, layers)
+	result, err := ExpandCandy([]string{"browser-desk"}, layers)
 	if err != nil {
-		t.Fatalf("ExpandLayer() error: %v", err)
+		t.Fatalf("ExpandCandy() error: %v", err)
 	}
 	want := []string{"pipewire", "wayvnc", "chrome"}
 	if !reflect.DeepEqual(result, want) {
-		t.Errorf("ExpandLayer() = %v, want %v", result, want)
+		t.Errorf("ExpandCandy() = %v, want %v", result, want)
 	}
 }
 
-func TestExpandLayersCycle(t *testing.T) {
-	layers := map[string]*Layer{
-		"a": {Name: "a", IncludedLayer: toLayerRefs([]string{"b"})},
-		"b": {Name: "b", IncludedLayer: toLayerRefs([]string{"a"})},
+func TestExpandCandiesCycle(t *testing.T) {
+	layers := map[string]*Candy{
+		"a": {Name: "a", IncludedCandy: toCandyRefs([]string{"b"})},
+		"b": {Name: "b", IncludedCandy: toCandyRefs([]string{"a"})},
 	}
 
-	_, err := ExpandLayer([]string{"a"}, layers)
+	_, err := ExpandCandy([]string{"a"}, layers)
 	if err == nil {
 		t.Error("expected circular composition error, got nil")
 	}
 }
 
-func TestExpandLayersWithContent(t *testing.T) {
-	layers := map[string]*Layer{
+func TestExpandCandiesWithContent(t *testing.T) {
+	layers := map[string]*Candy{
 		"pipewire": {Name: "pipewire", tasks: []Task{{Cmd: "true"}}},
 		"wayvnc":   {Name: "wayvnc", tasks: []Task{{Cmd: "true"}}},
 		// Composing layer that also has its own install content
-		"desktop": {Name: "desktop", tasks: []Task{{Cmd: "true"}}, IncludedLayer: toLayerRefs([]string{"pipewire", "wayvnc"})},
+		"desktop": {Name: "desktop", tasks: []Task{{Cmd: "true"}}, IncludedCandy: toCandyRefs([]string{"pipewire", "wayvnc"})},
 	}
 
-	result, err := ExpandLayer([]string{"desktop"}, layers)
+	result, err := ExpandCandy([]string{"desktop"}, layers)
 	if err != nil {
-		t.Fatalf("ExpandLayer() error: %v", err)
+		t.Fatalf("ExpandCandy() error: %v", err)
 	}
 	// desktop should stay because it has content
 	want := []string{"pipewire", "wayvnc", "desktop"}
 	if !reflect.DeepEqual(result, want) {
-		t.Errorf("ExpandLayer() = %v, want %v", result, want)
+		t.Errorf("ExpandCandy() = %v, want %v", result, want)
 	}
 }
 
-func TestResolveLayerOrderWithComposition(t *testing.T) {
-	layers := map[string]*Layer{
+func TestResolveCandyOrderWithComposition(t *testing.T) {
+	layers := map[string]*Candy{
 		"pixi":        {Name: "pixi", tasks: []Task{{Cmd: "true"}}},
-		"python":      {Name: "python", tasks: []Task{{Cmd: "true"}}, Require: toLayerRefs([]string{"pixi"})},
-		"supervisord": {Name: "supervisord", tasks: []Task{{Cmd: "true"}}, Require: toLayerRefs([]string{"python"})},
-		"svc-stack":   {Name: "svc-stack", IncludedLayer: toLayerRefs([]string{"python", "supervisord"})},
+		"python":      {Name: "python", tasks: []Task{{Cmd: "true"}}, Require: toCandyRefs([]string{"pixi"})},
+		"supervisord": {Name: "supervisord", tasks: []Task{{Cmd: "true"}}, Require: toCandyRefs([]string{"python"})},
+		"svc-stack":   {Name: "svc-stack", IncludedCandy: toCandyRefs([]string{"python", "supervisord"})},
 	}
 
-	order, err := ResolveLayerOrder([]string{"svc-stack"}, layers, nil)
+	order, err := ResolveCandyOrder([]string{"svc-stack"}, layers, nil)
 	if err != nil {
-		t.Fatalf("ResolveLayerOrder() error: %v", err)
+		t.Fatalf("ResolveCandyOrder() error: %v", err)
 	}
 	// pixi (dep of python) → python → supervisord
 	want := []string{"pixi", "python", "supervisord"}
@@ -463,17 +463,17 @@ func TestResolveLayerOrderWithComposition(t *testing.T) {
 	}
 }
 
-func TestDependsOnComposingLayer(t *testing.T) {
-	layers := map[string]*Layer{
+func TestDependsOnComposingCandy(t *testing.T) {
+	layers := map[string]*Candy{
 		"pipewire":     {Name: "pipewire", tasks: []Task{{Cmd: "true"}}},
 		"wayvnc":       {Name: "wayvnc", tasks: []Task{{Cmd: "true"}}},
-		"sway-desktop": {Name: "sway-desktop", IncludedLayer: toLayerRefs([]string{"pipewire", "wayvnc"})},
-		"myapp":        {Name: "myapp", tasks: []Task{{Cmd: "true"}}, Require: toLayerRefs([]string{"sway-desktop"})},
+		"sway-desktop": {Name: "sway-desktop", IncludedCandy: toCandyRefs([]string{"pipewire", "wayvnc"})},
+		"myapp":        {Name: "myapp", tasks: []Task{{Cmd: "true"}}, Require: toCandyRefs([]string{"sway-desktop"})},
 	}
 
-	order, err := ResolveLayerOrder([]string{"myapp"}, layers, nil)
+	order, err := ResolveCandyOrder([]string{"myapp"}, layers, nil)
 	if err != nil {
-		t.Fatalf("ResolveLayerOrder() error: %v", err)
+		t.Fatalf("ResolveCandyOrder() error: %v", err)
 	}
 	// pipewire and wayvnc should be pulled in via sway-desktop dependency
 	want := []string{"pipewire", "wayvnc", "myapp"}

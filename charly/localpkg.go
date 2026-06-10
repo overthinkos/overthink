@@ -61,7 +61,7 @@ type localPkgInstallContext struct {
 // actually contains a `PKGBUILD` file:
 //
 //  1. absolute ref → used verbatim.
-//  2. <layerDir>/<ref>     — the source bundled alongside the layer.
+//  2. <candyDir>/<ref>     — the source bundled alongside the layer.
 //  3. <projectDir>/<ref>   — relative to the deploy project dir (os.Getwd).
 //  4. walk UP from projectDir, trying <ancestor>/<ref> at each level — this is
 //     the operator path: `charly -C box/cachyos deploy add cachyos-gpu` has a
@@ -75,7 +75,7 @@ type localPkgInstallContext struct {
 // The SOURCE-dir marker is the format's `source_sentinel` (PKGBUILD for pac,
 // *.spec for rpm, debian/control for deb), matched via filepath.Glob so a plain
 // filename, a sub-path, or a glob all work — no hardcoded format literal here.
-func resolveLocalPkgDir(ref, layerDir, projectDir, sentinel string) string {
+func resolveLocalPkgDir(ref, candyDir, projectDir, sentinel string) string {
 	if ref == "" {
 		return ""
 	}
@@ -97,7 +97,7 @@ func resolveLocalPkgDir(ref, layerDir, projectDir, sentinel string) string {
 		return ""
 	}
 	// Layer-relative, then project-relative.
-	for _, base := range []string{layerDir, projectDir} {
+	for _, base := range []string{candyDir, projectDir} {
 		if base == "" {
 			continue
 		}
@@ -196,7 +196,7 @@ func buildLocalPkgOnHost(ctx context.Context, lp *LocalPkgDef, srcDir string, op
 //
 // The staging tmpdir is registered for sweep but deliberately NOT defer-removed:
 // the caller owns the returned package files until install completes.
-func buildDepPkgsOnHost(ctx context.Context, lp *LocalPkgDef, bDef *BuilderDef, builderImage string, packages []string, layerDir string, cfg *Config, projectDir string, opts EmitOpts) ([]string, error) {
+func buildDepPkgsOnHost(ctx context.Context, lp *LocalPkgDef, bDef *BuilderDef, builderImage string, packages []string, candyDir string, cfg *Config, projectDir string, opts EmitOpts) ([]string, error) {
 	if len(packages) == 0 {
 		return nil, nil
 	}
@@ -223,7 +223,7 @@ func buildDepPkgsOnHost(ctx context.Context, lp *LocalPkgDef, bDef *BuilderDef, 
 		Builder:         lp.DepBuilder,
 		BuilderImage:    builderImage,
 		BuilderDef:      bDef,
-		LayerDir:        layerDir,
+		CandyDir:        candyDir,
 		Phase:           PhaseInstall,
 		RawStageContext: map[string]interface{}{"packages": packages},
 	}
@@ -272,7 +272,7 @@ func buildDepPkgsOnHost(ctx context.Context, lp *LocalPkgDef, bDef *BuilderDef, 
 
 	out, err := BuilderRun(opts.ContextOrDefault(), BuilderRunOpts{
 		BuilderImage: builderImage,
-		LayerDir:     step.LayerDir,
+		CandyDir:     step.CandyDir,
 		ScriptBody:   wrappedScript,
 		BindMounts:   bindMounts,
 		Env:          envVars,
@@ -397,25 +397,25 @@ func venueHasPkgManager(ctx context.Context, exec DeployExecutor, lp *LocalPkgDe
 func execLocalPkgInstall(ctx context.Context, exec DeployExecutor, s *LocalPkgInstallStep, supported bool, venueName string, opts EmitOpts) error {
 	if s.LocalPkg == nil {
 		fmt.Fprintf(os.Stderr, "%s skip: localpkg %s (layer=%s) — target distro declares no localpkg-capable package format; the layer's curl/COPY task installs it instead\n",
-			venueName, s.PkgbuildRef, s.LayerName)
+			venueName, s.PkgbuildRef, s.CandyName)
 		return nil
 	}
 	if !supported {
 		fmt.Fprintf(os.Stderr, "%s skip: localpkg %s (layer=%s) — target has no %s package manager; the layer's curl/COPY task installs it instead\n",
-			venueName, s.PkgbuildRef, s.LayerName, s.Format)
+			venueName, s.PkgbuildRef, s.CandyName, s.Format)
 		return nil
 	}
-	pkgDir := resolveLocalPkgDir(s.PkgbuildRef, s.LayerDir, s.ProjectDir, s.LocalPkg.SourceSentinel)
+	pkgDir := resolveLocalPkgDir(s.PkgbuildRef, s.CandyDir, s.ProjectDir, s.LocalPkg.SourceSentinel)
 	if pkgDir == "" {
 		fmt.Fprintf(os.Stderr, "%s skip: localpkg %s (layer=%s) — no package source found from layer dir %q or project dir %q; the layer's curl/COPY task installs it instead\n",
-			venueName, s.PkgbuildRef, s.LayerName, s.LayerDir, s.ProjectDir)
+			venueName, s.PkgbuildRef, s.CandyName, s.CandyDir, s.ProjectDir)
 		return nil
 	}
 	fmt.Fprintf(os.Stderr, "%s: building %s package (%s) from %s for layer %s\n",
-		venueName, strings.TrimSuffix(filepath.Base(pkgDir), "/"), s.Format, pkgDir, s.LayerName)
+		venueName, strings.TrimSuffix(filepath.Base(pkgDir), "/"), s.Format, pkgDir, s.CandyName)
 	pkgFiles, err := buildLocalPkgOnHost(ctx, s.LocalPkg, pkgDir, opts)
 	if err != nil {
-		return fmt.Errorf("localpkg %s (layer=%s): %w", s.PkgbuildRef, s.LayerName, err)
+		return fmt.Errorf("localpkg %s (layer=%s): %w", s.PkgbuildRef, s.CandyName, err)
 	}
 	if opts.DryRun {
 		return nil
@@ -434,7 +434,7 @@ func execLocalPkgInstall(ctx context.Context, exec DeployExecutor, s *LocalPkgIn
 // OS-tracked + its deps pulled from the image's repos, identical to a deploy
 // install. Returns "" (no directive) when the format declares no download_template
 // (the layer's own task: install is the fallback). Shared by OCITarget AND
-// generate.go writeLayerSteps so the image-build emission has ONE home (R3).
+// generate.go writeCandySteps so the image-build emission has ONE home (R3).
 func renderLocalPkgImageRun(lp *LocalPkgDef) (string, error) {
 	if lp == nil || strings.TrimSpace(lp.DownloadTemplate) == "" {
 		return "", nil

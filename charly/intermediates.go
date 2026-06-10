@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-// pixiBoundLayers identifies layers that have install files (user.yml/root.yml)
+// pixiBoundCandies identifies layers that have install files (user.yml/root.yml)
 // but depend on a pixi environment from their including parent meta-layer.
 // These layers must NOT be extracted into auto-intermediates because the
 // intermediate won't have the pixi environment they need.
@@ -15,14 +15,14 @@ import (
 // 1. It has install files (user.yml or root.yml)
 // 2. It does NOT have its own pixi manifest (pixi.toml/pyproject.toml/environment.yml)
 // 3. It is included via layers: by another layer that DOES have a pixi manifest
-func pixiBoundLayers(layers map[string]*Layer) map[string]bool {
+func pixiBoundCandies(layers map[string]*Candy) map[string]bool {
 	bound := make(map[string]bool)
 	for _, layer := range layers {
 		if layer.PixiManifest() == "" {
 			continue
 		}
-		// This layer owns a pixi env. Check its IncludedLayers.
-		for _, includedRef := range layer.IncludedLayer {
+		// This layer owns a pixi env. Check its IncludedCandies.
+		for _, includedRef := range layer.IncludedCandy {
 			included := includedRef.Bare()
 			child, ok := layers[included]
 			if !ok {
@@ -52,31 +52,31 @@ func newTrieNode(layer string) *trieNode {
 	}
 }
 
-// GlobalLayerOrder computes a global topological order of all layers across
+// GlobalCandyOrder computes a global topological order of all layers across
 // all enabled images, using popularity (number of images needing each layer)
 // as the primary tie-breaker and lexicographic as secondary.
-func GlobalLayerOrder(boxes map[string]*ResolvedBox, layers map[string]*Layer) ([]string, error) {
+func GlobalCandyOrder(boxes map[string]*ResolvedBox, layers map[string]*Candy) ([]string, error) {
 	// Count popularity: how many images need each layer (including transitive deps)
 	popularity := make(map[string]int)
 	for _, img := range boxes {
-		resolved, err := ResolveLayerOrder(img.Layer, layers, nil)
+		resolved, err := ResolveCandyOrder(img.Candy, layers, nil)
 		if err != nil {
 			return nil, fmt.Errorf("resolving layers for image %q: %w", img.Name, err)
 		}
 		// Also include layers from the base chain
-		allLayers := collectAllBoxLayers(img.Name, boxes, layers)
-		// Merge resolved with allLayers
+		allCandies := collectAllBoxCandies(img.Name, boxes, layers)
+		// Merge resolved with allCandies
 		seen := make(map[string]bool)
-		for _, l := range allLayers {
+		for _, l := range allCandies {
 			seen[l] = true
 		}
 		for _, l := range resolved {
 			if !seen[l] {
-				allLayers = append(allLayers, l)
+				allCandies = append(allCandies, l)
 				seen[l] = true
 			}
 		}
-		for _, l := range allLayers {
+		for _, l := range allCandies {
 			popularity[l]++
 		}
 	}
@@ -96,7 +96,7 @@ func GlobalLayerOrder(boxes map[string]*ResolvedBox, layers map[string]*Layer) (
 				deps = append(deps, dep)
 			}
 		}
-		for _, includedRef := range layer.IncludedLayer {
+		for _, includedRef := range layer.IncludedCandy {
 			included := includedRef.Bare()
 			if _, inUse := popularity[included]; inUse {
 				deps = append(deps, included)
@@ -151,15 +151,15 @@ func GlobalLayerOrder(boxes map[string]*ResolvedBox, layers map[string]*Layer) (
 		}
 	}
 	// Every authored layer list contributes ordering edges: image-level lists
-	// AND metalayer `layers:` (IncludedLayer) lists. Non-node entries (pure-
+	// AND metalayer `layers:` (IncludedCandy) lists. Non-node entries (pure-
 	// composition metalayers with no RUN steps) are skipped by addListOrderEdge,
 	// so only content layers are constrained.
 	for _, img := range boxes {
-		addListEdges(img.Layer)
+		addListEdges(img.Candy)
 	}
 	for name := range popularity {
 		if l, ok := layers[name]; ok {
-			addListEdges(bareRefs(l.IncludedLayer))
+			addListEdges(bareRefs(l.IncludedCandy))
 		}
 	}
 
@@ -169,7 +169,7 @@ func GlobalLayerOrder(boxes map[string]*ResolvedBox, layers map[string]*Layer) (
 
 // graphReaches reports whether `to` is reachable from `from` by following
 // dependency edges (graph[x] lists the layers x depends on). Used to keep
-// authored-list-order edge insertion cycle-safe in GlobalLayerOrder.
+// authored-list-order edge insertion cycle-safe in GlobalCandyOrder.
 func graphReaches(graph map[string][]string, from, to string) bool {
 	if from == to {
 		return true
@@ -250,9 +250,9 @@ func sortByPopularity(s []string, popularity map[string]int) {
 	}
 }
 
-// collectAllBoxLayers returns the complete set of layers for an image,
+// collectAllBoxCandies returns the complete set of layers for an image,
 // including all layers inherited through the base chain.
-func collectAllBoxLayers(boxName string, boxes map[string]*ResolvedBox, layers map[string]*Layer) []string {
+func collectAllBoxCandies(boxName string, boxes map[string]*ResolvedBox, layers map[string]*Candy) []string {
 	seen := make(map[string]bool)
 	// walked is an IMAGE-visited guard for the base-chain recursion below. A
 	// base edge may form a cycle (A.base=B, B.base=A); that's caught + reported
@@ -276,7 +276,7 @@ func collectAllBoxLayers(boxName string, boxes map[string]*ResolvedBox, layers m
 		if !img.IsExternalBase {
 			walk(img.Base)
 		}
-		resolved, err := ResolveLayerOrder(img.Layer, layers, nil)
+		resolved, err := ResolveCandyOrder(img.Candy, layers, nil)
 		if err != nil {
 			return
 		}
@@ -291,19 +291,19 @@ func collectAllBoxLayers(boxName string, boxes map[string]*ResolvedBox, layers m
 	return result
 }
 
-// AbsoluteLayerSequence returns an image's complete layer set (own + entire
+// AbsoluteCandySequence returns an image's complete layer set (own + entire
 // base chain) as a subsequence of the global order.
-func AbsoluteLayerSequence(boxName string, boxes map[string]*ResolvedBox, layers map[string]*Layer, globalOrder []string) []string {
-	allLayers := collectAllBoxLayers(boxName, boxes, layers)
-	layerSet := make(map[string]bool, len(allLayers))
-	for _, l := range allLayers {
-		layerSet[l] = true
+func AbsoluteCandySequence(boxName string, boxes map[string]*ResolvedBox, layers map[string]*Candy, globalOrder []string) []string {
+	allCandies := collectAllBoxCandies(boxName, boxes, layers)
+	candySet := make(map[string]bool, len(allCandies))
+	for _, l := range allCandies {
+		candySet[l] = true
 	}
 
 	// Filter global order to only include this image's layers
 	var seq []string
 	for _, l := range globalOrder {
-		if layerSet[l] {
+		if candySet[l] {
 			seq = append(seq, l)
 		}
 	}
@@ -326,8 +326,8 @@ type siblingKey struct {
 // builds prefix tries of relative layer sequences within each sibling group,
 // creates intermediates at branching points, and returns updated images map.
 // User-defined images always take priority over auto-intermediates.
-func ComputeIntermediates(boxes map[string]*ResolvedBox, layers map[string]*Layer, cfg *Config, tag string) (map[string]*ResolvedBox, error) {
-	globalOrder, err := GlobalLayerOrder(boxes, layers)
+func ComputeIntermediates(boxes map[string]*ResolvedBox, layers map[string]*Candy, cfg *Config, tag string) (map[string]*ResolvedBox, error) {
+	globalOrder, err := GlobalCandyOrder(boxes, layers)
 	if err != nil {
 		return nil, fmt.Errorf("computing global layer order: %w", err)
 	}
@@ -340,7 +340,7 @@ func ComputeIntermediates(boxes map[string]*ResolvedBox, layers map[string]*Laye
 	}
 
 	// Compute pixi-bound layers: these must not be extracted into intermediates
-	pixiBound := pixiBoundLayers(layers)
+	pixiBound := pixiBoundCandies(layers)
 
 	// Collect all builder image names to exclude from intermediate generation.
 	builderNames := make(map[string]bool)
@@ -423,13 +423,13 @@ func ComputeIntermediates(boxes map[string]*ResolvedBox, layers map[string]*Laye
 // branch points. The uid is the shared UID of this sibling group; it flows
 // through walkTrieScoped into createIntermediate so the emitted ENV PATH
 // references the correct HOME for this group's user context.
-func processSiblingGroup(parentName string, uid, defaultUID int, children []string, result, origBoxes map[string]*ResolvedBox, layers map[string]*Layer, cfg *Config, tag string, globalOrder []string, pixiBound map[string]bool) error {
+func processSiblingGroup(parentName string, uid, defaultUID int, children []string, result, origBoxes map[string]*ResolvedBox, layers map[string]*Candy, cfg *Config, tag string, globalOrder []string, pixiBound map[string]bool) error {
 	sortStrings(children)
 
 	// Get layers provided by parent
 	parentProvided := make(map[string]bool)
 	if _, ok := result[parentName]; ok {
-		provided, err := LayerProvidedByBox(parentName, result, layers)
+		provided, err := CandyProvidedByBox(parentName, result, layers)
 		if err == nil {
 			parentProvided = provided
 		}
@@ -438,7 +438,7 @@ func processSiblingGroup(parentName string, uid, defaultUID int, children []stri
 	// Build trie from relative layer sequences
 	root := newTrieNode("")
 	for _, childName := range children {
-		seq := relativeLayerSequence(childName, parentProvided, result, layers, globalOrder, pixiBound)
+		seq := relativeCandySequence(childName, parentProvided, result, layers, globalOrder, pixiBound)
 		node := root
 		for _, layer := range seq {
 			child, ok := node.children[layer]
@@ -454,18 +454,18 @@ func processSiblingGroup(parentName string, uid, defaultUID int, children []stri
 	return walkTrieScoped(root, parentName, uid, defaultUID, result, origBoxes, layers, cfg, tag, globalOrder, pixiBound)
 }
 
-// relativeLayerSequence returns an image's layers minus what the parent provides,
+// relativeCandySequence returns an image's layers minus what the parent provides,
 // ordered according to the global layer order.
-func relativeLayerSequence(boxName string, parentProvided map[string]bool, boxes map[string]*ResolvedBox, layers map[string]*Layer, globalOrder []string, pixiBound map[string]bool) []string {
-	allLayers := collectAllBoxLayers(boxName, boxes, layers)
-	layerSet := make(map[string]bool, len(allLayers))
-	for _, l := range allLayers {
-		layerSet[l] = true
+func relativeCandySequence(boxName string, parentProvided map[string]bool, boxes map[string]*ResolvedBox, layers map[string]*Candy, globalOrder []string, pixiBound map[string]bool) []string {
+	allCandies := collectAllBoxCandies(boxName, boxes, layers)
+	candySet := make(map[string]bool, len(allCandies))
+	for _, l := range allCandies {
+		candySet[l] = true
 	}
 
 	var seq []string
 	for _, l := range globalOrder {
-		if layerSet[l] && !parentProvided[l] && !pixiBound[l] {
+		if candySet[l] && !parentProvided[l] && !pixiBound[l] {
 			seq = append(seq, l)
 		}
 	}
@@ -476,18 +476,18 @@ func relativeLayerSequence(boxName string, parentProvided map[string]bool, boxes
 // User-defined images at branch points are reused as intermediates without rebasing.
 // uid + defaultUID propagate from the sibling group so auto-intermediates
 // inherit the right user context and get UID-suffixed names when needed.
-func walkTrieScoped(node *trieNode, parentName string, uid, defaultUID int, result map[string]*ResolvedBox, origBoxes map[string]*ResolvedBox, layers map[string]*Layer, cfg *Config, tag string, globalOrder []string, pixiBound map[string]bool) error {
-	for _, childLayerName := range sortedKeys(node.children) {
-		child := node.children[childLayerName]
+func walkTrieScoped(node *trieNode, parentName string, uid, defaultUID int, result map[string]*ResolvedBox, origBoxes map[string]*ResolvedBox, layers map[string]*Candy, cfg *Config, tag string, globalOrder []string, pixiBound map[string]bool) error {
+	for _, childCandyName := range sortedKeys(node.children) {
+		child := node.children[childCandyName]
 
 		// Collect linear chain: walk as long as exactly one child and no terminal images
-		var pathLayers []string
+		var pathCandies []string
 		current := child
-		pathLayers = append(pathLayers, childLayerName)
+		pathCandies = append(pathCandies, childCandyName)
 
 		for len(current.children) == 1 && len(current.boxes) == 0 {
-			for layerName, next := range current.children {
-				pathLayers = append(pathLayers, layerName)
+			for candyName, next := range current.children {
+				pathCandies = append(pathCandies, candyName)
 				current = next
 			}
 		}
@@ -513,14 +513,14 @@ func walkTrieScoped(node *trieNode, parentName string, uid, defaultUID int, resu
 				}
 			} else {
 				// 0 or 2+ user images: create auto-intermediate
-				intermediateName := pickAutoName(pathLayers, parentName, uid, defaultUID, result, origBoxes)
+				intermediateName := pickAutoName(pathCandies, parentName, uid, defaultUID, result, origBoxes)
 				// Every terminal image in this subtree will base (directly or
 				// transitively) on this intermediate, so it must carry the UNION
 				// of their build formats / distro tags — a layer hoisted here whose
 				// package section is keyed on a format only the consumers declare
 				// would otherwise be silently dropped. See createIntermediate.
 				consumerBoxes := collectSubtreeBoxes(current)
-				createIntermediate(intermediateName, parentName, uid, pathLayers, consumerBoxes, result, origBoxes, cfg, tag, layers, globalOrder, pixiBound)
+				createIntermediate(intermediateName, parentName, uid, pathCandies, consumerBoxes, result, origBoxes, cfg, tag, layers, globalOrder, pixiBound)
 				// Rebase all terminal images to this intermediate
 				for _, imgName := range current.boxes {
 					updateBoxBase(imgName, intermediateName, result)
@@ -552,22 +552,22 @@ func collectSubtreeBoxes(node *trieNode) []string {
 	return out
 }
 
-// pickAutoName chooses a name for an auto-intermediate using {parent}-{lastLayer}.
+// pickAutoName chooses a name for an auto-intermediate using {parent}-{lastCandy}.
 // For OCI refs (e.g. "quay.io/fedora/fedora:43"), extracts the short image name.
 // When uid != defaultUID, appends "-uid<N>" so uid=0 and uid=1000 intermediates
 // at the same trie position get distinct OCI tags (otherwise they'd collide
 // and one group's HOME-baked ENV would poison the other).
 // Appends -2, -3 etc. to avoid conflicts with existing or already-created images.
-func pickAutoName(pathLayers []string, parentName string, uid, defaultUID int, result, origBoxes map[string]*ResolvedBox) string {
-	lastLayer := pathLayers[len(pathLayers)-1]
+func pickAutoName(pathCandies []string, parentName string, uid, defaultUID int, result, origBoxes map[string]*ResolvedBox) string {
+	lastCandy := pathCandies[len(pathCandies)-1]
 	// Remote layer keys are fully-qualified paths
 	// ("github.com/overthinkos/overthink/candy/pixi"); reduce to the short
 	// layer name so the intermediate gets a valid, slash-free OCI image name
 	// ("arch-pixi", not "arch-github.com/.../candy/pixi" — the latter is a
 	// malformed ref that crashes buildah's content-summary on COPY/FROM). Local
 	// layer keys are already short, so this is a no-op for them.
-	if i := strings.LastIndex(lastLayer, "/"); i >= 0 {
-		lastLayer = lastLayer[i+1:]
+	if i := strings.LastIndex(lastCandy, "/"); i >= 0 {
+		lastCandy = lastCandy[i+1:]
 	}
 
 	// Extract short parent name from OCI refs: "quay.io/fedora/fedora:43" → "fedora"
@@ -579,7 +579,7 @@ func pickAutoName(pathLayers []string, parentName string, uid, defaultUID int, r
 		shortParent = shortParent[i+1:]
 	}
 
-	baseName := shortParent + "-" + lastLayer
+	baseName := shortParent + "-" + lastCandy
 	if uid != defaultUID {
 		baseName = fmt.Sprintf("%s-uid%d", baseName, uid)
 	}
@@ -600,8 +600,8 @@ func pickAutoName(pathLayers []string, parentName string, uid, defaultUID int, r
 // uid is the sibling group's UID — it determines the intermediate's User/GID/Home
 // so HOME-relative env/path_append expansion matches the children that will
 // inherit from this intermediate.
-func createIntermediate(name, parentName string, uid int, pathLayers []string, consumerBoxes []string, result map[string]*ResolvedBox, origBoxes map[string]*ResolvedBox, cfg *Config, tag string, layers map[string]*Layer, globalOrder []string, pixiBound map[string]bool) {
-	ownLayers := computeOwnLayers(parentName, pathLayers, result, layers, globalOrder, pixiBound)
+func createIntermediate(name, parentName string, uid int, pathCandies []string, consumerBoxes []string, result map[string]*ResolvedBox, origBoxes map[string]*ResolvedBox, cfg *Config, tag string, layers map[string]*Candy, globalOrder []string, pixiBound map[string]bool) {
+	ownCandies := computeOwnCandies(parentName, pathCandies, result, layers, globalOrder, pixiBound)
 
 	isExternalBase := false
 	if _, ok := result[parentName]; !ok {
@@ -735,7 +735,7 @@ func createIntermediate(name, parentName string, uid int, pathLayers []string, c
 		Name:           name,
 		Base:           parentName,
 		IsExternalBase: isExternalBase,
-		Layer:          ownLayers,
+		Candy:          ownCandies,
 		Tag:            tag,
 		Registry:       cfg.Defaults.Registry,
 		Distro:         inheritedDistro,
@@ -776,19 +776,19 @@ func createIntermediate(name, parentName string, uid int, pathLayers []string, c
 	result[name] = img
 }
 
-// computeOwnLayers determines which layers an intermediate needs to install
-// (pathLayers minus what the parent already provides).
-func computeOwnLayers(parentName string, pathLayers []string, result map[string]*ResolvedBox, layers map[string]*Layer, globalOrder []string, pixiBound map[string]bool) []string {
+// computeOwnCandies determines which layers an intermediate needs to install
+// (pathCandies minus what the parent already provides).
+func computeOwnCandies(parentName string, pathCandies []string, result map[string]*ResolvedBox, layers map[string]*Candy, globalOrder []string, pixiBound map[string]bool) []string {
 	parentProvided := make(map[string]bool)
 	if _, ok := result[parentName]; ok {
-		provided, err := LayerProvidedByBox(parentName, result, layers)
+		provided, err := CandyProvidedByBox(parentName, result, layers)
 		if err == nil {
 			parentProvided = provided
 		}
 	}
 
 	var own []string
-	for _, l := range pathLayers {
+	for _, l := range pathCandies {
 		if !parentProvided[l] {
 			own = append(own, l)
 		}
@@ -815,8 +815,8 @@ func computeOwnLayers(parentName string, pathLayers []string, result map[string]
 }
 
 // addTransitiveDeps adds all transitive dependencies of a layer to the needed set.
-func addTransitiveDeps(layerName string, layers map[string]*Layer, needed map[string]bool, excluded map[string]bool) {
-	layer, ok := layers[layerName]
+func addTransitiveDeps(candyName string, layers map[string]*Candy, needed map[string]bool, excluded map[string]bool) {
+	layer, ok := layers[candyName]
 	if !ok {
 		return
 	}
@@ -828,7 +828,7 @@ func addTransitiveDeps(layerName string, layers map[string]*Layer, needed map[st
 		needed[dep] = true
 		addTransitiveDeps(dep, layers, needed, excluded)
 	}
-	for _, includedRef := range layer.IncludedLayer {
+	for _, includedRef := range layer.IncludedCandy {
 		included := includedRef.Bare()
 		if excluded[included] || needed[included] {
 			continue

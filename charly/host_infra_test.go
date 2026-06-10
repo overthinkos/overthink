@@ -112,7 +112,7 @@ func withTempLedger(t *testing.T) *LedgerPaths {
 	return &LedgerPaths{
 		Root:     root,
 		Deploys:  filepath.Join(root, "deploys"),
-		Layers:   filepath.Join(root, "layers"),
+		Candies:   filepath.Join(root, "layers"),
 		LockFile: filepath.Join(root, ".lock"),
 	}
 }
@@ -123,7 +123,7 @@ func TestLedgerRoundTrip(t *testing.T) {
 		DeployID:   "abc123",
 		Image:      "fedora-coder",
 		Target:     "host",
-		Layer:      []string{"ripgrep", "uv"},
+		Candy:      []string{"ripgrep", "uv"},
 		DeployedAt: "2026-04-21T00:00:00Z",
 	}
 	if err := WriteDeployRecord(paths, rec); err != nil {
@@ -133,7 +133,7 @@ func TestLedgerRoundTrip(t *testing.T) {
 	if err != nil || got == nil {
 		t.Fatalf("read: %v / %+v", err, got)
 	}
-	if got.Image != "fedora-coder" || len(got.Layer) != 2 {
+	if got.Image != "fedora-coder" || len(got.Candy) != 2 {
 		t.Errorf("round-trip broken: %+v", got)
 	}
 }
@@ -141,32 +141,32 @@ func TestLedgerRoundTrip(t *testing.T) {
 func TestLedgerRefcount(t *testing.T) {
 	paths := withTempLedger(t)
 	// Deploy A and B both include ripgrep.
-	if err := AddLayerDeployment(paths, "ripgrep", "deploy-A", nil); err != nil {
+	if err := AddCandyDeployment(paths, "ripgrep", "deploy-A", nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := AddLayerDeployment(paths, "ripgrep", "deploy-B", nil); err != nil {
+	if err := AddCandyDeployment(paths, "ripgrep", "deploy-B", nil); err != nil {
 		t.Fatal(err)
 	}
-	rec, _ := ReadLayerRecord(paths, "ripgrep")
+	rec, _ := ReadCandyRecord(paths, "ripgrep")
 	if len(rec.DeployedBy) != 2 {
 		t.Errorf("DeployedBy = %v, want 2 entries", rec.DeployedBy)
 	}
 
 	// Remove A — ripgrep stays.
-	_, shouldRemove, err := RemoveLayerDeployment(paths, "ripgrep", "deploy-A")
+	_, shouldRemove, err := RemoveCandyDeployment(paths, "ripgrep", "deploy-A")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if shouldRemove {
 		t.Errorf("shouldRemove=true after removing one of two deployers")
 	}
-	rec, _ = ReadLayerRecord(paths, "ripgrep")
+	rec, _ = ReadCandyRecord(paths, "ripgrep")
 	if len(rec.DeployedBy) != 1 || rec.DeployedBy[0] != "deploy-B" {
 		t.Errorf("after decrement: %v", rec.DeployedBy)
 	}
 
 	// Remove B — ripgrep should fully teardown.
-	_, shouldRemove, err = RemoveLayerDeployment(paths, "ripgrep", "deploy-B")
+	_, shouldRemove, err = RemoveCandyDeployment(paths, "ripgrep", "deploy-B")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -196,7 +196,7 @@ func TestLedgerFlock(t *testing.T) {
 func TestBuildBuilderRunArgs(t *testing.T) {
 	opts := BuilderRunOpts{
 		BuilderImage: "fedora-builder:latest",
-		LayerDir:     "/home/user/layers/pre-commit",
+		CandyDir:     "/home/user/layers/pre-commit",
 		HostHome:     "/home/user",
 		BindMounts: map[string]string{
 			"/home/user/.pixi": "/home/user/.pixi",
@@ -424,7 +424,7 @@ func TestShQuoteEnv(t *testing.T) {
 func TestBuildBuilderRunArgsRunAsRoot(t *testing.T) {
 	opts := BuilderRunOpts{
 		BuilderImage: "arch-builder:latest",
-		LayerDir:     "/home/user/layers/pre-commit",
+		CandyDir:     "/home/user/layers/pre-commit",
 		HostHome:     "/home/user",
 		RunAsRoot:    true,
 	}

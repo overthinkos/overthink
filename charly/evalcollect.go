@@ -19,40 +19,40 @@ package main
 //
 // Returns nil if every section is empty — callers (generate.go) skip label
 // emission in that case.
-func CollectEval(cfg *Config, layers map[string]*Layer, boxName string) *LabelEvalSet {
+func CollectEval(cfg *Config, layers map[string]*Candy, boxName string) *LabelEvalSet {
 	set := &LabelEvalSet{}
 
 	// Walk base-image chain the same way CollectHooks does: layer-order per
 	// level, then step into the internal base. Tracks visited images so we
 	// terminate cleanly on pathological cycles (validateBoxDAG reports the
 	// cycle itself; we just refuse to infinite-loop on bad input here).
-	var allLayerNames []string
+	var allCandyNames []string
 	for _, node := range cfg.walkBaseChain(boxName) {
-		resolved, err := ResolveLayerOrder(node.Img.Layer, layers, nil)
+		resolved, err := ResolveCandyOrder(node.Img.Candy, layers, nil)
 		if err != nil {
 			break
 		}
-		allLayerNames = append(allLayerNames, resolved...)
+		allCandyNames = append(allCandyNames, resolved...)
 	}
 
 	seen := map[string]bool{}
-	for _, layerName := range allLayerNames {
-		if seen[layerName] {
+	for _, candyName := range allCandyNames {
+		if seen[candyName] {
 			continue
 		}
-		seen[layerName] = true
-		layer, ok := layers[layerName]
+		seen[candyName] = true
+		layer, ok := layers[candyName]
 		if !ok {
 			continue
 		}
 		for _, c := range layer.tests {
-			c.Origin = "candy:" + layerName
+			c.Origin = "candy:" + candyName
 			switch c.Scope {
 			case "deploy":
 				set.Deploy = append(set.Deploy, c)
 			default:
 				c.Scope = "build"
-				set.Layer = append(set.Layer, c)
+				set.Candy = append(set.Candy, c)
 			}
 		}
 	}

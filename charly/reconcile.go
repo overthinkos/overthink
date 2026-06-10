@@ -96,7 +96,7 @@ func (c *BoxReconcileCmd) Run() error {
 		}
 		roots[f] = &root
 		walkScalars(&root, func(s *yaml.Node) {
-			if !IsRemoteLayerRef(s.Value) {
+			if !IsRemoteCandyRef(s.Value) {
 				return
 			}
 			p := ParseRemoteRef(s.Value)
@@ -131,7 +131,7 @@ func (c *BoxReconcileCmd) Run() error {
 		root := roots[f]
 		fileChanged := false
 		walkScalars(root, func(s *yaml.Node) {
-			if !IsRemoteLayerRef(s.Value) {
+			if !IsRemoteCandyRef(s.Value) {
 				return
 			}
 			p := ParseRemoteRef(s.Value)

@@ -175,10 +175,10 @@ box:
 	if err != nil {
 		t.Fatalf("LoadUnified: %v", err)
 	}
-	if _, ok := uf.Layer["chrome"]; !ok {
+	if _, ok := uf.Candy["chrome"]; !ok {
 		t.Error("layers.chrome missing")
 	}
-	if _, ok := uf.Layer["firefox"]; !ok {
+	if _, ok := uf.Candy["firefox"]; !ok {
 		t.Error("layers.firefox missing")
 	}
 	if _, ok := uf.Box["browsers"]; !ok {
@@ -207,7 +207,7 @@ box:
 	}
 }
 
-func TestLoadUnified_DiscoverLayers(t *testing.T) {
+func TestLoadUnified_DiscoverCandies(t *testing.T) {
 	root := t.TempDir()
 	// Canonical kind-keyed candy.yml manifests; discovery routes by shape.
 	writeFixture(t, root, "candy/chrome/charly.yml", `candy:
@@ -229,10 +229,10 @@ discover:
 	if err := uf.ApplyDiscover(root); err != nil {
 		t.Fatalf("ApplyDiscover: %v", err)
 	}
-	if _, ok := uf.Layer["chrome"]; !ok {
+	if _, ok := uf.Candy["chrome"]; !ok {
 		t.Error("discovered layers.chrome missing")
 	}
-	if _, ok := uf.Layer["firefox"]; !ok {
+	if _, ok := uf.Candy["firefox"]; !ok {
 		t.Error("discovered layers.firefox missing")
 	}
 }
@@ -256,7 +256,7 @@ candy:
 	if err := uf.ApplyDiscover(root); err != nil {
 		t.Fatalf("ApplyDiscover: %v", err)
 	}
-	il := uf.Layer["chrome"]
+	il := uf.Candy["chrome"]
 	if il == nil {
 		t.Fatal("layers.chrome missing")
 	}
@@ -285,10 +285,10 @@ discover:
 	// resolves against THAT file's location, not the consumer's cwd. The
 	// test fixture lives at <tempdir>/charly.yml, so the anchored path
 	// is filepath.Join(<tempdir>, "layers").
-	wantLayers := filepath.Join(root, "layers")
+	wantCandies := filepath.Join(root, "layers")
 	wantVendor := filepath.Join(root, "vendor")
-	if uf.Discover[0].Path != wantLayers || !uf.Discover[0].Recursive {
-		t.Errorf("[0] = %+v, want {Path:%s Recursive:true}", uf.Discover[0], wantLayers)
+	if uf.Discover[0].Path != wantCandies || !uf.Discover[0].Recursive {
+		t.Errorf("[0] = %+v, want {Path:%s Recursive:true}", uf.Discover[0], wantCandies)
 	}
 	if uf.Discover[1].Path != wantVendor || uf.Discover[1].Recursive {
 		t.Errorf("[1] = %+v, want {Path:%s Recursive:false}", uf.Discover[1], wantVendor)
@@ -321,7 +321,7 @@ discover:
 	if err := uf.ApplyDiscover(root); err != nil {
 		t.Fatalf("ApplyDiscover: %v", err)
 	}
-	if _, ok := uf.Layer["widget"]; !ok {
+	if _, ok := uf.Candy["widget"]; !ok {
 		t.Error("configurable-manifest discovery did not find widget under manifest: thing.yml")
 	}
 }

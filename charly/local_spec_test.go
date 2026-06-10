@@ -33,7 +33,7 @@ local:
 	if !exists {
 		t.Fatalf("expected dev-workstation in uf.Local; got %+v", uf.Local)
 	}
-	if got := spec.Layer; len(got) != 2 || got[0] != "ripgrep" || got[1] != "direnv" {
+	if got := spec.Candy; len(got) != 2 || got[0] != "ripgrep" || got[1] != "direnv" {
 		t.Errorf("unexpected layers: %v", got)
 	}
 	if spec.InstallOpts == nil || spec.InstallOpts.WithServices || !spec.InstallOpts.AllowRepoChanges {

@@ -16,12 +16,12 @@ func TestMigrateEntityVersion(t *testing.T) {
 	dir := t.TempDir()
 	seed := "2026.144.1443"
 
-	layerDir := filepath.Join(dir, "layers", "ripgrep")
-	if err := os.MkdirAll(layerDir, 0o755); err != nil {
+	candyDir := filepath.Join(dir, "layers", "ripgrep")
+	if err := os.MkdirAll(candyDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	layerYML := "layer:\n  name: ripgrep\n  package:\n    - ripgrep\n"
-	if err := os.WriteFile(filepath.Join(layerDir, "layer.yml"), []byte(layerYML), 0o644); err != nil {
+	candyYML := "layer:\n  name: ripgrep\n  package:\n    - ripgrep\n"
+	if err := os.WriteFile(filepath.Join(candyDir, "layer.yml"), []byte(candyYML), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -53,9 +53,9 @@ func TestMigrateEntityVersion(t *testing.T) {
 		t.Fatalf("expected 2 modified files (layer.yml + base.yml), got %d: %+v", len(results), results)
 	}
 
-	gotLayer, _ := os.ReadFile(filepath.Join(layerDir, "layer.yml"))
-	if !strings.Contains(string(gotLayer), "version: "+seed) {
-		t.Errorf("layer.yml missing version after backfill:\n%s", gotLayer)
+	gotCandy, _ := os.ReadFile(filepath.Join(candyDir, "layer.yml"))
+	if !strings.Contains(string(gotCandy), "version: "+seed) {
+		t.Errorf("layer.yml missing version after backfill:\n%s", gotCandy)
 	}
 
 	gotBase, _ := os.ReadFile(filepath.Join(dir, "base.yml"))
@@ -95,7 +95,7 @@ func TestMigrateEntityVersion(t *testing.T) {
 func TestMigrateEntityVersion_SkipsNestedGitRepos(t *testing.T) {
 	dir := t.TempDir()
 	seed := "2026.144.1443"
-	layerYML := "layer:\n  name: demo\n  package:\n    - demo\n"
+	candyYML := "layer:\n  name: demo\n  package:\n    - demo\n"
 
 	// The walk ROOT itself carries a `.git` (mimics a linked-worktree root, whose
 	// `.git` is a gitfile) + an own layer file — both MUST be migrated (the cwd
@@ -104,7 +104,7 @@ func TestMigrateEntityVersion_SkipsNestedGitRepos(t *testing.T) {
 		t.Fatal(err)
 	}
 	rootFile := filepath.Join(dir, "root.yml")
-	if err := os.WriteFile(rootFile, []byte(layerYML), 0o644); err != nil {
+	if err := os.WriteFile(rootFile, []byte(candyYML), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -113,7 +113,7 @@ func TestMigrateEntityVersion_SkipsNestedGitRepos(t *testing.T) {
 	if err := os.MkdirAll(filepath.Dir(ownFile), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(ownFile, []byte(layerYML), 0o644); err != nil {
+	if err := os.WriteFile(ownFile, []byte(candyYML), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -126,7 +126,7 @@ func TestMigrateEntityVersion_SkipsNestedGitRepos(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "box", "distro-sub", ".git"), []byte("gitdir: /elsewhere/sub\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(subFile, []byte(layerYML), 0o644); err != nil {
+	if err := os.WriteFile(subFile, []byte(candyYML), 0o644); err != nil {
 		t.Fatal(err)
 	}
 

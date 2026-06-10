@@ -97,7 +97,7 @@ func TestRenderTaskCommand_WriteHeredocBalanced(t *testing.T) {
 // (`CHARLY_DROPIN`).
 func TestOCIEmit_HeredocsBalanced(t *testing.T) {
 	tgt := &OCITarget{}
-	plan := &InstallPlan{Layer: "demo", Steps: []InstallStep{
+	plan := &InstallPlan{Candy: "demo", Steps: []InstallStep{
 		&RepoChangeStep{
 			Format:  "rpm",
 			File:    "/etc/yum.repos.d/demo.repo",
@@ -109,7 +109,7 @@ func TestOCIEmit_HeredocsBalanced(t *testing.T) {
 			Enable:        true,
 			OverridesText: "[Service]\nLimitNOFILE=65536\n",
 			OverridesPath: "/etc/systemd/system/demo.service.d/override.conf",
-			LayerName:     "demo",
+			CandyName:     "demo",
 		},
 	}}
 	if err := tgt.Emit([]*InstallPlan{plan}, EmitOpts{}); err != nil {

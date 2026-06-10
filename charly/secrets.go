@@ -54,7 +54,7 @@ func generateRandomSecretToken(byteCount int) string {
 // Used by:
 //   - ProvisionPodmanSecrets — config-time CollectedSecret provisioning
 //     when --password=auto is in effect.
-//   - ensureLayerSecret (layer_secrets.go) — deploy-time secret_requires
+//   - ensureCandySecret (layer_secrets.go) — deploy-time secret_requires
 //     resolution on host/VM/SSH targets when the value is missing.
 func generateAndStoreSecret(service, key string) (val, source string) {
 	val = generateRandomSecretToken(32)
@@ -82,7 +82,7 @@ type LabelSecretEntry struct {
 
 // CollectedSecret represents a fully resolved secret ready for provisioning.
 //
-// Service, Key, and RotateOnConfig are populated by CollectLayerSecretAccepts
+// Service, Key, and RotateOnConfig are populated by CollectCandySecretAccepts
 // (added in a later step) for credential-store-backed secrets derived from
 // secret_accepts / secret_requires candy manifest entries. They are zero for
 // layer-owned secrets (the existing CollectSecretsFromLabels path), preserving
@@ -161,7 +161,7 @@ func ProvisionPodmanSecrets(engine, boxName, instance string, secrets []Collecte
 		// The default (RotateOnConfig=false) is correct for layer-owned
 		// secrets like immich's db-password: overwriting would break a live
 		// postgres cluster. RotateOnConfig=true is set by
-		// CollectLayerSecretAccepts for secret_accepts/secret_requires
+		// CollectCandySecretAccepts for secret_accepts/secret_requires
 		// entries, whose whole point is to reflect the current credential
 		// store value on every reconcile. See plan §2.3.
 		if !s.RotateOnConfig && podmanSecretExists(engine, s.Name) {
@@ -257,13 +257,13 @@ func SecretArgs(secrets []CollectedSecret) []string {
 // they take precedence over the default lookup chain: the credential store
 // is queried exactly at (Service, Key) with the Env var as the env override.
 // This is the path used by secret_accepts / secret_requires entries
-// synthesized by CollectLayerSecretAccepts, where the layer author may have
+// synthesized by CollectCandySecretAccepts, where the layer author may have
 // set `key: charly/api-key/openrouter` to point at a shared credential namespace.
 //
 // When Service/Key are unset, the default chain (used by layer-owned secrets)
 // applies: env var → charly/secret/<podman-name> → charly/secret/<bare-secret-name>.
 func resolveSecretValue(s CollectedSecret, boxName, instance string) (value, source string) {
-	// Explicit override from CollectLayerSecretAccepts: query exactly once at
+	// Explicit override from CollectCandySecretAccepts: query exactly once at
 	// (Service, Key), allowing the Env var to win via ResolveCredential's
 	// env-first chain.
 	if s.Service != "" && s.Key != "" {
@@ -301,7 +301,7 @@ func resolveSecretValue(s CollectedSecret, boxName, instance string) (value, sou
 
 // SecretResolution records the result of resolving a single secret_accepts or
 // secret_requires entry against the credential store. Returned alongside the
-// []CollectedSecret list from CollectLayerSecretAccepts so downstream callers
+// []CollectedSecret list from CollectCandySecretAccepts so downstream callers
 // (checkMissingSecretRequires in Step 5/6) can distinguish "required but
 // missing" from "optional and absent" with actionable remediation.
 type SecretResolution struct {
@@ -311,7 +311,7 @@ type SecretResolution struct {
 	Required bool   // true iff the entry came from secret_requires (not secret_accepts)
 }
 
-// CollectLayerSecretAccepts synthesizes CollectedSecret entries from an
+// CollectCandySecretAccepts synthesizes CollectedSecret entries from an
 // image's secret_accepts and secret_requires label metadata, resolving each
 // against the credential store and returning:
 //
@@ -328,7 +328,7 @@ type SecretResolution struct {
 // This function does NOT touch the podman secret store — that's the job of
 // ProvisionPodmanSecrets. It only reads from the credential store. No network
 // calls, no filesystem mutations, safe to run speculatively.
-func CollectLayerSecretAccepts(boxName, instance string, meta *BoxMetadata) (collected []CollectedSecret, resolutions []SecretResolution) {
+func CollectCandySecretAccepts(boxName, instance string, meta *BoxMetadata) (collected []CollectedSecret, resolutions []SecretResolution) {
 	if meta == nil {
 		return nil, nil
 	}
@@ -393,7 +393,7 @@ func CollectLayerSecretAccepts(boxName, instance string, meta *BoxMetadata) (col
 // otherwise never see it. Generic across every hook+secret layer (R3); inert
 // (returns nil) when the image declares no secrets or none resolve.
 func resolveHookSecretEnv(boxName, instance string, meta *BoxMetadata) []string {
-	collected, _ := CollectLayerSecretAccepts(boxName, instance, meta)
+	collected, _ := CollectCandySecretAccepts(boxName, instance, meta)
 	var env []string
 	for _, s := range collected {
 		if s.Env == "" {

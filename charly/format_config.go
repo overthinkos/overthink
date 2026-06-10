@@ -732,7 +732,7 @@ type BuilderDef struct {
 	// artefacts live under (e.g. "~/.pixi/envs/default/bin"). When any
 	// layer in an image triggers the builder via DetectFiles/DetectConfig,
 	// these paths are emitted into the final image's `ENV PATH=...` and
-	// the `ai.opencharly.path_append` OCI label by writeLayerEnv +
+	// the `ai.opencharly.path_append` OCI label by writeCandyEnv +
 	// emitLabels in generate.go. Authors can also add layer-level entries
 	// via the candy manifest `path_append:` — both contribute to the same merged
 	// PATH. Empty list means the builder doesn't contribute (aur installs

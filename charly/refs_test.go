@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-func TestLayerRef(t *testing.T) {
+func TestCandyRef(t *testing.T) {
 	tests := []struct {
 		raw      string
 		bare     string
@@ -23,13 +23,13 @@ func TestLayerRef(t *testing.T) {
 	for _, tt := range tests {
 		r := CandyRef{Raw: tt.raw}
 		if got := r.Bare(); got != tt.bare {
-			t.Errorf("LayerRef{%q}.Bare() = %q, want %q", tt.raw, got, tt.bare)
+			t.Errorf("CandyRef{%q}.Bare() = %q, want %q", tt.raw, got, tt.bare)
 		}
 		if got := r.Version(); got != tt.version {
-			t.Errorf("LayerRef{%q}.Version() = %q, want %q", tt.raw, got, tt.version)
+			t.Errorf("CandyRef{%q}.Version() = %q, want %q", tt.raw, got, tt.version)
 		}
 		if got := r.IsRemote(); got != tt.isRemote {
-			t.Errorf("LayerRef{%q}.IsRemote() = %v, want %v", tt.raw, got, tt.isRemote)
+			t.Errorf("CandyRef{%q}.IsRemote() = %v, want %v", tt.raw, got, tt.isRemote)
 		}
 	}
 	// A resolved sibling key overrides Bare() but leaves Raw (and thus the
@@ -43,21 +43,21 @@ func TestLayerRef(t *testing.T) {
 	}
 }
 
-// TestPickLayerVersion covers the per-entity-version arbiter (the sole
+// TestPickCandyVersion covers the per-entity-version arbiter (the sole
 // layer-version resolver). Same per-entity `version:` across different git tags
 // resolves with NO warning — the newest git tag wins for freshness — which is
 // the Problem-B regression guard: a repo re-tag of an UNCHANGED layer must not
 // warn. Different per-entity versions warn once and the newest version wins.
-func TestPickLayerVersion(t *testing.T) {
-	mk := func(ver, tag string) layerCandidate {
-		return layerCandidate{
-			layer:   &Layer{Name: "x", Version: ver},
+func TestPickCandyVersion(t *testing.T) {
+	mk := func(ver, tag string) candyCandidate {
+		return candyCandidate{
+			layer:   &Candy{Name: "x", Version: ver},
 			version: ver,
 			gitTag:  tag,
 			source:  "github.com/o/r@" + tag,
 		}
 	}
-	capture := func(fn func() layerCandidate) (layerCandidate, string) {
+	capture := func(fn func() candyCandidate) (candyCandidate, string) {
 		old := os.Stderr
 		r, w, _ := os.Pipe()
 		os.Stderr = w
@@ -70,8 +70,8 @@ func TestPickLayerVersion(t *testing.T) {
 	}
 
 	// Same per-entity version, different git tags -> NO warning, newest tag wins.
-	got, warn := capture(func() layerCandidate {
-		return pickLayerVersion("github.com/o/r/layers/x", []layerCandidate{
+	got, warn := capture(func() candyCandidate {
+		return pickCandyVersion("github.com/o/r/layers/x", []candyCandidate{
 			mk("2026.141.1600", "v2026.141.1600"),
 			mk("2026.141.1600", "v2026.150.900"),
 		})
@@ -84,8 +84,8 @@ func TestPickLayerVersion(t *testing.T) {
 	}
 
 	// Different per-entity versions -> exactly one warning, newest version wins.
-	got, warn = capture(func() layerCandidate {
-		return pickLayerVersion("github.com/o/r/layers/x", []layerCandidate{
+	got, warn = capture(func() candyCandidate {
+		return pickCandyVersion("github.com/o/r/layers/x", []candyCandidate{
 			mk("2026.141.1600", "v2026.141.1600"),
 			mk("2026.144.531", "v2026.144.531"),
 		})
@@ -165,7 +165,7 @@ func TestParseRemoteRef(t *testing.T) {
 	}
 }
 
-func TestIsRemoteLayerRef(t *testing.T) {
+func TestIsRemoteCandyRef(t *testing.T) {
 	tests := []struct {
 		ref  string
 		want bool
@@ -180,9 +180,9 @@ func TestIsRemoteLayerRef(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		got := IsRemoteLayerRef(tt.ref)
+		got := IsRemoteCandyRef(tt.ref)
 		if got != tt.want {
-			t.Errorf("IsRemoteLayerRef(%q) = %v, want %v", tt.ref, got, tt.want)
+			t.Errorf("IsRemoteCandyRef(%q) = %v, want %v", tt.ref, got, tt.want)
 		}
 	}
 }
@@ -206,23 +206,23 @@ func TestIsRemoteImageRef(t *testing.T) {
 	}
 }
 
-func TestScanRemoteLayers(t *testing.T) {
+func TestScanRemoteCandies(t *testing.T) {
 	dir := t.TempDir()
-	layersDir := filepath.Join(dir, "candy")
-	os.MkdirAll(filepath.Join(layersDir, "cuda"), 0755)
-	os.MkdirAll(filepath.Join(layersDir, "python-ml"), 0755)
+	candiesDir := filepath.Join(dir, "candy")
+	os.MkdirAll(filepath.Join(candiesDir, "cuda"), 0755)
+	os.MkdirAll(filepath.Join(candiesDir, "python-ml"), 0755)
 
-	os.WriteFile(filepath.Join(layersDir, "cuda", "charly.yml"), []byte("candy:\n  name: cuda\n  package:\n    - cuda-toolkit\n"), 0644)
-	os.WriteFile(filepath.Join(layersDir, "python-ml", "charly.yml"), []byte("candy:\n  name: python-ml\n  require:\n    - cuda\n"), 0644)
-	os.WriteFile(filepath.Join(layersDir, "python-ml", "pixi.toml"), []byte("[project]\nname = \"python-ml\"\n"), 0644)
+	os.WriteFile(filepath.Join(candiesDir, "cuda", "charly.yml"), []byte("candy:\n  name: cuda\n  package:\n    - cuda-toolkit\n"), 0644)
+	os.WriteFile(filepath.Join(candiesDir, "python-ml", "charly.yml"), []byte("candy:\n  name: python-ml\n  require:\n    - cuda\n"), 0644)
+	os.WriteFile(filepath.Join(candiesDir, "python-ml", "pixi.toml"), []byte("[project]\nname = \"python-ml\"\n"), 0644)
 
 	wantRefs := map[string]bool{
 		"github.com/overthinkos/ml-layers/candy/cuda":      true,
 		"github.com/overthinkos/ml-layers/candy/python-ml": true,
 	}
-	layers, err := ScanRemoteLayer(dir, "github.com/overthinkos/ml-layers", wantRefs)
+	layers, err := ScanRemoteCandy(dir, "github.com/overthinkos/ml-layers", wantRefs)
 	if err != nil {
-		t.Fatalf("ScanRemoteLayer() error = %v", err)
+		t.Fatalf("ScanRemoteCandy() error = %v", err)
 	}
 
 	if len(layers) != 2 {
@@ -257,26 +257,26 @@ func TestScanRemoteLayers(t *testing.T) {
 	if len(pyml.Require) != 1 || pyml.Require[0].Bare() != wantDep {
 		t.Errorf("python-ml.Require = %v, want [%s]", pyml.Require, wantDep)
 	}
-	// LayerRef.Raw preserves the original short-name form for transitive fetch,
+	// CandyRef.Raw preserves the original short-name form for transitive fetch,
 	// while .Bare() yields the qualified sibling key the graph resolves on.
 	if pyml.Require[0].Raw != "cuda" {
 		t.Errorf("python-ml.Require[0].Raw = %q, want cuda", pyml.Require[0].Raw)
 	}
 }
 
-func TestScanAllLayersNoRemote(t *testing.T) {
-	layers, err := ScanAllLayer("testdata")
+func TestScanAllCandiesNoRemote(t *testing.T) {
+	layers, err := ScanAllCandy("testdata")
 	if err != nil {
-		t.Fatalf("ScanAllLayer() error = %v", err)
+		t.Fatalf("ScanAllCandy() error = %v", err)
 	}
 
-	localLayers, err := ScanLayer("testdata")
+	localCandies, err := ScanCandy("testdata")
 	if err != nil {
-		t.Fatalf("ScanLayer() error = %v", err)
+		t.Fatalf("ScanCandy() error = %v", err)
 	}
 
-	if len(layers) != len(localLayers) {
-		t.Errorf("len(layers) = %d, want %d", len(layers), len(localLayers))
+	if len(layers) != len(localCandies) {
+		t.Errorf("len(layers) = %d, want %d", len(layers), len(localCandies))
 	}
 }
 
@@ -284,16 +284,16 @@ func TestCollectRemoteRefs(t *testing.T) {
 	cfg := &Config{
 		Box: map[string]BoxConfig{
 			"myapp": {
-				Layer: []string{
+				Candy: []string{
 					"pixi",
 					"@github.com/overthinkos/ml-layers/candy/cuda:v1.0.0",
 				},
 			},
 		},
 	}
-	layers := map[string]*Layer{
-		"pixi": {Name: "pixi", Require: toLayerRefs([]string{})},
-		"my-layer": {Name: "my-layer", Require: toLayerRefs([]string{
+	layers := map[string]*Candy{
+		"pixi": {Name: "pixi", Require: toCandyRefs([]string{})},
+		"my-layer": {Name: "my-layer", Require: toCandyRefs([]string{
 			"@github.com/myorg/service-layers/layers/svc:v2.0.0",
 		})},
 	}
@@ -326,21 +326,21 @@ func TestCollectRemoteRefsLocalTemplate(t *testing.T) {
 	cfg := &Config{
 		Box: map[string]BoxConfig{
 			"myapp": {
-				Layer: []string{
+				Candy: []string{
 					"@github.com/overthinkos/overthink/layers/pixi:v1.0.0",
 				},
 			},
 		},
 		Local: map[string]*LocalSpec{
 			"workstation": {
-				Layer: []string{
+				Candy: []string{
 					"@github.com/overthinkos/overthink/layers/nvidia:v1.0.0",
 					"@github.com/myorg/extra-layers/layers/svc:v2.0.0",
 				},
 			},
 		},
 	}
-	layers := map[string]*Layer{}
+	layers := map[string]*Candy{}
 
 	downloads, err := CollectRemoteRefs(cfg, layers)
 	if err != nil {
@@ -364,7 +364,7 @@ func TestCollectRemoteRefsOptsIncludeDisabled(t *testing.T) {
 	// A disabled image's remote layer refs must be collected when a
 	// `--include-disabled <name>` build scopes IncludeDisabled to that image —
 	// so the FETCH set (CollectRemoteRefsOpts) stays in lockstep with the
-	// RESOLVE set (ResolveAllBox/GlobalLayerOrder). Regression guard for the
+	// RESOLVE set (ResolveAllBox/GlobalCandyOrder). Regression guard for the
 	// 2026-05 deb-family split: no enabled debian image references `pixi`, so a
 	// disabled `debian-builder --include-disabled` would otherwise hit
 	// "unknown layer .../pixi" in computing global layer order.
@@ -372,13 +372,13 @@ func TestCollectRemoteRefsOptsIncludeDisabled(t *testing.T) {
 		Box: map[string]BoxConfig{
 			"debian-builder": {
 				Enabled: boolPtr(false),
-				Layer: []string{
+				Candy: []string{
 					"@github.com/overthinkos/overthink/layers/pixi:v1.0.0",
 				},
 			},
 		},
 	}
-	layers := map[string]*Layer{}
+	layers := map[string]*Candy{}
 
 	// Default opts (enabled-only) → the disabled image is skipped, no downloads.
 	if dls, err := CollectRemoteRefs(cfg, layers); err != nil {
@@ -404,7 +404,7 @@ func TestCollectRemoteRefsOptsIncludeDisabled(t *testing.T) {
 	// A DIFFERENT disabled image must stay filtered under the scoped opts.
 	cfg.Box["other-disabled"] = BoxConfig{
 		Enabled: boolPtr(false),
-		Layer:   []string{"@github.com/myorg/other/layers/x:v3.0.0"},
+		Candy:   []string{"@github.com/myorg/other/layers/x:v3.0.0"},
 	}
 	dls2, err := CollectRemoteRefsOpts(cfg, layers, opts)
 	if err != nil {
@@ -417,7 +417,7 @@ func TestCollectRemoteRefsOptsIncludeDisabled(t *testing.T) {
 	}
 }
 
-func TestCollectRemoteRefsDefaultsBuilderTransitiveLayers(t *testing.T) {
+func TestCollectRemoteRefsDefaultsBuilderTransitiveCandies(t *testing.T) {
 	// An image whose builder comes from defaults.builder (a NAMESPACED builder,
 	// with NO per-image builder: block) must still have that builder's transitive
 	// layers fetched — collectBox follows the EFFECTIVE builder edge
@@ -432,7 +432,7 @@ func TestCollectRemoteRefsDefaultsBuilderTransitiveLayers(t *testing.T) {
 		Box: map[string]BoxConfig{
 			"bazzite": {
 				Base:  "ghcr.io/ublue-os/bazzite:stable", // external base
-				Layer: []string{"@github.com/overthinkos/overthink/layers/foo:v1.0.0"},
+				Candy: []string{"@github.com/overthinkos/overthink/layers/foo:v1.0.0"},
 				// NO per-image Builder: — supplied by defaults.builder above.
 			},
 		},
@@ -442,13 +442,13 @@ func TestCollectRemoteRefsDefaultsBuilderTransitiveLayers(t *testing.T) {
 					"fedora-builder": {
 						Base:    "quay.io/fedora/fedora:43",
 						Produce: []string{"pixi"},
-						Layer:   []string{"@github.com/buildorg/build-layers/layers/rpmfusion:v1.0.0"},
+						Candy:   []string{"@github.com/buildorg/build-layers/layers/rpmfusion:v1.0.0"},
 					},
 				},
 			},
 		},
 	}
-	layers := map[string]*Layer{}
+	layers := map[string]*Candy{}
 
 	downloads, err := CollectRemoteRefs(cfg, layers)
 	if err != nil {
@@ -472,23 +472,23 @@ func TestCollectRemoteRefsDefaultsBuilderTransitiveLayers(t *testing.T) {
 	}
 }
 
-func TestCollectRemoteRefsSameLayerBothTagsCollected(t *testing.T) {
+func TestCollectRemoteRefsSameCandyBothTagsCollected(t *testing.T) {
 	// Same bare ref at two git tags: collection now emits BOTH (the git tag is
 	// only the FETCH coordinate). Per-entity-version arbitration (newest-wins,
 	// or no-warning when the layer's own version: matches) happens AFTER fetch in
-	// pickLayerVersion — see TestPickLayerVersion. Collection's job is just to
+	// pickCandyVersion — see TestPickCandyVersion. Collection's job is just to
 	// fetch every distinct (repo, git-tag).
 	cfg := &Config{
 		Box: map[string]BoxConfig{
 			"myapp": {
-				Layer: []string{
+				Candy: []string{
 					"@github.com/org/repo/layers/cuda:v2.0.0",
 				},
 			},
 		},
 	}
-	layers := map[string]*Layer{
-		"local": {Name: "local", Version: "2026.1.1", Require: toLayerRefs([]string{
+	layers := map[string]*Candy{
+		"local": {Name: "local", Version: "2026.1.1", Require: toCandyRefs([]string{
 			"@github.com/org/repo/layers/cuda:v1.0.0",
 		})},
 	}
@@ -510,19 +510,19 @@ func TestCollectRemoteRefsSameLayerBothTagsCollected(t *testing.T) {
 	}
 }
 
-func TestCollectRemoteRefsDifferentLayersSameRepo(t *testing.T) {
+func TestCollectRemoteRefsDifferentCandiesSameRepo(t *testing.T) {
 	// Different layers from same repo at different versions should be OK
 	cfg := &Config{
 		Box: map[string]BoxConfig{
 			"myapp": {
-				Layer: []string{
+				Candy: []string{
 					"@github.com/org/repo/layers/cuda:v1.0.0",
 					"@github.com/org/repo/layers/python:v2.0.0",
 				},
 			},
 		},
 	}
-	layers := map[string]*Layer{}
+	layers := map[string]*Candy{}
 
 	downloads, err := CollectRemoteRefs(cfg, layers)
 	if err != nil {
@@ -627,16 +627,16 @@ func TestRepoGitURL(t *testing.T) {
 	}
 }
 
-func TestDiscoverRemoteLayers(t *testing.T) {
+func TestDiscoverRemoteCandies(t *testing.T) {
 	dir := t.TempDir()
-	layersDir := filepath.Join(dir, "candy")
-	os.MkdirAll(filepath.Join(layersDir, "beta"), 0755)
-	os.MkdirAll(filepath.Join(layersDir, "alpha"), 0755)
-	os.WriteFile(filepath.Join(layersDir, "README.md"), []byte("test"), 0644)
+	candiesDir := filepath.Join(dir, "candy")
+	os.MkdirAll(filepath.Join(candiesDir, "beta"), 0755)
+	os.MkdirAll(filepath.Join(candiesDir, "alpha"), 0755)
+	os.WriteFile(filepath.Join(candiesDir, "README.md"), []byte("test"), 0644)
 
-	names, err := DiscoverRemoteLayer(dir)
+	names, err := DiscoverRemoteCandy(dir)
 	if err != nil {
-		t.Fatalf("DiscoverRemoteLayer() error = %v", err)
+		t.Fatalf("DiscoverRemoteCandy() error = %v", err)
 	}
 	if len(names) != 2 {
 		t.Fatalf("len(names) = %d, want 2", len(names))
@@ -646,18 +646,18 @@ func TestDiscoverRemoteLayers(t *testing.T) {
 	}
 }
 
-func TestLayerCopySource(t *testing.T) {
+func TestCandyCopySource(t *testing.T) {
 	g := &Generator{
-		Layers: map[string]*Layer{
+		Candies: map[string]*Candy{
 			"pixi":                             {Name: "pixi", Remote: false},
 			"github.com/test/repo/layers/cuda": {Name: "cuda", Remote: true, RepoPath: "github.com/test/repo"},
 		},
 	}
 
-	if got := g.layerCopySource("pixi"); got != "candy/pixi" {
+	if got := g.candyCopySource("pixi"); got != "candy/pixi" {
 		t.Errorf("local candy: got %q, want %q", got, "candy/pixi")
 	}
-	if got := g.layerCopySource("github.com/test/repo/layers/cuda"); got != ".build/_layers/cuda" {
+	if got := g.candyCopySource("github.com/test/repo/layers/cuda"); got != ".build/_layers/cuda" {
 		t.Errorf("remote candy: got %q, want %q", got, ".build/_layers/cuda")
 	}
 }

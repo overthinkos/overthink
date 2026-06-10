@@ -27,7 +27,7 @@ type MigrateUnifiedOpts struct {
 	Dir           string // project dir containing build.yml/image.yml (and layers/)
 	Monolithic    bool   // emit one flat overthink.yml instead of includes: set
 	DryRun        bool   // if true, print plan without writing files
-	RewriteLayers bool   // if true, rewrite layer.yml files into kind-keyed form
+	RewriteCandies bool   // if true, rewrite layer.yml files into kind-keyed form
 }
 
 // MigrateUnified performs the migration and returns the list of files it
@@ -84,10 +84,10 @@ func MigrateUnified(opts MigrateUnifiedOpts) ([]string, error) {
 	}
 
 	// 3. Optionally rewrite layer.yml files.
-	if opts.RewriteLayers {
-		layersDir := filepath.Join(dir, "layers")
-		if dirExists(layersDir) {
-			rewritten, err := rewriteLayerFiles(layersDir, opts.DryRun)
+	if opts.RewriteCandies {
+		candiesDir := filepath.Join(dir, "layers")
+		if dirExists(candiesDir) {
+			rewritten, err := rewriteCandyFiles(candiesDir, opts.DryRun)
 			if err != nil {
 				return written, fmt.Errorf("rewriting layer.yml files: %w", err)
 			}
@@ -329,8 +329,8 @@ func emitWithIncludes(dir string, bs *buildSections, is *imageSections, ds *Depl
 // Layer rewrite — wrap flat layer.yml in `layer: {name, ...body}`.
 // -----------------------------------------------------------------------------
 
-func rewriteLayerFiles(layersDir string, dryRun bool) ([]string, error) {
-	entries, err := os.ReadDir(layersDir)
+func rewriteCandyFiles(candiesDir string, dryRun bool) ([]string, error) {
+	entries, err := os.ReadDir(candiesDir)
 	if err != nil {
 		return nil, err
 	}
@@ -339,11 +339,11 @@ func rewriteLayerFiles(layersDir string, dryRun bool) ([]string, error) {
 		if !e.IsDir() {
 			continue
 		}
-		path := filepath.Join(layersDir, e.Name(), "layer.yml")
+		path := filepath.Join(candiesDir, e.Name(), "layer.yml")
 		if !fileExists(path) {
 			continue
 		}
-		if err := rewriteOneLayerFile(path, e.Name(), dryRun); err != nil {
+		if err := rewriteOneCandyFile(path, e.Name(), dryRun); err != nil {
 			return out, fmt.Errorf("%s: %w", path, err)
 		}
 		out = append(out, path)
@@ -351,13 +351,13 @@ func rewriteLayerFiles(layersDir string, dryRun bool) ([]string, error) {
 	return out, nil
 }
 
-// rewriteOneLayerFile rewrites a layer.yml to the canonical unified form:
+// rewriteOneCandyFile rewrites a layer.yml to the canonical unified form:
 //  1. Wrapped under `layer: {name: <dir>, ...body}`.
 //  2. Schema: `service:` (singular, list) — legacy forms (`services:` plural,
 //     `service: |RAW_INI|`, `system_services: [names]`) are converted.
 //
 // Idempotent: running on an already-migrated file is a no-op.
-func rewriteOneLayerFile(path, name string, dryRun bool) error {
+func rewriteOneCandyFile(path, name string, dryRun bool) error {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return err
@@ -444,7 +444,7 @@ func rewriteServiceKeys(data []byte) []byte {
 
 func isZeroBoxConfig(ic BoxConfig) bool {
 	return ic.Base == "" && ic.Registry == "" && ic.Tag == "" && len(ic.Platforms) == 0 &&
-		len(ic.Distro) == 0 && len(ic.Build) == 0 && len(ic.Layer) == 0
+		len(ic.Distro) == 0 && len(ic.Build) == 0 && len(ic.Candy) == 0
 }
 
 func writeUnifiedFile(path string, uf *UnifiedFile, dryRun bool) (string, error) {

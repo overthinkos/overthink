@@ -460,7 +460,7 @@ func TestEmitCmd_UserNpmCache(t *testing.T) {
 func TestEmitTasks_UserCoalescing(t *testing.T) {
 	dir := t.TempDir()
 	g := &Generator{BuildDir: dir}
-	layer := &Layer{Name: "lyr", tasks: []Task{
+	layer := &Candy{Name: "lyr", tasks: []Task{
 		{Mkdir: "/a", User: "root"},
 		{Mkdir: "/b", User: "root"},
 		{Mkdir: "/c", User: "root"}, // all root → single USER 0 header, one RUN
@@ -483,7 +483,7 @@ func TestEmitTasks_UserCoalescing(t *testing.T) {
 func TestEmitTasks_UserSwitches(t *testing.T) {
 	dir := t.TempDir()
 	g := &Generator{BuildDir: dir}
-	layer := &Layer{Name: "lyr", tasks: []Task{
+	layer := &Candy{Name: "lyr", tasks: []Task{
 		{Mkdir: "/a", User: "root"},
 		{Mkdir: "/b", User: "${USER}"},
 		{Mkdir: "/c", User: "${USER}"}, // coalesces with previous
@@ -511,7 +511,7 @@ func TestEmitTasks_OrderPreserved(t *testing.T) {
 	dir := t.TempDir()
 	g := &Generator{BuildDir: dir}
 	// mkdir → copy → mkdir sequence: the second mkdir must NOT merge with the first
-	layer := &Layer{Name: "lyr", tasks: []Task{
+	layer := &Candy{Name: "lyr", tasks: []Task{
 		{Mkdir: "/a", User: "root"},
 		{Copy: "f", To: "/a/f", User: "root"},
 		{Mkdir: "/b", User: "root"},
@@ -537,7 +537,7 @@ func TestEmitTasks_OrderPreserved(t *testing.T) {
 func TestEmitTasks_ParentDirAutoInsert(t *testing.T) {
 	dir := t.TempDir()
 	g := &Generator{BuildDir: dir}
-	layer := &Layer{Name: "lyr", tasks: []Task{
+	layer := &Candy{Name: "lyr", tasks: []Task{
 		// Copy to /etc/traefik/traefik.yml without declaring /etc/traefik first
 		{Copy: "traefik.yml", To: "/etc/traefik/traefik.yml", User: "root"},
 	}}
@@ -562,7 +562,7 @@ func TestEmitTasks_ParentDirSuppressedWhenDeclared(t *testing.T) {
 	dir := t.TempDir()
 	g := &Generator{BuildDir: dir}
 	// Author explicitly declared /etc/foo via mkdir — no auto-insert
-	layer := &Layer{Name: "lyr", tasks: []Task{
+	layer := &Candy{Name: "lyr", tasks: []Task{
 		{Mkdir: "/etc/foo", User: "root"},
 		{Copy: "bar", To: "/etc/foo/bar", User: "root"},
 	}}
@@ -581,7 +581,7 @@ func TestEmitTasks_ParentDirSuppressedWhenDeclared(t *testing.T) {
 func TestEmitTasks_WriteStagesContent(t *testing.T) {
 	dir := t.TempDir()
 	g := &Generator{BuildDir: dir}
-	layer := &Layer{Name: "lyr", tasks: []Task{
+	layer := &Candy{Name: "lyr", tasks: []Task{
 		{Write: "/etc/foo.conf", Content: "hello world\n", User: "root"},
 	}}
 	var b strings.Builder
@@ -629,15 +629,15 @@ func TestEmitVarsEnv_SortedKeys(t *testing.T) {
 
 // --- Validator ---
 
-func TestValidateLayerTasks_CopyRequiresTo(t *testing.T) {
-	layers := map[string]*Layer{
+func TestValidateCandyTasks_CopyRequiresTo(t *testing.T) {
+	layers := map[string]*Candy{
 		"mylyr": {
 			Name:  "mylyr",
 			tasks: []Task{{Copy: "foo" /* no To */}},
 		},
 	}
 	errs := &ValidationError{}
-	validateLayerTasks(layers, errs)
+	validateCandyTasks(layers, errs)
 	if !errs.HasErrors() {
 		t.Fatal("expected missing-to error")
 	}
@@ -646,15 +646,15 @@ func TestValidateLayerTasks_CopyRequiresTo(t *testing.T) {
 	}
 }
 
-func TestValidateLayerTasks_UnresolvedVar(t *testing.T) {
-	layers := map[string]*Layer{
+func TestValidateCandyTasks_UnresolvedVar(t *testing.T) {
+	layers := map[string]*Candy{
 		"mylyr": {
 			Name:  "mylyr",
 			tasks: []Task{{Mkdir: "${UNDEFINED}/foo"}},
 		},
 	}
 	errs := &ValidationError{}
-	validateLayerTasks(layers, errs)
+	validateCandyTasks(layers, errs)
 	if !errs.HasErrors() {
 		t.Fatal("expected unresolved var error")
 	}
@@ -663,8 +663,8 @@ func TestValidateLayerTasks_UnresolvedVar(t *testing.T) {
 	}
 }
 
-func TestValidateLayerTasks_ReservedVarKey(t *testing.T) {
-	layers := map[string]*Layer{
+func TestValidateCandyTasks_ReservedVarKey(t *testing.T) {
+	layers := map[string]*Candy{
 		"mylyr": {
 			Name:  "mylyr",
 			tasks: []Task{{Cmd: "true"}},
@@ -672,7 +672,7 @@ func TestValidateLayerTasks_ReservedVarKey(t *testing.T) {
 		},
 	}
 	errs := &ValidationError{}
-	validateLayerTasks(layers, errs)
+	validateCandyTasks(layers, errs)
 	if !errs.HasErrors() {
 		t.Fatal("expected reserved-key error")
 	}
@@ -681,36 +681,36 @@ func TestValidateLayerTasks_ReservedVarKey(t *testing.T) {
 	}
 }
 
-func TestValidateLayerTasks_BadMode(t *testing.T) {
-	layers := map[string]*Layer{
+func TestValidateCandyTasks_BadMode(t *testing.T) {
+	layers := map[string]*Candy{
 		"mylyr": {
 			Name:  "mylyr",
 			tasks: []Task{{Mkdir: "/a", Mode: "9999"}},
 		},
 	}
 	errs := &ValidationError{}
-	validateLayerTasks(layers, errs)
+	validateCandyTasks(layers, errs)
 	if !errs.HasErrors() {
 		t.Fatal("expected bad-mode error")
 	}
 }
 
-func TestValidateLayerTasks_BuildOnlyAll(t *testing.T) {
-	layers := map[string]*Layer{
+func TestValidateCandyTasks_BuildOnlyAll(t *testing.T) {
+	layers := map[string]*Candy{
 		"mylyr": {
 			Name:  "mylyr",
 			tasks: []Task{{Build: "pixi"}}, // reserved for future
 		},
 	}
 	errs := &ValidationError{}
-	validateLayerTasks(layers, errs)
+	validateCandyTasks(layers, errs)
 	if !errs.HasErrors() {
 		t.Fatal("expected build-only-all error")
 	}
 }
 
-func TestValidateLayerTasks_HappyPath(t *testing.T) {
-	layers := map[string]*Layer{
+func TestValidateCandyTasks_HappyPath(t *testing.T) {
+	layers := map[string]*Candy{
 		"mylyr": {
 			Name: "mylyr",
 			vars: map[string]string{"VERSION": "1.0"},
@@ -726,7 +726,7 @@ func TestValidateLayerTasks_HappyPath(t *testing.T) {
 		},
 	}
 	errs := &ValidationError{}
-	validateLayerTasks(layers, errs)
+	validateCandyTasks(layers, errs)
 	if errs.HasErrors() {
 		t.Fatalf("expected no errors on happy path, got:\n%s", errs.Error())
 	}
@@ -734,8 +734,8 @@ func TestValidateLayerTasks_HappyPath(t *testing.T) {
 
 // --- Parity: ensure HasInstallFiles picks up HasTasks ---
 
-func TestLayer_HasInstallFiles_IncludesTasks(t *testing.T) {
-	l := &Layer{tasks: []Task{{Cmd: "true"}}}
+func TestCandy_HasInstallFiles_IncludesTasks(t *testing.T) {
+	l := &Candy{tasks: []Task{{Cmd: "true"}}}
 	if !l.HasInstallFiles() {
 		t.Error("HasInstallFiles() should be true when HasTasks is true")
 	}

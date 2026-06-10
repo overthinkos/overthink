@@ -17,7 +17,7 @@ func TestExtractMetadata_Tests(t *testing.T) {
 	defer func() { InspectLabels = orig }()
 
 	testsBlob, err := json.Marshal(&LabelEvalSet{
-		Layer: []Check{
+		Candy: []Check{
 			{File: "/usr/bin/redis-server", Exists: ptrBool(true), Origin: "candy:redis", Scope: "build"},
 		},
 		Box: []Check{
@@ -56,8 +56,8 @@ func TestExtractMetadata_Tests(t *testing.T) {
 		t.Fatal("Tests was not parsed from label")
 	}
 
-	if len(meta.Eval.Layer) != 1 || meta.Eval.Layer[0].File != "/usr/bin/redis-server" {
-		t.Errorf("layer section wrong: %+v", meta.Eval.Layer)
+	if len(meta.Eval.Candy) != 1 || meta.Eval.Candy[0].File != "/usr/bin/redis-server" {
+		t.Errorf("layer section wrong: %+v", meta.Eval.Candy)
 	}
 	if len(meta.Eval.Box) != 1 || meta.Eval.Box[0].Command != "supervisord -v" {
 		t.Errorf("image section wrong: %+v", meta.Eval.Box)

@@ -30,7 +30,7 @@ box:
 	}
 }
 
-func TestResolveDeployRefLocalLayer(t *testing.T) {
+func TestResolveDeployRefLocalCandy(t *testing.T) {
 	dir := t.TempDir()
 	lyrDir := filepath.Join(dir, "candy", "ripgrep")
 	if err := os.MkdirAll(lyrDir, 0755); err != nil {
@@ -60,7 +60,7 @@ candy:
 
 // TestResolveDeployRefCrossKindNameReuse — same name in both box: and
 // layers/ is permitted (cross-kind name reuse, 2026-05 cutover). The
-// primary `<ref>` resolver returns image-first; ResolveDeployRefAsLayer
+// primary `<ref>` resolver returns image-first; ResolveDeployRefAsCandy
 // (used by `--add-layer <ref>`) returns layer-first. Each kind remains
 // reachable via explicit paths.
 func TestResolveDeployRefCrossKindNameReuse(t *testing.T) {
@@ -93,9 +93,9 @@ candy:
 	}
 
 	// `--add-layer` context → layer-first.
-	got, err = ResolveDeployRefAsLayer("dup", dir)
+	got, err = ResolveDeployRefAsCandy("dup", dir)
 	if err != nil {
-		t.Fatalf("ResolveDeployRefAsLayer: %v", err)
+		t.Fatalf("ResolveDeployRefAsCandy: %v", err)
 	}
 	if got.Kind != RefKindCandy {
 		t.Errorf("add-layer ref: kind = %v, want layer (layer-first precedence)", got.Kind)
@@ -135,7 +135,7 @@ box:
 	}
 }
 
-func TestResolveDeployRefLocalPathLayer(t *testing.T) {
+func TestResolveDeployRefLocalPathCandy(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "custom-layer.yml")
 	if err := os.WriteFile(path, []byte(`
@@ -185,9 +185,9 @@ func TestResolveDeployRefRemoteGitHubLegacy(t *testing.T) {
 // refs are not supported" guard. Without the /candy/ classification this fails.
 func TestResolveDeployRefRemoteCandy(t *testing.T) {
 	ref := "@github.com/overthinkos/overthink/candy/charly:v2026.157.0427"
-	got, err := ResolveDeployRefAsLayer(ref, "")
+	got, err := ResolveDeployRefAsCandy(ref, "")
 	if err != nil {
-		t.Fatalf("ResolveDeployRefAsLayer: %v", err)
+		t.Fatalf("ResolveDeployRefAsCandy: %v", err)
 	}
 	if got.Kind != RefKindCandy {
 		t.Errorf("kind = %v, want layer (a candy/ ref is a layer)", got.Kind)

@@ -45,7 +45,7 @@ func (c *NewProjectCmd) Run() error {
 type NewBoxCmd struct {
 	Name   string   `arg:"" help:"Name for the new box entry"`
 	Base   string   `long:"base" required:"" help:"Base image (URL like quay.io/... or another box name)"`
-	Layers []string `long:"candy" sep:"," help:"Comma-separated list of layer names to include"`
+	Candies []string `long:"candy" sep:"," help:"Comma-separated list of layer names to include"`
 }
 
 func (c *NewBoxCmd) Run() error {
@@ -53,7 +53,7 @@ func (c *NewBoxCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	if err := AddBox(dir, c.Name, c.Base, c.Layers); err != nil {
+	if err := AddBox(dir, c.Name, c.Base, c.Candies); err != nil {
 		return err
 	}
 	fmt.Fprintf(os.Stderr, "Added image %s to charly.yml\n", c.Name)
@@ -85,7 +85,7 @@ func (c *BoxSetCmd) Run() error {
 
 type BoxAddCandyCmd struct {
 	Box   string `arg:"" help:"Name of the box in charly.yml"`
-	Layer string `arg:"" help:"Name of the layer to append"`
+	Candy string `arg:"" help:"Name of the layer to append"`
 }
 
 func (c *BoxAddCandyCmd) Run() error {
@@ -93,7 +93,7 @@ func (c *BoxAddCandyCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	return AddLayerToBox(dir, c.Box, c.Layer)
+	return AddCandyToBox(dir, c.Box, c.Candy)
 }
 
 // ---------------------------------------------------------------------------
@@ -101,7 +101,7 @@ func (c *BoxAddCandyCmd) Run() error {
 
 type BoxRmCandyCmd struct {
 	Box   string `arg:"" help:"Name of the box in charly.yml"`
-	Layer string `arg:"" help:"Name of the layer to remove"`
+	Candy string `arg:"" help:"Name of the layer to remove"`
 }
 
 func (c *BoxRmCandyCmd) Run() error {
@@ -109,7 +109,7 @@ func (c *BoxRmCandyCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	return RemoveLayerFromBox(dir, c.Box, c.Layer)
+	return RemoveCandyFromBox(dir, c.Box, c.Candy)
 }
 
 // ---------------------------------------------------------------------------
@@ -271,9 +271,9 @@ func (c *CandySetCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	layerYml := filepath.Join(dir, DefaultCandyDir, c.Name, UnifiedFileName)
-	if _, err := os.Stat(layerYml); err != nil {
-		return fmt.Errorf("candy %q not found at %s", c.Name, layerYml)
+	candyYml := filepath.Join(dir, DefaultCandyDir, c.Name, UnifiedFileName)
+	if _, err := os.Stat(candyYml); err != nil {
+		return fmt.Errorf("candy %q not found at %s", c.Name, candyYml)
 	}
 	// Candy manifests are kind-keyed under `candy:` (the layer kind key), so a
 	// body-relative dot-path like `version` or `env.X` must descend into the
@@ -284,7 +284,7 @@ func (c *CandySetCmd) Run() error {
 	if path != "candy" && !strings.HasPrefix(path, "candy.") {
 		path = "candy." + path
 	}
-	return SetByDotPath(layerYml, path, c.Value)
+	return SetByDotPath(candyYml, path, c.Value)
 }
 
 // CandyAddPkgCmd is shared between add-rpm/add-deb/add-pac/add-aur. The
@@ -310,7 +310,7 @@ func (c *CandyAddPkgCmd) Run() error {
 	// it from os.Args. This is a small runtime indirection but lets us
 	// share one struct across four nearly-identical commands.
 	section := detectPkgSection(os.Args)
-	return appendLayerPackages(c.Name, section, c.Packages)
+	return appendCandyPackages(c.Name, section, c.Packages)
 }
 
 // detectPkgSection looks at os.Args for "add-rpm" / "add-deb" / etc. and
@@ -344,10 +344,10 @@ var sectionDistroPath = map[string][]string{
 	"aur": {"distro", "arch", "aur"},
 }
 
-// appendLayerPackages reads the candy manifest, appends packages to the
+// appendCandyPackages reads the candy manifest, appends packages to the
 // `distro:` map section the add-<fmt> command targets (creating the parent
 // mappings as needed), and writes back — preserving comments via the yaml.Node API.
-func appendLayerPackages(name, section string, pkgs []string) error {
+func appendCandyPackages(name, section string, pkgs []string) error {
 	if len(pkgs) == 0 {
 		return fmt.Errorf("no packages specified")
 	}
@@ -359,20 +359,20 @@ func appendLayerPackages(name, section string, pkgs []string) error {
 	if err != nil {
 		return err
 	}
-	layerYml := filepath.Join(dir, DefaultCandyDir, name, UnifiedFileName)
-	data, err := os.ReadFile(layerYml)
+	candyYml := filepath.Join(dir, DefaultCandyDir, name, UnifiedFileName)
+	data, err := os.ReadFile(candyYml)
 	if err != nil {
-		return fmt.Errorf("reading %s: %w", layerYml, err)
+		return fmt.Errorf("reading %s: %w", candyYml, err)
 	}
 	var root yaml.Node
 	if err := yaml.Unmarshal(data, &root); err != nil {
-		return fmt.Errorf("parsing %s: %w", layerYml, err)
+		return fmt.Errorf("parsing %s: %w", candyYml, err)
 	}
 	// Candy manifests are kind-keyed under `candy:`; package declarations live
 	// under the `distro:` map inside that wrapper (distro.<name>[.aur].package).
 	candy, err := candyBodyNode(&root)
 	if err != nil {
-		return fmt.Errorf("%s: %w", layerYml, err)
+		return fmt.Errorf("%s: %w", candyYml, err)
 	}
 	sectionNode := candy
 	for _, key := range path {
@@ -412,7 +412,7 @@ func appendLayerPackages(name, section string, pkgs []string) error {
 	}
 	out, err := yaml.Marshal(&root)
 	if err != nil {
-		return fmt.Errorf("marshalling %s: %w", layerYml, err)
+		return fmt.Errorf("marshalling %s: %w", candyYml, err)
 	}
-	return os.WriteFile(layerYml, out, 0o644)
+	return os.WriteFile(candyYml, out, 0o644)
 }

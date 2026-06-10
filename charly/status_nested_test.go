@@ -15,8 +15,8 @@ func nestedUnified(parent string) *UnifiedFile {
 				Target: "pod",
 				Box:    "android-emulator",
 				Nested: map[string]*DeploymentNode{
-					"device":     {Target: "android", Android: "pixel9a-36", AddLayer: []string{"android-test-apps"}},
-					"device-net": {Target: "android", Android: "pixel9a-endpoint", AddLayer: []string{"android-apidemos"}},
+					"device":     {Target: "android", Android: "pixel9a-36", AddCandy: []string{"android-test-apps"}},
+					"device-net": {Target: "android", Android: "pixel9a-endpoint", AddCandy: []string{"android-apidemos"}},
 				},
 			},
 			"some-flat-pod": {Target: "pod", Box: "redis"},

@@ -43,7 +43,7 @@ func TestApkPackageSpec_Defaults(t *testing.T) {
 	}
 }
 
-func TestValidateLayerApk(t *testing.T) {
+func TestValidateCandyApk(t *testing.T) {
 	cases := []struct {
 		name    string
 		apks    []ApkPackageSpec
@@ -59,9 +59,9 @@ func TestValidateLayerApk(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			errs := &ValidationError{}
-			validateLayerApk("test-layer", tc.apks, errs)
+			validateCandyApk("test-layer", tc.apks, errs)
 			if errs.HasErrors() != tc.wantErr {
-				t.Errorf("validateLayerApk(%+v): HasErrors=%v want %v (%v)", tc.apks, errs.HasErrors(), tc.wantErr, errs.Errors)
+				t.Errorf("validateCandyApk(%+v): HasErrors=%v want %v (%v)", tc.apks, errs.HasErrors(), tc.wantErr, errs.Errors)
 			}
 		})
 	}

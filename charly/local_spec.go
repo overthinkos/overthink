@@ -19,7 +19,7 @@ type LocalSpec struct {
 	// Required (use `layers: []` for an explicit stub placeholder; an
 	// empty list emits a load-time WARNING but is permitted to support
 	// staged template name reservation).
-	Layer []string `yaml:"candy"`
+	Candy []string `yaml:"candy"`
 
 	// InstallOpts are default install-time gates. CLI flags / deployment
 	// overrides merge on top via InstallOptsConfig.ApplyTo (3-tier

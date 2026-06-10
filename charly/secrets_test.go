@@ -76,7 +76,7 @@ func TestQuadletSecretDirectives(t *testing.T) {
 // TestQuadletSecretEnvDirectives — Step 9 confirmation test for
 // credential-backed secrets (secret_accepts / secret_requires). Asserts that
 // a CollectedSecret with Env set (the shape produced by
-// CollectLayerSecretAccepts) emits Secret=<name>,type=env,target=<var> and
+// CollectCandySecretAccepts) emits Secret=<name>,type=env,target=<var> and
 // that the generated quadlet does NOT contain:
 //
 //   - an Environment=<var>=... line for the same env var (which would leak
@@ -192,7 +192,7 @@ func TestCredKeyForSecret(t *testing.T) {
 // ---------------------------------------------------------------------------
 // Step 4 tests: credential resolution for secret_accepts / secret_requires.
 // These exercise resolveSecretValue's new Service/Key override path and
-// CollectLayerSecretAccepts against an in-memory ConfigFileStore backed by a
+// CollectCandySecretAccepts against an in-memory ConfigFileStore backed by a
 // temp directory. They do not touch podman (which would require a live
 // daemon); the RotateOnConfig short-circuit bypass is validated by the live
 // integration tests in plan §8.3 (rotation test).
@@ -321,15 +321,15 @@ func TestResolveSecretValueLegacyChainUnchanged(t *testing.T) {
 	}
 }
 
-// TestCollectLayerSecretAcceptsHappyPath — given a meta with both
+// TestCollectCandySecretAcceptsHappyPath — given a meta with both
 // secret_requires and secret_accepts, and a credential store that has all
-// values, CollectLayerSecretAccepts returns one CollectedSecret per entry with
+// values, CollectCandySecretAccepts returns one CollectedSecret per entry with
 // correct naming, Service/Key parsed from the optional `key:` field, and
 // RotateOnConfig=true on every entry.
 //
 // Uses synthetic env var names (TEST_CHARLY_CRED_*) to guarantee the test can
 // never resolve — and print in a failure diff — a real user credential.
-func TestCollectLayerSecretAcceptsHappyPath(t *testing.T) {
+func TestCollectCandySecretAcceptsHappyPath(t *testing.T) {
 	store := withIsolatedCredentialStore(t)
 
 	// Required: default key path (charly/secret/TEST_CHARLY_CRED_REQUIRED)
@@ -355,7 +355,7 @@ func TestCollectLayerSecretAcceptsHappyPath(t *testing.T) {
 		},
 	}
 
-	collected, resolutions := CollectLayerSecretAccepts("openwebui", "", meta)
+	collected, resolutions := CollectCandySecretAccepts("openwebui", "", meta)
 
 	if len(collected) != 3 {
 		t.Fatalf("collected has %d entries, want 3", len(collected))
@@ -427,15 +427,15 @@ func TestCollectLayerSecretAcceptsHappyPath(t *testing.T) {
 	}
 }
 
-// TestCollectLayerSecretAcceptsMissingRequired — when a secret_requires entry
-// is not stored in the credential store, CollectLayerSecretAccepts omits it
+// TestCollectCandySecretAcceptsMissingRequired — when a secret_requires entry
+// is not stored in the credential store, CollectCandySecretAccepts omits it
 // from the collected list and records Resolved=false / Required=true in the
 // resolutions list. The checkMissingSecretRequires helper (Step 6) is the one
 // that turns this into a user-facing hard fail.
 //
 // Uses synthetic env var names so the test cannot accidentally pick up a
 // real credential from the outer shell.
-func TestCollectLayerSecretAcceptsMissingRequired(t *testing.T) {
+func TestCollectCandySecretAcceptsMissingRequired(t *testing.T) {
 	withIsolatedCredentialStore(t) // empty store
 
 	meta := &BoxMetadata{
@@ -447,7 +447,7 @@ func TestCollectLayerSecretAcceptsMissingRequired(t *testing.T) {
 		},
 	}
 
-	collected, resolutions := CollectLayerSecretAccepts("openwebui", "", meta)
+	collected, resolutions := CollectCandySecretAccepts("openwebui", "", meta)
 
 	if len(collected) != 0 {
 		t.Errorf("collected has %d entries, want 0 (empty credential store)", len(collected))
@@ -465,19 +465,19 @@ func TestCollectLayerSecretAcceptsMissingRequired(t *testing.T) {
 	}
 }
 
-// TestCollectLayerSecretAcceptsNilMeta — defensive: nil metadata must not
+// TestCollectCandySecretAcceptsNilMeta — defensive: nil metadata must not
 // panic and must return empty slices.
-func TestCollectLayerSecretAcceptsNilMeta(t *testing.T) {
+func TestCollectCandySecretAcceptsNilMeta(t *testing.T) {
 	withIsolatedCredentialStore(t)
-	collected, resolutions := CollectLayerSecretAccepts("anything", "", nil)
+	collected, resolutions := CollectCandySecretAccepts("anything", "", nil)
 	if collected != nil || resolutions != nil {
 		t.Errorf("nil meta should return (nil, nil), got (%+v, %+v)", collected, resolutions)
 	}
 }
 
-// TestCollectLayerSecretAcceptsEnvOverride — plan §2.5 one-shot import via -e:
+// TestCollectCandySecretAcceptsEnvOverride — plan §2.5 one-shot import via -e:
 // when the env var is already set in the process environment, ResolveCredential
-// returns source "env" and CollectLayerSecretAccepts picks it up without
+// returns source "env" and CollectCandySecretAccepts picks it up without
 // touching the credential store. This is what makes `charly config -e FOO=val`
 // work for secret_accepts entries.
 //
@@ -487,7 +487,7 @@ func TestCollectLayerSecretAcceptsNilMeta(t *testing.T) {
 // itself — the value is a test-controlled string ("from-env-synthetic") so
 // even if an assertion diff were accidentally printed, no real credential
 // could leak.
-func TestCollectLayerSecretAcceptsEnvOverride(t *testing.T) {
+func TestCollectCandySecretAcceptsEnvOverride(t *testing.T) {
 	withIsolatedCredentialStore(t) // empty store
 
 	t.Setenv("TEST_CHARLY_CRED_IMPORTED", "from-env-synthetic")
@@ -498,7 +498,7 @@ func TestCollectLayerSecretAcceptsEnvOverride(t *testing.T) {
 		},
 	}
 
-	collected, resolutions := CollectLayerSecretAccepts("openwebui", "", meta)
+	collected, resolutions := CollectCandySecretAccepts("openwebui", "", meta)
 
 	if len(collected) != 1 {
 		t.Fatalf("collected has %d, want 1", len(collected))
@@ -511,14 +511,14 @@ func TestCollectLayerSecretAcceptsEnvOverride(t *testing.T) {
 // TestMergedSecretsIncludeCredentialBacked — regression test for a bug caught
 // during live-system validation of Step 6: `updateAllDeployedQuadlets` at
 // `config_image.go` was calling ONLY `CollectSecretsFromLabels` and forgetting
-// to also call `CollectLayerSecretAccepts`, so consumer quadlets regenerated
+// to also call `CollectCandySecretAccepts`, so consumer quadlets regenerated
 // via `charly config <provider> --update-all` dropped their credential-backed
 // `Secret=` directives, and `secret_requires` entrypoints crashlooped.
 //
 // The invariant this test locks in: anywhere the charly code path builds the
 // `cfg.Secret` slice that reaches `quadlet.go:writeSecretsSection`, it MUST
 // merge both layer-owned (`CollectSecretsFromLabels`) and credential-backed
-// (`CollectLayerSecretAccepts`) collections. The `Run()` path does this at
+// (`CollectCandySecretAccepts`) collections. The `Run()` path does this at
 // `config_image.go` after the env resolution; the `updateAllDeployedQuadlets`
 // path does it where `provisioned` is constructed. Any third path that
 // generates a quadlet without merging both sources is a regression.
@@ -550,9 +550,9 @@ func TestMergedSecretsIncludeCredentialBacked(t *testing.T) {
 
 	// Mirror the merge that both Run() and updateAllDeployedQuadlets must
 	// perform: start with layer-owned, append credential-backed.
-	layerOwned := CollectSecretsFromLabels("openwebui", meta.Secret)
-	credBacked, _ := CollectLayerSecretAccepts("openwebui", "", meta)
-	merged := append(layerOwned, credBacked...)
+	candyOwned := CollectSecretsFromLabels("openwebui", meta.Secret)
+	credBacked, _ := CollectCandySecretAccepts("openwebui", "", meta)
+	merged := append(candyOwned, credBacked...)
 
 	// Expect 3 entries: 1 layer-owned + 2 credential-backed.
 	if len(merged) != 3 {

@@ -78,7 +78,7 @@ image:
 	if _, ok := uf.Distro["fedora"]; !ok {
 		t.Error("LoadUnified lost the fedora distro after migration")
 	}
-	if _, ok := uf.Layer["chrome"]; !ok {
+	if _, ok := uf.Candy["chrome"]; !ok {
 		t.Error("discovery didn't pick up candy/chrome after migration")
 	}
 }
@@ -114,13 +114,13 @@ func TestMigrateUnified_Monolithic(t *testing.T) {
 	}
 }
 
-func TestMigrateUnified_LayerRewriteIdempotent(t *testing.T) {
+func TestMigrateUnified_CandyRewriteIdempotent(t *testing.T) {
 	root := t.TempDir()
 	writeFixture(t, root, "layers/chrome/layer.yml", `rpm:
   package: [chromium]
 `)
 	// First pass: rewrites flat → kind-keyed.
-	if _, err := MigrateUnified(MigrateUnifiedOpts{Dir: root, RewriteLayers: true}); err != nil {
+	if _, err := MigrateUnified(MigrateUnifiedOpts{Dir: root, RewriteCandies: true}); err != nil {
 		t.Fatalf("migrate 1: %v", err)
 	}
 	data1, _ := os.ReadFile(filepath.Join(root, "layers", "chrome", "layer.yml"))
@@ -131,7 +131,7 @@ func TestMigrateUnified_LayerRewriteIdempotent(t *testing.T) {
 		t.Error("rewritten file missing name: chrome")
 	}
 	// Second pass: should be a no-op (idempotent).
-	if _, err := MigrateUnified(MigrateUnifiedOpts{Dir: root, RewriteLayers: true}); err != nil {
+	if _, err := MigrateUnified(MigrateUnifiedOpts{Dir: root, RewriteCandies: true}); err != nil {
 		t.Fatalf("migrate 2: %v", err)
 	}
 	data2, _ := os.ReadFile(filepath.Join(root, "layers", "chrome", "layer.yml"))

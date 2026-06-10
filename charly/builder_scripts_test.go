@@ -24,7 +24,7 @@ func builderStepWithDef(t *testing.T, name string, raw map[string]interface{}) *
 	if bDef == nil {
 		t.Fatalf("builder %q not defined in build.yml", name)
 	}
-	return &BuilderStep{Builder: name, LayerName: "test-layer", BuilderDef: bDef, RawStageContext: raw}
+	return &BuilderStep{Builder: name, CandyName: "test-layer", BuilderDef: bDef, RawStageContext: raw}
 }
 
 func TestRenderPixiScript(t *testing.T) {

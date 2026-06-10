@@ -95,19 +95,19 @@ type PodDeployTarget struct {
 // to place BEFORE the main image FROM.
 // runAppendBlock: the `RUN --mount=... cat >> /etc/supervisord.conf`
 // to place AFTER all overlay install tasks in the main image stage.
-func (t *PodDeployTarget) renderOverlayServices(overlayLayers []string) (string, string, error) {
+func (t *PodDeployTarget) renderOverlayServices(overlayCandies []string) (string, string, error) {
 	if t.Generator == nil || t.Box == nil || t.Box.InitConfig == nil {
 		return "", "", nil
 	}
-	layerOrder := append([]string{}, t.Box.Layer...)
-	layerOrder = append(layerOrder, overlayLayers...)
-	initName, initDef := t.Box.InitConfig.ResolveInitSystem(t.Generator.Layers, layerOrder, t.Box.InitSystem)
+	candyOrder := append([]string{}, t.Box.Candy...)
+	candyOrder = append(candyOrder, overlayCandies...)
+	initName, initDef := t.Box.InitConfig.ResolveInitSystem(t.Generator.Candies, candyOrder, t.Box.InitSystem)
 	if initDef == nil || initDef.ServiceSchema == nil {
 		return "", "", nil
 	}
 	var anySvc bool
-	for _, n := range overlayLayers {
-		l := t.Generator.Layers[n]
+	for _, n := range overlayCandies {
+		l := t.Generator.Candies[n]
 		if l != nil && l.HasInit(initName) {
 			anySvc = true
 			break
@@ -128,15 +128,15 @@ func (t *PodDeployTarget) renderOverlayServices(overlayLayers []string) (string,
 	savedBuildDir := t.Generator.BuildDir
 	t.Generator.BuildDir = overlayDir
 	defer func() { t.Generator.BuildDir = savedBuildDir }()
-	if err := t.Generator.generateInitFragments(overlayImageName, initName, initDef, overlayLayers); err != nil {
+	if err := t.Generator.generateInitFragments(overlayImageName, initName, initDef, overlayCandies); err != nil {
 		return "", "", fmt.Errorf("overlay service fragments: %w", err)
 	}
 
 	var stage strings.Builder
 	stageName := initDef.StageName + "-overlay"
 	fmt.Fprintf(&stage, "FROM scratch AS %s\n", stageName)
-	for i, layerName := range overlayLayers {
-		l := t.Generator.Layers[layerName]
+	for i, candyName := range overlayCandies {
+		l := t.Generator.Candies[candyName]
 		if l == nil || !l.HasInit(initName) {
 			continue
 		}
@@ -189,9 +189,9 @@ func (t *PodDeployTarget) Emit(plans []*InstallPlan, opts EmitOpts) error {
 
 	// Determine which plans represent overlay layers (add_layers:)
 	// rather than layers already baked into the base image. v1 heuristic:
-	// a plan's Layer is in any plan's AddLayers list → overlay.
-	overlayLayers := collectOverlayLayers(plans)
-	if len(overlayLayers) == 0 {
+	// a plan's Layer is in any plan's AddCandies list → overlay.
+	overlayCandies := collectOverlayCandies(plans)
+	if len(overlayCandies) == 0 {
 		// Nothing to overlay — the existing base image is deploy-ready.
 		t.overlayImageRef = t.BaseImage
 		// Schema v3: still tag the base as `<registry>/<deploy-name>:
@@ -210,7 +210,7 @@ func (t *PodDeployTarget) Emit(plans []*InstallPlan, opts EmitOpts) error {
 	}
 
 	// Synthesize overlay Containerfile.
-	return t.buildOverlay(plans, overlayLayers, opts)
+	return t.buildOverlay(plans, overlayCandies, opts)
 }
 
 // tagDeployAlias tags t.overlayImageRef under
@@ -240,14 +240,14 @@ func (t *PodDeployTarget) tagDeployAlias(opts EmitOpts) error {
 	return nil
 }
 
-// collectOverlayLayers returns the set of layer names declared as
+// collectOverlayCandies returns the set of layer names declared as
 // add_layers in any plan's meta. v1 heuristic: union all plans'
-// AddLayers slices.
-func collectOverlayLayers(plans []*InstallPlan) []string {
+// AddCandies slices.
+func collectOverlayCandies(plans []*InstallPlan) []string {
 	seen := make(map[string]bool)
 	var out []string
 	for _, p := range plans {
-		for _, n := range p.AddLayers {
+		for _, n := range p.AddCandies {
 			if !seen[n] {
 				seen[n] = true
 				out = append(out, n)
@@ -258,7 +258,7 @@ func collectOverlayLayers(plans []*InstallPlan) []string {
 }
 
 // buildOverlay synthesizes an overlay Containerfile and builds the image.
-func (t *PodDeployTarget) buildOverlay(plans []*InstallPlan, overlayLayers []string, opts EmitOpts) error {
+func (t *PodDeployTarget) buildOverlay(plans []*InstallPlan, overlayCandies []string, opts EmitOpts) error {
 	dir := t.OverlayBuildDir
 	if dir == "" {
 		dir = filepath.Join(".build", "overlay-"+t.DeployName)
@@ -278,27 +278,27 @@ func (t *PodDeployTarget) buildOverlay(plans []*InstallPlan, overlayLayers []str
 		BuildDir:      dir,
 	}
 	// Only emit for the overlay layers.
-	filtered := filterPlansByLayers(plans, overlayLayers)
+	filtered := filterPlansByCandies(plans, overlayCandies)
 	if err := oci.Emit(filtered, opts); err != nil {
 		return err
 	}
 
 	var cf bytes.Buffer
 	fmt.Fprintf(&cf, "# Overlay Containerfile for deploy %q\n", t.DeployName)
-	fmt.Fprintf(&cf, "# Extra layers: %s\n\n", strings.Join(overlayLayers, ", "))
+	fmt.Fprintf(&cf, "# Extra layers: %s\n\n", strings.Join(overlayCandies, ", "))
 	// Emit per-layer context stages before the main FROM. The tasks
 	// emitted by oci.Emit() reference these via `--mount=type=bind,
 	// from=<layer>`, same as the full-build Containerfile does (see
 	// generate.go:289). Without these stages the bind mounts fail with
 	// "no stage or image found with that name."
 	if t.Generator != nil {
-		for _, layerName := range overlayLayers {
-			layer := t.Generator.Layers[layerName]
+		for _, candyName := range overlayCandies {
+			layer := t.Generator.Candies[candyName]
 			if layer == nil {
 				continue
 			}
 			fmt.Fprintf(&cf, "FROM scratch AS %s\n", layer.Name)
-			fmt.Fprintf(&cf, "COPY %s/ /\n\n", t.Generator.layerCopySource(layerName))
+			fmt.Fprintf(&cf, "COPY %s/ /\n\n", t.Generator.candyCopySource(candyName))
 		}
 	}
 	// Render service: entries from overlay layers — emits a scratch
@@ -308,7 +308,7 @@ func (t *PodDeployTarget) buildOverlay(plans []*InstallPlan, overlayLayers []str
 	var svcStage, svcAppend string
 	if t.Generator != nil && t.Box != nil {
 		var svcErr error
-		svcStage, svcAppend, svcErr = t.renderOverlayServices(overlayLayers)
+		svcStage, svcAppend, svcErr = t.renderOverlayServices(overlayCandies)
 		if svcErr != nil {
 			return svcErr
 		}
@@ -337,7 +337,7 @@ func (t *PodDeployTarget) buildOverlay(plans []*InstallPlan, overlayLayers []str
 	// devices: [/dev/fuse] }`. Without this, add_layers' security
 	// blocks are silently dropped because only the base image's
 	// layer-merged security made it into the base image's own label.
-	if overlayLabel := t.renderOverlaySecurityLabel(overlayLayers); overlayLabel != "" {
+	if overlayLabel := t.renderOverlaySecurityLabel(overlayCandies); overlayLabel != "" {
 		cf.WriteString(overlayLabel)
 	}
 
@@ -360,7 +360,7 @@ func (t *PodDeployTarget) buildOverlay(plans []*InstallPlan, overlayLayers []str
 	}
 
 	// Deterministic overlay tag: hash of base + sorted layer set.
-	tag := overlayTagFor(t.BaseImage, overlayLayers)
+	tag := overlayTagFor(t.BaseImage, overlayCandies)
 	t.overlayImageRef = fmt.Sprintf("%s-overlay:%s", t.DeployName, tag)
 
 	if opts.DryRun {
@@ -372,7 +372,7 @@ func (t *PodDeployTarget) buildOverlay(plans []*InstallPlan, overlayLayers []str
 	// Build context is the PROJECT ROOT (Generator.Dir), not the overlay
 	// build dir — the emitted Containerfile has `COPY candy/<name>/ /`
 	// paths that are relative to the project root, same as the full
-	// build (see generate.go:layerCopySource).
+	// build (see generate.go:candyCopySource).
 	buildContext := dir
 	if t.Generator != nil && t.Generator.Dir != "" {
 		buildContext = t.Generator.Dir
@@ -421,7 +421,7 @@ func (t *PodDeployTarget) buildOverlay(plans []*InstallPlan, overlayLayers []str
 // base's label — or "" if no merge is needed. The resulting LABEL
 // sits after all tasks in the overlay stage so it wins on pull.
 // Picked up at deploy time by `charly config` via ExtractMetadata.
-func (t *PodDeployTarget) renderOverlaySecurityLabel(overlayLayers []string) string {
+func (t *PodDeployTarget) renderOverlaySecurityLabel(overlayCandies []string) string {
 	if t.Engine == "" || t.BaseImage == "" || t.Generator == nil {
 		return ""
 	}
@@ -435,8 +435,8 @@ func (t *PodDeployTarget) renderOverlaySecurityLabel(overlayLayers []string) str
 	// CollectSecurity in generate.go: union caps/devices/security_opts,
 	// OR privileged, last-writer for cgroupns, shm/memory tightest-wins.
 	added := false
-	for _, layerName := range overlayLayers {
-		layer := t.Generator.Layers[layerName]
+	for _, candyName := range overlayCandies {
+		layer := t.Generator.Candies[candyName]
 		if layer == nil {
 			continue
 		}
@@ -478,15 +478,15 @@ func readImageRegistry(engine, imageRef string) string {
 	return strings.TrimSpace(string(out))
 }
 
-// filterPlansByLayers returns only the plans whose Layer is in names.
-func filterPlansByLayers(plans []*InstallPlan, names []string) []*InstallPlan {
+// filterPlansByCandies returns only the plans whose Layer is in names.
+func filterPlansByCandies(plans []*InstallPlan, names []string) []*InstallPlan {
 	want := make(map[string]bool, len(names))
 	for _, n := range names {
 		want[n] = true
 	}
 	var out []*InstallPlan
 	for _, p := range plans {
-		if want[p.Layer] {
+		if want[p.Candy] {
 			out = append(out, p)
 		}
 	}

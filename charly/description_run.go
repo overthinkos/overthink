@@ -245,7 +245,7 @@ func RunScenarios(ctx context.Context, r *Runner, set *LabelDescriptionSet, filt
 		return nil
 	}
 	var out []ScenarioResult
-	for _, sec := range [][]LabeledDescription{set.Layer, set.Box, set.Deploy} {
+	for _, sec := range [][]LabeledDescription{set.Candy, set.Box, set.Deploy} {
 		for _, ld := range sec {
 			// Carry this description's goal (feature/narrative) into the
 			// agent grader for any prose-only step in its scenarios (ADE).

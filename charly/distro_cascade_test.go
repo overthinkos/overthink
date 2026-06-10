@@ -7,15 +7,15 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// deriveLayer parses a candy YAML body and runs the Calamares bridge, returning
+// deriveCandy parses a candy YAML body and runs the Calamares bridge, returning
 // the populated Layer (tagSections / formatSections / topPackages).
-func deriveLayer(t *testing.T, body string) *Layer {
+func deriveCandy(t *testing.T, body string) *Candy {
 	t.Helper()
 	var ly CandyYAML
 	if err := yaml.Unmarshal([]byte(body), &ly); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	layer := &Layer{Name: "t"}
+	layer := &Candy{Name: "t"}
 	derivePackageSectionsFromCalamares(layer, &ly)
 	return layer
 }
@@ -64,9 +64,9 @@ func fmtImg(format string, chain ...string) *ResolvedBox {
 // `pac:` block reaches arch AND cachyos with no Go-side distro inheritance.
 func TestCascade_FormatFamilyLevel(t *testing.T) {
 	// deb family: shared under `deb:`, debian-only under `debian:`.
-	debLayer := deriveLayer(t, "name: t\ndistro:\n  deb:\n    package: [shared]\n  debian:\n    package: [deb-only]\n")
-	debian := pkgStep(t, compileSystemPackageSteps(debLayer, fmtImg("deb", "debian:13", "debian"), HostContext{})).Packages
-	ubuntu := pkgStep(t, compileSystemPackageSteps(debLayer, fmtImg("deb", "ubuntu:24.04", "ubuntu"), HostContext{})).Packages
+	debCandy := deriveCandy(t, "name: t\ndistro:\n  deb:\n    package: [shared]\n  debian:\n    package: [deb-only]\n")
+	debian := pkgStep(t, compileSystemPackageSteps(debCandy, fmtImg("deb", "debian:13", "debian"), HostContext{})).Packages
+	ubuntu := pkgStep(t, compileSystemPackageSteps(debCandy, fmtImg("deb", "ubuntu:24.04", "ubuntu"), HostContext{})).Packages
 	if !reflect.DeepEqual(debian, []string{"shared", "deb-only"}) {
 		t.Errorf("debian = %v, want [shared deb-only]", debian)
 	}
@@ -75,9 +75,9 @@ func TestCascade_FormatFamilyLevel(t *testing.T) {
 	}
 
 	// pac family: a single `pac:` block reaches BOTH arch and cachyos.
-	pacLayer := deriveLayer(t, "name: t\ndistro:\n  pac:\n    package: [sddm]\n")
-	arch := pkgStep(t, compileSystemPackageSteps(pacLayer, fmtImg("pac", "arch"), HostContext{})).Packages
-	cachyos := pkgStep(t, compileSystemPackageSteps(pacLayer, fmtImg("pac", "cachyos"), HostContext{})).Packages
+	pacCandy := deriveCandy(t, "name: t\ndistro:\n  pac:\n    package: [sddm]\n")
+	arch := pkgStep(t, compileSystemPackageSteps(pacCandy, fmtImg("pac", "arch"), HostContext{})).Packages
+	cachyos := pkgStep(t, compileSystemPackageSteps(pacCandy, fmtImg("pac", "cachyos"), HostContext{})).Packages
 	if !reflect.DeepEqual(arch, []string{"sddm"}) || !reflect.DeepEqual(cachyos, []string{"sddm"}) {
 		t.Errorf("pac family: arch=%v cachyos=%v, want both [sddm]", arch, cachyos)
 	}
@@ -91,7 +91,7 @@ func TestCascade_FormatFamilyLevel(t *testing.T) {
 // --- Parser routing -------------------------------------------------------
 
 func TestCascade_BareDistroRoutesToTagSection(t *testing.T) {
-	l := deriveLayer(t, `
+	l := deriveCandy(t, `
 name: t
 distro:
   debian:
@@ -113,7 +113,7 @@ distro:
 }
 
 func TestCascade_VersionedAndCompoundKeys(t *testing.T) {
-	l := deriveLayer(t, `
+	l := deriveCandy(t, `
 name: t
 distro:
   debian-13:
@@ -134,7 +134,7 @@ distro:
 }
 
 func TestCascade_ArchAurStaysFormatSection(t *testing.T) {
-	l := deriveLayer(t, `
+	l := deriveCandy(t, `
 name: t
 distro:
   arch:
@@ -152,7 +152,7 @@ distro:
 }
 
 func TestCascade_TopPackagesNotFoldedAtParse(t *testing.T) {
-	l := deriveLayer(t, `
+	l := deriveCandy(t, `
 name: t
 package: [base-pkg]
 distro:
@@ -172,7 +172,7 @@ distro:
 // --- Cascade resolution ---------------------------------------------------
 
 func TestCascade_UnionAndTopBase(t *testing.T) {
-	l := deriveLayer(t, `
+	l := deriveCandy(t, `
 name: t
 package: [base]
 distro:
@@ -189,7 +189,7 @@ distro:
 }
 
 func TestCascade_MostSpecificRepoWins(t *testing.T) {
-	l := deriveLayer(t, `
+	l := deriveCandy(t, `
 name: t
 distro:
   ubuntu:
@@ -222,7 +222,7 @@ distro:
     repo: [{name: tailscale, suite: noble}]
 `
 	for i := 0; i < 50; i++ { // many iterations to defeat any map-order flakiness
-		l := deriveLayer(t, body)
+		l := deriveCandy(t, body)
 		deb := pkgStep(t, compileSystemPackageSteps(l, debImg("debian:13", "debian"), HostContext{}))
 		ubu := pkgStep(t, compileSystemPackageSteps(l, debImg("ubuntu:24.04", "ubuntu"), HostContext{}))
 		if s := toMapSlice(deb.RawInstallContext["repo"]); len(s) != 1 || s[0]["suite"] != "trixie" {
@@ -237,7 +237,7 @@ distro:
 func TestCascade_FedoraArchBareReach(t *testing.T) {
 	// A bare fedora image ([fedora]) must reach the fedora tag section — there is
 	// no format-section fallback anymore.
-	l := deriveLayer(t, `
+	l := deriveCandy(t, `
 name: t
 distro:
   fedora:
@@ -251,10 +251,10 @@ distro:
 	}
 }
 
-func TestCascade_TopOnlyLayerInstallsEverywhere(t *testing.T) {
+func TestCascade_TopOnlyCandyInstallsEverywhere(t *testing.T) {
 	// A layer with only a top-level package: (no distro:) installs that base on
 	// any image via the primary format.
-	l := deriveLayer(t, "name: t\npackage: [nodejs, npm]\n")
+	l := deriveCandy(t, "name: t\npackage: [nodejs, npm]\n")
 	step := pkgStep(t, compileSystemPackageSteps(l, debImg("debian:13", "debian"), HostContext{}))
 	if !reflect.DeepEqual(step.Packages, []string{"nodejs", "npm"}) {
 		t.Errorf("top-only base: packages = %v, want [nodejs npm]", step.Packages)

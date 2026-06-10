@@ -148,7 +148,7 @@ func provisionData(engine string, imageRef string, meta *BoxMetadata,
 			// is the runtime safety net.
 			fmt.Fprintf(os.Stderr,
 				"  data entry references unknown volume %q (layer=%s, staging=%s) — skipping\n",
-				entry.Volume, entry.Layer, entry.Staging)
+				entry.Volume, entry.Candy, entry.Staging)
 			continue
 		}
 

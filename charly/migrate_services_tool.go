@@ -34,7 +34,7 @@ func MigrateServicesDir(dir string) (int, error) {
 			continue
 		}
 		path := filepath.Join(dir, e.Name(), "layer.yml")
-		changed, err := migrateLayerFile(path)
+		changed, err := migrateCandyFile(path)
 		if err != nil {
 			return migrated, fmt.Errorf("%s: %w", path, err)
 		}
@@ -45,10 +45,10 @@ func MigrateServicesDir(dir string) (int, error) {
 	return migrated, nil
 }
 
-// migrateLayerFile reads path, rewrites service:/system_services: into
+// migrateCandyFile reads path, rewrites service:/system_services: into
 // the unified services: list, and writes back. Returns true when the
 // file was modified.
-func migrateLayerFile(path string) (bool, error) {
+func migrateCandyFile(path string) (bool, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return false, err

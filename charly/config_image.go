@@ -406,8 +406,8 @@ func (c *BoxConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	// Both flow into the same ProvisionPodmanSecrets call — the existing
 	// Secret=<name>,type=env,target=<var> emission at quadlet.go:100-106
 	// handles them identically at runtime.
-	layerOwnedSecrets := CollectSecretsFromLabels(c.Box, meta.Secret)
-	credBackedSecrets, secretResolutions := CollectLayerSecretAccepts(c.Box, c.Instance, meta)
+	candyOwnedSecrets := CollectSecretsFromLabels(c.Box, meta.Secret)
+	credBackedSecrets, secretResolutions := CollectCandySecretAccepts(c.Box, c.Instance, meta)
 
 	// Enforce secret_requires — hard error before writing anything. Runs
 	// alongside checkMissingEnvRequires (handled later in env resolution).
@@ -418,7 +418,7 @@ func (c *BoxConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 		}
 	}
 
-	collectedSecrets := append(layerOwnedSecrets, credBackedSecrets...)
+	collectedSecrets := append(candyOwnedSecrets, credBackedSecrets...)
 	autoGen := c.Password == "auto"
 	provisioned, fallbackEnv, err := ProvisionPodmanSecrets(rt.RunEngine, c.Box, c.Instance, collectedSecrets, autoGen)
 	if err != nil {
@@ -1486,7 +1486,7 @@ func checkMissingEnvRequires(boxName string, requires []EnvDependency, resolvedE
 // checkMissingSecretRequires reports a hard-fail when any secret_requires
 // entry could not be resolved from the credential store. Parallel to
 // checkMissingEnvRequires, but operates on the SecretResolution list
-// produced by CollectLayerSecretAccepts (which already has source
+// produced by CollectCandySecretAccepts (which already has source
 // classification) rather than a post-resolution env slice.
 //
 // The error message tells the user exactly which credential store path to
@@ -1657,7 +1657,7 @@ func updateAllDeployedQuadlets(rt *ResolvedRuntime, skipBox string) error {
 		// live-system testing session: charly-openwebui went FATAL after an
 		// `charly config immich-ml --update-all` wiped its credential Secret= lines.
 		provisioned := CollectSecretsFromLabels(boxName, meta.Secret)
-		credBacked, credResolutions := CollectLayerSecretAccepts(boxName, instance, meta)
+		credBacked, credResolutions := CollectCandySecretAccepts(boxName, instance, meta)
 		provisioned = append(provisioned, credBacked...)
 
 		// Mirror Run()'s checkMissingSecretRequires — but downgrade to a

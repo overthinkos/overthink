@@ -117,7 +117,7 @@ func TestBuilderStepReverse(t *testing.T) {
 	// pixi → pixi-env-remove
 	pixi := &BuilderStep{
 		Builder:         "pixi",
-		LayerName:       "pre-commit",
+		CandyName:       "pre-commit",
 		RawStageContext: map[string]interface{}{"env_name": "pre-commit"},
 	}
 	ops := pixi.Reverse()
@@ -251,7 +251,7 @@ func TestServiceCustomStepRequiresGate(t *testing.T) {
 
 func TestShellHookStep(t *testing.T) {
 	s := &ShellHookStep{
-		LayerName: "pre-commit",
+		CandyName: "pre-commit",
 		EnvVars:   map[string]string{"PIXI_CACHE_DIR": "$HOME/.cache/pixi"},
 		PathAdd:   []string{"/home/user/.pixi/envs/default/bin"},
 		EnvFile:   "/home/user/.config/opencharly/env.d/pre-commit.env",
@@ -271,7 +271,7 @@ func TestRepoChangeStep(t *testing.T) {
 		File:      "/etc/yum.repos.d/rpmfusion-free.repo",
 		Content:   "[rpmfusion-free]\n...",
 		Checksum:  "abc123",
-		LayerName: "rpmfusion",
+		CandyName: "rpmfusion",
 	}
 	if s.RequiresGate() != GateAllowRepoChanges {
 		t.Errorf("RepoChangeStep requires %v, want allow-repo-changes", s.RequiresGate())

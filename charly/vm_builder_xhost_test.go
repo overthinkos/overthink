@@ -21,7 +21,7 @@ func TestResolveBuilderImage(t *testing.T) {
 		t.Errorf("resolver fallback, got %q", img)
 	}
 	bare := &VmDeployTarget{}
-	if _, err := bare.resolveBuilderImage(&BuilderStep{Builder: "npm", LayerName: "claude-code"}, EmitOpts{}); err == nil {
+	if _, err := bare.resolveBuilderImage(&BuilderStep{Builder: "npm", CandyName: "claude-code"}, EmitOpts{}); err == nil {
 		t.Error("no image resolvable → expected error")
 	}
 }
@@ -40,7 +40,7 @@ func TestVmExecBuilderRoutesHomeBuilders(t *testing.T) {
 			Exec:                 &recordingExec{},
 			BuilderImageResolver: func(string) string { return "test-builder:latest" },
 		}
-		s := &BuilderStep{Builder: b, LayerName: "x", LayerDir: "/tmp/x", BuilderDef: bc.Builder[b]}
+		s := &BuilderStep{Builder: b, CandyName: "x", CandyDir: "/tmp/x", BuilderDef: bc.Builder[b]}
 		if err := tgt.execBuilder(context.Background(), s, &InstallPlan{}, EmitOpts{DryRun: true}); err != nil {
 			t.Errorf("execBuilder(%s) dry-run routed to home-artifact builder errored: %v", b, err)
 		}
@@ -53,7 +53,7 @@ func TestVmExecBuilderRoutesHomeBuilders(t *testing.T) {
 // cell there → unsupported), not a hardcoded builder-name list.
 func TestVmExecBuilderUnknown(t *testing.T) {
 	tgt := &VmDeployTarget{Exec: &recordingExec{}}
-	s := &BuilderStep{Builder: "bogus", LayerName: "x"}
+	s := &BuilderStep{Builder: "bogus", CandyName: "x"}
 
 	if err := tgt.execBuilder(context.Background(), s, &InstallPlan{}, EmitOpts{SkipIncompatible: true}); err != nil {
 		t.Errorf("unknown builder with --skip-incompatible should be skipped, got %v", err)

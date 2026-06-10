@@ -121,15 +121,15 @@ func AddBox(dir, name, base string, layers []string) error {
 		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: base},
 	)
 	if len(layers) > 0 {
-		layersNode := &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq"}
+		candiesNode := &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq"}
 		for _, l := range layers {
-			layersNode.Content = append(layersNode.Content,
+			candiesNode.Content = append(candiesNode.Content,
 				&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: l},
 			)
 		}
 		inner.Content = append(inner.Content,
 			&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "candy"},
-			layersNode,
+			candiesNode,
 		)
 	}
 	wrapper := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
@@ -144,57 +144,57 @@ func AddBox(dir, name, base string, layers []string) error {
 	return saveYAMLNodeFile(dest, doc)
 }
 
-// AddLayerToBox appends a layer to an existing image's `candy:` list.
+// AddCandyToBox appends a layer to an existing image's `candy:` list.
 // Idempotent: if the layer is already in the list, this is a no-op. The box is
 // resolved across the discovered box/<name>/charly.yml, charly.yml, AND any
 // flat-imported per-kind file,
 // and the edit is saved to the file where the image actually lives.
-func AddLayerToBox(dir, image, layer string) error {
+func AddCandyToBox(dir, image, layer string) error {
 	root, imgNode, path, err := resolveBoxNodeFile(dir, image)
 	if err != nil {
 		return err
 	}
-	layersNode := mappingChild(imgNode, "candy")
-	if layersNode == nil {
-		layersNode = &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq"}
+	candiesNode := mappingChild(imgNode, "candy")
+	if candiesNode == nil {
+		candiesNode = &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq"}
 		imgNode.Content = append(imgNode.Content,
 			&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "candy"},
-			layersNode,
+			candiesNode,
 		)
 	}
-	for _, n := range layersNode.Content {
+	for _, n := range candiesNode.Content {
 		if n.Kind == yaml.ScalarNode && n.Value == layer {
 			return nil
 		}
 	}
-	layersNode.Content = append(layersNode.Content,
+	candiesNode.Content = append(candiesNode.Content,
 		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: layer},
 	)
 	return saveYAMLNodeFile(path, root)
 }
 
-// RemoveLayerFromBox removes the named layer from an image's `candy:`
+// RemoveCandyFromBox removes the named layer from an image's `candy:`
 // list. Errors out if the image does not exist; succeeds silently if the
 // layer is not present. The box is resolved across the discovered
 // box/<name>/charly.yml, charly.yml, AND any flat-imported per-kind file, and
 // the edit is saved to the file where the box actually lives.
-func RemoveLayerFromBox(dir, image, layer string) error {
+func RemoveCandyFromBox(dir, image, layer string) error {
 	root, imgNode, path, err := resolveBoxNodeFile(dir, image)
 	if err != nil {
 		return err
 	}
-	layersNode := mappingChild(imgNode, "candy")
-	if layersNode == nil {
+	candiesNode := mappingChild(imgNode, "candy")
+	if candiesNode == nil {
 		return nil
 	}
-	out := layersNode.Content[:0]
-	for _, n := range layersNode.Content {
+	out := candiesNode.Content[:0]
+	for _, n := range candiesNode.Content {
 		if n.Kind == yaml.ScalarNode && n.Value == layer {
 			continue
 		}
 		out = append(out, n)
 	}
-	layersNode.Content = out
+	candiesNode.Content = out
 	return saveYAMLNodeFile(path, root)
 }
 

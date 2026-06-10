@@ -48,7 +48,7 @@ type CLI struct {
 	Deploy      DeployCmd       `cmd:"" help:"Manage deploy.yml deployment overrides"`
 	Doctor      DoctorCmd       `cmd:"" help:"Show host dependency status"`
 	Box       BoxCmd          `cmd:"" name:"box" help:"Build, generate, inspect, and pull container boxes (reads charly.yml)"`
-	Layer       CandyCmd        `cmd:"" name:"candy" help:"Edit candy.yml files in the project's candy/ directory"`
+	Candy       CandyCmd        `cmd:"" name:"candy" help:"Edit candy.yml files in the project's candy/ directory"`
 	Logs        LogsCmd         `cmd:"" help:"Show service container logs"`
 	Mcp         McpCmdGroup     `cmd:"" help:"Run an MCP server exposing the charly CLI as tools"`
 	Migrate     MigrateCmd      `cmd:"" help:"Migrate any opencharly config up to the latest schema CalVer (single idempotent chain — no sub-verbs)"`
@@ -119,13 +119,13 @@ func (c *ValidateCmd) Run() error {
 		defaultInitCfg = initCfg
 	}
 
-	layers, err := ScanAllLayerWithConfig(dir, cfg)
+	layers, err := ScanAllCandyWithConfig(dir, cfg)
 	if err != nil {
 		return err
 	}
 
 	// Populate init systems on layers from build.yml config
-	PopulateLayerInitSystem(layers, defaultInitCfg)
+	PopulateCandyInitSystem(layers, defaultInitCfg)
 
 	return Validate(cfg, layers, dir, ResolveOpts{IncludeDisabled: c.IncludeDisabled})
 }
@@ -189,7 +189,7 @@ func (c *InspectCmd) runFromConfig(cfg *Config, dir string) error {
 				fmt.Println(p)
 			}
 		case "candy":
-			for _, l := range resolved.Layer {
+			for _, l := range resolved.Candy {
 				fmt.Println(l)
 			}
 		case "ports":
@@ -197,7 +197,7 @@ func (c *InspectCmd) runFromConfig(cfg *Config, dir string) error {
 				fmt.Println(p)
 			}
 		case "volumes":
-			layers, err := ScanAllLayerWithConfig(dir, cfg)
+			layers, err := ScanAllCandyWithConfig(dir, cfg)
 			if err != nil {
 				return err
 			}
@@ -209,7 +209,7 @@ func (c *InspectCmd) runFromConfig(cfg *Config, dir string) error {
 				fmt.Printf("%s\t%s\n", vol.VolumeName, vol.ContainerPath)
 			}
 		case "aliases":
-			layers, err := ScanAllLayerWithConfig(dir, cfg)
+			layers, err := ScanAllCandyWithConfig(dir, cfg)
 			if err != nil {
 				return err
 			}
@@ -224,10 +224,10 @@ func (c *InspectCmd) runFromConfig(cfg *Config, dir string) error {
 			// Schema v4: Tunnel moved off BoxConfig/ResolvedBox —
 			// deploy-only. Resolve from DeploymentNode.Tunnel via deploy.yml.
 			if overlay, ok := loadDeployConfigForRead("charly box inspect tunnel").Lookup(c.Box, c.Instance); ok && overlay.Tunnel != nil {
-				layers, err := ScanAllLayerWithConfig(dir, cfg)
+				layers, err := ScanAllCandyWithConfig(dir, cfg)
 				if err == nil {
 					portProtos := make(map[int]string)
-					tc := ResolveTunnelConfig(overlay.Tunnel, c.Box, "", layers, resolved.Layer, portProtos, resolved.Port)
+					tc := ResolveTunnelConfig(overlay.Tunnel, c.Box, "", layers, resolved.Candy, portProtos, resolved.Port)
 					if tc != nil && len(tc.Ports) > 0 {
 						fmt.Println("PORT\tACCESS\tPROTOCOL\tHOSTNAME")
 						for _, tp := range tc.Ports {
@@ -247,7 +247,7 @@ func (c *InspectCmd) runFromConfig(cfg *Config, dir string) error {
 		case "network":
 			fmt.Println(resolved.Network)
 		case "engine":
-			layers, err := ScanAllLayerWithConfig(dir, cfg)
+			layers, err := ScanAllCandyWithConfig(dir, cfg)
 			if err != nil {
 				return err
 			}
@@ -272,7 +272,7 @@ func (c *InspectCmd) runFromConfig(cfg *Config, dir string) error {
 		case "tests":
 			// Emit the effective three-section test manifest as JSON.
 			// Mirrors what will land in the ai.opencharly.tests OCI label.
-			layers, err := ScanAllLayerWithConfig(dir, cfg)
+			layers, err := ScanAllCandyWithConfig(dir, cfg)
 			if err != nil {
 				return err
 			}
@@ -304,7 +304,7 @@ func (c *InspectCmd) runFromConfig(cfg *Config, dir string) error {
 type ListCmd struct {
 	Aliases  ListAliasesCmd  `cmd:"" help:"List layers that declare aliases"`
 	Boxes    ListBoxesCmd    `cmd:"" name:"boxes" help:"List boxes from charly.yml"`
-	Layers   ListCandiesCmd  `cmd:"" name:"candies" help:"List candies from the filesystem"`
+	Candies   ListCandiesCmd  `cmd:"" name:"candies" help:"List candies from the filesystem"`
 	Routes   ListRoutesCmd   `cmd:"" help:"List layers that declare a route"`
 	Services ListServicesCmd `cmd:"" help:"List layers that declare a service"`
 	Targets  ListTargetsCmd  `cmd:"" help:"List build targets in dependency order"`
@@ -337,7 +337,7 @@ func (c *ListBoxesCmd) Run() error {
 	return nil
 }
 
-// ListLayersCmd lists layers from filesystem
+// ListCandiesCmd lists layers from filesystem
 type ListCandiesCmd struct{}
 
 func (c *ListCandiesCmd) Run() error {
@@ -351,12 +351,12 @@ func (c *ListCandiesCmd) Run() error {
 		return err
 	}
 
-	layers, err := ScanAllLayerWithConfig(dir, cfg)
+	layers, err := ScanAllCandyWithConfig(dir, cfg)
 	if err != nil {
 		return err
 	}
 
-	for _, name := range LayerNames(layers) {
+	for _, name := range CandyNames(layers) {
 		layer := layers[name]
 		status := resolveStatus(layer.Status)
 		var tags []string
@@ -395,7 +395,7 @@ func (c *ListTargetsCmd) Run() error {
 		return err
 	}
 
-	layers, err := ScanAllLayerWithConfig(dir, cfg)
+	layers, err := ScanAllCandyWithConfig(dir, cfg)
 	if err != nil {
 		return err
 	}
@@ -436,12 +436,12 @@ func (c *ListServicesCmd) Run() error {
 		return err
 	}
 
-	layers, err := ScanAllLayerWithConfig(dir, cfg)
+	layers, err := ScanAllCandyWithConfig(dir, cfg)
 	if err != nil {
 		return err
 	}
 
-	services := InitLayer(layers)
+	services := InitCandy(layers)
 	for _, layer := range services {
 		fmt.Println(layer.Name)
 	}
@@ -462,12 +462,12 @@ func (c *ListRoutesCmd) Run() error {
 		return err
 	}
 
-	layers, err := ScanAllLayerWithConfig(dir, cfg)
+	layers, err := ScanAllCandyWithConfig(dir, cfg)
 	if err != nil {
 		return err
 	}
 
-	routes := RouteLayer(layers)
+	routes := RouteCandy(layers)
 	// Sort by name for deterministic output
 	names := make([]string, 0, len(routes))
 	for _, layer := range routes {
@@ -500,12 +500,12 @@ func (c *ListVolumesCmd) Run() error {
 		return err
 	}
 
-	layers, err := ScanAllLayerWithConfig(dir, cfg)
+	layers, err := ScanAllCandyWithConfig(dir, cfg)
 	if err != nil {
 		return err
 	}
 
-	vols := VolumeLayer(layers)
+	vols := VolumeCandy(layers)
 	// Sort by name for deterministic output
 	names := make([]string, 0, len(vols))
 	for _, layer := range vols {
@@ -524,12 +524,12 @@ func (c *ListVolumesCmd) Run() error {
 
 // NewCmd groups scaffolding subcommands
 type NewCmd struct {
-	Layer   NewCandyCmd   `cmd:"" name:"candy" help:"Scaffold a candy directory"`
+	Candy   NewCandyCmd   `cmd:"" name:"candy" help:"Scaffold a candy directory"`
 	Project NewProjectCmd `cmd:"" help:"Scaffold a fresh charly project (charly.yml + build.yml ref + candy/)"`
 	Box   NewBoxCmd     `cmd:"" name:"box" help:"Add a new box entry to charly.yml"`
 }
 
-// NewLayerCmd scaffolds a new layer
+// NewCandyCmd scaffolds a new layer
 type NewCandyCmd struct {
 	Name string `arg:"" help:"Layer name"`
 }
@@ -539,7 +539,7 @@ func (c *NewCandyCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	return ScaffoldLayer(dir, c.Name)
+	return ScaffoldCandy(dir, c.Name)
 }
 
 // SettingsCmd groups settings subcommands (renamed from ConfigCmd to free `charly config` for image configuration).

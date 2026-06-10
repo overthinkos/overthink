@@ -33,8 +33,8 @@ func StripVersion(ref string) (string, string) {
 	return ref, ""
 }
 
-// IsRemoteLayerRef returns true if a layer reference is a remote ref (starts with @)
-func IsRemoteLayerRef(ref string) bool {
+// IsRemoteCandyRef returns true if a layer reference is a remote ref (starts with @)
+func IsRemoteCandyRef(ref string) bool {
 	return strings.HasPrefix(ref, "@")
 }
 
@@ -100,7 +100,7 @@ func BareRef(ref string) string {
 	return strings.TrimPrefix(bare, "@")
 }
 
-// LayerRef is a single layer reference as authored in the candy manifest `require:` /
+// CandyRef is a single layer reference as authored in the candy manifest `require:` /
 // `layer:` (or charly.yml `layer:`). It carries the ORIGINAL ref string — with
 // any `@repo` prefix and `:version` suffix — as the single source of truth; the
 // bare map-key form (.Bare()) and the pinned version (.Version()) are DERIVED on
@@ -132,11 +132,11 @@ func (r CandyRef) Bare() string {
 func (r CandyRef) Version() string { _, v := StripVersion(r.Raw); return v }
 
 // IsRemote reports whether this is an @-prefixed remote ref.
-func (r CandyRef) IsRemote() bool { return IsRemoteLayerRef(r.Raw) }
+func (r CandyRef) IsRemote() bool { return IsRemoteCandyRef(r.Raw) }
 
-// toLayerRefs wraps raw ref strings (as parsed from the candy manifest) into LayerRef
+// toCandyRefs wraps raw ref strings (as parsed from the candy manifest) into CandyRef
 // values. Returns nil for a nil/empty input so an absent list stays absent.
-func toLayerRefs(raw []string) []CandyRef {
+func toCandyRefs(raw []string) []CandyRef {
 	if len(raw) == 0 {
 		return nil
 	}
@@ -163,7 +163,7 @@ func bareRefs(refs []CandyRef) []string {
 // Layer-version resolution is per-entity, not per-git-tag: the `@github…:vTAG`
 // suffix is ONLY the FETCH coordinate (which commit to clone). The authority is
 // the layer's own `version:` field, read AFTER fetch and arbitrated by
-// pickLayerVersion in ScanAllLayerWithConfigOpts (layers.go). So a repo re-tag
+// pickCandyVersion in ScanAllCandyWithConfigOpts (layers.go). So a repo re-tag
 // that doesn't change a layer emits no warning. CollectRemoteRefsOpts below
 // therefore collects EVERY distinct (repo, git-tag) a ref is referenced at;
 // the per-entity dedup + warn happens once, after fetch.
@@ -392,7 +392,7 @@ type RemoteDownload struct {
 // CollectRemoteRefs is the default-opts wrapper (enabled images only) around
 // CollectRemoteRefsOpts. The overwhelming majority of call sites want
 // enabled-only collection, so they keep this two-arg form.
-func CollectRemoteRefs(cfg *Config, layers map[string]*Layer) ([]RemoteDownload, error) {
+func CollectRemoteRefs(cfg *Config, layers map[string]*Candy) ([]RemoteDownload, error) {
 	return CollectRemoteRefsOpts(cfg, layers, ResolveOpts{})
 }
 
@@ -404,15 +404,15 @@ func CollectRemoteRefs(cfg *Config, layers map[string]*Layer) ([]RemoteDownload,
 // opts gates the disabled-image walk: a disabled image's layer refs are
 // collected when opts.shouldIncludeDisabled(name) is true (i.e. a
 // `--include-disabled <name>` build). This keeps the remote-ref FETCH set in
-// lockstep with the RESOLVE set walked by ResolveAllBox / GlobalLayerOrder —
+// lockstep with the RESOLVE set walked by ResolveAllBox / GlobalCandyOrder —
 // the same shouldIncludeDisabled predicate gates both. Without it, a disabled
 // named image lands in the build working set but its remote layers are never
 // fetched/registered, surfacing as "unknown layer" while computing global layer
 // order.
-func CollectRemoteRefsOpts(cfg *Config, layers map[string]*Layer, opts ResolveOpts) ([]RemoteDownload, error) {
+func CollectRemoteRefsOpts(cfg *Config, layers map[string]*Candy, opts ResolveOpts) ([]RemoteDownload, error) {
 	// Collect EVERY distinct (repo, git-tag) a ref is referenced at. The git tag
 	// is only the FETCH coordinate — per-entity-version arbitration (and any
-	// warning) happens AFTER fetch in ScanAllLayerWithConfigOpts, so a re-tag of
+	// warning) happens AFTER fetch in ScanAllCandyWithConfigOpts, so a re-tag of
 	// an unchanged layer no longer warns here. `source` is unused now (kept for
 	// call-site stability + future diagnostics).
 	type repoVer struct{ repo, ver string }
@@ -422,7 +422,7 @@ func CollectRemoteRefsOpts(cfg *Config, layers map[string]*Layer, opts ResolveOp
 
 	addRef := func(ref, source string) error {
 		_ = source
-		if !IsRemoteLayerRef(ref) {
+		if !IsRemoteCandyRef(ref) {
 			return nil
 		}
 		parsed := ParseRemoteRef(ref)
@@ -480,8 +480,8 @@ func CollectRemoteRefsOpts(cfg *Config, layers map[string]*Layer, opts ResolveOp
 		if !ok {
 			return nil // external OCI base or unknown name — no layers to collect
 		}
-		for _, layerRef := range img.Layer {
-			if err := addRef(layerRef, fmt.Sprintf("image %s", name)); err != nil {
+		for _, candyRef := range img.Candy {
+			if err := addRef(candyRef, fmt.Sprintf("image %s", name)); err != nil {
 				return err
 			}
 		}
@@ -503,7 +503,7 @@ func CollectRemoteRefsOpts(cfg *Config, layers map[string]*Layer, opts ResolveOp
 		if img.Base != "" {
 			edges = append(edges, img.Base)
 		}
-		if len(img.Layer) > 0 {
+		if len(img.Candy) > 0 {
 			edges = append(edges, c.effectiveBuilderForBox(name, img).AllBuilder()...)
 		}
 		for _, ref := range edges {
@@ -528,8 +528,8 @@ func CollectRemoteRefsOpts(cfg *Config, layers map[string]*Layer, opts ResolveOp
 			if spec == nil {
 				continue
 			}
-			for _, layerRef := range spec.Layer {
-				if err := addRef(layerRef, fmt.Sprintf("kind:local %s", tplName)); err != nil {
+			for _, candyRef := range spec.Candy {
+				if err := addRef(candyRef, fmt.Sprintf("kind:local %s", tplName)); err != nil {
 					return nil, err
 				}
 			}
@@ -537,14 +537,14 @@ func CollectRemoteRefsOpts(cfg *Config, layers map[string]*Layer, opts ResolveOp
 	}
 
 	// Scan the candy manifest require: and layer: fields
-	for layerName, layer := range layers {
+	for candyName, layer := range layers {
 		for _, dep := range layer.Require {
-			if err := addRef(dep.Raw, fmt.Sprintf("layer %s require", layerName)); err != nil {
+			if err := addRef(dep.Raw, fmt.Sprintf("layer %s require", candyName)); err != nil {
 				return nil, err
 			}
 		}
-		for _, ref := range layer.IncludedLayer {
-			if err := addRef(ref.Raw, fmt.Sprintf("layer %s layer", layerName)); err != nil {
+		for _, ref := range layer.IncludedCandy {
+			if err := addRef(ref.Raw, fmt.Sprintf("layer %s layer", candyName)); err != nil {
 				return nil, err
 			}
 		}

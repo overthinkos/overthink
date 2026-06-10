@@ -45,7 +45,7 @@ func (s *LabelSet) IsEmpty() bool {
 // ai.opencharly.tests OCI label: layer-contributed checks, image-level
 // checks, and deploy-default checks.
 type LabelEvalSet struct {
-	Layer  []Check `json:"candy,omitempty"`
+	Candy  []Check `json:"candy,omitempty"`
 	Box    []Check `json:"box,omitempty"`
 	Deploy []Check `json:"deploy,omitempty"`
 }
@@ -56,7 +56,7 @@ func (s *LabelEvalSet) IsEmpty() bool {
 	if s == nil {
 		return true
 	}
-	return len(s.Layer) == 0 && len(s.Box) == 0 && len(s.Deploy) == 0
+	return len(s.Candy) == 0 && len(s.Box) == 0 && len(s.Deploy) == 0
 }
 
 // LabelDescriptionSet is the three-section structure embedded in the
@@ -67,7 +67,7 @@ func (s *LabelEvalSet) IsEmpty() bool {
 // Mirrors LabelEvalSet's shape so the collection + merge pipeline and
 // the reporting format can share a mental model.
 type LabelDescriptionSet struct {
-	Layer  []LabeledDescription `json:"candy,omitempty"`
+	Candy  []LabeledDescription `json:"candy,omitempty"`
 	Box    []LabeledDescription `json:"box,omitempty"`
 	Deploy []LabeledDescription `json:"deploy,omitempty"`
 }
@@ -87,5 +87,5 @@ func (s *LabelDescriptionSet) IsEmpty() bool {
 	if s == nil {
 		return true
 	}
-	return len(s.Layer) == 0 && len(s.Box) == 0 && len(s.Deploy) == 0
+	return len(s.Candy) == 0 && len(s.Box) == 0 && len(s.Deploy) == 0
 }

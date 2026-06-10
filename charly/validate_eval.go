@@ -20,7 +20,7 @@ var lowercaseEvalVarPattern = regexp.MustCompile(`\$\{[a-z][a-zA-Z0-9_]*\}`)
 // authoring errors before build time. Hooked into charly box validate.
 //
 // Scope:
-//   - Layer-level tests (LayerYAML.Eval).
+//   - Layer-level tests (CandyYAML.Eval).
 //   - Image-level tests (BoxConfig.Eval, BoxConfig.DeployEval).
 //   - Deploy.yml tests are out of scope here because deploy.yml is loaded
 //     per-operator at runtime, not part of the charly.yml validation pass.
@@ -35,7 +35,7 @@ var lowercaseEvalVarPattern = regexp.MustCompile(`\$\{[a-z][a-zA-Z0-9_]*\}`)
 //     deploy.yml overrides are unambiguous.
 //  6. ExitStatus / Port / UID / GID sanity (non-negative).
 //  7. Matcher operator is a known one.
-func validateTests(cfg *Config, layers map[string]*Layer, errs *ValidationError) {
+func validateTests(cfg *Config, layers map[string]*Candy, errs *ValidationError) {
 	// Layer-level. Each Check may opt into deploy scope; default is build.
 	for name, layer := range layers {
 		for i := range layer.tests {
@@ -327,7 +327,7 @@ func validateTestIDUniqueness(img BoxConfig, imgName string, errs *ValidationErr
 
 // validateCollectedIDUniqueness runs CollectEval to see the post-merge
 // per-section ID layout and flags cross-layer collisions.
-func validateCollectedIDUniqueness(cfg *Config, layers map[string]*Layer, imgName string, errs *ValidationError) {
+func validateCollectedIDUniqueness(cfg *Config, layers map[string]*Candy, imgName string, errs *ValidationError) {
 	set := CollectEval(cfg, layers, imgName)
 	if set == nil {
 		return
@@ -346,7 +346,7 @@ func validateCollectedIDUniqueness(cfg *Config, layers map[string]*Layer, imgNam
 			}
 		}
 	}
-	checkSection("candy", set.Layer)
+	checkSection("candy", set.Candy)
 	checkSection("box", set.Box)
 	checkSection("deploy", set.Deploy)
 }

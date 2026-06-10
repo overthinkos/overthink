@@ -25,7 +25,7 @@ import (
 	"time"
 )
 
-// RetrieveLayerArtifacts walks every artifact declared by every layer
+// RetrieveCandyArtifacts walks every artifact declared by every layer
 // included in the deploy and pulls it back via the executor's GetFile.
 // Missing non-optional files are a hard error (R1).
 //
@@ -33,10 +33,10 @@ import (
 // rewrite-path expansion as ${deploy_name}. envVars is an additional
 // substitution context (e.g., K3S_SERVER_HOSTNAME from the deploy.env
 // block, used to rewrite server URLs in a retrieved kubeconfig).
-func RetrieveLayerArtifacts(
+func RetrieveCandyArtifacts(
 	ctx context.Context,
 	exec DeployExecutor,
-	layers []*Layer,
+	layers []*Candy,
 	deployName string,
 	envVars map[string]string,
 	opts EmitOpts,
@@ -62,7 +62,7 @@ func RetrieveLayerArtifacts(
 func retrieveOne(
 	ctx context.Context,
 	exec DeployExecutor,
-	layerName string,
+	candyName string,
 	a CandyArtifact,
 	deployName string,
 	envVars map[string]string,
@@ -112,13 +112,13 @@ func retrieveOne(
 		if r.Find == "" {
 			continue
 		}
-		find := expandArtifactVars(r.Find, deployName, layerName, envVars)
-		replace := expandArtifactVars(r.Replace, deployName, layerName, envVars)
+		find := expandArtifactVars(r.Find, deployName, candyName, envVars)
+		replace := expandArtifactVars(r.Replace, deployName, candyName, envVars)
 		content = strings.ReplaceAll(content, find, replace)
 	}
 
 	// Expand ${...} in retrieve_to (most useful: ${deploy_name}).
-	destPath := expandArtifactVars(a.RetrieveTo, deployName, layerName, envVars)
+	destPath := expandArtifactVars(a.RetrieveTo, deployName, candyName, envVars)
 	destPath, err = expandArtifactHome(destPath)
 	if err != nil {
 		return err
@@ -188,7 +188,7 @@ func waitForArtifactPath(
 // artifact rewrites that want a sensible fallback when the operator
 // doesn't set an optional env var (e.g. K3S_KUBECONFIG_SERVER).
 // Nested ${} is NOT supported — keep defaults literal.
-func expandArtifactVars(s, deployName, layerName string, envVars map[string]string) string {
+func expandArtifactVars(s, deployName, candyName string, envVars map[string]string) string {
 	mapFn := func(key string) string {
 		// ${KEY:-default} fallback syntax.
 		var defaultVal string
@@ -201,7 +201,7 @@ func expandArtifactVars(s, deployName, layerName string, envVars map[string]stri
 		case "deploy_name":
 			resolved = deployName
 		case "layer_name":
-			resolved = layerName
+			resolved = candyName
 		case "HOME":
 			if home, err := os.UserHomeDir(); err == nil {
 				resolved = home

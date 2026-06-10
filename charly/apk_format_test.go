@@ -43,12 +43,12 @@ func TestInstallWithRetry(t *testing.T) {
 // single ApkInstallStep carrying every entry, and that an empty apk: list
 // compiles to nothing.
 func TestCompileApkStep(t *testing.T) {
-	none := &Layer{Name: "no-apk"}
+	none := &Candy{Name: "no-apk"}
 	if step := compileApkStep(none); step != nil {
 		t.Errorf("layer with no apk: should compile to nil step, got %T", step)
 	}
 
-	l := &Layer{Name: "test-apps", SourceDir: "/layers/test-apps"}
+	l := &Candy{Name: "test-apps", SourceDir: "/layers/test-apps"}
 	l.apk = []ApkPackageSpec{
 		{Package: "org.fdroid.fdroid", Source: "apk-pure", Arch: "x86_64"},
 		{Apk: "tests/data/x.apk"},
@@ -67,8 +67,8 @@ func TestCompileApkStep(t *testing.T) {
 	if len(apk.Packages) != 2 {
 		t.Errorf("Packages len = %d, want 2", len(apk.Packages))
 	}
-	if apk.LayerName != "test-apps" || apk.LayerDir != "/layers/test-apps" {
-		t.Errorf("LayerName/LayerDir = %q/%q", apk.LayerName, apk.LayerDir)
+	if apk.CandyName != "test-apps" || apk.CandyDir != "/layers/test-apps" {
+		t.Errorf("CandyName/CandyDir = %q/%q", apk.CandyName, apk.CandyDir)
 	}
 	// PackageIDs excludes committed-APK entries (no id to uninstall by).
 	ids := apk.PackageIDs()
@@ -86,7 +86,7 @@ func TestOCITargetSkipsApkInstall(t *testing.T) {
 	tgt := &OCITarget{}
 	step := &ApkInstallStep{
 		Packages:  []ApkPackageSpec{{Package: "org.fdroid.fdroid"}},
-		LayerName: "test-apps",
+		CandyName: "test-apps",
 	}
 	if err := tgt.emitStep(step, &InstallPlan{}); err != nil {
 		t.Fatalf("OCITarget.emitStep(ApkInstallStep) = %v, want nil (skip)", err)
@@ -96,16 +96,16 @@ func TestOCITargetSkipsApkInstall(t *testing.T) {
 	}
 }
 
-// TestPopulateLayerApk verifies the candy manifest `apk:` field flows through the
+// TestPopulateCandyApk verifies the candy manifest `apk:` field flows through the
 // populator onto the resolved Layer.
-func TestPopulateLayerApk(t *testing.T) {
+func TestPopulateCandyApk(t *testing.T) {
 	ly := &CandyYAML{
 		Apk: []ApkPackageSpec{
 			{Package: "org.fdroid.fdroid", Source: "apk-pure", Arch: "x86_64"},
 		},
 	}
-	l := &Layer{Name: "test-apps"}
-	populateLayerFromYAML(l, ly)
+	l := &Candy{Name: "test-apps"}
+	populateCandyFromYAML(l, ly)
 	if !l.HasApk() {
 		t.Fatal("HasApk() = false after populating apk: entries")
 	}

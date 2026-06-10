@@ -30,7 +30,7 @@ type DeployAddCmd struct {
 	Ref  string `arg:"" optional:"" help:"Box or candy reference (local name, ./path.yml, or github.com/org/repo[/box/<n>|/candy/<n>][@ref])"`
 
 	// Layer overlays (repeatable).
-	AddLayer []string `long:"add-candy" help:"Extra layer to apply on top of the base image (repeatable)"`
+	AddCandy []string `long:"add-candy" help:"Extra layer to apply on top of the base image (repeatable)"`
 
 	// Plan-level flags.
 	Tag      string `long:"tag" help:"Image CalVer tag (empty = newest local CalVer resolved via the ai.opencharly.version OCI label)"`
@@ -218,7 +218,7 @@ func (c *DeployAddCmd) dispatchNode(path string, node *DeploymentNode, parentExe
 	// this matches the pre-v2 behavior; on children we must reload
 	// fields from the child node (not c.Name's top-level entry).
 	refStr := c.Ref
-	addLayers := append([]string(nil), c.AddLayer...)
+	addCandies := append([]string(nil), c.AddCandy...)
 	tag := c.Tag
 	if node != nil {
 		if node.Version != "" {
@@ -227,8 +227,8 @@ func (c *DeployAddCmd) dispatchNode(path string, node *DeploymentNode, parentExe
 		if node.InstallOpts != nil {
 			opts = node.InstallOpts.ApplyTo(opts)
 		}
-		if len(addLayers) == 0 && len(node.AddLayer) > 0 {
-			addLayers = append([]string(nil), node.AddLayer...)
+		if len(addCandies) == 0 && len(node.AddCandy) > 0 {
+			addCandies = append([]string(nil), node.AddCandy...)
 		}
 	}
 	if refStr == "" {
@@ -253,7 +253,7 @@ func (c *DeployAddCmd) dispatchNode(path string, node *DeploymentNode, parentExe
 
 	var plans []*InstallPlan
 	var base string
-	var layerSet []string
+	var candySet []string
 
 	target := classifyNodeTarget(node, path)
 
@@ -277,9 +277,9 @@ func (c *DeployAddCmd) dispatchNode(path string, node *DeploymentNode, parentExe
 			return fmt.Errorf("deployment %q: unknown kind:local template %q", path, node.Local)
 		}
 		// Prepend template layers; deployment add_layers are appended.
-		merged := append([]string(nil), tmpl.Layer...)
-		merged = append(merged, addLayers...)
-		addLayers = merged
+		merged := append([]string(nil), tmpl.Candy...)
+		merged = append(merged, addCandies...)
+		addCandies = merged
 		// Fill install_opts gaps from the template.
 		opts = tmpl.InstallOpts.ApplyTo(opts)
 	}
@@ -297,7 +297,7 @@ func (c *DeployAddCmd) dispatchNode(path string, node *DeploymentNode, parentExe
 		// Save c.Tag for compilePlans; restore after.
 		savedTag := c.Tag
 		c.Tag = tag
-		plans, base, layerSet, err = c.compilePlans(ref, cfg, distroCfg, builderCfg, dir)
+		plans, base, candySet, err = c.compilePlans(ref, cfg, distroCfg, builderCfg, dir)
 		c.Tag = savedTag
 		if err != nil {
 			return err
@@ -309,7 +309,7 @@ func (c *DeployAddCmd) dispatchNode(path string, node *DeploymentNode, parentExe
 	// operator host's context — otherwise the layer's install tasks pick
 	// the wrong distro section and the overlay build fails. Only host/vm
 	// targets use syntheticHostBox / syntheticVmBox (handled inside
-	// compileLayerPlans).
+	// compileCandyPlans).
 	var baseImg *ResolvedBox
 	if (target == "pod" || target == "k8s") && refStr != "" {
 		if baseResolved, rerr := cfg.ResolveBox(refStr, tag, dir, ResolveOpts{}); rerr == nil {
@@ -322,14 +322,14 @@ func (c *DeployAddCmd) dispatchNode(path string, node *DeploymentNode, parentExe
 			}
 		}
 	}
-	for _, al := range addLayers {
-		alRef, err := ResolveDeployRefAsLayer(al, dir)
+	for _, al := range addCandies {
+		alRef, err := ResolveDeployRefAsCandy(al, dir)
 		if err != nil {
 			return fmt.Errorf("resolving --add-layer %q: %w", al, err)
 		}
 		var alPlans []*InstallPlan
 		if baseImg != nil {
-			alPlans, _, _, err = c.compileLayerPlansWithContext(alRef, cfg, distroCfg, builderCfg, dir, baseImg)
+			alPlans, _, _, err = c.compileCandyPlansWithContext(alRef, cfg, distroCfg, builderCfg, dir, baseImg)
 		} else {
 			alPlans, _, _, err = c.compilePlans(alRef, cfg, distroCfg, builderCfg, dir)
 		}
@@ -341,33 +341,33 @@ func (c *DeployAddCmd) dispatchNode(path string, node *DeploymentNode, parentExe
 		// user-facing ref name (k3s-server without its k3s base dep).
 		overlayNames := make([]string, 0, len(alPlans))
 		for _, p := range alPlans {
-			if p.Layer != "" {
-				overlayNames = append(overlayNames, p.Layer)
+			if p.Candy != "" {
+				overlayNames = append(overlayNames, p.Candy)
 			}
 		}
 		for _, p := range alPlans {
-			p.AddLayers = append(p.AddLayers, overlayNames...)
+			p.AddCandies = append(p.AddCandies, overlayNames...)
 		}
 		plans = append(plans, alPlans...)
 	}
 
-	deployID := computeDeployID(base, layerSet, addLayers)
+	deployID := computeDeployID(base, candySet, addCandies)
 	for _, p := range plans {
 		p.DeployID = deployID
 		// Union — don't clobber. The per-alPlan propagation loop above
-		// already populated p.AddLayers with the overlay-layer names
+		// already populated p.AddCandies with the overlay-layer names
 		// (explicit add_layers + their transitive deps). Plain overwrite
-		// with the user-facing addLayers list drops the transitive
+		// with the user-facing addCandies list drops the transitive
 		// entries, so (e.g.) an overlay declaring add_layers:[k3s-server]
 		// would ship k3s-server but not its k3s base layer — runtime
 		// failure.
-		seen := make(map[string]bool, len(p.AddLayers))
-		for _, al := range p.AddLayers {
+		seen := make(map[string]bool, len(p.AddCandies))
+		for _, al := range p.AddCandies {
 			seen[al] = true
 		}
-		for _, al := range addLayers {
+		for _, al := range addCandies {
 			if !seen[al] {
-				p.AddLayers = append(p.AddLayers, al)
+				p.AddCandies = append(p.AddCandies, al)
 				seen[al] = true
 			}
 		}
@@ -684,40 +684,40 @@ func (c *DeployAddCmd) compilePlans(ref *DeployRef, cfg *Config, distroCfg *Dist
 	if ref.Kind == RefKindBox {
 		return c.compileBoxPlans(ref, cfg, distroCfg, builderCfg, dir)
 	}
-	// Local AND remote layer refs flow here — scanLayersForRef fetches a
+	// Local AND remote layer refs flow here — scanCandiesForRef fetches a
 	// remote `--add-layer @host/org/repo/candy/<name>:ver` (and its deps)
 	// on demand, so deploy add of remote layers is fully automatic.
-	return c.compileLayerPlans(ref, cfg, distroCfg, builderCfg, dir)
+	return c.compileCandyPlans(ref, cfg, distroCfg, builderCfg, dir)
 }
 
-// scanLayersForRef scans the layer set needed to compile `ref`, returning the
+// scanCandiesForRef scans the layer set needed to compile `ref`, returning the
 // layer map plus the map KEY for ref. A LOCAL layer ref keys by its short name.
 // A REMOTE ref (`@host/org/repo/candy/<name>:ver`) is fetched + scanned with
 // its transitive deps — by augmenting cfg with a synthetic image that carries
-// the ref, so the existing CollectRemoteRefs/ScanAllLayer machinery pulls it —
+// the ref, so the existing CollectRemoteRefs/ScanAllCandy machinery pulls it —
 // and keys by its bare ref. This makes `charly deploy add --add-layer <remote>`
 // (e.g. the VM eval beds' add_layer:) fully automatic with no manual pre-fetch.
-func (c *DeployAddCmd) scanLayersForRef(ref *DeployRef, cfg *Config, dir string) (map[string]*Layer, string, error) {
+func (c *DeployAddCmd) scanCandiesForRef(ref *DeployRef, cfg *Config, dir string) (map[string]*Candy, string, error) {
 	scanCfg := cfg
-	layerKey := ref.Name
+	candyKey := ref.Name
 	if ref.Source == RefSourceRemote {
 		aug := *cfg
 		aug.Box = make(map[string]BoxConfig, len(cfg.Box)+1)
 		for k, v := range cfg.Box {
 			aug.Box[k] = v
 		}
-		aug.Box["__charly_addlayer_fetch__"] = BoxConfig{Layer: []string{ref.Raw}}
+		aug.Box["__charly_addlayer_fetch__"] = BoxConfig{Candy: []string{ref.Raw}}
 		scanCfg = &aug
-		layerKey = BareRef(ref.Raw)
+		candyKey = BareRef(ref.Raw)
 	}
-	layers, err := ScanAllLayerWithConfig(dir, scanCfg)
+	layers, err := ScanAllCandyWithConfig(dir, scanCfg)
 	if err != nil {
 		return nil, "", err
 	}
-	if _, ok := layers[layerKey]; !ok {
+	if _, ok := layers[candyKey]; !ok {
 		return nil, "", fmt.Errorf("layer %q not found", ref.Raw)
 	}
-	return layers, layerKey, nil
+	return layers, candyKey, nil
 }
 
 func (c *DeployAddCmd) compileBoxPlans(ref *DeployRef, cfg *Config, distroCfg *DistroConfig, builderCfg *BuilderConfig, dir string) ([]*InstallPlan, string, []string, error) {
@@ -727,26 +727,26 @@ func (c *DeployAddCmd) compileBoxPlans(ref *DeployRef, cfg *Config, distroCfg *D
 	if err != nil {
 		return nil, "", nil, err
 	}
-	layers, err := ScanAllLayerWithConfig(dir, cfg)
+	layers, err := ScanAllCandyWithConfig(dir, cfg)
 	if err != nil {
 		return nil, "", nil, err
 	}
 	var parent map[string]bool
-	order, err := ResolveLayerOrder(img.Layer, layers, parent)
+	order, err := ResolveCandyOrder(img.Candy, layers, parent)
 	if err != nil {
 		return nil, "", nil, err
 	}
 	var plans []*InstallPlan
 	hostCtx := detectHostContext()
 	order = pruneContainerInitForSystemd(order, hostCtx)
-	for _, layerName := range order {
-		layer := layers[layerName]
+	for _, candyName := range order {
+		layer := layers[candyName]
 		if layer == nil {
 			continue
 		}
 		p, err := BuildDeployPlan(layer, img, hostCtx)
 		if err != nil {
-			return nil, "", nil, fmt.Errorf("compiling %s: %w", layerName, err)
+			return nil, "", nil, fmt.Errorf("compiling %s: %w", candyName, err)
 		}
 		plans = append(plans, p)
 	}
@@ -776,17 +776,17 @@ func pruneContainerInitForSystemd(order []string, hostCtx HostContext) []string 
 	return out
 }
 
-// compileLayerPlansWithContext is the same as compileLayerPlans but uses
+// compileCandyPlansWithContext is the same as compileCandyPlans but uses
 // the provided *ResolvedBox as the compile context (so add_layers for
 // a pod/k8s deployment compile against the base image's distro/user
 // context, not the operator host's).
-func (c *DeployAddCmd) compileLayerPlansWithContext(ref *DeployRef, cfg *Config, distroCfg *DistroConfig, builderCfg *BuilderConfig, dir string, ctx *ResolvedBox) ([]*InstallPlan, string, []string, error) {
+func (c *DeployAddCmd) compileCandyPlansWithContext(ref *DeployRef, cfg *Config, distroCfg *DistroConfig, builderCfg *BuilderConfig, dir string, ctx *ResolvedBox) ([]*InstallPlan, string, []string, error) {
 	_ = builderCfg
-	layers, layerKey, err := c.scanLayersForRef(ref, cfg, dir)
+	layers, candyKey, err := c.scanCandiesForRef(ref, cfg, dir)
 	if err != nil {
 		return nil, "", nil, err
 	}
-	order, err := ResolveLayerOrder([]string{layerKey}, layers, nil)
+	order, err := ResolveCandyOrder([]string{candyKey}, layers, nil)
 	if err != nil {
 		return nil, "", nil, fmt.Errorf("resolving deps for %s: %w", ref.Raw, err)
 	}
@@ -809,9 +809,9 @@ func (c *DeployAddCmd) compileLayerPlansWithContext(ref *DeployRef, cfg *Config,
 	return plans, ref.Name, order, nil
 }
 
-func (c *DeployAddCmd) compileLayerPlans(ref *DeployRef, cfg *Config, distroCfg *DistroConfig, builderCfg *BuilderConfig, dir string) ([]*InstallPlan, string, []string, error) {
+func (c *DeployAddCmd) compileCandyPlans(ref *DeployRef, cfg *Config, distroCfg *DistroConfig, builderCfg *BuilderConfig, dir string) ([]*InstallPlan, string, []string, error) {
 	_ = builderCfg
-	layers, layerKey, err := c.scanLayersForRef(ref, cfg, dir)
+	layers, candyKey, err := c.scanCandiesForRef(ref, cfg, dir)
 	if err != nil {
 		return nil, "", nil, err
 	}
@@ -819,8 +819,8 @@ func (c *DeployAddCmd) compileLayerPlans(ref *DeployRef, cfg *Config, distroCfg 
 	// or `--add-layer <name>`) MUST pull in the layer's `requires:` graph in
 	// topological order. Without this, layers whose tasks rely on upstream
 	// binaries (e.g. pre-commit's cargo install needing rust) fail with
-	// "command not found". Remote refs key by their bare ref (scanLayersForRef).
-	order, err := ResolveLayerOrder([]string{layerKey}, layers, nil)
+	// "command not found". Remote refs key by their bare ref (scanCandiesForRef).
+	order, err := ResolveCandyOrder([]string{candyKey}, layers, nil)
 	if err != nil {
 		return nil, "", nil, fmt.Errorf("resolving deps for %s: %w", ref.Name, err)
 	}

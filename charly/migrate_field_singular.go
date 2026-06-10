@@ -14,7 +14,7 @@ package main
 //
 // The `pluralToSingularYAMLKeys` map is the single source of truth for
 // (a) the migrator's substitution table, AND (b) the loader-rejection
-// helper `RejectLegacyPluralKeys` used by parseLayerYAML / LoadUnified
+// helper `RejectLegacyPluralKeys` used by parseCandyYAML / LoadUnified
 // / LoadDeployConfig (R3 no-duplication).
 
 import (
@@ -58,7 +58,7 @@ var pluralToSingularYAMLKeys = map[string]string{
 	"packages":  "package",
 	"sidecars":  "sidecar",
 	// 2026-06 singular-label cutover: the layer parser now hard-rejects
-	// these as unknown keys (the OCI label contract + the LayerYAML fields
+	// these as unknown keys (the OCI label contract + the CandyYAML fields
 	// went singular). hooks: / capabilities: are layer-level fields; tags:
 	// is the eval-scenario field. requires_capabilities (below) already
 	// singularizes longest-first, so `capabilities` is safe to add here.

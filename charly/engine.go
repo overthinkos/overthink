@@ -22,17 +22,17 @@ func EngineBinary(engine string) string {
 // now: layer engine requirements > global default. Deploy-time overrides
 // come from DeploymentNode.Engine via ResolveBoxEngineForDeploy /
 // ResolveBoxEngineFromMeta.
-func ResolveBoxEngine(cfg *Config, layers map[string]*Layer, boxName string, globalRunEngine string) string {
+func ResolveBoxEngine(cfg *Config, layers map[string]*Candy, boxName string, globalRunEngine string) string {
 	img, ok := cfg.Box[boxName]
 	if !ok {
 		return globalRunEngine
 	}
 
 	// Layer-level engine requirements (transitive closure)
-	resolved, err := ResolveLayerOrder(img.Layer, layers, nil)
+	resolved, err := ResolveCandyOrder(img.Candy, layers, nil)
 	if err == nil {
-		for _, layerName := range resolved {
-			if layer, ok := layers[layerName]; ok && layer.Engine() != "" {
+		for _, candyName := range resolved {
+			if layer, ok := layers[candyName]; ok && layer.Engine() != "" {
 				return layer.Engine()
 			}
 		}
@@ -59,7 +59,7 @@ func ResolveBoxEngineFromDir(dir, boxName, globalEngine string) string {
 	if err != nil {
 		return globalEngine
 	}
-	layers, err := ScanAllLayerWithConfig(dir, cfg)
+	layers, err := ScanAllCandyWithConfig(dir, cfg)
 	if err != nil {
 		return globalEngine
 	}

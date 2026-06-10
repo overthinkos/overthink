@@ -42,7 +42,7 @@ import (
 type BuilderRunOpts struct {
 	Engine       string // "podman" or "docker"; default "podman"
 	BuilderImage string // full image ref, e.g. "ghcr.io/overthinkos/fedora-builder:latest"
-	LayerDir     string // absolute path to layer source (bind-mounted as /work)
+	CandyDir     string // absolute path to layer source (bind-mounted as /work)
 	ScriptBody   string // shell script contents to pass to bash -c
 
 	// Cfg + ProjectDir feed `EnsureImagePresent` so a builder image
@@ -181,8 +181,8 @@ func buildBuilderRunArgs(opts BuilderRunOpts) []string {
 	}
 
 	// Layer source always mounted read-only at /work.
-	if opts.LayerDir != "" {
-		args = append(args, "-v", fmt.Sprintf("%s:/work:ro", opts.LayerDir))
+	if opts.CandyDir != "" {
+		args = append(args, "-v", fmt.Sprintf("%s:/work:ro", opts.CandyDir))
 	}
 
 	// HOME + extra env vars.

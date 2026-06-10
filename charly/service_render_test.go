@@ -14,7 +14,7 @@ import (
 // build.yml template contents.
 
 const testSystemdServiceTemplate = `[Unit]
-Description=charly: {{.Layer}} {{.Name}}
+Description=charly: {{.Candy}} {{.Name}}
 {{with .After}}After={{join . " "}}{{end}}
 
 [Service]
@@ -27,9 +27,9 @@ WantedBy={{if .WantedBy}}{{join .WantedBy " "}}{{else if eq .Scope "system"}}mul
 `
 
 const testSystemdUnitPathTemplate = `{{- if eq .Scope "system" -}}
-{{.SystemUnitDir}}/charly-{{.Layer}}-{{.Name}}.service
+{{.SystemUnitDir}}/charly-{{.Candy}}-{{.Name}}.service
 {{- else -}}
-{{.UserUnitDir}}/charly-{{.Layer}}-{{.Name}}.service
+{{.UserUnitDir}}/charly-{{.Candy}}-{{.Name}}.service
 {{- end -}}`
 
 const testSystemdDropinTemplate = `[Service]
@@ -38,9 +38,9 @@ const testSystemdDropinTemplate = `[Service]
 `
 
 const testSystemdDropinPathTemplate = `{{- if eq .Scope "system" -}}
-{{.SystemUnitDir}}/{{.PackagedUnit}}.d/charly-{{.Layer}}.conf
+{{.SystemUnitDir}}/{{.PackagedUnit}}.d/charly-{{.Candy}}.conf
 {{- else -}}
-{{.UserUnitDir}}/{{.PackagedUnit}}.d/charly-{{.Layer}}.conf
+{{.UserUnitDir}}/{{.PackagedUnit}}.d/charly-{{.Candy}}.conf
 {{- end -}}`
 
 const testSupervisordServiceTemplate = `[program:{{.Name}}]
@@ -66,7 +66,7 @@ func testSupervisordInitDef() *InitDef {
 		ManagementTool: "supervisorctl",
 		ServiceSchema: &ServiceSchemaDef{
 			ServiceTemplate:  testSupervisordServiceTemplate,
-			UnitPathTemplate: `/etc/supervisord.d/{{.Layer}}-{{.Name}}.conf`,
+			UnitPathTemplate: `/etc/supervisord.d/{{.Candy}}-{{.Name}}.conf`,
 			SupportsPackaged: false,
 		},
 	}
@@ -83,7 +83,7 @@ func TestRenderServiceCustomSystemd(t *testing.T) {
 		Enable:  true,
 	}
 	rendered, err := RenderService(entry, testSystemdInitDef(), ServiceRenderContext{
-		Layer:         "ollama",
+		Candy:         "ollama",
 		SystemUnitDir: "/etc/systemd/system",
 	})
 	if err != nil {
@@ -124,7 +124,7 @@ func TestRenderServiceWantedBy(t *testing.T) {
 		WantedBy: []string{"graphical-session.target"},
 	}
 	rendered, err := RenderService(entry, testSystemdInitDef(), ServiceRenderContext{
-		Layer:       "session-capture",
+		Candy:       "session-capture",
 		UserUnitDir: "/home/cachy/.config/systemd/user",
 	})
 	if err != nil {
@@ -152,7 +152,7 @@ func TestRenderServiceHomePortabilityToken(t *testing.T) {
 		Enable: true,
 	}
 	rendered, err := RenderService(entry, testSystemdInitDef(), ServiceRenderContext{
-		Layer:       "selkies",
+		Candy:       "selkies",
 		Home:        HomeToken, // compiler defers for host/vm
 		UserUnitDir: HomeToken + "/.config/systemd/user",
 	})
@@ -202,7 +202,7 @@ func TestRenderServicePackagedWithOverrides(t *testing.T) {
 		},
 	}
 	rendered, err := RenderService(entry, testSystemdInitDef(), ServiceRenderContext{
-		Layer:         "postgresql",
+		Candy:         "postgresql",
 		SystemUnitDir: "/etc/systemd/system",
 	})
 	if err != nil {
@@ -226,7 +226,7 @@ func TestRenderServicePackagedOnSupervisordRefuses(t *testing.T) {
 		UsePackaged: "postgresql.service",
 		Enable:      true,
 	}
-	_, err := RenderService(entry, testSupervisordInitDef(), ServiceRenderContext{Layer: "pg"})
+	_, err := RenderService(entry, testSupervisordInitDef(), ServiceRenderContext{Candy: "pg"})
 	if err == nil {
 		t.Fatalf("expected error rendering use_packaged on supervisord, got nil")
 	}
@@ -241,7 +241,7 @@ func TestRenderServiceCustomSupervisord(t *testing.T) {
 		Exec:    "/usr/bin/ollama serve",
 		Restart: "always",
 	}
-	rendered, err := RenderService(entry, testSupervisordInitDef(), ServiceRenderContext{Layer: "ollama"})
+	rendered, err := RenderService(entry, testSupervisordInitDef(), ServiceRenderContext{Candy: "ollama"})
 	if err != nil {
 		t.Fatalf("RenderService: %v", err)
 	}
@@ -264,7 +264,7 @@ func TestRenderServiceUserScope(t *testing.T) {
 		Enable: true,
 	}
 	rendered, err := RenderService(entry, testSystemdInitDef(), ServiceRenderContext{
-		Layer:       "x",
+		Candy:       "x",
 		UserUnitDir: "/home/atrawog/.config/systemd/user",
 	})
 	if err != nil {

@@ -5,23 +5,23 @@ import (
 	"testing"
 )
 
-func TestGlobalLayerOrder_PopularityTieBreaking(t *testing.T) {
-	layers := map[string]*Layer{
+func TestGlobalCandyOrder_PopularityTieBreaking(t *testing.T) {
+	layers := map[string]*Candy{
 		"pixi":    {Name: "pixi", Require: nil},
 		"nodejs":  {Name: "nodejs", Require: nil},
-		"python":  {Name: "python", Require: toLayerRefs([]string{"pixi"})},
-		"testapi": {Name: "testapi", Require: toLayerRefs([]string{"python"}), HasPixiToml: true},
+		"python":  {Name: "python", Require: toCandyRefs([]string{"pixi"})},
+		"testapi": {Name: "testapi", Require: toCandyRefs([]string{"python"}), HasPixiToml: true},
 	}
 
 	// pixi is used by 2 images, nodejs by 1
 	images := map[string]*ResolvedBox{
-		"a": {Name: "a", Base: "ext:1", IsExternalBase: true, Layer: []string{"pixi", "python", "testapi"}},
-		"b": {Name: "b", Base: "ext:1", IsExternalBase: true, Layer: []string{"pixi", "nodejs"}},
+		"a": {Name: "a", Base: "ext:1", IsExternalBase: true, Candy: []string{"pixi", "python", "testapi"}},
+		"b": {Name: "b", Base: "ext:1", IsExternalBase: true, Candy: []string{"pixi", "nodejs"}},
 	}
 
-	order, err := GlobalLayerOrder(images, layers)
+	order, err := GlobalCandyOrder(images, layers)
 	if err != nil {
-		t.Fatalf("GlobalLayerOrder() error = %v", err)
+		t.Fatalf("GlobalCandyOrder() error = %v", err)
 	}
 
 	// pixi (popularity 2) should come before nodejs (popularity 1)
@@ -43,19 +43,19 @@ func TestGlobalLayerOrder_PopularityTieBreaking(t *testing.T) {
 	}
 }
 
-func TestGlobalLayerOrder_RespectsDependencies(t *testing.T) {
-	layers := map[string]*Layer{
+func TestGlobalCandyOrder_RespectsDependencies(t *testing.T) {
+	layers := map[string]*Candy{
 		"pixi":   {Name: "pixi", Require: nil},
-		"python": {Name: "python", Require: toLayerRefs([]string{"pixi"})},
+		"python": {Name: "python", Require: toCandyRefs([]string{"pixi"})},
 	}
 
 	images := map[string]*ResolvedBox{
-		"a": {Name: "a", Base: "ext:1", IsExternalBase: true, Layer: []string{"python"}},
+		"a": {Name: "a", Base: "ext:1", IsExternalBase: true, Candy: []string{"python"}},
 	}
 
-	order, err := GlobalLayerOrder(images, layers)
+	order, err := GlobalCandyOrder(images, layers)
 	if err != nil {
-		t.Fatalf("GlobalLayerOrder() error = %v", err)
+		t.Fatalf("GlobalCandyOrder() error = %v", err)
 	}
 
 	if len(order) != 2 {
@@ -66,7 +66,7 @@ func TestGlobalLayerOrder_RespectsDependencies(t *testing.T) {
 	}
 }
 
-func TestGlobalLayerOrder_RespectsAuthoredListOrder(t *testing.T) {
+func TestGlobalCandyOrder_RespectsAuthoredListOrder(t *testing.T) {
 	// build-toolchain has NO `require: rpmfusion` (on Arch the codec -devel libs
 	// come from the distro repos, not RPM Fusion), but fedora-builder authors
 	// `candy: [rpmfusion, build-toolchain]` so rpmfusion MUST come first. Here
@@ -74,19 +74,19 @@ func TestGlobalLayerOrder_RespectsAuthoredListOrder(t *testing.T) {
 	// authored-list-order fix, made the popularity tie-break place it ahead of
 	// rpmfusion (the exact bug that broke fedora-builder in a mixed
 	// arch-builder + fedora-builder submodule).
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"rpmfusion":       {Name: "rpmfusion"},
 		"build-toolchain": {Name: "build-toolchain"},
 		"pixi":            {Name: "pixi"},
 	}
 	images := map[string]*ResolvedBox{
-		"fedora-builder": {Name: "fedora-builder", Base: "ext:1", IsExternalBase: true, Layer: []string{"rpmfusion", "build-toolchain"}},
-		"arch-builder":   {Name: "arch-builder", Base: "ext:2", IsExternalBase: true, Layer: []string{"build-toolchain", "pixi"}},
+		"fedora-builder": {Name: "fedora-builder", Base: "ext:1", IsExternalBase: true, Candy: []string{"rpmfusion", "build-toolchain"}},
+		"arch-builder":   {Name: "arch-builder", Base: "ext:2", IsExternalBase: true, Candy: []string{"build-toolchain", "pixi"}},
 	}
 
-	order, err := GlobalLayerOrder(images, layers)
+	order, err := GlobalCandyOrder(images, layers)
 	if err != nil {
-		t.Fatalf("GlobalLayerOrder() error = %v", err)
+		t.Fatalf("GlobalCandyOrder() error = %v", err)
 	}
 
 	indexOf := func(name string) int {
@@ -102,69 +102,69 @@ func TestGlobalLayerOrder_RespectsAuthoredListOrder(t *testing.T) {
 	}
 }
 
-// TestGlobalLayerOrder_ConflictingListOrderFallsBack ensures that when two
+// TestGlobalCandyOrder_ConflictingListOrderFallsBack ensures that when two
 // images author opposite orders for the same pair, the cycle-safe edge
 // insertion falls back to the popularity tie-break instead of erroring.
-func TestGlobalLayerOrder_ConflictingListOrderFallsBack(t *testing.T) {
-	layers := map[string]*Layer{
+func TestGlobalCandyOrder_ConflictingListOrderFallsBack(t *testing.T) {
+	layers := map[string]*Candy{
 		"x": {Name: "x"},
 		"y": {Name: "y"},
 	}
 	images := map[string]*ResolvedBox{
-		"a": {Name: "a", Base: "ext:1", IsExternalBase: true, Layer: []string{"x", "y"}},
-		"b": {Name: "b", Base: "ext:2", IsExternalBase: true, Layer: []string{"y", "x"}},
+		"a": {Name: "a", Base: "ext:1", IsExternalBase: true, Candy: []string{"x", "y"}},
+		"b": {Name: "b", Base: "ext:2", IsExternalBase: true, Candy: []string{"y", "x"}},
 	}
 
-	order, err := GlobalLayerOrder(images, layers)
+	order, err := GlobalCandyOrder(images, layers)
 	if err != nil {
-		t.Fatalf("GlobalLayerOrder() should not error on conflicting authored orders, got %v", err)
+		t.Fatalf("GlobalCandyOrder() should not error on conflicting authored orders, got %v", err)
 	}
 	if len(order) != 2 {
 		t.Fatalf("expected 2 layers, got %d: %v", len(order), order)
 	}
 }
 
-func TestAbsoluteLayerSequence_WithInternalBase(t *testing.T) {
-	layers := map[string]*Layer{
+func TestAbsoluteCandySequence_WithInternalBase(t *testing.T) {
+	layers := map[string]*Candy{
 		"pixi":    {Name: "pixi", Require: nil},
-		"python":  {Name: "python", Require: toLayerRefs([]string{"pixi"})},
+		"python":  {Name: "python", Require: toCandyRefs([]string{"pixi"})},
 		"nodejs":  {Name: "nodejs", Require: nil},
-		"testapi": {Name: "testapi", Require: toLayerRefs([]string{"python"}), HasPixiToml: true},
+		"testapi": {Name: "testapi", Require: toCandyRefs([]string{"python"}), HasPixiToml: true},
 	}
 
 	images := map[string]*ResolvedBox{
-		"base": {Name: "base", Base: "ext:1", IsExternalBase: true, Layer: []string{"pixi"}},
-		"app":  {Name: "app", Base: "base", IsExternalBase: false, Layer: []string{"python", "testapi"}},
+		"base": {Name: "base", Base: "ext:1", IsExternalBase: true, Candy: []string{"pixi"}},
+		"app":  {Name: "app", Base: "base", IsExternalBase: false, Candy: []string{"python", "testapi"}},
 	}
 
 	globalOrder := []string{"pixi", "nodejs", "python", "testapi"}
 
-	seq := AbsoluteLayerSequence("app", images, layers, globalOrder)
+	seq := AbsoluteCandySequence("app", images, layers, globalOrder)
 
 	// app needs pixi (from base) + python + testapi
 	expected := []string{"pixi", "python", "testapi"}
 	if !reflect.DeepEqual(seq, expected) {
-		t.Errorf("AbsoluteLayerSequence = %v, want %v", seq, expected)
+		t.Errorf("AbsoluteCandySequence = %v, want %v", seq, expected)
 	}
 }
 
 func TestComputeIntermediates_NoBranching(t *testing.T) {
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"pixi":   {Name: "pixi", Require: nil, tasks: []Task{{Cmd: "true"}}},
-		"python": {Name: "python", Require: toLayerRefs([]string{"pixi"}), HasPixiToml: true},
+		"python": {Name: "python", Require: toCandyRefs([]string{"pixi"}), HasPixiToml: true},
 	}
 
 	images := map[string]*ResolvedBox{
 		"app": {
 			Name: "app", Base: "ext:1", IsExternalBase: true,
-			Layer: []string{"python"}, Tag: "v1", Registry: "r",
+			Candy: []string{"python"}, Tag: "v1", Registry: "r",
 			FullTag: "r/app:v1", Pkg: "rpm",
 		},
 	}
 
 	cfg := &Config{
 		Defaults: BoxConfig{Registry: "r", Build: BuildFormats{"rpm"}},
-		Box:      map[string]BoxConfig{"app": {Layer: []string{"python"}}},
+		Box:      map[string]BoxConfig{"app": {Candy: []string{"python"}}},
 	}
 
 	result, err := ComputeIntermediates(images, layers, cfg, "v1")
@@ -185,27 +185,27 @@ func TestComputeIntermediates_NoBranching(t *testing.T) {
 }
 
 func TestComputeIntermediates_SimpleBranch(t *testing.T) {
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"pixi":    {Name: "pixi", Require: nil, tasks: []Task{{Cmd: "true"}}},
-		"python":  {Name: "python", Require: toLayerRefs([]string{"pixi"}), HasPixiToml: true},
+		"python":  {Name: "python", Require: toCandyRefs([]string{"pixi"}), HasPixiToml: true},
 		"nodejs":  {Name: "nodejs", Require: nil, tasks: []Task{{Cmd: "true"}}},
-		"testapi": {Name: "testapi", Require: toLayerRefs([]string{"python"}), HasPixiToml: true},
+		"testapi": {Name: "testapi", Require: toCandyRefs([]string{"python"}), HasPixiToml: true},
 	}
 
 	images := map[string]*ResolvedBox{
 		"fedora": {
 			Name: "fedora", Base: "ext:1", IsExternalBase: true,
-			Layer: []string{}, Tag: "v1", Registry: "r",
+			Candy: []string{}, Tag: "v1", Registry: "r",
 			FullTag: "r/fedora:v1", Pkg: "rpm",
 		},
 		"app1": {
 			Name: "app1", Base: "fedora", IsExternalBase: false,
-			Layer: []string{"python", "testapi"}, Tag: "v1", Registry: "r",
+			Candy: []string{"python", "testapi"}, Tag: "v1", Registry: "r",
 			FullTag: "r/app1:v1", Pkg: "rpm",
 		},
 		"app2": {
 			Name: "app2", Base: "fedora", IsExternalBase: false,
-			Layer: []string{"nodejs"}, Tag: "v1", Registry: "r",
+			Candy: []string{"nodejs"}, Tag: "v1", Registry: "r",
 			FullTag: "r/app2:v1", Pkg: "rpm",
 		},
 	}
@@ -213,9 +213,9 @@ func TestComputeIntermediates_SimpleBranch(t *testing.T) {
 	cfg := &Config{
 		Defaults: BoxConfig{Registry: "r", Build: BuildFormats{"rpm"}},
 		Box: map[string]BoxConfig{
-			"fedora": {Layer: []string{}},
-			"app1":   {Base: "fedora", Layer: []string{"python", "testapi"}},
-			"app2":   {Base: "fedora", Layer: []string{"nodejs"}},
+			"fedora": {Candy: []string{}},
+			"app1":   {Base: "fedora", Candy: []string{"python", "testapi"}},
+			"app2":   {Base: "fedora", Candy: []string{"nodejs"}},
 		},
 	}
 
@@ -245,28 +245,28 @@ func TestComputeIntermediates_SimpleBranch(t *testing.T) {
 }
 
 func TestComputeIntermediates_SharedPrefix(t *testing.T) {
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"pixi":        {Name: "pixi", Require: nil, tasks: []Task{{Cmd: "true"}}},
-		"python":      {Name: "python", Require: toLayerRefs([]string{"pixi"}), HasPixiToml: true},
-		"supervisord": {Name: "supervisord", Require: toLayerRefs([]string{"python"}), HasPixiToml: true},
-		"testapi":     {Name: "testapi", Require: toLayerRefs([]string{"supervisord"}), HasPixiToml: true},
-		"openclaw":    {Name: "openclaw", Require: toLayerRefs([]string{"supervisord"}), HasPackageJson: true},
+		"python":      {Name: "python", Require: toCandyRefs([]string{"pixi"}), HasPixiToml: true},
+		"supervisord": {Name: "supervisord", Require: toCandyRefs([]string{"python"}), HasPixiToml: true},
+		"testapi":     {Name: "testapi", Require: toCandyRefs([]string{"supervisord"}), HasPixiToml: true},
+		"openclaw":    {Name: "openclaw", Require: toCandyRefs([]string{"supervisord"}), HasPackageJson: true},
 	}
 
 	images := map[string]*ResolvedBox{
 		"fedora": {
 			Name: "fedora", Base: "ext:1", IsExternalBase: true,
-			Layer: []string{}, Tag: "v1", Registry: "r",
+			Candy: []string{}, Tag: "v1", Registry: "r",
 			FullTag: "r/fedora:v1", Pkg: "rpm",
 		},
 		"fedora-test": {
 			Name: "fedora-test", Base: "fedora", IsExternalBase: false,
-			Layer: []string{"testapi"}, Tag: "v1", Registry: "r",
+			Candy: []string{"testapi"}, Tag: "v1", Registry: "r",
 			FullTag: "r/fedora-test:v1", Pkg: "rpm",
 		},
 		"openclaw": {
 			Name: "openclaw", Base: "fedora", IsExternalBase: false,
-			Layer: []string{"openclaw"}, Tag: "v1", Registry: "r",
+			Candy: []string{"openclaw"}, Tag: "v1", Registry: "r",
 			FullTag: "r/openclaw:v1", Pkg: "rpm",
 		},
 	}
@@ -274,9 +274,9 @@ func TestComputeIntermediates_SharedPrefix(t *testing.T) {
 	cfg := &Config{
 		Defaults: BoxConfig{Registry: "r", Build: BuildFormats{"rpm"}},
 		Box: map[string]BoxConfig{
-			"fedora":      {Layer: []string{}},
-			"fedora-test": {Base: "fedora", Layer: []string{"testapi"}},
-			"openclaw":    {Base: "fedora", Layer: []string{"openclaw"}},
+			"fedora":      {Candy: []string{}},
+			"fedora-test": {Base: "fedora", Candy: []string{"testapi"}},
+			"openclaw":    {Base: "fedora", Candy: []string{"openclaw"}},
 		},
 	}
 
@@ -299,7 +299,7 @@ func TestComputeIntermediates_SharedPrefix(t *testing.T) {
 	if autoCount == 0 {
 		t.Error("expected at least 1 auto intermediate, got 0")
 		for name, img := range result {
-			t.Logf("  %s: base=%s layers=%v auto=%v", name, img.Base, img.Layer, img.Auto)
+			t.Logf("  %s: base=%s layers=%v auto=%v", name, img.Base, img.Candy, img.Auto)
 		}
 	}
 
@@ -309,13 +309,13 @@ func TestComputeIntermediates_SharedPrefix(t *testing.T) {
 	if ftImg.Base == "fedora" && ocImg.Base == "fedora" {
 		t.Error("both images still use fedora as base — expected an intermediate")
 		for name, img := range result {
-			t.Logf("  %s: base=%s layers=%v auto=%v", name, img.Base, img.Layer, img.Auto)
+			t.Logf("  %s: base=%s layers=%v auto=%v", name, img.Base, img.Candy, img.Auto)
 		}
 	}
 }
 
 func TestComputeIntermediates_ExistingImageReuse(t *testing.T) {
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"pixi":   {Name: "pixi", Require: nil, tasks: []Task{{Cmd: "true"}}},
 		"nodejs": {Name: "nodejs", Require: nil, tasks: []Task{{Cmd: "true"}}},
 	}
@@ -323,17 +323,17 @@ func TestComputeIntermediates_ExistingImageReuse(t *testing.T) {
 	images := map[string]*ResolvedBox{
 		"fedora": {
 			Name: "fedora", Base: "ext:1", IsExternalBase: true,
-			Layer: []string{}, Tag: "v1", Registry: "r",
+			Candy: []string{}, Tag: "v1", Registry: "r",
 			FullTag: "r/fedora:v1", Pkg: "rpm",
 		},
 		"app1": {
 			Name: "app1", Base: "fedora", IsExternalBase: false,
-			Layer: []string{"pixi"}, Tag: "v1", Registry: "r",
+			Candy: []string{"pixi"}, Tag: "v1", Registry: "r",
 			FullTag: "r/app1:v1", Pkg: "rpm",
 		},
 		"app2": {
 			Name: "app2", Base: "fedora", IsExternalBase: false,
-			Layer: []string{"nodejs"}, Tag: "v1", Registry: "r",
+			Candy: []string{"nodejs"}, Tag: "v1", Registry: "r",
 			FullTag: "r/app2:v1", Pkg: "rpm",
 		},
 	}
@@ -341,9 +341,9 @@ func TestComputeIntermediates_ExistingImageReuse(t *testing.T) {
 	cfg := &Config{
 		Defaults: BoxConfig{Registry: "r", Build: BuildFormats{"rpm"}},
 		Box: map[string]BoxConfig{
-			"fedora": {Layer: []string{}},
-			"app1":   {Base: "fedora", Layer: []string{"pixi"}},
-			"app2":   {Base: "fedora", Layer: []string{"nodejs"}},
+			"fedora": {Candy: []string{}},
+			"app1":   {Base: "fedora", Candy: []string{"pixi"}},
+			"app2":   {Base: "fedora", Candy: []string{"nodejs"}},
 		},
 	}
 
@@ -368,9 +368,9 @@ func TestComputeIntermediates_ExistingImageReuse(t *testing.T) {
 }
 
 func TestImageNeedsBuilder(t *testing.T) {
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"pixi":    {Name: "pixi", Require: nil, tasks: []Task{{Cmd: "true"}}},
-		"python":  {Name: "python", Require: toLayerRefs([]string{"pixi"}), HasPixiToml: true},
+		"python":  {Name: "python", Require: toCandyRefs([]string{"pixi"}), HasPixiToml: true},
 		"nodejs":  {Name: "nodejs", Require: nil, tasks: []Task{{Cmd: "true"}}},
 		"tooling": {Name: "tooling", Require: nil, tasks: []Task{{Cmd: "true"}}},
 	}
@@ -378,19 +378,19 @@ func TestImageNeedsBuilder(t *testing.T) {
 	images := map[string]*ResolvedBox{
 		"builder": {
 			Name: "builder", Base: "ext:1", IsExternalBase: true,
-			Layer: []string{"pixi", "nodejs", "tooling"},
+			Candy: []string{"pixi", "nodejs", "tooling"},
 		},
 		"base": {
 			Name: "base", Base: "ext:1", IsExternalBase: true,
-			Layer: []string{"pixi"},
+			Candy: []string{"pixi"},
 		},
 		"app": {
 			Name: "app", Base: "base", IsExternalBase: false,
-			Layer: []string{"python"},
+			Candy: []string{"python"},
 		},
 		"simple": {
 			Name: "simple", Base: "ext:1", IsExternalBase: true,
-			Layer: []string{"tooling"},
+			Candy: []string{"tooling"},
 		},
 	}
 
@@ -417,36 +417,36 @@ func TestImageNeedsBuilder(t *testing.T) {
 
 func TestComputeIntermediates_RealisticConfig(t *testing.T) {
 	// Simplified version of the actual charly.yml setup
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"pixi":            {Name: "pixi", Require: nil, tasks: []Task{{Cmd: "true"}}},
 		"nodejs":          {Name: "nodejs", Require: nil, tasks: []Task{{Cmd: "true"}}},
-		"python":          {Name: "python", Require: toLayerRefs([]string{"pixi"}), HasPixiToml: true},
-		"supervisord":     {Name: "supervisord", Require: toLayerRefs([]string{"python"}), HasPixiToml: true},
+		"python":          {Name: "python", Require: toCandyRefs([]string{"pixi"}), HasPixiToml: true},
+		"supervisord":     {Name: "supervisord", Require: toCandyRefs([]string{"python"}), HasPixiToml: true},
 		"build-toolchain": {Name: "build-toolchain", Require: nil, tasks: []Task{{Cmd: "true"}}},
-		"testapi":         {Name: "testapi", Require: toLayerRefs([]string{"supervisord"}), HasPixiToml: true},
-		"traefik":         {Name: "traefik", Require: toLayerRefs([]string{"supervisord"}), tasks: []Task{{Cmd: "true"}}},
-		"openclaw":        {Name: "openclaw", Require: toLayerRefs([]string{"supervisord", "nodejs"}), HasPackageJson: true},
+		"testapi":         {Name: "testapi", Require: toCandyRefs([]string{"supervisord"}), HasPixiToml: true},
+		"traefik":         {Name: "traefik", Require: toCandyRefs([]string{"supervisord"}), tasks: []Task{{Cmd: "true"}}},
+		"openclaw":        {Name: "openclaw", Require: toCandyRefs([]string{"supervisord", "nodejs"}), HasPackageJson: true},
 	}
 
 	images := map[string]*ResolvedBox{
 		"builder": {
 			Name: "builder", Base: "quay.io/fedora/fedora:43", IsExternalBase: true,
-			Layer: []string{"pixi", "nodejs", "build-toolchain"}, Tag: "v1", Registry: "r",
+			Candy: []string{"pixi", "nodejs", "build-toolchain"}, Tag: "v1", Registry: "r",
 			FullTag: "r/builder:v1", Pkg: "rpm",
 		},
 		"fedora": {
 			Name: "fedora", Base: "quay.io/fedora/fedora:43", IsExternalBase: true,
-			Layer: []string{}, Tag: "v1", Registry: "r",
+			Candy: []string{}, Tag: "v1", Registry: "r",
 			FullTag: "r/fedora:v1", Pkg: "rpm", Builder: BuilderMap{"pixi": "builder", "npm": "builder"},
 		},
 		"fedora-test": {
 			Name: "fedora-test", Base: "fedora", IsExternalBase: false,
-			Layer: []string{"traefik", "testapi"}, Tag: "v1", Registry: "r",
+			Candy: []string{"traefik", "testapi"}, Tag: "v1", Registry: "r",
 			FullTag: "r/fedora-test:v1", Pkg: "rpm", Builder: BuilderMap{"pixi": "builder", "npm": "builder"},
 		},
 		"openclaw": {
 			Name: "openclaw", Base: "fedora", IsExternalBase: false,
-			Layer: []string{"openclaw"}, Tag: "v1", Registry: "r",
+			Candy: []string{"openclaw"}, Tag: "v1", Registry: "r",
 			FullTag: "r/openclaw:v1", Pkg: "rpm", Builder: BuilderMap{"pixi": "builder", "npm": "builder"},
 		},
 	}
@@ -454,10 +454,10 @@ func TestComputeIntermediates_RealisticConfig(t *testing.T) {
 	cfg := &Config{
 		Defaults: BoxConfig{Registry: "r", Build: BuildFormats{"rpm"}, Builder: BuilderMap{"pixi": "builder", "npm": "builder"}},
 		Box: map[string]BoxConfig{
-			"builder":     {Layer: []string{"pixi", "nodejs", "build-toolchain"}},
-			"fedora":      {Layer: []string{}},
-			"fedora-test": {Base: "fedora", Layer: []string{"traefik", "testapi"}},
-			"openclaw":    {Base: "fedora", Layer: []string{"openclaw"}},
+			"builder":     {Candy: []string{"pixi", "nodejs", "build-toolchain"}},
+			"fedora":      {Candy: []string{}},
+			"fedora-test": {Base: "fedora", Candy: []string{"traefik", "testapi"}},
+			"openclaw":    {Base: "fedora", Candy: []string{"openclaw"}},
 		},
 	}
 
@@ -469,7 +469,7 @@ func TestComputeIntermediates_RealisticConfig(t *testing.T) {
 	// Log all images for debugging
 	t.Log("Resulting images:")
 	for name, img := range result {
-		t.Logf("  %s: base=%s layers=%v auto=%v", name, img.Base, img.Layer, img.Auto)
+		t.Logf("  %s: base=%s layers=%v auto=%v", name, img.Base, img.Candy, img.Auto)
 	}
 
 	// All original images should still exist
@@ -510,77 +510,77 @@ func TestComputeIntermediates_RealisticConfig(t *testing.T) {
 
 func TestComputeIntermediates_NvidiaScenario(t *testing.T) {
 	// Mirror the actual nvidia/python-ml/jupyter/comfyui/ollama config
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"pixi":            {Name: "pixi", Require: nil, tasks: []Task{{Cmd: "true"}}},
 		"nodejs":          {Name: "nodejs", Require: nil, tasks: []Task{{Cmd: "true"}}},
-		"python":          {Name: "python", Require: toLayerRefs([]string{"pixi"}), HasPixiToml: true},
-		"supervisord":     {Name: "supervisord", Require: toLayerRefs([]string{"python"}), HasPixiToml: true},
+		"python":          {Name: "python", Require: toCandyRefs([]string{"pixi"}), HasPixiToml: true},
+		"supervisord":     {Name: "supervisord", Require: toCandyRefs([]string{"python"}), HasPixiToml: true},
 		"build-toolchain": {Name: "build-toolchain", Require: nil, tasks: []Task{{Cmd: "true"}}},
 		"cuda":            {Name: "cuda", Require: nil, tasks: []Task{{Cmd: "true"}}},
-		"python-ml":       {Name: "python-ml", Require: toLayerRefs([]string{"pixi", "cuda"}), HasPixiToml: true},
-		"jupyter":         {Name: "jupyter", Require: toLayerRefs([]string{"python-ml", "supervisord"}), HasPixiToml: true},
-		"comfyui":         {Name: "comfyui", Require: toLayerRefs([]string{"python-ml", "supervisord"}), tasks: []Task{{Cmd: "true"}}},
-		"ollama":          {Name: "ollama", Require: toLayerRefs([]string{"cuda", "supervisord"}), tasks: []Task{{Cmd: "true"}}},
-		"openclaw":        {Name: "openclaw", Require: toLayerRefs([]string{"supervisord", "nodejs"}), HasPackageJson: true},
-		"testapi":         {Name: "testapi", Require: toLayerRefs([]string{"supervisord"}), HasPixiToml: true},
-		"traefik":         {Name: "traefik", Require: toLayerRefs([]string{"supervisord"}), tasks: []Task{{Cmd: "true"}}},
-		"github-runner":   {Name: "github-runner", Require: toLayerRefs([]string{"supervisord"}), tasks: []Task{{Cmd: "true"}}},
+		"python-ml":       {Name: "python-ml", Require: toCandyRefs([]string{"pixi", "cuda"}), HasPixiToml: true},
+		"jupyter":         {Name: "jupyter", Require: toCandyRefs([]string{"python-ml", "supervisord"}), HasPixiToml: true},
+		"comfyui":         {Name: "comfyui", Require: toCandyRefs([]string{"python-ml", "supervisord"}), tasks: []Task{{Cmd: "true"}}},
+		"ollama":          {Name: "ollama", Require: toCandyRefs([]string{"cuda", "supervisord"}), tasks: []Task{{Cmd: "true"}}},
+		"openclaw":        {Name: "openclaw", Require: toCandyRefs([]string{"supervisord", "nodejs"}), HasPackageJson: true},
+		"testapi":         {Name: "testapi", Require: toCandyRefs([]string{"supervisord"}), HasPixiToml: true},
+		"traefik":         {Name: "traefik", Require: toCandyRefs([]string{"supervisord"}), tasks: []Task{{Cmd: "true"}}},
+		"github-runner":   {Name: "github-runner", Require: toCandyRefs([]string{"supervisord"}), tasks: []Task{{Cmd: "true"}}},
 	}
 
 	images := map[string]*ResolvedBox{
 		"builder": {
 			Name: "builder", Base: "quay.io/fedora/fedora:43", IsExternalBase: true,
-			Layer: []string{"pixi", "nodejs", "build-toolchain"}, Tag: "v1", Registry: "r",
+			Candy: []string{"pixi", "nodejs", "build-toolchain"}, Tag: "v1", Registry: "r",
 			FullTag: "r/builder:v1", Pkg: "rpm",
 		},
 		"fedora": {
 			Name: "fedora", Base: "quay.io/fedora/fedora:43", IsExternalBase: true,
-			Layer: []string{}, Tag: "v1", Registry: "r",
+			Candy: []string{}, Tag: "v1", Registry: "r",
 			FullTag: "r/fedora:v1", Pkg: "rpm", Builder: BuilderMap{"pixi": "builder", "npm": "builder"},
 		},
 		"nvidia": {
 			Name: "nvidia", Base: "fedora", IsExternalBase: false,
-			Layer: []string{"cuda"}, Tag: "v1", Registry: "r",
+			Candy: []string{"cuda"}, Tag: "v1", Registry: "r",
 			FullTag: "r/nvidia:v1", Pkg: "rpm", Builder: BuilderMap{"pixi": "builder", "npm": "builder"},
 		},
 		"python-ml": {
 			Name: "python-ml", Base: "nvidia", IsExternalBase: false,
-			Layer: []string{"python-ml"}, Tag: "v1", Registry: "r",
+			Candy: []string{"python-ml"}, Tag: "v1", Registry: "r",
 			FullTag: "r/python-ml:v1", Pkg: "rpm", Builder: BuilderMap{"pixi": "builder", "npm": "builder"},
 		},
 		"jupyter": {
 			Name: "jupyter", Base: "python-ml", IsExternalBase: false,
-			Layer: []string{"jupyter"}, Tag: "v1", Registry: "r",
+			Candy: []string{"jupyter"}, Tag: "v1", Registry: "r",
 			FullTag: "r/jupyter:v1", Pkg: "rpm", Builder: BuilderMap{"pixi": "builder", "npm": "builder"},
 		},
 		"comfyui": {
 			Name: "comfyui", Base: "python-ml", IsExternalBase: false,
-			Layer: []string{"comfyui"}, Tag: "v1", Registry: "r",
+			Candy: []string{"comfyui"}, Tag: "v1", Registry: "r",
 			FullTag: "r/comfyui:v1", Pkg: "rpm", Builder: BuilderMap{"pixi": "builder", "npm": "builder"},
 		},
 		"ollama": {
 			Name: "ollama", Base: "nvidia", IsExternalBase: false,
-			Layer: []string{"ollama"}, Tag: "v1", Registry: "r",
+			Candy: []string{"ollama"}, Tag: "v1", Registry: "r",
 			FullTag: "r/ollama:v1", Pkg: "rpm", Builder: BuilderMap{"pixi": "builder", "npm": "builder"},
 		},
 		"gpu-gateway": {
 			Name: "gpu-gateway", Base: "nvidia", IsExternalBase: false,
-			Layer: []string{"openclaw", "ollama"}, Tag: "v1", Registry: "r",
+			Candy: []string{"openclaw", "ollama"}, Tag: "v1", Registry: "r",
 			FullTag: "r/gpu-gateway:v1", Pkg: "rpm", Builder: BuilderMap{"pixi": "builder", "npm": "builder"},
 		},
 		"fedora-test": {
 			Name: "fedora-test", Base: "fedora", IsExternalBase: false,
-			Layer: []string{"traefik", "testapi"}, Tag: "v1", Registry: "r",
+			Candy: []string{"traefik", "testapi"}, Tag: "v1", Registry: "r",
 			FullTag: "r/fedora-test:v1", Pkg: "rpm", Builder: BuilderMap{"pixi": "builder", "npm": "builder"},
 		},
 		"openclaw": {
 			Name: "openclaw", Base: "fedora", IsExternalBase: false,
-			Layer: []string{"openclaw"}, Tag: "v1", Registry: "r",
+			Candy: []string{"openclaw"}, Tag: "v1", Registry: "r",
 			FullTag: "r/openclaw:v1", Pkg: "rpm", Builder: BuilderMap{"pixi": "builder", "npm": "builder"},
 		},
 		"githubrunner": {
 			Name: "githubrunner", Base: "fedora", IsExternalBase: false,
-			Layer: []string{"github-runner"}, Tag: "v1", Registry: "r",
+			Candy: []string{"github-runner"}, Tag: "v1", Registry: "r",
 			FullTag: "r/githubrunner:v1", Pkg: "rpm", Builder: BuilderMap{"pixi": "builder", "npm": "builder"},
 		},
 	}
@@ -588,17 +588,17 @@ func TestComputeIntermediates_NvidiaScenario(t *testing.T) {
 	cfg := &Config{
 		Defaults: BoxConfig{Registry: "r", Build: BuildFormats{"rpm"}, Builder: BuilderMap{"pixi": "builder", "npm": "builder"}},
 		Box: map[string]BoxConfig{
-			"builder":      {Layer: []string{"pixi", "nodejs", "build-toolchain"}},
-			"fedora":       {Layer: []string{}},
-			"nvidia":       {Base: "fedora", Layer: []string{"cuda"}},
-			"python-ml":    {Base: "nvidia", Layer: []string{"python-ml"}},
-			"jupyter":      {Base: "python-ml", Layer: []string{"jupyter"}},
-			"comfyui":      {Base: "python-ml", Layer: []string{"comfyui"}},
-			"ollama":       {Base: "nvidia", Layer: []string{"ollama"}},
-			"gpu-gateway":  {Base: "nvidia", Layer: []string{"openclaw", "ollama"}},
-			"fedora-test":  {Base: "fedora", Layer: []string{"traefik", "testapi"}},
-			"openclaw":     {Base: "fedora", Layer: []string{"openclaw"}},
-			"githubrunner": {Base: "fedora", Layer: []string{"github-runner"}},
+			"builder":      {Candy: []string{"pixi", "nodejs", "build-toolchain"}},
+			"fedora":       {Candy: []string{}},
+			"nvidia":       {Base: "fedora", Candy: []string{"cuda"}},
+			"python-ml":    {Base: "nvidia", Candy: []string{"python-ml"}},
+			"jupyter":      {Base: "python-ml", Candy: []string{"jupyter"}},
+			"comfyui":      {Base: "python-ml", Candy: []string{"comfyui"}},
+			"ollama":       {Base: "nvidia", Candy: []string{"ollama"}},
+			"gpu-gateway":  {Base: "nvidia", Candy: []string{"openclaw", "ollama"}},
+			"fedora-test":  {Base: "fedora", Candy: []string{"traefik", "testapi"}},
+			"openclaw":     {Base: "fedora", Candy: []string{"openclaw"}},
+			"githubrunner": {Base: "fedora", Candy: []string{"github-runner"}},
 		},
 	}
 
@@ -622,7 +622,7 @@ func TestComputeIntermediates_NvidiaScenario(t *testing.T) {
 		if img.Auto {
 			autoStr = " [auto]"
 		}
-		t.Logf("  %s%s: base=%s layers=%v", name, autoStr, img.Base, img.Layer)
+		t.Logf("  %s%s: base=%s layers=%v", name, autoStr, img.Base, img.Candy)
 	}
 
 	// CRITICAL: no python-ml-2 should exist
@@ -702,34 +702,34 @@ func TestComputeIntermediates_NvidiaScenario(t *testing.T) {
 func TestComputeIntermediates_UserImageAtBranchPoint(t *testing.T) {
 	// User defines an image that sits exactly at the shared prefix branch point.
 	// It should be reused as the intermediate, not duplicated.
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"pixi":        {Name: "pixi", Require: nil, tasks: []Task{{Cmd: "true"}}},
-		"python":      {Name: "python", Require: toLayerRefs([]string{"pixi"}), HasPixiToml: true},
-		"supervisord": {Name: "supervisord", Require: toLayerRefs([]string{"python"}), HasPixiToml: true},
-		"testapi":     {Name: "testapi", Require: toLayerRefs([]string{"supervisord"}), HasPixiToml: true},
-		"webapp":      {Name: "webapp", Require: toLayerRefs([]string{"supervisord"}), tasks: []Task{{Cmd: "true"}}},
+		"python":      {Name: "python", Require: toCandyRefs([]string{"pixi"}), HasPixiToml: true},
+		"supervisord": {Name: "supervisord", Require: toCandyRefs([]string{"python"}), HasPixiToml: true},
+		"testapi":     {Name: "testapi", Require: toCandyRefs([]string{"supervisord"}), HasPixiToml: true},
+		"webapp":      {Name: "webapp", Require: toCandyRefs([]string{"supervisord"}), tasks: []Task{{Cmd: "true"}}},
 	}
 
 	images := map[string]*ResolvedBox{
 		"fedora": {
 			Name: "fedora", Base: "ext:1", IsExternalBase: true,
-			Layer: []string{}, Tag: "v1", Registry: "r",
+			Candy: []string{}, Tag: "v1", Registry: "r",
 			FullTag: "r/fedora:v1", Pkg: "rpm",
 		},
 		// "svbase" is a user image with layers=[supervisord] — it sits at the branch point
 		"svbase": {
 			Name: "svbase", Base: "fedora", IsExternalBase: false,
-			Layer: []string{"supervisord"}, Tag: "v1", Registry: "r",
+			Candy: []string{"supervisord"}, Tag: "v1", Registry: "r",
 			FullTag: "r/svbase:v1", Pkg: "rpm",
 		},
 		"app1": {
 			Name: "app1", Base: "svbase", IsExternalBase: false,
-			Layer: []string{"testapi"}, Tag: "v1", Registry: "r",
+			Candy: []string{"testapi"}, Tag: "v1", Registry: "r",
 			FullTag: "r/app1:v1", Pkg: "rpm",
 		},
 		"app2": {
 			Name: "app2", Base: "svbase", IsExternalBase: false,
-			Layer: []string{"webapp"}, Tag: "v1", Registry: "r",
+			Candy: []string{"webapp"}, Tag: "v1", Registry: "r",
 			FullTag: "r/app2:v1", Pkg: "rpm",
 		},
 	}
@@ -737,10 +737,10 @@ func TestComputeIntermediates_UserImageAtBranchPoint(t *testing.T) {
 	cfg := &Config{
 		Defaults: BoxConfig{Registry: "r", Build: BuildFormats{"rpm"}},
 		Box: map[string]BoxConfig{
-			"fedora": {Layer: []string{}},
-			"svbase": {Base: "fedora", Layer: []string{"supervisord"}},
-			"app1":   {Base: "svbase", Layer: []string{"testapi"}},
-			"app2":   {Base: "svbase", Layer: []string{"webapp"}},
+			"fedora": {Candy: []string{}},
+			"svbase": {Base: "fedora", Candy: []string{"supervisord"}},
+			"app1":   {Base: "svbase", Candy: []string{"testapi"}},
+			"app2":   {Base: "svbase", Candy: []string{"webapp"}},
 		},
 	}
 
@@ -755,19 +755,19 @@ func TestComputeIntermediates_UserImageAtBranchPoint(t *testing.T) {
 		if img.Auto {
 			autoStr = " [auto]"
 		}
-		t.Logf("  %s%s: base=%s layers=%v", name, autoStr, img.Base, img.Layer)
+		t.Logf("  %s%s: base=%s layers=%v", name, autoStr, img.Base, img.Candy)
 	}
 
 	// svbase should NOT be duplicated (no svbase-2, no supervisord auto with same layers)
 	for name, img := range result {
 		if img.Auto && name != "svbase" {
 			// Check that any auto-intermediate doesn't duplicate svbase's role
-			if len(img.Layer) > 0 {
+			if len(img.Candy) > 0 {
 				// Auto intermediates may exist for shared prefixes, but
 				// there should be no supervisord auto that duplicates svbase
-				lastLayer := img.Layer[len(img.Layer)-1]
-				if lastLayer == "supervisord" && img.Base == "fedora" {
-					t.Errorf("auto-intermediate %q duplicates svbase (base=%s layers=%v)", name, img.Base, img.Layer)
+				lastCandy := img.Candy[len(img.Candy)-1]
+				if lastCandy == "supervisord" && img.Base == "fedora" {
+					t.Errorf("auto-intermediate %q duplicates svbase (base=%s layers=%v)", name, img.Base, img.Candy)
 				}
 			}
 		}
@@ -804,40 +804,40 @@ func TestComputeIntermediates_UserImageAsBranchIntermediate(t *testing.T) {
 	// A user-defined image sits at the exact same layer set as a trie branch point
 	// and has children in the same sibling group. The algorithm should reuse it
 	// as the intermediate without creating a duplicate.
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"A": {Name: "A", Require: nil, tasks: []Task{{Cmd: "true"}}},
-		"B": {Name: "B", Require: toLayerRefs([]string{"A"}), tasks: []Task{{Cmd: "true"}}},
-		"C": {Name: "C", Require: toLayerRefs([]string{"B"}), tasks: []Task{{Cmd: "true"}}},
-		"D": {Name: "D", Require: toLayerRefs([]string{"B"}), tasks: []Task{{Cmd: "true"}}},
+		"B": {Name: "B", Require: toCandyRefs([]string{"A"}), tasks: []Task{{Cmd: "true"}}},
+		"C": {Name: "C", Require: toCandyRefs([]string{"B"}), tasks: []Task{{Cmd: "true"}}},
+		"D": {Name: "D", Require: toCandyRefs([]string{"B"}), tasks: []Task{{Cmd: "true"}}},
 	}
 
 	images := map[string]*ResolvedBox{
 		"base": {
 			Name: "base", Base: "ext:1", IsExternalBase: true,
-			Layer: []string{}, Tag: "v1", Registry: "r", FullTag: "r/base:v1", Pkg: "rpm",
+			Candy: []string{}, Tag: "v1", Registry: "r", FullTag: "r/base:v1", Pkg: "rpm",
 		},
 		// mid terminates at [A, B] and has children (app1 needs [A,B,C], app2 needs [A,B,D])
 		"mid": {
 			Name: "mid", Base: "base", IsExternalBase: false,
-			Layer: []string{"B"}, Tag: "v1", Registry: "r", FullTag: "r/mid:v1", Pkg: "rpm",
+			Candy: []string{"B"}, Tag: "v1", Registry: "r", FullTag: "r/mid:v1", Pkg: "rpm",
 		},
 		"app1": {
 			Name: "app1", Base: "base", IsExternalBase: false,
-			Layer: []string{"C"}, Tag: "v1", Registry: "r", FullTag: "r/app1:v1", Pkg: "rpm",
+			Candy: []string{"C"}, Tag: "v1", Registry: "r", FullTag: "r/app1:v1", Pkg: "rpm",
 		},
 		"app2": {
 			Name: "app2", Base: "base", IsExternalBase: false,
-			Layer: []string{"D"}, Tag: "v1", Registry: "r", FullTag: "r/app2:v1", Pkg: "rpm",
+			Candy: []string{"D"}, Tag: "v1", Registry: "r", FullTag: "r/app2:v1", Pkg: "rpm",
 		},
 	}
 
 	cfg := &Config{
 		Defaults: BoxConfig{Registry: "r", Build: BuildFormats{"rpm"}},
 		Box: map[string]BoxConfig{
-			"base": {Layer: []string{}},
-			"mid":  {Base: "base", Layer: []string{"B"}},
-			"app1": {Base: "base", Layer: []string{"C"}},
-			"app2": {Base: "base", Layer: []string{"D"}},
+			"base": {Candy: []string{}},
+			"mid":  {Base: "base", Candy: []string{"B"}},
+			"app1": {Base: "base", Candy: []string{"C"}},
+			"app2": {Base: "base", Candy: []string{"D"}},
 		},
 	}
 
@@ -852,7 +852,7 @@ func TestComputeIntermediates_UserImageAsBranchIntermediate(t *testing.T) {
 		if img.Auto {
 			autoStr = " [auto]"
 		}
-		t.Logf("  %s%s: base=%s layers=%v", name, autoStr, img.Base, img.Layer)
+		t.Logf("  %s%s: base=%s layers=%v", name, autoStr, img.Base, img.Candy)
 	}
 
 	// mid should keep base=base (not rebased)
@@ -884,9 +884,9 @@ func TestComputeIntermediates_UserImageAsBranchIntermediate(t *testing.T) {
 	// No duplicate of mid should exist
 	for name, img := range result {
 		if img.Auto && name != "mid" {
-			for _, l := range img.Layer {
+			for _, l := range img.Candy {
 				if l == "B" {
-					t.Errorf("auto-intermediate %q has layer B, may duplicate mid (layers=%v)", name, img.Layer)
+					t.Errorf("auto-intermediate %q has layer B, may duplicate mid (layers=%v)", name, img.Candy)
 				}
 			}
 		}
@@ -896,40 +896,40 @@ func TestComputeIntermediates_UserImageAsBranchIntermediate(t *testing.T) {
 func TestComputeIntermediates_PlatformInheritance(t *testing.T) {
 	// Parent with restricted platforms should propagate to auto-intermediates.
 	// nvidia is amd64-only; nvidia-supervisord should also be amd64-only.
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"pixi":        {Name: "pixi", Require: nil, tasks: []Task{{Cmd: "true"}}},
-		"python":      {Name: "python", Require: toLayerRefs([]string{"pixi"}), HasPixiToml: true},
-		"supervisord": {Name: "supervisord", Require: toLayerRefs([]string{"python"}), HasPixiToml: true},
+		"python":      {Name: "python", Require: toCandyRefs([]string{"pixi"}), HasPixiToml: true},
+		"supervisord": {Name: "supervisord", Require: toCandyRefs([]string{"python"}), HasPixiToml: true},
 		"cuda":        {Name: "cuda", Require: nil, tasks: []Task{{Cmd: "true"}}},
-		"appA":        {Name: "appA", Require: toLayerRefs([]string{"supervisord"}), tasks: []Task{{Cmd: "true"}}},
-		"appB":        {Name: "appB", Require: toLayerRefs([]string{"supervisord"}), tasks: []Task{{Cmd: "true"}}},
+		"appA":        {Name: "appA", Require: toCandyRefs([]string{"supervisord"}), tasks: []Task{{Cmd: "true"}}},
+		"appB":        {Name: "appB", Require: toCandyRefs([]string{"supervisord"}), tasks: []Task{{Cmd: "true"}}},
 	}
 
 	images := map[string]*ResolvedBox{
 		"fedora": {
 			Name: "fedora", Base: "quay.io/fedora/fedora:43", IsExternalBase: true,
-			Layer: []string{}, Tag: "v1", Registry: "r", FullTag: "r/fedora:v1",
+			Candy: []string{}, Tag: "v1", Registry: "r", FullTag: "r/fedora:v1",
 			Pkg: "rpm", Platforms: []string{"linux/amd64", "linux/arm64"},
 			Builder: BuilderMap{"pixi": "builder", "npm": "builder"},
 		},
 		"builder": {
 			Name: "builder", Base: "quay.io/fedora/fedora:43", IsExternalBase: true,
-			Layer: []string{"pixi"}, Tag: "v1", Registry: "r", FullTag: "r/builder:v1",
+			Candy: []string{"pixi"}, Tag: "v1", Registry: "r", FullTag: "r/builder:v1",
 			Pkg: "rpm", Platforms: []string{"linux/amd64", "linux/arm64"},
 		},
 		"nvidia": {
 			Name: "nvidia", Base: "fedora", IsExternalBase: false,
-			Layer: []string{"cuda"}, Tag: "v1", Registry: "r", FullTag: "r/nvidia:v1",
+			Candy: []string{"cuda"}, Tag: "v1", Registry: "r", FullTag: "r/nvidia:v1",
 			Pkg: "rpm", Platforms: []string{"linux/amd64"}, Builder: BuilderMap{"pixi": "builder", "npm": "builder"},
 		},
 		"appA": {
 			Name: "appA", Base: "nvidia", IsExternalBase: false,
-			Layer: []string{"appA"}, Tag: "v1", Registry: "r", FullTag: "r/appA:v1",
+			Candy: []string{"appA"}, Tag: "v1", Registry: "r", FullTag: "r/appA:v1",
 			Pkg: "rpm", Platforms: []string{"linux/amd64"}, Builder: BuilderMap{"pixi": "builder", "npm": "builder"},
 		},
 		"appB": {
 			Name: "appB", Base: "nvidia", IsExternalBase: false,
-			Layer: []string{"appB"}, Tag: "v1", Registry: "r", FullTag: "r/appB:v1",
+			Candy: []string{"appB"}, Tag: "v1", Registry: "r", FullTag: "r/appB:v1",
 			Pkg: "rpm", Platforms: []string{"linux/amd64"}, Builder: BuilderMap{"pixi": "builder", "npm": "builder"},
 		},
 	}
@@ -942,11 +942,11 @@ func TestComputeIntermediates_PlatformInheritance(t *testing.T) {
 			Platforms: []string{"linux/amd64", "linux/arm64"},
 		},
 		Box: map[string]BoxConfig{
-			"builder": {Layer: []string{"pixi"}},
-			"fedora":  {Layer: []string{}},
-			"nvidia":  {Base: "fedora", Layer: []string{"cuda"}, Platforms: []string{"linux/amd64"}},
-			"appA":    {Base: "nvidia", Layer: []string{"appA"}},
-			"appB":    {Base: "nvidia", Layer: []string{"appB"}},
+			"builder": {Candy: []string{"pixi"}},
+			"fedora":  {Candy: []string{}},
+			"nvidia":  {Base: "fedora", Candy: []string{"cuda"}, Platforms: []string{"linux/amd64"}},
+			"appA":    {Base: "nvidia", Candy: []string{"appA"}},
+			"appB":    {Base: "nvidia", Candy: []string{"appB"}},
 		},
 	}
 
@@ -996,25 +996,25 @@ func TestComputeIntermediates_PlatformInheritance(t *testing.T) {
 	}
 }
 
-func TestPixiBoundLayers(t *testing.T) {
-	layers := map[string]*Layer{
+func TestPixiBoundCandies(t *testing.T) {
+	layers := map[string]*Candy{
 		"llama-cpp": {Name: "llama-cpp", tasks: []Task{{Cmd: "true"}}},
 		"unsloth":   {Name: "unsloth", tasks: []Task{{Cmd: "true"}}},
 		"jupyter-ml": {
 			Name: "jupyter-ml", HasPixiToml: true, tasks: []Task{{Cmd: "true"}},
-			IncludedLayer: toLayerRefs([]string{"llama-cpp", "unsloth"}),
-			Require:       toLayerRefs([]string{"cuda", "supervisord"}),
+			IncludedCandy: toCandyRefs([]string{"llama-cpp", "unsloth"}),
+			Require:       toCandyRefs([]string{"cuda", "supervisord"}),
 		},
 		"unsloth-studio": {
 			Name: "unsloth-studio", HasPixiToml: true,
-			IncludedLayer: toLayerRefs([]string{"llama-cpp", "unsloth"}),
-			Require:       toLayerRefs([]string{"cuda", "supervisord"}),
+			IncludedCandy: toCandyRefs([]string{"llama-cpp", "unsloth"}),
+			Require:       toCandyRefs([]string{"cuda", "supervisord"}),
 		},
 		"cuda":        {Name: "cuda", tasks: []Task{{Cmd: "true"}}},
 		"supervisord": {Name: "supervisord", tasks: []Task{{Cmd: "true"}}},
 	}
 
-	bound := pixiBoundLayers(layers)
+	bound := pixiBoundCandies(layers)
 
 	// unsloth has user.yml, no pixi.toml, included by pixi-owning layers → pixi-bound
 	if !bound["unsloth"] {
@@ -1042,7 +1042,7 @@ func TestComputeIntermediates_PixiBoundNotExtracted(t *testing.T) {
 	// Both share nvidia base and include llama-cpp + unsloth via layers:.
 	// The intermediate generator must NOT extract unsloth into an intermediate
 	// because it needs the pixi environment from the final image.
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"dbus":                {Name: "dbus", tasks: []Task{{Cmd: "true"}}},
 		"charly":              {Name: "charly", tasks: []Task{{Cmd: "true"}}},
 		"llama-cpp":           {Name: "llama-cpp", tasks: []Task{{Cmd: "true"}}},
@@ -1051,56 +1051,56 @@ func TestComputeIntermediates_PixiBoundNotExtracted(t *testing.T) {
 		"notebook-finetuning": {Name: "notebook-finetuning"},
 		"jupyter-ml": {
 			Name: "jupyter-ml", HasPixiToml: true, tasks: []Task{{Cmd: "true"}},
-			IncludedLayer: toLayerRefs([]string{"llama-cpp", "unsloth"}),
-			Require:       toLayerRefs([]string{"cuda", "supervisord"}),
+			IncludedCandy: toCandyRefs([]string{"llama-cpp", "unsloth"}),
+			Require:       toCandyRefs([]string{"cuda", "supervisord"}),
 			portSpecs:     []PortSpec{{Port: 8080}},
 		},
 		"unsloth-studio": {
 			Name: "unsloth-studio", HasPixiToml: true,
-			IncludedLayer: toLayerRefs([]string{"llama-cpp", "unsloth"}),
-			Require:       toLayerRefs([]string{"cuda", "supervisord"}),
+			IncludedCandy: toCandyRefs([]string{"llama-cpp", "unsloth"}),
+			Require:       toCandyRefs([]string{"cuda", "supervisord"}),
 			portSpecs:     []PortSpec{{Port: 8080}},
 		},
 		"agent-forwarding": {Name: "agent-forwarding", tasks: []Task{{Cmd: "true"}}},
 		"cuda":             {Name: "cuda", tasks: []Task{{Cmd: "true"}}},
 		"pixi":             {Name: "pixi", tasks: []Task{{Cmd: "true"}}},
-		"python":           {Name: "python", Require: toLayerRefs([]string{"pixi"}), HasPixiToml: true},
-		"supervisord":      {Name: "supervisord", Require: toLayerRefs([]string{"python"}), HasPixiToml: true},
+		"python":           {Name: "python", Require: toCandyRefs([]string{"pixi"}), HasPixiToml: true},
+		"supervisord":      {Name: "supervisord", Require: toCandyRefs([]string{"python"}), HasPixiToml: true},
 	}
 
 	images := map[string]*ResolvedBox{
 		"builder": {
 			Name: "builder", Base: "quay.io/fedora/fedora:43", IsExternalBase: true,
-			Layer: []string{"pixi"}, Tag: "v1", Registry: "r",
+			Candy: []string{"pixi"}, Tag: "v1", Registry: "r",
 			FullTag: "r/builder:v1", Pkg: "rpm",
 		},
 		"fedora": {
 			Name: "fedora", Base: "quay.io/fedora/fedora:43", IsExternalBase: true,
-			Layer: []string{}, Tag: "v1", Registry: "r",
+			Candy: []string{}, Tag: "v1", Registry: "r",
 			FullTag: "r/fedora:v1", Pkg: "rpm",
 			Builder: BuilderMap{"pixi": "builder", "npm": "builder"},
 		},
 		"nvidia": {
 			Name: "nvidia", Base: "fedora", IsExternalBase: false,
-			Layer: []string{"cuda"}, Tag: "v1", Registry: "r",
+			Candy: []string{"cuda"}, Tag: "v1", Registry: "r",
 			FullTag: "r/nvidia:v1", Pkg: "rpm",
 			Builder: BuilderMap{"pixi": "builder", "npm": "builder"},
 		},
 		"jupyter-ml": {
 			Name: "jupyter-ml", Base: "nvidia", IsExternalBase: false,
-			Layer: []string{"agent-forwarding", "jupyter-ml", "notebook-templates", "dbus", "charly"},
+			Candy: []string{"agent-forwarding", "jupyter-ml", "notebook-templates", "dbus", "charly"},
 			Tag:   "v1", Registry: "r", FullTag: "r/jupyter-ml:v1", Pkg: "rpm",
 			Builder: BuilderMap{"pixi": "builder", "npm": "builder"},
 		},
 		"jupyter-ml-notebook": {
 			Name: "jupyter-ml-notebook", Base: "nvidia", IsExternalBase: false,
-			Layer: []string{"agent-forwarding", "jupyter-ml", "notebook-templates", "notebook-finetuning", "dbus", "charly"},
+			Candy: []string{"agent-forwarding", "jupyter-ml", "notebook-templates", "notebook-finetuning", "dbus", "charly"},
 			Tag:   "v1", Registry: "r", FullTag: "r/jupyter-ml-notebook:v1", Pkg: "rpm",
 			Builder: BuilderMap{"pixi": "builder", "npm": "builder"},
 		},
 		"unsloth-studio": {
 			Name: "unsloth-studio", Base: "nvidia", IsExternalBase: false,
-			Layer: []string{"agent-forwarding", "unsloth-studio", "notebook-finetuning", "dbus", "charly"},
+			Candy: []string{"agent-forwarding", "unsloth-studio", "notebook-finetuning", "dbus", "charly"},
 			Tag:   "v1", Registry: "r", FullTag: "r/unsloth-studio:v1", Pkg: "rpm",
 			Builder: BuilderMap{"pixi": "builder", "npm": "builder"},
 		},
@@ -1109,12 +1109,12 @@ func TestComputeIntermediates_PixiBoundNotExtracted(t *testing.T) {
 	cfg := &Config{
 		Defaults: BoxConfig{Registry: "r", Build: BuildFormats{"rpm"}, Builder: BuilderMap{"pixi": "builder", "npm": "builder"}},
 		Box: map[string]BoxConfig{
-			"builder":             {Layer: []string{"pixi"}},
-			"fedora":              {Layer: []string{}},
-			"nvidia":              {Base: "fedora", Layer: []string{"cuda"}},
-			"jupyter-ml":          {Base: "nvidia", Layer: []string{"agent-forwarding", "jupyter-ml", "notebook-templates", "dbus", "charly"}},
-			"jupyter-ml-notebook": {Base: "nvidia", Layer: []string{"agent-forwarding", "jupyter-ml", "notebook-templates", "notebook-finetuning", "dbus", "charly"}},
-			"unsloth-studio":      {Base: "nvidia", Layer: []string{"agent-forwarding", "unsloth-studio", "notebook-finetuning", "dbus", "charly"}},
+			"builder":             {Candy: []string{"pixi"}},
+			"fedora":              {Candy: []string{}},
+			"nvidia":              {Base: "fedora", Candy: []string{"cuda"}},
+			"jupyter-ml":          {Base: "nvidia", Candy: []string{"agent-forwarding", "jupyter-ml", "notebook-templates", "dbus", "charly"}},
+			"jupyter-ml-notebook": {Base: "nvidia", Candy: []string{"agent-forwarding", "jupyter-ml", "notebook-templates", "notebook-finetuning", "dbus", "charly"}},
+			"unsloth-studio":      {Base: "nvidia", Candy: []string{"agent-forwarding", "unsloth-studio", "notebook-finetuning", "dbus", "charly"}},
 		},
 	}
 
@@ -1137,7 +1137,7 @@ func TestComputeIntermediates_PixiBoundNotExtracted(t *testing.T) {
 		if img.Auto {
 			autoStr = " [auto]"
 		}
-		t.Logf("  %s%s: base=%s layers=%v", name, autoStr, img.Base, img.Layer)
+		t.Logf("  %s%s: base=%s layers=%v", name, autoStr, img.Base, img.Candy)
 	}
 
 	// CRITICAL: No auto-intermediate should contain unsloth or llama-cpp
@@ -1146,7 +1146,7 @@ func TestComputeIntermediates_PixiBoundNotExtracted(t *testing.T) {
 		if !img.Auto {
 			continue
 		}
-		for _, l := range img.Layer {
+		for _, l := range img.Candy {
 			if l == "unsloth" {
 				t.Errorf("auto-intermediate %q contains pixi-bound layer 'unsloth' — will fail at build time (no pixi env)", name)
 			}
@@ -1178,7 +1178,7 @@ func TestComputeIntermediates_PixiBoundNotExtracted(t *testing.T) {
 // An arch-rooted intermediate must inherit [pac] + [arch], not fall
 // through to defaults. See root cause in charly/intermediates.go createIntermediate.
 func TestComputeIntermediates_InheritDistroFromParent(t *testing.T) {
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"a": {Name: "a", tasks: []Task{{Cmd: "true"}}},
 		"b": {Name: "b", tasks: []Task{{Cmd: "true"}}},
 		"c": {Name: "c", tasks: []Task{{Cmd: "true"}}},
@@ -1187,27 +1187,27 @@ func TestComputeIntermediates_InheritDistroFromParent(t *testing.T) {
 	images := map[string]*ResolvedBox{
 		"fedora": {
 			Name: "fedora", Base: "ext:fedora", IsExternalBase: true,
-			Layer: []string{}, Tag: "v1", Registry: "r",
+			Candy: []string{}, Tag: "v1", Registry: "r",
 			FullTag: "r/fedora:v1", Pkg: "rpm",
 			Distro:       []string{"fedora"},
 			BuildFormats: []string{"rpm"},
 		},
 		"arch": {
 			Name: "arch", Base: "ext:arch", IsExternalBase: true,
-			Layer: []string{}, Tag: "v1", Registry: "r",
+			Candy: []string{}, Tag: "v1", Registry: "r",
 			FullTag: "r/arch:v1", Pkg: "pac",
 			Distro:       []string{"arch"},
 			BuildFormats: []string{"pac"},
 		},
 		"arch-a-b": {
 			Name: "arch-a-b", Base: "arch", IsExternalBase: false,
-			Layer: []string{"a", "b"}, Tag: "v1", Registry: "r",
+			Candy: []string{"a", "b"}, Tag: "v1", Registry: "r",
 			FullTag: "r/arch-a-b:v1", Pkg: "pac",
 			Distro: []string{"arch"}, BuildFormats: []string{"pac"},
 		},
 		"arch-a-c": {
 			Name: "arch-a-c", Base: "arch", IsExternalBase: false,
-			Layer: []string{"a", "c"}, Tag: "v1", Registry: "r",
+			Candy: []string{"a", "c"}, Tag: "v1", Registry: "r",
 			FullTag: "r/arch-a-c:v1", Pkg: "pac",
 			Distro: []string{"arch"}, BuildFormats: []string{"pac"},
 		},
@@ -1222,10 +1222,10 @@ func TestComputeIntermediates_InheritDistroFromParent(t *testing.T) {
 			Build:    BuildFormats{"rpm"},
 		},
 		Box: map[string]BoxConfig{
-			"fedora":   {Layer: []string{}},
-			"arch":     {Base: "ext:arch", Layer: []string{}},
-			"arch-a-b": {Base: "arch", Layer: []string{"a", "b"}},
-			"arch-a-c": {Base: "arch", Layer: []string{"a", "c"}},
+			"fedora":   {Candy: []string{}},
+			"arch":     {Base: "ext:arch", Candy: []string{}},
+			"arch-a-b": {Base: "arch", Candy: []string{"a", "b"}},
+			"arch-a-c": {Base: "arch", Candy: []string{"a", "c"}},
 		},
 	}
 
@@ -1275,7 +1275,7 @@ func TestComputeIntermediates_InheritDistroFromParent(t *testing.T) {
 // silently dropped and google-chrome never built. The fix unions the parent's
 // formats with every consuming descendant's, parent's primary format first.
 func TestComputeIntermediates_UnionChildBuildFormats(t *testing.T) {
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"a": {Name: "a", tasks: []Task{{Cmd: "true"}}},
 		"b": {Name: "b", tasks: []Task{{Cmd: "true"}}},
 		"c": {Name: "c", tasks: []Task{{Cmd: "true"}}},
@@ -1284,7 +1284,7 @@ func TestComputeIntermediates_UnionChildBuildFormats(t *testing.T) {
 	images := map[string]*ResolvedBox{
 		"cachyos": {
 			Name: "cachyos", Base: "ext:cachyos", IsExternalBase: true,
-			Layer: []string{}, Tag: "v1", Registry: "r",
+			Candy: []string{}, Tag: "v1", Registry: "r",
 			FullTag: "r/cachyos:v1", Pkg: "pac",
 			Distro:       []string{"cachyos", "arch"},
 			BuildFormats: []string{"pac"},
@@ -1292,13 +1292,13 @@ func TestComputeIntermediates_UnionChildBuildFormats(t *testing.T) {
 		},
 		"cachyos-a-b": {
 			Name: "cachyos-a-b", Base: "cachyos", IsExternalBase: false,
-			Layer: []string{"a", "b"}, Tag: "v1", Registry: "r",
+			Candy: []string{"a", "b"}, Tag: "v1", Registry: "r",
 			FullTag: "r/cachyos-a-b:v1", Pkg: "pac",
 			Distro: []string{"cachyos", "arch"}, BuildFormats: []string{"pac", "aur"},
 		},
 		"cachyos-a-c": {
 			Name: "cachyos-a-c", Base: "cachyos", IsExternalBase: false,
-			Layer: []string{"a", "c"}, Tag: "v1", Registry: "r",
+			Candy: []string{"a", "c"}, Tag: "v1", Registry: "r",
 			FullTag: "r/cachyos-a-c:v1", Pkg: "pac",
 			Distro: []string{"cachyos", "arch"}, BuildFormats: []string{"pac", "aur"},
 		},
@@ -1311,9 +1311,9 @@ func TestComputeIntermediates_UnionChildBuildFormats(t *testing.T) {
 			Build:    BuildFormats{"rpm"},
 		},
 		Box: map[string]BoxConfig{
-			"cachyos":     {Base: "ext:cachyos", Layer: []string{}},
-			"cachyos-a-b": {Base: "cachyos", Layer: []string{"a", "b"}},
-			"cachyos-a-c": {Base: "cachyos", Layer: []string{"a", "c"}},
+			"cachyos":     {Base: "ext:cachyos", Candy: []string{}},
+			"cachyos-a-b": {Base: "cachyos", Candy: []string{"a", "b"}},
+			"cachyos-a-c": {Base: "cachyos", Candy: []string{"a", "c"}},
 		},
 	}
 

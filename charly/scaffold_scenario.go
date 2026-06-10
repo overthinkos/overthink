@@ -44,8 +44,8 @@ func (c *CandyAddScenarioCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	layerYml := filepath.Join(dir, DefaultCandyDir, c.Name, UnifiedFileName)
-	added, err := appendLayerScenario(layerYml, c.Scenario, c.Given, c.When, c.Then, c.Tag, c.Pod)
+	candyYml := filepath.Join(dir, DefaultCandyDir, c.Name, UnifiedFileName)
+	added, err := appendCandyScenario(candyYml, c.Scenario, c.Given, c.When, c.Then, c.Tag, c.Pod)
 	if err != nil {
 		return err
 	}
@@ -57,26 +57,26 @@ func (c *CandyAddScenarioCmd) Run() error {
 	return nil
 }
 
-// appendLayerScenario appends one scenario to <layerYml>'s
+// appendCandyScenario appends one scenario to <candyYml>'s
 // layer.description.scenario list (creating the description / scenario nodes
 // as needed) and writes the file back, preserving comments via the yaml.Node
 // API. Returns added=false (no write) when a scenario of the same name is
 // already present (idempotent).
-func appendLayerScenario(layerYml, name string, given, when, then, tags []string, pod string) (bool, error) {
-	if _, err := os.Stat(layerYml); err != nil {
-		return false, fmt.Errorf("candy manifest not found at %s", layerYml)
+func appendCandyScenario(candyYml, name string, given, when, then, tags []string, pod string) (bool, error) {
+	if _, err := os.Stat(candyYml); err != nil {
+		return false, fmt.Errorf("candy manifest not found at %s", candyYml)
 	}
-	data, err := os.ReadFile(layerYml)
+	data, err := os.ReadFile(candyYml)
 	if err != nil {
-		return false, fmt.Errorf("reading %s: %w", layerYml, err)
+		return false, fmt.Errorf("reading %s: %w", candyYml, err)
 	}
 	var root yaml.Node
 	if err := yaml.Unmarshal(data, &root); err != nil {
-		return false, fmt.Errorf("parsing %s: %w", layerYml, err)
+		return false, fmt.Errorf("parsing %s: %w", candyYml, err)
 	}
 	candyNode, err := candyBodyNode(&root)
 	if err != nil {
-		return false, fmt.Errorf("%s: %w", layerYml, err)
+		return false, fmt.Errorf("%s: %w", candyYml, err)
 	}
 	descNode := ensureMappingChild(candyNode, "description")
 	scenarioSeq := mappingChild(descNode, "scenario")
@@ -106,9 +106,9 @@ func appendLayerScenario(layerYml, name string, given, when, then, tags []string
 
 	out, err := yaml.Marshal(&root)
 	if err != nil {
-		return false, fmt.Errorf("marshalling %s: %w", layerYml, err)
+		return false, fmt.Errorf("marshalling %s: %w", candyYml, err)
 	}
-	return true, os.WriteFile(layerYml, out, 0o644)
+	return true, os.WriteFile(candyYml, out, 0o644)
 }
 
 // candyBodyNode returns the `candy:` kind-wrapper mapping from a parsed candy

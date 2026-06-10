@@ -23,7 +23,7 @@ import (
 	"strings"
 )
 
-// ensureLayerSecret resolves a secret_requires/secret_accepts EnvDependency
+// ensureCandySecret resolves a secret_requires/secret_accepts EnvDependency
 // against the credential store. For required deps that miss everywhere
 // (env, store), generates a 32-byte hex token, persists via
 // DefaultCredentialStore, and returns the new value. For optional deps
@@ -39,7 +39,7 @@ import (
 // fallback per credential_store.go DefaultCredentialStore); the second
 // caller's ResolveCredential reads the persisted value. All callers in
 // one process share the cached singleton.
-func ensureLayerSecret(dep EnvDependency, required bool) (val, source string) {
+func ensureCandySecret(dep EnvDependency, required bool) (val, source string) {
 	service, key := "charly/secret", dep.Name
 	if dep.Key != "" {
 		if idx := strings.LastIndex(dep.Key, "/"); idx > 0 {
@@ -60,14 +60,14 @@ func ensureLayerSecret(dep EnvDependency, required bool) (val, source string) {
 	return generateAndStoreSecret(service, key)
 }
 
-// ResolveLayerSecret walks the layer's secret_requires + secret_accepts
+// ResolveCandySecret walks the layer's secret_requires + secret_accepts
 // and resolves each via the credential store. Required entries that miss
-// everywhere auto-generate a 32-byte hex token (see ensureLayerSecret).
+// everywhere auto-generate a 32-byte hex token (see ensureCandySecret).
 // Optional `secret_accepts:` entries that miss fall back to dep.Default.
 //
 // Returns the env map; never returns an error. The auto-generate policy
 // guarantees every `secret_requires:` resolves to a non-empty value.
-func ResolveLayerSecret(layer *Layer) map[string]string {
+func ResolveCandySecret(layer *Candy) map[string]string {
 	env := map[string]string{}
 	if layer == nil {
 		return env
@@ -75,14 +75,14 @@ func ResolveLayerSecret(layer *Layer) map[string]string {
 
 	if layer.HasSecretRequires() {
 		for _, dep := range layer.SecretRequire() {
-			val, _ := ensureLayerSecret(dep, true)
+			val, _ := ensureCandySecret(dep, true)
 			env[dep.Name] = val
 		}
 	}
 
 	if layer.HasSecretAccepts() {
 		for _, dep := range layer.SecretAccept() {
-			val, _ := ensureLayerSecret(dep, false)
+			val, _ := ensureCandySecret(dep, false)
 			if val == "" && dep.Default != "" {
 				env[dep.Name] = dep.Default
 				continue
@@ -96,32 +96,32 @@ func ResolveLayerSecret(layer *Layer) map[string]string {
 	return env
 }
 
-// ResolveSecretForLayer is the batch variant used when multiple layers in
+// ResolveSecretForCandy is the batch variant used when multiple layers in
 // a single deploy share secret_requires — their resolution results merge
 // into one env map, with layer-order precedence (later layers win on
 // duplicate names, matching the existing generate.go `secretRequiresMap`
 // semantics in the label-emission path).
-func ResolveSecretForLayer(layers []*Layer) map[string]string {
+func ResolveSecretForCandy(layers []*Candy) map[string]string {
 	env := map[string]string{}
 	for _, l := range layers {
-		for k, v := range ResolveLayerSecret(l) {
+		for k, v := range ResolveCandySecret(l) {
 			env[k] = v
 		}
 	}
 	return env
 }
 
-// LayerForPlan reloads the layer map and returns the ordered *Layer
-// slice covered by the given plans (both LayersIncluded for image-level
+// CandyForPlan reloads the layer map and returns the ordered *Layer
+// slice covered by the given plans (both CandiesIncluded for image-level
 // plans and per-plan Layer for layer-only plans). Used by deploy-add to
-// call ResolveSecretForLayer + RetrieveLayerArtifacts.
-func LayerForPlan(plans []*InstallPlan, dir string, cfg *Config) ([]*Layer, error) {
-	layers, err := ScanAllLayerWithConfig(dir, cfg)
+// call ResolveSecretForCandy + RetrieveCandyArtifacts.
+func CandyForPlan(plans []*InstallPlan, dir string, cfg *Config) ([]*Candy, error) {
+	layers, err := ScanAllCandyWithConfig(dir, cfg)
 	if err != nil {
 		return nil, err
 	}
 	seen := map[string]bool{}
-	var ordered []*Layer
+	var ordered []*Candy
 	pick := func(name string) {
 		if name == "" || seen[name] {
 			return
@@ -132,10 +132,10 @@ func LayerForPlan(plans []*InstallPlan, dir string, cfg *Config) ([]*Layer, erro
 		}
 	}
 	for _, p := range plans {
-		for _, name := range p.LayersIncluded {
+		for _, name := range p.CandiesIncluded {
 			pick(name)
 		}
-		pick(p.Layer)
+		pick(p.Candy)
 	}
 	return ordered, nil
 }
@@ -145,7 +145,7 @@ func LayerForPlan(plans []*InstallPlan, dir string, cfg *Config) ([]*Layer, erro
 // are preserved (layer-declared env takes precedence over a credential-
 // store collision — a deliberate choice so an author can explicitly pin
 // a value they control). Called from deploy_add_cmd after
-// ResolveLayerSecret and before target.Emit so the heredoc renderer
+// ResolveCandySecret and before target.Emit so the heredoc renderer
 // sees the values as regular env exports.
 func InjectSecretsIntoPlans(plans []*InstallPlan, env map[string]string) {
 	if len(env) == 0 {

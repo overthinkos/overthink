@@ -22,30 +22,30 @@ package main
 // filter decides what actually runs per section.
 //
 // Returns nil if every section is empty.
-func CollectDescriptions(cfg *Config, layers map[string]*Layer, boxName string) *LabelDescriptionSet {
+func CollectDescriptions(cfg *Config, layers map[string]*Candy, boxName string) *LabelDescriptionSet {
 	set := &LabelDescriptionSet{}
 
-	var allLayerNames []string
+	var allCandyNames []string
 	for _, node := range cfg.walkBaseChain(boxName) {
-		resolved, err := ResolveLayerOrder(node.Img.Layer, layers, nil)
+		resolved, err := ResolveCandyOrder(node.Img.Candy, layers, nil)
 		if err != nil {
 			break
 		}
-		allLayerNames = append(allLayerNames, resolved...)
+		allCandyNames = append(allCandyNames, resolved...)
 	}
 
 	seen := map[string]bool{}
-	for _, layerName := range allLayerNames {
-		if seen[layerName] {
+	for _, candyName := range allCandyNames {
+		if seen[candyName] {
 			continue
 		}
-		seen[layerName] = true
-		layer, ok := layers[layerName]
+		seen[candyName] = true
+		layer, ok := layers[candyName]
 		if !ok || layer.Description == nil {
 			continue
 		}
-		set.Layer = append(set.Layer, LabeledDescription{
-			Origin:      "candy:" + layerName,
+		set.Candy = append(set.Candy, LabeledDescription{
+			Origin:      "candy:" + candyName,
 			Description: *layer.Description,
 		})
 	}

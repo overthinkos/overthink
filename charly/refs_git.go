@@ -174,10 +174,10 @@ func DownloadRepo(repoPath string, version string) (string, error) {
 	return cachePath, nil
 }
 
-// DiscoverRemoteLayer returns the list of layer names in a remote repo directory
-func DiscoverRemoteLayer(repoDir string) ([]string, error) {
-	layersDir := filepath.Join(repoDir, DefaultCandyDir)
-	entries, err := os.ReadDir(layersDir)
+// DiscoverRemoteCandy returns the list of layer names in a remote repo directory
+func DiscoverRemoteCandy(repoDir string) ([]string, error) {
+	candiesDir := filepath.Join(repoDir, DefaultCandyDir)
+	entries, err := os.ReadDir(candiesDir)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil

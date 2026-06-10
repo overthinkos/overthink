@@ -27,12 +27,12 @@ func androidBedUnified() *UnifiedFile {
 					"device": {
 						Target:   "android",
 						Android:  "pixel9a-36",
-						AddLayer: []string{"android-test-apps"},
+						AddCandy: []string{"android-test-apps"},
 					},
 					"device-net": {
 						Target:   "android",
 						Android:  "pixel9a-endpoint",
-						AddLayer: []string{"android-apidemos"},
+						AddCandy: []string{"android-apidemos"},
 					},
 				},
 			},

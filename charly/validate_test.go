@@ -13,18 +13,18 @@ func TestValidateSuccess(t *testing.T) {
 			Platforms: []string{"linux/amd64"},
 		},
 		Box: map[string]BoxConfig{
-			"base": {Layer: []string{"pixi"}},
+			"base": {Candy: []string{"pixi"}},
 		},
 	}
 
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"pixi": {
 			Name:  "pixi",
 			tasks: []Task{{Cmd: "true"}},
 		},
 	}
 
-	err := Validate(cfg, vLayers(layers), testProjectDir(t), ResolveOpts{})
+	err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{})
 	if err != nil {
 		t.Errorf("Validate() unexpected error: %v", err)
 	}
@@ -79,9 +79,9 @@ func TestValidateInvalidPkg(t *testing.T) {
 		},
 		Box: map[string]BoxConfig{},
 	}
-	layers := map[string]*Layer{}
+	layers := map[string]*Candy{}
 
-	err := Validate(cfg, vLayers(layers), testdataDir, ResolveOpts{})
+	err := Validate(cfg, vCandies(layers), testdataDir, ResolveOpts{})
 	if err == nil {
 		t.Error("expected error for invalid pkg")
 	}
@@ -90,15 +90,15 @@ func TestValidateInvalidPkg(t *testing.T) {
 	}
 }
 
-func TestValidateMissingLayer(t *testing.T) {
+func TestValidateMissingCandy(t *testing.T) {
 	cfg := &Config{
 		Box: map[string]BoxConfig{
-			"test": {Layer: []string{"nonexistent"}},
+			"test": {Candy: []string{"nonexistent"}},
 		},
 	}
-	layers := map[string]*Layer{}
+	layers := map[string]*Candy{}
 
-	err := Validate(cfg, vLayers(layers), testProjectDir(t), ResolveOpts{})
+	err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{})
 	if err == nil {
 		t.Error("expected error for missing layer")
 	}
@@ -107,17 +107,17 @@ func TestValidateMissingLayer(t *testing.T) {
 	}
 }
 
-func TestValidateMissingLayerWithTypo(t *testing.T) {
+func TestValidateMissingCandyWithTypo(t *testing.T) {
 	cfg := &Config{
 		Box: map[string]BoxConfig{
-			"test": {Layer: []string{"pixie"}}, // typo for "pixi"
+			"test": {Candy: []string{"pixie"}}, // typo for "pixi"
 		},
 	}
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"pixi": {Name: "pixi", tasks: []Task{{Cmd: "true"}}},
 	}
 
-	err := Validate(cfg, vLayers(layers), testProjectDir(t), ResolveOpts{})
+	err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{})
 	if err == nil {
 		t.Error("expected error for missing layer")
 	}
@@ -126,15 +126,15 @@ func TestValidateMissingLayerWithTypo(t *testing.T) {
 	}
 }
 
-func TestValidateLayerNoInstallFiles(t *testing.T) {
+func TestValidateCandyNoInstallFiles(t *testing.T) {
 	cfg := &Config{
 		Box: map[string]BoxConfig{},
 	}
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"empty": {Name: "empty"}, // no install files
 	}
 
-	err := Validate(cfg, vLayers(layers), testProjectDir(t), ResolveOpts{})
+	err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{})
 	if err == nil {
 		t.Error("expected error for layer without install files")
 	}
@@ -147,7 +147,7 @@ func TestValidateCargoWithoutSrc(t *testing.T) {
 	cfg := &Config{
 		Box: map[string]BoxConfig{},
 	}
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"tool": {
 			Name:         "tool",
 			HasCargoToml: true,
@@ -155,7 +155,7 @@ func TestValidateCargoWithoutSrc(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, vLayers(layers), testProjectDir(t), ResolveOpts{})
+	err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{})
 	if err == nil {
 		t.Error("expected error for Cargo.toml without src/")
 	}
@@ -168,7 +168,7 @@ func TestValidateCoprWithoutPackages(t *testing.T) {
 	cfg := &Config{
 		Box: map[string]BoxConfig{},
 	}
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"layer": {
 			Name:  "layer",
 			tasks: []Task{{Cmd: "true"}},
@@ -178,7 +178,7 @@ func TestValidateCoprWithoutPackages(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, vLayers(layers), testProjectDir(t), ResolveOpts{})
+	err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{})
 	if err == nil {
 		t.Error("expected error for rpm.copr without rpm.packages")
 	}
@@ -191,7 +191,7 @@ func TestValidateReposWithoutPackages(t *testing.T) {
 	cfg := &Config{
 		Box: map[string]BoxConfig{},
 	}
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"layer": {
 			Name:  "layer",
 			tasks: []Task{{Cmd: "true"}}, // needs some install file
@@ -201,7 +201,7 @@ func TestValidateReposWithoutPackages(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, vLayers(layers), testProjectDir(t), ResolveOpts{})
+	err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{})
 	if err == nil {
 		t.Error("expected error for rpm.repo without packages")
 	}
@@ -214,7 +214,7 @@ func TestValidateModulesWithoutPackages(t *testing.T) {
 	cfg := &Config{
 		Box: map[string]BoxConfig{},
 	}
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"layer": {
 			Name:  "layer",
 			tasks: []Task{{Cmd: "true"}},
@@ -224,7 +224,7 @@ func TestValidateModulesWithoutPackages(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, vLayers(layers), testProjectDir(t), ResolveOpts{})
+	err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{})
 	if err == nil {
 		t.Error("expected error for rpm.modules without rpm.packages")
 	}
@@ -244,9 +244,9 @@ func TestValidatePacPkgValue(t *testing.T) {
 		Defaults: BoxConfig{Build: BuildFormats{"pac"}},
 		Box:      map[string]BoxConfig{},
 	}
-	layers := map[string]*Layer{}
+	layers := map[string]*Candy{}
 
-	err := Validate(cfg, vLayers(layers), testProjectDir(t), ResolveOpts{})
+	err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{})
 	if err != nil {
 		t.Errorf("pkg: pac should be valid, got error: %v", err)
 	}
@@ -259,9 +259,9 @@ func TestValidateInvalidPkgValue(t *testing.T) {
 		},
 		Box: map[string]BoxConfig{},
 	}
-	layers := map[string]*Layer{}
+	layers := map[string]*Candy{}
 
-	err := Validate(cfg, vLayers(layers), testdataDir, ResolveOpts{})
+	err := Validate(cfg, vCandies(layers), testdataDir, ResolveOpts{})
 	if err == nil {
 		t.Error("expected error for invalid pkg value")
 	}
@@ -277,7 +277,7 @@ func TestValidatePacReposMissingName(t *testing.T) {
 	cfg := &Config{
 		Box: map[string]BoxConfig{},
 	}
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"layer": {
 			Name: "layer",
 			formatSections: map[string]*PackageSection{
@@ -289,7 +289,7 @@ func TestValidatePacReposMissingName(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, vLayers(layers), testProjectDir(t), ResolveOpts{})
+	err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{})
 	if err == nil {
 		t.Error("expected error for pac.repos without name")
 	}
@@ -310,11 +310,11 @@ func TestValidateAurWithoutAurBuilder(t *testing.T) {
 			"arch-img": {
 				Base:  "arch:latest",
 				Build: BuildFormats{"pac", "aur"},
-				Layer: []string{"aur-layer"},
+				Candy: []string{"aur-layer"},
 			},
 		},
 	}
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"aur-layer": {
 			Name: "aur-layer",
 			formatSections: map[string]*PackageSection{
@@ -323,7 +323,7 @@ func TestValidateAurWithoutAurBuilder(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, vLayers(layers), testdataDir, ResolveOpts{})
+	err := Validate(cfg, vCandies(layers), testdataDir, ResolveOpts{})
 	if err == nil {
 		t.Fatal("expected error for aur packages without builder.aur")
 	}
@@ -347,11 +347,11 @@ func TestValidateAurOnFedoraImageNoError(t *testing.T) {
 			"fedora-img": {
 				Base:  "quay.io/fedora/fedora:43",
 				Build: BuildFormats{"rpm"},
-				Layer: []string{"multi-distro-layer"},
+				Candy: []string{"multi-distro-layer"},
 			},
 		},
 	}
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"multi-distro-layer": {
 			Name: "multi-distro-layer",
 			formatSections: map[string]*PackageSection{
@@ -361,7 +361,7 @@ func TestValidateAurOnFedoraImageNoError(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, vLayers(layers), testdataDir, ResolveOpts{})
+	err := Validate(cfg, vCandies(layers), testdataDir, ResolveOpts{})
 	if err != nil && strings.Contains(err.Error(), "no builder.aur configured") {
 		t.Fatalf("Fedora image (build=[rpm]) consuming a multi-distro layer with rpm:+aur: must not require builder.aur; got: %v", err)
 	}
@@ -379,11 +379,11 @@ func TestValidateAurOnArchImageWithoutAurInBuildFormats(t *testing.T) {
 			"arch-pac-only": {
 				Base:  "arch:latest",
 				Build: BuildFormats{"pac"},
-				Layer: []string{"aur-layer"},
+				Candy: []string{"aur-layer"},
 			},
 		},
 	}
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"aur-layer": {
 			Name: "aur-layer",
 			formatSections: map[string]*PackageSection{
@@ -392,7 +392,7 @@ func TestValidateAurOnArchImageWithoutAurInBuildFormats(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, vLayers(layers), testdataDir, ResolveOpts{})
+	err := Validate(cfg, vCandies(layers), testdataDir, ResolveOpts{})
 	if err != nil && strings.Contains(err.Error(), "no builder.aur configured") {
 		t.Fatalf("Arch image with build=[pac] (no aur) must not require builder.aur; got: %v", err)
 	}
@@ -413,18 +413,18 @@ func TestValidatePixiBuilderUnconditional(t *testing.T) {
 			"fedora-img": {
 				Base:  "quay.io/fedora/fedora:43",
 				Build: BuildFormats{"rpm"},
-				Layer: []string{"pixi-layer"},
+				Candy: []string{"pixi-layer"},
 			},
 		},
 	}
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"pixi-layer": {
 			Name:        "pixi-layer",
 			HasPixiToml: true,
 		},
 	}
 
-	err := Validate(cfg, vLayers(layers), testdataDir, ResolveOpts{})
+	err := Validate(cfg, vCandies(layers), testdataDir, ResolveOpts{})
 	if err == nil {
 		t.Fatal("expected error for pixi.toml without builder.pixi")
 	}
@@ -437,15 +437,15 @@ func TestValidateUnknownDependency(t *testing.T) {
 	cfg := &Config{
 		Box: map[string]BoxConfig{},
 	}
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"layer": {
 			Name:    "layer",
 			tasks:   []Task{{Cmd: "true"}},
-			Require: toLayerRefs([]string{"unknown"}),
+			Require: toCandyRefs([]string{"unknown"}),
 		},
 	}
 
-	err := Validate(cfg, vLayers(layers), testProjectDir(t), ResolveOpts{})
+	err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{})
 	if err == nil {
 		t.Error("expected error for unknown dependency")
 	}
@@ -458,14 +458,14 @@ func TestValidateImageCycle(t *testing.T) {
 	cfg := &Config{
 		Defaults: BoxConfig{Build: BuildFormats{"rpm"}},
 		Box: map[string]BoxConfig{
-			"a": {Base: "b", Layer: []string{}},
-			"b": {Base: "c", Layer: []string{}},
-			"c": {Base: "a", Layer: []string{}},
+			"a": {Base: "b", Candy: []string{}},
+			"b": {Base: "c", Candy: []string{}},
+			"c": {Base: "a", Candy: []string{}},
 		},
 	}
-	layers := map[string]*Layer{}
+	layers := map[string]*Candy{}
 
-	err := Validate(cfg, vLayers(layers), testProjectDir(t), ResolveOpts{})
+	err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{})
 	if err == nil {
 		t.Fatal("expected error for image cycle")
 	}
@@ -474,19 +474,19 @@ func TestValidateImageCycle(t *testing.T) {
 	}
 }
 
-func TestValidateLayerCycle(t *testing.T) {
+func TestValidateCandyCycle(t *testing.T) {
 	cfg := &Config{
 		Box: map[string]BoxConfig{
-			"test": {Layer: []string{"a"}},
+			"test": {Candy: []string{"a"}},
 		},
 	}
-	layers := map[string]*Layer{
-		"a": {Name: "a", tasks: []Task{{Cmd: "true"}}, Require: toLayerRefs([]string{"b"})},
-		"b": {Name: "b", tasks: []Task{{Cmd: "true"}}, Require: toLayerRefs([]string{"c"})},
-		"c": {Name: "c", tasks: []Task{{Cmd: "true"}}, Require: toLayerRefs([]string{"a"})},
+	layers := map[string]*Candy{
+		"a": {Name: "a", tasks: []Task{{Cmd: "true"}}, Require: toCandyRefs([]string{"b"})},
+		"b": {Name: "b", tasks: []Task{{Cmd: "true"}}, Require: toCandyRefs([]string{"c"})},
+		"c": {Name: "c", tasks: []Task{{Cmd: "true"}}, Require: toCandyRefs([]string{"a"})},
 	}
 
-	err := Validate(cfg, vLayers(layers), testProjectDir(t), ResolveOpts{})
+	err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{})
 	if err == nil {
 		t.Error("expected error for layer cycle")
 	}
@@ -499,12 +499,12 @@ func TestValidateMultipleErrors(t *testing.T) {
 	cfg := &Config{
 		Defaults: BoxConfig{Build: BuildFormats{"invalid"}},
 		Box: map[string]BoxConfig{
-			"test": {Layer: []string{"missing1", "missing2"}},
+			"test": {Candy: []string{"missing1", "missing2"}},
 		},
 	}
-	layers := map[string]*Layer{}
+	layers := map[string]*Candy{}
 
-	err := Validate(cfg, vLayers(layers), testProjectDir(t), ResolveOpts{})
+	err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{})
 	if err == nil {
 		t.Error("expected errors")
 	}
@@ -520,11 +520,11 @@ func TestValidateMultipleErrors(t *testing.T) {
 	}
 }
 
-func TestValidateLayerPortsValid(t *testing.T) {
+func TestValidateCandyPortsValid(t *testing.T) {
 	cfg := &Config{
 		Box: map[string]BoxConfig{},
 	}
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"web": {
 			Name:      "web",
 			tasks:     []Task{{Cmd: "true"}},
@@ -533,17 +533,17 @@ func TestValidateLayerPortsValid(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, vLayers(layers), testProjectDir(t), ResolveOpts{})
+	err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{})
 	if err != nil {
 		t.Errorf("Validate() unexpected error: %v", err)
 	}
 }
 
-func TestValidateLayerPortsInvalid(t *testing.T) {
+func TestValidateCandyPortsInvalid(t *testing.T) {
 	cfg := &Config{
 		Box: map[string]BoxConfig{},
 	}
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"web": {
 			Name:      "web",
 			tasks:     []Task{{Cmd: "true"}},
@@ -552,7 +552,7 @@ func TestValidateLayerPortsInvalid(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, vLayers(layers), testProjectDir(t), ResolveOpts{})
+	err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{})
 	if err == nil {
 		t.Error("expected error for invalid port number")
 	}
@@ -561,11 +561,11 @@ func TestValidateLayerPortsInvalid(t *testing.T) {
 	}
 }
 
-func TestValidateLayerPortsInvalidFromYAML(t *testing.T) {
+func TestValidateCandyPortsInvalidFromYAML(t *testing.T) {
 	cfg := &Config{
 		Box: map[string]BoxConfig{},
 	}
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"web": {
 			Name:      "web",
 			tasks:     []Task{{Cmd: "true"}},
@@ -574,7 +574,7 @@ func TestValidateLayerPortsInvalidFromYAML(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, vLayers(layers), testProjectDir(t), ResolveOpts{})
+	err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{})
 	if err == nil {
 		t.Error("expected error for invalid port number")
 	}
@@ -592,16 +592,16 @@ func TestValidateImagePortsValid(t *testing.T) {
 		},
 		Box: map[string]BoxConfig{
 			"test": {
-				Layer: []string{"web"},
+				Candy: []string{"web"},
 				Port:  []string{"8080:8080", "9090"},
 			},
 		},
 	}
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"web": {Name: "web", tasks: []Task{{Cmd: "true"}}},
 	}
 
-	err := Validate(cfg, vLayers(layers), testProjectDir(t), ResolveOpts{})
+	err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{})
 	if err != nil {
 		t.Errorf("Validate() unexpected error: %v", err)
 	}
@@ -611,16 +611,16 @@ func TestValidateImagePortsInvalid(t *testing.T) {
 	cfg := &Config{
 		Box: map[string]BoxConfig{
 			"test": {
-				Layer: []string{"web"},
+				Candy: []string{"web"},
 				Port:  []string{"abc:8080"},
 			},
 		},
 	}
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"web": {Name: "web", tasks: []Task{{Cmd: "true"}}},
 	}
 
-	err := Validate(cfg, vLayers(layers), testProjectDir(t), ResolveOpts{})
+	err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{})
 	if err == nil {
 		t.Error("expected error for invalid port mapping")
 	}
@@ -633,16 +633,16 @@ func TestValidateImagePortsBadFormat(t *testing.T) {
 	cfg := &Config{
 		Box: map[string]BoxConfig{
 			"test": {
-				Layer: []string{"web"},
+				Candy: []string{"web"},
 				Port:  []string{"8080:9090:1234"},
 			},
 		},
 	}
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"web": {Name: "web", tasks: []Task{{Cmd: "true"}}},
 	}
 
-	err := Validate(cfg, vLayers(layers), testProjectDir(t), ResolveOpts{})
+	err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{})
 	if err == nil {
 		t.Error("expected error for bad port format")
 	}
@@ -655,7 +655,7 @@ func TestValidateRouteMissingHost(t *testing.T) {
 	cfg := &Config{
 		Box: map[string]BoxConfig{},
 	}
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"svc": {
 			Name:  "svc",
 			tasks: []Task{{Cmd: "true"}},
@@ -663,7 +663,7 @@ func TestValidateRouteMissingHost(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, vLayers(layers), testProjectDir(t), ResolveOpts{})
+	err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{})
 	if err == nil {
 		t.Error("expected error for route missing host")
 	}
@@ -676,7 +676,7 @@ func TestValidateRouteMissingPort(t *testing.T) {
 	cfg := &Config{
 		Box: map[string]BoxConfig{},
 	}
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"svc": {
 			Name:  "svc",
 			tasks: []Task{{Cmd: "true"}},
@@ -684,7 +684,7 @@ func TestValidateRouteMissingPort(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, vLayers(layers), testProjectDir(t), ResolveOpts{})
+	err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{})
 	if err == nil {
 		t.Error("expected error for route missing port")
 	}
@@ -697,7 +697,7 @@ func TestValidateRouteInvalidPort(t *testing.T) {
 	cfg := &Config{
 		Box: map[string]BoxConfig{},
 	}
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"svc": {
 			Name:  "svc",
 			tasks: []Task{{Cmd: "true"}},
@@ -705,7 +705,7 @@ func TestValidateRouteInvalidPort(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, vLayers(layers), testProjectDir(t), ResolveOpts{})
+	err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{})
 	if err == nil {
 		t.Error("expected error for route invalid port")
 	}
@@ -719,10 +719,10 @@ func TestValidateRouteWithoutTraefik(t *testing.T) {
 	cfg := &Config{
 		Defaults: BoxConfig{Build: BuildFormats{"rpm"}},
 		Box: map[string]BoxConfig{
-			"test": {Layer: []string{"svc"}},
+			"test": {Candy: []string{"svc"}},
 		},
 	}
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"svc": {
 			Name:  "svc",
 			tasks: []Task{{Cmd: "true"}},
@@ -730,7 +730,7 @@ func TestValidateRouteWithoutTraefik(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, vLayers(layers), testProjectDir(t), ResolveOpts{})
+	err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{})
 	if err != nil {
 		t.Errorf("Validate() unexpected error: %v", err)
 	}
@@ -744,10 +744,10 @@ func TestValidateRouteWithTraefik(t *testing.T) {
 			Platforms: []string{"linux/amd64"},
 		},
 		Box: map[string]BoxConfig{
-			"test": {Layer: []string{"traefik", "svc"}},
+			"test": {Candy: []string{"traefik", "svc"}},
 		},
 	}
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"traefik": {
 			Name:  "traefik",
 			tasks: []Task{{Cmd: "true"}},
@@ -759,7 +759,7 @@ func TestValidateRouteWithTraefik(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, vLayers(layers), testProjectDir(t), ResolveOpts{})
+	err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{})
 	if err != nil {
 		t.Errorf("Validate() unexpected error: %v", err)
 	}
@@ -773,19 +773,19 @@ func TestValidateSkipsDisabledImages(t *testing.T) {
 			Platforms: []string{"linux/amd64"},
 		},
 		Box: map[string]BoxConfig{
-			"good": {Layer: []string{"pixi"}},
+			"good": {Candy: []string{"pixi"}},
 			"bad-disabled": {
 				Enabled: boolPtr(false),
-				Layer:   []string{"nonexistent-layer"},
+				Candy:   []string{"nonexistent-layer"},
 				Build:   BuildFormats{"invalid"},
 			},
 		},
 	}
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"pixi": {Name: "pixi", tasks: []Task{{Cmd: "true"}}},
 	}
 
-	err := Validate(cfg, vLayers(layers), testProjectDir(t), ResolveOpts{})
+	err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{})
 	if err != nil {
 		t.Errorf("Validate() should pass when bad image is disabled, got: %v", err)
 	}
@@ -795,7 +795,7 @@ func TestValidateVolumesValid(t *testing.T) {
 	cfg := &Config{
 		Box: map[string]BoxConfig{},
 	}
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"svc": {
 			Name:    "svc",
 			tasks:   []Task{{Cmd: "true"}},
@@ -803,7 +803,7 @@ func TestValidateVolumesValid(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, vLayers(layers), testProjectDir(t), ResolveOpts{})
+	err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{})
 	if err != nil {
 		t.Errorf("Validate() unexpected error: %v", err)
 	}
@@ -813,7 +813,7 @@ func TestValidateVolumesMissingName(t *testing.T) {
 	cfg := &Config{
 		Box: map[string]BoxConfig{},
 	}
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"svc": {
 			Name:    "svc",
 			tasks:   []Task{{Cmd: "true"}},
@@ -821,7 +821,7 @@ func TestValidateVolumesMissingName(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, vLayers(layers), testProjectDir(t), ResolveOpts{})
+	err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{})
 	if err == nil {
 		t.Error("expected error for missing volume name")
 	}
@@ -834,7 +834,7 @@ func TestValidateVolumesMissingPath(t *testing.T) {
 	cfg := &Config{
 		Box: map[string]BoxConfig{},
 	}
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"svc": {
 			Name:    "svc",
 			tasks:   []Task{{Cmd: "true"}},
@@ -842,7 +842,7 @@ func TestValidateVolumesMissingPath(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, vLayers(layers), testProjectDir(t), ResolveOpts{})
+	err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{})
 	if err == nil {
 		t.Error("expected error for missing volume path")
 	}
@@ -855,7 +855,7 @@ func TestValidateVolumesInvalidName(t *testing.T) {
 	cfg := &Config{
 		Box: map[string]BoxConfig{},
 	}
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"svc": {
 			Name:    "svc",
 			tasks:   []Task{{Cmd: "true"}},
@@ -863,7 +863,7 @@ func TestValidateVolumesInvalidName(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, vLayers(layers), testProjectDir(t), ResolveOpts{})
+	err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{})
 	if err == nil {
 		t.Error("expected error for invalid volume name")
 	}
@@ -876,7 +876,7 @@ func TestValidateVolumesDuplicate(t *testing.T) {
 	cfg := &Config{
 		Box: map[string]BoxConfig{},
 	}
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"svc": {
 			Name:  "svc",
 			tasks: []Task{{Cmd: "true"}},
@@ -887,7 +887,7 @@ func TestValidateVolumesDuplicate(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, vLayers(layers), testProjectDir(t), ResolveOpts{})
+	err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{})
 	if err == nil {
 		t.Error("expected error for duplicate volume name")
 	}
@@ -901,12 +901,12 @@ func TestValidateAliasesValid(t *testing.T) {
 		Defaults: BoxConfig{Build: BuildFormats{"rpm"}},
 		Box: map[string]BoxConfig{
 			"test": {
-				Layer: []string{"svc"},
+				Candy: []string{"svc"},
 				Alias: []AliasConfig{{Name: "mycli", Command: "mycli-bin"}},
 			},
 		},
 	}
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"svc": {
 			Name:    "svc",
 			tasks:   []Task{{Cmd: "true"}},
@@ -914,7 +914,7 @@ func TestValidateAliasesValid(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, vLayers(layers), testProjectDir(t), ResolveOpts{})
+	err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{})
 	if err != nil {
 		t.Errorf("Validate() unexpected error: %v", err)
 	}
@@ -924,7 +924,7 @@ func TestValidateAliasesMissingName(t *testing.T) {
 	cfg := &Config{
 		Box: map[string]BoxConfig{},
 	}
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"svc": {
 			Name:    "svc",
 			tasks:   []Task{{Cmd: "true"}},
@@ -932,7 +932,7 @@ func TestValidateAliasesMissingName(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, vLayers(layers), testProjectDir(t), ResolveOpts{})
+	err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{})
 	if err == nil {
 		t.Error("expected error for missing alias name")
 	}
@@ -945,7 +945,7 @@ func TestValidateAliasesMissingCommand(t *testing.T) {
 	cfg := &Config{
 		Box: map[string]BoxConfig{},
 	}
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"svc": {
 			Name:    "svc",
 			tasks:   []Task{{Cmd: "true"}},
@@ -953,7 +953,7 @@ func TestValidateAliasesMissingCommand(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, vLayers(layers), testProjectDir(t), ResolveOpts{})
+	err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{})
 	if err == nil {
 		t.Error("expected error for missing alias command")
 	}
@@ -966,7 +966,7 @@ func TestValidateAliasesDuplicate(t *testing.T) {
 	cfg := &Config{
 		Box: map[string]BoxConfig{},
 	}
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"svc": {
 			Name:  "svc",
 			tasks: []Task{{Cmd: "true"}},
@@ -977,7 +977,7 @@ func TestValidateAliasesDuplicate(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, vLayers(layers), testProjectDir(t), ResolveOpts{})
+	err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{})
 	if err == nil {
 		t.Error("expected error for duplicate alias name")
 	}
@@ -990,7 +990,7 @@ func TestValidateAliasesInvalidName(t *testing.T) {
 	cfg := &Config{
 		Box: map[string]BoxConfig{},
 	}
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"svc": {
 			Name:    "svc",
 			tasks:   []Task{{Cmd: "true"}},
@@ -998,7 +998,7 @@ func TestValidateAliasesInvalidName(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, vLayers(layers), testProjectDir(t), ResolveOpts{})
+	err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{})
 	if err == nil {
 		t.Error("expected error for invalid alias name")
 	}
@@ -1011,7 +1011,7 @@ func TestValidateImageAliasesDuplicate(t *testing.T) {
 	cfg := &Config{
 		Box: map[string]BoxConfig{
 			"test": {
-				Layer: []string{"svc"},
+				Candy: []string{"svc"},
 				Alias: []AliasConfig{
 					{Name: "mycli", Command: "cmd1"},
 					{Name: "mycli", Command: "cmd2"},
@@ -1019,11 +1019,11 @@ func TestValidateImageAliasesDuplicate(t *testing.T) {
 			},
 		},
 	}
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"svc": {Name: "svc", tasks: []Task{{Cmd: "true"}}},
 	}
 
-	err := Validate(cfg, vLayers(layers), testProjectDir(t), ResolveOpts{})
+	err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{})
 	if err == nil {
 		t.Error("expected error for duplicate image alias name")
 	}
@@ -1039,16 +1039,16 @@ func TestValidateSelfBuilder(t *testing.T) {
 		},
 		Box: map[string]BoxConfig{
 			"myimg": {
-				Layer:   []string{"pixi"},
+				Candy:   []string{"pixi"},
 				Builder: BuilderMap{"pixi": "myimg"},
 			},
 		},
 	}
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"pixi": {Name: "pixi", tasks: []Task{{Cmd: "true"}}},
 	}
 
-	err := Validate(cfg, vLayers(layers), testdataDir, ResolveOpts{})
+	err := Validate(cfg, vCandies(layers), testdataDir, ResolveOpts{})
 	if err == nil {
 		t.Fatal("expected error for self-referencing builder")
 	}
@@ -1065,14 +1065,14 @@ func TestValidateBuilderInheritedSelfNotError(t *testing.T) {
 			Builder: BuilderMap{"pixi": "builder", "npm": "builder"},
 		},
 		Box: map[string]BoxConfig{
-			"builder": {Layer: []string{"pixi"}},
+			"builder": {Candy: []string{"pixi"}},
 		},
 	}
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"pixi": {Name: "pixi", tasks: []Task{{Cmd: "true"}}},
 	}
 
-	err := Validate(cfg, vLayers(layers), testdataDir, ResolveOpts{})
+	err := Validate(cfg, vCandies(layers), testdataDir, ResolveOpts{})
 	if err != nil {
 		t.Errorf("Validate() unexpected error: %v", err)
 	}
@@ -1085,16 +1085,16 @@ func TestValidatePerImageBuilderNotFound(t *testing.T) {
 		},
 		Box: map[string]BoxConfig{
 			"app": {
-				Layer:   []string{"pixi"},
+				Candy:   []string{"pixi"},
 				Builder: BuilderMap{"pixi": "nonexistent"},
 			},
 		},
 	}
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"pixi": {Name: "pixi", tasks: []Task{{Cmd: "true"}}},
 	}
 
-	err := Validate(cfg, vLayers(layers), testdataDir, ResolveOpts{})
+	err := Validate(cfg, vCandies(layers), testdataDir, ResolveOpts{})
 	if err == nil {
 		t.Fatal("expected error for nonexistent per-image builder")
 	}
@@ -1127,49 +1127,49 @@ func TestIsValidPort(t *testing.T) {
 	}
 }
 
-func TestValidateLayerWithIncludesNoInstallFiles(t *testing.T) {
+func TestValidateCandyWithIncludesNoInstallFiles(t *testing.T) {
 	cfg := &Config{
 		Defaults: BoxConfig{Build: BuildFormats{"rpm"}},
 		Box: map[string]BoxConfig{
-			"test": {Layer: []string{"sway-desktop"}},
+			"test": {Candy: []string{"sway-desktop"}},
 		},
 	}
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"pipewire":     {Name: "pipewire", tasks: []Task{{Cmd: "true"}}},
 		"wayvnc":       {Name: "wayvnc", tasks: []Task{{Cmd: "true"}}},
-		"sway-desktop": {Name: "sway-desktop", IncludedLayer: toLayerRefs([]string{"pipewire", "wayvnc"})},
+		"sway-desktop": {Name: "sway-desktop", IncludedCandy: toCandyRefs([]string{"pipewire", "wayvnc"})},
 	}
 
-	err := Validate(cfg, vLayers(layers), testProjectDir(t), ResolveOpts{})
+	err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{})
 	if err != nil {
 		t.Errorf("expected no error for composing layer without install files, got: %v", err)
 	}
 }
 
-func TestValidateLayerIncludesCycle(t *testing.T) {
+func TestValidateCandyIncludesCycle(t *testing.T) {
 	cfg := &Config{
 		Box: map[string]BoxConfig{},
 	}
-	layers := map[string]*Layer{
-		"a": {Name: "a", tasks: []Task{{Cmd: "true"}}, IncludedLayer: toLayerRefs([]string{"b"})},
-		"b": {Name: "b", tasks: []Task{{Cmd: "true"}}, IncludedLayer: toLayerRefs([]string{"a"})},
+	layers := map[string]*Candy{
+		"a": {Name: "a", tasks: []Task{{Cmd: "true"}}, IncludedCandy: toCandyRefs([]string{"b"})},
+		"b": {Name: "b", tasks: []Task{{Cmd: "true"}}, IncludedCandy: toCandyRefs([]string{"a"})},
 	}
 
-	err := Validate(cfg, vLayers(layers), testProjectDir(t), ResolveOpts{})
+	err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{})
 	if err == nil {
 		t.Error("expected error for circular layer composition")
 	}
 }
 
-func TestValidateLayerIncludesMissing(t *testing.T) {
+func TestValidateCandyIncludesMissing(t *testing.T) {
 	cfg := &Config{
 		Box: map[string]BoxConfig{},
 	}
-	layers := map[string]*Layer{
-		"desktop": {Name: "desktop", IncludedLayer: toLayerRefs([]string{"nonexistent"})},
+	layers := map[string]*Candy{
+		"desktop": {Name: "desktop", IncludedCandy: toCandyRefs([]string{"nonexistent"})},
 	}
 
-	err := Validate(cfg, vLayers(layers), testProjectDir(t), ResolveOpts{})
+	err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{})
 	if err == nil {
 		t.Error("expected error for unknown layer in includes")
 	}
@@ -1203,11 +1203,11 @@ func TestValidatePortRelayValid(t *testing.T) {
 	cfg := &Config{
 		Defaults: BoxConfig{Build: BuildFormats{"rpm"}},
 		Box: map[string]BoxConfig{
-			"test": {Layer: []string{"supervisord", "socat", "chrome"}},
+			"test": {Candy: []string{"supervisord", "socat", "chrome"}},
 		},
 	}
-	layers := map[string]*Layer{
-		"supervisord": {Name: "supervisord", Require: toLayerRefs([]string{"python"}), tasks: []Task{{Cmd: "true"}}, formatSections: map[string]*PackageSection{"rpm": {FormatName: "rpm", Packages: []string{"supervisor"}}}},
+	layers := map[string]*Candy{
+		"supervisord": {Name: "supervisord", Require: toCandyRefs([]string{"python"}), tasks: []Task{{Cmd: "true"}}, formatSections: map[string]*PackageSection{"rpm": {FormatName: "rpm", Packages: []string{"supervisor"}}}},
 		"python":      {Name: "python", tasks: []Task{{Cmd: "true"}}},
 		"socat":       {Name: "socat", tasks: []Task{{Cmd: "true"}}, formatSections: map[string]*PackageSection{"rpm": {FormatName: "rpm", Packages: []string{"socat", "iproute"}}}},
 		"chrome": {
@@ -1219,7 +1219,7 @@ func TestValidatePortRelayValid(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, vLayers(layers), testProjectDir(t), ResolveOpts{})
+	err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{})
 	if err != nil {
 		t.Errorf("Validate() unexpected error: %v", err)
 	}
@@ -1229,7 +1229,7 @@ func TestValidatePortRelayInvalidPort(t *testing.T) {
 	cfg := &Config{
 		Box: map[string]BoxConfig{},
 	}
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"svc": {
 			Name:           "svc",
 			tasks:          []Task{{Cmd: "true"}},
@@ -1239,7 +1239,7 @@ func TestValidatePortRelayInvalidPort(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, vLayers(layers), testProjectDir(t), ResolveOpts{})
+	err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{})
 	if err == nil {
 		t.Error("expected error for invalid port_relay port")
 	}
@@ -1252,7 +1252,7 @@ func TestValidatePortRelayNotInPorts(t *testing.T) {
 	cfg := &Config{
 		Box: map[string]BoxConfig{},
 	}
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"svc": {
 			Name:           "svc",
 			tasks:          []Task{{Cmd: "true"}},
@@ -1262,7 +1262,7 @@ func TestValidatePortRelayNotInPorts(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, vLayers(layers), testProjectDir(t), ResolveOpts{})
+	err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{})
 	if err == nil {
 		t.Error("expected error for port_relay port not in layer ports")
 	}
@@ -1275,7 +1275,7 @@ func TestValidatePortRelayNoPorts(t *testing.T) {
 	cfg := &Config{
 		Box: map[string]BoxConfig{},
 	}
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"svc": {
 			Name:           "svc",
 			tasks:          []Task{{Cmd: "true"}},
@@ -1283,7 +1283,7 @@ func TestValidatePortRelayNoPorts(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, vLayers(layers), testProjectDir(t), ResolveOpts{})
+	err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{})
 	if err == nil {
 		t.Error("expected error for port_relay without ports")
 	}
@@ -1296,7 +1296,7 @@ func TestValidatePortRelayDuplicate(t *testing.T) {
 	cfg := &Config{
 		Box: map[string]BoxConfig{},
 	}
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"svc": {
 			Name:           "svc",
 			tasks:          []Task{{Cmd: "true"}},
@@ -1306,7 +1306,7 @@ func TestValidatePortRelayDuplicate(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, vLayers(layers), testProjectDir(t), ResolveOpts{})
+	err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{})
 	if err == nil {
 		t.Error("expected error for duplicate port_relay port")
 	}
@@ -1318,10 +1318,10 @@ func TestValidatePortRelayDuplicate(t *testing.T) {
 func TestValidatePortRelayMissingSocat(t *testing.T) {
 	cfg := &Config{
 		Box: map[string]BoxConfig{
-			"test": {Layer: []string{"chrome"}},
+			"test": {Candy: []string{"chrome"}},
 		},
 	}
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"chrome": {
 			Name:           "chrome",
 			tasks:          []Task{{Cmd: "true"}},
@@ -1331,7 +1331,7 @@ func TestValidatePortRelayMissingSocat(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, vLayers(layers), testProjectDir(t), ResolveOpts{})
+	err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{})
 	if err == nil {
 		t.Error("expected error for port_relay without socat layer")
 	}
@@ -1349,10 +1349,10 @@ func TestValidatePortRelayMissingSocat(t *testing.T) {
 func TestValidateDataEntryUnknownVolume(t *testing.T) {
 	cfg := &Config{
 		Box: map[string]BoxConfig{
-			"jupyter": {Layer: []string{"jupyter", "notebook-templates"}},
+			"jupyter": {Candy: []string{"jupyter", "notebook-templates"}},
 		},
 	}
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"jupyter": {
 			Name:  "jupyter",
 			tasks: []Task{{Cmd: "true"}},
@@ -1369,7 +1369,7 @@ func TestValidateDataEntryUnknownVolume(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, vLayers(layers), testProjectDir(t), ResolveOpts{})
+	err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{})
 	if err == nil {
 		t.Fatal("expected error for data entry referencing unknown volume")
 	}
@@ -1392,10 +1392,10 @@ func TestValidateDataEntryKnownVolume(t *testing.T) {
 			Platforms: []string{"linux/amd64"},
 		},
 		Box: map[string]BoxConfig{
-			"jupyter": {Layer: []string{"jupyter", "notebook-templates"}},
+			"jupyter": {Candy: []string{"jupyter", "notebook-templates"}},
 		},
 	}
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"jupyter": {
 			Name:  "jupyter",
 			tasks: []Task{{Cmd: "true"}},
@@ -1412,7 +1412,7 @@ func TestValidateDataEntryKnownVolume(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, vLayers(layers), testProjectDir(t), ResolveOpts{})
+	err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{})
 	if err != nil && strings.Contains(err.Error(), "not declared by any layer") {
 		t.Errorf("unexpected 'unknown volume' error for valid data entry: %v", err)
 	}
@@ -1424,10 +1424,10 @@ func TestValidateDataEntryKnownVolume(t *testing.T) {
 // plan §4.4.
 // ---------------------------------------------------------------------------
 
-// secretDepsLayer builds a minimal layer with the given secret dependency
+// secretDepsCandy builds a minimal layer with the given secret dependency
 // configuration, for reuse across tests.
-func secretDepsLayer(name string, opts func(l *Layer)) *Layer {
-	l := &Layer{Name: name, tasks: []Task{{Cmd: "true"}}}
+func secretDepsCandy(name string, opts func(l *Candy)) *Candy {
+	l := &Candy{Name: name, tasks: []Task{{Cmd: "true"}}}
 	if opts != nil {
 		opts(l)
 	}
@@ -1438,14 +1438,14 @@ func secretDepsLayer(name string, opts func(l *Layer)) *Layer {
 // explicit Key override that matches the charly/<service>/<key> format. No errors.
 func TestValidateSecretAcceptsHappyPath(t *testing.T) {
 	cfg := &Config{Box: map[string]BoxConfig{}}
-	layers := map[string]*Layer{
-		"svc": secretDepsLayer("svc", func(l *Layer) {
+	layers := map[string]*Candy{
+		"svc": secretDepsCandy("svc", func(l *Candy) {
 			l.secretAccepts = []EnvDependency{
 				{Name: "OPENROUTER_API_KEY", Description: "OpenRouter API key", Key: "charly/api-key/openrouter"},
 			}
 		}),
 	}
-	if err := Validate(cfg, vLayers(layers), testProjectDir(t), ResolveOpts{}); err != nil {
+	if err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{}); err != nil {
 		t.Errorf("Validate() unexpected error: %v", err)
 	}
 }
@@ -1454,14 +1454,14 @@ func TestValidateSecretAcceptsHappyPath(t *testing.T) {
 // empty description must be rejected (consistency with env_requires).
 func TestValidateSecretRequiresMissingDescription(t *testing.T) {
 	cfg := &Config{Box: map[string]BoxConfig{}}
-	layers := map[string]*Layer{
-		"svc": secretDepsLayer("svc", func(l *Layer) {
+	layers := map[string]*Candy{
+		"svc": secretDepsCandy("svc", func(l *Candy) {
 			l.secretRequires = []EnvDependency{
 				{Name: "WEBUI_ADMIN_PASSWORD"}, // no Description
 			}
 		}),
 	}
-	err := Validate(cfg, vLayers(layers), testProjectDir(t), ResolveOpts{})
+	err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{})
 	if err == nil {
 		t.Fatal("expected error for secret_requires entry with no description")
 	}
@@ -1474,14 +1474,14 @@ func TestValidateSecretRequiresMissingDescription(t *testing.T) {
 // rejected by the env-var-name check.
 func TestValidateSecretAcceptsInvalidName(t *testing.T) {
 	cfg := &Config{Box: map[string]BoxConfig{}}
-	layers := map[string]*Layer{
-		"svc": secretDepsLayer("svc", func(l *Layer) {
+	layers := map[string]*Candy{
+		"svc": secretDepsCandy("svc", func(l *Candy) {
 			l.secretAccepts = []EnvDependency{
 				{Name: "OPENROUTER-API-KEY", Description: "hyphen not allowed"},
 			}
 		}),
 	}
-	err := Validate(cfg, vLayers(layers), testProjectDir(t), ResolveOpts{})
+	err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{})
 	if err == nil {
 		t.Fatal("expected error for invalid env var name in secret_accepts")
 	}
@@ -1494,8 +1494,8 @@ func TestValidateSecretAcceptsInvalidName(t *testing.T) {
 // cannot appear in both env_accepts and secret_accepts.
 func TestValidateSecretAcceptsCollidesWithEnvAccepts(t *testing.T) {
 	cfg := &Config{Box: map[string]BoxConfig{}}
-	layers := map[string]*Layer{
-		"svc": secretDepsLayer("svc", func(l *Layer) {
+	layers := map[string]*Candy{
+		"svc": secretDepsCandy("svc", func(l *Candy) {
 			l.envAccepts = []EnvDependency{
 				{Name: "OPENROUTER_API_KEY", Description: "plaintext"},
 			}
@@ -1504,7 +1504,7 @@ func TestValidateSecretAcceptsCollidesWithEnvAccepts(t *testing.T) {
 			}
 		}),
 	}
-	err := Validate(cfg, vLayers(layers), testProjectDir(t), ResolveOpts{})
+	err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{})
 	if err == nil {
 		t.Fatal("expected collision error between env_accepts and secret_accepts")
 	}
@@ -1517,8 +1517,8 @@ func TestValidateSecretAcceptsCollidesWithEnvAccepts(t *testing.T) {
 // requires variants.
 func TestValidateSecretRequiresCollidesWithEnvRequires(t *testing.T) {
 	cfg := &Config{Box: map[string]BoxConfig{}}
-	layers := map[string]*Layer{
-		"svc": secretDepsLayer("svc", func(l *Layer) {
+	layers := map[string]*Candy{
+		"svc": secretDepsCandy("svc", func(l *Candy) {
 			l.envRequires = []EnvDependency{
 				{Name: "WEBUI_ADMIN_PASSWORD", Description: "plaintext"},
 			}
@@ -1527,7 +1527,7 @@ func TestValidateSecretRequiresCollidesWithEnvRequires(t *testing.T) {
 			}
 		}),
 	}
-	err := Validate(cfg, vLayers(layers), testProjectDir(t), ResolveOpts{})
+	err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{})
 	if err == nil {
 		t.Fatal("expected collision error between env_requires and secret_requires")
 	}
@@ -1540,8 +1540,8 @@ func TestValidateSecretRequiresCollidesWithEnvRequires(t *testing.T) {
 // in both secret_accepts and secret_requires in the same layer.
 func TestValidateSecretAcceptsCollidesWithSecretRequires(t *testing.T) {
 	cfg := &Config{Box: map[string]BoxConfig{}}
-	layers := map[string]*Layer{
-		"svc": secretDepsLayer("svc", func(l *Layer) {
+	layers := map[string]*Candy{
+		"svc": secretDepsCandy("svc", func(l *Candy) {
 			l.secretRequires = []EnvDependency{
 				{Name: "API_TOKEN", Description: "required"},
 			}
@@ -1550,7 +1550,7 @@ func TestValidateSecretAcceptsCollidesWithSecretRequires(t *testing.T) {
 			}
 		}),
 	}
-	err := Validate(cfg, vLayers(layers), testProjectDir(t), ResolveOpts{})
+	err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{})
 	if err == nil {
 		t.Fatal("expected collision between secret_requires and secret_accepts")
 	}
@@ -1564,8 +1564,8 @@ func TestValidateSecretAcceptsCollidesWithSecretRequires(t *testing.T) {
 // service discovery URLs; credentials must not be advertised that way.
 func TestValidateSecretCollidesWithEnvProvides(t *testing.T) {
 	cfg := &Config{Box: map[string]BoxConfig{}}
-	layers := map[string]*Layer{
-		"svc": secretDepsLayer("svc", func(l *Layer) {
+	layers := map[string]*Candy{
+		"svc": secretDepsCandy("svc", func(l *Candy) {
 			l.envProvides = map[string]string{
 				"API_TOKEN": "http://{{.ContainerName}}:8080/token", // would be plaintext
 			}
@@ -1574,7 +1574,7 @@ func TestValidateSecretCollidesWithEnvProvides(t *testing.T) {
 			}
 		}),
 	}
-	err := Validate(cfg, vLayers(layers), testProjectDir(t), ResolveOpts{})
+	err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{})
 	if err == nil {
 		t.Fatal("expected error when secret_accepts overlaps env_provides")
 	}
@@ -1588,14 +1588,14 @@ func TestValidateSecretCollidesWithEnvProvides(t *testing.T) {
 // exfiltrating unrelated user credentials.
 func TestValidateSecretAcceptsKeyMustStartWithCharly(t *testing.T) {
 	cfg := &Config{Box: map[string]BoxConfig{}}
-	layers := map[string]*Layer{
-		"svc": secretDepsLayer("svc", func(l *Layer) {
+	layers := map[string]*Candy{
+		"svc": secretDepsCandy("svc", func(l *Candy) {
 			l.secretAccepts = []EnvDependency{
 				{Name: "AWS_ACCESS_KEY_ID", Description: "bad key", Key: "aws/access-key"},
 			}
 		}),
 	}
-	err := Validate(cfg, vLayers(layers), testProjectDir(t), ResolveOpts{})
+	err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{})
 	if err == nil {
 		t.Fatal("expected error when secret_accepts Key does not start with charly/")
 	}
@@ -1615,14 +1615,14 @@ func TestValidateSecretAcceptsKeyValidFormats(t *testing.T) {
 	}
 	for _, k := range cases {
 		cfg := &Config{Box: map[string]BoxConfig{}}
-		layers := map[string]*Layer{
-			"svc": secretDepsLayer("svc", func(l *Layer) {
+		layers := map[string]*Candy{
+			"svc": secretDepsCandy("svc", func(l *Candy) {
 				l.secretAccepts = []EnvDependency{
 					{Name: "SOME_API_KEY", Description: "ok", Key: k},
 				}
 			}),
 		}
-		if err := Validate(cfg, vLayers(layers), testProjectDir(t), ResolveOpts{}); err != nil {
+		if err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{}); err != nil {
 			t.Errorf("Validate() unexpected error for Key=%q: %v", k, err)
 		}
 	}
@@ -1641,14 +1641,14 @@ func TestValidateSecretAcceptsKeyInvalidFormats(t *testing.T) {
 	}
 	for _, k := range cases {
 		cfg := &Config{Box: map[string]BoxConfig{}}
-		layers := map[string]*Layer{
-			"svc": secretDepsLayer("svc", func(l *Layer) {
+		layers := map[string]*Candy{
+			"svc": secretDepsCandy("svc", func(l *Candy) {
 				l.secretAccepts = []EnvDependency{
 					{Name: "SOME_API_KEY", Description: "ok", Key: k},
 				}
 			}),
 		}
-		err := Validate(cfg, vLayers(layers), testProjectDir(t), ResolveOpts{})
+		err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{})
 		if err == nil {
 			t.Errorf("Validate() should have rejected Key=%q", k)
 		}
@@ -1660,14 +1660,14 @@ func TestValidateSecretAcceptsKeyInvalidFormats(t *testing.T) {
 // lowercase-kebab) must be rejected.
 func TestValidateSecretAcceptsInvalidSlug(t *testing.T) {
 	cfg := &Config{Box: map[string]BoxConfig{}}
-	layers := map[string]*Layer{
-		"svc": secretDepsLayer("svc", func(l *Layer) {
+	layers := map[string]*Candy{
+		"svc": secretDepsCandy("svc", func(l *Candy) {
 			l.secretAccepts = []EnvDependency{
 				{Name: "_LEADING_UNDERSCORE", Description: "bad slug"},
 			}
 		}),
 	}
-	err := Validate(cfg, vLayers(layers), testProjectDir(t), ResolveOpts{})
+	err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{})
 	if err == nil {
 		t.Fatal("expected slug-validation error")
 	}
@@ -1694,12 +1694,12 @@ func TestEnvVarNameToPodmanSecretSlug(t *testing.T) {
 	}
 }
 
-// vLayers stamps a default per-entity version on every LOCAL layer that lacks
+// vCandies stamps a default per-entity version on every LOCAL layer that lacks
 // one, so a fixture map satisfies the mandatory-version rule
-// (validateLayerContents) without each literal repeating it — mirrors what
+// (validateCandyContents) without each literal repeating it — mirrors what
 // `charly migrate` (entity-version step) backfills in real configs. Remote layers
 // are left alone (their version comes from the fetched candy manifest).
-func vLayers(m map[string]*Layer) map[string]*Layer {
+func vCandies(m map[string]*Candy) map[string]*Candy {
 	for _, l := range m {
 		if l != nil && !l.Remote && l.Version == "" {
 			l.Version = "2026.155.1801"
@@ -1708,16 +1708,16 @@ func vLayers(m map[string]*Layer) map[string]*Layer {
 	return m
 }
 
-// TestValidateLayerMissingVersion is the proving coverage for the
+// TestValidateCandyMissingVersion is the proving coverage for the
 // mandatory-version rule: a local layer with no version: fails validation with
-// an actionable message. (Uses a distinctly-named map so the vLayers wrap that
+// an actionable message. (Uses a distinctly-named map so the vCandies wrap that
 // the other tests apply does not mask the error.)
-func TestValidateLayerMissingVersion(t *testing.T) {
+func TestValidateCandyMissingVersion(t *testing.T) {
 	cfg := &Config{Box: map[string]BoxConfig{}}
-	badLayers := map[string]*Layer{
+	badCandies := map[string]*Candy{
 		"noversion": {Name: "noversion", tasks: []Task{{Cmd: "true"}}},
 	}
-	err := Validate(cfg, badLayers, t.TempDir(), ResolveOpts{})
+	err := Validate(cfg, badCandies, t.TempDir(), ResolveOpts{})
 	if err == nil {
 		t.Fatal("expected validation error for a layer with no version:, got nil")
 	}

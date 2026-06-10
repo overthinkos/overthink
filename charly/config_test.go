@@ -137,7 +137,7 @@ func TestResolveImage(t *testing.T) {
 				t.Errorf("Platforms = %v, want %v", resolved.Platforms, tt.wantPlatforms)
 			}
 			// Bootc was deleted as an image-level field; the layer-aggregated
-			// LayerCaps.PreserveUser is the new signal. Tests that need this
+			// CandyCaps.PreserveUser is the new signal. Tests that need this
 			// behavior should compose a layer that contributes preserve_user.
 			_ = tt.wantBootc
 		})
@@ -245,10 +245,10 @@ func TestResolveImageBuilders(t *testing.T) {
 			Builder:   BuilderMap{"pixi": "default-builder", "npm": "default-builder"},
 		},
 		Box: map[string]BoxConfig{
-			"default-builder": {Layer: []string{}},
-			"custom-builder":  {Layer: []string{}},
-			"uses-default":    {Layer: []string{}},
-			"uses-custom":     {Layer: []string{}, Builder: BuilderMap{"pixi": "custom-builder"}},
+			"default-builder": {Candy: []string{}},
+			"custom-builder":  {Candy: []string{}},
+			"uses-default":    {Candy: []string{}},
+			"uses-custom":     {Candy: []string{}, Builder: BuilderMap{"pixi": "custom-builder"}},
 		},
 	}
 
@@ -278,7 +278,7 @@ func TestResolveImageBuilders(t *testing.T) {
 	cfg2 := &Config{
 		Defaults: BoxConfig{Build: BuildFormats{"rpm"}, Platforms: []string{"linux/amd64"}},
 		Box: map[string]BoxConfig{
-			"app": {Layer: []string{}},
+			"app": {Candy: []string{}},
 		},
 	}
 	resolved, err = cfg2.ResolveBox("app", "test", testProjectDir(t), ResolveOpts{})
@@ -297,7 +297,7 @@ func TestResolveImageBuilders(t *testing.T) {
 			Builder:   BuilderMap{"pixi": "my-builder"},
 		},
 		Box: map[string]BoxConfig{
-			"my-builder": {Layer: []string{}},
+			"my-builder": {Candy: []string{}},
 		},
 	}
 	resolved, err = cfg3.ResolveBox("my-builder", "test", testProjectDir(t), ResolveOpts{})
@@ -312,9 +312,9 @@ func TestResolveImageBuilders(t *testing.T) {
 	cfg4 := &Config{
 		Defaults: BoxConfig{Build: BuildFormats{"pac"}, Platforms: []string{"linux/amd64"}},
 		Box: map[string]BoxConfig{
-			"base-img":    {Build: BuildFormats{"pac"}, Layer: []string{}, Builder: BuilderMap{"aur": "aur-builder"}},
-			"aur-builder": {Layer: []string{}},
-			"child-img":   {Base: "base-img", Layer: []string{}},
+			"base-img":    {Build: BuildFormats{"pac"}, Candy: []string{}, Builder: BuilderMap{"aur": "aur-builder"}},
+			"aur-builder": {Candy: []string{}},
+			"child-img":   {Base: "base-img", Candy: []string{}},
 		},
 	}
 	resolved, err = cfg4.ResolveBox("child-img", "test", testProjectDir(t), ResolveOpts{})
@@ -335,9 +335,9 @@ func TestResolveImagePorts(t *testing.T) {
 			Port:      []string{"80:80"},
 		},
 		Box: map[string]BoxConfig{
-			"with-ports":    {Layer: []string{}, Port: []string{"9090:9090"}},
-			"inherit-ports": {Layer: []string{}},
-			"no-ports":      {Layer: []string{}, Port: []string{}},
+			"with-ports":    {Candy: []string{}, Port: []string{"9090:9090"}},
+			"inherit-ports": {Candy: []string{}},
+			"no-ports":      {Candy: []string{}, Port: []string{}},
 		},
 	}
 
@@ -520,22 +520,22 @@ func TestResolveImageDistroBaseChain(t *testing.T) {
 			"fedora": {
 				Base:   "quay.io/fedora/fedora:43",
 				Distro: []string{"fedora:43", "fedora"},
-				Layer:  []string{},
+				Candy:  []string{},
 			},
 			// Level 1: no distro set, should inherit from fedora
 			"fedora-nonfree": {
 				Base:  "fedora",
-				Layer: []string{},
+				Candy: []string{},
 			},
 			// Level 2: no distro set, should inherit through fedora-nonfree -> fedora
 			"nvidia": {
 				Base:  "fedora-nonfree",
-				Layer: []string{},
+				Candy: []string{},
 			},
 			// Level 3: no distro set, should inherit through nvidia -> fedora-nonfree -> fedora
 			"ml-app": {
 				Base:  "nvidia",
-				Layer: []string{},
+				Candy: []string{},
 			},
 		},
 	}
@@ -576,17 +576,17 @@ func TestResolveImageBuildBaseChain(t *testing.T) {
 			"arch": {
 				Base:  "docker.io/library/archlinux:latest",
 				Build: BuildFormats{"pac"},
-				Layer: []string{},
+				Candy: []string{},
 			},
 			// Level 1: no build set, should inherit from arch
 			"arch-extended": {
 				Base:  "arch",
-				Layer: []string{},
+				Candy: []string{},
 			},
 			// Level 2: no build set, should inherit through chain
 			"arch-app": {
 				Base:  "arch-extended",
-				Layer: []string{},
+				Candy: []string{},
 			},
 		},
 	}

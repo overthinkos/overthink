@@ -67,7 +67,7 @@ var recipeFromKinds = []string{"candy", "box", "pod", "vm"}
 //
 // The expander is idempotent: it consumes recipe.From and clears it, so
 // re-invocation is a no-op.
-func ExpandRecipeFrom(uf *UnifiedFile, layers map[string]*Layer, recipeName string, recipe *HarnessRecipe) error {
+func ExpandRecipeFrom(uf *UnifiedFile, layers map[string]*Candy, recipeName string, recipe *HarnessRecipe) error {
 	if recipe == nil || len(recipe.From) == 0 {
 		return nil
 	}
@@ -227,7 +227,7 @@ func (f HarnessRecipeFrom) sourceEffective() string {
 // collectScenariosForFromDescription returns the unfiltered Scenario list
 // for a `source: description` entry. Layer kinds read the layer's own
 // description; image kinds walk the layer chain via CollectDescriptions.
-func collectScenariosForFromDescription(uf *UnifiedFile, layers map[string]*Layer, from HarnessRecipeFrom) ([]Scenario, error) {
+func collectScenariosForFromDescription(uf *UnifiedFile, layers map[string]*Candy, from HarnessRecipeFrom) ([]Scenario, error) {
 	switch from.Kind {
 	case "candy":
 		layer, ok := layers[from.Name]
@@ -257,7 +257,7 @@ func collectScenariosForFromDescription(uf *UnifiedFile, layers map[string]*Laye
 		// Flatten the three sections into one slice. Authors who want
 		// section-specific behaviour can use kind: layer instead.
 		var out []Scenario
-		for _, sec := range [][]LabeledDescription{set.Layer, set.Box, set.Deploy} {
+		for _, sec := range [][]LabeledDescription{set.Candy, set.Box, set.Deploy} {
 			for _, ld := range sec {
 				out = append(out, ld.Description.Scenario...)
 			}
@@ -321,7 +321,7 @@ func scenarioImportName(prefix, name string) string {
 // dispatching by kind. For layer/image, it walks the existing collection
 // machinery; for pod/vm, it concats the entity-direct fields with whatever
 // the underlying image baked in.
-func collectChecksForFrom(uf *UnifiedFile, layers map[string]*Layer, from HarnessRecipeFrom) ([]Check, error) {
+func collectChecksForFrom(uf *UnifiedFile, layers map[string]*Candy, from HarnessRecipeFrom) ([]Check, error) {
 	switch from.Kind {
 	case "candy":
 		layer, ok := layers[from.Name]
@@ -351,8 +351,8 @@ func collectChecksForFrom(uf *UnifiedFile, layers map[string]*Layer, from Harnes
 		}
 		// Flatten the three sections into one slice; the scope filter
 		// step downstream picks which sections to keep.
-		out := make([]Check, 0, len(set.Layer)+len(set.Box)+len(set.Deploy))
-		out = append(out, set.Layer...)
+		out := make([]Check, 0, len(set.Candy)+len(set.Box)+len(set.Deploy))
+		out = append(out, set.Candy...)
 		out = append(out, set.Box...)
 		out = append(out, set.Deploy...)
 		return out, nil
@@ -368,7 +368,7 @@ func collectChecksForFrom(uf *UnifiedFile, layers map[string]*Layer, from Harnes
 			if _, hasImage := uf.Box[pod.Box]; hasImage {
 				cfg := uf.ProjectConfig()
 				if set := CollectEval(cfg, layers, pod.Box); set != nil {
-					out = append(out, set.Layer...)
+					out = append(out, set.Candy...)
 					out = append(out, set.Box...)
 					out = append(out, set.Deploy...)
 				}
@@ -590,7 +590,7 @@ func (f HarnessRecipeFrom) skipLiveOnlyEffective() bool {
 
 // sortedMapKeys returns the keys of a map[string]*Layer sorted, for
 // "available:" hint strings on errors.
-func sortedMapKeys(m map[string]*Layer) string {
+func sortedMapKeys(m map[string]*Candy) string {
 	keys := make([]string, 0, len(m))
 	for k := range m {
 		keys = append(keys, k)

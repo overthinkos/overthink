@@ -199,7 +199,7 @@ func TestValidateLibvirtHostdev(t *testing.T) {
 // --- A6: RebootStep ---
 
 func TestRebootStepInterface(t *testing.T) {
-	s := &RebootStep{LayerName: "nvidia-driver"}
+	s := &RebootStep{CandyName: "nvidia-driver"}
 	if s.Kind() != StepKindReboot {
 		t.Errorf("Kind = %q", s.Kind())
 	}
@@ -221,7 +221,7 @@ func TestBuildDeployPlanEmitsReboot(t *testing.T) {
 	img := &ResolvedBox{Name: "test-img", Distro: []string{"arch"}}
 
 	// reboot:false → no RebootStep.
-	noReboot, err := BuildDeployPlan(&Layer{Name: "x", Version: "2026.1.1"}, img, HostContext{})
+	noReboot, err := BuildDeployPlan(&Candy{Name: "x", Version: "2026.1.1"}, img, HostContext{})
 	if err != nil {
 		t.Fatalf("BuildDeployPlan(no reboot): %v", err)
 	}
@@ -232,7 +232,7 @@ func TestBuildDeployPlanEmitsReboot(t *testing.T) {
 	}
 
 	// reboot:true → trailing RebootStep.
-	withReboot, err := BuildDeployPlan(&Layer{Name: "nvidia-driver", Version: "2026.1.1", reboot: true}, img, HostContext{})
+	withReboot, err := BuildDeployPlan(&Candy{Name: "nvidia-driver", Version: "2026.1.1", reboot: true}, img, HostContext{})
 	if err != nil {
 		t.Fatalf("BuildDeployPlan(reboot): %v", err)
 	}
@@ -244,8 +244,8 @@ func TestBuildDeployPlanEmitsReboot(t *testing.T) {
 	if !isReboot {
 		t.Fatalf("last step = %T, want *RebootStep", last)
 	}
-	if rb.LayerName != "nvidia-driver" {
-		t.Errorf("RebootStep.LayerName = %q, want nvidia-driver", rb.LayerName)
+	if rb.CandyName != "nvidia-driver" {
+		t.Errorf("RebootStep.CandyName = %q, want nvidia-driver", rb.CandyName)
 	}
 }
 
@@ -327,14 +327,14 @@ func TestTransferImageToGuestReloadsCorrupt(t *testing.T) {
 // --- Render consolidation: VM + local share ONE render path per functionality ---
 
 // A copy: task MUST stage the layer file through the executor's PutFile
-// (scp+install over SSH), never a rendered `install <hostLayerDir>/<f> <dst>`
+// (scp+install over SSH), never a rendered `install <hostCandyDir>/<f> <dst>`
 // — the host path doesn't exist in the guest (the socat relay-wrapper 404 bug).
 func TestVmExecTaskCopyStagesViaPutFile(t *testing.T) {
 	fe := &fakeGuestExec{}
 	tgt := &VmDeployTarget{Exec: fe}
 	s := &TaskStep{
 		Task:     &Task{Copy: "relay-wrapper", To: "/usr/local/bin/relay-wrapper", Mode: "0755"},
-		LayerDir: "/host/cache/layers/socat",
+		CandyDir: "/host/cache/layers/socat",
 	}
 	if err := tgt.execTask(context.Background(), s, &InstallPlan{}, EmitOpts{}); err != nil {
 		t.Fatalf("execTask copy: %v", err)

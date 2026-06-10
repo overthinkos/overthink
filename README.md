@@ -461,7 +461,7 @@ discriminates where it lands:
 - **`target: k8s`** — Kustomize tree applied to k3s in-pod (candy
   triplet `/charly-infrastructure:k3s` + `k3s-server` + `k3s-agent`) or
   to an external cluster. `K3S_CLUSTER_TOKEN` auto-generated on
-  first deploy via `ensureLayerSecret` and shared with every joining
+  first deploy via `ensureCandySecret` and shared with every joining
   agent — zero operator setup. → `/charly-kubernetes:kubernetes`,
   `/charly-infrastructure:k3s`.
 - **`target: local`** — applies the candies' packages / files /
@@ -493,7 +493,7 @@ direnv loads the project; no plaintext on disk. Manage with `charly
 secrets gpg {env, show, set, unset, edit, encrypt, recipients,
 import-key, export-key, setup, doctor}`. Candy-private secrets
 (like `K3S_CLUSTER_TOKEN`) get auto-provisioned via
-`ensureLayerSecret` and stored under `charly/secret/<key>` in the
+`ensureCandySecret` and stored under `charly/secret/<key>` in the
 Secret Service. **Agent forwarding** — the `agent-forwarding` candy
 binds host `SSH_AUTH_SOCK` / `GPG_AGENT_SOCK` into the container.
 → `/charly-build:secrets`.

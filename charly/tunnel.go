@@ -168,16 +168,16 @@ type TunnelConfig struct {
 
 // collectPortProtos builds a port->protocol map from layer PortSpec data.
 // It resolves the full layer tree (including composing layers) to find all port specs.
-func collectPortProtos(layers map[string]*Layer, layerNames []string) map[int]string {
+func collectPortProtos(layers map[string]*Candy, candyNames []string) map[int]string {
 	// Resolve full layer order including sub-layers of composing layers
-	allLayers, err := ResolveLayerOrder(layerNames, layers, nil)
+	allCandies, err := ResolveCandyOrder(candyNames, layers, nil)
 	if err != nil {
 		// Fall back to direct layer names on error
-		allLayers = layerNames
+		allCandies = candyNames
 	}
 
 	protos := make(map[int]string)
-	for _, name := range allLayers {
+	for _, name := range allCandies {
 		layer, ok := layers[name]
 		if !ok {
 			continue
@@ -673,7 +673,7 @@ func resolveProto(containerPort int, portProtos map[int]string) string {
 // ResolveTunnelConfig resolves a TunnelYAML into a TunnelConfig with defaults applied.
 // portProtos maps container port -> protocol ("http" or "tcp") from layer PortSpec data.
 // boxPorts is the list of image port mappings (e.g. "18789:18789", "443:18789").
-func ResolveTunnelConfig(t *TunnelYAML, boxName string, dns string, layers map[string]*Layer, layerNames []string, portProtos map[int]string, boxPorts []string) *TunnelConfig {
+func ResolveTunnelConfig(t *TunnelYAML, boxName string, dns string, layers map[string]*Candy, candyNames []string, portProtos map[int]string, boxPorts []string) *TunnelConfig {
 	if t == nil {
 		return nil
 	}

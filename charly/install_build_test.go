@@ -9,7 +9,7 @@ import (
 
 // Integration-ish tests for BuildDeployPlan using the project's own
 // layer definitions. Not unit tests in the strict sense (they read
-// real YAML via LoadConfig + ScanAllLayerWithConfig) but they catch
+// real YAML via LoadConfig + ScanAllCandyWithConfig) but they catch
 // compile-time regressions that pure unit tests can't.
 
 // compilerTestProjectDir chdirs to the project root (the parent of charly/)
@@ -40,7 +40,7 @@ func compilerTestProjectDir(t *testing.T) (string, func()) {
 // resolves the "fedora-coder" image. Returns nil, nil if fixtures can't
 // load (used to gracefully skip in CI environments that might not have
 // the fixture layers present).
-func loadCompilerFixtures(t *testing.T, boxName string) (*Config, *ResolvedBox, map[string]*Layer) {
+func loadCompilerFixtures(t *testing.T, boxName string) (*Config, *ResolvedBox, map[string]*Candy) {
 	t.Helper()
 	dir, _ := os.Getwd()
 	cfg, err := LoadConfig(dir)
@@ -58,9 +58,9 @@ func loadCompilerFixtures(t *testing.T, boxName string) (*Config, *ResolvedBox, 
 		}
 		RegisterBuildVocabulary(distroCfg)
 	}
-	layers, err := ScanAllLayerWithConfig(dir, cfg)
+	layers, err := ScanAllCandyWithConfig(dir, cfg)
 	if err != nil {
-		t.Fatalf("ScanAllLayerWithConfig: %v", err)
+		t.Fatalf("ScanAllCandyWithConfig: %v", err)
 	}
 	img, err := cfg.ResolveBox(boxName, "testing", dir, ResolveOpts{})
 	if err != nil {
@@ -84,8 +84,8 @@ func TestBuildDeployPlanRipgrep(t *testing.T) {
 		t.Fatalf("BuildDeployPlan: %v", err)
 	}
 
-	if plan.Layer != "ripgrep" {
-		t.Errorf("plan.Layer = %q, want ripgrep", plan.Layer)
+	if plan.Candy != "ripgrep" {
+		t.Errorf("plan.Candy = %q, want ripgrep", plan.Candy)
 	}
 
 	// ripgrep is a pure rpm: package layer — expect exactly one
@@ -161,7 +161,7 @@ func TestBuildDeployPlanDevTools(t *testing.T) {
 	}
 }
 
-func TestBuildDeployPlanPixiLayer(t *testing.T) {
+func TestBuildDeployPlanPixiCandy(t *testing.T) {
 	_, cleanup := compilerTestProjectDir(t)
 	defer cleanup()
 
@@ -229,11 +229,11 @@ func TestComputeDeployIDDeterminism(t *testing.T) {
 }
 
 func TestMergePlansOrderingAndID(t *testing.T) {
-	p1 := &InstallPlan{Layer: "ripgrep", Distro: "fedora:43", Steps: []InstallStep{
+	p1 := &InstallPlan{Candy: "ripgrep", Distro: "fedora:43", Steps: []InstallStep{
 		&SystemPackagesStep{Format: "rpm", Phase: PhaseInstall, Packages: []string{"ripgrep"}},
 	}}
-	p2 := &InstallPlan{Layer: "uv", Distro: "fedora:43", Steps: []InstallStep{
-		&TaskStep{LayerName: "uv", Task: &Task{Download: "https://…"}},
+	p2 := &InstallPlan{Candy: "uv", Distro: "fedora:43", Steps: []InstallStep{
+		&TaskStep{CandyName: "uv", Task: &Task{Download: "https://…"}},
 	}}
 
 	merged := MergePlan([]*InstallPlan{p1, p2}, "fedora-coder", nil)
@@ -243,8 +243,8 @@ func TestMergePlansOrderingAndID(t *testing.T) {
 	if len(merged.Steps) != 2 {
 		t.Errorf("merged.Steps len = %d, want 2", len(merged.Steps))
 	}
-	if merged.LayersIncluded[0] != "ripgrep" || merged.LayersIncluded[1] != "uv" {
-		t.Errorf("layer order wrong: %v", merged.LayersIncluded)
+	if merged.CandiesIncluded[0] != "ripgrep" || merged.CandiesIncluded[1] != "uv" {
+		t.Errorf("layer order wrong: %v", merged.CandiesIncluded)
 	}
 	if merged.DeployID == "" {
 		t.Errorf("merged DeployID is empty")
@@ -268,7 +268,7 @@ func TestEnsureServiceSuffix(t *testing.T) {
 
 func TestDescribePlanSummary(t *testing.T) {
 	p := &InstallPlan{
-		Layer:  "x",
+		Candy:  "x",
 		Box:    "y",
 		Distro: "z",
 		Steps: []InstallStep{

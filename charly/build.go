@@ -155,7 +155,7 @@ func (c *BuildCmd) Run() error {
 
 	if len(c.Boxes) > 0 {
 		// Filtered build: use sequential order
-		order, err := ResolveBoxOrder(gen.Boxes, gen.Layers)
+		order, err := ResolveBoxOrder(gen.Boxes, gen.Candies)
 		if err != nil {
 			return err
 		}
@@ -173,7 +173,7 @@ func (c *BuildCmd) Run() error {
 		}
 	} else {
 		// Full build: use level-based parallelism
-		levels, err := ResolveBoxLevels(gen.Boxes, gen.Layers)
+		levels, err := ResolveBoxLevels(gen.Boxes, gen.Candies)
 		if err != nil {
 			return err
 		}
@@ -225,7 +225,7 @@ func (c *BuildCmd) Run() error {
 
 	// Push after merge (Podman only; Docker buildx pushes during build)
 	if c.Push && rt.BuildEngine == "podman" {
-		order, err := ResolveBoxOrder(gen.Boxes, gen.Layers)
+		order, err := ResolveBoxOrder(gen.Boxes, gen.Candies)
 		if err != nil {
 			return err
 		}
@@ -902,7 +902,7 @@ func ensureCharlyBinaryFresh(dir string, boxes map[string]*ResolvedBox, requeste
 		if !ok {
 			continue
 		}
-		for _, layer := range img.Layer {
+		for _, layer := range img.Candy {
 			if layer == "charly" {
 				needs = true
 				break

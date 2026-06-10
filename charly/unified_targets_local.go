@@ -92,7 +92,7 @@ func (t *LocalUnifiedTarget) Del(ctx context.Context, opts DelOpts) error {
 		}
 		if opts.DryRun {
 			fmt.Printf("[dry-run] would tear down host deploy %s (image=%s, %d layers)\n",
-				rec.DeployID, rec.Image, len(rec.Layer))
+				rec.DeployID, rec.Image, len(rec.Candy))
 			continue
 		}
 		if terr := teardownHostDeploy(paths, &rec, hostHome, re); terr != nil {
@@ -103,7 +103,7 @@ func (t *LocalUnifiedTarget) Del(ctx context.Context, opts DelOpts) error {
 	}
 
 	if anyRemoved && !opts.DryRun && !opts.KeepLedger {
-		if remainingLayers, _ := os.ReadDir(paths.Layers); len(remainingLayers) == 0 {
+		if remainingCandies, _ := os.ReadDir(paths.Candies); len(remainingCandies) == 0 {
 			shell := DetectLoginShell()
 			_ = RemoveManagedBlock(shell, hostHome)
 		}
@@ -115,19 +115,19 @@ func (t *LocalUnifiedTarget) Del(ctx context.Context, opts DelOpts) error {
 // function so LocalUnifiedTarget.Del can call it without a DeployDelCmd
 // instance.
 func teardownHostDeploy(paths *LedgerPaths, rec *DeployRecord, hostHome string, re ReverseExecutor) error {
-	for _, layer := range rec.Layer {
-		layerRec, shouldRemove, err := RemoveLayerDeployment(paths, layer, rec.DeployID)
+	for _, layer := range rec.Candy {
+		candyRec, shouldRemove, err := RemoveCandyDeployment(paths, layer, rec.DeployID)
 		if err != nil {
 			return err
 		}
 		if !shouldRemove {
 			continue
 		}
-		if err := runReverseOps(layerRec.ReverseOps, re); err != nil {
+		if err := runReverseOps(candyRec.ReverseOps, re); err != nil {
 			return fmt.Errorf("reversing layer %s: %w", layer, err)
 		}
 		_ = RemoveEnvdFile(hostHome, layer)
-		if err := DeleteLayerRecord(paths, layer); err != nil {
+		if err := DeleteCandyRecord(paths, layer); err != nil {
 			return err
 		}
 	}
@@ -207,7 +207,7 @@ func (t *LocalUnifiedTarget) Status(ctx context.Context) (StatusInfo, error) {
 		return StatusInfo{}, err
 	}
 	deploys := 0
-	totalLayers := 0
+	totalCandies := 0
 	var boxes []string
 	for _, e := range entries {
 		if e.IsDir() {
@@ -225,7 +225,7 @@ func (t *LocalUnifiedTarget) Status(ctx context.Context) (StatusInfo, error) {
 			continue
 		}
 		deploys++
-		totalLayers += len(rec.Layer)
+		totalCandies += len(rec.Candy)
 		boxes = append(boxes, rec.Image)
 	}
 	state := "stopped"
@@ -237,7 +237,7 @@ func (t *LocalUnifiedTarget) Status(ctx context.Context) (StatusInfo, error) {
 		Healthy: deploys > 0,
 		Details: map[string]string{
 			"deploys": fmt.Sprintf("%d", deploys),
-			"layers":  fmt.Sprintf("%d", totalLayers),
+			"layers":  fmt.Sprintf("%d", totalCandies),
 			"images":  strings.Join(boxes, ","),
 		},
 	}, nil
@@ -346,7 +346,7 @@ func (t *LocalUnifiedTarget) Add(ctx context.Context, dctx *DeployContext, plans
 
 	// Resolve layer secret_requires / secret_accepts and inject them into
 	// each TaskStep's env BEFORE emission (R3 shared helper).
-	layerList, secretEnv, err := prepareLayerSecrets(plans, dctx.Dir)
+	candyList, secretEnv, err := prepareCandySecrets(plans, dctx.Dir)
 	if err != nil {
 		return fmt.Errorf("loading layers for secret resolution: %w", err)
 	}
@@ -360,7 +360,7 @@ func (t *LocalUnifiedTarget) Add(ctx context.Context, dctx *DeployContext, plans
 
 	// Retrieve layer artifacts + k3s post-hook (R3 shared helper). No-op
 	// under DryRun.
-	if err := retrieveArtifactsAndK3s(ctx, exec, layerList, dctx.Name, artifactEnv, opts); err != nil {
+	if err := retrieveArtifactsAndK3s(ctx, exec, candyList, dctx.Name, artifactEnv, opts); err != nil {
 		return fmt.Errorf("retrieving layer artifacts: %w", err)
 	}
 

@@ -515,9 +515,9 @@ func buildStartArgs(engine, imageRef string, uid, gid int, ports []string, name 
 
 // resolveEntrypoint determines the init system entrypoint for an image.
 // Uses build.yml init: section config when available, falls back to well-known defaults.
-func resolveEntrypoint(initConfig *InitConfig, layers map[string]*Layer, layerOrder []string) []string {
+func resolveEntrypoint(initConfig *InitConfig, layers map[string]*Candy, candyOrder []string) []string {
 	if initConfig != nil {
-		initName, initDef := initConfig.ResolveInitSystem(layers, layerOrder, "")
+		initName, initDef := initConfig.ResolveInitSystem(layers, candyOrder, "")
 		if initName != "" && initDef != nil && len(initDef.Entrypoint) > 0 {
 			return initDef.Entrypoint
 		}

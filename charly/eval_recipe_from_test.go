@@ -7,8 +7,8 @@ import (
 
 // fixture builders -----------------------------------------------------------
 
-func fxLayer(name string, checks []Check) *Layer {
-	return &Layer{Name: name, tests: checks}
+func fxCandy(name string, checks []Check) *Candy {
+	return &Candy{Name: name, tests: checks}
 }
 
 func fxCheckFile(id, path string) Check {
@@ -43,10 +43,10 @@ func fxUnified() *UnifiedFile {
 
 // per-kind expansion ---------------------------------------------------------
 
-func TestExpandFromLayer(t *testing.T) {
+func TestExpandFromCandy(t *testing.T) {
 	uf := fxUnified()
-	layers := map[string]*Layer{
-		"sshd": fxLayer("sshd", []Check{
+	layers := map[string]*Candy{
+		"sshd": fxCandy("sshd", []Check{
 			fxCheckFile("sshd-binary", "/usr/sbin/sshd"),
 			fxCheckFile("sshd-wrapper", "/usr/local/bin/sshd-wrapper"),
 		}),
@@ -88,7 +88,7 @@ func TestExpandFromImage(t *testing.T) {
 			fxCheckCommand("arch-coder-charly-version", "charly version"),
 		},
 	}
-	layers := map[string]*Layer{}
+	layers := map[string]*Candy{}
 	recipe := &HarnessRecipe{
 		From: []HarnessRecipeFrom{
 			{Kind: "box", Name: "arch-coder", Pod: "selftest-img"},
@@ -108,7 +108,7 @@ func TestExpandFromPod(t *testing.T) {
 		Eval:       []Check{fxCheckFile("redis-binary", "/usr/bin/redis-server")},
 		DeployEval: []Check{fxCheckCommand("redis-ping", "redis-cli ping")},
 	}
-	layers := map[string]*Layer{}
+	layers := map[string]*Candy{}
 	recipe := &HarnessRecipe{
 		From: []HarnessRecipeFrom{
 			{Kind: "pod", Name: "redis", Pod: "selftest-pod"},
@@ -128,7 +128,7 @@ func TestExpandFromVM(t *testing.T) {
 		Eval:       []Check{fxCheckCommand("vm-id", "id")},
 		DeployEval: []Check{fxCheckCommand("vm-uptime", "uptime")},
 	}
-	layers := map[string]*Layer{}
+	layers := map[string]*Candy{}
 	recipe := &HarnessRecipe{
 		From: []HarnessRecipeFrom{
 			{Kind: "vm", Name: "arch-vm", Pod: "selftest-vm"},
@@ -152,8 +152,8 @@ func TestMultiKindComposition(t *testing.T) {
 	uf.Pod["pod-a"] = &PodSpec{
 		Eval: []Check{fxCheckFile("pod-a-test", "/etc/foo")},
 	}
-	layers := map[string]*Layer{
-		"layer-a": fxLayer("layer-a", []Check{fxCheckFile("layer-a-test", "/etc/bar")}),
+	layers := map[string]*Candy{
+		"layer-a": fxCandy("layer-a", []Check{fxCheckFile("layer-a-test", "/etc/bar")}),
 	}
 	recipe := &HarnessRecipe{
 		From: []HarnessRecipeFrom{
@@ -209,8 +209,8 @@ func scenarioNames(scs []Scenario) []string {
 
 func TestSelectExcludeFilterPipeline(t *testing.T) {
 	uf := fxUnified()
-	layers := map[string]*Layer{
-		"l": fxLayer("l", []Check{
+	layers := map[string]*Candy{
+		"l": fxCandy("l", []Check{
 			fxCheckFile("a", "/a"),
 			fxCheckFile("b", "/b"),
 			fxCheckFile("c", "/c"),
@@ -241,8 +241,8 @@ func TestSelectExcludeFilterPipeline(t *testing.T) {
 
 func TestLiveOnlyVerbsDroppedByDefault(t *testing.T) {
 	uf := fxUnified()
-	layers := map[string]*Layer{
-		"l": fxLayer("l", []Check{
+	layers := map[string]*Candy{
+		"l": fxCandy("l", []Check{
 			fxCheckFile("real", "/real"),
 			fxCheckLiveOnly("cdp-thing"),
 		}),
@@ -262,8 +262,8 @@ func TestLiveOnlyVerbsDroppedByDefault(t *testing.T) {
 
 func TestEmptyAfterFilterIsError(t *testing.T) {
 	uf := fxUnified()
-	layers := map[string]*Layer{
-		"l": fxLayer("l", []Check{fxCheckFile("a", "/a")}),
+	layers := map[string]*Candy{
+		"l": fxCandy("l", []Check{fxCheckFile("a", "/a")}),
 	}
 	recipe := &HarnessRecipe{
 		From: []HarnessRecipeFrom{
@@ -288,7 +288,7 @@ func TestUnknownEntityError(t *testing.T) {
 			{Kind: "candy", Name: "nope", Pod: "p"},
 		},
 	}
-	err := ExpandRecipeFrom(uf, map[string]*Layer{}, "test", recipe)
+	err := ExpandRecipeFrom(uf, map[string]*Candy{}, "test", recipe)
 	if err == nil || !strings.Contains(err.Error(), "not found") {
 		t.Fatalf("expected 'not found' error, got %v", err)
 	}
@@ -308,8 +308,8 @@ func TestInvalidKindError(t *testing.T) {
 
 func TestNamingCollisionError(t *testing.T) {
 	uf := fxUnified()
-	layers := map[string]*Layer{
-		"l": fxLayer("l", []Check{fxCheckFile("dup", "/a")}),
+	layers := map[string]*Candy{
+		"l": fxCandy("l", []Check{fxCheckFile("dup", "/a")}),
 	}
 	recipe := &HarnessRecipe{
 		From: []HarnessRecipeFrom{
@@ -327,8 +327,8 @@ func TestNamingCollisionError(t *testing.T) {
 
 func TestPrefixDisambiguatesCollision(t *testing.T) {
 	uf := fxUnified()
-	layers := map[string]*Layer{
-		"l": fxLayer("l", []Check{fxCheckFile("dup", "/a")}),
+	layers := map[string]*Candy{
+		"l": fxCandy("l", []Check{fxCheckFile("dup", "/a")}),
 	}
 	recipe := &HarnessRecipe{
 		From: []HarnessRecipeFrom{
@@ -355,8 +355,8 @@ func TestImportedScenarioCountEqualsCheckCount(t *testing.T) {
 	// N checks (post-filter) MUST produce exactly N synthetic scenarios,
 	// each with exactly one Step.
 	uf := fxUnified()
-	layers := map[string]*Layer{
-		"l": fxLayer("l", []Check{
+	layers := map[string]*Candy{
+		"l": fxCandy("l", []Check{
 			fxCheckFile("a", "/a"),
 			fxCheckFile("b", "/b"),
 			fxCheckFile("c", "/c"),
@@ -393,8 +393,8 @@ func TestImportedScenarioStepShape(t *testing.T) {
 	// to a hand-written scenario).
 	uf := fxUnified()
 	src := fxCheckFile("source", "/the/file")
-	layers := map[string]*Layer{
-		"l": fxLayer("l", []Check{src}),
+	layers := map[string]*Candy{
+		"l": fxCandy("l", []Check{src}),
 	}
 	recipe := &HarnessRecipe{
 		From: []HarnessRecipeFrom{
@@ -420,7 +420,7 @@ func TestImportedScenarioStepShape(t *testing.T) {
 
 func TestIdempotentExpansion(t *testing.T) {
 	uf := fxUnified()
-	layers := map[string]*Layer{"l": fxLayer("l", []Check{fxCheckFile("a", "/a")})}
+	layers := map[string]*Candy{"l": fxCandy("l", []Check{fxCheckFile("a", "/a")})}
 	recipe := &HarnessRecipe{
 		From: []HarnessRecipeFrom{{Kind: "candy", Name: "l", Pod: "p"}},
 	}
@@ -449,7 +449,7 @@ func TestScopeFilterDeployOnly(t *testing.T) {
 			{Kind: "box", Name: "i", Pod: "p", Scope: []string{"deploy"}},
 		},
 	}
-	if err := ExpandRecipeFrom(uf, map[string]*Layer{}, "test", recipe); err != nil {
+	if err := ExpandRecipeFrom(uf, map[string]*Candy{}, "test", recipe); err != nil {
 		t.Fatalf("expander error: %v", err)
 	}
 	if len(recipe.Scenario) != 1 || recipe.Scenario[0].Name != "img-deploy" {

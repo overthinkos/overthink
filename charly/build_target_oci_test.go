@@ -14,9 +14,9 @@ import (
 
 func TestOCITargetEmitShellHook(t *testing.T) {
 	tgt := &OCITarget{}
-	plan := &InstallPlan{Layer: "uv", Steps: []InstallStep{
+	plan := &InstallPlan{Candy: "uv", Steps: []InstallStep{
 		&ShellHookStep{
-			LayerName: "uv",
+			CandyName: "uv",
 			EnvVars: map[string]string{
 				"UV_INSTALL_DIR": "/usr/local/bin",
 			},
@@ -48,7 +48,7 @@ func TestOCITargetEmitSystemPackagesWithLegacyTemplate(t *testing.T) {
 		},
 	}
 	tgt := &OCITarget{DistroDef: distro}
-	plan := &InstallPlan{Layer: "ripgrep", Steps: []InstallStep{
+	plan := &InstallPlan{Candy: "ripgrep", Steps: []InstallStep{
 		&SystemPackagesStep{
 			Format:   "rpm",
 			Phase:    PhaseInstall,
@@ -82,7 +82,7 @@ func TestOCITargetEmitSystemPackagesPrefersNewPhases(t *testing.T) {
 		},
 	}
 	tgt := &OCITarget{DistroDef: distro}
-	plan := &InstallPlan{Layer: "foo", Steps: []InstallStep{
+	plan := &InstallPlan{Candy: "foo", Steps: []InstallStep{
 		&SystemPackagesStep{
 			Format:   "rpm",
 			Phase:    PhaseInstall,
@@ -107,7 +107,7 @@ func TestOCITargetEmitSystemPackagesPrefersNewPhases(t *testing.T) {
 func TestOCITargetSkipsVenueSkip(t *testing.T) {
 	// A step with VenueSkip should be elided entirely.
 	tgt := &OCITarget{}
-	plan := &InstallPlan{Layer: "x", Steps: []InstallStep{
+	plan := &InstallPlan{Candy: "x", Steps: []InstallStep{
 		&fakeSkipStep{},
 	}}
 	if err := tgt.Emit([]*InstallPlan{plan}, EmitOpts{}); err != nil {
@@ -121,7 +121,7 @@ func TestOCITargetSkipsVenueSkip(t *testing.T) {
 
 func TestOCITargetEmitRepoChange(t *testing.T) {
 	tgt := &OCITarget{}
-	plan := &InstallPlan{Layer: "rpmfusion", Steps: []InstallStep{
+	plan := &InstallPlan{Candy: "rpmfusion", Steps: []InstallStep{
 		&RepoChangeStep{
 			Format:  "rpm",
 			File:    "/etc/yum.repos.d/rpmfusion-free.repo",

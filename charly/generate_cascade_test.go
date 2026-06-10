@@ -16,7 +16,7 @@ func TestGenerateBuildPath_FoldsTopPackagesAndCascade(t *testing.T) {
 
 	// A layer with a top-level base + a bare-distro tag section + a versioned
 	// override — exercises base-fold + union across [debian:13, debian].
-	layer := &Layer{Name: "pkglayer"}
+	layer := &Candy{Name: "pkglayer"}
 	derivePackageSectionsFromCalamares(layer, &CandyYAML{
 		Package: PackageItemsFromStrings([]string{"base-pkg"}),
 		Distro: map[string]*DistroPackages{
@@ -28,7 +28,7 @@ func TestGenerateBuildPath_FoldsTopPackagesAndCascade(t *testing.T) {
 	g := &Generator{
 		BuildDir: tmpDir,
 		Config:   &Config{},
-		Layers:   map[string]*Layer{"pkglayer": layer},
+		Candies:   map[string]*Candy{"pkglayer": layer},
 		Boxes: map[string]*ResolvedBox{
 			"deb-image": {
 				Name:           "deb-image",
@@ -37,7 +37,7 @@ func TestGenerateBuildPath_FoldsTopPackagesAndCascade(t *testing.T) {
 				Registry:       "ghcr.io/test",
 				Tag:            "latest",
 				FullTag:        "ghcr.io/test/deb-image:latest",
-				Layer:          []string{"pkglayer"},
+				Candy:          []string{"pkglayer"},
 				Pkg:            "deb",
 				BuildFormats:   []string{"deb"},
 				Distro:         []string{"debian:13", "debian"},

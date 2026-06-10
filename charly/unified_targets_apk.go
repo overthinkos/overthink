@@ -36,7 +36,7 @@ func (t *AndroidUnifiedTarget) Add(ctx context.Context, dctx *DeployContext, pla
 	// Dry-run prints the planned installs WITHOUT resolving (or requiring)
 	// a live device — the emulator pod may not be running yet.
 	if opts.DryRun {
-		fmt.Printf("[dry-run] android device %q (apk packages from add_layer: %v)\n", node.Android, node.AddLayer)
+		fmt.Printf("[dry-run] android device %q (apk packages from add_layer: %v)\n", node.Android, node.AddCandy)
 		return (&AndroidDeployTarget{}).Emit(plans, opts)
 	}
 

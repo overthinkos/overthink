@@ -16,12 +16,12 @@ import (
 // and appended a `layer:` map the loader ignores.
 func TestCandySet_DescendsIntoCandyWrapper(t *testing.T) {
 	dir := t.TempDir()
-	layerDir := filepath.Join(dir, "candy", "foo")
-	if err := os.MkdirAll(layerDir, 0o755); err != nil {
+	candyDir := filepath.Join(dir, "candy", "foo")
+	if err := os.MkdirAll(candyDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
 	const start = "candy:\n  name: foo\n  version: 2026.1.1\n"
-	if err := os.WriteFile(filepath.Join(layerDir, UnifiedFileName), []byte(start), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(candyDir, UnifiedFileName), []byte(start), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	t.Chdir(dir)
@@ -30,7 +30,7 @@ func TestCandySet_DescendsIntoCandyWrapper(t *testing.T) {
 		t.Fatalf("CandySetCmd.Run: %v", err)
 	}
 
-	out, err := os.ReadFile(filepath.Join(layerDir, UnifiedFileName))
+	out, err := os.ReadFile(filepath.Join(candyDir, UnifiedFileName))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -41,7 +41,7 @@ func TestCandySet_DescendsIntoCandyWrapper(t *testing.T) {
 	if _, hasTop := root["version"]; hasTop {
 		t.Fatalf("stray top-level version: introduced (the bug):\n%s", out)
 	}
-	if _, hasLayer := root["layer"]; hasLayer {
+	if _, hasCandy := root["layer"]; hasCandy {
 		t.Fatalf("stray `layer:` wrapper introduced (pre-rename bug):\n%s", out)
 	}
 	candy, ok := root["candy"].(map[string]any)
@@ -56,7 +56,7 @@ func TestCandySet_DescendsIntoCandyWrapper(t *testing.T) {
 	if err := (&CandySetCmd{Name: "foo", Path: "candy.name", Value: "bar"}).Run(); err != nil {
 		t.Fatalf("CandySetCmd.Run (candy.-prefixed): %v", err)
 	}
-	out2, err := os.ReadFile(filepath.Join(layerDir, UnifiedFileName))
+	out2, err := os.ReadFile(filepath.Join(candyDir, UnifiedFileName))
 	if err != nil {
 		t.Fatal(err)
 	}

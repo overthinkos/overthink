@@ -57,13 +57,13 @@ func (t *VmUnifiedTarget) Del(ctx context.Context, opts DelOpts) error {
 	}
 	if opts.DryRun {
 		fmt.Printf("[dry-run] would tear down VM deploy %s (deploy_id=%s, %d layers)\n",
-			t.NodeName, rec.DeployID, len(rec.Layer))
-		for _, layer := range rec.Layer {
-			layerRec, lerr := ReadLayerRecord(paths, layer)
-			if lerr != nil || layerRec == nil {
+			t.NodeName, rec.DeployID, len(rec.Candy))
+		for _, layer := range rec.Candy {
+			candyRec, lerr := ReadCandyRecord(paths, layer)
+			if lerr != nil || candyRec == nil {
 				continue
 			}
-			for _, op := range layerRec.ReverseOps {
+			for _, op := range candyRec.ReverseOps {
 				fmt.Printf("  - %s %v\n", op.Kind, op.Targets)
 			}
 		}
@@ -86,19 +86,19 @@ func (t *VmUnifiedTarget) Del(ctx context.Context, opts DelOpts) error {
 		Runner:          t.RevRunner,
 	}
 
-	for _, layer := range rec.Layer {
-		layerRec, shouldRemove, lerr := RemoveLayerDeployment(paths, layer, rec.DeployID)
+	for _, layer := range rec.Candy {
+		candyRec, shouldRemove, lerr := RemoveCandyDeployment(paths, layer, rec.DeployID)
 		if lerr != nil {
 			return fmt.Errorf("removing layer deployment %s: %w", layer, lerr)
 		}
 		if !shouldRemove {
 			continue
 		}
-		if rerr := runReverseOps(layerRec.ReverseOps, re); rerr != nil {
+		if rerr := runReverseOps(candyRec.ReverseOps, re); rerr != nil {
 			return fmt.Errorf("reversing layer %s: %w", layer, rerr)
 		}
 		_ = t.RevRunner.RunUser(fmt.Sprintf(`rm -f "$HOME/.config/opencharly/env.d/%s.env"`, layer))
-		if derr := DeleteLayerRecord(paths, layer); derr != nil {
+		if derr := DeleteCandyRecord(paths, layer); derr != nil {
 			return fmt.Errorf("deleting layer record %s: %w", layer, derr)
 		}
 	}
@@ -493,7 +493,7 @@ func (t *VmUnifiedTarget) Add(ctx context.Context, dctx *DeployContext, plans []
 
 	// Resolve layer secrets + inject them into TaskSteps BEFORE emission
 	// (R3 shared helper).
-	layerList, secretEnv, err := prepareLayerSecrets(plans, dir)
+	candyList, secretEnv, err := prepareCandySecrets(plans, dir)
 	if err != nil {
 		return fmt.Errorf("loading layers for secret resolution: %w", err)
 	}
@@ -537,7 +537,7 @@ func (t *VmUnifiedTarget) Add(ctx context.Context, dctx *DeployContext, plans []
 	// under "vm-<entity>" — the name `cluster:` refs use (e.g. the eval-k3s-vm
 	// bed's `cluster: "vm-k3s-vm"`). Passing the deploy key here wrote the fresh
 	// kubeconfig under the wrong profile name, leaving the probe on a stale CA.
-	if err := retrieveArtifactsAndK3s(ctx, exec, layerList, "vm:"+vmName, artifactEnv, opts); err != nil {
+	if err := retrieveArtifactsAndK3s(ctx, exec, candyList, "vm:"+vmName, artifactEnv, opts); err != nil {
 		return fmt.Errorf("retrieving layer artifacts: %w", err)
 	}
 

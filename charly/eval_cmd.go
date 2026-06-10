@@ -367,16 +367,16 @@ func (c *EvalLiveCmd) runVm() error {
 	// differs from its vm entity (eval-k3s-vm -> vm: k3s-vm) resolves to its
 	// own entry rather than being mis-matched via the vm entity name.
 	var projectTests, localTests []Check
-	var addLayers []string
+	var addCandies []string
 	// Nested dotted-path short-circuit: when the request is for a
 	// child node, use its own Tests directly instead of the parent's.
 	if nestedLeaf != nil {
 		projectTests = nestedLeaf.Eval
-		addLayers = nestedLeaf.AddLayer
+		addCandies = nestedLeaf.AddCandy
 	} else if pc := uf.ProjectDeployConfig(); pc != nil {
 		if entry, ok := findVmDeployNode(pc.Deploy, c.Box, vmName); ok {
 			projectTests = entry.Eval
-			addLayers = entry.AddLayer
+			addCandies = entry.AddCandy
 		}
 	}
 	if dc := loadDeployConfigForRead("charly eval vm"); dc != nil {
@@ -400,8 +400,8 @@ func (c *EvalLiveCmd) runVm() error {
 	// `charly eval live` work against any deployment (disposable or not) with ONE
 	// check set per layer instead of a copy on each deploy (R3). Deploy-level
 	// checks override a layer check on id collision (layer is the base).
-	if layerChecks := collectAddLayerDeployEval(uf, dir, addLayers); len(layerChecks) > 0 {
-		tests = MergeDeployEval(layerChecks, tests)
+	if candyChecks := collectAddCandyDeployEval(uf, dir, addCandies); len(candyChecks) > 0 {
+		tests = MergeDeployEval(candyChecks, tests)
 	}
 
 	// SSH connection details (User/Port/IdentityFile) live in the
@@ -540,39 +540,39 @@ func vmHostdevCount(spec *VmSpec) int {
 	return len(spec.Libvirt.Devices.Hostdevs)
 }
 
-// collectAddLayerDeployEval collects the deploy-scope eval checks from each
-// layer a VM deployment applies via add_layer. ProjectLayers resolves the
+// collectAddCandyDeployEval collects the deploy-scope eval checks from each
+// layer a VM deployment applies via add_layer. ProjectCandies resolves the
 // project's LOCAL layer map (the shared check-only layers live here); remote
 // @github layers not materialized locally are skipped. This is the general
 // mechanism that lets `charly eval live <vm>` run a layer's checks against ANY
 // deployment that applies it — the disposable bed or the persistent operator
 // VM — so one shared check-only layer covers both (no per-deploy copy, R3).
-func collectAddLayerDeployEval(uf *UnifiedFile, dir string, addLayers []string) []Check {
-	if uf == nil || len(addLayers) == 0 {
+func collectAddCandyDeployEval(uf *UnifiedFile, dir string, addCandies []string) []Check {
+	if uf == nil || len(addCandies) == 0 {
 		return nil
 	}
-	// ScanAllLayerWithConfig (not ProjectLayers) — it includes the FILESYSTEM
+	// ScanAllCandyWithConfig (not ProjectCandies) — it includes the FILESYSTEM
 	// layers under candy/ discovered via `discover:`, where the shared
-	// check-only layers live; ProjectLayers only sees inline `layer:` entries.
+	// check-only layers live; ProjectCandies only sees inline `layer:` entries.
 	var cfg *Config
 	if uf != nil {
 		cfg = uf.ProjectConfig()
 	}
-	layerMap, err := ScanAllLayerWithConfig(dir, cfg)
-	if err != nil || layerMap == nil {
+	candyMap, err := ScanAllCandyWithConfig(dir, cfg)
+	if err != nil || candyMap == nil {
 		return nil
 	}
 	var out []Check
-	for _, ref := range addLayers {
+	for _, ref := range addCandies {
 		// Only LOCAL (filesystem) layers contribute checks here — the shared
 		// check-only layers live in the project's candy/ dir. Remote @github
 		// layers are SKIPPED: they carry their own test context (and a re-scan
 		// can resolve a different cached version than what was deployed, which
 		// would surface checks the deployed version never defined).
-		if IsRemoteLayerRef(ref) {
+		if IsRemoteCandyRef(ref) {
 			continue
 		}
-		lyr, ok := layerMap[BareRef(ref)]
+		lyr, ok := candyMap[BareRef(ref)]
 		if !ok || lyr == nil {
 			continue
 		}
@@ -874,7 +874,7 @@ func gatherSections(baked *LabelEvalSet, local []Check, sections []string) []Che
 	for _, s := range sections {
 		switch s {
 		case "candy":
-			out = append(out, baked.Layer...)
+			out = append(out, baked.Candy...)
 		case "box":
 			out = append(out, baked.Box...)
 		case "deploy":

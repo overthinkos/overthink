@@ -132,14 +132,14 @@ type CollectedAlias struct {
 // CollectBoxAlias gathers aliases from the image's own layers + image-level config.
 // No base chain traversal — aliases are leaf-image specific.
 // Layer aliases come first; image-level overrides by name.
-func CollectBoxAlias(cfg *Config, layers map[string]*Layer, boxName string) ([]CollectedAlias, error) {
+func CollectBoxAlias(cfg *Config, layers map[string]*Candy, boxName string) ([]CollectedAlias, error) {
 	img, ok := cfg.Box[boxName]
 	if !ok {
 		return nil, fmt.Errorf("box %q not found in charly.yml", boxName)
 	}
 
 	// Resolve layers for this image (includes transitive deps)
-	resolved, err := ResolveLayerOrder(img.Layer, layers, nil)
+	resolved, err := ResolveCandyOrder(img.Candy, layers, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -148,8 +148,8 @@ func CollectBoxAlias(cfg *Config, layers map[string]*Layer, boxName string) ([]C
 	var result []CollectedAlias
 
 	// Collect from layers
-	for _, layerName := range resolved {
-		layer, ok := layers[layerName]
+	for _, candyName := range resolved {
+		layer, ok := layers[candyName]
 		if !ok || !layer.HasAliases() {
 			continue
 		}
@@ -384,12 +384,12 @@ func (c *ListAliasesCmd) Run() error {
 		return err
 	}
 
-	layers, err := ScanAllLayerWithConfig(dir, cfg)
+	layers, err := ScanAllCandyWithConfig(dir, cfg)
 	if err != nil {
 		return err
 	}
 
-	result := AliasLayer(layers)
+	result := AliasCandy(layers)
 	names := make([]string, 0, len(result))
 	for _, layer := range result {
 		names = append(names, layer.Name)

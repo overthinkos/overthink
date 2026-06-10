@@ -16,8 +16,8 @@ import (
 // Returns the list of files changed (or that would change under dryRun).
 // This is the chain-callable form used by the unified `charly migrate` runner.
 func MigrateShellSchema(dir string, dryRun bool) ([]string, error) {
-	layersDir := filepath.Join(dir, "layers")
-	entries, err := os.ReadDir(layersDir)
+	candiesDir := filepath.Join(dir, "layers")
+	entries, err := os.ReadDir(candiesDir)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil
@@ -29,26 +29,26 @@ func MigrateShellSchema(dir string, dryRun bool) ([]string, error) {
 		if !entry.IsDir() {
 			continue
 		}
-		layerYAML := filepath.Join(layersDir, entry.Name(), "layer.yml")
-		if _, err := os.Stat(layerYAML); err != nil {
+		candyYAML := filepath.Join(candiesDir, entry.Name(), "layer.yml")
+		if _, err := os.Stat(candyYAML); err != nil {
 			continue
 		}
-		did, err := migrateLayerShellSchema(layerYAML, dryRun)
+		did, err := migrateCandyShellSchema(candyYAML, dryRun)
 		if err != nil {
-			return changed, fmt.Errorf("%s: %w", layerYAML, err)
+			return changed, fmt.Errorf("%s: %w", candyYAML, err)
 		}
 		if did {
-			changed = append(changed, layerYAML)
+			changed = append(changed, candyYAML)
 		}
 	}
 	return changed, nil
 }
 
-// migrateLayerShellSchema parses one layer.yml, scans for legacy
+// migrateCandyShellSchema parses one layer.yml, scans for legacy
 // heredoc cmd: tasks, and rewrites the file with a shell: schema.
 // Returns (changed, err) — changed is true when the file's content
 // would actually differ.
-func migrateLayerShellSchema(path string, dryRun bool) (bool, error) {
+func migrateCandyShellSchema(path string, dryRun bool) (bool, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return false, err

@@ -26,8 +26,8 @@ type BoxCmd struct {
 	// Authoring verbs — added so the MCP tool surface (auto-reflected from
 	// Kong) can author a project from scratch over RPC.
 	Set       BoxSetCmd       `cmd:"" help:"Set a value in charly.yml by dot-path (e.g. box.foo.base fedora)"`
-	AddLayer  BoxAddCandyCmd  `cmd:"" name:"add-candy" help:"Append a candy to a box's candy: list (idempotent)"`
-	RmLayer   BoxRmCandyCmd   `cmd:"" name:"rm-candy" help:"Remove a candy from a box's candy: list"`
+	AddCandy  BoxAddCandyCmd  `cmd:"" name:"add-candy" help:"Append a candy to a box's candy: list (idempotent)"`
+	RmCandy   BoxRmCandyCmd   `cmd:"" name:"rm-candy" help:"Remove a candy from a box's candy: list"`
 	Fetch     BoxFetchCmd     `cmd:"" help:"Pre-prime the remote-repo cache (default: overthinkos/overthink)"`
 	Refresh   BoxRefreshCmd   `cmd:"" help:"Force re-clone of a remote project repo"`
 	Write     BoxWriteCmd     `cmd:"" help:"Write file contents under the project root (escape hatch for free-form files)"`

@@ -152,11 +152,11 @@ type DeploymentNode struct {
 	// Probes — target-agnostic liveness/readiness/startup specs.
 	Probes *DeployProbes `yaml:"probes,omitempty"`
 
-	// AddLayers are overlay layer refs applied on top of the image.
+	// AddCandies are overlay layer refs applied on top of the image.
 	// Each entry is a DeployRef (local name / local YAML path /
 	// remote github ref). Same syntax as the command-line --add-layer
 	// flag.
-	AddLayer []string `yaml:"add_candy,omitempty"`
+	AddCandy []string `yaml:"add_candy,omitempty"`
 
 	// InstallOpts carries host-target-specific flags that would
 	// otherwise have to be passed on every command invocation.

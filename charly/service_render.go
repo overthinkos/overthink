@@ -15,7 +15,7 @@ package main
 //
 // This file declares the schema types, the rendering context, and the
 // template rendering helpers. It does NOT parse the candy manifest — that
-// happens in layers.go alongside the rest of the LayerYAML unmarshaller.
+// happens in layers.go alongside the rest of the CandyYAML unmarshaller.
 
 import (
 	"bytes"
@@ -153,7 +153,7 @@ func (e *ServiceEntry) EffectiveScope() string {
 // nothing else is reachable.
 type ServiceRenderContext struct {
 	Name             string
-	Layer            string
+	Candy            string
 	Exec             string
 	Env              map[string]string
 	EnvList          []KeyValue // ordered env for deterministic template iteration

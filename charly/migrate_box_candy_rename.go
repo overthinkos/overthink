@@ -98,14 +98,14 @@ func MigrateBoxCandyRename(dir, hostDeployPath string, dryRun bool) ([]string, e
 	} else if mod {
 		changed = append(changed, "image.yml -> box.yml")
 	}
-	layersDir := filepath.Join(dir, "layers")
-	if entries, err := os.ReadDir(layersDir); err == nil {
+	candiesDir := filepath.Join(dir, "layers")
+	if entries, err := os.ReadDir(candiesDir); err == nil {
 		for _, e := range entries {
 			if !e.IsDir() {
 				continue
 			}
-			from := filepath.Join(layersDir, e.Name(), "layer.yml")
-			to := filepath.Join(layersDir, e.Name(), "candy.yml")
+			from := filepath.Join(candiesDir, e.Name(), "layer.yml")
+			to := filepath.Join(candiesDir, e.Name(), "candy.yml")
 			if mod, err := renameProjectPath(from, to, dryRun); err != nil {
 				return changed, err
 			} else if mod {
@@ -115,7 +115,7 @@ func MigrateBoxCandyRename(dir, hostDeployPath string, dryRun bool) ([]string, e
 	}
 
 	// Phase C — rename the DIRECTORY layers/ -> candy/ (after its files moved).
-	if mod, err := renameProjectPath(layersDir, filepath.Join(dir, DefaultCandyDir), dryRun); err != nil {
+	if mod, err := renameProjectPath(candiesDir, filepath.Join(dir, DefaultCandyDir), dryRun); err != nil {
 		return changed, err
 	} else if mod {
 		changed = append(changed, "layers/ -> candy/")

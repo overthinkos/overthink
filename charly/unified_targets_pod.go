@@ -59,13 +59,13 @@ func (t *PodUnifiedTarget) Del(ctx context.Context, opts DelOpts) error {
 		_ = runPodmanCommand(engine, "rmi", overlayRef)
 	}
 
-	for _, layer := range rec.Layer {
-		_, shouldRemove, lerr := RemoveLayerDeployment(paths, layer, rec.DeployID)
+	for _, layer := range rec.Candy {
+		_, shouldRemove, lerr := RemoveCandyDeployment(paths, layer, rec.DeployID)
 		if lerr != nil {
 			return lerr
 		}
 		if shouldRemove {
-			_ = DeleteLayerRecord(paths, layer)
+			_ = DeleteCandyRecord(paths, layer)
 		}
 	}
 
@@ -319,7 +319,7 @@ func (t *PodUnifiedTarget) Add(ctx context.Context, dctx *DeployContext, plans [
 
 	// Resolve + inject layer secrets so the overlay Containerfile emits
 	// `export VAR=VALUE` before each task body (R3 shared helper).
-	if _, _, err := prepareLayerSecrets(plans, dir); err != nil {
+	if _, _, err := prepareCandySecrets(plans, dir); err != nil {
 		return fmt.Errorf("loading layers for secret resolution: %w", err)
 	}
 

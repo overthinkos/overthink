@@ -48,12 +48,12 @@ func TestCompileLocalPkgStep(t *testing.T) {
 	hostCtx := HostContext{Target: "host", Distro: "arch"}
 
 	// A layer with no localpkg entry for the target format → nil.
-	if step := compileLocalPkgStep(&Layer{Name: "no-pkg"}, img, hostCtx); step != nil {
+	if step := compileLocalPkgStep(&Candy{Name: "no-pkg"}, img, hostCtx); step != nil {
 		t.Errorf("layer with no localpkg: should compile to nil, got %T", step)
 	}
 
 	// The charly layer's per-format map: pac resolves to pkg/arch.
-	l := &Layer{Name: "charly", SourceDir: "/layers/charly", localpkg: map[string]string{"pac": "pkg/arch", "rpm": "pkg/fedora", "deb": "pkg/debian"}}
+	l := &Candy{Name: "charly", SourceDir: "/layers/charly", localpkg: map[string]string{"pac": "pkg/arch", "rpm": "pkg/fedora", "deb": "pkg/debian"}}
 	step := compileLocalPkgStep(l, img, hostCtx)
 	if step == nil {
 		t.Fatal("compileLocalPkgStep returned nil for a layer with a pac localpkg source")
@@ -62,7 +62,7 @@ func TestCompileLocalPkgStep(t *testing.T) {
 	if !ok {
 		t.Fatalf("compileLocalPkgStep returned %T, want *LocalPkgInstallStep", step)
 	}
-	if pkg.PkgbuildRef != "pkg/arch" || pkg.LayerName != "charly" || pkg.LayerDir != "/layers/charly" {
+	if pkg.PkgbuildRef != "pkg/arch" || pkg.CandyName != "charly" || pkg.CandyDir != "/layers/charly" {
 		t.Errorf("step fields = %+v", pkg)
 	}
 	if pkg.ProjectDir == "" {
@@ -91,7 +91,7 @@ func TestCompileLocalPkgStep(t *testing.T) {
 // TestLocalPkgInstallStepIR exercises the IR contract: kind, scope (system),
 // venue (host-native), gate (none), reverse (no ledger ops — like apk).
 func TestLocalPkgInstallStepIR(t *testing.T) {
-	s := &LocalPkgInstallStep{PkgbuildRef: "pkg/arch", LayerName: "charly"}
+	s := &LocalPkgInstallStep{PkgbuildRef: "pkg/arch", CandyName: "charly"}
 	if s.Kind() != StepKindLocalPkgInstall {
 		t.Errorf("Kind() = %q, want %q", s.Kind(), StepKindLocalPkgInstall)
 	}
@@ -114,7 +114,7 @@ func TestLocalPkgInstallStepIR(t *testing.T) {
 // package-aware cmd: gate sees charly already installed and does nothing
 // (instead of curling a /usr/local/bin/charly that shadows /usr/bin/charly).
 func TestBuildDeployPlanLocalPkgOrdering(t *testing.T) {
-	l := &Layer{
+	l := &Candy{
 		Name:     "charly",
 		localpkg: map[string]string{"pac": "pkg/arch"},
 		tasks: []Task{
@@ -154,7 +154,7 @@ func TestBuildDeployPlanLocalPkgOrdering(t *testing.T) {
 // (no host package build in a container) — emitStep returns nil and emits nothing.
 func TestOCITargetSkipsLocalPkg(t *testing.T) {
 	tgt := &OCITarget{}
-	step := &LocalPkgInstallStep{PkgbuildRef: "pkg/arch", LayerName: "charly"}
+	step := &LocalPkgInstallStep{PkgbuildRef: "pkg/arch", CandyName: "charly"}
 	if err := tgt.emitStep(step, &InstallPlan{}); err != nil {
 		t.Fatalf("OCITarget.emitStep(LocalPkgInstallStep) = %v, want nil (skip)", err)
 	}
@@ -182,11 +182,11 @@ func TestResolveLocalPkgDir(t *testing.T) {
 		t.Fatal(err)
 	}
 	// A layer dir that bundles its OWN PKGBUILD (layer-relative branch).
-	layerWithPkg := filepath.Join(root, "candy", "mytool")
-	if err := os.MkdirAll(filepath.Join(layerWithPkg, "arch"), 0o755); err != nil {
+	candyWithPkg := filepath.Join(root, "candy", "mytool")
+	if err := os.MkdirAll(filepath.Join(candyWithPkg, "arch"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(layerWithPkg, "arch", "PKGBUILD"), []byte("pkgname=mytool\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(candyWithPkg, "arch", "PKGBUILD"), []byte("pkgname=mytool\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	// rpm source dir (sentinel is a *.spec glob) and deb source dir (sentinel is
@@ -211,8 +211,8 @@ func TestResolveLocalPkgDir(t *testing.T) {
 		t.Errorf("absolute ref = %q, want %q", got, pkgArch)
 	}
 	// 2. Layer-relative.
-	if got := resolveLocalPkgDir("arch", layerWithPkg, root, "PKGBUILD"); got != filepath.Join(layerWithPkg, "arch") {
-		t.Errorf("layer-relative = %q, want %q", got, filepath.Join(layerWithPkg, "arch"))
+	if got := resolveLocalPkgDir("arch", candyWithPkg, root, "PKGBUILD"); got != filepath.Join(candyWithPkg, "arch") {
+		t.Errorf("layer-relative = %q, want %q", got, filepath.Join(candyWithPkg, "arch"))
 	}
 	// 3. Project-relative (project dir == superproject root).
 	if got := resolveLocalPkgDir("pkg/arch", "/no/such/layer", root, "PKGBUILD"); got != pkgArch {
@@ -236,7 +236,7 @@ func TestResolveLocalPkgDir(t *testing.T) {
 		t.Errorf("missing sentinel = %q, want empty (no-op fallback)", got)
 	}
 	// 8. Empty ref → "".
-	if got := resolveLocalPkgDir("", layerWithPkg, root, "PKGBUILD"); got != "" {
+	if got := resolveLocalPkgDir("", candyWithPkg, root, "PKGBUILD"); got != "" {
 		t.Errorf("empty ref = %q, want empty", got)
 	}
 	// 9. Empty sentinel → "" (never matches).
@@ -329,7 +329,7 @@ func TestVenueHasPkgManager(t *testing.T) {
 // installs it instead.
 func TestExecLocalPkgInstall_SkipsUnsupported(t *testing.T) {
 	exec := &localPkgRecExec{}
-	s := &LocalPkgInstallStep{PkgbuildRef: "pkg/arch", LayerName: "charly", ProjectDir: t.TempDir(), Format: "pac", LocalPkg: testPacLocalPkgDef()}
+	s := &LocalPkgInstallStep{PkgbuildRef: "pkg/arch", CandyName: "charly", ProjectDir: t.TempDir(), Format: "pac", LocalPkg: testPacLocalPkgDef()}
 	if err := execLocalPkgInstall(context.Background(), exec, s, false /* supported */, "host", EmitOpts{}); err != nil {
 		t.Fatalf("unsupported venue should be a clean no-op, got %v", err)
 	}
@@ -343,7 +343,7 @@ func TestExecLocalPkgInstall_SkipsUnsupported(t *testing.T) {
 // no-op even when the venue is reported supported.
 func TestExecLocalPkgInstall_SkipsNilLocalPkg(t *testing.T) {
 	exec := &localPkgRecExec{}
-	s := &LocalPkgInstallStep{PkgbuildRef: "pkg/arch", LayerName: "charly", ProjectDir: t.TempDir()} // LocalPkg nil
+	s := &LocalPkgInstallStep{PkgbuildRef: "pkg/arch", CandyName: "charly", ProjectDir: t.TempDir()} // LocalPkg nil
 	if err := execLocalPkgInstall(context.Background(), exec, s, true, "host", EmitOpts{}); err != nil {
 		t.Fatalf("nil LocalPkg should be a clean no-op, got %v", err)
 	}
@@ -357,7 +357,7 @@ func TestExecLocalPkgInstall_SkipsNilLocalPkg(t *testing.T) {
 // task) — not an error that aborts the deploy.
 func TestExecLocalPkgInstall_SkipsMissingSource(t *testing.T) {
 	exec := &localPkgRecExec{}
-	s := &LocalPkgInstallStep{PkgbuildRef: "no/such/source", LayerName: "charly", ProjectDir: t.TempDir(), Format: "pac", LocalPkg: testPacLocalPkgDef()}
+	s := &LocalPkgInstallStep{PkgbuildRef: "no/such/source", CandyName: "charly", ProjectDir: t.TempDir(), Format: "pac", LocalPkg: testPacLocalPkgDef()}
 	if err := execLocalPkgInstall(context.Background(), exec, s, true /* supported */, "host", EmitOpts{}); err != nil {
 		t.Fatalf("missing source should be a clean no-op, got %v", err)
 	}

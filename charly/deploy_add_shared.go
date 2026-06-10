@@ -19,7 +19,7 @@ import (
 	"strings"
 )
 
-// prepareLayerSecrets resolves the layers backing `plans`, computes their
+// prepareCandySecrets resolves the layers backing `plans`, computes their
 // secret_requires / secret_accepts env (auto-generating + persisting any
 // missing required token), and injects it into every plan's TaskSteps
 // BEFORE emission. Returns the resolved layer list (the caller reuses it
@@ -27,15 +27,15 @@ import (
 //
 // Shared by LocalUnifiedTarget.Add / VmUnifiedTarget.Add /
 // PodUnifiedTarget.Add — the three paths that previously each ran
-// LayerForPlan + ResolveSecretForLayer + InjectSecretsIntoPlans inline.
-func prepareLayerSecrets(plans []*InstallPlan, dir string) ([]*Layer, map[string]string, error) {
-	layerList, err := LayerForPlan(plans, dir, nil)
+// CandyForPlan + ResolveSecretForCandy + InjectSecretsIntoPlans inline.
+func prepareCandySecrets(plans []*InstallPlan, dir string) ([]*Candy, map[string]string, error) {
+	candyList, err := CandyForPlan(plans, dir, nil)
 	if err != nil {
 		return nil, nil, err
 	}
-	secretEnv := ResolveSecretForLayer(layerList)
+	secretEnv := ResolveSecretForCandy(candyList)
 	InjectSecretsIntoPlans(plans, secretEnv)
-	return layerList, secretEnv, nil
+	return candyList, secretEnv, nil
 }
 
 // buildArtifactEnv composes the env used for layer-artifact path
@@ -43,7 +43,7 @@ func prepareLayerSecrets(plans []*InstallPlan, dir string) ([]*Layer, map[string
 // own env: lines overlaid (last-wins). nil node contributes nothing.
 //
 // Shared by LocalUnifiedTarget.Add / VmUnifiedTarget.Add — both feed it
-// to RetrieveLayerArtifacts so rewrite rules like ${K3S_KUBECONFIG_SERVER}
+// to RetrieveCandyArtifacts so rewrite rules like ${K3S_KUBECONFIG_SERVER}
 // resolve to the declared value rather than a literal placeholder. The
 // node is the dispatch-merged DeploymentNode (never re-read from disk).
 func buildArtifactEnv(secretEnv map[string]string, node *DeploymentNode) map[string]string {
@@ -67,14 +67,14 @@ func buildArtifactEnv(secretEnv map[string]string, node *DeploymentNode) map[str
 // k3s-server. No-op under DryRun.
 //
 // Shared by LocalUnifiedTarget.Add / VmUnifiedTarget.Add.
-func retrieveArtifactsAndK3s(ctx context.Context, exec DeployExecutor, layerList []*Layer, name string, artifactEnv map[string]string, opts EmitOpts) error {
+func retrieveArtifactsAndK3s(ctx context.Context, exec DeployExecutor, candyList []*Candy, name string, artifactEnv map[string]string, opts EmitOpts) error {
 	if opts.DryRun {
 		return nil
 	}
-	if err := RetrieveLayerArtifacts(ctx, exec, layerList, sanitizeDeployName(name), artifactEnv, opts); err != nil {
+	if err := RetrieveCandyArtifacts(ctx, exec, candyList, sanitizeDeployName(name), artifactEnv, opts); err != nil {
 		return err
 	}
-	if deployHasLayer(layerList, "k3s-server") {
+	if deployHasCandy(candyList, "k3s-server") {
 		if err := K3sPostProvision(name); err != nil {
 			return err
 		}

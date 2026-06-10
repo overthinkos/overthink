@@ -15,23 +15,23 @@ type VolumeMount struct {
 // full image chain (image → base → base's base) and collecting volume
 // declarations from all layers. Volumes are deduplicated by name (first
 // declaration wins — outermost image takes priority).
-func CollectBoxVolume(cfg *Config, layers map[string]*Layer, boxName string, home string, excludeNames map[string]bool) ([]VolumeMount, error) {
+func CollectBoxVolume(cfg *Config, layers map[string]*Candy, boxName string, home string, excludeNames map[string]bool) ([]VolumeMount, error) {
 	// Collect all layer names from the image chain (outermost first)
-	var allLayerNames []string
+	var allCandyNames []string
 	for _, node := range cfg.walkBaseChain(boxName) {
 		// Resolve layers for this image (includes transitive deps)
-		resolved, err := ResolveLayerOrder(node.Img.Layer, layers, nil)
+		resolved, err := ResolveCandyOrder(node.Img.Candy, layers, nil)
 		if err != nil {
 			return nil, err
 		}
-		allLayerNames = append(allLayerNames, resolved...)
+		allCandyNames = append(allCandyNames, resolved...)
 	}
 
 	// Collect volumes, dedup by name (first wins), skip excluded names
 	seen := make(map[string]bool)
 	var mounts []VolumeMount
-	for _, layerName := range allLayerNames {
-		layer, ok := layers[layerName]
+	for _, candyName := range allCandyNames {
+		layer, ok := layers[candyName]
 		if !ok || !layer.HasVolumes() {
 			continue
 		}

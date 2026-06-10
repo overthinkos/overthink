@@ -126,10 +126,10 @@ func TestRemoveAliasScriptNotFound(t *testing.T) {
 func TestCollectImageAliases(t *testing.T) {
 	cfg := &Config{
 		Box: map[string]BoxConfig{
-			"myapp": {Layer: []string{"svc"}},
+			"myapp": {Candy: []string{"svc"}},
 		},
 	}
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"svc": {
 			Name:    "svc",
 			tasks:   []Task{{Cmd: "true"}},
@@ -148,16 +148,16 @@ func TestCollectImageAliases(t *testing.T) {
 	}
 }
 
-func TestCollectImageAliasesImageOverridesLayer(t *testing.T) {
+func TestCollectImageAliasesImageOverridesCandy(t *testing.T) {
 	cfg := &Config{
 		Box: map[string]BoxConfig{
 			"myapp": {
-				Layer: []string{"svc"},
+				Candy: []string{"svc"},
 				Alias: []AliasConfig{{Name: "svc-cli", Command: "custom-cmd"}},
 			},
 		},
 	}
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"svc": {
 			Name:    "svc",
 			tasks:   []Task{{Cmd: "true"}},
@@ -182,12 +182,12 @@ func TestCollectImageAliasesDefaultCommand(t *testing.T) {
 	cfg := &Config{
 		Box: map[string]BoxConfig{
 			"myapp": {
-				Layer: []string{"svc"},
+				Candy: []string{"svc"},
 				Alias: []AliasConfig{{Name: "mycli"}}, // no command
 			},
 		},
 	}
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"svc": {
 			Name:  "svc",
 			tasks: []Task{{Cmd: "true"}},
@@ -207,10 +207,10 @@ func TestCollectImageAliasesDefaultCommand(t *testing.T) {
 	}
 }
 
-func TestLayerAliases(t *testing.T) {
-	layers, err := ScanLayer("testdata")
+func TestCandyAliases(t *testing.T) {
+	layers, err := ScanCandy("testdata")
 	if err != nil {
-		t.Fatalf("ScanLayer() error = %v", err)
+		t.Fatalf("ScanCandy() error = %v", err)
 	}
 
 	ws := layers["webservice"]
@@ -234,18 +234,18 @@ func TestLayerAliases(t *testing.T) {
 	}
 }
 
-func TestAliasLayers(t *testing.T) {
-	layers, err := ScanLayer("testdata")
+func TestAliasCandies(t *testing.T) {
+	layers, err := ScanCandy("testdata")
 	if err != nil {
-		t.Fatalf("ScanLayer() error = %v", err)
+		t.Fatalf("ScanCandy() error = %v", err)
 	}
 
-	result := AliasLayer(layers)
+	result := AliasCandy(layers)
 	if len(result) != 1 {
-		t.Errorf("AliasLayer() returned %d layers, want 1", len(result))
+		t.Errorf("AliasCandy() returned %d layers, want 1", len(result))
 	}
 	if len(result) > 0 && result[0].Name != "webservice" {
-		t.Errorf("AliasLayer()[0].Name = %q, want %q", result[0].Name, "webservice")
+		t.Errorf("AliasCandy()[0].Name = %q, want %q", result[0].Name, "webservice")
 	}
 }
 

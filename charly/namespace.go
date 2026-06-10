@@ -150,7 +150,7 @@ func (c *Config) resolveNamespacedBases(out map[string]*ResolvedBox, calverTag, 
 			// own namespace (so the ref would not resolve from the root context).
 			// A local/layered image's builder refs ARE relative to the config
 			// being resolved, so they resolve correctly.
-			if len(ri.Layer) > 0 {
+			if len(ri.Candy) > 0 {
 				for _, b := range ri.Builder.AllBuilder() {
 					add(b)
 				}

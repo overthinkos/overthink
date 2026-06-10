@@ -15,24 +15,24 @@ type HooksConfig struct {
 
 // CollectHooks collects and concatenates hooks from all layers in an image's layer chain.
 // Hooks from multiple layers are concatenated in layer order.
-func CollectHooks(cfg *Config, layers map[string]*Layer, boxName string) *HooksConfig {
-	var allLayerNames []string
+func CollectHooks(cfg *Config, layers map[string]*Candy, boxName string) *HooksConfig {
+	var allCandyNames []string
 	for _, node := range cfg.walkBaseChain(boxName) {
-		resolved, err := ResolveLayerOrder(node.Img.Layer, layers, nil)
+		resolved, err := ResolveCandyOrder(node.Img.Candy, layers, nil)
 		if err != nil {
 			break
 		}
-		allLayerNames = append(allLayerNames, resolved...)
+		allCandyNames = append(allCandyNames, resolved...)
 	}
 
 	var postEnable, preRemove []string
 	seen := make(map[string]bool)
-	for _, layerName := range allLayerNames {
-		if seen[layerName] {
+	for _, candyName := range allCandyNames {
+		if seen[candyName] {
 			continue
 		}
-		seen[layerName] = true
-		layer, ok := layers[layerName]
+		seen[candyName] = true
+		layer, ok := layers[candyName]
 		if !ok {
 			continue
 		}

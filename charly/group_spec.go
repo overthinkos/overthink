@@ -43,7 +43,7 @@ type GroupSpec struct {
 
 // GroupDoc wraps a single GroupSpec with an explicit Name — the standalone
 // `kind: group` form. Bundles concatenated via YAML --- separators are
-// supported the same way as LayerDoc / VmDoc.
+// supported the same way as CandyDoc / VmDoc.
 type GroupDoc struct {
 	Name      string `yaml:"name"`
 	GroupSpec `yaml:",inline"`

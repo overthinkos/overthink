@@ -126,7 +126,7 @@ type BoxConfig struct {
 	Registry              string        `yaml:"registry,omitempty"`
 	Distro                []string      `yaml:"distro,omitempty"` // distro tags ["fedora:43", "fedora"] — first-match for packages
 	Build                 BuildFormats  `yaml:"build,omitempty"`  // package formats ["rpm"] — all installed in order
-	Layer                 []string      `yaml:"candy,omitempty"`
+	Candy                 []string      `yaml:"candy,omitempty"`
 	Port                  []string      `yaml:"port,omitempty"`        // runtime port mappings ["host:container"]
 	User                  string        `yaml:"user,omitempty"`        // username (default: "user")
 	UID                   *int          `yaml:"uid,omitempty"`         // user ID (default: 1000)
@@ -221,7 +221,7 @@ type ResolvedBox struct {
 	Distro                []string // resolved distro tags: ["fedora:43", "fedora"]
 	BuildFormats          []string // resolved build formats: ["rpm"] or ["pac", "aur"] — all installed in order
 	Tags                  []string // union: ["all"] + Distro + BuildFormats — for task matching
-	Layer                 []string
+	Candy                 []string
 	Port                  []string // runtime port mappings
 
 	// User configuration
@@ -267,14 +267,14 @@ type ResolvedBox struct {
 	// Data image (scratch-based, data-only)
 	DataImage bool // true = FROM scratch, no runtime, no init, no services
 
-	// LayerCaps aggregates layer-contributed capabilities from this
+	// CandyCaps aggregates layer-contributed capabilities from this
 	// image's resolved layer composition (preserve_user, data_only,
 	// init_system_hint, oci_labels, etc.). Populated by ResolveBox
-	// via AggregateLayerCapabilities. Replaces the magic image-level
+	// via AggregateCandyCapabilities. Replaces the magic image-level
 	// flags (Bootc, DataImage) with a layer-derived surface — those
 	// fields remain during the cutover transition and are removed in
-	// the same commit once consumers migrate to LayerCaps.
-	LayerCaps *AggregatedCandyCaps `json:"-"`
+	// the same commit once consumers migrate to CandyCaps.
+	CandyCaps *AggregatedCandyCaps `json:"-"`
 
 	// Derived fields
 	IsExternalBase bool   // true if base is external OCI image, false if internal
@@ -489,9 +489,9 @@ func (c *Config) ResolveBox(name string, calverTag string, dir string, opts Reso
 
 	// Layers are not inherited, they're image-specific
 	// Strip @ prefix and :version suffixes — layer map keys use bare refs
-	resolved.Layer = make([]string, len(img.Layer))
-	for i, ref := range img.Layer {
-		resolved.Layer[i] = BareRef(ref)
+	resolved.Candy = make([]string, len(img.Candy))
+	for i, ref := range img.Candy {
+		resolved.Candy[i] = BareRef(ref)
 	}
 
 	// Resolve ports: image -> defaults -> nil

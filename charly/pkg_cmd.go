@@ -33,7 +33,7 @@ func (c *BoxPkgCmd) Run() error {
 
 	// Load the local layers to find the requested layer's per-format localpkg
 	// sources (config-driven — no hardcoded pkg/<dir> paths).
-	layers, err := ScanLayer(dir)
+	layers, err := ScanCandy(dir)
 	if err != nil {
 		return fmt.Errorf("scanning layers: %w", err)
 	}

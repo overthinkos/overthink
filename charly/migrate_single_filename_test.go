@@ -117,7 +117,7 @@ vm:
 			t.Errorf("discovered box %q missing after migrate", name)
 		}
 	}
-	if _, ok := uf.Layer["foo"]; !ok {
+	if _, ok := uf.Candy["foo"]; !ok {
 		t.Error("discovered candy foo missing after migrate")
 	}
 

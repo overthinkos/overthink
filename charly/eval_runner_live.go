@@ -292,7 +292,7 @@ func RunEvalLive(ctx context.Context, deployment, scoreName string, scenarios []
 			}
 
 			set := &LabelDescriptionSet{
-				Layer: []LabeledDescription{{
+				Candy: []LabeledDescription{{
 					Origin: "pod:" + pod,
 					Description: Description{
 						Feature:  fmt.Sprintf("Score scenarios for pod %s", pod),

@@ -76,7 +76,7 @@ type AURPackages struct {
 // extras (copr, repos, options, exclude, modules) inherited from the legacy
 // per-format / per-distro-tag sections.
 //
-// The map key on `LayerYAML.Distros` / `GroupSpec.Distros` identifies the
+// The map key on `CandyYAML.Distros` / `GroupSpec.Distros` identifies the
 // distro (e.g. `fedora`, `arch`, `debian`, `ubuntu`) or a versioned
 // variant (`debian-13`, `ubuntu-24.04`).
 type DistroPackages struct {

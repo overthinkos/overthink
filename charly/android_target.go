@@ -87,12 +87,12 @@ func (a *AndroidDeployTarget) Emit(plans []*InstallPlan, opts EmitOpts) error {
 func (a *AndroidDeployTarget) installStep(s *ApkInstallStep, opts EmitOpts) error {
 	for _, spec := range s.Packages {
 		if spec.Apk != "" {
-			path := resolveApkPath(spec.Apk, s.LayerDir)
+			path := resolveApkPath(spec.Apk, s.CandyDir)
 			if opts.DryRun {
 				fmt.Printf("[dry-run] android: would install committed APK %s\n", path)
 				continue
 			}
-			fmt.Printf("android: installing %s (layer=%s)\n", path, s.LayerName)
+			fmt.Printf("android: installing %s (layer=%s)\n", path, s.CandyName)
 			out, err := installWithRetry(androidInstallDeadline, androidInstallInterval, func() (string, error) { return a.Device.InstallFromHostApk(path) })
 			if err != nil {
 				return fmt.Errorf("apk install %s: %w", path, err)
@@ -103,13 +103,13 @@ func (a *AndroidDeployTarget) installStep(s *ApkInstallStep, opts EmitOpts) erro
 			continue
 		}
 		if spec.Package == "" {
-			return fmt.Errorf("apk entry in layer %q has neither package: nor apk:", s.LayerName)
+			return fmt.Errorf("apk entry in layer %q has neither package: nor apk:", s.CandyName)
 		}
 		if opts.DryRun {
 			fmt.Printf("[dry-run] android: would install %s (source %s) via apkeep\n", spec.Package, spec.EffectiveSource())
 			continue
 		}
-		fmt.Printf("android: installing %s (source %s, layer=%s)\n", spec.Package, spec.EffectiveSource(), s.LayerName)
+		fmt.Printf("android: installing %s (source %s, layer=%s)\n", spec.Package, spec.EffectiveSource(), s.CandyName)
 		specCopy := spec
 		out, err := installWithRetry(androidInstallDeadline, androidInstallInterval, func() (string, error) { return a.Device.InstallByPackage(specCopy) })
 		if err != nil {
@@ -126,12 +126,12 @@ func (a *AndroidDeployTarget) installStep(s *ApkInstallStep, opts EmitOpts) erro
 // verbatim; relative paths anchor to the layer's source dir, then fall back
 // to the project cwd (so a layer can reference a shared project file like
 // tests/data/ApiDemos-debug.apk).
-func resolveApkPath(ref, layerDir string) string {
+func resolveApkPath(ref, candyDir string) string {
 	if filepath.IsAbs(ref) {
 		return ref
 	}
-	if layerDir != "" {
-		cand := filepath.Join(layerDir, ref)
+	if candyDir != "" {
+		cand := filepath.Join(candyDir, ref)
 		if _, err := os.Stat(cand); err == nil {
 			return cand
 		}

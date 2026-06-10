@@ -64,7 +64,7 @@ func TestScaffoldProject_AddImageRoundtrip(t *testing.T) {
 		Box struct {
 			Name   string   `yaml:"name"`
 			Base   string   `yaml:"base"`
-			Layers []string `yaml:"candy"`
+			Candies []string `yaml:"candy"`
 		} `yaml:"box"`
 	}
 	if err := yaml.Unmarshal(data, &doc); err != nil {
@@ -76,13 +76,13 @@ func TestScaffoldProject_AddImageRoundtrip(t *testing.T) {
 	if doc.Box.Base != "quay.io/fedora/fedora:43" {
 		t.Errorf("base = %q; want quay.io/fedora/fedora:43", doc.Box.Base)
 	}
-	if len(doc.Box.Layers) != 1 || doc.Box.Layers[0] != "sshd" {
-		t.Errorf("candy = %v; want [sshd]", doc.Box.Layers)
+	if len(doc.Box.Candies) != 1 || doc.Box.Candies[0] != "sshd" {
+		t.Errorf("candy = %v; want [sshd]", doc.Box.Candies)
 	}
 }
 
-// TestAddLayerToImage covers the idempotent-append behaviour.
-func TestAddLayerToImage(t *testing.T) {
+// TestAddCandyToImage covers the idempotent-append behaviour.
+func TestAddCandyToImage(t *testing.T) {
 	dir := t.TempDir()
 	if err := ScaffoldProject(dir); err != nil {
 		t.Fatalf("ScaffoldProject: %v", err)
@@ -90,14 +90,14 @@ func TestAddLayerToImage(t *testing.T) {
 	if err := AddBox(dir, "hello", "fedora", nil); err != nil {
 		t.Fatalf("AddBox: %v", err)
 	}
-	if err := AddLayerToBox(dir, "hello", "sshd"); err != nil {
-		t.Fatalf("AddLayerToBox first: %v", err)
+	if err := AddCandyToBox(dir, "hello", "sshd"); err != nil {
+		t.Fatalf("AddCandyToBox first: %v", err)
 	}
-	if err := AddLayerToBox(dir, "hello", "sshd"); err != nil {
-		t.Fatalf("AddLayerToBox second (idempotent): %v", err)
+	if err := AddCandyToBox(dir, "hello", "sshd"); err != nil {
+		t.Fatalf("AddCandyToBox second (idempotent): %v", err)
 	}
-	if err := AddLayerToBox(dir, "hello", "tmux"); err != nil {
-		t.Fatalf("AddLayerToBox tmux: %v", err)
+	if err := AddCandyToBox(dir, "hello", "tmux"); err != nil {
+		t.Fatalf("AddCandyToBox tmux: %v", err)
 	}
 	data, _ := os.ReadFile(filepath.Join(dir, "box", "hello", "charly.yml"))
 	// sshd should appear exactly once, tmux exactly once.
@@ -109,9 +109,9 @@ func TestAddLayerToImage(t *testing.T) {
 	}
 }
 
-// TestRemoveLayerFromImage covers the remove path including the no-op when
+// TestRemoveCandyFromImage covers the remove path including the no-op when
 // the layer isn't present.
-func TestRemoveLayerFromImage(t *testing.T) {
+func TestRemoveCandyFromImage(t *testing.T) {
 	dir := t.TempDir()
 	if err := ScaffoldProject(dir); err != nil {
 		t.Fatalf("ScaffoldProject: %v", err)
@@ -119,15 +119,15 @@ func TestRemoveLayerFromImage(t *testing.T) {
 	if err := AddBox(dir, "hello", "fedora", []string{"sshd", "tmux"}); err != nil {
 		t.Fatalf("AddBox: %v", err)
 	}
-	if err := RemoveLayerFromBox(dir, "hello", "sshd"); err != nil {
-		t.Fatalf("RemoveLayerFromBox: %v", err)
+	if err := RemoveCandyFromBox(dir, "hello", "sshd"); err != nil {
+		t.Fatalf("RemoveCandyFromBox: %v", err)
 	}
 	// No-op for missing layer.
-	if err := RemoveLayerFromBox(dir, "hello", "not-there"); err != nil {
-		t.Fatalf("RemoveLayerFromBox no-op: %v", err)
+	if err := RemoveCandyFromBox(dir, "hello", "not-there"); err != nil {
+		t.Fatalf("RemoveCandyFromBox no-op: %v", err)
 	}
 	// Error path: missing image.
-	if err := RemoveLayerFromBox(dir, "ghost", "sshd"); err == nil {
+	if err := RemoveCandyFromBox(dir, "ghost", "sshd"); err == nil {
 		t.Errorf("expected error for missing image; got nil")
 	}
 	data, _ := os.ReadFile(filepath.Join(dir, "box", "hello", "charly.yml"))
@@ -139,12 +139,12 @@ func TestRemoveLayerFromImage(t *testing.T) {
 	}
 }
 
-// TestEditLayer_ImportedBoxFile verifies the authoring-edit verbs resolve an
+// TestEditCandy_ImportedBoxFile verifies the authoring-edit verbs resolve an
 // image defined in a flat-imported per-kind file (box.yml) and save the edit
 // THERE — instead of erroring "image not found in charly.yml". This is the
 // fix for `charly box rm-candy <leaf> charly` / `charly box add-candy` on images that live
 // in box.yml rather than inlined in charly.yml.
-func TestEditLayer_ImportedBoxFile(t *testing.T) {
+func TestEditCandy_ImportedBoxFile(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "charly.yml"),
 		[]byte("version: 2026.156.0001\nimport:\n    - box.yml\n"), 0o644); err != nil {
@@ -167,7 +167,7 @@ func TestEditLayer_ImportedBoxFile(t *testing.T) {
 		return strings.Join(m.Box["leafy"].Candy, ",")
 	}
 
-	if err := RemoveLayerFromBox(dir, "leafy", "charly"); err != nil {
+	if err := RemoveCandyFromBox(dir, "leafy", "charly"); err != nil {
 		t.Fatalf("rm-candy on imported box.yml entry: %v", err)
 	}
 	if got := candy(); got != "supervisord,jupyter" {
@@ -179,14 +179,14 @@ func TestEditLayer_ImportedBoxFile(t *testing.T) {
 		t.Errorf("edit leaked into charly.yml:\n%s", charlyData)
 	}
 
-	if err := AddLayerToBox(dir, "leafy", "ripgrep"); err != nil {
+	if err := AddCandyToBox(dir, "leafy", "ripgrep"); err != nil {
 		t.Fatalf("add-candy on imported box.yml entry: %v", err)
 	}
 	if got := candy(); got != "supervisord,jupyter,ripgrep" {
 		t.Errorf("after add-candy ripgrep: candy = %q", got)
 	}
 
-	if err := RemoveLayerFromBox(dir, "nonexistent", "charly"); err == nil {
+	if err := RemoveCandyFromBox(dir, "nonexistent", "charly"); err == nil {
 		t.Error("expected error for a genuinely-missing image")
 	}
 }

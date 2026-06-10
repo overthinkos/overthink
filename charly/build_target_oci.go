@@ -6,12 +6,12 @@ package main
 // At this stage of the refactor, OCITarget is a thin walker over the
 // InstallPlan that delegates to the existing format/template rendering
 // machinery in format_template.go + tasks.go. Later passes will migrate
-// the direct-text emission inside writeLayerSteps into this walker so
+// the direct-text emission inside writeCandySteps into this walker so
 // the legacy generator shrinks to a shell.
 //
 // The key property we want from OCITarget: feeding it a plan produced
 // by BuildDeployPlan must emit a Containerfile fragment that's
-// functionally equivalent to what today's writeLayerSteps produces for
+// functionally equivalent to what today's writeCandySteps produces for
 // the same layer. Not byte-identical (we've dropped that requirement
 // per the user) but semantically equivalent — same packages installed,
 // same tasks executed, same services configured.
@@ -60,7 +60,7 @@ func (t *OCITarget) Emit(plans []*InstallPlan, opts EmitOpts) error {
 			continue
 		}
 		if err := t.emitPlan(plan, opts); err != nil {
-			return fmt.Errorf("OCITarget.Emit(%s): %w", plan.Layer, err)
+			return fmt.Errorf("OCITarget.Emit(%s): %w", plan.Candy, err)
 		}
 	}
 	return nil
@@ -79,7 +79,7 @@ func (t *OCITarget) emitPlan(plan *InstallPlan, opts EmitOpts) error {
 	if t.Box != nil {
 		plan.ResolveHome(t.Box.Home)
 	}
-	fmt.Fprintf(&t.buf, "# Layer: %s\n", plan.Layer)
+	fmt.Fprintf(&t.buf, "# Layer: %s\n", plan.Candy)
 	for _, step := range plan.Steps {
 		if step.Venue() == VenueSkip {
 			continue
@@ -234,7 +234,7 @@ func (t *OCITarget) emitSystemPackages(s *SystemPackagesStep) error {
 func (t *OCITarget) emitBuilder(s *BuilderStep, plan *InstallPlan) error {
 	if t.BuilderConfig == nil {
 		fmt.Fprintf(&t.buf, "# Builder: %s (layer=%s) — skipped, no BuilderConfig\n",
-			s.Builder, s.LayerName)
+			s.Builder, s.CandyName)
 		return nil
 	}
 	bDef, ok := t.BuilderConfig.Builder[s.Builder]
@@ -243,14 +243,14 @@ func (t *OCITarget) emitBuilder(s *BuilderStep, plan *InstallPlan) error {
 	}
 	if t.Box == nil {
 		fmt.Fprintf(&t.buf, "# Builder: %s (layer=%s) — skipped, no Image context\n",
-			s.Builder, s.LayerName)
+			s.Builder, s.CandyName)
 		return nil
 	}
 
-	layer := t.lookupLayer(s.LayerName)
+	layer := t.lookupCandy(s.CandyName)
 	if layer == nil {
 		fmt.Fprintf(&t.buf, "# Builder: %s (layer=%s) — layer not found in scan\n",
-			s.Builder, s.LayerName)
+			s.Builder, s.CandyName)
 		return nil
 	}
 
@@ -280,7 +280,7 @@ func (t *OCITarget) emitBuilder(s *BuilderStep, plan *InstallPlan) error {
 	// informative comment so authors can spot unwired test cases.
 	if t.Generator == nil {
 		fmt.Fprintf(&t.buf, "# Builder: %s (layer=%s) — multi-stage requires Generator; emit skipped\n",
-			s.Builder, s.LayerName)
+			s.Builder, s.CandyName)
 		return nil
 	}
 	builderRef := ""
@@ -306,17 +306,17 @@ func (t *OCITarget) emitBuilder(s *BuilderStep, plan *InstallPlan) error {
 // This preserves today's rendering semantics exactly.
 func (t *OCITarget) emitTask(s *TaskStep) error {
 	// Single-task emission delegates to the same emitTasks that
-	// writeLayerSteps calls, but for one task at a time via a synthetic
+	// writeCandySteps calls, but for one task at a time via a synthetic
 	// single-element layer.tasks slice. Requires Generator + Image.
 	if t.Generator == nil || t.Box == nil {
 		kind, _ := s.Task.Kind()
 		fmt.Fprintf(&t.buf, "# Task: %s (layer=%s) — no Generator context\n",
-			kind, s.LayerName)
+			kind, s.CandyName)
 		return nil
 	}
-	layer := t.lookupLayer(s.LayerName)
+	layer := t.lookupCandy(s.CandyName)
 	if layer == nil {
-		return fmt.Errorf("task emit: layer %q not found", s.LayerName)
+		return fmt.Errorf("task emit: layer %q not found", s.CandyName)
 	}
 
 	// Temporarily swap layer.tasks to just this one task so emitTasks
@@ -329,13 +329,13 @@ func (t *OCITarget) emitTask(s *TaskStep) error {
 	return err
 }
 
-// lookupLayer pulls the Layer struct by name from the Generator's
+// lookupCandy pulls the Layer struct by name from the Generator's
 // scanned layer set. Returns nil when the Generator is nil.
-func (t *OCITarget) lookupLayer(name string) *Layer {
+func (t *OCITarget) lookupCandy(name string) *Candy {
 	if t.Generator == nil {
 		return nil
 	}
-	return t.Generator.Layers[name]
+	return t.Generator.Candies[name]
 }
 
 // emitFile renders a file placement. Uses COPY --chmod/--chown with
@@ -366,7 +366,7 @@ func (t *OCITarget) emitServicePackaged(s *ServicePackagedStep) error {
 			scope = "user"
 		}
 		fmt.Fprintf(&t.buf, "# Service: enable packaged unit %s (scope=%s, layer=%s)\n",
-			s.Unit, scope, s.LayerName)
+			s.Unit, scope, s.CandyName)
 	}
 	return nil
 }
@@ -380,7 +380,7 @@ func (t *OCITarget) emitServiceCustom(s *ServiceCustomStep) error {
 		return nil
 	}
 	fmt.Fprintf(&t.buf, "# Service: custom %s (layer=%s)\n# -- unit content follows in the init fragment pipeline --\n",
-		s.Name, s.LayerName)
+		s.Name, s.CandyName)
 	return nil
 }
 

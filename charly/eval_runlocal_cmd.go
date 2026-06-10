@@ -525,7 +525,7 @@ func loadDescriptionsFromDir(dir, image string) *LabelDescriptionSet {
 	if err != nil || cfg == nil {
 		return nil
 	}
-	layers, err := ScanLayer(dir)
+	layers, err := ScanCandy(dir)
 	if err != nil {
 		return nil
 	}

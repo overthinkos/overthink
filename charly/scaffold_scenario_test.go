@@ -8,17 +8,17 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// TestAppendLayerScenario_UnderCandyWrapper proves a scenario lands inside the
+// TestAppendCandyScenario_UnderCandyWrapper proves a scenario lands inside the
 // `candy:` kind wrapper (never a stray top-level `description:`), and that a
 // second append of the same scenario name is an idempotent no-op.
-func TestAppendLayerScenario_UnderCandyWrapper(t *testing.T) {
+func TestAppendCandyScenario_UnderCandyWrapper(t *testing.T) {
 	dir := t.TempDir()
 	f := filepath.Join(dir, "candy.yml")
 	if err := os.WriteFile(f, []byte("candy:\n  name: foo\n  version: 2026.1.1\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	added, err := appendLayerScenario(f, "sc1", []string{"a baseline"}, nil, []string{"it responds"}, []string{"smoke"}, "pod1")
+	added, err := appendCandyScenario(f, "sc1", []string{"a baseline"}, nil, []string{"it responds"}, []string{"smoke"}, "pod1")
 	if err != nil || !added {
 		t.Fatalf("append: err=%v added=%v", err, added)
 	}
@@ -53,7 +53,7 @@ func TestAppendLayerScenario_UnderCandyWrapper(t *testing.T) {
 	}
 
 	// Idempotent: appending the same name again is a no-op.
-	added2, err := appendLayerScenario(f, "sc1", nil, nil, []string{"dup"}, nil, "")
+	added2, err := appendCandyScenario(f, "sc1", nil, nil, []string{"dup"}, nil, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -62,25 +62,25 @@ func TestAppendLayerScenario_UnderCandyWrapper(t *testing.T) {
 	}
 }
 
-// TestAppendLayerPackages_UnderCandyWrapper guards that add-<fmt> writes packages
+// TestAppendCandyPackages_UnderCandyWrapper guards that add-<fmt> writes packages
 // INSIDE `candy:` under the canonical `distro:` map (add-rpm → distro.fedora.package),
 // never as a stray top-level key the loader would now reject.
-func TestAppendLayerPackages_UnderCandyWrapper(t *testing.T) {
+func TestAppendCandyPackages_UnderCandyWrapper(t *testing.T) {
 	dir := t.TempDir()
-	layerDir := filepath.Join(dir, "candy", "foo")
-	if err := os.MkdirAll(layerDir, 0o755); err != nil {
+	candyDir := filepath.Join(dir, "candy", "foo")
+	if err := os.MkdirAll(candyDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(layerDir, UnifiedFileName),
+	if err := os.WriteFile(filepath.Join(candyDir, UnifiedFileName),
 		[]byte("candy:\n  name: foo\n  version: 2026.1.1\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	t.Chdir(dir)
 
-	if err := appendLayerPackages("foo", "rpm", []string{"ripgrep", "ripgrep"}); err != nil {
-		t.Fatalf("appendLayerPackages: %v", err)
+	if err := appendCandyPackages("foo", "rpm", []string{"ripgrep", "ripgrep"}); err != nil {
+		t.Fatalf("appendCandyPackages: %v", err)
 	}
-	data, _ := os.ReadFile(filepath.Join(layerDir, UnifiedFileName))
+	data, _ := os.ReadFile(filepath.Join(candyDir, UnifiedFileName))
 	var root map[string]any
 	if err := yaml.Unmarshal(data, &root); err != nil {
 		t.Fatalf("re-parse: %v\n%s", err, data)

@@ -32,7 +32,7 @@ func (c *FeatureListCmd) Run() error {
 	if err != nil {
 		return fmt.Errorf("loading config: %w", err)
 	}
-	layers, err := ScanLayer(cwd)
+	layers, err := ScanCandy(cwd)
 	if err != nil {
 		return fmt.Errorf("scanning layers: %w", err)
 	}
@@ -101,7 +101,7 @@ func (c *FeaturePendingCmd) Run() error {
 	if err != nil {
 		return fmt.Errorf("loading config: %w", err)
 	}
-	layers, err := ScanLayer(cwd)
+	layers, err := ScanCandy(cwd)
 	if err != nil {
 		return fmt.Errorf("scanning layers: %w", err)
 	}
@@ -175,7 +175,7 @@ func (c *FeatureValidateCmd) Run() error {
 	if err != nil {
 		return fmt.Errorf("loading config: %w", err)
 	}
-	layers, err := ScanLayer(cwd)
+	layers, err := ScanCandy(cwd)
 	if err != nil {
 		return fmt.Errorf("scanning layers: %w", err)
 	}

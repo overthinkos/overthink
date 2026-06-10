@@ -4,7 +4,7 @@ package main
 //
 // Background (see plan file referenced in the final design): today's code
 // walks Layer objects and emits Containerfile text directly in
-// generate.go:writeLayerSteps. That hardcodes "we're building an OCI image"
+// generate.go:writeCandySteps. That hardcodes "we're building an OCI image"
 // into the generator. The IR defined here lifts the walk into structured
 // data so the same plan can be consumed by:
 //
@@ -383,8 +383,8 @@ type ArtifactRef struct {
 type BuilderStep struct {
 	Builder      string        // "pixi" | "npm" | "cargo" | "aur"
 	BuilderImage string        // resolved image ref (e.g. "fedora-builder:2026.04")
-	LayerName    string        // layer that triggered this builder (for ledger)
-	LayerDir     string        // absolute layer source path (bind-mounted as /work)
+	CandyName    string        // layer that triggered this builder (for ledger)
+	CandyDir     string        // absolute layer source path (bind-mounted as /work)
 	Phase        Phase         // typically PhaseInstall
 	Artifacts    []ArtifactRef // outputs to extract (empty for user-scope pixi/npm/cargo; populated for aur)
 
@@ -447,7 +447,7 @@ func (s *BuilderStep) Reverse() []ReverseOp {
 				Kind:    ReverseOpPixiEnvRemove,
 				Targets: []string{env},
 				Scope:   ScopeUser,
-				Extra:   map[string]string{"layer": s.LayerName},
+				Extra:   map[string]string{"layer": s.CandyName},
 			}}
 		}
 	case "cargo":
@@ -484,8 +484,8 @@ func (s *BuilderStep) Reverse() []ReverseOp {
 // bind-mount, which doesn't exist on the host).
 type TaskStep struct {
 	Task         *Task
-	LayerName    string
-	LayerDir     string
+	CandyName    string
+	CandyDir     string
 	CtxPath      string // absolute layer-dir path replacing "/ctx/" on host
 	ResolvedUser string // uid:gid or "root" after resolveUserSpec
 
@@ -499,14 +499,14 @@ type TaskStep struct {
 	// ENV expands ${HOME}), so it is unaffected by this field.
 	To string
 
-	// LayerVars are the candy manifest `vars:` map propagated into the task
+	// CandyVars are the candy manifest `vars:` map propagated into the task
 	// script as exports. Build-time gets these via Containerfile ENV
 	// directives (emitVarsEnv); host/local-deploy time has no equivalent
 	// mechanism, so the renderer emits `export K=V` lines from this field.
 	// Without this, layers like `kubernetes` whose download URLs reference
 	// ${K3D_VERSION} fetched an empty path-component at deploy time and
 	// curl 404'd.
-	LayerVars map[string]string
+	CandyVars map[string]string
 }
 
 func (s *TaskStep) Kind() StepKind { return StepKindTask }
@@ -606,7 +606,7 @@ type FileStep struct {
 	Dest      string      // absolute destination path
 	Mode      os.FileMode // permissions
 	Owner     string      // "root" or "uid:gid" or the invoking user's name
-	LayerName string      // for ledger
+	CandyName string      // for ledger
 }
 
 func (s *FileStep) Kind() StepKind { return StepKindFile }
@@ -663,7 +663,7 @@ type ServicePackagedStep struct {
 	Enable        bool
 	OverridesText string // rendered drop-in (.conf) content; "" if no overrides
 	OverridesPath string // computed absolute path for the drop-in file
-	LayerName     string // for ledger + drop-in naming
+	CandyName     string // for ledger + drop-in naming
 	PriorEnabled  bool   // populated at install time (before enable); used for teardown restore
 }
 
@@ -714,7 +714,7 @@ type ServiceCustomStep struct {
 	UnitPath    string // absolute install path
 	TargetScope Scope  // ScopeSystem or ScopeUser
 	Enable      bool
-	LayerName   string
+	CandyName   string
 }
 
 func (s *ServiceCustomStep) Kind() StepKind { return StepKindServiceCustom }
@@ -751,7 +751,7 @@ func (s *ServiceCustomStep) Reverse() []ReverseOp {
 // become `~/.config/opencharly/env.d/<layer>.env` plus a managed block in
 // the user's shell init that sources the env.d directory.
 type ShellHookStep struct {
-	LayerName string
+	CandyName string
 	EnvVars   map[string]string
 	PathAdd   []string // already {{.Home}}-substituted to absolute paths
 	EnvFile   string   // computed path (~/.config/opencharly/env.d/<layer>.env); populated at install
@@ -770,7 +770,7 @@ func (s *ShellHookStep) Reverse() []ReverseOp {
 		Kind:    ReverseOpRemoveEnvdFile,
 		Targets: []string{s.EnvFile},
 		Scope:   ScopeUserProfile,
-		Extra:   map[string]string{"layer": s.LayerName},
+		Extra:   map[string]string{"layer": s.CandyName},
 	}}
 }
 
@@ -794,13 +794,13 @@ func (s *ShellHookStep) Reverse() []ReverseOp {
 //     unit). UseDropin discriminates the two paths.
 //   - K8sDeployTarget: skipped (no shell in pods).
 type ShellSnippetStep struct {
-	LayerName   string   // layer this snippet belongs to (also Marker source)
+	CandyName   string   // layer this snippet belongs to (also Marker source)
 	Origin      string   // "<layer>" or "image" or "deploy" (for ledger refcount + LabelShell origin)
 	Shell       string   // bash | zsh | fish | sh
 	Snippet     string   // rendered body, ${SHELL_NAME}-substituted, ready to write
 	PathAppend  []string // already rendered into Snippet by the compiler; tracked here for label round-trip / overlay
 	Destination string   // resolved per-target at compile time; absolute path on the target
-	Marker      string   // managed-block marker tag (= LayerName) — used by replaceOrAppendManagedBlock
+	Marker      string   // managed-block marker tag (= CandyName) — used by replaceOrAppendManagedBlock
 	UseDropin   bool     // true: write whole file (fish, container drop-in); false: managed-block append into existing rc file
 	Priority    int      // load-order hint, 0 = default
 }
@@ -833,7 +833,7 @@ func (s *ShellSnippetStep) Reverse() []ReverseOp {
 			Kind:    kind,
 			Targets: []string{s.Destination},
 			Scope:   s.Scope(),
-			Extra:   map[string]string{"layer": s.LayerName, "shell": s.Shell},
+			Extra:   map[string]string{"layer": s.CandyName, "shell": s.Shell},
 		}}
 	}
 	// Managed-block append: removal strips just our fence pair from the
@@ -844,7 +844,7 @@ func (s *ShellSnippetStep) Reverse() []ReverseOp {
 		Kind:    ReverseOpRemoveManaged,
 		Targets: []string{s.Destination},
 		Scope:   s.Scope(),
-		Extra:   map[string]string{"layer": s.LayerName, "shell": s.Shell, "marker": s.Marker},
+		Extra:   map[string]string{"layer": s.CandyName, "shell": s.Shell, "marker": s.Marker},
 	}}
 }
 
@@ -862,7 +862,7 @@ type RepoChangeStep struct {
 	File      string // absolute path of the repo file
 	Content   string // rendered repo file body
 	Checksum  string // sha256 of Content, for idempotency check at install
-	LayerName string
+	CandyName string
 }
 
 func (s *RepoChangeStep) Kind() StepKind     { return StepKindRepoChange }
@@ -875,7 +875,7 @@ func (s *RepoChangeStep) Reverse() []ReverseOp {
 		Kind:    ReverseOpRemoveRepoFile,
 		Targets: []string{s.File},
 		Scope:   ScopeSystem,
-		Extra:   map[string]string{"layer": s.LayerName, "format": s.Format},
+		Extra:   map[string]string{"layer": s.CandyName, "format": s.Format},
 	}}
 }
 
@@ -897,8 +897,8 @@ func (s *RepoChangeStep) Reverse() []ReverseOp {
 // error (an image legitimately builds without installing apps).
 type ApkInstallStep struct {
 	Packages  []ApkPackageSpec
-	LayerName string
-	LayerDir  string // layer source dir — anchors relative committed-APK paths
+	CandyName string
+	CandyDir  string // layer source dir — anchors relative committed-APK paths
 }
 
 func (s *ApkInstallStep) Kind() StepKind { return StepKindApkInstall }
@@ -948,8 +948,8 @@ func (s *ApkInstallStep) Reverse() []ReverseOp { return nil }
 // fallback).
 type LocalPkgInstallStep struct {
 	PkgbuildRef string // the layer's `localpkg:` value (e.g. "pkg/arch") — a hint, resolved at emit
-	LayerName   string
-	LayerDir    string // layer source dir — one anchor for the relative PKGBUILD search
+	CandyName   string
+	CandyDir    string // layer source dir — one anchor for the relative PKGBUILD search
 	ProjectDir  string // the deploy project dir (os.Getwd() at deploy time) — the other anchor
 
 	// Format is the package-format name whose `local_pkg:` config drives this
@@ -994,7 +994,7 @@ func (s *LocalPkgInstallStep) Reverse() []ReverseOp { return nil }
 // LocalDeployTarget refuses to reboot the operator's host unattended (skip +
 // warn). Mirrors the ApkInstallStep "only one target executes" pattern.
 type RebootStep struct {
-	LayerName string
+	CandyName string
 }
 
 func (s *RebootStep) Kind() StepKind     { return StepKindReboot }
@@ -1035,14 +1035,14 @@ type InstallPlan struct {
 	Box      string // deployable image name (or layer name for single-layer deploys)
 	Version  string // layer/image CalVer version
 	Distro   string // resolved host distro tag, e.g. "fedora:43"
-	Layer    string // layer name when this plan is for a single layer; "" for whole-image merges
+	Candy    string // candy name when this plan is for a single candy; "" for whole-image merges
 
 	// The ordered step sequence.
 	Steps []InstallStep
 
 	// Provenance — used by teardown and status.
-	LayersIncluded []string          // ordered layer names this plan composes (for whole-image merges)
-	AddLayers      []string          // layers added on top via deploy.yml add_layers: (for provenance)
+	CandiesIncluded []string          // ordered layer names this plan composes (for whole-image merges)
+	AddCandies      []string          // layers added on top via deploy.yml add_layers: (for provenance)
 	BuilderImage   string            // selected builder image for VenueContainerBuilder steps
 	Meta           map[string]string // free-form metadata (builder image, glibc version, …)
 }

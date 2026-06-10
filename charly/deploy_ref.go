@@ -28,7 +28,7 @@ package main
 //     each kind has its own namespace. Precedence is decided by the
 //     CALLER's context: ResolveDeployRef defaults to image-first
 //     (the primary `<ref>` positional almost always means "deploy
-//     this image"); ResolveDeployRefAsLayer prefers layers (used by
+//     this image"); ResolveDeployRefAsCandy prefers layers (used by
 //     `--add-layer <ref>` where the user explicitly asked for a layer).
 //   - A YAML file with a top-level `base:` or `images:` key is an image;
 //     one with `rpm:`/`deb:`/`pac:`/`aur:`/`tasks:`/`services:` is a layer.
@@ -72,23 +72,23 @@ type DeployRef struct {
 
 // ResolveDeployRef parses ref using projectDir as the current project
 // root for local-name resolution. Returns a DeployRef ready for
-// downstream loading (LoadLayerFromFile / LoadImageFromFile / remote
+// downstream loading (LoadCandyFromFile / LoadImageFromFile / remote
 // download). The function does not fetch remote repos — that happens
 // at Emit time when the plan actually needs the content.
 //
 // When the same name exists as BOTH an image and a layer (cross-kind
 // name reuse — permitted since 2026-05), this entry point prefers
 // image. For the `--add-layer` context where the user asked for a
-// layer specifically, use ResolveDeployRefAsLayer instead.
+// layer specifically, use ResolveDeployRefAsCandy instead.
 func ResolveDeployRef(ref, projectDir string) (*DeployRef, error) {
 	return resolveDeployRefWithPref(ref, projectDir, RefKindBox)
 }
 
-// ResolveDeployRefAsLayer is the layer-preferring sibling of
+// ResolveDeployRefAsCandy is the layer-preferring sibling of
 // ResolveDeployRef. Used for `--add-layer <ref>` resolution where the
 // user has explicitly asked for a layer overlay; if the same name
 // exists as both an image and a layer, layer wins.
-func ResolveDeployRefAsLayer(ref, projectDir string) (*DeployRef, error) {
+func ResolveDeployRefAsCandy(ref, projectDir string) (*DeployRef, error) {
 	return resolveDeployRefWithPref(ref, projectDir, RefKindCandy)
 }
 
@@ -249,7 +249,7 @@ func classifyYAMLFile(path string) (RefKind, error) {
 // preferKind decides precedence when the name exists in both kinds.
 func resolveLocalName(name, projectDir string, preferKind RefKind) (*DeployRef, error) {
 	imgYml := filepath.Join(projectDir, UnifiedFileName)
-	layersDir := filepath.Join(projectDir, DefaultCandyDir, name)
+	candiesDir := filepath.Join(projectDir, DefaultCandyDir, name)
 
 	inImageYml := false
 	resolvedImgPath := imgYml
@@ -267,10 +267,10 @@ func resolveLocalName(name, projectDir string, preferKind RefKind) (*DeployRef, 
 		}
 	}
 
-	inLayers := false
-	layerYML := filepath.Join(layersDir, UnifiedFileName)
-	if info, err := os.Stat(layerYML); err == nil && !info.IsDir() {
-		inLayers = true
+	inCandies := false
+	candyYML := filepath.Join(candiesDir, UnifiedFileName)
+	if info, err := os.Stat(candyYML); err == nil && !info.IsDir() {
+		inCandies = true
 	}
 
 	imageRef := func() *DeployRef {
@@ -282,31 +282,31 @@ func resolveLocalName(name, projectDir string, preferKind RefKind) (*DeployRef, 
 			Path:   resolvedImgPath,
 		}
 	}
-	layerRef := func() *DeployRef {
+	candyRef := func() *DeployRef {
 		return &DeployRef{
 			Raw:    name,
 			Kind:   RefKindCandy,
 			Source: RefSourceLocalName,
 			Name:   name,
-			Path:   layerYML,
+			Path:   candyYML,
 		}
 	}
 
 	switch {
-	case inImageYml && inLayers:
+	case inImageYml && inCandies:
 		// Cross-kind name reuse — preferKind decides. Both kinds
 		// remain reachable via explicit paths (./candy/<name>/ or
-		// the box config file with a #<name> fragment) or via ResolveDeployRefAsLayer.
+		// the box config file with a #<name> fragment) or via ResolveDeployRefAsCandy.
 		if preferKind == RefKindCandy {
-			return layerRef(), nil
+			return candyRef(), nil
 		}
 		return imageRef(), nil
 	case inImageYml:
 		return imageRef(), nil
-	case inLayers:
-		return layerRef(), nil
+	case inCandies:
+		return candyRef(), nil
 	}
 
 	return nil, fmt.Errorf("ResolveDeployRef: %q not found as image in %s or layer in %s",
-		name, imgYml, layersDir)
+		name, imgYml, candiesDir)
 }

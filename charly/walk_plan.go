@@ -7,7 +7,7 @@ package main
 // their own switch-over-step-kind. The two paths had diverged subtly:
 // host batched by (Scope, Venue) via plan.StepsByVenue(), vm iterated
 // plan.Steps directly; host dispatched through execStep(), vm dispatched
-// inline; vm collected ReverseOps into the LayerRecord, host did not.
+// inline; vm collected ReverseOps into the CandyRecord, host did not.
 //
 // WalkPlan here consolidates the dispatch table. Targets implement
 // StepExecutor (one method per InstallStep kind); WalkPlan handles the
@@ -32,7 +32,7 @@ import (
 //
 // Returning an error aborts the plan walk and propagates to the caller.
 // Returning nil records ReverseOps from step.Reverse() into the
-// LayerRecord so `charly deploy del` can replay them.
+// CandyRecord so `charly deploy del` can replay them.
 type StepExecutor interface {
 	ExecSystemPackages(ctx context.Context, s *SystemPackagesStep, plan *InstallPlan, opts EmitOpts) error
 	ExecTask(ctx context.Context, s *TaskStep, plan *InstallPlan, opts EmitOpts) error
@@ -46,7 +46,7 @@ type StepExecutor interface {
 
 // WalkPlan iterates plan.Steps in IR order, applies gate checks, and
 // dispatches each step to the matching StepExecutor method. Returns a
-// partially-populated LayerRecord on error so the caller can still
+// partially-populated CandyRecord on error so the caller can still
 // persist whatever was applied before the failure.
 //
 // Gate handling:
@@ -60,7 +60,7 @@ type StepExecutor interface {
 //
 // ReverseOp handling:
 //   - Every successfully-executed step has its Reverse() ops appended
-//     to the returned LayerRecord. BuilderStep is the one exception —
+//     to the returned CandyRecord. BuilderStep is the one exception —
 //     builder outputs are consumed by later Task/File steps and don't
 //     themselves carry teardown state.
 //
@@ -74,7 +74,7 @@ func WalkPlan(ctx context.Context, ex StepExecutor, plan *InstallPlan, opts Emit
 	}
 
 	rec := &CandyRecord{
-		Layer:      plan.Layer,
+		Candy:      plan.Candy,
 		Version:    plan.Version,
 		DeployedAt: time.Now().UTC().Format(time.RFC3339),
 	}
@@ -117,7 +117,7 @@ func WalkPlan(ctx context.Context, ex StepExecutor, plan *InstallPlan, opts Emit
 			// Stricter than GateEnabled: repo changes require an
 			// explicit opt-in, never silently skipped.
 			if !opts.AllowRepoChanges {
-				return rec, fmt.Errorf("repo change in plan %s requires --allow-repo-changes", plan.Layer)
+				return rec, fmt.Errorf("repo change in plan %s requires --allow-repo-changes", plan.Candy)
 			}
 			if err := ex.ExecRepoChange(ctx, s, plan, opts); err != nil {
 				return rec, err

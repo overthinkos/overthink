@@ -7,7 +7,7 @@ import (
 
 // runValidateTests invokes validateTests against a small synthetic fixture
 // and returns the collected errors' text joined.
-func runValidateTests(t *testing.T, cfg *Config, layers map[string]*Layer) string {
+func runValidateTests(t *testing.T, cfg *Config, layers map[string]*Candy) string {
 	t.Helper()
 	errs := &ValidationError{}
 	validateTests(cfg, layers, errs)
@@ -16,7 +16,7 @@ func runValidateTests(t *testing.T, cfg *Config, layers map[string]*Layer) strin
 
 // Empty-verb and multi-verb checks must be rejected by Kind() at validation.
 func TestValidateTests_VerbDiscriminator(t *testing.T) {
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"lyr": {Name: "lyr", tests: []Check{
 			{},                     // no verb
 			{File: "/x", Port: 80}, // two verbs
@@ -34,7 +34,7 @@ func TestValidateTests_VerbDiscriminator(t *testing.T) {
 
 // Port out-of-range and timeout parse failure.
 func TestValidateTests_NumericAndTimeout(t *testing.T) {
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"lyr": {Name: "lyr", tests: []Check{
 			{Port: 70000},                // out of range
 			{Port: 6379, Timeout: "xxx"}, // bad duration
@@ -52,7 +52,7 @@ func TestValidateTests_NumericAndTimeout(t *testing.T) {
 
 // Build-scope checks may not reference runtime-only variables.
 func TestValidateTests_RuntimeVarInBuildScope(t *testing.T) {
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"lyr": {Name: "lyr", tests: []Check{
 			// scope defaults to build at layer level
 			{Command: "redis-cli -p ${HOST_PORT:6379}"},
@@ -67,7 +67,7 @@ func TestValidateTests_RuntimeVarInBuildScope(t *testing.T) {
 
 // Deploy-scope checks can use runtime variables — must NOT error.
 func TestValidateTests_RuntimeVarInDeployScope(t *testing.T) {
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"lyr": {Name: "lyr", tests: []Check{
 			{Command: "redis-cli -p ${HOST_PORT:6379}", Scope: "deploy"},
 		}},
@@ -81,7 +81,7 @@ func TestValidateTests_RuntimeVarInDeployScope(t *testing.T) {
 
 // Invalid scope value.
 func TestValidateTests_UnknownScope(t *testing.T) {
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"lyr": {Name: "lyr", tests: []Check{{File: "/x", Scope: "weird"}}},
 	}
 	cfg := &Config{Box: map[string]BoxConfig{}}
@@ -102,20 +102,20 @@ func TestValidateTests_IDUniqueness_SameImage(t *testing.T) {
 			},
 		},
 	}}
-	got := runValidateTests(t, cfg, map[string]*Layer{})
+	got := runValidateTests(t, cfg, map[string]*Candy{})
 	if !strings.Contains(got, "duplicate id") {
 		t.Errorf("expected duplicate-id error: %s", got)
 	}
 }
 
 // ID collision across layers that land in the same section of a collected image.
-func TestValidateTests_IDUniqueness_CrossLayer(t *testing.T) {
-	layers := map[string]*Layer{
+func TestValidateTests_IDUniqueness_CrossCandy(t *testing.T) {
+	layers := map[string]*Candy{
 		"a": {Name: "a", tests: []Check{{ID: "same", File: "/a"}}},
 		"b": {Name: "b", tests: []Check{{ID: "same", File: "/b"}}},
 	}
 	cfg := &Config{Box: map[string]BoxConfig{
-		"img": {Enabled: boolPtr(true), Layer: []string{"a", "b"}},
+		"img": {Enabled: boolPtr(true), Candy: []string{"a", "b"}},
 	}}
 	got := runValidateTests(t, cfg, layers)
 	if !strings.Contains(got, "duplicate id") || !strings.Contains(got, "candy") {
@@ -125,7 +125,7 @@ func TestValidateTests_IDUniqueness_CrossLayer(t *testing.T) {
 
 // Unknown matcher operator rejected.
 func TestValidateTests_UnknownMatcherOp(t *testing.T) {
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"lyr": {Name: "lyr", tests: []Check{
 			{Command: "x", Stdout: MatcherList{{Op: "mystery", Value: "?"}}},
 		}},
@@ -139,7 +139,7 @@ func TestValidateTests_UnknownMatcherOp(t *testing.T) {
 
 // mcp verb is deploy-scope-only like cdp/wl/dbus/vnc.
 func TestValidateTests_McpRejectedInBuildScope(t *testing.T) {
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"jupyter": {Name: "jupyter", tests: []Check{
 			{Mcp: "ping"}, // default scope at layer level is build
 		}},
@@ -153,7 +153,7 @@ func TestValidateTests_McpRejectedInBuildScope(t *testing.T) {
 
 // mcp: call requires tool modifier.
 func TestValidateTests_McpCallRequiresTool(t *testing.T) {
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"jupyter": {Name: "jupyter", tests: []Check{
 			{Mcp: "call", Scope: "deploy"}, // missing tool
 		}},
@@ -167,7 +167,7 @@ func TestValidateTests_McpCallRequiresTool(t *testing.T) {
 
 // mcp: read requires uri modifier.
 func TestValidateTests_McpReadRequiresURI(t *testing.T) {
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"jupyter": {Name: "jupyter", tests: []Check{
 			{Mcp: "read", Scope: "deploy"}, // missing uri
 		}},
@@ -181,7 +181,7 @@ func TestValidateTests_McpReadRequiresURI(t *testing.T) {
 
 // Unknown mcp method rejected with a listing of allowed methods.
 func TestValidateTests_McpUnknownMethod(t *testing.T) {
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"jupyter": {Name: "jupyter", tests: []Check{
 			{Mcp: "bogus", Scope: "deploy"},
 		}},
@@ -198,7 +198,7 @@ func TestValidateTests_McpUnknownMethod(t *testing.T) {
 
 // Valid mcp checks produce no errors.
 func TestValidateTests_McpClean(t *testing.T) {
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"jupyter": {Name: "jupyter", tests: []Check{
 			{Mcp: "ping", Scope: "deploy"},
 			{Mcp: "list-tools", Scope: "deploy"},
@@ -217,7 +217,7 @@ func TestValidateTests_McpClean(t *testing.T) {
 // modifiers mirror the cdp/wl/dbus/vnc/mcp rules.
 
 func TestValidateTests_RecordRejectedInBuildScope(t *testing.T) {
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"asciinema": {Name: "asciinema", tests: []Check{
 			{Record: "list"}, // default build scope
 		}},
@@ -229,7 +229,7 @@ func TestValidateTests_RecordRejectedInBuildScope(t *testing.T) {
 }
 
 func TestValidateTests_RecordStopRequiresArtifact(t *testing.T) {
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"asciinema": {Name: "asciinema", tests: []Check{
 			{Record: "stop", Scope: "deploy"}, // missing artifact
 		}},
@@ -241,7 +241,7 @@ func TestValidateTests_RecordStopRequiresArtifact(t *testing.T) {
 }
 
 func TestValidateTests_RecordCmdRequiresText(t *testing.T) {
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"asciinema": {Name: "asciinema", tests: []Check{
 			{Record: "cmd", Scope: "deploy"}, // missing text
 		}},
@@ -253,7 +253,7 @@ func TestValidateTests_RecordCmdRequiresText(t *testing.T) {
 }
 
 func TestValidateTests_RecordClean(t *testing.T) {
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"asciinema": {Name: "asciinema", tests: []Check{
 			{Record: "list", Scope: "deploy"},
 			{Record: "start", RecordMode: "terminal", Scope: "deploy"},
@@ -268,7 +268,7 @@ func TestValidateTests_RecordClean(t *testing.T) {
 }
 
 func TestValidateTests_SpiceRejectedInBuildScope(t *testing.T) {
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"vm": {Name: "vm", tests: []Check{{Spice: "status"}}},
 	}
 	got := runValidateTests(t, &Config{Box: map[string]BoxConfig{}}, layers)
@@ -278,7 +278,7 @@ func TestValidateTests_SpiceRejectedInBuildScope(t *testing.T) {
 }
 
 func TestValidateTests_SpiceTypeRequiresText(t *testing.T) {
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"vm": {Name: "vm", tests: []Check{{Spice: "type", Scope: "deploy"}}},
 	}
 	got := runValidateTests(t, &Config{Box: map[string]BoxConfig{}}, layers)
@@ -288,7 +288,7 @@ func TestValidateTests_SpiceTypeRequiresText(t *testing.T) {
 }
 
 func TestValidateTests_SpiceUnknownMethod(t *testing.T) {
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"vm": {Name: "vm", tests: []Check{{Spice: "bogus", Scope: "deploy"}}},
 	}
 	got := runValidateTests(t, &Config{Box: map[string]BoxConfig{}}, layers)
@@ -298,7 +298,7 @@ func TestValidateTests_SpiceUnknownMethod(t *testing.T) {
 }
 
 func TestValidateTests_SpiceClean(t *testing.T) {
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"vm": {Name: "vm", tests: []Check{
 			{Spice: "status", Scope: "deploy"},
 			{Spice: "screenshot", Artifact: "/tmp/s.png", Scope: "deploy"},
@@ -313,7 +313,7 @@ func TestValidateTests_SpiceClean(t *testing.T) {
 }
 
 func TestValidateTests_LibvirtRejectedInBuildScope(t *testing.T) {
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"vm": {Name: "vm", tests: []Check{{Libvirt: "info"}}},
 	}
 	got := runValidateTests(t, &Config{Box: map[string]BoxConfig{}}, layers)
@@ -323,7 +323,7 @@ func TestValidateTests_LibvirtRejectedInBuildScope(t *testing.T) {
 }
 
 func TestValidateTests_LibvirtGuestExecRequiresCommand(t *testing.T) {
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"vm": {Name: "vm", tests: []Check{{Libvirt: "guest/exec", Scope: "deploy"}}},
 	}
 	got := runValidateTests(t, &Config{Box: map[string]BoxConfig{}}, layers)
@@ -333,7 +333,7 @@ func TestValidateTests_LibvirtGuestExecRequiresCommand(t *testing.T) {
 }
 
 func TestValidateTests_LibvirtSnapshotCreateRequiresTarget(t *testing.T) {
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"vm": {Name: "vm", tests: []Check{{Libvirt: "snapshot/create", Scope: "deploy"}}},
 	}
 	got := runValidateTests(t, &Config{Box: map[string]BoxConfig{}}, layers)
@@ -343,7 +343,7 @@ func TestValidateTests_LibvirtSnapshotCreateRequiresTarget(t *testing.T) {
 }
 
 func TestValidateTests_LibvirtUnknownMethod(t *testing.T) {
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"vm": {Name: "vm", tests: []Check{{Libvirt: "bogus", Scope: "deploy"}}},
 	}
 	got := runValidateTests(t, &Config{Box: map[string]BoxConfig{}}, layers)
@@ -353,7 +353,7 @@ func TestValidateTests_LibvirtUnknownMethod(t *testing.T) {
 }
 
 func TestValidateTests_LibvirtClean(t *testing.T) {
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"vm": {Name: "vm", tests: []Check{
 			{Libvirt: "list", Scope: "deploy"},
 			{Libvirt: "info", Scope: "deploy"},
@@ -373,7 +373,7 @@ func TestValidateTests_LibvirtClean(t *testing.T) {
 
 // Full valid fixture — should produce no errors.
 func TestValidateTests_Clean(t *testing.T) {
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"redis": {Name: "redis", tests: []Check{
 			{File: "/usr/bin/redis-server", Exists: ptrBool(true), Mode: "0755"},
 			{Port: 6379, Listening: ptrBool(true)},
@@ -383,7 +383,7 @@ func TestValidateTests_Clean(t *testing.T) {
 	cfg := &Config{Box: map[string]BoxConfig{
 		"redis-ml": {
 			Enabled: boolPtr(true),
-			Layer:   []string{"redis"},
+			Candy:   []string{"redis"},
 			Eval:    []Check{{ID: "version", Command: "redis-server --version"}},
 			DeployEval: []Check{
 				{ID: "routed", HTTP: "https://${DNS}/health", Status: 200},
@@ -403,7 +403,7 @@ func TestValidateTests_Clean(t *testing.T) {
 func TestValidateTests_LowercaseEvalVarInClusterField(t *testing.T) {
 	cfg := &Config{Box: map[string]BoxConfig{}}
 
-	bad := map[string]*Layer{
+	bad := map[string]*Candy{
 		"lyr": {Name: "lyr", tests: []Check{
 			{K8s: "addons", Cluster: "${deploy_name}", Scope: "deploy"},
 		}},
@@ -412,7 +412,7 @@ func TestValidateTests_LowercaseEvalVarInClusterField(t *testing.T) {
 		t.Errorf("expected lowercase-eval-var rejection: %s", got)
 	}
 
-	ok := map[string]*Layer{
+	ok := map[string]*Candy{
 		"lyr": {Name: "lyr", tests: []Check{
 			{K8s: "addons", Cluster: "${DEPLOY_NAME}", Scope: "deploy"},
 		}},
@@ -421,7 +421,7 @@ func TestValidateTests_LowercaseEvalVarInClusterField(t *testing.T) {
 		t.Errorf("uppercase eval var should pass: %s", got)
 	}
 
-	shell := map[string]*Layer{
+	shell := map[string]*Candy{
 		"lyr": {Name: "lyr", tests: []Check{
 			{Command: `for v in ${name}; do echo "$v"; done`, Scope: "deploy"},
 		}},

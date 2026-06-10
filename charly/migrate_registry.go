@@ -78,7 +78,7 @@ var latestSchemaVersion = mustCalVer("2026.161.1301")
 func migrationSteps() []MigrationStep {
 	return []MigrationStep{
 		{mustCalVer("2026.112.522"), "unified", false, func(c *MigrateContext) (bool, error) {
-			w, err := MigrateUnified(MigrateUnifiedOpts{Dir: c.Dir, RewriteLayers: true, DryRun: c.DryRun})
+			w, err := MigrateUnified(MigrateUnifiedOpts{Dir: c.Dir, RewriteCandies: true, DryRun: c.DryRun})
 			return len(w) > 0, err
 		}},
 		{mustCalVer("2026.114.1558"), "schema-v4", false, func(c *MigrateContext) (bool, error) {

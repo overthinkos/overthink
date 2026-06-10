@@ -20,7 +20,7 @@ func writeFakeDeploy(t *testing.T, paths *LedgerPaths, deployID, image string, l
 		DeployID: deployID,
 		Image:    image,
 		Target:   "host",
-		Layer:    layers,
+		Candy:    layers,
 	}
 	data, err := json.Marshal(rec)
 	if err != nil {
@@ -33,20 +33,20 @@ func writeFakeDeploy(t *testing.T, paths *LedgerPaths, deployID, image string, l
 	return p
 }
 
-// writeFakeLayer writes a LayerRecord with empty ReverseOps so teardown
+// writeFakeCandy writes a CandyRecord with empty ReverseOps so teardown
 // touches no real system state. DeployedBy carries the deploy IDs we
 // pass — the refcount logic decides when the layer record is removed.
-func writeFakeLayer(t *testing.T, paths *LedgerPaths, layer string, deployedBy []string) {
+func writeFakeCandy(t *testing.T, paths *LedgerPaths, layer string, deployedBy []string) {
 	t.Helper()
 	rec := CandyRecord{
-		Layer:      layer,
+		Candy:      layer,
 		DeployedBy: deployedBy,
 	}
 	data, err := json.Marshal(rec)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(paths.Layers, layer+".json"), data, 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(paths.Candies, layer+".json"), data, 0644); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -147,7 +147,7 @@ func TestHostUnifiedTarget_Del_DryRun(t *testing.T) {
 		t.Fatal(err)
 	}
 	deployFile := writeFakeDeploy(t, paths, "h-1", "fedora-coder", []string{"a"})
-	writeFakeLayer(t, paths, "a", []string{"h-1"})
+	writeFakeCandy(t, paths, "a", []string{"h-1"})
 
 	target := &LocalUnifiedTarget{NodeName: "host"}
 	if err := target.Del(context.Background(), DelOpts{DryRun: true}); err != nil {
@@ -171,8 +171,8 @@ func TestHostUnifiedTarget_Del_RemovesEntries(t *testing.T) {
 		t.Fatal(err)
 	}
 	deployFile := writeFakeDeploy(t, paths, "h-1", "fedora-coder", []string{"a"})
-	layerFile := filepath.Join(paths.Layers, "a.json")
-	writeFakeLayer(t, paths, "a", []string{"h-1"})
+	candyFile := filepath.Join(paths.Candies, "a.json")
+	writeFakeCandy(t, paths, "a", []string{"h-1"})
 
 	target := &LocalUnifiedTarget{NodeName: "host"}
 	if err := target.Del(context.Background(), DelOpts{}); err != nil {
@@ -181,7 +181,7 @@ func TestHostUnifiedTarget_Del_RemovesEntries(t *testing.T) {
 	if _, err := os.Stat(deployFile); !os.IsNotExist(err) {
 		t.Errorf("deploy file still exists: %v", err)
 	}
-	if _, err := os.Stat(layerFile); !os.IsNotExist(err) {
+	if _, err := os.Stat(candyFile); !os.IsNotExist(err) {
 		t.Errorf("layer file still exists: %v", err)
 	}
 }
@@ -206,7 +206,7 @@ func TestHostUnifiedTarget_Del_SkipsNonHost(t *testing.T) {
 		DeployID: "p-1",
 		Image:    "sway-pod",
 		Target:   "pod:sway-pod",
-		Layer:    []string{"x"},
+		Candy:    []string{"x"},
 	}
 	data, _ := json.Marshal(podRec)
 	podFile := filepath.Join(paths.Deploys, "p-1.json")

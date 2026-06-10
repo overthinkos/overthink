@@ -9,21 +9,21 @@ import "testing"
 // is a HARD ERROR (no build-timestamp fallback — the per-kind versioning cutover
 // dropped all backward compat).
 func TestComputeEffectiveVersions(t *testing.T) {
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"a": {Name: "a", Version: "2026.100.0"},
 		"b": {Name: "b", Version: "2026.200.0"}, // newest layer
 	}
 	images := map[string]*ResolvedBox{
 		// dedicated version wins over the (newer) layer versions.
-		"dedicated": {Name: "dedicated", Version: "2026.50.0", Layer: []string{"a", "b"}, IsExternalBase: true, Base: "quay.io/x:1"},
+		"dedicated": {Name: "dedicated", Version: "2026.50.0", Candy: []string{"a", "b"}, IsExternalBase: true, Base: "quay.io/x:1"},
 		// no dedicated version -> highest layer version (b = 2026.200.0).
-		"derived": {Name: "derived", Layer: []string{"a", "b"}, IsExternalBase: true, Base: "quay.io/x:1"},
+		"derived": {Name: "derived", Candy: []string{"a", "b"}, IsExternalBase: true, Base: "quay.io/x:1"},
 		// bare base: layerless + external + dedicated version (what `charly migrate` backfills).
 		"barebase": {Name: "barebase", Version: "2026.300.0", IsExternalBase: true, Base: "quay.io/x:1"},
 		// layerless on an INTERNAL base -> recurse to the base's effective version.
 		"passthrough": {Name: "passthrough", Base: "barebase"},
 	}
-	g := &Generator{Boxes: images, Layers: layers}
+	g := &Generator{Boxes: images, Candies: layers}
 	if err := g.computeEffectiveVersions(); err != nil {
 		t.Fatalf("computeEffectiveVersions: %v", err)
 	}
@@ -43,8 +43,8 @@ func TestComputeEffectiveVersions(t *testing.T) {
 	// A layer bump propagates to a deriving image's identity.
 	layers["b"].Version = "2026.400.0"
 	g2 := &Generator{Boxes: map[string]*ResolvedBox{
-		"derived": {Name: "derived", Layer: []string{"a", "b"}, IsExternalBase: true, Base: "quay.io/x:1"},
-	}, Layers: layers}
+		"derived": {Name: "derived", Candy: []string{"a", "b"}, IsExternalBase: true, Base: "quay.io/x:1"},
+	}, Candies: layers}
 	if err := g2.computeEffectiveVersions(); err != nil {
 		t.Fatal(err)
 	}
@@ -55,7 +55,7 @@ func TestComputeEffectiveVersions(t *testing.T) {
 	// Hard error: layerless external-base image with no version (no fallback).
 	gErr := &Generator{
 		Boxes:  map[string]*ResolvedBox{"orphan": {Name: "orphan", IsExternalBase: true, Base: "quay.io/x:1"}},
-		Layers: map[string]*Layer{},
+		Candies: map[string]*Candy{},
 	}
 	if err := gErr.computeEffectiveVersions(); err == nil {
 		t.Error("expected a hard error for a layerless external-base image with no version:")

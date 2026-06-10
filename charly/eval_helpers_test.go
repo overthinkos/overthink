@@ -79,10 +79,10 @@ func testFormatSection(format string, raw map[string]interface{}) *PackageSectio
 	return section
 }
 
-// testLayerWithFormat creates a Layer with a single format section for testing.
-func testLayerWithFormat(name, format string, raw map[string]interface{}) *Layer {
+// testCandyWithFormat creates a Layer with a single format section for testing.
+func testCandyWithFormat(name, format string, raw map[string]interface{}) *Candy {
 	section := testFormatSection(format, raw)
-	return &Layer{
+	return &Candy{
 		Name: name,
 		formatSections: map[string]*PackageSection{
 			format: section,

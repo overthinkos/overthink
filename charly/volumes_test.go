@@ -8,10 +8,10 @@ import (
 func TestCollectImageVolumesSimple(t *testing.T) {
 	cfg := &Config{
 		Box: map[string]BoxConfig{
-			"myapp": {Layer: []string{"svc"}},
+			"myapp": {Candy: []string{"svc"}},
 		},
 	}
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"svc": {
 			Name:    "svc",
 			tasks:   []Task{{Cmd: "true"}},
@@ -35,11 +35,11 @@ func TestCollectImageVolumesSimple(t *testing.T) {
 func TestCollectImageVolumesChain(t *testing.T) {
 	cfg := &Config{
 		Box: map[string]BoxConfig{
-			"base":  {Layer: []string{"store"}},
-			"child": {Base: "base", Layer: []string{"app"}},
+			"base":  {Candy: []string{"store"}},
+			"child": {Base: "base", Candy: []string{"app"}},
 		},
 	}
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"store": {
 			Name:    "store",
 			tasks:   []Task{{Cmd: "true"}},
@@ -70,11 +70,11 @@ func TestCollectImageVolumesChain(t *testing.T) {
 func TestCollectImageVolumesDedup(t *testing.T) {
 	cfg := &Config{
 		Box: map[string]BoxConfig{
-			"base":  {Layer: []string{"store"}},
-			"child": {Base: "base", Layer: []string{"override"}},
+			"base":  {Candy: []string{"store"}},
+			"child": {Base: "base", Candy: []string{"override"}},
 		},
 	}
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"store": {
 			Name:    "store",
 			tasks:   []Task{{Cmd: "true"}},
@@ -104,10 +104,10 @@ func TestCollectImageVolumesDedup(t *testing.T) {
 func TestCollectImageVolumesNoVolumes(t *testing.T) {
 	cfg := &Config{
 		Box: map[string]BoxConfig{
-			"base": {Layer: []string{"plain"}},
+			"base": {Candy: []string{"plain"}},
 		},
 	}
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"plain": {Name: "plain", tasks: []Task{{Cmd: "true"}}},
 	}
 

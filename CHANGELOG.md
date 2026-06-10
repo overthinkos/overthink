@@ -22,6 +22,73 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-10 — refactor(charly)!: rename candy-meaning Go identifiers `Layer*`→`Candy*` (keep OCI `v1.Layer` / build-stage)
+
+The symmetric completion of the candy/box rebrand's Go axis — the `Layer*`→`Candy*`
+rename the prior prose-sweep entry flagged as "the one un-done structural axis" (it
+mirrors the earlier `Image*`→`Box*` Phase-2). The candy/box rebrand had already
+renamed the SCHEMA/wire `layer:`→`candy:` and `CandyRef`, but the central Go `Layer`
+struct and ~300 derived identifiers still carried the old name; this reconciles them
+so the Go surface matches the wire vocabulary.
+
+**Disambiguation rule (mirrors image=OCI / box=candybox):** rename the
+charly-**candy**-meaning identifiers (the composable layer/candy); KEEP the
+**OCI-layer**-meaning ones (a tar layer in the image filesystem stack). Because
+`v1.Layer` (go-containerregistry) appears ONLY in `merge.go` / `merge_test.go`, every
+compound `*Layer*` token elsewhere is candy-meaning by construction — the only
+candy-file KEEP is the multi-stage build-stage (`LayerStage` / `layerStage` /
+`COPY --from`).
+
+**Method (compiler + tests as the net):**
+- **gopls** (AST-aware, never touches `v1.Layer` / `v1.Image.Layers()` / strings) for
+  the homonym-dangerous symbols: the `Layer` struct → `Candy`, and the 24 bare
+  `Layer`/`Layers` candy FIELDS across `BoxConfig`, `ResolvedBox`, `CapabilityService`,
+  `LabelEvalSet`, `InstallPlan`, the Kong command structs, etc. → `Candy`/`Candies`
+  (most already carried `yaml:"candy"`/`json:"candy"` tags, so the rename RESTORES
+  Go↔wire symmetry).
+- **word-boundary `sed`** for 294 unique compound candy identifiers
+  (`ScanAllLayerWithConfig`→`ScanAllCandyWithConfig`, `LayerName`→`CandyName`,
+  `pickLayerVersion`→`pickCandyVersion`, `toLayerRefs`→`toCandyRefs`,
+  `IncludedLayer`→`IncludedCandy`, `overlayLayers`→`overlayCandies`,
+  `vLayers`→`vCandies`, …). Snake_case wire keys, migration match-literals, prose
+  words (`Layered`/`layerless`/`metalayer`), and false string-matches (`nlayers` =
+  `\n`+`layers`, the `.build/_layers/` dir) were excluded — a Go-identifier rename, not
+  a text replace.
+
+**KEPT (OCI / external / build-artifact — verified intact):** `v1.Layer` (×3),
+`v1.Image.Layers()`, all `merge.go` tar-layer ops (`mergeLayers`, `EmptyLayer`,
+`makeTarLayer`, `LayerFromOpener`, `MergeStep.Layers []int`), the multi-stage
+`LayerStage`/`layerStage`/`COPY --from` build-stage surface, the emitted Containerfile
+`# Layer:` comment, the Wayland `layer-shell` protocol name. **No wire change, no
+MigrationStep, no `version:` bump** — the on-disk format is byte-identical: the rename
+left every struct TAG untouched (`json:"candy"`, but also the not-yet-rebranded
+`yaml:"layer_field"` / `yaml:"depends_layer"` / `json:"layer"` / `json:"add_layer"`),
+so old configs and pushed images load unchanged.
+
+**Template-ref fix (R8).** gopls renamed `ServiceRenderContext.Layer`→`Candy`, but
+`text/template` field refs (`{{.Layer}}`) live in STRING literals gopls can't see — the
+compiler is silent and only the live service-render test caught it. Swept
+`{{.Layer}}`→`{{.Candy}}` in the embedded `build.yml` service-unit template + the test
+fixtures (`{{.LayerStage}}` correctly preserved).
+
+**Docs (R5).** 17 skill/root-doc files re-swept for the renamed identifiers (CLAUDE.md
+`pickCandyVersion`/`ensureCandySecret`; the go/install-plan/generate-source/image/layer/
+capabilities skills' `Candy` struct + `Candy.Require`/`Candy.IncludedCandy` + IR-step
+`CandyName`/`CandyDir` references; the "Candy-version resolution" heading). The
+`/charly-image:layer` skill slug, `layer-validator` agent name, wire `candy:` examples,
+and "Remote-layer resolver" cross-ref anchor are all kept.
+
+`go test ./...` green; R5 grep self-test clean (no renamed compound identifier survives
+outside this file). Acceptance via R10 `charly -C box/fedora eval run eval-pod` (the
+combined kind:box build + kind:candy composition + kind:pod supervisord runtime +
+DeployTarget rendering bed — exactly the surfaces the rename touches).
+
+Two deliberately-separated follow-ons (each its own cutover, NOT folded in): (1) the
+remaining `layer`-spelled WIRE fields (`depends_layer:`, `layer_field:`, `layer_file:`,
+the composition `layer:`, ledger `json:"layer"`) → `candy` is a USER-FACING schema
+change (MigrationStep + `version:` bump); (2) conceptual "layer" prose in deep Go code
+comments, left where it is OCI-legitimate or ambiguous.
+
 ### 2026-06-10 — docs: comprehensive PROSE sweep image→box / layer→candy across the whole skill corpus
 
 The final consistency axis: where the prior docs-sync made the skills *factually*

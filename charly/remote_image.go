@@ -13,7 +13,7 @@ type RemoteImageContext struct {
 	CacheDir string
 	Config   *Config
 	Resolved *ResolvedBox
-	Layers   map[string]*Layer
+	Candies   map[string]*Candy
 	ImageRef string // registry/name:tag for pull
 	BoxName  string // short name (e.g. "openclaw-browser")
 }
@@ -57,7 +57,7 @@ func ResolveRemoteImage(ref string, tag string) (*RemoteImageContext, error) {
 	}
 
 	// Scan layers from the cached repo
-	layers, err := ScanAllLayerWithConfig(cachePath, cfg)
+	layers, err := ScanAllCandyWithConfig(cachePath, cfg)
 	if err != nil {
 		return nil, fmt.Errorf("scanning layers in %s: %w", parsed.RepoPath, err)
 	}
@@ -70,7 +70,7 @@ func ResolveRemoteImage(ref string, tag string) (*RemoteImageContext, error) {
 		CacheDir: cachePath,
 		Config:   cfg,
 		Resolved: resolved,
-		Layers:   layers,
+		Candies:   layers,
 		ImageRef: imageRef,
 		BoxName:  parsed.Name,
 	}, nil
@@ -107,7 +107,7 @@ func (ctx *RemoteImageContext) ContainerName() string {
 // CollectVolumes collects volumes for the remote image.
 func (ctx *RemoteImageContext) CollectVolumes() ([]VolumeMount, error) {
 	return CollectBoxVolume(
-		ctx.Config, ctx.Layers, ctx.BoxName,
+		ctx.Config, ctx.Candies, ctx.BoxName,
 		ctx.Resolved.Home,
 		nil,
 	)

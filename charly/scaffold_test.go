@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestScaffoldLayer(t *testing.T) {
+func TestScaffoldCandy(t *testing.T) {
 	// Create temp directory
 	tmpDir, err := os.MkdirTemp("", "scaffold-test")
 	if err != nil {
@@ -15,25 +15,25 @@ func TestScaffoldLayer(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	// Scaffold a layer
-	err = ScaffoldLayer(tmpDir, "test-layer")
+	err = ScaffoldCandy(tmpDir, "test-layer")
 	if err != nil {
-		t.Fatalf("ScaffoldLayer() error = %v", err)
+		t.Fatalf("ScaffoldCandy() error = %v", err)
 	}
 
 	// Check directory was created
-	layerDir := filepath.Join(tmpDir, "candy", "test-layer")
-	if _, err := os.Stat(layerDir); os.IsNotExist(err) {
+	candyDir := filepath.Join(tmpDir, "candy", "test-layer")
+	if _, err := os.Stat(candyDir); os.IsNotExist(err) {
 		t.Error("layer directory was not created")
 	}
 
 	// Check the candy manifest was created (the single charly.yml filename)
-	layerYml := filepath.Join(layerDir, UnifiedFileName)
-	if _, err := os.Stat(layerYml); os.IsNotExist(err) {
+	candyYml := filepath.Join(candyDir, UnifiedFileName)
+	if _, err := os.Stat(candyYml); os.IsNotExist(err) {
 		t.Error("candy manifest was not created")
 	}
 }
 
-func TestScaffoldLayerAlreadyExists(t *testing.T) {
+func TestScaffoldCandyAlreadyExists(t *testing.T) {
 	// Create temp directory with existing layer
 	tmpDir, err := os.MkdirTemp("", "scaffold-test")
 	if err != nil {
@@ -42,13 +42,13 @@ func TestScaffoldLayerAlreadyExists(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	// Create layer directory
-	layerDir := filepath.Join(tmpDir, "candy", "existing")
-	if err := os.MkdirAll(layerDir, 0755); err != nil {
+	candyDir := filepath.Join(tmpDir, "candy", "existing")
+	if err := os.MkdirAll(candyDir, 0755); err != nil {
 		t.Fatal(err)
 	}
 
 	// Try to scaffold - should fail
-	err = ScaffoldLayer(tmpDir, "existing")
+	err = ScaffoldCandy(tmpDir, "existing")
 	if err == nil {
 		t.Error("expected error for existing layer")
 	}

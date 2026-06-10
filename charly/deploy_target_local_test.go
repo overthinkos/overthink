@@ -15,7 +15,7 @@ func TestHostDeployTargetDryRunShellHook(t *testing.T) {
 	paths := &LedgerPaths{
 		Root:     filepath.Join(home, "installed"),
 		Deploys:  filepath.Join(home, "installed", "deploys"),
-		Layers:   filepath.Join(home, "installed", "layers"),
+		Candies:   filepath.Join(home, "installed", "layers"),
 		LockFile: filepath.Join(home, "installed", ".lock"),
 	}
 	tgt := &LocalDeployTarget{
@@ -24,11 +24,11 @@ func TestHostDeployTargetDryRunShellHook(t *testing.T) {
 		Shell:       ShellBash,
 	}
 	plan := &InstallPlan{
-		Layer:    "uv",
+		Candy:    "uv",
 		DeployID: "d1",
 		Steps: []InstallStep{
 			&ShellHookStep{
-				LayerName: "uv",
+				CandyName: "uv",
 				EnvVars:   map[string]string{"PIXI_CACHE_DIR": "/tmp/pixi"},
 				PathAdd:   []string{"/usr/local/bin"},
 			},
@@ -59,7 +59,7 @@ func TestHostDeployTargetDryRunShellHook(t *testing.T) {
 	}
 
 	// Ledger: layer + deploy records.
-	lrec, err := ReadLayerRecord(paths, "uv")
+	lrec, err := ReadCandyRecord(paths, "uv")
 	if err != nil || lrec == nil {
 		t.Fatalf("layer ledger missing: %v / %+v", err, lrec)
 	}
@@ -73,7 +73,7 @@ func TestHostDeployTargetGateSkips(t *testing.T) {
 	paths := &LedgerPaths{
 		Root:     filepath.Join(home, "installed"),
 		Deploys:  filepath.Join(home, "installed", "deploys"),
-		Layers:   filepath.Join(home, "installed", "layers"),
+		Candies:   filepath.Join(home, "installed", "layers"),
 		LockFile: filepath.Join(home, "installed", ".lock"),
 	}
 	tgt := &LocalDeployTarget{
@@ -83,7 +83,7 @@ func TestHostDeployTargetGateSkips(t *testing.T) {
 	}
 	// Step requires --with-services; we don't set the flag → skipped.
 	plan := &InstallPlan{
-		Layer:    "ollama",
+		Candy:    "ollama",
 		DeployID: "d-services",
 		Steps: []InstallStep{
 			&ServiceCustomStep{
@@ -92,7 +92,7 @@ func TestHostDeployTargetGateSkips(t *testing.T) {
 				UnitPath:    "/etc/systemd/system/charly-ollama-ollama.service",
 				TargetScope: ScopeSystem,
 				Enable:      true,
-				LayerName:   "ollama",
+				CandyName:   "ollama",
 			},
 		},
 	}
@@ -101,7 +101,7 @@ func TestHostDeployTargetGateSkips(t *testing.T) {
 	}
 	// No unit file should have been written — we're not root and it's dry-run anyway.
 	// Ledger should still record the layer but with no service step (gate skipped).
-	lrec, _ := ReadLayerRecord(paths, "ollama")
+	lrec, _ := ReadCandyRecord(paths, "ollama")
 	if lrec == nil {
 		// Dry-run skips ledger writes; that's OK for this test.
 		return
@@ -118,7 +118,7 @@ func TestHostDeployTargetDryRunSystemPackages(t *testing.T) {
 	paths := &LedgerPaths{
 		Root:     filepath.Join(home, "installed"),
 		Deploys:  filepath.Join(home, "installed", "deploys"),
-		Layers:   filepath.Join(home, "installed", "layers"),
+		Candies:   filepath.Join(home, "installed", "layers"),
 		LockFile: filepath.Join(home, "installed", ".lock"),
 	}
 	dc, _, _, err := LoadBuildConfigForBox(repoRootDir(t))
@@ -132,7 +132,7 @@ func TestHostDeployTargetDryRunSystemPackages(t *testing.T) {
 		DistroCfg:   dc,
 	}
 	plan := &InstallPlan{
-		Layer:    "ripgrep",
+		Candy:    "ripgrep",
 		DeployID: "d-rg",
 		Steps: []InstallStep{
 			&SystemPackagesStep{

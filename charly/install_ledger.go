@@ -37,7 +37,7 @@ import (
 type LedgerPaths struct {
 	Root     string // ~/.config/opencharly/installed
 	Deploys  string // <Root>/deploys/
-	Layers   string // <Root>/layers/
+	Candies   string // <Root>/layers/
 	LockFile string // <Root>/.lock
 }
 
@@ -52,14 +52,14 @@ func DefaultLedgerPaths() (*LedgerPaths, error) {
 	return &LedgerPaths{
 		Root:     root,
 		Deploys:  filepath.Join(root, "deploys"),
-		Layers:   filepath.Join(root, "layers"),
+		Candies:   filepath.Join(root, "layers"),
 		LockFile: filepath.Join(root, ".lock"),
 	}, nil
 }
 
 // Ensure creates the ledger directory tree if missing.
 func (p *LedgerPaths) Ensure() error {
-	for _, d := range []string{p.Root, p.Deploys, p.Layers} {
+	for _, d := range []string{p.Root, p.Deploys, p.Candies} {
 		if err := os.MkdirAll(d, 0755); err != nil {
 			return fmt.Errorf("ledger mkdir %s: %w", d, err)
 		}
@@ -117,17 +117,17 @@ type DeployRecord struct {
 	Image      string   `json:"image"`
 	Tag        string   `json:"tag,omitempty"`
 	Target     string   `json:"target"` // "host" | "container:<name>"
-	Layer      []string `json:"layer"`
-	AddLayer   []string `json:"add_layer,omitempty"`
+	Candy      []string `json:"layer"`
+	AddCandy   []string `json:"add_layer,omitempty"`
 	DeployedAt string   `json:"deployed_at"`
 }
 
-// LayerRecord is the per-layer ledger entry. Lists concrete artifacts
+// CandyRecord is the per-layer ledger entry. Lists concrete artifacts
 // (packages installed, files written, services enabled, env.d file
 // created, repo changes) so reversal doesn't need to re-compile the
 // plan from the candy manifest.
 type CandyRecord struct {
-	Layer        string       `json:"layer"`
+	Candy        string       `json:"layer"`
 	Version      string       `json:"version,omitempty"`
 	DeployedBy   []string     `json:"deployed_by"` // set of deploy IDs
 	DeployedAt   string       `json:"deployed_at"`
@@ -138,7 +138,7 @@ type CandyRecord struct {
 
 // StepRecord is a thin summary of a completed InstallStep that the
 // ledger keeps for audit. Kept intentionally small — the ReverseOps
-// list on LayerRecord is the source of truth for teardown.
+// list on CandyRecord is the source of truth for teardown.
 type StepRecord struct {
 	Kind        StepKind          `json:"kind"`
 	Scope       Scope             `json:"scope,omitempty"`
@@ -179,28 +179,28 @@ func ReadDeployRecord(paths *LedgerPaths, id string) (*DeployRecord, error) {
 	return &rec, nil
 }
 
-// WriteLayerRecord serializes rec to candy/<layer>.json.
-func WriteLayerRecord(paths *LedgerPaths, rec *CandyRecord) error {
+// WriteCandyRecord serializes rec to candy/<layer>.json.
+func WriteCandyRecord(paths *LedgerPaths, rec *CandyRecord) error {
 	if err := paths.Ensure(); err != nil {
 		return err
 	}
-	path := filepath.Join(paths.Layers, rec.Layer+".json")
+	path := filepath.Join(paths.Candies, rec.Candy+".json")
 	return writeJSONAtomic(path, rec)
 }
 
-// ReadLayerRecord loads candy/<layer>.json; returns nil, nil if absent.
-func ReadLayerRecord(paths *LedgerPaths, layer string) (*CandyRecord, error) {
-	path := filepath.Join(paths.Layers, layer+".json")
+// ReadCandyRecord loads candy/<layer>.json; returns nil, nil if absent.
+func ReadCandyRecord(paths *LedgerPaths, layer string) (*CandyRecord, error) {
+	path := filepath.Join(paths.Candies, layer+".json")
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil
 		}
-		return nil, fmt.Errorf("ReadLayerRecord: %w", err)
+		return nil, fmt.Errorf("ReadCandyRecord: %w", err)
 	}
 	var rec CandyRecord
 	if err := json.Unmarshal(data, &rec); err != nil {
-		return nil, fmt.Errorf("ReadLayerRecord: parsing %s: %w", path, err)
+		return nil, fmt.Errorf("ReadCandyRecord: parsing %s: %w", path, err)
 	}
 	return &rec, nil
 }
@@ -216,9 +216,9 @@ func DeleteDeployRecord(paths *LedgerPaths, id string) error {
 	return nil
 }
 
-// DeleteLayerRecord removes candy/<layer>.json.
-func DeleteLayerRecord(paths *LedgerPaths, layer string) error {
-	path := filepath.Join(paths.Layers, layer+".json")
+// DeleteCandyRecord removes candy/<layer>.json.
+func DeleteCandyRecord(paths *LedgerPaths, layer string) error {
+	path := filepath.Join(paths.Candies, layer+".json")
 	err := os.Remove(path)
 	if err != nil && !os.IsNotExist(err) {
 		return err
@@ -244,16 +244,16 @@ func writeJSONAtomic(path string, data interface{}) error {
 // Refcount helpers
 // ---------------------------------------------------------------------------
 
-// AddLayerDeployment adds deployID to layer.DeployedBy and writes the
+// AddCandyDeployment adds deployID to layer.DeployedBy and writes the
 // record. Used at install time.
-func AddLayerDeployment(paths *LedgerPaths, layerName, deployID string, update func(*CandyRecord)) error {
-	rec, err := ReadLayerRecord(paths, layerName)
+func AddCandyDeployment(paths *LedgerPaths, candyName, deployID string, update func(*CandyRecord)) error {
+	rec, err := ReadCandyRecord(paths, candyName)
 	if err != nil {
 		return err
 	}
 	if rec == nil {
 		rec = &CandyRecord{
-			Layer:      layerName,
+			Candy:      candyName,
 			DeployedAt: time.Now().UTC().Format(time.RFC3339),
 		}
 	}
@@ -263,15 +263,15 @@ func AddLayerDeployment(paths *LedgerPaths, layerName, deployID string, update f
 	if update != nil {
 		update(rec)
 	}
-	return WriteLayerRecord(paths, rec)
+	return WriteCandyRecord(paths, rec)
 }
 
-// RemoveLayerDeployment decrements a layer's deployed_by set. Returns
+// RemoveCandyDeployment decrements a layer's deployed_by set. Returns
 // (recordAfter, shouldFullyRemove, error). When shouldFullyRemove is
 // true, the caller should perform the actual file/package/service
 // teardown and then delete the layer ledger entry.
-func RemoveLayerDeployment(paths *LedgerPaths, layerName, deployID string) (*CandyRecord, bool, error) {
-	rec, err := ReadLayerRecord(paths, layerName)
+func RemoveCandyDeployment(paths *LedgerPaths, candyName, deployID string) (*CandyRecord, bool, error) {
+	rec, err := ReadCandyRecord(paths, candyName)
 	if err != nil {
 		return nil, false, err
 	}
@@ -288,7 +288,7 @@ func RemoveLayerDeployment(paths *LedgerPaths, layerName, deployID string) (*Can
 	if len(rec.DeployedBy) == 0 {
 		return rec, true, nil
 	}
-	return rec, false, WriteLayerRecord(paths, rec)
+	return rec, false, WriteCandyRecord(paths, rec)
 }
 
 func containsString(s []string, v string) bool {
@@ -311,8 +311,8 @@ func containsString(s []string, v string) bool {
 // needs the same treatment.
 // ---------------------------------------------------------------------------
 
-// AddLayerDeploymentVia is the executor-routed variant of
-// AddLayerDeployment. When exec is nil or a local executor, it
+// AddCandyDeploymentVia is the executor-routed variant of
+// AddCandyDeployment. When exec is nil or a local executor, it
 // falls back to operator-side file I/O (today's behaviour). When exec
 // is a non-local DeployExecutor (SSHExecutor / NestedExecutor), the
 // ledger file I/O goes through exec.GetFile + exec.RunSystem so the
@@ -320,30 +320,30 @@ func containsString(s []string, v string) bool {
 // ~/.config/opencharly/installed/ — matching the install's actual
 // venue (arch-vm.arch-host writes in the arch VM guest; sway-pod with
 // nested pods writes in the parent pod; etc.).
-func AddLayerDeploymentVia(exec DeployExecutor, paths *LedgerPaths, layerName, deployID string, update func(*CandyRecord)) error {
+func AddCandyDeploymentVia(exec DeployExecutor, paths *LedgerPaths, candyName, deployID string, update func(*CandyRecord)) error {
 	if exec == nil {
-		return AddLayerDeployment(paths, layerName, deployID, update)
+		return AddCandyDeployment(paths, candyName, deployID, update)
 	}
 	if _, isLocal := exec.(ShellExecutor); isLocal {
-		return AddLayerDeployment(paths, layerName, deployID, update)
+		return AddCandyDeployment(paths, candyName, deployID, update)
 	}
 	ctx := context.Background()
 	// Substrate ledger dirs. The layers-dir basename stays `layers` (NOT `candy`)
 	// — it must match DefaultLedgerPaths.Layers and the path the local reader
 	// expects (the box/candy rebrand deliberately preserved this on-disk ledger
-	// path). Single-source layersDir/deploysDir so the write target and the mkdir
+	// path). Single-source candiesDir/deploysDir so the write target and the mkdir
 	// can NEVER diverge again (the rebrand's bug was exactly that divergence —
 	// write went to installed/candy/ while mkdir created installed/layers/, so the
 	// write failed on every fresh substrate). `~` resolves in the substrate shell.
 	const installedRoot = "~/.config/opencharly/installed"
-	layersDir := installedRoot + "/layers"
+	candiesDir := installedRoot + "/layers"
 	deploysDir := installedRoot + "/deploys"
-	remoteFile := layersDir + "/" + layerName + ".json"
+	remoteFile := candiesDir + "/" + candyName + ".json"
 	// Create BOTH installed/layers and installed/deploys so the full ledger
 	// directory tree (matching Ensure()) exists on the substrate — ensures bed
 	// tests like `test -d ~/.config/opencharly/installed/deploys` pass even when no
 	// DeployRecord has been written yet.
-	mkdirScript := "mkdir -p " + layersDir + " " + deploysDir
+	mkdirScript := "mkdir -p " + candiesDir + " " + deploysDir
 	data, err := exec.GetFile(ctx, remoteFile, false, EmitOpts{})
 	var rec *CandyRecord
 	if err == nil && len(data) > 0 {
@@ -354,7 +354,7 @@ func AddLayerDeploymentVia(exec DeployExecutor, paths *LedgerPaths, layerName, d
 	}
 	if rec == nil {
 		rec = &CandyRecord{
-			Layer:      layerName,
+			Candy:      candyName,
 			DeployedAt: time.Now().UTC().Format(time.RFC3339),
 		}
 	}
@@ -366,18 +366,18 @@ func AddLayerDeploymentVia(exec DeployExecutor, paths *LedgerPaths, layerName, d
 	}
 	encoded, err := json.MarshalIndent(rec, "", "  ")
 	if err != nil {
-		return fmt.Errorf("AddLayerDeploymentVia: marshal: %w", err)
+		return fmt.Errorf("AddCandyDeploymentVia: marshal: %w", err)
 	}
 	script := mkdirScript + " && cat > " + remoteFile + " <<'CHARLY_LEDGER_EOF'\n" +
 		string(encoded) + "\nCHARLY_LEDGER_EOF\n"
 	if runErr := exec.RunUser(ctx, script, EmitOpts{}); runErr != nil {
-		return fmt.Errorf("AddLayerDeploymentVia: write via executor: %w", runErr)
+		return fmt.Errorf("AddCandyDeploymentVia: write via executor: %w", runErr)
 	}
 	return nil
 }
 
 // WriteDeployRecordVia is the executor-routed variant of
-// WriteDeployRecord. Same semantics as AddLayerDeploymentVia but for
+// WriteDeployRecord. Same semantics as AddCandyDeploymentVia but for
 // deploy records (deploys/<id>.json).
 func WriteDeployRecordVia(exec DeployExecutor, paths *LedgerPaths, rec *DeployRecord) error {
 	if exec == nil {

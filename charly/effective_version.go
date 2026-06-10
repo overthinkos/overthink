@@ -8,7 +8,7 @@ import "fmt"
 //
 //  1. the image's dedicated `version:` (img.Version) if set; else
 //  2. the highest layer `version:` across its full layer set
-//     (collectAllBoxLayers spans the entire base chain, including
+//     (collectAllBoxCandies spans the entire base chain, including
 //     namespaced bases since img.Base is a fully-qualified key in g.Images);
 //     else
 //  3. the internal base image's EffectiveVersion (recurse); else
@@ -18,7 +18,7 @@ import "fmt"
 // The label is stable across builds when no layer changed; that stability is
 // what keeps a child's `FROM <base>` SHA from shifting and cascading
 // cache-misses. Run by NewGenerator AFTER ComputeIntermediates +
-// GlobalLayerOrder, so the base chain and the auto-intermediate images are
+// GlobalCandyOrder, so the base chain and the auto-intermediate images are
 // fully materialized in g.Images (auto-intermediates carry no own version: and
 // resolve via step 2 over their hoisted layers).
 func (g *Generator) computeEffectiveVersions() error {
@@ -51,8 +51,8 @@ func (g *Generator) computeEffectiveVersions() error {
 		//    Layers are mandatory-versioned, so a layered image always resolves
 		//    here. compareCalVer orders YYYY.DDD.HHMM numerically.
 		best := ""
-		for _, ln := range collectAllBoxLayers(name, g.Boxes, g.Layers) {
-			l, ok := g.Layers[ln]
+		for _, ln := range collectAllBoxCandies(name, g.Boxes, g.Candies) {
+			l, ok := g.Candies[ln]
 			if !ok || l.Version == "" {
 				continue
 			}

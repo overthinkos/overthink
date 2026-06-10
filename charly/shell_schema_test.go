@@ -113,7 +113,7 @@ func TestResolveShellSpec_SelectionRule(t *testing.T) {
 // rm-file-* per scope; UseDropin=false reverses via remove-managed-block.
 func TestShellSnippetStep_ReverseOps(t *testing.T) {
 	dropin := &ShellSnippetStep{
-		LayerName:   "direnv",
+		CandyName:   "direnv",
 		Shell:       "fish",
 		Snippet:     "direnv hook fish | source\n",
 		Destination: "/home/u/.config/fish/conf.d/charly-direnv.fish",
@@ -126,7 +126,7 @@ func TestShellSnippetStep_ReverseOps(t *testing.T) {
 	}
 
 	managed := &ShellSnippetStep{
-		LayerName:   "direnv",
+		CandyName:   "direnv",
 		Shell:       "bash",
 		Snippet:     `eval "$(direnv hook bash)"`,
 		Destination: "/home/u/.bashrc",
@@ -147,7 +147,7 @@ func TestShellSnippetStep_ReverseOps(t *testing.T) {
 // in-memory shape and label-emit/extract pair.
 func TestLabelShellSet_RoundTrip(t *testing.T) {
 	original := &LabelShellSet{
-		Layer: []ShellEntry{
+		Candy: []ShellEntry{
 			{
 				Origin: "direnv",
 				ID:     "direnv",
@@ -168,10 +168,10 @@ func TestLabelShellSet_RoundTrip(t *testing.T) {
 	if err := json.Unmarshal(data, &roundtripped); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if len(roundtripped.Layer) != 1 {
-		t.Fatalf("Layer count: %d", len(roundtripped.Layer))
+	if len(roundtripped.Candy) != 1 {
+		t.Fatalf("Layer count: %d", len(roundtripped.Candy))
 	}
-	got := roundtripped.Layer[0]
+	got := roundtripped.Candy[0]
 	if got.Origin != "direnv" || got.ID != "direnv" {
 		t.Errorf("origin/id: %+v", got)
 	}
@@ -187,7 +187,7 @@ func TestLabelShellSet_RoundTrip(t *testing.T) {
 // the baked entry; non-matching id appends to Deploy.
 func TestMergeDeployShell_ReplaceByID(t *testing.T) {
 	baked := &LabelShellSet{
-		Layer: []ShellEntry{
+		Candy: []ShellEntry{
 			{Origin: "direnv", ID: "direnv", Generic: &ShellSpec{Init: "default"}},
 		},
 	}
@@ -196,8 +196,8 @@ func TestMergeDeployShell_ReplaceByID(t *testing.T) {
 		{Origin: "deploy", Generic: &ShellSpec{Init: "fresh-deploy-entry"}},
 	}
 	merged := MergeDeployShell(baked, overlay)
-	if len(merged.Layer) != 1 || merged.Layer[0].Generic.Init != "overridden" {
-		t.Errorf("replace by id: %+v", merged.Layer)
+	if len(merged.Candy) != 1 || merged.Candy[0].Generic.Init != "overridden" {
+		t.Errorf("replace by id: %+v", merged.Candy)
 	}
 	if len(merged.Deploy) != 1 || merged.Deploy[0].Generic.Init != "fresh-deploy-entry" {
 		t.Errorf("append to deploy: %+v", merged.Deploy)
@@ -208,7 +208,7 @@ func TestMergeDeployShell_ReplaceByID(t *testing.T) {
 // (encoded as Generic + ByShell both nil) drops the matched entry.
 func TestMergeDeployShell_SkipDropsBakedEntry(t *testing.T) {
 	baked := &LabelShellSet{
-		Layer: []ShellEntry{
+		Candy: []ShellEntry{
 			{Origin: "direnv", ID: "direnv", Generic: &ShellSpec{Init: "x"}},
 		},
 	}
@@ -216,8 +216,8 @@ func TestMergeDeployShell_SkipDropsBakedEntry(t *testing.T) {
 		{ID: "direnv"}, // Generic + ByShell nil ⇒ skip signal
 	}
 	merged := MergeDeployShell(baked, overlay)
-	if len(merged.Layer) != 0 {
-		t.Errorf("skip should drop entry: %+v", merged.Layer)
+	if len(merged.Candy) != 0 {
+		t.Errorf("skip should drop entry: %+v", merged.Candy)
 	}
 }
 
@@ -282,7 +282,7 @@ func TestDeployShellOverlay_YAMLParse(t *testing.T) {
 
 	// Convert + merge against a baked set.
 	baked := &LabelShellSet{
-		Layer: []ShellEntry{
+		Candy: []ShellEntry{
 			{
 				Origin:  "direnv",
 				ID:      "direnv",
@@ -304,14 +304,14 @@ func TestDeployShellOverlay_YAMLParse(t *testing.T) {
 		overlays[2].ToShellEntry(),
 	})
 	// direnv entry should now reflect the overlay's fish override.
-	if len(merged.Layer) == 0 || merged.Layer[0].ID != "direnv" {
-		t.Fatalf("direnv entry missing: %+v", merged.Layer)
+	if len(merged.Candy) == 0 || merged.Candy[0].ID != "direnv" {
+		t.Fatalf("direnv entry missing: %+v", merged.Candy)
 	}
-	if merged.Layer[0].ByShell["fish"] == nil || !strings.Contains(merged.Layer[0].ByShell["fish"].Init, "--no-prompt") {
-		t.Errorf("direnv.fish overlay not applied: %+v", merged.Layer[0].ByShell)
+	if merged.Candy[0].ByShell["fish"] == nil || !strings.Contains(merged.Candy[0].ByShell["fish"].Init, "--no-prompt") {
+		t.Errorf("direnv.fish overlay not applied: %+v", merged.Candy[0].ByShell)
 	}
 	// agent-forwarding:bash should be GONE (skipped).
-	for _, e := range merged.Layer {
+	for _, e := range merged.Candy {
 		if e.ID == "agent-forwarding:bash" {
 			t.Errorf("agent-forwarding:bash should be skipped: %+v", e)
 		}

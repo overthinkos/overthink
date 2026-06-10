@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-// LayerCapabilities is the per-layer YAML shape parsed from the candy manifest
+// CandyCapabilities is the per-layer YAML shape parsed from the candy manifest
 // `capabilities:`. Layers contribute image-level facts that previously
 // hid behind magic image-level booleans (image.bootc, image.data_image).
 //
@@ -27,7 +27,7 @@ type CandyCapabilities struct {
 	OCILabels          map[string]string `yaml:"oci_label,omitempty"`
 }
 
-// AggregatedLayerCaps is the output of walking all layers in resolution
+// AggregatedCandyCaps is the output of walking all layers in resolution
 // order. It is populated onto ResolvedBox and consumed wherever code
 // previously read BoxConfig.Bootc, BoxConfig.DataImage, or the
 // init-system bootc parameter.
@@ -43,12 +43,12 @@ type AggregatedCandyCaps struct {
 	Provided map[string]bool
 }
 
-// AggregateLayerCapabilities walks `order` (layer names in topological
+// AggregateCandyCapabilities walks `order` (layer names in topological
 // resolution order) and merges each layer's `capabilities:` contribution.
 // Returns an error if two layers declare conflicting values for the same
 // OCI label key — the conflict surfaces the bug rather than silently
 // picking a winner.
-func AggregateLayerCapabilities(layers map[string]*Layer, order []string) (*AggregatedCandyCaps, error) {
+func AggregateCandyCapabilities(layers map[string]*Candy, order []string) (*AggregatedCandyCaps, error) {
 	out := &AggregatedCandyCaps{
 		OCILabels: make(map[string]string),
 		Provided:  make(map[string]bool),
@@ -101,7 +101,7 @@ func AggregateLayerCapabilities(layers map[string]*Layer, order []string) (*Aggr
 // CheckRequiredCapabilities returns a sorted list of capability names
 // requested via `requires_capabilities:` on any layer in `order` but not
 // provided by the aggregated capabilities. Empty slice on success.
-func CheckRequiredCapabilities(layers map[string]*Layer, order []string, agg *AggregatedCandyCaps) []string {
+func CheckRequiredCapabilities(layers map[string]*Candy, order []string, agg *AggregatedCandyCaps) []string {
 	if agg == nil {
 		agg = &AggregatedCandyCaps{Provided: map[string]bool{}}
 	}
@@ -125,9 +125,9 @@ func CheckRequiredCapabilities(layers map[string]*Layer, order []string, agg *Ag
 	return out
 }
 
-// LayerCapabilitiesError formats a missing-capabilities error with a
+// CandyCapabilitiesError formats a missing-capabilities error with a
 // remediation hint pointing at which layers requested what.
-func LayerCapabilitiesError(layers map[string]*Layer, order []string, missing []string) error {
+func CandyCapabilitiesError(layers map[string]*Candy, order []string, missing []string) error {
 	if len(missing) == 0 {
 		return nil
 	}

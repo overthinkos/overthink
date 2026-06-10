@@ -9,7 +9,7 @@ package main
 // Two backfills, both seeded with the cutover's HEAD CalVer:
 //
 //  1. EVERY layer.yml (kind-keyed `layer:` map) gets `version: <seed>` — the
-//     layer kind now REQUIRES it (validateLayerContents hard-errors otherwise).
+//     layer kind now REQUIRES it (validateCandyContents hard-errors otherwise).
 //  2. Bare-base image entries — an `image:` entry with NO `layer:` field AND an
 //     EXTERNAL `base:` (a registry ref, detected by a "/" in the value, e.g.
 //     `quay.io/archlinux/archlinux:base-20260525.0.535911`) — get a dedicated

@@ -44,7 +44,7 @@ func (e *recordingExec) ResolveHome(context.Context, string) (string, error) {
 // baked image home, so each deploy target resolves them against the real
 // destination home at emit.
 func TestCompileShellHookStepDefersHome(t *testing.T) {
-	layer := &Layer{
+	layer := &Candy{
 		Name: "nodejs",
 		envConfig: &EnvConfig{
 			Vars:       map[string]string{"NPM_CONFIG_PREFIX": "~/.npm-global"},

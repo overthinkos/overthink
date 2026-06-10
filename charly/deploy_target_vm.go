@@ -185,20 +185,20 @@ func (t *VmDeployTarget) Emit(plans []*InstallPlan, opts EmitOpts) error {
 		// content, shell-snippet destinations, and managed blocks all point
 		// at the guest user's home rather than the host operator's.
 		plan.ResolveHome(t.guestHome)
-		layerRec, err := t.emitPlan(ctx, plan, opts)
+		candyRec, err := t.emitPlan(ctx, plan, opts)
 		if err != nil {
 			// Persist what we have so far before returning.
-			if layerRec != nil {
-				_ = t.recordLayer(paths, layerRec, plan, opts)
+			if candyRec != nil {
+				_ = t.recordCandy(paths, candyRec, plan, opts)
 			}
 			_ = WriteDeployRecordVia(t.Exec, paths, deployRec)
-			return fmt.Errorf("VmDeployTarget: plan %s: %w", plan.Layer, err)
+			return fmt.Errorf("VmDeployTarget: plan %s: %w", plan.Candy, err)
 		}
-		if err := t.recordLayer(paths, layerRec, plan, opts); err != nil {
-			return fmt.Errorf("VmDeployTarget: recording layer %s: %w", plan.Layer, err)
+		if err := t.recordCandy(paths, candyRec, plan, opts); err != nil {
+			return fmt.Errorf("VmDeployTarget: recording layer %s: %w", plan.Candy, err)
 		}
-		deployRec.Layer = append(deployRec.Layer, plan.Layer)
-		if deployRec.Image == "" && plan.Layer != "" {
+		deployRec.Candy = append(deployRec.Candy, plan.Candy)
+		if deployRec.Image == "" && plan.Candy != "" {
 			// For pure-add_layers vm deploys the deploy-id's "image" slot
 			// stays as the vm: target name so `charly deploy del` can find it.
 			deployRec.Image = t.targetName()
@@ -216,7 +216,7 @@ func (t *VmDeployTarget) Emit(plans []*InstallPlan, opts EmitOpts) error {
 		}
 	}
 
-	deployRec.AddLayer = append(deployRec.AddLayer, deployRec.Layer...)
+	deployRec.AddCandy = append(deployRec.AddCandy, deployRec.Candy...)
 	if !opts.DryRun {
 		if err := WriteDeployRecordVia(t.Exec, paths, deployRec); err != nil {
 			return fmt.Errorf("VmDeployTarget: writing deploy record: %w", err)
@@ -237,11 +237,11 @@ func firstDeployID(plans []*InstallPlan) string {
 	return ""
 }
 
-// recordLayer writes the per-layer ledger entry INTO THE GUEST via
-// t.Exec. Mirrors LocalDeployTarget.recordLayer's executor-routed
+// recordCandy writes the per-layer ledger entry INTO THE GUEST via
+// t.Exec. Mirrors LocalDeployTarget.recordCandy's executor-routed
 // pattern (B6 fix) so VM deploys obey the same
 // zero-operator-side-effects invariant as nested host deploys.
-func (t *VmDeployTarget) recordLayer(paths *LedgerPaths, rec *CandyRecord, plan *InstallPlan, opts EmitOpts) error {
+func (t *VmDeployTarget) recordCandy(paths *LedgerPaths, rec *CandyRecord, plan *InstallPlan, opts EmitOpts) error {
 	if opts.DryRun || plan.DeployID == "" || rec == nil {
 		return nil
 	}
@@ -249,7 +249,7 @@ func (t *VmDeployTarget) recordLayer(paths *LedgerPaths, rec *CandyRecord, plan 
 	// package-remove reverse op BEFORE persisting — same shared filler the
 	// host target uses (R3); the guest teardown reads only the persisted ledger.
 	fillReverseUninstallCmds(rec.ReverseOps, t.DistroCfg)
-	return AddLayerDeploymentVia(t.Exec, paths, plan.Layer, plan.DeployID, func(existing *CandyRecord) {
+	return AddCandyDeploymentVia(t.Exec, paths, plan.Candy, plan.DeployID, func(existing *CandyRecord) {
 		existing.Version = rec.Version
 		existing.Steps = append(existing.Steps, rec.Steps...)
 		existing.ReverseOps = append(existing.ReverseOps, rec.ReverseOps...)
@@ -275,9 +275,9 @@ mkdir -p "$HOME/.config/opencharly/env.d"
 // ReverseOps from each executed step so `charly deploy del vm:<name>` can
 // replay them in reverse order at teardown time.
 func (t *VmDeployTarget) emitPlan(ctx context.Context, plan *InstallPlan, opts EmitOpts) (*CandyRecord, error) {
-	fmt.Fprintf(os.Stderr, "\n--- plan: %s (layer=%s) ---\n", plan.DeployID, plan.Layer)
+	fmt.Fprintf(os.Stderr, "\n--- plan: %s (layer=%s) ---\n", plan.DeployID, plan.Candy)
 	rec := &CandyRecord{
-		Layer:      plan.Layer,
+		Candy:      plan.Candy,
 		Version:    plan.Version,
 		DeployedAt: time.Now().UTC().Format(time.RFC3339),
 	}
@@ -310,7 +310,7 @@ func (t *VmDeployTarget) emitPlan(ctx context.Context, plan *InstallPlan, opts E
 
 		case *RepoChangeStep:
 			if !opts.AllowRepoChanges {
-				return rec, fmt.Errorf("repo change in plan %s requires --allow-repo-changes", plan.Layer)
+				return rec, fmt.Errorf("repo change in plan %s requires --allow-repo-changes", plan.Candy)
 			}
 			if err := t.execRepoChange(ctx, s, plan, opts); err != nil {
 				return rec, err
@@ -349,7 +349,7 @@ func (t *VmDeployTarget) emitPlan(ctx context.Context, plan *InstallPlan, opts E
 		case *ApkInstallStep:
 			// apk packages install onto a `kind: android` device, not a VM
 			// guest. Skip (a `target: android` deploy handles them).
-			fmt.Fprintf(os.Stderr, "VmDeployTarget: skipping apk install (layer=%s) — apk installs only on a kind:android device\n", s.LayerName)
+			fmt.Fprintf(os.Stderr, "VmDeployTarget: skipping apk install (layer=%s) — apk installs only on a kind:android device\n", s.CandyName)
 
 		case *LocalPkgInstallStep:
 			// Build the package source on the host and install the result INTO
@@ -385,12 +385,12 @@ func (t *VmDeployTarget) execShellSnippet(ctx context.Context, s *ShellSnippetSt
 	}
 	if !t.shellsPresent[s.Shell] {
 		fmt.Fprintf(os.Stderr, "vm:%s skip: shell-snippet %s/%s: %s not installed on guest\n",
-			t.VMName, s.LayerName, s.Shell, s.Shell)
+			t.VMName, s.CandyName, s.Shell, s.Shell)
 		return nil
 	}
 	if opts.DryRun {
 		fmt.Fprintf(os.Stderr, "[dry-run] vm:%s shell-snippet %s/%s -> %s (use_dropin=%v)\n",
-			t.VMName, s.LayerName, s.Shell, s.Destination, s.UseDropin)
+			t.VMName, s.CandyName, s.Shell, s.Destination, s.UseDropin)
 		return nil
 	}
 	body := s.Snippet
@@ -494,10 +494,10 @@ func (t *VmDeployTarget) execTask(ctx context.Context, s *TaskStep, plan *Instal
 	}
 	// copy: stages the layer file into the guest via PutFile (scp+install) —
 	// the SAME shared path LocalDeployTarget uses. The old renderVmTaskCommand
-	// emitted `install <hostLayerDir>/<f> <dst>`, referencing a host path that
+	// emitted `install <hostCandyDir>/<f> <dst>`, referencing a host path that
 	// doesn't exist in the guest → file-not-found on every copy: task.
 	if s.Task.Copy != "" {
-		src := filepath.Join(s.LayerDir, s.Task.Copy)
+		src := filepath.Join(s.CandyDir, s.Task.Copy)
 		// Prefer the home-resolved dest (s.To) so `to: ${HOME}/...` lands in the
 		// real guest home, not a literal "${HOME}" dir created under sudo
 		// (HOME=/root). Falls back to the raw Task.To, then the src name.
@@ -532,14 +532,14 @@ func (t *VmDeployTarget) execTask(ctx context.Context, s *TaskStep, plan *Instal
 // layers (e.g. nvidia-open-dkms) whose module only loads on a fresh boot.
 func (t *VmDeployTarget) execReboot(ctx context.Context, s *RebootStep, opts EmitOpts) error {
 	if opts.DryRun {
-		fmt.Fprintf(os.Stderr, "[dry-run] reboot guest %s (layer %s) and wait for it to return\n", t.VMName, s.LayerName)
+		fmt.Fprintf(os.Stderr, "[dry-run] reboot guest %s (layer %s) and wait for it to return\n", t.VMName, s.CandyName)
 		return nil
 	}
 
 	oldBoot, _, _, _ := t.Exec.RunCapture(ctx, "cat /proc/sys/kernel/random/boot_id 2>/dev/null")
 	oldBoot = strings.TrimSpace(oldBoot)
 
-	fmt.Fprintf(os.Stderr, "vm:%s reboot: requested by layer %q — rebooting guest and waiting for it to return\n", t.VMName, s.LayerName)
+	fmt.Fprintf(os.Stderr, "vm:%s reboot: requested by layer %q — rebooting guest and waiting for it to return\n", t.VMName, s.CandyName)
 	// Fire the reboot in the background so the ssh session closes cleanly
 	// (a foreground `reboot` would race the connection teardown and yield an
 	// ambiguous exit code). The 1s delay is for clean session close, not a
@@ -566,7 +566,7 @@ func (t *VmDeployTarget) execReboot(ctx context.Context, s *RebootStep, opts Emi
 			return nil
 		}
 	}
-	return fmt.Errorf("vm:%s: guest did not return within 7m after reboot requested by layer %q", t.VMName, s.LayerName)
+	return fmt.Errorf("vm:%s: guest did not return within 7m after reboot requested by layer %q", t.VMName, s.CandyName)
 }
 
 // execFile handles a FileStep — reads the file content from FileStep.Source
@@ -589,14 +589,14 @@ func (t *VmDeployTarget) execShellHook(ctx context.Context, s *ShellHookStep, pl
 	// PATH-prepend (export PATH="d1:d2:$PATH") that the old VM-only renderer
 	// got wrong (it emitted per-entry `export PATH=$PATH:d`, a different order
 	// + no managed-by-charly header).
-	envDBody := renderEnvdBody(s.LayerName, s.EnvVars, s.PathAdd)
+	envDBody := renderEnvdBody(s.CandyName, s.EnvVars, s.PathAdd)
 	script := fmt.Sprintf(`
 set -e
 mkdir -p "$HOME/.config/opencharly/env.d"
 cat > "$HOME/.config/opencharly/env.d/%s.env" <<'CHARLY_ENVD'
 %s
 CHARLY_ENVD
-`, s.LayerName, envDBody)
+`, s.CandyName, envDBody)
 	return t.Exec.RunUser(ctx, script, opts)
 }
 
@@ -730,7 +730,7 @@ func (t *VmDeployTarget) execBuilder(ctx context.Context, s *BuilderStep, plan *
 				fmt.Fprintf(os.Stderr, "VmDeployTarget: skipping builder step %q (--skip-incompatible)\n", s.Builder)
 				return nil
 			}
-			return fmt.Errorf("builder %q on VM target has no phase.install.host cell in build.yml (layer=%s). Run with --skip-incompatible to skip, or add the host cell.", s.Builder, s.LayerName)
+			return fmt.Errorf("builder %q on VM target has no phase.install.host cell in build.yml (layer=%s). Run with --skip-incompatible to skip, or add the host cell.", s.Builder, s.CandyName)
 		}
 		return t.execHomeArtifactBuilder(ctx, s, opts)
 	}
@@ -743,14 +743,14 @@ func (t *VmDeployTarget) execBuilder(ctx context.Context, s *BuilderStep, plan *
 	// on the GUEST — config-driven, not a hardcoded distro/builder-name check.
 	if !venueHasPkgManager(ctx, t.Exec, s.LocalPkg, opts) {
 		return fmt.Errorf("builder %q (layer=%s) builds %s package files but the guest has no %s package manager (local_pkg.probe %q failed); cannot install the built packages",
-			s.Builder, s.LayerName, s.LocalPkg.DepBuilder, s.LocalPkg.DepBuilder, s.LocalPkg.Probe)
+			s.Builder, s.CandyName, s.LocalPkg.DepBuilder, s.LocalPkg.DepBuilder, s.LocalPkg.Probe)
 	}
 
 	// Build the aur packages on the HOST through the SHARED host-side dep-build
 	// helper (R3) — the same primitive the localpkg step uses to build its
 	// dependency closure. The builder runs on the host (podman); the guest never
 	// needs a container runtime. The package glob comes from the format config.
-	matches, err := buildDepPkgsOnHost(ctx, s.LocalPkg, s.BuilderDef, image, extractStringSlice(s.RawStageContext, "packages"), s.LayerDir, t.Cfg, t.ProjectDir, opts)
+	matches, err := buildDepPkgsOnHost(ctx, s.LocalPkg, s.BuilderDef, image, extractStringSlice(s.RawStageContext, "packages"), s.CandyDir, t.Cfg, t.ProjectDir, opts)
 	if err != nil {
 		return fmt.Errorf("VM aur builder: %w", err)
 	}
@@ -780,7 +780,7 @@ func (t *VmDeployTarget) resolveBuilderImage(s *BuilderStep, opts EmitOpts) (str
 	}
 	if image == "" {
 		return "", fmt.Errorf("no builder image for %s (layer=%s); set --builder-image or define builder.%s in charly.yml",
-			s.Builder, s.LayerName, s.Builder)
+			s.Builder, s.CandyName, s.Builder)
 	}
 	return image, nil
 }
@@ -801,7 +801,7 @@ func (t *VmDeployTarget) execHomeArtifactBuilder(ctx context.Context, s *Builder
 		return err
 	}
 	if t.guestHome == "" && !opts.DryRun {
-		return fmt.Errorf("execHomeArtifactBuilder: guest home unresolved (layer=%s)", s.LayerName)
+		return fmt.Errorf("execHomeArtifactBuilder: guest home unresolved (layer=%s)", s.CandyName)
 	}
 	guestHome := t.guestHome
 	if guestHome == "" {
@@ -827,7 +827,7 @@ func (t *VmDeployTarget) execHomeArtifactBuilder(ctx context.Context, s *Builder
 
 	out, err := BuilderRun(opts.ContextOrDefault(), BuilderRunOpts{
 		BuilderImage: image,
-		LayerDir:     s.LayerDir,
+		CandyDir:     s.CandyDir,
 		ScriptBody:   script,
 		BindMounts:   bindMounts,
 		Env:          envVars,
@@ -850,7 +850,7 @@ func (t *VmDeployTarget) execHomeArtifactBuilder(ctx context.Context, s *Builder
 		os.Stderr.Write(out)
 	}
 	if err != nil {
-		return fmt.Errorf("VM %s builder (layer=%s): %w", s.Builder, s.LayerName, err)
+		return fmt.Errorf("VM %s builder (layer=%s): %w", s.Builder, s.CandyName, err)
 	}
 	if opts.DryRun {
 		return nil
@@ -870,7 +870,7 @@ func (t *VmDeployTarget) execHomeArtifactBuilder(ctx context.Context, s *Builder
 	}
 	if len(transferDirs) == 0 {
 		return fmt.Errorf("%s builder for layer %q produced no home artifacts in %s; check the builder output above",
-			s.Builder, s.LayerName, stageHost)
+			s.Builder, s.CandyName, stageHost)
 	}
 
 	// Tar the artifacts into a single tarball on the host.
@@ -890,7 +890,7 @@ func (t *VmDeployTarget) execHomeArtifactBuilder(ctx context.Context, s *Builder
 
 	// Ship to the guest and extract into the guest user's $HOME AS the guest
 	// user, so ownership + baked paths are correct.
-	guestTar := "/tmp/charly-builder-" + s.LayerName + ".tar.gz"
+	guestTar := "/tmp/charly-builder-" + s.CandyName + ".tar.gz"
 	if err := t.Exec.PutFile(ctx, tarball, guestTar, 0o644, false, opts); err != nil {
 		return fmt.Errorf("scp builder artifacts: %w", err)
 	}

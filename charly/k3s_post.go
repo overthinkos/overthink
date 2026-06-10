@@ -1,7 +1,7 @@
 package main
 
 // k3s_post.go — post-provision finalization for deploys whose layers
-// included k3s-server. Runs after RetrieveLayerArtifacts has pulled the
+// included k3s-server. Runs after RetrieveCandyArtifacts has pulled the
 // kubeconfig to ~/.cache/charly/clusters/<deploy>/kubeconfig.yaml.
 //
 // Two things happen here that the generic artifact-retrieval pipeline
@@ -133,11 +133,11 @@ func mergeKubeconfig(retrievedPath, contextName string) error {
 	return nil
 }
 
-// deployHasLayer returns true when the deploy's layer list includes the
+// deployHasCandy returns true when the deploy's layer list includes the
 // given layer name. Used to gate whether K3sPostProvision runs — a no-op
 // check against the ordered layer slice the deploy-add dispatcher already
 // has in scope.
-func deployHasLayer(layers []*Layer, name string) bool {
+func deployHasCandy(layers []*Candy, name string) bool {
 	for _, l := range layers {
 		if l != nil && l.Name == name {
 			return true

@@ -82,7 +82,7 @@ type DataYAML struct {
 	Dest   string `yaml:"dest,omitempty"` // optional subdirectory within the volume path
 }
 
-// LayerArtifact declares a file the layer publishes back to the operator
+// CandyArtifact declares a file the layer publishes back to the operator
 // after its setup completes. Retrieval happens at `charly deploy add` finalization
 // via the target's back-channel (scp for SSH/VM, cp for host, podman cp for
 // container). The retrieved file is written to `RetrieveTo` with shell-style
@@ -131,7 +131,7 @@ type CandyArtifact struct {
 	WaitSeconds int `yaml:"wait_second,omitempty" json:"wait_seconds,omitempty"`
 }
 
-// LayerArtifactRewrite is a single find/replace pair.
+// CandyArtifactRewrite is a single find/replace pair.
 type CandyArtifactRewrite struct {
 	Find    string `yaml:"find" json:"find"`
 	Replace string `yaml:"replace" json:"replace"`
@@ -197,7 +197,7 @@ var shellConfigKnownFields = map[string]bool{
 // UnmarshalYAML two-pass parses the `shell:` body: standard decode for
 // intrinsic fields (init/path_append/path/priority), then a manual walk
 // over remaining keys to pick up per-shell sub-blocks (bash/zsh/fish/sh)
-// into ByShell. Mirrors the LayerYAML.UnmarshalYAML alias-trick pattern.
+// into ByShell. Mirrors the CandyYAML.UnmarshalYAML alias-trick pattern.
 // Unknown keys (not intrinsic, not in ShellAllowlist) raise a hard error
 // so authors don't silently typo a shell name.
 func (sc *ShellConfig) UnmarshalYAML(value *yaml.Node) error {
@@ -245,13 +245,13 @@ func sortedEnvDeps(m map[string]EnvDependency) []EnvDependency {
 	return out
 }
 
-// LayerYAML represents the parsed candy manifest file.
+// CandyYAML represents the parsed candy manifest file.
 // Unknown top-level keys are captured as tag-based package sections
 // (e.g., "fedora:", "arch:", "fedora:43:", "debian,ubuntu:").
 type CandyYAML struct {
 	Version     string            `yaml:"version,omitempty"`     // CalVer version (YYYY.DDD.HHMM) of this layer definition
 	Description *Description      `yaml:"description,omitempty"` // Gherkin-shaped self-description; replaces retired info:/status:
-	Layer       []string          `yaml:"candy,omitempty"`
+	Candy       []string          `yaml:"candy,omitempty"`
 	Require     []string          `yaml:"require,omitempty"`
 	Engine      string            `yaml:"engine,omitempty"` // required run engine: "docker" or "" (any)
 	Env         map[string]string `yaml:"env,omitempty"`
@@ -349,14 +349,14 @@ type CandyYAML struct {
 
 	// Capabilities are layer-contributed image-level facts (preserve_user,
 	// needs_root_after_init, init_system_hint, data_only, oci_labels).
-	// Aggregated at image resolve time via AggregateLayerCapabilities.
+	// Aggregated at image resolve time via AggregateCandyCapabilities.
 	// Replaces the magic image-level booleans (image.bootc, image.data_image)
 	// with a declarative layer-derived surface.
 	Capability         *CandyCapabilities `yaml:"capability,omitempty"`
 	RequiresCapability []string           `yaml:"requires_capability,omitempty"`
 }
 
-// layerYAMLKnownFields lists non-format top-level keys in the candy manifest.
+// candyYAMLKnownFields lists non-format top-level keys in the candy manifest.
 // Unknown keys are routed to FormatSections (if matching a build.yml distro format)
 // or TagSections (otherwise).
 //
@@ -366,7 +366,7 @@ type CandyYAML struct {
 // added as the unified package surface; per-format `rpm:`/`deb:`/`pac:`/
 // `aur:` and per-distro tag sections (debian:13: etc.) collapse into them
 // via `charly migrate`.
-var layerYAMLKnownFields = map[string]bool{
+var candyYAMLKnownFields = map[string]bool{
 	"description": true, "version": true, "status": true,
 	"name": true, "from": true,
 	"candy": true, "require": true, "engine": true, "env": true,
@@ -393,17 +393,17 @@ var layerYAMLKnownFields = map[string]bool{
 // format is therefore purely a build.yml edit, with no code change.
 //
 // These caches are consumed ONLY by the candy-manifest shape guard
-// (looksLikeDistroOrFormatKey / rejectLegacyLayerKeys) to recognize a
+// (looksLikeDistroOrFormatKey / rejectLegacyCandyKeys) to recognize a
 // package-format or per-distro section mistakenly placed at the candy root. The
 // FORWARD package parser (derivePackageSectionsFromCalamares) needs no
 // vocabulary at all — it routes every `distro:` sub-key structurally and lets
 // the cascade resolver match on the image's real img.Distro/img.Pkg.
 var (
-	// layerYAMLFormatNames = the union of every distro's declared package
+	// candyYAMLFormatNames = the union of every distro's declared package
 	// formats (rpm/deb/pac/aur/…), inherited chains resolved.
-	layerYAMLFormatNames map[string]bool
-	// layerYAMLDistroNames = every distro name declared in build.yml.
-	layerYAMLDistroNames map[string]bool
+	candyYAMLFormatNames map[string]bool
+	// candyYAMLDistroNames = every distro name declared in build.yml.
+	candyYAMLDistroNames map[string]bool
 )
 
 // RegisterBuildVocabulary derives the distro/format vocabulary from a
@@ -412,16 +412,16 @@ var (
 // config clears the caches (the shape guard then fails open — no false
 // positives).
 func RegisterBuildVocabulary(dc *DistroConfig) {
-	layerYAMLFormatNames = make(map[string]bool)
-	layerYAMLDistroNames = make(map[string]bool)
+	candyYAMLFormatNames = make(map[string]bool)
+	candyYAMLDistroNames = make(map[string]bool)
 	if dc == nil {
 		return
 	}
 	for _, name := range dc.AllFormatNames() {
-		layerYAMLFormatNames[name] = true
+		candyYAMLFormatNames[name] = true
 	}
 	for name := range dc.Distro {
-		layerYAMLDistroNames[name] = true
+		candyYAMLDistroNames[name] = true
 	}
 }
 
@@ -464,7 +464,7 @@ func RegisterBuildVocabulary(dc *DistroConfig) {
 //	distro.arch.*            → tagSections["arch"]   (+ any .aur.* → formatSections["aur"])
 //	distro.debian-13.*       → tagSections["debian:13"]   (dash → colon)
 //	distro."debian,ubuntu".* → tagSections["debian"] + tagSections["ubuntu"]
-func derivePackageSectionsFromCalamares(layer *Layer, ly *CandyYAML) {
+func derivePackageSectionsFromCalamares(layer *Candy, ly *CandyYAML) {
 	layer.topPackages = PackageNames(ly.Package)
 
 	ensureTag := func(tagKey string) *TagPkgConfig {
@@ -693,8 +693,8 @@ func (t *Task) presentVerbs() []string {
 
 func (ly *CandyYAML) UnmarshalYAML(value *yaml.Node) error {
 	// Use type alias to avoid infinite recursion
-	type layerYAMLAlias CandyYAML
-	var alias layerYAMLAlias
+	type candyYAMLAlias CandyYAML
+	var alias candyYAMLAlias
 	if err := value.Decode(&alias); err != nil {
 		return err
 	}
@@ -711,7 +711,7 @@ func (ly *CandyYAML) UnmarshalYAML(value *yaml.Node) error {
 		var unknownKeys []string
 		for i := 0; i < len(value.Content)-1; i += 2 {
 			key := value.Content[i].Value
-			if layerYAMLKnownFields[key] {
+			if candyYAMLKnownFields[key] {
 				continue // handled by standard YAML decoder
 			}
 			unknownKeys = append(unknownKeys, key)
@@ -732,10 +732,10 @@ type RouteYAML struct {
 
 // Format-specific structs (RpmConfig, DebConfig, PacConfig, AurConfig) removed.
 // All format sections are now parsed dynamically as PackageSection via build.yml distro format names.
-// See PackageSection type and LayerYAML.UnmarshalYAML for the generic parsing.
+// See PackageSection type and CandyYAML.UnmarshalYAML for the generic parsing.
 
-// Layer represents a layer directory and its contents
-type Layer struct {
+// Candy represents a candy directory and its contents
+type Candy struct {
 	Name        string
 	Path        string       // directory containing the candy manifest
 	SourceDir   string       // anchor for relative file lookups (tasks.copy, data.src, install files); defaults to Path, overridden by the candy manifest's `directory:`
@@ -757,16 +757,16 @@ type Layer struct {
 	HasSrcDir         bool
 	HasPixiLock       bool // the candy manifest has a non-empty tasks: list
 
-	// Init system detection (populated by PopulateLayerInitSystem)
+	// Init system detection (populated by PopulateCandyInitSystem)
 	InitSystems    map[string]bool // set of init system names this layer triggers
 	PortRelayPorts []int           // port_relay: field (init-agnostic)
 
-	// Layer references. Each LayerRef carries the original ref string; the bare
+	// Layer references. Each CandyRef carries the original ref string; the bare
 	// map-key form (.Bare()) and pinned version (.Version()) are derived. One
 	// list per concern — no parallel bare/raw arrays (the duplication that
 	// split version off the ref and enabled the silent version-collision bug).
 	Require       []CandyRef // require: deps (ordering + resolution)
-	IncludedLayer []CandyRef // layer: composition refs (splicing)
+	IncludedCandy []CandyRef // layer: composition refs (splicing)
 
 	// Remote layer metadata
 	Remote        bool   // true if from a remote repo
@@ -815,7 +815,7 @@ type Layer struct {
 	requiresCapabilities []string
 }
 
-// ScanLayer returns all layers for the project at dir. Post-unified-cutover
+// ScanCandy returns all layers for the project at dir. Post-unified-cutover
 // this loads charly.yml via LoadUnified, applies discover:, and projects
 // the layers map. Legacy `candy/` directory scan remains as a fallback when
 // charly.yml is absent (e.g., transitional test fixtures).
@@ -836,7 +836,7 @@ const DefaultBoxDir = "box"
 // every discovered candy all use the single charly.yml name. Each `discover[]`
 // spec may still override it via `manifest:` in charly.yml.
 
-func ScanLayer(dir string) (map[string]*Layer, error) {
+func ScanCandy(dir string) (map[string]*Candy, error) {
 	uf, present, err := LoadUnified(dir)
 	if err != nil {
 		return nil, fmt.Errorf("loading charly.yml: %w", err)
@@ -845,29 +845,29 @@ func ScanLayer(dir string) (map[string]*Layer, error) {
 		if err := uf.ApplyDiscover(dir); err != nil {
 			return nil, fmt.Errorf("discover: %w", err)
 		}
-		return uf.ProjectLayers(dir)
+		return uf.ProjectCandies(dir)
 	}
-	return legacyScanLayersDir(dir)
+	return legacyScanCandiesDir(dir)
 }
 
-// legacyScanLayersDir is the pre-unified filesystem walk. Kept for test
+// legacyScanCandiesDir is the pre-unified filesystem walk. Kept for test
 // fixtures (and the migration tool) that don't yet have an charly.yml.
-func legacyScanLayersDir(dir string) (map[string]*Layer, error) {
-	layersDir := filepath.Join(dir, DefaultCandyDir)
-	entries, err := os.ReadDir(layersDir)
+func legacyScanCandiesDir(dir string) (map[string]*Candy, error) {
+	candiesDir := filepath.Join(dir, DefaultCandyDir)
+	entries, err := os.ReadDir(candiesDir)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return make(map[string]*Layer), nil
+			return make(map[string]*Candy), nil
 		}
 		return nil, fmt.Errorf("reading layers directory: %w", err)
 	}
-	layers := make(map[string]*Layer)
+	layers := make(map[string]*Candy)
 	for _, entry := range entries {
 		if !entry.IsDir() {
 			continue
 		}
 		name := entry.Name()
-		layer, err := scanLayer(filepath.Join(layersDir, name), name, UnifiedFileName)
+		layer, err := scanCandy(filepath.Join(candiesDir, name), name, UnifiedFileName)
 		if err != nil {
 			return nil, fmt.Errorf("scanning layer %s: %w", name, err)
 		}
@@ -876,13 +876,13 @@ func legacyScanLayersDir(dir string) (map[string]*Layer, error) {
 	return layers, nil
 }
 
-// parseLayerYAML reads and unmarshals a candy manifest file. Strict schema:
-//   - Empty / comment-only file → zero-value LayerYAML.
-//   - Single top-level `candy:` key → decode its body as LayerYAML (canonical form).
+// parseCandyYAML reads and unmarshals a candy manifest file. Strict schema:
+//   - Empty / comment-only file → zero-value CandyYAML.
+//   - Single top-level `candy:` key → decode its body as CandyYAML (canonical form).
 //   - `candy:` + other top-level keys → error (ambiguous shape).
 //   - Multi-document stream → error (the candy manifest is not a bundle file).
 //   - Flat form (no `candy:` wrapper) → error with migration hint.
-func parseLayerYAML(path string) (*CandyYAML, error) {
+func parseCandyYAML(path string) (*CandyYAML, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
@@ -938,16 +938,16 @@ func parseLayerYAML(path string) (*CandyYAML, error) {
 
 	// Collect top-level keys.
 	var keys []string
-	var layerIdx = -1
+	var candyIdx = -1
 	for i := 0; i < len(inner.Content); i += 2 {
 		k := inner.Content[i].Value
 		keys = append(keys, k)
 		if k == "candy" {
-			layerIdx = i + 1
+			candyIdx = i + 1
 		}
 	}
 
-	if layerIdx >= 0 {
+	if candyIdx >= 0 {
 		// Canonical kind-keyed form — `candy:` must be the only top-level key.
 		if len(keys) != 1 {
 			var other []string
@@ -960,9 +960,9 @@ func parseLayerYAML(path string) (*CandyYAML, error) {
 		}
 		// 2026-05 Calamares cutover: hard-fail on legacy field shapes.
 		// Every legacy form has a one-shot remediation via `charly migrate`.
-		body := inner.Content[layerIdx]
+		body := inner.Content[candyIdx]
 		if body != nil && body.Kind == yaml.MappingNode {
-			if err := rejectLegacyLayerKeys(path, body); err != nil {
+			if err := rejectLegacyCandyKeys(path, body); err != nil {
 				return nil, err
 			}
 		}
@@ -977,7 +977,7 @@ func parseLayerYAML(path string) (*CandyYAML, error) {
 	return nil, fmt.Errorf("%s: legacy flat candy.yml form is no longer accepted. Run `charly migrate` to convert to the canonical `candy:` kind-keyed form", path)
 }
 
-// rejectLegacyLayerKeys is the candy-manifest shape guard: a removed field name
+// rejectLegacyCandyKeys is the candy-manifest shape guard: a removed field name
 // (`depends`/`directory`/`info`) or a misplaced package-format / per-distro
 // section at the candy root produces a clear error describing the current
 // schema. Runs before standard YAML decoding so the user sees a precise message,
@@ -985,7 +985,7 @@ func parseLayerYAML(path string) (*CandyYAML, error) {
 // the DYNAMIC build vocabulary sourced from build.yml (RegisterBuildVocabulary) —
 // no hardcoded format/distro list, so a newly-added format or distro is caught
 // automatically.
-func rejectLegacyLayerKeys(path string, body *yaml.Node) error {
+func rejectLegacyCandyKeys(path string, body *yaml.Node) error {
 	for i := 0; i+1 < len(body.Content); i += 2 {
 		key := body.Content[i].Value
 		switch key {
@@ -1017,7 +1017,7 @@ func looksLikeDistroOrFormatKey(key string) bool {
 	if key == "" {
 		return false
 	}
-	if layerYAMLFormatNames[key] {
+	if candyYAMLFormatNames[key] {
 		return true
 	}
 	for _, part := range strings.Split(key, ",") {
@@ -1029,24 +1029,24 @@ func looksLikeDistroOrFormatKey(key string) bool {
 		if i := strings.IndexByte(part, ':'); i >= 0 {
 			bare = part[:i]
 		}
-		if !layerYAMLDistroNames[bare] {
+		if !candyYAMLDistroNames[bare] {
 			return false
 		}
 	}
 	return true
 }
 
-// resolveLayerSourceDir was the resolver for the legacy `directory:` field on
+// resolveCandySourceDir was the resolver for the legacy `directory:` field on
 // the candy manifest. The field was deleted in the 2026-05 Calamares cutover; the
 // helper is now a no-op kept only for any external import that still calls
 // it. New code should use `path` directly.
-func resolveLayerSourceDir(path, _ string) string {
+func resolveCandySourceDir(path, _ string) string {
 	return path
 }
 
-// scanLayer scans a single layer directory
-func scanLayer(path, name, manifest string) (*Layer, error) {
-	layer := &Layer{
+// scanCandy scans a single layer directory
+func scanCandy(path, name, manifest string) (*Candy, error) {
+	layer := &Candy{
 		Name: name,
 		Path: path,
 	}
@@ -1059,7 +1059,7 @@ func scanLayer(path, name, manifest string) (*Layer, error) {
 	}
 	yamlPath := filepath.Join(path, manifest)
 	if fileExists(yamlPath) {
-		parsed, err := parseLayerYAML(yamlPath)
+		parsed, err := parseCandyYAML(yamlPath)
 		if err != nil {
 			return nil, fmt.Errorf("parsing %s: %w", manifest, err)
 		}
@@ -1080,7 +1080,7 @@ func scanLayer(path, name, manifest string) (*Layer, error) {
 	layer.HasSrcDir = dirExists(filepath.Join(layer.SourceDir, "src"))
 	layer.HasPixiLock = fileExists(filepath.Join(layer.SourceDir, "pixi.lock"))
 
-	// Scan for systemd service files (init system detection happens in PopulateLayerInitSystem)
+	// Scan for systemd service files (init system detection happens in PopulateCandyInitSystem)
 	svcFiles, _ := filepath.Glob(filepath.Join(layer.SourceDir, "*.service"))
 	if len(svcFiles) > 0 {
 		layer.serviceFiles = svcFiles
@@ -1090,14 +1090,14 @@ func scanLayer(path, name, manifest string) (*Layer, error) {
 		// Single shared post-parse populator (see unified.go). Both this
 		// discovered-layer path and the charly.yml inline path call it, so
 		// they can never drift.
-		populateLayerFromYAML(layer, ly)
+		populateCandyFromYAML(layer, ly)
 	}
 
 	return layer, nil
 }
 
 // HasInstallFiles returns true if the layer has at least one install file
-func (l *Layer) HasInstallFiles() bool {
+func (l *Candy) HasInstallFiles() bool {
 	return l.HasFormatPackages() || l.HasTagPackages() || len(l.topPackages) > 0 ||
 		l.HasPixiToml || l.HasPyprojectToml || l.HasEnvironmentYml ||
 		l.HasPackageJson || l.HasCargoToml ||
@@ -1107,7 +1107,7 @@ func (l *Layer) HasInstallFiles() bool {
 // HasTagPackages reports whether any per-distro/version tag section declares
 // packages (the per-distro package surface that bare/versioned `distro:` keys
 // produce).
-func (l *Layer) HasTagPackages() bool {
+func (l *Candy) HasTagPackages() bool {
 	for _, s := range l.tagSections {
 		if len(s.Package) > 0 {
 			return true
@@ -1121,13 +1121,13 @@ func (l *Layer) HasTagPackages() bool {
 // package: base, or a format section (aur). Used where the question is "does
 // this layer install packages at all?" (e.g. the use_packaged service check) —
 // must not be narrowed to format sections, which now hold only aur.
-func (l *Layer) HasAnyPackages() bool {
+func (l *Candy) HasAnyPackages() bool {
 	return l.HasTagPackages() || len(l.topPackages) > 0 || l.HasFormatPackages()
 }
 
 // HasContent returns true if the layer has install files or any configuration
 // that contributes to the Containerfile (env, ports, volumes, etc.)
-func (l *Layer) HasContent() bool {
+func (l *Candy) HasContent() bool {
 	return l.HasInstallFiles() || l.HasEnv() || l.HasPorts() || l.HasRoute() ||
 		l.HasVolumes() || l.HasAliases() || l.HasExtract() || l.HasData() || l.HasLibvirt() ||
 		l.HasAnyInit() || len(l.PortRelayPorts) > 0 ||
@@ -1138,30 +1138,30 @@ func (l *Layer) HasContent() bool {
 // no stored boolean (the former Has* fields were a denormalized cache that had
 // to be kept in lockstep with the field at every parse site). The filesystem
 // install-file probes (HasPixiToml/HasSrcDir/…) stay as cached fields; see the
-// Layer struct.
-func (l *Layer) HasEnv() bool     { return l.envConfig != nil }
-func (l *Layer) HasPorts() bool   { return len(l.portSpecs) > 0 }
-func (l *Layer) HasRoute() bool   { return l.route != nil }
-func (l *Layer) HasVolumes() bool { return len(l.volumes) > 0 }
-func (l *Layer) HasAliases() bool { return len(l.aliases) > 0 }
-func (l *Layer) HasExtract() bool { return len(l.extract) > 0 }
-func (l *Layer) HasData() bool    { return len(l.data) > 0 }
-func (l *Layer) HasLibvirt() bool { return len(l.libvirt) > 0 }
-func (l *Layer) HasTasks() bool   { return len(l.tasks) > 0 }
-func (l *Layer) HasApk() bool     { return len(l.apk) > 0 }
+// Candy struct.
+func (l *Candy) HasEnv() bool     { return l.envConfig != nil }
+func (l *Candy) HasPorts() bool   { return len(l.portSpecs) > 0 }
+func (l *Candy) HasRoute() bool   { return l.route != nil }
+func (l *Candy) HasVolumes() bool { return len(l.volumes) > 0 }
+func (l *Candy) HasAliases() bool { return len(l.aliases) > 0 }
+func (l *Candy) HasExtract() bool { return len(l.extract) > 0 }
+func (l *Candy) HasData() bool    { return len(l.data) > 0 }
+func (l *Candy) HasLibvirt() bool { return len(l.libvirt) > 0 }
+func (l *Candy) HasTasks() bool   { return len(l.tasks) > 0 }
+func (l *Candy) HasApk() bool     { return len(l.apk) > 0 }
 
 // Apk returns the layer's Android app-install entries (the `apk:` package
 // format). Empty for non-Android layers.
-func (l *Layer) Apk() []ApkPackageSpec { return l.apk }
+func (l *Candy) Apk() []ApkPackageSpec { return l.apk }
 
 // LocalPkg returns the layer's native-package SOURCE dir for the given package
 // FORMAT (pac/rpm/deb), or "" when the layer declares none for that format. See
 // LocalPkgInstallStep.
-func (l *Layer) LocalPkg(format string) string { return l.localpkg[format] }
+func (l *Candy) LocalPkg(format string) string { return l.localpkg[format] }
 
 // LocalPkgFormats returns the package formats (pac/rpm/deb) for which the layer
 // declares a native-package source, sorted for deterministic iteration.
-func (l *Layer) LocalPkgFormats() []string {
+func (l *Candy) LocalPkgFormats() []string {
 	out := make([]string, 0, len(l.localpkg))
 	for f := range l.localpkg {
 		out = append(out, f)
@@ -1188,17 +1188,17 @@ func (m *LocalPkgMap) UnmarshalYAML(value *yaml.Node) error {
 	*m = mm
 	return nil
 }
-func (l *Layer) HasEnvProvides() bool    { return len(l.envProvides) > 0 }
-func (l *Layer) HasEnvRequires() bool    { return len(l.envRequires) > 0 }
-func (l *Layer) HasEnvAccepts() bool     { return len(l.envAccepts) > 0 }
-func (l *Layer) HasSecretRequires() bool { return len(l.secretRequires) > 0 }
-func (l *Layer) HasSecretAccepts() bool  { return len(l.secretAccepts) > 0 }
-func (l *Layer) HasMCPProvides() bool    { return len(l.mcpProvides) > 0 }
-func (l *Layer) HasMCPRequires() bool    { return len(l.mcpRequires) > 0 }
-func (l *Layer) HasMCPAccepts() bool     { return len(l.mcpAccepts) > 0 }
+func (l *Candy) HasEnvProvides() bool    { return len(l.envProvides) > 0 }
+func (l *Candy) HasEnvRequires() bool    { return len(l.envRequires) > 0 }
+func (l *Candy) HasEnvAccepts() bool     { return len(l.envAccepts) > 0 }
+func (l *Candy) HasSecretRequires() bool { return len(l.secretRequires) > 0 }
+func (l *Candy) HasSecretAccepts() bool  { return len(l.secretAccepts) > 0 }
+func (l *Candy) HasMCPProvides() bool    { return len(l.mcpProvides) > 0 }
+func (l *Candy) HasMCPRequires() bool    { return len(l.mcpRequires) > 0 }
+func (l *Candy) HasMCPAccepts() bool     { return len(l.mcpAccepts) > 0 }
 
 // PixiManifest returns the filename of the pixi manifest if it exists
-func (l *Layer) PixiManifest() string {
+func (l *Candy) PixiManifest() string {
 	if l.HasPixiToml {
 		return "pixi.toml"
 	}
@@ -1212,7 +1212,7 @@ func (l *Layer) PixiManifest() string {
 }
 
 // FormatSection returns the generic package section for a format, or nil.
-func (l *Layer) FormatSection(name string) *PackageSection {
+func (l *Candy) FormatSection(name string) *PackageSection {
 	if l.formatSections == nil {
 		return nil
 	}
@@ -1220,7 +1220,7 @@ func (l *Layer) FormatSection(name string) *PackageSection {
 }
 
 // HasFormatPackages returns true if any format section has packages.
-func (l *Layer) HasFormatPackages() bool {
+func (l *Candy) HasFormatPackages() bool {
 	for _, s := range l.formatSections {
 		if len(s.Packages) > 0 {
 			return true
@@ -1230,7 +1230,7 @@ func (l *Layer) HasFormatPackages() bool {
 }
 
 // TagSection returns the tag-based package config for the given tag, or nil.
-func (l *Layer) TagSection(tag string) *TagPkgConfig {
+func (l *Candy) TagSection(tag string) *TagPkgConfig {
 	if l.tagSections == nil {
 		return nil
 	}
@@ -1242,10 +1242,10 @@ func (l *Layer) TagSection(tag string) *TagPkgConfig {
 // of which distro/version tag sections match. Folding it here (at resolve time)
 // rather than into every section at parse time is what keeps debian and ubuntu
 // from cross-contaminating each other's package lists.
-func (l *Layer) TopPackages() []string { return l.topPackages }
+func (l *Candy) TopPackages() []string { return l.topPackages }
 
 // EnvConfig returns the environment config (pre-populated from the candy manifest)
-func (l *Layer) EnvConfig() (*EnvConfig, error) {
+func (l *Candy) EnvConfig() (*EnvConfig, error) {
 	if l.envConfig != nil {
 		return l.envConfig, nil
 	}
@@ -1253,7 +1253,7 @@ func (l *Layer) EnvConfig() (*EnvConfig, error) {
 }
 
 // Ports returns the ports (pre-populated from the candy manifest)
-func (l *Layer) Port() ([]string, error) {
+func (l *Candy) Port() ([]string, error) {
 	if l.ports != nil {
 		return l.ports, nil
 	}
@@ -1261,7 +1261,7 @@ func (l *Layer) Port() ([]string, error) {
 }
 
 // PortSpecs returns the port specs with protocol info (pre-populated from the candy manifest)
-func (l *Layer) PortSpecs() []PortSpec {
+func (l *Candy) PortSpecs() []PortSpec {
 	return l.portSpecs
 }
 
@@ -1269,34 +1269,34 @@ func (l *Layer) PortSpecs() []PortSpec {
 // This is the only service schema — legacy raw-INI and system_services: are
 // retired entirely. External layers that still have the legacy forms must run
 // `charly migrate`.
-func (l *Layer) Service() []ServiceEntry {
+func (l *Candy) Service() []ServiceEntry {
 	return l.service
 }
 
 // HasService returns true when the layer declares at least one service entry.
-func (l *Layer) HasService() bool {
+func (l *Candy) HasService() bool {
 	return len(l.service) > 0
 }
 
 // ServiceFiles returns detected *.service file paths from the layer directory
 // (consumed by the systemd init's file_copy model, e.g. *.service globs).
-func (l *Layer) ServiceFiles() []string {
+func (l *Candy) ServiceFiles() []string {
 	return l.serviceFiles
 }
 
 // HasAnyInit returns true if this layer triggers any init system.
-func (l *Layer) HasAnyInit() bool {
+func (l *Candy) HasAnyInit() bool {
 	return len(l.InitSystems) > 0
 }
 
 // HasInit returns true if this layer triggers the named init system.
-func (l *Layer) HasInit(initName string) bool {
+func (l *Candy) HasInit(initName string) bool {
 	return l.InitSystems[initName]
 }
 
-// PopulateLayerInitSystem sets InitSystems on all layers based on the init config.
+// PopulateCandyInitSystem sets InitSystems on all layers based on the init config.
 // Must be called after scanning layers and loading init config.
-func PopulateLayerInitSystem(layers map[string]*Layer, initCfg *InitConfig) {
+func PopulateCandyInitSystem(layers map[string]*Candy, initCfg *InitConfig) {
 	if initCfg == nil {
 		return
 	}
@@ -1310,7 +1310,7 @@ func PopulateLayerInitSystem(layers map[string]*Layer, initCfg *InitConfig) {
 			// The legacy `layer_fields: [service]` config just gates whether
 			// this init participates in schema detection at all.
 			participatesInSchema := false
-			for _, field := range def.LayerFields {
+			for _, field := range def.CandyFields {
 				if field == "service" {
 					participatesInSchema = true
 					break
@@ -1334,7 +1334,7 @@ func PopulateLayerInitSystem(layers map[string]*Layer, initCfg *InitConfig) {
 			}
 			// Check layer_files (anchored at SourceDir — honors `directory:`)
 			// for init systems like systemd that use the file_copy model.
-			for _, pattern := range def.LayerFiles {
+			for _, pattern := range def.CandyFiles {
 				matches, _ := filepath.Glob(filepath.Join(layer.SourceDir, pattern))
 				if len(matches) > 0 {
 					layer.InitSystems[initName] = true
@@ -1351,16 +1351,16 @@ type RouteConfig struct {
 }
 
 // Route returns the route config (pre-populated from the candy manifest)
-func (l *Layer) Route() (*RouteConfig, error) {
+func (l *Candy) Route() (*RouteConfig, error) {
 	if l.route != nil {
 		return l.route, nil
 	}
 	return nil, nil
 }
 
-// RouteLayer returns layers that have a route file
-func RouteLayer(layers map[string]*Layer) []*Layer {
-	var routes []*Layer
+// RouteCandy returns layers that have a route file
+func RouteCandy(layers map[string]*Candy) []*Candy {
+	var routes []*Candy
 	for _, layer := range layers {
 		if layer.HasRoute() {
 			routes = append(routes, layer)
@@ -1369,8 +1369,8 @@ func RouteLayer(layers map[string]*Layer) []*Layer {
 	return routes
 }
 
-// LayerNames returns a sorted list of layer names
-func LayerNames(layers map[string]*Layer) []string {
+// CandyNames returns a sorted list of layer names
+func CandyNames(layers map[string]*Candy) []string {
 	names := make([]string, 0, len(layers))
 	for name := range layers {
 		names = append(names, name)
@@ -1380,32 +1380,32 @@ func LayerNames(layers map[string]*Layer) []string {
 }
 
 // Volume returns the volume declarations (pre-populated from the candy manifest)
-func (l *Layer) Volume() []VolumeYAML {
+func (l *Candy) Volume() []VolumeYAML {
 	return l.volumes
 }
 
 // Extract returns the extract declarations (pre-populated from the candy manifest)
-func (l *Layer) Extract() []ExtractYAML {
+func (l *Candy) Extract() []ExtractYAML {
 	return l.extract
 }
 
 // Data returns the data mappings (pre-populated from the candy manifest)
-func (l *Layer) Data() []DataYAML {
+func (l *Candy) Data() []DataYAML {
 	return l.data
 }
 
 // Security returns the security config (pre-populated from the candy manifest, nil if not set)
-func (l *Layer) Security() *SecurityConfig {
+func (l *Candy) Security() *SecurityConfig {
 	return l.security
 }
 
 // Libvirt returns the libvirt XML snippets (pre-populated from the candy manifest)
-func (l *Layer) Libvirt() []string {
+func (l *Candy) Libvirt() []string {
 	return l.libvirt
 }
 
 // Hooks returns the lifecycle hooks config (pre-populated from the candy manifest, nil if not set)
-func (l *Layer) Hooks() *HooksConfig {
+func (l *Candy) Hooks() *HooksConfig {
 	return l.hooks
 }
 
@@ -1414,33 +1414,33 @@ func (l *Layer) Hooks() *HooksConfig {
 // path_append, path, priority) plus per-shell sub-blocks (bash/zsh/fish/
 // sh) in ByShell. Selection rule applied at install time — see
 // compileShellSnippetSteps in install_build.go.
-func (l *Layer) Shell() *ShellConfig {
+func (l *Candy) Shell() *ShellConfig {
 	return l.shell
 }
 
 // Secrets returns the secret declarations (pre-populated from the candy manifest)
-func (l *Layer) Secret() []SecretYAML {
+func (l *Candy) Secret() []SecretYAML {
 	return l.secrets
 }
 
 // Artifact returns the files this layer publishes back to the operator
 // after its setup completes (pre-populated from the candy manifest artifact:).
-func (l *Layer) Artifact() []CandyArtifact {
+func (l *Candy) Artifact() []CandyArtifact {
 	return l.artifacts
 }
 
 // EnvProvides returns env vars this layer provides to other containers (pre-populated from the candy manifest)
-func (l *Layer) EnvProvides() map[string]string {
+func (l *Candy) EnvProvides() map[string]string {
 	return l.envProvides
 }
 
 // EnvRequires returns env vars this layer must have from the environment (pre-populated from the candy manifest)
-func (l *Layer) EnvRequire() []EnvDependency {
+func (l *Candy) EnvRequire() []EnvDependency {
 	return l.envRequires
 }
 
 // EnvAccepts returns env vars this layer can optionally use (pre-populated from the candy manifest)
-func (l *Layer) EnvAccept() []EnvDependency {
+func (l *Candy) EnvAccept() []EnvDependency {
 	return l.envAccepts
 }
 
@@ -1448,40 +1448,40 @@ func (l *Layer) EnvAccept() []EnvDependency {
 // These entries flow through the credential store → podman secret → Secret=type=env quadlet
 // directive pipeline, never touching plaintext deploy.yml or quadlet Environment= lines.
 // Pre-populated from the candy manifest.
-func (l *Layer) SecretAccept() []EnvDependency {
+func (l *Candy) SecretAccept() []EnvDependency {
 	return l.secretAccepts
 }
 
 // SecretRequires returns credential-store-backed env vars this layer MUST have.
 // Missing entries cause charly config to hard-fail with actionable remediation.
 // Pre-populated from the candy manifest.
-func (l *Layer) SecretRequire() []EnvDependency {
+func (l *Candy) SecretRequire() []EnvDependency {
 	return l.secretRequires
 }
 
 // MCPProvides returns MCP servers this layer provides to other containers (pre-populated from the candy manifest)
-func (l *Layer) MCPProvide() []MCPServerYAML {
+func (l *Candy) MCPProvide() []MCPServerYAML {
 	return l.mcpProvides
 }
 
 // MCPRequires returns MCP servers this layer must have from the environment (pre-populated from the candy manifest)
-func (l *Layer) MCPRequire() []EnvDependency {
+func (l *Candy) MCPRequire() []EnvDependency {
 	return l.mcpRequires
 }
 
 // MCPAccepts returns MCP servers this layer can optionally use (pre-populated from the candy manifest)
-func (l *Layer) MCPAccept() []EnvDependency {
+func (l *Candy) MCPAccept() []EnvDependency {
 	return l.mcpAccepts
 }
 
 // Engine returns the required run engine (pre-populated from the candy manifest, "" if not set)
-func (l *Layer) Engine() string {
+func (l *Candy) Engine() string {
 	return l.engine
 }
 
-// InitLayer returns layers that trigger any init system.
-func InitLayer(layers map[string]*Layer) []*Layer {
-	var result []*Layer
+// InitCandy returns layers that trigger any init system.
+func InitCandy(layers map[string]*Candy) []*Candy {
+	var result []*Candy
 	for _, layer := range layers {
 		if layer.HasAnyInit() || len(layer.PortRelayPorts) > 0 {
 			result = append(result, layer)
@@ -1490,9 +1490,9 @@ func InitLayer(layers map[string]*Layer) []*Layer {
 	return result
 }
 
-// VolumeLayer returns layers that have volume declarations
-func VolumeLayer(layers map[string]*Layer) []*Layer {
-	var vols []*Layer
+// VolumeCandy returns layers that have volume declarations
+func VolumeCandy(layers map[string]*Candy) []*Candy {
+	var vols []*Candy
 	for _, layer := range layers {
 		if layer.HasVolumes() {
 			vols = append(vols, layer)
@@ -1502,13 +1502,13 @@ func VolumeLayer(layers map[string]*Layer) []*Layer {
 }
 
 // Alias returns the alias declarations (pre-populated from the candy manifest)
-func (l *Layer) Alias() []AliasYAML {
+func (l *Candy) Alias() []AliasYAML {
 	return l.aliases
 }
 
-// AliasLayer returns layers that have alias declarations
-func AliasLayer(layers map[string]*Layer) []*Layer {
-	var result []*Layer
+// AliasCandy returns layers that have alias declarations
+func AliasCandy(layers map[string]*Candy) []*Candy {
+	var result []*Candy
 	for _, layer := range layers {
 		if layer.HasAliases() {
 			result = append(result, layer)
@@ -1518,7 +1518,7 @@ func AliasLayer(layers map[string]*Layer) []*Layer {
 }
 
 // NeedsGit returns true if the pixi manifest contains git-based dependencies
-func (l *Layer) NeedsGit() bool {
+func (l *Candy) NeedsGit() bool {
 	manifest := l.PixiManifest()
 	if manifest == "" {
 		return false
@@ -1533,7 +1533,7 @@ func (l *Layer) NeedsGit() bool {
 }
 
 // HasPypiDeps returns true if the pixi manifest has PyPI dependencies
-func (l *Layer) HasPypiDeps() bool {
+func (l *Candy) HasPypiDeps() bool {
 	manifest := l.PixiManifest()
 	if manifest == "" {
 		return false
@@ -1545,36 +1545,36 @@ func (l *Layer) HasPypiDeps() bool {
 	return strings.Contains(string(data), "[pypi-dependencies]")
 }
 
-// ScanRemoteLayer scans specific layers from a downloaded remote repository.
+// ScanRemoteCandy scans specific layers from a downloaded remote repository.
 // Only imports layers whose bare refs are in the wantRefs set.
 // Bare refs use the full path format: "github.com/org/repo/candy/name".
 // qualifyRemoteSiblingDeps records, for a freshly-scanned remote layer, the
 // fully-qualified "<repo>/<subpathprefix><dep>" map key of each plain-name
-// require:/layer: dep (the same form ScanRemoteLayer keys fetched siblings
-// under). It sets each ref's resolved key (LayerRef.resolved) and leaves
-// LayerRef.Raw intact, so the graph resolves on .Bare() (qualified) while the
+// require:/layer: dep (the same form ScanRemoteCandy keys fetched siblings
+// under). It sets each ref's resolved key (CandyRef.resolved) and leaves
+// CandyRef.Raw intact, so the graph resolves on .Bare() (qualified) while the
 // transitive fetch loop still keys on the original .Raw plain name. @-ref deps
 // are left untouched — their bare path already resolves directly.
-func qualifyRemoteSiblingDeps(layer *Layer) {
+func qualifyRemoteSiblingDeps(layer *Candy) {
 	for i := range layer.Require {
 		if !layer.Require[i].IsRemote() {
 			layer.Require[i].resolved = layer.RepoPath + "/" + layer.SubPathPrefix + layer.Require[i].Raw
 		}
 	}
-	for i := range layer.IncludedLayer {
-		if !layer.IncludedLayer[i].IsRemote() {
-			layer.IncludedLayer[i].resolved = layer.RepoPath + "/" + layer.SubPathPrefix + layer.IncludedLayer[i].Raw
+	for i := range layer.IncludedCandy {
+		if !layer.IncludedCandy[i].IsRemote() {
+			layer.IncludedCandy[i].resolved = layer.RepoPath + "/" + layer.SubPathPrefix + layer.IncludedCandy[i].Raw
 		}
 	}
 }
 
-func ScanRemoteLayer(repoDir string, repoPath string, wantRefs map[string]bool) (map[string]*Layer, error) {
-	layers := make(map[string]*Layer)
+func ScanRemoteCandy(repoDir string, repoPath string, wantRefs map[string]bool) (map[string]*Candy, error) {
+	layers := make(map[string]*Candy)
 
 	for bareRef := range wantRefs {
 		// Extract sub-path from bare ref: "github.com/org/repo/candy/name" -> "candy/name"
 		subPath := strings.TrimPrefix(bareRef, repoPath+"/")
-		layerDir := filepath.Join(repoDir, subPath)
+		candyDir := filepath.Join(repoDir, subPath)
 
 		// Derive name from last segment
 		name := subPath
@@ -1582,11 +1582,11 @@ func ScanRemoteLayer(repoDir string, repoPath string, wantRefs map[string]bool) 
 			name = subPath[idx+1:]
 		}
 
-		if _, err := os.Stat(layerDir); os.IsNotExist(err) {
-			return nil, fmt.Errorf("remote layer %s not found at %s", bareRef, layerDir)
+		if _, err := os.Stat(candyDir); os.IsNotExist(err) {
+			return nil, fmt.Errorf("remote layer %s not found at %s", bareRef, candyDir)
 		}
 
-		layer, err := scanLayer(layerDir, name, UnifiedFileName)
+		layer, err := scanCandy(candyDir, name, UnifiedFileName)
 		if err != nil {
 			return nil, fmt.Errorf("scanning remote layer %s: %w", bareRef, err)
 		}
@@ -1609,28 +1609,28 @@ func ScanRemoteLayer(repoDir string, repoPath string, wantRefs map[string]bool) 
 	return layers, nil
 }
 
-// ScanAllLayer scans local layers and all remote layers, returning a merged map.
+// ScanAllCandy scans local layers and all remote layers, returning a merged map.
 // Local layers are keyed by short name, remote layers by fully-qualified path.
 // Remote refs are collected from @-prefixed refs in the candy manifest and charly.yml.
-func ScanAllLayer(dir string) (map[string]*Layer, error) {
-	return ScanAllLayerWithConfig(dir, nil)
+func ScanAllCandy(dir string) (map[string]*Candy, error) {
+	return ScanAllCandyWithConfig(dir, nil)
 }
 
-// ScanAllLayerWithConfig is the default-opts wrapper (enabled images only)
-// around ScanAllLayerWithConfigOpts. Most call sites (deploy-mode, runtime,
+// ScanAllCandyWithConfig is the default-opts wrapper (enabled images only)
+// around ScanAllCandyWithConfigOpts. Most call sites (deploy-mode, runtime,
 // inspect) want enabled-only scanning and keep this two-arg form.
-func ScanAllLayerWithConfig(dir string, cfg *Config) (map[string]*Layer, error) {
-	return ScanAllLayerWithConfigOpts(dir, cfg, ResolveOpts{})
+func ScanAllCandyWithConfig(dir string, cfg *Config) (map[string]*Candy, error) {
+	return ScanAllCandyWithConfigOpts(dir, cfg, ResolveOpts{})
 }
 
-// ScanAllLayerWithConfigOpts scans local and remote layers.
+// ScanAllCandyWithConfigOpts scans local and remote layers.
 // Collects remote refs from @-prefixed layer references and auto-downloads
 // repos. opts is forwarded to CollectRemoteRefsOpts so a build with
 // `--include-disabled <name>` also fetches the named disabled image's remote
 // layers — keeping the FETCH set aligned with the RESOLVE set.
-func ScanAllLayerWithConfigOpts(dir string, cfg *Config, opts ResolveOpts) (map[string]*Layer, error) {
+func ScanAllCandyWithConfigOpts(dir string, cfg *Config, opts ResolveOpts) (map[string]*Candy, error) {
 	// 1. Scan local layers
-	layers, err := ScanLayer(dir)
+	layers, err := ScanCandy(dir)
 	if err != nil {
 		return nil, err
 	}
@@ -1649,12 +1649,12 @@ func ScanAllLayerWithConfigOpts(dir string, cfg *Config, opts ResolveOpts) (map[
 	// the authority is each layer's own `version:`, read AFTER fetch. So fetch
 	// EVERY distinct (repo, git-tag) referenced (directly or transitively),
 	// collect each materialization as a candidate, then arbitrate per bare ref by
-	// per-entity version (pickLayerVersion). A remote layer's plain-name
+	// per-entity version (pickCandyVersion). A remote layer's plain-name
 	// require:/layers: dep is a same-repo sibling at the SAME git tag; an @-ref
 	// dep carries its own repo/git-tag. Fix-point until no new (repo, git-tag,
 	// ref) surfaces, so cross-repo transitive closures are fully materialized.
 	type repoVer struct{ repo, ver string }
-	candidates := make(map[string][]layerCandidate) // bare ref -> all fetched materializations
+	candidates := make(map[string][]candyCandidate) // bare ref -> all fetched materializations
 	scanned := make(map[repoVer]map[string]bool)    // (repo, git-tag) -> refs already scanned
 	defaultBranches := make(map[string]string)      // repo → resolved default branch
 
@@ -1705,18 +1705,18 @@ func ScanAllLayerWithConfigOpts(dir string, cfg *Config, opts ResolveOpts) (map[
 			if err != nil {
 				return nil, fmt.Errorf("downloading %s:%s: %w", dl.RepoPath, dl.Version, err)
 			}
-			remoteLayers, err := ScanRemoteLayer(cachePath, dl.RepoPath, wantRefs)
+			remoteCandies, err := ScanRemoteCandy(cachePath, dl.RepoPath, wantRefs)
 			if err != nil {
 				return nil, fmt.Errorf("scanning %s:%s: %w", dl.RepoPath, dl.Version, err)
 			}
 			for ref := range wantRefs {
 				done[ref] = true
 			}
-			for ref, layer := range remoteLayers {
+			for ref, layer := range remoteCandies {
 				if layer.Version == "" {
 					return nil, fmt.Errorf("remote layer %q (from %s@%s) declares no version:; its producer repo must declare one (run `charly migrate` there)", ref, dl.RepoPath, dl.Version)
 				}
-				candidates[ref] = append(candidates[ref], layerCandidate{
+				candidates[ref] = append(candidates[ref], candyCandidate{
 					layer:   layer,
 					version: layer.Version,
 					gitTag:  dl.Version,
@@ -1738,7 +1738,7 @@ func ScanAllLayerWithConfigOpts(dir string, cfg *Config, opts ResolveOpts) (map[
 						return nil, err
 					}
 				}
-				for _, dep := range layer.IncludedLayer {
+				for _, dep := range layer.IncludedCandy {
 					if err := enqueueDep(dep); err != nil {
 						return nil, err
 					}
@@ -1758,7 +1758,7 @@ func ScanAllLayerWithConfigOpts(dir string, cfg *Config, opts ResolveOpts) (map[
 
 	// 4. Arbitrate each bare ref by per-entity version; materialize the winner.
 	for ref, cands := range candidates {
-		winner := pickLayerVersion(ref, cands)
+		winner := pickCandyVersion(ref, cands)
 		if _, ok := layers[winner.layer.Name]; ok {
 			fmt.Fprintf(os.Stderr, "Note: local layer %q shadows remote layer %q\n", winner.layer.Name, ref)
 		}
@@ -1768,22 +1768,22 @@ func ScanAllLayerWithConfigOpts(dir string, cfg *Config, opts ResolveOpts) (map[
 	return layers, nil
 }
 
-// layerCandidate is one fetched materialization of a bare layer ref. The git tag
+// candyCandidate is one fetched materialization of a bare layer ref. The git tag
 // is the fetch coordinate; version is the layer's own per-entity `version:`.
-type layerCandidate struct {
-	layer   *Layer
+type candyCandidate struct {
+	layer   *Candy
 	version string // per-entity version (layer.Version) — mandatory, never ""
 	gitTag  string // fetch coordinate (the @github :vTAG)
 	source  string // "<repo>@<git-tag>" for warning attribution
 }
 
-// pickLayerVersion arbitrates the candidates of ONE bare ref by per-entity
+// pickCandyVersion arbitrates the candidates of ONE bare ref by per-entity
 // version. Same per-entity version across different git tags => NO warning, the
 // newest git tag wins (freshness). Different per-entity versions => warn once
 // (naming the winner + a loser) and the newest per-entity version wins. This is
 // the sole layer-version arbiter — direct and transitive refs both flow through
 // it. cands is non-empty.
-func pickLayerVersion(bareRef string, cands []layerCandidate) layerCandidate {
+func pickCandyVersion(bareRef string, cands []candyCandidate) candyCandidate {
 	best := cands[0]
 	for _, c := range cands[1:] {
 		if compareCalVer(c.version, best.version) > 0 {

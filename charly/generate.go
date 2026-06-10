@@ -16,7 +16,7 @@ import (
 type Generator struct {
 	Dir            string
 	Config         *Config
-	Layers         map[string]*Layer
+	Candies         map[string]*Candy
 	Tag            string
 	Boxes          map[string]*ResolvedBox
 	BuildDir       string
@@ -27,9 +27,9 @@ type Generator struct {
 // globalOrderForBox returns the layer order for an image by filtering the
 // global order to only include the image's needed layers. This ensures shared
 // layers appear in the same order across all images, maximizing cache reuse.
-func (g *Generator) globalOrderForBox(imageLayers []string, parentLayers map[string]bool) ([]string, error) {
+func (g *Generator) globalOrderForBox(imageCandies []string, parentCandies map[string]bool) ([]string, error) {
 	// Resolve needed layers (expand composition + transitive deps)
-	needed, err := ResolveLayerOrder(imageLayers, g.Layers, parentLayers)
+	needed, err := ResolveCandyOrder(imageCandies, g.Candies, parentCandies)
 	if err != nil {
 		return nil, err
 	}
@@ -128,13 +128,13 @@ func NewGenerator(dir string, tag string, opts ResolveOpts) (*Generator, error) 
 	}
 	RegisterBuildVocabulary(defaultDistroCfg)
 
-	layers, err := ScanAllLayerWithConfigOpts(dir, cfg, opts)
+	layers, err := ScanAllCandyWithConfigOpts(dir, cfg, opts)
 	if err != nil {
 		return nil, err
 	}
 
 	// Populate init systems on layers from build.yml config
-	PopulateLayerInitSystem(layers, defaultInitCfg)
+	PopulateCandyInitSystem(layers, defaultInitCfg)
 
 	if err := Validate(cfg, layers, dir, opts); err != nil {
 		return nil, err
@@ -158,7 +158,7 @@ func NewGenerator(dir string, tag string, opts ResolveOpts) (*Generator, error) 
 	images = updated
 
 	// Compute global layer order for consistent cross-image ordering
-	globalOrder, err := GlobalLayerOrder(images, layers)
+	globalOrder, err := GlobalCandyOrder(images, layers)
 	if err != nil {
 		return nil, fmt.Errorf("computing global layer order: %w", err)
 	}
@@ -166,7 +166,7 @@ func NewGenerator(dir string, tag string, opts ResolveOpts) (*Generator, error) 
 	g := &Generator{
 		Dir:            dir,
 		Config:         cfg,
-		Layers:         layers,
+		Candies:         layers,
 		Tag:            tag,
 		Boxes:          images,
 		BuildDir:       filepath.Join(dir, ".build"),
@@ -237,12 +237,12 @@ func (g *Generator) Generate() error {
 	}
 
 	// Create symlinks for remote layers in .build/_layers/
-	if err := g.createRemoteLayerCopies(); err != nil {
+	if err := g.createRemoteCandyCopies(); err != nil {
 		return fmt.Errorf("creating remote layer symlinks: %w", err)
 	}
 
 	// Resolve image build order
-	order, err := ResolveBoxOrder(g.Boxes, g.Layers)
+	order, err := ResolveBoxOrder(g.Boxes, g.Candies)
 	if err != nil {
 		return fmt.Errorf("resolving box order: %w", err)
 	}
@@ -353,23 +353,23 @@ func (g *Generator) generateContainerfile(boxName string) error {
 	b.WriteString(fmt.Sprintf("# .build/%s/Containerfile (generated -- do not edit)\n\n", boxName))
 
 	// Resolve layer order for this image
-	var parentLayers map[string]bool
+	var parentCandies map[string]bool
 	if !img.IsExternalBase {
 		var err error
-		parentLayers, err = LayerProvidedByBox(img.Base, g.Boxes, g.Layers)
+		parentCandies, err = CandyProvidedByBox(img.Base, g.Boxes, g.Candies)
 		if err != nil {
 			return err
 		}
 	}
 
-	layerOrder, err := g.globalOrderForBox(img.Layer, parentLayers)
+	candyOrder, err := g.globalOrderForBox(img.Candy, parentCandies)
 	if err != nil {
 		return err
 	}
 
 	// Data images: minimal FROM scratch with only data staging + labels
 	if img.DataImage {
-		return g.generateDataImageContainerfile(boxName, img, layerOrder, imageDir)
+		return g.generateDataImageContainerfile(boxName, img, candyOrder, imageDir)
 	}
 
 	// ARG for base image must come first (before any FROM). For
@@ -379,11 +379,11 @@ func (g *Generator) generateContainerfile(boxName string) error {
 	b.WriteString(fmt.Sprintf("ARG BASE_IMAGE=%s\n\n", resolvedBase))
 
 	// Emit scratch stages for each layer
-	for _, layerName := range layerOrder {
-		layer := g.Layers[layerName]
+	for _, candyName := range candyOrder {
+		layer := g.Candies[candyName]
 		stageName := layer.Name // use short name for stage alias
 		b.WriteString(fmt.Sprintf("FROM scratch AS %s\n", stageName))
-		b.WriteString(fmt.Sprintf("COPY %s/ /\n\n", g.layerCopySource(layerName)))
+		b.WriteString(fmt.Sprintf("COPY %s/ /\n\n", g.candyCopySource(candyName)))
 	}
 
 	// Emit per-layer multi-stage build stages — fully config-driven from build.yml builder: section.
@@ -395,24 +395,24 @@ func (g *Generator) generateContainerfile(boxName string) error {
 		for _, builderName := range builderNames {
 			builderDef := img.BuilderConfig.Builder[builderName]
 			if builderDef.Inline {
-				continue // inline builders handled in writeLayerSteps
+				continue // inline builders handled in writeCandySteps
 			}
 			if builderDef.StageTemplate == "" {
 				continue
 			}
-			for _, layerName := range layerOrder {
-				layer := g.Layers[layerName]
-				if !g.layerNeedsBuilder(img, layer, builderDef) {
+			for _, candyName := range candyOrder {
+				layer := g.Candies[candyName]
+				if !g.candyNeedsBuilder(img, layer, builderDef) {
 					continue
 				}
 				builderRef := g.builderRefForFormat(boxName, builderName)
 				if builderRef == "" {
-					return fmt.Errorf("image %q: layer %q needs builder %q but no builders.%s configured", boxName, layerName, builderName, builderName)
+					return fmt.Errorf("image %q: layer %q needs builder %q but no builders.%s configured", boxName, candyName, builderName, builderName)
 				}
 				ctx := g.buildStageContext(layer, builderName, builderDef, img, builderRef)
 				rendered, err := RenderTemplate(builderName+"-stage", builderDef.StageTemplate, ctx)
 				if err != nil {
-					return fmt.Errorf("image %q: rendering %s stage for layer %q: %w", boxName, builderName, layerName, err)
+					return fmt.Errorf("image %q: rendering %s stage for layer %q: %w", boxName, builderName, candyName, err)
 				}
 				b.WriteString(rendered)
 				b.WriteString("\n")
@@ -421,13 +421,13 @@ func (g *Generator) generateContainerfile(boxName string) error {
 	}
 
 	// Emit extraction stages for layers with extract field
-	for _, layerName := range layerOrder {
-		layer := g.Layers[layerName]
+	for _, candyName := range candyOrder {
+		layer := g.Candies[candyName]
 		if !layer.HasExtract() {
 			continue
 		}
 		for i, ext := range layer.Extract() {
-			stageName := fmt.Sprintf("%s-extract-%d", layerName, i)
+			stageName := fmt.Sprintf("%s-extract-%d", candyName, i)
 			b.WriteString(fmt.Sprintf("FROM %s AS %s\n\n", ext.Source, stageName))
 		}
 	}
@@ -435,30 +435,30 @@ func (g *Generator) generateContainerfile(boxName string) error {
 	// Aggregate layer-contributed capabilities once for this image. Cache
 	// onto ResolvedBox so downstream emit paths (and label emission)
 	// don't recompute.
-	caps, capsErr := AggregateLayerCapabilities(g.Layers, layerOrder)
+	caps, capsErr := AggregateCandyCapabilities(g.Candies, candyOrder)
 	if capsErr != nil {
 		return capsErr
 	}
-	img.LayerCaps = caps
-	if missing := CheckRequiredCapabilities(g.Layers, layerOrder, caps); len(missing) > 0 {
-		return LayerCapabilitiesError(g.Layers, layerOrder, missing)
+	img.CandyCaps = caps
+	if missing := CheckRequiredCapabilities(g.Candies, candyOrder, caps); len(missing) > 0 {
+		return CandyCapabilitiesError(g.Candies, candyOrder, missing)
 	}
 
 	// Detect active init systems from layers (driven by build.yml init: section config)
 	activeInits := make(map[string]*InitDef)
 	if img.InitConfig != nil {
-		activeInits = img.InitConfig.ActiveInit(g.Layers, layerOrder)
+		activeInits = img.InitConfig.ActiveInit(g.Candies, candyOrder)
 	}
 	// Store init system on ResolvedBox for downstream use (labels, etc.)
 	if img.InitConfig != nil {
-		img.InitSystem, img.InitDef = img.InitConfig.ResolveInitSystem(g.Layers, layerOrder, "")
+		img.InitSystem, img.InitDef = img.InitConfig.ResolveInitSystem(g.Candies, candyOrder, "")
 	}
 
 	// Check if this image has route layers and traefik
 	hasRoutes := false
 	hasTraefik := false
-	for _, layerName := range layerOrder {
-		layer := g.Layers[layerName]
+	for _, candyName := range candyOrder {
+		layer := g.Candies[candyName]
 		if layer.HasRoute() {
 			hasRoutes = true
 		}
@@ -469,7 +469,7 @@ func (g *Generator) generateContainerfile(boxName string) error {
 
 	// Generate traefik routes only when traefik is actually present
 	if hasRoutes && hasTraefik {
-		if err := g.generateTraefikRoutes(boxName, layerOrder, img); err != nil {
+		if err := g.generateTraefikRoutes(boxName, candyOrder, img); err != nil {
 			return err
 		}
 		b.WriteString("FROM scratch AS traefik-routes\n")
@@ -487,14 +487,14 @@ func (g *Generator) generateContainerfile(boxName string) error {
 	// mounts from it would fail at build time with "no such file or directory".
 	initHasFragments := map[string]bool{}
 	for initName, def := range activeInits {
-		initLayerOrder := layerOrder
+		initCandyOrder := candyOrder
 		if !img.IsExternalBase {
-			full := collectAllBoxLayers(boxName, g.Boxes, g.Layers)
+			full := collectAllBoxCandies(boxName, g.Boxes, g.Candies)
 			if len(full) > 0 {
-				initLayerOrder = full
+				initCandyOrder = full
 			}
 		}
-		if err := g.generateInitFragments(boxName, initName, def, initLayerOrder); err != nil {
+		if err := g.generateInitFragments(boxName, initName, def, initCandyOrder); err != nil {
 			return err
 		}
 
@@ -502,8 +502,8 @@ func (g *Generator) generateContainerfile(boxName string) error {
 		// content. If not, skip both the scratch stage emission and the
 		// assembly_template RUN (see second loop below).
 		hasFragments := false
-		for _, layerName := range initLayerOrder {
-			layer := g.Layers[layerName]
+		for _, candyName := range initCandyOrder {
+			layer := g.Candies[candyName]
 			if def.Model == "fragment_assembly" && layer.HasInit(initName) {
 				hasFragments = true
 				break
@@ -531,8 +531,8 @@ func (g *Generator) generateContainerfile(boxName string) error {
 			}
 			b.WriteString(headerCopy + "\n")
 		}
-		for i, layerName := range initLayerOrder {
-			layer := g.Layers[layerName]
+		for i, candyName := range initCandyOrder {
+			layer := g.Candies[candyName]
 			// Service content fragments (fragment_assembly model)
 			if def.Model == "fragment_assembly" && layer.HasInit(initName) {
 				// Use the SHORT name (not the map key) — a remote layer's key is
@@ -540,7 +540,7 @@ func (g *Generator) generateContainerfile(boxName string) error {
 				fileName := fmt.Sprintf("%02d-%s.conf", i+1, layer.Name)
 				copyLine, err := def.RenderStageFragmentCopy(boxName, fileName)
 				if err != nil {
-					return fmt.Errorf("rendering stage fragment copy for %s/%s: %w", initName, layerName, err)
+					return fmt.Errorf("rendering stage fragment copy for %s/%s: %w", initName, candyName, err)
 				}
 				b.WriteString(copyLine + "\n")
 			}
@@ -550,7 +550,7 @@ func (g *Generator) generateContainerfile(boxName string) error {
 					confName := fmt.Sprintf("%02d-relay-%d.conf", i+1, port)
 					copyLine, err := def.RenderStageFragmentCopy(boxName, confName)
 					if err != nil {
-						return fmt.Errorf("rendering relay copy for %s/%s port %d: %w", initName, layerName, port, err)
+						return fmt.Errorf("rendering relay copy for %s/%s port %d: %w", initName, candyName, port, err)
 					}
 					b.WriteString(copyLine + "\n")
 				}
@@ -561,7 +561,7 @@ func (g *Generator) generateContainerfile(boxName string) error {
 					svcName := filepath.Base(svcPath)
 					copyLine, err := def.RenderStageFragmentCopy(boxName, svcName)
 					if err != nil {
-						return fmt.Errorf("rendering service file copy for %s/%s: %w", initName, layerName, err)
+						return fmt.Errorf("rendering service file copy for %s/%s: %w", initName, candyName, err)
 					}
 					b.WriteString(copyLine + "\n")
 				}
@@ -596,10 +596,10 @@ func (g *Generator) generateContainerfile(boxName string) error {
 	}
 
 	// Collect and write environment variables from layers
-	g.writeLayerEnv(&b, layerOrder, img)
+	g.writeCandyEnv(&b, candyOrder, img)
 
 	// Emit EXPOSE directives for layer ports
-	g.writeExpose(&b, layerOrder)
+	g.writeExpose(&b, candyOrder)
 
 	// LABEL emission is deferred to the end of the final stage — see the
 	// writeLabels call after the final USER directive below. Putting LABELs
@@ -619,9 +619,9 @@ func (g *Generator) generateContainerfile(boxName string) error {
 			// Find layers that triggered this builder
 			hasArtifacts := false
 			binaryCopied := false
-			for _, layerName := range layerOrder {
-				layer := g.Layers[layerName]
-				if !g.layerNeedsBuilder(img, layer, builderDef) {
+			for _, candyName := range candyOrder {
+				layer := g.Candies[candyName]
+				if !g.candyNeedsBuilder(img, layer, builderDef) {
 					continue
 				}
 				stageName := fmt.Sprintf("%s-%s-build", layer.Name, builderName)
@@ -655,8 +655,8 @@ func (g *Generator) generateContainerfile(boxName string) error {
 
 	// Copy extracted files from multi-stage builds
 	hasExtract := false
-	for _, layerName := range layerOrder {
-		layer := g.Layers[layerName]
+	for _, candyName := range candyOrder {
+		layer := g.Candies[candyName]
 		if !layer.HasExtract() {
 			continue
 		}
@@ -666,7 +666,7 @@ func (g *Generator) generateContainerfile(boxName string) error {
 			hasExtract = true
 		}
 		for i, ext := range layer.Extract() {
-			stageName := fmt.Sprintf("%s-extract-%d", layerName, i)
+			stageName := fmt.Sprintf("%s-extract-%d", candyName, i)
 			b.WriteString(fmt.Sprintf("COPY --from=%s --chown=%d:%d %s %s\n",
 				stageName, img.UID, img.GID, ext.Path, ext.Dest))
 		}
@@ -676,16 +676,16 @@ func (g *Generator) generateContainerfile(boxName string) error {
 	}
 
 	// Stage data files from data layers into /data/ for deploy-time provisioning
-	g.writeDataStaging(&b, layerOrder, img)
+	g.writeDataStaging(&b, candyOrder, img)
 
 	// Process each layer
 	// Post-layer steps (init assembly, traefik, bootc) run as root,
 	// so the last layer must reset to root only if such steps exist.
 	needsRootAfter := len(activeInits) > 0 || (hasRoutes && hasTraefik) || (caps != nil && caps.NeedsRootAfterInit)
 	inUserMode := false
-	for i, layerName := range layerOrder {
-		isLast := i == len(layerOrder)-1
-		inUserMode = g.writeLayerSteps(&b, layerName, img, isLast && !needsRootAfter)
+	for i, candyName := range candyOrder {
+		isLast := i == len(candyOrder)-1
+		inUserMode = g.writeCandySteps(&b, candyName, img, isLast && !needsRootAfter)
 	}
 
 	// Assemble init system configs (driven by build.yml init: section templates)
@@ -712,8 +712,8 @@ func (g *Generator) generateContainerfile(boxName string) error {
 		// Collect every use_packaged: entry across the layer chain — these
 		// are the distro-shipped systemd units the init system must enable.
 		var systemUnits []string
-		for _, layerName := range layerOrder {
-			layer := g.Layers[layerName]
+		for _, candyName := range candyOrder {
+			layer := g.Candies[candyName]
 			for i := range layer.Service() {
 				entry := &layer.Service()[i]
 				if entry.IsPackaged() && entry.EffectiveScope() == "system" {
@@ -768,7 +768,7 @@ func (g *Generator) generateContainerfile(boxName string) error {
 	// metadata (attach to the final image manifest) and have no functional
 	// dependency on subsequent instructions — they're the ideal last-line
 	// of the Containerfile.
-	g.writeLabels(&b, boxName, layerOrder, img)
+	g.writeLabels(&b, boxName, candyOrder, img)
 
 	// imageDir was cleaned at the start of this function; ensure it exists
 	if err := os.MkdirAll(imageDir, 0755); err != nil {
@@ -785,27 +785,27 @@ func (g *Generator) generateContainerfile(boxName string) error {
 // generateDataImageContainerfile produces a minimal FROM scratch Containerfile
 // with only data staging COPY instructions and OCI labels. No runtime, no init,
 // no packages, no builder stages.
-func (g *Generator) generateDataImageContainerfile(boxName string, img *ResolvedBox, layerOrder []string, imageDir string) error {
+func (g *Generator) generateDataImageContainerfile(boxName string, img *ResolvedBox, candyOrder []string, imageDir string) error {
 	var b strings.Builder
 
 	b.WriteString(fmt.Sprintf("# .build/%s/Containerfile (generated -- do not edit)\n\n", boxName))
 	b.WriteString("FROM scratch\n\n")
 
 	// Scratch stages for layers that have data
-	for _, layerName := range layerOrder {
-		layer := g.Layers[layerName]
+	for _, candyName := range candyOrder {
+		layer := g.Candies[candyName]
 		if !layer.HasData() {
 			continue
 		}
 		b.WriteString(fmt.Sprintf("FROM scratch AS %s\n", layer.Name))
-		b.WriteString(fmt.Sprintf("COPY %s/ /\n\n", g.layerCopySource(layerName)))
+		b.WriteString(fmt.Sprintf("COPY %s/ /\n\n", g.candyCopySource(candyName)))
 	}
 
 	// Main image: just data staging + labels
 	b.WriteString("FROM scratch\n\n")
 
 	// Data staging COPY instructions
-	g.writeDataStaging(&b, layerOrder, img)
+	g.writeDataStaging(&b, candyOrder, img)
 
 	// Minimal labels (no init, no services, no ports). Content-derived
 	// EffectiveVersion (not the per-build tag) — see writeLabels.
@@ -819,8 +819,8 @@ func (g *Generator) generateDataImageContainerfile(boxName string, img *Resolved
 
 	// Data entries label
 	var dataEntries []LabelDataEntry
-	for _, layerName := range layerOrder {
-		layer := g.Layers[layerName]
+	for _, candyName := range candyOrder {
+		layer := g.Candies[candyName]
 		if !layer.HasData() {
 			continue
 		}
@@ -835,7 +835,7 @@ func (g *Generator) generateDataImageContainerfile(boxName string, img *Resolved
 			dataEntries = append(dataEntries, LabelDataEntry{
 				Volume:  d.Volume,
 				Staging: staging,
-				Layer:   layerName,
+				Candy:   candyName,
 				Dest:    d.Dest,
 			})
 		}
@@ -845,7 +845,7 @@ func (g *Generator) generateDataImageContainerfile(boxName string, img *Resolved
 	}
 
 	// Volume labels (so charly config knows what volumes data targets)
-	volumes, _ := CollectBoxVolume(g.Config, g.Layers, boxName, img.Home, nil)
+	volumes, _ := CollectBoxVolume(g.Config, g.Candies, boxName, img.Home, nil)
 	if len(volumes) > 0 {
 		var labelVols []LabelVolumeEntry
 		for _, v := range volumes {
@@ -856,14 +856,14 @@ func (g *Generator) generateDataImageContainerfile(boxName string, img *Resolved
 	}
 
 	// Layer versions
-	layerVersions := make(map[string]string)
-	for _, layerName := range layerOrder {
-		layer := g.Layers[layerName]
+	candyVersions := make(map[string]string)
+	for _, candyName := range candyOrder {
+		layer := g.Candies[candyName]
 		if layer.Version != "" {
-			layerVersions[layerName] = layer.Version
+			candyVersions[candyName] = layer.Version
 		}
 	}
-	writeJSONLabel(&b, LabelCandyVersion, layerVersions)
+	writeJSONLabel(&b, LabelCandyVersion, candyVersions)
 
 	b.WriteString("\n")
 
@@ -1015,15 +1015,15 @@ func escapeContainerfileEnvValue(v string) string {
 	return v
 }
 
-// writeLayerEnv collects env configs from all layers and writes ENV directives.
+// writeCandyEnv collects env configs from all layers and writes ENV directives.
 // Builder-triggered runtime env contributions (RuntimeEnv + PathContributions
 // on BuilderDef) are merged in alongside layer contributions — see
 // collectBuilderRuntimeEnv.
-func (g *Generator) writeLayerEnv(b *strings.Builder, layerOrder []string, img *ResolvedBox) {
+func (g *Generator) writeCandyEnv(b *strings.Builder, candyOrder []string, img *ResolvedBox) {
 	var configs []*EnvConfig
 
-	for _, layerName := range layerOrder {
-		layer := g.Layers[layerName]
+	for _, candyName := range candyOrder {
+		layer := g.Candies[candyName]
 		if layer.HasEnv() {
 			cfg, err := layer.EnvConfig()
 			if err == nil && cfg != nil {
@@ -1032,7 +1032,7 @@ func (g *Generator) writeLayerEnv(b *strings.Builder, layerOrder []string, img *
 		}
 	}
 
-	configs = append(configs, g.collectBuilderRuntimeEnv(layerOrder, img)...)
+	configs = append(configs, g.collectBuilderRuntimeEnv(candyOrder, img)...)
 
 	if len(configs) == 0 {
 		return
@@ -1080,20 +1080,20 @@ func (g *Generator) writeLayerEnv(b *strings.Builder, layerOrder []string, img *
 }
 
 // writeExpose collects ports from all layers, deduplicates, sorts, and emits EXPOSE directives
-func (g *Generator) writeExpose(b *strings.Builder, layerOrder []string) {
+func (g *Generator) writeExpose(b *strings.Builder, candyOrder []string) {
 	seen := make(map[string]bool)
 	var ports []string
 
-	for _, layerName := range layerOrder {
-		layer := g.Layers[layerName]
+	for _, candyName := range candyOrder {
+		layer := g.Candies[candyName]
 		if !layer.HasPorts() {
 			continue
 		}
-		layerPorts, err := layer.Port()
+		candyPorts, err := layer.Port()
 		if err != nil {
 			continue
 		}
-		for _, port := range layerPorts {
+		for _, port := range candyPorts {
 			if !seen[port] {
 				seen[port] = true
 				ports = append(ports, port)
@@ -1115,10 +1115,10 @@ func (g *Generator) writeExpose(b *strings.Builder, layerOrder []string) {
 
 // writeDataStaging emits COPY instructions for data layers into /data/<volume>/[dest/].
 // Data files are staged in the image for deploy-time provisioning by charly config / charly update.
-func (g *Generator) writeDataStaging(b *strings.Builder, layerOrder []string, img *ResolvedBox) {
+func (g *Generator) writeDataStaging(b *strings.Builder, candyOrder []string, img *ResolvedBox) {
 	hasData := false
-	for _, layerName := range layerOrder {
-		layer := g.Layers[layerName]
+	for _, candyName := range candyOrder {
+		layer := g.Candies[candyName]
 		if !layer.HasData() {
 			continue
 		}
@@ -1144,9 +1144,9 @@ func (g *Generator) writeDataStaging(b *strings.Builder, layerOrder []string, im
 			}
 
 			// Use the short stage alias (layer.Name) to match `FROM scratch AS
-			// <layer.Name>` — for REMOTE layers layerName is the full @github map
+			// <layer.Name>` — for REMOTE layers candyName is the full @github map
 			// key, which is NOT a valid build-stage reference (podman would try to
-			// pull it as an image). Local layers: layerName == layer.Name (no-op).
+			// pull it as an image). Local layers: candyName == layer.Name (no-op).
 			b.WriteString(fmt.Sprintf("COPY --from=%s --chown=%d:%d %s %s\n",
 				layer.Name, img.UID, img.GID, srcPath, dstPath))
 		}
@@ -1157,7 +1157,7 @@ func (g *Generator) writeDataStaging(b *strings.Builder, layerOrder []string, im
 }
 
 // generateTraefikRoutes generates a traefik dynamic config YAML for route layers
-func (g *Generator) generateTraefikRoutes(boxName string, layerOrder []string, img *ResolvedBox) error {
+func (g *Generator) generateTraefikRoutes(boxName string, candyOrder []string, img *ResolvedBox) error {
 	var b strings.Builder
 
 	b.WriteString("# .build/" + boxName + "/traefik-routes.yml (generated -- do not edit)\n")
@@ -1170,8 +1170,8 @@ func (g *Generator) generateTraefikRoutes(boxName string, layerOrder []string, i
 		cfg  *RouteConfig
 	}
 	var routes []routeEntry
-	for _, layerName := range layerOrder {
-		layer := g.Layers[layerName]
+	for _, candyName := range candyOrder {
+		layer := g.Candies[candyName]
 		if !layer.HasRoute() {
 			continue
 		}
@@ -1179,7 +1179,7 @@ func (g *Generator) generateTraefikRoutes(boxName string, layerOrder []string, i
 		if err != nil || route == nil {
 			continue
 		}
-		routes = append(routes, routeEntry{name: layerName, cfg: route})
+		routes = append(routes, routeEntry{name: candyName, cfg: route})
 	}
 
 	for _, r := range routes {
@@ -1218,21 +1218,21 @@ func (g *Generator) generateTraefikRoutes(boxName string, layerOrder []string, i
 // service: list and renders every entry that binds to this init via
 // per-entry routing (use_packaged → systemd; custom exec → any init with
 // a service_template). No legacy raw-INI path.
-func (g *Generator) generateInitFragments(boxName, initName string, def *InitDef, layerOrder []string) error {
+func (g *Generator) generateInitFragments(boxName, initName string, def *InitDef, candyOrder []string) error {
 	fragDir := filepath.Join(g.BuildDir, boxName, def.FragmentDir)
 	if err := os.MkdirAll(fragDir, 0755); err != nil {
 		return err
 	}
 
-	for i, layerName := range layerOrder {
-		layer := g.Layers[layerName]
+	for i, candyName := range candyOrder {
+		layer := g.Candies[candyName]
 		idx := i + 1
 
 		if def.Model == "fragment_assembly" {
 			// Concatenate every service entry in this layer that binds to this init
 			// into ONE fragment file per layer, matching the Containerfile's
 			// stage_fragment_copy naming convention (NN-<layer>.conf).
-			var layerBuf strings.Builder
+			var candyBuf strings.Builder
 			for j := range layer.Service() {
 				entry := &layer.Service()[j]
 				// Per-entry routing: only render entries this init can handle.
@@ -1247,7 +1247,7 @@ func (g *Generator) generateInitFragments(boxName, initName string, def *InitDef
 				}
 				ctx := ServiceRenderContext{
 					Name:             entry.Name,
-					Layer:            layerName,
+					Candy:            candyName,
 					Exec:             entry.Exec,
 					Env:              entry.Env,
 					EnvList:          mapToKeyValueSlice(entry.Env),
@@ -1262,7 +1262,7 @@ func (g *Generator) generateInitFragments(boxName, initName string, def *InitDef
 				}
 				rendered, err := RenderService(entry, def, ctx)
 				if err != nil {
-					return fmt.Errorf("rendering service %s/%s/%s: %w", initName, layerName, entry.Name, err)
+					return fmt.Errorf("rendering service %s/%s/%s: %w", initName, candyName, entry.Name, err)
 				}
 				content := rendered.UnitText
 				if content == "" {
@@ -1271,21 +1271,21 @@ func (g *Generator) generateInitFragments(boxName, initName string, def *InitDef
 				if content == "" {
 					continue
 				}
-				if layerBuf.Len() > 0 && !strings.HasSuffix(layerBuf.String(), "\n\n") {
-					if !strings.HasSuffix(layerBuf.String(), "\n") {
-						layerBuf.WriteString("\n")
+				if candyBuf.Len() > 0 && !strings.HasSuffix(candyBuf.String(), "\n\n") {
+					if !strings.HasSuffix(candyBuf.String(), "\n") {
+						candyBuf.WriteString("\n")
 					}
-					layerBuf.WriteString("\n")
+					candyBuf.WriteString("\n")
 				}
-				layerBuf.WriteString(content)
+				candyBuf.WriteString(content)
 				if !strings.HasSuffix(content, "\n") {
-					layerBuf.WriteString("\n")
+					candyBuf.WriteString("\n")
 				}
 			}
-			if layerBuf.Len() > 0 {
+			if candyBuf.Len() > 0 {
 				// Short name, not the slashed remote map key (see scratch-stage note).
 				fragFile := filepath.Join(fragDir, fmt.Sprintf("%02d-%s.conf", idx, layer.Name))
-				if err := os.WriteFile(fragFile, []byte(layerBuf.String()), 0644); err != nil {
+				if err := os.WriteFile(fragFile, []byte(candyBuf.String()), 0644); err != nil {
 					return err
 				}
 			}
@@ -1295,9 +1295,9 @@ func (g *Generator) generateInitFragments(boxName, initName string, def *InitDef
 		// match Containerfile's stage_fragment_copy naming).
 		if def.HasRelayTemplate() && len(layer.PortRelayPorts) > 0 {
 			for _, port := range layer.PortRelayPorts {
-				content, err := def.RenderRelayTemplate(port, layerName, idx)
+				content, err := def.RenderRelayTemplate(port, candyName, idx)
 				if err != nil {
-					return fmt.Errorf("rendering relay for %s/%s port %d: %w", initName, layerName, port, err)
+					return fmt.Errorf("rendering relay for %s/%s port %d: %w", initName, candyName, port, err)
 				}
 				confName := fmt.Sprintf("%02d-relay-%d.conf", idx, port)
 				fragFile := filepath.Join(fragDir, confName)
@@ -1342,15 +1342,15 @@ func mapToKeyValueSlice(m map[string]string) []KeyValue {
 	return out
 }
 
-// writeLayerSteps writes the RUN steps for a single layer.
+// writeCandySteps writes the RUN steps for a single layer.
 // skipRootReset prevents emitting USER root after user-mode steps (used for the
 // last layer when no post-layer root steps follow).
 // Returns true if the layer ended in user mode.
-func (g *Generator) writeLayerSteps(b *strings.Builder, layerName string, img *ResolvedBox, skipRootReset bool) bool {
-	layer := g.Layers[layerName]
+func (g *Generator) writeCandySteps(b *strings.Builder, candyName string, img *ResolvedBox, skipRootReset bool) bool {
+	layer := g.Candies[candyName]
 	stageName := layer.Name // short name used as scratch stage alias
 
-	b.WriteString(fmt.Sprintf("# Layer: %s\n", layerName))
+	b.WriteString(fmt.Sprintf("# Layer: %s\n", candyName))
 
 	// Track if we've switched to user mode
 	asUser := false
@@ -1460,7 +1460,7 @@ func (g *Generator) writeLayerSteps(b *strings.Builder, layerName string, img *R
 			if !bDef.Inline || bDef.InstallTemplate == "" {
 				continue
 			}
-			if !g.layerNeedsBuilder(img, layer, bDef) {
+			if !g.candyNeedsBuilder(img, layer, bDef) {
 				continue
 			}
 			if !asUser {
@@ -1530,10 +1530,10 @@ func expandBuilderPath(path string, img *ResolvedBox) string {
 	return path
 }
 
-// layerNeedsBuilder checks if a layer triggers a builder's detection criteria.
-func (g *Generator) layerNeedsBuilder(img *ResolvedBox, layer *Layer, builderDef *BuilderDef) bool {
+// candyNeedsBuilder checks if a layer triggers a builder's detection criteria.
+func (g *Generator) candyNeedsBuilder(img *ResolvedBox, layer *Candy, builderDef *BuilderDef) bool {
 	for _, f := range builderDef.DetectFiles {
-		if layerHasFile(layer, f) {
+		if candyHasFile(layer, f) {
 			return true
 		}
 	}
@@ -1571,9 +1571,9 @@ func buildFormatsInclude(formats []string, target string) bool {
 }
 
 // collectBuilderRuntimeEnv returns synthesised EnvConfig entries for every
-// builder triggered by any layer in layerOrder. Each builder contributes at
+// builder triggered by any layer in candyOrder. Each builder contributes at
 // most one config — the same builder is not double-counted even when many
-// layers trigger it. Used by writeLayerEnv (Containerfile ENV emission) and
+// layers trigger it. Used by writeCandyEnv (Containerfile ENV emission) and
 // writeLabels (ai.opencharly.path_append + ai.opencharly.env_layers).
 //
 // The "runtime env contract" idea moved from the pixi LAYER to the pixi
@@ -1586,7 +1586,7 @@ func buildFormatsInclude(formats []string, target string) bool {
 // the binary lived at ~/.pixi/envs/default/bin/jupyter. Threading via the
 // BUILDER means any image whose layers trigger pixi gets the contract
 // automatically.
-func (g *Generator) collectBuilderRuntimeEnv(layerOrder []string, img *ResolvedBox) []*EnvConfig {
+func (g *Generator) collectBuilderRuntimeEnv(candyOrder []string, img *ResolvedBox) []*EnvConfig {
 	if img == nil || img.BuilderConfig == nil {
 		return nil
 	}
@@ -1600,12 +1600,12 @@ func (g *Generator) collectBuilderRuntimeEnv(layerOrder []string, img *ResolvedB
 			continue
 		}
 		triggered := false
-		for _, layerName := range layerOrder {
-			layer, ok := g.Layers[layerName]
+		for _, candyName := range candyOrder {
+			layer, ok := g.Candies[candyName]
 			if !ok {
 				continue
 			}
-			if g.layerNeedsBuilder(img, layer, def) {
+			if g.candyNeedsBuilder(img, layer, def) {
 				triggered = true
 				break
 			}
@@ -1622,13 +1622,13 @@ func (g *Generator) collectBuilderRuntimeEnv(layerOrder []string, img *ResolvedB
 }
 
 // buildStageContext creates the template context for a builder's stage_template.
-func (g *Generator) buildStageContext(layer *Layer, builderName string, builderDef *BuilderDef, img *ResolvedBox, builderRef string) *BuildStageContext {
+func (g *Generator) buildStageContext(layer *Candy, builderName string, builderDef *BuilderDef, img *ResolvedBox, builderRef string) *BuildStageContext {
 	stageName := fmt.Sprintf("%s-%s-build", layer.Name, builderName)
 	ctx := &BuildStageContext{
 		BuilderRef:  builderRef,
 		StageName:   stageName,
 		LayerStage:  layer.Name,
-		CopySrc:     g.layerCopySource(layerMapKey(layer)),
+		CopySrc:     g.candyCopySource(candyMapKey(layer)),
 		UID:         img.UID,
 		GID:         img.GID,
 		Home:        img.Home,
@@ -1640,7 +1640,7 @@ func (g *Generator) buildStageContext(layer *Layer, builderName string, builderD
 	if len(builderDef.InstallCommands) > 0 && len(builderDef.DetectFiles) > 0 {
 		manifest := ""
 		for _, f := range builderDef.DetectFiles {
-			if layerHasFile(layer, f) {
+			if candyHasFile(layer, f) {
 				manifest = f
 				break
 			}
@@ -1671,7 +1671,7 @@ func (g *Generator) buildStageContext(layer *Layer, builderName string, builderD
 	}
 
 	// Detect optional build script (runs in builder stage after install)
-	if builderDef.BuildScript != "" && layerHasFile(layer, builderDef.BuildScript) {
+	if builderDef.BuildScript != "" && candyHasFile(layer, builderDef.BuildScript) {
 		ctx.HasBuildScript = true
 		ctx.BuildScript = builderDef.BuildScript
 	}
@@ -1690,7 +1690,7 @@ func (g *Generator) buildStageContext(layer *Layer, builderName string, builderD
 
 // writeLabels emits OCI LABEL directives with all runtime-relevant metadata.
 // Every runtime config option is embedded so images are fully self-contained.
-func (g *Generator) writeLabels(b *strings.Builder, boxName string, layerOrder []string, img *ResolvedBox) {
+func (g *Generator) writeLabels(b *strings.Builder, boxName string, candyOrder []string, img *ResolvedBox) {
 	b.WriteString("# Image metadata\n")
 
 	// Always-present labels. ai.opencharly.version carries the image's
@@ -1715,21 +1715,21 @@ func (g *Generator) writeLabels(b *strings.Builder, boxName string, layerOrder [
 	// deploy-time consumers (labels.go ExtractMetadata) continue to see
 	// meta.Bootc=true. The signal is layer-derived now (preserve_user)
 	// rather than img.Bootc.
-	if img.LayerCaps != nil && img.LayerCaps.PreserveUser {
+	if img.CandyCaps != nil && img.CandyCaps.PreserveUser {
 		b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelBootc, "true"))
 	}
 	// Layer-contributed OCI labels (capabilities.oci_labels). Includes
 	// dev.containers.bootc=true emitted from the bootc-config layer when its
 	// preserve_user capability is in the composition. Sorted for
 	// determinism so Containerfile diffs stay stable.
-	if img.LayerCaps != nil && len(img.LayerCaps.OCILabels) > 0 {
-		keys := make([]string, 0, len(img.LayerCaps.OCILabels))
-		for k := range img.LayerCaps.OCILabels {
+	if img.CandyCaps != nil && len(img.CandyCaps.OCILabels) > 0 {
+		keys := make([]string, 0, len(img.CandyCaps.OCILabels))
+		for k := range img.CandyCaps.OCILabels {
 			keys = append(keys, k)
 		}
 		sort.Strings(keys)
 		for _, k := range keys {
-			b.WriteString(fmt.Sprintf("LABEL %s=%q\n", k, img.LayerCaps.OCILabels[k]))
+			b.WriteString(fmt.Sprintf("LABEL %s=%q\n", k, img.CandyCaps.OCILabels[k]))
 		}
 	}
 	if img.Network != "" {
@@ -1753,8 +1753,8 @@ func (g *Generator) writeLabels(b *strings.Builder, boxName string, layerOrder [
 
 	// Port protocols: collect from layer PortSpec declarations
 	portProtos := make(map[string]string)
-	for _, layerName := range layerOrder {
-		layer := g.Layers[layerName]
+	for _, candyName := range candyOrder {
+		layer := g.Candies[candyName]
 		for _, ps := range layer.PortSpecs() {
 			if ps.Protocol != "" && ps.Protocol != "http" {
 				portProtos[strconv.Itoa(ps.Port)] = ps.Protocol
@@ -1764,7 +1764,7 @@ func (g *Generator) writeLabels(b *strings.Builder, boxName string, layerOrder [
 	writeJSONLabel(b, LabelPortProto, portProtos)
 
 	// Volumes: short form names (without charly-<image>- prefix)
-	volumes, _ := CollectBoxVolume(g.Config, g.Layers, boxName, img.Home, nil)
+	volumes, _ := CollectBoxVolume(g.Config, g.Candies, boxName, img.Home, nil)
 	if len(volumes) > 0 {
 		var labelVols []LabelVolumeEntry
 		for _, v := range volumes {
@@ -1775,11 +1775,11 @@ func (g *Generator) writeLabels(b *strings.Builder, boxName string, layerOrder [
 	}
 
 	// Aliases: collected from layers + image-level config
-	aliases, _ := CollectBoxAlias(g.Config, g.Layers, boxName)
+	aliases, _ := CollectBoxAlias(g.Config, g.Candies, boxName)
 	writeJSONLabel(b, LabelAlias, aliases)
 
 	// Security: collected from layers + image config
-	security := CollectSecurity(g.Config, g.Layers, boxName)
+	security := CollectSecurity(g.Config, g.Candies, boxName)
 	if security.Privileged || security.CgroupNS != "" || len(security.CapAdd) > 0 || len(security.Devices) > 0 || len(security.SecurityOpt) > 0 || len(security.GroupAdd) > 0 || security.ShmSize != "" || len(security.Mounts) > 0 {
 		writeJSONLabel(b, LabelSecurity, security)
 	}
@@ -1792,7 +1792,7 @@ func (g *Generator) writeLabels(b *strings.Builder, boxName string, layerOrder [
 	writeJSONLabel(b, LabelEnv, imgCfg.Env)
 
 	// Hooks: collected from layers
-	hooks := CollectHooks(g.Config, g.Layers, boxName)
+	hooks := CollectHooks(g.Config, g.Candies, boxName)
 	if hooks != nil {
 		writeJSONLabel(b, LabelHook, hooks)
 	}
@@ -1800,7 +1800,7 @@ func (g *Generator) writeLabels(b *strings.Builder, boxName string, layerOrder [
 	// Tests: three-section (layer/image/deploy) declarative manifest. Shipped
 	// so every pulled image is self-describing at all three levels. Local
 	// deploy.yml overlays (by id) are applied at charly eval live time, not here.
-	tests := CollectEval(g.Config, g.Layers, boxName)
+	tests := CollectEval(g.Config, g.Candies, boxName)
 	if tests != nil {
 		writeJSONLabel(b, LabelEval, tests)
 	}
@@ -1809,7 +1809,7 @@ func (g *Generator) writeLabels(b *strings.Builder, boxName string, layerOrder [
 	// Replaces the retired LabelInfo/LabelStatus scalar labels. Local
 	// deploy.yml `description:` overlays merge at runtime via
 	// MergeDeployDescriptions, not here.
-	descriptions := CollectDescriptions(g.Config, g.Layers, boxName)
+	descriptions := CollectDescriptions(g.Config, g.Candies, boxName)
 	if descriptions != nil {
 		writeJSONLabel(b, LabelDescription, descriptions)
 	}
@@ -1820,8 +1820,8 @@ func (g *Generator) writeLabels(b *strings.Builder, boxName string, layerOrder [
 	// image-level `shell:` (when present). Deploy-scope defaults baked
 	// here; local deploy.yml `shell:` overlays merge at deploy time
 	// via MergeDeployShell.
-	shellSet := CollectShell(g.Config, g.Layers, boxName)
-	if shellSet != nil && (len(shellSet.Layer) > 0 || len(shellSet.Box) > 0 || len(shellSet.Deploy) > 0) {
+	shellSet := CollectShell(g.Config, g.Candies, boxName)
+	if shellSet != nil && (len(shellSet.Candy) > 0 || len(shellSet.Box) > 0 || len(shellSet.Deploy) > 0) {
 		writeJSONLabel(b, LabelShell, shellSet)
 	}
 
@@ -1832,16 +1832,16 @@ func (g *Generator) writeLabels(b *strings.Builder, boxName string, layerOrder [
 
 	// Init system label: active init system name + per-init service list
 	if img.InitConfig != nil {
-		labelInitSystem, labelInitDef := img.InitConfig.ResolveInitSystem(g.Layers, layerOrder, "")
+		labelInitSystem, labelInitDef := img.InitConfig.ResolveInitSystem(g.Candies, candyOrder, "")
 		if labelInitSystem != "" && labelInitDef != nil {
 			b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelInit, labelInitSystem))
 			// Per-init service-name list (legacy layer-name summary; kept for
 			// `charly service status/restart` CLI ergonomics).
 			var serviceNames []string
-			for _, layerName := range layerOrder {
-				layer := g.Layers[layerName]
+			for _, candyName := range candyOrder {
+				layer := g.Candies[candyName]
 				if layer.HasInit(labelInitSystem) {
-					serviceNames = append(serviceNames, layerName)
+					serviceNames = append(serviceNames, candyName)
 				}
 			}
 			if labelInitDef.LabelKey != "" {
@@ -1850,8 +1850,8 @@ func (g *Generator) writeLabels(b *strings.Builder, boxName string, layerOrder [
 			// Structured per-entry service spec — source-less deploy reads
 			// this instead of relying on layer-yml access at deploy time.
 			var capServices []CapabilityService
-			for _, layerName := range layerOrder {
-				layer := g.Layers[layerName]
+			for _, candyName := range candyOrder {
+				layer := g.Candies[candyName]
 				for i := range layer.Service() {
 					e := &layer.Service()[i]
 					capServices = append(capServices, CapabilityService{
@@ -1877,7 +1877,7 @@ func (g *Generator) writeLabels(b *strings.Builder, boxName string, layerOrder [
 						ExitCode:         e.ExitCode,
 						Priority:         e.Priority,
 						Init:             labelInitSystem,
-						Layer:            layerName,
+						Candy:            candyName,
 					})
 				}
 			}
@@ -1889,8 +1889,8 @@ func (g *Generator) writeLabels(b *strings.Builder, boxName string, layerOrder [
 
 	// Port relay: collected from layers
 	var portRelay []int
-	for _, layerName := range layerOrder {
-		layer := g.Layers[layerName]
+	for _, candyName := range candyOrder {
+		layer := g.Candies[candyName]
 		portRelay = append(portRelay, layer.PortRelayPorts...)
 	}
 	writeJSONLabel(b, LabelPortRelay, portRelay)
@@ -1899,8 +1899,8 @@ func (g *Generator) writeLabels(b *strings.Builder, boxName string, layerOrder [
 	// Deduplicate by name+env composite key: same podman secret can inject into multiple env vars.
 	var labelSecrets []LabelSecretEntry
 	secretSeen := make(map[string]bool)
-	for _, layerName := range layerOrder {
-		layer := g.Layers[layerName]
+	for _, candyName := range candyOrder {
+		layer := g.Candies[candyName]
 		for _, s := range layer.Secret() {
 			key := s.Name + ":" + s.Env
 			if secretSeen[key] {
@@ -1924,8 +1924,8 @@ func (g *Generator) writeLabels(b *strings.Builder, boxName string, layerOrder [
 
 	// Env provides: env vars provided to other containers (service discovery)
 	envProvides := make(map[string]string)
-	for _, layerName := range layerOrder {
-		layer := g.Layers[layerName]
+	for _, candyName := range candyOrder {
+		layer := g.Candies[candyName]
 		if layer.HasEnvProvides() {
 			for k, v := range layer.EnvProvides() {
 				envProvides[k] = v
@@ -1938,8 +1938,8 @@ func (g *Generator) writeLabels(b *strings.Builder, boxName string, layerOrder [
 
 	// Env requires: env vars image must have from the environment
 	envRequiresMap := make(map[string]EnvDependency) // deduplicate by name, last wins
-	for _, layerName := range layerOrder {
-		layer := g.Layers[layerName]
+	for _, candyName := range candyOrder {
+		layer := g.Candies[candyName]
 		if layer.HasEnvRequires() {
 			for _, dep := range layer.EnvRequire() {
 				envRequiresMap[dep.Name] = dep
@@ -1952,8 +1952,8 @@ func (g *Generator) writeLabels(b *strings.Builder, boxName string, layerOrder [
 
 	// Env accepts: env vars image can optionally use
 	envAcceptsMap := make(map[string]EnvDependency) // deduplicate by name, last wins
-	for _, layerName := range layerOrder {
-		layer := g.Layers[layerName]
+	for _, candyName := range candyOrder {
+		layer := g.Candies[candyName]
 		if layer.HasEnvAccepts() {
 			for _, dep := range layer.EnvAccept() {
 				envAcceptsMap[dep.Name] = dep
@@ -1966,8 +1966,8 @@ func (g *Generator) writeLabels(b *strings.Builder, boxName string, layerOrder [
 
 	// Secret requires: credential-store-backed env vars image must have
 	secretRequiresMap := make(map[string]EnvDependency) // deduplicate by name, last wins
-	for _, layerName := range layerOrder {
-		layer := g.Layers[layerName]
+	for _, candyName := range candyOrder {
+		layer := g.Candies[candyName]
 		if layer.HasSecretRequires() {
 			for _, dep := range layer.SecretRequire() {
 				secretRequiresMap[dep.Name] = dep
@@ -1980,8 +1980,8 @@ func (g *Generator) writeLabels(b *strings.Builder, boxName string, layerOrder [
 
 	// Secret accepts: credential-store-backed env vars image can optionally use
 	secretAcceptsMap := make(map[string]EnvDependency) // deduplicate by name, last wins
-	for _, layerName := range layerOrder {
-		layer := g.Layers[layerName]
+	for _, candyName := range candyOrder {
+		layer := g.Candies[candyName]
 		if layer.HasSecretAccepts() {
 			for _, dep := range layer.SecretAccept() {
 				secretAcceptsMap[dep.Name] = dep
@@ -1994,8 +1994,8 @@ func (g *Generator) writeLabels(b *strings.Builder, boxName string, layerOrder [
 
 	// MCP provides: MCP servers provided to other containers
 	mcpProvidesMap := make(map[string]MCPServerYAML) // deduplicate by name, last wins
-	for _, layerName := range layerOrder {
-		layer := g.Layers[layerName]
+	for _, candyName := range candyOrder {
+		layer := g.Candies[candyName]
 		if layer.HasMCPProvides() {
 			for _, mcp := range layer.MCPProvide() {
 				mcpProvidesMap[mcp.Name] = mcp
@@ -2018,8 +2018,8 @@ func (g *Generator) writeLabels(b *strings.Builder, boxName string, layerOrder [
 
 	// MCP requires: MCP servers image must have from the environment
 	mcpRequiresMap := make(map[string]EnvDependency) // deduplicate by name, last wins
-	for _, layerName := range layerOrder {
-		layer := g.Layers[layerName]
+	for _, candyName := range candyOrder {
+		layer := g.Candies[candyName]
 		if layer.HasMCPRequires() {
 			for _, dep := range layer.MCPRequire() {
 				mcpRequiresMap[dep.Name] = dep
@@ -2032,8 +2032,8 @@ func (g *Generator) writeLabels(b *strings.Builder, boxName string, layerOrder [
 
 	// MCP accepts: MCP servers image can optionally use
 	mcpAcceptsMap := make(map[string]EnvDependency) // deduplicate by name, last wins
-	for _, layerName := range layerOrder {
-		layer := g.Layers[layerName]
+	for _, candyName := range candyOrder {
+		layer := g.Candies[candyName]
 		if layer.HasMCPAccepts() {
 			for _, dep := range layer.MCPAccept() {
 				mcpAcceptsMap[dep.Name] = dep
@@ -2046,8 +2046,8 @@ func (g *Generator) writeLabels(b *strings.Builder, boxName string, layerOrder [
 
 	// Routes: collected from layers
 	var routes []LabelRouteEntry
-	for _, layerName := range layerOrder {
-		layer := g.Layers[layerName]
+	for _, candyName := range candyOrder {
+		layer := g.Candies[candyName]
 		if layer.HasRoute() {
 			rc, err := layer.Route()
 			if err == nil && rc != nil {
@@ -2064,13 +2064,13 @@ func (g *Generator) writeLabels(b *strings.Builder, boxName string, layerOrder [
 	// the full effective env regardless of whether it came from a layer's
 	// `env:`/`path_append:` or a builder's `runtime_env:`/`path_contributions:`.
 	var envConfigs []*EnvConfig
-	for _, layerName := range layerOrder {
-		layer := g.Layers[layerName]
+	for _, candyName := range candyOrder {
+		layer := g.Candies[candyName]
 		if layer.envConfig != nil {
 			envConfigs = append(envConfigs, layer.envConfig)
 		}
 	}
-	envConfigs = append(envConfigs, g.collectBuilderRuntimeEnv(layerOrder, img)...)
+	envConfigs = append(envConfigs, g.collectBuilderRuntimeEnv(candyOrder, img)...)
 	if len(envConfigs) > 0 {
 		merged := MergeEnvConfigs(envConfigs)
 		if len(merged.Vars) > 0 {
@@ -2096,12 +2096,12 @@ func (g *Generator) writeLabels(b *strings.Builder, boxName string, layerOrder [
 	if img.Info != "" {
 		infoParts = append(infoParts, img.Info)
 	}
-	for _, layerName := range layerOrder {
-		layer := g.Layers[layerName]
-		layerStatus := descriptionStatus(layer.Description)
-		effectiveStatus = worstStatus(effectiveStatus, layerStatus)
-		if li := descriptionInfo(layer.Description); li != "" && layerStatus != "working" {
-			infoParts = append(infoParts, layerName+": "+li)
+	for _, candyName := range candyOrder {
+		layer := g.Candies[candyName]
+		candyStatus := descriptionStatus(layer.Description)
+		effectiveStatus = worstStatus(effectiveStatus, candyStatus)
+		if li := descriptionInfo(layer.Description); li != "" && candyStatus != "working" {
+			infoParts = append(infoParts, candyName+": "+li)
 		}
 	}
 	resolvedStatus := resolveStatus(effectiveStatus)
@@ -2118,33 +2118,33 @@ func (g *Generator) writeLabels(b *strings.Builder, boxName string, layerOrder [
 	}
 
 	// Layer versions: map of layer name -> CalVer for layers with version set
-	layerVersions := make(map[string]string)
-	for _, layerName := range layerOrder {
-		layer := g.Layers[layerName]
+	candyVersions := make(map[string]string)
+	for _, candyName := range candyOrder {
+		layer := g.Candies[candyName]
 		if layer.Version != "" {
-			layerVersions[layerName] = layer.Version
+			candyVersions[candyName] = layer.Version
 		}
 	}
-	writeJSONLabel(b, LabelCandyVersion, layerVersions)
+	writeJSONLabel(b, LabelCandyVersion, candyVersions)
 
 	// Data entries: staging paths for deploy-time provisioning.
 	// Walk the full image chain (like CollectBoxVolume) to include data
 	// entries from layers in parent/intermediate images.
 	var dataEntries []LabelDataEntry
-	seenDataLayers := make(map[string]bool)
+	seenDataCandies := make(map[string]bool)
 	current := boxName
 	for {
 		imgDef, ok := g.Config.Box[current]
 		if !ok {
 			break
 		}
-		resolved, _ := ResolveLayerOrder(imgDef.Layer, g.Layers, nil)
-		for _, layerName := range resolved {
-			if seenDataLayers[layerName] {
+		resolved, _ := ResolveCandyOrder(imgDef.Candy, g.Candies, nil)
+		for _, candyName := range resolved {
+			if seenDataCandies[candyName] {
 				continue
 			}
-			seenDataLayers[layerName] = true
-			layer, ok := g.Layers[layerName]
+			seenDataCandies[candyName] = true
+			layer, ok := g.Candies[candyName]
 			if !ok || !layer.HasData() {
 				continue
 			}
@@ -2159,7 +2159,7 @@ func (g *Generator) writeLabels(b *strings.Builder, boxName string, layerOrder [
 				dataEntries = append(dataEntries, LabelDataEntry{
 					Volume:  d.Volume,
 					Staging: staging,
-					Layer:   layerName,
+					Candy:   candyName,
 					Dest:    d.Dest,
 				})
 			}
@@ -2280,13 +2280,13 @@ func worstStatusFromTags(a, b []string) string {
 	return worstStatus(resolveStatusFromTags(a), resolveStatusFromTags(b))
 }
 
-// createRemoteLayerCopies copies remote layer directories into .build/_layers/
+// createRemoteCandyCopies copies remote layer directories into .build/_layers/
 // so that Docker/Podman can access them from the build context.
 // Uses hard copies instead of symlinks because Podman doesn't follow symlinks
 // that point outside the build context.
-func (g *Generator) createRemoteLayerCopies() error {
+func (g *Generator) createRemoteCandyCopies() error {
 	hasRemote := false
-	for _, layer := range g.Layers {
+	for _, layer := range g.Candies {
 		if layer.Remote {
 			hasRemote = true
 			break
@@ -2298,18 +2298,18 @@ func (g *Generator) createRemoteLayerCopies() error {
 		return nil
 	}
 
-	layersDir := filepath.Join(g.BuildDir, "_layers")
+	candiesDir := filepath.Join(g.BuildDir, "_layers")
 	// Remove and recreate to ensure clean state
-	os.RemoveAll(layersDir)
-	if err := os.MkdirAll(layersDir, 0755); err != nil {
+	os.RemoveAll(candiesDir)
+	if err := os.MkdirAll(candiesDir, 0755); err != nil {
 		return err
 	}
 
-	for ref, layer := range g.Layers {
+	for ref, layer := range g.Candies {
 		if !layer.Remote {
 			continue
 		}
-		destPath := filepath.Join(layersDir, layer.Name)
+		destPath := filepath.Join(candiesDir, layer.Name)
 		cmd := exec.Command("cp", "-a", layer.Path, destPath)
 		if out, err := cmd.CombinedOutput(); err != nil {
 			return fmt.Errorf("copying remote layer %s: %s: %w", ref, string(out), err)
@@ -2324,7 +2324,7 @@ func (g *Generator) createRemoteLayerCopies() error {
 // cached Path (every remote layer + the remote build.yml share one repo@version
 // cache). Returns "" when the build-config is local (no remote layers).
 func (g *Generator) remoteBuildConfigCacheRoot() string {
-	for _, l := range g.Layers {
+	for _, l := range g.Candies {
 		if l.Remote && l.Path != "" {
 			suffix := filepath.Join(l.SubPathPrefix, l.Name) // e.g. "candy/pixi"
 			if trimmed := strings.TrimSuffix(l.Path, suffix); trimmed != l.Path {
@@ -2384,46 +2384,46 @@ func (g *Generator) rewriteHeaderCopyForRemote(headerCopy string) (string, error
 	return fmt.Sprintf("COPY %s %s", newSrc, fields[2]), nil
 }
 
-// layerCopySource returns the COPY source path for a layer in the Containerfile,
+// candyCopySource returns the COPY source path for a layer in the Containerfile,
 // relative to the build context root (g.Dir).
 //
 // For the common case (no `directory:` override in the candy manifest), this returns
-// "candy/<layerRef>/" for local layers and ".build/_layers/<name>/" for remote
+// "candy/<candyRef>/" for local layers and ".build/_layers/<name>/" for remote
 // layers — identical to the legacy behavior.
 //
 // When the layer declares `directory:` and points SourceDir outside the default
 // candy/<name>/ location, the result is the build-root-relative path to
 // SourceDir so that Containerfile COPY directives pick up files from the author's
 // chosen config directory.
-// layerMapKey returns the key under which a layer is stored in g.Layers: the
+// candyMapKey returns the key under which a layer is stored in g.Layers: the
 // fully-qualified remote ref (RepoPath/SubPathPrefix/Name) for remote layers,
 // the short name for local ones. Use this whenever code holds a *Layer but
-// needs to look it up (or pass its key to layerCopySource), since a remote
+// needs to look it up (or pass its key to candyCopySource), since a remote
 // layer's short Name does NOT match its map key.
-func layerMapKey(layer *Layer) string {
+func candyMapKey(layer *Candy) string {
 	if layer.Remote {
 		return layer.RepoPath + "/" + layer.SubPathPrefix + layer.Name
 	}
 	return layer.Name
 }
 
-func (g *Generator) layerCopySource(layerRef string) string {
-	layer := g.Layers[layerRef]
+func (g *Generator) candyCopySource(candyRef string) string {
+	layer := g.Candies[candyRef]
 	if layer.Remote {
 		return ".build/_layers/" + layer.Name
 	}
-	// If SourceDir matches the default candy/<layerRef>/ location, preserve
+	// If SourceDir matches the default candy/<candyRef>/ location, preserve
 	// the legacy path format (cheap, avoids filepath.Rel calls on hot path).
-	defaultDir := filepath.Join(g.Dir, DefaultCandyDir, layerRef)
+	defaultDir := filepath.Join(g.Dir, DefaultCandyDir, candyRef)
 	if layer.SourceDir == "" || layer.SourceDir == defaultDir {
-		return DefaultCandyDir + "/" + layerRef
+		return DefaultCandyDir + "/" + candyRef
 	}
 	// `directory:` override — resolve SourceDir relative to the build root.
 	rel, err := filepath.Rel(g.Dir, layer.SourceDir)
 	if err != nil || strings.HasPrefix(rel, "..") {
 		// Falling back to the default means the Containerfile will miss files
 		// from an out-of-tree SourceDir — validation should have caught this.
-		return DefaultCandyDir + "/" + layerRef
+		return DefaultCandyDir + "/" + candyRef
 	}
 	return rel
 }

@@ -84,7 +84,7 @@ type UnifiedFile struct {
 	// Field-singular cutover (2026-05): legacy plural `Images yaml:"images"`
 	// deleted; the singular `Box yaml:"box"` is the canonical surface.
 	Box   map[string]BoxConfig    `yaml:"box,omitempty"`
-	Layer map[string]*InlineCandy `yaml:"candy,omitempty"`
+	Candy map[string]*InlineCandy `yaml:"candy,omitempty"`
 	VM    map[string]*VmSpec      `yaml:"vm,omitempty"`
 	// Field-singular cutover: legacy `Deploys *DeploymentsSection
 	// yaml:"deployments"` deleted. The flat `Deploy yaml:"deploy"` map is
@@ -264,22 +264,22 @@ func (s *ScanSpec) UnmarshalYAML(node *yaml.Node) error {
 	return nil
 }
 
-// InlineLayer is a layer declared inline in the unified file's `layers:` map.
+// InlineCandy is a layer declared inline in the unified file's `layers:` map.
 // Mutually exclusive options: `from:` points at a directory to scan via the
-// existing scanLayer (no schema change), OR the inline body defines the layer
+// existing scanCandy (no schema change), OR the inline body defines the layer
 // (same fields as the candy manifest, flattened via yaml:",inline").
 type InlineCandy struct {
 	From      string `yaml:"from,omitempty"`
 	CandyYAML `yaml:",inline"`
 	// manifest carries the discovery manifest filename for a `From:` directory
-	// so ProjectLayers→scanLayer reads the right file. Not serialized.
+	// so ProjectCandies→scanCandy reads the right file. Not serialized.
 	manifest string
 }
 
-// UnmarshalYAML is required because LayerYAML has its own UnmarshalYAML —
+// UnmarshalYAML is required because CandyYAML has its own UnmarshalYAML —
 // yaml.v3's default ",inline" handling doesn't compose with a custom
 // unmarshaler on the embedded type. We read `from:` explicitly, then delegate
-// to LayerYAML for the body.
+// to CandyYAML for the body.
 func (il *InlineCandy) UnmarshalYAML(node *yaml.Node) error {
 	var own struct {
 		From string `yaml:"from"`
@@ -316,7 +316,7 @@ type DeploymentsSection struct {
 // -----------------------------------------------------------------------------
 
 type kindKeyedDoc struct {
-	Layer   *CandyDoc   `yaml:"candy,omitempty"`
+	Candy   *CandyDoc   `yaml:"candy,omitempty"`
 	Image   *BoxDoc     `yaml:"box,omitempty"`
 	Deploy  *DeployDoc  `yaml:"deploy,omitempty"`
 	Builder *BuilderDoc `yaml:"builder,omitempty"`
@@ -390,16 +390,16 @@ type AndroidDoc struct {
 	AndroidSpec `yaml:",inline"`
 }
 
-// LayerDoc wraps a LayerYAML body with an explicit Name — the standalone form
+// CandyDoc wraps a CandyYAML body with an explicit Name — the standalone form
 // authored as a standalone candy manifest post-migration.
 type CandyDoc struct {
 	Name      string `yaml:"name"`
 	CandyYAML `yaml:",inline"`
 }
 
-// UnmarshalYAML — same rationale as InlineLayer.UnmarshalYAML. The custom
-// unmarshaler on the embedded LayerYAML doesn't compose with ",inline", so we
-// extract Name ourselves and delegate the body to LayerYAML.
+// UnmarshalYAML — same rationale as InlineCandy.UnmarshalYAML. The custom
+// unmarshaler on the embedded CandyYAML doesn't compose with ",inline", so we
+// extract Name ourselves and delegate the body to CandyYAML.
 func (ld *CandyDoc) UnmarshalYAML(node *yaml.Node) error {
 	var own struct {
 		Name string `yaml:"name"`
@@ -763,7 +763,7 @@ func expandRecipeFromIfNeeded(merged *UnifiedFile, dir string) error {
 	if err := merged.ApplyDiscover(dir); err != nil {
 		return fmt.Errorf("apply discover (for from: expansion): %w", err)
 	}
-	layers, err := merged.ProjectLayers(dir)
+	layers, err := merged.ProjectCandies(dir)
 	if err != nil {
 		return fmt.Errorf("project layers (for from: expansion): %w", err)
 	}
@@ -1574,7 +1574,7 @@ func mergeUnified(dst, src *UnifiedFile, srcDir string) {
 	mergeBuilderMap(&dst.Builder, src.Builder)
 	mergeInitMap(&dst.Init, src.Init)
 	mergeBoxMap(&dst.Box, src.Box)
-	mergeLayerMap(&dst.Layer, src.Layer)
+	mergeCandyMap(&dst.Candy, src.Candy)
 	mergeVmMap(&dst.VM, src.VM)
 	mergePodMap(&dst.Pod, src.Pod)
 	mergeK8sMap(&dst.K8s, src.K8s)
@@ -1732,7 +1732,7 @@ func mergeBoxMap(dst *map[string]BoxConfig, src map[string]BoxConfig) {
 	}
 }
 
-func mergeLayerMap(dst *map[string]*InlineCandy, src map[string]*InlineCandy) {
+func mergeCandyMap(dst *map[string]*InlineCandy, src map[string]*InlineCandy) {
 	if len(src) == 0 {
 		return
 	}
@@ -1989,8 +1989,8 @@ func mergeBoxConfig(dst, src *BoxConfig) {
 	if len(dst.Build) == 0 {
 		dst.Build = src.Build
 	}
-	if len(dst.Layer) == 0 {
-		dst.Layer = src.Layer
+	if len(dst.Candy) == 0 {
+		dst.Candy = src.Candy
 	}
 	if dst.User == "" {
 		dst.User = src.User
@@ -2044,7 +2044,7 @@ func mergeBoxConfig(dst, src *BoxConfig) {
 // already present."
 func mergeKindDoc(merged *UnifiedFile, kd *kindKeyedDoc, srcDir string) error {
 	count := 0
-	if kd.Layer != nil {
+	if kd.Candy != nil {
 		count++
 	}
 	if kd.Image != nil {
@@ -2102,15 +2102,15 @@ func mergeKindDoc(merged *UnifiedFile, kd *kindKeyedDoc, srcDir string) error {
 		return nil
 	}
 	switch {
-	case kd.Layer != nil:
-		if kd.Layer.Name == "" {
+	case kd.Candy != nil:
+		if kd.Candy.Name == "" {
 			return fmt.Errorf("candy: missing name")
 		}
-		if merged.Layer == nil {
-			merged.Layer = map[string]*InlineCandy{}
+		if merged.Candy == nil {
+			merged.Candy = map[string]*InlineCandy{}
 		}
-		if _, exists := merged.Layer[kd.Layer.Name]; !exists {
-			merged.Layer[kd.Layer.Name] = &InlineCandy{CandyYAML: kd.Layer.CandyYAML}
+		if _, exists := merged.Candy[kd.Candy.Name]; !exists {
+			merged.Candy[kd.Candy.Name] = &InlineCandy{CandyYAML: kd.Candy.CandyYAML}
 		}
 	case kd.Image != nil:
 		if kd.Image.Name == "" {
@@ -2386,7 +2386,7 @@ func findEntityDirs(path, filename string, recursive bool) ([]string, error) {
 // applyDiscoveredManifest loads one discovered manifest and routes every
 // document it contains by SHAPE — determined from the document's top-level
 // kind-key WITHOUT parsing the body. A candy-shaped doc registers a lazy
-// `From:` directory reference (scanLayer parses + validates the manifest and
+// `From:` directory reference (scanCandy parses + validates the manifest and
 // resolves the layer's assets relative to its dir); every other shape decodes
 // and merges inline via mergeKindDoc. The conflict rule "explicit entry wins"
 // applies to discovered candies.
@@ -2410,19 +2410,19 @@ func (uf *UnifiedFile) applyDiscoveredManifest(dir, manifest, rootDir string) er
 			continue // empty / non-kind document — nothing to register
 		case "candy":
 			// Candy: register a lazy directory reference (name = dir base, as
-			// the legacy scanner did). scanLayer does the real parse later.
+			// the legacy scanner did). scanCandy does the real parse later.
 			name := filepath.Base(dir)
-			if uf.Layer == nil {
-				uf.Layer = map[string]*InlineCandy{}
+			if uf.Candy == nil {
+				uf.Candy = map[string]*InlineCandy{}
 			}
-			if _, exists := uf.Layer[name]; exists {
+			if _, exists := uf.Candy[name]; exists {
 				continue // explicit entry wins
 			}
 			rel, relErr := filepath.Rel(rootDir, dir)
 			if relErr != nil {
 				rel = dir
 			}
-			uf.Layer[name] = &InlineCandy{From: rel, manifest: manifest}
+			uf.Candy[name] = &InlineCandy{From: rel, manifest: manifest}
 		default:
 			// Any other kind: decode + merge inline, defaulting an empty entity
 			// name to the discovered directory's base.
@@ -2558,13 +2558,13 @@ func (uf *UnifiedFile) ProjectDeployConfig() *DeployConfig {
 	}
 }
 
-// ProjectLayers scans or synthesizes a *Layer per entry in uf.Layer. Entries
-// with `from:` go through the existing scanLayer so directory-based layers
+// ProjectCandies scans or synthesizes a *Layer per entry in uf.Layer. Entries
+// with `from:` go through the existing scanCandy so directory-based layers
 // behave identically to today. Inline entries synthesize a *Layer from the
-// embedded LayerYAML (Part A's `directory:` field still applies).
-func (uf *UnifiedFile) ProjectLayers(rootDir string) (map[string]*Layer, error) {
-	out := map[string]*Layer{}
-	for name, il := range uf.Layer {
+// embedded CandyYAML (Part A's `directory:` field still applies).
+func (uf *UnifiedFile) ProjectCandies(rootDir string) (map[string]*Candy, error) {
+	out := map[string]*Candy{}
+	for name, il := range uf.Candy {
 		if il == nil {
 			continue
 		}
@@ -2578,19 +2578,19 @@ func (uf *UnifiedFile) ProjectLayers(rootDir string) (map[string]*Layer, error) 
 			if manifest == "" {
 				manifest = UnifiedFileName
 			}
-			layer, err := scanLayer(p, name, manifest)
+			layer, err := scanCandy(p, name, manifest)
 			if err != nil {
 				return nil, fmt.Errorf("layer %q from %q: %w", name, il.From, err)
 			}
 			// Layers discovered via `include:` of a remote charly.yml
 			// live OUTSIDE the workspace's project tree (typically in
 			// the github cache under ~/.cache/charly/repos/). Mark them as
-			// Remote so the generator's createRemoteLayerCopies stages
+			// Remote so the generator's createRemoteCandyCopies stages
 			// them into .build/_layers/ and the emitted Containerfile
 			// COPY paths resolve correctly.
 			if absRoot, err := filepath.Abs(rootDir); err == nil {
-				if absLayer, err := filepath.Abs(p); err == nil {
-					if rel, err := filepath.Rel(absRoot, absLayer); err == nil && strings.HasPrefix(rel, "..") {
+				if absCandy, err := filepath.Abs(p); err == nil {
+					if rel, err := filepath.Rel(absRoot, absCandy); err == nil && strings.HasPrefix(rel, "..") {
 						layer.Remote = true
 					}
 				}
@@ -2599,7 +2599,7 @@ func (uf *UnifiedFile) ProjectLayers(rootDir string) (map[string]*Layer, error) 
 			continue
 		}
 		// Inline layer — synthesize.
-		layer, err := synthesizeInlineLayer(name, il, rootDir)
+		layer, err := synthesizeInlineCandy(name, il, rootDir)
 		if err != nil {
 			return nil, fmt.Errorf("inline layer %q: %w", name, err)
 		}
@@ -2608,21 +2608,21 @@ func (uf *UnifiedFile) ProjectLayers(rootDir string) (map[string]*Layer, error) 
 	return out, nil
 }
 
-// synthesizeInlineLayer produces a *Layer from an inline declaration in the
+// synthesizeInlineCandy produces a *Layer from an inline declaration in the
 // unified file. The effective Path is rootDir (the charly.yml's dir);
 // SourceDir always equals Path (the `directory:` field was deleted in the
 // 2026-05 Calamares cutover).
-func synthesizeInlineLayer(name string, il *InlineCandy, rootDir string) (*Layer, error) {
+func synthesizeInlineCandy(name string, il *InlineCandy, rootDir string) (*Candy, error) {
 	// Use inline layer body as if it were a parsed candy manifest at rootDir.
-	layer := &Layer{
+	layer := &Candy{
 		Name: name,
 		Path: rootDir,
 	}
 	layer.SourceDir = rootDir
-	// Populate fields the same way scanLayer does post-parse. We reuse the
+	// Populate fields the same way scanCandy does post-parse. We reuse the
 	// logic by duplicating the minimal set a test would notice; the full set
 	// can be factored out alongside Part G's refactor.
-	populateLayerFromYAML(layer, &il.CandyYAML)
+	populateCandyFromYAML(layer, &il.CandyYAML)
 	// Install-file detection against SourceDir.
 	layer.HasPixiToml = fileExists(filepath.Join(layer.SourceDir, "pixi.toml"))
 	layer.HasPyprojectToml = fileExists(filepath.Join(layer.SourceDir, "pyproject.toml"))
@@ -2638,21 +2638,21 @@ func synthesizeInlineLayer(name string, il *InlineCandy, rootDir string) (*Layer
 	return layer, nil
 }
 
-// populateLayerFromYAML copies every field from a parsed LayerYAML into the
-// runtime Layer. It is the SINGLE post-parse populator: BOTH scanLayer (the
-// discovered-layer-dir path) and synthesizeInlineLayer (the charly.yml
+// populateCandyFromYAML copies every field from a parsed CandyYAML into the
+// runtime Layer. It is the SINGLE post-parse populator: BOTH scanCandy (the
+// discovered-layer-dir path) and synthesizeInlineCandy (the charly.yml
 // inline path) call it, so the two can never drift. (They previously did — the
 // inline path silently dropped artifacts/capabilities/requiresCapabilities/
 // shell and the unexported description.) The caller is responsible for the
 // install-file filesystem probes (HasPixiToml etc.) against SourceDir.
-func populateLayerFromYAML(layer *Layer, ly *CandyYAML) {
+func populateCandyFromYAML(layer *Candy, ly *CandyYAML) {
 	layer.Version = ly.Version
 	layer.Description = ly.Description
 	layer.Status = descriptionStatus(ly.Description)
 	layer.Info = descriptionInfo(ly.Description)
 
-	layer.Require = toLayerRefs(ly.Require)
-	layer.IncludedLayer = toLayerRefs(ly.Layer)
+	layer.Require = toCandyRefs(ly.Require)
+	layer.IncludedCandy = toCandyRefs(ly.Candy)
 
 	layer.service = ly.Service
 	// derivePackageSectionsFromCalamares is the SOLE populator of the package

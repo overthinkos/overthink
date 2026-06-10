@@ -8,21 +8,21 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-func TestScanLayers(t *testing.T) {
-	layers, err := ScanLayer("testdata")
+func TestScanCandies(t *testing.T) {
+	layers, err := ScanCandy("testdata")
 	if err != nil {
-		t.Fatalf("ScanLayer() error = %v", err)
+		t.Fatalf("ScanCandy() error = %v", err)
 	}
 
-	expectedLayers := []string{"pixi", "python", "nodejs", "cargo-tool", "webservice", "pixi-locked"}
-	for _, name := range expectedLayers {
+	expectedCandies := []string{"pixi", "python", "nodejs", "cargo-tool", "webservice", "pixi-locked"}
+	for _, name := range expectedCandies {
 		if _, ok := layers[name]; !ok {
 			t.Errorf("missing layer %q", name)
 		}
 	}
 }
 
-func TestLayerUnknownKeyRejected(t *testing.T) {
+func TestCandyUnknownKeyRejected(t *testing.T) {
 	// The parser HARD-ERRORS on an unknown top-level key (a plural/singular typo)
 	// instead of silently dropping it. Regression for #50 — the
 	// tasks:/vars:/layers:/secret_accepts: silent-drop that masked broken layers.
@@ -51,9 +51,9 @@ func TestLayerUnknownKeyRejected(t *testing.T) {
 	if err := yaml.Unmarshal([]byte(good), &ly); err != nil {
 		t.Fatalf("singular keys must parse, got error: %v", err)
 	}
-	if len(ly.Task) != 1 || ly.Vars["FOO"] != "bar" || len(ly.Layer) != 1 || len(ly.SecretAccept) != 1 {
+	if len(ly.Task) != 1 || ly.Vars["FOO"] != "bar" || len(ly.Candy) != 1 || len(ly.SecretAccept) != 1 {
 		t.Errorf("singular keys parsed but fields empty: task=%d var=%v layer=%v secret_accept=%d",
-			len(ly.Task), ly.Vars, ly.Layer, len(ly.SecretAccept))
+			len(ly.Task), ly.Vars, ly.Candy, len(ly.SecretAccept))
 	}
 
 	// Packages live ONLY under the `distro:` map — a top-level distro-tag key
@@ -73,10 +73,10 @@ func TestLayerUnknownKeyRejected(t *testing.T) {
 	}
 }
 
-func TestLayerPixi(t *testing.T) {
-	layers, err := ScanLayer("testdata")
+func TestCandyPixi(t *testing.T) {
+	layers, err := ScanCandy("testdata")
 	if err != nil {
-		t.Fatalf("ScanLayer() error = %v", err)
+		t.Fatalf("ScanCandy() error = %v", err)
 	}
 
 	pixi := layers["pixi"]
@@ -98,10 +98,10 @@ func TestLayerPixi(t *testing.T) {
 	}
 }
 
-func TestLayerPython(t *testing.T) {
-	layers, err := ScanLayer("testdata")
+func TestCandyPython(t *testing.T) {
+	layers, err := ScanCandy("testdata")
 	if err != nil {
-		t.Fatalf("ScanLayer() error = %v", err)
+		t.Fatalf("ScanCandy() error = %v", err)
 	}
 
 	python := layers["python"]
@@ -117,10 +117,10 @@ func TestLayerPython(t *testing.T) {
 	}
 }
 
-func TestLayerNodejs(t *testing.T) {
-	layers, err := ScanLayer("testdata")
+func TestCandyNodejs(t *testing.T) {
+	layers, err := ScanCandy("testdata")
 	if err != nil {
-		t.Fatalf("ScanLayer() error = %v", err)
+		t.Fatalf("ScanCandy() error = %v", err)
 	}
 
 	nodejs := layers["nodejs"]
@@ -142,10 +142,10 @@ func TestLayerNodejs(t *testing.T) {
 	}
 }
 
-func TestLayerPacTool(t *testing.T) {
-	layers, err := ScanLayer("testdata")
+func TestCandyPacTool(t *testing.T) {
+	layers, err := ScanCandy("testdata")
 	if err != nil {
-		t.Fatalf("ScanLayer() error = %v", err)
+		t.Fatalf("ScanCandy() error = %v", err)
 	}
 
 	pacTool := layers["pac-tool"]
@@ -196,10 +196,10 @@ func TestLayerPacTool(t *testing.T) {
 	}
 }
 
-func TestLayerCargoTool(t *testing.T) {
-	layers, err := ScanLayer("testdata")
+func TestCandyCargoTool(t *testing.T) {
+	layers, err := ScanCandy("testdata")
 	if err != nil {
-		t.Fatalf("ScanLayer() error = %v", err)
+		t.Fatalf("ScanCandy() error = %v", err)
 	}
 
 	cargoTool := layers["cargo-tool"]
@@ -220,9 +220,9 @@ func TestHasInstallFiles(t *testing.T) {
 	// (so unknown top-level keys get routed to FormatSections, not discarded).
 	RegisterBuildVocabulary(testDistroConfig())
 
-	layers, err := ScanLayer("testdata")
+	layers, err := ScanCandy("testdata")
 	if err != nil {
-		t.Fatalf("ScanLayer() error = %v", err)
+		t.Fatalf("ScanCandy() error = %v", err)
 	}
 
 	for name, layer := range layers {
@@ -232,30 +232,30 @@ func TestHasInstallFiles(t *testing.T) {
 	}
 }
 
-func TestLayerNames(t *testing.T) {
-	layers, err := ScanLayer("testdata")
+func TestCandyNames(t *testing.T) {
+	layers, err := ScanCandy("testdata")
 	if err != nil {
-		t.Fatalf("ScanLayer() error = %v", err)
+		t.Fatalf("ScanCandy() error = %v", err)
 	}
 
-	names := LayerNames(layers)
+	names := CandyNames(layers)
 	if len(names) != 7 {
-		t.Errorf("LayerNames() returned %d names, want 7", len(names))
+		t.Errorf("CandyNames() returned %d names, want 7", len(names))
 	}
 
 	// Should be sorted
 	for i := 0; i < len(names)-1; i++ {
 		if names[i] > names[i+1] {
-			t.Errorf("LayerNames() not sorted: %v", names)
+			t.Errorf("CandyNames() not sorted: %v", names)
 			break
 		}
 	}
 }
 
-func TestLayerPorts(t *testing.T) {
-	layers, err := ScanLayer("testdata")
+func TestCandyPorts(t *testing.T) {
+	layers, err := ScanCandy("testdata")
 	if err != nil {
-		t.Fatalf("ScanLayer() error = %v", err)
+		t.Fatalf("ScanCandy() error = %v", err)
 	}
 
 	ws := layers["webservice"]
@@ -285,10 +285,10 @@ func TestLayerPorts(t *testing.T) {
 	}
 }
 
-func TestLayerPortsNone(t *testing.T) {
-	layers, err := ScanLayer("testdata")
+func TestCandyPortsNone(t *testing.T) {
+	layers, err := ScanCandy("testdata")
 	if err != nil {
-		t.Fatalf("ScanLayer() error = %v", err)
+		t.Fatalf("ScanCandy() error = %v", err)
 	}
 
 	pixi := layers["pixi"]
@@ -305,10 +305,10 @@ func TestLayerPortsNone(t *testing.T) {
 	}
 }
 
-func TestLayerRoute(t *testing.T) {
-	layers, err := ScanLayer("testdata")
+func TestCandyRoute(t *testing.T) {
+	layers, err := ScanCandy("testdata")
 	if err != nil {
-		t.Fatalf("ScanLayer() error = %v", err)
+		t.Fatalf("ScanCandy() error = %v", err)
 	}
 
 	ws := layers["webservice"]
@@ -341,10 +341,10 @@ func TestLayerRoute(t *testing.T) {
 	}
 }
 
-func TestLayerRouteNone(t *testing.T) {
-	layers, err := ScanLayer("testdata")
+func TestCandyRouteNone(t *testing.T) {
+	layers, err := ScanCandy("testdata")
 	if err != nil {
-		t.Fatalf("ScanLayer() error = %v", err)
+		t.Fatalf("ScanCandy() error = %v", err)
 	}
 
 	pixi := layers["pixi"]
@@ -361,10 +361,10 @@ func TestLayerRouteNone(t *testing.T) {
 	}
 }
 
-func TestLayerPixiLocked(t *testing.T) {
-	layers, err := ScanLayer("testdata")
+func TestCandyPixiLocked(t *testing.T) {
+	layers, err := ScanCandy("testdata")
 	if err != nil {
-		t.Fatalf("ScanLayer() error = %v", err)
+		t.Fatalf("ScanCandy() error = %v", err)
 	}
 
 	locked := layers["pixi-locked"]
@@ -386,10 +386,10 @@ func TestLayerPixiLocked(t *testing.T) {
 	}
 }
 
-func TestLayerPixiNoLock(t *testing.T) {
-	layers, err := ScanLayer("testdata")
+func TestCandyPixiNoLock(t *testing.T) {
+	layers, err := ScanCandy("testdata")
 	if err != nil {
-		t.Fatalf("ScanLayer() error = %v", err)
+		t.Fatalf("ScanCandy() error = %v", err)
 	}
 
 	python := layers["python"]
@@ -405,10 +405,10 @@ func TestLayerPixiNoLock(t *testing.T) {
 	}
 }
 
-func TestLayerVolumes(t *testing.T) {
-	layers, err := ScanLayer("testdata")
+func TestCandyVolumes(t *testing.T) {
+	layers, err := ScanCandy("testdata")
 	if err != nil {
-		t.Fatalf("ScanLayer() error = %v", err)
+		t.Fatalf("ScanCandy() error = %v", err)
 	}
 
 	ws := layers["webservice"]
@@ -432,10 +432,10 @@ func TestLayerVolumes(t *testing.T) {
 	}
 }
 
-func TestLayerVolumesNone(t *testing.T) {
-	layers, err := ScanLayer("testdata")
+func TestCandyVolumesNone(t *testing.T) {
+	layers, err := ScanCandy("testdata")
 	if err != nil {
-		t.Fatalf("ScanLayer() error = %v", err)
+		t.Fatalf("ScanCandy() error = %v", err)
 	}
 
 	pixi := layers["pixi"]
@@ -447,25 +447,25 @@ func TestLayerVolumesNone(t *testing.T) {
 	}
 }
 
-func TestVolumeLayers(t *testing.T) {
-	layers, err := ScanLayer("testdata")
+func TestVolumeCandies(t *testing.T) {
+	layers, err := ScanCandy("testdata")
 	if err != nil {
-		t.Fatalf("ScanLayer() error = %v", err)
+		t.Fatalf("ScanCandy() error = %v", err)
 	}
 
-	vols := VolumeLayer(layers)
+	vols := VolumeCandy(layers)
 	if len(vols) != 1 {
-		t.Errorf("VolumeLayer() returned %d layers, want 1", len(vols))
+		t.Errorf("VolumeCandy() returned %d layers, want 1", len(vols))
 	}
 	if len(vols) > 0 && vols[0].Name != "webservice" {
-		t.Errorf("VolumeLayer()[0].Name = %q, want %q", vols[0].Name, "webservice")
+		t.Errorf("VolumeCandy()[0].Name = %q, want %q", vols[0].Name, "webservice")
 	}
 }
 
-func TestLayerPortRelayFromYAML(t *testing.T) {
-	layers, err := ScanLayer("testdata")
+func TestCandyPortRelayFromYAML(t *testing.T) {
+	layers, err := ScanCandy("testdata")
 	if err != nil {
-		t.Fatalf("ScanLayer() error = %v", err)
+		t.Fatalf("ScanCandy() error = %v", err)
 	}
 
 	ws := layers["webservice"]
@@ -483,9 +483,9 @@ func TestLayerPortRelayFromYAML(t *testing.T) {
 	}
 }
 
-func TestLayerPortRelay(t *testing.T) {
+func TestCandyPortRelay(t *testing.T) {
 	// Test direct struct construction (no testdata file needed)
-	layer := &Layer{
+	layer := &Candy{
 		Name:           "chrome",
 		tasks:          []Task{{Cmd: "true"}},
 		PortRelayPorts: []int{9222},
@@ -502,8 +502,8 @@ func TestLayerPortRelay(t *testing.T) {
 	}
 }
 
-func TestLayerPortRelayNone(t *testing.T) {
-	layer := &Layer{
+func TestCandyPortRelayNone(t *testing.T) {
+	layer := &Candy{
 		Name:  "basic",
 		tasks: []Task{{Cmd: "true"}},
 	}
@@ -513,8 +513,8 @@ func TestLayerPortRelayNone(t *testing.T) {
 	}
 }
 
-func TestLayerPortRelayMultiple(t *testing.T) {
-	layer := &Layer{
+func TestCandyPortRelayMultiple(t *testing.T) {
+	layer := &Candy{
 		Name:           "multi",
 		tasks:          []Task{{Cmd: "true"}},
 		PortRelayPorts: []int{9222, 5900},
@@ -531,17 +531,17 @@ func TestLayerPortRelayMultiple(t *testing.T) {
 	}
 }
 
-func TestRouteLayers(t *testing.T) {
-	layers, err := ScanLayer("testdata")
+func TestRouteCandies(t *testing.T) {
+	layers, err := ScanCandy("testdata")
 	if err != nil {
-		t.Fatalf("ScanLayer() error = %v", err)
+		t.Fatalf("ScanCandy() error = %v", err)
 	}
 
-	routes := RouteLayer(layers)
+	routes := RouteCandy(layers)
 	if len(routes) != 1 {
-		t.Errorf("RouteLayer() returned %d layers, want 1", len(routes))
+		t.Errorf("RouteCandy() returned %d layers, want 1", len(routes))
 	}
 	if len(routes) > 0 && routes[0].Name != "webservice" {
-		t.Errorf("RouteLayer()[0].Name = %q, want %q", routes[0].Name, "webservice")
+		t.Errorf("RouteCandy()[0].Name = %q, want %q", routes[0].Name, "webservice")
 	}
 }

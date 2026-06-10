@@ -11,7 +11,7 @@ package main
 // the same InstallPlan regardless of filesystem or environment. Side
 // effects happen later, inside DeployTarget.Emit implementations.
 //
-// Logic here replaces the per-layer walk inside writeLayerSteps
+// Logic here replaces the per-layer walk inside writeCandySteps
 // (generate.go:1075-1208). Instead of emitting Containerfile text
 // directly, we emit structured InstallSteps that know *what* to do —
 // leaving *how* to render up to each target.
@@ -57,10 +57,10 @@ type HostContext struct {
 // BuildDeployPlan compiles one Layer into an InstallPlan.
 //
 // For whole-image deploys, the caller iterates the ordered layer list
-// (from ResolveLayerOrder) and builds one plan per layer, then merges
+// (from ResolveCandyOrder) and builds one plan per layer, then merges
 // them. Keeping one plan per layer makes refcounting trivial in the
 // ledger: each layer's teardown is independent.
-func BuildDeployPlan(layer *Layer, img *ResolvedBox, hostCtx HostContext) (*InstallPlan, error) {
+func BuildDeployPlan(layer *Candy, img *ResolvedBox, hostCtx HostContext) (*InstallPlan, error) {
 	if layer == nil {
 		return nil, fmt.Errorf("BuildDeployPlan: nil layer")
 	}
@@ -72,8 +72,8 @@ func BuildDeployPlan(layer *Layer, img *ResolvedBox, hostCtx HostContext) (*Inst
 		Box:            img.Name,
 		Version:        layer.Version,
 		Distro:         primaryDistroTag(img, hostCtx),
-		Layer:          layer.Name,
-		LayersIncluded: []string{layer.Name},
+		Candy:          layer.Name,
+		CandiesIncluded: []string{layer.Name},
 	}
 
 	// 0. Shell-env hook: vars + env + path_append — applies regardless of
@@ -145,7 +145,7 @@ func BuildDeployPlan(layer *Layer, img *ResolvedBox, hostCtx HostContext) (*Inst
 	// at build time); LocalDeployTarget skips + warns (never reboots the
 	// operator host unattended). See RebootStep.
 	if layer.reboot {
-		plan.Steps = append(plan.Steps, &RebootStep{LayerName: layer.Name})
+		plan.Steps = append(plan.Steps, &RebootStep{CandyName: layer.Name})
 	}
 
 	return plan, nil
@@ -156,15 +156,15 @@ func BuildDeployPlan(layer *Layer, img *ResolvedBox, hostCtx HostContext) (*Inst
 // format is target-agnostic at compile time — the step carries the specs and
 // each DeployTarget decides whether to execute (android) or skip (everything
 // else), exactly as the IR intends for venue-specific work.
-func compileApkStep(layer *Layer) InstallStep {
+func compileApkStep(layer *Candy) InstallStep {
 	apks := layer.Apk()
 	if len(apks) == 0 {
 		return nil
 	}
 	return &ApkInstallStep{
 		Packages:  append([]ApkPackageSpec(nil), apks...),
-		LayerName: layer.Name,
-		LayerDir:  layer.SourceDir,
+		CandyName: layer.Name,
+		CandyDir:  layer.SourceDir,
 	}
 }
 
@@ -188,7 +188,7 @@ func compileApkStep(layer *Layer) InstallStep {
 // when no dep builder resolves, BuilderImage is "" and the dep-build is skipped
 // with a clear log (the layer's own curl/COPY fallback still covers
 // non-localpkg targets).
-func compileLocalPkgStep(layer *Layer, img *ResolvedBox, hostCtx HostContext) InstallStep {
+func compileLocalPkgStep(layer *Candy, img *ResolvedBox, hostCtx HostContext) InstallStep {
 	// The target distro must declare a localpkg-capable package format, AND the
 	// layer must point that format at a source dir. Resolve the format FIRST so
 	// the per-format `localpkg:` map picks the matching source (pac→pkg/arch,
@@ -208,8 +208,8 @@ func compileLocalPkgStep(layer *Layer, img *ResolvedBox, hostCtx HostContext) In
 	projectDir, _ := os.Getwd()
 	return &LocalPkgInstallStep{
 		PkgbuildRef: ref,
-		LayerName:   layer.Name,
-		LayerDir:    layer.SourceDir,
+		CandyName:   layer.Name,
+		CandyDir:    layer.SourceDir,
 		ProjectDir:  projectDir,
 		Format:      fmtName,
 		LocalPkg:    lp,
@@ -220,10 +220,10 @@ func compileLocalPkgStep(layer *Layer, img *ResolvedBox, hostCtx HostContext) In
 // plan. Used by deploy targets that want to see all steps in one
 // sequence (for sudo batching, overall dry-run display, etc.) while
 // preserving per-layer provenance for the ledger.
-func MergePlan(plans []*InstallPlan, image string, addLayers []string) *InstallPlan {
+func MergePlan(plans []*InstallPlan, image string, addCandies []string) *InstallPlan {
 	out := &InstallPlan{
 		Box:       image,
-		AddLayers: append([]string(nil), addLayers...),
+		AddCandies: append([]string(nil), addCandies...),
 	}
 	if len(plans) == 0 {
 		return out
@@ -234,9 +234,9 @@ func MergePlan(plans []*InstallPlan, image string, addLayers []string) *InstallP
 			continue
 		}
 		out.Steps = append(out.Steps, p.Steps...)
-		out.LayersIncluded = append(out.LayersIncluded, p.Layer)
+		out.CandiesIncluded = append(out.CandiesIncluded, p.Candy)
 	}
-	out.DeployID = computeDeployID(image, out.LayersIncluded, addLayers)
+	out.DeployID = computeDeployID(image, out.CandiesIncluded, addCandies)
 	return out
 }
 
@@ -244,7 +244,7 @@ func MergePlan(plans []*InstallPlan, image string, addLayers []string) *InstallP
 // specific deploy (image + ordered layer set + add_layers). Used as the
 // ledger key so re-deploys of the same config are recognizable and
 // layer-refcount bookkeeping is stable.
-func computeDeployID(box string, layers, addLayers []string) string {
+func computeDeployID(box string, layers, addCandies []string) string {
 	h := sha256.New()
 	h.Write([]byte(box))
 	h.Write([]byte{0})
@@ -253,7 +253,7 @@ func computeDeployID(box string, layers, addLayers []string) string {
 		h.Write([]byte{0})
 	}
 	h.Write([]byte{1})
-	for _, l := range addLayers {
+	for _, l := range addCandies {
 		h.Write([]byte(l))
 		h.Write([]byte{0})
 	}
@@ -289,7 +289,7 @@ func primaryDistroTag(img *ResolvedBox, hostCtx HostContext) string {
 // synthetic plan's Home was the host operator's home, so env.d on the guest
 // pointed at /home/<operator> instead of /home/<guest-user>. See
 // InstallPlan.ResolveHome.
-func compileShellHookStep(layer *Layer, img *ResolvedBox) *ShellHookStep {
+func compileShellHookStep(layer *Candy, img *ResolvedBox) *ShellHookStep {
 	envCfg, _ := layer.EnvConfig()
 	if envCfg == nil {
 		return nil
@@ -306,7 +306,7 @@ func compileShellHookStep(layer *Layer, img *ResolvedBox) *ShellHookStep {
 		paths = append(paths, ExpandPath(p, HomeToken))
 	}
 	return &ShellHookStep{
-		LayerName: layer.Name,
+		CandyName: layer.Name,
 		EnvVars:   vars,
 		PathAdd:   paths,
 	}
@@ -338,7 +338,7 @@ func compileShellHookStep(layer *Layer, img *ResolvedBox) *ShellHookStep {
 //     (UseDropin=true).
 //
 // Returns nil when the layer has no shell: block.
-func compileShellSnippetSteps(layer *Layer, img *ResolvedBox, hostCtx HostContext) []InstallStep {
+func compileShellSnippetSteps(layer *Candy, img *ResolvedBox, hostCtx HostContext) []InstallStep {
 	cfg := layer.Shell()
 	if cfg == nil {
 		return nil
@@ -370,7 +370,7 @@ func compileShellSnippetSteps(layer *Layer, img *ResolvedBox, hostCtx HostContex
 			continue
 		}
 		out = append(out, &ShellSnippetStep{
-			LayerName:   layer.Name,
+			CandyName:   layer.Name,
 			Origin:      layer.Name,
 			Shell:       shell,
 			Snippet:     body,
@@ -424,7 +424,7 @@ func resolveShellSpec(cfg *ShellConfig, shell string) (*ShellSpec, string, []str
 // takes precedence (with ~/ expansion via ExpandPath). Returns the
 // resolved path and a UseDropin discriminator (true: full-file write;
 // false: managed-block append).
-func shellSnippetDestination(layerName, shell string, hostCtx HostContext, home, pathOverride string) (string, bool) {
+func shellSnippetDestination(candyName, shell string, hostCtx HostContext, home, pathOverride string) (string, bool) {
 	isHost := hostCtx.Target == "host" || hostCtx.Target == "vm"
 	if pathOverride != "" {
 		expanded := ExpandPath(pathOverride, home)
@@ -442,16 +442,16 @@ func shellSnippetDestination(layerName, shell string, hostCtx HostContext, home,
 		case "sh":
 			return ExpandPath("~/.profile", home), false
 		case "fish":
-			return ExpandPath(fmt.Sprintf("~/.config/fish/conf.d/charly-%s.fish", layerName), home), true
+			return ExpandPath(fmt.Sprintf("~/.config/fish/conf.d/charly-%s.fish", candyName), home), true
 		}
 		return "", false
 	}
 	// Container build (oci/empty target): system-wide drop-in files.
 	switch shell {
 	case "bash", "zsh", "sh":
-		return fmt.Sprintf("/etc/profile.d/charly-%s-%s.sh", layerName, shell), true
+		return fmt.Sprintf("/etc/profile.d/charly-%s-%s.sh", candyName, shell), true
 	case "fish":
-		return fmt.Sprintf("/etc/fish/conf.d/charly-%s.fish", layerName), true
+		return fmt.Sprintf("/etc/fish/conf.d/charly-%s.fish", candyName), true
 	}
 	return "", false
 }
@@ -487,14 +487,14 @@ func appendShellPathLines(body string, paths []string, shell, home string) strin
 
 // compileSystemPackageSteps emits SystemPackagesStep(s) for the layer's
 // package sections, honoring the distro-tag-wins-over-build-format rule
-// from today's writeLayerSteps.
+// from today's writeCandySteps.
 //
 // Phase 1: walk img.Distro tags in order; first match wins. If a tag
 // section is found, emit ONE install step using that section and stop.
 //
 // Phase 2: if no tag matched, walk img.BuildFormats in order; emit one
 // install step per format section that has packages. (Today's
-// writeLayerSteps does this to support images that install both rpm and
+// writeCandySteps does this to support images that install both rpm and
 // aur packages, for example.)
 //
 // For the IR we additionally break each install into the three-phase
@@ -519,7 +519,7 @@ func appendShellPathLines(body string, paths []string, shell, home string) strin
 // packages via the bare-distro tag (img.Distro = [fedora] / [arch]); there is no
 // format-section fallback — the deb collapse that caused non-deterministic repo
 // selection is gone (per-distro tag sections never share a mutable section).
-func compileSystemPackageSteps(layer *Layer, img *ResolvedBox, hostCtx HostContext) []InstallStep {
+func compileSystemPackageSteps(layer *Candy, img *ResolvedBox, hostCtx HostContext) []InstallStep {
 	if img.DistroDef == nil {
 		return nil
 	}
@@ -537,7 +537,7 @@ func compileSystemPackageSteps(layer *Layer, img *ResolvedBox, hostCtx HostConte
 // resolveCascadePackages is THE single distro-specificity cascade resolver,
 // shared by EVERY package-emitting path — the deploy compiler
 // (compileSystemPackageSteps) AND the image-build Containerfile emitter
-// (generate.go writeLayerSteps). There is exactly one resolution so build and
+// (generate.go writeCandySteps). There is exactly one resolution so build and
 // deploy can never diverge.
 //
 // It computes the primary-format package set for a layer on an image: the
@@ -568,7 +568,7 @@ func cascadeTagChain(img *ResolvedBox) []string {
 	return chain
 }
 
-func resolveCascadePackages(layer *Layer, img *ResolvedBox) (pkgs []string, raw map[string]interface{}, matched bool) {
+func resolveCascadePackages(layer *Candy, img *ResolvedBox) (pkgs []string, raw map[string]interface{}, matched bool) {
 	seen := map[string]bool{}
 	add := func(in []string) {
 		for _, p := range in {
@@ -641,7 +641,7 @@ func buildSystemPackagesStep(format string, phase Phase, packages []string, raw 
 // resolved user is captured at compile time so the host target doesn't
 // need to re-resolve ${USER} later; CtxPath carries the layer's absolute
 // directory for /ctx/ substitution on the host.
-func compileTaskSteps(layer *Layer, img *ResolvedBox) []InstallStep {
+func compileTaskSteps(layer *Candy, img *ResolvedBox) []InstallStep {
 	if !layer.HasTasks() || len(layer.tasks) == 0 {
 		return nil
 	}
@@ -654,11 +654,11 @@ func compileTaskSteps(layer *Layer, img *ResolvedBox) []InstallStep {
 		// Containerfile ENV (emitVarsEnv); deploy-time has no such
 		// mechanism, and references like ${K3D_VERSION} in a download
 		// URL would otherwise expand to empty.
-		var layerVars map[string]string
+		var candyVars map[string]string
 		if len(layer.vars) > 0 {
-			layerVars = make(map[string]string, len(layer.vars))
+			candyVars = make(map[string]string, len(layer.vars))
 			for k, v := range layer.vars {
-				layerVars[k] = v
+				candyVars[k] = v
 			}
 		}
 		// Tokenize a home-relative copy/download dest so each DeployTarget
@@ -671,11 +671,11 @@ func compileTaskSteps(layer *Layer, img *ResolvedBox) []InstallStep {
 		}
 		out = append(out, &TaskStep{
 			Task:         task,
-			LayerName:    layer.Name,
-			LayerDir:     layer.SourceDir,
+			CandyName:    layer.Name,
+			CandyDir:     layer.SourceDir,
 			CtxPath:      layer.SourceDir,
 			ResolvedUser: userDir,
-			LayerVars:    layerVars,
+			CandyVars:    candyVars,
 			To:           resolvedTo,
 		})
 	}
@@ -687,9 +687,9 @@ func compileTaskSteps(layer *Layer, img *ResolvedBox) []InstallStep {
 // ---------------------------------------------------------------------------
 
 // compileBuilderSteps emits one BuilderStep per triggered multi-stage or
-// inline builder. Detection matches today's Generator.layerNeedsBuilder
+// inline builder. Detection matches today's Generator.candyNeedsBuilder
 // logic: DetectFiles (pixi/npm/cargo) and DetectConfig (aur).
-func compileBuilderSteps(layer *Layer, img *ResolvedBox, hostCtx HostContext) []InstallStep {
+func compileBuilderSteps(layer *Candy, img *ResolvedBox, hostCtx HostContext) []InstallStep {
 	if img.BuilderConfig == nil {
 		return nil
 	}
@@ -701,13 +701,13 @@ func compileBuilderSteps(layer *Layer, img *ResolvedBox, hostCtx HostContext) []
 		if bDef == nil {
 			continue
 		}
-		if !layerNeedsBuilderStep(layer, bDef) {
+		if !candyNeedsBuilderStep(layer, bDef) {
 			continue
 		}
 		step := &BuilderStep{
 			Builder:    bName,
-			LayerName:  layer.Name,
-			LayerDir:   layer.SourceDir,
+			CandyName:  layer.Name,
+			CandyDir:   layer.SourceDir,
 			Phase:      PhaseInstall,
 			BuilderDef: bDef,
 		}
@@ -738,14 +738,14 @@ func compileBuilderSteps(layer *Layer, img *ResolvedBox, hostCtx HostContext) []
 	return out
 }
 
-// layerNeedsBuilderStep mirrors Generator.layerNeedsBuilder without
+// candyNeedsBuilderStep mirrors Generator.candyNeedsBuilder without
 // requiring a Generator receiver — the compiler doesn't have one.
-func layerNeedsBuilderStep(layer *Layer, bDef *BuilderDef) bool {
+func candyNeedsBuilderStep(layer *Candy, bDef *BuilderDef) bool {
 	if bDef == nil {
 		return false
 	}
 	for _, f := range bDef.DetectFiles {
-		if layerHasFile(layer, f) {
+		if candyHasFile(layer, f) {
 			return true
 		}
 	}
@@ -780,7 +780,7 @@ func resolveBuilderImage(name string, img *ResolvedBox, hostCtx HostContext) str
 // layer's Cargo.toml [[bin]] section, etc.). For now we capture names
 // derivable from the candy manifest alone; the host target refines these at
 // execution time.
-func collectBuilderContext(layer *Layer, builderName string, bDef *BuilderDef, img *ResolvedBox) map[string]interface{} {
+func collectBuilderContext(layer *Candy, builderName string, bDef *BuilderDef, img *ResolvedBox) map[string]interface{} {
 	ctx := map[string]interface{}{
 		"layer":   layer.Name,
 		"builder": builderName,
@@ -840,7 +840,7 @@ func stringSliceFromYAML(v interface{}) ([]string, bool) {
 // pixiDefaultEnvName returns the default pixi env name for a layer.
 // Pixi uses "default" unless the manifest declares otherwise; we keep it
 // simple and let the host target refine at install time.
-func pixiDefaultEnvName(layer *Layer) string {
+func pixiDefaultEnvName(layer *Candy) string {
 	return "default"
 }
 
@@ -882,7 +882,7 @@ func pixiDefaultEnvName(layer *Layer) string {
 // in three different places (the deleted VmDeployTarget lazy fallback,
 // the OCI build's per-entry routing, and the legacy nothing-rendered
 // path on LocalDeployTarget) into ONE compile-time filter.
-func compileServiceSteps(layer *Layer, img *ResolvedBox, hostCtx HostContext) []InstallStep {
+func compileServiceSteps(layer *Candy, img *ResolvedBox, hostCtx HostContext) []InstallStep {
 	var out []InstallStep
 	initIsSystemd := hostCtx.Target == "host" || hostCtx.Target == "vm"
 
@@ -918,7 +918,7 @@ func compileServiceSteps(layer *Layer, img *ResolvedBox, hostCtx HostContext) []
 		}
 		systemdDef = def
 		renderCtx = ServiceRenderContext{
-			Layer:         layer.Name,
+			Candy:         layer.Name,
 			SystemUnitDir: "/etc/systemd/system",
 		}
 		// Service home, like shell-snippet home, must be the DESTINATION user's
@@ -954,7 +954,7 @@ func compileServiceSteps(layer *Layer, img *ResolvedBox, hostCtx HostContext) []
 				Unit:        ensureServiceSuffix(entry.UsePackaged),
 				TargetScope: scope,
 				Enable:      entry.Enable,
-				LayerName:   layer.Name,
+				CandyName:   layer.Name,
 			})
 			continue
 		}
@@ -970,7 +970,7 @@ func compileServiceSteps(layer *Layer, img *ResolvedBox, hostCtx HostContext) []
 			Name:        fmt.Sprintf("charly-%s-%s", layer.Name, entry.Name),
 			TargetScope: scope,
 			Enable:      entry.Enable,
-			LayerName:   layer.Name,
+			CandyName:   layer.Name,
 		}
 
 		// On systemd targets, pre-render the unit text now so the
@@ -1020,7 +1020,7 @@ func DescribePlan(p *InstallPlan) string {
 	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "Plan: layer=%s image=%s distro=%s steps=%d\n",
-		p.Layer, p.Box, p.Distro, len(p.Steps))
+		p.Candy, p.Box, p.Distro, len(p.Steps))
 	counts := map[StepKind]int{}
 	for _, s := range p.Steps {
 		counts[s.Kind()]++

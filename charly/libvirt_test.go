@@ -60,11 +60,11 @@ func TestCollectLibvirtSnippets(t *testing.T) {
 	cfg := &Config{
 		Box: map[string]BoxConfig{
 			"test-image": {
-				Layer: []string{"layer-a", "layer-b"},
+				Candy: []string{"layer-a", "layer-b"},
 			},
 		},
 	}
-	layers := map[string]*Layer{
+	layers := map[string]*Candy{
 		"layer-a": {
 			Name:    "layer-a",
 			libvirt: []string{"<channel type='unix'><target type='virtio' name='org.qemu.guest_agent.0'/></channel>"},
@@ -82,7 +82,7 @@ func TestCollectLibvirtSnippets(t *testing.T) {
 
 func TestCollectLibvirtSnippets_NonexistentImage(t *testing.T) {
 	cfg := &Config{Box: map[string]BoxConfig{}}
-	layers := map[string]*Layer{}
+	layers := map[string]*Candy{}
 	snippets := CollectLibvirtSnippets(cfg, layers, "nonexistent")
 	if snippets != nil {
 		t.Fatalf("expected nil, got %v", snippets)

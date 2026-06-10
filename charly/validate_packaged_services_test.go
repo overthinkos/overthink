@@ -2,15 +2,15 @@ package main
 
 import "testing"
 
-// TestLayerHasOrphanPackaged guards the preserve_user-warning suppression:
+// TestCandyHasOrphanPackaged guards the preserve_user-warning suppression:
 // the warning must fire ONLY for a use_packaged service with no same-name
 // custom-exec sibling (genuinely dropped under supervisord), and stay silent
 // for the canonical mixed-form polymorphism pattern (sshd) where the exec
 // sibling provides the supervisord fallback.
-func TestLayerHasOrphanPackaged(t *testing.T) {
+func TestCandyHasOrphanPackaged(t *testing.T) {
 	tests := []struct {
 		name  string
-		layer *Layer
+		layer *Candy
 		want  bool
 	}{
 		{
@@ -20,7 +20,7 @@ func TestLayerHasOrphanPackaged(t *testing.T) {
 		},
 		{
 			name: "mixed-form (packaged + same-name exec sibling) — sshd pattern — no orphan",
-			layer: &Layer{service: []ServiceEntry{
+			layer: &Candy{service: []ServiceEntry{
 				{Name: "sshd", UsePackaged: "sshd.service"},
 				{Name: "sshd", Exec: "/usr/local/bin/sshd-wrapper"},
 			}},
@@ -28,14 +28,14 @@ func TestLayerHasOrphanPackaged(t *testing.T) {
 		},
 		{
 			name: "packaged-only (no exec sibling) — postgresql pattern — orphan",
-			layer: &Layer{service: []ServiceEntry{
+			layer: &Candy{service: []ServiceEntry{
 				{Name: "postgresql", UsePackaged: "postgresql.service"},
 			}},
 			want: true,
 		},
 		{
 			name: "packaged with a DIFFERENT-name exec sibling — still orphan",
-			layer: &Layer{service: []ServiceEntry{
+			layer: &Candy{service: []ServiceEntry{
 				{Name: "postgresql", UsePackaged: "postgresql.service"},
 				{Name: "other", Exec: "/bin/other"},
 			}},
@@ -43,21 +43,21 @@ func TestLayerHasOrphanPackaged(t *testing.T) {
 		},
 		{
 			name: "custom-only — no packaged — no orphan",
-			layer: &Layer{service: []ServiceEntry{
+			layer: &Candy{service: []ServiceEntry{
 				{Name: "svc", Exec: "svc serve"},
 			}},
 			want: false,
 		},
 		{
 			name:  "no services — no orphan",
-			layer: &Layer{},
+			layer: &Candy{},
 			want:  false,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := layerHasOrphanPackaged(tt.layer); got != tt.want {
-				t.Errorf("layerHasOrphanPackaged() = %v, want %v", got, tt.want)
+			if got := candyHasOrphanPackaged(tt.layer); got != tt.want {
+				t.Errorf("candyHasOrphanPackaged() = %v, want %v", got, tt.want)
 			}
 		})
 	}

@@ -175,10 +175,10 @@ func taskSubstPath(p string, img *ResolvedBox) string {
 //
 // buildDir is the absolute path to .build/<boxName>/.
 // contextRelPrefix is the build-context-relative prefix (e.g. ".build/<boxName>").
-func stageInlineContent(buildDir, contextRelPrefix, layerName, content string) (string, error) {
+func stageInlineContent(buildDir, contextRelPrefix, candyName, content string) (string, error) {
 	sum := sha256.Sum256([]byte(content))
 	hexSum := hex.EncodeToString(sum[:])
-	relToBuildDir := filepath.ToSlash(filepath.Join("_inline", layerName, hexSum))
+	relToBuildDir := filepath.ToSlash(filepath.Join("_inline", candyName, hexSum))
 	abs := filepath.Join(buildDir, relToBuildDir)
 	contextRel := filepath.ToSlash(filepath.Join(contextRelPrefix, relToBuildDir))
 
@@ -565,11 +565,11 @@ func taskCoalescesWith(current, next Task, currentVerb string) bool {
 // implicit build-task auto-append if the layer has builders and no
 // explicit build: in tasks:.
 //
-// Returns the final USER after processing (so writeLayerSteps knows
+// Returns the final USER after processing (so writeCandySteps knows
 // whether to emit USER root for the layer boundary reset).
 // Returns an error if emission fails (only for download/write I/O).
-func (g *Generator) emitTasks(b *strings.Builder, layer *Layer, img *ResolvedBox, buildDir, contextRelPrefix, initialUser string) (string, error) {
-	if len(layer.tasks) == 0 && !g.layerHasImplicitBuild(layer, img) {
+func (g *Generator) emitTasks(b *strings.Builder, layer *Candy, img *ResolvedBox, buildDir, contextRelPrefix, initialUser string) (string, error) {
+	if len(layer.tasks) == 0 && !g.candyHasImplicitBuild(layer, img) {
 		return initialUser, nil
 	}
 
@@ -583,7 +583,7 @@ func (g *Generator) emitTasks(b *strings.Builder, layer *Layer, img *ResolvedBox
 			break
 		}
 	}
-	if !hasExplicitBuild && g.layerHasImplicitBuild(layer, img) {
+	if !hasExplicitBuild && g.candyHasImplicitBuild(layer, img) {
 		tasks = append(tasks, Task{Build: "all", User: "${USER}"})
 	}
 
@@ -685,10 +685,10 @@ func (g *Generator) emitTasks(b *strings.Builder, layer *Layer, img *ResolvedBox
 
 		case "build":
 			// Builders are emitted by the existing builder block in
-			// writeLayerSteps; this is a marker the orchestrator honours by
+			// writeCandySteps; this is a marker the orchestrator honours by
 			// yielding back to the caller's builder logic. Because our
 			// emitTasks returns after the whole loop, we don't physically
-			// emit anything here — writeLayerSteps handles build placement
+			// emit anything here — writeCandySteps handles build placement
 			// by calling emitBuild at the position of the explicit task (or
 			// at end for implicit). Phase 0 keeps existing builder behaviour
 			// unchanged, so build tasks are a no-op in this emitter.
@@ -702,11 +702,11 @@ func (g *Generator) emitTasks(b *strings.Builder, layer *Layer, img *ResolvedBox
 	return runningUser, nil
 }
 
-// layerHasImplicitBuild returns true if the layer has a detection file
+// candyHasImplicitBuild returns true if the layer has a detection file
 // (pixi.toml, package.json, Cargo.toml, aur: config) that would trigger a
 // builder auto-append. Phase 0: placeholder that returns false — builders
-// continue to run via the existing writeLayerSteps builder block. Phase 2
+// continue to run via the existing writeCandySteps builder block. Phase 2
 // migrations will switch on this once explicit build: tasks appear.
-func (g *Generator) layerHasImplicitBuild(layer *Layer, img *ResolvedBox) bool {
+func (g *Generator) candyHasImplicitBuild(layer *Candy, img *ResolvedBox) bool {
 	return false
 }

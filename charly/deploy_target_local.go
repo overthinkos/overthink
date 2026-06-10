@@ -184,7 +184,7 @@ func (t *LocalDeployTarget) Emit(plans []*InstallPlan, opts EmitOpts) error {
 		// right user even for remote local-target deploys.
 		plan.ResolveHome(t.HostHome)
 		if err := t.emitPlan(plan, opts); err != nil {
-			return fmt.Errorf("plan %s: %w", plan.Layer, err)
+			return fmt.Errorf("plan %s: %w", plan.Candy, err)
 		}
 	}
 
@@ -201,7 +201,7 @@ func (t *LocalDeployTarget) Emit(plans []*InstallPlan, opts EmitOpts) error {
 // (Scope, Venue) for efficient sudo/user/container execution.
 func (t *LocalDeployTarget) emitPlan(plan *InstallPlan, opts EmitOpts) error {
 	rec := &CandyRecord{
-		Layer:      plan.Layer,
+		Candy:      plan.Candy,
 		Version:    plan.Version,
 		DeployedAt: time.Now().UTC().Format(time.RFC3339),
 	}
@@ -220,19 +220,19 @@ func (t *LocalDeployTarget) emitPlan(plan *InstallPlan, opts EmitOpts) error {
 			}
 			if err := t.execStep(step, plan, opts, rec); err != nil {
 				// Persist what we've recorded so far, then propagate.
-				_ = t.recordLayer(rec, plan, opts)
+				_ = t.recordCandy(rec, plan, opts)
 				return err
 			}
 		}
 	}
 
-	return t.recordLayer(rec, plan, opts)
+	return t.recordCandy(rec, plan, opts)
 }
 
-// recordLayer writes the per-layer ledger entry and adds the deploy
+// recordCandy writes the per-layer ledger entry and adds the deploy
 // to the refcount set. Idempotent across multiple deploys of the same
 // layer.
-func (t *LocalDeployTarget) recordLayer(rec *CandyRecord, plan *InstallPlan, opts EmitOpts) error {
+func (t *LocalDeployTarget) recordCandy(rec *CandyRecord, plan *InstallPlan, opts EmitOpts) error {
 	if opts.DryRun || plan.DeployID == "" {
 		return nil
 	}
@@ -244,7 +244,7 @@ func (t *LocalDeployTarget) recordLayer(rec *CandyRecord, plan *InstallPlan, opt
 	// a VM / pod via SSH / podman exec) write the ledger on the substrate,
 	// not the operator's filesystem. Local executor → operator-side
 	// (unchanged behaviour).
-	return AddLayerDeploymentVia(t.Executor, t.LedgerPaths, plan.Layer, plan.DeployID, func(existing *CandyRecord) {
+	return AddCandyDeploymentVia(t.Executor, t.LedgerPaths, plan.Candy, plan.DeployID, func(existing *CandyRecord) {
 		existing.Version = rec.Version
 		existing.Steps = append(existing.Steps, rec.Steps...)
 		existing.ReverseOps = append(existing.ReverseOps, rec.ReverseOps...)
@@ -278,7 +278,7 @@ func (t *LocalDeployTarget) execStep(step InstallStep, plan *InstallPlan, opts E
 		// a local deploy has no emulator. Record a skip and continue (a
 		// layer carrying apk: may also carry host-relevant steps).
 		t.noteStep(rec, StepKindApkInstall, s.Scope(), VenueSkip,
-			fmt.Sprintf("layer=%s skipped: apk installs only on a kind:android device", s.LayerName), start)
+			fmt.Sprintf("layer=%s skipped: apk installs only on a kind:android device", s.CandyName), start)
 		return nil
 	case *LocalPkgInstallStep:
 		return t.execLocalPkg(s, plan, opts, rec, start)
@@ -286,9 +286,9 @@ func (t *LocalDeployTarget) execStep(step InstallStep, plan *InstallPlan, opts E
 		// Never reboot the operator's host unattended. Record a skip and
 		// warn — a host that needs a kernel module reloaded should be
 		// rebooted by the operator, not by a deploy.
-		fmt.Fprintf(os.Stderr, "warning: layer %q requests a reboot; skipping on target:local (reboot the host yourself if a new kernel module must load)\n", s.LayerName)
+		fmt.Fprintf(os.Stderr, "warning: layer %q requests a reboot; skipping on target:local (reboot the host yourself if a new kernel module must load)\n", s.CandyName)
 		t.noteStep(rec, StepKindReboot, s.Scope(), VenueSkip,
-			fmt.Sprintf("layer=%s skipped: reboot not performed on target:local", s.LayerName), start)
+			fmt.Sprintf("layer=%s skipped: reboot not performed on target:local", s.CandyName), start)
 		return nil
 	}
 	return fmt.Errorf("LocalDeployTarget: unknown step kind %T", step)
@@ -305,14 +305,14 @@ func (t *LocalDeployTarget) execShellSnippet(s *ShellSnippetStep, plan *InstallP
 		return err
 	}
 	if !t.shellsPresent[s.Shell] {
-		t.logSkipReason(fmt.Sprintf("shell-snippet %s/%s: %s not installed on target", s.LayerName, s.Shell, s.Shell), opts)
+		t.logSkipReason(fmt.Sprintf("shell-snippet %s/%s: %s not installed on target", s.CandyName, s.Shell, s.Shell), opts)
 		return nil
 	}
 	if opts.DryRun {
 		fmt.Fprintf(t.stderr(), "[dry-run] shell-snippet %s/%s -> %s (use_dropin=%v)\n",
-			s.LayerName, s.Shell, s.Destination, s.UseDropin)
+			s.CandyName, s.Shell, s.Destination, s.UseDropin)
 		t.noteStep(rec, StepKindShellSnippet, s.Scope(), s.Venue(),
-			fmt.Sprintf("layer=%s shell=%s dest=%s", s.LayerName, s.Shell, s.Destination), start)
+			fmt.Sprintf("layer=%s shell=%s dest=%s", s.CandyName, s.Shell, s.Destination), start)
 		return nil
 	}
 	body := s.Snippet
@@ -349,7 +349,7 @@ func (t *LocalDeployTarget) execShellSnippet(s *ShellSnippetStep, plan *InstallP
 		return fmt.Errorf("write %s: %w", s.Destination, err)
 	}
 	t.noteStep(rec, StepKindShellSnippet, s.Scope(), s.Venue(),
-		fmt.Sprintf("layer=%s shell=%s dest=%s", s.LayerName, s.Shell, s.Destination), start)
+		fmt.Sprintf("layer=%s shell=%s dest=%s", s.CandyName, s.Shell, s.Destination), start)
 	rec.ReverseOps = append(rec.ReverseOps, s.Reverse()...)
 	return nil
 }
@@ -417,11 +417,11 @@ func isFileNotFoundErr(err error) bool {
 
 func (t *LocalDeployTarget) execShellHook(s *ShellHookStep, plan *InstallPlan, opts EmitOpts, rec *CandyRecord, start time.Time) error {
 	if opts.DryRun {
-		fmt.Fprintf(t.stderr(), "[dry-run] env.d/%s.env + managed block\n", s.LayerName)
-		t.noteStep(rec, StepKindShellHook, s.Scope(), s.Venue(), fmt.Sprintf("layer=%s", s.LayerName), start)
+		fmt.Fprintf(t.stderr(), "[dry-run] env.d/%s.env + managed block\n", s.CandyName)
+		t.noteStep(rec, StepKindShellHook, s.Scope(), s.Venue(), fmt.Sprintf("layer=%s", s.CandyName), start)
 		return nil
 	}
-	path, err := WriteEnvdFile(t.HostHome, s.LayerName, s.EnvVars, s.PathAdd)
+	path, err := WriteEnvdFile(t.HostHome, s.CandyName, s.EnvVars, s.PathAdd)
 	if err != nil {
 		return err
 	}
@@ -506,7 +506,7 @@ func (t *LocalDeployTarget) execBuilder(s *BuilderStep, plan *InstallPlan, opts 
 		image = t.BuilderImageResolver(s.Builder)
 	}
 	if image == "" {
-		return fmt.Errorf("no builder image for %s (layer=%s); set --builder-image or define builder.%s in charly.yml", s.Builder, s.LayerName, s.Builder)
+		return fmt.Errorf("no builder image for %s (layer=%s); set --builder-image or define builder.%s in charly.yml", s.Builder, s.CandyName, s.Builder)
 	}
 
 	// aur builds package files that the venue installs via the format's
@@ -516,7 +516,7 @@ func (t *LocalDeployTarget) execBuilder(s *BuilderStep, plan *InstallPlan, opts 
 	// for the aur builder; nil for pixi/npm/cargo (no package-file install).
 	if s.LocalPkg != nil && !venueHasPkgManager(opts.ContextOrDefault(), t.exec(), s.LocalPkg, opts) {
 		return fmt.Errorf("builder %q (layer=%s) builds %s package files but the target has no %s package manager (local_pkg.probe %q failed); cannot install the built packages",
-			s.Builder, s.LayerName, s.LocalPkg.DepBuilder, s.LocalPkg.DepBuilder, s.LocalPkg.Probe)
+			s.Builder, s.CandyName, s.LocalPkg.DepBuilder, s.LocalPkg.DepBuilder, s.LocalPkg.Probe)
 	}
 
 	bindMounts, err := UserScopeBindMounts(t.HostHome)
@@ -546,7 +546,7 @@ func (t *LocalDeployTarget) execBuilder(s *BuilderStep, plan *InstallPlan, opts 
 
 	_, err = BuilderRun(opts.ContextOrDefault(), BuilderRunOpts{
 		BuilderImage: image,
-		LayerDir:     s.LayerDir,
+		CandyDir:     s.CandyDir,
 		ScriptBody:   script,
 		BindMounts:   bindMounts,
 		Env:          envVars,
@@ -590,7 +590,7 @@ func (t *LocalDeployTarget) execBuilder(s *BuilderStep, plan *InstallPlan, opts 
 		if len(matches) == 0 {
 			pkgList := extractStringSlice(s.RawStageContext, "packages")
 			return fmt.Errorf("aur builder for layer %q produced zero .pkg.tar.zst artifacts in %s; expected packages: %v. Check the BuilderRun output above for the actual yay/makepkg failure",
-				s.LayerName, aurStage, pkgList)
+				s.CandyName, aurStage, pkgList)
 		}
 		// Pre-removal of `replaces:` entries — distro-repo packages
 		// that conflict with the AUR build artifact (file ownership
@@ -609,7 +609,7 @@ func (t *LocalDeployTarget) execBuilder(s *BuilderStep, plan *InstallPlan, opts 
 	}
 
 	t.noteStep(rec, StepKindBuilder, s.Scope(), s.Venue(),
-		fmt.Sprintf("%s (image=%s, layer=%s)", s.Builder, image, s.LayerName), start)
+		fmt.Sprintf("%s (image=%s, layer=%s)", s.Builder, image, s.CandyName), start)
 	rec.ReverseOps = append(rec.ReverseOps, s.Reverse()...)
 	return nil
 }
@@ -621,11 +621,11 @@ func (t *LocalDeployTarget) execTask(s *TaskStep, plan *InstallPlan, opts EmitOp
 	// copy: stages a layer file onto the venue through the executor's
 	// PutFile — a plain `install` locally, scp+install over SSH. This is
 	// the ONE path both LocalDeployTarget and VmDeployTarget share for
-	// file-copy tasks (a rendered `install <layerDir>/<f> <dst>` only works
+	// file-copy tasks (a rendered `install <candyDir>/<f> <dst>` only works
 	// when the layer dir is on the same host the command runs on, which is
 	// false for SSH/VM deploys — the historic VM copy:-task bug).
 	if s.Task.Copy != "" {
-		src := filepath.Join(s.LayerDir, s.Task.Copy)
+		src := filepath.Join(s.CandyDir, s.Task.Copy)
 		// Prefer the home-resolved dest (s.To) so `to: ${HOME}/...` expands to
 		// the real host home rather than staying a literal "${HOME}".
 		dst := s.To
@@ -729,7 +729,7 @@ func renderTaskCommand(s *TaskStep) (string, error) {
 		return fmt.Sprintf("install -m%s /dev/stdin %s <<'CHARLY_WRITE'\n%s\nCHARLY_WRITE",
 			mode, shDoubleQuote(task.Write), task.Content), nil
 	case task.Download != "":
-		return renderDownloadScript(task, s.LayerVars), nil
+		return renderDownloadScript(task, s.CandyVars), nil
 	}
 	return "", fmt.Errorf("task has no supported verb: %+v", task)
 }
@@ -755,14 +755,14 @@ func parseTaskMode(mode string, def uint32) uint32 {
 func taskShellPreamble(s *TaskStep) string {
 	var b strings.Builder
 	b.WriteString(buildArchExports())
-	if len(s.LayerVars) > 0 {
-		keys := make([]string, 0, len(s.LayerVars))
-		for k := range s.LayerVars {
+	if len(s.CandyVars) > 0 {
+		keys := make([]string, 0, len(s.CandyVars))
+		for k := range s.CandyVars {
 			keys = append(keys, k)
 		}
 		sortStrings(keys)
 		for _, k := range keys {
-			fmt.Fprintf(&b, "export %s=%s\n", k, shQuoteArg(s.LayerVars[k]))
+			fmt.Fprintf(&b, "export %s=%s\n", k, shQuoteArg(s.CandyVars[k]))
 		}
 	}
 	// Task.Env (sorted) — declared env: on the task AND the secret-injection
@@ -789,11 +789,11 @@ func taskShellPreamble(s *TaskStep) string {
 // mode (applied to the resulting file or directory), env vars injected
 // during the download (used by install scripts).
 //
-// layerVars are exported alongside task.Env so the candy manifest `vars:` keys
+// candyVars are exported alongside task.Env so the candy manifest `vars:` keys
 // referenced inside the download URL (e.g. ${K3D_VERSION}) resolve
 // correctly. Build-time gets these via Containerfile ENV; deploy-time
 // has no equivalent without this.
-func renderDownloadScript(task *Task, layerVars map[string]string) string {
+func renderDownloadScript(task *Task, candyVars map[string]string) string {
 	url := task.Download
 	to := task.To
 	extract := task.Extract
@@ -816,19 +816,19 @@ func renderDownloadScript(task *Task, layerVars map[string]string) string {
 	}
 
 	// Emit each env var as a prefix export so the downloaded script can
-	// see it (matches the container behavior). layerVars come first
+	// see it (matches the container behavior). candyVars come first
 	// (lower priority) so per-task task.Env values override on key
 	// collision — same precedence the container path gets via ENV +
 	// per-RUN env overrides.
 	var envPrefix strings.Builder
-	if len(layerVars) > 0 {
-		lkeys := make([]string, 0, len(layerVars))
-		for k := range layerVars {
+	if len(candyVars) > 0 {
+		lkeys := make([]string, 0, len(candyVars))
+		for k := range candyVars {
 			lkeys = append(lkeys, k)
 		}
 		sortStrings(lkeys)
 		for _, k := range lkeys {
-			fmt.Fprintf(&envPrefix, "export %s=%s\n", k, shQuoteArg(layerVars[k]))
+			fmt.Fprintf(&envPrefix, "export %s=%s\n", k, shQuoteArg(candyVars[k]))
 		}
 	}
 	keys := make([]string, 0, len(task.Env))
@@ -970,7 +970,7 @@ func (t *LocalDeployTarget) execServiceCustom(s *ServiceCustomStep, plan *Instal
 	if s.UnitPath == "" || s.UnitText == "" {
 		return fmt.Errorf("service %s: no unit text rendered (compile-time render skipped this entry; check that the layer's mixed-`service:` pair is well-formed)", s.Name)
 	}
-	if err := detectPackagedUnitConflict(s.UnitPath, s.TargetScope, rec.Layer); err != nil {
+	if err := detectPackagedUnitConflict(s.UnitPath, s.TargetScope, rec.Candy); err != nil {
 		return err
 	}
 	if err := writeServiceUnit(s.UnitPath, s.UnitText, s.TargetScope, opts); err != nil {
@@ -1020,7 +1020,7 @@ func (t *LocalDeployTarget) execLocalPkg(s *LocalPkgInstallStep, plan *InstallPl
 		venue = "skipped (unsupported package format)"
 	}
 	t.noteStep(rec, StepKindLocalPkgInstall, s.Scope(), s.Venue(),
-		fmt.Sprintf("layer=%s pkgbuild=%s (%s)", s.LayerName, s.PkgbuildRef, venue), start)
+		fmt.Sprintf("layer=%s pkgbuild=%s (%s)", s.CandyName, s.PkgbuildRef, venue), start)
 	return nil
 }
 
@@ -1169,7 +1169,7 @@ var packagedUnitDirs = []string{
 // /usr/lib/systemd/system/<name>.service and replaces socket activation
 // or other distro-managed behavior. The error message points authors
 // at use_packaged: as the canonical remediation.
-func detectPackagedUnitConflict(unitPath string, scope Scope, layerName string) error {
+func detectPackagedUnitConflict(unitPath string, scope Scope, candyName string) error {
 	if scope != ScopeSystem {
 		return nil
 	}
@@ -1182,7 +1182,7 @@ func detectPackagedUnitConflict(unitPath string, scope Scope, layerName string) 
 					"To respect the distro's native unit, set `use_packaged: %s` on the service entry "+
 					"(drop-in overrides are still applied). To replace it anyway, change `scope:` to "+
 					"`user` for a per-user unit, or rename the service",
-				unitName, layerName, packagedPath, unitName,
+				unitName, candyName, packagedPath, unitName,
 			)
 		}
 	}

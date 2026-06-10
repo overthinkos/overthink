@@ -31,10 +31,10 @@ func (c *NewProjectCmd) Run() error {
 	fmt.Fprintln(os.Stderr, "  # Wire a build.yml — copy from upstream, or reference a published release:")
 	fmt.Fprintln(os.Stderr, "  cp /path/to/opencharly/build.yml "+c.Dir+"/")
 	fmt.Fprintln(os.Stderr, "  charly -C "+c.Dir+" box set defaults.format_config build.yml")
-	fmt.Fprintln(os.Stderr, "  # Add an image, a layer, and build:")
-	fmt.Fprintln(os.Stderr, "  charly -C "+c.Dir+" box new box my-image --base quay.io/fedora/fedora:43 --candy my-layer")
-	fmt.Fprintln(os.Stderr, "  charly -C "+c.Dir+" box new candy my-layer")
-	fmt.Fprintln(os.Stderr, "  charly -C "+c.Dir+" candy add-rpm my-layer curl jq")
+	fmt.Fprintln(os.Stderr, "  # Add a box, a candy, and build:")
+	fmt.Fprintln(os.Stderr, "  charly -C "+c.Dir+" box new box my-box --base quay.io/fedora/fedora:43 --candy my-candy")
+	fmt.Fprintln(os.Stderr, "  charly -C "+c.Dir+" box new candy my-candy")
+	fmt.Fprintln(os.Stderr, "  charly -C "+c.Dir+" candy add-rpm my-candy curl jq")
 	fmt.Fprintln(os.Stderr, "  charly -C "+c.Dir+" box build my-image")
 	return nil
 }
@@ -45,7 +45,7 @@ func (c *NewProjectCmd) Run() error {
 type NewBoxCmd struct {
 	Name   string   `arg:"" help:"Name for the new box entry"`
 	Base   string   `long:"base" required:"" help:"Base image (URL like quay.io/... or another box name)"`
-	Candies []string `long:"candy" sep:"," help:"Comma-separated list of layer names to include"`
+	Candies []string `long:"candy" sep:"," help:"Comma-separated list of candy names to include"`
 }
 
 func (c *NewBoxCmd) Run() error {
@@ -56,7 +56,7 @@ func (c *NewBoxCmd) Run() error {
 	if err := AddBox(dir, c.Name, c.Base, c.Candies); err != nil {
 		return err
 	}
-	fmt.Fprintf(os.Stderr, "Added image %s to charly.yml\n", c.Name)
+	fmt.Fprintf(os.Stderr, "Added box %s to charly.yml\n", c.Name)
 	return nil
 }
 
@@ -85,7 +85,7 @@ func (c *BoxSetCmd) Run() error {
 
 type BoxAddCandyCmd struct {
 	Box   string `arg:"" help:"Name of the box in charly.yml"`
-	Candy string `arg:"" help:"Name of the layer to append"`
+	Candy string `arg:"" help:"Name of the candy to append"`
 }
 
 func (c *BoxAddCandyCmd) Run() error {
@@ -101,7 +101,7 @@ func (c *BoxAddCandyCmd) Run() error {
 
 type BoxRmCandyCmd struct {
 	Box   string `arg:"" help:"Name of the box in charly.yml"`
-	Candy string `arg:"" help:"Name of the layer to remove"`
+	Candy string `arg:"" help:"Name of the candy to remove"`
 }
 
 func (c *BoxRmCandyCmd) Run() error {
@@ -253,15 +253,15 @@ func resolveProjectFile(projectDir, relPath string) (string, error) {
 
 type CandyCmd struct {
 	Set         CandySetCmd         `cmd:"" help:"Set a value in a candy manifest by dot-path"`
-	AddRpm      CandyAddPkgCmd      `cmd:"add-rpm" help:"Append packages to a layer's distro.fedora.package list"`
-	AddDeb      CandyAddPkgCmd      `cmd:"add-deb" help:"Append packages to a layer's shared distro.'debian,ubuntu'.package list"`
-	AddPac      CandyAddPkgCmd      `cmd:"add-pac" help:"Append packages to a layer's distro.arch.package list"`
-	AddAur      CandyAddPkgCmd      `cmd:"add-aur" help:"Append packages to a layer's distro.arch.aur.package list"`
-	AddScenario CandyAddScenarioCmd `cmd:"add-scenario" help:"Append a Gherkin acceptance scenario to a layer's description (idempotent; Agent Driven Evaluation)"`
+	AddRpm      CandyAddPkgCmd      `cmd:"add-rpm" help:"Append packages to a candy's distro.fedora.package list"`
+	AddDeb      CandyAddPkgCmd      `cmd:"add-deb" help:"Append packages to a candy's shared distro.'debian,ubuntu'.package list"`
+	AddPac      CandyAddPkgCmd      `cmd:"add-pac" help:"Append packages to a candy's distro.arch.package list"`
+	AddAur      CandyAddPkgCmd      `cmd:"add-aur" help:"Append packages to a candy's distro.arch.aur.package list"`
+	AddScenario CandyAddScenarioCmd `cmd:"add-scenario" help:"Append a Gherkin acceptance scenario to a candy's description (idempotent; Agent Driven Evaluation)"`
 }
 
 type CandySetCmd struct {
-	Name  string `arg:"" help:"Layer name (under candy/)"`
+	Name  string `arg:"" help:"Candy name (under candy/)"`
 	Path  string `arg:"" help:"Dot-path into the candy manifest (e.g. service.name, env.MY_VAR)"`
 	Value string `arg:"" help:"Value (parsed as YAML)"`
 }
@@ -298,7 +298,7 @@ func (c *CandySetCmd) Run() error {
 // Implementation choice: instead of plumbing Kong context, we instantiate
 // four distinct concrete types so the section is hard-wired per type.
 type CandyAddPkgCmd struct {
-	Name     string   `arg:"" help:"Layer name (under candy/)"`
+	Name     string   `arg:"" help:"Candy name (under candy/)"`
 	Packages []string `arg:"" help:"Package names to append"`
 	// section is set by the parent group via aliases; default to rpm if
 	// somehow invoked directly.

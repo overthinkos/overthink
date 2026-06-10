@@ -49,14 +49,14 @@ func TestCompileLocalPkgStep(t *testing.T) {
 
 	// A candy with no localpkg entry for the target format → nil.
 	if step := compileLocalPkgStep(&Candy{Name: "no-pkg"}, img, hostCtx); step != nil {
-		t.Errorf("layer with no localpkg: should compile to nil, got %T", step)
+		t.Errorf("candy with no localpkg: should compile to nil, got %T", step)
 	}
 
 	// The charly candy's per-format map: pac resolves to pkg/arch.
 	l := &Candy{Name: "charly", SourceDir: "/layers/charly", localpkg: map[string]string{"pac": "pkg/arch", "rpm": "pkg/fedora", "deb": "pkg/debian"}}
 	step := compileLocalPkgStep(l, img, hostCtx)
 	if step == nil {
-		t.Fatal("compileLocalPkgStep returned nil for a layer with a pac localpkg source")
+		t.Fatal("compileLocalPkgStep returned nil for a candy with a pac localpkg source")
 	}
 	pkg, ok := step.(*LocalPkgInstallStep)
 	if !ok {
@@ -146,7 +146,7 @@ func TestBuildDeployPlanLocalPkgOrdering(t *testing.T) {
 		t.Fatal("no TaskStep in the compiled plan")
 	}
 	if pkgIdx > taskIdx {
-		t.Errorf("localpkg step (idx %d) must precede the layer's task steps (idx %d) so the cmd: gate sees the installed package", pkgIdx, taskIdx)
+		t.Errorf("localpkg step (idx %d) must precede the candy's task steps (idx %d) so the cmd: gate sees the installed package", pkgIdx, taskIdx)
 	}
 }
 
@@ -212,7 +212,7 @@ func TestResolveLocalPkgDir(t *testing.T) {
 	}
 	// 2. Candy-relative.
 	if got := resolveLocalPkgDir("arch", candyWithPkg, root, "PKGBUILD"); got != filepath.Join(candyWithPkg, "arch") {
-		t.Errorf("layer-relative = %q, want %q", got, filepath.Join(candyWithPkg, "arch"))
+		t.Errorf("candy-relative = %q, want %q", got, filepath.Join(candyWithPkg, "arch"))
 	}
 	// 3. Project-relative (project dir == superproject root).
 	if got := resolveLocalPkgDir("pkg/arch", "/no/such/layer", root, "PKGBUILD"); got != pkgArch {

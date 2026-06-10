@@ -396,26 +396,26 @@ func venueHasPkgManager(ctx context.Context, exec DeployExecutor, lp *LocalPkgDe
 // venueName is used only for log lines (e.g. "host", "vm:cachyos-gpu").
 func execLocalPkgInstall(ctx context.Context, exec DeployExecutor, s *LocalPkgInstallStep, supported bool, venueName string, opts EmitOpts) error {
 	if s.LocalPkg == nil {
-		fmt.Fprintf(os.Stderr, "%s skip: localpkg %s (layer=%s) — target distro declares no localpkg-capable package format; the layer's curl/COPY task installs it instead\n",
+		fmt.Fprintf(os.Stderr, "%s skip: localpkg %s (candy=%s) — target distro declares no localpkg-capable package format; the candy's curl/COPY task installs it instead\n",
 			venueName, s.PkgbuildRef, s.CandyName)
 		return nil
 	}
 	if !supported {
-		fmt.Fprintf(os.Stderr, "%s skip: localpkg %s (layer=%s) — target has no %s package manager; the layer's curl/COPY task installs it instead\n",
+		fmt.Fprintf(os.Stderr, "%s skip: localpkg %s (candy=%s) — target has no %s package manager; the candy's curl/COPY task installs it instead\n",
 			venueName, s.PkgbuildRef, s.CandyName, s.Format)
 		return nil
 	}
 	pkgDir := resolveLocalPkgDir(s.PkgbuildRef, s.CandyDir, s.ProjectDir, s.LocalPkg.SourceSentinel)
 	if pkgDir == "" {
-		fmt.Fprintf(os.Stderr, "%s skip: localpkg %s (layer=%s) — no package source found from layer dir %q or project dir %q; the layer's curl/COPY task installs it instead\n",
+		fmt.Fprintf(os.Stderr, "%s skip: localpkg %s (candy=%s) — no package source found from candy dir %q or project dir %q; the candy's curl/COPY task installs it instead\n",
 			venueName, s.PkgbuildRef, s.CandyName, s.CandyDir, s.ProjectDir)
 		return nil
 	}
-	fmt.Fprintf(os.Stderr, "%s: building %s package (%s) from %s for layer %s\n",
+	fmt.Fprintf(os.Stderr, "%s: building %s package (%s) from %s for candy %s\n",
 		venueName, strings.TrimSuffix(filepath.Base(pkgDir), "/"), s.Format, pkgDir, s.CandyName)
 	pkgFiles, err := buildLocalPkgOnHost(ctx, s.LocalPkg, pkgDir, opts)
 	if err != nil {
-		return fmt.Errorf("localpkg %s (layer=%s): %w", s.PkgbuildRef, s.CandyName, err)
+		return fmt.Errorf("localpkg %s (candy=%s): %w", s.PkgbuildRef, s.CandyName, err)
 	}
 	if opts.DryRun {
 		return nil

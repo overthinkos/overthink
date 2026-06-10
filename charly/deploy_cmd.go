@@ -155,7 +155,7 @@ func (c *DeployImportCmd) Run() error {
 	if c.Box != "" {
 		entry, ok := merged.Deploy[c.Box]
 		if !ok {
-			return fmt.Errorf("image %q not found in input files", c.Box)
+			return fmt.Errorf("box %q not found in input files", c.Box)
 		}
 		// Preserve other images from existing config, replace only the target
 		if !c.Replace {

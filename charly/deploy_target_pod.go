@@ -1,6 +1,6 @@
 package main
 
-// deploy_target_container.go — PodDeployTarget deploys an
+// deploy_target_pod.go — PodDeployTarget deploys an
 // InstallPlan as a running container.
 //
 // For container deploys, the same InstallPlan produced by
@@ -285,7 +285,7 @@ func (t *PodDeployTarget) buildOverlay(plans []*InstallPlan, overlayCandies []st
 
 	var cf bytes.Buffer
 	fmt.Fprintf(&cf, "# Overlay Containerfile for deploy %q\n", t.DeployName)
-	fmt.Fprintf(&cf, "# Extra layers: %s\n\n", strings.Join(overlayCandies, ", "))
+	fmt.Fprintf(&cf, "# Extra candies: %s\n\n", strings.Join(overlayCandies, ", "))
 	// Emit per-layer context stages before the main FROM. The tasks
 	// emitted by oci.Emit() reference these via `--mount=type=bind,
 	// from=<layer>`, same as the full-build Containerfile does (see

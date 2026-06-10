@@ -568,10 +568,10 @@ func TestMergedSecretsIncludeCredentialBacked(t *testing.T) {
 	// candy-owned secrets, e.g., a live postgres db-password would break).
 	webui, ok := byEnv["WEBUI_SECRET_KEY"]
 	if !ok {
-		t.Fatal("WEBUI_SECRET_KEY (layer-owned) missing from merged slice")
+		t.Fatal("WEBUI_SECRET_KEY (candy-owned) missing from merged slice")
 	}
 	if webui.RotateOnConfig {
-		t.Error("WEBUI_SECRET_KEY.RotateOnConfig = true, want false (layer-owned secrets must not rotate)")
+		t.Error("WEBUI_SECRET_KEY.RotateOnConfig = true, want false (candy-owned secrets must not rotate)")
 	}
 
 	// Credential-backed entries: RotateOnConfig must be true, so

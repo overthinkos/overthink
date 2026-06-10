@@ -96,7 +96,7 @@ func (c *RecordStartCmd) resolveMode(ex DeployExecutor) (tool, mode string, err 
 	switch c.Mode {
 	case "terminal":
 		if !venueHasTool(ex, "asciinema") {
-			return "", "", fmt.Errorf("terminal recording requires asciinema (add the asciinema layer)")
+			return "", "", fmt.Errorf("terminal recording requires asciinema (add the asciinema candy)")
 		}
 		return "asciinema", "terminal", nil
 	case "desktop":

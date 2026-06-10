@@ -227,7 +227,7 @@ func TestBuildDeployPlanEmitsReboot(t *testing.T) {
 	}
 	for _, s := range noReboot.Steps {
 		if _, isReboot := s.(*RebootStep); isReboot {
-			t.Fatal("RebootStep emitted for a layer without reboot:true")
+			t.Fatal("RebootStep emitted for a candy without reboot:true")
 		}
 	}
 

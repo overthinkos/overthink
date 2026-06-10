@@ -22,6 +22,18 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-10 — refactor(strings): finish syncing user-facing strings + stale comment file-refs with current names
+
+Following the Go-comment sync, this closes the remaining stale SELF-REFERENCES the comment scope didn't cover — the behavior-affecting STRING surface plus a few stale file-name comments from OTHER renames.
+
+- **User-facing STRINGS** (error messages, Kong `help:` tags, `charly status` display) saying "layer"/"image" for the candy/box concept → "candy"/"box", with their **test assertions updated in lockstep**. E.g. `"unknown layer %q"`→`"unknown candy %q"`, help `"Extra layer to apply…"`→`"Extra candy…"`, `"local (%d layers)"`→`"local (%d candies)"`, `"not declared by any layer"`→`"…candy"`, the `--add-layer` error strings → `--add-candy`.
+- **Comment file-references from OTHER renames**: `deploy_target_container.go`/`deploy_target_host.go` → `deploy_target_pod.go`/`deploy_target_local.go`; `harness_recipe_from.go`/`testrun_ov_verbs.go` → `eval_recipe_from.go`/`evalrun_charly_verbs.go`; the `DeployTests` field → `DeployEval`.
+- **KEPT — still accurate**: OCI image-layer / build-stage terms; OCI "image" (registry/pull/tag/SHA/`<image>` CLI placeholder); the live `${layer_name}` substitution token; the on-disk `~/.config/opencharly/installed/layers/` ledger dir; `json:"layer"` legacy keys; the `# Layer: <name>` Containerfile build-section headers (each candy's instructions = a build layer — defensible); and every legacy form named by migration code.
+
+Verification: `go build`/`go vet`/`go test ./...` green (every changed string's assertion updated); live `charly … --help` emits the new strings; `charly eval run eval-local` PASS (4/4) on the fresh rebuild, exercising the changed local-deploy path. No schema change (`version:` stays `2026.161.1650`; main repo only).
+
+Separately surfaced (NOT in this cutover — each its own future change): `charly box new candy` scaffolds a stub with a top-level `rpm:` key the current loader rejects; and the deeper `depends:`→`require:` / `tests:`→`eval:` renames + the `migrate_local_deploy` `image:`→`box:` wire emission remain.
+
 ### 2026-06-10 — docs(comments): sync Go code comments with the post-rebrand codebase (layer→candy, image→box)
 
 The candy/box rebrand renamed the Go identifiers wholesale (the `Layer` struct → `Candy`,

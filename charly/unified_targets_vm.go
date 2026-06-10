@@ -56,7 +56,7 @@ func (t *VmUnifiedTarget) Del(ctx context.Context, opts DelOpts) error {
 		return nil
 	}
 	if opts.DryRun {
-		fmt.Printf("[dry-run] would tear down VM deploy %s (deploy_id=%s, %d layers)\n",
+		fmt.Printf("[dry-run] would tear down VM deploy %s (deploy_id=%s, %d candies)\n",
 			t.NodeName, rec.DeployID, len(rec.Candy))
 		for _, layer := range rec.Candy {
 			candyRec, lerr := ReadCandyRecord(paths, layer)
@@ -89,17 +89,17 @@ func (t *VmUnifiedTarget) Del(ctx context.Context, opts DelOpts) error {
 	for _, layer := range rec.Candy {
 		candyRec, shouldRemove, lerr := RemoveCandyDeployment(paths, layer, rec.DeployID)
 		if lerr != nil {
-			return fmt.Errorf("removing layer deployment %s: %w", layer, lerr)
+			return fmt.Errorf("removing candy deployment %s: %w", layer, lerr)
 		}
 		if !shouldRemove {
 			continue
 		}
 		if rerr := runReverseOps(candyRec.ReverseOps, re); rerr != nil {
-			return fmt.Errorf("reversing layer %s: %w", layer, rerr)
+			return fmt.Errorf("reversing candy %s: %w", layer, rerr)
 		}
 		_ = t.RevRunner.RunUser(fmt.Sprintf(`rm -f "$HOME/.config/opencharly/env.d/%s.env"`, layer))
 		if derr := DeleteCandyRecord(paths, layer); derr != nil {
-			return fmt.Errorf("deleting layer record %s: %w", layer, derr)
+			return fmt.Errorf("deleting candy record %s: %w", layer, derr)
 		}
 	}
 
@@ -495,7 +495,7 @@ func (t *VmUnifiedTarget) Add(ctx context.Context, dctx *DeployContext, plans []
 	// (R3 shared helper).
 	candyList, secretEnv, err := prepareCandySecrets(plans, dir)
 	if err != nil {
-		return fmt.Errorf("loading layers for secret resolution: %w", err)
+		return fmt.Errorf("loading candies for secret resolution: %w", err)
 	}
 
 	// artifactEnv = secretEnv overlaid with the MERGED node's env: lines
@@ -538,7 +538,7 @@ func (t *VmUnifiedTarget) Add(ctx context.Context, dctx *DeployContext, plans []
 	// bed's `cluster: "vm-k3s-vm"`). Passing the deploy key here wrote the fresh
 	// kubeconfig under the wrong profile name, leaving the probe on a stale CA.
 	if err := retrieveArtifactsAndK3s(ctx, exec, candyList, "vm:"+vmName, artifactEnv, opts); err != nil {
-		return fmt.Errorf("retrieving layer artifacts: %w", err)
+		return fmt.Errorf("retrieving candy artifacts: %w", err)
 	}
 
 	// Deploy nested target:pod children as persistent in-guest quadlets.

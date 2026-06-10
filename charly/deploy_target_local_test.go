@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-// Tests for deploy_target_host.go.
+// Tests for deploy_target_local.go.
 // We focus on dry-run paths so the tests don't spawn sudo/podman.
 
 func TestHostDeployTargetDryRunShellHook(t *testing.T) {
@@ -61,7 +61,7 @@ func TestHostDeployTargetDryRunShellHook(t *testing.T) {
 	// Ledger: candy + deploy records.
 	lrec, err := ReadCandyRecord(paths, "uv")
 	if err != nil || lrec == nil {
-		t.Fatalf("layer ledger missing: %v / %+v", err, lrec)
+		t.Fatalf("candy ledger missing: %v / %+v", err, lrec)
 	}
 	if len(lrec.DeployedBy) != 1 || lrec.DeployedBy[0] != "d1" {
 		t.Errorf("DeployedBy = %v, want [d1]", lrec.DeployedBy)

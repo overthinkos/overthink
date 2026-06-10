@@ -316,7 +316,7 @@ func (t *OCITarget) emitTask(s *TaskStep) error {
 	}
 	layer := t.lookupCandy(s.CandyName)
 	if layer == nil {
-		return fmt.Errorf("task emit: layer %q not found", s.CandyName)
+		return fmt.Errorf("task emit: candy %q not found", s.CandyName)
 	}
 
 	// Temporarily swap layer.tasks to just this one task so emitTasks

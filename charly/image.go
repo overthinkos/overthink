@@ -19,8 +19,8 @@ type BoxCmd struct {
 	Merge    MergeCmd      `cmd:"" help:"Merge small layers in a built container image"`
 	New      NewCmd        `cmd:"" help:"Scaffold new components"`
 	Pull     BoxPullCmd    `cmd:"" help:"Pull an image from its registry into local storage"`
-	Pkg      BoxPkgCmd     `cmd:"" help:"Build standalone native package artifacts (.pkg.tar.zst/.rpm/.deb) for a layer's localpkg sources into dist/"`
-	Validate ValidateCmd   `cmd:"" help:"Check charly.yml + layers, exit 0 or 1"`
+	Pkg      BoxPkgCmd     `cmd:"" help:"Build standalone native package artifacts (.pkg.tar.zst/.rpm/.deb) for a candy's localpkg sources into dist/"`
+	Validate ValidateCmd   `cmd:"" help:"Check charly.yml + candies, exit 0 or 1"`
 	Feature  BoxFeatureCmd `cmd:"" help:"Run a box's baked Gherkin scenarios as acceptance tests against a disposable container (Agent Driven Evaluation, build scope)"`
 
 	// Authoring verbs — added so the MCP tool surface (auto-reflected from
@@ -32,7 +32,7 @@ type BoxCmd struct {
 	Refresh   BoxRefreshCmd   `cmd:"" help:"Force re-clone of a remote project repo"`
 	Write     BoxWriteCmd     `cmd:"" help:"Write file contents under the project root (escape hatch for free-form files)"`
 	Cat       BoxCatCmd       `cmd:"" help:"Print file contents from under the project root"`
-	Reconcile BoxReconcileCmd `cmd:"" help:"Align cross-repo @github layer pins to the newest version (clears resolver newest-wins warnings)"`
+	Reconcile BoxReconcileCmd `cmd:"" help:"Align cross-repo @github candy pins to the newest version (clears resolver newest-wins warnings)"`
 }
 
 // BoxPullCmd fetches an image from its registry into the local container

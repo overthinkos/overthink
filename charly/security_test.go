@@ -291,10 +291,10 @@ func TestCollectSecurityImageOverridesCaps(t *testing.T) {
 	}
 	sec := CollectSecurity(cfg, layers, "heavy")
 	if sec.MemoryMax != "16g" {
-		t.Errorf("MemoryMax = %q, want 16g (image override)", sec.MemoryMax)
+		t.Errorf("MemoryMax = %q, want 16g (box override)", sec.MemoryMax)
 	}
 	if sec.ShmSize != "1g" {
-		t.Errorf("ShmSize = %q, want 1g (layer default preserved)", sec.ShmSize)
+		t.Errorf("ShmSize = %q, want 1g (candy default preserved)", sec.ShmSize)
 	}
 }
 

@@ -12,12 +12,12 @@ func ScaffoldCandy(dir string, name string) error {
 
 	// Check if candy already exists
 	if _, err := os.Stat(candyDir); err == nil {
-		return fmt.Errorf("layer %q already exists at %s", name, candyDir)
+		return fmt.Errorf("candy %q already exists at %s", name, candyDir)
 	}
 
 	// Create candy directory
 	if err := os.MkdirAll(candyDir, 0755); err != nil {
-		return fmt.Errorf("creating layer directory: %w", err)
+		return fmt.Errorf("creating candy directory: %w", err)
 	}
 
 	// Create a placeholder candy manifest in the canonical kind-keyed form,
@@ -28,7 +28,7 @@ func ScaffoldCandy(dir string, name string) error {
 		return fmt.Errorf("creating %s: %w", UnifiedFileName, err)
 	}
 
-	fmt.Printf("Created layer at %s\n", candyDir)
+	fmt.Printf("Created candy at %s\n", candyDir)
 	fmt.Println("Files created:")
 	fmt.Println("  charly.yml - Candy config (rpm/deb packages, require, env, ports, route, service)")
 	fmt.Println()

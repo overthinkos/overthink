@@ -54,7 +54,7 @@ func BuildBootcVM(
 		return BootcVMResult{}, fmt.Errorf("BuildBootcVM called with source.kind=%q (expected bootc)", spec.Source.Kind)
 	}
 	if spec.Source.Box == "" {
-		return BootcVMResult{}, fmt.Errorf("source.image is required for bootc VMs")
+		return BootcVMResult{}, fmt.Errorf("source.box is required for bootc VMs")
 	}
 	if spec.DiskSize == "" {
 		return BootcVMResult{}, fmt.Errorf("disk_size is required for bootc VMs")

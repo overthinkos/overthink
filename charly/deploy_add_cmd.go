@@ -30,7 +30,7 @@ type DeployAddCmd struct {
 	Ref  string `arg:"" optional:"" help:"Box or candy reference (local name, ./path.yml, or github.com/org/repo[/box/<n>|/candy/<n>][@ref])"`
 
 	// Candy overlays (repeatable).
-	AddCandy []string `long:"add-candy" help:"Extra layer to apply on top of the base image (repeatable)"`
+	AddCandy []string `long:"add-candy" help:"Extra candy to apply on top of the base image (repeatable)"`
 
 	// Plan-level flags.
 	Tag      string `long:"tag" help:"Image CalVer tag (empty = newest local CalVer resolved via the ai.opencharly.version OCI label)"`
@@ -38,13 +38,13 @@ type DeployAddCmd struct {
 	NodeOnly bool   `long:"node-only" help:"Dispatch only the named node; do not descend into nested children (children of a pod can't deploy until the pod is started)"`
 	Format   string `long:"format" default:"table" enum:"table,json" help:"Output format for --dry-run"`
 	Pull     bool   `long:"pull" help:"Force re-fetch of remote refs / image pull"`
-	Verify   bool   `long:"verify" help:"Re-run layer tests: on the host after install"`
+	Verify   bool   `long:"verify" help:"Re-run candy tests: on the host after install"`
 
 	// Host-only gates.
 	WithServices     bool   `long:"with-services" help:"Install systemd services (host target only)"`
 	AllowRepoChanges bool   `long:"allow-repo-changes" help:"Allow repo config mutations (host target only)"`
 	AllowRootTasks   bool   `long:"allow-root-tasks" help:"Allow arbitrary root cmd: tasks (host target only)"`
-	SkipIncompatible bool   `long:"skip-incompatible" help:"Skip layers without host-matching format (host target only)"`
+	SkipIncompatible bool   `long:"skip-incompatible" help:"Skip candies without host-matching format (host target only)"`
 	BuilderImage     string `long:"builder-image" help:"Override the compile builder image"`
 	AssumeYes        bool   `long:"yes" short:"y" help:"Assume yes; implies all allow-* gates plus skip sudo preflight"`
 
@@ -325,7 +325,7 @@ func (c *DeployAddCmd) dispatchNode(path string, node *DeploymentNode, parentExe
 	for _, al := range addCandies {
 		alRef, err := ResolveDeployRefAsCandy(al, dir)
 		if err != nil {
-			return fmt.Errorf("resolving --add-layer %q: %w", al, err)
+			return fmt.Errorf("resolving --add-candy %q: %w", al, err)
 		}
 		var alPlans []*InstallPlan
 		if baseImg != nil {
@@ -334,7 +334,7 @@ func (c *DeployAddCmd) dispatchNode(path string, node *DeploymentNode, parentExe
 			alPlans, _, _, err = c.compilePlans(alRef, cfg, distroCfg, builderCfg, dir)
 		}
 		if err != nil {
-			return fmt.Errorf("compiling --add-layer %q: %w", al, err)
+			return fmt.Errorf("compiling --add-candy %q: %w", al, err)
 		}
 		// Mark each plan's own candy (plus transitive deps) as overlay
 		// candies so the Pod target picks them ALL up — not just the
@@ -715,7 +715,7 @@ func (c *DeployAddCmd) scanCandiesForRef(ref *DeployRef, cfg *Config, dir string
 		return nil, "", err
 	}
 	if _, ok := layers[candyKey]; !ok {
-		return nil, "", fmt.Errorf("layer %q not found", ref.Raw)
+		return nil, "", fmt.Errorf("candy %q not found", ref.Raw)
 	}
 	return layers, candyKey, nil
 }

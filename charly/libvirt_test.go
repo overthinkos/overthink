@@ -76,7 +76,7 @@ func TestCollectLibvirtSnippets(t *testing.T) {
 
 	snippets := CollectLibvirtSnippets(cfg, layers, "test-image")
 	if len(snippets) != 1 {
-		t.Fatalf("expected 1 snippet (layer-a only, image-level removed), got %d: %v", len(snippets), snippets)
+		t.Fatalf("expected 1 snippet (layer-a only, box-level removed), got %d: %v", len(snippets), snippets)
 	}
 }
 

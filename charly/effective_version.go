@@ -78,7 +78,7 @@ func (g *Generator) computeEffectiveVersions() error {
 
 		// 4. Nothing derivable — a candy-free image on an external base with no
 		//    dedicated version. Hard cutover: no build-timestamp fallback.
-		return "", fmt.Errorf("image %q resolves no version: a layerless image on an external base needs a dedicated `version:`. Run: charly migrate", name)
+		return "", fmt.Errorf("image %q resolves no version: a candy-free image on an external base needs a dedicated `version:`. Run: charly migrate", name)
 	}
 
 	for name, img := range g.Boxes {

@@ -45,7 +45,7 @@ func TestInstallWithRetry(t *testing.T) {
 func TestCompileApkStep(t *testing.T) {
 	none := &Candy{Name: "no-apk"}
 	if step := compileApkStep(none); step != nil {
-		t.Errorf("layer with no apk: should compile to nil step, got %T", step)
+		t.Errorf("candy with no apk: should compile to nil step, got %T", step)
 	}
 
 	l := &Candy{Name: "test-apps", SourceDir: "/layers/test-apps"}
@@ -55,7 +55,7 @@ func TestCompileApkStep(t *testing.T) {
 	}
 	step := compileApkStep(l)
 	if step == nil {
-		t.Fatal("compileApkStep returned nil for a layer with apk: entries")
+		t.Fatal("compileApkStep returned nil for a candy with apk: entries")
 	}
 	apk, ok := step.(*ApkInstallStep)
 	if !ok {

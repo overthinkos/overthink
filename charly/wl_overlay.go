@@ -148,7 +148,7 @@ func buildOverlayShowArgs(c *WlOverlayShowCmd) string {
 // (container / VM / host).
 func checkOverlayAvailable(ex DeployExecutor) error {
 	if err := execWlCmdSilent(ex, "command -v charly-overlay >/dev/null 2>&1"); err != nil {
-		return fmt.Errorf("charly-overlay not available on the target (add the wl-overlay layer to your image, or install it on the host/VM)")
+		return fmt.Errorf("charly-overlay not available on the target (add the wl-overlay candy to your box, or install it on the host/VM)")
 	}
 	return nil
 }

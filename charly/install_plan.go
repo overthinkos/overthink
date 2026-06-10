@@ -19,7 +19,7 @@ package main
 //
 // This file defines only types and interfaces — no logic. The compiler that
 // turns the candy manifest → InstallPlan lives in install_build.go; the emitters live
-// in build_target_oci.go / deploy_target_container.go / deploy_target_host.go.
+// in build_target_oci.go / deploy_target_pod.go / deploy_target_local.go.
 
 import (
 	"os"
@@ -1043,8 +1043,8 @@ type InstallPlan struct {
 	// Provenance — used by teardown and status.
 	CandiesIncluded []string          // ordered layer names this plan composes (for whole-image merges)
 	AddCandies      []string          // layers added on top via charly.yml add_layers: (for provenance)
-	BuilderImage   string            // selected builder image for VenueContainerBuilder steps
-	Meta           map[string]string // free-form metadata (builder image, glibc version, …)
+	BuilderImage    string            // selected builder image for VenueContainerBuilder steps
+	Meta            map[string]string // free-form metadata (builder image, glibc version, …)
 }
 
 // ResolveHome substitutes the deferred HomeToken with a concrete home in

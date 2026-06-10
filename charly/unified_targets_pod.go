@@ -320,7 +320,7 @@ func (t *PodUnifiedTarget) Add(ctx context.Context, dctx *DeployContext, plans [
 	// Resolve + inject candy secrets so the overlay Containerfile emits
 	// `export VAR=VALUE` before each task body (R3 shared helper).
 	if _, _, err := prepareCandySecrets(plans, dir); err != nil {
-		return fmt.Errorf("loading layers for secret resolution: %w", err)
+		return fmt.Errorf("loading candies for secret resolution: %w", err)
 	}
 
 	// Thread ParentExec: when this container is a child of another

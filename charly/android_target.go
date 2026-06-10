@@ -92,7 +92,7 @@ func (a *AndroidDeployTarget) installStep(s *ApkInstallStep, opts EmitOpts) erro
 				fmt.Printf("[dry-run] android: would install committed APK %s\n", path)
 				continue
 			}
-			fmt.Printf("android: installing %s (layer=%s)\n", path, s.CandyName)
+			fmt.Printf("android: installing %s (candy=%s)\n", path, s.CandyName)
 			out, err := installWithRetry(androidInstallDeadline, androidInstallInterval, func() (string, error) { return a.Device.InstallFromHostApk(path) })
 			if err != nil {
 				return fmt.Errorf("apk install %s: %w", path, err)
@@ -103,13 +103,13 @@ func (a *AndroidDeployTarget) installStep(s *ApkInstallStep, opts EmitOpts) erro
 			continue
 		}
 		if spec.Package == "" {
-			return fmt.Errorf("apk entry in layer %q has neither package: nor apk:", s.CandyName)
+			return fmt.Errorf("apk entry in candy %q has neither package: nor apk:", s.CandyName)
 		}
 		if opts.DryRun {
 			fmt.Printf("[dry-run] android: would install %s (source %s) via apkeep\n", spec.Package, spec.EffectiveSource())
 			continue
 		}
-		fmt.Printf("android: installing %s (source %s, layer=%s)\n", spec.Package, spec.EffectiveSource(), s.CandyName)
+		fmt.Printf("android: installing %s (source %s, candy=%s)\n", spec.Package, spec.EffectiveSource(), s.CandyName)
 		specCopy := spec
 		out, err := installWithRetry(androidInstallDeadline, androidInstallInterval, func() (string, error) { return a.Device.InstallByPackage(specCopy) })
 		if err != nil {

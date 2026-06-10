@@ -76,7 +76,7 @@ func (c *LogsCmd) Run() error {
 // "Any config changes should be done via charly config only" — this verb
 // updates ARTIFACTS, charly config updates CONFIG.
 type UpdateCmd struct {
-	Box       string `arg:"" help:"Deploy name (resolved via charly.yml) OR box name. For deploys, the target's update strategy is auto-selected (pod=systemctl restart with new image; vm=in-guest layer re-apply; local=idempotent re-apply)."`
+	Box       string `arg:"" help:"Deploy name (resolved via charly.yml) OR box name. For deploys, the target's update strategy is auto-selected (pod=systemctl restart with new image; vm=in-guest candy re-apply; local=idempotent re-apply)."`
 	Tag       string `long:"tag" help:"Image CalVer tag (empty = newest local CalVer resolved via the ai.opencharly.version OCI label)"`
 	Build     bool   `long:"build" help:"Force local build instead of pulling from registry"`
 	Instance  string `short:"i" long:"instance" help:"Instance name for running multiple containers of the same box"`

@@ -231,7 +231,7 @@ func TestScanRemoteCandies(t *testing.T) {
 
 	cuda, ok := layers["github.com/overthinkos/ml-layers/candy/cuda"]
 	if !ok {
-		t.Fatal("cuda layer not found")
+		t.Fatal("cuda candy not found")
 	}
 	if !cuda.Remote {
 		t.Error("cuda should be remote")

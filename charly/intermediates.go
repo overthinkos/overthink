@@ -61,7 +61,7 @@ func GlobalCandyOrder(boxes map[string]*ResolvedBox, layers map[string]*Candy) (
 	for _, img := range boxes {
 		resolved, err := ResolveCandyOrder(img.Candy, layers, nil)
 		if err != nil {
-			return nil, fmt.Errorf("resolving layers for image %q: %w", img.Name, err)
+			return nil, fmt.Errorf("resolving candies for image %q: %w", img.Name, err)
 		}
 		// Also include candies from the base chain
 		allCandies := collectAllBoxCandies(img.Name, boxes, layers)
@@ -233,7 +233,7 @@ func topoSortByPopularity(graph map[string][]string, popularity map[string]int) 
 	}
 
 	if len(result) != len(graph) {
-		return nil, fmt.Errorf("cycle detected in layer dependency graph")
+		return nil, fmt.Errorf("cycle detected in candy dependency graph")
 	}
 	return result, nil
 }
@@ -329,7 +329,7 @@ type siblingKey struct {
 func ComputeIntermediates(boxes map[string]*ResolvedBox, layers map[string]*Candy, cfg *Config, tag string) (map[string]*ResolvedBox, error) {
 	globalOrder, err := GlobalCandyOrder(boxes, layers)
 	if err != nil {
-		return nil, fmt.Errorf("computing global layer order: %w", err)
+		return nil, fmt.Errorf("computing global candy order: %w", err)
 	}
 
 	// Copy all existing images

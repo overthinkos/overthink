@@ -4,7 +4,7 @@ package main
 // at install time, turning them into concrete teardown commands.
 //
 // Each InstallStep's Reverse() method records a list of ReverseOps
-// when the step runs (see deploy_target_host.go). `charly deploy del`
+// when the step runs (see deploy_target_local.go). `charly deploy del`
 // reads those ops from the candy ledger and hands them here for
 // execution. The ops are opaque to the ledger — only the teardown
 // logic in this file understands each Kind.

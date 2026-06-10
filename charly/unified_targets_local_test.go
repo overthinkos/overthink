@@ -184,7 +184,7 @@ func TestHostUnifiedTarget_Del_RemovesEntries(t *testing.T) {
 		t.Errorf("deploy file still exists: %v", err)
 	}
 	if _, err := os.Stat(candyFile); !os.IsNotExist(err) {
-		t.Errorf("layer file still exists: %v", err)
+		t.Errorf("candy file still exists: %v", err)
 	}
 }
 

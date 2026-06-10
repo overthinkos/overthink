@@ -52,7 +52,7 @@ var artifactValidatableMethods = map[string]bool{
 	"record/stop":        true,
 }
 
-// testrun_ov_verbs.go implements the cdp/wl/dbus/vnc test verbs. Each verb
+// evalrun_charly_verbs.go implements the cdp/wl/dbus/vnc test verbs. Each verb
 // is a thin wrapper around the corresponding `charly eval <verb> <method>` CLI
 // path — the test framework spawns a subprocess for each check, captures
 // stdout/stderr/exit, and feeds the output through the existing matcher

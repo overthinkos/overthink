@@ -19,7 +19,7 @@ package main
 // steps actually reverse.
 //
 // This file implements I/O (read/write/lock) and ledger-shape types.
-// The actual reverse-execution logic lives in deploy_target_host.go.
+// The actual reverse-execution logic lives in deploy_target_local.go.
 
 import (
 	"encoding/json"

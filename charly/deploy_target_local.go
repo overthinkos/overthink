@@ -1,6 +1,6 @@
 package main
 
-// deploy_target_host.go — LocalDeployTarget executes an InstallPlan on
+// deploy_target_local.go — LocalDeployTarget executes an InstallPlan on
 // the host filesystem.
 //
 // Walk strategy:
@@ -278,7 +278,7 @@ func (t *LocalDeployTarget) execStep(step InstallStep, plan *InstallPlan, opts E
 		// a local deploy has no emulator. Record a skip and continue (a
 		// candy carrying apk: may also carry host-relevant steps).
 		t.noteStep(rec, StepKindApkInstall, s.Scope(), VenueSkip,
-			fmt.Sprintf("layer=%s skipped: apk installs only on a kind:android device", s.CandyName), start)
+			fmt.Sprintf("candy=%s skipped: apk installs only on a kind:android device", s.CandyName), start)
 		return nil
 	case *LocalPkgInstallStep:
 		return t.execLocalPkg(s, plan, opts, rec, start)
@@ -286,9 +286,9 @@ func (t *LocalDeployTarget) execStep(step InstallStep, plan *InstallPlan, opts E
 		// Never reboot the operator's host unattended. Record a skip and
 		// warn — a host that needs a kernel module reloaded should be
 		// rebooted by the operator, not by a deploy.
-		fmt.Fprintf(os.Stderr, "warning: layer %q requests a reboot; skipping on target:local (reboot the host yourself if a new kernel module must load)\n", s.CandyName)
+		fmt.Fprintf(os.Stderr, "warning: candy %q requests a reboot; skipping on target:local (reboot the host yourself if a new kernel module must load)\n", s.CandyName)
 		t.noteStep(rec, StepKindReboot, s.Scope(), VenueSkip,
-			fmt.Sprintf("layer=%s skipped: reboot not performed on target:local", s.CandyName), start)
+			fmt.Sprintf("candy=%s skipped: reboot not performed on target:local", s.CandyName), start)
 		return nil
 	}
 	return fmt.Errorf("LocalDeployTarget: unknown step kind %T", step)
@@ -312,7 +312,7 @@ func (t *LocalDeployTarget) execShellSnippet(s *ShellSnippetStep, plan *InstallP
 		fmt.Fprintf(t.stderr(), "[dry-run] shell-snippet %s/%s -> %s (use_dropin=%v)\n",
 			s.CandyName, s.Shell, s.Destination, s.UseDropin)
 		t.noteStep(rec, StepKindShellSnippet, s.Scope(), s.Venue(),
-			fmt.Sprintf("layer=%s shell=%s dest=%s", s.CandyName, s.Shell, s.Destination), start)
+			fmt.Sprintf("candy=%s shell=%s dest=%s", s.CandyName, s.Shell, s.Destination), start)
 		return nil
 	}
 	body := s.Snippet
@@ -349,7 +349,7 @@ func (t *LocalDeployTarget) execShellSnippet(s *ShellSnippetStep, plan *InstallP
 		return fmt.Errorf("write %s: %w", s.Destination, err)
 	}
 	t.noteStep(rec, StepKindShellSnippet, s.Scope(), s.Venue(),
-		fmt.Sprintf("layer=%s shell=%s dest=%s", s.CandyName, s.Shell, s.Destination), start)
+		fmt.Sprintf("candy=%s shell=%s dest=%s", s.CandyName, s.Shell, s.Destination), start)
 	rec.ReverseOps = append(rec.ReverseOps, s.Reverse()...)
 	return nil
 }
@@ -418,7 +418,7 @@ func isFileNotFoundErr(err error) bool {
 func (t *LocalDeployTarget) execShellHook(s *ShellHookStep, plan *InstallPlan, opts EmitOpts, rec *CandyRecord, start time.Time) error {
 	if opts.DryRun {
 		fmt.Fprintf(t.stderr(), "[dry-run] env.d/%s.env + managed block\n", s.CandyName)
-		t.noteStep(rec, StepKindShellHook, s.Scope(), s.Venue(), fmt.Sprintf("layer=%s", s.CandyName), start)
+		t.noteStep(rec, StepKindShellHook, s.Scope(), s.Venue(), fmt.Sprintf("candy=%s", s.CandyName), start)
 		return nil
 	}
 	path, err := WriteEnvdFile(t.HostHome, s.CandyName, s.EnvVars, s.PathAdd)
@@ -506,7 +506,7 @@ func (t *LocalDeployTarget) execBuilder(s *BuilderStep, plan *InstallPlan, opts 
 		image = t.BuilderImageResolver(s.Builder)
 	}
 	if image == "" {
-		return fmt.Errorf("no builder image for %s (layer=%s); set --builder-image or define builder.%s in charly.yml", s.Builder, s.CandyName, s.Builder)
+		return fmt.Errorf("no builder image for %s (candy=%s); set --builder-image or define builder.%s in charly.yml", s.Builder, s.CandyName, s.Builder)
 	}
 
 	// aur builds package files that the venue installs via the format's
@@ -515,7 +515,7 @@ func (t *LocalDeployTarget) execBuilder(s *BuilderStep, plan *InstallPlan, opts 
 	// distro/builder-name check. s.LocalPkg is set (the pac local_pkg block) only
 	// for the aur builder; nil for pixi/npm/cargo (no package-file install).
 	if s.LocalPkg != nil && !venueHasPkgManager(opts.ContextOrDefault(), t.exec(), s.LocalPkg, opts) {
-		return fmt.Errorf("builder %q (layer=%s) builds %s package files but the target has no %s package manager (local_pkg.probe %q failed); cannot install the built packages",
+		return fmt.Errorf("builder %q (candy=%s) builds %s package files but the target has no %s package manager (local_pkg.probe %q failed); cannot install the built packages",
 			s.Builder, s.CandyName, s.LocalPkg.DepBuilder, s.LocalPkg.DepBuilder, s.LocalPkg.Probe)
 	}
 
@@ -589,7 +589,7 @@ func (t *LocalDeployTarget) execBuilder(s *BuilderStep, plan *InstallPlan, opts 
 		matches, _ := filepath.Glob(filepath.Join(aurStage, "*.pkg.tar.zst"))
 		if len(matches) == 0 {
 			pkgList := extractStringSlice(s.RawStageContext, "packages")
-			return fmt.Errorf("aur builder for layer %q produced zero .pkg.tar.zst artifacts in %s; expected packages: %v. Check the BuilderRun output above for the actual yay/makepkg failure",
+			return fmt.Errorf("aur builder for candy %q produced zero .pkg.tar.zst artifacts in %s; expected packages: %v. Check the BuilderRun output above for the actual yay/makepkg failure",
 				s.CandyName, aurStage, pkgList)
 		}
 		// Pre-removal of `replaces:` entries — distro-repo packages
@@ -609,7 +609,7 @@ func (t *LocalDeployTarget) execBuilder(s *BuilderStep, plan *InstallPlan, opts 
 	}
 
 	t.noteStep(rec, StepKindBuilder, s.Scope(), s.Venue(),
-		fmt.Sprintf("%s (image=%s, layer=%s)", s.Builder, image, s.CandyName), start)
+		fmt.Sprintf("%s (image=%s, candy=%s)", s.Builder, image, s.CandyName), start)
 	rec.ReverseOps = append(rec.ReverseOps, s.Reverse()...)
 	return nil
 }
@@ -968,7 +968,7 @@ func (t *LocalDeployTarget) execServicePackaged(s *ServicePackagedStep, plan *In
 
 func (t *LocalDeployTarget) execServiceCustom(s *ServiceCustomStep, plan *InstallPlan, opts EmitOpts, rec *CandyRecord, start time.Time) error {
 	if s.UnitPath == "" || s.UnitText == "" {
-		return fmt.Errorf("service %s: no unit text rendered (compile-time render skipped this entry; check that the layer's mixed-`service:` pair is well-formed)", s.Name)
+		return fmt.Errorf("service %s: no unit text rendered (compile-time render skipped this entry; check that the candy's mixed-`service:` pair is well-formed)", s.Name)
 	}
 	if err := detectPackagedUnitConflict(s.UnitPath, s.TargetScope, rec.Candy); err != nil {
 		return err
@@ -1020,7 +1020,7 @@ func (t *LocalDeployTarget) execLocalPkg(s *LocalPkgInstallStep, plan *InstallPl
 		venue = "skipped (unsupported package format)"
 	}
 	t.noteStep(rec, StepKindLocalPkgInstall, s.Scope(), s.Venue(),
-		fmt.Sprintf("layer=%s pkgbuild=%s (%s)", s.CandyName, s.PkgbuildRef, venue), start)
+		fmt.Sprintf("candy=%s pkgbuild=%s (%s)", s.CandyName, s.PkgbuildRef, venue), start)
 	return nil
 }
 
@@ -1178,7 +1178,7 @@ func detectPackagedUnitConflict(unitPath string, scope Scope, candyName string) 
 		packagedPath := filepath.Join(dir, unitName)
 		if _, err := os.Stat(packagedPath); err == nil {
 			return fmt.Errorf(
-				"service %q from layer %q would override the packaged unit at %s. "+
+				"service %q from candy %q would override the packaged unit at %s. "+
 					"To respect the distro's native unit, set `use_packaged: %s` on the service entry "+
 					"(drop-in overrides are still applied). To replace it anyway, change `scope:` to "+
 					"`user` for a per-user unit, or rename the service",

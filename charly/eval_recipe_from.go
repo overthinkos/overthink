@@ -1,6 +1,6 @@
 package main
 
-// harness_recipe_from.go — composition primitive on `kind: recipe`.
+// eval_recipe_from.go — composition primitive on `kind: recipe`.
 //
 // A recipe author can pull existing tests out of a candy, box, pod, or vm
 // entity into a recipe by adding a `from:` block. Each entry expands AT
@@ -10,7 +10,7 @@ package main
 // Scoring invariant: 1 Check = 1 ScenarioID = 1 point. Imported scenarios
 // are scored identically to hand-written ones (the harness scorer cannot
 // tell them apart). Enforced by TestImportedScenarioCountEqualsCheckCount
-// in harness_recipe_from_test.go.
+// in eval_recipe_from_test.go.
 //
 // Filter pipeline per `from:` entry, in order:
 //   1. Section filter via `scope:` (default: candy + box + deploy).
@@ -195,7 +195,7 @@ func validateFromEntryShape(recipeName string, idx int, from HarnessRecipeFrom) 
 		switch s {
 		case "candy", "box", "deploy":
 		default:
-			return fmt.Errorf("recipe %q: from[%d] (kind=%s name=%q): invalid scope value %q (one of: layer, image, deploy)",
+			return fmt.Errorf("recipe %q: from[%d] (kind=%s name=%q): invalid scope value %q (one of: candy, box, deploy)",
 				recipeName, idx, from.Kind, from.Name, s)
 		}
 	}
@@ -206,7 +206,7 @@ func validateFromEntryShape(recipeName string, idx int, from HarnessRecipeFrom) 
 		// Only candy/box carry descriptions today. pod/vm
 		// descriptions could be added later but are absent.
 		if from.Kind != "candy" && from.Kind != "box" {
-			return fmt.Errorf("recipe %q: from[%d] (kind=%s name=%q): source=description is only valid for kind=layer or kind=image (pod and vm don't carry description: blocks)",
+			return fmt.Errorf("recipe %q: from[%d] (kind=%s name=%q): source=description is only valid for kind=candy or kind=box (pod and vm don't carry description: blocks)",
 				recipeName, idx, from.Kind, from.Name)
 		}
 	default:
@@ -232,10 +232,10 @@ func collectScenariosForFromDescription(uf *UnifiedFile, layers map[string]*Cand
 	case "candy":
 		layer, ok := layers[from.Name]
 		if !ok {
-			return nil, fmt.Errorf("layer %q not found (available: %s)", from.Name, sortedMapKeys(layers))
+			return nil, fmt.Errorf("candy %q not found (available: %s)", from.Name, sortedMapKeys(layers))
 		}
 		if layer.Description == nil {
-			return nil, fmt.Errorf("layer %q has no description: block to import scenarios from", from.Name)
+			return nil, fmt.Errorf("candy %q has no description: block to import scenarios from", from.Name)
 		}
 		return append([]Scenario(nil), layer.Description.Scenario...), nil
 
@@ -252,7 +252,7 @@ func collectScenariosForFromDescription(uf *UnifiedFile, layers map[string]*Cand
 		}
 		set := CollectDescriptions(nsCfg, layers, leafName(from.Name))
 		if set == nil {
-			return nil, fmt.Errorf("image %q produced no descriptions (no layer in the chain has a description: block)", from.Name)
+			return nil, fmt.Errorf("box %q produced no descriptions (no candy in the chain has a description: block)", from.Name)
 		}
 		// Flatten the three sections into one slice. Authors who want
 		// section-specific behaviour can use kind: candy instead.
@@ -326,7 +326,7 @@ func collectChecksForFrom(uf *UnifiedFile, layers map[string]*Candy, from Harnes
 	case "candy":
 		layer, ok := layers[from.Name]
 		if !ok {
-			return nil, fmt.Errorf("layer %q not found (available: %s)", from.Name, sortedMapKeys(layers))
+			return nil, fmt.Errorf("candy %q not found (available: %s)", from.Name, sortedMapKeys(layers))
 		}
 		out := make([]Check, 0, len(layer.tests))
 		for _, c := range layer.tests {

@@ -89,7 +89,7 @@ candy:
 		t.Fatalf("ResolveDeployRef: %v", err)
 	}
 	if got.Kind != RefKindBox {
-		t.Errorf("primary ref: kind = %v, want image (image-first precedence)", got.Kind)
+		t.Errorf("primary ref: kind = %v, want box (box-first precedence)", got.Kind)
 	}
 
 	// `--add-layer` context → candy-first.
@@ -98,7 +98,7 @@ candy:
 		t.Fatalf("ResolveDeployRefAsCandy: %v", err)
 	}
 	if got.Kind != RefKindCandy {
-		t.Errorf("add-layer ref: kind = %v, want layer (layer-first precedence)", got.Kind)
+		t.Errorf("add-candy ref: kind = %v, want candy (candy-first precedence)", got.Kind)
 	}
 }
 
@@ -128,7 +128,7 @@ box:
 		t.Fatalf("ResolveDeployRef: %v", err)
 	}
 	if got.Kind != RefKindBox {
-		t.Errorf("kind = %v, want image", got.Kind)
+		t.Errorf("kind = %v, want box", got.Kind)
 	}
 	if got.Source != RefSourceLocalPath {
 		t.Errorf("source = %v, want local-path", got.Source)
@@ -150,7 +150,7 @@ rpm:
 		t.Fatalf("ResolveDeployRef: %v", err)
 	}
 	if got.Kind != RefKindCandy {
-		t.Errorf("kind = %v, want layer", got.Kind)
+		t.Errorf("kind = %v, want candy", got.Kind)
 	}
 }
 
@@ -162,7 +162,7 @@ func TestResolveDeployRefRemoteGitHubLegacy(t *testing.T) {
 		t.Fatalf("ResolveDeployRef: %v", err)
 	}
 	if got.Kind != RefKindCandy {
-		t.Errorf("kind = %v, want layer", got.Kind)
+		t.Errorf("kind = %v, want candy", got.Kind)
 	}
 	if got.Source != RefSourceRemote {
 		t.Errorf("source = %v, want remote", got.Source)
@@ -190,10 +190,10 @@ func TestResolveDeployRefRemoteCandy(t *testing.T) {
 		t.Fatalf("ResolveDeployRefAsCandy: %v", err)
 	}
 	if got.Kind != RefKindCandy {
-		t.Errorf("kind = %v, want layer (a candy/ ref is a layer)", got.Kind)
+		t.Errorf("kind = %v, want candy (a candy/ ref is a candy)", got.Kind)
 	}
 	if got.Source != RefSourceRemote || got.Remote == nil || got.Remote.Name != "charly" {
-		t.Errorf("got = %+v, want remote layer named charly", got)
+		t.Errorf("got = %+v, want remote candy named charly", got)
 	}
 	// And a box/<n> subpath classifies as a box.
 	img, err := ResolveDeployRef("@github.com/overthinkos/overthink/box/fedora-coder:v2026.157.0427", "")
@@ -201,7 +201,7 @@ func TestResolveDeployRefRemoteCandy(t *testing.T) {
 		t.Fatalf("ResolveDeployRef(box): %v", err)
 	}
 	if img.Kind != RefKindBox {
-		t.Errorf("box/ ref kind = %v, want image", img.Kind)
+		t.Errorf("box/ ref kind = %v, want box", img.Kind)
 	}
 }
 
@@ -213,7 +213,7 @@ func TestResolveDeployRefRemoteGitHubNewSyntax(t *testing.T) {
 		t.Fatalf("ResolveDeployRef: %v", err)
 	}
 	if got.Kind != RefKindCandy {
-		t.Errorf("kind = %v, want layer", got.Kind)
+		t.Errorf("kind = %v, want candy", got.Kind)
 	}
 	if got.Remote.Version != "main" {
 		t.Errorf("remote version = %q", got.Remote.Version)
@@ -227,7 +227,7 @@ func TestResolveDeployRefRemoteImage(t *testing.T) {
 		t.Fatalf("ResolveDeployRef: %v", err)
 	}
 	if got.Kind != RefKindBox {
-		t.Errorf("kind = %v, want image", got.Kind)
+		t.Errorf("kind = %v, want box", got.Kind)
 	}
 }
 
@@ -240,7 +240,7 @@ func TestResolveDeployRefRemoteBareRepo(t *testing.T) {
 		t.Fatalf("ResolveDeployRef: %v", err)
 	}
 	if got.Kind != RefKindBox {
-		t.Errorf("bare repo kind = %v, want image (default)", got.Kind)
+		t.Errorf("bare repo kind = %v, want box (default)", got.Kind)
 	}
 }
 
@@ -270,10 +270,10 @@ func TestClassifyYAMLFile(t *testing.T) {
 	_ = os.WriteFile(unknown, []byte("foo: bar\n"), 0644)
 
 	if k, err := classifyYAMLFile(image); err != nil || k != RefKindBox {
-		t.Errorf("image file: kind=%v err=%v, want image nil", k, err)
+		t.Errorf("box file: kind=%v err=%v, want box nil", k, err)
 	}
 	if k, err := classifyYAMLFile(layer); err != nil || k != RefKindCandy {
-		t.Errorf("layer file: kind=%v err=%v, want layer nil", k, err)
+		t.Errorf("candy file: kind=%v err=%v, want candy nil", k, err)
 	}
 	if _, err := classifyYAMLFile(unknown); err == nil {
 		t.Errorf("unknown file should return error")

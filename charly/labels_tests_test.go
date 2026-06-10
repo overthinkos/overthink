@@ -57,10 +57,10 @@ func TestExtractMetadata_Tests(t *testing.T) {
 	}
 
 	if len(meta.Eval.Candy) != 1 || meta.Eval.Candy[0].File != "/usr/bin/redis-server" {
-		t.Errorf("layer section wrong: %+v", meta.Eval.Candy)
+		t.Errorf("candy section wrong: %+v", meta.Eval.Candy)
 	}
 	if len(meta.Eval.Box) != 1 || meta.Eval.Box[0].Command != "supervisord -v" {
-		t.Errorf("image section wrong: %+v", meta.Eval.Box)
+		t.Errorf("box section wrong: %+v", meta.Eval.Box)
 	}
 	if len(meta.Eval.Deploy) != 1 {
 		t.Fatalf("deploy section wrong: %+v", meta.Eval.Deploy)

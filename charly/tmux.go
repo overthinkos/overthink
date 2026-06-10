@@ -261,7 +261,7 @@ func tmuxArgs(args []string) string {
 // checkTmuxInstalled verifies tmux is available on the venue (container/VM/host).
 func checkTmuxInstalled(ex DeployExecutor) error {
 	if !venueHasTool(ex, "tmux") {
-		return fmt.Errorf("tmux is not installed on the target (add the tmux layer to your image, or install it on the host/VM)")
+		return fmt.Errorf("tmux is not installed on the target (add the tmux candy to your box, or install it on the host/VM)")
 	}
 	return nil
 }

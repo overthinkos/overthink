@@ -216,12 +216,12 @@ func TestComputeDeployIDDeterminism(t *testing.T) {
 	// Reordering candies changes the ID (candy order matters for reproducibility).
 	c := computeDeployID("fedora-coder", []string{"uv", "ripgrep"}, nil)
 	if a == c {
-		t.Errorf("expected different IDs for different layer orders, both got %s", a)
+		t.Errorf("expected different IDs for different candy orders, both got %s", a)
 	}
 	// Adding an overlay changes the ID.
 	d := computeDeployID("fedora-coder", []string{"ripgrep", "uv"}, []string{"my-extras"})
 	if a == d {
-		t.Errorf("expected different IDs with add_layers, both got %s", a)
+		t.Errorf("expected different IDs with add_candies, both got %s", a)
 	}
 	if len(a) != 16 {
 		t.Errorf("deploy ID length = %d, want 16 (first 16 hex chars of sha256)", len(a))
@@ -238,13 +238,13 @@ func TestMergePlansOrderingAndID(t *testing.T) {
 
 	merged := MergePlan([]*InstallPlan{p1, p2}, "fedora-coder", nil)
 	if merged.Box != "fedora-coder" {
-		t.Errorf("merged.Image = %q, want fedora-coder", merged.Box)
+		t.Errorf("merged.Box = %q, want fedora-coder", merged.Box)
 	}
 	if len(merged.Steps) != 2 {
 		t.Errorf("merged.Steps len = %d, want 2", len(merged.Steps))
 	}
 	if merged.CandiesIncluded[0] != "ripgrep" || merged.CandiesIncluded[1] != "uv" {
-		t.Errorf("layer order wrong: %v", merged.CandiesIncluded)
+		t.Errorf("candy order wrong: %v", merged.CandiesIncluded)
 	}
 	if merged.DeployID == "" {
 		t.Errorf("merged DeployID is empty")
@@ -278,8 +278,8 @@ func TestDescribePlanSummary(t *testing.T) {
 		},
 	}
 	out := DescribePlan(p)
-	if !strings.Contains(out, "layer=x") {
-		t.Errorf("missing layer name in description: %s", out)
+	if !strings.Contains(out, "candy=x") {
+		t.Errorf("missing candy name in description: %s", out)
 	}
 	if !strings.Contains(out, "SystemPackages: 2") {
 		t.Errorf("missing SystemPackages count: %s", out)

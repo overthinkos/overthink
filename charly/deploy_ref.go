@@ -241,7 +241,7 @@ func classifyYAMLFile(path string) (RefKind, error) {
 			return RefKindCandy, nil
 		}
 	}
-	return "", fmt.Errorf("ResolveDeployRef: %s has no recognized image or layer keys", path)
+	return "", fmt.Errorf("ResolveDeployRef: %s has no recognized box or candy keys", path)
 }
 
 // resolveLocalName checks the unified loader's boxes and candy/ for
@@ -307,6 +307,6 @@ func resolveLocalName(name, projectDir string, preferKind RefKind) (*DeployRef, 
 		return candyRef(), nil
 	}
 
-	return nil, fmt.Errorf("ResolveDeployRef: %q not found as image in %s or layer in %s",
+	return nil, fmt.Errorf("ResolveDeployRef: %q not found as box in %s or candy in %s",
 		name, imgYml, candiesDir)
 }

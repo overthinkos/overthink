@@ -91,7 +91,7 @@ func (t *LocalUnifiedTarget) Del(ctx context.Context, opts DelOpts) error {
 			continue
 		}
 		if opts.DryRun {
-			fmt.Printf("[dry-run] would tear down host deploy %s (image=%s, %d layers)\n",
+			fmt.Printf("[dry-run] would tear down host deploy %s (image=%s, %d candies)\n",
 				rec.DeployID, rec.Image, len(rec.Candy))
 			continue
 		}
@@ -124,7 +124,7 @@ func teardownHostDeploy(paths *LedgerPaths, rec *DeployRecord, hostHome string, 
 			continue
 		}
 		if err := runReverseOps(candyRec.ReverseOps, re); err != nil {
-			return fmt.Errorf("reversing layer %s: %w", layer, err)
+			return fmt.Errorf("reversing candy %s: %w", layer, err)
 		}
 		_ = RemoveEnvdFile(hostHome, layer)
 		if err := DeleteCandyRecord(paths, layer); err != nil {
@@ -348,7 +348,7 @@ func (t *LocalUnifiedTarget) Add(ctx context.Context, dctx *DeployContext, plans
 	// each TaskStep's env BEFORE emission (R3 shared helper).
 	candyList, secretEnv, err := prepareCandySecrets(plans, dctx.Dir)
 	if err != nil {
-		return fmt.Errorf("loading layers for secret resolution: %w", err)
+		return fmt.Errorf("loading candies for secret resolution: %w", err)
 	}
 
 	// artifactEnv = secretEnv overlaid with the merged node's env: lines.
@@ -361,7 +361,7 @@ func (t *LocalUnifiedTarget) Add(ctx context.Context, dctx *DeployContext, plans
 	// Retrieve candy artifacts + k3s post-hook (R3 shared helper). No-op
 	// under DryRun.
 	if err := retrieveArtifactsAndK3s(ctx, exec, candyList, dctx.Name, artifactEnv, opts); err != nil {
-		return fmt.Errorf("retrieving layer artifacts: %w", err)
+		return fmt.Errorf("retrieving candy artifacts: %w", err)
 	}
 
 	// --verify: run the deployment's deploy-scope eval probes on the venue

@@ -42,7 +42,7 @@ func ExpandCandy(requested []string, layers map[string]*Candy) ([]string, error)
 			return nil
 		}
 		if expanding[name] {
-			return fmt.Errorf("circular layer composition: %s", name)
+			return fmt.Errorf("circular candy composition: %s", name)
 		}
 
 		layer, ok := layers[name]
@@ -120,7 +120,7 @@ func ResolveCandyOrder(requested []string, layers map[string]*Candy, parentCandi
 
 		layer, ok := layers[name]
 		if !ok {
-			return fmt.Errorf("unknown layer %q", name)
+			return fmt.Errorf("unknown candy %q", name)
 		}
 
 		visiting[name] = true

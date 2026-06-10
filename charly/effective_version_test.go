@@ -49,7 +49,7 @@ func TestComputeEffectiveVersions(t *testing.T) {
 		t.Fatal(err)
 	}
 	if got := g2.Boxes["derived"].EffectiveVersion; got != "2026.400.0" {
-		t.Errorf("after layer bump: EffectiveVersion = %q, want 2026.400.0", got)
+		t.Errorf("after candy bump: EffectiveVersion = %q, want 2026.400.0", got)
 	}
 
 	// Hard error: candyless external-base image with no version (no fallback).
@@ -58,6 +58,6 @@ func TestComputeEffectiveVersions(t *testing.T) {
 		Candies: map[string]*Candy{},
 	}
 	if err := gErr.computeEffectiveVersions(); err == nil {
-		t.Error("expected a hard error for a layerless external-base image with no version:")
+		t.Error("expected a hard error for a candyless external-base image with no version:")
 	}
 }

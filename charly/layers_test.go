@@ -17,7 +17,7 @@ func TestScanCandies(t *testing.T) {
 	expectedCandies := []string{"pixi", "python", "nodejs", "cargo-tool", "webservice", "pixi-locked"}
 	for _, name := range expectedCandies {
 		if _, ok := layers[name]; !ok {
-			t.Errorf("missing layer %q", name)
+			t.Errorf("missing candy %q", name)
 		}
 	}
 }
@@ -52,7 +52,7 @@ func TestCandyUnknownKeyRejected(t *testing.T) {
 		t.Fatalf("singular keys must parse, got error: %v", err)
 	}
 	if len(ly.Task) != 1 || ly.Vars["FOO"] != "bar" || len(ly.Candy) != 1 || len(ly.SecretAccept) != 1 {
-		t.Errorf("singular keys parsed but fields empty: task=%d var=%v layer=%v secret_accept=%d",
+		t.Errorf("singular keys parsed but fields empty: task=%d var=%v candy=%v secret_accept=%d",
 			len(ly.Task), ly.Vars, ly.Candy, len(ly.SecretAccept))
 	}
 
@@ -81,7 +81,7 @@ func TestCandyPixi(t *testing.T) {
 
 	pixi := layers["pixi"]
 	if pixi == nil {
-		t.Fatal("pixi layer not found")
+		t.Fatal("pixi candy not found")
 	}
 
 	if !pixi.HasTasks() {
@@ -106,7 +106,7 @@ func TestCandyPython(t *testing.T) {
 
 	python := layers["python"]
 	if python == nil {
-		t.Fatal("python layer not found")
+		t.Fatal("python candy not found")
 	}
 
 	if !python.HasPixiToml {
@@ -125,7 +125,7 @@ func TestCandyNodejs(t *testing.T) {
 
 	nodejs := layers["nodejs"]
 	if nodejs == nil {
-		t.Fatal("nodejs layer not found")
+		t.Fatal("nodejs candy not found")
 	}
 
 	// nodejs declares ONLY a top-level package: list (no distro: overrides), so it
@@ -150,7 +150,7 @@ func TestCandyPacTool(t *testing.T) {
 
 	pacTool := layers["pac-tool"]
 	if pacTool == nil {
-		t.Fatal("pac-tool layer not found")
+		t.Fatal("pac-tool candy not found")
 	}
 
 	// pac-tool declares distro.arch → the per-distro "arch" TAG section (bare
@@ -204,7 +204,7 @@ func TestCandyCargoTool(t *testing.T) {
 
 	cargoTool := layers["cargo-tool"]
 	if cargoTool == nil {
-		t.Fatal("cargo-tool layer not found")
+		t.Fatal("cargo-tool candy not found")
 	}
 
 	if !cargoTool.HasCargoToml {
@@ -227,7 +227,7 @@ func TestHasInstallFiles(t *testing.T) {
 
 	for name, layer := range layers {
 		if !layer.HasInstallFiles() {
-			t.Errorf("layer %q should have install files", name)
+			t.Errorf("candy %q should have install files", name)
 		}
 	}
 }
@@ -260,7 +260,7 @@ func TestCandyPorts(t *testing.T) {
 
 	ws := layers["webservice"]
 	if ws == nil {
-		t.Fatal("webservice layer not found")
+		t.Fatal("webservice candy not found")
 	}
 
 	if !ws.HasPorts() {
@@ -313,7 +313,7 @@ func TestCandyRoute(t *testing.T) {
 
 	ws := layers["webservice"]
 	if ws == nil {
-		t.Fatal("webservice layer not found")
+		t.Fatal("webservice candy not found")
 	}
 
 	if !ws.HasRoute() {
@@ -369,7 +369,7 @@ func TestCandyPixiLocked(t *testing.T) {
 
 	locked := layers["pixi-locked"]
 	if locked == nil {
-		t.Fatal("pixi-locked layer not found")
+		t.Fatal("pixi-locked candy not found")
 	}
 
 	if !locked.HasPixiToml {
@@ -394,7 +394,7 @@ func TestCandyPixiNoLock(t *testing.T) {
 
 	python := layers["python"]
 	if python == nil {
-		t.Fatal("python layer not found")
+		t.Fatal("python candy not found")
 	}
 
 	if !python.HasPixiToml {
@@ -413,7 +413,7 @@ func TestCandyVolumes(t *testing.T) {
 
 	ws := layers["webservice"]
 	if ws == nil {
-		t.Fatal("webservice layer not found")
+		t.Fatal("webservice candy not found")
 	}
 
 	if !ws.HasVolumes() {
@@ -455,7 +455,7 @@ func TestVolumeCandies(t *testing.T) {
 
 	vols := VolumeCandy(layers)
 	if len(vols) != 1 {
-		t.Errorf("VolumeCandy() returned %d layers, want 1", len(vols))
+		t.Errorf("VolumeCandy() returned %d candies, want 1", len(vols))
 	}
 	if len(vols) > 0 && vols[0].Name != "webservice" {
 		t.Errorf("VolumeCandy()[0].Name = %q, want %q", vols[0].Name, "webservice")
@@ -470,7 +470,7 @@ func TestCandyPortRelayFromYAML(t *testing.T) {
 
 	ws := layers["webservice"]
 	if ws == nil {
-		t.Fatal("webservice layer not found")
+		t.Fatal("webservice candy not found")
 	}
 
 	if len(ws.PortRelayPorts) == 0 {
@@ -494,7 +494,7 @@ func TestCandyPortRelay(t *testing.T) {
 	}
 
 	if len(layer.PortRelayPorts) == 0 {
-		t.Error("layer should have port_relay")
+		t.Error("candy should have port_relay")
 	}
 	relay := layer.PortRelayPorts
 	if len(relay) != 1 || relay[0] != 9222 {
@@ -509,7 +509,7 @@ func TestCandyPortRelayNone(t *testing.T) {
 	}
 
 	if len(layer.PortRelayPorts) != 0 {
-		t.Error("basic layer should not have port_relay")
+		t.Error("basic candy should not have port_relay")
 	}
 }
 
@@ -539,7 +539,7 @@ func TestRouteCandies(t *testing.T) {
 
 	routes := RouteCandy(layers)
 	if len(routes) != 1 {
-		t.Errorf("RouteCandy() returned %d layers, want 1", len(routes))
+		t.Errorf("RouteCandy() returned %d candies, want 1", len(routes))
 	}
 	if len(routes) > 0 && routes[0].Name != "webservice" {
 		t.Errorf("RouteCandy()[0].Name = %q, want %q", routes[0].Name, "webservice")

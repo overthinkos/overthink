@@ -59,7 +59,7 @@ func TestGlobalCandyOrder_RespectsDependencies(t *testing.T) {
 	}
 
 	if len(order) != 2 {
-		t.Fatalf("expected 2 layers, got %d: %v", len(order), order)
+		t.Fatalf("expected 2 candies, got %d: %v", len(order), order)
 	}
 	if order[0] != "pixi" || order[1] != "python" {
 		t.Errorf("expected [pixi python], got %v", order)
@@ -120,7 +120,7 @@ func TestGlobalCandyOrder_ConflictingListOrderFallsBack(t *testing.T) {
 		t.Fatalf("GlobalCandyOrder() should not error on conflicting authored orders, got %v", err)
 	}
 	if len(order) != 2 {
-		t.Fatalf("expected 2 layers, got %d: %v", len(order), order)
+		t.Fatalf("expected 2 candies, got %d: %v", len(order), order)
 	}
 }
 
@@ -299,7 +299,7 @@ func TestComputeIntermediates_SharedPrefix(t *testing.T) {
 	if autoCount == 0 {
 		t.Error("expected at least 1 auto intermediate, got 0")
 		for name, img := range result {
-			t.Logf("  %s: base=%s layers=%v auto=%v", name, img.Base, img.Candy, img.Auto)
+			t.Logf("  %s: base=%s candies=%v auto=%v", name, img.Base, img.Candy, img.Auto)
 		}
 	}
 
@@ -309,7 +309,7 @@ func TestComputeIntermediates_SharedPrefix(t *testing.T) {
 	if ftImg.Base == "fedora" && ocImg.Base == "fedora" {
 		t.Error("both images still use fedora as base — expected an intermediate")
 		for name, img := range result {
-			t.Logf("  %s: base=%s layers=%v auto=%v", name, img.Base, img.Candy, img.Auto)
+			t.Logf("  %s: base=%s candies=%v auto=%v", name, img.Base, img.Candy, img.Auto)
 		}
 	}
 }
@@ -411,7 +411,7 @@ func TestImageNeedsBuilder(t *testing.T) {
 
 	// nil candies → conservative true
 	if !BoxNeedsBuilder(images["simple"], images, nil) {
-		t.Error("nil layers should return true (conservative)")
+		t.Error("nil candies should return true (conservative)")
 	}
 }
 
@@ -469,7 +469,7 @@ func TestComputeIntermediates_RealisticConfig(t *testing.T) {
 	// Log all images for debugging
 	t.Log("Resulting images:")
 	for name, img := range result {
-		t.Logf("  %s: base=%s layers=%v auto=%v", name, img.Base, img.Candy, img.Auto)
+		t.Logf("  %s: base=%s candies=%v auto=%v", name, img.Base, img.Candy, img.Auto)
 	}
 
 	// All original images should still exist
@@ -622,7 +622,7 @@ func TestComputeIntermediates_NvidiaScenario(t *testing.T) {
 		if img.Auto {
 			autoStr = " [auto]"
 		}
-		t.Logf("  %s%s: base=%s layers=%v", name, autoStr, img.Base, img.Candy)
+		t.Logf("  %s%s: base=%s candies=%v", name, autoStr, img.Base, img.Candy)
 	}
 
 	// CRITICAL: no python-ml-2 should exist
@@ -755,7 +755,7 @@ func TestComputeIntermediates_UserImageAtBranchPoint(t *testing.T) {
 		if img.Auto {
 			autoStr = " [auto]"
 		}
-		t.Logf("  %s%s: base=%s layers=%v", name, autoStr, img.Base, img.Candy)
+		t.Logf("  %s%s: base=%s candies=%v", name, autoStr, img.Base, img.Candy)
 	}
 
 	// svbase should NOT be duplicated (no svbase-2, no supervisord auto with same candies)
@@ -767,7 +767,7 @@ func TestComputeIntermediates_UserImageAtBranchPoint(t *testing.T) {
 				// there should be no supervisord auto that duplicates svbase
 				lastCandy := img.Candy[len(img.Candy)-1]
 				if lastCandy == "supervisord" && img.Base == "fedora" {
-					t.Errorf("auto-intermediate %q duplicates svbase (base=%s layers=%v)", name, img.Base, img.Candy)
+					t.Errorf("auto-intermediate %q duplicates svbase (base=%s candies=%v)", name, img.Base, img.Candy)
 				}
 			}
 		}
@@ -852,7 +852,7 @@ func TestComputeIntermediates_UserImageAsBranchIntermediate(t *testing.T) {
 		if img.Auto {
 			autoStr = " [auto]"
 		}
-		t.Logf("  %s%s: base=%s layers=%v", name, autoStr, img.Base, img.Candy)
+		t.Logf("  %s%s: base=%s candies=%v", name, autoStr, img.Base, img.Candy)
 	}
 
 	// mid should keep base=base (not rebased)
@@ -886,7 +886,7 @@ func TestComputeIntermediates_UserImageAsBranchIntermediate(t *testing.T) {
 		if img.Auto && name != "mid" {
 			for _, l := range img.Candy {
 				if l == "B" {
-					t.Errorf("auto-intermediate %q has layer B, may duplicate mid (layers=%v)", name, img.Candy)
+					t.Errorf("auto-intermediate %q has candy B, may duplicate mid (candies=%v)", name, img.Candy)
 				}
 			}
 		}
@@ -1018,12 +1018,12 @@ func TestPixiBoundCandies(t *testing.T) {
 
 	// unsloth has user.yml, no pixi.toml, included by pixi-owning candies → pixi-bound
 	if !bound["unsloth"] {
-		t.Error("unsloth should be pixi-bound (has user.yml, no pixi.toml, included by pixi-owning layer)")
+		t.Error("unsloth should be pixi-bound (has user.yml, no pixi.toml, included by pixi-owning candy)")
 	}
 
 	// llama-cpp has user.yml, no pixi.toml, included by pixi-owning candies → pixi-bound
 	if !bound["llama-cpp"] {
-		t.Error("llama-cpp should be pixi-bound (has user.yml, no pixi.toml, included by pixi-owning layer)")
+		t.Error("llama-cpp should be pixi-bound (has user.yml, no pixi.toml, included by pixi-owning candy)")
 	}
 
 	// jupyter-ml has pixi.toml → NOT pixi-bound (it owns its env)
@@ -1033,7 +1033,7 @@ func TestPixiBoundCandies(t *testing.T) {
 
 	// cuda has root.yml but is NOT included by any pixi-owning candy → NOT pixi-bound
 	if bound["cuda"] {
-		t.Error("cuda should NOT be pixi-bound (not included by pixi-owning layer)")
+		t.Error("cuda should NOT be pixi-bound (not included by pixi-owning candy)")
 	}
 }
 
@@ -1137,7 +1137,7 @@ func TestComputeIntermediates_PixiBoundNotExtracted(t *testing.T) {
 		if img.Auto {
 			autoStr = " [auto]"
 		}
-		t.Logf("  %s%s: base=%s layers=%v", name, autoStr, img.Base, img.Candy)
+		t.Logf("  %s%s: base=%s candies=%v", name, autoStr, img.Base, img.Candy)
 	}
 
 	// CRITICAL: No auto-intermediate should contain unsloth or llama-cpp
@@ -1148,10 +1148,10 @@ func TestComputeIntermediates_PixiBoundNotExtracted(t *testing.T) {
 		}
 		for _, l := range img.Candy {
 			if l == "unsloth" {
-				t.Errorf("auto-intermediate %q contains pixi-bound layer 'unsloth' — will fail at build time (no pixi env)", name)
+				t.Errorf("auto-intermediate %q contains pixi-bound candy 'unsloth' — will fail at build time (no pixi env)", name)
 			}
 			if l == "llama-cpp" {
-				t.Errorf("auto-intermediate %q contains pixi-bound layer 'llama-cpp' — will fail at build time (no pixi env)", name)
+				t.Errorf("auto-intermediate %q contains pixi-bound candy 'llama-cpp' — will fail at build time (no pixi env)", name)
 			}
 		}
 	}

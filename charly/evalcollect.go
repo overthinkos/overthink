@@ -12,7 +12,7 @@ package main
 //   - Candy-defined checks with scope:"deploy" land in Deploy.
 //   - Box-level Tests default to scope:"build" → Box section;
 //     scope:"deploy" routes to Deploy.
-//   - Box-level DeployTests always land in Deploy (scope forced to "deploy").
+//   - Box-level DeployEval always land in Deploy (scope forced to "deploy").
 //
 // Each check receives an Origin annotation for reporting:
 // "candy:<name>", "box:<name>", or "deploy-default" (for box deploy entries).
@@ -57,7 +57,7 @@ func CollectEval(cfg *Config, layers map[string]*Candy, boxName string) *LabelEv
 		}
 	}
 
-	// Box-level Tests (defaults to build scope) and DeployTests.
+	// Box-level Tests (defaults to build scope) and DeployEval.
 	if img, ok := cfg.Box[boxName]; ok {
 		for _, c := range img.Eval {
 			c.Origin = "box:" + boxName

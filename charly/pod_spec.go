@@ -41,7 +41,7 @@ type PodSpec struct {
 	// and box tests stay where authored and propagate automatically.
 	Eval []Check `yaml:"eval,omitempty"`
 
-	// DeployTests are optional target-specific deploy-scope defaults.
+	// DeployEval are optional target-specific deploy-scope defaults.
 	// Default empty. Deployment-level tests overlay on top via
 	// MergeDeployEval.
 	DeployEval []Check `yaml:"deploy_eval,omitempty"`

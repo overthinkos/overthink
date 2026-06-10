@@ -51,7 +51,7 @@ func RetrieveCandyArtifacts(
 		}
 		for _, a := range artifacts {
 			if err := retrieveOne(ctx, exec, layer.Name, a, deployName, envVars, opts); err != nil {
-				return fmt.Errorf("layer %q artifact %q: %w", layer.Name, a.Name, err)
+				return fmt.Errorf("candy %q artifact %q: %w", layer.Name, a.Name, err)
 			}
 		}
 	}

@@ -91,7 +91,7 @@ func TestValidateTests_UnknownScope(t *testing.T) {
 	}
 }
 
-// ID collisions within image.Eval and across image.Eval ↔ DeployTests.
+// ID collisions within image.Eval and across image.Eval ↔ DeployEval.
 func TestValidateTests_IDUniqueness_SameImage(t *testing.T) {
 	cfg := &Config{Box: map[string]BoxConfig{
 		"img": {
@@ -119,7 +119,7 @@ func TestValidateTests_IDUniqueness_CrossCandy(t *testing.T) {
 	}}
 	got := runValidateTests(t, cfg, layers)
 	if !strings.Contains(got, "duplicate id") || !strings.Contains(got, "candy") {
-		t.Errorf("expected cross-layer duplicate-id error: %s", got)
+		t.Errorf("expected cross-candy duplicate-id error: %s", got)
 	}
 }
 

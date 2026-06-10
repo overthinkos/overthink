@@ -59,7 +59,7 @@ func ResolveRemoteImage(ref string, tag string) (*RemoteImageContext, error) {
 	// Scan candies from the cached repo
 	layers, err := ScanAllCandyWithConfig(cachePath, cfg)
 	if err != nil {
-		return nil, fmt.Errorf("scanning layers in %s: %w", parsed.RepoPath, err)
+		return nil, fmt.Errorf("scanning candies in %s: %w", parsed.RepoPath, err)
 	}
 
 	// Build the registry image ref for pulling

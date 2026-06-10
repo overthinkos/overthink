@@ -34,7 +34,7 @@ func (c *FeatureListCmd) Run() error {
 	}
 	layers, err := ScanCandy(cwd)
 	if err != nil {
-		return fmt.Errorf("scanning layers: %w", err)
+		return fmt.Errorf("scanning candies: %w", err)
 	}
 
 	filter := strings.ToLower(strings.TrimSpace(c.Kind))
@@ -87,7 +87,7 @@ func summarizeDesc(kind, name string, d *Description) {
 // FeaturePendingCmd: `charly feature pending <entity>`. Lists steps with
 // no bound verb (pending) so authors see outstanding work.
 type FeaturePendingCmd struct {
-	Entity   string `arg:"" optional:"" help:"Entity identifier (e.g. layer:redis); default: all"`
+	Entity   string `arg:"" optional:"" help:"Entity identifier (e.g. candy:redis); default: all"`
 	Skeleton bool   `long:"skeleton" help:"Also list scenarios tagged @skeleton (migration placeholders)"`
 }
 
@@ -103,7 +103,7 @@ func (c *FeaturePendingCmd) Run() error {
 	}
 	layers, err := ScanCandy(cwd)
 	if err != nil {
-		return fmt.Errorf("scanning layers: %w", err)
+		return fmt.Errorf("scanning candies: %w", err)
 	}
 
 	filter := strings.ToLower(strings.TrimSpace(c.Entity))
@@ -162,7 +162,7 @@ func (c *FeaturePendingCmd) Run() error {
 // description: block and reports issues. Called automatically by
 // `charly box validate` as of the cutover.
 type FeatureValidateCmd struct {
-	Entity string `arg:"" optional:"" help:"Entity identifier (e.g. layer:redis); default: all"`
+	Entity string `arg:"" optional:"" help:"Entity identifier (e.g. candy:redis); default: all"`
 }
 
 // Run executes `charly feature validate`.
@@ -177,7 +177,7 @@ func (c *FeatureValidateCmd) Run() error {
 	}
 	layers, err := ScanCandy(cwd)
 	if err != nil {
-		return fmt.Errorf("scanning layers: %w", err)
+		return fmt.Errorf("scanning candies: %w", err)
 	}
 
 	filter := strings.ToLower(strings.TrimSpace(c.Entity))

@@ -166,7 +166,7 @@ func TestVmUnifiedTarget_Rebuild_DryRun(t *testing.T) {
 	// The candy re-apply step (the fix) must be present, keyed on NodeName.
 	deployAdd := "dry-run: charly deploy add k3s-vm"
 	if !strings.Contains(out, deployAdd) {
-		t.Errorf("Rebuild dry-run missing layer re-apply step %q in:\n%s", deployAdd, out)
+		t.Errorf("Rebuild dry-run missing candy re-apply step %q in:\n%s", deployAdd, out)
 	}
 	// And it must come AFTER `charly vm start` (re-apply on the booted guest).
 	vmStart := "dry-run: charly vm start k3s"
@@ -185,7 +185,7 @@ func TestVmUnifiedTarget_Rebuild_DryRun(t *testing.T) {
 		t.Errorf("Rebuild dry-run no-box: should not emit `charly vm build` in:\n%s", out)
 	}
 	if !strings.Contains(out, deployAdd) {
-		t.Errorf("Rebuild dry-run no-box: missing layer re-apply step %q in:\n%s", deployAdd, out)
+		t.Errorf("Rebuild dry-run no-box: missing candy re-apply step %q in:\n%s", deployAdd, out)
 	}
 }
 

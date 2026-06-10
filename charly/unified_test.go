@@ -60,7 +60,7 @@ box:
 	}
 	fedora, ok := uf.Box["fedora"]
 	if !ok {
-		t.Fatal("images.fedora missing")
+		t.Fatal("box.fedora missing")
 	}
 	if fedora.Base != "quay.io/fedora/fedora:43" {
 		t.Errorf("Base = %q", fedora.Base)
@@ -130,7 +130,7 @@ box:
 		t.Error("Distros.fedora missing")
 	}
 	if _, ok := uf.Box["fedora"]; !ok {
-		t.Error("Images.fedora missing")
+		t.Error("Box.fedora missing")
 	}
 }
 
@@ -176,13 +176,13 @@ box:
 		t.Fatalf("LoadUnified: %v", err)
 	}
 	if _, ok := uf.Candy["chrome"]; !ok {
-		t.Error("layers.chrome missing")
+		t.Error("candy.chrome missing")
 	}
 	if _, ok := uf.Candy["firefox"]; !ok {
-		t.Error("layers.firefox missing")
+		t.Error("candy.firefox missing")
 	}
 	if _, ok := uf.Box["browsers"]; !ok {
-		t.Error("images.browsers missing")
+		t.Error("box.browsers missing")
 	}
 }
 
@@ -230,10 +230,10 @@ discover:
 		t.Fatalf("ApplyDiscover: %v", err)
 	}
 	if _, ok := uf.Candy["chrome"]; !ok {
-		t.Error("discovered layers.chrome missing")
+		t.Error("discovered candy.chrome missing")
 	}
 	if _, ok := uf.Candy["firefox"]; !ok {
-		t.Error("discovered layers.firefox missing")
+		t.Error("discovered candy.firefox missing")
 	}
 }
 
@@ -258,7 +258,7 @@ candy:
 	}
 	il := uf.Candy["chrome"]
 	if il == nil {
-		t.Fatal("layers.chrome missing")
+		t.Fatal("candy.chrome missing")
 	}
 	if il.From != "custom/chrome" {
 		t.Errorf("explicit map entry lost: From = %q, want custom/chrome", il.From)
@@ -347,7 +347,7 @@ discover:
 		t.Fatalf("ApplyDiscover: %v", err)
 	}
 	if _, ok := uf.Box["myimg"]; !ok {
-		t.Error("shape-routed discovery did not register the box: doc as an image")
+		t.Error("shape-routed discovery did not register the box: doc as a box")
 	}
 }
 
@@ -392,6 +392,6 @@ box:
 		t.Errorf("Defaults.Registry = %q", cfg.Defaults.Registry)
 	}
 	if cfg.Box["foo"].Base != "alpine" {
-		t.Errorf("Images.foo.Base = %q", cfg.Box["foo"].Base)
+		t.Errorf("Box.foo.Base = %q", cfg.Box["foo"].Base)
 	}
 }

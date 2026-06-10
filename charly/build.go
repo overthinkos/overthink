@@ -411,20 +411,20 @@ func (c *BuildCmd) runPrivilegedBootstrap(engine, dir, boxName string, img *Reso
 	}
 	builderName := strings.TrimPrefix(img.From, "builder:")
 	if img.BootstrapBuilderImage == "" {
-		return fmt.Errorf("image %s: from: builder:%s requires bootstrap_builder_image: in charly.yml", boxName, builderName)
+		return fmt.Errorf("box %s: from: builder:%s requires bootstrap_builder_image: in charly.yml", boxName, builderName)
 	}
 	if img.BuilderConfig == nil {
-		return fmt.Errorf("image %s: build.yml builder: section is empty", boxName)
+		return fmt.Errorf("box %s: build.yml builder: section is empty", boxName)
 	}
 	builder, ok := img.BuilderConfig.Builder[builderName]
 	if !ok {
-		return fmt.Errorf("image %s: builder %q is not declared in build.yml", boxName, builderName)
+		return fmt.Errorf("box %s: builder %q is not declared in build.yml", boxName, builderName)
 	}
 	if !builder.IsBootstrap() {
-		return fmt.Errorf("image %s: builder %q is not kind: bootstrap (got kind=%q)", boxName, builderName, builder.Kind)
+		return fmt.Errorf("box %s: builder %q is not kind: bootstrap (got kind=%q)", boxName, builderName, builder.Kind)
 	}
 	if img.DistroDef == nil {
-		return fmt.Errorf("image %s: distro %v has no resolved DistroDef", boxName, img.Distro)
+		return fmt.Errorf("box %s: distro %v has no resolved DistroDef", boxName, img.Distro)
 	}
 
 	output := builder.OutputArtifact
@@ -844,7 +844,7 @@ func filterBox(order []string, requested []string, boxes map[string]*ResolvedBox
 	// Validate requested images exist
 	for _, name := range requested {
 		if _, ok := boxes[name]; !ok {
-			return nil, fmt.Errorf("unknown image %q", name)
+			return nil, fmt.Errorf("unknown box %q", name)
 		}
 	}
 

@@ -20,8 +20,8 @@ import (
 
 // BoxPkgCmd builds native package artifacts for a candy's localpkg sources.
 type BoxPkgCmd struct {
-	Format []string `arg:"" optional:"" help:"Package formats to build (pac/rpm/deb). Default: every format the layer declares a localpkg source for."`
-	Candy  string   `long:"candy" default:"charly" help:"Layer whose localpkg sources to build."`
+	Format []string `arg:"" optional:"" help:"Package formats to build (pac/rpm/deb). Default: every format the candy declares a localpkg source for."`
+	Candy  string   `long:"candy" default:"charly" help:"Candy whose localpkg sources to build."`
 	Out    string   `long:"out" default:"dist" help:"Output directory for the built package files."`
 }
 
@@ -35,11 +35,11 @@ func (c *BoxPkgCmd) Run() error {
 	// sources (config-driven — no hardcoded pkg/<dir> paths).
 	layers, err := ScanCandy(dir)
 	if err != nil {
-		return fmt.Errorf("scanning layers: %w", err)
+		return fmt.Errorf("scanning candies: %w", err)
 	}
 	lyr := layers[c.Candy]
 	if lyr == nil {
-		return fmt.Errorf("layer %q not found in %s/candy", c.Candy, dir)
+		return fmt.Errorf("candy %q not found in %s/candy", c.Candy, dir)
 	}
 
 	formats := c.Format
@@ -47,7 +47,7 @@ func (c *BoxPkgCmd) Run() error {
 		formats = lyr.LocalPkgFormats()
 	}
 	if len(formats) == 0 {
-		return fmt.Errorf("layer %q declares no localpkg sources", c.Candy)
+		return fmt.Errorf("candy %q declares no localpkg sources", c.Candy)
 	}
 
 	// Load the build config to resolve each format's local_pkg contract.
@@ -68,7 +68,7 @@ func (c *BoxPkgCmd) Run() error {
 	for _, format := range formats {
 		src := lyr.LocalPkg(format)
 		if src == "" {
-			return fmt.Errorf("layer %q declares no localpkg source for format %q", c.Candy, format)
+			return fmt.Errorf("candy %q declares no localpkg source for format %q", c.Candy, format)
 		}
 		lp := lookupLocalPkgDef(dc, format)
 		if lp == nil {
@@ -78,7 +78,7 @@ func (c *BoxPkgCmd) Run() error {
 		if srcDir == "" {
 			return fmt.Errorf("package source %q for format %q not found (sentinel %q)", src, format, lp.SourceSentinel)
 		}
-		fmt.Fprintf(os.Stderr, "Building %s package for layer %q from %s\n", format, c.Candy, srcDir)
+		fmt.Fprintf(os.Stderr, "Building %s package for candy %q from %s\n", format, c.Candy, srcDir)
 		files, err := buildLocalPkgOnHost(ctx, lp, srcDir, EmitOpts{})
 		if err != nil {
 			return fmt.Errorf("building %s package: %w", format, err)

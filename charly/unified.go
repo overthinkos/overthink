@@ -590,7 +590,7 @@ func rejectLegacyMarimoMl(root string, merged *UnifiedFile) error {
 	}
 	if _, ok := merged.Box["marimo-ml"]; ok {
 		return fmt.Errorf(
-			"%s: image entry %q is retired (2026-04 marimo-rename cutover, 2026-05 versa-rename cutover).\n  Renamed to `versa` (cross-kind name reuse). Run: charly migrate",
+			"%s: box entry %q is retired (2026-04 marimo-rename cutover, 2026-05 versa-rename cutover).\n  Renamed to `versa` (cross-kind name reuse). Run: charly migrate",
 			root, "marimo-ml")
 	}
 	var walk func(name string, node *DeploymentNode) error
@@ -605,7 +605,7 @@ func rejectLegacyMarimoMl(root string, merged *UnifiedFile) error {
 		}
 		if node.Box == "marimo-ml" {
 			return fmt.Errorf(
-				"%s: deployment %q references retired image %q (2026-04 marimo-rename cutover, 2026-05 versa-rename cutover).\n  Renamed to `versa`. Run: charly migrate",
+				"%s: deployment %q references retired box %q (2026-04 marimo-rename cutover, 2026-05 versa-rename cutover).\n  Renamed to `versa`. Run: charly migrate",
 				root, name, "marimo-ml")
 		}
 		for childName, child := range node.Nested {
@@ -773,7 +773,7 @@ func expandRecipeFromIfNeeded(merged *UnifiedFile, dir string) error {
 	}
 	layers, err := merged.ProjectCandies(dir)
 	if err != nil {
-		return fmt.Errorf("project layers (for from: expansion): %w", err)
+		return fmt.Errorf("project candies (for from: expansion): %w", err)
 	}
 	// recipe-name → set of vm names imported into that recipe.
 	vmImportsByRecipe := map[string]map[string]bool{}
@@ -2588,7 +2588,7 @@ func (uf *UnifiedFile) ProjectCandies(rootDir string) (map[string]*Candy, error)
 			}
 			layer, err := scanCandy(p, name, manifest)
 			if err != nil {
-				return nil, fmt.Errorf("layer %q from %q: %w", name, il.From, err)
+				return nil, fmt.Errorf("candy %q from %q: %w", name, il.From, err)
 			}
 			// Candies discovered via `include:` of a remote charly.yml
 			// live OUTSIDE the workspace's project tree (typically in
@@ -2609,7 +2609,7 @@ func (uf *UnifiedFile) ProjectCandies(rootDir string) (map[string]*Candy, error)
 		// Inline candy — synthesize.
 		layer, err := synthesizeInlineCandy(name, il, rootDir)
 		if err != nil {
-			return nil, fmt.Errorf("inline layer %q: %w", name, err)
+			return nil, fmt.Errorf("inline candy %q: %w", name, err)
 		}
 		out[name] = layer
 	}

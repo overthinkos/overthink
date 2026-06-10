@@ -147,7 +147,7 @@ func provisionData(engine string, imageRef string, meta *BoxMetadata,
 			// image. charly validate also catches this at build time, but this
 			// is the runtime safety net.
 			fmt.Fprintf(os.Stderr,
-				"  data entry references unknown volume %q (layer=%s, staging=%s) — skipping\n",
+				"  data entry references unknown volume %q (candy=%s, staging=%s) — skipping\n",
 				entry.Volume, entry.Candy, entry.Staging)
 			continue
 		}

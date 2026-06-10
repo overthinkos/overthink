@@ -160,7 +160,7 @@ func NewGenerator(dir string, tag string, opts ResolveOpts) (*Generator, error) 
 	// Compute global candy order for consistent cross-image ordering
 	globalOrder, err := GlobalCandyOrder(images, layers)
 	if err != nil {
-		return nil, fmt.Errorf("computing global layer order: %w", err)
+		return nil, fmt.Errorf("computing global candy order: %w", err)
 	}
 
 	g := &Generator{
@@ -238,7 +238,7 @@ func (g *Generator) Generate() error {
 
 	// Create symlinks for remote candies in .build/_layers/
 	if err := g.createRemoteCandyCopies(); err != nil {
-		return fmt.Errorf("creating remote layer symlinks: %w", err)
+		return fmt.Errorf("creating remote candy symlinks: %w", err)
 	}
 
 	// Resolve box build order
@@ -407,12 +407,12 @@ func (g *Generator) generateContainerfile(boxName string) error {
 				}
 				builderRef := g.builderRefForFormat(boxName, builderName)
 				if builderRef == "" {
-					return fmt.Errorf("image %q: layer %q needs builder %q but no builders.%s configured", boxName, candyName, builderName, builderName)
+					return fmt.Errorf("image %q: candy %q needs builder %q but no builders.%s configured", boxName, candyName, builderName, builderName)
 				}
 				ctx := g.buildStageContext(layer, builderName, builderDef, img, builderRef)
 				rendered, err := RenderTemplate(builderName+"-stage", builderDef.StageTemplate, ctx)
 				if err != nil {
-					return fmt.Errorf("image %q: rendering %s stage for layer %q: %w", boxName, builderName, candyName, err)
+					return fmt.Errorf("image %q: rendering %s stage for candy %q: %w", boxName, builderName, candyName, err)
 				}
 				b.WriteString(rendered)
 				b.WriteString("\n")
@@ -2312,7 +2312,7 @@ func (g *Generator) createRemoteCandyCopies() error {
 		destPath := filepath.Join(candiesDir, layer.Name)
 		cmd := exec.Command("cp", "-a", layer.Path, destPath)
 		if out, err := cmd.CombinedOutput(); err != nil {
-			return fmt.Errorf("copying remote layer %s: %s: %w", ref, string(out), err)
+			return fmt.Errorf("copying remote candy %s: %s: %w", ref, string(out), err)
 		}
 	}
 

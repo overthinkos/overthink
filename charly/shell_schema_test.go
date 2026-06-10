@@ -169,7 +169,7 @@ func TestLabelShellSet_RoundTrip(t *testing.T) {
 		t.Fatalf("unmarshal: %v", err)
 	}
 	if len(roundtripped.Candy) != 1 {
-		t.Fatalf("Layer count: %d", len(roundtripped.Candy))
+		t.Fatalf("Candy count: %d", len(roundtripped.Candy))
 	}
 	got := roundtripped.Candy[0]
 	if got.Origin != "direnv" || got.ID != "direnv" {

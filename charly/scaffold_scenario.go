@@ -27,7 +27,7 @@ import (
 
 // CandyAddScenarioCmd: `charly candy add-scenario <candy> <name> [--given … --when … --then …]`.
 type CandyAddScenarioCmd struct {
-	Name     string   `arg:"" help:"Layer name (under candy/)"`
+	Name     string   `arg:"" help:"Candy name (under candy/)"`
 	Scenario string   `arg:"" name:"scenario" help:"Scenario name (idempotent: a no-op if a scenario with this name already exists)"`
 	Given    []string `long:"given" help:"Given step text (repeatable; the scenario's preconditions)"`
 	When     []string `long:"when" help:"When step text (repeatable; the action)"`

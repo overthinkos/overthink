@@ -157,7 +157,7 @@ func (c *BoxConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	} else {
 		deployBoxName = resolveDeployBoxName(c.Box, c.Instance)
 		if deployBoxName != c.Box {
-			fmt.Fprintf(os.Stderr, "config: deploy %q declares image: %q\n", c.Box, deployBoxName)
+			fmt.Fprintf(os.Stderr, "config: deploy %q declares box: %q\n", c.Box, deployBoxName)
 		}
 		imageRef = resolveShellImageRef("", deployBoxName, c.Tag)
 	}

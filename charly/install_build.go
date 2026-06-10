@@ -62,7 +62,7 @@ type HostContext struct {
 // ledger: each candy's teardown is independent.
 func BuildDeployPlan(layer *Candy, img *ResolvedBox, hostCtx HostContext) (*InstallPlan, error) {
 	if layer == nil {
-		return nil, fmt.Errorf("BuildDeployPlan: nil layer")
+		return nil, fmt.Errorf("BuildDeployPlan: nil candy")
 	}
 	if img == nil {
 		return nil, fmt.Errorf("BuildDeployPlan: nil image %q", layer.Name)
@@ -1019,7 +1019,7 @@ func DescribePlan(p *InstallPlan) string {
 		return "<nil>"
 	}
 	var b strings.Builder
-	fmt.Fprintf(&b, "Plan: layer=%s image=%s distro=%s steps=%d\n",
+	fmt.Fprintf(&b, "Plan: candy=%s image=%s distro=%s steps=%d\n",
 		p.Candy, p.Box, p.Distro, len(p.Steps))
 	counts := map[StepKind]int{}
 	for _, s := range p.Steps {

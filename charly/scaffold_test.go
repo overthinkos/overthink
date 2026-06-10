@@ -23,7 +23,7 @@ func TestScaffoldCandy(t *testing.T) {
 	// Check directory was created
 	candyDir := filepath.Join(tmpDir, "candy", "test-layer")
 	if _, err := os.Stat(candyDir); os.IsNotExist(err) {
-		t.Error("layer directory was not created")
+		t.Error("candy directory was not created")
 	}
 
 	// Check the candy manifest was created (the single charly.yml filename)
@@ -50,6 +50,6 @@ func TestScaffoldCandyAlreadyExists(t *testing.T) {
 	// Try to scaffold - should fail
 	err = ScaffoldCandy(tmpDir, "existing")
 	if err == nil {
-		t.Error("expected error for existing layer")
+		t.Error("expected error for existing candy")
 	}
 }

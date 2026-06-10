@@ -717,7 +717,7 @@ func (ly *CandyYAML) UnmarshalYAML(value *yaml.Node) error {
 			unknownKeys = append(unknownKeys, key)
 		}
 		if len(unknownKeys) > 0 {
-			return fmt.Errorf("layer has unknown top-level key(s) %v — each is neither a known field nor part of the `distro:` package map. This is almost always a plural/singular typo: use the SINGULAR form (task: not tasks:, var: not vars:, candy: not layers:, env_provide: not env_provides:). A legacy top-level package format (rpm:/deb:/pac:/aur:/debian:13:/debian,ubuntu:) is no longer accepted — run `charly migrate`", unknownKeys)
+			return fmt.Errorf("candy has unknown top-level key(s) %v — each is neither a known field nor part of the `distro:` package map. This is almost always a plural/singular typo: use the SINGULAR form (task: not tasks:, var: not vars:, candy: not layers:, env_provide: not env_provides:). A legacy top-level package format (rpm:/deb:/pac:/aur:/debian:13:/debian,ubuntu:) is no longer accepted — run `charly migrate`", unknownKeys)
 		}
 	}
 
@@ -859,7 +859,7 @@ func legacyScanCandiesDir(dir string) (map[string]*Candy, error) {
 		if os.IsNotExist(err) {
 			return make(map[string]*Candy), nil
 		}
-		return nil, fmt.Errorf("reading layers directory: %w", err)
+		return nil, fmt.Errorf("reading candy directory: %w", err)
 	}
 	layers := make(map[string]*Candy)
 	for _, entry := range entries {
@@ -869,7 +869,7 @@ func legacyScanCandiesDir(dir string) (map[string]*Candy, error) {
 		name := entry.Name()
 		layer, err := scanCandy(filepath.Join(candiesDir, name), name, UnifiedFileName)
 		if err != nil {
-			return nil, fmt.Errorf("scanning layer %s: %w", name, err)
+			return nil, fmt.Errorf("scanning candy %s: %w", name, err)
 		}
 		layers[name] = layer
 	}
@@ -992,7 +992,7 @@ func rejectLegacyCandyKeys(path string, body *yaml.Node) error {
 		case "depends":
 			return fmt.Errorf("%s: candy manifest uses the removed `depends:` field — rename it to `require:`", path)
 		case "directory":
-			return fmt.Errorf("%s: candy manifest uses the removed `directory:` field — the layer directory is implicit", path)
+			return fmt.Errorf("%s: candy manifest uses the removed `directory:` field — the candy directory is implicit", path)
 		case "info":
 			return fmt.Errorf("%s: candy manifest uses the removed `info:` field — use `description:`", path)
 		}
@@ -1583,12 +1583,12 @@ func ScanRemoteCandy(repoDir string, repoPath string, wantRefs map[string]bool) 
 		}
 
 		if _, err := os.Stat(candyDir); os.IsNotExist(err) {
-			return nil, fmt.Errorf("remote layer %s not found at %s", bareRef, candyDir)
+			return nil, fmt.Errorf("remote candy %s not found at %s", bareRef, candyDir)
 		}
 
 		layer, err := scanCandy(candyDir, name, UnifiedFileName)
 		if err != nil {
-			return nil, fmt.Errorf("scanning remote layer %s: %w", bareRef, err)
+			return nil, fmt.Errorf("scanning remote candy %s: %w", bareRef, err)
 		}
 		layer.Remote = true
 		layer.RepoPath = repoPath
@@ -1714,7 +1714,7 @@ func ScanAllCandyWithConfigOpts(dir string, cfg *Config, opts ResolveOpts) (map[
 			}
 			for ref, layer := range remoteCandies {
 				if layer.Version == "" {
-					return nil, fmt.Errorf("remote layer %q (from %s@%s) declares no version:; its producer repo must declare one (run `charly migrate` there)", ref, dl.RepoPath, dl.Version)
+					return nil, fmt.Errorf("remote candy %q (from %s@%s) declares no version:; its producer repo must declare one (run `charly migrate` there)", ref, dl.RepoPath, dl.Version)
 				}
 				candidates[ref] = append(candidates[ref], candyCandidate{
 					layer:   layer,
@@ -1760,7 +1760,7 @@ func ScanAllCandyWithConfigOpts(dir string, cfg *Config, opts ResolveOpts) (map[
 	for ref, cands := range candidates {
 		winner := pickCandyVersion(ref, cands)
 		if _, ok := layers[winner.layer.Name]; ok {
-			fmt.Fprintf(os.Stderr, "Note: local layer %q shadows remote layer %q\n", winner.layer.Name, ref)
+			fmt.Fprintf(os.Stderr, "Note: local candy %q shadows remote candy %q\n", winner.layer.Name, ref)
 		}
 		layers[ref] = winner.layer
 	}
@@ -1795,7 +1795,7 @@ func pickCandyVersion(bareRef string, cands []candyCandidate) candyCandidate {
 	for _, c := range cands {
 		if c.version != best.version {
 			fmt.Fprintf(os.Stderr,
-				"Warning: layer %s resolved to multiple versions; using newest %s (from %s), ignoring %s (from %s)\n",
+				"Warning: candy %s resolved to multiple versions; using newest %s (from %s), ignoring %s (from %s)\n",
 				bareRef, best.version, best.source, c.version, c.source)
 			break
 		}

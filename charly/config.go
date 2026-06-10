@@ -169,7 +169,7 @@ type BoxConfig struct {
 	// box section of the OCI label.
 	Eval []Check `yaml:"eval,omitempty"`
 
-	// DeployTests are image-author-supplied deploy-level defaults. All
+	// DeployEval are image-author-supplied deploy-level defaults. All
 	// entries default to scope: deploy and land in the deploy section of
 	// the OCI label; local charly.yml can override them by id.
 	DeployEval []Check `yaml:"deploy_eval,omitempty"`

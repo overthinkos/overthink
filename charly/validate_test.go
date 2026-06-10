@@ -100,7 +100,7 @@ func TestValidateMissingCandy(t *testing.T) {
 
 	err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{})
 	if err == nil {
-		t.Error("expected error for missing layer")
+		t.Error("expected error for missing candy")
 	}
 	if !strings.Contains(err.Error(), "not found") {
 		t.Errorf("unexpected error: %v", err)
@@ -119,7 +119,7 @@ func TestValidateMissingCandyWithTypo(t *testing.T) {
 
 	err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{})
 	if err == nil {
-		t.Error("expected error for missing layer")
+		t.Error("expected error for missing candy")
 	}
 	if !strings.Contains(err.Error(), "did you mean") {
 		t.Errorf("expected typo suggestion, got: %v", err)
@@ -136,7 +136,7 @@ func TestValidateCandyNoInstallFiles(t *testing.T) {
 
 	err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{})
 	if err == nil {
-		t.Error("expected error for layer without install files")
+		t.Error("expected error for candy without install files")
 	}
 	if !strings.Contains(err.Error(), "must have at least one install file") {
 		t.Errorf("unexpected error: %v", err)
@@ -363,7 +363,7 @@ func TestValidateAurOnFedoraImageNoError(t *testing.T) {
 
 	err := Validate(cfg, vCandies(layers), testdataDir, ResolveOpts{})
 	if err != nil && strings.Contains(err.Error(), "no builder.aur configured") {
-		t.Fatalf("Fedora image (build=[rpm]) consuming a multi-distro layer with rpm:+aur: must not require builder.aur; got: %v", err)
+		t.Fatalf("Fedora image (build=[rpm]) consuming a multi-distro candy with rpm:+aur: must not require builder.aur; got: %v", err)
 	}
 }
 
@@ -449,7 +449,7 @@ func TestValidateUnknownDependency(t *testing.T) {
 	if err == nil {
 		t.Error("expected error for unknown dependency")
 	}
-	if !strings.Contains(err.Error(), "unknown layer") {
+	if !strings.Contains(err.Error(), "unknown candy") {
 		t.Errorf("unexpected error: %v", err)
 	}
 }
@@ -1157,7 +1157,7 @@ func TestValidateCandyIncludesCycle(t *testing.T) {
 
 	err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{})
 	if err == nil {
-		t.Error("expected error for circular layer composition")
+		t.Error("expected error for circular candy composition")
 	}
 }
 
@@ -1171,7 +1171,7 @@ func TestValidateCandyIncludesMissing(t *testing.T) {
 
 	err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{})
 	if err == nil {
-		t.Error("expected error for unknown layer in includes")
+		t.Error("expected error for unknown candy in includes")
 	}
 }
 
@@ -1264,9 +1264,9 @@ func TestValidatePortRelayNotInPorts(t *testing.T) {
 
 	err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{})
 	if err == nil {
-		t.Error("expected error for port_relay port not in layer ports")
+		t.Error("expected error for port_relay port not in candy ports")
 	}
-	if !strings.Contains(err.Error(), "not declared in the layer's ports") {
+	if !strings.Contains(err.Error(), "not declared in the candy's ports") {
 		t.Errorf("unexpected error: %v", err)
 	}
 }
@@ -1333,9 +1333,9 @@ func TestValidatePortRelayMissingSocat(t *testing.T) {
 
 	err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{})
 	if err == nil {
-		t.Error("expected error for port_relay without socat layer")
+		t.Error("expected error for port_relay without socat candy")
 	}
-	if !strings.Contains(err.Error(), "missing \"socat\" layer") {
+	if !strings.Contains(err.Error(), "missing \"socat\" candy") {
 		t.Errorf("unexpected error: %v", err)
 	}
 }
@@ -1376,8 +1376,8 @@ func TestValidateDataEntryUnknownVolume(t *testing.T) {
 	if !strings.Contains(err.Error(), "workspae") {
 		t.Errorf("expected error to mention unknown volume name, got: %v", err)
 	}
-	if !strings.Contains(err.Error(), "not declared by any layer") {
-		t.Errorf("expected 'not declared by any layer' phrasing, got: %v", err)
+	if !strings.Contains(err.Error(), "not declared by any candy") {
+		t.Errorf("expected 'not declared by any candy' phrasing, got: %v", err)
 	}
 }
 

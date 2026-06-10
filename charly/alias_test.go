@@ -18,7 +18,7 @@ func TestGenerateAliasScript(t *testing.T) {
 		t.Error("script should contain charly-alias marker")
 	}
 	if !strings.Contains(script, "# box: openclaw") {
-		t.Error("script should contain image metadata")
+		t.Error("script should contain box metadata")
 	}
 	if !strings.Contains(script, "# command: openclaw") {
 		t.Error("script should contain command metadata")
@@ -63,7 +63,7 @@ func TestWriteAndListAliasScripts(t *testing.T) {
 		t.Errorf("alias name = %q, want %q", aliases[0].Name, "mycmd")
 	}
 	if aliases[0].Box != "myimage" {
-		t.Errorf("alias image = %q, want %q", aliases[0].Box, "myimage")
+		t.Errorf("alias box = %q, want %q", aliases[0].Box, "myimage")
 	}
 	if aliases[0].Command != "mycommand" {
 		t.Errorf("alias command = %q, want %q", aliases[0].Command, "mycommand")
@@ -215,7 +215,7 @@ func TestCandyAliases(t *testing.T) {
 
 	ws := layers["webservice"]
 	if ws == nil {
-		t.Fatal("webservice layer not found")
+		t.Fatal("webservice candy not found")
 	}
 
 	if !ws.HasAliases() {
@@ -242,7 +242,7 @@ func TestAliasCandies(t *testing.T) {
 
 	result := AliasCandy(layers)
 	if len(result) != 1 {
-		t.Errorf("AliasCandy() returned %d layers, want 1", len(result))
+		t.Errorf("AliasCandy() returned %d candies, want 1", len(result))
 	}
 	if len(result) > 0 && result[0].Name != "webservice" {
 		t.Errorf("AliasCandy()[0].Name = %q, want %q", result[0].Name, "webservice")

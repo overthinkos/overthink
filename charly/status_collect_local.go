@@ -140,7 +140,7 @@ func (l *LocalCollector) Collect(ctx context.Context, opts CollectOpts) ([]Deplo
 	// DeployRecord, enriching the candy set of those that have one).
 	candyNames, err := ledgerJSONStems(paths.Candies)
 	if err != nil {
-		return nil, fmt.Errorf("local ledger layers: %w", err)
+		return nil, fmt.Errorf("local ledger candies: %w", err)
 	}
 	for _, ln := range candyNames {
 		rec, err := ReadCandyRecord(paths, ln)
@@ -208,9 +208,9 @@ func ledgerJSONStems(dir string) ([]string, error) {
 // container image. It reports the applied-candy count instead.
 func localDeployLabel(n int) string {
 	if n == 1 {
-		return "local (1 layer)"
+		return "local (1 candy)"
 	}
-	return fmt.Sprintf("local (%d layers)", n)
+	return fmt.Sprintf("local (%d candies)", n)
 }
 
 // newerTimestamp returns whichever of two RFC3339 timestamps is later. A

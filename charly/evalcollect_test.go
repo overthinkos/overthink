@@ -12,7 +12,7 @@ import (
 //   - candy-level tests with scope:"deploy" → Deploy section
 //   - box-level Tests default to build → Box section; scope:"deploy" →
 //     Deploy section
-//   - box-level DeployTests → Deploy section with deploy-default origin
+//   - box-level DeployEval → Deploy section with deploy-default origin
 func TestCollectTests_Sections(t *testing.T) {
 	layers := map[string]*Candy{
 		"redis": {
@@ -57,36 +57,36 @@ func TestCollectTests_Sections(t *testing.T) {
 	// Candy section: redis (port), base (file). base comes after redis because
 	// it's deeper in the chain (candy order within each level, then parent).
 	if len(got.Candy) != 2 {
-		t.Fatalf("layer section has %d entries, want 2: %+v", len(got.Candy), got.Candy)
+		t.Fatalf("candy section has %d entries, want 2: %+v", len(got.Candy), got.Candy)
 	}
 	if got.Candy[0].Origin != "candy:redis" || got.Candy[0].Port != 6379 {
-		t.Errorf("layer[0] wrong: %+v", got.Candy[0])
+		t.Errorf("candy[0] wrong: %+v", got.Candy[0])
 	}
 	if got.Candy[0].Scope != "build" {
-		t.Errorf("layer[0].scope should default to build, got %q", got.Candy[0].Scope)
+		t.Errorf("candy[0].scope should default to build, got %q", got.Candy[0].Scope)
 	}
 	if got.Candy[1].Origin != "candy:base" || got.Candy[1].File != "/etc/os-release" {
-		t.Errorf("layer[1] wrong: %+v", got.Candy[1])
+		t.Errorf("candy[1] wrong: %+v", got.Candy[1])
 	}
 
 	// Box section: supervisord -v
 	if len(got.Box) != 1 || got.Box[0].Origin != "box:redis-ml" || got.Box[0].Command != "supervisord -v" {
-		t.Errorf("image section wrong: %+v", got.Box)
+		t.Errorf("box section wrong: %+v", got.Box)
 	}
 
-	// Deploy section: candy scope-deploy, box scope-deploy, DeployTests.
+	// Deploy section: candy scope-deploy, box scope-deploy, DeployEval.
 	if len(got.Deploy) != 3 {
 		t.Fatalf("deploy section has %d entries, want 3: %+v", len(got.Deploy), got.Deploy)
 	}
 	origins := []string{got.Deploy[0].Origin, got.Deploy[1].Origin, got.Deploy[2].Origin}
-	// Order: candy-deploy entries first (in candy walk order), then box scope:deploy, then DeployTests.
+	// Order: candy-deploy entries first (in candy walk order), then box scope:deploy, then DeployEval.
 	wantOrigins := []string{"candy:redis", "box:redis-ml", "deploy-default"}
 	if !reflect.DeepEqual(origins, wantOrigins) {
 		t.Errorf("deploy origins = %v, want %v", origins, wantOrigins)
 	}
-	// DeployTests has scope forced to "deploy".
+	// DeployEval has scope forced to "deploy".
 	if got.Deploy[2].Scope != "deploy" {
-		t.Errorf("DeployTests scope should be forced to deploy, got %q", got.Deploy[2].Scope)
+		t.Errorf("DeployEval scope should be forced to deploy, got %q", got.Deploy[2].Scope)
 	}
 }
 
@@ -134,10 +134,10 @@ func TestCollectEval_RemoteRefCandiesResolve(t *testing.T) {
 
 	got := CollectEval(cfg, layers, "selkies-bootc")
 	if got == nil {
-		t.Fatal("expected non-nil LabelEvalSet — the @github-ref layer's eval block was dropped (BareRef regression)")
+		t.Fatal("expected non-nil LabelEvalSet — the @github-ref candy's eval block was dropped (BareRef regression)")
 	}
 	if len(got.Candy) != 1 {
-		t.Fatalf("layer section has %d entries, want 1 (the tailscale check): %+v", len(got.Candy), got.Candy)
+		t.Fatalf("candy section has %d entries, want 1 (the tailscale check): %+v", len(got.Candy), got.Candy)
 	}
 	if got.Candy[0].File != "/usr/bin/tailscale" {
 		t.Errorf("collected wrong check: %+v", got.Candy[0])
@@ -231,7 +231,7 @@ func TestLabelTests_JSONRoundTrip(t *testing.T) {
 
 	// Per-section length parity.
 	if len(parsed.Candy) != 2 || len(parsed.Box) != 1 || len(parsed.Deploy) != 1 {
-		t.Fatalf("section lengths changed: layer=%d image=%d deploy=%d",
+		t.Fatalf("section lengths changed: candy=%d box=%d deploy=%d",
 			len(parsed.Candy), len(parsed.Box), len(parsed.Deploy))
 	}
 
@@ -244,7 +244,7 @@ func TestLabelTests_JSONRoundTrip(t *testing.T) {
 
 	// Origin annotation survives — critical for failure reports.
 	if parsed.Candy[0].Origin != "candy:redis" || parsed.Deploy[0].Origin != "deploy-default" {
-		t.Errorf("origin annotations lost: layer[0]=%q deploy[0]=%q",
+		t.Errorf("origin annotations lost: candy[0]=%q deploy[0]=%q",
 			parsed.Candy[0].Origin, parsed.Deploy[0].Origin)
 	}
 

@@ -44,7 +44,7 @@ func validateTests(cfg *Config, layers map[string]*Candy, errs *ValidationError)
 			if scope == "" {
 				scope = "build"
 			}
-			validateCheck(&layer.tests[i], fmt.Sprintf("layer %q tests[%d]", name, i), scope, errs)
+			validateCheck(&layer.tests[i], fmt.Sprintf("candy %q tests[%d]", name, i), scope, errs)
 		}
 	}
 
@@ -58,11 +58,11 @@ func validateTests(cfg *Config, layers map[string]*Candy, errs *ValidationError)
 			if scope == "" {
 				scope = "build"
 			}
-			validateCheck(&img.Eval[i], fmt.Sprintf("image %q tests[%d]", name, i), scope, errs)
+			validateCheck(&img.Eval[i], fmt.Sprintf("box %q tests[%d]", name, i), scope, errs)
 		}
 		for i := range img.DeployEval {
-			// DeployTests always carry implicit scope:"deploy".
-			validateCheck(&img.DeployEval[i], fmt.Sprintf("image %q deploy_tests[%d]", name, i), "deploy", errs)
+			// DeployEval always carry implicit scope:"deploy".
+			validateCheck(&img.DeployEval[i], fmt.Sprintf("box %q deploy_tests[%d]", name, i), "deploy", errs)
 		}
 
 		// ID uniqueness: collect IDs seen per effective section.
@@ -150,7 +150,7 @@ func validateCheck(c *Check, loc, effectiveScope string, errs *ValidationError) 
 	// cdp/wl/dbus/vnc verbs: validate method allowlist + required modifiers
 	// + scope enforcement (all four are deploy-scope-only since they need a
 	// running container with port mappings). The allowlists live in
-	// testrun_ov_verbs.go next to the dispatch logic so adding a new method
+	// evalrun_charly_verbs.go next to the dispatch logic so adding a new method
 	// means touching one file.
 	validateCharlyVerb(c, verb, loc, effectiveScope, errs)
 }
@@ -297,8 +297,8 @@ func validMatcherOpList() []string {
 	return out
 }
 
-// validateTestIDUniqueness ensures IDs don't collide within Tests, within
-// DeployTests, or between Tests and DeployTests of the same image.
+// validateTestIDUniqueness ensures IDs don't collide within Eval, within
+// DeployEval, or between Eval and DeployEval of the same box.
 func validateTestIDUniqueness(img BoxConfig, imgName string, errs *ValidationError) {
 	seen := map[string]string{} // id → first location
 	for i, c := range img.Eval {
@@ -306,7 +306,7 @@ func validateTestIDUniqueness(img BoxConfig, imgName string, errs *ValidationErr
 			continue
 		}
 		section := "tests"
-		loc := fmt.Sprintf("image %q %s[%d]", imgName, section, i)
+		loc := fmt.Sprintf("box %q %s[%d]", imgName, section, i)
 		if prev, dup := seen[c.ID]; dup {
 			errs.Add("%s: duplicate id %q (previously defined at %s)", loc, c.ID, prev)
 		} else {
@@ -317,7 +317,7 @@ func validateTestIDUniqueness(img BoxConfig, imgName string, errs *ValidationErr
 		if c.ID == "" {
 			continue
 		}
-		loc := fmt.Sprintf("image %q deploy_tests[%d]", imgName, i)
+		loc := fmt.Sprintf("box %q deploy_tests[%d]", imgName, i)
 		if prev, dup := seen[c.ID]; dup {
 			errs.Add("%s: duplicate id %q (previously defined at %s)", loc, c.ID, prev)
 		} else {
@@ -341,7 +341,7 @@ func validateCollectedIDUniqueness(cfg *Config, layers map[string]*Candy, imgNam
 			}
 			loc := fmt.Sprintf("%s (from %s)", sectionName, c.Origin)
 			if prev, dup := seen[c.ID]; dup {
-				errs.Add("image %q: duplicate id %q in %s section — %s collides with %s", imgName, c.ID, sectionName, loc, prev)
+				errs.Add("box %q: duplicate id %q in %s section — %s collides with %s", imgName, c.ID, sectionName, loc, prev)
 			} else {
 				seen[c.ID] = loc
 			}

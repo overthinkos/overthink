@@ -39,7 +39,7 @@ const defaultMaxTotalMB = 0 // 0 = no limit
 
 func (c *MergeCmd) Run() error {
 	if c.Box == "" && !c.All {
-		return fmt.Errorf("specify an image name or use --all")
+		return fmt.Errorf("specify a box name or use --all")
 	}
 
 	dir, err := os.Getwd()

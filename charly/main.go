@@ -302,13 +302,13 @@ func (c *InspectCmd) runFromConfig(cfg *Config, dir string) error {
 
 // ListCmd groups list subcommands
 type ListCmd struct {
-	Aliases  ListAliasesCmd  `cmd:"" help:"List layers that declare aliases"`
+	Aliases  ListAliasesCmd  `cmd:"" help:"List candies that declare aliases"`
 	Boxes    ListBoxesCmd    `cmd:"" name:"boxes" help:"List boxes from charly.yml"`
 	Candies   ListCandiesCmd  `cmd:"" name:"candies" help:"List candies from the filesystem"`
-	Routes   ListRoutesCmd   `cmd:"" help:"List layers that declare a route"`
-	Services ListServicesCmd `cmd:"" help:"List layers that declare a service"`
+	Routes   ListRoutesCmd   `cmd:"" help:"List candies that declare a route"`
+	Services ListServicesCmd `cmd:"" help:"List candies that declare a service"`
 	Targets  ListTargetsCmd  `cmd:"" help:"List build targets in dependency order"`
-	Volumes  ListVolumesCmd  `cmd:"" help:"List layers that declare volumes"`
+	Volumes  ListVolumesCmd  `cmd:"" help:"List candies that declare volumes"`
 }
 
 // ListBoxesCmd lists boxes from charly.yml
@@ -531,7 +531,7 @@ type NewCmd struct {
 
 // NewCandyCmd scaffolds a new candy
 type NewCandyCmd struct {
-	Name string `arg:"" help:"Layer name"`
+	Name string `arg:"" help:"Candy name"`
 }
 
 func (c *NewCandyCmd) Run() error {

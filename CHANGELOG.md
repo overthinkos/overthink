@@ -22,6 +22,36 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-10 — refactor!: rename the install-ledger json tags `layer`/`add_layer` → `candy`/`add_candy` with a ledger version gate (schema cutover)
+
+The candy/box rebrand's last `layer`-spelled WIRE: the 2 internal install-ledger json
+keys on `DeployRecord` / `CandyRecord` (`~/.config/opencharly/installed/{deploys,layers}/
+*.json`). Cutover E deferred these because the ledger is un-versioned persisted deploy
+STATE the unified loader never sees — renaming the keys would silently misread existing
+ledgers (a legacy `"layer"` key unmarshals to an empty `Candy`, breaking refcount +
+reversal). This adds the missing version gate so the rename is safe.
+
+- **Tags renamed**: `DeployRecord.Candy` / `CandyRecord.Candy` `json:"layer"`→`json:"candy"`,
+  `DeployRecord.AddCandy` `json:"add_layer"`→`json:"add_candy"`.
+- **Ledger version gate**: a new `SchemaVersion` field (`json:"schema_version"`) on both
+  records, stamped on every write (`ledgerSchemaVersion` — a FIXED CalVer INDEPENDENT of
+  the project HEAD, so a non-ledger schema cutover never invalidates the ledger gate).
+  `ReadDeployRecord` / `ReadCandyRecord` hard-reject a record without it (`run charly
+  migrate`) — the same fail-loud-not-silent discipline as the project load gate.
+- **Migration**: new `ledger-candy-keys` MigrationStep (2026.161.1649, TouchesHost) walks
+  `ctx.LedgerRoot/{deploys,layers}/*.json` (`MigrateContext` gained `LedgerRoot` via
+  `DefaultLedgerPaths`), raw-JSON-rewrites the keys + stamps `schema_version`. Idempotent.
+  HEAD bumped 2026.161.1555→2026.161.1650 (6-repo re-stamp cascade).
+
+`go test ./...` green; new `TestMigrateLedgerCandyKeys` + `TestReadCandyRecord_GatesPreCutover`.
+RDD proved the real `~/.config/opencharly/installed/` ledger migrated in place (records
+now carry `candy` + `schema_version`; `charly status` reads clean). R10 `charly eval run
+eval-local` PASS (4/4, ok:true) — `LocalDeployTarget` deploy-add/eval-live/update/cleanup
+write+read the ledger through the renamed tags + the gate.
+
+This completes the candy/box rebrand: every `layer`-spelled wire surface — kind keys,
+nested fields, init vocabulary, the per-host config, and now the install ledger — is `candy`.
+
 ### 2026-06-10 — refactor!: unify the per-host `deploy.yml` onto `charly.yml` + collapse the bespoke deploy-config machinery (schema cutover)
 
 The last config that did NOT load through the one unified loader: the per-host deploy

@@ -22,7 +22,7 @@ func TestCharlyUpdatePreservesPerHostDeployFields(t *testing.T) {
 	}
 	// Per-host overlay keyed as `charly vm destroy`/`charly vm create` key it (vm:<name>):
 	// preemptible + env + tunnel — operator-authored local state.
-	yml := `version: 2026.161.1555
+	yml := `version: 2026.161.1650
 deploy:
   vm:cachyos-gpu:
     target: vm
@@ -86,7 +86,7 @@ func TestVmDestroyRemovesPureAutoEntry(t *testing.T) {
 	if err := os.MkdirAll(cfgDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	yml := `version: 2026.161.1555
+	yml := `version: 2026.161.1650
 deploy:
   vm:eval-cachyos-gpu-vm:
     target: vm
@@ -118,7 +118,7 @@ deploy:
 func TestGatherDeployNodesPerHostWins(t *testing.T) {
 	proj := t.TempDir()
 	// Committed project: cachyos-gpu, NO preemptible.
-	projYml := `version: 2026.161.1555
+	projYml := `version: 2026.161.1650
 deploy:
   cachyos-gpu:
     target: vm
@@ -133,7 +133,7 @@ deploy:
 	if err := os.MkdirAll(filepath.Join(cfg, "charly"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	hostYml := `version: 2026.161.1555
+	hostYml := `version: 2026.161.1650
 deploy:
   cachyos-gpu:
     target: vm

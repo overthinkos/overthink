@@ -45,6 +45,7 @@ type MigrateContext struct {
 	HostConfigPath string // ~/.config/ov/config.yml
 	SecretsFile    string // <Dir>/.secrets
 	QuadletDir     string // ~/.config/containers/systemd
+	LedgerRoot     string // ~/.config/opencharly/installed (install-ledger root; empty in project-only mode)
 	DryRun         bool
 	Out            io.Writer // progress reporting; defaults to os.Stderr when nil
 }
@@ -70,7 +71,7 @@ type MigrationStep struct {
 // closure references it, and the registry's last entry uses it as its Version,
 // so the two are guaranteed equal (asserted by TestRegistryHeadMatchesLatest).
 // Bump it — and append the matching MigrationStep — for each future cutover.
-var latestSchemaVersion = mustCalVer("2026.161.1555")
+var latestSchemaVersion = mustCalVer("2026.161.1650")
 
 // migrationSteps is the ordered registry. Chronological by git landing date
 // (see `git log --diff-filter=A` on each migrate_*.go), which is the order the
@@ -293,6 +294,15 @@ func migrationSteps() []MigrationStep {
 		{mustCalVer("2026.161.1554"), "host-charly-yml", true, func(c *MigrateContext) (bool, error) {
 			return MigrateHostCharlyYml(c)
 		}},
+		// 2026-06 ledger-candy-keys: rename the install-ledger json keys
+		// layer→candy / add_layer→add_candy and stamp each record with the
+		// ledger schema_version (Cutover F). The ledger is per-host deploy STATE
+		// the unified loader never sees, so it gets its OWN version gate
+		// (ReadDeployRecord/ReadCandyRecord hard-reject a record without
+		// schema_version). TouchesHost; walks ctx.LedgerRoot/{deploys,layers}.
+		{mustCalVer("2026.161.1649"), "ledger-candy-keys", true, func(c *MigrateContext) (bool, error) {
+			return MigrateLedgerCandyKeys(c)
+		}},
 		// HEAD — the schema stamp. Must stay LAST so LatestSchemaVersion picks it up
 		// and every versioned file lands on this CalVer. This is the integer→CalVer
 		// transition step (version: 4 → version: <HEAD>) and the universal stamper.
@@ -331,12 +341,17 @@ func NewMigrateContext(dir string, dryRun bool) (*MigrateContext, error) {
 	if err != nil {
 		return nil, err
 	}
+	ledgerRoot := ""
+	if lp, lerr := DefaultLedgerPaths(); lerr == nil {
+		ledgerRoot = lp.Root
+	}
 	return &MigrateContext{
 		Dir:            dir,
 		HostDeployPath: filepath.Join(cfgDir, "ov", "deploy.yml"),
 		HostConfigPath: hostConfig,
 		SecretsFile:    filepath.Join(dir, ".secrets"),
 		QuadletDir:     filepath.Join(cfgDir, "containers", "systemd"),
+		LedgerRoot:     ledgerRoot,
 		DryRun:         dryRun,
 		Out:            os.Stderr,
 	}, nil

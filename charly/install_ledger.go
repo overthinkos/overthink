@@ -110,16 +110,20 @@ func (l *LedgerLock) Release() error {
 // ---------------------------------------------------------------------------
 
 // DeployRecord is the top-level entry in deploys/<deploy-id>.json.
-// Lists the image, tag, and the ordered layer set included in this
-// deploy (image layers + add_layers overlays, already topo-sorted).
+// Lists the image, tag, and the ordered candy set included in this
+// deploy (image candies + add_candy overlays, already topo-sorted).
 type DeployRecord struct {
-	DeployID   string   `json:"deploy_id"`
-	Image      string   `json:"image"`
-	Tag        string   `json:"tag,omitempty"`
-	Target     string   `json:"target"` // "host" | "container:<name>"
-	Candy      []string `json:"layer"`
-	AddCandy   []string `json:"add_layer,omitempty"`
-	DeployedAt string   `json:"deployed_at"`
+	// SchemaVersion is the ledger-format version (the ledger-candy-keys
+	// cutover's CalVer). Empty means a pre-cutover record (json:"layer"
+	// keys) — the read path rejects it with a `charly migrate` hint.
+	SchemaVersion string   `json:"schema_version,omitempty"`
+	DeployID      string   `json:"deploy_id"`
+	Image         string   `json:"image"`
+	Tag           string   `json:"tag,omitempty"`
+	Target        string   `json:"target"` // "host" | "container:<name>"
+	Candy         []string `json:"candy"`
+	AddCandy      []string `json:"add_candy,omitempty"`
+	DeployedAt    string   `json:"deployed_at"`
 }
 
 // CandyRecord is the per-layer ledger entry. Lists concrete artifacts
@@ -127,8 +131,9 @@ type DeployRecord struct {
 // created, repo changes) so reversal doesn't need to re-compile the
 // plan from the candy manifest.
 type CandyRecord struct {
-	Candy        string       `json:"layer"`
-	Version      string       `json:"version,omitempty"`
+	SchemaVersion string       `json:"schema_version,omitempty"`
+	Candy         string       `json:"candy"`
+	Version       string       `json:"version,omitempty"`
 	DeployedBy   []string     `json:"deployed_by"` // set of deploy IDs
 	DeployedAt   string       `json:"deployed_at"`
 	BuilderImage string       `json:"builder_image,omitempty"`
@@ -153,10 +158,19 @@ type StepRecord struct {
 // ---------------------------------------------------------------------------
 
 // WriteDeployRecord serializes rec to deploys/<deploy-id>.json.
+// ledgerSchemaVersion is the install-ledger record format version (the
+// ledger-candy-keys cutover's CalVer). It is INDEPENDENT of the project schema
+// CalVer (LatestSchemaVersion) — a non-ledger schema cutover that bumps the
+// project HEAD must NOT invalidate the ledger gate. Every record written
+// carries it; the read path rejects a record without it (a pre-cutover record
+// whose json:"layer" key would silently unmarshal to an empty Candy).
+const ledgerSchemaVersion = "2026.161.1649"
+
 func WriteDeployRecord(paths *LedgerPaths, rec *DeployRecord) error {
 	if err := paths.Ensure(); err != nil {
 		return err
 	}
+	rec.SchemaVersion = ledgerSchemaVersion
 	path := filepath.Join(paths.Deploys, rec.DeployID+".json")
 	return writeJSONAtomic(path, rec)
 }
@@ -176,6 +190,9 @@ func ReadDeployRecord(paths *LedgerPaths, id string) (*DeployRecord, error) {
 	if err := json.Unmarshal(data, &rec); err != nil {
 		return nil, fmt.Errorf("ReadDeployRecord: parsing %s: %w", path, err)
 	}
+	if rec.SchemaVersion == "" {
+		return nil, fmt.Errorf("ReadDeployRecord: %s is a pre-cutover install-ledger record (legacy json:\"layer\" keys, no schema_version) — run `charly migrate` to convert the ledger to candy keys", path)
+	}
 	return &rec, nil
 }
 
@@ -184,6 +201,7 @@ func WriteCandyRecord(paths *LedgerPaths, rec *CandyRecord) error {
 	if err := paths.Ensure(); err != nil {
 		return err
 	}
+	rec.SchemaVersion = ledgerSchemaVersion
 	path := filepath.Join(paths.Candies, rec.Candy+".json")
 	return writeJSONAtomic(path, rec)
 }
@@ -201,6 +219,9 @@ func ReadCandyRecord(paths *LedgerPaths, layer string) (*CandyRecord, error) {
 	var rec CandyRecord
 	if err := json.Unmarshal(data, &rec); err != nil {
 		return nil, fmt.Errorf("ReadCandyRecord: parsing %s: %w", path, err)
+	}
+	if rec.SchemaVersion == "" {
+		return nil, fmt.Errorf("ReadCandyRecord: %s is a pre-cutover install-ledger record (legacy json:\"layer\" keys, no schema_version) — run `charly migrate` to convert the ledger to candy keys", path)
 	}
 	return &rec, nil
 }
@@ -364,6 +385,7 @@ func AddCandyDeploymentVia(exec DeployExecutor, paths *LedgerPaths, candyName, d
 	if update != nil {
 		update(rec)
 	}
+	rec.SchemaVersion = ledgerSchemaVersion
 	encoded, err := json.MarshalIndent(rec, "", "  ")
 	if err != nil {
 		return fmt.Errorf("AddCandyDeploymentVia: marshal: %w", err)
@@ -389,6 +411,7 @@ func WriteDeployRecordVia(exec DeployExecutor, paths *LedgerPaths, rec *DeployRe
 	ctx := context.Background()
 	remoteFile := "~/.config/opencharly/installed/deploys/" + rec.DeployID + ".json"
 	remoteDir := "~/.config/opencharly/installed/deploys"
+	rec.SchemaVersion = ledgerSchemaVersion
 	encoded, err := json.MarshalIndent(rec, "", "  ")
 	if err != nil {
 		return fmt.Errorf("WriteDeployRecordVia: marshal: %w", err)

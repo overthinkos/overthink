@@ -35,7 +35,7 @@ func TestEncMount_ShortCircuit_AllMounted(t *testing.T) {
 	// short-circuit and triggering a hang in resolveEncPassphraseForMount.
 	dir := t.TempDir()
 	deployPath := filepath.Join(dir, "deploy.yml")
-	deployYAML := `version: 2026.161.1555
+	deployYAML := `version: 2026.161.1650
 deploy:
   testimg:
     target: pod
@@ -104,7 +104,7 @@ func TestEncMount_NoShortCircuit_WhenOneUnmounted(t *testing.T) {
 	}
 
 	dir := t.TempDir()
-	deployYAML := `version: 2026.161.1555
+	deployYAML := `version: 2026.161.1650
 deploy:
   testimg:
     target: pod

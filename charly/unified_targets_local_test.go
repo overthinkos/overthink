@@ -17,10 +17,11 @@ func writeFakeDeploy(t *testing.T, paths *LedgerPaths, deployID, image string, l
 		t.Fatal(err)
 	}
 	rec := DeployRecord{
-		DeployID: deployID,
-		Image:    image,
-		Target:   "host",
-		Candy:    layers,
+		SchemaVersion: ledgerSchemaVersion,
+		DeployID:      deployID,
+		Image:         image,
+		Target:        "host",
+		Candy:         layers,
 	}
 	data, err := json.Marshal(rec)
 	if err != nil {
@@ -39,8 +40,9 @@ func writeFakeDeploy(t *testing.T, paths *LedgerPaths, deployID, image string, l
 func writeFakeCandy(t *testing.T, paths *LedgerPaths, layer string, deployedBy []string) {
 	t.Helper()
 	rec := CandyRecord{
-		Candy:      layer,
-		DeployedBy: deployedBy,
+		SchemaVersion: ledgerSchemaVersion,
+		Candy:         layer,
+		DeployedBy:    deployedBy,
 	}
 	data, err := json.Marshal(rec)
 	if err != nil {

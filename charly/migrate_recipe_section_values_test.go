@@ -13,7 +13,7 @@ import (
 // untouched, and the step is idempotent.
 func TestMigrateRecipeSectionValues(t *testing.T) {
 	dir := t.TempDir()
-	src := `version: 2026.161.1555
+	src := `version: 2026.161.1650
 recipe:
     r:
         from:

@@ -22,6 +22,23 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-10 — docs: complete the single-filename rebrand sweep in the skills (`box.yml`/`candy.yml` → `charly.yml`)
+
+The single-filename cutover made `charly.yml` the ONE manifest
+(`candy/<name>/charly.yml`, `box/<name>/charly.yml`) but the skills were never swept:
+~667 `box.yml` / `candy.yml` references across **193** `plugins/**` files still told
+users to author the old filenames. Swept to `charly.yml` — path forms
+(`candy/<name>/candy.yml` → `…/charly.yml`), compound build-flow phrasing
+(`box.yml` + `candy.yml` → `charly.yml`), code-block headers, and bare refs — plus
+`kind: image`/`kind: layer` → `kind: box`/`kind: candy`. ~15 separate-concept lines
+(where `box.yml`/`candy.yml` meant distinct things — `eval:` fields in a candy/box
+`charly.yml` or `deploy.yml`; `box/` checked before `candy/`; the per-kind-naming
+illustration; the candy-vs-box alias sections) were hand-rewritten to preserve meaning,
+caught by a duplicate-`charly.yml` verification grep. plugins `9ed53fe..80d5e9e`; main
+bumps the gitlink. The orthogonal `image:`/`layer:` YAML-KEY terminology (the
+`image:`/`layer:` maps, "Image-level", `images:` in examples) is a separate
+candy-box-rename follow-up, NOT in scope.
+
 ### 2026-06-10 — docs: fix 51 broken `charly image <verb>` command examples in the skills
 
 The image → box command rebrand never reached the skill docs: 51 examples across 25

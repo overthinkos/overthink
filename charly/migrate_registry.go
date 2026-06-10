@@ -70,7 +70,7 @@ type MigrationStep struct {
 // closure references it, and the registry's last entry uses it as its Version,
 // so the two are guaranteed equal (asserted by TestRegistryHeadMatchesLatest).
 // Bump it — and append the matching MigrationStep — for each future cutover.
-var latestSchemaVersion = mustCalVer("2026.161.1301")
+var latestSchemaVersion = mustCalVer("2026.161.1502")
 
 // migrationSteps is the ordered registry. Chronological by git landing date
 // (see `git log --diff-filter=A` on each migrate_*.go), which is the order the
@@ -273,6 +273,16 @@ func migrationSteps() []MigrationStep {
 		// migration is mandatory. TouchesHost false. See CHANGELOG.md.
 		{mustCalVer("2026.161.1300"), "recipe-section-values", false, func(c *MigrateContext) (bool, error) {
 			w, err := MigrateRecipeSectionValues(c.Dir, c.DryRun)
+			return len(w) > 0, err
+		}},
+		// 2026-06 init-candy-keys: the candy/box rebrand's INIT-SYSTEM vocabulary.
+		// `layer_field:`→`candy_field:`, `layer_file:`→`candy_file:`,
+		// `depends_layer:`→`depends_candy:` inside `init:` system defs (build.yml /
+		// charly.yml). The Go struct (init_config.go) now reads candy_*; a config on
+		// the old keys silently loses them. Scoped to the init: subtree; TouchesHost
+		// false so remote-cache auto-migration applies it to fetched init overrides.
+		{mustCalVer("2026.161.1501"), "init-candy-keys", false, func(c *MigrateContext) (bool, error) {
+			w, err := MigrateInitCandyKeys(c.Dir, c.DryRun)
 			return len(w) > 0, err
 		}},
 		// HEAD — the schema stamp. Must stay LAST so LatestSchemaVersion picks it up

@@ -22,6 +22,43 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-10 — refactor!: rename the init-system vocabulary keys `layer_field`/`layer_file`/`depends_layer` → `candy_field`/`candy_file`/`depends_candy` (schema cutover)
+
+The candy/box rebrand's last `layer`-spelled user-facing WIRE: the three init-system
+definition keys (the `init:` section in the embedded `build.yml`) that survived the
+kind-discriminator rename. `layer_field:`→`candy_field:` (which candy field holds
+services), `layer_file:`→`candy_file:` (which candy file globs to match, e.g.
+`*.service`), `depends_layer:`→`depends_candy:` (which candy must precede the init
+system). The Go `InitDef` (`init_config.go`) struct tags + the embedded
+`charly/build.yml` init vocabulary now read `candy_*`.
+
+Schema cutover: new `init-candy-keys` MigrationStep (2026.161.1501 — scoped to the
+`init:` subtree, comment-preserving, idempotent, TouchesHost false), HEAD bumped
+2026.161.1301→2026.161.1502 (calver-schema stays last). The load gate then rejects any
+config below HEAD with a `Run: charly migrate` hint; the remote-cache auto-migration
+rewrites a fetched repo's `init:` overrides — so a consumer pinning an old producer's
+`build.yml` loads clean (verified: box/fedora importing main@v2026.160.0856 raised a
+`field layer_field not found in InitDef` warning until a cache refresh re-ran the new
+chain, then loaded warning-free).
+
+**6-repo version cascade** — every charly-project's root `version:` re-stamped to
+2026.161.1502 + a fresh tag: main + the arch/cachyos/debian/fedora/ubuntu box
+submodules. The box submodules carry no `init:` keys, so their migration is the
+calver-schema re-stamp only.
+
+**Deliberately LEFT** (RDD finding): the 2 internal ledger json tags
+(`DeployRecord`/`CandyRecord` `json:"layer"` + `json:"add_layer"`). They are
+un-versioned persisted deploy state (`deploys/*.json`) the migrate framework does NOT
+reach, and there is no ledger read-gate — renaming them would silently break existing
+deploys' refcount/reversal without a new ledger-versioning mechanism. Disproportionate
+for an invisible on-disk key; the user-facing candy/box authoring surface is fully
+`candy`.
+
+`go test ./...` green; new `TestMigrateInitCandyKeys` (rename + init-scoping +
+idempotency); R10 `charly -C box/fedora eval run eval-pod` PASS (10/10 steps, ok:true,
+**zero warnings**) — `config`/`start` render supervisord units through the renamed
+embedded init vocabulary on a `disposable: true` bed, fresh-rebuild included.
+
 ### 2026-06-10 — refactor(charly)!: rename candy-meaning Go identifiers `Layer*`→`Candy*` (keep OCI `v1.Layer` / build-stage)
 
 The symmetric completion of the candy/box rebrand's Go axis — the `Layer*`→`Candy*`

@@ -1096,9 +1096,9 @@ distro:
                 # update-initramfs / chroot-grub-install are identical on Ubuntu.
 init:
     supervisord:
-        layer_field:
+        candy_field:
             - service
-        depends_layer: supervisord
+        depends_candy: supervisord
         model: fragment_assembly
         header_file: templates/supervisord.header.conf
         fragment_dir: supervisor
@@ -1204,9 +1204,9 @@ init:
                 stderr_logfile_maxbytes=0
                 {{- end}}
     systemd:
-        layer_field:
+        candy_field:
             - service
-        layer_file:
+        candy_file:
             - '*.service'
         requires_capability:
             - preserve_user
@@ -1239,7 +1239,7 @@ init:
         # DEPLOY time for target: vm / target: host custom service: entries
         # (used by VmDeployTarget.execServiceCustom →
         # renderCustomServiceForSystemdTarget). Build-time bootc images
-        # still use the layer_files: *.service file_copy model above for
+        # still use the candy_file: *.service file_copy model above for
         # pre-authored units — this schema is only consulted when no
         # pre-authored file exists and the compiler emits a
         # ServiceCustomStep with empty UnitText/UnitPath.

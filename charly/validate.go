@@ -297,7 +297,7 @@ func validateInitDependencies(cfg *Config, initCfg *InitConfig, layers map[strin
 			continue // other validators handle resolution errors
 		}
 
-		// For each init system with a depends_layer, check if it's needed and present.
+		// For each init system with a depends_candy, check if it's needed and present.
 		// Layer-derived caps replace the prior img.Bootc magic flag.
 		caps, _ := AggregateCandyCapabilities(layers, resolved)
 		if caps == nil {
@@ -315,7 +315,7 @@ func validateInitDependencies(cfg *Config, initCfg *InitConfig, layers map[strin
 				continue
 			}
 			// For bootc-flavored compositions with dual-init layers
-			// (service: + system_services:), skip supervisord depends_layer
+			// (service: + system_services:), skip supervisord depends_candy
 			// check when systemd is also triggered.
 			if len(def.RequiresCapability) == 0 && isBootcFlavored {
 				hasSystemdCandy := false
@@ -350,7 +350,7 @@ func validateInitDependencies(cfg *Config, initCfg *InitConfig, layers map[strin
 				continue
 			}
 
-			// Check if the depends_layer is in the resolved layers
+			// Check if the depends_candy is in the resolved layers
 			hasDepCandy := false
 			for _, candyName := range resolved {
 				// candyName is the resolved-order map KEY — for a remotely

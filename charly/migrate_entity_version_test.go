@@ -85,3 +85,65 @@ func TestMigrateEntityVersion(t *testing.T) {
 		t.Errorf("second run should be a no-op, got %d changes: %+v", len(results2), results2)
 	}
 }
+
+// TestMigrateEntityVersion_SkipsNestedGitRepos proves the walker descends into a
+// normal project's OWN box/<name> dirs but SKIPS a nested git repo (a submodule
+// checkout, identified generically by a `.git` entry) — so a superproject
+// migration never rewrites a submodule's files, independent of WHERE the
+// submodule is mounted. The cwd guard keeps the
+// walk root's own `.git` in scope (a worktree root carries a `.git` gitfile too).
+func TestMigrateEntityVersion_SkipsNestedGitRepos(t *testing.T) {
+	dir := t.TempDir()
+	seed := "2026.144.1443"
+	layerYML := "layer:\n  name: demo\n  package:\n    - demo\n"
+
+	// The walk ROOT itself carries a `.git` (mimics a linked-worktree root, whose
+	// `.git` is a gitfile) + an own layer file — both MUST be migrated (the cwd
+	// guard keeps the root in scope despite its `.git`).
+	if err := os.WriteFile(filepath.Join(dir, ".git"), []byte("gitdir: /elsewhere/root\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	rootFile := filepath.Join(dir, "root.yml")
+	if err := os.WriteFile(rootFile, []byte(layerYML), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// A normal own-box layer dir (NOT a git repo) — MUST be walked + migrated.
+	ownFile := filepath.Join(dir, "box", "mybox", "charly.yml")
+	if err := os.MkdirAll(filepath.Dir(ownFile), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(ownFile, []byte(layerYML), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// A nested submodule checkout under box/ (a `.git` gitfile makes it a separate
+	// repo) — MUST be skipped even though it lives under box/.
+	subFile := filepath.Join(dir, "box", "distro-sub", "charly.yml")
+	if err := os.MkdirAll(filepath.Dir(subFile), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "box", "distro-sub", ".git"), []byte("gitdir: /elsewhere/sub\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(subFile, []byte(layerYML), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := MigrateEntityVersion(dir, seed, false); err != nil {
+		t.Fatalf("MigrateEntityVersion: %v", err)
+	}
+
+	// Root layer migrated (cwd guard keeps the root's own `.git` in scope).
+	if got, _ := os.ReadFile(rootFile); !strings.Contains(string(got), "version: "+seed) {
+		t.Errorf("walk root layer was NOT migrated (cwd guard should keep it in scope):\n%s", got)
+	}
+	// Own box layer migrated (box/ is descended into when it is not a git repo).
+	if got, _ := os.ReadFile(ownFile); !strings.Contains(string(got), "version: "+seed) {
+		t.Errorf("own box/<name> layer was NOT migrated (should be walked):\n%s", got)
+	}
+	// Submodule file untouched (nested git repo is skipped).
+	if got, _ := os.ReadFile(subFile); strings.Contains(string(got), "version:") {
+		t.Errorf("nested git repo file WAS modified (should be skipped):\n%s", got)
+	}
+}

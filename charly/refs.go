@@ -220,7 +220,7 @@ func IsRepoCached(repoPath, version string) (bool, error) {
 // `github.com/` prefix, same rule as `--repo`). Example:
 //
 //	CHARLY_REPO_OVERRIDE=overthinkos/overthink=/home/me/oc-overthink \
-//	    charly -C image/ubuntu box build ubuntu-coder
+//	    charly -C box/ubuntu box build ubuntu-coder
 //
 // The matched directory resolves verbatim (leading `~/` expanded); the ref's
 // `:vTAG` is IGNORED — an override ALWAYS resolves to the dev's current tree.

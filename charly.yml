@@ -44,7 +44,7 @@ defaults:
     # generated .containerignore/.dockerignore on top of the built-in baseline
     # (.git, bin, charly, *.md, editor/python/node cache-bust globs).
     context_ignore:
-        - image
+        - box
         - .eval
         - output
         - dist

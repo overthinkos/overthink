@@ -64,8 +64,8 @@ type localPkgInstallContext struct {
 //  2. <layerDir>/<ref>     — the source bundled alongside the layer.
 //  3. <projectDir>/<ref>   — relative to the deploy project dir (os.Getwd).
 //  4. walk UP from projectDir, trying <ancestor>/<ref> at each level — this is
-//     the operator path: `charly -C image/cachyos deploy add cachyos-gpu` has a
-//     project dir of image/cachyos while pkg/arch lives at the SUPERPROJECT
+//     the operator path: `charly -C box/cachyos deploy add cachyos-gpu` has a
+//     project dir of box/cachyos while pkg/arch lives at the SUPERPROJECT
 //     root (../../pkg/arch). The walk finds it without the layer needing to
 //     know how deeply the consuming project is nested.
 //

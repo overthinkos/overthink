@@ -93,7 +93,7 @@ func rewriteLocalpkgMap(data []byte) ([]byte, bool) {
 // layer's `localpkg:` field: candy/<name>/*.yml (the layer dir), the root-level
 // *.yml siblings (inline layers in overthink.yml / per-kind files), and
 // ov/testdata/**/*.yml when run from the overthink repo itself. It deliberately
-// does NOT recurse into image/<distro> submodules (separate repos, migrated on
+// does NOT recurse into box/<distro> submodules (separate repos, migrated on
 // their own). Sorted, deduplicated.
 func localpkgCandidateFiles(dir string) []string {
 	seen := map[string]struct{}{}

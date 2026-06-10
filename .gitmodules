@@ -4,25 +4,25 @@
 [submodule "pkg/arch"]
 	path = pkg/arch
 	url = git@github.com:overthinkos/overthink-arch.git
-[submodule "image/arch"]
-	path = image/arch
-	url = git@github.com:overthinkos/arch.git
-	branch = main
-[submodule "image/cachyos"]
-	path = image/cachyos
-	url = git@github.com:overthinkos/cachyos.git
-[submodule "image/debian"]
-	path = image/debian
-	url = git@github.com:overthinkos/debian.git
-[submodule "image/ubuntu"]
-	path = image/ubuntu
-	url = git@github.com:overthinkos/ubuntu.git
-[submodule "image/fedora"]
-	path = image/fedora
-	url = git@github.com:overthinkos/fedora.git
 [submodule "pkg/fedora"]
 	path = pkg/fedora
 	url = git@github.com:overthinkos/overthink-fedora.git
 [submodule "pkg/debian"]
 	path = pkg/debian
 	url = git@github.com:overthinkos/overthink-debian.git
+[submodule "box/arch"]
+	path = box/arch
+	url = git@github.com:overthinkos/arch.git
+	branch = main
+[submodule "box/cachyos"]
+	path = box/cachyos
+	url = git@github.com:overthinkos/cachyos.git
+[submodule "box/debian"]
+	path = box/debian
+	url = git@github.com:overthinkos/debian.git
+[submodule "box/fedora"]
+	path = box/fedora
+	url = git@github.com:overthinkos/fedora.git
+[submodule "box/ubuntu"]
+	path = box/ubuntu
+	url = git@github.com:overthinkos/ubuntu.git

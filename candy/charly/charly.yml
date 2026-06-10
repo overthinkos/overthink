@@ -58,7 +58,7 @@ candy:
     # dpkg-buildpackage + apt-get install. Each install AUTO-RESOLVES the package's
     # dependencies from the target's repos. The sources live at the SUPERPROJECT
     # root (pkg/<fmt>) — resolved by walking UP from the deploy project dir, so a
-    # consumer nested under image/<distro> still finds them. An IMAGE build has no
+    # consumer nested under box/<distro> still finds them. An IMAGE build has no
     # host-package-build step, so it DOWNLOADS the published package
     # (format.<fmt>.local_pkg.download_template) and installs it via the same
     # dep-resolving install command — same OS-tracked result, no curl'd raw binary.

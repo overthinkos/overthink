@@ -474,7 +474,7 @@ distro:
                         # alone isn't enough (i.e. cachyos rotates its master
                         # signing key without updating the bundled keyring
                         # package), the fix is to repin the cachyos base to a
-                        # newer cachyos-v3 digest in image/cachyos/box.yml —
+                        # newer cachyos-v3 digest in box/cachyos/charly.yml —
                         # the upstream rebuild carries the updated keyring package.
                         (pacman-key --populate 2>/dev/null || true) && \
                         pacman -Syu --noconfirm

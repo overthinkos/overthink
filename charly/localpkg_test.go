@@ -218,7 +218,7 @@ func TestResolveLocalPkgDir(t *testing.T) {
 	if got := resolveLocalPkgDir("pkg/arch", "/no/such/layer", root, "PKGBUILD"); got != pkgArch {
 		t.Errorf("project-relative = %q, want %q", got, pkgArch)
 	}
-	// 4. Walk-up: project dir is the nested image/cachyos; pkg/arch is two levels up.
+	// 4. Walk-up: project dir is the nested box/cachyos; pkg/arch is two levels up.
 	if got := resolveLocalPkgDir("pkg/arch", "/no/such/layer", nestedProject, "PKGBUILD"); got != pkgArch {
 		t.Errorf("walk-up = %q, want %q (must find the superproject pkg/arch from a nested project dir)", got, pkgArch)
 	}

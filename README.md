@@ -309,7 +309,7 @@ cd charly && go build -o ../bin/charly .
 charly box build fedora
 
 # Build a CachyOS box (in submodule; charly resolves cross-repo refs)
-charly -C image/cachyos box build cachyos
+charly -C box/cachyos box build cachyos
 
 # Drop into an interactive shell
 charly shell fedora
@@ -681,7 +681,7 @@ gateway exposing the entire surface as MCP tools.
 Content lives in the working tree and in the skill index — pointers,
 not enumerations:
 
-- **Candy library** (`candy/` + submodule `image/<distro>/candy/`,
+- **Candy library** (`candy/` + submodule `box/<distro>/candy/`,
   187 candies total). Foundation: `/charly-distros:*` (40 skills — base
   OS, GPU runtime, bootc, per-distro builders),
   `/charly-languages:*`, `/charly-infrastructure:*` (22), `/charly-tools:*`
@@ -689,10 +689,10 @@ not enumerations:
   `/charly-selkies:*` (40), `/charly-openclaw:*`, `/charly-versa:*`,
   `/charly-ollama:*`, `/charly-openwebui:*`, `/charly-comfyui:*`,
   `/charly-immich:*`, `/charly-hermes:*`, `/charly-filebrowser:*`.
-- **Box catalog** (discovered `box/<name>/charly.yml` in the `image/<distro>` submodules — main owns none after the 2026-06 box inversion) — boxes,
+- **Box catalog** (discovered `box/<name>/charly.yml` in the `box/<distro>` submodules — main owns none after the 2026-06 box inversion) — boxes,
   39 enabled by default. Same plugin namespaces; per-pod boxes
   carry an MCP server hint in `plugins/README.md`.
-- **VM catalog** (`vm.yml` + `image/cachyos/vm.yml`) — cloud_image
+- **VM catalog** (`vm.yml` + `box/cachyos/vm.yml`) — cloud_image
   + bootc entries. → `/charly-vm:vms-catalog`.
 - **Deploy-target catalog** — pod / vm / k8s / local / android.
   Each has a dedicated kind file.
@@ -701,8 +701,8 @@ not enumerations:
   → `/charly-eval:eval`.
 
 Candies used by only one box family are vendored in that
-`image/<distro>` submodule (e.g. `ghostty`/`keepassxc-keyring` in
-`image/cachyos`, `arch-*-test` fixtures in `image/arch`). Shared
+`box/<distro>` submodule (e.g. `ghostty`/`keepassxc-keyring` in
+`box/cachyos`, `arch-*-test` fixtures in `box/arch`). Shared
 candies are pulled by `@github` ref.
 
 **Composition meta-candies** — `sway-desktop`, `sway-desktop-vnc`,

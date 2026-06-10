@@ -22,6 +22,70 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-10 — refactor!: relocate the 5 distro submodule mounts `image/<distro>` → `box/<distro>`
+
+After the box inversion (below) the `image/` mount directory was misnamed: those
+five git submodules no longer hold "images" — they hold whole distro **box
+projects** (`arch`, `cachyos`, `debian`, `fedora`, `ubuntu`), while `box/` (the
+natural home) sat empty. This cutover renames the five submodule **mount points**
+`image/<distro>` → `box/<distro>`. It is a **superproject-only** change: the five
+distro submodule repos are NOT touched (same commit SHA, new path), their `@github`
+import pins are unchanged, and the import graph is identical. `charly` reaches the
+boxes via the `@github` cache, not the local mount, so the rename is
+**loader-invisible** (`charly box validate` zero-warnings before and after).
+
+**The move (per submodule).** `git mv` on a submodule fails under git 2.54
+(`fatal: renaming … No such file or directory` — the `.git/modules/<parent>`
+gitdir relocation breaks), populated OR deinitialized. The working recipe, proven
+on a scratch superproject + linked worktree first (RDD): `git submodule deinit -f
+image/<d>` → `git rm -f image/<d>` → `mv .git/…/modules/image/<d>
+.git/…/modules/box/<d>` (relocate the existing module gitdir — no re-clone) →
+`git submodule add --force [-b main] <url> box/<d>` (git prints `Reactivating local
+git directory`, reusing the moved gitdir) → `git -C box/<d> checkout <recorded-SHA>`
+→ `git add`. `branch = main` on `arch` is preserved. git records each as a
+**rename** (`R image/arch -> box/arch`) because the gitlink SHA is byte-identical —
+confirming the move changes *home*, not *content*.
+
+**Generic submodule skip in the entity-version migrator (`charly/migrate_entity_version.go`).**
+The dir-walk skip list hardcoded `"image"` to avoid descending into the submodules
+during a superproject `charly migrate`. A naive `"image"→"box"` swap would regress
+every NORMAL project (whose own `box/<name>` boxes must be migrated), so the skip
+is now generic: a directory is skipped when it is a registered git submodule
+(`isNestedGitRepo` — a nested `.git`, with a `path != cwd` guard so the walk root
+stays in scope), dropping the hardcoded `"image"`/`"plugins"` names. Strictly more
+correct than the old hardcode — it survives any future mount rename AND
+distinguishes a submodule checkout from a normal project's own `box/<name>` box dir.
+Covered by `TestMigrateEntityVersion_SkipsNestedGitRepos` (fails without the fix).
+
+**Sweep.** `charly.yml` `context_ignore: image` → `box`; the `image/<distro>` /
+`image/<distro-name>` mount-path references in `CLAUDE.md` (dispatcher rows +
+prose), `README.md`, the Go comments (`build.yml`, `evalcollect_test.go`,
+`localpkg.go`, `localpkg_test.go`, `refs.go`, `migrate_localpkg_map.go`,
+`candy/charly/charly.yml`), and 44 `plugins/**/SKILL.md` files → `box/<distro>`.
+The `migrate` skill's entity-version row now describes the generic
+nested-submodule skip. NOT touched: the Go stdlib `image`/`image/png` imports, the
+`cache: image` build-cache mode, `kind: image`, the `image:`/`images:` YAML keys,
+and the `<image>/<instance>` deploy-id format.
+
+**Separable, NOT folded in (R2).** (1) The six OTHER `charly/migrate_*` dir-walk
+skip lists carry an identical hardcoded `.git/node_modules/.build/.cache/.eval/plugins`
+list (no `image`/`box`) — they already descend into the submodules regardless of
+mount name, so the rename does not regress them; consolidating all seven into one
+shared submodule-aware helper is a future R3 cleanup. (2) `charly migrate --dry-run`
+on main reports "would apply single-filename" because the single-filename
+migrator's `discoverIsBoxCandy` guard expects discover to list BOTH `box` and
+`candy` paths, whereas main's discover is candy-only — a PRE-EXISTING box-inversion
+artifact (main owns no boxes), identical before and after this rename and
+independent of it. (3) The five submodule signpost `# image/<distro>` headers are
+submodule-owned and invisible to main's `git grep` — cosmetic, left to the
+submodule repos.
+
+**R10** (`disposable: true`): `charly -C box/arch eval run eval-arch-vscode-pod` —
+the relocated `arch` submodule builds + deploys + evals from its new `box/arch`
+mount; full Go suite green (incl. the new skip test); `charly box validate`
+zero-warnings with submodules at `box/`. Landed main + `plugins` (no submodule
+re-pin, no tag bump on the distro repos).
+
 ### 2026-06-10 — feat!: box inversion — relocate every box from main's `box/` into the `image/<distro>` submodules; flip the import graph
 
 The main repo's `box/` is now EMPTY. All 43 box definitions moved into the

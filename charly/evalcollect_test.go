@@ -102,7 +102,7 @@ func TestCollectTests_EmptyReturnsNil(t *testing.T) {
 }
 
 // Regression: an image whose layer list uses RAW @github.com/...:version refs
-// (the submodule git-ref composition pattern used by image/fedora, image/cachyos,
+// (the submodule git-ref composition pattern used by box/fedora, box/cachyos,
 // etc.) must still collect the referenced layers' eval blocks. Before the
 // BareRef chokepoint fix in ExpandLayer (charly/graph.go), CollectEval walked the
 // raw refs against the BareRef-keyed layer map, missed every one, silently

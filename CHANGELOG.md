@@ -22,6 +22,17 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-10 — docs: fix 51 broken `charly image <verb>` command examples in the skills
+
+The image → box command rebrand never reached the skill docs: 51 examples across 25
+`plugins/**/SKILL.md` files told users to run `charly image build` / `list` /
+`validate` / `reconcile` — no longer a valid command (it is `charly box`). Swept to
+`charly box <verb>`, with the `new` subcommands mapping `image new image` →
+`box new box` and `image new layer` → `box new candy`; prose ("the image carries …")
+left untouched, and the corrected commands verified valid. plugins `c1a85b3..9ed53fe`,
+main bumps the gitlink. (The orthogonal `box.yml` / `candy.yml` stale-filename debt in
+the skills — a separate single-filename-cutover follow-up — is NOT in scope here.)
+
 ### 2026-06-10 — docs: complete the `image/<distro>` → `box/<distro>` mount-rename sweep into the 5 distro submodules
 
 The mount-rename cutover (below) was superproject-only; the 5 distro submodule repos

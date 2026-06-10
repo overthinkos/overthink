@@ -4,7 +4,7 @@ package main
 // introduced 2026-05. The same identifier (e.g. charly-cachyos) MAY exist
 // simultaneously across multiple namespaces:
 //
-//   - layer (under layers/<name>/)
+//   - candy (under candy/<name>/)
 //   - box: entry
 //   - pod: entry
 //   - vm: entry
@@ -26,7 +26,7 @@ import (
 
 // TestCrossKindNameReuse_LoaderAcceptsAllKinds — write an charly.yml
 // with the SAME identifier `charly-cachyos` under every kind-keyed map, plus
-// a layer at layers/charly-cachyos/. LoadUnified must accept it without a
+// a candy at layers/charly-cachyos/. LoadUnified must accept it without a
 // uniqueness error.
 func TestCrossKindNameReuse_LoaderAcceptsAllKinds(t *testing.T) {
 	dir := t.TempDir()

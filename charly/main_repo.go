@@ -41,7 +41,7 @@ func normalizeRepoSpec(spec string) (repoPath, version string) {
 }
 
 // ResolveProjectRepo turns a --repo spec into a local cache path that can
-// be passed to os.Chdir. Reuses the existing remote-layer cache machinery
+// be passed to os.Chdir. Reuses the existing remote-candy cache machinery
 // (RepoCacheDir, EnsureRepoDownloaded) so we don't have a second copy of
 // "clone-and-cache".
 func ResolveProjectRepo(spec string) (string, error) {

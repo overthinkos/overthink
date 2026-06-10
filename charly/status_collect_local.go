@@ -13,11 +13,11 @@ package main
 //
 //   deploys/<deploy-id>.json   DeployRecord — written by VmDeployTarget for
 //                              its guest-side ledger; the host LocalDeployTarget
-//                              records at LAYER granularity only, so this dir is
+//                              records at CANDY granularity only, so this dir is
 //                              typically EMPTY for plain host deploys.
-//   candy/<layer>.json        CandyRecord — written by EVERY local apply
+//   candy/<candy>.json        CandyRecord — written by EVERY local apply
 //                              (AddCandyDeploymentVia). `deployed_by` is the set
-//                              of deploy-ids that pulled this layer in; this is
+//                              of deploy-ids that pulled this candy in; this is
 //                              the populated, authoritative source.
 //
 // Because the host LocalDeployTarget never writes a DeployRecord, a collector
@@ -26,7 +26,7 @@ package main
 // synthesized row per deploy-id that appears in some CandyRecord.deployed_by
 // but has no DeployRecord. No deploy-id is double-counted. One
 // DeploymentStatus{Kind: local, Source: "ledger"} per deploy-id, with the
-// applied-layer count and the most-recent deployed_at surfaced.
+// applied-candy count and the most-recent deployed_at surfaced.
 
 import (
 	"context"
@@ -74,11 +74,11 @@ func (l *LocalCollector) Available(opts CollectOpts) bool {
 // Two passes over the ledger, unioned by deploy-id:
 //  1. deploys/<id>.json DeployRecords (explicit; written by VM-target local
 //     deploys and any future host DeployRecord write).
-//  2. candy/<layer>.json CandyRecords — every deploy-id in a layer's
+//  2. candy/<candy>.json CandyRecords — every deploy-id in a candy's
 //     deployed_by set that wasn't already covered by a DeployRecord gets a
-//     synthesized row from the layers that reference it.
+//     synthesized row from the candies that reference it.
 //
-// For each deploy-id we surface: the applied-layer count (Image cell, since a
+// For each deploy-id we surface: the applied-candy count (Image cell, since a
 // kind:local deploy has no container image), the deploy-id (Container cell),
 // and the most-recent deployed_at as an absolute UTC timestamp (Uptime cell).
 func (l *LocalCollector) Collect(ctx context.Context, opts CollectOpts) ([]DeploymentStatus, error) {
@@ -88,7 +88,7 @@ func (l *LocalCollector) Collect(ctx context.Context, opts CollectOpts) ([]Deplo
 	}
 
 	// deployAgg accumulates per-deploy-id facts gathered across both ledger
-	// passes. candySet dedupes layer names; latest tracks the newest
+	// passes. candySet dedupes candy names; latest tracks the newest
 	// deployed_at across the deploy record and every contributing layer.
 	type deployAgg struct {
 		candySet   map[string]bool
@@ -135,9 +135,9 @@ func (l *LocalCollector) Collect(ctx context.Context, opts CollectOpts) ([]Deplo
 		a.latest = newerTimestamp(a.latest, rec.DeployedAt)
 	}
 
-	// Pass 2: CandyRecords in candy/ — attribute each layer to every deploy-id
+	// Pass 2: CandyRecords in candy/ — attribute each candy to every deploy-id
 	// in its deployed_by set (synthesizing rows for deploy-ids with no
-	// DeployRecord, enriching the layer set of those that have one).
+	// DeployRecord, enriching the candy set of those that have one).
 	candyNames, err := ledgerJSONStems(paths.Candies)
 	if err != nil {
 		return nil, fmt.Errorf("local ledger layers: %w", err)
@@ -205,7 +205,7 @@ func ledgerJSONStems(dir string) ([]string, error) {
 }
 
 // localDeployLabel renders the IMAGE-cell text for a local deploy, which has no
-// container image. It reports the applied-layer count instead.
+// container image. It reports the applied-candy count instead.
 func localDeployLabel(n int) string {
 	if n == 1 {
 		return "local (1 layer)"

@@ -186,7 +186,7 @@ func buildTimeVars(meta *BoxMetadata, instance string) map[string]string {
 // inspection: IP, hostname, HOST_PORT:<N>, VOLUME_PATH:<name>,
 // VOLUME_CONTAINER_PATH:<name>, ENV_<NAME>.
 //
-// For volume mapping, the layer-declared short name is recovered by
+// For volume mapping, the candy-declared short name is recovered by
 // stripping the "charly-<image>-" prefix from the engine's full volume name.
 // Bind mounts without a named volume are cross-referenced by destination
 // path against meta.Volume to recover the short name.
@@ -266,7 +266,7 @@ func mergeRuntimeVars(env map[string]string, meta *BoxMetadata, c *ContainerInsp
 		if m.Name != "" && meta != nil && meta.Box != "" {
 			// c.Mounts are the container's ACTUAL (deploy-scoped) volume names,
 			// so strip by the deploy key, not the image. meta.Volume above is
-			// image-label-named, so that loop keeps using meta.Image.
+			// image-label-named, so that loop keeps using meta.Box.
 			short = BareVolumeName(m.Name, deployName, instance)
 			if short == m.Name {
 				short = "" // not one of ours — fall through to dest lookup

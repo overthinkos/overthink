@@ -66,7 +66,7 @@ func secretDepNames(meta *BoxMetadata) []string {
 }
 
 // secretKeyForDep returns the (service, key) tuple used to look up a secret
-// in the credential store. When the layer author set an explicit `key:
+// in the credential store. When the candy author set an explicit `key:
 // charly/api-key/openrouter` override, that's parsed into its two segments;
 // otherwise the default (charly/secret, dep.Name) is returned. The format is
 // enforced by validateSecretDeps at build time, so this is purely a
@@ -88,7 +88,7 @@ func secretKeyForDep(dep EnvDependency) (service, key string) {
 // for any KEY=VAL entries whose KEY is declared as secret_accepts or
 // secret_requires on the given image metadata. For each match, it:
 //
-//   - writes VAL into the credential store at the layer-declared (service, key)
+//   - writes VAL into the credential store at the candy-declared (service, key)
 //   - removes KEY=VAL from the in-memory dc.Env slice
 //   - creates a charly.yml.bak.<unix-timestamp> backup before the first
 //     mutation (one backup per call, even if multiple entries are migrated)
@@ -148,7 +148,7 @@ func MigratePlaintextEnvSecret(dc *DeployConfig, meta *BoxMetadata, image, insta
 	}
 
 	// Build a lookup from dep name → full EnvDependency so we can honor any
-	// `key:` override on the layer declaration.
+	// `key:` override on the candy declaration.
 	depByName := map[string]EnvDependency{}
 	for _, dep := range meta.SecretRequire {
 		depByName[dep.Name] = dep

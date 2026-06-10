@@ -60,7 +60,7 @@ type EphemeralHandle struct {
 	// TtlDeadline is the absolute time the transient timer fires.
 	TtlDeadline time.Time
 
-	// ParentVm names the kind:vm entity (or kind:image / kind:k8s for
+	// ParentVm names the kind:vm entity (or kind:box / kind:k8s for
 	// pod / k8s targets). Empty for non-clone deploys.
 	ParentVm string
 

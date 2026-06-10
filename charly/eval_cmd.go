@@ -203,7 +203,7 @@ func (c *EvalLiveCmd) Run() error {
 	localTests = MergeDeployEval(projectTests, localTests)
 	resolver, _ := ResolveEvalVarsRuntime(meta, deployOverlay, engine, c.Box, containerName, c.Instance)
 
-	// Compose the final check list: layer + image + merged deploy.
+	// Compose the final check list: candy + box + merged deploy.
 	checks := collectChecksForRun(meta.Eval, localTests, c.Section, c.Filter)
 	if len(checks) == 0 {
 		fmt.Fprintln(os.Stderr, "No checks to run after filtering.")
@@ -227,7 +227,7 @@ func (c *EvalLiveCmd) Run() error {
 	return nil
 }
 
-// isVmTarget returns true when c.Image names a `kind: vm` entity OR a
+// isVmTarget returns true when c.Box names a `kind: vm` entity OR a
 // kind:deployment with target:vm OR a dotted-path child deployment nested
 // inside a target:vm parent. Cheap check — a missing/unreadable
 // charly.yml returns false and the caller falls through to the
@@ -279,10 +279,10 @@ func resolveNestedNode(roots map[string]DeploymentNode, path string) *Deployment
 //  1. Start from VmSpec defaults (resolveVmSshUser / resolveVmSshPort / the
 //     conventional key path under ~/.local/share/charly/vm/charly-<name>/).
 //  2. Overlay any VmState-materialized fields from charly.yml (user, port,
-//     key path) so VMs whose layers have been applied via `charly deploy add vm:`
+//     key path) so VMs whose candies have been applied via `charly deploy add vm:`
 //     honor the exact state the deploy wrote.
 //
-// VMs have no OCI image labels, so no layer/image test section exists —
+// VMs have no OCI image labels, so no candy/box test section exists —
 // only the local deploy overlay's `tests:` list applies.
 // vmEvalReadyWaitSeconds bounds the VM eval-live readiness gate's WaitForSSH
 // poll (WaitForCloudInit carries its own internal 5-minute bound).
@@ -316,7 +316,7 @@ func (c *EvalLiveCmd) runVm() error {
 	if err != nil {
 		return err
 	}
-	// Schema v4: c.Image may be
+	// Schema v4: c.Box may be
 	//   (a) a kind:vm entity name directly (e.g. "arch"),
 	//   (b) a kind:deployment name with target:vm (e.g. "arch-vm") whose
 	//       Vm field points at the actual kind:vm entity, OR
@@ -357,12 +357,12 @@ func (c *EvalLiveCmd) runVm() error {
 	//       overrides/additions.
 	//
 	// Schema v3: also accept plain-identifier deployment entries whose
-	// `target: vm` + `vm: <c.Image>` resolves to the same VM.
+	// `target: vm` + `vm: <c.Box>` resolves to the same VM.
 	// This is what makes `charly eval live <deploy-name>` work for beds like
 	// `arch-vm` that don't carry the legacy `vm:` prefix in the key.
 	// Merge by id (local replaces project); same rules as MergeDeployEval.
 	// Resolve the VM's deploy entry via THE shared findVmDeployNode (deploy.go)
-	// — the same lookup `charly deploy add` uses — by deploy NAME (c.Image) first,
+	// — the same lookup `charly deploy add` uses — by deploy NAME (c.Box) first,
 	// then the vm entity (vmName). Keying by name first means a bed whose key
 	// differs from its vm entity (eval-k3s-vm -> vm: k3s-vm) resolves to its
 	// own entry rather than being mis-matched via the vm entity name.
@@ -394,12 +394,12 @@ func (c *EvalLiveCmd) runVm() error {
 	}
 	tests := MergeDeployEval(projectTests, localTests)
 
-	// Collect deploy-scope eval from the layers this VM deployment applies, so
+	// Collect deploy-scope eval from the candies this VM deployment applies, so
 	// ANY VM deploy — the disposable bed OR the persistent operator VM — that
-	// adds a layer automatically runs that layer's checks. This is what makes
+	// adds a candy automatically runs that candy's checks. This is what makes
 	// `charly eval live` work against any deployment (disposable or not) with ONE
-	// check set per layer instead of a copy on each deploy (R3). Deploy-level
-	// checks override a layer check on id collision (layer is the base).
+	// check set per candy instead of a copy on each deploy (R3). Deploy-level
+	// checks override a candy check on id collision (candy is the base).
 	if candyChecks := collectAddCandyDeployEval(uf, dir, addCandies); len(candyChecks) > 0 {
 		tests = MergeDeployEval(candyChecks, tests)
 	}
@@ -411,7 +411,7 @@ func (c *EvalLiveCmd) runVm() error {
 	host := "127.0.0.1"
 	var executor DeployExecutor = &SSHExecutor{Host: VmSshAlias(vmName), ConnectTimeout: 10}
 
-	// 2026-04 cutover: when c.Image is dotted ("vm.inner-pod"), walk
+	// 2026-04 cutover: when c.Box is dotted ("vm.inner-pod"), walk
 	// the deploy tree and construct the full chain via ResolveDeployChain
 	// so leaf tests run inside the leaf's actual venue. Pre-cutover this
 	// path was silently single-hop SSH — `command: id` for a pod-in-vm
@@ -463,7 +463,7 @@ func (c *EvalLiveCmd) runVm() error {
 		"VM_HOSTDEV_COUNT": strconv.Itoa(vmHostdevCount(spec)),
 		// DEPLOY_NAME — the sanitized VM deploy name (vm:<vmName> -> vm-<vmName>),
 		// the SAME identifier `charly deploy add vm:<vmName>` feeds to K3sPostProvision
-		// for the kubeconfig context + ClusterProfile. Lets a layer's deploy-scope
+		// for the kubeconfig context + ClusterProfile. Lets a candy's deploy-scope
 		// k8s checks address their own cluster generically via cluster:
 		// "${DEPLOY_NAME}" instead of hard-coding the bed's cluster name.
 		"DEPLOY_NAME": sanitizeDeployName("vm:" + vmName),
@@ -541,19 +541,19 @@ func vmHostdevCount(spec *VmSpec) int {
 }
 
 // collectAddCandyDeployEval collects the deploy-scope eval checks from each
-// layer a VM deployment applies via add_layer. ProjectCandies resolves the
-// project's LOCAL layer map (the shared check-only layers live here); remote
-// @github layers not materialized locally are skipped. This is the general
-// mechanism that lets `charly eval live <vm>` run a layer's checks against ANY
+// candy a VM deployment applies via add_candy. ProjectCandies resolves the
+// project's LOCAL candy map (the shared check-only candies live here); remote
+// @github candies not materialized locally are skipped. This is the general
+// mechanism that lets `charly eval live <vm>` run a candy's checks against ANY
 // deployment that applies it — the disposable bed or the persistent operator
-// VM — so one shared check-only layer covers both (no per-deploy copy, R3).
+// VM — so one shared check-only candy covers both (no per-deploy copy, R3).
 func collectAddCandyDeployEval(uf *UnifiedFile, dir string, addCandies []string) []Check {
 	if uf == nil || len(addCandies) == 0 {
 		return nil
 	}
 	// ScanAllCandyWithConfig (not ProjectCandies) — it includes the FILESYSTEM
-	// layers under candy/ discovered via `discover:`, where the shared
-	// check-only layers live; ProjectCandies only sees inline `layer:` entries.
+	// candies under candy/ discovered via `discover:`, where the shared
+	// check-only candies live; ProjectCandies only sees inline `candy:` entries.
 	var cfg *Config
 	if uf != nil {
 		cfg = uf.ProjectConfig()
@@ -564,9 +564,9 @@ func collectAddCandyDeployEval(uf *UnifiedFile, dir string, addCandies []string)
 	}
 	var out []Check
 	for _, ref := range addCandies {
-		// Only LOCAL (filesystem) layers contribute checks here — the shared
-		// check-only layers live in the project's candy/ dir. Remote @github
-		// layers are SKIPPED: they carry their own test context (and a re-scan
+		// Only LOCAL (filesystem) candies contribute checks here — the shared
+		// check-only candies live in the project's candy/ dir. Remote @github
+		// candies are SKIPPED: they carry their own test context (and a re-scan
 		// can resolve a different cached version than what was deployed, which
 		// would surface checks the deployed version never defined).
 		if IsRemoteCandyRef(ref) {
@@ -585,7 +585,7 @@ func collectAddCandyDeployEval(uf *UnifiedFile, dir string, addCandies []string)
 	return out
 }
 
-// isLocalTarget returns true when c.Image names a `target: local` deployment
+// isLocalTarget returns true when c.Box names a `target: local` deployment
 // (a host filesystem apply) OR a dotted-path child whose root segment is a
 // target:local deployment. Mirror of isVmTarget — a missing/unreadable
 // charly.yml returns false and the caller falls through to the container
@@ -610,7 +610,7 @@ func (c *EvalLiveCmd) isLocalTarget() bool {
 // shared rootExecutorForDeployNode, and dotted paths compose through
 // ResolveDeployChain exactly like runVm.
 //
-// Local deploys carry no OCI image labels, so there is no layer/image test
+// Local deploys carry no OCI image labels, so there is no candy/box test
 // section — checks come from the resolved kind:local template's `eval:` (base)
 // merged with the deploy entry's `eval:` and the per-host charly.yml overlay
 // (id-based replace/append, same as everywhere). Host-context vars only: no
@@ -727,7 +727,7 @@ func evalLocalDeployScope(dir string, node *DeploymentNode, image, instance, sec
 }
 
 // EvalBoxCmd runs PURE-BOX eval against a disposable container.
-// Build-scope checks only (layer + image sections). Deploy-scope checks
+// Build-scope checks only (candy + box sections). Deploy-scope checks
 // are skipped — they require a running deployment with port mappings,
 // volumes, and resolved runtime variables. For full-stack eval against
 // a running deployment, use `charly eval live <name>`.
@@ -761,7 +761,7 @@ func (c *EvalBoxCmd) Run() error {
 		return nil
 	}
 
-	// PURE-IMAGE: always disposable container, always layer + image
+	// PURE-BOX: always disposable container, always candy + box
 	// sections only. The mode is explicit; no autodetect, no fallback.
 	executor := ImageChain(rt.RunEngine, imageRef)
 	resolver := ResolveEvalVarsBuild(meta)

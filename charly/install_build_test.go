@@ -8,7 +8,7 @@ import (
 )
 
 // Integration-ish tests for BuildDeployPlan using the project's own
-// layer definitions. Not unit tests in the strict sense (they read
+// candy definitions. Not unit tests in the strict sense (they read
 // real YAML via LoadConfig + ScanAllCandyWithConfig) but they catch
 // compile-time regressions that pure unit tests can't.
 
@@ -36,10 +36,10 @@ func compilerTestProjectDir(t *testing.T) (string, func()) {
 	return "", func() {}
 }
 
-// loadCompilerFixtures loads charly.yml + layers from the project and
+// loadCompilerFixtures loads charly.yml + candies from the project and
 // resolves the "fedora-coder" image. Returns nil, nil if fixtures can't
 // load (used to gracefully skip in CI environments that might not have
-// the fixture layers present).
+// the fixture candies present).
 func loadCompilerFixtures(t *testing.T, boxName string) (*Config, *ResolvedBox, map[string]*Candy) {
 	t.Helper()
 	dir, _ := os.Getwd()
@@ -47,7 +47,7 @@ func loadCompilerFixtures(t *testing.T, boxName string) (*Config, *ResolvedBox, 
 	if err != nil {
 		t.Fatalf("LoadConfig: %v", err)
 	}
-	// RegisterBuildVocabulary must run before layer scanning so format sections
+	// RegisterBuildVocabulary must run before candy scanning so format sections
 	// (rpm:/deb:/pac:) are recognized. Post-unified-cutover LoadDefaultBuildConfig
 	// reads charly.yml directly.
 	{
@@ -88,7 +88,7 @@ func TestBuildDeployPlanRipgrep(t *testing.T) {
 		t.Errorf("plan.Candy = %q, want ripgrep", plan.Candy)
 	}
 
-	// ripgrep is a pure rpm: package layer — expect exactly one
+	// ripgrep is a pure rpm: package candy — expect exactly one
 	// SystemPackagesStep at PhaseInstall with the ripgrep package.
 	var pkgSteps []*SystemPackagesStep
 	for _, s := range plan.Steps {
@@ -166,7 +166,7 @@ func TestBuildDeployPlanPixiCandy(t *testing.T) {
 	defer cleanup()
 
 	_, img, layers := loadCompilerFixtures(t, "fedora-coder")
-	// pre-commit layer uses pixi builder (has pixi.toml).
+	// pre-commit candy uses pixi builder (has pixi.toml).
 	pc, ok := layers["pre-commit"]
 	if !ok {
 		t.Skip("pre-commit layer not present in fixtures")
@@ -213,7 +213,7 @@ func TestComputeDeployIDDeterminism(t *testing.T) {
 	if a != b {
 		t.Errorf("deploy ID not deterministic: %s vs %s", a, b)
 	}
-	// Reordering layers changes the ID (layer order matters for reproducibility).
+	// Reordering candies changes the ID (candy order matters for reproducibility).
 	c := computeDeployID("fedora-coder", []string{"uv", "ripgrep"}, nil)
 	if a == c {
 		t.Errorf("expected different IDs for different layer orders, both got %s", a)
@@ -294,7 +294,7 @@ func TestDescribePlanSummary(t *testing.T) {
 // derivePackageSectionsFromCalamares writes + NewInstallContext reads), as a
 // []map[string]any value. The prior code read raw["repos"] (plural) with a
 // []interface{} assertion, so step.Repos was ALWAYS empty and the PhasePrepare
-// repo-gate (SystemPackagesStep.RequiresGate) never saw a layer's repos.
+// repo-gate (SystemPackagesStep.RequiresGate) never saw a candy's repos.
 func TestBuildSystemPackagesStepRepos(t *testing.T) {
 	raw := map[string]interface{}{
 		"package": []string{"tailscale"},

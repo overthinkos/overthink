@@ -47,8 +47,8 @@ func (e *hostReverseExec) reverseRunner() ReverseRunner { return e.Runner }
 
 // Del tears down every host deploy in the ledger.
 //
-// Walks the deploys ledger, decrements layer refcounts, runs ReverseOps
-// for layers that drop to refcount=0, and removes deploy + layer
+// Walks the deploys ledger, decrements candy refcounts, runs ReverseOps
+// for candies that drop to refcount=0, and removes deploy + candy
 // records. When all host deploys are torn down, also strips the
 // shell-profile managed block.
 func (t *LocalUnifiedTarget) Del(ctx context.Context, opts DelOpts) error {
@@ -295,7 +295,7 @@ func (t *LocalUnifiedTarget) Logs(ctx context.Context, opts LogsOpts) error {
 // the live LocalDeployTarget (host distro + kind:local template + cfg),
 // selects the executor (opts.ParentExec for a nested local node, else
 // rootExecutorForDeployNode per node.Host: ShellExecutor for host:local,
-// SSHExecutor otherwise), injects layer secrets, emits, retrieves
+// SSHExecutor otherwise), injects candy secrets, emits, retrieves
 // artifacts, and runs --verify.
 //
 // node fields come from dctx.Node (the dispatch-merged node) — never
@@ -311,7 +311,7 @@ func (t *LocalUnifiedTarget) Add(ctx context.Context, dctx *DeployContext, plans
 	}
 	// Resolve the kind:local template (when the deployment has a
 	// `local: <name>` ref) so its `images:` pre-pass + Eval/DeployEval
-	// reach the target. nil when the deployment uses inline add_layers:.
+	// reach the target. nil when the deployment uses inline add_candy:.
 	if node != nil && strings.TrimSpace(node.Local) != "" {
 		tgt.LocalSpec = findLocalSpec(dctx.Dir, strings.TrimSpace(node.Local))
 	}
@@ -344,7 +344,7 @@ func (t *LocalUnifiedTarget) Add(ctx context.Context, dctx *DeployContext, plans
 		}
 	}
 
-	// Resolve layer secret_requires / secret_accepts and inject them into
+	// Resolve candy secret_requires / secret_accepts and inject them into
 	// each TaskStep's env BEFORE emission (R3 shared helper).
 	candyList, secretEnv, err := prepareCandySecrets(plans, dctx.Dir)
 	if err != nil {
@@ -358,7 +358,7 @@ func (t *LocalUnifiedTarget) Add(ctx context.Context, dctx *DeployContext, plans
 		return err
 	}
 
-	// Retrieve layer artifacts + k3s post-hook (R3 shared helper). No-op
+	// Retrieve candy artifacts + k3s post-hook (R3 shared helper). No-op
 	// under DryRun.
 	if err := retrieveArtifactsAndK3s(ctx, exec, candyList, dctx.Name, artifactEnv, opts); err != nil {
 		return fmt.Errorf("retrieving layer artifacts: %w", err)

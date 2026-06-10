@@ -24,7 +24,7 @@ import (
 //     base64 of exactly 32 bytes (cryptography.fernet.Fernet's documented
 //     format). Hex strings are rejected with `binascii.Error: Invalid
 //     base64-encoded string`. This is the load-bearing fix — prior hex
-//     output forced every Fernet-using layer (airflow today, more
+//     output forced every Fernet-using candy (airflow today, more
 //     tomorrow) to ship a workaround that regenerated the key.
 //   - gocryptfs / Podman / KeePassXC: accept any string; format-agnostic.
 //
@@ -85,7 +85,7 @@ type LabelSecretEntry struct {
 // Service, Key, and RotateOnConfig are populated by CollectCandySecretAccepts
 // (added in a later step) for credential-store-backed secrets derived from
 // secret_accepts / secret_requires candy manifest entries. They are zero for
-// layer-owned secrets (the existing CollectSecretsFromLabels path), preserving
+// candy-owned secrets (the existing CollectSecretsFromLabels path), preserving
 // the current behavior.
 //
 //   - Service / Key: optional override for the ResolveCredential lookup.
@@ -94,7 +94,7 @@ type LabelSecretEntry struct {
 //   - RotateOnConfig: if true, ProvisionPodmanSecrets bypasses the
 //     podmanSecretExists short-circuit and always rm+creates the podman
 //     secret, so rotation via `charly secrets set` + `charly config` takes effect
-//     on the next reconcile. Layer-owned secrets (like immich db-password)
+//     on the next reconcile. Candy-owned secrets (like immich db-password)
 //     must keep this false — you cannot re-init a live postgres cluster
 //     with a rotated password.
 type CollectedSecret struct {
@@ -158,7 +158,7 @@ func ProvisionPodmanSecrets(engine, boxName, instance string, secrets []Collecte
 		// always re-resolve and re-create so credential rotation via
 		// `charly secrets set <name> <new>` takes effect on the next charly config.
 		//
-		// The default (RotateOnConfig=false) is correct for layer-owned
+		// The default (RotateOnConfig=false) is correct for candy-owned
 		// secrets like immich's db-password: overwriting would break a live
 		// postgres cluster. RotateOnConfig=true is set by
 		// CollectCandySecretAccepts for secret_accepts/secret_requires
@@ -257,10 +257,10 @@ func SecretArgs(secrets []CollectedSecret) []string {
 // they take precedence over the default lookup chain: the credential store
 // is queried exactly at (Service, Key) with the Env var as the env override.
 // This is the path used by secret_accepts / secret_requires entries
-// synthesized by CollectCandySecretAccepts, where the layer author may have
+// synthesized by CollectCandySecretAccepts, where the candy author may have
 // set `key: charly/api-key/openrouter` to point at a shared credential namespace.
 //
-// When Service/Key are unset, the default chain (used by layer-owned secrets)
+// When Service/Key are unset, the default chain (used by candy-owned secrets)
 // applies: env var → charly/secret/<podman-name> → charly/secret/<bare-secret-name>.
 func resolveSecretValue(s CollectedSecret, boxName, instance string) (value, source string) {
 	// Explicit override from CollectCandySecretAccepts: query exactly once at
@@ -271,7 +271,7 @@ func resolveSecretValue(s CollectedSecret, boxName, instance string) (value, sou
 		return val, src
 	}
 
-	// Default chain for layer-owned secrets (pre-existing behavior).
+	// Default chain for candy-owned secrets (pre-existing behavior).
 	// If the secret has an associated env var, check it first.
 	//
 	// Multi-tailnet path: when the sidecar resolution set HostEnv to a
@@ -390,7 +390,7 @@ func CollectCandySecretAccepts(boxName, instance string, meta *BoxMetadata) (col
 // is scrubbed from c.Env by scrubSecretCLIEnv (never plaintext in charly.yml),
 // and a podman `type=env` secret is not reliably inherited by `podman exec`, so
 // a hook that consumes a secret (e.g. github-runner's registration token) would
-// otherwise never see it. Generic across every hook+secret layer (R3); inert
+// otherwise never see it. Generic across every hook+secret candy (R3); inert
 // (returns nil) when the image declares no secrets or none resolve.
 func resolveHookSecretEnv(boxName, instance string, meta *BoxMetadata) []string {
 	collected, _ := CollectCandySecretAccepts(boxName, instance, meta)

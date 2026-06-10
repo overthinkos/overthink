@@ -28,8 +28,8 @@ func fxCheckLiveOnly(id string) Check {
 }
 
 // fxUnified builds a minimal UnifiedFile populated with the given
-// images / pods / vms. Layers are passed separately because they go
-// through the projected-layers map, not uf.Layer.
+// boxes / pods / vms. Candies are passed separately because they go
+// through the projected-candies map, not uf.Candy.
 func fxUnified() *UnifiedFile {
 	return &UnifiedFile{
 		Version: LatestSchemaVersion().String(),

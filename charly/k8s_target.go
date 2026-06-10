@@ -4,7 +4,7 @@ package main
 // K8sDeployTarget — the fourth DeployTarget implementation (Part F).
 // Sibling of OCITarget (install_plan.go), ContainerDeployTarget, LocalDeployTarget.
 //
-// Unlike host target (which applies layers directly to the local filesystem)
+// Unlike host target (which applies candies directly to the local filesystem)
 // or container target (which emits podman quadlets), k8s target produces a
 // Kustomize base + overlay tree under <dir>/.opencharly/k8s/<name>/ — which
 // a subsequent `charly deploy sync` or `kubectl apply -k` applies to the cluster.

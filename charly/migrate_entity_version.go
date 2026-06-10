@@ -4,7 +4,7 @@ package main
 //
 // Backfill for the per-kind versioning hard cutover that made the per-entity
 // `version:` field load-bearing (it drives the image's content-stable
-// org.overthinkos.version label AND cross-repo layer resolution).
+// org.overthinkos.version label AND cross-repo candy resolution).
 //
 // Two backfills, both seeded with the cutover's HEAD CalVer:
 //
@@ -26,8 +26,8 @@ package main
 // Any NESTED git submodule is skipped: each is its own charly-project repo,
 // migrated by its OWN `charly migrate` (or by remote-cache auto-migration when
 // fetched). That auto-migration (RunProjectMigrations on a freshly-cloned cache)
-// is what backfills fetched remote layers' versions, so the runtime can
-// hard-error on an unversioned fetched layer instead of carrying a fallback.
+// is what backfills fetched remote candies' versions, so the runtime can
+// hard-error on an unversioned fetched candy instead of carrying a fallback.
 
 import (
 	"fmt"

@@ -10,7 +10,7 @@ import (
 )
 
 // TestScaffoldProject covers the happy path + the don't-clobber guard.
-// Doesn't run `image validate`, that's exercised in TestScaffoldProject_AddImageRoundtrip.
+// Doesn't run `box validate`, that's exercised in TestScaffoldProject_AddImageRoundtrip.
 func TestScaffoldProject(t *testing.T) {
 	dir := t.TempDir()
 	if err := ScaffoldProject(dir); err != nil {
@@ -34,8 +34,8 @@ func TestScaffoldProject(t *testing.T) {
 }
 
 // TestScaffoldProject_AddImageRoundtrip is the integration test the plan
-// names. Scaffold a project, add an image, round-trip through the parser,
-// and confirm both the image appears AND the leading comment block at
+// names. Scaffold a project, add a box, round-trip through the parser,
+// and confirm both the box appears AND the leading comment block at
 // top of charly.yml is preserved (proves the yaml.Node API is wired
 // correctly and not destroying authoring metadata).
 func TestScaffoldProject_AddImageRoundtrip(t *testing.T) {
@@ -110,7 +110,7 @@ func TestAddCandyToImage(t *testing.T) {
 }
 
 // TestRemoveCandyFromImage covers the remove path including the no-op when
-// the layer isn't present.
+// the candy isn't present.
 func TestRemoveCandyFromImage(t *testing.T) {
 	dir := t.TempDir()
 	if err := ScaffoldProject(dir); err != nil {
@@ -122,11 +122,11 @@ func TestRemoveCandyFromImage(t *testing.T) {
 	if err := RemoveCandyFromBox(dir, "hello", "sshd"); err != nil {
 		t.Fatalf("RemoveCandyFromBox: %v", err)
 	}
-	// No-op for missing layer.
+	// No-op for missing candy.
 	if err := RemoveCandyFromBox(dir, "hello", "not-there"); err != nil {
 		t.Fatalf("RemoveCandyFromBox no-op: %v", err)
 	}
-	// Error path: missing image.
+	// Error path: missing box.
 	if err := RemoveCandyFromBox(dir, "ghost", "sshd"); err == nil {
 		t.Errorf("expected error for missing image; got nil")
 	}
@@ -139,10 +139,10 @@ func TestRemoveCandyFromImage(t *testing.T) {
 	}
 }
 
-// TestEditCandy_ImportedBoxFile verifies the authoring-edit verbs resolve an
-// image defined in a flat-imported per-kind file (box.yml) and save the edit
-// THERE — instead of erroring "image not found in charly.yml". This is the
-// fix for `charly box rm-candy <leaf> charly` / `charly box add-candy` on images that live
+// TestEditCandy_ImportedBoxFile verifies the authoring-edit verbs resolve a
+// box defined in a flat-imported per-kind file (box.yml) and save the edit
+// THERE — instead of erroring "box not found in charly.yml". This is the
+// fix for `charly box rm-candy <leaf> charly` / `charly box add-candy` on boxes that live
 // in box.yml rather than inlined in charly.yml.
 func TestEditCandy_ImportedBoxFile(t *testing.T) {
 	dir := t.TempDir()

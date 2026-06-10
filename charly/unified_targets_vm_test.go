@@ -144,9 +144,9 @@ func captureVmStdout(t *testing.T, fn func()) string {
 
 // TestVmUnifiedTarget_Rebuild_DryRun verifies the dry-run path emits the
 // expected ordered sequence — and, critically, that it ENDS in
-// `charly deploy add <node>` so the deploy node's layers are re-applied to the
+// `charly deploy add <node>` so the deploy node's candies are re-applied to the
 // fresh guest, exactly like LocalUnifiedTarget/PodUnifiedTarget.Rebuild. A
-// VM Rebuild that recreates the domain but skips the layer re-apply (the #42
+// VM Rebuild that recreates the domain but skips the candy re-apply (the #42
 // bug) would not emit this line, and this test would fail.
 func TestVmUnifiedTarget_Rebuild_DryRun(t *testing.T) {
 	// NodeName != entity name (the eval-k3s-vm → vm: k3s-vm shape): the
@@ -163,7 +163,7 @@ func TestVmUnifiedTarget_Rebuild_DryRun(t *testing.T) {
 		}
 	})
 
-	// The layer re-apply step (the fix) must be present, keyed on NodeName.
+	// The candy re-apply step (the fix) must be present, keyed on NodeName.
 	deployAdd := "dry-run: charly deploy add k3s-vm"
 	if !strings.Contains(out, deployAdd) {
 		t.Errorf("Rebuild dry-run missing layer re-apply step %q in:\n%s", deployAdd, out)
@@ -174,7 +174,7 @@ func TestVmUnifiedTarget_Rebuild_DryRun(t *testing.T) {
 		t.Errorf("Rebuild dry-run: expected %q before %q in:\n%s", vmStart, deployAdd, out)
 	}
 
-	// Without RebuildImage the disk build step is skipped, but the layer
+	// Without RebuildImage the disk build step is skipped, but the candy
 	// re-apply still runs (a config-only rebuild must still re-deploy).
 	out = captureVmStdout(t, func() {
 		if err := target.Rebuild(context.Background(), RebuildOpts{DryRun: true, RebuildImage: false}); err != nil {
@@ -192,7 +192,7 @@ func TestVmUnifiedTarget_Rebuild_DryRun(t *testing.T) {
 // TestVmUnifiedTarget_Rebuild_ReappliesCandies exercises the real (non-dry-run)
 // Rebuild body through the stubbable runCharlySubcommand seam and asserts the
 // recorded subcommand sequence ends in `deploy add <node>` — the shared
-// layer-apply primitive LocalUnifiedTarget.Rebuild and PodUnifiedTarget.Rebuild
+// candy-apply primitive LocalUnifiedTarget.Rebuild and PodUnifiedTarget.Rebuild
 // also call (R3). The #42 bug (domain-recreate only) would record no such call.
 func TestVmUnifiedTarget_Rebuild_ReappliesCandies(t *testing.T) {
 	var calls [][]string
@@ -205,7 +205,7 @@ func TestVmUnifiedTarget_Rebuild_ReappliesCandies(t *testing.T) {
 
 	// `charly vm start` goes through runCharlySubcommandCapture (real exec). Stub it
 	// to return a benign "already running" so Rebuild falls through to the
-	// layer re-apply without spawning a real charly binary.
+	// candy re-apply without spawning a real charly binary.
 	origCap := runCharlySubcommandCapture
 	runCharlySubcommandCapture = func(args ...string) (string, error) {
 		calls = append(calls, append([]string{"<capture>"}, args...))

@@ -101,7 +101,7 @@ type UnifiedFile struct {
 	// Android (kind:android) — Android device substrates (an in-pod emulator
 	// or a remote/physical adb endpoint) onto which `apk:` packages install
 	// via a `target: android` deploy. Modeled on K8s (the device is the
-	// substrate; the apps ride in on the deploy's layers). See android_spec.go.
+	// substrate; the apps ride in on the deploy's candies). See android_spec.go.
 	Android map[string]*AndroidSpec `yaml:"android,omitempty"`
 
 	// AI catalog (kind:ai), harness recipes (kind:recipe = pure spec),
@@ -141,7 +141,7 @@ type UnifiedFile struct {
 	// directly and NOT flat-merged into the root maps — populated at load
 	// time by loadUnifiedInto. Entries are referenced qualified, e.g.
 	// `base: cachyos.cachyos` resolves `cachyos` in Namespaces, then its
-	// Image["cachyos"]. Bare refs inside a namespace resolve within that
+	// Box["cachyos"]. Bare refs inside a namespace resolve within that
 	// namespace first (Go package-member semantics). See charly/namespace.go.
 	Namespaces map[string]*UnifiedFile `yaml:"-"`
 }
@@ -220,7 +220,7 @@ func (il ImportList) MarshalYAML() (interface{}, error) {
 type DiscoverConfig []ScanSpec
 
 // ScanSpec describes one discovery root. Accepts string shorthand
-// ("layers" → {Path: "layers", Recursive: true}) or the explicit object form
+// ("candy" → {Path: "candy", Recursive: true}) or the explicit object form
 // ({path: X, recursive: false}). Empty Path is invalid.
 type ScanSpec struct {
 	Path      string `yaml:"path"`
@@ -264,9 +264,9 @@ func (s *ScanSpec) UnmarshalYAML(node *yaml.Node) error {
 	return nil
 }
 
-// InlineCandy is a layer declared inline in the unified file's `layers:` map.
+// InlineCandy is a candy declared inline in the unified file's `candy:` map.
 // Mutually exclusive options: `from:` points at a directory to scan via the
-// existing scanCandy (no schema change), OR the inline body defines the layer
+// existing scanCandy (no schema change), OR the inline body defines the candy
 // (same fields as the candy manifest, flattened via yaml:",inline").
 type InlineCandy struct {
 	From      string `yaml:"from,omitempty"`
@@ -309,7 +309,7 @@ type DeploymentsSection struct {
 // -----------------------------------------------------------------------------
 // Kind-keyed single-entity document forms (Part E).
 //
-// A document containing exactly one top-level kind key (`layer:` / `image:` /
+// A document containing exactly one top-level kind key (`candy:` / `box:` /
 // `deployment:` / `builder:` / `distro:` / `init:`) + a `name:` inside the
 // body is a self-describing standalone entity. Multiple such documents can be
 // concatenated via YAML `---` separators to form a bundle file.
@@ -442,7 +442,7 @@ type InitDoc struct {
 
 // VmDoc wraps a single VmSpec with an explicit name. The standalone
 // form is authored as a top-level `kind: vm` + `name: <name>` document
-// (often as a paired entry in the same file as a kind:image entry for
+// (often as a paired entry in the same file as a kind:box entry for
 // bootc images — see migrate vm-spec).
 type VmDoc struct {
 	Name        string       `yaml:"name"`
@@ -577,8 +577,8 @@ func rejectLegacyLocalSurface(root string, merged *UnifiedFile) error {
 }
 
 // rejectLegacyMarimoMl errors out on any residual `marimo-ml` /
-// `marimo-ml-pod` reference (image key, deployment key, or `image:`
-// cross-ref). The 2026-04 cutover renamed the image + deploy entry to
+// `marimo-ml-pod` reference (box key, deployment key, or `box:`
+// cross-ref). The 2026-04 cutover renamed the box + deploy entry to
 // `marimo`; the 2026-05 cutover then renamed `marimo` → `versa`. This
 // guard ensures users on an outdated personal charly.yml STILL on
 // marimo-ml see a remediation hint pointing at the current canonical
@@ -692,7 +692,7 @@ func LoadUnified(dir string) (*UnifiedFile, bool, error) {
 	// deploy verb resolves them by name through the same path as any
 	// deploy. Disjoint-name guard inside. Runs BEFORE validateDeploymentTree
 	// so folded beds get the same deploy validation (name shape, required
-	// image: on pod targets).
+	// box: on pod targets).
 	if err := foldEvalBeds(merged); err != nil {
 		return nil, true, fmt.Errorf("%s: %w", root, err)
 	}
@@ -875,7 +875,7 @@ func validateDeploymentTree(deploy map[string]DeploymentNode) error {
 }
 
 // validateDeployRequiresBox enforces the 2026-05-12 schema rule:
-// every `target: pod` deploy entry MUST declare its `image:` field.
+// every `target: pod` deploy entry MUST declare its `box:` field.
 // Pre-cutover the eval runner silently fell back to inspecting the
 // running container's image ref via `containerImageRef`, which read
 // stale OCI labels off volume-pinned containers and dropped any
@@ -884,7 +884,7 @@ func validateDeploymentTree(deploy map[string]DeploymentNode) error {
 // ref ONLY from this field.
 //
 // Scope: target: pod (or empty — pod is the default). target: vm
-// uses `vm:`, target: local is layer-driven, target: k8s
+// uses `vm:`, target: local is candy-driven, target: k8s
 // CLUSTER definitions live in the `k8s:` section (not deploy:).
 //
 // Remediation: `charly migrate` (idempotent) walks every
@@ -1048,10 +1048,10 @@ func loadUnifiedInto(path string, merged *UnifiedFile, visited map[string]bool, 
 	}
 	// At a project boundary (depth 0 = the root file OR a namespace root) every
 	// import is now merged, so run discovery here — the SINGLE site for ALL
-	// consumers (box config, layers, deploy). discover: scans each spec and
+	// consumers (box config, candies, deploy). discover: scans each spec and
 	// registers discovered entities by SHAPE (candies AND boxes AND any other
-	// kind). Historically only the layer-loading path called ApplyDiscover, so a
-	// discovered `box:` dir never reached ProjectConfig/Config.Image; routing
+	// kind). Historically only the candy-loading path called ApplyDiscover, so a
+	// discovered `box:` dir never reached ProjectConfig/Config.Box; routing
 	// it through the loader fixes box-via-discover uniformly.
 	if depth == 0 {
 		if err := merged.ApplyDiscover(base); err != nil {
@@ -1171,7 +1171,7 @@ const (
 )
 
 // rootShapeKeys are the top-level keys that mark a doc as root-shaped.
-// Schema v4 uses singular keys uniformly: image/pod/vm/k8s/host/deployment.
+// Schema v4 uses singular keys uniformly: box/pod/vm/k8s/host/deployment.
 // Plural spellings (images:/vms:) are legacy; classifyDoc rejects them
 // with a migration hint.
 var rootShapeKeys = map[string]bool{
@@ -1185,7 +1185,7 @@ var rootShapeKeys = map[string]bool{
 	"deploy":  true,
 	// 2026-04 harness cutover: `ai:` and `recipe:` are recognized as
 	// root-shape collection-map keys (in addition to being valid
-	// kind-keyed forms). Mirrors how image/pod/vm work.
+	// kind-keyed forms). Mirrors how box/pod/vm work.
 	"ai": true, "recipe": true, "score": true,
 	// kind:eval disposable R10 beds — root-shape collection map
 	// (bed-name → DeploymentNode) authored in eval.yml. The nested `eval:`
@@ -1247,7 +1247,7 @@ func classifyDoc(node *yaml.Node) (docShape, error) {
 		if k == "include" {
 			hasLegacyIncludeKey = true
 		}
-		// Schema v4: the target-template kind keys (image/pod/vm/k8s/host/
+		// Schema v4: the target-template kind keys (box/pod/vm/k8s/host/
 		// deployment) overlap with root-shape map keys. Disambiguate by
 		// value inspection — kind-keyed single-entity form has a `name:`
 		// scalar child; root-shape map form has child keys that are names
@@ -1463,7 +1463,7 @@ func validateHarnessSemantics(u *UnifiedFile) error {
 	// Every kind:recipe scenario must declare `pod:`, have a unique name,
 	// and resolve depends_on intra-recipe without cycles. All four rules
 	// run through the shared ValidateScenarios (scenario_validate.go,
-	// 2026-04 cleanup cutover) so layer/image descriptions get the same
+	// 2026-04 cleanup cutover) so candy/box descriptions get the same
 	// enforcement when description loading calls it with RequirePod=false.
 	for name, recipe := range u.Recipe {
 		if recipe == nil {
@@ -1521,7 +1521,7 @@ func validateHarnessSemantics(u *UnifiedFile) error {
 // BDD/test/harness surface-cleanup cutover. Its rules (name uniqueness,
 // depends_on resolution, cycle detection) are now part of the shared
 // ValidateScenarios in scenario_validate.go, which validateHarnessSemantics
-// invokes above with RequirePod=true. Layer/image description loading
+// invokes above with RequirePod=true. Candy/box description loading
 // invokes the same validator with RequirePod=false.
 
 // -----------------------------------------------------------------------------
@@ -1928,7 +1928,7 @@ func (uf *UnifiedFile) EvalBeds() map[string]DeploymentNode {
 // validateEvalBeds enforces the kind:eval bed-specific invariants beyond the
 // generic deploy validation (which already runs on the folded beds via
 // validateDeploymentTree → validateDeployRequiresBox, covering the pod
-// `image:` requirement). Runs at LOAD time so EVERY command that resolves a
+// `box:` requirement). Runs at LOAD time so EVERY command that resolves a
 // bed (charly eval run, charly deploy add, charly config, charly box validate, …) sees the
 // same friendly error — not just `charly box validate`.
 func validateEvalBeds(uf *UnifiedFile) error {
@@ -1943,7 +1943,7 @@ func validateEvalBeds(uf *UnifiedFile) error {
 		}
 		switch node.Target {
 		case "pod":
-			// image: presence enforced by validateDeployRequiresBox on the
+			// box: presence enforced by validateDeployRequiresBox on the
 			// folded Deploy entry — no duplicate check here.
 		case "vm":
 			if node.Vm == "" {
@@ -2349,7 +2349,7 @@ func findEntityDirs(path, filename string, recursive bool) ([]string, error) {
 	if !dirExists(path) {
 		// A discover path that doesn't exist yields zero entities — NOT an
 		// error. discover: is universally applied at load now (not just on the
-		// layer path), and a project may legitimately declare a uniform
+		// candy path), and a project may legitimately declare a uniform
 		// `discover: [box, candy]` while carrying only one of the directories
 		// (e.g. a distro submodule with boxes but no candy/ of its own).
 		return nil, nil
@@ -2395,7 +2395,7 @@ func findEntityDirs(path, filename string, recursive bool) ([]string, error) {
 // document it contains by SHAPE — determined from the document's top-level
 // kind-key WITHOUT parsing the body. A candy-shaped doc registers a lazy
 // `From:` directory reference (scanCandy parses + validates the manifest and
-// resolves the layer's assets relative to its dir); every other shape decodes
+// resolves the candy's assets relative to its dir); every other shape decodes
 // and merges inline via mergeKindDoc. The conflict rule "explicit entry wins"
 // applies to discovered candies.
 func (uf *UnifiedFile) applyDiscoveredManifest(dir, manifest, rootDir string) error {
@@ -2566,9 +2566,9 @@ func (uf *UnifiedFile) ProjectDeployConfig() *DeployConfig {
 	}
 }
 
-// ProjectCandies scans or synthesizes a *Layer per entry in uf.Layer. Entries
-// with `from:` go through the existing scanCandy so directory-based layers
-// behave identically to today. Inline entries synthesize a *Layer from the
+// ProjectCandies scans or synthesizes a *Candy per entry in uf.Candy. Entries
+// with `from:` go through the existing scanCandy so directory-based candies
+// behave identically to today. Inline entries synthesize a *Candy from the
 // embedded CandyYAML (Part A's `directory:` field still applies).
 func (uf *UnifiedFile) ProjectCandies(rootDir string) (map[string]*Candy, error) {
 	out := map[string]*Candy{}
@@ -2577,7 +2577,7 @@ func (uf *UnifiedFile) ProjectCandies(rootDir string) (map[string]*Candy, error)
 			continue
 		}
 		if il.From != "" {
-			// Directory-based layer — reuse existing scanner.
+			// Directory-based candy — reuse existing scanner.
 			p := il.From
 			if !filepath.IsAbs(p) {
 				p = filepath.Join(rootDir, p)
@@ -2590,7 +2590,7 @@ func (uf *UnifiedFile) ProjectCandies(rootDir string) (map[string]*Candy, error)
 			if err != nil {
 				return nil, fmt.Errorf("layer %q from %q: %w", name, il.From, err)
 			}
-			// Layers discovered via `include:` of a remote charly.yml
+			// Candies discovered via `include:` of a remote charly.yml
 			// live OUTSIDE the workspace's project tree (typically in
 			// the github cache under ~/.cache/charly/repos/). Mark them as
 			// Remote so the generator's createRemoteCandyCopies stages
@@ -2606,7 +2606,7 @@ func (uf *UnifiedFile) ProjectCandies(rootDir string) (map[string]*Candy, error)
 			out[name] = layer
 			continue
 		}
-		// Inline layer — synthesize.
+		// Inline candy — synthesize.
 		layer, err := synthesizeInlineCandy(name, il, rootDir)
 		if err != nil {
 			return nil, fmt.Errorf("inline layer %q: %w", name, err)
@@ -2616,12 +2616,12 @@ func (uf *UnifiedFile) ProjectCandies(rootDir string) (map[string]*Candy, error)
 	return out, nil
 }
 
-// synthesizeInlineCandy produces a *Layer from an inline declaration in the
+// synthesizeInlineCandy produces a *Candy from an inline declaration in the
 // unified file. The effective Path is rootDir (the charly.yml's dir);
 // SourceDir always equals Path (the `directory:` field was deleted in the
 // 2026-05 Calamares cutover).
 func synthesizeInlineCandy(name string, il *InlineCandy, rootDir string) (*Candy, error) {
-	// Use inline layer body as if it were a parsed candy manifest at rootDir.
+	// Use inline candy body as if it were a parsed candy manifest at rootDir.
 	layer := &Candy{
 		Name: name,
 		Path: rootDir,
@@ -2647,8 +2647,8 @@ func synthesizeInlineCandy(name string, il *InlineCandy, rootDir string) (*Candy
 }
 
 // populateCandyFromYAML copies every field from a parsed CandyYAML into the
-// runtime Layer. It is the SINGLE post-parse populator: BOTH scanCandy (the
-// discovered-layer-dir path) and synthesizeInlineCandy (the charly.yml
+// runtime Candy. It is the SINGLE post-parse populator: BOTH scanCandy (the
+// discovered-candy-dir path) and synthesizeInlineCandy (the charly.yml
 // inline path) call it, so the two can never drift. (They previously did — the
 // inline path silently dropped artifacts/capabilities/requiresCapabilities/
 // shell and the unexported description.) The caller is responsible for the

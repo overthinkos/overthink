@@ -18,7 +18,7 @@ package main
 //	target: vm    → charly vm build + charly vm create + charly deploy add + charly eval
 //	                live (image build / eval box skipped — the substrate
 //	                is a cloud_image, not an charly box)
-//	target: local → charly deploy add only (kind:local applies layers in place;
+//	target: local → charly deploy add only (kind:local applies candies in place;
 //	                no container/VM to exec eval live against)
 //
 // The dispatcher SHELLS OUT to the same `charly` binary the caller invoked, so
@@ -353,8 +353,8 @@ func runEvalBed(exe, name string, node DeploymentNode, opts bedRunOpts) (*bedRun
 		// 30-90s on cold boot; poll until ssh connects so deploy-add starts
 		// at a known-ready state. Best-effort: silent on timeout.
 		waitForVmSshReady(vmTemplate, 120*time.Second)
-		// Deploy the VM node's own layers AND its nested target:pod children.
-		// The VM target's Add applies the layers over SSH (incl. any kernel-driver
+		// Deploy the VM node's own candies AND its nested target:pod children.
+		// The VM target's Add applies the candies over SSH (incl. any kernel-driver
 		// reboot), then deploys each nested pod as a PERSISTENT in-guest quadlet via
 		// deployNestedPodsInGuest (build + cp-box into the guest + the guest's
 		// own project-free `charly deploy from-box`). The dispatch routes a VM root
@@ -366,9 +366,9 @@ func runEvalBed(exe, name string, node DeploymentNode, opts bedRunOpts) (*bedRun
 		}
 		// deployNestedPodsInGuest (inside the VM deploy-add above) brings up
 		// nested target:pod children as in-guest quadlets, but it SKIPS
-		// target:local children (they carry no image — they apply layers in
+		// target:local children (they carry no image — they apply candies in
 		// place). Deploy each nested local child via the dotted-path dispatch,
-		// which applies the child's local-deploy layers into the guest over the
+		// which applies the child's local-deploy candies into the guest over the
 		// NestedExecutor (SSH). Without this, evalLiveTree below would eval an
 		// un-deployed child and fail. Mirrors the pod-bed nested-child loop.
 		for _, childKey := range sortedNestedKeys(node.Nested) {
@@ -419,7 +419,7 @@ func runEvalBed(exe, name string, node DeploymentNode, opts bedRunOpts) (*bedRun
 		deployed = true // target registered — keep it on any later failure
 		// Pod beds: deploy add registers the entry but does not generate the
 		// quadlet or start the service — `charly config` writes the unit,
-		// `charly start` activates it. kind:local applies layers in place during
+		// `charly start` activates it. kind:local applies candies in place during
 		// deploy add, so neither step is needed.
 		if !isLocal {
 			if err := step("config", []string{"config", name}); err != nil {
@@ -434,7 +434,7 @@ func runEvalBed(exe, name string, node DeploymentNode, opts bedRunOpts) (*bedRun
 			waitForContainerReady(name, 30*time.Second)
 			// Now the substrate is up: deploy any nested children onto it,
 			// pre-order. The canonical case is a `target: android` device
-			// child whose layers' apk: packages install onto the running
+			// child whose candies' apk: packages install onto the running
 			// emulator (`charly deploy add <bed>.<child>` resolves the child
 			// against the started pod's executor). Childless beds skip this.
 			for _, childKey := range sortedNestedKeys(node.Nested) {
@@ -447,7 +447,7 @@ func runEvalBed(exe, name string, node DeploymentNode, opts bedRunOpts) (*bedRun
 
 	// evalLiveTree runs `charly eval live` against the bed's substrate AND every
 	// nested child through the multi-hop NestedExecutor chain, so a nested
-	// child's BAKED layer/image eval (e.g. the selkies layer's frame-not-black
+	// child's BAKED candy/box eval (e.g. the selkies candy's frame-not-black
 	// + encoder-active checks on a nested selkies-kde pod) is actually exercised
 	// against its real venue. Without this, `charly eval run` deploys nested
 	// children (above) but never evaluates them — their coverage is silently
@@ -520,7 +520,7 @@ func runEvalBed(exe, name string, node DeploymentNode, opts bedRunOpts) (*bedRun
 		if !isLocal && len(node.Nested) > 0 {
 			if isVM {
 				// `charly update` recreated the libvirt domain; the qcow2 disk (and
-				// thus the applied guest layers, the nested pod's quadlet, and
+				// thus the applied guest candies, the nested pod's quadlet, and
 				// its loaded image) persists across the recreate. The nested pod
 				// is a PERSISTENT in-guest quadlet with lingering enabled, so it
 				// auto-starts on the fresh boot — no re-assert needed. Just wait

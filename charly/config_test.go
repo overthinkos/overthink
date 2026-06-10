@@ -136,9 +136,9 @@ func TestResolveImage(t *testing.T) {
 			if !reflect.DeepEqual(resolved.Platforms, tt.wantPlatforms) {
 				t.Errorf("Platforms = %v, want %v", resolved.Platforms, tt.wantPlatforms)
 			}
-			// Bootc was deleted as an image-level field; the layer-aggregated
+			// Bootc was deleted as an image-level field; the candy-aggregated
 			// CandyCaps.PreserveUser is the new signal. Tests that need this
-			// behavior should compose a layer that contributes preserve_user.
+			// behavior should compose a candy that contributes preserve_user.
 			_ = tt.wantBootc
 		})
 	}

@@ -4,7 +4,7 @@ package main
 //
 // Schema kind rename: `kind: deployment` → `kind: deploy` everywhere (kind-keyed
 // standalone docs and root-shape collection maps). It no longer SPLITS inline
-// `image:`/`vm:` into sibling files — YAML files are generic kind-containers and
+// `box:`/`vm:` into sibling files — YAML files are generic kind-containers and
 // per-kind sibling files are an optional convenience, never forced.
 //
 // Preserves YAML comments via yaml.Node round-trip (same approach as
@@ -39,7 +39,7 @@ var kindFilesSchemaVersion = mustCalVer("2026.125.2355")
 // In dry-run mode no files are written.
 func MigrateKindFiles(dir string, dryRun bool) (MigrateKindFilesResult, error) {
 	var res MigrateKindFilesResult
-	// kind-files no longer SPLITS inline image:/vm: into sibling files — YAML
+	// kind-files no longer SPLITS inline box:/vm: into sibling files — YAML
 	// files are generic kind-containers and per-kind sibling files are an
 	// optional convenience, never forced. The only remaining transform is the
 	// legacy `kind: deployment` → `kind: deploy` rename.
@@ -205,7 +205,7 @@ func renameKindDocKey(path, oldKind, newKind string, dryRun bool) (int, error) {
 }
 
 // collectProjectYAMLs returns every *.yml file at dir's top level. The
-// migration only touches files at the project root; nested layer.yml files
+// migration only touches files at the project root; nested charly.yml files
 // are left alone (they don't carry kind: deployment).
 func collectProjectYAMLs(dir string) ([]string, error) {
 	entries, err := os.ReadDir(dir)

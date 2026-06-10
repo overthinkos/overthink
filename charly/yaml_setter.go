@@ -17,14 +17,14 @@ import (
 // The dot-path syntax is intentionally narrow:
 //
 //   defaults.tag                    → top-level scalar
-//   images.foo.base                 → nested scalar
-//   images.foo.layers               → list (value parsed as YAML)
-//   images.foo.ports                → list (value parsed as YAML)
+//   box.foo.base                 → nested scalar
+//   box.foo.candy               → list (value parsed as YAML)
+//   box.foo.port                → list (value parsed as YAML)
 //
 // The value is parsed as YAML, so:
 //   charly box set defaults.tag auto         → string "auto"
-//   charly box set images.foo.layers '[a,b]' → list of strings
-//   charly box set images.foo.ports '["8080:8080"]' → list with quoted item
+//   charly box set box.foo.candy '[a,b]' → list of strings
+//   charly box set box.foo.port '["8080:8080"]' → list with quoted item
 //
 // This deliberately does not try to model every candy manifest field as its
 // own verb. For free-form auxiliary files (pixi.toml, root.yml, scripts),

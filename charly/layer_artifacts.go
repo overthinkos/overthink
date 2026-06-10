@@ -1,7 +1,7 @@
 package main
 
-// layer_artifacts.go — retrieves files declared in a layer's `artifacts:`
-// block after the layer's setup has completed on the deploy target.
+// layer_artifacts.go — retrieves files declared in a candy's `artifacts:`
+// block after the candy's setup has completed on the deploy target.
 //
 // Retrieval uses the DeployExecutor's GetFile back-channel (os.ReadFile
 // on host, `ssh vm sudo cat` on VM, `podman exec cat` via the nested
@@ -25,7 +25,7 @@ import (
 	"time"
 )
 
-// RetrieveCandyArtifacts walks every artifact declared by every layer
+// RetrieveCandyArtifacts walks every artifact declared by every candy
 // included in the deploy and pulls it back via the executor's GetFile.
 // Missing non-optional files are a hard error (R1).
 //
@@ -90,7 +90,7 @@ func retrieveOne(
 
 	// GetFile with asRoot=true — artifacts are typically system-owned
 	// files (kubeconfig, service state) that require sudo to read on the
-	// target. Layers that need a user-owned file can add a future
+	// target. Candies that need a user-owned file can add a future
 	// `as_user:` flag; the current schema is deliberately narrow.
 	data, err := exec.GetFile(ctx, a.Path, true /*asRoot*/, opts)
 	if err != nil {
@@ -184,7 +184,7 @@ func waitForArtifactPath(
 // not silently empty-string out.
 //
 // Supports shell-style ${KEY:-default} fallback: when KEY is unset or
-// empty, the substitution resolves to `default`. Needed for layer
+// empty, the substitution resolves to `default`. Needed for candy
 // artifact rewrites that want a sensible fallback when the operator
 // doesn't set an optional env var (e.g. K3S_KUBECONFIG_SERVER).
 // Nested ${} is NOT supported — keep defaults literal.

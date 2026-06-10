@@ -453,7 +453,7 @@ func TestCollector_LookupDeploy_KeyShapes(t *testing.T) {
 // --- collectOne uses base image name for image-label fallback ---
 
 func TestCollector_CollectOne_UsesBaseImageForLabels(t *testing.T) {
-	// Smoke check: an empty Collector + a snapshot with Image set should
+	// Smoke check: an empty Collector + a snapshot with Box set should
 	// not panic and should populate Ports from runtime snapshot. Exercising
 	// the full image-label fallback would require mocking
 	// ResolveNewestLocalCalVer/ExtractMetadata; that's covered indirectly

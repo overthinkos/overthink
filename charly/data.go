@@ -142,7 +142,7 @@ func provisionData(engine string, imageRef string, meta *BoxMetadata,
 		target, ok := targets[entry.Volume]
 		if !ok {
 			// Surface the typo rather than silently dropping the entry.
-			// This catches cases where a layer declares data: volume: <name>
+			// This catches cases where a candy declares data: volume: <name>
 			// but the bare name doesn't match any volume in the composed
 			// image. charly validate also catches this at build time, but this
 			// is the runtime safety net.

@@ -29,7 +29,7 @@ func deployNestedPodsInGuest(vmName string, node *DeploymentNode, exec DeployExe
 	}
 	// The from-box delegation runs the HOST's OWN charly in the guest — not the
 	// guest's PATH charly. The host binary running this deploy is guaranteed current
-	// and from-box-capable; the guest's PATH charly may be a stale layer install
+	// and from-box-capable; the guest's PATH charly may be a stale candy install
 	// (a @github-fetched charly candy ships no bin/charly, so its curl fallback installs
 	// a pre-from-box release). So deliver the host charly to a /tmp path OUTSIDE
 	// $PATH via putHostCharlyInVenue and invoke it by explicit path — NEVER shadowing
@@ -221,7 +221,7 @@ func resolveVmSshPort(spec *VmSpec, vmName string) (int, error) {
 
 // saveVmDeployState writes the updated VmDeployState into
 // ~/.config/charly/charly.yml for the given deploy name. Idempotent —
-// overwrites the images.<name>.vm_state block.
+// overwrites the deploy.<name>.vm_state block.
 func saveVmDeployState(deployName string, state *VmDeployState, spec *VmSpec) error {
 	// Load existing charly.yml (or start fresh).
 	dc, err := LoadDeployConfig()
@@ -255,7 +255,7 @@ func saveVmDeployState(deployName string, state *VmDeployState, spec *VmSpec) er
 	return SaveDeployConfig(dc)
 }
 
-// removeVmDeployEntry strips images.<deployName> from charly.yml.
+// removeVmDeployEntry strips deploy.<deployName> from charly.yml.
 func removeVmDeployEntry(deployName string) error {
 	dc, err := LoadDeployConfig()
 	if err != nil {
@@ -270,7 +270,7 @@ func removeVmDeployEntry(deployName string) error {
 	}
 	// Destroying the VM invalidates only the RUNTIME state (vm_state). Clear
 	// that, but PRESERVE every operator-authored per-host field (preemptible,
-	// env, tunnel, port, security, add_layers, install_opts, …) so a
+	// env, tunnel, port, security, add_candy, install_opts, …) so a
 	// destroy→create cycle — which is exactly what `charly update <vm>` does
 	// (VmUnifiedTarget.Rebuild shells `charly vm destroy` then `charly vm create`) —
 	// never silently drops local config. (This is the root cause of the lost

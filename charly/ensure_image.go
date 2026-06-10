@@ -11,14 +11,14 @@ package main
 //
 // Three input forms accepted, mirroring `charly box pull`:
 //
-//   - Short name (e.g. "eval-target") — resolved via `cfg.Image`
+//   - Short name (e.g. "eval-target") — resolved via `cfg.Box`
 //     to a registry ref, then pulled. Build-fallback uses the same
 //     short name as the input to `charly box build`.
 //
 //   - Fully-qualified registry ref (e.g.
 //     "ghcr.io/overthinkos/eval-target:2026.124.1253") — pulled as-is.
 //     Build-fallback reverse-resolves the basename against
-//     `cfg.Image`; when the basename matches a project image entry,
+//     `cfg.Box`; when the basename matches a project image entry,
 //     the local build runs that entry. This is what makes the
 //     operator's `ghcr.io/overthinkos/arch-builder:<tag>`
 //     buildable on a CachyOS host that has no ghcr.io credentials.
@@ -102,7 +102,7 @@ func EnsureImagePresent(ctx context.Context, image string, cfg *Config, projectD
 	}
 
 	// Fallback: short-name local build. Applies when the identifier
-	// maps to a short-name entry in `cfg.Image` — directly (it IS a
+	// maps to a short-name entry in `cfg.Box` — directly (it IS a
 	// short name) or via basename reverse-resolution (it's a full ref
 	// whose basename matches an entry).
 	short := buildableShortName(image, cfg)
@@ -201,7 +201,7 @@ func podmanPullForEnsure(ctx context.Context, ref string) error {
 //
 // Algorithm:
 //   - Short names (no slash, no @prefix) are returned as-is when
-//     `cfg.Image[name]` exists.
+//     `cfg.Box[name]` exists.
 //   - Full registry refs have their basename (last path segment,
 //     before the tag) extracted and resolved via findBoxByLeaf,
 //     which searches the root image map AND every imported namespace.

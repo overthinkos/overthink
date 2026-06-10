@@ -105,7 +105,7 @@ func TestLocalCollector_SynthesizesFromCandyRecords(t *testing.T) {
 	if a.Image != "local (2 layers)" {
 		t.Errorf("row[0].Image = %q, want local (2 layers)", a.Image)
 	}
-	// Newest deployed_at across its layers wins.
+	// Newest deployed_at across its candies wins.
 	if a.Uptime != "deployed 2026-05-31 12:00 UTC" {
 		t.Errorf("row[0].Uptime = %q, want deployed 2026-05-31 12:00 UTC", a.Uptime)
 	}
@@ -121,7 +121,7 @@ func TestLocalCollector_SynthesizesFromCandyRecords(t *testing.T) {
 }
 
 // An explicit DeployRecord (VM-target local deploy, or a future host write) is
-// honored; its layer set + add_layer merge, and a CandyRecord referencing the
+// honored; its candy set + add_candy merge, and a CandyRecord referencing the
 // same deploy-id must NOT create a second row.
 func TestLocalCollector_DeployRecordUnionNoDoubleCount(t *testing.T) {
 	paths := redirectLocalLedger(t, true)
@@ -134,7 +134,7 @@ func TestLocalCollector_DeployRecordUnionNoDoubleCount(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("WriteDeployRecord: %v", err)
 	}
-	// A CandyRecord for the SAME deploy-id, plus one extra layer not in the
+	// A CandyRecord for the SAME deploy-id, plus one extra candy not in the
 	// deploy record's lists.
 	writeCandy(t, paths, &CandyRecord{
 		Candy:      "extra-layer",
@@ -150,11 +150,11 @@ func TestLocalCollector_DeployRecordUnionNoDoubleCount(t *testing.T) {
 	if r.Container != "deploy-X" {
 		t.Errorf("Container = %q, want deploy-X", r.Container)
 	}
-	// base + charly + sshkeys (record) + extra-layer (layer pass) = 4 distinct.
+	// base + charly + sshkeys (record) + extra-layer (candy pass) = 4 distinct.
 	if r.Image != "local (4 layers)" {
 		t.Errorf("Image = %q, want local (4 layers)", r.Image)
 	}
-	// Newest across record (08:00) and layer (09:00) wins.
+	// Newest across record (08:00) and candy (09:00) wins.
 	if r.Uptime != "deployed 2026-05-29 09:00 UTC" {
 		t.Errorf("Uptime = %q, want deployed 2026-05-29 09:00 UTC", r.Uptime)
 	}

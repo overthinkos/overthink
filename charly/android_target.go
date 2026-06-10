@@ -9,7 +9,7 @@ package main
 // LocalDeployTarget: it walks the plans, picks out ApkInstallStep entries
 // (the `apk:` package format), and installs each app onto the device via the
 // shared installer (android_install.go). Every NON-apk step is skipped — a
-// device is not a host/pod, so a layer's tasks/services/packages don't apply
+// device is not a host/pod, so a candy's tasks/services/packages don't apply
 // to it; only its apk: list does.
 
 import (
@@ -123,8 +123,8 @@ func (a *AndroidDeployTarget) installStep(s *ApkInstallStep, opts EmitOpts) erro
 }
 
 // resolveApkPath resolves a committed-APK reference. Absolute paths are used
-// verbatim; relative paths anchor to the layer's source dir, then fall back
-// to the project cwd (so a layer can reference a shared project file like
+// verbatim; relative paths anchor to the candy's source dir, then fall back
+// to the project cwd (so a candy can reference a shared project file like
 // tests/data/ApiDemos-debug.apk).
 func resolveApkPath(ref, candyDir string) string {
 	if filepath.IsAbs(ref) {

@@ -44,7 +44,7 @@ func TestResolveImageRefForEnsure_ShortNameRequiresCfg(t *testing.T) {
 
 // TestBuildableShortName_FullRefBasenameLookup — the build-fallback
 // path for full registry refs reverse-resolves the basename against
-// cfg.Image. This is what lets
+// cfg.Box. This is what lets
 // `ghcr.io/overthinkos/arch-builder:<tag>` build locally on a
 // host with no ghcr.io credentials.
 func TestBuildableShortName_FullRefBasenameLookup(t *testing.T) {

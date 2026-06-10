@@ -11,15 +11,15 @@ type VolumeMount struct {
 	ContainerPath string // e.g. "/home/user/.openclaw" (~ expanded)
 }
 
-// CollectBoxVolume resolves all volumes for an image by traversing the
-// full image chain (image → base → base's base) and collecting volume
-// declarations from all layers. Volumes are deduplicated by name (first
-// declaration wins — outermost image takes priority).
+// CollectBoxVolume resolves all volumes for a box by traversing the
+// full box chain (box → base → base's base) and collecting volume
+// declarations from all candies. Volumes are deduplicated by name (first
+// declaration wins — outermost box takes priority).
 func CollectBoxVolume(cfg *Config, layers map[string]*Candy, boxName string, home string, excludeNames map[string]bool) ([]VolumeMount, error) {
-	// Collect all layer names from the image chain (outermost first)
+	// Collect all candy names from the box chain (outermost first)
 	var allCandyNames []string
 	for _, node := range cfg.walkBaseChain(boxName) {
-		// Resolve layers for this image (includes transitive deps)
+		// Resolve candies for this box (includes transitive deps)
 		resolved, err := ResolveCandyOrder(node.Img.Candy, layers, nil)
 		if err != nil {
 			return nil, err

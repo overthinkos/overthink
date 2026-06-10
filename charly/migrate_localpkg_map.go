@@ -2,9 +2,9 @@ package main
 
 // migrate_localpkg_map.go — `charly migrate`.
 //
-// 2026-06 localpkg per-format cutover. The layer `localpkg:` field went from a
+// 2026-06 localpkg per-format cutover. The candy `localpkg:` field went from a
 // single scalar (Arch-only — `localpkg: pkg/arch`) to a per-format MAP so one
-// `ov` layer carries a native-package SOURCE per distro format:
+// `ov` candy carries a native-package SOURCE per distro format:
 //
 //	localpkg:
 //	    pac: pkg/arch
@@ -26,9 +26,9 @@ import (
 	"strings"
 )
 
-// MigrateLocalpkgMap rewrites the legacy scalar `localpkg: <dir>` layer field to
+// MigrateLocalpkgMap rewrites the legacy scalar `localpkg: <dir>` candy field to
 // the per-format map form `localpkg:\n    pac: <dir>` across every project YAML
-// that can carry a layer definition (candy/<name>/candy.yml, root-level YAML
+// that can carry a candy definition (candy/<name>/charly.yml, root-level YAML
 // siblings such as overthink.yml / per-kind files, and ov/testdata when
 // self-migrating). Returns the rewritten file paths. Idempotent.
 func MigrateLocalpkgMap(dir string, dryRun bool) ([]string, error) {
@@ -90,8 +90,8 @@ func rewriteLocalpkgMap(data []byte) ([]byte, bool) {
 }
 
 // localpkgCandidateFiles returns the YAML files in a project that can carry a
-// layer's `localpkg:` field: candy/<name>/*.yml (the layer dir), the root-level
-// *.yml siblings (inline layers in overthink.yml / per-kind files), and
+// candy's `localpkg:` field: candy/<name>/*.yml (the candy dir), the root-level
+// *.yml siblings (inline candies in overthink.yml / per-kind files), and
 // ov/testdata/**/*.yml when run from the overthink repo itself. It deliberately
 // does NOT recurse into box/<distro> submodules (separate repos, migrated on
 // their own). Sorted, deduplicated.
@@ -108,9 +108,9 @@ func localpkgCandidateFiles(dir string) []string {
 			return nil
 		})
 	}
-	// candy/<name>/candy.yml — the rebranded layer dir.
+	// candy/<name>/charly.yml — the rebranded candy dir.
 	addYAMLTree(filepath.Join(dir, "candy"))
-	// Root-level YAML siblings (overthink.yml + per-kind files with inline layers).
+	// Root-level YAML siblings (overthink.yml + per-kind files with inline candies).
 	if entries, err := os.ReadDir(dir); err == nil {
 		for _, e := range entries {
 			if !e.IsDir() && (strings.HasSuffix(e.Name(), ".yml") || strings.HasSuffix(e.Name(), ".yaml")) {

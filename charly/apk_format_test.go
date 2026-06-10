@@ -39,7 +39,7 @@ func TestInstallWithRetry(t *testing.T) {
 	}
 }
 
-// TestCompileApkStep verifies the layer `apk:` package format compiles into a
+// TestCompileApkStep verifies the candy `apk:` package format compiles into a
 // single ApkInstallStep carrying every entry, and that an empty apk: list
 // compiles to nothing.
 func TestCompileApkStep(t *testing.T) {
@@ -97,7 +97,7 @@ func TestOCITargetSkipsApkInstall(t *testing.T) {
 }
 
 // TestPopulateCandyApk verifies the candy manifest `apk:` field flows through the
-// populator onto the resolved Layer.
+// populator onto the resolved Candy.
 func TestPopulateCandyApk(t *testing.T) {
 	ly := &CandyYAML{
 		Apk: []ApkPackageSpec{
@@ -115,12 +115,12 @@ func TestPopulateCandyApk(t *testing.T) {
 }
 
 // TestResolveApkPath checks committed-APK path resolution: absolute verbatim,
-// layer-relative when present, else project-cwd-relative fallback.
+// candy-relative when present, else project-cwd-relative fallback.
 func TestResolveApkPath(t *testing.T) {
 	if got := resolveApkPath("/abs/x.apk", "/layers/foo"); got != "/abs/x.apk" {
 		t.Errorf("absolute path = %q, want verbatim", got)
 	}
-	// Layer-relative miss → cwd-relative fallback (verbatim ref).
+	// Candy-relative miss → cwd-relative fallback (verbatim ref).
 	if got := resolveApkPath("tests/data/x.apk", "/nonexistent-layer-dir"); got != "tests/data/x.apk" {
 		t.Errorf("relative fallback = %q, want tests/data/x.apk", got)
 	}

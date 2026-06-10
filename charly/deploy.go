@@ -92,7 +92,7 @@ type DeploymentNode struct {
 	// Shell is the deploy-level overlay for the ai.opencharly.shell
 	// label. Same id-based replace/skip/append semantics as Eval —
 	// applied via MergeDeployShell at deploy time. 2026-05 cutover.
-	// Each entry carries optional `id:` (matches a baked layer/image
+	// Each entry carries optional `id:` (matches a baked candy/box
 	// origin or "<origin>:<shell>") and either a generic body /
 	// per-shell sub-blocks (replaces the baked entry) or `skip: true`
 	// (drops the baked entry). Entries without a matching id append
@@ -102,7 +102,7 @@ type DeploymentNode struct {
 	// --- BuildTarget refactor fields (Task 13) ---
 	//
 	// Target selects the deploy destination. Empty or "container" →
-	// the existing quadlet/podman pipeline. "host" → apply layers
+	// the existing quadlet/podman pipeline. "host" → apply candies
 	// directly to the invoking user's filesystem via LocalDeployTarget.
 	// "kubernetes" → emit a Kustomize tree via K8sDeployTarget (Part F).
 	// Only honored when this entry's map key matches (host/kubernetes)
@@ -152,9 +152,9 @@ type DeploymentNode struct {
 	// Probes — target-agnostic liveness/readiness/startup specs.
 	Probes *DeployProbes `yaml:"probes,omitempty"`
 
-	// AddCandies are overlay layer refs applied on top of the image.
+	// AddCandies are overlay candy refs applied on top of the image.
 	// Each entry is a DeployRef (local name / local YAML path /
-	// remote github ref). Same syntax as the command-line --add-layer
+	// remote github ref). Same syntax as the command-line --add-candy
 	// flag.
 	AddCandy []string `yaml:"add_candy,omitempty"`
 
@@ -164,7 +164,7 @@ type DeploymentNode struct {
 
 	// --- Schema-v4 template references (exactly one matching Target) ---
 
-	// Box names a kind:image directly. Used for target: pod when no
+	// Box names a kind:box directly. Used for target: pod when no
 	// kind:pod template is needed (the common case), or as a legacy
 	// fallback for other targets during migration.
 	Box string `yaml:"box,omitempty"`
@@ -182,15 +182,15 @@ type DeploymentNode struct {
 	// target: k8s. Replaces the legacy `cluster:` field.
 	K8s string `yaml:"k8s,omitempty"`
 
-	// Local names a kind:local template (layer stack + install_opts + env).
-	// Optional — a target:local deployment MAY inline add_layers: directly
+	// Local names a kind:local template (candy stack + install_opts + env).
+	// Optional — a target:local deployment MAY inline add_candy: directly
 	// without a template.
 	Local string `yaml:"local,omitempty"`
 
 	// Android names a kind:android device (an in-pod emulator or a
 	// remote/physical adb endpoint). Only meaningful for target: android —
-	// the deploy installs its `add_layer:` layers' `apk:` packages onto the
-	// device via AndroidDeployTarget. The apps ride in on add_layer: (the
+	// the deploy installs its `add_candy:` candies' `apk:` packages onto the
+	// device via AndroidDeployTarget. The apps ride in on add_candy: (the
 	// same overlay mechanism every other target uses), so there is no
 	// dedicated apk-list field here.
 	Android string `yaml:"android,omitempty"`
@@ -626,8 +626,8 @@ func sortedNestedKeys(children map[string]*DeploymentNode) []string {
 
 // bedEvalLiveRefs returns the ordered `charly eval live` targets for a bed: the
 // substrate itself first, then each nested child as a sorted dotted path. This
-// is the pure list `charly eval run` walks so a nested pod's BAKED layer/image eval
-// (e.g. the selkies layer's encoder + frame checks on a nested selkies-kde pod)
+// is the pure list `charly eval run` walks so a nested pod's BAKED candy/box eval
+// (e.g. the selkies candy's encoder + frame checks on a nested selkies-kde pod)
 // is exercised against its real venue through the chain — not just the parent
 // substrate. Without the nested entries, `charly eval run` deploys nested children
 // but never evaluates them. Pure + unit-tested.
@@ -969,7 +969,7 @@ type EphemeralRuntime struct {
 	// ephemeral instantiation.
 	ID string `yaml:"id"`
 
-	// ParentVm names the kind:vm entity (or kind:image / kind:k8s for
+	// ParentVm names the kind:vm entity (or kind:box / kind:k8s for
 	// pod / k8s targets) the ephemeral was instantiated from.
 	ParentVm string `yaml:"parent_vm,omitempty"`
 
@@ -1055,19 +1055,19 @@ func (o *InstallOptsConfig) ApplyTo(opts EmitOpts) EmitOpts {
 	return opts
 }
 
-// DeployVolumeConfig overrides the backing for a layer-declared volume.
+// DeployVolumeConfig overrides the backing for a candy-declared volume.
 type DeployVolumeConfig struct {
-	Name       string `yaml:"name"`                  // matches layer volume name
+	Name       string `yaml:"name"`                  // matches candy volume name
 	Type       string `yaml:"type,omitempty"`        // "volume" (default), "bind", "encrypted"
 	Host       string `yaml:"host,omitempty"`        // explicit host path (bind type only, optional)
-	Path       string `yaml:"path,omitempty"`        // container path (only for deploy-only volumes not in any layer)
+	Path       string `yaml:"path,omitempty"`        // container path (only for deploy-only volumes not in any candy)
 	DataSeeded bool   `yaml:"data_seeded,omitempty"` // tracks if data was provisioned from image
 	DataSource string `yaml:"data_source,omitempty"` // image:tag that provided the data
 }
 
 // DeploySecretConfig overrides or provides a secret for deployment.
 type DeploySecretConfig struct {
-	Name   string `yaml:"name"`             // matches layer secret name
+	Name   string `yaml:"name"`             // matches candy secret name
 	Source string `yaml:"source,omitempty"` // "keyring" (default), "env:VAR", "file:/path"
 }
 
@@ -1098,7 +1098,7 @@ type DeployStorage struct {
 	Size      string `yaml:"size,omitempty"`       // e.g. "20Gi"
 	ClassHint string `yaml:"class_hint,omitempty"` // fast | cheap | encrypted | default
 	Access    string `yaml:"access,omitempty"`     // single-writer | many-readers | many-writers
-	Path      string `yaml:"path,omitempty"`       // container mount path (optional — layer can declare)
+	Path      string `yaml:"path,omitempty"`       // container mount path (optional — candy can declare)
 }
 
 // DeployProbes — target-agnostic probes. Each entry is a Check (same shape
@@ -1162,12 +1162,12 @@ func parseDeployKey(key string) (boxName, instance string) {
 	return key, ""
 }
 
-// resolveDeployKeyToBox maps a deploy-key name to the `image:` field of
+// resolveDeployKeyToBox maps a deploy-key name to the `box:` field of
 // its deploy entry. User (~/.config/charly/charly.yml) wins over project
 // (charly.yml/eval.yml) — the same precedence the eval runner and
-// `charly config` use. Returns "" when no entry declares an image for the key
+// `charly config` use. Returns "" when no entry declares a box for the key
 // (caller decides the fallback). Implements the Pattern-B (arbitrary
-// deploy-key + version-pin) and kind:eval-bed (key != image) lookups.
+// deploy-key + version-pin) and kind:eval-bed (key != box) lookups.
 // See /charly-core:deploy "Two supported deploy patterns".
 func resolveDeployKeyToBox(key, instance string) string {
 	if key == "" {
@@ -1258,7 +1258,7 @@ func vmEntityForDeploy(deployName string) string {
 // resolveDeployBoxName is THE single deploy-key→image-name resolver used
 // by every deploy-mode command that starts from a deploy key (charly config /
 // start / shell / eval live). It returns the deploy entry's declared
-// `image:` (resolveDeployKeyToBox), falling back to the key itself when
+// `box:` (resolveDeployKeyToBox), falling back to the key itself when
 // no entry declares one (the key==image convention). Before this was
 // shared, `charly config` resolved key→image but `charly start`/`charly shell`/
 // `charly eval live` treated the key AS the image — so a kind:eval bed
@@ -1428,7 +1428,7 @@ func (dc *DeployConfig) OccupiedHostPorts(excludeKey string) map[int]bool {
 //
 // The overlay entry is keyed by deployName — the charly.yml key base the caller
 // is operating on (the bed / instance / Pattern-B name), NOT meta.Image (the
-// baked ai.opencharly.image short-name). For a plain deploy the two coincide,
+// baked ai.opencharly.box short-name). For a plain deploy the two coincide,
 // but a kind:eval bed or a Pattern-B deploy carries a key distinct from its
 // image, so the caller MUST pass its own deploy key (typically c.Image). Keying
 // off meta.Image would read whichever sibling deploy merely shares the image and
@@ -1481,7 +1481,7 @@ func MergeDeployOntoMetadata(meta *BoxMetadata, dc *DeployConfig, deployName, in
 	if overlay.Security != nil {
 		// Field-level merge: overlay fields override, unset fields fall
 		// through to the label-provided values. A full struct replace would
-		// wipe layer defaults like shm_size when a user sets just --memory-max
+		// wipe candy defaults like shm_size when a user sets just --memory-max
 		// via `charly config`.
 		if overlay.Security.Privileged {
 			meta.Security.Privileged = true
@@ -1592,7 +1592,7 @@ func deployStorageDir(deployKey, instance string) string {
 // (deployVolumePrefix), so every distinctly-named deploy ALWAYS gets volume
 // mounts distinct from any other deploy of the same image — production pods,
 // instances, and disposable kind:eval beds alike. Before this, names were keyed
-// by the baked ai.opencharly.image label, so two deploys of one image (e.g.
+// by the baked ai.opencharly.box label, so two deploys of one image (e.g.
 // the operator's immich plus a disposable immich bed, or two production pods)
 // shared the SAME named volumes and could read or corrupt each other's data.
 // No-op when the deploy's prefix already equals the image prefix (the common
@@ -1669,7 +1669,7 @@ func ResolveVolumeBacking(boxName, instance string, labelVolumes []VolumeMount, 
 		}
 	}
 
-	// Add deploy-only volumes (not in any layer, must have Path)
+	// Add deploy-only volumes (not in any candy, must have Path)
 	for _, dv := range deployVolumes {
 		if matched[dv.Name] || dv.Path == "" {
 			continue

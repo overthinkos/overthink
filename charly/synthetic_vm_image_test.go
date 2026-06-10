@@ -8,7 +8,7 @@ import (
 // TestSyntheticVmImageDistroFormat is the regression guard for the
 // non-arch VM deploy bug: syntheticVmBox used to hardcode
 // Distro:["arch"]/Pkg:"pac"/BuildFormats:["pac"] for EVERY non-root VM, so
-// a layer deploy (and the `charly` localpkg) onto a debian/ubuntu/fedora guest
+// a candy deploy (and the `charly` localpkg) onto a debian/ubuntu/fedora guest
 // ran `pacman` and failed with exit 127. The fix derives the guest's real
 // distro + primary package format from the VM spec — bootstrap `distro:` or
 // cloud_image `base_user:` — so apt/dnf is used on those guests.
@@ -60,7 +60,7 @@ func TestSyntheticVmImageDistroFormat(t *testing.T) {
 		},
 		{
 			// cachyos sets inherit_packages: true, so its VM distro chain expands
-			// to [cachyos, arch] — an `arch:` layer block reaches the cachyos VM.
+			// to [cachyos, arch] — an `arch:` candy block reaches the cachyos VM.
 			// Pkg is still the resolved pac primary (aur is secondary, skipped).
 			name:       "cachyos bootstrap (inherit_packages -> [cachyos, arch], pac primary)",
 			spec:       &VmSpec{Source: VmSource{Kind: "bootstrap", Distro: "cachyos"}, SSH: &VmSSH{User: "cachyos"}},
@@ -98,7 +98,7 @@ func TestSyntheticVmImageDistroFormat(t *testing.T) {
 // TestResolveVmEntity is the regression guard for the bed-deploy reach bug:
 // a kind:eval bed (and any deploy.yml target:vm entry) names its VM via the
 // node's `vm:` cross-ref, NOT a "vm:"-prefixed deploy name. Before the fix the
-// layer compiler only recognized the "vm:" prefix, so a bed fell through to
+// candy compiler only recognized the "vm:" prefix, so a bed fell through to
 // syntheticHostBox (host distro → pac) and the deploy ran `pacman` on a
 // debian/fedora guest. resolveVmEntity must surface node.Vm so syntheticVmBox
 // is reached.

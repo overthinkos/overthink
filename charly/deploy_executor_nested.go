@@ -54,8 +54,8 @@ type JumpKind int
 const (
 	// JumpPodmanExec enters a rootful or rootless podman container
 	// via `podman exec -i <name>`. The parent must have podman
-	// available (the container-nesting layer provides this for
-	// container-in-container; the virtualization layer is unrelated
+	// available (the container-nesting candy provides this for
+	// container-in-container; the virtualization candy is unrelated
 	// here — container children of container parents).
 	JumpPodmanExec JumpKind = iota + 1
 

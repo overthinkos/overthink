@@ -43,7 +43,7 @@ candy:
 		t.Fatal(err)
 	}
 	// Also create charly.yml so the local-name resolver has something
-	// to search — but we don't add "ripgrep" to it, so it's layer-only.
+	// to search — but we don't add "ripgrep" to it, so it's candy-only.
 	_ = os.WriteFile(filepath.Join(dir, "charly.yml"), []byte("version: 2026.161.1650\nimage: {}\n"), 0644)
 
 	got, err := ResolveDeployRef("ripgrep", dir)
@@ -59,9 +59,9 @@ candy:
 }
 
 // TestResolveDeployRefCrossKindNameReuse — same name in both box: and
-// layers/ is permitted (cross-kind name reuse, 2026-05 cutover). The
-// primary `<ref>` resolver returns image-first; ResolveDeployRefAsCandy
-// (used by `--add-layer <ref>`) returns layer-first. Each kind remains
+// candy/ is permitted (cross-kind name reuse, 2026-05 cutover). The
+// primary `<ref>` resolver returns box-first; ResolveDeployRefAsCandy
+// (used by `--add-layer <ref>`) returns candy-first. Each kind remains
 // reachable via explicit paths.
 func TestResolveDeployRefCrossKindNameReuse(t *testing.T) {
 	dir := t.TempDir()
@@ -83,7 +83,7 @@ candy:
 		t.Fatal(err)
 	}
 
-	// Primary `<ref>` positional → image-first.
+	// Primary `<ref>` positional → box-first.
 	got, err := ResolveDeployRef("dup", dir)
 	if err != nil {
 		t.Fatalf("ResolveDeployRef: %v", err)
@@ -92,7 +92,7 @@ candy:
 		t.Errorf("primary ref: kind = %v, want image (image-first precedence)", got.Kind)
 	}
 
-	// `--add-layer` context → layer-first.
+	// `--add-layer` context → candy-first.
 	got, err = ResolveDeployRefAsCandy("dup", dir)
 	if err != nil {
 		t.Fatalf("ResolveDeployRefAsCandy: %v", err)
@@ -155,7 +155,7 @@ rpm:
 }
 
 func TestResolveDeployRefRemoteGitHubLegacy(t *testing.T) {
-	// Legacy @-prefixed form used by today's depends:/layers: fields.
+	// Legacy @-prefixed form used by today's require:/candy: fields.
 	ref := "@github.com/overthinkos/overthink/layers/ripgrep:main"
 	got, err := ResolveDeployRef(ref, "")
 	if err != nil {
@@ -179,7 +179,7 @@ func TestResolveDeployRefRemoteGitHubLegacy(t *testing.T) {
 }
 
 // TestResolveDeployRefRemoteCandy covers the post-2026-06-rebrand `candy/<n>`
-// subpath: a remote candy ref must classify as a LAYER (not an image), so
+// subpath: a remote candy ref must classify as a CANDY (not a box), so
 // `charly deploy add --add-layer @github.../candy/charly:vTAG` (the form a kind:eval
 // bed's add_candy compiles to) is accepted instead of hitting the "remote image
 // refs are not supported" guard. Without the /candy/ classification this fails.
@@ -195,7 +195,7 @@ func TestResolveDeployRefRemoteCandy(t *testing.T) {
 	if got.Source != RefSourceRemote || got.Remote == nil || got.Remote.Name != "charly" {
 		t.Errorf("got = %+v, want remote layer named charly", got)
 	}
-	// And a box/<n> subpath classifies as an image.
+	// And a box/<n> subpath classifies as a box.
 	img, err := ResolveDeployRef("@github.com/overthinkos/overthink/box/fedora-coder:v2026.157.0427", "")
 	if err != nil {
 		t.Fatalf("ResolveDeployRef(box): %v", err)
@@ -232,7 +232,7 @@ func TestResolveDeployRefRemoteImage(t *testing.T) {
 }
 
 func TestResolveDeployRefRemoteBareRepo(t *testing.T) {
-	// A remote repo without /layers/ or /images/ — defaults to image
+	// A remote repo without /layers/ or /images/ — defaults to box
 	// (points at the project's charly.yml).
 	ref := "github.com/overthinkos/overthink"
 	got, err := ResolveDeployRef(ref, "")

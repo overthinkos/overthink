@@ -7,7 +7,7 @@ import (
 
 // TestTopoSortByDeclarationOrder_DuplicateNamesAcrossRecipes verifies the
 // phase-6 from-composition-selftest scenario: two recipes import a
-// scenario named "sshd-binary" from the same sshd layer, plus a
+// scenario named "sshd-binary" from the same sshd candy, plus a
 // hand-written probe in one of them depends_on "sshd-binary". Without
 // SourceRecipe-scoped name resolution, the merged topo-sort would lose
 // one of the two scenarios and fail with a false CycleError.

@@ -273,11 +273,11 @@ func (t *VmUnifiedTarget) Shell(ctx context.Context, cmd []string) error {
 }
 
 // Rebuild destroys + (optionally) rebuilds the disk image + recreates +
-// starts the VM, THEN re-applies the deploy node's layers to the fresh
+// starts the VM, THEN re-applies the deploy node's candies to the fresh
 // guest via the shared deploy-add path — mirroring LocalUnifiedTarget.Rebuild
 // and PodUnifiedTarget.Rebuild, which both end in `charly deploy add <node>`.
 // Without that final step the guest would come back as a bare image with the
-// deploy node's add_layer: layers (and nested pods) gone, so a config change
+// deploy node's add_candy: candies (and nested pods) gone, so a config change
 // would never take effect on rebuild. This is the VM rebuild path. The
 // disposable check is the caller's responsibility (the disposable
 // classification); this method does not re-validate.
@@ -317,14 +317,14 @@ func (t *VmUnifiedTarget) Rebuild(ctx context.Context, opts RebuildOpts) error {
 			return fmt.Errorf("charly vm start %s: %w", name, startErr)
 		}
 		// "already running" is the desired end state — fall through to the
-		// layer re-apply below.
+		// candy re-apply below.
 	} else if stderr != "" {
 		fmt.Fprint(os.Stderr, stderr)
 	}
-	// Re-apply the deploy node's layers (and nested pods) on the fresh guest.
+	// Re-apply the deploy node's candies (and nested pods) on the fresh guest.
 	// `charly deploy add <node>` routes through dispatchNode → ResolveTarget →
 	// VmUnifiedTarget.Add → VmDeployTarget.Emit, which SSHes in and applies the
-	// node's add_layer: layers idempotently — the SAME shared primitive
+	// node's add_candy: candies idempotently — the SAME shared primitive
 	// LocalUnifiedTarget.Rebuild and PodUnifiedTarget.Rebuild call (R3).
 	if err := runCharlySubcommand("deploy", "add", t.NodeName); err != nil {
 		return fmt.Errorf("charly deploy add %s: %w", t.NodeName, err)
@@ -379,7 +379,7 @@ func vmEntityForAdd(node *DeploymentNode, name string) (string, error) {
 // Add brings a target:vm deployment online: resolves the kind:vm entity,
 // publishes the managed ssh-config stanza, builds an SSHExecutor (or
 // NestedExecutor under a parent), auto-boots the VM if unreachable,
-// constructs the live VmDeployTarget, emits the plans, retrieves layer
+// constructs the live VmDeployTarget, emits the plans, retrieves candy
 // artifacts, deploys nested target:pod children IN the guest from the
 // MERGED dctx.Node.Nested, and writes back VmDeployState.
 //
@@ -491,7 +491,7 @@ func (t *VmUnifiedTarget) Add(ctx context.Context, dctx *DeployContext, plans []
 		ProjectDir: dctx.Dir,
 	}
 
-	// Resolve layer secrets + inject them into TaskSteps BEFORE emission
+	// Resolve candy secrets + inject them into TaskSteps BEFORE emission
 	// (R3 shared helper).
 	candyList, secretEnv, err := prepareCandySecrets(plans, dir)
 	if err != nil {
@@ -530,7 +530,7 @@ func (t *VmUnifiedTarget) Add(ctx context.Context, dctx *DeployContext, plans []
 		return fmt.Errorf("VmDeployTarget.Emit: %w", err)
 	}
 
-	// Retrieve layer artifacts + k3s post-hook (R3 shared helper). Keyed by the
+	// Retrieve candy artifacts + k3s post-hook (R3 shared helper). Keyed by the
 	// VM-ENTITY name ("vm:<entity>"), NOT the deploy key: a k3s cluster hosted in
 	// a VM is identified by that VM (one cluster per VM, possibly reached by
 	// several beds/deploys), so its ClusterProfile + artifact cache must land
@@ -542,7 +542,7 @@ func (t *VmUnifiedTarget) Add(ctx context.Context, dctx *DeployContext, plans []
 	}
 
 	// Deploy nested target:pod children as persistent in-guest quadlets.
-	// Runs AFTER Emit (so the VM's own layers + any kernel-driver reboot
+	// Runs AFTER Emit (so the VM's own candies + any kernel-driver reboot
 	// are applied). Skipped on dry-run, nested VMs, and --node-only.
 	//
 	// The children come from the dispatch-merged dctx.Node — THE source

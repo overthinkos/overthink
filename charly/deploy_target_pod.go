@@ -7,8 +7,8 @@ package main
 // BuildDeployPlan is consumed by two sub-systems:
 //
 //   1. Overlay Containerfile synthesis — when the charly.yml has
-//      `add_layers:` entries, we generate a new Containerfile that
-//      inherits FROM the base image and applies the extra layers'
+//      `add_candy:` entries, we generate a new Containerfile that
+//      inherits FROM the base image and applies the extra candies'
 //      install steps on top. The overlay image is then passed to the
 //      existing quadlet/podman machinery.
 //
@@ -54,7 +54,7 @@ type PodDeployTarget struct {
 	DistroDef     *DistroDef
 	BuilderConfig *BuilderConfig
 
-	// Generator + Image are required for the overlay builder to render
+	// Generator + Box are required for the overlay builder to render
 	// task steps (package installs, cmd runs, etc.) as actual RUN
 	// directives in the Containerfile. Without them the emitter degrades
 	// to "no Generator context" comments and the overlay contains no
@@ -85,7 +85,7 @@ type PodDeployTarget struct {
 
 // renderOverlayServices hooks into the existing Generator init-fragment
 // pipeline (generate.go:375-605) to render service: blocks from overlay
-// layers into proper fragment files, emit a scratch stage that holds
+// candies into proper fragment files, emit a scratch stage that holds
 // them, and emit a RUN step that APPENDS the rendered fragments to the
 // base image's existing /etc/supervisord.conf. Reuses RenderService +
 // generateInitFragments so all the init-system-specific logic (scope,
@@ -176,7 +176,7 @@ func (t *PodDeployTarget) OverlayImageRef() string {
 }
 
 // Emit is the DeployTarget entry point. Handles overlay synthesis when
-// the plan set has any layers that aren't part of the base image.
+// the plan set has any candies that aren't part of the base image.
 // Does NOT perform the final container start — that stays in start.go
 // via DeployUpCmd.
 func (t *PodDeployTarget) Emit(plans []*InstallPlan, opts EmitOpts) error {
@@ -187,9 +187,9 @@ func (t *PodDeployTarget) Emit(plans []*InstallPlan, opts EmitOpts) error {
 		t.Engine = "podman"
 	}
 
-	// Determine which plans represent overlay layers (add_layers:)
-	// rather than layers already baked into the base image. v1 heuristic:
-	// a plan's Layer is in any plan's AddCandies list → overlay.
+	// Determine which plans represent overlay candies (add_candy:)
+	// rather than candies already baked into the base image. v1 heuristic:
+	// a plan's Candy is in any plan's AddCandies list → overlay.
 	overlayCandies := collectOverlayCandies(plans)
 	if len(overlayCandies) == 0 {
 		// Nothing to overlay — the existing base image is deploy-ready.
@@ -240,8 +240,8 @@ func (t *PodDeployTarget) tagDeployAlias(opts EmitOpts) error {
 	return nil
 }
 
-// collectOverlayCandies returns the set of layer names declared as
-// add_layers in any plan's meta. v1 heuristic: union all plans'
+// collectOverlayCandies returns the set of candy names declared as
+// add_candy in any plan's meta. v1 heuristic: union all plans'
 // AddCandies slices.
 func collectOverlayCandies(plans []*InstallPlan) []string {
 	seen := make(map[string]bool)
@@ -266,7 +266,7 @@ func (t *PodDeployTarget) buildOverlay(plans []*InstallPlan, overlayCandies []st
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return fmt.Errorf("overlay build dir: %w", err)
 	}
-	// Render overlay Containerfile via OCITarget. Generator + Image are
+	// Render overlay Containerfile via OCITarget. Generator + Box are
 	// required for task emission to produce RUN directives (without them
 	// the emitter emits "no Generator context" comments — the overlay
 	// then contains no install logic).
@@ -277,7 +277,7 @@ func (t *PodDeployTarget) buildOverlay(plans []*InstallPlan, overlayCandies []st
 		Box:           t.Box,
 		BuildDir:      dir,
 	}
-	// Only emit for the overlay layers.
+	// Only emit for the overlay candies.
 	filtered := filterPlansByCandies(plans, overlayCandies)
 	if err := oci.Emit(filtered, opts); err != nil {
 		return err
@@ -301,7 +301,7 @@ func (t *PodDeployTarget) buildOverlay(plans []*InstallPlan, overlayCandies []st
 			fmt.Fprintf(&cf, "COPY %s/ /\n\n", t.Generator.candyCopySource(candyName))
 		}
 	}
-	// Render service: entries from overlay layers — emits a scratch
+	// Render service: entries from overlay candies — emits a scratch
 	// stage holding the rendered fragments AND a RUN-append line to be
 	// placed inside the main image stage below. Uses the Generator's
 	// init-fragment pipeline (same path as the full image build).
@@ -320,23 +320,23 @@ func (t *PodDeployTarget) buildOverlay(plans []*InstallPlan, overlayCandies []st
 	}
 	fmt.Fprintf(&cf, "FROM %s\n\n", t.BaseImage)
 	// Match the full-build convention: reset to USER root after FROM so
-	// layer tasks with `user: root` (most install/config tasks) run with
+	// candy tasks with `user: root` (most install/config tasks) run with
 	// the correct privileges. Full build does this in generate.go:467.
 	cf.WriteString("USER root\n\n")
 	cf.WriteString(oci.String())
 	// Append service fragments inside the MAIN image stage (after all
-	// layer tasks). This extends the base image's /etc/supervisord.conf
+	// candy tasks). This extends the base image's /etc/supervisord.conf
 	// instead of replacing it.
 	if svcAppend != "" {
 		cf.WriteString(svcAppend)
 	}
-	// Merge overlay-layer security into the base image's
+	// Merge overlay-candy security into the base image's
 	// LabelSecurity and re-emit so `charly config` (quadlet generator)
-	// picks up intrinsic requirements declared by add_layers — e.g.
+	// picks up intrinsic requirements declared by add_candy — e.g.
 	// k3s-server's `security: { privileged, cgroupns: host,
-	// devices: [/dev/fuse] }`. Without this, add_layers' security
+	// devices: [/dev/fuse] }`. Without this, add_candy security
 	// blocks are silently dropped because only the base image's
-	// layer-merged security made it into the base image's own label.
+	// candy-merged security made it into the base image's own label.
 	if overlayLabel := t.renderOverlaySecurityLabel(overlayCandies); overlayLabel != "" {
 		cf.WriteString(overlayLabel)
 	}
@@ -347,7 +347,7 @@ func (t *PodDeployTarget) buildOverlay(plans []*InstallPlan, overlayCandies []st
 	// downstream invariant that depends on the base running as a
 	// non-root user (rootless nested podman, claude's
 	// --dangerously-skip-permissions, etc.). Symptom of the regression
-	// before this fix: the harness sandbox with add_layers: [virtualization]
+	// before this fix: the harness sandbox with add_candy: [virtualization]
 	// flipped from uid=1000 to uid=0, breaking the harness's claude
 	// invocation across every iteration.
 	if baseMeta, err := ExtractMetadata(t.Engine, t.BaseImage); err == nil && baseMeta != nil && baseMeta.User != "" && baseMeta.User != "root" {
@@ -359,7 +359,7 @@ func (t *PodDeployTarget) buildOverlay(plans []*InstallPlan, overlayCandies []st
 		return err
 	}
 
-	// Deterministic overlay tag: hash of base + sorted layer set.
+	// Deterministic overlay tag: hash of base + sorted candy set.
 	tag := overlayTagFor(t.BaseImage, overlayCandies)
 	t.overlayImageRef = fmt.Sprintf("%s-overlay:%s", t.DeployName, tag)
 
@@ -416,7 +416,7 @@ func (t *PodDeployTarget) buildOverlay(plans []*InstallPlan, overlayCandies []st
 }
 
 // renderOverlaySecurityLabel merges the base image's baked
-// LabelSecurity with each overlay layer's own `security:` block and
+// LabelSecurity with each overlay candy's own `security:` block and
 // returns a Containerfile LABEL directive that overwrites the
 // base's label — or "" if no merge is needed. The resulting LABEL
 // sits after all tasks in the overlay stage so it wins on pull.
@@ -431,7 +431,7 @@ func (t *PodDeployTarget) renderOverlaySecurityLabel(overlayCandies []string) st
 	if baseMeta != nil {
 		sec = baseMeta.Security
 	}
-	// Merge each overlay layer's security on top. Same semantics as
+	// Merge each overlay candy's security on top. Same semantics as
 	// CollectSecurity in generate.go: union caps/devices/security_opts,
 	// OR privileged, last-writer for cgroupns, shm/memory tightest-wins.
 	added := false
@@ -478,7 +478,7 @@ func readImageRegistry(engine, imageRef string) string {
 	return strings.TrimSpace(string(out))
 }
 
-// filterPlansByCandies returns only the plans whose Layer is in names.
+// filterPlansByCandies returns only the plans whose Candy is in names.
 func filterPlansByCandies(plans []*InstallPlan, names []string) []*InstallPlan {
 	want := make(map[string]bool, len(names))
 	for _, n := range names {
@@ -494,7 +494,7 @@ func filterPlansByCandies(plans []*InstallPlan, names []string) []*InstallPlan {
 }
 
 // overlayTagFor computes a deterministic short tag from the base image
-// ref + the (sorted) overlay layer set. Same inputs → same tag, so
+// ref + the (sorted) overlay candy set. Same inputs → same tag, so
 // re-deploys of the same config don't churn overlay images.
 func overlayTagFor(base string, layers []string) string {
 	sorted := append([]string(nil), layers...)

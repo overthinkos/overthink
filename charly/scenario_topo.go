@@ -5,7 +5,7 @@ package main
 // Renamed from harness_score_deps.go in the 2026-04 BDD/test/harness
 // surface-cleanup cutover. The topo-sort helper was originally
 // harness-only; it's now shared with the BDD path
-// (description_run.go) so `depends_on:` in layer/image descriptions
+// (description_run.go) so `depends_on:` in candy/box descriptions
 // is honored uniformly. Bucketing-by-pod stays harness-specific
 // (BDD descriptions have no multi-pod model).
 //
@@ -61,7 +61,7 @@ func keyOf(sc Scenario) scenarioKey {
 // Scope: DependsOn is intra-recipe (validator-enforced). When the input
 // slice is the merged output of ResolveScoreRecipe, two recipes may
 // legitimately import a scenario with the same name from different
-// candy/images (e.g. both from-single-kind-selftest and
+// candy/boxes (e.g. both from-single-kind-selftest and
 // from-composition-selftest import "sshd-binary"). To handle this
 // without false-cycle errors, internal bookkeeping uses scenario INDEX
 // (unique by construction) and DependsOn names are resolved within the
@@ -144,7 +144,7 @@ func topoSortByDeclarationOrder(scenarios []Scenario) ([]Scenario, error) {
 // name to produce a scenarioKey. This prevents cross-recipe bleed
 // when two recipes both import a scenario with the same name (e.g.
 // both `from-*-selftest` recipes importing `sshd-binary` from the
-// same layer).
+// same candy).
 //
 // Used by RunEvalLive to decide whether to probe a
 // scenario or mark it skipped + cascade. Extracted to a named helper

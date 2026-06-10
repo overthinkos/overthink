@@ -6,16 +6,16 @@ import (
 	"path/filepath"
 )
 
-// ScaffoldCandy creates a new layer directory with placeholder files
+// ScaffoldCandy creates a new candy directory with placeholder files
 func ScaffoldCandy(dir string, name string) error {
 	candyDir := filepath.Join(dir, DefaultCandyDir, name)
 
-	// Check if layer already exists
+	// Check if candy already exists
 	if _, err := os.Stat(candyDir); err == nil {
 		return fmt.Errorf("layer %q already exists at %s", name, candyDir)
 	}
 
-	// Create layer directory
+	// Create candy directory
 	if err := os.MkdirAll(candyDir, 0755); err != nil {
 		return fmt.Errorf("creating layer directory: %w", err)
 	}

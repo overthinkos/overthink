@@ -53,9 +53,9 @@ func TestIsDeviceElement(t *testing.T) {
 }
 
 func TestCollectLibvirtSnippets(t *testing.T) {
-	// Post-cutover, CollectLibvirtSnippets only harvests layer-level
-	// `libvirt:` fields (image-level `libvirt:` was deleted in the VM
-	// hard-cutover; image-level raw snippets now live on the paired
+	// Post-cutover, CollectLibvirtSnippets only harvests candy-level
+	// `libvirt:` fields (box-level `libvirt:` was deleted in the VM
+	// hard-cutover; box-level raw snippets now live on the paired
 	// kind:vm entity's spec.libvirt.snippets:).
 	cfg := &Config{
 		Box: map[string]BoxConfig{

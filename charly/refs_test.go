@@ -44,9 +44,9 @@ func TestCandyRef(t *testing.T) {
 }
 
 // TestPickCandyVersion covers the per-entity-version arbiter (the sole
-// layer-version resolver). Same per-entity `version:` across different git tags
+// candy-version resolver). Same per-entity `version:` across different git tags
 // resolves with NO warning — the newest git tag wins for freshness — which is
-// the Problem-B regression guard: a repo re-tag of an UNCHANGED layer must not
+// the Problem-B regression guard: a repo re-tag of an UNCHANGED candy must not
 // warn. Different per-entity versions warn once and the newest version wins.
 func TestPickCandyVersion(t *testing.T) {
 	mk := func(ver, tag string) candyCandidate {
@@ -250,9 +250,9 @@ func TestScanRemoteCandies(t *testing.T) {
 	if !pyml.HasPixiToml {
 		t.Error("python-ml should have pixi.toml")
 	}
-	// A remote layer's plain-name sibling dep is qualified at scan time to the
+	// A remote candy's plain-name sibling dep is qualified at scan time to the
 	// sibling's fully-qualified map key, so the dependency graph resolves it
-	// against the cuda layer fetched from the same repo (keyed identically).
+	// against the cuda candy fetched from the same repo (keyed identically).
 	wantDep := "github.com/overthinkos/ml-layers/candy/cuda"
 	if len(pyml.Require) != 1 || pyml.Require[0].Bare() != wantDep {
 		t.Errorf("python-ml.Require = %v, want [%s]", pyml.Require, wantDep)
@@ -322,7 +322,7 @@ func TestCollectRemoteRefsLocalTemplate(t *testing.T) {
 	// kind:local template candy: lists must feed the same remote-ref collection
 	// path as image candy: lists (regression guard for the 2026-05 CachyOS
 	// migration, where the charly-cachyos kind:local template composes 30 remote
-	// @-ref layers — previously invisible to CollectRemoteRefs).
+	// @-ref candies — previously invisible to CollectRemoteRefs).
 	cfg := &Config{
 		Box: map[string]BoxConfig{
 			"myapp": {
@@ -361,13 +361,13 @@ func TestCollectRemoteRefsLocalTemplate(t *testing.T) {
 }
 
 func TestCollectRemoteRefsOptsIncludeDisabled(t *testing.T) {
-	// A disabled image's remote layer refs must be collected when a
+	// A disabled image's remote candy refs must be collected when a
 	// `--include-disabled <name>` build scopes IncludeDisabled to that image —
 	// so the FETCH set (CollectRemoteRefsOpts) stays in lockstep with the
 	// RESOLVE set (ResolveAllBox/GlobalCandyOrder). Regression guard for the
 	// 2026-05 deb-family split: no enabled debian image references `pixi`, so a
 	// disabled `debian-builder --include-disabled` would otherwise hit
-	// "unknown layer .../pixi" in computing global layer order.
+	// "unknown layer .../pixi" in computing global candy order.
 	cfg := &Config{
 		Box: map[string]BoxConfig{
 			"debian-builder": {
@@ -420,10 +420,10 @@ func TestCollectRemoteRefsOptsIncludeDisabled(t *testing.T) {
 func TestCollectRemoteRefsDefaultsBuilderTransitiveCandies(t *testing.T) {
 	// An image whose builder comes from defaults.builder (a NAMESPACED builder,
 	// with NO per-image builder: block) must still have that builder's transitive
-	// layers fetched — collectBox follows the EFFECTIVE builder edge
+	// candies fetched — collectBox follows the EFFECTIVE builder edge
 	// (effectiveBuilderForBox → resolveEffectiveBuilder), not the empty raw
 	// img.Builder. Regression guard for the bazzite/aurora
-	// "unknown layer .../rpmfusion" under-collection: the builder's layer lives in
+	// "unknown layer .../rpmfusion" under-collection: the builder's candy lives in
 	// a DISTINCT repo, so it appears in downloads ONLY if the defaults-supplied
 	// builder edge was actually followed (it was absent before the fix, because
 	// the raw per-image img.Builder these images carry is empty).
@@ -458,12 +458,12 @@ func TestCollectRemoteRefsDefaultsBuilderTransitiveCandies(t *testing.T) {
 	for _, dl := range downloads {
 		found[dl.RepoPath] = dl.Version
 	}
-	// Sanity: the image's own layer repo is always collected.
+	// Sanity: the image's own candy repo is always collected.
 	if found["github.com/overthinkos/overthink"] != "v1.0.0" {
 		t.Errorf("image's own layer not collected: overthink = %q", found["github.com/overthinkos/overthink"])
 	}
 	// The fix: charly.fedora-builder (from defaults.builder) is built as an
-	// intermediate, so its transitive layer's repo MUST be collected. Absent
+	// intermediate, so its transitive candy's repo MUST be collected. Absent
 	// before the fix (raw img.Builder was empty) → "unknown layer" at generate.
 	if found["github.com/buildorg/build-layers"] != "v1.0.0" {
 		t.Errorf("defaults.builder's transitive layer not collected: build-layers = %q, want %q "+
@@ -475,7 +475,7 @@ func TestCollectRemoteRefsDefaultsBuilderTransitiveCandies(t *testing.T) {
 func TestCollectRemoteRefsSameCandyBothTagsCollected(t *testing.T) {
 	// Same bare ref at two git tags: collection now emits BOTH (the git tag is
 	// only the FETCH coordinate). Per-entity-version arbitration (newest-wins,
-	// or no-warning when the layer's own version: matches) happens AFTER fetch in
+	// or no-warning when the candy's own version: matches) happens AFTER fetch in
 	// pickCandyVersion — see TestPickCandyVersion. Collection's job is just to
 	// fetch every distinct (repo, git-tag).
 	cfg := &Config{
@@ -511,7 +511,7 @@ func TestCollectRemoteRefsSameCandyBothTagsCollected(t *testing.T) {
 }
 
 func TestCollectRemoteRefsDifferentCandiesSameRepo(t *testing.T) {
-	// Different layers from same repo at different versions should be OK
+	// Different candies from same repo at different versions should be OK
 	cfg := &Config{
 		Box: map[string]BoxConfig{
 			"myapp": {

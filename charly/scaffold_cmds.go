@@ -81,7 +81,7 @@ func (c *BoxSetCmd) Run() error {
 }
 
 // ---------------------------------------------------------------------------
-// `charly box add-candy <image> <layer>`
+// `charly box add-candy <box> <candy>`
 
 type BoxAddCandyCmd struct {
 	Box   string `arg:"" help:"Name of the box in charly.yml"`
@@ -97,7 +97,7 @@ func (c *BoxAddCandyCmd) Run() error {
 }
 
 // ---------------------------------------------------------------------------
-// `charly box rm-candy <image> <layer>`
+// `charly box rm-candy <box> <candy>`
 
 type BoxRmCandyCmd struct {
 	Box   string `arg:"" help:"Name of the box in charly.yml"`
@@ -275,7 +275,7 @@ func (c *CandySetCmd) Run() error {
 	if _, err := os.Stat(candyYml); err != nil {
 		return fmt.Errorf("candy %q not found at %s", c.Name, candyYml)
 	}
-	// Candy manifests are kind-keyed under `candy:` (the layer kind key), so a
+	// Candy manifests are kind-keyed under `candy:` (the candy kind key), so a
 	// body-relative dot-path like `version` or `env.X` must descend into the
 	// `candy:` wrapper. Without this, SetByDotPath appends a stray top-level
 	// key (e.g. a second `version:`) and the loader then rejects the file as

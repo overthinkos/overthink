@@ -37,8 +37,8 @@ type PodSpec struct {
 	EnvDefaults []string `yaml:"env_default,omitempty"`
 
 	// Tests are optional target-specific build-scope checks that run for
-	// every deployment using this template. Default empty — layer tests
-	// and image tests stay where authored and propagate automatically.
+	// every deployment using this template. Default empty — candy tests
+	// and box tests stay where authored and propagate automatically.
 	Eval []Check `yaml:"eval,omitempty"`
 
 	// DeployTests are optional target-specific deploy-scope defaults.

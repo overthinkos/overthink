@@ -291,7 +291,7 @@ func adbAddrForContainer(engine, containerName string) (string, error) {
 // runs `apkeep` INSIDE the pod to download the app by package id from APKPure
 // (default, no creds) or the Google Play Store (google-play, via an AAS token),
 // then installs the result onto the emulator with the container's own adb. The
-// pod owns the capability (apkeep is baked into the android-sdk layer); this
+// pod owns the capability (apkeep is baked into the android-sdk candy); this
 // verb just orchestrates the in-pod download + install. Handles a single .apk,
 // a split .apk set, and a .xapk (APKPure's split bundle — unzipped, then
 // install-multiple). Source/Arch/AppVersion are the apkeep knobs.

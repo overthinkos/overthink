@@ -332,8 +332,8 @@ func TestValidateAurWithoutAurBuilder(t *testing.T) {
 	}
 }
 
-// TestValidateAurOnFedoraImageNoError covers the multi-distro layer case.
-// A layer that ships rpm: AND aur: sections is consumed by a Fedora image
+// TestValidateAurOnFedoraImageNoError covers the multi-distro candy case.
+// A candy that ships rpm: AND aur: sections is consumed by a Fedora image
 // with build: [rpm]. The IR compiler skips the aur: section entirely
 // (install_build.go:236-249 iterates only img.BuildFormats), so the
 // arch-builder is never invoked. The validator must NOT require
@@ -368,7 +368,7 @@ func TestValidateAurOnFedoraImageNoError(t *testing.T) {
 }
 
 // TestValidateAurOnArchImageWithoutAurInBuildFormats covers the partial-build
-// case. An Arch image with build: [pac] (no aur) consumes a layer with an
+// case. An Arch image with build: [pac] (no aur) consumes a candy with an
 // aur: section. The IR compiler skips aur, so the validator must skip it too.
 func TestValidateAurOnArchImageWithoutAurInBuildFormats(t *testing.T) {
 	cfg := &Config{
@@ -401,7 +401,7 @@ func TestValidateAurOnArchImageWithoutAurInBuildFormats(t *testing.T) {
 // TestValidatePixiBuilderUnconditional covers the detect_files path. Pixi
 // produces distro-agnostic artifacts copied into the final stage, so the
 // builder requirement applies regardless of the image's BuildFormats.
-// A Fedora image with a layer containing pixi.toml MUST still require
+// A Fedora image with a candy containing pixi.toml MUST still require
 // builder.pixi — the BuildFormats gate applies only to detect_config-based
 // builders (aur).
 func TestValidatePixiBuilderUnconditional(t *testing.T) {
@@ -514,7 +514,7 @@ func TestValidateMultipleErrors(t *testing.T) {
 		t.Fatalf("expected ValidationError, got %T", err)
 	}
 
-	// Should have at least 3 errors: invalid pkg, two missing layers
+	// Should have at least 3 errors: invalid pkg, two missing candies
 	if len(valErr.Errors) < 3 {
 		t.Errorf("expected at least 3 errors, got %d: %v", len(valErr.Errors), valErr.Errors)
 	}
@@ -1341,9 +1341,9 @@ func TestValidatePortRelayMissingSocat(t *testing.T) {
 }
 
 // TestValidateDataEntryUnknownVolume guards the check at validate.go where a
-// layer's data: entry references a volume name that is not declared by any
-// layer in the composed image chain. Without this guard, a typo in a data
-// layer (e.g. `volume: workspae`) silently produces an image that never
+// candy's data: entry references a volume name that is not declared by any
+// candy in the composed image chain. Without this guard, a typo in a data
+// candy (e.g. `volume: workspae`) silently produces an image that never
 // seeds its workspace, and the error only surfaces at runtime as an empty
 // directory.
 func TestValidateDataEntryUnknownVolume(t *testing.T) {
@@ -1383,7 +1383,7 @@ func TestValidateDataEntryUnknownVolume(t *testing.T) {
 
 // TestValidateDataEntryKnownVolume is the happy path for the same check:
 // when the data entry's volume matches a declared volume anywhere in the
-// image's layer chain, Validate succeeds.
+// image's candy chain, Validate succeeds.
 func TestValidateDataEntryKnownVolume(t *testing.T) {
 	cfg := &Config{
 		Defaults: BoxConfig{
@@ -1424,7 +1424,7 @@ func TestValidateDataEntryKnownVolume(t *testing.T) {
 // plan §4.4.
 // ---------------------------------------------------------------------------
 
-// secretDepsCandy builds a minimal layer with the given secret dependency
+// secretDepsCandy builds a minimal candy with the given secret dependency
 // configuration, for reuse across tests.
 func secretDepsCandy(name string, opts func(l *Candy)) *Candy {
 	l := &Candy{Name: name, tasks: []Task{{Cmd: "true"}}}
@@ -1537,7 +1537,7 @@ func TestValidateSecretRequiresCollidesWithEnvRequires(t *testing.T) {
 }
 
 // TestValidateSecretAcceptsCollidesWithSecretRequires — a name cannot appear
-// in both secret_accepts and secret_requires in the same layer.
+// in both secret_accepts and secret_requires in the same candy.
 func TestValidateSecretAcceptsCollidesWithSecretRequires(t *testing.T) {
 	cfg := &Config{Box: map[string]BoxConfig{}}
 	layers := map[string]*Candy{
@@ -1584,7 +1584,7 @@ func TestValidateSecretCollidesWithEnvProvides(t *testing.T) {
 }
 
 // TestValidateSecretAcceptsKeyMustStartWithCharly — plan §4.4 rule 5: the
-// optional Key override must start with "charly/" to prevent layers from
+// optional Key override must start with "charly/" to prevent candies from
 // exfiltrating unrelated user credentials.
 func TestValidateSecretAcceptsKeyMustStartWithCharly(t *testing.T) {
 	cfg := &Config{Box: map[string]BoxConfig{}}
@@ -1694,10 +1694,10 @@ func TestEnvVarNameToPodmanSecretSlug(t *testing.T) {
 	}
 }
 
-// vCandies stamps a default per-entity version on every LOCAL layer that lacks
+// vCandies stamps a default per-entity version on every LOCAL candy that lacks
 // one, so a fixture map satisfies the mandatory-version rule
 // (validateCandyContents) without each literal repeating it — mirrors what
-// `charly migrate` (entity-version step) backfills in real configs. Remote layers
+// `charly migrate` (entity-version step) backfills in real configs. Remote candies
 // are left alone (their version comes from the fetched candy manifest).
 func vCandies(m map[string]*Candy) map[string]*Candy {
 	for _, l := range m {
@@ -1709,7 +1709,7 @@ func vCandies(m map[string]*Candy) map[string]*Candy {
 }
 
 // TestValidateCandyMissingVersion is the proving coverage for the
-// mandatory-version rule: a local layer with no version: fails validation with
+// mandatory-version rule: a local candy with no version: fails validation with
 // an actionable message. (Uses a distinctly-named map so the vCandies wrap that
 // the other tests apply does not mask the error.)
 func TestValidateCandyMissingVersion(t *testing.T) {

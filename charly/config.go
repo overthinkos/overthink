@@ -12,8 +12,8 @@ type Config struct {
 	Defaults BoxConfig            `yaml:"defaults"`
 	Box      map[string]BoxConfig `yaml:"box"`
 	// Local carries kind:local templates so remote-ref collection +
-	// validation walk their layer: lists symmetrically with image layer
-	// lists (kind:local templates compose remote @-ref layers too). Populated
+	// validation walk their candy: lists symmetrically with box candy
+	// lists (kind:local templates compose remote @-ref candies too). Populated
 	// from UnifiedFile.Local by ProjectConfig().
 	Local map[string]*LocalSpec `yaml:"local,omitempty"`
 	// Namespaces carries child namespaces mounted by namespaced `import:`
@@ -65,7 +65,7 @@ type AliasConfig struct {
 // SecurityConfig holds container security options (privileged, capabilities, devices).
 type SecurityConfig struct {
 	Privileged  bool     `yaml:"privileged,omitempty" json:"privileged,omitempty"`
-	CgroupNS    string   `yaml:"cgroupns,omitempty" json:"cgroupns,omitempty"` // --cgroupns=<value>: "host" | "private" | "". Layer-intrinsic; needed by workloads like k3s that require host cgroup controllers (cpuset) not delegated to rootless sub-slices.
+	CgroupNS    string   `yaml:"cgroupns,omitempty" json:"cgroupns,omitempty"` // --cgroupns=<value>: "host" | "private" | "". Candy-intrinsic; needed by workloads like k3s that require host cgroup controllers (cpuset) not delegated to rootless sub-slices.
 	CapAdd      []string `yaml:"cap_add,omitempty" json:"cap_add,omitempty"`
 	Devices     []string `yaml:"devices,omitempty" json:"devices,omitempty"`
 	SecurityOpt []string `yaml:"security_opt,omitempty" json:"security_opt,omitempty"`
@@ -74,7 +74,7 @@ type SecurityConfig struct {
 	GroupAdd    []string `yaml:"group_add,omitempty" json:"group_add,omitempty"` // --group-add values (e.g. "keep-groups", "video")
 	Mounts      []string `yaml:"mount,omitempty" json:"mounts,omitempty"`        // host mounts (e.g. "/dev/input:/dev/input:rw", "tmpfs:/run/udev:rw,size=1m")
 	// Resource caps. Sizes use the same suffixes as ShmSize ("6g", "500m", "1024k").
-	// Layer merging is smallest-wins (tightest cap is safest); image-level values override.
+	// Candy merging is smallest-wins (tightest cap is safest); image-level values override.
 	MemoryMax     string `yaml:"memory_max,omitempty" json:"memory_max,omitempty"`           // hard OOM threshold (cgroup memory.max, podman --memory, systemd MemoryMax)
 	MemoryHigh    string `yaml:"memory_high,omitempty" json:"memory_high,omitempty"`         // soft limit — reclaim pressure kicks in (systemd MemoryHigh)
 	MemorySwapMax string `yaml:"memory_swap_max,omitempty" json:"memory_swap_max,omitempty"` // swap ceiling (podman --memory-swap, systemd MemorySwapMax)
@@ -164,9 +164,9 @@ type BoxConfig struct {
 	KeepImages   *int `yaml:"keep_images,omitempty"`
 	KeepEvalRuns *int `yaml:"keep_eval_runs,omitempty"`
 
-	// Tests are image-level declarative checks (cross-layer invariants).
+	// Tests are image-level declarative checks (cross-candy invariants).
 	// Entries without explicit scope default to "build" and land in the
-	// image section of the OCI label.
+	// box section of the OCI label.
 	Eval []Check `yaml:"eval,omitempty"`
 
 	// DeployTests are image-author-supplied deploy-level defaults. All
@@ -175,9 +175,9 @@ type BoxConfig struct {
 	DeployEval []Check `yaml:"deploy_eval,omitempty"`
 
 	// Shell is an image-level shell-init contribution layered on top of
-	// what the included layers contribute. Same shape as the candy
+	// what the included candies contribute. Same shape as the candy
 	// manifest's `shell:` field — generic body + per-shell overrides. Travels in
-	// the ai.opencharly.shell OCI label under the Image section.
+	// the ai.opencharly.shell OCI label under the Box section.
 	// 2026-05 cutover.
 	Shell *ShellConfig `yaml:"shell,omitempty"`
 }
@@ -201,13 +201,13 @@ type ResolvedBox struct {
 	Version string `json:"version,omitempty"` // authored per-entity CalVer (the box config `version:`); optional
 	// EffectiveVersion is the content-derived identity emitted as the
 	// ai.opencharly.version label: the dedicated Version if set, else the
-	// highest layer version across the full chain (computeEffectiveVersions in
+	// highest candy version across the full chain (computeEffectiveVersions in
 	// effective_version.go, run by the generator once the base chain +
-	// auto-intermediates are materialized). Stable across builds when no layer
+	// auto-intermediates are materialized). Stable across builds when no candy
 	// changed — this is what keeps a child's FROM <base> SHA from shifting.
 	EffectiveVersion string `json:"effective_version,omitempty"`
-	Status           string `json:"status,omitempty"` // effective status (worst of image + layers)
-	Info             string `json:"info,omitempty"`   // aggregated info from image + layers
+	Status           string `json:"status,omitempty"` // effective status (worst of box + candies)
+	Info             string `json:"info,omitempty"`   // aggregated info from box + candies
 	Base             string // Resolved base (external OCI ref or internal image name)
 	// From mirrors BoxConfig.From after resolution. When non-empty
 	// (e.g. "builder:pacstrap"), the generator emits FROM scratch +
@@ -267,11 +267,11 @@ type ResolvedBox struct {
 	// Data image (scratch-based, data-only)
 	DataImage bool // true = FROM scratch, no runtime, no init, no services
 
-	// CandyCaps aggregates layer-contributed capabilities from this
-	// image's resolved layer composition (preserve_user, data_only,
+	// CandyCaps aggregates candy-contributed capabilities from this
+	// box's resolved candy composition (preserve_user, data_only,
 	// init_system_hint, oci_labels, etc.). Populated by ResolveBox
 	// via AggregateCandyCapabilities. Replaces the magic image-level
-	// flags (Bootc, DataImage) with a layer-derived surface — those
+	// flags (Bootc, DataImage) with a candy-derived surface — those
 	// fields remain during the cutover transition and are removed in
 	// the same commit once consumers migrate to CandyCaps.
 	CandyCaps *AggregatedCandyCaps `json:"-"`
@@ -336,7 +336,7 @@ func LoadConfigRaw(dir string) (*Config, error) {
 // the set bypass the disabled check; other disabled images stay filtered.
 // Used by `charly box build <name> --include-disabled` so widening the
 // working set doesn't surface unrelated disabled-image dep errors (e.g.
-// images with remote layers that aren't fetched yet). Empty + IncludeDisabled
+// images with remote candies that aren't fetched yet). Empty + IncludeDisabled
 // = include every disabled image (the inspect/validate behavior).
 type ResolveOpts struct {
 	IncludeDisabled      bool            // skip the `enabled: false` check
@@ -487,8 +487,8 @@ func (c *Config) ResolveBox(name string, calverTag string, dir string, opts Reso
 	resolved.Tags = append([]string{"all"}, resolved.Distro...)
 	resolved.Tags = append(resolved.Tags, resolved.BuildFormats...)
 
-	// Layers are not inherited, they're image-specific
-	// Strip @ prefix and :version suffixes — layer map keys use bare refs
+	// Candies are not inherited, they're image-specific
+	// Strip @ prefix and :version suffixes — candy map keys use bare refs
 	resolved.Candy = make([]string, len(img.Candy))
 	for i, ref := range img.Candy {
 		resolved.Candy[i] = BareRef(ref)
@@ -579,7 +579,7 @@ func (c *Config) ResolveBox(name string, calverTag string, dir string, opts Reso
 	resolved.InitConfig = initCfg
 	if distroCfg != nil {
 		// Expand the package-cascade chain with any inherit_packages: ancestor
-		// (cachyos → [cachyos, arch]) so an `arch:` layer block reaches cachyos.
+		// (cachyos → [cachyos, arch]) so an `arch:` candy block reaches cachyos.
 		// Idempotent when the box already authored the ancestor explicitly.
 		resolved.Distro = distroCfg.expandPackageInheritance(resolved.Distro)
 		resolved.DistroDef = distroCfg.ResolveDistro(resolved.Distro)
@@ -918,22 +918,22 @@ type baseChainNode struct {
 // shared base-chain traversal used by every chain-walking collector
 // (CollectHooks / CollectEval / CollectShell / CollectDescription /
 // CollectBoxVolume) — each previously re-implemented the identical
-// `for { img := cfg.Image[current]; ...; current = img.Base }` loop (R3: one
+// `for { img := cfg.Box[current]; ...; current = img.Base }` loop (R3: one
 // implementation, no divergent copies), now cycle-safe for all of them.
 //
 // It deliberately does NOT descend import namespaces. A namespace-qualified
 // base (e.g. `selkies.selkies-labwc`) is a SEPARATELY-BUILT image that owns
-// its own baked eval / hooks / shell / volume labels; re-collecting its layers
-// into the consumer would DOUBLE-COUNT every layer the consumer also lists
-// directly (the same layer reached bare here and via its `@github…` ref in the
+// its own baked eval / hooks / shell / volume labels; re-collecting its candies
+// into the consumer would DOUBLE-COUNT every candy the consumer also lists
+// directly (the same candy reached bare here and via its `@github…` ref in the
 // base), which the per-section id-uniqueness validator correctly rejects.
 // Stopping at the namespace boundary (and at external / disabled / missing
 // bases) is the long-standing, semantically-correct per-image collection
 // behaviour — preserved here byte-for-byte. Namespace-AWARENESS belongs to
 // NAME resolution (ResolveBox / resolveBoxRef / findBoxByLeaf), not to
-// this per-image layer-collection walk; the distro/build VALUE walkers
+// this per-image candy-collection walk; the distro/build VALUE walkers
 // (walkBaseChainDistro / walkBaseChainBuild) cross namespaces precisely because
-// those are inherited values, whereas layer contributions are not.
+// those are inherited values, whereas candy contributions are not.
 func (c *Config) walkBaseChain(boxName string) []baseChainNode {
 	var out []baseChainNode
 	seen := make(map[string]bool)

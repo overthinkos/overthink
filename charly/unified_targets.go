@@ -148,7 +148,7 @@ type PodUnifiedTarget struct {
 
 	// BaseImageRef is the image ref the rebuild's image-build/eval
 	// steps target. Set by the dispatcher from the charly.yml node's
-	// `image:` field (or NodeName when absent). Empty → falls back to
+	// `box:` field (or NodeName when absent). Empty → falls back to
 	// NodeName at Rebuild time.
 	BaseImageRef string
 
@@ -208,7 +208,7 @@ func (t *K8sUnifiedTarget) Executor() DeployExecutor { return nil }
 // ---------------------------------------------------------------------------
 // AndroidUnifiedTarget — adapter over AndroidDeployTarget.
 //
-// A target: android deploy installs its add_layer: layers' apk: packages
+// A target: android deploy installs its add_candy: candies' apk: packages
 // onto a kind:android DEVICE (an in-pod emulator or a remote adb endpoint).
 // Like K8s it only implements UnifiedDeployTarget (not LifecycleTarget) —
 // the device's lifecycle belongs to its pod deploy / the remote host, not
@@ -289,7 +289,7 @@ func ResolveTarget(node *DeploymentNode, name string) (UnifiedDeployTarget, erro
 
 	case "pod":
 		// BaseImageRef is the image the rebuild's build/eval steps target;
-		// node.Image is the charly.yml `image:` field (Rebuild falls back to
+		// node.Box is the charly.yml `box:` field (Rebuild falls back to
 		// NodeName when empty).
 		return &PodUnifiedTarget{NodeName: name, BaseImageRef: node.Box}, nil
 

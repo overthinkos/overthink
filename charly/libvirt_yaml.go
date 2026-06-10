@@ -15,9 +15,9 @@ package main
 //
 // Raw-XML escape hatches:
 //   - Snippets: runtime-injected via InjectLibvirtXML (post-define).
-//     Preserved from the prior design for layer-level `libvirt:`
-//     composition — layers contribute XML fragments that are not
-//     known until the image is composed.
+//     Preserved from the prior design for candy-level `libvirt:`
+//     composition — candies contribute XML fragments that are not
+//     known until the box is composed.
 //   - XMLPassthrough: declarative verbatim libvirt XML fragments
 //     merged into the rendered domain at ToLibvirtXML time (Rule 6
 //     of the YAML↔XML mapping table). Read directly from vm.yml
@@ -26,7 +26,7 @@ type LibvirtDomain struct {
 	// Snippets are raw XML strings classified by the existing
 	// isDeviceElement helper: device-scoped elements are injected
 	// into <devices>, domain-scoped elements before </domain>.
-	// Deduplicated by exact string match. Composed by the layer
+	// Deduplicated by exact string match. Composed by the candy
 	// machinery (CollectLibvirtSnippets); NOT a user-authored
 	// vm.yml field.
 	Snippets []string `yaml:"snippets,omitempty"`

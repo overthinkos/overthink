@@ -2,28 +2,28 @@ package main
 
 // CollectEval walks the base-image chain for boxName and gathers all
 // declarative checks into a three-section LabelEvalSet. The structure of
-// the walk mirrors CollectHooks (charly/hooks.go) — dedupe by layer name, step
-// through internal bases until an external image is hit — so layer ordering
+// the walk mirrors CollectHooks (charly/hooks.go) — dedupe by candy name, step
+// through internal bases until an external image is hit — so candy ordering
 // is consistent across every collected label.
 //
 // Section assignment rules:
 //
-//   - Layer-defined checks with no scope (or scope:"build") land in Layer.
-//   - Layer-defined checks with scope:"deploy" land in Deploy.
-//   - Image-level Tests default to scope:"build" → Image section;
+//   - Candy-defined checks with no scope (or scope:"build") land in Candy.
+//   - Candy-defined checks with scope:"deploy" land in Deploy.
+//   - Box-level Tests default to scope:"build" → Box section;
 //     scope:"deploy" routes to Deploy.
-//   - Image-level DeployTests always land in Deploy (scope forced to "deploy").
+//   - Box-level DeployTests always land in Deploy (scope forced to "deploy").
 //
 // Each check receives an Origin annotation for reporting:
-// "layer:<name>", "image:<name>", or "deploy-default" (for image deploy entries).
+// "candy:<name>", "box:<name>", or "deploy-default" (for box deploy entries).
 //
 // Returns nil if every section is empty — callers (generate.go) skip label
 // emission in that case.
 func CollectEval(cfg *Config, layers map[string]*Candy, boxName string) *LabelEvalSet {
 	set := &LabelEvalSet{}
 
-	// Walk base-image chain the same way CollectHooks does: layer-order per
-	// level, then step into the internal base. Tracks visited images so we
+	// Walk base-image chain the same way CollectHooks does: candy-order per
+	// level, then step into the internal base. Tracks visited boxes so we
 	// terminate cleanly on pathological cycles (validateBoxDAG reports the
 	// cycle itself; we just refuse to infinite-loop on bad input here).
 	var allCandyNames []string
@@ -57,7 +57,7 @@ func CollectEval(cfg *Config, layers map[string]*Candy, boxName string) *LabelEv
 		}
 	}
 
-	// Image-level Tests (defaults to build scope) and DeployTests.
+	// Box-level Tests (defaults to build scope) and DeployTests.
 	if img, ok := cfg.Box[boxName]; ok {
 		for _, c := range img.Eval {
 			c.Origin = "box:" + boxName

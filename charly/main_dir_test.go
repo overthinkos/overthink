@@ -20,7 +20,7 @@ import (
 // Uses `charly box list boxes` as the probe: it reads charly.yml from the
 // resolved project dir. If the binary fails to chdir, the command errors
 // with "no charly.yml found: ... no such file or directory". A pass means
-// chdir worked — the command listed the images from the scratch project.
+// chdir worked — the command listed the boxes from the scratch project.
 func TestCharlyDir_FlagChdir(t *testing.T) {
 	bin := buildCharlyBinary(t)
 

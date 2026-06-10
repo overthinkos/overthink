@@ -142,7 +142,7 @@ func TestHasChildren(t *testing.T) {
 // SSHArgs. Without these, target:local deployments authored in the project
 // deploy.yml lost their template ref + ssh overrides whenever resolveTreeRoot
 // merged via MergeDeployConfigs(projectDC, localDC), leaving the local deploy
-// with an empty layer list and a silent no-op install.
+// with an empty candy list and a silent no-op install.
 //
 // Fixture name `charly-cachyos` matches the deployment key (renamed from `qc`
 // in the 2026-05 cross-kind name reuse cutover; the entry itself relocated to

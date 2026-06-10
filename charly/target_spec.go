@@ -25,9 +25,9 @@ type TargetSpec struct {
 	OemSetup      bool             `yaml:"oem-setup,omitempty" json:"oem-setup,omitempty"`
 	DisableCancel bool             `yaml:"disable-cancel,omitempty" json:"disable-cancel,omitempty"`
 
-	// charly extensions: bind groups and images to the target.
+	// charly extensions: bind groups and boxes to the target.
 	Group []string `yaml:"group,omitempty" json:"group,omitempty"` // group names from the unified file
-	Box   []string `yaml:"box,omitempty" json:"image,omitempty"`   // image names from the unified file
+	Box   []string `yaml:"box,omitempty" json:"image,omitempty"`   // box names from the unified file
 }
 
 // TargetInstance mirrors Calamares' `instances:` entries — multiple

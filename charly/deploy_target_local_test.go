@@ -58,7 +58,7 @@ func TestHostDeployTargetDryRunShellHook(t *testing.T) {
 		t.Errorf("managed block not inserted:\n%s", profile)
 	}
 
-	// Ledger: layer + deploy records.
+	// Ledger: candy + deploy records.
 	lrec, err := ReadCandyRecord(paths, "uv")
 	if err != nil || lrec == nil {
 		t.Fatalf("layer ledger missing: %v / %+v", err, lrec)
@@ -100,7 +100,7 @@ func TestHostDeployTargetGateSkips(t *testing.T) {
 		t.Fatalf("Emit: %v", err)
 	}
 	// No unit file should have been written — we're not root and it's dry-run anyway.
-	// Ledger should still record the layer but with no service step (gate skipped).
+	// Ledger should still record the candy but with no service step (gate skipped).
 	lrec, _ := ReadCandyRecord(paths, "ollama")
 	if lrec == nil {
 		// Dry-run skips ledger writes; that's OK for this test.
@@ -233,8 +233,8 @@ func TestRenderHostPackageCommand(t *testing.T) {
 	}
 }
 
-// TestRenderHostPackageCommandDebRepo guards the deb host-cell repo fix: a layer
-// that declares a third-party `repo:` (e.g. the charly layer's tailscale repo on
+// TestRenderHostPackageCommandDebRepo guards the deb host-cell repo fix: a candy
+// that declares a third-party `repo:` (e.g. the charly candy's tailscale repo on
 // deb-family) must have that repo added — key dearmor + sources.list — BEFORE
 // apt-get install on a target:local / target:vm deploy. The deb host cell
 // previously rendered only apt-get install, so `apt-get install tailscale`

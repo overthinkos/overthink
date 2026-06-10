@@ -9,15 +9,15 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// ImageReconcileCmd aligns cross-repo `@github` git-tag pins so every reference
+// BoxReconcileCmd aligns cross-repo `@github` git-tag pins so every reference
 // of a repo fetches ONE commit — clearing any per-entity-version warning from
-// the resolver (which compares each layer's own `version:`, read after fetch).
+// the resolver (which compares each candy's own `version:`, read after fetch).
 // For each distinct repo referenced by the project's versioned YAML files, every
 // pin of that repo is rewritten to ONE target version: the newest already-referenced version
 // (default) or the newest tag on the remote (`--remote`). Edits are
 // comment-preserving (yaml.v3 node API) and idempotent. Operates on the current
 // project (cwd; honors the top-level -C / --dir / CHARLY_PROJECT_DIR). For a
-// multi-repo tree, run it per repo (e.g. `charly -C image/<name> image reconcile`).
+// multi-repo tree, run it per repo (e.g. `charly -C box/<name> box reconcile`).
 type BoxReconcileCmd struct {
 	DryRun bool `name:"dry-run" help:"Print the pin rewrites without modifying any file."`
 	Remote bool `help:"Align each repo's pins to its newest REMOTE tag (git ls-remote) instead of the newest already-referenced version."`
@@ -34,8 +34,8 @@ func reconcileCandidateFiles(dir string) []string {
 	}
 	// Scan every YAML under the discovered box/ and candy/ directories. A
 	// per-box charly.yml can pin a @github `base:`, and a per-candy charly.yml can
-	// pin @github deps in its require:/layer: lists (e.g. the cachyos
-	// keepassxc-keyring layer); both must be aligned too — otherwise reconciliation
+	// pin @github deps in its require:/candy: lists (e.g. the cachyos
+	// keepassxc-keyring candy); both must be aligned too — otherwise reconciliation
 	// is not FULLY automatic and the resolver still warns about a version it cannot
 	// reach from the entry point. filepath.Walk on a missing directory is a clean
 	// no-op (the root err arm returns nil).

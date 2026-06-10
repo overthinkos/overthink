@@ -129,16 +129,16 @@ type CollectedAlias struct {
 	Command string `json:"command"`
 }
 
-// CollectBoxAlias gathers aliases from the image's own layers + image-level config.
-// No base chain traversal — aliases are leaf-image specific.
-// Layer aliases come first; image-level overrides by name.
+// CollectBoxAlias gathers aliases from the box's own candies + box-level config.
+// No base chain traversal — aliases are leaf-box specific.
+// Candy aliases come first; box-level overrides by name.
 func CollectBoxAlias(cfg *Config, layers map[string]*Candy, boxName string) ([]CollectedAlias, error) {
 	img, ok := cfg.Box[boxName]
 	if !ok {
 		return nil, fmt.Errorf("box %q not found in charly.yml", boxName)
 	}
 
-	// Resolve layers for this image (includes transitive deps)
+	// Resolve candies for this box (includes transitive deps)
 	resolved, err := ResolveCandyOrder(img.Candy, layers, nil)
 	if err != nil {
 		return nil, err
@@ -147,7 +147,7 @@ func CollectBoxAlias(cfg *Config, layers map[string]*Candy, boxName string) ([]C
 	seen := make(map[string]bool)
 	var result []CollectedAlias
 
-	// Collect from layers
+	// Collect from candies
 	for _, candyName := range resolved {
 		layer, ok := layers[candyName]
 		if !ok || !layer.HasAliases() {
@@ -162,7 +162,7 @@ func CollectBoxAlias(cfg *Config, layers map[string]*Candy, boxName string) ([]C
 		}
 	}
 
-	// Collect from image config (overrides layer aliases with same name)
+	// Collect from box config (overrides candy aliases with same name)
 	for _, a := range img.Alias {
 		cmd := a.Command
 		if cmd == "" {
@@ -370,7 +370,7 @@ func (c *AliasUninstallCmd) Run() error {
 	return nil
 }
 
-// ListAliasesCmd lists layers with alias declarations
+// ListAliasesCmd lists candies with alias declarations
 type ListAliasesCmd struct{}
 
 func (c *ListAliasesCmd) Run() error {

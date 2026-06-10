@@ -5,7 +5,7 @@ package main
 // format's `local_pkg:` config (build.yml `distro.<name>.format.<fmt>.local_pkg`).
 //
 // This is the execution machinery behind LocalPkgInstallStep (the IR form of a
-// layer's `localpkg:` field). NOTHING here hardcodes a package-format command:
+// candy's `localpkg:` field). NOTHING here hardcodes a package-format command:
 // the source-dir sentinel, build command, install command, package-file glob,
 // and probe command all come from the resolved *LocalPkgDef
 // (LocalPkgInstallStep.LocalPkg / BuilderStep.LocalPkg), rendered through the
@@ -18,14 +18,14 @@ package main
 // Pieces, each a shared primitive (R3):
 //
 //   1. resolveLocalPkgDir   — locate the package SOURCE directory from the
-//      author's hint + the layer/project anchors (walk-up search), keyed on the
+//      author's hint + the candy/project anchors (walk-up search), keyed on the
 //      format's LocalPkgDef.SourceSentinel.
 //   2. buildLocalPkgOnHost  — render LocalPkgDef.BuildTemplate and run it on the
 //      HOST, returning the produced package-file paths (globbed via PkgGlob).
 //   3. transferAndInstallPkgs — the SHARED transfer+install leg: PutFile each
 //      package onto the target venue's filesystem (a local copy for the host
 //      ShellExecutor, scp for the SSHExecutor) then render+run
-//      LocalPkgDef.InstallTemplate via RunSystem. The SAME leg the aur-LAYER
+//      LocalPkgDef.InstallTemplate via RunSystem. The SAME leg the aur-CANDY
 //      deploy path uses (buildDepPkgsOnHost → transferAndInstallPkgs) — both
 //      call this one helper.
 
@@ -56,21 +56,21 @@ type localPkgInstallContext struct {
 	Glob     string // LocalPkgDef.PkgGlob (e.g. "*.pkg.tar.zst")
 }
 
-// resolveLocalPkgDir locates the package SOURCE directory for a layer's
+// resolveLocalPkgDir locates the package SOURCE directory for a candy's
 // `localpkg:` hint. Resolution order, returning the first directory that
 // actually contains a `PKGBUILD` file:
 //
 //  1. absolute ref → used verbatim.
-//  2. <candyDir>/<ref>     — the source bundled alongside the layer.
+//  2. <candyDir>/<ref>     — the source bundled alongside the candy.
 //  3. <projectDir>/<ref>   — relative to the deploy project dir (os.Getwd).
 //  4. walk UP from projectDir, trying <ancestor>/<ref> at each level — this is
 //     the operator path: `charly -C box/cachyos deploy add cachyos-gpu` has a
 //     project dir of box/cachyos while pkg/arch lives at the SUPERPROJECT
-//     root (../../pkg/arch). The walk finds it without the layer needing to
+//     root (../../pkg/arch). The walk finds it without the candy needing to
 //     know how deeply the consuming project is nested.
 //
 // Returns "" when no PKGBUILD is found anywhere — the caller treats that as a
-// no-op (the layer's own curl/COPY task is the documented fallback).
+// no-op (the candy's own curl/COPY task is the documented fallback).
 //
 // The SOURCE-dir marker is the format's `source_sentinel` (PKGBUILD for pac,
 // *.spec for rpm, debian/control for deb), matched via filepath.Glob so a plain
@@ -96,7 +96,7 @@ func resolveLocalPkgDir(ref, candyDir, projectDir, sentinel string) string {
 		}
 		return ""
 	}
-	// Layer-relative, then project-relative.
+	// Candy-relative, then project-relative.
 	for _, base := range []string{candyDir, projectDir} {
 		if base == "" {
 			continue
@@ -182,7 +182,7 @@ func buildLocalPkgOnHost(ctx context.Context, lp *LocalPkgDef, srcDir string, op
 // aur `execBuilder` path factored out (R3): execBuilder now calls this and then
 // transferAndInstallPkgs, and the localpkg step calls it to build the package's
 // dependency closure. There is exactly ONE host-side dep-builder implementation
-// across the layer-aur path and the localpkg-dep-closure path.
+// across the candy-aur path and the localpkg-dep-closure path.
 //
 // It synthesizes a BuilderStep{Builder:lp.DepBuilder, …} carrying the package
 // names in RawStageContext["packages"], renders the SAME renderBuilderScript the
@@ -282,7 +282,7 @@ func buildDepPkgsOnHost(ctx context.Context, lp *LocalPkgDef, bDef *BuilderDef, 
 		// Cfg + ProjectDir let BuilderRun's EnsureImagePresent run the
 		// namespace-aware ResolveBox, so a namespace-qualified builder ref
 		// (e.g. the cachyos project's aur builder `charly.arch-builder`) resolves to
-		// its concrete image — matching the aur-LAYER path (deploy_target_local.go).
+		// its concrete image — matching the aur-CANDY path (deploy_target_local.go).
 		Cfg:        cfg,
 		ProjectDir: projectDir,
 	})
@@ -391,7 +391,7 @@ func venueHasPkgManager(ctx context.Context, exec DeployExecutor, lp *LocalPkgDe
 // build it on the host, then transfer+install onto the target venue. `supported`
 // gates whether the install leg runs (the venue's package manager must match the
 // step's format); an unsupported target or a missing source dir is a clean no-op
-// (the layer's own curl/COPY task covers it).
+// (the candy's own curl/COPY task covers it).
 //
 // venueName is used only for log lines (e.g. "host", "vm:cachyos-gpu").
 func execLocalPkgInstall(ctx context.Context, exec DeployExecutor, s *LocalPkgInstallStep, supported bool, venueName string, opts EmitOpts) error {
@@ -428,12 +428,12 @@ func execLocalPkgInstall(ctx context.Context, exec DeployExecutor, s *LocalPkgIn
 }
 
 // renderLocalPkgImageRun returns the Containerfile `RUN` directive that, in an
-// IMAGE build, downloads a layer's PUBLISHED package (LocalPkgDef.DownloadTemplate,
+// IMAGE build, downloads a candy's PUBLISHED package (LocalPkgDef.DownloadTemplate,
 // with ${ARCH} resolved by BuildKit) into the staging dir and installs it via the
 // SAME dep-resolving InstallTemplate the deploy path uses — so the toolchain is
 // OS-tracked + its deps pulled from the image's repos, identical to a deploy
 // install. Returns "" (no directive) when the format declares no download_template
-// (the layer's own task: install is the fallback). Shared by OCITarget AND
+// (the candy's own task: install is the fallback). Shared by OCITarget AND
 // generate.go writeCandySteps so the image-build emission has ONE home (R3).
 func renderLocalPkgImageRun(lp *LocalPkgDef) (string, error) {
 	if lp == nil || strings.TrimSpace(lp.DownloadTemplate) == "" {

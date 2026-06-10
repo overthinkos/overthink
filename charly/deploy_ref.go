@@ -1,20 +1,20 @@
 package main
 
-// deploy_ref.go — unified image/layer reference resolver for
-// `charly deploy add <name> <ref>`, `--add-layer <ref>`, and charly.yml
-// image:/add_layers: fields.
+// deploy_ref.go — unified box/candy reference resolver for
+// `charly deploy add <name> <ref>`, `--add-candy <ref>`, and charly.yml
+// box:/add_candy: fields.
 //
 // <ref> accepts four forms, auto-detected:
 //
-//   1. Local image name         "fedora-coder"
+//   1. Local box name           "fedora-coder"
 //      Matches a top-level entry in charly.yml.
 //
-//   2. Local layer name         "pre-commit"
+//   2. Local candy name         "pre-commit"
 //      Matches a directory in candy/.
 //
 //   3. Local YAML path          "./my-box.yml" | "/abs/path/candy.yml"
 //      Starts with "./" or "/"; ends with ".yml" or ".yaml". The file's
-//      top-level keys tell us whether it's an image or layer declaration.
+//      top-level keys tell us whether it's a box or candy declaration.
 //
 //   4. Remote repo ref          "github.com/owner/repo[/box/<n>|/candy/<n>][@ref]"
 //      Matches "{host}/{org}/{repo}[/sub][@ref]" with a known host. The
@@ -22,16 +22,16 @@ package main
 //      compat with charly.yml import:/candy: already in the tree.
 //
 // Disambiguation rules (post 2026-06 candy/box rebrand):
-//   - Any ref with a "candy/<n>" subpath resolves to a layer ("candy/" legacy).
-//   - Any ref with a "box/<n>" subpath resolves to an image ("images/" legacy).
+//   - Any ref with a "candy/<n>" subpath resolves to a candy ("layers/" legacy).
+//   - Any ref with a "box/<n>" subpath resolves to a box ("images/" legacy).
 //   - A local name found in BOTH charly.yml and candy/ is permitted —
 //     each kind has its own namespace. Precedence is decided by the
-//     CALLER's context: ResolveDeployRef defaults to image-first
+//     CALLER's context: ResolveDeployRef defaults to box-first
 //     (the primary `<ref>` positional almost always means "deploy
-//     this image"); ResolveDeployRefAsCandy prefers layers (used by
-//     `--add-layer <ref>` where the user explicitly asked for a layer).
-//   - A YAML file with a top-level `base:` or `images:` key is an image;
-//     one with `rpm:`/`deb:`/`pac:`/`aur:`/`tasks:`/`services:` is a layer.
+//     this box"); ResolveDeployRefAsCandy prefers candies (used by
+//     `--add-candy <ref>` where the user explicitly asked for a candy).
+//   - A YAML file with a top-level `base:` or `box:` key is a box;
+//     one with `rpm:`/`deb:`/`pac:`/`aur:`/`tasks:`/`services:` is a candy.
 
 import (
 	"fmt"
@@ -60,7 +60,7 @@ const (
 	RefSourceRemote    RefSource = "remote"
 )
 
-// DeployRef is a parsed `<image-or-layer-ref>` ready to be loaded.
+// DeployRef is a parsed `<box-or-candy-ref>` ready to be loaded.
 type DeployRef struct {
 	Raw    string     // original input
 	Kind   RefKind    // box or candy
@@ -76,25 +76,25 @@ type DeployRef struct {
 // download). The function does not fetch remote repos — that happens
 // at Emit time when the plan actually needs the content.
 //
-// When the same name exists as BOTH an image and a layer (cross-kind
+// When the same name exists as BOTH a box and a candy (cross-kind
 // name reuse — permitted since 2026-05), this entry point prefers
-// image. For the `--add-layer` context where the user asked for a
-// layer specifically, use ResolveDeployRefAsCandy instead.
+// box. For the `--add-candy` context where the user asked for a
+// candy specifically, use ResolveDeployRefAsCandy instead.
 func ResolveDeployRef(ref, projectDir string) (*DeployRef, error) {
 	return resolveDeployRefWithPref(ref, projectDir, RefKindBox)
 }
 
-// ResolveDeployRefAsCandy is the layer-preferring sibling of
-// ResolveDeployRef. Used for `--add-layer <ref>` resolution where the
-// user has explicitly asked for a layer overlay; if the same name
-// exists as both an image and a layer, layer wins.
+// ResolveDeployRefAsCandy is the candy-preferring sibling of
+// ResolveDeployRef. Used for `--add-candy <ref>` resolution where the
+// user has explicitly asked for a candy overlay; if the same name
+// exists as both a box and a candy, candy wins.
 func ResolveDeployRefAsCandy(ref, projectDir string) (*DeployRef, error) {
 	return resolveDeployRefWithPref(ref, projectDir, RefKindCandy)
 }
 
 // resolveDeployRefWithPref is the shared implementation; preferKind
 // only affects the local-name codepath when a name resolves to both
-// an image and a layer. Remote refs and explicit local paths classify
+// a box and a candy. Remote refs and explicit local paths classify
 // themselves unambiguously.
 func resolveDeployRefWithPref(ref, projectDir string, preferKind RefKind) (*DeployRef, error) {
 	ref = strings.TrimSpace(ref)
@@ -160,15 +160,15 @@ func resolveRemoteRef(ref string) (*DeployRef, error) {
 	kind := RefKindCandy
 	switch {
 	case refSubPathHas(parsed.SubPath, "candy") || refSubPathHas(parsed.SubPath, "layers"):
-		// `candy/<n>` is the post-rebrand layer subpath; `candy/<n>` is the
+		// `candy/<n>` is the post-rebrand candy subpath; `layers/<n>` is the
 		// legacy form kept for back-compat with old pins.
 		kind = RefKindCandy
 	case refSubPathHas(parsed.SubPath, "box") || refSubPathHas(parsed.SubPath, "images"):
-		// `box/<n>` is the post-rebrand image subpath; `images/<n>` is legacy.
+		// `box/<n>` is the post-rebrand box subpath; `images/<n>` is legacy.
 		kind = RefKindBox
 	default:
 		// A bare repo ref (no candy//box/ subpath) defaults to the project's
-		// charly.yml, which is image-shaped. Existing tooling treats such
+		// charly.yml, which is box-shaped. Existing tooling treats such
 		// refs as project imports; we follow suit.
 		kind = RefKindBox
 	}
@@ -182,7 +182,7 @@ func resolveRemoteRef(ref string) (*DeployRef, error) {
 }
 
 // resolveLocalPath handles `./path.yml`, `/abs/path.yaml`, etc. Reads
-// the file's top-level keys to classify as image vs layer.
+// the file's top-level keys to classify as box vs candy.
 func resolveLocalPath(ref, projectDir string) (*DeployRef, error) {
 	path := ref
 	if !filepath.IsAbs(path) {
@@ -193,7 +193,7 @@ func resolveLocalPath(ref, projectDir string) (*DeployRef, error) {
 		return nil, fmt.Errorf("ResolveDeployRef: cannot stat %s: %w", path, err)
 	}
 	if info.IsDir() {
-		// A directory ref points at a layer directory (candy/<name>/).
+		// A directory ref points at a candy directory (candy/<name>/).
 		path = filepath.Join(path, UnifiedFileName)
 		if _, err := os.Stat(path); err != nil {
 			return nil, fmt.Errorf("ResolveDeployRef: directory %s has no %s", ref, UnifiedFileName)
@@ -217,7 +217,7 @@ func resolveLocalPath(ref, projectDir string) (*DeployRef, error) {
 }
 
 // classifyYAMLFile reads the file's top-level keys and decides whether
-// it declares an image or a layer.
+// it declares a box or a candy.
 func classifyYAMLFile(path string) (RefKind, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -227,13 +227,13 @@ func classifyYAMLFile(path string) (RefKind, error) {
 	if err := yaml.Unmarshal(data, &top); err != nil {
 		return "", fmt.Errorf("parsing %s: %w", path, err)
 	}
-	// Image-shaped: has `images:` (top-level), `base:`, or `defaults:` block.
+	// Box-shaped: has `box:` (top-level), `base:`, or `defaults:` block.
 	for _, k := range []string{"box", "base", "defaults"} {
 		if _, ok := top[k]; ok {
 			return RefKindBox, nil
 		}
 	}
-	// Layer-shaped: has any layer marker. This list roughly matches
+	// Candy-shaped: has any candy marker. This list roughly matches
 	// the candy manifest's documented top-level fields; a YAML that has none of
 	// these keys is an error (we don't try to guess).
 	for _, k := range []string{"rpm", "deb", "pac", "aur", "tasks", "services", "service", "system_services", "candy", "depends", "env", "path_append", "description"} {
@@ -244,7 +244,7 @@ func classifyYAMLFile(path string) (RefKind, error) {
 	return "", fmt.Errorf("ResolveDeployRef: %s has no recognized image or layer keys", path)
 }
 
-// resolveLocalName checks the unified loader's images and candy/ for
+// resolveLocalName checks the unified loader's boxes and candy/ for
 // a matching name. Cross-kind name reuse is permitted (since 2026-05);
 // preferKind decides precedence when the name exists in both kinds.
 func resolveLocalName(name, projectDir string, preferKind RefKind) (*DeployRef, error) {
@@ -253,14 +253,14 @@ func resolveLocalName(name, projectDir string, preferKind RefKind) (*DeployRef, 
 
 	inImageYml := false
 	resolvedImgPath := imgYml
-	// Schema v4: only charly.yml is the entry point. Resolve image
+	// Schema v4: only charly.yml is the entry point. Resolve box
 	// names through the unified loader (which pulls in sibling per-kind
 	// files transparently). No direct file reads here.
 	if uf, ok, err := LoadUnified(projectDir); err == nil && ok && uf != nil {
 		// Namespace-aware presence check via the single resolver, so a qualified
 		// deploy ref (`charly deploy add charly.<image>`) resolves the same way every
-		// other command resolves an image name. Bare names hit the root map
-		// exactly as the previous flat `uf.Image[name]` did.
+		// other command resolves a box name. Bare names hit the root map
+		// exactly as the previous flat `uf.Box[name]` did.
 		if _, _, present := uf.ProjectConfig().resolveBoxRef(name); present {
 			inImageYml = true
 			resolvedImgPath = imgYml

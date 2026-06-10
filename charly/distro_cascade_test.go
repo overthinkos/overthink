@@ -8,7 +8,7 @@ import (
 )
 
 // deriveCandy parses a candy YAML body and runs the Calamares bridge, returning
-// the populated Layer (tagSections / formatSections / topPackages).
+// the populated Candy (tagSections / formatSections / topPackages).
 func deriveCandy(t *testing.T, body string) *Candy {
 	t.Helper()
 	var ly CandyYAML
@@ -59,7 +59,7 @@ func fmtImg(format string, chain ...string) *ResolvedBox {
 // TestCascade_FormatFamilyLevel proves the package-format FAMILY level
 // (`distro: deb:`/`pac:`/`rpm:`) applies to every distro of that format, while
 // distro-specific blocks stay scoped. This is the YAML-configured
-// deb/pac/rpm → distro → version hierarchy: a layer declares family-generic
+// deb/pac/rpm → distro → version hierarchy: a candy declares family-generic
 // packages ONCE under the format tag instead of duplicating per distro, and a
 // `pac:` block reaches arch AND cachyos with no Go-side distro inheritance.
 func TestCascade_FormatFamilyLevel(t *testing.T) {
@@ -252,7 +252,7 @@ distro:
 }
 
 func TestCascade_TopOnlyCandyInstallsEverywhere(t *testing.T) {
-	// A layer with only a top-level package: (no distro:) installs that base on
+	// A candy with only a top-level package: (no distro:) installs that base on
 	// any image via the primary format.
 	l := deriveCandy(t, "name: t\npackage: [nodejs, npm]\n")
 	step := pkgStep(t, compileSystemPackageSteps(l, debImg("debian:13", "debian"), HostContext{}))
@@ -298,7 +298,7 @@ func TestDistroDefVersionInherits(t *testing.T) {
 
 // TestExpandPackageInheritance proves the YAML-driven asymmetry: a distro with
 // inherit_packages: true expands its cascade chain to include the inherits:
-// ancestor (cachyos → [cachyos, arch]) so an `arch:` layer block reaches it,
+// ancestor (cachyos → [cachyos, arch]) so an `arch:` candy block reaches it,
 // while a distro that only sets inherits: (ubuntu → debian) does NOT pull the
 // parent's package sections. No Go-side hardcoded inheritance table.
 func TestExpandPackageInheritance(t *testing.T) {

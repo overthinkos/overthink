@@ -54,7 +54,7 @@ func TestValidateTests_NumericAndTimeout(t *testing.T) {
 func TestValidateTests_RuntimeVarInBuildScope(t *testing.T) {
 	layers := map[string]*Candy{
 		"lyr": {Name: "lyr", tests: []Check{
-			// scope defaults to build at layer level
+			// scope defaults to build at candy level
 			{Command: "redis-cli -p ${HOST_PORT:6379}"},
 		}},
 	}
@@ -108,7 +108,7 @@ func TestValidateTests_IDUniqueness_SameImage(t *testing.T) {
 	}
 }
 
-// ID collision across layers that land in the same section of a collected image.
+// ID collision across candies that land in the same section of a collected image.
 func TestValidateTests_IDUniqueness_CrossCandy(t *testing.T) {
 	layers := map[string]*Candy{
 		"a": {Name: "a", tests: []Check{{ID: "same", File: "/a"}}},
@@ -141,7 +141,7 @@ func TestValidateTests_UnknownMatcherOp(t *testing.T) {
 func TestValidateTests_McpRejectedInBuildScope(t *testing.T) {
 	layers := map[string]*Candy{
 		"jupyter": {Name: "jupyter", tests: []Check{
-			{Mcp: "ping"}, // default scope at layer level is build
+			{Mcp: "ping"}, // default scope at candy level is build
 		}},
 	}
 	cfg := &Config{Box: map[string]BoxConfig{}}

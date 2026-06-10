@@ -3,9 +3,9 @@ package main
 import "testing"
 
 // These tests pin the resolver-unification cutover: every command's
-// image/local name resolution must descend import namespaces through the ONE
+// box/local name resolution must descend import namespaces through the ONE
 // namespace-aware mechanism (splitNamespaceRef / resolveBoxRef), instead of a
-// flat root-only `c.Image[name]` lookup that silently misses (or truncates at)
+// flat root-only `c.Box[name]` lookup that silently misses (or truncates at)
 // an imported namespace. Each test FAILS against the pre-cutover code.
 
 // fixtureNamespacedProject writes a root project that imports a `sub`
@@ -43,7 +43,7 @@ box:
 
 // TestResolveImage_QualifiedDelegates is the central-chokepoint guard:
 // ResolveBox must resolve a namespace-qualified name by delegating into the
-// owning namespace Config. Pre-fix, `c.Image["sub.widget"]` missed and this
+// owning namespace Config. Pre-fix, `c.Box["sub.widget"]` missed and this
 // returned "image \"sub.widget\" not found".
 func TestResolveImage_QualifiedDelegates(t *testing.T) {
 	root, cfg := fixtureNamespacedProject(t)
@@ -88,14 +88,14 @@ func TestFindImageByLeaf(t *testing.T) {
 }
 
 // TestResolveAllImage_RequestedQualifiedTarget guards the build-target path:
-// an explicitly-requested qualified image that is NOT a base/builder of any
-// root image must still land in the resolved set (so filterBox / the build
+// an explicitly-requested qualified box that is NOT a base/builder of any
+// root box must still land in the resolved set (so filterBox / the build
 // graph accept `charly box build sub.widget` and the ensure-image build-fallback
 // for a namespaced builder). Pre-fix it was absent.
 func TestResolveAllImage_RequestedQualifiedTarget(t *testing.T) {
 	root, cfg := fixtureNamespacedProject(t)
 
-	// Without RequestedImages, sub.widget is not reachable, so not pulled.
+	// Without RequestedBoxes, sub.widget is not reachable, so not pulled.
 	base, err := cfg.ResolveAllBox("test", root, ResolveOpts{})
 	if err != nil {
 		t.Fatalf("ResolveAllBox: %v", err)
@@ -118,7 +118,7 @@ func TestResolveAllImage_RequestedQualifiedTarget(t *testing.T) {
 // semantics: it follows ROOT-internal bases (so the 5 collectors keep walking
 // the full same-repo chain) but STOPS at a namespace-qualified base. A
 // namespaced base is a separately-built image that owns its own labels;
-// descending into it would double-count layers the consumer also lists directly
+// descending into it would double-count candies the consumer also lists directly
 // (the regression the id-uniqueness validator caught). Namespace descent is a
 // name-resolution concern, not a per-image collection concern.
 func TestWalkBaseChain_RootInternalOnly(t *testing.T) {

@@ -2,7 +2,7 @@ package main
 
 // install_build.go — the InstallPlan compiler.
 //
-// BuildDeployPlan walks a resolved image plus its layer set and produces
+// BuildDeployPlan walks a resolved image plus its candy set and produces
 // an InstallPlan (charly/install_plan.go) — the IR that both the OCI target
 // (Containerfile emission) and the host target (shell + podman execution)
 // consume.
@@ -11,7 +11,7 @@ package main
 // the same InstallPlan regardless of filesystem or environment. Side
 // effects happen later, inside DeployTarget.Emit implementations.
 //
-// Logic here replaces the per-layer walk inside writeCandySteps
+// Logic here replaces the per-candy walk inside writeCandySteps
 // (generate.go:1075-1208). Instead of emitting Containerfile text
 // directly, we emit structured InstallSteps that know *what* to do —
 // leaving *how* to render up to each target.
@@ -54,12 +54,12 @@ type HostContext struct {
 	BuilderImage string
 }
 
-// BuildDeployPlan compiles one Layer into an InstallPlan.
+// BuildDeployPlan compiles one Candy into an InstallPlan.
 //
-// For whole-image deploys, the caller iterates the ordered layer list
-// (from ResolveCandyOrder) and builds one plan per layer, then merges
-// them. Keeping one plan per layer makes refcounting trivial in the
-// ledger: each layer's teardown is independent.
+// For whole-image deploys, the caller iterates the ordered candy list
+// (from ResolveCandyOrder) and builds one plan per candy, then merges
+// them. Keeping one plan per candy makes refcounting trivial in the
+// ledger: each candy's teardown is independent.
 func BuildDeployPlan(layer *Candy, img *ResolvedBox, hostCtx HostContext) (*InstallPlan, error) {
 	if layer == nil {
 		return nil, fmt.Errorf("BuildDeployPlan: nil layer")
@@ -89,14 +89,14 @@ func BuildDeployPlan(layer *Candy, img *ResolvedBox, hostCtx HostContext) (*Inst
 	pkgSteps := compileSystemPackageSteps(layer, img, hostCtx)
 	plan.Steps = append(plan.Steps, pkgSteps...)
 
-	// 2. Multi-stage builders triggered by layer manifest files. Emitted
-	// BEFORE the layer's tasks so a task that consumes the builder's home
+	// 2. Multi-stage builders triggered by candy manifest files. Emitted
+	// BEFORE the candy's tasks so a task that consumes the builder's home
 	// artifacts (e.g. selkies' web-copy reads the pixi/build.sh output at
 	// ~/.local/share/selkies-build) finds them already in place. This
 	// matches the image build, where every builder stage's /home is COPYed
-	// into the main stage up front (before any layer install step) — the
+	// into the main stage up front (before any candy install step) — the
 	// builder runs in an isolated stage/image and never depends on the
-	// layer's own tasks, so running it first is always safe. On a cross-host
+	// candy's own tasks, so running it first is always safe. On a cross-host
 	// deploy the BuilderStep extracts the home artifacts into the guest home,
 	// which the subsequent TaskStep then relocates; the OCI target hoists the
 	// builder stages regardless of step order, so its Containerfile is
@@ -105,8 +105,8 @@ func BuildDeployPlan(layer *Candy, img *ResolvedBox, hostCtx HostContext) (*Inst
 	plan.Steps = append(plan.Steps, builderSteps...)
 
 	// 2.5. Bundled PKGBUILD (`localpkg:`) — build on the host + pacman -U on a
-	// pac deploy target. Emitted BEFORE the layer's tasks so the package is
-	// already installed when the layer's own `cmd:` task runs: the charly layer's
+	// pac deploy target. Emitted BEFORE the candy's tasks so the package is
+	// already installed when the candy's own `cmd:` task runs: the charly candy's
 	// task is pacman-aware (it does nothing when opencharly-git is present and
 	// only curls a binary otherwise), so the package must land first or the
 	// curl branch shadows the proper /usr/bin/charly with a stale /usr/local/bin/charly.
@@ -140,7 +140,7 @@ func BuildDeployPlan(layer *Candy, img *ResolvedBox, hostCtx HostContext) (*Inst
 	}
 
 	// 7. Reboot: the candy manifest `reboot: true`. Emitted LAST so the reboot
-	// follows every install step of this layer. Only VmDeployTarget acts
+	// follows every install step of this candy. Only VmDeployTarget acts
 	// on it (reboots the guest + waits); OCI/pod/k8s skip it (no machine
 	// at build time); LocalDeployTarget skips + warns (never reboots the
 	// operator host unattended). See RebootStep.
@@ -151,8 +151,8 @@ func BuildDeployPlan(layer *Candy, img *ResolvedBox, hostCtx HostContext) (*Inst
 	return plan, nil
 }
 
-// compileApkStep turns a layer's `apk:` package list into a single
-// ApkInstallStep, or nil if the layer declares no apk packages. The `apk`
+// compileApkStep turns a candy's `apk:` package list into a single
+// ApkInstallStep, or nil if the candy declares no apk packages. The `apk`
 // format is target-agnostic at compile time — the step carries the specs and
 // each DeployTarget decides whether to execute (android) or skip (everything
 // else), exactly as the IR intends for venue-specific work.
@@ -168,10 +168,10 @@ func compileApkStep(layer *Candy) InstallStep {
 	}
 }
 
-// compileLocalPkgStep turns a layer's `localpkg:` field into a single
-// LocalPkgInstallStep, or nil if the layer declares none. Like compileApkStep
+// compileLocalPkgStep turns a candy's `localpkg:` field into a single
+// LocalPkgInstallStep, or nil if the candy declares none. Like compileApkStep
 // it is target-agnostic at compile time — the step carries the author's
-// PKGBUILD hint plus the layer dir AND the deploy project dir (os.Getwd, the
+// PKGBUILD hint plus the candy dir AND the deploy project dir (os.Getwd, the
 // same handle compileServiceSteps reads) as the two anchors the emit-time
 // walk-up search uses to locate the PKGBUILD. Each DeployTarget decides whether
 // to build+install (localpkg-capable host/guest), skip (image build, non-pac
@@ -186,13 +186,13 @@ func compileApkStep(layer *Candy) InstallStep {
 // closure through the EXISTING builder before installing. When the distro
 // declares no localpkg-capable format, LocalPkg is nil and the executor skips;
 // when no dep builder resolves, BuilderImage is "" and the dep-build is skipped
-// with a clear log (the layer's own curl/COPY fallback still covers
+// with a clear log (the candy's own curl/COPY fallback still covers
 // non-localpkg targets).
 func compileLocalPkgStep(layer *Candy, img *ResolvedBox, hostCtx HostContext) InstallStep {
 	// The target distro must declare a localpkg-capable package format, AND the
-	// layer must point that format at a source dir. Resolve the format FIRST so
+	// candy must point that format at a source dir. Resolve the format FIRST so
 	// the per-format `localpkg:` map picks the matching source (pac→pkg/arch,
-	// rpm→pkg/fedora, deb→pkg/debian). Either missing → no step (the layer's own
+	// rpm→pkg/fedora, deb→pkg/debian). Either missing → no step (the candy's own
 	// curl/COPY task is the fallback on formats with no native package).
 	if img.DistroDef == nil {
 		return nil
@@ -216,10 +216,10 @@ func compileLocalPkgStep(layer *Candy, img *ResolvedBox, hostCtx HostContext) In
 	}
 }
 
-// MergePlan combines a list of per-layer plans into one whole-image
+// MergePlan combines a list of per-candy plans into one whole-image
 // plan. Used by deploy targets that want to see all steps in one
 // sequence (for sudo batching, overall dry-run display, etc.) while
-// preserving per-layer provenance for the ledger.
+// preserving per-candy provenance for the ledger.
 func MergePlan(plans []*InstallPlan, image string, addCandies []string) *InstallPlan {
 	out := &InstallPlan{
 		Box:       image,
@@ -241,9 +241,9 @@ func MergePlan(plans []*InstallPlan, image string, addCandies []string) *Install
 }
 
 // computeDeployID returns a deterministic hex hash that identifies a
-// specific deploy (image + ordered layer set + add_layers). Used as the
+// specific deploy (image + ordered candy set + add_candy). Used as the
 // ledger key so re-deploys of the same config are recognizable and
-// layer-refcount bookkeeping is stable.
+// candy-refcount bookkeeping is stable.
 func computeDeployID(box string, layers, addCandies []string) string {
 	h := sha256.New()
 	h.Write([]byte(box))
@@ -277,8 +277,8 @@ func primaryDistroTag(img *ResolvedBox, hostCtx HostContext) string {
 // Shell hook compilation
 // ---------------------------------------------------------------------------
 
-// compileShellHookStep returns a ShellHookStep for the layer's env: and
-// path_append: fields, or nil if the layer contributes neither.
+// compileShellHookStep returns a ShellHookStep for the candy's env: and
+// path_append: fields, or nil if the candy contributes neither.
 //
 // Home resolution is DEFERRED: `~`/`$HOME` are rewritten to the literal
 // `{{.Home}}` token rather than expanded against img.Home. Each DeployTarget
@@ -316,12 +316,12 @@ func compileShellHookStep(layer *Candy, img *ResolvedBox) *ShellHookStep {
 // Shell-init snippet compilation
 // ---------------------------------------------------------------------------
 
-// compileShellSnippetSteps returns one ShellSnippetStep per (layer, shell)
-// pair the layer contributes. Selection rule (mirrors TagPkgConfig):
+// compileShellSnippetSteps returns one ShellSnippetStep per (candy, shell)
+// pair the candy contributes. Selection rule (mirrors TagPkgConfig):
 //  1. If layer.Shell.ByShell[shell] exists, render it.
 //  2. Else if layer.Shell.Init is non-empty, render the generic body with
 //     ${SHELL_NAME} substituted to the active shell name.
-//  3. Else this shell gets nothing from this layer.
+//  3. Else this shell gets nothing from this candy.
 //
 // path_append entries are rendered into the snippet body using
 // shell-appropriate syntax (PATH=... for bash/zsh/sh, fish_add_path for
@@ -330,14 +330,14 @@ func compileShellHookStep(layer *Candy, img *ResolvedBox) *ShellHookStep {
 //
 // Destination resolution is target-aware:
 //   - Container build (hostCtx.Target empty / "oci"): system-wide
-//     drop-in (/etc/profile.d/charly-<layer>-<shell>.sh, /etc/fish/conf.d/
-//     charly-<layer>.fish). UseDropin=true.
+//     drop-in (/etc/profile.d/charly-<candy>-<shell>.sh, /etc/fish/conf.d/
+//     charly-<candy>.fish). UseDropin=true.
 //   - target:local, target:vm (hostCtx.Target = "host" or "vm"):
 //     bash/zsh/sh → managed-block append in the user's rc file (UseDropin
-//     =false); fish → per-layer drop-in in ~/.config/fish/conf.d/
+//     =false); fish → per-candy drop-in in ~/.config/fish/conf.d/
 //     (UseDropin=true).
 //
-// Returns nil when the layer has no shell: block.
+// Returns nil when the candy has no shell: block.
 func compileShellSnippetSteps(layer *Candy, img *ResolvedBox, hostCtx HostContext) []InstallStep {
 	cfg := layer.Shell()
 	if cfg == nil {
@@ -419,7 +419,7 @@ func resolveShellSpec(cfg *ShellConfig, shell string) (*ShellSpec, string, []str
 	return view, body, paths, true
 }
 
-// shellSnippetDestination resolves the destination file path for a layer's
+// shellSnippetDestination resolves the destination file path for a candy's
 // snippet given the shell and target. When pathOverride is non-empty, it
 // takes precedence (with ~/ expansion via ExpandPath). Returns the
 // resolved path and a UseDropin discriminator (true: full-file write;
@@ -485,7 +485,7 @@ func appendShellPathLines(body string, paths []string, shell, home string) strin
 // System package compilation
 // ---------------------------------------------------------------------------
 
-// compileSystemPackageSteps emits SystemPackagesStep(s) for the layer's
+// compileSystemPackageSteps emits SystemPackagesStep(s) for the candy's
 // package sections, honoring the distro-tag-wins-over-build-format rule
 // from today's writeCandySteps.
 //
@@ -502,10 +502,10 @@ func appendShellPathLines(body string, paths []string, shell, home string) strin
 // PhasePrepare on --allow-repo-changes. Current build.yml only has one
 // phase per format (the monolithic install_template); Task 4 will split
 // templates into phases. Until then, we emit everything as PhaseInstall.
-// compileSystemPackageSteps resolves a layer's package surface for an image via
+// compileSystemPackageSteps resolves a candy's package surface for an image via
 // the distro-specificity CASCADE and emits ONE SystemPackagesStep for the
 // image's primary format. img.Distro is the most-specific-first tag chain
-// (e.g. [debian:13, debian] or [ubuntu:24.04, ubuntu]); the layer's top-level
+// (e.g. [debian:13, debian] or [ubuntu:24.04, ubuntu]); the candy's top-level
 // package: list (layer.TopPackages) is the always-included BASE.
 //
 //   - packages = UNION of the base + every matching tag section's packages
@@ -540,16 +540,16 @@ func compileSystemPackageSteps(layer *Candy, img *ResolvedBox, hostCtx HostConte
 // (generate.go writeCandySteps). There is exactly one resolution so build and
 // deploy can never diverge.
 //
-// It computes the primary-format package set for a layer on an image: the
-// layer's top-level `package:` BASE, UNION every matching distro tag section
+// It computes the primary-format package set for a candy on an image: the
+// candy's top-level `package:` BASE, UNION every matching distro tag section
 // walked most-specific-first over img.Distro (deduped), with the Raw extras
 // repo/copr/options/exclude/module resolved MOST-SPECIFIC-WINS. Returns the
 // package list, the rendered Raw install context (including the unioned
 // `package` list), and whether any tag section matched.
-// cascadeTagChain returns the full per-layer cascade tag chain MOST-SPECIFIC
+// cascadeTagChain returns the full per-candy cascade tag chain MOST-SPECIFIC
 // FIRST: the image's distro chain (e.g. [debian:13, debian]) followed by the
 // package-format FAMILY tag (img.Pkg = deb/pac/rpm) as the LEAST-specific level.
-// A `distro: deb:` layer block therefore applies to EVERY deb-format distro
+// A `distro: deb:` candy block therefore applies to EVERY deb-format distro
 // (debian + ubuntu + their versions), `pac:` to arch + cachyos, `rpm:` to
 // fedora — the family-generic level of the YAML-configured
 // deb/pac/rpm → distro → version hierarchy. img.Pkg is the build.yml-declared
@@ -623,7 +623,7 @@ func buildSystemPackagesStep(format string, phase Phase, packages []string, raw 
 	// so a []map[string]any value (the Calamares Repo shape) converts correctly:
 	// the prior `raw["repos"].([]interface{})` was wrong on BOTH the key (plural)
 	// and the type assertion, so step.Repos stayed empty and the deploy path never
-	// added a layer's apt/dnf repo (e.g. the charly layer's tailscale repo on deb).
+	// added a candy's apt/dnf repo (e.g. the charly candy's tailscale repo on deb).
 	for _, m := range toMapSlice(raw["repo"]) {
 		step.Repos = append(step.Repos, RepoSpec{Raw: m})
 	}
@@ -637,9 +637,9 @@ func buildSystemPackagesStep(format string, phase Phase, packages []string, raw 
 // Task compilation
 // ---------------------------------------------------------------------------
 
-// compileTaskSteps turns the layer's tasks: list into TaskSteps. The
+// compileTaskSteps turns the candy's tasks: list into TaskSteps. The
 // resolved user is captured at compile time so the host target doesn't
-// need to re-resolve ${USER} later; CtxPath carries the layer's absolute
+// need to re-resolve ${USER} later; CtxPath carries the candy's absolute
 // directory for /ctx/ substitution on the host.
 func compileTaskSteps(layer *Candy, img *ResolvedBox) []InstallStep {
 	if !layer.HasTasks() || len(layer.tasks) == 0 {
@@ -777,7 +777,7 @@ func resolveBuilderImage(name string, img *ResolvedBox, hostCtx HostContext) str
 // Populates the "env_name"/"binaries"/"packages" keys the BuilderStep's
 // Reverse() method reads — best-effort; accurate env/binary detection
 // typically happens after the builder runs (binaries come from the
-// layer's Cargo.toml [[bin]] section, etc.). For now we capture names
+// candy's Cargo.toml [[bin]] section, etc.). For now we capture names
 // derivable from the candy manifest alone; the host target refines these at
 // execution time.
 func collectBuilderContext(layer *Candy, builderName string, bDef *BuilderDef, img *ResolvedBox) map[string]interface{} {
@@ -788,16 +788,16 @@ func collectBuilderContext(layer *Candy, builderName string, bDef *BuilderDef, i
 	}
 	switch builderName {
 	case "pixi":
-		// Default pixi env name. A layer with pixi.toml using a
+		// Default pixi env name. A candy with pixi.toml using a
 		// [workspace] or [project] name overrides this; the host target
 		// can read pixi.toml at install time and amend.
 		ctx["env_name"] = pixiDefaultEnvName(layer)
 	case "cargo":
 		// Cargo binaries are knowable only by reading Cargo.toml's
-		// [[bin]] entries. For the skeleton we record the layer name as
+		// [[bin]] entries. For the skeleton we record the candy name as
 		// a placeholder — the host target will read the real names
 		// after `cargo install` and update the ledger. Empty list means
-		// "best-effort uninstall via cargo uninstall <layer-name>".
+		// "best-effort uninstall via cargo uninstall <candy-name>".
 	case "npm":
 		// npm packages come from package.json dependencies; the host
 		// target reads those at install time.
@@ -837,7 +837,7 @@ func stringSliceFromYAML(v interface{}) ([]string, bool) {
 	return nil, false
 }
 
-// pixiDefaultEnvName returns the default pixi env name for a layer.
+// pixiDefaultEnvName returns the default pixi env name for a candy.
 // Pixi uses "default" unless the manifest declares otherwise; we keep it
 // simple and let the host target refine at install time.
 func pixiDefaultEnvName(layer *Candy) string {
@@ -848,7 +848,7 @@ func pixiDefaultEnvName(layer *Candy) string {
 // Service compilation
 // ---------------------------------------------------------------------------
 
-// compileServiceSteps turns the layer's service declarations into IR
+// compileServiceSteps turns the candy's service declarations into IR
 // steps. Preference order:
 //
 //  1. Unified `services:` list (Task 6) — preferred when present.
@@ -858,9 +858,9 @@ func pixiDefaultEnvName(layer *Candy) string {
 // compileServiceSteps — unified schema only. Each ServiceEntry becomes
 // either a ServicePackagedStep (use_packaged:) or a ServiceCustomStep
 // (custom exec). Legacy fields (raw-INI service:, system_services:) are
-// gone — external layers must run `charly migrate`.
+// gone — external candies must run `charly migrate`.
 //
-// **Init-system polymorphism filter (2026-05).** When a layer declares
+// **Init-system polymorphism filter (2026-05).** When a candy declares
 // the same service `name:` twice — once with `use_packaged:` and once
 // with custom `exec:` (the mixed-entry polymorphism pattern documented
 // in CLAUDE.md "Init-system polymorphism via mixed `service:` entries"

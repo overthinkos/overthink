@@ -97,7 +97,7 @@ func (c *EvalListScoreCmd) Run() error {
 
 // EvalRunCmd is `charly eval run <name>` — overloaded by the kind the name
 // resolves to: a kind:eval bed runs the full R10 sequence (build → eval
-// image → deploy → eval live → fresh update → tear down); a kind:score
+// box → deploy → eval live → fresh update → tear down); a kind:score
 // drives the AI iteration loop. The two namespaces are disjoint (a name
 // cannot be both — foldEvalBeds enforces it at load time).
 type EvalRunCmd struct {
@@ -290,7 +290,7 @@ func (c *EvalRunCmd) Run() error {
 	switch tk {
 	case TargetKindHost:
 		// Test-bed image preflight. The deploy that prepared the host
-		// installs layers (host packages + configs) only; container
+		// installs candies (host packages + configs) only; container
 		// images that scenarios spawn need to be pulled or built
 		// before the score's runner walks them.
 		if !c.DryRun {

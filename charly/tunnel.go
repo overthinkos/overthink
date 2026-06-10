@@ -166,13 +166,13 @@ type TunnelConfig struct {
 	Ports      []TunnelPort // all tunneled ports with access scope
 }
 
-// collectPortProtos builds a port->protocol map from layer PortSpec data.
-// It resolves the full layer tree (including composing layers) to find all port specs.
+// collectPortProtos builds a port->protocol map from candy PortSpec data.
+// It resolves the full candy tree (including composing candies) to find all port specs.
 func collectPortProtos(layers map[string]*Candy, candyNames []string) map[int]string {
-	// Resolve full layer order including sub-layers of composing layers
+	// Resolve full candy order including sub-candies of composing candies
 	allCandies, err := ResolveCandyOrder(candyNames, layers, nil)
 	if err != nil {
-		// Fall back to direct layer names on error
+		// Fall back to direct candy names on error
 		allCandies = candyNames
 	}
 
@@ -671,7 +671,7 @@ func resolveProto(containerPort int, portProtos map[int]string) string {
 }
 
 // ResolveTunnelConfig resolves a TunnelYAML into a TunnelConfig with defaults applied.
-// portProtos maps container port -> protocol ("http" or "tcp") from layer PortSpec data.
+// portProtos maps container port -> protocol ("http" or "tcp") from candy PortSpec data.
 // boxPorts is the list of image port mappings (e.g. "18789:18789", "443:18789").
 func ResolveTunnelConfig(t *TunnelYAML, boxName string, dns string, layers map[string]*Candy, candyNames []string, portProtos map[int]string, boxPorts []string) *TunnelConfig {
 	if t == nil {
@@ -747,7 +747,7 @@ func ResolveTunnelConfig(t *TunnelYAML, boxName string, dns string, layers map[s
 }
 
 // TunnelConfigFromMetadata creates a TunnelConfig from image label metadata.
-// Unlike ResolveTunnelConfig, this doesn't need layer access since the tunnel
+// Unlike ResolveTunnelConfig, this doesn't need candy access since the tunnel
 // configuration is already stored in the label.
 func TunnelConfigFromMetadata(meta *BoxMetadata) *TunnelConfig {
 	if meta == nil || meta.Tunnel == nil {

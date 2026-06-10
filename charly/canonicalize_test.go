@@ -35,7 +35,7 @@ func TestCanonicalizeDeployArg(t *testing.T) {
 }
 
 // TestResolveLocalImageRef_PrefersBaseOverAlias asserts that when two
-// equal-CalVer candidates share the `ai.opencharly.image` label
+// equal-CalVer candidates share the `ai.opencharly.box` label
 // (because `bumpDeployAlias` tags an instance alias inheriting the
 // base label), the resolver picks the BASE ref (repo's trailing
 // segment == short name) over the alias (`<base>/<instance>`).
@@ -74,14 +74,14 @@ func TestResolveLocalImageRef_PrefersBaseOverAlias(t *testing.T) {
 }
 
 // TestMergeDeployOntoMetadata_KeyedByDeployNameNotImage guards the bug class
-// where MergeDeployOntoMetadata looked up the deploy overlay by meta.Image (the
-// baked ai.opencharly.image short-name) instead of the caller's deploy key. A
+// where MergeDeployOntoMetadata looked up the deploy overlay by meta.Box (the
+// baked ai.opencharly.box short-name) instead of the caller's deploy key. A
 // kind:eval bed (key "eval-cachyos-ollama-pod", image "ollama") that remaps
 // 45434:11434 MUST keep its own port even when a sibling production deploy keyed
 // "ollama" publishes the image-default 11434 — otherwise the bed's quadlet
 // inherits 11434 and collides with the running same-image service at start
 // (rootlessport "address already in use"). Fails against the pre-fix code, which
-// keyed on meta.Image and therefore returned 11434 for the bed too.
+// keyed on meta.Box and therefore returned 11434 for the bed too.
 func TestMergeDeployOntoMetadata_KeyedByDeployNameNotImage(t *testing.T) {
 	dc := &DeployConfig{
 		Deploy: map[string]DeploymentNode{

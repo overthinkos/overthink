@@ -212,7 +212,7 @@ type BuildStageContext struct {
 	BuilderRef     string
 	StageName      string
 	LayerStage     string // scratch stage name for COPY --from
-	CopySrc        string // build context path for layer files (e.g., "candy/python")
+	CopySrc        string // build context path for candy files (e.g., "candy/python")
 	UID            int
 	GID            int
 	Home           string
@@ -224,7 +224,7 @@ type BuildStageContext struct {
 	CacheMounts    []CacheMountDef
 	Packages       []string // for config-detected builders (aur)
 	Options        []string // for config-detected builders (aur)
-	HasBuildScript bool     // true if layer has a build script (e.g., build.sh)
+	HasBuildScript bool     // true if candy has a build script (e.g., build.sh)
 	BuildScript    string   // build script filename
 }
 

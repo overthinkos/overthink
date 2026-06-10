@@ -1,7 +1,7 @@
 package main
 
 // scaffold_scenario.go — `charly candy add-scenario`: idempotently append a
-// Gherkin scenario to a layer's `description.scenario` list.
+// Gherkin scenario to a candy's `description.scenario` list.
 //
 // This is the SPECIFY-stage authoring affordance of Agent Driven Evaluation:
 // it lets a human or an agent (over MCP, via the auto-reflected
@@ -9,10 +9,10 @@ package main
 // YAML or clobbering the existing list — the scenario sibling of
 // `charly candy add-rpm` (idempotent append, comment-preserving yaml.Node API).
 //
-// Scenarios belong on the LAYER that provides the behaviour: a scenario
+// Scenarios belong on the CANDY that provides the behaviour: a scenario
 // authored here bakes into the ai.opencharly.description label of EVERY
-// image that composes the layer (CollectDescriptions walks the layer chain),
-// so one scenario covers all consumers (R3) — no per-image duplication. The
+// box that composes the candy (CollectDescriptions walks the candy chain),
+// so one scenario covers all consumers (R3) — no per-box duplication. The
 // helper authors PROSE steps (the agent-graded path); deterministic check
 // verbs are added afterward by editing the step, surfaced by
 // `charly feature pending`.
@@ -25,7 +25,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// CandyAddScenarioCmd: `charly candy add-scenario <layer> <name> [--given … --when … --then …]`.
+// CandyAddScenarioCmd: `charly candy add-scenario <candy> <name> [--given … --when … --then …]`.
 type CandyAddScenarioCmd struct {
 	Name     string   `arg:"" help:"Layer name (under candy/)"`
 	Scenario string   `arg:"" name:"scenario" help:"Scenario name (idempotent: a no-op if a scenario with this name already exists)"`
@@ -58,7 +58,7 @@ func (c *CandyAddScenarioCmd) Run() error {
 }
 
 // appendCandyScenario appends one scenario to <candyYml>'s
-// layer.description.scenario list (creating the description / scenario nodes
+// candy.description.scenario list (creating the description / scenario nodes
 // as needed) and writes the file back, preserving comments via the yaml.Node
 // API. Returns added=false (no write) when a scenario of the same name is
 // already present (idempotent).
@@ -113,7 +113,7 @@ func appendCandyScenario(candyYml, name string, given, when, then, tags []string
 
 // candyBodyNode returns the `candy:` kind-wrapper mapping from a parsed candy
 // manifest root, descending through the document node. Candy manifests are
-// kind-keyed under `candy:` (the layer kind key); every body-relative edit —
+// kind-keyed under `candy:` (the candy kind key); every body-relative edit —
 // package sections, scenarios, scalar fields — lives INSIDE that wrapper, not
 // at the document root. Shared by the candy authoring helpers (add-scenario,
 // add-rpm/deb/pac/aur) so they agree on where the body lives (R3).

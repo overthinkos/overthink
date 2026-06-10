@@ -1,34 +1,34 @@
 package main
 
 // android_spec.go — the `kind: android` schema (AndroidSpec) and the
-// `apk:` layer-package schema (ApkPackageSpec).
+// `apk:` candy-package schema (ApkPackageSpec).
 //
 // kind:android is a first-class deploy SUBSTRATE, modeled on kind:k8s: it
 // describes an Android DEVICE (an in-pod emulator OR a remote/physical adb
 // endpoint) onto which `apk` packages are installed by a `target: android`
 // deploy. The apps themselves are NOT a kind — `apk` is a package format
-// declared in layers like pac/aur/rpm/deb (see ApkPackageSpec + the
-// candy manifest's `apk:` field), and an android deploy applies layers (their
+// declared in candies like pac/aur/rpm/deb (see ApkPackageSpec + the
+// candy manifest's `apk:` field), and an android deploy applies candies (their
 // `apk:` packages) onto the device via AndroidDeployTarget.
 //
 // Build-vs-runtime split: the Android system image + API level are baked
-// into the referenced kind:image at BUILD time (sdkmanager in the
-// android-sdk layer). kind:android REFERENCES that image — it never drives
+// into the referenced kind:box at BUILD time (sdkmanager in the
+// android-sdk candy). kind:android REFERENCES that box — it never drives
 // a build. The api_level/device fields are informational documentation of
 // the baked profile, not assertions or build drivers.
 
 // AndroidSpec is the kind:android target template — an Android device.
-// Exactly one device source must be set: Image (an in-pod emulator hosted
-// by a kind:image) XOR Adb (a remote/physical adb endpoint).
+// Exactly one device source must be set: Box (an in-pod emulator hosted
+// by a kind:box) XOR Adb (a remote/physical adb endpoint).
 type AndroidSpec struct {
-	// Box names the kind:image that bakes the emulator (Android SDK +
+	// Box names the kind:box that bakes the emulator (Android SDK +
 	// system image + adb + apkeep). In-pod source: apkeep runs inside the
 	// running pod and adb reaches the emulator via the pod. XOR Adb.
 	Box string `yaml:"box,omitempty"`
 
 	// Adb names a remote/physical adb endpoint (network host:port served by
 	// an adb server). Endpoint source: apkeep runs on the host and the APK
-	// is pushed via goadb to the endpoint. XOR Image.
+	// is pushed via goadb to the endpoint. XOR Box.
 	Adb *AndroidAdbEndpoint `yaml:"adb,omitempty"`
 
 	// Serial selects the device the adb server manages. Default
@@ -40,9 +40,9 @@ type AndroidSpec struct {
 	// `source: google-play` apk path consults it.
 	GoogleAccount *AndroidGoogleAccount `yaml:"google_account,omitempty"`
 
-	// --- Informational (documents the referenced image's baked profile) ---
+	// --- Informational (documents the referenced box's baked profile) ---
 	// Neither asserted nor used to reconfigure a running emulator (the live
-	// device profile lives in the image/layer env; overrides apply at the
+	// device profile lives in the box/candy env; overrides apply at the
 	// next pod `charly update`). Present so a kind:android entity is
 	// self-describing.
 	Device   string `yaml:"device,omitempty"`    // e.g. "pixel_9a"
@@ -83,7 +83,7 @@ func (a *AndroidSpec) EffectiveSerial() string {
 }
 
 // apkSourceAllowlist is the set of valid apkeep download sources. Mirrors
-// the AdbInstallAppCmd --source enum; validated for layer `apk:` entries.
+// the AdbInstallAppCmd --source enum; validated for candy `apk:` entries.
 var apkSourceAllowlist = map[string]bool{
 	"apk-pure":           true,
 	"google-play":        true,
@@ -92,7 +92,7 @@ var apkSourceAllowlist = map[string]bool{
 }
 
 // ApkPackageSpec is one Android app install entry — the unit of the `apk:`
-// package format declared in a layer. Exactly one of Package (download by id
+// package format declared in a candy. Exactly one of Package (download by id
 // via apkeep) XOR Apk (a committed local APK path pushed via the adb sync
 // protocol) must be set.
 type ApkPackageSpec struct {
@@ -100,7 +100,7 @@ type ApkPackageSpec struct {
 	// XOR Apk.
 	Package string `yaml:"package,omitempty" json:"package,omitempty"`
 
-	// Apk is a committed local APK path (relative to the layer dir or the
+	// Apk is a committed local APK path (relative to the candy dir or the
 	// project root), pushed via the adb sync protocol. XOR Package.
 	Apk string `yaml:"apk,omitempty" json:"apk,omitempty"`
 

@@ -312,7 +312,7 @@ var libvirtMethods = map[string]methodSpec{
 // vendored client-go SDK. Cluster selection is via --cluster <profile> /
 // --context / --kubeconfig (see cmd_test_k8s.go). Host-side; applicable to
 // any deploy whose post-provision registered a ClusterProfile (typically
-// a k3s-server layer).
+// a k3s-server candy).
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
@@ -1020,7 +1020,7 @@ func (r *Runner) runAppium(ctx context.Context, c *Check) EvalResult {
 // passed-through RTX heads ARE the display), so the SHARED
 // cachyos-gpu-desktop-eval SPICE checks skip on the operator while still
 // asserting on the disposable eval bed (which keeps a virtio/SPICE head) — one
-// shared layer, no operator/bed split (R3). The signal is the VM-target
+// shared candy, no operator/bed split (R3). The signal is the VM-target
 // resolver's own "VM <name> has no SPICE graphics device declared in vm.yml"
 // error (charly/vm_target.go), surfaced on the verb subprocess's stderr.
 func vmDisplayDeviceAbsent(verb, stderr string) bool {

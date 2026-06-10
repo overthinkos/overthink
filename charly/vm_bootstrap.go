@@ -144,7 +144,7 @@ func BuildBootstrapVM(
 	if output == "" {
 		output = "/out/rootfs.tar.gz"
 	}
-	// Resolve the builder image ref. Internal kind:image names need
+	// Resolve the builder image ref. Internal kind:box names need
 	// resolution to a newest local CalVer tag — sudo podman won't auto-
 	// pull from registries that don't have the build.
 	// Resolve + auto-build the bootstrap builder image on demand (fully

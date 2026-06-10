@@ -24,9 +24,9 @@ import (
 // step with the shell CLI.
 //
 // The symmetric client lives in mcp.go / mcp_client.go and is built on the same
-// github.com/modelcontextprotocol/go-sdk. Layers that ship the `charly` binary
+// github.com/modelcontextprotocol/go-sdk. Candies that ship the `charly` binary
 // declare `mcp_provides: charly` to advertise this endpoint to consumers
-// (see the `charly` layer's candy manifest).
+// (see the `charly` candy's candy manifest).
 
 // Tool names that should not be exposed — the serve command itself (would be a
 // shell into itself), and the interactive help flag.
@@ -81,14 +81,14 @@ var mcpDestructivePaths = map[string]bool{
 	"box.new.project": true,
 	"box.new.box":     true,
 	// MCP-first authoring surface — mutates charly.yml or filesystem.
-	// (image.fetch is idempotent + additive; box.cat is read-only — neither
+	// (box.fetch is idempotent + additive; box.cat is read-only — neither
 	// is listed.)
 	"box.set":       true,
 	"box.add-candy": true,
 	"box.rm-candy":  true,
 	"box.refresh":   true, // deletes + re-clones cache
 	"box.write":     true, // writes arbitrary file under project root
-	// Layer authoring — mutates the candy manifest.
+	// Candy authoring — mutates the candy manifest.
 	"candy.set":          true,
 	"candy.add-rpm":      true,
 	"candy.add-deb":      true,
@@ -533,7 +533,7 @@ func makeToolHandler(path string, leaf *kong.Node) mcp.ToolHandler {
 
 // argvFromJSON reconstructs a CLI args slice from MCP-supplied JSON. Order:
 //
-//  1. Command tokens (e.g. "image", "build").
+//  1. Command tokens (e.g. "box", "build").
 //  2. --flag=value pairs (sorted for determinism; booleans emit --flag or
 //     --no-flag with no value).
 //  3. Positional values, in the order declared by Kong.
@@ -570,7 +570,7 @@ func argvFromJSON(cmdTokens, posOrder []string, posByProp map[string]*kong.Posit
 		if err != nil {
 			return nil, fmt.Errorf("positional %s: %w", name, err)
 		}
-		// Cumulative positionals (e.g. image build <images...>) accept
+		// Cumulative positionals (e.g. box build <boxes...>) accept
 		// multiple values. If the JSON value is an array, expand it.
 		if arr, ok := v.([]any); ok {
 			for _, item := range arr {

@@ -7,14 +7,14 @@ import (
 
 // TestGenerateBuildPath_FoldsTopPackagesAndCascade is the regression guard for
 // the build-path unification: `generate.go`'s package emission MUST go through
-// the SAME `resolveCascadePackages` the deploy path uses, so the layer's
+// the SAME `resolveCascadePackages` the deploy path uses, so the candy's
 // top-level `package:` base is folded AND distro tag sections cascade (union).
 // Before the unification the build path read only TagSection/FormatSection and
-// silently dropped every layer's top-level packages.
+// silently dropped every candy's top-level packages.
 func TestGenerateBuildPath_FoldsTopPackagesAndCascade(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	// A layer with a top-level base + a bare-distro tag section + a versioned
+	// A candy with a top-level base + a bare-distro tag section + a versioned
 	// override — exercises base-fold + union across [debian:13, debian].
 	layer := &Candy{Name: "pkglayer"}
 	derivePackageSectionsFromCalamares(layer, &CandyYAML{

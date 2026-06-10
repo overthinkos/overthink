@@ -64,10 +64,10 @@ const (
 	LabelMCPProvide     = "ai.opencharly.mcp_provide"
 	LabelMCPRequire     = "ai.opencharly.mcp_require"
 	LabelMCPAccept      = "ai.opencharly.mcp_accept"
-	LabelEval           = "ai.opencharly.eval" // three-section test manifest (layer/image/deploy)
+	LabelEval           = "ai.opencharly.eval" // three-section test manifest (candy/box/deploy)
 	// LabelDescription — three-section Gherkin-shaped self-description for
 	// every `kind:` entity the image rolled up. Each section carries one
-	// LabeledDescription per contributing entity (layer/image/deploy).
+	// LabeledDescription per contributing entity (candy/box/deploy).
 	// Authored inline in YAML under `description:` on each kind; collected
 	// via CollectDescriptions following the same base-chain walk as
 	// CollectEval. Subject to a 256 KiB soft cap with narrative truncation.
@@ -99,7 +99,7 @@ type LabelRouteEntry struct {
 
 // CapabilityService is the full structured spec of a single service entry
 // baked into an OCI label. Mirrors ServiceEntry's fields plus two origin
-// annotations (Init, Layer) so a source-less consumer can reconstruct
+// annotations (Init, Candy) so a source-less consumer can reconstruct
 // everything `charly deploy` needs without the source repo.
 type CapabilityService struct {
 	Name             string            `json:"name"`
@@ -124,21 +124,21 @@ type CapabilityService struct {
 	ExitCode         string            `json:"exit_code,omitempty"`
 	Priority         int               `json:"priority,omitempty"`
 	Init             string            `json:"init,omitempty"`  // which init system owns this entry
-	Candy            string            `json:"candy,omitempty"` // source layer name
+	Candy            string            `json:"candy,omitempty"` // source candy name
 }
 
 // LabelDataEntry represents a data mapping stored in the ai.opencharly.data label.
 type LabelDataEntry struct {
 	Volume  string `json:"volume"`         // target volume name
 	Staging string `json:"staging"`        // path inside image (/data/<volume>/[dest/])
-	Candy   string `json:"candy"`          // source layer name
+	Candy   string `json:"candy"`          // source candy name
 	Dest    string `json:"dest,omitempty"` // optional subdirectory within volume
 }
 
 // BoxMetadata is the runtime-relevant config extracted from image labels.
 type BoxMetadata struct {
 	Box       string
-	Version   string // ai.opencharly.version — content-derived EffectiveVersion (highest layer version, or the image's dedicated version:)
+	Version   string // ai.opencharly.version — content-derived EffectiveVersion (highest candy version, or the image's dedicated version:)
 	Registry  string
 	Bootc     bool
 	UID       int
@@ -170,7 +170,7 @@ type BoxMetadata struct {
 	Skill         string               // skill documentation URL
 	Status        string               // effective status (working, testing, broken)
 	Info          string               // aggregated status info
-	CandyVersion  map[string]string    // layer name -> CalVer version
+	CandyVersion  map[string]string    // candy name -> CalVer version
 	Secret        []LabelSecretEntry   // secret requirements (metadata only, no values)
 	Distro        []string             // distro identity tags (ai.opencharly.platform.distro)
 	BuildFormat   []string             // package formats installed (ai.opencharly.platform.format)
@@ -186,14 +186,14 @@ type BoxMetadata struct {
 	MCPProvide    []MCPServerYAML      // MCP servers provided to other containers (service discovery templates)
 	MCPRequire    []EnvDependency      // MCP servers image must have from the environment
 	MCPAccept     []EnvDependency      // MCP servers image can optionally use
-	Eval          *LabelEvalSet        // three-section (layer/image/deploy) declarative test spec
-	Description   *LabelDescriptionSet // three-section Gherkin-shaped self-description (layer/image/deploy)
-	Shell         *LabelShellSet       // three-section (layer/image/deploy) shell-init manifest (2026-05 cutover)
+	Eval          *LabelEvalSet        // three-section (candy/box/deploy) declarative test spec
+	Description   *LabelDescriptionSet // three-section Gherkin-shaped self-description (candy/box/deploy)
+	Shell         *LabelShellSet       // three-section (candy/box/deploy) shell-init manifest (2026-05 cutover)
 }
 
 // LabelShellSet is the three-section JSON manifest carried in
-// ai.opencharly.shell. Mirrors LabelEvalSet's bucketing — Layer
-// holds per-layer contributions (origin = layer name); Image holds
+// ai.opencharly.shell. Mirrors LabelEvalSet's bucketing — Candy
+// holds per-candy contributions (origin = candy name); Box holds
 // charly.yml-level shell: declarations; Deploy holds deploy-scope
 // defaults baked at build time. The charly.yml `shell:` overlay
 // merges into a separate runtime-only set via MergeDeployShell.
@@ -382,7 +382,7 @@ func ExtractMetadata(engine, imageRef string) (*BoxMetadata, error) {
 		}
 	}
 
-	// Layer env vars
+	// Candy env vars
 	if v := labels[LabelEnvCandy]; v != "" {
 		if err := json.Unmarshal([]byte(v), &meta.EnvCandy); err != nil {
 			return nil, fmt.Errorf("parsing %s: %w", LabelEnvCandy, err)
@@ -424,7 +424,7 @@ func ExtractMetadata(engine, imageRef string) (*BoxMetadata, error) {
 	meta.Status = labels[LabelStatus]
 	meta.Info = labels[LabelInfo]
 
-	// Layer versions
+	// Candy versions
 	if v := labels[LabelCandyVersion]; v != "" {
 		if err := json.Unmarshal([]byte(v), &meta.CandyVersion); err != nil {
 			return nil, fmt.Errorf("parsing %s: %w", LabelCandyVersion, err)
@@ -543,7 +543,7 @@ func ExtractMetadata(engine, imageRef string) (*BoxMetadata, error) {
 		meta.Eval = &ts
 	}
 
-	// Shell-init manifest (three-section, layer/image/deploy)
+	// Shell-init manifest (three-section, candy/box/deploy)
 	if v := labels[LabelShell]; v != "" {
 		var ss LabelShellSet
 		if err := json.Unmarshal([]byte(v), &ss); err != nil {

@@ -7,7 +7,7 @@ import "testing"
 // build-time ENV substitution by being escaped at emission. Without this,
 // `${POSTGRES_PASSWORD}` references in env: block values get silently emptied
 // by Docker (POSTGRES_PASSWORD isn't a build arg; the substitution resolves
-// to empty), breaking every layer that composes a connection URL with a
+// to empty), breaking every candy that composes a connection URL with a
 // runtime password.
 func TestEscapeContainerfileEnvValue(t *testing.T) {
 	cases := []struct {

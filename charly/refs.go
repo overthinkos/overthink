@@ -10,7 +10,7 @@ import (
 )
 
 // ParsedRef represents a parsed remote reference with version.
-// Works for both layer refs and image refs.
+// Works for both candy refs and image refs.
 // Format: @host/org/repo/sub/path:version
 type ParsedRef struct {
 	Raw      string // original string, e.g. "@github.com/org/repo/candy/name:v1.0.0"
@@ -33,7 +33,7 @@ func StripVersion(ref string) (string, string) {
 	return ref, ""
 }
 
-// IsRemoteCandyRef returns true if a layer reference is a remote ref (starts with @)
+// IsRemoteCandyRef returns true if a candy reference is a remote ref (starts with @)
 func IsRemoteCandyRef(ref string) bool {
 	return strings.HasPrefix(ref, "@")
 }
@@ -93,23 +93,23 @@ func splitRepoAndSubPath(ref string) (repoPath, subPath, name string) {
 	return repoPath, subPath, name
 }
 
-// BareRef returns the layer map key for a remote ref (without @ prefix and without :version).
+// BareRef returns the candy map key for a remote ref (without @ prefix and without :version).
 // e.g. "@github.com/org/repo/name:v1.0.0" -> "github.com/org/repo/name"
 func BareRef(ref string) string {
 	bare, _ := StripVersion(ref)
 	return strings.TrimPrefix(bare, "@")
 }
 
-// CandyRef is a single layer reference as authored in the candy manifest `require:` /
-// `layer:` (or charly.yml `layer:`). It carries the ORIGINAL ref string — with
+// CandyRef is a single candy reference as authored in the candy manifest `require:` /
+// `candy:` (or charly.yml `candy:`). It carries the ORIGINAL ref string — with
 // any `@repo` prefix and `:version` suffix — as the single source of truth; the
 // bare map-key form (.Bare()) and the pinned version (.Version()) are DERIVED on
 // demand, so a ref's identity and its version can never drift apart. The
 // transitive fetch keys on .Raw; the dependency graph keys on .Bare().
 type CandyRef struct {
 	Raw string // original ref, e.g. "@github.com/org/repo/candy/x:v1" or bare "x"
-	// resolved is the qualified layer-map key assigned when a freshly-fetched
-	// remote layer's plain-name sibling deps are qualified to
+	// resolved is the qualified candy-map key assigned when a freshly-fetched
+	// remote candy's plain-name sibling deps are qualified to
 	// "<repo>/<subpathprefix><name>" (qualifyRemoteSiblingDeps). Empty for every
 	// other ref, where the map key derives from Raw. Keeping Raw immutable while
 	// resolution lands in a separate slot lets ONE list serve both the graph
@@ -117,7 +117,7 @@ type CandyRef struct {
 	resolved string
 }
 
-// Bare returns the layer-map key (no @ prefix, no :version) — the form used for
+// Bare returns the candy-map key (no @ prefix, no :version) — the form used for
 // dependency resolution and graph keying. After remote sibling-qualification it
 // is the qualified key; otherwise it derives from the original ref.
 func (r CandyRef) Bare() string {
@@ -148,7 +148,7 @@ func toCandyRefs(raw []string) []CandyRef {
 }
 
 // bareRefs returns the bare map-key form of each ref — for the consumers that
-// resolve a layer list against the layer map.
+// resolve a candy list against the candy map.
 func bareRefs(refs []CandyRef) []string {
 	if len(refs) == 0 {
 		return nil
@@ -160,11 +160,11 @@ func bareRefs(refs []CandyRef) []string {
 	return out
 }
 
-// Layer-version resolution is per-entity, not per-git-tag: the `@github…:vTAG`
+// Candy-version resolution is per-entity, not per-git-tag: the `@github…:vTAG`
 // suffix is ONLY the FETCH coordinate (which commit to clone). The authority is
-// the layer's own `version:` field, read AFTER fetch and arbitrated by
+// the candy's own `version:` field, read AFTER fetch and arbitrated by
 // pickCandyVersion in ScanAllCandyWithConfigOpts (layers.go). So a repo re-tag
-// that doesn't change a layer emits no warning. CollectRemoteRefsOpts below
+// that doesn't change a candy emits no warning. CollectRemoteRefsOpts below
 // therefore collects EVERY distinct (repo, git-tag) a ref is referenced at;
 // the per-entity dedup + warn happens once, after fetch.
 
@@ -215,7 +215,7 @@ func IsRepoCached(repoPath, version string) (bool, error) {
 // hacks, no producer-first tag churn).
 //
 // Value: a comma-separated list of `repoPath=localDir` pairs. repoPath matches
-// the repo-root form every `@github` layer/namespace/image ref resolves through
+// the repo-root form every `@github` candy/namespace/image ref resolves through
 // (`github.com/<org>/<repo>`); a bare `<org>/<repo>` is accepted too (auto
 // `github.com/` prefix, same rule as `--repo`). Example:
 //
@@ -396,24 +396,24 @@ func CollectRemoteRefs(cfg *Config, layers map[string]*Candy) ([]RemoteDownload,
 	return CollectRemoteRefsOpts(cfg, layers, ResolveOpts{})
 }
 
-// CollectRemoteRefsOpts collects all unique remote refs from charly.yml layer
-// lists and candy manifest depends/layers fields. Different layers from the same repo
+// CollectRemoteRefsOpts collects all unique remote refs from charly.yml candy
+// lists and candy manifest depends/candy fields. Different candies from the same repo
 // can use different versions. Only the same bare ref at conflicting versions is
 // an error. Returns a list of RemoteDownload grouped by (repoPath, version).
 //
-// opts gates the disabled-image walk: a disabled image's layer refs are
+// opts gates the disabled-image walk: a disabled image's candy refs are
 // collected when opts.shouldIncludeDisabled(name) is true (i.e. a
 // `--include-disabled <name>` build). This keeps the remote-ref FETCH set in
 // lockstep with the RESOLVE set walked by ResolveAllBox / GlobalCandyOrder —
 // the same shouldIncludeDisabled predicate gates both. Without it, a disabled
-// named image lands in the build working set but its remote layers are never
-// fetched/registered, surfacing as "unknown layer" while computing global layer
+// named image lands in the build working set but its remote candies are never
+// fetched/registered, surfacing as "unknown layer" while computing global candy
 // order.
 func CollectRemoteRefsOpts(cfg *Config, layers map[string]*Candy, opts ResolveOpts) ([]RemoteDownload, error) {
 	// Collect EVERY distinct (repo, git-tag) a ref is referenced at. The git tag
 	// is only the FETCH coordinate — per-entity-version arbitration (and any
 	// warning) happens AFTER fetch in ScanAllCandyWithConfigOpts, so a re-tag of
-	// an unchanged layer no longer warns here. `source` is unused now (kept for
+	// an unchanged candy no longer warns here. `source` is unused now (kept for
 	// call-site stability + future diagnostics).
 	type repoVer struct{ repo, ver string }
 	pairs := make(map[repoVer]map[string]bool) // (repo, git-tag) -> set of bare refs
@@ -454,14 +454,14 @@ func CollectRemoteRefsOpts(cfg *Config, layers map[string]*Candy, opts ResolveOp
 	// format_config: has been removed. Remote build-config refs now live in
 	// charly.yml's `includes:` mechanism (see unified.go).
 
-	// Collect layer refs from the ROOT project's own build/deploy targets (every
+	// Collect candy refs from the ROOT project's own build/deploy targets (every
 	// enabled image + every kind:local template), then follow base/builder edges
 	// into imported namespaces, collecting ONLY the namespaced images actually
 	// reachable as a base or builder. A namespace is imported to provide
 	// bases/builders; its UNREFERENCED images and its kind:local templates (which
 	// can never be a base/builder of the importing project) are not build inputs
 	// here and must not be collected. Over-collecting them pulled unrelated
-	// layers pinned at a different ecosystem tag, which the one-layer-one-version
+	// candies pinned at a different ecosystem tag, which the one-candy-one-version
 	// invariant (tracker) then correctly — but spuriously — rejected. The
 	// per-(Config,name) `collected` set also breaks the main<->cachyos cycle.
 	collected := map[*Config]map[string]bool{}
@@ -478,7 +478,7 @@ func CollectRemoteRefsOpts(cfg *Config, layers map[string]*Candy, opts ResolveOp
 		seen[name] = true
 		img, ok := c.Box[name]
 		if !ok {
-			return nil // external OCI base or unknown name — no layers to collect
+			return nil // external OCI base or unknown name — no candies to collect
 		}
 		for _, candyRef := range img.Candy {
 			if err := addRef(candyRef, fmt.Sprintf("image %s", name)); err != nil {
@@ -486,16 +486,16 @@ func CollectRemoteRefsOpts(cfg *Config, layers map[string]*Candy, opts ResolveOp
 			}
 		}
 		// Follow the base edge, plus builder edges when this image actually builds
-		// (a layerless base needs no builder). A namespaced builder (e.g.
+		// (a candyless base needs no builder). A namespaced builder (e.g.
 		// charly.fedora-builder) is BUILT as an intermediate in the consumer's graph,
-		// so its layers (rpmfusion, yay, …) must be fetched here — dropping the
+		// so its candies (rpmfusion, yay, …) must be fetched here — dropping the
 		// builder edge under-collects them ("unknown layer"). The builder edge
 		// follows the EFFECTIVE builder (effectiveBuilderForBox → the canonical
 		// resolveEffectiveBuilder), NOT the raw per-image img.Builder: an image
 		// whose builder comes from defaults.builder / the distro-keyed default
 		// (e.g. bazzite/aurora -> charly.fedora-builder, with no per-image builder:
 		// block) has an EMPTY raw img.Builder, so reading it skipped the builder
-		// edge and under-collected its layers — the exact fetch/resolve lockstep
+		// edge and under-collected its candies — the exact fetch/resolve lockstep
 		// break this walk exists to prevent. Qualified refs descend into the
 		// imported namespace; bare refs resolve within c; an external-URL/unknown
 		// base resolves to ok=false and is skipped.
@@ -536,7 +536,7 @@ func CollectRemoteRefsOpts(cfg *Config, layers map[string]*Candy, opts ResolveOp
 		}
 	}
 
-	// Scan the candy manifest require: and layer: fields
+	// Scan the candy manifest require: and candy: fields
 	for candyName, layer := range layers {
 		for _, dep := range layer.Require {
 			if err := addRef(dep.Raw, fmt.Sprintf("layer %s require", candyName)); err != nil {

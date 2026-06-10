@@ -29,13 +29,13 @@ type HostDistro struct {
 
 	// IDLike is the list of distros this system claims compatibility
 	// with, in order. Populated from ID_LIKE=; enables fallback when a
-	// layer only has a parent-distro section (e.g. an ubuntu host
+	// candy only has a parent-distro section (e.g. an ubuntu host
 	// picking up a debian: section).
 	IDLike []string
 
 	// Tags is the ordered list of distro tags to use for format-section
 	// matching: [exact ID+Version, ID, ID_LIKE entries]. Matches the
-	// img.Distro list structure used by layer tag-section resolution.
+	// img.Distro list structure used by candy tag-section resolution.
 	Tags []string
 }
 
@@ -105,7 +105,7 @@ func splitOsReleaseLine(line string) (key, val string, ok bool) {
 // spin-offs report their own name but charly treats them as "fedora".
 //
 // Populated tags include both the os-release name and the build.yml
-// canonical name so layer tag-section matching and build.yml
+// canonical name so candy tag-section matching and build.yml
 // format-lookup both succeed.
 var distroIDAliases = map[string]string{
 	"arch":        "arch",
@@ -120,7 +120,7 @@ var distroIDAliases = map[string]string{
 
 // populateTags derives HostDistro.Tags from the other fields. The
 // resulting list includes both the os-release ID (exact match for
-// layer tag sections like `arch:`) and the build.yml canonical name
+// candy tag sections like `arch:`) and the build.yml canonical name
 // (for DistroConfig.ResolveDistro to find the format definitions).
 func (hd *HostDistro) populateTags() {
 	hd.Tags = hd.Tags[:0]

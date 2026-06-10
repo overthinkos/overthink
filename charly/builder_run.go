@@ -12,7 +12,7 @@ package main
 //   -v $HOME/.cargo:$HOME/.cargo:rw
 //   -v $HOME/.npm-global:$HOME/.npm-global:rw
 //   -v $HOME/.cache/charly:$HOME/.cache/charly:rw
-//   -v <layer-dir>:/work:ro
+//   -v <candy-dir>:/work:ro
 //   -e HOME=$HOME
 //   -e PIXI_CACHE_DIR=$HOME/.cache/charly/pixi
 //   -e NPM_CONFIG_PREFIX=$HOME/.npm-global
@@ -42,7 +42,7 @@ import (
 type BuilderRunOpts struct {
 	Engine       string // "podman" or "docker"; default "podman"
 	BuilderImage string // full image ref, e.g. "ghcr.io/overthinkos/fedora-builder:latest"
-	CandyDir     string // absolute path to layer source (bind-mounted as /work)
+	CandyDir     string // absolute path to candy source (bind-mounted as /work)
 	ScriptBody   string // shell script contents to pass to bash -c
 
 	// Cfg + ProjectDir feed `EnsureImagePresent` so a builder image
@@ -180,7 +180,7 @@ func buildBuilderRunArgs(opts BuilderRunOpts) []string {
 		args = append(args, "-v", fmt.Sprintf("%s:%s:rw", hpath, cpath))
 	}
 
-	// Layer source always mounted read-only at /work.
+	// Candy source always mounted read-only at /work.
 	if opts.CandyDir != "" {
 		args = append(args, "-v", fmt.Sprintf("%s:/work:ro", opts.CandyDir))
 	}

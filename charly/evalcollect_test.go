@@ -8,11 +8,11 @@ import (
 )
 
 // Covers all three section-assignment branches of CollectEval:
-//   - layer-level tests default to scope:"build" → Layer section
-//   - layer-level tests with scope:"deploy" → Deploy section
-//   - image-level Tests default to build → Image section; scope:"deploy" →
+//   - candy-level tests default to scope:"build" → Candy section
+//   - candy-level tests with scope:"deploy" → Deploy section
+//   - box-level Tests default to build → Box section; scope:"deploy" →
 //     Deploy section
-//   - image-level DeployTests → Deploy section with deploy-default origin
+//   - box-level DeployTests → Deploy section with deploy-default origin
 func TestCollectTests_Sections(t *testing.T) {
 	layers := map[string]*Candy{
 		"redis": {
@@ -54,8 +54,8 @@ func TestCollectTests_Sections(t *testing.T) {
 		t.Fatal("expected non-nil LabelEvalSet")
 	}
 
-	// Layer section: redis (port), base (file). base comes after redis because
-	// it's deeper in the chain (layer order within each level, then parent).
+	// Candy section: redis (port), base (file). base comes after redis because
+	// it's deeper in the chain (candy order within each level, then parent).
 	if len(got.Candy) != 2 {
 		t.Fatalf("layer section has %d entries, want 2: %+v", len(got.Candy), got.Candy)
 	}
@@ -69,17 +69,17 @@ func TestCollectTests_Sections(t *testing.T) {
 		t.Errorf("layer[1] wrong: %+v", got.Candy[1])
 	}
 
-	// Image section: supervisord -v
+	// Box section: supervisord -v
 	if len(got.Box) != 1 || got.Box[0].Origin != "box:redis-ml" || got.Box[0].Command != "supervisord -v" {
 		t.Errorf("image section wrong: %+v", got.Box)
 	}
 
-	// Deploy section: layer scope-deploy, image scope-deploy, DeployTests.
+	// Deploy section: candy scope-deploy, box scope-deploy, DeployTests.
 	if len(got.Deploy) != 3 {
 		t.Fatalf("deploy section has %d entries, want 3: %+v", len(got.Deploy), got.Deploy)
 	}
 	origins := []string{got.Deploy[0].Origin, got.Deploy[1].Origin, got.Deploy[2].Origin}
-	// Order: layer-deploy entries first (in layer walk order), then image scope:deploy, then DeployTests.
+	// Order: candy-deploy entries first (in candy walk order), then box scope:deploy, then DeployTests.
 	wantOrigins := []string{"candy:redis", "box:redis-ml", "deploy-default"}
 	if !reflect.DeepEqual(origins, wantOrigins) {
 		t.Errorf("deploy origins = %v, want %v", origins, wantOrigins)
@@ -101,18 +101,18 @@ func TestCollectTests_EmptyReturnsNil(t *testing.T) {
 	}
 }
 
-// Regression: an image whose layer list uses RAW @github.com/...:version refs
+// Regression: an image whose candy list uses RAW @github.com/...:version refs
 // (the submodule git-ref composition pattern used by box/fedora, box/cachyos,
-// etc.) must still collect the referenced layers' eval blocks. Before the
+// etc.) must still collect the referenced candies' eval blocks. Before the
 // BareRef chokepoint fix in ExpandCandy (charly/graph.go), CollectEval walked the
-// raw refs against the BareRef-keyed layer map, missed every one, silently
+// raw refs against the BareRef-keyed candy map, missed every one, silently
 // swallowed the resulting "unknown layer" error, and collected ZERO
-// layer-level checks — so every @github-ref-composed image shipped with
-// image-level checks only (e.g. a @github-ref-composed desktop box: 1 instead of ~77). The
+// candy-level checks — so every @github-ref-composed image shipped with
+// box-level checks only (e.g. a @github-ref-composed desktop box: 1 instead of ~77). The
 // same chokepoint feeds CollectHooks/Shell/Descriptions/Security/Volumes/Alias,
 // so this single test guards the whole family.
 func TestCollectEval_RemoteRefCandiesResolve(t *testing.T) {
-	// Remote layers are keyed by their BareRef (no @ prefix, no :version
+	// Remote candies are keyed by their BareRef (no @ prefix, no :version
 	// suffix) — see ScanRemoteCandy in layers.go.
 	const bareRef = "github.com/overthinkos/overthink/layers/tailscale"
 	layers := map[string]*Candy{

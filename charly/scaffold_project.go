@@ -144,11 +144,11 @@ func AddBox(dir, name, base string, layers []string) error {
 	return saveYAMLNodeFile(dest, doc)
 }
 
-// AddCandyToBox appends a layer to an existing image's `candy:` list.
-// Idempotent: if the layer is already in the list, this is a no-op. The box is
+// AddCandyToBox appends a candy to an existing box's `candy:` list.
+// Idempotent: if the candy is already in the list, this is a no-op. The box is
 // resolved across the discovered box/<name>/charly.yml, charly.yml, AND any
 // flat-imported per-kind file,
-// and the edit is saved to the file where the image actually lives.
+// and the edit is saved to the file where the box actually lives.
 func AddCandyToBox(dir, image, layer string) error {
 	root, imgNode, path, err := resolveBoxNodeFile(dir, image)
 	if err != nil {
@@ -173,9 +173,9 @@ func AddCandyToBox(dir, image, layer string) error {
 	return saveYAMLNodeFile(path, root)
 }
 
-// RemoveCandyFromBox removes the named layer from an image's `candy:`
-// list. Errors out if the image does not exist; succeeds silently if the
-// layer is not present. The box is resolved across the discovered
+// RemoveCandyFromBox removes the named candy from a box's `candy:`
+// list. Errors out if the box does not exist; succeeds silently if the
+// candy is not present. The box is resolved across the discovered
 // box/<name>/charly.yml, charly.yml, AND any flat-imported per-kind file, and
 // the edit is saved to the file where the box actually lives.
 func RemoveCandyFromBox(dir, image, layer string) error {
@@ -253,9 +253,9 @@ func mappingChild(m *yaml.Node, key string) *yaml.Node {
 	return nil
 }
 
-// boxesMapNode returns the images mapping node from a document and the
-// key that addressed it ("image" or "images"). Schema v4 canonical key
-// is the singular "image:"; the plural "images:" is accepted for
+// boxesMapNode returns the box mapping node from a document and the
+// key that addressed it ("box" or "images"). Schema v4 canonical key
+// is the singular "box:"; the plural "images:" is accepted for
 // legacy projects (it's an alias normalized by LoadUnified). When the
 // node is missing, returns ("", nil) so callers can append the
 // canonical singular form.
@@ -269,7 +269,7 @@ func boxesMapNode(doc *yaml.Node) (string, *yaml.Node) {
 	return "", nil
 }
 
-// boxNode returns the mapping node for the named image, or nil.
+// boxNode returns the mapping node for the named box, or nil.
 func boxNode(root *yaml.Node, name string) *yaml.Node {
 	doc := docContent(root)
 	_, imagesNode := boxesMapNode(doc)
@@ -282,7 +282,7 @@ func boxNode(root *yaml.Node, name string) *yaml.Node {
 // flatLocalImports returns the bare-string `import:` items that are LOCAL file
 // refs (same-repo per-kind files such as box.yml) — NOT @github refs and NOT
 // namespaced single-key-map imports. The authoring-edit verbs search these for
-// an image defined outside charly.yml itself.
+// a box defined outside charly.yml itself.
 func flatLocalImports(root *yaml.Node) []string {
 	doc := docContent(root)
 	imp := mappingChild(doc, "import")

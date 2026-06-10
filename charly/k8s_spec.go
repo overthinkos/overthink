@@ -12,7 +12,7 @@ package main
 // kind:k8s template (via YAML anchors or by referencing the same
 // template from multiple deployments).
 type K8sSpec struct {
-	// Box is the kind:image name this workload runs. Required.
+	// Box is the kind:box name this workload runs. Required.
 	Box string `yaml:"box"`
 
 	// --- Workload-level defaults ---

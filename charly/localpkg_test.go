@@ -36,7 +36,7 @@ func testPacDistroDef() *DistroDef {
 
 // TestCompileLocalPkgStep verifies the per-format `localpkg:` map compiles into a
 // single LocalPkgInstallStep carrying the format-matched source ref + anchors +
-// the config-driven LocalPkg; a layer with no source for the target format, or a
+// the config-driven LocalPkg; a candy with no source for the target format, or a
 // distro with no localpkg-capable format, compiles to nothing.
 func TestCompileLocalPkgStep(t *testing.T) {
 	img := &ResolvedBox{
@@ -47,12 +47,12 @@ func TestCompileLocalPkgStep(t *testing.T) {
 	}
 	hostCtx := HostContext{Target: "host", Distro: "arch"}
 
-	// A layer with no localpkg entry for the target format → nil.
+	// A candy with no localpkg entry for the target format → nil.
 	if step := compileLocalPkgStep(&Candy{Name: "no-pkg"}, img, hostCtx); step != nil {
 		t.Errorf("layer with no localpkg: should compile to nil, got %T", step)
 	}
 
-	// The charly layer's per-format map: pac resolves to pkg/arch.
+	// The charly candy's per-format map: pac resolves to pkg/arch.
 	l := &Candy{Name: "charly", SourceDir: "/layers/charly", localpkg: map[string]string{"pac": "pkg/arch", "rpm": "pkg/fedora", "deb": "pkg/debian"}}
 	step := compileLocalPkgStep(l, img, hostCtx)
 	if step == nil {
@@ -73,7 +73,7 @@ func TestCompileLocalPkgStep(t *testing.T) {
 		t.Errorf("LocalPkg config not resolved from the pac format: Format=%q LocalPkg=%#v", pkg.Format, pkg.LocalPkg)
 	}
 
-	// Same layer on an rpm distro → picks the rpm source from the map.
+	// Same candy on an rpm distro → picks the rpm source from the map.
 	rpmImg := &ResolvedBox{Name: "charly-fedora", Pkg: "rpm", DistroDef: &DistroDef{Format: map[string]*FormatDef{
 		"rpm": {LocalPkg: &LocalPkgDef{PkgGlob: "*.rpm", SourceSentinel: "*.spec", BuildTemplate: "x", InstallTemplate: "dnf install -y {{.StageDir}}/{{.Glob}}", Probe: "command -v dnf"}},
 	}}}
@@ -110,7 +110,7 @@ func TestLocalPkgInstallStepIR(t *testing.T) {
 }
 
 // TestBuildDeployPlanLocalPkgOrdering proves the localpkg step is emitted BEFORE
-// the layer's task steps in the compiled plan — load-bearing so the charly layer's
+// the candy's task steps in the compiled plan — load-bearing so the charly candy's
 // package-aware cmd: gate sees charly already installed and does nothing
 // (instead of curling a /usr/local/bin/charly that shadows /usr/bin/charly).
 func TestBuildDeployPlanLocalPkgOrdering(t *testing.T) {
@@ -164,7 +164,7 @@ func TestOCITargetSkipsLocalPkg(t *testing.T) {
 }
 
 // TestResolveLocalPkgDir covers source-dir resolution across the four branches
-// (absolute, layer-relative, project-relative, walk-up) AND the config-driven
+// (absolute, candy-relative, project-relative, walk-up) AND the config-driven
 // per-format sentinel: PKGBUILD (plain file), *.spec (glob), debian/control
 // (sub-path). A missing sentinel returns "".
 func TestResolveLocalPkgDir(t *testing.T) {
@@ -181,7 +181,7 @@ func TestResolveLocalPkgDir(t *testing.T) {
 	if err := os.MkdirAll(nestedProject, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	// A layer dir that bundles its OWN PKGBUILD (layer-relative branch).
+	// A candy dir that bundles its OWN PKGBUILD (candy-relative branch).
 	candyWithPkg := filepath.Join(root, "candy", "mytool")
 	if err := os.MkdirAll(filepath.Join(candyWithPkg, "arch"), 0o755); err != nil {
 		t.Fatal(err)
@@ -210,7 +210,7 @@ func TestResolveLocalPkgDir(t *testing.T) {
 	if got := resolveLocalPkgDir(pkgArch, "", "", "PKGBUILD"); got != pkgArch {
 		t.Errorf("absolute ref = %q, want %q", got, pkgArch)
 	}
-	// 2. Layer-relative.
+	// 2. Candy-relative.
 	if got := resolveLocalPkgDir("arch", candyWithPkg, root, "PKGBUILD"); got != filepath.Join(candyWithPkg, "arch") {
 		t.Errorf("layer-relative = %q, want %q", got, filepath.Join(candyWithPkg, "arch"))
 	}
@@ -325,7 +325,7 @@ func TestVenueHasPkgManager(t *testing.T) {
 }
 
 // TestExecLocalPkgInstall_SkipsUnsupported proves an unsupported venue is a
-// clean no-op: no build, no transfer, no install — the layer's curl/COPY task
+// clean no-op: no build, no transfer, no install — the candy's curl/COPY task
 // installs it instead.
 func TestExecLocalPkgInstall_SkipsUnsupported(t *testing.T) {
 	exec := &localPkgRecExec{}
@@ -353,7 +353,7 @@ func TestExecLocalPkgInstall_SkipsNilLocalPkg(t *testing.T) {
 }
 
 // TestExecLocalPkgInstall_SkipsMissingSource proves a missing source dir on a
-// supported venue is ALSO a clean no-op (fallback to the layer's curl/COPY
+// supported venue is ALSO a clean no-op (fallback to the candy's curl/COPY
 // task) — not an error that aborts the deploy.
 func TestExecLocalPkgInstall_SkipsMissingSource(t *testing.T) {
 	exec := &localPkgRecExec{}
@@ -415,7 +415,7 @@ func TestBuildLocalPkgOnHost_DryRunAndEmpty(t *testing.T) {
 }
 
 // TestBuildDepPkgsOnHost_EmptyAndDryRun proves the no-op contracts of the
-// aur-LAYER dep-build helper: empty packages → (nil, nil) with no build; DryRun →
+// aur-CANDY dep-build helper: empty packages → (nil, nil) with no build; DryRun →
 // (nil, nil) logging the plan; an empty builder image (or nil builder def) with
 // packages → error (never a silent drop).
 func TestBuildDepPkgsOnHost_EmptyAndDryRun(t *testing.T) {

@@ -44,7 +44,7 @@ func ResolveCharlyInstallStrategy(spec *VmSpec) CharlyInstallStrategy {
 // deliver — cp / scp / podman cp per executor), so one code path serves every
 // substrate (R3). Used by every in-venue `charly` caller (dbus delegation, desktop
 // notifications, the VM-deploy strategy wrapper, nested from-box delegation)
-// so an image need NOT bake the `charly` layer for those transient needs.
+// so an image need NOT bake the `charly` candy for those transient needs.
 //
 // Resolution (quiet — the caller decides what, if anything, to print):
 //
@@ -145,7 +145,7 @@ func EnsureCharlyInGuest(
 //
 // The host binary is guaranteed current and from-box-capable: it is the binary
 // running this very deploy. That is the whole point — a venue's own PATH charly may
-// be a stale layer install (a @github-fetched charly candy ships no bin/charly, so its
+// be a stale candy install (a @github-fetched charly candy ships no bin/charly, so its
 // cmd: curls a pre-from-box release that reports the wall clock as its version)
 // and must never be trusted as the delegation binary.
 func putHostCharlyInVenue(ctx context.Context, exec DeployExecutor, remotePath string, ownerRoot bool, opts EmitOpts) error {

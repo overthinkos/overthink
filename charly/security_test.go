@@ -247,7 +247,7 @@ func TestSecurityArgsMemoryCapsWithPrivileged(t *testing.T) {
 }
 
 func TestCollectSecurityMergesCapsSmallest(t *testing.T) {
-	// Two layers disagreeing on memory_max — tightest wins.
+	// Two candies disagreeing on memory_max — tightest wins.
 	layers := map[string]*Candy{
 		"big": {
 			security: &SecurityConfig{MemoryMax: "8g", MemoryHigh: "7g", Cpus: "8"},
@@ -274,7 +274,7 @@ func TestCollectSecurityMergesCapsSmallest(t *testing.T) {
 }
 
 func TestCollectSecurityImageOverridesCaps(t *testing.T) {
-	// Image-level security.memory_max replaces whatever the layers decided,
+	// Box-level security.memory_max replaces whatever the candies decided,
 	// consistent with how ShmSize is handled.
 	layers := map[string]*Candy{
 		"chrome": {

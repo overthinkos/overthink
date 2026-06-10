@@ -87,7 +87,7 @@ type UnifiedDeployTarget interface {
 	// re-reading the node from disk — see DeployContext).
 	Add(ctx context.Context, dctx *DeployContext, plans []*InstallPlan, opts EmitOpts) error
 
-	// Del reverses every layer currently recorded for this target
+	// Del reverses every candy currently recorded for this target
 	// and removes the deploy record. Equivalent to `charly deploy del
 	// <name>`. Only recorded ReverseOps are replayed — never an
 	// ad-hoc computation from the candy manifest.
@@ -99,7 +99,7 @@ type UnifiedDeployTarget interface {
 	Test(ctx context.Context, checks []Check, opts TestOpts) error
 
 	// Update re-applies the plan diff between the currently-recorded
-	// layer set and the plan set derived from fresh charly.yml.
+	// candy set and the plan set derived from fresh charly.yml.
 	// Equivalent to `charly deploy update <name>` (new command; today's
 	// `charly update` is image-focused and will be separate).
 	Update(ctx context.Context, plans []*InstallPlan, opts UpdateOpts) error

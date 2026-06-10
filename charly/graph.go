@@ -14,10 +14,10 @@ func (e *CycleError) Error() string {
 	return fmt.Sprintf("circular dependency: %s", strings.Join(e.Cycle, " -> "))
 }
 
-// ExpandCandy expands layer composition references (layer: field in the candy manifest).
-// For each layer that has IncludedCandies, recursively inserts them into the result.
-// Layers without content (no install files, no env/ports/etc.) are omitted.
-// Returns a flat, deduplicated layer list.
+// ExpandCandy expands candy composition references (candy: field in the candy manifest).
+// For each candy that has IncludedCandies, recursively inserts them into the result.
+// Candies without content (no install files, no env/ports/etc.) are omitted.
+// Returns a flat, deduplicated candy list.
 func ExpandCandy(requested []string, layers map[string]*Candy) ([]string, error) {
 	var result []string
 	seen := make(map[string]bool)
@@ -26,17 +26,17 @@ func ExpandCandy(requested []string, layers map[string]*Candy) ([]string, error)
 	var expand func(rawName string) error
 	expand = func(rawName string) error {
 		// BareRef-normalize every ref before lookup so callers that pass the
-		// RAW charly.yml layer list (cfg.Image[...].Layer with @github.com/...
-		// :version refs) resolve against the BareRef-keyed layer map. This is
+		// RAW charly.yml candy list (cfg.Box[...].Candy with @github.com/...
+		// :version refs) resolve against the BareRef-keyed candy map. This is
 		// the single chokepoint every ResolveCandyOrder caller funnels through,
 		// so one normalization here fixes all of them. It is idempotent for
 		// already-bare names — local plain names and the build path's
-		// pre-normalized ResolvedBox.Layer (config.go: BareRef per ref) — so
+		// pre-normalized ResolvedBox.Candy (config.go: BareRef per ref) — so
 		// the build/install path is byte-unchanged. Without it the collectors
-		// that walk RAW cfg.Image[...].Layer (eval/hooks/shell/descriptions/
+		// that walk RAW cfg.Box[...].Candy (eval/hooks/shell/descriptions/
 		// security/volumes/alias/engine + validateInitDependencies) silently
-		// dropped every layer-level contribution for @github-ref-composed
-		// images (the whole submodule image family).
+		// dropped every candy-level contribution for @github-ref-composed
+		// boxes (the whole submodule box family).
 		name := BareRef(rawName)
 		if seen[name] {
 			return nil
@@ -47,7 +47,7 @@ func ExpandCandy(requested []string, layers map[string]*Candy) ([]string, error)
 
 		layer, ok := layers[name]
 		if !ok {
-			// Unknown layer — pass through for ResolveCandyOrder to report
+			// Unknown candy — pass through for ResolveCandyOrder to report
 			seen[name] = true
 			result = append(result, name)
 			return nil
@@ -62,12 +62,12 @@ func ExpandCandy(requested []string, layers map[string]*Candy) ([]string, error)
 			}
 			expanding[name] = false
 			seen[name] = true
-			// Composing layers only appear in result if they also have content
+			// Composing candies only appear in result if they also have content
 			if layer.HasContent() {
 				result = append(result, name)
 			}
 		} else {
-			// Regular layer — always include
+			// Regular candy — always include
 			seen[name] = true
 			result = append(result, name)
 		}
@@ -82,23 +82,23 @@ func ExpandCandy(requested []string, layers map[string]*Candy) ([]string, error)
 	return result, nil
 }
 
-// ResolveCandyOrder resolves layer dependencies and returns them in topological order.
-// It takes the explicitly requested layers and the full layer map, then:
-// 1. Expands layer composition (layer: field)
+// ResolveCandyOrder resolves candy dependencies and returns them in topological order.
+// It takes the explicitly requested candies and the full candy map, then:
+// 1. Expands candy composition (candy: field)
 // 2. Transitively resolves all dependencies
 // 3. Topologically sorts the result
-// 4. Returns layers in install order (dependencies before dependents)
+// 4. Returns candies in install order (dependencies before dependents)
 //
-// parentCandies contains layers already installed by parent images (via base chain).
+// parentCandies contains candies already installed by parent boxes (via base chain).
 // These are excluded from the returned order.
 func ResolveCandyOrder(requested []string, layers map[string]*Candy, parentCandies map[string]bool) ([]string, error) {
-	// Expand layer composition first
+	// Expand candy composition first
 	expanded, err := ExpandCandy(requested, layers)
 	if err != nil {
 		return nil, err
 	}
 
-	// Build the set of all layers we need (transitive closure)
+	// Build the set of all candies we need (transitive closure)
 	needed := make(map[string]bool)
 	visiting := make(map[string]bool) // Track current path for cycle detection
 
@@ -126,7 +126,7 @@ func ResolveCandyOrder(requested []string, layers map[string]*Candy, parentCandi
 		visiting[name] = true
 		newPath := append(path, name)
 
-		// Add included layers (composition)
+		// Add included candies (composition)
 		for _, included := range layer.IncludedCandy {
 			if err := addTransitive(included.Bare(), newPath); err != nil {
 				return err
@@ -141,7 +141,7 @@ func ResolveCandyOrder(requested []string, layers map[string]*Candy, parentCandi
 		}
 
 		visiting[name] = false
-		// Composing layers without content don't need to be built
+		// Composing candies without content don't need to be built
 		if len(layer.IncludedCandy) == 0 || layer.HasContent() {
 			needed[name] = true
 		}
@@ -159,13 +159,13 @@ func ResolveCandyOrder(requested []string, layers map[string]*Candy, parentCandi
 	graph := make(map[string][]string)
 
 	// resolveDepEdges returns the effective dependencies for a dep reference,
-	// expanding through composing layers that aren't in the needed set.
+	// expanding through composing candies that aren't in the needed set.
 	var resolveDepEdges func(dep string) []string
 	resolveDepEdges = func(dep string) []string {
 		if needed[dep] {
 			return []string{dep}
 		}
-		// dep is a composing layer not in needed — inherit its included layers
+		// dep is a composing candy not in needed — inherit its included candies
 		layer, ok := layers[dep]
 		if !ok {
 			return nil
@@ -183,7 +183,7 @@ func ResolveCandyOrder(requested []string, layers map[string]*Candy, parentCandi
 		for _, dep := range layer.Require {
 			deps = append(deps, resolveDepEdges(dep.Bare())...)
 		}
-		// Included layers that have content are also dependencies (must install before)
+		// Included candies that have content are also dependencies (must install before)
 		for _, included := range layer.IncludedCandy {
 			deps = append(deps, resolveDepEdges(included.Bare())...)
 		}
@@ -194,15 +194,15 @@ func ResolveCandyOrder(requested []string, layers map[string]*Candy, parentCandi
 	return topoSort(graph)
 }
 
-// BoxNeedsBuilder returns true if any of the image's own resolved layers
+// BoxNeedsBuilder returns true if any of the box's own resolved candies
 // (excluding parent-provided) have pixi.toml, package.json, or Cargo.toml.
-// When layers is nil, falls back to unconditional builder dependency.
+// When candies is nil, falls back to unconditional builder dependency.
 func BoxNeedsBuilder(img *ResolvedBox, boxes map[string]*ResolvedBox, layers map[string]*Candy) bool {
 	if layers == nil {
 		return true // conservative fallback
 	}
 
-	// Get parent-provided layers
+	// Get parent-provided candies
 	var parentCandies map[string]bool
 	if !img.IsExternalBase {
 		var err error
@@ -212,7 +212,7 @@ func BoxNeedsBuilder(img *ResolvedBox, boxes map[string]*ResolvedBox, layers map
 		}
 	}
 
-	// Resolve this image's own layers (excluding parent)
+	// Resolve this box's own candies (excluding parent)
 	resolved, err := ResolveCandyOrder(img.Candy, layers, parentCandies)
 	if err != nil {
 		return true // conservative
@@ -235,15 +235,15 @@ func BoxNeedsBuilder(img *ResolvedBox, boxes map[string]*ResolvedBox, layers map
 	return false
 }
 
-// boxDirectDeps returns the direct image-build dependencies of img:
+// boxDirectDeps returns the direct box-build dependencies of img:
 //   - Base (when not an external OCI ref)
-//   - Builder.AllBuilder() format-builder images (only when includeFormatBuilders)
+//   - Builder.AllBuilder() format-builder boxes (only when includeFormatBuilders)
 //   - BootstrapBuilderImage (the `from: builder:pacstrap` / debootstrap source —
 //     the runPrivilegedBootstrap step in build.go reads the rootfs tarball from
 //     this builder's local-storage tag and hard-fails on miss, so it MUST be
 //     scheduled first by every dep traversal)
 //
-// Self-refs and refs to images not in the map (for builder + bootstrap builder)
+// Self-refs and refs to boxes not in the map (for builder + bootstrap builder)
 // are filtered out. Base is appended unconditionally when not external — the
 // existing invariant is that !IsExternalBase implies Base is in the map; if it
 // isn't, downstream code (filterBox's addDeps + topoSort) surfaces the bad
@@ -276,10 +276,10 @@ func boxDirectDeps(name string, img *ResolvedBox, boxes map[string]*ResolvedBox,
 	return deps
 }
 
-// ResolveBoxOrder resolves image dependencies and returns them in build order.
-// Images that reference other images via `base` create dependencies.
-// Each image's Builder field determines its builder dependency.
-// Pass layers to enable conditional builder dependency; nil for unconditional.
+// ResolveBoxOrder resolves box dependencies and returns them in build order.
+// Boxes that reference other boxes via `base` create dependencies.
+// Each box's Builder field determines its builder dependency.
+// Pass candies to enable conditional builder dependency; nil for unconditional.
 func ResolveBoxOrder(boxes map[string]*ResolvedBox, layers map[string]*Candy) ([]string, error) {
 	// Build adjacency list
 	// Edge from A to B means A depends on B (B must be built before A)
@@ -417,8 +417,8 @@ func topoLevels(graph map[string][]string) ([][]string, error) {
 	return levels, nil
 }
 
-// ResolveBoxLevels resolves image dependencies and returns them grouped by build level.
-// Images at the same level can be built concurrently.
+// ResolveBoxLevels resolves box dependencies and returns them grouped by build level.
+// Boxes at the same level can be built concurrently.
 func ResolveBoxLevels(boxes map[string]*ResolvedBox, layers map[string]*Candy) ([][]string, error) {
 	graph := make(map[string][]string)
 	for name, img := range boxes {
@@ -474,8 +474,8 @@ func findCycle(graph map[string][]string, inDegree map[string]int) []string {
 	return cyclePath
 }
 
-// CandyProvidedByBox returns the set of layers installed by an image
-// (including those inherited from parent images via base chain)
+// CandyProvidedByBox returns the set of candies installed by a box
+// (including those inherited from parent boxes via base chain)
 func CandyProvidedByBox(boxName string, boxes map[string]*ResolvedBox, layers map[string]*Candy) (map[string]bool, error) {
 	provided := make(map[string]bool)
 	visited := make(map[string]bool)
@@ -499,12 +499,12 @@ func CandyProvidedByBox(boxName string, boxes map[string]*ResolvedBox, layers ma
 			}
 		}
 
-		// Add this image's layers (expand composition)
+		// Add this box's candies (expand composition)
 		expanded, _ := ExpandCandy(img.Candy, layers)
 		for _, candyName := range expanded {
 			provided[candyName] = true
 		}
-		// Also mark composing layer names as provided
+		// Also mark composing candy names as provided
 		for _, candyName := range img.Candy {
 			provided[candyName] = true
 		}

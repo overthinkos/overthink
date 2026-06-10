@@ -20,8 +20,8 @@ var lowercaseEvalVarPattern = regexp.MustCompile(`\$\{[a-z][a-zA-Z0-9_]*\}`)
 // authoring errors before build time. Hooked into charly box validate.
 //
 // Scope:
-//   - Layer-level tests (CandyYAML.Eval).
-//   - Image-level tests (BoxConfig.Eval, BoxConfig.DeployEval).
+//   - Candy-level tests (CandyYAML.Eval).
+//   - Box-level tests (BoxConfig.Eval, BoxConfig.DeployEval).
 //   - Per-host charly.yml tests are out of scope here because that overlay is
 //     loaded per-operator at runtime, not part of the project charly.yml
 //     validation pass.
@@ -32,12 +32,12 @@ var lowercaseEvalVarPattern = regexp.MustCompile(`\$\{[a-z][a-zA-Z0-9_]*\}`)
 //  3. Timeout parses as time.Duration when present.
 //  4. All ${NAME[:arg]} references are legitimate: scope:"build" checks
 //     may not reference runtime-only variables.
-//  5. ID uniqueness within a single section (layer/image/deploy) so
+//  5. ID uniqueness within a single section (candy/box/deploy) so
 //     charly.yml overrides are unambiguous.
 //  6. ExitStatus / Port / UID / GID sanity (non-negative).
 //  7. Matcher operator is a known one.
 func validateTests(cfg *Config, layers map[string]*Candy, errs *ValidationError) {
-	// Layer-level. Each Check may opt into deploy scope; default is build.
+	// Candy-level. Each Check may opt into deploy scope; default is build.
 	for name, layer := range layers {
 		for i := range layer.tests {
 			scope := layer.tests[i].Scope
@@ -48,7 +48,7 @@ func validateTests(cfg *Config, layers map[string]*Candy, errs *ValidationError)
 		}
 	}
 
-	// Image-level
+	// Box-level
 	for name, img := range cfg.Box {
 		if img.Enabled != nil && !*img.Enabled {
 			continue
@@ -68,9 +68,9 @@ func validateTests(cfg *Config, layers map[string]*Candy, errs *ValidationError)
 		// ID uniqueness: collect IDs seen per effective section.
 		validateTestIDUniqueness(img, name, errs)
 
-		// Layer-contributed checks per image also need section-unique IDs. We
-		// emulate CollectEval bucketing to catch collisions across layer +
-		// image sources.
+		// Candy-contributed checks per box also need section-unique IDs. We
+		// emulate CollectEval bucketing to catch collisions across candy +
+		// box sources.
 		validateCollectedIDUniqueness(cfg, layers, name, errs)
 	}
 }
@@ -327,7 +327,7 @@ func validateTestIDUniqueness(img BoxConfig, imgName string, errs *ValidationErr
 }
 
 // validateCollectedIDUniqueness runs CollectEval to see the post-merge
-// per-section ID layout and flags cross-layer collisions.
+// per-section ID layout and flags cross-candy collisions.
 func validateCollectedIDUniqueness(cfg *Config, layers map[string]*Candy, imgName string, errs *ValidationError) {
 	set := CollectEval(cfg, layers, imgName)
 	if set == nil {

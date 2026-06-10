@@ -11,7 +11,7 @@ package main
 //   - the credential-store service prefix `ov/` (secret / enc / api-key / vnc /
 //     probe) → `charly/` — both the `key:` overrides authored in YAML AND the
 //     persisted entries in the OS keyring / per-host config (re-keyed in place).
-//   - the inconsistent power-user image names `arch-charly` / `fedora-charly`
+//   - the inconsistent power-user box names `arch-charly` / `fedora-charly`
 //     (distro-first) → `charly-arch` / `charly-fedora` (charly-first, matching
 //     the `charly-cachyos` the cachyos step already produces).
 //   - the fish shell-init `~/.config/fish/conf.d/overthink.fish` →
@@ -55,7 +55,7 @@ var charly4EnvTokenRe = regexp.MustCompile(`\bCH_[A-Z][A-Z0-9_]*`)
 // rebrand left on `ov/`. Each is re-keyed to `charly/<tail>`.
 var charly4CredServicePrefixes = []string{"secret", "enc", "api-key", "vnc", "probe"}
 
-// charly4EntityRenames are the charly-first power-user image-name fixes applied
+// charly4EntityRenames are the charly-first power-user box-name fixes applied
 // as exact whole-token replacements in scalar values and mapping keys.
 var charly4EntityRenames = [][2]string{
 	{"arch-charly", "charly-arch"},
@@ -194,7 +194,7 @@ func cutover4Scalar(v string) string {
 	// substring rewrite). The Go struct tag was renamed to charly_install in the
 	// rebrand; legacy configs still authoring ov_install migrate here.
 	v = strings.ReplaceAll(v, "ov_install", "charly_install")
-	// Charly-first power-user image names.
+	// Charly-first power-user box names.
 	for _, r := range charly4EntityRenames {
 		v = strings.ReplaceAll(v, r[0], r[1])
 	}

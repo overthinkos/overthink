@@ -55,7 +55,7 @@ type BoxConfigSetupCmd struct {
 	// resolution in runConfig and uses this exact image ref (a full local or
 	// registry ref). Set by `charly deploy from-box` for a source-less pod
 	// deploy — quadlet config comes from the image's baked OCI labels with no
-	// charly.yml project. Image then carries the deploy-key/name only.
+	// charly.yml project. Box then carries the deploy-key/name only.
 	// Not a CLI flag (kong:"-").
 	ExplicitRef string `kong:"-"`
 }
@@ -119,27 +119,27 @@ func (c *BoxConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	}
 
 	// Pattern B (arbitrary deploy-key + version-pin) lookup —
-	// /charly-core:deploy "Two supported deploy patterns". If `c.Image`
+	// /charly-core:deploy "Two supported deploy patterns". If `c.Box`
 	// (the positional arg) names a charly.yml entry with an
-	// explicit `image:` field, use that as the ref the rest of the
-	// pipeline pulls/inspects. Critically c.Image is NOT mutated:
+	// explicit `box:` field, use that as the ref the rest of the
+	// pipeline pulls/inspects. Critically c.Box is NOT mutated:
 	// it remains the deploy-key for container-name / quadlet-name
 	// / secret-name / charly.yml-key composition. Pre-2026-05-12
-	// the arg was always treated as a kind:image short-name; this
+	// the arg was always treated as a kind:box short-name; this
 	// split lets the deploy-key and the image-ref diverge.
-	// Resolve the deploy key to its declared image short-name via THE shared
+	// Resolve the deploy key to its declared box short-name via THE shared
 	// resolver (deploy.go resolveDeployBoxName) that config / start / shell
 	// / eval live all use, so they never diverge. Falls back to the key for
-	// the key==image convention. c.Image stays the deploy-KEY for container /
+	// the key==box convention. c.Box stays the deploy-KEY for container /
 	// quadlet / secret / charly.yml-key composition; only the image ref and
-	// the persisted `image:` field (below) use the resolved name. Routing the
+	// the persisted `box:` field (below) use the resolved name. Routing the
 	// short name through resolveShellImageRef yields a full local-CalVer ref
 	// podman storage knows (storage is keyed by full registry refs like
 	// ghcr.io/overthinkos/arch:TAG, not bare short names).
 	var deployBoxName, imageRef string
 	if c.ExplicitRef != "" {
 		// Source-less from-box deploy (`charly deploy from-box`): use the exact
-		// ref as-is; c.Image is the deploy-key/name only. No charly.yml
+		// ref as-is; c.Box is the deploy-key/name only. No charly.yml
 		// short-name resolution, no registry-ref composition — the image is
 		// already present locally (e.g. cp-box'd into a VM guest) and its
 		// quadlet config comes entirely from its baked OCI labels.
@@ -151,7 +151,7 @@ func (c *BoxConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 		// delegated) — resolves the image straight from local storage (full refs
 		// pass through resolveImageRefForEnsure unchanged) instead of failing
 		// with "short name requires a project directory with charly.yml". The
-		// deploy KEY stays c.Image for container/quadlet/secret naming.
+		// deploy KEY stays c.Box for container/quadlet/secret naming.
 		deployBoxName = c.ExplicitRef
 		imageRef = c.ExplicitRef
 	} else {
@@ -257,7 +257,7 @@ func (c *BoxConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	volumes, bindMounts := ResolveVolumeBacking(c.Box, c.Instance, meta.Volume, deployVolumes, meta.Home, rt.EncryptedStoragePath, rt.VolumesPath)
 
 	// Re-resolve the canonical registry ref UNLESS the operator
-	// supplied an explicit ref via the deploy entry's `image:`
+	// supplied an explicit ref via the deploy entry's `box:`
 	// field (Pattern B — arbitrary deploy-key + version-pin from
 	// /charly-core:deploy "Two supported deploy patterns"). In Pattern
 	// B the imageRef is already a fully-qualified registry ref
@@ -327,7 +327,7 @@ func (c *BoxConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	}
 
 	// Resolve env vars from global provides + labels + charly.yml + CLI.
-	// Pass deployKey (image-with-instance) — NOT bare c.Image — so an
+	// Pass deployKey (box-with-instance) — NOT bare c.Box — so an
 	// instance consumer like `versa/ecovoyage` doesn't pick up the base
 	// `versa` deploy's provides, and vice versa.
 	ctrName := containerNameInstance(c.Box, c.Instance)
@@ -394,7 +394,7 @@ func (c *BoxConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	//
 	// Two sources feed the provisioning step:
 	//
-	//  1. Layer-owned secrets (existing, unchanged): declared in
+	//  1. Candy-owned secrets (existing, unchanged): declared in
 	//     the candy manifest `secrets:`, provisioned per-image, never rotated on
 	//     config. Example: immich's db-password.
 	//  2. Credential-store-backed secrets (new in this release): declared
@@ -593,15 +593,15 @@ func (c *BoxConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 		Sidecar:     deploySidecars,
 		Tunnel:      meta.Tunnel,
 		SecretNames: secretDepNames(meta),
-		// Image + Target are required by the 2026-05-12 require-image
+		// Box + Target are required by the 2026-05-12 require-image
 		// validator (validateDeployRequiresBox). Without them, the entry
 		// `charly config` writes would be rejected by the loader on the next
 		// `charly` invocation, forcing an `charly migrate`. saveDeployState only
 		// writes these when the existing entry doesn't already declare them
 		// (never clobbers operator-authored refs). charly config is exclusively
-		// a pod-deploy setup verb, so Target is always "pod"; Image is the
-		// RESOLVED image short-name (deployBoxName), NOT the deploy key —
-		// the key and the image diverge for kind:eval beds and Pattern-B
+		// a pod-deploy setup verb, so Target is always "pod"; Box is the
+		// RESOLVED box short-name (deployBoxName), NOT the deploy key —
+		// the key and the box diverge for kind:eval beds and Pattern-B
 		// deploys. Mirrors the fields set by the container path in
 		// deploy_add_cmd.go.
 		Box:    deployBoxName,
@@ -1283,7 +1283,7 @@ func parseVolumeEnv(boxName string) []DeployVolumeConfig {
 // portMap is a {containerPort -> hostPort} lookup used by resolveTemplate
 // to substitute {{.HostPort N}} placeholders against the resolved port
 // mapping list. nil is accepted (HostPort substitutions degrade to the
-// literal container port — only safe for layers that don't actually use
+// literal container port — only safe for candies that don't actually use
 // the placeholder).
 func injectEnvProvides(boxName, instance string, envProvides map[string]string, portMap map[int]int) (bool, error) {
 	if len(envProvides) == 0 {
@@ -1587,7 +1587,7 @@ func updateAllDeployedQuadlets(rt *ResolvedRuntime, skipBox string) error {
 		}
 
 		// Apply charly.yml overrides (instance-aware). Key by the deploy-key
-		// base (boxName from parseDeployKey), not meta.Image — a bed /
+		// base (boxName from parseDeployKey), not meta.Box — a bed /
 		// Pattern-B entry carries a key distinct from its baked image label.
 		MergeDeployOntoMetadata(meta, dc, boxName, instance)
 
@@ -1644,7 +1644,7 @@ func updateAllDeployedQuadlets(rt *ResolvedRuntime, skipBox string) error {
 
 		// Collect secrets from labels (for quadlet Secret= directives).
 		//
-		// Two sources: layer-owned secrets from meta.Secret (existing, unchanged)
+		// Two sources: candy-owned secrets from meta.Secret (existing, unchanged)
 		// and credential-backed secrets synthesized from meta.SecretAccept /
 		// meta.SecretRequire (new in the credential-backed-secrets feature).
 		// Both flow through the same cfg.Secrets slice and the same Secret=

@@ -5,7 +5,7 @@ package main
 //
 // Each InstallStep's Reverse() method records a list of ReverseOps
 // when the step runs (see deploy_target_host.go). `charly deploy del`
-// reads those ops from the layer ledger and hands them here for
+// reads those ops from the candy ledger and hands them here for
 // execution. The ops are opaque to the ledger — only the teardown
 // logic in this file understands each Kind.
 
@@ -56,7 +56,7 @@ func runReverseOps(ops []ReverseOp, exec ReverseExecutor) error {
 	for i := len(ops) - 1; i >= 0; i-- {
 		if err := runReverseOp(ops[i], exec); err != nil {
 			// Keep going: a partial teardown is better than giving up
-			// mid-way with half the layer removed. Log to stderr and
+			// mid-way with half the candy removed. Log to stderr and
 			// continue.
 			fmt.Fprintf(os.Stderr, "reverse: %s failed: %v\n", ops[i].Kind, err)
 		}

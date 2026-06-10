@@ -15,7 +15,7 @@ import (
 
 // Auto-exported variable names reserved for the generator.
 // `vars:` entries may not shadow these. Every task-field `${VAR}` reference
-// resolves against (auto-exports ∪ layer.Vars).
+// resolves against (auto-exports ∪ candy.Vars).
 var taskAutoExports = map[string]bool{
 	"USER":       true,
 	"UID":        true,
@@ -29,7 +29,7 @@ var taskAutoExports = map[string]bool{
 var taskVarRefPattern = regexp.MustCompile(`\$\{([A-Z_][A-Z0-9_]*)\}`)
 
 // taskKnownNames returns the set of ${NAME} references that resolve cleanly
-// in task fields for this layer: auto-exports ∪ layer.Vars keys.
+// in task fields for this candy: auto-exports ∪ candy.Vars keys.
 func taskKnownNames(vars map[string]string) map[string]bool {
 	known := make(map[string]bool, len(taskAutoExports)+len(vars))
 	for k := range taskAutoExports {
@@ -133,7 +133,7 @@ func resolveUserSpec(userField string, img *ResolvedBox) (directive, chown strin
 
 // taskSubstAutoExports performs string substitution of the image-level
 // auto-exports (USER, UID, GID, HOME) in s. ARCH and BUILD_ARCH are NOT
-// substituted here — ARCH is delivered via ENV at layer-section top so
+// substituted here — ARCH is delivered via ENV at candy-section top so
 // Docker's substitution handles it; BUILD_ARCH is shell-only (cmd/download).
 func taskSubstAutoExports(s string, img *ResolvedBox) string {
 	if s == "" || img == nil {
@@ -167,9 +167,9 @@ func taskSubstPath(p string, img *ResolvedBox) string {
 }
 
 // stageInlineContent writes write-task content to
-// <buildDir>/_inline/<layer>/<sha256> on disk and returns the
+// <buildDir>/_inline/<candy>/<sha256> on disk and returns the
 // build-context-relative path suitable for COPY (e.g.
-// ".build/<image>/_inline/<layer>/<sha256>"). Writes are idempotent —
+// ".build/<image>/_inline/<candy>/<sha256>"). Writes are idempotent —
 // repeated calls with identical content are no-ops via content-addressed
 // filenames.
 //
@@ -197,7 +197,7 @@ func stageInlineContent(buildDir, contextRelPrefix, candyName, content string) (
 
 // buildArchExports returns a multi-line shell snippet that exports both
 // BUILD_ARCH (uname-style: x86_64/aarch64) and ARCH (BuildKit-style:
-// amd64/arm64/arm) so layer download URLs templating ${ARCH} match the
+// amd64/arm64/arm) so candy download URLs templating ${ARCH} match the
 // build-time behavior. The build-time path gets ARCH from BuildKit's
 // TARGETARCH (set via ENV in emitVarsEnv); the host/vm-deploy paths
 // have no such mechanism, so this helper translates uname → BuildKit
@@ -215,9 +215,9 @@ func buildArchExports() string {
 		"export BUILD_ARCH ARCH\n"
 }
 
-// emitVarsEnv writes ENV directives for layer.Vars and the build-arg-sourced
+// emitVarsEnv writes ENV directives for candy.Vars and the build-arg-sourced
 // ARCH auto-export. Sorts vars by key for deterministic output.
-// Emitted once per layer, before the layer's tasks block.
+// Emitted once per candy, before the candy's tasks block.
 func emitVarsEnv(b *strings.Builder, vars map[string]string) {
 	// ARCH comes from BuildKit's TARGETARCH automatic arg.
 	// ARG TARGETARCH makes it visible in this stage; ENV propagates it
@@ -280,10 +280,10 @@ func emitMkdirBatch(b *strings.Builder, tasks []Task, img *ResolvedBox) {
 }
 
 // emitCopy emits a COPY --from=<layer-stage> directive for an existing file
-// in the layer directory. No RUN required — BuildKit handles the file
+// in the candy directory. No RUN required — BuildKit handles the file
 // transfer directly from the layer's scratch stage.
 func emitCopy(b *strings.Builder, t Task, layerStage string, img *ResolvedBox) {
-	src := t.Copy // relative to layer dir; do not substitute (filesystem path at generate time)
+	src := t.Copy // relative to candy dir; do not substitute (filesystem path at generate time)
 	dest := taskSubstPath(t.To, img)
 	mode := t.Mode
 	if mode == "" {
@@ -301,7 +301,7 @@ func emitCopy(b *strings.Builder, t Task, layerStage string, img *ResolvedBox) {
 // emitWrite emits a COPY from the staged inline-content directory to the
 // destination. Caller has already called stageInlineContent to produce the
 // relative path. layerStage here is the final build-stage name and srcPath
-// is the _inline/<layer>/<hash> path inside the build context (NOT from a
+// is the _inline/<candy>/<hash> path inside the build context (NOT from a
 // layer stage — inline content lives in the image's .build directory).
 func emitWrite(b *strings.Builder, t Task, srcPath string, img *ResolvedBox) {
 	dest := taskSubstPath(t.Write, img)
@@ -353,13 +353,13 @@ func emitSetcapBatch(b *strings.Builder, tasks []Task, img *ResolvedBox) {
 	b.WriteString("RUN " + strings.Join(parts, " && ") + "\n")
 }
 
-// taskCacheMounts renders a task's layer-declared `cache:` paths as BuildKit
+// taskCacheMounts renders a task's candy-declared `cache:` paths as BuildKit
 // cache-mount flags, so ANY cmd:/download: task can persist heavy downloads or
 // build artifacts across builds the SAME way package caches do (surviving an
 // upstream layer cache-miss instead of re-fetching). Ownership follows the
 // task's user: root → shared (sharing=locked), non-root → uid/gid-owned. The
 // cache-USE logic (sentinel guards, copy-into-place) lives in the task body;
-// this only emits the mount. Generic + config-driven — nothing layer-specific.
+// this only emits the mount. Generic + config-driven — nothing candy-specific.
 func taskCacheMounts(t Task, img *ResolvedBox) []string {
 	if len(t.Cache) == 0 {
 		return nil
@@ -379,7 +379,7 @@ func taskCacheMounts(t Task, img *ResolvedBox) []string {
 }
 
 // emitDownload emits one RUN per download task: fetch to a content-addressed
-// /tmp/downloads cache, then extract. Honors layer-declared `cache:` mounts.
+// /tmp/downloads cache, then extract. Honors candy-declared `cache:` mounts.
 func emitDownload(b *strings.Builder, t Task, img *ResolvedBox) error {
 	url := t.Download // no generate-time substitution — left for shell/ENV to handle
 	dest := taskSubstPath(t.To, img)
@@ -493,7 +493,7 @@ func emitCmd(b *strings.Builder, t Task, layerStage string, img *ResolvedBox, us
 		mounts = append(mounts, OwnedCacheMount("/tmp/npm-cache", img.UID, img.GID).String())
 	}
 
-	// Layer-declared `cache:` mounts (generic, config-driven) — let a task
+	// Candy-declared `cache:` mounts (generic, config-driven) — let a task
 	// persist heavy downloads/build artifacts the same way package caches do.
 	mounts = append(mounts, taskCacheMounts(t, img)...)
 
@@ -562,11 +562,11 @@ func taskCoalescesWith(current, next Task, currentVerb string) bool {
 // emitTasks renders layer.tasks to b in strict YAML order, with
 // adjacent-coalescing for mkdir/link/setcap batches, parent-dir
 // auto-insertion for copy/write, USER switches on user change, and
-// implicit build-task auto-append if the layer has builders and no
+// implicit build-task auto-append if the candy has builders and no
 // explicit build: in tasks:.
 //
 // Returns the final USER after processing (so writeCandySteps knows
-// whether to emit USER root for the layer boundary reset).
+// whether to emit USER root for the candy boundary reset).
 // Returns an error if emission fails (only for download/write I/O).
 func (g *Generator) emitTasks(b *strings.Builder, layer *Candy, img *ResolvedBox, buildDir, contextRelPrefix, initialUser string) (string, error) {
 	if len(layer.tasks) == 0 && !g.candyHasImplicitBuild(layer, img) {
@@ -702,7 +702,7 @@ func (g *Generator) emitTasks(b *strings.Builder, layer *Candy, img *ResolvedBox
 	return runningUser, nil
 }
 
-// candyHasImplicitBuild returns true if the layer has a detection file
+// candyHasImplicitBuild returns true if the candy has a detection file
 // (pixi.toml, package.json, Cargo.toml, aur: config) that would trigger a
 // builder auto-append. Phase 0: placeholder that returns false — builders
 // continue to run via the existing writeCandySteps builder block. Phase 2

@@ -7,7 +7,7 @@ package main
 // client-go subset (clientcmd + dynamic + apimachinery). No dependency on
 // an external kubectl on PATH. Cluster selection via --cluster <profile>
 // (ClusterProfile in charly/k8s_config.go), --context <ctx>, or --kubeconfig
-// <path>. Output is line-oriented so declarative `k8s:` checks in layer
+// <path>. Output is line-oriented so declarative `k8s:` checks in candy
 // YAMLs can match against it with the existing stdout/contains/equals
 // matchers.
 
@@ -603,7 +603,7 @@ type K8sAddonsCmd struct {
 // k3sAddons is the fixed list of addon workloads the `addons` method waits
 // on. Names match the stock k3s deployment; if the operator explicitly
 // disables one via `disable:` in k3s config, this check fails fast (which
-// is the intended signal — a k3s-server layer test expects them all).
+// is the intended signal — a k3s-server candy test expects them all).
 var k3sAddons = []struct {
 	Kind string
 	Name string
@@ -912,7 +912,7 @@ func kindToPluralResource(kind string) (string, bool) {
 // charly.yml / k8s.yml for new deployments).
 //
 // A stub is kept below so k3s_post.go compiles; in v4, the k3s-server
-// layer's artifacts: block is what surfaces the kubeconfig, and operators
+// candy's artifacts: block is what surfaces the kubeconfig, and operators
 // author the matching kind:k8s entry themselves.
 // ---------------------------------------------------------------------------
 

@@ -262,9 +262,9 @@ func (t *PodUnifiedTarget) Rebuild(ctx context.Context, opts RebuildOpts) error 
 }
 
 // Add builds the pod (container) overlay: synthesizes a Containerfile
-// (FROM base + the add_layer: build steps) and a deterministic overlay
+// (FROM base + the add_candy: build steps) and a deterministic overlay
 // image. Constructs the live PodDeployTarget (Generator + ResolvedBox +
-// base-image DistroDef + baseRef CalVer), injects layer secrets, emits,
+// base-image DistroDef + baseRef CalVer), injects candy secrets, emits,
 // persists --disposable/--lifecycle, and prints the `charly start` hint.
 //
 // node fields come from dctx.Node (the dispatch-merged node) — the
@@ -317,7 +317,7 @@ func (t *PodUnifiedTarget) Add(ctx context.Context, dctx *DeployContext, plans [
 		Box:           resolvedImg,
 	}
 
-	// Resolve + inject layer secrets so the overlay Containerfile emits
+	// Resolve + inject candy secrets so the overlay Containerfile emits
 	// `export VAR=VALUE` before each task body (R3 shared helper).
 	if _, _, err := prepareCandySecrets(plans, dir); err != nil {
 		return fmt.Errorf("loading layers for secret resolution: %w", err)

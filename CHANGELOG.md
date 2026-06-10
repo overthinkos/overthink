@@ -22,6 +22,38 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-10 — docs(comments): sync Go code comments with the post-rebrand codebase (layer→candy, image→box)
+
+The candy/box rebrand renamed the Go identifiers wholesale (the `Layer` struct → `Candy`,
+`LabelEvalSet`/`LabelShellSet`/`LabelDescriptionSet` section trios `{Layer,Image,Deploy}` →
+`{Candy,Box,Deploy}`, `InstallPlan.Layer` → `.Candy`, `LayerName`/`LayerDir` → `CandyName`/
+`CandyDir`, `AddLayers` → `AddCandy`, `g.Layers` → `g.Candies`, `cfg.Image`/`uf.Image` →
+`cfg.Box`/`uf.Candy`, …) but left **1551 code comments across 182 files** still describing
+the old "layer"/"image" concepts and naming renamed-away identifiers. This sweep brings every
+Go comment in `charly/` in sync with the current code.
+
+- **layer** (the candy concept — a unit under `candy/<name>/`) → **candy**; **image** (the
+  box-KIND / `charly.yml` `box:` composition concept) → **box**.
+- Stale identifier spellings in comments → current (the section trios `layer/image/deploy` →
+  `candy/box/deploy`, `add_layer(s)` → `add_candy`, `cfg.Image` → `cfg.Box`, the `env_layers`
+  label note → `env_candy`, …).
+- Stale paths/manifest filenames where they name the candy concept (`layers/<name>/` →
+  `candy/<name>/`; per-entity manifest `candy.yml`/`box.yml`/`layer.yml`/`image.yml` →
+  `charly.yml`).
+- **KEPT — still accurate to the code**: OCI image layers, Containerfile build STAGES
+  (`LayerStage`), `v1.Layer`, `mergeLayers`/squash (`merge.go` untouched); OCI container
+  "image" (registry / pull / tag / SHA / `ResolvedImage`); the live `${layer_name}`
+  substitution token; the on-disk `~/.config/opencharly/installed/layers/` ledger dir; the
+  `json:"layer"` legacy keys named by migration code; and every comment naming an identifier
+  still spelled `Layer*` in the code.
+
+Comment-only (1551 insertions / 1551 deletions — symmetric in-place swaps; code byte-identical).
+`go build` / `go vet` / `go test ./...` all green; `merge.go` untouched; no gofmt drift. No
+schema change (`version:` stays `2026.161.1650`; no migration step, no submodule cascade).
+User-facing STRINGS (error messages, Kong `help:` text, `charly status` display) that still
+say "layer"/"image" are a separate, behavior-affecting concern — NOT part of this comment-only
+sweep.
+
 ### 2026-06-10 — refactor!: rename the install-ledger json tags `layer`/`add_layer` → `candy`/`add_candy` with a ledger version gate (schema cutover)
 
 The candy/box rebrand's last `layer`-spelled WIRE: the 2 internal install-ledger json

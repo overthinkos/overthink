@@ -1,18 +1,18 @@
 package main
 
-// CollectDescriptions walks the base-image chain for boxName and
+// CollectDescriptions walks the base-box chain for boxName and
 // gathers every kind: entity's description: block into a three-section
 // LabelDescriptionSet.
 //
-// The walk mirrors CollectEval and CollectHooks: layer-order per
-// level, then step into internal base, dedupe by layer name, stop at
+// The walk mirrors CollectEval and CollectHooks: candy-order per
+// level, then step into internal base, dedupe by candy name, stop at
 // first external base OR on cycle. This keeps collection ordering
 // consistent across every collected label.
 //
 // Section assignment rules:
 //
-//   - Layer-defined descriptions → Layer section
-//   - Image-level description → Image section
+//   - Candy-defined descriptions → Candy section
+//   - Box-level description → Box section
 //   - Deploy-node descriptions (from charly.yml overlay) → Deploy section
 //     (added later by MergeDeployDescriptions when applicable)
 //
@@ -50,7 +50,7 @@ func CollectDescriptions(cfg *Config, layers map[string]*Candy, boxName string) 
 		})
 	}
 
-	// Image-level description.
+	// Box-level description.
 	if img, ok := cfg.Box[boxName]; ok && img.Description != nil {
 		set.Box = append(set.Box, LabeledDescription{
 			Origin:      "box:" + boxName,

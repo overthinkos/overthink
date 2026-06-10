@@ -16,7 +16,7 @@ type DistroConfig struct {
 type DistroDef struct {
 	Inherits string `yaml:"inherits,omitempty"`
 	// InheritPackages, when true on a distro that also sets `inherits:`, makes
-	// the parent distro's package sections cascade onto this distro — a layer's
+	// the parent distro's package sections cascade onto this distro — a candy's
 	// `distro: <parent>:` block applies when building/deploying this distro. The
 	// canonical case is cachyos (`inherits: arch`, `inherit_packages: true`): an
 	// `arch:` package block reaches cachyos because cachyos is ABI-compatible
@@ -66,7 +66,7 @@ type DistroDef struct {
 
 // DnfConfig holds dnf download-speed knobs written to /etc/dnf/dnf.conf during
 // the bootstrap, so they apply uniformly to the bootstrap install AND every
-// per-layer dnf install in this image and its descendants. These are
+// per-candy dnf install in this image and its descendants. These are
 // SPEED-only settings — they never change which packages are selected.
 type DnfConfig struct {
 	MaxParallelDownloads int  `yaml:"max_parallel_downloads,omitempty"` // dnf max_parallel_downloads (concurrent package downloads)
@@ -82,7 +82,7 @@ type PacstrapDef struct {
 	// RuntimePacmanConf is the verbatim /etc/pacman.conf written into the
 	// bootstrapped rootfs (NOT the install config). pacstrap configures only the
 	// builder container's pacman.conf for the install; the booted guest is left
-	// with no working config, so a deploy that installs pac packages (add_layer)
+	// with no working config, so a deploy that installs pac packages (add_candy)
 	// fails with "config file /etc/pacman.conf could not be read". When set, the
 	// shared pacstrap bootstrap template writes this content to
 	// {{.Target}}/etc/pacman.conf so every guest of this distro boots with a
@@ -202,7 +202,7 @@ type FormatDef struct {
 	// installed from the produced files (the canonical case is `aur`, built by
 	// the `aur` builder and installed with `pacman -U`). It is the YAML-declared
 	// replacement for the former Go-side `name == "aur"` special-case: a
-	// distro's PrimaryFormat() skips every Secondary format, and the layer
+	// distro's PrimaryFormat() skips every Secondary format, and the candy
 	// parser only routes a secondary sub-block under a distro/format-family that
 	// declares it. Adding a new secondary build format is therefore a build.yml
 	// edit, not a code change. Defaults false (a primary install format).
@@ -216,12 +216,12 @@ type FormatDef struct {
 	// no host teardown.
 	UninstallTemplate string `yaml:"uninstall_template,omitempty"`
 
-	// LocalPkg drives the layer `localpkg:` mechanism for this format —
+	// LocalPkg drives the candy `localpkg:` mechanism for this format —
 	// building a bundled package SOURCE dir on the host, installing the
 	// resulting package FILE(s) onto a deploy target, and resolving the
 	// built package's builder-resolvable dependency closure. It is the
 	// ONLY home for these operations: the format's `install_template:`
-	// describes installing REPO packages (from a layer's `package:` list),
+	// describes installing REPO packages (from a candy's `package:` list),
 	// not building/installing a local source-built package file. Nil for
 	// formats that ship no localpkg support (rpm/deb today); populated for
 	// `pac` only. See LocalPkgDef.
@@ -275,19 +275,19 @@ type LocalPkgDef struct {
 	Probe string `yaml:"probe"`
 
 	// DepBuilder is the builder name (a key in build.yml `builder:`) used by the
-	// aur-LAYER deploy path to build a layer's `aur:` packages into installable
+	// aur-CANDY deploy path to build a candy's `aur:` packages into installable
 	// files before installing them via InstallTemplate (the localpkg step itself
 	// auto-resolves and needs no builder). For pac: `aur`. Empty for rpm/deb.
 	DepBuilder string `yaml:"dep_builder"`
 
 	// DownloadTemplate is the URL the IMAGE build (OCITarget) curl-fetches the
-	// PUBLISHED package file from, when a layer with a `localpkg:` map is baked
+	// PUBLISHED package file from, when a candy with a `localpkg:` map is baked
 	// into an image. Deploy targets BUILD the package on the host (BuildTemplate);
 	// an image build has no host-package-build step, so it downloads the release
 	// asset and installs it via the SAME dep-resolving InstallTemplate (so the
 	// charly toolchain is OS-tracked + its deps resolved, identically to deploy).
 	// `${ARCH}` (BuildKit amd64/arm64) is substituted at build time. Empty → the
-	// layer's own task: install is the fallback (the legacy behavior).
+	// candy's own task: install is the fallback (the legacy behavior).
 	DownloadTemplate string `yaml:"download_template"`
 }
 
@@ -553,7 +553,7 @@ func bareDistroName(tag string) string {
 // package-cascade inheritance, sourced entirely from build.yml:
 //
 //   - cachyos (inherits arch, inherit_packages: true) → [cachyos, arch]: an
-//     `arch:` layer block reaches cachyos.
+//     `arch:` candy block reaches cachyos.
 //   - arch (no inherit_packages)                       → [arch]: unchanged.
 //   - ubuntu (inherits debian, no flag)                → [ubuntu]: debian
 //     package sections do NOT leak onto ubuntu.
@@ -663,7 +663,7 @@ func indexOf(s string, c byte) int {
 // declares `local_pkg:` support on this distro, preferring `primaryFormat`
 // (the image's primary build format) when it carries one. Returns ("", nil)
 // when no format on this distro supports localpkg — the localpkg executor then
-// treats the step as a clean no-op (the layer's own curl/COPY fallback). This is
+// treats the step as a clean no-op (the candy's own curl/COPY fallback). This is
 // the single config-driven entry point that replaces every hardcoded
 // makepkg/pacman/glob literal: whichever format defines `local_pkg:` drives the
 // whole mechanism.
@@ -730,17 +730,17 @@ type BuilderDef struct {
 
 	// PathContributions lists HOME-relative paths the builder's runtime
 	// artefacts live under (e.g. "~/.pixi/envs/default/bin"). When any
-	// layer in an image triggers the builder via DetectFiles/DetectConfig,
+	// candy in an image triggers the builder via DetectFiles/DetectConfig,
 	// these paths are emitted into the final image's `ENV PATH=...` and
 	// the `ai.opencharly.path_append` OCI label by writeCandyEnv +
-	// emitLabels in generate.go. Authors can also add layer-level entries
+	// emitLabels in generate.go. Authors can also add candy-level entries
 	// via the candy manifest `path_append:` — both contribute to the same merged
 	// PATH. Empty list means the builder doesn't contribute (aur installs
 	// to /usr/bin via pacman -U).
 	PathContributions []string `yaml:"path_contribution,omitempty"`
 
 	// RuntimeEnv lists environment variables the builder contributes to the
-	// final image when triggered by any layer (e.g. PIXI_CACHE_DIR pointing
+	// final image when triggered by any candy (e.g. PIXI_CACHE_DIR pointing
 	// at the user's persistent cache). Distinct from `Env` above — `Env`
 	// applies to the BUILDER stage of the multi-stage Containerfile;
 	// RuntimeEnv applies to the FINAL image's ENV directives. Tilde-prefixed

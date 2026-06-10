@@ -326,7 +326,7 @@ func TestTransferImageToGuestReloadsCorrupt(t *testing.T) {
 
 // --- Render consolidation: VM + local share ONE render path per functionality ---
 
-// A copy: task MUST stage the layer file through the executor's PutFile
+// A copy: task MUST stage the candy file through the executor's PutFile
 // (scp+install over SSH), never a rendered `install <hostCandyDir>/<f> <dst>`
 // — the host path doesn't exist in the guest (the socat relay-wrapper 404 bug).
 func TestVmExecTaskCopyStagesViaPutFile(t *testing.T) {

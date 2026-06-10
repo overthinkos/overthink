@@ -3,9 +3,9 @@ package main
 // android_deploy_cmd.go — shared kind:android helpers (device + apk
 // resolution) used by AndroidUnifiedTarget.Add / .Del (unified_targets_apk.go).
 //
-// A `target: android` deploy installs its layers' `apk:` packages onto a
+// A `target: android` deploy installs its candies' `apk:` packages onto a
 // kind:android DEVICE (an in-pod emulator or a remote adb endpoint). The
-// apps ride in on the deploy's add_layer: set — the SAME overlay mechanism
+// apps ride in on the deploy's add_candy: set — the SAME overlay mechanism
 // the local/vm targets use — so the android Add receives the already-compiled
 // plans and hands their ApkInstallStep entries to AndroidDeployTarget.
 //
@@ -33,7 +33,7 @@ func findAndroidSpec(dir, name string) *AndroidSpec {
 	return uf.Android[name]
 }
 
-// androidApkPackageIDs re-resolves the deploy's add_layer: layers and
+// androidApkPackageIDs re-resolves the deploy's add_candy: candies and
 // collects every apk: package id (committed-APK entries have no id and are
 // skipped — they can't be uninstalled by id). Best-effort; returns nil on
 // resolution failure.

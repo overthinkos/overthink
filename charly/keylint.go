@@ -13,7 +13,7 @@ import (
 // single classified document — every key that matches no struct field and
 // would therefore be SILENTLY DROPPED by the lenient decode. It re-decodes
 // the already-parsed node with KnownFields(true) into the same target type
-// the loader uses. Types with a custom UnmarshalYAML (the layer types) opt
+// the loader uses. Types with a custom UnmarshalYAML (the candy types) opt
 // out of KnownFields and self-decode, so they are never falsely flagged.
 // Only unknown-key diagnostics are returned; any other strict-mode complaint
 // (type coercion) is suppressed — the loader's lenient decode is the source

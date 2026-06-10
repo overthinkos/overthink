@@ -14,7 +14,7 @@ func TestScaffoldCandy(t *testing.T) {
 	}
 	defer os.RemoveAll(tmpDir)
 
-	// Scaffold a layer
+	// Scaffold a candy
 	err = ScaffoldCandy(tmpDir, "test-layer")
 	if err != nil {
 		t.Fatalf("ScaffoldCandy() error = %v", err)
@@ -34,14 +34,14 @@ func TestScaffoldCandy(t *testing.T) {
 }
 
 func TestScaffoldCandyAlreadyExists(t *testing.T) {
-	// Create temp directory with existing layer
+	// Create temp directory with existing candy
 	tmpDir, err := os.MkdirTemp("", "scaffold-test")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(tmpDir)
 
-	// Create layer directory
+	// Create candy directory
 	candyDir := filepath.Join(tmpDir, "candy", "existing")
 	if err := os.MkdirAll(candyDir, 0755); err != nil {
 		t.Fatal(err)

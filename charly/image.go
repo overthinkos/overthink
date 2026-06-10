@@ -8,8 +8,8 @@ import (
 	"strings"
 )
 
-// ImageCmd groups build-mode commands that operate on charly.yml (or, in the
-// case of ImagePullCmd, resolve registry/tag via charly.yml and then fetch the
+// BoxCmd groups build-mode commands that operate on charly.yml (or, in the
+// case of BoxPullCmd, resolve registry/tag via charly.yml and then fetch the
 // image into local storage so deploy-mode commands can read its OCI labels).
 type BoxCmd struct {
 	Build    BuildCmd      `cmd:"" help:"Build container boxes"`
@@ -35,7 +35,7 @@ type BoxCmd struct {
 	Reconcile BoxReconcileCmd `cmd:"" help:"Align cross-repo @github layer pins to the newest version (clears resolver newest-wins warnings)"`
 }
 
-// ImagePullCmd fetches an image from its registry into the local container
+// BoxPullCmd fetches an image from its registry into the local container
 // engine so deploy-mode commands can read its OCI labels. Accepts three
 // input forms:
 //

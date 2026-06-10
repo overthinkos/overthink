@@ -209,7 +209,7 @@ box:
 
 func TestLoadUnified_DiscoverCandies(t *testing.T) {
 	root := t.TempDir()
-	// Canonical kind-keyed candy.yml manifests; discovery routes by shape.
+	// Canonical kind-keyed charly.yml manifests; discovery routes by shape.
 	writeFixture(t, root, "candy/chrome/charly.yml", `candy:
   version: "1"
   package: [chromium]
@@ -328,7 +328,7 @@ discover:
 
 // TestLoadUnified_DiscoverRoutesNonCandyByShape proves a discovered manifest is
 // routed by SHAPE, not by a per-kind filename: a `box:`-shaped manifest found by
-// a generic discover spec merges as an image, not a candy.
+// a generic discover spec merges as a box, not a candy.
 func TestLoadUnified_DiscoverRoutesNonCandyByShape(t *testing.T) {
 	root := t.TempDir()
 	writeFixture(t, root, "entities/myimg/entity.yml", `box:

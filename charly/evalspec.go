@@ -178,7 +178,7 @@ type Check struct {
 	MaxMatch  Matcher `yaml:"max,omitempty"  json:"max,omitempty"`
 	MeanMatch Matcher `yaml:"mean,omitempty" json:"mean,omitempty"`
 
-	// Origin is populated at collection time (layer:<name>, image:<name>,
+	// Origin is populated at collection time (candy:<name>, box:<name>,
 	// deploy-default, deploy-local). Not authored in YAML, but travels in
 	// the OCI label JSON.
 	Origin string `yaml:"-" json:"origin,omitempty"`

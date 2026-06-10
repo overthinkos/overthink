@@ -260,7 +260,7 @@ deploy:
 }
 
 // TestBedEvalLiveRefs proves `charly eval run <bed>` eval-lives the substrate AND
-// every nested child (sorted, dotted) — so a nested pod's baked layer/image
+// every nested child (sorted, dotted) — so a nested pod's baked candy/box
 // eval runs against its real venue. Before the nested-eval fix this produced
 // only [name], so a nested selkies-kde pod was deployed but never evaluated.
 func TestBedEvalLiveRefs(t *testing.T) {

@@ -1,7 +1,7 @@
 package main
 
 // Gherkin-shaped `description:` schema — the canonical self-description for
-// every `kind:` entity (layer, image, pod, vm, k8s, host, deployment).
+// every `kind:` entity (candy, box, pod, vm, k8s, host, deployment).
 //
 // Design decisions (see the plan file):
 //   - YAML-only. No `.feature` text files, no vendored Gherkin parser. The
@@ -34,7 +34,7 @@ import (
 //	description:
 //	  feature: Redis in-memory data store
 //	  narrative: |
-//	    The redis layer installs redis-server and exposes a Redis-protocol
+//	    The redis candy installs redis-server and exposes a Redis-protocol
 //	    endpoint on port 6379.
 //	  tag: [cache, service]
 //	  scenario: [...]
@@ -173,7 +173,7 @@ type Scenario struct {
 
 	// Pod is the container name this scenario's steps probe. Used by
 	// kind:recipe scenarios in the harness; required at validation time
-	// for any scenario inside a `recipe:` block. Layer- and image-baked
+	// for any scenario inside a `recipe:` block. Candy- and box-baked
 	// scenarios do not set this (their target is the image-baked test
 	// runner). The harness scoring code does
 	// `containerName := "charly-" + scenario.Pod` and dispatches every step
@@ -403,8 +403,8 @@ func (s *Step) IsPending() bool {
 // ---------------------------------------------------------------------------
 
 // LabelDescriptionSet is the three-section structure embedded in the
-// ai.opencharly.description OCI label: layer-contributed descriptions
-// (one per layer), image-level description (one), deploy-default
+// ai.opencharly.description OCI label: candy-contributed descriptions
+// (one per candy), box-level description (one), deploy-default
 // description (one — usually from charly.yml overlays).
 //
 // Mirrors LabelEvalSet's shape so the collection + merge pipeline and

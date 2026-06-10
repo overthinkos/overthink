@@ -25,7 +25,7 @@ func TestScanCandies(t *testing.T) {
 func TestCandyUnknownKeyRejected(t *testing.T) {
 	// The parser HARD-ERRORS on an unknown top-level key (a plural/singular typo)
 	// instead of silently dropping it. Regression for #50 — the
-	// tasks:/vars:/layers:/secret_accepts: silent-drop that masked broken layers.
+	// tasks:/vars:/layers:/secret_accepts: silent-drop that masked broken candies.
 	bad := map[string]string{
 		"tasks":          "name: t\ntasks:\n  - cmd: echo hi\n",
 		"vars":           "name: t\nvars:\n  FOO: bar\n",
@@ -129,7 +129,7 @@ func TestCandyNodejs(t *testing.T) {
 	}
 
 	// nodejs declares ONLY a top-level package: list (no distro: overrides), so it
-	// becomes the always-included BASE (layer.TopPackages) that the cascade
+	// becomes the always-included BASE (candy.TopPackages) that the cascade
 	// resolver folds in for EVERY distro. It is not a format/tag section.
 	if !reflect.DeepEqual(nodejs.TopPackages(), []string{"nodejs", "npm"}) {
 		t.Errorf("nodejs.TopPackages() = %v, want [nodejs npm]", nodejs.TopPackages())

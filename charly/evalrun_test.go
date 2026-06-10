@@ -121,7 +121,7 @@ func TestRunner_FileVerb(t *testing.T) {
 }
 
 // port verb — listening via fake ss output, unreachable via dial timeout,
-// host-side dial skip under image-test mode.
+// host-side dial skip under box-test mode.
 func TestRunner_PortVerb_Listening(t *testing.T) {
 	r, fake := newFakeRunner(t, RunModeLive)
 	fake.responses = []fakeResponse{
@@ -146,7 +146,7 @@ func TestRunner_PortVerb_NotListening(t *testing.T) {
 
 func TestRunner_PortVerb_ReachableSkipUnderImageTest(t *testing.T) {
 	r, _ := newFakeRunner(t, RunModeBox)
-	// Reachable attribute triggers host-side dial → skipped under image test.
+	// Reachable attribute triggers host-side dial → skipped under box test.
 	res := r.Run(context.Background(), []Check{{Port: 6379, Reachable: ptrBool(true)}})
 	if res[0].Status != TestSkip {
 		t.Errorf("expected skip, got %+v", res[0])

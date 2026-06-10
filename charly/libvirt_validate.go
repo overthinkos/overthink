@@ -266,15 +266,15 @@ func validateVmCloudInit(name string, spec *VmSpec, errs *ValidationError) {
 	if ci == nil {
 		return
 	}
-	// CloudInit only meaningful for cloud_image OR bootc+cloud-init-layer.
+	// CloudInit only meaningful for cloud_image OR bootc+cloud-init-candy.
 	if spec.Source.Kind == "bootc" {
-		// Can't verify layer membership from here (requires Config access).
+		// Can't verify candy membership from here (requires Config access).
 		// Full check lives in charly box validate's top-level wiring.
 		// Per D13: warn via validator only when key_injection.cloud_init
 		// was explicitly requested (user intent to use cloud-init).
 		if spec.SSH != nil && spec.SSH.KeyInjection != nil &&
 			spec.SSH.KeyInjection.CloudInit == "enabled" {
-			// Actual "cloud-init layer present" check is deferred.
+			// Actual "cloud-init candy present" check is deferred.
 		}
 	}
 	if ci.CharlyInstall != nil {

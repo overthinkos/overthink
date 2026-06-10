@@ -5,14 +5,14 @@ import (
 	"strings"
 )
 
-// CollectSecurity merges security configs from all layers in an image,
+// CollectSecurity merges security configs from all candies in an image,
 // then applies image-level overrides. Returns a merged SecurityConfig.
-// If any layer sets privileged: true, the result is privileged.
-// cap_add, devices, and security_opt are unioned across all layers.
-// shm_size takes the largest value from any layer (biggest-wins — more shared
+// If any candy sets privileged: true, the result is privileged.
+// cap_add, devices, and security_opt are unioned across all candies.
+// shm_size takes the largest value from any candy (biggest-wins — more shared
 // memory is safer). memory_max, memory_high, memory_swap_max, and cpus take
 // the smallest value (smallest-wins — a tighter cap is a smaller blast radius).
-// Image-level security (from charly.yml) overrides layer-level settings.
+// Image-level security (from charly.yml) overrides candy-level settings.
 func CollectSecurity(cfg *Config, layers map[string]*Candy, boxName string) SecurityConfig {
 	var merged SecurityConfig
 
@@ -21,13 +21,13 @@ func CollectSecurity(cfg *Config, layers map[string]*Candy, boxName string) Secu
 		return merged
 	}
 
-	// Resolve full layer tree (including composing layers' sub-layers)
+	// Resolve full candy tree (including composing candies' sub-candies)
 	allCandies, err := ResolveCandyOrder(img.Candy, layers, nil)
 	if err != nil {
-		allCandies = img.Candy // fall back to direct layers on error
+		allCandies = img.Candy // fall back to direct candies on error
 	}
 
-	// Collect from all layers
+	// Collect from all candies
 	for _, candyName := range allCandies {
 		ly, ok := layers[candyName]
 		if !ok {
@@ -41,9 +41,9 @@ func CollectSecurity(cfg *Config, layers map[string]*Candy, boxName string) Secu
 			merged.Privileged = true
 		}
 		if sec.CgroupNS != "" {
-			// Explicit declaration wins. Layer order is deterministic,
+			// Explicit declaration wins. Candy order is deterministic,
 			// so last-writer semantics are stable; conflicts between
-			// layers (both declaring cgroupns, different values) are
+			// candies (both declaring cgroupns, different values) are
 			// vanishingly rare and surface immediately at rebuild.
 			merged.CgroupNS = sec.CgroupNS
 		}

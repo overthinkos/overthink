@@ -8,7 +8,7 @@ import (
 // setupIsolatedConfigStore wires a test-isolated ConfigFileStore-backed
 // credential store. Returns a teardown func; defer it. Mirrors the
 // pattern in credential_store_test.go but specialised for the new
-// layer-secrets tests so each one starts with an empty store.
+// candy-secrets tests so each one starts with an empty store.
 func setupIsolatedConfigStore(t *testing.T) (cleanup func()) {
 	t.Helper()
 	dir := t.TempDir()
@@ -156,7 +156,7 @@ func TestEnsureCandySecret_CustomKeyRoutesToOverride(t *testing.T) {
 }
 
 // TestResolveCandySecrets_RequiredAutoGen exercises the wrapper that
-// the deploy-add path actually calls: a Layer with secret_requires
+// the deploy-add path actually calls: a Candy with secret_requires
 // must always resolve (auto-gen guarantees non-empty values).
 func TestResolveCandySecrets_RequiredAutoGen(t *testing.T) {
 	defer setupIsolatedConfigStore(t)()
@@ -194,7 +194,7 @@ func TestResolveCandySecrets_OptionalDefaultFallback(t *testing.T) {
 }
 
 // TestResolveSecretsForCandies_TwoCandiesSameSecret verifies the
-// race-free invariant at the wrapper level: two layers (think
+// race-free invariant at the wrapper level: two candies (think
 // k3s-server + k3s-agent) declaring the same secret_requires
 // resolve to the SAME value.
 func TestResolveSecretsForCandies_TwoCandiesSameSecret(t *testing.T) {

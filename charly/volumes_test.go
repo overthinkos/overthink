@@ -57,7 +57,7 @@ func TestCollectImageVolumesChain(t *testing.T) {
 		t.Fatalf("CollectBoxVolume() error = %v", err)
 	}
 
-	// Should have volumes from both child and base image layers
+	// Should have volumes from both child and base image candies
 	want := []VolumeMount{
 		{VolumeName: "charly-child-data", ContainerPath: "/home/user/.app"},
 		{VolumeName: "charly-child-models", ContainerPath: "/home/user/.models"},

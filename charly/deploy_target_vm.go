@@ -162,7 +162,7 @@ func (t *VmDeployTarget) Emit(plans []*InstallPlan, opts EmitOpts) error {
 		t.guestHome = guestHome
 	}
 
-	// 5. Iterate plans, writing per-layer ledger records INTO THE GUEST
+	// 5. Iterate plans, writing per-candy ledger records INTO THE GUEST
 	//    via t.Exec. VM deploys are disposable — storing ledger on
 	//    the operator leaves garbage that survives `charly vm destroy` and
 	//    breaks the zero-operator-side-effects invariant (see B6). The
@@ -199,14 +199,14 @@ func (t *VmDeployTarget) Emit(plans []*InstallPlan, opts EmitOpts) error {
 		}
 		deployRec.Candy = append(deployRec.Candy, plan.Candy)
 		if deployRec.Image == "" && plan.Candy != "" {
-			// For pure-add_layers vm deploys the deploy-id's "image" slot
+			// For pure-add_candy vm deploys the deploy-id's "image" slot
 			// stays as the vm: target name so `charly deploy del` can find it.
 			deployRec.Image = t.targetName()
 		}
 	}
 
 	// Ensure the env.d-sourcing managed block exists in the GUEST user's
-	// shell init so the per-layer env.d files actually get sourced at login.
+	// shell init so the per-candy env.d files actually get sourced at login.
 	// Without this the env.d files are written but never read — PATH never
 	// picks up ~/.npm-global/bin etc. Uses the guest's detected login shell
 	// and the same executor-based writer as the local path (R3).
@@ -237,7 +237,7 @@ func firstDeployID(plans []*InstallPlan) string {
 	return ""
 }
 
-// recordCandy writes the per-layer ledger entry INTO THE GUEST via
+// recordCandy writes the per-candy ledger entry INTO THE GUEST via
 // t.Exec. Mirrors LocalDeployTarget.recordCandy's executor-routed
 // pattern (B6 fix) so VM deploys obey the same
 // zero-operator-side-effects invariant as nested host deploys.
@@ -257,7 +257,7 @@ func (t *VmDeployTarget) recordCandy(paths *LedgerPaths, rec *CandyRecord, plan 
 }
 
 // ensureGuestLedgerDirs makes sure ~/.config/opencharly/installed/ and
-// ~/.config/opencharly/env.d/ exist in the guest. Without this, layer
+// ~/.config/opencharly/env.d/ exist in the guest. Without this, candy
 // record writes would fail on the first apply.
 func (t *VmDeployTarget) ensureGuestLedgerDirs(ctx context.Context, opts EmitOpts) error {
 	script := `
@@ -353,9 +353,9 @@ func (t *VmDeployTarget) emitPlan(ctx context.Context, plan *InstallPlan, opts E
 
 		case *LocalPkgInstallStep:
 			// Build the package source on the host and install the result INTO
-			// THE GUEST — the proper-package counterpart of the layer's curl/COPY
+			// THE GUEST — the proper-package counterpart of the candy's curl/COPY
 			// cmd: task. Gated (config-driven) on the GUEST having the format's
-			// package manager; an unsupported guest is a clean no-op (the layer's
+			// package manager; an unsupported guest is a clean no-op (the candy's
 			// curl task installs it).
 			if err := execLocalPkgInstall(ctx, t.Exec, s, venueHasPkgManager(ctx, t.Exec, s.LocalPkg, opts), "vm:"+t.VMName, opts); err != nil {
 				return rec, err
@@ -374,7 +374,7 @@ func (t *VmDeployTarget) emitPlan(ctx context.Context, plan *InstallPlan, opts E
 	return rec, nil
 }
 
-// execShellSnippet renders one (layer, shell) snippet onto the VM
+// execShellSnippet renders one (candy, shell) snippet onto the VM
 // guest. Same shape as LocalDeployTarget.execShellSnippet — probes
 // shell presence on the guest via SSH, writes drop-in or applies
 // managed-block to existing rc file. Probe result cached on the
@@ -492,7 +492,7 @@ func (t *VmDeployTarget) execTask(ctx context.Context, s *TaskStep, plan *Instal
 	if s.Task == nil {
 		return nil
 	}
-	// copy: stages the layer file into the guest via PutFile (scp+install) —
+	// copy: stages the candy file into the guest via PutFile (scp+install) —
 	// the SAME shared path LocalDeployTarget uses. The old renderVmTaskCommand
 	// emitted `install <hostCandyDir>/<f> <dst>`, referencing a host path that
 	// doesn't exist in the guest → file-not-found on every copy: task.
@@ -529,7 +529,7 @@ func (t *VmDeployTarget) execTask(ctx context.Context, s *TaskStep, plan *Instal
 // not a sleep-and-pray: it records the kernel boot_id before the reboot, then
 // polls until SSH answers AND the boot_id has changed — so the still-up sshd of
 // the pre-reboot system can't be mistaken for "back up". Needed by kernel-module
-// layers (e.g. nvidia-open-dkms) whose module only loads on a fresh boot.
+// candies (e.g. nvidia-open-dkms) whose module only loads on a fresh boot.
 func (t *VmDeployTarget) execReboot(ctx context.Context, s *RebootStep, opts EmitOpts) error {
 	if opts.DryRun {
 		fmt.Fprintf(os.Stderr, "[dry-run] reboot guest %s (layer %s) and wait for it to return\n", t.VMName, s.CandyName)
@@ -580,8 +580,8 @@ func (t *VmDeployTarget) execFile(ctx context.Context, s *FileStep, plan *Instal
 	return t.Exec.PutFile(ctx, s.Source, s.Dest, uint32(s.Mode), ownerRoot, opts)
 }
 
-// execShellHook writes the env.d file for a layer. Layer env vars end
-// up in ~/.config/opencharly/env.d/<layer>.env on the guest; the managed
+// execShellHook writes the env.d file for a candy. Candy env vars end
+// up in ~/.config/opencharly/env.d/<candy>.env on the guest; the managed
 // block in the guest user's shell init sources them.
 func (t *VmDeployTarget) execShellHook(ctx context.Context, s *ShellHookStep, plan *InstallPlan, opts EmitOpts) error {
 	// Shared env.d renderer (shell_profile.go renderEnvdBody) so VM and local

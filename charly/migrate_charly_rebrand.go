@@ -12,7 +12,7 @@ package main
 // This step, in a project tree (and, host-gated, in the per-host config dir):
 //   - renames the project root config `overthink.yml` → `charly.yml`.
 //   - rewrites SCALAR values in every project YAML:
-//       * `@github…/candy/ov[-mcp]:vTAG` layer-ref path segment → `/candy/charly[-mcp]`.
+//       * `@github…/candy/ov[-mcp]:vTAG` candy-ref path segment → `/candy/charly[-mcp]`.
 //       * `org.overthinkos.*` label strings → `ai.opencharly.*`.
 //       * qualified import-namespace refs `ov.<member>` → `charly.<member>`.
 //   - renames the import-namespace ALIAS key `ov:` → `charly:` (the alias every
@@ -94,7 +94,7 @@ func MigrateCharlyRebrand(ctx *MigrateContext) ([]string, error) {
 			changed = append(changed, f)
 		}
 	}
-	// candy/<name>/candy.yml — layer refs (require:) + label strings.
+	// candy/<name>/candy.yml — candy refs (require:) + label strings.
 	candyDir := filepath.Join(dir, DefaultCandyDir)
 	if entries, err := os.ReadDir(candyDir); err == nil {
 		for _, e := range entries {
@@ -210,7 +210,7 @@ func rewriteCharlyRebrandNode(n *yaml.Node, inImport bool) bool {
 // prefix, and a leading `ov.` namespace qualifier — none of which appear inside
 // `github.com/overthinkos/overthink`, `ghcr.io/overthinkos/…`, or `overthinkos`.
 func rewriteCharlyBrandScalar(v string) string {
-	// Layer-ref path segment: …/candy/ov-mcp:vTAG and …/candy/ov:vTAG.
+	// Candy-ref path segment: …/candy/ov-mcp:vTAG and …/candy/ov:vTAG.
 	v = strings.ReplaceAll(v, "/candy/ov-mcp", "/candy/charly-mcp")
 	v = strings.ReplaceAll(v, "/candy/ov:", "/candy/charly:")
 	if strings.HasSuffix(v, "/candy/ov") {

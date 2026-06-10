@@ -57,9 +57,9 @@ var pluralToSingularYAMLKeys = map[string]string{
 	"artifacts": "artifact",
 	"packages":  "package",
 	"sidecars":  "sidecar",
-	// 2026-06 singular-label cutover: the layer parser now hard-rejects
+	// 2026-06 singular-label cutover: the candy parser now hard-rejects
 	// these as unknown keys (the OCI label contract + the CandyYAML fields
-	// went singular). hooks: / capabilities: are layer-level fields; tags:
+	// went singular). hooks: / capabilities: are candy-level fields; tags:
 	// is the eval-scenario field. requires_capabilities (below) already
 	// singularizes longest-first, so `capabilities` is safe to add here.
 	"hooks":        "hook",

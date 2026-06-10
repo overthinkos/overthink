@@ -9,8 +9,8 @@ import (
 // TestCollectBuilderRuntimeEnv_TriggeredEmitsRuntimeEnv is the
 // regression for the 2026-04-29 jupyter-PATH-bug cutover. The pixi
 // builder's runtime env contract (PIXI_CACHE_DIR + RATTLER_CACHE_DIR +
-// ~/.pixi/{bin,envs/default/bin}) must reach any image whose layers
-// have `pixi.toml` — even if `pixi` is NOT a top-level layer.
+// ~/.pixi/{bin,envs/default/bin}) must reach any image whose candies
+// have `pixi.toml` — even if `pixi` is NOT a top-level candy.
 func TestCollectBuilderRuntimeEnv_TriggeredEmitsRuntimeEnv(t *testing.T) {
 	g := &Generator{
 		Candies: map[string]*Candy{
@@ -43,7 +43,7 @@ func TestCollectBuilderRuntimeEnv_TriggeredEmitsRuntimeEnv(t *testing.T) {
 	}
 }
 
-// TestCollectBuilderRuntimeEnv_NotTriggered: when no layer triggers a
+// TestCollectBuilderRuntimeEnv_NotTriggered: when no candy triggers a
 // builder, the builder must NOT contribute. Otherwise every image
 // would inherit pixi env even when it has no Python in it.
 func TestCollectBuilderRuntimeEnv_NotTriggered(t *testing.T) {
@@ -72,8 +72,8 @@ func TestCollectBuilderRuntimeEnv_NotTriggered(t *testing.T) {
 }
 
 // TestCollectBuilderRuntimeEnv_MultipleCandies verifies that even when
-// many layers trigger the same builder (a future Python-heavy image
-// where every layer has its own pixi.toml), the builder is counted
+// many candies trigger the same builder (a future Python-heavy image
+// where every candy has its own pixi.toml), the builder is counted
 // once — no duplicate ENV PATH entries.
 func TestCollectBuilderRuntimeEnv_MultipleCandies(t *testing.T) {
 	g := &Generator{
@@ -204,7 +204,7 @@ func TestGenerateTraefikRoutes(t *testing.T) {
 }
 
 func TestGenerateRouteWithoutTraefik_NoTraefikRoutes(t *testing.T) {
-	// When an image has route layers but no traefik layer,
+	// When an image has route candies but no traefik candy,
 	// traefik-routes.yml should NOT be generated
 	tmpDir := t.TempDir()
 
@@ -260,7 +260,7 @@ func TestGenerateRouteWithoutTraefik_NoTraefikRoutes(t *testing.T) {
 func TestGenerateInitFragments(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	// Schema-driven: each layer's service: list contains structured entries.
+	// Schema-driven: each candy's service: list contains structured entries.
 	// generateInitFragments iterates them and calls RenderService per entry.
 	g := &Generator{
 		BuildDir: tmpDir,
@@ -303,8 +303,8 @@ func TestGenerateInitFragments(t *testing.T) {
 		t.Fatalf("generateInitFragments() error = %v", err)
 	}
 
-	// Layer ordering: python=1, svc=2, other=3. Each layer with service entries
-	// gets ONE fragment file named <NN>-<layer>.conf containing all its entries.
+	// Candy ordering: python=1, svc=2, other=3. Each candy with service entries
+	// gets ONE fragment file named <NN>-<candy>.conf containing all its entries.
 	data, err := os.ReadFile(tmpDir + "/test-image/supervisor/02-svc.conf")
 	if err != nil {
 		t.Fatalf("reading svc supervisor fragment: %v", err)
@@ -369,7 +369,7 @@ func TestGenerateRelayInitFragments(t *testing.T) {
 		t.Fatalf("generateInitFragments() error = %v", err)
 	}
 
-	// Layer ordering: socat=1, chrome=2. chrome has both a service: entry
+	// Candy ordering: socat=1, chrome=2. chrome has both a service: entry
 	// and a port_relay, producing 02-chrome.conf + 02-relay-9222.conf.
 	data, err := os.ReadFile(tmpDir + "/test-image/supervisor/02-chrome.conf")
 	if err != nil {
@@ -562,11 +562,11 @@ func TestBuilderRefForFormat(t *testing.T) {
 }
 
 // TestWriteDataStaging_RemoteCandyUsesShortStageAlias is the regression for the
-// 2026-05-24 cachyos-GPU cutover: a DATA layer fetched via a remote @github ref
-// is keyed in g.Layers by its FULL ref, but its `FROM scratch AS <name>` stage
-// uses the SHORT name (layer.Name). The data COPY --from must reference the short
+// 2026-05-24 cachyos-GPU cutover: a DATA candy fetched via a remote @github ref
+// is keyed in g.Candies by its FULL ref, but its `FROM scratch AS <name>` stage
+// uses the SHORT name (candy.Name). The data COPY --from must reference the short
 // alias, else podman fails with "no stage or image found" (it tries to pull the
-// full ref as an image). Local data layers are unaffected (key == Name).
+// full ref as an image). Local data candies are unaffected (key == Name).
 func TestWriteDataStaging_RemoteCandyUsesShortStageAlias(t *testing.T) {
 	fullKey := "github.com/overthinkos/overthink/layers/notebook-templates"
 	g := &Generator{

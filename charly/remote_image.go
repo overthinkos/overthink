@@ -56,7 +56,7 @@ func ResolveRemoteImage(ref string, tag string) (*RemoteImageContext, error) {
 		return nil, fmt.Errorf("resolving image %q in %s: %w", parsed.Name, parsed.RepoPath, err)
 	}
 
-	// Scan layers from the cached repo
+	// Scan candies from the cached repo
 	layers, err := ScanAllCandyWithConfig(cachePath, cfg)
 	if err != nil {
 		return nil, fmt.Errorf("scanning layers in %s: %w", parsed.RepoPath, err)

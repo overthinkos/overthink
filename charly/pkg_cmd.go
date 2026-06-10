@@ -1,14 +1,14 @@
 package main
 
 // pkg_cmd.go — `charly box pkg`: build standalone, downloadable native package
-// ARTIFACTS (.pkg.tar.zst / .rpm / .deb) for a layer's localpkg sources.
+// ARTIFACTS (.pkg.tar.zst / .rpm / .deb) for a candy's localpkg sources.
 //
 // This is the release-artifact counterpart of the deploy-time localpkg step:
 // both build the package the SAME way — through the format's build.yml
 // `local_pkg.build_template` rendered by buildLocalPkgOnHost (R3) — so there is
 // ONE per-format build definition and ZERO distro-specific Go here. The command
 // is format-blind: it looks up each requested format's local_pkg block in
-// build.yml and the layer's per-format source dir, builds, and copies the
+// build.yml and the candy's per-format source dir, builds, and copies the
 // produced files into the output dir.
 
 import (
@@ -18,7 +18,7 @@ import (
 	"path/filepath"
 )
 
-// BoxPkgCmd builds native package artifacts for a layer's localpkg sources.
+// BoxPkgCmd builds native package artifacts for a candy's localpkg sources.
 type BoxPkgCmd struct {
 	Format []string `arg:"" optional:"" help:"Package formats to build (pac/rpm/deb). Default: every format the layer declares a localpkg source for."`
 	Candy  string   `long:"candy" default:"charly" help:"Layer whose localpkg sources to build."`
@@ -31,7 +31,7 @@ func (c *BoxPkgCmd) Run() error {
 		return err
 	}
 
-	// Load the local layers to find the requested layer's per-format localpkg
+	// Load the local candies to find the requested candy's per-format localpkg
 	// sources (config-driven — no hardcoded pkg/<dir> paths).
 	layers, err := ScanCandy(dir)
 	if err != nil {

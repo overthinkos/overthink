@@ -32,7 +32,7 @@ const (
 // the node's dotted path, the node itself, and the parent executor
 // (nil at the root). The return value is the DeployExecutor that this
 // node's CHILDREN should use as their parent. A host-target node
-// returns the same executor it was given (layers applied in-place on
+// returns the same executor it was given (candies applied in-place on
 // the parent venue); a container or vm node returns a NestedExecutor
 // that drills into the newly-created environment.
 //
@@ -115,7 +115,7 @@ func WalkDeploymentTreePostOrder(rootPath string, root *DeploymentNode, parentEx
 //
 // Semantics by target:
 //
-//	host:       children share the parent venue (host applies layers
+//	host:       children share the parent venue (host applies candies
 //	            in-place). Child executor = parentExec or
 //	            ShellExecutor at the root.
 //	container:  wrap parent with NestedExecutor{JumpPodmanExec}.

@@ -12,7 +12,7 @@ import (
 // ONLY where it references a baked label by NAME — never as an authoring key
 // (those are singularized by the field-singular table). The in-repo case is
 // build.yml's init `label_key: org.overthinkos.service.<init>`; the broader
-// set covers a forked layer.yml `oci_label:` override or an eval `command:`
+// set covers a forked charly.yml `oci_label:` override or an eval `command:`
 // that inspects a label. The `org.overthinkos.` prefix anchors every rename,
 // so a bare authoring key is never touched. Order-independent + idempotent:
 // each plural carries a trailing `s` (or `_`/`.` boundary) so no singular form

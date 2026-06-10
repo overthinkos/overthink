@@ -12,7 +12,7 @@ package main
 // The key property we want from OCITarget: feeding it a plan produced
 // by BuildDeployPlan must emit a Containerfile fragment that's
 // functionally equivalent to what today's writeCandySteps produces for
-// the same layer. Not byte-identical (we've dropped that requirement
+// the same candy. Not byte-identical (we've dropped that requirement
 // per the user) but semantically equivalent — same packages installed,
 // same tasks executed, same services configured.
 
@@ -53,7 +53,7 @@ type OCITarget struct {
 func (t *OCITarget) Name() string { return "oci" }
 
 // Emit walks each plan's steps and appends Containerfile directives to
-// the internal buffer. Multiple plans emit sequentially (per-layer).
+// the internal buffer. Multiple plans emit sequentially (per-candy).
 func (t *OCITarget) Emit(plans []*InstallPlan, opts EmitOpts) error {
 	for _, plan := range plans {
 		if plan == nil {
@@ -71,7 +71,7 @@ func (t *OCITarget) String() string {
 	return t.buf.String()
 }
 
-// emitPlan emits directives for one layer's plan.
+// emitPlan emits directives for one candy's plan.
 func (t *OCITarget) emitPlan(plan *InstallPlan, opts EmitOpts) error {
 	// Resolve the deferred {{.Home}} token in home-bearing step fields to
 	// the image's runtime home. For an OCI build (and the pod-overlay build
@@ -121,24 +121,24 @@ func (t *OCITarget) emitStep(step InstallStep, plan *InstallPlan) error {
 		// silently (the deploy-time AndroidDeployTarget executes it).
 		return nil
 	case *LocalPkgInstallStep:
-		// In an image build there is no host-package-build step, so the layer's
+		// In an image build there is no host-package-build step, so the candy's
 		// PUBLISHED package is downloaded from its release and installed via the
 		// SAME dep-resolving install_template the deploy path uses — so the
 		// toolchain is OS-tracked + its deps resolved (not a bare COPY'd binary).
-		// Needs LocalPkg.DownloadTemplate; absent → skip (layer's task: fallback).
+		// Needs LocalPkg.DownloadTemplate; absent → skip (candy's task: fallback).
 		return t.emitLocalPkgInstall(s)
 	case *RebootStep:
 		// No machine to reboot during an image build — skip silently
-		// (a target:vm deploy of this layer performs the reboot).
+		// (a target:vm deploy of this candy performs the reboot).
 		return nil
 	}
 	return fmt.Errorf("OCITarget: unknown step kind %q", step.Kind())
 }
 
-// emitShellSnippet renders a layer's per-shell init snippet into the
+// emitShellSnippet renders a candy's per-shell init snippet into the
 // container's system-wide drop-in directory. bash/zsh/sh land in
-// /etc/profile.d/charly-<layer>-<shell>.sh; fish lands in
-// /etc/fish/conf.d/charly-<layer>.fish (paths are computed by
+// /etc/profile.d/charly-<candy>-<shell>.sh; fish lands in
+// /etc/fish/conf.d/charly-<candy>.fish (paths are computed by
 // compileShellSnippetSteps based on hostCtx.Target).
 //
 // Uses a heredoc with a randomized end-marker to avoid collision with
@@ -186,13 +186,13 @@ func (t *OCITarget) emitShellHook(s *ShellHookStep) error {
 // PhaseTemplate lookup so the new phase: path preempts the legacy
 // install_template when present. Falls back to legacy InstallTemplate
 // for the (install, container) cell.
-// emitLocalPkgInstall emits the image-build install of a layer's `localpkg:`
+// emitLocalPkgInstall emits the image-build install of a candy's `localpkg:`
 // package: download the PUBLISHED package file (LocalPkg.DownloadTemplate, with
 // ${ARCH} resolved by BuildKit) into the staging dir, then run the SAME
 // dep-resolving InstallTemplate the deploy path uses (pacman -U / dnf install /
 // apt-get install). The toolchain is thus OS-tracked and its dependencies pulled
 // from the image's repos — identical to a deploy-target install. A nil LocalPkg
-// or empty DownloadTemplate is a clean no-op (the layer's own task: installs it).
+// or empty DownloadTemplate is a clean no-op (the candy's own task: installs it).
 func (t *OCITarget) emitLocalPkgInstall(s *LocalPkgInstallStep) error {
 	run, err := renderLocalPkgImageRun(s.LocalPkg)
 	if err != nil {
@@ -228,7 +228,7 @@ func (t *OCITarget) emitSystemPackages(s *SystemPackagesStep) error {
 
 // emitBuilder renders a multi-stage or inline builder by invoking
 // the same BuildStageContext + RenderTemplate pipeline the legacy
-// generator uses. Requires OCITarget.Image + OCITarget.BuilderConfig
+// generator uses. Requires OCITarget.Box + OCITarget.BuilderConfig
 // to be populated; otherwise emits a comment explaining why nothing
 // was rendered (tests that don't care about real output leave them nil).
 func (t *OCITarget) emitBuilder(s *BuilderStep, plan *InstallPlan) error {
@@ -300,7 +300,7 @@ func (t *OCITarget) emitBuilder(s *BuilderStep, plan *InstallPlan) error {
 }
 
 // emitTask renders a single task via the legacy emitTasks pipeline.
-// Because emitTasks processes the entire layer in one pass (including
+// Because emitTasks processes the entire candy in one pass (including
 // coalescing adjacent mkdir/link/setcap batches), we accumulate
 // consecutive TaskSteps and flush them through emitTasks as a group.
 // This preserves today's rendering semantics exactly.
@@ -329,8 +329,8 @@ func (t *OCITarget) emitTask(s *TaskStep) error {
 	return err
 }
 
-// lookupCandy pulls the Layer struct by name from the Generator's
-// scanned layer set. Returns nil when the Generator is nil.
+// lookupCandy pulls the Candy struct by name from the Generator's
+// scanned candy set. Returns nil when the Generator is nil.
 func (t *OCITarget) lookupCandy(name string) *Candy {
 	if t.Generator == nil {
 		return nil
@@ -386,7 +386,7 @@ func (t *OCITarget) emitServiceCustom(s *ServiceCustomStep) error {
 
 // emitRepoChange renders a structured repo file write. This path is
 // rarely used by today's generator (which renders repo setup inline in
-// the format install_template); it exists for layers that declare
+// the format install_template); it exists for candies that declare
 // explicit repo files via the structured schema.
 func (t *OCITarget) emitRepoChange(s *RepoChangeStep) error {
 	fmt.Fprintf(&t.buf, "RUN mkdir -p $(dirname %s) && cat > %s <<'CHARLY_REPO'\n%s\nCHARLY_REPO\n",

@@ -47,7 +47,7 @@ func (c *EvalRecipeCmd) Run() error {
 	// Recipes can declare `from:` imports that materialize into synthetic
 	// scenarios. ExpandRecipeFrom mutates the recipe in place; for recipes
 	// without `from:` (the common case for hand-authored concurrency
-	// recipes) it's a no-op and the layers map is unused.
+	// recipes) it's a no-op and the candies map is unused.
 	if err := ExpandRecipeFrom(uf, nil, c.Name, recipe); err != nil {
 		return fmt.Errorf("eval recipe: expanding from imports: %w", err)
 	}

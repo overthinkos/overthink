@@ -29,7 +29,7 @@ type DeployAddCmd struct {
 	Name string `arg:"" help:"Deploy name ('host' for local system; any other string is a container deploy name)"`
 	Ref  string `arg:"" optional:"" help:"Box or candy reference (local name, ./path.yml, or github.com/org/repo[/box/<n>|/candy/<n>][@ref])"`
 
-	// Layer overlays (repeatable).
+	// Candy overlays (repeatable).
 	AddCandy []string `long:"add-candy" help:"Extra layer to apply on top of the base image (repeatable)"`
 
 	// Plan-level flags.
@@ -59,7 +59,7 @@ type DeployAddCmd struct {
 	// vmEntity is the resolved kind:vm entity name this deploy targets,
 	// populated per-node by dispatchNode from the node's `vm:` cross-ref
 	// (kind:eval beds + charly.yml target:vm entries) OR the "vm:<name>"
-	// deploy-key prefix (the CLI `charly deploy add vm:<name>` form). The layer
+	// deploy-key prefix (the CLI `charly deploy add vm:<name>` form). The candy
 	// compiler reads it to build plans against the GUEST's distro/format
 	// (apt/dnf), not the operator host's. Not a Kong flag.
 	vmEntity string `kong:"-"`
@@ -235,9 +235,9 @@ func (c *DeployAddCmd) dispatchNode(path string, node *DeploymentNode, parentExe
 		if node == nil {
 			return fmt.Errorf("charly deploy add: no <ref> and charly.yml has no entry for %q", path)
 		}
-		// Schema v3: prefer the explicit `image:` cross-ref when set,
-		// so deployment names like "sway-pod" don't need to match an
-		// image name. Falls back to the deploy key for legacy entries.
+		// Schema v3: prefer the explicit `box:` cross-ref when set,
+		// so deployment names like "sway-pod" don't need to match a
+		// box name. Falls back to the deploy key for legacy entries.
 		switch {
 		case node.Box != "":
 			refStr = node.Box
@@ -257,7 +257,7 @@ func (c *DeployAddCmd) dispatchNode(path string, node *DeploymentNode, parentExe
 
 	target := classifyNodeTarget(node, path)
 
-	// Resolve the kind:vm entity this node targets (if any) so the layer
+	// Resolve the kind:vm entity this node targets (if any) so the candy
 	// compiler builds plans against the GUEST's distro/format (apt/dnf on
 	// debian/fedora) rather than the operator host's (cachyos→pac). The
 	// `vm:` deploy-key prefix was the ONLY signal before — it missed every
@@ -266,7 +266,7 @@ func (c *DeployAddCmd) dispatchNode(path string, node *DeploymentNode, parentExe
 	c.vmEntity = resolveVmEntity(c.Name, node)
 
 	// Resolve a kind:local template, when referenced. Template fields
-	// (layers + install_opts + env) merge BENEATH deployment-level
+	// (candies + install_opts + env) merge BENEATH deployment-level
 	// overrides — so the precedence is CLI > deployment > template.
 	// `InstallOptsConfig.ApplyTo` is fill-empty, so calling it with the
 	// template's opts after the deployment's leaves the deployment's
@@ -276,7 +276,7 @@ func (c *DeployAddCmd) dispatchNode(path string, node *DeploymentNode, parentExe
 		if tmpl == nil {
 			return fmt.Errorf("deployment %q: unknown kind:local template %q", path, node.Local)
 		}
-		// Prepend template layers; deployment add_layers are appended.
+		// Prepend template candies; deployment add_candy are appended.
 		merged := append([]string(nil), tmpl.Candy...)
 		merged = append(merged, addCandies...)
 		addCandies = merged
@@ -285,8 +285,8 @@ func (c *DeployAddCmd) dispatchNode(path string, node *DeploymentNode, parentExe
 	}
 
 	// Target-only deploys (local, vm, android) don't compile a primary
-	// image plan — everything comes from add_layers (for android: the
-	// layers' apk: packages installed onto the device).
+	// image plan — everything comes from add_candy (for android: the
+	// candies' apk: packages installed onto the device).
 	if target == "local" || target == "vm" || target == "android" {
 		base = path
 	} else {
@@ -304,9 +304,9 @@ func (c *DeployAddCmd) dispatchNode(path string, node *DeploymentNode, parentExe
 		}
 	}
 
-	// For pod/k8s targets the add_layers must compile against the BASE
+	// For pod/k8s targets the add_candy must compile against the BASE
 	// IMAGE's context (distro=fedora, pkg=rpm, etc.) rather than the
-	// operator host's context — otherwise the layer's install tasks pick
+	// operator host's context — otherwise the candy's install tasks pick
 	// the wrong distro section and the overlay build fails. Only host/vm
 	// targets use syntheticHostBox / syntheticVmBox (handled inside
 	// compileCandyPlans).
@@ -336,8 +336,8 @@ func (c *DeployAddCmd) dispatchNode(path string, node *DeploymentNode, parentExe
 		if err != nil {
 			return fmt.Errorf("compiling --add-layer %q: %w", al, err)
 		}
-		// Mark each plan's own layer (plus transitive deps) as overlay
-		// layers so the Pod target picks them ALL up — not just the
+		// Mark each plan's own candy (plus transitive deps) as overlay
+		// candies so the Pod target picks them ALL up — not just the
 		// user-facing ref name (k3s-server without its k3s base dep).
 		overlayNames := make([]string, 0, len(alPlans))
 		for _, p := range alPlans {
@@ -355,11 +355,11 @@ func (c *DeployAddCmd) dispatchNode(path string, node *DeploymentNode, parentExe
 	for _, p := range plans {
 		p.DeployID = deployID
 		// Union — don't clobber. The per-alPlan propagation loop above
-		// already populated p.AddCandies with the overlay-layer names
-		// (explicit add_layers + their transitive deps). Plain overwrite
+		// already populated p.AddCandies with the overlay-candy names
+		// (explicit add_candy + their transitive deps). Plain overwrite
 		// with the user-facing addCandies list drops the transitive
-		// entries, so (e.g.) an overlay declaring add_layers:[k3s-server]
-		// would ship k3s-server but not its k3s base layer — runtime
+		// entries, so (e.g.) an overlay declaring add_candy:[k3s-server]
+		// would ship k3s-server but not its k3s base candy — runtime
 		// failure.
 		seen := make(map[string]bool, len(p.AddCandies))
 		for _, al := range p.AddCandies {
@@ -673,9 +673,9 @@ func (c *DeployAddCmd) emitOpts() EmitOpts {
 	}
 }
 
-// compilePlans resolves the ref to a layer set and builds plans for
-// each. For image refs: walk the image's Layers in topological order.
-// For layer refs: compile a single plan. For remote refs: fetch and
+// compilePlans resolves the ref to a candy set and builds plans for
+// each. For image refs: walk the image's candies in topological order.
+// For candy refs: compile a single plan. For remote refs: fetch and
 // proceed (remote fetch is handled by existing EnsureRepoDownloaded).
 func (c *DeployAddCmd) compilePlans(ref *DeployRef, cfg *Config, distroCfg *DistroConfig, builderCfg *BuilderConfig, dir string) ([]*InstallPlan, string, []string, error) {
 	if ref.Source == RefSourceRemote && ref.Kind == RefKindBox {
@@ -684,19 +684,19 @@ func (c *DeployAddCmd) compilePlans(ref *DeployRef, cfg *Config, distroCfg *Dist
 	if ref.Kind == RefKindBox {
 		return c.compileBoxPlans(ref, cfg, distroCfg, builderCfg, dir)
 	}
-	// Local AND remote layer refs flow here — scanCandiesForRef fetches a
+	// Local AND remote candy refs flow here — scanCandiesForRef fetches a
 	// remote `--add-layer @host/org/repo/candy/<name>:ver` (and its deps)
-	// on demand, so deploy add of remote layers is fully automatic.
+	// on demand, so deploy add of remote candies is fully automatic.
 	return c.compileCandyPlans(ref, cfg, distroCfg, builderCfg, dir)
 }
 
-// scanCandiesForRef scans the layer set needed to compile `ref`, returning the
-// layer map plus the map KEY for ref. A LOCAL layer ref keys by its short name.
+// scanCandiesForRef scans the candy set needed to compile `ref`, returning the
+// candy map plus the map KEY for ref. A LOCAL candy ref keys by its short name.
 // A REMOTE ref (`@host/org/repo/candy/<name>:ver`) is fetched + scanned with
 // its transitive deps — by augmenting cfg with a synthetic image that carries
 // the ref, so the existing CollectRemoteRefs/ScanAllCandy machinery pulls it —
 // and keys by its bare ref. This makes `charly deploy add --add-layer <remote>`
-// (e.g. the VM eval beds' add_layer:) fully automatic with no manual pre-fetch.
+// (e.g. the VM eval beds' add_candy:) fully automatic with no manual pre-fetch.
 func (c *DeployAddCmd) scanCandiesForRef(ref *DeployRef, cfg *Config, dir string) (map[string]*Candy, string, error) {
 	scanCfg := cfg
 	candyKey := ref.Name
@@ -753,13 +753,13 @@ func (c *DeployAddCmd) compileBoxPlans(ref *DeployRef, cfg *Config, distroCfg *D
 	return plans, img.Name, order, nil
 }
 
-// pruneContainerInitForSystemd drops the `supervisord` layer (the CONTAINER
-// init system) from a resolved DEPLOY layer order when the target is systemd
+// pruneContainerInitForSystemd drops the `supervisord` candy (the CONTAINER
+// init system) from a resolved DEPLOY candy order when the target is systemd
 // (host / vm). On a systemd target the OS init is the one and only init system
-// — every layer's `service:` entries render as systemd units — so pulling in
+// — every candy's `service:` entries render as systemd units — so pulling in
 // supervisord is wrong (it lands installed-but-unused, a second init). Pod/k8s
 // deploys and OCI image builds keep supervisord (it IS their init), so this
-// only affects host/vm deploys. Layers that `require: supervisord` purely for
+// only affects host/vm deploys. Candies that `require: supervisord` purely for
 // graph ordering are unaffected at runtime — their services run under systemd
 // regardless of whether the supervisord package is present.
 func pruneContainerInitForSystemd(order []string, hostCtx HostContext) []string {
@@ -777,7 +777,7 @@ func pruneContainerInitForSystemd(order []string, hostCtx HostContext) []string 
 }
 
 // compileCandyPlansWithContext is the same as compileCandyPlans but uses
-// the provided *ResolvedBox as the compile context (so add_layers for
+// the provided *ResolvedBox as the compile context (so add_candy for
 // a pod/k8s deployment compile against the base image's distro/user
 // context, not the operator host's).
 func (c *DeployAddCmd) compileCandyPlansWithContext(ref *DeployRef, cfg *Config, distroCfg *DistroConfig, builderCfg *BuilderConfig, dir string, ctx *ResolvedBox) ([]*InstallPlan, string, []string, error) {
@@ -815,9 +815,9 @@ func (c *DeployAddCmd) compileCandyPlans(ref *DeployRef, cfg *Config, distroCfg 
 	if err != nil {
 		return nil, "", nil, err
 	}
-	// Expand transitive deps — a layer deploy (bare `charly deploy add <layer>`
-	// or `--add-layer <name>`) MUST pull in the layer's `requires:` graph in
-	// topological order. Without this, layers whose tasks rely on upstream
+	// Expand transitive deps — a candy deploy (bare `charly deploy add <candy>`
+	// or `--add-layer <name>`) MUST pull in the candy's `requires:` graph in
+	// topological order. Without this, candies whose tasks rely on upstream
 	// binaries (e.g. pre-commit's cargo install needing rust) fail with
 	// "command not found". Remote refs key by their bare ref (scanCandiesForRef).
 	order, err := ResolveCandyOrder([]string{candyKey}, layers, nil)
@@ -853,7 +853,7 @@ func (c *DeployAddCmd) compileCandyPlans(ref *DeployRef, cfg *Config, distroCfg 
 	// (distro-keyed) exactly like a built image would — no command-specific
 	// divergence. This path previously seeded from cfg.Defaults.Builder only,
 	// which gave a cachyos host fedora-builder and left the local deploy/execBuilder
-	// with the wrong builder when a layer's install needs cargo/npm/pixi/aur.
+	// with the wrong builder when a candy's install needs cargo/npm/pixi/aur.
 	if cfg != nil {
 		img.Builder = cfg.resolveEffectiveBuilder(img.Name, img.Distro, img.Base, img.IsExternalBase, img.Builder)
 	}
@@ -900,10 +900,10 @@ func detectHostContext() HostContext {
 }
 
 // syntheticHostBox returns a minimal ResolvedBox suitable for
-// compiling a single-layer plan against the host. Used when the user
-// invokes `charly deploy add host <layer-ref>` without a containing image.
+// compiling a single-candy plan against the host. Used when the user
+// invokes `charly deploy add host <candy-ref>` without a containing image.
 //
-// UID/GID/User/Home come from the operator's own process so a layer
+// UID/GID/User/Home come from the operator's own process so a candy
 // task carrying `user: ${USER}` resolves to the operator (not root).
 // Without this, resolveUserSpec's `${USER}` branch returns img.UID
 // which would default to 0 — quietly routing the task through
@@ -933,7 +933,7 @@ func syntheticHostBox() *ResolvedBox {
 // targets no VM. A node's explicit `vm:` cross-ref wins (kind:eval beds and
 // charly.yml target:vm entries, whose names are NOT "vm:"-prefixed); otherwise
 // the "vm:<name>" deploy-key prefix (the CLI `charly deploy add vm:<name>` form).
-// This is the single signal the layer compiler uses to pick syntheticVmBox
+// This is the single signal the candy compiler uses to pick syntheticVmBox
 // over syntheticHostBox — the prefix alone missed bed/target:vm deploys.
 func resolveVmEntity(deployName string, node *DeploymentNode) string {
 	if node != nil && node.Vm != "" {
@@ -949,15 +949,15 @@ func resolveVmEntity(deployName string, node *DeploymentNode) string {
 
 // syntheticVmBox returns a ResolvedBox tuned for `charly deploy add
 // vm:<name>` — the User/UID/GID/Home fields come from the VM spec's SSH
-// config (not the host's env), so `${USER}` in a layer's `user:` field
+// config (not the host's env), so `${USER}` in a candy's `user:` field
 // resolves to the GUEST user (e.g. `arch`) and task scope classification
 // dispatches user-scoped tasks to RunUser (bare ssh bash -s) instead of
 // RunSystem (ssh sudo bash -s). Without this, `cargo install taplo-cli`
-// under the pre-commit layer ends up in /root/.cargo/bin/ instead of
-// /home/<user>/.cargo/bin/, and $HOME-anchored layer tests fail.
+// under the pre-commit candy ends up in /root/.cargo/bin/ instead of
+// /home/<user>/.cargo/bin/, and $HOME-anchored candy tests fail.
 //
 // The guest's distro + primary package format are resolved from the VM
-// spec (NOT hardcoded), so a layer deploy onto a debian/ubuntu/fedora VM
+// spec (NOT hardcoded), so a candy deploy onto a debian/ubuntu/fedora VM
 // installs its packages — and the `charly` localpkg — through the guest's own
 // package manager (apt/dnf) instead of pacman. The distro key is the
 // bootstrap `distro:` field (debootstrap/pacstrap VMs) or, for cloud_image
@@ -995,7 +995,7 @@ func syntheticVmBox(spec *VmSpec, distroCfg *DistroConfig) *ResolvedBox {
 			// target:vm deploy reaches per-version tag sections, not only the bare
 			// distro tag — image/VM parity for the distro-cascade resolver. Then
 			// expand inherit_packages: ancestors (a cachyos VM → [cachyos, arch]
-			// so `arch:` layer blocks reach it), mirroring the image-resolve path.
+			// so `arch:` candy blocks reach it), mirroring the image-resolve path.
 			img.Distro = distroCfg.expandPackageInheritance(distroTagChain(distroKey, def.Version))
 			if pf := def.PrimaryFormat(); pf != "" {
 				img.Pkg = pf
@@ -1018,7 +1018,7 @@ func resolveDistroDef(cfg *DistroConfig, distroTag string) *DistroDef {
 
 // loadConfigForDeploy loads charly.yml + build.yml for the current
 // project directory. Runs RegisterBuildVocabulary as a side effect since the
-// layer scanner needs it.
+// candy scanner needs it.
 func loadConfigForDeploy(dir string) (*Config, *DistroConfig, *BuilderConfig, error) {
 	cfg, err := LoadConfig(dir)
 	if err != nil {

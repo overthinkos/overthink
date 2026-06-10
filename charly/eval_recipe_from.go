@@ -2,7 +2,7 @@ package main
 
 // harness_recipe_from.go — composition primitive on `kind: recipe`.
 //
-// A recipe author can pull existing tests out of a layer, image, pod, or vm
+// A recipe author can pull existing tests out of a candy, box, pod, or vm
 // entity into a recipe by adding a `from:` block. Each entry expands AT
 // LOAD TIME into one synthetic Scenario per surviving Check (filter
 // pipeline below), each carrying one Step that embeds the source Check.
@@ -13,7 +13,7 @@ package main
 // in harness_recipe_from_test.go.
 //
 // Filter pipeline per `from:` entry, in order:
-//   1. Section filter via `scope:` (default: layer + image + deploy).
+//   1. Section filter via `scope:` (default: candy + box + deploy).
 //   2. Live-only verb filter (drops cdp/wl/dbus/vnc/mcp/record/spice/
 //      libvirt/k8s when skip_live_only is true; default true).
 //   3. `select:` allow-list by id (matches Check.ID OR the synthesized
@@ -27,7 +27,7 @@ import (
 )
 
 // HarnessRecipeFrom is one entry under a recipe's `from:` block. It pulls
-// tests out of an existing entity (layer / image / pod / vm) and lets the
+// tests out of an existing entity (candy / box / pod / vm) and lets the
 // expander turn them into synthetic scenarios on the recipe.
 //
 // `source:` (added 2026-04 BDD/test/harness cleanup cutover) selects
@@ -39,16 +39,16 @@ import (
 //     block, preserving Steps, DependsOn, OnFail. Invariant: 1
 //     imported Scenario = 1 ScenarioID = 1 point.
 //
-// Only `kind: layer` and `kind: image` carry descriptions today;
+// Only `kind: candy` and `kind: box` carry descriptions today;
 // `source: description` with kind=pod or kind=vm fails validation.
 type HarnessRecipeFrom struct {
-	Kind         string   `yaml:"kind"`                     // layer | image | pod | vm
-	Name         string   `yaml:"name"`                     // entity name (matches uf.Layer/Images/Pod/VM)
+	Kind         string   `yaml:"kind"`                     // candy | box | pod | vm
+	Name         string   `yaml:"name"`                     // entity name (matches uf.Candy/Box/Pod/VM)
 	Pod          string   `yaml:"pod"`                      // harness container name (becomes scenario.pod)
 	Source       string   `yaml:"source,omitempty"`         // tests (default) | description
 	Select       []string `yaml:"select,omitempty"`         // optional allow-list (Check.ID for tests, Scenario.Name for description)
 	Exclude      []string `yaml:"exclude,omitempty"`        // optional deny-list (same matching as Select)
-	Scope        []string `yaml:"scope,omitempty"`          // optional section filter (default: layer + image + deploy)
+	Scope        []string `yaml:"scope,omitempty"`          // optional section filter (default: candy + box + deploy)
 	Prefix       string   `yaml:"prefix,omitempty"`         // optional scenario-name prefix
 	SkipLiveOnly *bool    `yaml:"skip_live_only,omitempty"` // optional; default true (drops live-only verbs)
 }
@@ -203,7 +203,7 @@ func validateFromEntryShape(recipeName string, idx int, from HarnessRecipeFrom) 
 	case "", "tests":
 		// default — flat-Check import path
 	case "description":
-		// Only layer/image carry descriptions today. pod/vm
+		// Only candy/box carry descriptions today. pod/vm
 		// descriptions could be added later but are absent.
 		if from.Kind != "candy" && from.Kind != "box" {
 			return fmt.Errorf("recipe %q: from[%d] (kind=%s name=%q): source=description is only valid for kind=layer or kind=image (pod and vm don't carry description: blocks)",
@@ -225,8 +225,8 @@ func (f HarnessRecipeFrom) sourceEffective() string {
 }
 
 // collectScenariosForFromDescription returns the unfiltered Scenario list
-// for a `source: description` entry. Layer kinds read the layer's own
-// description; image kinds walk the layer chain via CollectDescriptions.
+// for a `source: description` entry. Candy kinds read the candy's own
+// description; box kinds walk the candy chain via CollectDescriptions.
 func collectScenariosForFromDescription(uf *UnifiedFile, layers map[string]*Candy, from HarnessRecipeFrom) ([]Scenario, error) {
 	switch from.Kind {
 	case "candy":
@@ -240,7 +240,7 @@ func collectScenariosForFromDescription(uf *UnifiedFile, layers map[string]*Cand
 		return append([]Scenario(nil), layer.Description.Scenario...), nil
 
 	case "box":
-		// Namespace-aware: a recipe may import from an image that lives in an
+		// Namespace-aware: a recipe may import from a box that lives in an
 		// imported submodule (e.g. `fedora.composition-source` after the box
 		// inversion). resolveBoxRef descends into the namespace and returns
 		// that namespace's Config; CollectDescriptions then walks the chain in
@@ -255,7 +255,7 @@ func collectScenariosForFromDescription(uf *UnifiedFile, layers map[string]*Cand
 			return nil, fmt.Errorf("image %q produced no descriptions (no layer in the chain has a description: block)", from.Name)
 		}
 		// Flatten the three sections into one slice. Authors who want
-		// section-specific behaviour can use kind: layer instead.
+		// section-specific behaviour can use kind: candy instead.
 		var out []Scenario
 		for _, sec := range [][]LabeledDescription{set.Candy, set.Box, set.Deploy} {
 			for _, ld := range sec {
@@ -318,7 +318,7 @@ func scenarioImportName(prefix, name string) string {
 }
 
 // collectChecksForFrom returns the unfiltered `[]Check` for a from entry,
-// dispatching by kind. For layer/image, it walks the existing collection
+// dispatching by kind. For candy/box, it walks the existing collection
 // machinery; for pod/vm, it concats the entity-direct fields with whatever
 // the underlying image baked in.
 func collectChecksForFrom(uf *UnifiedFile, layers map[string]*Candy, from HarnessRecipeFrom) ([]Check, error) {
@@ -339,7 +339,7 @@ func collectChecksForFrom(uf *UnifiedFile, layers map[string]*Candy, from Harnes
 		return out, nil
 
 	case "box":
-		// Namespace-aware (see the kind:image case in collectScenariosForFromDescription).
+		// Namespace-aware (see the kind:box case in collectScenariosForFromDescription).
 		cfg := uf.ProjectConfig()
 		_, nsCfg, ok := cfg.resolveBoxRef(from.Name)
 		if !ok {
@@ -362,7 +362,7 @@ func collectChecksForFrom(uf *UnifiedFile, layers map[string]*Candy, from Harnes
 		if !ok {
 			return nil, fmt.Errorf("pod %q not found (available: %s)", from.Name, sortedPodNames(uf))
 		}
-		// If the pod wraps an image, walk the image's layer chain too.
+		// If the pod wraps a box, walk the box's candy chain too.
 		var out []Check
 		if pod.Box != "" {
 			if _, hasImage := uf.Box[pod.Box]; hasImage {
@@ -427,7 +427,7 @@ func filterByScope(checks []Check, allowed []string) []Check {
 		// Scope on a check is "build" or "deploy". The author-facing
 		// scope filter values are "candy" / "box" / "deploy".
 		// The Origin annotation tells us which section the check came
-		// from (layer:* for layer, image:* / pod:* / vm:* / deploy-default
+		// from (candy:* for candy, box:* / pod:* / vm:* / deploy-default
 		// for the entity itself). Map back to the author's vocabulary:
 		section := scopeSection(c)
 		if allow[section] {
@@ -438,7 +438,7 @@ func filterByScope(checks []Check, allowed []string) []Check {
 }
 
 // scopeSection maps a Check's (Scope, Origin) onto the author-facing
-// scope vocabulary used in `from.scope:` ([layer | image | deploy]).
+// scope vocabulary used in `from.scope:` ([candy | box | deploy]).
 func scopeSection(c Check) string {
 	if c.Scope == "deploy" {
 		return "deploy"
@@ -588,7 +588,7 @@ func (f HarnessRecipeFrom) skipLiveOnlyEffective() bool {
 	return *f.SkipLiveOnly
 }
 
-// sortedMapKeys returns the keys of a map[string]*Layer sorted, for
+// sortedMapKeys returns the keys of a map[string]*Candy sorted, for
 // "available:" hint strings on errors.
 func sortedMapKeys(m map[string]*Candy) string {
 	keys := make([]string, 0, len(m))

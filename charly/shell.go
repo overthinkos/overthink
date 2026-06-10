@@ -103,7 +103,7 @@ func (c *ShellCmd) Run() error {
 
 	// Resolve the deploy key → declared image short-name via THE shared
 	// resolver (deploy.go); the same one charly config / start / eval live use,
-	// so no command diverges when key != image. c.Image stays the deploy-KEY;
+	// so no command diverges when key != image. c.Box stays the deploy-KEY;
 	// only the image ref uses the resolved name.
 	deployBoxName := resolveDeployBoxName(c.Box, c.Instance)
 	// Resolve from image labels (+ charly.yml overlay). No charly.yml.

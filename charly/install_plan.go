@@ -3,7 +3,7 @@ package main
 // install_plan.go — the InstallPlan IR.
 //
 // Background (see plan file referenced in the final design): today's code
-// walks Layer objects and emits Containerfile text directly in
+// walks Candy objects and emits Containerfile text directly in
 // generate.go:writeCandySteps. That hardcodes "we're building an OCI image"
 // into the generator. The IR defined here lifts the walk into structured
 // data so the same plan can be consumed by:
@@ -13,7 +13,7 @@ package main
 //   - LocalDeployTarget → deploy-mode host execution (charly deploy add host)
 //
 // Keeping these three code paths behind one shared IR is the load-bearing
-// move: every feature (service rendering, add_layers overlay, uninstall
+// move: every feature (service rendering, add_candy overlay, uninstall
 // reversal) now lives in one place and applies to all three targets
 // uniformly.
 //
@@ -389,7 +389,7 @@ type BuilderStep struct {
 	Artifacts    []ArtifactRef // outputs to extract (empty for user-scope pixi/npm/cargo; populated for aur)
 
 	// Builder-specific template context — the compiler populates this from
-	// the layer's manifest files + build.yml builder definition.
+	// the candy's manifest files + build.yml builder definition.
 	RawStageContext map[string]interface{}
 
 	// LocalPkg is the package format's localpkg contract, populated by the
@@ -440,7 +440,7 @@ func (s *BuilderStep) Reverse() []ReverseOp {
 		}
 	case "pixi":
 		// Pixi envs land at $HOME/.pixi/envs/<env-name>/ — the env name
-		// comes from the layer's pixi.toml (project name) or defaults to
+		// comes from the candy's pixi.toml (project name) or defaults to
 		// "default". Recorded under "env_name" in RawStageContext.
 		if env := extractString(s.RawStageContext, "env_name"); env != "" {
 			return []ReverseOp{{
@@ -503,7 +503,7 @@ type TaskStep struct {
 	// script as exports. Build-time gets these via Containerfile ENV
 	// directives (emitVarsEnv); host/local-deploy time has no equivalent
 	// mechanism, so the renderer emits `export K=V` lines from this field.
-	// Without this, layers like `kubernetes` whose download URLs reference
+	// Without this, candies like `kubernetes` whose download URLs reference
 	// ${K3D_VERSION} fetched an empty path-component at deploy time and
 	// curl 404'd.
 	CandyVars map[string]string
@@ -557,7 +557,7 @@ func (s *TaskStep) Reverse() []ReverseOp {
 			Scope:   s.Scope(),
 		}}
 	case s.Task.Download != "":
-		// When the layer author declared an explicit uninstall list,
+		// When the candy author declared an explicit uninstall list,
 		// use it — that's the correct target set for extract-into-a-
 		// shared-dir tasks (e.g. tarballs that land multiple binaries
 		// in /usr/local/bin/). Otherwise fall back to task.To.
@@ -596,7 +596,7 @@ func reverseFileKindFor(sc Scope) ReverseOpKind {
 // ---------------------------------------------------------------------------
 
 // FileStep places a single file. The compiler may emit these for
-// layer-declared file directives that aren't wrapped as tasks (e.g.
+// candy-declared file directives that aren't wrapped as tasks (e.g.
 // supervisord fragment assembly). Today's tasks.go handles most file
 // placement via TaskStep; FileStep exists for cases where the compiler
 // synthesizes file writes that weren't in the candy manifest (e.g. service unit
@@ -706,7 +706,7 @@ func (s *ServicePackagedStep) Reverse() []ReverseOp {
 // ---------------------------------------------------------------------------
 
 // ServiceCustomStep writes and enables a full service definition. The
-// unit text is already rendered by the compiler from the layer's generic
+// unit text is already rendered by the compiler from the candy's generic
 // `services:` entry via the target init system's service_template.
 type ServiceCustomStep struct {
 	Name        string // e.g. "charly-ollama-ollama"
@@ -745,16 +745,16 @@ func (s *ServiceCustomStep) Reverse() []ReverseOp {
 // ShellHookStep — env: and path_append: materialized as a shell env.d file.
 // ---------------------------------------------------------------------------
 
-// ShellHookStep records the env vars and PATH contributions a layer makes
+// ShellHookStep records the env vars and PATH contributions a candy makes
 // to the user's shell environment. On the OCI target these translate to
 // `ENV K=V` directives in the Containerfile. On the host target they
-// become `~/.config/opencharly/env.d/<layer>.env` plus a managed block in
+// become `~/.config/opencharly/env.d/<candy>.env` plus a managed block in
 // the user's shell init that sources the env.d directory.
 type ShellHookStep struct {
 	CandyName string
 	EnvVars   map[string]string
 	PathAdd   []string // already {{.Home}}-substituted to absolute paths
-	EnvFile   string   // computed path (~/.config/opencharly/env.d/<layer>.env); populated at install
+	EnvFile   string   // computed path (~/.config/opencharly/env.d/<candy>.env); populated at install
 }
 
 func (s *ShellHookStep) Kind() StepKind     { return StepKindShellHook }
@@ -775,27 +775,27 @@ func (s *ShellHookStep) Reverse() []ReverseOp {
 }
 
 // ---------------------------------------------------------------------------
-// ShellSnippetStep — per-layer per-shell init snippet for the candy manifest `shell:`.
+// ShellSnippetStep — per-candy per-shell init snippet for the candy manifest `shell:`.
 // ---------------------------------------------------------------------------
 
-// ShellSnippetStep records a per-(layer, shell) init snippet emitted from
-// a layer's `shell:` block. The compiler emits one step per (layer, shell)
+// ShellSnippetStep records a per-(candy, shell) init snippet emitted from
+// a candy's `shell:` block. The compiler emits one step per (candy, shell)
 // pair after applying the selection rule (per-shell ByShell entry wins
 // over generic, with ${SHELL_NAME} substitution).
 //
 // Per-target rendering:
 //   - OCITarget: snippet bytes are content-address-staged and COPYed to
-//     a system-wide drop-in (/etc/profile.d/charly-<layer>.sh for bash/zsh/sh,
-//     /etc/fish/conf.d/charly-<layer>.fish for fish).
+//     a system-wide drop-in (/etc/profile.d/charly-<candy>.sh for bash/zsh/sh,
+//     /etc/fish/conf.d/charly-<candy>.fish for fish).
 //   - LocalDeployTarget / VmDeployTarget: managed-block append to the
 //     user's rc file (~/.bashrc, ~/.zshrc, ~/.profile) keyed by
-//     `# opencharly:begin <Marker>` fence; for fish, a per-layer drop-in at
-//     ~/.config/fish/conf.d/charly-<layer>.fish (no fence needed, file IS the
+//     `# opencharly:begin <Marker>` fence; for fish, a per-candy drop-in at
+//     ~/.config/fish/conf.d/charly-<candy>.fish (no fence needed, file IS the
 //     unit). UseDropin discriminates the two paths.
 //   - K8sDeployTarget: skipped (no shell in pods).
 type ShellSnippetStep struct {
-	CandyName   string   // layer this snippet belongs to (also Marker source)
-	Origin      string   // "<layer>" or "image" or "deploy" (for ledger refcount + LabelShell origin)
+	CandyName   string   // candy this snippet belongs to (also Marker source)
+	Origin      string   // "<candy>" or "box" or "deploy" (for ledger refcount + LabelShell origin)
 	Shell       string   // bash | zsh | fish | sh
 	Snippet     string   // rendered body, ${SHELL_NAME}-substituted, ready to write
 	PathAppend  []string // already rendered into Snippet by the compiler; tracked here for label round-trip / overlay
@@ -838,7 +838,7 @@ func (s *ShellSnippetStep) Reverse() []ReverseOp {
 	}
 	// Managed-block append: removal strips just our fence pair from the
 	// existing rc file (which may belong to the user and contain unrelated
-	// content). Marker carries the per-layer fence tag so multiple layers
+	// content). Marker carries the per-candy fence tag so multiple candies
 	// can coexist in one rc file.
 	return []ReverseOp{{
 		Kind:    ReverseOpRemoveManaged,
@@ -884,7 +884,7 @@ func (s *RepoChangeStep) Reverse() []ReverseOp {
 // ---------------------------------------------------------------------------
 
 // ApkInstallStep installs Android apps onto a `kind: android` device. It is
-// the IR form of a layer's `apk:` package section — the apk "package format"
+// the IR form of a candy's `apk:` package section — the apk "package format"
 // (parallel to SystemPackagesStep for rpm/deb/pac, and BuilderStep for aur).
 //
 // Unlike every other step, an apk install lands on a RUNNING Android device,
@@ -898,7 +898,7 @@ func (s *RepoChangeStep) Reverse() []ReverseOp {
 type ApkInstallStep struct {
 	Packages  []ApkPackageSpec
 	CandyName string
-	CandyDir  string // layer source dir — anchors relative committed-APK paths
+	CandyDir  string // candy source dir — anchors relative committed-APK paths
 }
 
 func (s *ApkInstallStep) Kind() StepKind { return StepKindApkInstall }
@@ -913,7 +913,7 @@ func (s *ApkInstallStep) RequiresGate() Gate { return GateNone }
 
 // Reverse returns no ledger ops — Android teardown is not ledger-based.
 // `charly deploy del <android>` (AndroidUnifiedTarget.Del) re-resolves the
-// deploy's apk layers and `pm uninstall`s each package directly.
+// deploy's apk candies and `pm uninstall`s each package directly.
 func (s *ApkInstallStep) Reverse() []ReverseOp { return nil }
 
 // ---------------------------------------------------------------------------
@@ -921,9 +921,9 @@ func (s *ApkInstallStep) Reverse() []ReverseOp { return nil }
 // install the resulting `.pkg.tar.zst` onto a pac-based deploy target.
 // ---------------------------------------------------------------------------
 //
-// LocalPkgInstallStep is the IR form of a layer's `localpkg:` field — a
-// pointer at a bundled Arch PKGBUILD directory (relative to the layer dir or
-// the project root). It is the proper-package counterpart of the charly layer's
+// LocalPkgInstallStep is the IR form of a candy's `localpkg:` field — a
+// pointer at a bundled Arch PKGBUILD directory (relative to the candy dir or
+// the project root). It is the proper-package counterpart of the charly candy's
 // ad-hoc curl-a-binary `cmd:` task: on an Arch/CachyOS DEPLOY target the
 // package is built from the repo's bundled PKGBUILD on the HOST (`makepkg`),
 // the resulting artifact is transferred to the target, and `pacman -U`-installed
@@ -935,16 +935,16 @@ func (s *ApkInstallStep) Reverse() []ReverseOp { return nil }
 //   - LocalDeployTarget (Arch/CachyOS host) and VmDeployTarget (Arch/CachyOS
 //     guest) EXECUTE it (build on host → transfer → pacman -U on the target).
 //   - On a NON-pac deploy target the executor records a clean skip (a Fedora /
-//     Debian host has no pacman; the layer's own `cmd:` task curls the binary
+//     Debian host has no pacman; the candy's own `cmd:` task curls the binary
 //     there as the documented fallback).
 //   - OCITarget SKIPS it — no makepkg in a container image build; the image
-//     bakes one self-contained binary via the layer's COPY/curl `cmd:` task.
+//     bakes one self-contained binary via the candy's COPY/curl `cmd:` task.
 //   - AndroidDeployTarget / K8sDeployTarget SKIP it (no Arch package surface).
 //
 // The PKGBUILD location is resolved at EMIT time (not compile time), so the
-// step carries only the author's hint (`PkgbuildRef`) plus the layer's source
+// step carries only the author's hint (`PkgbuildRef`) plus the candy's source
 // dir + the deploy project dir for the walk-up search. When no PKGBUILD is
-// found the step is a no-op (the layer's existing curl/COPY task is the
+// found the step is a no-op (the candy's existing curl/COPY task is the
 // fallback).
 type LocalPkgInstallStep struct {
 	PkgbuildRef string // the layer's `localpkg:` value (e.g. "pkg/arch") — a hint, resolved at emit
@@ -983,9 +983,9 @@ func (s *LocalPkgInstallStep) RequiresGate() Gate { return GateNone }
 // the operator, not by deploy teardown. Mirrors ApkInstallStep's empty Reverse.
 func (s *LocalPkgInstallStep) Reverse() []ReverseOp { return nil }
 
-// RebootStep requests a reboot of the deploy target after this layer's steps.
-// It is emitted (last in the layer) when a layer declares `reboot: true` —
-// the canonical case is a kernel-module layer (e.g. nvidia-open-dkms) whose
+// RebootStep requests a reboot of the deploy target after this candy's steps.
+// It is emitted (last in the candy) when a candy declares `reboot: true` —
+// the canonical case is a kernel-module candy (e.g. nvidia-open-dkms) whose
 // module only loads on a fresh boot with nouveau blacklisted.
 //
 // Only targets that OWN a rebootable machine act on it: VmDeployTarget reboots
@@ -1021,19 +1021,19 @@ func (s *ApkInstallStep) PackageIDs() []string {
 // InstallPlan — the top-level IR container.
 // ---------------------------------------------------------------------------
 
-// InstallPlan is the full ordered list of steps for one layer or one
+// InstallPlan is the full ordered list of steps for one candy or one
 // whole-image deploy. Compiled by BuildDeployPlan and consumed by any
 // DeployTarget implementation.
 //
-// The compiler produces one InstallPlan per layer (then merges them in
+// The compiler produces one InstallPlan per candy (then merges them in
 // topological order for whole-image deploys). A whole-image deploy keeps
-// layer boundaries visible so the ledger can refcount which layers
+// candy boundaries visible so the ledger can refcount which candies
 // participate in which deploys — crucial for correct uninstall.
 type InstallPlan struct {
 	// Identity — populated by the compiler.
-	DeployID string // per-deploy unique ID (hash of image + add_layers list)
-	Box      string // deployable image name (or layer name for single-layer deploys)
-	Version  string // layer/image CalVer version
+	DeployID string // per-deploy unique ID (hash of image + add_candy list)
+	Box      string // deployable box name (or candy name for single-candy deploys)
+	Version  string // candy/box CalVer version
 	Distro   string // resolved host distro tag, e.g. "fedora:43"
 	Candy    string // candy name when this plan is for a single candy; "" for whole-image merges
 
@@ -1179,10 +1179,10 @@ type EmitOpts struct {
 
 // DeployTarget is the interface OCI + container-deploy + host-deploy
 // emitters satisfy. Taking a slice of plans (rather than a single plan)
-// lets whole-image deploys pass all per-layer plans at once and let the
+// lets whole-image deploys pass all per-candy plans at once and let the
 // target merge them — useful because OCITarget may want to emit a single
 // Containerfile for the image while LocalDeployTarget may batch steps
-// across layers.
+// across candies.
 type DeployTarget interface {
 	Name() string
 	Emit(plans []*InstallPlan, opts EmitOpts) error

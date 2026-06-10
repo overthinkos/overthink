@@ -9,13 +9,13 @@ package main
 //   ~/.config/opencharly/installed/
 //     .lock                          flock for concurrent sessions
 //     deploys/
-//       <deploy-id>.json             image + add_layers + layers list
+//       <deploy-id>.json             image + add_candy + candy list
 //     candy/
-//       <layer-name>.json            per-layer steps + deployed_by set
+//       <candy-name>.json            per-candy steps + deployed_by set
 //
-// Refcounting lives in the layer files: `deployed_by` is the set of
-// deploy IDs that include this layer. Uninstalling one deploy
-// decrements the set; only when it becomes empty does the layer's
+// Refcounting lives in the candy files: `deployed_by` is the set of
+// deploy IDs that include this candy. Uninstalling one deploy
+// decrements the set; only when it becomes empty does the candy's
 // steps actually reverse.
 //
 // This file implements I/O (read/write/lock) and ledger-shape types.
@@ -126,7 +126,7 @@ type DeployRecord struct {
 	DeployedAt    string   `json:"deployed_at"`
 }
 
-// CandyRecord is the per-layer ledger entry. Lists concrete artifacts
+// CandyRecord is the per-candy ledger entry. Lists concrete artifacts
 // (packages installed, files written, services enabled, env.d file
 // created, repo changes) so reversal doesn't need to re-compile the
 // plan from the candy manifest.
@@ -196,7 +196,7 @@ func ReadDeployRecord(paths *LedgerPaths, id string) (*DeployRecord, error) {
 	return &rec, nil
 }
 
-// WriteCandyRecord serializes rec to candy/<layer>.json.
+// WriteCandyRecord serializes rec to candy/<candy>.json.
 func WriteCandyRecord(paths *LedgerPaths, rec *CandyRecord) error {
 	if err := paths.Ensure(); err != nil {
 		return err
@@ -206,7 +206,7 @@ func WriteCandyRecord(paths *LedgerPaths, rec *CandyRecord) error {
 	return writeJSONAtomic(path, rec)
 }
 
-// ReadCandyRecord loads candy/<layer>.json; returns nil, nil if absent.
+// ReadCandyRecord loads candy/<candy>.json; returns nil, nil if absent.
 func ReadCandyRecord(paths *LedgerPaths, layer string) (*CandyRecord, error) {
 	path := filepath.Join(paths.Candies, layer+".json")
 	data, err := os.ReadFile(path)
@@ -237,7 +237,7 @@ func DeleteDeployRecord(paths *LedgerPaths, id string) error {
 	return nil
 }
 
-// DeleteCandyRecord removes candy/<layer>.json.
+// DeleteCandyRecord removes candy/<candy>.json.
 func DeleteCandyRecord(paths *LedgerPaths, layer string) error {
 	path := filepath.Join(paths.Candies, layer+".json")
 	err := os.Remove(path)
@@ -265,7 +265,7 @@ func writeJSONAtomic(path string, data interface{}) error {
 // Refcount helpers
 // ---------------------------------------------------------------------------
 
-// AddCandyDeployment adds deployID to layer.DeployedBy and writes the
+// AddCandyDeployment adds deployID to candy.DeployedBy and writes the
 // record. Used at install time.
 func AddCandyDeployment(paths *LedgerPaths, candyName, deployID string, update func(*CandyRecord)) error {
 	rec, err := ReadCandyRecord(paths, candyName)
@@ -287,10 +287,10 @@ func AddCandyDeployment(paths *LedgerPaths, candyName, deployID string, update f
 	return WriteCandyRecord(paths, rec)
 }
 
-// RemoveCandyDeployment decrements a layer's deployed_by set. Returns
+// RemoveCandyDeployment decrements a candy's deployed_by set. Returns
 // (recordAfter, shouldFullyRemove, error). When shouldFullyRemove is
 // true, the caller should perform the actual file/package/service
-// teardown and then delete the layer ledger entry.
+// teardown and then delete the candy ledger entry.
 func RemoveCandyDeployment(paths *LedgerPaths, candyName, deployID string) (*CandyRecord, bool, error) {
 	rec, err := ReadCandyRecord(paths, candyName)
 	if err != nil {
@@ -350,7 +350,7 @@ func AddCandyDeploymentVia(exec DeployExecutor, paths *LedgerPaths, candyName, d
 	}
 	ctx := context.Background()
 	// Substrate ledger dirs. The layers-dir basename stays `layers` (NOT `candy`)
-	// — it must match DefaultLedgerPaths.Layers and the path the local reader
+	// — it must match DefaultLedgerPaths.Candies and the path the local reader
 	// expects (the box/candy rebrand deliberately preserved this on-disk ledger
 	// path). Single-source candiesDir/deploysDir so the write target and the mkdir
 	// can NEVER diverge again (the rebrand's bug was exactly that divergence —

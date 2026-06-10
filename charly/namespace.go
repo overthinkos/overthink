@@ -47,7 +47,7 @@ func splitNamespaceRef(ref string) (ns, rest string, ok bool) {
 // returning the final member name — e.g. "charly.arch-builder" -> "arch-builder",
 // "a.b.c" -> "c", bare "fedora" -> "fedora". Paired with resolveBoxRef's
 // returned namespace Config, it gives the key under which the resolved entity
-// lives in that Config's Image map.
+// lives in that Config's Box map.
 func leafName(ref string) string {
 	for {
 		_, rest, ok := splitNamespaceRef(ref)
@@ -76,11 +76,11 @@ func (c *Config) resolveBoxRef(ref string) (BoxConfig, *Config, bool) {
 	return img, c, true
 }
 
-// findBoxByLeaf searches for an image whose leaf (unqualified) name equals
-// `leaf` — first in c's own root image map, then recursively in each imported
+// findBoxByLeaf searches for a box whose leaf (unqualified) name equals
+// `leaf` — first in c's own root box map, then recursively in each imported
 // namespace (deterministic alias order). Returns the fully-qualified ref under
-// which the image is reachable from c (bare for a root hit, `ns.<...>` for a
-// namespaced hit), or ok=false when no image with that leaf exists anywhere in
+// which the box is reachable from c (bare for a root hit, `ns.<...>` for a
+// namespaced hit), or ok=false when no box with that leaf exists anywhere in
 // the namespace tree.
 //
 // This is the DISCOVERY dual of resolveBoxRef: resolveBoxRef resolves a
@@ -88,7 +88,7 @@ func (c *Config) resolveBoxRef(ref string) (BoxConfig, *Config, bool) {
 // qualification for a bare leaf that may live in a namespace. ensure-image's
 // build-fallback needs it because it only has the basename of a full registry
 // ref (e.g. `arch-builder` extracted from
-// `ghcr.io/overthinkos/arch-builder:<tag>`) and must find that the image lives
+// `ghcr.io/overthinkos/arch-builder:<tag>`) and must find that the box lives
 // under the `charly` namespace to build it locally.
 func (c *Config) findBoxByLeaf(leaf string) (string, bool) {
 	if leaf == "" {
@@ -145,7 +145,7 @@ func (c *Config) resolveNamespacedBases(out map[string]*ResolvedBox, calverTag, 
 			// Qualified builder refs (e.g. a submodule image's
 			// `builder: {pixi: charly.arch-builder}`) are pulled in so the generator
 			// can resolve the builder stage's FROM — but ONLY for images that
-			// actually have layers to build. A layerless base (e.g. cachyos.cachyos)
+			// actually have candies to build. A candyless base (e.g. cachyos.cachyos)
 			// needs no builder, and its builder map is namespace-relative to ITS
 			// own namespace (so the ref would not resolve from the root context).
 			// A local/layered image's builder refs ARE relative to the config

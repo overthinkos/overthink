@@ -6,7 +6,7 @@ package main
 // a GOOS build constraint (android) and would exclude it from a linux/amd64
 // build. The "apk" name reflects the apk: package-install payload.
 //
-// A target:android deploy installs its add_layer: layers' apk: packages
+// A target:android deploy installs its add_candy: candies' apk: packages
 // onto a kind:android DEVICE (an in-pod emulator or a remote adb endpoint)
 // via AndroidDeployTarget. The apps ride in on the compiled plans'
 // ApkInstallStep entries. Add resolves + readiness-gates the device then
@@ -21,7 +21,7 @@ import (
 	"os"
 )
 
-// Add installs the deploy's add_layer: apk packages onto the kind:android
+// Add installs the deploy's add_candy: apk packages onto the kind:android
 // device. node fields come from dctx.Node (the dispatch-merged node).
 func (t *AndroidUnifiedTarget) Add(ctx context.Context, dctx *DeployContext, plans []*InstallPlan, opts EmitOpts) error {
 	node := dctx.Node

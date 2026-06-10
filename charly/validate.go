@@ -32,7 +32,7 @@ func (e *ValidationError) HasErrors() bool {
 	return len(e.Errors) > 0
 }
 
-// Validate validates the configuration and layers. opts.IncludeDisabled
+// Validate validates the configuration and candies. opts.IncludeDisabled
 // extends the validation pass to images marked enabled: false (the
 // validator pre-filters them out by default to keep its working-set
 // aligned with the build verb).
@@ -61,10 +61,10 @@ func Validate(cfg *Config, layers map[string]*Candy, dir string, opts ResolveOpt
 		validateBuildAndDistro(cfg, defaultDistroCfg, errs)
 	}
 
-	// Validate layers referenced in images
+	// Validate candies referenced in images
 	validateCandyReferences(cfg, layers, errs)
 
-	// Validate layer contents
+	// Validate candy contents
 	validateCandyContents(layers, errs)
 
 	// Validate tasks: field (replaces root.yml/user.yml)
@@ -110,13 +110,13 @@ func Validate(cfg *Config, layers map[string]*Candy, dir string, opts ResolveOpt
 
 	// Tunnel is a deploy-time concern (charly.yml only) — not validated here.
 
-	// Validate layer composition (layer: field)
+	// Validate candy composition (candy: field)
 	validateCandyIncludes(layers, errs)
 
-	// Validate no circular dependencies in layers
+	// Validate no circular dependencies in candies
 	validateCandyDAG(cfg, layers, errs)
 
-	// Validate remote layer consistency
+	// Validate remote candy consistency
 	validateRemoteCandies(cfg, layers, errs)
 
 	// Validate systemd service files
@@ -157,7 +157,7 @@ func Validate(cfg *Config, layers map[string]*Candy, dir string, opts ResolveOpt
 	// Validate mcp_requires and mcp_accepts declarations
 	validateMCPDeps(layers, errs)
 
-	// Validate data layers and data images
+	// Validate data candies and data images
 	validateDataCandies(cfg, layers, errs)
 
 	// Validate init system dependencies (driven by build.yml init: section)
@@ -179,9 +179,9 @@ func Validate(cfg *Config, layers map[string]*Candy, dir string, opts ResolveOpt
 	return nil
 }
 
-// validateLocalTemplates checks each kind:local entity for: layer
-// references that resolve, an empty `layers: []` (warning, allowed for
-// stub placeholders), and a missing `layers:` field entirely (error).
+// validateLocalTemplates checks each kind:local entity for: candy
+// references that resolve, an empty `candy: []` (warning, allowed for
+// stub placeholders), and a missing `candy:` field entirely (error).
 // Also hard-errors on legacy `images:` fields surviving the 2026-05
 // deploy-fetch-narrowing cutover (see validateLegacyLocalImagesField).
 func validateLocalTemplates(dir string, layers map[string]*Candy, errs *ValidationError) {
@@ -199,7 +199,7 @@ func validateLocalTemplates(dir string, layers map[string]*Candy, errs *Validati
 		}
 		for _, candyRef := range spec.Candy {
 			// Normalize remote @-refs to their bare key form (mirror of the
-			// image layer path in validateCandyReferences) — remote layers are
+			// image candy path in validateCandyReferences) — remote candies are
 			// stored in the map keyed by bare ref.
 			candyName := BareRef(candyRef)
 			if _, ok := layers[candyName]; !ok {
@@ -279,8 +279,8 @@ func validateLocalDeployments(dir string, errs *ValidationError) {
 }
 
 // validateInitDependencies checks that images using an init system have the
-// required dependency layer in their resolved dependency chain.
-// For example, images with supervisord services must include the "supervisord" layer.
+// required dependency candy in their resolved dependency chain.
+// For example, images with supervisord services must include the "supervisord" candy.
 func validateInitDependencies(cfg *Config, initCfg *InitConfig, layers map[string]*Candy, errs *ValidationError) {
 	if initCfg == nil {
 		return
@@ -291,14 +291,14 @@ func validateInitDependencies(cfg *Config, initCfg *InitConfig, layers map[strin
 			continue
 		}
 
-		// Resolve all layers for this image (own + transitive deps)
+		// Resolve all candies for this image (own + transitive deps)
 		resolved, err := ResolveCandyOrder(img.Candy, layers, nil)
 		if err != nil {
 			continue // other validators handle resolution errors
 		}
 
 		// For each init system with a depends_candy, check if it's needed and present.
-		// Layer-derived caps replace the prior img.Bootc magic flag.
+		// Candy-derived caps replace the prior img.Bootc magic flag.
 		caps, _ := AggregateCandyCapabilities(layers, resolved)
 		if caps == nil {
 			caps = &AggregatedCandyCaps{Provided: map[string]bool{}}
@@ -314,7 +314,7 @@ func validateInitDependencies(cfg *Config, initCfg *InitConfig, layers map[strin
 			if !initDefRequirementsMet(def, caps) {
 				continue
 			}
-			// For bootc-flavored compositions with dual-init layers
+			// For bootc-flavored compositions with dual-init candies
 			// (service: + system_services:), skip supervisord depends_candy
 			// check when systemd is also triggered.
 			if len(def.RequiresCapability) == 0 && isBootcFlavored {
@@ -330,7 +330,7 @@ func validateInitDependencies(cfg *Config, initCfg *InitConfig, layers map[strin
 				}
 			}
 
-			// Check if any layer requires this init system
+			// Check if any candy requires this init system
 			var needsInit []string
 			for _, candyName := range resolved {
 				layer, ok := layers[candyName]
@@ -350,13 +350,13 @@ func validateInitDependencies(cfg *Config, initCfg *InitConfig, layers map[strin
 				continue
 			}
 
-			// Check if the depends_candy is in the resolved layers
+			// Check if the depends_candy is in the resolved candies
 			hasDepCandy := false
 			for _, candyName := range resolved {
 				// candyName is the resolved-order map KEY — for a remotely
 				// consumed @github candy that's the qualified path, not the bare
-				// name. Compare the layer's identity (layer.Name), per the idiom
-				// documented at generate.go ("for REMOTE layers candyName is the
+				// name. Compare the candy's identity (layer.Name), per the idiom
+				// documented at generate.go ("for REMOTE candies candyName is the
 				// full @github map key; local: candyName == layer.Name").
 				if l, ok := layers[candyName]; ok && l.Name == def.DependsCandy {
 					hasDepCandy = true
@@ -379,9 +379,9 @@ func validateInitDependencies(cfg *Config, initCfg *InitConfig, layers map[strin
 			}
 
 			if !hasDepCandy {
-				// For dual-init layers (e.g., sshd with both service: and system_services:),
-				// skip the error if ALL triggering layers also support another init system.
-				// The layer is designed to use whichever init system the image provides.
+				// For dual-init candies (e.g., sshd with both service: and system_services:),
+				// skip the error if ALL triggering candies also support another init system.
+				// The candy is designed to use whichever init system the image provides.
 				allDualInit := true
 				for _, candyName := range resolved {
 					layer, ok := layers[candyName]
@@ -441,7 +441,7 @@ func validateBuildAndDistro(cfg *Config, distroCfg *DistroConfig, errs *Validati
 	}
 }
 
-// validateCandyReferences ensures all layers referenced in images exist
+// validateCandyReferences ensures all candies referenced in images exist
 func validateCandyReferences(cfg *Config, layers map[string]*Candy, errs *ValidationError) {
 	for boxName, img := range cfg.Box {
 		if !img.IsEnabled() {
@@ -466,19 +466,19 @@ func validateCandyReferences(cfg *Config, layers map[string]*Candy, errs *Valida
 	}
 }
 
-// validateCandyContents validates each layer has required files
+// validateCandyContents validates each candy has required files
 func validateCandyContents(layers map[string]*Candy, errs *ValidationError) {
 	for name, layer := range layers {
-		// Layer must have at least one install file, a layer: field (composition), or data declarations
+		// Candy must have at least one install file, a candy: field (composition), or data declarations
 		if !layer.HasInstallFiles() && len(layer.IncludedCandy) == 0 && !layer.HasData() {
 			errs.Add("layer %q: must have at least one install file (candy manifest rpm/deb packages, root.yml, pixi.toml, pyproject.toml, environment.yml, package.json, Cargo.toml, or user.yml) or a layer: field", name)
 		}
 
-		// `version:` is MANDATORY for the layer kind (optional for every other
+		// `version:` is MANDATORY for the candy kind (optional for every other
 		// kind). It is the authoritative per-entity version that drives both the
 		// image's content-stable ai.opencharly.version label and cross-repo
-		// layer resolution (pickCandyVersion). Scoped to local layers — a fetched
-		// remote layer with no version is already a hard error at scan time
+		// candy resolution (pickCandyVersion). Scoped to local candies — a fetched
+		// remote candy with no version is already a hard error at scan time
 		// (ScanAllCandyWithConfigOpts). Run `charly migrate` to backfill.
 		if !layer.Remote && layer.Version == "" {
 			errs.Add("layer %q: missing required `version:` (CalVer YYYY.DDD.HHMM). Run: charly migrate", name)
@@ -495,7 +495,7 @@ func validateCandyContents(layers map[string]*Candy, errs *ValidationError) {
 			errs.Add("layer %q: Cargo.toml requires src/ directory", name)
 		}
 
-		// Validate depends references. Remote layers' deps were qualified to
+		// Validate depends references. Remote candies' deps were qualified to
 		// fully-qualified map keys at scan time (qualifyRemoteSiblingDeps), so a
 		// direct lookup covers both local short names and remote sibling refs.
 		for _, depRef := range layer.Require {
@@ -625,7 +625,7 @@ func validateShellPath(candyName, field, p string, errs *ValidationError) {
 	}
 }
 
-// validateCandyIncludes validates layer composition (layer: field in the candy manifest)
+// validateCandyIncludes validates candy composition (candy: field in the candy manifest)
 func validateCandyIncludes(layers map[string]*Candy, errs *ValidationError) {
 	for name, layer := range layers {
 		if len(layer.IncludedCandy) == 0 {
@@ -674,7 +674,7 @@ func validateCandyIncludes(layers map[string]*Candy, errs *ValidationError) {
 	}
 }
 
-// checkIncludeCycle detects circular layer composition
+// checkIncludeCycle detects circular candy composition
 func checkIncludeCycle(name string, layers map[string]*Candy, visited map[string]bool) error {
 	if visited == nil {
 		visited = make(map[string]bool)
@@ -718,10 +718,10 @@ func validateEnvFiles(layers map[string]*Candy, errs *ValidationError) {
 // validatePkgConfig validates per-distro/format package config in the candy
 // manifest. Packages live in per-distro tag sections (debian, ubuntu, debian:13,
 // …) plus the always-included top-level base; the only format section is `aur`.
-// repo/copr/module entries are meaningful only when the layer installs packages,
+// repo/copr/module entries are meaningful only when the candy installs packages,
 // but a repo may sit on one distro level while the package it serves sits at the
 // top-level base (the nodesource pattern) — so the "requires packages" gate is
-// the WHOLE-LAYER union (HasAnyPackages), not the single section. Repo entries
+// the WHOLE-CANDY union (HasAnyPackages), not the single section. Repo entries
 // must carry a name. The canonical repo key is `repo` (singular) — what
 // derivePackageSectionsFromCalamares writes and DistroPackages.Repo unmarshals.
 func validatePkgConfig(layers map[string]*Candy, errs *ValidationError) {
@@ -805,15 +805,15 @@ func validateBoxDAG(cfg *Config, layers map[string]*Candy, dir string, opts Reso
 		} else {
 			errs.Add("image DAG error: %v", orderErr)
 		}
-		// A cyclic / broken image DAG was already reported; the global layer
+		// A cyclic / broken image DAG was already reported; the global candy
 		// order over it is meaningless, so stop here.
 		return
 	}
 
-	// Resolve the GLOBAL layer order over the enriched image set (locals PLUS the
+	// Resolve the GLOBAL candy order over the enriched image set (locals PLUS the
 	// namespace-pulled bases/builders above) — the SAME computation that
 	// `charly box generate`/`build` run (ComputeIntermediates → GlobalCandyOrder).
-	// validateCandyDAG only iterates cfg.Image, so a layer missing from a PULLED
+	// validateCandyDAG only iterates cfg.Box, so a candy missing from a PULLED
 	// builder (e.g. an imported charly.fedora-builder's rpmfusion) slipped past
 	// validate yet failed generate; running it here restores validate↔generate
 	// agreement so the gap is caught at validate time, not only at build time.
@@ -823,14 +823,14 @@ func validateBoxDAG(cfg *Config, layers map[string]*Candy, dir string, opts Reso
 	}
 }
 
-// validateCandyDAG checks for circular layer dependencies
+// validateCandyDAG checks for circular candy dependencies
 func validateCandyDAG(cfg *Config, layers map[string]*Candy, errs *ValidationError) {
-	// Check each image's layers for cycles
+	// Check each image's candies for cycles
 	for boxName, img := range cfg.Box {
 		if !img.IsEnabled() {
 			continue
 		}
-		// Convert raw refs to bare refs for layer map lookup
+		// Convert raw refs to bare refs for candy map lookup
 		bareCandies := make([]string, len(img.Candy))
 		for i, ref := range img.Candy {
 			bareCandies[i] = BareRef(ref)
@@ -846,9 +846,9 @@ func validateCandyDAG(cfg *Config, layers map[string]*Candy, errs *ValidationErr
 	}
 }
 
-// validatePort validates port declarations in layers and images
+// validatePort validates port declarations in candies and images
 func validatePort(cfg *Config, layers map[string]*Candy, errs *ValidationError) {
-	// Validate layer ports from the candy manifest
+	// Validate candy ports from the candy manifest
 	for name, layer := range layers {
 		if !layer.HasPorts() {
 			continue
@@ -896,7 +896,7 @@ func validatePort(cfg *Config, layers map[string]*Candy, errs *ValidationError) 
 	}
 }
 
-// validateRoutes validates route file declarations in layers
+// validateRoutes validates route file declarations in candies
 func validateRoutes(cfg *Config, layers map[string]*Candy, errs *ValidationError) {
 	// Validate route config from the candy manifest
 	for name, layer := range layers {
@@ -991,7 +991,7 @@ func validateBuildTunables(cfg *Config, errs *ValidationError) {
 // volumeNameRe matches valid volume names: lowercase alphanumeric + hyphens
 var volumeNameRe = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
 
-// validateVolume validates volume declarations in layers
+// validateVolume validates volume declarations in candies
 func validateVolume(layers map[string]*Candy, errs *ValidationError) {
 	for name, layer := range layers {
 		if !layer.HasVolumes() {
@@ -1015,9 +1015,9 @@ func validateVolume(layers map[string]*Candy, errs *ValidationError) {
 	}
 }
 
-// validateAliases validates alias declarations in layers and images
+// validateAliases validates alias declarations in candies and images
 func validateAliases(cfg *Config, layers map[string]*Candy, errs *ValidationError) {
-	// Validate layer aliases
+	// Validate candy aliases
 	for name, layer := range layers {
 		if !layer.HasAliases() {
 			continue
@@ -1152,10 +1152,10 @@ func validateBuilders(cfg *Config, layers map[string]*Candy, builderCfg *Builder
 			buildFmtSet[f] = true
 		}
 
-		// Check if layers need builders that aren't configured.
+		// Check if candies need builders that aren't configured.
 		// Detection is fully config-driven from build.yml builder: section:
-		//   detect_files: layer has any of these files
-		//   detect_config: layer has this format section with packages
+		//   detect_files: candy has any of these files
+		//   detect_config: candy has this format section with packages
 		candyOrder, err := ResolveCandyOrder(img.Candy, layers, nil)
 		if err != nil {
 			continue
@@ -1186,15 +1186,15 @@ func validateBuilders(cfg *Config, layers map[string]*Candy, builderCfg *Builder
 				// include that format. The IR compiler
 				// (install_build.go:236-249) iterates only img.BuildFormats, so
 				// the section is unreachable for this image — the builder is
-				// not actually needed even though the layer has the section.
-				// Multi-distro layers can carry rpm: + pac: + aur:
+				// not actually needed even though the candy has the section.
+				// Multi-distro candies can carry rpm: + pac: + aur:
 				// simultaneously without forcing every Fedora consumer to
 				// declare an arch-builder.
 				//
 				// detect_files-based detection is NOT gated: pixi/npm/cargo
 				// artifacts are produced once at build time and copied into
 				// the final stage regardless of distro, so the builder is
-				// required for any image consuming the layer.
+				// required for any image consuming the candy.
 				if !fileMatched && configMatched && !buildFmtSet[builderDef.DetectConfig] {
 					continue
 				}
@@ -1397,7 +1397,7 @@ func validateTunnel(cfg *Config, layers map[string]*Candy, errs *ValidationError
 	_ = layers
 }
 
-// validateRemoteCandies checks remote layer consistency
+// validateRemoteCandies checks remote candy consistency
 func validateRemoteCandies(cfg *Config, layers map[string]*Candy, errs *ValidationError) {
 	// Check version conflicts (same repo referenced with different versions)
 	_, err := CollectRemoteRefs(cfg, layers)
@@ -1405,7 +1405,7 @@ func validateRemoteCandies(cfg *Config, layers map[string]*Candy, errs *Validati
 		errs.Add("%v", err)
 	}
 
-	// Check for naming conflicts between remote layers from different repos
+	// Check for naming conflicts between remote candies from different repos
 	for _, layer := range layers {
 		if !layer.Remote {
 			continue
@@ -1421,7 +1421,7 @@ func validateRemoteCandies(cfg *Config, layers map[string]*Candy, errs *Validati
 	}
 }
 
-// validateSystemdServices validates systemd .service files in layers
+// validateSystemdServices validates systemd .service files in candies
 func validateSystemdServices(cfg *Config, layers map[string]*Candy, errs *ValidationError) {
 	for name, layer := range layers {
 		if len(layer.ServiceFiles()) == 0 {
@@ -1440,11 +1440,11 @@ func validateSystemdServices(cfg *Config, layers map[string]*Candy, errs *Valida
 	}
 }
 
-// validatePackagedServices validates use_packaged: entries in each layer's
+// validatePackagedServices validates use_packaged: entries in each candy's
 // service: list. Use_packaged names the distro-shipped systemd unit that the
 // entry reuses (e.g. "sshd.service", "postgresql.service"). Rules:
 //   - use_packaged name cannot contain paths or spaces (must be a unit name).
-//   - The layer must declare packages that provide those units.
+//   - The candy must declare packages that provide those units.
 //   - Packaged entries only work on bootc / systemd images; warn otherwise.
 func validatePackagedServices(cfg *Config, layers map[string]*Candy, errs *ValidationError) {
 	candyHasPackaged := func(l *Candy) bool {
@@ -1475,14 +1475,14 @@ func validatePackagedServices(cfg *Config, layers map[string]*Candy, errs *Valid
 	}
 
 	// Warn if use_packaged is used on a composition that doesn't preserve
-	// the layer USER (i.e. non-bootc-flavored images). Only systemd-based
+	// the candy USER (i.e. non-bootc-flavored images). Only systemd-based
 	// compositions consume packaged units; supervisord, the container
 	// default init, can't.
 	for boxName, img := range cfg.Box {
 		if !img.IsEnabled() {
 			continue
 		}
-		// Resolve layer order to aggregate caps for this image.
+		// Resolve candy order to aggregate caps for this image.
 		var imgCandies []string
 		for _, ref := range img.Candy {
 			imgCandies = append(imgCandies, BareRef(ref))
@@ -1502,7 +1502,7 @@ func validatePackagedServices(cfg *Config, layers map[string]*Candy, errs *Valid
 	}
 }
 
-// candyHasOrphanPackaged reports whether the layer has a use_packaged service
+// candyHasOrphanPackaged reports whether the candy has a use_packaged service
 // entry with NO custom-exec sibling of the same name. Only such "orphan"
 // packaged units are genuinely dropped under supervisord (the container default
 // init can't consume packaged systemd units), so only they warrant the
@@ -1588,9 +1588,9 @@ func levenshteinDistance(a, b string) int {
 	return matrix[len(a)][len(b)]
 }
 
-// validateLibvirt validates libvirt XML snippets in layers and images
+// validateLibvirt validates libvirt XML snippets in candies and images
 func validateLibvirt(cfg *Config, layers map[string]*Candy, errs *ValidationError) {
-	// Validate layer-level snippets
+	// Validate candy-level snippets
 	for name, layer := range layers {
 		if !layer.HasLibvirt() {
 			continue
@@ -1603,18 +1603,18 @@ func validateLibvirt(cfg *Config, layers map[string]*Candy, errs *ValidationErro
 	}
 
 	// Image-level `libvirt:` field was removed in the VM hard-cutover.
-	// Raw XML snippets live on layer `libvirt:` fields (validated above)
+	// Raw XML snippets live on candy `libvirt:` fields (validated above)
 	// and on `kind: vm` entity `spec.libvirt.snippets:` lists (validated
 	// by ValidateLibvirtDomain in libvirt_validate.go).
 	_ = cfg
 	_ = layers
 }
 
-// validateEngineConfig validates engine declarations in layers and images
+// validateEngineConfig validates engine declarations in candies and images
 func validateEngineConfig(cfg *Config, layers map[string]*Candy, errs *ValidationError) {
 	validEngines := map[string]bool{"docker": true, "podman": true}
 
-	// Validate layer engine declarations
+	// Validate candy engine declarations
 	for name, layer := range layers {
 		if e := layer.Engine(); e != "" && !validEngines[e] {
 			errs.Add("layer %q: engine must be \"docker\" or \"podman\", got %q", name, e)
@@ -1622,7 +1622,7 @@ func validateEngineConfig(cfg *Config, layers map[string]*Candy, errs *Validatio
 	}
 
 	// Schema v4: BoxConfig.Engine removed (deploy-only choice).
-	// Defaults.Engine + per-image Engine no longer exist. Layer-level
+	// Defaults.Engine + per-image Engine no longer exist. Candy-level
 	// conflict detection still applies below.
 
 	for boxName, img := range cfg.Box {
@@ -1630,13 +1630,13 @@ func validateEngineConfig(cfg *Config, layers map[string]*Candy, errs *Validatio
 			continue
 		}
 
-		// Check for conflicting layer engine requirements within the image
+		// Check for conflicting candy engine requirements within the image
 		resolved, err := ResolveCandyOrder(img.Candy, layers, nil)
 		if err != nil {
 			continue
 		}
 
-		engineSources := make(map[string]string) // engine value -> first layer declaring it
+		engineSources := make(map[string]string) // engine value -> first candy declaring it
 		for _, candyName := range resolved {
 			layer, ok := layers[candyName]
 			if !ok {
@@ -1659,7 +1659,7 @@ func validateEngineConfig(cfg *Config, layers map[string]*Candy, errs *Validatio
 	}
 }
 
-// validatePortRelay validates port_relay declarations in layers
+// validatePortRelay validates port_relay declarations in candies
 func validatePortRelay(cfg *Config, layers map[string]*Candy, errs *ValidationError) {
 	for name, layer := range layers {
 		if len(layer.PortRelayPorts) == 0 {
@@ -1677,7 +1677,7 @@ func validatePortRelay(cfg *Config, layers map[string]*Candy, errs *ValidationEr
 			portSet[port] = true
 		}
 
-		// Warn if relay port isn't declared in the layer's ports
+		// Warn if relay port isn't declared in the candy's ports
 		if layer.HasPorts() {
 			candyPorts := make(map[int]bool)
 			for _, ps := range layer.PortSpecs() {
@@ -1693,7 +1693,7 @@ func validatePortRelay(cfg *Config, layers map[string]*Candy, errs *ValidationEr
 		}
 	}
 
-	// Validate that images with port_relay layers include the socat layer
+	// Validate that images with port_relay candies include the socat candy
 	for boxName, img := range cfg.Box {
 		if !img.IsEnabled() {
 			continue
@@ -1746,7 +1746,7 @@ var validStatuses = map[string]bool{
 // calverRe matches CalVer format: YYYY.DDD.HHMM (3 dot-separated non-negative integers)
 var calverRe = regexp.MustCompile(`^\d+\.\d+\.\d+$`)
 
-// validateStatus validates status tags in description.tag for layers
+// validateStatus validates status tags in description.tag for candies
 // and images. Accepts empty (defaults to testing) plus working/testing/
 // broken. The status word is one of many possible Description.Tag
 // entries — others are free-form and not policed here.
@@ -1773,7 +1773,7 @@ func validateStatus(cfg *Config, layers map[string]*Candy, errs *ValidationError
 	}
 }
 
-// validateVersionFields validates version fields in layers and images.
+// validateVersionFields validates version fields in candies and images.
 func validateVersionFields(cfg *Config, layers map[string]*Candy, errs *ValidationError) {
 	for name, layer := range layers {
 		if layer.Version != "" && !calverRe.MatchString(layer.Version) {
@@ -1790,7 +1790,7 @@ func validateVersionFields(cfg *Config, layers map[string]*Candy, errs *Validati
 	}
 }
 
-// candyHasFile checks if a layer has a specific file (used for builder detection).
+// candyHasFile checks if a candy has a specific file (used for builder detection).
 func candyHasFile(layer *Candy, filename string) bool {
 	switch filename {
 	case "pixi.toml":
@@ -1808,14 +1808,14 @@ func candyHasFile(layer *Candy, filename string) bool {
 	}
 }
 
-// candyHasFormatConfig checks if a layer has a non-empty config section for a format.
+// candyHasFormatConfig checks if a candy has a non-empty config section for a format.
 // Fully generic — uses the FormatSection accessor which checks both typed and dynamic sections.
 func candyHasFormatConfig(layer *Candy, formatName string) bool {
 	section := layer.FormatSection(formatName)
 	return section != nil && len(section.Packages) > 0
 }
 
-// validateDataCandies checks data layer declarations and data image constraints.
+// validateDataCandies checks data candy declarations and data image constraints.
 func validateDataCandies(cfg *Config, layers map[string]*Candy, errs *ValidationError) {
 	// Validate data src directories exist
 	for name, layer := range layers {
@@ -1836,13 +1836,13 @@ func validateDataCandies(cfg *Config, layers map[string]*Candy, errs *Validation
 			continue
 		}
 
-		// Resolve layers for this image
+		// Resolve candies for this image
 		resolved, err := ResolveCandyOrder(img.Candy, layers, nil)
 		if err != nil {
-			continue // layer resolution errors are caught elsewhere
+			continue // candy resolution errors are caught elsewhere
 		}
 
-		// Collect all volume names declared in this image's layer chain
+		// Collect all volume names declared in this image's candy chain
 		volumeNames := make(map[string]bool)
 		for _, candyName := range resolved {
 			layer, ok := layers[candyName]
@@ -1897,7 +1897,7 @@ func validateDataCandies(cfg *Config, layers map[string]*Candy, errs *Validation
 	}
 }
 
-// validateEnvProvides checks env_provides declarations in layers.
+// validateEnvProvides checks env_provides declarations in candies.
 func validateEnvProvides(layers map[string]*Candy, errs *ValidationError) {
 	for name, layer := range layers {
 		if !layer.HasEnvProvides() {
@@ -1917,7 +1917,7 @@ func validateEnvProvides(layers map[string]*Candy, errs *ValidationError) {
 				errs.Add("layer %s: env_provides[%s] contains unknown or malformed template variable (allowed: {{.ContainerName}}, {{.HostPort N}}, {{.ContainerPort N}}): %s", name, key, tmpl)
 			}
 
-			// Note: env_provides key may intentionally overlap with env key in the same layer.
+			// Note: env_provides key may intentionally overlap with env key in the same candy.
 			// env is baked into the service's own image (e.g., OLLAMA_HOST="0.0.0.0" for binding).
 			// env_provides is injected into OTHER containers (e.g., OLLAMA_HOST="http://charly-ollama:11434").
 		}
@@ -1925,9 +1925,9 @@ func validateEnvProvides(layers map[string]*Candy, errs *ValidationError) {
 }
 
 // validateEnvDeps checks env_requires, env_accepts, secret_requires, and
-// secret_accepts declarations in layers. A single `seen` map enforces the rule
+// secret_accepts declarations in candies. A single `seen` map enforces the rule
 // that an env var name cannot appear in more than one of these four sections
-// within the same layer — each entry is either a plaintext-safe accept/require
+// within the same candy — each entry is either a plaintext-safe accept/require
 // or a credential-backed accept/require, never both.
 func validateEnvDeps(layers map[string]*Candy, errs *ValidationError) {
 	for name, layer := range layers {
@@ -1964,7 +1964,7 @@ func validateDepEntries(candyName, section string, entries []EnvDependency, seen
 
 // secretKeyPattern matches the optional Key field on secret_accepts /
 // secret_requires entries. Enforces <service>/<key> with an "charly/" prefix to
-// prevent layers from exfiltrating unrelated user credentials (e.g.,
+// prevent candies from exfiltrating unrelated user credentials (e.g.,
 // "aws/access-key") into a podman secret. Plan §2.7 / §4.4 rule 5.
 var secretKeyPattern = regexp.MustCompile(`^charly/[a-z0-9][a-z0-9-]*/[a-z0-9][a-z0-9_-]*$`)
 
@@ -2025,7 +2025,7 @@ func validateSecretDeps(layers map[string]*Candy, errs *ValidationError) {
 	}
 }
 
-// validateMCPProvides checks mcp_provides declarations in layers.
+// validateMCPProvides checks mcp_provides declarations in candies.
 func validateMCPProvides(layers map[string]*Candy, errs *ValidationError) {
 	for name, layer := range layers {
 		if !layer.HasMCPProvides() {
@@ -2061,7 +2061,7 @@ func validateMCPProvides(layers map[string]*Candy, errs *ValidationError) {
 	}
 }
 
-// validateMCPDeps checks mcp_requires and mcp_accepts declarations in layers.
+// validateMCPDeps checks mcp_requires and mcp_accepts declarations in candies.
 func validateMCPDeps(layers map[string]*Candy, errs *ValidationError) {
 	for name, layer := range layers {
 		seen := make(map[string]string) // name -> "requires" or "accepts"
@@ -2142,7 +2142,7 @@ var (
 //   - path / mode / caps format checks
 //   - vars: key rules (pattern, no auto-export collision, no env: collision)
 //   - ${VAR} references resolve against vars ∪ auto-exports
-//   - dual-config: tasks: AND root.yml/user.yml in same layer → error
+//   - dual-config: tasks: AND root.yml/user.yml in same candy → error
 //   - build: value restricted to "all" in initial implementation
 func validateCandyTasks(layers map[string]*Candy, errs *ValidationError) {
 	for name, layer := range layers {
@@ -2182,7 +2182,7 @@ func validateCandyTasks(layers map[string]*Candy, errs *ValidationError) {
 
 // validateSingleTask runs per-verb modifier and field validation for a single
 // task. Errors accumulate in errs. known is the set of ${VAR} names that
-// resolve (auto-exports ∪ layer.Vars keys).
+// resolve (auto-exports ∪ candy.Vars keys).
 func validateSingleTask(candyName string, idx int, verb string, t *Task, known map[string]bool, errs *ValidationError) {
 	// user: format check
 	if t.User != "" {

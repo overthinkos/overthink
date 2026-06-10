@@ -16,9 +16,9 @@ package main
 //
 // Section semantics (identical for both LabelEvalSet and
 // LabelDescriptionSet):
-//   - Layer:  one entry per layer in the chain that contributes
+//   - Candy:  one entry per candy in the chain that contributes
 //             tests / a description.
-//   - Image:  the image's own image-level entries.
+//   - Box:    the box's own box-level entries.
 //   - Deploy: deploy-scope entries (build-time defaults baked into
 //             the image; charly.yml overlays merge into this section
 //             at test/run time, not here).
@@ -42,7 +42,7 @@ func (s *LabelSet) IsEmpty() bool {
 }
 
 // LabelEvalSet is the three-section structure embedded in the
-// ai.opencharly.tests OCI label: layer-contributed checks, image-level
+// ai.opencharly.tests OCI label: candy-contributed checks, box-level
 // checks, and deploy-default checks.
 type LabelEvalSet struct {
 	Candy  []Check `json:"candy,omitempty"`
@@ -60,8 +60,8 @@ func (s *LabelEvalSet) IsEmpty() bool {
 }
 
 // LabelDescriptionSet is the three-section structure embedded in the
-// ai.opencharly.description OCI label: layer-contributed descriptions
-// (one per layer), image-level description (one), deploy-default
+// ai.opencharly.description OCI label: candy-contributed descriptions
+// (one per candy), box-level description (one), deploy-default
 // description (one — usually from charly.yml overlays).
 //
 // Mirrors LabelEvalSet's shape so the collection + merge pipeline and
@@ -73,7 +73,7 @@ type LabelDescriptionSet struct {
 }
 
 // LabeledDescription is a Description with its collection-time origin
-// annotation. Origin follows the `layer:<name>` / `image:<name>` /
+// annotation. Origin follows the `candy:<name>` / `box:<name>` /
 // `deploy-default` / `deploy-local` convention also used by
 // LabelEvalSet entries' Origin field.
 type LabeledDescription struct {

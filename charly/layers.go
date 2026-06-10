@@ -73,16 +73,16 @@ type ExtractYAML struct {
 	Dest   string `yaml:"dest"`   // Destination in target image (e.g., "/opt/immich/server")
 }
 
-// DataYAML represents a data mapping from the layer directory to a volume staging area.
+// DataYAML represents a data mapping from the candy directory to a volume staging area.
 // Data files are COPYed into /data/<volume>/[dest/] at build time and provisioned
 // into bind-backed volumes by charly config / charly update at deploy time.
 type DataYAML struct {
-	Src    string `yaml:"src"`            // source dir relative to layer dir (e.g., "data/notebooks")
+	Src    string `yaml:"src"`            // source dir relative to candy dir (e.g., "data/notebooks")
 	Volume string `yaml:"volume"`         // target volume name (must match a volumes[].name in the image chain)
 	Dest   string `yaml:"dest,omitempty"` // optional subdirectory within the volume path
 }
 
-// CandyArtifact declares a file the layer publishes back to the operator
+// CandyArtifact declares a file the candy publishes back to the operator
 // after its setup completes. Retrieval happens at `charly deploy add` finalization
 // via the target's back-channel (scp for SSH/VM, cp for host, podman cp for
 // container). The retrieved file is written to `RetrieveTo` with shell-style
@@ -91,7 +91,7 @@ type DataYAML struct {
 // loopback addresses in kubeconfig files, etc.
 type CandyArtifact struct {
 	// Name is a human-readable identifier (e.g. "kubeconfig"). Used in
-	// log messages and as a dedupe key when multiple layers in the same
+	// log messages and as a dedupe key when multiple candies in the same
 	// deploy declare overlapping artifacts.
 	Name string `yaml:"name" json:"name"`
 
@@ -118,7 +118,7 @@ type CandyArtifact struct {
 	Optional bool `yaml:"optional,omitempty" json:"optional,omitempty"`
 
 	// WaitSeconds is the deadline (in seconds) for the file to appear on
-	// the target before retrieval. Useful for layers whose service unit
+	// the target before retrieval. Useful for candies whose service unit
 	// transitions to "active" BEFORE the artifact file is written —
 	// canonical case: k3s.service reaches active when the binary execs,
 	// but /etc/rancher/k3s/k3s.yaml lands ~3-15s later when the API
@@ -137,7 +137,7 @@ type CandyArtifactRewrite struct {
 	Replace string `yaml:"replace" json:"replace"`
 }
 
-// EnvDependency declares an env var or MCP server that a layer needs or can use.
+// EnvDependency declares an env var or MCP server that a candy needs or can use.
 // Reused for env_requires, env_accepts, mcp_requires, mcp_accepts,
 // secret_accepts, and secret_requires.
 //
@@ -160,7 +160,7 @@ type MCPServerYAML struct {
 	Transport string `yaml:"transport,omitempty" json:"transport,omitempty"` // "http" (default), "sse"
 }
 
-// ShellConfig represents a layer's shell-init declarations (the `shell:`
+// ShellConfig represents a candy's shell-init declarations (the `shell:`
 // field in the candy manifest). Mirrors the per-distro / per-package pattern: an
 // intrinsic body (init, path_append, path, priority) plus per-shell
 // sub-blocks (bash, zsh, fish, sh) that override the intrinsic for that
@@ -249,7 +249,7 @@ func sortedEnvDeps(m map[string]EnvDependency) []EnvDependency {
 // Unknown top-level keys are captured as tag-based package sections
 // (e.g., "fedora:", "arch:", "fedora:43:", "debian,ubuntu:").
 type CandyYAML struct {
-	Version     string            `yaml:"version,omitempty"`     // CalVer version (YYYY.DDD.HHMM) of this layer definition
+	Version     string            `yaml:"version,omitempty"`     // CalVer version (YYYY.DDD.HHMM) of this candy definition
 	Description *Description      `yaml:"description,omitempty"` // Gherkin-shaped self-description; replaces retired info:/status:
 	Candy       []string          `yaml:"candy,omitempty"`
 	Require     []string          `yaml:"require,omitempty"`
@@ -272,13 +272,13 @@ type CandyYAML struct {
 	SecretYAML    []SecretYAML      `yaml:"secret,omitempty"`
 	Data          []DataYAML        `yaml:"data,omitempty"`
 	EnvProvides   map[string]string `yaml:"env_provide,omitempty"`    // env vars provided to OTHER containers when this service is deployed
-	EnvRequire    []EnvDependency   `yaml:"env_require,omitempty"`    // env vars this layer MUST have from the environment
-	EnvAccept     []EnvDependency   `yaml:"env_accept,omitempty"`     // env vars this layer CAN optionally use
-	SecretAccept  []EnvDependency   `yaml:"secret_accept,omitempty"`  // credential-store-backed env vars this layer CAN optionally use
-	SecretRequire []EnvDependency   `yaml:"secret_require,omitempty"` // credential-store-backed env vars this layer MUST have
+	EnvRequire    []EnvDependency   `yaml:"env_require,omitempty"`    // env vars this candy MUST have from the environment
+	EnvAccept     []EnvDependency   `yaml:"env_accept,omitempty"`     // env vars this candy CAN optionally use
+	SecretAccept  []EnvDependency   `yaml:"secret_accept,omitempty"`  // credential-store-backed env vars this candy CAN optionally use
+	SecretRequire []EnvDependency   `yaml:"secret_require,omitempty"` // credential-store-backed env vars this candy MUST have
 	MCPProvide    []MCPServerYAML   `yaml:"mcp_provide,omitempty"`    // MCP servers provided to OTHER containers when this service is deployed
-	MCPRequire    []EnvDependency   `yaml:"mcp_require,omitempty"`    // MCP servers this layer MUST have from the environment
-	MCPAccept     []EnvDependency   `yaml:"mcp_accept,omitempty"`     // MCP servers this layer CAN optionally use
+	MCPRequire    []EnvDependency   `yaml:"mcp_require,omitempty"`    // MCP servers this candy MUST have from the environment
+	MCPAccept     []EnvDependency   `yaml:"mcp_accept,omitempty"`     // MCP servers this candy CAN optionally use
 
 	// Calamares-aligned package surface (2026-05 cutover). The unified
 	// flat top-level `packages:` is the Calamares group / module package
@@ -290,7 +290,7 @@ type CandyYAML struct {
 	Distro  map[string]*DistroPackages `yaml:"distro,omitempty"`
 
 	// Apk is the Android app-install package format — a list of apps the
-	// layer installs onto a `kind: android` device (apkeep by package id, or
+	// candy installs onto a `kind: android` device (apkeep by package id, or
 	// a committed local APK). Parallel to package:/aur: but device-scoped, not
 	// OS-distro-scoped, so it lives at the top level rather than under distro:.
 	// Compiled into an ApkInstallStep; executed ONLY by a `target: android`
@@ -298,20 +298,20 @@ type CandyYAML struct {
 	Apk []ApkPackageSpec `yaml:"apk,omitempty"`
 
 	// LocalPkg maps a package FORMAT (pac/rpm/deb) to a bundled native-package
-	// SOURCE directory (relative to the layer dir or the project root, or
+	// SOURCE directory (relative to the candy dir or the project root, or
 	// absolute). On a DEPLOY target charly picks the entry matching the target
 	// distro's package format, builds the package from that source on the HOST,
 	// and installs the result onto the target via the format's auto-resolving
 	// local-file install (pacman -U / dnf install / apt-get install) — delivering
 	// an OS-package-tracked binary instead of an ad-hoc curl. Compiled into a
 	// LocalPkgInstallStep; skipped at image build (no host package build in a
-	// container). The canonical user is the `charly` layer:
+	// container). The canonical user is the `charly` candy:
 	// {pac: pkg/arch, rpm: pkg/fedora, deb: pkg/debian}. A legacy scalar is
 	// rejected at load with an `charly migrate` hint. See LocalPkgInstallStep.
 	LocalPkg LocalPkgMap `yaml:"localpkg,omitempty"`
 
-	// Reboot requests a reboot of the deploy target after this layer's
-	// steps (a trailing RebootStep). For kernel-module layers (e.g.
+	// Reboot requests a reboot of the deploy target after this candy's
+	// steps (a trailing RebootStep). For kernel-module candies (e.g.
 	// nvidia-open-dkms) whose module only loads on a fresh boot with the
 	// conflicting in-tree driver blacklisted. Honored by target:vm (reboots
 	// the guest over SSH + waits for it to return); skipped at image build
@@ -319,39 +319,39 @@ type CandyYAML struct {
 	Reboot bool `yaml:"reboot,omitempty"`
 
 	// Replaces root.yml / user.yml — see Task type and docs/plan.
-	Vars map[string]string `yaml:"var,omitempty"`  // layer-local variables for ${VAR} substitution in tasks
+	Vars map[string]string `yaml:"var,omitempty"`  // candy-local variables for ${VAR} substitution in tasks
 	Task []Task            `yaml:"task,omitempty"` // ordered install operations
 
 	// Shell-init declarations: an intrinsic body (init/path_append/path/
 	// priority) plus per-shell sub-blocks (bash/zsh/fish/sh). Travels in
-	// the ai.opencharly.shell OCI label (layer section) and is applied
+	// the ai.opencharly.shell OCI label (candy section) and is applied
 	// at `charly box build` time (snippets land in /etc/profile.d/,
 	// /etc/fish/conf.d/) and at `charly deploy add` time on target:local /
-	// target:vm (managed-block in user rc files; per-layer drop-in for
+	// target:vm (managed-block in user rc files; per-candy drop-in for
 	// fish). See ShellConfig type and /charly-build:layer "Shell Init Surface".
 	Shell *ShellConfig `yaml:"shell,omitempty"`
 
-	// Tests are declarative checks contributed by this layer. They travel
-	// in the ai.opencharly.tests OCI label (layer section) and run under
+	// Tests are declarative checks contributed by this candy. They travel
+	// in the ai.opencharly.tests OCI label (candy section) and run under
 	// `charly eval box` (build-time) and `charly eval live` (deploy-time).
 	// See testspec.go for the Check type.
 	Eval []Check `yaml:"eval,omitempty"`
 
-	// Artifacts are files a layer publishes back to the operator after its
+	// Artifacts are files a candy publishes back to the operator after its
 	// setup runs successfully. Each artifact is retrieved from the deploy
 	// venue (scp for VM/SSH targets, plain copy for host target, podman cp
 	// for container target) and written to `retrieve_to:`, optionally
-	// rewritten via `rewrite:` rules. Used by e.g. the k3s-server layer to
+	// rewritten via `rewrite:` rules. Used by e.g. the k3s-server candy to
 	// publish `/etc/rancher/k3s/k3s.yaml` back to `~/.cache/charly/clusters/
 	// <deploy>/kubeconfig.yaml` so the operator can `kubectl` the new
 	// cluster without manual scp. Generic — not k3s-specific.
 	Artifact []CandyArtifact `yaml:"artifact,omitempty"`
 
-	// Capabilities are layer-contributed image-level facts (preserve_user,
+	// Capabilities are candy-contributed image-level facts (preserve_user,
 	// needs_root_after_init, init_system_hint, data_only, oci_labels).
 	// Aggregated at image resolve time via AggregateCandyCapabilities.
 	// Replaces the magic image-level booleans (image.bootc, image.data_image)
-	// with a declarative layer-derived surface.
+	// with a declarative candy-derived surface.
 	Capability         *CandyCapabilities `yaml:"capability,omitempty"`
 	RequiresCapability []string           `yaml:"requires_capability,omitempty"`
 }
@@ -389,7 +389,7 @@ var candyYAMLKnownFields = map[string]bool{
 // The build vocabulary — the set of distro names and package-format names — is
 // NOT hardcoded in Go. It is DERIVED at load time from the project's build.yml
 // `distro:` section (the DistroConfig) by RegisterBuildVocabulary, which every
-// entry point calls before scanning layers. Adding a new distro or package
+// entry point calls before scanning candies. Adding a new distro or package
 // format is therefore purely a build.yml edit, with no code change.
 //
 // These caches are consumed ONLY by the candy-manifest shape guard
@@ -425,7 +425,7 @@ func RegisterBuildVocabulary(dc *DistroConfig) {
 	}
 }
 
-// derivePackageSectionsFromCalamares is the SOLE populator of a layer's package
+// derivePackageSectionsFromCalamares is the SOLE populator of a candy's package
 // surface from the Calamares-aligned top-level `package:` + `distro:` map. Every
 // `distro:` key — bare (`debian`), versioned (`debian-13`), or compound
 // (`debian,ubuntu` / `debian-13,ubuntu-24.04`) — routes to one or more per-distro
@@ -605,7 +605,7 @@ type Task struct {
 	// Verb discriminators — exactly one non-empty
 	Cmd      string `yaml:"cmd,omitempty"`      // shell command (escape hatch)
 	Mkdir    string `yaml:"mkdir,omitempty"`    // directory path to create
-	Copy     string `yaml:"copy,omitempty"`     // layer-dir file to copy (src)
+	Copy     string `yaml:"copy,omitempty"`     // candy-dir file to copy (src)
 	Write    string `yaml:"write,omitempty"`    // destination path for inline content
 	Link     string `yaml:"link,omitempty"`     // link path (where the symlink goes)
 	Download string `yaml:"download,omitempty"` // URL to fetch
@@ -745,7 +745,7 @@ type Candy struct {
 	Info        string       // derived from Description.Feature+Narrative
 	// Parse-time filesystem-probe caches: each caches a single fileExists /
 	// dirExists check against SourceDir performed once at scan time. These stay
-	// fields (a remote layer's cache dir may be evicted before they're read,
+	// fields (a remote candy's cache dir may be evicted before they're read,
 	// and re-probing on every access would re-do I/O) — they are NOT redundant.
 	// Every OTHER Has* predicate (HasEnv/HasPorts/HasVolumes/HasData/…) is a
 	// derived method computed from the populated field, not a stored bool.
@@ -758,17 +758,17 @@ type Candy struct {
 	HasPixiLock       bool // the candy manifest has a non-empty tasks: list
 
 	// Init system detection (populated by PopulateCandyInitSystem)
-	InitSystems    map[string]bool // set of init system names this layer triggers
+	InitSystems    map[string]bool // set of init system names this candy triggers
 	PortRelayPorts []int           // port_relay: field (init-agnostic)
 
-	// Layer references. Each CandyRef carries the original ref string; the bare
+	// Candy references. Each CandyRef carries the original ref string; the bare
 	// map-key form (.Bare()) and pinned version (.Version()) are derived. One
 	// list per concern — no parallel bare/raw arrays (the duplication that
 	// split version off the ref and enabled the silent version-collision bug).
 	Require       []CandyRef // require: deps (ordering + resolution)
-	IncludedCandy []CandyRef // layer: composition refs (splicing)
+	IncludedCandy []CandyRef // candy: composition refs (splicing)
 
-	// Remote layer metadata
+	// Remote candy metadata
 	Remote        bool   // true if from a remote repo
 	RepoPath      string // e.g. "github.com/overthinkos/overthink" (empty for local)
 	SubPathPrefix string // e.g. "candy/" — parent directory within the repo for sibling resolution
@@ -781,7 +781,7 @@ type Candy struct {
 	portSpecs      []PortSpec // full PortSpec data with protocol info
 	envConfig      *EnvConfig
 	route          *RouteConfig
-	serviceFiles   []string       // paths to *.service files in layer dir (systemd user-level, file_copy model)
+	serviceFiles   []string       // paths to *.service files in candy dir (systemd user-level, file_copy model)
 	service        []ServiceEntry // unified service: list (the only service schema)
 	volumes        []VolumeYAML
 	aliases        []AliasYAML
@@ -792,40 +792,40 @@ type Candy struct {
 	hooks          *HooksConfig
 	secrets        []SecretYAML
 	envProvides    map[string]string // env vars provided to other containers (service discovery)
-	envRequires    []EnvDependency   // env vars this layer must have
-	envAccepts     []EnvDependency   // env vars this layer can optionally use
-	secretAccepts  []EnvDependency   // credential-store-backed env vars this layer can optionally use
-	secretRequires []EnvDependency   // credential-store-backed env vars this layer must have
+	envRequires    []EnvDependency   // env vars this candy must have
+	envAccepts     []EnvDependency   // env vars this candy can optionally use
+	secretAccepts  []EnvDependency   // credential-store-backed env vars this candy can optionally use
+	secretRequires []EnvDependency   // credential-store-backed env vars this candy must have
 	mcpProvides    []MCPServerYAML   // MCP servers provided to other containers
-	mcpRequires    []EnvDependency   // MCP servers this layer must have
-	mcpAccepts     []EnvDependency   // MCP servers this layer can optionally use
+	mcpRequires    []EnvDependency   // MCP servers this candy must have
+	mcpAccepts     []EnvDependency   // MCP servers this candy can optionally use
 	engine         string            // required run engine from the candy manifest ("docker", "podman", or "")
-	vars           map[string]string // layer-local variables (from the candy manifest vars:)
+	vars           map[string]string // candy-local variables (from the candy manifest vars:)
 	tasks          []Task            // ordered install operations (from the candy manifest tasks:)
 	apk            []ApkPackageSpec  // Android apps to install on a kind:android device (from the candy manifest apk:)
 	localpkg       map[string]string // per-format native-package source dirs (pac/rpm/deb → dir) from the candy manifest localpkg:
-	reboot         bool              // reboot the deploy target after this layer (from the candy manifest reboot:)
+	reboot         bool              // reboot the deploy target after this candy (from the candy manifest reboot:)
 	tests          []Check           // declarative checks (from the candy manifest tests:)
 	artifacts      []CandyArtifact   // files to retrieve after setup (from the candy manifest artifacts:)
 	shell          *ShellConfig      // shell-init declarations (from the candy manifest shell:)
 
-	// Layer-contributed image-level facts (capabilities: block in the candy manifest)
-	// and cross-layer requirement declarations (requires_capabilities:).
+	// Candy-contributed image-level facts (capabilities: block in the candy manifest)
+	// and cross-candy requirement declarations (requires_capabilities:).
 	capabilities         *CandyCapabilities
 	requiresCapabilities []string
 }
 
-// ScanCandy returns all layers for the project at dir. Post-unified-cutover
+// ScanCandy returns all candies for the project at dir. Post-unified-cutover
 // this loads charly.yml via LoadUnified, applies discover:, and projects
-// the layers map. Legacy `candy/` directory scan remains as a fallback when
+// the candies map. Legacy `candy/` directory scan remains as a fallback when
 // charly.yml is absent (e.g., transitional test fixtures).
 // DefaultCandyDir is the single source of truth for the on-disk directory that
-// holds candy (layer) definitions. The discover: block overrides it per project
+// holds candy definitions. The discover: block overrides it per project
 // for discovery; write/resolve paths fall back to this default. Renaming the
 // candy directory project-wide is a one-line change here.
 const DefaultCandyDir = "candy"
 
-// DefaultBoxDir is the on-disk directory that holds box (image) definitions,
+// DefaultBoxDir is the on-disk directory that holds box definitions,
 // discovered per-box as <DefaultBoxDir>/<name>/<UnifiedFileName>. Symmetric with
 // DefaultCandyDir; the discover: block overrides it per project.
 const DefaultBoxDir = "box"
@@ -1044,7 +1044,7 @@ func resolveCandySourceDir(path, _ string) string {
 	return path
 }
 
-// scanCandy scans a single layer directory
+// scanCandy scans a single candy directory
 func scanCandy(path, name, manifest string) (*Candy, error) {
 	layer := &Candy{
 		Name: name,
@@ -1067,7 +1067,7 @@ func scanCandy(path, name, manifest string) (*Candy, error) {
 	}
 
 	// SourceDir always equals layer Path (the `directory:` field was deleted
-	// in the 2026-05 Calamares cutover; 0 layers used it).
+	// in the 2026-05 Calamares cutover; 0 candies used it).
 	_ = ly
 	layer.SourceDir = path
 
@@ -1088,7 +1088,7 @@ func scanCandy(path, name, manifest string) (*Candy, error) {
 
 	if ly != nil {
 		// Single shared post-parse populator (see unified.go). Both this
-		// discovered-layer path and the charly.yml inline path call it, so
+		// discovered-candy path and the charly.yml inline path call it, so
 		// they can never drift.
 		populateCandyFromYAML(layer, ly)
 	}
@@ -1096,7 +1096,7 @@ func scanCandy(path, name, manifest string) (*Candy, error) {
 	return layer, nil
 }
 
-// HasInstallFiles returns true if the layer has at least one install file
+// HasInstallFiles returns true if the candy has at least one install file
 func (l *Candy) HasInstallFiles() bool {
 	return l.HasFormatPackages() || l.HasTagPackages() || len(l.topPackages) > 0 ||
 		l.HasPixiToml || l.HasPyprojectToml || l.HasEnvironmentYml ||
@@ -1116,16 +1116,16 @@ func (l *Candy) HasTagPackages() bool {
 	return false
 }
 
-// HasAnyPackages reports whether the layer declares ANY OS packages across all
+// HasAnyPackages reports whether the candy declares ANY OS packages across all
 // surfaces: per-distro/version tag sections, the always-included top-level
 // package: base, or a format section (aur). Used where the question is "does
-// this layer install packages at all?" (e.g. the use_packaged service check) —
+// this candy install packages at all?" (e.g. the use_packaged service check) —
 // must not be narrowed to format sections, which now hold only aur.
 func (l *Candy) HasAnyPackages() bool {
 	return l.HasTagPackages() || len(l.topPackages) > 0 || l.HasFormatPackages()
 }
 
-// HasContent returns true if the layer has install files or any configuration
+// HasContent returns true if the candy has install files or any configuration
 // that contributes to the Containerfile (env, ports, volumes, etc.)
 func (l *Candy) HasContent() bool {
 	return l.HasInstallFiles() || l.HasEnv() || l.HasPorts() || l.HasRoute() ||
@@ -1150,16 +1150,16 @@ func (l *Candy) HasLibvirt() bool { return len(l.libvirt) > 0 }
 func (l *Candy) HasTasks() bool   { return len(l.tasks) > 0 }
 func (l *Candy) HasApk() bool     { return len(l.apk) > 0 }
 
-// Apk returns the layer's Android app-install entries (the `apk:` package
-// format). Empty for non-Android layers.
+// Apk returns the candy's Android app-install entries (the `apk:` package
+// format). Empty for non-Android candies.
 func (l *Candy) Apk() []ApkPackageSpec { return l.apk }
 
-// LocalPkg returns the layer's native-package SOURCE dir for the given package
-// FORMAT (pac/rpm/deb), or "" when the layer declares none for that format. See
+// LocalPkg returns the candy's native-package SOURCE dir for the given package
+// FORMAT (pac/rpm/deb), or "" when the candy declares none for that format. See
 // LocalPkgInstallStep.
 func (l *Candy) LocalPkg(format string) string { return l.localpkg[format] }
 
-// LocalPkgFormats returns the package formats (pac/rpm/deb) for which the layer
+// LocalPkgFormats returns the package formats (pac/rpm/deb) for which the candy
 // declares a native-package source, sorted for deterministic iteration.
 func (l *Candy) LocalPkgFormats() []string {
 	out := make([]string, 0, len(l.localpkg))
@@ -1237,7 +1237,7 @@ func (l *Candy) TagSection(tag string) *TagPkgConfig {
 	return l.tagSections[tag]
 }
 
-// TopPackages returns the layer's top-level package: list — the always-included
+// TopPackages returns the candy's top-level package: list — the always-included
 // BASE that the cascade resolver folds in for EVERY resolved format, regardless
 // of which distro/version tag sections match. Folding it here (at resolve time)
 // rather than into every section at parse time is what keeps debian and ubuntu
@@ -1265,37 +1265,37 @@ func (l *Candy) PortSpecs() []PortSpec {
 	return l.portSpecs
 }
 
-// Service returns the layer's unified service: list (ServiceEntry slice).
+// Service returns the candy's unified service: list (ServiceEntry slice).
 // This is the only service schema — legacy raw-INI and system_services: are
-// retired entirely. External layers that still have the legacy forms must run
+// retired entirely. External candies that still have the legacy forms must run
 // `charly migrate`.
 func (l *Candy) Service() []ServiceEntry {
 	return l.service
 }
 
-// HasService returns true when the layer declares at least one service entry.
+// HasService returns true when the candy declares at least one service entry.
 func (l *Candy) HasService() bool {
 	return len(l.service) > 0
 }
 
-// ServiceFiles returns detected *.service file paths from the layer directory
+// ServiceFiles returns detected *.service file paths from the candy directory
 // (consumed by the systemd init's file_copy model, e.g. *.service globs).
 func (l *Candy) ServiceFiles() []string {
 	return l.serviceFiles
 }
 
-// HasAnyInit returns true if this layer triggers any init system.
+// HasAnyInit returns true if this candy triggers any init system.
 func (l *Candy) HasAnyInit() bool {
 	return len(l.InitSystems) > 0
 }
 
-// HasInit returns true if this layer triggers the named init system.
+// HasInit returns true if this candy triggers the named init system.
 func (l *Candy) HasInit(initName string) bool {
 	return l.InitSystems[initName]
 }
 
-// PopulateCandyInitSystem sets InitSystems on all layers based on the init config.
-// Must be called after scanning layers and loading init config.
+// PopulateCandyInitSystem sets InitSystems on all candies based on the init config.
+// Must be called after scanning candies and loading init config.
 func PopulateCandyInitSystem(layers map[string]*Candy, initCfg *InitConfig) {
 	if initCfg == nil {
 		return
@@ -1307,7 +1307,7 @@ func PopulateCandyInitSystem(layers map[string]*Candy, initCfg *InitConfig) {
 			// Each entry binds to init systems per per-entry routing:
 			//   - IsPackaged()  → inits with ServiceSchema.SupportsPackaged
 			//   - custom exec   → inits with ServiceSchema.ServiceTemplate != ""
-			// The legacy `layer_fields: [service]` config just gates whether
+			// The legacy `candy_field: [service]` config just gates whether
 			// this init participates in schema detection at all.
 			participatesInSchema := false
 			for _, field := range def.CandyFields {
@@ -1332,7 +1332,7 @@ func PopulateCandyInitSystem(layers map[string]*Candy, initCfg *InitConfig) {
 					}
 				}
 			}
-			// Check layer_files (anchored at SourceDir — honors `directory:`)
+			// Check candy_file (anchored at SourceDir — honors `directory:`)
 			// for init systems like systemd that use the file_copy model.
 			for _, pattern := range def.CandyFiles {
 				matches, _ := filepath.Glob(filepath.Join(layer.SourceDir, pattern))
@@ -1358,7 +1358,7 @@ func (l *Candy) Route() (*RouteConfig, error) {
 	return nil, nil
 }
 
-// RouteCandy returns layers that have a route file
+// RouteCandy returns candies that have a route file
 func RouteCandy(layers map[string]*Candy) []*Candy {
 	var routes []*Candy
 	for _, layer := range layers {
@@ -1369,7 +1369,7 @@ func RouteCandy(layers map[string]*Candy) []*Candy {
 	return routes
 }
 
-// CandyNames returns a sorted list of layer names
+// CandyNames returns a sorted list of candy names
 func CandyNames(layers map[string]*Candy) []string {
 	names := make([]string, 0, len(layers))
 	for name := range layers {
@@ -1423,28 +1423,28 @@ func (l *Candy) Secret() []SecretYAML {
 	return l.secrets
 }
 
-// Artifact returns the files this layer publishes back to the operator
+// Artifact returns the files this candy publishes back to the operator
 // after its setup completes (pre-populated from the candy manifest artifact:).
 func (l *Candy) Artifact() []CandyArtifact {
 	return l.artifacts
 }
 
-// EnvProvides returns env vars this layer provides to other containers (pre-populated from the candy manifest)
+// EnvProvides returns env vars this candy provides to other containers (pre-populated from the candy manifest)
 func (l *Candy) EnvProvides() map[string]string {
 	return l.envProvides
 }
 
-// EnvRequires returns env vars this layer must have from the environment (pre-populated from the candy manifest)
+// EnvRequires returns env vars this candy must have from the environment (pre-populated from the candy manifest)
 func (l *Candy) EnvRequire() []EnvDependency {
 	return l.envRequires
 }
 
-// EnvAccepts returns env vars this layer can optionally use (pre-populated from the candy manifest)
+// EnvAccepts returns env vars this candy can optionally use (pre-populated from the candy manifest)
 func (l *Candy) EnvAccept() []EnvDependency {
 	return l.envAccepts
 }
 
-// SecretAccepts returns credential-store-backed env vars this layer can optionally use.
+// SecretAccepts returns credential-store-backed env vars this candy can optionally use.
 // These entries flow through the credential store → podman secret → Secret=type=env quadlet
 // directive pipeline, never touching plaintext charly.yml or quadlet Environment= lines.
 // Pre-populated from the candy manifest.
@@ -1452,24 +1452,24 @@ func (l *Candy) SecretAccept() []EnvDependency {
 	return l.secretAccepts
 }
 
-// SecretRequires returns credential-store-backed env vars this layer MUST have.
+// SecretRequires returns credential-store-backed env vars this candy MUST have.
 // Missing entries cause charly config to hard-fail with actionable remediation.
 // Pre-populated from the candy manifest.
 func (l *Candy) SecretRequire() []EnvDependency {
 	return l.secretRequires
 }
 
-// MCPProvides returns MCP servers this layer provides to other containers (pre-populated from the candy manifest)
+// MCPProvides returns MCP servers this candy provides to other containers (pre-populated from the candy manifest)
 func (l *Candy) MCPProvide() []MCPServerYAML {
 	return l.mcpProvides
 }
 
-// MCPRequires returns MCP servers this layer must have from the environment (pre-populated from the candy manifest)
+// MCPRequires returns MCP servers this candy must have from the environment (pre-populated from the candy manifest)
 func (l *Candy) MCPRequire() []EnvDependency {
 	return l.mcpRequires
 }
 
-// MCPAccepts returns MCP servers this layer can optionally use (pre-populated from the candy manifest)
+// MCPAccepts returns MCP servers this candy can optionally use (pre-populated from the candy manifest)
 func (l *Candy) MCPAccept() []EnvDependency {
 	return l.mcpAccepts
 }
@@ -1479,7 +1479,7 @@ func (l *Candy) Engine() string {
 	return l.engine
 }
 
-// InitCandy returns layers that trigger any init system.
+// InitCandy returns candies that trigger any init system.
 func InitCandy(layers map[string]*Candy) []*Candy {
 	var result []*Candy
 	for _, layer := range layers {
@@ -1490,7 +1490,7 @@ func InitCandy(layers map[string]*Candy) []*Candy {
 	return result
 }
 
-// VolumeCandy returns layers that have volume declarations
+// VolumeCandy returns candies that have volume declarations
 func VolumeCandy(layers map[string]*Candy) []*Candy {
 	var vols []*Candy
 	for _, layer := range layers {
@@ -1506,7 +1506,7 @@ func (l *Candy) Alias() []AliasYAML {
 	return l.aliases
 }
 
-// AliasCandy returns layers that have alias declarations
+// AliasCandy returns candies that have alias declarations
 func AliasCandy(layers map[string]*Candy) []*Candy {
 	var result []*Candy
 	for _, layer := range layers {
@@ -1545,12 +1545,12 @@ func (l *Candy) HasPypiDeps() bool {
 	return strings.Contains(string(data), "[pypi-dependencies]")
 }
 
-// ScanRemoteCandy scans specific layers from a downloaded remote repository.
-// Only imports layers whose bare refs are in the wantRefs set.
+// ScanRemoteCandy scans specific candies from a downloaded remote repository.
+// Only imports candies whose bare refs are in the wantRefs set.
 // Bare refs use the full path format: "github.com/org/repo/candy/name".
-// qualifyRemoteSiblingDeps records, for a freshly-scanned remote layer, the
+// qualifyRemoteSiblingDeps records, for a freshly-scanned remote candy, the
 // fully-qualified "<repo>/<subpathprefix><dep>" map key of each plain-name
-// require:/layer: dep (the same form ScanRemoteCandy keys fetched siblings
+// require:/candy: dep (the same form ScanRemoteCandy keys fetched siblings
 // under). It sets each ref's resolved key (CandyRef.resolved) and leaves
 // CandyRef.Raw intact, so the graph resolves on .Bare() (qualified) while the
 // transitive fetch loop still keys on the original .Raw plain name. @-ref deps
@@ -1596,10 +1596,10 @@ func ScanRemoteCandy(repoDir string, repoPath string, wantRefs map[string]bool) 
 		if idx := strings.LastIndex(subPath, "/"); idx != -1 {
 			layer.SubPathPrefix = subPath[:idx+1]
 		}
-		// Qualify plain-name sibling deps (require:/layers:) to fully-qualified
+		// Qualify plain-name sibling deps (require:/candy:) to fully-qualified
 		// "<repo>/<subpathprefix><dep>" map keys, matching how fetched siblings
 		// are keyed. This lets the dependency graph (graph.go) and validator
-		// resolve a remote layer's transitive deps against siblings pulled from
+		// resolve a remote candy's transitive deps against siblings pulled from
 		// the same repo, without per-call-site repo-path plumbing.
 		qualifyRemoteSiblingDeps(layer)
 
@@ -1609,8 +1609,8 @@ func ScanRemoteCandy(repoDir string, repoPath string, wantRefs map[string]bool) 
 	return layers, nil
 }
 
-// ScanAllCandy scans local layers and all remote layers, returning a merged map.
-// Local layers are keyed by short name, remote layers by fully-qualified path.
+// ScanAllCandy scans local candies and all remote candies, returning a merged map.
+// Local candies are keyed by short name, remote candies by fully-qualified path.
 // Remote refs are collected from @-prefixed refs in the candy manifest and charly.yml.
 func ScanAllCandy(dir string) (map[string]*Candy, error) {
 	return ScanAllCandyWithConfig(dir, nil)
@@ -1623,19 +1623,19 @@ func ScanAllCandyWithConfig(dir string, cfg *Config) (map[string]*Candy, error) 
 	return ScanAllCandyWithConfigOpts(dir, cfg, ResolveOpts{})
 }
 
-// ScanAllCandyWithConfigOpts scans local and remote layers.
-// Collects remote refs from @-prefixed layer references and auto-downloads
+// ScanAllCandyWithConfigOpts scans local and remote candies.
+// Collects remote refs from @-prefixed candy references and auto-downloads
 // repos. opts is forwarded to CollectRemoteRefsOpts so a build with
 // `--include-disabled <name>` also fetches the named disabled image's remote
-// layers — keeping the FETCH set aligned with the RESOLVE set.
+// candies — keeping the FETCH set aligned with the RESOLVE set.
 func ScanAllCandyWithConfigOpts(dir string, cfg *Config, opts ResolveOpts) (map[string]*Candy, error) {
-	// 1. Scan local layers
+	// 1. Scan local candies
 	layers, err := ScanCandy(dir)
 	if err != nil {
 		return nil, err
 	}
 
-	// 2. Collect remote refs from @-prefixed layer references
+	// 2. Collect remote refs from @-prefixed candy references
 	downloads, err := CollectRemoteRefsOpts(cfg, layers, opts)
 	if err != nil {
 		return nil, err
@@ -1646,11 +1646,11 @@ func ScanAllCandyWithConfigOpts(dir string, cfg *Config, opts ResolveOpts) (map[
 	}
 
 	// 3. Per-entity-version resolution. The git tag is ONLY the fetch coordinate;
-	// the authority is each layer's own `version:`, read AFTER fetch. So fetch
+	// the authority is each candy's own `version:`, read AFTER fetch. So fetch
 	// EVERY distinct (repo, git-tag) referenced (directly or transitively),
 	// collect each materialization as a candidate, then arbitrate per bare ref by
-	// per-entity version (pickCandyVersion). A remote layer's plain-name
-	// require:/layers: dep is a same-repo sibling at the SAME git tag; an @-ref
+	// per-entity version (pickCandyVersion). A remote candy's plain-name
+	// require:/candy: dep is a same-repo sibling at the SAME git tag; an @-ref
 	// dep carries its own repo/git-tag. Fix-point until no new (repo, git-tag,
 	// ref) surfaces, so cross-repo transitive closures are fully materialized.
 	type repoVer struct{ repo, ver string }
@@ -1768,8 +1768,8 @@ func ScanAllCandyWithConfigOpts(dir string, cfg *Config, opts ResolveOpts) (map[
 	return layers, nil
 }
 
-// candyCandidate is one fetched materialization of a bare layer ref. The git tag
-// is the fetch coordinate; version is the layer's own per-entity `version:`.
+// candyCandidate is one fetched materialization of a bare candy ref. The git tag
+// is the fetch coordinate; version is the candy's own per-entity `version:`.
 type candyCandidate struct {
 	layer   *Candy
 	version string // per-entity version (layer.Version) — mandatory, never ""
@@ -1781,7 +1781,7 @@ type candyCandidate struct {
 // version. Same per-entity version across different git tags => NO warning, the
 // newest git tag wins (freshness). Different per-entity versions => warn once
 // (naming the winner + a loser) and the newest per-entity version wins. This is
-// the sole layer-version arbiter — direct and transitive refs both flow through
+// the sole candy-version arbiter — direct and transitive refs both flow through
 // it. cands is non-empty.
 func pickCandyVersion(bareRef string, cands []candyCandidate) candyCandidate {
 	best := cands[0]

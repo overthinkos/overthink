@@ -101,7 +101,7 @@ func flattenScanSpecNode(spec *yaml.Node, manifest string) *yaml.Node {
 	m := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
 	switch spec.Kind {
 	case yaml.ScalarNode:
-		// String shorthand "layers" → {path, recursive: true, manifest}.
+		// String shorthand "candy" → {path, recursive: true, manifest}.
 		m.HeadComment = spec.HeadComment
 		m.Content = append(m.Content,
 			scalar("path", "!!str"), scalar(spec.Value, "!!str"),

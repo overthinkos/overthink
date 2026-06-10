@@ -109,7 +109,7 @@ func rewriteCharlyCachyosFile(path string, dryRun bool) (bool, error) {
 //
 // We deliberately scope each pattern to the indented-mapping-key
 // shape — bare `qc:` / `cachyos-dx:` strings elsewhere in the file
-// (a comment, a fixture in test data, a layer name reference) are
+// (a comment, a fixture in test data, a candy name reference) are
 // NOT touched.
 var (
 	qcDeployKeyPattern        = regexp.MustCompile(`(?m)^(\s+)qc:\s*$`)

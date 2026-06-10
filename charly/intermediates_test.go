@@ -70,7 +70,7 @@ func TestGlobalCandyOrder_RespectsAuthoredListOrder(t *testing.T) {
 	// build-toolchain has NO `require: rpmfusion` (on Arch the codec -devel libs
 	// come from the distro repos, not RPM Fusion), but fedora-builder authors
 	// `candy: [rpmfusion, build-toolchain]` so rpmfusion MUST come first. Here
-	// build-toolchain is the more popular layer (2 images) — which, before the
+	// build-toolchain is the more popular candy (2 images) — which, before the
 	// authored-list-order fix, made the popularity tie-break place it ahead of
 	// rpmfusion (the exact bug that broke fedora-builder in a mixed
 	// arch-builder + fedora-builder submodule).
@@ -409,7 +409,7 @@ func TestImageNeedsBuilder(t *testing.T) {
 		t.Error("simple should not need builder (tooling has root.yml only)")
 	}
 
-	// nil layers → conservative true
+	// nil candies → conservative true
 	if !BoxNeedsBuilder(images["simple"], images, nil) {
 		t.Error("nil layers should return true (conservative)")
 	}
@@ -716,7 +716,7 @@ func TestComputeIntermediates_UserImageAtBranchPoint(t *testing.T) {
 			Candy: []string{}, Tag: "v1", Registry: "r",
 			FullTag: "r/fedora:v1", Pkg: "rpm",
 		},
-		// "svbase" is a user image with layers=[supervisord] — it sits at the branch point
+		// "svbase" is a user image with candies=[supervisord] — it sits at the branch point
 		"svbase": {
 			Name: "svbase", Base: "fedora", IsExternalBase: false,
 			Candy: []string{"supervisord"}, Tag: "v1", Registry: "r",
@@ -758,7 +758,7 @@ func TestComputeIntermediates_UserImageAtBranchPoint(t *testing.T) {
 		t.Logf("  %s%s: base=%s layers=%v", name, autoStr, img.Base, img.Candy)
 	}
 
-	// svbase should NOT be duplicated (no svbase-2, no supervisord auto with same layers)
+	// svbase should NOT be duplicated (no svbase-2, no supervisord auto with same candies)
 	for name, img := range result {
 		if img.Auto && name != "svbase" {
 			// Check that any auto-intermediate doesn't duplicate svbase's role
@@ -801,7 +801,7 @@ func TestComputeIntermediates_UserImageAtBranchPoint(t *testing.T) {
 }
 
 func TestComputeIntermediates_UserImageAsBranchIntermediate(t *testing.T) {
-	// A user-defined image sits at the exact same layer set as a trie branch point
+	// A user-defined image sits at the exact same candy set as a trie branch point
 	// and has children in the same sibling group. The algorithm should reuse it
 	// as the intermediate without creating a duplicate.
 	layers := map[string]*Candy{
@@ -1016,12 +1016,12 @@ func TestPixiBoundCandies(t *testing.T) {
 
 	bound := pixiBoundCandies(layers)
 
-	// unsloth has user.yml, no pixi.toml, included by pixi-owning layers → pixi-bound
+	// unsloth has user.yml, no pixi.toml, included by pixi-owning candies → pixi-bound
 	if !bound["unsloth"] {
 		t.Error("unsloth should be pixi-bound (has user.yml, no pixi.toml, included by pixi-owning layer)")
 	}
 
-	// llama-cpp has user.yml, no pixi.toml, included by pixi-owning layers → pixi-bound
+	// llama-cpp has user.yml, no pixi.toml, included by pixi-owning candies → pixi-bound
 	if !bound["llama-cpp"] {
 		t.Error("llama-cpp should be pixi-bound (has user.yml, no pixi.toml, included by pixi-owning layer)")
 	}
@@ -1031,7 +1031,7 @@ func TestPixiBoundCandies(t *testing.T) {
 		t.Error("jupyter-ml should NOT be pixi-bound (has pixi.toml)")
 	}
 
-	// cuda has root.yml but is NOT included by any pixi-owning layer → NOT pixi-bound
+	// cuda has root.yml but is NOT included by any pixi-owning candy → NOT pixi-bound
 	if bound["cuda"] {
 		t.Error("cuda should NOT be pixi-bound (not included by pixi-owning layer)")
 	}
@@ -1039,7 +1039,7 @@ func TestPixiBoundCandies(t *testing.T) {
 
 func TestComputeIntermediates_PixiBoundNotExtracted(t *testing.T) {
 	// Mirror the actual jupyter-ml / unsloth-studio scenario.
-	// Both share nvidia base and include llama-cpp + unsloth via layers:.
+	// Both share nvidia base and include llama-cpp + unsloth via candy:.
 	// The intermediate generator must NOT extract unsloth into an intermediate
 	// because it needs the pixi environment from the final image.
 	layers := map[string]*Candy{
@@ -1141,7 +1141,7 @@ func TestComputeIntermediates_PixiBoundNotExtracted(t *testing.T) {
 	}
 
 	// CRITICAL: No auto-intermediate should contain unsloth or llama-cpp
-	// These are pixi-bound layers that must stay in the final image
+	// These are pixi-bound candies that must stay in the final image
 	for name, img := range result {
 		if !img.Auto {
 			continue
@@ -1234,7 +1234,7 @@ func TestComputeIntermediates_InheritDistroFromParent(t *testing.T) {
 		t.Fatalf("ComputeIntermediates() error = %v", err)
 	}
 
-	// Find the auto-intermediate that contains layer "a" rooted at arch.
+	// Find the auto-intermediate that contains candy "a" rooted at arch.
 	var archInter *ResolvedBox
 	for _, img := range result {
 		if !img.Auto {
@@ -1267,9 +1267,9 @@ func TestComputeIntermediates_InheritDistroFromParent(t *testing.T) {
 
 // TestComputeIntermediates_UnionChildBuildFormats guards the orthogonal case to
 // the test above: a build format declared on the CONSUMING children but NOT the
-// parent must still reach an auto-intermediate that hoists a layer needing it.
+// parent must still reach an auto-intermediate that hoists a candy needing it.
 // Real-world regression: the cachyos base is build:[pac]; selkies-labwc and
-// openclaw-desktop are build:[pac,aur]; the shared chrome layer (aur:
+// openclaw-desktop are build:[pac,aur]; the shared chrome candy (aur:
 // google-chrome) gets hoisted into a shared intermediate. With parent-only
 // inheritance the intermediate was [pac]-only, so chrome's aur: section was
 // silently dropped and google-chrome never built. The fix unions the parent's
@@ -1322,7 +1322,7 @@ func TestComputeIntermediates_UnionChildBuildFormats(t *testing.T) {
 		t.Fatalf("ComputeIntermediates() error = %v", err)
 	}
 
-	// Find the auto-intermediate that hoists layer "a" rooted at cachyos.
+	// Find the auto-intermediate that hoists candy "a" rooted at cachyos.
 	var inter *ResolvedBox
 	for _, img := range result {
 		if img.Auto && img.Base == "cachyos" {
@@ -1336,7 +1336,7 @@ func TestComputeIntermediates_UnionChildBuildFormats(t *testing.T) {
 
 	// The intermediate must carry the UNION: parent's [pac] first, then the
 	// consumer-only aur appended. Without the fix this is [pac] only and the
-	// hoisted aur-bearing layer is silently dropped.
+	// hoisted aur-bearing candy is silently dropped.
 	if got, want := inter.BuildFormats, []string{"pac", "aur"}; !slicesEqual(got, want) {
 		t.Errorf("auto-intermediate %q: BuildFormats = %v, want %v (parent pac first + consumer-only aur appended)",
 			inter.Name, got, want)

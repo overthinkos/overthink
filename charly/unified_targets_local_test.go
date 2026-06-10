@@ -36,7 +36,7 @@ func writeFakeDeploy(t *testing.T, paths *LedgerPaths, deployID, image string, l
 
 // writeFakeCandy writes a CandyRecord with empty ReverseOps so teardown
 // touches no real system state. DeployedBy carries the deploy IDs we
-// pass — the refcount logic decides when the layer record is removed.
+// pass — the refcount logic decides when the candy record is removed.
 func writeFakeCandy(t *testing.T, paths *LedgerPaths, layer string, deployedBy []string) {
 	t.Helper()
 	rec := CandyRecord{
@@ -162,7 +162,7 @@ func TestHostUnifiedTarget_Del_DryRun(t *testing.T) {
 }
 
 // TestHostUnifiedTarget_Del_RemovesEntries verifies the non-dry-run
-// path deletes the deploy record (and the layer record, since refcount
+// path deletes the deploy record (and the candy record, since refcount
 // drops to zero).
 func TestHostUnifiedTarget_Del_RemovesEntries(t *testing.T) {
 	tmp := t.TempDir()

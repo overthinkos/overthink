@@ -236,7 +236,7 @@ func substituteIndex(c *Check, indexVar string, idx int) *Check {
 // from RunEvalLive.
 //
 // Features are iterated in LabelDescriptionSet section order
-// (layer → image → deploy). Outline scenarios fan out to one
+// (candy → box → deploy). Outline scenarios fan out to one
 // ScenarioResult per Examples row. Outline expansion happens AFTER the
 // topo-sort (sort orders the parent scenarios; outline rows inherit
 // their parent's position).
@@ -325,7 +325,7 @@ func cyclicScenarioResult(origin string, sIdx int, sc Scenario) ScenarioResult {
 // every step's individual EvalResult. Reporters transform this into
 // text/json/tap/junit output.
 type ScenarioResult struct {
-	Origin     string       `json:"origin"`      // "layer:redis" etc.
+	Origin     string       `json:"origin"`      // "candy:redis" etc.
 	ScenarioID string       `json:"scenario_id"` // ScenarioID(origin, idx[, row])
 	Name       string       `json:"name"`        // post-substitution scenario name
 	Tag        []string     `json:"tag,omitempty"`

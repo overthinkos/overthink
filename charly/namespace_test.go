@@ -185,7 +185,7 @@ box:
 // because the builder ref was re-resolved from root (no `up` namespace there).
 // Mirrors the real selkies-labwc (`builder: charly.arch-builder`) consumed by main's
 // android-emulator (`base: cachyos.selkies-labwc`). The shape — a namespaced base
-// with BOTH buildable layers AND a namespace-relative builder map — is the exact
+// with BOTH buildable candies AND a namespace-relative builder map — is the exact
 // combination the prior tests never exercised.
 func TestResolveNamespacedBase_BuilderRefRequalified(t *testing.T) {
 	root := t.TempDir()

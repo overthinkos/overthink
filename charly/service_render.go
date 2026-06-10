@@ -216,7 +216,7 @@ func RenderService(entry *ServiceEntry, initDef *InitDef, ctx ServiceRenderConte
 	schema := initDef.ServiceSchema
 	out := &RenderedService{}
 	ctx.Name = entry.Name
-	// ctx.Layer is preserved from the caller (not overwritten here).
+	// ctx.Candy is preserved from the caller (not overwritten here).
 	ctx.Scope = entry.EffectiveScope()
 	ctx.PackagedUnit = entry.UsePackaged
 	ctx.Env = flattenedEnvMap(entry.Env, entry.Overrides)
@@ -232,7 +232,7 @@ func RenderService(entry *ServiceEntry, initDef *InitDef, ctx ServiceRenderConte
 	}
 	// Make home-relative exec/working-dir/env portable across init systems.
 	// supervisord expands its own `%(ENV_HOME)s` at runtime; systemd does NOT,
-	// so a layer whose service exec reuses that syntax (or a bare $HOME) yields
+	// so a candy whose service exec reuses that syntax (or a bare $HOME) yields
 	// a broken ExecStart on a systemd target. Resolve both against ctx.Home —
 	// which the compiler sets to the deferred {{.Home}} token for host/vm
 	// targets (substituted per-destination by InstallPlan.ResolveHome at emit)

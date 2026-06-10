@@ -5,7 +5,7 @@ import "testing"
 // TestVmDisplayDeviceAbsent pins the SPICE/VNC precondition-not-met SKIP gate:
 // a VM-display verb against a deployment with no such display device is N/A
 // (the SPICE-less cachyos-gpu operator), never a check failure — while the
-// SPICE-having eval bed still asserts. One shared eval layer, no bed/operator
+// SPICE-having eval bed still asserts. One shared eval candy, no bed/operator
 // split (R3).
 func TestVmDisplayDeviceAbsent(t *testing.T) {
 	noSpice := "charly: error: VM cachyos-gpu has no SPICE graphics device declared in vm.yml"

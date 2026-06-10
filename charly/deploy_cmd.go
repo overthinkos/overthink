@@ -11,7 +11,7 @@ import (
 // DeployCmd manages deployments and charly.yml overrides.
 //
 // The `add` and `del` subcommands (added in the BuildTarget refactor)
-// apply an image/layer plan to a target: either a container (named
+// apply a box/candy plan to a target: either a container (named
 // anything) or the local host (literal name "host"). The existing
 // config-management subcommands (export/import/show/reset/path/status)
 // remain unchanged — they manipulate charly.yml itself.

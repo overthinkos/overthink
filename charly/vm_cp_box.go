@@ -58,7 +58,7 @@ func hostImageExists(engine, ref string) bool {
 //     brings the pod up with the guest user's own `charly deploy from-box` (a
 //     --user quadlet), which reads the USER's podman storage — so the image must
 //     land there, not in root's. Rootless GPU works via CDI (/dev/nvidia* are
-//     world-rw; the nvidia-driver layer's boot service writes a world-readable
+//     world-rw; the nvidia-driver candy's boot service writes a world-readable
 //     /etc/cdi/nvidia.yaml).
 //
 // VERIFIED transfer: `podman load` can exit 0 on a TRUNCATED stream and

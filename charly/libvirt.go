@@ -54,8 +54,8 @@ func isDeviceElement(snippet string) bool {
 	}
 }
 
-// CollectLibvirtSnippets gathers libvirt XML snippets from all layers in an image
-// plus image-level snippets, deduplicating by exact string match.
+// CollectLibvirtSnippets gathers libvirt XML snippets from all candies in a box
+// plus box-level snippets, deduplicating by exact string match.
 func CollectLibvirtSnippets(cfg *Config, layers map[string]*Candy, boxName string) []string {
 	seen := make(map[string]bool)
 	var snippets []string
@@ -69,7 +69,7 @@ func CollectLibvirtSnippets(cfg *Config, layers map[string]*Candy, boxName strin
 		snippets = append(snippets, s)
 	}
 
-	// Collect from image's layers
+	// Collect from box's candies
 	img, ok := cfg.Box[boxName]
 	if !ok {
 		return nil
@@ -85,7 +85,7 @@ func CollectLibvirtSnippets(cfg *Config, layers map[string]*Candy, boxName strin
 		}
 	}
 
-	// Image-level `libvirt:` field was removed in the VM hard-cutover.
+	// Box-level `libvirt:` field was removed in the VM hard-cutover.
 	// Raw XML snippets now live on the paired `kind: vm` entity's
 	// `spec.libvirt.snippets:` list in vm.yml.
 	_ = img

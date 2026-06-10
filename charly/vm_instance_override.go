@@ -27,7 +27,7 @@ import (
 // the committed `vm.yml` — lets the project's VM entities stay PORTABLE
 // (no PCI address, no operator-home path baked into version control)
 // while this host attaches its real GPU + shares for a live run. Future
-// fields (per-instance ports, env, add_layers) can be added without
+// fields (per-instance ports, env, add_candy) can be added without
 // breaking the on-disk format because yaml.v3 unknown-keys defaults
 // to forgiving.
 //

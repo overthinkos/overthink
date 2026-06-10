@@ -5,12 +5,12 @@ import "fmt"
 // CollectShell walks the base-image chain for boxName and gathers
 // per-(origin, shell) shell-init contributions into a three-section
 // LabelShellSet. Mirrors CollectEval / CollectHooks shape — dedupe by
-// layer name, walk internal bases until an external image, terminate
+// candy name, walk internal bases until an external image, terminate
 // on visited-image cycle.
 //
 // Section assignment:
-//   - Each layer's `shell:` (intrinsic + per-shell sub-blocks) → Layer.
-//   - Image-level `shell:` → Image.
+//   - Each candy's `shell:` (intrinsic + per-shell sub-blocks) → Candy.
+//   - Box-level `shell:` → Box.
 //   - Deploy-scope defaults from charly.yml are not yet expressed —
 //     reserved for future use; today the Deploy section is filled at
 //     deploy time by MergeDeployShell from charly.yml entries.
@@ -164,7 +164,7 @@ func replaceShellEntryByID(set *LabelShellSet, e ShellEntry) bool {
 // resolveDeploymentShellOverride applies the selection rule (per-shell
 // wins over generic) to an aggregate LabelShellSet at deploy time.
 // Returns a flat (origin, shell) → ShellSpec map for the renderer to
-// consume. Origin order is Layer first, then Image, then Deploy — so
+// consume. Origin order is Candy first, then Box, then Deploy — so
 // later contributors win on (origin, shell) collision.
 func resolveDeploymentShellOverride(set *LabelShellSet) map[string]map[string]*ShellSpec {
 	out := map[string]map[string]*ShellSpec{}

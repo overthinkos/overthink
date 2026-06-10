@@ -10,7 +10,7 @@ import (
 
 // QuadletConfig holds the parameters for generating a quadlet .container file
 type QuadletConfig struct {
-	BoxName         string              // image name from charly.yml (e.g. "fedora-test")
+	BoxName         string              // box name from charly.yml (e.g. "fedora-test")
 	ImageRef        string              // full image reference (e.g. "ghcr.io/overthinkos/fedora-test:latest")
 	Home            string              // container home directory (for WorkingDir resolution)
 	Ports           []string            // port mappings from charly.yml (e.g. ["8000:8000", "8080:8080"])
@@ -155,7 +155,7 @@ func generateQuadlet(cfg QuadletConfig) string {
 	// CgroupNS applies in both privileged and non-privileged paths —
 	// e.g. k3s needs --cgroupns=host to see the host's cpuset cgroup
 	// controller that the rootless user slice doesn't delegate to its
-	// sub-slices. Declared at the layer level; no-op for VM/host deploys.
+	// sub-slices. Declared at the candy level; no-op for VM/host deploys.
 	if cfg.Security.CgroupNS != "" {
 		b.WriteString(fmt.Sprintf("PodmanArgs=--cgroupns=%s\n", cfg.Security.CgroupNS))
 	}

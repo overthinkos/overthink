@@ -17,9 +17,9 @@ func EngineBinary(engine string) string {
 	}
 }
 
-// ResolveBoxEngine returns the run engine for a specific image.
+// ResolveBoxEngine returns the run engine for a specific box.
 // Schema v4: BoxConfig.Engine removed (deploy-only choice). Priority is
-// now: layer engine requirements > global default. Deploy-time overrides
+// now: candy engine requirements > global default. Deploy-time overrides
 // come from DeploymentNode.Engine via ResolveBoxEngineForDeploy /
 // ResolveBoxEngineFromMeta.
 func ResolveBoxEngine(cfg *Config, layers map[string]*Candy, boxName string, globalRunEngine string) string {
@@ -28,7 +28,7 @@ func ResolveBoxEngine(cfg *Config, layers map[string]*Candy, boxName string, glo
 		return globalRunEngine
 	}
 
-	// Layer-level engine requirements (transitive closure)
+	// Candy-level engine requirements (transitive closure)
 	resolved, err := ResolveCandyOrder(img.Candy, layers, nil)
 	if err == nil {
 		for _, candyName := range resolved {

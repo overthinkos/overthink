@@ -102,7 +102,7 @@ func TestResolveShellSpec_SelectionRule(t *testing.T) {
 	if !ok || !strings.Contains(body, "direnv hook bash") {
 		t.Errorf("bash selection: ok=%v body=%q", ok, body)
 	}
-	// Layer with no shell: returns false for any shell.
+	// Candy with no shell: returns false for any shell.
 	_, _, _, ok = resolveShellSpec(nil, "bash")
 	if ok {
 		t.Error("nil cfg should yield !ok")

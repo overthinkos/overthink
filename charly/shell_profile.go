@@ -2,9 +2,9 @@ package main
 
 // shell_profile.go — host-side shell profile integration.
 //
-// On `charly deploy add host`, each installed layer contributes a set of
+// On `charly deploy add host`, each installed candy contributes a set of
 // env vars and PATH additions (from the candy manifest's env: + path_append:).
-// We materialize them as `~/.config/opencharly/env.d/<layer>.env` files
+// We materialize them as `~/.config/opencharly/env.d/<candy>.env` files
 // and insert a managed block in the user's shell init so those files
 // get sourced at login.
 //
@@ -24,7 +24,7 @@ package main
 //   <sourcing loop>
 //   # opencharly:end
 //
-// On `charly deploy del host`, if no layers remain deployed the managed
+// On `charly deploy del host`, if no candies remain deployed the managed
 // block is removed from the shell init file.
 
 import (
@@ -78,17 +78,17 @@ func getShellFromPasswd(_ string) string { return "" }
 // env.d file writing.
 // ---------------------------------------------------------------------------
 
-// EnvdDir returns the directory where per-layer env files live.
+// EnvdDir returns the directory where per-candy env files live.
 func EnvdDir(hostHome string) string {
 	return filepath.Join(hostHome, ".config", "opencharly", "env.d")
 }
 
-// EnvdFilePath returns the env file path for a given layer.
+// EnvdFilePath returns the env file path for a given candy.
 func EnvdFilePath(hostHome, candyName string) string {
 	return filepath.Join(EnvdDir(hostHome), candyName+".env")
 }
 
-// WriteEnvdFile creates (or overwrites) the env.d entry for a layer.
+// WriteEnvdFile creates (or overwrites) the env.d entry for a candy.
 // Content is rendered from the ShellHookStep's EnvVars + PathAdd.
 func WriteEnvdFile(hostHome, candyName string, envVars map[string]string, pathAdd []string) (string, error) {
 	dir := EnvdDir(hostHome)
@@ -129,10 +129,10 @@ func renderEnvdBody(candyName string, envVars map[string]string, pathAdd []strin
 	if len(pathAdd) > 0 {
 		// Build PATH prepend entries. Double-quote the value so $PATH
 		// EXPANDS at sourcing time — single-quoting (shQuoteEnv) makes
-		// each layer's env.d set PATH to the literal string
-		// "/some/dir:$PATH", which the next layer's env.d then clobbers
+		// each candy's env.d set PATH to the literal string
+		// "/some/dir:$PATH", which the next candy's env.d then clobbers
 		// with its own literal "/other/dir:$PATH", losing every prior
-		// layer's PATH entries. Layer-supplied paths are absolute, so
+		// candy's PATH entries. Candy-supplied paths are absolute, so
 		// double-quoting is safe; we only escape characters with
 		// special meaning inside double quotes.
 		parts := append([]string(nil), pathAdd...)
@@ -263,7 +263,7 @@ func EnsureManagedBlockVia(ctx context.Context, exec DeployExecutor, shell Shell
 }
 
 // RemoveManagedBlock strips the managed block from the shell init
-// file. Used at full-teardown when no layers remain deployed.
+// file. Used at full-teardown when no candies remain deployed.
 func RemoveManagedBlock(shell ShellKind, hostHome string) error {
 	path := ShellInitFilePath(shell, hostHome)
 	existing, err := os.ReadFile(path)
@@ -284,8 +284,8 @@ func RemoveManagedBlock(shell ShellKind, hostHome string) error {
 
 // markersForTag returns the begin/end fence pair for a given marker tag.
 // Empty tag yields the global-block fence (used for env.d sourcing and
-// the VM ssh-config Include); non-empty tag yields a per-layer fence so
-// multiple layers can coexist in one rc file.
+// the VM ssh-config Include); non-empty tag yields a per-candy fence so
+// multiple candies can coexist in one rc file.
 func markersForTag(marker string) (begin, end string) {
 	if marker == "" {
 		return managedBlockBegin, managedBlockEnd
@@ -296,7 +296,7 @@ func markersForTag(marker string) (begin, end string) {
 
 // stripLegacyOverthinkBlocks removes every managed block left by the
 // pre-rebrand binary — any region fenced by a `# overthink:begin` line
-// through the next `# overthink:end` line (global OR per-layer tagged).
+// through the next `# overthink:end` line (global OR per-candy tagged).
 // charly maintains its own `# opencharly:` block, so a surviving
 // `# overthink:` block is dead weight: it also sources the relocated
 // ~/.config/overthink/env.d path, which no longer exists, so it errors on
@@ -335,7 +335,7 @@ func stripLegacyOverthinkBlocks(existing string) string {
 // with `marker` — empty for the global block) in `existing` and replaces
 // its body; if the markers are absent, appends a fresh block at end-of-
 // file. Marker is required (use "" for the global block; non-empty for
-// per-layer blocks). Any pre-rebrand `# overthink:` block is stripped first
+// per-candy blocks). Any pre-rebrand `# overthink:` block is stripped first
 // so charly self-heals carried-over hosts (R3 — one helper, every caller).
 func replaceOrAppendManagedBlock(existing, body, marker string) string {
 	existing = stripLegacyOverthinkBlocks(existing)
@@ -447,7 +447,7 @@ func stripManagedBlock(existing, marker string) string {
 
 // EnsureManagedBlockAt inserts/updates a managed block at the absolute
 // file path `path`, creating the parent directory if needed. Marker is
-// required (use "" for the global block, non-empty for per-layer
+// required (use "" for the global block, non-empty for per-candy
 // blocks).
 func EnsureManagedBlockAt(path, body, marker string) (string, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {

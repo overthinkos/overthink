@@ -5,7 +5,7 @@ package main
 // `charly vm build` / `charly deploy add vm:…` time by RenderCloudInit.
 //
 // No raw user_data YAML string — users declare intent here, charly produces
-// the cloud-config YAML at run time. The cloud-init layer, network
+// the cloud-config YAML at run time. The cloud-init candy, network
 // setup, and ssh_authorized_keys injection are all handled by the
 // renderer; user-supplied fields extend those defaults rather than
 // replacing them. See the approved plan D15.

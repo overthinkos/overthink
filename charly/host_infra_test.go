@@ -323,9 +323,9 @@ func TestEnsureAndRemoveManagedBlock(t *testing.T) {
 // TestRenderEnvdBodyPathDoubleQuoted asserts the PATH export in an
 // env.d file uses double quotes so $PATH EXPANDS at sourcing time.
 // A previous version single-quoted the value, which left the PATH
-// literally set to "/some/dir:$PATH" — and each subsequent layer's
+// literally set to "/some/dir:$PATH" — and each subsequent candy's
 // env.d then clobbered it with another literal "/other/dir:$PATH",
-// losing every previous layer's PATH entries (npm-global, cargo,
+// losing every previous candy's PATH entries (npm-global, cargo,
 // pixi, ...). The result was that npm-installed binaries weren't
 // on PATH after a target:local deploy unless the user manually
 // fixed up their shell.
@@ -344,7 +344,7 @@ func TestRenderEnvdBodyPathDoubleQuoted(t *testing.T) {
 // snippet leaves the *.env glob UNQUOTED so the shell expands it. A
 // previous version wrapped the path in double quotes which made the
 // loop iterate once over the literal pattern, the `[ -r ]` test
-// fail, and no env files get sourced — leaving deployed layers'
+// fail, and no env files get sourced — leaving deployed candies'
 // PATH / NPM_CONFIG_PREFIX / etc. unset until the user manually
 // sourced ~/.config/opencharly/env.d/*.env.
 func TestManagedBlockBodyGlobUnquoted(t *testing.T) {

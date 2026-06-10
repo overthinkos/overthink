@@ -92,7 +92,7 @@ func (c *GenerateCmd) Run() error {
 	return gen.Generate()
 }
 
-// ValidateCmd validates charly.yml and layers
+// ValidateCmd validates charly.yml and candies
 type ValidateCmd struct {
 	IncludeDisabled bool `long:"include-disabled" help:"Include boxes with enabled: false in validation (does not modify charly.yml)"`
 }
@@ -108,7 +108,7 @@ func (c *ValidateCmd) Run() error {
 		return err
 	}
 
-	// Load default build config for RegisterBuildVocabulary + init detection before layer scanning.
+	// Load default build config for RegisterBuildVocabulary + init detection before candy scanning.
 	var defaultInitCfg *InitConfig
 	{
 		distroCfg, _, initCfg, err := LoadDefaultBuildConfig(dir)
@@ -124,7 +124,7 @@ func (c *ValidateCmd) Run() error {
 		return err
 	}
 
-	// Populate init systems on layers from build.yml config
+	// Populate init systems on candies from build.yml config
 	PopulateCandyInitSystem(layers, defaultInitCfg)
 
 	return Validate(cfg, layers, dir, ResolveOpts{IncludeDisabled: c.IncludeDisabled})
@@ -311,7 +311,7 @@ type ListCmd struct {
 	Volumes  ListVolumesCmd  `cmd:"" help:"List layers that declare volumes"`
 }
 
-// ListImagesCmd lists images from charly.yml
+// ListBoxesCmd lists boxes from charly.yml
 type ListBoxesCmd struct{}
 
 func (c *ListBoxesCmd) Run() error {
@@ -337,7 +337,7 @@ func (c *ListBoxesCmd) Run() error {
 	return nil
 }
 
-// ListCandiesCmd lists layers from filesystem
+// ListCandiesCmd lists candies from filesystem
 type ListCandiesCmd struct{}
 
 func (c *ListCandiesCmd) Run() error {
@@ -422,7 +422,7 @@ func (c *ListTargetsCmd) Run() error {
 	return nil
 }
 
-// ListServicesCmd lists layers that trigger any init system
+// ListServicesCmd lists candies that trigger any init system
 type ListServicesCmd struct{}
 
 func (c *ListServicesCmd) Run() error {
@@ -448,7 +448,7 @@ func (c *ListServicesCmd) Run() error {
 	return nil
 }
 
-// ListRoutesCmd lists layers with route files
+// ListRoutesCmd lists candies with route files
 type ListRoutesCmd struct{}
 
 func (c *ListRoutesCmd) Run() error {
@@ -486,7 +486,7 @@ func (c *ListRoutesCmd) Run() error {
 	return nil
 }
 
-// ListVolumesCmd lists layers with volume declarations
+// ListVolumesCmd lists candies with volume declarations
 type ListVolumesCmd struct{}
 
 func (c *ListVolumesCmd) Run() error {
@@ -529,7 +529,7 @@ type NewCmd struct {
 	Box   NewBoxCmd     `cmd:"" name:"box" help:"Add a new box entry to charly.yml"`
 }
 
-// NewCandyCmd scaffolds a new layer
+// NewCandyCmd scaffolds a new candy
 type NewCandyCmd struct {
 	Name string `arg:"" help:"Layer name"`
 }

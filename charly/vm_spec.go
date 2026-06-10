@@ -49,7 +49,7 @@ type VmSpec struct {
 
 	// Only meaningful when Source.Kind == "cloud_image", or when
 	// Source.Kind == "bootc" AND the bootc image includes the
-	// `cloud-init` layer AND SSH.KeyInjection.CloudInit is enabled.
+	// `cloud-init` candy AND SSH.KeyInjection.CloudInit is enabled.
 	CloudInit *VmCloudInit `yaml:"cloud_init,omitempty"`
 
 	// --- Fully-generic libvirt / qemu configuration ---
@@ -58,7 +58,7 @@ type VmSpec struct {
 
 	// --- Target-specific tests (optional; default empty) ---
 	//
-	// Layer tests and image tests propagate automatically via the existing
+	// Candy tests and box tests propagate automatically via the existing
 	// composition machinery. These slots are ONLY for tests genuinely
 	// specific to the VM template (e.g., checking a cloud-init runcmd
 	// took effect, probing a libvirt device).

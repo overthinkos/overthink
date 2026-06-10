@@ -11,7 +11,7 @@ package main
 // user-overlay deploy entry (no `charly deploy add` / `charly config` calls
 // allowed in the pod path). The user's directive: "Any config changes
 // should be done via charly config only." This verb updates ARTIFACTS
-// (image bits, VM disk, local layers, quadlet/marker image refs);
+// (image bits, VM disk, local candies, quadlet/marker image refs);
 // `charly config` updates CONFIG. The two responsibilities are strictly
 // separated.
 
@@ -24,12 +24,12 @@ import (
 	"strings"
 )
 
-// dispatchByDeployTarget resolves c.Image as a charly.yml entry and
+// dispatchByDeployTarget resolves c.Box as a charly.yml entry and
 // invokes the target-specific update helper. Errors explicitly when:
 //
 //   - cwd has no charly.yml (use 'charly box pull' for image-only refresh)
 //   - the name doesn't resolve to a deploy entry (same)
-//   - the deploy entry's `image:` field is empty for pod targets
+//   - the deploy entry's `box:` field is empty for pod targets
 //     (config bug — deploy needs to know which image to refresh)
 //   - target is unknown / unsupported (k8s)
 //
@@ -41,7 +41,7 @@ import (
 // empty — so `charly update <base> -i <inst>` finds the instance-keyed
 // `<base>/<inst>` entry, plain names still resolve, and dotted nested
 // paths (`a.b.c`) still walk. Mirrors the composition `charly start` uses via
-// dc.Lookup(c.Image, c.Instance). On miss the error reports the full key.
+// dc.Lookup(c.Box, c.Instance). On miss the error reports the full key.
 func resolveUpdateDeployNode(tree map[string]DeploymentNode, image, instance string) (*DeploymentNode, error) {
 	key := deployKey(image, instance)
 	node, _, err := ResolveNodePath(tree, key)
@@ -90,8 +90,8 @@ func (c *UpdateCmd) dispatchByDeployTarget() error {
 	// code. Rebuild's contract is "redeploy the current artifact + restart"
 	// (and, with --build, rebuild the artifact first); each kind's adapter
 	// realizes it for its substrate (vm: destroy→create the domain, then
-	// re-apply the deploy node's layers via deploy add; pod: deploy
-	// add→config→start; local: re-apply layers). k8s has no live runtime
+	// re-apply the deploy node's candies via deploy add; pod: deploy
+	// add→config→start; local: re-apply candies). k8s has no live runtime
 	// to rebuild (it is applied out-of-band via kubectl) so it is deliberately
 	// NOT a LifecycleTarget and falls out here with a clear error.
 	target, err := ResolveTarget(node, deployName)

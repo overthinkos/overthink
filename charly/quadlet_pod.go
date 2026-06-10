@@ -137,7 +137,7 @@ func generateSidecarQuadlet(sc ResolvedSidecar, podName string) string {
 	}
 	// Security: cgroupns — needed when a workload requires host cgroup
 	// controllers (e.g. k3s needs cpuset which rootless user slices
-	// don't delegate to sub-slices). Layer-intrinsic, no-op for VM/host.
+	// don't delegate to sub-slices). Candy-intrinsic, no-op for VM/host.
 	if sc.Security.CgroupNS != "" {
 		b.WriteString(fmt.Sprintf("PodmanArgs=--cgroupns=%s\n", sc.Security.CgroupNS))
 	}

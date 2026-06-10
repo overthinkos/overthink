@@ -1,12 +1,12 @@
 package main
 
 // scenario_validate.go — shared validator for any Scenario list,
-// regardless of whether it came from a harness recipe or a layer/image
+// regardless of whether it came from a harness recipe or a candy/box
 // description.
 //
 // Promoted in the 2026-04 BDD/test/harness surface-cleanup cutover from
 // the harness-only path (validateHarnessSemantics + validateRecipeScenario
-// Dependencies in unified.go) so layer/image `description:` blocks get
+// Dependencies in unified.go) so candy/box `description:` blocks get
 // the SAME `depends_on:` + name-uniqueness enforcement that recipes have
 // always had. Pre-cutover, depends_on in a description was silently
 // accepted and silently ignored.
@@ -19,7 +19,7 @@ package main
 //                           they pass false.
 //   - OwnerLabel          — error-message prefix identifying the
 //                           container of the scenarios ("recipe foo",
-//                           "layer redis", "image fedora-coder"). Lets
+//                           "candy redis", "box fedora-coder"). Lets
 //                           one validator emit precise errors regardless
 //                           of who called it.
 
@@ -33,13 +33,13 @@ import (
 type ScenarioValidationContext struct {
 	// OwnerLabel is the prefix used in error messages, e.g.
 	//   "recipe foo"            (from validateHarnessSemantics)
-	//   "layer redis"           (from description loading)
-	//   "image fedora-coder"    (from description loading)
+	//   "candy redis"           (from description loading)
+	//   "box fedora-coder"    (from description loading)
 	OwnerLabel string
 
 	// RequirePod toggles enforcement of non-empty Scenario.Pod. True
 	// for harness recipes (where pod IS the scoring target); false
-	// for layer/image descriptions (which run against the entity
+	// for candy/box descriptions (which run against the entity
 	// itself, no per-scenario pod selection).
 	RequirePod bool
 }

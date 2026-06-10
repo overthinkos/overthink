@@ -1,6 +1,6 @@
 package main
 
-// k3s_post.go — post-provision finalization for deploys whose layers
+// k3s_post.go — post-provision finalization for deploys whose candies
 // included k3s-server. Runs after RetrieveCandyArtifacts has pulled the
 // kubeconfig to ~/.cache/charly/clusters/<deploy>/kubeconfig.yaml.
 //
@@ -15,7 +15,7 @@ package main
 //      this cluster picks up the right defaults for the k3s addon stack.
 //
 // Called from deploy_add_cmd.go and deploy_add_cmd_vm.go after the artifact
-// retrieval step when the deploy's layer list contains "k3s-server".
+// retrieval step when the deploy's candy list contains "k3s-server".
 
 import (
 	"fmt"
@@ -38,7 +38,7 @@ func sanitizeDeployName(s string) string {
 
 // K3sPostProvision runs the post-provision steps for a k3s-server deploy.
 // No-op when the retrieved kubeconfig path does not exist (e.g. because
-// the layer did not actually include k3s-server, or the artifact
+// the candy did not actually include k3s-server, or the artifact
 // retrieval was skipped by --dry-run).
 func K3sPostProvision(deployName string) error {
 	home, err := os.UserHomeDir()
@@ -133,9 +133,9 @@ func mergeKubeconfig(retrievedPath, contextName string) error {
 	return nil
 }
 
-// deployHasCandy returns true when the deploy's layer list includes the
-// given layer name. Used to gate whether K3sPostProvision runs — a no-op
-// check against the ordered layer slice the deploy-add dispatcher already
+// deployHasCandy returns true when the deploy's candy list includes the
+// given candy name. Used to gate whether K3sPostProvision runs — a no-op
+// check against the ordered candy slice the deploy-add dispatcher already
 // has in scope.
 func deployHasCandy(layers []*Candy, name string) bool {
 	for _, l := range layers {

@@ -44,7 +44,7 @@ type BuildCmd struct {
 // local CalVer tag, BUILDING it on demand when it isn't in local storage. This
 // makes bootstrap image/VM builds fully automatic — no manual
 // `charly box build <builder>` prerequisite. A ref containing "/" (a full registry
-// ref) is returned unchanged. Shared by the kind:image bootstrap path
+// ref) is returned unchanged. Shared by the kind:box bootstrap path
 // (BuildCmd) and the kind:vm bootstrap path (vm_bootstrap.go) — one helper, both
 // call sites.
 func ensureBuilderImageBuilt(engine, builderRef string) (string, error) {
@@ -98,7 +98,7 @@ func (c *BuildCmd) Run() error {
 	// When the user named specific images on the command line, scope the
 	// override to those names only — otherwise widening the working set
 	// would surface unrelated disabled-image dep errors (e.g. images that
-	// declare remote layers not yet fetched into the cache).
+	// declare remote candies not yet fetched into the cache).
 	resolveOpts := ResolveOpts{IncludeDisabled: c.IncludeDisabled}
 	if c.IncludeDisabled && len(c.Boxes) > 0 {
 		resolveOpts.IncludeDisabledNames = make(map[string]bool, len(c.Boxes))
@@ -441,7 +441,7 @@ func (c *BuildCmd) runPrivilegedBootstrap(engine, dir, boxName string, img *Reso
 		return nil
 	}
 
-	// Resolve the builder image ref. Internal kind:image names get
+	// Resolve the builder image ref. Internal kind:box names get
 	// resolved to the newest local CalVer tag via the same machinery
 	// as `charly shell <name>` so build never tries to pull a `:latest`
 	// that charly doesn't emit.
@@ -882,7 +882,7 @@ func filterBox(order []string, requested []string, boxes map[string]*ResolvedBox
 }
 
 // ensureCharlyBinaryFresh rebuilds candy/charly/bin/charly when any image whose
-// resolved layer chain includes the `charly` layer is in scope for the
+// resolved candy chain includes the `charly` candy is in scope for the
 // current build. Without this, podman build would COPY whatever stale
 // binary happens to live at candy/charly/bin/charly — silently baking obsolete
 // CLI behaviour into the image. Skipped (with a one-line warning) when
@@ -922,7 +922,7 @@ func ensureCharlyBinaryFresh(dir string, boxes map[string]*ResolvedBox, requeste
 	// Downstream workspaces (project trees that `import:` upstream
 	// opencharly via `@github.com/...`) don't ship the charly Go source.
 	// Without ./charly to rebuild from, there's nothing to refresh — the
-	// embedded layer chain will use the cached upstream binary at
+	// embedded candy chain will use the cached upstream binary at
 	// <upstream-cache>/candy/charly/bin/charly which is already up-to-date
 	// relative to upstream's charly source.
 	if _, err := os.Stat(srcDir); os.IsNotExist(err) {

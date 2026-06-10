@@ -20,10 +20,10 @@ type InitDef struct {
 	CandyFields  []string `yaml:"candy_field,omitempty"`
 	CandyFiles   []string `yaml:"candy_file,omitempty"`    // glob patterns (e.g., "*.service")
 	DependsCandy string   `yaml:"depends_candy,omitempty"` // candy name required in dependency chain
-	// RequiresCapabilities lists layer-aggregated capability names that
+	// RequiresCapabilities lists candy-aggregated capability names that
 	// must be present in the image composition for this init system to
 	// be selected. Replaces the previous RequiresBootc boolean — generic
-	// across any layer-contributed capability (preserve_user, data_only,
+	// across any candy-contributed capability (preserve_user, data_only,
 	// gpu_required, ...). Empty means "no requirement, always eligible".
 	// Names match the keys used in AggregatedCandyCaps.Provided.
 	RequiresCapability []string `yaml:"requires_capability,omitempty"`
@@ -112,7 +112,7 @@ type ServiceCommandContext struct {
 	Service string
 }
 
-// DetectCandyInit returns which init system names a layer triggers,
+// DetectCandyInit returns which init system names a candy triggers,
 // based on its candy manifest fields and file patterns.
 func (ic *InitConfig) DetectCandyInit(ly *CandyYAML, candyPath string) []string {
 	if ic == nil {
@@ -128,14 +128,14 @@ func (ic *InitConfig) DetectCandyInit(ly *CandyYAML, candyPath string) []string 
 	return result
 }
 
-// detectsInit checks if a layer matches an init system's detection criteria.
+// detectsInit checks if a candy matches an init system's detection criteria.
 // Schema-driven: iterates the unified service: list + per-entry init routing
 // (IsPackaged → ServiceSchema.SupportsPackaged; custom exec → ServiceSchema.ServiceTemplate).
 func detectsInit(def *InitDef, ly *CandyYAML, candyPath string) bool {
 	if ly == nil {
 		return false
 	}
-	// layer_fields: [service] gates schema-driven detection.
+	// candy_field: [service] gates schema-driven detection.
 	participatesInSchema := false
 	for _, field := range def.CandyFields {
 		if field == "service" {
@@ -158,7 +158,7 @@ func detectsInit(def *InitDef, ly *CandyYAML, candyPath string) bool {
 		}
 	}
 
-	// layer_files: glob the layer dir (file_copy model — systemd *.service units).
+	// candy_file: glob the candy dir (file_copy model — systemd *.service units).
 	for _, pattern := range def.CandyFiles {
 		matches, _ := filepath.Glob(filepath.Join(candyPath, pattern))
 		if len(matches) > 0 {
@@ -170,11 +170,11 @@ func detectsInit(def *InitDef, ly *CandyYAML, candyPath string) bool {
 }
 
 // ResolveInitSystem determines the active init system for an image.
-// Priority: explicit override → auto-detect from layers.
+// Priority: explicit override → auto-detect from candies.
 // Returns ("", nil) if no init system is needed.
 //
-// Layer capability requirements (RequiresCapabilities) are checked
-// against the aggregated layer caps for the composition; init systems
+// Candy capability requirements (RequiresCapabilities) are checked
+// against the aggregated candy caps for the composition; init systems
 // whose requirements aren't met are filtered out. The aggregated caps
 // are also consulted for the bootc-prefer-systemd heuristic via
 // PreserveUser (the canonical signal that this is a bootc-flavored
@@ -196,7 +196,7 @@ func (ic *InitConfig) ResolveInitSystem(layers map[string]*Candy, candyOrder []s
 		caps = &AggregatedCandyCaps{Provided: map[string]bool{}}
 	}
 
-	// Auto-detect: find the init system that layers trigger
+	// Auto-detect: find the init system that candies trigger
 	initHits := make(map[string]bool)
 	for _, candyName := range candyOrder {
 		layer, ok := layers[candyName]

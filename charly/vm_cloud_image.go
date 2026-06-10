@@ -154,7 +154,7 @@ func RegenerateSeedISO(spec *VmSpec, seedPath, vmStateDir string, existingState 
 	// Source-kind agnostic: any VM with a non-nil cloud_init: block gets a
 	// seed ISO. Cloud_image and bootstrap-VM both consume cloud-init via
 	// the NoCloud datasource; bootc-VM optionally does too when its image
-	// includes the cloud-init layer.
+	// includes the cloud-init candy.
 	if spec.CloudInit == nil {
 		return nil
 	}

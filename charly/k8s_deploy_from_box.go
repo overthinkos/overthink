@@ -15,7 +15,7 @@ import (
 // image invariant from Part G.
 // -----------------------------------------------------------------------------
 
-// DeployFromImageOpts carries the source-less-deploy inputs.
+// DeployFromBoxOpts carries the source-less-deploy inputs.
 type DeployFromBoxOpts struct {
 	Engine         string          // "podman" | "docker" (auto-detected if empty)
 	ImageRef       string          // fully-qualified registry/name:tag

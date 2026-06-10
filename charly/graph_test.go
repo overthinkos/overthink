@@ -6,7 +6,7 @@ import (
 )
 
 func TestResolveCandyOrder(t *testing.T) {
-	// Create test layers
+	// Create test candies
 	layers := map[string]*Candy{
 		"pixi":    {Name: "pixi", Require: nil},
 		"python":  {Name: "python", Require: toCandyRefs([]string{"pixi"})},
@@ -86,7 +86,7 @@ func TestResolveCandyOrder(t *testing.T) {
 }
 
 func TestResolveCandyOrderCycle(t *testing.T) {
-	// Create layers with a cycle: a -> b -> c -> a
+	// Create candies with a cycle: a -> b -> c -> a
 	layers := map[string]*Candy{
 		"a": {Name: "a", Require: toCandyRefs([]string{"b"})},
 		"b": {Name: "b", Require: toCandyRefs([]string{"c"})},
@@ -107,7 +107,7 @@ func TestResolveCandyOrderCycle(t *testing.T) {
 }
 
 func TestResolveImageOrder(t *testing.T) {
-	// Create test images
+	// Create test boxes
 	images := map[string]*ResolvedBox{
 		"base": {
 			Name:           "base",
@@ -210,7 +210,7 @@ func TestResolveImageOrderWithBootstrapBuilder(t *testing.T) {
 	// overthinkos/cachyos submodule's charly.yml in the 2026-05 CachyOS migration).
 	// `cachyos` is built `from: builder:pacstrap` with
 	// `bootstrap_builder_image: cachyos-pacstrap-builder`. A downstream
-	// image `app` consumes cachyos via `base: cachyos`. Without the
+	// box `app` consumes cachyos via `base: cachyos`. Without the
 	// bootstrap-builder edge, the topo-sort would schedule cachyos before
 	// cachyos-pacstrap-builder and runPrivilegedBootstrap would fail at
 	// resolveLocalImageRef (build.go:294).
@@ -283,7 +283,7 @@ func TestResolveImageOrderWithBootstrapBuilder(t *testing.T) {
 }
 
 func TestResolveImageOrderCycle(t *testing.T) {
-	// Create images with a cycle
+	// Create boxes with a cycle
 	images := map[string]*ResolvedBox{
 		"a": {Name: "a", Base: "b", IsExternalBase: false},
 		"b": {Name: "b", Base: "c", IsExternalBase: false},
@@ -429,7 +429,7 @@ func TestExpandCandiesWithContent(t *testing.T) {
 	layers := map[string]*Candy{
 		"pipewire": {Name: "pipewire", tasks: []Task{{Cmd: "true"}}},
 		"wayvnc":   {Name: "wayvnc", tasks: []Task{{Cmd: "true"}}},
-		// Composing layer that also has its own install content
+		// Composing candy that also has its own install content
 		"desktop": {Name: "desktop", tasks: []Task{{Cmd: "true"}}, IncludedCandy: toCandyRefs([]string{"pipewire", "wayvnc"})},
 	}
 

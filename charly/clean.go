@@ -79,7 +79,7 @@ func imageLabelCalVer(im LocalImageInfo) (CalVer, bool) {
 }
 
 // pruneImagesByRetention keeps the newest keepN build TAGS per
-// `ai.opencharly.image` group and removes the older ones. Tags are ordered by
+// `ai.opencharly.box` group and removes the older ones. Tags are ordered by
 // the `ai.opencharly.version` CalVer label (PRIMARY) then the `:YYYY.DDD.HHMM`
 // build TAG (TIEBREAKER); because the label is content-stable, the tag is what
 // distinguishes the newest builds.
@@ -106,7 +106,7 @@ func pruneImagesByRetention(engine string, keepN int, dryRun bool) ([]string, er
 	}
 
 	// One candidate PER TAG (deduped by ref — robust even if the lister returns
-	// row-per-tag duplicates), grouped by the ai.opencharly.image label.
+	// row-per-tag duplicates), grouped by the ai.opencharly.box label.
 	// Non-charly images (no label) are never touched.
 	type tagCand struct {
 		ref         string

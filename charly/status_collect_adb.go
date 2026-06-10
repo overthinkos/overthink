@@ -19,7 +19,7 @@ import (
 //
 // Every row is stamped Kind=SubstrateAndroid, Source="adb". Container carries
 // the device serial (or the in-pod container name when the serial is empty),
-// and the Network cell notes the venue: "in-pod (<container>)" for an image
+// and the Network cell notes the venue: "in-pod (<container>)" for a box
 // device, "endpoint <host:port>" for a remote adb endpoint.
 //
 // Under opts.Nested the collector additionally polls sys.boot_completed on a

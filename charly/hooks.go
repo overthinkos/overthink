@@ -7,14 +7,14 @@ import (
 	"strings"
 )
 
-// HooksConfig holds lifecycle hook scripts for a layer
+// HooksConfig holds lifecycle hook scripts for a candy
 type HooksConfig struct {
 	PostEnable string `yaml:"post_enable,omitempty" json:"post_enable,omitempty"`
 	PreRemove  string `yaml:"pre_remove,omitempty" json:"pre_remove,omitempty"`
 }
 
-// CollectHooks collects and concatenates hooks from all layers in an image's layer chain.
-// Hooks from multiple layers are concatenated in layer order.
+// CollectHooks collects and concatenates hooks from all candies in a box's candy chain.
+// Hooks from multiple candies are concatenated in candy order.
 func CollectHooks(cfg *Config, layers map[string]*Candy, boxName string) *HooksConfig {
 	var allCandyNames []string
 	for _, node := range cfg.walkBaseChain(boxName) {

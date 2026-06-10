@@ -4,19 +4,19 @@ import (
 	"os"
 )
 
-// LocalSpec is a reusable layer-stack template applied directly to a
+// LocalSpec is a reusable candy-stack template applied directly to a
 // Linux filesystem (target:local deployments). Unlike pod/vm/k8s which
-// wrap an image, a local deployment is defined entirely by its layer
+// wrap an image, a local deployment is defined entirely by its candy
 // stack + install options + env — there's no OCI artifact backing it.
 // A kind:local entry lets multiple deployments share the same profile
 // (e.g., a "developer workstation" stack reused across machines).
 //
 // A target:local deployment MAY reference a template via
-// `local: <name>` on kind:deployment OR inline `add_layers:` directly.
+// `local: <name>` on kind:deployment OR inline `add_candy:` directly.
 // Both are valid; templates are for reuse.
 type LocalSpec struct {
-	// Layers is the ordered layer stack applied to the host filesystem.
-	// Required (use `layers: []` for an explicit stub placeholder; an
+	// Candy is the ordered candy stack applied to the host filesystem.
+	// Required (use `candy: []` for an explicit stub placeholder; an
 	// empty list emits a load-time WARNING but is permitted to support
 	// staged template name reservation).
 	Candy []string `yaml:"candy"`
@@ -39,13 +39,13 @@ type LocalSpec struct {
 	Description *Description `yaml:"description,omitempty"`
 
 	// Eval / DeployEval are optional target-specific checks (default
-	// empty). Layer tests and per-deployment tests propagate
+	// empty). Candy tests and per-deployment tests propagate
 	// automatically.
 	Eval       []Check `yaml:"eval,omitempty"`
 	DeployEval []Check `yaml:"deploy_eval,omitempty"`
 
 	// Note: there is NO image-fetch surface on a kind:local template.
-	// Deploys apply layers (host packages + configs) only; container
+	// Deploys apply candies (host packages + configs) only; container
 	// images required for `charly eval run` / `charly eval live` are ensured by the
 	// eval preflight (see charly/eval_image_preflight.go), sourced from the
 	// score's `target_image:` + scenario `pod:` declarations. The

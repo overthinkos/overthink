@@ -69,7 +69,7 @@ var CapabilityLabelMap = map[string]string{
 	"EnvCandy":   LabelEnvCandy,
 	"PathAppend": LabelPathAppend,
 
-	// Init — auto-detected from layers (see init_config.go ResolveInitSystem).
+	// Init — auto-detected from candies (see init_config.go ResolveInitSystem).
 	// Engine moved to DeploymentNode in schema v4 (deploy-host choice).
 	"Init":         LabelInit,
 	"Service":      LabelService,
@@ -106,14 +106,14 @@ var CapabilityLabelMap = map[string]string{
 	// Declarative tests (image-level invariants + deploy defaults)
 	"Eval": LabelEval,
 
-	// Gherkin-shaped self-description — three-section (layer/image/deploy)
+	// Gherkin-shaped self-description — three-section (candy/box/deploy)
 	// LabelDescriptionSet. Replaces the single-scalar Info/Status pair in
 	// the BDD cutover; those remain on BoxMetadata during the additive
 	// foundation phase and are removed in the hard-cutover commit.
 	"Description": LabelDescription,
 
-	// Shell-init manifest — three-section (layer/image/deploy) per-shell
-	// rc-snippet contributions. 2026-05 cutover. Read by `charly image
+	// Shell-init manifest — three-section (candy/box/deploy) per-shell
+	// rc-snippet contributions. 2026-05 cutover. Read by `charly box
 	// inspect`, `charly deploy from-box`, and the charly.yml `shell:`
 	// overlay merge in MergeDeployShell.
 	"Shell": LabelShell,

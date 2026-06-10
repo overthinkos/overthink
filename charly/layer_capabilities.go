@@ -6,19 +6,19 @@ import (
 	"strings"
 )
 
-// CandyCapabilities is the per-layer YAML shape parsed from the candy manifest
-// `capabilities:`. Layers contribute image-level facts that previously
+// CandyCapabilities is the per-candy YAML shape parsed from the candy manifest
+// `capabilities:`. Candies contribute image-level facts that previously
 // hid behind magic image-level booleans (image.bootc, image.data_image).
 //
 // Aggregation rules at image resolve time:
-//   - bools: OR (any contributing layer wins)
-//   - strings: last-layer-wins (deterministic via topological order)
+//   - bools: OR (any contributing candy wins)
+//   - strings: last-candy-wins (deterministic via topological order)
 //   - oci_labels map: union; key collision with conflicting values is a hard error
 //
 // The aggregated values populate the existing BoxMetadata surface
 // (labels.go), which already round-trips through OCI labels. We do NOT
 // introduce a parallel runtime contract type; we just change the source
-// of truth from BoxConfig flags to layer aggregation.
+// of truth from BoxConfig flags to candy aggregation.
 type CandyCapabilities struct {
 	PreserveUser       bool              `yaml:"preserve_user,omitempty"`
 	NeedsRootAfterInit bool              `yaml:"needs_root_after_init,omitempty"`
@@ -27,7 +27,7 @@ type CandyCapabilities struct {
 	OCILabels          map[string]string `yaml:"oci_label,omitempty"`
 }
 
-// AggregatedCandyCaps is the output of walking all layers in resolution
+// AggregatedCandyCaps is the output of walking all candies in resolution
 // order. It is populated onto ResolvedBox and consumed wherever code
 // previously read BoxConfig.Bootc, BoxConfig.DataImage, or the
 // init-system bootc parameter.
@@ -37,15 +37,15 @@ type AggregatedCandyCaps struct {
 	InitSystemHint     string
 	DataOnly           bool
 	OCILabels          map[string]string
-	// Provided is the set of capability names declared by some layer in
+	// Provided is the set of capability names declared by some candy in
 	// the composition. Used by CheckRequiredCapabilities to validate
-	// `requires_capabilities:` cross-layer requirements.
+	// `requires_capabilities:` cross-candy requirements.
 	Provided map[string]bool
 }
 
-// AggregateCandyCapabilities walks `order` (layer names in topological
-// resolution order) and merges each layer's `capabilities:` contribution.
-// Returns an error if two layers declare conflicting values for the same
+// AggregateCandyCapabilities walks `order` (candy names in topological
+// resolution order) and merges each candy's `capabilities:` contribution.
+// Returns an error if two candies declare conflicting values for the same
 // OCI label key — the conflict surfaces the bug rather than silently
 // picking a winner.
 func AggregateCandyCapabilities(layers map[string]*Candy, order []string) (*AggregatedCandyCaps, error) {
@@ -99,7 +99,7 @@ func AggregateCandyCapabilities(layers map[string]*Candy, order []string) (*Aggr
 }
 
 // CheckRequiredCapabilities returns a sorted list of capability names
-// requested via `requires_capabilities:` on any layer in `order` but not
+// requested via `requires_capabilities:` on any candy in `order` but not
 // provided by the aggregated capabilities. Empty slice on success.
 func CheckRequiredCapabilities(layers map[string]*Candy, order []string, agg *AggregatedCandyCaps) []string {
 	if agg == nil {
@@ -126,7 +126,7 @@ func CheckRequiredCapabilities(layers map[string]*Candy, order []string, agg *Ag
 }
 
 // CandyCapabilitiesError formats a missing-capabilities error with a
-// remediation hint pointing at which layers requested what.
+// remediation hint pointing at which candies requested what.
 func CandyCapabilitiesError(layers map[string]*Candy, order []string, missing []string) error {
 	if len(missing) == 0 {
 		return nil

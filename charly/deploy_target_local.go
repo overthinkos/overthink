@@ -13,7 +13,7 @@ package main
 //       - user + host-native   → `bash <<EOF ... EOF` as invoking user
 //       - * + container-builder → podman run <builder> ...
 //       - * + skip             → no-op (just record the skip reason)
-//   4. After every successful step, append to the per-layer ledger.
+//   4. After every successful step, append to the per-candy ledger.
 //   5. After the whole plan completes, write the deploy record.
 
 import (
@@ -81,10 +81,10 @@ type LocalDeployTarget struct {
 
 	// LocalSpec is the resolved kind:local template. Populated by the
 	// deploy dispatcher when a deployment carries `local: <name>`.
-	// Used for layer-stack composition only — there is NO image-fetch
+	// Used for candy-stack composition only — there is NO image-fetch
 	// surface on a kind:local template (see local_spec.go for the
 	// post-2026-05 contract). Nil when the deployment uses inline
-	// add_layers: instead of a template.
+	// add_candy: instead of a template.
 	LocalSpec *LocalSpec
 
 	// Cfg + ProjectDir are kept on the target for downstream callers
@@ -229,9 +229,9 @@ func (t *LocalDeployTarget) emitPlan(plan *InstallPlan, opts EmitOpts) error {
 	return t.recordCandy(rec, plan, opts)
 }
 
-// recordCandy writes the per-layer ledger entry and adds the deploy
+// recordCandy writes the per-candy ledger entry and adds the deploy
 // to the refcount set. Idempotent across multiple deploys of the same
-// layer.
+// candy.
 func (t *LocalDeployTarget) recordCandy(rec *CandyRecord, plan *InstallPlan, opts EmitOpts) error {
 	if opts.DryRun || plan.DeployID == "" {
 		return nil
@@ -276,7 +276,7 @@ func (t *LocalDeployTarget) execStep(step InstallStep, plan *InstallPlan, opts E
 	case *ApkInstallStep:
 		// apk packages install onto a `kind: android` device, not a host —
 		// a local deploy has no emulator. Record a skip and continue (a
-		// layer carrying apk: may also carry host-relevant steps).
+		// candy carrying apk: may also carry host-relevant steps).
 		t.noteStep(rec, StepKindApkInstall, s.Scope(), VenueSkip,
 			fmt.Sprintf("layer=%s skipped: apk installs only on a kind:android device", s.CandyName), start)
 		return nil
@@ -294,12 +294,12 @@ func (t *LocalDeployTarget) execStep(step InstallStep, plan *InstallPlan, opts E
 	return fmt.Errorf("LocalDeployTarget: unknown step kind %T", step)
 }
 
-// execShellSnippet renders one (layer, shell) snippet onto the target
+// execShellSnippet renders one (candy, shell) snippet onto the target
 // venue. Shell-detection probe runs once per Emit() (cached on the
 // target struct). Snippets for absent shells become VenueSkip-style
 // no-ops with a logged reason. UseDropin=true writes the file
 // outright; UseDropin=false applies replaceOrAppendManagedBlock to the
-// existing rc file under a per-layer fence pair.
+// existing rc file under a per-candy fence pair.
 func (t *LocalDeployTarget) execShellSnippet(s *ShellSnippetStep, plan *InstallPlan, opts EmitOpts, rec *CandyRecord, start time.Time) error {
 	if err := t.ensureShellProbe(opts); err != nil {
 		return err
@@ -618,11 +618,11 @@ func (t *LocalDeployTarget) execTask(s *TaskStep, plan *InstallPlan, opts EmitOp
 	if s.Task == nil {
 		return nil
 	}
-	// copy: stages a layer file onto the venue through the executor's
+	// copy: stages a candy file onto the venue through the executor's
 	// PutFile — a plain `install` locally, scp+install over SSH. This is
 	// the ONE path both LocalDeployTarget and VmDeployTarget share for
 	// file-copy tasks (a rendered `install <candyDir>/<f> <dst>` only works
-	// when the layer dir is on the same host the command runs on, which is
+	// when the candy dir is on the same host the command runs on, which is
 	// false for SSH/VM deploys — the historic VM copy:-task bug).
 	if s.Task.Copy != "" {
 		src := filepath.Join(s.CandyDir, s.Task.Copy)
@@ -683,7 +683,7 @@ func (t *LocalDeployTarget) execTask(s *TaskStep, plan *InstallPlan, opts EmitOp
 // package-level (uses only the step, not the target) so LocalDeployTarget AND
 // VmDeployTarget render every task verb through ONE code path. copy: is NOT
 // handled here — it is staged via the executor's PutFile in execTask, the only
-// portable way to place a layer file on a remote/SSH venue.
+// portable way to place a candy file on a remote/SSH venue.
 func renderTaskCommand(s *TaskStep) (string, error) {
 	task := s.Task
 	ctxPath := s.CtxPath
@@ -694,8 +694,8 @@ func renderTaskCommand(s *TaskStep) (string, error) {
 		if ctxPath != "" {
 			body = strings.ReplaceAll(body, "/ctx/", ctxPath+"/")
 		}
-		// Prepend BUILD_ARCH/ARCH + layer.vars exports so cmd bodies
-		// templating ${ARCH} / ${MY_LAYER_VAR} resolve at deploy-time
+		// Prepend BUILD_ARCH/ARCH + candy.vars exports so cmd bodies
+		// templating ${ARCH} / ${MY_CANDY_VAR} resolve at deploy-time
 		// the same as they do at build-time. Build-time gets these
 		// from BuildKit's TARGETARCH ENV + emitVarsEnv ENV directives.
 		if preamble := taskShellPreamble(s); preamble != "" {
@@ -734,7 +734,7 @@ func renderTaskCommand(s *TaskStep) (string, error) {
 	return "", fmt.Errorf("task has no supported verb: %+v", task)
 }
 
-// parseTaskMode parses a layer task mode string ("0644", "0o755") into a
+// parseTaskMode parses a candy task mode string ("0644", "0o755") into a
 // uint32 file mode for PutFile, falling back to def when empty/unparseable.
 func parseTaskMode(mode string, def uint32) uint32 {
 	if mode == "" {
@@ -748,8 +748,8 @@ func parseTaskMode(mode string, def uint32) uint32 {
 }
 
 // taskShellPreamble returns the BUILD_ARCH/ARCH exports plus any
-// layer.vars exports (sorted for deterministic output) so cmd: bodies
-// can reference ${ARCH} / ${MY_LAYER_VAR} at deploy-time the same way
+// candy.vars exports (sorted for deterministic output) so cmd: bodies
+// can reference ${ARCH} / ${MY_CANDY_VAR} at deploy-time the same way
 // they do at build-time. Trailing newline included; safe to prepend
 // to a script.
 func taskShellPreamble(s *TaskStep) string {
@@ -850,8 +850,8 @@ func renderDownloadScript(task *Task, candyVars map[string]string) string {
 	//
 	// ARCH is the BuildKit-style triplet (amd64/arm64/arm) — same format
 	// the container-build path gets from BuildKit's TARGETARCH. Without
-	// this, layers that template `${ARCH}` into a download URL (e.g.
-	// the kubernetes layer's `k3d-linux-${ARCH}`) get an empty value at
+	// this, candies that template `${ARCH}` into a download URL (e.g.
+	// the kubernetes candy's `k3d-linux-${ARCH}`) get an empty value at
 	// host-deploy time and curl 404s. Mapping uname-style → BuildKit
 	// covers the architectures charly officially targets.
 	b.WriteString(buildArchExports())
@@ -998,15 +998,15 @@ func (t *LocalDeployTarget) execRepoChange(s *RepoChangeStep, plan *InstallPlan,
 	return nil
 }
 
-// execLocalPkg builds the layer's bundled package source on the host and
+// execLocalPkg builds the candy's bundled package source on the host and
 // installs the result onto the deploy venue — the proper-package counterpart of
-// the layer's curl/COPY cmd: task (for the `charly` layer this lands opencharly-git
+// the candy's curl/COPY cmd: task (for the `charly` candy this lands opencharly-git
 // at /usr/bin/charly instead of an untracked /usr/local/bin/charly). The build/install
 // commands, package glob, and probe all come from the package format's
 // `local_pkg:` config (config-driven). Gated on the VENUE having the format's
 // package manager (an Arch/CachyOS host, or an Arch SSH host for a
 // `host: user@machine` local deploy); an unsupported venue or a missing source
-// dir is a clean no-op (the layer's curl task installs it there). The shared
+// dir is a clean no-op (the candy's curl task installs it there). The shared
 // build+transfer+install body lives in localpkg.go (R3 — the VM target calls the
 // same execLocalPkgInstall).
 func (t *LocalDeployTarget) execLocalPkg(s *LocalPkgInstallStep, plan *InstallPlan, opts EmitOpts, rec *CandyRecord, start time.Time) error {

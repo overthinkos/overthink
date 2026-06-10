@@ -6,7 +6,7 @@ package main
 //
 // The migration is invoked via an explicit Go test
 // (migrate_services_test.go) that's guarded by the CH_RUN_MIGRATION
-// env var so it doesn't run in normal test runs. After all layers are
+// env var so it doesn't run in normal test runs. After all candies are
 // migrated the tool can be deleted — the compiler only needs to
 // understand the unified schema going forward (legacy-compat path
 // stays in the compiler to keep `go test` green without migration).

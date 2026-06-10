@@ -1,13 +1,13 @@
 package main
 
 // layer_secrets.go — resolver for the candy manifest `secret_requires:` and
-// `secret_accepts:` when a layer is being applied via host / vm / ssh deploy
+// `secret_accepts:` when a candy is being applied via host / vm / ssh deploy
 // targets (the non-container install-plan flow).
 //
 // Container targets have their own path (ProvisionPodmanSecrets, see
 // secrets.go) that mounts secrets as podman secrets / env at container-run
-// time. That path runs AFTER build and does not inject env into the layer's
-// build-time tasks. For install-plan-based targets, the layer's tasks run
+// time. That path runs AFTER build and does not inject env into the candy's
+// build-time tasks. For install-plan-based targets, the candy's tasks run
 // directly on the deploy target, so the credential-store value must be
 // resolved on the operator side and passed through as env on the step.
 //
@@ -15,7 +15,7 @@ package main
 // auto-generate a 32-byte hex token via DefaultCredentialStore.Set when
 // missing everywhere (env + store). `secret_accepts:` entries fall back to
 // dep.Default when missing, never auto-generate. The auto-generation is
-// race-free across multiple layers declaring the same secret because
+// race-free across multiple candies declaring the same secret because
 // DefaultCredentialStore is cached via sync.Once and the first caller's
 // Set is visible to the second caller's ResolveCredential.
 
@@ -34,7 +34,7 @@ import (
 // and must start with "charly/" (enforced by validate.go). When Key is empty,
 // the default lookup is service="charly/secret", key=Name.
 //
-// Race-free across multiple layers declaring the same secret: the first
+// Race-free across multiple candies declaring the same secret: the first
 // caller's store.Set lands in the active backend (keyring/config
 // fallback per credential_store.go DefaultCredentialStore); the second
 // caller's ResolveCredential reads the persisted value. All callers in
@@ -60,7 +60,7 @@ func ensureCandySecret(dep EnvDependency, required bool) (val, source string) {
 	return generateAndStoreSecret(service, key)
 }
 
-// ResolveCandySecret walks the layer's secret_requires + secret_accepts
+// ResolveCandySecret walks the candy's secret_requires + secret_accepts
 // and resolves each via the credential store. Required entries that miss
 // everywhere auto-generate a 32-byte hex token (see ensureCandySecret).
 // Optional `secret_accepts:` entries that miss fall back to dep.Default.
@@ -96,9 +96,9 @@ func ResolveCandySecret(layer *Candy) map[string]string {
 	return env
 }
 
-// ResolveSecretForCandy is the batch variant used when multiple layers in
+// ResolveSecretForCandy is the batch variant used when multiple candies in
 // a single deploy share secret_requires — their resolution results merge
-// into one env map, with layer-order precedence (later layers win on
+// into one env map, with candy-order precedence (later candies win on
 // duplicate names, matching the existing generate.go `secretRequiresMap`
 // semantics in the label-emission path).
 func ResolveSecretForCandy(layers []*Candy) map[string]string {
@@ -111,9 +111,9 @@ func ResolveSecretForCandy(layers []*Candy) map[string]string {
 	return env
 }
 
-// CandyForPlan reloads the layer map and returns the ordered *Layer
+// CandyForPlan reloads the candy map and returns the ordered *Candy
 // slice covered by the given plans (both CandiesIncluded for image-level
-// plans and per-plan Layer for layer-only plans). Used by deploy-add to
+// plans and per-plan Candy for candy-only plans). Used by deploy-add to
 // call ResolveSecretForCandy + RetrieveCandyArtifacts.
 func CandyForPlan(plans []*InstallPlan, dir string, cfg *Config) ([]*Candy, error) {
 	layers, err := ScanAllCandyWithConfig(dir, cfg)
@@ -142,7 +142,7 @@ func CandyForPlan(plans []*InstallPlan, dir string, cfg *Config) ([]*Candy, erro
 
 // InjectSecretsIntoPlans merges the resolved secret env map into every
 // TaskStep's task.Env across the supplied plans. Existing task.Env keys
-// are preserved (layer-declared env takes precedence over a credential-
+// are preserved (candy-declared env takes precedence over a credential-
 // store collision — a deliberate choice so an author can explicitly pin
 // a value they control). Called from deploy_add_cmd after
 // ResolveCandySecret and before target.Emit so the heredoc renderer

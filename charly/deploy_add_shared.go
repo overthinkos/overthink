@@ -6,7 +6,7 @@ package main
 // ONE implementation, called from local/vm/pod Add.
 //
 // Ordering is load-bearing and preserved exactly:
-//   - secrets are injected into the plans BEFORE any Emit (a layer's
+//   - secrets are injected into the plans BEFORE any Emit (a candy's
 //     TaskStep body references the resolved token via env).
 //   - artifactEnv is secretEnv first, then node.Env lines overlaid
 //     (last-wins) — so a deploy entry's explicit env: overrides an
@@ -19,10 +19,10 @@ import (
 	"strings"
 )
 
-// prepareCandySecrets resolves the layers backing `plans`, computes their
+// prepareCandySecrets resolves the candies backing `plans`, computes their
 // secret_requires / secret_accepts env (auto-generating + persisting any
 // missing required token), and injects it into every plan's TaskSteps
-// BEFORE emission. Returns the resolved layer list (the caller reuses it
+// BEFORE emission. Returns the resolved candy list (the caller reuses it
 // for artifact retrieval) and the secret env map.
 //
 // Shared by LocalUnifiedTarget.Add / VmUnifiedTarget.Add /
@@ -38,7 +38,7 @@ func prepareCandySecrets(plans []*InstallPlan, dir string) ([]*Candy, map[string
 	return candyList, secretEnv, nil
 }
 
-// buildArtifactEnv composes the env used for layer-artifact path
+// buildArtifactEnv composes the env used for candy-artifact path
 // substitution: the resolved secret env first, then the deploy node's
 // own env: lines overlaid (last-wins). nil node contributes nothing.
 //
@@ -61,9 +61,9 @@ func buildArtifactEnv(secretEnv map[string]string, node *DeploymentNode) map[str
 	return env
 }
 
-// retrieveArtifactsAndK3s pulls back the layers' published artifacts via
+// retrieveArtifactsAndK3s pulls back the candies' published artifacts via
 // the same executor the deploy used, then runs the k3s-server post-hook
-// (merge kubeconfig + register ClusterProfile) when the layer set includes
+// (merge kubeconfig + register ClusterProfile) when the candy set includes
 // k3s-server. No-op under DryRun.
 //
 // Shared by LocalUnifiedTarget.Add / VmUnifiedTarget.Add.

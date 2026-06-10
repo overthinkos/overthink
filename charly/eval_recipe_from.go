@@ -240,12 +240,17 @@ func collectScenariosForFromDescription(uf *UnifiedFile, layers map[string]*Laye
 		return append([]Scenario(nil), layer.Description.Scenario...), nil
 
 	case "image":
-		_, ok := uf.Image[from.Name]
+		// Namespace-aware: a recipe may import from an image that lives in an
+		// imported submodule (e.g. `fedora.composition-source` after the box
+		// inversion). resolveImageRef descends into the namespace and returns
+		// that namespace's Config; CollectDescriptions then walks the chain in
+		// the right Config keyed by the leaf name. Bare refs resolve locally.
+		cfg := uf.ProjectConfig()
+		_, nsCfg, ok := cfg.resolveImageRef(from.Name)
 		if !ok {
 			return nil, fmt.Errorf("image %q not found (available: %s)", from.Name, sortedImageNames(uf))
 		}
-		cfg := uf.ProjectConfig()
-		set := CollectDescriptions(cfg, layers, from.Name)
+		set := CollectDescriptions(nsCfg, layers, leafName(from.Name))
 		if set == nil {
 			return nil, fmt.Errorf("image %q produced no descriptions (no layer in the chain has a description: block)", from.Name)
 		}
@@ -334,12 +339,13 @@ func collectChecksForFrom(uf *UnifiedFile, layers map[string]*Layer, from Harnes
 		return out, nil
 
 	case "image":
-		_, ok := uf.Image[from.Name]
+		// Namespace-aware (see the kind:image case in collectScenariosForFromDescription).
+		cfg := uf.ProjectConfig()
+		_, nsCfg, ok := cfg.resolveImageRef(from.Name)
 		if !ok {
 			return nil, fmt.Errorf("image %q not found (available: %s)", from.Name, sortedImageNames(uf))
 		}
-		cfg := uf.ProjectConfig()
-		set := CollectEval(cfg, layers, from.Name)
+		set := CollectEval(nsCfg, layers, leafName(from.Name))
 		if set == nil {
 			return nil, nil
 		}

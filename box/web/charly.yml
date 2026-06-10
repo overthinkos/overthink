@@ -1,8 +1,0 @@
-box:
-    name: web
-    base: fedora
-    candy:
-        - supervisord
-        - web-layer
-    port:
-        - 8080:8080

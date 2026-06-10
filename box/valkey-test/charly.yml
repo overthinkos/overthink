@@ -1,9 +1,0 @@
-box:
-    name: valkey-test
-    base: fedora
-    candy:
-        - agent-forwarding
-        - supervisord
-        - valkey
-    port:
-        - 6379:6379

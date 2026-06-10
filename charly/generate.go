@@ -462,7 +462,7 @@ func (g *Generator) generateContainerfile(imageName string) error {
 		if layer.HasRoute() {
 			hasRoutes = true
 		}
-		if layerName == "traefik" {
+		if layer.Name == "traefik" {
 			hasTraefik = true
 		}
 	}

@@ -1,8 +1,0 @@
-box:
-    name: tier23
-    base: fedora
-    candy:
-        - supervisord
-        - eval-tier23-layer
-    port:
-        - 8080:8080

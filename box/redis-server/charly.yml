@@ -1,9 +1,0 @@
-box:
-    # tier4-redis: server bound to 0.0.0.0 for cross-pod access (deploys as `redis`).
-    name: redis-server
-    base: fedora
-    candy:
-        - supervisord
-        - redis-server-layer
-    port:
-        - 6379:6379

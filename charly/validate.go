@@ -353,7 +353,12 @@ func validateInitDependencies(cfg *Config, initCfg *InitConfig, layers map[strin
 			// Check if the depends_layer is in the resolved layers
 			hasDepLayer := false
 			for _, layerName := range resolved {
-				if layerName == def.DependsLayer {
+				// layerName is the resolved-order map KEY — for a remotely
+				// consumed @github candy that's the qualified path, not the bare
+				// name. Compare the layer's identity (layer.Name), per the idiom
+				// documented at generate.go ("for REMOTE layers layerName is the
+				// full @github map key; local: layerName == layer.Name").
+				if l, ok := layers[layerName]; ok && l.Name == def.DependsLayer {
 					hasDepLayer = true
 					break
 				}
@@ -1707,7 +1712,7 @@ func validatePortRelay(cfg *Config, layers map[string]*Layer, errs *ValidationEr
 			if len(layer.PortRelayPorts) > 0 {
 				hasRelay = true
 			}
-			if layerName == "socat" {
+			if layer.Name == "socat" {
 				hasSocat = true
 			}
 		}

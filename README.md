@@ -689,7 +689,7 @@ not enumerations:
   `/charly-selkies:*` (40), `/charly-openclaw:*`, `/charly-versa:*`,
   `/charly-ollama:*`, `/charly-openwebui:*`, `/charly-comfyui:*`,
   `/charly-immich:*`, `/charly-hermes:*`, `/charly-filebrowser:*`.
-- **Box catalog** (discovered `box/<name>/charly.yml` across the repo + submodules) — 53 boxes,
+- **Box catalog** (discovered `box/<name>/charly.yml` in the `image/<distro>` submodules — main owns none after the 2026-06 box inversion) — boxes,
   39 enabled by default. Same plugin namespaces; per-pod boxes
   carry an MCP server hint in `plugins/README.md`.
 - **VM catalog** (`vm.yml` + `image/cachyos/vm.yml`) — cloud_image

@@ -1,9 +1,0 @@
-box:
-    # kubernetes-cluster: fake k8s API server (deploys as `k8s`).
-    name: k8s
-    base: fedora
-    candy:
-        - supervisord
-        - k8s-layer
-    port:
-        - 6443:6443

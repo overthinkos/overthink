@@ -1,9 +1,0 @@
-box:
-    name: openclaw-full
-    enabled: true
-    base: cachyos.cachyos
-    candy:
-        - agent-forwarding
-        - openclaw-full
-    port:
-        - 18789:18789

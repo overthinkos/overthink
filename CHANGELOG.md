@@ -22,6 +22,63 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-10 — feat!: box inversion — relocate every box from main's `box/` into the `image/<distro>` submodules; flip the import graph
+
+The main repo's `box/` is now EMPTY. All 43 box definitions moved into the
+`image/<distro>` submodule matching the box's ROOT distro, and the
+main↔submodule import direction flipped from a mutual cycle to one-directional
+(main → submodule).
+
+**Relocation (by root distro):**
+- **image/arch** gained the Arch base/builder stack (`arch`, `arch-builder`,
+  `cuda-arch-builder`) + `vscode-test`. Self-contained (`import: []`).
+- **image/cachyos** gained `versa`, `openclaw`/`openclaw-full`/`openclaw-desktop`,
+  `githubrunner`, `android-emulator`, `charly-selftest` + the `pixel9a-36` /
+  `pixel9a-endpoint` android devices. It now imports `arch` (for
+  `arch.arch-builder` / `arch.cuda-arch-builder`) instead of `charly`.
+- **image/fedora** gained the Fedora base/builder stack (`fedora`,
+  `fedora-nonfree`, `fedora-builder`) + ~29 fedora-rooted boxes (jupyter,
+  jupyter-ml, comfyui, ollama, unsloth-studio, immich, immich-ml, openwebui,
+  hermes(-playwright), web, chrome-headless, eval-pod, eval-target,
+  composition-source/app, filebrowser, k8s, mcp, os, redis*, selftest-*,
+  tier1/tier23, valkey-test). Self-contained (`import: []`).
+
+**Inverted import graph:** main imports all three active distro submodules
+(`arch`/`cachyos`/`fedora`) one-directionally to reference the relocated boxes in
+its inline eval/vm/local/k8s/android orchestration; the submodules reach main's
+shared candies via `@github` refs (not a namespace import), so the former
+main↔cachyos / main↔fedora mutual cycles are dissolved. arch + fedora are fully
+self-contained; cachyos imports only arch.
+
+**Bed relocation:** each box's per-box R10 bed moved into the box's submodule
+(bare local ref). Main retains only the box-less mechanism/substrate beds
+(`eval-k3s-vm`, `eval-cross-vm-http`, `eval-local`, `eval-charly-vm`) and the two
+cross-deployment mechanism beds (`eval-cross-pod-cdp`, `eval-cross-local-http`),
+which now reference their subject boxes as `fedora.web` / `fedora.chrome-headless`
+(their shared driver template stays in main, so moving them would duplicate it).
+Main's `defaults.builder` was dropped (main owns no boxes to build).
+
+**Two pre-existing Go bugs were exposed and fixed (R3) in main's charly binary:**
+1. The validator/generator compared the resolved-layer-order MAP KEY (the
+   qualified `@github` path for a remotely-consumed candy) against a bare layer
+   name, at three sites (`validate.go` socat / depends_layer, `generate.go`
+   traefik). The traefik one SILENTLY dropped routes for any box consuming traefik
+   via a remote ref. Fixed to compare `layer.Name`. Exposed because the relocated
+   boxes are the first to consume `port_relay`/`traefik` candies cross-repo via
+   `@github` (caught by cachyos `eval-openclaw-pod`).
+2. The eval-recipe loader resolved `from[].name` (kind:image) only in the local
+   image map, not namespace-aware. Fixed to use `resolveImageRef`, so a recipe can
+   import scenarios from a relocated image (`fedora.composition-source`,
+   `fedora.jupyter`).
+
+**Known orthogonal finding (NOT a regression of this cutover):** the `charly-mcp`
+candy's `box.list.boxes` deploy-scope check fails on fedora-coder because the
+`@github`-pinned `candy/charly:v2026.160.2017` bundles an older charly binary
+(2026.159.1515) whose MCP auto-default can't list the current main project. The
+fedora-coder image content is byte-identical pre/post move, and a boxless main
+returns exit 0, so the cutover neither caused nor worsened it; bumping the
+charly-candy pin is a separable future change.
+
 ### 2026-06-10 — chore(images): enable all previously-disabled boxes
 
 Removed the `enabled: false` flag from all 12 previously-disabled boxes so they

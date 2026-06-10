@@ -1,9 +1,0 @@
-box:
-    name: redis
-    base: fedora
-    candy:
-        - supervisord
-        - redis
-        - eval-redis-init-layer
-    port:
-        - 6379:6379

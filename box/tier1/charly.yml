@@ -1,5 +1,0 @@
-box:
-    name: tier1
-    base: fedora
-    candy:
-        - eval-tier1-layer

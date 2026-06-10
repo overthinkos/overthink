@@ -1,8 +1,0 @@
-box:
-    name: hermes-playwright
-    base: fedora
-    candy:
-        - agent-forwarding
-        - hermes
-        - hermes-playwright
-        - dbus

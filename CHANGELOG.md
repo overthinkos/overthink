@@ -22,6 +22,14 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-11 — refactor(pacstrap): move the pacstrap toolchain eval onto candy/pacstrap-builder (covers both builder boxes)
+
+The `cachyos-pacstrap-builder` box re-declared four box-level checks — `cpb-pacstrap-binary` (`/usr/sbin/pacstrap`), `cpb-arch-install-scripts` (package), `cpb-grub-install` (`/usr/sbin/grub-install`), `cpb-parted` (`/usr/sbin/parted`) — that test the `pacstrap-builder` candy's OWN install surface (arch-install-scripts, grub, parted). The sibling `arch-pacstrap-builder` box composed the SAME candy but carried NO eval at all, so the toolchain went unverified there. Moving the four checks ONTO `candy/pacstrap-builder` (which had no eval) makes ONE candy check cover EVERY box composing it (R3): the cachyos box drops its `cpb-*` copies and arch-pacstrap-builder GAINS the coverage for free. Build-scope (pacstrap ships inside arch-install-scripts; grub/parted ship the named binaries).
+
+Eval-normalization campaign, cutover 6 of 7 — the gap-fill MOVE. Cross-repo (B6): the producer candy lands in **main** (`candy/pacstrap-builder` version `2026.144.1443`→`2026.162.1200`, +eval block; tag `v2026.162.1207`); the two **box/{cachyos,arch}** consumers reconcile their `@github…/pacstrap-builder` pin to `v2026.162.1207` (cachyos drops `cpb-*`, arch gains the candy eval; both tag `v2026.162.1210`); main bumps the two submodule pointers. No `package_map:` needed — both boxes are Arch-family (`distro: arch`), so the candy's single `distro.arch.package` section already names them.
+
+R10: `charly eval box cachyos-pacstrap-builder` 4 passed · 0 failed AND `charly eval box arch-pacstrap-builder` 4 passed · 0 failed (the candy checks that replaced/added the box coverage all green on both consumers, fetched from the landed candy tag). No schema change (content-only; per-candy `version:` is the candy's own CalVer, not the YAML schema version).
+
 ### 2026-06-11 — refactor(coder): drop redundant coder-box eval rollups (covered by their candies)
 
 The four `*-coder` boxes (arch/debian/fedora/ubuntu) each re-declared box-level eval checks — `*-ai-clis`, `*-languages`, `*-devops`, `*-sshd-port`, `*-mcp-port` (+ arch-coder's `*-charly-version`) — that the composed candies ALREADY provide at the IDENTICAL path: claude-code/codex/gemini/forgecode (`${HOME}/.npm-global/bin/{claude,codex,gemini,forge}`), golang/nodejs/rust (`/usr/bin/{go,node,cargo}`), kubernetes/docker-ce/devops-tools/google-cloud (`{kubectl,docker,aws,gcloud,tofu}`), sshd (:2222), charly-mcp (:18765), charly (`charly version`). One candy check covers every box composing the candy (R3); the box copies were pure duplication. Replaced with a documenting comment; net eval coverage preserved (every deleted box check's binary/port is candy-covered at the same path).

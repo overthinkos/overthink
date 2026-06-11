@@ -1,5 +1,5 @@
 candy:
-    version: 2026.144.1443
+    version: 2026.162.1200
     name: pacstrap-builder
     description: |
         Tools needed to bootstrap an Arch-family rootfs from scratch via
@@ -22,3 +22,20 @@ candy:
                 - grub
                 - efibootmgr
                 - mkinitcpio
+    # The pacstrap toolchain this candy installs — checked HERE so the ONE check
+    # covers every box composing it (arch-pacstrap-builder, cachyos-pacstrap-builder)
+    # instead of each box re-declaring its own copy. Build-scope (pacstrap is part
+    # of arch-install-scripts; grub/parted ship the named binaries).
+    eval:
+        - id: pacstrap-binary
+          file: /usr/sbin/pacstrap
+          exists: true
+        - id: arch-install-scripts-installed
+          package: arch-install-scripts
+          installed: true
+        - id: grub-install-binary
+          file: /usr/sbin/grub-install
+          exists: true
+        - id: parted-binary
+          file: /usr/sbin/parted
+          exists: true

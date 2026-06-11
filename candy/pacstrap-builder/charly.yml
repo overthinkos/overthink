@@ -23,9 +23,9 @@ candy:
                 - efibootmgr
                 - mkinitcpio
     # The pacstrap toolchain this candy installs — checked HERE so the ONE check
-    # covers every box composing it (arch-pacstrap-builder, cachyos-pacstrap-builder)
-    # instead of each box re-declaring its own copy. Build-scope (pacstrap is part
-    # of arch-install-scripts; grub/parted ship the named binaries).
+    # covers every box composing it (arch-pacstrap-builder, cachyos-pacstrap-builder).
+    # Build-scope (pacstrap is part of arch-install-scripts; grub/parted ship the
+    # named binaries).
     eval:
         - id: pacstrap-binary
           file: /usr/sbin/pacstrap

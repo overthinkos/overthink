@@ -22,6 +22,10 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-11 — docs(comments): drop migration phrasing from two eval comments
+
+CLAUDE.md "history lives ONLY in CHANGELOG" — code comments describe the CURRENT state in present tense. Two comments authored during campaigns 6/7 carried migration phrasing: `candy/pacstrap-builder` ("instead of each box re-declaring its own copy") and `box/cachyos` `eval-cachyos-vm` ("a copy here re-tested the identical pacman path on a second bed"). Both reworded to present-tense rationale. Comment-only — no functional or schema change; `charly box validate` exit 0 in both repos. box/cachyos lands at `v2026.162.1414`; main bumps the pointer.
+
 ### 2026-06-11 — refactor(eval): push fedora service-box checks down to their candies (campaign 5)
 
 The 6 fedora service boxes (filebrowser/hermes/immich-ml/jupyter/openwebui/sway-browser-vnc) each re-declared box-level eval checks their composed candies already own. Each duplicate is removed; checks a candy genuinely provides move onto the candy so ONE check covers every box composing it (R3):

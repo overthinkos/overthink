@@ -120,6 +120,47 @@ func TestImageReconcile_VendoredCandyRequires(t *testing.T) {
 	}
 }
 
+// TestImageReconcile_SkipsSubmodules proves reconcile does NOT recurse into git
+// submodule directories — after the box inversion main/box/ is the submodule
+// mount parent, and each charly-project repo reconciles ITSELF.
+func TestImageReconcile_SkipsSubmodules(t *testing.T) {
+	dir := t.TempDir()
+	// Root references gnupg at the newer pin (the reconcile target).
+	if err := os.WriteFile(filepath.Join(dir, "charly.yml"), []byte(
+		"version: 2026.161.2303\n"+
+			"box:\n  foo:\n    base: fedora\n    candy:\n"+
+			"      - '@github.com/overthinkos/overthink/candy/gnupg:v2026.144.0531'\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// A submodule under box/ (gitlink `.git` file) whose box pins the OLDER gnupg.
+	sub := filepath.Join(dir, "box", "cachyos")
+	subBox := filepath.Join(sub, "box", "selkies")
+	if err := os.MkdirAll(subBox, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sub, ".git"), []byte("gitdir: ../.git/modules/box/cachyos\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	subYML := "box:\n    name: selkies\n    candy:\n" +
+		"        - '@github.com/overthinkos/overthink/candy/gnupg:v2026.141.1600'\n"
+	if err := os.WriteFile(filepath.Join(subBox, "charly.yml"), []byte(subYML), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cwd, _ := os.Getwd()
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chdir(cwd)
+	if err := (&BoxReconcileCmd{}).Run(); err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
+	// The submodule's pin must be UNTOUCHED (left for the submodule's own reconcile).
+	got, _ := os.ReadFile(filepath.Join(subBox, "charly.yml"))
+	if !strings.Contains(string(got), "gnupg:v2026.141.1600") {
+		t.Errorf("reconcile recursed into a submodule (rewrote its pin):\n%s", got)
+	}
+}
+
 // TestImageReconcile_NoPins: a project with no @github pins is a clean no-op.
 func TestImageReconcile_NoPins(t *testing.T) {
 	dir := t.TempDir()

@@ -160,14 +160,8 @@ func dropBoxPortCandidateFiles(dir string) []string {
 				return nil
 			}
 			if d.IsDir() {
-				// Skip git submodule directories — each charly-project repo
-				// migrates ITSELF. After the box inversion main/box/ is the
-				// submodule mount parent, so without this skip a `charly migrate`
-				// in main would reach into box/<distro>/box/<name>/charly.yml.
-				if p != root {
-					if _, statErr := os.Stat(filepath.Join(p, ".git")); statErr == nil {
-						return filepath.SkipDir
-					}
+				if isGitSubmoduleDir(p, root) {
+					return filepath.SkipDir
 				}
 				return nil
 			}

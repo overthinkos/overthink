@@ -40,8 +40,15 @@ func reconcileCandidateFiles(dir string) []string {
 	// reach from the entry point. filepath.Walk on a missing directory is a clean
 	// no-op (the root err arm returns nil).
 	for _, sub := range []string{DefaultBoxDir, DefaultCandyDir} {
-		filepath.Walk(filepath.Join(dir, sub), func(p string, info os.FileInfo, err error) error {
-			if err != nil || info == nil || info.IsDir() {
+		root := filepath.Join(dir, sub)
+		filepath.Walk(root, func(p string, info os.FileInfo, err error) error {
+			if err != nil || info == nil {
+				return nil
+			}
+			if info.IsDir() {
+				if isGitSubmoduleDir(p, root) {
+					return filepath.SkipDir
+				}
 				return nil
 			}
 			if ext := filepath.Ext(p); ext == ".yml" || ext == ".yaml" {
@@ -56,6 +63,20 @@ func reconcileCandidateFiles(dir string) []string {
 	}
 	sortStrings(out)
 	return out
+}
+
+// isGitSubmoduleDir reports whether p (a directory OTHER than the walk root) is
+// a git submodule — it carries a `.git` entry. Project-file walks (reconcile,
+// `charly migrate`) use it to STOP recursing into submodules: after the box
+// inversion main/box/ is the submodule mount parent, so a recursive walk in main
+// would otherwise reach into box/<distro>/{box,candy}/<name>/charly.yml. Each
+// charly-project repo is scanned on its own (run the verb with `-C box/<distro>`).
+func isGitSubmoduleDir(p, root string) bool {
+	if p == root {
+		return false
+	}
+	_, err := os.Stat(filepath.Join(p, ".git"))
+	return err == nil
 }
 
 // walkScalars visits every scalar node in a YAML node tree.

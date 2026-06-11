@@ -1404,7 +1404,7 @@ score:
             Notes: ${NOTES}
 
             == Ground rules ==
-              - Recipe scenarios are immutable — they live in eval.yml.
+              - Recipe scenarios are immutable — they live in the eval: block of the project charly.yml.
               - The ${TARGET_NAME} sandbox was rebuilt FRESH for this run; it persists
                 across iters but is destroyed + recreated NEXT run.
               - Every pod a scenario references MUST be running at exit (that's
@@ -1534,7 +1534,7 @@ score:
             named upstream scenarios pass.
 
             == Ground rules ==
-              - Recipe scenarios are immutable — they live in eval.yml.
+              - Recipe scenarios are immutable — they live in the eval: block of the project charly.yml.
               - Every pod a scenario references MUST be running at exit
                 (that's what gets scored).
               - Imported probes are scored identically to hand-written
@@ -1709,7 +1709,7 @@ eval:
 local:
     # =================================================================
     # eval-local — per-kind R10 smoke template for kind:local.
-    # Applied via the eval-local bed (kind:eval) in eval.yml. Single layer
+    # Applied via the eval-local bed (kind:eval) in this file's eval: block. Single layer
     # (eval-local-layer) drops a marker file the deploy-scope eval probe
     # verifies on the host (not in a container).
     # =================================================================

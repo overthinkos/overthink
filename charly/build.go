@@ -23,7 +23,7 @@ import (
 
 // BuildCmd builds container images
 type BuildCmd struct {
-	Boxes           []string `arg:"" optional:"" help:"Boxes to build (default: all enabled). Supports remote refs (github.com/org/repo/box[@version])"`
+	Boxes           []string `arg:"" optional:"" help:"Boxes to build (default: all enabled; the sentinel 'all' is equivalent). Supports remote refs (github.com/org/repo/box[@version])"`
 	Push            bool     `long:"push" help:"Push to registry after building"`
 	Tag             string   `long:"tag" help:"Override tag (default: CalVer)"`
 	Platform        string   `long:"platform" help:"Target platform (default: host platform)"`
@@ -67,7 +67,50 @@ func ensureBuilderImageBuilt(engine, builderRef string) (string, error) {
 	return resolved, nil
 }
 
+// normalizeBoxArgs canonicalises the positional box selection shared by
+// `charly box build` and `charly box generate`. The lone sentinel `all`
+// (case-insensitive) collapses to nil — i.e. "every enabled box" — so
+// `charly box build all` / `charly box generate all` behave identically to the
+// bare no-argument form. Any other slice (including a literal "all" alongside
+// other names) passes through unchanged: the sentinel fires ONLY when it is the
+// sole argument, so a box that happens to be named "all" is still reachable via
+// an explicit two-name invocation.
+func normalizeBoxArgs(boxes []string) []string {
+	if len(boxes) == 1 && strings.EqualFold(boxes[0], "all") {
+		return nil
+	}
+	return boxes
+}
+
+// boxResolveOpts builds the ResolveOpts that scope a generate/build to a set of
+// explicitly-named boxes. It is the SINGLE source of the box-selection rule for
+// both `charly box build` and `charly box generate` (R3): an empty slice means
+// "all enabled boxes" (no scoping); a non-empty slice pins those names into the
+// resolved set (RequestedBoxes) and, when --include-disabled is set, relaxes the
+// enabled: false gate for exactly those names (IncludeDisabledNames) so the
+// override never widens the working set globally. Callers pass boxes already run
+// through normalizeBoxArgs.
+func boxResolveOpts(boxes []string, includeDisabled bool) ResolveOpts {
+	opts := ResolveOpts{IncludeDisabled: includeDisabled}
+	if len(boxes) == 0 {
+		return opts
+	}
+	opts.RequestedBoxes = boxes
+	if includeDisabled {
+		opts.IncludeDisabledNames = make(map[string]bool, len(boxes))
+		for _, name := range boxes {
+			opts.IncludeDisabledNames[name] = true
+		}
+	}
+	return opts
+}
+
 func (c *BuildCmd) Run() error {
+	// Normalize the `all` sentinel to nil BEFORE any per-name interpretation
+	// (remote-ref dispatch, include-passthrough, the resolver) so every surface
+	// agrees that "no specific boxes" means "all enabled".
+	c.Boxes = normalizeBoxArgs(c.Boxes)
+
 	// Check if any image arg is a remote ref
 	for _, img := range c.Boxes {
 		ref := StripURLScheme(img)
@@ -93,26 +136,16 @@ func (c *BuildCmd) Run() error {
 		return c.buildRemote(remoteRef)
 	}
 
-	// Generate Containerfiles. --include-disabled flows through Generator
-	// so `charly box build <disabled-image> --include-disabled` reaches it
-	// without the operator having to flip enabled: false in charly.yml.
-	// When the user named specific images on the command line, scope the
-	// override to those names only — otherwise widening the working set
-	// would surface unrelated disabled-image dep errors (e.g. images that
-	// declare remote candies not yet fetched into the cache).
-	resolveOpts := ResolveOpts{IncludeDisabled: c.IncludeDisabled}
-	if c.IncludeDisabled && len(c.Boxes) > 0 {
-		resolveOpts.IncludeDisabledNames = make(map[string]bool, len(c.Boxes))
-		for _, name := range c.Boxes {
-			resolveOpts.IncludeDisabledNames[name] = true
-		}
-	}
-	// Pass the explicit targets through so a qualified one (e.g.
-	// `charly box build charly.arch-builder`, or ensure-image's build-fallback for a
-	// namespaced builder) is pulled into the resolved set even when it isn't a
-	// base/builder of any root image. Remote (`@github…`) refs were already
-	// dispatched to buildRemote above, so these are local names only.
-	resolveOpts.RequestedBoxes = c.Boxes
+	// Generate Containerfiles via the shared box-selection rule. An empty
+	// selection builds every enabled box; a named selection scopes the
+	// resolved set (RequestedBoxes) and, with --include-disabled, relaxes the
+	// enabled: false gate for exactly those names — so the override never
+	// widens the working set globally and surfaces unrelated disabled-image dep
+	// errors. Explicit targets are also how a qualified name (e.g.
+	// `charly box build charly.arch-builder`) is pulled into the resolved set even
+	// when it isn't a base/builder of any root image. Remote (`@github…`) refs
+	// were already dispatched to buildRemote above, so these are local names.
+	resolveOpts := boxResolveOpts(c.Boxes, c.IncludeDisabled)
 	gen, err := NewGenerator(dir, c.Tag, resolveOpts)
 	if err != nil {
 		return err

@@ -13,7 +13,7 @@ import (
 // image into local storage so deploy-mode commands can read its OCI labels).
 type BoxCmd struct {
 	Build    BuildCmd      `cmd:"" help:"Build container boxes"`
-	Generate GenerateCmd   `cmd:"" help:"Write .build/ (Containerfiles)"`
+	Generate GenerateCmd   `cmd:"" help:"Write .build/ (Containerfiles) for the named boxes (default: all enabled)"`
 	Inspect  InspectCmd    `cmd:"" help:"Print resolved config for a box (JSON)"`
 	List     ListCmd       `cmd:"" help:"List components from charly.yml"`
 	Merge    MergeCmd      `cmd:"" help:"Merge small layers in a built container image"`

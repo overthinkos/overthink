@@ -47,7 +47,7 @@ type CLI struct {
 	Config      BoxConfigCmd    `cmd:"" help:"Configure box deployment (setup, secrets, encrypted volumes)"`
 	Deploy      DeployCmd       `cmd:"" help:"Manage charly.yml deployment overrides"`
 	Doctor      DoctorCmd       `cmd:"" help:"Show host dependency status"`
-	Box       BoxCmd          `cmd:"" name:"box" help:"Build, generate, inspect, and pull container boxes (reads charly.yml)"`
+	Box         BoxCmd          `cmd:"" name:"box" help:"Build, generate, inspect, and pull container boxes (reads charly.yml)"`
 	Candy       CandyCmd        `cmd:"" name:"candy" help:"Edit candy.yml files in the project's candy/ directory"`
 	Logs        LogsCmd         `cmd:"" help:"Show service container logs"`
 	Mcp         McpCmdGroup     `cmd:"" help:"Run an MCP server exposing the charly CLI as tools"`
@@ -75,7 +75,9 @@ type CLI struct {
 
 // GenerateCmd generates Containerfiles
 type GenerateCmd struct {
-	Tag string `long:"tag" help:"Override tag (default: CalVer)"`
+	Boxes           []string `arg:"" optional:"" help:"Boxes to generate (default: all enabled). The sentinel 'all' is equivalent to passing no argument."`
+	Tag             string   `long:"tag" help:"Override tag (default: CalVer)"`
+	IncludeDisabled bool     `long:"include-disabled" help:"Generate boxes with enabled: false in charly.yml (does not modify the file). Scoped to the named boxes when any are given."`
 }
 
 func (c *GenerateCmd) Run() error {
@@ -84,7 +86,12 @@ func (c *GenerateCmd) Run() error {
 		return err
 	}
 
-	gen, err := NewGenerator(dir, c.Tag, ResolveOpts{})
+	// Share the box-selection rule with `charly box build`: the `all` sentinel
+	// collapses to "every enabled box", and a named selection scopes the
+	// resolved set (and, with --include-disabled, relaxes the gate for exactly
+	// those names).
+	boxes := normalizeBoxArgs(c.Boxes)
+	gen, err := NewGenerator(dir, c.Tag, boxResolveOpts(boxes, c.IncludeDisabled))
 	if err != nil {
 		return err
 	}
@@ -313,7 +320,7 @@ func (c *InspectCmd) runFromConfig(cfg *Config, dir string) error {
 type ListCmd struct {
 	Aliases  ListAliasesCmd  `cmd:"" help:"List candies that declare aliases"`
 	Boxes    ListBoxesCmd    `cmd:"" name:"boxes" help:"List boxes from charly.yml"`
-	Candies   ListCandiesCmd  `cmd:"" name:"candies" help:"List candies from the filesystem"`
+	Candies  ListCandiesCmd  `cmd:"" name:"candies" help:"List candies from the filesystem"`
 	Routes   ListRoutesCmd   `cmd:"" help:"List candies that declare a route"`
 	Services ListServicesCmd `cmd:"" help:"List candies that declare a service"`
 	Targets  ListTargetsCmd  `cmd:"" help:"List build targets in dependency order"`
@@ -535,7 +542,7 @@ func (c *ListVolumesCmd) Run() error {
 type NewCmd struct {
 	Candy   NewCandyCmd   `cmd:"" name:"candy" help:"Scaffold a candy directory"`
 	Project NewProjectCmd `cmd:"" help:"Scaffold a fresh charly project (charly.yml + build.yml ref + candy/)"`
-	Box   NewBoxCmd     `cmd:"" name:"box" help:"Add a new box entry to charly.yml"`
+	Box     NewBoxCmd     `cmd:"" name:"box" help:"Add a new box entry to charly.yml"`
 }
 
 // NewCandyCmd scaffolds a new candy

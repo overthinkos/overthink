@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 )
 
@@ -154,10 +155,27 @@ func GlobalCandyOrder(boxes map[string]*ResolvedBox, layers map[string]*Candy) (
 	// AND metacandy `candy:` (IncludedCandy) lists. Non-node entries (pure-
 	// composition metacandies with no RUN steps) are skipped by addListOrderEdge,
 	// so only content candies are constrained.
-	for _, img := range boxes {
-		addListEdges(img.Candy)
+	//
+	// Iterate in sorted name order, NOT map-iteration order: addListOrderEdge
+	// skips any edge that would create a cycle, so the SET of edges added depends
+	// on insertion order. Go map iteration is randomized, which would make the
+	// graph — and thus the global candy order and every auto-intermediate derived
+	// from it — vary run-to-run, breaking cross-run cache reuse. Sorted iteration
+	// makes the edge set, the topo order, and the intermediates deterministic.
+	boxNames := make([]string, 0, len(boxes))
+	for name := range boxes {
+		boxNames = append(boxNames, name)
 	}
+	sortStrings(boxNames)
+	for _, name := range boxNames {
+		addListEdges(boxes[name].Candy)
+	}
+	candyNames := make([]string, 0, len(popularity))
 	for name := range popularity {
+		candyNames = append(candyNames, name)
+	}
+	sortStrings(candyNames)
+	for _, name := range candyNames {
 		if l, ok := layers[name]; ok {
 			addListEdges(bareRefs(l.IncludedCandy))
 		}
@@ -390,32 +408,59 @@ func ComputeIntermediates(boxes map[string]*ResolvedBox, layers map[string]*Cand
 		return nil, fmt.Errorf("resolving box order: %w", err)
 	}
 
+	// Sibling-group processing order MUST be deterministic: createIntermediate
+	// writes into `result`, and pickAutoName's collision suffix (`-2`/`-3`) is
+	// assigned by checking already-created names — so the order groups are
+	// processed decides which group claims the bare name and which gets the
+	// suffix. Map iteration is randomized, so iterate keys sorted by (base, uid)
+	// instead, keeping intermediate names stable run-to-run AND identical whether
+	// one box or all are generated (ComputeIntermediates always runs over the
+	// full set, so the only variable was iteration order).
+	orderedKeys := sortedSiblingKeys(siblingGroups)
+
 	processed := make(map[siblingKey]bool)
 	for _, parentName := range imageOrder {
 		// Each parent may host multiple sibling groups (one per UID).
 		// Iterate every sibling key whose base matches parentName.
-		for k, children := range siblingGroups {
-			if k.base != parentName || len(children) < 2 {
+		for _, k := range orderedKeys {
+			if k.base != parentName || len(siblingGroups[k]) < 2 {
 				continue
 			}
 			processed[k] = true
-			if err := processSiblingGroup(k.base, k.uid, defaultUID, children, result, boxes, layers, cfg, tag, globalOrder, pixiBound); err != nil {
+			if err := processSiblingGroup(k.base, k.uid, defaultUID, siblingGroups[k], result, boxes, layers, cfg, tag, globalOrder, pixiBound); err != nil {
 				return nil, err
 			}
 		}
 	}
 
 	// Process external-base groups (parent is an external OCI ref, not in imageOrder)
-	for k, children := range siblingGroups {
-		if processed[k] || len(children) < 2 {
+	for _, k := range orderedKeys {
+		if processed[k] || len(siblingGroups[k]) < 2 {
 			continue
 		}
-		if err := processSiblingGroup(k.base, k.uid, defaultUID, children, result, boxes, layers, cfg, tag, globalOrder, pixiBound); err != nil {
+		if err := processSiblingGroup(k.base, k.uid, defaultUID, siblingGroups[k], result, boxes, layers, cfg, tag, globalOrder, pixiBound); err != nil {
 			return nil, err
 		}
 	}
 
 	return result, nil
+}
+
+// sortedSiblingKeys returns the sibling-group keys in a deterministic order —
+// by base name, then UID. Used to make auto-intermediate creation independent of
+// Go's randomized map iteration (see ComputeIntermediates).
+func sortedSiblingKeys(m map[siblingKey][]string) []siblingKey {
+	keys := make([]siblingKey, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		if keys[i].base != keys[j].base {
+			return keys[i].base < keys[j].base
+		}
+		return keys[i].uid < keys[j].uid
+	})
+	return keys
 }
 
 // processSiblingGroup builds a prefix trie from the relative candy sequences
@@ -546,8 +591,10 @@ func walkTrieScoped(node *trieNode, parentName string, uid, defaultUID int, resu
 // formats / distro tags the intermediate must carry (see createIntermediate).
 func collectSubtreeBoxes(node *trieNode) []string {
 	out := append([]string(nil), node.boxes...)
-	for _, child := range node.children {
-		out = append(out, collectSubtreeBoxes(child)...)
+	// Sorted child traversal (not map order) so consumerBoxes — and the
+	// format/distro union createIntermediate derives from it — are deterministic.
+	for _, childName := range sortedKeys(node.children) {
+		out = append(out, collectSubtreeBoxes(node.children[childName])...)
 	}
 	return out
 }

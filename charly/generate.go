@@ -16,12 +16,22 @@ import (
 type Generator struct {
 	Dir            string
 	Config         *Config
-	Candies         map[string]*Candy
+	Candies        map[string]*Candy
 	Tag            string
 	Boxes          map[string]*ResolvedBox
 	BuildDir       string
 	Containerfiles map[string]string // cached content per image (used by charly build to pipe via stdin)
 	GlobalOrder    []string          // popularity-weighted global candy order for cache optimization
+
+	// RequestedBoxes scopes which Containerfiles Generate() writes: when
+	// non-empty, only the named boxes and their transitive deps (Base + format
+	// builders + bootstrap builder) are emitted — the SAME filterBox set the
+	// build path uses to scope `podman build` (R3, build/generate unified). Empty
+	// means "every enabled box" (the bare `charly box generate` / `generate all`
+	// and full `charly box build` behaviour). The whole resolved graph
+	// (intermediates, global candy order, effective versions) is still computed
+	// in NewGenerator regardless — only the per-box emission loop is scoped.
+	RequestedBoxes []string
 
 	// DevLocalPkg, when true, makes localpkg candies (the charly toolchain) build
 	// from LOCAL in-development source instead of downloading the published
@@ -173,12 +183,13 @@ func NewGenerator(dir string, tag string, opts ResolveOpts) (*Generator, error) 
 	g := &Generator{
 		Dir:            dir,
 		Config:         cfg,
-		Candies:         layers,
+		Candies:        layers,
 		Tag:            tag,
 		Boxes:          images,
 		BuildDir:       filepath.Join(dir, ".build"),
 		Containerfiles: make(map[string]string),
 		GlobalOrder:    globalOrder,
+		RequestedBoxes: opts.RequestedBoxes,
 	}
 
 	// Derive each image's content-stable identity (ai.opencharly.version)
@@ -252,6 +263,20 @@ func (g *Generator) Generate() error {
 	order, err := ResolveBoxOrder(g.Boxes, g.Candies)
 	if err != nil {
 		return fmt.Errorf("resolving box order: %w", err)
+	}
+
+	// Scope the emission to the requested boxes + their transitive deps, using
+	// the SAME filterBox the build path uses to scope `podman build` (R3:
+	// `charly box generate <name>` and `charly box build <name>` select identically).
+	// Empty RequestedBoxes leaves the full enabled set — the bare-generate /
+	// `generate all` / full-build behaviour. Transitive deps stay in `order` so a
+	// requested child's Base/builders are emitted too, and dependency order
+	// (parents first) is preserved.
+	if len(g.RequestedBoxes) > 0 {
+		order, err = filterBox(order, g.RequestedBoxes, g.Boxes)
+		if err != nil {
+			return fmt.Errorf("scoping generation to requested boxes: %w", err)
+		}
 	}
 
 	// Resolve user context for each image (in order, so parents are resolved first)

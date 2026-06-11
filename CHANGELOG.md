@@ -22,6 +22,14 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-11 — refactor(coder): drop redundant coder-box eval rollups (covered by their candies)
+
+The four `*-coder` boxes (arch/debian/fedora/ubuntu) each re-declared box-level eval checks — `*-ai-clis`, `*-languages`, `*-devops`, `*-sshd-port`, `*-mcp-port` (+ arch-coder's `*-charly-version`) — that the composed candies ALREADY provide at the IDENTICAL path: claude-code/codex/gemini/forgecode (`${HOME}/.npm-global/bin/{claude,codex,gemini,forge}`), golang/nodejs/rust (`/usr/bin/{go,node,cargo}`), kubernetes/docker-ce/devops-tools/google-cloud (`{kubectl,docker,aws,gcloud,tofu}`), sshd (:2222), charly-mcp (:18765), charly (`charly version`). One candy check covers every box composing the candy (R3); the box copies were pure duplication. Replaced with a documenting comment; net eval coverage preserved (every deleted box check's binary/port is candy-covered at the same path).
+
+Eval-normalization campaign, cutover 1 of 7 — the first pure-DELETE cutover, proving the rubric. Submodule-only (box/{arch,debian,fedora,ubuntu} drop their `<distro>-coder` box eval); main bumps the four pointers.
+
+R10: `charly eval run eval-fedora-coder-pod` PASS (151 passed · 0 failed — the candy checks that replaced the deleted rollups all green); arch/debian/ubuntu-coder `charly eval box` 141/140/139 passed · 0 failed. No schema change.
+
 ### 2026-06-11 — feat(localpkg): disposable eval beds bake the IN-DEVELOPMENT charly; production boxes the published release
 
 A `localpkg:` candy (the `charly` toolchain) installs the charly binary as a proper OS package. An IMAGE build previously ALWAYS downloaded the PUBLISHED release (`releases/latest/download/opencharly-<arch>.<fmt>`) — so a disposable `kind: eval` bed tested a STALE released binary instead of the code under development. After the candy/box rename advanced main's eval recipes to `kind: box`, the published release (built before the recipe-from-kind update) could no longer parse them, and the `charly-mcp` `box.list.boxes` deploy-check failed in every coder bed (the MCP server's embedded-fallback load of main rejected `kind: box` with the stale `{layer, image, pod, vm}` allowlist).

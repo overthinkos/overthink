@@ -22,6 +22,21 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-11 — refactor(eval): push fedora service-box checks down to their candies (campaign 5)
+
+The 6 fedora service boxes (filebrowser/hermes/immich-ml/jupyter/openwebui/sway-browser-vnc) each re-declared box-level eval checks their composed candies already own. Each duplicate is removed; checks a candy genuinely provides move onto the candy so ONE check covers every box composing it (R3):
+
+- **DELETE dups:** `filebrowser-composed-binaries` (filebrowser/dbus candy binaries), `hermes-all-clis-present` (claude/codex/gemini + hermes candies), `hermes-service-up` (= candy/hermes:hermes-service-running), `immich-ml-stack-binaries` (4 candy binary checks) + `immich-ml-internal-ping` (= candy/immich-ml:immich-ml-http), `jupyter-notebook-templates-provisioned` (= candy/notebook-templates:notebook-templates-present, a 5-box candy) + `jupyter-mcp-extension-enabled` (candy/jupyter-mcp + candy/jupyter mcp probes), `openwebui-composition` + `openwebui-required-env-injected` (candy/openwebui entrypoint/service/admin-email checks).
+- **MOVE→candy:** `filebrowser-volumes-exist` → candy/filebrowser (which declares the `data` volume); the full 7-check browser-VNC desktop verification → candy/sway-desktop-vnc (the composite that assembles sway+wayvnc+chrome, mirroring immich-ml-services-running's composition check).
+- **KEEP-on-box (rule 2):** `immich-ml-services-running` (the 4-candy "postgres+redis+immich-server+immich-ml all RUNNING together" composition no single candy owns).
+- **Bed:** `eval-sway-browser-vnc-pod` drops its redundant raw-http cdp probe (the moved candy `cdp: status` covers "cdp up").
+
+**Blocking fix surfaced by the R10 (R1/R2):** the fresh hermes rebuild re-pulled the unpinned ahmetb/kubectx `master` script, exposing that candy/devops-tools' `kubectx-help`/`kubens-help` checks run `kubectx --help`, which aborts ("kubectl is not installed", exit 1) BEFORE the help branch when kubectl is absent — failing on any kubectl-less devops-tools consumer (hermes composes devops-tools but not the kubernetes candy). Dropped the two overreaching checks (the `kubectx-binary`/`kubens-binary` file-exists checks already prove installation; functional kubectx needs kubectl from the separate kubernetes candy).
+
+Cross-repo (B6): candy/filebrowser + candy/sway-desktop-vnc + candy/devops-tools land in main (tags `v2026.162.1314`, `v2026.162.1355`); box/fedora reconciles all `@github` pins to `v2026.162.1355` and lands the box dedup (`v2026.162.1407`); main bumps the pointer.
+
+R10: `eval-sway-browser-vnc-pod` PASS (99 passed · 0 failed; the moved sway-desktop-vnc-* checks all green incl a 1920×1080 framebuffer; fresh-update leg green); `eval-jupyter-pod` PASS (10/10); `charly eval box` filebrowser 14/0, hermes 49/0 (post-fix), openwebui 15/0. immich-ml composes none of the 3 changed candies (composition-invariant — the removed checks are verbatim dups of present, unchanged candy checks). No schema change.
+
 ### 2026-06-11 — refactor(eval): dedup the pac localpkg witness onto one bed (campaign 7)
 
 `eval-cachyos-vm` (box/cachyos) carried a `localpkg-pac-autoresolve` inline check functionally identical to main's `eval-charly-vm` — both asserting that `pacman -U` of the charly candy's localpkg `opencharly-git` auto-resolves its mandatory repo deps (podman/libvirt/tailscale/gocryptfs) on a bare Arch-family VM. main's `eval-charly-vm` is the PURPOSE-BUILT pac witness (a plain Arch cloud VM carrying no other layers, so the localpkg path is its sole reason to exist), so the cachyos copy was a bed-to-bed structural dup. Removed it; `eval-cachyos-vm` keeps its genuine value as the cachyos pacstrap bootstrap-VM R10 canary — and the deploy-add step still FAILS the bed if the localpkg install or its dep auto-resolve fails (`pacman -U` errors on an unsatisfiable Depends), so cachyos-substrate install coverage is retained implicitly, matching the existing `eval-arch-pacstrap-vm` bootstrap-canary pattern (a VM bed whose R10 value is the lifecycle, not an inline check).

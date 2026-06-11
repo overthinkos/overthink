@@ -22,6 +22,19 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-11 — refactor(eval): push selkies/openclaw desktop+nesting checks down to their candies (campaign 2)
+
+The all-in-one openclaw-desktop image (and the selkies-labwc box) re-declared box-level eval checks their composed candies provide. Each is removed; checks a candy genuinely owns move onto the candy so ONE check covers every composing box (R3):
+
+- **MOVE→candy (multi-box reach):** `candy/container-nesting` gains the rootless-nesting posture (subuid two-ranges, newuidmap cap, policy.json, containers.conf userns=host system+`${HOME}`, the `_CONTAINERS_USERNS_CONFIGURED`/`BUILDAH_ISOLATION` env contracts) + `nested-podman-run` + `newgidmap-binary` — portable across all **9 boxes** composing it; `candy/openclaw` gains `openclaw-binary` + `gateway-port` (:18789, covering the 3 openclaw boxes); `candy/virtualization` gains `libvirt-session-list` (virsh `qemu:///session` — NOT an orphan: charly→virtualization composes libvirt); `candy/charly` gains `charly-doctor` (engine-agnostic — `charly doctor` prints its `Summary:` line before the required-deps exit, so it verifies the subcommand on ANY charly box incl. engine-less fixtures).
+- **DELETE dups:** openclaw-desktop's 17 box checks (selkies/chrome/labwc/traefik/sshd binaries, ollama/gocryptfs/socat, the nested binaries, charly version/doctor, chrome-devtools-mcp/gateway/ollama ports — all candy-covered) and selkies-labwc's 2.
+- **Bed-dedup:** the 4 selkies/openclaw pod beds strip their inline binary/file dups.
+- **KEEP (rule 2):** `pixelflux-nvenc-compiled` stays on the two nvidia boxes (build-variant-specific — the CPU/stub build patches nvenc-sys out, so the symbol is absent → it would FAIL on the shared candy/selkies; RDD reverted an earlier move there).
+
+Cross-repo (B6): the 4 producer candies land in main (`v2026.162.1442`); box/cachyos reconciles its `@github` pins and lands the box+bed dedup (`v2026.162.1548`); main bumps the pointer. **This completes the 7-cutover eval-normalization campaign** (C1 coder · C3 versa no-op · C4 android · C5 fedora-services · C6 pacstrap · C7 bed-dedup · C2 selkies/openclaw).
+
+R10: `eval-openclaw-desktop-pod` PASS (167 passed · 0 failed, incl. the fresh-update leg); `eval-githubrunner-pod` PASS (10/10 — the container-nesting posture move verified on a uid-0 box); `eval-charly-selftest-pod` PASS (10/10 — charly-doctor + virtualization libvirt + container-nesting); `eval-selkies-labwc-pod`/`eval-openclaw-pod`/`eval-openclaw-full-pod` PASS (10/10 each). The 2 nvidia GPU-VM beds (`eval-selkies-{labwc,kde}-nvidia-vm`) fail environmentally (no GPU passthrough on this host — both `NVENC-N/A` + stream-https refused); the nvidia boxes are composition-invariant under C2 (candy/selkies reverted, nvenc-compiled unchanged), so those beds test no C2 change. No schema change.
+
 ### 2026-06-11 — docs(comments): drop migration phrasing from two eval comments
 
 CLAUDE.md "history lives ONLY in CHANGELOG" — code comments describe the CURRENT state in present tense. Two comments authored during campaigns 6/7 carried migration phrasing: `candy/pacstrap-builder` ("instead of each box re-declaring its own copy") and `box/cachyos` `eval-cachyos-vm` ("a copy here re-tested the identical pacman path on a second bed"). Both reworded to present-tense rationale. Comment-only — no functional or schema change; `charly box validate` exit 0 in both repos. box/cachyos lands at `v2026.162.1414`; main bumps the pointer.

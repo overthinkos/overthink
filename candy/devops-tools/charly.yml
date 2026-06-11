@@ -1,5 +1,5 @@
 candy:
-    version: 2026.144.1443
+    version: 2026.162.1430
     name: devops-tools
     require:
         - nodejs
@@ -77,12 +77,10 @@ candy:
         - id: scw-version
           command: /usr/local/bin/scw version
           exit_status: 0
-        - id: kubectx-help
-          command: /usr/local/bin/kubectx --help
-          exit_status: 0
-        - id: kubens-help
-          command: /usr/local/bin/kubens --help
-          exit_status: 0
+        # kubectx/kubens are file-exists-only here: they are plain kubectl
+        # wrappers that abort (exit 1) unless kubectl is present, so a functional
+        # probe requires the separate `kubernetes` candy. A box that wants
+        # functional kubectx composes both; devops-tools only ships the scripts.
         - id: tofu-version
           command: /usr/local/bin/tofu version
           exit_status: 0

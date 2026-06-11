@@ -21,6 +21,7 @@ type BoxCmd struct {
 	Pull     BoxPullCmd    `cmd:"" help:"Pull an image from its registry into local storage"`
 	Pkg      BoxPkgCmd     `cmd:"" help:"Build standalone native package artifacts (.pkg.tar.zst/.rpm/.deb) for a candy's localpkg sources into dist/"`
 	Validate ValidateCmd   `cmd:"" help:"Check charly.yml + candies, exit 0 or 1"`
+	Labels   BoxLabelsCmd  `cmd:"" help:"Print a built image's OCI labels (the ai.opencharly.* capability contract; --format <key> for one value, --all for every label)"`
 	Feature  BoxFeatureCmd `cmd:"" help:"Run a box's baked Gherkin scenarios as acceptance tests against a disposable container (Agent Driven Evaluation, build scope)"`
 
 	// Authoring verbs — added so the MCP tool surface (auto-reflected from

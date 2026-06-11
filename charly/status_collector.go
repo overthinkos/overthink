@@ -183,6 +183,7 @@ func (c *Collector) collectOne(ctx context.Context, snap *ContainerSnapshot) Dep
 		Kind:      SubstratePod,
 		Source:    "podman",
 		Image:     snap.Box,
+		ImageRef:  snap.ImageRef,
 		Instance:  snap.Instance,
 		Status:    statusFromState(snap.State),
 		Uptime:    snap.Status,

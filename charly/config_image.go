@@ -35,6 +35,7 @@ type BoxConfigSetupCmd struct {
 	Port            []string `short:"p" help:"Remap host port (newHost:containerPort, e.g., 5901:5900)"`
 	KeepMounted     bool     `long:"keep-mounted" help:"Keep encrypted volumes mounted after setup"`
 	Password        string   `long:"password" default:"auto" enum:"auto,manual" help:"auto: generate secrets (default), manual: prompt for each"`
+	RefreshSecret   []string `name:"refresh-secret" help:"Force re-provisioning of the named podman secret(s) from their source on this run ('all' = every secret of this image, sidecars included): the charly-<image>-<name> secret is removed and recreated. A candy-owned auto-generated secret gets a NEW value — re-initialize services that stored the old one"`
 	VolumeFlag      []string `long:"volume" short:"v" help:"Configure volume backing (name:type[:path]). Type: volume|bind|encrypted"`
 	Bind            []string `long:"bind" help:"Shorthand: configure volume as bind mount (name or name=path)"`
 	Encrypt         []string `long:"encrypt" help:"Shorthand: configure volume as encrypted (gocryptfs)"`
@@ -419,6 +420,10 @@ func (c *BoxConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	}
 
 	collectedSecrets := append(candyOwnedSecrets, credBackedSecrets...)
+	collectedSecrets, unmatchedRefresh := ApplySecretRefresh(collectedSecrets, c.RefreshSecret)
+	for _, name := range unmatchedRefresh {
+		fmt.Fprintf(os.Stderr, "Warning: --refresh-secret %s matched no secret declared by %s\n", name, c.Box)
+	}
 	autoGen := c.Password == "auto"
 	provisioned, fallbackEnv, err := ProvisionPodmanSecrets(rt.RunEngine, c.Box, c.Instance, collectedSecrets, autoGen)
 	if err != nil {
@@ -516,7 +521,8 @@ func (c *BoxConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	// Provision sidecar secrets as podman secrets
 	for i, sc := range resolvedSidecars {
 		if len(sc.Secret) > 0 {
-			scProvisioned, scFallback, scErr := ProvisionPodmanSecrets(rt.RunEngine, c.Box, c.Instance, sc.Secret, autoGen)
+			scSecrets, _ := ApplySecretRefresh(sc.Secret, c.RefreshSecret)
+			scProvisioned, scFallback, scErr := ProvisionPodmanSecrets(rt.RunEngine, c.Box, c.Instance, scSecrets, autoGen)
 			if scErr != nil {
 				fmt.Fprintf(os.Stderr, "Warning: could not provision sidecar %s secrets: %v\n", sc.Name, scErr)
 			}

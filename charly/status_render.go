@@ -19,6 +19,7 @@ import (
 type DeploymentStatus struct {
 	Kind      SubstrateKind      `json:"kind"`
 	Image     string             `json:"image"`
+	ImageRef  string             `json:"image_ref,omitempty"`
 	Instance  string             `json:"instance,omitempty"`
 	Status    string             `json:"status"`
 	Uptime    string             `json:"uptime,omitempty"`
@@ -72,6 +73,9 @@ func RenderDetail(w io.Writer, s DeploymentStatus) error {
 		fmt.Fprintf(w, "Kind:      %s\n", s.Kind)
 	}
 	fmt.Fprintf(w, "Image:     %s\n", s.Image)
+	if s.ImageRef != "" {
+		fmt.Fprintf(w, "Image ref: %s\n", s.ImageRef)
+	}
 	if s.Instance != "" {
 		fmt.Fprintf(w, "Instance:  %s\n", s.Instance)
 	}

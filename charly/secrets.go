@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"sort"
 	"strings"
 
 	"golang.org/x/term"
@@ -106,6 +107,47 @@ type CollectedSecret struct {
 	Service        string // credential store service override (empty = use default lookup)
 	Key            string // credential store key override (empty = use default lookup)
 	RotateOnConfig bool   // if true, bypass podmanSecretExists short-circuit (rotate on every charly config)
+}
+
+// ApplySecretRefresh marks the named secrets (matched by their manifest
+// SecretName; the literal "all" matches every secret) RotateOnConfig for
+// THIS provisioning run, so ProvisionPodmanSecrets removes and recreates
+// their podman secrets — the charly-native replacement for the retired
+// ad-hoc `podman secret rm` re-provisioning path. Returns the requested
+// names that matched nothing so the caller can surface typos. NOTE: a
+// candy-owned auto-generated secret gets a NEW random value on refresh;
+// services that persisted the old value (an initialized database) must be
+// re-initialized by the operator.
+func ApplySecretRefresh(secrets []CollectedSecret, refresh []string) ([]CollectedSecret, []string) {
+	if len(refresh) == 0 {
+		return secrets, nil
+	}
+	all := false
+	hit := map[string]bool{}
+	for _, r := range refresh {
+		if r == "all" {
+			all = true
+			continue
+		}
+		hit[r] = false
+	}
+	for i := range secrets {
+		name := secrets[i].SecretName
+		if _, requested := hit[name]; all || requested {
+			secrets[i].RotateOnConfig = true
+			if _, requested := hit[name]; requested {
+				hit[name] = true
+			}
+		}
+	}
+	var unmatched []string
+	for name, matched := range hit {
+		if !matched {
+			unmatched = append(unmatched, name)
+		}
+	}
+	sort.Strings(unmatched)
+	return secrets, unmatched
 }
 
 // CollectSecretsFromLabels reconstructs secrets from image label metadata.

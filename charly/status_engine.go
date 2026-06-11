@@ -31,6 +31,7 @@ type ContainerSnapshot struct {
 	Status      string        // human "Up 3 hours"
 	Box         string        // base box short-name (filled by Collector after parsing the quadlet description)
 	Instance    string        // optional instance suffix, ditto
+	ImageRef    string        // full image ref:tag from ps — the deployed artifact identity
 	NetworkMode string        // "host" | "bridge" | "container:<id>" | named network
 	Ports       []PortMapping // runtime mappings from `podman ps`
 	Devices     []string      // /dev/dri/..., nvidia.com/gpu=all, ...
@@ -116,10 +117,11 @@ func (e *EngineClient) SnapshotAll(includeAll bool) ([]ContainerSnapshot, error)
 	out := make([]ContainerSnapshot, 0, len(rows))
 	for _, r := range rows {
 		snap := ContainerSnapshot{
-			Name:   r.Name,
-			State:  r.State,
-			Status: r.Status,
-			Ports:  r.Ports,
+			Name:     r.Name,
+			State:    r.State,
+			Status:   r.Status,
+			ImageRef: r.Image,
+			Ports:    r.Ports,
 		}
 		if ir, ok := idx[r.Name]; ok {
 			snap.NetworkMode = ir.NetworkMode
@@ -164,10 +166,11 @@ func (e *EngineClient) Snapshot(name string) (*ContainerSnapshot, error) {
 		return nil, fmt.Errorf("container %s not found", name)
 	}
 	snap := &ContainerSnapshot{
-		Name:   row.Name,
-		State:  row.State,
-		Status: row.Status,
-		Ports:  row.Ports,
+		Name:     row.Name,
+		State:    row.State,
+		Status:   row.Status,
+		ImageRef: row.Image,
+		Ports:    row.Ports,
 	}
 	if inspects, err := e.runInspect([]string{name}); err == nil && len(inspects) > 0 {
 		snap.NetworkMode = inspects[0].NetworkMode
@@ -183,6 +186,7 @@ type enginePSRow struct {
 	Name   string
 	State  string
 	Status string
+	Image  string // full image ref:tag as reported by ps
 	Ports  []PortMapping
 }
 
@@ -203,6 +207,7 @@ type podmanPSEntry struct {
 	Names  []string     `json:"Names"`
 	Status string       `json:"Status"`
 	State  string       `json:"State"`
+	Image  string       `json:"Image"`
 	Ports  []podmanPort `json:"Ports"`
 }
 
@@ -219,6 +224,7 @@ type dockerPSEntry struct {
 	Names  string `json:"Names"`
 	Status string `json:"Status"`
 	State  string `json:"State"`
+	Image  string `json:"Image"`
 	Ports  string `json:"Ports"`
 }
 
@@ -237,6 +243,7 @@ func parsePS(data string) ([]enginePSRow, error) {
 					Name:   firstName(e.Names),
 					State:  e.State,
 					Status: e.Status,
+					Image:  e.Image,
 					Ports:  fromPodmanPorts(e.Ports),
 				})
 			}
@@ -301,6 +308,7 @@ func fromDockerPSRows(rows []dockerPSEntry) []enginePSRow {
 			Name:   strings.Split(r.Names, ",")[0],
 			State:  r.State,
 			Status: r.Status,
+			Image:  r.Image,
 			Ports:  parseDockerPortString(r.Ports),
 		})
 	}

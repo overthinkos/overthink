@@ -1,5 +1,5 @@
 candy:
-    version: 2026.144.1443
+    version: 2026.162.1430
     name: filebrowser
     require:
         - supervisord
@@ -51,6 +51,13 @@ candy:
           http: http://127.0.0.1:${HOST_PORT:8080}/
           status: 200
           timeout: 5s
+        # The candy owns the `data` volume (declared above), so the
+        # "data dir exists" probe lives here — one check covers every box
+        # composing filebrowser.
+        - id: filebrowser-volumes-exist
+          scope: deploy
+          file: ${VOLUME_CONTAINER_PATH:data}
+          filetype: directory
     service:
         - name: filebrowser
           exec: /usr/local/bin/filebrowser

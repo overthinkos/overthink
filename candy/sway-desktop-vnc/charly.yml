@@ -1,8 +1,48 @@
 candy:
-    version: 2026.144.1443
+    version: 2026.162.1430
     name: sway-desktop-vnc
     candy:
         - sway-desktop
         - wayvnc
     env:
         WLR_RENDERER: "pixman"
+    # The full browser-VNC desktop verification lives on THIS composite candy
+    # (sway-desktop[+chrome-sway] + wayvnc) — the candy that assembles the
+    # running desktop — so ONE check set covers every box composing it. The
+    # sibling sway/wayvnc/chrome candies keep their own per-binary checks; the
+    # rollup here is the composition check (all three desktop binaries + the
+    # full stack running together), mirroring immich-ml-services-running.
+    eval:
+        - id: sway-desktop-vnc-binaries
+          command: test -x /usr/bin/sway && test -x /usr/bin/wayvnc && test -x /usr/bin/google-chrome-stable
+          exit_status: 0
+        - id: sway-desktop-vnc-services
+          scope: deploy
+          command: supervisorctl status sway wayvnc | awk '{print $2}' | sort -u
+          in_container: true
+          exit_status: 0
+          stdout:
+            - RUNNING
+        - id: sway-desktop-vnc-cdp-up
+          scope: deploy
+          cdp: status
+          stdout:
+            - contains: ok
+        - id: sway-desktop-vnc-vnc-up
+          scope: deploy
+          vnc: status
+          stdout:
+            - contains: ok
+        - id: sway-desktop-vnc-wl-has-windows
+          scope: deploy
+          wl: toplevel
+        - id: sway-desktop-vnc-dbus-notifications-registered
+          scope: deploy
+          dbus: list
+          stdout:
+            - contains: org.freedesktop.Notifications
+        - id: sway-desktop-vnc-vnc-framebuffer
+          scope: deploy
+          vnc: screenshot
+          artifact: /tmp/sway-desktop-vnc-fb.png
+          artifact_min_bytes: 5000

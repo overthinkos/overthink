@@ -244,45 +244,51 @@ func (c *EvalRunCmd) Run() error {
 	// through systemctl restart uses the existing on-disk quadlet
 	// unchanged.
 	if tk == TargetKindPod {
-		if cfg, _ := LoadDeployConfig(); cfg != nil {
-			if entry, ok := cfg.Deploy[tn]; ok && entry.IsDisposable() {
-				unit := "charly-" + tn + ".service"
-				container := "charly-" + tn
-				fmt.Fprintf(os.Stderr,
-					"harness: preflight restart of disposable harness sandbox %q (fresh-per-run)\n", tn)
-				cmd := exec.Command("systemctl", "--user", "restart", unit)
-				cmd.Stdout = os.Stderr
-				cmd.Stderr = os.Stderr
-				if err := cmd.Run(); err != nil {
-					return fmt.Errorf("preflight restart of %s: %w", unit, err)
+		cfg, err := LoadDeployConfig()
+		if err != nil {
+			return fmt.Errorf("loading per-host deploy overlay: %w", err)
+		}
+		entry, err := scorePodTargetEntry(cfg, c.Name, tn)
+		if err != nil {
+			return err
+		}
+		if entry.IsDisposable() {
+			unit := "charly-" + tn + ".service"
+			container := "charly-" + tn
+			fmt.Fprintf(os.Stderr,
+				"harness: preflight restart of disposable harness sandbox %q (fresh-per-run)\n", tn)
+			cmd := exec.Command("systemctl", "--user", "restart", unit)
+			cmd.Stdout = os.Stderr
+			cmd.Stderr = os.Stderr
+			if err := cmd.Run(); err != nil {
+				return fmt.Errorf("preflight restart of %s: %w", unit, err)
+			}
+			// The restart wipes the container's writable layer (the
+			// `--rm` flag in the quadlet means restart = destroy +
+			// recreate). Re-sync the host's fresh charly binary AND
+			// claude credentials into the pod so the in-pod harness
+			// has the latest code AND can authenticate. Without
+			// these, the AI invocation fails with auth errors and
+			// the in-pod charly falls back to the (older) image-baked
+			// version which lacks post-cutover commands.
+			ready := exec.Command("podman", "inspect", "--format", "{{.State.Running}}", container)
+			_ = ready.Run()
+			if exe, err := os.Executable(); err == nil && exe != "" {
+				sync := exec.Command("podman", "cp", exe, container+":/usr/local/bin/charly")
+				sync.Stdout = os.Stderr
+				sync.Stderr = os.Stderr
+				if err := sync.Run(); err != nil {
+					return fmt.Errorf("preflight sync of charly binary into %s: %w", container, err)
 				}
-				// The restart wipes the container's writable layer (the
-				// `--rm` flag in the quadlet means restart = destroy +
-				// recreate). Re-sync the host's fresh charly binary AND
-				// claude credentials into the pod so the in-pod harness
-				// has the latest code AND can authenticate. Without
-				// these, the AI invocation fails with auth errors and
-				// the in-pod charly falls back to the (older) image-baked
-				// version which lacks post-cutover commands.
-				ready := exec.Command("podman", "inspect", "--format", "{{.State.Running}}", container)
-				_ = ready.Run()
-				if exe, err := os.Executable(); err == nil && exe != "" {
-					sync := exec.Command("podman", "cp", exe, container+":/usr/local/bin/charly")
-					sync.Stdout = os.Stderr
-					sync.Stderr = os.Stderr
-					if err := sync.Run(); err != nil {
-						return fmt.Errorf("preflight sync of charly binary into %s: %w", container, err)
-					}
-				}
-				// Re-sync AI credentials (claude creds, etc.) into the
-				// freshly-restarted pod. Use the host's just-built charly
-				// binary so the sync logic itself is post-cutover.
-				credSync := exec.Command(findCharlyForEval(), "eval", "sync-credential", c.Name)
-				credSync.Stdout = os.Stderr
-				credSync.Stderr = os.Stderr
-				if err := credSync.Run(); err != nil {
-					return fmt.Errorf("preflight sync of credentials for score %q: %w", c.Name, err)
-				}
+			}
+			// Re-sync AI credentials (claude creds, etc.) into the
+			// freshly-restarted pod. Use the host's just-built charly
+			// binary so the sync logic itself is post-cutover.
+			credSync := exec.Command(findCharlyForEval(), "eval", "sync-credential", c.Name)
+			credSync.Stdout = os.Stderr
+			credSync.Stderr = os.Stderr
+			if err := credSync.Run(); err != nil {
+				return fmt.Errorf("preflight sync of credentials for score %q: %w", c.Name, err)
 			}
 		}
 	}
@@ -305,6 +311,22 @@ func (c *EvalRunCmd) Run() error {
 		return dispatchToVM(tn, c.Name, args)
 	}
 	return fmt.Errorf("unsupported target kind: %s", tk)
+}
+
+// scorePodTargetEntry resolves a score's pod-target deploy entry from the
+// per-host overlay. The harness restarts-but-never-creates its sandbox pod
+// (see the preflight comment in Run), so a missing entry is an operator
+// precondition failure — fail fast with the remediation instead of letting
+// podman surface a raw exec error against a container that cannot exist.
+func scorePodTargetEntry(cfg *DeployConfig, scoreName, targetName string) (DeploymentNode, error) {
+	if cfg != nil {
+		if entry, ok := cfg.Deploy[targetName]; ok {
+			return entry, nil
+		}
+	}
+	return DeploymentNode{}, fmt.Errorf(
+		"score %q targets pod %q but no deploy entry exists on this host — provision the harness sandbox first: `charly deploy add %s <ref> --disposable` then `charly start %s` (the sandbox is per-host operator config, never shipped by the repo; see /charly-eval:eval)",
+		scoreName, targetName, targetName, targetName)
 }
 
 // runAllEvalBeds runs every kind:eval bed (name-sorted for determinism)

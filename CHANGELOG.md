@@ -22,6 +22,10 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-11 — fix(eval): fail fast when a score's pod target has no deploy entry on this host
+
+`charly eval run <score>` restarts-but-never-creates its sandbox pod by design, but a host without the operator-provisioned `eval-sandbox` deploy entry surfaced the gap as podman's raw `no container with name or ID "charly-eval-sandbox"` exit-125 — the silent `cfg.Deploy[tn]` preflight skip hid the missing precondition (RCA'd live on this host, which has never carried the entry). The pod dispatch now resolves the entry through `scorePodTargetEntry` and errors actionably — `score X targets pod Y but no deploy entry exists on this host — provision the harness sandbox first: charly deploy add Y <ref> --disposable …` — and a per-host overlay load failure surfaces instead of being swallowed. Go tests cover the nil-config / missing-entry / present-entry branches; `/charly-eval:eval` now documents the sandbox as an operator-provisioned per-host precondition.
+
 ### 2026-06-11 — fix(eval): sweep the last three stale `eval.yml` references out of charly.yml's live prompt strings
 
 The `default` and `scaffolding-selftest` scores' Ground-rules prompt lines told the harness AI "Recipe scenarios are immutable — they live in eval.yml" — a file that no longer exists (the beds/recipes live in this same file's `eval:` block) — and one `kind: local` comment said the same. All three now name the `eval:` block. Gate (operator-authorized this turn: parse + non-runtime standards): `charly box validate` exit 0, zero warnings; the live loader demonstrably parses past the edited lines (the score resolved during a run that failed later for an independent, pre-existing reason — the missing operator-provisioned `eval-sandbox` host deploy, see the fail-fast entry). The full live prompt-render leg awaits an `eval-sandbox` deploy on this host.

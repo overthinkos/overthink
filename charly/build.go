@@ -32,6 +32,7 @@ type BuildCmd struct {
 	Jobs            int      `long:"jobs" help:"Max concurrent image builds per DAG level (0=auto: defaults.jobs, else 4)" env:"CHARLY_BUILD_JOBS"`
 	PodmanJobs      int      `long:"podman-jobs" help:"Stages per podman build (0=auto: min(NCPU, defaults.podman_jobs_cap))" env:"CHARLY_PODMAN_JOBS"`
 	IncludeDisabled bool     `long:"include-disabled" help:"Build boxes with enabled: false in charly.yml (does not modify the file). Use for one-off operational rebuilds without flipping authored config."`
+	DevLocalPkg     bool     `long:"dev-local-pkg" help:"Build localpkg candies (the charly toolchain) from LOCAL in-development source instead of downloading the published release. Set automatically for disposable eval-bed image builds so a bed tests in-development code; never on a production box build."`
 
 	// podmanJobsCap is the resolved ceiling for the auto podman-jobs calc,
 	// sourced from defaults.podman_jobs_cap in Run() (0 → podmanJobsCapFallback).
@@ -116,6 +117,10 @@ func (c *BuildCmd) Run() error {
 	if err != nil {
 		return err
 	}
+	// Disposable eval beds build the charly toolchain (any localpkg candy) from
+	// LOCAL in-development source; production boxes download the published
+	// release. The eval-bed runner passes --dev-local-pkg (see eval_bed_run.go).
+	gen.DevLocalPkg = c.DevLocalPkg
 	if err := gen.Generate(); err != nil {
 		return fmt.Errorf("generating build files: %w", err)
 	}

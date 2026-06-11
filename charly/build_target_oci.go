@@ -121,11 +121,11 @@ func (t *OCITarget) emitStep(step InstallStep, plan *InstallPlan) error {
 		// silently (the deploy-time AndroidDeployTarget executes it).
 		return nil
 	case *LocalPkgInstallStep:
-		// In an image build there is no host-package-build step, so the candy's
-		// PUBLISHED package is downloaded from its release and installed via the
-		// SAME dep-resolving install_template the deploy path uses — so the
-		// toolchain is OS-tracked + its deps resolved (not a bare COPY'd binary).
-		// Needs LocalPkg.DownloadTemplate; absent → skip (candy's task: fallback).
+		// Image-build install of a candy's localpkg package. PRODUCTION boxes
+		// download the PUBLISHED release; disposable eval beds build the
+		// in-development package from local source — ONE shared decision in
+		// renderLocalPkgImageInstall. Both install via the SAME dep-resolving
+		// install_template (OS-tracked, not a bare COPY'd binary).
 		return t.emitLocalPkgInstall(s)
 	case *RebootStep:
 		// No machine to reboot during an image build — skip silently
@@ -187,14 +187,17 @@ func (t *OCITarget) emitShellHook(s *ShellHookStep) error {
 // install_template when present. Falls back to legacy InstallTemplate
 // for the (install, container) cell.
 // emitLocalPkgInstall emits the image-build install of a candy's `localpkg:`
-// package: download the PUBLISHED package file (LocalPkg.DownloadTemplate, with
-// ${ARCH} resolved by BuildKit) into the staging dir, then run the SAME
-// dep-resolving InstallTemplate the deploy path uses (pacman -U / dnf install /
-// apt-get install). The toolchain is thus OS-tracked and its dependencies pulled
-// from the image's repos — identical to a deploy-target install. A nil LocalPkg
-// or empty DownloadTemplate is a clean no-op (the candy's own task: installs it).
+// package via the shared renderLocalPkgImageInstall (production release-download
+// vs disposable-eval-bed in-development build — see that function). The
+// eval-bed switch flows through the Generator's DevLocalPkg flag (one source,
+// both image-build paths read it). The overlay path (deploy-time) never sets it.
 func (t *OCITarget) emitLocalPkgInstall(s *LocalPkgInstallStep) error {
-	run, err := renderLocalPkgImageRun(s.LocalPkg)
+	dev := t.Generator != nil && t.Generator.DevLocalPkg
+	boxName := ""
+	if t.Box != nil {
+		boxName = t.Box.Name
+	}
+	run, err := renderLocalPkgImageInstall(s, dev, t.BuildDir, boxName)
 	if err != nil {
 		return err
 	}

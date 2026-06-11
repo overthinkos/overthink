@@ -22,6 +22,21 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-11 — feat(localpkg): disposable eval beds bake the IN-DEVELOPMENT charly; production boxes the published release
+
+A `localpkg:` candy (the `charly` toolchain) installs the charly binary as a proper OS package. An IMAGE build previously ALWAYS downloaded the PUBLISHED release (`releases/latest/download/opencharly-<arch>.<fmt>`) — so a disposable `kind: eval` bed tested a STALE released binary instead of the code under development. After the candy/box rename advanced main's eval recipes to `kind: box`, the published release (built before the recipe-from-kind update) could no longer parse them, and the `charly-mcp` `box.list.boxes` deploy-check failed in every coder bed (the MCP server's embedded-fallback load of main rejected `kind: box` with the stale `{layer, image, pod, vm}` allowlist).
+
+The fix makes the binary source a hard, GENERIC distinction by box type, NEVER mixed, decided in ONE place:
+
+- **Disposable eval boxes** (`kind: eval` beds) bake the latest **in-development** charly: the eval-bed runner passes `charly box build --dev-local-pkg` for every bed image build, so the localpkg is BUILT from the local working tree (`pkg/<fmt>` + `charly/`, via `buildLocalPkgOnHost`) and COPY'd into the image — a bed always tests the code under development.
+- **Production boxes** bake the latest **published** charly: a normal `charly box build` downloads the release.
+
+- **charly/localpkg.go**: `renderLocalPkgImageRun(lp)` → unified `renderLocalPkgImageInstall(s, devLocalPkg, imageDir, boxName)` — the SINGLE image-build install, shared by `OCITarget` AND `generate.go writeCandySteps` (R3). Production renders the `download_template` curl; dev builds the local source, stages it under `.build/<box>/_localpkg/`, and COPYs it — both install via the SAME dep-resolving `install_template`. A dev build with no local source HARD-errors (R4: no silent release fallback).
+- **charly/build.go**: `--dev-local-pkg` flag → `Generator.DevLocalPkg`. **charly/eval_bed_run.go**: the bed runner sets it automatically for every pod-bed image build (VM/local beds already build current charly via the deploy `build_template` path).
+- Skills: `/charly-tools:charly`, `/charly-internals:install-plan`, `/charly-eval:eval`, `/charly-build:build` document the distinction.
+
+R10: `charly eval run eval-fedora-coder-pod` PASS (10/10 steps; eval-live 151 passed · 0 failed; baked charly 2026.162.1002, `box.list.boxes` exit 0) — the bed now bakes the in-development toolchain. Covered by `TestRenderLocalPkgImageInstall_ProductionDownloadsRelease` + `…_DevMissingSourceHardErrors`. No schema change.
+
 ### 2026-06-11 — fix(reconcile): skip git-submodule dirs in the project-file scan (shared `isGitSubmoduleDir`) + align main namespace pins
 
 `charly box reconcile`'s `reconcileCandidateFiles` walked `box/` + `candy/` with `filepath.Walk` and, after the box inversion made `main/box/` the submodule mount parent, recursed into `box/<distro>/{box,candy}/<name>/charly.yml` — rewriting the SUBMODULES' `@github` pins and leaving every submodule `-dirty` on a main `charly box reconcile`. Same bug class as the `drop-box-port` migrator-scoping fix in the candy-port cutover below: each charly-project repo reconciles/migrates ITSELF.

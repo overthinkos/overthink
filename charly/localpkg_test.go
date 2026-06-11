@@ -511,3 +511,49 @@ func repoRootDir(t *testing.T) string {
 	t.Skip("charly.yml not found walking up from test cwd; skipping round-trip")
 	return ""
 }
+
+// renderLocalPkgImageInstall: a PRODUCTION box build DOWNLOADS the candy's
+// PUBLISHED release package (latest released toolchain) and installs it via the
+// shared install template — never a COPY of a locally-built package.
+func TestRenderLocalPkgImageInstall_ProductionDownloadsRelease(t *testing.T) {
+	lp := testPacLocalPkgDef()
+	lp.DownloadTemplate = "https://github.com/overthinkos/overthink/releases/latest/download/opencharly-${ARCH}.pkg.tar.zst"
+	s := &LocalPkgInstallStep{CandyName: "charly", Format: "pac", LocalPkg: lp}
+	got, err := renderLocalPkgImageInstall(s, false, "", "")
+	if err != nil {
+		t.Fatalf("production render: %v", err)
+	}
+	if !strings.Contains(got, "curl -fsSL") || !strings.Contains(got, "releases/latest/download/opencharly-${ARCH}.pkg.tar.zst") {
+		t.Errorf("production mode must DOWNLOAD the published release; got:\n%s", got)
+	}
+	if !strings.Contains(got, "pacman -U --noconfirm") {
+		t.Errorf("production mode must install via the format install_template; got:\n%s", got)
+	}
+	if strings.Contains(got, "COPY ") {
+		t.Errorf("production mode must NOT COPY a locally-built package; got:\n%s", got)
+	}
+}
+
+// renderLocalPkgImageInstall: a DISPOSABLE eval bed (devLocalPkg=true) builds the
+// in-development package from LOCAL source. With no localpkg source dir present it
+// HARD ERRORS — it must NEVER silently fall back to the published release (R4: no
+// black-magic fallback that would let a bed test a stale binary).
+func TestRenderLocalPkgImageInstall_DevMissingSourceHardErrors(t *testing.T) {
+	lp := testPacLocalPkgDef()
+	lp.DownloadTemplate = "https://example.com/opencharly-${ARCH}.pkg.tar.zst"
+	s := &LocalPkgInstallStep{
+		CandyName:   "charly",
+		Format:      "pac",
+		PkgbuildRef: "pkg/arch",
+		CandyDir:    t.TempDir(), // no PKGBUILD sentinel here
+		ProjectDir:  t.TempDir(), // nor here
+		LocalPkg:    lp,
+	}
+	_, err := renderLocalPkgImageInstall(s, true, t.TempDir(), "charly-arch")
+	if err == nil {
+		t.Fatalf("dev-local-pkg with no source dir must HARD ERROR (no silent fallback to the release); got nil")
+	}
+	if !strings.Contains(err.Error(), "dev-local-pkg") {
+		t.Errorf("dev-mode error should name dev-local-pkg; got: %v", err)
+	}
+}

@@ -427,16 +427,28 @@ func execLocalPkgInstall(ctx context.Context, exec DeployExecutor, s *LocalPkgIn
 	return transferAndInstallPkgs(ctx, exec, s.LocalPkg, pkgFiles, opts)
 }
 
-// renderLocalPkgImageRun returns the Containerfile `RUN` directive that, in an
-// IMAGE build, downloads a candy's PUBLISHED package (LocalPkgDef.DownloadTemplate,
-// with ${ARCH} resolved by BuildKit) into the staging dir and installs it via the
-// SAME dep-resolving InstallTemplate the deploy path uses — so the toolchain is
-// OS-tracked + its deps pulled from the image's repos, identical to a deploy
-// install. Returns "" (no directive) when the format declares no download_template
-// (the candy's own task: install is the fallback). Shared by OCITarget AND
-// generate.go writeCandySteps so the image-build emission has ONE home (R3).
-func renderLocalPkgImageRun(lp *LocalPkgDef) (string, error) {
-	if lp == nil || strings.TrimSpace(lp.DownloadTemplate) == "" {
+// renderLocalPkgImageInstall emits the IMAGE-build install of a candy's
+// `localpkg:` package. It is the ONE place the eval-vs-production charly-binary
+// distinction lives (R3 — shared by OCITarget AND generate.go writeCandySteps,
+// so the two image-build paths can never drift):
+//
+//   - PRODUCTION boxes (devLocalPkg=false) DOWNLOAD the candy's PUBLISHED package
+//     (LocalPkgDef.DownloadTemplate → releases/latest, ${ARCH} resolved by
+//     BuildKit) and install it. A real box ships the latest RELEASED toolchain.
+//
+//   - DISPOSABLE EVAL BEDS (devLocalPkg=true) BUILD the candy's package from the
+//     LOCAL in-development source (LocalPkgDef.BuildTemplate, via the SAME
+//     buildLocalPkgOnHost the deploy path uses — R3), stage it into the image
+//     build context, and COPY+install it. A bed thus ALWAYS tests the
+//     in-development charly, never a stale published release.
+//
+// Both modes install via the SAME dep-resolving InstallTemplate (pacman -U /
+// dnf install / apt-get install), so the toolchain is OS-tracked either way.
+// Returns "" (no directive) when the format declares no localpkg contract (the
+// candy's own task: install is the fallback).
+func renderLocalPkgImageInstall(s *LocalPkgInstallStep, devLocalPkg bool, imageDir, boxName string) (string, error) {
+	lp := s.LocalPkg
+	if lp == nil {
 		return "", nil
 	}
 	install, err := RenderTemplate("localpkg-install", lp.InstallTemplate, localPkgInstallContext{
@@ -450,9 +462,64 @@ func renderLocalPkgImageRun(lp *LocalPkgDef) (string, error) {
 	if install == "" {
 		return "", fmt.Errorf("localpkg install template rendered empty (format config missing install_template?)")
 	}
+
+	if devLocalPkg {
+		return renderLocalPkgImageDevInstall(s, install, imageDir, boxName)
+	}
+
+	// PRODUCTION: download the published release package. No download_template →
+	// no directive (the candy's own task: install is the fallback).
+	if strings.TrimSpace(lp.DownloadTemplate) == "" {
+		return "", nil
+	}
 	// Download to a glob-matching filename (e.g. "*.rpm" → "pkg.rpm") so the
 	// install template's {{.StageDir}}/{{.Glob}} matches the downloaded file.
 	pkgFile := "pkg" + strings.TrimPrefix(lp.PkgGlob, "*")
 	return fmt.Sprintf("RUN mkdir -p %[1]s && curl -fsSL \"%[2]s\" -o %[1]s/%[3]s && %[4]s && rm -rf %[1]s\n",
 		localPkgGuestStage, lp.DownloadTemplate, pkgFile, install), nil
+}
+
+// renderLocalPkgImageDevInstall is the DISPOSABLE-EVAL-BED leg of
+// renderLocalPkgImageInstall: build the candy's localpkg package from LOCAL
+// in-development source on the host (the SAME buildLocalPkgOnHost the deploy path
+// uses — R3), stage it into the per-image build context (the charly source itself
+// is excluded from the context, so the built package FILE is what the COPY
+// reaches), and emit a COPY + the same dep-resolving install the download path
+// runs. A missing source dir is a HARD ERROR — an eval bed that cannot build the
+// in-development package must fail loudly, never silently fall back to a release.
+func renderLocalPkgImageDevInstall(s *LocalPkgInstallStep, install, imageDir, boxName string) (string, error) {
+	lp := s.LocalPkg
+	srcDir := resolveLocalPkgDir(s.PkgbuildRef, s.CandyDir, s.ProjectDir, lp.SourceSentinel)
+	if srcDir == "" {
+		return "", fmt.Errorf("dev-local-pkg: cannot locate the %s localpkg source (%q) for candy %q — a disposable eval bed must build the in-development package from local source", s.Format, s.PkgbuildRef, s.CandyName)
+	}
+	pkgFiles, err := buildLocalPkgOnHost(context.Background(), lp, srcDir, EmitOpts{})
+	if err != nil {
+		return "", fmt.Errorf("dev-local-pkg: building %s package for candy %q from %s: %w", s.Format, s.CandyName, srcDir, err)
+	}
+	if len(pkgFiles) == 0 {
+		return "", fmt.Errorf("dev-local-pkg: build produced no %s package for candy %q (glob %q)", s.Format, s.CandyName, lp.PkgGlob)
+	}
+	// Stage the built package file(s) into the per-image build context so the
+	// Containerfile COPY can reach them.
+	stageRel := filepath.Join("_localpkg", s.CandyName)
+	stageDir := filepath.Join(imageDir, stageRel)
+	if err := os.MkdirAll(stageDir, 0o755); err != nil {
+		return "", fmt.Errorf("dev-local-pkg: staging dir %s: %w", stageDir, err)
+	}
+	for _, pf := range pkgFiles {
+		data, err := os.ReadFile(pf)
+		if err != nil {
+			return "", fmt.Errorf("dev-local-pkg: reading built package %s: %w", pf, err)
+		}
+		if err := os.WriteFile(filepath.Join(stageDir, filepath.Base(pf)), data, 0o644); err != nil {
+			return "", fmt.Errorf("dev-local-pkg: staging package %s: %w", filepath.Base(pf), err)
+		}
+	}
+	// COPY the staged package(s) into the image stage dir, then install via the
+	// SAME dep-resolving install template the download path uses. COPY of a
+	// trailing-slash dir copies its CONTENTS into the (auto-created) dest.
+	copySrc := ".build/" + boxName + "/" + filepath.ToSlash(stageRel) + "/"
+	return fmt.Sprintf("COPY %[1]s %[2]s/\nRUN %[3]s && rm -rf %[2]s\n",
+		copySrc, localPkgGuestStage, install), nil
 }

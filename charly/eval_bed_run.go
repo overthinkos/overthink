@@ -324,7 +324,11 @@ func runEvalBed(exe, name string, node DeploymentNode, opts bedRunOpts) (*bedRun
 	// Steps 1+2: image build + eval box (pod beds only; VM substrate is a
 	// cloud_image and kind:local has no image to build/disposable-eval).
 	if !isVM && !isLocal && image != "" {
-		if err := step("image-build", []string{"box", "build", image}); err != nil {
+		// Disposable eval beds ALWAYS bake the IN-DEVELOPMENT charly toolchain
+		// (any localpkg candy built from local source), never a stale published
+		// release — so a bed tests the code under development. --dev-local-pkg is
+		// the generic switch; production box builds omit it (download the release).
+		if err := step("image-build", []string{"box", "build", image, "--dev-local-pkg"}); err != nil {
 			return fail("image build %s: %w", image, err)
 		}
 		if err := step("eval-image", []string{"eval", "box", image}); err != nil {

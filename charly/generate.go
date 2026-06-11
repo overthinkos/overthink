@@ -22,6 +22,13 @@ type Generator struct {
 	BuildDir       string
 	Containerfiles map[string]string // cached content per image (used by charly build to pipe via stdin)
 	GlobalOrder    []string          // popularity-weighted global candy order for cache optimization
+
+	// DevLocalPkg, when true, makes localpkg candies (the charly toolchain) build
+	// from LOCAL in-development source instead of downloading the published
+	// release. Set ONLY for disposable eval-bed image builds (the eval-bed runner
+	// passes `--dev-local-pkg`), so a bed always tests the in-development charly;
+	// a production box build leaves it false. See renderLocalPkgImageInstall.
+	DevLocalPkg bool
 }
 
 // globalOrderForBox returns the candy order for an image by filtering the
@@ -1396,19 +1403,19 @@ func (g *Generator) writeCandySteps(b *strings.Builder, candyName string, img *R
 		}
 	}
 
-	// 2.5 localpkg: download + install the candy's PUBLISHED OS package in the
-	// IMAGE build — the same dep-resolving install the deploy LocalPkgInstallStep
-	// performs, but sourced from the format's published release asset
-	// (DownloadTemplate) since an image build has no host package-build step. This
-	// is what makes a localpkg candy (the `charly` toolchain) install as a proper,
-	// OS-tracked, dependency-resolving package on EVERY distro image — not a
-	// curl'd raw binary. compileLocalPkgStep resolves the target distro's
-	// localpkg-capable format and the candy's source for it; renderLocalPkgImageRun
-	// (shared with OCITarget — R3) emits "" when the format declares no
-	// download_template (the candy's own task: install is the fallback).
+	// 2.5 localpkg: install the candy's OS package in the IMAGE build — the same
+	// dep-resolving install the deploy LocalPkgInstallStep performs, so a localpkg
+	// candy (the `charly` toolchain) installs as a proper, OS-tracked,
+	// dependency-resolving package on EVERY distro image, not a curl'd raw binary.
+	// compileLocalPkgStep resolves the target distro's localpkg-capable format and
+	// the candy's source; renderLocalPkgImageInstall (shared with OCITarget — R3)
+	// then picks the binary source by box type: a PRODUCTION box downloads the
+	// PUBLISHED release; a DISPOSABLE eval bed (g.DevLocalPkg) builds the
+	// IN-DEVELOPMENT package from local source. Emits "" when the format declares
+	// no localpkg contract (the candy's own task: install is the fallback).
 	if step := compileLocalPkgStep(layer, img, HostContext{}); step != nil {
 		if s, ok := step.(*LocalPkgInstallStep); ok {
-			run, err := renderLocalPkgImageRun(s.LocalPkg)
+			run, err := renderLocalPkgImageInstall(s, g.DevLocalPkg, filepath.Join(g.BuildDir, img.Name), img.Name)
 			if err != nil {
 				b.WriteString(fmt.Sprintf("# localpkg render error: %v\n", err))
 			} else {

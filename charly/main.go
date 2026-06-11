@@ -50,6 +50,8 @@ type CLI struct {
 	Box         BoxCmd          `cmd:"" name:"box" help:"Build, generate, inspect, and pull container boxes (reads charly.yml)"`
 	Candy       CandyCmd        `cmd:"" name:"candy" help:"Edit candy.yml files in the project's candy/ directory"`
 	Logs        LogsCmd         `cmd:"" help:"Show service container logs"`
+	Volume      VolumeCmd       `cmd:"" name:"volume" help:"List or reset a deployment's charly-managed named volumes"`
+	Cp          CpCmd           `cmd:"" name:"cp" help:"Copy a file between the host and a running container (':' prefix marks the container side)"`
 	Mcp         McpCmdGroup     `cmd:"" help:"Run an MCP server exposing the charly CLI as tools"`
 	Migrate     MigrateCmd      `cmd:"" help:"Migrate any opencharly config up to the latest schema CalVer (single idempotent chain — no sub-verbs)"`
 	Preempt     PreemptCmd      `cmd:"" help:"Inspect and recover exclusive-resource preemption leases (preemptible holders stopped to free a resource for a claimant)"`
@@ -325,6 +327,7 @@ type ListCmd struct {
 	Services ListServicesCmd `cmd:"" help:"List candies that declare a service"`
 	Targets  ListTargetsCmd  `cmd:"" help:"List build targets in dependency order"`
 	Volumes  ListVolumesCmd  `cmd:"" help:"List candies that declare volumes"`
+	Tags     ListTagsCmd     `cmd:"" help:"List locally stored CalVer tags of charly-built images, newest first (rollback discovery for charly update --tag)"`
 }
 
 // ListBoxesCmd lists boxes from charly.yml

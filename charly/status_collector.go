@@ -164,6 +164,7 @@ func (c *Collector) Single(ctx context.Context, image, instance string) (Deploym
 	}
 
 	cs := c.collectOne(ctx, snap)
+	cs.Secrets = ListProvisionedSecretNames(engine.Bin(), boxName)
 
 	// statusSingle's lifecycle resolution: when the container isn't in
 	// podman, consult systemd/quadlet to distinguish stopped vs failed vs

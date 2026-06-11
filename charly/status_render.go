@@ -30,6 +30,7 @@ type DeploymentStatus struct {
 	Volumes   []string           `json:"volumes,omitempty"`
 	Network   string             `json:"network,omitempty"`
 	Tunnel    string             `json:"tunnel,omitempty"`
+	Secrets   []string           `json:"secrets,omitempty"`
 	RunMode   string             `json:"run_mode"`
 	Nested    []DeploymentStatus `json:"nested,omitempty"`
 	Source    string             `json:"source,omitempty"` // provenance: libvirt|ledger|adb|tree|podman
@@ -85,6 +86,9 @@ func RenderDetail(w io.Writer, s DeploymentStatus) error {
 		fmt.Fprintf(w, "Status:    %s\n", s.Status)
 	}
 	fmt.Fprintf(w, "Container: %s\n", s.Container)
+	if len(s.Secrets) > 0 {
+		fmt.Fprintf(w, "Secrets:   %s\n", strings.Join(s.Secrets, ", "))
+	}
 	fmt.Fprintf(w, "Mode:      %s\n", s.RunMode)
 	if len(s.Ports) > 0 {
 		fmt.Fprintf(w, "Ports:     %s\n", longPorts(s.Ports))

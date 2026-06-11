@@ -16,6 +16,7 @@ type LogsCmd struct {
 	Box      string `arg:"" help:"Box name or remote ref"`
 	Follow   bool   `short:"f" long:"follow" help:"Follow log output"`
 	Instance string `short:"i" long:"instance" help:"Instance name for running multiple containers of the same box"`
+	Sidecar  string `long:"sidecar" help:"Show the named SIDECAR container's logs instead of the app container's"`
 }
 
 func (c *LogsCmd) Run() error {
@@ -29,6 +30,9 @@ func (c *LogsCmd) Run() error {
 
 	if rt.RunMode == "quadlet" {
 		svc := serviceNameInstance(boxName, c.Instance)
+		if c.Sidecar != "" {
+			svc = SidecarContainerNameInstance(boxName, c.Instance, c.Sidecar) + ".service"
+		}
 		args := []string{"--user", "-u", svc}
 		if c.Follow {
 			args = append(args, "-f")
@@ -46,6 +50,9 @@ func (c *LogsCmd) Run() error {
 	runEngine := ResolveBoxEngineForDeploy(boxName, c.Instance, rt.RunEngine)
 	engine := EngineBinary(runEngine)
 	name := containerNameInstance(boxName, c.Instance)
+	if c.Sidecar != "" {
+		name = SidecarContainerNameInstance(boxName, c.Instance, c.Sidecar)
+	}
 	args := []string{"logs"}
 	if c.Follow {
 		args = append(args, "-f")

@@ -109,6 +109,26 @@ type CollectedSecret struct {
 	RotateOnConfig bool   // if true, bypass podmanSecretExists short-circuit (rotate on every charly config)
 }
 
+// ListProvisionedSecretNames returns the engine-side podman secrets
+// provisioned for a box (the charly-<box>-* names, sidecar secrets
+// included), sorted — the charly-native replacement for ad-hoc
+// `podman secret ls` verification (surfaced on `charly status <box>` detail).
+func ListProvisionedSecretNames(engineBin, boxName string) []string {
+	out, err := exec.Command(engineBin, "secret", "ls", "--format", "{{.Name}}").Output()
+	if err != nil {
+		return nil
+	}
+	prefix := "charly-" + boxName + "-"
+	var names []string
+	for _, n := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		if n != "" && strings.HasPrefix(n, prefix) {
+			names = append(names, n)
+		}
+	}
+	sort.Strings(names)
+	return names
+}
+
 // ApplySecretRefresh marks the named secrets (matched by their manifest
 // SecretName; the literal "all" matches every secret) RotateOnConfig for
 // THIS provisioning run, so ProvisionPodmanSecrets removes and recreates

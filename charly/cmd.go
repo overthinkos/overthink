@@ -13,11 +13,18 @@ type CmdCmd struct {
 	Command  string `arg:"" help:"Command to execute"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 	Notify   bool   `long:"notify" negatable:"" default:"true" help:"Send desktop notification on completion (--no-notify to disable)"`
+	Sidecar  string `long:"sidecar" help:"Run in the named SIDECAR container (charly-<box>[-<instance>]-<sidecar>) instead of the app container"`
 }
 
 func (c *CmdCmd) Run() error {
 	c.Box, c.Instance = canonicalizeDeployArg(c.Box, c.Instance)
-	engine, name, err := resolveContainer(c.Box, c.Instance)
+	resolve := func() (string, string, error) {
+		if c.Sidecar != "" {
+			return resolveSidecarContainer(c.Box, c.Instance, c.Sidecar)
+		}
+		return resolveContainer(c.Box, c.Instance)
+	}
+	engine, name, err := resolve()
 	if err != nil {
 		return err
 	}

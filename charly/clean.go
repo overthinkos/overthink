@@ -92,10 +92,23 @@ func imageLabelCalVer(im LocalImageInfo) (CalVer, bool) {
 // tags onto one id — see CHANGELOG.) Tags whose image is referenced by a
 // container are skipped, and `rmi` runs WITHOUT `-f` as a backstop. keepN <= 0
 // disables (no-op). Returns the refs removed (or that would be, when dryRun).
-func pruneImagesByRetention(engine string, keepN int, dryRun bool) ([]string, error) {
-	if keepN <= 0 {
-		return nil, nil
-	}
+// imageTagInfo is one locally stored tag of a charly-labeled image —
+// the shared inventory row behind retention pruning, `charly box list tags`,
+// and `charly clean --invalidate`.
+type imageTagInfo struct {
+	Ref         string
+	LabelCalVer CalVer
+	OkLabel     bool
+	TagCalVer   CalVer
+	OkTag       bool
+	InUse       bool
+}
+
+// charlyImageTags inventories local storage: one row PER TAG (deduped by
+// ref), grouped by the ai.opencharly.box label and sorted newest-first
+// (label-CalVer primary, build-tag CalVer tiebreaker; undatable tags last).
+// Non-charly images (no label) never appear.
+func charlyImageTags(engine string) (map[string][]imageTagInfo, error) {
 	imgs, err := ListLocalImages(engine)
 	if err != nil {
 		return nil, err
@@ -104,19 +117,7 @@ func pruneImagesByRetention(engine string, keepN int, dryRun bool) ([]string, er
 	if err != nil {
 		return nil, err
 	}
-
-	// One candidate PER TAG (deduped by ref — robust even if the lister returns
-	// row-per-tag duplicates), grouped by the ai.opencharly.box label.
-	// Non-charly images (no label) are never touched.
-	type tagCand struct {
-		ref         string
-		labelCalVer CalVer
-		okLabel     bool
-		tagCalVer   CalVer
-		okTag       bool
-		inUse       bool
-	}
-	groups := map[string][]tagCand{}
+	groups := map[string][]imageTagInfo{}
 	seenRef := map[string]bool{}
 	for _, im := range imgs {
 		short := im.Labels[LabelBox]
@@ -131,51 +132,61 @@ func pruneImagesByRetention(engine string, keepN int, dryRun bool) ([]string, er
 			}
 			seenRef[ref] = true
 			tcv, okT := ParseCalVer(extractCalVerTag(ref))
-			groups[short] = append(groups[short], tagCand{
-				ref: ref, labelCalVer: lcv, okLabel: okL,
-				tagCalVer: tcv, okTag: okT, inUse: inUse,
+			groups[short] = append(groups[short], imageTagInfo{
+				Ref: ref, LabelCalVer: lcv, OkLabel: okL,
+				TagCalVer: tcv, OkTag: okT, InUse: inUse,
 			})
 		}
 	}
+	for _, group := range groups {
+		sort.SliceStable(group, func(i, j int) bool {
+			if group[i].OkLabel && group[j].OkLabel && group[i].LabelCalVer != group[j].LabelCalVer {
+				return group[j].LabelCalVer.Less(group[i].LabelCalVer) // newer label first
+			}
+			if group[i].OkLabel != group[j].OkLabel {
+				return group[i].OkLabel // labelled sorts before unlabelled
+			}
+			if group[i].OkTag && group[j].OkTag && group[i].TagCalVer != group[j].TagCalVer {
+				return group[j].TagCalVer.Less(group[i].TagCalVer) // newer build first
+			}
+			return group[i].OkTag && !group[j].OkTag // dateable sorts before undateable
+		})
+	}
+	return groups, nil
+}
 
+func pruneImagesByRetention(engine string, keepN int, dryRun bool) ([]string, error) {
+	if keepN <= 0 {
+		return nil, nil
+	}
+	groups, err := charlyImageTags(engine)
+	if err != nil {
+		return nil, err
+	}
 	var removed []string
 	for _, group := range groups {
-		// Newest first: label-CalVer PRIMARY, per-ref build-tag CalVer
-		// TIEBREAKER. Undatable tags (neither key) sort last; never removed.
-		sort.SliceStable(group, func(i, j int) bool {
-			if group[i].okLabel && group[j].okLabel && group[i].labelCalVer != group[j].labelCalVer {
-				return group[j].labelCalVer.Less(group[i].labelCalVer) // newer label first
-			}
-			if group[i].okLabel != group[j].okLabel {
-				return group[i].okLabel // labelled sorts before unlabelled
-			}
-			if group[i].okTag && group[j].okTag && group[i].tagCalVer != group[j].tagCalVer {
-				return group[j].tagCalVer.Less(group[i].tagCalVer) // newer build first
-			}
-			return group[i].okTag && !group[j].okTag // dateable sorts before undateable
-		})
 		for idx, c := range group {
 			if idx < keepN {
 				continue // keep the newest keepN tags
 			}
-			if !c.okLabel && !c.okTag {
+			if !c.OkLabel && !c.OkTag {
 				continue // never remove a tag we can't date (no label/tag CalVer)
 			}
-			if c.inUse {
+			if c.InUse {
 				continue // image referenced by a container/deploy
 			}
 			if dryRun {
-				removed = append(removed, c.ref)
+				removed = append(removed, c.Ref)
 				continue
 			}
 			// rmi WITHOUT -f untags this ref while other tags of a shared id
 			// survive; it also refuses an image still held by a build /
-			// "external" container our imageInUse pre-check can't see — the
+			// "external" container our InUse pre-check can't see — the
 			// safety backstop. Silent skip — in-use retention is expected.
-			if err := exec.Command(EngineBinary(engine), "rmi", c.ref).Run(); err != nil {
+			if err := exec.Command(EngineBinary(engine), "rmi", c.Ref).Run(); err != nil {
 				continue
 			}
-			removed = append(removed, c.ref)
+			removed = append(removed, c.Ref)
 		}
 	}
 	return removed, nil
@@ -351,16 +362,36 @@ func cleanMakepkgArtifacts(projectDir string, dryRun bool) []string {
 // the auto-prune that runs after `charly box build` / `charly eval run`), and also
 // sweeps the one-time makepkg backlog.
 type CleanCmd struct {
-	DryRun bool `long:"dry-run" help:"Print everything that would be removed; touch nothing"`
-	Images bool `long:"images" help:"Only image-tag retention"`
-	Eval   bool `long:"eval" help:"Only eval-run retention"`
-	Keep   int  `long:"keep" help:"Override the retention count for this run (0 = use defaults:)"`
+	DryRun     bool   `long:"dry-run" help:"Print everything that would be removed; touch nothing"`
+	Images     bool   `long:"images" help:"Only image-tag retention"`
+	Eval       bool   `long:"eval" help:"Only eval-run retention"`
+	Keep       int    `long:"keep" help:"Override the retention count for this run (0 = use defaults:)"`
+	Invalidate string `long:"invalidate" help:"Remove every charly-labeled image tag matching this glob (full ref or last path segment) — targeted cache invalidation for stale intermediates; in-use images are skipped. Runs ONLY the invalidation"`
 }
 
 func (c *CleanCmd) Run() error {
 	dir, err := os.Getwd()
 	if err != nil {
 		return err
+	}
+	if c.Invalidate != "" {
+		rt, err := ResolveRuntime()
+		if err != nil {
+			return err
+		}
+		refs, err := invalidateImageTags(EngineBinary(rt.BuildEngine), c.Invalidate, c.DryRun)
+		if err != nil {
+			return fmt.Errorf("invalidating image tags: %w", err)
+		}
+		verb := "removed"
+		if c.DryRun {
+			verb = "would remove"
+		}
+		fmt.Printf("invalidate: %s %d tag(s) matching %q\n", verb, len(refs), c.Invalidate)
+		for _, r := range refs {
+			fmt.Printf("  %s\n", r)
+		}
+		return nil
 	}
 	keepImages := resolveIntPtr(nil, nil, keepImagesFallback)
 	keepEval := resolveIntPtr(nil, nil, keepEvalRunsFallback)

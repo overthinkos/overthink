@@ -123,19 +123,32 @@ func (a *AndroidDeployTarget) installStep(s *ApkInstallStep, opts EmitOpts) erro
 }
 
 // resolveApkPath resolves a committed-APK reference. Absolute paths are used
-// verbatim; relative paths anchor to the candy's source dir, then fall back
-// to the project cwd (so a candy can reference a shared project file like
-// tests/data/ApiDemos-debug.apk).
+// verbatim; a relative path anchors against the candy's SOURCE tree —
+// candy-dir-relative first, then each ancestor up to the candy's project /
+// repo root (first existing match wins, so the closest anchor takes priority).
+// This resolves a path like `tests/data/ApiDemos-debug.apk` identically whether
+// the candy is LOCAL (candyDir under the consuming project root) or fetched via
+// @github (candyDir under the cloned-repo cache, where a project-root-relative
+// file lives at <repo-root>/tests/data/... — several levels above candyDir).
+// The consuming deploy's cwd is NOT an anchor: a fetched candy's committed file
+// is never under the consumer's project.
 func resolveApkPath(ref, candyDir string) string {
 	if filepath.IsAbs(ref) {
 		return ref
 	}
 	if candyDir != "" {
-		cand := filepath.Join(candyDir, ref)
-		if _, err := os.Stat(cand); err == nil {
-			return cand
+		for dir := candyDir; ; {
+			cand := filepath.Join(dir, ref)
+			if _, err := os.Stat(cand); err == nil {
+				return cand
+			}
+			parent := filepath.Dir(dir)
+			if parent == dir {
+				break // reached the filesystem root
+			}
+			dir = parent
 		}
 	}
-	// Fall back to project-root-relative (cwd).
+	// Last resort: the local-project case where candyDir is unset — cwd-relative.
 	return ref
 }

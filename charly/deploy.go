@@ -1394,7 +1394,7 @@ func hasLegacyImagesKey(data []byte) bool {
 // any deployment in dc except the named one (`excludeKey` is typically
 // the deploy key for the entry currently being expanded — we want to
 // allow it to keep its old allocations, not avoid them). Used by
-// ExpandAutoPorts to keep auto-allocations from colliding across deploys.
+// ResolveDeployPorts to keep auto-allocations from colliding across deploys.
 func (dc *DeployConfig) OccupiedHostPorts(excludeKey string) map[int]bool {
 	out := map[int]bool{}
 	if dc == nil {
@@ -1463,17 +1463,15 @@ func MergeDeployOntoMetadata(meta *BoxMetadata, dc *DeployConfig, deployName, in
 	if overlay.AcmeEmail != "" {
 		meta.AcmeEmail = overlay.AcmeEmail
 	}
-	// Port override semantics: prefer ResolvedPort (the persisted
-	// expansion of an "auto" sentinel) over Port. If neither is set,
-	// meta.Port keeps its image-label value. If Port is set but still
-	// contains "auto", the expansion didn't happen yet — charly config /
-	// charly update is responsible for running ExpandAutoPorts and writing
-	// ResolvedPort BEFORE this merge runs.
-	switch {
-	case overlay.ResolvedPort != nil:
+	// Ports: prefer the persisted ResolvedPort (the auto-allocated /
+	// pinned host:container mapping `charly config` computed via
+	// ResolveDeployPorts). A deploy `port:` entry is only a PIN INPUT to that
+	// resolution — never a wholesale replacement — so it is NOT applied here.
+	// If ResolvedPort isn't set yet (deploy not configured), meta.Port keeps the
+	// image-label's bare container ports (published 1:1 on 127.0.0.1 until the
+	// next charly config resolves them).
+	if overlay.ResolvedPort != nil {
 		meta.Port = overlay.ResolvedPort
-	case overlay.Port != nil && !HasAutoPort(overlay.Port):
-		meta.Port = overlay.Port
 	}
 	if overlay.Env != nil {
 		meta.Env = overlay.Env
@@ -2259,15 +2257,15 @@ func ExportAllBox(cfg *Config) *DeployConfig {
 		entry := DeploymentNode{
 			Version:     img.Version,
 			Description: img.Description,
-			Port:        img.Port,
 			Env:         img.Env,
 			EnvFile:     img.EnvFile,
 			Security:    img.Security,
 			Network:     img.Network,
 		}
-		// Only include if at least one field is set
+		// Only include if at least one field is set. Ports are no longer a box
+		// field — they're inherited from candies and auto-allocated at deploy.
 		if entry.Version != "" || entry.Description != nil ||
-			entry.Port != nil || entry.Env != nil ||
+			entry.Env != nil ||
 			entry.EnvFile != "" || entry.Security != nil || entry.Network != "" {
 			dc.Deploy[name] = entry
 		}

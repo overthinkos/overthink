@@ -1,0 +1,197 @@
+package main
+
+// migrate_drop_box_port.go — `charly migrate`.
+//
+// 2026-06 candy-port-inheritance cutover. Boxes no longer declare ports: the
+// box-level `port:` field is RETIRED and the published ports are inherited from
+// the box's candy chain (CollectBoxPorts). Host mappings are auto-allocated on
+// 127.0.0.1 at deploy time, so the `port: [auto]` sentinel is also retired
+// (absence of pins IS auto now). This step:
+//
+//   - removes the box-level `port:` field from every box doc + `defaults:` (the
+//     loader hard-rejects a residual box `port:` via rejectLegacyBoxPort);
+//   - removes a `port: [auto]` sentinel from deploy/eval/pod/k8s entries (incl.
+//     their nested:/peer: children) — auto-allocation is the deploy default.
+//
+// EXPLICIT deploy port PINS (host:container, e.g. "8888:8888") are PRESERVED —
+// they remain a valid way to fix a published host port. Candy `port:` is never
+// touched (candies are the source of truth now). Comment-preserving via the
+// yaml.v3 node API, idempotent.
+
+import (
+	"bytes"
+	"fmt"
+	"io/fs"
+	"os"
+	"path/filepath"
+	"strings"
+
+	"gopkg.in/yaml.v3"
+)
+
+// MigrateDropBoxPort strips the retired box-level `port:` field and the
+// redundant deploy `port: [auto]` sentinel across a project's box dir + root
+// YAML siblings. Returns the rewritten file paths. Does NOT touch candy/
+// (candies keep their ports) and does NOT recurse into box/<distro> submodules
+// (separate repos, migrated on their own). Idempotent.
+func MigrateDropBoxPort(dir string, dryRun bool) ([]string, error) {
+	var rewritten []string
+	for _, path := range dropBoxPortCandidateFiles(dir) {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			continue // skip unreadable siblings; don't abort the chain
+		}
+		dec := yaml.NewDecoder(bytes.NewReader(data))
+		var docs []*yaml.Node
+		changed := false
+		for {
+			var doc yaml.Node
+			if derr := dec.Decode(&doc); derr != nil {
+				break
+			}
+			d := doc
+			if dropBoxPortFromDoc(&d) {
+				changed = true
+			}
+			docs = append(docs, &d)
+		}
+		if !changed {
+			continue
+		}
+		var out bytes.Buffer
+		enc := yaml.NewEncoder(&out)
+		enc.SetIndent(4)
+		for _, d := range docs {
+			if eerr := enc.Encode(d); eerr != nil {
+				return rewritten, fmt.Errorf("encoding %s: %w", path, eerr)
+			}
+		}
+		enc.Close()
+		if !dryRun {
+			if werr := os.WriteFile(path, out.Bytes(), 0o644); werr != nil {
+				return rewritten, fmt.Errorf("writing %s: %w", path, werr)
+			}
+		}
+		rewritten = append(rewritten, path)
+	}
+	return rewritten, nil
+}
+
+// dropBoxPortFromDoc removes box.port + defaults.port (unconditional) and the
+// `port: [auto]` sentinel from every deploy-shaped entry in one doc. Returns
+// whether anything changed.
+func dropBoxPortFromDoc(doc *yaml.Node) bool {
+	root := rootMappingNode(doc)
+	if root == nil {
+		return false
+	}
+	changed := false
+	// The box-level port field is retired entirely.
+	for _, k := range []string{"box", "defaults"} {
+		if m := findMappingValue(root, k); m != nil && m.Kind == yaml.MappingNode {
+			if removeMappingKey(m, "port") {
+				changed = true
+			}
+		}
+	}
+	// Deploy-shaped maps: drop a `port: [auto]` sentinel (auto is the default).
+	for _, k := range []string{"deploy", "eval", "pod", "k8s"} {
+		if m := findMappingValue(root, k); m != nil && m.Kind == yaml.MappingNode {
+			for i := 0; i+1 < len(m.Content); i += 2 {
+				if dropAutoPortFromNode(m.Content[i+1]) {
+					changed = true
+				}
+			}
+		}
+	}
+	return changed
+}
+
+// dropAutoPortFromNode removes a `port: [auto]` (auto-only) from a deployment
+// node and recurses into its `nested:` + `peer:` child maps. An explicit pin
+// list is left untouched.
+func dropAutoPortFromNode(node *yaml.Node) bool {
+	if node == nil || node.Kind != yaml.MappingNode {
+		return false
+	}
+	changed := false
+	if pv := findMappingValue(node, "port"); isAutoOnlyPortSeq(pv) {
+		if removeMappingKey(node, "port") {
+			changed = true
+		}
+	}
+	for _, k := range []string{"nested", "peer"} {
+		if m := findMappingValue(node, k); m != nil && m.Kind == yaml.MappingNode {
+			for i := 0; i+1 < len(m.Content); i += 2 {
+				if dropAutoPortFromNode(m.Content[i+1]) {
+					changed = true
+				}
+			}
+		}
+	}
+	return changed
+}
+
+// isAutoOnlyPortSeq reports whether a `port:` value is a sequence whose entries
+// are ALL the literal `auto` sentinel — the only case it is safe to drop (auto
+// is now the default). An explicit pin (any host:container entry) makes it false.
+func isAutoOnlyPortSeq(n *yaml.Node) bool {
+	if n == nil || n.Kind != yaml.SequenceNode || len(n.Content) == 0 {
+		return false
+	}
+	for _, c := range n.Content {
+		if c.Kind != yaml.ScalarNode || strings.TrimSpace(c.Value) != "auto" {
+			return false
+		}
+	}
+	return true
+}
+
+// dropBoxPortCandidateFiles returns the project YAML files that can carry a box
+// `port:` or a deploy `port: [auto]`: box/<name>/charly.yml + root-level YAML
+// siblings (inline boxes / deploys / eval beds). NOT candy/ (candies keep ports)
+// and NOT the box/<distro> submodules (separate repos). Self-migrates the repo's
+// own charly/testdata fixtures. Sorted, deduplicated.
+func dropBoxPortCandidateFiles(dir string) []string {
+	seen := map[string]struct{}{}
+	addYAMLTree := func(root string) {
+		filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
+			if err != nil {
+				return nil
+			}
+			if d.IsDir() {
+				// Skip git submodule directories — each charly-project repo
+				// migrates ITSELF. After the box inversion main/box/ is the
+				// submodule mount parent, so without this skip a `charly migrate`
+				// in main would reach into box/<distro>/box/<name>/charly.yml.
+				if p != root {
+					if _, statErr := os.Stat(filepath.Join(p, ".git")); statErr == nil {
+						return filepath.SkipDir
+					}
+				}
+				return nil
+			}
+			if strings.HasSuffix(p, ".yml") || strings.HasSuffix(p, ".yaml") {
+				seen[filepath.Clean(p)] = struct{}{}
+			}
+			return nil
+		})
+	}
+	addYAMLTree(filepath.Join(dir, "box"))
+	if entries, err := os.ReadDir(dir); err == nil {
+		for _, e := range entries {
+			if !e.IsDir() && (strings.HasSuffix(e.Name(), ".yml") || strings.HasSuffix(e.Name(), ".yaml")) {
+				seen[filepath.Clean(filepath.Join(dir, e.Name()))] = struct{}{}
+			}
+		}
+	}
+	if _, err := os.Stat(filepath.Join(dir, "charly", "go.mod")); err == nil {
+		addYAMLTree(filepath.Join(dir, "charly", "testdata"))
+	}
+	out := make([]string, 0, len(seen))
+	for p := range seen {
+		out = append(out, p)
+	}
+	sortStrings(out)
+	return out
+}

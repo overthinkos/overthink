@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -115,13 +117,95 @@ func TestPopulateCandyApk(t *testing.T) {
 }
 
 // TestResolveApkPath checks committed-APK path resolution: absolute verbatim,
-// candy-relative when present, else project-cwd-relative fallback.
+// candy-relative when present, project-root-relative via walk-up (the @github
+// fetched-candy case), else verbatim ref when nothing resolves.
 func TestResolveApkPath(t *testing.T) {
 	if got := resolveApkPath("/abs/x.apk", "/layers/foo"); got != "/abs/x.apk" {
 		t.Errorf("absolute path = %q, want verbatim", got)
 	}
-	// Candy-relative miss → cwd-relative fallback (verbatim ref).
+	// No anchor resolves (candyDir + ancestors lack the file) → verbatim ref.
 	if got := resolveApkPath("tests/data/x.apk", "/nonexistent-layer-dir"); got != "tests/data/x.apk" {
 		t.Errorf("relative fallback = %q, want tests/data/x.apk", got)
+	}
+
+	// Fetched-candy layout: <repo>/tests/data/x.apk exists, candyDir is
+	// <repo>/candy/android-apidemos (the file is NOT under candyDir). The walk-up
+	// must resolve the project-root-relative ref to <repo>/tests/data/x.apk.
+	// Without the walk-up this returns the bare ref (cwd-relative) → install
+	// fails with "open tests/data/x.apk: no such file or directory".
+	repo := t.TempDir()
+	candyDir := filepath.Join(repo, "candy", "android-apidemos")
+	if err := os.MkdirAll(candyDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	apk := filepath.Join(repo, "tests", "data", "x.apk")
+	if err := os.MkdirAll(filepath.Dir(apk), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(apk, []byte("PK\x03\x04"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := resolveApkPath("tests/data/x.apk", candyDir); got != apk {
+		t.Errorf("project-root walk-up = %q, want %q", got, apk)
+	}
+
+	// Candy-relative takes priority (closest anchor wins) when the file sits
+	// directly under candyDir.
+	localApk := filepath.Join(candyDir, "local.apk")
+	if err := os.WriteFile(localApk, []byte("PK\x03\x04"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := resolveApkPath("local.apk", candyDir); got != localApk {
+		t.Errorf("candy-relative = %q, want %q", got, localApk)
+	}
+}
+
+// TestResolveCheckApk covers the eval-verb path resolution (adb: install /
+// appium: install-app), which anchors a relative committed-APK ref against a
+// resolved candy's source tree — including the fallback used when the AUTHORING
+// candy wasn't collected into the eval-live candy map (the reachability gap).
+func TestResolveCheckApk(t *testing.T) {
+	repo := t.TempDir()
+	apk := filepath.Join(repo, "tests", "data", "x.apk") // project-root fixture
+	if err := os.MkdirAll(filepath.Dir(apk), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(apk, []byte("PK\x03\x04"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	authorDir := filepath.Join(repo, "candy", "android-emulator-layer")
+	siblingDir := filepath.Join(repo, "candy", "sshd")
+	for _, d := range []string{authorDir, siblingDir} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// LOCAL candy: map key == bare name. Origin "candy:<name>" → resolves.
+	r := &Runner{CandyDirs: map[string]string{"android-emulator-layer": authorDir, "sshd": siblingDir}}
+	if got := r.resolveCheckApk("./tests/data/x.apk", "candy:android-emulator-layer"); got != apk {
+		t.Errorf("local-candy resolve = %q, want %q", got, apk)
+	}
+	// FETCHED candy: map key == bare @github ref, and CollectEval stamps Origin
+	// with that same ref. CandyDirs[origin-key] must match (the real bug — keying
+	// by bare NAME instead of the ref form left the lookup empty → install failed).
+	const ref = "github.com/owner/repo/candy/android-emulator-layer"
+	rRemote := &Runner{CandyDirs: map[string]string{ref: authorDir}}
+	if got := rRemote.resolveCheckApk("./tests/data/x.apk", "candy:"+ref); got != apk {
+		t.Errorf("fetched-candy (ref-keyed) resolve = %q, want %q", got, apk)
+	}
+	// Authoring candy NOT in CandyDirs → ref left verbatim (no black-magic
+	// fallback to a different candy).
+	r2 := &Runner{CandyDirs: map[string]string{"sshd": siblingDir}}
+	if got := r2.resolveCheckApk("./tests/data/x.apk", "candy:android-emulator-layer"); got != "./tests/data/x.apk" {
+		t.Errorf("unknown-candy = %q, want verbatim", got)
+	}
+	// Absolute passes through; no-candies leaves the ref verbatim (no regression).
+	if got := r2.resolveCheckApk("/abs/y.apk", "candy:foo"); got != "/abs/y.apk" {
+		t.Errorf("absolute = %q, want verbatim", got)
+	}
+	r3 := &Runner{}
+	if got := r3.resolveCheckApk("./tests/data/x.apk", "candy:foo"); got != "./tests/data/x.apk" {
+		t.Errorf("no-candies fallthrough = %q, want verbatim", got)
 	}
 }

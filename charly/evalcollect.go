@@ -22,25 +22,11 @@ package main
 func CollectEval(cfg *Config, layers map[string]*Candy, boxName string) *LabelEvalSet {
 	set := &LabelEvalSet{}
 
-	// Walk base-image chain the same way CollectHooks does: candy-order per
-	// level, then step into the internal base. Tracks visited boxes so we
-	// terminate cleanly on pathological cycles (validateBoxDAG reports the
-	// cycle itself; we just refuse to infinite-loop on bad input here).
-	var allCandyNames []string
-	for _, node := range cfg.walkBaseChain(boxName) {
-		resolved, err := ResolveCandyOrder(node.Img.Candy, layers, nil)
-		if err != nil {
-			break
-		}
-		allCandyNames = append(allCandyNames, resolved...)
-	}
-
-	seen := map[string]bool{}
+	// The base-chain candy walk (boxCandyChain) is the ONE shared traversal —
+	// candy-order per level, internal bases stepped through, deduped, cycle-safe
+	// (validateBoxDAG reports the cycle itself).
+	allCandyNames, _ := cfg.boxCandyChain(layers, boxName)
 	for _, candyName := range allCandyNames {
-		if seen[candyName] {
-			continue
-		}
-		seen[candyName] = true
 		layer, ok := layers[candyName]
 		if !ok {
 			continue

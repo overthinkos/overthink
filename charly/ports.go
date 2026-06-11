@@ -4,9 +4,60 @@ import (
 	"fmt"
 	"net"
 	"os/exec"
+	"sort"
 	"strconv"
 	"strings"
 )
+
+// CollectBoxPorts returns the published container ports a box exposes, inherited
+// from EVERY candy in its full base chain (boxCandyChain) — the single source of
+// truth now that boxes no longer declare ports themselves. Each candy `port:`
+// (a bare container port, optionally "/udp") contributes one published port; the
+// HOST mapping is decided at deploy time (auto-allocated on 127.0.0.1, or pinned
+// by a deploy `port:` entry — see ResolveDeployPorts). Result is deduplicated by
+// container port and sorted ascending for deterministic OCI-label / Containerfile
+// output (stable label ⇒ no spurious cache-miss cascades).
+func CollectBoxPorts(cfg *Config, layers map[string]*Candy, boxName string) ([]string, error) {
+	names, err := cfg.boxCandyChain(layers, boxName)
+	if err != nil {
+		return nil, err
+	}
+	type portEntry struct {
+		cp    int
+		proto string
+	}
+	seen := map[int]bool{}
+	var entries []portEntry
+	for _, candyName := range names {
+		layer, ok := layers[candyName]
+		if !ok || !layer.HasPorts() {
+			continue
+		}
+		cports, perr := layer.Port()
+		if perr != nil {
+			continue
+		}
+		for _, cpStr := range cports {
+			clean, proto := stripPortSuffix(cpStr)
+			cp, aerr := strconv.Atoi(clean)
+			if aerr != nil || cp <= 0 || cp > 65535 || seen[cp] {
+				continue
+			}
+			seen[cp] = true
+			entries = append(entries, portEntry{cp: cp, proto: proto})
+		}
+	}
+	sort.Slice(entries, func(i, j int) bool { return entries[i].cp < entries[j].cp })
+	out := make([]string, 0, len(entries))
+	for _, e := range entries {
+		s := strconv.Itoa(e.cp)
+		if e.proto != "" {
+			s += "/" + e.proto
+		}
+		out = append(out, s)
+	}
+	return out, nil
+}
 
 // PortConflict describes a host port that is already in use.
 type PortConflict struct {
@@ -316,21 +367,25 @@ func containerPortsFromMappings(mappings []string) ([]int, error) {
 	return result, nil
 }
 
+// sameStringSlice reports whether two string slices are element-wise equal
+// (order-sensitive) — used to skip a redundant resolved-port re-save.
+func sameStringSlice(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
 // IsAutoPort reports whether a port-list entry is the literal "auto" sentinel.
 // Authors write `port: [auto]` (or `port: [auto, "8443:443"]` to mix
 // auto-allocation with explicit pins) in charly.yml.
 func IsAutoPort(mapping string) bool {
 	return strings.TrimSpace(mapping) == "auto"
-}
-
-// HasAutoPort reports whether any entry in the list is the auto sentinel.
-func HasAutoPort(ports []string) bool {
-	for _, p := range ports {
-		if IsAutoPort(p) {
-			return true
-		}
-	}
-	return false
 }
 
 // AllocateAutoPorts probes free TCP host ports — one per container port,
@@ -379,53 +434,79 @@ func AllocateAutoPorts(containerPorts []int, occupied map[int]bool) ([]ParsedPor
 	return result, nil
 }
 
-// ExpandAutoPorts replaces every "auto" sentinel in the list with concrete
-// `host:container` pairs allocated from containerPorts (one allocation per
-// container port, in declaration order). Explicit mappings pass through
-// unchanged AND their host ports are added to the occupied set so the
-// allocator avoids collisions.
+// ResolveDeployPorts maps each image-declared container port to a host:container
+// publish mapping — the AUTO-PORT-MAPPING default. For every container port:
 //
-// Multiple "auto" sentinels in one list collapse to a single expansion at
-// the first sentinel's position (so `port: [auto, auto]` is treated the
-// same as `port: [auto]`).
+//   - an explicit deploy pin (host:container, matched by container port) wins;
+//   - else a still-valid prior allocation (from a previous `charly config` —
+//     keeps a deploy's host ports STABLE across `charly update`) is reused;
+//   - else a fresh free 127.0.0.1 host port is allocated.
 //
-// Returns the expanded list and a flag indicating whether expansion
-// happened (caller can persist the result back to charly.yml as
-// `resolved_port:`).
-func ExpandAutoPorts(ports []string, containerPorts []int, occupied map[int]bool) ([]string, bool, error) {
-	if !HasAutoPort(ports) {
-		return ports, false, nil
+// `occupied` seeds host ports already taken by SIBLING deployments so concurrent
+// beds never collide; every chosen host port is recorded back into it. Pins for
+// container ports the image does not expose are honored too (an operator
+// publishing an extra port). A stray `auto` token in `pins` is ignored (treated
+// as "no pin" → allocate), so a not-yet-migrated `port: [auto]` still works.
+// Returned mappings carry no bind address; localizePort prepends BindAddress
+// (127.0.0.1 by default) at quadlet/run time so every published port is loopback.
+func ResolveDeployPorts(containerPorts []int, pins, prior []string, occupied map[int]bool) ([]string, error) {
+	if len(containerPorts) == 0 && len(pins) == 0 {
+		return nil, nil
 	}
 	if occupied == nil {
 		occupied = map[int]bool{}
 	}
-	// Reserve explicit host ports first so auto-allocation can't collide.
-	for _, p := range ports {
+	pinByCont := map[int]ParsedPortMapping{}
+	var pinOrder []int
+	for _, p := range pins {
 		if IsAutoPort(p) {
 			continue
 		}
-		if h, err := ParseHostPort(p); err == nil {
+		pm, ok := ParsePortMapping(p)
+		if !ok {
+			return nil, fmt.Errorf("invalid deploy port pin %q (expected host:container)", p)
+		}
+		if _, dup := pinByCont[pm.Container]; !dup {
+			pinOrder = append(pinOrder, pm.Container)
+		}
+		pinByCont[pm.Container] = pm
+		occupied[pm.Host] = true
+	}
+	priorByCont := map[int]int{}
+	for _, p := range prior {
+		if pm, ok := ParsePortMapping(p); ok {
+			priorByCont[pm.Container] = pm.Host
+		}
+	}
+	out := make([]string, 0, len(containerPorts)+len(pinOrder))
+	emitted := map[int]bool{}
+	for _, cp := range containerPorts {
+		if emitted[cp] {
+			continue
+		}
+		emitted[cp] = true
+		if pm, ok := pinByCont[cp]; ok {
+			out = append(out, FormatPortMapping(pm))
+			continue
+		}
+		if h, ok := priorByCont[cp]; ok && !occupied[h] {
 			occupied[h] = true
-		}
-	}
-	allocs, err := AllocateAutoPorts(containerPorts, occupied)
-	if err != nil {
-		return nil, false, err
-	}
-	result := make([]string, 0, len(ports)+len(allocs))
-	consumed := false
-	for _, p := range ports {
-		if IsAutoPort(p) {
-			if consumed {
-				continue
-			}
-			for _, a := range allocs {
-				result = append(result, FormatPortMapping(a))
-			}
-			consumed = true
+			out = append(out, FormatPortMapping(ParsedPortMapping{Host: h, Container: cp}))
 			continue
 		}
-		result = append(result, p)
+		allocs, err := AllocateAutoPorts([]int{cp}, occupied)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, FormatPortMapping(allocs[0]))
 	}
-	return result, true, nil
+	// Honor pins for container ports the image does not expose.
+	for _, cp := range pinOrder {
+		if emitted[cp] {
+			continue
+		}
+		emitted[cp] = true
+		out = append(out, FormatPortMapping(pinByCont[cp]))
+	}
+	return out, nil
 }

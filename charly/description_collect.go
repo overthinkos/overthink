@@ -25,21 +25,8 @@ package main
 func CollectDescriptions(cfg *Config, layers map[string]*Candy, boxName string) *LabelDescriptionSet {
 	set := &LabelDescriptionSet{}
 
-	var allCandyNames []string
-	for _, node := range cfg.walkBaseChain(boxName) {
-		resolved, err := ResolveCandyOrder(node.Img.Candy, layers, nil)
-		if err != nil {
-			break
-		}
-		allCandyNames = append(allCandyNames, resolved...)
-	}
-
-	seen := map[string]bool{}
+	allCandyNames, _ := cfg.boxCandyChain(layers, boxName)
 	for _, candyName := range allCandyNames {
-		if seen[candyName] {
-			continue
-		}
-		seen[candyName] = true
 		layer, ok := layers[candyName]
 		if !ok || layer.Description == nil {
 			continue

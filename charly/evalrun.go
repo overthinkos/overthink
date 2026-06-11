@@ -109,6 +109,15 @@ type Runner struct {
 	// distros (e.g. openssh-server on Fedora vs openssh on Arch).
 	Distros []string
 
+	// CandyDirs maps a candy name → its resolved source directory. Used to
+	// anchor a relative committed-APK path in an `adb: install` / `appium:
+	// install-app` check (apk: ./tests/data/...) against the authoring candy's
+	// source tree, so a check resolves the same way whether the candy is local
+	// or fetched via @github (mirrors the deploy resolveApkPath, R3). Best-effort:
+	// empty when the project context isn't available; the apk path then stays
+	// cwd-relative (existing behaviour, no regression).
+	CandyDirs map[string]string
+
 	// Scenario carries the BDD scenario context when the runner is
 	// driving a description: scenario (from description_run.go). Nil
 	// under classical `tests:` runs — captures/${SCENARIO_ID}/etc. stay

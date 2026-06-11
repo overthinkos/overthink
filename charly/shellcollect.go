@@ -19,21 +19,8 @@ import "fmt"
 func CollectShell(cfg *Config, layers map[string]*Candy, boxName string) *LabelShellSet {
 	set := &LabelShellSet{}
 
-	var allCandyNames []string
-	for _, node := range cfg.walkBaseChain(boxName) {
-		resolved, err := ResolveCandyOrder(node.Img.Candy, layers, nil)
-		if err != nil {
-			break
-		}
-		allCandyNames = append(allCandyNames, resolved...)
-	}
-
-	seen := map[string]bool{}
+	allCandyNames, _ := cfg.boxCandyChain(layers, boxName)
 	for _, candyName := range allCandyNames {
-		if seen[candyName] {
-			continue
-		}
-		seen[candyName] = true
 		layer, ok := layers[candyName]
 		if !ok {
 			continue

@@ -16,15 +16,11 @@ type VolumeMount struct {
 // declarations from all candies. Volumes are deduplicated by name (first
 // declaration wins — outermost box takes priority).
 func CollectBoxVolume(cfg *Config, layers map[string]*Candy, boxName string, home string, excludeNames map[string]bool) ([]VolumeMount, error) {
-	// Collect all candy names from the box chain (outermost first)
-	var allCandyNames []string
-	for _, node := range cfg.walkBaseChain(boxName) {
-		// Resolve candies for this box (includes transitive deps)
-		resolved, err := ResolveCandyOrder(node.Img.Candy, layers, nil)
-		if err != nil {
-			return nil, err
-		}
-		allCandyNames = append(allCandyNames, resolved...)
+	// Collect all candy names from the box chain (outermost first) via the
+	// shared base-chain walk; propagate a resolution error as before.
+	allCandyNames, err := cfg.boxCandyChain(layers, boxName)
+	if err != nil {
+		return nil, err
 	}
 
 	// Collect volumes, dedup by name (first wins), skip excluded names

@@ -10,6 +10,7 @@ import (
 	_ "image/png"  // register PNG decoder for image.DecodeConfig / image.Decode
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -803,6 +804,30 @@ func posInstallApp(c *Check) []string {
 	return args
 }
 
+// resolveCheckApk resolves a relative committed-APK path (adb: install /
+// appium: install-app, apk: ./tests/data/...) against the AUTHORING candy's
+// source tree, so a check resolves its fixture whether the candy is local OR
+// fetched via @github (mirrors the deploy resolveApkPath, R3). The check's
+// Origin is "candy:<key>" where <key> is the candy MAP KEY (a bare name for a
+// local candy, the bare @github ref for a fetched one) — CandyDirs is keyed by
+// that same key (candySourceDirs), so the lookup matches in both cases.
+// Absolute paths pass through; a non-candy origin or an unknown key leaves the
+// ref verbatim (cwd-relative, no regression).
+func (r *Runner) resolveCheckApk(apk, origin string) string {
+	if apk == "" || filepath.IsAbs(apk) {
+		return apk
+	}
+	key := strings.TrimPrefix(origin, "candy:")
+	if key == origin {
+		return apk // not candy-originated
+	}
+	dir := r.CandyDirs[key]
+	if dir == "" {
+		return apk // authoring candy's source dir unknown
+	}
+	return resolveApkPath(apk, dir)
+}
+
 func posApkFlag(c *Check) []string      { return []string{"--apk", c.Apk} }
 func posArtifactFlag(c *Check) []string { return []string{"--artifact", c.Artifact} }
 func posCapsFlag(c *Check) []string     { return []string{"--caps", c.Caps} }
@@ -1098,6 +1123,18 @@ func (r *Runner) runCharlyVerb(ctx context.Context, c *Check, verb, method strin
 		}
 		return passf(c, fmt.Sprintf("%s %s: validated AI-produced artifact at %s (mtime %s)",
 			verb, method, c.Artifact, info.ModTime().UTC().Format(time.RFC3339)))
+	}
+
+	// Resolve a relative committed-APK path (adb: install / appium: install-app,
+	// `apk: ./tests/data/...`) against the ORIGINATING candy's source tree, so a
+	// check authored on a candy resolves to that candy's copy — local OR fetched
+	// via @github — instead of the eval cwd. Reuses the deploy walk-up (R3).
+	if c.Apk != "" {
+		if resolved := r.resolveCheckApk(c.Apk, c.Origin); resolved != c.Apk {
+			cc := *c
+			cc.Apk = resolved
+			c = &cc
+		}
 	}
 
 	// Build argv: ["eval"] + spec.path + [image?] + spec.posArgs(c) + ["-i", instance]

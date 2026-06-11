@@ -214,6 +214,7 @@ func (c *EvalLiveCmd) Run() error {
 	runner.Box = c.Box
 	runner.Instance = c.Instance
 	runner.Distros = meta.Distro
+	runner.CandyDirs = candySourceDirs(dir, projectCfg)
 	// Cross-deployment probing (a check with `on: <driver>` reaching a SEPARATE
 	// subject via ${PEER_*}) is wired generically by RunLive — the ONE entry
 	// point every live-eval path shares (R3).
@@ -580,6 +581,29 @@ func collectAddCandyDeployEval(uf *UnifiedFile, dir string, addCandies []string)
 			if chk.Scope == "deploy" {
 				out = append(out, chk)
 			}
+		}
+	}
+	return out
+}
+
+// candySourceDirs builds a candy-name → source-dir map for anchoring relative
+// committed-APK paths in adb/appium eval checks against the authoring candy's
+// tree (local or @github-fetched). Best-effort — any error yields nil, and the
+// apk path stays cwd-relative (runCharlyVerb → candyDirForOrigin → resolveApkPath).
+func candySourceDirs(dir string, cfg *Config) map[string]string {
+	candyMap, err := ScanAllCandyWithConfig(dir, cfg)
+	if err != nil || len(candyMap) == 0 {
+		return nil
+	}
+	// Key by the candy MAP KEY — which is exactly the check's Origin form:
+	// a bare name for a local candy ("sshd"), the bare @github ref for a fetched
+	// one ("github.com/owner/repo/candy/<name>"). CollectEval stamps
+	// Origin = "candy:" + this same key, so resolveCheckApk's CandyDirs[origin]
+	// lookup matches in BOTH cases.
+	out := make(map[string]string, len(candyMap))
+	for key, lyr := range candyMap {
+		if lyr != nil && lyr.SourceDir != "" {
+			out[key] = lyr.SourceDir
 		}
 	}
 	return out

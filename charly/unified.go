@@ -625,6 +625,31 @@ func rejectLegacyMarimoMl(root string, merged *UnifiedFile) error {
 	return nil
 }
 
+// rejectLegacyBoxPort hard-rejects a residual box-level (or `defaults`) `port:`
+// declaration. Boxes no longer carry ports — published ports are inherited from
+// the candy chain (CollectBoxPorts) and host mappings are auto-allocated at
+// deploy (127.0.0.1, or pinned by a deploy `port:` entry). `charly migrate`
+// strips the legacy field. The BoxConfig.Port field survives ONLY so this guard
+// can detect it.
+func rejectLegacyBoxPort(root string, merged *UnifiedFile) error {
+	if merged == nil {
+		return nil
+	}
+	if len(merged.Defaults.Port) > 0 {
+		return fmt.Errorf(
+			"%s: `defaults.port:` is retired — boxes no longer declare ports (inherited from candies, auto-allocated at deploy). Run: charly migrate",
+			root)
+	}
+	for name, box := range merged.Box {
+		if len(box.Port) > 0 {
+			return fmt.Errorf(
+				"%s: box %q declares `port:` — box-level ports are retired (ports are inherited from candies and auto-allocated on 127.0.0.1 at deploy). Run: charly migrate",
+				root, name)
+		}
+	}
+	return nil
+}
+
 func LoadUnified(dir string) (*UnifiedFile, bool, error) {
 	root := filepath.Join(dir, UnifiedFileName)
 	if !fileExists(root) {
@@ -686,6 +711,9 @@ func LoadUnified(dir string) (*UnifiedFile, bool, error) {
 		return nil, true, err
 	}
 	if err := rejectLegacyMarimoMl(root, merged); err != nil {
+		return nil, true, err
+	}
+	if err := rejectLegacyBoxPort(root, merged); err != nil {
 		return nil, true, err
 	}
 	// Fold kind:eval beds into the Deploy map (EvalBed=true) so every

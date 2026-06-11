@@ -203,34 +203,34 @@ func (c *BoxConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 		return fmt.Errorf("persisting resource caps: %w", err)
 	}
 
-	// Pre-expand "auto" port sentinels BEFORE MergeDeployOntoMetadata so
-	// that the merge sees a concrete list. ExpandAutoPorts walks the
-	// deploy entry's Port list; for each "auto" entry, it allocates one
-	// free host TCP port per image-declared container port (from meta.Port
-	// AS LOADED FROM LABELS — before overlay merge). The expansion is
-	// persisted as ResolvedPort so subsequent charly start / charly logs / charly
-	// status see the same allocation. Re-allocation happens on the next
-	// charly config / charly update where Port still contains "auto".
+	// Auto-port-mapping default: resolve a host:container publish mapping for
+	// EVERY image-declared container port (meta.Port, from the OCI label) BEFORE
+	// MergeDeployOntoMetadata, so the merge sees a concrete list. Each port gets
+	// a fresh free 127.0.0.1 host port unless a deploy `port:` entry PINS it; a
+	// prior allocation is reused for stability across `charly update`. The result
+	// persists as ResolvedPort (re-read after the reload below) so charly
+	// start/logs/status publish the same mapping. `OccupiedHostPorts` excludes
+	// THIS deploy so two concurrent beds never collide on a host port.
 	if dc != nil {
 		key := deployKey(c.Box, c.Instance)
-		overlay, hasOverlay := dc.Deploy[key]
-		if hasOverlay && HasAutoPort(overlay.Port) {
-			containerPorts, cpErr := containerPortsFromMappings(meta.Port)
-			if cpErr != nil {
-				return fmt.Errorf("resolving container ports for auto expansion: %w", cpErr)
+		overlay := dc.Deploy[key]
+		containerPorts, cpErr := containerPortsFromMappings(meta.Port)
+		if cpErr != nil {
+			return fmt.Errorf("resolving container ports: %w", cpErr)
+		}
+		if len(containerPorts) > 0 || len(overlay.Port) > 0 {
+			resolved, rErr := ResolveDeployPorts(containerPorts, overlay.Port, overlay.ResolvedPort, dc.OccupiedHostPorts(key))
+			if rErr != nil {
+				return fmt.Errorf("resolving deploy ports: %w", rErr)
 			}
-			expanded, did, expErr := ExpandAutoPorts(overlay.Port, containerPorts, dc.OccupiedHostPorts(key))
-			if expErr != nil {
-				return fmt.Errorf("expanding auto port sentinels: %w", expErr)
-			}
-			if did {
-				overlay.ResolvedPort = expanded
+			if !sameStringSlice(overlay.ResolvedPort, resolved) {
+				overlay.ResolvedPort = resolved
 				dc.Deploy[key] = overlay
 				if saveErr := SaveDeployConfig(dc); saveErr != nil {
 					return fmt.Errorf("saving resolved_port: %w", saveErr)
 				}
 				fmt.Fprintf(os.Stderr, "Resolved ports for %s: %s\n",
-					key, strings.Join(expanded, ", "))
+					key, strings.Join(resolved, ", "))
 			}
 		}
 	}

@@ -22,6 +22,23 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-11 — feat!: candy-port inheritance + auto port mapping (boxes drop `port:`, deploys auto-allocate on 127.0.0.1) + unified candy-chain collectors
+
+Ports now live on ONE surface — the candy that runs the service — and travel automatically to every box that composes it and every deploy that publishes it. This kills the band-aid where a box (and its eval bed) manually re-declared a candy's port. The canonical case: the `android-emulator` box composed `selkies-labwc`, whose chain includes `chrome-cdp` (9222) + `chrome-devtools-mcp` (9224); the inherited mcp eval probes resolve `${HOST_PORT:9222/9224}`, but the published ports did NOT inherit, so the box re-declared `9222:9222`/`9224:9224` (with a comment admitting it compensated for broken inheritance) and the bed's explicit port list then REPLACED the box label and silently dropped them. Three distinct duplication/replace bugs, one fix.
+
+**Schema (hard cutover, `version:` → 2026.161.2303, migration step `drop-box-port` @ 2026.161.2302):**
+- The box-level `port:` field is **RETIRED** (`BoxConfig.Port` parsed only so `rejectLegacyBoxPort` hard-errors a residual one with a `charly migrate` hint; `defaults.port` likewise). Boxes declare NO ports.
+- The `port: [auto]` deploy sentinel is retired (absence of pins IS auto now). `ExpandAutoPorts`/`HasAutoPort` deleted.
+- `charly migrate` step `drop-box-port` strips box-level `port:` + `defaults.port` + the `port: [auto]` sentinel (node-API, comment-preserving, idempotent); explicit deploy port PINS (host:container) are preserved.
+
+**Behaviour:**
+- `CollectBoxPorts` (charly/ports.go) collects the published container ports from a box's FULL base chain via the new shared `boxCandyChain` walk — the single source feeding both the `ai.opencharly.port` OCI label (`generate.go`) and `EXPOSE` (`writeExpose`), so they can never diverge. `charly box inspect <box> --format ports` shows the inherited set (e.g. android-emulator → `2222 3000 4723 5037 9222 9224` with no box `port:`).
+- `ResolveDeployPorts` (auto port mapping default): at `charly config`, every image-declared container port without an explicit deploy pin gets a freshly-allocated FREE host port; a prior allocation is reused for stability across `charly update`; the result persists as `ResolvedPort`. `localizePort` + `BindAddress` (default `127.0.0.1`) bind every published port — auto-allocated and pinned alike — to loopback only. A deploy `port:` entry is now a PIN INPUT to the resolution (pin some, auto-allocate the rest), NOT a wholesale replacement (`MergeDeployOntoMetadata`).
+
+**Unified candy-chain collection:** the duplicated `walkBaseChain` + `ResolveCandyOrder` + per-field `seen`-dedup boilerplate copy-pasted across eight collectors is replaced by TWO shared walks — `boxCandyChain` (base-chain inheritance: `CollectEval`/`CollectHooks`/`CollectShell`/`CollectDescriptions`/`CollectBoxVolume`/`CollectBoxPorts`) and `boxDirectCandies` (leaf-direct, no base traversal: `CollectSecurity`/`CollectBoxAlias`/`CollectLibvirtSnippets`, the latter gaining correct transitive resolution). Each collector keeps its field-specific semantics; zero behaviour change for the existing seven.
+
+**Ports moved into candies:** `candy/eval-stack-layer` (which runs `nc -lk 18794`) now declares `port: [18794]`; the `eval-pod` box drops its `18794:18794`. Every box across the main repo + the five distro submodules drops its `port:` block (e.g. the four selkies boxes' `3000/9222/9224/2222`, versa's eight, immich-ml's `2283`); the `eval-android-emulator-pod` bed drops its 35xxx pins entirely (full auto, conflict-free with sibling beds).
+
 ### 2026-06-10 — fix(scaffold): repair `charly box new project`/`new candy` to emit loadable current-schema configs
 
 `charly box new candy` wrote a stub with a top-level `rpm:` key the current loader REJECTS (packages moved under the `distro:` map in the localpkg-map / single-canonical-surface migration) and missing the mandatory `version:` — so a freshly-scaffolded candy broke the WHOLE project's load (`candy has unknown top-level key(s) [rpm]`). `charly box new project` wrote a stale plural `platforms:` key (the field-singular migration made it `platform:`), warning on every load. And the `box new project` "Next steps" guidance + the `/charly-build:new` skill pointed at a `build.yml` to copy (it's embedded in the binary now), a `--candy`/`--layers` flag (it's `--candies`), and an `images:`/`layers:` output shape (a box is a discovered `box/<name>/charly.yml` with `box: {candy: […]}`).

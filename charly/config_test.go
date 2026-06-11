@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -326,48 +327,47 @@ func TestResolveImageBuilders(t *testing.T) {
 	}
 }
 
-func TestResolveImagePorts(t *testing.T) {
+// TestCollectBoxPorts proves the box's published ports are inherited from EVERY
+// candy in its base chain (boxes no longer declare ports), deduped by container
+// port, sorted ascending, with the /udp suffix preserved.
+func TestCollectBoxPorts(t *testing.T) {
+	mk := func(name string, specs ...PortSpec) *Candy {
+		l := &Candy{Name: name}
+		l.portSpecs = specs
+		for _, s := range specs {
+			if s.Protocol == "udp" {
+				l.ports = append(l.ports, fmt.Sprintf("%d/udp", s.Port))
+			} else {
+				l.ports = append(l.ports, fmt.Sprintf("%d", s.Port))
+			}
+		}
+		return l
+	}
+	layers := map[string]*Candy{
+		"sshd":     mk("sshd", PortSpec{Port: 2222, Protocol: "tcp"}),
+		"web":      mk("web", PortSpec{Port: 3000, Protocol: "https+insecure"}),
+		"cdp":      mk("cdp", PortSpec{Port: 9222}),
+		"udp-svc":  mk("udp-svc", PortSpec{Port: 47998, Protocol: "udp"}),
+		"web-dup":  mk("web-dup", PortSpec{Port: 3000}), // duplicate container port → deduped
+		"no-ports": mk("no-ports"),
+	}
 	cfg := &Config{
-		Defaults: BoxConfig{
-			Registry:  "ghcr.io/test",
-			Build:     BuildFormats{"rpm"},
-			Platforms: []string{"linux/amd64"},
-			Port:      []string{"80:80"},
-		},
 		Box: map[string]BoxConfig{
-			"with-ports":    {Candy: []string{}, Port: []string{"9090:9090"}},
-			"inherit-ports": {Candy: []string{}},
-			"no-ports":      {Candy: []string{}, Port: []string{}},
+			// child inherits the base box's candy ports
+			"base":  {Candy: []string{"sshd", "web"}},
+			"child": {Base: "base", Candy: []string{"cdp", "udp-svc", "web-dup", "no-ports"}},
 		},
 	}
 
-	// Image with explicit ports
-	resolved, err := cfg.ResolveBox("with-ports", "test", testProjectDir(t), ResolveOpts{})
+	got, err := CollectBoxPorts(cfg, layers, "child")
 	if err != nil {
-		t.Fatalf("ResolveBox() error = %v", err)
+		t.Fatalf("CollectBoxPorts() error = %v", err)
 	}
-	if !reflect.DeepEqual(resolved.Port, []string{"9090:9090"}) {
-		t.Errorf("Ports = %v, want [9090:9090]", resolved.Port)
-	}
-
-	// Image inheriting default ports
-	resolved, err = cfg.ResolveBox("inherit-ports", "test", testProjectDir(t), ResolveOpts{})
-	if err != nil {
-		t.Fatalf("ResolveBox() error = %v", err)
-	}
-	if !reflect.DeepEqual(resolved.Port, []string{"80:80"}) {
-		t.Errorf("Ports = %v, want [80:80]", resolved.Port)
-	}
-
-	// Image with empty ports (no inheritance since explicitly empty slice won't be set via JSON)
-	resolved, err = cfg.ResolveBox("no-ports", "test", testProjectDir(t), ResolveOpts{})
-	if err != nil {
-		t.Fatalf("ResolveBox() error = %v", err)
-	}
-	// Empty slice in JSON becomes nil after unmarshal, but in Go struct it's []string{}
-	// When len == 0, we fall through to defaults
-	if !reflect.DeepEqual(resolved.Port, []string{"80:80"}) {
-		t.Errorf("Ports = %v, want [80:80]", resolved.Port)
+	// Inherited (sshd 2222, web 3000) + own (cdp 9222, udp 47998); web-dup's
+	// 3000 deduped; sorted by container port; /udp preserved.
+	want := []string{"2222", "3000", "9222", "47998/udp"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("CollectBoxPorts(child) = %v, want %v", got, want)
 	}
 }
 

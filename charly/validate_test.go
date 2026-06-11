@@ -607,47 +607,30 @@ func TestValidateImagePortsValid(t *testing.T) {
 	}
 }
 
-func TestValidateImagePortsInvalid(t *testing.T) {
-	cfg := &Config{
+// TestRejectLegacyBoxPort proves a residual box-level (or defaults) `port:` is
+// hard-rejected at load — box-level ports are retired; ports are inherited from
+// candies and host mappings are auto-allocated at deploy.
+func TestRejectLegacyBoxPort(t *testing.T) {
+	boxPort := &UnifiedFile{
 		Box: map[string]BoxConfig{
-			"test": {
-				Candy: []string{"web"},
-				Port:  []string{"abc:8080"},
-			},
+			"test": {Candy: []string{"web"}, Port: []string{"8080:9090"}},
 		},
 	}
-	layers := map[string]*Candy{
-		"web": {Name: "web", tasks: []Task{{Cmd: "true"}}},
+	if err := rejectLegacyBoxPort("charly.yml", boxPort); err == nil {
+		t.Error("expected hard error for residual box `port:`")
+	} else if !strings.Contains(err.Error(), "charly migrate") {
+		t.Errorf("error should point at `charly migrate`: %v", err)
 	}
 
-	err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{})
-	if err == nil {
-		t.Error("expected error for invalid port mapping")
-	}
-	if !strings.Contains(err.Error(), "not valid") {
-		t.Errorf("unexpected error: %v", err)
-	}
-}
-
-func TestValidateImagePortsBadFormat(t *testing.T) {
-	cfg := &Config{
-		Box: map[string]BoxConfig{
-			"test": {
-				Candy: []string{"web"},
-				Port:  []string{"8080:9090:1234"},
-			},
-		},
-	}
-	layers := map[string]*Candy{
-		"web": {Name: "web", tasks: []Task{{Cmd: "true"}}},
+	defaultsPort := &UnifiedFile{Defaults: BoxConfig{Port: []string{"80:80"}}}
+	if err := rejectLegacyBoxPort("charly.yml", defaultsPort); err == nil {
+		t.Error("expected hard error for residual `defaults.port:`")
 	}
 
-	err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{})
-	if err == nil {
-		t.Error("expected error for bad port format")
-	}
-	if !strings.Contains(err.Error(), "host:container") {
-		t.Errorf("unexpected error: %v", err)
+	// A box with no ports is accepted (ports come from candies).
+	clean := &UnifiedFile{Box: map[string]BoxConfig{"test": {Candy: []string{"web"}}}}
+	if err := rejectLegacyBoxPort("charly.yml", clean); err != nil {
+		t.Errorf("clean box should not error: %v", err)
 	}
 }
 

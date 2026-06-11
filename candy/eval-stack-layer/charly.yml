@@ -1,6 +1,11 @@
 candy:
-    version: 2026.144.1443
+    version: 2026.161.2302
     name: eval-stack-layer
+    # The eval listener's container port. Boxes composing this candy inherit it
+    # (CollectBoxPorts) and auto-publish it on a free 127.0.0.1 host port — the
+    # eval-pod box no longer declares `port: 18794:18794` itself.
+    port:
+        - 18794
     description:
         feature: Combined kind:layer + kind:pod + DeployTarget smoke on top of eval-base-layer
         narrative: |

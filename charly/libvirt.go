@@ -69,13 +69,15 @@ func CollectLibvirtSnippets(cfg *Config, layers map[string]*Candy, boxName strin
 		snippets = append(snippets, s)
 	}
 
-	// Collect from box's candies
-	img, ok := cfg.Box[boxName]
-	if !ok {
+	// Collect from the box's own candies (leaf-specific — VM snippets do NOT
+	// inherit from a base box; the shared boxDirectCandies walk). Box-level
+	// `libvirt:` was removed in the VM hard-cutover — raw XML snippets now live
+	// on the paired `kind: vm` entity's `spec.libvirt.snippets:` in vm.yml.
+	resolved, err := cfg.boxDirectCandies(layers, boxName)
+	if err != nil {
 		return nil
 	}
-	for _, candyRef := range img.Candy {
-		candyName := BareRef(candyRef)
+	for _, candyName := range resolved {
 		layer, ok := layers[candyName]
 		if !ok || !layer.HasLibvirt() {
 			continue
@@ -84,11 +86,6 @@ func CollectLibvirtSnippets(cfg *Config, layers map[string]*Candy, boxName strin
 			addSnippet(s)
 		}
 	}
-
-	// Box-level `libvirt:` field was removed in the VM hard-cutover.
-	// Raw XML snippets now live on the paired `kind: vm` entity's
-	// `spec.libvirt.snippets:` list in vm.yml.
-	_ = img
 
 	return snippets
 }

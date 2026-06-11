@@ -193,7 +193,15 @@ func (c *InspectCmd) runFromConfig(cfg *Config, dir string) error {
 				fmt.Println(l)
 			}
 		case "ports":
-			for _, p := range resolved.Port {
+			layers, err := ScanAllCandyWithConfig(dir, cfg)
+			if err != nil {
+				return err
+			}
+			ports, err := CollectBoxPorts(cfg, layers, c.Box)
+			if err != nil {
+				return err
+			}
+			for _, p := range ports {
 				fmt.Println(p)
 			}
 		case "volumes":
@@ -227,7 +235,8 @@ func (c *InspectCmd) runFromConfig(cfg *Config, dir string) error {
 				layers, err := ScanAllCandyWithConfig(dir, cfg)
 				if err == nil {
 					portProtos := make(map[int]string)
-					tc := ResolveTunnelConfig(overlay.Tunnel, c.Box, "", layers, resolved.Candy, portProtos, resolved.Port)
+					boxPorts, _ := CollectBoxPorts(cfg, layers, c.Box)
+					tc := ResolveTunnelConfig(overlay.Tunnel, c.Box, "", layers, resolved.Candy, portProtos, boxPorts)
 					if tc != nil && len(tc.Ports) > 0 {
 						fmt.Println("PORT\tACCESS\tPROTOCOL\tHOSTNAME")
 						for _, tp := range tc.Ports {

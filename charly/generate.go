@@ -598,8 +598,8 @@ func (g *Generator) generateContainerfile(boxName string) error {
 	// Collect and write environment variables from candies
 	g.writeCandyEnv(&b, candyOrder, img)
 
-	// Emit EXPOSE directives for candy ports
-	g.writeExpose(&b, candyOrder)
+	// Emit EXPOSE directives for the box's inherited candy ports
+	g.writeExpose(&b, img.Name)
 
 	// LABEL emission is deferred to the end of the final stage — see the
 	// writeLabels call after the final USER directive below. Putting LABELs
@@ -1079,33 +1079,15 @@ func (g *Generator) writeCandyEnv(b *strings.Builder, candyOrder []string, img *
 	}
 }
 
-// writeExpose collects ports from all candies, deduplicates, sorts, and emits EXPOSE directives
-func (g *Generator) writeExpose(b *strings.Builder, candyOrder []string) {
-	seen := make(map[string]bool)
-	var ports []string
-
-	for _, candyName := range candyOrder {
-		layer := g.Candies[candyName]
-		if !layer.HasPorts() {
-			continue
-		}
-		candyPorts, err := layer.Port()
-		if err != nil {
-			continue
-		}
-		for _, port := range candyPorts {
-			if !seen[port] {
-				seen[port] = true
-				ports = append(ports, port)
-			}
-		}
-	}
-
+// writeExpose emits EXPOSE directives for the box's inherited candy ports —
+// the SAME set baked into the ai.opencharly.port label (CollectBoxPorts), so
+// EXPOSE and the label can never diverge. CollectBoxPorts already dedups by
+// container port and sorts ascending.
+func (g *Generator) writeExpose(b *strings.Builder, boxName string) {
+	ports, _ := CollectBoxPorts(g.Config, g.Candies, boxName)
 	if len(ports) == 0 {
 		return
 	}
-
-	sortStrings(ports)
 	b.WriteString("# Exposed ports\n")
 	for _, port := range ports {
 		b.WriteString(fmt.Sprintf("EXPOSE %s\n", port))
@@ -1748,8 +1730,12 @@ func (g *Generator) writeLabels(b *strings.Builder, boxName string, candyOrder [
 	}
 	writeJSONLabel(b, LabelBuilderProvide, img.BuilderCapabilities)
 
-	// JSON array labels (omitted when empty)
-	writeJSONLabel(b, LabelPort, img.Port)
+	// JSON array labels (omitted when empty). Ports are inherited from the
+	// candy chain (CollectBoxPorts) — boxes no longer declare ports. The label
+	// carries bare container ports; the host mapping is resolved at deploy time
+	// (auto-allocated on 127.0.0.1, or pinned by a deploy `port:` entry).
+	boxPorts, _ := CollectBoxPorts(g.Config, g.Candies, boxName)
+	writeJSONLabel(b, LabelPort, boxPorts)
 
 	// Port protocols: collect from candy PortSpec declarations
 	portProtos := make(map[string]string)

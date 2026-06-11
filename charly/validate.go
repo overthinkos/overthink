@@ -861,39 +861,10 @@ func validatePort(cfg *Config, layers map[string]*Candy, errs *ValidationError) 
 		}
 	}
 
-	// Validate image port mappings
-	validatePortMappings := func(name string, ports []string) {
-		for _, mapping := range ports {
-			parts := strings.Split(mapping, ":")
-			switch len(parts) {
-			case 1:
-				if !isValidPort(parts[0]) {
-					errs.Add("box %q ports: %q is not a valid port number (1-65535)", name, parts[0])
-				}
-			case 2:
-				if !isValidPort(parts[0]) {
-					errs.Add("box %q ports: host port %q in %q is not valid (1-65535)", name, parts[0], mapping)
-				}
-				if !isValidPort(parts[1]) {
-					errs.Add("box %q ports: container port %q in %q is not valid (1-65535)", name, parts[1], mapping)
-				}
-			default:
-				errs.Add("box %q ports: %q must be \"port\" or \"host:container\" format", name, mapping)
-			}
-		}
-	}
-
-	if len(cfg.Defaults.Port) > 0 {
-		validatePortMappings("defaults", cfg.Defaults.Port)
-	}
-	for name, img := range cfg.Box {
-		if !img.IsEnabled() {
-			continue
-		}
-		if len(img.Port) > 0 {
-			validatePortMappings(name, img.Port)
-		}
-	}
+	// Box-level / defaults `port:` is REMOVED — published ports are inherited
+	// from the candy chain (CollectBoxPorts) and host mappings are auto-allocated
+	// at deploy. A residual box `port:` is hard-rejected at load time
+	// (rejectLegacyBoxPort), so there is nothing to format-validate here.
 }
 
 // validateRoutes validates route file declarations in candies

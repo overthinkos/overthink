@@ -138,8 +138,9 @@ func CollectBoxAlias(cfg *Config, layers map[string]*Candy, boxName string) ([]C
 		return nil, fmt.Errorf("box %q not found in charly.yml", boxName)
 	}
 
-	// Resolve candies for this box (includes transitive deps)
-	resolved, err := ResolveCandyOrder(img.Candy, layers, nil)
+	// Resolve candies for this box (leaf-specific — aliases do NOT inherit from
+	// a base box; the shared boxDirectCandies walk).
+	resolved, err := cfg.boxDirectCandies(layers, boxName)
 	if err != nil {
 		return nil, err
 	}

@@ -127,7 +127,11 @@ type BoxConfig struct {
 	Distro                []string      `yaml:"distro,omitempty"` // distro tags ["fedora:43", "fedora"] — first-match for packages
 	Build                 BuildFormats  `yaml:"build,omitempty"`  // package formats ["rpm"] — all installed in order
 	Candy                 []string      `yaml:"candy,omitempty"`
-	Port                  []string      `yaml:"port,omitempty"`        // runtime port mappings ["host:container"]
+	// Port is REMOVED as an authored field — boxes no longer declare ports;
+	// published ports are inherited from the candy chain (CollectBoxPorts) and
+	// host mappings are auto-allocated at deploy. Parsed only so the loader can
+	// hard-reject a residual box `port:` (rejectLegacyBoxPort → `charly migrate`).
+	Port                  []string      `yaml:"port,omitempty"`
 	User                  string        `yaml:"user,omitempty"`        // username (default: "user")
 	UID                   *int          `yaml:"uid,omitempty"`         // user ID (default: 1000)
 	GID                   *int          `yaml:"gid,omitempty"`         // group ID (default: 1000)
@@ -222,7 +226,6 @@ type ResolvedBox struct {
 	BuildFormats          []string // resolved build formats: ["rpm"] or ["pac", "aur"] — all installed in order
 	Tags                  []string // union: ["all"] + Distro + BuildFormats — for task matching
 	Candy                 []string
-	Port                  []string // runtime port mappings
 
 	// User configuration
 	User string // username
@@ -494,11 +497,9 @@ func (c *Config) ResolveBox(name string, calverTag string, dir string, opts Reso
 		resolved.Candy[i] = BareRef(ref)
 	}
 
-	// Resolve ports: image -> defaults -> nil
-	resolved.Port = img.Port
-	if len(resolved.Port) == 0 {
-		resolved.Port = c.Defaults.Port
-	}
+	// Ports are NOT resolved here — they are inherited from the candy chain
+	// (CollectBoxPorts) at OCI-label emission + inspect time, since ResolveBox
+	// has no candy map. Boxes no longer declare ports.
 
 	// Resolve user: image -> defaults -> "user"
 	resolved.User = img.User

@@ -160,29 +160,48 @@ func TestAllocateAutoPorts(t *testing.T) {
 	}
 }
 
-func TestExpandAutoPorts(t *testing.T) {
-	// No "auto" → pass-through.
-	ports := []string{"22718:2718", "28080:8080"}
-	got, expanded, err := ExpandAutoPorts(ports, []int{2718, 8080}, nil)
+func TestResolveDeployPorts(t *testing.T) {
+	// Auto-default: every container port gets a fresh host port; the mapping's
+	// container side matches and the host side is a real (>0) allocated port.
+	got, err := ResolveDeployPorts([]int{2718, 8080, 3000}, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
-	}
-	if expanded {
-		t.Error("ExpandAutoPorts(no-auto) should not expand")
-	}
-	if !reflect.DeepEqual(got, ports) {
-		t.Errorf("ExpandAutoPorts(no-auto) = %v, want %v", got, ports)
-	}
-	// Single "auto" → expansion produces len(containerPorts) entries.
-	got, expanded, err = ExpandAutoPorts([]string{"auto"}, []int{2718, 8080, 3000}, nil)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !expanded {
-		t.Error("ExpandAutoPorts(auto) should expand")
 	}
 	if len(got) != 3 {
-		t.Errorf("ExpandAutoPorts(auto): got %d entries, want 3", len(got))
+		t.Fatalf("ResolveDeployPorts(auto): got %d entries, want 3", len(got))
+	}
+	for i, cp := range []int{2718, 8080, 3000} {
+		pm, ok := ParsePortMapping(got[i])
+		if !ok || pm.Container != cp || pm.Host <= 0 {
+			t.Errorf("entry %d = %q, want host:%d with a real host port", i, got[i], cp)
+		}
+	}
+
+	// A pin wins for its container port; the rest auto-allocate.
+	got, err = ResolveDeployPorts([]int{2718, 8080}, []string{"28080:8080"}, nil, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(got) != 2 || got[1] != "28080:8080" {
+		t.Errorf("pin not honored: %v", got)
+	}
+
+	// Prior allocation is reused for stability across re-resolution.
+	got, err = ResolveDeployPorts([]int{2718}, nil, []string{"49718:2718"}, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(got) != 1 || got[0] != "49718:2718" {
+		t.Errorf("prior not reused: %v, want [49718:2718]", got)
+	}
+
+	// A stray "auto" pin token is ignored (treated as no pin → allocate).
+	got, err = ResolveDeployPorts([]int{2718}, []string{"auto"}, nil, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(got) != 1 {
+		t.Errorf("stray auto: got %v, want 1 allocated entry", got)
 	}
 }
 

@@ -71,7 +71,7 @@ type MigrationStep struct {
 // closure references it, and the registry's last entry uses it as its Version,
 // so the two are guaranteed equal (asserted by TestRegistryHeadMatchesLatest).
 // Bump it — and append the matching MigrationStep — for each future cutover.
-var latestSchemaVersion = mustCalVer("2026.161.1650")
+var latestSchemaVersion = mustCalVer("2026.161.2303")
 
 // migrationSteps is the ordered registry. Chronological by git landing date
 // (see `git log --diff-filter=A` on each migrate_*.go), which is the order the
@@ -302,6 +302,19 @@ func migrationSteps() []MigrationStep {
 		// schema_version). TouchesHost; walks ctx.LedgerRoot/{deploys,layers}.
 		{mustCalVer("2026.161.1649"), "ledger-candy-keys", true, func(c *MigrateContext) (bool, error) {
 			return MigrateLedgerCandyKeys(c)
+		}},
+		// 2026-06 candy-port-inheritance cutover: boxes no longer declare ports.
+		// The box-level `port:` field is RETIRED (published ports are inherited
+		// from the candy chain — CollectBoxPorts) and host mappings are
+		// auto-allocated on 127.0.0.1 at deploy, so the `port: [auto]` sentinel is
+		// retired too (absence of pins IS auto). This step removes box.port +
+		// defaults.port and the auto sentinel from deploy/eval/pod/k8s entries;
+		// explicit deploy port PINS are preserved. The loader hard-rejects a
+		// residual box `port:` (rejectLegacyBoxPort) with a `charly migrate` hint.
+		// TouchesHost false — runs under remote-cache auto-migration. See CHANGELOG.md.
+		{mustCalVer("2026.161.2302"), "drop-box-port", false, func(c *MigrateContext) (bool, error) {
+			w, err := MigrateDropBoxPort(c.Dir, c.DryRun)
+			return len(w) > 0, err
 		}},
 		// HEAD — the schema stamp. Must stay LAST so LatestSchemaVersion picks it up
 		// and every versioned file lands on this CalVer. This is the integer→CalVer

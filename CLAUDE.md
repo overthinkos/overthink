@@ -109,7 +109,7 @@ OpenCharly is built around **candyboxing**, not sandboxing. A classical sandbox 
 
 **Why a full candy store, not a locked cabinet.** An AI that cannot install a package, reach a registry, build an image, or run a real deploy cannot VALIDATE a real composition — it can only guess. Candyboxing is what makes Risk Driven Development cheap and honest: the bed is fully stocked, so the AI builds the actual box, deploys the actual candies, and `charly eval`s the actual running system (RDD), and it is disposable, so a wrong move costs one `charly update`, not an incident (Disposable-Only Autonomy). The generosity is the point — it is what "OpenCharly" means: hand the agent an over-provisioned environment, not a minimal one, and contain it at the boundary.
 
-**Candyboxing composes with R0 and the safety rules — it does not loosen them.** A full candy store inside the box is NOT permission to act outside it: autonomous destroy is still gated on an explicit `disposable: true` (Disposable-Only Autonomy), outward-facing / hard-to-reverse actions still require authorization, and skills-first (R0) still governs HOW the AI uses the candy. Candyboxing widens what the AI may freely reach for INSIDE a secured, disposable boundary; it never widens the boundary itself.
+**Candyboxing composes with R0 and the safety rules — it does not loosen them.** A full candy store inside the box is NOT permission to act outside it: autonomous destroy is still gated on an explicit `disposable: true` (Disposable-Only Autonomy), outward-facing / hard-to-reverse actions still require authorization (one standing exception: **preempting a declared-`preemptible:` holder is reversible by design — graceful stop + crash-safe `restore: always` — and carries STANDING authorization, so the AI preempts autonomously with no per-run confirmation; see Disposable-Only Autonomy**), and skills-first (R0) still governs HOW the AI uses the candy. Candyboxing widens what the AI may freely reach for INSIDE a secured, disposable boundary; it never widens the boundary itself.
 
 See `/charly-internals:disposable` (the lifecycle boundary), `/charly-eval:eval` (the `charly eval` candy store + the disposable bed), and `/charly-internals:agents` (agents and teams working inside the box).
 
@@ -228,7 +228,7 @@ On resources that ARE marked `disposable: true`, `charly update <name>` performs
 1. Build the artifact from the changed source, on the target host.
 2. Verify the deployed binary's version matches what you built (R9).
 3. Verify runtime deps are installed via package management (R9).
-4. For a target with `disposable: true`: `charly update <name>` — unattended. For any other resource: confirm with the user before any destroy.
+4. For a target with `disposable: true`: `charly update <name>` — unattended. For any other resource: confirm with the user before any *destroy* (an irreversible teardown). **Preempting a declared-`preemptible:` holder is the standing exception — no confirmation needed:** the resource arbiter gracefully stops the holder to free its exclusive resource for a `requires_exclusive:` claimant and is GUARANTEED to restart it (crash-safe `restore: always`), so preemption is reversible by design, not a destroy. See `/charly-internals:disposable` "The resource-arbitration axis".
 5. Exercise the feature end-to-end.
 6. Paste the runtime output back into the conversation.
 7. Leave the target healthy (running, not paused, not crashed).

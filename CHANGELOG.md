@@ -22,6 +22,17 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-11 — fix(reconcile): skip git-submodule dirs in the project-file scan (shared `isGitSubmoduleDir`) + align main namespace pins
+
+`charly box reconcile`'s `reconcileCandidateFiles` walked `box/` + `candy/` with `filepath.Walk` and, after the box inversion made `main/box/` the submodule mount parent, recursed into `box/<distro>/{box,candy}/<name>/charly.yml` — rewriting the SUBMODULES' `@github` pins and leaving every submodule `-dirty` on a main `charly box reconcile`. Same bug class as the `drop-box-port` migrator-scoping fix in the candy-port cutover below: each charly-project repo reconciles/migrates ITSELF.
+
+- **charly/reconcile.go**: `reconcileCandidateFiles` now `filepath.SkipDir`s any walked directory carrying a `.git` entry, so the scan stays inside the current repo.
+- **Shared `isGitSubmoduleDir(p, root)` (R3)**: the new predicate backs BOTH the reconcile scan and the `charly migrate` `dropBoxPortCandidateFiles` walk; the latter's inline `.git`-stat block is refactored onto it (one abstraction, two call-sites).
+- **charly/reconcile_test.go**: `TestImageReconcile_SkipsSubmodules` (a submodule under `box/` with a stale pin stays UNTOUCHED) joins the existing `TestMigrateDropBoxPortSkipsSubmodules`; both now exercise the shared helper.
+- **charly.yml**: main's `arch` / `cachyos` / `fedora` namespace `@github` import pins aligned to the freshly-landed submodule tags (`v2026.162.0906` / `v2026.162.0912` / `v2026.162.0855`) — the main-namespace reconcile result, now a clean no-op.
+
+Verification: `go test ./...` green (the two scoping guards + the four other reconcile tests pass); live `charly box reconcile --remote` on the final tree → "already reconciled" with every submodule staying clean; `charly box validate` exit 0; `charly eval run eval-local` PASS (4/4) on the fresh rebuild; all six charly-project repos report "already reconciled" (zero version-mismatch warnings). No schema change (`version:` unchanged; content-only edits).
+
 ### 2026-06-11 — feat!: candy-port inheritance + auto port mapping (boxes drop `port:`, deploys auto-allocate on 127.0.0.1) + unified candy-chain collectors
 
 Ports now live on ONE surface — the candy that runs the service — and travel automatically to every box that composes it and every deploy that publishes it. This kills the band-aid where a box (and its eval bed) manually re-declared a candy's port. The canonical case: the `android-emulator` box composed `selkies-labwc`, whose chain includes `chrome-cdp` (9222) + `chrome-devtools-mcp` (9224); the inherited mcp eval probes resolve `${HOST_PORT:9222/9224}`, but the published ports did NOT inherit, so the box re-declared `9222:9222`/`9224:9224` (with a comment admitting it compensated for broken inheritance) and the bed's explicit port list then REPLACED the box label and silently dropped them. Three distinct duplication/replace bugs, one fix.

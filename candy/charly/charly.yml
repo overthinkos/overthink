@@ -1,5 +1,5 @@
 candy:
-    version: 2026.159.0748
+    version: 2026.162.1430
     name: charly
     description: |
         Full charly toolchain — the CLI binary + the VM stack (virtualization),
@@ -94,3 +94,11 @@ candy:
           exit_status: 0
           stdout:
             - matches: "[0-9]{4}\\.[0-9]+"
+        # Engine-agnostic: `charly doctor` prints its "Summary:" line before the
+        # required-deps exit check, so this verifies the doctor subcommand runs
+        # and reports on ANY charly box (incl. fixtures with no container engine,
+        # where `charly doctor` itself exits non-zero). The "engine present"
+        # assertion belongs to container-nesting's nested-podman probe.
+        - id: charly-doctor
+          command: charly doctor 2>&1 | grep -q "Summary:"
+          exit_status: 0

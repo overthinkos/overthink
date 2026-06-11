@@ -1,5 +1,5 @@
 candy:
-    version: 2026.144.1443
+    version: 2026.162.1430
     name: openclaw
     require:
         - nodejs
@@ -23,3 +23,14 @@ candy:
           restart: always
           enable: true
           scope: system
+    # The gateway this candy runs — checked HERE so one check covers every box
+    # composing it (openclaw, openclaw-full, openclaw-desktop).
+    eval:
+        - id: openclaw-binary
+          file: ${HOME}/.npm-global/bin/openclaw
+          exists: true
+        - id: openclaw-gateway-port
+          scope: deploy
+          addr: 127.0.0.1:${HOST_PORT:18789}
+          reachable: true
+          timeout: 5s

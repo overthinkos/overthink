@@ -1,5 +1,5 @@
 candy:
-    version: 2026.157.0640
+    version: 2026.162.1430
     name: virtualization
     description: |
         QEMU/KVM/libvirt stack that runs identically on container/pod
@@ -141,6 +141,14 @@ candy:
         - id: qemu-img-binary
           file: /usr/bin/qemu-img
           exists: true
+        # The rootless libvirt session this candy's virtqemud serves — checked
+        # HERE so one check covers every box composing virtualization (directly
+        # or via the charly toolchain), instead of the box re-declaring it.
+        - id: libvirt-session-list
+          scope: deploy
+          command: virsh -c qemu:///session list --all
+          in_container: true
+          exit_status: 0
     # Mixed-entry `service:` pattern (CLAUDE.md "Init-system
     # polymorphism via mixed `service:` entries"). Each daemon
     # appears twice with the same `name:` — one entry rendered by

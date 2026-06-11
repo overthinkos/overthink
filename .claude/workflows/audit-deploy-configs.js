@@ -9,9 +9,25 @@ export const meta = {
   ],
 }
 
+// `args` may arrive as an actual array (Workflow tool), a JSON-encoded string
+// of that array (tool-call stringification), or a space-separated string
+// (slash invocation). Decode JSON first, then normalize.
+let rawArgs = args
+if (typeof rawArgs === 'string') {
+  const t = rawArgs.trim()
+  if (t.startsWith('[') || t.startsWith('"')) {
+    try {
+      rawArgs = JSON.parse(t)
+    } catch {
+      rawArgs = t
+    }
+  } else {
+    rawArgs = t
+  }
+}
 let requested = []
-if (Array.isArray(args)) requested = args.filter(Boolean)
-else if (typeof args === 'string' && args.trim()) requested = args.trim().split(/\s+/)
+if (Array.isArray(rawArgs)) requested = rawArgs.map(String).map((s) => s.trim()).filter(Boolean)
+else if (typeof rawArgs === 'string' && rawArgs.trim()) requested = rawArgs.trim().split(/\s+/)
 
 const VALIDATE_SCHEMA = {
   type: 'object',

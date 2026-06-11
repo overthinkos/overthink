@@ -9,11 +9,25 @@ export const meta = {
   ],
 }
 
-// Bed name to triage. Required. Workflow `args` may arrive as an array (Workflow
-// tool) or a space-separated string (slash invocation).
+// Bed name to triage. Required. `args` may arrive as an actual array
+// (Workflow tool), a JSON-encoded string of that array (tool-call
+// stringification), or a space-separated string (slash invocation).
+let rawArgs = args
+if (typeof rawArgs === 'string') {
+  const t = rawArgs.trim()
+  if (t.startsWith('[') || t.startsWith('"')) {
+    try {
+      rawArgs = JSON.parse(t)
+    } catch {
+      rawArgs = t
+    }
+  } else {
+    rawArgs = t
+  }
+}
 let bed = ''
-if (Array.isArray(args)) bed = args.filter(Boolean)[0] || ''
-else if (typeof args === 'string') bed = args.trim().split(/\s+/)[0] || ''
+if (Array.isArray(rawArgs)) bed = rawArgs.map(String).map((s) => s.trim()).filter(Boolean)[0] || ''
+else if (typeof rawArgs === 'string') bed = rawArgs.trim().split(/\s+/)[0] || ''
 if (!bed) {
   log('Usage: /triage-eval-failure <bed> — no bed name supplied.')
   return { error: 'no bed supplied' }

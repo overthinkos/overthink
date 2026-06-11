@@ -8,25 +8,43 @@ export const meta = {
   ],
 }
 
-// The fixed substrate→bed map. Each bed carries a `status-shows-*` deploy-scope
-// eval check that asserts `charly status --json` reports the correct `kind` (and,
+// The fixed substrate→bed map. Each bed carries `status-shows-*` deploy-scope
+// eval checks that assert `charly status --json` reports the correct `kind` (and,
 // for android, the declared pod→android nested tree) for the live deployment.
-// One bed per substrate is the unit of coverage — distinct beds get distinct
+// `dir` names the charly project the bed lives in ('' = the superproject root;
+// the pod/android beds live in `box/<distro>` submodules) — the runner invokes
+// `charly -C <dir> eval run <bed>` and reads `<dir>/.eval/…`. One bed per
+// substrate is the unit of coverage — distinct beds get distinct
 // container/VM/image names; the author gives each disjoint host ports (the
 // loader does NOT check ports — an overlap fails the second bed at deploy),
 // so they run concurrent-safe with no worktree.
 const SUBSTRATE_BEDS = [
-  { substrate: 'pod', bed: 'eval-pod', check: 'status-shows-pod' },
-  { substrate: 'vm', bed: 'eval-k3s-vm', check: 'status-shows-vm' },
-  { substrate: 'local', bed: 'eval-local', check: 'status-shows-local' },
-  { substrate: 'android', bed: 'eval-android-emulator-pod', check: 'status-shows-android-nested' },
+  { substrate: 'pod', bed: 'eval-pod', dir: 'box/fedora', checks: ['status-shows-pod'] },
+  { substrate: 'vm', bed: 'eval-k3s-vm', dir: '', checks: ['status-shows-vm'] },
+  { substrate: 'local', bed: 'eval-local', dir: '', checks: ['status-shows-local'] },
+  { substrate: 'android', bed: 'eval-android-emulator-pod', dir: 'box/cachyos', checks: ['status-shows-android', 'status-shows-nested'] },
 ]
 
-// Normalize requested substrates/beds: `args` may arrive as an array (Workflow
-// tool) or a space-separated string (slash invocation). Empty => all four.
+// Normalize requested substrates/beds. Empty => all four.
+// `args` may arrive as an actual array (Workflow tool), a JSON-encoded string
+// of that array (tool-call stringification), or a space-separated string
+// (slash invocation). Decode JSON first, then normalize.
+let rawArgs = args
+if (typeof rawArgs === 'string') {
+  const t = rawArgs.trim()
+  if (t.startsWith('[') || t.startsWith('"')) {
+    try {
+      rawArgs = JSON.parse(t)
+    } catch {
+      rawArgs = t
+    }
+  } else {
+    rawArgs = t
+  }
+}
 let requested = []
-if (Array.isArray(args)) requested = args.filter(Boolean)
-else if (typeof args === 'string' && args.trim()) requested = args.trim().split(/\s+/)
+if (Array.isArray(rawArgs)) requested = rawArgs.map(String).map((s) => s.trim()).filter(Boolean)
+else if (typeof rawArgs === 'string' && rawArgs.trim()) requested = rawArgs.trim().split(/\s+/)
 
 let selected = SUBSTRATE_BEDS
 if (requested.length) {
@@ -46,9 +64,14 @@ const DISCOVER_SCHEMA = {
         properties: {
           substrate: { type: 'string', description: 'pod | vm | local | android' },
           bed: { type: 'string' },
-          check: { type: 'string', description: 'the status-shows-* deploy-scope assertion id' },
+          dir: { type: 'string', description: "charly project dir of the bed ('' = repo root)" },
+          checks: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'the status-shows-* deploy-scope assertion ids',
+          },
         },
-        required: ['substrate', 'bed', 'check'],
+        required: ['substrate', 'bed', 'checks'],
       },
     },
   },
@@ -64,16 +87,19 @@ const BED_SCHEMA = {
     exitCode: { type: 'integer', description: '0 pass / 1 infra / 2 checks-failed' },
     ok: { type: 'boolean' },
     skippedPrereq: { type: 'boolean', description: 'true if a host prereq (libvirt/kvm) was missing' },
-    statusAssertion: {
-      type: 'object',
-      additionalProperties: false,
-      description: 'verbatim verdict for the status-shows-* deploy-scope check',
-      properties: {
-        id: { type: 'string' },
-        ok: { type: 'boolean' },
-        detail: { type: 'string', description: 'the eval-live line for this check (verbatim)' },
+    statusAssertions: {
+      type: 'array',
+      description: 'verbatim verdicts, one per status-shows-* deploy-scope check',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          id: { type: 'string' },
+          ok: { type: 'boolean' },
+          detail: { type: 'string', description: 'the eval-live line for this check (verbatim)' },
+        },
+        required: ['id', 'ok'],
       },
-      required: ['id', 'ok'],
     },
     failingLogTail: { type: 'string' },
   },
@@ -81,15 +107,31 @@ const BED_SCHEMA = {
 }
 
 phase('Discover')
-// The substrate→bed map is fixed in this workflow; the discover phase emits it
-// verbatim (and lets a teammate confirm each bed/check still exists in the
-// charly.yml eval: blocks before any bed is run). Do NOT run anything in this phase.
+// The substrate→bed map is fixed in this workflow; the discover phase only
+// CONFIRMS each selected entry still exists in its project's eval: block —
+// the SELECTED map stays authoritative (the discover agent can drop entries
+// it cannot confirm, never add or substitute beds). Do NOT run anything here.
 const discoverPrompt =
-  `Read the project charly.yml (its top-level eval: block) and every box/*/charly.yml eval: block in this project. Confirm each of these substrate→bed→check triples still exists as a kind:eval bed with the named status-shows-* deploy-scope eval check, and return them verbatim as JSON {beds:[{substrate,bed,check}]}. The map is: ` +
-  selected.map((e) => `${e.substrate}=>${e.bed} (${e.check})`).join(', ') +
-  `. Do NOT run anything.`
+  `STRICTLY CONFIRM — never add, never substitute — each of these substrate→bed entries against the kind:eval beds in their charly project (dir '' or '.' = this repo's charly.yml top-level eval: block; otherwise <dir>/charly.yml): ` +
+  selected.map((e) => `${e.substrate}=>${e.bed} in '${e.dir || '.'}' (checks: ${e.checks.join(' + ')})`).join(', ') +
+  `. Return ONLY the entries whose bed AND every named status-shows-* deploy-scope check exist, verbatim, as JSON {beds:[{substrate,bed,dir,checks}]}. Do NOT run anything; do NOT include any bed not in this list.`
 const discovered = await agent(discoverPrompt, { schema: DISCOVER_SCHEMA, label: 'discover-status-beds', phase: 'Discover' })
-const beds = (discovered && discovered.beds ? discovered.beds : []).filter(Boolean)
+const confirmed = new Set(
+  (discovered && discovered.beds ? discovered.beds : [])
+    .filter(Boolean)
+    .map((b) => b.substrate + '|' + b.bed)
+)
+// Code-side intersection — the agent's output can only NARROW the selected
+// map, never widen it (an over-helpful discover agent must not fan out
+// beyond what the caller asked for).
+const beds = selected.filter((e) => confirmed.has(e.substrate + '|' + e.bed))
+const unconfirmed = selected.filter((e) => !confirmed.has(e.substrate + '|' + e.bed))
+if (unconfirmed.length) {
+  log(
+    `verify-status: ${unconfirmed.length} selected entr(y/ies) not confirmed in config — skipped: ` +
+      unconfirmed.map((e) => `${e.substrate}=>${e.bed}`).join(', ')
+  )
+}
 
 if (!beds.length) {
   log('No substrate beds resolved — nothing to verify.')
@@ -101,11 +143,15 @@ if (!beds.length) {
 // documented 16-concurrent dynamic-workflow agent ceiling, which queues excess.
 log(`Verifying ${beds.length} substrate bed(s) in parallel (bounded + queued by the 16-concurrent runtime ceiling).`)
 
-const runBed = (b) =>
-  agent(
-    `You are the eval-bed runner verifying the unified \`charly status\` surface for the "${b.substrate}" substrate. Run the kind:eval bed "${b.bed}" EXACTLY as \`charly eval run ${b.bed}\` — do NOT add any flags (no --no-rebuild/--keep/--on-*; that would shrink the R10 spec, CLAUDE.md R10 flag-override clause). The bed's full R10 sequence (build → eval image → deploy → eval live → fresh charly update → teardown) runs the deploy-scope eval check "${b.check}", which asserts that \`charly status --json\` reports the correct substrate kind (and, for android, the declared pod→android nested tree) for the live deployment. Capture stdout/stderr and the process exit code. Read .eval/${b.bed}/<calver>/summary.yml for the per-step verdict, and extract the VERBATIM eval-live line for the "${b.check}" check into statusAssertion. Tail any failing step's .log into failingLogTail. If a required host prereq is missing (libvirt user session for the vm bed, /dev/kvm for the android bed), set skippedPrereq=true and do NOT report it as a pass. Set substrate="${b.substrate}". Return the verbatim verdict — never summarize away a failure.`,
+const runBed = (b) => {
+  const charlyCmd = b.dir ? `charly -C ${b.dir} eval run ${b.bed}` : `charly eval run ${b.bed}`
+  const evalDir = `${b.dir ? b.dir + '/' : ''}.eval/${b.bed}/<calver>/`
+  const checkList = b.checks.map((c) => `"${c}"`).join(' and ')
+  return agent(
+    `You are the eval-bed runner verifying the unified \`charly status\` surface for the "${b.substrate}" substrate. Run the kind:eval bed "${b.bed}" EXACTLY as \`${charlyCmd}\` — do NOT add any flags (no --no-rebuild/--keep/--on-*; that would shrink the R10 spec, CLAUDE.md R10 flag-override clause). The bed's full R10 sequence (build → eval image → deploy → eval live → fresh charly update → teardown) runs the deploy-scope eval check(s) ${checkList}, which assert that \`charly status --json\` reports the correct substrate kind (and, for android, the declared pod→android nested tree) for the live deployment. Capture stdout/stderr and the process exit code. Read ${evalDir}summary.yml for the per-step verdict, and extract the VERBATIM eval-live line for EACH of those checks into statusAssertions. Tail any failing step's .log into failingLogTail. If a required host prereq is missing (libvirt user session for the vm bed, /dev/kvm for the android bed), set skippedPrereq=true and do NOT report it as a pass. Set substrate="${b.substrate}" and bed="${b.bed}". Return the verbatim verdict — never summarize away a failure.`,
     { schema: BED_SCHEMA, label: `status:${b.substrate}:${b.bed}`, phase: 'Verify' }
   )
+}
 
 phase('Verify')
 const all = (await parallel(beds.map((b) => () => runBed(b)))).filter(Boolean)
@@ -116,8 +162,8 @@ log(`verify-status: ${passed.length} passed, ${failed.length} failed, ${skipped.
 
 return {
   total: all.length,
-  passed: passed.map((r) => ({ substrate: r.substrate, bed: r.bed, statusAssertion: r.statusAssertion })),
-  failed: failed.map((r) => ({ substrate: r.substrate, bed: r.bed, exitCode: r.exitCode, statusAssertion: r.statusAssertion, failingLogTail: r.failingLogTail })),
+  passed: passed.map((r) => ({ substrate: r.substrate, bed: r.bed, statusAssertions: r.statusAssertions })),
+  failed: failed.map((r) => ({ substrate: r.substrate, bed: r.bed, exitCode: r.exitCode, statusAssertions: r.statusAssertions, failingLogTail: r.failingLogTail })),
   skipped: skipped.map((r) => ({ substrate: r.substrate, bed: r.bed })),
   beds: all,
 }

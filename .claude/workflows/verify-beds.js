@@ -8,11 +8,26 @@ export const meta = {
   ],
 }
 
-// Normalize requested beds: Workflow `args` may arrive as an array (Workflow
-// tool) or a space-separated string (slash invocation). Empty => all beds.
+// Normalize requested beds. Empty => all beds.
+// `args` may arrive as an actual array (Workflow tool), a JSON-encoded string
+// of that array (tool-call stringification), or a space-separated string
+// (slash invocation). Decode JSON first, then normalize.
+let rawArgs = args
+if (typeof rawArgs === 'string') {
+  const t = rawArgs.trim()
+  if (t.startsWith('[') || t.startsWith('"')) {
+    try {
+      rawArgs = JSON.parse(t)
+    } catch {
+      rawArgs = t
+    }
+  } else {
+    rawArgs = t
+  }
+}
 let requested = []
-if (Array.isArray(args)) requested = args.filter(Boolean)
-else if (typeof args === 'string' && args.trim()) requested = args.trim().split(/\s+/)
+if (Array.isArray(rawArgs)) requested = rawArgs.map(String).map((s) => s.trim()).filter(Boolean)
+else if (typeof rawArgs === 'string' && rawArgs.trim()) requested = rawArgs.trim().split(/\s+/)
 
 const DISCOVER_SCHEMA = {
   type: 'object',
@@ -26,6 +41,7 @@ const DISCOVER_SCHEMA = {
         properties: {
           bed: { type: 'string' },
           target: { type: 'string', description: 'pod | vm | local' },
+          dir: { type: 'string', description: "charly project dir of the bed ('' = repo root, 'box/<distro>' = submodule)" },
         },
         required: ['bed', 'target'],
       },
@@ -62,8 +78,8 @@ const BED_SCHEMA = {
 
 phase('Discover')
 const discoverPrompt = requested.length
-  ? `Read the project charly.yml (its top-level eval: block) and every box/*/charly.yml eval: block in this project. For each of these bed names: ${requested.join(', ')} — return its kind:eval target kind (pod/vm/local). Return JSON {beds:[{bed,target}]}. Do NOT run anything.`
-  : 'Read the project charly.yml (its top-level eval: block) and every box/*/charly.yml eval: block in this project. Return ALL kind:eval bed entities as JSON {beds:[{bed,target}]} where target is the entity .target field (pod/vm/local). Do NOT run anything.'
+  ? `Read the project charly.yml (its top-level eval: block) and every box/*/charly.yml eval: block in this project. For each of these bed names: ${requested.join(', ')} — return its kind:eval target kind (pod/vm/local) and the charly project dir it lives in ('' for the repo root, 'box/<distro>' for a submodule bed). Return JSON {beds:[{bed,target,dir}]}. Do NOT run anything; do NOT return beds not in the list.`
+  : `Read the project charly.yml (its top-level eval: block) and every box/*/charly.yml eval: block in this project. Return ALL kind:eval bed entities as JSON {beds:[{bed,target,dir}]} where target is the entity .target field (pod/vm/local) and dir is the charly project dir the bed lives in ('' for the repo root, 'box/<distro>' for a submodule bed). Do NOT run anything.`
 const discovered = await agent(discoverPrompt, { schema: DISCOVER_SCHEMA, label: 'discover-beds', phase: 'Discover' })
 const beds = (discovered && discovered.beds ? discovered.beds : []).filter(Boolean)
 
@@ -77,11 +93,14 @@ if (!beds.length) {
 // documented 16-concurrent dynamic-workflow agent ceiling, which queues excess.
 log(`Discovered ${beds.length} bed(s): running all in parallel (bounded + queued by the 16-concurrent runtime ceiling).`)
 
-const runBed = (b) =>
-  agent(
-    `You are the eval-bed runner. Run the kind:eval bed "${b.bed}" EXACTLY as \`charly eval run ${b.bed}\` — do NOT add any flags (no --no-rebuild/--keep/--on-*; that would shrink the R10 spec, CLAUDE.md R10 flag-override clause). Capture stdout/stderr and the process exit code. Then read .eval/${b.bed}/<calver>/summary.yml for the per-step verdict and tail any failing step's .log. If a required host prereq is missing (libvirt user session for a vm bed, /dev/kvm for the android bed), set skippedPrereq=true and do NOT report it as a pass. Return the verbatim verdict — never summarize away a failure.`,
+const runBed = (b) => {
+  const charlyCmd = b.dir ? `charly -C ${b.dir} eval run ${b.bed}` : `charly eval run ${b.bed}`
+  const evalDir = `${b.dir ? b.dir + '/' : ''}.eval/${b.bed}/<calver>/`
+  return agent(
+    `You are the eval-bed runner. Run the kind:eval bed "${b.bed}" EXACTLY as \`${charlyCmd}\` — do NOT add any flags (no --no-rebuild/--keep/--on-*; that would shrink the R10 spec, CLAUDE.md R10 flag-override clause). Capture stdout/stderr and the process exit code. Then read ${evalDir}summary.yml for the per-step verdict and tail any failing step's .log. If a required host prereq is missing (libvirt user session for a vm bed, /dev/kvm for the android bed), set skippedPrereq=true and do NOT report it as a pass. Return the verbatim verdict — never summarize away a failure.`,
     { schema: BED_SCHEMA, label: `bed:${b.bed}`, phase: 'Run beds' }
   )
+}
 
 phase('Run beds')
 const all = (await parallel(beds.map((b) => () => runBed(b)))).filter(Boolean)

@@ -22,6 +22,10 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-11 — fix(build): derive `task build:charly`'s package-displace list from the PKGBUILD (no more drift)
+
+`task build:charly` failed on any host with the pre-rename `overthink-git` package installed: `opencharly-git and overthink-git are in conflict … unresolvable package conflicts`. The PKGBUILD correctly declares `conflicts=('overthink-git' 'ov-git')` + `replaces=('overthink-git' 'ov-git')`, but `pacman -U` (what `makepkg -i` runs for a local-file install) does NOT honor `replaces=`, so the Taskfile pre-removes the superseded packages first — and its hardcoded list (`ov-git ov-git-debug opencharly-git opencharly-git-debug`) had drifted from the PKGBUILD, omitting `overthink-git`/`overthink-git-debug` (its comment even mis-cited `replaces=('opencharly-git' 'ov-git')`). The classic two-sources-of-truth drift. Fixed by DERIVING the displace-list from the PKGBUILD's own `conflicts=`/`replaces=` arrays (`bash -c 'source ./PKGBUILD …'`) plus each entry's `-debug` sibling and the package's own `-debug` sibling — so the list can never drift from the PKGBUILD again. R10: `task build:charly` on this host (with `overthink-git` installed) removed it and installed `opencharly-git` system-wide, EXIT 0.
+
 ### 2026-06-11 — feat(generate)!: `charly box generate <name>` + `all` default, unified with build selection, and DETERMINISTIC auto-intermediates
 
 `charly box generate` gained the box selection surface `charly box build` already had, and the underlying auto-intermediate computation was made fully deterministic so generation is reproducible and maximizes build-cache reuse.

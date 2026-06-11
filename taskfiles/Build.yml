@@ -56,24 +56,28 @@ tasks:
               cd pkg/arch
               mkdir -p src/opencharly-git
               cp "{{.ROOT_DIR}}/LICENSE" src/opencharly-git/LICENSE
-              # Auto-remove legacy ov-git / ov-git-debug / opencharly-git
-              # packages if present. The PKGBUILD declares
-              # replaces=('opencharly-git' 'ov-git'), but pacman -U (which
-              # makepkg -i invokes for local-file installs) does NOT honor
-              # `replaces=` — that field only fires during sync-database
-              # upgrades (pacman -Syu). Without this pre-step the install
-              # hits an interactive conflict prompt that --noconfirm answers
-              # "no" to, and the install fails with `unresolvable package
-              # conflicts` (for the main package) or `conflicting files`
-              # (for the debug sibling). Both must be removed together.
+              # Displace any package this build supersedes BEFORE installing.
+              # pacman -U (which makepkg -i runs for a local-file install) does
+              # NOT honor `replaces=` — that fires only on a sync-database
+              # upgrade (pacman -Syu) — so a conflicting/replaced package left
+              # installed fails the install with `unresolvable package
+              # conflicts` (main package) or `conflicting files` (debug
+              # sibling). The displace-list is DERIVED from the PKGBUILD's own
+              # conflicts=/replaces= arrays (the single source of truth — a
+              # hardcoded copy here drifts from the PKGBUILD and silently misses
+              # a renamed package), plus each entry's -debug sibling and this
+              # package's own -debug sibling.
+              DISPLACE=$(bash -c 'source ./PKGBUILD
+                for p in "${conflicts[@]}" "${replaces[@]}"; do printf "%s\n%s-debug\n" "$p" "$p"; done
+                printf "%s-debug\n" "$pkgname"' | sort -u)
               LEGACY_PKGS=""
-              for pkg in ov-git ov-git-debug opencharly-git opencharly-git-debug; do
+              for pkg in $DISPLACE; do
                 if pacman -Q "$pkg" >/dev/null 2>&1; then
                   LEGACY_PKGS="$LEGACY_PKGS $pkg"
                 fi
               done
               if [ -n "$LEGACY_PKGS" ]; then
-                echo "Removing legacy package(s):$LEGACY_PKGS (renamed to opencharly-git)..."
+                echo "Removing superseded package(s):$LEGACY_PKGS (replaced by the opencharly-git build)..."
                 sudo pacman -Rdd --noconfirm $LEGACY_PKGS
               fi
               makepkg -sefi --noconfirm

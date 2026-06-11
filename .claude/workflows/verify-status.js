@@ -82,10 +82,10 @@ const BED_SCHEMA = {
 
 phase('Discover')
 // The substrate→bed map is fixed in this workflow; the discover phase emits it
-// verbatim (and lets a teammate confirm each bed/check still exists in eval.yml
-// before any bed is run). Do NOT run anything in this phase.
+// verbatim (and lets a teammate confirm each bed/check still exists in the
+// charly.yml eval: blocks before any bed is run). Do NOT run anything in this phase.
 const discoverPrompt =
-  `Read eval.yml in this project. Confirm each of these substrate→bed→check triples still exists as a kind:eval bed with the named status-shows-* deploy-scope eval check, and return them verbatim as JSON {beds:[{substrate,bed,check}]}. The map is: ` +
+  `Read the project charly.yml (its top-level eval: block) and every box/*/charly.yml eval: block in this project. Confirm each of these substrate→bed→check triples still exists as a kind:eval bed with the named status-shows-* deploy-scope eval check, and return them verbatim as JSON {beds:[{substrate,bed,check}]}. The map is: ` +
   selected.map((e) => `${e.substrate}=>${e.bed} (${e.check})`).join(', ') +
   `. Do NOT run anything.`
 const discovered = await agent(discoverPrompt, { schema: DISCOVER_SCHEMA, label: 'discover-status-beds', phase: 'Discover' })
@@ -103,7 +103,7 @@ log(`Verifying ${beds.length} substrate bed(s) in parallel (bounded + queued by 
 
 const runBed = (b) =>
   agent(
-    `You are the eval-bed runner verifying the unified \`charly status\` surface for the "${b.substrate}" substrate. Run the kind:eval bed "${b.bed}" EXACTLY as \`charly eval run ${b.bed}\` — do NOT add any flags (no --no-rebuild/--keep/--on-*; that would shrink the R10 spec, CLAUDE.md Law 3.6). The bed's full R10 sequence (build → eval image → deploy → eval live → fresh charly update → teardown) runs the deploy-scope eval check "${b.check}", which asserts that \`charly status --json\` reports the correct substrate kind (and, for android, the declared pod→android nested tree) for the live deployment. Capture stdout/stderr and the process exit code. Read .eval/${b.bed}/<calver>/summary.yml for the per-step verdict, and extract the VERBATIM eval-live line for the "${b.check}" check into statusAssertion. Tail any failing step's .log into failingLogTail. If a required host prereq is missing (libvirt user session for the vm bed, /dev/kvm for the android bed), set skippedPrereq=true and do NOT report it as a pass. Set substrate="${b.substrate}". Return the verbatim verdict — never summarize away a failure.`,
+    `You are the eval-bed runner verifying the unified \`charly status\` surface for the "${b.substrate}" substrate. Run the kind:eval bed "${b.bed}" EXACTLY as \`charly eval run ${b.bed}\` — do NOT add any flags (no --no-rebuild/--keep/--on-*; that would shrink the R10 spec, CLAUDE.md R10 flag-override clause). The bed's full R10 sequence (build → eval image → deploy → eval live → fresh charly update → teardown) runs the deploy-scope eval check "${b.check}", which asserts that \`charly status --json\` reports the correct substrate kind (and, for android, the declared pod→android nested tree) for the live deployment. Capture stdout/stderr and the process exit code. Read .eval/${b.bed}/<calver>/summary.yml for the per-step verdict, and extract the VERBATIM eval-live line for the "${b.check}" check into statusAssertion. Tail any failing step's .log into failingLogTail. If a required host prereq is missing (libvirt user session for the vm bed, /dev/kvm for the android bed), set skippedPrereq=true and do NOT report it as a pass. Set substrate="${b.substrate}". Return the verbatim verdict — never summarize away a failure.`,
     { schema: BED_SCHEMA, label: `status:${b.substrate}:${b.bed}`, phase: 'Verify' }
   )
 

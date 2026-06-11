@@ -4,14 +4,14 @@
 # emits blocking JSON; a trivial-reply turn still completes normally.
 #
 # DOCTRINE: a LEAN POINTER, not a copy. The authoritative checklist is
-# CLAUDE.md "End-of-turn checklist" + "Post-Execution Policies". This hook
+# CLAUDE.md "Acceptance checklist" + "Post-Execution Policies". This hook
 # only anchors the few self-checks most worth re-asking every turn and points
 # at the source. Deterministic enforcement (force-push, bad tier, --no-verify)
 # is in the PreToolUse gates, not here. See /charly-internals:agents "Hooks doctrine".
 
 cat <<'EOF'
 END-OF-TURN CHECK (soft — does not block). Confirm against CLAUDE.md
-"End-of-turn checklist" + "Post-Execution Policies":
+"Acceptance checklist" + "Post-Execution Policies":
 
   [ ] R0: every non-trivial action this turn was preceded by the matching
       Skill load (all relevant skills, up front). If you caught yourself
@@ -23,11 +23,13 @@ END-OF-TURN CHECK (soft — does not block). Confirm against CLAUDE.md
       Above all: does this layer composition, at its latest versions,
       build/deploy/run together? (Low-risk orientation = an R0 lookup.)
 
-  [ ] R10 (if code/deploy was touched): a real `charly eval run <bed>` /
-      `charly eval live` ran against a FRESH rebuild of a `disposable: true`
-      target AND its output is PASTED. A dry-run / unit-test / validate /
-      bare rebuild is NOT R10. No scope-shrinking flags were added without
-      explicit per-turn authorization (Law 3.6).
+  [ ] R10 (gate by change class): code/config touched => a real
+      `charly eval run <bed>` / `charly eval live` ran against a FRESH rebuild
+      of a `disposable: true` target AND its output is PASTED (dry-run /
+      unit-test / validate / bare rebuild is NOT it); script edits => the
+      changed script EXECUTED live; docs/comments-only =>
+      the non-runtime standards ran, NO bed. No scope-shrinking flags without
+      explicit per-turn authorization (CLAUDE.md R10 flag-override clause).
 
   [ ] Attribution tier == what the pasted proof supports (no inflation). A
       KNOWN rule violation => NO commit at any tier (fix in-tree or escalate;

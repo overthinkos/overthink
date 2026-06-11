@@ -524,7 +524,7 @@ Three execution modes:
   `${ENV_*}`) so the same check survives port remaps and volume
   rebindings.
 - **`charly eval run <bed>`** — the canonical R10 acceptance gate.
-  Picks a `kind: eval` bed in `eval.yml` (a disposable deploy
+  Picks a `kind: eval` bed from the project `charly.yml` `eval:` block (a disposable deploy
   carrying `disposable: true`) and runs build → eval box → deploy
   → eval live → fresh `charly update` → eval live again → teardown.
   Pick the bed whose kind matches what you changed: `eval-pod`,
@@ -701,7 +701,8 @@ not enumerations:
   + bootc entries. → `/charly-vm:vms-catalog`.
 - **Deploy-target catalog** — pod / vm / k8s / local / android.
   Each has a dedicated kind file.
-- **Eval bed catalog** (`eval.yml`) — `kind: eval` beds for R10,
+- **Eval bed catalog** (the `eval:` blocks in the project and
+  `box/<distro>` `charly.yml`s) — `kind: eval` beds for R10,
   plus `kind: recipe` / `score` / `ai` for the agent harness.
   → `/charly-eval:eval`.
 

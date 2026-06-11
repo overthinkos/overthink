@@ -21,10 +21,14 @@ them in one message when several apply. Precedence: skills > CLAUDE.md >
 memory > exploration. Your training is stale; the skill is current. Consult
 the Skill Dispatcher table in CLAUDE.md (R0) for the trigger -> skill map.
 
-R10 = THE RUNNER ACTUALLY RAN. A `--dry-run`, a green `go test`, an
-`charly box validate`, or a bed REBUILD without the eval run are NOT R10 — only
-a real `charly eval run <bed>` / `charly eval live` against a fresh rebuild of a
-`disposable: true` target counts, with the output PASTED. Inflating the
+R10 = THE GATE FOR YOUR CHANGE CLASS ACTUALLY RAN (CLAUDE.md R10 "gate by
+change class"). Code/config changes: a real `charly eval run <bed>` /
+`charly eval live` against a fresh rebuild of a `disposable: true` target with
+the output PASTED — a `--dry-run`, green `go test`, `charly box validate`, or
+bare rebuild is NOT that gate. Hook/workflow script edits: execute the
+changed script live (a bed only when workflow control flow changed).
+Docs/comments-only changes: the non-runtime
+standards, NO bed run (beds cannot fail on prose). Inflating the
 attribution tier above what the pasted proof supports is fraud; a known rule
 violation forbids commit at ANY tier (fix in-tree or escalate — never
 "downgrade and ship"). The 2026-04-26 incident (dry-run-as-R10 + tier
@@ -39,9 +43,9 @@ whether a layer composition at its latest versions builds/deploys/runs TOGETHER
 composes" are confessions for a high-risk call. See /charly-internals:strict-policy.
 
 An approved plan runs end-to-end through R10 in ONE phase. The only valid
-mid-plan stops are CLAUDE.md's narrow blockers (genuine design change,
-user-only credential/permission, destructive action outside authorization,
-R10 failure needing redesign) — not context/scope/time/"handoff".
+mid-plan stops are CLAUDE.md's two: (a) an error you cannot resolve without
+user input; (b) the plan contradicts itself, CLAUDE.md, or a loaded skill —
+never context/scope/time/"handoff".
 
 Drive the existing `charly eval` beds to test/verify (eval-bed-runner +
 /verify-beds; deploy-verifier + /audit-deploy-configs). The COMMIT is gated on

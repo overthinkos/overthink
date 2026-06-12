@@ -22,6 +22,14 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-12 — docs(policy): documentation/skill/comment divergence is a first-class R1 incident
+
+Sharpened R1/R2/R5 in `CLAUDE.md` (no new section, no R-number/heading rename) so that ANY divergence between a doc, skill, or code comment and observed reality — discovered by ANY means, not only via an RDD bed-contradiction or an R5 deleted-identifier — is an incident: it triggers `/charly-internals:root-cause-analyzer` (R1), its RCA remediation is a TRANSITIVE *claim-keyed* sweep across EVERY other doc/skill/comment carrying the same false/outdated/misleading claim (generalizing R5's identifier-keyed `git grep` self-test), and the fix for the changed surface + its sibling-set is BLOCKING in the current cutover (blocking by R2's own "is the tree correct?" test). A genuinely-unrelated divergence stumbled upon mid-cutover is still RCA'd immediately and never parked as "someday", but lands as its own immediate-next cutover (R2's existing non-blocking path). Previously this was covered only narrowly and implicitly — RDD's "when the bed contradicts the doc, the DOC IS STALE" (bed-discovery only) and R5's stale-reference sweep (deleted-identifier only); both are now framed as special cases of the general rule.
+
+Surfaces: `CLAUDE.md` R1/R2/R5 (the mandate); `/charly-internals:strict-policy` R1 (a new "Documentation divergence is a failure for R1 purposes" paragraph), R2 (a documentation worked-example of the existing blocking/non-blocking discriminator), R5 (identifier-keyed vs claim-keyed sweep) — the operationalization; the `root-cause-analyzer` agent ("What Qualifies as Unexpected" + a Step 7 transitive-sweep duty + "When to Invoke"); and `/charly-internals:skills` "When to Update Skills" (one general divergence row, with the two prior RDD/R5 rows reframed as special cases). The Authoritative-copy registry is unchanged (R1–R5 already → strict-policy); no new owner, no new named section.
+
+Docs/policy-only cutover (every touched file is `*.md`, zero behavioral change): no `MigrationStep`, no `version:` / `LatestSchemaVersion()` bump. Gate = the non-runtime standards (CLAUDE.md R10 "Docs / comments only"): adversarial consistency review (R1/R2/R5 in `CLAUDE.md` ↔ strict-policy ↔ the agent all say the same thing), R5 grep self-test, cross-reference validation, markdown integrity, the PreToolUse commit/push gates. Deliberately untouched (audited): no `CLAUDE.md` heading / R-number / clause rename → the mirroring-surface sweep (hooks, other agents, signpost `CLAUDE.md` files, workflows) is NOT triggered; those reference R1/R5 by name as pointers and stay valid. Landed across plugins + the superproject.
+
 ### 2026-06-12 — feat(schema)!: `kind: ai` → `kind: agent`, strict canonical fixed-width CalVer, and the human/AI voice collapsed to "you"
 
 Three intertwined cutovers landed together (schema HEAD `2026.161.2303` → `2026.163.0928`).

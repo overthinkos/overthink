@@ -4,6 +4,10 @@
 
 Most other tools hand an agent a sandbox — and then spend their effort taking things *away*: fewer commands, no network, no installs, safety bought by stripping the candy out, and most of the capability lost with it. Charly does the opposite. It treats the agent to a full candy store — a whole factory ready to produce every candy imaginable.
 
+## The core purpose
+
+Every candy, every box, every probe serves one end: **to build a better candybox — because a better candybox is how charly builds a better charly.** The whole factory exists to forge the tools, recipes, and proving grounds it needs to out-build its current self, then turn them on itself and do exactly that. It is the chocolatier who perfects their own kitchen so the next kitchen comes out finer still — a flywheel where every turn of the crank makes the next turn easier, and each candybox is the means to a better one. The ten tenets below are *how* that flywheel is built to spin safely and fearlessly; tenet 10 is the flywheel made literal — the factory nested in its own box, rebuilding itself. This is what all that candy is *for*.
+
 ## The tenets
 
 1. **Secure the room, not the candy.** Safety lives at the boundary of a candybox — rootless containers, isolated VMs, encrypted volumes — never in a shrunken toolset. A walled room you can hand over *completely* beats an empty sandbox you keep narrowing.

@@ -1,4 +1,4 @@
-version: 2026.161.2303
+version: 2026.163.0928
 # Canonical repo identity. After the 2026-06 box inversion main imports the three
 # active distro submodules (arch / cachyos / fedora) ONE-DIRECTIONALLY to reference
 # their relocated boxes; the submodules no longer import main as a namespace (they
@@ -166,7 +166,7 @@ vm:
                 - sudo
 pod: {}
 k8s: {vm-k3s-vm: {box: "", kubeconfig_context: vm-k3s-vm}}
-ai:
+agent:
     claude:
         description:
             feature: "Anthropic Claude Code CLI — autonomous coding agent."
@@ -1275,7 +1275,7 @@ score:
         description:
             feature: "AI eval — an agent operates the charly management command surface (build → deploy → status) end-to-end."
         pod: eval-sandbox
-        ai: [claude]
+        agent: [claude]
         plateau_iteration: 3
         progressive: false
         note: false
@@ -1307,7 +1307,7 @@ score:
         description:
             feature: "Default benchmark — progressive verb-coverage curriculum across the full `charly eval` surface (system state → network → cross-pod → MCP → Kubernetes → desktop → VM → nested)."
         pod: eval-sandbox # the AI-sandbox pod; harness runs iterations inside charly-<pod>
-        ai: [claude]
+        agent: [claude]
         plateau_iteration: 3
         progressive: true # curriculum-style: phase N adds recipe N
         target_image: "eval-target" # informational prompt token (${TARGET_IMAGE})
@@ -1477,7 +1477,7 @@ score:
         description:
             feature: "End-to-end self-test of the harness benchmark scaffolding chain — loader + composition + cross-namespace deps + live scoring against AI-deployed pods."
         pod: eval-sandbox
-        ai: [claude]
+        agent: [claude]
         plateau_iteration: 3
         progressive: false
         note: false

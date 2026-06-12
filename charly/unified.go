@@ -104,11 +104,11 @@ type UnifiedFile struct {
 	// substrate; the apps ride in on the deploy's candies). See android_spec.go.
 	Android map[string]*AndroidSpec `yaml:"android,omitempty"`
 
-	// AI catalog (kind:ai), harness recipes (kind:recipe = pure spec),
+	// Agent catalog (kind:agent), harness recipes (kind:recipe = pure spec),
 	// and harness scores (kind:score = runner config that references
-	// recipes). See ai_config.go, harness_recipe.go, harness_score_kind.go,
+	// recipes). See agent_config.go, harness_recipe.go, harness_score_kind.go,
 	// /charly:harness.
-	AI     map[string]*AIConfig      `yaml:"ai,omitempty"`
+	Agent  map[string]*AgentConfig   `yaml:"agent,omitempty"`
 	Recipe map[string]*HarnessRecipe `yaml:"recipe,omitempty"`
 	Score  map[string]*HarnessScore  `yaml:"score,omitempty"`
 
@@ -329,7 +329,7 @@ type kindKeyedDoc struct {
 	Local   *LocalDoc   `yaml:"local,omitempty"`
 	Android *AndroidDoc `yaml:"android,omitempty"`
 	// 2026-04 harness cutover.
-	AI     *AIDoc     `yaml:"ai,omitempty"`
+	Agent  *AgentDoc  `yaml:"agent,omitempty"`
 	Recipe *RecipeDoc `yaml:"recipe,omitempty"`
 	Score  *ScoreDoc  `yaml:"score,omitempty"`
 	// 2026-05 Calamares cutover.
@@ -340,12 +340,12 @@ type kindKeyedDoc struct {
 	Resource *ResourceDoc `yaml:"resource,omitempty"`
 }
 
-// AIDoc wraps a single AIConfig with an explicit Name — the kind:ai
-// standalone form. Bundles of `kind: ai` + `name: <name>` documents
+// AgentDoc wraps a single AgentConfig with an explicit Name — the kind:agent
+// standalone form. Bundles of `kind: agent` + `name: <name>` documents
 // can be concatenated via YAML --- separators in eval.yml.
-type AIDoc struct {
-	Name     string `yaml:"name"`
-	AIConfig `yaml:",inline"`
+type AgentDoc struct {
+	Name        string `yaml:"name"`
+	AgentConfig `yaml:",inline"`
 }
 
 // RecipeDoc wraps a single HarnessRecipe with an explicit Name —
@@ -463,7 +463,7 @@ type VmDoc struct {
 var kindKeys = []string{
 	"candy", "box", "deploy", "builder", "distro", "init",
 	"pod", "vm", "k8s", "local", "android",
-	"ai", "recipe", "score",
+	"agent", "recipe", "score",
 	"group", "target", "module",
 	"resource",
 }
@@ -530,6 +530,50 @@ func rejectLegacyDeploymentRefs(dir string) error {
 			if v := findMappingValue(root, "kind"); v != nil && v.Kind == yaml.ScalarNode && v.Value == "deployment" {
 				return fmt.Errorf(
 					"%s (doc %d): `kind: deployment` is retired (2026-05 kind-files cutover).\n  Renamed to `kind: deploy`. Run: charly migrate",
+					path, docIdx)
+			}
+		}
+	}
+	return nil
+}
+
+// rejectLegacyAgentCatalog scans every *.yml at the project root for a residual
+// agent-CLI catalog on the retired `ai:` key — the top-level `ai:` catalog map
+// or a standalone `kind: ai` doc — renamed to `agent:` / `kind: agent` by the
+// 2026-06 agent-kind-rename cutover. Defense-in-depth alongside the CalVer load
+// gate: a config carrying `ai:` would otherwise silently lose its agent catalog.
+func rejectLegacyAgentCatalog(dir string) error {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil
+	}
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".yml") {
+			continue
+		}
+		path := filepath.Join(dir, e.Name())
+		data, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		dec := yaml.NewDecoder(bytes.NewReader(data))
+		for docIdx := 0; ; docIdx++ {
+			var doc yaml.Node
+			if err := dec.Decode(&doc); err != nil {
+				break
+			}
+			if len(doc.Content) == 0 || doc.Content[0].Kind != yaml.MappingNode {
+				continue
+			}
+			root := doc.Content[0]
+			if v := findMappingValue(root, "ai"); v != nil {
+				return fmt.Errorf(
+					"%s (doc %d): top-level `ai:` catalog is retired (2026-06 agent-kind-rename).\n  Renamed to `agent:`. Run: charly migrate",
+					path, docIdx)
+			}
+			if v := findMappingValue(root, "kind"); v != nil && v.Kind == yaml.ScalarNode && v.Value == "ai" {
+				return fmt.Errorf(
+					"%s (doc %d): `kind: ai` is retired (2026-06 agent-kind-rename).\n  Renamed to `kind: agent`. Run: charly migrate",
 					path, docIdx)
 			}
 		}
@@ -660,6 +704,12 @@ func LoadUnified(dir string) (*UnifiedFile, bool, error) {
 	// were renamed to `deploy:` / `kind: deploy`. The migration command
 	// rewrites them in-place.
 	if err := rejectLegacyDeploymentRefs(dir); err != nil {
+		return nil, true, err
+	}
+	// 2026-06 agent-kind-rename: hard-reject a residual `ai:` catalog or
+	// `kind: ai` doc (renamed to `agent:` / `kind: agent`). The migration
+	// rewrites them in-place.
+	if err := rejectLegacyAgentCatalog(dir); err != nil {
 		return nil, true, err
 	}
 	// Field-singular cutover (2026-05): hard-reject any residual plural
@@ -1211,10 +1261,10 @@ var rootShapeKeys = map[string]bool{
 	"box":   true, "pod": true, "vm": true, "k8s": true, "local": true,
 	"android": true,
 	"deploy":  true,
-	// 2026-04 harness cutover: `ai:` and `recipe:` are recognized as
+	// 2026-04 harness cutover: `agent:` and `recipe:` are recognized as
 	// root-shape collection-map keys (in addition to being valid
 	// kind-keyed forms). Mirrors how box/pod/vm work.
-	"ai": true, "recipe": true, "score": true,
+	"agent": true, "recipe": true, "score": true,
 	// kind:eval disposable R10 beds — root-shape collection map
 	// (bed-name → DeploymentNode) authored in eval.yml. The nested `eval:`
 	// PROBE-LIST field never appears as a top-level document key, so this
@@ -1506,16 +1556,16 @@ func validateHarnessSemantics(u *UnifiedFile) error {
 		}
 	}
 
-	for name, ai := range u.AI {
+	for name, ai := range u.Agent {
 		if ai == nil {
 			continue
 		}
 		switch ai.OutputFormat {
-		case AIOutputFormatPlain, AIOutputFormatStreamJSON:
+		case AgentOutputFormatPlain, AgentOutputFormatStreamJSON:
 			// ok
 		default:
 			return fmt.Errorf("ai %q: output_format: %q is not a legal value (allowed: %q, %q)",
-				name, ai.OutputFormat, AIOutputFormatPlain, AIOutputFormatStreamJSON)
+				name, ai.OutputFormat, AgentOutputFormatPlain, AgentOutputFormatStreamJSON)
 		}
 	}
 
@@ -1616,7 +1666,7 @@ func mergeUnified(dst, src *UnifiedFile, srcDir string) {
 	mergeK8sMap(&dst.K8s, src.K8s)
 	mergeLocalMap(&dst.Local, src.Local)
 	mergeAndroidMap(&dst.Android, src.Android)
-	mergeAIMap(&dst.AI, src.AI)
+	mergeAgentMap(&dst.Agent, src.Agent)
 	mergeRecipeMap(&dst.Recipe, src.Recipe)
 	mergeScoreMap(&dst.Score, src.Score)
 	mergeGroupMap(&dst.Group, src.Group)
@@ -1664,14 +1714,14 @@ func mergeDistroMap(dst *map[string]*DistroDef, src map[string]*DistroDef) {
 	}
 }
 
-// mergeAIMap merges AI-catalog entries (kind:ai). Root-wins: existing dst
+// mergeAgentMap merges agent-catalog entries (kind:agent). Root-wins: existing dst
 // keys are preserved; src keys are only added if dst doesn't have them.
-func mergeAIMap(dst *map[string]*AIConfig, src map[string]*AIConfig) {
+func mergeAgentMap(dst *map[string]*AgentConfig, src map[string]*AgentConfig) {
 	if len(src) == 0 {
 		return
 	}
 	if *dst == nil {
-		*dst = make(map[string]*AIConfig)
+		*dst = make(map[string]*AgentConfig)
 	}
 	for k, v := range src {
 		if _, exists := (*dst)[k]; !exists {
@@ -2113,7 +2163,7 @@ func mergeKindDoc(merged *UnifiedFile, kd *kindKeyedDoc, srcDir string) error {
 	if kd.Android != nil {
 		count++
 	}
-	if kd.AI != nil {
+	if kd.Agent != nil {
 		count++
 	}
 	if kd.Recipe != nil {
@@ -2267,16 +2317,16 @@ func mergeKindDoc(merged *UnifiedFile, kd *kindKeyedDoc, srcDir string) error {
 			spec := kd.Android.AndroidSpec
 			merged.Android[kd.Android.Name] = &spec
 		}
-	case kd.AI != nil:
-		if kd.AI.Name == "" {
-			return fmt.Errorf("ai: missing name")
+	case kd.Agent != nil:
+		if kd.Agent.Name == "" {
+			return fmt.Errorf("agent: missing name")
 		}
-		if merged.AI == nil {
-			merged.AI = map[string]*AIConfig{}
+		if merged.Agent == nil {
+			merged.Agent = map[string]*AgentConfig{}
 		}
-		if _, exists := merged.AI[kd.AI.Name]; !exists {
-			spec := kd.AI.AIConfig
-			merged.AI[kd.AI.Name] = &spec
+		if _, exists := merged.Agent[kd.Agent.Name]; !exists {
+			spec := kd.Agent.AgentConfig
+			merged.Agent[kd.Agent.Name] = &spec
 		}
 	case kd.Recipe != nil:
 		if kd.Recipe.Name == "" {

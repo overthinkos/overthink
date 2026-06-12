@@ -34,7 +34,7 @@ box:
   beta:
     base: fedora
 `)
-	writeFixture(t, dir, "base.yml", `version: 2026.143.844
+	writeFixture(t, dir, "base.yml", `version: 2026.143.0844
 box:
   arch:
     version: 2026.144.1443
@@ -137,7 +137,7 @@ vm:
 // clobber the already-single-filename candy-only discover back to [box, candy].
 func TestMigrateSingleFilename_CandyOnlyDiscoverPreserved(t *testing.T) {
 	dir := t.TempDir()
-	writeFixture(t, dir, "charly.yml", `version: 2026.161.2303
+	writeFixture(t, dir, "charly.yml", `version: 2026.163.0928
 discover:
   - path: candy
     recursive: true

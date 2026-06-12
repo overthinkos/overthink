@@ -62,7 +62,7 @@ type HarnessOpts struct {
 
 	TargetKind string // "pod" | "vm" | "host"
 	TargetName string // pod or vm name (empty when host)
-	AIName     string
+	AgentName  string
 
 	// Phase / PhaseTotal carry progressive-scoping context. When the
 	// score is non-progressive both are 0 and ${PHASE_*} tokens
@@ -71,7 +71,7 @@ type HarnessOpts struct {
 	// PhaseTotal == len(score.Recipe).
 	Phase            int
 	PhaseTotal       int
-	AI               *AIConfig
+	Agent            *AgentConfig
 	Prompt           string // template; per-iter substitution at render time
 	TargetImage      string
 	Tag              string
@@ -196,8 +196,8 @@ type FinalReport struct {
 	Recipe              []string          `yaml:"recipe,omitempty"`
 	Calver              string            `yaml:"calver"`
 	RunID               string            `yaml:"run_id"`
-	AI                  string            `yaml:"ai"`
-	AIVersion           map[string]string `yaml:"ai_version,omitempty"`
+	Agent               string            `yaml:"agent"`
+	AgentVersion        map[string]string `yaml:"agent_version,omitempty"`
 	Where               ReportWhere       `yaml:"where"`
 	TargetImage         string            `yaml:"target_image,omitempty"`
 	Tag                 string            `yaml:"tag,omitempty"`
@@ -316,7 +316,7 @@ var runRunnerFn = func(ctx context.Context, layout RunLayout, argv []string, env
 	cmd.Dir = layout.RepoDir
 	cmd.Env = mergeOsEnv(env)
 
-	if stream != nil && stream.OutputFormat == AIOutputFormatStreamJSON {
+	if stream != nil && stream.OutputFormat == AgentOutputFormatStreamJSON {
 		sink, err := newStreamJSONSink(stream.NdjsonPath, stream.OnEvent)
 		if err != nil {
 			return 0, fmt.Errorf("harness: open ndjson sink: %w", err)
@@ -390,7 +390,7 @@ func RunHarness(ctx context.Context, opts HarnessOpts, layout RunLayout) (*Final
 		Recipe:              append([]string(nil), opts.Recipe...),
 		Calver:              ComputeCalVer(),
 		RunID:               layout.RunID,
-		AI:                  opts.AIName,
+		Agent:               opts.AgentName,
 		Where:               ReportWhere{Kind: opts.TargetKind, Name: opts.TargetName},
 		TargetImage:         opts.TargetImage,
 		Tag:                 opts.Tag,
@@ -636,7 +636,7 @@ func runOneIteration(
 	substCtx := &SubstContext{
 		RunID:            layout.RunID,
 		ScoreName:        opts.ScoreName,
-		AIName:           opts.AIName,
+		AgentName:        opts.AgentName,
 		WorkspacePath:    layout.RepoDir,
 		TargetImage:      opts.TargetImage,
 		TargetKind:       opts.TargetKind,
@@ -657,13 +657,13 @@ func runOneIteration(
 		PhaseIntro:       phaseIntro,
 		Deploy:           deploymentName,
 		Tag:              opts.Tag,
-		Timeout:          opts.AI.Timeout,
+		Timeout:          opts.Agent.Timeout,
 	}
 	if opts.Score != nil {
 		substCtx.AppendEnv(opts.Score.Env)
 	}
-	if opts.AI != nil {
-		substCtx.AppendEnv(opts.AI.Env)
+	if opts.Agent != nil {
+		substCtx.AppendEnv(opts.Agent.Env)
 	}
 	promptText := Substitute(opts.Prompt, substCtx)
 	if err := writePrompt(layout, k, promptText); err != nil {
@@ -685,7 +685,7 @@ func runOneIteration(
 	// user interrupts. The plateau counter is the loop bound, not wall
 	// clock. The score's prompt promises "Take all the time you need" —
 	// honoring that promise is the harness's job.
-	timeout, _ := ParseAITimeout(opts.AI.Timeout)
+	timeout, _ := ParseAgentTimeout(opts.Agent.Timeout)
 	var runnerCtx context.Context
 	var cancelRunner context.CancelFunc
 	if timeout > 0 {
@@ -710,11 +710,11 @@ func runOneIteration(
 	watchdogStarted := false
 	var watchdogDone chan struct{}
 	if len(opts.ScoringScenarios) > 0 {
-		checkInterval, _ := ParseAITimeout(opts.AI.ProgressCheckInterval)
+		checkInterval, _ := ParseAgentTimeout(opts.Agent.ProgressCheckInterval)
 		if checkInterval == 0 {
 			checkInterval = DefaultProgressCheckInterval
 		}
-		noImpTimeout, _ := ParseAITimeout(opts.AI.ProgressNoImprovementTimeout)
+		noImpTimeout, _ := ParseAgentTimeout(opts.Agent.ProgressNoImprovementTimeout)
 		if noImpTimeout == 0 {
 			noImpTimeout = DefaultProgressNoImprovementTimeout
 		}
@@ -835,11 +835,11 @@ func runOneIteration(
 	// RunnerEvents and stderr is split into a sibling file. For all
 	// other AIs, stream is nil → legacy merged-stream path.
 	var streamCfg *RunnerStreamConfig
-	if opts.AI != nil && opts.AI.OutputFormat == AIOutputFormatStreamJSON {
+	if opts.Agent != nil && opts.Agent.OutputFormat == AgentOutputFormatStreamJSON {
 		ndjsonPath := filepath.Join(iterDir, "runner.ndjson")
 		stderrPath := filepath.Join(iterDir, "runner.stderr.log")
 		streamCfg = &RunnerStreamConfig{
-			OutputFormat: AIOutputFormatStreamJSON,
+			OutputFormat: AgentOutputFormatStreamJSON,
 			NdjsonPath:   ndjsonPath,
 			StderrPath:   stderrPath,
 			OnEvent: func(ev RunnerEvent) {
@@ -1261,7 +1261,7 @@ type HarnessScope struct {
 	RunID            string              `yaml:"run_id"`
 	Score            string              `yaml:"score,omitempty"`
 	Recipe           []string            `yaml:"recipe,omitempty"`
-	AI               string              `yaml:"ai,omitempty"`
+	Agent            string              `yaml:"agent,omitempty"`
 	Iteration        int                 `yaml:"iteration"`
 	PlateauIteration int                 `yaml:"plateau_iteration"`
 	PlateauCounter   int                 `yaml:"plateau_counter"`
@@ -1317,7 +1317,7 @@ func renderScope(opts HarnessOpts, layout RunLayout, k int, reportSoFar *FinalRe
 		RunID:            layout.RunID,
 		Score:            opts.ScoreName,
 		Recipe:           append([]string(nil), opts.Recipe...),
-		AI:               opts.AIName,
+		Agent:            opts.AgentName,
 		Iteration:        k,
 		PlateauIteration: opts.PlateauIteration,
 		PlateauCounter:   plateauCounter,
@@ -1418,7 +1418,7 @@ func printHarnessReport(w *os.File, r *FinalReport, format string) {
 		return
 	}
 	fmt.Fprintf(w, "harness: score=%s ai=%s exit=%s iterations=%d best=%d/%d\n",
-		r.Score, r.AI, r.ExitReason, r.IterationsRun, r.BestScore, r.Summary.Input)
+		r.Score, r.Agent, r.ExitReason, r.IterationsRun, r.BestScore, r.Summary.Input)
 	fmt.Fprintf(w, "  result: .eval/%s/results/result-%s.yml\n", r.Score, r.Calver)
 	fmt.Fprintf(w, "  branch: %s\n", r.CharlyharnessBranch)
 }
@@ -1429,24 +1429,24 @@ func printHarnessReport(w *os.File, r *FinalReport, format string) {
 
 // renderRunnerInvocation prepares the argv + env the dispatcher executes.
 func renderRunnerInvocation(opts HarnessOpts, substCtx *SubstContext, promptText, iterDir string) ([]string, map[string]string) {
-	if opts.AI.PromptVia == "file" {
+	if opts.Agent.PromptVia == "file" {
 		path := filepath.Join(iterDir, "prompt-arg.md")
 		_ = os.WriteFile(path, []byte(promptText), 0o644)
 		substCtx.PromptFile = path
 	}
-	if opts.AI.PromptVia == "argv" || opts.AI.PromptVia == "" {
+	if opts.Agent.PromptVia == "argv" || opts.Agent.PromptVia == "" {
 		substCtx.Prompt = promptText
 	}
 
-	argv := SubstituteArgv(opts.AI.Command, substCtx)
-	env := SubstituteEnv(opts.AI.Env, substCtx)
+	argv := SubstituteArgv(opts.Agent.Command, substCtx)
+	env := SubstituteEnv(opts.Agent.Env, substCtx)
 	if env == nil {
 		env = make(map[string]string)
 	}
 	env["CHARLY_EVAL_RUN_ID"] = substCtx.RunID
 	env["CHARLY_EVAL_ITERATION"] = fmt.Sprintf("%d", substCtx.Iteration)
 	env["CHARLY_EVAL_SCORE"] = substCtx.ScoreName
-	env["CHARLY_EVAL_AI"] = substCtx.AIName
+	env["CHARLY_EVAL_AGENT"] = substCtx.AgentName
 	env["CHARLY_EVAL_TARGET_KIND"] = substCtx.TargetKind
 	env["CHARLY_EVAL_TARGET_NAME"] = substCtx.TargetName
 	// CHARLY_EVAL_PHASE is the 1-indexed phase number (0 when the score

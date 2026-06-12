@@ -27,10 +27,10 @@ func TestPruneImagesByRetention(t *testing.T) {
 
 	ListLocalImages = func(string) ([]LocalImageInfo, error) {
 		return []LocalImageInfo{
-			img("aaa", "ghcr/foo:2026.1.100", "foo", "2026.1.100"), // oldest foo
-			img("bbb", "ghcr/foo:2026.1.200", "foo", "2026.1.200"), // middle foo (mark in-use)
-			img("ccc", "ghcr/foo:2026.1.300", "foo", "2026.1.300"), // newest foo (kept)
-			img("ddd", "ghcr/bar:2026.1.100", "bar", "2026.1.100"), // sole bar (kept)
+			img("aaa", "ghcr/foo:2026.001.0100", "foo", "2026.001.0100"), // oldest foo
+			img("bbb", "ghcr/foo:2026.001.0200", "foo", "2026.001.0200"), // middle foo (mark in-use)
+			img("ccc", "ghcr/foo:2026.001.0300", "foo", "2026.001.0300"), // newest foo (kept)
+			img("ddd", "ghcr/bar:2026.001.0100", "bar", "2026.001.0100"), // sole bar (kept)
 			{ID: "eee", Names: []string{"docker.io/other:latest"}}, // no charly label → ignored
 		}, nil
 	}
@@ -45,7 +45,7 @@ func TestPruneImagesByRetention(t *testing.T) {
 	}
 	sort.Strings(removed)
 	// foo: keep newest (ccc); bbb in-use skipped; aaa removed. bar: only one, kept.
-	want := []string{"ghcr/foo:2026.1.100"}
+	want := []string{"ghcr/foo:2026.001.0100"}
 	if len(removed) != len(want) || removed[0] != want[0] {
 		t.Errorf("removed = %v, want %v", removed, want)
 	}
@@ -61,11 +61,11 @@ func TestPruneImagesByRetention_SharedID(t *testing.T) {
 	defer func() { ListLocalImages, listContainerImageRefs = origList, origCtr }()
 
 	allTags := []string{
-		"ghcr/eval-pod:2026.150.827",
-		"ghcr/eval-pod:2026.150.830",
-		"ghcr/eval-pod:2026.150.835",
-		"ghcr/eval-pod:2026.150.836",
-		"ghcr/eval-pod:2026.150.916", // newest / just-built
+		"ghcr/eval-pod:2026.150.0827",
+		"ghcr/eval-pod:2026.150.0830",
+		"ghcr/eval-pod:2026.150.0835",
+		"ghcr/eval-pod:2026.150.0836",
+		"ghcr/eval-pod:2026.150.0916", // newest / just-built
 	}
 	rowPerTag := make([]LocalImageInfo, len(allTags))
 	for i := range allTags {
@@ -89,13 +89,13 @@ func TestPruneImagesByRetention_SharedID(t *testing.T) {
 	}
 	sort.Strings(removed)
 	// keepN=3 keeps the newest 3 tags (.835/.836/.916); only the 2 oldest go.
-	want := []string{"ghcr/eval-pod:2026.150.827", "ghcr/eval-pod:2026.150.830"}
+	want := []string{"ghcr/eval-pod:2026.150.0827", "ghcr/eval-pod:2026.150.0830"}
 	if len(removed) != len(want) || removed[0] != want[0] || removed[1] != want[1] {
 		t.Fatalf("removed = %v, want %v", removed, want)
 	}
 	// The just-built newest tag must NEVER be removed — this is the bug.
 	for _, r := range removed {
-		if r == "ghcr/eval-pod:2026.150.916" {
+		if r == "ghcr/eval-pod:2026.150.0916" {
 			t.Fatalf("BUG: removed the newest/just-built tag %q", r)
 		}
 	}
@@ -121,15 +121,15 @@ func TestPruneImagesByRetention_Disabled(t *testing.T) {
 func TestPruneEvalRuns(t *testing.T) {
 	root := t.TempDir()
 	bed := filepath.Join(root, "sample-bed")
-	// 3 CalVer run dirs (newest = 2026.143.300) + NOTES.md.
-	for _, cv := range []string{"2026.143.100", "2026.143.200", "2026.143.300"} {
+	// 3 CalVer run dirs (newest = 2026.143.0300) + NOTES.md.
+	for _, cv := range []string{"2026.143.0100", "2026.143.0200", "2026.143.0300"} {
 		mustMkdir(t, filepath.Join(bed, cv))
 	}
 	mustWrite(t, filepath.Join(bed, "NOTES.md"), "memory")
 	// A score dir with result files + runs/<id>.
 	score := filepath.Join(root, "default")
 	mustMkdir(t, score)
-	for _, r := range []string{"result-2026.143.100.yml", "result-2026.143.200.yml", "result-2026.143.300.yml"} {
+	for _, r := range []string{"result-2026.143.0100.yml", "result-2026.143.0200.yml", "result-2026.143.0300.yml"} {
 		mustWrite(t, filepath.Join(score, r), "x")
 	}
 	mustWrite(t, filepath.Join(score, "NOTES.md"), "memory")
@@ -142,18 +142,18 @@ func TestPruneEvalRuns(t *testing.T) {
 		t.Errorf("removed %d, want 4: %v", len(removed), removed)
 	}
 	// Newest kept, oldest gone, NOTES.md preserved.
-	assertExists(t, filepath.Join(bed, "2026.143.300"))
-	assertGone(t, filepath.Join(bed, "2026.143.100"))
+	assertExists(t, filepath.Join(bed, "2026.143.0300"))
+	assertGone(t, filepath.Join(bed, "2026.143.0100"))
 	assertExists(t, filepath.Join(bed, "NOTES.md"))
-	assertExists(t, filepath.Join(score, "result-2026.143.300.yml"))
-	assertGone(t, filepath.Join(score, "result-2026.143.100.yml"))
+	assertExists(t, filepath.Join(score, "result-2026.143.0300.yml"))
+	assertGone(t, filepath.Join(score, "result-2026.143.0100.yml"))
 	assertExists(t, filepath.Join(score, "NOTES.md"))
 }
 
 func TestPruneEvalRuns_DryRunAndDisabled(t *testing.T) {
 	root := t.TempDir()
 	bed := filepath.Join(root, "bed")
-	for _, cv := range []string{"2026.143.100", "2026.143.200"} {
+	for _, cv := range []string{"2026.143.0100", "2026.143.0200"} {
 		mustMkdir(t, filepath.Join(bed, cv))
 	}
 	// dry-run lists but deletes nothing.
@@ -161,7 +161,7 @@ func TestPruneEvalRuns_DryRunAndDisabled(t *testing.T) {
 	if err != nil || len(removed) != 1 {
 		t.Fatalf("dry-run removed=%v err=%v, want 1 listed", removed, err)
 	}
-	assertExists(t, filepath.Join(bed, "2026.143.100")) // still there
+	assertExists(t, filepath.Join(bed, "2026.143.0100")) // still there
 
 	// keep=0 disables.
 	r2, _ := pruneEvalRuns(root, 0, false)
@@ -175,7 +175,7 @@ func TestCleanMakepkgArtifacts(t *testing.T) {
 	arch := filepath.Join(root, "pkg", "arch")
 	mustMkdir(t, filepath.Join(arch, "src"))
 	mustMkdir(t, filepath.Join(arch, "pkg"))
-	mustWrite(t, filepath.Join(arch, "opencharly-git-2026.1.1-1-x86_64.pkg.tar.zst"), "z")
+	mustWrite(t, filepath.Join(arch, "opencharly-git-2026.001.0001-1-x86_64.pkg.tar.zst"), "z")
 	mustWrite(t, filepath.Join(arch, "build.log"), "l")
 	mustWrite(t, filepath.Join(arch, "PKGBUILD"), "keep") // must survive
 
@@ -184,7 +184,7 @@ func TestCleanMakepkgArtifacts(t *testing.T) {
 		t.Errorf("removed %d, want 4 (src, pkg, .zst, .log): %v", len(removed), removed)
 	}
 	assertGone(t, filepath.Join(arch, "src"))
-	assertGone(t, filepath.Join(arch, "opencharly-git-2026.1.1-1-x86_64.pkg.tar.zst"))
+	assertGone(t, filepath.Join(arch, "opencharly-git-2026.001.0001-1-x86_64.pkg.tar.zst"))
 	assertExists(t, filepath.Join(arch, "PKGBUILD"))
 }
 

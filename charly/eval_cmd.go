@@ -63,7 +63,7 @@ func (e *EvalFailedError) Error() string {
 // self-evaluate) are the renamed `charly eval *` surface.
 type EvalCmd struct {
 	// Three primary modes
-	Box   EvalBoxCmd     `cmd:"" name:"box" help:"Pure-box eval (disposable container, build-scope checks)"`
+	Box     EvalBoxCmd     `cmd:"" name:"box" help:"Pure-box eval (disposable container, build-scope checks)"`
 	Live    EvalLiveCmd    `cmd:"" help:"Full-stack eval against a running deployment"`
 	Run     EvalRunCmd     `cmd:"" help:"Run a kind:eval R10 bed (full sequence) or drive an AI through a kind:score's iteration cycles"`
 	Recipe  EvalRecipeCmd  `cmd:"" help:"Run a recipe's scenarios once (deterministic; no AI iteration)"`
@@ -83,7 +83,7 @@ type EvalCmd struct {
 	Appium  AppiumCmd  `cmd:"" help:"Appium WebDriver — status, session-create/delete, install-app, find, click, send-keys, screenshot"`
 
 	// Eval-run management (was `charly eval *`)
-	ListAI     EvalListAICmd     `cmd:"" name:"list-ai" help:"List configured AIs from eval.yml"`
+	ListAgent  EvalListAgentCmd  `cmd:"" name:"list-agent" help:"List configured agents from eval.yml"`
 	ListRecipe EvalListRecipeCmd `cmd:"" name:"list-recipe" help:"List configured recipes (spec) from eval.yml"`
 	ListScore  EvalListScoreCmd  `cmd:"" name:"list-score" help:"List configured scores (runner config) from eval.yml"`
 	RunLocal   EvalRunLocalCmd   `cmd:"" name:"run-local" hidden:"" help:"Pod/VM-side iteration driver (not invoked directly)"`

@@ -69,10 +69,10 @@ func BuildDeployPlan(layer *Candy, img *ResolvedBox, hostCtx HostContext) (*Inst
 	}
 
 	plan := &InstallPlan{
-		Box:            img.Name,
-		Version:        layer.Version,
-		Distro:         primaryDistroTag(img, hostCtx),
-		Candy:          layer.Name,
+		Box:             img.Name,
+		Version:         layer.Version,
+		Distro:          primaryDistroTag(img, hostCtx),
+		Candy:           layer.Name,
 		CandiesIncluded: []string{layer.Name},
 	}
 
@@ -222,7 +222,7 @@ func compileLocalPkgStep(layer *Candy, img *ResolvedBox, hostCtx HostContext) In
 // preserving per-candy provenance for the ledger.
 func MergePlan(plans []*InstallPlan, image string, addCandies []string) *InstallPlan {
 	out := &InstallPlan{
-		Box:       image,
+		Box:        image,
 		AddCandies: append([]string(nil), addCandies...),
 	}
 	if len(plans) == 0 {

@@ -44,17 +44,17 @@ func (c *EvalSyncCredCmd) RunActual() error {
 	}
 
 	var aiNames []string
-	if c.AI != "" {
-		aiNames = []string{c.AI}
+	if c.Agent != "" {
+		aiNames = []string{c.Agent}
 	} else {
-		aiNames = score.AI
+		aiNames = score.Agent
 	}
 	if len(aiNames) == 0 {
-		return fmt.Errorf("harness sync-credential: score %q has no AIs configured", c.Score)
+		return fmt.Errorf("harness sync-credential: score %q has no agents configured", c.Score)
 	}
 
 	for _, aiName := range aiNames {
-		ai, _, err := ResolveAI(uf.AI, aiName)
+		ai, _, err := ResolveAgent(uf.Agent, aiName)
 		if err != nil {
 			return err
 		}

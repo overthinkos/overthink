@@ -53,7 +53,7 @@ Consult this table BEFORE the first tool call of every task; when several rows m
 | `charly eval adb <method>` / Android Debug Bridge from host (devices, shell, install, getprop, screencap, logcat, wait-for-device) | `/charly-eval:adb` + `/charly-eval:eval` |
 | `charly eval appium <method>` / Android UI automation / W3C WebDriver sessions, element introspection, the gesture/app/key/device sugar groups, the generic `execute`/`raw` escape hatch | `/charly-eval:appium` + `/charly-eval:eval` |
 | Verify a cutover by running the R10 beds (drive `charly eval run <bed>`) | `/charly-internals:agents` + `/charly-eval:eval` (agent `eval-bed-runner`, workflow `/verify-beds`) |
-| Evaluate/audit a deployment config (image or deploy, yours or a human's) | `/charly-internals:agents` + `/charly-eval:eval` (agent `deploy-verifier`, workflow `/audit-deploy-configs`) |
+| Evaluate/audit a deployment config (image or deploy, yours) | `/charly-internals:agents` + `/charly-eval:eval` (agent `deploy-verifier`, workflow `/audit-deploy-configs`) |
 | **— Git & landing —** | |
 | Git/`gh` workflow — `feat/` branch, commit, push, ff-merge to main, tag, worktree, sync-to-upstream, branch/worktree prune, PR create, `gh` approve/merge, cross-repo R10 landing | `/charly-internals:git-workflow` |
 | **— Discipline & process —** | |

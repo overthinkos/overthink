@@ -60,18 +60,18 @@ func reportScenarios(w io.Writer, results []ScenarioResult, format string) int {
 	return scenarioFailCount(results)
 }
 
-// resolveGraderAI loads the project's `ai:` catalog and resolves the named
+// resolveGraderAgent loads the project's `agent:` catalog and resolves the named
 // AI (or the sole entry when name is empty). Errors clearly when no AI is
 // configured so the operator knows to add one or pass --no-agent.
-func resolveGraderAI(dir, name string) (*AIConfig, error) {
+func resolveGraderAgent(dir, name string) (*AgentConfig, error) {
 	uf, ok, err := LoadUnified(dir)
 	if err != nil {
 		return nil, fmt.Errorf("loading project for the ai: catalog: %w", err)
 	}
-	if !ok || uf == nil || len(uf.AI) == 0 {
-		return nil, fmt.Errorf("agent grader needs a kind:ai entry (an `ai:` map in eval.yml); add one or pass --no-agent for deterministic-only")
+	if !ok || uf == nil || len(uf.Agent) == 0 {
+		return nil, fmt.Errorf("agent grader needs a kind:agent entry (an `agent:` map in eval.yml); add one or pass --no-agent for deterministic-only")
 	}
-	ai, _, err := ResolveAI(uf.AI, name)
+	ai, _, err := ResolveAgent(uf.Agent, name)
 	if err != nil {
 		return nil, err
 	}
@@ -162,7 +162,7 @@ type EvalFeatureRunCmd struct {
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 	Format   string `long:"format" default:"text" help:"Output format: text, json, tap, junit"`
 	Tag      string `long:"tag" help:"Only run scenarios matching this tag expression"`
-	AI       string `long:"ai" help:"kind:ai entry to use as the prose-step grader (default: the sole configured ai)"`
+	Agent    string `long:"agent" help:"kind:agent entry to use as the prose-step grader (default: the sole configured agent)"`
 	Timeout  string `long:"timeout" help:"Per-grader-call wall-clock cap (Go duration; default 5m or the ai entry's timeout)"`
 	NoAgent  bool   `long:"no-agent" help:"Deterministic-only: do not agent-grade prose-only steps (they report as unbound/skip)"`
 	Strict   bool   `long:"strict" help:"Treat unbound steps as failures (only meaningful with --no-agent)"`
@@ -221,11 +221,11 @@ func (c *EvalFeatureRunCmd) Run() error {
 
 	// Wire the agent grader for prose-only steps unless deterministic-only.
 	if !c.NoAgent {
-		ai, aerr := resolveGraderAI(dir, c.AI)
+		ai, aerr := resolveGraderAgent(dir, c.Agent)
 		if aerr != nil {
 			return aerr
 		}
-		runner.Grader = &AgentGrader{AI: ai, Target: c.Box, Instance: c.Instance, Timeout: c.Timeout}
+		runner.Grader = &AgentGrader{Agent: ai, Target: c.Box, Instance: c.Instance, Timeout: c.Timeout}
 	}
 
 	results := RunScenarios(context.Background(), runner, meta.Description, filter, c.Strict)

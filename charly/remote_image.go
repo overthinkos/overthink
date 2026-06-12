@@ -13,7 +13,7 @@ type RemoteImageContext struct {
 	CacheDir string
 	Config   *Config
 	Resolved *ResolvedBox
-	Candies   map[string]*Candy
+	Candies  map[string]*Candy
 	ImageRef string // registry/name:tag for pull
 	BoxName  string // short name (e.g. "openclaw-browser")
 }
@@ -70,7 +70,7 @@ func ResolveRemoteImage(ref string, tag string) (*RemoteImageContext, error) {
 		CacheDir: cachePath,
 		Config:   cfg,
 		Resolved: resolved,
-		Candies:   layers,
+		Candies:  layers,
 		ImageRef: imageRef,
 		BoxName:  parsed.Name,
 	}, nil

@@ -35,9 +35,9 @@ func TestCalverScriptDeterministic(t *testing.T) {
 	dir := t.TempDir()
 	// A FIXED commit timestamp → a deterministic expected CalVer, independent of
 	// when the test runs. 2026-01-02 03:04:05 UTC → year 2026, day-of-year 2,
-	// HHMM 3*100+4 = 304 → "2026.2.304" (no leading zeros, matching charly_calver).
+	// HHMM 3*100+4 = 304 → "2026.002.0304" (HHMM 4-digit zero-padded, matching charly_calver).
 	const fixedDate = "2026-01-02T03:04:05 +0000"
-	const want = "2026.2.304"
+	const want = "2026.002.0304"
 
 	runGit := func(env []string, args ...string) {
 		t.Helper()

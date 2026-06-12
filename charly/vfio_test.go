@@ -221,7 +221,7 @@ func TestBuildDeployPlanEmitsReboot(t *testing.T) {
 	img := &ResolvedBox{Name: "test-img", Distro: []string{"arch"}}
 
 	// reboot:false → no RebootStep.
-	noReboot, err := BuildDeployPlan(&Candy{Name: "x", Version: "2026.1.1"}, img, HostContext{})
+	noReboot, err := BuildDeployPlan(&Candy{Name: "x", Version: "2026.001.0001"}, img, HostContext{})
 	if err != nil {
 		t.Fatalf("BuildDeployPlan(no reboot): %v", err)
 	}
@@ -232,7 +232,7 @@ func TestBuildDeployPlanEmitsReboot(t *testing.T) {
 	}
 
 	// reboot:true → trailing RebootStep.
-	withReboot, err := BuildDeployPlan(&Candy{Name: "nvidia-driver", Version: "2026.1.1", reboot: true}, img, HostContext{})
+	withReboot, err := BuildDeployPlan(&Candy{Name: "nvidia-driver", Version: "2026.001.0001", reboot: true}, img, HostContext{})
 	if err != nil {
 		t.Fatalf("BuildDeployPlan(reboot): %v", err)
 	}

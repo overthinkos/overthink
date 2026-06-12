@@ -41,8 +41,8 @@ func (c *NewProjectCmd) Run() error {
 // `charly box new box <name>`
 
 type NewBoxCmd struct {
-	Name   string   `arg:"" help:"Name for the new box entry"`
-	Base   string   `long:"base" required:"" help:"Base image (URL like quay.io/... or another box name)"`
+	Name    string   `arg:"" help:"Name for the new box entry"`
+	Base    string   `long:"base" required:"" help:"Base image (URL like quay.io/... or another box name)"`
 	Candies []string `long:"candy" sep:"," help:"Comma-separated list of candy names to include"`
 }
 

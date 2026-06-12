@@ -10,16 +10,16 @@ import "testing"
 // dropped all backward compat).
 func TestComputeEffectiveVersions(t *testing.T) {
 	layers := map[string]*Candy{
-		"a": {Name: "a", Version: "2026.100.0"},
-		"b": {Name: "b", Version: "2026.200.0"}, // newest candy
+		"a": {Name: "a", Version: "2026.100.0000"},
+		"b": {Name: "b", Version: "2026.200.0000"}, // newest candy
 	}
 	images := map[string]*ResolvedBox{
 		// dedicated version wins over the (newer) candy versions.
-		"dedicated": {Name: "dedicated", Version: "2026.50.0", Candy: []string{"a", "b"}, IsExternalBase: true, Base: "quay.io/x:1"},
-		// no dedicated version -> highest candy version (b = 2026.200.0).
+		"dedicated": {Name: "dedicated", Version: "2026.050.0000", Candy: []string{"a", "b"}, IsExternalBase: true, Base: "quay.io/x:1"},
+		// no dedicated version -> highest candy version (b = 2026.200.0000).
 		"derived": {Name: "derived", Candy: []string{"a", "b"}, IsExternalBase: true, Base: "quay.io/x:1"},
 		// bare base: candyless + external + dedicated version (what `charly migrate` backfills).
-		"barebase": {Name: "barebase", Version: "2026.300.0", IsExternalBase: true, Base: "quay.io/x:1"},
+		"barebase": {Name: "barebase", Version: "2026.300.0000", IsExternalBase: true, Base: "quay.io/x:1"},
 		// candyless on an INTERNAL base -> recurse to the base's effective version.
 		"passthrough": {Name: "passthrough", Base: "barebase"},
 	}
@@ -29,10 +29,10 @@ func TestComputeEffectiveVersions(t *testing.T) {
 	}
 
 	cases := map[string]string{
-		"dedicated":   "2026.50.0",  // dedicated wins
-		"derived":     "2026.200.0", // highest candy version
-		"barebase":    "2026.300.0", // dedicated bare-base version
-		"passthrough": "2026.300.0", // recursed to barebase
+		"dedicated":   "2026.050.0000",  // dedicated wins
+		"derived":     "2026.200.0000", // highest candy version
+		"barebase":    "2026.300.0000", // dedicated bare-base version
+		"passthrough": "2026.300.0000", // recursed to barebase
 	}
 	for name, want := range cases {
 		if got := images[name].EffectiveVersion; got != want {
@@ -41,20 +41,20 @@ func TestComputeEffectiveVersions(t *testing.T) {
 	}
 
 	// A candy bump propagates to a deriving image's identity.
-	layers["b"].Version = "2026.400.0"
+	layers["b"].Version = "2026.400.0000"
 	g2 := &Generator{Boxes: map[string]*ResolvedBox{
 		"derived": {Name: "derived", Candy: []string{"a", "b"}, IsExternalBase: true, Base: "quay.io/x:1"},
 	}, Candies: layers}
 	if err := g2.computeEffectiveVersions(); err != nil {
 		t.Fatal(err)
 	}
-	if got := g2.Boxes["derived"].EffectiveVersion; got != "2026.400.0" {
-		t.Errorf("after candy bump: EffectiveVersion = %q, want 2026.400.0", got)
+	if got := g2.Boxes["derived"].EffectiveVersion; got != "2026.400.0000" {
+		t.Errorf("after candy bump: EffectiveVersion = %q, want 2026.400.0000", got)
 	}
 
 	// Hard error: candyless external-base image with no version (no fallback).
 	gErr := &Generator{
-		Boxes:  map[string]*ResolvedBox{"orphan": {Name: "orphan", IsExternalBase: true, Base: "quay.io/x:1"}},
+		Boxes:   map[string]*ResolvedBox{"orphan": {Name: "orphan", IsExternalBase: true, Base: "quay.io/x:1"}},
 		Candies: map[string]*Candy{},
 	}
 	if err := gErr.computeEffectiveVersions(); err == nil {

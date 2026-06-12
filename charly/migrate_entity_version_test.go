@@ -27,7 +27,7 @@ func TestMigrateEntityVersion(t *testing.T) {
 
 	// base.yml: a root schema stamp + a bare base (external) + a layered image +
 	// an internal-base image. Only `arch` (bare external base) should be backfilled.
-	baseYML := "version: 2026.143.844\n" +
+	baseYML := "version: 2026.143.0844\n" +
 		"image:\n" +
 		"    arch:\n" +
 		"        base: quay.io/archlinux/archlinux:latest\n" +
@@ -61,7 +61,7 @@ func TestMigrateEntityVersion(t *testing.T) {
 	gotBase, _ := os.ReadFile(filepath.Join(dir, "base.yml"))
 	gb := string(gotBase)
 	// Root schema stamp untouched.
-	if !strings.HasPrefix(gb, "version: 2026.143.844\n") {
+	if !strings.HasPrefix(gb, "version: 2026.143.0844\n") {
 		t.Errorf("root schema stamp was modified:\n%s", gb)
 	}
 	// arch (bare external base) backfilled exactly once.

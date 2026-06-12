@@ -28,7 +28,7 @@ func TestGenerateBuildPath_FoldsTopPackagesAndCascade(t *testing.T) {
 	g := &Generator{
 		BuildDir: tmpDir,
 		Config:   &Config{},
-		Candies:   map[string]*Candy{"pkglayer": layer},
+		Candies:  map[string]*Candy{"pkglayer": layer},
 		Boxes: map[string]*ResolvedBox{
 			"deb-image": {
 				Name:           "deb-image",

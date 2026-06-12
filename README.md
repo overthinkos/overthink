@@ -113,7 +113,7 @@ a mistake costs one rebuild.
 Prove the riskiest unknown — above all whether a particular *combination*
 of candies, at their latest versions, actually builds and runs together —
 empirically on a disposable `kind: eval` bed EARLY, before a design rests
-on it. `charly eval` makes that proof cheap, for agents and humans alike.
+on it. `charly eval` makes that proof cheap, for you and your agents alike.
 → [VISION.md](VISION.md) (why), CLAUDE.md "Risk Driven Development (RDD)"
 (the rule), `/charly-eval:eval` (usage).
 
@@ -175,7 +175,7 @@ discriminator in its file:
 - **Eval** (`kind: eval`) — a *disposable* deploy used as an R10 test
   bed: `charly eval run <bed>` runs build → deploy → probe →
   fresh-update → tear-down. The `kind: recipe` / `kind: score` /
-  `kind: ai` overlays drive the agent-iteration harness on top.
+  `kind: agent` overlays drive the agent-iteration harness on top.
   → `/charly-eval:eval`.
 
 ### Cross-cutting rules
@@ -233,9 +233,9 @@ OpenCharly treats boxes as composable building blocks (see
 your agents) don't have to.
 
 **Testing and evaluating deployment configs is a first-class goal —
-for agents and humans.** A deploy config is only useful if you can prove
+for you and your agents.** A deploy config is only useful if you can prove
 it works, so any box or deployment is self-verifiable end-to-end — the
-same surface whether a human drives it at the keyboard or an agent drives
+same surface whether you drive it at the keyboard or your agents drive
 it autonomously. See [Evaluate](#evaluate) for the framework and
 [Works with Claude Code](#works-with-claude-code) for the agents and
 workflows. → `/charly-eval:eval`, `/charly-internals:agents`.
@@ -586,7 +586,7 @@ Gherkin-shaped descriptions on the same entries.
 The agent iteration harness sits on top of `kind: eval` and
 adds three overlay kinds:
 
-- **`kind: ai`** — reusable agent CLI catalog (`claude`,
+- **`kind: agent`** — reusable agent CLI catalog (`claude`,
   `codex`, `gemini`, …). Each entry declares a command, a version
   probe, an output format (typically `stream-json`), and credential
   paths. The harness parses each NDJSON line into

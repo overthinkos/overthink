@@ -12,10 +12,10 @@ Most other tools hand an agent a sandbox — and then spend their effort taking 
 2. **One recipe, many boxes.** A single declarative recipe — candies stacked into a box — pours into every mold: an interactive shell, a managed pod, a host workstation, a k8s cluster, a bootable VM, an Android device. Write the recipe once; let `charly` set it in whatever shape the moment needs.
    → README "Build → run → deploy → evaluate".
 
-3. **Every candy ships with its recipe card.** Every candy, box, and verb carries a dedicated skill, so nothing in the candy store is a mystery — neither human nor agent ever has to guess what a piece does, how it's made, or how it should taste.
+3. **Every candy ships with its recipe card.** Every candy, box, and verb carries a dedicated skill, so nothing in the candy store is a mystery — neither you nor your agents ever have to guess what a piece does, how it's made, or how it should taste.
    → `plugins/README.md`.
 
-4. **Two tasters at one bench.** The same `charly` surface serves the human at the keyboard and the agent driving the line, with no second-class channel for either. Built for you *and* your agents, in the same breath.
+4. **Two tasters at one bench.** The same `charly` surface serves you at the keyboard and your agents driving the line, with no second-class channel for either. Built for you *and* your agents, in the same breath.
    → CLAUDE.md "Candyboxing", `/charly-internals:agents`.
 
 5. **Taste every candy before making the recipe — Risk Driven Development.** Recipe cards drift and vats spring leaks, so nothing high-stakes should ride on "I think that's how everyone does it". The riskiest question — *do these candies actually melt together the way I think they do* — gets proven on a real, disposable candybox first. Reality is the only ground truth. Risk Driven Development decides *what* to prove, and *when*: the riskiest unknown, first.
@@ -39,7 +39,7 @@ Most other tools hand an agent a sandbox — and then spend their effort taking 
 ## Where the factory is heading
 
 - **Widen what one recipe can become.** The same declaration already pours into containers, VMs, k8s, hosts, and Android — the long arc is *more molds under one wrapper*, never more wrappers to learn.
-- **Hand the whole line to the agents.** The full loop, run end-to-end *inside* the candybox — agents free to forge a fresh, better box whenever the job needs one — with the human watching the floor rather than turning every crank.
+- **Hand the whole line to the agents.** The full loop, run end-to-end *inside* the candybox — agents free to forge a fresh, better box whenever the job needs one — with you watching the floor rather than turning every crank.
 - **Verification becomes the cadence, not a checkpoint.** The long arc of *prove it first* (Risk Driven Development) and *the spec is the test* (Agent Driven Evaluation) is a single loop: the agent writes down what a good candy is as runnable scenarios, proves the riskiest unknowns on a live, disposable candybox *before* it commits to a recipe, and grades its own acceptance against the running box — until *never trust, verify* is the factory's default rhythm, woven through every batch, not a discipline anyone has to remember to apply.
   → CLAUDE.md "Risk Driven Development (RDD)" + "Agent Driven Evaluation (ADE)".
 - **A shared candy store.** Cross-repo, versioned candies and boxes (`@github` refs, content-derived versions) maturing into an ecosystem you *compose from*, not a pantry you restock by hand.

@@ -50,40 +50,40 @@ func TestResolveImage(t *testing.T) {
 		{
 			name:           "base image inherits defaults",
 			boxName:        "base",
-			calverTag:      "2026.45.1415",
+			calverTag:      "2026.045.1415",
 			wantBase:       "quay.io/fedora/fedora:43",
 			wantIsExternal: true,
 			wantPkg:        "rpm",
-			wantTag:        "2026.45.1415", // auto -> calver
+			wantTag:        "2026.045.1415", // auto -> calver
 			wantPlatforms:  []string{"linux/amd64", "linux/arm64"},
 			wantBootc:      false,
 		},
 		{
 			name:           "cuda overrides platforms",
 			boxName:        "cuda",
-			calverTag:      "2026.45.1415",
+			calverTag:      "2026.045.1415",
 			wantBase:       "quay.io/fedora/fedora:43",
 			wantIsExternal: true,
 			wantPkg:        "rpm",
-			wantTag:        "2026.45.1415",
+			wantTag:        "2026.045.1415",
 			wantPlatforms:  []string{"linux/amd64"},
 			wantBootc:      false,
 		},
 		{
 			name:           "ml-cuda has internal base",
 			boxName:        "ml-cuda",
-			calverTag:      "2026.45.1415",
+			calverTag:      "2026.045.1415",
 			wantBase:       "cuda",
 			wantIsExternal: false,
 			wantPkg:        "rpm",
-			wantTag:        "2026.45.1415",
+			wantTag:        "2026.045.1415",
 			wantPlatforms:  []string{"linux/amd64", "linux/arm64"},
 			wantBootc:      false,
 		},
 		{
 			name:           "inference has pinned tag",
 			boxName:        "inference",
-			calverTag:      "2026.45.1415",
+			calverTag:      "2026.045.1415",
 			wantBase:       "ml-cuda",
 			wantIsExternal: false,
 			wantPkg:        "rpm",
@@ -94,22 +94,22 @@ func TestResolveImage(t *testing.T) {
 		{
 			name:           "ubuntu-dev uses deb",
 			boxName:        "ubuntu-dev",
-			calverTag:      "2026.45.1415",
+			calverTag:      "2026.045.1415",
 			wantBase:       "ubuntu:24.04",
 			wantIsExternal: true,
 			wantPkg:        "deb",
-			wantTag:        "2026.45.1415",
+			wantTag:        "2026.045.1415",
 			wantPlatforms:  []string{"linux/amd64", "linux/arm64"},
 			wantBootc:      false,
 		},
 		{
 			name:           "bazzite is bootc",
 			boxName:        "bazzite",
-			calverTag:      "2026.45.1415",
+			calverTag:      "2026.045.1415",
 			wantBase:       "ghcr.io/ublue-os/bazzite:stable",
 			wantIsExternal: true,
 			wantPkg:        "rpm",
-			wantTag:        "2026.45.1415",
+			wantTag:        "2026.045.1415",
 			wantPlatforms:  []string{"linux/amd64"},
 			wantBootc:      true,
 		},
@@ -151,7 +151,7 @@ func TestResolveImageNotFound(t *testing.T) {
 		t.Fatalf("LoadConfig() error = %v", err)
 	}
 
-	_, err = cfg.ResolveBox("nonexistent", "2026.45.1415", testProjectDir(t), ResolveOpts{})
+	_, err = cfg.ResolveBox("nonexistent", "2026.045.1415", testProjectDir(t), ResolveOpts{})
 	if err == nil {
 		t.Error("ResolveBox() expected error for nonexistent image")
 	}
@@ -377,12 +377,12 @@ func TestFullTag(t *testing.T) {
 		t.Fatalf("LoadConfig() error = %v", err)
 	}
 
-	resolved, err := cfg.ResolveBox("base", "2026.45.1415", testProjectDir(t), ResolveOpts{})
+	resolved, err := cfg.ResolveBox("base", "2026.045.1415", testProjectDir(t), ResolveOpts{})
 	if err != nil {
 		t.Fatalf("ResolveBox() error = %v", err)
 	}
 
-	want := "ghcr.io/test/base:2026.45.1415"
+	want := "ghcr.io/test/base:2026.045.1415"
 	if resolved.FullTag != want {
 		t.Errorf("FullTag = %q, want %q", resolved.FullTag, want)
 	}

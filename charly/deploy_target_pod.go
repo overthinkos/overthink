@@ -42,7 +42,7 @@ type PodDeployTarget struct {
 	DeployName string
 
 	// BaseImage is the image ref the overlay inherits from. May be the
-	// project's own image (e.g. fedora-coder:2026.04.21) or a remote
+	// project's own image (e.g. fedora-coder:2026.004.0021) or a remote
 	// ref already pulled into local storage.
 	BaseImage string
 

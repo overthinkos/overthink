@@ -15,7 +15,7 @@ func TestHostDeployTargetDryRunShellHook(t *testing.T) {
 	paths := &LedgerPaths{
 		Root:     filepath.Join(home, "installed"),
 		Deploys:  filepath.Join(home, "installed", "deploys"),
-		Candies:   filepath.Join(home, "installed", "layers"),
+		Candies:  filepath.Join(home, "installed", "layers"),
 		LockFile: filepath.Join(home, "installed", ".lock"),
 	}
 	tgt := &LocalDeployTarget{
@@ -73,7 +73,7 @@ func TestHostDeployTargetGateSkips(t *testing.T) {
 	paths := &LedgerPaths{
 		Root:     filepath.Join(home, "installed"),
 		Deploys:  filepath.Join(home, "installed", "deploys"),
-		Candies:   filepath.Join(home, "installed", "layers"),
+		Candies:  filepath.Join(home, "installed", "layers"),
 		LockFile: filepath.Join(home, "installed", ".lock"),
 	}
 	tgt := &LocalDeployTarget{
@@ -118,7 +118,7 @@ func TestHostDeployTargetDryRunSystemPackages(t *testing.T) {
 	paths := &LedgerPaths{
 		Root:     filepath.Join(home, "installed"),
 		Deploys:  filepath.Join(home, "installed", "deploys"),
-		Candies:   filepath.Join(home, "installed", "layers"),
+		Candies:  filepath.Join(home, "installed", "layers"),
 		LockFile: filepath.Join(home, "installed", ".lock"),
 	}
 	dc, _, _, err := LoadBuildConfigForBox(repoRootDir(t))

@@ -76,10 +76,10 @@ func TestEnsureCharlyInVenue(t *testing.T) {
 		wantCmd    string // "charly" or the /tmp path
 		wantPush   bool   // scp of a /tmp copy
 	}{
-		{"venue older → /tmp copy", "2026.154.900\n", "/tmp/charly-2026.154.1000", true},
+		{"venue older → /tmp copy", "2026.154.0900\n", "/tmp/charly-2026.154.1000", true},
 		{"venue absent → /tmp copy", "", "/tmp/charly-2026.154.1000", true},
 		{"venue equal → system charly (no scp)", "2026.154.1000\n", "charly", false},
-		{"venue strictly newer → system charly (no downgrade)", "2026.155.10\n", "charly", false},
+		{"venue strictly newer → system charly (no downgrade)", "2026.155.0010\n", "charly", false},
 		{"venue 'unknown' (unstamped) → /tmp copy", "unknown\n", "/tmp/charly-2026.154.1000", true},
 	}
 	for _, tt := range tests {

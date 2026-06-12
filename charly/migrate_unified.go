@@ -24,9 +24,9 @@ import (
 
 // MigrateUnifiedOpts carries the migration-command inputs.
 type MigrateUnifiedOpts struct {
-	Dir           string // project dir containing build.yml/image.yml (and layers/)
-	Monolithic    bool   // emit one flat overthink.yml instead of includes: set
-	DryRun        bool   // if true, print plan without writing files
+	Dir            string // project dir containing build.yml/image.yml (and layers/)
+	Monolithic     bool   // emit one flat overthink.yml instead of includes: set
+	DryRun         bool   // if true, print plan without writing files
 	RewriteCandies bool   // if true, rewrite layer.yml files into kind-keyed form
 }
 

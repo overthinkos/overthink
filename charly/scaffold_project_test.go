@@ -62,8 +62,8 @@ func TestScaffoldProject_AddImageRoundtrip(t *testing.T) {
 	}
 	var doc struct {
 		Box struct {
-			Name   string   `yaml:"name"`
-			Base   string   `yaml:"base"`
+			Name    string   `yaml:"name"`
+			Base    string   `yaml:"base"`
 			Candies []string `yaml:"candy"`
 		} `yaml:"box"`
 	}

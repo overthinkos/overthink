@@ -71,14 +71,14 @@ type MigrationStep struct {
 // closure references it, and the registry's last entry uses it as its Version,
 // so the two are guaranteed equal (asserted by TestRegistryHeadMatchesLatest).
 // Bump it — and append the matching MigrationStep — for each future cutover.
-var latestSchemaVersion = mustCalVer("2026.161.2303")
+var latestSchemaVersion = mustCalVer("2026.163.0928")
 
 // migrationSteps is the ordered registry. Chronological by git landing date
 // (see `git log --diff-filter=A` on each migrate_*.go), which is the order the
 // cutovers were authored in and therefore the only correct replay order.
 func migrationSteps() []MigrationStep {
 	return []MigrationStep{
-		{mustCalVer("2026.112.522"), "unified", false, func(c *MigrateContext) (bool, error) {
+		{mustCalVer("2026.112.0522"), "unified", false, func(c *MigrateContext) (bool, error) {
 			w, err := MigrateUnified(MigrateUnifiedOpts{Dir: c.Dir, RewriteCandies: true, DryRun: c.DryRun})
 			return len(w) > 0, err
 		}},
@@ -90,7 +90,7 @@ func migrationSteps() []MigrationStep {
 			w, err := MigrateDescription(MigrateDescriptionOpts{Dir: c.Dir, DryRun: c.DryRun})
 			return len(w) > 0, err
 		}},
-		{mustCalVer("2026.123.114"), "target-local", false, func(c *MigrateContext) (bool, error) {
+		{mustCalVer("2026.123.0114"), "target-local", false, func(c *MigrateContext) (bool, error) {
 			w, err := MigrateTargetLocal(c.Dir, c.DryRun)
 			return len(w) > 0, err
 		}},
@@ -98,7 +98,7 @@ func migrationSteps() []MigrationStep {
 			w, err := MigrateShellSchema(c.Dir, c.DryRun)
 			return len(w) > 0, err
 		}},
-		{mustCalVer("2026.125.702"), "ov-cachyos", true, func(c *MigrateContext) (bool, error) {
+		{mustCalVer("2026.125.0702"), "ov-cachyos", true, func(c *MigrateContext) (bool, error) {
 			w, err := MigrateCharlyCachyos(c.Dir, c.DryRun)
 			return len(w) > 0, err
 		}},
@@ -113,11 +113,11 @@ func migrationSteps() []MigrationStep {
 			r, err := MigrateKindFiles(c.Dir, c.DryRun)
 			return !r.NoChanges, err
 		}},
-		{mustCalVer("2026.128.255"), "local-deploy", true, func(c *MigrateContext) (bool, error) {
+		{mustCalVer("2026.128.0255"), "local-deploy", true, func(c *MigrateContext) (bool, error) {
 			changed, _, err := MigrateLocalDeploy(c.HostDeployPath, c.DryRun)
 			return changed, err
 		}},
-		{mustCalVer("2026.128.306"), "quadlets", true, func(c *MigrateContext) (bool, error) {
+		{mustCalVer("2026.128.0306"), "quadlets", true, func(c *MigrateContext) (bool, error) {
 			w, err := MigrateQuadlets(c.QuadletDir, c.DryRun)
 			return len(w) > 0, err
 		}},
@@ -125,7 +125,7 @@ func migrationSteps() []MigrationStep {
 			r, err := MigrateFieldSingular(MigrateFieldSingularOpts{Dir: c.Dir, DryRun: c.DryRun})
 			return len(r.Rewritten) > 0, err
 		}},
-		{mustCalVer("2026.131.857"), "marimo-rename", true, func(c *MigrateContext) (bool, error) {
+		{mustCalVer("2026.131.0857"), "marimo-rename", true, func(c *MigrateContext) (bool, error) {
 			w, err := MigrateMarimoRename(c.Dir, c.DryRun)
 			return len(w) > 0, err
 		}},
@@ -153,7 +153,7 @@ func migrationSteps() []MigrationStep {
 		// `alias: ref` items). This step renames include: → import: in every
 		// project YAML; repo-specific reshaping (base.yml merge, cachyos
 		// namespace, deploy→eval beds) is hand-authored. See CHANGELOG.md.
-		{mustCalVer("2026.143.843"), "import-namespace", false, func(c *MigrateContext) (bool, error) {
+		{mustCalVer("2026.143.0843"), "import-namespace", false, func(c *MigrateContext) (bool, error) {
 			w, err := MigrateImportNamespace(c.Dir, c.DryRun)
 			return len(w) > 0, err
 		}},
@@ -186,7 +186,7 @@ func migrationSteps() []MigrationStep {
 		// layer.yml→candy.yml), and the layers/→candy/ directory. This step
 		// renames the keys, the files, and the directory, and rewrites
 		// import:/discover: path references. See CHANGELOG.md.
-		{mustCalVer("2026.156.556"), "candy-box-rename", false, func(c *MigrateContext) (bool, error) {
+		{mustCalVer("2026.156.0556"), "candy-box-rename", false, func(c *MigrateContext) (bool, error) {
 			w, err := MigrateBoxCandyRename(c.Dir, c.HostDeployPath, c.DryRun)
 			return len(w) > 0, err
 		}},
@@ -314,6 +314,20 @@ func migrationSteps() []MigrationStep {
 		// TouchesHost false — runs under remote-cache auto-migration. See CHANGELOG.md.
 		{mustCalVer("2026.161.2302"), "drop-box-port", false, func(c *MigrateContext) (bool, error) {
 			w, err := MigrateDropBoxPort(c.Dir, c.DryRun)
+			return len(w) > 0, err
+		}},
+		// 2026-06 agent-kind-rename: the reusable agent-CLI catalog kind
+		// `kind: ai` → `kind: agent`. The catalog map key `ai:` + the kind:score
+		// eligible-agent selector `ai:` → `agent:`, and the standalone-doc
+		// discriminator value `kind: ai` → `agent`. The Go loader now reads
+		// AgentConfig/`agent:`; a config carrying the old `ai:` key silently
+		// loses the catalog/selector. The independent kind:score
+		// `validate_ai_artifacts` flag is a separate concept and is NOT renamed.
+		// TouchesHost false → remote-cache auto-migration applies the project-file
+		// rewrites; the per-host agent overlay (the AI-CLI catalog that never ships
+		// with the repo) is processed when ctx.HostDeployPath is set. See CHANGELOG.md.
+		{mustCalVer("2026.163.0927"), "agent-kind-rename", false, func(c *MigrateContext) (bool, error) {
+			w, err := MigrateAgentKindRename(c.Dir, c.HostDeployPath, c.DryRun)
 			return len(w) > 0, err
 		}},
 		// HEAD — the schema stamp. Must stay LAST so LatestSchemaVersion picks it up

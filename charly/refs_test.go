@@ -87,13 +87,13 @@ func TestPickCandyVersion(t *testing.T) {
 	got, warn = capture(func() candyCandidate {
 		return pickCandyVersion("github.com/o/r/layers/x", []candyCandidate{
 			mk("2026.141.1600", "v2026.141.1600"),
-			mk("2026.144.531", "v2026.144.531"),
+			mk("2026.144.0531", "v2026.144.531"),
 		})
 	})
-	if got.version != "2026.144.531" {
+	if got.version != "2026.144.0531" {
 		t.Errorf("newest per-entity version must win, got %q", got.version)
 	}
-	if !strings.Contains(warn, "resolved to multiple versions") || !strings.Contains(warn, "2026.144.531") {
+	if !strings.Contains(warn, "resolved to multiple versions") || !strings.Contains(warn, "2026.144.0531") {
 		t.Errorf("expected one multi-version warning naming the winner, got: %q", warn)
 	}
 }
@@ -488,7 +488,7 @@ func TestCollectRemoteRefsSameCandyBothTagsCollected(t *testing.T) {
 		},
 	}
 	layers := map[string]*Candy{
-		"local": {Name: "local", Version: "2026.1.1", Require: toCandyRefs([]string{
+		"local": {Name: "local", Version: "2026.001.0001", Require: toCandyRefs([]string{
 			"@github.com/org/repo/layers/cuda:v1.0.0",
 		})},
 	}

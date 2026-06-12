@@ -120,16 +120,16 @@ func TestResolveBaseImage_InternalUseCalVer(t *testing.T) {
 				Base:           "quay.io/fedora/fedora:43",
 				IsExternalBase: true,
 				Registry:       "ghcr.io/overthinkos",
-				Tag:            "2026.46.1415",
-				FullTag:        "ghcr.io/overthinkos/fedora:2026.46.1415",
+				Tag:            "2026.046.1415",
+				FullTag:        "ghcr.io/overthinkos/fedora:2026.046.1415",
 			},
 			"fedora-test": {
 				Name:           "fedora-test",
 				Base:           "fedora",
 				IsExternalBase: false,
 				Registry:       "ghcr.io/overthinkos",
-				Tag:            "2026.46.1415",
-				FullTag:        "ghcr.io/overthinkos/fedora-test:2026.46.1415",
+				Tag:            "2026.046.1415",
+				FullTag:        "ghcr.io/overthinkos/fedora-test:2026.046.1415",
 			},
 		},
 	}
@@ -142,7 +142,7 @@ func TestResolveBaseImage_InternalUseCalVer(t *testing.T) {
 
 	// Internal base should return the parent's full CalVer tag
 	got = g.resolveBaseImage(g.Boxes["fedora-test"])
-	want := "ghcr.io/overthinkos/fedora:2026.46.1415"
+	want := "ghcr.io/overthinkos/fedora:2026.046.1415"
 	if got != want {
 		t.Errorf("resolveBaseImage(fedora-test) = %q, want %q", got, want)
 	}
@@ -537,7 +537,7 @@ func TestBuilderRefForFormat(t *testing.T) {
 				Builder: BuilderMap{"aur": "arch-builder", "pixi": "arch-builder"},
 			},
 			"arch-builder": {
-				FullTag: "ghcr.io/overthinkos/arch-builder:2026.84.1200",
+				FullTag: "ghcr.io/overthinkos/arch-builder:2026.084.1200",
 			},
 			"no-aur-img": {
 				Builder: BuilderMap{},
@@ -546,12 +546,12 @@ func TestBuilderRefForFormat(t *testing.T) {
 	}
 
 	ref := g.builderRefForFormat("arch-img", "aur")
-	if ref != "ghcr.io/overthinkos/arch-builder:2026.84.1200" {
+	if ref != "ghcr.io/overthinkos/arch-builder:2026.084.1200" {
 		t.Errorf("builderRefForFormat(aur) = %q, want full tag", ref)
 	}
 
 	ref = g.builderRefForFormat("arch-img", "pixi")
-	if ref != "ghcr.io/overthinkos/arch-builder:2026.84.1200" {
+	if ref != "ghcr.io/overthinkos/arch-builder:2026.084.1200" {
 		t.Errorf("builderRefForFormat(pixi) = %q, want full tag", ref)
 	}
 

@@ -20,13 +20,13 @@ func TestCandySet_DescendsIntoCandyWrapper(t *testing.T) {
 	if err := os.MkdirAll(candyDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	const start = "candy:\n  name: foo\n  version: 2026.1.1\n"
+	const start = "candy:\n  name: foo\n  version: 2026.001.0001\n"
 	if err := os.WriteFile(filepath.Join(candyDir, UnifiedFileName), []byte(start), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	t.Chdir(dir)
 
-	if err := (&CandySetCmd{Name: "foo", Path: "version", Value: "2026.2.2"}).Run(); err != nil {
+	if err := (&CandySetCmd{Name: "foo", Path: "version", Value: "2026.002.0002"}).Run(); err != nil {
 		t.Fatalf("CandySetCmd.Run: %v", err)
 	}
 
@@ -48,8 +48,8 @@ func TestCandySet_DescendsIntoCandyWrapper(t *testing.T) {
 	if !ok {
 		t.Fatalf("candy: wrapper missing or wrong type:\n%s", out)
 	}
-	if got := candy["version"]; got != "2026.2.2" {
-		t.Fatalf("candy.version = %v, want 2026.2.2:\n%s", got, out)
+	if got := candy["version"]; got != "2026.002.0002" {
+		t.Fatalf("candy.version = %v, want 2026.002.0002:\n%s", got, out)
 	}
 
 	// An already-qualified path must not be double-prefixed (candy.candy.name).

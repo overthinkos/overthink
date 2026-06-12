@@ -14,7 +14,7 @@ import (
 func TestAppendCandyScenario_UnderCandyWrapper(t *testing.T) {
 	dir := t.TempDir()
 	f := filepath.Join(dir, "candy.yml")
-	if err := os.WriteFile(f, []byte("candy:\n  name: foo\n  version: 2026.1.1\n"), 0o644); err != nil {
+	if err := os.WriteFile(f, []byte("candy:\n  name: foo\n  version: 2026.001.0001\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -72,7 +72,7 @@ func TestAppendCandyPackages_UnderCandyWrapper(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(candyDir, UnifiedFileName),
-		[]byte("candy:\n  name: foo\n  version: 2026.1.1\n"), 0o644); err != nil {
+		[]byte("candy:\n  name: foo\n  version: 2026.001.0001\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	t.Chdir(dir)

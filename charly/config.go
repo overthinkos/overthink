@@ -119,27 +119,27 @@ type BoxConfig struct {
 	// builder must be kind: bootstrap and runs as a pre-build privileged
 	// container that produces a rootfs tarball, then the Containerfile
 	// emits FROM scratch + ADD. Mutually exclusive with Base.
-	From                  string        `yaml:"from,omitempty"`
-	BootstrapBuilderImage string        `yaml:"bootstrap_builder_image,omitempty"`
-	Platforms             []string      `yaml:"platform,omitempty"`
-	Tag                   string        `yaml:"tag,omitempty"`
-	Registry              string        `yaml:"registry,omitempty"`
-	Distro                []string      `yaml:"distro,omitempty"` // distro tags ["fedora:43", "fedora"] — first-match for packages
-	Build                 BuildFormats  `yaml:"build,omitempty"`  // package formats ["rpm"] — all installed in order
-	Candy                 []string      `yaml:"candy,omitempty"`
+	From                  string       `yaml:"from,omitempty"`
+	BootstrapBuilderImage string       `yaml:"bootstrap_builder_image,omitempty"`
+	Platforms             []string     `yaml:"platform,omitempty"`
+	Tag                   string       `yaml:"tag,omitempty"`
+	Registry              string       `yaml:"registry,omitempty"`
+	Distro                []string     `yaml:"distro,omitempty"` // distro tags ["fedora:43", "fedora"] — first-match for packages
+	Build                 BuildFormats `yaml:"build,omitempty"`  // package formats ["rpm"] — all installed in order
+	Candy                 []string     `yaml:"candy,omitempty"`
 	// Port is REMOVED as an authored field — boxes no longer declare ports;
 	// published ports are inherited from the candy chain (CollectBoxPorts) and
 	// host mappings are auto-allocated at deploy. Parsed only so the loader can
 	// hard-reject a residual box `port:` (rejectLegacyBoxPort → `charly migrate`).
-	Port                  []string      `yaml:"port,omitempty"`
-	User                  string        `yaml:"user,omitempty"`        // username (default: "user")
-	UID                   *int          `yaml:"uid,omitempty"`         // user ID (default: 1000)
-	GID                   *int          `yaml:"gid,omitempty"`         // group ID (default: 1000)
-	UserPolicy            string        `yaml:"user_policy,omitempty"` // how to reconcile user: with base_image's pre-existing account ("auto" (default) | "adopt" | "create")
-	Merge                 *MergeConfig  `yaml:"merge,omitempty"`       // layer merge settings
-	Alias                 []AliasConfig `yaml:"alias,omitempty"`       // command aliases
-	Builder               BuilderMap    `yaml:"builder,omitempty"`     // build type → builder image (pixi, npm, cargo, aur)
-	Produce               []string      `yaml:"produce,omitempty"`     // what this builder image can produce (pixi, npm, cargo, aur). Renamed from `builds:` to avoid yaml key collision with the `build:` BuildFormats above (field-singular cutover, 2026-05).
+	Port       []string      `yaml:"port,omitempty"`
+	User       string        `yaml:"user,omitempty"`        // username (default: "user")
+	UID        *int          `yaml:"uid,omitempty"`         // user ID (default: 1000)
+	GID        *int          `yaml:"gid,omitempty"`         // group ID (default: 1000)
+	UserPolicy string        `yaml:"user_policy,omitempty"` // how to reconcile user: with base_image's pre-existing account ("auto" (default) | "adopt" | "create")
+	Merge      *MergeConfig  `yaml:"merge,omitempty"`       // layer merge settings
+	Alias      []AliasConfig `yaml:"alias,omitempty"`       // command aliases
+	Builder    BuilderMap    `yaml:"builder,omitempty"`     // build type → builder image (pixi, npm, cargo, aur)
+	Produce    []string      `yaml:"produce,omitempty"`     // what this builder image can produce (pixi, npm, cargo, aur). Renamed from `builds:` to avoid yaml key collision with the `build:` BuildFormats above (field-singular cutover, 2026-05).
 	// Schema v4: DNS / AcmeEmail / Tunnel / Engine removed — they are
 	// deployment choices with no declaration meaning. They live on
 	// DeploymentNode and flow through to consumers via BoxMetadata.

@@ -6,7 +6,7 @@ package main
 // embeds a check verb (file/http/cdp/mcp/command/…) is graded
 // DETERMINISTICALLY by the runner; a prose-only step (a given/when/then with
 // no verb) binds to an AGENT — this grader. The grader spawns the configured
-// `kind: ai` CLI on the host, hands it the scenario goal + the step's prose +
+// `kind: agent` CLI on the host, hands it the scenario goal + the step's prose +
 // the live target handle, lets it probe the running deployment with the full
 // `charly eval` surface, and parses back a structured pass/fail verdict.
 //
@@ -55,17 +55,17 @@ type StepGrader interface {
 }
 
 // AgentGrader is the production StepGrader: it drives the configured
-// `kind: ai` CLI against a live deployment.
+// `kind: agent` CLI against a live deployment.
 type AgentGrader struct {
-	AI       *AIConfig // the resolved kind:ai entry (how to launch the CLI)
-	Target   string    // the deployment name the agent probes (e.g. "eval-pod")
-	Instance string    // optional deploy instance
-	Timeout  string    // optional Go-duration override (from --timeout)
+	Agent    *AgentConfig // the resolved kind:agent entry (how to launch the CLI)
+	Target   string       // the deployment name the agent probes (e.g. "eval-pod")
+	Instance string       // optional deploy instance
+	Timeout  string       // optional Go-duration override (from --timeout)
 }
 
 // Grade builds the grader prompt, runs the AI once, and parses its verdict.
 func (g *AgentGrader) Grade(ctx context.Context, req GraderRequest) EvalResult {
-	if g == nil || g.AI == nil {
+	if g == nil || g.Agent == nil {
 		return EvalResult{Status: TestFail, Verb: "agent", Message: "agent grader misconfigured (no ai)"}
 	}
 	prompt := buildGraderPrompt(req, g.Target, g.Instance)
@@ -73,7 +73,7 @@ func (g *AgentGrader) Grade(ctx context.Context, req GraderRequest) EvalResult {
 	timeout := GraderDefaultTimeout
 	src := strings.TrimSpace(g.Timeout)
 	if src == "" {
-		src = strings.TrimSpace(g.AI.Timeout)
+		src = strings.TrimSpace(g.Agent.Timeout)
 	}
 	if src != "" {
 		if d, err := time.ParseDuration(src); err == nil && d > 0 {
@@ -82,7 +82,7 @@ func (g *AgentGrader) Grade(ctx context.Context, req GraderRequest) EvalResult {
 	}
 
 	started := time.Now()
-	stdout, stderr, err := RunAIOnce(ctx, g.AI, prompt, timeout)
+	stdout, stderr, err := RunAgentOnce(ctx, g.Agent, prompt, timeout)
 	elapsed := time.Since(started)
 	if err != nil {
 		msg := fmt.Sprintf("agent grader launch failed: %v", err)
@@ -154,13 +154,13 @@ func buildGraderPrompt(req GraderRequest, target, instance string) string {
 	return b.String()
 }
 
-// RunAIOnce launches the configured AI CLI exactly once with the given
+// RunAgentOnce launches the configured AI CLI exactly once with the given
 // prompt and returns its stdout/stderr. It is the bounded, single-shot
 // sibling of the harness loop's iteration launcher (eval_loop.go) and of
-// LocalCaptureVersion (ai_config.go) — same host-exec shape, no iteration
+// LocalCaptureVersion (agent_config.go) — same host-exec shape, no iteration
 // directories, no plateau state. ${PROMPT} in the AI's command argv (and a
 // PromptVia: file temp file) is substituted with the prompt text.
-func RunAIOnce(ctx context.Context, ai *AIConfig, prompt string, timeout time.Duration) (string, string, error) {
+func RunAgentOnce(ctx context.Context, ai *AgentConfig, prompt string, timeout time.Duration) (string, string, error) {
 	if ai == nil || len(ai.Command) == 0 {
 		return "", "", fmt.Errorf("ai entry has no command")
 	}

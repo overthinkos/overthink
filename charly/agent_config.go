@@ -1,6 +1,6 @@
 package main
 
-// ai_config.go — `kind: ai` entity (the reusable AI-CLI catalog).
+// agent_config.go — `kind: agent` entity (the reusable AI-CLI catalog).
 //
 // One entry per AI CLI (claude, codex, gemini, ...). Each entry is the
 // *invocation contract*: how to launch the CLI, how to authenticate it,
@@ -27,7 +27,7 @@ import (
 // Types
 // ---------------------------------------------------------------------------
 
-// AIConfig is one entry under the top-level `ai:` map. Authoring shape:
+// AgentConfig is one entry under the top-level `agent:` map. Authoring shape:
 //
 //	ai:
 //	  claude:
@@ -39,7 +39,7 @@ import (
 //	    timeout: 30m
 //	    credential:
 //	      - {src: ~/.claude/.credentials.json, dst: ~/.claude/.credentials.json}
-type AIConfig struct {
+type AgentConfig struct {
 	Description    *Description      `yaml:"description,omitempty"`
 	Command        []string          `yaml:"command"`
 	PromptVia      string            `yaml:"prompt_via,omitempty"`
@@ -71,16 +71,16 @@ type AIConfig struct {
 }
 
 // AIOutputFormat* constants enumerate the legal values of
-// AIConfig.OutputFormat. The validator in validateHarnessSemantics
+// AgentConfig.OutputFormat. The validator in validateHarnessSemantics
 // rejects anything else with a list-of-legal-values hint.
 const (
-	AIOutputFormatPlain      = ""
-	AIOutputFormatStreamJSON = "stream-json"
+	AgentOutputFormatPlain      = ""
+	AgentOutputFormatStreamJSON = "stream-json"
 )
 
-// validAIOutputFormats lists every legal value of OutputFormat for the
+// validAgentOutputFormats lists every legal value of OutputFormat for the
 // validator's "available: ..." hint.
-var validAIOutputFormats = []string{AIOutputFormatPlain, AIOutputFormatStreamJSON}
+var validAgentOutputFormats = []string{AgentOutputFormatPlain, AgentOutputFormatStreamJSON}
 
 // DefaultProgressCheckInterval / DefaultProgressNoImprovementTimeout are
 // the Go-level defaults the harness loop applies when an AI's
@@ -105,45 +105,45 @@ type CredentialMount struct {
 	Optional bool   `yaml:"optional,omitempty"` // missing src: warn, don't fail
 }
 
-// DefaultAITimeout is the Go-level default applied by ResolveAI when an
+// DefaultAgentTimeout is the Go-level default applied by ResolveAgent when an
 // AI entry's `timeout:` field is empty. Empty string = no per-iteration
 // timeout (the harness loop is plateau-bounded, not wall-clock-bounded;
 // the score's prompt promises "Take all the time you need" and the
 // runner must honor that). Authors who DO want a wall-clock cap can
 // set `ai.<name>.timeout: 30m` (or any Go duration) on their AI entry.
-const DefaultAITimeout = ""
+const DefaultAgentTimeout = ""
 
 // ---------------------------------------------------------------------------
 // Sentinel errors
 // ---------------------------------------------------------------------------
 
 var (
-	// ErrNoAIs fires when the project has no `ai:` map (no AIs configured).
-	ErrNoAIs = errors.New("eval: no AIs configured (add a 'ai:' map to eval.yml)")
+	// ErrNoAgents fires when the project has no `agent:` map (no agents configured).
+	ErrNoAgents = errors.New("eval: no agents configured (add an 'agent:' map to eval.yml)")
 
-	// ErrAINotFound fires when the requested AI name is absent from the catalog.
-	ErrAINotFound = errors.New("harness: ai not found")
+	// ErrAgentNotFound fires when the requested AI name is absent from the catalog.
+	ErrAgentNotFound = errors.New("harness: ai not found")
 )
 
 // ---------------------------------------------------------------------------
 // Resolution + defaults
 // ---------------------------------------------------------------------------
 
-// ResolveAI returns the named AI entry, or the sole entry if name == "" and
+// ResolveAgent returns the named AI entry, or the sole entry if name == "" and
 // exactly one is configured. Applies Go-level defaults:
 //   - Timeout: "" (no per-iteration wall-clock cap) when empty
 //   - PromptVia: "argv" when empty
 //
 // Returns a *copy* so callers can mutate without poisoning the catalog.
-func ResolveAI(catalog map[string]*AIConfig, name string) (*AIConfig, string, error) {
+func ResolveAgent(catalog map[string]*AgentConfig, name string) (*AgentConfig, string, error) {
 	if len(catalog) == 0 {
-		return nil, "", ErrNoAIs
+		return nil, "", ErrNoAgents
 	}
 
-	apply := func(ai AIConfig) *AIConfig {
+	apply := func(ai AgentConfig) *AgentConfig {
 		out := ai
 		if out.Timeout == "" {
-			out.Timeout = DefaultAITimeout
+			out.Timeout = DefaultAgentTimeout
 		}
 		if out.PromptVia == "" {
 			out.PromptVia = "argv"
@@ -153,8 +153,8 @@ func ResolveAI(catalog map[string]*AIConfig, name string) (*AIConfig, string, er
 
 	if name == "" {
 		if len(catalog) > 1 {
-			return nil, "", fmt.Errorf("harness: multiple AIs configured (%s); pass --ai NAME to pick one",
-				strings.Join(SortedAINames(catalog), ", "))
+			return nil, "", fmt.Errorf("harness: multiple agents configured (%s); pass --agent NAME to pick one",
+				strings.Join(SortedAgentNames(catalog), ", "))
 		}
 		// Exactly one entry — pick it.
 		for k, v := range catalog {
@@ -165,14 +165,14 @@ func ResolveAI(catalog map[string]*AIConfig, name string) (*AIConfig, string, er
 	ai, ok := catalog[name]
 	if !ok {
 		return nil, "", fmt.Errorf("%w: %q (available: %s)",
-			ErrAINotFound, name, strings.Join(SortedAINames(catalog), ", "))
+			ErrAgentNotFound, name, strings.Join(SortedAgentNames(catalog), ", "))
 	}
 	return apply(*ai), name, nil
 }
 
-// SortedAINames returns AI names in alphabetical order. Useful for
+// SortedAgentNames returns AI names in alphabetical order. Useful for
 // deterministic error messages and stable test expectations.
-func SortedAINames(catalog map[string]*AIConfig) []string {
+func SortedAgentNames(catalog map[string]*AgentConfig) []string {
 	out := make([]string, 0, len(catalog))
 	for k := range catalog {
 		out = append(out, k)
@@ -181,7 +181,7 @@ func SortedAINames(catalog map[string]*AIConfig) []string {
 	return out
 }
 
-// ParseAITimeout parses the AI's Timeout field. Empty string (the
+// ParseAgentTimeout parses the AI's Timeout field. Empty string (the
 // default) returns 0 — meaning "no wall-clock cap on the runner".
 // Callers in harness_loop should branch on `dur == 0` to skip
 // `context.WithTimeout` entirely (use plain `context.WithCancel`)
@@ -191,7 +191,7 @@ func SortedAINames(catalog map[string]*AIConfig) []string {
 // Authors who DO want a per-iteration cap (e.g., for cost control on
 // shared infrastructure) can set `ai.<name>.timeout: 30m` (or any
 // Go duration) on their AI entry; that path still uses the timeout.
-func ParseAITimeout(s string) (time.Duration, error) {
+func ParseAgentTimeout(s string) (time.Duration, error) {
 	if s == "" {
 		return 0, nil
 	}
@@ -210,7 +210,7 @@ type VersionResult struct {
 	Error  string `yaml:"error,omitempty"  json:"error,omitempty"`
 }
 
-// String renders the version for the result file's ai_version: block.
+// String renders the version for the result file's agent_version: block.
 // Successful captures show the trimmed stdout; failures show "error: <...>".
 func (v VersionResult) String() string {
 	if v.Error != "" {
@@ -225,14 +225,14 @@ func (v VersionResult) String() string {
 //
 // Failure of the version command is NOT fatal to a harness run — the
 // loop carries on and records the failure in result.<calver>.yml under
-// `ai_version:` so future readers can see what broke.
+// `agent_version:` so future readers can see what broke.
 //
 // run is `func(ctx, argv []string) (stdout, stderr string, err error)`.
 // The harness loop adapts each executor to this signature so AI version
 // capture is independent of the executor implementation.
 func CaptureVersion(
 	ctx context.Context,
-	ai *AIConfig,
+	ai *AgentConfig,
 	run func(ctx context.Context, argv []string) (string, string, error),
 ) VersionResult {
 	if len(ai.VersionCommand) == 0 {
@@ -258,7 +258,7 @@ func CaptureVersion(
 // LocalCaptureVersion is a convenience wrapper that runs the version
 // command on the host directly (for `host: true` recipes). Exposed so
 // the host-target preflight + the per-AI capture share one path.
-func LocalCaptureVersion(ctx context.Context, ai *AIConfig) VersionResult {
+func LocalCaptureVersion(ctx context.Context, ai *AgentConfig) VersionResult {
 	return CaptureVersion(ctx, ai, func(ctx context.Context, argv []string) (string, string, error) {
 		if len(argv) == 0 {
 			return "", "", errors.New("argv empty")
@@ -289,20 +289,20 @@ func firstNonEmptyLine(s string) string {
 // Listing
 // ---------------------------------------------------------------------------
 
-// PrintAIs writes a human-readable table of configured AIs to w.
+// PrintAgents writes a human-readable table of configured agents to w.
 // Used by `charly eval list-ai`.
-func PrintAIs(w io.Writer, catalog map[string]*AIConfig) {
+func PrintAgents(w io.Writer, catalog map[string]*AgentConfig) {
 	if len(catalog) == 0 {
-		fmt.Fprintln(w, "No AIs configured. Add a 'ai:' map to eval.yml.")
+		fmt.Fprintln(w, "No agents configured. Add an 'agent:' map to eval.yml.")
 		return
 	}
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(tw, "NAME\tCOMMAND\tVERSION_COMMAND\tTIMEOUT\tPROMPT_VIA\tCREDENTIAL")
-	for _, name := range SortedAINames(catalog) {
+	for _, name := range SortedAgentNames(catalog) {
 		ai := catalog[name]
 		timeout := ai.Timeout
 		if timeout == "" {
-			timeout = DefaultAITimeout + " (default)"
+			timeout = DefaultAgentTimeout + " (default)"
 		}
 		promptVia := ai.PromptVia
 		if promptVia == "" {

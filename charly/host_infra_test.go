@@ -112,7 +112,7 @@ func withTempLedger(t *testing.T) *LedgerPaths {
 	return &LedgerPaths{
 		Root:     root,
 		Deploys:  filepath.Join(root, "deploys"),
-		Candies:   filepath.Join(root, "layers"),
+		Candies:  filepath.Join(root, "layers"),
 		LockFile: filepath.Join(root, ".lock"),
 	}
 }

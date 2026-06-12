@@ -47,8 +47,8 @@ type HarnessScore struct {
 	// explicit-only rule from /charly-internals:disposable.
 	Disposable bool `yaml:"disposable,omitempty"`
 
-	// Eligible AI names (must reference entries in the `ai:` map).
-	AI []string `yaml:"ai,omitempty"`
+	// Eligible agent names (must reference entries in the `agent:` map).
+	Agent []string `yaml:"agent,omitempty"`
 
 	// PlateauIteration is the only loop bound. The loop exits after
 	// this many consecutive non-improving iterations. 0 disables
@@ -332,7 +332,7 @@ func PrintScores(w io.Writer, catalog map[string]*HarnessScore) {
 		return
 	}
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(tw, "NAME\tWHERE\tAI\tPLATEAU\tRECIPES\tNOTES\tSUMMARY")
+	fmt.Fprintln(tw, "NAME\tWHERE\tAGENT\tPLATEAU\tRECIPES\tNOTES\tSUMMARY")
 	for _, name := range SortedScoreNames(catalog) {
 		s := catalog[name]
 		where := "(invalid)"
@@ -343,7 +343,7 @@ func PrintScores(w io.Writer, catalog map[string]*HarnessScore) {
 				where = string(k)
 			}
 		}
-		ai := strings.Join(s.AI, ",")
+		ai := strings.Join(s.Agent, ",")
 		if ai == "" {
 			ai = "(none)"
 		}

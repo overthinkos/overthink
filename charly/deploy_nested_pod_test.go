@@ -63,7 +63,7 @@ func TestDeployNestedPodsInGuest_DeploysOnlyPodChildren(t *testing.T) {
 	// and a /tmp path can't shadow the guest's pacman /usr/bin/charly.
 	savedVer := BuildCalVer
 	defer func() { BuildCalVer = savedVer }()
-	BuildCalVer = "2026.154.943"
+	BuildCalVer = "2026.154.0943"
 
 	exec := &nestedRecordingExec{}
 	node := &DeploymentNode{
@@ -102,7 +102,7 @@ func TestDeployNestedPodsInGuest_DeploysOnlyPodChildren(t *testing.T) {
 	// The host charly was delivered into the guest at the explicit /tmp/charly-<calver>
 	// path (NOT shadowing the guest's pacman /usr/bin/charly) before any from-box
 	// deploy. One delivery for the whole batch (same guest venue).
-	wantCharlyPath := "/tmp/charly-2026.154.943"
+	wantCharlyPath := "/tmp/charly-2026.154.0943"
 	if len(exec.putDests) == 0 {
 		t.Fatalf("host charly was never delivered into the guest (no PutFile)")
 	}

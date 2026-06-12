@@ -336,8 +336,8 @@ func TestResolveShellImageRef(t *testing.T) {
 			name:     "custom tag",
 			registry: "ghcr.io/overthinkos",
 			image:    "ubuntu",
-			tag:      "2026.46.1415",
-			want:     "ghcr.io/overthinkos/ubuntu:2026.46.1415",
+			tag:      "2026.046.1415",
+			want:     "ghcr.io/overthinkos/ubuntu:2026.046.1415",
 		},
 	}
 

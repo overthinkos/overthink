@@ -16,53 +16,53 @@ func TestResolveCandyOrder(t *testing.T) {
 	}
 
 	tests := []struct {
-		name         string
-		requested    []string
+		name          string
+		requested     []string
 		parentCandies map[string]bool
-		wantOrder    []string
-		wantErr      bool
+		wantOrder     []string
+		wantErr       bool
 	}{
 		{
-			name:         "single layer no deps",
-			requested:    []string{"pixi"},
+			name:          "single layer no deps",
+			requested:     []string{"pixi"},
 			parentCandies: nil,
-			wantOrder:    []string{"pixi"},
+			wantOrder:     []string{"pixi"},
 		},
 		{
-			name:         "layer with deps",
-			requested:    []string{"python"},
+			name:          "layer with deps",
+			requested:     []string{"python"},
 			parentCandies: nil,
-			wantOrder:    []string{"pixi", "python"},
+			wantOrder:     []string{"pixi", "python"},
 		},
 		{
-			name:         "transitive deps",
-			requested:    []string{"ml-libs"},
+			name:          "transitive deps",
+			requested:     []string{"ml-libs"},
 			parentCandies: nil,
-			wantOrder:    []string{"pixi", "python", "ml-libs"},
+			wantOrder:     []string{"pixi", "python", "ml-libs"},
 		},
 		{
-			name:         "multiple independent layers",
-			requested:    []string{"pixi", "nodejs"},
+			name:          "multiple independent layers",
+			requested:     []string{"pixi", "nodejs"},
 			parentCandies: nil,
-			wantOrder:    []string{"nodejs", "pixi"}, // sorted alphabetically
+			wantOrder:     []string{"nodejs", "pixi"}, // sorted alphabetically
 		},
 		{
-			name:         "mixed deps",
-			requested:    []string{"ml-libs", "web-ui"},
+			name:          "mixed deps",
+			requested:     []string{"ml-libs", "web-ui"},
 			parentCandies: nil,
-			wantOrder:    []string{"nodejs", "pixi", "python", "ml-libs", "web-ui"},
+			wantOrder:     []string{"nodejs", "pixi", "python", "ml-libs", "web-ui"},
 		},
 		{
-			name:         "parent provides dep",
-			requested:    []string{"python"},
+			name:          "parent provides dep",
+			requested:     []string{"python"},
 			parentCandies: map[string]bool{"pixi": true},
-			wantOrder:    []string{"python"}, // pixi excluded
+			wantOrder:     []string{"python"}, // pixi excluded
 		},
 		{
-			name:         "unknown layer",
-			requested:    []string{"unknown"},
+			name:          "unknown layer",
+			requested:     []string{"unknown"},
 			parentCandies: nil,
-			wantErr:      true,
+			wantErr:       true,
 		},
 	}
 

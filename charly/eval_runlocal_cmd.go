@@ -64,7 +64,7 @@ func pinPersistentXDGRuntimeDir() error {
 type EvalRunLocalCmd struct {
 	Score       string `arg:"" help:"Score name (from eval.yml)"`
 	TargetImage string `name:"target-image" help:"Target image to score (default: derived from score / pod)"`
-	AI          string `name:"ai" help:"AI to invoke (defaults to score.ai when single-element)"`
+	Agent       string `name:"agent" help:"Agent to invoke (defaults to score.agent when single-element)"`
 	RunID       string `name:"run-id" help:"Run identifier (set by host harness; auto if empty)"`
 	PlateauIter int    `name:"plateau-iteration" help:"Override score.plateau_iteration"`
 	MaxScenario int    `name:"max-scenario" help:"Cap the pending input set"`
@@ -157,18 +157,18 @@ func (c *EvalRunLocalCmd) Run() error {
 			"harness: generated %d per-run nonce(s): %v\n", len(nonces), names)
 	}
 
-	// AI selection — score.AI is the eligible list; --ai picks one.
-	aiName := c.AI
+	// AI selection — score.Agent is the eligible list; --agent picks one.
+	aiName := c.Agent
 	if aiName == "" {
-		if len(score.AI) == 1 {
-			aiName = score.AI[0]
-		} else if len(score.AI) == 0 {
+		if len(score.Agent) == 1 {
+			aiName = score.Agent[0]
+		} else if len(score.Agent) == 0 {
 			return fmt.Errorf("score %q has empty ai: list", c.Score)
 		} else {
-			return fmt.Errorf("score %q has multiple eligible AIs (%v); pass --ai NAME", c.Score, score.AI)
+			return fmt.Errorf("score %q has multiple eligible agents (%v); pass --agent NAME", c.Score, score.Agent)
 		}
 	}
-	ai, _, err := ResolveAI(uf.AI, aiName)
+	ai, _, err := ResolveAgent(uf.Agent, aiName)
 	if err != nil {
 		return err
 	}
@@ -229,8 +229,8 @@ func (c *EvalRunLocalCmd) Run() error {
 		Score:            score,
 		TargetKind:       string(tk),
 		TargetName:       tn,
-		AIName:           aiName,
-		AI:               ai,
+		AgentName:        aiName,
+		Agent:            ai,
 		Prompt:           score.Prompt,
 		TargetImage:      targetImage,
 		Tag:              tagExpr,
@@ -254,7 +254,7 @@ func (c *EvalRunLocalCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	report.AIVersion = map[string]string{aiName: aiVer.String()}
+	report.AgentVersion = map[string]string{aiName: aiVer.String()}
 
 	if err := PushBranchToHost(ctx, layout); err != nil {
 		fmt.Fprintf(os.Stderr, "harness: push branch back failed (non-fatal): %v\n", err)
@@ -336,7 +336,7 @@ func runProgressiveHarness(
 		Recipe:              append([]string(nil), score.Recipe...),
 		Calver:              ComputeCalVer(),
 		RunID:               layout.RunID,
-		AI:                  commonOpts.AIName,
+		Agent:               commonOpts.AgentName,
 		Where:               ReportWhere{Kind: commonOpts.TargetKind, Name: commonOpts.TargetName},
 		TargetImage:         commonOpts.TargetImage,
 		Tag:                 commonOpts.Tag,

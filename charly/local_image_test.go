@@ -10,9 +10,9 @@ func TestParseLocalImagesJSON_DedupByID(t *testing.T) {
 	// Two rows for one id (id "ccc", two tags), each row carrying BOTH tags in
 	// Names — exactly podman's row-per-tag shape. Plus a distinct id "ddd".
 	js := []byte(`[
-		{"Id":"ccc","Names":["ghcr/eval-pod:2026.150.916","ghcr/eval-pod:2026.150.836"],"Labels":{"ai.opencharly.image":"eval-pod","ai.opencharly.version":"2026.155.1801"}},
-		{"Id":"ccc","Names":["ghcr/eval-pod:2026.150.916","ghcr/eval-pod:2026.150.836"],"Labels":{"ai.opencharly.image":"eval-pod","ai.opencharly.version":"2026.155.1801"}},
-		{"Id":"ddd","Names":["ghcr/other:2026.1.1"],"Labels":{"ai.opencharly.image":"other"}}
+		{"Id":"ccc","Names":["ghcr/eval-pod:2026.150.0916","ghcr/eval-pod:2026.150.0836"],"Labels":{"ai.opencharly.image":"eval-pod","ai.opencharly.version":"2026.155.1801"}},
+		{"Id":"ccc","Names":["ghcr/eval-pod:2026.150.0916","ghcr/eval-pod:2026.150.0836"],"Labels":{"ai.opencharly.image":"eval-pod","ai.opencharly.version":"2026.155.1801"}},
+		{"Id":"ddd","Names":["ghcr/other:2026.001.0001"],"Labels":{"ai.opencharly.image":"other"}}
 	]`)
 	imgs, err := parseLocalImagesJSON(js)
 	if err != nil {
@@ -38,7 +38,7 @@ func TestParseLocalImagesJSON_DedupByID(t *testing.T) {
 // instead of Names) and that distinct untagged (empty-id) rows do NOT merge.
 func TestParseLocalImagesJSON_DockerRepoTags(t *testing.T) {
 	js := []byte(`[
-		{"ID":"aaa","RepoTags":["ghcr/foo:2026.1.1"],"Labels":{"ai.opencharly.image":"foo"}},
+		{"ID":"aaa","RepoTags":["ghcr/foo:2026.001.0001"],"Labels":{"ai.opencharly.image":"foo"}},
 		{"Id":"","Names":["<none>:<none>"]},
 		{"Id":"","Names":["<none>:<none>"]}
 	]`)
@@ -50,7 +50,7 @@ func TestParseLocalImagesJSON_DockerRepoTags(t *testing.T) {
 	if len(imgs) != 3 {
 		t.Fatalf("got %d entries, want 3 (docker RepoTags + 2 unmerged empty-id): %+v", len(imgs), imgs)
 	}
-	if imgs[0].ID != "aaa" || len(imgs[0].Names) != 1 || imgs[0].Names[0] != "ghcr/foo:2026.1.1" {
+	if imgs[0].ID != "aaa" || len(imgs[0].Names) != 1 || imgs[0].Names[0] != "ghcr/foo:2026.001.0001" {
 		t.Fatalf("entry 0 = %+v, want id aaa with RepoTags ref", imgs[0])
 	}
 }

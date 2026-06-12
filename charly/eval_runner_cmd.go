@@ -20,7 +20,7 @@ import (
 
 // The HarnessCmd top-level type was deleted in the eval-cutover. Its
 // fields are absorbed into EvalCmd in eval_cmd.go; the per-subcommand
-// types (EvalListAICmd, EvalRunCmd, EvalSyncCredCmd, EvalScopeCmd,
+// types (EvalListAgentCmd, EvalRunCmd, EvalSyncCredCmd, EvalScopeCmd,
 // EvalLastTagCmd, EvalSelfEvalCmd, EvalListRunsCmd, EvalReportCmd,
 // EvalNoteCmd, EvalRunLocalCmd) live in this file (and the
 // eval_runlocal_cmd.go / eval_synccreds_cmd.go siblings).
@@ -29,10 +29,10 @@ import (
 // list-ai / list-recipe / list-score — functional inspection
 // ---------------------------------------------------------------------------
 
-// EvalListAICmd implements `charly eval list-ai`.
-type EvalListAICmd struct{}
+// EvalListAgentCmd implements `charly eval list-ai`.
+type EvalListAgentCmd struct{}
 
-func (c *EvalListAICmd) Run() error {
+func (c *EvalListAgentCmd) Run() error {
 	dir, err := os.Getwd()
 	if err != nil {
 		return err
@@ -45,7 +45,7 @@ func (c *EvalListAICmd) Run() error {
 		fmt.Fprintln(os.Stdout, "No charly.yml found in current directory.")
 		return nil
 	}
-	PrintAIs(os.Stdout, uf.AI)
+	PrintAgents(os.Stdout, uf.Agent)
 	return nil
 }
 
@@ -101,8 +101,8 @@ func (c *EvalListScoreCmd) Run() error {
 // drives the AI iteration loop. The two namespaces are disjoint (a name
 // cannot be both — foldEvalBeds enforces it at load time).
 type EvalRunCmd struct {
-	Name string `arg:"" optional:"" help:"kind:eval bed (full R10 sequence) or kind:score (AI iteration loop). Omit with --all-beds."`
-	AI   string `name:"ai" help:"Pick which AI to run (required if score.ai has more than one entry)"`
+	Name  string `arg:"" optional:"" help:"kind:eval bed (full R10 sequence) or kind:score (AI iteration loop). Omit with --all-beds."`
+	Agent string `name:"agent" help:"Pick which agent to run (required if score.agent has more than one entry)"`
 
 	// kind:eval bed-path flags (ignored on the kind:score path).
 	AllBeds   bool `name:"all-beds" help:"Run every kind:eval bed (name-sorted) through the full R10 sequence"`
@@ -204,8 +204,8 @@ func (c *EvalRunCmd) Run() error {
 
 	runID := GenerateRunID()
 	args := []string{"eval", "run-local", c.Name, "--run-id", runID}
-	if c.AI != "" {
-		args = append(args, "--ai", c.AI)
+	if c.Agent != "" {
+		args = append(args, "--agent", c.Agent)
 	}
 	if c.PlateauIteration > 0 {
 		args = append(args, "--plateau-iteration", fmt.Sprintf("%d", c.PlateauIteration))
@@ -504,7 +504,7 @@ func runWithPhaseResync(cmd *exec.Cmd, scoreName string) error {
 // EvalSyncCredCmd is `charly eval sync-credential <score>`.
 type EvalSyncCredCmd struct {
 	Score string `arg:"" help:"Score name"`
-	AI    string `name:"ai" help:"Sync credentials for this AI only (default: all configured)"`
+	Agent string `name:"agent" help:"Sync credentials for this agent only (default: all configured)"`
 }
 
 func (c *EvalSyncCredCmd) Run() error { return c.RunActual() }
@@ -804,7 +804,7 @@ func (c *EvalNoteAppendCmd) Run() error {
 	}
 	runID := os.Getenv("CHARLY_EVAL_RUN_ID")
 	iter := os.Getenv("CHARLY_EVAL_ITERATION")
-	ai := os.Getenv("CHARLY_EVAL_AI")
+	ai := os.Getenv("CHARLY_EVAL_AGENT")
 	if iter == "" {
 		iter = "0"
 	}

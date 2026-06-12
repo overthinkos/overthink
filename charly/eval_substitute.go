@@ -30,7 +30,7 @@ type SubstContext struct {
 	// Run identity
 	RunID     string
 	ScoreName string
-	AIName    string
+	AgentName string
 
 	// Workspace + target
 	WorkspacePath string
@@ -153,7 +153,7 @@ func lookupHarnessToken(name string, ctx *SubstContext) string {
 	case "SCORE_NAME":
 		return ctx.ScoreName
 	case "AI_NAME":
-		return ctx.AIName
+		return ctx.AgentName
 	case "ITERATION":
 		return intTok(ctx.Iteration)
 	case "PLATEAU_ITERATION":

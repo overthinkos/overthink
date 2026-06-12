@@ -21,7 +21,7 @@ func TestCanonicalLabelKey_ExpandsShorthand(t *testing.T) {
 
 func TestSortedLabelKeys_FiltersToContractUnlessAll(t *testing.T) {
 	labels := map[string]string{
-		"ai.opencharly.version": "2026.1.1",
+		"ai.opencharly.version": "2026.001.0001",
 		"ai.opencharly.init":    "supervisord",
 		"maintainer":            "someone",
 	}
@@ -59,11 +59,11 @@ func TestApplySecretRefresh_NamedAllAndUnmatched(t *testing.T) {
 }
 
 func TestParsePS_PodmanRowsCarryImageRef(t *testing.T) {
-	rows, err := parsePS(`[{"Names":["charly-probe"],"State":"running","Status":"Up 2 minutes","Image":"ghcr.io/overthinkos/eval-box-check:2026.160.804","Ports":[]}]`)
+	rows, err := parsePS(`[{"Names":["charly-probe"],"State":"running","Status":"Up 2 minutes","Image":"ghcr.io/overthinkos/eval-box-check:2026.160.0804","Ports":[]}]`)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(rows) != 1 || rows[0].Image != "ghcr.io/overthinkos/eval-box-check:2026.160.804" {
+	if len(rows) != 1 || rows[0].Image != "ghcr.io/overthinkos/eval-box-check:2026.160.0804" {
 		t.Errorf("podman ps Image not parsed: %+v", rows)
 	}
 }

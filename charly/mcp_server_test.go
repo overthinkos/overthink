@@ -196,7 +196,7 @@ func TestMcpServerSchema_AdditionalPropertiesFalse(t *testing.T) {
 func TestMcpServer_VersionRoundTrip(t *testing.T) {
 	saved := BuildCalVer
 	defer func() { BuildCalVer = saved }()
-	BuildCalVer = "2026.154.943"
+	BuildCalVer = "2026.154.0943"
 
 	stdout, stderr, err := captureAndRun([]string{"version"})
 	if err != nil {
@@ -204,8 +204,8 @@ func TestMcpServer_VersionRoundTrip(t *testing.T) {
 	}
 	trimmed := strings.TrimSpace(stdout)
 	// Must echo the stamped identity verbatim — not the current time.
-	if trimmed != "2026.154.943" {
-		t.Errorf("version output = %q, want the stamped BuildCalVer %q (stderr=%q)", trimmed, "2026.154.943", stderr)
+	if trimmed != "2026.154.0943" {
+		t.Errorf("version output = %q, want the stamped BuildCalVer %q (stderr=%q)", trimmed, "2026.154.0943", stderr)
 	}
 }
 

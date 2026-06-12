@@ -10,7 +10,7 @@ func TestSubstitute_WellKnownTokens(t *testing.T) {
 	ctx := &SubstContext{
 		RunID:            "run-1",
 		ScoreName:        "default",
-		AIName:           "claude",
+		AgentName:        "claude",
 		WorkspacePath:    "/workspace/repo",
 		TargetImage:      "fedora-coder",
 		TargetKind:       "pod",

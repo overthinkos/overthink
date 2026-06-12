@@ -48,13 +48,13 @@ func TestParseVerdict_LastWins(t *testing.T) {
 	}
 }
 
-// --- RunAIOnce -----------------------------------------------------------
+// --- RunAgentOnce -----------------------------------------------------------
 
 func TestRunAIOnce_CapturesStdout(t *testing.T) {
-	ai := &AIConfig{Command: []string{"sh", "-c", `echo '{"verdict":"pass","evidence":"ok"}'`}}
-	out, _, err := RunAIOnce(context.Background(), ai, "ignored", 10*time.Second)
+	ai := &AgentConfig{Command: []string{"sh", "-c", `echo '{"verdict":"pass","evidence":"ok"}'`}}
+	out, _, err := RunAgentOnce(context.Background(), ai, "ignored", 10*time.Second)
 	if err != nil {
-		t.Fatalf("RunAIOnce: %v", err)
+		t.Fatalf("RunAgentOnce: %v", err)
 	}
 	if pass, _, ok := parseVerdict(out); !ok || !pass {
 		t.Fatalf("verdict not parsed from %q", out)
@@ -62,10 +62,10 @@ func TestRunAIOnce_CapturesStdout(t *testing.T) {
 }
 
 func TestRunAIOnce_SubstitutesPrompt(t *testing.T) {
-	ai := &AIConfig{Command: []string{"printf", "%s", "${PROMPT}"}}
-	out, _, err := RunAIOnce(context.Background(), ai, "HELLO-PROMPT-TOKEN", 10*time.Second)
+	ai := &AgentConfig{Command: []string{"printf", "%s", "${PROMPT}"}}
+	out, _, err := RunAgentOnce(context.Background(), ai, "HELLO-PROMPT-TOKEN", 10*time.Second)
 	if err != nil {
-		t.Fatalf("RunAIOnce: %v", err)
+		t.Fatalf("RunAgentOnce: %v", err)
 	}
 	if !strings.Contains(out, "HELLO-PROMPT-TOKEN") {
 		t.Fatalf("${PROMPT} not substituted into argv: %q", out)
@@ -73,15 +73,15 @@ func TestRunAIOnce_SubstitutesPrompt(t *testing.T) {
 }
 
 func TestRunAIOnce_Timeout(t *testing.T) {
-	ai := &AIConfig{Command: []string{"sleep", "10"}}
-	_, _, err := RunAIOnce(context.Background(), ai, "x", 150*time.Millisecond)
+	ai := &AgentConfig{Command: []string{"sleep", "10"}}
+	_, _, err := RunAgentOnce(context.Background(), ai, "x", 150*time.Millisecond)
 	if err == nil {
 		t.Fatal("expected a timeout error")
 	}
 }
 
 func TestRunAIOnce_NoCommand(t *testing.T) {
-	if _, _, err := RunAIOnce(context.Background(), &AIConfig{}, "x", time.Second); err == nil {
+	if _, _, err := RunAgentOnce(context.Background(), &AgentConfig{}, "x", time.Second); err == nil {
 		t.Fatal("expected error for an ai entry with no command")
 	}
 }
@@ -89,8 +89,8 @@ func TestRunAIOnce_NoCommand(t *testing.T) {
 // --- AgentGrader ---------------------------------------------------------
 
 func TestAgentGrader_GradeFail(t *testing.T) {
-	ai := &AIConfig{Command: []string{"sh", "-c", `echo '{"verdict":"fail","evidence":"port closed"}'`}}
-	g := &AgentGrader{AI: ai, Target: "eval-pod"}
+	ai := &AgentConfig{Command: []string{"sh", "-c", `echo '{"verdict":"fail","evidence":"port closed"}'`}}
+	g := &AgentGrader{Agent: ai, Target: "eval-pod"}
 	res := g.Grade(context.Background(), GraderRequest{Keyword: "Then", Text: "the port answers"})
 	if res.Status != TestFail {
 		t.Fatalf("want TestFail, got %v", res.Status)
@@ -101,8 +101,8 @@ func TestAgentGrader_GradeFail(t *testing.T) {
 }
 
 func TestAgentGrader_UnparseableIsFail(t *testing.T) {
-	ai := &AIConfig{Command: []string{"sh", "-c", `echo "I have no idea"`}}
-	g := &AgentGrader{AI: ai, Target: "eval-pod"}
+	ai := &AgentConfig{Command: []string{"sh", "-c", `echo "I have no idea"`}}
+	g := &AgentGrader{Agent: ai, Target: "eval-pod"}
 	res := g.Grade(context.Background(), GraderRequest{Keyword: "Then", Text: "x"})
 	if res.Status != TestFail {
 		t.Fatalf("unparseable grader output must FAIL (never silent pass), got %v", res.Status)

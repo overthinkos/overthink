@@ -37,7 +37,7 @@ import (
 type LedgerPaths struct {
 	Root     string // ~/.config/opencharly/installed
 	Deploys  string // <Root>/deploys/
-	Candies   string // <Root>/layers/
+	Candies  string // <Root>/layers/
 	LockFile string // <Root>/.lock
 }
 
@@ -52,7 +52,7 @@ func DefaultLedgerPaths() (*LedgerPaths, error) {
 	return &LedgerPaths{
 		Root:     root,
 		Deploys:  filepath.Join(root, "deploys"),
-		Candies:   filepath.Join(root, "layers"),
+		Candies:  filepath.Join(root, "layers"),
 		LockFile: filepath.Join(root, ".lock"),
 	}, nil
 }
@@ -134,11 +134,11 @@ type CandyRecord struct {
 	SchemaVersion string       `json:"schema_version,omitempty"`
 	Candy         string       `json:"candy"`
 	Version       string       `json:"version,omitempty"`
-	DeployedBy   []string     `json:"deployed_by"` // set of deploy IDs
-	DeployedAt   string       `json:"deployed_at"`
-	BuilderImage string       `json:"builder_image,omitempty"`
-	Steps        []StepRecord `json:"steps,omitempty"`       // completed steps, in install order
-	ReverseOps   []ReverseOp  `json:"reverse_ops,omitempty"` // precomputed ops for teardown
+	DeployedBy    []string     `json:"deployed_by"` // set of deploy IDs
+	DeployedAt    string       `json:"deployed_at"`
+	BuilderImage  string       `json:"builder_image,omitempty"`
+	Steps         []StepRecord `json:"steps,omitempty"`       // completed steps, in install order
+	ReverseOps    []ReverseOp  `json:"reverse_ops,omitempty"` // precomputed ops for teardown
 }
 
 // StepRecord is a thin summary of a completed InstallStep that the

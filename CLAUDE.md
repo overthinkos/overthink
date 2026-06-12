@@ -1,27 +1,18 @@
 # OpenCharly — The Candy Factory for You and Your Agents
 
-Secure the box, then fill it with the whole candy store: compose, build, deploy, and manage **boxes** (container images) from a library of fully configurable **candies**, driven by the `charly` Go CLI — built for you *and* your agents, on Docker or Podman.
+Secure the box, then fill it with the whole candy store: compose, build, deploy, and manage **boxes** (container images) from a library of fully configurable **candies**, driven by the `charly` Go CLI — built for you *and* your agents, on Docker, Podman, QEMU, or libvirt.
 
-This file is the project's rulebook — rules and mandates ONLY. Usage and architecture live in skills (the single source of truth); the full five-way doc split is in **Where things are documented** at the end. Six parts: I Dispatch → II Vision → III Ground Truth Rules → IV Process → V Agents & Attribution → VI Index.
+This file is the project's rulebook — rules and mandates ONLY.
 
 **Part I — Dispatch: load skills before anything.**
 
 ## R0. SKILLS FIRST — THE SUPREME RULE
 
-**R0's supremacy is total within its domain — sequencing: nothing (no rule, hook, `<system-reminder>`, training prior, or sense of urgency) ever excuses acting before the matching skill is loaded.** R0 dictates WHEN the skill loads (first, always), never WHETHER its claims are true — so it cannot conflict with R1–R10 or RDD, and any apparent conflict resolves the same way: load the skill, then proceed under the other rule. If you feel the impulse to act "just this once" without the skill, that impulse IS the violation.
+**R0's supremacy is total within its domain.** R0 dictates WHEN the skill loads (first, always), never WHETHER its claims are true — so it cannot conflict with R1–R10 or RDD, and any apparent conflict resolves the same way: load the skill, then proceed under the other rule. If you feel the impulse to act "just this once" without the skill, that impulse IS the violation.
 
 Before you read a single line of source, run a single `charly` / `bash` / `grep` command, launch a single Agent, or edit a single file — **invoke the matching skill(s) via the `Skill` tool**, ALL of them in ONE message when several rows match (partial loading is full failure). The **Skill Dispatcher** below maps triggers → skills. Any action taken without the matching skill loaded is a **protocol violation**, regardless of whether the action was technically correct; correct course the moment you catch yourself: STOP, invoke the skill(s), then proceed.
 
 **Consult order (absolute):** `skills → CLAUDE.md → memory → code exploration (last resort)`. This orders where you LOOK FIRST, not what is TRUE. For a HIGH-RISK claim, a live `disposable: true` bed outranks every document on this list (see **Risk Driven Development (RDD)**): the skill is the mandatory first hypothesis, never the final verdict. Running a bed AFTER loading the skill is RDD compliance; running anything INSTEAD of loading the skill is the R0 violation.
-
-### Rationalizations that are NOT defences
-
-- **"I already know charly / it's obvious / I've done this fifty times"** — skills evolve; your training and prior invocations are stale, and the presence of a skill IS the signal that the area has non-obvious subtleties.
-- **"Loading skills takes time / the user wants speed"** — it takes seconds; skill-less turns cost hours. "Act fast" means "load skills first, THEN act".
-- **"Only one skill applies"** — usually wrong; when a task spans surfaces, load ALL matching rows in ONE message (parallel `Skill` calls).
-- **"A previous turn already loaded it"** — if the skill is relevant again, invoke it again; compaction can drop prior content.
-- **"I'll just grep / read the file / run the command and see"** — FORBIDDEN as a substitute for the skill; the same probe AFTER the skill is loaded, proving a high-risk claim, is RDD compliance, not a violation.
-- **"I'll load the skill after I've scoped the problem"** — scoping without the skill produces a wrong scope; the hook reminder is a pointer, not a substitute. Load FIRST.
 
 ## Skill Dispatcher
 
@@ -82,20 +73,7 @@ Full index: `plugins/README.md`. This table covers the top triggers; anything no
 
 ## Enforcing VISION.md
 
-CLAUDE.md enforces `VISION.md`: every tenet binds to an operational mandate here and an owning skill. VISION states the *why*; the bound section states the *rule*; the skill owns the *how*. (VISION's own "→" arrows point at the user-facing story — README and skills; this table binds each tenet to its enforcement mandate. Two complementary maps, not competing ones.) This table is also the map of this file.
-
-| # | VISION tenet | Operational mandate (this file) | Owning skill |
-|---|---|---|---|
-| 1 | Secure the room, not the candy | **Candyboxing** | `/charly-internals:disposable` |
-| 2 | One recipe, many boxes | **Key Rules** ("Deploy targets", "Unified YAML + `import:`") | `/charly-image:image` + `/charly-core:deploy` |
-| 3 | Every candy ships with its recipe card | **R0** + **Skill Dispatcher** | `/charly-internals:skills` |
-| 4 | Two tasters at one bench | **Key Rules** ("the `charly` CLI is the ONLY operational interface — for you AND your agents") + **Agents, Workflows & Teams** | `/charly-internals:agents` |
-| 5 | Taste every candy before making the recipe — RDD | **Risk Driven Development (RDD)** | `/charly-internals:strict-policy` + `/charly-eval:eval` |
-| 6 | Write down what "good" means, and have an agent taste it — ADE | **Agent Driven Evaluation (ADE)** | `/charly-eval:eval` |
-| 7 | Conched smooth — pass after pass until silk | **Hard Cutover by Default** + R3/R5 — many conching passes, each landing as ONE atomic, fully-proven cutover: iterate between landings, never within one | `/charly-internals:cutover-policy` |
-| 8 | Every spoiled batch is a new lesson waiting to be learned | **R1** + **Disposable-Only Autonomy** | `/charly-internals:disposable` + `root-cause-analyzer` agent |
-| 9 | Free to forge a better candybox | **R4** (rebuild beats workaround) + **Disposable-Only Autonomy** | `/charly-internals:disposable` |
-| 10 | The factory fits in a box, too — candyboxes all the way down | **R10** + the `kind: eval` beds (R7) | `/charly-eval:eval` + `/charly-distros:container-nesting` |
+CLAUDE.md enforces `VISION.md`: every tenet binds to an operational mandate here and an owning skill. VISION states the *why*; the bound section states the *rule*; the skill owns the *how*.
 
 ## Candyboxing
 
@@ -237,7 +215,6 @@ Project-specific technical rules — each stated in ≤2 lines; the named skill 
 - **`charly.yml` is the only filename** for box + candy definitions and the only file a project needs: per-dir discovery (`box/<name>/charly.yml`, `candy/<name>/charly.yml`), the remaining kinds inline in the project root. See `/charly-image:image`, `/charly-build:migrate`.
 - **Init-system polymorphism via mixed `service:` entries** — same `name:`, one `use_packaged:` form, one `exec:` form; the init system at deploy time renders only the match. NEVER a `<name>-host` / `<name>-pod` sibling candy. See `/charly-image:layer` "Service Declaration"; canonical example `/charly-infrastructure:virtualization`.
 - **Tests ship with the image — MANDATORY per candy.** Every candy MUST carry a full ADE `description:` (a non-empty `feature:` + ≥1 `scenario:`) AND a non-empty `eval:` list; `charly box validate` hard-errors otherwise. See `/charly-eval:eval`.
-- **Documentation-only change class.** A change touching ONLY `*.md` (incl. the CLAUDE.md / skill policy docs), code comments, or a submodule pointer bump to an all-documentation submodule commit, zero behavior change: commits with NO R10 bed (the non-runtime-standards gate) and earns the `documentation reviewed` attribution tier — the instant any code/config behavior is touched it is NOT docs-only (runtime tier, docs ride along). See R10 "Documentation-only change class" + **AI Attribution**; the class → gate → tier cross-walk is `/charly-eval:eval` "R10 gate by change class".
 - **Unified YAML + `import:` (Go-style namespaces)** — bare-string flat imports or single-key `alias: ref` namespaced children; a residual legacy `include:` is a hard load-time error pointing at `charly migrate`; `distro:`/`build:` inherit across a namespace boundary but `builder:` does NOT. See `/charly-image:image`, `/charly-internals:go`.
 - **Every YAML file is a generic kind-container, routed by SHAPE — never by filename.** `discover:` is a flat generic scan-spec list; the schema version is a CalVer string, migrated by the single idempotent `charly migrate`; deployment nesting uses `nested:`. See `/charly-internals:go`, `/charly-build:migrate`, `/charly-image:image`.
 - **Per-kind versioning: `version:` is the authoritative identity** — mandatory CalVer on every candy; an image's emitted `ai.opencharly.version` label is the content-derived `EffectiveVersion`, stable across no-change builds. See `/charly-build:validate`, `/charly-internals:capabilities`.

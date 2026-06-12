@@ -2,7 +2,9 @@
 # PreToolUse(Bash) deterministic gate. Blocks (exit 2) a `git commit` that:
 #   - bypasses the project's git hooks (--no-verify, or its short alias -n
 #     incl. bundled forms like -an, as a flag BEFORE the message — so a
-#     "--no-verify" mention INSIDE a commit message never false-triggers), or
+#     "--no-verify" mention INSIDE a commit message never false-triggers; or
+#     a core.hooksPath override in git's global options, the config spelling
+#     of the same bypass), or
 #   - carries an AI-attribution tier the CLAUDE.md table forbids on a commit
 #     (`theoretical suggestion`, and `syntax check only` — the table pairs it
 #     with "do NOT commit"; docs-only cutovers ship at "fully tested and
@@ -46,6 +48,15 @@ has_inline_msg = False
 for m in INVOKE.finditer(cmd):
     found = True
     args = m.group(1) or ''
+    # A core.hooksPath override is the config spelling of --no-verify. The
+    # `-c key=value` form lives in git's GLOBAL options (between `git` and
+    # `commit`), so scan ONLY that span — commit's own `-c <commit>`
+    # (reuse-message) and a message merely mentioning the key never
+    # false-trigger. Env-var config injection is out of scope: the gate is a
+    # discipline backstop, not a security boundary.
+    glob_opts = cmd[m.start(0):m.start(1)]
+    if re.search(r'core\.hookspath', glob_opts, re.IGNORECASE):
+        block("`git -c core.hooksPath=...` bypasses the project's git hooks — the config spelling of --no-verify; forbidden (CLAUDE.md: never bypass hooks).")
     # inline-message detection is scoped to THIS commit invocation's arg span,
     # so a foreign -m elsewhere on the line (grep -m 1 ...; git commit -F f)
     # never triggers the absent-trailer check.

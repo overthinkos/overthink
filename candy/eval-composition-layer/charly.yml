@@ -6,6 +6,22 @@ candy:
         narrative: |
             Writes /etc/charly-composition-selftest, satisfying the
             composition-handwritten-probe scenario in from-composition-selftest.
+        tag: [working]
+        scenario:
+            - name: composition-marker-present
+              step:
+                - then: the composition selftest marker file exists at /etc/charly-composition-selftest
+                  file: /etc/charly-composition-selftest
+                  exists: true
+                - then: the marker file is written world-readable at mode 0644
+                  file: /etc/charly-composition-selftest
+                  mode: "0644"
+            - name: composition-marker-content-matches
+              step:
+                - then: the marker file carries the composition selftest marker string
+                  file: /etc/charly-composition-selftest
+                  contains:
+                    - charly composition selftest marker
     task:
         - mkdir: /etc
           user: root
@@ -19,3 +35,10 @@ candy:
         - id: composition-marker-exists
           file: /etc/charly-composition-selftest
           exists: true
+        - id: composition-marker-content
+          file: /etc/charly-composition-selftest
+          contains:
+            - charly composition selftest marker
+        - id: composition-marker-mode
+          file: /etc/charly-composition-selftest
+          mode: "0644"

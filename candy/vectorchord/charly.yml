@@ -1,6 +1,33 @@
 candy:
     version: 2026.144.1531
     name: vectorchord
+    description:
+        feature: VectorChord vector-search extension installed into the PostgreSQL layer
+        narrative: |
+            VectorChord (vchord) is a PostgreSQL extension for vector similarity
+            search. This candy downloads the per-Postgres-major release zip and
+            installs the vchord.so shared library into the server's pkglibdir plus
+            the vchord.control manifest and vchord--*.sql migration files into the
+            extension sharedir, then sets POSTGRES_SHARED_PRELOAD_LIBRARIES=vchord.so
+            so the running server preloads it. The control manifest and shared
+            library are concrete, distro-agnostic artifacts whose presence proves
+            the download-and-install ran; CREATE EXTENSION vchord against the live
+            server proves it is actually loadable.
+        tag: [working]
+        scenario:
+            - name: vchord-extension-control-registered
+              step:
+                - then: the vchord.control extension manifest is registered in the PostgreSQL extension sharedir
+                  command: 'SD=$(for d in /usr/share/pgsql /usr/share/postgresql; do [ -d "$d/extension" ] && echo "$d" && break; done); test -f "$SD/extension/vchord.control"'
+                  exit_status: 0
+            - name: vchord-shared-library-installed
+              step:
+                - then: the vchord.so shared library is installed alongside the server's plpgsql.so in pkglibdir
+                  command: 'PL=$(dirname "$(find /usr/lib* -name plpgsql.so -print -quit 2>/dev/null)"); test -f "$PL/vchord.so"'
+                  exit_status: 0
+            - name: vchord-loadable-as-postgres-extension
+              step:
+                - then: CREATE EXTENSION vchord succeeds against the running PostgreSQL server, exposing the vchord vector index access methods
     require:
         - postgresql
     distro:
@@ -68,6 +95,9 @@ candy:
     eval:
         - id: vchord-control-file
           command: SD=$(for d in /usr/share/pgsql /usr/share/postgresql; do [ -d "$d/extension" ] && echo "$d" && break; done); test -f "$SD/extension/vchord.control"
+          exit_status: 0
+        - id: vchord-shared-library
+          command: PL=$(dirname "$(find /usr/lib* -name plpgsql.so -print -quit 2>/dev/null)"); test -f "$PL/vchord.so"
           exit_status: 0
         - id: vchord-shared-preload-env
           scope: deploy

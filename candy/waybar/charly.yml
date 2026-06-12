@@ -3,6 +3,43 @@ candy:
     name: waybar
     require:
         - sway
+    description:
+        feature: Waybar status bar and Sway auto-tiling for the Sway desktop
+        narrative: |
+            Installs the waybar package, stages the waybar-wrapper launcher and the
+            sway-autotile helper into the user's ~/.local/bin, and stages the shared
+            Catppuccin Mocha waybar config + stylesheet under ~/.config/waybar. Two
+            supervisord services then run the bar and the auto-tiler against the Sway
+            Wayland session. Every installed artifact is file-verifiable at build scope.
+        tag: [working]
+        scenario:
+            - name: waybar-binary-installed
+              step:
+                - then: the waybar status-bar binary is installed from the distro package
+                  file: /usr/bin/waybar
+                  exists: true
+                - then: waybar is recorded as installed in the package database
+                  package: waybar
+                  installed: true
+            - name: launcher-and-autotile-scripts-staged
+              step:
+                - then: the waybar-wrapper launcher script is installed under the user's bin
+                  file: ${HOME}/.local/bin/waybar-wrapper
+                  exists: true
+                - then: the sway-autotile helper script is installed under the user's bin
+                  file: ${HOME}/.local/bin/sway-autotile
+                  exists: true
+            - name: waybar-config-staged
+              step:
+                - then: the waybar module-layout config is staged for the user
+                  file: ${HOME}/.config/waybar/config
+                  exists: true
+                - then: the Catppuccin Mocha stylesheet is staged for the user
+                  file: ${HOME}/.config/waybar/style.css
+                  exists: true
+            - name: status-bar-renders-on-sway-desktop
+              step:
+                - then: the waybar status bar appears on the running Sway desktop showing the taskbar, Chrome-restart, and notification toggle modules
     distro:
         fedora:
             package:
@@ -32,11 +69,17 @@ candy:
         - id: waybar-binary
           file: /usr/bin/waybar
           exists: true
+        - id: waybar-package
+          package: waybar
+          installed: true
         - id: waybar-wrapper
           file: ${HOME}/.local/bin/waybar-wrapper
           exists: true
         - id: waybar-config
           file: ${HOME}/.config/waybar/config
+          exists: true
+        - id: waybar-style
+          file: ${HOME}/.config/waybar/style.css
           exists: true
         - id: sway-autotile-script
           file: ${HOME}/.local/bin/sway-autotile

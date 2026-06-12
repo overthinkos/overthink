@@ -10,6 +10,23 @@ candy:
             eval-stack-layer that composes on top asserts this marker is still
             present, proving layer-composition order survives the build pipeline.
         tag: [working]
+        scenario:
+            # Agent Driven Evaluation acceptance scenarios, baked into this
+            # candy's ai.opencharly.description label. Both steps are
+            # DETERMINISTIC (embedded file check verbs → run at build AND
+            # deploy scope by `charly box/eval feature run`); the marker is a
+            # build-time artifact, so a missing or empty file fails them.
+            - name: eval-base-marker-present
+              step:
+                - then: the eval-base marker file is present at /etc/eval-base-marker
+                  file: /etc/eval-base-marker
+                  exists: true
+            - name: eval-base-marker-records-version
+              step:
+                - then: the marker records the eval-base version string "eval-base v1"
+                  file: /etc/eval-base-marker
+                  contains:
+                    - contains: "eval-base v1"
     task:
         - write: /etc/eval-base-marker
           user: root
@@ -20,3 +37,7 @@ candy:
         - id: eval-base-marker-exists
           file: /etc/eval-base-marker
           exists: true
+        - id: eval-base-marker-content
+          file: /etc/eval-base-marker
+          contains:
+            - contains: "eval-base v1"

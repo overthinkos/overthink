@@ -1,6 +1,57 @@
 candy:
     version: 2026.144.1531
     name: immich
+    description:
+        feature: Immich self-hosted photo and video management server on port 2283.
+        narrative: |
+            Builds the Immich Node server from source with pnpm into
+            /opt/immich/server, installs a PostgreSQL-aware startup wrapper and an
+            idempotent DB-migration wrapper, and seeds Postgres with the vector /
+            vchord / earthdistance extensions before serving the photo+video API on
+            port 2283. Library, cache, import and external media live under
+            ~/.immich. The behaviour is verifiable as the built server bundle, the
+            installed wrappers, the image-codec toolchain, the seeded init SQL, and a
+            live /api/server/ping response.
+        tag: [working]
+        scenario:
+            - name: server-bundle-built
+              step:
+                - then: the Immich Node server bundle is built into /opt/immich/server
+                  file: /opt/immich/server/dist/main.js
+                  exists: true
+            - name: startup-and-migration-wrappers-installed
+              step:
+                - then: the PostgreSQL-aware server startup wrapper is installed and executable
+                  file: /usr/local/bin/immich-server-start.sh
+                  exists: true
+                  mode: "0755"
+                - then: the idempotent DB-migration wrapper is installed and executable
+                  file: /usr/local/bin/immich-db-migrate.sh
+                  exists: true
+                  mode: "0755"
+            - name: image-codec-toolchain-present
+              step:
+                - then: the libvips image-processing library is installed for thumbnailing and transcoding
+                  package: vips
+                  package_map:
+                    arch: libvips
+                    fedora: vips
+                  installed: true
+            - name: db-extensions-seeded
+              step:
+                - then: the Postgres init script seeds the pgvector extension Immich requires
+                  file: /docker-entrypoint-initdb.d/01-immich-extensions.sql
+                  exists: true
+                  contains: "CREATE EXTENSION IF NOT EXISTS vector"
+            - name: api-answers-health-ping
+              step:
+                - then: the running Immich API answers its health ping on port 2283
+                  scope: deploy
+                  http: http://127.0.0.1:${HOST_PORT:2283}/api/server/ping
+                  status: 200
+                  body:
+                    - contains: "pong"
+                - then: the web UI presents a usable first-run / login experience
     require:
         - supervisord
         - nodejs
@@ -225,6 +276,12 @@ candy:
         - id: immich-library-dir
           file: ${HOME}/.immich/library
           filetype: directory
+        - id: immich-vips-package
+          package: vips
+          package_map:
+            arch: libvips
+            fedora: vips
+          installed: true
         - id: immich-server-running
           scope: deploy
           service: immich-server

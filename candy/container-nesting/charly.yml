@@ -1,7 +1,50 @@
 candy:
     version: 2026.162.1430
     name: container-nesting
-    description: Container-in-container support (rootless nested podman, buildah, skopeo).
+    description:
+        feature: Rootless nested podman/buildah/skopeo inside a rootless outer container -- zero added capabilities, no --privileged.
+        narrative: |
+            Ports quay.io/podman/stable's canonical rootless-in-rootless configuration
+            into the candy system. Installs podman + crun + buildah + skopeo +
+            fuse-overlayfs, writes containers.conf with every namespace=host (the
+            userns=host line is what bypasses the kernel mount_too_revealing /proc
+            check), a two-range subuid layout that fits the keep-id window,
+            newuidmap/newgidmap file caps, policy.json and storage.conf -- so an inner
+            `podman run` of a fresh container succeeds with no cap_add and no
+            --privileged. Every artifact below is observable in the built image; the
+            end-to-end nested run is provable on a live deployment.
+        tag: [working]
+        scenario:
+            - name: nesting-toolchain-installed
+              step:
+                - then: the podman container engine is installed for in-container use
+                  file: /usr/bin/podman
+                  exists: true
+                - then: the buildah image-build tool is installed
+                  file: /usr/bin/buildah
+                  exists: true
+                - then: the skopeo image-copy tool is installed
+                  file: /usr/bin/skopeo
+                  exists: true
+            - name: rootless-userns-config-present
+              step:
+                - then: containers.conf pins userns=host so the inner /proc mount is not rejected by the kernel mount_too_revealing check
+                  command: grep -E '^userns\s*=\s*"host"' /etc/containers/containers.conf
+                  exit_status: 0
+                - then: policy.json is present so podman pull/run accepts an image signature policy
+                  file: /etc/containers/policy.json
+                  exists: true
+            - name: subuid-delegation-ready
+              step:
+                - then: newuidmap carries the cap_setuid file capability so a nested user namespace can be delegated
+                  command: getcap /usr/bin/newuidmap | grep -c cap_setuid
+                  exit_status: 0
+                - then: /etc/subuid declares the username:start:count delegation ranges the inner podman maps from
+                  command: grep -cE '^[a-z0-9_-]+:[0-9]+:[0-9]+$' /etc/subuid
+                  exit_status: 0
+            - name: nested-container-runs-rootless
+              step:
+                - then: a fresh rootless `podman run` of an inner container succeeds end-to-end with no added capabilities and no --privileged
     package:
         - buildah
         - fuse-overlayfs

@@ -1,6 +1,32 @@
 candy:
     version: 2026.144.1443
     name: github-actions
+    description:
+        feature: Local GitHub Actions execution and workflow linting via act and actionlint.
+        narrative: |
+            Installs the act CLI at /usr/bin/act for running GitHub Actions
+            workflows locally, the actionlint linter at /usr/local/bin/actionlint
+            for static workflow validation, and the guestfs-tools package. Each
+            tool lands at a fixed path and self-reports a version, so its presence
+            and basic operability are deterministically verifiable.
+        tag: [working]
+        scenario:
+            - name: act-runs-workflows-locally
+              step:
+                - then: the act CLI is installed at its fixed path
+                  file: /usr/bin/act
+                  exists: true
+                - then: act reports its version without error
+                  command: /usr/bin/act --version
+                  exit_status: 0
+            - name: actionlint-validates-workflows
+              step:
+                - then: the actionlint linter is installed at its fixed path
+                  file: /usr/local/bin/actionlint
+                  exists: true
+                - then: actionlint reports its version without error
+                  command: /usr/local/bin/actionlint -version
+                  exit_status: 0
     package:
         - guestfs-tools
     task:
@@ -53,3 +79,6 @@ candy:
         - id: actionlint-version
           command: /usr/local/bin/actionlint -version
           exit_status: 0
+        - id: guestfs-tools-package
+          package: guestfs-tools
+          installed: true

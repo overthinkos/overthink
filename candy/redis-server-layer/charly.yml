@@ -7,6 +7,41 @@ candy:
             Runs /usr/bin/redis-server (provided by valkey-compat-redis on Fedora 43)
             bound to 0.0.0.0:6379 with protected-mode off, so a sibling redis-client
             pod on the shared `charly` network can SET/GET via `redis-cli -h charly-redis`.
+        tag: [working]
+        scenario:
+            # ADE acceptance scenarios baked into ai.opencharly.description.
+            # Scenarios 1-2 are DETERMINISTIC (embedded check verbs): the
+            # build-scope file/package checks prove the redis binaries and
+            # package landed; the deploy-scope command/addr checks prove the
+            # live server answers PING and the published port is reachable.
+            # Scenario 3 is PROSE-ONLY (given/when/then, no verb) -> agent-graded.
+            - name: redis-server-binaries-installed
+              step:
+                - then: the redis-server daemon binary is present at /usr/bin/redis-server
+                  file: /usr/bin/redis-server
+                  exists: true
+                - then: the redis-cli client binary is present at /usr/bin/redis-cli
+                  file: /usr/bin/redis-cli
+                  exists: true
+                - then: the redis package (valkey-compat-redis on Fedora 43) is installed
+                  package: valkey-compat-redis
+                  installed: true
+            - name: redis-server-answers-ping
+              step:
+                - then: the running redis-server answers PING with PONG on port 6379
+                  scope: deploy
+                  command: redis-cli -h 127.0.0.1 -p 6379 ping
+                  stdout: PONG
+                  in_container: true
+                - then: the published redis TCP port is reachable from the host
+                  scope: deploy
+                  addr: 127.0.0.1:${HOST_PORT:6379}
+                  reachable: true
+            - name: redis-reachable-from-sibling-pod
+              step:
+                - given: redis-server-layer is deployed with --bind 0.0.0.0 and protected-mode off
+                - when: a sibling redis-client pod on the shared charly network connects to charly-redis:6379
+                - then: the sibling pod can SET and GET keys against this redis instance
     distro:
         fedora:
             package:
@@ -33,3 +68,23 @@ candy:
         - id: harness-redis-cli-binary
           file: /usr/bin/redis-cli
           exists: true
+        - id: harness-redis-package
+          package: valkey-compat-redis
+          installed: true
+        - id: harness-redis-service-running
+          scope: deploy
+          service: redis-server
+          running: true
+        - id: harness-redis-responds
+          scope: deploy
+          command: redis-cli -h 127.0.0.1 -p 6379 ping
+          stdout: PONG
+          in_container: true
+        - id: harness-redis-port-listening
+          scope: deploy
+          port: 6379
+          listening: true
+        - id: harness-redis-port-reachable
+          scope: deploy
+          addr: 127.0.0.1:${HOST_PORT:6379}
+          reachable: true

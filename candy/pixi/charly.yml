@@ -1,6 +1,28 @@
 candy:
     version: 2026.144.1443
     name: pixi
+    description:
+        feature: pixi package-manager binary installed and runnable
+        narrative: |
+            The pixi candy downloads the upstream pixi release binary and
+            extracts it to /usr/local/bin/pixi -- the conda-forge package
+            and environment manager that backs the python / python-ml
+            candies and the fedora/arch builder images. Verifiable by
+            asserting the binary landed on PATH and reports its version.
+        tag: [working]
+        scenario:
+            - name: pixi-binary-installed
+              step:
+                - then: the pixi binary is installed at /usr/local/bin/pixi
+                  file: /usr/local/bin/pixi
+                  exists: true
+            - name: pixi-reports-its-version
+              step:
+                - then: running pixi --version exits cleanly and prints a version string
+                  command: /usr/local/bin/pixi --version
+                  exit_status: 0
+                  stdout:
+                    - matches: "[0-9]+\\.[0-9]+"
     # env: + path_append: moved to build.yml's pixi BUILDER definition
     # in 2026-04-29 so images that consume pixi via pixi.toml-triggered
     # builds (and don't list `pixi` as a top-level layer for sibling-

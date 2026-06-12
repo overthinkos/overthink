@@ -1,6 +1,48 @@
 candy:
     version: 2026.155.2227
     name: labwc
+    description:
+        feature: A nested labwc Wayland compositor hosting the Selkies streaming desktop
+        narrative: |
+            labwc installs a wlroots-based Wayland compositor plus the foot terminal,
+            thunar file manager, and Xwayland for X11 compatibility. The labwc-wrapper
+            connects to pixelflux's wayland-1 socket and creates its own wayland-0
+            client socket so desktop apps render into the captured desktop; rc.xml
+            maximizes every window and autostart wires the session. Every installed
+            binary and config file is verifiable on the built image, and the
+            supervised labwc service must reach a stable RUNNING state at deploy.
+        tag: [working]
+        scenario:
+            - name: compositor-binary-installed
+              step:
+                - then: the labwc Wayland compositor binary is installed at /usr/bin/labwc
+                  file: /usr/bin/labwc
+                  exists: true
+            - name: nested-session-files-present
+              step:
+                - then: the labwc-wrapper that nests the compositor under pixelflux wayland-1 is installed
+                  file: ${HOME}/.local/bin/labwc-wrapper
+                  exists: true
+                - then: the labwc rc.xml configuration (server-side decorations, maximize-all window rule) is present
+                  file: ${HOME}/.config/labwc/rc.xml
+                  exists: true
+                - then: the labwc autostart session script is present
+                  file: ${HOME}/.config/labwc/autostart
+                  exists: true
+            - name: desktop-applications-available
+              step:
+                - then: the foot terminal emulator is installed for the desktop session
+                  file: /usr/bin/foot
+                  exists: true
+                - then: the thunar file manager is installed for the desktop session
+                  file: /usr/bin/thunar
+                  exists: true
+                - then: Xwayland is installed so X11 applications run inside the Wayland session
+                  file: /usr/bin/Xwayland
+                  exists: true
+            - name: compositor-runs-as-nested-desktop
+              step:
+                - then: once pixelflux's wayland-1 socket is healthy, labwc creates its own wayland-0 socket and hosts the desktop applications as a stable supervised service
     require:
         - dbus
     # autostart script has a wait-for-supervisord-socket guard (see autostart)

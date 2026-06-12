@@ -1,6 +1,75 @@
 candy:
     version: 2026.144.1443
     name: sway-desktop
+    description:
+        feature: Composes a complete headless Sway desktop userland (Wayland automation, screen capture, browser, terminal, file manager, status bar, notifications, audio) with no install of its own
+        narrative: |
+            sway-desktop is a pure meta-composition: it ships no packages or
+            tasks itself and instead pulls in pipewire, the wl-tools /
+            wl-screenshot-grim / wl-overlay / wf-recorder capture stack,
+            chrome-sway, xfce4-terminal, thunar, waybar, desktop-fonts, swaync,
+            pavucontrol, tmux, asciinema, and fastfetch. The observable effect of
+            the composition is that every member candy's key binary lands in the
+            image, so the metalayer is verified by asserting those composed
+            artifacts are present and actually run inside a disposable container.
+        tag: [working]
+        scenario:
+            - name: desktop-shell-tools-composed
+              step:
+                - then: the waybar status bar binary from the composed waybar candy is installed
+                  file: /usr/bin/waybar
+                  exists: true
+                - then: the swaync notification daemon from the composed swaync candy is installed
+                  file: /usr/bin/swaync
+                  exists: true
+                - then: the thunar file manager from the composed thunar candy is installed
+                  file: /usr/bin/thunar
+                  exists: true
+                - then: the xfce4-terminal emulator from the composed xfce4-terminal candy is installed
+                  file: /usr/bin/xfce4-terminal
+                  exists: true
+            - name: wayland-capture-and-automation-composed
+              step:
+                - then: the grim screenshot tool from the composed wl-screenshot-grim candy is installed
+                  file: /usr/bin/grim
+                  exists: true
+                - then: the wtype keyboard-injection tool from the composed wl-tools candy is installed
+                  file: /usr/bin/wtype
+                  exists: true
+                - then: the wf-recorder Wayland screen recorder from the composed wf-recorder candy is installed
+                  file: /usr/bin/wf-recorder
+                  exists: true
+            - name: browser-and-audio-composed
+              step:
+                - then: Google Chrome from the composed chrome-sway candy is installed for the desktop to launch
+                  file: /usr/bin/google-chrome-stable
+                  exists: true
+                - then: the PipeWire audio server from the composed pipewire candy is installed
+                  file: /usr/bin/pipewire
+                  exists: true
+                - then: the pavucontrol mixer from the composed pavucontrol candy is installed
+                  file: /usr/bin/pavucontrol
+                  exists: true
+            - name: terminal-and-recording-tools-run
+              step:
+                - then: tmux from the composed tmux candy reports its version and exits cleanly
+                  command: /usr/bin/tmux -V
+                  exit_status: 0
+                  stdout:
+                    - matches: "^tmux"
+                - then: asciinema from the composed asciinema candy reports its version and exits cleanly
+                  command: /usr/bin/asciinema --version
+                  exit_status: 0
+                  stdout:
+                    - contains: asciinema
+                - then: fastfetch from the composed fastfetch candy reports its version and exits cleanly
+                  command: /usr/bin/fastfetch --version 2>&1
+                  exit_status: 0
+                  stdout:
+                    - matches: "[0-9]+\\.[0-9]+"
+            - name: composition-forms-a-coherent-desktop
+              step:
+                - then: the composed binaries together form a coherent headless Sway desktop userland (capture, browser, terminal, audio) with no missing member candy
     candy:
         - pipewire
         - xdg-portal
@@ -18,3 +87,52 @@ candy:
         - tmux
         - asciinema
         - fastfetch
+    eval:
+        - id: sway-desktop-pipewire-binary
+          file: /usr/bin/pipewire
+          exists: true
+        - id: sway-desktop-grim-binary
+          file: /usr/bin/grim
+          exists: true
+        - id: sway-desktop-wtype-binary
+          file: /usr/bin/wtype
+          exists: true
+        - id: sway-desktop-wlr-randr-binary
+          file: /usr/bin/wlr-randr
+          exists: true
+        - id: sway-desktop-wf-recorder-binary
+          file: /usr/bin/wf-recorder
+          exists: true
+        - id: sway-desktop-chrome-binary
+          file: /usr/bin/google-chrome-stable
+          exists: true
+        - id: sway-desktop-xfce4-terminal-binary
+          file: /usr/bin/xfce4-terminal
+          exists: true
+        - id: sway-desktop-thunar-binary
+          file: /usr/bin/thunar
+          exists: true
+        - id: sway-desktop-waybar-binary
+          file: /usr/bin/waybar
+          exists: true
+        - id: sway-desktop-swaync-binary
+          file: /usr/bin/swaync
+          exists: true
+        - id: sway-desktop-pavucontrol-binary
+          file: /usr/bin/pavucontrol
+          exists: true
+        - id: sway-desktop-tmux-version
+          command: /usr/bin/tmux -V
+          exit_status: 0
+          stdout:
+            - matches: "^tmux"
+        - id: sway-desktop-asciinema-version
+          command: /usr/bin/asciinema --version
+          exit_status: 0
+          stdout:
+            - contains: "asciinema"
+        - id: sway-desktop-fastfetch-version
+          command: /usr/bin/fastfetch --version 2>&1
+          exit_status: 0
+          stdout:
+            - matches: "[0-9]+\\.[0-9]+"

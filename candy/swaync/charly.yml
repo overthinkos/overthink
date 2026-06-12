@@ -1,6 +1,45 @@
 candy:
     version: 2026.144.1443
     name: swaync
+    description:
+        feature: Desktop notification center (swaync) for wlroots compositors
+        narrative: |
+            Installs SwayNotificationCenter, which provides the swaync daemon and
+            the swaync-client control CLI. Stages a Catppuccin-themed config.json
+            and style.css into the user's ~/.config/swaync and installs a
+            wayland-aware wrapper run as a supervisord service. The build also
+            removes the D-Bus auto-activation service files so a single
+            supervisord-managed instance owns the notification bus name (no
+            competing daemon spawned via D-Bus activation).
+        tag: [working]
+        scenario:
+            - name: notification-daemon-installed
+              step:
+                - then: the swaync notification daemon binary is installed
+                  file: /usr/bin/swaync
+                  exists: true
+                - then: the swaync-client control CLI is installed
+                  file: /usr/bin/swaync-client
+                  exists: true
+            - name: themed-config-staged
+              step:
+                - then: the swaync config.json is staged in the user config dir
+                  file: ${HOME}/.config/swaync/config.json
+                  exists: true
+                - then: the Catppuccin style.css is staged alongside it
+                  file: ${HOME}/.config/swaync/style.css
+                  exists: true
+                - then: the wayland-aware wrapper script is installed
+                  file: ${HOME}/.local/bin/swaync-wrapper
+                  exists: true
+            - name: dbus-autoactivation-disabled
+              step:
+                - then: the daemon D-Bus auto-activation unit is removed so it cannot spawn a competing instance
+                  file: /usr/share/dbus-1/services/org.erikreider.swaync.service
+                  exists: false
+                - then: the control-center D-Bus auto-activation unit is also removed
+                  file: /usr/share/dbus-1/services/org.erikreider.swaync.cc.service
+                  exists: false
     require:
         - dbus
     distro:
@@ -45,6 +84,18 @@ candy:
         - id: swaync-style
           file: ${HOME}/.config/swaync/style.css
           exists: true
+        - id: swaync-client-binary
+          file: /usr/bin/swaync-client
+          exists: true
+        - id: swaync-package
+          package: SwayNotificationCenter
+          package_map:
+            arch: swaync
+            fedora: SwayNotificationCenter
+          installed: true
+        - id: swaync-dbus-activation-removed
+          file: /usr/share/dbus-1/services/org.erikreider.swaync.service
+          exists: false
     service:
         - name: swaync
           exec: "%(ENV_HOME)s/.local/bin/swaync-wrapper"

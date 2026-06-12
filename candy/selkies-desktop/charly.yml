@@ -1,19 +1,103 @@
 candy:
     version: 2026.152.2006
     name: selkies-desktop
-    description: |
-        The labwc edition of the selkies streaming desktop (the original, proven
-        flavor — kept by name because openclaw-desktop composes this layer and
-        android-emulator chains through the same-named image). Composes the shared
-        selkies-core (pixelflux WebRTC transport + Chrome/CDP + wl-* tooling +
-        fonts + a11y + terminal-recording + sshd) with the labwc nested compositor
-        and its labwc-specific desktop UI: waybar-labwc (top panel), swaync
-        (notifications), and pavucontrol (the GTK audio control the waybar audio
-        module launches). The KDE sibling is selkies-kde-desktop; both share
-        selkies-core unchanged and differ ONLY in the nested compositor (R3).
+    description:
+        feature: A browser-accessible labwc Selkies streaming desktop — the shared selkies-core spine plus the labwc compositor and its panel, notifier, and audio UI.
+        narrative: |
+            The labwc edition of the selkies streaming desktop (the original, proven
+            flavor — kept by name because openclaw-desktop composes this layer and
+            android-emulator chains through the same-named image). Composes the shared
+            selkies-core (pixelflux WebRTC transport + Chrome/CDP + wl-* tooling +
+            fonts + a11y + terminal-recording + sshd) with the labwc nested compositor
+            and its labwc-specific desktop UI: waybar-labwc (top panel), swaync
+            (notifications), and pavucontrol (the GTK audio control the waybar audio
+            module launches). The KDE sibling is selkies-kde-desktop; both share
+            selkies-core unchanged and differ ONLY in the nested compositor (R3).
+            This candy installs nothing of its own; its observable effect is that the
+            labwc-flavor binaries and configs from every composed candy coexist on the
+            built image, and the labwc desktop daemons reach a supervised RUNNING state
+            at deploy.
+        tag: [working]
+        scenario:
+            - name: labwc-flavor-compositor-composed
+              step:
+                - then: the labwc nested Wayland compositor — this flavor's defining compositor — is installed
+                  file: /usr/bin/labwc
+                  exists: true
+                - then: the pavucontrol GTK audio mixer the waybar audio module launches is installed
+                  file: /usr/bin/pavucontrol
+                  exists: true
+            - name: labwc-panel-and-notifier-composed
+              step:
+                - then: the waybar top-panel binary is installed
+                  file: /usr/bin/waybar
+                  exists: true
+                - then: the labwc-flavor waybar panel configuration is present
+                  file: ${HOME}/.config/waybar/config
+                  exists: true
+                - then: the SwayNotificationCenter notification daemon is installed
+                  file: /usr/bin/swaync
+                  exists: true
+            - name: selkies-core-spine-composed
+              step:
+                - then: the google-chrome-stable browser from the shared selkies-core spine is installed
+                  file: /usr/bin/google-chrome-stable
+                  exists: true
+                - then: the PipeWire audio server backing the desktop session is installed
+                  file: /usr/bin/pipewire
+                  exists: true
+            - name: labwc-desktop-reaches-streamable-steady-state
+              step:
+                - then: once the pixelflux to labwc chain is healthy, the labwc compositor hosts the waybar panel, swaync notifier, and audio controls as one coherent, browser-streamable desktop session
     candy:
         - selkies-core
         - labwc
         - waybar-labwc
         - swaync
         - pavucontrol
+    eval:
+        # Meta-composition candy (no install of its own): assert the labwc-flavor
+        # artifacts from every composed candy coexist on the built image — the
+        # observable effect of THIS composition. None of these files would be
+        # present if selkies-desktop composed nothing.
+        - id: selkies-desktop-labwc-compositor
+          file: /usr/bin/labwc
+          exists: true
+        - id: selkies-desktop-waybar-panel
+          file: /usr/bin/waybar
+          exists: true
+        - id: selkies-desktop-waybar-config
+          file: ${HOME}/.config/waybar/config
+          exists: true
+        - id: selkies-desktop-swaync-daemon
+          file: /usr/bin/swaync
+          exists: true
+        - id: selkies-desktop-swaync-package
+          package: swaync
+          package_map:
+            arch: swaync
+            fedora: SwayNotificationCenter
+          installed: true
+        - id: selkies-desktop-pavucontrol
+          file: /usr/bin/pavucontrol
+          exists: true
+        - id: selkies-desktop-pavucontrol-package
+          package: pavucontrol
+          installed: true
+        - id: selkies-desktop-chrome-spine
+          file: /usr/bin/google-chrome-stable
+          exists: true
+        - id: selkies-desktop-pipewire-audio
+          file: /usr/bin/pipewire
+          exists: true
+        # Deploy-scope: the labwc-flavor UI daemons (waybar panel + swaync notifier)
+        # reach a supervised RUNNING state — neither composed candy ships its own
+        # deploy-scope service check, so this proves the composition runs end-to-end.
+        - id: selkies-desktop-panel-running
+          scope: deploy
+          service: waybar
+          running: true
+        - id: selkies-desktop-notifier-running
+          scope: deploy
+          service: swaync
+          running: true

@@ -1,6 +1,44 @@
 candy:
     version: 2026.159.1324
     name: supervisord
+    description:
+        feature: supervisord is the container init that supervises every service and provides a per-user XDG_RUNTIME_DIR
+        narrative: |
+            Installs the supervisor package, providing /usr/bin/supervisord (PID 1
+            for container images) and the supervisorctl control client. It also
+            creates a per-user /tmp/xdg-runtime directory at mode 0700 and points
+            XDG_RUNTIME_DIR at it, so older podman/buildah and wayland/pipewire both
+            accept it. Every claim below is observable either in the built image or
+            in the running deployment.
+        tag: [working]
+        scenario:
+            - name: supervisord-binaries-installed
+              step:
+                - then: the supervisord process manager binary is installed
+                  file: /usr/bin/supervisord
+                  exists: true
+                - then: the supervisorctl control client is installed
+                  file: /usr/bin/supervisorctl
+                  exists: true
+                - then: the supervisor package is recorded in the package database
+                  package: supervisor
+                  installed: true
+            - name: per-user-xdg-runtime-dir-provisioned
+              step:
+                - then: a per-user XDG_RUNTIME_DIR directory exists in the image
+                  file: /tmp/xdg-runtime
+                  filetype: directory
+                - then: XDG_RUNTIME_DIR is exported and points at the per-user runtime dir
+                  command: printenv XDG_RUNTIME_DIR
+                  stdout:
+                    - equals: /tmp/xdg-runtime
+            - name: supervisord-supervises-the-deployment
+              step:
+                - then: supervisord runs as container init and its control socket answers supervisorctl pid
+                  scope: deploy
+                  command: supervisorctl pid
+                  exit_status: 0
+                  in_container: true
     # XDG_RUNTIME_DIR for the CONTAINER. A container has no logind /run/user/<uid>,
     # so we provide a per-user runtime dir; supervisord (PID 1) + every program it
     # starts inherit this image ENV. It MUST be a per-user directory OWNED BY the

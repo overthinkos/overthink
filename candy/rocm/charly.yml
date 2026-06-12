@@ -1,6 +1,44 @@
 candy:
     version: 2026.144.1443
     name: rocm
+    description:
+        feature: AMD ROCm HIP runtime, OpenCL ICD, and GPU management tooling on Fedora
+        narrative: |
+            Installs the AMD ROCm user-space stack from the Fedora system repos:
+            rocm-hip-runtime (the HIP runtime), rocm-opencl (the OpenCL ICD),
+            rocm-clinfo (the clinfo OpenCL diagnostic at /usr/bin/clinfo), and
+            rocm-smi (the GPU management tool at /usr/bin/rocm-smi). Exports
+            ROCM_PATH=/usr and keeps host video/render groups via keep-groups so
+            a passed-through AMD GPU (/dev/kfd + /dev/dri/renderD*) is usable.
+            The installed binaries, the packages, and the ROCM_PATH env are
+            verifiable at build scope; live GPU enumeration is verifiable only on
+            a host with a real AMD GPU passed through.
+        tag: [working]
+        scenario:
+            - name: rocm-userspace-installed
+              step:
+                - then: the ROCm HIP runtime package is installed in the image
+                  package: rocm-hip-runtime
+                  installed: true
+                - then: the clinfo OpenCL diagnostic tool is present at /usr/bin/clinfo
+                  file: /usr/bin/clinfo
+                  exists: true
+            - name: rocm-smi-management-tool
+              step:
+                - then: the rocm-smi GPU management tool is present at /usr/bin/rocm-smi
+                  file: /usr/bin/rocm-smi
+                  exists: true
+                - then: the rocm-smi package is installed in the image
+                  package: rocm-smi
+                  installed: true
+            - name: rocm-path-exported
+              step:
+                - then: ROCM_PATH is exported into the container environment as /usr
+                  command: printenv ROCM_PATH
+                  stdout: /usr
+            - name: amd-gpu-enumerated-when-present
+              step:
+                - then: on a host with an AMD GPU and /dev/kfd passed through, clinfo lists at least one ROCm OpenCL platform and rocm-smi reports the device temperature and utilization
     env:
         ROCM_PATH: "/usr"
     security:
@@ -13,3 +51,25 @@ candy:
                 - rocm-opencl
                 - rocm-clinfo
                 - rocm-smi
+    eval:
+        - id: rocm-clinfo-binary
+          file: /usr/bin/clinfo
+          exists: true
+        - id: rocm-smi-binary
+          file: /usr/bin/rocm-smi
+          exists: true
+        - id: rocm-hip-runtime-package
+          package: rocm-hip-runtime
+          installed: true
+        - id: rocm-opencl-package
+          package: rocm-opencl
+          installed: true
+        - id: rocm-clinfo-package
+          package: rocm-clinfo
+          installed: true
+        - id: rocm-smi-package
+          package: rocm-smi
+          installed: true
+        - id: rocm-path-env
+          command: printenv ROCM_PATH
+          stdout: /usr

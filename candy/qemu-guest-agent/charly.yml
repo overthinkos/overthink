@@ -1,21 +1,47 @@
 candy:
     version: 2026.149.1200
     name: qemu-guest-agent
-    description: |
-        QEMU guest agent — full host↔guest control channel. Installs the agent
-        package, contributes the virtio-serial channel libvirt device, enables
-        the system service, and wires the fsfreeze hook so the host can take
-        application-consistent snapshots (guest-fsfreeze-freeze/thaw).
-
-        All guest-agent RPCs (guest-exec, guest-file-*, guest-fsfreeze-*,
-        guest-set-*) are exposed — the package's default config blocks none,
-        and the qemu-ga.conf written here documents and pins that intent. The
-        fsfreeze hook is the one capability not active by default: it lets the
-        host quiesce filesystems and run per-app pre/post-freeze scripts dropped
-        into /etc/qemu/fsfreeze-hook.d/.
-
-        Cross-distro: the package name is identical on Arch/CachyOS and Fedora;
-        the service + channel + config apply unchanged.
+    description:
+        feature: QEMU guest agent — full host↔guest control channel with an application-consistent fsfreeze snapshot hook.
+        narrative: |
+            Installs the qemu-guest-agent package (identical name on Arch/CachyOS
+            and Fedora), contributes the virtio-serial control channel, enables the
+            system service, and writes /etc/qemu/qemu-ga.conf pinning the full RPC
+            surface (guest-exec, guest-file-*, guest-fsfreeze-*, guest-set-* — the
+            package default blocks none). The fsfreeze hook dispatcher runs every
+            executable in /etc/qemu/fsfreeze-hook.d/ on freeze/thaw so the host can
+            take application-consistent snapshots. Every artifact — the qemu-ga
+            binary, the package, the config, the executable dispatcher and its
+            drop-in dir — is file- and command-checkable inside the built image.
+        tag: [working]
+        scenario:
+            - name: guest-agent-binary-installed
+              step:
+                - then: the qemu-ga daemon binary is installed at /usr/bin/qemu-ga
+                  file: /usr/bin/qemu-ga
+                  exists: true
+                - then: the cross-distro qemu-guest-agent package is installed
+                  package: qemu-guest-agent
+                  installed: true
+            - name: fsfreeze-hook-dispatcher-functional
+              step:
+                - then: the fsfreeze hook dispatcher is installed and references its drop-in dir
+                  file: /etc/qemu/fsfreeze-hook
+                  contains: "fsfreeze-hook.d"
+                - then: the per-application freeze/thaw drop-in directory exists
+                  file: /etc/qemu/fsfreeze-hook.d
+                  filetype: directory
+                - then: freezing filesystems with no hooks installed runs the dispatcher and exits 0
+                  command: /etc/qemu/fsfreeze-hook freeze
+                  exit_status: 0
+            - name: full-rpc-surface-pinned
+              step:
+                - then: the guest-agent config wires in the fsfreeze hook
+                  file: /etc/qemu/qemu-ga.conf
+                  contains: "fsfreeze-hook=/etc/qemu/fsfreeze-hook"
+                - then: the config documents that no guest-agent RPCs are blocked
+                  file: /etc/qemu/qemu-ga.conf
+                  contains: "No RPCs are blocked"
     package:
         - qemu-guest-agent
     libvirt:
@@ -62,9 +88,21 @@ candy:
           enable: true
           scope: system
     eval:
+        - id: qemu-ga-binary
+          file: /usr/bin/qemu-ga
+          exists: true
+        - id: qemu-ga-package
+          package: qemu-guest-agent
+          installed: true
         - id: qemu-ga-config
           file: /etc/qemu/qemu-ga.conf
           contains: "fsfreeze-hook"
         - id: qemu-ga-fsfreeze-hook
           file: /etc/qemu/fsfreeze-hook
           contains: "fsfreeze-hook.d"
+        - id: qemu-ga-fsfreeze-hook-dir
+          file: /etc/qemu/fsfreeze-hook.d
+          filetype: directory
+        - id: qemu-ga-freeze-noop
+          command: /etc/qemu/fsfreeze-hook freeze
+          exit_status: 0

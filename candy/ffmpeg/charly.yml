@@ -1,7 +1,36 @@
 candy:
     version: 2026.144.1443
     name: ffmpeg
-    description: FFmpeg multimedia framework
+    description:
+        feature: FFmpeg provides command-line audio/video transcoding and media inspection
+        narrative: |
+            Installs the ffmpeg package (from the negativo17 fedora-multimedia repo
+            on Fedora, core/extra on Arch). It ships the ffmpeg transcoder and the
+            ffprobe media inspector under /usr/bin, both of which print a version
+            banner to stdout — so their presence and basic operability are directly
+            verifiable.
+        tag: [working]
+        scenario:
+            - name: ffmpeg-cli-available
+              step:
+                - then: the ffmpeg transcoder binary is installed at /usr/bin/ffmpeg
+                  file: /usr/bin/ffmpeg
+                  exists: true
+                - then: ffmpeg prints its version banner to stdout
+                  command: ffmpeg -version
+                  exit_status: 0
+                  stdout:
+                    - contains: ffmpeg version
+            - name: ffprobe-inspects-media
+              step:
+                - then: the ffprobe media inspector binary is installed at /usr/bin/ffprobe
+                  file: /usr/bin/ffprobe
+                  exists: true
+                - then: ffprobe prints its version banner to stdout
+                  command: ffprobe -version
+                  exit_status: 0
+                  stdout:
+                    - contains: ffprobe version
     distro:
         arch:
             package:
@@ -17,3 +46,19 @@ candy:
         - id: ffmpeg-binary
           file: /usr/bin/ffmpeg
           exists: true
+        - id: ffprobe-binary
+          file: /usr/bin/ffprobe
+          exists: true
+        - id: ffmpeg-package
+          package: ffmpeg
+          installed: true
+        - id: ffmpeg-version
+          command: ffmpeg -version
+          exit_status: 0
+          stdout:
+            - contains: ffmpeg version
+        - id: ffprobe-version
+          command: ffprobe -version
+          exit_status: 0
+          stdout:
+            - contains: ffprobe version

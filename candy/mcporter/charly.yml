@@ -1,6 +1,60 @@
 candy:
     version: 2026.144.1443
     name: mcporter
-    description: MCP server CLI for listing, configuring, and calling MCP tools
+    description:
+        feature: Installs the mcporter MCP CLI globally via npm so `mcporter` is on PATH for listing, configuring, and calling MCP tools.
+        narrative: |
+            The candy depends on nodejs and ships a package.json pinning
+            mcporter, which the build installs globally under NPM_CONFIG_PREFIX
+            (~/.npm-global). The result is verifiable: the mcporter binary lands
+            at ~/.npm-global/bin/mcporter, the mcporter package is unpacked under
+            ~/.npm-global/lib/node_modules/mcporter, `mcporter --version` exits
+            cleanly and prints a semantic version, and `mcporter --help` lists the
+            core MCP commands (list, call) that define the CLI surface.
+        tag: [working]
+        scenario:
+            - name: cli-binary-installed
+              step:
+                - then: the mcporter binary is installed into the npm global bin directory
+                  file: ${HOME}/.npm-global/bin/mcporter
+                  exists: true
+            - name: npm-package-unpacked
+              step:
+                - then: the mcporter package is unpacked under the npm global lib directory
+                  file: ${HOME}/.npm-global/lib/node_modules/mcporter/package.json
+                  exists: true
+            - name: cli-reports-version
+              step:
+                - then: running mcporter --version exits cleanly and prints a semantic version
+                  command: ${HOME}/.npm-global/bin/mcporter --version
+                  exit_status: 0
+                  stdout:
+                    - matches: "[0-9]+\\.[0-9]+"
+            - name: cli-help-lists-core-commands
+              step:
+                - then: running mcporter --help lists the list and call MCP commands
+                  command: ${HOME}/.npm-global/bin/mcporter --help
+                  exit_status: 0
+                  stderr:
+                    - contains: "list"
+                    - contains: "call"
     require:
         - nodejs
+    eval:
+        - id: mcporter-binary
+          file: ${HOME}/.npm-global/bin/mcporter
+          exists: true
+        - id: mcporter-package
+          file: ${HOME}/.npm-global/lib/node_modules/mcporter/package.json
+          exists: true
+        - id: mcporter-version
+          command: ${HOME}/.npm-global/bin/mcporter --version
+          exit_status: 0
+          stdout:
+            - matches: "[0-9]+\\.[0-9]+"
+        - id: mcporter-help-lists-commands
+          command: ${HOME}/.npm-global/bin/mcporter --help
+          exit_status: 0
+          stderr:
+            - contains: "list"
+            - contains: "call"

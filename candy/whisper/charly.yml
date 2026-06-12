@@ -1,8 +1,47 @@
 candy:
     version: 2026.144.1443
     name: whisper
-    description: OpenAI Whisper local speech-to-text
+    description:
+        feature: OpenAI Whisper local speech-to-text CLI (GPU-capable)
+        narrative: |
+            Installs openai-whisper via pixi into the default env, composing the
+            python + cuda + ffmpeg candies (ffmpeg is required for audio
+            decoding). Verifiable: the whisper CLI lands in the pixi default env,
+            runs `--help`, and ffmpeg is available for decoding.
+        tag: [working]
+        scenario:
+            - name: whisper-cli-installed
+              step:
+                - then: the whisper CLI is installed in the pixi default env
+                  file: ${HOME}/.pixi/envs/default/bin/whisper
+                  exists: true
+                - then: the whisper CLI runs and prints its usage
+                  command: ${HOME}/.pixi/envs/default/bin/whisper --help
+                  exit_status: 0
+                  stdout:
+                    - contains: "--model"
+            - name: whisper-has-ffmpeg-for-decoding
+              step:
+                - then: ffmpeg is available on PATH for audio decoding
+                  command: ffmpeg -version
+                  exit_status: 0
+                  stdout:
+                    - contains: ffmpeg
     require:
         - python
         - cuda
         - ffmpeg
+    eval:
+        - id: whisper-cli
+          file: ${HOME}/.pixi/envs/default/bin/whisper
+          exists: true
+        - id: whisper-help
+          command: ${HOME}/.pixi/envs/default/bin/whisper --help
+          exit_status: 0
+          stdout:
+            - contains: "--model"
+        - id: whisper-ffmpeg-available
+          command: ffmpeg -version
+          exit_status: 0
+          stdout:
+            - contains: ffmpeg

@@ -1,7 +1,41 @@
 candy:
     version: 2026.144.1443
     name: versatiles-style
-    description: "@versatiles/style — TypeScript MapLibre style generator. Generates colorful() / eclipse() / graybeard() / neutrino() / shadow() / satellite() style JSON for MapLibre maps backed by the Shortbread vector-tile schema. Installed locally so the notebook's MapLibre HTML can import the browser bundle WITHOUT a runtime CDN dependency (unpkg.com). The bundle is served as static JS by the versatiles-frontend layer's http.server at /style/versatiles-style.js."
+    description:
+        feature: Local @versatiles/style MapLibre style-generator browser bundle for the Shortbread schema
+        narrative: |
+            @versatiles/style is a TypeScript MapLibre style generator producing
+            colorful() / eclipse() / graybeard() / neutrino() / shadow() /
+            satellite() style JSON for maps backed by the Shortbread vector-tile
+            schema. This candy installs nodejs + npm and lands the browser-ready
+            bundle under /opt/versatiles-style/ (GitHub release tarball first, npm
+            install fallback), so the notebook's MapLibre HTML imports the styles
+            from a local file instead of a runtime CDN dependency (unpkg.com). The
+            bundle is re-served as static JS by the versatiles-frontend layer at
+            /style/versatiles-style.js. The install is verifiable: a non-empty
+            versatiles-style*.js must land under the install path, and the node
+            toolchain that built and serves it must be present.
+        tag: [working]
+        scenario:
+            # First scenario is DETERMINISTIC (embedded command check verb → runs
+            # at build AND deploy scope). Second scenario's steps are also
+            # deterministic (package + command verbs), proving the build toolchain.
+            - name: style-bundle-installed
+              step:
+                - then: a non-empty versatiles-style*.js browser bundle is present under /opt/versatiles-style
+                  command: |
+                    find /opt/versatiles-style -maxdepth 3 -name 'versatiles-style*.js' -size +1c | head -1 | grep -q .
+                  exit_status: 0
+            - name: node-toolchain-present
+              step:
+                - then: nodejs is installed so the @versatiles/style bundle can be built and served
+                  package: nodejs
+                  installed: true
+                - then: the node runtime reports its version
+                  command: node --version
+                  exit_status: 0
+                  stdout:
+                    - matches: "v[0-9]+"
     require:
         - supervisord
     distro:
@@ -86,3 +120,17 @@ candy:
           command: |
             find /opt/versatiles-style -maxdepth 3 -name 'versatiles-style*.js' -size +1c | head -1 | grep -q .
           exit_status: 0
+        # The install directory itself (created by the mkdir task).
+        - id: versatiles-style-install-dir
+          file: /opt/versatiles-style
+          filetype: directory
+        # nodejs is the build/serve toolchain — same package name on arch + fedora.
+        - id: versatiles-style-nodejs-package
+          package: nodejs
+          installed: true
+        # The node runtime is functional (proves the package landed a working binary).
+        - id: versatiles-style-node-runs
+          command: node --version
+          exit_status: 0
+          stdout:
+            - matches: "v[0-9]+"

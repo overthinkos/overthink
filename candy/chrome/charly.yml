@@ -1,11 +1,36 @@
 candy:
     version: 2026.144.1443
     name: chrome
-    description: |
-        Google Chrome browser package. Cross-distro: pulls from Google's
-        direct repo on RPM, AUR on Arch/CachyOS. No CDP scaffolding, no
-        supervisord — for headless container CDP automation, compose
-        /charly-selkies:chrome-cdp on top.
+    description:
+        feature: Installs the Google Chrome browser cross-distro as a runnable binary at a stable path.
+        narrative: |
+            Google Chrome browser package. Cross-distro: pulls from Google's
+            direct RPM repo on Fedora, the AUR on Arch/CachyOS. Lands the
+            google-chrome-stable binary plus its desktop entry, and best-effort
+            registers it as the default web browser via xdg-settings. No CDP
+            scaffolding, no supervisord — for headless container CDP automation,
+            compose /charly-selkies:chrome-cdp on top. Verifiable: the binary
+            exists at a fixed path, reports its version, and ships its .desktop
+            entry.
+        tag: [working]
+        scenario:
+            - name: chrome-binary-installed
+              step:
+                - then: the google-chrome-stable binary is present at its canonical path
+                  file: /usr/bin/google-chrome-stable
+                  exists: true
+            - name: chrome-reports-its-version
+              step:
+                - then: invoking chrome with --version prints its Google Chrome version banner
+                  command: google-chrome-stable --version
+                  exit_status: 0
+                  stdout:
+                    - matches: "Google Chrome"
+            - name: chrome-desktop-entry-installed
+              step:
+                - then: the google-chrome.desktop entry the default-browser task references is installed
+                  file: /usr/share/applications/google-chrome.desktop
+                  exists: true
     env:
         CHROME_FLAGS: "--ozone-platform=wayland --enable-features=UseOzonePlatform,VaapiVideoDecodeLinuxGL,VaapiIgnoreDriverChecks"
     env_accept:
@@ -63,4 +88,18 @@ candy:
     eval:
         - id: google-chrome-binary
           file: /usr/bin/google-chrome-stable
+          exists: true
+        - id: chrome-package-installed
+          package: google-chrome-stable
+          package_map:
+              arch: google-chrome
+              fedora: google-chrome-stable
+          installed: true
+        - id: chrome-reports-version
+          command: google-chrome-stable --version
+          exit_status: 0
+          stdout:
+              - matches: "Google Chrome"
+        - id: chrome-desktop-entry
+          file: /usr/share/applications/google-chrome.desktop
           exists: true

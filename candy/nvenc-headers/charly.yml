@@ -1,12 +1,33 @@
 candy:
     version: 2026.149.1210
     name: nvenc-headers
-    description: |
-        NVIDIA Video Codec SDK headers (ffnvcodec / nvEncodeAPI.h) for building
-        NVENC-capable encoders. Build-time only — used by the cuda-arch-builder so
-        pixelflux's nvenc-sys crate can compile the real NvencEncoder. Kept out of
-        the shared cuda layer so the many CUDA runtime images (comfyui, jupyter-ml,
-        immich-ml, …) don't cascade-rebuild for a build-only header.
+    description:
+        feature: NVIDIA Video Codec SDK headers (ffnvcodec / nvEncodeAPI.h) for building NVENC-capable encoders.
+        narrative: |
+            Installs the ffnvcodec-headers (nv-codec-headers) package on Arch, which
+            ships the NVENC/NVDEC API headers under /usr/include/ffnvcodec plus the
+            ffnvcodec.pc pkg-config descriptor. Build-time only — used by the
+            cuda-arch-builder so pixelflux's nvenc-sys crate can compile the real
+            NvencEncoder. Kept out of the shared cuda layer so the many CUDA runtime
+            images (comfyui, jupyter-ml, immich-ml, …) don't cascade-rebuild for a
+            build-only header. Verifiable: the headers and the pkg-config descriptor
+            must land in the built image.
+        tag: [working]
+        scenario:
+            - name: nvenc-headers-present
+              step:
+                - then: the NVENC encode API header is installed for nvenc-sys to compile against
+                  file: /usr/include/ffnvcodec/nvEncodeAPI.h
+                  exists: true
+                - then: the ffnvcodec pkg-config descriptor is installed so downstream builds can link against ffnvcodec
+                  file: /usr/lib/pkgconfig/ffnvcodec.pc
+                  exists: true
+            - name: nvenc-encode-api-entrypoint-declared
+              step:
+                - then: the header declares the NvEncodeAPICreateInstance entry point the nvenc-sys crate binds to
+                  file: /usr/include/ffnvcodec/nvEncodeAPI.h
+                  contains:
+                    - NvEncodeAPICreateInstance
     distro:
         arch:
             package:
@@ -15,3 +36,13 @@ candy:
         - id: nvencodeapi-header
           file: /usr/include/ffnvcodec/nvEncodeAPI.h
           exists: true
+        - id: nvenc-headers-package
+          package: ffnvcodec-headers
+          installed: true
+        - id: ffnvcodec-pkgconfig
+          file: /usr/lib/pkgconfig/ffnvcodec.pc
+          exists: true
+        - id: nvenc-encode-api-symbol
+          file: /usr/include/ffnvcodec/nvEncodeAPI.h
+          contains:
+            - NvEncodeAPICreateInstance

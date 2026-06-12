@@ -2,6 +2,59 @@ candy:
     version: 2026.144.1531
     name: postgresql
     require: []
+    description:
+        feature: A Docker-compatible PostgreSQL server that self-initializes its cluster and accepts client connections.
+        narrative: |
+            Installs the PostgreSQL server (postgres, initdb, pg_ctl), the psql
+            client + pg_isready readiness probe, and the pgvector similarity-search
+            extension. A generated entrypoint wrapper
+            (/usr/local/bin/postgresql-entrypoint.sh) performs first-run initdb,
+            database creation, password handling, and /docker-entrypoint-initdb.d
+            processing, then execs the server on a unix socket under ~/.postgresql
+            listening on 127.0.0.1:5432. Every behaviour below is observable: the
+            binaries on disk, the executable entrypoint, and a live server whose
+            cluster was initialized and that answers pg_isready. Deploy-scope steps
+            stay auth-independent so the scenario holds for every box composing this
+            candy (consumers such as immich override POSTGRES_USER/POSTGRES_DB).
+        tag: [working]
+        scenario:
+            - name: server-and-client-binaries-installed
+              step:
+                - then: the PostgreSQL server binary is installed
+                  file: /usr/bin/postgres
+                  exists: true
+                - and: the psql client binary is installed
+                  file: /usr/bin/psql
+                  exists: true
+                - and: the initdb cluster-bootstrap tool is installed
+                  file: /usr/bin/initdb
+                  exists: true
+                - and: the pg_isready readiness probe is installed
+                  file: /usr/bin/pg_isready
+                  exists: true
+            - name: entrypoint-wrapper-installed-and-executable
+              step:
+                - then: the Docker-compatible entrypoint wrapper is present and executable
+                  file: /usr/local/bin/postgresql-entrypoint.sh
+                  exists: true
+                  mode: "0755"
+            - name: pgvector-extension-available
+              step:
+                - then: the pgvector similarity-search extension package is installed
+                  package: pgvector
+                  installed: true
+            - name: server-initializes-and-accepts-connections
+              step:
+                - then: the entrypoint initialized the cluster data directory on first run
+                  scope: deploy
+                  command: test -f ${HOME}/.postgresql/data/PG_VERSION
+                  exit_status: 0
+                  in_container: true
+                - and: the running server reports ready on its unix socket
+                  scope: deploy
+                  command: pg_isready -h ${HOME}/.postgresql
+                  exit_status: 0
+                  in_container: true
     distro:
         arch:
             # Arch `postgresql` ships the server (postgres, initdb, pg_ctl); psql,

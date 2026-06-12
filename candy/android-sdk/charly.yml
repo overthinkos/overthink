@@ -1,21 +1,58 @@
 candy:
     version: 2026.145.1302
     name: android-sdk
-    description: |
-        Android SDK installed from CachyOS/AUR packages under /opt/android-sdk:
-        cmdline-tools (sdkmanager/avdmanager), platform-tools (adb), build-tools
-        36 (aapt2), platform android-36, the emulator, and apkeep (the
-        by-package-name app downloader the `charly eval adb install-app` verb drives
-        IN the pod). Every AUR package installs into /opt/android-sdk (verified
-        PKGBUILD prefixes), so they coexist with the one sdkmanager-fetched
-        component. The Android 16 (API 36, google_apis_playstore x86_64) SYSTEM
-        IMAGE has NO package anywhere — it is the single component sdkmanager
-        fetches (using the AUR cmdline-tools), cached in a persistent build mount
-        keyed per API level + variant. requires java-openjdk for sdkmanager +
-        emulator runtime. cachyos (Arch-derived) consumes the arch: section and
-        routes aur → arch-builder; the consuming image must declare
-        build:[pac,aur] (android-emulator inherits it from the selkies-desktop
-        chain).
+    description:
+        feature: Android SDK toolchain (sdkmanager/adb/aapt2/emulator + API-36 system image) under /opt/android-sdk
+        narrative: |
+            Installs the Android SDK from CachyOS/AUR packages under
+            /opt/android-sdk: cmdline-tools (sdkmanager/avdmanager),
+            platform-tools (adb), build-tools 36 (aapt2), platform android-36,
+            and the emulator; plus apkeep (the by-package-name app downloader
+            the `charly eval adb install-app` verb drives IN the pod), installed
+            from its upstream precompiled x86_64 binary. The one component with
+            NO package anywhere — the API-36 google_apis_playstore x86_64 system
+            image — is fetched by sdkmanager into a persistent cache and copied
+            alongside the AUR-installed tools. Every artifact is a fixed path
+            under /opt/android-sdk, so the SDK is verifiable by probing those
+            paths and running adb.
+        tag: [working]
+        scenario:
+            - name: sdk-toolchain-present
+              step:
+                - then: the cmdline-tools sdkmanager lands under /opt/android-sdk
+                  file: /opt/android-sdk/cmdline-tools/latest/bin/sdkmanager
+                  exists: true
+                - then: platform-tools provides adb
+                  file: /opt/android-sdk/platform-tools/adb
+                  exists: true
+                - then: build-tools 36 provides aapt2 (Appium's ADB badging probe needs it)
+                  file: /opt/android-sdk/build-tools/36/aapt2
+                  exists: true
+                - then: the emulator binary is installed
+                  file: /opt/android-sdk/emulator/emulator
+                  exists: true
+            - name: adb-reports-version
+              step:
+                - then: adb runs and reports the Android Debug Bridge banner
+                  command: /opt/android-sdk/platform-tools/adb version
+                  exit_status: 0
+                  stdout:
+                    - contains: "Android Debug Bridge"
+            - name: apkeep-downloader-on-path
+              step:
+                - then: apkeep (the by-package-name app downloader) is installed and on PATH
+                  command: which apkeep
+                  exit_status: 0
+            - name: api-36-system-image-fetched
+              step:
+                - then: the android-36 platform is installed
+                  file: /opt/android-sdk/platforms/android-36
+                  exists: true
+                  filetype: directory
+                - then: the sdkmanager-fetched google_apis_playstore x86_64 system image is present
+                  file: /opt/android-sdk/system-images/android-36/google_apis_playstore/x86_64
+                  exists: true
+                  filetype: directory
     require:
         - java-openjdk
     env:

@@ -1,17 +1,70 @@
 candy:
     version: 2026.152.1445
     name: android-emulator-layer
-    description: |
-        Composite glue layer that turns the underlying selkies-desktop +
-        android-sdk + appium-server stack into a running Android 16 (API 36,
-        google_apis_playstore x86_64, pixel_9a) emulator. The Play Store image
-        ships Play Store + Google Play services (GMS) + Google Chrome
-        preinstalled. Ships two helper scripts (start-emulator, wait-for-display),
-        two supervisord services (emulator + adb-server), the AVD volume, and the
-        /dev/kvm device-passthrough declaration that round-trips through the OCI
-        label into the quadlet. CPU/RAM are auto-sized from the host at runtime
-        (start-emulator). Optional GOOGLE_ACCOUNT_EMAIL + GOOGLE_AAS_TOKEN secrets
-        feed the `charly eval adb install-app --source google-play` path.
+    description:
+        feature: Compose selkies + android-sdk + appium into a booting Android 16 emulator.
+        narrative: |
+            Composite glue layer that turns the underlying selkies-desktop +
+            android-sdk + appium-server stack into a running Android 16 (API 36,
+            google_apis_playstore x86_64, pixel_9a) emulator. The Play Store image
+            ships Play Store + Google Play services (GMS) + Google Chrome
+            preinstalled. Ships two helper scripts (start-emulator, wait-for-display),
+            two supervisord services (emulator + adb-server), the AVD volume, and the
+            /dev/kvm device-passthrough declaration that round-trips through the OCI
+            label into the quadlet. CPU/RAM are auto-sized from the host at runtime
+            (start-emulator). Optional GOOGLE_ACCOUNT_EMAIL + GOOGLE_AAS_TOKEN secrets
+            feed the `charly eval adb install-app --source google-play` path. The
+            helper scripts, the AVD home directory, and the booted device are all
+            directly observable, so the behaviour is verifiable end to end.
+        tag: [working]
+        scenario:
+            # Build-scope: the layer's own install artifacts — both helper scripts
+            # land at their published paths, executable. Fails if the copy: tasks
+            # never ran.
+            - name: helper-scripts-installed
+              step:
+                - then: the start-emulator launcher is installed and executable
+                  file: /usr/local/bin/start-emulator
+                  exists: true
+                  mode: "0755"
+                - then: the wait-for-display gate is installed and executable
+                  file: /usr/local/bin/wait-for-display
+                  exists: true
+                  mode: "0755"
+            # Build-scope: the layer provisions the AVD home for the runtime user
+            # (the two mkdir: tasks). Fails if the directory was never created.
+            - name: avd-home-provisioned
+              step:
+                - then: the AVD home directory exists for the runtime user
+                  file: ${HOME}/.android/avd
+                  exists: true
+                  filetype: directory
+            # Deploy-scope: the composite actually boots an emulator and adb attaches.
+            # Order is load-bearing — the wait-for-device gate precedes the single-shot
+            # getprop (mirrors the eval: block's readiness discipline).
+            - name: emulator-boots-and-adb-attaches
+              step:
+                - then: the emulator supervisord service is running
+                  scope: deploy
+                  service: emulator
+                  running: true
+                - then: the adb server port is reachable on the host
+                  scope: deploy
+                  addr: 127.0.0.1:${HOST_PORT:5037}
+                  reachable: true
+                  timeout: 5s
+                - then: adb reports the device fully booted
+                  scope: deploy
+                  adb: wait-for-device
+                  timeout: 300s
+                  stdout:
+                    - contains: ready
+                - then: the booted AVD reports Android version 16
+                  scope: deploy
+                  adb: shell
+                  arg: [getprop, ro.build.version.release]
+                  stdout:
+                    - contains: "16"
     require:
         - android-sdk
         - appium-server

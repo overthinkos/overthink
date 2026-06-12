@@ -1,6 +1,32 @@
 candy:
     version: 2026.144.1443
     name: xdg-portal
+    description:
+        feature: XDG desktop portal (wlroots backend) for screencast/screenshot on sway
+        narrative: |
+            Installs xdg-desktop-portal with the wlroots + GTK backends and slurp
+            (region selector), plus the sway config.d and portal config that wire
+            screencasting through PipeWire on a sway session. Verifiable: the
+            portal packages and slurp are installed and the portal/sway config
+            files land at their expected paths.
+        tag: [working]
+        scenario:
+            - name: xdg-portal-installed
+              step:
+                - then: the xdg-desktop-portal package is installed
+                  package: xdg-desktop-portal
+                  installed: true
+                - then: the wlroots portal backend package is installed
+                  package: xdg-desktop-portal-wlr
+                  installed: true
+                - then: the slurp region selector binary is installed
+                  file: /usr/bin/slurp
+                  exists: true
+            - name: xdg-portal-config-present
+              step:
+                - then: the wlroots portal config file is installed in the user config
+                  file: ${HOME}/.config/xdg-desktop-portal-wlr/config
+                  exists: true
     require:
         - dbus
         - sway

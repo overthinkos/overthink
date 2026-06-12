@@ -1,7 +1,21 @@
 candy:
     version: 2026.144.1443
     name: wl-record-pixelflux
-    description: Desktop video recorder via pixelflux H.264 pipeline
+    description:
+        feature: Desktop video recorder via the selkies pixelflux H.264 pipeline
+        narrative: |
+            Installs the pixelflux-record wrapper script under ~/.local/bin, which
+            drives the selkies pixelflux capture pipeline through ffmpeg to record
+            the desktop as H.264. Verifiable: the wrapper script is installed and
+            executable.
+        tag: [working]
+        scenario:
+            - name: pixelflux-record-script-installed
+              step:
+                - then: the pixelflux-record wrapper is installed and executable
+                  file: ${HOME}/.local/bin/pixelflux-record
+                  exists: true
+                  mode: "0755"
     require:
         - selkies
         - ffmpeg

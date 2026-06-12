@@ -1,6 +1,62 @@
 candy:
     version: 2026.157.1917
     name: github-runner
+    description:
+        feature: A GitHub Actions self-hosted runner that builds CI jobs rootless inside a disposable box.
+        narrative: |
+            Installs the pinned actions/runner release under ${HOME}/actions-runner
+            (config.sh + run.sh, run as uid 1000) plus the CI toolchain — jq/git/go/cosign,
+            qemu-user-static for aarch64 binfmt cross-builds, and the rootless nested
+            container stack (podman/buildah/skopeo via container-nesting). The .NET runtime
+            deps (icu/krb5/openssl/libunwind/lttng-ust) are declared explicitly because the
+            runner's installdependencies.sh has no Arch branch — so config.sh actually runs.
+        tag: [working]
+        scenario:
+            - name: runner-binaries-installed-and-runnable
+              step:
+                - then: the GitHub Actions runner is extracted under the home directory with its config.sh present
+                  file: "${HOME}/actions-runner/config.sh"
+                  exists: true
+                - then: the runner's run.sh service launcher is present
+                  file: "${HOME}/actions-runner/run.sh"
+                  exists: true
+                - then: config.sh executes, proving the .NET native deps (icu/krb5/openssl/libunwind/lttng-ust) resolved on this distro
+                  command: "${HOME}/actions-runner/config.sh --version"
+                  exit_status: 0
+            - name: ci-container-toolchain-works
+              step:
+                - then: skopeo (rootless image copy) reports its version
+                  command: skopeo --version
+                  exit_status: 0
+                - then: buildah (rootless image build) reports its version
+                  command: buildah --version
+                  exit_status: 0
+                - then: cosign (image signing) reports its version
+                  command: cosign version
+                  exit_status: 0
+                - then: the go toolchain used by CI jobs reports its version
+                  command: go version
+                  exit_status: 0
+            - name: cross-arch-binfmt-available
+              step:
+                - then: the aarch64 qemu interpreter is installed so jobs can cross-build for arm64 via binfmt
+                  file: /usr/bin/qemu-aarch64-static
+                  exists: true
+            - name: runner-runs-rootless-with-nested-podman
+              step:
+                - then: the runner service process runs as the unprivileged uid 1000, never root
+                  scope: deploy
+                  command: id
+                  stdout:
+                    - contains: "uid=1000"
+                - then: rootless nested podman works inside the box (no mount_too_revealing EPERM)
+                  scope: deploy
+                  command: podman info
+                  exit_status: 0
+                - then: a CI job can actually pull and run a container image rootless
+                  scope: deploy
+                  command: "podman run --rm quay.io/libpod/alpine:latest true"
+                  exit_status: 0
     require:
         - supervisord
         # Rootless nested podman/buildah/skopeo + subuid/subgid layout +

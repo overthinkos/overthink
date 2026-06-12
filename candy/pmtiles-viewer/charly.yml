@@ -1,7 +1,39 @@
 candy:
     version: 2026.144.1443
     name: pmtiles-viewer
-    description: "PMTiles Viewer — visual inspector for PMTiles archives. TypeScript SPA from protomaps/PMTiles/app/ built via npm at image build time, served as a static dist by python -m http.server on port 8001 (host 28001). Pairs with the osm-tools layer's martin tile server: load any of the versa image's /workspace/tiles/pmtiles/*.pmtiles archives into the viewer over HTTP to inspect their bbox, zoom range, metadata, and tile contents."
+    description:
+        feature: Visual PMTiles archive inspector served as a static SPA on port 8001 (host 28001)
+        narrative: |
+            The protomaps/PMTiles TypeScript SPA — the same code deployed at
+            pmtiles.io — built from upstream source via npm at image build time
+            and served as a static Vite dist by `python -m http.server` on port
+            8001 (host 28001). Operators point it at any
+            /workspace/tiles/pmtiles/*.pmtiles archive (e.g. served by the
+            osm-tools martin tile server) to inspect its bbox, zoom range,
+            metadata, and tile contents in the browser. Verifiable: the Vite
+            build lands at /opt/pmtiles-viewer/build/index.html and the
+            supervisord service serves it over HTTP with root-relative assets.
+        tag: [working]
+        scenario:
+            # Build-scope deterministic steps (file/command — checkable under
+            # `charly box feature run` in podman run --rm AND at deploy scope).
+            - name: spa-built-from-source
+              step:
+                - then: the Vite build artifact directory is present in the image
+                  file: /opt/pmtiles-viewer/build
+                  filetype: directory
+                  exists: true
+                - then: the SPA entry point index.html exists in the build artifact
+                  file: /opt/pmtiles-viewer/build/index.html
+                  exists: true
+                - then: the node toolchain that builds the SPA is installed
+                  command: node --version
+                  exit_status: 0
+            # Deploy-scope behaviour — prose-only, graded by the agent against
+            # the live pod (the http.server isn't up under build scope).
+            - name: viewer-served-over-http
+              step:
+                - then: the pmtiles-viewer service serves the built SPA over HTTP, answering GET / with status 200 and root-relative asset URLs that load in the browser
     require:
         - supervisord
     distro:

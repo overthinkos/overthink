@@ -1,6 +1,50 @@
 candy:
     version: 2026.144.1443
     name: immich-ml
+    description:
+        feature: Immich machine-learning backend serving face recognition and smart-search inference on port 3003.
+        narrative: |
+            Installs the uv Python package manager, then builds a dedicated
+            virtualenv at /opt/immich/machine-learning/.venv and installs the
+            immich_ml module from the pinned Immich source release. A supervised
+            immich-ml service runs `python -m immich_ml`, exposing the ML
+            inference API on port 3003 (its /ping endpoint answers "pong") so the
+            Immich server can offload face detection and CLIP smart-search
+            embedding to this backend.
+        tag: [working]
+        scenario:
+            # Build-scope deterministic steps assert the installed ML runtime
+            # artifacts; the deploy-scope scenario binds check verbs that run
+            # against the live immich-ml service under `charly eval feature run`.
+            - name: ml-runtime-installed
+              step:
+                - then: the dedicated machine-learning virtualenv ships a python interpreter
+                  file: /opt/immich/machine-learning/.venv/bin/python
+                  exists: true
+                - and: the immich_ml inference module is installed into the machine-learning tree
+                  file: /opt/immich/machine-learning/immich_ml
+                  filetype: directory
+                - and: the uv package manager that built the venv is on the system PATH
+                  file: /usr/local/bin/uv
+                  exists: true
+            - name: model-cache-directory-provisioned
+              step:
+                - then: the per-user model cache directory is provisioned under the home tree
+                  file: ${HOME}/.immich/models
+                  filetype: directory
+            - name: ml-inference-api-answers-ping
+              step:
+                - given: the supervised immich-ml service is running
+                  scope: deploy
+                  service: immich-ml
+                  running: true
+                - then: the ML inference API answers its health probe on port 3003 with pong
+                  scope: deploy
+                  command: curl -fsS http://127.0.0.1:3003/ping
+                  exit_status: 0
+                  in_container: true
+                  stdout:
+                    - contains: pong
     require:
         - immich
     env:

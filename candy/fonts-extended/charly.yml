@@ -1,12 +1,51 @@
 candy:
     version: 2026.149.1210
     name: fonts-extended
-    description: |
-        The full CachyOS desktop font set (the netinstall "fonts" subgroup) on top
-        of the lean desktop-fonts layer: Noto (incl. CJK + emoji), Cantarell,
-        DejaVu, Bitstream Vera, Open Sans, Meslo Nerd, and the awesome-terminal
-        glyphs. Separate from desktop-fonts so the lightweight streaming-desktop
-        images don't pull the heavy CJK set; a full KDE workstation wants it.
+    description:
+        feature: The full CachyOS desktop font set — Noto CJK + emoji, Cantarell, DejaVu, Bitstream Vera, Open Sans, Meslo Nerd, and awesome-terminal glyphs — installed system-wide
+        narrative: |
+            The full CachyOS desktop font set (the netinstall "fonts" subgroup) on
+            top of the lean desktop-fonts layer: Noto (incl. CJK + emoji),
+            Cantarell, DejaVu, Bitstream Vera, Open Sans, Meslo Nerd, and the
+            awesome-terminal glyphs. Separate from desktop-fonts so the lightweight
+            streaming-desktop images don't pull the heavy CJK set; a full KDE
+            workstation wants it. Each family ships as an installed Arch package,
+            so its presence is verifiable by querying the package database.
+        tag: [working]
+        scenario:
+            - name: noto-cjk-and-emoji-installed
+              step:
+                - then: the heavy Noto CJK font set — the reason this candy is split out from desktop-fonts — is installed
+                  package: noto-fonts-cjk
+                  installed: true
+                - then: the Noto color-emoji font is installed
+                  package: noto-fonts-emoji
+                  installed: true
+            - name: latin-desktop-fonts-installed
+              step:
+                - then: the Noto base Latin family is installed
+                  package: noto-fonts
+                  installed: true
+                - then: the Cantarell GNOME UI font is installed
+                  package: cantarell-fonts
+                  installed: true
+                - then: the DejaVu family is installed
+                  package: ttf-dejavu
+                  installed: true
+                - then: the Bitstream Vera family is installed
+                  package: ttf-bitstream-vera
+                  installed: true
+                - then: the Open Sans family is installed
+                  package: ttf-opensans
+                  installed: true
+            - name: terminal-glyph-fonts-installed
+              step:
+                - then: the Meslo Nerd patched font for terminal and powerline glyphs is installed
+                  package: ttf-meslo-nerd
+                  installed: true
+                - then: the awesome-terminal-fonts glyph set is installed
+                  package: awesome-terminal-fonts
+                  installed: true
     require:
         - desktop-fonts
     distro:
@@ -30,4 +69,22 @@ candy:
           installed: true
         - id: cantarell-installed
           package: cantarell-fonts
+          installed: true
+        - id: noto-emoji-installed
+          package: noto-fonts-emoji
+          installed: true
+        - id: dejavu-installed
+          package: ttf-dejavu
+          installed: true
+        - id: bitstream-vera-installed
+          package: ttf-bitstream-vera
+          installed: true
+        - id: opensans-installed
+          package: ttf-opensans
+          installed: true
+        - id: meslo-nerd-installed
+          package: ttf-meslo-nerd
+          installed: true
+        - id: awesome-terminal-fonts-installed
+          package: awesome-terminal-fonts
           installed: true

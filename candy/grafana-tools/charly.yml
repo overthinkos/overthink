@@ -1,7 +1,48 @@
 candy:
     version: 2026.144.1443
     name: grafana-tools
-    description: Grafana observability CLI tools (mcp-grafana, logcli, promtool, mimirtool, tempo-cli, tanka, grafanactl)
+    description:
+        feature: Grafana observability CLI suite (mcp-grafana, logcli, promtool, mimirtool, tempo-cli, tanka, grafanactl) on the PATH
+        narrative: |
+            Installs the Grafana observability toolset as standalone binaries under
+            /usr/local/bin: the mcp-grafana MCP server, Loki's logcli, Prometheus'
+            promtool, Mimir's mimirtool, Tempo's tempo-cli, Tanka's tk, and grafanactl.
+            Each binary is fetched from its upstream release during the image build, so
+            its presence on the PATH and its ability to report a version are directly
+            verifiable.
+        tag: [working]
+        scenario:
+            - name: observability-binaries-installed
+              step:
+                - then: the mcp-grafana MCP server binary is installed on the PATH
+                  file: /usr/local/bin/mcp-grafana
+                  exists: true
+                - then: Loki's logcli query client is installed
+                  file: /usr/local/bin/logcli
+                  exists: true
+                - then: Prometheus' promtool is installed
+                  file: /usr/local/bin/promtool
+                  exists: true
+                - then: Mimir's mimirtool is installed
+                  file: /usr/local/bin/mimirtool
+                  exists: true
+                - then: Tempo's tempo-cli is installed
+                  file: /usr/local/bin/tempo-cli
+                  exists: true
+                - then: Tanka's tk binary is installed
+                  file: /usr/local/bin/tk
+                  exists: true
+                - then: grafanactl is installed
+                  file: /usr/local/bin/grafanactl
+                  exists: true
+            - name: query-tools-report-version
+              step:
+                - then: logcli reports its version and exits cleanly
+                  command: /usr/local/bin/logcli --version
+                  exit_status: 0
+                - then: promtool reports its version and exits cleanly
+                  command: /usr/local/bin/promtool --version
+                  exit_status: 0
     var:
         MCP_GRAFANA_VERSION: v0.7.8
     task:

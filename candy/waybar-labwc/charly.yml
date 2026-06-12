@@ -1,6 +1,45 @@
 candy:
     version: 2026.144.1443
     name: waybar-labwc
+    description:
+        feature: A bottom waybar status bar wired for the labwc desktop session, launched once labwc's Wayland socket is ready.
+        narrative: |
+            Installs the waybar package and drops a labwc-specific launch wrapper
+            plus a bottom-bar config (wlr taskbar, Chrome launcher, swaync
+            notification module) and a matching style sheet into the user's home.
+            A supervisord service runs the wrapper, which waits for labwc's
+            wayland-0 socket before exec'ing waybar so the bar attaches to the
+            labwc compositor, not the pixelflux capture display.
+        tag: [working]
+        scenario:
+            - name: waybar-binary-installed
+              step:
+                - then: the waybar status bar binary is installed at /usr/bin/waybar
+                  file: /usr/bin/waybar
+                  exists: true
+            - name: labwc-launch-wrapper-installed
+              step:
+                - then: the labwc launch wrapper is installed and executable
+                  file: ${HOME}/.local/bin/waybar-labwc-wrapper
+                  exists: true
+                  mode: "0755"
+                - then: the wrapper attaches waybar to labwc's wayland-0 socket, not the pixelflux capture compositor
+                  file: ${HOME}/.local/bin/waybar-labwc-wrapper
+                  contains: ["wayland-0"]
+            - name: waybar-labwc-config-installed
+              step:
+                - then: the bottom-bar waybar config is installed in the user's config dir
+                  file: ${HOME}/.config/waybar/config
+                  exists: true
+                - then: the config wires the wlr foreign-toplevel taskbar module
+                  file: ${HOME}/.config/waybar/config
+                  contains: ["wlr/taskbar"]
+                - then: the matching style sheet is installed alongside the config
+                  file: ${HOME}/.config/waybar/style.css
+                  exists: true
+            - name: bar-renders-in-labwc-session
+              step:
+                - then: the waybar bar is visible along the bottom of the running labwc desktop session, showing the taskbar and the Chrome launcher
     require:
         - labwc
     distro:
@@ -31,6 +70,9 @@ candy:
         - id: waybar-binary
           file: /usr/bin/waybar
           exists: true
+        - id: waybar-package
+          package: waybar
+          installed: true
         - id: waybar-labwc-wrapper
           file: ${HOME}/.local/bin/waybar-labwc-wrapper
           exists: true

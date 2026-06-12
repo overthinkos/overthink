@@ -1,7 +1,39 @@
 candy:
     version: 2026.144.1443
     name: maplibre-versatiles-styler
-    description: "maplibre-versatiles-styler — TypeScript MapLibre GL JS control that adds an interactive sidebar widget for switching between VersaTiles style presets (colorful/eclipse/graybeard/…), editing color palettes, adjusting fonts/language, and exporting styles. Bundled locally from the npm package so the notebook's MapLibre cell can load the styler without depending on unpkg.com at runtime. Re-exported by the versatiles-frontend layer's http.server at /styler/."
+    description:
+        feature: Bundles the MapLibre VersaTiles styler control locally into the image so the map UI loads it without runtime CDN access.
+        narrative: |
+            maplibre-versatiles-styler is a MapLibre GL JS control that adds an
+            interactive sidebar widget for switching between VersaTiles style
+            presets, editing color palettes, and adjusting fonts/language. This
+            candy installs the npm package (GitHub release tarball, with an
+            npm-install fallback) into /opt/maplibre-versatiles-styler/, shipping
+            the prebuilt ESM + UMD bundles so the notebook's MapLibre cell can
+            load the styler from the image instead of unpkg.com at runtime (the
+            versatiles-frontend layer re-exports the directory at /styler/).
+            Observable by the install directory and at least one non-empty
+            JavaScript bundle landing there, plus the node/npm bundling toolchain.
+        tag: [working]
+        scenario:
+            - name: styler-bundle-installed
+              step:
+                - then: the styler install directory exists in the built image
+                  file: /opt/maplibre-versatiles-styler
+                  filetype: directory
+                  exists: true
+                - then: at least one non-empty JavaScript bundle is present for consumers to load
+                  command: |
+                    find /opt/maplibre-versatiles-styler -maxdepth 4 -name '*.js' -size +1c | head -1 | grep -q .
+                  exit_status: 0
+            - name: bundling-toolchain-present
+              step:
+                - then: the node runtime used to fetch and bundle the package is installed
+                  package: nodejs
+                  installed: true
+                - then: the npm client used by the install fallback is available
+                  package: npm
+                  installed: true
     require:
         - supervisord
     distro:
@@ -65,6 +97,11 @@ candy:
             rm -rf "$TMPDIR" /root/.npm
           user: root
     eval:
+        # Build-scope: the install directory was created.
+        - id: maplibre-versatiles-styler-dir
+          file: /opt/maplibre-versatiles-styler
+          filetype: directory
+          exists: true
         # Build-scope: at least one non-empty JS bundle landed (entry-
         # point filename varies across versions: `maplibre-versatiles-styler.umd.js`,
         # `index.js`, `dist/index.js`, etc.; lenient match by extension).
@@ -72,3 +109,11 @@ candy:
           command: |
             find /opt/maplibre-versatiles-styler -maxdepth 4 -name '*.js' -size +1c | head -1 | grep -q .
           exit_status: 0
+        # Build-scope: the node/npm toolchain that fetches + bundles the
+        # package is installed (identical package names on arch + fedora).
+        - id: maplibre-versatiles-styler-nodejs-package
+          package: nodejs
+          installed: true
+        - id: maplibre-versatiles-styler-npm-package
+          package: npm
+          installed: true

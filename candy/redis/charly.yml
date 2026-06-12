@@ -1,6 +1,51 @@
 candy:
     version: 2026.144.1531
     name: redis
+    description:
+        feature: A Redis-compatible key-value server (redis-server + redis-cli) supervised on 127.0.0.1:6379
+        narrative: |
+            Installs the Redis server and CLI — the `redis` package on Fedora,
+            and `valkey` (which provides /usr/bin/redis-server and
+            /usr/bin/redis-cli) on Arch/CachyOS. A supervised redis-server binds
+            127.0.0.1:6379 with a ${HOME}/.redis data dir and a 60s/1-key RDB
+            snapshot policy, so the running service answers `redis-cli ping` with
+            PONG and accepts TCP on its published host port. Every claim below is
+            verifiable: binaries on disk, the providing package installed, and a
+            live PING/PONG + reachable-port probe against the running deployment.
+        tag: [working]
+        scenario:
+            # DETERMINISTIC build-scope steps — embedded check verbs run at both
+            # build and deploy scope; they fail if redis/valkey was never installed.
+            - name: redis-server-and-cli-installed
+              step:
+                - then: the redis-server daemon binary is installed at /usr/bin/redis-server
+                  file: /usr/bin/redis-server
+                  exists: true
+                - and: the redis-cli client binary is installed at /usr/bin/redis-cli
+                  file: /usr/bin/redis-cli
+                  exists: true
+                - and: the providing package is installed (redis on Fedora, valkey on Arch/CachyOS)
+                  package: valkey-compat-redis
+                  package_map:
+                    arch: valkey
+                  installed: true
+            # DETERMINISTIC deploy-scope steps — need the running service, so they
+            # are scoped to deploy and probe the live container / published port.
+            - name: redis-answers-ping-on-its-port
+              step:
+                - then: redis-cli ping returns PONG against the supervised redis-server
+                  scope: deploy
+                  command: redis-cli -h 127.0.0.1 -p 6379 ping
+                  stdout: PONG
+                - and: the redis port accepts a TCP connection from the host
+                  scope: deploy
+                  addr: 127.0.0.1:${HOST_PORT:6379}
+                  reachable: true
+            # PROSE-ONLY step — genuine free-form resilience behaviour, agent-graded
+            # by `charly eval feature run redis` against the live deployment.
+            - name: redis-service-stays-available
+              step:
+                - then: the supervised redis service is running and keeps answering clients, restarting automatically (restart=always) if the redis-server process exits
     require: []
     distro:
         arch:
@@ -39,7 +84,7 @@ candy:
         # deploy publishes 6379:6379 or remaps to (e.g.) 16379:6379.
         - id: redis-responds
           scope: deploy
-          command: redis-cli -h ${CONTAINER_IP} -p ${HOST_PORT:6379} ping
+          command: redis-cli -h 127.0.0.1 -p ${HOST_PORT:6379} ping
           stdout: PONG
           in_container: false
         - id: redis-port-open

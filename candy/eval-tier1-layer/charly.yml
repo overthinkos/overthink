@@ -6,6 +6,22 @@ candy:
         narrative: |
             Writes /etc/charly-bench-marker containing the string "charly benchmark target",
             satisfying the tier1-easy harness recipe.
+        tag: [working]
+        scenario:
+            - name: marker-file-present
+              step:
+                - then: the bench marker file exists at /etc/charly-bench-marker
+                  file: /etc/charly-bench-marker
+                  exists: true
+                - then: the marker file is written world-readable at mode 0644
+                  file: /etc/charly-bench-marker
+                  mode: "0644"
+            - name: marker-content-matches-tier1-recipe
+              step:
+                - then: the marker file carries the tier1 benchmark target string
+                  file: /etc/charly-bench-marker
+                  contains:
+                    - charly benchmark target
     task:
         - mkdir: /etc
           user: root
@@ -23,3 +39,6 @@ candy:
           file: /etc/charly-bench-marker
           contains:
             - charly benchmark target
+        - id: tier1-marker-mode
+          file: /etc/charly-bench-marker
+          mode: "0644"

@@ -1,6 +1,41 @@
 candy:
     version: 2026.144.1443
     name: cuda
+    description:
+        feature: CUDA toolkit (nvcc, cudart, cuDNN, onnxruntime) stitched into the canonical /usr layout on Fedora and Arch
+        narrative: |
+            Installs the CUDA compiler driver (nvcc), the CUDA runtime/dev
+            libraries (cudart, nvrtc, cupti, curand, cccl, cufile), cuDNN, and
+            onnxruntime. On Fedora the RPMs land in /usr directly; on Arch the
+            post-install tasks symlink the /opt/cuda binaries, headers, and libs
+            into the same /usr-rooted paths, so every downstream GPU consumer
+            compiles against one layout regardless of distro. Each artifact is a
+            real file or library on disk, so its presence is directly verifiable.
+        tag: [working]
+        scenario:
+            - name: nvcc-compiler-installed
+              step:
+                - then: the nvcc CUDA compiler driver is on the canonical /usr path
+                  file: /usr/bin/nvcc
+                  exists: true
+                - then: nvcc reports its CUDA compilation-tools release
+                  command: nvcc --version
+                  exit_status: 0
+                  stdout:
+                    - contains: release
+            - name: cudnn-header-stitched
+              step:
+                - then: the cuDNN header is available at /usr/include regardless of distro
+                  file: /usr/include/cudnn.h
+                  exists: true
+            - name: cuda-runtime-library-present
+              step:
+                - then: the CUDA runtime library is linkable from the canonical /usr/lib64 path
+                  command: ls /usr/lib64/libcudart.so*
+                  exit_status: 0
+            - name: gpu-consumers-share-one-layout
+              step:
+                - then: downstream GPU layers (llama-cpp, vllm, comfyui, jupyter-ml) compile against the same /usr-rooted CUDA layout on both Fedora and Arch
     require:
         - nvidia
         - ffmpeg

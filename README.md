@@ -125,7 +125,9 @@ A step with a check verb is verified deterministically; a prose-only step
 is graded by an **agent** probing the live deployment. Author with
 `charly candy add-scenario`, run with `charly box feature run` /
 `charly eval feature run`, or let the `charly eval run <score>` AI loop drive it to
-green. The spec is the test, and agents both write it and grade it.
+green. The spec is the test, and agents both write it and grade it. Every
+candy MUST ship a full `description:` (≥1 scenario) AND a non-empty `eval:` —
+`charly box validate` hard-errors otherwise.
 → [VISION.md](VISION.md) (why), CLAUDE.md "Agent Driven Evaluation (ADE)"
 (the rule), `/charly-eval:eval` (usage).
 
@@ -592,7 +594,8 @@ adds three overlay kinds:
 - **`kind: recipe`** — deterministic test specification: scenarios,
   each with a `pod:` declaring the container its probes target.
   Pure check catalogs and Gherkin scenario descriptions; no agent
-  involved here (the agent grader is opt-in via `charly eval feature run`).
+  involved here (authoring the description + eval is mandatory per candy; the
+  live agent grader via `charly eval feature run` stays opt-in).
 - **`kind: score`** — runner config naming the agent, the
   target `eval-sandbox`, the recipes, the plateau iteration count,
   the prompt, and the watchdog timeout. `charly eval run <score>` runs

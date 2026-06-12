@@ -1,6 +1,40 @@
 candy:
     version: 2026.144.1443
     name: a11y-tools
+    description:
+        feature: AT-SPI accessibility bindings importable from the system Python 3
+        narrative: |
+            Installs the AT-SPI2 Python bindings (pyatspi) and PyGObject (gi) into the
+            system python3 so accessibility introspection works on the desktop image.
+            These land in the system interpreter, NOT the pixi env that dominates PATH,
+            so every check targets the absolute /usr/bin/python3. Verifiable by importing
+            both modules and by confirming each distro's package is installed.
+        tag: [working]
+        scenario:
+            - name: atspi-importable-from-system-python
+              step:
+                - then: the system python3 imports the pyatspi AT-SPI bindings without error
+                  command: /usr/bin/python3 -c "import pyatspi"
+                  exit_status: 0
+            - name: pygobject-introspection-available
+              step:
+                - then: the system python3 imports the gi PyGObject introspection module
+                  command: /usr/bin/python3 -c "import gi"
+                  exit_status: 0
+            - name: atspi-packages-installed
+              step:
+                - then: the AT-SPI python binding package is installed for the running distro
+                  package: python3-pyatspi
+                  package_map:
+                    arch: python-atspi
+                    fedora: python3-pyatspi
+                  installed: true
+                - then: the PyGObject package is installed for the running distro
+                  package: python3-gobject
+                  package_map:
+                    arch: python-gobject
+                    fedora: python3-gobject
+                  installed: true
     require:
         - dbus
     distro:
@@ -29,4 +63,9 @@ candy:
         # dominates PATH on these images. Use the absolute system path.
         - id: pyatspi-importable
           command: /usr/bin/python3 -c "import pyatspi"
+          exit_status: 0
+        # python-gobject provides the `gi` module; import-verify it for the same
+        # system python3, symmetric with the pyatspi import check above.
+        - id: pygobject-importable
+          command: /usr/bin/python3 -c "import gi"
           exit_status: 0

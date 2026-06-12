@@ -1,6 +1,36 @@
 candy:
     version: 2026.144.1443
     name: wayvnc
+    description:
+        feature: WayVNC headless VNC server exposing a wlroots Wayland desktop on TCP 5900
+        narrative: |
+            Installs the wayvnc package (the /usr/bin/wayvnc server) plus a
+            launcher wrapper under ~/.local/bin, run as a supervised service that
+            publishes the Wayland desktop over VNC on port 5900. Verifiable: the
+            server binary and wrapper exist and the package is installed at build
+            scope; at deploy scope the wayvnc service runs and the VNC port
+            accepts a TCP connection.
+        tag: [working]
+        scenario:
+            - name: wayvnc-server-installed
+              step:
+                - then: the wayvnc server binary is installed at /usr/bin/wayvnc
+                  file: /usr/bin/wayvnc
+                  exists: true
+                - then: the wayvnc launcher wrapper is installed and executable
+                  file: ${HOME}/.local/bin/wayvnc-wrapper
+                  exists: true
+                  mode: "0755"
+            - name: wayvnc-serves-vnc
+              step:
+                - then: the supervised wayvnc service is running
+                  scope: deploy
+                  service: wayvnc
+                  running: true
+                - then: the VNC port accepts a TCP connection on the published host port
+                  scope: deploy
+                  addr: 127.0.0.1:${HOST_PORT:5900}
+                  reachable: true
     require:
         - supervisord
     port:

@@ -1,6 +1,22 @@
 candy:
     version: 2026.144.1443
     name: xterm
+    description:
+        feature: xterm classic X terminal emulator
+        narrative: |
+            Installs xterm, the reference X terminal emulator (usable under
+            XWayland). Verifiable: the xterm binary lands at /usr/bin/xterm and
+            the xterm package is installed.
+        tag: [working]
+        scenario:
+            - name: xterm-installed
+              step:
+                - then: the xterm binary is installed at /usr/bin/xterm
+                  file: /usr/bin/xterm
+                  exists: true
+                - then: the xterm package is registered with the package manager
+                  package: xterm
+                  installed: true
     distro:
         arch:
             package:

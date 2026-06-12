@@ -9,6 +9,26 @@ candy:
             on 8080 and serves /srv/fixture/, plus curl for the self-curl
             probe. Combined with a fedora base + supervisord this satisfies
             every scenario in the network-and-http recipe.
+        tag: [working]
+        scenario:
+            - name: fixture-web-content-installed
+              step:
+                - then: nginx is installed
+                  package: nginx
+                  installed: true
+                - then: the fixture index.html carries the predetermined content marker
+                  file: /srv/fixture/index.html
+                  exists: true
+                  contains:
+                    - charly-fixture-web-content-marker
+            - name: fixture-web-http-responds
+              step:
+                - then: the fixture web server answers HTTP 200 with the marker on its published port
+                  scope: deploy
+                  http: http://127.0.0.1:${HOST_PORT:8080}/
+                  status: 200
+                  body:
+                    - contains: charly-fixture-web-content-marker
     require:
         - supervisord
     distro:

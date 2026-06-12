@@ -1,7 +1,56 @@
 candy:
     version: 2026.155.1203
     name: k3s-server
-    description: k3s control-plane (server) node — ships with ServiceLB, Traefik, local-path-provisioner enabled by default
+    description:
+        feature: A single-node k3s control plane that boots with ServiceLB, Traefik, and local-path-provisioner enabled by default.
+        narrative: |
+            Renders /etc/rancher/k3s/config.yaml (admin-only, disabling no
+            default addons), runs `k3s server` as a managed service, and
+            publishes the cluster kubeconfig back to the operator. The
+            observable proof the control plane came up: a live deploy reaches a
+            Ready node with Traefik as the default IngressClass and local-path
+            as the default StorageClass.
+        tag: [working]
+        scenario:
+            - name: server-config-rendered-admin-only
+              step:
+                - then: the k3s server config file is rendered with admin-only (0600) permissions
+                  file: /etc/rancher/k3s/config.yaml
+                  exists: true
+                  mode: "0600"
+            - name: control-plane-binary-installed
+              step:
+                - then: the k3s control-plane binary the service execs is installed by the required k3s candy
+                  file: /usr/local/bin/k3s
+                  exists: true
+            - name: cluster-bootstraps-with-default-addons
+              step:
+                - then: the cluster reports at least one Ready node
+                  scope: deploy
+                  k8s: wait-nodes
+                  cluster: "${DEPLOY_NAME}"
+                  k8s_count: 1
+                  timeout: 180s
+                  stdout:
+                    contains: "Ready"
+                - then: Traefik, ServiceLB, and local-path addons are all Ready
+                  scope: deploy
+                  k8s: addons
+                  cluster: "${DEPLOY_NAME}"
+                  timeout: 240s
+                  exit_status: 0
+                - then: Traefik is registered as the cluster's default ingress class
+                  scope: deploy
+                  k8s: ingressclass
+                  cluster: "${DEPLOY_NAME}"
+                  stdout:
+                    contains: "traefik"
+                - then: local-path is registered as the cluster's default storage class
+                  scope: deploy
+                  k8s: storageclass
+                  cluster: "${DEPLOY_NAME}"
+                  stdout:
+                    contains: "local-path"
     require:
         - k3s
     # Layer-intrinsic container security. Applied ONLY to pod targets via
@@ -171,6 +220,10 @@ candy:
           file: /etc/rancher/k3s/config.yaml
           exists: true
           mode: "0600"
+        - id: k3s-binary
+          scope: build
+          file: /usr/local/bin/k3s
+          exists: true
         # Deploy-scope tests: hit the running cluster via the new charly eval k8s
         # verb. These run during `charly deploy add vm:k3s-srv` after the k3s
         # service reaches Active and kubeconfig artifact retrieval has

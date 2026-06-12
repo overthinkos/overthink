@@ -1,6 +1,41 @@
 candy:
     version: 2026.144.1443
     name: docker-ce
+    description:
+        feature: Docker CE engine, containerd runtime, and the buildx/compose plugins
+        narrative: |
+            The docker-ce candy installs the upstream Docker Community Edition stack -
+            the docker CLI + dockerd engine, the containerd runtime, and the buildx and
+            compose plugins - from Docker's own repositories (the docker metapackage on
+            Arch). It also queues the iptable_nat kernel module for load at boot so the
+            docker bridge network can NAT. Every artifact is a fixed on-disk path or a
+            CLI that reports its version, so the install is directly verifiable.
+        tag: [working]
+        scenario:
+            - name: docker-engine-installed
+              step:
+                - then: the docker CLI binary is installed at /usr/bin/docker
+                  file: /usr/bin/docker
+                  exists: true
+                - then: the docker CLI reports its version and exits cleanly
+                  command: /usr/bin/docker --version
+                  exit_status: 0
+            - name: containerd-runtime-and-plugins
+              step:
+                - then: the containerd runtime binary is installed at /usr/bin/containerd
+                  file: /usr/bin/containerd
+                  exists: true
+                - then: the containerd runtime reports its version and exits cleanly
+                  command: /usr/bin/containerd --version
+                  exit_status: 0
+                - then: the docker compose plugin is wired into the docker CLI
+                  command: /usr/bin/docker compose version
+                  exit_status: 0
+            - name: docker-networking-prepared
+              step:
+                - then: the iptable_nat module is queued for load at boot so the docker bridge can NAT
+                  file: /etc/modules-load.d/ip_tables.conf
+                  contains: iptable_nat
     distro:
         arch:
             package:
@@ -64,3 +99,15 @@ candy:
         - id: docker-compose-plugin
           command: /usr/bin/docker compose version
           exit_status: 0
+        - id: docker-ce-package
+          package: docker-ce
+          package_map:
+            arch: docker
+            fedora: docker-ce
+          installed: true
+        - id: containerd-package
+          package: containerd.io
+          package_map:
+            arch: containerd
+            fedora: containerd.io
+          installed: true

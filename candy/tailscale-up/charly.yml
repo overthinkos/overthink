@@ -1,16 +1,43 @@
 candy:
     version: 2026.144.1443
     name: tailscale-up
-    description: |
-        Tailscale runtime wiring for target:local hosts. Starts tailscaled
-        (the /charly-infrastructure:tailscale layer only enables it, never --now,
-        because that body also runs at image-build time where systemd isn't
-        PID 1), sets --operator + --hostname so user-systemd ExecStartPost
-        can run `tailscale serve` without sudo, and keeps the tailnet device
-        name in sync with `hostname -s` across hostname changes. Self-gates
-        on `systemctl is-active tailscaled` after the start attempt so it's
-        a no-op in image-build / bootc-assembly contexts where systemctl
-        can't manage live services.
+    description:
+        feature: Deploy-time tailscale runtime wiring — start the daemon, set --operator + --hostname.
+        narrative: |
+            Runtime-config sibling of the tailscale install candy, which it
+            `require:`s — so any image composing this layer carries the
+            tailscale CLI + tailscaled daemon it drives. On a target:local host
+            its single deploy task starts tailscaled, sets --operator (uid 1000)
+            so user-systemd ExecStartPost can `tailscale serve` without sudo,
+            and keeps the tailnet device name in sync with /etc/hostname across
+            hostname changes. Every step self-gates on
+            `systemctl is-active tailscaled`, so it is a no-op in image-build /
+            bootc-assembly contexts where systemd isn't PID 1 — which is exactly
+            why the build-scope composition facts (CLI + daemon present) are
+            verifiable independently of the conditional runtime operator wiring.
+        tag: [working]
+        scenario:
+            - name: tailscale-runtime-stack-composed
+              step:
+                - then: the tailscale CLI is composed into the image at /usr/bin/tailscale via require:tailscale
+                  file: /usr/bin/tailscale
+                  exists: true
+                - then: the tailscaled daemon the deploy task starts is present at /usr/sbin/tailscaled
+                  file: /usr/sbin/tailscaled
+                  exists: true
+                - then: the composed tailscale CLI runs offline so the deploy task can call `tailscale set`
+                  command: tailscale version
+                  exit_status: 0
+            - name: operator-readable-when-logged-in
+              step:
+                - then: on a logged-in tailnet member the operator user is set so `tailscale debug prefs` succeeds without sudo; skip-passes when the daemon is down or logged out
+                  command: |
+                    systemctl is-active --quiet tailscaled || exit 0
+                    if tailscale status --peers=false 2>/dev/null | head -1 | grep -q "Logged out"; then
+                      exit 0
+                    fi
+                    tailscale debug prefs 2>/dev/null | grep -E '"OperatorUser":[[:space:]]*"[^"]+"' >/dev/null
+                  exit_status: 0
     require:
         - tailscale
     task:
@@ -55,6 +82,20 @@ candy:
           user: root
           comment: Start tailscaled + wire operator (non-root serve) + hostname matching
     eval:
+        # Build-scope composition facts — tailscale-up `require:`s the tailscale
+        # candy, so any image composing this runtime layer carries the CLI +
+        # daemon it drives. Unlike the three-state deploy probes below (which
+        # skip-pass on a down/logged-out daemon), these always run and FAIL if
+        # the require:tailscale composition is ever broken.
+        - id: tailscale-up-cli-composed
+          file: /usr/bin/tailscale
+          exists: true
+        - id: tailscale-up-daemon-composed
+          file: /usr/sbin/tailscaled
+          exists: true
+        - id: tailscale-up-package-composed
+          package: tailscale
+          installed: true
         - id: tailscale-up-operator-readable
           scope: deploy
           command: |

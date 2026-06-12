@@ -1,7 +1,24 @@
 candy:
     version: 2026.144.1443
     name: wl-overlay
-    description: Wayland overlay windows via gtk4-layer-shell (for screen recordings)
+    description:
+        feature: Wayland overlay windows via gtk4-layer-shell (for screen recordings)
+        narrative: |
+            Installs gtk4 + gtk4-layer-shell + PyGObject and a charly-overlay
+            helper script under ~/.local/bin that draws layer-shell overlay
+            windows (e.g. recording indicators). Verifiable: the helper script is
+            installed and executable and the gtk4-layer-shell package is present.
+        tag: [working]
+        scenario:
+            - name: wl-overlay-installed
+              step:
+                - then: the charly-overlay helper script is installed and executable
+                  file: ${HOME}/.local/bin/charly-overlay
+                  exists: true
+                  mode: "0755"
+                - then: the gtk4-layer-shell library package is installed
+                  package: gtk4-layer-shell
+                  installed: true
     require:
         - dbus
     distro:

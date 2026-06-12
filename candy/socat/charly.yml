@@ -1,7 +1,48 @@
 candy:
     version: 2026.144.1443
     name: socat
-    description: Socket relay tool for VM console access and port relays
+    description:
+        feature: Relays an eth0-bound TCP port to the same port on loopback via socat
+        narrative: |
+            Installs the socat binary plus iproute (the `ip` command) and ships the
+            relay-wrapper script at /usr/local/bin/relay-wrapper. port_relay: consumers
+            pull this candy in automatically; the wrapper discovers the container's
+            non-loopback IP with `ip -4 addr` and execs
+            `socat TCP-LISTEN:PORT,bind=ETH_IP,fork TCP:127.0.0.1:PORT`. Every claim
+            below is checkable in a disposable build-scope container: the socat binary
+            runs, the package is installed, and the wrapper is present, executable, and
+            rejects a missing-port invocation.
+        tag: [working]
+        scenario:
+            - name: socat-binary-runnable
+              step:
+                - then: the socat binary is installed at /usr/bin/socat
+                  file: /usr/bin/socat
+                  exists: true
+                - then: socat reports its version and exits zero
+                  command: /usr/bin/socat -V
+                  exit_status: 0
+            - name: relay-wrapper-installed
+              step:
+                - then: the relay-wrapper script is installed executable at /usr/local/bin/relay-wrapper
+                  file: /usr/local/bin/relay-wrapper
+                  exists: true
+                  mode: "0755"
+                - then: invoking relay-wrapper with no port argument prints a usage error and exits non-zero
+                  command: /usr/local/bin/relay-wrapper
+                  exit_status: 1
+                  stderr:
+                    - contains: "Usage"
+            - name: iproute-dependency-present
+              step:
+                - then: the iproute package providing the ip command the relay uses is installed
+                  package: iproute
+                  package_map:
+                    arch: iproute2
+                    debian: iproute2
+                    ubuntu: iproute2
+                    fedora: iproute
+                  installed: true
     package:
         - socat
     distro:
@@ -29,7 +70,23 @@ candy:
         - id: socat-version
           command: /usr/bin/socat -V
           exit_status: 0
+        - id: socat-package
+          package: socat
+          installed: true
+        - id: iproute-package
+          package: iproute
+          package_map:
+            arch: iproute2
+            debian: iproute2
+            ubuntu: iproute2
+            fedora: iproute
+          installed: true
         - id: relay-wrapper
           file: /usr/local/bin/relay-wrapper
           exists: true
           mode: "0755"
+        - id: relay-wrapper-usage
+          command: /usr/local/bin/relay-wrapper
+          exit_status: 1
+          stderr:
+            - contains: "Usage"

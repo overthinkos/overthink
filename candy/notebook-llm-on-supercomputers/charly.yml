@@ -29,3 +29,42 @@ candy:
                   exit_status: 0
                   stdout:
                     - matches: "D0_"
+            - name: the full multi-day curriculum and its datasets are provisioned
+              step:
+                - then: a D3 fine-tuning-day notebook is present, proving the curriculum spans more than the setup day
+                  scope: deploy
+                  command: ls ${VOLUME_CONTAINER_PATH:workspace}/llms_on_supercomputers/
+                  exit_status: 0
+                  stdout:
+                    - matches: "D3_"
+                - and: the supporting datasets subdirectory ships alongside the notebooks
+                  scope: deploy
+                  file: ${VOLUME_CONTAINER_PATH:workspace}/llms_on_supercomputers/datasets
+                  filetype: directory
+                - and: the booking-queries classification CSV is present for the RAG and evaluation notebooks
+                  scope: deploy
+                  command: ls ${VOLUME_CONTAINER_PATH:workspace}/llms_on_supercomputers/datasets/
+                  exit_status: 0
+                  stdout:
+                    - matches: "booking_queries_dataset.csv"
+    eval:
+        - id: llm-supercomputers-dir
+          scope: deploy
+          file: ${VOLUME_CONTAINER_PATH:workspace}/llms_on_supercomputers
+          filetype: directory
+        - id: llm-supercomputers-setup-notebook
+          scope: deploy
+          command: ls ${VOLUME_CONTAINER_PATH:workspace}/llms_on_supercomputers/
+          exit_status: 0
+          stdout:
+            - matches: "D0_"
+        - id: llm-supercomputers-finetuning-notebook
+          scope: deploy
+          command: ls ${VOLUME_CONTAINER_PATH:workspace}/llms_on_supercomputers/
+          exit_status: 0
+          stdout:
+            - matches: "D3_"
+        - id: llm-supercomputers-datasets
+          scope: deploy
+          file: ${VOLUME_CONTAINER_PATH:workspace}/llms_on_supercomputers/datasets
+          filetype: directory

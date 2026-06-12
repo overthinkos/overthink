@@ -1,16 +1,53 @@
 candy:
     version: 2026.162.1430
     name: virtualization
-    description: |
-        QEMU/KVM/libvirt stack that runs identically on container/pod
-        targets (under supervisord) AND on host/bootc/local targets
-        (under systemd) via the mixed-`service:` schema pattern. Each
-        daemon (virtqemud, virtnetworkd) carries TWO entries with the
-        same name: a `use_packaged:` form for systemd init, and a
-        custom `exec:` form for supervisord init. The init system at
-        deploy time renders only the matching form. NEVER author a
-        `virtualization-host` sibling — see CLAUDE.md "Init-system
-        polymorphism via mixed `service:` entries".
+    description:
+        feature: QEMU/KVM/libvirt virtualization stack for both supervisord and systemd init systems
+        narrative: |
+            Installs the QEMU/KVM emulators, qemu-img, and the split libvirt
+            daemons (virtqemud + virtnetworkd) across Fedora, Arch, Debian and
+            Ubuntu. The daemons ship as MIXED service: entries — a
+            use_packaged: socket form rendered on systemd targets and a custom
+            exec: form rendered on supervisord targets — so one candy serves
+            container/pod deploys AND host/bootc/VM deploys without a
+            virtualization-host sibling (CLAUDE.md "Init-system polymorphism
+            via mixed service: entries"). Verifiable: the virsh,
+            qemu-system-x86_64 and qemu-img binaries land at fixed paths, the
+            libvirt qemu driver package is installed on every distro, and the
+            rootless qemu:///session daemon answers once deployed.
+        tag: [working]
+        scenario:
+            - name: qemu-libvirt-binaries-installed
+              step:
+                - then: the libvirt client virsh is installed at its fixed path
+                  file: /usr/bin/virsh
+                  exists: true
+                - then: the QEMU x86_64 system emulator binary is present
+                  file: /usr/bin/qemu-system-x86_64
+                  exists: true
+                - then: the qemu-img disk-image tool is present
+                  file: /usr/bin/qemu-img
+                  exists: true
+            - name: libvirt-qemu-driver-package-present
+              step:
+                - then: the libvirt qemu driver package is installed (cross-distro name resolution)
+                  package: libvirt-daemon-driver-qemu
+                  package_map:
+                    arch: libvirt
+                    fedora: libvirt-daemon-driver-qemu
+                    debian: libvirt-daemon-system
+                    ubuntu: libvirt-daemon-system
+                  installed: true
+            - name: rootless-libvirt-session-answers
+              step:
+                - then: virsh reaches the rootless qemu:///session daemon and lists domains
+                  scope: deploy
+                  command: virsh -c qemu:///session list --all
+                  in_container: true
+                  exit_status: 0
+            - name: mixed-init-service-polymorphism
+              step:
+                - then: the same virtqemud and virtnetworkd daemons come up under whichever init system the target runs (supervisord in containers, systemd on host/bootc) with no virtualization-host sibling candy
     distro:
         arch:
             package:

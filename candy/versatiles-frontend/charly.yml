@@ -1,7 +1,69 @@
 candy:
     version: 2026.144.1443
     name: versatiles-frontend
-    description: "VersaTiles Frontend — pre-built TypeScript SPA from versatiles-org/versatiles-frontend GitHub releases. Same family as the upstream pmtiles.io viewer but for the .versatiles / VersaTiles tile-server ecosystem. Served as static dist by python -m http.server on port 8002 (host-mapped 28002). Pattern mirrors /charly-versa:maputnik-layer and /charly-versa:pmtiles-viewer (third static-SPA-via-http.server service in the image). The same http.server also re-exports /opt/versatiles-style/ at /style/ so the notebook's MapLibre HTML can import the locally-bundled @versatiles/style without a CDN dependency."
+    description:
+        feature: VersaTiles frontend SPA served by a permissive-CORS static server on port 8002 (host 28002), re-exporting the style/fonts/styler bundles single-origin
+        narrative: |
+            The pre-built versatiles-org/versatiles-frontend TypeScript SPA (the
+            `frontend` full-feature release variant) unpacked at
+            /opt/versatiles-frontend/ with index.html at the root — same family
+            as the upstream pmtiles.io viewer but for the VersaTiles tile-server
+            ecosystem. It is served by a custom permissive-CORS python-stdlib
+            static server on port 8002 (host 28002), mirroring the sibling
+            maputnik (8000) and pmtiles-viewer (8001) static-SPA services. The
+            same server re-exports the sibling layers' bundles under /style/
+            (versatiles-style), /fonts/ (versatiles-fonts SDF glyphs) and /styler/
+            (maplibre-versatiles-styler) so the notebook's MapLibre iframe loads
+            every asset single-origin without a CDN. Verifiable: the SPA index,
+            the CORS server script and the three re-exported bundles land at their
+            paths, and the live service answers GET / with 200 plus an
+            Access-Control-Allow-Origin header (the reason this layer ships a
+            custom server instead of plain `python -m http.server`).
+        tag: [working]
+        scenario:
+            # Build-scope deterministic steps — checkable under
+            # `charly box feature run` in podman run --rm AND at deploy scope.
+            - name: frontend-spa-and-cors-server-installed
+              step:
+                - then: the pre-built frontend SPA is unpacked with its index.html at the layer root
+                  file: /opt/versatiles-frontend/index.html
+                  exists: true
+                - then: the CORS-enabled static server script is installed and executable
+                  file: /opt/versatiles-frontend-cors-server.py
+                  exists: true
+                  mode: "0755"
+            # Build-scope deterministic steps — the three re-exported bundles
+            # land under the http.server root (proving the cross-layer cp ran).
+            - name: companion-bundles-re-exported
+              step:
+                - then: the versatiles-style bundle is co-located under the http.server root at /style/
+                  command: |
+                    find /opt/versatiles-frontend/style -maxdepth 3 -name 'versatiles-style*.js' -size +1c | head -1 | grep -q .
+                  exit_status: 0
+                - then: the SDF font glyphs are re-exported under /fonts/
+                  command: |
+                    find /opt/versatiles-frontend/fonts -name '*.pbf' -size +1c | head -1 | grep -q .
+                  exit_status: 0
+                - then: the maplibre-versatiles-styler bundle is re-exported under /styler/
+                  command: |
+                    find /opt/versatiles-frontend/styler -maxdepth 4 -name '*.js' -size +1c | head -1 | grep -q .
+                  exit_status: 0
+            # Deploy-scope deterministic steps — the live CORS server answers
+            # GET / with 200 AND every response carries the
+            # Access-Control-Allow-Origin header that distinguishes this layer
+            # from a plain http.server.
+            - name: served-with-cors-headers
+              step:
+                - then: the running versatiles-frontend service answers GET / with HTTP 200
+                  scope: deploy
+                  http: "http://127.0.0.1:${HOST_PORT:8002}/"
+                  status: 200
+                - then: every response carries an Access-Control-Allow-Origin header so browser map clients fetch the re-exported /style/, /fonts/ and /styler/ assets cross-origin
+                  scope: deploy
+                  command: |
+                    curl -fsSI http://localhost:8002/ | grep -i 'access-control-allow-origin'
+                  in_container: true
+                  exit_status: 0
     require:
         - supervisord
         - versatiles-style # the http.server re-exports its bundle at /style/
@@ -153,6 +215,13 @@ candy:
           command: |
             find /opt/versatiles-frontend/styler -maxdepth 4 -name '*.js' -size +1c | head -1 | grep -q .
           exit_status: 0
+        # Build-scope: the custom CORS-enabled static server script (the reason
+        # this layer ships its own server, not plain http.server) is installed
+        # and executable.
+        - id: versatiles-frontend-cors-server-script
+          file: /opt/versatiles-frontend-cors-server.py
+          exists: true
+          mode: "0755"
         # Deploy-scope: service running + endpoints reachable.
         - id: versatiles-frontend-running
           scope: deploy
@@ -175,6 +244,16 @@ candy:
           scope: deploy
           command: |
             curl -fsS http://localhost:8002/style/ | grep -qi 'versatiles\|index\|<html'
+          in_container: true
+          exit_status: 0
+        # Deploy-scope: every response carries the Access-Control-Allow-Origin
+        # header — without it a browser map client on another origin silently
+        # fails to fetch the /style/, /fonts/ and /styler/ re-exports. Proves the
+        # custom CORS server (not a plain http.server) is the one running.
+        - id: versatiles-frontend-cors-header
+          scope: deploy
+          command: |
+            curl -fsSI http://localhost:8002/ | grep -i 'access-control-allow-origin'
           in_container: true
           exit_status: 0
     service:

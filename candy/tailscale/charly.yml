@@ -1,7 +1,35 @@
 candy:
     version: 2026.144.1443
     name: tailscale
-    description: Tailscale mesh VPN (tailscaled service)
+    description:
+        feature: Tailscale mesh VPN daemon baked in as an enabled systemd service.
+        narrative: |
+            Installs the tailscale package (the `tailscale` CLI plus the
+            `tailscaled` daemon) and enables `tailscaled.service` at build
+            time, so the image boots as its own tailnet node. Bringing the
+            mesh up (`tailscale up --authkey=...`) is a runtime concern, so
+            every check here is a build-time fact: the binaries land on PATH,
+            the CLI runs offline, and the unit is enabled.
+        tag: [working]
+        scenario:
+            - name: tailscale-cli-on-path
+              step:
+                - then: the tailscale CLI is installed and executable at /usr/bin/tailscale
+                  file: /usr/bin/tailscale
+                  exists: true
+                - then: the tailscale CLI reports its version without contacting the daemon
+                  command: tailscale version
+                  exit_status: 0
+            - name: tailscaled-daemon-installed
+              step:
+                - then: the tailscaled daemon binary is installed at /usr/sbin/tailscaled
+                  file: /usr/sbin/tailscaled
+                  exists: true
+            - name: tailscaled-service-enabled
+              step:
+                - then: the tailscaled systemd unit is enabled so the node joins its tailnet at boot
+                  command: systemctl is-enabled tailscaled.service
+                  exit_status: 0
     package:
         - tailscale
     distro:
@@ -33,4 +61,10 @@ candy:
           exit_status: 0
         - id: tailscaled-unit-enabled
           command: systemctl is-enabled tailscaled.service
+          exit_status: 0
+        - id: tailscale-package
+          package: tailscale
+          installed: true
+        - id: tailscale-cli-runs
+          command: tailscale version
           exit_status: 0

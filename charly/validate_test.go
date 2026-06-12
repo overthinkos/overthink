@@ -1684,8 +1684,27 @@ func TestEnvVarNameToPodmanSecretSlug(t *testing.T) {
 // are left alone (their version comes from the fetched candy manifest).
 func vCandies(m map[string]*Candy) map[string]*Candy {
 	for _, l := range m {
-		if l != nil && !l.Remote && l.Version == "" {
+		if l == nil || l.Remote {
+			continue
+		}
+		if l.Version == "" {
 			l.Version = "2026.155.1801"
+		}
+		// Mandatory-ADE fixtures: stamp a minimal compliant description: (feature
+		// + one scenario) and a non-empty eval: onto any fixture lacking them, so
+		// tests exercising OTHER validation rules satisfy validateCandyContents's
+		// ADE mandate. Mirrors the Version stamp above (the prior mandatory-version
+		// cutover used the same fixture-stamping trick). Non-destructive — only
+		// fills in when absent, so a test that authors its own description/eval
+		// keeps it.
+		if l.Description == nil || l.Description.Feature == "" || len(l.Description.Scenario) == 0 {
+			l.Description = &Description{
+				Feature:  "fixture",
+				Scenario: []Scenario{{Name: "fixture", Step: []Step{{Then: "fixture step"}}}},
+			}
+		}
+		if len(l.tests) == 0 {
+			l.tests = []Check{{Command: "true"}}
 		}
 	}
 	return m

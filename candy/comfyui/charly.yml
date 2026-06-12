@@ -1,6 +1,41 @@
 candy:
     version: 2026.144.1531
     name: comfyui
+    description:
+        feature: GPU image-generation server with ComfyUI + the Manager and model-download tooling baked in
+        narrative: |
+            Clones ComfyUI to ~/ComfyUI plus the ComfyUI-Manager custom node and
+            the full model directory tree, and installs the aria2 + git-lfs tooling
+            used to fetch model checkpoints. A supervisord service runs
+            `main.py --listen 0.0.0.0` on port 8188. Each piece is verifiable: the
+            cloned entrypoint and Manager, the model dirs, the download-tooling
+            packages, and the live /system_stats API on port 8188.
+        tag: [working]
+        scenario:
+            # Scenarios 1-2 are DETERMINISTIC (embedded check verbs → run at build
+            # AND deploy scope, baked into ai.opencharly.description). Scenario 3 is
+            # PROSE-ONLY (no verb → agent-graded by `charly eval feature run comfyui`
+            # against the live GPU deployment; reported unbound by build-scope
+            # `charly box feature run`).
+            - name: comfyui-app-cloned
+              step:
+                - then: the ComfyUI server entrypoint main.py is baked into ~/ComfyUI
+                  file: ${HOME}/ComfyUI/main.py
+                  exists: true
+                - then: the ComfyUI-Manager custom node directory is cloned alongside it
+                  file: ${HOME}/ComfyUI/custom_nodes/ComfyUI-Manager
+                  filetype: directory
+            - name: model-fetch-tooling-present
+              step:
+                - then: aria2c is installed so model checkpoints can be fetched in parallel
+                  file: /usr/bin/aria2c
+                  exists: true
+                - then: git-lfs is installed for pulling large model repositories
+                  package: git-lfs
+                  installed: true
+            - name: serves-image-generation-api
+              step:
+                - then: the comfyui supervisord service comes up and serves the image-generation web UI and /system_stats API on port 8188
     require:
         - cuda
         - supervisord
@@ -38,3 +73,43 @@ candy:
           working_directory: "%(ENV_HOME)s/ComfyUI"
           enable: true
           scope: system
+    eval:
+        # Build-scope — run inside the built image via `podman run --rm`.
+        - id: comfyui-main-py
+          file: ${HOME}/ComfyUI/main.py
+          exists: true
+        - id: comfyui-manager-cloned
+          file: ${HOME}/ComfyUI/custom_nodes/ComfyUI-Manager
+          filetype: directory
+        - id: comfyui-models-checkpoints
+          file: ${HOME}/ComfyUI/models/checkpoints
+          filetype: directory
+        - id: comfyui-aria2-binary
+          file: /usr/bin/aria2c
+          exists: true
+        - id: comfyui-aria2-package
+          package: aria2
+          installed: true
+        - id: comfyui-git-lfs-binary
+          file: /usr/bin/git-lfs
+          exists: true
+        - id: comfyui-git-lfs-package
+          package: git-lfs
+          installed: true
+
+        # Deploy-scope — HOST_PORT:8188 resolves to the published host port, so the
+        # same probe works whatever port the deploy maps. Needs a running GPU deploy.
+        - id: comfyui-service-running
+          scope: deploy
+          service: comfyui
+          running: true
+        - id: comfyui-port-reachable
+          scope: deploy
+          addr: 127.0.0.1:${HOST_PORT:8188}
+          reachable: true
+        - id: comfyui-system-stats-api
+          scope: deploy
+          http: http://127.0.0.1:${HOST_PORT:8188}/system_stats
+          status: 200
+          body:
+            - contains: system

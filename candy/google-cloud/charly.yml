@@ -1,7 +1,40 @@
 candy:
     version: 2026.144.1443
     name: google-cloud
-    description: Google Cloud SDK (gcloud, gsutil, bq)
+    description:
+        feature: Google Cloud SDK ships the gcloud, gsutil and bq CLIs on PATH
+        narrative: |
+            The candy downloads the official Google Cloud CLI x86_64 tarball,
+            unpacks it under /var/opt/google-cloud-sdk, runs the bundled
+            install.sh, and symlinks gcloud, gsutil and bq into /usr/bin so
+            every shell finds them. Each CLI answers its own version
+            subcommand, which is what these scenarios assert.
+        tag: [working]
+        scenario:
+            - name: gcloud-cli-on-path
+              step:
+                - then: the gcloud CLI is symlinked onto PATH
+                  file: /usr/bin/gcloud
+                  exists: true
+                - then: gcloud reports its version and exits cleanly
+                  command: /usr/bin/gcloud --version
+                  exit_status: 0
+            - name: storage-and-bigquery-clis-present
+              step:
+                - then: the gsutil storage CLI is on PATH
+                  file: /usr/bin/gsutil
+                  exists: true
+                - then: the bq BigQuery CLI is on PATH
+                  file: /usr/bin/bq
+                  exists: true
+                - then: bq reports its version and exits cleanly
+                  command: /usr/bin/bq version
+                  exit_status: 0
+            - name: sdk-unpacked-at-install-prefix
+              step:
+                - then: the SDK tree is unpacked at its /var/opt install prefix
+                  file: /var/opt/google-cloud-sdk/bin/gcloud
+                  exists: true
     task:
         # Google Cloud SDK only ships x86_64 linux tarballs — no arch template
         # needed. The bundled install.sh wires up shell completion / PATH.

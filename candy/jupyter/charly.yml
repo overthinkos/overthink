@@ -1,6 +1,56 @@
 candy:
     version: 2026.144.1443
     name: jupyter
+    description:
+        feature: JupyterLab notebook server with a CRDT MCP server for agent-driven notebook editing.
+        narrative: |
+            Installs JupyterLab into the pixi default environment (the jupyter-lab
+            binary), adds the spaCy en_core_web_sm NLP model and the
+            jupyterlab-quarto extension, and serves notebooks on port 8888 from
+            the /workspace volume under supervisord. A bundled MCP server (composed
+            from jupyter-mcp) exposes notebook_*/cell_* tools at /mcp so an agent
+            can create and edit notebooks over the Model Context Protocol.
+        tag: [working]
+        scenario:
+            - name: jupyterlab-installed
+              step:
+                - then: JupyterLab is installed as a pixi-managed binary in the default env
+                  file: ${HOME}/.pixi/envs/default/bin/jupyter-lab
+                  exists: true
+            - name: nlp-stack-ready
+              step:
+                - then: the spaCy en_core_web_sm model loads for NLP notebooks
+                  command: ${HOME}/.pixi/envs/default/bin/python -c "import spacy; spacy.load('en_core_web_sm')"
+                  exit_status: 0
+            - name: notebook-server-serves-api
+              step:
+                - then: the workspace volume is mounted for notebooks
+                  scope: deploy
+                  file: /workspace
+                  filetype: directory
+                - then: the JupyterLab service is running under supervisord
+                  scope: deploy
+                  service: jupyter
+                  running: true
+                - then: the JupyterLab REST API answers on the published port with a server version
+                  scope: deploy
+                  http: http://127.0.0.1:${HOST_PORT:8888}/api
+                  status: 200
+                  body:
+                    - contains: version
+            - name: mcp-notebook-tools-exposed
+              step:
+                - then: the Jupyter MCP server responds to a protocol ping
+                  scope: deploy
+                  mcp: ping
+                  timeout: 10s
+                - then: the MCP tool catalog exposes the notebook and cell manipulation tools
+                  scope: deploy
+                  mcp: list-tools
+                  stdout:
+                    - contains: notebook_create
+                    - contains: cell_execute
+                - then: an agent can create a notebook and edit its cells through the MCP server end to end
     require:
         - supervisord
     candy:

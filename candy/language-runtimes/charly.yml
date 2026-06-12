@@ -1,6 +1,45 @@
 candy:
     version: 2026.144.1443
     name: language-runtimes
+    description:
+        feature: System language runtimes (.NET 9 SDK, PHP CLI, system Python 3) installed on PATH and version-reachable.
+        narrative: |
+            language-runtimes installs the .NET 9 SDK (distro package on
+            Fedora/Arch, Microsoft's dotnet-install.sh on Debian/Ubuntu), the PHP
+            CLI, and the system Python 3 interpreter — each landing at a /usr/bin
+            path. Every runtime exposes a version subcommand, so its presence is
+            directly verifiable from a fresh build with no service or deploy state.
+            (Go and Node.js are installed too but their acceptance is owned by the
+            golang/nodejs candies — not duplicated here, per R3.)
+        tag: [working]
+        scenario:
+            # ADE acceptance scenarios baked into ai.opencharly.description. Every
+            # step embeds a check verb (file/command) → DETERMINISTIC, runs under
+            # `charly box feature run` at build scope. They mirror the eval: list.
+            - name: dotnet-sdk-reachable
+              step:
+                - then: the .NET 9 SDK binary is installed at /usr/bin/dotnet
+                  file: /usr/bin/dotnet
+                  exists: true
+                - then: dotnet reports its SDK version and exits cleanly
+                  command: /usr/bin/dotnet --version
+                  exit_status: 0
+            - name: php-cli-reachable
+              step:
+                - then: the PHP CLI binary is installed at /usr/bin/php
+                  file: /usr/bin/php
+                  exists: true
+                - then: php prints its version banner and exits cleanly
+                  command: /usr/bin/php --version
+                  exit_status: 0
+            - name: system-python3-reachable
+              step:
+                - then: the system Python 3 interpreter is at /usr/bin/python3 (the RPM one, not a pixi-env path)
+                  file: /usr/bin/python3
+                  exists: true
+                - then: python3 reports its version and exits cleanly
+                  command: /usr/bin/python3 --version
+                  exit_status: 0
     require:
         - nodejs
         - rust

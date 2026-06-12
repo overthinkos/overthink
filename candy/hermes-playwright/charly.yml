@@ -1,7 +1,40 @@
 candy:
     version: 2026.144.1443
     name: hermes-playwright
-    description: Playwright Chromium browser for Hermes Agent
+    description:
+        feature: Playwright Chromium browser baked into the Hermes image for headless browser automation
+        narrative: |
+            Installs the Chromium browser via `npx playwright install chromium`
+            into /tmp/.cache/ms-playwright (PLAYWRIGHT_BROWSERS_PATH) plus the
+            Fedora system libraries (nss, gtk3, alsa-lib, ...) Chromium needs to
+            launch. Verifiable: the browser build dir + chrome executable land
+            under the cache path, and the runtime libraries are in the rpm db.
+        tag: [working]
+        scenario:
+            - name: chromium-browser-installed
+              step:
+                - then: the Playwright browsers cache directory is baked into the image
+                  file: /tmp/.cache/ms-playwright
+                  exists: true
+                - then: a Chromium build directory is present under the cache path
+                  command: ls /tmp/.cache/ms-playwright
+                  stdout:
+                    - contains: chromium
+                - then: the installed Chromium browser binary is executable
+                  command: |
+                    bin=$(ls /tmp/.cache/ms-playwright/chromium-*/chrome-linux/chrome /tmp/.cache/ms-playwright/chromium_headless_shell-*/chrome-linux/headless_shell 2>/dev/null | head -1)
+                    test -x "$bin" && echo "EXEC_OK:$bin"
+                  stdout:
+                    - contains: EXEC_OK
+            - name: chromium-runtime-libraries-present
+              step:
+                - then: the NSS library Chromium links against is installed
+                  package: nss
+                  installed: true
+                - then: the GTK3 runtime Chromium needs to launch is installed
+                  package: gtk3
+                  installed: true
+                - then: Playwright can launch the installed Chromium headlessly to drive a browser automation session
     require:
         - hermes
     env:
@@ -29,3 +62,26 @@ candy:
         # Install Chromium browser binary only (system deps handled by rpm packages)
         - cmd: HOME=/tmp npx playwright install chromium
           user: "${USER}"
+    eval:
+        - id: hermes-playwright-cache-dir
+          file: /tmp/.cache/ms-playwright
+          exists: true
+        - id: hermes-playwright-chromium-build-dir
+          command: ls /tmp/.cache/ms-playwright
+          stdout:
+            - contains: chromium
+        - id: hermes-playwright-chromium-binary
+          command: |
+            bin=$(ls /tmp/.cache/ms-playwright/chromium-*/chrome-linux/chrome /tmp/.cache/ms-playwright/chromium_headless_shell-*/chrome-linux/headless_shell 2>/dev/null | head -1)
+            test -x "$bin" && echo "EXEC_OK:$bin"
+          stdout:
+            - contains: EXEC_OK
+        - id: hermes-playwright-nss-package
+          package: nss
+          installed: true
+        - id: hermes-playwright-gtk3-package
+          package: gtk3
+          installed: true
+        - id: hermes-playwright-alsa-lib-package
+          package: alsa-lib
+          installed: true

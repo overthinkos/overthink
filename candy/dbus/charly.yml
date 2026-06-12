@@ -1,6 +1,50 @@
 candy:
     version: 2026.144.1443
     name: dbus
+    description:
+        feature: A supervisord-managed D-Bus session bus exported at a unix-socket address for in-container clients
+        narrative: |
+            Installs the distro D-Bus package (the dbus-daemon binary) and runs a
+            session bus under supervisord as `dbus-daemon --session --nofork
+            --address=unix:path=/tmp/dbus-session`, exporting
+            DBUS_SESSION_BUS_ADDRESS so notification senders, introspection tools,
+            and `charly eval dbus` clients in the container can reach the bus.
+            Every claim is verifiable: the dbus-daemon binary on disk and the
+            providing package installed at build scope, and at deploy scope the
+            session-bus address env var exported plus the dbus service running.
+        tag: [working]
+        scenario:
+            # DETERMINISTIC build-scope steps — embedded check verbs run at both
+            # build and deploy scope; they fail if the dbus package was never installed.
+            - name: dbus-daemon-installed
+              step:
+                - then: the dbus-daemon binary is installed at /usr/bin/dbus-daemon
+                  file: /usr/bin/dbus-daemon
+                  exists: true
+                - and: the providing D-Bus package is installed (dbus-daemon on Fedora, dbus on Arch/Debian/Ubuntu)
+                  package: dbus-daemon
+                  package_map:
+                    arch: dbus
+                  installed: true
+            # DETERMINISTIC deploy-scope steps — need the running session bus, so
+            # they are scoped to deploy and probe the live container.
+            - name: session-bus-exported-and-running
+              step:
+                - then: the DBUS_SESSION_BUS_ADDRESS env var is exported as a unix-socket address
+                  scope: deploy
+                  command: printenv DBUS_SESSION_BUS_ADDRESS
+                  exit_status: 0
+                  stdout:
+                    - contains: "unix:path="
+                - and: the supervised dbus session-bus service is running
+                  scope: deploy
+                  service: dbus
+                  running: true
+            # PROSE-ONLY step — genuine free-form resilience behaviour, agent-graded
+            # by `charly eval feature run dbus` against the live deployment.
+            - name: session-bus-stays-available
+              step:
+                - then: the supervised dbus service keeps the session bus reachable, restarting automatically (restart=always) if the dbus-daemon process exits
     require:
         - supervisord
     env:

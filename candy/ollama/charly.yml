@@ -21,6 +21,41 @@ candy:
     alias:
         - name: ollama
           command: ollama
+    description:
+        feature: GPU-agnostic Ollama LLM inference server on port 11434
+        narrative: |
+            Installs the upstream Ollama binary (release tarball extracted to /usr,
+            no systemd) and runs `ollama serve` as a custom supervisord service that
+            listens on 0.0.0.0:11434. The binary auto-detects a GPU at runtime and
+            falls back to CPU inference, so the candy carries no CUDA dependency.
+            Pulled models persist under the ~/.ollama models volume. The running
+            service exposes the Ollama HTTP API (e.g. /api/tags) so any composing box
+            can serve and query local models.
+        tag: [working]
+        scenario:
+            # DETERMINISTIC build-scope step — the installed binary artifact.
+            - name: ollama-binary-installed
+              step:
+                - then: the ollama binary is installed at /usr/bin/ollama
+                  file: /usr/bin/ollama
+                  exists: true
+            # DETERMINISTIC deploy-scope steps — the live serve API + CLI version.
+            - name: ollama-serves-inference-api
+              step:
+                - then: the running ollama service answers the model-tags API with HTTP 200 on port 11434
+                  scope: deploy
+                  http: http://127.0.0.1:${HOST_PORT:11434}/api/tags
+                  status: 200
+                - then: the ollama CLI reports an "ollama version" string
+                  scope: deploy
+                  command: ollama --version
+                  stdout:
+                    - matches: "^ollama version"
+            # PROSE-ONLY step — model persistence is genuinely free-form (a real
+            # `ollama pull` + restart), so it binds to the agent grader.
+            - name: ollama-model-volume-persists
+              step:
+                - then: models pulled via `ollama pull` are stored under the ~/.ollama models volume and survive a service restart
     task:
         # Ollama binary release tarball (no systemd)
         - download: "https://github.com/ollama/ollama/releases/latest/download/ollama-linux-amd64.tar.zst"

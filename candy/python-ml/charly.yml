@@ -1,6 +1,43 @@
 candy:
     version: 2026.144.1443
     name: python-ml
+    description:
+        feature: A CUDA-ready Python 3.13 ML environment with PyTorch, transformers, and a vLLM inference runtime
+        narrative: |
+            The python-ml candy owns the pixi.toml that builds the core ML
+            Python environment under ~/.pixi/envs/default: PyTorch (cu130),
+            torchvision/torchaudio, transformers, accelerate and the full vLLM
+            runtime-dependency closure. After the pixi environment is built, a
+            user-phase task pip-installs the vLLM nightly wheel (--no-deps) into
+            that same interpreter. Every interpreter and library lands at a
+            fixed path under ~/.pixi/envs/default, so its presence and
+            importability are directly checkable.
+        tag: [working]
+        scenario:
+            - name: pixi-ml-environment-built
+              step:
+                - then: the pixi default-environment Python interpreter is present
+                  file: ${HOME}/.pixi/envs/default/bin/python
+                  exists: true
+                - then: PyTorch imports inside the pixi environment and prints its version
+                  command: ${HOME}/.pixi/envs/default/bin/python -c "import torch; print(torch.__version__)"
+                  exit_status: 0
+                  stdout:
+                    - matches: "[0-9]+\\.[0-9]+"
+            - name: huggingface-stack-importable
+              step:
+                - then: the transformers library imports inside the pixi environment and prints its version
+                  command: ${HOME}/.pixi/envs/default/bin/python -c "import transformers; print(transformers.__version__)"
+                  exit_status: 0
+                  stdout:
+                    - matches: "[0-9]+\\.[0-9]+"
+            - name: vllm-inference-runtime-installed
+              step:
+                - then: the vLLM nightly wheel installed by the user-phase task imports and prints its version
+                  command: ${HOME}/.pixi/envs/default/bin/python -c "import vllm; print(vllm.__version__)"
+                  exit_status: 0
+                  stdout:
+                    - matches: "[0-9]+\\.[0-9]+"
     require:
         - cuda
     candy:
@@ -24,4 +61,7 @@ candy:
           exit_status: 0
         - id: python-ml-vllm-importable
           command: ${HOME}/.pixi/envs/default/bin/python -c "import vllm; print(vllm.__version__)"
+          exit_status: 0
+        - id: python-ml-transformers-importable
+          command: ${HOME}/.pixi/envs/default/bin/python -c "import transformers; print(transformers.__version__)"
           exit_status: 0

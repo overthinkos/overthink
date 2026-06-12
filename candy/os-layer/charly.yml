@@ -9,6 +9,25 @@ candy:
             service so that `pgrep -x bash` succeeds. Combined with a fedora
             base + supervisord this satisfies every scenario in the
             single-pod-system-state recipe.
+        tag: [working]
+        scenario:
+            - name: os-marker-written
+              step:
+                - then: the predetermined marker file exists at /etc/charly-os-marker
+                  file: /etc/charly-os-marker
+                  exists: true
+                - then: the marker file carries the content marker charly-os-content-marker
+                  file: /etc/charly-os-marker
+                  contains:
+                    - charly-os-content-marker
+            - name: system-probe-tools-installed
+              step:
+                - then: bash is present at /usr/bin/bash to back the keepalive service
+                  file: /usr/bin/bash
+                  exists: true
+                - then: procps-ng is installed so pgrep can probe the keepalive process
+                  package: procps-ng
+                  installed: true
     distro:
         fedora:
             package:
@@ -43,3 +62,7 @@ candy:
         - id: os-bash-installed
           package: bash
           installed: true
+        - id: os-bash-service-running
+          scope: deploy
+          service: os-bash
+          running: true

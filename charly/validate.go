@@ -484,6 +484,27 @@ func validateCandyContents(layers map[string]*Candy, errs *ValidationError) {
 			errs.Add("candy %q: missing required `version:` (CalVer YYYY.DDD.HHMM). Run: charly migrate", name)
 		}
 
+		// ADE is MANDATORY per candy: every local candy MUST ship a full ADE
+		// `description:` (a non-empty feature: + at least one scenario:) AND a
+		// non-empty `eval:` list. Both bake into the image's
+		// ai.opencharly.{description,eval} labels as runnable acceptance tests
+		// (the spec IS the test). Scoped to local candies — a fetched remote
+		// candy's compliance is its own repo's concern (same scope as the
+		// version: check). See CLAUDE.md "Agent Driven Evaluation (ADE)" +
+		// /charly-eval:eval.
+		if !layer.Remote {
+			if layer.Description == nil || strings.TrimSpace(layer.Description.Feature) == "" || len(layer.Description.Scenario) == 0 {
+				errs.Add("candy %q: missing required `description:` with a non-empty feature: and at least one scenario: (ADE is mandatory). See /charly-eval:eval", name)
+			} else {
+				for _, issue := range ValidateDescription(layer.Description, "candy "+name) {
+					errs.Add("%s", issue)
+				}
+			}
+			if len(layer.tests) == 0 {
+				errs.Add("candy %q: missing required `eval:` block (at least one declarative check; the spec IS the test). See /charly-eval:eval", name)
+			}
+		}
+
 		// If `directory:` redirected the source anchor, SourceDir must exist.
 		// (For the default case SourceDir == Path, which is guaranteed to exist.)
 		if layer.SourceDir != layer.Path && !dirExists(layer.SourceDir) {

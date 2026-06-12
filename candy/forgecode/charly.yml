@@ -1,12 +1,40 @@
 candy:
     version: 2026.144.1443
     name: forgecode
-    description: Forge AI coding agent CLI (forgecode.dev)
+    description:
+        feature: Installs the Forge AI coding agent CLI globally via npm so `forge` is on PATH (forgecode.dev).
+        narrative: |
+            The candy depends on nodejs and ships a package.json pinning
+            forgecode, which the build installs globally under NPM_CONFIG_PREFIX
+            (~/.npm-global). The result is verifiable: the forge binary lands at
+            ~/.npm-global/bin/forge, the forgecode package is unpacked under
+            ~/.npm-global/lib/node_modules/forgecode, and `forge --version` exits
+            cleanly.
+        tag: [working]
+        scenario:
+            - name: cli-binary-installed
+              step:
+                - then: the forge binary is installed into the npm global bin directory
+                  file: ${HOME}/.npm-global/bin/forge
+                  exists: true
+            - name: npm-package-unpacked
+              step:
+                - then: the forgecode package is unpacked under the npm global lib directory
+                  file: ${HOME}/.npm-global/lib/node_modules/forgecode/package.json
+                  exists: true
+            - name: cli-reports-version
+              step:
+                - then: running forge --version exits cleanly
+                  command: ${HOME}/.npm-global/bin/forge --version
+                  exit_status: 0
     require:
         - nodejs
     eval:
         - id: forge-binary
           file: ${HOME}/.npm-global/bin/forge
+          exists: true
+        - id: forge-package
+          file: ${HOME}/.npm-global/lib/node_modules/forgecode/package.json
           exists: true
         - id: forge-version
           command: ${HOME}/.npm-global/bin/forge --version

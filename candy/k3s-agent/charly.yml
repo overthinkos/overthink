@@ -1,7 +1,44 @@
 candy:
     version: 2026.144.1443
     name: k3s-agent
-    description: k3s worker (agent) node — joins an existing k3s-server via pre-shared token
+    description:
+        feature: k3s worker (agent) node — joins an existing k3s-server via pre-shared token
+        narrative: |
+            The k3s-agent candy renders /etc/rancher/k3s/config.yaml (mode 0600) with the
+            cluster server URL and the shared pre-shared token, then installs and enables a
+            k3s-agent.service systemd unit that runs `k3s agent`. On a deployed node the
+            agent registers with the control plane and the node reaches the Ready state —
+            no join-token handoff, only the server URL plus the credential-store token.
+        tag: [working]
+        scenario:
+            - name: agent-config-rendered
+              step:
+                - then: the rendered agent config exists with owner-only permissions
+                  file: /etc/rancher/k3s/config.yaml
+                  exists: true
+                  mode: "0600"
+                - then: the config points the agent at the cluster server URL
+                  file: /etc/rancher/k3s/config.yaml
+                  contains: "server:"
+            - name: agent-service-installed
+              step:
+                - then: the k3s-agent systemd unit is installed
+                  file: /etc/systemd/system/k3s-agent.service
+                  exists: true
+                - then: the unit starts the node in agent (worker) mode
+                  file: /etc/systemd/system/k3s-agent.service
+                  contains: "k3s agent"
+            - name: agent-joins-cluster
+              step:
+                - then: the worker node registers with the server and reaches Ready
+                  scope: deploy
+                  k8s: wait-nodes
+                  cluster: "${K3S_CLUSTER}"
+                  name: "${HOSTNAME}"
+                  timeout: 180s
+                  stdout:
+                    contains: "Ready"
+                - then: the joined worker becomes schedulable so cluster workloads can land on it
     require:
         - k3s
     # Same pre-shared token as k3s-server consumes. Both layers declare
@@ -75,6 +112,10 @@ candy:
           file: /etc/rancher/k3s/config.yaml
           exists: true
           mode: "0600"
+        - id: k3s-agent-service-unit
+          scope: build
+          file: /etc/systemd/system/k3s-agent.service
+          exists: true
         # Deploy-scope: verify this node actually joined the cluster.
         # Uses charly eval k8s wait-nodes --name <hostname> — the cluster flag
         # resolves to the sibling k3s-server's ClusterProfile (the operator

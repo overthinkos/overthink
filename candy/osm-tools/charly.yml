@@ -1,7 +1,71 @@
 candy:
     version: 2026.144.1443
     name: osm-tools
-    description: "OpenStreetMap data pipeline tooling: tippecanoe (GeoJSON → MBTiles/PMTiles), gdal CLI (ogr2ogr/ogrinfo for format conversion), pmtiles CLI (PMTiles inspection/conversion), and martin (Rust tile server). Martin reads tiles from /workspace/tiles/pmtiles/ — the user-owned workspace volume — so DAG output and tile-server input share one persistent location with no chown / volume-shadow tricks."
+    description:
+        feature: OSM tile-pipeline CLIs (tippecanoe/gdal/pmtiles/gpq-tiles) plus the martin vector-tile server supervised on port 3000
+        narrative: |
+            Bundles every CLI the OSM data pipeline needs — tippecanoe
+            (GeoJSON → MBTiles/PMTiles, built from felt/tippecanoe source), the
+            gdal CLIs ogr2ogr/ogrinfo (format conversion), the pmtiles
+            inspection CLI, and gpq-tiles (direct GeoParquet → PMTiles) — and
+            runs martin, the Rust vector-tile server, as a supervised service.
+            martin reads tiles from the user-owned /workspace/tiles/pmtiles/
+            volume via a wrapper that pre-creates the directory, so DAG output
+            and tile-server input share one persistent location and martin
+            answers GET /catalog on port 3000 the moment it starts. Every claim
+            below is verifiable: each binary on disk responding to --version,
+            the wrapper script present and executable, and a live service +
+            reachable-port + HTTP-catalog probe against the running deployment.
+        tag: [working]
+        scenario:
+            # DETERMINISTIC build-scope steps — embedded check verbs fail if a
+            # CLI was never installed (no version response / missing binary).
+            - name: osm-cli-tools-installed
+              step:
+                - then: tippecanoe (built from felt/tippecanoe source) responds to --version
+                  command: tippecanoe --version
+                  exit_status: 0
+                - and: the gdal ogr2ogr conversion CLI responds to --version
+                  command: ogr2ogr --version
+                  exit_status: 0
+                - and: the pmtiles inspection CLI responds to its version subcommand
+                  command: pmtiles version
+                  exit_status: 0
+                - and: the gpq-tiles GeoParquet→PMTiles converter is installed at /usr/local/bin/gpq-tiles
+                  file: /usr/local/bin/gpq-tiles
+                  exists: true
+            - name: martin-binary-and-wrapper-present
+              step:
+                - then: the martin (musl) tile-server binary is installed at /usr/local/bin/martin
+                  file: /usr/local/bin/martin
+                  exists: true
+                - and: the martin start wrapper is present and executable (0755)
+                  file: /usr/local/bin/martin-wrapper.sh
+                  exists: true
+                  mode: "0755"
+            # DETERMINISTIC deploy-scope steps — need the running service, so
+            # they are scoped to deploy and probe the live container / port.
+            - name: martin-serves-catalog-on-its-port
+              step:
+                - then: the martin supervisord program is running
+                  scope: deploy
+                  service: martin
+                  running: true
+                - and: the martin port accepts a TCP connection from the host
+                  scope: deploy
+                  addr: 127.0.0.1:${HOST_PORT:3000}
+                  reachable: true
+                  timeout: 10s
+                - and: martin answers GET /catalog with HTTP 200 (empty source list pre-DAG, populated post-DAG)
+                  scope: deploy
+                  http: http://127.0.0.1:${HOST_PORT:3000}/catalog
+                  status: 200
+                  timeout: 10s
+            # PROSE-ONLY step — genuine free-form serving behaviour, agent-graded
+            # by `charly eval feature run` against the live deployment.
+            - name: martin-discovers-and-serves-vector-tiles
+              step:
+                - then: martin auto-discovers PMTiles files written into /workspace/tiles/pmtiles/ and serves each as a named vector-tile source (Content-Type application/x-protobuf) under /<source>/{z}/{x}/{y}
     require:
         - supervisord
     distro:

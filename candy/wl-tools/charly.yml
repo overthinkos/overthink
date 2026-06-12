@@ -1,6 +1,28 @@
 candy:
     version: 2026.144.1443
     name: wl-tools
+    description:
+        feature: Wayland/X command-line input, clipboard, and window tools
+        narrative: |
+            Installs the wlroots input/clipboard/window toolset — wtype,
+            wl-clipboard (wl-copy/wl-paste), wlr-randr, wlrctl, xdotool, ydotool,
+            plus the xprop/xwininfo X utilities — used to drive and introspect a
+            Wayland desktop. Verifiable: each tool's binary lands on PATH under
+            /usr/bin (cross-distro; wlrctl ships from the AUR on Arch and the
+            repo on Fedora).
+        tag: [working]
+        scenario:
+            - name: wayland-input-and-clipboard-tools-installed
+              step:
+                - then: the wtype keyboard-injection tool is installed
+                  file: /usr/bin/wtype
+                  exists: true
+                - then: the wl-clipboard copy tool is installed
+                  file: /usr/bin/wl-copy
+                  exists: true
+                - then: the wlrctl wlroots control tool is installed
+                  file: /usr/bin/wlrctl
+                  exists: true
     distro:
         arch:
             package:

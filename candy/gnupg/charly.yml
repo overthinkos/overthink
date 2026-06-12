@@ -1,7 +1,36 @@
 candy:
     version: 2026.144.1443
     name: gnupg
-    description: GnuPG encryption and signing tools for GPG agent forwarding
+    description:
+        feature: GnuPG encryption and signing tools for GPG agent forwarding
+        narrative: |
+            Installs the GnuPG suite (gpg, gpgconf, gpg-agent, gpg-connect-agent)
+            from the distro package -- gnupg on arch/debian/ubuntu, gnupg2 on
+            fedora. The binaries land in /usr/bin and gpg reports its GnuPG
+            version string, so the install and the agent-forwarding tooling are
+            directly verifiable inside the built image.
+        tag: [working]
+        scenario:
+            - name: gpg-binary-installed
+              step:
+                - then: the gpg encryption/signing binary is present at /usr/bin/gpg
+                  file: /usr/bin/gpg
+                  exists: true
+            - name: gpg-reports-gnupg-version
+              step:
+                - then: invoking gpg --version exits cleanly and identifies itself as GnuPG
+                  command: /usr/bin/gpg --version
+                  exit_status: 0
+                  stdout:
+                    - contains: "gpg (GnuPG)"
+            - name: gpg-agent-forwarding-tooling-present
+              step:
+                - then: the gpg-agent daemon ships so a forwarded host agent can answer key operations
+                  file: /usr/bin/gpg-agent
+                  exists: true
+                - then: the gpgconf helper ships so the agent socket path can be resolved
+                  file: /usr/bin/gpgconf
+                  exists: true
     distro:
         arch:
             package:
@@ -24,3 +53,14 @@ candy:
           exit_status: 0
           stdout:
             - contains: "gpg (GnuPG)"
+        - id: gpg-agent-binary
+          file: /usr/bin/gpg-agent
+          exists: true
+        - id: gpgconf-binary
+          file: /usr/bin/gpgconf
+          exists: true
+        - id: gnupg-package
+          package: gnupg
+          package_map:
+            fedora: gnupg2
+          installed: true

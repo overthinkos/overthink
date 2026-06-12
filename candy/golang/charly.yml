@@ -1,7 +1,42 @@
 candy:
     version: 2026.144.1443
     name: golang
-    description: Go programming language compiler
+    description:
+        feature: Go programming language compiler — the `go` toolchain on $PATH
+        narrative: |
+            Installs the Go compiler/toolchain from each distro's package repo
+            (arch `go`, debian/ubuntu `golang-go`, fedora `golang-bin`), landing
+            the `go` driver binary at /usr/bin/go. Verifiable end to end: the
+            binary exists, `go version` reports a Go toolchain version, and the
+            toolchain actually compiles and runs a standalone Go program.
+        tag: [working]
+        scenario:
+            - name: go-compiler-on-path
+              step:
+                - then: the go compiler binary is installed at /usr/bin/go
+                  file: /usr/bin/go
+                  exists: true
+            - name: go-reports-its-version
+              step:
+                - then: running `go version` succeeds and prints a Go toolchain version
+                  command: /usr/bin/go version
+                  exit_status: 0
+                  stdout:
+                    - matches: "go version go[0-9]"
+            - name: go-compiles-and-runs-a-program
+              step:
+                - then: the toolchain compiles and runs a standalone Go program and prints its output
+                  command: |
+                    set -e
+                    d=$(mktemp -d)
+                    printf 'package main\nimport "fmt"\nfunc main() { fmt.Println("charly-go-build-ok") }\n' > "$d/main.go"
+                    cd "$d"
+                    export HOME="$d" GOCACHE="$d/.gocache" GOPATH="$d/.gopath" GOFLAGS=-mod=mod
+                    /usr/bin/go mod init charlygotest >/dev/null 2>&1 || true
+                    /usr/bin/go run main.go
+                  exit_status: 0
+                  stdout:
+                    - contains: charly-go-build-ok
     distro:
         arch:
             package:
@@ -19,6 +54,28 @@ candy:
         - id: go-binary
           file: /usr/bin/go
           exists: true
+        - id: go-package
+          package: go
+          package_map:
+            arch: go
+            debian: golang-go
+            ubuntu: golang-go
+            fedora: golang-bin
+          installed: true
         - id: go-version
           command: /usr/bin/go version
           exit_status: 0
+          stdout:
+            - matches: "go version go[0-9]"
+        - id: go-compiles-and-runs
+          command: |
+            set -e
+            d=$(mktemp -d)
+            printf 'package main\nimport "fmt"\nfunc main() { fmt.Println("charly-go-build-ok") }\n' > "$d/main.go"
+            cd "$d"
+            export HOME="$d" GOCACHE="$d/.gocache" GOPATH="$d/.gopath" GOFLAGS=-mod=mod
+            /usr/bin/go mod init charlygotest >/dev/null 2>&1 || true
+            /usr/bin/go run main.go
+          exit_status: 0
+          stdout:
+            - contains: charly-go-build-ok

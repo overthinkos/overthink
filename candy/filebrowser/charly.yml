@@ -1,6 +1,50 @@
 candy:
     version: 2026.162.1430
     name: filebrowser
+    description:
+        feature: Browser-based file manager (FileBrowser Quantum) served over HTTP on port 8080
+        narrative: |
+            Downloads the gtsteffaniak/filebrowser ${FILEBROWSER_VERSION} static
+            binary to /usr/local/bin/filebrowser (0755), writes its server config
+            to /etc/filebrowser/config.yaml (listen port 8080, SQLite database + a
+            "Files" source under ~/.filebrowser/files), and runs it as the
+            always-restart `filebrowser` service under the init system. The data
+            and files volumes persist the database and the user-browsable tree.
+            Every fact below is observable: the installed binary, the config
+            contents, the running service, and the HTTP 200 the web UI returns.
+        tag: [working]
+        scenario:
+            # DETERMINISTIC build-scope facts (embedded check verbs run at both
+            # `charly box feature run` and `charly eval feature run`).
+            - name: filebrowser-binary-installed
+              step:
+                - then: the filebrowser binary is installed and executable at /usr/local/bin/filebrowser
+                  file: /usr/local/bin/filebrowser
+                  exists: true
+                  mode: "0755"
+            - name: filebrowser-config-declares-listen-port
+              step:
+                - then: the server config is present at /etc/filebrowser/config.yaml
+                  file: /etc/filebrowser/config.yaml
+                  exists: true
+                - then: the config declares the listen port 8080
+                  file: /etc/filebrowser/config.yaml
+                  contains:
+                    - matches: "port: 8080"
+            # DETERMINISTIC deploy-scope facts — the running service answers HTTP
+            # 200 on the published port (agent-graded only if a runtime probe is
+            # unavailable; here every step embeds a check verb).
+            - name: filebrowser-serves-web-ui
+              step:
+                - then: the filebrowser service is running under the init system
+                  scope: deploy
+                  service: filebrowser
+                  running: true
+                - then: the web UI answers HTTP 200 on the published port
+                  scope: deploy
+                  http: http://127.0.0.1:${HOST_PORT:8080}/
+                  status: 200
+                  timeout: 5s
     require:
         - supervisord
     env:

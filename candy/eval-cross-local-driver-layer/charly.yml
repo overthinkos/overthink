@@ -10,6 +10,18 @@ candy:
             subject). USER-level only (a marker under $HOME, no root/sudo/gates)
             so bringUpPeers applies it unattended via `charly deploy add`.
         tag: [working]
+        scenario:
+            - name: driver-marker-present
+              step:
+                - then: applying the layer leaves the cross-local-driver marker file under the host cache dir
+                  file: "${HOME}/.cache/charly-cross-local-driver-marker"
+                  exists: true
+            - name: driver-marker-carries-version-stamp
+              step:
+                - then: the marker records the driver version stamp the cross-local-http bed reads back to confirm the host-driver peer applied
+                  file: "${HOME}/.cache/charly-cross-local-driver-marker"
+                  contains:
+                    - charly-cross-local-driver v1
     task:
         - mkdir: "${HOME}/.cache"
           user: "${USER}"
@@ -23,3 +35,9 @@ candy:
           scope: deploy
           command: "test -f ${HOME}/.cache/charly-cross-local-driver-marker"
           in_container: false
+        - id: cross-local-driver-marker-content
+          scope: deploy
+          command: "cat ${HOME}/.cache/charly-cross-local-driver-marker"
+          in_container: false
+          stdout:
+            - contains: charly-cross-local-driver v1

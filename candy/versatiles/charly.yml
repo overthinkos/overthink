@@ -1,7 +1,62 @@
 candy:
     version: 2026.144.1443
     name: versatiles
-    description: "VersaTiles CLI (versatiles-rs) — single Rust binary that does convert / serve / probe / dev for the .versatiles, .pmtiles, .mbtiles, and .tar tile-container formats. Ships a supervisord service running `versatiles serve` on port 8090 (host-mapped 28090) that watches /workspace/tiles/shortbread/. The convert subcommand is symmetric: PMTiles ↔ .versatiles ↔ MBTiles round-trip; the layer's eval probes assert the round-trip works end-to-end as the canonical interop verification."
+    description:
+        feature: VersaTiles CLI (versatiles-rs) + tile server — convert/serve/probe tile containers, serving vector tiles over HTTP on port 8090
+        narrative: |
+            Installs the versatiles-rs single Rust binary at /usr/local/bin/versatiles
+            (convert / serve / probe / dev for the .versatiles, .pmtiles, .mbtiles and
+            .tar tile-container formats), plus a supervisord-managed wrapper that runs
+            `versatiles serve` on port 8090 (host-mapped 28090). The wrapper always
+            includes the public download.versatiles.org/osm.versatiles source so the
+            service starts cleanly on a fresh deploy before any local shortbread tiles
+            exist, then appends local /workspace/tiles/shortbread/ containers as the OSM
+            DAG produces them. The convert subcommand is symmetric (PMTiles ↔ .versatiles
+            ↔ MBTiles round-trip). Every fact below is observable: the installed binary,
+            the linked convert subcommand, the serve wrapper, the running service, the
+            reachable port, and the HTTP 200 a known OSM tile endpoint returns.
+        tag: [working]
+        scenario:
+            # DETERMINISTIC build-scope facts (embedded check verbs run at both
+            # `charly box feature run` and `charly eval feature run`).
+            - name: versatiles-binary-installed
+              step:
+                - then: the versatiles binary is installed and executable at /usr/local/bin/versatiles
+                  file: /usr/local/bin/versatiles
+                  exists: true
+                  mode: "0755"
+                - then: the installed binary reports its version
+                  command: versatiles --version
+                  exit_status: 0
+            - name: convert-subcommand-linked
+              step:
+                - then: the convert subcommand is compiled into the binary (not a stripped-down build)
+                  command: versatiles convert --help
+                  exit_status: 0
+            - name: serve-wrapper-installed
+              step:
+                - then: the supervisord serve wrapper is installed and executable at /usr/local/bin/versatiles-wrapper.sh
+                  file: /usr/local/bin/versatiles-wrapper.sh
+                  exists: true
+                  mode: "0755"
+            # DETERMINISTIC deploy-scope facts — the running service answers an
+            # HTTP tile fetch on the published port from the always-on OSM source.
+            - name: tile-server-serves-vector-tiles
+              step:
+                - then: the versatiles service is running under the init system
+                  scope: deploy
+                  service: versatiles
+                  running: true
+                - then: the serve port is reachable on the host loopback
+                  scope: deploy
+                  addr: "127.0.0.1:${HOST_PORT:8090}"
+                  reachable: true
+                  timeout: 10s
+                - then: a known OSM tile endpoint returns HTTP 200
+                  scope: deploy
+                  http: "http://127.0.0.1:${HOST_PORT:8090}/tiles/osm/0/0/0.pbf"
+                  status: 200
+                  timeout: 10s
     require:
         - supervisord
     distro:

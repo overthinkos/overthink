@@ -1,6 +1,56 @@
 candy:
     version: 2026.153.2308
     name: selkies
+    description:
+        feature: Browser-accessible desktop streaming over HTTPS via pixelflux Wayland capture and a Traefik reverse proxy
+        narrative: |
+            selkies installs a Python streaming server (the launch wrapper, the
+            capture-bridge server, and a static web-UI fileserver), a Traefik
+            reverse proxy with a self-signed cert for the WebCodecs secure context,
+            and the pre-built web UI bundle. pixelflux creates the nested wayland-1
+            compositor and streams H.264 to the browser; Traefik terminates TLS on
+            :3000 and proxies the web UI plus the /websockets backend. Each step
+            below asserts a real installed file or a live HTTPS endpoint, so every
+            scenario fails if the candy installed nothing.
+        tag: [working]
+        scenario:
+            - name: streaming-server-scripts-installed
+              step:
+                - then: the selkies launch wrapper is installed and executable
+                  file: ${HOME}/.local/bin/selkies-wrapper
+                  exists: true
+                  mode: "0755"
+                - then: the capture-bridge server script is installed
+                  file: ${HOME}/.local/bin/selkies-capture-server
+                  exists: true
+                - then: the static web-UI fileserver script is installed
+                  file: ${HOME}/.local/bin/selkies-fileserver
+                  exists: true
+            - name: https-proxy-and-secure-context
+              step:
+                - then: the Traefik reverse-proxy binary is installed
+                  file: /usr/local/bin/traefik
+                  exists: true
+                - then: the self-signed TLS certificate for the WebCodecs secure context exists
+                  file: /usr/local/share/selkies/certs/selkies.crt
+                  exists: true
+                - then: the matching private key for the certificate exists
+                  file: /usr/local/share/selkies/certs/selkies.key
+                  exists: true
+            - name: web-ui-bundle-staged
+              step:
+                - then: the pre-built Selkies web UI is staged into the system share directory
+                  file: /usr/local/share/selkies/web
+                  filetype: directory
+            - name: desktop-stream-served-over-https
+              step:
+                - then: the streaming endpoint serves the web UI over HTTPS on the published port
+                  scope: deploy
+                  http: https://127.0.0.1:${HOST_PORT:3000}/
+                  status: 200
+                  allow_insecure: true
+                  timeout: 10s
+                - then: a connected browser shows the live desktop rendering, not a black or frozen frame
     require:
         - supervisord
         - python

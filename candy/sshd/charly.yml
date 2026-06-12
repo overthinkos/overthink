@@ -1,6 +1,44 @@
 candy:
     version: 2026.144.1443
     name: sshd
+    description:
+        feature: SSH server with key-based login and passwordless sudo for the uid-1000 account
+        narrative: |
+            Installs the OpenSSH server (openssh-server / openssh on Arch) plus a
+            sshd-wrapper launcher, publishes the SSH port, and drops a NOPASSWD
+            sudoers rule for the build's uid-1000 account. Every artifact is
+            directly observable in the built image: the daemon binary, the wrapper
+            script, the installed package, and the effective sudo grant.
+        tag: [working]
+        scenario:
+            - name: openssh-server-installed
+              step:
+                - then: the OpenSSH sshd daemon binary is installed at /usr/sbin/sshd
+                  file: /usr/sbin/sshd
+                  exists: true
+                - then: the OpenSSH server package is installed (openssh on Arch)
+                  package: openssh-server
+                  package_map:
+                    arch: openssh
+                    fedora: openssh-server
+                  installed: true
+            - name: supervisord-wrapper-executable
+              step:
+                - then: the sshd-wrapper launcher is present and world-executable
+                  file: /usr/local/bin/sshd-wrapper
+                  exists: true
+                  mode: "0755"
+            - name: uid-1000-has-passwordless-sudo
+              step:
+                - then: the uid-1000 account can run sudo with no password (NOPASSWD rule in effect)
+                  command: |
+                    if [ "$(id -u)" = "0" ]; then runuser -u user -- sudo -n -l; else sudo -n -l; fi
+                  exit_status: 0
+                  stdout:
+                    - contains: "NOPASSWD"
+            - name: ssh-key-login-accepted
+              step:
+                - then: a client presenting a key from SSH_AUTHORIZED_KEYS can open an interactive session on the published SSH port
     env_accept:
         - name: SSH_AUTHORIZED_KEYS
           description: "SSH public key(s) for authorized access (one per line). Set via: charly config <image> --ssh-key auto"

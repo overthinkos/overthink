@@ -1,7 +1,55 @@
 candy:
     version: 2026.144.1443
     name: debug-tools
-    description: "Debug toolkit for inspecting deployed services from inside the container — network probes (ip/ss/lsof/ping/dig/nc/socat/tcpdump/traceroute/mtr/wget), process inspection (ps/top/htop/pgrep/free/vmstat/strace/ltrace), file inspection (file/tree/xxd/vim/nano), system stats (iotop/iftop/sysstat), and session helpers (tmux/rsync/yq). Distro-agnostic: rpm/deb/pac sections cover Fedora/Debian/Ubuntu/Arch."
+    description:
+        feature: In-container debug toolkit — network, process, file, and system-stats probes for inspecting deployed services from the inside
+        narrative: |
+            Installs a distro-agnostic debugging toolkit so an operator can
+            inspect a deployed service from inside the container without
+            re-deploying. Network probes (ip/ss/lsof/ping/dig/nc/socat/tcpdump/
+            traceroute/mtr/wget), process inspection (ps/top/htop/pgrep/free/
+            vmstat/strace/ltrace), file/text inspection (file/tree/xxd/vim/nano),
+            system stats (iotop/iftop/sysstat), and session helpers (tmux/rsync).
+            Every headline binary lands at a fixed path, so its presence is
+            directly verifiable. rpm/deb/pac sections cover Fedora/Debian/Ubuntu/Arch.
+        tag: [working]
+        scenario:
+            # Deterministic acceptance: each step embeds a `file:`/`exists:`
+            # check verb, so the scenario FAILS if the candy installed nothing.
+            # The paths below match the eval: block's verified locations.
+            - name: network-probes-installed
+              step:
+                - then: the DNS lookup tool dig is present for probing service discovery
+                  file: /usr/bin/dig
+                  exists: true
+                - then: the socket-statistics tool ss is present for inspecting listening ports
+                  file: /usr/sbin/ss
+                  exists: true
+                - then: tcpdump is present for capturing traffic between services
+                  file: /usr/sbin/tcpdump
+                  exists: true
+            - name: process-inspection-installed
+              step:
+                - then: the process-table tool ps is available to list running processes
+                  file: /usr/bin/ps
+                  exists: true
+                - then: the interactive process monitor htop is available
+                  file: /usr/bin/htop
+                  exists: true
+                - then: the syscall tracer strace is available to debug a stuck process
+                  file: /usr/bin/strace
+                  exists: true
+            - name: file-and-session-helpers-installed
+              step:
+                - then: an editor (vim) is present so config files can be inspected in place
+                  file: /usr/bin/vim
+                  exists: true
+                - then: tmux is present so a long-running probe survives a dropped exec session
+                  file: /usr/bin/tmux
+                  exists: true
+                - then: lsof is present to report which process holds an open file or socket
+                  file: /usr/bin/lsof
+                  exists: true
     # Distro-specific package lists. Tool names diverge across distros
     # (e.g. nmap-ncat vs ncat vs gnu-netcat) so per-distro lists are the
     # honest authoring path — no synthetic "common" package list that
@@ -171,3 +219,31 @@ candy:
         - id: rsync-binary
           file: /usr/bin/rsync
           exists: true
+        # Package-identity spot-checks complement the binary-path checks above:
+        # a file check catches a moved binary, a package check catches a renamed
+        # or absent package. Names below are uniform across all four distros;
+        # the process-tools package diverges (procps-ng vs procps), so it uses
+        # package_map to resolve the right name per distro tag.
+        - id: procps-package
+          package: procps-ng
+          package_map:
+            fedora: procps-ng
+            arch: procps-ng
+            debian: procps
+            ubuntu: procps
+          installed: true
+        - id: htop-package
+          package: htop
+          installed: true
+        - id: strace-package
+          package: strace
+          installed: true
+        - id: tcpdump-package
+          package: tcpdump
+          installed: true
+        - id: tmux-package
+          package: tmux
+          installed: true
+        - id: lsof-package
+          package: lsof
+          installed: true

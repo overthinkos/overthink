@@ -1,7 +1,40 @@
 candy:
     version: 2026.144.1443
     name: gogcli
-    description: Google Workspace CLI (Gmail, Calendar, Drive, Contacts, Sheets, Docs)
+    description:
+        feature: Installs the gog Google Workspace CLI (Gmail, Calendar, Drive, Contacts, Sheets, Docs) into the user's Go bin
+        narrative: |
+            gogcli builds the upstream `gog` binary from
+            github.com/steipete/gogcli via `go install`, landing it at
+            ~/go/bin/gog (placed on PATH by path_append). `gog` is a single
+            static Go binary that exposes the Google Workspace APIs as
+            subcommands (gmail, calendar, drive, ...). `gog --version` and
+            `gog --help` run locally with no OAuth or network, so the install
+            is verifiable at build scope; live Workspace access additionally
+            needs OAuth credentials provisioned at deploy time.
+        tag: [working]
+        scenario:
+            - name: gog-binary-installed
+              step:
+                - then: the gog binary is installed at ~/go/bin/gog
+                  file: ${HOME}/go/bin/gog
+                  exists: true
+            - name: gog-reports-version
+              step:
+                - then: running `gog --version` exits 0, proving the built binary actually runs
+                  command: ${HOME}/go/bin/gog --version
+                  exit_status: 0
+            - name: gog-exposes-workspace-subcommands
+              step:
+                - then: "`gog --help` lists the Google Workspace subcommands (gmail, calendar)"
+                  command: ${HOME}/go/bin/gog --help 2>&1
+                  exit_status: 0
+                  stdout:
+                    - contains: gmail
+                    - contains: calendar
+            - name: gog-authenticates-to-google-workspace
+              step:
+                - then: once OAuth credentials are provisioned, gog authenticates and lists the user's Gmail messages
     require:
         - golang
     env:
@@ -17,3 +50,12 @@ candy:
         - id: gog-binary
           file: ${HOME}/go/bin/gog
           exists: true
+        - id: gog-version
+          command: ${HOME}/go/bin/gog --version
+          exit_status: 0
+        - id: gog-workspace-subcommands
+          command: ${HOME}/go/bin/gog --help 2>&1
+          exit_status: 0
+          stdout:
+            - contains: gmail
+            - contains: calendar

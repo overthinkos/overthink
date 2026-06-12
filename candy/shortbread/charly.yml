@@ -1,7 +1,46 @@
 candy:
     version: 2026.144.1443
     name: shortbread
-    description: "Shortbread vector-tile schema generation via Tilemaker. Builds systemed/tilemaker (C++/Lua) from source and bundles the official shortbread-tiles/shortbread-tilemaker Lua + JSON configuration so the notebook's DAG can produce monaco-shortbread.pmtiles from an OSM PBF. The Shortbread schema is the de-facto general-purpose OSM vector-tile schema documented at https://shortbread-tiles.org."
+    description:
+        feature: Generate Shortbread-schema OSM vector tiles with a source-built Tilemaker plus the official shortbread config bundle.
+        narrative: |
+            Builds systemed/tilemaker (C++/Lua) from source — there is no Arch/Fedora
+            package and no release binary — and installs it at /usr/local/bin/tilemaker.
+            Clones the official shortbread-tiles/shortbread-tilemaker bundle (the
+            process.lua per-feature classifier + the config.json layer/zoom schema)
+            to /opt/shortbread-tilemaker with its .git history stripped. With both in
+            place the notebook DAG can convert an OSM PBF into monaco-shortbread.pmtiles
+            under the versatiles-watched /workspace/tiles/shortbread directory. The
+            Shortbread schema is the de-facto general-purpose OSM vector-tile schema
+            documented at https://shortbread-tiles.org.
+        tag: [working]
+        scenario:
+            - name: tilemaker-built-from-source
+              step:
+                - then: the tilemaker binary built from systemed/tilemaker source is installed under /usr/local/bin
+                  file: /usr/local/bin/tilemaker
+                  exists: true
+                - then: tilemaker resolves on PATH so the notebook DAG can invoke it (tilemaker ships no --version flag, so resolve by name)
+                  command: command -v tilemaker
+                  exit_status: 0
+            - name: shortbread-config-bundle-dropped
+              step:
+                - then: the shortbread per-feature Lua classifier is bundled for tilemaker --process
+                  file: /opt/shortbread-tilemaker/process.lua
+                  exists: true
+                - then: the shortbread layer and zoom schema definition is bundled for tilemaker --config
+                  file: /opt/shortbread-tilemaker/config.json
+                  exists: true
+                - then: the cloned bundle has its .git history stripped to keep the image small
+                  file: /opt/shortbread-tilemaker/.git
+                  exists: false
+            - name: shortbread-output-directory-precreated
+              step:
+                - then: the versatiles-watched output directory is pre-created at build time so versatiles serve starts cleanly on a fresh deploy
+                  file: /workspace/tiles/shortbread
+                  exists: true
+                - then: a tilemaker run converts an OSM PBF into a monaco-shortbread.pmtiles archive in that directory using the bundled config.json and process.lua
+
     require:
         - supervisord
     distro:
@@ -97,6 +136,22 @@ candy:
         - id: shortbread-config-json
           file: /opt/shortbread-tilemaker/config.json
           exists: true
+        # Build-scope: tilemaker binary lands at the source-build install path.
+        - id: tilemaker-binary
+          file: /usr/local/bin/tilemaker
+          exists: true
+        # Build-scope: the .git history is stripped from the cloned bundle
+        # (image-size reduction) — the directory must be absent.
+        - id: shortbread-bundle-no-git
+          file: /opt/shortbread-tilemaker/.git
+          exists: false
+        # Build-scope: the Lua embedding runtime tilemaker's process.lua hooks
+        # into is installed. Cross-distro: Arch ships `lua`, Fedora `lua-devel`.
+        - id: shortbread-lua-runtime
+          package: lua
+          package_map:
+            fedora: lua-devel
+          installed: true
         # Deploy-scope: the versatiles-watched directory is present on a
         # fresh deploy (the mkdir above lands at image-build time; the
         # workspace volume seed preserves it).

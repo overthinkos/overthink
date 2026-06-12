@@ -1,6 +1,41 @@
 candy:
     version: 2026.144.1443
     name: sway
+    description:
+        feature: A headless Sway Wayland compositor, staged with a launcher wrapper and config and run as a supervised service.
+        narrative: |
+            The sway candy installs the Sway compositor (plus Xwayland, fuzzel, and
+            Mesa GL/Vulkan drivers) on Fedora, strips the cap_sys_nice file capability
+            so the binary can exec inside a rootless user namespace, and stages a
+            sway-wrapper launcher plus a config file under the user's home. A
+            supervisord service runs the wrapper headless (WLR_BACKENDS=headless).
+            Every claim below is observable: the binary, the package, the staged
+            files, and the live service.
+        tag: [working]
+        scenario:
+            - name: compositor-binary-installed
+              step:
+                - then: the Sway compositor binary is installed at /usr/bin/sway
+                  file: /usr/bin/sway
+                  exists: true
+                - then: the sway package is registered in the package database
+                  package: sway
+                  installed: true
+            - name: launcher-and-config-staged
+              step:
+                - then: the sway-wrapper launcher is installed and executable
+                  file: ${HOME}/.local/bin/sway-wrapper
+                  exists: true
+                  mode: "0755"
+                - then: the Sway config file is staged in the user's home
+                  file: ${HOME}/.config/sway/config
+                  exists: true
+            - name: compositor-service-runs
+              step:
+                - then: the sway compositor service is running under supervisord
+                  scope: deploy
+                  service: sway
+                  running: true
     require:
         - dbus
     env:

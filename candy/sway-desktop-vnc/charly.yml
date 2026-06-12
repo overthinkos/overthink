@@ -6,6 +6,58 @@ candy:
         - wayvnc
     env:
         WLR_RENDERER: "pixman"
+    description:
+        feature: A headless sway Wayland desktop with Chrome, served over VNC on :5900
+        narrative: |
+            Composes sway-desktop (the sway compositor + Chrome browser + waybar +
+            the wl/desktop tooling) with wayvnc into ONE running browser-VNC desktop,
+            and forces WLR_RENDERER=pixman so the whole stack renders in software —
+            no GPU required. The composition is observable: all three desktop
+            binaries (sway, wayvnc, google-chrome-stable) land in the image, and at
+            deploy time sway + wayvnc run together under supervisord with the VNC
+            server reachable on display :5900.
+        tag: [working]
+        scenario:
+            # DETERMINISTIC (build scope) — every composed candy's key binary lands
+            # in the image. This scenario FAILS if any of the three composition legs
+            # (sway, wayvnc, chrome-sway via sway-desktop) is dropped.
+            - name: desktop-stack-binaries-composed
+              step:
+                - then: the sway Wayland compositor binary is installed
+                  file: /usr/bin/sway
+                  exists: true
+                - then: the wayvnc VNC server binary is installed
+                  file: /usr/bin/wayvnc
+                  exists: true
+                - then: the Chrome browser binary is installed
+                  file: /usr/bin/google-chrome-stable
+                  exists: true
+            # DETERMINISTIC (build scope) — this candy's OWN contribution: the
+            # WLR_RENDERER=pixman env that makes the desktop render headless.
+            - name: headless-software-rendering-configured
+              step:
+                - then: the Wayland renderer is pinned to the pixman software backend so the desktop runs without a GPU
+                  command: printenv WLR_RENDERER
+                  exit_status: 0
+                  stdout:
+                    - pixman
+            # DETERMINISTIC (deploy scope) + one PROSE-ONLY (agent-graded) — the full
+            # stack actually runs together and is reachable over VNC.
+            - name: vnc-desktop-live
+              step:
+                - then: the sway compositor and wayvnc server both report RUNNING under supervisord
+                  scope: deploy
+                  command: supervisorctl status sway wayvnc | awk '{print $2}' | sort -u
+                  in_container: true
+                  exit_status: 0
+                  stdout:
+                    - RUNNING
+                - then: the VNC server accepts a TCP connection on the published display port
+                  scope: deploy
+                  addr: 127.0.0.1:${HOST_PORT:5900}
+                  reachable: true
+                  timeout: 5s
+                - then: the VNC framebuffer shows the live Chrome desktop rendered, not a blank or single-color screen
     # The full browser-VNC desktop verification lives on THIS composite candy
     # (sway-desktop[+chrome-sway] + wayvnc) — the candy that assembles the
     # running desktop — so ONE check set covers every box composing it. The

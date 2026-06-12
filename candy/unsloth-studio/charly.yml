@@ -1,6 +1,40 @@
 candy:
     version: 2026.144.1443
     name: unsloth-studio
+    description:
+        feature: Unsloth Studio web UI for GPU LLM fine-tuning, backed by a pixi PyTorch/transformers environment and composed llama.cpp GGUF export tools
+        narrative: |
+            unsloth-studio owns the pixi fine-tuning environment (Python 3.13 +
+            PyTorch/CUDA + transformers + PEFT/TRL) and composes the llama-cpp and
+            unsloth candies, then runs the Unsloth Studio web UI as a supervisord
+            service on port 8888. Every owned artifact lands at a fixed path -- the
+            pixi interpreter at ~/.pixi/envs/default and the composed llama.cpp CLI
+            at ~/llama.cpp -- so the environment and the composition's effect are
+            directly checkable.
+        tag: [working]
+        scenario:
+            # Deterministic build-scope steps: the pixi environment owned by this
+            # candy ships a Python interpreter and importable PyTorch.
+            - name: finetuning-pixi-environment-ready
+              step:
+                - then: the pixi fine-tuning environment provides a Python interpreter at ~/.pixi/envs/default
+                  file: ${HOME}/.pixi/envs/default/bin/python
+                  exists: true
+                - then: PyTorch imports successfully inside that environment
+                  command: ${HOME}/.pixi/envs/default/bin/python -c "import torch; print('torch', torch.__version__)"
+                  stdout:
+                    - contains: torch
+            # Deterministic build-scope step: the observable effect of the
+            # `candy: [llama-cpp]` composition is the GGUF-export CLI on disk.
+            - name: gguf-export-tools-composed
+              step:
+                - then: the composed llama.cpp CLI binary is present so fine-tuned models can be exported to GGUF
+                  file: ${HOME}/llama.cpp/llama-cli
+                  exists: true
+            # Prose-only (agent-graded) deploy behaviour: the web UI is usable.
+            - name: studio-web-ui-serves
+              step:
+                - then: the Unsloth Studio web UI is served on port 8888 and is usable for interactive LLM fine-tuning
     require:
         - cuda
         - supervisord
@@ -23,3 +57,30 @@ candy:
           working_directory: "%(ENV_HOME)s"
           enable: true
           scope: system
+    eval:
+        # Build-scope: the pixi environment this candy owns lands its CPython
+        # interpreter at a fixed path, with the ML/fine-tuning stack importable.
+        - id: unsloth-studio-pixi-python
+          file: ${HOME}/.pixi/envs/default/bin/python
+          exists: true
+        - id: unsloth-studio-torch
+          command: ${HOME}/.pixi/envs/default/bin/python -c "import torch; print('torch', torch.__version__)"
+          stdout:
+            - contains: torch
+        - id: unsloth-studio-finetuning-stack
+          command: ${HOME}/.pixi/envs/default/bin/python -c "import transformers, peft, trl; print('finetune-stack-ok')"
+          stdout:
+            - contains: finetune-stack-ok
+        # Build-scope: observable effect of the `candy: [llama-cpp]` composition.
+        - id: unsloth-studio-llama-cli
+          file: ${HOME}/llama.cpp/llama-cli
+          exists: true
+        # Deploy-scope: the supervisord service runs and binds the Studio UI port.
+        - id: unsloth-studio-service-running
+          scope: deploy
+          service: unsloth-studio
+          running: true
+        - id: unsloth-studio-ui-reachable
+          scope: deploy
+          addr: 127.0.0.1:${HOST_PORT:8888}
+          reachable: true

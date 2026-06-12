@@ -1,7 +1,42 @@
 candy:
     version: 2026.144.1443
     name: hermes
-    description: Hermes self-improving AI agent by Nous Research
+    description:
+        feature: Hermes self-improving AI agent by Nous Research, installed as a pixi CLI with a supervised entrypoint
+        narrative: |
+            The hermes candy installs the upstream Nous Research hermes-agent as a
+            non-editable pip package into the pixi default environment, so the
+            `hermes` CLI lands at ${HOME}/.pixi/envs/default/bin/hermes. It also
+            stages the full hermes-agent source tree under $HOME (for the bundled
+            .env / config examples, skills, and the WhatsApp bridge) and copies an
+            executable hermes-entrypoint wrapper onto the user PATH. At deploy time
+            the entrypoint runs under supervisord, mounts the persistent /opt/data
+            volume, and one-time auto-configures an LLM provider from the supplied
+            API key. Every claim below is observable: the binary, the wrapper, and
+            the source tree are real files in the image, and the running service +
+            data volume are probed against a live deployment.
+        tag: [working]
+        scenario:
+            - name: hermes-cli-installed
+              step:
+                - then: the hermes Python CLI is installed into the pixi default environment
+                  file: ${HOME}/.pixi/envs/default/bin/hermes
+                  exists: true
+            - name: entrypoint-wrapper-installed
+              step:
+                - then: the hermes entrypoint wrapper is installed and executable on the user PATH
+                  file: ${HOME}/.local/bin/hermes-entrypoint
+                  exists: true
+                  mode: "0755"
+            - name: agent-source-staged
+              step:
+                - then: the upstream hermes-agent source tree is staged under $HOME so the entrypoint can bootstrap config, skills, and the WhatsApp bridge
+                  file: ${HOME}/hermes-agent
+                  exists: true
+                  filetype: directory
+            - name: agent-service-runs-with-data-volume
+              step:
+                - then: when deployed, the persistent /opt/data volume is mounted and the supervised hermes service reaches a running state, having auto-configured an LLM provider from the supplied API key
     require:
         - nodejs
         - supervisord
@@ -77,6 +112,10 @@ candy:
         - id: hermes-binary
           file: ${HOME}/.pixi/envs/default/bin/hermes
           exists: true
+        - id: hermes-agent-source
+          file: ${HOME}/hermes-agent
+          exists: true
+          filetype: directory
         - id: hermes-data-volume-mount
           scope: deploy
           file: /opt/data

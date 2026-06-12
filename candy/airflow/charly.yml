@@ -1,7 +1,65 @@
 candy:
     version: 2026.144.1443
     name: airflow
-    description: "Apache Airflow with LocalExecutor + SQLite (single-node, dev-friendly). Python deps live in the marimo layer's pixi.toml. NB: the upstream MCP wrapper (mcp-server-apache-airflow) targets the removed /api/v1 in Airflow 3 and was removed from this layer in 2026-05; consumers drive Airflow via direct REST /api/v2 calls."
+    # NB: the upstream MCP wrapper (mcp-server-apache-airflow) targets the
+    # removed /api/v1 in Airflow 3 and was removed from this layer in 2026-05;
+    # consumers drive Airflow via direct REST /api/v2 calls. Python deps live
+    # in the marimo layer's pixi.toml (the `marimo` require:), so the airflow
+    # binary itself is provided by that layer; THIS candy installs the four
+    # supervisord wrapper scripts that drive it.
+    description:
+        feature: Apache Airflow runs single-node (LocalExecutor + SQLite) from charly-installed wrapper scripts, serving an authenticated REST API on :8080.
+        narrative: |
+            The airflow candy installs four /usr/local/bin wrapper scripts that
+            drive Airflow 3.x under supervisord: airflow-init.sh (one-shot `db
+            migrate` + binds the SimpleAuthManager admin password to the injected
+            AIRFLOW_ADMIN_PASSWORD secret) plus airflow-webserver.sh (api-server),
+            airflow-scheduler.sh, and airflow-dag-processor.sh. At deploy the
+            three daemons serve the REST API on :8080; notebooks self-author DAGs
+            into AIRFLOW__CORE__DAGS_FOLDER at runtime. The verifiable artifacts
+            are the wrapper scripts (build scope) and the live REST API + JWT
+            issuance (deploy scope).
+        tag: [working]
+        scenario:
+            - name: init-wrapper-installed
+              step:
+                - then: the one-shot init wrapper is installed and executable
+                  file: /usr/local/bin/airflow-init.sh
+                  exists: true
+                  mode: "0755"
+            - name: daemon-wrappers-installed
+              step:
+                - then: the api-server wrapper is installed and executable
+                  file: /usr/local/bin/airflow-webserver.sh
+                  exists: true
+                  mode: "0755"
+                - then: the scheduler wrapper is installed and executable
+                  file: /usr/local/bin/airflow-scheduler.sh
+                  exists: true
+                  mode: "0755"
+                - then: the dag-processor wrapper is installed and executable
+                  file: /usr/local/bin/airflow-dag-processor.sh
+                  exists: true
+                  mode: "0755"
+            - name: rest-api-serves-version
+              step:
+                - then: the running api-server answers /api/v2/version with HTTP 200
+                  scope: deploy
+                  http: "http://127.0.0.1:${HOST_PORT:8080}/api/v2/version"
+                  status: 200
+                  timeout: 30s
+            - name: admin-jwt-issued
+              step:
+                - then: posting the injected admin credentials to /auth/token returns a bearer access_token
+                  scope: deploy
+                  command: |
+                    curl -fsS -X POST "http://localhost:8080/auth/token" \
+                      -H "Content-Type: application/json" \
+                      -d "{\"username\":\"admin\",\"password\":\"$AIRFLOW_ADMIN_PASSWORD\"}" \
+                    | grep -q '"access_token"'
+                  in_container: true
+                  exit_status: 0
+                  timeout: 15s
     require:
         - marimo
         - supervisord

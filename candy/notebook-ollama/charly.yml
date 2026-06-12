@@ -15,6 +15,7 @@ candy:
             embeddings, tool calling). Pairs naturally with the
             `charly-ollama:ollama` server layer for a self-contained local
             LLM stack. Data-only — no packages, no services.
+        tag: [working]
         scenario:
             - name: ollama notebooks land in the workspace volume
               step:
@@ -28,3 +29,52 @@ candy:
                   exit_status: 0
                   stdout:
                     - matches: "Ollama_Requests"
+            - name: the ollama notebook collection is baked into the image
+              step:
+                - then: the Ollama_Requests producer notebook is staged in the image data tree
+                  file: /data/workspace/ollama/00_Ollama_Requests.ipynb
+                  exists: true
+                - and: the notebooks.yaml manifest cataloguing the collection is staged
+                  file: /data/workspace/ollama/notebooks.yaml
+                  exists: true
+                - and: a substantial collection of integration notebooks is staged, not just the producer
+                  command: test "$(find /data/workspace/ollama -maxdepth 1 -name '*.ipynb' | wc -l)" -ge 6
+                  exit_status: 0
+                - then: the notebooks span the documented client libraries (requests, OpenAI-compatible, native ollama, HuggingFace, Anthropic-style) as runnable examples
+    eval:
+        # Build-scope — the notebook collection is baked into the image data
+        # staging tree at /data/<volume>/<dest>/ (COPY --chown=uid:gid), so these
+        # run under `charly eval box` as the image's default user.
+        - id: notebook-ollama-staged-dir
+          file: /data/workspace/ollama
+          filetype: directory
+        - id: notebook-ollama-requests-staged
+          file: /data/workspace/ollama/00_Ollama_Requests.ipynb
+          exists: true
+        - id: notebook-ollama-manifest-staged
+          file: /data/workspace/ollama/notebooks.yaml
+          exists: true
+        - id: notebook-ollama-openai-staged
+          file: /data/workspace/ollama/02_Ollama_OpenAI.ipynb
+          exists: true
+        - id: notebook-ollama-library-staged
+          file: /data/workspace/ollama/03_Ollama_Library.ipynb
+          exists: true
+        - id: notebook-ollama-anthropic-staged
+          file: /data/workspace/ollama/05_Ollama_Anthropic.ipynb
+          exists: true
+        - id: notebook-ollama-collection-staged
+          command: test "$(find /data/workspace/ollama -maxdepth 1 -name '*.ipynb' | wc -l)" -ge 6
+          exit_status: 0
+        # Deploy-scope — at deploy time the data is provisioned into the workspace
+        # volume's ollama/ subdirectory (needs the mounted volume + runtime vars).
+        - id: notebook-ollama-provisioned
+          scope: deploy
+          file: ${VOLUME_CONTAINER_PATH:workspace}/ollama
+          filetype: directory
+        - id: notebook-ollama-requests-present
+          scope: deploy
+          command: ls ${VOLUME_CONTAINER_PATH:workspace}/ollama/
+          exit_status: 0
+          stdout:
+            - matches: "Ollama_Requests"

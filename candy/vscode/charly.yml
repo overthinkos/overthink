@@ -1,6 +1,29 @@
 candy:
     version: 2026.155.1458
     name: vscode
+    description:
+        feature: VS Code is installed and launchable as /usr/bin/code on every distro
+        narrative: |
+            The candy installs Microsoft's Visual Studio Code by two paths that
+            converge on the same launcher: on Arch a sha256-verified direct
+            tarball extracted to /opt/vscode and symlinked to /usr/bin/code, and
+            on Fedora the `code` RPM from Microsoft's yum repo. Either path lands
+            an executable at /usr/bin/code that prints its semantic version, so
+            both are verifiable the same cross-distro way.
+        tag: [working]
+        scenario:
+            - name: code-launcher-installed
+              step:
+                - then: the code launcher is present at /usr/bin/code
+                  file: /usr/bin/code
+                  exists: true
+            - name: code-reports-its-version
+              step:
+                - then: running code --version exits 0 and prints a semantic version
+                  command: /usr/bin/code --version
+                  exit_status: 0
+                  stdout:
+                    matches: "^[0-9]+\\.[0-9]+\\.[0-9]+"
     var:
         # VS Code is installed direct from Microsoft's VERSIONED URL with a sha256
         # WE control (computed against the real tarball; a future bump is a

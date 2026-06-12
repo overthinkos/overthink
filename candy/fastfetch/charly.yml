@@ -1,7 +1,34 @@
 candy:
     version: 2026.144.1443
     name: fastfetch
-    description: Fast system information tool (neofetch successor)
+    description:
+        feature: Fast system-information report (neofetch successor) covering OS, kernel, CPU, and memory
+        narrative: |
+            Installs the fastfetch package on arch and fedora, landing the
+            /usr/bin/fastfetch binary. fastfetch prints a system-information
+            report (OS, kernel, host, CPU, GPU, memory) beside an ASCII distro
+            logo and exposes a --version flag, so both its presence and its
+            runtime behaviour are verifiable inside a disposable container.
+        tag: [working]
+        scenario:
+            - name: fastfetch-binary-installed
+              step:
+                - then: the fastfetch binary is installed at /usr/bin/fastfetch
+                  file: /usr/bin/fastfetch
+                  exists: true
+            - name: fastfetch-reports-version
+              step:
+                - then: fastfetch --version prints a version banner and exits 0
+                  command: /usr/bin/fastfetch --version 2>&1
+                  exit_status: 0
+                  stdout:
+                    - matches: "[0-9]+\\.[0-9]+"
+            - name: fastfetch-prints-system-info
+              step:
+                - then: running fastfetch in pipe mode prints a system-information report and exits 0
+                  command: /usr/bin/fastfetch --pipe --logo none 2>&1
+                  exit_status: 0
+                - then: the report is human-readable, grouping system facts (OS, kernel, CPU, memory) into labelled lines
     distro:
         arch:
             package:
@@ -16,3 +43,8 @@ candy:
         - id: fastfetch-package
           package: fastfetch
           installed: true
+        - id: fastfetch-version
+          command: /usr/bin/fastfetch --version 2>&1
+          exit_status: 0
+          stdout:
+            - matches: "[0-9]+\\.[0-9]+"

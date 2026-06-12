@@ -1,6 +1,45 @@
 candy:
     version: 2026.159.1803
     name: dev-tools
+    description:
+        feature: Cross-distro developer CLI toolkit (search, edit, monitor, archive, FUSE) with a normalized bat binary path
+        narrative: |
+            dev-tools installs a broad set of command-line developer utilities
+            (ripgrep, neovim, htop, bat, restic, rclone, yamllint, ...) uniformly
+            across Arch, Fedora, Debian, and Ubuntu. A post-install task
+            normalizes Debian/Ubuntu's `batcat` binary to /usr/bin/bat so the
+            same paths and commands resolve on every distro. Every claim below
+            is checkable against the built image: binaries land at fixed paths
+            and run.
+        tag: [working]
+        scenario:
+            - name: core-search-and-edit-tools-present
+              step:
+                - then: the ripgrep fast-search binary is on PATH
+                  file: /usr/bin/rg
+                  exists: true
+                - then: the neovim editor binary is on PATH
+                  file: /usr/bin/nvim
+                  exists: true
+                - then: the htop process monitor binary is on PATH
+                  file: /usr/bin/htop
+                  exists: true
+            - name: bat-pager-normalized-across-distros
+              step:
+                - then: /usr/bin/bat resolves on every distro (native on Fedora/Arch, batcat symlink on Debian/Ubuntu)
+                  file: /usr/bin/bat
+                  exists: true
+                - then: the bat pager runs and reports its version
+                  command: bat --version
+                  exit_status: 0
+                  stdout:
+                    - contains: bat
+            - name: yaml-tooling-usable
+              step:
+                - then: the yamllint linter runs and reports its version
+                  command: yamllint --version
+                  exit_status: 0
+                - then: an engineer can lint a malformed YAML file and have yamllint flag the syntax error
     package:
         - bat
         - bpftrace
@@ -142,3 +181,17 @@ candy:
             - debian
             - ubuntu
             - fedora
+        # neovim ships under the same package name on every distro (top-level
+        # `package:` base), so a bare package check needs no package_map.
+        - id: neovim-package
+          package: neovim
+          installed: true
+        # Functional probe: the bat pager actually runs. On Debian/Ubuntu this
+        # exercises the /usr/bin/bat -> batcat symlink the post-install task
+        # creates (batcat --version prints "batcat <ver>", which contains "bat");
+        # on Fedora/Arch it runs the native bat. exit_status 0 proves it executes.
+        - id: bat-runs
+          command: bat --version
+          exit_status: 0
+          stdout:
+            - contains: bat

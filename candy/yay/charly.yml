@@ -1,6 +1,25 @@
 candy:
     version: 2026.144.1443
     name: yay
+    description:
+        feature: yay — AUR helper for building Arch User Repository packages
+        narrative: |
+            Downloads the latest yay release binary to /usr/local/bin/yay and
+            pulls base-devel + git (on Arch) for building AUR packages.
+            Verifiable: the yay binary lands at /usr/local/bin/yay, is executable,
+            and reports its version.
+        tag: [working]
+        scenario:
+            - name: yay-installed
+              step:
+                - then: the yay binary is installed at /usr/local/bin/yay
+                  file: /usr/local/bin/yay
+                  exists: true
+                - then: yay runs and reports its version
+                  command: /usr/local/bin/yay --version
+                  exit_status: 0
+                  stdout:
+                    - matches: "yay v[0-9]"
     distro:
         arch:
             package:
@@ -14,3 +33,12 @@ candy:
               | grep -o "https://github.com/Jguer/yay/releases/download/[^\"]*_${BUILD_ARCH}.tar.gz")
             curl -fsSL "$URL" | tar -xzf - -C /usr/local/bin --strip-components=1 --wildcards '*/yay'
           user: root
+    eval:
+        - id: yay-binary
+          file: /usr/local/bin/yay
+          exists: true
+        - id: yay-version
+          command: /usr/local/bin/yay --version
+          exit_status: 0
+          stdout:
+            - matches: "yay v[0-9]"

@@ -1,7 +1,57 @@
 candy:
     version: 2026.146.1203
     name: marimo
-    description: "marimo reactive notebook server (also runs as MCP server via --mcp), GPU-accelerated OSM analytics deps (Polars-GPU/cuDF, geopandas, quackosm), Apache Airflow Python deps (the airflow layer ships no pixi env), and the marimo-team/learn curriculum + marimo-team/skills bundle for AI agents."
+    description:
+        feature: marimo reactive notebook + MCP server on port 2718 with GPU OSM analytics, Airflow deps, and the marimo-team skills bundle for AI agents
+        narrative: |
+            Installs marimo (a reactive notebook server that also runs as an MCP
+            server via `--mcp` on the same port 2718) plus its data stack into a
+            pixi env at ${HOME}/.pixi/envs/default: GPU-accelerated OSM analytics
+            deps (Polars-GPU/cuDF, geopandas, quackosm), Apache Airflow Python
+            deps (the airflow layer ships no pixi env of its own), and the
+            marimo-team/learn curriculum. The marimo-team/skills bundle is
+            unpacked read-only at /opt/marimo-skills (MARIMO_SKILLS_DIR) for AI
+            agents driving marimo over MCP, and a baked marimo.toml turns
+            auto_instantiate on so cells run the moment the notebook URL opens.
+            Every claim below is observable: the pixi-env binaries, the skills
+            directory, the config line, and — at deploy scope — the live notebook
+            UI plus the MCP endpoint on /mcp/server.
+        tag: [working]
+        scenario:
+            # The first four scenarios are DETERMINISTIC (each step embeds a
+            # check verb, so it runs at build scope via `charly box feature run`
+            # AND deploy scope via `charly eval feature run`). The last is
+            # PROSE-ONLY (no verb → agent-graded against the live deployment;
+            # the deploy-scope port/http/mcp probes in the eval: block below are
+            # the deterministic counterpart of that runtime behaviour).
+            - name: marimo-server-binary-installed
+              step:
+                - then: the marimo notebook+MCP server binary is installed in the pixi env
+                  file: ${HOME}/.pixi/envs/default/bin/marimo
+                  exists: true
+            - name: airflow-python-deps-present
+              step:
+                - then: the Apache Airflow CLI is installed in the same pixi env (the airflow layer ships none of its own)
+                  file: ${HOME}/.pixi/envs/default/bin/airflow
+                  exists: true
+            - name: agent-skills-bundle-shipped
+              step:
+                - then: the marimo-team/skills bundle is unpacked read-only under MARIMO_SKILLS_DIR
+                  file: /opt/marimo-skills/skills
+                  exists: true
+                  filetype: directory
+            - name: reactive-auto-instantiate-enabled
+              step:
+                - then: the baked marimo.toml enables auto_instantiate so cells run on page open
+                  file: ${HOME}/.config/marimo/marimo.toml
+                  exists: true
+                  contains:
+                    - "auto_instantiate = true"
+            - name: notebook-and-mcp-server-live
+              step:
+                - given: a marimo deployment is running with `marimo edit --mcp --mcp-allow-remote` on port 2718
+                - when: a client opens the published notebook port and an MCP client pings /mcp/server
+                - then: the marimo editor UI is served and the MCP endpoint answers protocol requests on the same port
     require:
         - cuda
         - supervisord

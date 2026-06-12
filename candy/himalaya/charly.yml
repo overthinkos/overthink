@@ -1,9 +1,62 @@
 candy:
     version: 2026.144.1443
     name: himalaya
-    description: Himalaya email CLI (IMAP/SMTP)
+    description:
+        feature: Himalaya IMAP/SMTP email CLI compiled into the image
+        narrative: |
+            Builds and installs the himalaya email CLI from crates.io via
+            `cargo install himalaya --locked`, run as the image user so the
+            binary lands in the user's cargo bin (~/.cargo/bin, which the
+            required `rust` candy puts on PATH). himalaya is a single
+            self-contained Rust binary that speaks IMAP and SMTP to manage
+            accounts, folders, envelopes and messages from the command line.
+            The install is fully verifiable at build scope: the binary file is
+            present, runs `--version` cleanly, and its `--help` advertises the
+            email-management subcommands.
+        tag: [working]
+        scenario:
+            # Deterministic: the binary lands and runs. An embedded check verb
+            # (file / command) on each step binds to a deterministic check, run
+            # at build scope inside the built image.
+            - name: himalaya-binary-installed
+              step:
+                - then: the himalaya binary is installed into the user's cargo bin directory
+                  file: ${HOME}/.cargo/bin/himalaya
+                  exists: true
+                - then: the installed himalaya binary runs --version and exits cleanly
+                  command: ${HOME}/.cargo/bin/himalaya --version
+                  exit_status: 0
+            # Deterministic: proves it is really the email CLI, not just any
+            # binary at that path, by asserting the IMAP/SMTP management
+            # subcommands appear in its --help output (clap writes --help to
+            # stdout and exits 0).
+            - name: himalaya-exposes-email-subcommands
+              step:
+                - then: himalaya --help advertises the IMAP/SMTP email-management subcommands
+                  command: ${HOME}/.cargo/bin/himalaya --help
+                  exit_status: 0
+                  stdout:
+                    - matches: "account|folder|envelope|message"
+            # Prose-only (agent-graded): genuinely free-form behaviour that needs
+            # live IMAP/SMTP credentials a build/eval bed does not carry, so it is
+            # left to the agent grader rather than a deterministic check.
+            - name: himalaya-manages-remote-mailbox
+              step:
+                - then: given valid IMAP/SMTP account credentials, himalaya lists folders and fetches message envelopes from the configured remote mailbox
     require:
         - rust
     task:
         - cmd: cargo install himalaya --locked
           user: "${USER}"
+    eval:
+        - id: himalaya-binary
+          file: ${HOME}/.cargo/bin/himalaya
+          exists: true
+        - id: himalaya-version
+          command: ${HOME}/.cargo/bin/himalaya --version
+          exit_status: 0
+        - id: himalaya-email-subcommands
+          command: ${HOME}/.cargo/bin/himalaya --help
+          exit_status: 0
+          stdout:
+            - matches: "account|folder|envelope|message"

@@ -1,12 +1,39 @@
 candy:
     version: 2026.149.1210
     name: cachyos-extras
-    description: |
-        The remaining host workstation tools not already covered by the charly dev
-        stack — the CLI/diagnostic/app gap from the CachyOS netinstall + the
-        operator's manual installs, reverse-resolved to top-level packages.
-        Excludes host-hardware/boot/firmware/network entries by design. accounts
-        service is here because SDDM/Plasma user management needs it.
+    description:
+        feature: Installs the CachyOS host-parity workstation toolset — pacman/AUR helpers, diagnostic monitors, editors, tunnels, and desktop-integration packages.
+        narrative: |
+            The remaining host workstation tools not already covered by the charly dev
+            stack — the CLI/diagnostic/app gap from the CachyOS netinstall + the
+            operator's manual installs, reverse-resolved to top-level packages.
+            Excludes host-hardware/boot/firmware/network entries by design. accounts
+            service is here because SDDM/Plasma user management needs it. Every entry
+            lands as a real pacman repo or AUR package, so each tool's binary and
+            package identity is independently verifiable on the built image.
+        tag: [working]
+        scenario:
+            - name: diagnostic-monitors-installed
+              step:
+                - then: the btop resource monitor binary is present
+                  file: /usr/bin/btop
+                  exists: true
+                - then: the duf disk-usage viewer binary is present
+                  file: /usr/bin/duf
+                  exists: true
+            - name: aur-helper-and-tunnel-installed
+              step:
+                - then: the paru AUR helper binary is present
+                  file: /usr/bin/paru
+                  exists: true
+                - then: the cloudflared-bin AUR tunnel client resolves on PATH
+                  command: command -v cloudflared
+                  exit_status: 0
+            - name: syncthing-daemon-installed
+              step:
+                - then: the syncthing file-synchronisation daemon binary is present
+                  file: /usr/bin/syncthing
+                  exists: true
     require:
         - yay
     distro:

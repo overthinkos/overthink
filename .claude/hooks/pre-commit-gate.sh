@@ -12,7 +12,8 @@
 #     `documentation reviewed`), or
 #   - carries the `documentation reviewed` tier with a staged diff that is NOT
 #     all-documentation (the tier is only honest for `*.md`/CHANGELOG/README/
-#     LICENSE/VISION/`*.txt` files, or comment-only code edits), or
+#     LICENSE/VISION/`*.txt` files, comment-only code edits, or a submodule
+#     pointer bump whose own old..new diff is itself all-documentation), or
 #   - uses an inline -m message with NO `Assisted-by: Claude (<tier>)` trailer
 #     (every commit Claude is involved in — in ANY way — must attribute; a
 #     pure-human hand-commit does not pass through this PreToolUse gate).
@@ -45,11 +46,13 @@ def block(msg):
 # --- strict gate for the `documentation reviewed` tier ---------------------
 # That tier is only honest when the staged diff is all-documentation: every
 # staged file is a doc path OR a code file whose staged hunks are full-line
-# comments / blanks only. Conservative-safe: it may reject a trailing/block-
-# comment-only edit (harmless — use a runtime tier there), but it never lets a
-# behavioral change pass as docs. The gate is a discipline backstop, not a
-# security boundary (a compound `git add ... && git commit` inspects the
-# CURRENT index, like the rest of this gate's command-span scoping).
+# comments / blanks only OR a submodule pointer bump whose own old..new diff is
+# itself all-documentation (recursed one level — a bump that integrates submodule
+# code is rejected). Conservative-safe: it may reject a trailing/block-comment-
+# only edit (harmless — use a runtime tier there), but it never lets a behavioral
+# change pass as docs. The gate is a discipline backstop, not a security boundary
+# (a compound `git add ... && git commit` inspects the CURRENT index, like the
+# rest of this gate's command-span scoping).
 DOC_PATH = re.compile(r'(?:^|/)(?:CHANGELOG|README|LICENSE|VISION)[^/]*$|\.(?:md|txt)$',
                       re.IGNORECASE)
 LINE_COMMENT = {
@@ -59,21 +62,24 @@ LINE_COMMENT = {
     '.yml': '#', '.yaml': '#', '.toml': '#', '.cfg': '#', '.ini': '#', '.mk': '#',
 }
 
-def _git(args):
+def _git(args, cwd=None):
+    base = ["git"] + (["-C", cwd] if cwd else [])
     try:
-        out = subprocess.run(["git"] + args, capture_output=True, text=True, timeout=10)
+        out = subprocess.run(base + args, capture_output=True, text=True, timeout=10)
     except Exception:
         return None
     if out.returncode != 0:
         return None
     return out.stdout
 
-def changed_lines_all_comments(path):
+def changed_lines_all_comments(path, repo=None, rangespec=None):
     ext = os.path.splitext(path)[1].lower()
     marker = LINE_COMMENT.get(ext)
     if marker is None:
         return False  # unknown / binary type — cannot certify comment-only
-    diff = _git(["diff", "--cached", "-U0", "--", path])
+    diffargs = (["diff", "-U0", rangespec, "--", path] if rangespec
+                else ["diff", "--cached", "-U0", "--", path])
+    diff = _git(diffargs, cwd=repo)
     if diff is None:
         return False
     if "Binary files" in diff:
@@ -89,25 +95,71 @@ def changed_lines_all_comments(path):
                 return False
     return True
 
-def assert_docs_only_diff():
-    names = _git(["diff", "--cached", "--name-only"])
+def _is_doc(path, repo=None, rangespec=None):
+    if DOC_PATH.search(path):
+        return True
+    return changed_lines_all_comments(path, repo=repo, rangespec=rangespec)
+
+ZERO = re.compile(r'^0+$')
+
+def submodule_bad_files(sub, old, new, repo=None):
+    # A staged submodule pointer bump is documentation IFF the submodule's own
+    # old..new diff is itself all-documentation. Returns the non-doc file list
+    # (empty == all docs), or None when the bump cannot be certified — objects
+    # absent locally, or a submodule add/remove (all-zero old/new sha).
+    if ZERO.match(old) or ZERO.match(new):
+        return None
+    subrepo = os.path.join(repo, sub) if repo else sub
+    rangespec = old + ".." + new
+    names = _git(["diff", "--name-only", rangespec], cwd=subrepo)
     if names is None:
-        block('the "documentation reviewed" tier requires inspecting the staged diff, but '
-              '`git diff --cached` failed. Stage the documentation changes and retry, or use '
-              'a runtime tier.')
-    files = [f for f in names.splitlines() if f.strip()]
+        return None
     bad = []
-    for f in files:
-        if DOC_PATH.search(f):
-            continue
-        if changed_lines_all_comments(f):
+    for f in (x for x in names.splitlines() if x.strip()):
+        if _is_doc(f, repo=subrepo, rangespec=rangespec):
             continue
         bad.append(f)
+    return bad
+
+def assert_docs_only_diff(repo=None):
+    # The `documentation reviewed` tier is honest only when EVERY staged entry is
+    # documentation: a doc path, a comment-only code edit, OR a submodule pointer
+    # bump whose own old..new diff is itself all-documentation (recursed one
+    # level). `--raw` exposes the gitlink mode (160000) + the old/new SHAs needed
+    # to inspect the bumped submodule commit.
+    raw = _git(["diff", "--cached", "--raw"], cwd=repo)
+    if raw is None:
+        block('the "documentation reviewed" tier requires inspecting the staged diff, but '
+              '`git diff --cached --raw` failed. Stage the documentation changes and retry, or use '
+              'a runtime tier.')
+    bad = []
+    for line in raw.splitlines():
+        if not line.startswith(':'):
+            continue
+        meta, _tab, rest = line.partition('\t')
+        fields = meta[1:].split()
+        path = rest.strip()
+        if len(fields) < 4:
+            bad.append(path or meta)
+            continue
+        modeA, modeB, shaA, shaB = fields[0], fields[1], fields[2], fields[3]
+        if modeA == '160000' or modeB == '160000':
+            sub_bad = submodule_bad_files(path, shaA, shaB, repo=repo)
+            if sub_bad is None:
+                block('the "documentation reviewed" tier cannot certify the submodule pointer bump '
+                      '"%s" as documentation: its objects are not present locally, or it adds/removes '
+                      'a submodule. Fetch the submodule and retry, or use a runtime tier.' % path)
+            bad.extend('%s -> %s' % (path, b) for b in sub_bad)
+            continue
+        if _is_doc(path, repo=repo):
+            continue
+        bad.append(path)
     if bad:
         block('the "documentation reviewed" tier is only legal for an all-documentation diff '
-              '(*.md / CHANGELOG / README / LICENSE / VISION / *.txt, or comment-only code '
-              'edits). Non-documentation changes staged: %s. The change touches code/config — '
-              'use a runtime tier, or split the docs into their own commit.' % ', '.join(bad))
+              '(*.md / CHANGELOG / README / LICENSE / VISION / *.txt, comment-only code edits, or a '
+              'submodule pointer bump to an all-documentation submodule commit). Non-documentation '
+              'changes staged: %s. The change touches code/config — use a runtime tier, or split the '
+              'docs into their own commit.' % ', '.join(bad))
 
 # git in command position (start / after ;&| / after a shell keyword),
 # optional global opts, then `commit`, then capture the invocation's arg span
@@ -118,6 +170,7 @@ INVOKE = re.compile(
 
 found = False
 has_inline_msg = False
+commit_cwd = None
 for m in INVOKE.finditer(cmd):
     found = True
     args = m.group(1) or ''
@@ -130,6 +183,13 @@ for m in INVOKE.finditer(cmd):
     glob_opts = cmd[m.start(0):m.start(1)]
     if re.search(r'core\.hookspath', glob_opts, re.IGNORECASE):
         block("`git -c core.hooksPath=...` bypasses the project's git hooks — the config spelling of --no-verify; forbidden (CLAUDE.md: never bypass hooks).")
+    # A `-C <dir>` in the commit invocation's global options retargets the repo
+    # whose index this commit writes; scope the docs-tier diff inspection there
+    # (default: the hook's CWD) so a `git -C <sub> commit` is judged against the
+    # submodule's index, not the superproject's.
+    mC = re.search(r'(?:^|\s)-C\s+(\S+)', glob_opts)
+    if mC:
+        commit_cwd = mC.group(1)
     # inline-message detection is scoped to THIS commit invocation's arg span,
     # so a foreign -m elsewhere on the line (grep -m 1 ...; git commit -F f)
     # never triggers the absent-trailer check.
@@ -157,7 +217,7 @@ if found:
         if tier not in LEGAL:
             block('illegal AI-attribution tier "%s". Legal on a commit: %s. ("theoretical suggestion" is forbidden for shipped code.)' % (tier, sorted(LEGAL)))
         if tier == "documentation reviewed":
-            assert_docs_only_diff()
+            assert_docs_only_diff(commit_cwd)
     if has_inline_msg and not tiers and '$(' not in cmd and '<<' not in cmd:
         block("commit message has no `Assisted-by: Claude (<tier>)` trailer (every commit Claude is involved in must attribute; add it inline with the tier your R10 proof supports — docs-only commits use `documentation reviewed`).")
 

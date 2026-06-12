@@ -3,54 +3,17 @@
 # <system-reminder> appended to Claude's final response context. SOFT — never
 # emits blocking JSON; a trivial-reply turn still completes normally.
 #
-# DOCTRINE: a LEAN POINTER, not a copy. The authoritative checklist is
-# CLAUDE.md "Acceptance checklist" + "Post-Execution Policies". This hook
-# only anchors the few self-checks most worth re-asking every turn and points
-# at the source. Deterministic enforcement (force-push, bad tier, --no-verify)
-# is in the PreToolUse gates, not here. See /charly-internals:agents "Hooks doctrine".
+# DOCTRINE: an ULTRA-LEAN POINTER — the authoritative checklist is CLAUDE.md
+# "Acceptance checklist" + "Post-Execution Policies"; this hook points at it
+# and keeps ONE behavioral anchor, restating nothing (duplication drifts).
+# Deterministic enforcement (force-push, bad tier, --no-verify) is in the
+# PreToolUse gates. See /charly-internals:agents "Hooks doctrine".
 
 cat <<'EOF'
-END-OF-TURN CHECK (soft — does not block). Confirm against CLAUDE.md
-"Acceptance checklist" + "Post-Execution Policies":
-
-  [ ] R0: every non-trivial action this turn was preceded by the matching
-      Skill load (all relevant skills, up front). If you caught yourself
-      acting skill-less, you re-validated against the skill before stopping.
-
-  [ ] RDD (proactive twin of R1): every HIGH-RISK assumption this turn rested
-      on was proven on a `disposable: true` bed BEFORE the dependent edits —
-      not accepted from a (possibly stale) skill / CLAUDE.md or the code.
-      Above all: does this layer composition, at its latest versions,
-      build/deploy/run together? (Low-risk orientation = an R0 lookup.)
-
-  [ ] R10 (gate by change class): code/config touched => a real
-      `charly eval run <bed>` / `charly eval live` ran against a FRESH rebuild
-      of a `disposable: true` target AND its output is PASTED (dry-run /
-      unit-test / validate / bare rebuild is NOT it); script edits => the
-      changed script EXECUTED live; docs/comments-only =>
-      the non-runtime standards ran, NO bed. No scope-shrinking flags without
-      explicit per-turn authorization (CLAUDE.md R10 flag-override clause).
-
-  [ ] Attribution tier == what the pasted proof supports (no inflation). A
-      KNOWN rule violation => NO commit at any tier (fix in-tree or escalate;
-      never "downgrade and ship"). You did NOT mark an R10 task complete, edit
-      it to "partial", or delete it, when the runner did not run (the
-      2026-04-26 pattern — see CHANGELOG.md).
-
-  [ ] Cutover is ONE phase + NO parked work (R2): every task complete, no
-      transitional/half-migrated state, no "Phase 2 TODO". Every issue surfaced
-      this turn is FIXED in-tree (blocking) or opened as its OWN immediate-next
-      cutover (non-blocking) — NEVER "follow-up / someday / your call later /
-      deferred". `git grep` of any removed identifier returns only CHANGELOG.md
-      / migration help-text (R5).
-
-  [ ] Landing (only after R10 PASS): R10 PASS is the sole landing trigger and
-      auto-lands per /charly-internals:git-workflow — ONE atomic commit per repo
-      with the Assisted-by trailer, feat/ fast-forward-merged to main, a fresh
-      v<CalVer> tag on each charly.yml repo, pushed. NEVER force-push
-      (no --force / --force-with-lease, any branch, any repo).
-
-If any box is unchecked and the cutover isn't done: KEEP WORKING (on
-`disposable: true` targets, `charly update`/`charly eval run` need no extra
-permission). If genuinely stuck, stop with ONE specific actionable question.
+END-OF-TURN CHECK (soft — does not block): before claiming done, walk
+CLAUDE.md "Acceptance checklist" (all three groups) + "Post-Execution
+Policies" box by box against THIS turn's work.
+If any box is unchecked and the cutover isn't done: KEEP WORKING
+(`disposable: true` targets need no extra permission). If genuinely stuck,
+stop with ONE specific actionable question.
 EOF

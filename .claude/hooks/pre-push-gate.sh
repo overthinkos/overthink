@@ -35,7 +35,9 @@ INVOKE = re.compile(
 
 for m in INVOKE.finditer(cmd):
     args = m.group(1) or ''
-    if re.search(r'(?:^|\s)(?:--force|--force-with-lease|-f)(?:\s|=|$)', args):
+    # -f matches bundled too (-fu, -uf, ...); the bundle charset is git-push's
+    # value-less short options, mirroring the commit gate's -n bundle handling.
+    if re.search(r'(?:^|\s)(?:--force|--force-with-lease|-[uqvnd46]*f[uqvnd46]*)(?:\s|=|$)', args):
         block("force-push is forbidden on every branch in every repo (CLAUDE.md: main only fast-forwards, tags are add-only). Remove --force / --force-with-lease / -f.")
     if re.search(r'(?:^|\s)--no-verify(?:\s|$)', args):
         block("`git push --no-verify` bypasses hooks — forbidden.")

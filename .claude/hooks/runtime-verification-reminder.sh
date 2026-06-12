@@ -17,9 +17,11 @@ OPENCHARLY OPERATING REMINDER (pointer — the rules live in CLAUDE.md):
 
 R0 SKILLS FIRST. Before you read source / grep / run a command / edit a file
 / launch an Agent, invoke the matching skill(s) via the Skill tool — ALL of
-them in one message when several apply. Precedence: skills > CLAUDE.md >
-memory > exploration. Your training is stale; the skill is current. Consult
-the Skill Dispatcher table in CLAUDE.md (R0) for the trigger -> skill map.
+them in one message when several apply. Consult order: skills > CLAUDE.md >
+memory > exploration — that orders where you LOOK FIRST, not what is TRUE:
+for a HIGH-RISK claim a live disposable bed outranks every doc (RDD below).
+Your training is stale; the skill is current. Consult the Skill Dispatcher
+table in CLAUDE.md (R0) for the trigger -> skill map.
 
 R10 = THE GATE FOR YOUR CHANGE CLASS ACTUALLY RAN (CLAUDE.md R10 "gate by
 change class"). Code/config changes: a real `charly eval run <bed>` /

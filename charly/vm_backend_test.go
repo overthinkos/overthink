@@ -5,6 +5,18 @@ import (
 	"testing"
 )
 
+// stubNoLibvirtSpawn replaces startLibvirtUserSession with a no-op for the
+// duration of the test. resolveVmBackend spawns the session daemon before
+// probing its socket (so on-demand-autospawn hosts are detected correctly);
+// an un-stubbed real spawn would create a socket inside the test's temp
+// XDG_RUNTIME_DIR and defeat the "no socket present" fixture below.
+func stubNoLibvirtSpawn(t *testing.T) {
+	t.Helper()
+	orig := startLibvirtUserSession
+	startLibvirtUserSession = func() {}
+	t.Cleanup(func() { startLibvirtUserSession = orig })
+}
+
 // TestResolveVmBackend_ExplicitLibvirtMissingSocket asserts that when
 // the operator explicitly requests `backend: libvirt` and no libvirt
 // session daemon socket is available, resolveVmBackend returns a
@@ -16,6 +28,7 @@ func TestResolveVmBackend_ExplicitLibvirtMissingSocket(t *testing.T) {
 	// Point XDG_RUNTIME_DIR at a temp dir that has no libvirt sockets.
 	// libvirtSessionSocketWithProbes() reads this env var (vm_libvirt.go).
 	t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
+	stubNoLibvirtSpawn(t)
 
 	_, err := resolveVmBackend("libvirt")
 	if err == nil {
@@ -40,6 +53,7 @@ func TestResolveVmBackend_ExplicitLibvirtMissingSocket(t *testing.T) {
 // libvirt gate above is opt-in via deploy.yml.
 func TestResolveVmBackend_AutoFallsThroughToQemu(t *testing.T) {
 	t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
+	stubNoLibvirtSpawn(t)
 	backend, err := resolveVmBackend("auto")
 	if err != nil {
 		// On hosts without qemu installed, this returns an error too.

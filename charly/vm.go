@@ -62,6 +62,21 @@ func vmDir() (string, error) {
 // Priority: libvirt → qemu
 func resolveVmBackend(configured string) (string, error) {
 	if configured == "libvirt" || configured == "auto" {
+		// Spawn the libvirt session daemon BEFORE probing for its socket.
+		// On hosts that ship no persistent virtqemud.socket (Arch/CachyOS),
+		// the socket exists only AFTER a client triggers libvirt's on-demand
+		// autospawn — so a COLD os.Stat() false-negatives a fully working
+		// libvirt and silently falls back to qemu (or errors on
+		// `backend: libvirt`). resolveVmBackend is called from many verbs
+		// (create/build/start/stop/destroy/console) and only some had a
+		// preceding spawn, so the detection was nondeterministic per-verb;
+		// spawning HERE makes every caller detect uniformly. The call is
+		// idempotent + best-effort (a no-op when libvirt is absent — virsh
+		// LookPath simply fails). NOTE: a `systemctl is-active <service>`
+		// check is the WRONG probe — socket-activated / autospawn daemons
+		// report the SERVICE inactive while libvirt is fully usable; the
+		// socket (or a real connection) is the only valid signal.
+		startLibvirtUserSession()
 		picked, probed := libvirtSessionSocketWithProbes()
 		// `picked` is the last-resort dial target; we still need to
 		// confirm it exists. The earlier probes (in `probed`) ARE
@@ -148,7 +163,12 @@ func vmConfiguredBackend(vmName, rtBackend string) string {
 //     which surfaces the real error.
 //
 // Reason for best-effort: don't block legitimate non-libvirt users.
-func startLibvirtUserSession() {
+//
+// Package-level var (not a plain func) so hermetic tests can stub it to a
+// no-op — resolveVmBackend now calls it before probing the socket, and an
+// un-stubbed real spawn would create a socket inside a test's temp
+// XDG_RUNTIME_DIR and defeat "no socket" fixtures (see stubNoLibvirtSpawn).
+var startLibvirtUserSession = func() {
 	// Try systemd user-units first.
 	for _, unit := range []string{"virtqemud.service", "libvirtd.service"} {
 		// Idempotent: systemctl start on an already-active unit is a no-op.

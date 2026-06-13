@@ -22,6 +22,82 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-13 — feat(schema)!: collapse the five test/eval formats into ONE flat `plan:` vocabulary (plan-unify)
+
+The capstone of the op-unify lineage. OpenCharly carried **five parallel
+operation/test formats** layered on the `Op`/`Scenario` structs — the imperative
+install list `task:`; the baked acceptance `description.scenario:` with the
+Gherkin step keywords `given`/`when`/`then`/`and`/`but`, the `Op.Do` axis
+(`act`/`assert`/`instruct`), and the `setup:`/`step:`/`teardown:`/`on_fail:`
+phase lists; `kind: recipe` (the scenario assembler with `from:` +
+`select:`/`exclude:`/`prefix:`); `kind: score` (the AI-iteration benchmark
+config); and `example:` (Gherkin scenario-outline row expansion). This cutover
+**collapses all five into one vocabulary — `plan:`, a flat ordered list of
+intent-typed steps** — and deletes every parallel code path. A candy is now
+**declarative metadata (distro/package surface, `service:`, `port:`, `env:`,
+`volume:`, `secrets:`, status) + ONE `plan:`**, nothing more.
+
+A `plan:` step is exactly ONE intent keyword carrying prose plus an inline `Op`
+(verb + matchers + `context:` + `id:`): **`run:`** (deterministic state-change —
+the install timeline, replacing `task:` and the build/deploy `do: act` steps;
+lowered to the Containerfile / DeployExecutor, ledgered, and reversed by
+`charly deploy del` exactly as `task:` was), **`check:`** (deterministic
+idempotent probe, replacing `do: assert`; `charly check`/`charly check live` run
+ONLY `check:` + `agent-check:` steps), **`agent-run:`** (an agent that may
+mutate), **`agent-check:`** (read-only agent assessment, replacing the prose-only
+`do: instruct` / `agent:` verb), and **`include: <kind>:<name>`** (splice another
+entity's plan, replacing the recipe `from:` block). DELETED: `task:`,
+`scenario:`, the `do:` axis, `given`/`when`/`then`/`and`/`but`, the
+`setup:`/`step:`/`teardown:`/`on_fail:` phase lists, `kind: recipe`, `kind: score`,
+`example:`, the `agent:` verb, and the `CtxAgent` context value (the `agent`
+context folded into the `agent-*` keyword prefix). `context:` (`build`/`deploy`/
+`runtime`) is kept; ordering uses step `id:` + `depends_on:[id]`; pod-targeting
+and `count:`/`index_var:` are per-step (the latter replacing `example:` outlines).
+
+The AI-iteration benchmark (was `kind: score` + `kind: recipe`) is now an
+**`iterate:` block** on a `kind: check` bed (or a `deploy:`): `{agent, sandbox,
+plateau_iteration, progressive, prompt, note, env, mcp_endpoint,
+validate_ai_artifacts}`. The bed's own `plan:` IS the scored content;
+`charly check run <entity>` drives the AI loop when the entity carries an
+`iterate:` block, else runs the deterministic `kind: check` bed sequence. The
+**scoring unit became the `check:`/`agent-check:` step** (was the scenario):
+numerator = solved such steps, denominator = total such steps. Prompt renderers
+`${SCENARIOS}`/`${RECIPES}` → `${PLAN}` (the flat step list) and `${CHECKS}`
+(the still-unsolved `check:`/`agent-check:` subset). Deleted: `HarnessScore`,
+`HarnessRecipe`, `ResolveScore*`, `check_recipe.go` + `check_recipe_from.go`, the
+`charly check recipe`/`list-recipe`/`list-score` commands; `ResolveScoreTarget` →
+`ResolveIterateSandbox`.
+
+`description:` **collapsed to a plain string** — the `Description{Feature,
+Narrative, Tag}` struct became a scalar `description:` (the candy's purpose; first
+line = the `charly box list` / `charly check list` summary). `feature:`/
+`narrative:` nesting and per-feature `tag:` are deleted (tags are per-step now).
+The download-verb extract filter modifier **`include:` was renamed to
+`extract_include:`** (because `include:` is now the plan-composition step). The
+ADE gate became "a non-empty `description:` string + a `plan:` with ≥1 `check:`
+step" (`charly box validate` hard-errors otherwise). `charly candy add-scenario`
+was removed (author plan steps by hand-edit or `charly candy set`);
+`charly feature list/pending/validate` re-key to plan steps (`pending` lists the
+`agent-run:`/`agent-check:` steps); `charly box/check feature run` run the baked
+`plan:`, agent-grading the `agent-check:`/`agent-run:` steps.
+
+OCI-label payload change: **`ai.opencharly.description`** (`LabelDescriptionSet`)
+now carries `LabeledDescription{Origin, Description string, Plan []Step}` — the
+JSON key `scenario` → `plan`, and `Description` is the string (was the struct).
+The bake rule is unchanged in spirit (every `check:`/`agent-check:` step plus any
+runtime-context `run:` step; pure build/deploy `run:` steps flow to the
+Containerfile, not the label), re-keyed to `context:`; the legacy-accepting
+`UnmarshalJSON` shim was deleted (hard cutover). Because every image carries this
+label, the JSON-shape change required rebuilding EVERY image.
+`ai.opencharly.check_level` is unchanged. Migration: the single idempotent
+`charly migrate` gained a `plan-unify` step (schema CalVer `2026.164.0005`) that
+prepends each entity's `task:` entries as `run:` steps, flattens `scenario:`
+groups into the flat `plan:` (hoisting `setup:`→`run:` front, `teardown:`→`run:`
+end, classifying each `step:` by keyword), collapses `description:` to the scalar,
+and rewrites each `kind: score` into the target deploy's `iterate:` block with the
+score's `recipe:` refs becoming `include:` steps. Docs swept across `CLAUDE.md`,
+`README.md`, `VISION.md`, and the `plugins/**` skills + agents in the same cutover.
+
 ### 2026-06-13 — refactor(check): dedup exact-content folded-eval twin scenarios
 
 The op-unify cutover folded each candy's old `eval:` check list into `scenario:`

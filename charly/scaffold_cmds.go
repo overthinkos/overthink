@@ -255,7 +255,6 @@ type CandyCmd struct {
 	AddDeb      CandyAddPkgCmd      `cmd:"add-deb" help:"Append packages to a candy's shared distro.'debian,ubuntu'.package list"`
 	AddPac      CandyAddPkgCmd      `cmd:"add-pac" help:"Append packages to a candy's distro.arch.package list"`
 	AddAur      CandyAddPkgCmd      `cmd:"add-aur" help:"Append packages to a candy's distro.arch.aur.package list"`
-	AddScenario CandyAddScenarioCmd `cmd:"add-scenario" help:"Append a Gherkin acceptance scenario to a candy's description (idempotent; Agent Driven Checkuation)"`
 }
 
 type CandySetCmd struct {

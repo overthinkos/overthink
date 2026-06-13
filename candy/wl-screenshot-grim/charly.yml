@@ -1,24 +1,20 @@
 candy:
     version: 2026.144.1443
     name: wl-screenshot-grim
-    description:
-        feature: Wayland screenshot capture via grim on wlroots compositors
-        narrative: |
-            Installs grim, the de-facto screenshot tool for wlroots Wayland
-            sessions. Verifiable: the grim binary lands at /usr/bin/grim and the
-            grim package is registered — both fail on an image that installed
-            nothing.
-        tag: [working]
+    description: |
+        Wayland screenshot capture via grim on wlroots compositors
+        Installs grim, the de-facto screenshot tool for wlroots Wayland
+        sessions. Verifiable: the grim binary lands at /usr/bin/grim and the
+        grim package is registered — both fail on an image that installed
+        nothing.
     distro:
         fedora:
             package:
                 - grim
-    scenario:
-        - name: grim-installed
-          step:
-            - then: the grim screenshot binary is installed at /usr/bin/grim
-              file: /usr/bin/grim
-              exists: true
-            - then: the grim package is registered with the package manager
-              package: grim
-              installed: true
+    plan:
+        - check: the grim screenshot binary is installed at /usr/bin/grim
+          file: /usr/bin/grim
+          exists: true
+        - check: the grim package is registered with the package manager
+          package: grim
+          installed: true

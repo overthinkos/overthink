@@ -2,8 +2,9 @@ package main
 
 // check_runner_cmd.go — `charly check` command tree (host-side dispatcher).
 //
-// Post the 2026-04 kind split, the runner is keyed on `kind: score`.
-// `recipe:` entries are pure spec; the user invokes a score, not a recipe.
+// Post the plan-unify cutover, the runner dispatches on an entity's
+// `iterate:` block (the AI loop, scoring the entity's own plan: steps) or a
+// plain kind:check bed (the deterministic R10 sequence).
 
 import (
 	"bufio"
@@ -26,7 +27,7 @@ import (
 // check_runlocal_cmd.go / check_synccreds_cmd.go siblings).
 
 // ---------------------------------------------------------------------------
-// list-ai / list-recipe / list-score — functional inspection
+// list-ai — functional inspection
 // ---------------------------------------------------------------------------
 
 // CheckListAgentCmd implements `charly check list-ai`.
@@ -46,48 +47,6 @@ func (c *CheckListAgentCmd) Run() error {
 		return nil
 	}
 	PrintAgents(os.Stdout, uf.Agent)
-	return nil
-}
-
-// CheckListRecipeCmd implements `charly check list-recipe` — lists pure
-// spec recipes (description + scenarios).
-type CheckListRecipeCmd struct{}
-
-func (c *CheckListRecipeCmd) Run() error {
-	dir, err := os.Getwd()
-	if err != nil {
-		return err
-	}
-	uf, _, err := LoadUnified(dir)
-	if err != nil {
-		return err
-	}
-	if uf == nil {
-		fmt.Fprintln(os.Stdout, "No charly.yml found in current directory.")
-		return nil
-	}
-	PrintRecipe(os.Stdout, uf.Recipe)
-	return nil
-}
-
-// CheckListScoreCmd implements `charly check list-score` — lists runner
-// configs (target, AI, plateau, recipes).
-type CheckListScoreCmd struct{}
-
-func (c *CheckListScoreCmd) Run() error {
-	dir, err := os.Getwd()
-	if err != nil {
-		return err
-	}
-	uf, _, err := LoadUnified(dir)
-	if err != nil {
-		return err
-	}
-	if uf == nil {
-		fmt.Fprintln(os.Stdout, "No charly.yml found in current directory.")
-		return nil
-	}
-	PrintScores(os.Stdout, uf.Score)
 	return nil
 }
 
@@ -115,10 +74,10 @@ type CheckRunCmd struct {
 	Host bool   `name:"on-host" xor:"target" help:"Override score target to run on the host directly"`
 
 	PlateauIteration int    `name:"plateau-iteration" help:"Override score.plateau_iteration"`
-	MaxScenario      int    `name:"max-scenario" help:"Cap the pending input set"`
-	Tag              string `name:"tag" help:"Override score.tag (Gherkin tag expression)"`
+	MaxStep      int    `name:"max-step" help:"Cap the pending input set"`
+	Tag              string `name:"tag" help:"Override score.tag (tag expression)"`
 	DryRun           bool   `name:"dry-run" help:"Render scope+prompt without rebuild"`
-	SkipRebuild      bool   `name:"skip-rebuild" help:"Source-only scenarios"`
+	SkipRebuild      bool   `name:"skip-rebuild" help:"Source-only steps"`
 	KeepRepo         bool   `name:"keep-repo" help:"Don't delete the per-run repo clone after the run (~100MB; debugging only)"`
 	Format           string `name:"format" enum:"text,yaml" default:"text" help:"Output format"`
 }
@@ -148,59 +107,42 @@ func (c *CheckRunCmd) Run() error {
 		}()
 	}
 
-	// kind:check bed dispatch — beds and scores share the `charly check run`
-	// verb. --all-beds runs every bed; a bare name that resolves to a bed
-	// runs that one; otherwise fall through to the kind:score AI loop.
+	// Dispatch: an entity carrying an `iterate:` block → the AI loop; a plain
+	// kind:check bed → the deterministic R10 sequence. --all-beds runs every
+	// bed. The two share the `charly check run` verb.
 	beds := uf.CheckBeds()
 	if c.AllBeds {
 		return runAllCheckBeds(uf, beds, bedRunOpts{Keep: c.Keep, NoRebuild: c.NoRebuild})
 	}
 	if c.Name == "" {
-		return fmt.Errorf("charly check run: provide a kind:check bed or kind:score name, or pass --all-beds")
+		return fmt.Errorf("charly check run: provide an iterate: entity or kind:check bed name, or pass --all-beds")
 	}
-	if node, isBed := beds[c.Name]; isBed {
+	node, hasNode := uf.Deploy[c.Name]
+	bedNode, isBed := beds[c.Name]
+	if (!hasNode || node.Iterate == nil) && isBed {
 		exe, exeErr := os.Executable()
 		if exeErr != nil {
 			exe = os.Args[0]
 		}
-		res, runErr := runCheckBed(exe, c.Name, node, bedRunOpts{Keep: c.Keep, NoRebuild: c.NoRebuild, CheckLevel: bedCheckLevel(uf, node)})
+		res, runErr := runCheckBed(exe, c.Name, bedNode, bedRunOpts{Keep: c.Keep, NoRebuild: c.NoRebuild, CheckLevel: bedCheckLevel(uf, bedNode)})
 		if res != nil {
 			fmt.Fprintf(os.Stderr, "charly check run %s: %s (steps=%d)\n",
 				c.Name, summaryStatus(res.OK), len(res.Step))
 		}
-		// Propagate the check-check exit code (2) when the bed failed at an
-		// check step (check-image/check-live reporting failing checks), so
-		// `charly check run <bed>` distinguishes "the thing under test is broken"
-		// from an infra failure (build/deploy/vm-create) which stays exit 1.
+		// Propagate the check-fail exit code (2) when the bed failed at a check
+		// step, so `charly check run <bed>` distinguishes "the thing under test
+		// is broken" from an infra failure (build/deploy/vm-create) at exit 1.
 		if runErr != nil && res != nil && res.FailExitCode == CheckFailExitCode {
-			return &CheckFailedError{Msg: fmt.Sprintf("charly check run %s: check checks failed", c.Name)}
+			return &CheckFailedError{Msg: fmt.Sprintf("charly check run %s: checks failed", c.Name)}
 		}
 		return runErr
 	}
 
-	// kind:score path (AI iteration loop).
-	score, err := ResolveScore(uf.Score, c.Name)
-	if err != nil {
-		return err
+	// iterate: path (AI iteration loop).
+	if !hasNode || node.Iterate == nil {
+		return fmt.Errorf("charly check run %s: no iterate: block and no kind:check bed by that name", c.Name)
 	}
-	if c.Pod != "" {
-		score.Pod = c.Pod
-		score.VM = ""
-		score.Host = false
-	} else if c.VM != "" {
-		score.VM = c.VM
-		score.Pod = ""
-		score.Host = false
-	} else if c.Host {
-		score.Host = true
-		score.Pod = ""
-		score.VM = ""
-		score.Disposable = true
-	}
-	tk, tn, err := ResolveScoreTarget(score)
-	if err != nil {
-		return err
-	}
+	tk, tn := ResolveIterateSandbox(uf, node.Iterate.Sandbox)
 
 	runID := GenerateRunID()
 	args := []string{"check", "run-local", c.Name, "--run-id", runID}
@@ -210,8 +152,8 @@ func (c *CheckRunCmd) Run() error {
 	if c.PlateauIteration > 0 {
 		args = append(args, "--plateau-iteration", fmt.Sprintf("%d", c.PlateauIteration))
 	}
-	if c.MaxScenario > 0 {
-		args = append(args, "--max-scenario", fmt.Sprintf("%d", c.MaxScenario))
+	if c.MaxStep > 0 {
+		args = append(args, "--max-step", fmt.Sprintf("%d", c.MaxStep))
 	}
 	if c.Tag != "" {
 		args = append(args, "--tag", c.Tag)
@@ -297,14 +239,16 @@ func (c *CheckRunCmd) Run() error {
 	case TargetKindHost:
 		// Test-bed image preflight. The deploy that prepared the host
 		// installs candies (host packages + configs) only; container
-		// images that scenarios spawn need to be pulled or built
+		// images that plan steps spawn need to be pulled or built
 		// before the score's runner walks them.
 		if !c.DryRun {
-			if err := ensureScoreImages(context.Background(), score, uf, cwd); err != nil {
+			layers, _ := ScanCandy(cwd)
+			plan, _ := ExpandPlanIncludes(uf, layers, node.Plan)
+			if err := ensureScoreImages(context.Background(), plan, uf, cwd); err != nil {
 				return err
 			}
 		}
-		return runLocalInProcess(args, c.Name, runID, score, uf, cwd)
+		return runLocalInProcess(args, c.Name, runID, cwd)
 	case TargetKindPod:
 		return dispatchToPod(tn, c.Name, args)
 	case TargetKindVM:
@@ -376,7 +320,7 @@ func runAllCheckBeds(uf *UnifiedFile, beds map[string]DeploymentNode, opts bedRu
 }
 
 // runLocalInProcess invokes CheckRunLocalCmd in-process for host targets.
-func runLocalInProcess(args []string, scoreName, runID string, _ *HarnessScore, _ *UnifiedFile, cwd string) error {
+func runLocalInProcess(args []string, scoreName, runID string, cwd string) error {
 	exe, err := os.Executable()
 	if err != nil {
 		exe = "charly"
@@ -417,7 +361,7 @@ func dispatchToVM(vmName, scoreName string, args []string) error {
 
 // checkPhaseRe matches the orchestrator's per-phase boundary marker:
 //
-//	harness: phase N/M — recipes [...] (K scenarios)
+//	harness: phase N/M — ...
 //
 // Captures phase number N. Progress lines have the form
 // `harness: progress [phase N/M iter K] ...` and are deliberately not
@@ -556,10 +500,10 @@ func (c *CheckLastTagCmd) Run() error {
 // canonical self-verification path during a harness iteration.
 //
 // Behavior: invokes the SAME RunCheckLive function the
-// end-of-iter harness scorer calls, against the SAME in-scope recipe
-// scenarios for the current phase, against the AI's live deployments.
-// Output is a per-scenario verdict table (pass / fail / skipped).
-// Exit 0 if every in-scope scenario passes, non-zero otherwise.
+// end-of-iter harness scorer calls, against the SAME in-scope plan
+// steps for the current phase, against the AI's live deployments.
+// Output is a per-step verdict table (pass / fail / skipped).
+// Exit 0 if every in-scope step passes, non-zero otherwise.
 //
 // Anti-deception properties:
 //
@@ -606,61 +550,56 @@ func (c *CheckSelfCheckCmd) Run() error {
 	if !ok || uf == nil {
 		return fmt.Errorf("charly check self-evaluate: no check.yml at project root %s — self-evaluate must run from a directory with a project tree containing check.yml (typically /workspace inside the harness sandbox)", cwd)
 	}
-	resolvedScore, err := ResolveScore(uf.Score, score)
-	if err != nil {
-		return fmt.Errorf("charly check self-evaluate: resolve score %q: %w", score, err)
+	node, found := uf.Deploy[score]
+	if !found || node.Iterate == nil {
+		return fmt.Errorf("charly check self-evaluate: entity %q has no iterate: block", score)
 	}
-
-	// Determine the in-scope recipe set: progressive scores reveal
-	// recipes per phase; non-progressive scores show all at once.
 	var phase int
 	if phaseStr != "" {
 		fmt.Sscanf(phaseStr, "%d", &phase)
 	}
-	var scenarios []Scenario
-	if resolvedScore.Progressive && phase > 0 {
-		scenarios, _, err = resolvePhaseScenarios(resolvedScore, uf.Recipe, phase)
-	} else {
-		scenarios, _, err = ResolveScoreRecipe(resolvedScore, uf.Recipe)
+
+	layers, lerr := ScanCandy(cwd)
+	if lerr != nil {
+		return fmt.Errorf("charly check self-evaluate: scan candies: %w", lerr)
 	}
+	plan, err := ExpandPlanIncludes(uf, layers, node.Plan)
 	if err != nil {
-		return fmt.Errorf("charly check self-evaluate: resolve scenarios: %w", err)
+		return fmt.Errorf("charly check self-evaluate: expand includes: %w", err)
 	}
-	if len(scenarios) == 0 {
-		fmt.Fprintln(os.Stdout, "charly check self-evaluate: no in-scope scenarios for this phase")
+	if len(plan) == 0 {
+		fmt.Fprintln(os.Stdout, "charly check self-evaluate: empty plan")
 		return nil
 	}
 
 	// Always-execute mode (RunScoringOpts zero value): no
 	// validate-ai-artifacts shortcut, no freshness gate. Every probe
-	// re-runs against live systems, producing fresh artifacts at the
-	// recipe-declared `artifact:` paths.
+	// re-runs against live systems, producing fresh artifacts.
 	ctx := context.Background()
-	live, err := RunCheckLive(ctx, resolvedScore.Deploy, score, scenarios, RunScoringOpts{})
+	live, err := RunCheckLive(ctx, score, score, plan, RunScoringOpts{})
 	if err != nil {
 		return fmt.Errorf("charly check self-evaluate: live scoring: %w", err)
 	}
 
-	// Print verdict table — same fields the orchestrator's scorer
-	// records into result-<calver>.yml. The AI reads stdout to see
-	// pass/fail/skipped per scenario.
+	// Print verdict table — same fields the orchestrator's scorer records into
+	// result-<calver>.yml. The AI reads stdout to see pass/fail/skipped per step.
 	fmt.Fprintf(os.Stdout, "self-evaluate: score=%s phase=%d iter=%s run=%s\n", score, phase, iter, runID)
-	fmt.Fprintf(os.Stdout, "%-50s  %-7s  %s\n", "SCENARIO", "STATUS", "DETAIL")
+	fmt.Fprintf(os.Stdout, "%-50s  %-7s  %s\n", "STEP", "STATUS", "DETAIL")
 	failed := 0
-	for _, sc := range live.Scenario {
+	for _, st := range live.Step {
 		detail := ""
-		if sc.SkippedReason != "" {
-			detail = sc.SkippedReason
+		if st.SkippedReason != "" {
+			detail = st.SkippedReason
 		}
-		fmt.Fprintf(os.Stdout, "%-50s  %-7s  %s\n", sc.Name, sc.Status, detail)
-		if sc.Status != "pass" && sc.Status != "skip" {
+		fmt.Fprintf(os.Stdout, "%-50s  %-7s  %s\n", st.Text, st.Status, detail)
+		if st.Status != "pass" && st.Status != "skip" {
 			failed++
 		}
 	}
 	fmt.Fprintf(os.Stdout, "summary: %d/%d pass, %d fail, %d skip (total %d)\n",
 		live.Summary.Pass, live.Summary.Total, live.Summary.Fail, live.Summary.Skip, live.Summary.Total)
 	if failed > 0 {
-		return fmt.Errorf("self-evaluate: %d scenario(s) failed", failed)
+		return fmt.Errorf("self-evaluate: %d step(s) failed", failed)
 	}
 	return nil
 }

@@ -1,42 +1,37 @@
 candy:
     version: 2026.144.1443
     name: thunar
-    description:
-        feature: Thunar file manager is installed and bound to $mod+e in the Sway desktop
-        narrative: |
-            Installs the Thunar Xfce file manager (the thunar Fedora package, binary at
-            /usr/bin/thunar) and drops a Sway config.d snippet that binds $mod+e to launch
-            it. Verifiable by the installed binary + package and by the keybinding drop-in
-            whose content wires the $mod+e launcher line.
-        tag: [working]
+    description: |
+        Thunar file manager is installed and bound to $mod+e in the Sway desktop
+        Installs the Thunar Xfce file manager (the thunar Fedora package, binary at
+        /usr/bin/thunar) and drops a Sway config.d snippet that binds $mod+e to launch
+        it. Verifiable by the installed binary + package and by the keybinding drop-in
+        whose content wires the $mod+e launcher line.
     require:
         - sway
     distro:
         fedora:
             package:
                 - thunar
-    task:
-        - mkdir: "${HOME}/.config/sway/config.d"
+    plan:
+        - run: mkdir=${HOME}/.config/sway/config.d
+          mkdir: "${HOME}/.config/sway/config.d"
           run_as: "${USER}"
-        - copy: thunar.conf
+        - run: copy=thunar.conf
+          copy: thunar.conf
           to: "${HOME}/.config/sway/config.d/thunar.conf"
           mode: "0644"
           run_as: "${USER}"
-    scenario:
-        - name: thunar-binary-installed
-          step:
-            - then: the thunar file manager binary is installed at /usr/bin/thunar
-              file: /usr/bin/thunar
-              exists: true
-            - then: the thunar package is present in the package database
-              package: thunar
-              installed: true
-        - name: sway-mod-e-launcher-configured
-          step:
-            - then: a Sway config.d drop-in is installed for thunar
-              file: ${HOME}/.config/sway/config.d/thunar.conf
-              exists: true
-            - then: the drop-in binds $mod+e to launch thunar
-              file: ${HOME}/.config/sway/config.d/thunar.conf
-              contains:
-                - contains: "bindsym $mod+e exec thunar"
+        - check: the thunar file manager binary is installed at /usr/bin/thunar
+          file: /usr/bin/thunar
+          exists: true
+        - check: the thunar package is present in the package database
+          package: thunar
+          installed: true
+        - check: a Sway config.d drop-in is installed for thunar
+          file: ${HOME}/.config/sway/config.d/thunar.conf
+          exists: true
+        - check: the drop-in binds $mod+e to launch thunar
+          file: ${HOME}/.config/sway/config.d/thunar.conf
+          contains:
+            - contains: "bindsym $mod+e exec thunar"

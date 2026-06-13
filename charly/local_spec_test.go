@@ -11,13 +11,13 @@ import (
 // expected fields.
 func TestLoadUnified_LocalMap_Inline(t *testing.T) {
 	dir := t.TempDir()
-	src := `version: 2026.164.0004
+	src := `version: 2026.164.0006
 local:
   dev-workstation:
     candy: [ripgrep, direnv]
     install_opts: {with_services: false, allow_repo_changes: true}
     env: [EDITOR=vim]
-    description: {feature: Dev workstation, tag: [working]}
+    description: Dev workstation
 `
 	if err := os.WriteFile(filepath.Join(dir, "charly.yml"), []byte(src), 0o644); err != nil {
 		t.Fatalf("write charly.yml: %v", err)
@@ -42,11 +42,8 @@ local:
 	if len(spec.Env) != 1 || spec.Env[0] != "EDITOR=vim" {
 		t.Errorf("unexpected env: %v", spec.Env)
 	}
-	if spec.Description == nil || spec.Description.Feature != "Dev workstation" {
-		t.Errorf("description not preserved: %+v", spec.Description)
-	}
-	if descriptionStatus(spec.Description) != "working" {
-		t.Errorf("expected status=working from tag, got %q", descriptionStatus(spec.Description))
+	if spec.Description != "Dev workstation" {
+		t.Errorf("description not preserved: %q", spec.Description)
 	}
 }
 
@@ -54,7 +51,7 @@ local:
 // on a deployment that still uses the legacy target:host spelling.
 func TestLoadUnified_RejectLegacyTargetHost(t *testing.T) {
 	dir := t.TempDir()
-	src := `version: 2026.164.0004
+	src := `version: 2026.164.0006
 deploy:
   my-laptop:
     target: host

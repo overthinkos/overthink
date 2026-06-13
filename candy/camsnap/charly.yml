@@ -1,41 +1,35 @@
 candy:
     version: 2026.144.1443
     name: camsnap
-    description:
-        feature: RTSP/ONVIF camera snapshot and clip CLI — the `camsnap` binary on $PATH
-        narrative: |
-            Installs the camsnap Go CLI via `go install
-            github.com/steipete/camsnap/cmd/camsnap`, landing the binary in the
-            user's GOPATH bin (~/go/bin/camsnap). Verifiable end to end: the
-            binary exists, is executable, and `go version -m` reports it was built
-            from the upstream github.com/steipete/camsnap module.
-        tag: [working]
+    description: |
+        RTSP/ONVIF camera snapshot and clip CLI — the `camsnap` binary on $PATH
+        Installs the camsnap Go CLI via `go install
+        github.com/steipete/camsnap/cmd/camsnap`, landing the binary in the
+        user's GOPATH bin (~/go/bin/camsnap). Verifiable end to end: the
+        binary exists, is executable, and `go version -m` reports it was built
+        from the upstream github.com/steipete/camsnap module.
     require:
         - golang
     env:
         GOPATH: "~/go"
     path_append:
         - "~/go/bin"
-    task:
-        - command: |
+    plan:
+        - run: |
+            command=go install github.com/steipete/camsnap/cmd/camsnap@latest
+            go clean -cache
+          command: |
             go install github.com/steipete/camsnap/cmd/camsnap@latest
             go clean -cache
           run_as: "${USER}"
-    scenario:
-        - name: camsnap-binary-installed
-          step:
-            - then: the camsnap binary is installed in the user's GOPATH bin
-              file: ${HOME}/go/bin/camsnap
-              exists: true
-        - name: camsnap-binary-executable
-          step:
-            - then: the installed camsnap binary is executable
-              command: test -x ${HOME}/go/bin/camsnap
-              exit_status: 0
-        - name: camsnap-built-from-upstream-module
-          step:
-            - then: go version -m reports the binary was built from the camsnap module
-              command: /usr/bin/go version -m ${HOME}/go/bin/camsnap
-              exit_status: 0
-              stdout:
-                - contains: github.com/steipete/camsnap
+        - check: the camsnap binary is installed in the user's GOPATH bin
+          file: ${HOME}/go/bin/camsnap
+          exists: true
+        - check: the installed camsnap binary is executable
+          command: test -x ${HOME}/go/bin/camsnap
+          exit_status: 0
+        - check: go version -m reports the binary was built from the camsnap module
+          command: /usr/bin/go version -m ${HOME}/go/bin/camsnap
+          exit_status: 0
+          stdout:
+            - contains: github.com/steipete/camsnap

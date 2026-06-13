@@ -1,4 +1,4 @@
-version: 2026.164.0004
+version: 2026.164.0006
 # Canonical repo identity. After the 2026-06 box inversion main imports the three
 # active distro submodules (arch / cachyos / fedora) ONE-DIRECTIONALLY to reference
 # their relocated boxes; the submodules no longer import main as a namespace (they
@@ -168,8 +168,7 @@ pod: {}
 k8s: {vm-k3s-vm: {box: "", kubeconfig_context: vm-k3s-vm}}
 agent:
     claude:
-        description:
-            feature: "Anthropic Claude Code CLI — autonomous coding agent."
+        description: Anthropic Claude Code CLI — autonomous coding agent.
         # --verbose + --output-format stream-json emit one JSON object per
         # message in the agent loop (system / assistant / user / tool_use /
         # tool_result / result). The harness parses each line, embeds it
@@ -183,1367 +182,17 @@ agent:
         credential:
             - {src: ~/.claude/.credentials.json, dst: ~/.claude/.credentials.json}
     codex:
-        description:
-            feature: "OpenAI Codex CLI — coding agent."
+        description: OpenAI Codex CLI — coding agent.
         command: [codex, exec, "${PROMPT}"]
         version_command: [codex, --version]
         credential:
             - {src: ~/.config/codex/auth.json, dst: ~/.config/codex/auth.json, optional: true}
     gemini:
-        description:
-            feature: "Google Gemini CLI."
+        description: Google Gemini CLI.
         command: [gemini, chat, "${PROMPT}"]
         version_command: [gemini, --version]
         credential:
             - {src: ~/.config/gcloud/application_default_credentials.json, dst: ~/.config/gcloud/application_default_credentials.json, optional: true}
-# kind: recipe — every scenario carries `pod:` declaring its scoring target.
-# Every recipe is a producer→consumer chain (see file-header docstring).
-recipe:
-    # ─────────────────────────────────────────────────────────────────────
-    # Phase 1 — single-pod system state (file/package/service/process/user/
-    # group/mount/kernel-param/interface/matching).
-    # ─────────────────────────────────────────────────────────────────────
-    single-pod-system-state:
-        description:
-            feature: "A baseline Linux container with predictable system state."
-            narrative: |
-                Feature: A baseline Linux container with predictable system state.
-                  As an operator establishing a deployment foundation,
-                  I want a single container running with a known set of OS-level
-                    invariants — a marker file with predetermined content, a known
-                    package installed, a known service running, a known process
-                    visible by name, a known user and group present in the user
-                    database, a known mount listed in the mount table, and a known
-                    kernel parameter set to a known value,
-                  So that downstream tests have a baseline OS-state foundation
-                    they can rely on.
-
-                  What must be true to pass this test:
-                    - A pod named `os` is running.
-                    - A file at `/etc/charly-os-marker` exists.
-                    - That file contains the literal string
-                      `charly-os-content-marker`.
-                    - The system package `bash` is installed in the pod.
-                    - A process named `bash` is running in the pod.
-                    - The user `root` is present in the user database with
-                      uid 0.
-                    - The group `root` is present in the group database with
-                      gid 0.
-                    - The mount table lists `/proc` mounted as filesystem
-                      `proc`.
-                    - The kernel parameter `kernel.hostname` is readable via
-                      sysctl and has any non-empty value.
-                    - The loopback interface `lo` is present and carries
-                      the address `127.0.0.1/8`.
-                    - An in-process matcher correctly resolves the literal
-                      string `charly-os-content-marker`.
-        scenario:
-            - name: os-marker-file-exists
-              pod: os
-              step:
-                - then: "the predetermined marker file exists at /etc/charly-os-marker"
-                  file: /etc/charly-os-marker
-                  exists: true
-            - name: os-marker-file-content
-              pod: os
-              step:
-                - then: "the marker file contains the predetermined content marker"
-                  file: /etc/charly-os-marker
-                  contains: ["charly-os-content-marker"]
-            - name: os-package-installed
-              pod: os
-              step:
-                - then: "the predetermined system package is installed"
-                  package: bash
-                  installed: true
-            - name: os-process-running
-              pod: os
-              step:
-                - then: "a predetermined process is running by name"
-                  process: bash
-                  running: true
-            - name: os-user-present
-              pod: os
-              step:
-                - then: "the predetermined user account is present in the user database"
-                  user: root
-                  uid: 0
-            - name: os-group-present
-              pod: os
-              step:
-                - then: "the predetermined group is present in the group database"
-                  group: root
-                  gid: 0
-            - name: os-mount-table-includes-proc
-              pod: os
-              step:
-                - then: "the predetermined mountpoint is listed in the mount table"
-                  mount: /proc
-                  filesystem: proc
-            - name: os-kernel-param
-              pod: os
-              step:
-                - then: "the predetermined kernel parameter is readable from sysctl"
-                  kernel-param: kernel.hostname
-                  value: {matches: "."}
-            - name: os-interface-loopback
-              pod: os
-              step:
-                - then: "the loopback interface is present"
-                  interface: lo
-                  addrs: ["127.0.0.1/8"]
-            - name: os-matching-content
-              pod: os
-              step:
-                - then: "an in-process matcher resolves a literal predetermined string"
-                  matching: "charly-os-content-marker"
-                  contains: ["charly-os-content-marker"]
-    # ─────────────────────────────────────────────────────────────────────
-    # Phase 2 — network-and-http: produces web with a predetermined
-    # content marker. Consumed by phase 6 (CDP/WL/VNC) and phase 7 (VM
-    # guest/exec curl).
-    # ─────────────────────────────────────────────────────────────────────
-    network-and-http:
-        description:
-            feature: "A networked HTTP fixture serving a predetermined content marker."
-            narrative: |
-                Feature: A networked HTTP fixture serving a predetermined content marker.
-                  As an operator providing a stable HTTP fixture for downstream tests,
-                  I want one pod running an HTTP server, installed from a system
-                    package, that serves a predetermined content marker on its root
-                    URL — both via the HTTP body and as an on-disk file at a
-                    predetermined path,
-                  So that downstream recipes (browser automation, virtualization,
-                    container orchestration) can consume this fixture via different
-                    protocols and assert correctness against the same known marker.
-
-                  What must be true to pass this test:
-                    - A pod named `web` is running.
-                    - Its `nginx` system package is installed.
-                    - Its TCP port 8080 is listening inside the pod.
-                    - Its TCP port 8080 is reachable from the host via the
-                      published port mapping.
-                    - A GET request to its root URL returns HTTP 200 with a
-                      body that contains the literal string
-                      `charly-web-content-marker`.
-                    - A file at `/srv/fixture/index.html` exists in the pod
-                      and contains the literal string
-                      `charly-web-content-marker`.
-                    - A self-curl from inside the pod to its own port 8080
-                      returns the same marker.
-
-                  The pod must remain running across phases — later recipes
-                  probe it across the pod network.
-        scenario:
-            - name: web-package-installed
-              pod: web
-              step:
-                - then: "the HTTP server's system package is installed"
-                  package: nginx
-                  installed: true
-            - name: web-port-listening
-              pod: web
-              step:
-                - then: "the HTTP server's port is listening inside the pod"
-                  port: 8080
-                  listening: true
-            - name: web-port-reachable-from-host
-              pod: web
-              step:
-                - then: "the HTTP server's port is reachable from the host"
-                  addr: "127.0.0.1:${HOST_PORT:8080}"
-                  reachable: true
-            - name: web-serves-marker
-              pod: web
-              step:
-                - then: "GET / returns 200 with the predetermined content marker"
-                  http: "http://localhost:8080/"
-                  status: 200
-                  body: {contains: ["charly-web-content-marker"]}
-            - name: web-content-file-on-disk
-              pod: web
-              step:
-                - then: "the served content file persists on disk with the predetermined marker"
-                  file: /srv/fixture/index.html
-                  exists: true
-                  contains: ["charly-web-content-marker"]
-            - name: web-self-curl-returns-marker
-              pod: web
-              step:
-                - then: "a self-curl from inside the pod returns the predetermined marker"
-                  command: "curl -fsS http://127.0.0.1:8080/"
-                  exit_status: 0
-                  stdout: {contains: ["charly-web-content-marker"]}
-    # ─────────────────────────────────────────────────────────────────────
-    # Phase 3 — cross-pod-nonce-traffic: redis-server pod + redis-client pod
-    # with HARNESS_NONCE-protected SET/GET across the pod boundary.
-    # (Renamed from tier4-redis; nonce mechanism intact.)
-    # ─────────────────────────────────────────────────────────────────────
-    cross-pod-nonce-traffic:
-        description:
-            feature: "Cross-pod traffic between an app pod and a data-store pod, protected against pre-setting."
-            narrative: |
-                Feature: Cross-pod traffic between an app pod and a data-store pod,
-                  protected against pre-setting.
-                  As an operator running multi-pod applications,
-                  I want one pod hosting a data store and a separate pod carrying
-                    the data store's client tooling, where the client pod can
-                    connect across the pod boundary to write a value the harness
-                    generates after I exit the iteration, and read it back from
-                    the server pod,
-                  So that the deployment proves genuine cross-pod connectivity
-                    against a value the harness generates AFTER the AI exits
-                    the iteration.
-
-                  What must be true to pass this test:
-                    - A pod named `redis` is running, with a `redis-server`
-                      process running in it.
-                    - The `redis` pod's TCP port 6379 listens on a non-
-                      loopback address (so it is reachable from another pod).
-                    - A pod named `redis-client` is running, with the
-                      `redis-cli` command available on its PATH.
-                    - From inside the `redis-client` pod, running
-                      `redis-cli -h charly-redis SET bench:${EVAL_NONCE_KEY}
-                      ${EVAL_NONCE_VALUE}` outputs `OK`.
-                    - From inside the `redis` pod, running
-                      `redis-cli get bench:${EVAL_NONCE_KEY}` outputs the
-                      same `${EVAL_NONCE_VALUE}` that was written above.
-
-                  The `${EVAL_NONCE_*}` placeholders are substituted by the
-                  harness at scoring time with values generated AFTER the AI
-                  exits this iteration; the AI sees only the placeholders.
-        scenario:
-            - name: redis-server-running
-              pod: redis
-              step:
-                - then: "the data store's primary process is running"
-                  process: redis-server
-                  running: true
-            - name: redis-reachable-cross-pod
-              pod: redis
-              step:
-                - then: "the data store is reachable from a separate pod"
-                  command: "ss -tln | grep ':6379' | grep -v '127.0.0.1'"
-                  exit_status: 0
-            - name: redis-client-has-cli
-              pod: redis-client
-              step:
-                - then: "the client pod has the data store's client tool installed"
-                  command: "command -v redis-cli"
-                  exit_status: 0
-            - name: redis-cross-pod-set-from-client
-              pod: redis-client
-              step:
-                - then: "the client pod successfully writes the nonce-protected key into the data store"
-                  command: "redis-cli -h charly-redis SET bench:${EVAL_NONCE_KEY} ${EVAL_NONCE_VALUE}"
-                  stdout: {contains: [OK]}
-            - name: redis-cross-pod-readback-on-server
-              pod: redis
-              depends_on: [redis-cross-pod-set-from-client]
-              step:
-                - then: "the nonce-protected key is readable on the server pod with the correct value"
-                  command: "redis-cli get bench:${EVAL_NONCE_KEY}"
-                  stdout: {contains: ["${EVAL_NONCE_VALUE}"]}
-    # ─────────────────────────────────────────────────────────────────────
-    # Phase 4 — mcp-protocol-probe: deploy the project's MCP-enabled jupyter
-    # image. Imports jupyter's existing MCP tests via `from:` so the AI's
-    # task is "deploy the existing image", not "implement an MCP server
-    # from scratch". Post-2026-05-06 cutover: 11-tool surface (no
-    # client-side room management); auto-attach in the server.
-    # ─────────────────────────────────────────────────────────────────────
-    mcp-protocol-probe:
-        description:
-            feature: "A Jupyter MCP server reachable on a pod named `mcp` exposes the post-2026-05-06 11-tool surface (notebook_*/cell_* + room_list + notebook_list_users), auto-attaches to whichever CRDT room exists for any given notebook, and passes every test the project's jupyter image certifies."
-            narrative: |
-                Feature: A Jupyter MCP server reachable on a pod named
-                  `mcp` exposes a clean notebook+cell toolset and manages
-                  CRDT rooms invisibly.
-
-                  As an operator,
-                  I want a pod named `mcp` running a Jupyter MCP server,
-                  So that every notebook_*/cell_* call works WITH the user
-                    (auto-attaches to whatever CRDT room exists, never creates
-                    a parallel one) and the project's jupyter image's own test
-                    surface passes against the pod.
-
-                  What must be true to pass this test:
-
-                    - A pod named `mcp` is running.
-
-                    - Sending an MCP `ping` to it succeeds.
-
-                    - An MCP `list-tools` request returns a list whose output
-                      includes EACH of these 11 JupyterLab tool names
-                      (uniform `<noun>_<verb>` form):
-                      `notebook_list`, `notebook_create`, `notebook_get`,
-                      `notebook_watch`, `notebook_list_users`, `cell_get`,
-                      `cell_update`, `cell_insert`, `cell_delete`,
-                      `cell_execute`, `room_list`. The list MUST NOT contain
-                      the deleted management tools `room_open`, `room_close`,
-                      `room_close_all`, `room_pick`.
-
-                    - An MCP `call` for the `notebook_list` tool with
-                      JSON input `{}` exits with status 0.
-
-                    - Cell mutations preserve the cell's `id` across
-                      `cell_update` (no fresh-UUID minting).
-
-                    - Sequential `cell_update` calls do not grow the
-                      notebook's cell count (no phantom-cell residue).
-
-                    - Three different path forms for the same logical file
-                      (`foo.ipynb`, `./foo.ipynb`,
-                      `/workspace/foo.ipynb`) converge on a SINGLE
-                      room.
-
-                    - Host paths (e.g. `/home/atrawog/...`) are rejected.
-
-                    - Every other test the project's `jupyter` image
-                      certifies (binaries, packages, services, ports,
-                      HTTP endpoints, post-cutover regression scenarios)
-                      passes against the `mcp` pod.
-        from:
-            - kind: box
-              name: fedora.jupyter
-              pod: mcp
-        scenario:
-            # A. notebook_create still does NOT open a room. Auto-attach
-            # happens on the FIRST notebook_*/cell_* call, not on create.
-            - name: notebook-create-no-room
-              pod: mcp
-              setup:
-                - then: "remove any prior probe notebook"
-                  command: "rm -f /workspace/mcp-A.ipynb"
-                  in_container: true
-                  exit_status: 0
-              step:
-                - then: "notebook_create writes the file but does not open a CRDT room"
-                  mcp: call
-                  tool: notebook_create
-                  input: '{"path":"mcp-A.ipynb"}'
-                  timeout: 30s
-                - then: "room_list does NOT contain mcp-A.ipynb"
-                  mcp: call
-                  tool: room_list
-                  input: '{}'
-                  stdout: {not_contains: "mcp-A.ipynb"}
-                  timeout: 30s
-            # B. cell_insert on a fresh notebook auto-attaches.
-            - name: cell-insert-auto-attaches-room
-              pod: mcp
-              setup:
-                - then: "clean state"
-                  command: "rm -f /workspace/mcp-B.ipynb"
-                  in_container: true
-                  exit_status: 0
-                - then: "create"
-                  mcp: call
-                  tool: notebook_create
-                  input: '{"path":"mcp-B.ipynb"}'
-                  timeout: 30s
-              step:
-                - then: "cell_insert without prior open auto-creates the room"
-                  mcp: call
-                  tool: cell_insert
-                  input: '{"path":"mcp-B.ipynb","index":0,"source":"x","cell_type":"markdown"}'
-                  timeout: 60s
-                - then: "room_list now contains mcp-B.ipynb"
-                  mcp: call
-                  tool: room_list
-                  input: '{}'
-                  stdout: {contains: "mcp-B.ipynb"}
-                  timeout: 30s
-            # C. UI auto-join: a transient WebSocket connection to the same
-            # path that MCP has been mutating must NOT create a parallel room.
-            - name: ui-autojoin-no-second-room
-              pod: mcp
-              setup:
-                - then: "clean state"
-                  command: "rm -f /workspace/mcp-D.ipynb"
-                  in_container: true
-                  exit_status: 0
-                - then: "create"
-                  mcp: call
-                  tool: notebook_create
-                  input: '{"path":"mcp-D.ipynb"}'
-                  timeout: 30s
-                - then: "MCP-side cell_insert auto-creates the room"
-                  mcp: call
-                  tool: cell_insert
-                  input: '{"path":"mcp-D.ipynb","index":0,"source":"hello","cell_type":"markdown"}'
-                  timeout: 60s
-              step:
-                - then: "transient UI-style WebSocket connect (in-container python)"
-                  command: |-
-                    python3 -c '
-                    import asyncio
-                    async def main():
-                        try:
-                            import websockets
-                        except ImportError:
-                            print("websockets not installed; skipping ws probe"); return
-                        try:
-                            ws = await asyncio.wait_for(
-                                websockets.connect("ws://127.0.0.1:8888/api/yjs/json:notebook:mcp-D.ipynb"),
-                                5,
-                            )
-                            await asyncio.sleep(1)
-                            await ws.close()
-                            print("ws-probe-ok")
-                        except Exception as e:
-                            print(f"ws-probe-noop: {e}")
-                    asyncio.run(main())
-                    '
-                  in_container: true
-                  exit_status: 0
-                - then: "room_list still shows EXACTLY one entry for the path"
-                  mcp: call
-                  tool: room_list
-                  input: '{}'
-                  stdout:
-                    - matches: 'mcp-D\.ipynb'
-                  timeout: 30s
-            # D. Upstream-race regression guard: 2026-05-01 incident logged
-            # `Task exception 'is not in list'` from
-            # YDocWebSocketHandler._clean_room when MCP and UI raced on close.
-            # Post-cutover there is no MCP-side close, but the idle-room
-            # sweeper might race the UI's clean_room when the last UI client
-            # disconnects.
-            - name: no-clean-room-valueerror
-              pod: mcp
-              setup:
-                - then: "clean state"
-                  command: "rm -f /workspace/mcp-E.ipynb"
-                  in_container: true
-                  exit_status: 0
-                - then: "create"
-                  mcp: call
-                  tool: notebook_create
-                  input: '{"path":"mcp-E.ipynb"}'
-                  timeout: 30s
-                - then: "MCP cell_insert auto-creates the room"
-                  mcp: call
-                  tool: cell_insert
-                  input: '{"path":"mcp-E.ipynb","index":0,"source":"x","cell_type":"markdown"}'
-                  timeout: 60s
-                - then: "snapshot the pod log mark"
-                  command: "date +%s > /tmp/mcp-E.markstamp"
-                  in_container: true
-                  exit_status: 0
-              step:
-                - then: "transient UI-style WebSocket connect to provoke _clean_room"
-                  command: |-
-                    python3 -c '
-                    import asyncio
-                    async def main():
-                        try:
-                            import websockets
-                        except ImportError:
-                            return
-                        try:
-                            ws = await asyncio.wait_for(
-                                websockets.connect("ws://127.0.0.1:8888/api/yjs/json:notebook:mcp-E.ipynb"),
-                                5,
-                            )
-                            await asyncio.sleep(0.5)
-                            await ws.close()
-                        except Exception:
-                            pass
-                    asyncio.run(main())
-                    '
-                  in_container: true
-                  exit_status: 0
-                - then: "let upstream _clean_room settle"
-                  command: "sleep 2"
-                  in_container: true
-                  exit_status: 0
-                - then: "no 'Task exception was never retrieved' or 'is not in list' since the mark"
-                  command: |-
-                    MARK=$(cat /tmp/mcp-E.markstamp); LOG=$(journalctl -t supervisord --since "@$MARK" 2>/dev/null || cat /tmp/jupyter*.log 2>/dev/null || true); echo "$LOG" | grep -E 'Task exception was never retrieved|is not in list' && exit 1 || exit 0
-                  in_container: true
-                  exit_status: 0
-    kubernetes-cluster:
-        description:
-            feature: "A single-node Kubernetes cluster running a predetermined application manifest."
-            narrative: |
-                Feature: A single-node Kubernetes cluster running a predetermined
-                  application manifest.
-                  As an operator running container orchestration,
-                  I want one pod hosting a single-node Kubernetes cluster reachable
-                    via the standard Kubernetes API, with a predetermined Pod-and-
-                    Service manifest applied,
-                  So that pod listings, service listings, ingress class, storage
-                    class, and addon health can all be probed against known
-                    names and values, proving the cluster is verifiably
-                    functional end-to-end.
-
-                  What must be true to pass this test:
-                    - A pod named `k8s` is running a Kubernetes
-                      cluster.
-                    - `kubectl get nodes` against that cluster returns at
-                      least one node.
-                    - All nodes reach the `Ready` condition.
-                    - All system pods reach the `Ready` condition.
-                    - A default storage class is registered in the cluster.
-                    - An ingress class is registered in the cluster.
-                    - The cluster's addons report healthy.
-                    - The cluster's `kubernetes` Service is listable in the
-                      service listing.
-                    - A raw API call to the cluster returns a JSON document
-                      that contains the field `kind`.
-        scenario:
-            - name: k8s-nodes-listed
-              pod: k8s
-              step:
-                - then: "at least one cluster node is listable"
-                  k8s: nodes
-            - name: k8s-nodes-ready
-              pod: k8s
-              depends_on: [k8s-nodes-listed]
-              step:
-                - then: "all cluster nodes reach Ready"
-                  k8s: wait-nodes
-            - name: k8s-system-pods-ready
-              pod: k8s
-              depends_on: [k8s-nodes-ready]
-              step:
-                - then: "the kube-system coredns Deployment reaches Ready"
-                  k8s: wait-ready
-                  k8s_kind: Deployment
-                  name: coredns
-                  namespace: kube-system
-            - name: k8s-storage-class-present
-              pod: k8s
-              depends_on: [k8s-nodes-listed]
-              step:
-                - then: "a default storage class is present"
-                  k8s: storageclass
-            - name: k8s-ingress-class-present
-              pod: k8s
-              depends_on: [k8s-nodes-listed]
-              step:
-                - then: "an ingress class is registered"
-                  k8s: ingressclass
-            - name: k8s-addons-healthy
-              pod: k8s
-              depends_on: [k8s-system-pods-ready]
-              step:
-                - then: "the cluster addons report healthy"
-                  k8s: addons
-            - name: k8s-service-readback-shows-fixture
-              pod: k8s
-              depends_on: [k8s-system-pods-ready]
-              step:
-                - then: "the kubernetes Service is listable"
-                  k8s: service
-                  stdout: {contains: ["kubernetes"]}
-            - name: k8s-raw-returns-known-kind
-              pod: k8s
-              depends_on: [k8s-nodes-listed]
-              step:
-                - then: "a raw API call to the /nodes resource returns a JSON document with a kind field"
-                  k8s: raw
-                  k8s_resource: nodes
-                  json: true
-                  stdout: {contains: ["kind"]}
-    # ─────────────────────────────────────────────────────────────────────
-    # Phase 6 — desktop-display-and-input: Wayland desktop + CDP browser +
-    # VNC + D-Bus + record. CONSUMES web (phase 2) via CDP/WL/VNC
-    # to validate cross-pod traffic + verb correctness simultaneously.
-    # ─────────────────────────────────────────────────────────────────────
-    desktop-display-and-input:
-        description:
-            feature: "A Wayland desktop with a CDP-enabled browser, VNC remote access, D-Bus, and recording — consuming the upstream HTTP fixture."
-            narrative: |
-                Feature: A Wayland desktop with a CDP-enabled browser, VNC remote
-                  access, D-Bus session bus, and recording — consuming the
-                  upstream HTTP fixture.
-                  As an operator running a browser-based desktop service,
-                  I want one pod with a running Wayland session, a Chrome browser
-                    exposing the DevTools Protocol, a VNC server for remote
-                    framebuffer access, a session bus for desktop notifications,
-                    and a recording capability — and I want the browser to load
-                    the upstream HTTP fixture's URL so that probes can assert
-                    through every desktop protocol that the loaded page is the
-                    expected one,
-                  So that browser automation, screen capture (Wayland and VNC),
-                    session notifications, and session recording are all
-                    verifiably correct against a known upstream content marker.
-
-                  What must be true to pass this test:
-                    - A pod named `desktop` is running.
-                    - The Chrome DevTools Protocol on that pod responds with
-                      `ok` to a status query.
-                    - The Wayland session on that pod responds with `ok` to a
-                      status query.
-                    - The VNC server on that pod responds with `ok` to a
-                      status query.
-                    - The D-Bus session bus on that pod lists the
-                      `org.freedesktop.Notifications` service.
-                    - Via CDP, the browser navigates to
-                      `http://charly-web:8080/` (the phase-2 fixture).
-                    - Via CDP `text` on tab 1, the loaded page's text
-                      contains the literal string
-                      `charly-web-content-marker`.
-                    - Via CDP `check` on tab 1, the JavaScript expression
-                      `1+1` returns `2`.
-                    - A CDP screenshot of tab 1 produces a PNG file at
-                      `/tmp/cdp.png` of at least 5000 bytes, with image
-                      dimensions ≥ 800×600, with non-uniform pixel content.
-                    - The Wayland toplevel listing returns at least one
-                      entry.
-                    - A Wayland screenshot produces a PNG file at
-                      `/tmp/wl.png` of at least 10000 bytes, with image
-                      dimensions ≥ 800×600, with non-uniform pixel content.
-                    - A VNC framebuffer screenshot produces a PNG file at
-                      `/tmp/vnc.png` of at least 5000 bytes, with image
-                      dimensions ≥ 800×600, with non-uniform pixel content.
-                    - A D-Bus notification with body
-                      `charly-dbus-notify-marker` succeeds.
-                    - A `record stop` produces an asciinema cast file at
-                      `/tmp/session.cast` of at least 200 bytes containing
-                      at least 5 event records.
-        scenario:
-            # Producer probes — the desktop is up
-            - name: desktop-cdp-up
-              pod: desktop
-              step:
-                - then: "the desktop's Chrome DevTools is reachable"
-                  cdp: status
-                  stdout: {contains: ["ok"]}
-            - name: desktop-wl-up
-              pod: desktop
-              step:
-                - then: "the desktop's Wayland session is up"
-                  wl: status
-                  stdout: {contains: ["ok"]}
-            - name: desktop-vnc-up
-              pod: desktop
-              step:
-                - then: "the desktop's VNC server is reachable"
-                  vnc: status
-                  stdout: {contains: ["ok"]}
-            - name: desktop-dbus-up
-              pod: desktop
-              step:
-                - then: "the desktop's session bus advertises notifications"
-                  dbus: list
-                  stdout: {contains: ["org.freedesktop.Notifications"]}
-            # Cross-recipe CDP consumer chain — proves cross-pod + CDP correctness
-            - name: desktop-cdp-loads-web
-              pod: desktop
-              depends_on: [desktop-cdp-up]
-              step:
-                - then: "the desktop browser navigates to the upstream HTTP fixture URL via CDP"
-                  cdp: open
-                  url: "http://charly-web:8080/"
-                  exit_status: 0
-            - name: desktop-cdp-extracts-web-marker
-              pod: desktop
-              depends_on: [desktop-cdp-loads-web]
-              step:
-                - then: "CDP extracts the predetermined upstream content marker from the loaded page"
-                  cdp: text
-                  tab: "1"
-                  stdout: {contains: ["charly-web-content-marker"]}
-            - name: desktop-cdp-check-known-expression
-              pod: desktop
-              depends_on: [desktop-cdp-loads-web]
-              step:
-                - then: "CDP correctly evaluates a predetermined JavaScript expression on the loaded page"
-                  cdp: eval
-                  tab: "1"
-                  expression: "1+1"
-                  stdout: {contains: ["2"]}
-            - name: desktop-cdp-screenshot-of-web
-              pod: desktop
-              depends_on: [desktop-cdp-loads-web]
-              step:
-                - then: "a CDP screenshot of the loaded page has real, non-uniform content at the expected dimensions"
-                  cdp: screenshot
-                  tab: "1"
-                  artifact: /tmp/cdp.png
-                  artifact_min_bytes: 5000
-                  artifact_min_dimensions: 800x600
-                  artifact_not_uniform: true
-            # Wayland consumer — proves the desktop is rendering the loaded page
-            - name: desktop-wl-toplevel-includes-window
-              pod: desktop
-              depends_on: [desktop-cdp-loads-web]
-              step:
-                - then: "the Wayland toplevel listing includes at least one rendered window"
-                  wl: toplevel
-                  stdout: {matches: "."}
-            - name: desktop-wl-screenshot-shows-real-content
-              pod: desktop
-              depends_on: [desktop-cdp-loads-web]
-              step:
-                - then: "a Wayland screenshot of the desktop has real, non-uniform content at the expected dimensions"
-                  wl: screenshot
-                  artifact: /tmp/wl.png
-                  artifact_min_bytes: 10000
-                  artifact_min_dimensions: 800x600
-                  artifact_not_uniform: true
-            # VNC consumer — different protocol, same desktop
-            - name: desktop-vnc-screenshot-shows-real-content
-              pod: desktop
-              depends_on: [desktop-cdp-loads-web]
-              step:
-                - then: "a VNC framebuffer screenshot has real, non-uniform content at the expected dimensions"
-                  vnc: screenshot
-                  artifact: /tmp/vnc.png
-                  artifact_min_bytes: 5000
-                  artifact_min_dimensions: 800x600
-                  artifact_not_uniform: true
-            # D-Bus consumer — predetermined notification body
-            - name: desktop-dbus-notify-roundtrip
-              pod: desktop
-              depends_on: [desktop-dbus-up]
-              step:
-                - then: "a desktop notification can be sent with a predetermined body"
-                  dbus: notify
-                  text: "charly-dbus-notify-marker"
-                  exit_status: 0
-            # Recording consumer — produces a known-shape artifact
-            - name: desktop-record-cast-has-events
-              pod: desktop
-              step:
-                - then: "a terminal recording is captured with at least the predetermined number of events"
-                  record: stop
-                  artifact: /tmp/session.cast
-                  artifact_min_bytes: 200
-                  artifact_min_cast_events: 5
-    # ─────────────────────────────────────────────────────────────────────
-    # Phase 7 — vm-control-libvirt-spice: KVM VM with libvirt + SPICE.
-    # CONSUMES web (phase 2) via guest/exec curl to prove the VM
-    # has cross-pod network reachability AND libvirt guest-agent forwards
-    # stdout correctly.
-    # ─────────────────────────────────────────────────────────────────────
-    vm-control-libvirt-spice:
-        description:
-            feature: "A KVM-accelerated VM reachable via libvirt and SPICE — the guest can reach the upstream HTTP fixture."
-            narrative: |
-                Feature: A KVM-accelerated VM reachable via libvirt and SPICE —
-                  the guest can reach the upstream HTTP fixture.
-                  As an operator running a virtualized workload alongside container
-                    deployments,
-                  I want one KVM-accelerated VM running with a guest agent
-                    installed and a predetermined hostname, reachable via the
-                    libvirt RPC protocol and the SPICE display protocol, where
-                    the guest can reach the upstream HTTP fixture pod across the
-                    network boundary,
-                  So that virtualization correctness, console capture, guest-agent
-                    functionality, and VM-to-pod networking are all verifiable
-                    against known upstream values.
-
-                  What must be true to pass this test:
-                    - A VM named `vm` is running on
-                      hardware-accelerated virtualization.
-                    - The VM's libvirt domain info is queryable.
-                    - The VM's domain XML definition contains the literal
-                      string `vm` as its domain name.
-                    - A libvirt console screenshot of the VM produces a PNG
-                      file at `/tmp/lv.png` of at least 5000 bytes, with
-                      dimensions ≥ 640×480, with non-uniform pixel content.
-                    - The VM guest agent answers `ping`.
-                    - Inside the VM via guest/exec, running `uname -s`
-                      outputs a string containing `Linux`.
-                    - Inside the VM via guest/exec, running
-                      `curl -fsS http://charly-web:8080/` outputs a
-                      response containing the literal string
-                      `charly-web-content-marker` (the marker served by
-                      the phase-2 web pod).
-                    - `libvirt snapshot/list` against the VM exits with
-                      status 0.
-                    - The VM's SPICE handshake completes with `ok`.
-                    - A SPICE framebuffer screenshot of the VM produces a
-                      PNG file at `/tmp/spice.png` of at least 5000 bytes,
-                      with dimensions ≥ 640×480, with non-uniform pixel
-                      content.
-        scenario:
-            - name: vm-libvirt-info
-              pod: vm
-              step:
-                - then: "the VM's libvirt domain info is queryable"
-                  libvirt: info
-            - name: vm-libvirt-domain-xml
-              pod: vm
-              depends_on: [vm-libvirt-info]
-              step:
-                - then: "the VM's domain definition contains the predetermined domain name"
-                  libvirt: domain-xml
-                  stdout: {contains: ["vm"]}
-            - name: vm-libvirt-screenshot-real
-              pod: vm
-              depends_on: [vm-libvirt-info]
-              step:
-                - then: "a libvirt console screenshot has real, non-uniform content at the expected dimensions"
-                  libvirt: screenshot
-                  artifact: /tmp/lv.png
-                  artifact_min_bytes: 5000
-                  artifact_min_dimensions: 640x480
-                  artifact_not_uniform: true
-            - name: vm-guest-ping
-              pod: vm
-              depends_on: [vm-libvirt-info]
-              step:
-                - then: "the VM guest agent answers ping"
-                  libvirt: guest/ping
-            - name: vm-guest-uname-linux
-              pod: vm
-              depends_on: [vm-guest-ping]
-              step:
-                - then: "the VM guest reports a Linux kernel via guest/exec"
-                  libvirt: guest/exec
-                  command: "uname -s"
-                  stdout: {contains: ["Linux"]}
-            - name: vm-guest-curls-web
-              pod: vm
-              depends_on: [vm-guest-ping]
-              step:
-                - then: "from inside the VM, fetching the upstream HTTP fixture URL returns the predetermined marker"
-                  libvirt: guest/exec
-                  command: "curl -fsS http://charly-web:8080/"
-                  stdout: {contains: ["charly-web-content-marker"]}
-            - name: vm-snapshot-list
-              pod: vm
-              depends_on: [vm-libvirt-info]
-              step:
-                - then: "snapshot listing succeeds"
-                  libvirt: snapshot/list
-            - name: vm-spice-status
-              pod: vm
-              depends_on: [vm-libvirt-info]
-              step:
-                - then: "the VM's SPICE handshake completes"
-                  spice: status
-                  stdout: {contains: ["ok"]}
-            - name: vm-spice-screenshot-real
-              pod: vm
-              depends_on: [vm-spice-status]
-              step:
-                - then: "a SPICE framebuffer screenshot has real, non-uniform content at the expected dimensions"
-                  spice: screenshot
-                  artifact: /tmp/spice.png
-                  artifact_min_bytes: 5000
-                  artifact_min_dimensions: 640x480
-                  artifact_not_uniform: true
-    # ─────────────────────────────────────────────────────────────────────
-    # Phase 8 — nested-deployment-chain: VM-in-pod-in-pod with cross-hop
-    # nonce-protected traffic. (Renamed from nested-vm-pod-pod; narrative
-    # and `then:` fields stripped of solution hints.)
-    # ─────────────────────────────────────────────────────────────────────
-    nested-deployment-chain:
-        description:
-            feature: "A three-layer deployment topology — VM containing a pod containing a nested pod — with cross-hop nonce-protected traffic."
-            narrative: |
-                Feature: A three-layer deployment topology — VM containing a pod
-                  containing a nested pod — with cross-hop nonce-protected traffic.
-                  As an operator running deeply-nested multi-tenant deployments,
-                  I want a virtual machine containing an application pod that
-                    itself contains a nested data-store pod, where the application
-                    pod can write a freshly generated, randomized value into the
-                    nested data store and read it back from the deepest pod,
-                  So that the entire three-layer chain is verifiably functional
-                    end-to-end against a value the harness generates AFTER the
-                    AI exits the iteration.
-
-                  What must be true to pass this test:
-                    - A VM named `nested-check-vm` is running and reachable
-                      from the check-sandbox (`uptime` runs successfully inside
-                      the VM via the harness chain).
-                    - The VM guest has `/dev/kvm` available
-                      (hardware-accelerated virtualization is reachable).
-                    - Inside the VM, a pod named `inner-app-pod` is running
-                      (deployment path: `nested-check-vm.inner-app-pod`) with
-                      an `nginx` process running and TCP port 8080 listening.
-                    - Inside that pod, a nested pod named `nested-redis-pod`
-                      is running (deployment path:
-                      `nested-check-vm.inner-app-pod.nested-redis-pod`) with
-                      a `redis-server` process and a non-loopback TCP 6379
-                      listener.
-                    - From inside `inner-app-pod`, running
-                      `redis-cli -h charly-inner-app-pod_nested-redis-pod SET
-                      bench:${EVAL_NONCE_KEY} ${EVAL_NONCE_VALUE}`
-                      outputs `OK`.
-                    - From inside `nested-redis-pod`, running
-                      `redis-cli get bench:${EVAL_NONCE_KEY}` outputs the
-                      same `${EVAL_NONCE_VALUE}`.
-                    - From inside the VM, running `redis-cli -h charly-redis
-                      ping` outputs `PONG` (the VM can reach the outermost
-                      redis pod from phase 3).
-
-                  The `${EVAL_NONCE_*}` placeholders are substituted by the
-                  harness at scoring time with values generated AFTER the AI
-                  exits this iteration.
-        scenario:
-            # ─── Layer 1: VM exists and is reachable ─────────────────────────
-            - name: vm-running
-              pod: nested-check-vm
-              step:
-                - then: "the VM has booted and is reachable from the bench pod"
-                  command: "uptime"
-                  exit_status: 0
-            - name: vm-has-kvm-acceleration
-              pod: nested-check-vm
-              depends_on: [vm-running]
-              step:
-                - then: "the guest has hardware-accelerated virtualization available"
-                  file: /dev/kvm
-                  exists: true
-            # ─── Layer 2: pod inside the VM ──────────────────────────────────
-            - name: inner-pod-running
-              pod: nested-check-vm.inner-app-pod
-              depends_on: [vm-running]
-              step:
-                - then: "the inner pod's primary process is running"
-                  process: nginx
-                  running: true
-            - name: inner-pod-listens-8080
-              pod: nested-check-vm.inner-app-pod
-              depends_on: [inner-pod-running]
-              step:
-                - then: "the inner pod's predetermined port is listening"
-                  port: 8080
-                  listening: true
-            # ─── Layer 3: pod nested inside the inner pod ────────────────────
-            - name: nested-pod-running
-              pod: nested-check-vm.inner-app-pod.nested-redis-pod
-              depends_on: [inner-pod-running]
-              step:
-                - then: "the nested data store's primary process is running"
-                  process: redis-server
-                  running: true
-            - name: nested-pod-listens-network
-              pod: nested-check-vm.inner-app-pod.nested-redis-pod
-              depends_on: [nested-pod-running]
-              step:
-                - then: "the nested data store is reachable on the network (not loopback only)"
-                  command: "ss -tln | grep ':6379' | grep -v '127.0.0.1'"
-                  exit_status: 0
-            # ─── End-to-end nonce-protected probe (the real test) ────────────
-            - name: nested-set-from-inner
-              pod: nested-check-vm.inner-app-pod
-              depends_on: [nested-pod-listens-network]
-              step:
-                - then: "the inner pod successfully writes the nonce-protected key on the nested data store"
-                  command: "redis-cli -h charly-inner-app-pod_nested-redis-pod SET bench:${EVAL_NONCE_KEY} ${EVAL_NONCE_VALUE}"
-                  stdout: {contains: [OK]}
-            - name: nested-readback-on-deepest
-              pod: nested-check-vm.inner-app-pod.nested-redis-pod
-              depends_on: [nested-set-from-inner]
-              step:
-                - then: "the nonce-protected key is readable on the deepest pod with the correct value"
-                  command: "redis-cli get bench:${EVAL_NONCE_KEY}"
-                  stdout: {contains: ["${EVAL_NONCE_VALUE}"]}
-            # ─── Cross-hop reachability (VM-to-check-sandbox-redis) ──────────────
-            - name: vm-can-reach-redis
-              pod: nested-check-vm
-              depends_on: [vm-running]
-              step:
-                - then: "the VM guest can reach the outermost data store from phase 3"
-                  command: "redis-cli -h charly-redis ping"
-                  stdout: {contains: [PONG]}
-    # ─────────────────────────────────────────────────────────────────────
-    # SCAFFOLDING SELF-TEST — pulled out of the default score; lives in its
-    # own `scaffolding-selftest` score (below). Tests the harness recipe
-    # loader's `from:` machinery against real project entities.
-    # ─────────────────────────────────────────────────────────────────────
-    composition-import-selftest:
-        description:
-            feature: "End-to-end self-test of the harness scaffolding chain — loader + composition + cross-namespace deps + live scoring against AI-deployed pods."
-            narrative: |
-                Feature: End-to-end self-test of the harness scaffolding chain.
-
-                  As a harness maintainer keeping the benchmark scaffolding honest,
-                  I want a recipe that imports tests from existing project
-                    entities onto THREE separate harness pods (per-kind isolation
-                    plus multi-kind composition), AND adds a hand-written
-                    scenario whose dependency reference crosses the
-                    imported-versus-hand-written namespace boundary, AND requires
-                    the AI to actually deploy those three pods with the binaries,
-                    files, and modes that the imported probes assert against,
-                  So that EVERY scaffolding link is exercised end-to-end on real
-                    running infrastructure: the loader expanded the imports, the
-                    filter pipeline (select / exclude / scope / prefix) produced
-                    the expected scenario set, the cross-namespace dependency
-                    resolver respected the imported↔hand-written boundary, and
-                    the scoring path landed probes inside the AI's actual
-                    deployments and turned the verdict green — isolating any
-                    scaffolding regression from AI-task regressions in the main
-                    verb-coverage curriculum.
-
-                  What must be true to pass this test:
-                    - A pod named `selftest-layer` is running with:
-                        - `/usr/sbin/sshd` present.
-                        - `/usr/local/bin/sshd-wrapper` present with mode
-                          0755.
-                    - A pod named `selftest-image` is running with:
-                        - `/usr/bin/charly` present and executable.
-                    - A pod named `composition-app` is running with:
-                        - `/usr/sbin/sshd` present.
-                        - `/usr/bin/charly` present and executable.
-                        - `/etc/charly-composition-selftest` present (this file
-                          is verified by the hand-written scenario that
-                          depends on the imported `sshd-binary` probe).
-        from:
-            # Per-kind expansion in isolation onto dedicated pods (distinct
-            # prefix to avoid collisions with the composition-pod imports below).
-            - kind: candy
-              name: sshd
-              pod: selftest-layer
-              select: [sshd-binary, sshd-wrapper]
-              prefix: solo
-            - kind: box
-              name: fedora.composition-source
-              pod: selftest-image
-              select: [composition-source-charly]
-              prefix: solo
-            # Multi-kind composition onto the SAME pod, with filter pipeline.
-            - kind: candy
-              name: sshd
-              pod: composition-app
-              select: [sshd-binary]
-            - kind: box
-              name: fedora.composition-source
-              pod: composition-app
-              select: [composition-source-charly, composition-source-marker]
-              exclude: [composition-source-marker]
-              prefix: img
-        scenario:
-            # Hand-written scenario whose depends_on: crosses the imported↔
-            # hand-written namespace boundary.
-            - name: composition-handwritten-probe
-              pod: composition-app
-              depends_on: [sshd-binary]
-              step:
-                - then: "a marker file written during the composition self-test is present"
-                  file: /etc/charly-composition-selftest
-                  exists: true
-    # ─────────────────────────────────────────────────────────────────────
-    # charly-cli-surface — the agent drives the charly MANAGEMENT command surface
-    # (box build → deploy/start → status) to stand up a pod it inspects. The
-    # deterministic check-charly-selftest-pod bed asserts every command GROUP runs;
-    # this is the AI-driven companion proving an agent can OPERATE the CLI
-    # end-to-end against a real deployment.
-    # ─────────────────────────────────────────────────────────────────────
-    charly-cli-surface:
-        description:
-            feature: "An agent operates the charly management commands to build, deploy, and inspect a pod."
-            narrative: |
-                Feature: An agent operates the charly management command surface end-to-end.
-                  As an operator delegating to an agent,
-                  I want the agent to use `charly box build` to build the `os` image,
-                    `charly deploy add`/`charly start` to bring it up as a pod, and
-                    `charly status` to confirm it is running,
-                  So that the core management surface (build → deploy → status) is
-                    proven operable by a real agent against a real deployment.
-
-                  What must be true to pass this test:
-                    - A pod named `os` is running — the agent built it with
-                      `charly box build os` and started it with `charly start os` /
-                      `charly deploy add os os`.
-                    - The `supervisord` init process is running in the pod.
-                    - A file at `/etc/charly-os-marker` exists in the pod containing
-                      the literal string `charly-os-content-marker`, proving the agent
-                      built + deployed the real `os` image (not a stand-in).
-        scenario:
-            - name: ovcli-os-built-and-running
-              pod: os
-              step:
-                - then: "the os pod the agent built with `charly box build` + started with charly is running"
-                  process: supervisord
-                  running: true
-            - name: ovcli-os-marker-present
-              pod: os
-              step:
-                - then: "the built os image's predetermined marker file is present"
-                  file: /etc/charly-os-marker
-                  contains: ["charly-os-content-marker"]
-score:
-    # ─────────────────────────────────────────────────────────────────────
-    # charly-cli — AI check of the charly MANAGEMENT command surface. Companion to the
-    # deterministic check-charly-selftest-pod bed: where the bed asserts every
-    # command GROUP runs in-container, this proves an AGENT can OPERATE the
-    # build → deploy → status lifecycle end-to-end. A full convergence run is
-    # the multi-hour benchmark; the deterministic bed is the per-commit R10 gate.
-    # ─────────────────────────────────────────────────────────────────────
-    charly-cli:
-        description:
-            feature: "AI check — an agent operates the charly management command surface (build → deploy → status) end-to-end."
-        pod: check-sandbox
-        agent: [claude]
-        plateau_iteration: 3
-        progressive: false
-        note: false
-        mcp_endpoint: "http://localhost:18765/mcp"
-        env: {}
-        recipe:
-            - charly-cli-surface
-        prompt: |
-            == Where you are ==
-            Your cwd is /workspace — a fresh per-run clone of the OpenCharly
-            project, bind-mounted into this freshly-rebuilt ${TARGET_NAME}. You
-            have FULL sudo + nested podman + the `charly` CLI. Host services are
-            invisible; you cannot conflict with them.
-
-            == Score purpose ==
-            This score proves an agent can OPERATE the charly management command
-            surface end-to-end. Use `charly box build os` to build the `os` image,
-            then `charly deploy add os os` (or `charly start os`) to bring it up as a
-            running pod, and `charly status` to confirm it. The recipe's scenarios
-            assert the `os` pod is running with its predetermined marker file —
-            satisfy them by driving the real charly commands, not by hand-crafting
-            state. The full `charly` CLI + the MCP surface (`charly mcp serve` on
-            ${TARGET_NAME}) are available; how you satisfy the spec is your call.
-    # ─────────────────────────────────────────────────────────────────────
-    # Default benchmark — progressive verb-coverage curriculum across the
-    # full `charly check` surface. 8 phases, one recipe added per phase.
-    # ─────────────────────────────────────────────────────────────────────
-    default:
-        description:
-            feature: "Default benchmark — progressive verb-coverage curriculum across the full `charly check` surface (system state → network → cross-pod → MCP → Kubernetes → desktop → VM → nested)."
-        pod: check-sandbox # the AI-sandbox pod; harness runs iterations inside charly-<pod>
-        agent: [claude]
-        plateau_iteration: 3
-        progressive: true # curriculum-style: phase N adds recipe N
-        target_image: "check-target" # informational prompt token (${TARGET_IMAGE})
-        deploy: "check-default" # HarnessScore.Deploy (yaml:"deploy") — names the scored deployment
-        note: true
-        mcp_endpoint: "http://localhost:18765/mcp"
-        env: {}
-        # Validate the AI's iteration artifacts (instead of re-running the
-        # capture) for state-dependent probes ONLY: cdp/wl/vnc/libvirt/spice
-        # screenshots, spice cursor, record stop. The harness scorer at iter
-        # end skips re-execution for these probes (which would overwrite the
-        # AI's file with a different chrome/wayland frame anyway) and
-        # validates the file the AI's own self-evaluate produced. A freshness
-        # mtime gate (artifact mtime ≥ iter start) rejects pre-staged or
-        # stale files.
-        #
-        # ALL OTHER probes (status, evaluation, listing, info, file/process/
-        # package/port/service/command, libvirt RPC queries, k8s queries,
-        # mcp queries) ALWAYS re-run independently regardless of this flag.
-        # The harness remains AUTHORITATIVE for everything reproducible.
-        validate_ai_artifacts: true
-        recipe:
-            - single-pod-system-state # phase 1 — trivial smoke
-            - network-and-http # phase 2 — web producer
-            - cross-pod-nonce-traffic # phase 3 — multi-pod redis with nonce
-            - mcp-protocol-probe # phase 4 — existing MCP-enabled image (jupyter)
-            - kubernetes-cluster # phase 5 — k3s cluster with predetermined manifest
-            - desktop-display-and-input # phase 6 — desktop pod CONSUMES web
-            - vm-control-libvirt-spice # phase 7 — VM CONSUMES web via guest/exec
-            - nested-deployment-chain # phase 8 — VM-in-pod-in-pod with nonce-protected traffic
-        prompt: |
-            == Where you are ==
-            Your cwd is /workspace — the project tree, bind-mounted from the host
-            into this freshly-rebuilt ${TARGET_NAME}. You have FULL sudo + nested
-            podman + every package the recipes need. Host services are completely
-            invisible; you cannot conflict with them.
-
-            Your `/workspace` is a fresh per-run clone of the OpenCharly
-            source repository — the full git tree (with submodules
-            initialized), the `charly` CLI binary, and every layer, image,
-            pod, VM, and Kubernetes cluster definition the project
-            already ships (`candy/`, `box.yml`, `pod.yml`, `vm.yml`,
-            `k8s.yml`). Your session has the project's plugin skills
-            loaded (`/charly-check:check`, `/charly-core:deploy`, `/charly-image:image`, `/charly-image:layer`,
-            `/charly-build:build`, plus per-pod plugins (`/charly-jupyter:*`, `/charly-coder:*`, etc.) and foundation plugins (`/charly-distros:*`, `/charly-infrastructure:*`, `/charly-tools:*`), …). All of these
-            are available to be used if you decide to do so — they may
-            be useful for most of the scenarios. The recipes specify
-            what each pod must do; how you satisfy each specification
-            is entirely your call.
-
-            == Phase progression — curriculum-style ==
-            ${PHASE_INTRO}
-            You are in PHASE ${PHASE} of ${PHASE_TOTAL}. The benchmark adds one
-            recipe per phase: phase 1 starts with the easiest, each later phase
-            brings the previous recipes BACK plus one new one. State persists
-            across phases — pods you deployed in phase 1 stay running for phase
-            2's scoring. Several later recipes EXPLICITLY consume earlier
-            phases' fixtures (phase 6 and phase 7 both reach back to phase 2's
-            HTTP fixture across the pod network) — keeping every phase's pods
-            healthy is part of the contract.
-
-            == Iteration semantics within this phase — NO RUSHING ==
-            Iteration ${ITERATION} of an UNBOUNDED loop within phase ${PHASE}.
-            Score progression: ${BEST_SCORE} (last delta: ${SCORE_DELTA})
-
-            The phase ends when:
-              - every in-scope scenario passes (solved-all → next phase begins), OR
-              - you fail to improve your score for ${PLATEAU_ITERATION} iterations
-                in a row (genuine plateau → next phase begins anyway).
-
-            There is NO maximum iteration count per phase. Take all the time you
-            need. A complete solution in iteration 7 outscores a partial solution
-            in iteration 1. Correctness > speed. NO shortcuts. NO "ship something
-            and hope" — every scenario the harness probes you can re-probe
-            yourself the same way before exiting.
-
-            == Recipes you must solve — IN-SCOPE FOR THIS PHASE ==
-            ${RECIPES}
-
-            Each scenario carries a `pod:` field — that's the container the
-            harness probes its steps in. Read every scenario; collect the unique
-            set of pod names; deploy a container with each name. Across recipes,
-            multiple recipes may share a pod name (same container, more
-            scenarios scored against it). Some recipes deploy "fixture pods"
-            whose hostnames (e.g. `charly-web`) are reached from later
-            recipes' pods across the pod network — those fixtures must remain
-            running across phases.
-
-            Some scenarios carry `depends_on: [...]` — they only run after the
-            named upstream scenarios pass. If you see a scenario marked
-            `verdict: skipped` with `skipped_reason: "dep-unmet: <name>"`, the
-            upstream <name> failed; fix that one first.
-
-            Notes: ${NOTES}
-
-            == Ground rules ==
-              - Recipe scenarios are immutable — they live in the check: block of the project charly.yml.
-              - The ${TARGET_NAME} sandbox was rebuilt FRESH for this run; it persists
-                across iters but is destroyed + recreated NEXT run.
-              - Every pod a scenario references MUST be running at exit (that's
-                what gets scored). Fixtures from earlier phases must STAY
-                running for later phases' consumer probes.
-              - There is NO premium on speed. There IS a premium on every
-                scenario you can make pass.
-
-            == How harness scoring relates to your iteration ==
-            The harness scorer is AUTHORITATIVE. At iter end it physically
-            re-runs every probe against the live system EXCEPT for the
-            state-dependent capture probes listed below — for those, the
-            harness validates the artifact YOUR iteration produced (the file
-            at the recipe's `artifact:` path), with a strict mtime freshness
-            check that rejects pre-staged or stale files.
-
-            Re-run by harness independently (you cannot influence the verdict):
-              - Status / evaluation / listing verbs (cdp:status, cdp:check,
-                wl:status, libvirt:info, libvirt:domain-xml, libvirt:guest/
-                ping, libvirt:guest/exec, k8s:nodes/wait-ready/addons/raw,
-                mcp:ping/list-tools/call/read, dbus:list/call/notify).
-              - File / process / package / port / service / command /
-                matching / http / dns / addr / interface / mount / kernel-
-                param / user / group probes.
-              - All deploy-tree resolution probes.
-
-            Validates YOUR iteration's artifact (state-dependent capture only):
-              - cdp:screenshot, wl:screenshot, vnc:screenshot,
-                libvirt:screenshot, spice:screenshot, spice:cursor, record:stop.
-              - For these the harness validates artifact_min_bytes /
-                artifact_min_dimensions / artifact_not_uniform /
-                artifact_min_cast_events against the file at the recipe-
-                declared `artifact:` path, with mtime ≥ iter start.
-
-            == MANDATORY before exiting this iteration ==
-            Run `charly check self-evaluate` and read its output BEFORE you
-            exit. It runs every in-scope probe against live systems via the
-            SAME code path the harness scorer will invoke at iter end. The
-            verdict it prints (pass / fail / skipped per scenario) is what
-            the harness will record.
-
-            Why this is mandatory: for state-dependent capture probes,
-            self-evaluate's invocation IS what writes the canonical artifact
-            the harness then validates. Skipping self-evaluate means missing
-            or stale artifacts → those scenarios fail. For other probes,
-            self-evaluate gives you a chance to see the harness's verdict
-            and fix your deployment BEFORE the iter ends.
-
-            Do not consider the iteration complete until self-evaluate
-            prints the verdict you intended.
-
-            == When a source-code fix can't apply mid-run ==
-            The harness loop runs as a long-lived Go process (PID inside
-            ${TARGET_NAME}). Source fixes you make to /workspace/charly/*.go and
-            rebuilds appear on disk via the bind-mount, BUT the running
-            harness PID has the OLD binary mmap'd and CANNOT hot-reload Go
-            code. Your fix takes effect on the NEXT harness run — not the
-            current one. Recommended response: record the fix in your
-            iteration notes and exit this iteration cleanly; the next run
-            will fork a fresh PID and pick up the new binary. Do NOT loop
-            iterations 3+ trying to make the running PID see your on-disk
-            fix; the score won't change this run.
-    # ─────────────────────────────────────────────────────────────────────
-    # Scaffolding self-test — exercises the harness benchmark machinery
-    # itself (recipe loader + `from:` composition + cross-namespace deps).
-    # Runs BEFORE the default score in any cutover; failure here means the
-    # loader is broken and verb-coverage runs cannot be trusted.
-    # ─────────────────────────────────────────────────────────────────────
-    scaffolding-selftest:
-        description:
-            feature: "End-to-end self-test of the harness benchmark scaffolding chain — loader + composition + cross-namespace deps + live scoring against AI-deployed pods."
-        pod: check-sandbox
-        agent: [claude]
-        plateau_iteration: 3
-        progressive: false
-        note: false
-        mcp_endpoint: "http://localhost:18765/mcp"
-        env: {}
-        recipe:
-            - composition-import-selftest
-        prompt: |
-            == Where you are ==
-            Your cwd is /workspace — the project tree, bind-mounted from the
-            host into this freshly-rebuilt ${TARGET_NAME}. You have FULL sudo +
-            nested podman + every package the recipes need. Host services are
-            completely invisible; you cannot conflict with them.
-
-            Your `/workspace` is a fresh per-run clone of the OpenCharly
-            source repository — the full git tree (with submodules
-            initialized), the `charly` CLI binary, and every layer, image,
-            pod, VM, and Kubernetes cluster definition the project
-            already ships (`candy/`, `box.yml`, `pod.yml`, `vm.yml`,
-            `k8s.yml`). Your session has the project's plugin skills
-            loaded (`/charly-check:check`, `/charly-core:deploy`, `/charly-image:image`, `/charly-image:layer`,
-            `/charly-build:build`, plus per-pod plugins (`/charly-jupyter:*`, `/charly-coder:*`, etc.) and foundation plugins (`/charly-distros:*`, `/charly-infrastructure:*`, `/charly-tools:*`), …). All of these
-            are available to be used if you decide to do so — they may
-            be useful for most of the scenarios. The recipes specify
-            what each pod must do; how you satisfy each specification
-            is entirely your call.
-
-            == Score purpose ==
-            This score's single recipe exercises the harness scaffolding chain
-            end-to-end: the recipe loader, the `from:` composition expander,
-            the select/exclude/scope/prefix filter pipeline, the
-            cross-namespace `depends_on:` resolver, AND the live-state scoring
-            path. To prove every link works, the imported probes must run AND
-            turn green — which requires you to deploy the pods the recipe's
-            scenarios target, with the binaries, files, and modes those
-            probes assert against.
-
-            == Iteration semantics — NO RUSHING ==
-            Iteration ${ITERATION} of an UNBOUNDED loop. Score progression:
-            ${BEST_SCORE} (last delta: ${SCORE_DELTA}). The score ends when
-            every scenario passes (solved-all) OR when you fail to improve
-            for ${PLATEAU_ITERATION} iterations in a row (plateau). There is
-            NO maximum iteration count. Take the time you need. Correctness
-            over speed.
-
-            == Recipe in scope ==
-            ${RECIPES}
-
-            Each scenario carries a `pod:` field — that's the container the
-            harness probes its steps in. Read every scenario; collect the
-            unique set of pod names; deploy a container with each name whose
-            filesystem satisfies the probes the recipe asserts. Some
-            scenarios carry `depends_on: [...]` — they only run after the
-            named upstream scenarios pass.
-
-            == Ground rules ==
-              - Recipe scenarios are immutable — they live in the check: block of the project charly.yml.
-              - Every pod a scenario references MUST be running at exit
-                (that's what gets scored).
-              - Imported probes are scored identically to hand-written
-                probes — one Check = one ScenarioID = one point.
-
-            == When a source-code fix can't apply mid-run ==
-            The harness loop runs as a long-lived Go process. Source fixes
-            to /workspace/charly/*.go appear on disk via the bind-mount but the
-            running harness PID has the OLD binary mmap'd and CANNOT
-            hot-reload Go code. Your fix takes effect on the NEXT harness
-            run, not the current one. Record the fix in your iteration
-            notes and exit cleanly; the next run picks up the new binary.
 # =============================================================================
 # kind: check — disposable, zero-operator-side-effect R10 test beds.
 # =============================================================================
@@ -1608,107 +257,128 @@ check:
             allow_repo_changes: true # pacman sync / repo key import
             skip_incompatible: true # skip rpm:/deb:-only layer sections
             verify: true
-        scenario:
-            - name: kv-guest-identity
-              step:
-                # --- Guest identity + VM health --------------------------
-                - {id: kv-guest-identity, command: id, stdout: {contains: "uid=1000(arch)"}, context: [runtime]}
-            - name: kv-guest-os-release
-              step:
-                - {id: kv-guest-os-release, command: "cat /etc/os-release", stdout: {contains: "ID=arch"}, context: [runtime]}
-            - name: kv-k3s-process
-              step:
-                # --- k3s-server in-guest health --------------------------
-                # The k3s binary re-execs into `k3s-server` (the unambiguous
-                # post-exec comm name).
-                - {id: kv-k3s-process, process: "k3s-server", running: true, context: [runtime]}
-            - name: kv-port-6443-listening
-              step:
-                - {id: kv-port-6443-listening, port: 6443, listening: true, context: [runtime]}
-            - name: kv-kubeconfig-file
-              step:
-                - {id: kv-kubeconfig-file, file: /etc/rancher/k3s/k3s.yaml, exists: true, context: [runtime]}
-            - name: kv-k8s-nodes
-              step:
-                # NOTE: no http: /healthz probe — k3s v1.31 gates /healthz behind
-                # authn (401 to anonymous). kv-k8s-raw-version exercises the
-                # authenticated API path end-to-end via the retrieved kubeconfig.
-                # --- k8s: verb (all 13 methods) --------------------------
-                - {id: kv-k8s-nodes, k8s: nodes, cluster: "vm-k3s-vm", context: [runtime]}
-            - name: kv-k8s-wait-nodes
-              step:
-                - {id: kv-k8s-wait-nodes, k8s: "wait-nodes", cluster: "vm-k3s-vm", k8s_count: 1, timeout: "300s", context: [runtime]}
-            - name: kv-k8s-pods
-              step:
-                - {id: kv-k8s-pods, k8s: pods, cluster: "vm-k3s-vm", namespace: kube-system, context: [runtime]}
-            - name: kv-k8s-wait-ready
-              step:
-                - {id: kv-k8s-wait-ready, k8s: "wait-ready", cluster: "vm-k3s-vm", k8s_kind: Deployment, namespace: kube-system, name: coredns, timeout: "180s", context: [runtime]}
-            - name: kv-k8s-addons
-              step:
-                # `addons` rolls up Traefik + ServiceLB + local-path readiness; it MUST gate
-                # the ingressclass/storageclass checks below, because those resources are
-                # registered BY the addon stack. Probing them before addons is Ready races
-                # the helm-install job / provisioner and returns an empty list — and the
-                # verb exits 0 on an empty list, so the `contains` matcher FAILS (not waits).
-                - {id: kv-k8s-addons, k8s: addons, cluster: "vm-k3s-vm", context: [runtime]}
-            - name: kv-k8s-ingressclass-traefik
-              step:
-                - {id: kv-k8s-ingressclass-traefik, k8s: ingressclass, cluster: "vm-k3s-vm", stdout: {contains: "traefik"}, context: [runtime]}
-            - name: kv-k8s-storageclass-localpath
-              step:
-                - {id: kv-k8s-storageclass-localpath, k8s: storageclass, cluster: "vm-k3s-vm", stdout: {contains: "local-path"}, context: [runtime]}
-            - name: kv-k8s-raw-version
-              step:
-                - {id: kv-k8s-raw-version, k8s: raw, cluster: "vm-k3s-vm", text: "version -o json", context: [runtime]}
-            - name: kv-k8s-service-kubernetes
-              step:
-                - {id: kv-k8s-service-kubernetes, k8s: service, cluster: "vm-k3s-vm", namespace: default, name: kubernetes, context: [runtime]}
-            - name: kv-charly-version
-              step:
-                # --- command: charly-specific operator-side smoke ------------
-                - {id: kv-charly-version, command: "/tmp/charly-build/charly version || charly version", stdout: {matches: "[0-9]{4}\\.[0-9]+"}, in_container: false, context: [runtime]}
-            - name: kv-matching
-              step:
-                # --- matching: verb smoke --------------------------------
-                - {id: kv-matching, matching: "check-k3s-vm up", contains: {contains: "k3s"}, context: [runtime]}
-            - name: status-shows-vm
-              step:
-                # check-coverage gate for the unified `charly status` VM substrate: the
-                # libvirt-domain row must render (host-side, via listCharlyDomains). Fails
-                # if VMCollector regresses.
-                - id: status-shows-vm
-                  command: charly status --json
-                  in_container: false
-                  stdout:
-                    - contains: '"kind": "vm"'
-                    - contains: k3s-vm
-                  context:
-                    - runtime
+        plan:
+            - check: command=id
+              id: kv-guest-identity
+              command: id
+              stdout: {contains: "uid=1000(arch)"}
+              context: [runtime]
+            - check: command=cat /etc/os-release
+              id: kv-guest-os-release
+              command: "cat /etc/os-release"
+              stdout: {contains: "ID=arch"}
+              context: [runtime]
+            - check: process=k3s-server
+              id: kv-k3s-process
+              process: "k3s-server"
+              running: true
+              context: [runtime]
+            - check: port=6443
+              id: kv-port-6443-listening
+              port: 6443
+              listening: true
+              context: [runtime]
+            - check: file=/etc/rancher/k3s/k3s.yaml
+              id: kv-kubeconfig-file
+              file: /etc/rancher/k3s/k3s.yaml
+              exists: true
+              context: [runtime]
+            - check: k8s=nodes
+              id: kv-k8s-nodes
+              k8s: nodes
+              cluster: "vm-k3s-vm"
+              context: [runtime]
+            - check: k8s=wait-nodes
+              id: kv-k8s-wait-nodes
+              k8s: "wait-nodes"
+              cluster: "vm-k3s-vm"
+              k8s_count: 1
+              timeout: "300s"
+              context: [runtime]
+            - check: k8s=pods
+              id: kv-k8s-pods
+              k8s: pods
+              cluster: "vm-k3s-vm"
+              namespace: kube-system
+              context: [runtime]
+            - check: k8s=wait-ready
+              id: kv-k8s-wait-ready
+              k8s: "wait-ready"
+              cluster: "vm-k3s-vm"
+              k8s_kind: Deployment
+              namespace: kube-system
+              name: coredns
+              timeout: "180s"
+              context: [runtime]
+            - check: k8s=addons
+              id: kv-k8s-addons
+              k8s: addons
+              cluster: "vm-k3s-vm"
+              context: [runtime]
+            - check: k8s=ingressclass
+              id: kv-k8s-ingressclass-traefik
+              k8s: ingressclass
+              cluster: "vm-k3s-vm"
+              stdout: {contains: "traefik"}
+              context: [runtime]
+            - check: k8s=storageclass
+              id: kv-k8s-storageclass-localpath
+              k8s: storageclass
+              cluster: "vm-k3s-vm"
+              stdout: {contains: "local-path"}
+              context: [runtime]
+            - check: k8s=raw
+              id: kv-k8s-raw-version
+              k8s: raw
+              cluster: "vm-k3s-vm"
+              text: "version -o json"
+              context: [runtime]
+            - check: k8s=service
+              id: kv-k8s-service-kubernetes
+              k8s: service
+              cluster: "vm-k3s-vm"
+              namespace: default
+              name: kubernetes
+              context: [runtime]
+            - check: command=/tmp/charly-build/charly version || charly version
+              id: kv-charly-version
+              command: "/tmp/charly-build/charly version || charly version"
+              stdout: {matches: "[0-9]{4}\\.[0-9]+"}
+              in_container: false
+              context: [runtime]
+            - agent-check: agent-check
+              id: kv-matching
+              matching: "check-k3s-vm up"
+              contains: {contains: "k3s"}
+              context: [runtime]
+            - check: command=charly status --json
+              id: status-shows-vm
+              command: charly status --json
+              in_container: false
+              stdout:
+                - contains: '"kind": "vm"'
+                - contains: k3s-vm
+              context:
+                - runtime
     check-local:
         target: local
         local: check-local
         host: local
         disposable: true
         lifecycle: dev
-        description:
-            feature: Fast local bed exercising kind:local layer application
-            tag: [working]
-        scenario:
-            - name: status-shows-local
-              step:
-                # check-coverage gate for the unified `charly status` LOCAL substrate: the
-                # install-ledger row must render. Fails if LocalCollector regresses.
-                - id: status-shows-local
-                  command: charly status --json
-                  in_container: false
-                  stdout:
-                    # local deploy-ids are content hashes (not the bed name), so assert
-                    # the substrate renders via the kind discriminator + ledger source.
-                    - contains: '"kind": "local"'
-                    - contains: '"source": "ledger"'
-                  context:
-                    - runtime
+        description: Fast local bed exercising kind:local layer application
+        plan:
+            - check: command=charly status --json
+              id: status-shows-local
+              command: charly status --json
+              in_container: false
+              stdout:
+                # local deploy-ids are content hashes (not the bed name), so assert
+                # the substrate renders via the kind discriminator + ledger source.
+                - contains: '"kind": "local"'
+                - contains: '"source": "ledger"'
+              context:
+                - runtime
     # pac localpkg AUTO-RESOLVE witness against the LOCAL charly candy (no @github):
     # deploys candy/charly to a disposable Arch Cloud VM, where the layer's localpkg
     # builds the opencharly-git package from pkg/arch (makepkg on the host) and
@@ -1725,25 +395,686 @@ check:
         install_opts:
             allow_repo_changes: true
             allow_root_tasks: true
-        scenario:
-            - name: localpkg-pac-autoresolve
-              step:
-                - id: localpkg-pac-autoresolve
-                  description: charly installed as the opencharly-git pacman package via localpkg, mandatory repo deps auto-resolved by pacman -U
-                  command: |
-                    pacman -Q opencharly-git >/dev/null 2>&1 &&
-                    pacman -Q podman >/dev/null 2>&1 &&
-                    pacman -Q libvirt >/dev/null 2>&1 &&
-                    pacman -Q tailscale >/dev/null 2>&1 &&
-                    pacman -Q gocryptfs >/dev/null 2>&1 &&
-                    test "$(command -v charly)" -ef /usr/bin/charly &&
-                    charly version &&
-                    echo LOCALPKG-PAC-AUTORESOLVE-OK
-                  stdout:
-                    - contains: LOCALPKG-PAC-AUTORESOLVE-OK
-                  exit_status: 0
-                  context:
-                    - runtime
+        plan:
+            - check: |
+                command=pacman -Q opencharly-git >/dev/null 2>&1 &&
+                pacman -Q podman >/dev/null 2>&1 &&
+                pacman -Q libvirt >/dev/null 2>&1 &&
+                pacman -Q tailscale >/dev/null 2>&1 &&
+                pacman -Q gocryptfs >/dev/null 2>&1 &&
+                test "$(command -v charly)" -ef /usr/bin/charly &&
+                charly version &&
+                echo LOCALPKG-PAC-AUTORESOLVE-OK
+              id: localpkg-pac-autoresolve
+              description: charly installed as the opencharly-git pacman package via localpkg, mandatory repo deps auto-resolved by pacman -U
+              command: |
+                pacman -Q opencharly-git >/dev/null 2>&1 &&
+                pacman -Q podman >/dev/null 2>&1 &&
+                pacman -Q libvirt >/dev/null 2>&1 &&
+                pacman -Q tailscale >/dev/null 2>&1 &&
+                pacman -Q gocryptfs >/dev/null 2>&1 &&
+                test "$(command -v charly)" -ef /usr/bin/charly &&
+                charly version &&
+                echo LOCALPKG-PAC-AUTORESOLVE-OK
+              stdout:
+                - contains: LOCALPKG-PAC-AUTORESOLVE-OK
+              exit_status: 0
+              context:
+                - runtime
+    charly-cli:
+        description: AI check — an agent operates the charly management command surface (build → deploy → status) end-to-end.
+        iterate:
+            sandbox: check-sandbox
+            agent: [claude]
+            plateau_iteration: 3
+            prompt: |
+                == Where you are ==
+                Your cwd is /workspace — a fresh per-run clone of the OpenCharly
+                project, bind-mounted into this freshly-rebuilt ${TARGET_NAME}. You
+                have FULL sudo + nested podman + the `charly` CLI. Host services are
+                invisible; you cannot conflict with them.
+
+                == Bed purpose ==
+                This bed proves an agent can OPERATE the charly management command
+                surface end-to-end. Use `charly box build os` to build the `os` image,
+                then `charly deploy add os os` (or `charly start os`) to bring it up as a
+                running pod, and `charly status` to confirm it. The bed's `check:` steps
+                assert the `os` pod is running with its predetermined marker file —
+                satisfy them by driving the real charly commands, not by hand-crafting
+                state. The full `charly` CLI + the MCP surface (`charly mcp serve` on
+                ${TARGET_NAME}) are available; how you satisfy the spec is your call.
+            note: false
+            env: {}
+            mcp_endpoint: "http://localhost:18765/mcp"
+        plan:
+            - check: the os pod the agent built with `charly box build` + started with charly is running
+              process: supervisord
+              running: true
+              pod: os
+            - check: the built os image's predetermined marker file is present
+              file: /etc/charly-os-marker
+              contains: ["charly-os-content-marker"]
+              pod: os
+    default:
+        description: Default benchmark — progressive verb-coverage curriculum across the full `charly check` surface (system state → network → cross-pod → MCP → Kubernetes → desktop → VM → nested).
+        iterate:
+            sandbox: check-sandbox
+            agent: [claude]
+            plateau_iteration: 3
+            prompt: |
+                == Where you are ==
+                Your cwd is /workspace — the project tree, bind-mounted from the host
+                into this freshly-rebuilt ${TARGET_NAME}. You have FULL sudo + nested
+                podman + every package the plan needs. Host services are completely
+                invisible; you cannot conflict with them.
+
+                Your `/workspace` is a fresh per-run clone of the OpenCharly
+                source repository — the full git tree (with submodules
+                initialized), the `charly` CLI binary, and every layer, image,
+                pod, VM, and Kubernetes cluster definition the project
+                already ships (`candy/`, `box/<name>/charly.yml`, plus the
+                pod/vm/k8s/check kinds inline in `charly.yml`). Your session has the project's plugin skills
+                loaded (`/charly-check:check`, `/charly-core:deploy`, `/charly-image:image`, `/charly-image:layer`,
+                `/charly-build:build`, plus per-pod plugins (`/charly-jupyter:*`, `/charly-coder:*`, etc.) and foundation plugins (`/charly-distros:*`, `/charly-infrastructure:*`, `/charly-tools:*`), …). All of these
+                are available to be used if you decide to do so — they may
+                be useful for most of the steps. The plan specifies
+                what each pod must do; how you satisfy each specification
+                is entirely your call.
+
+                == Phase progression — curriculum-style ==
+                ${PHASE_INTRO}
+                You are in PHASE ${PHASE} of ${PHASE_TOTAL}. The benchmark adds one
+                include: block per phase: phase 1 starts with the easiest, each later phase
+                brings the previous plan segments BACK plus one new one. State persists
+                across phases — pods you deployed in phase 1 stay running for phase
+                2's scoring. Several later plan segments EXPLICITLY consume earlier
+                phases' fixtures (phase 6 and phase 7 both reach back to phase 2's
+                HTTP fixture across the pod network) — keeping every phase's pods
+                healthy is part of the contract.
+
+                == Iteration semantics within this phase — NO RUSHING ==
+                Iteration ${ITERATION} of an UNBOUNDED loop within phase ${PHASE}.
+                Score progression: ${BEST_SCORE} (last delta: ${SCORE_DELTA})
+
+                The phase ends when:
+                  - every in-scope check: step passes (solved-all → next phase begins), OR
+                  - you fail to improve your score for ${PLATEAU_ITERATION} iterations
+                    in a row (genuine plateau → next phase begins anyway).
+
+                There is NO maximum iteration count per phase. Take all the time you
+                need. A complete solution in iteration 7 outscores a partial solution
+                in iteration 1. Correctness > speed. NO shortcuts. NO "ship something
+                and hope" — every check the harness probes you can re-probe
+                yourself the same way before exiting.
+
+                == Plan you must solve — IN-SCOPE FOR THIS PHASE ==
+                ${PLAN}
+
+                Each step carries a `pod:` field — that's the container the
+                harness probes it in. Read every step; collect the unique
+                set of pod names; deploy a container with each name. The plan may
+                reuse a pod name (same container, more steps scored against it).
+                Some include: blocks deploy "fixture pods"
+                whose hostnames (e.g. `charly-web`) are reached from later
+                steps' pods across the pod network — those fixtures must remain
+                running across phases.
+
+                Some steps carry `depends_on: [...]` — they only run after the
+                named upstream steps pass. If you see a step marked
+                `verdict: skipped` with `skipped_reason: "dep-unmet: <name>"`, the
+                upstream <name> failed; fix that one first.
+
+                Notes: ${NOTES}
+
+                == Ground rules ==
+                  - The bed's plan steps are immutable — they live in the check: block of the project charly.yml.
+                  - The ${TARGET_NAME} sandbox was rebuilt FRESH for this run; it persists
+                    across iters but is destroyed + recreated NEXT run.
+                  - Every pod a step references MUST be running at exit (that's
+                    what gets scored). Fixtures from earlier phases must STAY
+                    running for later phases' consumer probes.
+                  - There is NO premium on speed. There IS a premium on every
+                    check: step you can make pass.
+
+                == How harness scoring relates to your iteration ==
+                The harness scorer is AUTHORITATIVE. At iter end it physically
+                re-runs every probe against the live system EXCEPT for the
+                state-dependent capture probes listed below — for those, the
+                harness validates the artifact YOUR iteration produced (the file
+                at the step's `artifact:` path), with a strict mtime freshness
+                check that rejects pre-staged or stale files.
+
+                Re-run by harness independently (you cannot influence the verdict):
+                  - Status / evaluation / listing verbs (cdp:status, cdp:check,
+                    wl:status, libvirt:info, libvirt:domain-xml, libvirt:guest/
+                    ping, libvirt:guest/exec, k8s:nodes/wait-ready/addons/raw,
+                    mcp:ping/list-tools/call/read, dbus:list/call/notify).
+                  - File / process / package / port / service / command /
+                    matching / http / dns / addr / interface / mount / kernel-
+                    param / user / group probes.
+                  - All deploy-tree resolution probes.
+
+                Validates YOUR iteration's artifact (state-dependent capture only):
+                  - cdp:screenshot, wl:screenshot, vnc:screenshot,
+                    libvirt:screenshot, spice:screenshot, spice:cursor, record:stop.
+                  - For these the harness validates artifact_min_bytes /
+                    artifact_min_dimensions / artifact_not_uniform /
+                    artifact_min_cast_events against the file at the step-
+                    declared `artifact:` path, with mtime ≥ iter start.
+
+                == MANDATORY before exiting this iteration ==
+                Run `charly check self-evaluate` and read its output BEFORE you
+                exit. It runs every in-scope probe against live systems via the
+                SAME code path the harness scorer will invoke at iter end. The
+                verdict it prints (pass / fail / skipped per step) is what
+                the harness will record.
+
+                Why this is mandatory: for state-dependent capture probes,
+                self-evaluate's invocation IS what writes the canonical artifact
+                the harness then validates. Skipping self-evaluate means missing
+                or stale artifacts → those steps fail. For other probes,
+                self-evaluate gives you a chance to see the harness's verdict
+                and fix your deployment BEFORE the iter ends.
+
+                Do not consider the iteration complete until self-evaluate
+                prints the verdict you intended.
+
+                == When a source-code fix can't apply mid-run ==
+                The harness loop runs as a long-lived Go process (PID inside
+                ${TARGET_NAME}). Source fixes you make to /workspace/charly/*.go and
+                rebuilds appear on disk via the bind-mount, BUT the running
+                harness PID has the OLD binary mmap'd and CANNOT hot-reload Go
+                code. Your fix takes effect on the NEXT harness run — not the
+                current one. Recommended response: record the fix in your
+                iteration notes and exit this iteration cleanly; the next run
+                will fork a fresh PID and pick up the new binary. Do NOT loop
+                iterations 3+ trying to make the running PID see your on-disk
+                fix; the score won't change this run.
+            note: true
+            env: {}
+            mcp_endpoint: "http://localhost:18765/mcp"
+            validate_ai_artifacts: true
+        plan:
+            - check: the predetermined marker file exists at /etc/charly-os-marker
+              file: /etc/charly-os-marker
+              exists: true
+              pod: os
+            - check: the marker file contains the predetermined content marker
+              file: /etc/charly-os-marker
+              contains: ["charly-os-content-marker"]
+              pod: os
+            - check: the predetermined system package is installed
+              package: bash
+              installed: true
+              pod: os
+            - check: a predetermined process is running by name
+              process: bash
+              running: true
+              pod: os
+            - check: the predetermined user account is present in the user database
+              user: root
+              uid: 0
+              pod: os
+            - check: the predetermined group is present in the group database
+              group: root
+              gid: 0
+              pod: os
+            - check: the predetermined mountpoint is listed in the mount table
+              mount: /proc
+              filesystem: proc
+              pod: os
+            - check: the predetermined kernel parameter is readable from sysctl
+              kernel-param: kernel.hostname
+              value: {matches: "."}
+              pod: os
+            - check: the loopback interface is present
+              interface: lo
+              addrs: ["127.0.0.1/8"]
+              pod: os
+            - agent-check: an in-process matcher resolves a literal predetermined string
+              matching: "charly-os-content-marker"
+              contains: ["charly-os-content-marker"]
+              pod: os
+            - check: the HTTP server's system package is installed
+              package: nginx
+              installed: true
+              pod: web
+            - check: the HTTP server's port is listening inside the pod
+              port: 8080
+              listening: true
+              pod: web
+            - check: the HTTP server's port is reachable from the host
+              addr: "127.0.0.1:${HOST_PORT:8080}"
+              reachable: true
+              pod: web
+            - check: GET / returns 200 with the predetermined content marker
+              http: "http://localhost:8080/"
+              status: 200
+              body: {contains: ["charly-web-content-marker"]}
+              pod: web
+            - check: the served content file persists on disk with the predetermined marker
+              file: /srv/fixture/index.html
+              exists: true
+              contains: ["charly-web-content-marker"]
+              pod: web
+            - check: a self-curl from inside the pod returns the predetermined marker
+              command: "curl -fsS http://127.0.0.1:8080/"
+              exit_status: 0
+              stdout: {contains: ["charly-web-content-marker"]}
+              pod: web
+            - check: the data store's primary process is running
+              process: redis-server
+              running: true
+              pod: redis
+            - check: the data store is reachable from a separate pod
+              command: "ss -tln | grep ':6379' | grep -v '127.0.0.1'"
+              exit_status: 0
+              pod: redis
+            - check: the client pod has the data store's client tool installed
+              command: "command -v redis-cli"
+              exit_status: 0
+              pod: redis-client
+            - check: the client pod successfully writes the nonce-protected key into the data store
+              command: "redis-cli -h charly-redis SET bench:${EVAL_NONCE_KEY} ${EVAL_NONCE_VALUE}"
+              stdout: {contains: [OK]}
+              pod: redis-client
+            - check: the nonce-protected key is readable on the server pod with the correct value
+              command: "redis-cli get bench:${EVAL_NONCE_KEY}"
+              stdout: {contains: ["${EVAL_NONCE_VALUE}"]}
+              pod: redis
+            - include: box:fedora.jupyter
+            - run: remove any prior probe notebook
+              command: "rm -f /workspace/mcp-A.ipynb"
+              in_container: true
+              exit_status: 0
+            - check: notebook_create writes the file but does not open a CRDT room
+              mcp: call
+              tool: notebook_create
+              input: '{"path":"mcp-A.ipynb"}'
+              timeout: 30s
+              pod: mcp
+            - check: room_list does NOT contain mcp-A.ipynb
+              mcp: call
+              tool: room_list
+              input: '{}'
+              stdout: {not_contains: "mcp-A.ipynb"}
+              timeout: 30s
+              pod: mcp
+            - run: clean state
+              command: "rm -f /workspace/mcp-B.ipynb"
+              in_container: true
+              exit_status: 0
+            - run: create
+              mcp: call
+              tool: notebook_create
+              input: '{"path":"mcp-B.ipynb"}'
+              timeout: 30s
+            - check: cell_insert without prior open auto-creates the room
+              mcp: call
+              tool: cell_insert
+              input: '{"path":"mcp-B.ipynb","index":0,"source":"x","cell_type":"markdown"}'
+              timeout: 60s
+              pod: mcp
+            - check: room_list now contains mcp-B.ipynb
+              mcp: call
+              tool: room_list
+              input: '{}'
+              stdout: {contains: "mcp-B.ipynb"}
+              timeout: 30s
+              pod: mcp
+            - run: clean state
+              command: "rm -f /workspace/mcp-D.ipynb"
+              in_container: true
+              exit_status: 0
+            - run: create
+              mcp: call
+              tool: notebook_create
+              input: '{"path":"mcp-D.ipynb"}'
+              timeout: 30s
+            - run: MCP-side cell_insert auto-creates the room
+              mcp: call
+              tool: cell_insert
+              input: '{"path":"mcp-D.ipynb","index":0,"source":"hello","cell_type":"markdown"}'
+              timeout: 60s
+            - check: transient UI-style WebSocket connect (in-container python)
+              command: |-
+                python3 -c '
+                import asyncio
+                async def main():
+                    try:
+                        import websockets
+                    except ImportError:
+                        print("websockets not installed; skipping ws probe"); return
+                    try:
+                        ws = await asyncio.wait_for(
+                            websockets.connect("ws://127.0.0.1:8888/api/yjs/json:notebook:mcp-D.ipynb"),
+                            5,
+                        )
+                        await asyncio.sleep(1)
+                        await ws.close()
+                        print("ws-probe-ok")
+                    except Exception as e:
+                        print(f"ws-probe-noop: {e}")
+                asyncio.run(main())
+                '
+              in_container: true
+              exit_status: 0
+              pod: mcp
+            - check: room_list still shows EXACTLY one entry for the path
+              mcp: call
+              tool: room_list
+              input: '{}'
+              stdout:
+                - matches: 'mcp-D\.ipynb'
+              timeout: 30s
+              pod: mcp
+            - run: clean state
+              command: "rm -f /workspace/mcp-E.ipynb"
+              in_container: true
+              exit_status: 0
+            - run: create
+              mcp: call
+              tool: notebook_create
+              input: '{"path":"mcp-E.ipynb"}'
+              timeout: 30s
+            - run: MCP cell_insert auto-creates the room
+              mcp: call
+              tool: cell_insert
+              input: '{"path":"mcp-E.ipynb","index":0,"source":"x","cell_type":"markdown"}'
+              timeout: 60s
+            - run: snapshot the pod log mark
+              command: "date +%s > /tmp/mcp-E.markstamp"
+              in_container: true
+              exit_status: 0
+            - check: transient UI-style WebSocket connect to provoke _clean_room
+              command: |-
+                python3 -c '
+                import asyncio
+                async def main():
+                    try:
+                        import websockets
+                    except ImportError:
+                        return
+                    try:
+                        ws = await asyncio.wait_for(
+                            websockets.connect("ws://127.0.0.1:8888/api/yjs/json:notebook:mcp-E.ipynb"),
+                            5,
+                        )
+                        await asyncio.sleep(0.5)
+                        await ws.close()
+                    except Exception:
+                        pass
+                asyncio.run(main())
+                '
+              in_container: true
+              exit_status: 0
+              pod: mcp
+            - check: let upstream _clean_room settle
+              command: "sleep 2"
+              in_container: true
+              exit_status: 0
+              pod: mcp
+            - check: no 'Task exception was never retrieved' or 'is not in list' since the mark
+              command: |-
+                MARK=$(cat /tmp/mcp-E.markstamp); LOG=$(journalctl -t supervisord --since "@$MARK" 2>/dev/null || cat /tmp/jupyter*.log 2>/dev/null || true); echo "$LOG" | grep -E 'Task exception was never retrieved|is not in list' && exit 1 || exit 0
+              in_container: true
+              exit_status: 0
+              pod: mcp
+            - check: at least one cluster node is listable
+              k8s: nodes
+              pod: k8s
+            - check: all cluster nodes reach Ready
+              k8s: wait-nodes
+              pod: k8s
+            - check: the kube-system coredns Deployment reaches Ready
+              k8s: wait-ready
+              k8s_kind: Deployment
+              name: coredns
+              namespace: kube-system
+              pod: k8s
+            - check: a default storage class is present
+              k8s: storageclass
+              pod: k8s
+            - check: an ingress class is registered
+              k8s: ingressclass
+              pod: k8s
+            - check: the cluster addons report healthy
+              k8s: addons
+              pod: k8s
+            - check: the kubernetes Service is listable
+              k8s: service
+              stdout: {contains: ["kubernetes"]}
+              pod: k8s
+            - check: a raw API call to the /nodes resource returns a JSON document with a kind field
+              k8s: raw
+              k8s_resource: nodes
+              json: true
+              stdout: {contains: ["kind"]}
+              pod: k8s
+            - check: the desktop's Chrome DevTools is reachable
+              cdp: status
+              stdout: {contains: ["ok"]}
+              pod: desktop
+            - check: the desktop's Wayland session is up
+              wl: status
+              stdout: {contains: ["ok"]}
+              pod: desktop
+            - check: the desktop's VNC server is reachable
+              vnc: status
+              stdout: {contains: ["ok"]}
+              pod: desktop
+            - check: the desktop's session bus advertises notifications
+              dbus: list
+              stdout: {contains: ["org.freedesktop.Notifications"]}
+              pod: desktop
+            - check: the desktop browser navigates to the upstream HTTP fixture URL via CDP
+              cdp: open
+              url: "http://charly-web:8080/"
+              exit_status: 0
+              pod: desktop
+            - check: CDP extracts the predetermined upstream content marker from the loaded page
+              cdp: text
+              tab: "1"
+              stdout: {contains: ["charly-web-content-marker"]}
+              pod: desktop
+            - check: CDP correctly evaluates a predetermined JavaScript expression on the loaded page
+              cdp: eval
+              tab: "1"
+              expression: "1+1"
+              stdout: {contains: ["2"]}
+              pod: desktop
+            - check: a CDP screenshot of the loaded page has real, non-uniform content at the expected dimensions
+              cdp: screenshot
+              tab: "1"
+              artifact: /tmp/cdp.png
+              artifact_min_bytes: 5000
+              artifact_min_dimensions: 800x600
+              artifact_not_uniform: true
+              pod: desktop
+            - check: the Wayland toplevel listing includes at least one rendered window
+              wl: toplevel
+              stdout: {matches: "."}
+              pod: desktop
+            - check: a Wayland screenshot of the desktop has real, non-uniform content at the expected dimensions
+              wl: screenshot
+              artifact: /tmp/wl.png
+              artifact_min_bytes: 10000
+              artifact_min_dimensions: 800x600
+              artifact_not_uniform: true
+              pod: desktop
+            - check: a VNC framebuffer screenshot has real, non-uniform content at the expected dimensions
+              vnc: screenshot
+              artifact: /tmp/vnc.png
+              artifact_min_bytes: 5000
+              artifact_min_dimensions: 800x600
+              artifact_not_uniform: true
+              pod: desktop
+            - check: a desktop notification can be sent with a predetermined body
+              dbus: notify
+              text: "charly-dbus-notify-marker"
+              exit_status: 0
+              pod: desktop
+            - check: a terminal recording is captured with at least the predetermined number of events
+              record: stop
+              artifact: /tmp/session.cast
+              artifact_min_bytes: 200
+              artifact_min_cast_events: 5
+              pod: desktop
+            - check: the VM's libvirt domain info is queryable
+              libvirt: info
+              pod: vm
+            - check: the VM's domain definition contains the predetermined domain name
+              libvirt: domain-xml
+              stdout: {contains: ["vm"]}
+              pod: vm
+            - check: a libvirt console screenshot has real, non-uniform content at the expected dimensions
+              libvirt: screenshot
+              artifact: /tmp/lv.png
+              artifact_min_bytes: 5000
+              artifact_min_dimensions: 640x480
+              artifact_not_uniform: true
+              pod: vm
+            - check: the VM guest agent answers ping
+              libvirt: guest/ping
+              pod: vm
+            - check: the VM guest reports a Linux kernel via guest/exec
+              libvirt: guest/exec
+              command: "uname -s"
+              stdout: {contains: ["Linux"]}
+              pod: vm
+            - check: from inside the VM, fetching the upstream HTTP fixture URL returns the predetermined marker
+              libvirt: guest/exec
+              command: "curl -fsS http://charly-web:8080/"
+              stdout: {contains: ["charly-web-content-marker"]}
+              pod: vm
+            - check: snapshot listing succeeds
+              libvirt: snapshot/list
+              pod: vm
+            - check: the VM's SPICE handshake completes
+              spice: status
+              stdout: {contains: ["ok"]}
+              pod: vm
+            - check: a SPICE framebuffer screenshot has real, non-uniform content at the expected dimensions
+              spice: screenshot
+              artifact: /tmp/spice.png
+              artifact_min_bytes: 5000
+              artifact_min_dimensions: 640x480
+              artifact_not_uniform: true
+              pod: vm
+            - check: the VM has booted and is reachable from the bench pod
+              command: "uptime"
+              exit_status: 0
+              pod: nested-check-vm
+            - check: the guest has hardware-accelerated virtualization available
+              file: /dev/kvm
+              exists: true
+              pod: nested-check-vm
+            - check: the inner pod's primary process is running
+              process: nginx
+              running: true
+              pod: nested-check-vm.inner-app-pod
+            - check: the inner pod's predetermined port is listening
+              port: 8080
+              listening: true
+              pod: nested-check-vm.inner-app-pod
+            - check: the nested data store's primary process is running
+              process: redis-server
+              running: true
+              pod: nested-check-vm.inner-app-pod.nested-redis-pod
+            - check: the nested data store is reachable on the network (not loopback only)
+              command: "ss -tln | grep ':6379' | grep -v '127.0.0.1'"
+              exit_status: 0
+              pod: nested-check-vm.inner-app-pod.nested-redis-pod
+            - check: the inner pod successfully writes the nonce-protected key on the nested data store
+              command: "redis-cli -h charly-inner-app-pod_nested-redis-pod SET bench:${EVAL_NONCE_KEY} ${EVAL_NONCE_VALUE}"
+              stdout: {contains: [OK]}
+              pod: nested-check-vm.inner-app-pod
+            - check: the nonce-protected key is readable on the deepest pod with the correct value
+              command: "redis-cli get bench:${EVAL_NONCE_KEY}"
+              stdout: {contains: ["${EVAL_NONCE_VALUE}"]}
+              pod: nested-check-vm.inner-app-pod.nested-redis-pod
+            - check: the VM guest can reach the outermost data store from phase 3
+              command: "redis-cli -h charly-redis ping"
+              stdout: {contains: [PONG]}
+              pod: nested-check-vm
+    scaffolding-selftest:
+        description: End-to-end self-test of the harness benchmark scaffolding chain — loader + composition + cross-namespace deps + live scoring against AI-deployed pods.
+        iterate:
+            sandbox: check-sandbox
+            agent: [claude]
+            plateau_iteration: 3
+            prompt: |
+                == Where you are ==
+                Your cwd is /workspace — the project tree, bind-mounted from the
+                host into this freshly-rebuilt ${TARGET_NAME}. You have FULL sudo +
+                nested podman + every package the plan needs. Host services are
+                completely invisible; you cannot conflict with them.
+
+                Your `/workspace` is a fresh per-run clone of the OpenCharly
+                source repository — the full git tree (with submodules
+                initialized), the `charly` CLI binary, and every layer, image,
+                pod, VM, and Kubernetes cluster definition the project
+                already ships (`candy/`, `box/<name>/charly.yml`, plus the
+                pod/vm/k8s/check kinds inline in `charly.yml`). Your session has the project's plugin skills
+                loaded (`/charly-check:check`, `/charly-core:deploy`, `/charly-image:image`, `/charly-image:layer`,
+                `/charly-build:build`, plus per-pod plugins (`/charly-jupyter:*`, `/charly-coder:*`, etc.) and foundation plugins (`/charly-distros:*`, `/charly-infrastructure:*`, `/charly-tools:*`), …). All of these
+                are available to be used if you decide to do so — they may
+                be useful for most of the steps. The plan specifies
+                what each pod must do; how you satisfy each specification
+                is entirely your call.
+
+                == Bed purpose ==
+                This bed's single plan exercises the harness scaffolding chain
+                end-to-end: the plan loader, the `include: <kind>:<name>` composition step,
+                the tag/id filter pipeline, the
+                cross-namespace `depends_on:` resolver, AND the live-state scoring
+                path. To prove every link works, the included probes must run AND
+                turn green — which requires you to deploy the pods the plan's
+                steps target, with the binaries, files, and modes those
+                probes assert against.
+
+                == Iteration semantics — NO RUSHING ==
+                Iteration ${ITERATION} of an UNBOUNDED loop. Score progression:
+                ${BEST_SCORE} (last delta: ${SCORE_DELTA}). The run ends when
+                every check: step passes (solved-all) OR when you fail to improve
+                for ${PLATEAU_ITERATION} iterations in a row (plateau). There is
+                NO maximum iteration count. Take the time you need. Correctness
+                over speed.
+
+                == Plan in scope ==
+                ${PLAN}
+
+                Each step carries a `pod:` field — that's the container the
+                harness probes it in. Read every step; collect the
+                unique set of pod names; deploy a container with each name whose
+                filesystem satisfies the probes the plan asserts. Some
+                steps carry `depends_on: [...]` — they only run after the
+                named upstream steps pass.
+
+                == Ground rules ==
+                  - The bed's plan steps are immutable — they live in the check: block of the project charly.yml.
+                  - Every pod a step references MUST be running at exit
+                    (that's what gets scored).
+                  - Included probes are scored identically to hand-written
+                    probes — one check: step = one point.
+
+                == When a source-code fix can't apply mid-run ==
+                The harness loop runs as a long-lived Go process. Source fixes
+                to /workspace/charly/*.go appear on disk via the bind-mount but the
+                running harness PID has the OLD binary mmap'd and CANNOT
+                hot-reload Go code. Your fix takes effect on the NEXT harness
+                run, not the current one. Record the fix in your iteration
+                notes and exit cleanly; the next run picks up the new binary.
+            note: false
+            env: {}
+            mcp_endpoint: "http://localhost:18765/mcp"
+        plan:
+            - include: candy:sshd
+            - include: box:fedora.composition-source
+            - check: a marker file written during the composition self-test is present
+              file: /etc/charly-composition-selftest
+              exists: true
+              pod: composition-app
 local:
     # =================================================================
     # check-local — per-kind R10 smoke template for kind:local.
@@ -1754,15 +1085,13 @@ local:
     check-local:
         candy:
             - check-local-layer
-        description:
-            feature: Fast check bed for kind:local layer-application smoke
-            narrative: Minimal kind:local template applying check-local-layer to the operator's host.
-            tag: [working]
-        scenario:
-            - name: check-local-marker
-              step:
-                - id: check-local-marker
-                  command: "test -f /etc/check-local-marker"
-                  in_container: false
-                  context:
-                    - runtime
+        description: |-
+            Fast check bed for kind:local layer-application smoke
+            Minimal kind:local template applying check-local-layer to the operator's host.
+        plan:
+            - check: command=test -f /etc/check-local-marker
+              id: check-local-marker
+              command: "test -f /etc/check-local-marker"
+              in_container: false
+              context:
+                - runtime

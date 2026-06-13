@@ -250,7 +250,8 @@ func sortedEnvDeps(m map[string]EnvDependency) []EnvDependency {
 // (e.g., "fedora:", "arch:", "fedora:43:", "debian,ubuntu:").
 type CandyYAML struct {
 	Version     string            `yaml:"version,omitempty"`     // CalVer version (YYYY.DDD.HHMM) of this candy definition
-	Description *Description      `yaml:"description,omitempty"` // Gherkin-shaped self-description; replaces retired info:/status:
+	Description string            `yaml:"description,omitempty"` // plain-string self-description; first line = summary
+	Status      string            `yaml:"status,omitempty"`      // maturity rung: working | testing | broken (default testing)
 	Candy       []string          `yaml:"candy,omitempty"`
 	Require     []string          `yaml:"require,omitempty"`
 	Engine      string            `yaml:"engine,omitempty"` // required run engine: "docker" or "" (any)
@@ -318,9 +319,10 @@ type CandyYAML struct {
 	// (OCI/pod) and on target:local (never reboots the operator host).
 	Reboot bool `yaml:"reboot,omitempty"`
 
-	// Replaces root.yml / user.yml — see Task type and docs/plan.
-	Vars map[string]string `yaml:"var,omitempty"`  // candy-local variables for ${VAR} substitution in tasks
-	Task []Op              `yaml:"task,omitempty"` // ordered install operations (unified Op vocabulary)
+	// Vars holds candy-local variables for ${VAR} substitution in plan run:
+	// steps. (The former separate `task:` list is retired — install operations
+	// are now `run:` steps in the unified `plan:`.)
+	Vars map[string]string `yaml:"var,omitempty"`
 
 	// Shell-init declarations: an intrinsic body (init/path_append/path/
 	// priority) plus per-shell sub-blocks (bash/zsh/fish/sh). Travels in
@@ -331,11 +333,14 @@ type CandyYAML struct {
 	// fish). See ShellConfig type and /charly-build:layer "Shell Init Surface".
 	Shell *ShellConfig `yaml:"shell,omitempty"`
 
-	// Scenario carries the acceptance scenarios (Op steps) contributed by
-	// this candy. They travel in the ai.opencharly.description OCI label
-	// (candy section) and run under `charly check` (build) / `charly check
-	// live` (deploy). See description_spec.go for the Scenario type.
-	Scenario []Scenario `yaml:"scenario,omitempty"`
+	// Plan carries the unified ordered step list contributed by this candy:
+	// run: (the install timeline) + check:/agent-check: (acceptance) +
+	// agent-run:/include:. The check:/agent-check: + runtime-context run:
+	// steps travel in the ai.opencharly.description OCI label (candy section)
+	// and run under `charly check` (build) / `charly check live` (deploy);
+	// build/deploy-context run: steps lower into the InstallPlan. See
+	// description_spec.go for the Step type.
+	Plan []Step `yaml:"plan,omitempty"`
 
 	// Artifacts are files a candy publishes back to the operator after its
 	// setup runs successfully. Each artifact is retrieved from the deploy
@@ -377,7 +382,7 @@ var candyYAMLKnownFields = map[string]bool{
 	"env_provide": true, "env_require": true, "env_accept": true,
 	"secret_accept": true, "secret_require": true,
 	"mcp_provide": true, "mcp_require": true, "mcp_accept": true,
-	"var": true, "task": true, "scenario": true,
+	"var": true, "plan": true,
 	"artifact":   true,
 	"capability": true, "requires_capability": true,
 	"package": true, "distro": true,
@@ -640,12 +645,12 @@ type RouteYAML struct {
 // Candy represents a candy directory and its contents
 type Candy struct {
 	Name        string
-	Path        string       // directory containing the candy manifest
-	SourceDir   string       // anchor for relative file lookups (tasks.copy, data.src, install files); defaults to Path, overridden by the candy manifest's `directory:`
-	Version     string       // CalVer version from the candy manifest
-	Description *Description // Gherkin-shaped self-description (Feature/Narrative/Tag)
-	Status      string       // derived from Description.Tag — working/testing/broken (empty = testing)
-	Info        string       // derived from Description.Feature+Narrative
+	Path        string // directory containing the candy manifest
+	SourceDir   string // anchor for relative file lookups (run: copy/download, data.src, install files); defaults to Path, overridden by the candy manifest's `directory:`
+	Version     string // CalVer version from the candy manifest
+	Description string // plain-string self-description; first line = summary
+	Status      string // maturity rung: working | testing | broken (default testing)
+	Info        string // the description's first line — summary shown in listings
 	// Parse-time filesystem-probe caches: each caches a single fileExists /
 	// dirExists check against SourceDir performed once at scan time. These stay
 	// fields (a remote candy's cache dir may be evicted before they're read,
@@ -704,11 +709,10 @@ type Candy struct {
 	mcpAccepts     []EnvDependency   // MCP servers this candy can optionally use
 	engine         string            // required run engine from the candy manifest ("docker", "podman", or "")
 	vars           map[string]string // candy-local variables (from the candy manifest vars:)
-	tasks          []Op              // ordered install operations (from the candy manifest task:)
 	apk            []ApkPackageSpec  // Android apps to install on a kind:android device (from the candy manifest apk:)
 	localpkg       map[string]string // per-format native-package source dirs (pac/rpm/deb → dir) from the candy manifest localpkg:
 	reboot         bool              // reboot the deploy target after this candy (from the candy manifest reboot:)
-	scenario       []Scenario        // acceptance scenarios (from the candy manifest scenario:)
+	plan           []Step            // unified ordered plan (from the candy manifest plan:): run:/check:/agent-*/include:
 	artifacts      []CandyArtifact   // files to retrieve after setup (from the candy manifest artifacts:)
 	shell          *ShellConfig      // shell-init declarations (from the candy manifest shell:)
 
@@ -1050,8 +1054,29 @@ func (l *Candy) HasAliases() bool { return len(l.aliases) > 0 }
 func (l *Candy) HasExtract() bool { return len(l.extract) > 0 }
 func (l *Candy) HasData() bool    { return len(l.data) > 0 }
 func (l *Candy) HasLibvirt() bool { return len(l.libvirt) > 0 }
-func (l *Candy) HasTasks() bool   { return len(l.tasks) > 0 }
+func (l *Candy) HasTasks() bool   { return len(l.runOps()) > 0 }
 func (l *Candy) HasApk() bool     { return len(l.apk) > 0 }
+
+// runOps returns the Ops from the candy's plan: `run:` steps that form the
+// install timeline (build/deploy context). A runtime-only run: step is
+// plan-runtime provisioning the check Runner executes, not the build, so it
+// is excluded. check:/agent-*/include: steps are never install ops.
+func (l *Candy) runOps() []Op {
+	var out []Op
+	for i := range l.plan {
+		step := &l.plan[i]
+		kw, err := step.StepKind()
+		if err != nil || kw != KwRun {
+			continue
+		}
+		op := step.Op
+		if op.InContext(CtxRuntime) && !(op.InContext(CtxBuild) || op.InContext(CtxDeploy)) {
+			continue
+		}
+		out = append(out, op)
+	}
+	return out
+}
 
 // Apk returns the candy's Android app-install entries (the `apk:` package
 // format). Empty for non-Android candies.

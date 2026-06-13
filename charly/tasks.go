@@ -438,11 +438,11 @@ func emitDownload(b *strings.Builder, t Op, img *ResolvedBox) error {
 	var extractCmd string
 	switch extract {
 	case "tar.gz":
-		extractCmd = fmt.Sprintf(`tar -xzf "$__c"%s -C %s %s`, stripFlag, dest, strings.Join(t.Include, " "))
+		extractCmd = fmt.Sprintf(`tar -xzf "$__c"%s -C %s %s`, stripFlag, dest, strings.Join(t.ExtractInclude, " "))
 	case "tar.xz":
-		extractCmd = fmt.Sprintf(`tar -xJf "$__c"%s -C %s %s`, stripFlag, dest, strings.Join(t.Include, " "))
+		extractCmd = fmt.Sprintf(`tar -xJf "$__c"%s -C %s %s`, stripFlag, dest, strings.Join(t.ExtractInclude, " "))
 	case "tar.zst":
-		extractCmd = fmt.Sprintf(`tar --zstd -xf "$__c"%s -C %s %s`, stripFlag, dest, strings.Join(t.Include, " "))
+		extractCmd = fmt.Sprintf(`tar --zstd -xf "$__c"%s -C %s %s`, stripFlag, dest, strings.Join(t.ExtractInclude, " "))
 	case "zip":
 		extractCmd = fmt.Sprintf(`unzip -o "$__c" -d %s`, dest)
 	case "sh":
@@ -568,16 +568,16 @@ func taskCoalescesWith(current, next Op, currentVerb string) bool {
 // Returns the final USER after processing (so writeCandySteps knows
 // whether to emit USER root for the candy boundary reset).
 // Returns an error if emission fails (only for download/write I/O).
-func (g *Generator) emitTasks(b *strings.Builder, layer *Candy, img *ResolvedBox, buildDir, contextRelPrefix, initialUser string) (string, error) {
-	if len(layer.tasks) == 0 && !g.candyHasImplicitBuild(layer, img) {
+func (g *Generator) emitTasks(b *strings.Builder, layer *Candy, img *ResolvedBox, ops []Op, buildDir, contextRelPrefix, initialUser string) (string, error) {
+	if len(ops) == 0 && !g.candyHasImplicitBuild(layer, img) {
 		return initialUser, nil
 	}
 
-	// Clone tasks and append implicit build if needed.
-	tasks := make([]Op, 0, len(layer.tasks)+1)
-	tasks = append(tasks, layer.tasks...)
+	// Clone ops and append implicit build if needed.
+	tasks := make([]Op, 0, len(ops)+1)
+	tasks = append(tasks, ops...)
 	hasExplicitBuild := false
-	for _, t := range layer.tasks {
+	for _, t := range ops {
 		if t.Build != "" {
 			hasExplicitBuild = true
 			break

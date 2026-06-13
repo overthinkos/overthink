@@ -1,21 +1,19 @@
 candy:
     version: 2026.144.1443
     name: debootstrap-builder
-    description:
-        feature: Privileged builder toolchain that bootstraps and makes bootable a Debian-family rootfs from scratch
-        narrative: |
-            Tools needed to bootstrap a Debian-family rootfs from scratch via
-            debootstrap, partition a VM disk, and install grub-efi for a
-            bootable Debian/Ubuntu system. Used as the layer composition for
-            the debian-debootstrap-builder / ubuntu-debootstrap-builder images,
-            which run as privileged containers under `charly box build` and
-            `charly vm build` for kind:bootstrap source kinds.
+    description: |
+        Privileged builder toolchain that bootstraps and makes bootable a Debian-family rootfs from scratch
+        Tools needed to bootstrap a Debian-family rootfs from scratch via
+        debootstrap, partition a VM disk, and install grub-efi for a
+        bootable Debian/Ubuntu system. Used as the layer composition for
+        the debian-debootstrap-builder / ubuntu-debootstrap-builder images,
+        which run as privileged containers under `charly box build` and
+        `charly vm build` for kind:bootstrap source kinds.
 
-            Counterpart of candy/pacstrap-builder; both compose the same
-            disk-build toolchain (qemu-img + parted + mkfs + grub-efi) plus
-            the family-specific bootstrap tool. Verifiable at build scope: each
-            tool ships a named binary on PATH and a registered dpkg package.
-        tag: [working]
+        Counterpart of candy/pacstrap-builder; both compose the same
+        disk-build toolchain (qemu-img + parted + mkfs + grub-efi) plus
+        the family-specific bootstrap tool. Verifiable at build scope: each
+        tool ships a named binary on PATH and a registered dpkg package.
     package:
         - debootstrap
         - debian-archive-keyring
@@ -32,45 +30,33 @@ candy:
         - efibootmgr
         - mount
         - ca-certificates
-    scenario:
-        # Deterministic acceptance scenarios baked into the image's
-        # ai.opencharly.description label. Each step embeds a check verb
-        # (file/command/package), so the whole list is build-scope
-        # deterministic — no agent grader needed for a pure builder candy.
-        - name: debootstrap-tool-available
-          step:
-            - then: the debootstrap bootstrap tool is installed at /usr/sbin/debootstrap
-              file: /usr/sbin/debootstrap
-              exists: true
-            - then: the debootstrap package is registered in the dpkg database
-              package: debootstrap
-              installed: true
-        - name: disk-image-toolchain-present
-          step:
-            - then: qemu-img is available to create and convert the VM disk image
-              file: /usr/bin/qemu-img
-              exists: true
-            - then: qemu-img runs and reports its version
-              command: /usr/bin/qemu-img --version
-              stdout: qemu-img version
-            - then: parted is available to partition the disk image
-              file: /usr/sbin/parted
-              exists: true
-        - name: grub-efi-bootloader-installable
-          step:
-            - then: grub-install is present to write the EFI bootloader into the rootfs
-              file: /usr/sbin/grub-install
-              exists: true
-            - then: efibootmgr is installed to register the EFI boot entry
-              package: efibootmgr
-              installed: true
-        - name: debootstrap-builder-e2fsprogs-package
-          step:
-            - id: debootstrap-builder-e2fsprogs-package
-              package: e2fsprogs
-              installed: true
-        - name: debootstrap-builder-dosfstools-package
-          step:
-            - id: debootstrap-builder-dosfstools-package
-              package: dosfstools
-              installed: true
+    plan:
+        - check: the debootstrap bootstrap tool is installed at /usr/sbin/debootstrap
+          file: /usr/sbin/debootstrap
+          exists: true
+        - check: the debootstrap package is registered in the dpkg database
+          package: debootstrap
+          installed: true
+        - check: qemu-img is available to create and convert the VM disk image
+          file: /usr/bin/qemu-img
+          exists: true
+        - check: qemu-img runs and reports its version
+          command: /usr/bin/qemu-img --version
+          stdout: qemu-img version
+        - check: parted is available to partition the disk image
+          file: /usr/sbin/parted
+          exists: true
+        - check: grub-install is present to write the EFI bootloader into the rootfs
+          file: /usr/sbin/grub-install
+          exists: true
+        - check: efibootmgr is installed to register the EFI boot entry
+          package: efibootmgr
+          installed: true
+        - check: package=e2fsprogs
+          id: debootstrap-builder-e2fsprogs-package
+          package: e2fsprogs
+          installed: true
+        - check: package=dosfstools
+          id: debootstrap-builder-dosfstools-package
+          package: dosfstools
+          installed: true

@@ -253,10 +253,10 @@ func TestShortNameMatchesRef(t *testing.T) {
 }
 
 // TestPosK8sRaw_JsonFlagThreaded covers the 2026-04-27 cutover's
-// `json: true` recipe modifier passthrough into the underlying
+// `json: true` step modifier passthrough into the underlying
 // `charly check k8s raw --json` invocation. List-mode default emits
 // `<namespace>/<name>` per line; --json emits the full JSON List
-// document for recipes that author `stdout: { contains: kind }`.
+// document for plan steps that author `stdout: { contains: kind }`.
 func TestPosK8sRaw_JsonFlagThreaded(t *testing.T) {
 	withJSON := posK8sRaw(&Op{K8sResource: "nodes", JSON: true})
 	foundJSON := false

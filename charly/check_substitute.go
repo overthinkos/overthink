@@ -49,7 +49,7 @@ type SubstContext struct {
 	// Prompt + filter
 	Prompt     string // rendered prompt text (for ${PROMPT})
 	PromptFile string // when PromptVia == "file"
-	Tag        string // Gherkin tag filter expression
+	Tag        string // tag filter expression
 
 	// MCP endpoint (drives the canonical ${MCP_ENDPOINT} substitution)
 	MCPEndpoint string
@@ -57,18 +57,17 @@ type SubstContext struct {
 	// Persistent NOTES.md content (drives ${NOTES})
 	Notes string
 
-	// Score-merged scenarios rendered as YAML (drives ${SCENARIOS})
-	Scenarios string
+	// Full plan (check:/agent-check: + agent-run:) rendered as YAML (drives ${PLAN})
+	Plan string
 
-	// Per-recipe-grouped block (drives ${RECIPES})
-	Recipe string
+	// Still-unsolved check:/agent-check: subset rendered as YAML (drives ${CHECKS})
+	Checks string
 
-	// Progressive-scoring phase state. Populated when score.progressive
-	// is true; zero-valued and ignored otherwise.
-	Phase        int    // 1-indexed current phase number
-	PhaseTotal   int    // total number of phases (== len(score.Recipe))
-	PhaseRecipes string // comma-joined in-scope recipe names for this phase
-	PhaseIntro   string // pre-rendered "Phase N of M — Y new recipe(s) added: ..." preamble
+	// Progressive-scoring phase state. Populated when progressive scoring
+	// is enabled; zero-valued and ignored otherwise.
+	Phase      int    // 1-indexed current phase number
+	PhaseTotal int    // total number of phases (== number of include: blocks)
+	PhaseIntro string // pre-rendered "Phase N of M — Y new block(s) added: ..." preamble
 
 	// Deployment name the harness scores against (drives ${DEPLOYMENT})
 	Deploy string
@@ -132,9 +131,9 @@ func SubstituteEnv(env map[string]string, ctx *SubstContext) map[string]string {
 //  3. os.Getenv
 //  4. ""
 func lookupHarnessToken(name string, ctx *SubstContext) string {
-	// Well-known tokens — fixed, deterministic. Post the 2026-04 kind
-	// split: ${RECIPE_NAME} and ${MAX_ITERATION} are removed; new
-	// ${SCORE_NAME}, ${SCORE_DELTA}, ${ATTEMPTS_LEFT}, ${RECIPES} added.
+	// Well-known tokens — fixed, deterministic. Post the plan-unify
+	// cutover the scored content is surfaced via ${PLAN} (the full plan)
+	// and ${CHECKS} (the still-unsolved check:/agent-check: subset).
 	switch name {
 	case "PROMPT":
 		return ctx.Prompt
@@ -170,16 +169,14 @@ func lookupHarnessToken(name string, ctx *SubstContext) string {
 		return ctx.MCPEndpoint
 	case "NOTES":
 		return ctx.Notes
-	case "SCENARIOS":
-		return ctx.Scenarios
-	case "RECIPES":
-		return ctx.Recipe
+	case "PLAN":
+		return ctx.Plan
+	case "CHECKS":
+		return ctx.Checks
 	case "PHASE":
 		return intTok(ctx.Phase)
 	case "PHASE_TOTAL":
 		return intTok(ctx.PhaseTotal)
-	case "PHASE_RECIPES":
-		return ctx.PhaseRecipes
 	case "PHASE_INTRO":
 		return ctx.PhaseIntro
 	case "DEPLOYMENT":
@@ -210,13 +207,13 @@ func intTok(n int) string {
 
 // ---------------------------------------------------------------------------
 // ${EVAL_NONCE_<NAME>} substitution — per-run randomized nonces that
-// the AI never sees. Recipe authors use these tokens in scenarios that
+// the AI never sees. Plan authors use these tokens in steps that
 // require cross-pod traffic at scoring time (e.g., redis-cli SET) so the
 // AI cannot pre-set the expected key/value via shortcut paths
 // (`podman exec` into the target pod, hardcoding values). Generation
 // happens at CheckRunLocalCmd entry; substitution happens in-place
-// on a copy of the merged scenarios that flows ONLY into baseline
-// synthesis + per-iter scoring (never into ${SCENARIOS}/${RECIPES}
+// on a copy of the merged plan that flows ONLY into baseline
+// synthesis + per-iter scoring (never into ${PLAN}/${CHECKS}
 // prompt rendering).
 // ---------------------------------------------------------------------------
 
@@ -224,16 +221,16 @@ func intTok(n int) string {
 // alphanumeric + underscore.
 var nonceTokenRe = regexp.MustCompile(`\$\{EVAL_NONCE_([A-Z0-9_]+)\}`)
 
-// GenerateHarnessNonces walks the scenarios via yaml.Marshal, finds every
+// GenerateHarnessNonces walks the plan steps via yaml.Marshal, finds every
 // unique ${EVAL_NONCE_<NAME>} reference, and assigns each NAME a fresh
 // 16-hex-char value drawn from crypto/rand (64 bits of entropy —
 // brute-force-infeasible).
 //
 // Returns an empty map if no nonce tokens are found.
-func GenerateHarnessNonces(scenarios []Scenario) (map[string]string, error) {
-	data, err := yaml.Marshal(scenarios)
+func GenerateHarnessNonces(plan []Step) (map[string]string, error) {
+	data, err := yaml.Marshal(plan)
 	if err != nil {
-		return nil, fmt.Errorf("marshal scenarios for nonce discovery: %w", err)
+		return nil, fmt.Errorf("marshal plan for nonce discovery: %w", err)
 	}
 	nonces := map[string]string{}
 	for _, m := range nonceTokenRe.FindAllSubmatch(data, -1) {
@@ -250,23 +247,22 @@ func GenerateHarnessNonces(scenarios []Scenario) (map[string]string, error) {
 	return nonces, nil
 }
 
-// SubstituteScenarioNonces returns a new slice of scenarios with all
-// ${EVAL_NONCE_<NAME>} tokens replaced by nonces[NAME]. Implemented
-// via yaml round-trip with regex replacement on the marshaled bytes —
-// reuses Scenario's existing UnmarshalYAML for fidelity.
+// SubstituteStepNonces returns a new slice of plan steps with all
+// ${EVAL_NONCE_<NAME>} tokens replaced by nonces[NAME]. Implemented via yaml
+// round-trip with regex replacement on the marshaled bytes — reuses Step's
+// existing UnmarshalYAML for fidelity.
 //
-// Tokens whose NAME isn't in the map are left untouched (will surface
-// at scoring time as failed verbs — visibility, not silent corruption).
+// Tokens whose NAME isn't in the map are left untouched (will surface at
+// scoring time as failed verbs — visibility, not silent corruption).
 //
-// Re-stamps Scenario.SourceRecipe after round-trip (yaml:"-" so it
-// would otherwise drop).
-func SubstituteScenarioNonces(scenarios []Scenario, nonces map[string]string) ([]Scenario, error) {
+// Re-stamps Op.Origin after round-trip (yaml:"-" so it would otherwise drop).
+func SubstituteStepNonces(plan []Step, nonces map[string]string) ([]Step, error) {
 	if len(nonces) == 0 {
-		return scenarios, nil
+		return plan, nil
 	}
-	data, err := yaml.Marshal(scenarios)
+	data, err := yaml.Marshal(plan)
 	if err != nil {
-		return nil, fmt.Errorf("marshal scenarios: %w", err)
+		return nil, fmt.Errorf("marshal plan: %w", err)
 	}
 	substituted := nonceTokenRe.ReplaceAllFunc(data, func(match []byte) []byte {
 		sub := nonceTokenRe.FindSubmatch(match)
@@ -279,13 +275,13 @@ func SubstituteScenarioNonces(scenarios []Scenario, nonces map[string]string) ([
 		}
 		return match
 	})
-	var out []Scenario
+	var out []Step
 	if err := yaml.Unmarshal(substituted, &out); err != nil {
-		return nil, fmt.Errorf("unmarshal substituted scenarios: %w", err)
+		return nil, fmt.Errorf("unmarshal substituted plan: %w", err)
 	}
 	for i := range out {
-		if i < len(scenarios) {
-			out[i].SourceRecipe = scenarios[i].SourceRecipe
+		if i < len(plan) {
+			out[i].Op.Origin = plan[i].Op.Origin
 		}
 	}
 	return out, nil

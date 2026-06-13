@@ -9,44 +9,23 @@ import (
 	"time"
 )
 
-// FormatScenarioResultsText emits a human-readable report of
-// scenario-level outcomes to w. Each scenario shows:
-//
-//	Scenario: <name>  <PASS | FAIL>  (attempts over elapsed when non-trivial)
-//	  <KEYWORD> <text>  <status>  <message>
-//
-// OnFail steps are rendered under a "on_fail:" sub-heading when the
-// scenario failed so the diagnostic output they produce is visible.
-func FormatScenarioResultsText(w io.Writer, results []ScenarioResult) {
+// FormatStepResultsText emits a human-readable per-step report to w.
+func FormatStepResultsText(w io.Writer, results []StepResult) {
 	var passed, failed, skipped int
-	for _, sr := range results {
-		statusBadge := "PASS"
-		if sr.Status == TestFail {
-			statusBadge = "FAIL"
+	for i := range results {
+		step := results[i]
+		switch step.Result.Status {
+		case TestFail:
 			failed++
-		} else {
+		case TestSkip:
+			skipped++
+		default:
 			passed++
 		}
-
-		fmt.Fprintf(w, "\nScenario: %s  %s\n", sr.Name, statusBadge)
-		if sr.Origin != "" {
-			fmt.Fprintf(w, "  origin: %s\n", sr.Origin)
-		}
-		for _, step := range sr.Step {
-			renderStep(w, &step)
-			if step.Result.Status == TestSkip {
-				skipped++
-			}
-		}
-		if len(sr.OnFail) > 0 {
-			fmt.Fprintln(w, "  on_fail:")
-			for _, step := range sr.OnFail {
-				renderStep(w, &step)
-			}
-		}
+		renderStep(w, &step)
 	}
-	fmt.Fprintf(w, "\n%d scenario%s: %d passed, %d failed, %d step%s skipped\n",
-		len(results), plural(len(results)), passed, failed, skipped, plural(skipped))
+	fmt.Fprintf(w, "\n%d step%s: %d passed, %d failed, %d skipped\n",
+		len(results), plural(len(results)), passed, failed, skipped)
 }
 
 func renderStep(w io.Writer, step *StepResult) {
@@ -71,44 +50,37 @@ func truncate(s string, n int) string {
 	return s[:n] + "…"
 }
 
-// FormatScenarioResultsJSON emits a structured JSON document.
-func FormatScenarioResultsJSON(w io.Writer, results []ScenarioResult) error {
+// FormatStepResultsJSON emits a structured JSON document.
+func FormatStepResultsJSON(w io.Writer, results []StepResult) error {
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
 	return enc.Encode(results)
 }
 
-// FormatScenarioResultsTAP emits TAP v13. Each scenario is one TAP
-// test point; failing scenarios include a YAML block with step-level
-// detail.
-func FormatScenarioResultsTAP(w io.Writer, results []ScenarioResult) {
+// FormatStepResultsTAP emits TAP v13. Each step is one TAP test point.
+func FormatStepResultsTAP(w io.Writer, results []StepResult) {
 	fmt.Fprintln(w, "TAP version 13")
 	fmt.Fprintf(w, "1..%d\n", len(results))
-	for i, sr := range results {
+	for i, step := range results {
 		directive := "ok"
-		if sr.Status == TestFail {
+		if step.Result.Status == TestFail {
 			directive = "not ok"
 		}
-		fmt.Fprintf(w, "%s %d - %s\n", directive, i+1, sr.Name)
-		if sr.Status == TestFail {
+		fmt.Fprintf(w, "%s %d - %s %s\n", directive, i+1, step.Keyword, step.Text)
+		if step.Result.Status == TestFail {
 			fmt.Fprintln(w, "  ---")
-			fmt.Fprintf(w, "  origin: %q\n", sr.Origin)
-			fmt.Fprintf(w, "  scenario_id: %q\n", sr.ScenarioID)
-			fmt.Fprintln(w, "  steps:")
-			for _, step := range sr.Step {
-				fmt.Fprintf(w, "    - %s %s: %s (%s)\n",
-					step.Keyword, step.Text,
-					strings.ToUpper(step.Result.Status.String()),
-					step.Result.Message)
-			}
+			fmt.Fprintf(w, "  origin: %q\n", step.Origin)
+			fmt.Fprintf(w, "  step_id: %q\n", step.StepID)
+			fmt.Fprintf(w, "  verb: %q\n", step.Result.Verb)
+			fmt.Fprintf(w, "  message: %q\n", step.Result.Message)
 			fmt.Fprintln(w, "  ...")
 		}
 	}
 }
 
-// FormatScenarioResultsJUnit emits JUnit XML for CI dashboards.
-// Scenarios surface as <testsuite>, steps as <testcase>.
-func FormatScenarioResultsJUnit(w io.Writer, results []ScenarioResult) error {
+// FormatStepResultsJUnit emits JUnit XML for CI dashboards. Steps surface as
+// <testcase> grouped by origin into <testsuite>s.
+func FormatStepResultsJUnit(w io.Writer, results []StepResult) error {
 	type junitFailure struct {
 		Message string `xml:"message,attr"`
 		Body    string `xml:",chardata"`
@@ -138,37 +110,46 @@ func FormatScenarioResultsJUnit(w io.Writer, results []ScenarioResult) error {
 		Suites  []junitTestSuite `xml:"testsuite"`
 	}
 
-	var suites junitTestSuites
-	for _, sr := range results {
-		suite := junitTestSuite{Name: sr.Name}
-		var totalTime float64
-		for _, step := range sr.Step {
-			elapsed := step.Result.Elapsed.Seconds()
-			if step.Result.TotalElapsed > 0 {
-				elapsed = step.Result.TotalElapsed.Seconds()
-			}
-			totalTime += elapsed
-			tc := junitTestCase{
-				Name:      step.Keyword + " " + step.Text,
-				Classname: sr.Origin,
-				Time:      elapsed,
-			}
-			switch step.Result.Status {
-			case TestFail:
-				tc.Failure = &junitFailure{
-					Message: step.Result.Message,
-					Body:    "Verb: " + step.Result.Verb + "\nStep ID: " + step.StepID,
-				}
-				suite.Failures++
-			case TestSkip:
-				tc.Skipped = &junitSkipped{Message: step.Result.Message}
-				suite.Skipped++
-			}
-			suite.Cases = append(suite.Cases, tc)
+	// Group steps by origin (preserving first-seen order).
+	var order []string
+	byOrigin := map[string]*junitTestSuite{}
+	for i := range results {
+		step := results[i]
+		suite := byOrigin[step.Origin]
+		if suite == nil {
+			suite = &junitTestSuite{Name: step.Origin}
+			byOrigin[step.Origin] = suite
+			order = append(order, step.Origin)
 		}
-		suite.Tests = len(suite.Cases)
-		suite.Time = totalTime
-		suites.Suites = append(suites.Suites, suite)
+		elapsed := step.Result.Elapsed.Seconds()
+		if step.Result.TotalElapsed > 0 {
+			elapsed = step.Result.TotalElapsed.Seconds()
+		}
+		tc := junitTestCase{
+			Name:      step.Keyword + " " + step.Text,
+			Classname: step.Origin,
+			Time:      elapsed,
+		}
+		switch step.Result.Status {
+		case TestFail:
+			tc.Failure = &junitFailure{
+				Message: step.Result.Message,
+				Body:    "Verb: " + step.Result.Verb + "\nStep ID: " + step.StepID,
+			}
+			suite.Failures++
+		case TestSkip:
+			tc.Skipped = &junitSkipped{Message: step.Result.Message}
+			suite.Skipped++
+		}
+		suite.Cases = append(suite.Cases, tc)
+		suite.Time += elapsed
+	}
+
+	var suites junitTestSuites
+	for _, o := range order {
+		s := byOrigin[o]
+		s.Tests = len(s.Cases)
+		suites.Suites = append(suites.Suites, *s)
 	}
 
 	fmt.Fprintln(w, `<?xml version="1.0" encoding="UTF-8"?>`)

@@ -1,15 +1,13 @@
 candy:
     version: 2026.144.1443
     name: sshd
-    description:
-        feature: SSH server with key-based login and passwordless sudo for the uid-1000 account
-        narrative: |
-            Installs the OpenSSH server (openssh-server / openssh on Arch) plus a
-            sshd-wrapper launcher, publishes the SSH port, and drops a NOPASSWD
-            sudoers rule for the build's uid-1000 account. Every artifact is
-            directly observable in the built image: the daemon binary, the wrapper
-            script, the installed package, and the effective sudo grant.
-        tag: [working]
+    description: |
+        SSH server with key-based login and passwordless sudo for the uid-1000 account
+        Installs the OpenSSH server (openssh-server / openssh on Arch) plus a
+        sshd-wrapper launcher, publishes the SSH port, and drops a NOPASSWD
+        sudoers rule for the build's uid-1000 account. Every artifact is
+        directly observable in the built image: the daemon binary, the wrapper
+        script, the installed package, and the effective sudo grant.
     env_accept:
         - name: SSH_AUTHORIZED_KEYS
           description: "SSH public key(s) for authorized access (one per line). Set via: charly config <image> --ssh-key auto"
@@ -33,29 +31,6 @@ candy:
                 - openssh-client
     port:
         - tcp:2222
-    # Supervisord service (containers)
-    task:
-        - copy: sshd-wrapper
-          to: /usr/local/bin/sshd-wrapper
-          mode: "0755"
-          run_as: root
-        # Sudoers file targets the ACTUAL uid-1000 account, not a hardcoded
-        # literal. System-discovery via `getent passwd 1000` works uniformly
-        # across both paths: create mode (Fedora/Arch/plain Debian — the account
-        # is named "user") and adopt mode (Ubuntu — the account is named
-        # "ubuntu" per the base_user declaration in build.yml). Note: we can't
-        # use ${USER} here because the generator doesn't substitute in cmd: body
-        # (per layer-authoring docs) and RUN shells don't have $USER set by
-        # default. getent is the reliable path.
-        - command: |
-            account=$(getent passwd 1000 | cut -d: -f1)
-            if [ -z "$account" ]; then
-              echo "sshd layer: no uid-1000 account found — refusing to write sudoers" >&2
-              exit 1
-            fi
-            printf '%s ALL=(ALL) NOPASSWD: ALL\n' "$account" > /etc/sudoers.d/charly-user
-            chmod 0440 /etc/sudoers.d/charly-user
-          run_as: root
     service:
         - name: sshd
           use_packaged: sshd.service
@@ -68,67 +43,76 @@ candy:
           start_sec: 1
           enable: true
           scope: system
-    scenario:
-        - name: openssh-server-installed
-          step:
-            - then: the OpenSSH sshd daemon binary is installed at /usr/sbin/sshd
-              file: /usr/sbin/sshd
-              exists: true
-            - then: the OpenSSH server package is installed (openssh on Arch)
-              package: openssh-server
-              package_map:
-                arch: openssh
-                fedora: openssh-server
-              installed: true
-        - name: supervisord-wrapper-executable
-          step:
-            - then: the sshd-wrapper launcher is present and world-executable
-              file: /usr/local/bin/sshd-wrapper
-              exists: true
-              mode: "0755"
-        - name: uid-1000-has-passwordless-sudo
-          step:
-            - then: the uid-1000 account can run sudo with no password (NOPASSWD rule in effect)
-              command: |
-                if [ "$(id -u)" = "0" ]; then runuser -u user -- sudo -n -l; else sudo -n -l; fi
-              exit_status: 0
-              stdout:
-                - contains: "NOPASSWD"
-        - name: ssh-key-login-accepted
-          step:
-            - then: a client presenting a key from SSH_AUTHORIZED_KEYS can open an interactive session on the published SSH port
-        - name: sshd-binary
-          step:
-            - id: sshd-binary
-              file: /usr/sbin/sshd
-              exists: true
-        - name: sshd-wrapper
-          step:
-            - id: sshd-wrapper
-              file: /usr/local/bin/sshd-wrapper
-              exists: true
-              mode: "0755"
-        - name: openssh-server-package
-          step:
-            - id: openssh-server-package
-              package: openssh-server
-              package_map:
-                arch: openssh
-                fedora: openssh-server
-                fedora:43: openssh-server
-              installed: true
-        - name: sshd-service-running
-          step:
-            - id: sshd-service-running
-              service: sshd
-              running: true
-              context:
-                - runtime
-        - name: sshd-port-reachable
-          step:
-            - id: sshd-port-reachable
-              addr: 127.0.0.1:${HOST_PORT:2222}
-              reachable: true
-              timeout: 5s
-              context:
-                - runtime
+    plan:
+        - run: copy=sshd-wrapper
+          copy: sshd-wrapper
+          to: /usr/local/bin/sshd-wrapper
+          mode: "0755"
+          run_as: root
+        - run: |
+            command=account=$(getent passwd 1000 | cut -d: -f1)
+            if [ -z "$account" ]; then
+              echo "sshd layer: no uid-1000 account found — refusing to write sudoers" >&2
+              exit 1
+            fi
+            printf '%s ALL=(ALL) NOPASSWD: ALL\n' "$account" > /etc/sudoers.d/charly-user
+            chmod 0440 /etc/sudoers.d/charly-user
+          command: |
+            account=$(getent passwd 1000 | cut -d: -f1)
+            if [ -z "$account" ]; then
+              echo "sshd layer: no uid-1000 account found — refusing to write sudoers" >&2
+              exit 1
+            fi
+            printf '%s ALL=(ALL) NOPASSWD: ALL\n' "$account" > /etc/sudoers.d/charly-user
+            chmod 0440 /etc/sudoers.d/charly-user
+          run_as: root
+        - check: the OpenSSH sshd daemon binary is installed at /usr/sbin/sshd
+          file: /usr/sbin/sshd
+          exists: true
+        - check: the OpenSSH server package is installed (openssh on Arch)
+          package: openssh-server
+          package_map:
+            arch: openssh
+            fedora: openssh-server
+          installed: true
+        - check: the sshd-wrapper launcher is present and world-executable
+          file: /usr/local/bin/sshd-wrapper
+          exists: true
+          mode: "0755"
+        - check: the uid-1000 account can run sudo with no password (NOPASSWD rule in effect)
+          command: |
+            if [ "$(id -u)" = "0" ]; then runuser -u user -- sudo -n -l; else sudo -n -l; fi
+          exit_status: 0
+          stdout:
+            - contains: "NOPASSWD"
+        - agent-check: a client presenting a key from SSH_AUTHORIZED_KEYS can open an interactive session on the published SSH port
+        - check: file=/usr/sbin/sshd
+          id: sshd-binary
+          file: /usr/sbin/sshd
+          exists: true
+        - check: file=/usr/local/bin/sshd-wrapper
+          id: sshd-wrapper
+          file: /usr/local/bin/sshd-wrapper
+          exists: true
+          mode: "0755"
+        - check: package=openssh-server
+          id: openssh-server-package
+          package: openssh-server
+          package_map:
+            arch: openssh
+            fedora: openssh-server
+            fedora:43: openssh-server
+          installed: true
+        - check: service=sshd
+          id: sshd-service-running
+          service: sshd
+          running: true
+          context:
+            - runtime
+        - check: addr=127.0.0.1:${HOST_PORT:2222}
+          id: sshd-port-reachable
+          addr: 127.0.0.1:${HOST_PORT:2222}
+          reachable: true
+          timeout: 5s
+          context:
+            - runtime

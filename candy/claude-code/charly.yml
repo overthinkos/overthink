@@ -1,28 +1,22 @@
 candy:
     version: 2026.144.1443
     name: claude-code
-    description:
-        feature: Installs the Claude Code CLI globally via npm so `claude` is on PATH.
-        narrative: |
-            The candy depends on nodejs and ships a package.json pinning
-            @anthropic-ai/claude-code, which the build installs globally into
-            ~/.npm-global/bin. The result is verifiable: the claude binary exists at
-            that path and `claude --version` prints the Claude Code version banner.
-        tag: [working]
+    description: |
+        Installs the Claude Code CLI globally via npm so `claude` is on PATH.
+        The candy depends on nodejs and ships a package.json pinning
+        @anthropic-ai/claude-code, which the build installs globally into
+        ~/.npm-global/bin. The result is verifiable: the claude binary exists at
+        that path and `claude --version` prints the Claude Code version banner.
     require:
         - nodejs
     path_append:
         - "~/.local/bin"
-    scenario:
-        - name: cli-binary-installed
-          step:
-            - then: the claude binary is installed into the npm global bin directory
-              file: ${HOME}/.npm-global/bin/claude
-              exists: true
-        - name: cli-reports-claude-code-version
-          step:
-            - then: running claude --version exits cleanly and prints the Claude Code banner
-              command: ${HOME}/.npm-global/bin/claude --version
-              exit_status: 0
-              stdout:
-                - contains: "Claude Code"
+    plan:
+        - check: the claude binary is installed into the npm global bin directory
+          file: ${HOME}/.npm-global/bin/claude
+          exists: true
+        - check: running claude --version exits cleanly and prints the Claude Code banner
+          command: ${HOME}/.npm-global/bin/claude --version
+          exit_status: 0
+          stdout:
+            - contains: "Claude Code"

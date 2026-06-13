@@ -67,7 +67,7 @@ type CLI struct {
 	Status      StatusCmd       `cmd:"" help:"Show service status (all if no box given)"`
 	Stop        StopCmd         `cmd:"" help:"Stop a running service container"`
 	Check        CheckCmd         `cmd:"" help:"Evaluate boxes and deployments — pure-box (disposable), live (running deployment), AI-driven iteration, and live-container probe verbs (cdp/wl/dbus/vnc/mcp/spice/libvirt/record/k8s)"`
-	Feature     FeatureCmd      `cmd:"" help:"Gherkin-shaped description authoring: list/pending/validate"`
+	Feature     FeatureCmd      `cmd:"" help:"plan-shaped description authoring: list/pending/validate"`
 	Tmux        TmuxCmd         `cmd:"" help:"Manage tmux sessions inside running containers"`
 	Udev        UdevCmd         `cmd:"" help:"Manage udev rules for GPU device access in containers"`
 	Update      UpdateCmd       `cmd:"" help:"Update box and restart if active"`
@@ -328,8 +328,10 @@ func (c *ListBoxesCmd) Run() error {
 	}
 
 	for _, name := range cfg.BoxNames() {
-		img := cfg.Box[name]
-		status := descriptionStatus(img.Description)
+		_ = cfg.Box[name]
+		// Boxes author no status; the effective rung (worst of the candy chain)
+		// is computed for the ai.opencharly.status label at generate time.
+		status := resolveStatus("")
 		if status != "working" {
 			fmt.Printf("%s [%s]\n", name, status)
 		} else {
@@ -360,7 +362,7 @@ func (c *ListCandiesCmd) Run() error {
 
 	for _, name := range CandyNames(layers) {
 		layer := layers[name]
-		status := resolveStatus(layer.Status)
+		status := candyStatus(layer)
 		var tags []string
 		if layer.Remote {
 			tags = append(tags, layer.RepoPath)

@@ -115,8 +115,8 @@ func BuildDeployPlan(layer *Candy, img *ResolvedBox, hostCtx HostContext) (*Inst
 		plan.Steps = append(plan.Steps, pkgStep)
 	}
 
-	// 3. The install timeline: the candy's task: ops PLUS any build/deploy-scoped
-	// do:act ops folded from the scenario list (act anywhere via the do: flag).
+	// 3. The install timeline: the candy plan's build/deploy-context run: steps,
+	// lowered into typed install steps (or generic OpSteps).
 	taskSteps := compileOpSteps(layer, img)
 	plan.Steps = append(plan.Steps, taskSteps...)
 
@@ -639,38 +639,31 @@ func buildSystemPackagesStep(format string, phase Phase, packages []string, raw 
 // ---------------------------------------------------------------------------
 
 // compileOpSteps turns the candy's install timeline into InstallSteps. The
-// timeline is the `task:` ops (every one an act op — install verbs default to
-// do:act, probe verbs require explicit do:act) PLUS the build/deploy-scoped
-// do:act ops folded from the `scenario:` list, in declared (cache-stable)
-// order. Each act op either LOWERS into an existing typed step (package →
-// SystemPackagesStep, service → ServicePackagedStep) so emit + reversal are
-// REUSED, or stays a generic OpStep (install verbs + command). The act/assert
-// boundary keeps probe-only scenario steps out of the install plan — the check
-// Runner handles those.
+// timeline is the candy's `plan:` `run:` steps (StepKind()==KwRun) whose
+// context includes build/deploy, in declared (cache-stable) order — the fold
+// that retired the separate `task:` list. Each run op either LOWERS into an
+// existing typed step (package → SystemPackagesStep, service →
+// ServicePackagedStep) so emit + reversal are REUSED, or stays a generic
+// OpStep (install verbs + command). A run: step scoped runtime-only is
+// plan-runtime provisioning the check Runner executes — NOT the install
+// timeline — and is skipped here (avoids double-execution); check:/agent-*/
+// include: steps are never lowered.
 func compileOpSteps(layer *Candy, img *ResolvedBox) []InstallStep {
 	var out []InstallStep
-	// The task: list — the canonical install timeline. Every op is an act op.
-	for i := range layer.tasks {
-		if s := compileActOp(&layer.tasks[i], layer, img); s != nil {
-			out = append(out, s)
+	for i := range layer.plan {
+		step := &layer.plan[i]
+		kw, err := step.StepKind()
+		if err != nil || kw != KwRun {
+			continue
 		}
-	}
-	// Fold scenario do:act ops scoped to build/deploy (and NOT runtime) into
-	// the install plan, so a scenario step can provision as well as assert.
-	// A runtime-capable do:act op (the default for most verbs) is NOT folded —
-	// the check Runner executes it live (avoids double-execution).
-	for si := range layer.scenario {
-		for sti := range layer.scenario[si].Step {
-			op := &layer.scenario[si].Step[sti].Op
-			if op.EffectiveDo() != DoAct {
-				continue
-			}
-			if op.InContext(CtxRuntime) || !(op.InContext(CtxBuild) || op.InContext(CtxDeploy)) {
-				continue // runtime/agent act → handled by the check Runner
-			}
-			if s := compileActOp(op, layer, img); s != nil {
-				out = append(out, s)
-			}
+		op := &step.Op
+		// A run: step scoped runtime-only (and NOT build/deploy) is handled by
+		// the check Runner live; everything else is the install timeline.
+		if op.InContext(CtxRuntime) && !(op.InContext(CtxBuild) || op.InContext(CtxDeploy)) {
+			continue
+		}
+		if s := compileActOp(op, layer, img); s != nil {
+			out = append(out, s)
 		}
 	}
 	return out
@@ -680,9 +673,9 @@ func compileOpSteps(layer *Candy, img *ResolvedBox) []InstallStep {
 // It is the SOLE consumer of VerbCatalog.LowersTo: a verb that names a typed
 // step kind is constructed as that step (reusing its emit + Reverse); every
 // other verb (the install verbs + command) stays a generic OpStep. Callers
-// decide which ops reach here — the task: list passes every op (the install
-// timeline is act by definition, regardless of a verb's scenario-context
-// do:assert default), the scenario fold passes only its do:act ops.
+// decide which ops reach here — compileOpSteps passes the plan's build/deploy-
+// context run: steps (the install timeline is act by definition, regardless of
+// a verb's runtime-context do:assert default).
 func compileActOp(op *Op, layer *Candy, img *ResolvedBox) InstallStep {
 	verb, err := op.Kind()
 	if err != nil {

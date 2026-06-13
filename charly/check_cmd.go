@@ -58,16 +58,15 @@ func (e *CheckFailedError) Error() string {
 // Live-container probe verbs (cdp/wl/dbus/vnc/mcp/record/spice/libvirt/k8s)
 // share the same "live" semantic: each requires a running target.
 //
-// Check-run management subcommands (list-ai, list-recipe, list-score,
-// list, sync-credential, report, scope, last-tag, note, run-local,
-// self-evaluate) are the renamed `charly check *` surface.
+// Check-run management subcommands (list-ai, list, sync-credential,
+// report, scope, last-tag, note, run-local, self-evaluate) are the
+// renamed `charly check *` surface.
 type CheckCmd struct {
 	// Three primary modes
 	Box     CheckBoxCmd     `cmd:"" name:"box" help:"Pure-box check (disposable container, build-scope checks)"`
 	Live    CheckLiveCmd    `cmd:"" help:"Full-stack check against a running deployment"`
-	Run     CheckRunCmd     `cmd:"" help:"Run a kind:check R10 bed (full sequence) or drive an AI through a kind:score's iteration cycles"`
-	Recipe  CheckRecipeCmd  `cmd:"" help:"Run a recipe's scenarios once (deterministic; no AI iteration)"`
-	Feature CheckFeatureCmd `cmd:"" help:"Run a running deployment's baked Gherkin scenarios as acceptance tests; prose-only steps are agent-graded (Agent Driven Checkuation)"`
+	Run     CheckRunCmd     `cmd:"" help:"Run a kind:check R10 bed (full sequence) or drive an AI through an iterate: entity's iteration cycles"`
+	Feature CheckFeatureCmd `cmd:"" help:"Run a running deployment's baked plan as acceptance tests; agent steps are agent-graded (Agent Driven Evaluation)"`
 
 	// Live-container probe verbs (each requires a running target)
 	Cdp     CdpCmd     `cmd:"" help:"Chrome DevTools Protocol (open, list, click, check)"`
@@ -83,17 +82,15 @@ type CheckCmd struct {
 	Appium  AppiumCmd  `cmd:"" help:"Appium WebDriver — status, session-create/delete, install-app, find, click, send-keys, screenshot"`
 
 	// Check-run management (was `charly check *`)
-	ListAgent  CheckListAgentCmd  `cmd:"" name:"list-agent" help:"List configured agents from check.yml"`
-	ListRecipe CheckListRecipeCmd `cmd:"" name:"list-recipe" help:"List configured recipes (spec) from check.yml"`
-	ListScore  CheckListScoreCmd  `cmd:"" name:"list-score" help:"List configured scores (runner config) from check.yml"`
-	RunLocal   CheckRunLocalCmd   `cmd:"" name:"run-local" hidden:"" help:"Pod/VM-side iteration driver (not invoked directly)"`
-	SyncCred   CheckSyncCredCmd   `cmd:"" name:"sync-credential" help:"Copy AI credentials into the score's target"`
-	Scope      CheckScopeCmd      `cmd:"" name:"scope" help:"AI-facing: print current iteration scope"`
-	LastTag    CheckLastTagCmd    `cmd:"" name:"last-tag" help:"AI-facing: print prior iteration's image tag"`
-	SelfCheck   CheckSelfCheckCmd   `cmd:"" name:"self-evaluate" help:"AI-facing: rebuild current clone + re-run live check"`
-	List       CheckListRunsCmd   `cmd:"" name:"list" help:"List past check runs under .check/<score>/"`
-	Report     CheckReportCmd     `cmd:"" name:"report" help:"Render a past result-<calver>.yml"`
-	Note       CheckNoteCmd       `cmd:"" name:"note" help:"Read/append the persistent NOTES.md memory for a score"`
+	ListAgent CheckListAgentCmd `cmd:"" name:"list-agent" help:"List configured agents from check.yml"`
+	RunLocal  CheckRunLocalCmd  `cmd:"" name:"run-local" hidden:"" help:"Pod/VM-side iteration driver (not invoked directly)"`
+	SyncCred  CheckSyncCredCmd  `cmd:"" name:"sync-credential" help:"Copy AI credentials into the score's target"`
+	Scope     CheckScopeCmd     `cmd:"" name:"scope" help:"AI-facing: print current iteration scope"`
+	LastTag   CheckLastTagCmd   `cmd:"" name:"last-tag" help:"AI-facing: print prior iteration's image tag"`
+	SelfCheck CheckSelfCheckCmd `cmd:"" name:"self-evaluate" help:"AI-facing: rebuild current clone + re-run live check"`
+	List      CheckListRunsCmd  `cmd:"" name:"list" help:"List past check runs under .check/<score>/"`
+	Report    CheckReportCmd    `cmd:"" name:"report" help:"Render a past result-<calver>.yml"`
+	Note      CheckNoteCmd      `cmd:"" name:"note" help:"Read/append the persistent NOTES.md memory for a score"`
 }
 
 // CheckLiveCmd runs tests against a running service — the deploy-time entry point.
@@ -150,7 +147,7 @@ func (c *CheckLiveCmd) Run() error {
 	// (validateDeployRequiresBox in unified.go / deploy.go) guarantees
 	// this lookup always finds a non-empty value.
 	dir, _ := os.Getwd()
-	var localScenarios []Scenario
+	var localPlan []Step
 	var deployOverlay *DeploymentNode
 	var projectCfg *Config
 	if uf, ok, _ := LoadUnified(dir); ok && uf != nil {
@@ -159,10 +156,10 @@ func (c *CheckLiveCmd) Run() error {
 	dc := loadDeployConfigForRead("charly check live")
 	if dc != nil {
 		if entry, ok := dc.Deploy[deployKey(c.Box, c.Instance)]; ok {
-			localScenarios = entry.Scenario
+			localPlan = entry.Plan
 			deployOverlay = &entry
 		} else if entry, ok := dc.Deploy[c.Box]; ok {
-			localScenarios = entry.Scenario
+			localPlan = entry.Plan
 			deployOverlay = &entry
 		}
 	}
@@ -190,14 +187,15 @@ func (c *CheckLiveCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	set := MergeDeployDescriptions(meta.Description, localScenarios, c.Box)
+	set := MergeDeployDescriptions(meta.Description, localPlan, c.Box)
 	if set == nil || set.IsEmpty() {
-		fmt.Fprintln(os.Stderr, "No scenarios defined for this image.")
+		fmt.Fprintln(os.Stderr, "No plan steps defined for this image.")
 		return nil
 	}
 	resolver, _ := ResolveCheckVarsRuntime(meta, deployOverlay, engine, c.Box, containerName, c.Instance)
 
 	runner := NewRunner(ContainerChain(engine, containerName), resolver, RunModeLive)
+	runner.VerifyOnly = true // charly check live: idempotent check:/agent-check: only
 	runner.Box = c.Box
 	runner.Instance = c.Instance
 	runner.Distros = meta.Distro
@@ -208,13 +206,13 @@ func (c *CheckLiveCmd) Run() error {
 	runner.TargetResolver = liveTargetResolver(c.Instance)
 	for _, sec := range [][]LabeledDescription{set.Candy, set.Box, set.Deploy} {
 		for _, ld := range sec {
-			applyPeerVarsScenarios(runner, ld.Scenario, c.Instance)
+			applyPeerVarsSteps(runner, ld.Plan, c.Instance)
 		}
 	}
 
-	results := RunScenarios(context.Background(), runner, set, nil, false)
+	results := RunPlan(context.Background(), runner, set, nil, false)
 	fmt.Fprintf(os.Stderr, "Image: %s (container: %s)\n", meta.Box, containerName)
-	fails := reportScenarios(os.Stderr, results, c.Format)
+	fails := reportSteps(os.Stderr, results, c.Format)
 	if fails > 0 {
 		return &CheckFailedError{Failed: fails}
 	}
@@ -360,22 +358,22 @@ func (c *CheckLiveCmd) runVm() error {
 	// then the vm entity (vmName). Keying by name first means a bed whose key
 	// differs from its vm entity (check-k3s-vm -> vm: k3s-vm) resolves to its
 	// own entry rather than being mis-matched via the vm entity name.
-	var projectScenarios, localScenarios []Scenario
+	var projectPlan, localPlan []Step
 	var addCandies []string
 	// Nested dotted-path short-circuit: when the request is for a
-	// child node, use its own scenarios directly instead of the parent's.
+	// child node, use its own plan directly instead of the parent's.
 	if nestedLeaf != nil {
-		projectScenarios = nestedLeaf.Scenario
+		projectPlan = nestedLeaf.Plan
 		addCandies = nestedLeaf.AddCandy
 	} else if pc := uf.ProjectDeployConfig(); pc != nil {
 		if entry, ok := findVmDeployNode(pc.Deploy, c.Box, vmName); ok {
-			projectScenarios = entry.Scenario
+			projectPlan = entry.Plan
 			addCandies = entry.AddCandy
 		}
 	}
 	if dc := loadDeployConfigForRead("charly check vm"); dc != nil {
 		if entry, ok := findVmDeployNode(dc.Deploy, c.Box, vmName); ok {
-			localScenarios = entry.Scenario
+			localPlan = entry.Plan
 			if entry.VmState != nil {
 				if entry.VmState.SshUser != "" {
 					user = entry.VmState.SshUser
@@ -386,12 +384,12 @@ func (c *CheckLiveCmd) runVm() error {
 			}
 		}
 	}
-	scenarios := append(append([]Scenario(nil), projectScenarios...), localScenarios...)
+	plan := append(append([]Step(nil), projectPlan...), localPlan...)
 
-	// Collect deploy-scope scenarios from the candies this VM deployment
-	// applies, so ANY VM deploy — disposable bed OR persistent operator VM —
-	// that adds a candy automatically runs that candy's scenarios (R3).
-	scenarios = append(scenarios, collectAddCandyScenarios(uf, dir, addCandies)...)
+	// Collect deploy-scope steps from the candies this VM deployment applies,
+	// so ANY VM deploy — disposable bed OR persistent operator VM — that adds a
+	// candy automatically runs that candy's plan (R3).
+	plan = append(plan, collectAddCandySteps(uf, dir, addCandies)...)
 
 	// SSH connection details (User/Port/IdentityFile) live in the
 	// managed ssh-config Host stanza (charly-<vmName>) written at deploy
@@ -496,19 +494,20 @@ func (c *CheckLiveCmd) runVm() error {
 		return nil
 	}
 
-	if len(scenarios) == 0 {
-		fmt.Fprintln(os.Stderr, "No scenarios to run.")
+	if len(plan) == 0 {
+		fmt.Fprintln(os.Stderr, "No plan steps to run.")
 		return nil
 	}
-	set := &LabelDescriptionSet{Deploy: []LabeledDescription{{Origin: "vm:" + vmName, Scenario: scenarios}}}
+	set := &LabelDescriptionSet{Deploy: []LabeledDescription{{Origin: "vm:" + vmName, Plan: plan}}}
 
 	runner := NewRunner(executor, resolver, RunModeLive)
+	runner.VerifyOnly = true
 	runner.Box = c.Box
 	runner.Instance = c.Instance
-	results := RunScenarios(context.Background(), runner, set, nil, false)
+	results := RunPlan(context.Background(), runner, set, nil, false)
 
 	fmt.Fprintf(os.Stderr, "VM: charly-%s (ssh %s@%s:%d)\n", c.Box, user, host, port)
-	fails := reportScenarios(os.Stderr, results, c.Format)
+	fails := reportSteps(os.Stderr, results, c.Format)
 	if fails > 0 {
 		return &CheckFailedError{Failed: fails}
 	}
@@ -535,7 +534,7 @@ func vmHostdevCount(spec *VmSpec) int {
 // mechanism that lets `charly check live <vm>` run a candy's checks against ANY
 // deployment that applies it — the disposable bed or the persistent operator
 // VM — so one shared check-only candy covers both (no per-deploy copy, R3).
-func collectAddCandyScenarios(uf *UnifiedFile, dir string, addCandies []string) []Scenario {
+func collectAddCandySteps(uf *UnifiedFile, dir string, addCandies []string) []Step {
 	if uf == nil || len(addCandies) == 0 {
 		return nil
 	}
@@ -550,12 +549,12 @@ func collectAddCandyScenarios(uf *UnifiedFile, dir string, addCandies []string) 
 	if err != nil || candyMap == nil {
 		return nil
 	}
-	var out []Scenario
+	var out []Step
 	for _, ref := range addCandies {
-		// Only LOCAL (filesystem) candies contribute scenarios here — the
-		// shared candies live in the project's candy/ dir. Remote @github
-		// candies are SKIPPED: they carry their own context (and a re-scan can
-		// resolve a different cached version than what was deployed).
+		// Only LOCAL (filesystem) candies contribute steps here — the shared
+		// candies live in the project's candy/ dir. Remote @github candies are
+		// SKIPPED: they carry their own context (and a re-scan can resolve a
+		// different cached version than what was deployed).
 		if IsRemoteCandyRef(ref) {
 			continue
 		}
@@ -563,7 +562,7 @@ func collectAddCandyScenarios(uf *UnifiedFile, dir string, addCandies []string) 
 		if !ok || lyr == nil {
 			continue
 		}
-		out = append(out, lyr.scenario...)
+		out = append(out, bakeableSteps(lyr.plan)...)
 	}
 	return out
 }
@@ -689,20 +688,20 @@ func (c *CheckLiveCmd) runLocalCheck() error {
 // source + run probes identically (R3). Host-context vars only (no
 // HOST_PORT:<N> / CONTAINER_IP). Returns the failure count.
 func checkLocalDeployScope(dir string, node *DeploymentNode, image, instance, section string, filter []string, exec DeployExecutor, format string) (int, error) {
-	var scenarios []Scenario
+	var plan []Step
 	if node != nil && strings.TrimSpace(node.Local) != "" {
 		if spec := findLocalSpec(dir, strings.TrimSpace(node.Local)); spec != nil {
-			scenarios = append(scenarios, spec.Scenario...)
+			plan = append(plan, spec.Plan...)
 		}
 	}
 	if node != nil {
-		scenarios = append(scenarios, node.Scenario...)
+		plan = append(plan, node.Plan...)
 	}
 	if dc := loadDeployConfigForRead("charly check live"); dc != nil {
 		if entry, ok := dc.Deploy[deployKey(image, instance)]; ok {
-			scenarios = append(scenarios, entry.Scenario...)
+			plan = append(plan, entry.Plan...)
 		} else if entry, ok := dc.Deploy[image]; ok {
-			scenarios = append(scenarios, entry.Scenario...)
+			plan = append(plan, entry.Plan...)
 		}
 	}
 
@@ -718,20 +717,21 @@ func checkLocalDeployScope(dir string, node *DeploymentNode, image, instance, se
 		"HOME":     home,
 	}, HasRuntime: true}
 
-	if len(scenarios) == 0 {
-		fmt.Fprintln(os.Stderr, "No scenarios to run.")
+	if len(plan) == 0 {
+		fmt.Fprintln(os.Stderr, "No plan steps to run.")
 		return 0, nil
 	}
-	set := &LabelDescriptionSet{Deploy: []LabeledDescription{{Origin: "local:" + image, Scenario: scenarios}}}
+	set := &LabelDescriptionSet{Deploy: []LabeledDescription{{Origin: "local:" + image, Plan: plan}}}
 	runner := NewRunner(exec, resolver, RunModeLive)
+	runner.VerifyOnly = true
 	runner.Box = image
 	runner.Instance = instance
 	// Generic cross-deployment support (on: driver + ${PEER_*}) — a local
 	// SUBJECT bed can drive a peer too (R3).
 	runner.TargetResolver = liveTargetResolver(instance)
-	applyPeerVarsScenarios(runner, scenarios, instance)
-	results := RunScenarios(context.Background(), runner, set, nil, false)
-	return reportScenarios(os.Stdout, results, format), nil
+	applyPeerVarsSteps(runner, plan, instance)
+	results := RunPlan(context.Background(), runner, set, nil, false)
+	return reportSteps(os.Stdout, results, format), nil
 }
 
 // CheckBoxCmd runs PURE-BOX check against a disposable container.
@@ -765,74 +765,67 @@ func (c *CheckBoxCmd) Run() error {
 		return err
 	}
 	if meta == nil || meta.Description == nil || meta.Description.IsEmpty() {
-		fmt.Fprintln(os.Stderr, "No scenarios defined for this image.")
+		fmt.Fprintln(os.Stderr, "No plan steps defined for this image.")
 		return nil
 	}
 
-	// PURE-BOX: always a disposable container, build-context scenario steps
-	// only. The mode is explicit; no autodetect, no fallback. Deploy/runtime-
-	// context steps are skipped under RunModeBox.
+	// PURE-BOX: always a disposable container, build-context steps only. The
+	// mode is explicit; no autodetect, no fallback. Deploy/runtime-context
+	// steps are skipped under RunModeBox.
 	executor := ImageChain(rt.RunEngine, imageRef)
 	resolver := ResolveCheckVarsBuild(meta)
 	runner := NewRunner(executor, resolver, RunModeBox)
+	runner.VerifyOnly = true
 	runner.Distros = meta.Distro
 
-	scenarioResults := RunScenarios(context.Background(), runner, meta.Description, nil, false)
+	stepResults := RunPlan(context.Background(), runner, meta.Description, nil, false)
 
 	fmt.Fprintf(os.Stderr, "Image: %s\n", imageRef)
 
 	// YAML format emits the shape ParseCharlyTestOutput expects —
 	// the benchmark scorer's input format.
 	if c.Format == "yaml" {
-		return emitImageTestYAML(os.Stdout, imageRef, "", scenarioResults, nil)
+		return emitImageTestYAML(os.Stdout, imageRef, "", stepResults, nil)
 	}
 
-	fails := reportScenarios(os.Stderr, scenarioResults, c.Format)
+	fails := reportSteps(os.Stderr, stepResults, c.Format)
 	if fails > 0 {
 		return &CheckFailedError{Failed: fails}
 	}
 	return nil
 }
 
-// emitImageTestYAML writes the `charly check box --format yaml` payload
-// that ParseCharlyTestOutput (benchmark_score.go) consumes. The shape is:
+// emitImageTestYAML writes the `charly check box --format yaml` payload that
+// ParseCharlyTestOutput (check_score.go) consumes. The shape is:
 //
-//	image: <ref>
-//	mode: image | run
-//	scenarios:
-//	  - id, origin, name, tags, status, pending_steps, steps[]
+//	box: <ref>
+//	mode: box | run
+//	step:
+//	  - id, origin, text, tag, keyword, verb, status
 //	summary: { total, pass, fail, skip }
-func emitImageTestYAML(w io.Writer, imageRef, liveContainer string, scenarios []ScenarioResult, _ []CheckResult) error {
+//
+// Only check:/agent-check: steps are emitted (the scored success criteria).
+func emitImageTestYAML(w io.Writer, imageRef, liveContainer string, steps []StepResult, _ []CheckResult) error {
 	mode := "box"
 	if liveContainer != "" {
 		mode = "run"
 	}
 	out := CheckRunResults{Box: imageRef, Mode: mode}
-	for _, sr := range scenarios {
-		tr := ScenarioCheckResult{
-			ID:           sr.ScenarioID,
-			Origin:       sr.Origin,
-			Name:         sr.Name,
-			Tag:          append([]string(nil), sr.Tag...),
-			Status:       sr.Status.String(),
-			PendingSteps: sr.Pending,
+	for _, sp := range steps {
+		if sp.Keyword != string(KwCheck) && sp.Keyword != string(KwAgentCheck) {
+			continue // only scored steps land in the --format yaml payload
 		}
-		for _, sp := range sr.Step {
-			stepRes := StepCheckResult{
-				Keyword: sp.Keyword,
-				Text:    sp.Text,
-				StepID:  sp.StepID,
-				Status:  sp.Result.Status.String(),
-				Verb:    sp.Result.Verb,
-			}
-			if sp.Result.Verb == "" {
-				stepRes.Pending = true
-			}
-			tr.Step = append(tr.Step, stepRes)
+		ss := StepScore{
+			ID:      sp.StepID,
+			Origin:  sp.Origin,
+			Text:    sp.Text,
+			Keyword: sp.Keyword,
+			Verb:    sp.Result.Verb,
+			Status:  sp.Result.Status.String(),
 		}
-		out.Scenario = append(out.Scenario, tr)
+		out.Step = append(out.Step, ss)
 		out.Summary.Total++
-		switch tr.Status {
+		switch ss.Status {
 		case "pass":
 			out.Summary.Pass++
 		case "fail":

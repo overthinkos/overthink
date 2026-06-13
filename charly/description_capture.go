@@ -6,31 +6,25 @@ import (
 	"sync"
 )
 
-// ScenarioContext carries per-scenario mutable state across the
-// execution of that scenario's steps — principally the capture store
+// ScenarioContext carries per-plan-run mutable state across the
+// execution of that run's steps — principally the capture store
 // populated by checks with `capture: <name>`. Instantiated fresh per
-// scenario (and per outline row) so cross-scenario state never leaks.
+// plan run (and per count expansion) so cross-run state never leaks.
 //
-// The struct also threads the scenario- and step-level identifiers
-// through variable expansion (${SCENARIO_ID}, ${STEP_ID}) so artifact
-// paths and narrative text can embed stable references without the
-// runner having to know about them.
+// The struct also threads the current step identifier through variable
+// expansion (${STEP_ID}) so artifact paths and narrative text can embed
+// stable references without the runner having to know about them.
 
-// A ScenarioContext is OWNED by one scenario's execution pass. When
-// that pass completes, the context is discarded; the next scenario
-// gets a fresh one. `capture:` values never survive the scenario
-// that produced them.
+// A ScenarioContext is OWNED by one plan run's execution pass. When
+// that pass completes, the context is discarded; the next run gets a
+// fresh one. `capture:` values never survive the run that produced them.
 type ScenarioContext struct {
-	// ScenarioID is the stable identifier assigned by the collector
-	// (desc:<origin>:<scenario-idx>[:row<n>]). Resolves as ${SCENARIO_ID}.
-	ScenarioID string
-
-	// CurrentStepID is rewritten for each step as the scenario executes,
+	// CurrentStepID is rewritten for each step as the plan run executes,
 	// so ${STEP_ID} references resolve to the currently-running step's
 	// identifier. Reporters surface this on failures.
 	CurrentStepID string
 
-	// Captures is the scenario-local stash populated by checks with
+	// Captures is the plan-run-local stash populated by checks with
 	// `capture:` set. Keys are the unprefixed capture names (e.g.
 	// `login_tab`); the variable resolver looks them up under
 	// `CAPTURED:<name>` so the existing ${NAME:arg} grammar in
@@ -43,7 +37,7 @@ type ScenarioContext struct {
 	mu sync.Mutex
 
 	// Backgrounds tracks PIDs of host-side processes spawned by
-	// `command:` verbs with `background: true`. Reaped at scenario
+	// `command:` verbs with `background: true`. Reaped at plan
 	// teardown via SIGTERM (best-effort; non-fatal on failure).
 	Backgrounds []int
 
@@ -53,14 +47,13 @@ type ScenarioContext struct {
 	Results map[string]CheckResult
 }
 
-// NewScenarioContext returns an empty context bound to the given
-// scenario identifier. Outline-row executions each get their own
-// context so captured values from row-0 don't leak into row-1.
-func NewScenarioContext(scenarioID string) *ScenarioContext {
+// NewScenarioContext returns an empty plan-run context. Count
+// expansions each get their own context so captured values from one
+// iteration don't leak into the next.
+func NewScenarioContext() *ScenarioContext {
 	return &ScenarioContext{
-		ScenarioID: scenarioID,
-		Captures:   map[string]string{},
-		Results:    map[string]CheckResult{},
+		Captures: map[string]string{},
+		Results:  map[string]CheckResult{},
 	}
 }
 
@@ -147,28 +140,24 @@ func (s *ScenarioContext) SnapshotResults() map[string]CheckResult {
 	return out
 }
 
-// ApplyToEnv merges scenario-scope variables into an env map for
+// ApplyToEnv merges plan-run-scope variables into an env map for
 // variable expansion. Called by the runner immediately before
 // `Check.ExpandVars(env)` so the existing `${NAME[:arg]}` grammar
-// picks up captures, scenario id, and step id without knowing about
-// the ScenarioContext type.
+// picks up captures and the step id without knowing about the
+// ScenarioContext type.
 //
 // Keys populated:
 //
-//   - SCENARIO_ID          → ctx.ScenarioID
 //   - STEP_ID              → ctx.CurrentStepID
 //   - CAPTURED:<name>      → value stored via Capture(name, value)
 //
 // ApplyToEnv overlays — it never overwrites existing keys so a
-// host-level `${SCENARIO_ID}` override (if ever introduced for
-// testing) continues to win. The runner builds env by copying its
-// resolver's base env first and then calling ApplyToEnv on the copy.
+// host-level `${STEP_ID}` override (if ever introduced for testing)
+// continues to win. The runner builds env by copying its resolver's
+// base env first and then calling ApplyToEnv on the copy.
 func (s *ScenarioContext) ApplyToEnv(env map[string]string) {
 	if s == nil || env == nil {
 		return
-	}
-	if _, exists := env["SCENARIO_ID"]; !exists && s.ScenarioID != "" {
-		env["SCENARIO_ID"] = s.ScenarioID
 	}
 	if _, exists := env["STEP_ID"]; !exists && s.CurrentStepID != "" {
 		env["STEP_ID"] = s.CurrentStepID

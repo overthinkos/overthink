@@ -1,30 +1,22 @@
 candy:
     version: 2026.144.1443
     name: oracle
-    description:
-        feature: Oracle CLI for bundling prompts and running multi-engine AI queries
-        narrative: |
-            Installs the @steipete/oracle npm package globally from package.json,
-            placing the oracle executable on PATH at ${HOME}/.npm-global/bin/oracle.
-            Requires the nodejs runtime. The binary's presence and its --version
-            entrypoint are deterministically verifiable in the built image with no
-            network access or API credentials.
-        tag: [working]
+    description: |
+        Oracle CLI for bundling prompts and running multi-engine AI queries
+        Installs the @steipete/oracle npm package globally from package.json,
+        placing the oracle executable on PATH at ${HOME}/.npm-global/bin/oracle.
+        Requires the nodejs runtime. The binary's presence and its --version
+        entrypoint are deterministically verifiable in the built image with no
+        network access or API credentials.
     require:
         - nodejs
-    scenario:
-        - name: oracle-binary-on-path
-          step:
-            - then: the oracle executable is installed at ${HOME}/.npm-global/bin/oracle
-              file: ${HOME}/.npm-global/bin/oracle
-              exists: true
-        - name: oracle-reports-version
-          step:
-            - then: running oracle --version exits cleanly
-              command: ${HOME}/.npm-global/bin/oracle --version
-              exit_status: 0
-        - name: oracle-dispatches-multi-engine-queries
-          step:
-            - given: the oracle CLI and its nodejs runtime are installed in the image
-            - when: a user runs oracle with a bundled prompt against its configured AI engines
-            - then: oracle dispatches the prompt to each configured engine and returns their answers
+    plan:
+        - check: the oracle executable is installed at ${HOME}/.npm-global/bin/oracle
+          file: ${HOME}/.npm-global/bin/oracle
+          exists: true
+        - check: running oracle --version exits cleanly
+          command: ${HOME}/.npm-global/bin/oracle --version
+          exit_status: 0
+        - agent-check: the oracle CLI and its nodejs runtime are installed in the image
+        - agent-check: a user runs oracle with a bundled prompt against its configured AI engines
+        - agent-check: oracle dispatches the prompt to each configured engine and returns their answers

@@ -1,22 +1,20 @@
 candy:
     version: 2026.152.1445
     name: android-emulator-layer
-    description:
-        feature: Compose selkies + android-sdk + appium into a booting Android 16 emulator.
-        narrative: |
-            Composite glue layer that turns the underlying selkies-desktop +
-            android-sdk + appium-server stack into a running Android 16 (API 36,
-            google_apis_playstore x86_64, pixel_9a) emulator. The Play Store image
-            ships Play Store + Google Play services (GMS) + Google Chrome
-            preinstalled. Ships two helper scripts (start-emulator, wait-for-display),
-            two supervisord services (emulator + adb-server), the AVD volume, and the
-            /dev/kvm device-passthrough declaration that round-trips through the OCI
-            label into the quadlet. CPU/RAM are auto-sized from the host at runtime
-            (start-emulator). Optional GOOGLE_ACCOUNT_EMAIL + GOOGLE_AAS_TOKEN secrets
-            feed the `charly check adb install-app --source google-play` path. The
-            helper scripts, the AVD home directory, and the booted device are all
-            directly observable, so the behaviour is verifiable end to end.
-        tag: [working]
+    description: |
+        Compose selkies + android-sdk + appium into a booting Android 16 emulator.
+        Composite glue layer that turns the underlying selkies-desktop +
+        android-sdk + appium-server stack into a running Android 16 (API 36,
+        google_apis_playstore x86_64, pixel_9a) emulator. The Play Store image
+        ships Play Store + Google Play services (GMS) + Google Chrome
+        preinstalled. Ships two helper scripts (start-emulator, wait-for-display),
+        two supervisord services (emulator + adb-server), the AVD volume, and the
+        /dev/kvm device-passthrough declaration that round-trips through the OCI
+        label into the quadlet. CPU/RAM are auto-sized from the host at runtime
+        (start-emulator). Optional GOOGLE_ACCOUNT_EMAIL + GOOGLE_AAS_TOKEN secrets
+        feed the `charly check adb install-app --source google-play` path. The
+        helper scripts, the AVD home directory, and the booted device are all
+        directly observable, so the behaviour is verifiable end to end.
     require:
         - android-sdk
         - appium-server
@@ -50,46 +48,6 @@ candy:
             # requiring a matching group to exist inside. Same pattern as immich-ml
             # uses for /dev/kvm + /dev/dri passthrough on this project's hosts.
             - keep-groups
-    task:
-        # Add the runtime user to the container's kvm group. KVM access via
-        # /dev/kvm actually works through crun's keep-groups + userns mapping
-        # without this (verified: `python3 -c "import os, fcntl; fd=os.open('/dev/kvm', os.O_RDWR); fcntl.ioctl(fd, 0xae00)"` returns the KVM API version), BUT the Android emulator's preflight check naively reads /etc/group, sees the user is not in the kvm
-        # group, and refuses to launch with "ERROR | x86_64 emulation
-        # currently requires hardware acceleration!". Satisfying the naive
-        # group membership check bypasses this entirely.
-        - command: |
-            set -e
-            USERNAME="$(getent passwd 1000 | cut -d: -f1)"
-            # Add user to BOTH the container's kvm group (satisfies the emulator's
-            # naive /etc/group preflight check that prints "The KVM line in
-            # /etc/group is: [kvm:x:36:user]") AND the nobody group (gid 65534).
-            # /dev/kvm inside a rootless container is owned by nobody:nobody
-            # because the host's kvm group (gid 990) maps through subgid to the
-            # overflow gid 65534. supervisord's setuid+initgroups drops the
-            # supplementary groups crun-keep-groups provided at container start,
-            # so user must be listed in /etc/group for both groups to retain
-            # access across the setuid boundary.
-            if getent group kvm >/dev/null 2>&1; then
-              usermod -aG kvm "${USERNAME}"
-            fi
-            if getent group nobody >/dev/null 2>&1; then
-              usermod -aG nobody "${USERNAME}"
-            fi
-          run_as: root
-        - copy: start-emulator
-          to: /usr/local/bin/start-emulator
-          mode: "0755"
-          run_as: root
-        - copy: wait-for-display
-          to: /usr/local/bin/wait-for-display
-          mode: "0755"
-          run_as: root
-        - mkdir: "${HOME}/.android"
-          run_as: "${USER}"
-          mode: "0755"
-        - mkdir: "${HOME}/.android/avd"
-          run_as: "${USER}"
-          mode: "0755"
     service:
         - name: emulator
           exec: "/bin/bash -c '/usr/local/bin/wait-for-display && exec /usr/local/bin/start-emulator'"
@@ -133,796 +91,680 @@ candy:
           path: "/home/user/.android"
     port:
         - 5037
-    scenario:
-        # Build-scope: the layer's own install artifacts — both helper scripts
-        # land at their published paths, executable. Fails if the copy: tasks
-        # never ran.
-        - name: helper-scripts-installed
-          step:
-            - then: the start-emulator launcher is installed and executable
-              file: /usr/local/bin/start-emulator
-              exists: true
-              mode: "0755"
-            - then: the wait-for-display gate is installed and executable
-              file: /usr/local/bin/wait-for-display
-              exists: true
-              mode: "0755"
-        # Build-scope: the layer provisions the AVD home for the runtime user
-        # (the two mkdir: tasks). Fails if the directory was never created.
-        - name: avd-home-provisioned
-          step:
-            - then: the AVD home directory exists for the runtime user
-              file: ${HOME}/.android/avd
-              exists: true
-              filetype: directory
-        # Deploy-scope: the composite actually boots an emulator and adb attaches.
-        # Order is load-bearing — the wait-for-device gate precedes the single-shot
-        # getprop (mirrors the check: block's readiness discipline).
-        - name: emulator-boots-and-adb-attaches
-          step:
-            - then: the emulator supervisord service is running
-              service: emulator
-              running: true
-              context:
-                - runtime
-            - then: the adb server port is reachable on the host
-              addr: 127.0.0.1:${HOST_PORT:5037}
-              reachable: true
-              timeout: 5s
-              context:
-                - runtime
-            - then: adb reports the device fully booted
-              adb: wait-for-device
-              timeout: 300s
-              stdout:
-                - contains: ready
-              context:
-                - runtime
-            - then: the booted AVD reports Android version 16
-              adb: shell
-              arg: [getprop, ro.build.version.release]
-              stdout:
-                - contains: "16"
-              context:
-                - runtime
-        - name: adb-detects-emulator
-          step:
-            - id: adb-detects-emulator
-              adb: devices
-              stdout:
-                - contains: "emulator-5554"
-              context:
-                - runtime
-        - name: android-boot-completed
-          step:
-            - id: android-boot-completed
-              adb: getprop
-              property: sys.boot_completed
-              stdout:
-                - contains: "1"
-              context:
-                - runtime
-        - name: avd-internet-ip
-          step:
-            # AVD full-internet regression guard. The AVD HAS working internet + DNS
-            # out of the box: the emulator's user-mode NAT forwards guest DNS to the
-            # container's resolver (podman aardvark-dns), and the container has bridge
-            # egress — no -dns-server flag is needed (verified live 2026-05-25:
-            # `ping 8.8.8.8` 0% loss, `ping google.com` resolves+replies). These two
-            # checks lock that in so a future networking regression is caught. DNS
-            # can take a moment to settle post-boot, hence eventually:.
-            - id: avd-internet-ip
-              adb: shell
-              arg: [ping, -c, "1", -W, "5", 8.8.8.8]
-              stdout:
-                - contains: "1 received"
-              eventually: 60s
-              retry_interval: 5s
-              context:
-                - runtime
-        - name: avd-internet-dns
-          step:
-            - id: avd-internet-dns
-              adb: shell
-              arg: [ping, -c, "1", -W, "5", google.com]
-              stdout:
-                - contains: "1 received"
-              eventually: 60s
-              retry_interval: 5s
-              context:
-                - runtime
-        - name: emulator-ui-settled
-          step:
-            # GMS-settle readiness gate (LOAD-BEARING — must precede every interactive
-            # check below: chrome-launch + the whole appium scenario). A freshly-booted
-            # google_apis_playstore emulator runs minutes of GMS post-boot churn (Play
-            # Store auto-update, ChimeraConfigurator, Heterodyne sync, RCS provisioning)
-            # that starves the GMS-coupled system UI (the Pixel Launcher via AiAi
-            # app-prediction, and systemui), which ANRs; the "Application Not Responding"
-            # dialog then OCCLUDES whatever app is foreground, so an appium find/gesture
-            # fired right after an app-start silently 404s (the test app is resumed but
-            # hidden behind the dialog). sys.boot_completed is NECESSARY-BUT-NOT-SUFFICIENT
-            # readiness — it fires before GMS quiesces. The first-class `adb:
-            # wait-ui-settled` verb (charly/adb.go) polls the focused window over goadb and
-            # dismisses any ANR dialog via KEYCODE_HOME until the UI is stable. It is
-            # LOAD-INDEPENDENT (the ANR is GMS churn, not host load) and adapts to a
-            # load-dilated churn purely via timeout:. All logic is typed Go over goadb —
-            # no in-container shell, no stdin-heredoc hazard, no per-command </dev/null.
-            - id: emulator-ui-settled
-              adb: wait-ui-settled
-              timeout: 600s
-              stdout:
-                - contains: settled
-              context:
-                - runtime
-        - name: play-store-present
-          step:
-            # ===================================================================
-            # Play Store + GMS + Chrome are PREINSTALLED in the google_apis_playstore
-            # image (live-verified 2026-05-25: com.android.vending / com.google.android.gms
-            # / com.google.android.gsf / com.android.chrome all present out of the box).
-            # These assert that the image switch delivered the full Google stack.
-            # ===================================================================
-            - id: play-store-present
-              adb: shell
-              arg: [pm, list, packages, com.android.vending]
-              stdout:
-                - contains: "com.android.vending"
-              context:
-                - runtime
-        - name: gms-present
-          step:
-            - id: gms-present
-              adb: shell
-              arg: [pm, list, packages, com.google.android.gms]
-              stdout:
-                - contains: "com.google.android.gms"
-              context:
-                - runtime
-        - name: gsf-present
-          step:
-            - id: gsf-present
-              adb: shell
-              arg: [pm, list, packages, com.google.android.gsf]
-              stdout:
-                - contains: "com.google.android.gsf"
-              context:
-                - runtime
-        - name: chrome-preinstalled
-          step:
-            - id: chrome-preinstalled
-              adb: shell
-              arg: [pm, list, packages, com.android.chrome]
-              stdout:
-                - contains: "com.android.chrome"
-              context:
-                - runtime
-        - name: chrome-launch
-          step:
-            - id: chrome-launch
-              adb: shell
-              # monkey injects a LAUNCHER intent; exit 0 means the activity started.
-              arg: [monkey, -p, com.android.chrome, -c, android.intent.category.LAUNCHER, "1"]
-              exit_status: 0
-              context:
-                - runtime
-        - name: chrome-screencap
-          step:
-            - id: chrome-screencap
-              adb: screencap
-              artifact: /tmp/charly-check-chrome.png
-              artifact_min_bytes: 5000
-              context:
-                - runtime
-        - name: apk-fdroid-present
-          step:
-            # ===================================================================
-            # `apk:` PACKAGE FORMAT — apps installed declaratively onto the device
-            # by a `target: android` deploy (NOT by an check verb). The
-            # check-android-emulator-pod bed nests two kind:android devices that the
-            # bed runner deploys after the pod starts:
-            #   - `device` (in-pod) installs F-Droid (org.fdroid.fdroid) via apkeep
-            #     in-pod from the android-test-apps layer's apk: list;
-            #   - `device-net` (remote adb ENDPOINT) installs the committed ApiDemos
-            #     (io.appium.android.apis) via goadb push from the android-apidemos
-            #     layer.
-            # These checks ASSERT the deploys' results (deploy-scope, so they only
-            # run under `charly check live` after the nested deploys). F-Droid: unlike
-            # Chrome it has no static-library dependency, so it sideloads cleanly
-            # from APKPure as a single x86_64 .apk.
-            # ===================================================================
-            - id: apk-fdroid-present
-              adb: shell
-              arg: [pm, list, packages, org.fdroid.fdroid]
-              stdout:
-                - contains: "org.fdroid.fdroid"
-              # The android `device` deploy installs F-Droid right before check-live;
-              # allow a little settle on a fresh boot.
-              eventually: 120s
-              retry_interval: 5s
-              context:
-                - runtime
-        - name: apk-fdroid-launch
-          step:
-            - id: apk-fdroid-launch
-              adb: shell
-              # Launch raises a runtime-permission dialog (GrantPermissionsActivity)
-              # that covers F-Droid, so assert the PROCESS is running (pidof prints a
-              # PID), NOT the focused activity (live-observed 2026-05-25).
-              arg: [sh, -c, "monkey -p org.fdroid.fdroid -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1; sleep 3; pidof org.fdroid.fdroid"]
-              stdout:
-                - matches: "[0-9]"
-              context:
-                - runtime
-        - name: apk-net-apidemos-present
-          step:
-            # Endpoint-device (remote adb) result: ApiDemos installed via goadb push
-            # over the published 35002 port from the android-apidemos committed-APK
-            # layer. Proves the remote/physical kind:android path end-to-end.
-            - id: apk-net-apidemos-present
-              adb: shell
-              arg: [pm, list, packages, io.appium.android.apis]
-              stdout:
-                - contains: "io.appium.android.apis"
-              eventually: 120s
-              retry_interval: 5s
-              context:
-                - runtime
-        - name: adb-disable-verifier
-          step:
-            # Disable Play Protect's ADB-install verification before the install
-            # checks. NOTE: the AVD has full internet (see the guard above) — this is
-            # NOT a no-internet workaround; it's a determinism/speed measure. The
-            # online Play Protect verifier adds latency + occasional flakiness to
-            # `pm install`/`mobile: installApp`; disabling it makes installs fast and
-            # deterministic. Both global settings cover the legacy + modern code
-            # paths. Idempotent — running twice is a no-op.
-            - id: adb-disable-verifier
-              adb: shell
-              arg: [settings, put, global, package_verifier_enable, "0"]
-              context:
-                - runtime
-        - name: adb-disable-adb-install-verifier
-          step:
-            - id: adb-disable-adb-install-verifier
-              adb: shell
-              arg: [settings, put, global, verifier_verify_adb_installs, "0"]
-              context:
-                - runtime
-        - name: adb-install-apidemos
-          step:
-            - id: adb-install-apidemos
-              adb: install
-              # adb: install reads `apk:` from the HOST filesystem (the host
-              # charly binary pushes via the ADB sync protocol). Path resolves
-              # against the project root.
-              apk: ./tests/data/ApiDemos-debug.apk
-              stdout:
-                - contains: Success
-              timeout: 60s
-              # PackageManager keeps initializing for a few seconds AFTER
-              # sys.boot_completed=1 (the wait-for-device gate above), so an install
-              # fired in that window fails with "Failed to parse APK file". This is
-              # the ONE package-mutating op that runs right after boot — `eventually:`
-              # re-runs the whole install (push + idempotent `pm install -r`) until it
-              # succeeds or the deadline, polling the exact end-to-end readiness
-              # condition (no proxy signal). The framework's synchronization
-              # primitive, NOT a fixed sleep. Once this passes, the device is settled,
-              # so the confirm/uninstall/appium ops below stay one-shot.
-              eventually: 180s
-              retry_interval: 5s
-              context:
-                - runtime
-        - name: adb-shell-confirms-apidemos-installed
-          step:
-            - id: adb-shell-confirms-apidemos-installed
-              adb: shell
-              arg: [pm, list, packages, io.appium.android.apis]
-              stdout:
-                - contains: "io.appium.android.apis"
-              context:
-                - runtime
-        - name: adb-screencap-png-min-size
-          step:
-            - id: adb-screencap-png-min-size
-              adb: screencap
-              artifact: /tmp/charly-check-adb-screencap.png
-              artifact_min_bytes: 5000
-              context:
-                - runtime
-        - name: adb-uninstall-apidemos
-          step:
-            - id: adb-uninstall-apidemos
-              adb: uninstall
-              # args[0] = package id (posPackageArg builder convention).
-              arg: [io.appium.android.apis]
-              stdout:
-                - contains: Success
-              context:
-                - runtime
-        - name: appium-session-create
-          step:
-            # ===================================================================
-            # Appium coverage — three tiers driving ONE representative ApiDemos
-            # screen per interaction class. Reaches each screen with
-            # `appium: app-start-activity` (intent form), interacts via the
-            # gesture/typed sugar, asserts with get-text/get-attribute/source.
-            # One shared session (session-create … session-delete LAST). Order is
-            # load-bearing. Density-/build-dependent selectors + result strings are
-            # tuned against the committed tests/data/ApiDemos-debug.apk at R10 using
-            # live `appium: source`. The `appium: status` smoke check lives in the
-            # appium-server layer (R3 — no duplication) and gates this via the chain.
-            # ===================================================================
-            - id: appium-session-create
-              appium: session-create
-              # UiAutomator2 installs its instrumentation server APK + waits for the
-              # test runner on first invocation; on a fresh emulator this exceeds the
-              # 30s default, so bump the two timeouts. chromedriverExecutableDir
-              # points at the pinned chromedriver-133 baked by appium-server (matches
-              # the API-36 System WebView 133) so the WebView context switch works
-              # offline (NO --allow-insecure autodownload); chromedriverDisableBuildCheck
-              # tolerates a WebView patch-version skew.
-              caps: |
-                {"platformName":"Android","appium:automationName":"UiAutomator2","appium:deviceName":"emulator-5554","appium:platformVersion":"16","appium:noReset":true,"appium:newCommandTimeout":120,"appium:uiautomator2ServerInstallTimeout":240000,"appium:uiautomator2ServerLaunchTimeout":240000,"appium:chromedriverExecutableDir":"/opt/chromedriver/133","appium:chromedriverDisableBuildCheck":true}
-              timeout: 600s
-              context:
-                - runtime
-        - name: av-set-implicit-wait
-          step:
-            # Set a W3C implicit wait so every find polls until the element renders.
-            # Without it, a find fired immediately after `app-start-activity` races
-            # the activity layout and returns "no such element" (verified live
-            # 2026-05-25). 10s covers per-screen render. Dogfoods the Tier-3 raw verb.
-            - id: av-set-implicit-wait
-              appium: raw
-              method: POST
-              path: /timeouts
-              request_body: '{"implicit":10000}'
-              context:
-                - runtime
-        - name: appium-install-apidemos
-          step:
-            - id: appium-install-apidemos
-              appium: install-app
-              # HOST path (resolved against project root); the verb stages it into the
-              # container via `<engine> cp` then calls mobile:installApp.
-              apk: ./tests/data/ApiDemos-debug.apk
-              timeout: 120s
-              context:
-                - runtime
-        - name: av-grant-notifications
-          step:
-            # Pre-grant POST_NOTIFICATIONS so Android 16's runtime-permission dialog
-            # (com.google.android.permissioncontroller) does NOT cover ApiDemos on
-            # first launch — without this, every per-class find hits the dialog and
-            # returns "no such element" (verified live 2026-05-25). force-stop makes
-            # the next activate a clean, dialog-free launch.
-            - id: av-grant-notifications
-              adb: shell
-              arg: [pm, grant, io.appium.android.apis, android.permission.POST_NOTIFICATIONS]
-              context:
-                - runtime
-        - name: av-force-stop-apidemos
-          step:
-            - id: av-force-stop-apidemos
-              adb: shell
-              arg: [am, force-stop, io.appium.android.apis]
-              context:
-                - runtime
-        - name: av-app-installed
-          step:
-            # --- App lifecycle (Go-program equivalence: isAppInstalled + activate) ---
-            - id: av-app-installed
-              appium: app-is-installed
-              app_id: io.appium.android.apis
-              stdout:
-                - contains: "true"
-              context:
-                - runtime
-        - name: av-app-activate
-          step:
-            - id: av-app-activate
-              appium: app-activate
-              app_id: io.appium.android.apis
-              stdout:
-                - contains: activated
-              context:
-                - runtime
-        - name: av-textfields-open
-          step:
-            # --- TextFields: type + READ-BACK (the original Go-program flow) ---
-            - id: av-textfields-open
-              appium: app-start-activity
-              activity: io.appium.android.apis/.view.TextFields
-              stdout:
-                - contains: started
-              context:
-                - runtime
-        - name: av-textfields-type
-          step:
-            - id: av-textfields-type
-              appium: send-keys
-              strategy: class-name
-              selector: android.widget.EditText
-              text: charly-readback
-              context:
-                - runtime
-        - name: av-textfields-readback
-          step:
-            - id: av-textfields-readback
-              appium: get-text
-              strategy: class-name
-              selector: android.widget.EditText
-              stdout:
-                - contains: charly-readback
-              context:
-                - runtime
-        - name: av-controls-open
-          step:
-            # --- Controls/Buttons + Checkbox: tap toggles checked state ---
-            - id: av-controls-open
-              appium: app-start-activity
-              activity: io.appium.android.apis/.view.Controls1
-              stdout:
-                - contains: started
-              context:
-                - runtime
-        - name: av-checkbox-tap
-          step:
-            - id: av-checkbox-tap
-              appium: gesture-tap
-              strategy: class-name
-              selector: android.widget.CheckBox
-              stdout:
-                - contains: tapped
-              context:
-                - runtime
-        - name: av-checkbox-checked
-          step:
-            - id: av-checkbox-checked
-              appium: get-attribute
-              strategy: class-name
-              selector: android.widget.CheckBox
-              attribute: checked
-              stdout:
-                - contains: "true"
-              context:
-                - runtime
-        - name: av-radio-open
-          step:
-            # --- RadioGroup: tap a radio button, assert checked ---
-            - id: av-radio-open
-              appium: app-start-activity
-              activity: io.appium.android.apis/.view.RadioGroup1
-              stdout:
-                - contains: started
-              context:
-                - runtime
-        - name: av-radio-tap
-          step:
-            - id: av-radio-tap
-              appium: gesture-tap
-              strategy: android-uiautomator
-              selector: 'new UiSelector().text("Snack")'
-              stdout:
-                - contains: tapped
-              context:
-                - runtime
-        - name: av-radio-checked
-          step:
-            - id: av-radio-checked
-              appium: get-attribute
-              strategy: android-uiautomator
-              selector: 'new UiSelector().text("Snack")'
-              attribute: checked
-              stdout:
-                - contains: "true"
-              context:
-                - runtime
-        - name: av-list-open
-          step:
-            # --- ListView + scroll: scroll, then scrollIntoView an off-screen item ---
-            - id: av-list-open
-              appium: app-start-activity
-              activity: io.appium.android.apis/.view.List1
-              stdout:
-                - contains: started
-              context:
-                - runtime
-        - name: av-list-scroll
-          step:
-            - id: av-list-scroll
-              appium: gesture-scroll
-              strategy: class-name
-              selector: android.widget.ListView
-              direction: down
-              percent: "0.8"
-              stdout:
-                - contains: scrolled
-              context:
-                - runtime
-        - name: av-list-scroll-into-view
-          step:
-            - id: av-list-scroll-into-view
-              appium: find
-              strategy: android-uiautomator
-              selector: 'new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().text("Gruyere"))'
-              stdout:
-                - matches: "."
-              context:
-                - runtime
-        - name: av-spinner-open
-          step:
-            # --- Spinner: open, pick an option, read the selection ---
-            - id: av-spinner-open
-              appium: app-start-activity
-              activity: io.appium.android.apis/.view.Spinner1
-              stdout:
-                - contains: started
-              context:
-                - runtime
-        - name: av-spinner-open-planet
-          step:
-            # Spinner1 has TWO spinners (Color="red", Planet="Mercury"); Jupiter is
-            # a Planet option. Tap the planet spinner (shows "Mercury") to open its
-            # dropdown, pick Jupiter, then assert it via page source.
-            - id: av-spinner-open-planet
-              appium: gesture-tap
-              strategy: android-uiautomator
-              selector: 'new UiSelector().text("Mercury")'
-              stdout:
-                - contains: tapped
-              context:
-                - runtime
-        - name: av-spinner-pick
-          step:
-            - id: av-spinner-pick
-              appium: gesture-tap
-              strategy: android-uiautomator
-              selector: 'new UiSelector().text("Jupiter")'
-              stdout:
-                - contains: tapped
-              context:
-                - runtime
-        - name: av-spinner-selected
-          step:
-            - id: av-spinner-selected
-              appium: source
-              stdout:
-                - contains: Jupiter
-              context:
-                - runtime
-        - name: av-datetime-open
-          step:
-            # --- Date/Time widgets: the formatted date TextView shows digits ---
-            - id: av-datetime-open
-              appium: app-start-activity
-              activity: io.appium.android.apis/.view.DateWidgets1
-              stdout:
-                - contains: started
-              context:
-                - runtime
-        - name: av-datetime-text
-          step:
-            - id: av-datetime-text
-              appium: get-text
-              strategy: id
-              selector: io.appium.android.apis:id/dateDisplay
-              stdout:
-                - matches: "[0-9]"
-              context:
-                - runtime
-        - name: av-seekbar-open
-          step:
-            # --- SeekBar: swipe right, progress label shows a number ---
-            - id: av-seekbar-open
-              appium: app-start-activity
-              activity: io.appium.android.apis/.view.SeekBar1
-              stdout:
-                - contains: started
-              context:
-                - runtime
-        - name: av-seekbar-swipe
-          step:
-            - id: av-seekbar-swipe
-              appium: gesture-swipe
-              strategy: class-name
-              selector: android.widget.SeekBar
-              direction: right
-              percent: "0.75"
-              stdout:
-                - contains: swiped
-              context:
-                - runtime
-        - name: av-seekbar-progress
-          step:
-            - id: av-seekbar-progress
-              appium: get-text
-              strategy: id
-              selector: io.appium.android.apis:id/progress
-              stdout:
-                - matches: "[0-9]"
-              context:
-                - runtime
-        - name: av-dnd-open
-          step:
-            # --- Drag-and-drop: drag the source dot, assert the demo's result text ---
-            - id: av-dnd-open
-              appium: app-start-activity
-              activity: io.appium.android.apis/.view.DragAndDropDemo
-              stdout:
-                - contains: started
-              context:
-                - runtime
-        - name: av-dnd-drag
-          step:
-            - id: av-dnd-drag
-              appium: gesture-drag
-              strategy: id
-              selector: io.appium.android.apis:id/drag_dot_1
-              params: '{"endX":600,"endY":900,"speed":2500}'
-              stdout:
-                - contains: dragged
-              context:
-                - runtime
-        - name: av-dnd-result
-          step:
-            - id: av-dnd-result
-              appium: source
-              stdout:
-                - contains: Dropped
-              context:
-                - runtime
-        - name: av-webview-open
-          step:
-            # --- WebView: context presence (always) + switch via pre-baked cd-133 ---
-            - id: av-webview-open
-              appium: app-start-activity
-              activity: io.appium.android.apis/.view.WebView1
-              stdout:
-                - contains: started
-              context:
-                - runtime
-        - name: av-webview-contexts
-          step:
-            - id: av-webview-contexts
-              appium: device-contexts
-              stdout:
-                - contains: WEBVIEW
-              eventually: 30s
-              retry_interval: 3s
-              context:
-                - runtime
-        - name: av-webview-switch
-          step:
-            - id: av-webview-switch
-              appium: device-context
-              params: WEBVIEW_io.appium.android.apis
-              stdout:
-                - contains: WEBVIEW
-              timeout: 120s
-              context:
-                - runtime
-        - name: av-webview-html
-          step:
-            - id: av-webview-html
-              appium: source
-              stdout:
-                - contains: "<html"
-              context:
-                - runtime
-        - name: av-webview-native
-          step:
-            - id: av-webview-native
-              appium: device-context
-              params: NATIVE_APP
-              stdout:
-                - contains: NATIVE_APP
-              context:
-                - runtime
-        - name: av-notif-open
-          step:
-            # --- Notifications: raise one, open the shade, assert it's present ---
-            - id: av-notif-open
-              appium: app-start-activity
-              activity: io.appium.android.apis/.app.StatusBarNotifications
-              stdout:
-                - contains: started
-              context:
-                - runtime
-        - name: av-notif-fire
-          step:
-            - id: av-notif-fire
-              appium: gesture-tap
-              strategy: android-uiautomator
-              selector: 'new UiSelector().text(":-|")'
-              stdout:
-                - contains: tapped
-              context:
-                - runtime
-        - name: av-notif-shade
-          step:
-            - id: av-notif-shade
-              appium: device-notifications
-              stdout:
-                - contains: opened
-              context:
-                - runtime
-        - name: av-notif-present
-          step:
-            - id: av-notif-present
-              appium: source
-              stdout:
-                - contains: "Mood ring"
-              eventually: 15s
-              retry_interval: 3s
-              context:
-                - runtime
-        - name: av-notif-close-shade
-          step:
-            - id: av-notif-close-shade
-              appium: key-press
-              keycode: 4
-              context:
-                - runtime
-        - name: av-device-info
-          step:
-            # --- Tier-2/Tier-3 device + generic-path smoke ---
-            - id: av-device-info
-              appium: device-info
-              stdout:
-                - contains: platformVersion
-              context:
-                - runtime
-        - name: av-current-package
-          step:
-            - id: av-current-package
-              appium: app-current-package
-              stdout:
-                - contains: io.appium.android.apis
-              context:
-                - runtime
-        - name: av-orientation
-          step:
-            - id: av-orientation
-              appium: device-orientation
-              stdout:
-                - contains: PORTRAIT
-              context:
-                - runtime
-        - name: av-execute-devicetime
-          step:
-            - id: av-execute-devicetime
-              appium: execute
-              expression: "mobile: getDeviceTime"
-              stdout:
-                - matches: "[0-9]"
-              context:
-                - runtime
-        - name: av-raw-orientation
-          step:
-            - id: av-raw-orientation
-              appium: raw
-              method: GET
-              path: /orientation
-              stdout:
-                - contains: PORTRAIT
-              context:
-                - runtime
-        - name: appium-screenshot
-          step:
-            # --- Screenshot + clean session teardown (LAST) ---
-            - id: appium-screenshot
-              appium: screenshot
-              artifact: /tmp/charly-check-appium-screenshot.png
-              artifact_min_bytes: 5000
-              context:
-                - runtime
-        - name: appium-session-delete
-          step:
-            - id: appium-session-delete
-              appium: session-delete
-              stdout:
-                - contains: deleted
-              context:
-                - runtime
+    plan:
+        - run: |
+            command=set -e
+            USERNAME="$(getent passwd 1000 | cut -d: -f1)"
+            # Add user to BOTH the container's kvm group (satisfies the emulator's
+            # naive /etc/group preflight check that prints "The KVM line in
+            # /etc/group is: [kvm:x:36:user]") AND the nobody group (gid 65534).
+            # /dev/kvm inside a rootless container is owned by nobody:nobody
+            # because the host's kvm group (gid 990) maps through subgid to the
+            # overflow gid 65534. supervisord's setuid+initgroups drops the
+            # supplementary groups crun-keep-groups provided at container start,
+            # so user must be listed in /etc/group for both groups to retain
+            # access across the setuid boundary.
+            if getent group kvm >/dev/null 2>&1; then
+              usermod -aG kvm "${USERNAME}"
+            fi
+            if getent group nobody >/dev/null 2>&1; then
+              usermod -aG nobody "${USERNAME}"
+            fi
+          command: |
+            set -e
+            USERNAME="$(getent passwd 1000 | cut -d: -f1)"
+            # Add user to BOTH the container's kvm group (satisfies the emulator's
+            # naive /etc/group preflight check that prints "The KVM line in
+            # /etc/group is: [kvm:x:36:user]") AND the nobody group (gid 65534).
+            # /dev/kvm inside a rootless container is owned by nobody:nobody
+            # because the host's kvm group (gid 990) maps through subgid to the
+            # overflow gid 65534. supervisord's setuid+initgroups drops the
+            # supplementary groups crun-keep-groups provided at container start,
+            # so user must be listed in /etc/group for both groups to retain
+            # access across the setuid boundary.
+            if getent group kvm >/dev/null 2>&1; then
+              usermod -aG kvm "${USERNAME}"
+            fi
+            if getent group nobody >/dev/null 2>&1; then
+              usermod -aG nobody "${USERNAME}"
+            fi
+          run_as: root
+        - run: copy=start-emulator
+          copy: start-emulator
+          to: /usr/local/bin/start-emulator
+          mode: "0755"
+          run_as: root
+        - run: copy=wait-for-display
+          copy: wait-for-display
+          to: /usr/local/bin/wait-for-display
+          mode: "0755"
+          run_as: root
+        - run: mkdir=${HOME}/.android
+          mkdir: "${HOME}/.android"
+          run_as: "${USER}"
+          mode: "0755"
+        - run: mkdir=${HOME}/.android/avd
+          mkdir: "${HOME}/.android/avd"
+          run_as: "${USER}"
+          mode: "0755"
+        - check: the start-emulator launcher is installed and executable
+          file: /usr/local/bin/start-emulator
+          exists: true
+          mode: "0755"
+        - check: the wait-for-display gate is installed and executable
+          file: /usr/local/bin/wait-for-display
+          exists: true
+          mode: "0755"
+        - check: the AVD home directory exists for the runtime user
+          file: ${HOME}/.android/avd
+          exists: true
+          filetype: directory
+        - check: the emulator supervisord service is running
+          service: emulator
+          running: true
+          context:
+            - runtime
+        - check: the adb server port is reachable on the host
+          addr: 127.0.0.1:${HOST_PORT:5037}
+          reachable: true
+          timeout: 5s
+          context:
+            - runtime
+        - check: adb reports the device fully booted
+          adb: wait-for-device
+          timeout: 300s
+          stdout:
+            - contains: ready
+          context:
+            - runtime
+        - check: the booted AVD reports Android version 16
+          adb: shell
+          arg: [getprop, ro.build.version.release]
+          stdout:
+            - contains: "16"
+          context:
+            - runtime
+        - check: adb=devices
+          id: adb-detects-emulator
+          adb: devices
+          stdout:
+            - contains: "emulator-5554"
+          context:
+            - runtime
+        - check: adb=getprop
+          id: android-boot-completed
+          adb: getprop
+          property: sys.boot_completed
+          stdout:
+            - contains: "1"
+          context:
+            - runtime
+        - check: adb=shell
+          id: avd-internet-ip
+          adb: shell
+          arg: [ping, -c, "1", -W, "5", 8.8.8.8]
+          stdout:
+            - contains: "1 received"
+          eventually: 60s
+          retry_interval: 5s
+          context:
+            - runtime
+        - check: adb=shell
+          id: avd-internet-dns
+          adb: shell
+          arg: [ping, -c, "1", -W, "5", google.com]
+          stdout:
+            - contains: "1 received"
+          eventually: 60s
+          retry_interval: 5s
+          context:
+            - runtime
+        - check: adb=wait-ui-settled
+          id: emulator-ui-settled
+          adb: wait-ui-settled
+          timeout: 600s
+          stdout:
+            - contains: settled
+          context:
+            - runtime
+        - check: adb=shell
+          id: play-store-present
+          adb: shell
+          arg: [pm, list, packages, com.android.vending]
+          stdout:
+            - contains: "com.android.vending"
+          context:
+            - runtime
+        - check: adb=shell
+          id: gms-present
+          adb: shell
+          arg: [pm, list, packages, com.google.android.gms]
+          stdout:
+            - contains: "com.google.android.gms"
+          context:
+            - runtime
+        - check: adb=shell
+          id: gsf-present
+          adb: shell
+          arg: [pm, list, packages, com.google.android.gsf]
+          stdout:
+            - contains: "com.google.android.gsf"
+          context:
+            - runtime
+        - check: adb=shell
+          id: chrome-preinstalled
+          adb: shell
+          arg: [pm, list, packages, com.android.chrome]
+          stdout:
+            - contains: "com.android.chrome"
+          context:
+            - runtime
+        - check: adb=shell
+          id: chrome-launch
+          adb: shell
+          # monkey injects a LAUNCHER intent; exit 0 means the activity started.
+          arg: [monkey, -p, com.android.chrome, -c, android.intent.category.LAUNCHER, "1"]
+          exit_status: 0
+          context:
+            - runtime
+        - check: adb=screencap
+          id: chrome-screencap
+          adb: screencap
+          artifact: /tmp/charly-check-chrome.png
+          artifact_min_bytes: 5000
+          context:
+            - runtime
+        - check: adb=shell
+          id: apk-fdroid-present
+          adb: shell
+          arg: [pm, list, packages, org.fdroid.fdroid]
+          stdout:
+            - contains: "org.fdroid.fdroid"
+          # The android `device` deploy installs F-Droid right before check-live;
+          # allow a little settle on a fresh boot.
+          eventually: 120s
+          retry_interval: 5s
+          context:
+            - runtime
+        - check: adb=shell
+          id: apk-fdroid-launch
+          adb: shell
+          # Launch raises a runtime-permission dialog (GrantPermissionsActivity)
+          # that covers F-Droid, so assert the PROCESS is running (pidof prints a
+          # PID), NOT the focused activity (live-observed 2026-05-25).
+          arg: [sh, -c, "monkey -p org.fdroid.fdroid -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1; sleep 3; pidof org.fdroid.fdroid"]
+          stdout:
+            - matches: "[0-9]"
+          context:
+            - runtime
+        - check: adb=shell
+          id: apk-net-apidemos-present
+          adb: shell
+          arg: [pm, list, packages, io.appium.android.apis]
+          stdout:
+            - contains: "io.appium.android.apis"
+          eventually: 120s
+          retry_interval: 5s
+          context:
+            - runtime
+        - check: adb=shell
+          id: adb-disable-verifier
+          adb: shell
+          arg: [settings, put, global, package_verifier_enable, "0"]
+          context:
+            - runtime
+        - check: adb=shell
+          id: adb-disable-adb-install-verifier
+          adb: shell
+          arg: [settings, put, global, verifier_verify_adb_installs, "0"]
+          context:
+            - runtime
+        - check: adb=install
+          id: adb-install-apidemos
+          adb: install
+          # adb: install reads `apk:` from the HOST filesystem (the host
+          # charly binary pushes via the ADB sync protocol). Path resolves
+          # against the project root.
+          apk: ./tests/data/ApiDemos-debug.apk
+          stdout:
+            - contains: Success
+          timeout: 60s
+          # PackageManager keeps initializing for a few seconds AFTER
+          # sys.boot_completed=1 (the wait-for-device gate above), so an install
+          # fired in that window fails with "Failed to parse APK file". This is
+          # the ONE package-mutating op that runs right after boot — `eventually:`
+          # re-runs the whole install (push + idempotent `pm install -r`) until it
+          # succeeds or the deadline, polling the exact end-to-end readiness
+          # condition (no proxy signal). The framework's synchronization
+          # primitive, NOT a fixed sleep. Once this passes, the device is settled,
+          # so the confirm/uninstall/appium ops below stay one-shot.
+          eventually: 180s
+          retry_interval: 5s
+          context:
+            - runtime
+        - check: adb=shell
+          id: adb-shell-confirms-apidemos-installed
+          adb: shell
+          arg: [pm, list, packages, io.appium.android.apis]
+          stdout:
+            - contains: "io.appium.android.apis"
+          context:
+            - runtime
+        - check: adb=screencap
+          id: adb-screencap-png-min-size
+          adb: screencap
+          artifact: /tmp/charly-check-adb-screencap.png
+          artifact_min_bytes: 5000
+          context:
+            - runtime
+        - check: adb=uninstall
+          id: adb-uninstall-apidemos
+          adb: uninstall
+          # args[0] = package id (posPackageArg builder convention).
+          arg: [io.appium.android.apis]
+          stdout:
+            - contains: Success
+          context:
+            - runtime
+        - check: appium=session-create
+          id: appium-session-create
+          appium: session-create
+          # UiAutomator2 installs its instrumentation server APK + waits for the
+          # test runner on first invocation; on a fresh emulator this exceeds the
+          # 30s default, so bump the two timeouts. chromedriverExecutableDir
+          # points at the pinned chromedriver-133 baked by appium-server (matches
+          # the API-36 System WebView 133) so the WebView context switch works
+          # offline (NO --allow-insecure autodownload); chromedriverDisableBuildCheck
+          # tolerates a WebView patch-version skew.
+          caps: |
+            {"platformName":"Android","appium:automationName":"UiAutomator2","appium:deviceName":"emulator-5554","appium:platformVersion":"16","appium:noReset":true,"appium:newCommandTimeout":120,"appium:uiautomator2ServerInstallTimeout":240000,"appium:uiautomator2ServerLaunchTimeout":240000,"appium:chromedriverExecutableDir":"/opt/chromedriver/133","appium:chromedriverDisableBuildCheck":true}
+          timeout: 600s
+          context:
+            - runtime
+        - check: appium=raw
+          id: av-set-implicit-wait
+          appium: raw
+          method: POST
+          path: /timeouts
+          request_body: '{"implicit":10000}'
+          context:
+            - runtime
+        - check: appium=install-app
+          id: appium-install-apidemos
+          appium: install-app
+          # HOST path (resolved against project root); the verb stages it into the
+          # container via `<engine> cp` then calls mobile:installApp.
+          apk: ./tests/data/ApiDemos-debug.apk
+          timeout: 120s
+          context:
+            - runtime
+        - check: adb=shell
+          id: av-grant-notifications
+          adb: shell
+          arg: [pm, grant, io.appium.android.apis, android.permission.POST_NOTIFICATIONS]
+          context:
+            - runtime
+        - check: adb=shell
+          id: av-force-stop-apidemos
+          adb: shell
+          arg: [am, force-stop, io.appium.android.apis]
+          context:
+            - runtime
+        - check: appium=app-is-installed
+          id: av-app-installed
+          appium: app-is-installed
+          app_id: io.appium.android.apis
+          stdout:
+            - contains: "true"
+          context:
+            - runtime
+        - check: appium=app-activate
+          id: av-app-activate
+          appium: app-activate
+          app_id: io.appium.android.apis
+          stdout:
+            - contains: activated
+          context:
+            - runtime
+        - check: appium=app-start-activity
+          id: av-textfields-open
+          appium: app-start-activity
+          activity: io.appium.android.apis/.view.TextFields
+          stdout:
+            - contains: started
+          context:
+            - runtime
+        - check: appium=send-keys
+          id: av-textfields-type
+          appium: send-keys
+          strategy: class-name
+          selector: android.widget.EditText
+          text: charly-readback
+          context:
+            - runtime
+        - check: appium=get-text
+          id: av-textfields-readback
+          appium: get-text
+          strategy: class-name
+          selector: android.widget.EditText
+          stdout:
+            - contains: charly-readback
+          context:
+            - runtime
+        - check: appium=app-start-activity
+          id: av-controls-open
+          appium: app-start-activity
+          activity: io.appium.android.apis/.view.Controls1
+          stdout:
+            - contains: started
+          context:
+            - runtime
+        - check: appium=gesture-tap
+          id: av-checkbox-tap
+          appium: gesture-tap
+          strategy: class-name
+          selector: android.widget.CheckBox
+          stdout:
+            - contains: tapped
+          context:
+            - runtime
+        - check: appium=get-attribute
+          id: av-checkbox-checked
+          appium: get-attribute
+          strategy: class-name
+          selector: android.widget.CheckBox
+          attribute: checked
+          stdout:
+            - contains: "true"
+          context:
+            - runtime
+        - check: appium=app-start-activity
+          id: av-radio-open
+          appium: app-start-activity
+          activity: io.appium.android.apis/.view.RadioGroup1
+          stdout:
+            - contains: started
+          context:
+            - runtime
+        - check: appium=gesture-tap
+          id: av-radio-tap
+          appium: gesture-tap
+          strategy: android-uiautomator
+          selector: 'new UiSelector().text("Snack")'
+          stdout:
+            - contains: tapped
+          context:
+            - runtime
+        - check: appium=get-attribute
+          id: av-radio-checked
+          appium: get-attribute
+          strategy: android-uiautomator
+          selector: 'new UiSelector().text("Snack")'
+          attribute: checked
+          stdout:
+            - contains: "true"
+          context:
+            - runtime
+        - check: appium=app-start-activity
+          id: av-list-open
+          appium: app-start-activity
+          activity: io.appium.android.apis/.view.List1
+          stdout:
+            - contains: started
+          context:
+            - runtime
+        - check: appium=gesture-scroll
+          id: av-list-scroll
+          appium: gesture-scroll
+          strategy: class-name
+          selector: android.widget.ListView
+          direction: down
+          percent: "0.8"
+          stdout:
+            - contains: scrolled
+          context:
+            - runtime
+        - check: appium=find
+          id: av-list-scroll-into-view
+          appium: find
+          strategy: android-uiautomator
+          selector: 'new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().text("Gruyere"))'
+          stdout:
+            - matches: "."
+          context:
+            - runtime
+        - check: appium=app-start-activity
+          id: av-spinner-open
+          appium: app-start-activity
+          activity: io.appium.android.apis/.view.Spinner1
+          stdout:
+            - contains: started
+          context:
+            - runtime
+        - check: appium=gesture-tap
+          id: av-spinner-open-planet
+          appium: gesture-tap
+          strategy: android-uiautomator
+          selector: 'new UiSelector().text("Mercury")'
+          stdout:
+            - contains: tapped
+          context:
+            - runtime
+        - check: appium=gesture-tap
+          id: av-spinner-pick
+          appium: gesture-tap
+          strategy: android-uiautomator
+          selector: 'new UiSelector().text("Jupiter")'
+          stdout:
+            - contains: tapped
+          context:
+            - runtime
+        - check: appium=source
+          id: av-spinner-selected
+          appium: source
+          stdout:
+            - contains: Jupiter
+          context:
+            - runtime
+        - check: appium=app-start-activity
+          id: av-datetime-open
+          appium: app-start-activity
+          activity: io.appium.android.apis/.view.DateWidgets1
+          stdout:
+            - contains: started
+          context:
+            - runtime
+        - check: appium=get-text
+          id: av-datetime-text
+          appium: get-text
+          strategy: id
+          selector: io.appium.android.apis:id/dateDisplay
+          stdout:
+            - matches: "[0-9]"
+          context:
+            - runtime
+        - check: appium=app-start-activity
+          id: av-seekbar-open
+          appium: app-start-activity
+          activity: io.appium.android.apis/.view.SeekBar1
+          stdout:
+            - contains: started
+          context:
+            - runtime
+        - check: appium=gesture-swipe
+          id: av-seekbar-swipe
+          appium: gesture-swipe
+          strategy: class-name
+          selector: android.widget.SeekBar
+          direction: right
+          percent: "0.75"
+          stdout:
+            - contains: swiped
+          context:
+            - runtime
+        - check: appium=get-text
+          id: av-seekbar-progress
+          appium: get-text
+          strategy: id
+          selector: io.appium.android.apis:id/progress
+          stdout:
+            - matches: "[0-9]"
+          context:
+            - runtime
+        - check: appium=app-start-activity
+          id: av-dnd-open
+          appium: app-start-activity
+          activity: io.appium.android.apis/.view.DragAndDropDemo
+          stdout:
+            - contains: started
+          context:
+            - runtime
+        - check: appium=gesture-drag
+          id: av-dnd-drag
+          appium: gesture-drag
+          strategy: id
+          selector: io.appium.android.apis:id/drag_dot_1
+          params: '{"endX":600,"endY":900,"speed":2500}'
+          stdout:
+            - contains: dragged
+          context:
+            - runtime
+        - check: appium=source
+          id: av-dnd-result
+          appium: source
+          stdout:
+            - contains: Dropped
+          context:
+            - runtime
+        - check: appium=app-start-activity
+          id: av-webview-open
+          appium: app-start-activity
+          activity: io.appium.android.apis/.view.WebView1
+          stdout:
+            - contains: started
+          context:
+            - runtime
+        - check: appium=device-contexts
+          id: av-webview-contexts
+          appium: device-contexts
+          stdout:
+            - contains: WEBVIEW
+          eventually: 30s
+          retry_interval: 3s
+          context:
+            - runtime
+        - check: appium=device-context
+          id: av-webview-switch
+          appium: device-context
+          params: WEBVIEW_io.appium.android.apis
+          stdout:
+            - contains: WEBVIEW
+          timeout: 120s
+          context:
+            - runtime
+        - check: appium=source
+          id: av-webview-html
+          appium: source
+          stdout:
+            - contains: "<html"
+          context:
+            - runtime
+        - check: appium=device-context
+          id: av-webview-native
+          appium: device-context
+          params: NATIVE_APP
+          stdout:
+            - contains: NATIVE_APP
+          context:
+            - runtime
+        - check: appium=app-start-activity
+          id: av-notif-open
+          appium: app-start-activity
+          activity: io.appium.android.apis/.app.StatusBarNotifications
+          stdout:
+            - contains: started
+          context:
+            - runtime
+        - check: appium=gesture-tap
+          id: av-notif-fire
+          appium: gesture-tap
+          strategy: android-uiautomator
+          selector: 'new UiSelector().text(":-|")'
+          stdout:
+            - contains: tapped
+          context:
+            - runtime
+        - check: appium=device-notifications
+          id: av-notif-shade
+          appium: device-notifications
+          stdout:
+            - contains: opened
+          context:
+            - runtime
+        - check: appium=source
+          id: av-notif-present
+          appium: source
+          stdout:
+            - contains: "Mood ring"
+          eventually: 15s
+          retry_interval: 3s
+          context:
+            - runtime
+        - check: appium=key-press
+          id: av-notif-close-shade
+          appium: key-press
+          keycode: 4
+          context:
+            - runtime
+        - check: appium=device-info
+          id: av-device-info
+          appium: device-info
+          stdout:
+            - contains: platformVersion
+          context:
+            - runtime
+        - check: appium=app-current-package
+          id: av-current-package
+          appium: app-current-package
+          stdout:
+            - contains: io.appium.android.apis
+          context:
+            - runtime
+        - check: appium=device-orientation
+          id: av-orientation
+          appium: device-orientation
+          stdout:
+            - contains: PORTRAIT
+          context:
+            - runtime
+        - check: appium=execute
+          id: av-execute-devicetime
+          appium: execute
+          expression: "mobile: getDeviceTime"
+          stdout:
+            - matches: "[0-9]"
+          context:
+            - runtime
+        - check: appium=raw
+          id: av-raw-orientation
+          appium: raw
+          method: GET
+          path: /orientation
+          stdout:
+            - contains: PORTRAIT
+          context:
+            - runtime
+        - check: appium=screenshot
+          id: appium-screenshot
+          appium: screenshot
+          artifact: /tmp/charly-check-appium-screenshot.png
+          artifact_min_bytes: 5000
+          context:
+            - runtime
+        - check: appium=session-delete
+          id: appium-session-delete
+          appium: session-delete
+          stdout:
+            - contains: deleted
+          context:
+            - runtime

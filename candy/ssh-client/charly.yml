@@ -1,17 +1,15 @@
 candy:
     version: 2026.144.1443
     name: ssh-client
-    description:
-        feature: OpenSSH client tools for SSH agent forwarding
-        narrative: |
-            ssh-client installs the OpenSSH client package (openssh-clients on
-            Fedora, openssh-client on Debian/Ubuntu, openssh on Arch) providing
-            the ssh, ssh-add, ssh-keygen, scp and sftp binaries at /usr/bin.
-            Boxes compose it (directly or via the agent-forwarding metalayer) so
-            in-container ssh and git can reach hosts through the host's forwarded
-            SSH agent socket. The observable, verifiable effect is that the client
-            binaries are present and `ssh -V` reports the OpenSSH banner on stderr.
-        tag: [working]
+    description: |
+        OpenSSH client tools for SSH agent forwarding
+        ssh-client installs the OpenSSH client package (openssh-clients on
+        Fedora, openssh-client on Debian/Ubuntu, openssh on Arch) providing
+        the ssh, ssh-add, ssh-keygen, scp and sftp binaries at /usr/bin.
+        Boxes compose it (directly or via the agent-forwarding metalayer) so
+        in-container ssh and git can reach hosts through the host's forwarded
+        SSH agent socket. The observable, verifiable effect is that the client
+        binaries are present and `ssh -V` reports the OpenSSH banner on stderr.
     distro:
         arch:
             package:
@@ -25,33 +23,26 @@ candy:
         ubuntu:
             package:
                 - openssh-client
-    scenario:
-        - name: ssh-client-binaries-present
-          step:
-            - then: the ssh client binary is installed at /usr/bin/ssh so in-container git and ssh can connect out
-              file: /usr/bin/ssh
-              exists: true
-            - then: ssh-add is installed so the forwarded host agent's keys can be loaded and listed
-              file: /usr/bin/ssh-add
-              exists: true
-            - then: ssh-keygen is installed for generating and inspecting key material
-              file: /usr/bin/ssh-keygen
-              exists: true
-        - name: ssh-reports-openssh-version
-          step:
-            - then: ssh -V identifies the client as OpenSSH on stderr and exits cleanly
-              command: /usr/bin/ssh -V
-              exit_status: 0
-              stderr:
-                - contains: "OpenSSH"
-        - name: ssh-agent-socket-used-when-forwarded
-          step:
-            - then: with a host SSH agent forwarded at runtime, ssh-add -l inside the deployment lists the host's keys via the forwarded SSH_AUTH_SOCK
-        - name: ssh-client-package
-          step:
-            - id: ssh-client-package
-              package: openssh-client
-              package_map:
-                arch: openssh
-                fedora: openssh-clients
-              installed: true
+    plan:
+        - check: the ssh client binary is installed at /usr/bin/ssh so in-container git and ssh can connect out
+          file: /usr/bin/ssh
+          exists: true
+        - check: ssh-add is installed so the forwarded host agent's keys can be loaded and listed
+          file: /usr/bin/ssh-add
+          exists: true
+        - check: ssh-keygen is installed for generating and inspecting key material
+          file: /usr/bin/ssh-keygen
+          exists: true
+        - check: ssh -V identifies the client as OpenSSH on stderr and exits cleanly
+          command: /usr/bin/ssh -V
+          exit_status: 0
+          stderr:
+            - contains: "OpenSSH"
+        - agent-check: with a host SSH agent forwarded at runtime, ssh-add -l inside the deployment lists the host's keys via the forwarded SSH_AUTH_SOCK
+        - check: package=openssh-client
+          id: ssh-client-package
+          package: openssh-client
+          package_map:
+            arch: openssh
+            fedora: openssh-clients
+          installed: true

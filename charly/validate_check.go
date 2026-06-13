@@ -37,26 +37,30 @@ var lowercaseCheckVarPattern = regexp.MustCompile(`\$\{[a-z][a-zA-Z0-9_]*\}`)
 //  6. ExitStatus / Port / UID / GID sanity (non-negative).
 //  7. Matcher operator is a known one.
 func validateOps(cfg *Config, layers map[string]*Candy, errs *ValidationError) {
-	// Validate every Op embedded in a scenario step — candy + box.
-	validateScenarioOps := func(scenarios []Scenario, who string) {
-		for si := range scenarios {
-			for sti := range scenarios[si].Step {
-				op := &scenarios[si].Step[sti].Op
-				if len(op.verbsSet()) == 0 {
-					continue // narrative-only step (no verb)
-				}
-				validateCheck(op, fmt.Sprintf("%s scenario %q step[%d]", who, scenarios[si].Name, sti), errs)
+	// Validate every Op embedded in a plan step — candy + box. Agent
+	// (agent-run:/agent-check:) and include: steps carry no Op verb, so they
+	// are skipped.
+	validatePlanOps := func(plan []Step, who string) {
+		for i := range plan {
+			op := &plan[i].Op
+			if len(op.verbsSet()) == 0 {
+				continue // agent / include / verb-less step
 			}
+			// Stamp the step keyword's do-mode onto the op so validateCheck's
+			// act-form rules (e.g. a run: step whose verb has no build/deploy
+			// install path) are keyword-aware — mirroring runUnit's stamping.
+			op.intentDo = plan[i].DoMode()
+			validateCheck(op, fmt.Sprintf("%s step[%d]", who, i), errs)
 		}
 	}
 	for name, layer := range layers {
-		validateScenarioOps(layer.scenario, fmt.Sprintf("candy %q", name))
+		validatePlanOps(layer.plan, fmt.Sprintf("candy %q", name))
 	}
 	for name, img := range cfg.Box {
 		if img.Enabled != nil && !*img.Enabled {
 			continue
 		}
-		validateScenarioOps(img.Scenario, fmt.Sprintf("box %q", name))
+		validatePlanOps(img.Plan, fmt.Sprintf("box %q", name))
 	}
 }
 
@@ -82,9 +86,9 @@ func validateCheck(c *Op, loc string, errs *ValidationError) {
 	}
 	for _, ctx := range c.Context {
 		switch ExecContext(ctx) {
-		case CtxBuild, CtxDeploy, CtxRuntime, CtxAgent:
+		case CtxBuild, CtxDeploy, CtxRuntime:
 		default:
-			errs.Add("%s: context %q must be one of build|deploy|runtime|agent", loc, ctx)
+			errs.Add("%s: context %q must be one of build|deploy|runtime", loc, ctx)
 		}
 	}
 	if spec, ok := VerbCatalog[verb]; ok {

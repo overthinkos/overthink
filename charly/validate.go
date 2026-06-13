@@ -134,9 +134,6 @@ func Validate(cfg *Config, layers map[string]*Candy, dir string, opts ResolveOpt
 	// Validate port_relay declarations
 	validatePortRelay(cfg, layers, errs)
 
-	// Validate status fields
-	validateStatus(cfg, layers, errs)
-
 	// Validate version fields
 	validateVersionFields(cfg, layers, errs)
 
@@ -165,7 +162,7 @@ func Validate(cfg *Config, layers map[string]*Candy, dir string, opts ResolveOpt
 		validateInitDependencies(cfg, defaultInitCfg, layers, errs)
 	}
 
-	// Validate every Op embedded in a candy/box scenario step.
+	// Validate every Op embedded in a candy/box plan step.
 	validateOps(cfg, layers, errs)
 
 	// Validate kind:local templates and target:local deployments.
@@ -488,31 +485,36 @@ func validateCandyContents(layers map[string]*Candy, errs *ValidationError) {
 			errs.Add("candy %q: missing required `version:` (CalVer YYYY.DDD.HHMM). Run: charly migrate", name)
 		}
 
+		// `status:` (optional) must be one of working|testing|broken when set.
+		switch layer.Status {
+		case "", StatusWorking, StatusTesting, StatusBroken:
+		default:
+			errs.Add("candy %q: invalid status %q (must be one of: %s, %s, %s)", name, layer.Status, StatusWorking, StatusTesting, StatusBroken)
+		}
+
 		// ADE is MANDATORY per candy: every local candy MUST ship a non-empty
-		// `description.feature:` AND a `scenario:` list containing at least one
-		// DETERMINISTIC step (do: assert) so the agentless check always has
+		// `description:` string AND a `plan:` containing at least one
+		// DETERMINISTIC `check:` step so the agentless check always has
 		// something to verify (the spec IS the test). Scoped to local candies —
 		// a fetched remote candy's compliance is its own repo's concern (same
-		// scope as the version: check). See CLAUDE.md "Agent Driven Checkuation
+		// scope as the version: check). See CLAUDE.md "Agent Driven Evaluation
 		// (ADE)" + /charly-check:check.
 		if !layer.Remote {
-			deterministic := 0
-			for si := range layer.scenario {
-				for sti := range layer.scenario[si].Step {
-					if layer.scenario[si].Step[sti].EffectiveDo() == DoAssert {
-						deterministic++
-					}
+			checkSteps := 0
+			for i := range layer.plan {
+				if layer.plan[i].Check != "" {
+					checkSteps++
 				}
 			}
 			switch {
-			case layer.Description == nil || strings.TrimSpace(layer.Description.Feature) == "":
-				errs.Add("candy %q: missing required `description:` with a non-empty feature: (ADE is mandatory). See /charly-check:check", name)
-			case len(layer.scenario) == 0:
-				errs.Add("candy %q: missing required `scenario:` list (ADE is mandatory; the spec IS the test). See /charly-check:check", name)
-			case deterministic == 0:
-				errs.Add("candy %q: `scenario:` must contain at least one deterministic step (do: assert) so the agentless check has something to verify. See /charly-check:check", name)
+			case strings.TrimSpace(layer.Description) == "":
+				errs.Add("candy %q: missing required `description:` string (ADE is mandatory). See /charly-check:check", name)
+			case len(layer.plan) == 0:
+				errs.Add("candy %q: missing required `plan:` list (ADE is mandatory; the spec IS the test). See /charly-check:check", name)
+			case checkSteps == 0:
+				errs.Add("candy %q: `plan:` must contain at least one `check:` step so the agentless check has something to verify. See /charly-check:check", name)
 			default:
-				for _, issue := range validateDescriptionSteps(layer.Description, layer.scenario, "candy "+name) {
+				for _, issue := range validatePlanSteps(layer.Description, layer.plan, "candy "+name) {
 					errs.Add("%s", issue)
 				}
 			}
@@ -1740,43 +1742,8 @@ func min(a, b, c int) int {
 	return c
 }
 
-// validStatuses lists the allowed status values (empty string also accepted as "testing").
-var validStatuses = map[string]bool{
-	"":        true,
-	"working": true,
-	"testing": true,
-	"broken":  true,
-}
-
 // calverRe matches CalVer format: YYYY.DDD.HHMM (3 dot-separated non-negative integers)
 var calverRe = regexp.MustCompile(`^\d+\.\d+\.\d+$`)
-
-// validateStatus validates status tags in description.tag for candies
-// and images. Accepts empty (defaults to testing) plus working/testing/
-// broken. The status word is one of many possible Description.Tag
-// entries — others are free-form and not policed here.
-func validateStatus(cfg *Config, layers map[string]*Candy, errs *ValidationError) {
-	for name, layer := range layers {
-		if layer.Description == nil {
-			continue
-		}
-		for _, t := range layer.Description.Tag {
-			if (t == "working" || t == "testing" || t == "broken") && !validStatuses[t] {
-				errs.Add("candy %q: description.tag includes unknown status %q", name, t)
-			}
-		}
-	}
-	for name, img := range cfg.Box {
-		if !img.IsEnabled() || img.Description == nil {
-			continue
-		}
-		for _, t := range img.Description.Tag {
-			if (t == "working" || t == "testing" || t == "broken") && !validStatuses[t] {
-				errs.Add("box %q: description.tag includes unknown status %q", name, t)
-			}
-		}
-	}
-}
 
 // validateVersionFields validates version fields in candies and images.
 func validateVersionFields(cfg *Config, layers map[string]*Candy, errs *ValidationError) {
@@ -2172,11 +2139,11 @@ func validateCandyTasks(layers map[string]*Candy, errs *ValidationError) {
 		}
 
 		known := taskKnownNames(layer.vars)
-		for i, t := range layer.tasks {
+		for i, t := range layer.runOps() {
 			// Exactly-one-verb
 			verb, err := t.Kind()
 			if err != nil {
-				errs.Add("candy %q: tasks[%d]: %v", name, i, err)
+				errs.Add("candy %q: plan run[%d]: %v", name, i, err)
 				continue
 			}
 

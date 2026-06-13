@@ -1,38 +1,30 @@
 candy:
     version: 2026.144.1443
     name: asciinema
-    description:
-        feature: Record and replay terminal sessions as asciicast v2 .cast files
-        narrative: |
-            The asciinema candy installs the asciinema terminal recorder from the
-            distro package (named `asciinema` on RPM, DEB, and PAC alike). It
-            provides the /usr/bin/asciinema CLI whose `rec` subcommand captures a
-            terminal session -- timing, input, and output -- into a replayable
-            asciicast v2 .cast file; this is the engine behind
-            `charly check record start --mode terminal`.
-        tag: [working]
+    description: |
+        Record and replay terminal sessions as asciicast v2 .cast files
+        The asciinema candy installs the asciinema terminal recorder from the
+        distro package (named `asciinema` on RPM, DEB, and PAC alike). It
+        provides the /usr/bin/asciinema CLI whose `rec` subcommand captures a
+        terminal session -- timing, input, and output -- into a replayable
+        asciicast v2 .cast file; this is the engine behind
+        `charly check record start --mode terminal`.
     package:
         - asciinema
-    scenario:
-        - name: asciinema-cli-installed
-          step:
-            - then: the asciinema recorder binary is installed at /usr/bin/asciinema
-              file: /usr/bin/asciinema
-              exists: true
-            - then: the asciinema package is registered in the distro package database
-              package: asciinema
-              installed: true
-        - name: asciinema-reports-version
-          step:
-            - then: running asciinema --version prints the asciinema version banner and exits cleanly
-              command: /usr/bin/asciinema --version
-              exit_status: 0
-              stdout:
-                - contains: asciinema
-        - name: asciinema-exposes-recording-command
-          step:
-            - then: asciinema --help advertises the rec subcommand that captures terminal sessions
-              command: /usr/bin/asciinema --help
-              exit_status: 0
-              stdout:
-                - contains: rec
+    plan:
+        - check: the asciinema recorder binary is installed at /usr/bin/asciinema
+          file: /usr/bin/asciinema
+          exists: true
+        - check: the asciinema package is registered in the distro package database
+          package: asciinema
+          installed: true
+        - check: running asciinema --version prints the asciinema version banner and exits cleanly
+          command: /usr/bin/asciinema --version
+          exit_status: 0
+          stdout:
+            - contains: asciinema
+        - check: asciinema --help advertises the rec subcommand that captures terminal sessions
+          command: /usr/bin/asciinema --help
+          exit_status: 0
+          stdout:
+            - contains: rec

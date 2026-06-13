@@ -1,18 +1,16 @@
 candy:
     version: 2026.162.1430
     name: filebrowser
-    description:
-        feature: Browser-based file manager (FileBrowser Quantum) served over HTTP on port 8080
-        narrative: |
-            Downloads the gtsteffaniak/filebrowser ${FILEBROWSER_VERSION} static
-            binary to /usr/local/bin/filebrowser (0755), writes its server config
-            to /etc/filebrowser/config.yaml (listen port 8080, SQLite database + a
-            "Files" source under ~/.filebrowser/files), and runs it as the
-            always-restart `filebrowser` service under the init system. The data
-            and files volumes persist the database and the user-browsable tree.
-            Every fact below is observable: the installed binary, the config
-            contents, the running service, and the HTTP 200 the web UI returns.
-        tag: [working]
+    description: |
+        Browser-based file manager (FileBrowser Quantum) served over HTTP on port 8080
+        Downloads the gtsteffaniak/filebrowser ${FILEBROWSER_VERSION} static
+        binary to /usr/local/bin/filebrowser (0755), writes its server config
+        to /etc/filebrowser/config.yaml (listen port 8080, SQLite database + a
+        "Files" source under ~/.filebrowser/files), and runs it as the
+        always-restart `filebrowser` service under the init system. The data
+        and files volumes persist the database and the user-browsable tree.
+        Every fact below is observable: the installed binary, the config
+        contents, the running service, and the HTTP 200 the web UI returns.
     require:
         - supervisord
     env:
@@ -29,18 +27,6 @@ candy:
           command: filebrowser
     var:
         FILEBROWSER_VERSION: v1.2.4-stable
-    task:
-        - download: "https://github.com/gtsteffaniak/filebrowser/releases/download/${FILEBROWSER_VERSION}/linux-${ARCH}-filebrowser"
-          extract: none
-          to: /usr/local/bin/filebrowser
-          mode: "0755"
-          run_as: root
-        - mkdir: /etc/filebrowser
-          run_as: root
-        - copy: config.yaml
-          to: /etc/filebrowser/config.yaml
-          mode: "0644"
-          run_as: root
     service:
         - name: filebrowser
           exec: /usr/local/bin/filebrowser
@@ -49,55 +35,53 @@ candy:
           restart: always
           enable: true
           scope: system
-    scenario:
-        # DETERMINISTIC build-scope facts (embedded check verbs run at both
-        # `charly box feature run` and `charly check feature run`).
-        - name: filebrowser-binary-installed
-          step:
-            - then: the filebrowser binary is installed and executable at /usr/local/bin/filebrowser
-              file: /usr/local/bin/filebrowser
-              exists: true
-              mode: "0755"
-        - name: filebrowser-config-declares-listen-port
-          step:
-            - then: the server config is present at /etc/filebrowser/config.yaml
-              file: /etc/filebrowser/config.yaml
-              exists: true
-            - then: the config declares the listen port 8080
-              file: /etc/filebrowser/config.yaml
-              contains:
-                - matches: "port: 8080"
-        # DETERMINISTIC deploy-scope facts — the running service answers HTTP
-        # 200 on the published port (agent-graded only if a runtime probe is
-        # unavailable; here every step embeds a check verb).
-        - name: filebrowser-serves-web-ui
-          step:
-            - then: the filebrowser service is running under the init system
-              service: filebrowser
-              running: true
-              context:
-                - runtime
-            - then: the web UI answers HTTP 200 on the published port
-              http: http://127.0.0.1:${HOST_PORT:8080}/
-              status: 200
-              timeout: 5s
-              context:
-                - runtime
-        - name: filebrowser-port
-          step:
-            - id: filebrowser-port
-              addr: 127.0.0.1:${HOST_PORT:8080}
-              reachable: true
-              timeout: 5s
-              context:
-                - runtime
-        - name: filebrowser-volumes-exist
-          step:
-            # The candy owns the `data` volume (declared above), so the
-            # "data dir exists" probe lives here — one check covers every box
-            # composing filebrowser.
-            - id: filebrowser-volumes-exist
-              file: ${VOLUME_CONTAINER_PATH:data}
-              filetype: directory
-              context:
-                - runtime
+    plan:
+        - run: download=https://github.com/gtsteffaniak/filebrowser/releases/download/${FILEBROWSER_VERSION}/linux-${ARCH}-filebrowser
+          download: "https://github.com/gtsteffaniak/filebrowser/releases/download/${FILEBROWSER_VERSION}/linux-${ARCH}-filebrowser"
+          extract: none
+          to: /usr/local/bin/filebrowser
+          mode: "0755"
+          run_as: root
+        - run: mkdir=/etc/filebrowser
+          mkdir: /etc/filebrowser
+          run_as: root
+        - run: copy=config.yaml
+          copy: config.yaml
+          to: /etc/filebrowser/config.yaml
+          mode: "0644"
+          run_as: root
+        - check: the filebrowser binary is installed and executable at /usr/local/bin/filebrowser
+          file: /usr/local/bin/filebrowser
+          exists: true
+          mode: "0755"
+        - check: the server config is present at /etc/filebrowser/config.yaml
+          file: /etc/filebrowser/config.yaml
+          exists: true
+        - check: the config declares the listen port 8080
+          file: /etc/filebrowser/config.yaml
+          contains:
+            - matches: "port: 8080"
+        - check: the filebrowser service is running under the init system
+          service: filebrowser
+          running: true
+          context:
+            - runtime
+        - check: the web UI answers HTTP 200 on the published port
+          http: http://127.0.0.1:${HOST_PORT:8080}/
+          status: 200
+          timeout: 5s
+          context:
+            - runtime
+        - check: addr=127.0.0.1:${HOST_PORT:8080}
+          id: filebrowser-port
+          addr: 127.0.0.1:${HOST_PORT:8080}
+          reachable: true
+          timeout: 5s
+          context:
+            - runtime
+        - check: file=${VOLUME_CONTAINER_PATH:data}
+          id: filebrowser-volumes-exist
+          file: ${VOLUME_CONTAINER_PATH:data}
+          filetype: directory
+          context:
+            - runtime

@@ -82,10 +82,10 @@ func TestDownloadScriptEnvVars(t *testing.T) {
 
 func TestDownloadScriptInclude(t *testing.T) {
 	task := &Op{
-		Download: "https://example.com/bundle.tar.gz",
-		To:       "/opt/bundle",
-		Extract:  "tar.gz",
-		Include:  []string{"bin/foo", "share/doc/foo"},
+		Download:       "https://example.com/bundle.tar.gz",
+		To:             "/opt/bundle",
+		Extract:        "tar.gz",
+		ExtractInclude: []string{"bin/foo", "share/doc/foo"},
 	}
 	out := renderDownloadScript(task, nil)
 	if !strings.Contains(out, "bin/foo") {

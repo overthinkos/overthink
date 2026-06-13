@@ -1,21 +1,19 @@
 candy:
     version: 2026.157.1134
     name: gh
-    description:
-        feature: GitHub CLI (gh), git, and git-lfs — the GitHub-from-the-shell toolchain
-        narrative: |
-            gh is the single-responsibility home for the GitHub command-line
-            toolchain: the `gh` CLI (packaged as github-cli on arch, gh on
-            fedora/debian/ubuntu), `git`, and `git-lfs`. git-lfs is installed
-            with its rpm %post scriptlet suppressed (tsflags=noscripts, since
-            that scriptlet tries to talk to systemd inside the build container)
-            and its system hooks are instead configured by an explicit
-            post-install task (`git-lfs install --system --skip-repo`). The
-            observable, verifiable effect is that all three binaries are present
-            and runnable in any box that composes this candy — that is what the
-            scenarios and check block assert; they FAIL if any of the three tools
-            is missing.
-        tag: [working]
+    description: |
+        GitHub CLI (gh), git, and git-lfs — the GitHub-from-the-shell toolchain
+        gh is the single-responsibility home for the GitHub command-line
+        toolchain: the `gh` CLI (packaged as github-cli on arch, gh on
+        fedora/debian/ubuntu), `git`, and `git-lfs`. git-lfs is installed
+        with its rpm %post scriptlet suppressed (tsflags=noscripts, since
+        that scriptlet tries to talk to systemd inside the build container)
+        and its system hooks are instead configured by an explicit
+        post-install task (`git-lfs install --system --skip-repo`). The
+        observable, verifiable effect is that all three binaries are present
+        and runnable in any box that composes this candy — that is what the
+        scenarios and check block assert; they FAIL if any of the three tools
+        is missing.
     package:
         - git
         - git-lfs
@@ -40,72 +38,58 @@ candy:
                 - gh
             option:
                 - "--setopt=tsflags=noscripts"
-    task:
-        # git-lfs post-install config (package installed with noscripts above so
-        # the systemd-triggered git-lfs install step doesn't run in the build).
-        - command: /usr/bin/git-lfs install --system --skip-repo 2>/dev/null || true
+    plan:
+        - run: command=/usr/bin/git-lfs install --system --skip-repo 2>/dev/null || true
+          command: /usr/bin/git-lfs install --system --skip-repo 2>/dev/null || true
           run_as: root
-    scenario:
-        - name: github-cli-available
-          step:
-            - then: the GitHub CLI binary is installed at /usr/bin/gh for driving GitHub (PRs, issues, releases) from the shell
-              file: /usr/bin/gh
-              exists: true
-            - then: gh reports its version without error
-              command: /usr/bin/gh --version
-              exit_status: 0
-              stdout:
-                - contains: "gh version"
-        - name: git-version-control-available
-          step:
-            - then: the git binary is installed at /usr/bin/git
-              file: /usr/bin/git
-              exists: true
-            - then: git reports its version without error
-              command: /usr/bin/git --version
-              exit_status: 0
-              stdout:
-                - contains: "git version"
-        - name: git-lfs-large-file-support
-          step:
-            - then: the git-lfs binary is installed at /usr/bin/git-lfs for transparent large-file storage
-              file: /usr/bin/git-lfs
-              exists: true
-            - then: git-lfs reports its version without error
-              command: /usr/bin/git-lfs --version
-              exit_status: 0
-              stdout:
-                - contains: "git-lfs"
-            - then: with the system hooks configured by the post-install task, git-lfs is registered as a git filter so large files are smudged and cleaned transparently on checkout and commit
-        - name: gh-version
-          step:
-            - id: gh-version
-              command: /usr/bin/gh --version
-              exit_status: 0
-        - name: git-version
-          step:
-            - id: git-version
-              command: /usr/bin/git --version
-              exit_status: 0
-        - name: git-lfs-version
-          step:
-            - id: git-lfs-version
-              command: /usr/bin/git-lfs --version
-              exit_status: 0
-        - name: gh-package
-          step:
-            - id: gh-package
-              package: gh
-              package_map:
-                arch: github-cli
-              installed: true
-        - name: git-package
-          step:
-            - id: git-package
-              package: git
-              installed: true
-        - name: git-lfs-package
-          step:
-            - id: git-lfs-package
-              package: git-lfs
-              installed: true
+        - check: the GitHub CLI binary is installed at /usr/bin/gh for driving GitHub (PRs, issues, releases) from the shell
+          file: /usr/bin/gh
+          exists: true
+        - check: gh reports its version without error
+          command: /usr/bin/gh --version
+          exit_status: 0
+          stdout:
+            - contains: "gh version"
+        - check: the git binary is installed at /usr/bin/git
+          file: /usr/bin/git
+          exists: true
+        - check: git reports its version without error
+          command: /usr/bin/git --version
+          exit_status: 0
+          stdout:
+            - contains: "git version"
+        - check: the git-lfs binary is installed at /usr/bin/git-lfs for transparent large-file storage
+          file: /usr/bin/git-lfs
+          exists: true
+        - check: git-lfs reports its version without error
+          command: /usr/bin/git-lfs --version
+          exit_status: 0
+          stdout:
+            - contains: "git-lfs"
+        - agent-check: with the system hooks configured by the post-install task, git-lfs is registered as a git filter so large files are smudged and cleaned transparently on checkout and commit
+        - check: command=/usr/bin/gh --version
+          id: gh-version
+          command: /usr/bin/gh --version
+          exit_status: 0
+        - check: command=/usr/bin/git --version
+          id: git-version
+          command: /usr/bin/git --version
+          exit_status: 0
+        - check: command=/usr/bin/git-lfs --version
+          id: git-lfs-version
+          command: /usr/bin/git-lfs --version
+          exit_status: 0
+        - check: package=gh
+          id: gh-package
+          package: gh
+          package_map:
+            arch: github-cli
+          installed: true
+        - check: package=git
+          id: git-package
+          package: git
+          installed: true
+        - check: package=git-lfs
+          id: git-lfs-package
+          package: git-lfs
+          installed: true

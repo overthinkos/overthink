@@ -1,19 +1,17 @@
 candy:
     version: 2026.149.1210
     name: desktop-media
-    description:
-        feature: Desktop media codecs, thumbnailers, and the ALSA<->PipeWire bridge for a KDE workstation
-        narrative: |
-            Installs the GStreamer plugin set (libav/bad/ugly/va/pipewire) so Plasma,
-            Phonon and Haruna play every codec, plus the VLC plugins, DVD CSS,
-            thumbnailer support libs (libgsf/libopenraw/poppler-glib), and the
-            ALSA<->PipeWire bridge with pavucontrol. Mirrors the CachyOS netinstall
-            "desktop integration" + "audio" subgroups (host-firmware entries like
-            alsa-firmware/sof-firmware are excluded — the VM has no physical audio
-            hardware, its streamed/null sinks come from PipeWire). Every package
-            lands a known binary, an unsonamed plugin .so, or a config drop-in, so
-            each scenario below is a deterministic file/package check.
-        tag: [working]
+    description: |
+        Desktop media codecs, thumbnailers, and the ALSA<->PipeWire bridge for a KDE workstation
+        Installs the GStreamer plugin set (libav/bad/ugly/va/pipewire) so Plasma,
+        Phonon and Haruna play every codec, plus the VLC plugins, DVD CSS,
+        thumbnailer support libs (libgsf/libopenraw/poppler-glib), and the
+        ALSA<->PipeWire bridge with pavucontrol. Mirrors the CachyOS netinstall
+        "desktop integration" + "audio" subgroups (host-firmware entries like
+        alsa-firmware/sof-firmware are excluded — the VM has no physical audio
+        hardware, its streamed/null sinks come from PipeWire). Every package
+        lands a known binary, an unsonamed plugin .so, or a config drop-in, so
+        each scenario below is a deterministic file/package check.
     require:
         - pipewire
     distro:
@@ -37,47 +35,39 @@ candy:
                 - alsa-plugins
                 - pipewire-alsa
                 - pavucontrol
-    scenario:
-        - name: gstreamer-codec-plugins-present
-          step:
-            - then: the GStreamer libav codec bridge is installed for Plasma/Phonon/Haruna playback
-              package: gst-libav
-              installed: true
-            - then: the libav GStreamer plugin shared object is present on disk
-              file: /usr/lib/gstreamer-1.0/libgstlibav.so
-              exists: true
-            - then: the VA-API hardware-decode GStreamer plugin is present
-              file: /usr/lib/gstreamer-1.0/libgstva.so
-              exists: true
-        - name: alsa-pipewire-bridge-wired
-          step:
-            - then: the ALSA->PipeWire bridge package is installed so ALSA clients route through PipeWire
-              package: pipewire-alsa
-              installed: true
-            - then: the PipeWire default-PCM ALSA config drop-in is installed
-              file: /etc/alsa/conf.d/99-pipewire-default.conf
-              exists: true
-            - then: the pavucontrol mixer UI binary is installed
-              file: /usr/bin/pavucontrol
-              exists: true
-        - name: thumbnailer-and-document-libs-present
-          step:
-            - then: the ffmpeg thumbnailer binary is present for video-file previews
-              file: /usr/bin/ffmpegthumbnailer
-              exists: true
-            - then: the libdvdcss DVD decryption library is installed
-              package: libdvdcss
-              installed: true
-            - then: the poppler-glib PDF library that backs document thumbnails is installed
-              package: poppler-glib
-              installed: true
-        - name: vlc-plugins-all-installed
-          step:
-            - id: vlc-plugins-all-installed
-              package: vlc-plugins-all
-              installed: true
-        - name: alsa-utils-aplay
-          step:
-            - id: alsa-utils-aplay
-              file: /usr/bin/aplay
-              exists: true
+    plan:
+        - check: the GStreamer libav codec bridge is installed for Plasma/Phonon/Haruna playback
+          package: gst-libav
+          installed: true
+        - check: the libav GStreamer plugin shared object is present on disk
+          file: /usr/lib/gstreamer-1.0/libgstlibav.so
+          exists: true
+        - check: the VA-API hardware-decode GStreamer plugin is present
+          file: /usr/lib/gstreamer-1.0/libgstva.so
+          exists: true
+        - check: the ALSA->PipeWire bridge package is installed so ALSA clients route through PipeWire
+          package: pipewire-alsa
+          installed: true
+        - check: the PipeWire default-PCM ALSA config drop-in is installed
+          file: /etc/alsa/conf.d/99-pipewire-default.conf
+          exists: true
+        - check: the pavucontrol mixer UI binary is installed
+          file: /usr/bin/pavucontrol
+          exists: true
+        - check: the ffmpeg thumbnailer binary is present for video-file previews
+          file: /usr/bin/ffmpegthumbnailer
+          exists: true
+        - check: the libdvdcss DVD decryption library is installed
+          package: libdvdcss
+          installed: true
+        - check: the poppler-glib PDF library that backs document thumbnails is installed
+          package: poppler-glib
+          installed: true
+        - check: package=vlc-plugins-all
+          id: vlc-plugins-all-installed
+          package: vlc-plugins-all
+          installed: true
+        - check: file=/usr/bin/aplay
+          id: alsa-utils-aplay
+          file: /usr/bin/aplay
+          exists: true

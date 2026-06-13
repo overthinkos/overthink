@@ -1,21 +1,17 @@
 candy:
     version: 2026.144.1443
     name: uv
-    description:
-        feature: Provides the uv Python package manager (astral-sh/uv) as standalone uv + uvx binaries
-        narrative: |
-            Downloads the latest astral-sh/uv release tarball and extracts the
-            two standalone Rust binaries (uv, uvx) directly into /usr/local/bin.
-            The release nests them under an arch dir, so strip_components: 1
-            lands them flat. Verifiable because both binaries must be present
-            and `uv --version` must run cleanly once the candy is applied — a
-            no-op candy would leave /usr/local/bin/uv absent.
-        tag: [working]
-    task:
-        # uv releases nest binaries under uv-${ARCH}-unknown-linux-gnu/ inside the
-        # tarball, so --strip-components=1 is needed to land uv + uvx directly at
-        # /usr/local/bin/*.
-        - download: "https://github.com/astral-sh/uv/releases/latest/download/uv-${BUILD_ARCH}-unknown-linux-gnu.tar.gz"
+    description: |
+        Provides the uv Python package manager (astral-sh/uv) as standalone uv + uvx binaries
+        Downloads the latest astral-sh/uv release tarball and extracts the
+        two standalone Rust binaries (uv, uvx) directly into /usr/local/bin.
+        The release nests them under an arch dir, so strip_components: 1
+        lands them flat. Verifiable because both binaries must be present
+        and `uv --version` must run cleanly once the candy is applied — a
+        no-op candy would leave /usr/local/bin/uv absent.
+    plan:
+        - run: download=https://github.com/astral-sh/uv/releases/latest/download/uv-${BUILD_ARCH}-unknown-linux-gnu.tar.gz
+          download: "https://github.com/astral-sh/uv/releases/latest/download/uv-${BUILD_ARCH}-unknown-linux-gnu.tar.gz"
           extract: tar.gz
           strip_components: 1
           to: /usr/local/bin
@@ -26,21 +22,12 @@ candy:
           uninstall:
             - /usr/local/bin/uv
             - /usr/local/bin/uvx
-    scenario:
-        # Both scenarios are DETERMINISTIC (each step embeds a check verb),
-        # so they run at build scope (`charly box feature run`) AND deploy
-        # scope (`charly check feature run`). They fail if the download/extract
-        # task did nothing — the binaries simply would not exist.
-        - name: uv-package-manager-installed
-          step:
-            - then: the uv binary is installed at /usr/local/bin/uv
-              file: /usr/local/bin/uv
-              exists: true
-            - then: uv reports its version and exits successfully
-              command: /usr/local/bin/uv --version
-              exit_status: 0
-        - name: uvx-tool-runner-installed
-          step:
-            - then: the uvx tool-runner is installed at /usr/local/bin/uvx
-              file: /usr/local/bin/uvx
-              exists: true
+        - check: the uv binary is installed at /usr/local/bin/uv
+          file: /usr/local/bin/uv
+          exists: true
+        - check: uv reports its version and exits successfully
+          command: /usr/local/bin/uv --version
+          exit_status: 0
+        - check: the uvx tool-runner is installed at /usr/local/bin/uvx
+          file: /usr/local/bin/uvx
+          exists: true

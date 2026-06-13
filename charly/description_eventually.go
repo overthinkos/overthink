@@ -29,7 +29,7 @@ import (
 // Variable expansion: the handler re-runs from the same expanded check
 // each attempt. The caller must expand variables BEFORE calling
 // runWithEventually — re-expansion per attempt would re-evaluate
-// ${CAPTURED:name} mid-scenario, which is unwanted (captures record on
+// ${CAPTURED:name} mid-run, which is unwanted (captures record on
 // PASS only, and pre-pass attempts wouldn't see their own future
 // capture).
 //

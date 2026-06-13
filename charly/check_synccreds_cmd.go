@@ -34,20 +34,18 @@ func (c *CheckSyncCredCmd) RunActual() error {
 	if !ok || uf == nil {
 		return errors.New("harness sync-credential: no charly.yml in current directory")
 	}
-	score, err := ResolveScore(uf.Score, c.Score)
-	if err != nil {
-		return err
+	node, found := uf.Deploy[c.Score]
+	if !found || node.Iterate == nil {
+		return fmt.Errorf("harness sync-credential: entity %q has no iterate: block", c.Score)
 	}
-	tk, tn, err := ResolveScoreTarget(score)
-	if err != nil {
-		return err
-	}
+	iterate := node.Iterate
+	tk, tn := ResolveIterateSandbox(uf, iterate.Sandbox)
 
 	var aiNames []string
 	if c.Agent != "" {
 		aiNames = []string{c.Agent}
 	} else {
-		aiNames = score.Agent
+		aiNames = iterate.Agent
 	}
 	if len(aiNames) == 0 {
 		return fmt.Errorf("harness sync-credential: score %q has no agents configured", c.Score)

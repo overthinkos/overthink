@@ -1,18 +1,16 @@
 candy:
     version: 2026.153.2308
     name: selkies
-    description:
-        feature: Browser-accessible desktop streaming over HTTPS via pixelflux Wayland capture and a Traefik reverse proxy
-        narrative: |
-            selkies installs a Python streaming server (the launch wrapper, the
-            capture-bridge server, and a static web-UI fileserver), a Traefik
-            reverse proxy with a self-signed cert for the WebCodecs secure context,
-            and the pre-built web UI bundle. pixelflux creates the nested wayland-1
-            compositor and streams H.264 to the browser; Traefik terminates TLS on
-            :3000 and proxies the web UI plus the /websockets backend. Each step
-            below asserts a real installed file or a live HTTPS endpoint, so every
-            scenario fails if the candy installed nothing.
-        tag: [working]
+    description: |
+        Browser-accessible desktop streaming over HTTPS via pixelflux Wayland capture and a Traefik reverse proxy
+        selkies installs a Python streaming server (the launch wrapper, the
+        capture-bridge server, and a static web-UI fileserver), a Traefik
+        reverse proxy with a self-signed cert for the WebCodecs secure context,
+        and the pre-built web UI bundle. pixelflux creates the nested wayland-1
+        compositor and streams H.264 to the browser; Traefik terminates TLS on
+        :3000 and proxies the web UI plus the /websockets backend. Each step
+        below asserts a real installed file or a live HTTPS endpoint, so every
+        scenario fails if the candy installed nothing.
     require:
         - supervisord
         - python
@@ -83,69 +81,6 @@ candy:
                 - openssl
     var:
         TRAEFIK_VERSION: v3.4.0
-    task:
-        # Move pre-built Selkies web UI from the build-stage output into the system
-        # share directory. The build (pixi + build.sh) writes selkies-build/web into
-        # the build user's ~/.local/share — uid 1000, but the path differs by target:
-        # /home/user in a container build, /home/<deploy-user> on a host/VM cross-host
-        # build. Resolve it via getent (this cmd runs as root, so $HOME would be /root).
-        - command: |
-            SRCH="$(getent passwd 1000 | cut -d: -f6)"
-            mkdir -p /usr/local/share/selkies/web
-            cp -r "$SRCH"/.local/share/selkies-build/web/* /usr/local/share/selkies/web/
-            rm -rf "$SRCH"/.local/share/selkies-build
-          run_as: root
-        # Traefik binary (same version the dedicated traefik layer uses).
-        - download: "https://github.com/traefik/traefik/releases/download/${TRAEFIK_VERSION}/traefik_${TRAEFIK_VERSION}_linux_${ARCH}.tar.gz"
-          extract: tar.gz
-          to: /usr/local/bin
-          include: [traefik]
-          run_as: root
-        # Self-signed cert for HTTPS secure context (dev-only). openssl is genuinely
-        # procedural — stays in cmd: rather than a contrived write: pair.
-        - mkdir: /usr/local/share/selkies/certs
-          run_as: root
-        - command: |
-            openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 \
-              -keyout /usr/local/share/selkies/certs/selkies.key \
-              -out /usr/local/share/selkies/certs/selkies.crt \
-              -days 3650 -nodes \
-              -subj "/CN=selkies" \
-              -addext "subjectAltName=DNS:localhost,DNS:selkies.localhost,DNS:*.localhost,DNS:charly-selkies-desktop,IP:127.0.0.1"
-            chmod 644 /usr/local/share/selkies/certs/selkies.crt /usr/local/share/selkies/certs/selkies.key
-          run_as: root
-        # Traefik configs from the layer dir.
-        - copy: traefik.yml
-          to: /usr/local/share/selkies/traefik.yml
-          mode: "0644"
-          run_as: root
-        - copy: traefik-dynamic.yml
-          to: /usr/local/share/selkies/traefik-dynamic.yml
-          mode: "0644"
-          run_as: root
-        # User-phase setup: wrappers for the three services.
-        - mkdir: "${HOME}/.local/bin"
-          run_as: "${USER}"
-        - mkdir: "${HOME}/.config/selkies"
-          run_as: "${USER}"
-        # Dedicated selkies log dir — the `selkies` capture-server writes a
-        # rotating stdout/stderr log here (see its `stdout: file:` below), so
-        # capture/encoder failures are tailable instead of buried in the pod's
-        # interleaved container stdout.
-        - mkdir: "${HOME}/.local/share/selkies"
-          run_as: "${USER}"
-        - copy: selkies-wrapper
-          to: "${HOME}/.local/bin/selkies-wrapper"
-          mode: "0755"
-          run_as: "${USER}"
-        - copy: selkies-capture-server
-          to: "${HOME}/.local/bin/selkies-capture-server"
-          mode: "0755"
-          run_as: "${USER}"
-        - copy: selkies-fileserver
-          to: "${HOME}/.local/bin/selkies-fileserver"
-          mode: "0755"
-          run_as: "${USER}"
     service:
         - name: traefik
           exec: "/usr/local/bin/traefik --configFile=/usr/local/share/selkies/traefik.yml"
@@ -183,204 +118,271 @@ candy:
           # supervisord layer, /run/user/<uid> on a systemd VM via the user
           # manager) — not a root system service. Container render is unchanged.
           scope: user
-    scenario:
-        - name: streaming-server-scripts-installed
-          step:
-            - then: the selkies launch wrapper is installed and executable
-              file: ${HOME}/.local/bin/selkies-wrapper
-              exists: true
-              mode: "0755"
-            - then: the capture-bridge server script is installed
-              file: ${HOME}/.local/bin/selkies-capture-server
-              exists: true
-            - then: the static web-UI fileserver script is installed
-              file: ${HOME}/.local/bin/selkies-fileserver
-              exists: true
-        - name: https-proxy-and-secure-context
-          step:
-            - then: the Traefik reverse-proxy binary is installed
-              file: /usr/local/bin/traefik
-              exists: true
-            - then: the self-signed TLS certificate for the WebCodecs secure context exists
-              file: /usr/local/share/selkies/certs/selkies.crt
-              exists: true
-            - then: the matching private key for the certificate exists
-              file: /usr/local/share/selkies/certs/selkies.key
-              exists: true
-        - name: web-ui-bundle-staged
-          step:
-            - then: the pre-built Selkies web UI is staged into the system share directory
-              file: /usr/local/share/selkies/web
-              filetype: directory
-        - name: desktop-stream-served-over-https
-          step:
-            - then: the streaming endpoint serves the web UI over HTTPS on the published port
-              http: https://127.0.0.1:${HOST_PORT:3000}/
-              status: 200
-              allow_insecure: true
-              timeout: 10s
-              context:
-                - runtime
-            - then: a connected browser shows the live desktop rendering, not a black or frozen frame
-        - name: pixelflux-wayland-libs-resolvable
-          step:
-            # Pixelflux's Wayland backend (pixelflux_wayland.so) is dynamically linked
-            # against ffmpeg's libav* + libx264. If those runtime libs are absent from
-            # the final image the backend silently fails to load, pixelflux never
-            # creates wayland-1, and the whole desktop (labwc/chrome) crash-loops — while
-            # every OTHER probe (files/services/ports/https) still passes. This ldd check
-            # catches that class of missing-runtime-lib regression at BUILD scope
-            # (`charly check box`) — no deploy or GPU needed. ldd exits 0 even when a lib is
-            # "not found", so the assertion is on the absence of that string.
-            - id: pixelflux-wayland-libs-resolvable
-              command: ldd ${HOME}/.pixi/envs/default/lib/python3.*/site-packages/pixelflux/pixelflux_wayland*.so
-              exit_status: 0
-              stdout:
-                - not_contains: "not found"
-        - name: selkies-service-running
-          step:
-            - id: selkies-service-running
-              service: selkies
-              running: true
-              context:
-                - runtime
-        - name: pixelflux-wayland-socket
-          step:
-            # supervisord reports the `selkies` program RUNNING even when pixelflux's
-            # Wayland backend failed to load — so service:running is not sufficient.
-            # Assert the compositor socket actually exists (pixelflux created wayland-1),
-            # the precondition for labwc/chrome to start. Poll for readiness.
-            # The socket lives at $XDG_RUNTIME_DIR/wayland-1 — the session wrappers
-            # (kde-selkies-session, labwc-wrapper, sway-wrapper) all open
-            # ${XDG_RUNTIME_DIR:-/tmp}/wayland-1, so this check tracks the same path.
-            # XDG_RUNTIME_DIR is an image ENV (supervisord layer: /tmp/xdg-runtime),
-            # inherited by the exec shell. Braceless $XDG_RUNTIME_DIR is left for the
-            # in-container shell (ov's resolver substitutes only ${braces}); the || /tmp
-            # fallback covers any image that doesn't set it.
-            - id: pixelflux-wayland-socket
-              command: |
-                d="$XDG_RUNTIME_DIR"; [ -n "$d" ] || d=/tmp
-                test -e "$d/wayland-1"
-              exit_status: 0
-              in_container: true
-              eventually: 60s
-              retry_interval: 3s
-              context:
-                - runtime
-        - name: traefik-service-running
-          step:
-            - id: traefik-service-running
-              service: traefik
-              running: true
-              context:
-                - runtime
-        - name: selkies-port-reachable
-          step:
-            - id: selkies-port-reachable
-              addr: 127.0.0.1:${HOST_PORT:3000}
-              reachable: true
-              timeout: 5s
-              context:
-                - runtime
-        - name: selkies-vaapi-encode
-          step:
-            - id: selkies-vaapi-encode
-              command: |
-                node="$DRINODE"
-                [ -n "$node" ] || node=$(ls -1 /dev/dri/renderD* 2>/dev/null | head -1)
-                [ -n "$node" ] || node=/dev/dri/renderD128
-                vendor=$(cat /sys/class/drm/$(basename "$node")/device/vendor 2>/dev/null)
-                if vainfo --display drm --device "$node" 2>/dev/null | grep -q "VAProfileH264.*VAEntrypointEncSlice"; then
-                  echo "VAAPI-ENCODE-CAPABLE ($node vendor=$vendor)"
-                elif [ "$vendor" = "0x1002" ] || [ "$vendor" = "0x8086" ]; then
-                  echo "FAIL: AMD/Intel GPU ($vendor) at $node but no VAAPI H264 encode — DRINODE misconfig / broken libva (CPU x264 fallback)"; exit 1
-                else
-                  echo "VAAPI-N/A (no VAAPI-encode GPU at $node vendor=${vendor:-none} — NVENC/x264 path)"
-                fi
-              exit_status: 0
-              stdout:
-                - matches: "VAAPI-ENCODE-CAPABLE|VAAPI-N/A"
-              context:
-                - runtime
-        - name: selkies-frame-not-black
-          step:
-            # Generic capture-content probe (R3: lives on the selkies layer so it
-            # runs on EVERY selkies image — AMD pod, NVIDIA pod-in-VM, CPU pod —
-            # via `charly check live`, no per-bed re-implementation). A black/broken
-            # stream — dead compositor, silent encoder failure producing blank
-            # output — passes every file/port/https probe; THIS is the only check
-            # that proves real pixels reach the stream. Captures via the pixelflux
-            # capture bridge (pixelflux-screenshot writes PNG to STDOUT — it ignores
-            # path args, so redirect) and measures luma spread with ffmpeg
-            # signalstats: a uniform/black frame has YMIN==YMAX. Vendor-agnostic.
-            # Polls while the desktop session paints.
-            - id: selkies-frame-not-black
-              command: |
-                rm -f /tmp/charly-frame.png
-                pixelflux-screenshot > /tmp/charly-frame.png 2>/dev/null
-                [ -s /tmp/charly-frame.png ] || { echo "no PNG captured yet"; exit 1; }
-                out=$(ffmpeg -hide_banner -i /tmp/charly-frame.png -vf "signalstats,metadata=print" -f null - 2>&1)
-                ymin=$(printf "%s" "$out" | grep -oE "YMIN=[0-9]+" | grep -oE "[0-9]+" | head -1); ymin=${ymin:-0}
-                ymax=$(printf "%s" "$out" | grep -oE "YMAX=[0-9]+" | grep -oE "[0-9]+" | head -1); ymax=${ymax:-0}
-                sp=$((ymax - ymin))
-                [ "$sp" -gt 24 ] && { echo "FRAME-NOT-BLACK (luma spread=$sp ymin=$ymin ymax=$ymax)"; exit 0; }
-                echo "frame still uniform (spread=$sp ymin=$ymin ymax=$ymax)"; exit 1
-              exit_status: 0
-              in_container: true
-              eventually: 90s
-              retry_interval: 5s
-              stdout:
-                - contains: "FRAME-NOT-BLACK"
-              context:
-                - runtime
-        - name: selkies-encoder-active
-          step:
-            # Generic encoder-SELECTION probe (R3: on the layer, runs everywhere).
-            # The danger it guards: pixelflux silently falling back to CPU x264 when
-            # a GPU encoder init fails (the exact pixelflux-NVENC bug build.sh Patch
-            # 2d fixes) — every other probe stays green while the stream burns CPU.
-            # Reads the dedicated selkies log and vendor-gates on the active render
-            # node: NVIDIA (0x10de) MUST be NVENC (a CPU-fallback marker is a HARD
-            # fail); AMD/Intel MUST NOT have fallen back to CPU (VAAPI *capability*
-            # is asserted separately by selkies-vaapi-encode); no GPU node is
-            # legitimately CPU x264. $DRINODE braceless (resolver only substitutes
-            # ${UPPERCASE} — ${DRINODE:-x} would SKIP the whole check).
-            - id: selkies-encoder-active
-              command: |
-                home="$HOME"
-                [ -n "$home" ] || home=$(getent passwd "$(id -u)" 2>/dev/null | cut -d: -f6)
-                log="$home/.local/share/selkies/selkies.log"
-                [ -f "$log" ] || { echo "selkies log not present yet"; exit 1; }
-                node="$DRINODE"
-                [ -n "$node" ] || node=$(ls -1 /dev/dri/renderD* 2>/dev/null | head -1)
-                # Only trust a render node actually present in THIS container: a
-                # GPU-less (CPU) pod can still carry an injected DRINODE for a host
-                # device that was never mapped in — selkies itself then falls to
-                # software too, so treat it as no-GPU (the clean CPU x264 path).
-                [ -n "$node" ] && [ ! -e "$node" ] && node=""
-                vendor=""
-                [ -n "$node" ] && vendor=$(cat /sys/class/drm/$(basename "$node")/device/vendor 2>/dev/null)
-                if grep -qiE "Failed to init NVENC|Falling back to CPU|Using CPU Software Encoding|Mode: H264 \(CPU\)" "$log"; then
-                  cpu_fallback=1
-                else
-                  cpu_fallback=0
-                fi
-                case "$vendor" in
-                  0x10de)
-                    [ "$cpu_fallback" = "1" ] && { echo "FAIL: NVIDIA GPU ($node) but pixelflux fell back to CPU — NVENC not active. log tail:"; grep -iE "NVENC|CUDA|CPU|encoder" "$log" | tail -8; exit 1; }
-                    grep -qiE "NVENC" "$log" || { echo "NVENC not initialized yet"; exit 1; }
-                    echo "ENCODER-OK: NVENC active on NVIDIA $node"; exit 0 ;;
-                  0x1002|0x8086)
-                    [ "$cpu_fallback" = "1" ] && { echo "FAIL: AMD/Intel GPU ($node) but pixelflux fell back to CPU — hardware encode not selected. log tail:"; grep -iE "VAAPI|VA-API|CPU|encoder" "$log" | tail -8; exit 1; }
-                    echo "ENCODER-OK: hardware encode selected on $node (VAAPI capability asserted by selkies-vaapi-encode)"; exit 0 ;;
-                  *)
-                    echo "ENCODER-OK: CPU x264 (no GPU render node — vendor=${vendor:-none})"; exit 0 ;;
-                esac
-              exit_status: 0
-              in_container: true
-              eventually: 90s
-              retry_interval: 5s
-              stdout:
-                - contains: "ENCODER-OK"
-              context:
-                - runtime
+    plan:
+        - run: |
+            command=SRCH="$(getent passwd 1000 | cut -d: -f6)"
+            mkdir -p /usr/local/share/selkies/web
+            cp -r "$SRCH"/.local/share/selkies-build/web/* /usr/local/share/selkies/web/
+            rm -rf "$SRCH"/.local/share/selkies-build
+          command: |
+            SRCH="$(getent passwd 1000 | cut -d: -f6)"
+            mkdir -p /usr/local/share/selkies/web
+            cp -r "$SRCH"/.local/share/selkies-build/web/* /usr/local/share/selkies/web/
+            rm -rf "$SRCH"/.local/share/selkies-build
+          run_as: root
+        - run: download=https://github.com/traefik/traefik/releases/download/${TRAEFIK_VERSION}/traefik_${TRAEFIK_VERSION}_linux_${ARCH}.tar.gz
+          download: "https://github.com/traefik/traefik/releases/download/${TRAEFIK_VERSION}/traefik_${TRAEFIK_VERSION}_linux_${ARCH}.tar.gz"
+          extract: tar.gz
+          to: /usr/local/bin
+          extract_include: [traefik]
+          run_as: root
+        - run: mkdir=/usr/local/share/selkies/certs
+          mkdir: /usr/local/share/selkies/certs
+          run_as: root
+        - run: |
+            command=openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 \
+              -keyout /usr/local/share/selkies/certs/selkies.key \
+              -out /usr/local/share/selkies/certs/selkies.crt \
+              -days 3650 -nodes \
+              -subj "/CN=selkies" \
+              -addext "subjectAltName=DNS:localhost,DNS:selkies.localhost,DNS:*.localhost,DNS:charly-selkies-desktop,IP:127.0.0.1"
+            chmod 644 /usr/local/share/selkies/certs/selkies.crt /usr/local/share/selkies/certs/selkies.key
+          command: |
+            openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 \
+              -keyout /usr/local/share/selkies/certs/selkies.key \
+              -out /usr/local/share/selkies/certs/selkies.crt \
+              -days 3650 -nodes \
+              -subj "/CN=selkies" \
+              -addext "subjectAltName=DNS:localhost,DNS:selkies.localhost,DNS:*.localhost,DNS:charly-selkies-desktop,IP:127.0.0.1"
+            chmod 644 /usr/local/share/selkies/certs/selkies.crt /usr/local/share/selkies/certs/selkies.key
+          run_as: root
+        - run: copy=traefik.yml
+          copy: traefik.yml
+          to: /usr/local/share/selkies/traefik.yml
+          mode: "0644"
+          run_as: root
+        - run: copy=traefik-dynamic.yml
+          copy: traefik-dynamic.yml
+          to: /usr/local/share/selkies/traefik-dynamic.yml
+          mode: "0644"
+          run_as: root
+        - run: mkdir=${HOME}/.local/bin
+          mkdir: "${HOME}/.local/bin"
+          run_as: "${USER}"
+        - run: mkdir=${HOME}/.config/selkies
+          mkdir: "${HOME}/.config/selkies"
+          run_as: "${USER}"
+        - run: mkdir=${HOME}/.local/share/selkies
+          mkdir: "${HOME}/.local/share/selkies"
+          run_as: "${USER}"
+        - run: copy=selkies-wrapper
+          copy: selkies-wrapper
+          to: "${HOME}/.local/bin/selkies-wrapper"
+          mode: "0755"
+          run_as: "${USER}"
+        - run: copy=selkies-capture-server
+          copy: selkies-capture-server
+          to: "${HOME}/.local/bin/selkies-capture-server"
+          mode: "0755"
+          run_as: "${USER}"
+        - run: copy=selkies-fileserver
+          copy: selkies-fileserver
+          to: "${HOME}/.local/bin/selkies-fileserver"
+          mode: "0755"
+          run_as: "${USER}"
+        - check: the selkies launch wrapper is installed and executable
+          file: ${HOME}/.local/bin/selkies-wrapper
+          exists: true
+          mode: "0755"
+        - check: the capture-bridge server script is installed
+          file: ${HOME}/.local/bin/selkies-capture-server
+          exists: true
+        - check: the static web-UI fileserver script is installed
+          file: ${HOME}/.local/bin/selkies-fileserver
+          exists: true
+        - check: the Traefik reverse-proxy binary is installed
+          file: /usr/local/bin/traefik
+          exists: true
+        - check: the self-signed TLS certificate for the WebCodecs secure context exists
+          file: /usr/local/share/selkies/certs/selkies.crt
+          exists: true
+        - check: the matching private key for the certificate exists
+          file: /usr/local/share/selkies/certs/selkies.key
+          exists: true
+        - check: the pre-built Selkies web UI is staged into the system share directory
+          file: /usr/local/share/selkies/web
+          filetype: directory
+        - check: the streaming endpoint serves the web UI over HTTPS on the published port
+          http: https://127.0.0.1:${HOST_PORT:3000}/
+          status: 200
+          allow_insecure: true
+          timeout: 10s
+          context:
+            - runtime
+        - agent-check: a connected browser shows the live desktop rendering, not a black or frozen frame
+        - check: command=ldd ${HOME}/.pixi/envs/default/lib/python3.*/site-packages/pixelflux/pixelflux_wayland*.so
+          id: pixelflux-wayland-libs-resolvable
+          command: ldd ${HOME}/.pixi/envs/default/lib/python3.*/site-packages/pixelflux/pixelflux_wayland*.so
+          exit_status: 0
+          stdout:
+            - not_contains: "not found"
+        - check: service=selkies
+          id: selkies-service-running
+          service: selkies
+          running: true
+          context:
+            - runtime
+        - check: |
+            command=d="$XDG_RUNTIME_DIR"; [ -n "$d" ] || d=/tmp
+            test -e "$d/wayland-1"
+          id: pixelflux-wayland-socket
+          command: |
+            d="$XDG_RUNTIME_DIR"; [ -n "$d" ] || d=/tmp
+            test -e "$d/wayland-1"
+          exit_status: 0
+          in_container: true
+          eventually: 60s
+          retry_interval: 3s
+          context:
+            - runtime
+        - check: service=traefik
+          id: traefik-service-running
+          service: traefik
+          running: true
+          context:
+            - runtime
+        - check: addr=127.0.0.1:${HOST_PORT:3000}
+          id: selkies-port-reachable
+          addr: 127.0.0.1:${HOST_PORT:3000}
+          reachable: true
+          timeout: 5s
+          context:
+            - runtime
+        - check: |
+            command=node="$DRINODE"
+            [ -n "$node" ] || node=$(ls -1 /dev/dri/renderD* 2>/dev/null | head -1)
+            [ -n "$node" ] || node=/dev/dri/renderD128
+            vendor=$(cat /sys/class/drm/$(basename "$node")/device/vendor 2>/dev/null)
+            if vainfo --display drm --device "$node" 2>/dev/null | grep -q "VAProfileH264.*VAEntrypointEncSlice"; then
+              echo "VAAPI-ENCODE-CAPABLE ($node vendor=$vendor)"
+            elif [ "$vendor" = "0x1002" ] || [ "$vendor" = "0x8086" ]; then
+              echo "FAIL: AMD/Intel GPU ($vendor) at $node but no VAAPI H264 encode — DRINODE misconfig / broken libva (CPU x264 fallback)"; exit 1
+            else
+              echo "VAAPI-N/A (no VAAPI-encode GPU at $node vendor=${vendor:-none} — NVENC/x264 path)"
+            fi
+          id: selkies-vaapi-encode
+          command: |
+            node="$DRINODE"
+            [ -n "$node" ] || node=$(ls -1 /dev/dri/renderD* 2>/dev/null | head -1)
+            [ -n "$node" ] || node=/dev/dri/renderD128
+            vendor=$(cat /sys/class/drm/$(basename "$node")/device/vendor 2>/dev/null)
+            if vainfo --display drm --device "$node" 2>/dev/null | grep -q "VAProfileH264.*VAEntrypointEncSlice"; then
+              echo "VAAPI-ENCODE-CAPABLE ($node vendor=$vendor)"
+            elif [ "$vendor" = "0x1002" ] || [ "$vendor" = "0x8086" ]; then
+              echo "FAIL: AMD/Intel GPU ($vendor) at $node but no VAAPI H264 encode — DRINODE misconfig / broken libva (CPU x264 fallback)"; exit 1
+            else
+              echo "VAAPI-N/A (no VAAPI-encode GPU at $node vendor=${vendor:-none} — NVENC/x264 path)"
+            fi
+          exit_status: 0
+          stdout:
+            - matches: "VAAPI-ENCODE-CAPABLE|VAAPI-N/A"
+          context:
+            - runtime
+        - check: |
+            command=rm -f /tmp/charly-frame.png
+            pixelflux-screenshot > /tmp/charly-frame.png 2>/dev/null
+            [ -s /tmp/charly-frame.png ] || { echo "no PNG captured yet"; exit 1; }
+            out=$(ffmpeg -hide_banner -i /tmp/charly-frame.png -vf "signalstats,metadata=print" -f null - 2>&1)
+            ymin=$(printf "%s" "$out" | grep -oE "YMIN=[0-9]+" | grep -oE "[0-9]+" | head -1); ymin=${ymin:-0}
+            ymax=$(printf "%s" "$out" | grep -oE "YMAX=[0-9]+" | grep -oE "[0-9]+" | head -1); ymax=${ymax:-0}
+            sp=$((ymax - ymin))
+            [ "$sp" -gt 24 ] && { echo "FRAME-NOT-BLACK (luma spread=$sp ymin=$ymin ymax=$ymax)"; exit 0; }
+            echo "frame still uniform (spread=$sp ymin=$ymin ymax=$ymax)"; exit 1
+          id: selkies-frame-not-black
+          command: |
+            rm -f /tmp/charly-frame.png
+            pixelflux-screenshot > /tmp/charly-frame.png 2>/dev/null
+            [ -s /tmp/charly-frame.png ] || { echo "no PNG captured yet"; exit 1; }
+            out=$(ffmpeg -hide_banner -i /tmp/charly-frame.png -vf "signalstats,metadata=print" -f null - 2>&1)
+            ymin=$(printf "%s" "$out" | grep -oE "YMIN=[0-9]+" | grep -oE "[0-9]+" | head -1); ymin=${ymin:-0}
+            ymax=$(printf "%s" "$out" | grep -oE "YMAX=[0-9]+" | grep -oE "[0-9]+" | head -1); ymax=${ymax:-0}
+            sp=$((ymax - ymin))
+            [ "$sp" -gt 24 ] && { echo "FRAME-NOT-BLACK (luma spread=$sp ymin=$ymin ymax=$ymax)"; exit 0; }
+            echo "frame still uniform (spread=$sp ymin=$ymin ymax=$ymax)"; exit 1
+          exit_status: 0
+          in_container: true
+          eventually: 90s
+          retry_interval: 5s
+          stdout:
+            - contains: "FRAME-NOT-BLACK"
+          context:
+            - runtime
+        - check: |
+            command=home="$HOME"
+            [ -n "$home" ] || home=$(getent passwd "$(id -u)" 2>/dev/null | cut -d: -f6)
+            log="$home/.local/share/selkies/selkies.log"
+            [ -f "$log" ] || { echo "selkies log not present yet"; exit 1; }
+            node="$DRINODE"
+            [ -n "$node" ] || node=$(ls -1 /dev/dri/renderD* 2>/dev/null | head -1)
+            # Only trust a render node actually present in THIS container: a
+            # GPU-less (CPU) pod can still carry an injected DRINODE for a host
+            # device that was never mapped in — selkies itself then falls to
+            # software too, so treat it as no-GPU (the clean CPU x264 path).
+            [ -n "$node" ] && [ ! -e "$node" ] && node=""
+            vendor=""
+            [ -n "$node" ] && vendor=$(cat /sys/class/drm/$(basename "$node")/device/vendor 2>/dev/null)
+            if grep -qiE "Failed to init NVENC|Falling back to CPU|Using CPU Software Encoding|Mode: H264 \(CPU\)" "$log"; then
+              cpu_fallback=1
+            else
+              cpu_fallback=0
+            fi
+            case "$vendor" in
+              0x10de)
+                [ "$cpu_fallback" = "1" ] && { echo "FAIL: NVIDIA GPU ($node) but pixelflux fell back to CPU — NVENC not active. log tail:"; grep -iE "NVENC|CUDA|CPU|encoder" "$log" | tail -8; exit 1; }
+                grep -qiE "NVENC" "$log" || { echo "NVENC not initialized yet"; exit 1; }
+                echo "ENCODER-OK: NVENC active on NVIDIA $node"; exit 0 ;;
+              0x1002|0x8086)
+                [ "$cpu_fallback" = "1" ] && { echo "FAIL: AMD/Intel GPU ($node) but pixelflux fell back to CPU — hardware encode not selected. log tail:"; grep -iE "VAAPI|VA-API|CPU|encoder" "$log" | tail -8; exit 1; }
+                echo "ENCODER-OK: hardware encode selected on $node (VAAPI capability asserted by selkies-vaapi-encode)"; exit 0 ;;
+              *)
+                echo "ENCODER-OK: CPU x264 (no GPU render node — vendor=${vendor:-none})"; exit 0 ;;
+            esac
+          id: selkies-encoder-active
+          command: |
+            home="$HOME"
+            [ -n "$home" ] || home=$(getent passwd "$(id -u)" 2>/dev/null | cut -d: -f6)
+            log="$home/.local/share/selkies/selkies.log"
+            [ -f "$log" ] || { echo "selkies log not present yet"; exit 1; }
+            node="$DRINODE"
+            [ -n "$node" ] || node=$(ls -1 /dev/dri/renderD* 2>/dev/null | head -1)
+            # Only trust a render node actually present in THIS container: a
+            # GPU-less (CPU) pod can still carry an injected DRINODE for a host
+            # device that was never mapped in — selkies itself then falls to
+            # software too, so treat it as no-GPU (the clean CPU x264 path).
+            [ -n "$node" ] && [ ! -e "$node" ] && node=""
+            vendor=""
+            [ -n "$node" ] && vendor=$(cat /sys/class/drm/$(basename "$node")/device/vendor 2>/dev/null)
+            if grep -qiE "Failed to init NVENC|Falling back to CPU|Using CPU Software Encoding|Mode: H264 \(CPU\)" "$log"; then
+              cpu_fallback=1
+            else
+              cpu_fallback=0
+            fi
+            case "$vendor" in
+              0x10de)
+                [ "$cpu_fallback" = "1" ] && { echo "FAIL: NVIDIA GPU ($node) but pixelflux fell back to CPU — NVENC not active. log tail:"; grep -iE "NVENC|CUDA|CPU|encoder" "$log" | tail -8; exit 1; }
+                grep -qiE "NVENC" "$log" || { echo "NVENC not initialized yet"; exit 1; }
+                echo "ENCODER-OK: NVENC active on NVIDIA $node"; exit 0 ;;
+              0x1002|0x8086)
+                [ "$cpu_fallback" = "1" ] && { echo "FAIL: AMD/Intel GPU ($node) but pixelflux fell back to CPU — hardware encode not selected. log tail:"; grep -iE "VAAPI|VA-API|CPU|encoder" "$log" | tail -8; exit 1; }
+                echo "ENCODER-OK: hardware encode selected on $node (VAAPI capability asserted by selkies-vaapi-encode)"; exit 0 ;;
+              *)
+                echo "ENCODER-OK: CPU x264 (no GPU render node — vendor=${vendor:-none})"; exit 0 ;;
+            esac
+          exit_status: 0
+          in_container: true
+          eventually: 90s
+          retry_interval: 5s
+          stdout:
+            - contains: "ENCODER-OK"
+          context:
+            - runtime

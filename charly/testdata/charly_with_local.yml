@@ -1,50 +1,43 @@
-version: 2026.164.0004
-
+version: 2026.164.0006
 local:
-  dev-workstation:
-    candy: [ripgrep, direnv]
-    install_opts: {with_services: false, allow_repo_changes: true}
-    env: [EDITOR=vim]
-    description: {feature: Dev workstation, tag: [working]}
-
-  ci-runner:
-    candy: [ripgrep, pre-commit]
-    install_opts: {with_services: true, allow_root_tasks: true}
-    description: {feature: CI runner profile, tag: [working]}
-
-  charly-cachyos:
-    # Empty placeholder — `layers: []` is a load-time WARNING (allowed
-    # for staged name reservation); a missing `layers:` field would be
-    # a hard error.
-    candy: []
-    install_opts: {}
-    description: {feature: charly-cachyos (placeholder), tag: [testing]}
-
+    dev-workstation:
+        candy: [ripgrep, direnv]
+        install_opts: {with_services: false, allow_repo_changes: true}
+        env: [EDITOR=vim]
+        description: Dev workstation
+    ci-runner:
+        candy: [ripgrep, pre-commit]
+        install_opts: {with_services: true, allow_root_tasks: true}
+        description: CI runner profile
+    charly-cachyos:
+        # Empty placeholder — `layers: []` is a load-time WARNING (allowed
+        # for staged name reservation); a missing `layers:` field would be
+        # a hard error.
+        candy: []
+        install_opts: {}
+        description: charly-cachyos (placeholder)
 deploy:
-  # Default — direct local exec (host: omitted == "local").
-  my-laptop:
-    target: local
-    local: dev-workstation
-    add_candy: [sshkeys]
-
-  # Explicit "local" sentinel.
-  my-laptop-explicit:
-    target: local
-    local: dev-workstation
-    host: local
-
-  # Remote SSH — ssh-config + ssh-agent supply credentials.
-  ci-runner-3:
-    target: local
-    local: ci-runner
-    host: ubuntu@ci-runner-3.lan
-
-  # ssh_args: pass-through (Ansible's ansible_ssh_extra_args).
-  via-bastion:
-    target: local
-    local: dev-workstation
-    host: target.internal
-    user: ops
-    ssh_arg:
-      - "-o"
-      - "ProxyJump=ops@bastion.example.com"
+    # Default — direct local exec (host: omitted == "local").
+    my-laptop:
+        target: local
+        local: dev-workstation
+        add_candy: [sshkeys]
+    # Explicit "local" sentinel.
+    my-laptop-explicit:
+        target: local
+        local: dev-workstation
+        host: local
+    # Remote SSH — ssh-config + ssh-agent supply credentials.
+    ci-runner-3:
+        target: local
+        local: ci-runner
+        host: ubuntu@ci-runner-3.lan
+    # ssh_args: pass-through (Ansible's ansible_ssh_extra_args).
+    via-bastion:
+        target: local
+        local: dev-workstation
+        host: target.internal
+        user: ops
+        ssh_arg:
+            - "-o"
+            - "ProxyJump=ops@bastion.example.com"

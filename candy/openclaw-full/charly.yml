@@ -1,21 +1,19 @@
 candy:
     version: 2026.144.1443
     name: openclaw-full
-    description:
-        feature: Maximal headless OpenClaw deployment — gateway plus all feasible CLI tools/skills, no system Chrome/CDP
-        narrative: |
-            openclaw-full is a pure meta-composition candy: it installs nothing of
-            its own and instead composes 27 candies — the openclaw gateway, the
-            claude-code CLI, and 25 tool candies (codex, gemini, clawhub, mcporter,
-            oracle, xurl, summarize, playwright, ripgrep, sqlite, tmux, ffmpeg, gh,
-            uv, himalaya, …). The observable effect of the composition is that every
-            composed tool's key artifact lands in ONE image: the openclaw / claude /
-            mcporter binaries under ~/.npm-global/bin, uv under /usr/local/bin, and
-            rg / sqlite3 / tmux / ffmpeg / gh under /usr/bin. The scenarios and check
-            block assert that cross-section — they FAIL if any composed candy is
-            dropped from the metalayer. The gateway's own port reachability is
-            already checked by the composed openclaw candy and rides along.
-        tag: [working]
+    description: |
+        Maximal headless OpenClaw deployment — gateway plus all feasible CLI tools/skills, no system Chrome/CDP
+        openclaw-full is a pure meta-composition candy: it installs nothing of
+        its own and instead composes 27 candies — the openclaw gateway, the
+        claude-code CLI, and 25 tool candies (codex, gemini, clawhub, mcporter,
+        oracle, xurl, summarize, playwright, ripgrep, sqlite, tmux, ffmpeg, gh,
+        uv, himalaya, …). The observable effect of the composition is that every
+        composed tool's key artifact lands in ONE image: the openclaw / claude /
+        mcporter binaries under ~/.npm-global/bin, uv under /usr/local/bin, and
+        rg / sqlite3 / tmux / ffmpeg / gh under /usr/bin. The scenarios and check
+        block assert that cross-section — they FAIL if any composed candy is
+        dropped from the metalayer. The gateway's own port reachability is
+        already checked by the composed openclaw candy and rides along.
     candy:
         - openclaw
         - claude-code
@@ -44,55 +42,46 @@ candy:
         - ffmpeg
         - ripgrep
         - sqlite
-    scenario:
-        - name: agent-clis-composed
-          step:
-            - then: the claude-code CLI is composed into the image under the npm global bin dir
-              file: ${HOME}/.npm-global/bin/claude
-              exists: true
-            - then: claude --version exits cleanly and prints the Claude Code banner
-              command: ${HOME}/.npm-global/bin/claude --version
-              exit_status: 0
-              stdout:
-                - contains: "Claude Code"
-            - then: the mcporter MCP CLI is composed into the image
-              file: ${HOME}/.npm-global/bin/mcporter
-              exists: true
-        - name: system-toolbelt-composed
-          step:
-            - then: ripgrep's rg binary is present from the composed ripgrep candy
-              file: /usr/bin/rg
-              exists: true
-            - then: the sqlite3 shell is present from the composed sqlite candy
-              file: /usr/bin/sqlite3
-              exists: true
-            - then: tmux is present from the composed tmux candy
-              file: /usr/bin/tmux
-              exists: true
-            - then: ffmpeg is present from the composed ffmpeg candy
-              file: /usr/bin/ffmpeg
-              exists: true
-            - then: the GitHub CLI gh is present from the composed gh candy
-              file: /usr/bin/gh
-              exists: true
-        - name: gateway-orchestrates-headless-toolbelt
-          step:
-            - then: the uv Python package manager is composed into the image at /usr/local/bin/uv
-              file: /usr/local/bin/uv
-              exists: true
-            - then: the running OpenClaw gateway exposes the bundled CLI tools to agent requests without relying on a system browser
-        - name: openclaw-full-ripgrep-package
-          step:
-            - id: openclaw-full-ripgrep-package
-              package: ripgrep
-              installed: true
-        - name: openclaw-full-git-binary
-          step:
-            - id: openclaw-full-git-binary
-              file: /usr/bin/git
-              exists: true
-        - name: openclaw-full-uvx-binary
-          step:
-            - id: openclaw-full-uvx-binary
-              file: /usr/local/bin/uvx
-              exists: true
+    plan:
+        - check: the claude-code CLI is composed into the image under the npm global bin dir
+          file: ${HOME}/.npm-global/bin/claude
+          exists: true
+        - check: claude --version exits cleanly and prints the Claude Code banner
+          command: ${HOME}/.npm-global/bin/claude --version
+          exit_status: 0
+          stdout:
+            - contains: "Claude Code"
+        - check: the mcporter MCP CLI is composed into the image
+          file: ${HOME}/.npm-global/bin/mcporter
+          exists: true
+        - check: ripgrep's rg binary is present from the composed ripgrep candy
+          file: /usr/bin/rg
+          exists: true
+        - check: the sqlite3 shell is present from the composed sqlite candy
+          file: /usr/bin/sqlite3
+          exists: true
+        - check: tmux is present from the composed tmux candy
+          file: /usr/bin/tmux
+          exists: true
+        - check: ffmpeg is present from the composed ffmpeg candy
+          file: /usr/bin/ffmpeg
+          exists: true
+        - check: the GitHub CLI gh is present from the composed gh candy
+          file: /usr/bin/gh
+          exists: true
+        - check: the uv Python package manager is composed into the image at /usr/local/bin/uv
+          file: /usr/local/bin/uv
+          exists: true
+        - agent-check: the running OpenClaw gateway exposes the bundled CLI tools to agent requests without relying on a system browser
+        - check: package=ripgrep
+          id: openclaw-full-ripgrep-package
+          package: ripgrep
+          installed: true
+        - check: file=/usr/bin/git
+          id: openclaw-full-git-binary
+          file: /usr/bin/git
+          exists: true
+        - check: file=/usr/local/bin/uvx
+          id: openclaw-full-uvx-binary
+          file: /usr/local/bin/uvx
+          exists: true

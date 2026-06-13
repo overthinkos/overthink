@@ -104,7 +104,7 @@ func ovmfCandidatesForDistro(distroID string, secure bool) []OvmfPaths {
 }
 
 // ovmfNotFoundError returns a clear error with distro-appropriate
-// install recipe.
+// install instructions.
 func ovmfNotFoundError(distroID string, secure bool) error {
 	var installHint string
 	switch distroID {

@@ -36,13 +36,13 @@ func canonicalIntermediates(m map[string]*ResolvedBox) string {
 // sibling-group processing order (Fix B).
 func determinismFixture() (map[string]*ResolvedBox, map[string]*Candy, *Config) {
 	layers := map[string]*Candy{
-		"core":   {Name: "core", tasks: []Op{{Command: "true"}}},
+		"core":   {Name: "core", plan: []Step{{Run: "build", Op: Op{Command: "true"}}}},
 		"shared": {Name: "shared", Require: toCandyRefs([]string{"core"}), HasPixiToml: true},
 		"leafA":  {Name: "leafA", Require: toCandyRefs([]string{"shared"}), HasPixiToml: true},
 		"leafB":  {Name: "leafB", Require: toCandyRefs([]string{"shared"}), HasPackageJson: true},
 		// Conflicting-authored-order pair: list [x, y] vs [y, x].
-		"x": {Name: "x", tasks: []Op{{Command: "true"}}},
-		"y": {Name: "y", tasks: []Op{{Command: "true"}}},
+		"x": {Name: "x", plan: []Step{{Run: "build", Op: Op{Command: "true"}}}},
+		"y": {Name: "y", plan: []Step{{Run: "build", Op: Op{Command: "true"}}}},
 	}
 
 	mk := func(name, base string, ext bool, candy []string, builds BuildFormats, distro []string) *ResolvedBox {

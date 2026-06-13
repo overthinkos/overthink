@@ -15,6 +15,7 @@ candy:
     alias:
         - name: websvc
           command: websvc-server
-    task:
-        - command: echo "setup webservice"
+    plan:
+        - run: command=echo "setup webservice"
+          command: echo "setup webservice"
           run_as: "${USER}"

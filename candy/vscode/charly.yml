@@ -1,16 +1,14 @@
 candy:
     version: 2026.155.1458
     name: vscode
-    description:
-        feature: VS Code is installed and launchable as /usr/bin/code on every distro
-        narrative: |
-            The candy installs Microsoft's Visual Studio Code by two paths that
-            converge on the same launcher: on Arch a sha256-verified direct
-            tarball extracted to /opt/vscode and symlinked to /usr/bin/code, and
-            on Fedora the `code` RPM from Microsoft's yum repo. Either path lands
-            an executable at /usr/bin/code that prints its semantic version, so
-            both are verifiable the same cross-distro way.
-        tag: [working]
+    description: |
+        VS Code is installed and launchable as /usr/bin/code on every distro
+        The candy installs Microsoft's Visual Studio Code by two paths that
+        converge on the same launcher: on Arch a sha256-verified direct
+        tarball extracted to /opt/vscode and symlinked to /usr/bin/code, and
+        on Fedora the `code` RPM from Microsoft's yum repo. Either path lands
+        an executable at /usr/bin/code that prints its semantic version, so
+        both are verifiable the same cross-distro way.
     var:
         # VS Code is installed direct from Microsoft's VERSIONED URL with a sha256
         # WE control (computed against the real tarball; a future bump is a
@@ -47,14 +45,23 @@ candy:
                 - name: code
                   url: "https://packages.microsoft.com/yumrepos/vscode"
                   gpgkey: "https://packages.microsoft.com/keys/microsoft.asc"
-    task:
-        # Arch/CachyOS install path. Self-gated to Arch via `command -v pacman`
-        # because task: bodies are NOT distro-scoped — on Fedora this is a no-op and
-        # the distro.fedora `code` package (same proprietary, Marketplace-enabled
-        # build, from the MS yum repo) installs instead. The download is content-
-        # cached (sha256-verified on both fetch and cache-hit), extracted to
-        # /opt/vscode, and symlinked to /usr/bin/code.
-        - command: |
+    plan:
+        - run: |
+            command=command -v pacman >/dev/null 2>&1 || exit 0
+            set -eu
+            cache=/var/cache/charly-vscode
+            tarball="${cache}/code-${VSCODE_VERSION}.tar.gz"
+            mkdir -p "$cache"
+            if [ ! -f "$tarball" ] || ! printf '%s  %s\n' "$VSCODE_SHA256" "$tarball" | sha256sum -c - >/dev/null 2>&1; then
+              curl -fsSL "https://update.code.visualstudio.com/${VSCODE_VERSION}/linux-x64/stable" -o "${tarball}.part"
+              printf '%s  %s\n' "$VSCODE_SHA256" "${tarball}.part" | sha256sum -c -
+              mv -f "${tarball}.part" "$tarball"
+            fi
+            rm -rf /opt/vscode
+            mkdir -p /opt/vscode
+            tar -xzf "$tarball" -C /opt/vscode --strip-components=1
+            ln -sf /opt/vscode/bin/code /usr/bin/code
+          command: |
             command -v pacman >/dev/null 2>&1 || exit 0
             set -eu
             cache=/var/cache/charly-vscode
@@ -72,35 +79,25 @@ candy:
           run_as: root
           cache:
             - /var/cache/charly-vscode
-    scenario:
-        - name: code-launcher-installed
-          step:
-            - then: the code launcher is present at /usr/bin/code
-              file: /usr/bin/code
-              exists: true
-        - name: code-reports-its-version
-          step:
-            - then: running code --version exits 0 and prints a semantic version
-              command: /usr/bin/code --version
-              exit_status: 0
-              stdout:
-                matches: "^[0-9]+\\.[0-9]+\\.[0-9]+"
-        - name: code-binary
-          step:
-            # check-coverage gate (build-scope): proves VS Code installed on BOTH paths
-            # (Arch symlink → /opt/vscode; Fedora MS-repo package → /usr/bin/code).
-            # Would FAIL without this layer (no /usr/bin/code).
-            - id: code-binary
-              file: /usr/bin/code
-              exists: true
-              context:
-                - build
-        - name: code-version
-          step:
-            - id: code-version
-              command: /usr/bin/code --version
-              exit_status: 0
-              stdout:
-                matches: "^[0-9]+\\.[0-9]+\\.[0-9]+"
-              context:
-                - build
+        - check: the code launcher is present at /usr/bin/code
+          file: /usr/bin/code
+          exists: true
+        - check: running code --version exits 0 and prints a semantic version
+          command: /usr/bin/code --version
+          exit_status: 0
+          stdout:
+            matches: "^[0-9]+\\.[0-9]+\\.[0-9]+"
+        - check: file=/usr/bin/code
+          id: code-binary
+          file: /usr/bin/code
+          exists: true
+          context:
+            - build
+        - check: command=/usr/bin/code --version
+          id: code-version
+          command: /usr/bin/code --version
+          exit_status: 0
+          stdout:
+            matches: "^[0-9]+\\.[0-9]+\\.[0-9]+"
+          context:
+            - build

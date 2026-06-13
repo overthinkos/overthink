@@ -1,12 +1,12 @@
 package main
 
-// check_feature_grader.go — the Agent Driven Checkuation (ADE) agent grader.
+// check_feature_grader.go — the Agent Driven Evaluation (ADE) agent grader.
 //
-// ADE binds each Gherkin scenario step to a verifier BY SHAPE: a step that
+// ADE binds each plan step to a verifier BY SHAPE: a step that
 // embeds a check verb (file/http/cdp/mcp/command/…) is graded
-// DETERMINISTICALLY by the runner; a prose-only step (a given/when/then with
-// no verb) binds to an AGENT — this grader. The grader spawns the configured
-// `kind: agent` CLI on the host, hands it the scenario goal + the step's prose +
+// DETERMINISTICALLY by the runner; a prose-only step (an agent-run/agent-check
+// with no verb) binds to an AGENT — this grader. The grader spawns the configured
+// `kind: agent` CLI on the host, hands it the entity's goal + the step's prose +
 // the live target handle, lets it probe the running deployment with the full
 // `charly check` surface, and parses back a structured pass/fail verdict.
 //
@@ -15,8 +15,7 @@ package main
 // grader is a FAIL with evidence — never a silent pass. The grader is wired
 // only by `charly check feature run <deployment>` (a live deployment the agent can
 // reach); `charly box feature run` (disposable, no stable target) leaves it nil so
-// prose steps stay advisory-skip, and the harness loop / `charly check recipe`
-// never set it.
+// prose steps stay advisory-skip, and the harness loop never sets it.
 
 import (
 	"context"
@@ -34,18 +33,19 @@ import (
 // wall-clock-bounded so one stuck prose step can't hang an acceptance run.
 const GraderDefaultTimeout = 5 * time.Minute
 
-// GraderRequest is the context handed to a StepGrader for one prose step.
-// Feature/Narrative are the scenario's description goal; Scenario is the
-// scenario name; Keyword/Text are the step's Gherkin keyword and prose.
+// GraderRequest is the context handed to a StepGrader for one agent step.
+// Description is the entity's purpose (the goal); Keyword is the agent step
+// keyword (agent-run / agent-check); Text is the step's prose; ReadOnly is
+// true for agent-check (assessment, never mutates) and false for agent-run
+// (the agent may change state).
 type GraderRequest struct {
-	Feature   string
-	Narrative string
-	Scenario  string
-	Keyword   string
-	Text      string
+	Description string
+	Keyword     string
+	Text        string
+	ReadOnly    bool
 }
 
-// StepGrader judges a prose-only scenario step (one with no embedded check
+// StepGrader judges a prose-only plan step (one with no embedded check
 // verb). Implementations return an CheckResult with Status TestPass/TestFail
 // and a Message carrying the grader's evidence. A grader that cannot reach a
 // verdict (launch failure, timeout, unparseable output) returns TestFail —
@@ -119,20 +119,14 @@ func (g *AgentGrader) Grade(ctx context.Context, req GraderRequest) CheckResult 
 // contract the parser expects back.
 func buildGraderPrompt(req GraderRequest, target, instance string) string {
 	var b strings.Builder
-	b.WriteString("You are an acceptance-test grader for Agent Driven Checkuation. ")
+	b.WriteString("You are an acceptance-test grader for Agent Driven Evaluation. ")
 	b.WriteString("Decide, from real evidence, whether ONE behaviour holds on a running deployment.\n\n")
-	if strings.TrimSpace(req.Feature) != "" {
-		b.WriteString("Feature (the goal): " + req.Feature + "\n")
-	}
-	if strings.TrimSpace(req.Narrative) != "" {
-		b.WriteString("Narrative:\n" + req.Narrative + "\n")
-	}
-	if strings.TrimSpace(req.Scenario) != "" {
-		b.WriteString("Scenario: " + req.Scenario + "\n")
+	if strings.TrimSpace(req.Description) != "" {
+		b.WriteString("Goal (the entity's purpose): " + req.Description + "\n")
 	}
 	kw := strings.TrimSpace(req.Keyword)
 	if kw == "" {
-		kw = "Then"
+		kw = "agent-check"
 	}
 	b.WriteString("\nBehaviour to verify — " + kw + ": " + req.Text + "\n\n")
 	b.WriteString("The deployment under test is named '" + target + "'")
@@ -145,7 +139,11 @@ func buildGraderPrompt(req GraderRequest, target, instance string) string {
 	b.WriteString("  charly check cdp status " + target + "          # Chrome DevTools (if it runs a browser)\n")
 	b.WriteString("  charly check wl screenshot " + target + " --artifact /tmp/s.png   # desktop screenshot\n")
 	b.WriteString("  charly status " + target + "                   # deployment status\n")
-	b.WriteString("Use only what is relevant. Do NOT modify the deployment.\n\n")
+	if req.ReadOnly {
+		b.WriteString("Use only what is relevant. Do NOT modify the deployment (read-only assessment).\n\n")
+	} else {
+		b.WriteString("Use only what is relevant. You MAY change the deployment's state to satisfy the behaviour.\n\n")
+	}
 	b.WriteString("Decide pass ONLY if the evidence positively confirms the behaviour; otherwise fail. ")
 	b.WriteString("If you cannot gather evidence, fail.\n\n")
 	b.WriteString("Output discipline: your FINAL line MUST be exactly one JSON object and nothing after it:\n")

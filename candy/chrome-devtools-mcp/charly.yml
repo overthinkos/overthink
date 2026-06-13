@@ -1,17 +1,15 @@
 candy:
     version: 2026.144.1443
     name: chrome-devtools-mcp
-    description:
-        feature: Chrome DevTools MCP server exposes browser-automation tools over Streamable HTTP on port 9224
-        narrative: |
-            Installs the chrome-devtools-mcp Node.js server (npm) and the Python
-            mcp-proxy bridge (pixi). A supervisord service runs mcp-proxy, which
-            bridges the stdio MCP server to Streamable HTTP on port 9224 and points
-            chrome-devtools-mcp at Chrome's DevTools Protocol on 127.0.0.1:9222.
-            Both binaries are on disk at build time; once Chrome is reachable the
-            live endpoint answers MCP pings and advertises the browser-automation
-            tool catalog (navigate_page, take_screenshot, ...).
-        tag: [working]
+    description: |
+        Chrome DevTools MCP server exposes browser-automation tools over Streamable HTTP on port 9224
+        Installs the chrome-devtools-mcp Node.js server (npm) and the Python
+        mcp-proxy bridge (pixi). A supervisord service runs mcp-proxy, which
+        bridges the stdio MCP server to Streamable HTTP on port 9224 and points
+        chrome-devtools-mcp at Chrome's DevTools Protocol on 127.0.0.1:9222.
+        Both binaries are on disk at build time; once Chrome is reachable the
+        live endpoint answers MCP pings and advertises the browser-automation
+        tool catalog (navigate_page, take_screenshot, ...).
     require:
         - nodejs
         - supervisord
@@ -27,56 +25,43 @@ candy:
           restart: always
           enable: true
           scope: system
-    scenario:
-        # DETERMINISTIC (build-scope file checks): the two binaries the
-        # dual builder (npm + pixi) drops on disk. Fail if nothing installed.
-        - name: mcp-server-binary-installed
-          step:
-            - then: the chrome-devtools-mcp server binary is installed under the npm global prefix
-              file: ${HOME}/.npm-global/bin/chrome-devtools-mcp
-              exists: true
-        - name: mcp-proxy-bridge-installed
-          step:
-            - then: the mcp-proxy stdio-to-HTTP bridge binary is installed in the pixi env
-              file: ${HOME}/.pixi/envs/default/bin/mcp-proxy
-              exists: true
-        # DETERMINISTIC (deploy-scope mcp probes): the running endpoint answers
-        # the protocol and advertises the browser-automation tools. Agent-graded
-        # for the free-form "Chrome session reachable" prose step.
-        - name: browser-tools-exposed-over-http
-          step:
-            - then: the MCP endpoint answers a protocol ping on port 9224
-              mcp: ping
-              timeout: 10s
-              eventually: 90s
-              retry_interval: 3s
-              context:
-                - runtime
-            - then: the advertised tool catalog includes the core browser-automation tools
-              mcp: list-tools
-              eventually: 90s
-              retry_interval: 3s
-              stdout:
-                - contains: navigate_page
-                - contains: take_screenshot
-              context:
-                - runtime
-            - then: navigation and screenshot calls drive a live Chrome session via the DevTools Protocol
-        - name: chrome-devtools-mcp-service
-          step:
-            - id: chrome-devtools-mcp-service
-              service: chrome-devtools-mcp
-              running: true
-              context:
-                - runtime
-        - name: chrome-devtools-mcp-port
-          step:
-            - id: chrome-devtools-mcp-port
-              addr: 127.0.0.1:${HOST_PORT:9224}
-              reachable: true
-              timeout: 5s
-              # Readiness wait: the mcp-proxy binds 9224 shortly after start.
-              eventually: 60s
-              retry_interval: 2s
-              context:
-                - runtime
+    plan:
+        - check: the chrome-devtools-mcp server binary is installed under the npm global prefix
+          file: ${HOME}/.npm-global/bin/chrome-devtools-mcp
+          exists: true
+        - check: the mcp-proxy stdio-to-HTTP bridge binary is installed in the pixi env
+          file: ${HOME}/.pixi/envs/default/bin/mcp-proxy
+          exists: true
+        - check: the MCP endpoint answers a protocol ping on port 9224
+          mcp: ping
+          timeout: 10s
+          eventually: 90s
+          retry_interval: 3s
+          context:
+            - runtime
+        - check: the advertised tool catalog includes the core browser-automation tools
+          mcp: list-tools
+          eventually: 90s
+          retry_interval: 3s
+          stdout:
+            - contains: navigate_page
+            - contains: take_screenshot
+          context:
+            - runtime
+        - agent-check: navigation and screenshot calls drive a live Chrome session via the DevTools Protocol
+        - check: service=chrome-devtools-mcp
+          id: chrome-devtools-mcp-service
+          service: chrome-devtools-mcp
+          running: true
+          context:
+            - runtime
+        - check: addr=127.0.0.1:${HOST_PORT:9224}
+          id: chrome-devtools-mcp-port
+          addr: 127.0.0.1:${HOST_PORT:9224}
+          reachable: true
+          timeout: 5s
+          # Readiness wait: the mcp-proxy binds 9224 shortly after start.
+          eventually: 60s
+          retry_interval: 2s
+          context:
+            - runtime

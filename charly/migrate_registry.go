@@ -71,7 +71,7 @@ type MigrationStep struct {
 // closure references it, and the registry's last entry uses it as its Version,
 // so the two are guaranteed equal (asserted by TestRegistryHeadMatchesLatest).
 // Bump it — and append the matching MigrationStep — for each future cutover.
-var latestSchemaVersion = mustCalVer("2026.164.0004")
+var latestSchemaVersion = mustCalVer("2026.164.0006")
 
 // migrationSteps is the ordered registry. Chronological by git landing date
 // (see `git log --diff-filter=A` on each migrate_*.go), which is the order the
@@ -351,13 +351,25 @@ func migrationSteps() []MigrationStep {
 			w, err := MigrateEvalCheck(c.Dir, c.DryRun)
 			return len(w) > 0, err
 		}},
+		// plan-unify: the entire test/eval/benchmark surface collapses into ONE
+		// flat plan: vocabulary — task:+scenario:+description.scenario fold into
+		// plan: (run:/check:/agent-run:/agent-check:/include:); the Gherkin
+		// keywords + the Op.Do axis retire (the keyword IS the do-mode); the
+		// description: struct collapses to a string; kind:recipe/kind:score fold
+		// into a deploy iterate: block + the entity's own plan:. TouchesHost
+		// false → remote-cache auto-migration applies it to fetched candy
+		// manifests. See migrate_plan_unify.go + CHANGELOG.md.
+		{mustCalVer("2026.164.0005"), "plan-unify", false, func(c *MigrateContext) (bool, error) {
+			w, err := MigratePlanUnify(c.Dir, c.DryRun)
+			return len(w) > 0, err
+		}},
 		// HEAD — the schema stamp. Must stay LAST so LatestSchemaVersion picks it up
 		// and every versioned file lands on this CalVer. This is the integer→CalVer
 		// transition step (version: 4 → version: <HEAD>) and the universal stamper.
 		// TouchesHost is false so it ALSO runs in project-only mode (remote-cache
 		// auto-migration); its host-file stamping is gated on ctx.HostDeployPath,
 		// which the project-only runner leaves empty.
-		{latestSchemaVersion, "calver-schema", false, func(c *MigrateContext) (bool, error) {
+		{mustCalVer("2026.164.0006"), "calver-schema", false, func(c *MigrateContext) (bool, error) {
 			w, err := MigrateCalverSchema(c.Dir, c.HostDeployPath, latestSchemaVersion, c.DryRun)
 			return len(w) > 0, err
 		}},

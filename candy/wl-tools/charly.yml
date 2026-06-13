@@ -1,16 +1,14 @@
 candy:
     version: 2026.144.1443
     name: wl-tools
-    description:
-        feature: Wayland/X command-line input, clipboard, and window tools
-        narrative: |
-            Installs the wlroots input/clipboard/window toolset — wtype,
-            wl-clipboard (wl-copy/wl-paste), wlr-randr, wlrctl, xdotool, ydotool,
-            plus the xprop/xwininfo X utilities — used to drive and introspect a
-            Wayland desktop. Verifiable: each tool's binary lands on PATH under
-            /usr/bin (cross-distro; wlrctl ships from the AUR on Arch and the
-            repo on Fedora).
-        tag: [working]
+    description: |
+        Wayland/X command-line input, clipboard, and window tools
+        Installs the wlroots input/clipboard/window toolset — wtype,
+        wl-clipboard (wl-copy/wl-paste), wlr-randr, wlrctl, xdotool, ydotool,
+        plus the xprop/xwininfo X utilities — used to drive and introspect a
+        Wayland desktop. Verifiable: each tool's binary lands on PATH under
+        /usr/bin (cross-distro; wlrctl ships from the AUR on Arch and the
+        repo on Fedora).
     distro:
         arch:
             package:
@@ -34,35 +32,29 @@ candy:
                 - wl-clipboard
                 - wlr-randr
                 - ydotool
-    scenario:
-        - name: wayland-input-and-clipboard-tools-installed
-          step:
-            - then: the wtype keyboard-injection tool is installed
-              file: /usr/bin/wtype
-              exists: true
-            - then: the wl-clipboard copy tool is installed
-              file: /usr/bin/wl-copy
-              exists: true
-            - then: the wlrctl wlroots control tool is installed
-              file: /usr/bin/wlrctl
-              exists: true
-        - name: wl-paste-binary
-          step:
-            - id: wl-paste-binary
-              file: /usr/bin/wl-paste
-              exists: true
-        - name: wlr-randr-binary
-          step:
-            - id: wlr-randr-binary
-              file: /usr/bin/wlr-randr
-              exists: true
-        - name: xdotool-binary
-          step:
-            - id: xdotool-binary
-              file: /usr/bin/xdotool
-              exists: true
-        - name: ydotool-binary
-          step:
-            - id: ydotool-binary
-              file: /usr/bin/ydotool
-              exists: true
+    plan:
+        - check: the wtype keyboard-injection tool is installed
+          file: /usr/bin/wtype
+          exists: true
+        - check: the wl-clipboard copy tool is installed
+          file: /usr/bin/wl-copy
+          exists: true
+        - check: the wlrctl wlroots control tool is installed
+          file: /usr/bin/wlrctl
+          exists: true
+        - check: file=/usr/bin/wl-paste
+          id: wl-paste-binary
+          file: /usr/bin/wl-paste
+          exists: true
+        - check: file=/usr/bin/wlr-randr
+          id: wlr-randr-binary
+          file: /usr/bin/wlr-randr
+          exists: true
+        - check: file=/usr/bin/xdotool
+          id: xdotool-binary
+          file: /usr/bin/xdotool
+          exists: true
+        - check: file=/usr/bin/ydotool
+          id: ydotool-binary
+          file: /usr/bin/ydotool
+          exists: true

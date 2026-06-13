@@ -1,15 +1,13 @@
 candy:
     version: 2026.144.1443
     name: web-layer
-    description:
-        feature: fixture-web — predictable HTTP fixture for harness phase 2
-        narrative: |
-            Installs nginx, writes /srv/fixture/index.html containing the
-            predetermined web content marker, ships an nginx.conf that listens
-            on 8080 and serves /srv/fixture/, plus curl for the self-curl
-            probe. Combined with a fedora base + supervisord this satisfies
-            every scenario in the network-and-http recipe.
-        tag: [working]
+    description: |
+        fixture-web — predictable HTTP fixture for harness phase 2
+        Installs nginx, writes /srv/fixture/index.html containing the
+        predetermined web content marker, ships an nginx.conf that listens
+        on 8080 and serves /srv/fixture/, plus curl for the self-curl
+        probe. Combined with a fedora base + supervisord this satisfies
+        every scenario in the network-and-http recipe.
     require:
         - supervisord
     distro:
@@ -21,11 +19,20 @@ candy:
                 - procps-ng
     port:
         - 8080
-    task:
-        - mkdir: /srv/fixture
+    service:
+        - name: fixture-web-nginx
+          exec: "/usr/sbin/nginx -g 'daemon off;'"
+          restart: always
+          priority: 50
+          enable: true
+          scope: system
+    plan:
+        - run: mkdir=/srv/fixture
+          mkdir: /srv/fixture
           run_as: root
           mode: "0755"
-        - write: /srv/fixture/index.html
+        - run: write=/srv/fixture/index.html
+          write: /srv/fixture/index.html
           run_as: root
           mode: "0644"
           content: |
@@ -56,7 +63,8 @@ candy:
             </div>
             </body>
             </html>
-        - write: /etc/nginx/nginx.conf
+        - run: write=/etc/nginx/nginx.conf
+          write: /etc/nginx/nginx.conf
           run_as: root
           mode: "0644"
           content: |
@@ -85,35 +93,22 @@ candy:
                     }
                 }
             }
-    service:
-        - name: fixture-web-nginx
-          exec: "/usr/sbin/nginx -g 'daemon off;'"
-          restart: always
-          priority: 50
-          enable: true
-          scope: system
-    scenario:
-        - name: fixture-web-content-installed
-          step:
-            - then: nginx is installed
-              package: nginx
-              installed: true
-            - then: the fixture index.html carries the predetermined content marker
-              file: /srv/fixture/index.html
-              exists: true
-              contains:
-                - charly-fixture-web-content-marker
-        - name: fixture-web-http-responds
-          step:
-            - then: the fixture web server answers HTTP 200 with the marker on its published port
-              http: http://127.0.0.1:${HOST_PORT:8080}/
-              status: 200
-              body:
-                - contains: charly-fixture-web-content-marker
-              context:
-                - runtime
-        - name: fixture-web-curl-installed
-          step:
-            - id: fixture-web-curl-installed
-              package: curl
-              installed: true
+        - check: nginx is installed
+          package: nginx
+          installed: true
+        - check: the fixture index.html carries the predetermined content marker
+          file: /srv/fixture/index.html
+          exists: true
+          contains:
+            - charly-fixture-web-content-marker
+        - check: the fixture web server answers HTTP 200 with the marker on its published port
+          http: http://127.0.0.1:${HOST_PORT:8080}/
+          status: 200
+          body:
+            - contains: charly-fixture-web-content-marker
+          context:
+            - runtime
+        - check: package=curl
+          id: fixture-web-curl-installed
+          package: curl
+          installed: true

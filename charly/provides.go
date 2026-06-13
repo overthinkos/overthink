@@ -150,7 +150,7 @@ func podAwareMCPProvides(entries []MCPProvideEntry, consumerKey, ctrName string)
 // acceptedEnv controls which env_provides vars are injected — the filter applies
 // uniformly to BOTH same-image and cross-image entries. A producer is NOT automatically
 // a self-consumer of its own env_provides; if it ever needs to consume its own URL
-// (e.g. a genuine same-image-pod scenario), it must explicitly opt in via env_accepts.
+// (e.g. a genuine same-image-pod case), it must explicitly opt in via env_accepts.
 // This ensures the producer's own `env:` declaration (e.g. OLLAMA_HOST=0.0.0.0 baked
 // into the image's Dockerfile ENV) is never clobbered by its own env_provides
 // service-discovery URL via the quadlet's Environment= directive.

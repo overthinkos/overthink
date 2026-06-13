@@ -1,26 +1,24 @@
 candy:
     version: 2026.152.2006
     name: kde-desktop
-    description:
-        feature: Bare-metal KDE Plasma desktop with an SDDM display manager that boots a real GPU seat into a graphical KDE login.
-        narrative: |
-            Bare-metal KDE Plasma desktop for a graphical workstation (host or VM
-            guest with a real GPU output). Composes the shared kde-shell layer (the
-            SDDM-free Plasma session: plasma-desktop deps-puller + core components +
-            curated apps) and adds the display-manager half: SDDM plus the
-            workstation-only extras that would only bloat the headless streaming pod
-            (system monitor, browser integration, firewall/thunderbolt KCMs, kwallet,
-            kdeconnect, bluetooth, partition tools, media players). The layer sets the
-            systemd default to graphical.target so a real GPU output lights up a KDE
-            login. CachyOS theming/settings live in the separate cachyos-kde-settings
-            layer (bare-metal seat only — NOT part of the headless streaming pod
-            path); audio in pipewire; fonts in desktop-fonts.
+    description: |
+        Bare-metal KDE Plasma desktop with an SDDM display manager that boots a real GPU seat into a graphical KDE login.
+        Bare-metal KDE Plasma desktop for a graphical workstation (host or VM
+        guest with a real GPU output). Composes the shared kde-shell layer (the
+        SDDM-free Plasma session: plasma-desktop deps-puller + core components +
+        curated apps) and adds the display-manager half: SDDM plus the
+        workstation-only extras that would only bloat the headless streaming pod
+        (system monitor, browser integration, firewall/thunderbolt KCMs, kwallet,
+        kdeconnect, bluetooth, partition tools, media players). The layer sets the
+        systemd default to graphical.target so a real GPU output lights up a KDE
+        login. CachyOS theming/settings live in the separate cachyos-kde-settings
+        layer (bare-metal seat only — NOT part of the headless streaming pod
+        path); audio in pipewire; fonts in desktop-fonts.
 
-            Only meaningful on a systemd target with a real display (bare host / VM
-            guest with GPU). On supervisord-init containers the sddm use_packaged
-            entry is skipped (warn) by design. For the headless streamed KDE pod use
-            selkies-kde-desktop, which composes kde-shell directly without SDDM.
-        tag: [working]
+        Only meaningful on a systemd target with a real display (bare host / VM
+        guest with GPU). On supervisord-init containers the sddm use_packaged
+        entry is skipped (warn) by design. For the headless streamed KDE pod use
+        selkies-kde-desktop, which composes kde-shell directly without SDDM.
     require:
         - dbus
         - pipewire
@@ -56,60 +54,44 @@ candy:
                 - ffmpegthumbs
                 - phonon-qt6-vlc
                 - haruna
-    task:
-        # A graphical workstation boots into the display manager. On a fresh
-        # systemd guest the default is often multi-user.target; flip it so SDDM
-        # starts a KDE login on the real GPU output. Tolerant of an image-build
-        # chroot (no running systemd).
-        - command: |
-            systemctl set-default graphical.target || true
-          run_as: root
     service:
         - name: sddm
           use_packaged: sddm.service
           enable: true
           scope: system
-    scenario:
-        # Build-scope: SDDM is the display-manager half kde-desktop adds on top
-        # of kde-shell — the package + binary land even on a supervisord image
-        # (only the sddm.service entry is skipped there).
-        - name: sddm-display-manager-installed
-          step:
-            - then: the SDDM display-manager binary is installed for the graphical seat
-              file: /usr/bin/sddm
-              exists: true
-            - then: the sddm package is present in the image
-              package: sddm
-              installed: true
-        # Build-scope: the workstation-only Plasma extras that distinguish a
-        # bare-metal seat from the lean headless kde-shell streaming pod.
-        - name: workstation-plasma-extras-present
-          step:
-            - then: the workstation system monitor is available
-              file: /usr/bin/plasma-systemmonitor
-              exists: true
-            - then: the filelight disk-usage visualiser is installed
-              file: /usr/bin/filelight
-              exists: true
-            - then: the KDE partition manager is installed
-              file: /usr/bin/partitionmanager
-              exists: true
-            - then: the haruna media player package is present
-              package: haruna
-              installed: true
-        # Deploy-scope: on a real systemd seat the task flips the default
-        # target and the packaged unit is enabled so SDDM lights up a login.
-        - name: graphical-seat-boots-sddm
-          step:
-            - then: the systemd default target is graphical so SDDM starts a KDE login on the real GPU output
-              command: systemctl get-default
-              exit_status: 0
-              stdout:
-                - matches: "graphical.target"
-              context:
-                - runtime
-            - then: the packaged sddm.service is enabled to start at boot
-              service: sddm
-              enabled: true
-              context:
-                - runtime
+    plan:
+        - run: |
+            command=systemctl set-default graphical.target || true
+          command: |
+            systemctl set-default graphical.target || true
+          run_as: root
+        - check: the SDDM display-manager binary is installed for the graphical seat
+          file: /usr/bin/sddm
+          exists: true
+        - check: the sddm package is present in the image
+          package: sddm
+          installed: true
+        - check: the workstation system monitor is available
+          file: /usr/bin/plasma-systemmonitor
+          exists: true
+        - check: the filelight disk-usage visualiser is installed
+          file: /usr/bin/filelight
+          exists: true
+        - check: the KDE partition manager is installed
+          file: /usr/bin/partitionmanager
+          exists: true
+        - check: the haruna media player package is present
+          package: haruna
+          installed: true
+        - check: the systemd default target is graphical so SDDM starts a KDE login on the real GPU output
+          command: systemctl get-default
+          exit_status: 0
+          stdout:
+            - matches: "graphical.target"
+          context:
+            - runtime
+        - check: the packaged sddm.service is enabled to start at boot
+          service: sddm
+          enabled: true
+          context:
+            - runtime

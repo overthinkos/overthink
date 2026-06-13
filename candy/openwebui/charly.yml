@@ -1,21 +1,19 @@
 candy:
     version: 2026.144.1443
     name: openwebui
-    description:
-        feature: Open WebUI LLM chat front-end with an auto-configuring entrypoint, served as a supervised HTTP service on port 8080.
-        narrative: |
-            Installs the Open WebUI server (the `open-webui` PyPI package via pixi)
-            and copies a bash auto-config entrypoint to
-            ${HOME}/.local/bin/openwebui-entrypoint (mode 0755). A supervised system
-            service runs that entrypoint, which wires up LLM providers from
-            env/secrets (OpenRouter, Ollama Cloud, direct OpenAI, local Ollama, MCP
-            servers, and Jupyter code execution), enforces mandatory admin
-            credentials (WEBUI_ADMIN_EMAIL + WEBUI_ADMIN_PASSWORD), reads the
-            auto-generated WEBUI_SECRET_KEY, then exec's `open-webui serve` on port
-            8080. Every fact below is observable: the installed executable
-            entrypoint, the running service, the admin email injected into its
-            environment, and the HTTP 200 the web UI returns on its published port.
-        tag: [working]
+    description: |
+        Open WebUI LLM chat front-end with an auto-configuring entrypoint, served as a supervised HTTP service on port 8080.
+        Installs the Open WebUI server (the `open-webui` PyPI package via pixi)
+        and copies a bash auto-config entrypoint to
+        ${HOME}/.local/bin/openwebui-entrypoint (mode 0755). A supervised system
+        service runs that entrypoint, which wires up LLM providers from
+        env/secrets (OpenRouter, Ollama Cloud, direct OpenAI, local Ollama, MCP
+        servers, and Jupyter code execution), enforces mandatory admin
+        credentials (WEBUI_ADMIN_EMAIL + WEBUI_ADMIN_PASSWORD), reads the
+        auto-generated WEBUI_SECRET_KEY, then exec's `open-webui serve` on port
+        8080. Every fact below is observable: the installed executable
+        entrypoint, the running service, the admin email injected into its
+        environment, and the HTTP 200 the web UI returns on its published port.
     require:
         - python
         - supervisord
@@ -85,13 +83,6 @@ candy:
     secret:
         - name: webui-secret-key
           env: WEBUI_SECRET_KEY
-    task:
-        - mkdir: "${HOME}/.local/bin"
-          run_as: "${USER}"
-        - copy: openwebui-entrypoint
-          to: "${HOME}/.local/bin/openwebui-entrypoint"
-          mode: "0755"
-          run_as: "${USER}"
     service:
         - name: openwebui
           exec: "%(ENV_HOME)s/.local/bin/openwebui-entrypoint"
@@ -99,48 +90,40 @@ candy:
           working_directory: "%(ENV_HOME)s"
           enable: true
           scope: system
-    scenario:
-        # DETERMINISTIC build-scope fact — the embedded check verbs run at both
-        # `charly box feature run` and `charly check feature run`; they fail if
-        # the auto-config entrypoint was never installed.
-        - name: entrypoint-script-installed
-          step:
-            - then: the auto-config entrypoint script is present and executable at ${HOME}/.local/bin/openwebui-entrypoint
-              file: ${HOME}/.local/bin/openwebui-entrypoint
-              exists: true
-              mode: "0755"
-        # DETERMINISTIC deploy-scope facts — need the running deployment, so
-        # they are scoped to deploy and probe the live container / published
-        # port (agent-graded only if a runtime probe is unavailable; here every
-        # step embeds a check verb).
-        - name: web-ui-serves-http
-          step:
-            - then: the openwebui service is running under the init system
-              service: openwebui
-              running: true
-              context:
-                - runtime
-            - and: the Open WebUI web interface answers HTTP 200 on the published port
-              http: http://127.0.0.1:${HOST_PORT:8080}/
-              status: 200
-              timeout: 30s
-              context:
-                - runtime
-            - and: the mandatory admin email is injected into the running service environment
-              command: printenv WEBUI_ADMIN_EMAIL
-              exit_status: 0
-              context:
-                - runtime
-        # PROSE-ONLY step — genuine free-form behaviour, agent-graded by
-        # `charly check feature run openwebui` against the live deployment.
-        - name: admin-can-reach-the-chat-ui
-          step:
-            - then: the rendered landing page presents the Open WebUI sign-in experience for the auto-provisioned admin account, ready to start an LLM chat
-        - name: openwebui-port
-          step:
-            - id: openwebui-port
-              addr: 127.0.0.1:${HOST_PORT:8080}
-              reachable: true
-              timeout: 5s
-              context:
-                - runtime
+    plan:
+        - run: mkdir=${HOME}/.local/bin
+          mkdir: "${HOME}/.local/bin"
+          run_as: "${USER}"
+        - run: copy=openwebui-entrypoint
+          copy: openwebui-entrypoint
+          to: "${HOME}/.local/bin/openwebui-entrypoint"
+          mode: "0755"
+          run_as: "${USER}"
+        - check: the auto-config entrypoint script is present and executable at ${HOME}/.local/bin/openwebui-entrypoint
+          file: ${HOME}/.local/bin/openwebui-entrypoint
+          exists: true
+          mode: "0755"
+        - check: the openwebui service is running under the init system
+          service: openwebui
+          running: true
+          context:
+            - runtime
+        - check: the Open WebUI web interface answers HTTP 200 on the published port
+          http: http://127.0.0.1:${HOST_PORT:8080}/
+          status: 200
+          timeout: 30s
+          context:
+            - runtime
+        - check: the mandatory admin email is injected into the running service environment
+          command: printenv WEBUI_ADMIN_EMAIL
+          exit_status: 0
+          context:
+            - runtime
+        - agent-check: the rendered landing page presents the Open WebUI sign-in experience for the auto-provisioned admin account, ready to start an LLM chat
+        - check: addr=127.0.0.1:${HOST_PORT:8080}
+          id: openwebui-port
+          addr: 127.0.0.1:${HOST_PORT:8080}
+          reachable: true
+          timeout: 5s
+          context:
+            - runtime

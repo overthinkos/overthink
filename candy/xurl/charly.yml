@@ -1,21 +1,17 @@
 candy:
     version: 2026.144.1443
     name: xurl
-    description:
-        feature: xurl — X (Twitter) API CLI for posts, search, DMs, and media
-        narrative: |
-            Installs the @xdevplatform/xurl npm package globally (npm -g into
-            ~/.npm-global/bin, placed on PATH by the nodejs candy). Verifiable:
-            the xurl binary lands at ~/.npm-global/bin/xurl and runs `--help`.
-        tag: [working]
+    description: |
+        xurl — X (Twitter) API CLI for posts, search, DMs, and media
+        Installs the @xdevplatform/xurl npm package globally (npm -g into
+        ~/.npm-global/bin, placed on PATH by the nodejs candy). Verifiable:
+        the xurl binary lands at ~/.npm-global/bin/xurl and runs `--help`.
     require:
         - nodejs
-    scenario:
-        - name: xurl-cli-installed
-          step:
-            - then: the xurl CLI is installed in the npm global bin
-              file: ${HOME}/.npm-global/bin/xurl
-              exists: true
-            - then: the xurl CLI runs and prints its usage
-              command: ${HOME}/.npm-global/bin/xurl --help
-              exit_status: 0
+    plan:
+        - check: the xurl CLI is installed in the npm global bin
+          file: ${HOME}/.npm-global/bin/xurl
+          exists: true
+        - check: the xurl CLI runs and prints its usage
+          command: ${HOME}/.npm-global/bin/xurl --help
+          exit_status: 0

@@ -1,18 +1,16 @@
 candy:
     version: 2026.156.1921
     name: hermes-full
-    description:
-        feature: Standalone Hermes AI-agent metalayer composing the AI coding CLIs (claude/codex/gemini/forge) plus the developer and DevOps toolchains into one box
-        narrative: |
-            hermes-full is a pure meta-composition with no install of its own: it
-            composes the hermes agent, four AI coding CLIs (claude-code, codex,
-            gemini, forgecode), the dev-tools and devops-tools toolchains, and tmux.
-            Its observable effect is that every composed candy's key artifact
-            coexists in ONE image — the hermes agent binary, each AI CLI on PATH,
-            and the developer/DevOps binaries — and the hermes agent comes up as a
-            supervised service when the box is deployed. Dropping any candy from the
-            candy: list makes the matching check below fail.
-        tag: [working]
+    description: |
+        Standalone Hermes AI-agent metalayer composing the AI coding CLIs (claude/codex/gemini/forge) plus the developer and DevOps toolchains into one box
+        hermes-full is a pure meta-composition with no install of its own: it
+        composes the hermes agent, four AI coding CLIs (claude-code, codex,
+        gemini, forgecode), the dev-tools and devops-tools toolchains, and tmux.
+        Its observable effect is that every composed candy's key artifact
+        coexists in ONE image — the hermes agent binary, each AI CLI on PATH,
+        and the developer/DevOps binaries — and the hermes agent comes up as a
+        supervised service when the box is deployed. Dropping any candy from the
+        candy: list makes the matching check below fail.
     candy:
         - hermes
         - claude-code
@@ -22,90 +20,69 @@ candy:
         - dev-tools
         - devops-tools
         - tmux
-    scenario:
-        # DETERMINISTIC build-scope steps — the AI agent + AI CLIs all land in
-        # one image. They fail if hermes / claude-code / codex / gemini /
-        # forgecode were dropped from the composition.
-        - name: ai-agent-and-clis-coexist
-          step:
-            - then: the hermes agent binary is installed in the pixi default env
-              file: ${HOME}/.pixi/envs/default/bin/hermes
-              exists: true
-            - and: the hermes entrypoint wrapper is installed and executable
-              file: ${HOME}/.local/bin/hermes-entrypoint
-              exists: true
-              mode: "0755"
-            - and: the Claude Code CLI binary is on PATH in the npm global bin dir
-              file: ${HOME}/.npm-global/bin/claude
-              exists: true
-            - and: the OpenAI Codex CLI binary is on PATH in the npm global bin dir
-              file: ${HOME}/.npm-global/bin/codex
-              exists: true
-            - and: the Google Gemini CLI binary is on PATH in the npm global bin dir
-              file: ${HOME}/.npm-global/bin/gemini
-              exists: true
-            - and: the Forge CLI binary is on PATH in the npm global bin dir
-              file: ${HOME}/.npm-global/bin/forge
-              exists: true
-        # DETERMINISTIC build-scope steps — the developer + DevOps toolchains
-        # land at fixed paths and run. They fail if dev-tools / devops-tools /
-        # tmux were dropped from the composition.
-        - name: developer-and-devops-toolchain-present
-          step:
-            - then: the ripgrep fast-search binary from dev-tools is on PATH
-              file: /usr/bin/rg
-              exists: true
-            - and: the neovim editor binary from dev-tools is on PATH
-              file: /usr/bin/nvim
-              exists: true
-            - and: the tmux multiplexer binary is on PATH and reports its version
-              command: /usr/bin/tmux -V
-              exit_status: 0
-              stdout:
-                - matches: "^tmux"
-            - and: the AWS CLI v2 binary from devops-tools is installed under /usr/local/bin
-              file: /usr/local/bin/aws
-              exists: true
-            - and: OpenTofu from devops-tools runs and reports its version
-              command: /usr/local/bin/tofu version
-              exit_status: 0
-            - and: jq from devops-tools runs and reports its version
-              command: /usr/bin/jq --version
-              exit_status: 0
-        # DETERMINISTIC deploy-scope step + a PROSE-ONLY agent-graded step —
-        # the composition actually functions: the hermes agent service runs,
-        # and an operator can drive it alongside the bundled CLIs.
-        - name: hermes-agent-runs-when-deployed
-          step:
-            - then: the supervised hermes agent service is running on the live deployment
-              service: hermes
-              running: true
-              context:
-                - runtime
-            - and: an operator can open a shell in the deployed box and launch the hermes agent together with any bundled AI CLI (claude/codex/gemini/forge) and developer tool from that one session
-        - name: hermes-full-neovim-package
-          step:
-            - id: hermes-full-neovim-package
-              package: neovim
-              installed: true
-        - name: hermes-full-tofu-binary
-          step:
-            - id: hermes-full-tofu-binary
-              file: /usr/local/bin/tofu
-              exists: true
-        - name: hermes-full-jq-binary
-          step:
-            - id: hermes-full-jq-binary
-              file: /usr/bin/jq
-              exists: true
-        - name: hermes-full-tmux-binary
-          step:
-            # --- tmux ---
-            - id: hermes-full-tmux-binary
-              file: /usr/bin/tmux
-              exists: true
-        - name: hermes-full-tmux-package
-          step:
-            - id: hermes-full-tmux-package
-              package: tmux
-              installed: true
+    plan:
+        - check: the hermes agent binary is installed in the pixi default env
+          file: ${HOME}/.pixi/envs/default/bin/hermes
+          exists: true
+        - check: the hermes entrypoint wrapper is installed and executable
+          file: ${HOME}/.local/bin/hermes-entrypoint
+          exists: true
+          mode: "0755"
+        - check: the Claude Code CLI binary is on PATH in the npm global bin dir
+          file: ${HOME}/.npm-global/bin/claude
+          exists: true
+        - check: the OpenAI Codex CLI binary is on PATH in the npm global bin dir
+          file: ${HOME}/.npm-global/bin/codex
+          exists: true
+        - check: the Google Gemini CLI binary is on PATH in the npm global bin dir
+          file: ${HOME}/.npm-global/bin/gemini
+          exists: true
+        - check: the Forge CLI binary is on PATH in the npm global bin dir
+          file: ${HOME}/.npm-global/bin/forge
+          exists: true
+        - check: the ripgrep fast-search binary from dev-tools is on PATH
+          file: /usr/bin/rg
+          exists: true
+        - check: the neovim editor binary from dev-tools is on PATH
+          file: /usr/bin/nvim
+          exists: true
+        - check: the tmux multiplexer binary is on PATH and reports its version
+          command: /usr/bin/tmux -V
+          exit_status: 0
+          stdout:
+            - matches: "^tmux"
+        - check: the AWS CLI v2 binary from devops-tools is installed under /usr/local/bin
+          file: /usr/local/bin/aws
+          exists: true
+        - check: OpenTofu from devops-tools runs and reports its version
+          command: /usr/local/bin/tofu version
+          exit_status: 0
+        - check: jq from devops-tools runs and reports its version
+          command: /usr/bin/jq --version
+          exit_status: 0
+        - check: the supervised hermes agent service is running on the live deployment
+          service: hermes
+          running: true
+          context:
+            - runtime
+        - agent-check: an operator can open a shell in the deployed box and launch the hermes agent together with any bundled AI CLI (claude/codex/gemini/forge) and developer tool from that one session
+        - check: package=neovim
+          id: hermes-full-neovim-package
+          package: neovim
+          installed: true
+        - check: file=/usr/local/bin/tofu
+          id: hermes-full-tofu-binary
+          file: /usr/local/bin/tofu
+          exists: true
+        - check: file=/usr/bin/jq
+          id: hermes-full-jq-binary
+          file: /usr/bin/jq
+          exists: true
+        - check: file=/usr/bin/tmux
+          id: hermes-full-tmux-binary
+          file: /usr/bin/tmux
+          exists: true
+        - check: package=tmux
+          id: hermes-full-tmux-package
+          package: tmux
+          installed: true

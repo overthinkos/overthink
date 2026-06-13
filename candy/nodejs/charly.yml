@@ -1,15 +1,13 @@
 candy:
     version: 2026.159.1324
     name: nodejs
-    description:
-        feature: A Node.js runtime with the npm and pnpm package managers on the default PATH.
-        narrative: |
-            Installs the distro nodejs package (NodeSource node 20.x on Ubuntu so the
-            in-box CLIs that require node >=20 work), the matching npm CLI, and a
-            self-contained pnpm standalone binary at /usr/local/bin/pnpm. Every artifact
-            is a real file at a known path with a working --version, so the runtime is
-            directly verifiable.
-        tag: [working]
+    description: |
+        A Node.js runtime with the npm and pnpm package managers on the default PATH.
+        Installs the distro nodejs package (NodeSource node 20.x on Ubuntu so the
+        in-box CLIs that require node >=20 work), the matching npm CLI, and a
+        self-contained pnpm standalone binary at /usr/local/bin/pnpm. Every artifact
+        is a real file at a known path with a working --version, so the runtime is
+        directly verifiable.
     env:
         NPM_CONFIG_PREFIX: "~/.npm-global"
         npm_config_cache: "~/.cache/npm"
@@ -49,14 +47,16 @@ candy:
                   components: main
     var:
         PNPM_VERSION: "10.33.4"
-    task:
-        # pnpm standalone binary (self-contained — bundles its own node) into
-        # /usr/local/bin, on the default system PATH for every user incl. root
-        # (Immich runs pnpm as root). NOT a package.json: that triggers the npm
-        # multi-stage builder on this layer, which the builder images that COMPOSE
-        # nodejs (arch-builder/fedora-builder) cannot self-provide. pnpm's release
-        # asset tokens are x64/arm64 (match neither ${ARCH} nor ${BUILD_ARCH}).
-        - command: |
+    plan:
+        - run: |
+            command=case "${BUILD_ARCH}" in
+              x86_64)  PNPM_ARCH="x64" ;;
+              aarch64) PNPM_ARCH="arm64" ;;
+              *) echo "Unsupported arch: ${BUILD_ARCH}"; exit 1 ;;
+            esac
+            curl -fsSL "https://github.com/pnpm/pnpm/releases/download/v${PNPM_VERSION}/pnpm-linux-${PNPM_ARCH}" -o /usr/local/bin/pnpm
+            chmod 0755 /usr/local/bin/pnpm
+          command: |
             case "${BUILD_ARCH}" in
               x86_64)  PNPM_ARCH="x64" ;;
               aarch64) PNPM_ARCH="arm64" ;;
@@ -65,33 +65,25 @@ candy:
             curl -fsSL "https://github.com/pnpm/pnpm/releases/download/v${PNPM_VERSION}/pnpm-linux-${PNPM_ARCH}" -o /usr/local/bin/pnpm
             chmod 0755 /usr/local/bin/pnpm
           run_as: root
-    scenario:
-        - name: node-runtime-available
-          step:
-            - then: the node interpreter is installed at /usr/bin/node
-              file: /usr/bin/node
-              exists: true
-            - then: node reports its version and exits cleanly
-              command: /usr/bin/node --version
-              exit_status: 0
-        - name: npm-cli-available
-          step:
-            - then: the npm package manager is installed at /usr/bin/npm
-              file: /usr/bin/npm
-              exists: true
-            - then: npm reports its version and exits cleanly
-              command: /usr/bin/npm --version
-              exit_status: 0
-        - name: pnpm-standalone-installed
-          step:
-            - then: the self-contained pnpm binary lands on the system PATH at /usr/local/bin/pnpm
-              file: /usr/local/bin/pnpm
-              exists: true
-            - then: pnpm runs and reports its version
-              command: pnpm --version
-              exit_status: 0
-        - name: nodejs-package
-          step:
-            - id: nodejs-package
-              package: nodejs
-              installed: true
+        - check: the node interpreter is installed at /usr/bin/node
+          file: /usr/bin/node
+          exists: true
+        - check: node reports its version and exits cleanly
+          command: /usr/bin/node --version
+          exit_status: 0
+        - check: the npm package manager is installed at /usr/bin/npm
+          file: /usr/bin/npm
+          exists: true
+        - check: npm reports its version and exits cleanly
+          command: /usr/bin/npm --version
+          exit_status: 0
+        - check: the self-contained pnpm binary lands on the system PATH at /usr/local/bin/pnpm
+          file: /usr/local/bin/pnpm
+          exists: true
+        - check: pnpm runs and reports its version
+          command: pnpm --version
+          exit_status: 0
+        - check: package=nodejs
+          id: nodejs-package
+          package: nodejs
+          installed: true

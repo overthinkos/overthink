@@ -1,15 +1,13 @@
 candy:
     version: 2026.144.1443
     name: ffmpeg
-    description:
-        feature: FFmpeg provides command-line audio/video transcoding and media inspection
-        narrative: |
-            Installs the ffmpeg package (from the negativo17 fedora-multimedia repo
-            on Fedora, core/extra on Arch). It ships the ffmpeg transcoder and the
-            ffprobe media inspector under /usr/bin, both of which print a version
-            banner to stdout — so their presence and basic operability are directly
-            verifiable.
-        tag: [working]
+    description: |
+        FFmpeg provides command-line audio/video transcoding and media inspection
+        Installs the ffmpeg package (from the negativo17 fedora-multimedia repo
+        on Fedora, core/extra on Arch). It ships the ffmpeg transcoder and the
+        ffprobe media inspector under /usr/bin, both of which print a version
+        banner to stdout — so their presence and basic operability are directly
+        verifiable.
     distro:
         arch:
             package:
@@ -21,29 +19,24 @@ candy:
                 - name: fedora-multimedia
                   url: "https://negativo17.org/repos/fedora-multimedia.repo"
                   gpgkey: "https://negativo17.org/repos/RPM-GPG-KEY-slaanesh"
-    scenario:
-        - name: ffmpeg-cli-available
-          step:
-            - then: the ffmpeg transcoder binary is installed at /usr/bin/ffmpeg
-              file: /usr/bin/ffmpeg
-              exists: true
-            - then: ffmpeg prints its version banner to stdout
-              command: ffmpeg -version
-              exit_status: 0
-              stdout:
-                - contains: ffmpeg version
-        - name: ffprobe-inspects-media
-          step:
-            - then: the ffprobe media inspector binary is installed at /usr/bin/ffprobe
-              file: /usr/bin/ffprobe
-              exists: true
-            - then: ffprobe prints its version banner to stdout
-              command: ffprobe -version
-              exit_status: 0
-              stdout:
-                - contains: ffprobe version
-        - name: ffmpeg-package
-          step:
-            - id: ffmpeg-package
-              package: ffmpeg
-              installed: true
+    plan:
+        - check: the ffmpeg transcoder binary is installed at /usr/bin/ffmpeg
+          file: /usr/bin/ffmpeg
+          exists: true
+        - check: ffmpeg prints its version banner to stdout
+          command: ffmpeg -version
+          exit_status: 0
+          stdout:
+            - contains: ffmpeg version
+        - check: the ffprobe media inspector binary is installed at /usr/bin/ffprobe
+          file: /usr/bin/ffprobe
+          exists: true
+        - check: ffprobe prints its version banner to stdout
+          command: ffprobe -version
+          exit_status: 0
+          stdout:
+            - contains: ffprobe version
+        - check: package=ffmpeg
+          id: ffmpeg-package
+          package: ffmpeg
+          installed: true

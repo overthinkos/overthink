@@ -214,7 +214,7 @@ func equalSlices(a, b []string) bool {
 func TestMergeDeployConfigsPreservesAllFields(t *testing.T) {
 	tr := true
 	rp := []string{"32718:2718"}
-	desc := &Description{Tag: []string{"testing"}}
+	desc := "testing"
 	sec := []DeploySecretConfig{{Name: "test"}}
 	sd := map[string]SidecarDef{"side": {Image: "img"}}
 	shl := []DeployShellOverlay{{ID: "x"}}
@@ -254,7 +254,7 @@ func TestMergeDeployConfigsPreservesAllFields(t *testing.T) {
 		fail bool
 	}{
 		{"ResolvedPort", !equalSlices(got.ResolvedPort, rp)},
-		{"Description", got.Description == nil},
+		{"Description", got.Description == ""},
 		{"Secret", len(got.Secret) != 1},
 		{"ForwardGpgAgent", got.ForwardGpgAgent == nil || !*got.ForwardGpgAgent},
 		{"ForwardSshAgent", got.ForwardSshAgent == nil || !*got.ForwardSshAgent},

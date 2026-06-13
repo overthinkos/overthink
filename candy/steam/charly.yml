@@ -1,16 +1,14 @@
 candy:
     version: 2026.144.1443
     name: steam
-    description:
-        feature: Steam gaming client plus the gamescope nested compositor on a Sway/XWayland desktop
-        narrative: |
-            Installs the Steam client and the gamescope micro-compositor from the
-            Fedora + RPM Fusion nonfree repos, and pins
-            STEAM_RUNTIME_PREFER_HOST_LIBRARIES=0 so Steam uses its own bundled
-            runtime instead of host libraries. The launcher binary, the gamescope
-            binary, both RPM packages, and the runtime env pin are all directly
-            verifiable inside the built image.
-        tag: [working]
+    description: |
+        Steam gaming client plus the gamescope nested compositor on a Sway/XWayland desktop
+        Installs the Steam client and the gamescope micro-compositor from the
+        Fedora + RPM Fusion nonfree repos, and pins
+        STEAM_RUNTIME_PREFER_HOST_LIBRARIES=0 so Steam uses its own bundled
+        runtime instead of host libraries. The launcher binary, the gamescope
+        binary, both RPM packages, and the runtime env pin are all directly
+        verifiable inside the built image.
     require:
         - sway
     env:
@@ -27,25 +25,19 @@ candy:
     volume:
         - name: steam-data
           path: "~/.local/share/Steam"
-    scenario:
-        - name: steam-client-installed
-          step:
-            - then: the Steam client launcher is installed at /usr/bin/steam
-              file: /usr/bin/steam
-              exists: true
-            - then: the steam RPM is present in the package database
-              package: steam
-              installed: true
-        - name: gamescope-compositor-available
-          step:
-            - then: the gamescope nested Wayland compositor binary is installed
-              file: /usr/bin/gamescope
-              exists: true
-            - then: the gamescope RPM is present in the package database
-              package: gamescope
-              installed: true
-        - name: steam-runtime-prefers-bundled-libraries
-          step:
-            - then: STEAM_RUNTIME_PREFER_HOST_LIBRARIES is pinned to 0 so Steam uses its bundled runtime
-              command: printenv STEAM_RUNTIME_PREFER_HOST_LIBRARIES
-              stdout: "0"
+    plan:
+        - check: the Steam client launcher is installed at /usr/bin/steam
+          file: /usr/bin/steam
+          exists: true
+        - check: the steam RPM is present in the package database
+          package: steam
+          installed: true
+        - check: the gamescope nested Wayland compositor binary is installed
+          file: /usr/bin/gamescope
+          exists: true
+        - check: the gamescope RPM is present in the package database
+          package: gamescope
+          installed: true
+        - check: STEAM_RUNTIME_PREFER_HOST_LIBRARIES is pinned to 0 so Steam uses its bundled runtime
+          command: printenv STEAM_RUNTIME_PREFER_HOST_LIBRARIES
+          stdout: "0"

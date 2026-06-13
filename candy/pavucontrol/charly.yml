@@ -1,15 +1,13 @@
 candy:
     version: 2026.144.1443
     name: pavucontrol
-    description:
-        feature: Graphical PulseAudio/PipeWire volume control (pavucontrol) for the desktop.
-        narrative: |
-            Installs the pavucontrol GTK mixer and pulls in the pipewire candy,
-            whose PulseAudio-compatible server pavucontrol connects to. The
-            binary lands at /usr/bin/pavucontrol and is launched on demand (e.g.
-            from the waybar volume indicator), so both its presence and the audio
-            backend it drives are build-time verifiable.
-        tag: [working]
+    description: |
+        Graphical PulseAudio/PipeWire volume control (pavucontrol) for the desktop.
+        Installs the pavucontrol GTK mixer and pulls in the pipewire candy,
+        whose PulseAudio-compatible server pavucontrol connects to. The
+        binary lands at /usr/bin/pavucontrol and is launched on demand (e.g.
+        from the waybar volume indicator), so both its presence and the audio
+        backend it drives are build-time verifiable.
     require:
         - pipewire
     distro:
@@ -19,17 +17,13 @@ candy:
         fedora:
             package:
                 - pavucontrol
-    scenario:
-        - name: pavucontrol-mixer-installed
-          step:
-            - then: the pavucontrol GTK mixer binary is installed at /usr/bin/pavucontrol
-              file: /usr/bin/pavucontrol
-              exists: true
-            - then: the pavucontrol package is recorded in the package database
-              package: pavucontrol
-              installed: true
-        - name: pipewire-audio-backend-composed
-          step:
-            - then: the required PipeWire audio server that pavucontrol controls is present
-              file: /usr/bin/pipewire
-              exists: true
+    plan:
+        - check: the pavucontrol GTK mixer binary is installed at /usr/bin/pavucontrol
+          file: /usr/bin/pavucontrol
+          exists: true
+        - check: the pavucontrol package is recorded in the package database
+          package: pavucontrol
+          installed: true
+        - check: the required PipeWire audio server that pavucontrol controls is present
+          file: /usr/bin/pipewire
+          exists: true

@@ -1,14 +1,13 @@
 package main
 
-// harness_loop.go — the iteration state machine for `charly check run`.
+// check_loop.go — the iteration state machine for `charly check run`.
 //
-// Post the 2026-04 kind split, the loop is keyed on a `kind: score`
-// (HarnessScore) which references one or more `kind: recipe` entries.
-// Per iteration:
-//   - the AI sees ALL recipes via ${RECIPES} (per-recipe-grouped block)
-//     and the flat ${SCENARIOS} (concatenated in score.recipes order)
-//   - the harness scores against the union of every referenced
-//     recipe's scenarios — score = total solved across the whole set
+// Post the plan-unify cutover, the loop is keyed on an entity's `iterate:`
+// block (IterateConfig) carried on a deploy / kind:check bed. Per iteration:
+//   - the AI sees the full scored plan via ${PLAN} and the still-unsolved
+//     check:/agent-check: subset via ${CHECKS}
+//   - the harness scores the entity's plan check:/agent-check: STEPS —
+//     score = total solved across the whole plan
 //   - the prompt surfaces ${SCORE_DELTA} (improvement vs prev iter)
 //     and ${ATTEMPTS_LEFT} (plateau_iteration - plateau_counter)
 //
@@ -37,38 +36,25 @@ import (
 // CheckRunLocalCmd.Run before calling RunHarness.
 type HarnessOpts struct {
 	ProjectDir string
-	ScoreName  string
-	Score      *HarnessScore
-	// Recipes is the ordered list of recipe names this score evaluates
-	// against (mirror of Score.Recipes — kept for substitution wiring).
-	Recipe []string
-	// ResolvedRecipes is the recipe catalog projection in the same order
-	// as Recipes; consumed by the ${RECIPES} renderer.
-	ResolvedRecipes []*HarnessRecipe
-	// MergedScenarios is the concatenated scenario list across every
-	// referenced recipe (in score.Recipe order). Each scenario carries
-	// its source recipe via Scenario.SourceRecipe. **Drives ${SCENARIOS}
-	// and ${RECIPES} prompt rendering** — the AI sees this slice with
-	// any ${EVAL_NONCE_*} placeholders un-substituted.
-	MergedScenarios []Scenario
+	ScoreName  string // the iterate entity name (deploy / kind:check bed)
+	Iterate    *IterateConfig
 
-	// ScoringScenarios is MergedScenarios with all ${EVAL_NONCE_*}
-	// tokens substituted to their per-run hex values. **Drives baseline
-	// synthesis AND per-iter scoring**. Generated once per run via
-	// GenerateHarnessNonces + SubstituteScenarioNonces, after the AI's
-	// prompt is rendered. The AI never sees this slice — substituted
-	// values stay inside the harness's scoring path.
-	ScoringScenarios []Scenario
+	// MergedPlan is the entity's scored plan (check:/agent-check: + agent-run:
+	// + runtime-context run:), baked + include-expanded + inline, with any
+	// ${EVAL_NONCE_*} placeholders UN-substituted. Drives ${PLAN}/${CHECKS}
+	// prompt rendering — the slice the AI sees.
+	MergedPlan []Step
+
+	// ScoringPlan is MergedPlan with all ${EVAL_NONCE_*} tokens substituted to
+	// their per-run hex values. Drives baseline synthesis AND per-iter scoring;
+	// the AI never sees the substituted values.
+	ScoringPlan []Step
 
 	TargetKind string // "pod" | "vm" | "host"
 	TargetName string // pod or vm name (empty when host)
 	AgentName  string
 
-	// Phase / PhaseTotal carry progressive-scoping context. When the
-	// score is non-progressive both are 0 and ${PHASE_*} tokens
-	// substitute to "0"/"" — the prompt template is expected to omit
-	// them in that case. When progressive, Phase is 1-indexed and
-	// PhaseTotal == len(score.Recipe).
+	// Phase / PhaseTotal carry progressive-scoping context (0/0 = single-pass).
 	Phase            int
 	PhaseTotal       int
 	Agent            *AgentConfig
@@ -76,7 +62,7 @@ type HarnessOpts struct {
 	TargetImage      string
 	Tag              string
 	PlateauIteration int
-	MaxScenario      int
+	MaxStep      int
 	MCPEndpoint      string
 	Notes            string // ${NOTES} snapshot at run start
 	NoMCP            bool
@@ -88,15 +74,19 @@ type HarnessOpts struct {
 	Stdout           *os.File
 	Stderr           *os.File
 
-	// PreAIScenario is the frozen set of scenarios the score is
-	// evaluated against. Populated from synthesizeScoreBaseline at
-	// CheckRunLocalCmd entry.
-	PreAIScenario []ScenarioCheckResult
+	// Deploy names the subject deployment the plan scores against (drives
+	// ${DEPLOYMENT}). RunCheckLive scores by each step's Op.Pod, so this is
+	// informational for the prompt.
+	Deploy string
 
-	// PreFingerprints maps ScenarioID -> body fingerprint at baseline.
+	// PreAIStep is the frozen set of scored steps. Populated from
+	// synthesizeScoreBaseline at CheckRunLocalCmd entry.
+	PreAIStep []StepScore
+
+	// PreFingerprints maps step id -> body fingerprint at baseline.
 	PreFingerprints map[string]string
 
-	// PreTagFingerprints maps ScenarioID -> tag fingerprint at baseline.
+	// PreTagFingerprints maps step id -> tag fingerprint at baseline.
 	PreTagFingerprints map[string]string
 }
 
@@ -121,29 +111,29 @@ type HarnessOpts struct {
 // score, total, last_improved_at). This is what answers "what score
 // did the AI reach when?" — cross-reference at_utc with StartedUTC.
 type IterationState struct {
-	K                   int               `yaml:"k"`
-	Phase               int               `yaml:"phase,omitempty"`
-	Score               int               `yaml:"score"`
-	ScoreDelta          int               `yaml:"score_delta"`
-	PlateauCounterAfter int               `yaml:"plateau_counter_after"`
-	BuildFailure        bool              `yaml:"build_failure,omitempty"`
-	StartedUTC          string            `yaml:"started_utc,omitempty"`
-	FinishedUTC         string            `yaml:"finished_utc,omitempty"`
-	IterationDuration   string            `yaml:"iteration_duration,omitempty"`
-	BuildDuration       string            `yaml:"build_duration,omitempty"`
-	TestDuration        string            `yaml:"test_duration,omitempty"`
-	RunnerDuration      string            `yaml:"runner_duration,omitempty"`
-	RunnerCommand       []string          `yaml:"runner_command,omitempty"`
-	RunnerOutput        string            `yaml:"runner_output,omitempty"`
-	RunnerLogPath       string            `yaml:"runner_log_path,omitempty"`
-	RunnerNdjsonPath    string            `yaml:"runner_ndjson_path,omitempty"`
-	RunnerStderrPath    string            `yaml:"runner_stderr_path,omitempty"`
-	RunnerEvent         []RunnerEvent     `yaml:"runner_event,omitempty"`
-	WatchdogSample      []WatchdogSample  `yaml:"watchdog_sample,omitempty"`
-	BuildLogPath        string            `yaml:"build_log_path,omitempty"`
-	CommitSHA           string            `yaml:"commit_sha,omitempty"`
-	Scenario            []ScenarioVerdict `yaml:"scenario,omitempty"`
-	AddedScenario       []string          `yaml:"added_scenario,omitempty"`
+	K                   int              `yaml:"k"`
+	Phase               int              `yaml:"phase,omitempty"`
+	Score               int              `yaml:"score"`
+	ScoreDelta          int              `yaml:"score_delta"`
+	PlateauCounterAfter int              `yaml:"plateau_counter_after"`
+	BuildFailure        bool             `yaml:"build_failure,omitempty"`
+	StartedUTC          string           `yaml:"started_utc,omitempty"`
+	FinishedUTC         string           `yaml:"finished_utc,omitempty"`
+	IterationDuration   string           `yaml:"iteration_duration,omitempty"`
+	BuildDuration       string           `yaml:"build_duration,omitempty"`
+	TestDuration        string           `yaml:"test_duration,omitempty"`
+	RunnerDuration      string           `yaml:"runner_duration,omitempty"`
+	RunnerCommand       []string         `yaml:"runner_command,omitempty"`
+	RunnerOutput        string           `yaml:"runner_output,omitempty"`
+	RunnerLogPath       string           `yaml:"runner_log_path,omitempty"`
+	RunnerNdjsonPath    string           `yaml:"runner_ndjson_path,omitempty"`
+	RunnerStderrPath    string           `yaml:"runner_stderr_path,omitempty"`
+	RunnerEvent         []RunnerEvent    `yaml:"runner_event,omitempty"`
+	WatchdogSample      []WatchdogSample `yaml:"watchdog_sample,omitempty"`
+	BuildLogPath        string           `yaml:"build_log_path,omitempty"`
+	CommitSHA           string           `yaml:"commit_sha,omitempty"`
+	Step                []StepVerdict    `yaml:"step,omitempty"`
+	AddedStep           []string         `yaml:"added_step,omitempty"`
 }
 
 // RunnerEvent is one parsed line from a stream-json AI runner's stdout.
@@ -162,7 +152,7 @@ type RunnerEvent struct {
 
 // WatchdogSample is one tick of the score-progress watchdog (default
 // 5m cadence). The harness loop appends one of these per OnTick fired
-// during a stream-json or plain iteration that runs in recipe-mode.
+// during a stream-json or plain iteration that scores a live plan.
 // LastImprovedAt is empty until the AI has scored at least once.
 type WatchdogSample struct {
 	AtUTC          string `yaml:"at_utc"`
@@ -172,20 +162,17 @@ type WatchdogSample struct {
 	LastImprovedAt string `yaml:"last_improved_at,omitempty"`
 }
 
-// ScenarioVerdict is one scenario's post-iteration outcome.
-type ScenarioVerdict struct {
+// StepVerdict is one scored step's post-iteration outcome.
+type StepVerdict struct {
 	ID              string  `yaml:"id"`
 	Origin          string  `yaml:"origin,omitempty"`
-	SourceRecipe    string  `yaml:"source_recipe,omitempty"`
 	Verdict         Verdict `yaml:"verdict"`
 	Baseline        string  `yaml:"baseline,omitempty"`
 	Final           string  `yaml:"final,omitempty"`
 	FingerprintPre  string  `yaml:"fingerprint_pre,omitempty"`
 	FingerprintPost string  `yaml:"fingerprint_post,omitempty"`
-	PendingPre      int     `yaml:"pending_pre,omitempty"`
-	PendingPost     int     `yaml:"pending_post,omitempty"`
 	// SkippedReason carries the dependency-cascade explanation when
-	// Verdict == VerdictSkipped. Format: "dep-unmet: <upstream-name>".
+	// Verdict == VerdictSkipped. Format: "dep-unmet: <upstream-id>".
 	SkippedReason string `yaml:"skipped_reason,omitempty"`
 }
 
@@ -193,7 +180,6 @@ type ScenarioVerdict struct {
 type FinalReport struct {
 	Schema              int               `yaml:"schema"`
 	Score               string            `yaml:"score"`
-	Recipe              []string          `yaml:"recipe,omitempty"`
 	Calver              string            `yaml:"calver"`
 	RunID               string            `yaml:"run_id"`
 	Agent               string            `yaml:"agent"`
@@ -214,17 +200,16 @@ type FinalReport struct {
 	Phases              []PhaseReport     `yaml:"phase,omitempty"`
 	PhasesCompleted     int               `yaml:"phases_completed,omitempty"`
 	Iterations          []IterationState  `yaml:"iteration,omitempty"`
-	FinalScenario       []ScenarioVerdict `yaml:"final_scenario,omitempty"`
+	FinalStep           []StepVerdict     `yaml:"final_step,omitempty"`
 }
 
 // PhaseReport summarizes one phase of a progressive run.
 type PhaseReport struct {
-	N             int      `yaml:"n"`
-	Recipe        []string `yaml:"recipe,omitempty"`
-	IterationsRun int      `yaml:"iterations_run"`
-	ExitReason    string   `yaml:"exit_reason"` // solved-all | plateau | interrupted
-	Score         int      `yaml:"score"`
-	Total         int      `yaml:"total"`
+	N             int    `yaml:"n"`
+	IterationsRun int    `yaml:"iterations_run"`
+	ExitReason    string `yaml:"exit_reason"` // solved-all | plateau | interrupted
+	Score         int    `yaml:"score"`
+	Total         int    `yaml:"total"`
 }
 
 // ReportWhere identifies the target a run executed against.
@@ -378,7 +363,7 @@ func mergeOsEnv(env map[string]string) []string {
 // CheckRunLocalCmd.Run, inside the target).
 //
 // Loop bounds, post-cutover:
-//   - solved-all: every scenario has been solved
+//   - solved-all: every scored step has been solved
 //   - plateau: plateau_counter >= plateau_iteration
 //   - dry-run: after iter 1 with --dry-run
 //   - interrupted: ctx cancelled
@@ -387,7 +372,6 @@ func RunHarness(ctx context.Context, opts HarnessOpts, layout RunLayout) (*Final
 	report := &FinalReport{
 		Schema:              1,
 		Score:               opts.ScoreName,
-		Recipe:              append([]string(nil), opts.Recipe...),
 		Calver:              ComputeCalVer(),
 		RunID:               layout.RunID,
 		Agent:               opts.AgentName,
@@ -404,12 +388,12 @@ func RunHarness(ctx context.Context, opts HarnessOpts, layout RunLayout) (*Final
 	bestScore := 0
 	bestIteration := 0
 	prevScore := 0
-	preIDs := scenarioIDSet(opts.PreAIScenario)
+	preIDs := stepIDSet(opts.PreAIStep)
 
 	// Iteration loop — plateau-bounded, no max-iteration ceiling.
 	for k := 1; ; k++ {
 		// Compute still-unsolved.
-		unsolved := stillUnsolved(opts.PreAIScenario, report.Iterations)
+		unsolved := stillUnsolved(opts.PreAIStep, report.Iterations)
 		if len(unsolved) == 0 && k > 1 {
 			report.ExitReason = "solved-all"
 			break
@@ -466,11 +450,11 @@ func RunHarness(ctx context.Context, opts HarnessOpts, layout RunLayout) (*Final
 		report.ExitReason = "interrupted"
 	}
 
-	// Aggregate per-scenario final verdicts.
+	// Aggregate per-step final verdicts.
 	if n := len(report.Iterations); n > 0 {
-		report.FinalScenario = report.Iterations[n-1].Scenario
+		report.FinalStep = report.Iterations[n-1].Step
 	}
-	report.Summary = computeSummary(report.FinalScenario, len(preIDs))
+	report.Summary = computeSummary(report.FinalStep, len(preIDs))
 
 	if err := writeReport(layout, report); err != nil {
 		return report, fmt.Errorf("write report: %w", err)
@@ -478,24 +462,24 @@ func RunHarness(ctx context.Context, opts HarnessOpts, layout RunLayout) (*Final
 	return report, nil
 }
 
-// scenarioIDSet returns a set of scenario IDs from a frozen list.
-func scenarioIDSet(scenarios []ScenarioCheckResult) map[string]bool {
-	out := make(map[string]bool, len(scenarios))
-	for _, s := range scenarios {
+// stepIDSet returns a set of step IDs from a frozen list.
+func stepIDSet(steps []StepScore) map[string]bool {
+	out := make(map[string]bool, len(steps))
+	for _, s := range steps {
 		out[s.ID] = true
 	}
 	return out
 }
 
-// stillUnsolved returns scenario IDs still in play across the run so far.
-func stillUnsolved(pre []ScenarioCheckResult, iters []IterationState) []ScenarioCheckResult {
+// stillUnsolved returns scored steps still in play across the run so far.
+func stillUnsolved(pre []StepScore, iters []IterationState) []StepScore {
 	latest := make(map[string]Verdict)
 	for _, it := range iters {
-		for _, v := range it.Scenario {
+		for _, v := range it.Step {
 			latest[v.ID] = v.Verdict
 		}
 	}
-	var out []ScenarioCheckResult
+	var out []StepScore
 	for _, s := range pre {
 		v, seen := latest[s.ID]
 		if !seen {
@@ -520,7 +504,7 @@ func runOneIteration(
 	opts HarnessOpts,
 	layout RunLayout,
 	k int,
-	unsolved []ScenarioCheckResult,
+	unsolved []StepScore,
 	reportSoFar *FinalReport,
 	prevScore int,
 	plateauCounterEntering int,
@@ -550,7 +534,7 @@ func runOneIteration(
 	}
 
 	// 0. Pre-iter fixture-persistence check (iter ≥ 2 only): probe whether
-	// every in-scope scenario's `pod:` is still running inside the harness sandbox.
+	// every in-scope step's `pod:` is still running inside the harness sandbox.
 	// Per the harness contract, fixtures from earlier phases must persist
 	// for cumulative scoring; if one disappeared (R10 saw charly-desktop's
 	// supervisord exit cleanly mid-run between phases 6 and 7), warn the
@@ -558,7 +542,7 @@ func runOneIteration(
 	// auto-redeploy: that's the AI's job. Skip on iter1 (no prior fixtures
 	// expected yet — they're being deployed in this iter for the first time).
 	if k > 1 {
-		warnMissingInScopePods(opts.MergedScenarios)
+		warnMissingInScopePods(opts.MergedPlan)
 	}
 
 	// 1. Write scope.yml
@@ -569,7 +553,7 @@ func runOneIteration(
 
 	// 2. Render + write prompt.md
 	notesSnap := opts.Notes
-	if opts.Score != nil && opts.Score.NotesEnabled() {
+	if opts.Iterate != nil && opts.Iterate.NotesEnabled() {
 		runNotesPath := NotePathForRun(layout.HarnessRoot, layout.RunID)
 		if data, err := os.ReadFile(runNotesPath); err == nil {
 			notesSnap = string(data)
@@ -581,23 +565,11 @@ func runOneIteration(
 	if mcp == "" {
 		mcp = DefaultMCPEndpoint
 	}
-	scenariosYAML := RenderRecipeScenariosYAML(opts.MergedScenarios)
-	recipesYAML := ""
-	if len(opts.Recipe) > 0 {
-		// Build a recipe-name → *HarnessRecipe map from ResolvedRecipes
-		// for the renderer.
-		catalog := make(map[string]*HarnessRecipe, len(opts.ResolvedRecipes))
-		for i, name := range opts.Recipe {
-			if i < len(opts.ResolvedRecipes) {
-				catalog[name] = opts.ResolvedRecipes[i]
-			}
-		}
-		recipesYAML = RenderScoreRecipesYAML(opts.Recipe, catalog)
-	}
-	deploymentName := ""
-	if opts.Score != nil {
-		deploymentName = opts.Score.Deploy
-	}
+	// ${PLAN} = the full scored plan; ${CHECKS} = the still-unsolved check
+	// subset (rendered from the unsolved StepScore ids against the plan).
+	planYAML := RenderPlanYAML(opts.MergedPlan)
+	checksYAML := RenderPlanYAML(unsolvedPlanSubset(opts.MergedPlan, unsolved))
+	deploymentName := opts.Deploy
 	scoreDelta := 0
 	if k > 1 {
 		scoreDelta = priorScore(reportSoFar) - prevScore
@@ -613,26 +585,7 @@ func runOneIteration(
 	if attemptsLeft < 0 {
 		attemptsLeft = 0
 	}
-	phaseRecipesJoined := ""
 	phaseIntro := ""
-	if opts.PhaseTotal > 0 {
-		phaseRecipesJoined = strings.Join(opts.Recipe, ", ")
-		if opts.Phase == 1 {
-			phaseIntro = fmt.Sprintf(
-				"Phase %d of %d — first phase, in-scope recipes: %s",
-				opts.Phase, opts.PhaseTotal, phaseRecipesJoined,
-			)
-		} else {
-			added := ""
-			if n := len(opts.Recipe); n > 0 {
-				added = opts.Recipe[n-1]
-			}
-			phaseIntro = fmt.Sprintf(
-				"Phase %d of %d — added recipe: %q. Total in-scope recipes: %s",
-				opts.Phase, opts.PhaseTotal, added, phaseRecipesJoined,
-			)
-		}
-	}
 	substCtx := &SubstContext{
 		RunID:            layout.RunID,
 		ScoreName:        opts.ScoreName,
@@ -649,18 +602,17 @@ func runOneIteration(
 		AttemptsLeft:     attemptsLeft,
 		MCPEndpoint:      mcp,
 		Notes:            notesSnap,
-		Scenarios:        scenariosYAML,
-		Recipe:           recipesYAML,
+		Plan:             planYAML,
+		Checks:           checksYAML,
 		Phase:            opts.Phase,
 		PhaseTotal:       opts.PhaseTotal,
-		PhaseRecipes:     phaseRecipesJoined,
 		PhaseIntro:       phaseIntro,
 		Deploy:           deploymentName,
 		Tag:              opts.Tag,
 		Timeout:          opts.Agent.Timeout,
 	}
-	if opts.Score != nil {
-		substCtx.AppendEnv(opts.Score.Env)
+	if opts.Iterate != nil {
+		substCtx.AppendEnv(opts.Iterate.Env)
 	}
 	if opts.Agent != nil {
 		substCtx.AppendEnv(opts.Agent.Env)
@@ -704,12 +656,12 @@ func runOneIteration(
 	// orthogonal — both bound the run, neither penalizes legitimately
 	// long iterations that ARE making progress.
 	//
-	// Watchdog only applies in recipe-mode (when ScoringScenarios is
-	// non-empty). Image-test mode runs scoring after the runner exits,
+	// Watchdog only applies when ScoringPlan is non-empty (live-plan
+	// scoring). Image-test mode runs scoring after the runner exits,
 	// so there's no live-score signal to poll.
 	watchdogStarted := false
 	var watchdogDone chan struct{}
-	if len(opts.ScoringScenarios) > 0 {
+	if len(opts.ScoringPlan) > 0 {
 		checkInterval, _ := ParseAgentTimeout(opts.Agent.ProgressCheckInterval)
 		if checkInterval == 0 {
 			checkInterval = DefaultProgressCheckInterval
@@ -719,9 +671,10 @@ func runOneIteration(
 			noImpTimeout = DefaultProgressNoImprovementTimeout
 		}
 		if checkInterval > 0 {
-			scoringScenarios := opts.ScoringScenarios
-			deployment := opts.Score.Deploy
+			scoringPlan := opts.ScoringPlan
+			deployment := opts.Deploy
 			scoreName := opts.ScoreName
+			validateArtifacts := opts.Iterate != nil && opts.Iterate.ValidateAiArtifacts
 			phase, phaseTotal, iterK := opts.Phase, opts.PhaseTotal, k
 			stderr := opts.Stderr
 			wd := &ProgressWatchdog{
@@ -737,8 +690,8 @@ func runOneIteration(
 					// later phase's per-iter start. Anti-deception is
 					// preserved because files older than the benchmark
 					// start are still rejected.
-					live, err := RunCheckLive(probeCtx, deployment, scoreName, scoringScenarios, RunScoringOpts{
-						ValidateAiArtifacts: opts.Score.ValidateAiArtifacts,
+					live, err := RunCheckLive(probeCtx, deployment, scoreName, scoringPlan, RunScoringOpts{
+						ValidateAiArtifacts: validateArtifacts,
 						IterStartTime:       benchmarkStart,
 					})
 					if err != nil {
@@ -870,10 +823,11 @@ func runOneIteration(
 		fmt.Fprintf(opts.Stderr, "iter%d: runner exited with error: %v (continuing)\n", k, runnerErr)
 	}
 
-	// 4. Score against the substituted scenario set. The AI saw the
-	// MergedScenarios slice (with ${EVAL_NONCE_*} placeholders);
-	// scoring runs against ScoringScenarios with substituted values.
-	useRecipeScenarios := len(opts.ScoringScenarios) > 0
+	// 4. Score against the substituted plan. The AI saw the MergedPlan slice
+	// (with ${EVAL_NONCE_*} placeholders); scoring runs against ScoringPlan
+	// with substituted values.
+	useLivePlan := len(opts.ScoringPlan) > 0
+	validateArtifacts := opts.Iterate != nil && opts.Iterate.ValidateAiArtifacts
 	iterTagSuffix := fmt.Sprintf("charlycheck-%s-iter%d", layout.RunID, k)
 	iterRef := fmt.Sprintf("ghcr.io/overthinkos/%s:%s", opts.TargetImage, iterTagSuffix)
 	var (
@@ -883,10 +837,10 @@ func runOneIteration(
 		postTagFingerprints map[string]string
 	)
 
-	if useRecipeScenarios {
+	if useLivePlan {
 		testStart := time.Now()
-		live, scoreErr := RunCheckLive(ctx, opts.Score.Deploy, opts.ScoreName, opts.ScoringScenarios, RunScoringOpts{
-			ValidateAiArtifacts: opts.Score.ValidateAiArtifacts,
+		live, scoreErr := RunCheckLive(ctx, opts.Deploy, opts.ScoreName, opts.ScoringPlan, RunScoringOpts{
+			ValidateAiArtifacts: validateArtifacts,
 			// Freshness floor uses benchmarkStart so artifacts
 			// produced in earlier phases survive scoring across
 			// phase boundaries — see the watchdog probe path
@@ -897,7 +851,7 @@ func runOneIteration(
 		if scoreErr != nil {
 			iter.BuildFailure = true
 			iter.Score = priorScore(reportSoFar)
-			iter.Scenario = priorScenarios(reportSoFar)
+			iter.Step = priorStepVerdicts(reportSoFar)
 			fmt.Fprintf(opts.Stderr, "iter%d: live score: %v\n", k, scoreErr)
 			if err := commitIterationBestEffort(ctx, layout, k, iter, opts); err != nil {
 				fmt.Fprintf(opts.Stderr, "iter%d: commit: %v\n", k, err)
@@ -920,7 +874,7 @@ func runOneIteration(
 		if buildErr != nil {
 			iter.BuildFailure = true
 			iter.Score = priorScore(reportSoFar)
-			iter.Scenario = priorScenarios(reportSoFar)
+			iter.Step = priorStepVerdicts(reportSoFar)
 			if err := commitIterationBestEffort(ctx, layout, k, iter, opts); err != nil {
 				fmt.Fprintf(opts.Stderr, "iter%d: commit: %v\n", k, err)
 			}
@@ -934,7 +888,7 @@ func runOneIteration(
 		if testErr != nil {
 			iter.BuildFailure = true
 			iter.Score = priorScore(reportSoFar)
-			iter.Scenario = priorScenarios(reportSoFar)
+			iter.Step = priorStepVerdicts(reportSoFar)
 			fmt.Fprintf(opts.Stderr, "iter%d: charly check box: %v\n", k, testErr)
 			if err := commitIterationBestEffort(ctx, layout, k, iter, opts); err != nil {
 				fmt.Fprintf(opts.Stderr, "iter%d: commit: %v\n", k, err)
@@ -963,56 +917,46 @@ func runOneIteration(
 		postTagFingerprints = map[string]string{}
 	}
 
-	postByID := parsed.ScenarioByID()
-	for _, pre := range opts.PreAIScenario {
-		preState := ScenarioState{
+	postByID := parsed.StepByID()
+	for _, pre := range opts.PreAIStep {
+		preState := StepState{
 			Present:        true,
 			Fingerprint:    opts.PreFingerprints[pre.ID],
 			Status:         pre.Status,
-			PendingSteps:   pre.PendingSteps,
 			TagFingerprint: opts.PreTagFingerprints[pre.ID],
 		}
-		var postState ScenarioState
+		var postState StepState
 		if post, ok := postByID[pre.ID]; ok {
-			postState = ScenarioState{
+			postState = StepState{
 				Present:        true,
 				Fingerprint:    postFingerprints[pre.ID],
 				Status:         post.Status,
-				PendingSteps:   post.PendingSteps,
 				TagFingerprint: postTagFingerprints[pre.ID],
 			}
 		}
 		v := Classify(preState, postState)
-		// Carry SourceRecipe through from baseline annotation if any.
-		sr := ""
-		if idx := strings.Index(pre.Origin, "recipe:"); idx >= 0 {
-			sr = pre.Origin[idx+len("recipe:"):]
-		}
-		iter.Scenario = append(iter.Scenario, ScenarioVerdict{
+		iter.Step = append(iter.Step, StepVerdict{
 			ID:              pre.ID,
 			Origin:          pre.Origin,
-			SourceRecipe:    sr,
 			Verdict:         v,
 			Baseline:        pre.Status,
 			Final:           postState.Status,
 			FingerprintPre:  preState.Fingerprint,
 			FingerprintPost: postState.Fingerprint,
-			PendingPre:      preState.PendingSteps,
-			PendingPost:     postState.PendingSteps,
 		})
 		if v == VerdictSolved {
 			iter.Score++
 		}
 	}
 
-	preIDs := scenarioIDSet(opts.PreAIScenario)
+	preIDs := stepIDSet(opts.PreAIStep)
 	for id := range postByID {
 		if !preIDs[id] {
-			iter.AddedScenario = append(iter.AddedScenario, id)
+			iter.AddedStep = append(iter.AddedStep, id)
 		}
 	}
 
-	solvedIDs := collectSolvedIDs(iter.Scenario)
+	solvedIDs := collectSolvedIDs(iter.Step)
 	if err := commitIterationBestEffort(ctx, layout, k, iter, opts); err != nil {
 		fmt.Fprintf(opts.Stderr, "iter%d: commit: %v\n", k, err)
 	}
@@ -1044,7 +988,7 @@ func runOneIteration(
 func commitIterationBestEffort(ctx context.Context, layout RunLayout, k int, iter IterationState, opts HarnessOpts) error {
 	emitIterEndSummary(k, iter)
 	killOrphanLoopBashes(opts.TargetKind, opts.TargetName)
-	solved := collectSolvedIDs(iter.Scenario)
+	solved := collectSolvedIDs(iter.Step)
 	sha, err := CommitIterationInRepo(ctx, layout, k, iter.Score, solved)
 	if err != nil {
 		return err
@@ -1055,7 +999,7 @@ func commitIterationBestEffort(ctx context.Context, layout RunLayout, k int, ite
 
 // emitIterEndSummary prints one stderr line at the end of every
 // iteration with a per-iter delta breakdown: solved count this iter,
-// list of failed scenarios (capped at 5), cascade-skipped count, and
+// list of failed steps (capped at 5), cascade-skipped count, and
 // the new cumulative score. The watchdog's per-tick "current score"
 // log shows running totals but does not delta-summarize. This is the
 // "what did this iter actually change?" view operators want.
@@ -1065,14 +1009,14 @@ func commitIterationBestEffort(ctx context.Context, layout RunLayout, k int, ite
 //	harness: phase 6 iter 1 → solved 6 of 13 this iter (failed:
 //	desktop-cdp-loads-web; cascade-skipped: 6 dependents); cumulative 67/74
 //
-// `solved this iter` counts scenarios with VerdictSolved (baseline
-// fail → final pass) — NOT cumulative passing scenarios from prior
-// iters. Cumulative score = total scenarios with `final: pass` across
-// all in-scope recipes.
+// `solved this iter` counts steps with VerdictSolved (baseline
+// fail → final pass) — NOT cumulative passing steps from prior
+// iters. Cumulative score = total steps with `final: pass` across
+// the whole scored plan.
 func emitIterEndSummary(k int, iter IterationState) {
 	var solvedThisIter, failedFinal, skippedFinal, cumulativePass, total int
 	var failedNames []string
-	for _, s := range iter.Scenario {
+	for _, s := range iter.Step {
 		total++
 		switch s.Verdict {
 		case VerdictSolved:
@@ -1086,7 +1030,7 @@ func emitIterEndSummary(k int, iter IterationState) {
 			} else {
 				failedFinal++
 				if len(failedNames) < 5 {
-					failedNames = append(failedNames, scenarioShortName(s.ID))
+					failedNames = append(failedNames, stepShortName(s.ID))
 				}
 			}
 		case VerdictSkipped:
@@ -1096,7 +1040,7 @@ func emitIterEndSummary(k int, iter IterationState) {
 			// Tampering means baseline-pass + final-fail.
 			failedFinal++
 			if len(failedNames) < 5 {
-				failedNames = append(failedNames, scenarioShortName(s.ID))
+				failedNames = append(failedNames, stepShortName(s.ID))
 			}
 		default:
 			if s.Final == "pass" {
@@ -1119,10 +1063,9 @@ func emitIterEndSummary(k int, iter IterationState) {
 		k, solvedThisIter, failPart, cumulativePass, total)
 }
 
-// scenarioShortName returns the tail segment of a `desc:pod:<pod>:<idx>`
-// or `recipe:<name>:<idx>` scenario ID, falling back to the full ID.
-// Used by emitIterEndSummary to keep the failed-name list compact.
-func scenarioShortName(id string) string {
+// stepShortName returns the tail segment of a step id, falling back to the
+// full id. Used by emitIterEndSummary to keep the failed-name list compact.
+func stepShortName(id string) string {
 	parts := strings.Split(id, ":")
 	if len(parts) >= 2 {
 		return parts[len(parts)-2] + ":" + parts[len(parts)-1]
@@ -1130,21 +1073,15 @@ func scenarioShortName(id string) string {
 	return id
 }
 
-// warnMissingInScopePods probes the running container set and warns
-// once per missing fixture pod that's referenced in the in-scope
-// scenarios. The harness contract requires earlier-phase fixture pods
-// to persist for cumulative scoring; this is a soft signal to the AI
-// (via the next iter's prompt context) that something needs redeploying.
-// Best-effort: probe failures are silently ignored (the live scorer
-// will surface real issues at iter end).
-func warnMissingInScopePods(scenarios []Scenario) {
-	// Collect unique pod names from scenarios.
+// warnMissingInScopePods probes the running container set and warns once per
+// missing fixture pod referenced by the in-scope plan steps' Op.Pod. The
+// harness contract requires earlier-phase fixture pods to persist for
+// cumulative scoring; this is a soft signal to the AI. Best-effort.
+func warnMissingInScopePods(plan []Step) {
 	uniquePods := map[string]bool{}
-	for _, sc := range scenarios {
-		if sc.Pod != "" {
-			// Use only the root segment for dotted paths — nested
-			// pods are checked via their parent's reachability.
-			rootPod := sc.Pod
+	for _, s := range plan {
+		if s.Op.Pod != "" {
+			rootPod := s.Op.Pod
 			if i := strings.IndexByte(rootPod, '.'); i > 0 {
 				rootPod = rootPod[:i]
 			}
@@ -1168,7 +1105,7 @@ func warnMissingInScopePods(scenarios []Scenario) {
 		if !strings.Contains(string(out), expected) {
 			fmt.Fprintf(os.Stderr,
 				"harness: WARNING: in-scope fixture pod %q is not running — "+
-					"earlier-phase scenarios that probe it will fail at iter end "+
+					"earlier-phase steps that probe it will fail at iter end "+
 					"unless the AI redeploys it this iteration.\n", expected)
 			missing++
 		}
@@ -1217,12 +1154,29 @@ func killOrphanLoopBashes(targetKind, targetName string) {
 	}
 }
 
-// collectSolvedIDs returns the IDs with Verdict == Solved.
-func collectSolvedIDs(v []ScenarioVerdict) []string {
+// collectSolvedIDs returns the step IDs with Verdict == Solved.
+func collectSolvedIDs(v []StepVerdict) []string {
 	var out []string
 	for _, s := range v {
 		if s.Verdict == VerdictSolved {
 			out = append(out, s.ID)
+		}
+	}
+	return out
+}
+
+// unsolvedPlanSubset returns the plan steps whose id is in the unsolved set,
+// for the ${CHECKS} prompt token (the still-failing check subset).
+func unsolvedPlanSubset(plan []Step, unsolved []StepScore) []Step {
+	want := make(map[string]bool, len(unsolved))
+	for _, u := range unsolved {
+		want[u.ID] = true
+	}
+	var out []Step
+	for i := range plan {
+		id := EffectiveStepID(&plan[i], scoredPlanOrigin, i)
+		if want[id] {
+			out = append(out, plan[i])
 		}
 	}
 	return out
@@ -1236,12 +1190,12 @@ func priorScore(r *FinalReport) int {
 	return r.Iterations[len(r.Iterations)-1].Score
 }
 
-// priorScenarios returns the last iteration's scenario slice.
-func priorScenarios(r *FinalReport) []ScenarioVerdict {
+// priorStepVerdicts returns the last iteration's step-verdict slice.
+func priorStepVerdicts(r *FinalReport) []StepVerdict {
 	if r == nil || len(r.Iterations) == 0 {
 		return nil
 	}
-	return r.Iterations[len(r.Iterations)-1].Scenario
+	return r.Iterations[len(r.Iterations)-1].Step
 }
 
 // computePlateauSoFar returns the plateau counter going into iter k+1.
@@ -1260,7 +1214,6 @@ func computePlateauSoFar(r *FinalReport) int {
 type HarnessScope struct {
 	RunID            string              `yaml:"run_id"`
 	Score            string              `yaml:"score,omitempty"`
-	Recipe           []string            `yaml:"recipe,omitempty"`
 	Agent            string              `yaml:"agent,omitempty"`
 	Iteration        int                 `yaml:"iteration"`
 	PlateauIteration int                 `yaml:"plateau_iteration"`
@@ -1272,7 +1225,7 @@ type HarnessScope struct {
 	Where            ReportWhere         `yaml:"where"`
 	Tag              string              `yaml:"tag,omitempty"`
 	History          []ScopeHistoryEntry `yaml:"history,omitempty"`
-	Scenario         []ScopeScenario     `yaml:"scenario,omitempty"`
+	Step             []ScopeStep         `yaml:"step,omitempty"`
 }
 
 // ScopeHistoryEntry summarizes one past iteration for the AI.
@@ -1286,24 +1239,15 @@ type ScopeHistoryEntry struct {
 	PlateauCounterAfter int      `yaml:"plateau_counter_after,omitempty"`
 }
 
-// ScopeScenario is one still-unsolved scenario as the AI sees it.
-type ScopeScenario struct {
-	ID              string                    `yaml:"id"`
-	Origin          string                    `yaml:"origin,omitempty"`
-	BaselineVerdict string                    `yaml:"baseline_verdict,omitempty"`
-	Trajectory      []ScopeScenarioTrajectory `yaml:"trajectory,omitempty"`
-	PendingCurrent  int                       `yaml:"pending_steps_current,omitempty"`
-}
-
-// ScopeScenarioTrajectory records one iteration's verdict + pending delta.
-type ScopeScenarioTrajectory struct {
-	K                 int     `yaml:"k"`
-	Verdict           Verdict `yaml:"verdict"`
-	PendingStepsDelta int     `yaml:"pending_steps_delta,omitempty"`
+// ScopeStep is one still-unsolved scored step as the AI sees it.
+type ScopeStep struct {
+	ID              string `yaml:"id"`
+	Origin          string `yaml:"origin,omitempty"`
+	BaselineVerdict string `yaml:"baseline_verdict,omitempty"`
 }
 
 // renderScope builds the Scope that iteration k will see.
-func renderScope(opts HarnessOpts, layout RunLayout, k int, reportSoFar *FinalReport, unsolved []ScenarioCheckResult) *HarnessScope {
+func renderScope(opts HarnessOpts, layout RunLayout, k int, reportSoFar *FinalReport, unsolved []StepScore) *HarnessScope {
 	plateauCounter := computePlateauSoFar(reportSoFar)
 	attemptsLeft := opts.PlateauIteration - plateauCounter
 	if attemptsLeft < 0 {
@@ -1316,7 +1260,6 @@ func renderScope(opts HarnessOpts, layout RunLayout, k int, reportSoFar *FinalRe
 	s := &HarnessScope{
 		RunID:            layout.RunID,
 		Score:            opts.ScoreName,
-		Recipe:           append([]string(nil), opts.Recipe...),
 		Agent:            opts.AgentName,
 		Iteration:        k,
 		PlateauIteration: opts.PlateauIteration,
@@ -1333,17 +1276,16 @@ func renderScope(opts HarnessOpts, layout RunLayout, k int, reportSoFar *FinalRe
 			K:                   h.K,
 			Score:               h.Score,
 			ScoreDelta:          h.ScoreDelta,
-			SolvedIDs:           collectSolvedIDs(h.Scenario),
+			SolvedIDs:           collectSolvedIDs(h.Step),
 			Runtime:             h.RunnerDuration,
 			PlateauCounterAfter: h.PlateauCounterAfter,
 		})
 	}
 	for _, u := range unsolved {
-		s.Scenario = append(s.Scenario, ScopeScenario{
+		s.Step = append(s.Step, ScopeStep{
 			ID:              u.ID,
 			Origin:          u.Origin,
 			BaselineVerdict: u.Status,
-			PendingCurrent:  u.PendingSteps,
 		})
 	}
 	return s
@@ -1449,12 +1391,12 @@ func renderRunnerInvocation(opts HarnessOpts, substCtx *SubstContext, promptText
 	env["CHARLY_EVAL_AGENT"] = substCtx.AgentName
 	env["CHARLY_EVAL_TARGET_KIND"] = substCtx.TargetKind
 	env["CHARLY_EVAL_TARGET_NAME"] = substCtx.TargetName
-	// CHARLY_EVAL_PHASE is the 1-indexed phase number (0 when the score
+	// CHARLY_EVAL_PHASE is the 1-indexed phase number (0 when the run
 	// is single-pass / non-progressive). `charly check self-evaluate`
-	// uses this to resolve the in-scope recipes for the current phase
+	// uses this to resolve the in-scope steps for the current phase
 	// the same way the orchestrator's scorer does.
 	env["CHARLY_EVAL_PHASE"] = fmt.Sprintf("%d", substCtx.Phase)
-	if opts.Score != nil && opts.Score.NotesEnabled() {
+	if opts.Iterate != nil && opts.Iterate.NotesEnabled() {
 		harnessRoot := HarnessDataRoot(opts.ProjectDir, opts.ScoreName)
 		env["CHARLY_EVAL_NOTES_FILE"] = NotePathForRun(harnessRoot, substCtx.RunID)
 	}
@@ -1472,12 +1414,9 @@ func collectTagFingerprints(set *LabelDescriptionSet) map[string]string {
 	}
 	for _, sec := range [][]LabeledDescription{set.Candy, set.Box, set.Deploy} {
 		for _, ld := range sec {
-			for sIdx, scenario := range ld.Scenario {
-				expanded := ExpandScenario(scenario)
-				for _, es := range expanded {
-					id := ScenarioID(ld.Origin, sIdx, es.RowIndex)
-					out[id] = FingerprintTags(es.Tag)
-				}
+			for sIdx, step := range ld.Plan {
+				id := EffectiveStepID(&step, ld.Origin, sIdx)
+				out[id] = FingerprintTags(step.Op.Tag)
 			}
 		}
 	}
@@ -1488,14 +1427,12 @@ func collectTagFingerprints(set *LabelDescriptionSet) map[string]string {
 // Summary aggregation
 // ---------------------------------------------------------------------------
 
-func computeSummary(scenarios []ScenarioVerdict, total int) ReportSummary {
+func computeSummary(steps []StepVerdict, total int) ReportSummary {
 	s := ReportSummary{Input: total}
-	for _, v := range scenarios {
+	for _, v := range steps {
 		switch v.Verdict {
 		case VerdictSolved:
 			s.Solved++
-		case VerdictPartial:
-			s.Partial++
 		case VerdictUnchanged:
 			s.Unchanged++
 		case VerdictRegressed:

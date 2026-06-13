@@ -290,7 +290,7 @@ func resolveTabWS(devtoolsURL, tabID string) (string, error) {
 		return "", fmt.Errorf("parsing tab list: %w", err)
 	}
 
-	// Recipe authors and CLI users write `tab: "1"` (1-based human counting)
+	// Check authors and CLI users write `tab: "1"` (1-based human counting)
 	// to mean "the first page tab". Chrome assigns hex/UUID tab IDs that
 	// nobody can predict, so the numeric index path is the practical
 	// authoring contract. Falls through to UUID-match if the integer

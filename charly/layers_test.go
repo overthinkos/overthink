@@ -45,15 +45,17 @@ func TestCandyUnknownKeyRejected(t *testing.T) {
 		})
 	}
 
-	// The SINGULAR forms must parse cleanly AND populate their fields.
-	good := "name: t\ntask:\n  - command: echo hi\nvar:\n  FOO: bar\ncandy:\n  - supervisord\nsecret_accept:\n  - name: X\n"
+	// The SINGULAR forms must parse cleanly AND populate their fields. The
+	// operational list is now `plan:` (the former `task:` key is retired — install
+	// ops are `run:` steps in the unified plan).
+	good := "name: t\nplan:\n  - run: install\n    command: echo hi\nvar:\n  FOO: bar\ncandy:\n  - supervisord\nsecret_accept:\n  - name: X\n"
 	var ly CandyYAML
 	if err := yaml.Unmarshal([]byte(good), &ly); err != nil {
 		t.Fatalf("singular keys must parse, got error: %v", err)
 	}
-	if len(ly.Task) != 1 || ly.Vars["FOO"] != "bar" || len(ly.Candy) != 1 || len(ly.SecretAccept) != 1 {
-		t.Errorf("singular keys parsed but fields empty: task=%d var=%v candy=%v secret_accept=%d",
-			len(ly.Task), ly.Vars, ly.Candy, len(ly.SecretAccept))
+	if len(ly.Plan) != 1 || ly.Vars["FOO"] != "bar" || len(ly.Candy) != 1 || len(ly.SecretAccept) != 1 {
+		t.Errorf("singular keys parsed but fields empty: plan=%d var=%v candy=%v secret_accept=%d",
+			len(ly.Plan), ly.Vars, ly.Candy, len(ly.SecretAccept))
 	}
 
 	// Packages live ONLY under the `distro:` map — a top-level distro-tag key
@@ -487,7 +489,7 @@ func TestCandyPortRelay(t *testing.T) {
 	// Test direct struct construction (no testdata file needed)
 	layer := &Candy{
 		Name:           "chrome",
-		tasks:          []Op{{Command: "true"}},
+		plan:           []Step{{Run: "build", Op: Op{Command: "true"}}},
 		PortRelayPorts: []int{9222},
 		ports:          []string{"9222"},
 		portSpecs:      []PortSpec{{Port: 9222, Protocol: "http"}},
@@ -504,8 +506,8 @@ func TestCandyPortRelay(t *testing.T) {
 
 func TestCandyPortRelayNone(t *testing.T) {
 	layer := &Candy{
-		Name:  "basic",
-		tasks: []Op{{Command: "true"}},
+		Name: "basic",
+		plan: []Step{{Run: "build", Op: Op{Command: "true"}}},
 	}
 
 	if len(layer.PortRelayPorts) != 0 {
@@ -516,7 +518,7 @@ func TestCandyPortRelayNone(t *testing.T) {
 func TestCandyPortRelayMultiple(t *testing.T) {
 	layer := &Candy{
 		Name:           "multi",
-		tasks:          []Op{{Command: "true"}},
+		plan:           []Step{{Run: "build", Op: Op{Command: "true"}}},
 		PortRelayPorts: []int{9222, 5900},
 		ports:          []string{"9222", "5900"},
 		portSpecs:      []PortSpec{{Port: 9222, Protocol: "http"}, {Port: 5900, Protocol: "tcp"}},

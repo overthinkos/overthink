@@ -54,7 +54,7 @@ type CheckResult struct {
 	TotalElapsed time.Duration `json:"total_elapsed,omitempty"`
 
 	// CapturedValue is the value stashed under `capture:` for consumption
-	// by downstream steps in the same scenario. Empty when Capture was
+	// by downstream steps in the same plan run. Empty when Capture was
 	// unset or the check did not pass (captures are recorded only on
 	// final PASS — failing `eventually:` attempts don't pollute).
 	CapturedValue string `json:"captured_value,omitempty"`
@@ -118,40 +118,28 @@ type Runner struct {
 	// cwd-relative (existing behaviour, no regression).
 	CandyDirs map[string]string
 
-	// Scenario carries the BDD scenario context when the runner is
-	// driving a description: scenario (from description_run.go). Nil
-	// under classical `tests:` runs — captures/${SCENARIO_ID}/etc. stay
-	// absent and existing behavior is unchanged.
-	//
-	// Scenario is mutated by description_run.go between steps (assigning
-	// CurrentStepID; updating Captures on PASS). Runner.runOne reads it
-	// to overlay ${CAPTURED:name}, ${SCENARIO_ID}, ${STEP_ID} into the
-	// variable-expansion env.
+	// VerifyOnly, when true, restricts a RunPlan walk to the idempotent
+	// verification steps (check:/agent-check:) and SKIPS mutating steps
+	// (run:/agent-run:). This is the `charly check live` / `charly check box`
+	// mode — verify a running/disposable target without re-provisioning.
+	// False (the default) runs every step in order (provision-and-verify).
+	VerifyOnly bool
+
+	// Scenario carries the per-run capture/var context when the runner is
+	// driving a plan: (from description_run.go). Nil under classical bare-Op
+	// runs — captures/${STEP_ID}/etc. stay absent and behaviour is unchanged.
 	Scenario *ScenarioContext
 
-	// Grader, when set, judges a prose-only (pending) scenario step —
-	// one whose Given/When/Then carries no embedded Check verb — instead
-	// of the default skip/--strict-fail. The agent grader (check_feature_grader.go)
-	// spawns the configured kind:agent CLI to probe the live target and
-	// return a pass/fail verdict with evidence. This is the Agent Driven
-	// Checkuation (ADE) binding: a step binds to a deterministic check by
-	// embedding a verb, or to an agent by leaving the step prose-only.
-	//
-	// Nil under classical `tests:` runs, `charly check recipe`, the harness
-	// loop, and `charly box feature run` (build-scope, no live target to
-	// probe) — those keep the existing skip/strict semantics unchanged.
-	// Set only by `charly check feature run <deployment>` against a running
-	// deployment the agent can reach. GraderFeature / GraderNarrative /
-	// GraderScenario carry the goal context into each Grade call; they
-	// are set per-description / per-scenario by RunScenarios alongside
-	// the Scenario swap above.
-	Grader          StepGrader
-	GraderFeature   string
-	GraderNarrative string
-	GraderScenario  string
+	// Grader, when set, judges an agent step (agent-run:/agent-check:) instead
+	// of the default skip/--strict-fail. The agent grader
+	// (check_feature_grader.go) spawns the configured kind:agent CLI to probe
+	// the live target and return a pass/fail verdict with evidence. Set only by
+	// `charly check feature run <deployment>` against a running deployment the
+	// agent can reach; nil elsewhere (agent steps then advisory-skip).
+	Grader StepGrader
 
 	// TargetResolver, when set, is called to obtain a (resolver, exec)
-	// pair for a given `on:` target name. Enables multi-target scenarios
+	// pair for a given `on:` target name. Enables multi-target plan runs
 	// (the `on:` step modifier). Classical `tests:` runs leave this nil
 	// and use the Runner's static Resolver+Exec pair throughout.
 	//
@@ -190,7 +178,7 @@ type Runner struct {
 	// SUBJECT deployment over the shared `charly` network or the host. Overlaid by
 	// effectiveEnv onto WHATEVER resolver is active (primary, on:-swapped, or a
 	// harness bucket), so cross-deployment addressing is identical across
-	// `charly check live`, kind:check beds, and recipes. Nil under classical runs
+	// `charly check live`, kind:check beds, and AI-iteration runs. Nil under classical runs
 	// with no ${PEER_*} refs (no overlay, behaviour unchanged).
 	PeerVars map[string]string
 	// peerCleanups tears down anything opened while resolving PeerVars (an
@@ -314,9 +302,7 @@ func (r *Runner) runOne(ctx context.Context, c *Op) CheckResult {
 	if r.Mode == RunModeBox {
 		wantCtx, modeName = CtxBuild, "box"
 	}
-	// do:instruct (the agent verb) is exempt — it routes to the grader, which
-	// itself advisory-skips when no grader is bound.
-	if c.EffectiveDo() != DoInstruct && !c.InContext(wantCtx) {
+	if !c.InContext(wantCtx) {
 		result.Status = TestSkip
 		result.Message = fmt.Sprintf("context %v not active in %s mode", c.EffectiveContexts(), modeName)
 		result.Elapsed = time.Since(start)
@@ -332,9 +318,9 @@ func (r *Runner) runOne(ctx context.Context, c *Op) CheckResult {
 	// 2026-05: also swap r.Image so cdp/wl/vnc/mcp/etc dispatch
 	// (runCharlyVerb at checkrun_ov_verbs.go:709 reads r.Image to build
 	// `charly check <verb> <method> <image> ...` argv) routes against the
-	// on-named pod, not the scenario's default pod. Without this swap,
+	// on-named pod, not the plan run's default pod. Without this swap,
 	// `cdp: open` with `on: sway-browser-vnc-concurrency-test` was
-	// silently dispatched against the scenario's jupyter pod and
+	// silently dispatched against the plan run's jupyter pod and
 	// failed at unknown-image.
 	origExec, origResolver, origImage := r.Exec, r.Resolver, r.Box
 	if c.On != "" && r.TargetResolver != nil {
@@ -393,14 +379,12 @@ func (r *Runner) runOne(ctx context.Context, c *Op) CheckResult {
 	// Verb dispatch, wrapped in the `eventually:` retry when requested.
 	dispatch := func() CheckResult {
 		var dr CheckResult
-		// do-mode branch: instruct → agent grader; act on a state-provision
-		// verb → execute the create/configure. Action verbs (command/http/
-		// dbus/cdp/…) act in their own handler, so do:act there falls through
-		// to the assert dispatch below (the handler IS the act).
-		switch expanded.EffectiveDo() {
-		case DoInstruct:
-			return r.gradeInstruct(ctx, &expanded)
-		case DoAct:
+		// do-mode branch: act on a state-provision verb → execute the
+		// create/configure. Action verbs (command/http/dbus/cdp/…) act in their
+		// own handler, so do:act there falls through to the assert dispatch
+		// below (the handler IS the act). Agent steps never reach runOne —
+		// they route to the grader in runUnit (description_run.go).
+		if expanded.EffectiveDo() == DoAct {
 			if act, ok := r.runProvisionAct(ctx, &expanded, kind); ok {
 				return act
 			}
@@ -508,8 +492,8 @@ func (r *Runner) runOne(ctx context.Context, c *Op) CheckResult {
 }
 
 // effectiveEnv builds the variable-expansion env map for the current
-// check. When a ScenarioContext is attached, captures + SCENARIO_ID +
-// STEP_ID are overlaid on top of the resolver's base env — keeping
+// check. When a ScenarioContext is attached, captures + STEP_ID are
+// overlaid on top of the resolver's base env — keeping
 // classical tests: behaviour unchanged (nil Scenario → no overlay).
 func (r *Runner) effectiveEnv() map[string]string {
 	var base map[string]string
@@ -520,8 +504,8 @@ func (r *Runner) effectiveEnv() map[string]string {
 		return base
 	}
 	// Copy-on-overlay so the resolver's shared Env map stays clean across
-	// scenarios. Cross-deployment ${PEER_*} addresses overlay first (they are
-	// per-run, target-independent), then scenario captures (which win on the
+	// plan runs. Cross-deployment ${PEER_*} addresses overlay first (they are
+	// per-run, target-independent), then plan-run captures (which win on the
 	// rare key collision).
 	capN := 0
 	if r.Scenario != nil {
@@ -740,7 +724,7 @@ func (r *Runner) dialPort(c *Op) CheckResult {
 // ${CAPTURED:<name>} carrying a prior `command:` step's
 // "backgrounded pid=N" message via capture_extract), and sends a
 // signal — SIGTERM by default, SIGKILL when c.Signal == "KILL". The
-// counterpart to `command: ... background: true`: a scenario can
+// counterpart to `command: ... background: true`: a plan can
 // spawn a writer, capture its PID, kill it mid-stream, and assert
 // post-state consistency.
 //
@@ -781,7 +765,7 @@ func (r *Runner) runKill(ctx context.Context, c *Op) CheckResult {
 
 // Background mode: when c.Background is true, the host-side command is
 // spawned via cmd.Start() (no Wait); the PID is registered with the
-// scenario context for SIGTERM-reap at scenario teardown. Background
+// plan-run context for SIGTERM-reap at plan teardown. Background
 // mode is host-side only — in-container backgrounding is the user's
 // responsibility (use `setsid nohup ... &` inside the bash given to
 // the container shell).
@@ -809,7 +793,7 @@ func (r *Runner) runCommand(ctx context.Context, c *Op) CheckResult {
 		inContainer = false
 	}
 
-	// Background path — host-side only, fire-and-forget. Scenario teardown
+	// Background path — host-side only, fire-and-forget. Plan teardown
 	// reaps via SIGTERM. Returns immediately with PASS.
 	if c.Background {
 		if inContainer {
@@ -828,7 +812,7 @@ func (r *Runner) runCommand(ctx context.Context, c *Op) CheckResult {
 		// Reap asynchronously so `kill:` SIGKILL doesn't leave the
 		// process as a zombie (which `kill -0 PID` would still report
 		// as alive). Wait blocks until the process actually exits;
-		// either teardown's SIGTERM or an in-scenario kill: SIGKILL
+		// either teardown's SIGTERM or an in-plan kill: SIGKILL
 		// will trigger that exit, after which Wait clears the zombie.
 		go func() { _ = cmd.Wait() }()
 		return passf(c, fmt.Sprintf("backgrounded pid=%d", cmd.Process.Pid))

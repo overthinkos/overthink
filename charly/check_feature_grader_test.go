@@ -109,7 +109,7 @@ func TestAgentGrader_UnparseableIsFail(t *testing.T) {
 	}
 }
 
-// --- grader dispatch through RunScenarios --------------------------------
+// --- grader dispatch through RunPlan -------------------------------------
 
 type stubGrader struct {
 	pass    bool
@@ -127,85 +127,79 @@ func (g *stubGrader) Grade(_ context.Context, req GraderRequest) CheckResult {
 	return CheckResult{Status: st, Verb: "agent", Message: "stub"}
 }
 
-func proseScenarioSet() *LabelDescriptionSet {
+// proseAgentSet returns a label set whose single candy plan has one prose-only
+// agent-check: step (no Op verb) — the grader-dispatch path.
+func proseAgentSet() *LabelDescriptionSet {
 	return &LabelDescriptionSet{
 		Candy: []LabeledDescription{{
-			Origin: "candy:x",
-			Description: Description{
-				Feature:   "the gizmo works",
-				Narrative: "as an operator...",
-			},
-			Scenario: []Scenario{{
-				Name: "gizmo-prose",
-				Step: []Step{{Then: "the gizmo responds"}},
-			}},
+			Origin:      "candy:x",
+			Description: "the gizmo works",
+			Plan:        []Step{{AgentCheck: "the gizmo responds"}},
 		}},
 	}
 }
 
-func TestRunScenarios_GraderDispatchPass(t *testing.T) {
+func TestRunPlan_GraderDispatchPass(t *testing.T) {
 	g := &stubGrader{pass: true}
 	r := NewRunner(nil, nil, RunModeLive)
 	r.Grader = g
-	res := RunScenarios(context.Background(), r, proseScenarioSet(), nil, false)
-	if len(res) != 1 || res[0].Status != TestPass {
-		t.Fatalf("graded scenario should pass, got %+v", res)
+	res := RunPlan(context.Background(), r, proseAgentSet(), nil, false)
+	if len(res) != 1 || res[0].Result.Status != TestPass {
+		t.Fatalf("graded agent step should pass, got %+v", res)
 	}
 	if g.calls != 1 {
 		t.Fatalf("grader called %d times, want 1", g.calls)
 	}
-	// Goal + scenario context threaded into the grader.
-	if g.lastReq.Feature != "the gizmo works" || g.lastReq.Scenario != "gizmo-prose" || g.lastReq.Text != "the gizmo responds" {
+	// Goal (entity description) + step context threaded into the grader.
+	if g.lastReq.Description != "the gizmo works" || g.lastReq.Keyword != string(KwAgentCheck) || g.lastReq.Text != "the gizmo responds" {
 		t.Fatalf("grader request context not threaded: %+v", g.lastReq)
 	}
 }
 
-func TestRunScenarios_GraderDispatchFail(t *testing.T) {
+func TestRunPlan_GraderDispatchFail(t *testing.T) {
 	r := NewRunner(nil, nil, RunModeLive)
 	r.Grader = &stubGrader{pass: false}
-	res := RunScenarios(context.Background(), r, proseScenarioSet(), nil, false)
-	if len(res) != 1 || res[0].Status != TestFail {
-		t.Fatalf("a failing grader must fail the scenario, got %+v", res)
+	res := RunPlan(context.Background(), r, proseAgentSet(), nil, false)
+	if len(res) != 1 || res[0].Result.Status != TestFail {
+		t.Fatalf("a failing grader must fail the agent step, got %+v", res)
 	}
 }
 
-func TestRunScenarios_NoGrader_ProseSkips(t *testing.T) {
+func TestRunPlan_NoGrader_ProseSkips(t *testing.T) {
 	r := NewRunner(nil, nil, RunModeLive) // no grader
-	res := RunScenarios(context.Background(), r, proseScenarioSet(), nil, false)
+	res := RunPlan(context.Background(), r, proseAgentSet(), nil, false)
 	if len(res) != 1 {
-		t.Fatalf("want 1 scenario, got %d", len(res))
+		t.Fatalf("want 1 step result, got %d", len(res))
 	}
-	if res[0].Status == TestFail {
-		t.Fatalf("prose step without a grader must NOT fail (advisory skip), got %v", res[0].Status)
+	if res[0].Result.Status == TestFail {
+		t.Fatalf("a prose agent step without a grader must NOT fail (advisory skip), got %v", res[0].Result.Status)
 	}
-	if res[0].Pending != 1 {
-		t.Fatalf("prose step without a grader should be pending=1, got %d", res[0].Pending)
+	if res[0].Result.Status != TestSkip {
+		t.Fatalf("a prose agent step without a grader should skip, got %v", res[0].Result.Status)
 	}
 }
 
-// --- scenarioFailCount ---------------------------------------------------
+// --- stepFailCount -------------------------------------------------------
 
-func TestScenarioFailCount(t *testing.T) {
-	in := []ScenarioResult{
-		{Status: TestPass}, {Status: TestFail}, {Status: TestSkip}, {Status: TestFail},
+func TestStepFailCount(t *testing.T) {
+	in := []StepResult{
+		{Result: CheckResult{Status: TestPass}},
+		{Result: CheckResult{Status: TestFail}},
+		{Result: CheckResult{Status: TestSkip}},
+		{Result: CheckResult{Status: TestFail}},
 	}
-	if got := scenarioFailCount(in); got != 2 {
-		t.Fatalf("scenarioFailCount = %d, want 2", got)
+	if got := stepFailCount(in); got != 2 {
+		t.Fatalf("stepFailCount = %d, want 2", got)
 	}
 }
 
 // --- buildGraderPrompt ---------------------------------------------------
 
-// TestBuildGraderPrompt_PillarName is the check-coverage gate for the pillar
-// rename: the grader's system prompt names the pillar, and it must read
-// "Agent Driven Checkuation" — never the retired "Agent Driven Development".
-// This assertion FAILS on the pre-rename string and PASSES after.
+// TestBuildGraderPrompt_PillarName is the check-coverage gate for the grader
+// system prompt naming the ADE pillar ("Agent Driven Evaluation").
 func TestBuildGraderPrompt_PillarName(t *testing.T) {
-	prompt := buildGraderPrompt(GraderRequest{Keyword: "Then", Text: "the port answers"}, "check-pod", "")
-	if !strings.Contains(prompt, "Agent Driven Checkuation") {
-		t.Fatalf("grader prompt must name the pillar 'Agent Driven Checkuation'; got:\n%s", prompt)
-	}
-	if strings.Contains(prompt, "Agent Driven Development") {
-		t.Fatalf("grader prompt still names the retired pillar 'Agent Driven Development':\n%s", prompt)
+	prompt := buildGraderPrompt(GraderRequest{Keyword: "agent-check", Text: "the port answers"}, "check-pod", "")
+	if !strings.Contains(prompt, "Agent Driven Evaluation") {
+		t.Fatalf("grader prompt must name the pillar 'Agent Driven Evaluation'; got:\n%s", prompt)
 	}
 }

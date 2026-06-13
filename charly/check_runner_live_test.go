@@ -6,90 +6,33 @@ import (
 	"testing"
 )
 
-// TestFilterOutCyclic_RemovesMatchingKeysPreservesOrder verifies the
-// helper drops scenarios whose scenarioKey is in cyclicKeys, while
-// preserving the declaration order of the kept scenarios.
-func TestFilterOutCyclic_RemovesMatchingKeysPreservesOrder(t *testing.T) {
-	scs := []Scenario{
-		{Name: "a", SourceRecipe: "r1", Pod: "p"},
-		{Name: "b", SourceRecipe: "r1", Pod: "p"},
-		{Name: "c", SourceRecipe: "r1", Pod: "p"},
-		{Name: "d", SourceRecipe: "r2", Pod: "q"},
+// TestRunCheckLive_PureCycleEmitsFailVerdictsNoPropagation exercises the
+// depends_on cycle handling: with every scored step in a cycle, topoSortScored
+// returns an empty ordered set + the cyclic remainder, and RunCheckLive emits
+// one fail verdict per cyclic step (SkippedReason prefix "cycle:") instead of
+// erroring out. Plan-unify re-keys this from scenario- to step-level.
+func TestRunCheckLive_PureCycleEmitsFailVerdictsNoPropagation(t *testing.T) {
+	// a depends_on b, b depends_on a — pure cycle (id-keyed).
+	plan := []Step{
+		{Check: "a", Op: Op{ID: "a", Pod: "test-pod", DependsOn: []string{"b"}, File: "/a"}},
+		{Check: "b", Op: Op{ID: "b", Pod: "test-pod", DependsOn: []string{"a"}, File: "/b"}},
 	}
-	cyclicKeys := map[scenarioKey]bool{
-		{recipe: "r1", name: "b"}: true,
-		{recipe: "r2", name: "d"}: true,
-	}
-	got := filterOutCyclic(scs, cyclicKeys)
-	if len(got) != 2 {
-		t.Fatalf("want 2 scenarios kept, got %d", len(got))
-	}
-	if got[0].Name != "a" || got[1].Name != "c" {
-		t.Errorf("order not preserved: got %v", []string{got[0].Name, got[1].Name})
-	}
-}
-
-func TestFilterOutCyclic_EmptyCyclicReturnsInput(t *testing.T) {
-	scs := []Scenario{{Name: "a"}, {Name: "b"}}
-	got := filterOutCyclic(scs, nil)
-	if len(got) != 2 {
-		t.Errorf("empty cyclicKeys should pass-through; got %d scenarios", len(got))
-	}
-}
-
-func TestFilterOutCyclic_RecipeScopeMatters(t *testing.T) {
-	// Two scenarios share Name="x" but different SourceRecipe. Marking
-	// only r1's "x" as cyclic must not also drop r2's "x".
-	scs := []Scenario{
-		{Name: "x", SourceRecipe: "r1", Pod: "p"},
-		{Name: "x", SourceRecipe: "r2", Pod: "q"},
-	}
-	cyclic := map[scenarioKey]bool{{recipe: "r1", name: "x"}: true}
-	got := filterOutCyclic(scs, cyclic)
-	if len(got) != 1 || got[0].SourceRecipe != "r2" {
-		t.Errorf("recipe-scoped filter failed: kept %v", scenarioKeysOf(got))
-	}
-}
-
-func scenarioKeysOf(scs []Scenario) []scenarioKey {
-	out := make([]scenarioKey, len(scs))
-	for i, sc := range scs {
-		out[i] = keyOf(sc)
-	}
-	return out
-}
-
-// TestRunRecipeScenariosLive_PureCycleEmitsFailVerdictsNoPropagation
-// exercises the post-Fix-D behavior where a *CycleError no longer
-// wipes the entire phase. With every scenario in a cycle, the
-// non-cyclic subset is empty (no podman exec needed), so the
-// function returns a CheckRunResults whose Scenario slice contains
-// one fail verdict per cyclic scenario with SkippedReason starting
-// with "cycle:".
-func TestRunRecipeScenariosLive_PureCycleEmitsFailVerdictsNoPropagation(t *testing.T) {
-	// A → B, B → A. Pure cycle.
-	scenarios := []Scenario{
-		{Name: "a", Pod: "test-pod", SourceRecipe: "r1", DependsOn: []string{"b"},
-			Step: []Step{{Then: "x", Op: Op{File: "/a"}}}},
-		{Name: "b", Pod: "test-pod", SourceRecipe: "r1", DependsOn: []string{"a"},
-			Step: []Step{{Then: "y", Op: Op{File: "/b"}}}},
-	}
-	res, err := RunCheckLive(context.Background(), "", "test-score", scenarios, RunScoringOpts{})
+	res, err := RunCheckLive(context.Background(), "", "test-score", plan, RunScoringOpts{})
 	if err != nil {
-		t.Fatalf("CycleError must NOT propagate per Fix D — got error: %v", err)
+		t.Fatalf("a depends_on cycle must NOT propagate as an error — got: %v", err)
 	}
 	if res == nil {
-		t.Fatalf("expected non-nil CheckRunResults even on pure cycle")
+		t.Fatalf("expected non-nil CheckRunResults even on a pure cycle")
 	}
-	if len(res.Scenario) != 2 {
-		t.Fatalf("Section-5 invariant: 2 cyclic scenarios → 2 fail verdicts, got %d", len(res.Scenario))
+	if len(res.Step) != 2 {
+		t.Fatalf("2 cyclic steps → 2 fail verdicts, got %d", len(res.Step))
 	}
-	for _, sc := range res.Scenario {
+	for _, sc := range res.Step {
 		if sc.Status != "fail" {
-			t.Errorf("scenario %q: status = %q, want fail", sc.Name, sc.Status)
+			t.Errorf("step %q: status = %q, want fail", sc.ID, sc.Status)
 		}
 		if !strings.HasPrefix(sc.SkippedReason, "cycle:") {
-			t.Errorf("scenario %q: SkippedReason = %q, want prefix 'cycle:'", sc.Name, sc.SkippedReason)
+			t.Errorf("step %q: SkippedReason = %q, want prefix 'cycle:'", sc.ID, sc.SkippedReason)
 		}
 	}
 	if res.Summary.Fail != 2 || res.Summary.Total != 2 {
@@ -97,14 +40,14 @@ func TestRunRecipeScenariosLive_PureCycleEmitsFailVerdictsNoPropagation(t *testi
 	}
 }
 
-// TestRunRecipeScenariosLive_NonCycleEmptyInputReturnsEarly is a
-// regression on the empty-input fast path.
-func TestRunRecipeScenariosLive_NonCycleEmptyInputReturnsEarly(t *testing.T) {
+// TestRunCheckLive_EmptyInputReturnsEarly is a regression on the empty-plan
+// fast path.
+func TestRunCheckLive_EmptyInputReturnsEarly(t *testing.T) {
 	res, err := RunCheckLive(context.Background(), "", "test-score", nil, RunScoringOpts{})
 	if err != nil {
-		t.Fatalf("nil scenarios should not error: %v", err)
+		t.Fatalf("nil plan should not error: %v", err)
 	}
-	if res == nil || len(res.Scenario) != 0 {
-		t.Errorf("nil scenarios should yield empty result; got %v", res)
+	if res == nil || len(res.Step) != 0 {
+		t.Errorf("nil plan should yield empty result; got %v", res)
 	}
 }

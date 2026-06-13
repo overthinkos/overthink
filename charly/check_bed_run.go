@@ -533,9 +533,9 @@ func runCheckBed(exe, name string, node DeploymentNode, opts bedRunOpts) (*bedRu
 			return fail("check live %s: %w", name, err)
 		}
 
-		// Step 4b: Agent Driven Checkuation acceptance — run the bed image's baked
-		// Gherkin scenarios (`description.scenario`) as acceptance tests. This is
-		// the opt-in scenario gate: a no-op PASS when the image bakes no scenarios,
+		// Step 4b: Agent Driven Evaluation acceptance — run the bed image's baked
+		// `plan:` steps as acceptance tests. This is
+		// the opt-in plan gate: a no-op PASS when the image bakes no plan steps,
 		// real coverage when it does. At check_level: noagent it runs --no-agent
 		// (deterministic, free); at check_level: agent the prose-step agent grader
 		// runs too (featureRunArgs drops --no-agent). Pod beds only: VM/local
@@ -582,9 +582,9 @@ func runCheckBed(exe, name string, node DeploymentNode, opts bedRunOpts) (*bedRu
 				return fail("check live (fresh rebuild) %s: %w", name, err)
 			}
 		}
-		// Re-run the bed image's baked scenarios on the fresh rebuild (pod
+		// Re-run the bed image's baked plan steps on the fresh rebuild (pod
 		// beds) — the ADE acceptance gate against the new image, at the box's
-		// check_level depth. No-op pass when the image bakes no scenarios.
+		// check_level depth. No-op pass when the image bakes no plan steps.
 		if runRuntimeCheck && !isVM && !isLocal && image != "" {
 			waitForContainerReady(name, 30*time.Second)
 			if err := step("feature-run-rebuild", featureRunArgs()); err != nil {

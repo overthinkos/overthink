@@ -6,45 +6,22 @@ import (
 	"strings"
 )
 
-// checkrun_act.go — the runtime do:act + do:instruct execution paths.
+// checkrun_act.go — the runtime do:act execution path.
 //
-// runOne dispatches by the op's resolved do-mode (Op.EffectiveDo):
+// runOne dispatches by the op's resolved do-mode (Op.EffectiveDo, stamped from
+// the enclosing Step keyword):
 //
-//   - do: assert  → the run<Verb> probe handlers (the default; unchanged).
-//   - do: act     → for a STATE-PROVISION verb (file/package/service/user/
-//                   group/kernel-param/mount) render the create/configure
+//   - do: assert (check:) → the run<Verb> probe handlers (the default).
+//   - do: act    (run:)   → for a STATE-PROVISION verb (file/package/service/
+//                   user/group/kernel-param/mount) render the create/configure
 //                   command and run it via the executor. ACTION verbs
 //                   (command/http/dbus/cdp/wl/vnc/mcp/k8s/adb/appium/spice/
 //                   libvirt/record/kill) already perform their side-effect in
 //                   their own handler, so do:act there reuses that handler.
-//   - do: instruct → hand the free-form text to the agent grader.
 //
-// Runtime act ops are NOT auto-reversed (no ledger entry) — the author reverses
-// them with a scenario `teardown:` step (CLAUDE.md / the plan: "live-verb
-// do:act … reversed via scenario teardown, never the ledger").
-
-// gradeInstruct routes a do:instruct op (the `agent:` verb, or any op marked
-// do: instruct) to the agent grader. With no grader bound it is an advisory
-// skip — mirroring a prose-only step under `--no-agent`.
-func (r *Runner) gradeInstruct(ctx context.Context, c *Op) CheckResult {
-	text := c.Agent
-	if text == "" {
-		// A non-agent verb marked do:instruct: fall back to the command/file
-		// path text so the grader still has something to act on.
-		text = firstNonEmpty(c.Command, c.File, c.HTTP)
-	}
-	if r.Grader == nil {
-		return skipf(c, "instruct: no agent grader bound (advisory; run without --no-agent to grade)")
-	}
-	res := r.Grader.Grade(ctx, GraderRequest{
-		Feature:   r.GraderFeature,
-		Narrative: r.GraderNarrative,
-		Scenario:  r.GraderScenario,
-		Text:      text,
-	})
-	res.Op = c
-	return res
-}
+// Agent steps (agent-run:/agent-check:) never reach runOne — they route to the
+// grader in runUnit (description_run.go). Runtime act ops are NOT auto-reversed
+// (no ledger entry) — the author reverses them with a teardown run: step.
 
 // runProvisionAct executes a state-provision verb's create/configure command
 // and reports pass on a zero exit. Returns ok=false when the verb has no

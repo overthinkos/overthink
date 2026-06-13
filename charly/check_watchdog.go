@@ -13,7 +13,7 @@ package main
 //   1. Every CheckInterval (default 5 min), Run probes the live
 //      deployments via the supplied Prober. The prober returns the
 //      current (score, total) snapshot — typically by calling
-//      RunCheckLive against the iter's in-scope scenarios.
+//      RunCheckLive against the iter's in-scope plan steps.
 //   2. OnTick fires after every probe with the current observation
 //      (host-side stderr logging, NOT into any AI-visible surface).
 //   3. If the score has not increased in NoImprovementTimeout (default
@@ -23,7 +23,7 @@ package main
 //
 // The watchdog is HIDDEN from the AI by construction:
 //   - Runs in the harness Go process, not in any tool the AI invokes.
-//   - Adds no token to the prompt, no field to ${SCENARIOS}/${RECIPES},
+//   - Adds no token to the prompt, no field to ${PLAN}/${CHECKS},
 //     no entry in `charly check scope`, no log line in NOTES.md.
 //   - The AI's view of the iteration is unchanged from before Round 3.
 //
@@ -39,7 +39,7 @@ import (
 
 // Prober is the function signature the watchdog uses to sample the
 // current score. Concrete implementations call RunCheckLive
-// against the iter's scenarios; tests pass a fake.
+// against the iter's plan steps; tests pass a fake.
 //
 // Returns (score, total, err). On err, Run logs the error via
 // OnTickError (or skips the tick) but does NOT count it as
@@ -126,7 +126,7 @@ func (w *ProgressWatchdog) Run(ctx context.Context) {
 			// is technically true (0 > -1) but semantically wrong; the
 			// score has not improved, the watchdog has just observed
 			// the baseline. Same trap fires when a phase boundary
-			// preserves passing scenarios from earlier phases: the
+			// preserves passing steps from earlier phases: the
 			// first probe of the new phase sees a non-zero score that
 			// reflects PRIOR work, not improvement during this iter.
 			// Treating the first probe as baseline-only fixes both.

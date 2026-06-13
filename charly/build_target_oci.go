@@ -322,13 +322,9 @@ func (t *OCITarget) emitOp(s *OpStep) error {
 		return fmt.Errorf("task emit: candy %q not found", s.CandyName)
 	}
 
-	// Temporarily swap layer.tasks to just this one task so emitTasks
-	// renders only it. Restore on exit.
-	saved := layer.tasks
-	layer.tasks = []Op{*s.Op}
-	defer func() { layer.tasks = saved }()
-
-	_, err := t.Generator.emitTasks(&t.buf, layer, t.Box, t.BuildDir, t.ContextRelPrefix, "0")
+	// Render just this one op (the OpStep the compiler produced from a plan
+	// run: step) via the shared emitter.
+	_, err := t.Generator.emitTasks(&t.buf, layer, t.Box, []Op{*s.Op}, t.BuildDir, t.ContextRelPrefix, "0")
 	return err
 }
 

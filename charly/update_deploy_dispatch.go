@@ -180,7 +180,7 @@ var quadletImageLineRe = regexp.MustCompile(`(?m)^Image=.*$`)
 // contains no Image= directive (caller decides whether to fall back).
 // Used by updateAllDeployedQuadlets to preserve the operator-chosen
 // image ref across cross-deploy quadlet refreshes — see the bug-fix
-// note in that function for the cross-pollution scenario the bare
+// note in that function for the cross-pollution case the bare
 // resolveShellImageRef lookup falls victim to when a sibling deploy's
 // alias tag has been re-tagged onto the base image.
 func extractQuadletImageLine(path string) (string, error) {

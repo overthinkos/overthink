@@ -1,16 +1,14 @@
 candy:
     version: 2026.144.1443
     name: cloud-init
-    description:
-        feature: Cloud-init NoCloud provisioning for first-boot VM/cloud instance bootstrap.
-        narrative: |
-            Installs cloud-init and the growpart partition-resize utility, then
-            pins the datasource to NoCloud via a drop-in at
-            /etc/cloud/cloud.cfg.d/99-nocloud.cfg so a bootc/VM guest reads its
-            seed ISO (user-data/meta-data) at first boot. The cloud-init binary,
-            the growpart binary, and the NoCloud drop-in are all baked into the
-            image and independently checkable.
-        tag: [working]
+    description: |
+        Cloud-init NoCloud provisioning for first-boot VM/cloud instance bootstrap.
+        Installs cloud-init and the growpart partition-resize utility, then
+        pins the datasource to NoCloud via a drop-in at
+        /etc/cloud/cloud.cfg.d/99-nocloud.cfg so a bootc/VM guest reads its
+        seed ISO (user-data/meta-data) at first boot. The cloud-init binary,
+        the growpart binary, and the NoCloud drop-in are all baked into the
+        image and independently checkable.
     require:
         - sshd
     package:
@@ -28,14 +26,6 @@ candy:
         ubuntu:
             package:
                 - cloud-guest-utils
-    task:
-        - mkdir: /etc/cloud/cloud.cfg.d
-          run_as: root
-        - write: /etc/cloud/cloud.cfg.d/99-nocloud.cfg
-          mode: "0644"
-          run_as: root
-          content: |
-            datasource_list: [ NoCloud, None ]
     service:
         - name: cloud-init-local
           use_packaged: cloud-init-local.service
@@ -53,55 +43,55 @@ candy:
           use_packaged: cloud-final.service
           enable: true
           scope: system
-    scenario:
-        - name: cloud-init-binary-installed
-          step:
-            - then: the cloud-init binary is present in the image
-              file: /usr/bin/cloud-init
-              exists: true
-            - then: cloud-init responds to --version with a version string
-              command: cloud-init --version 2>&1
-              exit_status: 0
-              stdout:
-                - matches: '[0-9]+\.[0-9]'
-        - name: nocloud-datasource-pinned
-          step:
-            - then: the NoCloud datasource drop-in is installed mode 0644
-              file: /etc/cloud/cloud.cfg.d/99-nocloud.cfg
-              exists: true
-              mode: "0644"
-            - then: the drop-in restricts the datasource list to NoCloud
-              file: /etc/cloud/cloud.cfg.d/99-nocloud.cfg
-              contains:
-                - contains: datasource_list
-                - contains: NoCloud
-        - name: growpart-utility-available
-          step:
-            - then: the growpart partition-resize utility is installed
-              file: /usr/bin/growpart
-              exists: true
-        - name: cloud-init-package
-          step:
-            - id: cloud-init-package
-              package: cloud-init
-              installed: true
-        - name: cloud-init-nocloud-datasource
-          step:
-            - id: cloud-init-nocloud-datasource
-              file: /etc/cloud/cloud.cfg.d/99-nocloud.cfg
-              exists: true
-              mode: "0644"
-              contains:
-                - contains: datasource_list
-                - contains: NoCloud
-                - contains: None
-        - name: cloud-init-growpart-package
-          step:
-            - id: cloud-init-growpart-package
-              package: cloud-utils-growpart
-              package_map:
-                arch: cloud-guest-utils
-                debian: cloud-guest-utils
-                ubuntu: cloud-guest-utils
-                fedora: cloud-utils-growpart
-              installed: true
+    plan:
+        - run: mkdir=/etc/cloud/cloud.cfg.d
+          mkdir: /etc/cloud/cloud.cfg.d
+          run_as: root
+        - run: write=/etc/cloud/cloud.cfg.d/99-nocloud.cfg
+          write: /etc/cloud/cloud.cfg.d/99-nocloud.cfg
+          mode: "0644"
+          run_as: root
+          content: |
+            datasource_list: [ NoCloud, None ]
+        - check: the cloud-init binary is present in the image
+          file: /usr/bin/cloud-init
+          exists: true
+        - check: cloud-init responds to --version with a version string
+          command: cloud-init --version 2>&1
+          exit_status: 0
+          stdout:
+            - matches: '[0-9]+\.[0-9]'
+        - check: the NoCloud datasource drop-in is installed mode 0644
+          file: /etc/cloud/cloud.cfg.d/99-nocloud.cfg
+          exists: true
+          mode: "0644"
+        - check: the drop-in restricts the datasource list to NoCloud
+          file: /etc/cloud/cloud.cfg.d/99-nocloud.cfg
+          contains:
+            - contains: datasource_list
+            - contains: NoCloud
+        - check: the growpart partition-resize utility is installed
+          file: /usr/bin/growpart
+          exists: true
+        - check: package=cloud-init
+          id: cloud-init-package
+          package: cloud-init
+          installed: true
+        - check: file=/etc/cloud/cloud.cfg.d/99-nocloud.cfg
+          id: cloud-init-nocloud-datasource
+          file: /etc/cloud/cloud.cfg.d/99-nocloud.cfg
+          exists: true
+          mode: "0644"
+          contains:
+            - contains: datasource_list
+            - contains: NoCloud
+            - contains: None
+        - check: package=cloud-utils-growpart
+          id: cloud-init-growpart-package
+          package: cloud-utils-growpart
+          package_map:
+            arch: cloud-guest-utils
+            debian: cloud-guest-utils
+            ubuntu: cloud-guest-utils
+            fedora: cloud-utils-growpart
+          installed: true

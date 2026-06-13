@@ -1,24 +1,18 @@
 candy:
     version: 2026.144.1443
     name: codex
-    description:
-        feature: Installs the OpenAI Codex CLI globally via npm so `codex` is on PATH.
-        narrative: |
-            The candy depends on nodejs and ships a package.json pinning
-            @openai/codex, which the build installs globally into
-            ~/.npm-global/bin. The result is verifiable: the codex binary exists at
-            that path and `codex --version` exits cleanly.
-        tag: [working]
+    description: |
+        Installs the OpenAI Codex CLI globally via npm so `codex` is on PATH.
+        The candy depends on nodejs and ships a package.json pinning
+        @openai/codex, which the build installs globally into
+        ~/.npm-global/bin. The result is verifiable: the codex binary exists at
+        that path and `codex --version` exits cleanly.
     require:
         - nodejs
-    scenario:
-        - name: cli-binary-installed
-          step:
-            - then: the codex binary is installed into the npm global bin directory
-              file: ${HOME}/.npm-global/bin/codex
-              exists: true
-        - name: cli-reports-version
-          step:
-            - then: running codex --version exits cleanly
-              command: ${HOME}/.npm-global/bin/codex --version
-              exit_status: 0
+    plan:
+        - check: the codex binary is installed into the npm global bin directory
+          file: ${HOME}/.npm-global/bin/codex
+          exists: true
+        - check: running codex --version exits cleanly
+          command: ${HOME}/.npm-global/bin/codex --version
+          exit_status: 0

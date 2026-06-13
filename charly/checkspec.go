@@ -54,13 +54,6 @@ type Op struct {
 	Setcap   string `yaml:"setcap,omitempty"   json:"setcap,omitempty"`   // file path for capability op
 	Build    string `yaml:"build,omitempty"    json:"build,omitempty"`    // builder selector ("all")
 
-	// Agent verb — free-form natural-language instruction handed to the AI
-	// grader (the former prose-only scenario step). DefaultDo is "instruct";
-	// legal only in the agent context (gated by check_level). The value is the
-	// instruction text; the grader agent itself is resolved via --agent / the
-	// sole configured agent: entry.
-	Agent string `yaml:"agent,omitempty" json:"agent,omitempty"`
-
 	// Test-mode live-container verbs — each is a method-name discriminator
 	// validated against the CLI's subcommand surface. Dispatched by runCdp/
 	// runWl/runDbus/runVnc/runMcp/runRecord/runSpice/runLibvirt in
@@ -83,7 +76,7 @@ type Op struct {
 	// ran with `background: true` and captured its "backgrounded pid=N"
 	// message). The kill: verb resolves this PID and sends a signal —
 	// SIGTERM by default, SIGKILL when Signal is "KILL". Companion to
-	// Background; the two together let scenarios spawn a writer, kill it
+	// Background; the two together let steps spawn a writer, kill it
 	// mid-stream, and assert post-state consistency.
 	Kill   string `yaml:"kill,omitempty"   json:"kill,omitempty"`
 	Signal string `yaml:"signal,omitempty" json:"signal,omitempty"` // "TERM" (default) or "KILL"
@@ -113,7 +106,7 @@ type Op struct {
 	// the underlying `charly check k8s raw` invocation passes --json so the
 	// full Kubernetes List object (with .kind, .apiVersion, .items[])
 	// is emitted instead of the default `<namespace>/<name>` per
-	// line. Recipe authors expecting `stdout: { contains: "kind" }`
+	// line. Check authors expecting `stdout: { contains: "kind" }`
 	// against the JSON document need this flag — the default
 	// names-only list is back-compat-preserved.
 	JSON bool `yaml:"json,omitempty" json:"json,omitempty"`
@@ -126,10 +119,20 @@ type Op struct {
 	InContainer *bool  `yaml:"in_container,omitempty" json:"in_container,omitempty"`
 
 	// Unified operation axes.
-	//   Do:      "act" | "assert" | "instruct". Empty → VerbCatalog default.
-	//   Context: subset of {build, deploy, runtime, agent}. Empty → VerbCatalog default.
-	Do      string   `yaml:"do,omitempty"      json:"do,omitempty"`
-	Context []string `yaml:"context,omitempty" json:"context,omitempty"`
+	//   intentDo: act | assert | instruct — STAMPED by the enclosing Step's
+	//            keyword (run→act, check→assert, agent-*→instruct) at run/
+	//            collect time, never authored. The former authored `do:` axis
+	//            is RETIRED — the step keyword IS the do-mode.
+	//   Context: subset of {build, deploy, runtime}. Empty → VerbCatalog default.
+	intentDo DoMode   `yaml:"-"                 json:"-"`
+	Context  []string `yaml:"context,omitempty" json:"context,omitempty"`
+
+	// Pod targets the container a check/agent-check step probes (a per-step
+	// field). Empty → the run-level default target. DependsOn
+	// lists step ids this step depends on (topological ordering + cascade
+	// skip). Both are per-step fields carried on the inline Op.
+	Pod       string   `yaml:"pod,omitempty"        json:"pod,omitempty"`
+	DependsOn []string `yaml:"depends_on,omitempty" json:"depends_on,omitempty"`
 
 	// Install/build modifiers (formerly Task). Validity depends on verb.
 	//   RunAs:           user context for an act-mode op (root / ${USER} / name /
@@ -140,24 +143,24 @@ type Op struct {
 	To              string            `yaml:"to,omitempty"              json:"to,omitempty"`                // copy/download destination
 	Content         string            `yaml:"content,omitempty"         json:"content,omitempty"`           // write: inline body
 	Extract         string            `yaml:"extract,omitempty"         json:"extract,omitempty"`           // download: archive format
-	Include         []string          `yaml:"include,omitempty"         json:"include,omitempty"`           // download: extract filter
+	ExtractInclude  []string          `yaml:"extract_include,omitempty" json:"extract_include,omitempty"`   // download: extract filter (renamed from include: — that key is now the plan-composition Step.Include)
 	StripComponents int               `yaml:"strip_components,omitempty" json:"strip_components,omitempty"` // download: tar --strip-components
 	Uninstall       []string          `yaml:"uninstall,omitempty"       json:"uninstall,omitempty"`         // explicit reverse-target file list
 	Comment         string            `yaml:"comment,omitempty"         json:"comment,omitempty"`           // Containerfile comment
 	Cache           []string          `yaml:"cache,omitempty"           json:"cache,omitempty"`             // BuildKit cache-mount paths
 	Env             map[string]string `yaml:"env,omitempty"             json:"env,omitempty"`               // download: install-script env
 
-	// BDD-era modifiers (2026-04) — usable both in scenario Steps and in classical `tests:` entries.
+	// Step modifiers — usable both in plan Steps and in classical `tests:` entries.
 	//
 	//   Capture:       stash this check's produced output under <name>; downstream refs use ${CAPTURED:name}.
-	//                  Scoped per-scenario; reset between scenarios and between outline rows.
+	//                  Scoped per plan run; reset between runs.
 	//                  Capture is recorded ONLY on the final PASS (so Eventually retries don't pollute).
 	//   Eventually:    duration string; retry the check (verb + matchers) until pass or timeout.
 	//                  Composes with Timeout (per-attempt cap) — Eventually is the outer retry cap.
 	//   RetryInterval: spacing between retries; defaults to "1s"; must be ≤ Eventually.
-	//   On:            target-entity override for multi-target scenarios. Omit → use the scenario's default target.
+	//   On:            target-entity override for multi-target plan runs. Omit → use the run's default target.
 	//                  Each On dispatch resolves a target-specific VarResolver (HOST_PORT / CONTAINER_IP / …).
-	//   Tag: free-form label set for --tag filtering. Combined with the enclosing scenario's tags.
+	//   Tag: free-form label set for --tag filtering (per-step; no group inheritance).
 	Capture string `yaml:"capture,omitempty"        json:"capture,omitempty"`
 	// CaptureExtract: optional Go RE2 regex applied to the raw capture
 	// value before it lands in ScenarioContext.Captures. The first
@@ -175,14 +178,14 @@ type Op struct {
 	On             string   `yaml:"on,omitempty"             json:"on,omitempty"`
 	Tag            []string `yaml:"tag,omitempty"           json:"tag,omitempty"`
 
-	// Concurrency primitives (2026-05) — usable in scenario Steps to express
+	// Concurrency primitives (2026-05) — usable in plan Steps to express
 	// stress, race, and high-volume concurrency tests declaratively.
 	//
 	//   Parallel:   non-empty group id; consecutive steps with the same value
 	//               run concurrently as goroutines, awaited via WaitGroup
 	//               before the runner advances past the last step in the group.
 	//               Empty = sequential (current behavior). Validator: only
-	//               valid in Scenario.Steps (not Setup/Teardown/OnFail).
+	//               valid in plan Steps.
 	//   Count:      expand the step into N iterations. Each iteration receives
 	//               its own CheckResult with id="<orig>-<i>" and an INDEX
 	//               variable available via ${INDEX} (or ${IndexVar} if set).
@@ -191,7 +194,7 @@ type Op struct {
 	//   IndexVar:   override the default "INDEX" variable name when Count > 0.
 	//   Background: spawn a `command:` verb without waiting for it to exit.
 	//               PID is tracked in ScenarioContext.Backgrounds and reaped
-	//               at scenario teardown via SIGTERM. Only valid on command:.
+	//               at run teardown via SIGTERM. Only valid on command:.
 	Parallel   string `yaml:"parallel,omitempty"   json:"parallel,omitempty"`
 	Count      int    `yaml:"count,omitempty"      json:"count,omitempty"`
 	IndexVar   string `yaml:"index_var,omitempty"  json:"index_var,omitempty"`
@@ -368,7 +371,9 @@ type Op struct {
 
 // OpVerbs lists valid discriminator keys in stable order (used for
 // deterministic error messages). It is the union of the former Task install
-// verbs + Check probe/live/meta verbs + the agent verb.
+// verbs + Check probe/live/meta verbs. (The former free-form `agent:` verb is
+// retired — agent prose now lives in the agent-run:/agent-check: step keyword,
+// which carries no Op verb.)
 var OpVerbs = []string{
 	// install/build (imperative — DefaultDo act)
 	"mkdir", "copy", "write", "link", "download", "setcap", "build",
@@ -382,8 +387,6 @@ var OpVerbs = []string{
 	"adb", "appium",
 	// meta
 	"summarize", "kill",
-	// agent (free-form instruct)
-	"agent",
 }
 
 // Kind returns the check's verb name and an error if zero or multiple
@@ -405,7 +408,7 @@ func (c *Op) Kind() (string, error) {
 // record / spice / libvirt / k8s) is set, `command:` is interpreted as a
 // MODIFIER (e.g. the argv for `libvirt: guest/exec`), NOT a verb of its own.
 // Otherwise (no charly-verb set), `command:` is the verb discriminator selecting
-// `runCommand` to shell out via the executor. The recipe-author surface
+// `runCommand` to shell out via the executor. The check-author surface
 // stays:
 //
 //	command: "uname -s"      # alone → command verb
@@ -433,9 +436,6 @@ func (c *Op) verbsSet() []string {
 	}
 	if c.Build != "" {
 		set = append(set, "build")
-	}
-	if c.Agent != "" {
-		set = append(set, "agent")
 	}
 	if c.File != "" {
 		set = append(set, "file")
@@ -744,7 +744,7 @@ func (cl *ContainsList) UnmarshalYAML(node *yaml.Node) error {
 }
 
 // LabelDescriptionSet (labelset.go) is the three-section label set carrying an
-// image's baked scenarios; the LabelSet aggregate there wraps it.
+// image's baked plan steps; the LabelSet aggregate there wraps it.
 
 // ---------------------------------------------------------------------------
 // Variable expansion (extended grammar shared with tasks)
@@ -823,10 +823,9 @@ var runtimeOnlyVarPrefixes = []string{
 	"CONTAINER_NAME",
 	"INSTANCE",
 	"ENV_",
-	// BDD-era: capture store + scenario/step ids are populated only at scenario
+	// Capture store + step id are populated only at plan-run
 	// execution time, so they're effectively runtime-only.
 	"CAPTURED",
-	"SCENARIO_ID",
 	"STEP_ID",
 	// VM live-check intent: how many <hostdev> the VM's spec declares. Resolved
 	// only against a live VM deployment (check_cmd.go VM path), so a build-scope
@@ -909,7 +908,7 @@ func (c *Op) StringFields() []*string {
 		// Task surface). Content is INTENTIONALLY excluded — write: bodies are
 		// verbatim bytes, never ${VAR}-substituted (matches the task rule).
 		&c.Mkdir, &c.Copy, &c.Write, &c.Link, &c.Download, &c.Setcap, &c.Build,
-		&c.Agent, &c.RunAs, &c.To, &c.Extract,
+		&c.RunAs, &c.To, &c.Extract,
 	}
 }
 
@@ -950,7 +949,6 @@ const (
 	CtxBuild   ExecContext = "build"   // image construction (OCITarget → Containerfile)
 	CtxDeploy  ExecContext = "deploy"  // host/VM/pod provisioning (DeployExecutor)
 	CtxRuntime ExecContext = "runtime" // a running target (check Runner)
-	CtxAgent   ExecContext = "agent"   // an AI CLI driving the bed (do: instruct)
 )
 
 // DoMode is the act/assert/instruct axis. act = perform a side-effect;
@@ -968,7 +966,7 @@ const (
 // canonical default context. LowersTo names the InstallPlan step kind an
 // act-mode op of this verb lowers to ("" → a generic OpStep). Reversible marks
 // whether act-mode reversal is automatic (an auto ReverseOp); when false an
-// act-mode op needs an explicit `uninstall:` or is reversed via scenario
+// act-mode op needs an explicit `uninstall:` or is reversed via plan
 // teardown (live verbs) — enforced in validation.
 type VerbSpec struct {
 	Contexts   []ExecContext
@@ -1026,9 +1024,9 @@ var VerbCatalog = map[string]VerbSpec{
 	"dns":          {ctxDeployRuntime, DoAssert, false, ""},                          // observe-only
 	"interface":    {ctxRuntimeOnly, DoAssert, false, ""},                            // observe-only
 	"addr":         {ctxDeployRuntime, DoAssert, false, ""},                          // observe-only
-	"matching":     {[]ExecContext{CtxBuild, CtxDeploy, CtxRuntime, CtxAgent}, DoAssert, false, ""},
+	"matching":     {ctxBuildDeployRuntime, DoAssert, false, ""},
 
-	// live-container — runtime only; act drives UI/config, reversed via scenario
+	// live-container — runtime only; act drives UI/config, reversed via plan
 	// teardown (never the ledger). k8s also legal at deploy (apply manifest).
 	"cdp":     {ctxRuntimeOnly, DoAssert, false, ""},
 	"wl":      {ctxRuntimeOnly, DoAssert, false, ""},
@@ -1042,10 +1040,9 @@ var VerbCatalog = map[string]VerbSpec{
 	"adb":     {ctxRuntimeOnly, DoAssert, false, ""},
 	"appium":  {ctxRuntimeOnly, DoAssert, false, ""},
 
-	// meta + agent.
-	"summarize": {[]ExecContext{CtxRuntime, CtxAgent}, DoAssert, false, ""},
+	// meta.
+	"summarize": {ctxRuntimeOnly, DoAssert, false, ""},
 	"kill":      {ctxRuntimeOnly, DoAct, false, ""},
-	"agent":     {[]ExecContext{CtxAgent}, DoInstruct, false, ""},
 }
 
 // installVerbs are the verbs that render directly to a generic OpStep install
@@ -1066,12 +1063,13 @@ func ActsInBuildDeploy(verb string) bool {
 	return installVerbs[verb] || VerbCatalog[verb].LowersTo != ""
 }
 
-// EffectiveDo returns the op's resolved do-mode: an explicit Do wins, else the
-// verb's VerbCatalog default, else DoAssert.
+// EffectiveDo returns the op's resolved do-mode: the keyword-stamped intentDo
+// wins (set by the enclosing Step at run/collect time), else the verb's
+// VerbCatalog default, else DoAssert.
 func (c *Op) EffectiveDo() DoMode {
-	switch DoMode(c.Do) {
+	switch c.intentDo {
 	case DoAct, DoAssert, DoInstruct:
-		return DoMode(c.Do)
+		return c.intentDo
 	}
 	verb, err := c.Kind()
 	if err == nil {

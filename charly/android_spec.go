@@ -48,8 +48,8 @@ type AndroidSpec struct {
 	Device   string `yaml:"device,omitempty"`    // e.g. "pixel_9a"
 	ApiLevel int    `yaml:"api_level,omitempty"` // e.g. 36
 
-	// --- Target-specific acceptance scenarios (parity with K8sSpec) ---
-	Scenario []Scenario `yaml:"scenario,omitempty"`
+	// --- Target-specific plan steps (parity with K8sSpec) ---
+	Plan []Step `yaml:"plan,omitempty"`
 }
 
 // AndroidAdbEndpoint addresses a remote/physical device's adb server.

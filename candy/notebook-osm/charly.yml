@@ -5,36 +5,32 @@ candy:
         - src: data/notebooks
           volume: workspace
           dest: notebooks
-    description:
-        feature: "Standalone marimo notebook for the OSM analytics + vector tile pipeline"
-        narrative: |
-            Provisions a self-contained marimo notebook into
-            /workspace/notebooks/ at deploy time. The notebook
-            self-authors its own Airflow DAG (writing to AIRFLOW_DAGS_DIR
-            and triggering via the Airflow REST API), runs Polars GPU + CPU
-            analysis against the resulting GeoParquet, and renders a folium
-            map via martin's PMTiles (URL sourced from MARTIN_PUBLIC_URL so
-            the user's browser can reach the host port). Data-only layer —
-            no packages, no services, no baked DAGs.
-    scenario:
-        - name: OSM viz notebook lands in workspace/notebooks/
-          step:
-            - then: the notebooks subdirectory is provisioned in the workspace
-              file: ${VOLUME_CONTAINER_PATH:workspace}/notebooks
-              filetype: directory
-              context:
-                - runtime
-            - and: the osm-monaco-viz notebook is present
-              command: ls ${VOLUME_CONTAINER_PATH:workspace}/notebooks/
-              exit_status: 0
-              stdout:
-                - matches: "osm-monaco-viz"
-              context:
-                - runtime
-        - name: notebook-osm-viz-present
-          step:
-            - id: notebook-osm-viz-present
-              file: ${VOLUME_CONTAINER_PATH:workspace}/notebooks/osm-monaco-viz.py
-              exists: true
-              context:
-                - runtime
+    description: |
+        Standalone marimo notebook for the OSM analytics + vector tile pipeline
+        Provisions a self-contained marimo notebook into
+        /workspace/notebooks/ at deploy time. The notebook
+        self-authors its own Airflow DAG (writing to AIRFLOW_DAGS_DIR
+        and triggering via the Airflow REST API), runs Polars GPU + CPU
+        analysis against the resulting GeoParquet, and renders a folium
+        map via martin's PMTiles (URL sourced from MARTIN_PUBLIC_URL so
+        the user's browser can reach the host port). Data-only layer —
+        no packages, no services, no baked DAGs.
+    plan:
+        - check: the notebooks subdirectory is provisioned in the workspace
+          file: ${VOLUME_CONTAINER_PATH:workspace}/notebooks
+          filetype: directory
+          context:
+            - runtime
+        - check: the osm-monaco-viz notebook is present
+          command: ls ${VOLUME_CONTAINER_PATH:workspace}/notebooks/
+          exit_status: 0
+          stdout:
+            - matches: "osm-monaco-viz"
+          context:
+            - runtime
+        - check: file=${VOLUME_CONTAINER_PATH:workspace}/notebooks/osm-monaco-viz.py
+          id: notebook-osm-viz-present
+          file: ${VOLUME_CONTAINER_PATH:workspace}/notebooks/osm-monaco-viz.py
+          exists: true
+          context:
+            - runtime

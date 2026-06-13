@@ -11,9 +11,9 @@ import (
 // so that `charly check feature run <deployment>` and `charly box feature run
 // <image>` fit the existing test-command hierarchy.
 type FeatureCmd struct {
-	List     FeatureListCmd     `cmd:"list"     help:"Enumerate every kind: entity and the scenarios declared on its description: block"`
-	Pending  FeaturePendingCmd  `cmd:"pending"  help:"List steps with no bound Check (authoring gaps)"`
-	Validate FeatureValidateCmd `cmd:"validate" help:"Parse + binding consistency check for description: blocks (called by charly box validate)"`
+	List     FeatureListCmd     `cmd:"list"     help:"Enumerate every kind: entity and its plan: steps"`
+	Pending  FeaturePendingCmd  `cmd:"pending"  help:"List agent-graded plan steps (agent-run:/agent-check:)"`
+	Validate FeatureValidateCmd `cmd:"validate" help:"Parse + binding consistency check for plan: blocks (called by charly box validate)"`
 }
 
 // FeatureListCmd: `charly feature list [<kind>]`. Walks the resolved
@@ -44,51 +44,43 @@ func (c *FeatureListCmd) Run() error {
 			if layer == nil {
 				continue
 			}
-			summarizeDesc("candy", name, layer.Description, layer.scenario)
+			summarizeDesc("candy", name, layer.Description, layer.plan)
 		}
 	}
 	if filter == "" || filter == "box" {
 		for name, img := range cfg.Box {
-			if img.Description != nil || len(img.Scenario) > 0 {
-				summarizeDesc("box", name, img.Description, img.Scenario)
+			if img.Description != "" || len(img.Plan) > 0 {
+				summarizeDesc("box", name, img.Description, img.Plan)
 			}
 		}
 	}
 	return nil
 }
 
-func summarizeDesc(kind, name string, d *Description, scenarios []Scenario) {
-	if d == nil && len(scenarios) == 0 {
+func summarizeDesc(kind, name string, desc string, plan []Step) {
+	if desc == "" && len(plan) == 0 {
 		fmt.Printf("%s %s: (no description)\n", kind, name)
 		return
 	}
-	feature := "(empty)"
-	if d != nil && d.Feature != "" {
-		feature = d.Feature
+	summary := "(empty)"
+	if s := descriptionInfo(desc); s != "" {
+		summary = s
 	}
-	nScenarios := len(scenarios)
-	nSkeleton := 0
-	for _, sc := range scenarios {
-		for _, t := range sc.Tag {
-			if normalizeTag(t) == "skeleton" {
-				nSkeleton++
-				break
-			}
+	nChecks := 0
+	for _, st := range plan {
+		if st.Check != "" || st.AgentCheck != "" {
+			nChecks++
 		}
 	}
-	skel := ""
-	if nSkeleton > 0 {
-		skel = fmt.Sprintf(" [%d skeleton]", nSkeleton)
-	}
-	fmt.Printf("%s %s: %q (%d scenario%s%s)\n",
-		kind, name, feature, nScenarios, plural(nScenarios), skel)
+	fmt.Printf("%s %s: %q (%d step%s, %d check%s)\n",
+		kind, name, summary, len(plan), plural(len(plan)), nChecks, plural(nChecks))
 }
 
-// FeaturePendingCmd: `charly feature pending <entity>`. Lists steps with
-// no bound verb (pending) so authors see outstanding work.
+// FeaturePendingCmd: `charly feature pending <entity>`. Lists agent-graded
+// plan steps (the non-deterministic ones), so authors see what relies on an
+// agent grader rather than a deterministic check.
 type FeaturePendingCmd struct {
-	Entity   string `arg:"" optional:"" help:"Entity identifier (e.g. candy:redis); default: all"`
-	Skeleton bool   `long:"skeleton" help:"Also list scenarios tagged @skeleton (migration placeholders)"`
+	Entity string `arg:"" optional:"" help:"Entity identifier (e.g. candy:redis); default: all"`
 }
 
 // Run executes `charly feature pending`.
@@ -108,59 +100,35 @@ func (c *FeaturePendingCmd) Run() error {
 
 	filter := strings.ToLower(strings.TrimSpace(c.Entity))
 
-	scan := func(kind, name string, d *Description, scenarios []Scenario) {
-		if d == nil && len(scenarios) == 0 {
+	scan := func(kind, name string, desc string, plan []Step) {
+		if desc == "" && len(plan) == 0 {
 			return
 		}
 		eid := kind + ":" + name
 		if filter != "" && filter != eid && filter != kind {
 			return
 		}
-		for _, sc := range scenarios {
-			isSkel := false
-			for _, t := range sc.Tag {
-				if normalizeTag(t) == "skeleton" {
-					isSkel = true
-					break
-				}
-			}
-			if isSkel && !c.Skeleton {
-				continue
-			}
-			var pendingSteps []int
-			for i, step := range sc.Step {
-				if step.IsPending() {
-					pendingSteps = append(pendingSteps, i)
-				}
-			}
-			if isSkel || len(pendingSteps) > 0 {
-				tag := ""
-				if isSkel {
-					tag = " [@skeleton]"
-				}
-				fmt.Printf("%s — scenario %q%s\n", eid, sc.Name, tag)
-				for _, i := range pendingSteps {
-					step := sc.Step[i]
-					fmt.Printf("    step %d: %s %q — pending (no verb bound)\n", i, keywordOf(&step), step.KeywordText())
-				}
+		for i := range plan {
+			step := plan[i]
+			if step.IsAgent() {
+				fmt.Printf("%s — step %d: %s %q (agent-graded)\n", eid, i, keywordOf(&step), step.KeywordText())
 			}
 		}
 	}
 
 	for name, layer := range layers {
 		if layer != nil {
-			scan("candy", name, layer.Description, layer.scenario)
+			scan("candy", name, layer.Description, layer.plan)
 		}
 	}
 	for name, img := range cfg.Box {
-		scan("box", name, img.Description, img.Scenario)
+		scan("box", name, img.Description, img.Plan)
 	}
 	return nil
 }
 
 // FeatureValidateCmd: `charly feature validate [<entity>]`. Parses every
-// description: block and reports issues. Called automatically by
-// `charly box validate` as of the cutover.
+// plan: block and reports issues. Called automatically by `charly box validate`.
 type FeatureValidateCmd struct {
 	Entity string `arg:"" optional:"" help:"Entity identifier (e.g. candy:redis); default: all"`
 }
@@ -183,25 +151,24 @@ func (c *FeatureValidateCmd) Run() error {
 	filter := strings.ToLower(strings.TrimSpace(c.Entity))
 	var errs []string
 
-	validate := func(kind, name string, d *Description, scenarios []Scenario) {
-		if d == nil && len(scenarios) == 0 {
+	validate := func(kind, name string, desc string, plan []Step) {
+		if desc == "" && len(plan) == 0 {
 			return
 		}
 		eid := kind + ":" + name
 		if filter != "" && filter != eid && filter != kind {
 			return
 		}
-		issues := validateDescriptionSteps(d, scenarios, eid)
-		errs = append(errs, issues...)
+		errs = append(errs, validatePlanSteps(desc, plan, eid)...)
 	}
 
 	for name, layer := range layers {
 		if layer != nil {
-			validate("candy", name, layer.Description, layer.scenario)
+			validate("candy", name, layer.Description, layer.plan)
 		}
 	}
 	for name, img := range cfg.Box {
-		validate("box", name, img.Description, img.Scenario)
+		validate("box", name, img.Description, img.Plan)
 	}
 
 	if len(errs) > 0 {
@@ -210,94 +177,41 @@ func (c *FeatureValidateCmd) Run() error {
 		}
 		return fmt.Errorf("%d validation error(s)", len(errs))
 	}
-	fmt.Println("All description blocks validated successfully.")
+	fmt.Println("All plan blocks validated successfully.")
 	return nil
 }
 
-// validateDescriptionSteps runs static checks against a description + its
-// top-level scenario list (complementary to ValidateScenarios in
-// scenario_validate.go, which validates list structure / depends_on):
+// validatePlanSteps runs static checks against a description + its plan steps
+// (complementary to ValidatePlan in step_validate.go, which validates list
+// structure / depends_on):
 //
-//   - feature: non-empty
-//   - every step binds a keyword OR carries an Op verb
-//   - every step's Op passes Op.Kind() (0 or 1 verb; 0 = narrative)
-//   - scenario Examples rows cover every <placeholder> used in step
-//     text or Op string fields
+//   - description non-empty
+//   - every step has exactly one keyword (StepKind())
+//   - run/check steps carry exactly one Op verb; agent-* steps carry none
 //
 // Returns a list of human-readable error strings (empty if OK).
-func validateDescriptionSteps(d *Description, scenarios []Scenario, eid string) []string {
+func validatePlanSteps(desc string, plan []Step, eid string) []string {
 	var errs []string
-	if d == nil || strings.TrimSpace(d.Feature) == "" {
-		errs = append(errs, fmt.Sprintf("%s: description.feature is empty", eid))
+	if strings.TrimSpace(desc) == "" {
+		errs = append(errs, fmt.Sprintf("%s: description is empty", eid))
 	}
-	for sIdx, sc := range scenarios {
-		if strings.TrimSpace(sc.Name) == "" {
-			errs = append(errs, fmt.Sprintf("%s: scenario %d has empty name", eid, sIdx))
+	for i := range plan {
+		step := plan[i]
+		kw, err := step.StepKind()
+		if err != nil {
+			errs = append(errs, fmt.Sprintf("%s: step %d: %v", eid, i, err))
+			continue
 		}
-		for stepIdx, step := range sc.Step {
-			// A step is one Op: it is valid with a Gherkin keyword (prose, for
-			// narrative / agent-grading) OR a verb (a bare deterministic Op step,
-			// per the scenario schema) — a keyword is NOT required when a verb is
-			// present. Only a step with NEITHER (an empty step) is invalid, and
-			// MULTIPLE keywords are always invalid.
-			_, kwErr := step.StepKeyword()
-			hasVerb := !step.IsPending()
-			switch {
-			case kwErr != nil && strings.Contains(kwErr.Error(), "multiple"):
-				errs = append(errs, fmt.Sprintf("%s: scenario %q step %d: %v", eid, sc.Name, stepIdx, kwErr))
-			case kwErr != nil && !hasVerb:
-				errs = append(errs, fmt.Sprintf("%s: scenario %q step %d: empty step — needs a Gherkin keyword (given/when/then/and/but) or a verb", eid, sc.Name, stepIdx))
+		switch kw {
+		case KwRun, KwCheck:
+			if _, verbErr := step.Op.Kind(); verbErr != nil {
+				errs = append(errs, fmt.Sprintf("%s: step %d (%s): %v", eid, i, kw, verbErr))
 			}
-			if hasVerb {
-				if _, err := step.Op.Kind(); err != nil {
-					errs = append(errs, fmt.Sprintf("%s: scenario %q step %d: %v", eid, sc.Name, stepIdx, err))
-				}
-			}
-		}
-		if len(sc.Example) > 0 {
-			placeholders := collectPlaceholders(sc)
-			for _, row := range sc.Example {
-				for ph := range placeholders {
-					if _, ok := row[ph]; !ok {
-						errs = append(errs, fmt.Sprintf("%s: scenario %q outline row missing placeholder <%s>", eid, sc.Name, ph))
-					}
-				}
+		case KwAgentRun, KwAgentCheck:
+			if _, verbErr := step.Op.Kind(); verbErr == nil {
+				errs = append(errs, fmt.Sprintf("%s: step %d (%s): agent steps must not carry an Op verb", eid, i, kw))
 			}
 		}
 	}
 	return errs
-}
-
-// collectPlaceholders returns the set of <name> tokens referenced
-// anywhere in a scenario's step text or Check string fields.
-func collectPlaceholders(sc Scenario) map[string]bool {
-	set := map[string]bool{}
-	scan := func(s string) {
-		for {
-			i := strings.IndexByte(s, '<')
-			if i < 0 {
-				return
-			}
-			j := strings.IndexByte(s[i+1:], '>')
-			if j < 0 {
-				return
-			}
-			name := s[i+1 : i+1+j]
-			if name != "" && !strings.ContainsAny(name, " \t") {
-				set[name] = true
-			}
-			s = s[i+1+j+1:]
-		}
-	}
-	for _, step := range sc.Step {
-		scan(step.Given)
-		scan(step.When)
-		scan(step.Then)
-		scan(step.And)
-		scan(step.But)
-		for _, p := range step.Op.StringFields() {
-			scan(*p)
-		}
-	}
-	return set
 }

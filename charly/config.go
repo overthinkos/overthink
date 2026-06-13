@@ -111,10 +111,10 @@ func (m BuilderMap) AllBuilder() []string {
 
 // BoxConfig represents configuration for a single box or defaults
 type BoxConfig struct {
-	Enabled     *bool        `yaml:"enabled,omitempty"`
-	Version     string       `yaml:"version,omitempty"`     // CalVer version (YYYY.DDD.HHMM) of this image definition
-	Description *Description `yaml:"description,omitempty"` // Gherkin-shaped self-description; replaces retired info:/status:
-	Base        string       `yaml:"base,omitempty"`
+	Enabled     *bool  `yaml:"enabled,omitempty"`
+	Version     string `yaml:"version,omitempty"`     // CalVer version (YYYY.DDD.HHMM) of this image definition
+	Description string `yaml:"description,omitempty"` // plain-string self-description; first line = summary
+	Base        string `yaml:"base,omitempty"`
 	// From selects a non-registry base via "builder:<name>" — the named
 	// builder must be kind: bootstrap and runs as a pre-build privileged
 	// container that produces a rootfs tarball, then the Containerfile
@@ -168,11 +168,11 @@ type BoxConfig struct {
 	KeepImages   *int `yaml:"keep_images,omitempty"`
 	KeepCheckRuns *int `yaml:"keep_check_runs,omitempty"`
 
-	// Scenario carries image-level acceptance scenarios (Op steps) — the
-	// box's own cross-candy invariants. Candy scenarios propagate via the
-	// composition machinery; these are box-specific. Travels in the box
-	// section of the ai.opencharly.description OCI label.
-	Scenario []Scenario `yaml:"scenario,omitempty"`
+	// Plan carries image-level acceptance + provisioning steps — the box's
+	// own cross-candy invariants. Candy plans propagate via the composition
+	// machinery; these are box-specific. Travels in the box section of the
+	// ai.opencharly.description OCI label.
+	Plan []Step `yaml:"plan,omitempty"`
 
 	// CheckLevel declares how deep `charly check run <bed>` runs this box's
 	// acceptance: none | build | noagent (default) | agent. Baked into the
@@ -398,7 +398,7 @@ func (c *Config) ResolveBox(name string, calverTag string, dir string, opts Reso
 	resolved := &ResolvedBox{
 		Name:      name,
 		Version:   img.Version,
-		Status:    descriptionStatus(img.Description),
+		Status:    resolveStatus(""), // boxes author no status; the effective rung (worst-of-candy-chain) is computed at generate time for the ai.opencharly.status label
 		Info:      descriptionInfo(img.Description),
 		CheckLevel: ResolveCheckLevel(img.CheckLevel),
 	}

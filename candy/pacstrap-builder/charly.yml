@@ -1,16 +1,14 @@
 candy:
     version: 2026.162.1200
     name: pacstrap-builder
-    description:
-        feature: Bootstrap a bootable Arch/CachyOS rootfs via pacstrap, partition the disk, and install grub.
-        narrative: |
-            Tools needed to bootstrap an Arch-family rootfs from scratch via
-            pacstrap, partition a VM disk, and install grub for a bootable
-            Arch/CachyOS system. Used as the layer composition for the
-            arch-pacstrap-builder / cachyos-pacstrap-builder images,
-            which run as privileged containers under `charly box build` and
-            `charly vm build` for kind:bootstrap source kinds.
-        tag: [working]
+    description: |
+        Bootstrap a bootable Arch/CachyOS rootfs via pacstrap, partition the disk, and install grub.
+        Tools needed to bootstrap an Arch-family rootfs from scratch via
+        pacstrap, partition a VM disk, and install grub for a bootable
+        Arch/CachyOS system. Used as the layer composition for the
+        arch-pacstrap-builder / cachyos-pacstrap-builder images,
+        which run as privileged containers under `charly box build` and
+        `charly vm build` for kind:bootstrap source kinds.
     distro:
         arch:
             package:
@@ -25,37 +23,31 @@ candy:
                 - grub
                 - efibootmgr
                 - mkinitcpio
-    scenario:
-        - name: bootstrap-an-arch-rootfs
-          step:
-            - then: pacstrap bootstraps a fresh Arch/CachyOS root filesystem
-              file: /usr/sbin/pacstrap
-              exists: true
-            - then: the arch-install-scripts package supplies genfstab and arch-chroot alongside pacstrap
-              package: arch-install-scripts
-              installed: true
-        - name: partition-and-format-a-vm-disk
-          step:
-            - then: parted partitions the target VM disk
-              file: /usr/sbin/parted
-              exists: true
-            - then: a raw VM disk image can be created with qemu-img
-              file: /usr/bin/qemu-img
-              exists: true
-            - then: e2fsprogs provides the ext4 mkfs used for the root partition
-              package: e2fsprogs
-              installed: true
-            - then: dosfstools provides the FAT mkfs used for the EFI system partition
-              package: dosfstools
-              installed: true
-        - name: install-a-bootable-grub-system
-          step:
-            - then: grub-install writes the bootloader to the disk
-              file: /usr/sbin/grub-install
-              exists: true
-            - then: efibootmgr registers the UEFI boot entry
-              package: efibootmgr
-              installed: true
-            - then: mkinitcpio regenerates the initramfs inside the new root
-              file: /usr/bin/mkinitcpio
-              exists: true
+    plan:
+        - check: pacstrap bootstraps a fresh Arch/CachyOS root filesystem
+          file: /usr/sbin/pacstrap
+          exists: true
+        - check: the arch-install-scripts package supplies genfstab and arch-chroot alongside pacstrap
+          package: arch-install-scripts
+          installed: true
+        - check: parted partitions the target VM disk
+          file: /usr/sbin/parted
+          exists: true
+        - check: a raw VM disk image can be created with qemu-img
+          file: /usr/bin/qemu-img
+          exists: true
+        - check: e2fsprogs provides the ext4 mkfs used for the root partition
+          package: e2fsprogs
+          installed: true
+        - check: dosfstools provides the FAT mkfs used for the EFI system partition
+          package: dosfstools
+          installed: true
+        - check: grub-install writes the bootloader to the disk
+          file: /usr/sbin/grub-install
+          exists: true
+        - check: efibootmgr registers the UEFI boot entry
+          package: efibootmgr
+          installed: true
+        - check: mkinitcpio regenerates the initramfs inside the new root
+          file: /usr/bin/mkinitcpio
+          exists: true

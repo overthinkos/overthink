@@ -9,54 +9,46 @@ import (
 // TestEmitImageTestYAML_RoundTripsThroughParseCharlyTestOutput is the
 // load-bearing invariant: whatever `charly check box --format yaml`
 // emits MUST parse cleanly via ParseCharlyTestOutput. Without this,
-// the benchmark scorer would silently mis-parse and classify
-// scenarios wrong.
+// the benchmark scorer would silently mis-parse and classify steps
+// wrong. Only check:/agent-check: steps land in the scored payload;
+// run: steps (the install timeline) are excluded.
 func TestEmitImageTestYAML_RoundTripsThroughParseCharlyTestOutput(t *testing.T) {
-	scenarios := []ScenarioResult{
+	steps := []StepResult{
 		{
-			Origin:     "candy:sshd",
-			ScenarioID: "desc:candy:sshd:0",
-			Name:       "SSH server reachable",
-			Tag:        []string{"smoke"},
-			Status:     TestPass,
-			Pending:    0,
-			Step: []StepResult{
-				{
-					Keyword: "given",
-					Text:    "sshd is installed",
-					StepID:  "desc:candy:sshd:0:0",
-					Result:  CheckResult{Verb: "package", Status: TestPass},
-				},
-				{
-					Keyword: "when",
-					Text:    "connecting",
-					StepID:  "desc:candy:sshd:0:1",
-					Result:  CheckResult{Verb: "port", Status: TestPass},
-				},
-			},
+			Keyword: string(KwCheck),
+			Text:    "sshd is installed",
+			Origin:  "candy:sshd",
+			StepID:  "plan:candy:sshd:0",
+			Result:  CheckResult{Verb: "package", Status: TestPass},
 		},
 		{
-			Origin:     "candy:foo",
-			ScenarioID: "desc:candy:foo:0",
-			Name:       "Foo service runs",
-			Status:     TestFail,
-			Pending:    1,
-			Step: []StepResult{
-				{
-					Keyword: "then",
-					Text:    "pending step",
-					StepID:  "desc:candy:foo:0:0",
-					Result:  CheckResult{Verb: "", Status: TestSkip},
-				},
-			},
+			Keyword: string(KwCheck),
+			Text:    "port reachable",
+			Origin:  "candy:sshd",
+			StepID:  "plan:candy:sshd:1",
+			Result:  CheckResult{Verb: "port", Status: TestPass},
+		},
+		{
+			Keyword: string(KwCheck),
+			Text:    "foo service runs",
+			Origin:  "candy:foo",
+			StepID:  "plan:candy:foo:0",
+			Result:  CheckResult{Verb: "service", Status: TestFail},
+		},
+		{
+			// A run: step is NOT scored — it must be excluded from the payload.
+			Keyword: string(KwRun),
+			Text:    "install foo",
+			Origin:  "candy:foo",
+			StepID:  "plan:candy:foo:1",
+			Result:  CheckResult{Verb: "package", Status: TestPass},
 		},
 	}
 
 	var buf bytes.Buffer
-	if err := emitImageTestYAML(&buf, "ovbench/test:charly-fedora", "", scenarios, nil); err != nil {
+	if err := emitImageTestYAML(&buf, "ovbench/test:charly-fedora", "", steps, nil); err != nil {
 		t.Fatalf("emit: %v", err)
 	}
-	// Sanity: the emitted YAML looks right.
 	out := buf.String()
 	if !strings.Contains(out, "box: ovbench/test:charly-fedora") {
 		t.Errorf("missing box line: %q", out)
@@ -76,32 +68,22 @@ func TestEmitImageTestYAML_RoundTripsThroughParseCharlyTestOutput(t *testing.T) 
 	if parsed.Mode != "box" {
 		t.Errorf("parsed mode: %q", parsed.Mode)
 	}
-	if len(parsed.Scenario) != 2 {
-		t.Fatalf("want 2 scenarios, got %d", len(parsed.Scenario))
+	// 3 scored check: steps; the run: step is excluded.
+	if len(parsed.Step) != 3 {
+		t.Fatalf("want 3 scored steps (run: excluded), got %d", len(parsed.Step))
 	}
-	if parsed.Scenario[0].ID != "desc:candy:sshd:0" {
-		t.Errorf("scenario[0].ID: %q", parsed.Scenario[0].ID)
+	if parsed.Step[0].ID != "plan:candy:sshd:0" {
+		t.Errorf("step[0].ID: %q", parsed.Step[0].ID)
 	}
-	if parsed.Scenario[0].Status != "pass" {
-		t.Errorf("scenario[0].Status: %q", parsed.Scenario[0].Status)
+	if parsed.Step[0].Status != "pass" {
+		t.Errorf("step[0].Status: %q", parsed.Step[0].Status)
 	}
-	if parsed.Scenario[1].Status != "fail" {
-		t.Errorf("scenario[1].Status: %q", parsed.Scenario[1].Status)
-	}
-	if parsed.Scenario[1].PendingSteps != 1 {
-		t.Errorf("scenario[1].PendingSteps: %d", parsed.Scenario[1].PendingSteps)
+	if parsed.Step[2].Status != "fail" {
+		t.Errorf("step[2].Status: %q", parsed.Step[2].Status)
 	}
 	// Summary derivation (producer set totals).
-	if parsed.Summary.Total != 2 || parsed.Summary.Pass != 1 || parsed.Summary.Fail != 1 {
+	if parsed.Summary.Total != 3 || parsed.Summary.Pass != 2 || parsed.Summary.Fail != 1 {
 		t.Errorf("summary: %+v", parsed.Summary)
-	}
-	// Pending step flag propagates.
-	foo := parsed.Scenario[1]
-	if len(foo.Step) != 1 {
-		t.Fatalf("foo.Step: %d", len(foo.Step))
-	}
-	if !foo.Step[0].Pending {
-		t.Errorf("step with no verb should have Pending=true; got %+v", foo.Step[0])
 	}
 }
 

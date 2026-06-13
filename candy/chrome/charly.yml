@@ -1,18 +1,16 @@
 candy:
     version: 2026.144.1443
     name: chrome
-    description:
-        feature: Installs the Google Chrome browser cross-distro as a runnable binary at a stable path.
-        narrative: |
-            Google Chrome browser package. Cross-distro: pulls from Google's
-            direct RPM repo on Fedora, the AUR on Arch/CachyOS. Lands the
-            google-chrome-stable binary plus its desktop entry, and best-effort
-            registers it as the default web browser via xdg-settings. No CDP
-            scaffolding, no supervisord — for headless container CDP automation,
-            compose /charly-selkies:chrome-cdp on top. Verifiable: the binary
-            exists at a fixed path, reports its version, and ships its .desktop
-            entry.
-        tag: [working]
+    description: |
+        Installs the Google Chrome browser cross-distro as a runnable binary at a stable path.
+        Google Chrome browser package. Cross-distro: pulls from Google's
+        direct RPM repo on Fedora, the AUR on Arch/CachyOS. Lands the
+        google-chrome-stable binary plus its desktop entry, and best-effort
+        registers it as the default web browser via xdg-settings. No CDP
+        scaffolding, no supervisord — for headless container CDP automation,
+        compose /charly-selkies:chrome-cdp on top. Verifiable: the binary
+        exists at a fixed path, reports its version, and ships its .desktop
+        entry.
     env:
         CHROME_FLAGS: "--ozone-platform=wayland --enable-features=UseOzonePlatform,VaapiVideoDecodeLinuxGL,VaapiIgnoreDriverChecks"
     env_accept:
@@ -57,39 +55,28 @@ candy:
                 - name: google-chrome
                   url: "https://dl.google.com/linux/chrome/rpm/stable/x86_64"
                   gpgkey: "https://dl.google.com/linux/linux_signing_key.pub"
-    task:
-        # Register chrome as the default browser in xdg-settings. Best-effort
-        # only — xdg-settings has a fragile KDE codepath that calls qtpaths,
-        # which isn't installed on every host. Failure here doesn't break the
-        # deploy: chrome is still installed, just not registered as default.
-        - command: BROWSER= xdg-settings set default-web-browser google-chrome.desktop || true
-          run_as: "${USER}"
     volume:
         - name: chrome-data
           path: "~/.chrome-debug"
-    scenario:
-        - name: chrome-binary-installed
-          step:
-            - then: the google-chrome-stable binary is present at its canonical path
-              file: /usr/bin/google-chrome-stable
-              exists: true
-        - name: chrome-reports-its-version
-          step:
-            - then: invoking chrome with --version prints its Google Chrome version banner
-              command: google-chrome-stable --version
-              exit_status: 0
-              stdout:
-                - matches: "Google Chrome"
-        - name: chrome-desktop-entry-installed
-          step:
-            - then: the google-chrome.desktop entry the default-browser task references is installed
-              file: /usr/share/applications/google-chrome.desktop
-              exists: true
-        - name: chrome-package-installed
-          step:
-            - id: chrome-package-installed
-              package: google-chrome-stable
-              package_map:
-                arch: google-chrome
-                fedora: google-chrome-stable
-              installed: true
+    plan:
+        - run: command=BROWSER= xdg-settings set default-web-browser google-chrome.desktop || true
+          command: BROWSER= xdg-settings set default-web-browser google-chrome.desktop || true
+          run_as: "${USER}"
+        - check: the google-chrome-stable binary is present at its canonical path
+          file: /usr/bin/google-chrome-stable
+          exists: true
+        - check: invoking chrome with --version prints its Google Chrome version banner
+          command: google-chrome-stable --version
+          exit_status: 0
+          stdout:
+            - matches: "Google Chrome"
+        - check: the google-chrome.desktop entry the default-browser task references is installed
+          file: /usr/share/applications/google-chrome.desktop
+          exists: true
+        - check: package=google-chrome-stable
+          id: chrome-package-installed
+          package: google-chrome-stable
+          package_map:
+            arch: google-chrome
+            fedora: google-chrome-stable
+          installed: true

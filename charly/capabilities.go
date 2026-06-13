@@ -103,7 +103,7 @@ var CapabilityLabelMap = map[string]string{
 	"MCPRequire":    LabelMCPRequire,
 	"MCPAccept":     LabelMCPAccept,
 
-	// Gherkin-shaped self-description — three-section (candy/box/deploy)
+	// plan-shaped self-description — three-section (candy/box/deploy)
 	// LabelDescriptionSet. Replaces the single-scalar Info/Status pair in
 	// the BDD cutover; those remain on BoxMetadata during the additive
 	// foundation phase and are removed in the hard-cutover commit.

@@ -1,11 +1,6 @@
 candy:
     name: cargo-tool
     version: "1"
-    description:
-        feature: Test fixture layer — Cargo.toml + src/ trigger cargo builder detection
-        narrative: |-
-            Test fixture layer — Cargo.toml + src/ trigger cargo builder detection
-    scenario:
-        - name: 'TODO: describe Test fixture layer — Cargo.toml + src/ trigger cargo builder detection'
-          tag: [skeleton]
-          step: []
+    description: |-
+        Test fixture layer — Cargo.toml + src/ trigger cargo builder detection
+        Test fixture layer — Cargo.toml + src/ trigger cargo builder detection

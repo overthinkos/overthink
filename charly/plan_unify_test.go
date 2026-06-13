@@ -1,0 +1,262 @@
+package main
+
+// plan_unify_test.go — the §J failing-first acceptance suite for the plan-unify
+// cutover: the unified flat `plan:` vocabulary (run/check/agent-*/include), the
+// runner modes, the per-step scorer, the include splice, the load gate, and the
+// score→check-bed + task→run migration.
+
+import (
+	"context"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+// §J.1 — a check: step runs and reports its verdict through RunPlan.
+func TestPlanUnify_CheckStepRuns(t *testing.T) {
+	set := &LabelDescriptionSet{Candy: []LabeledDescription{{
+		Origin: "candy:x",
+		Plan: []Step{{Check: "the marker resolves", Op: Op{
+			Matching: "charly-marker",
+			Contains: ContainsList{{Op: "contains", Value: "charly-marker"}},
+		}}},
+	}}}
+	r := NewRunner(nil, nil, RunModeLive)
+	res := RunPlan(context.Background(), r, set, nil, false)
+	if len(res) != 1 {
+		t.Fatalf("want 1 step result, got %d", len(res))
+	}
+	if res[0].Keyword != string(KwCheck) {
+		t.Errorf("keyword = %q, want check", res[0].Keyword)
+	}
+	if res[0].Result.Status != TestPass {
+		t.Fatalf("check step should pass, got %v (%s)", res[0].Result.Status, res[0].Result.Message)
+	}
+}
+
+// §J.2 — VerifyOnly mode skips run: (mutating) steps and runs check: steps.
+func TestPlanUnify_VerifyOnlySkipsRun(t *testing.T) {
+	set := &LabelDescriptionSet{Candy: []LabeledDescription{{
+		Origin: "candy:x",
+		Plan: []Step{
+			{Run: "mutate the world", Op: Op{Command: "echo should-not-run"}},
+			{Check: "the marker resolves", Op: Op{
+				Matching: "m", Contains: ContainsList{{Op: "contains", Value: "m"}},
+			}},
+		},
+	}}}
+	r := NewRunner(nil, nil, RunModeLive)
+	r.VerifyOnly = true
+	res := RunPlan(context.Background(), r, set, nil, false)
+	if len(res) != 2 {
+		t.Fatalf("want 2 step results, got %d", len(res))
+	}
+	// The run: step is skipped (not executed) under verify-only.
+	if res[0].Keyword != string(KwRun) || res[0].Result.Status != TestSkip {
+		t.Errorf("run: step should be skipped under VerifyOnly, got keyword=%q status=%v", res[0].Keyword, res[0].Result.Status)
+	}
+	if !strings.Contains(res[0].Result.Message, "verify-only") {
+		t.Errorf("skip reason should name verify-only, got %q", res[0].Result.Message)
+	}
+	// The check: step still runs and passes.
+	if res[1].Keyword != string(KwCheck) || res[1].Result.Status != TestPass {
+		t.Errorf("check: step should run under VerifyOnly, got keyword=%q status=%v", res[1].Keyword, res[1].Result.Status)
+	}
+}
+
+// §J.3 — validation rejects a candy whose plan has no check: step (ADE gate).
+func TestPlanUnify_ValidateRejectsNoCheckStep(t *testing.T) {
+	layers := map[string]*Candy{
+		"x": {
+			Name:        "x",
+			Version:     "2026.001.0001",
+			Description: "a candy with run: but no check:",
+			plan:        []Step{{Run: "install", Op: Op{Command: "true"}}}, // run only, no check
+		},
+	}
+	errs := &ValidationError{}
+	validateCandyContents(layers, errs)
+	got := strings.Join(errs.Errors, "\n")
+	if !strings.Contains(got, "at least one `check:` step") {
+		t.Fatalf("expected a no-check-step ADE rejection, got: %s", got)
+	}
+}
+
+// §J.4 — the load gate rejects every retired test-vocabulary key with a
+// `charly migrate` hint.
+func TestPlanUnify_LoadGateRejectsLegacyVocab(t *testing.T) {
+	cases := map[string]string{
+		"scenario":    "version: 2026.164.0006\ncandy:\n  x:\n    scenario: []\n",
+		"task":        "version: 2026.164.0006\ncandy:\n  x:\n    task: []\n",
+		"kind-recipe": "version: 2026.164.0006\nrecipe:\n  r:\n    kind: recipe\n",
+		"kind-score":  "version: 2026.164.0006\nscore:\n  s:\n    kind: score\n",
+		"do":          "version: 2026.164.0006\ncandy:\n  x:\n    plan:\n      - check: t\n        do: assert\n",
+		"example":     "version: 2026.164.0006\ncandy:\n  x:\n    example: []\n",
+	}
+	for name, body := range cases {
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			if err := os.WriteFile(filepath.Join(dir, "charly.yml"), []byte(body), 0o644); err != nil {
+				t.Fatalf("write: %v", err)
+			}
+			err := rejectLegacyTestVocab(dir)
+			if err == nil {
+				t.Fatalf("expected the load gate to reject %q", name)
+			}
+			if !strings.Contains(err.Error(), "charly migrate") {
+				t.Errorf("rejection should point at `charly migrate`, got: %v", err)
+			}
+		})
+	}
+}
+
+// §J.5 — the plan-unify migration is idempotent and folds task:→run:,
+// scenario:→plan:, and score:→a kind:check iterate bed.
+func TestPlanUnify_MigrationRoundTripIdempotent(t *testing.T) {
+	dir := t.TempDir()
+	src := `version: 2026.164.0004
+candy:
+  redis:
+    version: 2026.001.0001
+    description:
+      feature: Redis store
+    task:
+      - command: "true"
+    scenario:
+      - name: ping
+        step:
+          - then: redis answers
+            command: redis-cli ping
+            stdout: PONG
+recipe:
+  base-recipe:
+    scenario:
+      - name: marker
+        step:
+          - then: the marker is present
+            file: /etc/marker
+            exists: true
+score:
+  bench:
+    pod: check-sandbox
+    agent: [claude]
+    plateau_iteration: 3
+    recipe: [base-recipe]
+    prompt: "drive it"
+`
+	path := filepath.Join(dir, "charly.yml")
+	if err := os.WriteFile(path, []byte(src), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	rewritten, err := MigratePlanUnify(dir, false)
+	if err != nil {
+		t.Fatalf("MigratePlanUnify: %v", err)
+	}
+	if len(rewritten) != 1 {
+		t.Fatalf("expected the charly.yml to be rewritten, got %v", rewritten)
+	}
+
+	out, _ := os.ReadFile(path)
+	got := string(out)
+	// task:/scenario:/score:/recipe: are all retired.
+	for _, gone := range []string{"task:", "scenario:", "score:", "recipe:"} {
+		if strings.Contains(got, gone) {
+			t.Errorf("migrated charly.yml still carries retired key %q:\n%s", gone, got)
+		}
+	}
+	// The unified surface is present: a plan:, a check: bed, an iterate: block.
+	for _, want := range []string{"plan:", "check:", "iterate:", "sandbox: check-sandbox"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("migrated charly.yml missing %q:\n%s", want, got)
+		}
+	}
+	// task:→run: fold: the candy's former task command is now a run: step.
+	if !strings.Contains(got, "run:") {
+		t.Errorf("task: did not fold into a run: step:\n%s", got)
+	}
+
+	// Idempotent: a second pass rewrites nothing.
+	rewritten2, err := MigratePlanUnify(dir, false)
+	if err != nil {
+		t.Fatalf("second MigratePlanUnify: %v", err)
+	}
+	if len(rewritten2) != 0 {
+		t.Errorf("migration is not idempotent — second pass rewrote %v", rewritten2)
+	}
+}
+
+// §J.6 — an `include: candy:X` step splices the referenced candy's plan steps
+// in place.
+func TestPlanUnify_IncludeSplicesCandyPlan(t *testing.T) {
+	layers := map[string]*Candy{
+		"redis": {Name: "redis", plan: []Step{
+			{Check: "redis answers ping", Op: Op{Command: "redis-cli ping", Stdout: MatcherList{{Op: "equals", Value: "PONG"}}}},
+			{Check: "redis binary present", Op: Op{File: "/usr/bin/redis-server"}},
+		}},
+	}
+	plan := []Step{{Include: "candy:redis"}}
+	expanded, err := ExpandPlanIncludes(&UnifiedFile{}, layers, plan)
+	if err != nil {
+		t.Fatalf("ExpandPlanIncludes: %v", err)
+	}
+	if len(expanded) != 2 {
+		t.Fatalf("include should splice 2 steps, got %d", len(expanded))
+	}
+	if expanded[0].Check != "redis answers ping" || expanded[1].Check != "redis binary present" {
+		t.Errorf("spliced steps not in order: %+v", expanded)
+	}
+	// The spliced steps carry the include source origin for reporting.
+	if expanded[0].Op.Origin != "candy:redis" {
+		t.Errorf("spliced step missing source origin, got %q", expanded[0].Op.Origin)
+	}
+}
+
+// §J.7 — the per-step scorer reports N/M solved and identifies the failing step
+// by id (the scenario→step scoring change).
+func TestPlanUnify_PerStepScorerReportsSolvedAndFailingID(t *testing.T) {
+	verdicts := []StepVerdict{
+		{ID: "redis-ping", Verdict: VerdictSolved},
+		{ID: "redis-config", Verdict: VerdictUnchanged}, // still failing
+	}
+	s := computeSummary(verdicts, 2)
+	if s.Solved != 1 || s.Input != 2 {
+		t.Fatalf("want 1/2 solved, got %d/%d", s.Solved, s.Input)
+	}
+	if s.PercentSolved != 50.0 {
+		t.Errorf("PercentSolved = %v, want 50", s.PercentSolved)
+	}
+	// The failing step is identifiable by id (verdict != solved).
+	var failing []string
+	for _, v := range verdicts {
+		if v.Verdict != VerdictSolved {
+			failing = append(failing, v.ID)
+		}
+	}
+	if len(failing) != 1 || failing[0] != "redis-config" {
+		t.Errorf("failing step by id = %v, want [redis-config]", failing)
+	}
+}
+
+// §J.8 — a migrated task:→run: step lowers to an InstallStep AND reverses on
+// `charly deploy del` (the task:→plan: fold preserves the ledger/reversal).
+func TestPlanUnify_RunStepLowersToInstallStepAndReverses(t *testing.T) {
+	// The migration turns a `task: { package: redis }` op into a run: step.
+	layer := &Candy{Name: "x", plan: []Step{{Run: "install redis", Op: Op{Package: "redis"}}}}
+	steps := compileOpSteps(layer, testResolvedBox())
+
+	var sp *SystemPackagesStep
+	for _, s := range steps {
+		if v, ok := s.(*SystemPackagesStep); ok {
+			sp = v
+		}
+	}
+	if sp == nil {
+		t.Fatalf("run: package step did not lower to a SystemPackagesStep: %#v", steps)
+	}
+	rev := sp.Reverse()
+	if len(rev) != 1 || rev[0].Kind != ReverseOpPackageRemove {
+		t.Fatalf("lowered install step does not reverse to package-remove (charly deploy del): %+v", rev)
+	}
+}

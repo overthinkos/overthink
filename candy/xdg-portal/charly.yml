@@ -1,15 +1,13 @@
 candy:
     version: 2026.144.1443
     name: xdg-portal
-    description:
-        feature: XDG desktop portal (wlroots backend) for screencast/screenshot on sway
-        narrative: |
-            Installs xdg-desktop-portal with the wlroots + GTK backends and slurp
-            (region selector), plus the sway config.d and portal config that wire
-            screencasting through PipeWire on a sway session. Verifiable: the
-            portal packages and slurp are installed and the portal/sway config
-            files land at their expected paths.
-        tag: [working]
+    description: |
+        XDG desktop portal (wlroots backend) for screencast/screenshot on sway
+        Installs xdg-desktop-portal with the wlroots + GTK backends and slurp
+        (region selector), plus the sway config.d and portal config that wire
+        screencasting through PipeWire on a sway session. Verifiable: the
+        portal packages and slurp are installed and the portal/sway config
+        files land at their expected paths.
     require:
         - dbus
         - sway
@@ -23,38 +21,36 @@ candy:
                 - xdg-desktop-portal-wlr
                 - xdg-desktop-portal-gtk
                 - slurp
-    task:
-        - mkdir: "${HOME}/.config/sway/config.d"
+    plan:
+        - run: mkdir=${HOME}/.config/sway/config.d
+          mkdir: "${HOME}/.config/sway/config.d"
           run_as: "${USER}"
-        - copy: portal.conf
+        - run: copy=portal.conf
+          copy: portal.conf
           to: "${HOME}/.config/sway/config.d/portal.conf"
           mode: "0644"
           run_as: "${USER}"
-        - mkdir: "${HOME}/.config/xdg-desktop-portal-wlr"
+        - run: mkdir=${HOME}/.config/xdg-desktop-portal-wlr
+          mkdir: "${HOME}/.config/xdg-desktop-portal-wlr"
           run_as: "${USER}"
-        - copy: xdg-desktop-portal-wlr-config
+        - run: copy=xdg-desktop-portal-wlr-config
+          copy: xdg-desktop-portal-wlr-config
           to: "${HOME}/.config/xdg-desktop-portal-wlr/config"
           mode: "0644"
           run_as: "${USER}"
-    scenario:
-        - name: xdg-portal-installed
-          step:
-            - then: the xdg-desktop-portal package is installed
-              package: xdg-desktop-portal
-              installed: true
-            - then: the wlroots portal backend package is installed
-              package: xdg-desktop-portal-wlr
-              installed: true
-            - then: the slurp region selector binary is installed
-              file: /usr/bin/slurp
-              exists: true
-        - name: xdg-portal-config-present
-          step:
-            - then: the wlroots portal config file is installed in the user config
-              file: ${HOME}/.config/xdg-desktop-portal-wlr/config
-              exists: true
-        - name: xdg-portal-sway-conf
-          step:
-            - id: xdg-portal-sway-conf
-              file: ${HOME}/.config/sway/config.d/portal.conf
-              exists: true
+        - check: the xdg-desktop-portal package is installed
+          package: xdg-desktop-portal
+          installed: true
+        - check: the wlroots portal backend package is installed
+          package: xdg-desktop-portal-wlr
+          installed: true
+        - check: the slurp region selector binary is installed
+          file: /usr/bin/slurp
+          exists: true
+        - check: the wlroots portal config file is installed in the user config
+          file: ${HOME}/.config/xdg-desktop-portal-wlr/config
+          exists: true
+        - check: file=${HOME}/.config/sway/config.d/portal.conf
+          id: xdg-portal-sway-conf
+          file: ${HOME}/.config/sway/config.d/portal.conf
+          exists: true

@@ -1,15 +1,15 @@
 package main
 
-// check_feature_run.go — the Agent Driven Checkuation (ADE) acceptance
+// check_feature_run.go — the Agent Driven Evaluation (ADE) acceptance
 // runners: `charly box feature run <image>` and `charly check feature run <deployment>`.
 //
-// These run an entity's OWN baked Gherkin scenarios (the `description.scenario`
-// blocks, shipped in the ai.opencharly.description OCI label) as acceptance
-// tests — the RUN half of the `charly feature {list,pending,validate}` family
-// (see description_cmd.go). Both reuse the shared scenario engine
-// (RunScenarios, description_run.go) and the same target/var resolution as
+// These run an entity's OWN baked plan steps (the `plan:` list, shipped in
+// the ai.opencharly.description OCI label) as acceptance tests — the RUN
+// half of the `charly feature {list,pending,validate}` family
+// (see description_cmd.go). Both reuse the shared plan engine
+// (RunPlan, description_run.go) and the same target/var resolution as
 // `charly check box` / `charly check live` (R3); the only new behaviour is surfacing
-// scenario results as a first-class pass/fail run and, for the live verb,
+// step results as a first-class pass/fail run and, for the live verb,
 // wiring the agent grader so prose-only steps are agent-graded.
 //
 //   - `charly box feature run <image>`     — BUILD scope. Disposable container
@@ -33,31 +33,31 @@ import (
 // Shared reporting
 // ---------------------------------------------------------------------------
 
-// scenarioFailCount returns how many scenarios ended in a fail verdict.
-func scenarioFailCount(results []ScenarioResult) int {
+// stepFailCount returns how many steps ended in a fail verdict.
+func stepFailCount(results []StepResult) int {
 	n := 0
 	for _, r := range results {
-		if r.Status == TestFail {
+		if r.Result.Status == TestFail {
 			n++
 		}
 	}
 	return n
 }
 
-// reportScenarios writes results in the requested format and returns the
-// fail count. Reuses the FormatScenarioResults* reporters (description_report.go).
-func reportScenarios(w io.Writer, results []ScenarioResult, format string) int {
+// reportSteps writes results in the requested format and returns the fail
+// count. Reuses the FormatStepResults* reporters (description_report.go).
+func reportSteps(w io.Writer, results []StepResult, format string) int {
 	switch strings.ToLower(strings.TrimSpace(format)) {
 	case "json":
-		_ = FormatScenarioResultsJSON(w, results)
+		_ = FormatStepResultsJSON(w, results)
 	case "tap":
-		FormatScenarioResultsTAP(w, results)
+		FormatStepResultsTAP(w, results)
 	case "junit":
-		_ = FormatScenarioResultsJUnit(w, results)
+		_ = FormatStepResultsJUnit(w, results)
 	default:
-		FormatScenarioResultsText(w, results)
+		FormatStepResultsText(w, results)
 	}
-	return scenarioFailCount(results)
+	return stepFailCount(results)
 }
 
 // resolveGraderAgent loads the project's `agent:` catalog and resolves the named
@@ -78,8 +78,8 @@ func resolveGraderAgent(dir, name string) (*AgentConfig, error) {
 	return ai, nil
 }
 
-// scenarioTagFilter parses an optional --tag expression into a TagExpr.
-func scenarioTagFilter(tag string) (*TagExpr, error) {
+// planTagFilter parses an optional --tag expression into a TagExpr.
+func planTagFilter(tag string) (*TagExpr, error) {
 	if strings.TrimSpace(tag) == "" {
 		return nil, nil
 	}
@@ -94,17 +94,17 @@ func scenarioTagFilter(tag string) (*TagExpr, error) {
 // feature verbs). The run-verb lives here, per description_cmd.go's design
 // note, so it fits the existing build-mode command hierarchy.
 type BoxFeatureCmd struct {
-	Run BoxFeatureRunCmd `cmd:"" help:"Run a box's baked Gherkin scenarios against a disposable container (build scope; prose-only steps need a live deployment — see charly check feature run)"`
+	Run BoxFeatureRunCmd `cmd:"" help:"Run a box's baked plan steps against a disposable container (build scope; prose-only steps need a live deployment — see charly check feature run)"`
 }
 
 // BoxFeatureRunCmd: `charly box feature run <image>`. Build-scope acceptance —
-// the image's baked scenarios run against a disposable container. Image refs
+// the image's baked plan steps run against a disposable container. Image refs
 // resolve against local container storage (never charly.yml), same as
 // `charly check box`.
 type BoxFeatureRunCmd struct {
 	Image  string `arg:"" help:"Image reference (full ref or short name resolved against local container storage)"`
 	Format string `long:"format" default:"text" help:"Output format: text, json, tap, junit"`
-	Tag    string `long:"tag" help:"Only run scenarios matching this tag expression (e.g. 'smoke and not slow')"`
+	Tag    string `long:"tag" help:"Only run steps matching this tag expression (e.g. 'smoke and not slow')"`
 	Strict bool   `long:"strict" help:"Treat prose-only (unbound) steps as failures instead of skips"`
 }
 
@@ -122,10 +122,10 @@ func (c *BoxFeatureRunCmd) Run() error {
 		return err
 	}
 	if meta == nil || meta.Description == nil || meta.Description.IsEmpty() {
-		fmt.Fprintln(os.Stderr, "No scenarios baked into this image (author a description.scenario block).")
+		fmt.Fprintln(os.Stderr, "No plan steps baked into this image (author a plan: with check: steps).")
 		return nil
 	}
-	filter, err := scenarioTagFilter(c.Tag)
+	filter, err := planTagFilter(c.Tag)
 	if err != nil {
 		return fmt.Errorf("parsing --tag: %w", err)
 	}
@@ -134,10 +134,10 @@ func (c *BoxFeatureRunCmd) Run() error {
 	runner.Distros = meta.Distro
 	// Build scope: no live target to probe, so no grader — prose-only steps
 	// stay advisory (skip, or fail under --strict).
-	results := RunScenarios(context.Background(), runner, meta.Description, filter, c.Strict)
+	results := RunPlan(context.Background(), runner, meta.Description, filter, c.Strict)
 
 	fmt.Fprintf(os.Stderr, "Feature run (image, build scope): %s\n", imageRef)
-	fails := reportScenarios(os.Stdout, results, c.Format)
+	fails := reportSteps(os.Stdout, results, c.Format)
 	if fails > 0 {
 		return &CheckFailedError{Failed: fails}
 	}
@@ -150,7 +150,7 @@ func (c *BoxFeatureRunCmd) Run() error {
 
 // CheckFeatureCmd groups `charly check feature run` under the live-check hierarchy.
 type CheckFeatureCmd struct {
-	Run CheckFeatureRunCmd `cmd:"" help:"Run a running deployment's baked Gherkin scenarios as acceptance tests; prose-only steps are agent-graded (Agent Driven Checkuation)"`
+	Run CheckFeatureRunCmd `cmd:"" help:"Run a running deployment's baked plan steps as acceptance tests; prose-only steps are agent-graded (Agent Driven Evaluation)"`
 }
 
 // CheckFeatureRunCmd: `charly check feature run <deployment>`. Deploy-scope
@@ -161,7 +161,7 @@ type CheckFeatureRunCmd struct {
 	Box      string `arg:"" help:"Deployment name (a box-backed pod deployment)"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 	Format   string `long:"format" default:"text" help:"Output format: text, json, tap, junit"`
-	Tag      string `long:"tag" help:"Only run scenarios matching this tag expression"`
+	Tag      string `long:"tag" help:"Only run steps matching this tag expression"`
 	Agent    string `long:"agent" help:"kind:agent entry to use as the prose-step grader (default: the sole configured agent)"`
 	Timeout  string `long:"timeout" help:"Per-grader-call wall-clock cap (Go duration; default 5m or the ai entry's timeout)"`
 	NoAgent  bool   `long:"no-agent" help:"Deterministic-only: do not agent-grade prose-only steps (they report as unbound/skip)"`
@@ -193,7 +193,7 @@ func (c *CheckFeatureRunCmd) Run() error {
 		return err
 	}
 	if meta == nil || meta.Description == nil || meta.Description.IsEmpty() {
-		fmt.Fprintln(os.Stderr, "No scenarios baked into this deployment's image (author a description.scenario block).")
+		fmt.Fprintln(os.Stderr, "No plan steps baked into this deployment's image (author a plan: with check: steps).")
 		return nil
 	}
 
@@ -209,7 +209,7 @@ func (c *CheckFeatureRunCmd) Run() error {
 	}
 	resolver, _ := ResolveCheckVarsRuntime(meta, deployOverlay, engine, c.Box, containerName, c.Instance)
 
-	filter, err := scenarioTagFilter(c.Tag)
+	filter, err := planTagFilter(c.Tag)
 	if err != nil {
 		return fmt.Errorf("parsing --tag: %w", err)
 	}
@@ -228,14 +228,14 @@ func (c *CheckFeatureRunCmd) Run() error {
 		runner.Grader = &AgentGrader{Agent: ai, Target: c.Box, Instance: c.Instance, Timeout: c.Timeout}
 	}
 
-	results := RunScenarios(context.Background(), runner, meta.Description, filter, c.Strict)
+	results := RunPlan(context.Background(), runner, meta.Description, filter, c.Strict)
 
 	grading := "agent-graded prose"
 	if c.NoAgent {
 		grading = "deterministic-only"
 	}
 	fmt.Fprintf(os.Stderr, "Feature run (deploy scope, %s): %s (container: %s)\n", grading, meta.Box, containerName)
-	fails := reportScenarios(os.Stdout, results, c.Format)
+	fails := reportSteps(os.Stdout, results, c.Format)
 	if fails > 0 {
 		return &CheckFailedError{Failed: fails}
 	}

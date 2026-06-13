@@ -1,16 +1,14 @@
 candy:
     version: 2026.144.1443
     name: sag
-    description:
-        feature: ElevenLabs text-to-speech CLI
-        narrative: |
-            Installs the sag ElevenLabs text-to-speech CLI by go-installing
-            github.com/steipete/sag into the user's GOPATH bin (~/go/bin) and
-            appending that directory to PATH, so `sag` is invokable by the
-            container user. On Fedora the alsa-lib-devel headers are pulled in
-            for the cgo audio backend. The install is verifiable by the binary's
-            presence and its resolution on PATH.
-        tag: [working]
+    description: |
+        ElevenLabs text-to-speech CLI
+        Installs the sag ElevenLabs text-to-speech CLI by go-installing
+        github.com/steipete/sag into the user's GOPATH bin (~/go/bin) and
+        appending that directory to PATH, so `sag` is invokable by the
+        container user. On Fedora the alsa-lib-devel headers are pulled in
+        for the cgo audio backend. The install is verifiable by the binary's
+        presence and its resolution on PATH.
     require:
         - golang
     distro:
@@ -21,29 +19,27 @@ candy:
         GOPATH: "~/go"
     path_append:
         - "~/go/bin"
-    task:
-        - command: |
+    plan:
+        - run: |
+            command=go install github.com/steipete/sag/cmd/sag@latest
+            go clean -cache
+          command: |
             go install github.com/steipete/sag/cmd/sag@latest
             go clean -cache
           run_as: "${USER}"
-    scenario:
-        - name: sag-binary-installed
-          step:
-            - then: the sag binary is present in the user's Go bin directory
-              file: ${HOME}/go/bin/sag
-              exists: true
-            - then: the sag command resolves on PATH from the Go bin directory
-              command: command -v sag
-              exit_status: 0
-              stdout:
-                - contains: go/bin/sag
-        - name: alsa-cgo-backend-available
-          step:
-            - then: the Fedora alsa development headers for sag's cgo audio backend are installed
-              package: alsa-lib-devel
-              installed: true
-              exclude_distros:
-                - arch
-                - cachyos
-                - debian
-                - ubuntu
+        - check: the sag binary is present in the user's Go bin directory
+          file: ${HOME}/go/bin/sag
+          exists: true
+        - check: the sag command resolves on PATH from the Go bin directory
+          command: command -v sag
+          exit_status: 0
+          stdout:
+            - contains: go/bin/sag
+        - check: the Fedora alsa development headers for sag's cgo audio backend are installed
+          package: alsa-lib-devel
+          installed: true
+          exclude_distros:
+            - arch
+            - cachyos
+            - debian
+            - ubuntu

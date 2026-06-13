@@ -1,35 +1,31 @@
 candy:
     version: 2026.144.1443
     name: songsee
-    description:
-        feature: Generates spectral visualizations (spectrogram, mel, chroma) from an audio file
-        narrative: |
-            Installs the songsee CLI via `go install
-            github.com/steipete/songsee/cmd/songsee@latest` into ~/go/bin (the
-            GOPATH bin dir, appended to PATH). songsee is a kong-based Go binary
-            that renders an input audio file into a spectral image. Verifiable
-            without an audio fixture: the binary lands at ~/go/bin/songsee, and
-            `songsee --version` execs the kong CLI and exits 0.
-        tag: [working]
+    description: |
+        Generates spectral visualizations (spectrogram, mel, chroma) from an audio file
+        Installs the songsee CLI via `go install
+        github.com/steipete/songsee/cmd/songsee@latest` into ~/go/bin (the
+        GOPATH bin dir, appended to PATH). songsee is a kong-based Go binary
+        that renders an input audio file into a spectral image. Verifiable
+        without an audio fixture: the binary lands at ~/go/bin/songsee, and
+        `songsee --version` execs the kong CLI and exits 0.
     require:
         - golang
     env:
         GOPATH: "~/go"
     path_append:
         - "~/go/bin"
-    task:
-        - command: |
+    plan:
+        - run: |
+            command=go install github.com/steipete/songsee/cmd/songsee@latest
+            go clean -cache
+          command: |
             go install github.com/steipete/songsee/cmd/songsee@latest
             go clean -cache
           run_as: "${USER}"
-    scenario:
-        - name: songsee-binary-installed
-          step:
-            - then: the songsee binary is installed at ~/go/bin/songsee
-              file: ${HOME}/go/bin/songsee
-              exists: true
-        - name: songsee-version-flag-responds
-          step:
-            - then: running `songsee --version` execs the kong CLI and exits 0
-              command: ${HOME}/go/bin/songsee --version
-              exit_status: 0
+        - check: the songsee binary is installed at ~/go/bin/songsee
+          file: ${HOME}/go/bin/songsee
+          exists: true
+        - check: running `songsee --version` execs the kong CLI and exits 0
+          command: ${HOME}/go/bin/songsee --version
+          exit_status: 0

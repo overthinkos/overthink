@@ -119,15 +119,16 @@ on it. `charly check` makes that proof cheap, for you and your agents alike.
 
 ### Agent Driven Evaluation (acceptance)
 
-What a box is *supposed* to do is written as runnable Gherkin scenarios
-on the candy that provides the behaviour, baked into the box as a label.
-A step with a check verb is verified deterministically; a prose-only step
-is graded by an **agent** probing the live deployment. Author with
-`charly candy add-scenario`, run with `charly box feature run` /
-`charly check feature run`, or let the `charly check run <score>` AI loop drive it to
-green. The spec is the test, and agents both write it and grade it. Every
-candy MUST ship a non-empty `description.feature:` AND a `scenario:` list with
-≥1 deterministic `do: assert` step — `charly box validate` hard-errors otherwise.
+What a box is *supposed* to do is written as a runnable `plan:` on the
+candy that provides the behaviour, baked into the box as a label.
+A `check:` step is verified deterministically; an `agent-check:` step
+(prose only) is graded by an **agent** probing the live deployment. Author
+by editing the candy's `plan:`, run with `charly box feature run` /
+`charly check feature run`, or let the `charly check run` AI loop (an
+`iterate:` bed) drive it to green. The spec is the test, and agents both
+write it and grade it. Every candy MUST ship a non-empty `description:`
+string AND a `plan:` with ≥1 deterministic `check:` step —
+`charly box validate` hard-errors otherwise.
 → [VISION.md](VISION.md) (why), CLAUDE.md "Agent Driven Evaluation (ADE)"
 (the rule), `/charly-check:check` (usage).
 
@@ -174,9 +175,10 @@ discriminator in its file:
   → `/charly-core:deploy`.
 - **Check** (`kind: check`) — a *disposable* deploy used as an R10 test
   bed: `charly check run <bed>` runs build → deploy → probe →
-  fresh-update → tear-down. The `kind: recipe` / `kind: score` /
-  `kind: agent` overlays drive the agent-iteration harness on top.
-  → `/charly-check:check`.
+  fresh-update → tear-down. An `iterate:` block on the bed drives the
+  agent-iteration harness on top (the AI scores the bed's `plan:`
+  `check:`/`agent-check:` steps), choosing among the configured
+  `kind: agent` AI CLIs. → `/charly-check:check`.
 
 ### Cross-cutting rules
 
@@ -362,7 +364,7 @@ workdirs, and runs `podman build` (or `docker build` — switch with
 planner grinds every candy smooth — deduplicated, ordered, and
 cache-warmed — before it sets into a box. The emitted image carries
 OCI labels for every capability it claims: `ai.opencharly.description`
-(the baked Gherkin scenarios), `ai.opencharly.check_level`,
+(the baked `plan:`), `ai.opencharly.check_level`,
 `ai.opencharly.init`, `ai.opencharly.version` (content-derived
 `EffectiveVersion`, stable across no-op rebuilds), `.ports`, etc.
 
@@ -509,16 +511,19 @@ binds host `SSH_AUTH_SOCK` / `GPG_AGENT_SOCK` into the container.
 > Build → deploy → probe → fresh-update → tear down — disposable beds
 > with the same DSL as production deploys.
 
-Tests are first-class. Every `charly.yml` (box + candy) /
-`charly.yml` declares a top-level `scenario:` list whose steps are
-one unified `Op` vocabulary — verb × `do:` (`act`|`assert`|`instruct`)
-× `context:` — covering goss-style checks (files, packages, services,
-ports, processes, commands, HTTP, DNS, mounts, users, groups, kernel
-params, interfaces, matchers) as `do: assert`, configuration as
-`do: act`, and free-form agent instructions (`agent:`) as `do: instruct`.
-Scenarios bake into a three-section OCI label
-(`ai.opencharly.description` → `{candy, box, deploy}`) so any pulled
-box is self-testable without its source repo.
+Tests are first-class. Every `charly.yml` (box + candy) declares one
+flat ordered `plan:` list whose steps each carry exactly one intent
+keyword — `run:` (deterministic state-change, the install timeline),
+`check:` (deterministic idempotent probe), `agent-run:` (an agent that
+may mutate), `agent-check:` (read-only agent assessment), or
+`include: <kind>:<name>` (splice another entity's plan) — plus an inline
+`Op` and a `context:`. `check:` covers the goss-style probes (files,
+packages, services, ports, processes, commands, HTTP, DNS, mounts, users,
+groups, kernel params, interfaces, matchers); `run:` covers configuration
+(install a package, write a file, drive a UI); `agent-check:` carries
+free-form prose graded by an agent. The plan bakes into a three-section
+OCI label (`ai.opencharly.description` → `{candy, box, deploy}`) so any
+pulled box is self-testable without its source repo.
 
 Three execution modes:
 
@@ -549,8 +554,8 @@ run`/`live`/`box` against the existing beds and return verbatim
 pass/fail — the same disposable-bed verification, whether you run it
 or your agent does. → `/charly-internals:agents`.
 
-Eleven live-container probe verbs — authorable inline as
-`scenario:` steps (`cdp: check`, `wl:
+Eleven live-container probe verbs — authorable inline as `plan:`
+`check:` steps (`cdp: check`, `wl:
 screenshot`, `dbus: call`, `vnc: status`, `mcp: list-tools`, `adb:
 getprop`, `appium: click`, …):
 
@@ -574,8 +579,9 @@ getprop`, `appium: click`, …):
 - `charly check appium` — W3C WebDriver session lifecycle, find, click,
   send-keys, screenshot.
 
-`charly feature {list, pending, validate}` authors and validates
-Gherkin-shaped descriptions on the same entries.
+`charly feature {list, pending, validate}` enumerates and validates the
+`plan:` steps on the same entries (`pending` lists the agent-graded
+`agent-run:`/`agent-check:` steps).
 
 → `/charly-check:check`, `/charly-check:cdp`, `/charly-check:wl`, `/charly-check:dbus`,
 `/charly-check:vnc`, `/charly-check:spice`, `/charly-check:libvirt`,
@@ -587,27 +593,27 @@ Gherkin-shaped descriptions on the same entries.
 > Agents in the loop, authoring and iterating on candies and
 > boxes — `charly`-specific.
 
-The agent iteration harness sits on top of `kind: check` and
-adds three overlay kinds:
+The agent iteration harness sits on top of `kind: check` via two
+pieces — the `kind: agent` catalog and an `iterate:` block:
 
 - **`kind: agent`** — reusable agent CLI catalog (`claude`,
   `codex`, `gemini`, …). Each entry declares a command, a version
   probe, an output format (typically `stream-json`), and credential
   paths. The harness parses each NDJSON line into
   `iteration[].runner_event`.
-- **`kind: recipe`** — deterministic test specification: scenarios,
-  each with a `pod:` declaring the container its probes target.
-  Pure check catalogs and Gherkin scenario descriptions; no agent
-  involved here (authoring the description + check is mandatory per candy; the
-  live agent grader via `charly check feature run` stays opt-in).
-- **`kind: score`** — runner config naming the agent, the
-  target `check-sandbox`, the recipes, the plateau iteration count,
-  the prompt, and the watchdog timeout. `charly check run <score>` runs
-  the multi-hour benchmark: the agent reads scope
+- **`iterate:` block** — the AI-loop orchestration declared on a
+  `kind: check` bed (or a `deploy:`): the eligible agents, the
+  `sandbox:` where the agent + `charly` run (the former
+  `check-sandbox`), the plateau iteration count, the prompt, and the
+  watchdog timeout. The bed's own `plan:` IS the scored content —
+  `include: <kind>:<name>` splices in another entity's plan, and the
+  `check:`/`agent-check:` steps are the scored success criteria.
+  `charly check run <bed>` runs the multi-hour benchmark when the bed
+  carries an `iterate:` block: the agent reads scope
   (`charly check scope`) + prior tag (`charly check last-tag`) + live results →
   rebuilds + redeploys → harness re-scores → continues until plateau
-  detection or the watchdog fires. Progressive recipe disclosure
-  means the agent sees recipes one at a time as it earns them.
+  detection or the watchdog fires. Progressive disclosure means the
+  agent earns plan steps one at a time.
 
 Cross-cutting: **`charly mcp serve`** is the MCP gateway. Every leaf
 Kong command auto-exposes as an MCP tool (Streamable HTTP or
@@ -710,8 +716,8 @@ not enumerations:
   Each has a dedicated kind file.
 - **Check bed catalog** (the `check:` blocks in the project and
   `box/<distro>` `charly.yml`s) — `kind: check` beds for R10,
-  plus `kind: recipe` / `score` / `ai` for the agent harness.
-  → `/charly-check:check`.
+  plus `kind: agent` and the bed's `iterate:` block for the agent
+  harness. → `/charly-check:check`.
 
 Candies used by only one box family are vendored in that
 `box/<distro>` submodule (e.g. `ghostty`/`keepassxc-keyring` in
@@ -771,9 +777,9 @@ charly box build my-image                 # Build it
 charly check box my-image                  # Run the baked checks
 ```
 
-`/charly-image:layer` is the canonical reference for the eight `task:`
-verbs (`cmd`, `mkdir`, `copy`, `write`, `link`, `download`,
-`setcap`, `build`), the unified `service:` schema, `vars:`
+`/charly-image:layer` is the canonical reference for the eight
+`run:`-step verbs (`command`, `mkdir`, `copy`, `write`, `link`,
+`download`, `setcap`, `build`), the unified `service:` schema, `vars:`
 substitution, YAML anchors, and execution-order rules.
 `/charly-check:check` covers the matcher forms, runtime variable table,
 gold-standard pattern (`candy/redis/charly.yml`), and the 10

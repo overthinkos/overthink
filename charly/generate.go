@@ -1455,7 +1455,7 @@ func (g *Generator) writeCandySteps(b *strings.Builder, candyName string, img *R
 		boxName := img.Name
 		buildDir := filepath.Join(g.BuildDir, boxName)
 		contextRelPrefix := filepath.ToSlash(filepath.Join(".build", boxName))
-		finalUser, err := g.emitTasks(b, layer, img, buildDir, contextRelPrefix, "0")
+		finalUser, err := g.emitTasks(b, layer, img, layer.runOps(), buildDir, contextRelPrefix, "0")
 		if err != nil {
 			// Phase 0: log but continue; validator should catch this earlier.
 			b.WriteString(fmt.Sprintf("# emitTasks error: %v\n", err))
@@ -1815,7 +1815,7 @@ func (g *Generator) writeLabels(b *strings.Builder, boxName string, candyOrder [
 		writeJSONLabel(b, LabelHook, hooks)
 	}
 
-	// Description: three-section Gherkin-shaped self-description.
+	// Description: three-section plan-shaped self-description.
 	// Replaces the retired LabelInfo/LabelStatus scalar labels. Local
 	// charly.yml `description:` overlays merge at runtime via
 	// MergeDeployDescriptions, not here.
@@ -2096,21 +2096,21 @@ func (g *Generator) writeLabels(b *strings.Builder, boxName string, candyOrder [
 		b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelSkill, skillURL))
 	}
 
-	// Status and info: aggregate worst status from image + candies using
-	// Description.Tag (status word) and Description.Feature/Narrative
-	// (human-facing info). The legacy Status/Info scalar fields on
-	// authored configs were removed; ResolvedBox carries the derived
-	// pair (populated in ResolveBox from img.Description).
-	effectiveStatus := resolveStatus(img.Status)
+	// Status and info: the box's effective status is the WORST of its own
+	// nominal status (boxes author none → the permissive "working" seed, so the
+	// candy chain drives the rung) and every candy's authored `status:`
+	// (working|testing|broken, default testing). Info is the first line of each
+	// entity's plain-string description.
+	effectiveStatus := StatusWorking // a box authors no status; the candy chain drives the rung
 	var infoParts []string
 	if img.Info != "" {
 		infoParts = append(infoParts, img.Info)
 	}
 	for _, candyName := range candyOrder {
 		layer := g.Candies[candyName]
-		candyStatus := descriptionStatus(layer.Description)
-		effectiveStatus = worstStatus(effectiveStatus, candyStatus)
-		if li := descriptionInfo(layer.Description); li != "" && candyStatus != "working" {
+		cs := candyStatus(layer)
+		effectiveStatus = worstStatus(effectiveStatus, cs)
+		if li := descriptionInfo(layer.Description); li != "" && cs != "working" {
 			infoParts = append(infoParts, candyName+": "+li)
 		}
 	}
@@ -2226,45 +2226,35 @@ func resolveStatus(s string) string {
 	return s
 }
 
-// resolveStatusFromTags walks Description.Tag looking for a literal
-// status tag (working/testing/broken) and returns it. When none is
-// present, returns "testing" (the historic default).
-func resolveStatusFromTags(tags []string) string {
-	for _, t := range tags {
-		switch t {
-		case "working", "testing", "broken":
-			return t
-		}
+// Status rungs. The default (empty) is "testing"; "working" is the most
+// permissive (used as the box-status seed so the candy chain drives the rung).
+const (
+	StatusWorking = "working"
+	StatusTesting = "testing"
+	StatusBroken  = "broken"
+)
+
+// candyStatus returns a candy's authored maturity rung (working|testing|broken),
+// defaulting an unset value to "testing". The authoritative per-candy status
+// source — replaces the retired Description.Tag derivation.
+func candyStatus(c *Candy) string {
+	if c == nil {
+		return StatusTesting
 	}
-	return "testing"
+	return resolveStatus(c.Status)
 }
 
-// descriptionStatus is a thin wrapper that pulls the status tag out of
-// a Description value (returning "testing" when the description is nil
-// or carries no status-class tag). Centralizes the lookup so callers
-// don't reach into Description.Tag directly.
-func descriptionStatus(d *Description) string {
-	if d == nil {
-		return "testing"
-	}
-	return resolveStatusFromTags(d.Tag)
-}
-
-// descriptionInfo aggregates Description.Feature + Description.Narrative
-// into a single human-facing string (replacing the legacy Info field).
-func descriptionInfo(d *Description) string {
-	if d == nil {
+// descriptionInfo returns the human-facing summary: the FIRST line of the
+// plain-string description (multi-line prose lives in the rest of the string).
+func descriptionInfo(d string) string {
+	d = strings.TrimSpace(d)
+	if d == "" {
 		return ""
 	}
-	switch {
-	case d.Feature != "" && d.Narrative != "":
-		return d.Feature + ": " + d.Narrative
-	case d.Feature != "":
-		return d.Feature
-	case d.Narrative != "":
-		return d.Narrative
+	if i := strings.IndexByte(d, '\n'); i >= 0 {
+		return strings.TrimSpace(d[:i])
 	}
-	return ""
+	return d
 }
 
 // statusSeverity returns a numeric severity for status comparison.
@@ -2287,12 +2277,6 @@ func worstStatus(a, b string) string {
 		return resolveStatus(b)
 	}
 	return resolveStatus(a)
-}
-
-// worstStatusFromTags picks the more severe of two tag lists, returning
-// the resolved status string ("working" / "testing" / "broken").
-func worstStatusFromTags(a, b []string) string {
-	return worstStatus(resolveStatusFromTags(a), resolveStatusFromTags(b))
 }
 
 // createRemoteCandyCopies copies remote candy directories into .build/_layers/

@@ -1,13 +1,11 @@
 candy:
     version: 2026.144.1443
     name: redis-server-layer
-    description:
-        feature: harness-redis-server — redis-server bound to 0.0.0.0 for cross-pod access
-        narrative: |
-            Runs /usr/bin/redis-server (provided by valkey-compat-redis on Fedora 43)
-            bound to 0.0.0.0:6379 with protected-mode off, so a sibling redis-client
-            pod on the shared `charly` network can SET/GET via `redis-cli -h charly-redis`.
-        tag: [working]
+    description: |
+        harness-redis-server — redis-server bound to 0.0.0.0 for cross-pod access
+        Runs /usr/bin/redis-server (provided by valkey-compat-redis on Fedora 43)
+        bound to 0.0.0.0:6379 with protected-mode off, so a sibling redis-client
+        pod on the shared `charly` network can SET/GET via `redis-cli -h charly-redis`.
     distro:
         fedora:
             package:
@@ -16,10 +14,6 @@ candy:
                 - procps-ng
     port:
         - 6379
-    task:
-        - mkdir: /var/lib/harness-redis
-          run_as: root
-          mode: "0755"
     service:
         - name: redis-server
           exec: "/usr/bin/redis-server --bind 0.0.0.0 --port 6379 --protected-mode no --dir /var/lib/harness-redis --save '' --daemonize no"
@@ -27,53 +21,43 @@ candy:
           priority: 20
           enable: true
           scope: system
-    scenario:
-        # ADE acceptance scenarios baked into ai.opencharly.description.
-        # Scenarios 1-2 are DETERMINISTIC (embedded check verbs): the
-        # build-scope file/package checks prove the redis binaries and
-        # package landed; the deploy-scope command/addr checks prove the
-        # live server answers PING and the published port is reachable.
-        # Scenario 3 is PROSE-ONLY (given/when/then, no verb) -> agent-graded.
-        - name: redis-server-binaries-installed
-          step:
-            - then: the redis-server daemon binary is present at /usr/bin/redis-server
-              file: /usr/bin/redis-server
-              exists: true
-            - then: the redis-cli client binary is present at /usr/bin/redis-cli
-              file: /usr/bin/redis-cli
-              exists: true
-            - then: the redis package (valkey-compat-redis on Fedora 43) is installed
-              package: valkey-compat-redis
-              installed: true
-        - name: redis-server-answers-ping
-          step:
-            - then: the running redis-server answers PING with PONG on port 6379
-              command: redis-cli -h 127.0.0.1 -p 6379 ping
-              stdout: PONG
-              in_container: true
-              context:
-                - runtime
-            - then: the published redis TCP port is reachable from the host
-              addr: 127.0.0.1:${HOST_PORT:6379}
-              reachable: true
-              context:
-                - runtime
-        - name: redis-reachable-from-sibling-pod
-          step:
-            - given: redis-server-layer is deployed with --bind 0.0.0.0 and protected-mode off
-            - when: a sibling redis-client pod on the shared charly network connects to charly-redis:6379
-            - then: the sibling pod can SET and GET keys against this redis instance
-        - name: harness-redis-service-running
-          step:
-            - id: harness-redis-service-running
-              service: redis-server
-              running: true
-              context:
-                - runtime
-        - name: harness-redis-port-listening
-          step:
-            - id: harness-redis-port-listening
-              port: 6379
-              listening: true
-              context:
-                - runtime
+    plan:
+        - run: mkdir=/var/lib/harness-redis
+          mkdir: /var/lib/harness-redis
+          run_as: root
+          mode: "0755"
+        - check: the redis-server daemon binary is present at /usr/bin/redis-server
+          file: /usr/bin/redis-server
+          exists: true
+        - check: the redis-cli client binary is present at /usr/bin/redis-cli
+          file: /usr/bin/redis-cli
+          exists: true
+        - check: the redis package (valkey-compat-redis on Fedora 43) is installed
+          package: valkey-compat-redis
+          installed: true
+        - check: the running redis-server answers PING with PONG on port 6379
+          command: redis-cli -h 127.0.0.1 -p 6379 ping
+          stdout: PONG
+          in_container: true
+          context:
+            - runtime
+        - check: the published redis TCP port is reachable from the host
+          addr: 127.0.0.1:${HOST_PORT:6379}
+          reachable: true
+          context:
+            - runtime
+        - agent-check: redis-server-layer is deployed with --bind 0.0.0.0 and protected-mode off
+        - agent-check: a sibling redis-client pod on the shared charly network connects to charly-redis:6379
+        - agent-check: the sibling pod can SET and GET keys against this redis instance
+        - check: service=redis-server
+          id: harness-redis-service-running
+          service: redis-server
+          running: true
+          context:
+            - runtime
+        - check: port=6379
+          id: harness-redis-port-listening
+          port: 6379
+          listening: true
+          context:
+            - runtime

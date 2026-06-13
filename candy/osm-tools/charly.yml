@@ -1,22 +1,20 @@
 candy:
     version: 2026.144.1443
     name: osm-tools
-    description:
-        feature: OSM tile-pipeline CLIs (tippecanoe/gdal/pmtiles/gpq-tiles) plus the martin vector-tile server supervised on port 3000
-        narrative: |
-            Bundles every CLI the OSM data pipeline needs — tippecanoe
-            (GeoJSON → MBTiles/PMTiles, built from felt/tippecanoe source), the
-            gdal CLIs ogr2ogr/ogrinfo (format conversion), the pmtiles
-            inspection CLI, and gpq-tiles (direct GeoParquet → PMTiles) — and
-            runs martin, the Rust vector-tile server, as a supervised service.
-            martin reads tiles from the user-owned /workspace/tiles/pmtiles/
-            volume via a wrapper that pre-creates the directory, so DAG output
-            and tile-server input share one persistent location and martin
-            answers GET /catalog on port 3000 the moment it starts. Every claim
-            below is verifiable: each binary on disk responding to --version,
-            the wrapper script present and executable, and a live service +
-            reachable-port + HTTP-catalog probe against the running deployment.
-        tag: [working]
+    description: |
+        OSM tile-pipeline CLIs (tippecanoe/gdal/pmtiles/gpq-tiles) plus the martin vector-tile server supervised on port 3000
+        Bundles every CLI the OSM data pipeline needs — tippecanoe
+        (GeoJSON → MBTiles/PMTiles, built from felt/tippecanoe source), the
+        gdal CLIs ogr2ogr/ogrinfo (format conversion), the pmtiles
+        inspection CLI, and gpq-tiles (direct GeoParquet → PMTiles) — and
+        runs martin, the Rust vector-tile server, as a supervised service.
+        martin reads tiles from the user-owned /workspace/tiles/pmtiles/
+        volume via a wrapper that pre-creates the directory, so DAG output
+        and tile-server input share one persistent location and martin
+        answers GET /catalog on port 3000 the moment it starts. Every claim
+        below is verifiable: each binary on disk responding to --version,
+        the wrapper script present and executable, and a live service +
+        reachable-port + HTTP-catalog probe against the running deployment.
     require:
         - supervisord
     distro:
@@ -83,88 +81,6 @@ candy:
     # auto-allocated default and an explicit `port: [23000:3000]` deploy pin).
     env_provide:
         MARTIN_PUBLIC_URL: "http://127.0.0.1:{{.HostPort 3000}}"
-    task:
-        # ---- tippecanoe (GeoJSON → MBTiles/PMTiles) ----
-        # NOT in Fedora repos and upstream (felt/tippecanoe) ships only source —
-        # no GitHub release binaries exist. Build from source in-image. The
-        # build is small (~200 MB git clone, <1 min `make -j`); cleanup keeps
-        # the image lean. Build deps (git/make/gcc-c++/sqlite-devel/zlib-devel)
-        # are declared in distros.fedora.packages above.
-        - command: |
-            set -euo pipefail
-            git clone --depth 1 https://github.com/felt/tippecanoe /tmp/tippecanoe
-            cd /tmp/tippecanoe
-            make -j"$(nproc)"
-            make install PREFIX=/usr/local
-            cd /
-            rm -rf /tmp/tippecanoe
-          run_as: root
-        # ---- martin (tile server) ----
-        # Static-musl Rust binary (the gnu build hard-depends on libicuuc.so.74
-        # / libicui18n.so.74 which aren't on Fedora 43 — it ships libicu 77;
-        # musl is self-contained). Pinned to martin-v1.9.0 rather than tracking
-        # `releases/latest/download/` because maplibre/martin's release pipeline
-        # has, on multiple occasions, published a tag (e.g. martin-v1.9.1) with
-        # zero attached assets while CI was mid-upload — `latest/download/...`
-        # returned 404 for every asset until the assets caught up. A principled
-        # version pin avoids the "upstream half-published a release" failure
-        # class entirely (R4: no transient-flake workarounds; the fix is the
-        # pin, not a retry loop). Bump the version explicitly when needed.
-        - download: "https://github.com/maplibre/martin/releases/download/martin-v1.9.0/martin-${BUILD_ARCH}-unknown-linux-musl.tar.gz"
-          extract: tar.gz
-          to: /usr/local/bin
-          include: [martin]
-          run_as: root
-        # ---- pmtiles CLI (protomaps/go-pmtiles) ----
-        # Asset filenames embed the version (`go-pmtiles_<v>_Linux_x86_64.tar.gz`),
-        # so the releases/latest/download/ static-redirect trick can't reach them.
-        # Resolve the latest tag via the GitHub API, then download + extract +
-        # install in one shell. jq comes from the rpm: list above; curl is
-        # always present in fedora minimal.
-        - command: |
-            set -euo pipefail
-            LATEST=$(curl -fsSL "https://api.github.com/repos/protomaps/go-pmtiles/releases/latest" | jq -r '.tag_name')
-            VERSION="${LATEST#v}"
-            TMPDIR=$(mktemp -d)
-            cd "$TMPDIR"
-            curl -fsSL "https://github.com/protomaps/go-pmtiles/releases/download/${LATEST}/go-pmtiles_${VERSION}_Linux_${BUILD_ARCH}.tar.gz" \
-              -o pmtiles.tar.gz
-            tar -xzf pmtiles.tar.gz pmtiles
-            install -m 0755 pmtiles /usr/local/bin/pmtiles
-            cd / && rm -rf "$TMPDIR"
-          run_as: root
-        # ---- gpq-tiles (GeoParquet → PMTiles direct converter) ----
-        # geoparquet-io/gpq-tiles v0.6.0 publishes wheels only for Python 3.8
-        # on Linux x86_64; our marimo pixi env is Python <3.14 and has
-        # [pypi-options] no-build = true (load-bearing — without it, uv
-        # downgrades apache-airflow to v1.10.2 which fails on the removed
-        # `imp` module). So we build the binary from crates.io via cargo
-        # and install system-wide at /usr/local/bin/gpq-tiles. The
-        # ~/.cargo/registry + .cargo/git build caches are dropped after
-        # install to keep the image lean. Build duration: ~5-10 min on a
-        # warm rust toolchain (cargo compiles 80+ transitive crates).
-        - command: |
-            set -euo pipefail
-            cargo install gpq-tiles --root /usr/local --jobs "$(nproc)"
-            rm -rf /root/.cargo/registry /root/.cargo/git \
-                   /root/.cargo/.crates.toml /root/.cargo/.crates2.json
-          run_as: root
-        # ---- martin wrapper ----
-        # Tiny shell wrapper that pre-creates the tile source directory under
-        # the user-owned workspace volume before exec'ing martin. The directory
-        # may not exist yet on first deploy (the DAG hasn't run); without
-        # mkdir -p, martin would error or warn. With it, martin starts with
-        # an empty source dir and auto-discovers tiles as the DAG produces
-        # them. `exec` keeps PID 1 ownership for proper signal handling.
-        - write: /usr/local/bin/martin-wrapper.sh
-          mode: "0755"
-          run_as: root
-          content: |
-            #!/usr/bin/env bash
-            set -euo pipefail
-            DIR="/workspace/tiles/pmtiles"
-            mkdir -p "$DIR"
-            exec /usr/local/bin/martin --listen-addresses 0.0.0.0:3000 "$DIR"
     service:
         - name: martin
           # Wrapper script ensures the tile source dir exists under the
@@ -178,78 +94,127 @@ candy:
           priority: 33
           enable: true
           scope: system
-    scenario:
-        # DETERMINISTIC build-scope steps — embedded check verbs fail if a
-        # CLI was never installed (no version response / missing binary).
-        - name: osm-cli-tools-installed
-          step:
-            - then: tippecanoe (built from felt/tippecanoe source) responds to --version
-              command: tippecanoe --version
-              exit_status: 0
-            - and: the gdal ogr2ogr conversion CLI responds to --version
-              command: ogr2ogr --version
-              exit_status: 0
-            - and: the pmtiles inspection CLI responds to its version subcommand
-              command: pmtiles version
-              exit_status: 0
-            - and: the gpq-tiles GeoParquet→PMTiles converter is installed at /usr/local/bin/gpq-tiles
-              file: /usr/local/bin/gpq-tiles
-              exists: true
-        - name: martin-binary-and-wrapper-present
-          step:
-            - then: the martin (musl) tile-server binary is installed at /usr/local/bin/martin
-              file: /usr/local/bin/martin
-              exists: true
-            - and: the martin start wrapper is present and executable (0755)
-              file: /usr/local/bin/martin-wrapper.sh
-              exists: true
-              mode: "0755"
-        # DETERMINISTIC deploy-scope steps — need the running service, so
-        # they are scoped to deploy and probe the live container / port.
-        - name: martin-serves-catalog-on-its-port
-          step:
-            - then: the martin supervisord program is running
-              service: martin
-              running: true
-              context:
-                - runtime
-            - and: the martin port accepts a TCP connection from the host
-              addr: 127.0.0.1:${HOST_PORT:3000}
-              reachable: true
-              timeout: 10s
-              context:
-                - runtime
-            - and: martin answers GET /catalog with HTTP 200 (empty source list pre-DAG, populated post-DAG)
-              http: http://127.0.0.1:${HOST_PORT:3000}/catalog
-              status: 200
-              timeout: 10s
-              context:
-                - runtime
-        # PROSE-ONLY step — genuine free-form serving behaviour, agent-graded
-        # by `charly check feature run` against the live deployment.
-        - name: martin-discovers-and-serves-vector-tiles
-          step:
-            - then: martin auto-discovers PMTiles files written into /workspace/tiles/pmtiles/ and serves each as a named vector-tile source (Content-Type application/x-protobuf) under /<source>/{z}/{x}/{y}
-        - name: jq-installed
-          step:
-            - id: jq-installed
-              command: jq --version
-              exit_status: 0
-        - name: martin-installed
-          step:
-            - id: martin-installed
-              command: martin --version
-              exit_status: 0
-        - name: gpq-tiles-installed
-          step:
-            - id: gpq-tiles-installed
-              command: /usr/local/bin/gpq-tiles --version
-              exit_status: 0
-        - name: martin-tiles-dir-runtime
-          step:
-            - id: martin-tiles-dir-runtime
-              command: test -d /workspace/tiles/pmtiles
-              exit_status: 0
-              in_container: true
-              context:
-                - runtime
+    plan:
+        - run: |
+            command=set -euo pipefail
+            git clone --depth 1 https://github.com/felt/tippecanoe /tmp/tippecanoe
+            cd /tmp/tippecanoe
+            make -j"$(nproc)"
+            make install PREFIX=/usr/local
+            cd /
+            rm -rf /tmp/tippecanoe
+          command: |
+            set -euo pipefail
+            git clone --depth 1 https://github.com/felt/tippecanoe /tmp/tippecanoe
+            cd /tmp/tippecanoe
+            make -j"$(nproc)"
+            make install PREFIX=/usr/local
+            cd /
+            rm -rf /tmp/tippecanoe
+          run_as: root
+        - run: download=https://github.com/maplibre/martin/releases/download/martin-v1.9.0/martin-${BUILD_ARCH}-unknown-linux-musl.tar.gz
+          download: "https://github.com/maplibre/martin/releases/download/martin-v1.9.0/martin-${BUILD_ARCH}-unknown-linux-musl.tar.gz"
+          extract: tar.gz
+          to: /usr/local/bin
+          extract_include: [martin]
+          run_as: root
+        - run: |
+            command=set -euo pipefail
+            LATEST=$(curl -fsSL "https://api.github.com/repos/protomaps/go-pmtiles/releases/latest" | jq -r '.tag_name')
+            VERSION="${LATEST#v}"
+            TMPDIR=$(mktemp -d)
+            cd "$TMPDIR"
+            curl -fsSL "https://github.com/protomaps/go-pmtiles/releases/download/${LATEST}/go-pmtiles_${VERSION}_Linux_${BUILD_ARCH}.tar.gz" \
+              -o pmtiles.tar.gz
+            tar -xzf pmtiles.tar.gz pmtiles
+            install -m 0755 pmtiles /usr/local/bin/pmtiles
+            cd / && rm -rf "$TMPDIR"
+          command: |
+            set -euo pipefail
+            LATEST=$(curl -fsSL "https://api.github.com/repos/protomaps/go-pmtiles/releases/latest" | jq -r '.tag_name')
+            VERSION="${LATEST#v}"
+            TMPDIR=$(mktemp -d)
+            cd "$TMPDIR"
+            curl -fsSL "https://github.com/protomaps/go-pmtiles/releases/download/${LATEST}/go-pmtiles_${VERSION}_Linux_${BUILD_ARCH}.tar.gz" \
+              -o pmtiles.tar.gz
+            tar -xzf pmtiles.tar.gz pmtiles
+            install -m 0755 pmtiles /usr/local/bin/pmtiles
+            cd / && rm -rf "$TMPDIR"
+          run_as: root
+        - run: |
+            command=set -euo pipefail
+            cargo install gpq-tiles --root /usr/local --jobs "$(nproc)"
+            rm -rf /root/.cargo/registry /root/.cargo/git \
+                   /root/.cargo/.crates.toml /root/.cargo/.crates2.json
+          command: |
+            set -euo pipefail
+            cargo install gpq-tiles --root /usr/local --jobs "$(nproc)"
+            rm -rf /root/.cargo/registry /root/.cargo/git \
+                   /root/.cargo/.crates.toml /root/.cargo/.crates2.json
+          run_as: root
+        - run: write=/usr/local/bin/martin-wrapper.sh
+          write: /usr/local/bin/martin-wrapper.sh
+          mode: "0755"
+          run_as: root
+          content: |
+            #!/usr/bin/env bash
+            set -euo pipefail
+            DIR="/workspace/tiles/pmtiles"
+            mkdir -p "$DIR"
+            exec /usr/local/bin/martin --listen-addresses 0.0.0.0:3000 "$DIR"
+        - check: tippecanoe (built from felt/tippecanoe source) responds to --version
+          command: tippecanoe --version
+          exit_status: 0
+        - check: the gdal ogr2ogr conversion CLI responds to --version
+          command: ogr2ogr --version
+          exit_status: 0
+        - check: the pmtiles inspection CLI responds to its version subcommand
+          command: pmtiles version
+          exit_status: 0
+        - check: the gpq-tiles GeoParquet→PMTiles converter is installed at /usr/local/bin/gpq-tiles
+          file: /usr/local/bin/gpq-tiles
+          exists: true
+        - check: the martin (musl) tile-server binary is installed at /usr/local/bin/martin
+          file: /usr/local/bin/martin
+          exists: true
+        - check: the martin start wrapper is present and executable (0755)
+          file: /usr/local/bin/martin-wrapper.sh
+          exists: true
+          mode: "0755"
+        - check: the martin supervisord program is running
+          service: martin
+          running: true
+          context:
+            - runtime
+        - check: the martin port accepts a TCP connection from the host
+          addr: 127.0.0.1:${HOST_PORT:3000}
+          reachable: true
+          timeout: 10s
+          context:
+            - runtime
+        - check: martin answers GET /catalog with HTTP 200 (empty source list pre-DAG, populated post-DAG)
+          http: http://127.0.0.1:${HOST_PORT:3000}/catalog
+          status: 200
+          timeout: 10s
+          context:
+            - runtime
+        - agent-check: martin auto-discovers PMTiles files written into /workspace/tiles/pmtiles/ and serves each as a named vector-tile source (Content-Type application/x-protobuf) under /<source>/{z}/{x}/{y}
+        - check: command=jq --version
+          id: jq-installed
+          command: jq --version
+          exit_status: 0
+        - check: command=martin --version
+          id: martin-installed
+          command: martin --version
+          exit_status: 0
+        - check: command=/usr/local/bin/gpq-tiles --version
+          id: gpq-tiles-installed
+          command: /usr/local/bin/gpq-tiles --version
+          exit_status: 0
+        - check: command=test -d /workspace/tiles/pmtiles
+          id: martin-tiles-dir-runtime
+          command: test -d /workspace/tiles/pmtiles
+          exit_status: 0
+          in_container: true
+          context:
+            - runtime

@@ -1,20 +1,18 @@
 candy:
     version: 2026.144.1443
     name: direnv
-    description:
-        feature: direnv — automatic per-directory environment loading from .envrc files
-        narrative: |
-            direnv installs the `direnv` binary (one package name across
-            fedora/arch/debian) AND declaratively wires the per-shell hook that
-            makes .envrc autoload work. At `charly box build` the shell: schema
-            bakes the POSIX hook into /etc/profile.d/charly-direnv-<shell>.sh for
-            bash/zsh/sh (the generic body `check "$(direnv hook <shell>)"` with
-            ${SHELL_NAME} substituted) and the fish-specific hook into
-            /etc/fish/conf.d/charly-direnv.fish (`direnv hook fish | source`).
-            The scenarios assert both the installed/runnable binary AND the baked
-            hook drop-ins, so they fail if either the package or the shell wiring
-            is missing.
-        tag: [working]
+    description: |
+        direnv — automatic per-directory environment loading from .envrc files
+        direnv installs the `direnv` binary (one package name across
+        fedora/arch/debian) AND declaratively wires the per-shell hook that
+        makes .envrc autoload work. At `charly box build` the shell: schema
+        bakes the POSIX hook into /etc/profile.d/charly-direnv-<shell>.sh for
+        bash/zsh/sh (the generic body `check "$(direnv hook <shell>)"` with
+        ${SHELL_NAME} substituted) and the fish-specific hook into
+        /etc/fish/conf.d/charly-direnv.fish (`direnv hook fish | source`).
+        The scenarios assert both the installed/runnable binary AND the baked
+        hook drop-ins, so they fail if either the package or the shell wiring
+        is missing.
     package:
         - direnv
     # Shell hooks installed declaratively via the shell: schema (2026-05).
@@ -27,38 +25,30 @@ candy:
         fish:
             init: |
                 direnv hook fish | source
-    scenario:
-        - name: direnv-binary-installed
-          step:
-            - then: the direnv binary is installed at /usr/bin/direnv for the .envrc/.secrets autoload workflow
-              file: /usr/bin/direnv
-              exists: true
-            - then: direnv reports its version without error
-              command: /usr/bin/direnv version
-              exit_status: 0
-        - name: bash-hook-baked-into-image
-          step:
-            - then: the bash shell-init drop-in is baked into the image and installs the direnv hook so .envrc loads on directory change
-              file: /etc/profile.d/charly-direnv-bash.sh
-              exists: true
-              contains:
-                - "direnv hook bash"
-        - name: fish-hook-baked-into-image
-          step:
-            - then: the fish shell-init drop-in is baked into its conf.d and sources the direnv fish hook
-              file: /etc/fish/conf.d/charly-direnv.fish
-              exists: true
-              contains:
-                - "direnv hook fish"
-        - name: direnv-package
-          step:
-            - id: direnv-package
-              package: direnv
-              installed: true
-        - name: direnv-version
-          step:
-            - id: direnv-version
-              command: /usr/bin/direnv version
-              exit_status: 0
-              stdout:
-                - matches: "[0-9]+\\.[0-9]+"
+    plan:
+        - check: the direnv binary is installed at /usr/bin/direnv for the .envrc/.secrets autoload workflow
+          file: /usr/bin/direnv
+          exists: true
+        - check: direnv reports its version without error
+          command: /usr/bin/direnv version
+          exit_status: 0
+        - check: the bash shell-init drop-in is baked into the image and installs the direnv hook so .envrc loads on directory change
+          file: /etc/profile.d/charly-direnv-bash.sh
+          exists: true
+          contains:
+            - "direnv hook bash"
+        - check: the fish shell-init drop-in is baked into its conf.d and sources the direnv fish hook
+          file: /etc/fish/conf.d/charly-direnv.fish
+          exists: true
+          contains:
+            - "direnv hook fish"
+        - check: package=direnv
+          id: direnv-package
+          package: direnv
+          installed: true
+        - check: command=/usr/bin/direnv version
+          id: direnv-version
+          command: /usr/bin/direnv version
+          exit_status: 0
+          stdout:
+            - matches: "[0-9]+\\.[0-9]+"

@@ -1,20 +1,18 @@
 candy:
     version: 2026.162.1430
     name: charly
-    description:
-        feature: The full charly toolchain on a deployment — the on-PATH charly CLI plus its composed VM / encrypted-storage / console-relay stack.
-        narrative: |
-            Full charly toolchain — the CLI binary + the VM stack (virtualization),
-            encrypted storage (gocryptfs), and console relay (socat) — composed into
-            ONE layer that works identically on container/pod, host/local, and
-            bootc/VM targets via the `virtualization` layer's mixed-entry `service:`
-            pattern. This is the single canonical `charly` layer: bake it where a
-            deployment needs a persistent on-`$PATH` charly or the full toolchain inside
-            (the `charly-mcp` server, the `*-charly` showcases, nested-pod orchestrators).
-            Images that only need transient in-container `charly` (the dbus delegation
-            path) need NOT bake it — the host copies `charly` in on demand
-            (`EnsureCharlyInVenue`; see `/charly-tools:charly`).
-        tag: [working]
+    description: |
+        The full charly toolchain on a deployment — the on-PATH charly CLI plus its composed VM / encrypted-storage / console-relay stack.
+        Full charly toolchain — the CLI binary + the VM stack (virtualization),
+        encrypted storage (gocryptfs), and console relay (socat) — composed into
+        ONE layer that works identically on container/pod, host/local, and
+        bootc/VM targets via the `virtualization` layer's mixed-entry `service:`
+        pattern. This is the single canonical `charly` layer: bake it where a
+        deployment needs a persistent on-`$PATH` charly or the full toolchain inside
+        (the `charly-mcp` server, the `*-charly` showcases, nested-pod orchestrators).
+        Images that only need transient in-container `charly` (the dbus delegation
+        path) need NOT bake it — the host copies `charly` in on demand
+        (`EnsureCharlyInVenue`; see `/charly-tools:charly`).
     candy:
         - virtualization
         - gocryptfs
@@ -69,50 +67,39 @@ candy:
         pac: pkg/arch
         rpm: pkg/fedora
         deb: pkg/debian
-    scenario:
-        # The candy's OWN deliverable: the charly binary on PATH, reporting a CalVer.
-        - name: charly-cli-on-path
-          step:
-            - then: the charly binary resolves on the deployment's PATH
-              command: command -v charly
-              exit_status: 0
-            - then: charly version prints a CalVer build stamp on stdout
-              command: charly version
-              exit_status: 0
-              stdout:
-                - matches: "[0-9]{4}\\.[0-9]+"
-        # The observable effect of the meta-composition: the key artifacts of
-        # each composed candy are present (same paths those candies validate).
-        - name: toolchain-composition-present
-          step:
-            - then: the gocryptfs encrypted-storage binary (gocryptfs candy) is installed
-              file: /usr/bin/gocryptfs
-              exists: true
-            - then: the socat console-relay binary (socat candy) is installed
-              file: /usr/bin/socat
-              exists: true
-            - then: the libvirt virsh client (virtualization candy) is installed
-              file: /usr/bin/virsh
-              exists: true
-            - then: the qemu system emulator (virtualization candy) is installed
-              file: /usr/bin/qemu-system-x86_64
-              exists: true
-        # The doctor subcommand runs and reports — the in-container CLI works.
-        - name: charly-doctor-reports
-          step:
-            - then: charly doctor runs and emits its Summary line
-              command: charly doctor 2>&1 | grep -q "Summary:"
-              exit_status: 0
-        - name: charly-binary
-          step:
-            - id: charly-binary
-              command: command -v charly
-              exit_status: 0
-              stdout:
-                # Path-agnostic: the package installs to /usr/bin/charly, but on a
-                # usr-merged distro (Arch/CachyOS: /usr/sbin -> bin, /usr/sbin ahead
-                # of /usr/bin in PATH) `command -v` reports it via /usr/sbin — the
-                # SAME inode. Accept any /usr[/local]/{bin,sbin}/charly so the probe
-                # passes regardless of which PATH alias resolved it (RE2: no $ anchor,
-                # which wouldn't match the trailing newline).
-                - matches: "/usr/(local/)?s?bin/charly"
+    plan:
+        - check: the charly binary resolves on the deployment's PATH
+          command: command -v charly
+          exit_status: 0
+        - check: charly version prints a CalVer build stamp on stdout
+          command: charly version
+          exit_status: 0
+          stdout:
+            - matches: "[0-9]{4}\\.[0-9]+"
+        - check: the gocryptfs encrypted-storage binary (gocryptfs candy) is installed
+          file: /usr/bin/gocryptfs
+          exists: true
+        - check: the socat console-relay binary (socat candy) is installed
+          file: /usr/bin/socat
+          exists: true
+        - check: the libvirt virsh client (virtualization candy) is installed
+          file: /usr/bin/virsh
+          exists: true
+        - check: the qemu system emulator (virtualization candy) is installed
+          file: /usr/bin/qemu-system-x86_64
+          exists: true
+        - check: charly doctor runs and emits its Summary line
+          command: charly doctor 2>&1 | grep -q "Summary:"
+          exit_status: 0
+        - check: command=command -v charly
+          id: charly-binary
+          command: command -v charly
+          exit_status: 0
+          stdout:
+            # Path-agnostic: the package installs to /usr/bin/charly, but on a
+            # usr-merged distro (Arch/CachyOS: /usr/sbin -> bin, /usr/sbin ahead
+            # of /usr/bin in PATH) `command -v` reports it via /usr/sbin — the
+            # SAME inode. Accept any /usr[/local]/{bin,sbin}/charly so the probe
+            # passes regardless of which PATH alias resolved it (RE2: no $ anchor,
+            # which wouldn't match the trailing newline).
+            - matches: "/usr/(local/)?s?bin/charly"

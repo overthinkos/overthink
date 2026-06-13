@@ -1,8 +1,10 @@
 candy:
     version: 2026.144.1443
     name: pixi
-    task:
-        - command: echo "installing pixi"
+    plan:
+        - run: command=echo "installing pixi"
+          command: echo "installing pixi"
           run_as: root
-        - command: echo "init pixi project"
+        - run: command=echo "init pixi project"
+          command: echo "init pixi project"
           run_as: "${USER}"

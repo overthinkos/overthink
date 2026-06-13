@@ -1,18 +1,16 @@
 candy:
     version: 2026.144.1443
     name: nvidia
-    description:
-        feature: NVIDIA GPU runtime — nvidia-container-toolkit (nvidia-ctk CDI) plus the driver-lib path and Vulkan ICD wiring
-        narrative: |
-            Installs nvidia-container-toolkit (the nvidia-ctk CLI that generates
-            CDI device specs) alongside the per-distro driver libs (nvidia-utils
-            on Arch, libva-nvidia-driver on Fedora). Exports
-            LD_LIBRARY_PATH=/usr/lib64 so the GPU driver libraries resolve, and
-            prepares /etc/vulkan/icd.d to hold the nvidia Vulkan ICD symlinks.
-            Every effect — the package, the nvidia-ctk binary, the exported path,
-            and the ICD directory — is a real artifact baked into the image, so
-            each is directly verifiable without a physical GPU.
-        tag: [working]
+    description: |
+        NVIDIA GPU runtime — nvidia-container-toolkit (nvidia-ctk CDI) plus the driver-lib path and Vulkan ICD wiring
+        Installs nvidia-container-toolkit (the nvidia-ctk CLI that generates
+        CDI device specs) alongside the per-distro driver libs (nvidia-utils
+        on Arch, libva-nvidia-driver on Fedora). Exports
+        LD_LIBRARY_PATH=/usr/lib64 so the GPU driver libraries resolve, and
+        prepares /etc/vulkan/icd.d to hold the nvidia Vulkan ICD symlinks.
+        Every effect — the package, the nvidia-ctk binary, the exported path,
+        and the ICD directory — is a real artifact baked into the image, so
+        each is directly verifiable without a physical GPU.
     package:
         - nvidia-container-toolkit
     distro:
@@ -28,42 +26,38 @@ candy:
                   gpgkey: "https://negativo17.org/repos/RPM-GPG-KEY-slaanesh"
     env:
         LD_LIBRARY_PATH: "/usr/lib64"
-    task:
-        # Vulkan ICD symlinks for nvidia-ctk CDI. Conditional because the ICD JSON
-        # files may or may not be present depending on the driver package — || true
-        # keeps the RUN from failing on distros that don't ship them here.
-        - mkdir: /etc/vulkan/icd.d
+    plan:
+        - run: mkdir=/etc/vulkan/icd.d
+          mkdir: /etc/vulkan/icd.d
           run_as: root
-        - command: |
+        - run: |
+            command=[ -f /usr/share/vulkan/icd.d/nvidia_icd.x86_64.json ] && \
+              ln -sf /usr/share/vulkan/icd.d/nvidia_icd.x86_64.json /etc/vulkan/icd.d/nvidia_icd.json || true
+            [ -f /usr/share/vulkan/implicit_layer.d/nvidia_layers.json ] && \
+              ln -sf /usr/share/vulkan/implicit_layer.d/nvidia_layers.json /etc/vulkan/icd.d/nvidia_layers.json || true
+          command: |
             [ -f /usr/share/vulkan/icd.d/nvidia_icd.x86_64.json ] && \
               ln -sf /usr/share/vulkan/icd.d/nvidia_icd.x86_64.json /etc/vulkan/icd.d/nvidia_icd.json || true
             [ -f /usr/share/vulkan/implicit_layer.d/nvidia_layers.json ] && \
               ln -sf /usr/share/vulkan/implicit_layer.d/nvidia_layers.json /etc/vulkan/icd.d/nvidia_layers.json || true
           run_as: root
-    scenario:
-        - name: container-toolkit-installed
-          step:
-            - then: the nvidia-container-toolkit package is installed for CDI device generation
-              package: nvidia-container-toolkit
-              installed: true
-            - then: the nvidia-ctk CLI binary lands on the canonical /usr/bin path
-              file: /usr/bin/nvidia-ctk
-              exists: true
-            - then: nvidia-ctk runs and reports a version number
-              command: nvidia-ctk --version
-              exit_status: 0
-              stdout:
-                - matches: "[0-9]+\\.[0-9]+"
-        - name: vulkan-icd-dir-prepared
-          step:
-            - then: the Vulkan ICD directory exists to hold the nvidia ICD symlinks
-              file: /etc/vulkan/icd.d
-              exists: true
-              filetype: directory
-        - name: gpu-driver-library-path-exported
-          step:
-            - then: LD_LIBRARY_PATH is exported so the GPU driver libs under /usr/lib64 resolve at runtime
-              command: printenv LD_LIBRARY_PATH
-              exit_status: 0
-              stdout:
-                - contains: /usr/lib64
+        - check: the nvidia-container-toolkit package is installed for CDI device generation
+          package: nvidia-container-toolkit
+          installed: true
+        - check: the nvidia-ctk CLI binary lands on the canonical /usr/bin path
+          file: /usr/bin/nvidia-ctk
+          exists: true
+        - check: nvidia-ctk runs and reports a version number
+          command: nvidia-ctk --version
+          exit_status: 0
+          stdout:
+            - matches: "[0-9]+\\.[0-9]+"
+        - check: the Vulkan ICD directory exists to hold the nvidia ICD symlinks
+          file: /etc/vulkan/icd.d
+          exists: true
+          filetype: directory
+        - check: LD_LIBRARY_PATH is exported so the GPU driver libs under /usr/lib64 resolve at runtime
+          command: printenv LD_LIBRARY_PATH
+          exit_status: 0
+          stdout:
+            - contains: /usr/lib64

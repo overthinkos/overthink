@@ -1,13 +1,11 @@
 candy:
     version: 2026.144.1443
     name: check-redis-init-layer
-    description:
-        feature: bench-redis-init — pre-populates redis with bench:hello = world
-        narrative: |
-            Companion to the redis layer. Sets the key `bench:hello` to `world`
-            after redis-server is up so the tier4-redis recipe's
-            `redis-cli get bench:hello` probe returns the expected value.
-        tag: [working]
+    description: |
+        bench-redis-init — pre-populates redis with bench:hello = world
+        Companion to the redis layer. Sets the key `bench:hello` to `world`
+        after redis-server is up so the tier4-redis recipe's
+        `redis-cli get bench:hello` probe returns the expected value.
     require:
         - redis
     distro:
@@ -15,8 +13,16 @@ candy:
             package:
                 - iproute
                 - procps-ng
-    task:
-        - write: /usr/local/bin/bench-redis-init.sh
+    service:
+        - name: bench-redis-init
+          exec: "/usr/local/bin/bench-redis-init.sh"
+          restart: always
+          priority: 30
+          enable: true
+          scope: system
+    plan:
+        - run: write=/usr/local/bin/bench-redis-init.sh
+          write: /usr/local/bin/bench-redis-init.sh
           run_as: root
           mode: "0755"
           content: |
@@ -34,36 +40,16 @@ candy:
             # Stay up so supervisord doesn't restart-loop us; the key is
             # already set, but keeping the process alive is the contract.
             exec sleep infinity
-    service:
-        - name: bench-redis-init
-          exec: "/usr/local/bin/bench-redis-init.sh"
-          restart: always
-          priority: 30
-          enable: true
-          scope: system
-    scenario:
-        # ADE acceptance scenarios baked into ai.opencharly.description.
-        # The first two scenarios are DETERMINISTIC (embedded check verbs):
-        # the build-scope file check proves the seed script landed and still
-        # carries the redis-cli set command; the deploy-scope command proves
-        # the key was actually populated against the live redis. The last
-        # step is PROSE-ONLY (no verb -> agent-graded).
-        - name: bench-redis-init-script-installed
-          step:
-            - then: the bench-redis-init seed script is installed and executable at /usr/local/bin/bench-redis-init.sh and issues the redis-cli set for bench:hello
-              file: /usr/local/bin/bench-redis-init.sh
-              exists: true
-              mode: "0755"
-              contains:
-                - contains: "set bench:hello world"
-        - name: bench-hello-key-populated
-          step:
-            - then: after the service runs, redis serves the pre-populated key bench:hello = world
-              command: redis-cli -h 127.0.0.1 -p 6379 get bench:hello
-              stdout: world
-              in_container: true
-              context:
-                - runtime
-        - name: bench-redis-init-stays-up
-          step:
-            - then: the bench-redis-init service stays running after seeding the key (exec sleep infinity, restart=always) so supervisord does not restart-loop it
+        - check: the bench-redis-init seed script is installed and executable at /usr/local/bin/bench-redis-init.sh and issues the redis-cli set for bench:hello
+          file: /usr/local/bin/bench-redis-init.sh
+          exists: true
+          mode: "0755"
+          contains:
+            - contains: "set bench:hello world"
+        - check: after the service runs, redis serves the pre-populated key bench:hello = world
+          command: redis-cli -h 127.0.0.1 -p 6379 get bench:hello
+          stdout: world
+          in_container: true
+          context:
+            - runtime
+        - agent-check: the bench-redis-init service stays running after seeding the key (exec sleep infinity, restart=always) so supervisord does not restart-loop it

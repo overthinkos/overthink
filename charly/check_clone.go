@@ -108,13 +108,13 @@ func (l RunLayout) IterDir(k int) string {
 	return filepath.Join(l.RunDir, fmt.Sprintf("iter%d", k))
 }
 
-// ResultsDir returns the per-recipe results directory (sibling of
+// ResultsDir returns the per-entity results directory (sibling of
 // runs/) under the harness data root — outside the project tree.
 func (l RunLayout) ResultsDir() string {
 	return filepath.Join(l.HarnessRoot, "results")
 }
 
-// NoteDir returns the per-recipe note directory under the harness
+// NoteDir returns the per-entity note directory under the harness
 // data root.
 func (l RunLayout) NoteDir() string {
 	return filepath.Join(l.HarnessRoot, "note")

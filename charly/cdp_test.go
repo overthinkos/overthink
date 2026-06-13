@@ -283,7 +283,7 @@ func TestCdpCmdSubcommands(t *testing.T) {
 // non-numeric strings fall through to the existing UUID-match path. The
 // numeric path filters out non-page tabs (service-workers, dedicated-workers,
 // iframes) so authors can rely on stable 1-based positions in `tab: "1"`
-// recipe authoring without knowing Chrome-assigned UUIDs.
+// plan authoring without knowing Chrome-assigned UUIDs.
 func TestResolveTabWS_NumericIndex(t *testing.T) {
 	type tabFixture struct {
 		ID                   string

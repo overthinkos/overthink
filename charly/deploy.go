@@ -52,7 +52,7 @@ type DeployConfig struct {
 // each child's flag stands on its own (see /charly-internals:disposable).
 type DeploymentNode struct {
 	Version     string               `yaml:"version,omitempty"`
-	Description *Description         `yaml:"description,omitempty"` // Gherkin-shaped self-description; replaces retired info:/status:
+	Description string               `yaml:"description,omitempty"` // plain-string self-description; first line = summary
 	Tunnel      *TunnelYAML          `yaml:"tunnel,omitempty"`
 	DNS         string               `yaml:"dns,omitempty"`
 	AcmeEmail   string               `yaml:"acme_email,omitempty"`
@@ -75,11 +75,18 @@ type DeploymentNode struct {
 	ForwardSshAgent *bool                 `yaml:"forward_ssh_agent,omitempty"`
 	Sidecar         map[string]SidecarDef `yaml:"sidecar,omitempty"` // Sidecar container overrides
 
-	// Scenario carries local deploy-level acceptance overlays (Op steps).
-	// They merge onto the image's label-baked scenarios at runtime by
-	// scenario name / step id (MergeDeployDescriptions); a step with
-	// skip:true disables the baked step.
-	Scenario []Scenario `yaml:"scenario,omitempty"`
+	// Plan carries local deploy-level acceptance + provisioning overlays
+	// (Steps). They merge onto the image's label-baked plan at runtime by
+	// step id (MergeDeployDescriptions); a step with skip:true disables the
+	// baked step.
+	Plan []Step `yaml:"plan,omitempty"`
+
+	// Iterate carries the AI-loop orchestration (the former kind:score). When
+	// set on a deploy / kind:check bed, `charly check run <name>` drives the
+	// iterate loop scoring this entity's plan check:/agent-check: steps;
+	// absent → the deterministic R10 bed sequence. Never baked into the image
+	// (deploy/runtime state).
+	Iterate *IterateConfig `yaml:"iterate,omitempty"`
 
 	// CheckBed marks this entry as a `kind: check` disposable R10 bed,
 	// folded into the Deploy map by foldCheckBeds() at load time so every
@@ -275,7 +282,7 @@ type DeploymentNode struct {
 
 	// Ephemeral is the operational-mandate counterpart to Disposable's
 	// authorization: presence indicates the deploy MUST be destroyed as
-	// soon as it isn't needed anymore (auto-cleanup at scenario end,
+	// soon as it isn't needed anymore (auto-cleanup at run end,
 	// SIGTERM, or TTL expiry). The block-form unmarshal accepts both
 	// `ephemeral: true` (boolean shorthand → defaults) and
 	// `ephemeral: { ttl: ..., keep_on_failure: ..., naming_pattern:
@@ -671,7 +678,7 @@ type EphemeralLifetime struct {
 	TTL string `yaml:"ttl,omitempty"`
 
 	// KeepOnFailure, when true, instructs the check-runner integration
-	// to skip the post-scenario `charly deploy del` when assertions fail
+	// to skip the post-run `charly deploy del` when assertions fail
 	// — leaves the instance alive (still subject to TTL) for operator
 	// inspection. Default false.
 	KeepOnFailure bool `yaml:"keep_on_failure,omitempty"`
@@ -1450,8 +1457,11 @@ func MergeDeployOntoMetadata(meta *BoxMetadata, dc *DeployConfig, deployName, in
 		return
 	}
 
-	if overlay.Description != nil {
-		meta.Status = descriptionStatus(overlay.Description)
+	if overlay.Description != "" {
+		// A deploy overlay's description is purely informational — it carries no
+		// status signal (the maturity rung lives on the candy `status:` field and
+		// is baked into the image's ai.opencharly.status label). Keep the baked
+		// meta.Status; only refresh the human-facing summary.
 		meta.Info = descriptionInfo(overlay.Description)
 	}
 	if overlay.Tunnel != nil {
@@ -2264,7 +2274,7 @@ func ExportAllBox(cfg *Config) *DeployConfig {
 		}
 		// Only include if at least one field is set. Ports are no longer a box
 		// field — they're inherited from candies and auto-allocated at deploy.
-		if entry.Version != "" || entry.Description != nil ||
+		if entry.Version != "" || entry.Description != "" ||
 			entry.Env != nil ||
 			entry.EnvFile != "" || entry.Security != nil || entry.Network != "" {
 			dc.Deploy[name] = entry

@@ -64,7 +64,7 @@ const (
 	LabelMCPProvide     = "ai.opencharly.mcp_provide"
 	LabelMCPRequire     = "ai.opencharly.mcp_require"
 	LabelMCPAccept      = "ai.opencharly.mcp_accept"
-	// LabelDescription — three-section Gherkin-shaped self-description for
+	// LabelDescription — three-section plan-shaped self-description for
 	// every `kind:` entity the image rolled up. Each section carries one
 	// LabeledDescription per contributing entity (candy/box/deploy).
 	// Authored inline in YAML under `description:` on each kind; collected
@@ -190,7 +190,7 @@ type BoxMetadata struct {
 	MCPProvide    []MCPServerYAML      // MCP servers provided to other containers (service discovery templates)
 	MCPRequire    []EnvDependency      // MCP servers image must have from the environment
 	MCPAccept     []EnvDependency      // MCP servers image can optionally use
-	Description   *LabelDescriptionSet // three-section Gherkin-shaped self-description (candy/box/deploy)
+	Description   *LabelDescriptionSet // three-section plan-shaped self-description (candy/box/deploy)
 	Shell         *LabelShellSet       // three-section (candy/box/deploy) shell-init manifest (2026-05 cutover)
 	CheckLevel     string               // acceptance-depth rung (ai.opencharly.check_level): none|build|noagent|agent
 }
@@ -550,7 +550,7 @@ func ExtractMetadata(engine, imageRef string) (*BoxMetadata, error) {
 		meta.Shell = &ss
 	}
 
-	// Description (three-section Gherkin-shaped self-description)
+	// Description (three-section plan-shaped self-description)
 	if v := labels[LabelDescription]; v != "" {
 		var ds LabelDescriptionSet
 		if err := json.Unmarshal([]byte(v), &ds); err != nil {

@@ -1,22 +1,20 @@
 candy:
     version: 2026.146.1203
     name: marimo
-    description:
-        feature: marimo reactive notebook + MCP server on port 2718 with GPU OSM analytics, Airflow deps, and the marimo-team skills bundle for AI agents
-        narrative: |
-            Installs marimo (a reactive notebook server that also runs as an MCP
-            server via `--mcp` on the same port 2718) plus its data stack into a
-            pixi env at ${HOME}/.pixi/envs/default: GPU-accelerated OSM analytics
-            deps (Polars-GPU/cuDF, geopandas, quackosm), Apache Airflow Python
-            deps (the airflow layer ships no pixi env of its own), and the
-            marimo-team/learn curriculum. The marimo-team/skills bundle is
-            unpacked read-only at /opt/marimo-skills (MARIMO_SKILLS_DIR) for AI
-            agents driving marimo over MCP, and a baked marimo.toml turns
-            auto_instantiate on so cells run the moment the notebook URL opens.
-            Every claim below is observable: the pixi-env binaries, the skills
-            directory, the config line, and — at deploy scope — the live notebook
-            UI plus the MCP endpoint on /mcp/server.
-        tag: [working]
+    description: |
+        marimo reactive notebook + MCP server on port 2718 with GPU OSM analytics, Airflow deps, and the marimo-team skills bundle for AI agents
+        Installs marimo (a reactive notebook server that also runs as an MCP
+        server via `--mcp` on the same port 2718) plus its data stack into a
+        pixi env at ${HOME}/.pixi/envs/default: GPU-accelerated OSM analytics
+        deps (Polars-GPU/cuDF, geopandas, quackosm), Apache Airflow Python
+        deps (the airflow layer ships no pixi env of its own), and the
+        marimo-team/learn curriculum. The marimo-team/skills bundle is
+        unpacked read-only at /opt/marimo-skills (MARIMO_SKILLS_DIR) for AI
+        agents driving marimo over MCP, and a baked marimo.toml turns
+        auto_instantiate on so cells run the moment the notebook URL opens.
+        Every claim below is observable: the pixi-env binaries, the skills
+        directory, the config line, and — at deploy scope — the live notebook
+        UI plus the MCP endpoint on /mcp/server.
     require:
         - cuda
         - supervisord
@@ -76,40 +74,36 @@ candy:
     volume:
         - name: workspace
           path: "/workspace"
-    task:
-        # Workspace mount-point at filesystem root. Same pattern as the
-        # /charly-coder:charly-mcp layer's /workspace bind-mount target: created as
-        # root with mode 0777 so the unprivileged ${USER} process (and any
-        # nested supervisord-spawned processes) can write into it without
-        # baking in a uid assumption. Bind-mount target for the workspace
-        # volume; named-volume case is also fine.
-        - mkdir: "/workspace"
+    service:
+        - name: marimo
+          # `--mcp` enables the MCP HTTP server on the same port as the editor.
+          # `--mcp-allow-remote` is mandatory because we bind 0.0.0.0 (the marimo
+          # docs explicitly call this out — without it the MCP endpoint refuses
+          # non-localhost requests, which means our host-port rewriter can't
+          # reach it from 127.0.0.1:HOST_PORT). `--no-token` keeps the editor
+          # itself token-free for the dev posture.
+          exec: "%(ENV_HOME)s/.pixi/envs/default/bin/marimo edit --host 0.0.0.0 --port 2718 --no-token --headless --mcp --mcp-allow-remote /workspace"
+          restart: always
+          working_directory: "%(ENV_HOME)s"
+          priority: 30
+          enable: true
+          scope: system
+    plan:
+        - run: mkdir=/workspace
+          mkdir: "/workspace"
           mode: "0777"
           run_as: root
-        # ---- marimo-team/skills bundle ----
-        # Anthropic-style "skills folder" of instructions/scripts/resources that
-        # AI agents (driving marimo over MCP) load dynamically to improve task
-        # performance. Shipped read-only at /opt/marimo-skills/. The MARIMO_SKILLS_DIR
-        # env var (above) points consumers at this path.
-        - mkdir: /opt/marimo-skills
+        - run: mkdir=/opt/marimo-skills
+          mkdir: /opt/marimo-skills
           run_as: root
-        - download: "https://github.com/marimo-team/skills/archive/refs/heads/main.tar.gz"
+        - run: download=https://github.com/marimo-team/skills/archive/refs/heads/main.tar.gz
+          download: "https://github.com/marimo-team/skills/archive/refs/heads/main.tar.gz"
           extract: tar.gz
           to: /opt/marimo-skills
           strip_components: 1
           run_as: root
-        # ---- marimo user config (auto-instantiate on notebook open) ----
-        # Marimo's default `runtime.auto_instantiate` is FALSE — opening a
-        # notebook in edit mode mounts the UI but cells stay STALE until
-        # the user clicks the per-cell run buttons. The 2026-05-12 map
-        # test on sway-browser-vnc/ecovoyage confirmed this: cells = 21,
-        # canvases = 0 indefinitely. Setting it TRUE makes opening the
-        # marimo URL kick off the reactive cascade immediately, which is
-        # what every consumer of this image (notebook authors AND headless
-        # AI agents driving the page) actually expects. Marimo creates an
-        # EMPTY ~/.config/marimo/marimo.toml on first start if the file is
-        # absent — baking a non-empty file here pre-empts that path.
-        - mkdir: "${HOME}/.config/marimo"
+        - run: mkdir=${HOME}/.config/marimo
+          mkdir: "${HOME}/.config/marimo"
           # NB: the sample marimo notebook (osm-monaco-viz.py) used to be
           # written inline here via `write:` — that's the volume-shadow
           # anti-pattern (in-image content shadowed by the workspace volume
@@ -130,7 +124,8 @@ candy:
           # via the notebook-osm data-only layer.
 
           run_as: "${USER}"
-        - write: "${HOME}/.config/marimo/marimo.toml"
+        - run: write=${HOME}/.config/marimo/marimo.toml
+          write: "${HOME}/.config/marimo/marimo.toml"
           mode: "0644"
           run_as: "${USER}"
           content: |
@@ -139,114 +134,61 @@ candy:
             # page open. Don't hand-edit; rebuild the image to change.
             [runtime]
             auto_instantiate = true
-    service:
-        - name: marimo
-          # `--mcp` enables the MCP HTTP server on the same port as the editor.
-          # `--mcp-allow-remote` is mandatory because we bind 0.0.0.0 (the marimo
-          # docs explicitly call this out — without it the MCP endpoint refuses
-          # non-localhost requests, which means our host-port rewriter can't
-          # reach it from 127.0.0.1:HOST_PORT). `--no-token` keeps the editor
-          # itself token-free for the dev posture.
-          exec: "%(ENV_HOME)s/.pixi/envs/default/bin/marimo edit --host 0.0.0.0 --port 2718 --no-token --headless --mcp --mcp-allow-remote /workspace"
-          restart: always
-          working_directory: "%(ENV_HOME)s"
-          priority: 30
-          enable: true
-          scope: system
-    scenario:
-        # The first four scenarios are DETERMINISTIC (each step embeds a
-        # check verb, so it runs at build scope via `charly box feature run`
-        # AND deploy scope via `charly check feature run`). The last is
-        # PROSE-ONLY (no verb → agent-graded against the live deployment;
-        # the deploy-scope port/http/mcp probes in the check: block below are
-        # the deterministic counterpart of that runtime behaviour).
-        - name: marimo-server-binary-installed
-          step:
-            - then: the marimo notebook+MCP server binary is installed in the pixi env
-              file: ${HOME}/.pixi/envs/default/bin/marimo
-              exists: true
-        - name: airflow-python-deps-present
-          step:
-            - then: the Apache Airflow CLI is installed in the same pixi env (the airflow layer ships none of its own)
-              file: ${HOME}/.pixi/envs/default/bin/airflow
-              exists: true
-        - name: agent-skills-bundle-shipped
-          step:
-            - then: the marimo-team/skills bundle is unpacked read-only under MARIMO_SKILLS_DIR
-              file: /opt/marimo-skills/skills
-              exists: true
-              filetype: directory
-        - name: reactive-auto-instantiate-enabled
-          step:
-            - then: the baked marimo.toml enables auto_instantiate so cells run on page open
-              file: ${HOME}/.config/marimo/marimo.toml
-              exists: true
-              contains:
-                - "auto_instantiate = true"
-        - name: notebook-and-mcp-server-live
-          step:
-            - given: a marimo deployment is running with `marimo edit --mcp --mcp-allow-remote` on port 2718
-            - when: a client opens the published notebook port and an MCP client pings /mcp/server
-            - then: the marimo editor UI is served and the MCP endpoint answers protocol requests on the same port
-        - name: marimo-curriculum-imports
-          step:
-            # Build-scope smoke for the lean ML + curriculum + airflow union.
-            # One import line per topic group catches resolver drift at image build,
-            # not at first notebook open.
-            - id: marimo-curriculum-imports
-              command: ${HOME}/.pixi/envs/default/bin/python -c "import marimo, torch, transformers, polars, scipy, altair, plotly, statsmodels, duckdb, sqlalchemy, sqlglot, cvxpy, clarabel, daft, wigglystuff, drawdata, marimo_learn, simpy"
-              exit_status: 0
-        - name: marimo-osm-mcp-imports
-          step:
-            # Build-scope: confirm the geospatial + GPU + MCP additions installed cleanly.
-            # cudf-polars-cu13 is imported as cudf_polars; geoparquet-io as geoparquet_io.
-            # fastmcp is the runtime backing marimo's own --mcp server (10 notebook-
-            # inspection tools); pixi resolver doesn't pull it transitively, so the
-            # explicit dep + import probe lock the contract in.
-            - id: marimo-osm-mcp-imports
-              command: ${HOME}/.pixi/envs/default/bin/python -c "import geopandas, shapely, fiona, pyproj, quackosm, geoparquet_io, pmtiles, h3, mercantile, folium, contextily, mapclassify, fastmcp, cudf_polars, polars_st, geopolars, geoarrow.pyarrow, geoarrow.pandas, lonboard, freestiler"
-              exit_status: 0
-        - name: marimo-port-reachable
-          step:
-            # NB: sample notebook check moved to candy/notebook-osm/ (data
-            # layer pattern). Deploy-scope check there asserts the seeded
-            # file at ${VOLUME_CONTAINER_PATH:workspace}/notebooks/osm-monaco-viz.py.
-            # Deploy-scope smoke — port reachable + HTTP 200 from marimo edit.
-            - id: marimo-port-reachable
-              addr: "127.0.0.1:${HOST_PORT:2718}"
-              reachable: true
-              timeout: 5s
-              context:
-                - runtime
-        - name: marimo-http-up
-          step:
-            - id: marimo-http-up
-              http: "http://127.0.0.1:${HOST_PORT:2718}/"
-              status: 200
-              timeout: 10s
-              context:
-                - runtime
-        - name: mcp-marimo-ping
-          step:
-            # Deploy-scope: marimo's --mcp server responds. The endpoint lives at
-            # /mcp/server (per marimo docs) which is what mcp_provide above declares,
-            # so `charly check mcp ping marimo --name marimo` resolves the URL correctly
-            # via the host-port rewriter.
-            - id: mcp-marimo-ping
-              mcp: ping
-              mcp_name: marimo
-              timeout: 10s
-              context:
-                - runtime
-        - name: mcp-marimo-list-tools
-          step:
-            - id: mcp-marimo-list-tools
-              mcp: list-tools
-              mcp_name: marimo
-              stdout:
-                # marimo's MCP tool catalog isn't fully documented; just assert
-                # that SOME marimo-flavored tool surfaces (the tool list contains
-                # at least one line, and one of the standard editor tools is present).
-                - matches: "."
-              context:
-                - runtime
+        - check: the marimo notebook+MCP server binary is installed in the pixi env
+          file: ${HOME}/.pixi/envs/default/bin/marimo
+          exists: true
+        - check: the Apache Airflow CLI is installed in the same pixi env (the airflow layer ships none of its own)
+          file: ${HOME}/.pixi/envs/default/bin/airflow
+          exists: true
+        - check: the marimo-team/skills bundle is unpacked read-only under MARIMO_SKILLS_DIR
+          file: /opt/marimo-skills/skills
+          exists: true
+          filetype: directory
+        - check: the baked marimo.toml enables auto_instantiate so cells run on page open
+          file: ${HOME}/.config/marimo/marimo.toml
+          exists: true
+          contains:
+            - "auto_instantiate = true"
+        - agent-check: a marimo deployment is running with `marimo edit --mcp --mcp-allow-remote` on port 2718
+        - agent-check: a client opens the published notebook port and an MCP client pings /mcp/server
+        - agent-check: the marimo editor UI is served and the MCP endpoint answers protocol requests on the same port
+        - check: command=${HOME}/.pixi/envs/default/bin/python -c "import marimo, torch, transformers, polars, scipy, altair, plotly, statsmodels, duckdb, sqlalchemy, sqlglot, cvxpy, clarabel, daft, wigglystuff, drawdata, marimo_learn, simpy"
+          id: marimo-curriculum-imports
+          command: ${HOME}/.pixi/envs/default/bin/python -c "import marimo, torch, transformers, polars, scipy, altair, plotly, statsmodels, duckdb, sqlalchemy, sqlglot, cvxpy, clarabel, daft, wigglystuff, drawdata, marimo_learn, simpy"
+          exit_status: 0
+        - check: command=${HOME}/.pixi/envs/default/bin/python -c "import geopandas, shapely, fiona, pyproj, quackosm, geoparquet_io, pmtiles, h3, mercantile, folium, contextily, mapclassify, fastmcp, cudf_polars, polars_st, geopolars, geoarrow.pyarrow, geoarrow.pandas, lonboard, freestiler"
+          id: marimo-osm-mcp-imports
+          command: ${HOME}/.pixi/envs/default/bin/python -c "import geopandas, shapely, fiona, pyproj, quackosm, geoparquet_io, pmtiles, h3, mercantile, folium, contextily, mapclassify, fastmcp, cudf_polars, polars_st, geopolars, geoarrow.pyarrow, geoarrow.pandas, lonboard, freestiler"
+          exit_status: 0
+        - check: addr=127.0.0.1:${HOST_PORT:2718}
+          id: marimo-port-reachable
+          addr: "127.0.0.1:${HOST_PORT:2718}"
+          reachable: true
+          timeout: 5s
+          context:
+            - runtime
+        - check: http=http://127.0.0.1:${HOST_PORT:2718}/
+          id: marimo-http-up
+          http: "http://127.0.0.1:${HOST_PORT:2718}/"
+          status: 200
+          timeout: 10s
+          context:
+            - runtime
+        - check: mcp=ping
+          id: mcp-marimo-ping
+          mcp: ping
+          mcp_name: marimo
+          timeout: 10s
+          context:
+            - runtime
+        - check: mcp=list-tools
+          id: mcp-marimo-list-tools
+          mcp: list-tools
+          mcp_name: marimo
+          stdout:
+            # marimo's MCP tool catalog isn't fully documented; just assert
+            # that SOME marimo-flavored tool surfaces (the tool list contains
+            # at least one line, and one of the standard editor tools is present).
+            - matches: "."
+          context:
+            - runtime

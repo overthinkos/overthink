@@ -291,10 +291,10 @@ func TestEmitDownload_TarGz(t *testing.T) {
 	var b strings.Builder
 	err := emitDownload(&b,
 		Op{
-			Download: "https://example.com/app.tar.gz",
-			Extract:  "tar.gz",
-			To:       "/usr/local/bin",
-			Include:  []string{"app"},
+			Download:       "https://example.com/app.tar.gz",
+			Extract:        "tar.gz",
+			To:             "/usr/local/bin",
+			ExtractInclude: []string{"app"},
 		},
 		testResolvedBox(),
 	)
@@ -445,13 +445,14 @@ func TestEmitCmd_UserNpmCache(t *testing.T) {
 func TestEmitTasks_UserCoalescing(t *testing.T) {
 	dir := t.TempDir()
 	g := &Generator{BuildDir: dir}
-	layer := &Candy{Name: "lyr", tasks: []Op{
+	ops := []Op{
 		{Mkdir: "/a", RunAs: "root"},
 		{Mkdir: "/b", RunAs: "root"},
 		{Mkdir: "/c", RunAs: "root"}, // all root → single USER 0 header, one RUN
-	}}
+	}
+	layer := &Candy{Name: "lyr"}
 	var b strings.Builder
-	_, err := g.emitTasks(&b, layer, testResolvedBox(), dir, ".build/test-img", "0")
+	_, err := g.emitTasks(&b, layer, testResolvedBox(), ops, dir, ".build/test-img", "0")
 	if err != nil {
 		t.Fatalf("emitTasks: %v", err)
 	}
@@ -474,11 +475,12 @@ func TestEmitTasks_UserCoalescing(t *testing.T) {
 func TestEmitTasks_CommandEmitsRun(t *testing.T) {
 	dir := t.TempDir()
 	g := &Generator{BuildDir: dir}
-	layer := &Candy{Name: "lyr", tasks: []Op{
+	ops := []Op{
 		{Command: "echo rpmfusion-enable", RunAs: "root"},
-	}}
+	}
+	layer := &Candy{Name: "lyr"}
 	var b strings.Builder
-	_, err := g.emitTasks(&b, layer, testResolvedBox(), dir, ".build/test-img", "0")
+	_, err := g.emitTasks(&b, layer, testResolvedBox(), ops, dir, ".build/test-img", "0")
 	if err != nil {
 		t.Fatalf("emitTasks: %v", err)
 	}
@@ -491,13 +493,14 @@ func TestEmitTasks_CommandEmitsRun(t *testing.T) {
 func TestEmitTasks_UserSwitches(t *testing.T) {
 	dir := t.TempDir()
 	g := &Generator{BuildDir: dir}
-	layer := &Candy{Name: "lyr", tasks: []Op{
+	ops := []Op{
 		{Mkdir: "/a", RunAs: "root"},
 		{Mkdir: "/b", RunAs: "${USER}"},
 		{Mkdir: "/c", RunAs: "${USER}"}, // coalesces with previous
-	}}
+	}
+	layer := &Candy{Name: "lyr"}
 	var b strings.Builder
-	_, err := g.emitTasks(&b, layer, testResolvedBox(), dir, ".build/test-img", "0")
+	_, err := g.emitTasks(&b, layer, testResolvedBox(), ops, dir, ".build/test-img", "0")
 	if err != nil {
 		t.Fatalf("emitTasks: %v", err)
 	}
@@ -519,13 +522,14 @@ func TestEmitTasks_OrderPreserved(t *testing.T) {
 	dir := t.TempDir()
 	g := &Generator{BuildDir: dir}
 	// mkdir → copy → mkdir sequence: the second mkdir must NOT merge with the first
-	layer := &Candy{Name: "lyr", tasks: []Op{
+	ops := []Op{
 		{Mkdir: "/a", RunAs: "root"},
 		{Copy: "f", To: "/a/f", RunAs: "root"},
 		{Mkdir: "/b", RunAs: "root"},
-	}}
+	}
+	layer := &Candy{Name: "lyr"}
 	var b strings.Builder
-	_, err := g.emitTasks(&b, layer, testResolvedBox(), dir, ".build/test-img", "0")
+	_, err := g.emitTasks(&b, layer, testResolvedBox(), ops, dir, ".build/test-img", "0")
 	if err != nil {
 		t.Fatalf("emitTasks: %v", err)
 	}
@@ -545,12 +549,13 @@ func TestEmitTasks_OrderPreserved(t *testing.T) {
 func TestEmitTasks_ParentDirAutoInsert(t *testing.T) {
 	dir := t.TempDir()
 	g := &Generator{BuildDir: dir}
-	layer := &Candy{Name: "lyr", tasks: []Op{
+	ops := []Op{
 		// Copy to /etc/traefik/traefik.yml without declaring /etc/traefik first
 		{Copy: "traefik.yml", To: "/etc/traefik/traefik.yml", RunAs: "root"},
-	}}
+	}
+	layer := &Candy{Name: "lyr"}
 	var b strings.Builder
-	_, err := g.emitTasks(&b, layer, testResolvedBox(), dir, ".build/test-img", "0")
+	_, err := g.emitTasks(&b, layer, testResolvedBox(), ops, dir, ".build/test-img", "0")
 	if err != nil {
 		t.Fatalf("emitTasks: %v", err)
 	}
@@ -570,12 +575,13 @@ func TestEmitTasks_ParentDirSuppressedWhenDeclared(t *testing.T) {
 	dir := t.TempDir()
 	g := &Generator{BuildDir: dir}
 	// Author explicitly declared /etc/foo via mkdir — no auto-insert
-	layer := &Candy{Name: "lyr", tasks: []Op{
+	ops := []Op{
 		{Mkdir: "/etc/foo", RunAs: "root"},
 		{Copy: "bar", To: "/etc/foo/bar", RunAs: "root"},
-	}}
+	}
+	layer := &Candy{Name: "lyr"}
 	var b strings.Builder
-	_, err := g.emitTasks(&b, layer, testResolvedBox(), dir, ".build/test-img", "0")
+	_, err := g.emitTasks(&b, layer, testResolvedBox(), ops, dir, ".build/test-img", "0")
 	if err != nil {
 		t.Fatalf("emitTasks: %v", err)
 	}
@@ -589,12 +595,13 @@ func TestEmitTasks_ParentDirSuppressedWhenDeclared(t *testing.T) {
 func TestEmitTasks_WriteStagesContent(t *testing.T) {
 	dir := t.TempDir()
 	g := &Generator{BuildDir: dir}
-	layer := &Candy{Name: "lyr", tasks: []Op{
+	ops := []Op{
 		{Write: "/etc/foo.conf", Content: "hello world\n", RunAs: "root"},
-	}}
+	}
+	layer := &Candy{Name: "lyr"}
 	var b strings.Builder
 	buildDir := filepath.Join(dir, "test-img")
-	_, err := g.emitTasks(&b, layer, testResolvedBox(), buildDir, ".build/test-img", "0")
+	_, err := g.emitTasks(&b, layer, testResolvedBox(), ops, buildDir, ".build/test-img", "0")
 	if err != nil {
 		t.Fatalf("emitTasks: %v", err)
 	}
@@ -640,8 +647,8 @@ func TestEmitVarsEnv_SortedKeys(t *testing.T) {
 func TestValidateCandyTasks_CopyRequiresTo(t *testing.T) {
 	layers := map[string]*Candy{
 		"mylyr": {
-			Name:  "mylyr",
-			tasks: []Op{{Copy: "foo" /* no To */}},
+			Name: "mylyr",
+			plan: []Step{{Run: "build", Op: Op{Copy: "foo" /* no To */}}},
 		},
 	}
 	errs := &ValidationError{}
@@ -657,8 +664,8 @@ func TestValidateCandyTasks_CopyRequiresTo(t *testing.T) {
 func TestValidateCandyTasks_UnresolvedVar(t *testing.T) {
 	layers := map[string]*Candy{
 		"mylyr": {
-			Name:  "mylyr",
-			tasks: []Op{{Mkdir: "${UNDEFINED}/foo"}},
+			Name: "mylyr",
+			plan: []Step{{Run: "build", Op: Op{Mkdir: "${UNDEFINED}/foo"}}},
 		},
 	}
 	errs := &ValidationError{}
@@ -674,9 +681,9 @@ func TestValidateCandyTasks_UnresolvedVar(t *testing.T) {
 func TestValidateCandyTasks_ReservedVarKey(t *testing.T) {
 	layers := map[string]*Candy{
 		"mylyr": {
-			Name:  "mylyr",
-			tasks: []Op{{Command: "true"}},
-			vars:  map[string]string{"USER": "ignored"}, // collides with auto-export
+			Name: "mylyr",
+			plan: []Step{{Run: "build", Op: Op{Command: "true"}}},
+			vars: map[string]string{"USER": "ignored"}, // collides with auto-export
 		},
 	}
 	errs := &ValidationError{}
@@ -692,8 +699,8 @@ func TestValidateCandyTasks_ReservedVarKey(t *testing.T) {
 func TestValidateCandyTasks_BadMode(t *testing.T) {
 	layers := map[string]*Candy{
 		"mylyr": {
-			Name:  "mylyr",
-			tasks: []Op{{Mkdir: "/a", Mode: "9999"}},
+			Name: "mylyr",
+			plan: []Step{{Run: "build", Op: Op{Mkdir: "/a", Mode: "9999"}}},
 		},
 	}
 	errs := &ValidationError{}
@@ -706,8 +713,8 @@ func TestValidateCandyTasks_BadMode(t *testing.T) {
 func TestValidateCandyTasks_BuildOnlyAll(t *testing.T) {
 	layers := map[string]*Candy{
 		"mylyr": {
-			Name:  "mylyr",
-			tasks: []Op{{Build: "pixi"}}, // reserved for future
+			Name: "mylyr",
+			plan: []Step{{Run: "build", Op: Op{Build: "pixi"}}}, // reserved for future
 		},
 	}
 	errs := &ValidationError{}
@@ -722,14 +729,14 @@ func TestValidateCandyTasks_HappyPath(t *testing.T) {
 		"mylyr": {
 			Name: "mylyr",
 			vars: map[string]string{"VERSION": "1.0"},
-			tasks: []Op{
-				{Mkdir: "/etc/foo", RunAs: "root"},
-				{Copy: "bar", To: "/etc/foo/bar", Mode: "0644", RunAs: "root"},
-				{Write: "/etc/baz.conf", Content: "hello", RunAs: "root"},
-				{Download: "https://x.com/v${VERSION}/app.tar.gz", Extract: "tar.gz", To: "/usr/local/bin", RunAs: "root"},
-				{Link: "/usr/local/bin/app-current", Target: "/usr/local/bin/app", RunAs: "root"},
-				{Setcap: "/usr/bin/foo", Caps: "cap_setuid=ep"},
-				{Command: "echo hello ${VERSION}", RunAs: "${USER}"},
+			plan: []Step{
+				{Run: "build", Op: Op{Mkdir: "/etc/foo", RunAs: "root"}},
+				{Run: "build", Op: Op{Copy: "bar", To: "/etc/foo/bar", Mode: "0644", RunAs: "root"}},
+				{Run: "build", Op: Op{Write: "/etc/baz.conf", Content: "hello", RunAs: "root"}},
+				{Run: "build", Op: Op{Download: "https://x.com/v${VERSION}/app.tar.gz", Extract: "tar.gz", To: "/usr/local/bin", RunAs: "root"}},
+				{Run: "build", Op: Op{Link: "/usr/local/bin/app-current", Target: "/usr/local/bin/app", RunAs: "root"}},
+				{Run: "build", Op: Op{Setcap: "/usr/bin/foo", Caps: "cap_setuid=ep"}},
+				{Run: "build", Op: Op{Command: "echo hello ${VERSION}", RunAs: "${USER}"}},
 			},
 		},
 	}
@@ -743,7 +750,7 @@ func TestValidateCandyTasks_HappyPath(t *testing.T) {
 // --- Parity: ensure HasInstallFiles picks up HasTasks ---
 
 func TestCandy_HasInstallFiles_IncludesTasks(t *testing.T) {
-	l := &Candy{tasks: []Op{{Command: "true"}}}
+	l := &Candy{plan: []Step{{Run: "build", Op: Op{Command: "true"}}}}
 	if !l.HasInstallFiles() {
 		t.Error("HasInstallFiles() should be true when HasTasks is true")
 	}

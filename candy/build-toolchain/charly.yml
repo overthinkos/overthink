@@ -1,17 +1,15 @@
 candy:
     version: 2026.144.1443
     name: build-toolchain
-    description:
-        feature: A complete C/C++/Rust build toolchain (gcc, make, cmake, cargo, nasm) for compiling native software inside builder images.
-        narrative: |
-            build-toolchain installs the generic native-compilation stack: the
-            GNU C/C++ compiler (gcc), GNU make, the CMake build-system
-            generator, the Rust/cargo toolchain, the nasm assembler, ccache,
-            gdb, git, and a wide set of -devel/-dev headers. Every consuming
-            builder stage (fedora-builder, arch-builder) depends on these
-            binaries being on PATH, so each is directly file- and
-            version-checkable inside the built image.
-        tag: [working]
+    description: |
+        A complete C/C++/Rust build toolchain (gcc, make, cmake, cargo, nasm) for compiling native software inside builder images.
+        build-toolchain installs the generic native-compilation stack: the
+        GNU C/C++ compiler (gcc), GNU make, the CMake build-system
+        generator, the Rust/cargo toolchain, the nasm assembler, ccache,
+        gdb, git, and a wide set of -devel/-dev headers. Every consuming
+        builder stage (fedora-builder, arch-builder) depends on these
+        binaries being on PATH, so each is directly file- and
+        version-checkable inside the built image.
     env:
         CCACHE_DISABLE: "1"
     package:
@@ -137,50 +135,41 @@ candy:
                 - pkg-config
                 - portaudio19-dev
                 - rustc
-    scenario:
-        - name: c-compiler-builds-and-reports-version
-          step:
-            - then: the GNU C compiler binary is installed at /usr/bin/gcc
-              file: /usr/bin/gcc
-              exists: true
-            - then: gcc reports its version and exits successfully
-              command: /usr/bin/gcc --version
-              exit_status: 0
-        - name: build-orchestrators-present
-          step:
-            - then: GNU make is available to drive Makefile builds
-              file: /usr/bin/make
-              exists: true
-            - then: the CMake build-system generator is available
-              file: /usr/bin/cmake
-              exists: true
-            - then: cmake reports its version and exits successfully
-              command: /usr/bin/cmake --version
-              exit_status: 0
-        - name: rust-and-native-asm-toolchain-present
-          step:
-            - then: the cargo Rust package manager is installed
-              file: /usr/bin/cargo
-              exists: true
-            - then: the nasm assembler (needed by SIMD native crates) is installed
-              file: /usr/bin/nasm
-              exists: true
-            - then: cargo reports its version and exits successfully
-              command: /usr/bin/cargo --version
-              exit_status: 0
-        - name: developer-utilities-present
-          step:
-            - then: the GNU debugger is available for native debugging
-              file: /usr/bin/gdb
-              exists: true
-            - then: ccache is available to accelerate repeat compilations
-              file: /usr/bin/ccache
-              exists: true
-            - then: git is available so builder stages can clone pinned sources
-              file: /usr/bin/git
-              exists: true
-        - name: make-version
-          step:
-            - id: make-version
-              command: /usr/bin/make --version
-              exit_status: 0
+    plan:
+        - check: the GNU C compiler binary is installed at /usr/bin/gcc
+          file: /usr/bin/gcc
+          exists: true
+        - check: gcc reports its version and exits successfully
+          command: /usr/bin/gcc --version
+          exit_status: 0
+        - check: GNU make is available to drive Makefile builds
+          file: /usr/bin/make
+          exists: true
+        - check: the CMake build-system generator is available
+          file: /usr/bin/cmake
+          exists: true
+        - check: cmake reports its version and exits successfully
+          command: /usr/bin/cmake --version
+          exit_status: 0
+        - check: the cargo Rust package manager is installed
+          file: /usr/bin/cargo
+          exists: true
+        - check: the nasm assembler (needed by SIMD native crates) is installed
+          file: /usr/bin/nasm
+          exists: true
+        - check: cargo reports its version and exits successfully
+          command: /usr/bin/cargo --version
+          exit_status: 0
+        - check: the GNU debugger is available for native debugging
+          file: /usr/bin/gdb
+          exists: true
+        - check: ccache is available to accelerate repeat compilations
+          file: /usr/bin/ccache
+          exists: true
+        - check: git is available so builder stages can clone pinned sources
+          file: /usr/bin/git
+          exists: true
+        - check: command=/usr/bin/make --version
+          id: make-version
+          command: /usr/bin/make --version
+          exit_status: 0

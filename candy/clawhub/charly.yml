@@ -1,49 +1,35 @@
 candy:
     version: 2026.144.1443
     name: clawhub
-    description:
-        feature: ClawHub CLI for searching and installing OpenClaw skills
-        narrative: |
-            Installs the `clawhub` npm package globally (via package.json,
-            requires nodejs), landing the commander-based `clawhub` CLI on the
-            npm global bin path at ~/.npm-global/bin (npm also creates the
-            `clawdhub` alias). The CLI searches, installs, and updates OpenClaw
-            skills from the ClawHub registry; `clawhub --cli-version` reports its
-            version offline, so the install + bin wiring is verifiable without
-            network access.
-        tag: [working]
+    description: |
+        ClawHub CLI for searching and installing OpenClaw skills
+        Installs the `clawhub` npm package globally (via package.json,
+        requires nodejs), landing the commander-based `clawhub` CLI on the
+        npm global bin path at ~/.npm-global/bin (npm also creates the
+        `clawdhub` alias). The CLI searches, installs, and updates OpenClaw
+        skills from the ClawHub registry; `clawhub --cli-version` reports its
+        version offline, so the install + bin wiring is verifiable without
+        network access.
     require:
         - nodejs
-    scenario:
-        # Deterministic — the npm-global install lands the CLI on PATH.
-        - name: clawhub-cli-installed
-          step:
-            - then: the clawhub CLI binary is installed on the npm global bin path
-              file: ${HOME}/.npm-global/bin/clawhub
-              exists: true
-        # Deterministic + functional — the CLI actually runs and self-reports.
-        - name: clawhub-reports-version
-          step:
-            - then: running clawhub --cli-version prints a semantic version and exits zero
-              command: ${HOME}/.npm-global/bin/clawhub --cli-version
-              exit_status: 0
-              stdout:
-                - matches: "[0-9]+\\.[0-9]+\\.[0-9]+"
-        # Prose-only — genuinely free-form (live registry query over the
-        # network), graded by the agent against a running deployment.
-        - name: clawhub-searches-skill-registry
-          step:
-            - then: clawhub search <term> queries the ClawHub registry and returns matching OpenClaw skills
-        - name: clawdhub-alias-binary
-          step:
-            - id: clawdhub-alias-binary
-              file: ${HOME}/.npm-global/bin/clawdhub
-              exists: true
-        - name: clawhub-help-subcommands
-          step:
-            - id: clawhub-help-subcommands
-              command: ${HOME}/.npm-global/bin/clawhub --help
-              exit_status: 0
-              stdout:
-                - contains: search
-                - contains: install
+    plan:
+        - check: the clawhub CLI binary is installed on the npm global bin path
+          file: ${HOME}/.npm-global/bin/clawhub
+          exists: true
+        - check: running clawhub --cli-version prints a semantic version and exits zero
+          command: ${HOME}/.npm-global/bin/clawhub --cli-version
+          exit_status: 0
+          stdout:
+            - matches: "[0-9]+\\.[0-9]+\\.[0-9]+"
+        - agent-check: clawhub search <term> queries the ClawHub registry and returns matching OpenClaw skills
+        - check: file=${HOME}/.npm-global/bin/clawdhub
+          id: clawdhub-alias-binary
+          file: ${HOME}/.npm-global/bin/clawdhub
+          exists: true
+        - check: command=${HOME}/.npm-global/bin/clawhub --help
+          id: clawhub-help-subcommands
+          command: ${HOME}/.npm-global/bin/clawhub --help
+          exit_status: 0
+          stdout:
+            - contains: search
+            - contains: install

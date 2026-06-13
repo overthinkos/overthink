@@ -56,13 +56,13 @@ type VmSpec struct {
 
 	Libvirt *LibvirtDomain `yaml:"libvirt,omitempty"`
 
-	// --- Target-specific acceptance scenarios (optional) ---
+	// --- Target-specific plan steps (optional) ---
 	//
-	// Candy and box scenarios propagate automatically via the composition
-	// machinery. This slot is ONLY for scenarios genuinely specific to the
+	// Candy and box plans propagate automatically via the composition
+	// machinery. This slot is ONLY for steps genuinely specific to the
 	// VM template (e.g., probing a cloud-init runcmd effect or a libvirt
 	// device).
-	Scenario []Scenario `yaml:"scenario,omitempty"`
+	Plan []Step `yaml:"plan,omitempty"`
 
 	// --- Declarative snapshot intent (optional; default empty) ---
 	//

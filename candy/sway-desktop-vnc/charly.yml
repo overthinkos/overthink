@@ -6,100 +6,79 @@ candy:
         - wayvnc
     env:
         WLR_RENDERER: "pixman"
-    description:
-        feature: A headless sway Wayland desktop with Chrome, served over VNC on :5900
-        narrative: |
-            Composes sway-desktop (the sway compositor + Chrome browser + waybar +
-            the wl/desktop tooling) with wayvnc into ONE running browser-VNC desktop,
-            and forces WLR_RENDERER=pixman so the whole stack renders in software —
-            no GPU required. The composition is observable: all three desktop
-            binaries (sway, wayvnc, google-chrome-stable) land in the image, and at
-            deploy time sway + wayvnc run together under supervisord with the VNC
-            server reachable on display :5900.
-        tag: [working]
-    scenario:
-        # DETERMINISTIC (build scope) — every composed candy's key binary lands
-        # in the image. This scenario FAILS if any of the three composition legs
-        # (sway, wayvnc, chrome-sway via sway-desktop) is dropped.
-        - name: desktop-stack-binaries-composed
-          step:
-            - then: the sway Wayland compositor binary is installed
-              file: /usr/bin/sway
-              exists: true
-            - then: the wayvnc VNC server binary is installed
-              file: /usr/bin/wayvnc
-              exists: true
-            - then: the Chrome browser binary is installed
-              file: /usr/bin/google-chrome-stable
-              exists: true
-        # DETERMINISTIC (build scope) — this candy's OWN contribution: the
-        # WLR_RENDERER=pixman env that makes the desktop render headless.
-        - name: headless-software-rendering-configured
-          step:
-            - then: the Wayland renderer is pinned to the pixman software backend so the desktop runs without a GPU
-              command: printenv WLR_RENDERER
-              exit_status: 0
-              stdout:
-                - pixman
-        # DETERMINISTIC (deploy scope) + one PROSE-ONLY (agent-graded) — the full
-        # stack actually runs together and is reachable over VNC.
-        - name: vnc-desktop-live
-          step:
-            - then: the sway compositor and wayvnc server both report RUNNING under supervisord
-              command: supervisorctl status sway wayvnc | awk '{print $2}' | sort -u
-              in_container: true
-              exit_status: 0
-              stdout:
-                - RUNNING
-              context:
-                - runtime
-            - then: the VNC server accepts a TCP connection on the published display port
-              addr: 127.0.0.1:${HOST_PORT:5900}
-              reachable: true
-              timeout: 5s
-              context:
-                - runtime
-            - then: the VNC framebuffer shows the live Chrome desktop rendered, not a blank or single-color screen
-        - name: sway-desktop-vnc-binaries
-          step:
-            - id: sway-desktop-vnc-binaries
-              command: test -x /usr/bin/sway && test -x /usr/bin/wayvnc && test -x /usr/bin/google-chrome-stable
-              exit_status: 0
-        - name: sway-desktop-vnc-cdp-up
-          step:
-            - id: sway-desktop-vnc-cdp-up
-              cdp: status
-              stdout:
-                - contains: ok
-              context:
-                - runtime
-        - name: sway-desktop-vnc-vnc-up
-          step:
-            - id: sway-desktop-vnc-vnc-up
-              vnc: status
-              stdout:
-                - contains: ok
-              context:
-                - runtime
-        - name: sway-desktop-vnc-wl-has-windows
-          step:
-            - id: sway-desktop-vnc-wl-has-windows
-              wl: toplevel
-              context:
-                - runtime
-        - name: sway-desktop-vnc-dbus-notifications-registered
-          step:
-            - id: sway-desktop-vnc-dbus-notifications-registered
-              dbus: list
-              stdout:
-                - contains: org.freedesktop.Notifications
-              context:
-                - runtime
-        - name: sway-desktop-vnc-vnc-framebuffer
-          step:
-            - id: sway-desktop-vnc-vnc-framebuffer
-              vnc: screenshot
-              artifact: /tmp/sway-desktop-vnc-fb.png
-              artifact_min_bytes: 5000
-              context:
-                - runtime
+    description: |
+        A headless sway Wayland desktop with Chrome, served over VNC on :5900
+        Composes sway-desktop (the sway compositor + Chrome browser + waybar +
+        the wl/desktop tooling) with wayvnc into ONE running browser-VNC desktop,
+        and forces WLR_RENDERER=pixman so the whole stack renders in software —
+        no GPU required. The composition is observable: all three desktop
+        binaries (sway, wayvnc, google-chrome-stable) land in the image, and at
+        deploy time sway + wayvnc run together under supervisord with the VNC
+        server reachable on display :5900.
+    plan:
+        - check: the sway Wayland compositor binary is installed
+          file: /usr/bin/sway
+          exists: true
+        - check: the wayvnc VNC server binary is installed
+          file: /usr/bin/wayvnc
+          exists: true
+        - check: the Chrome browser binary is installed
+          file: /usr/bin/google-chrome-stable
+          exists: true
+        - check: the Wayland renderer is pinned to the pixman software backend so the desktop runs without a GPU
+          command: printenv WLR_RENDERER
+          exit_status: 0
+          stdout:
+            - pixman
+        - check: the sway compositor and wayvnc server both report RUNNING under supervisord
+          command: supervisorctl status sway wayvnc | awk '{print $2}' | sort -u
+          in_container: true
+          exit_status: 0
+          stdout:
+            - RUNNING
+          context:
+            - runtime
+        - check: the VNC server accepts a TCP connection on the published display port
+          addr: 127.0.0.1:${HOST_PORT:5900}
+          reachable: true
+          timeout: 5s
+          context:
+            - runtime
+        - agent-check: the VNC framebuffer shows the live Chrome desktop rendered, not a blank or single-color screen
+        - check: command=test -x /usr/bin/sway && test -x /usr/bin/wayvnc && test -x /usr/bin/google-chrome-stable
+          id: sway-desktop-vnc-binaries
+          command: test -x /usr/bin/sway && test -x /usr/bin/wayvnc && test -x /usr/bin/google-chrome-stable
+          exit_status: 0
+        - check: cdp=status
+          id: sway-desktop-vnc-cdp-up
+          cdp: status
+          stdout:
+            - contains: ok
+          context:
+            - runtime
+        - check: vnc=status
+          id: sway-desktop-vnc-vnc-up
+          vnc: status
+          stdout:
+            - contains: ok
+          context:
+            - runtime
+        - check: wl=toplevel
+          id: sway-desktop-vnc-wl-has-windows
+          wl: toplevel
+          context:
+            - runtime
+        - check: dbus=list
+          id: sway-desktop-vnc-dbus-notifications-registered
+          dbus: list
+          stdout:
+            - contains: org.freedesktop.Notifications
+          context:
+            - runtime
+        - check: vnc=screenshot
+          id: sway-desktop-vnc-vnc-framebuffer
+          vnc: screenshot
+          artifact: /tmp/sway-desktop-vnc-fb.png
+          artifact_min_bytes: 5000
+          context:
+            - runtime

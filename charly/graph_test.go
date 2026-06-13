@@ -357,12 +357,12 @@ func TestCandiesProvidedByImage(t *testing.T) {
 
 func TestExpandCandies(t *testing.T) {
 	layers := map[string]*Candy{
-		"pipewire":     {Name: "pipewire", tasks: []Op{{Command: "true"}}},
-		"wayvnc":       {Name: "wayvnc", tasks: []Op{{Command: "true"}}},
-		"chrome":       {Name: "chrome", tasks: []Op{{Command: "true"}}},
-		"waybar":       {Name: "waybar", tasks: []Op{{Command: "true"}}},
+		"pipewire":     {Name: "pipewire", plan: []Step{{Run: "build", Op: Op{Command: "true"}}}},
+		"wayvnc":       {Name: "wayvnc", plan: []Step{{Run: "build", Op: Op{Command: "true"}}}},
+		"chrome":       {Name: "chrome", plan: []Step{{Run: "build", Op: Op{Command: "true"}}}},
+		"waybar":       {Name: "waybar", plan: []Step{{Run: "build", Op: Op{Command: "true"}}}},
 		"sway-desktop": {Name: "sway-desktop", IncludedCandy: toCandyRefs([]string{"pipewire", "wayvnc", "chrome", "waybar"})},
-		"openclaw":     {Name: "openclaw", tasks: []Op{{Command: "true"}}},
+		"openclaw":     {Name: "openclaw", plan: []Step{{Run: "build", Op: Op{Command: "true"}}}},
 	}
 
 	// Basic expansion
@@ -378,8 +378,8 @@ func TestExpandCandies(t *testing.T) {
 
 func TestExpandCandiesDedup(t *testing.T) {
 	layers := map[string]*Candy{
-		"pipewire":     {Name: "pipewire", tasks: []Op{{Command: "true"}}},
-		"wayvnc":       {Name: "wayvnc", tasks: []Op{{Command: "true"}}},
+		"pipewire":     {Name: "pipewire", plan: []Step{{Run: "build", Op: Op{Command: "true"}}}},
+		"wayvnc":       {Name: "wayvnc", plan: []Step{{Run: "build", Op: Op{Command: "true"}}}},
 		"sway-desktop": {Name: "sway-desktop", IncludedCandy: toCandyRefs([]string{"pipewire", "wayvnc"})},
 	}
 
@@ -396,9 +396,9 @@ func TestExpandCandiesDedup(t *testing.T) {
 
 func TestExpandCandiesNested(t *testing.T) {
 	layers := map[string]*Candy{
-		"pipewire":     {Name: "pipewire", tasks: []Op{{Command: "true"}}},
-		"wayvnc":       {Name: "wayvnc", tasks: []Op{{Command: "true"}}},
-		"chrome":       {Name: "chrome", tasks: []Op{{Command: "true"}}},
+		"pipewire":     {Name: "pipewire", plan: []Step{{Run: "build", Op: Op{Command: "true"}}}},
+		"wayvnc":       {Name: "wayvnc", plan: []Step{{Run: "build", Op: Op{Command: "true"}}}},
+		"chrome":       {Name: "chrome", plan: []Step{{Run: "build", Op: Op{Command: "true"}}}},
 		"vnc-stack":    {Name: "vnc-stack", IncludedCandy: toCandyRefs([]string{"pipewire", "wayvnc"})},
 		"browser-desk": {Name: "browser-desk", IncludedCandy: toCandyRefs([]string{"vnc-stack", "chrome"})},
 	}
@@ -427,10 +427,10 @@ func TestExpandCandiesCycle(t *testing.T) {
 
 func TestExpandCandiesWithContent(t *testing.T) {
 	layers := map[string]*Candy{
-		"pipewire": {Name: "pipewire", tasks: []Op{{Command: "true"}}},
-		"wayvnc":   {Name: "wayvnc", tasks: []Op{{Command: "true"}}},
+		"pipewire": {Name: "pipewire", plan: []Step{{Run: "build", Op: Op{Command: "true"}}}},
+		"wayvnc":   {Name: "wayvnc", plan: []Step{{Run: "build", Op: Op{Command: "true"}}}},
 		// Composing candy that also has its own install content
-		"desktop": {Name: "desktop", tasks: []Op{{Command: "true"}}, IncludedCandy: toCandyRefs([]string{"pipewire", "wayvnc"})},
+		"desktop": {Name: "desktop", plan: []Step{{Run: "build", Op: Op{Command: "true"}}}, IncludedCandy: toCandyRefs([]string{"pipewire", "wayvnc"})},
 	}
 
 	result, err := ExpandCandy([]string{"desktop"}, layers)
@@ -446,9 +446,9 @@ func TestExpandCandiesWithContent(t *testing.T) {
 
 func TestResolveCandyOrderWithComposition(t *testing.T) {
 	layers := map[string]*Candy{
-		"pixi":        {Name: "pixi", tasks: []Op{{Command: "true"}}},
-		"python":      {Name: "python", tasks: []Op{{Command: "true"}}, Require: toCandyRefs([]string{"pixi"})},
-		"supervisord": {Name: "supervisord", tasks: []Op{{Command: "true"}}, Require: toCandyRefs([]string{"python"})},
+		"pixi":        {Name: "pixi", plan: []Step{{Run: "build", Op: Op{Command: "true"}}}},
+		"python":      {Name: "python", plan: []Step{{Run: "build", Op: Op{Command: "true"}}}, Require: toCandyRefs([]string{"pixi"})},
+		"supervisord": {Name: "supervisord", plan: []Step{{Run: "build", Op: Op{Command: "true"}}}, Require: toCandyRefs([]string{"python"})},
 		"svc-stack":   {Name: "svc-stack", IncludedCandy: toCandyRefs([]string{"python", "supervisord"})},
 	}
 
@@ -465,10 +465,10 @@ func TestResolveCandyOrderWithComposition(t *testing.T) {
 
 func TestDependsOnComposingCandy(t *testing.T) {
 	layers := map[string]*Candy{
-		"pipewire":     {Name: "pipewire", tasks: []Op{{Command: "true"}}},
-		"wayvnc":       {Name: "wayvnc", tasks: []Op{{Command: "true"}}},
+		"pipewire":     {Name: "pipewire", plan: []Step{{Run: "build", Op: Op{Command: "true"}}}},
+		"wayvnc":       {Name: "wayvnc", plan: []Step{{Run: "build", Op: Op{Command: "true"}}}},
 		"sway-desktop": {Name: "sway-desktop", IncludedCandy: toCandyRefs([]string{"pipewire", "wayvnc"})},
-		"myapp":        {Name: "myapp", tasks: []Op{{Command: "true"}}, Require: toCandyRefs([]string{"sway-desktop"})},
+		"myapp":        {Name: "myapp", plan: []Step{{Run: "build", Op: Op{Command: "true"}}}, Require: toCandyRefs([]string{"sway-desktop"})},
 	}
 
 	order, err := ResolveCandyOrder([]string{"myapp"}, layers, nil)

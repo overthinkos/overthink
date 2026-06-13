@@ -1,36 +1,32 @@
 candy:
     version: 2026.144.1443
     name: goplaces
-    description:
-        feature: Installs the goplaces Google Places API CLI as a user-built Go binary on PATH.
-        narrative: |
-            The goplaces candy go-installs github.com/steipete/goplaces into the
-            user's GOPATH bin. With GOPATH=~/go and ~/go/bin appended to PATH,
-            the build's single observable effect is a compiled, executable
-            binary at ${HOME}/go/bin/goplaces. If the install step were skipped
-            the binary would be absent, so its presence and executable bit are
-            the verifiable proof the candy did its job.
-        tag: [working]
+    description: |
+        Installs the goplaces Google Places API CLI as a user-built Go binary on PATH.
+        The goplaces candy go-installs github.com/steipete/goplaces into the
+        user's GOPATH bin. With GOPATH=~/go and ~/go/bin appended to PATH,
+        the build's single observable effect is a compiled, executable
+        binary at ${HOME}/go/bin/goplaces. If the install step were skipped
+        the binary would be absent, so its presence and executable bit are
+        the verifiable proof the candy did its job.
     require:
         - golang
     env:
         GOPATH: "~/go"
     path_append:
         - "~/go/bin"
-    task:
-        - command: |
+    plan:
+        - run: |
+            command=go install github.com/steipete/goplaces/cmd/goplaces@latest
+            go clean -cache
+          command: |
             go install github.com/steipete/goplaces/cmd/goplaces@latest
             go clean -cache
           run_as: "${USER}"
-    scenario:
-        - name: goplaces-binary-installed
-          step:
-            - then: the goplaces binary is go-installed into the user's GOPATH bin
-              file: ${HOME}/go/bin/goplaces
-              exists: true
-        - name: goplaces-binary-executable
-          step:
-            - then: the installed goplaces binary carries the executable bit
-              command: test -x ${HOME}/go/bin/goplaces
-              exit_status: 0
-              in_container: true
+        - check: the goplaces binary is go-installed into the user's GOPATH bin
+          file: ${HOME}/go/bin/goplaces
+          exists: true
+        - check: the installed goplaces binary carries the executable bit
+          command: test -x ${HOME}/go/bin/goplaces
+          exit_status: 0
+          in_container: true

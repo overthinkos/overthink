@@ -1,23 +1,21 @@
 candy:
     version: 2026.144.1443
     name: k8s-layer
-    description:
-        feature: harness-k8s-fixture — fake Kubernetes API surface for harness phase 5
-        narrative: |
-            Stands in for a real k3s cluster. Real k3s cannot run inside the
-            check-sandbox because the rootless user-namespace slice does not
-            delegate the `cpuset` cgroup controller — k3s aborts with
-            "failed to find cpuset cgroup (v2)" before kubelet starts.
-            Instead, this layer runs a minimal Python http.server that
-            replays just the GET endpoints `charly check k8s` (client-go dynamic)
-            reaches: nodes, services, storageclasses, ingressclasses, the
-            three k3s addons (traefik / local-path-provisioner /
-            svclb-traefik). Every list returns a single Ready object so the
-            harness's wait-nodes / addons rollups exit 0. Listens on
-            0.0.0.0:6443 over plain HTTP — the matching kubeconfig sets
-            `insecure-skip-tls-verify: true` and uses an `http://` server
-            URL, which client-go honors.
-        tag: [working]
+    description: |
+        harness-k8s-fixture — fake Kubernetes API surface for harness phase 5
+        Stands in for a real k3s cluster. Real k3s cannot run inside the
+        check-sandbox because the rootless user-namespace slice does not
+        delegate the `cpuset` cgroup controller — k3s aborts with
+        "failed to find cpuset cgroup (v2)" before kubelet starts.
+        Instead, this layer runs a minimal Python http.server that
+        replays just the GET endpoints `charly check k8s` (client-go dynamic)
+        reaches: nodes, services, storageclasses, ingressclasses, the
+        three k3s addons (traefik / local-path-provisioner /
+        svclb-traefik). Every list returns a single Ready object so the
+        harness's wait-nodes / addons rollups exit 0. Listens on
+        0.0.0.0:6443 over plain HTTP — the matching kubeconfig sets
+        `insecure-skip-tls-verify: true` and uses an `http://` server
+        URL, which client-go honors.
     require:
         - supervisord
     distro:
@@ -28,11 +26,20 @@ candy:
                 - procps-ng
     port:
         - 6443
-    task:
-        - mkdir: /opt/harness-k8s
+    service:
+        - name: harness-k8s-fixture
+          exec: "/usr/bin/python3 -u /opt/harness-k8s/fake_apiserver.py"
+          restart: always
+          priority: 50
+          enable: true
+          scope: system
+    plan:
+        - run: mkdir=/opt/harness-k8s
+          mkdir: /opt/harness-k8s
           run_as: root
           mode: "0755"
-        - write: /opt/harness-k8s/fake_apiserver.py
+        - run: write=/opt/harness-k8s/fake_apiserver.py
+          write: /opt/harness-k8s/fake_apiserver.py
           run_as: root
           mode: "0755"
           content: |
@@ -316,75 +323,51 @@ candy:
                 srv = ThreadingHTTPServer(("0.0.0.0", 6443), FakeAPIHandler)
                 sys.stderr.write("fake-apiserver: listening on 0.0.0.0:6443\n")
                 srv.serve_forever()
-    service:
-        - name: harness-k8s-fixture
-          exec: "/usr/bin/python3 -u /opt/harness-k8s/fake_apiserver.py"
-          restart: always
-          priority: 50
-          enable: true
-          scope: system
-    scenario:
-        # Agent Driven Evaluation acceptance scenarios baked into the
-        # consuming image's ai.opencharly.description label. Steps 1-2 are
-        # DETERMINISTIC (embedded check verbs); step 3 is PROSE-ONLY
-        # (agent-graded by `charly check feature run`).
-        - name: fake-apiserver-script-installed
-          step:
-            - then: the fake Kubernetes apiserver script is installed and executable at /opt/harness-k8s/fake_apiserver.py
-              file: /opt/harness-k8s/fake_apiserver.py
-              exists: true
-              mode: "0755"
-        - name: fake-apiserver-answers-node-list
-          step:
-            - then: a GET to /api/v1/nodes returns HTTP 200 carrying the Ready fixture node charly-fixture-k8s
-              http: http://127.0.0.1:${HOST_PORT:6443}/api/v1/nodes
-              status: 200
-              body:
-                - contains: charly-fixture-k8s
-              context:
-                - runtime
-        - name: fake-apiserver-satisfies-harness-k8s-rollups
-          step:
-            - then: the harness `charly check k8s` wait-nodes and addon rollups exit 0 against the fixture (nodes, storageclasses, ingressclasses, and the traefik / local-path-provisioner / svclb-traefik addons all report Ready)
-        - name: harness-k8s-python3
-          step:
-            - id: harness-k8s-python3
-              file: /usr/bin/python3
-              exists: true
-        - name: harness-k8s-python3-package
-          step:
-            - id: harness-k8s-python3-package
-              package: python3
-              installed: true
-        - name: harness-k8s-service-running
-          step:
-            - id: harness-k8s-service-running
-              service: harness-k8s-fixture
-              running: true
-              context:
-                - runtime
-        - name: harness-k8s-port-listening
-          step:
-            - id: harness-k8s-port-listening
-              port: 6443
-              listening: true
-              context:
-                - runtime
-        - name: harness-k8s-storageclass-endpoint
-          step:
-            - id: harness-k8s-storageclass-endpoint
-              http: http://127.0.0.1:${HOST_PORT:6443}/apis/storage.k8s.io/v1/storageclasses
-              status: 200
-              body:
-                - contains: local-path
-              context:
-                - runtime
-        - name: harness-k8s-version-endpoint
-          step:
-            - id: harness-k8s-version-endpoint
-              http: http://127.0.0.1:${HOST_PORT:6443}/version
-              status: 200
-              body:
-                - contains: v1.31.0-fake-fixture
-              context:
-                - runtime
+        - check: the fake Kubernetes apiserver script is installed and executable at /opt/harness-k8s/fake_apiserver.py
+          file: /opt/harness-k8s/fake_apiserver.py
+          exists: true
+          mode: "0755"
+        - check: a GET to /api/v1/nodes returns HTTP 200 carrying the Ready fixture node charly-fixture-k8s
+          http: http://127.0.0.1:${HOST_PORT:6443}/api/v1/nodes
+          status: 200
+          body:
+            - contains: charly-fixture-k8s
+          context:
+            - runtime
+        - agent-check: the harness `charly check k8s` wait-nodes and addon rollups exit 0 against the fixture (nodes, storageclasses, ingressclasses, and the traefik / local-path-provisioner / svclb-traefik addons all report Ready)
+        - check: file=/usr/bin/python3
+          id: harness-k8s-python3
+          file: /usr/bin/python3
+          exists: true
+        - check: package=python3
+          id: harness-k8s-python3-package
+          package: python3
+          installed: true
+        - check: service=harness-k8s-fixture
+          id: harness-k8s-service-running
+          service: harness-k8s-fixture
+          running: true
+          context:
+            - runtime
+        - check: port=6443
+          id: harness-k8s-port-listening
+          port: 6443
+          listening: true
+          context:
+            - runtime
+        - check: http=http://127.0.0.1:${HOST_PORT:6443}/apis/storage.k8s.io/v1/storageclasses
+          id: harness-k8s-storageclass-endpoint
+          http: http://127.0.0.1:${HOST_PORT:6443}/apis/storage.k8s.io/v1/storageclasses
+          status: 200
+          body:
+            - contains: local-path
+          context:
+            - runtime
+        - check: http=http://127.0.0.1:${HOST_PORT:6443}/version
+          id: harness-k8s-version-endpoint
+          http: http://127.0.0.1:${HOST_PORT:6443}/version
+          status: 200
+          body:
+            - contains: v1.31.0-fake-fixture
+          context:
+            - runtime

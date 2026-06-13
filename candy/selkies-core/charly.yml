@@ -1,29 +1,27 @@
 candy:
     version: 2026.155.2227
     name: selkies-core
-    description:
-        feature: Single shared streaming spine for every selkies flavor; supervises the desktop's Chrome for both labwc and KDE.
-        narrative: |
-            Compositor-agnostic core of the selkies streaming desktop: the pixelflux
-            WebRTC transport (selkies) plus the shared desktop fixings every flavor
-            (labwc, KDE Plasma) needs — Chrome + CDP, fonts, the wl-* pixelflux
-            screenshot/record/overlay tooling, accessibility introspection, an X
-            terminal, the terminal-recording stack, and sshd. There is NO compositor
-            here and NO compositor-specific panel/notifier — those live in the
-            per-flavor metalayer (selkies-desktop for labwc; selkies-kde-desktop for
-            KDE Plasma). This is the single shared spine consumed by BOTH flavors
-            across ALL GPU configs, so the streaming transport + fixings are defined
-            exactly once (R3 — no duplication, no -host/-pod siblings).
+    description: |
+        Single shared streaming spine for every selkies flavor; supervises the desktop's Chrome for both labwc and KDE.
+        Compositor-agnostic core of the selkies streaming desktop: the pixelflux
+        WebRTC transport (selkies) plus the shared desktop fixings every flavor
+        (labwc, KDE Plasma) needs — Chrome + CDP, fonts, the wl-* pixelflux
+        screenshot/record/overlay tooling, accessibility introspection, an X
+        terminal, the terminal-recording stack, and sshd. There is NO compositor
+        here and NO compositor-specific panel/notifier — those live in the
+        per-flavor metalayer (selkies-desktop for labwc; selkies-kde-desktop for
+        KDE Plasma). This is the single shared spine consumed by BOTH flavors
+        across ALL GPU configs, so the streaming transport + fixings are defined
+        exactly once (R3 — no duplication, no -host/-pod siblings).
 
-            selkies-core's OWN contribution on top of the composed candies is the
-            supervised [program:chrome] launcher: it bakes the chrome program into
-            the assembled supervisord config and keeps the browser alive for both
-            flavors, where the former per-flavor fire-once autostart only ever
-            passed by racing Chrome's brief alive window. The scenarios below assert
-            that baked supervisor entry (build scope) and that the supervised
-            browser stays up with a responsive CDP endpoint after the
-            nested-compositor startup-race settles (deploy scope).
-        tag: [working]
+        selkies-core's OWN contribution on top of the composed candies is the
+        supervised [program:chrome] launcher: it bakes the chrome program into
+        the assembled supervisord config and keeps the browser alive for both
+        flavors, where the former per-flavor fire-once autostart only ever
+        passed by racing Chrome's brief alive window. The scenarios below assert
+        that baked supervisor entry (build scope) and that the supervised
+        browser stays up with a responsive CDP endpoint after the
+        nested-compositor startup-race settles (deploy scope).
     candy:
         - selkies
         - pipewire
@@ -68,49 +66,36 @@ candy:
           stdout: file:/tmp/chrome.log
           enable: true
           scope: system
-    scenario:
-        - name: chrome-supervisor-baked-into-image
-          step:
-            - then: the assembled supervisord config carries selkies-core's own [program:chrome] launcher entry
-              file: /etc/supervisord.conf
-              exists: true
-              contains:
-                - contains: "[program:chrome]"
-            - then: that supervised entry execs the chrome-wrapper launcher (self-synchronizing — it polls for the nested compositor's wayland-0 socket)
-              file: /etc/supervisord.conf
-              contains:
-                - contains: "chrome-wrapper"
-        - name: chrome-stays-supervised-after-startup-race
-          step:
-            - then: the init system reports selkies-core's supervised chrome program as RUNNING
-              service: chrome
-              running: true
-              context:
-                - runtime
-            - then: 25s after deploy Chrome is still alive and its internal CDP endpoint on 9223 answers in-container, proving supervisord relaunched the browser past the nested-compositor self-exit instead of the bed merely racing its brief alive window
-              command: |
-                sleep 25
-                pgrep -f "/opt/google/chrome/chrome" >/dev/null 2>&1 || { echo "FAIL: chrome not running 25s after deploy"; exit 1; }
-                curl -sf --max-time 5 http://127.0.0.1:9223/json/version >/dev/null 2>&1 || { echo "FAIL: chrome CDP not responding"; exit 1; }
-                echo "ok: chrome supervised + alive + CDP responsive"
-              exit_status: 0
-              in_container: true
-              stdout:
-                - contains: "ok: chrome supervised"
-              context:
-                - runtime
-        - name: selkies-chrome-supervisor-baked
-          step:
-            # Build-scope: selkies-core's OWN service block bakes a supervised
-            # [program:chrome] launcher into the assembled supervisord config. The
-            # chrome candy installs the binary, chrome-cdp installs the wrapper +
-            # cdp-proxy program — only selkies-core supervises the BROWSER itself
-            # (chrome-cdp's program is cdp-proxy, not chrome), so this is the
-            # composition's distinguishing, non-duplicative artifact. /etc/supervisord.conf
-            # is chmod 0644, readable by the image's default uid-1000 user under
-            # `charly check box`. Fails if the service block did nothing.
-            - id: selkies-chrome-supervisor-baked
-              file: /etc/supervisord.conf
-              contains:
-                - contains: "[program:chrome]"
-                - contains: "chrome-wrapper"
+    plan:
+        - check: the assembled supervisord config carries selkies-core's own [program:chrome] launcher entry
+          file: /etc/supervisord.conf
+          exists: true
+          contains:
+            - contains: "[program:chrome]"
+        - check: that supervised entry execs the chrome-wrapper launcher (self-synchronizing — it polls for the nested compositor's wayland-0 socket)
+          file: /etc/supervisord.conf
+          contains:
+            - contains: "chrome-wrapper"
+        - check: the init system reports selkies-core's supervised chrome program as RUNNING
+          service: chrome
+          running: true
+          context:
+            - runtime
+        - check: 25s after deploy Chrome is still alive and its internal CDP endpoint on 9223 answers in-container, proving supervisord relaunched the browser past the nested-compositor self-exit instead of the bed merely racing its brief alive window
+          command: |
+            sleep 25
+            pgrep -f "/opt/google/chrome/chrome" >/dev/null 2>&1 || { echo "FAIL: chrome not running 25s after deploy"; exit 1; }
+            curl -sf --max-time 5 http://127.0.0.1:9223/json/version >/dev/null 2>&1 || { echo "FAIL: chrome CDP not responding"; exit 1; }
+            echo "ok: chrome supervised + alive + CDP responsive"
+          exit_status: 0
+          in_container: true
+          stdout:
+            - contains: "ok: chrome supervised"
+          context:
+            - runtime
+        - check: file=/etc/supervisord.conf
+          id: selkies-chrome-supervisor-baked
+          file: /etc/supervisord.conf
+          contains:
+            - contains: "[program:chrome]"
+            - contains: "chrome-wrapper"

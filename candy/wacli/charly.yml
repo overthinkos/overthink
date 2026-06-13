@@ -1,44 +1,37 @@
 candy:
     version: 2026.144.1443
     name: wacli
-    description:
-        feature: WhatsApp messaging and history sync from the command line — the `wacli` binary in the user's Go bin
-        narrative: |
-            Installs the wacli WhatsApp CLI by `go install`-ing
-            github.com/openclaw/wacli/cmd/wacli@latest with GOPATH=~/go, so the
-            `wacli` binary lands in the user's Go bin (~/go/bin, already appended
-            to $PATH). Verifiable end to end: the binary exists at ~/go/bin/wacli,
-            carries the executable bit, and the required Go toolchain that builds
-            and runs it is present at /usr/bin/go (the golang dependency).
-        tag: [working]
+    description: |
+        WhatsApp messaging and history sync from the command line — the `wacli` binary in the user's Go bin
+        Installs the wacli WhatsApp CLI by `go install`-ing
+        github.com/openclaw/wacli/cmd/wacli@latest with GOPATH=~/go, so the
+        `wacli` binary lands in the user's Go bin (~/go/bin, already appended
+        to $PATH). Verifiable end to end: the binary exists at ~/go/bin/wacli,
+        carries the executable bit, and the required Go toolchain that builds
+        and runs it is present at /usr/bin/go (the golang dependency).
     require:
         - golang
     env:
         GOPATH: "~/go"
     path_append:
         - "~/go/bin"
-    task:
-        - command: |
+    plan:
+        - run: |
+            command=go install github.com/openclaw/wacli/cmd/wacli@latest
+            go clean -cache
+          command: |
             go install github.com/openclaw/wacli/cmd/wacli@latest
             go clean -cache
           run_as: "${USER}"
-    scenario:
-        - name: wacli-binary-installed
-          step:
-            - then: the wacli WhatsApp CLI binary is installed in the user's Go bin directory
-              file: ${HOME}/go/bin/wacli
-              exists: true
-        - name: wacli-binary-is-executable
-          step:
-            - then: the installed wacli binary carries the executable bit and can be invoked
-              command: test -x ${HOME}/go/bin/wacli
-              exit_status: 0
-              in_container: true
-        - name: wacli-provides-whatsapp-cli
-          step:
-            - then: invoking wacli in the running deployment presents its WhatsApp command interface (login/pairing prompt) instead of crashing
-        - name: wacli-go-toolchain
-          step:
-            - id: wacli-go-toolchain
-              file: /usr/bin/go
-              exists: true
+        - check: the wacli WhatsApp CLI binary is installed in the user's Go bin directory
+          file: ${HOME}/go/bin/wacli
+          exists: true
+        - check: the installed wacli binary carries the executable bit and can be invoked
+          command: test -x ${HOME}/go/bin/wacli
+          exit_status: 0
+          in_container: true
+        - agent-check: invoking wacli in the running deployment presents its WhatsApp command interface (login/pairing prompt) instead of crashing
+        - check: file=/usr/bin/go
+          id: wacli-go-toolchain
+          file: /usr/bin/go
+          exists: true

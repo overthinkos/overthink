@@ -1,18 +1,16 @@
 candy:
     version: 2026.144.1443
     name: unsloth
-    description:
-        feature: Patched vLLM nightly runtime layered into the pixi env for Unsloth LLM fine-tuning (pip-only, requires pixi env from parent layer)
-        narrative: |
-            Layers a vLLM cu130 nightly wheel into the parent layer's pixi
-            `default` environment (installed --no-deps; the matching runtime
-            deps live in the parent jupyter-ml pixi.toml), then patches vLLM's
-            _decompose_size_nodes bug (upstream vllm-project/vllm#38360) so the
-            torch.compile graph passes stop crashing. It also exports
-            UNSLOTH_SKIP_LLAMA_CPP_INSTALL=1 and HF_HOME (the HuggingFace cache,
-            backed by the models volume), so the wheel install, the env, and the
-            patch are each observable in the built image.
-        tag: [working]
+    description: |
+        Patched vLLM nightly runtime layered into the pixi env for Unsloth LLM fine-tuning (pip-only, requires pixi env from parent layer)
+        Layers a vLLM cu130 nightly wheel into the parent layer's pixi
+        `default` environment (installed --no-deps; the matching runtime
+        deps live in the parent jupyter-ml pixi.toml), then patches vLLM's
+        _decompose_size_nodes bug (upstream vllm-project/vllm#38360) so the
+        torch.compile graph passes stop crashing. It also exports
+        UNSLOTH_SKIP_LLAMA_CPP_INSTALL=1 and HF_HOME (the HuggingFace cache,
+        backed by the models volume), so the wheel install, the env, and the
+        patch are each observable in the built image.
     env:
         UNSLOTH_SKIP_LLAMA_CPP_INSTALL: "1"
         HF_HOME: "~/.cache/huggingface"
@@ -22,50 +20,32 @@ candy:
     alias:
         - name: unsloth
           command: unsloth
-    task:
-        # vLLM cu130 nightly wheel — runtime deps live in the parent layer's pixi.toml
-        - command: |
+    plan:
+        - run: |
+            command=~/.pixi/envs/default/bin/python -m pip install --no-deps \
+              'https://wheels.vllm.ai/f53fa26e05c476a43f6db048a9e3b43bcb2b72fb/vllm-0.19.1rc1.dev39%2Bgf53fa26e0.cu130-cp38-abi3-manylinux_2_35_x86_64.whl'
+          command: |
             ~/.pixi/envs/default/bin/python -m pip install --no-deps \
               'https://wheels.vllm.ai/f53fa26e05c476a43f6db048a9e3b43bcb2b72fb/vllm-0.19.1rc1.dev39%2Bgf53fa26e0.cu130-cp38-abi3-manylinux_2_35_x86_64.whl'
           run_as: "${USER}"
-        # Patch vLLM _decompose_size_nodes bug (upstream: vllm-project/vllm#38360).
-        # File is delivered via the layer's `/ctx` bind-mount (declared
-        # implicitly by the `cmd` verb's cache-mount table — see
-        # /charly-build:layer "Cache Mounts"); the script is NOT in the
-        # container's CWD, so the absolute /ctx/ path is required.
-        - command: ~/.pixi/envs/default/bin/python /ctx/patch_vllm_size_nodes.py
+        - run: command=~/.pixi/envs/default/bin/python /ctx/patch_vllm_size_nodes.py
+          command: ~/.pixi/envs/default/bin/python /ctx/patch_vllm_size_nodes.py
           run_as: "${USER}"
-    scenario:
-        # First two scenarios bind DETERMINISTIC steps (embedded check
-        # verbs run at build + deploy scope); the last is PROSE-ONLY
-        # (agent-graded — verifying the applied vLLM source patch needs a
-        # heavy live import, so it is left for `charly check feature run`).
-        - name: vllm-wheel-installed-in-pixi-env
-          step:
-            - then: the vLLM 0.19.x cu130 nightly wheel is installed in the pixi default environment
-              command: ${HOME}/.pixi/envs/default/bin/python -m pip show vllm
-              exit_status: 0
-              stdout:
-                - contains: "0.19.1"
-        - name: unsloth-runtime-env-exported
-          step:
-            - then: the candy exports UNSLOTH_SKIP_LLAMA_CPP_INSTALL=1 so the bundled llama.cpp build is skipped
-              command: printenv UNSLOTH_SKIP_LLAMA_CPP_INSTALL
-              stdout:
-                - equals: "1"
-            - then: the candy exports HF_HOME at the HuggingFace cache that backs the models volume
-              command: printenv HF_HOME
-              stdout:
-                - contains: ".cache/huggingface"
-        - name: vllm-size-nodes-patch-applied
-          step:
-            - then: vLLM's compilation backend carries the _decompose_size_nodes fix (the x.size(dim) scalar guard) rather than the unpatched upstream code
-        - name: unsloth-pixi-python
-          step:
-            # Build-scope — run inside the built image via `podman run --rm`.
-            # The pixi interpreter is the install target; vLLM + the two env
-            # exports are this candy's own observable contributions (the parent
-            # pixi.toml installs neither vLLM nor these vars).
-            - id: unsloth-pixi-python
-              file: ${HOME}/.pixi/envs/default/bin/python
-              exists: true
+        - check: the vLLM 0.19.x cu130 nightly wheel is installed in the pixi default environment
+          command: ${HOME}/.pixi/envs/default/bin/python -m pip show vllm
+          exit_status: 0
+          stdout:
+            - contains: "0.19.1"
+        - check: the candy exports UNSLOTH_SKIP_LLAMA_CPP_INSTALL=1 so the bundled llama.cpp build is skipped
+          command: printenv UNSLOTH_SKIP_LLAMA_CPP_INSTALL
+          stdout:
+            - equals: "1"
+        - check: the candy exports HF_HOME at the HuggingFace cache that backs the models volume
+          command: printenv HF_HOME
+          stdout:
+            - contains: ".cache/huggingface"
+        - agent-check: vLLM's compilation backend carries the _decompose_size_nodes fix (the x.size(dim) scalar guard) rather than the unpatched upstream code
+        - check: file=${HOME}/.pixi/envs/default/bin/python
+          id: unsloth-pixi-python
+          file: ${HOME}/.pixi/envs/default/bin/python
+          exists: true

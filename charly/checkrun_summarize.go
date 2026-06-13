@@ -11,19 +11,19 @@ import (
 )
 
 // runSummarize implements the `summarize:` verb (Path B from the
-// concurrency-test plan). It walks the scenario context's recorded
+// concurrency-test plan). It walks the plan-run context's recorded
 // CheckResults, filters by step-id glob patterns in OverIDs, and
 // computes distribution metrics (p50/p95/p99/max/mean) over each
 // matching step's Elapsed time. Optional per-metric matchers
 // (P50Match, P95Match, P99Match, MaxMatch, MeanMatch) assert
 // thresholds — the verb fails if any threshold is exceeded.
 //
-// Scope: walks ONLY the current scenario's results (via r.Scenario).
-// summarize verbs in classical `tests:` blocks (no scenario context)
-// skip with a clear message.
+// Scope: walks ONLY the current plan run's results (via r.Scenario).
+// summarize verbs invoked without a plan-run context skip with a clear
+// message.
 func (r *Runner) runSummarize(ctx context.Context, c *Op) CheckResult {
 	if r.Scenario == nil {
-		return skipf(c, "summarize: requires scenario context (use inside scenario steps)")
+		return skipf(c, "summarize: requires a plan-run context (use inside plan steps)")
 	}
 	if len(c.OverIDs) == 0 {
 		return failf(c, "summarize: over_ids: must list at least one step-id glob")

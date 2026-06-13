@@ -1,23 +1,21 @@
 candy:
     version: 2026.155.2119
     name: kde-shell
-    description:
-        feature: Installs the shared SDDM-free KDE Plasma Wayland session package set — plasma-desktop, the core session components, a curated app set, and the kdotool KWin automation tool — used by both the bare-metal seat and the headless streamed pod.
-        narrative: |
-            The SDDM-free KDE Plasma Wayland SESSION package set — the shared subset
-            needed by BOTH the bare-metal KDE desktop (kde-desktop, which adds SDDM +
-            graphical.target on a real GPU output) AND the headless streamed KDE pod
-            (kde-selkies, which runs startplasma-wayland nested in pixelflux with no
-            seat). plasma-desktop is the dependency-pulling top package (drags
-            plasma-workspace + kwin_wayland + plasmashell + kf6 + qt6 + breeze as
-            deps). Only the core session components + a curated app set usable in
-            both venues live here; workstation-only extras (partition tools,
-            kdeconnect, bluetooth, firewall/thunderbolt, kwallet, kinfocenter, media
-            players) stay in kde-desktop so the streaming pod is not bloated. Factored
-            out of kde-desktop so the bare-metal seat and the headless pod share ONE
-            package list (R3). require: dbus (the Plasma session bus). Every package
-            lands a binary at a fixed /usr/bin path, so presence is directly verifiable.
-        tag: [working]
+    description: |
+        Installs the shared SDDM-free KDE Plasma Wayland session package set — plasma-desktop, the core session components, a curated app set, and the kdotool KWin automation tool — used by both the bare-metal seat and the headless streamed pod.
+        The SDDM-free KDE Plasma Wayland SESSION package set — the shared subset
+        needed by BOTH the bare-metal KDE desktop (kde-desktop, which adds SDDM +
+        graphical.target on a real GPU output) AND the headless streamed KDE pod
+        (kde-selkies, which runs startplasma-wayland nested in pixelflux with no
+        seat). plasma-desktop is the dependency-pulling top package (drags
+        plasma-workspace + kwin_wayland + plasmashell + kf6 + qt6 + breeze as
+        deps). Only the core session components + a curated app set usable in
+        both venues live here; workstation-only extras (partition tools,
+        kdeconnect, bluetooth, firewall/thunderbolt, kwallet, kinfocenter, media
+        players) stay in kde-desktop so the streaming pod is not bloated. Factored
+        out of kde-desktop so the bare-metal seat and the headless pod share ONE
+        package list (R3). require: dbus (the Plasma session bus). Every package
+        lands a binary at a fixed /usr/bin path, so presence is directly verifiable.
     require:
         - dbus
     distro:
@@ -54,36 +52,25 @@ candy:
                 # input) — keyboard uses wtype, pointer is a separate cutover.
                 package:
                     - kdotool
-    scenario:
-        # Deterministic scenarios — each step embeds a check verb (file/package),
-        # so they run at BOTH build and deploy scope and would FAIL if the
-        # package set were not installed.
-        - name: plasma-wayland-session-binaries-present
-          step:
-            - then: plasmashell, the Plasma shell, is installed at /usr/bin/plasmashell
-              file: /usr/bin/plasmashell
-              exists: true
-            - then: kwin_wayland, the Wayland compositor, is installed at /usr/bin/kwin_wayland
-              file: /usr/bin/kwin_wayland
-              exists: true
-            - then: startplasma-wayland, the session entry point, is installed at /usr/bin/startplasma-wayland
-              file: /usr/bin/startplasma-wayland
-              exists: true
-        - name: plasma-desktop-top-package-installed
-          step:
-            - then: the dependency-pulling top package plasma-desktop is installed in the rpm/pacman database
-              package: plasma-desktop
-              installed: true
-        - name: curated-kde-apps-present
-          step:
-            - then: the Dolphin file manager is installed at /usr/bin/dolphin
-              file: /usr/bin/dolphin
-              exists: true
-            - then: the Konsole terminal is installed at /usr/bin/konsole
-              file: /usr/bin/konsole
-              exists: true
-        - name: kdotool-kwin-automation-available
-          step:
-            - then: kdotool, the KWin window-management automation tool that drives charly check wl on KWin, is installed at /usr/bin/kdotool
-              file: /usr/bin/kdotool
-              exists: true
+    plan:
+        - check: plasmashell, the Plasma shell, is installed at /usr/bin/plasmashell
+          file: /usr/bin/plasmashell
+          exists: true
+        - check: kwin_wayland, the Wayland compositor, is installed at /usr/bin/kwin_wayland
+          file: /usr/bin/kwin_wayland
+          exists: true
+        - check: startplasma-wayland, the session entry point, is installed at /usr/bin/startplasma-wayland
+          file: /usr/bin/startplasma-wayland
+          exists: true
+        - check: the dependency-pulling top package plasma-desktop is installed in the rpm/pacman database
+          package: plasma-desktop
+          installed: true
+        - check: the Dolphin file manager is installed at /usr/bin/dolphin
+          file: /usr/bin/dolphin
+          exists: true
+        - check: the Konsole terminal is installed at /usr/bin/konsole
+          file: /usr/bin/konsole
+          exists: true
+        - check: kdotool, the KWin window-management automation tool that drives charly check wl on KWin, is installed at /usr/bin/kdotool
+          file: /usr/bin/kdotool
+          exists: true

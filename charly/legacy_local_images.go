@@ -235,7 +235,7 @@ func rewriteLegacyLocalImagesInFile(path, body string) (string, int) {
 			indentStr + "# 2026-05 deploy-fetch-narrowing cutover: 'images:' field removed.",
 			indentStr + "# The deploy now fetches NOTHING speculative. Test-bed images are",
 			indentStr + "# ensured by `charly check run` preflight, sourced from each score's",
-			indentStr + "# `target_image:` + scenario `pod:` declarations.",
+			indentStr + "# `target_image:` + per-step `pod:` declarations.",
 		}
 		if len(b.OriginalRefs) > 0 {
 			comment = append(comment, indentStr+"# Original list:")

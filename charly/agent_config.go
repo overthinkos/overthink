@@ -6,10 +6,10 @@ package main
 // *invocation contract*: how to launch the CLI, how to authenticate it,
 // how to capture its version, and how long to let it run.
 //
-// Recipes (`kind: recipe` in harness_recipe.go) reference AIs by name and
-// inherit nothing from them — recipes carry the prompt + plateau policy,
-// AIs carry the binary contract. A new AI is added once and reused by
-// every recipe; a new recipe doesn't need to redeclare its AIs.
+// An `iterate:` block (on a deploy / kind:check bed) references AIs by name and
+// inherits nothing from them — the iterate block carries the prompt + plateau
+// policy, AIs carry the binary contract. A new AI is added once and reused by
+// every iterate block; a new benchmark doesn't need to redeclare its AIs.
 
 import (
 	"context"
@@ -40,7 +40,7 @@ import (
 //	    credential:
 //	      - {src: ~/.claude/.credentials.json, dst: ~/.claude/.credentials.json}
 type AgentConfig struct {
-	Description    *Description      `yaml:"description,omitempty"`
+	Description    string            `yaml:"description,omitempty"`
 	Command        []string          `yaml:"command"`
 	PromptVia      string            `yaml:"prompt_via,omitempty"`
 	VersionCommand []string          `yaml:"version_command,omitempty"`
@@ -256,7 +256,7 @@ func CaptureVersion(
 }
 
 // LocalCaptureVersion is a convenience wrapper that runs the version
-// command on the host directly (for `host: true` recipes). Exposed so
+// command on the host directly (for a host-target iterate sandbox). Exposed so
 // the host-target preflight + the per-AI capture share one path.
 func LocalCaptureVersion(ctx context.Context, ai *AgentConfig) VersionResult {
 	return CaptureVersion(ctx, ai, func(ctx context.Context, argv []string) (string, string, error) {

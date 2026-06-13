@@ -23,7 +23,7 @@ func TestSubstitute_WellKnownTokens(t *testing.T) {
 		AttemptsLeft:     2,
 		MCPEndpoint:      "http://mcp.example/",
 		Notes:            "remember this",
-		Recipe:           "- recipe: tier1\n",
+		Plan:             "- check: tier1\n",
 		Tag:              "@smoke",
 	}
 	cases := map[string]string{
@@ -42,7 +42,7 @@ func TestSubstitute_WellKnownTokens(t *testing.T) {
 		"${ATTEMPTS_LEFT}":     "2",
 		"${MCP_ENDPOINT}":      "http://mcp.example/",
 		"${NOTES}":             "remember this",
-		"${RECIPES}":           "- recipe: tier1\n",
+		"${PLAN}":              "- check: tier1\n",
 		"${TAG}":               "@smoke",
 	}
 	for in, want := range cases {

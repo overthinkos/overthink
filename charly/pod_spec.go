@@ -36,8 +36,8 @@ type PodSpec struct {
 	// values. Deployment overrides any of them.
 	EnvDefaults []string `yaml:"env_default,omitempty"`
 
-	// Scenario carries optional target-specific acceptance scenarios (Op
-	// steps) that run for every deployment using this template. Candy and
-	// box scenarios propagate automatically via the composition machinery.
-	Scenario []Scenario `yaml:"scenario,omitempty"`
+	// Plan carries optional target-specific plan steps that run for every
+	// deployment using this template. Candy and box plans propagate
+	// automatically via the composition machinery.
+	Plan []Step `yaml:"plan,omitempty"`
 }

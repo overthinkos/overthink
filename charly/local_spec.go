@@ -32,21 +32,19 @@ type LocalSpec struct {
 	// key collision (deployment wins).
 	Env []string `yaml:"env,omitempty"`
 
-	// Description carries the Gherkin-shaped self-description (Feature/
-	// Narrative/Tag/Scenario). Replaces the retired info:/status: scalar
-	// fields. The status word lives in Description.Tag — walk the tag
-	// list looking for "working"/"testing"/"broken" via descriptionStatus.
-	Description *Description `yaml:"description,omitempty"`
+	// Description carries the plain-string self-description; first line = the
+	// summary shown in listings.
+	Description string `yaml:"description,omitempty"`
 
-	// Scenario carries optional target-specific acceptance scenarios (Op
-	// steps). Candy and box scenarios propagate automatically.
-	Scenario []Scenario `yaml:"scenario,omitempty"`
+	// Plan carries optional target-specific plan steps. Candy and box plans
+	// propagate automatically.
+	Plan []Step `yaml:"plan,omitempty"`
 
 	// Note: there is NO image-fetch surface on a kind:local template.
 	// Deploys apply candies (host packages + configs) only; container
 	// images required for `charly check run` / `charly check live` are ensured by the
 	// check preflight (see charly/check_image_preflight.go), sourced from the
-	// score's `target_image:` + scenario `pod:` declarations. The
+	// score's `target_image:` + per-step `pod:` declarations. The
 	// previous template-level `images:` field was removed in the
 	// 2026-05 deploy-fetch-narrowing cutover; legacy YAML carrying it
 	// hard-errors at validate time with a pointer to

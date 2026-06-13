@@ -886,9 +886,9 @@ func renderDownloadScript(task *Op, candyVars map[string]string) string {
 		strip = fmt.Sprintf(" --strip-components=%d", task.StripComponents)
 	}
 	includeFilter := ""
-	if len(task.Include) > 0 {
-		quoted := make([]string, 0, len(task.Include))
-		for _, p := range task.Include {
+	if len(task.ExtractInclude) > 0 {
+		quoted := make([]string, 0, len(task.ExtractInclude))
+		for _, p := range task.ExtractInclude {
 			quoted = append(quoted, shQuoteArg(p))
 		}
 		includeFilter = " " + strings.Join(quoted, " ")

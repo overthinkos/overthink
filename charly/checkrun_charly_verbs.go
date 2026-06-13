@@ -39,7 +39,7 @@ import (
 //     allowlist, runCharlyVerb skips subprocess execution and runs the
 //     post-run validators (artifact_min_bytes / artifact_min_dimensions
 //     / artifact_not_uniform / artifact_min_cast_events) against the
-//     existing file at the recipe-declared `artifact:` path.
+//     existing file at the plan-declared `artifact:` path.
 //
 //   - The freshness mtime gate (artifact mtime ≥ Runner.IterStartTime)
 //     prevents pre-staged or stale files from passing.
@@ -531,7 +531,7 @@ func posK8sRaw(c *Op) []string {
 		args = append(args, "--namespace", c.Namespace)
 	}
 	if c.JSON {
-		// Recipe `json: true` → `--json` flag on the underlying
+		// A check's `json: true` → `--json` flag on the underlying
 		// `charly check k8s raw` invocation. List-mode then emits the
 		// full Kubernetes List JSON document instead of one
 		// `<namespace>/<name>` per line.
@@ -736,13 +736,13 @@ func posKeyNameSplit(c *Op) []string {
 }
 
 // posCommandFields splits c.Command on whitespace into argv slots. Used for
-// libvirt:guest/exec where the recipe surface is `command: "uname -s"` and
+// libvirt:guest/exec where the check surface is `command: "uname -s"` and
 // the QEMU guest-agent wants a real argv list (no shell, no metachars).
 // Prefixes `--` so kong does not interpret embedded `-flag`-like tokens
 // (e.g. `-s` in `uname -s`, `-fsS` in `curl -fsS …`) as CLI flags of the
 // outer `charly check libvirt guest exec` invocation.
 // For commands containing real shell metacharacters (pipes, redirects,
-// quoted spaces), use `command: "sh -c '<full command>'"` so the recipe-side
+// quoted spaces), use `command: "sh -c '<full command>'"` so the check-side
 // argv is `sh`, `-c`, `<full command>`.
 func posCommandFields(c *Op) []string {
 	fields := strings.Fields(c.Command)
@@ -1079,7 +1079,7 @@ func (r *Runner) runCharlyVerb(ctx context.Context, c *Op, verb, method string, 
 	// allowlist. The harness scorer skips the subprocess re-execution
 	// (which would overwrite the AI's iteration artifact and capture a
 	// different chrome/wayland/etc. moment) and instead validates the
-	// AI-produced file at the recipe-declared `artifact:` path.
+	// AI-produced file at the plan-declared `artifact:` path.
 	//
 	// The freshness mtime gate enforces that the file was written
 	// during the current iteration — pre-staged or stale files are
@@ -1089,14 +1089,14 @@ func (r *Runner) runCharlyVerb(ctx context.Context, c *Op, verb, method string, 
 	// stdout/stderr/exit_status matchers are incompatible with this
 	// mode: without re-running the command there is no captured
 	// output to match against. Authors hitting this combination need
-	// to either remove the matchers or split into separate scenarios.
+	// to either remove the matchers or split into separate steps.
 	key := verb + "/" + method
 	if r.ValidateAiArtifacts && artifactValidatableMethods[key] {
 		if c.Stdout != nil || c.Stderr != nil || c.ExitStatus != nil {
 			return failf(c,
 				"%s: %s: validate_ai_artifacts skips command execution; "+
 					"stdout/stderr/exit_status matchers cannot be evaluated — "+
-					"remove them or split into a separate scenario", verb, method)
+					"remove them or split into a separate step", verb, method)
 		}
 		info, err := os.Stat(c.Artifact)
 		if err != nil {

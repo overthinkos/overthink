@@ -26,7 +26,7 @@ package main
 // Peer vars are pre-resolved per run and overlaid by Runner.effectiveEnv onto
 // WHATEVER resolver is active (primary, on:-swapped, or harness bucket), so a
 // `cdp:` check with `on: chrome` and `url: http://${PEER_HOST:web}:8080` works
-// the same in `charly check live`, a kind:check bed, and an AI-iteration recipe (R3).
+// the same in `charly check live`, a kind:check bed, and an AI-iteration run (R3).
 
 import (
 	"fmt"
@@ -62,20 +62,12 @@ func applyPeerVars(r *Runner, checks []Op, instance string) {
 	r.peerCleanups = append(r.peerCleanups, cleanups...)
 }
 
-// applyPeerVarsScenarios is the scenario-list counterpart (harness / recipe /
-// feature-run paths), flattening every step's embedded Check.
-func applyPeerVarsScenarios(r *Runner, scenarios []Scenario, instance string) {
+// applyPeerVarsSteps is the plan-step counterpart (harness / iterate /
+// feature-run paths), flattening every step's embedded Op.
+func applyPeerVarsSteps(r *Runner, plan []Step, instance string) {
 	var checks []Op
-	for _, sc := range scenarios {
-		for _, st := range sc.Step {
-			checks = append(checks, st.Op)
-		}
-		for _, st := range sc.Setup {
-			checks = append(checks, st.Op)
-		}
-		for _, st := range sc.Teardown {
-			checks = append(checks, st.Op)
-		}
+	for _, st := range plan {
+		checks = append(checks, st.Op)
 	}
 	applyPeerVars(r, checks, instance)
 }

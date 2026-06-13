@@ -47,14 +47,14 @@ type LabelDescriptionSet struct {
 	Deploy []LabeledDescription `json:"deploy,omitempty"`
 }
 
-// LabeledDescription is a Description with its collection-time origin
-// annotation. Origin follows the `candy:<name>` / `box:<name>` /
-// `deploy-default` / `deploy-local` convention also used by
-// LabelShellSet entries' Origin field.
+// LabeledDescription is a plain-string description + its baked plan steps,
+// with a collection-time origin annotation. Origin follows the
+// `candy:<name>` / `box:<name>` / `deploy-default` / `deploy-local`
+// convention also used by LabelShellSet entries' Origin field.
 type LabeledDescription struct {
-	Origin      string      `json:"origin"`
-	Description Description `json:"description"`
-	Scenario    []Scenario  `json:"scenario,omitempty"`
+	Origin      string `json:"origin"`
+	Description string `json:"description,omitempty"`
+	Plan        []Step `json:"plan,omitempty"`
 }
 
 // IsEmpty returns true if no section has any descriptions. Used by label

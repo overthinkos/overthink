@@ -4,7 +4,7 @@ package main
 // `charly check run` host-target dispatches.
 //
 // The deploy applies host packages + configs only (CLAUDE.md "Deploy
-// fetches NOTHING speculative"); container images that scenarios
+// fetches NOTHING speculative"); container images that plan steps
 // spawn need to be present BEFORE the runner walks them. This file
 // owns the score → image-set discovery only — the actual ensure
 // logic lives in `charly/ensure_image.go::EnsureImagePresent`, the
@@ -17,27 +17,21 @@ import (
 	"sort"
 )
 
-// ensureScoreImages collects every image identifier the score's
-// in-scope scenarios may spawn (target_image + per-scenario pod
-// values), deduplicates, and ensures each is present via the
-// canonical EnsureImagePresent helper. Idempotent.
+// ensureScoreImages collects every image identifier the iterate plan's
+// scored steps may spawn (per-step Op.Pod values), deduplicates, and ensures
+// each is present via the canonical EnsureImagePresent helper. Idempotent.
 //
-// Failures abort the check BEFORE any scenario runs.
-func ensureScoreImages(ctx context.Context, score *HarnessScore, uf *UnifiedFile, projectDir string) error {
-	if score == nil || uf == nil {
+// Failures abort the check BEFORE any step runs.
+func ensureScoreImages(ctx context.Context, plan []Step, uf *UnifiedFile, projectDir string) error {
+	if uf == nil {
 		return nil
 	}
 	cfg := uf.ProjectConfig()
 
 	want := map[string]struct{}{}
-	if score.TargetImage != "" {
-		want[score.TargetImage] = struct{}{}
-	}
-	if scenarios, _, err := ResolveScoreRecipe(score, uf.Recipe); err == nil {
-		for _, sc := range scenarios {
-			if sc.Pod != "" {
-				want[sc.Pod] = struct{}{}
-			}
+	for _, s := range plan {
+		if s.Op.Pod != "" {
+			want[s.Op.Pod] = struct{}{}
 		}
 	}
 	if len(want) == 0 {

@@ -5,7 +5,7 @@ package main
 //
 // Retricheck uses the DeployExecutor's GetFile back-channel (os.ReadFile
 // on host, `ssh vm sudo cat` on VM, `podman exec cat` via the nested
-// executor on container-in-container scenarios). Rewrite rules apply
+// executor on container-in-container cases). Rewrite rules apply
 // literal find/replace against the retrieved content before writing to
 // the operator-side destination. Missing-file handling depends on the
 // artifact's `optional:` flag.

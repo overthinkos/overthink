@@ -1,15 +1,13 @@
 candy:
     version: 2026.144.1443
     name: heroic
-    description:
-        feature: Heroic Games Launcher (Epic/GOG/Amazon) on a Sway desktop with MangoHud and GameMode
-        narrative: |
-            Installs the Heroic Games Launcher from its GitHub-release RPM
-            (the heroic package and /usr/bin/heroic launcher) alongside the
-            MangoHud FPS overlay and Feral GameMode performance optimizer from
-            the Fedora repos. Heroic config, Wine/Proton tools, and game
-            installs persist in the heroic-config and heroic-games volumes.
-        tag: [working]
+    description: |
+        Heroic Games Launcher (Epic/GOG/Amazon) on a Sway desktop with MangoHud and GameMode
+        Installs the Heroic Games Launcher from its GitHub-release RPM
+        (the heroic package and /usr/bin/heroic launcher) alongside the
+        MangoHud FPS overlay and Feral GameMode performance optimizer from
+        the Fedora repos. Heroic config, Wine/Proton tools, and game
+        installs persist in the heroic-config and heroic-games volumes.
     require:
         - sway
     distro:
@@ -24,40 +22,36 @@ candy:
           path: "~/Games/Heroic"
     var:
         HEROIC_VERSION: 2.20.1
-    task:
-        # Heroic ships as an .rpm from GitHub releases — fetch, install with dnf
-        # (which pulls in transitive deps), then clean up the staged file.
-        - command: |
+    plan:
+        - run: |
+            command=ARCH=$(uname -m)
+            curl -fsSL "https://github.com/Heroic-Games-Launcher/HeroicGamesLauncher/releases/download/v${HEROIC_VERSION}/Heroic-${HEROIC_VERSION}-linux-${ARCH}.rpm" -o /tmp/heroic.rpm
+            dnf install -y /tmp/heroic.rpm
+            rm -f /tmp/heroic.rpm
+          command: |
             ARCH=$(uname -m)
             curl -fsSL "https://github.com/Heroic-Games-Launcher/HeroicGamesLauncher/releases/download/v${HEROIC_VERSION}/Heroic-${HEROIC_VERSION}-linux-${ARCH}.rpm" -o /tmp/heroic.rpm
             dnf install -y /tmp/heroic.rpm
             rm -f /tmp/heroic.rpm
           run_as: root
-    scenario:
-        - name: heroic-launcher-installed
-          step:
-            - then: the Heroic Games Launcher binary is installed on PATH
-              file: /usr/bin/heroic
-              exists: true
-            - then: the heroic RPM is registered in the package database
-              package: heroic
-              installed: true
-            - then: a desktop entry installs so the launcher appears in the application menu
-              file: /usr/share/applications/heroic.desktop
-              exists: true
-        - name: gaming-performance-tools-installed
-          step:
-            - then: the MangoHud overlay is installed for in-game FPS and stats
-              package: mangohud
-              installed: true
-            - then: Feral GameMode is installed to optimize the CPU governor while gaming
-              package: gamemode
-              installed: true
-        - name: game-data-persists-across-rebuilds
-          step:
-            - then: the heroic-config volume is mounted as a directory so Wine/Proton tools and settings survive a rebuild
-              file: ${VOLUME_CONTAINER_PATH:heroic-config}
-              filetype: directory
-              context:
-                - runtime
-            - then: installed games and their Wine prefixes are retained between container restarts
+        - check: the Heroic Games Launcher binary is installed on PATH
+          file: /usr/bin/heroic
+          exists: true
+        - check: the heroic RPM is registered in the package database
+          package: heroic
+          installed: true
+        - check: a desktop entry installs so the launcher appears in the application menu
+          file: /usr/share/applications/heroic.desktop
+          exists: true
+        - check: the MangoHud overlay is installed for in-game FPS and stats
+          package: mangohud
+          installed: true
+        - check: Feral GameMode is installed to optimize the CPU governor while gaming
+          package: gamemode
+          installed: true
+        - check: the heroic-config volume is mounted as a directory so Wine/Proton tools and settings survive a rebuild
+          file: ${VOLUME_CONTAINER_PATH:heroic-config}
+          filetype: directory
+          context:
+            - runtime
+        - agent-check: installed games and their Wine prefixes are retained between container restarts

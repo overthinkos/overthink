@@ -1,15 +1,13 @@
 candy:
     version: 2026.144.1443
     name: testapi
-    description:
-        feature: A FastAPI test service answering HTTP on port 9090 under supervisord
-        narrative: |
-            Installs fastapi + uvicorn into a pixi environment and copies app.py
-            (the FastAPI app exposing GET / and GET /health) into the service
-            working directory. supervisord runs `uvicorn app:app` on 0.0.0.0:9090,
-            so the running container answers HTTP 200 on / ({"status":"ok"}) and
-            /health ({"healthy":true}). Every claim below is independently checked.
-        tag: [working]
+    description: |
+        A FastAPI test service answering HTTP on port 9090 under supervisord
+        Installs fastapi + uvicorn into a pixi environment and copies app.py
+        (the FastAPI app exposing GET / and GET /health) into the service
+        working directory. supervisord runs `uvicorn app:app` on 0.0.0.0:9090,
+        so the running container answers HTTP 200 on / ({"status":"ok"}) and
+        /health ({"healthy":true}). Every claim below is independently checked.
     require:
         - supervisord
     port:
@@ -17,13 +15,6 @@ candy:
     route:
         host: testapi.localhost
         port: 9090
-    task:
-        - mkdir: "${HOME}/testapi"
-          run_as: "${USER}"
-        - copy: app.py
-          to: "${HOME}/testapi/app.py"
-          mode: "0644"
-          run_as: "${USER}"
     service:
         - name: testapi
           exec: "/home/user/.pixi/envs/default/bin/uvicorn app:app --host 0.0.0.0 --port 9090"
@@ -31,63 +22,60 @@ candy:
           working_directory: /home/user/testapi
           enable: true
           scope: system
-    scenario:
-        - name: testapi-app-installed
-          step:
-            - then: the FastAPI application module is installed in the service working directory
-              file: /home/user/testapi/app.py
-              exists: true
-        - name: testapi-dependencies-importable
-          step:
-            - then: the pixi environment can import the fastapi and uvicorn modules
-              command: '/home/user/.pixi/envs/default/bin/python -c "import fastapi, uvicorn"'
-              exit_status: 0
-        - name: testapi-health-endpoint-responds
-          step:
-            - then: a GET request to /health on the running service returns HTTP 200
-              http: http://127.0.0.1:${HOST_PORT:9090}/health
-              status: 200
-              body:
-                - contains: healthy
-            - and: a GET request to / reports a JSON status of ok
-              http: http://127.0.0.1:${HOST_PORT:9090}/
-              status: 200
-              body:
-                - contains: ok
-        - name: testapi-uvicorn-binary
-          step:
-            - id: testapi-uvicorn-binary
-              file: /home/user/.pixi/envs/default/bin/uvicorn
-              exists: true
-        - name: testapi-service-running
-          step:
-            - id: testapi-service-running
-              service: testapi
-              running: true
-              context:
-                - runtime
-        - name: testapi-port-reachable
-          step:
-            - id: testapi-port-reachable
-              addr: 127.0.0.1:${HOST_PORT:9090}
-              reachable: true
-              context:
-                - runtime
-        - name: testapi-root-responds
-          step:
-            - id: testapi-root-responds
-              http: http://127.0.0.1:${HOST_PORT:9090}/
-              status: 200
-              body:
-                - contains: ok
-              context:
-                - runtime
-        - name: testapi-health-responds
-          step:
-            - id: testapi-health-responds
-              http: http://127.0.0.1:${HOST_PORT:9090}/health
-              status: 200
-              body:
-                - contains: healthy
-              context:
-                - runtime
+    plan:
+        - run: mkdir=${HOME}/testapi
+          mkdir: "${HOME}/testapi"
+          run_as: "${USER}"
+        - run: copy=app.py
+          copy: app.py
+          to: "${HOME}/testapi/app.py"
+          mode: "0644"
+          run_as: "${USER}"
+        - check: the FastAPI application module is installed in the service working directory
+          file: /home/user/testapi/app.py
+          exists: true
+        - check: the pixi environment can import the fastapi and uvicorn modules
+          command: '/home/user/.pixi/envs/default/bin/python -c "import fastapi, uvicorn"'
+          exit_status: 0
+        - check: a GET request to /health on the running service returns HTTP 200
+          http: http://127.0.0.1:${HOST_PORT:9090}/health
+          status: 200
+          body:
+            - contains: healthy
+        - check: a GET request to / reports a JSON status of ok
+          http: http://127.0.0.1:${HOST_PORT:9090}/
+          status: 200
+          body:
+            - contains: ok
+        - check: file=/home/user/.pixi/envs/default/bin/uvicorn
+          id: testapi-uvicorn-binary
+          file: /home/user/.pixi/envs/default/bin/uvicorn
+          exists: true
+        - check: service=testapi
+          id: testapi-service-running
+          service: testapi
+          running: true
+          context:
+            - runtime
+        - check: addr=127.0.0.1:${HOST_PORT:9090}
+          id: testapi-port-reachable
+          addr: 127.0.0.1:${HOST_PORT:9090}
+          reachable: true
+          context:
+            - runtime
+        - check: http=http://127.0.0.1:${HOST_PORT:9090}/
+          id: testapi-root-responds
+          http: http://127.0.0.1:${HOST_PORT:9090}/
+          status: 200
+          body:
+            - contains: ok
+          context:
+            - runtime
+        - check: http=http://127.0.0.1:${HOST_PORT:9090}/health
+          id: testapi-health-responds
+          http: http://127.0.0.1:${HOST_PORT:9090}/health
+          status: 200
+          body:
+            - contains: healthy
+          context:
+            - runtime

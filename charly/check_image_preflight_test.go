@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"strings"
 	"testing"
 )
@@ -87,19 +88,19 @@ func TestBuildableShortName_RemoteRef(t *testing.T) {
 	}
 }
 
-// TestEnsureScoreImages_NilScore returns nil (no-op).
-func TestEnsureScoreImages_NilScore(t *testing.T) {
-	if err := ensureScoreImages(nil, nil, nil, ""); err != nil {
-		t.Errorf("nil score should be a no-op, got %v", err)
+// TestEnsureScoreImages_NilUnifiedFile returns nil (no-op).
+func TestEnsureScoreImages_NilUnifiedFile(t *testing.T) {
+	if err := ensureScoreImages(context.Background(), nil, nil, ""); err != nil {
+		t.Errorf("nil unified file should be a no-op, got %v", err)
 	}
 }
 
-// TestEnsureScoreImages_EmptyTargetAndNoScenarios returns nil.
-func TestEnsureScoreImages_EmptyTargetAndNoScenarios(t *testing.T) {
-	score := &HarnessScore{}
+// TestEnsureScoreImages_EmptyPlan returns nil — no pod-targeted steps means no
+// images to ensure.
+func TestEnsureScoreImages_EmptyPlan(t *testing.T) {
 	uf := &UnifiedFile{}
-	if err := ensureScoreImages(nil, score, uf, ""); err != nil {
-		t.Errorf("score with no images to ensure should be a no-op, got %v", err)
+	if err := ensureScoreImages(context.Background(), nil, uf, ""); err != nil {
+		t.Errorf("plan with no pod-targeted steps should be a no-op, got %v", err)
 	}
 }
 

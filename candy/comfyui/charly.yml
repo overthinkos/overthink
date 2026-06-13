@@ -1,16 +1,14 @@
 candy:
     version: 2026.144.1531
     name: comfyui
-    description:
-        feature: GPU image-generation server with ComfyUI + the Manager and model-download tooling baked in
-        narrative: |
-            Clones ComfyUI to ~/ComfyUI plus the ComfyUI-Manager custom node and
-            the full model directory tree, and installs the aria2 + git-lfs tooling
-            used to fetch model checkpoints. A supervisord service runs
-            `main.py --listen 0.0.0.0` on port 8188. Each piece is verifiable: the
-            cloned entrypoint and Manager, the model dirs, the download-tooling
-            packages, and the live /system_stats API on port 8188.
-        tag: [working]
+    description: |
+        GPU image-generation server with ComfyUI + the Manager and model-download tooling baked in
+        Clones ComfyUI to ~/ComfyUI plus the ComfyUI-Manager custom node and
+        the full model directory tree, and installs the aria2 + git-lfs tooling
+        used to fetch model checkpoints. A supervisord service runs
+        `main.py --listen 0.0.0.0` on port 8188. Each piece is verifiable: the
+        cloned entrypoint and Manager, the model dirs, the download-tooling
+        packages, and the live /system_stats API on port 8188.
     require:
         - cuda
         - supervisord
@@ -28,11 +26,23 @@ candy:
     volume:
         - name: comfyui
           path: "~/ComfyUI"
-    task:
-        # Clone ComfyUI + the Manager into the workspace volume staging dir.
-        # || true on the main clone makes this idempotent if an earlier build left
-        # a partial clone (rare but observed in failed CI runs).
-        - command: |
+    service:
+        - name: comfyui
+          exec: "python %(ENV_HOME)s/ComfyUI/main.py --listen 0.0.0.0"
+          restart: always
+          working_directory: "%(ENV_HOME)s/ComfyUI"
+          enable: true
+          scope: system
+    plan:
+        - run: |
+            command=git clone --depth 1 https://github.com/comfyanonymous/ComfyUI.git ${HOME}/ComfyUI || true
+            cd ${HOME}/ComfyUI
+            mkdir -p models/{checkpoints,clip,clip_vision,configs,controlnet}
+            mkdir -p models/{diffusers,diffusion_models,embeddings,gligen,hypernetworks,loras}
+            mkdir -p models/{photomaker,style_models,text_encoders,unet,upscale_models,vae,vae_approx}
+            mkdir -p custom_nodes output input user
+            git clone --depth 1 https://github.com/ltdrdata/ComfyUI-Manager.git ${HOME}/ComfyUI/custom_nodes/ComfyUI-Manager || true
+          command: |
             git clone --depth 1 https://github.com/comfyanonymous/ComfyUI.git ${HOME}/ComfyUI || true
             cd ${HOME}/ComfyUI
             mkdir -p models/{checkpoints,clip,clip_vision,configs,controlnet}
@@ -41,75 +51,48 @@ candy:
             mkdir -p custom_nodes output input user
             git clone --depth 1 https://github.com/ltdrdata/ComfyUI-Manager.git ${HOME}/ComfyUI/custom_nodes/ComfyUI-Manager || true
           run_as: "${USER}"
-    service:
-        - name: comfyui
-          exec: "python %(ENV_HOME)s/ComfyUI/main.py --listen 0.0.0.0"
-          restart: always
-          working_directory: "%(ENV_HOME)s/ComfyUI"
-          enable: true
-          scope: system
-    scenario:
-        # Scenarios 1-2 are DETERMINISTIC (embedded check verbs → run at build
-        # AND deploy scope, baked into ai.opencharly.description). Scenario 3 is
-        # PROSE-ONLY (no verb → agent-graded by `charly check feature run comfyui`
-        # against the live GPU deployment; reported unbound by build-scope
-        # `charly box feature run`).
-        - name: comfyui-app-cloned
-          step:
-            - then: the ComfyUI server entrypoint main.py is baked into ~/ComfyUI
-              file: ${HOME}/ComfyUI/main.py
-              exists: true
-            - then: the ComfyUI-Manager custom node directory is cloned alongside it
-              file: ${HOME}/ComfyUI/custom_nodes/ComfyUI-Manager
-              filetype: directory
-        - name: model-fetch-tooling-present
-          step:
-            - then: aria2c is installed so model checkpoints can be fetched in parallel
-              file: /usr/bin/aria2c
-              exists: true
-            - then: git-lfs is installed for pulling large model repositories
-              package: git-lfs
-              installed: true
-        - name: serves-image-generation-api
-          step:
-            - then: the comfyui supervisord service comes up and serves the image-generation web UI and /system_stats API on port 8188
-        - name: comfyui-models-checkpoints
-          step:
-            - id: comfyui-models-checkpoints
-              file: ${HOME}/ComfyUI/models/checkpoints
-              filetype: directory
-        - name: comfyui-aria2-package
-          step:
-            - id: comfyui-aria2-package
-              package: aria2
-              installed: true
-        - name: comfyui-git-lfs-binary
-          step:
-            - id: comfyui-git-lfs-binary
-              file: /usr/bin/git-lfs
-              exists: true
-        - name: comfyui-service-running
-          step:
-            # Deploy-scope — HOST_PORT:8188 resolves to the published host port, so the
-            # same probe works whatever port the deploy maps. Needs a running GPU deploy.
-            - id: comfyui-service-running
-              service: comfyui
-              running: true
-              context:
-                - runtime
-        - name: comfyui-port-reachable
-          step:
-            - id: comfyui-port-reachable
-              addr: 127.0.0.1:${HOST_PORT:8188}
-              reachable: true
-              context:
-                - runtime
-        - name: comfyui-system-stats-api
-          step:
-            - id: comfyui-system-stats-api
-              http: http://127.0.0.1:${HOST_PORT:8188}/system_stats
-              status: 200
-              body:
-                - contains: system
-              context:
-                - runtime
+        - check: the ComfyUI server entrypoint main.py is baked into ~/ComfyUI
+          file: ${HOME}/ComfyUI/main.py
+          exists: true
+        - check: the ComfyUI-Manager custom node directory is cloned alongside it
+          file: ${HOME}/ComfyUI/custom_nodes/ComfyUI-Manager
+          filetype: directory
+        - check: aria2c is installed so model checkpoints can be fetched in parallel
+          file: /usr/bin/aria2c
+          exists: true
+        - check: git-lfs is installed for pulling large model repositories
+          package: git-lfs
+          installed: true
+        - agent-check: the comfyui supervisord service comes up and serves the image-generation web UI and /system_stats API on port 8188
+        - check: file=${HOME}/ComfyUI/models/checkpoints
+          id: comfyui-models-checkpoints
+          file: ${HOME}/ComfyUI/models/checkpoints
+          filetype: directory
+        - check: package=aria2
+          id: comfyui-aria2-package
+          package: aria2
+          installed: true
+        - check: file=/usr/bin/git-lfs
+          id: comfyui-git-lfs-binary
+          file: /usr/bin/git-lfs
+          exists: true
+        - check: service=comfyui
+          id: comfyui-service-running
+          service: comfyui
+          running: true
+          context:
+            - runtime
+        - check: addr=127.0.0.1:${HOST_PORT:8188}
+          id: comfyui-port-reachable
+          addr: 127.0.0.1:${HOST_PORT:8188}
+          reachable: true
+          context:
+            - runtime
+        - check: http=http://127.0.0.1:${HOST_PORT:8188}/system_stats
+          id: comfyui-system-stats-api
+          http: http://127.0.0.1:${HOST_PORT:8188}/system_stats
+          status: 200
+          body:
+            - contains: system
+          context:
+            - runtime

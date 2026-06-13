@@ -5,15 +5,15 @@ import (
 	"testing"
 )
 
-// opsCandy wraps a list of Ops as the steps of a single candy scenario so the
-// per-Op validation rules (driven by validateOps walking scenario steps) can be
+// opsCandy wraps a list of Ops as `check:` steps of a single candy plan so the
+// per-Op validation rules (driven by validateOps walking plan steps) can be
 // exercised in isolation.
 func opsCandy(name string, ops ...Op) *Candy {
 	steps := make([]Step, len(ops))
 	for i := range ops {
-		steps[i] = Step{Then: "check", Op: ops[i]}
+		steps[i] = Step{Check: "check", Op: ops[i]}
 	}
-	return &Candy{Name: name, scenario: []Scenario{{Name: name + "-s", Step: steps}}}
+	return &Candy{Name: name, plan: steps}
 }
 
 // runValidateOps invokes validateOps against a synthetic fixture and returns the
@@ -93,7 +93,7 @@ func TestValidateOps_UnknownContext(t *testing.T) {
 	}
 	cfg := &Config{Box: map[string]BoxConfig{}}
 	got := runValidateOps(t, cfg, layers)
-	if !strings.Contains(got, "must be one of build|deploy|runtime|agent") {
+	if !strings.Contains(got, "must be one of build|deploy|runtime") {
 		t.Errorf("expected context-value error: %s", got)
 	}
 }
@@ -333,7 +333,7 @@ func TestValidateOps_LibvirtClean(t *testing.T) {
 	}
 }
 
-// Full valid fixture — candy scenario + box scenario — should produce no errors.
+// Full valid fixture — candy plan + box plan — should produce no errors.
 func TestValidateOps_Clean(t *testing.T) {
 	layers := map[string]*Candy{
 		"redis": opsCandy("redis",
@@ -346,13 +346,10 @@ func TestValidateOps_Clean(t *testing.T) {
 		"redis-ml": {
 			Enabled: boolPtr(true),
 			Candy:   []string{"redis"},
-			Scenario: []Scenario{{
-				Name: "box-checks",
-				Step: []Step{
-					{Then: "version", Op: Op{ID: "version", Command: "redis-server --version"}},
-					{Then: "routed", Op: Op{ID: "routed", HTTP: "https://${DNS}/health", Status: 200}},
-				},
-			}},
+			Plan: []Step{
+				{Check: "version", Op: Op{ID: "version", Command: "redis-server --version"}},
+				{Check: "routed", Op: Op{ID: "routed", HTTP: "https://${DNS}/health", Status: 200}},
+			},
 		},
 	}}
 	got := runValidateOps(t, cfg, layers)

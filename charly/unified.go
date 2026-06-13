@@ -104,17 +104,13 @@ type UnifiedFile struct {
 	// substrate; the apps ride in on the deploy's candies). See android_spec.go.
 	Android map[string]*AndroidSpec `yaml:"android,omitempty"`
 
-	// Agent catalog (kind:agent), harness recipes (kind:recipe = pure spec),
-	// and harness scores (kind:score = runner config that references
-	// recipes). See agent_config.go, harness_recipe.go, harness_score_kind.go,
-	// /charly:harness.
-	Agent  map[string]*AgentConfig   `yaml:"agent,omitempty"`
-	Recipe map[string]*HarnessRecipe `yaml:"recipe,omitempty"`
-	Score  map[string]*HarnessScore  `yaml:"score,omitempty"`
+	// Agent catalog (kind:agent) — the AI-CLI graders the iterate loop drives.
+	// See agent_config.go.
+	Agent map[string]*AgentConfig `yaml:"agent,omitempty"`
 
 	// Check (kind:check) — disposable R10 test beds. A deploy-shaped map
-	// (bed-name → DeploymentNode) authored in check.yml alongside the
-	// recipe/score framework. foldCheckBeds() copies each entry into the
+	// (bed-name → DeploymentNode) authored in check.yml. foldCheckBeds()
+	// copies each entry into the
 	// Deploy map (CheckBed=true) at load time so every deploy verb resolves
 	// a bed by name through the SAME path as any deploy; `charly check run <bed>`
 	// drives the full R10 sequence. CheckBeds() enumerates them.
@@ -328,10 +324,8 @@ type kindKeyedDoc struct {
 	K8s     *K8sDoc     `yaml:"k8s,omitempty"`
 	Local   *LocalDoc   `yaml:"local,omitempty"`
 	Android *AndroidDoc `yaml:"android,omitempty"`
-	// 2026-04 harness cutover.
-	Agent  *AgentDoc  `yaml:"agent,omitempty"`
-	Recipe *RecipeDoc `yaml:"recipe,omitempty"`
-	Score  *ScoreDoc  `yaml:"score,omitempty"`
+	// AI-CLI catalog (the iterate-loop graders).
+	Agent *AgentDoc `yaml:"agent,omitempty"`
 	// 2026-05 Calamares cutover.
 	Group  *GroupDoc  `yaml:"group,omitempty"`
 	Target *TargetDoc `yaml:"target,omitempty"`
@@ -346,20 +340,6 @@ type kindKeyedDoc struct {
 type AgentDoc struct {
 	Name        string `yaml:"name"`
 	AgentConfig `yaml:",inline"`
-}
-
-// RecipeDoc wraps a single HarnessRecipe with an explicit Name —
-// the kind:recipe standalone form.
-type RecipeDoc struct {
-	Name          string `yaml:"name"`
-	HarnessRecipe `yaml:",inline"`
-}
-
-// ScoreDoc wraps a single HarnessScore with an explicit Name —
-// the kind:score standalone form.
-type ScoreDoc struct {
-	Name         string `yaml:"name"`
-	HarnessScore `yaml:",inline"`
 }
 
 // PodDoc wraps a single PodSpec with an explicit Name — the kind:pod
@@ -445,10 +425,10 @@ type InitDoc struct {
 // (often as a paired entry in the same file as a kind:box entry for
 // bootc images — see migrate vm-spec).
 type VmDoc struct {
-	Name        string       `yaml:"name"`
-	Version     string       `yaml:"version,omitempty"`
-	Description *Description `yaml:"description,omitempty"` // Gherkin-shaped self-description; replaces retired info:/status:
-	Spec        VmSpec       `yaml:"spec"`
+	Name        string `yaml:"name"`
+	Version     string `yaml:"version,omitempty"`
+	Description string `yaml:"description,omitempty"` // plain-string self-description; first line = summary
+	Spec        VmSpec `yaml:"spec"`
 }
 
 // -----------------------------------------------------------------------------
@@ -463,7 +443,7 @@ type VmDoc struct {
 var kindKeys = []string{
 	"candy", "box", "deploy", "builder", "distro", "init",
 	"pod", "vm", "k8s", "local", "android",
-	"agent", "recipe", "score",
+	"agent",
 	"group", "target", "module",
 	"resource",
 }
@@ -579,6 +559,93 @@ func rejectLegacyAgentCatalog(dir string) error {
 		}
 	}
 	return nil
+}
+
+// legacyTestVocabKeys are the mapping keys retired by the plan-unify cutover.
+// `from:` is deliberately EXCLUDED — it collides with the live box `from:`
+// (non-registry base) field; the recipe from: it once named is gone with the
+// recipe kind itself, caught here via `kind: recipe` / `recipe:`.
+var legacyTestVocabKeys = map[string]string{
+	"task":     "the imperative install list folded into plan: as run: steps",
+	"scenario": "scenario: folded into the flat plan: list",
+	"recipe":   "kind: recipe is deleted (composition is now an include: step)",
+	"score":    "kind: score is deleted (the AI loop is now a deploy iterate: block)",
+	"example":  "scenario-outline example: rows are deleted (use count:)",
+	"setup":    "the setup: phase list is deleted (run: steps in plan: order)",
+	"teardown": "the teardown: phase list is deleted (run: steps in plan: order)",
+	"on_fail":  "the on_fail: phase list is deleted",
+	"given":    "the given/when/then/and/but plan keywords are deleted",
+	"when":     "the given/when/then/and/but plan keywords are deleted",
+	"then":     "the given/when/then/and/but plan keywords are deleted",
+	"and":      "the given/when/then/and/but plan keywords are deleted",
+	"but":      "the given/when/then/and/but plan keywords are deleted",
+	"do":       "the Op.Do axis is deleted (the step keyword IS the do-mode)",
+}
+
+// rejectLegacyTestVocab scans every *.yml at the project root for any residual
+// test/eval vocabulary retired by the plan-unify cutover, hard-erroring with a
+// `charly migrate` hint. Defense-in-depth alongside the CalVer load gate — a
+// config carrying any of these keys would otherwise silently drop them.
+func rejectLegacyTestVocab(dir string) error {
+	// Scope to charly-config files ONLY (charly.yml + candy/*/charly.yml +
+	// box/*/charly.yml + per-kind siblings), NOT arbitrary root *.yml. The
+	// legacy keys (setup/teardown/from/do/given/when/then/and/but) are generic
+	// words that legitimately appear in non-charly YAML (a go-task `Taskfile.yml`
+	// `setup:` task, CI configs, …) — opUnifyCandidateFiles excludes those plus
+	// nested git submodules and testdata.
+	for _, path := range opUnifyCandidateFiles(dir) {
+		// Only `charly.yml` carries the (now-deleted) test vocabulary — never a
+		// root sibling like Taskfile.yml whose generic `setup:`/`from:` keys
+		// would false-trip the recursive scan.
+		if filepath.Base(path) != UnifiedFileName {
+			continue
+		}
+		data, rerr := os.ReadFile(path)
+		if rerr != nil {
+			continue
+		}
+		dec := yaml.NewDecoder(bytes.NewReader(data))
+		for {
+			var doc yaml.Node
+			if derr := dec.Decode(&doc); derr != nil {
+				break
+			}
+			if key, why := findLegacyTestVocab(&doc); key != "" {
+				return fmt.Errorf(
+					"%s: residual legacy test vocabulary `%s:` — %s. Run: charly migrate",
+					path, key, why)
+			}
+		}
+	}
+	return nil
+}
+
+// findLegacyTestVocab recurses a yaml node tree returning the first retired
+// mapping key it finds (plus a remediation phrase), or "" when clean. It also
+// flags `kind: recipe` / `kind: score` scalar discriminators.
+func findLegacyTestVocab(n *yaml.Node) (string, string) {
+	if n == nil {
+		return "", ""
+	}
+	if n.Kind == yaml.MappingNode {
+		for i := 0; i+1 < len(n.Content); i += 2 {
+			k, v := n.Content[i], n.Content[i+1]
+			if k.Kind == yaml.ScalarNode {
+				if why, ok := legacyTestVocabKeys[k.Value]; ok {
+					return k.Value, why
+				}
+				if k.Value == "kind" && v.Kind == yaml.ScalarNode && (v.Value == "recipe" || v.Value == "score") {
+					return "kind: " + v.Value, "kind: " + v.Value + " is deleted by the plan-unify cutover"
+				}
+			}
+		}
+	}
+	for _, c := range n.Content {
+		if key, why := findLegacyTestVocab(c); key != "" {
+			return key, why
+		}
+	}
+	return "", ""
 }
 
 func rejectLegacyLocalSurface(root string, merged *UnifiedFile) error {
@@ -712,6 +779,12 @@ func LoadUnified(dir string) (*UnifiedFile, bool, error) {
 	if err := rejectLegacyAgentCatalog(dir); err != nil {
 		return nil, true, err
 	}
+	// plan-unify cutover: hard-reject any residual test/eval vocabulary
+	// (task:/scenario:/recipe:/score:/given:/do:/...). `charly migrate`
+	// rewrites them into the flat plan: surface.
+	if err := rejectLegacyTestVocab(dir); err != nil {
+		return nil, true, err
+	}
 	// Field-singular cutover (2026-05): hard-reject any residual plural
 	// top-level keys (images:/layers:/distros:/... ) in charly.yml.
 	// `charly migrate` rewrites them in-place.
@@ -812,99 +885,10 @@ func LoadUnified(dir string) (*UnifiedFile, bool, error) {
 			root,
 		)
 	}
-	if err := expandRecipeFromIfNeeded(merged, dir); err != nil {
-		return nil, true, fmt.Errorf("%s: %w", root, err)
-	}
-	if err := validateHarnessSemantics(merged); err != nil {
+	if err := validateAgentCatalog(merged); err != nil {
 		return nil, true, fmt.Errorf("%s: %w", root, err)
 	}
 	return merged, true, nil
-}
-
-// expandRecipeFromIfNeeded resolves every recipe's `from:` directives
-// into synthetic scenarios via ExpandRecipeFrom. Runs only when at least
-// one recipe declares `from:` — otherwise we skip the discover/project
-// pass entirely, preserving zero-cost loading for non-composing projects.
-//
-// Hooked between validateDeploymentTree and validateHarnessSemantics so
-// the latter sees the synthesized scenarios and can apply its existing
-// pod-required + depends_on intra-recipe rules to the post-expansion
-// flat scenario list uniformly.
-//
-// Also enforces the cross-recipe-score rule: a recipe with any
-// `kind: vm` import can only be referenced by scores that target that
-// VM via `vm:` (per-scenario execution against a VM uses the score's
-// SSH path, not `podman exec charly-<pod>`).
-func expandRecipeFromIfNeeded(merged *UnifiedFile, dir string) error {
-	needed := false
-	for _, r := range merged.Recipe {
-		if r != nil && len(r.From) > 0 {
-			needed = true
-			break
-		}
-	}
-	if !needed {
-		return nil
-	}
-	if err := merged.ApplyDiscover(dir); err != nil {
-		return fmt.Errorf("apply discover (for from: expansion): %w", err)
-	}
-	layers, err := merged.ProjectCandies(dir)
-	if err != nil {
-		return fmt.Errorf("project candies (for from: expansion): %w", err)
-	}
-	// recipe-name → set of vm names imported into that recipe.
-	vmImportsByRecipe := map[string]map[string]bool{}
-	for name, recipe := range merged.Recipe {
-		if recipe == nil {
-			continue
-		}
-		for _, from := range recipe.From {
-			if from.Kind == "vm" && from.Name != "" {
-				if vmImportsByRecipe[name] == nil {
-					vmImportsByRecipe[name] = map[string]bool{}
-				}
-				vmImportsByRecipe[name][from.Name] = true
-			}
-		}
-		if err := ExpandRecipeFrom(merged, layers, name, recipe); err != nil {
-			return err
-		}
-	}
-	// Cross-validate: any score referencing a vm-importing recipe MUST
-	// target the same VM via `vm:`. Pod- or host-targeted scores can't
-	// reach VM-side tests through `podman exec`.
-	for scoreName, score := range merged.Score {
-		if score == nil {
-			continue
-		}
-		for _, recipeName := range score.Recipe {
-			vmSet := vmImportsByRecipe[recipeName]
-			if len(vmSet) == 0 {
-				continue
-			}
-			if score.VM == "" {
-				return fmt.Errorf("score %q references recipe %q which imports tests from kind:vm (%s) — the score MUST target the VM via `vm: <name>` (current target: pod=%q host=%v); per-scenario execution against a VM uses the score's SSH path, not podman exec",
-					scoreName, recipeName, joinStringSet(vmSet), score.Pod, score.Host)
-			}
-			if !vmSet[score.VM] {
-				return fmt.Errorf("score %q targets vm %q but references recipe %q which imports tests from a different vm (%s) — vm-import recipes can only be scored against the same VM they import from",
-					scoreName, score.VM, recipeName, joinStringSet(vmSet))
-			}
-		}
-	}
-	return nil
-}
-
-// joinStringSet returns a sorted comma-joined string of map keys, for
-// human-readable error messages.
-func joinStringSet(m map[string]bool) string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	return strings.Join(keys, ", ")
 }
 
 // validateDeploymentTree enforces structural invariants on the
@@ -971,6 +955,13 @@ func validateDeploymentTree(deploy map[string]DeploymentNode) error {
 // itself otherwise).
 func validateDeployRequiresBox(deploy map[string]DeploymentNode) error {
 	for name, node := range deploy {
+		// An iterate: benchmark (the former kind:score) composes its scored
+		// subject via plan `include:` steps + the iterate.sandbox, NOT a single
+		// `box:`. It is exempt from the pod-target box requirement; its own
+		// invariants are checked by validateCheckBeds (iterate block validation).
+		if node.Iterate != nil {
+			continue
+		}
 		target := node.Target
 		if target != "" && target != "pod" {
 			continue
@@ -1056,9 +1047,6 @@ func loadUnifiedInto(path string, merged *UnifiedFile, visited map[string]bool, 
 		shape, err := classifyDoc(&node)
 		if err != nil {
 			return fmt.Errorf("%s:doc%d: %w", abs, docIdx, err)
-		}
-		if err := validateHarnessYAMLNode(&node, fmt.Sprintf("%s:doc%d", abs, docIdx)); err != nil {
-			return err
 		}
 		// Surface key misalignments (silently-dropped unknown keys) as
 		// non-fatal warnings before the lenient decode below.
@@ -1261,10 +1249,9 @@ var rootShapeKeys = map[string]bool{
 	"box":   true, "pod": true, "vm": true, "k8s": true, "local": true,
 	"android": true,
 	"deploy":  true,
-	// 2026-04 harness cutover: `agent:` and `recipe:` are recognized as
-	// root-shape collection-map keys (in addition to being valid
-	// kind-keyed forms). Mirrors how box/pod/vm work.
-	"agent": true, "recipe": true, "score": true,
+	// The AI-CLI catalog `agent:` is a root-shape collection-map key (in
+	// addition to a valid kind-keyed form). Mirrors how box/pod/vm work.
+	"agent": true,
 	// kind:check disposable R10 beds — root-shape collection map
 	// (bed-name → DeploymentNode) authored in check.yml. The nested `check:`
 	// PROBE-LIST field never appears as a top-level document key, so this
@@ -1346,10 +1333,11 @@ func classifyDoc(node *yaml.Node) (docShape, error) {
 	// Legacy `benchmark:` root key — predates the 2026-04 harness→check
 	// cutover, whose forward-only migrator has since been removed. There is
 	// no automated path in the current binary; the block must be rewritten
-	// by hand as a `kind: score` + `kind: recipe` pair under `check:`.
+	// by hand as a `deploy:` (or `kind: check` bed) carrying an `iterate:`
+	// block + a `plan:`.
 	if hasLegacyBenchmarkKey {
 		return 0, fmt.Errorf(
-			"the `benchmark:` root key is no longer accepted — it predates the 2026-04 harness→check cutover, whose migrator has since been removed. Rewrite the block by hand as a `kind: score` + `kind: recipe` pair under `check:` (see /charly-check:check)",
+			"the `benchmark:` root key is no longer accepted — it predates the 2026-04 harness→check cutover, whose migrator has since been removed. Rewrite the block by hand as a `deploy:` (or `kind: check` bed) carrying an `iterate:` block + a `plan:` (see /charly-check:check)",
 		)
 	}
 	// 2026-05 import-namespace cutover: `include:` was deleted in favor of
@@ -1372,190 +1360,11 @@ func classifyDoc(node *yaml.Node) (docShape, error) {
 }
 
 // -----------------------------------------------------------------------------
-// Harness kind-split validation (post-classify, pre-decode).
+// AI-CLI catalog validation.
 // -----------------------------------------------------------------------------
 
-// validateHarnessYAMLNode rejects, with hard errors pointing at
-// `charly migrate`, two legacy shapes that the slim post-cutover
-// HarnessRecipe / HarnessScore struct decoders would otherwise silently
-// drop:
-//
-//  1. **Fat-recipe shape**: a `recipe:` entry whose body carries any
-//     key other than {description, scenario}. Pre-cutover recipes
-//     mixed runner config (host, ai, plateau_iteration, prompt, …)
-//     with spec; post-cutover those move to `score:`.
-//
-//  2. **Residual `max_iteration:`** anywhere on `recipe:` or `score:`
-//     bodies. The post-cutover loop bound is plateau-only.
-//
-// Walks both the root-shape (recipe: { name: { ... }, name2: { ... } })
-// and the kind-keyed standalone form (top-level `recipe: { name: X,
-// description: ..., scenario: ... }`). Empty or absent keys are no-ops.
-func validateHarnessYAMLNode(node *yaml.Node, source string) error {
-	inner := node
-	if node.Kind == yaml.DocumentNode {
-		if len(node.Content) == 0 {
-			return nil
-		}
-		inner = node.Content[0]
-	}
-	if inner == nil || inner.Kind != yaml.MappingNode {
-		return nil
-	}
-	for i := 0; i+1 < len(inner.Content); i += 2 {
-		k := inner.Content[i]
-		v := inner.Content[i+1]
-		if k.Kind != yaml.ScalarNode {
-			continue
-		}
-		switch k.Value {
-		case "recipe":
-			if err := validateRecipeNode(v, source); err != nil {
-				return err
-			}
-		case "score":
-			if err := validateScoreNode(v, source); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
-// validateRecipeNode walks either:
-//   - root-shape: a mapping of name -> body (each body validated)
-//   - kind-keyed: a mapping with `name:` + body fields at the same level
-func validateRecipeNode(v *yaml.Node, source string) error {
-	if v == nil || v.Kind != yaml.MappingNode {
-		return nil
-	}
-	if mapHasKey(v, "name") {
-		// Kind-keyed standalone form: this node IS the body (with
-		// an extra `name:` key alongside description/scenario).
-		name := ""
-		for i := 0; i+1 < len(v.Content); i += 2 {
-			if v.Content[i].Value == "name" {
-				name = v.Content[i+1].Value
-				break
-			}
-		}
-		return validateRecipeBody(v, name, source, true)
-	}
-	// Root-shape map: name -> body
-	for i := 0; i+1 < len(v.Content); i += 2 {
-		nameNode := v.Content[i]
-		body := v.Content[i+1]
-		if err := validateRecipeBody(body, nameNode.Value, source, false); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// validateRecipeBody enforces the slim recipe shape and rejects
-// max_iteration. allowName=true permits a `name:` key (kind-keyed form).
-func validateRecipeBody(body *yaml.Node, name, source string, allowName bool) error {
-	if body == nil || body.Kind != yaml.MappingNode {
-		return nil
-	}
-	allowed := map[string]bool{"description": true, "scenario": true, "from": true}
-	if allowName {
-		allowed["name"] = true
-	}
-	for i := 0; i+1 < len(body.Content); i += 2 {
-		k := body.Content[i].Value
-		if k == "max_iteration" {
-			return fmt.Errorf(
-				"%s: recipe %q carries `max_iteration:` — the field was removed in the 2026-04 harness cutover. Loop bound is now plateau-only via score.plateau_iteration. Remove the field.",
-				source, name,
-			)
-		}
-		if !allowed[k] {
-			return fmt.Errorf(
-				"%s: recipe %q carries forbidden runner field %q. Recipes are pure spec (description + scenario only); runner fields (host/pod/vm, ai, plateau_iteration, prompt, deployment, target_image, mcp_endpoint, env, notes, recipes) live on a `kind: score` entry. Move them there.",
-				source, name, k,
-			)
-		}
-	}
-	return nil
-}
-
-// validateScoreNode walks either:
-//   - root-shape: a mapping of name -> body
-//   - kind-keyed: a mapping with `name:` + body at the same level
-//
-// Rejects residual `max_iteration:` and a few obvious mis-spellings.
-func validateScoreNode(v *yaml.Node, source string) error {
-	if v == nil || v.Kind != yaml.MappingNode {
-		return nil
-	}
-	if mapHasKey(v, "name") {
-		name := ""
-		for i := 0; i+1 < len(v.Content); i += 2 {
-			if v.Content[i].Value == "name" {
-				name = v.Content[i+1].Value
-				break
-			}
-		}
-		return validateScoreBody(v, name, source)
-	}
-	for i := 0; i+1 < len(v.Content); i += 2 {
-		nameNode := v.Content[i]
-		body := v.Content[i+1]
-		if err := validateScoreBody(body, nameNode.Value, source); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// validateScoreBody rejects max_iteration on a score body. Other fields
-// are decoded permissively (HarnessScore decode will catch unknown).
-func validateScoreBody(body *yaml.Node, name, source string) error {
-	if body == nil || body.Kind != yaml.MappingNode {
-		return nil
-	}
-	for i := 0; i+1 < len(body.Content); i += 2 {
-		k := body.Content[i].Value
-		if k == "max_iteration" {
-			return fmt.Errorf(
-				"%s: score %q carries `max_iteration:` — the field was removed in the 2026-04 harness cutover. Loop bound is now plateau-only via score.plateau_iteration. Remove the field.",
-				source, name,
-			)
-		}
-	}
-	return nil
-}
-
-// validateHarnessSemantics runs cross-reference validation on the merged
-// UnifiedFile after every include has been folded in. Catches:
-//   - score.recipes must be non-empty
-//   - score.recipes entries must not duplicate
-//   - score.recipes entries must resolve to defined recipes
-//   - score target xor (exactly one of pod/vm/host)
-//   - host: true requires disposable: true on the score
-//   - every scenario in every recipe MUST set `pod:` (the scoring target)
-//   - scenario.depends_on entries must reference scenarios within the
-//     same recipe (intra-recipe scope) and form an acyclic graph
-func validateHarnessSemantics(u *UnifiedFile) error {
-	// Every kind:recipe scenario must declare `pod:`, have a unique name,
-	// and resolve depends_on intra-recipe without cycles. All four rules
-	// run through the shared ValidateScenarios (scenario_validate.go,
-	// 2026-04 cleanup cutover) so candy/box descriptions get the same
-	// enforcement when description loading calls it with RequirePod=false.
-	for name, recipe := range u.Recipe {
-		if recipe == nil {
-			continue
-		}
-		ctx := ScenarioValidationContext{
-			OwnerLabel: fmt.Sprintf("recipe %q", name),
-			RequirePod: true,
-		}
-		if err := ValidateScenarios(recipe.Scenario, ctx); err != nil {
-			return err
-		}
-	}
-
+// validateAgentCatalog checks every kind:agent entry's output_format is legal.
+func validateAgentCatalog(u *UnifiedFile) error {
 	for name, ai := range u.Agent {
 		if ai == nil {
 			continue
@@ -1564,43 +1373,12 @@ func validateHarnessSemantics(u *UnifiedFile) error {
 		case AgentOutputFormatPlain, AgentOutputFormatStreamJSON:
 			// ok
 		default:
-			return fmt.Errorf("ai %q: output_format: %q is not a legal value (allowed: %q, %q)",
+			return fmt.Errorf("agent %q: output_format: %q is not a legal value (allowed: %q, %q)",
 				name, ai.OutputFormat, AgentOutputFormatPlain, AgentOutputFormatStreamJSON)
-		}
-	}
-
-	for name, score := range u.Score {
-		if score == nil {
-			continue
-		}
-		if len(score.Recipe) == 0 {
-			return fmt.Errorf("score %q: recipes: must reference at least one recipe (got empty list)", name)
-		}
-		seen := make(map[string]bool, len(score.Recipe))
-		for _, r := range score.Recipe {
-			if seen[r] {
-				return fmt.Errorf("score %q: recipes: duplicate recipe name %q", name, r)
-			}
-			seen[r] = true
-			if _, ok := u.Recipe[r]; !ok {
-				avail := SortedRecipeNames(u.Recipe)
-				return fmt.Errorf("score %q: recipes: %q does not resolve to a defined recipe (available: %s)",
-					name, r, strings.Join(avail, ", "))
-			}
-		}
-		if _, _, err := ResolveScoreTarget(score); err != nil {
-			return fmt.Errorf("score %q: %w", name, err)
 		}
 	}
 	return nil
 }
-
-// validateRecipeScenarioDependencies was deleted in the 2026-04
-// BDD/test/harness surface-cleanup cutover. Its rules (name uniqueness,
-// depends_on resolution, cycle detection) are now part of the shared
-// ValidateScenarios in scenario_validate.go, which validateHarnessSemantics
-// invokes above with RequirePod=true. Candy/box description loading
-// invokes the same validator with RequirePod=false.
 
 // -----------------------------------------------------------------------------
 // Merge helpers.
@@ -1667,8 +1445,6 @@ func mergeUnified(dst, src *UnifiedFile, srcDir string) {
 	mergeLocalMap(&dst.Local, src.Local)
 	mergeAndroidMap(&dst.Android, src.Android)
 	mergeAgentMap(&dst.Agent, src.Agent)
-	mergeRecipeMap(&dst.Recipe, src.Recipe)
-	mergeScoreMap(&dst.Score, src.Score)
 	mergeGroupMap(&dst.Group, src.Group)
 	mergeTargetMap(&dst.Target, src.Target)
 	mergeModuleMap(&dst.Module, src.Module)
@@ -1722,36 +1498,6 @@ func mergeAgentMap(dst *map[string]*AgentConfig, src map[string]*AgentConfig) {
 	}
 	if *dst == nil {
 		*dst = make(map[string]*AgentConfig)
-	}
-	for k, v := range src {
-		if _, exists := (*dst)[k]; !exists {
-			(*dst)[k] = v
-		}
-	}
-}
-
-// mergeRecipeMap merges harness-recipe entries (kind:recipe). Root-wins.
-func mergeRecipeMap(dst *map[string]*HarnessRecipe, src map[string]*HarnessRecipe) {
-	if len(src) == 0 {
-		return
-	}
-	if *dst == nil {
-		*dst = make(map[string]*HarnessRecipe)
-	}
-	for k, v := range src {
-		if _, exists := (*dst)[k]; !exists {
-			(*dst)[k] = v
-		}
-	}
-}
-
-// mergeScoreMap merges harness-score entries (kind:score). Root-wins.
-func mergeScoreMap(dst *map[string]*HarnessScore, src map[string]*HarnessScore) {
-	if len(src) == 0 {
-		return
-	}
-	if *dst == nil {
-		*dst = make(map[string]*HarnessScore)
 	}
 	for k, v := range src {
 		if _, exists := (*dst)[k]; !exists {
@@ -2011,6 +1757,17 @@ func (uf *UnifiedFile) CheckBeds() map[string]DeploymentNode {
 // same friendly error — not just `charly box validate`.
 func validateCheckBeds(uf *UnifiedFile) error {
 	for name, node := range uf.Check {
+		// An iterate: bed is a benchmark (the former kind:score), NOT a
+		// deterministic R10 bed: it drives the AI loop scoring its plan's
+		// check:/agent-check: steps against an operator-provisioned sandbox, so
+		// the target/disposable/cross-ref requirements do not apply. Validate the
+		// iterate block instead.
+		if node.Iterate != nil {
+			if err := validateIterateBed(uf, name, &node); err != nil {
+				return err
+			}
+			continue
+		}
 		// Disposable is the sole authorization for the destroy+rebuild the
 		// R10 sequence drives; a non-disposable bed can't be rebuilt
 		// unattended (see /charly-internals:disposable).
@@ -2047,6 +1804,37 @@ func validateCheckBeds(uf *UnifiedFile) error {
 		default:
 			return fmt.Errorf("kind:check bed %q has unsupported target %q (must be pod, vm, local, or android)", name, node.Target)
 		}
+	}
+	return nil
+}
+
+// validateIterateBed enforces the iterate: benchmark invariants (replaces the
+// former validateScoreNode/validateHarnessSemantics). An iterate bed is exempt
+// from the deterministic R10 bed rules (target/disposable/cross-ref); instead:
+//   - every iterate.agent[] entry references an entry in the `agent:` catalog;
+//   - iterate.sandbox names a deployment (non-empty — its target kind is
+//     resolved at run time, possibly against an operator-provisioned sandbox);
+//   - the bed's plan: carries at least one `check:` step (the scored success
+//     criteria — an include: step's checks expand at collect time, so a plan of
+//     pure include: steps without a single direct check: is rejected here).
+func validateIterateBed(uf *UnifiedFile, name string, node *DeploymentNode) error {
+	it := node.Iterate
+	for _, a := range it.Agent {
+		if _, ok := uf.Agent[a]; !ok {
+			return fmt.Errorf("iterate bed %q: agent %q is not defined in the agent: catalog", name, a)
+		}
+	}
+	if strings.TrimSpace(it.Sandbox) == "" {
+		return fmt.Errorf("iterate bed %q: iterate.sandbox must name a deployment (pod|vm|host) where the agent + charly run", name)
+	}
+	checks := 0
+	for i := range node.Plan {
+		if node.Plan[i].Check != "" {
+			checks++
+		}
+	}
+	if checks == 0 {
+		return fmt.Errorf("iterate bed %q: plan must contain at least one `check:` step (the scored success criteria)", name)
 	}
 	return nil
 }
@@ -2164,12 +1952,6 @@ func mergeKindDoc(merged *UnifiedFile, kd *kindKeyedDoc, srcDir string) error {
 		count++
 	}
 	if kd.Agent != nil {
-		count++
-	}
-	if kd.Recipe != nil {
-		count++
-	}
-	if kd.Score != nil {
 		count++
 	}
 	if kd.Group != nil {
@@ -2327,28 +2109,6 @@ func mergeKindDoc(merged *UnifiedFile, kd *kindKeyedDoc, srcDir string) error {
 		if _, exists := merged.Agent[kd.Agent.Name]; !exists {
 			spec := kd.Agent.AgentConfig
 			merged.Agent[kd.Agent.Name] = &spec
-		}
-	case kd.Recipe != nil:
-		if kd.Recipe.Name == "" {
-			return fmt.Errorf("recipe: missing name")
-		}
-		if merged.Recipe == nil {
-			merged.Recipe = map[string]*HarnessRecipe{}
-		}
-		if _, exists := merged.Recipe[kd.Recipe.Name]; !exists {
-			spec := kd.Recipe.HarnessRecipe
-			merged.Recipe[kd.Recipe.Name] = &spec
-		}
-	case kd.Score != nil:
-		if kd.Score.Name == "" {
-			return fmt.Errorf("score: missing name")
-		}
-		if merged.Score == nil {
-			merged.Score = map[string]*HarnessScore{}
-		}
-		if _, exists := merged.Score[kd.Score.Name]; !exists {
-			spec := kd.Score.HarnessScore
-			merged.Score[kd.Score.Name] = &spec
 		}
 	case kd.Group != nil:
 		if kd.Group.Name == "" {
@@ -2734,7 +2494,7 @@ func synthesizeInlineCandy(name string, il *InlineCandy, rootDir string) (*Candy
 func populateCandyFromYAML(layer *Candy, ly *CandyYAML) {
 	layer.Version = ly.Version
 	layer.Description = ly.Description
-	layer.Status = descriptionStatus(ly.Description)
+	layer.Status = ly.Status
 	layer.Info = descriptionInfo(ly.Description)
 
 	layer.Require = toCandyRefs(ly.Require)
@@ -2777,7 +2537,7 @@ func populateCandyFromYAML(layer *Candy, ly *CandyYAML) {
 	layer.security = ly.Security
 	layer.libvirt = ly.Libvirt
 	layer.hooks = ly.Hook
-	layer.scenario = ly.Scenario
+	layer.plan = ly.Plan
 	layer.artifacts = ly.Artifact
 	layer.capabilities = ly.Capability
 	layer.requiresCapabilities = ly.RequiresCapability
@@ -2793,7 +2553,6 @@ func populateCandyFromYAML(layer *Candy, ly *CandyYAML) {
 	layer.mcpAccepts = ly.MCPAccept
 	layer.engine = ly.Engine
 	layer.vars = ly.Vars
-	layer.tasks = ly.Task
 	layer.apk = ly.Apk
 	layer.localpkg = ly.LocalPkg
 	layer.reboot = ly.Reboot

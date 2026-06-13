@@ -5,35 +5,35 @@ import (
 	"testing"
 )
 
-func TestValidateHarnessSemantics_OutputFormatPlain(t *testing.T) {
+func TestValidateAgentCatalog_OutputFormatPlain(t *testing.T) {
 	u := &UnifiedFile{
 		Agent: map[string]*AgentConfig{
 			"claude": {Command: []string{"claude"}, OutputFormat: ""},
 		},
 	}
-	if err := validateHarnessSemantics(u); err != nil {
+	if err := validateAgentCatalog(u); err != nil {
 		t.Errorf("plain output_format should validate, got: %v", err)
 	}
 }
 
-func TestValidateHarnessSemantics_OutputFormatStreamJSON(t *testing.T) {
+func TestValidateAgentCatalog_OutputFormatStreamJSON(t *testing.T) {
 	u := &UnifiedFile{
 		Agent: map[string]*AgentConfig{
 			"claude": {Command: []string{"claude"}, OutputFormat: AgentOutputFormatStreamJSON},
 		},
 	}
-	if err := validateHarnessSemantics(u); err != nil {
+	if err := validateAgentCatalog(u); err != nil {
 		t.Errorf("stream-json output_format should validate, got: %v", err)
 	}
 }
 
-func TestValidateHarnessSemantics_OutputFormatBogus(t *testing.T) {
+func TestValidateAgentCatalog_OutputFormatBogus(t *testing.T) {
 	u := &UnifiedFile{
 		Agent: map[string]*AgentConfig{
 			"claude": {Command: []string{"claude"}, OutputFormat: "ndjson-but-not-quite"},
 		},
 	}
-	err := validateHarnessSemantics(u)
+	err := validateAgentCatalog(u)
 	if err == nil {
 		t.Fatal("expected error for invalid output_format, got nil")
 	}

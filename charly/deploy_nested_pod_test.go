@@ -45,7 +45,7 @@ func (e *nestedRecordingExec) ResolveHome(context.Context, string) (string, erro
 // the guest's own project-free `charly deploy from-box <ref> <key>` as a PERSISTENT
 // (lingering) quadlet — in sorted order — while non-pod children (android/k8s) and
 // image-less entries are skipped. Without the capability the helper does not exist
-// / does nothing and these assertions fail; this is the eval-coverage gate for the
+// / does nothing and these assertions fail; this is the check-coverage gate for the
 // Go side of Cutover 2 (the live bed proves it end-to-end on the GPU VM).
 func TestDeployNestedPodsInGuest_DeploysOnlyPodChildren(t *testing.T) {
 	// Stub the child-process boundary: record build / vm-cp-box argv, no real charly.
@@ -196,9 +196,9 @@ func TestDeriveDeploymentName(t *testing.T) {
 // target/vm/preemptible but no nested:) that surfaced the failure: a whole-node
 // re-read of the operator deploy.yml (operator clobbering project) would drop
 // nested: and silently skip deployNestedPodsInGuest. VmUnifiedTarget.Add
-// consumes this merged node directly. The eval-bed keys (no operator overlay)
+// consumes this merged node directly. The check-bed keys (no operator overlay)
 // were never affected — which is why the bug hid behind a green pod bed. The
-// end-to-end consumption proof is the live `charly eval live cachyos-gpu.selkies-kde`
+// end-to-end consumption proof is the live `charly check live cachyos-gpu.selkies-kde`
 // R10.
 func TestMergeDeployConfigs_VMNestedSurvivesNestedlessOverlay(t *testing.T) {
 	project := &DeployConfig{Deploy: map[string]DeploymentNode{

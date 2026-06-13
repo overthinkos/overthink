@@ -93,7 +93,7 @@ candy:
         - name: mcp-chrome-devtools-ping
           step:
             # MCP server exercised live via github.com/modelcontextprotocol/go-sdk.
-            # Runs only under `charly eval live <image>` (deploy-scope). No `call` test — the
+            # Runs only under `charly check live <image>` (deploy-scope). No `call` test — the
             # chrome-devtools tools need a live Chrome session; ping + tool-catalog are
             # safe non-destructive probes.
             # Readiness waits: the MCP server proxies to Chrome's CDP (--browser-url

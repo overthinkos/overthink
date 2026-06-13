@@ -66,7 +66,7 @@ candy:
         - name: sherpa-onnx-tts-binary
           step:
             # Runtime engine binary — exists and is executable (test -x avoids
-            # running the dynamically-linked foreign binary at eval time).
+            # running the dynamically-linked foreign binary at check time).
             - id: sherpa-onnx-tts-binary
               file: ${HOME}/.local/share/sherpa-onnx/runtime/bin/sherpa-onnx-offline-tts
               exists: true

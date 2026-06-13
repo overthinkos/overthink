@@ -65,7 +65,7 @@ candy:
             # Vite (the build tool the PMTiles app uses) defaults to
             # --base=/ when the package.json `build` script doesn't pin
             # it, but pass --base=/ explicitly to match the maputnik
-            # layer's lockdown — the asset-base-not-prefixed eval below
+            # layer's lockdown — the asset-base-not-prefixed check below
             # locks the served HTML to root-relative asset URLs. Forward
             # the flag through npm via `--`.
             npm run build -- --base=/
@@ -131,7 +131,7 @@ candy:
           step:
             # Build-scope: nodejs binary present (paired with the maputnik
             # check — declaring it here means dropping maputnik leaves this
-            # eval in place; declaring it on both layers documents the
+            # check in place; declaring it on both layers documents the
             # cross-layer requirement clearly).
             - id: nodejs-installed-pmtiles-viewer
               command: node --version

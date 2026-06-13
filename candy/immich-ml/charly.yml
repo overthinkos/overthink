@@ -68,7 +68,7 @@ candy:
     scenario:
         # Build-scope deterministic steps assert the installed ML runtime
         # artifacts; the deploy-scope scenario binds check verbs that run
-        # against the live immich-ml service under `charly eval feature run`.
+        # against the live immich-ml service under `charly check feature run`.
         - name: ml-runtime-installed
           step:
             - then: the dedicated machine-learning virtualenv ships a python interpreter

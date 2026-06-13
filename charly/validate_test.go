@@ -37,7 +37,7 @@ func TestValidateBuildTunables(t *testing.T) {
 		wantErr string // substring; "" = expect no error
 	}{
 		{"all unset is valid", BoxConfig{}, ""},
-		{"valid full set", BoxConfig{Jobs: intPtr(4), PodmanJobs: intPtr(0), PodmanJobsCap: intPtr(8), Cache: "image", ContextIgnore: []string{"image", ".eval"}}, ""},
+		{"valid full set", BoxConfig{Jobs: intPtr(4), PodmanJobs: intPtr(0), PodmanJobsCap: intPtr(8), Cache: "image", ContextIgnore: []string{"image", ".check"}}, ""},
 		{"jobs zero rejected", BoxConfig{Jobs: intPtr(0)}, "jobs must be >= 1"},
 		{"jobs negative rejected", BoxConfig{Jobs: intPtr(-2)}, "jobs must be >= 1"},
 		{"podman_jobs negative rejected", BoxConfig{PodmanJobs: intPtr(-1)}, "podman_jobs must be >= 0"},
@@ -48,8 +48,8 @@ func TestValidateBuildTunables(t *testing.T) {
 		{"empty context_ignore entry rejected", BoxConfig{ContextIgnore: []string{"image", "  "}}, "context_ignore[1] must not be empty"},
 		{"keep_images zero allowed (disabled)", BoxConfig{KeepImages: intPtr(0)}, ""},
 		{"keep_images negative rejected", BoxConfig{KeepImages: intPtr(-1)}, "keep_images must be >= 0"},
-		{"keep_eval_runs valid", BoxConfig{KeepEvalRuns: intPtr(10)}, ""},
-		{"keep_eval_runs negative rejected", BoxConfig{KeepEvalRuns: intPtr(-3)}, "keep_eval_runs must be >= 0"},
+		{"keep_check_runs valid", BoxConfig{KeepCheckRuns: intPtr(10)}, ""},
+		{"keep_check_runs negative rejected", BoxConfig{KeepCheckRuns: intPtr(-3)}, "keep_check_runs must be >= 0"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

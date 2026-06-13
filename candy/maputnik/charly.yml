@@ -102,7 +102,7 @@ candy:
           scope: system
     scenario:
         # DETERMINISTIC build-scope facts — embedded check verbs run at both
-        # `charly box feature run` and `charly eval feature run`.
+        # `charly box feature run` and `charly check feature run`.
         - name: maputnik-spa-built-into-static-dist
           step:
             - then: the maputnik static dist directory was built from upstream source

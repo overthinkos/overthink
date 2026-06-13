@@ -133,7 +133,7 @@ candy:
     scenario:
         # Deterministic acceptance: each step embeds a `file:`/`exists:`
         # check verb, so the scenario FAILS if the candy installed nothing.
-        # The paths below match the eval: block's verified locations.
+        # The paths below match the check: block's verified locations.
         - name: network-probes-installed
           step:
             - then: the DNS lookup tool dig is present for probing service discovery

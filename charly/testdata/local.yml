@@ -12,5 +12,5 @@ spec:
   description:
     feature: Standard developer workstation profile
     tag: [working]
-  eval:
+  check:
     - {id: rg-version, scope: deploy, command: "rg --version"}

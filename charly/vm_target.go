@@ -1,6 +1,6 @@
 package main
 
-// Shared VM target resolution for `charly eval spice` and `charly eval libvirt`.
+// Shared VM target resolution for `charly check spice` and `charly check libvirt`.
 //
 // ResolveVmTarget opens a session-scoped libvirt connection, finds
 // the running domain whose name matches the vm.yml entity, and

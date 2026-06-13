@@ -127,7 +127,7 @@ func TestCellImage(t *testing.T) {
 	}{
 		{"image only", DeploymentStatus{Image: "redis"}, "redis"},
 		{"image+instance", DeploymentStatus{Image: "selkies-desktop", Instance: "work"}, "selkies-desktop/work"},
-		{"hyphen in image", DeploymentStatus{Image: "eval-sway-browser-vnc-pod"}, "eval-sway-browser-vnc-pod"},
+		{"hyphen in image", DeploymentStatus{Image: "check-sway-browser-vnc-pod"}, "check-sway-browser-vnc-pod"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

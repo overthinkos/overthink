@@ -76,7 +76,7 @@ func TestResolveLocalImageRef_PrefersBaseOverAlias(t *testing.T) {
 // TestMergeDeployOntoMetadata_KeyedByDeployNameNotImage guards the bug class
 // where MergeDeployOntoMetadata looked up the deploy overlay by meta.Box (the
 // baked ai.opencharly.box short-name) instead of the caller's deploy key. A
-// kind:eval bed (key "eval-cachyos-ollama-pod", image "ollama") that remaps
+// kind:check bed (key "check-cachyos-ollama-pod", image "ollama") that remaps
 // 45434:11434 MUST keep its own port even when a sibling production deploy keyed
 // "ollama" publishes the image-default 11434 — otherwise the bed's quadlet
 // inherits 11434 and collides with the running same-image service at start
@@ -90,14 +90,14 @@ func TestMergeDeployOntoMetadata_KeyedByDeployNameNotImage(t *testing.T) {
 	dc := &DeployConfig{
 		Deploy: map[string]DeploymentNode{
 			"ollama":                  {ResolvedPort: []string{"11434:11434"}},
-			"eval-cachyos-ollama-pod": {Box: "ollama", ResolvedPort: []string{"45434:11434"}},
+			"check-cachyos-ollama-pod": {Box: "ollama", ResolvedPort: []string{"45434:11434"}},
 		},
 	}
 
 	// Bed: deploy key differs from the baked image short-name. The merge must
 	// resolve the bed's OWN ResolvedPort, not the sibling "ollama" deploy.
 	bedMeta := &BoxMetadata{Box: "ollama", Port: []string{"11434"}}
-	MergeDeployOntoMetadata(bedMeta, dc, "eval-cachyos-ollama-pod", "")
+	MergeDeployOntoMetadata(bedMeta, dc, "check-cachyos-ollama-pod", "")
 	if len(bedMeta.Port) != 1 || bedMeta.Port[0] != "45434:11434" {
 		t.Errorf("bed merge: got Ports=%v, want [45434:11434] (must not pick up sibling 'ollama' deploy or the image default)", bedMeta.Port)
 	}
@@ -121,7 +121,7 @@ func TestMergeDeployOntoMetadata_KeyedByDeployNameNotImage(t *testing.T) {
 // TestMergeDeployOntoMetadata_VolumesScopedToDeployKey pins the GENERIC
 // guarantee the operator asked for: EVERY distinctly-named deploy of an image —
 // the base deploy, a second production pod (Pattern-B), an instance, or a
-// kind:eval bed — gets volume mounts under its OWN deploy/container name, so no
+// kind:check bed — gets volume mounts under its OWN deploy/container name, so no
 // two differently-named pods ever share a named volume (the immich-pgdata
 // sharing incident). The ONLY no-op is the base deploy whose key == image
 // (nothing else can share that name), so that single deploy's names never
@@ -140,7 +140,7 @@ func TestMergeDeployOntoMetadata_VolumesScopedToDeployKey(t *testing.T) {
 		{"base_deploy_key_equals_image_unchanged", "immich-ml", "", "charly-immich-ml-pgdata"},
 		{"second_production_pod_same_image_isolated", "immich-prod", "", "charly-immich-prod-pgdata"},
 		{"instance_isolated", "immich-ml", "blue", "charly-immich-ml-blue-pgdata"},
-		{"eval_bed_isolated", "eval-cachyos-immich-ml-pod", "", "charly-eval-cachyos-immich-ml-pod-pgdata"},
+		{"check_bed_isolated", "check-cachyos-immich-ml-pod", "", "charly-check-cachyos-immich-ml-pod-pgdata"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			meta := mk()

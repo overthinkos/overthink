@@ -11,7 +11,7 @@ import (
 // stubs (the 127.0.0.53 systemd-resolved stub — unreachable from a container
 // netns) and dedupes real resolvers in file order. This is the fix for the
 // rootless-podman + systemd-resolved external-DNS failure that crash-looped the
-// MCP server in isolated eval pods.
+// MCP server in isolated check pods.
 func TestParseResolvNameservers(t *testing.T) {
 	dir := t.TempDir()
 	cases := []struct {

@@ -146,7 +146,7 @@ type PodUnifiedTarget struct {
 	// DelOpts is uniform across kinds; pod-specific gates live here.
 	KeepImage bool
 
-	// BaseImageRef is the image ref the rebuild's image-build/eval
+	// BaseImageRef is the image ref the rebuild's image-build/check
 	// steps target. Set by the dispatcher from the charly.yml node's
 	// `box:` field (or NodeName when absent). Empty → falls back to
 	// NodeName at Rebuild time.
@@ -288,7 +288,7 @@ func ResolveTarget(node *DeploymentNode, name string) (UnifiedDeployTarget, erro
 		return &VmUnifiedTarget{NodeName: name}, nil
 
 	case "pod":
-		// BaseImageRef is the image the rebuild's build/eval steps target;
+		// BaseImageRef is the image the rebuild's build/check steps target;
 		// node.Box is the charly.yml `box:` field (Rebuild falls back to
 		// NodeName when empty).
 		return &PodUnifiedTarget{NodeName: name, BaseImageRef: node.Box}, nil

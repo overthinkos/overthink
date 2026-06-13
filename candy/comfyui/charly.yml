@@ -51,7 +51,7 @@ candy:
     scenario:
         # Scenarios 1-2 are DETERMINISTIC (embedded check verbs → run at build
         # AND deploy scope, baked into ai.opencharly.description). Scenario 3 is
-        # PROSE-ONLY (no verb → agent-graded by `charly eval feature run comfyui`
+        # PROSE-ONLY (no verb → agent-graded by `charly check feature run comfyui`
         # against the live GPU deployment; reported unbound by build-scope
         # `charly box feature run`).
         - name: comfyui-app-cloned

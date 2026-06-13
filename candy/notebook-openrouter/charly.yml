@@ -55,7 +55,7 @@ candy:
           step:
             # Build-scope — the notebook collection is baked into the image data
             # staging tree at /data/<volume>/<dest>/ (COPY --chown=uid:gid), so these
-            # run under `charly eval box` as the image's default user.
+            # run under `charly check box` as the image's default user.
             - id: notebook-openrouter-staged-dir
               file: /data/workspace/openrouter
               filetype: directory

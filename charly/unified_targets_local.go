@@ -139,7 +139,7 @@ func teardownHostDeploy(paths *LedgerPaths, rec *DeployRecord, hostHome string, 
 // non-nested host; NestedExecutor for a host-inside-vm child) and walks
 // the supplied check list. OnlyIDs/StopOnFail mirror their TestOpts
 // semantics; the runner-level matching for verb dispatch is shared with
-// `charly eval live`.
+// `charly check live`.
 func (t *LocalUnifiedTarget) Test(ctx context.Context, checks []Op, opts TestOpts) error {
 	onlyIDs := make(map[string]bool, len(opts.OnlyIDs))
 	for _, id := range opts.OnlyIDs {
@@ -310,7 +310,7 @@ func (t *LocalUnifiedTarget) Add(ctx context.Context, dctx *DeployContext, plans
 		DistroCfg:  dctx.DistroCfg,
 	}
 	// Resolve the kind:local template (when the deployment has a
-	// `local: <name>` ref) so its `images:` pre-pass + Eval/DeployEval
+	// `local: <name>` ref) so its `images:` pre-pass + Check/DeployCheck
 	// reach the target. nil when the deployment uses inline add_candy:.
 	if node != nil && strings.TrimSpace(node.Local) != "" {
 		tgt.LocalSpec = findLocalSpec(dctx.Dir, strings.TrimSpace(node.Local))
@@ -322,7 +322,7 @@ func (t *LocalUnifiedTarget) Add(ctx context.Context, dctx *DeployContext, plans
 	}
 
 	// Pick the executor via the shared selector (R3 — same logic
-	// charly eval live's runLocalEval uses). opts.ParentExec (nested
+	// charly check live's runLocalCheck uses). opts.ParentExec (nested
 	// local-target inside a container/VM) stays here: it's
 	// deploy-execution-specific, not a property of the node's host:.
 	var exec DeployExecutor = ShellExecutor{}
@@ -364,12 +364,12 @@ func (t *LocalUnifiedTarget) Add(ctx context.Context, dctx *DeployContext, plans
 		return fmt.Errorf("retrieving candy artifacts: %w", err)
 	}
 
-	// --verify: run the deployment's deploy-scope eval probes on the venue
+	// --verify: run the deployment's deploy-scope check probes on the venue
 	// we just deployed to (the same `exec`). Default (Verify=false) is a
-	// no-op. Reuses evalLocalDeployScope so `charly deploy add <local> --verify`
-	// sources + runs probes identically to `charly eval live <local>` (R3).
+	// no-op. Reuses checkLocalDeployScope so `charly deploy add <local> --verify`
+	// sources + runs probes identically to `charly check live <local>` (R3).
 	if opts.Verify && !opts.DryRun {
-		fails, verr := evalLocalDeployScope(dctx.Dir, node, dctx.Name, "", "", nil, exec, "text")
+		fails, verr := checkLocalDeployScope(dctx.Dir, node, dctx.Name, "", "", nil, exec, "text")
 		if verr != nil {
 			return fmt.Errorf("deployment %q: --verify: %w", dctx.Name, verr)
 		}

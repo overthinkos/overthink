@@ -7,8 +7,8 @@ import (
 )
 
 // FeatureCmd groups the `charly feature` authoring + inspection verbs.
-// Additional run-verbs live on EvalCmd / ImageCmd as Feature children
-// so that `charly eval feature run <deployment>` and `charly box feature run
+// Additional run-verbs live on CheckCmd / ImageCmd as Feature children
+// so that `charly check feature run <deployment>` and `charly box feature run
 // <image>` fit the existing test-command hierarchy.
 type FeatureCmd struct {
 	List     FeatureListCmd     `cmd:"list"     help:"Enumerate every kind: entity and the scenarios declared on its description: block"`

@@ -1,0 +1,46 @@
+candy:
+    version: 2026.144.1443
+    name: check-base-layer
+    description:
+        feature: Drop /etc/check-base-marker as the first layer of the check-pod stack
+        narrative: |
+            Single-file marker layer — the build-scope smoke target AND the
+            composition-order anchor for the combined check-pod bed
+            (`charly check run check-pod`). It writes /etc/check-base-marker; the
+            check-stack-layer that composes on top asserts this marker is still
+            present, proving layer-composition order survives the build pipeline.
+        tag: [working]
+    task:
+        - write: /etc/check-base-marker
+          run_as: root
+          mode: "0644"
+          content: |
+            check-base v1
+    scenario:
+        # Agent Driven Evaluation acceptance scenarios, baked into this
+        # candy's ai.opencharly.description label. Both steps are
+        # DETERMINISTIC (embedded file check verbs → run at build AND
+        # deploy scope by `charly box/check feature run`); the marker is a
+        # build-time artifact, so a missing or empty file fails them.
+        - name: check-base-marker-present
+          step:
+            - then: the check-base marker file is present at /etc/check-base-marker
+              file: /etc/check-base-marker
+              exists: true
+        - name: check-base-marker-records-version
+          step:
+            - then: the marker records the check-base version string "check-base v1"
+              file: /etc/check-base-marker
+              contains:
+                - contains: "check-base v1"
+        - name: check-base-marker-exists
+          step:
+            - id: check-base-marker-exists
+              file: /etc/check-base-marker
+              exists: true
+        - name: check-base-marker-content
+          step:
+            - id: check-base-marker-content
+              file: /etc/check-base-marker
+              contains:
+                - contains: "check-base v1"

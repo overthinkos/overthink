@@ -1,7 +1,7 @@
 package main
 
-// `charly eval vnc vm <name> <verb>` — RFB/VNC verbs targeting a VM
-// declared in vm.yml, mirroring the shape of `charly eval spice`.
+// `charly check vnc vm <name> <verb>` — RFB/VNC verbs targeting a VM
+// declared in vm.yml, mirroring the shape of `charly check spice`.
 //
 // For VMs whose <graphics type='vnc'> listens on a UNIX socket,
 // we dial the socket directly (local) or tunnel it over SSH (remote);
@@ -30,8 +30,8 @@ type VncVmCmd struct {
 	Mouse      VncVmMouseCmd      `cmd:"" help:"Move pointer to x,y (no click)"`
 }
 
-// vncVmFlags is the shared flag surface for every `charly eval vnc vm …`
-// verb. --uri follows the same convention as `charly eval libvirt --uri`.
+// vncVmFlags is the shared flag surface for every `charly check vnc vm …`
+// verb. --uri follows the same convention as `charly check libvirt --uri`.
 type vncVmFlags struct {
 	Uri string `name:"uri" env:"CHARLY_LIBVIRT_URI" help:"Libvirt URI (default: qemu:///session)."`
 }

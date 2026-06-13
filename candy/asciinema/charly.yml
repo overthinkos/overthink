@@ -9,7 +9,7 @@ candy:
             provides the /usr/bin/asciinema CLI whose `rec` subcommand captures a
             terminal session -- timing, input, and output -- into a replayable
             asciicast v2 .cast file; this is the engine behind
-            `charly eval record start --mode terminal`.
+            `charly check record start --mode terminal`.
         tag: [working]
     package:
         - asciinema

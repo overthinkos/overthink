@@ -227,7 +227,7 @@ func (e *SSHExecutor) ResolveHome(ctx context.Context, user string) (string, err
 	} else {
 		// getent passwd <user> | cut -d: -f6
 		// Fallback to ~user expansion if getent isn't available.
-		script = `entry=$(getent passwd ` + shellSingleQuoteSSH(user) + ` 2>/dev/null) && printf %s "$(printf %s "$entry" | cut -d: -f6)" || eval "printf %s ~` + shellSingleQuoteSSH(user) + `"`
+		script = `entry=$(getent passwd ` + shellSingleQuoteSSH(user) + ` 2>/dev/null) && printf %s "$(printf %s "$entry" | cut -d: -f6)" || check "printf %s ~` + shellSingleQuoteSSH(user) + `"`
 	}
 	// Feed the script over stdin to `bash -s` (the same transport
 	// RunCapture/RunUser use). Passing it as a `bash -c <script>` remote

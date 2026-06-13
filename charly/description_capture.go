@@ -47,10 +47,10 @@ type ScenarioContext struct {
 	// teardown via SIGTERM (best-effort; non-fatal on failure).
 	Backgrounds []int
 
-	// Results accumulates EvalResults from steps that have completed,
+	// Results accumulates CheckResults from steps that have completed,
 	// indexed by step ID. Used by the `summarize:` verb to walk prior
 	// steps' Elapsed durations and compute distribution metrics.
-	Results map[string]EvalResult
+	Results map[string]CheckResult
 }
 
 // NewScenarioContext returns an empty context bound to the given
@@ -60,7 +60,7 @@ func NewScenarioContext(scenarioID string) *ScenarioContext {
 	return &ScenarioContext{
 		ScenarioID: scenarioID,
 		Captures:   map[string]string{},
-		Results:    map[string]EvalResult{},
+		Results:    map[string]CheckResult{},
 	}
 }
 
@@ -118,29 +118,29 @@ func (s *ScenarioContext) SnapshotBackgrounds() []int {
 	return out
 }
 
-// RecordResult stores a step's EvalResult for later inspection by
+// RecordResult stores a step's CheckResult for later inspection by
 // `summarize:` verbs. Keyed by step ID.
-func (s *ScenarioContext) RecordResult(stepID string, r EvalResult) {
+func (s *ScenarioContext) RecordResult(stepID string, r CheckResult) {
 	if s == nil || stepID == "" {
 		return
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.Results == nil {
-		s.Results = map[string]EvalResult{}
+		s.Results = map[string]CheckResult{}
 	}
 	s.Results[stepID] = r
 }
 
 // SnapshotResults returns a copy of all recorded results. Used by
 // `summarize:` to compute aggregate metrics.
-func (s *ScenarioContext) SnapshotResults() map[string]EvalResult {
+func (s *ScenarioContext) SnapshotResults() map[string]CheckResult {
 	if s == nil {
 		return nil
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	out := make(map[string]EvalResult, len(s.Results))
+	out := make(map[string]CheckResult, len(s.Results))
 	for k, v := range s.Results {
 		out[k] = v
 	}
@@ -187,14 +187,14 @@ func (s *ScenarioContext) ApplyToEnv(env map[string]string) {
 // centralises the mapping so capture semantics stay consistent across
 // verbs.
 //
-// Today's heuristic: use the EvalResult's Message field. Verb handlers
+// Today's heuristic: use the CheckResult's Message field. Verb handlers
 // overwrite Message with their primary output on PASS (for example
 // `runCommand` includes stdout in the Message; `runCDP` in
 // `testrun_ov_verbs.go` puts captured subprocess stdout there). The
 // caller (Runner) holds the stdout verbatim for verbs where Message
 // is a summary rather than raw output and supplies that instead.
 //
-// Callers should prefer CaptureFromResult when they have a EvalResult
+// Callers should prefer CaptureFromResult when they have a CheckResult
 // and Captures already knows the raw value (e.g. command stdout); it
 // falls back to Result.Message for verbs that don't carry the raw
 // value separately.
@@ -210,7 +210,7 @@ func CaptureFromResult(rawValue, resultMessage string) string {
 // exist). Returns an error if the pattern is invalid or doesn't match.
 //
 // Used by the runner when a check sets `capture_extract:` alongside
-// `capture:` — see evalrun.go's post-dispatch capture block. A failed
+// `capture:` — see checkrun.go's post-dispatch capture block. A failed
 // match deliberately surfaces as an error so the caller can FAIL the
 // check rather than silently store the unextracted (noisy) value.
 func ApplyCaptureExtract(value, pattern string) (string, error) {

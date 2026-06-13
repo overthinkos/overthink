@@ -51,7 +51,7 @@ func TestTaskKind_Valid(t *testing.T) {
 }
 
 // Zero-verb and multiple-verb enforcement on the unified Op.Kind() is covered
-// by TestCheck_Kind in evalspec_test.go (one Kind() implementation, one set of
+// by TestCheck_Kind in checkspec_test.go (one Kind() implementation, one set of
 // tests — R3). TestTaskKind_Valid above covers the install-verb names that
 // TestCheck_Kind's probe-verb cases do not.
 

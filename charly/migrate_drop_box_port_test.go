@@ -35,7 +35,7 @@ func TestMigrateDropBoxPort(t *testing.T) {
 	// Root charly.yml: an eval bed using `port: [auto]` (dropped) and another
 	// using an explicit pin (preserved); plus a candy `port:` that must survive.
 	rootYML := "" +
-		"version: 2026.164.0002\n" +
+		"version: 2026.164.0004\n" +
 		"eval:\n" +
 		"    alpha-bed:\n" +
 		"        target: pod\n" +

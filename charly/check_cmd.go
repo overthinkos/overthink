@@ -1,0 +1,854 @@
+package main
+
+import (
+	"context"
+	"fmt"
+	"io"
+	"os"
+	"strconv"
+	"strings"
+
+	"gopkg.in/yaml.v3"
+)
+
+// CheckFailExitCode is the process exit code `charly check` returns when an
+// check RAN to completion but one or more checks FAILED — deliberately
+// distinct from 0 (all checks passed) and 1 (command / usage / infra error:
+// couldn't build, deploy, or even run the check). This lets automation (and
+// `charly check run <bed>`) tell "the thing under test is broken" apart from "the
+// check itself couldn't run". Mirrors the goss / pytest 0/1/2 convention;
+// main() maps CheckFailedError to this code.
+const CheckFailExitCode = 2
+
+// CheckFailedError marks an check that ran but had failing checks. main()
+// detects it via errors.As and exits CheckFailExitCode. Wrap with %w to
+// preserve the chain through callers.
+type CheckFailedError struct {
+	Failed int    // number of failed checks (0 = aggregate/unknown)
+	Msg    string // optional message override (e.g. a bed-level aggregate)
+}
+
+func (e *CheckFailedError) Error() string {
+	if e.Msg != "" {
+		return e.Msg
+	}
+	return fmt.Sprintf("%d check(s) failed", e.Failed)
+}
+
+// CheckCmd is the unified `charly check` command tree — declarative checkuation,
+// AI-driven iteration, and live-container probe verbs all under one
+// prefix. Three primary verbs (image / live / run) replace the old
+// `charly check box` / `charly check live <image>` / `charly check run <score>` split:
+//
+//   - `charly check box <image>` — pure-image artifact check (disposable
+//     container, build-scope checks only, no host port mapping, no
+//     volumes attached).
+//   - `charly check live <name>` — full-stack check against a running
+//     deployment (pod / vm / host / k8s); runtime variables resolved.
+//   - `charly check run <name>` — overloaded by the resolved kind: a
+//     kind:check bed runs the full R10 sequence (build → check box →
+//     deploy → check live → fresh update → tear down); a kind:score
+//     drives an AI through iteration cycles. `--all-beds` runs every
+//     kind:check bed. (Replaces the retired `charly check kind <subkind>`,
+//     whose hardcoded per-kind bed table moved into check.yml as
+//     kind:check entities.)
+//
+// The mode is explicit; there is no autodetect or implicit fallback.
+//
+// Live-container probe verbs (cdp/wl/dbus/vnc/mcp/record/spice/libvirt/k8s)
+// share the same "live" semantic: each requires a running target.
+//
+// Check-run management subcommands (list-ai, list-recipe, list-score,
+// list, sync-credential, report, scope, last-tag, note, run-local,
+// self-evaluate) are the renamed `charly check *` surface.
+type CheckCmd struct {
+	// Three primary modes
+	Box     CheckBoxCmd     `cmd:"" name:"box" help:"Pure-box check (disposable container, build-scope checks)"`
+	Live    CheckLiveCmd    `cmd:"" help:"Full-stack check against a running deployment"`
+	Run     CheckRunCmd     `cmd:"" help:"Run a kind:check R10 bed (full sequence) or drive an AI through a kind:score's iteration cycles"`
+	Recipe  CheckRecipeCmd  `cmd:"" help:"Run a recipe's scenarios once (deterministic; no AI iteration)"`
+	Feature CheckFeatureCmd `cmd:"" help:"Run a running deployment's baked Gherkin scenarios as acceptance tests; prose-only steps are agent-graded (Agent Driven Checkuation)"`
+
+	// Live-container probe verbs (each requires a running target)
+	Cdp     CdpCmd     `cmd:"" help:"Chrome DevTools Protocol (open, list, click, check)"`
+	Dbus    DbusCmd    `cmd:"" help:"Interact with D-Bus services inside containers"`
+	Libvirt LibvirtCmd `cmd:"" help:"VM management via libvirt API (info, screenshot, send-key, QMP, guest-agent, snapshots, events)"`
+	Mcp     McpCmd     `cmd:"" help:"Probe MCP servers declared via mcp_provides"`
+	Record  RecordCmd  `cmd:"" help:"Record terminal sessions or desktop video inside running containers"`
+	Spice   SpiceCmd   `cmd:"" help:"VM SPICE display (handshake, inputs, native screenshot)"`
+	Vnc     VncCmd     `cmd:"" help:"Control VNC desktop in running containers"`
+	Wl      WlCmd      `cmd:"" help:"Desktop automation (input, windows, screenshots, sway IPC)"`
+	K8s     K8sCmd     `cmd:"" name:"k8s" help:"Kubernetes cluster probes (nodes, wait-nodes, pods, ingress, storageclass, addons, apply, delete, raw)"`
+	Adb     AdbCmd     `cmd:"" help:"Android Debug Bridge — devices, shell, install, uninstall, getprop, screencap, logcat-tail, wait-for-device"`
+	Appium  AppiumCmd  `cmd:"" help:"Appium WebDriver — status, session-create/delete, install-app, find, click, send-keys, screenshot"`
+
+	// Check-run management (was `charly check *`)
+	ListAgent  CheckListAgentCmd  `cmd:"" name:"list-agent" help:"List configured agents from check.yml"`
+	ListRecipe CheckListRecipeCmd `cmd:"" name:"list-recipe" help:"List configured recipes (spec) from check.yml"`
+	ListScore  CheckListScoreCmd  `cmd:"" name:"list-score" help:"List configured scores (runner config) from check.yml"`
+	RunLocal   CheckRunLocalCmd   `cmd:"" name:"run-local" hidden:"" help:"Pod/VM-side iteration driver (not invoked directly)"`
+	SyncCred   CheckSyncCredCmd   `cmd:"" name:"sync-credential" help:"Copy AI credentials into the score's target"`
+	Scope      CheckScopeCmd      `cmd:"" name:"scope" help:"AI-facing: print current iteration scope"`
+	LastTag    CheckLastTagCmd    `cmd:"" name:"last-tag" help:"AI-facing: print prior iteration's image tag"`
+	SelfCheck   CheckSelfCheckCmd   `cmd:"" name:"self-evaluate" help:"AI-facing: rebuild current clone + re-run live check"`
+	List       CheckListRunsCmd   `cmd:"" name:"list" help:"List past check runs under .check/<score>/"`
+	Report     CheckReportCmd     `cmd:"" name:"report" help:"Render a past result-<calver>.yml"`
+	Note       CheckNoteCmd       `cmd:"" name:"note" help:"Read/append the persistent NOTES.md memory for a score"`
+}
+
+// CheckLiveCmd runs tests against a running service — the deploy-time entry point.
+//
+//   - Extracts the image's three-section LabelDescriptionSet from OCI labels.
+//   - Applies the local charly.yml tests overlay (merge by id:).
+//   - Resolves ${…} variables using meta + deploy + podman-inspect of the
+//     running container.
+//   - Executes the merged spec (container-internal verbs via exec; host-side
+//     verbs directly).
+//
+// The command exits non-zero on any failed check. Skipped checks (missing
+// runtime context, skip: true, id-override with skip) do not fail the run.
+type CheckLiveCmd struct {
+	Box      string   `arg:"" help:"Box name"`
+	Instance string   `short:"i" long:"instance" help:"Instance name"`
+	Format   string   `long:"format" default:"text" help:"Output format: text, json, tap"`
+	Filter   []string `long:"filter" help:"Only run checks with these verbs (repeatable)"`
+	Section  string   `long:"section" help:"Only run this section: candy, box, or deploy"`
+}
+
+func (c *CheckLiveCmd) Run() error {
+	// VM dispatch: if the name matches a vm.yml entity, route the test run
+	// through SSH instead of podman exec. VM deploys don't have an OCI image
+	// to pull labels from, so tests come exclusively from the charly.yml
+	// overlay. This keeps the same declarative `tests:` authoring surface
+	// working for `charly deploy add vm:<name>` flows, and also works for bare VMs
+	// created via `charly vm create` before `charly deploy add` has been run.
+	if c.isVmTarget() {
+		return c.runVm()
+	}
+
+	// Local dispatch: a `target: local` deploy is a host filesystem apply, not
+	// a container, so its deploy-scope probes run on the host (or over SSH for
+	// host: <remote>) via a ShellExecutor/SSHExecutor — the SAME target-dispatch
+	// `charly deploy add` uses — instead of the podman-exec container path below.
+	if c.isLocalTarget() {
+		return c.runLocalCheck()
+	}
+
+	engine, containerName, err := resolveContainer(c.Box, c.Instance)
+	if err != nil {
+		return err
+	}
+
+	// Load deploy overlay (local tests) AND project-level tests up front
+	// so the deploy entry's `image:` field can drive metadata extraction.
+	// Pre-2026-05-12 the code read the running container's image ref via
+	// `containerImageRef`, which silently returned a stale ref on
+	// volume-pinned deploys and dropped any probes added after the seed
+	// image. The cutover deletes that fallback: the check runner now
+	// inspects what the operator declared, not what the container
+	// happens to be running. The hard-required `image:` field
+	// (validateDeployRequiresBox in unified.go / deploy.go) guarantees
+	// this lookup always finds a non-empty value.
+	dir, _ := os.Getwd()
+	var localScenarios []Scenario
+	var deployOverlay *DeploymentNode
+	var projectCfg *Config
+	if uf, ok, _ := LoadUnified(dir); ok && uf != nil {
+		projectCfg = uf.ProjectConfig()
+	}
+	dc := loadDeployConfigForRead("charly check live")
+	if dc != nil {
+		if entry, ok := dc.Deploy[deployKey(c.Box, c.Instance)]; ok {
+			localScenarios = entry.Scenario
+			deployOverlay = &entry
+		} else if entry, ok := dc.Deploy[c.Box]; ok {
+			localScenarios = entry.Scenario
+			deployOverlay = &entry
+		}
+	}
+
+	// Resolve the deploy key → declared image short-name via THE shared
+	// resolver (deploy.go resolveDeployBoxName) — the same one charly config /
+	// start / shell use. This used to be an inline operator-then-project
+	// copy, which is exactly how `charly check live` diverged from `charly config`
+	// for kind:check beds where key != image (check-jupyter-pod → jupyter).
+	// deployOverlay (loaded above) is still consulted for the tests overlay
+	// + runtime var resolution. The hard-required `image:` field
+	// (validateDeployRequiresBox) guarantees a real image for every pod
+	// deploy, so the resolver returns the declared image, never the key.
+	imageRef := resolveDeployBoxName(c.Box, c.Instance)
+	// Short names (e.g. `versa`) need to be resolved to a fully-
+	// qualified registry ref before ExtractMetadata can read OCI
+	// labels. Full refs and remote refs pass through unchanged. The
+	// canonical helper (also used by deploy preflight) lives in
+	// ensure_image.go.
+	resolvedRef, err := resolveImageRefForEnsure(imageRef, projectCfg, dir)
+	if err != nil {
+		return fmt.Errorf("resolving deploy box %q: %w", imageRef, err)
+	}
+	meta, err := ExtractMetadata(engine, resolvedRef)
+	if err != nil {
+		return err
+	}
+	set := MergeDeployDescriptions(meta.Description, localScenarios, c.Box)
+	if set == nil || set.IsEmpty() {
+		fmt.Fprintln(os.Stderr, "No scenarios defined for this image.")
+		return nil
+	}
+	resolver, _ := ResolveCheckVarsRuntime(meta, deployOverlay, engine, c.Box, containerName, c.Instance)
+
+	runner := NewRunner(ContainerChain(engine, containerName), resolver, RunModeLive)
+	runner.Box = c.Box
+	runner.Instance = c.Instance
+	runner.Distros = meta.Distro
+	runner.CandyDirs = candySourceDirs(dir, projectCfg)
+	// Cross-deployment probing (a step with `on: <driver>` reaching a SEPARATE
+	// subject via ${PEER_*}): wire the live target resolver + peer vars — the
+	// ONE entry point every live path shares (R3).
+	runner.TargetResolver = liveTargetResolver(c.Instance)
+	for _, sec := range [][]LabeledDescription{set.Candy, set.Box, set.Deploy} {
+		for _, ld := range sec {
+			applyPeerVarsScenarios(runner, ld.Scenario, c.Instance)
+		}
+	}
+
+	results := RunScenarios(context.Background(), runner, set, nil, false)
+	fmt.Fprintf(os.Stderr, "Image: %s (container: %s)\n", meta.Box, containerName)
+	fails := reportScenarios(os.Stderr, results, c.Format)
+	if fails > 0 {
+		return &CheckFailedError{Failed: fails}
+	}
+	return nil
+}
+
+// isVmTarget returns true when c.Box names a `kind: vm` entity OR a
+// kind:deployment with target:vm OR a dotted-path child deployment nested
+// inside a target:vm parent. Cheap check — a missing/unreadable
+// charly.yml returns false and the caller falls through to the
+// container dispatch path.
+func (c *CheckLiveCmd) isVmTarget() bool {
+	dir, err := os.Getwd()
+	if err != nil {
+		return false
+	}
+	uf, ok, err := LoadUnified(dir)
+	if err != nil || !ok {
+		return false
+	}
+	// Shared classifier (check_venue.go) — also drives resolveCheckVenue for
+	// the interactive verbs, so `charly check live <vm>` and `charly check wl <vm>`
+	// agree on what is a VM target (R3).
+	_, isVM := checkVmTarget(uf, c.Box)
+	return isVM
+}
+
+// resolveNestedNode walks a dotted path through the Nested tree rooted at
+// the top-level deployment, returning the leaf DeploymentNode.
+func resolveNestedNode(roots map[string]DeploymentNode, path string) *DeploymentNode {
+	parts := strings.Split(path, ".")
+	if len(parts) == 0 {
+		return nil
+	}
+	entry, ok := roots[parts[0]]
+	if !ok {
+		return nil
+	}
+	current := &entry
+	for _, p := range parts[1:] {
+		if current.Nested == nil {
+			return nil
+		}
+		next, ok := current.Nested[p]
+		if !ok || next == nil {
+			return nil
+		}
+		current = next
+	}
+	return current
+}
+
+// runVm executes deploy-scope tests against a VM guest over SSH.
+//
+// Connection resolution order:
+//  1. Start from VmSpec defaults (resolveVmSshUser / resolveVmSshPort / the
+//     conventional key path under ~/.local/share/charly/vm/charly-<name>/).
+//  2. Overlay any VmState-materialized fields from charly.yml (user, port,
+//     key path) so VMs whose candies have been applied via `charly deploy add vm:`
+//     honor the exact state the deploy wrote.
+//
+// VMs have no OCI image labels, so no candy/box test section exists —
+// only the local deploy overlay's `tests:` list applies.
+// vmCheckReadyWaitSeconds bounds the VM check-live readiness gate's WaitForSSH
+// poll (WaitForCloudInit carries its own internal 5-minute bound).
+const vmCheckReadyWaitSeconds = 120
+
+// guestNestedCheckCmd builds the `charly check live <pod>` command that runVm runs
+// IN the guest (over SSH) to evaluate a nested-in-VM pod as a direct pod. The
+// host's --format/--section/--filter/-i selectors pass through unchanged so the
+// guest produces the same report shape the host would. Args are single-quoted
+// (shellSingleQuote) since they cross an `ssh ... bash -c` boundary.
+func guestNestedCheckCmd(guestPod, format, section string, filter []string, instance string) string {
+	if format == "" {
+		format = "text"
+	}
+	cmd := "charly check live " + shellSingleQuote(guestPod) + " --format " + shellSingleQuote(format)
+	if section != "" {
+		cmd += " --section " + shellSingleQuote(section)
+	}
+	for _, f := range filter {
+		cmd += " --filter " + shellSingleQuote(f)
+	}
+	if instance != "" {
+		cmd += " -i " + shellSingleQuote(instance)
+	}
+	return cmd
+}
+
+func (c *CheckLiveCmd) runVm() error {
+	dir, _ := os.Getwd()
+	uf, _, err := LoadUnified(dir)
+	if err != nil {
+		return err
+	}
+	// Schema v4: c.Box may be
+	//   (a) a kind:vm entity name directly (e.g. "arch"),
+	//   (b) a kind:deployment name with target:vm (e.g. "arch-vm") whose
+	//       Vm field points at the actual kind:vm entity, OR
+	//   (c) a dotted path "parent.child" where `parent` is a target:vm
+	//       deployment and `child` is a nested node whose tests run in
+	//       the parent's SSH substrate.
+	vmName := c.Box
+	var nestedLeaf *DeploymentNode
+	if uf.Deploy != nil {
+		if entry, ok := uf.Deploy[c.Box]; ok && entry.Target == "vm" && entry.Vm != "" {
+			vmName = entry.Vm
+		} else if idx := strings.Index(c.Box, "."); idx > 0 {
+			root := c.Box[:idx]
+			if parent, present := uf.Deploy[root]; present && parent.Target == "vm" {
+				if parent.Vm != "" {
+					vmName = parent.Vm
+				}
+				nestedLeaf = resolveNestedNode(uf.Deploy, c.Box)
+			}
+		}
+	}
+	var spec *VmSpec
+	if uf.VM != nil {
+		spec = uf.VM[vmName]
+	}
+
+	user := resolveVmSshUser(spec)
+	port, err := resolveVmSshPort(spec, vmName)
+	if err != nil {
+		return err
+	}
+
+	// Two deploy sources for VMs:
+	//   - project-level: charly.yml / charly.yml `deployments.images["vm:<name>"]`
+	//     → holds the authored `tests:` list (part of the repo).
+	//   - per-machine:   ~/.config/charly/charly.yml `images["vm:<name>"]`
+	//     → holds VmState written by `charly deploy add vm:<name>` and any local
+	//       overrides/additions.
+	//
+	// Schema v3: also accept plain-identifier deployment entries whose
+	// `target: vm` + `vm: <c.Box>` resolves to the same VM.
+	// This is what makes `charly check live <deploy-name>` work for beds like
+	// `arch-vm` that don't carry the legacy `vm:` prefix in the key.
+	// Merge by id (local replaces project); same rules as MergeDeployDescriptions.
+	// Resolve the VM's deploy entry via THE shared findVmDeployNode (deploy.go)
+	// — the same lookup `charly deploy add` uses — by deploy NAME (c.Box) first,
+	// then the vm entity (vmName). Keying by name first means a bed whose key
+	// differs from its vm entity (check-k3s-vm -> vm: k3s-vm) resolves to its
+	// own entry rather than being mis-matched via the vm entity name.
+	var projectScenarios, localScenarios []Scenario
+	var addCandies []string
+	// Nested dotted-path short-circuit: when the request is for a
+	// child node, use its own scenarios directly instead of the parent's.
+	if nestedLeaf != nil {
+		projectScenarios = nestedLeaf.Scenario
+		addCandies = nestedLeaf.AddCandy
+	} else if pc := uf.ProjectDeployConfig(); pc != nil {
+		if entry, ok := findVmDeployNode(pc.Deploy, c.Box, vmName); ok {
+			projectScenarios = entry.Scenario
+			addCandies = entry.AddCandy
+		}
+	}
+	if dc := loadDeployConfigForRead("charly check vm"); dc != nil {
+		if entry, ok := findVmDeployNode(dc.Deploy, c.Box, vmName); ok {
+			localScenarios = entry.Scenario
+			if entry.VmState != nil {
+				if entry.VmState.SshUser != "" {
+					user = entry.VmState.SshUser
+				}
+				if entry.VmState.SshPort > 0 {
+					port = entry.VmState.SshPort
+				}
+			}
+		}
+	}
+	scenarios := append(append([]Scenario(nil), projectScenarios...), localScenarios...)
+
+	// Collect deploy-scope scenarios from the candies this VM deployment
+	// applies, so ANY VM deploy — disposable bed OR persistent operator VM —
+	// that adds a candy automatically runs that candy's scenarios (R3).
+	scenarios = append(scenarios, collectAddCandyScenarios(uf, dir, addCandies)...)
+
+	// SSH connection details (User/Port/IdentityFile) live in the
+	// managed ssh-config Host stanza (charly-<vmName>) written at deploy
+	// time. We point the executor at the alias and let ssh(1) resolve
+	// the rest from ~/.ssh/config + agent.
+	host := "127.0.0.1"
+	var executor DeployExecutor = &SSHExecutor{Host: VmSshAlias(vmName), ConnectTimeout: 10}
+
+	// 2026-04 cutover: when c.Box is dotted ("vm.inner-pod"), walk
+	// the deploy tree and construct the full chain via ResolveDeployChain
+	// so leaf tests run inside the leaf's actual venue. Pre-cutover this
+	// path was silently single-hop SSH — `command: id` for a pod-in-vm
+	// leaf returned the VM's user, not the inner pod's.
+	if strings.Contains(c.Box, ".") {
+		if roots, _ := resolveTreeRoot(dir); roots != nil {
+			if _, chain, chainErr := ResolveDeployChain(roots, c.Box, ShellExecutor{}); chainErr == nil && chain != nil {
+				executor = chain
+			}
+		}
+	}
+
+	// Readiness gate (runs as the first step of the VM check sequence): confirm
+	// the VM is up + SSH-reachable AND cloud-init has settled BEFORE running any
+	// checks. Without it, a guest that is down, mid-cloud-init, or mid-restart
+	// surfaces as a confusing wall of "Connection refused" on EVERY check
+	// instead of one clear "VM not ready" signal — and a cloud-init that
+	// triggers a reboot would otherwise be tested mid-restart. WaitForSSH (poll
+	// until sshd answers) and WaitForCloudInit (retry until an ssh connection
+	// survives `cloud-init status --wait`) are real synchronization primitives,
+	// not fixed sleeps — the same SSHExecutor preflight VmDeployTarget.Emit runs
+	// at deploy time. Fast no-op on an already-settled guest (zero added
+	// latency); the VM analog of waitForContainerReady for the bed runner.
+	gate := &SSHExecutor{Host: VmSshAlias(vmName), ConnectTimeout: 5}
+	gctx := context.Background()
+	if gerr := gate.WaitForSSH(gctx, vmCheckReadyWaitSeconds); gerr != nil {
+		return fmt.Errorf("vm %q is not up / SSH-reachable — is the domain running? %w", vmName, gerr)
+	}
+	if gerr := gate.WaitForCloudInit(gctx); gerr != nil {
+		return fmt.Errorf("vm %q cloud-init did not settle (still running or restarting?): %w", vmName, gerr)
+	}
+
+	env := map[string]string{
+		"IMAGE":          c.Box,
+		"INSTANCE":       c.Instance,
+		"HOST_PORT:22":   strconv.Itoa(port),
+		"CONTAINER_IP":   host,
+		"CONTAINER_NAME": "charly-" + c.Box,
+		"USER":           user,
+		"HOME":           "/home/" + user,
+		// VM_HOSTDEV_COUNT = how many <hostdev> passthrough devices THIS VM's
+		// spec declares (the operator's INTENT). A guest-side GPU check uses it
+		// to tell "no GPU configured for this VM" (legit N/A) apart from "a GPU
+		// hostdev WAS configured but the guest cannot see it" (passthrough
+		// silently failed → the check must HARD-FAIL, never N/A-pass). Sourced
+		// from the VmSpec, NOT the running domain: a libvirt hostdev drop would
+		// zero the running count and re-mask the exact failure this guards
+		// against (the check-cachyos-gpu-vm false-green that motivated this var).
+		"VM_HOSTDEV_COUNT": strconv.Itoa(vmHostdevCount(spec)),
+		// DEPLOY_NAME — the sanitized VM deploy name (vm:<vmName> -> vm-<vmName>),
+		// the SAME identifier `charly deploy add vm:<vmName>` feeds to K3sPostProvision
+		// for the kubeconfig context + ClusterProfile. Lets a candy's deploy-scope
+		// k8s checks address their own cluster generically via cluster:
+		// "${DEPLOY_NAME}" instead of hard-coding the bed's cluster name.
+		"DEPLOY_NAME": sanitizeDeployName("vm:" + vmName),
+	}
+	resolver := &CheckVarResolver{Env: env, HasRuntime: true}
+
+	// Nested-in-VM POD leaf: delegate the pod's check to the guest `charly`. FROM
+	// THE GUEST the nested pod is a DIRECT pod — guest-local podman, ports on
+	// guest localhost, the guest `charly` binary (installed by EnsureCharlyInGuest
+	// at deploy time) — so the already-working direct-pod path runs the protocol
+	// verbs (cdp/wl/dbus/vnc/mcp) AND resolves ${HOST_PORT} addr/http natively.
+	// Those are exactly the checks the HOST chain cannot reach across the VM
+	// boundary (they would SKIP). The guest reads the SAME baked checks from the
+	// cp-box'd pod image, so the check set is identical; only the
+	// previously-unreachable probes now actually execute. The readiness gate above
+	// already confirmed the guest is up + cloud-init settled. Every other check
+	// path (direct pods, the VM itself, host, on:-redirected cross-deployment
+	// probes against a host driver) is unchanged — they never enter this branch.
+	if nestedLeaf != nil && nestedLeaf.Target == "pod" {
+		parts := strings.Split(c.Box, ".")
+		guestPod := parts[len(parts)-1]
+		guestCmd := guestNestedCheckCmd(guestPod, c.Format, c.Section, c.Filter, c.Instance)
+		vmSSH := &SSHExecutor{Host: VmSshAlias(vmName), ConnectTimeout: 10}
+		fmt.Fprintf(os.Stderr, "VM: charly-%s — nested pod %q evaluated IN the guest (%s)\n", c.Box, guestPod, VmSshAlias(vmName))
+		stdout, stderr, exit, rerr := vmSSH.RunCapture(context.Background(), guestCmd)
+		if stdout != "" {
+			fmt.Print(stdout)
+		}
+		if stderr != "" {
+			fmt.Fprint(os.Stderr, stderr)
+		}
+		if rerr != nil {
+			return fmt.Errorf("delegating nested-pod check to guest %q: %w", vmName, rerr)
+		}
+		if exit == CheckFailExitCode {
+			return &CheckFailedError{Failed: 1}
+		}
+		if exit != 0 {
+			return fmt.Errorf("nested-pod check in guest %q exited %d", vmName, exit)
+		}
+		return nil
+	}
+
+	if len(scenarios) == 0 {
+		fmt.Fprintln(os.Stderr, "No scenarios to run.")
+		return nil
+	}
+	set := &LabelDescriptionSet{Deploy: []LabeledDescription{{Origin: "vm:" + vmName, Scenario: scenarios}}}
+
+	runner := NewRunner(executor, resolver, RunModeLive)
+	runner.Box = c.Box
+	runner.Instance = c.Instance
+	results := RunScenarios(context.Background(), runner, set, nil, false)
+
+	fmt.Fprintf(os.Stderr, "VM: charly-%s (ssh %s@%s:%d)\n", c.Box, user, host, port)
+	fails := reportScenarios(os.Stderr, results, c.Format)
+	if fails > 0 {
+		return &CheckFailedError{Failed: fails}
+	}
+	return nil
+}
+
+// vmHostdevCount returns how many <hostdev> passthrough devices the VM spec
+// declares — the operator's INTENT, sourced from the authored VmSpec rather
+// than the running domain (a libvirt drop would zero the live count and re-mask
+// a silent passthrough failure). nil-safe at every level: a spec with no
+// libvirt block, no devices block, or no hostdevs all yield 0, which a GPU check
+// check reads as "no GPU configured for this VM" (legit N/A).
+func vmHostdevCount(spec *VmSpec) int {
+	if spec == nil || spec.Libvirt == nil || spec.Libvirt.Devices == nil {
+		return 0
+	}
+	return len(spec.Libvirt.Devices.Hostdevs)
+}
+
+// collectAddCandyDeployCheck collects the deploy-scope check checks from each
+// candy a VM deployment applies via add_candy. ProjectCandies resolves the
+// project's LOCAL candy map (the shared check-only candies live here); remote
+// @github candies not materialized locally are skipped. This is the general
+// mechanism that lets `charly check live <vm>` run a candy's checks against ANY
+// deployment that applies it — the disposable bed or the persistent operator
+// VM — so one shared check-only candy covers both (no per-deploy copy, R3).
+func collectAddCandyScenarios(uf *UnifiedFile, dir string, addCandies []string) []Scenario {
+	if uf == nil || len(addCandies) == 0 {
+		return nil
+	}
+	// ScanAllCandyWithConfig (not ProjectCandies) — it includes the FILESYSTEM
+	// candies under candy/ discovered via `discover:`, where the shared
+	// check-only candies live; ProjectCandies only sees inline `candy:` entries.
+	var cfg *Config
+	if uf != nil {
+		cfg = uf.ProjectConfig()
+	}
+	candyMap, err := ScanAllCandyWithConfig(dir, cfg)
+	if err != nil || candyMap == nil {
+		return nil
+	}
+	var out []Scenario
+	for _, ref := range addCandies {
+		// Only LOCAL (filesystem) candies contribute scenarios here — the
+		// shared candies live in the project's candy/ dir. Remote @github
+		// candies are SKIPPED: they carry their own context (and a re-scan can
+		// resolve a different cached version than what was deployed).
+		if IsRemoteCandyRef(ref) {
+			continue
+		}
+		lyr, ok := candyMap[BareRef(ref)]
+		if !ok || lyr == nil {
+			continue
+		}
+		out = append(out, lyr.scenario...)
+	}
+	return out
+}
+
+// candySourceDirs builds a candy-name → source-dir map for anchoring relative
+// committed-APK paths in adb/appium check checks against the authoring candy's
+// tree (local or @github-fetched). Best-effort — any error yields nil, and the
+// apk path stays cwd-relative (runCharlyVerb → candyDirForOrigin → resolveApkPath).
+func candySourceDirs(dir string, cfg *Config) map[string]string {
+	candyMap, err := ScanAllCandyWithConfig(dir, cfg)
+	if err != nil || len(candyMap) == 0 {
+		return nil
+	}
+	// Key by the candy MAP KEY — which is exactly the check's Origin form:
+	// a bare name for a local candy ("sshd"), the bare @github ref for a fetched
+	// one ("github.com/owner/repo/candy/<name>"). CollectDescriptions stamps
+	// Origin = "candy:" + this same key, so resolveCheckApk's CandyDirs[origin]
+	// lookup matches in BOTH cases.
+	out := make(map[string]string, len(candyMap))
+	for key, lyr := range candyMap {
+		if lyr != nil && lyr.SourceDir != "" {
+			out[key] = lyr.SourceDir
+		}
+	}
+	return out
+}
+
+// isLocalTarget returns true when c.Box names a `target: local` deployment
+// (a host filesystem apply) OR a dotted-path child whose root segment is a
+// target:local deployment. Mirror of isVmTarget — a missing/unreadable
+// charly.yml returns false and the caller falls through to the container
+// dispatch path.
+func (c *CheckLiveCmd) isLocalTarget() bool {
+	dir, err := os.Getwd()
+	if err != nil {
+		return false
+	}
+	uf, ok, err := LoadUnified(dir)
+	if err != nil || !ok {
+		return false
+	}
+	// Shared classifier (check_venue.go), same as isVmTarget (R3).
+	_, isLocal := checkLocalTarget(uf, c.Box)
+	return isLocal
+}
+
+// runLocalCheck executes deploy-scope checks against a `target: local`
+// deployment on its host venue. Mirror of runVm, but the venue is a
+// ShellExecutor (host: local) or SSHExecutor (host: <remote>) selected by the
+// shared rootExecutorForDeployNode, and dotted paths compose through
+// ResolveDeployChain exactly like runVm.
+//
+// Local deploys carry no OCI image labels, so there is no candy/box test
+// section — checks come from the resolved kind:local template's `check:` (base)
+// merged with the deploy entry's `check:` and the per-host charly.yml overlay
+// (id-based replace/append, same as everywhere). Host-context vars only: no
+// HOST_PORT:<N> / CONTAINER_IP (host services bind real ports; faking a port
+// mapping would be wrong).
+func (c *CheckLiveCmd) runLocalCheck() error {
+	dir, _ := os.Getwd()
+	uf, _, err := LoadUnified(dir)
+	if err != nil {
+		return err
+	}
+
+	// Resolve the target node (leaf for a dotted path; the entry otherwise)
+	// and the root-segment node (whose host: selects the chain's root venue).
+	dotted := strings.Contains(c.Box, ".")
+	var node, rootNode *DeploymentNode
+	if uf.Deploy != nil {
+		if dotted {
+			node = resolveNestedNode(uf.Deploy, c.Box)
+			root := c.Box[:strings.Index(c.Box, ".")]
+			if entry, ok := uf.Deploy[root]; ok {
+				rn := entry
+				rootNode = &rn
+			}
+		} else if entry, ok := uf.Deploy[c.Box]; ok {
+			n := entry
+			node = &n
+			rootNode = &n
+		}
+	}
+	if node == nil {
+		return fmt.Errorf("check live: local deployment %q not found", c.Box)
+	}
+
+	// Select the root venue from the root node's host:, then compose nested
+	// hops for a dotted path through the shared ResolveDeployChain.
+	executor, err := rootExecutorForDeployNode(rootNode)
+	if err != nil {
+		return fmt.Errorf("check live %q: %w", c.Box, err)
+	}
+	if dotted {
+		if roots, _ := resolveTreeRoot(dir); roots != nil {
+			if _, chain, chainErr := ResolveDeployChain(roots, c.Box, executor); chainErr == nil && chain != nil {
+				executor = chain
+			}
+		}
+	}
+
+	venue := "host (local)"
+	if _, isShell := executor.(ShellExecutor); !isShell {
+		venue = executor.Venue()
+	}
+	fmt.Fprintf(os.Stderr, "Local deploy: %s [%s]\n", c.Box, venue)
+
+	fails, err := checkLocalDeployScope(dir, node, c.Box, c.Instance, c.Section, c.Filter, executor, c.Format)
+	if err != nil {
+		return err
+	}
+	if fails > 0 {
+		return &CheckFailedError{Failed: fails}
+	}
+	return nil
+}
+
+// checkLocalDeployScope collects a local deployment's deploy-scope checks —
+// kind:local template `check:` (base) merged with the deploy entry `check:`
+// (extends/overrides) and the per-host charly.yml overlay — and runs them on
+// `exec`. Shared by `charly check live <local>` (runLocalCheck) and
+// `charly deploy add <local> --verify` (LocalDeployTarget) so the two surfaces
+// source + run probes identically (R3). Host-context vars only (no
+// HOST_PORT:<N> / CONTAINER_IP). Returns the failure count.
+func checkLocalDeployScope(dir string, node *DeploymentNode, image, instance, section string, filter []string, exec DeployExecutor, format string) (int, error) {
+	var scenarios []Scenario
+	if node != nil && strings.TrimSpace(node.Local) != "" {
+		if spec := findLocalSpec(dir, strings.TrimSpace(node.Local)); spec != nil {
+			scenarios = append(scenarios, spec.Scenario...)
+		}
+	}
+	if node != nil {
+		scenarios = append(scenarios, node.Scenario...)
+	}
+	if dc := loadDeployConfigForRead("charly check live"); dc != nil {
+		if entry, ok := dc.Deploy[deployKey(image, instance)]; ok {
+			scenarios = append(scenarios, entry.Scenario...)
+		} else if entry, ok := dc.Deploy[image]; ok {
+			scenarios = append(scenarios, entry.Scenario...)
+		}
+	}
+
+	user := os.Getenv("USER")
+	home, herr := exec.ResolveHome(context.Background(), user)
+	if herr != nil || home == "" {
+		home = os.Getenv("HOME")
+	}
+	resolver := &CheckVarResolver{Env: map[string]string{
+		"IMAGE":    image,
+		"INSTANCE": instance,
+		"USER":     user,
+		"HOME":     home,
+	}, HasRuntime: true}
+
+	if len(scenarios) == 0 {
+		fmt.Fprintln(os.Stderr, "No scenarios to run.")
+		return 0, nil
+	}
+	set := &LabelDescriptionSet{Deploy: []LabeledDescription{{Origin: "local:" + image, Scenario: scenarios}}}
+	runner := NewRunner(exec, resolver, RunModeLive)
+	runner.Box = image
+	runner.Instance = instance
+	// Generic cross-deployment support (on: driver + ${PEER_*}) — a local
+	// SUBJECT bed can drive a peer too (R3).
+	runner.TargetResolver = liveTargetResolver(instance)
+	applyPeerVarsScenarios(runner, scenarios, instance)
+	results := RunScenarios(context.Background(), runner, set, nil, false)
+	return reportScenarios(os.Stdout, results, format), nil
+}
+
+// CheckBoxCmd runs PURE-BOX check against a disposable container.
+// Build-scope checks only (candy + box sections). Deploy-scope checks
+// are skipped — they require a running deployment with port mappings,
+// volumes, and resolved runtime variables. For full-stack check against
+// a running deployment, use `charly check live <name>`.
+//
+// Image references resolve purely against local container storage via
+// resolveLocalImageRef — never reads charly.yml. Run `charly box pull <name>`
+// or `charly box build <name>` first if the image isn't in local storage yet.
+type CheckBoxCmd struct {
+	Image  string   `arg:"" help:"Image reference (full ref or short name resolved against local container storage; never reads charly.yml)"`
+	Format string   `long:"format" default:"text" help:"Output format: text, json, tap, yaml"`
+	Filter []string `long:"filter" help:"Only run checks with these verbs (repeatable)"`
+}
+
+func (c *CheckBoxCmd) Run() error {
+	rt, err := ResolveRuntime()
+	if err != nil {
+		return err
+	}
+
+	imageRef, err := resolveLocalImageRef(rt.RunEngine, c.Image)
+	if err != nil {
+		return err
+	}
+
+	meta, err := ExtractMetadata(rt.RunEngine, imageRef)
+	if err != nil {
+		return err
+	}
+	if meta == nil || meta.Description == nil || meta.Description.IsEmpty() {
+		fmt.Fprintln(os.Stderr, "No scenarios defined for this image.")
+		return nil
+	}
+
+	// PURE-BOX: always a disposable container, build-context scenario steps
+	// only. The mode is explicit; no autodetect, no fallback. Deploy/runtime-
+	// context steps are skipped under RunModeBox.
+	executor := ImageChain(rt.RunEngine, imageRef)
+	resolver := ResolveCheckVarsBuild(meta)
+	runner := NewRunner(executor, resolver, RunModeBox)
+	runner.Distros = meta.Distro
+
+	scenarioResults := RunScenarios(context.Background(), runner, meta.Description, nil, false)
+
+	fmt.Fprintf(os.Stderr, "Image: %s\n", imageRef)
+
+	// YAML format emits the shape ParseCharlyTestOutput expects —
+	// the benchmark scorer's input format.
+	if c.Format == "yaml" {
+		return emitImageTestYAML(os.Stdout, imageRef, "", scenarioResults, nil)
+	}
+
+	fails := reportScenarios(os.Stderr, scenarioResults, c.Format)
+	if fails > 0 {
+		return &CheckFailedError{Failed: fails}
+	}
+	return nil
+}
+
+// emitImageTestYAML writes the `charly check box --format yaml` payload
+// that ParseCharlyTestOutput (benchmark_score.go) consumes. The shape is:
+//
+//	image: <ref>
+//	mode: image | run
+//	scenarios:
+//	  - id, origin, name, tags, status, pending_steps, steps[]
+//	summary: { total, pass, fail, skip }
+func emitImageTestYAML(w io.Writer, imageRef, liveContainer string, scenarios []ScenarioResult, _ []CheckResult) error {
+	mode := "box"
+	if liveContainer != "" {
+		mode = "run"
+	}
+	out := CheckRunResults{Box: imageRef, Mode: mode}
+	for _, sr := range scenarios {
+		tr := ScenarioCheckResult{
+			ID:           sr.ScenarioID,
+			Origin:       sr.Origin,
+			Name:         sr.Name,
+			Tag:          append([]string(nil), sr.Tag...),
+			Status:       sr.Status.String(),
+			PendingSteps: sr.Pending,
+		}
+		for _, sp := range sr.Step {
+			stepRes := StepCheckResult{
+				Keyword: sp.Keyword,
+				Text:    sp.Text,
+				StepID:  sp.StepID,
+				Status:  sp.Result.Status.String(),
+				Verb:    sp.Result.Verb,
+			}
+			if sp.Result.Verb == "" {
+				stepRes.Pending = true
+			}
+			tr.Step = append(tr.Step, stepRes)
+		}
+		out.Scenario = append(out.Scenario, tr)
+		out.Summary.Total++
+		switch tr.Status {
+		case "pass":
+			out.Summary.Pass++
+		case "fail":
+			out.Summary.Fail++
+		case "skip":
+			out.Summary.Skip++
+		}
+	}
+	data, err := yaml.Marshal(&out)
+	if err != nil {
+		return err
+	}
+	_, err = w.Write(data)
+	return err
+}
+
+// containerImageRef + containerImage (the live-container image-ref
+// inspectors) live in commands.go — ONE inspect implementation shared by
+// mcp / service / remove / start-direct and the check runner.

@@ -87,7 +87,7 @@ candy:
                 matches: "^[0-9]+\\.[0-9]+\\.[0-9]+"
         - name: code-binary
           step:
-            # eval-coverage gate (build-scope): proves VS Code installed on BOTH paths
+            # check-coverage gate (build-scope): proves VS Code installed on BOTH paths
             # (Arch symlink → /opt/vscode; Fedora MS-repo package → /usr/bin/code).
             # Would FAIL without this layer (no /usr/bin/code).
             - id: code-binary

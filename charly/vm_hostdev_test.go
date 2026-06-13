@@ -5,7 +5,7 @@ import "testing"
 // TestVmHostdevCount pins the nil-safety contract of the VM_HOSTDEV_COUNT
 // intent source: a spec with no libvirt block, no devices block, or an empty
 // hostdevs list all read as 0 ("no GPU configured for this VM" → legit N/A),
-// and a declared hostdevs list reports its length (the GPU eval check then
+// and a declared hostdevs list reports its length (the GPU check check then
 // HARD-FAILS if the guest can't see the device).
 func TestVmHostdevCount(t *testing.T) {
 	cases := []struct {
@@ -30,7 +30,7 @@ func TestVmHostdevCount(t *testing.T) {
 
 // TestVmHostdevCountIsRuntimeOnly guards the validation contract: VM_HOSTDEV_COUNT
 // resolves only against a live VM deployment, so a scope:"build" check must be
-// barred from referencing it (validate_eval.go enforces this via IsRuntimeOnlyVar).
+// barred from referencing it (validate_check.go enforces this via IsRuntimeOnlyVar).
 func TestVmHostdevCountIsRuntimeOnly(t *testing.T) {
 	if !IsRuntimeOnlyVar("VM_HOSTDEV_COUNT") {
 		t.Error("VM_HOSTDEV_COUNT must be runtime-only so build-scope checks cannot reference it")

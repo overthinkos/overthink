@@ -84,7 +84,7 @@ func TestResolveUpdateDeployNode(t *testing.T) {
 // transparency note for a non-disposable one. Disposable/ephemeral targets get
 // NO note; non-disposable targets get a note naming the key + lifecycle. The
 // disposable flag now gates only the AI's autonomous destroy (CLAUDE.md R10) and
-// the eval-runner's unattended fresh-rebuild — not this human-driven verb.
+// the check-runner's unattended fresh-rebuild — not this human-driven verb.
 func TestNoteUpdateDisposability(t *testing.T) {
 	tDisposable := boolPtr(true)
 	fDisposable := boolPtr(false)

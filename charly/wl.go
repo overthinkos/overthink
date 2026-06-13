@@ -66,7 +66,7 @@ type WlScreenshotCmd struct {
 }
 
 func (c *WlScreenshotCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Box, c.Instance)
+	venue, err := resolveCheckVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -113,7 +113,7 @@ type WlClickCmd struct {
 }
 
 func (c *WlClickCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Box, c.Instance)
+	venue, err := resolveCheckVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -195,7 +195,7 @@ type WlTypeCmd struct {
 }
 
 func (c *WlTypeCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Box, c.Instance)
+	venue, err := resolveCheckVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -221,7 +221,7 @@ func (c *WlKeyCmd) Run() error {
 		return fmt.Errorf("unknown key %q (valid: %s)", c.KeyName, wlKeyNames())
 	}
 
-	venue, err := resolveEvalVenue(c.Box, c.Instance)
+	venue, err := resolveCheckVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -244,7 +244,7 @@ type WlMouseCmd struct {
 }
 
 func (c *WlMouseCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Box, c.Instance)
+	venue, err := resolveCheckVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -271,7 +271,7 @@ type WlStatusCmd struct {
 }
 
 func (c *WlStatusCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Box, c.Instance)
+	venue, err := resolveCheckVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -405,7 +405,7 @@ type WlWindowsCmd struct {
 }
 
 func (c *WlWindowsCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Box, c.Instance)
+	venue, err := resolveCheckVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -444,7 +444,7 @@ type WlFocusCmd struct {
 }
 
 func (c *WlFocusCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Box, c.Instance)
+	venue, err := resolveCheckVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -523,7 +523,7 @@ type WlToplevelCmd struct {
 }
 
 func (c *WlToplevelCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Box, c.Instance)
+	venue, err := resolveCheckVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -543,7 +543,7 @@ type WlCloseCmd struct {
 }
 
 func (c *WlCloseCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Box, c.Instance)
+	venue, err := resolveCheckVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -569,7 +569,7 @@ type WlFullscreenCmd struct {
 }
 
 func (c *WlFullscreenCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Box, c.Instance)
+	venue, err := resolveCheckVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -595,7 +595,7 @@ type WlMinimizeCmd struct {
 }
 
 func (c *WlMinimizeCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Box, c.Instance)
+	venue, err := resolveCheckVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -621,7 +621,7 @@ type WlExecCmd struct {
 }
 
 func (c *WlExecCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Box, c.Instance)
+	venue, err := resolveCheckVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -646,7 +646,7 @@ type WlResolutionCmd struct {
 }
 
 func (c *WlResolutionCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Box, c.Instance)
+	venue, err := resolveCheckVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -735,7 +735,7 @@ func (c *WlKeyComboCmd) Run() error {
 		return err
 	}
 
-	venue, err := resolveEvalVenue(c.Box, c.Instance)
+	venue, err := resolveCheckVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -769,7 +769,7 @@ type WlDoubleClickCmd struct {
 }
 
 func (c *WlDoubleClickCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Box, c.Instance)
+	venue, err := resolveCheckVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -827,7 +827,7 @@ func (c *WlScrollCmd) Run() error {
 		return err
 	}
 
-	venue, err := resolveEvalVenue(c.Box, c.Instance)
+	venue, err := resolveCheckVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -893,7 +893,7 @@ type WlDragCmd struct {
 }
 
 func (c *WlDragCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Box, c.Instance)
+	venue, err := resolveCheckVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -939,7 +939,7 @@ type WlClipboardCmd struct {
 }
 
 func (c *WlClipboardCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Box, c.Instance)
+	venue, err := resolveCheckVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -985,7 +985,7 @@ type WlXpropCmd struct {
 }
 
 func (c *WlXpropCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Box, c.Instance)
+	venue, err := resolveCheckVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -993,7 +993,7 @@ func (c *WlXpropCmd) Run() error {
 	// Check if XWayland is running.
 	if execWlCmdSilent(venue.Exec, `pgrep -f Xwayland >/dev/null 2>&1`) != nil {
 		fmt.Fprintf(os.Stderr, "XWayland is not running (no X11 clients have been launched)\n")
-		fmt.Fprintf(os.Stderr, "Launch an X11 app first: charly eval wl exec <image> xterm\n")
+		fmt.Fprintf(os.Stderr, "Launch an X11 app first: charly check wl exec <image> xterm\n")
 		return nil
 	}
 
@@ -1018,7 +1018,7 @@ type WlGeometryCmd struct {
 }
 
 func (c *WlGeometryCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Box, c.Instance)
+	venue, err := resolveCheckVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -1232,7 +1232,7 @@ else:
 `
 
 func (c *WlAtspiCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Box, c.Instance)
+	venue, err := resolveCheckVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -1333,7 +1333,7 @@ type WlSwayReloadCmd struct {
 // --- Sway subcommand Run methods ---
 
 func (c *WlSwayMsgCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Box, c.Instance)
+	venue, err := resolveCheckVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -1341,7 +1341,7 @@ func (c *WlSwayMsgCmd) Run() error {
 }
 
 func (c *WlSwayTreeCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Box, c.Instance)
+	venue, err := resolveCheckVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -1349,7 +1349,7 @@ func (c *WlSwayTreeCmd) Run() error {
 }
 
 func (c *WlSwayWorkspacesCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Box, c.Instance)
+	venue, err := resolveCheckVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -1357,7 +1357,7 @@ func (c *WlSwayWorkspacesCmd) Run() error {
 }
 
 func (c *WlSwayOutputsCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Box, c.Instance)
+	venue, err := resolveCheckVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -1365,7 +1365,7 @@ func (c *WlSwayOutputsCmd) Run() error {
 }
 
 func (c *WlSwayFocusCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Box, c.Instance)
+	venue, err := resolveCheckVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -1381,7 +1381,7 @@ func (c *WlSwayFocusCmd) Run() error {
 }
 
 func (c *WlSwayMoveCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Box, c.Instance)
+	venue, err := resolveCheckVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -1394,7 +1394,7 @@ func (c *WlSwayMoveCmd) Run() error {
 }
 
 func (c *WlSwayResizeCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Box, c.Instance)
+	venue, err := resolveCheckVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -1408,7 +1408,7 @@ func (c *WlSwayResizeCmd) Run() error {
 }
 
 func (c *WlSwayKillCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Box, c.Instance)
+	venue, err := resolveCheckVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -1416,7 +1416,7 @@ func (c *WlSwayKillCmd) Run() error {
 }
 
 func (c *WlSwayFloatingCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Box, c.Instance)
+	venue, err := resolveCheckVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -1424,7 +1424,7 @@ func (c *WlSwayFloatingCmd) Run() error {
 }
 
 func (c *WlSwayLayoutCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Box, c.Instance)
+	venue, err := resolveCheckVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -1432,7 +1432,7 @@ func (c *WlSwayLayoutCmd) Run() error {
 }
 
 func (c *WlSwayWorkspaceCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Box, c.Instance)
+	venue, err := resolveCheckVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -1440,7 +1440,7 @@ func (c *WlSwayWorkspaceCmd) Run() error {
 }
 
 func (c *WlSwayReloadCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Box, c.Instance)
+	venue, err := resolveCheckVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -1600,7 +1600,7 @@ func wlrctlToplevel(ex DeployExecutor, action, target string) error {
 // up their actual socket). Degrades to the historical fallbacks when pgrep or
 // the compositor process is unavailable.
 const wlCompositorEnvPrelude = `for __c in kwin_wayland sway labwc; do __p=$(pgrep -x "$__c" 2>/dev/null | head -1); [ -n "$__p" ] && break; done; ` +
-	`if [ -n "$__p" ] && [ -r /proc/$__p/environ ]; then eval "$(tr '\0' '\n' < /proc/$__p/environ | grep -E '^(XDG_RUNTIME_DIR|WAYLAND_DISPLAY|DBUS_SESSION_BUS_ADDRESS)=' | sed 's/^/export /')"; fi; ` +
+	`if [ -n "$__p" ] && [ -r /proc/$__p/environ ]; then check "$(tr '\0' '\n' < /proc/$__p/environ | grep -E '^(XDG_RUNTIME_DIR|WAYLAND_DISPLAY|DBUS_SESSION_BUS_ADDRESS)=' | sed 's/^/export /')"; fi; ` +
 	`export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp}" WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-0}"`
 
 // wlShellCmd wraps a command with the compositor session environment (sourced

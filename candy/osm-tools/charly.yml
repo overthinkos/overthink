@@ -226,7 +226,7 @@ candy:
               context:
                 - runtime
         # PROSE-ONLY step — genuine free-form serving behaviour, agent-graded
-        # by `charly eval feature run` against the live deployment.
+        # by `charly check feature run` against the live deployment.
         - name: martin-discovers-and-serves-vector-tiles
           step:
             - then: martin auto-discovers PMTiles files written into /workspace/tiles/pmtiles/ and serves each as a named vector-tile source (Content-Type application/x-protobuf) under /<source>/{z}/{x}/{y}

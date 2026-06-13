@@ -25,7 +25,7 @@ candy:
         # build (133.0.6943.141 — same major.minor.build; the +4 patch skew is
         # tolerated by the session cap appium:chromedriverDisableBuildCheck). Bump
         # BOTH vars in lockstep with the system image's WebView version, and the
-        # literal /opt/chromedriver/133 in the eval below + the emulator-layer cap.
+        # literal /opt/chromedriver/133 in the check below + the emulator-layer cap.
         WEBVIEW_CHROMEDRIVER_VERSION: "133.0.6943.141"
         WEBVIEW_CHROMEDRIVER_MAJOR: "133"
     distro:

@@ -10,23 +10,23 @@ import (
 	adb "github.com/zach-klippenstein/goadb"
 )
 
-// adb.go implements `charly eval adb …` — the host-side Android Debug Bridge
+// adb.go implements `charly check adb …` — the host-side Android Debug Bridge
 // client. The host `charly` binary connects to the running container's
 // host-published ADB server port (container :5037 → host's HOST_PORT:5037,
-// e.g. 35002 on eval-android-emulator-pod) using github.com/zach-klippenstein/goadb,
+// e.g. 35002 on check-android-emulator-pod) using github.com/zach-klippenstein/goadb,
 // then issues ADB protocol operations against the emulator backing that
 // server (typically `emulator-5554`).
 //
-// Same architecture pattern as `charly eval mcp …`: host-side protocol client,
+// Same architecture pattern as `charly check mcp …`: host-side protocol client,
 // no container-side helper, works against any deploy that publishes the
 // adb-server port — pod / vm / host / nested all transparently because the
 // connection is plain TCP to `127.0.0.1:<host-port>` and the
 // portforward/passt/etc layer handles the rest.
 //
-// Method allowlist + declarative dispatch live in evalrun_ov_verbs.go
+// Method allowlist + declarative dispatch live in checkrun_ov_verbs.go
 // (adbMethods + runAdb).
 
-// AdbCmd groups the `charly eval adb …` leaves.
+// AdbCmd groups the `charly check adb …` leaves.
 type AdbCmd struct {
 	Devices       AdbDevicesCmd       `cmd:"" help:"List ADB devices/emulators with state"`
 	Shell         AdbShellCmd         `cmd:"" help:"Run a shell command on the emulator and stream stdout"`
@@ -55,7 +55,7 @@ type adbCommonFlags struct {
 // the socket per-call so there's nothing to Close().
 //
 // The host port is read from podman's NetworkSettings.Ports — same source
-// of truth used by the eval test runner's HOST_PORT:N substitution.
+// of truth used by the check test runner's HOST_PORT:N substitution.
 func adbDeviceFor(box, instance, serial string) (*adb.Device, error) {
 	engine, containerName, err := resolveContainer(box, instance)
 	if err != nil {
@@ -121,7 +121,7 @@ func findHostPort(insp *ContainerInspection, containerPort int) (int, error) {
 // adb devices
 // ---------------------------------------------------------------------------
 
-// AdbDevicesCmd: `charly eval adb devices <image>` — wraps `host:devices` and
+// AdbDevicesCmd: `charly check adb devices <image>` — wraps `host:devices` and
 // emits one line per device in `<serial>\t<state>` form (matches the
 // `adb devices` CLI output without the header).
 type AdbDevicesCmd struct {
@@ -192,7 +192,7 @@ func adbStateString(s adb.DeviceState) string {
 // adb shell
 // ---------------------------------------------------------------------------
 
-// AdbShellCmd: `charly eval adb shell <image> -- <command…>` — runs a shell
+// AdbShellCmd: `charly check adb shell <image> -- <command…>` — runs a shell
 // command on the device. The `--` delimiter is recommended in the runner's
 // posShellArgs builder so flags like `-l` aren't claimed by Kong.
 type AdbShellCmd struct {
@@ -213,7 +213,7 @@ func (c *AdbShellCmd) Run() error {
 		cmd = cmd[1:]
 	}
 	if len(cmd) == 0 {
-		return fmt.Errorf("adb shell: empty command (use `charly eval adb shell <image> -- <cmd> [args...]`)")
+		return fmt.Errorf("adb shell: empty command (use `charly check adb shell <image> -- <cmd> [args...]`)")
 	}
 	dev, err := adbDeviceFor(c.Box, c.Instance, c.Serial)
 	if err != nil {
@@ -231,7 +231,7 @@ func (c *AdbShellCmd) Run() error {
 // adb install
 // ---------------------------------------------------------------------------
 
-// AdbInstallCmd: `charly eval adb install <image> --apk <path>` — pushes the
+// AdbInstallCmd: `charly check adb install <image> --apk <path>` — pushes the
 // APK to the device and invokes `pm install`. Uses adb shell `pm install
 // <remote>` after streaming the APK via the sync protocol.
 type AdbInstallCmd struct {
@@ -302,7 +302,7 @@ func adbAddrForContainer(engine, containerName string) (string, error) {
 // preinstalled in the google_apis_playstore image.
 // ---------------------------------------------------------------------------
 
-// AdbInstallAppCmd: `charly eval adb install-app <image> --package <id>
+// AdbInstallAppCmd: `charly check adb install-app <image> --package <id>
 // [--source apk-pure|google-play|f-droid|huawei-app-gallery] [--arch x86_64]
 // [--app-version X]`.
 type AdbInstallAppCmd struct {
@@ -340,7 +340,7 @@ func (c *AdbInstallAppCmd) Run() error {
 // adb uninstall
 // ---------------------------------------------------------------------------
 
-// AdbUninstallCmd: `charly eval adb uninstall <image> <package>`.
+// AdbUninstallCmd: `charly check adb uninstall <image> <package>`.
 type AdbUninstallCmd struct {
 	Box     string `arg:"" help:"Box name"`
 	Package string `arg:"" help:"Package id (e.g. com.example.android.apis)"`
@@ -368,9 +368,9 @@ func (c *AdbUninstallCmd) Run() error {
 // adb getprop
 // ---------------------------------------------------------------------------
 
-// AdbGetpropCmd: `charly eval adb getprop <image> <property>` — reads one
+// AdbGetpropCmd: `charly check adb getprop <image> <property>` — reads one
 // system property and prints its value (trimmed). Use the bare
-// `charly eval adb shell <image> -- getprop` for the full property dump.
+// `charly check adb shell <image> -- getprop` for the full property dump.
 type AdbGetpropCmd struct {
 	Box      string `arg:"" help:"Box name"`
 	Property string `arg:"" help:"Property key (e.g. sys.boot_completed, ro.build.version.release)"`
@@ -394,7 +394,7 @@ func (c *AdbGetpropCmd) Run() error {
 // adb screencap
 // ---------------------------------------------------------------------------
 
-// AdbScreencapCmd: `charly eval adb screencap <image> --artifact <png>` —
+// AdbScreencapCmd: `charly check adb screencap <image> --artifact <png>` —
 // captures a PNG via `screencap -p` and writes it to the host filesystem.
 // The shell stream is base64-encoded round-trip safe through goadb's
 // command interface (binary stdout would otherwise be mangled by line
@@ -439,7 +439,7 @@ func (c *AdbScreencapCmd) Run() error {
 // adb logcat-tail
 // ---------------------------------------------------------------------------
 
-// AdbLogcatTailCmd: `charly eval adb logcat-tail <image> [--lines N] [--filter TAG:LEVEL]`
+// AdbLogcatTailCmd: `charly check adb logcat-tail <image> [--lines N] [--filter TAG:LEVEL]`
 // runs `logcat -d` (dump-and-exit) so the command always terminates.
 // `--lines` limits to the last N lines; `--filter` is appended verbatim as
 // the logcat filter spec (e.g. `MyApp:I *:S` to silence everything but
@@ -483,7 +483,7 @@ func (c *AdbLogcatTailCmd) Run() error {
 // adb wait-for-device
 // ---------------------------------------------------------------------------
 
-// AdbWaitForDeviceCmd: `charly eval adb wait-for-device <image> [--timeout 60s]`
+// AdbWaitForDeviceCmd: `charly check adb wait-for-device <image> [--timeout 60s]`
 // — polls `getprop sys.boot_completed` until it returns "1" or the timeout
 // expires. Exits 0 on ready, non-zero on timeout. Lighter than blocking on
 // the wire-protocol `wait-for-device` because that command waits for the
@@ -544,7 +544,7 @@ func parseCurrentFocus(dumpsysWindow string) string {
 	return ""
 }
 
-// AdbCurrentFocusCmd: `charly eval adb current-focus <image>` — prints the
+// AdbCurrentFocusCmd: `charly check adb current-focus <image>` — prints the
 // foreground window line. Use it to assert the foreground app (e.g. stdout
 // contains `io.appium.android.apis`) or to detect a stuck ANR dialog.
 type AdbCurrentFocusCmd struct {
@@ -565,7 +565,7 @@ func (c *AdbCurrentFocusCmd) Run() error {
 	return nil
 }
 
-// AdbKeyeventCmd: `charly eval adb keyevent <image> <key>` — sends a single key
+// AdbKeyeventCmd: `charly check adb keyevent <image> <key>` — sends a single key
 // event via `input keyevent` (KEYCODE_HOME / KEYCODE_BACK / … or a numeric
 // code). Generic input building block; wait-ui-settled uses the same call to
 // dismiss dialogs.
@@ -587,7 +587,7 @@ func (c *AdbKeyeventCmd) Run() error {
 	return nil
 }
 
-// AdbWaitUiSettledCmd: `charly eval adb wait-ui-settled <image> [--timeout 600s]` —
+// AdbWaitUiSettledCmd: `charly check adb wait-ui-settled <image> [--timeout 600s]` —
 // blocks until the foreground window is NOT a system "Application Not
 // Responding" dialog, dismissing any such dialog with KEYCODE_HOME (the "Wait"
 // action) between polls. Returns 0 when settled, non-zero on timeout.

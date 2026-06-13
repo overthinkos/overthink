@@ -156,9 +156,9 @@ candy:
     scenario:
         # The first four scenarios are DETERMINISTIC (each step embeds a
         # check verb, so it runs at build scope via `charly box feature run`
-        # AND deploy scope via `charly eval feature run`). The last is
+        # AND deploy scope via `charly check feature run`). The last is
         # PROSE-ONLY (no verb → agent-graded against the live deployment;
-        # the deploy-scope port/http/mcp probes in the eval: block below are
+        # the deploy-scope port/http/mcp probes in the check: block below are
         # the deterministic counterpart of that runtime behaviour).
         - name: marimo-server-binary-installed
           step:
@@ -257,7 +257,7 @@ candy:
           step:
             # Deploy-scope: marimo's --mcp server responds. The endpoint lives at
             # /mcp/server (per marimo docs) which is what mcp_provide above declares,
-            # so `charly eval mcp ping marimo --name marimo` resolves the URL correctly
+            # so `charly check mcp ping marimo --name marimo` resolves the URL correctly
             # via the host-port rewriter.
             - id: mcp-marimo-ping
               mcp: ping

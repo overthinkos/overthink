@@ -140,7 +140,7 @@ candy:
         - name: mcp-jupyter-ml-ping
           step:
             # MCP server exercised live via github.com/modelcontextprotocol/go-sdk.
-            # Runs only under `charly eval live <image>` (deploy-scope). Build-scope and
+            # Runs only under `charly check live <image>` (deploy-scope). Build-scope and
             # functional HTTP checks are contributed by the composed jupyter-mcp layer.
             - id: mcp-jupyter-ml-ping
               mcp: ping

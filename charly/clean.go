@@ -10,13 +10,13 @@ import (
 	"strings"
 )
 
-// Retention fallbacks — used ONLY when defaults.keep_images / keep_eval_runs are
+// Retention fallbacks — used ONLY when defaults.keep_images / keep_check_runs are
 // absent from config. Zero means "disabled" so third-party configs that never
 // declare the keys get NO surprise pruning. The repo's charly.yml opts in
-// (keep_images: 5, keep_eval_runs: 10). See /charly-core:clean.
+// (keep_images: 5, keep_check_runs: 10). See /charly-core:clean.
 const (
 	keepImagesFallback   = 0
-	keepEvalRunsFallback = 0
+	keepCheckRunsFallback = 0
 )
 
 // listContainerImageRefs returns the set of image IDs and image refs currently
@@ -192,15 +192,15 @@ func pruneImagesByRetention(engine string, keepN int, dryRun bool) ([]string, er
 	return removed, nil
 }
 
-// pruneEvalRuns trims each bed/score subdir of evalDir to the newest keepN run
+// pruneCheckRuns trims each bed/score subdir of checkDir to the newest keepN run
 // artifacts: CalVer-named run dirs (bed runs), `runs/<id>` dirs (score
 // iterations), and `result-<calver>.yml` files. NOTES.md and any other file are
 // always preserved. keepN <= 0 disables. Returns the paths removed.
-func pruneEvalRuns(evalDir string, keepN int, dryRun bool) ([]string, error) {
+func pruneCheckRuns(checkDir string, keepN int, dryRun bool) ([]string, error) {
 	if keepN <= 0 {
 		return nil, nil
 	}
-	entries, err := os.ReadDir(evalDir)
+	entries, err := os.ReadDir(checkDir)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil
@@ -212,7 +212,7 @@ func pruneEvalRuns(evalDir string, keepN int, dryRun bool) ([]string, error) {
 		if !e.IsDir() {
 			continue // top-level files (ISSUE-*.md, etc.) are not run output
 		}
-		rm, err := pruneOneEvalDir(filepath.Join(evalDir, e.Name()), keepN, dryRun)
+		rm, err := pruneOneCheckDir(filepath.Join(checkDir, e.Name()), keepN, dryRun)
 		if err != nil {
 			return removed, err
 		}
@@ -221,7 +221,7 @@ func pruneEvalRuns(evalDir string, keepN int, dryRun bool) ([]string, error) {
 	return removed, nil
 }
 
-func pruneOneEvalDir(bedDir string, keepN int, dryRun bool) ([]string, error) {
+func pruneOneCheckDir(bedDir string, keepN int, dryRun bool) ([]string, error) {
 	children, err := os.ReadDir(bedDir)
 	if err != nil {
 		return nil, err
@@ -359,12 +359,12 @@ func cleanMakepkgArtifacts(projectDir string, dryRun bool) []string {
 }
 
 // CleanCmd applies the configured retention now (the on-demand counterpart to
-// the auto-prune that runs after `charly box build` / `charly eval run`), and also
+// the auto-prune that runs after `charly box build` / `charly check run`), and also
 // sweeps the one-time makepkg backlog.
 type CleanCmd struct {
 	DryRun     bool   `long:"dry-run" help:"Print everything that would be removed; touch nothing"`
 	Images     bool   `long:"images" help:"Only image-tag retention"`
-	Eval       bool   `long:"eval" help:"Only eval-run retention"`
+	Check       bool   `long:"check" help:"Only check-run retention"`
 	Keep       int    `long:"keep" help:"Override the retention count for this run (0 = use defaults:)"`
 	Invalidate string `long:"invalidate" help:"Remove every charly-labeled image tag matching this glob (full ref or last path segment) — targeted cache invalidation for stale intermediates; in-use images are skipped. Runs ONLY the invalidation"`
 }
@@ -394,19 +394,19 @@ func (c *CleanCmd) Run() error {
 		return nil
 	}
 	keepImages := resolveIntPtr(nil, nil, keepImagesFallback)
-	keepEval := resolveIntPtr(nil, nil, keepEvalRunsFallback)
+	keepCheck := resolveIntPtr(nil, nil, keepCheckRunsFallback)
 	if cfg, err := LoadConfig(dir); err == nil {
 		keepImages = resolveIntPtr(cfg.Defaults.KeepImages, nil, keepImagesFallback)
-		keepEval = resolveIntPtr(cfg.Defaults.KeepEvalRuns, nil, keepEvalRunsFallback)
+		keepCheck = resolveIntPtr(cfg.Defaults.KeepCheckRuns, nil, keepCheckRunsFallback)
 	}
 	if c.Keep > 0 {
-		keepImages, keepEval = c.Keep, c.Keep
+		keepImages, keepCheck = c.Keep, c.Keep
 	}
 
 	// Default (neither flag) = all categories.
-	doImages := c.Images || (!c.Images && !c.Eval)
-	doEval := c.Eval || (!c.Images && !c.Eval)
-	doMakepkg := !c.Images && !c.Eval
+	doImages := c.Images || (!c.Images && !c.Check)
+	doCheck := c.Check || (!c.Images && !c.Check)
+	doMakepkg := !c.Images && !c.Check
 
 	tag := "removed"
 	if c.DryRun {
@@ -427,12 +427,12 @@ func (c *CleanCmd) Run() error {
 			fmt.Printf("  %s\n", r)
 		}
 	}
-	if doEval {
-		paths, err := pruneEvalRuns(filepath.Join(dir, ".eval"), keepEval, c.DryRun)
+	if doCheck {
+		paths, err := pruneCheckRuns(filepath.Join(dir, ".check"), keepCheck, c.DryRun)
 		if err != nil {
-			return fmt.Errorf("pruning eval runs: %w", err)
+			return fmt.Errorf("pruning check runs: %w", err)
 		}
-		fmt.Printf("eval: %s %d run artifact(s) (keep_eval_runs=%d, NOTES.md preserved)\n", tag, len(paths), keepEval)
+		fmt.Printf("check: %s %d run artifact(s) (keep_check_runs=%d, NOTES.md preserved)\n", tag, len(paths), keepCheck)
 		for _, p := range paths {
 			fmt.Printf("  %s\n", p)
 		}

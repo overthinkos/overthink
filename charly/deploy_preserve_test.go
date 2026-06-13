@@ -22,7 +22,7 @@ func TestCharlyUpdatePreservesPerHostDeployFields(t *testing.T) {
 	}
 	// Per-host overlay keyed as `charly vm destroy`/`charly vm create` key it (vm:<name>):
 	// preemptible + env + tunnel — operator-authored local state.
-	yml := `version: 2026.164.0002
+	yml := `version: 2026.164.0004
 deploy:
   vm:cachyos-gpu:
     target: vm
@@ -77,7 +77,7 @@ deploy:
 
 // TestVmDestroyRemovesPureAutoEntry guards the other half: a pure auto-created
 // VM-state entry (target: vm + vm: + vm_state, NO operator config — e.g. a
-// disposable eval-bed VM) IS deleted on destroy, so such entries don't
+// disposable check-bed VM) IS deleted on destroy, so such entries don't
 // accumulate. This is why removeVmDeployEntry existed in the first place.
 func TestVmDestroyRemovesPureAutoEntry(t *testing.T) {
 	dir := t.TempDir()
@@ -86,11 +86,11 @@ func TestVmDestroyRemovesPureAutoEntry(t *testing.T) {
 	if err := os.MkdirAll(cfgDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	yml := `version: 2026.164.0002
+	yml := `version: 2026.164.0004
 deploy:
-  vm:eval-cachyos-gpu-vm:
+  vm:check-cachyos-gpu-vm:
     target: vm
-    vm: eval-cachyos-gpu-vm
+    vm: check-cachyos-gpu-vm
     vm_state:
       instance_id: bed-uuid
       ssh_port: 12227
@@ -98,14 +98,14 @@ deploy:
 	if err := os.WriteFile(filepath.Join(cfgDir, "charly.yml"), []byte(yml), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := removeVmDeployEntry("vm:eval-cachyos-gpu-vm"); err != nil {
+	if err := removeVmDeployEntry("vm:check-cachyos-gpu-vm"); err != nil {
 		t.Fatalf("removeVmDeployEntry: %v", err)
 	}
 	dc, err := LoadDeployConfig()
 	if err != nil {
 		t.Fatalf("LoadDeployConfig: %v", err)
 	}
-	if _, ok := dc.Deploy["vm:eval-cachyos-gpu-vm"]; ok {
+	if _, ok := dc.Deploy["vm:check-cachyos-gpu-vm"]; ok {
 		t.Error("pure auto-created bed VM entry should be deleted on destroy (else entries accumulate)")
 	}
 }
@@ -118,7 +118,7 @@ deploy:
 func TestGatherDeployNodesPerHostWins(t *testing.T) {
 	proj := t.TempDir()
 	// Committed project: cachyos-gpu, NO preemptible.
-	projYml := `version: 2026.164.0002
+	projYml := `version: 2026.164.0004
 deploy:
   cachyos-gpu:
     target: vm
@@ -133,7 +133,7 @@ deploy:
 	if err := os.MkdirAll(filepath.Join(cfg, "charly"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	hostYml := `version: 2026.164.0002
+	hostYml := `version: 2026.164.0004
 deploy:
   cachyos-gpu:
     target: vm

@@ -6,7 +6,7 @@ package main
 // project YAML.
 //
 // The kind:local `images:` field was removed; see local_spec.go and
-// the eval preflight in eval_image_preflight.go. Operators with
+// the check preflight in check_image_preflight.go. Operators with
 // legacy YAML run `charly migrate` to convert each block to
 // a dated comment fence; the validator (validateLegacyLocalImagesField)
 // hard-errors on any surviving key so legacy configs cannot silently
@@ -192,7 +192,7 @@ func previousLinesContainMarker(lines []string, idx, n int, marker string) bool 
 // a stale schema field is loaded.
 func walkYAMLForLegacyLocalImages(dir string, errs *ValidationError) {
 	for _, block := range scanLegacyLocalImagesBlocks(dir) {
-		errs.Add("kind:local %q in %s:%d: legacy `images:` field detected — run `charly migrate` to convert; the field was removed in the 2026-05 deploy-fetch-narrowing cutover (test-bed image preflight moved to `charly eval run`)",
+		errs.Add("kind:local %q in %s:%d: legacy `images:` field detected — run `charly migrate` to convert; the field was removed in the 2026-05 deploy-fetch-narrowing cutover (test-bed image preflight moved to `charly check run`)",
 			block.TemplateName, relPathForError(dir, block.Path), block.StartLine)
 	}
 }
@@ -234,7 +234,7 @@ func rewriteLegacyLocalImagesInFile(path, body string) (string, int) {
 		comment := []string{
 			indentStr + "# 2026-05 deploy-fetch-narrowing cutover: 'images:' field removed.",
 			indentStr + "# The deploy now fetches NOTHING speculative. Test-bed images are",
-			indentStr + "# ensured by `charly eval run` preflight, sourced from each score's",
+			indentStr + "# ensured by `charly check run` preflight, sourced from each score's",
 			indentStr + "# `target_image:` + scenario `pod:` declarations.",
 		}
 		if len(b.OriginalRefs) > 0 {

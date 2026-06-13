@@ -149,7 +149,7 @@ candy:
         - name: mcp-jupyter-ping
           step:
             # MCP server exercised live via github.com/modelcontextprotocol/go-sdk.
-            # Runs only under `charly eval live <image>` (deploy-scope).
+            # Runs only under `charly check live <image>` (deploy-scope).
             - id: mcp-jupyter-ping
               mcp: ping
               timeout: 10s
@@ -208,7 +208,7 @@ candy:
                             return r.data if r.data is not None else json.loads(
                                 "".join(b.text for b in r.content if hasattr(b, "text"))
                             )
-                        p = f"_eval_id_{uuid.uuid4().hex[:8]}.ipynb"
+                        p = f"_check_id_{uuid.uuid4().hex[:8]}.ipynb"
                         await call("notebook_create", {"path": p})
                         await call("cell_insert", {"path": p, "index": 0,
                                                     "source": "alpha", "cell_type": "markdown"})
@@ -239,7 +239,7 @@ candy:
                             return r.data if r.data is not None else json.loads(
                                 "".join(b.text for b in r.content if hasattr(b, "text"))
                             )
-                        p = f"_eval_count_{uuid.uuid4().hex[:8]}.ipynb"
+                        p = f"_check_count_{uuid.uuid4().hex[:8]}.ipynb"
                         await call("notebook_create", {"path": p})
                         for i, src in enumerate(["a","b","c","d","e"]):
                             await call("cell_insert", {"path": p, "index": i,
@@ -275,7 +275,7 @@ candy:
                             return r.data if r.data is not None else json.loads(
                                 "".join(b.text for b in r.content if hasattr(b, "text"))
                             )
-                        stem = f"_eval_canon_{uuid.uuid4().hex[:8]}"
+                        stem = f"_check_canon_{uuid.uuid4().hex[:8]}"
                         p = f"{stem}.ipynb"
                         await call("notebook_create", {"path": p})
                         # Three different path forms — all must converge on ONE room.
@@ -350,7 +350,7 @@ candy:
                             return r.data if r.data is not None else json.loads(
                                 "".join(b.text for b in r.content if hasattr(b, "text"))
                             )
-                        p = f"_eval_cold_{uuid.uuid4().hex[:8]}.ipynb"
+                        p = f"_check_cold_{uuid.uuid4().hex[:8]}.ipynb"
                         # No prior tool to "open" the room — cell_insert auto-attaches.
                         # Upstream YNotebook auto-injects a default empty code cell, so
                         # baseline = 1, after 1 insert = 2.

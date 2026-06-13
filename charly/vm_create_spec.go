@@ -246,7 +246,7 @@ func (c *VmCreateCmd) runVmSpecCreate(vmName string, spec *VmSpec, backend strin
 // vm create writes the new key into known_hosts.
 //
 // Without this fix, dispatcher loops that destroy + recreate VMs
-// (`charly eval run eval-k3s-vm`, `charly update <vm-bed>`) fail at the post-create
+// (`charly check run check-k3s-vm`, `charly update <vm-bed>`) fail at the post-create
 // SSH step with "Host key verification failed", which surfaces in
 // VmDeployTarget.WaitForSSH as "Could not resolve hostname" — see the
 // 2026-05-06 R10 follow-up RCA.

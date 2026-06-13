@@ -9,7 +9,7 @@ candy:
             path (`apk: <path>`, NOT an apkeep download). Pushed via the goadb
             sync protocol — so it works against a remote/physical adb endpoint
             with no host apkeep/adb binaries, exercising the endpoint device path.
-            The APK ships in tests/data/ (the same fixture the adb/appium eval
+            The APK ships in tests/data/ (the same fixture the adb/appium check
             verbs use). The candy installs nothing into a container image — the
             apk: step runs ONLY on a `target: android` deploy, so the observable
             effect is the package present on the booted device (deploy-scope adb).
@@ -23,7 +23,7 @@ candy:
         # `target: android` deploy applies the apk: list, the ApiDemos package
         # is present on the device. Fails (no such package) if the committed
         # APK was never pushed/installed. `eventually:` re-polls because the
-        # device install lands right before eval-live (mirrors the
+        # device install lands right before check-live (mirrors the
         # android-emulator-layer apk-net-apidemos-present guard).
         - name: apidemos-installed-on-device
           step:

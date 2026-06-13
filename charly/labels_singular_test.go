@@ -85,7 +85,7 @@ func TestLabelConstantsAreSingular(t *testing.T) {
 func TestMigrateSingularLabel(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "overthink.yml"),
-		[]byte("version: 2026.164.0002\nimport:\n  - build.yml\n"), 0o644); err != nil {
+		[]byte("version: 2026.164.0004\nimport:\n  - build.yml\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	bp := filepath.Join(dir, "build.yml")

@@ -6,7 +6,7 @@ import (
 
 // nestedUnified builds a minimal UnifiedFile projection carrying one declared
 // nested topology: a target:pod parent `parent` with two target:android nested
-// children `device` and `device-net` (the eval-android-emulator-pod shape),
+// children `device` and `device-net` (the check-android-emulator-pod shape),
 // plus an unrelated flat pod deploy the overlay must leave alone.
 func nestedUnified(parent string) *UnifiedFile {
 	return &UnifiedFile{
@@ -39,7 +39,7 @@ func findNested(children []DeploymentStatus, image string) *DeploymentStatus {
 // stamped with its declared kind + Source="nested", and an unrelated flat row
 // is untouched.
 func TestNestedOverlay_AttachesDeclaredChildren(t *testing.T) {
-	const parent = "eval-android-emulator-pod"
+	const parent = "check-android-emulator-pod"
 	rows := []DeploymentStatus{
 		{Kind: SubstratePod, Image: parent, Status: "running", Container: "charly-" + parent, Source: "podman"},
 		{Kind: SubstratePod, Image: "redis", Status: "running", Container: "charly-redis", Source: "podman"},
@@ -90,7 +90,7 @@ func TestNestedOverlay_AttachesDeclaredChildren(t *testing.T) {
 // flat row (not running, not in --all) attaches nothing — the overlay never
 // synthesizes a phantom parent.
 func TestNestedOverlay_NoParentRowNoPhantom(t *testing.T) {
-	const parent = "eval-android-emulator-pod"
+	const parent = "check-android-emulator-pod"
 	// Only the unrelated flat row is present; the declared parent has no row.
 	rows := []DeploymentStatus{
 		{Kind: SubstratePod, Image: "redis", Status: "running", Container: "charly-redis", Source: "podman"},
@@ -175,13 +175,13 @@ func TestNestedOverlay_MovesFlatPodRow(t *testing.T) {
 }
 
 // TestNestedOverlay_MovesFlatAndroidRowOnly verifies the canonical
-// eval-android-emulator-pod dedup: a nested android device that ALSO surfaced
+// check-android-emulator-pod dedup: a nested android device that ALSO surfaced
 // as a flat AndroidCollector row (keyed on its DOTTED path) is moved under its
 // parent and removed from the top level, while a sibling declared-only child
 // with no flat row is still SYNTHESIZED in place (Source "nested"). This proves
 // the move and the synthesize paths coexist in one parent.
 func TestNestedOverlay_MovesFlatAndroidRowOnly(t *testing.T) {
-	const parent = "eval-android-emulator-pod"
+	const parent = "check-android-emulator-pod"
 	// Flat rows: the parent pod, PLUS one flat AndroidCollector row for the
 	// "device" child keyed on its dotted path (Source "adb"). The "device-net"
 	// child has NO flat row.
@@ -241,7 +241,7 @@ func TestNestedOverlay_MovesFlatAndroidRowOnly(t *testing.T) {
 // live backend: a declared nested child whose multi-hop venue can't be reached
 // renders Status="unreachable" (deadline-bounded, never blocks the table).
 func TestNestedOverlay_LiveProbeUnreachable(t *testing.T) {
-	const parent = "eval-android-emulator-pod"
+	const parent = "check-android-emulator-pod"
 	rows := []DeploymentStatus{
 		{Kind: SubstratePod, Image: parent, Status: "running", Container: "charly-" + parent, Source: "podman"},
 	}

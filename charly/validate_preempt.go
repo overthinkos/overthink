@@ -60,7 +60,7 @@ func ValidatePreemptibleAcrossDeploy(dc *DeployConfig, errs *ValidationError) {
 }
 
 // validatePreemptibleUnified validates preemptible/requires_exclusive across a
-// unified project's deploy map (which includes folded kind:eval beds),
+// unified project's deploy map (which includes folded kind:check beds),
 // returning the first batch of errors for the LoadUnified hard-fail path.
 func validatePreemptibleUnified(uf *UnifiedFile) error {
 	if uf == nil {

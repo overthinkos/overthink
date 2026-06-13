@@ -4,19 +4,19 @@ package main
 //
 // `EnsureImagePresent` is the single source of truth used by every
 // command that needs a container image present in local podman
-// storage: deploys (BuilderRun), the eval preflight, the operator-
+// storage: deploys (BuilderRun), the check preflight, the operator-
 // facing `charly box pull` verb, and the engine-transfer path
 // (`EnsureImage` in transfer.go). One contract, one implementation,
 // one set of failure modes — no per-caller divergence (R3).
 //
 // Three input forms accepted, mirroring `charly box pull`:
 //
-//   - Short name (e.g. "eval-target") — resolved via `cfg.Box`
+//   - Short name (e.g. "check-target") — resolved via `cfg.Box`
 //     to a registry ref, then pulled. Build-fallback uses the same
 //     short name as the input to `charly box build`.
 //
 //   - Fully-qualified registry ref (e.g.
-//     "ghcr.io/overthinkos/eval-target:2026.124.1253") — pulled as-is.
+//     "ghcr.io/overthinkos/check-target:2026.124.1253") — pulled as-is.
 //     Build-fallback reverse-resolves the basename against
 //     `cfg.Box`; when the basename matches a project image entry,
 //     the local build runs that entry. This is what makes the
@@ -24,7 +24,7 @@ package main
 //     buildable on a CachyOS host that has no ghcr.io credentials.
 //
 //   - Remote project ref (e.g.
-//     "@github.com/overthinkos/overthink/eval-target:latest") —
+//     "@github.com/overthinkos/overthink/check-target:latest") —
 //     resolved via `ResolveRemoteImage` (operator-side repo download)
 //     to a registry ref, then pulled. No build fallback for remote
 //     refs (the remote repo's charly.yml resolution already gave us

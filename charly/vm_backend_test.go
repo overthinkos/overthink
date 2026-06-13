@@ -21,7 +21,7 @@ func stubNoLibvirtSpawn(t *testing.T) {
 // the operator explicitly requests `backend: libvirt` and no libvirt
 // session daemon socket is available, resolveVmBackend returns a
 // loud, actionable error — instead of silently falling back to qemu
-// (which would cause every `charly eval libvirt …` probe to fail with a
+// (which would cause every `charly check libvirt …` probe to fail with a
 // confusing "no such file or directory" error 5+ minutes into the
 // dispatcher run; see plan-please-use-the-plan-atomic-comet H1).
 func TestResolveVmBackend_ExplicitLibvirtMissingSocket(t *testing.T) {
@@ -36,7 +36,7 @@ func TestResolveVmBackend_ExplicitLibvirtMissingSocket(t *testing.T) {
 	}
 	msg := err.Error()
 	// The error MUST mention how to fix it — operators see only the
-	// last log line in some failure modes (eval-live timeout). Hint
+	// last log line in some failure modes (check-live timeout). Hint
 	// pointers:
 	if !strings.Contains(msg, "libvirt session daemon") {
 		t.Errorf("error must mention 'libvirt session daemon', got: %q", msg)

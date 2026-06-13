@@ -22,7 +22,7 @@ type BoxCmd struct {
 	Pkg      BoxPkgCmd     `cmd:"" help:"Build standalone native package artifacts (.pkg.tar.zst/.rpm/.deb) for a candy's localpkg sources into dist/"`
 	Validate ValidateCmd   `cmd:"" help:"Check charly.yml + candies, exit 0 or 1"`
 	Labels   BoxLabelsCmd  `cmd:"" help:"Print a built image's OCI labels (the ai.opencharly.* capability contract; --format <key> for one value, --all for every label)"`
-	Feature  BoxFeatureCmd `cmd:"" help:"Run a box's baked Gherkin scenarios as acceptance tests against a disposable container (Agent Driven Evaluation, build scope)"`
+	Feature  BoxFeatureCmd `cmd:"" help:"Run a box's baked Gherkin scenarios as acceptance tests against a disposable container (Agent Driven Checkuation, build scope)"`
 
 	// Authoring verbs — added so the MCP tool surface (auto-reflected from
 	// Kong) can author a project from scratch over RPC.
@@ -55,7 +55,7 @@ func (c *BoxPullCmd) Run() error {
 	// `charly box pull` is the operator-facing alias for the canonical
 	// EnsureImagePresent path: pull from registry, fall back to a
 	// local build when the identifier maps to a project charly.yml
-	// entry. Same contract as BuilderRun, the eval preflight, and
+	// entry. Same contract as BuilderRun, the check preflight, and
 	// EnsureImage in transfer.go (R3, no per-command divergence).
 	dir, _ := os.Getwd()
 	cfg, _ := LoadConfig(dir)

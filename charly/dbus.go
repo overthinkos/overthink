@@ -30,7 +30,7 @@ func (c *DbusNotifyCmd) Run() error {
 	if c.Box == "." {
 		return dbusNotifyLocal(c.Title, c.Body)
 	}
-	venue, err := resolveEvalVenue(c.Box, c.Instance)
+	venue, err := resolveCheckVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -51,7 +51,7 @@ func (c *DbusCallCmd) Run() error {
 	if c.Box == "." {
 		return dbusCallLocal(c.Dest, c.Path, c.Method, c.Args)
 	}
-	venue, err := resolveEvalVenue(c.Box, c.Instance)
+	venue, err := resolveCheckVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -68,7 +68,7 @@ func (c *DbusListCmd) Run() error {
 	if c.Box == "." {
 		return dbusListLocal()
 	}
-	venue, err := resolveEvalVenue(c.Box, c.Instance)
+	venue, err := resolveCheckVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -88,7 +88,7 @@ func (c *DbusIntrospectCmd) Run() error {
 	if c.Box == "." {
 		return dbusIntrospectLocal(c.Dest, c.Path)
 	}
-	venue, err := resolveEvalVenue(c.Box, c.Instance)
+	venue, err := resolveCheckVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -189,20 +189,20 @@ func dbusIntrospectLocal(dest, path string) error {
 // --- Remote D-Bus operations (host → container delegation) ---
 
 // dbusNotifyRemoteStrict sends a notification to the venue (container / VM /
-// host), returning errors (for charly eval dbus notify). Delegates to the venue's
-// own `charly eval dbus notify .` so the call runs with the live session bus inside
+// host), returning errors (for charly check dbus notify). Delegates to the venue's
+// own `charly check dbus notify .` so the call runs with the live session bus inside
 // the target — the same delegation pattern, now venue-agnostic (R3).
 func dbusNotifyRemoteStrict(ex DeployExecutor, title, body string) error {
 	// Ensure an invokable charly on the venue — copying the host binary in when the
 	// image doesn't bake the charly candy (the generic copy-in mechanism), then
 	// delegate to it so the notify runs against the venue's own live session bus.
 	if charlyCmd, err := EnsureCharlyInVenue(context.Background(), ex, EmitOpts{}); err == nil && charlyCmd != "" {
-		script := fmt.Sprintf("%s eval dbus notify . %s %s", charlyCmd,
+		script := fmt.Sprintf("%s check dbus notify . %s %s", charlyCmd,
 			deployShellQuote(title), deployShellQuote(body))
 		if rerr := venueRun(ex, script); rerr == nil {
 			return nil
 		}
-		fmt.Fprintf(os.Stderr, "Warning: in-venue charly eval dbus failed, trying gdbus fallback\n")
+		fmt.Fprintf(os.Stderr, "Warning: in-venue charly check dbus failed, trying gdbus fallback\n")
 	}
 
 	// Fallback: gdbus call on the venue.
@@ -227,7 +227,7 @@ func dbusCallRemote(ex DeployExecutor, dest, path, method string, args []string)
 	if err != nil || charlyCmd == "" {
 		return fmt.Errorf("could not provide an invokable charly on the target %s for the D-Bus call: %v", ex.Venue(), err)
 	}
-	parts := []string{charlyCmd, "eval", "dbus", "call", ".",
+	parts := []string{charlyCmd, "check", "dbus", "call", ".",
 		deployShellQuote(dest), deployShellQuote(path), deployShellQuote(method)}
 	for _, a := range args {
 		parts = append(parts, deployShellQuote(a))

@@ -584,7 +584,7 @@ func (t *LocalDeployTarget) execBuilder(s *BuilderStep, plan *InstallPlan, opts 
 	// exit 0 even when an internal step (e.g. silent sudo prompt, fetch
 	// failure, signature failure) leaves /tmp/aur-build empty. Without
 	// this check, the deploy "succeeds" but the package isn't installed
-	// — invisible to operators and downstream eval probes.
+	// — invisible to operators and downstream check probes.
 	if s.Builder == "aur" && !opts.DryRun {
 		matches, _ := filepath.Glob(filepath.Join(aurStage, "*.pkg.tar.zst"))
 		if len(matches) == 0 {

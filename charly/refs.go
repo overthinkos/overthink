@@ -209,7 +209,7 @@ func IsRepoCached(repoPath, version string) (bool, error) {
 
 // RepoOverrideEnv configures RDD local-overrides: it points a remote `@github`
 // repo ref at a LOCAL working tree (Go-`replace`-style), so an UNCOMMITTED
-// candy / build.yml / charly.yml change can be built and `charly eval`'d by ANY
+// candy / build.yml / charly.yml change can be built and `charly check`'d by ANY
 // consumer — across submodule boundaries — BEFORE it is committed and pushed.
 // This is the supported "verify before you push to main" mechanism (no cache
 // hacks, no producer-first tag churn).

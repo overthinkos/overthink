@@ -99,7 +99,7 @@ candy:
     task:
         # 1. Render the k3s server config. write-kubeconfig-mode 0644 allows
         # the unprivileged deploy user to scp the kubeconfig back in the
-        # artifact-retrieval step. disable:[] is explicit — ServiceLB,
+        # artifact-retricheck step. disable:[] is explicit — ServiceLB,
         # Traefik, and local-path-provisioner must all install as default
         # addons; if an operator needs to disable them they should override
         # this layer, not monkey-patch the config.
@@ -218,7 +218,7 @@ candy:
         - name: k3s-config-file
           step:
             # Build-scope tests: emitted config files exist and are sane. Run
-            # during `charly eval box` — verifies the layer's setup did its job
+            # during `charly check box` — verifies the layer's setup did its job
             # before we start it.
             - id: k3s-config-file
               file: /etc/rancher/k3s/config.yaml
@@ -235,9 +235,9 @@ candy:
                 - build
         - name: cluster-nodes-ready
           step:
-            # Deploy-scope tests: hit the running cluster via the new charly eval k8s
+            # Deploy-scope tests: hit the running cluster via the new charly check k8s
             # verb. These run during `charly deploy add vm:k3s-srv` after the k3s
-            # service reaches Active and kubeconfig artifact retrieval has
+            # service reaches Active and kubeconfig artifact retricheck has
             # written ~/.cache/charly/clusters/<deploy>/kubeconfig.yaml (the cluster
             # flag value that ClusterProfile resolution uses).
             - id: cluster-nodes-ready

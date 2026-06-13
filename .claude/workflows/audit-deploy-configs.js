@@ -1,11 +1,11 @@
 export const meta = {
   name: 'audit-deploy-configs',
   description:
-    'Evaluate deployment configs — for AI agents and human operators. Runs `charly box validate` once (config correctness), then per target a read-only deploy-verifier pass (`charly eval box` for built images, `charly eval live` + `charly status` for running deploys) and aggregates a health report. NON-destructive: never builds, deploys, rebuilds, or tears down. For the destructive R10 bed gate use /verify-beds instead.',
+    'Evaluate deployment configs — for AI agents and human operators. Runs `charly box validate` once (config correctness), then per target a read-only deploy-verifier pass (`charly check box` for built images, `charly check live` + `charly status` for running deploys) and aggregates a health report. NON-destructive: never builds, deploys, rebuilds, or tears down. For the destructive R10 bed gate use /verify-beds instead.',
   phases: [
     { title: 'Validate', detail: 'charly box validate — config + warnings' },
     { title: 'Discover', detail: 'enumerate target images/deploys to audit' },
-    { title: 'Audit', detail: 'per-target read-only eval image/live + status' },
+    { title: 'Audit', detail: 'per-target read-only check image/live + status' },
   ],
 }
 
@@ -111,7 +111,7 @@ const results = (
   await parallel(
     targets.map((t) => () =>
       agent(
-        `You are the deploy-verifier (read-only — never build/deploy/rebuild/destroy). Evaluate the deploy config "${t.name}" (kind ${t.kind}). Run the probes that apply: \`charly eval box ${t.name}\` if a built image exists locally (use the full registry ref if the short name is ambiguous; report NOT-BUILT if absent), and \`charly eval live ${t.name}\` + \`charly status ${t.name}\` if it is currently deployed (report NOT-RUNNING if not). Return the health verdict with verbatim failing-check output — never hide a failed check.`,
+        `You are the deploy-verifier (read-only — never build/deploy/rebuild/destroy). Evaluate the deploy config "${t.name}" (kind ${t.kind}). Run the probes that apply: \`charly check box ${t.name}\` if a built image exists locally (use the full registry ref if the short name is ambiguous; report NOT-BUILT if absent), and \`charly check live ${t.name}\` + \`charly status ${t.name}\` if it is currently deployed (report NOT-RUNNING if not). Return the health verdict with verbatim failing-check output — never hide a failed check.`,
         { schema: HEALTH_SCHEMA, label: `audit:${t.name}`, phase: 'Audit' }
       )
     )

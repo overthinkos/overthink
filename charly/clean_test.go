@@ -61,11 +61,11 @@ func TestPruneImagesByRetention_SharedID(t *testing.T) {
 	defer func() { ListLocalImages, listContainerImageRefs = origList, origCtr }()
 
 	allTags := []string{
-		"ghcr/eval-pod:2026.150.0827",
-		"ghcr/eval-pod:2026.150.0830",
-		"ghcr/eval-pod:2026.150.0835",
-		"ghcr/eval-pod:2026.150.0836",
-		"ghcr/eval-pod:2026.150.0916", // newest / just-built
+		"ghcr/check-pod:2026.150.0827",
+		"ghcr/check-pod:2026.150.0830",
+		"ghcr/check-pod:2026.150.0835",
+		"ghcr/check-pod:2026.150.0836",
+		"ghcr/check-pod:2026.150.0916", // newest / just-built
 	}
 	rowPerTag := make([]LocalImageInfo, len(allTags))
 	for i := range allTags {
@@ -73,7 +73,7 @@ func TestPruneImagesByRetention_SharedID(t *testing.T) {
 			ID:    "ccc", // all five tags share ONE image id
 			Names: append([]string(nil), allTags...),
 			Labels: map[string]string{
-				"ai.opencharly.box":     "eval-pod",
+				"ai.opencharly.box":     "check-pod",
 				"ai.opencharly.version": "2026.155.1801", // content-stable across tags
 			},
 		}
@@ -89,13 +89,13 @@ func TestPruneImagesByRetention_SharedID(t *testing.T) {
 	}
 	sort.Strings(removed)
 	// keepN=3 keeps the newest 3 tags (.835/.836/.916); only the 2 oldest go.
-	want := []string{"ghcr/eval-pod:2026.150.0827", "ghcr/eval-pod:2026.150.0830"}
+	want := []string{"ghcr/check-pod:2026.150.0827", "ghcr/check-pod:2026.150.0830"}
 	if len(removed) != len(want) || removed[0] != want[0] || removed[1] != want[1] {
 		t.Fatalf("removed = %v, want %v", removed, want)
 	}
 	// The just-built newest tag must NEVER be removed — this is the bug.
 	for _, r := range removed {
-		if r == "ghcr/eval-pod:2026.150.0916" {
+		if r == "ghcr/check-pod:2026.150.0916" {
 			t.Fatalf("BUG: removed the newest/just-built tag %q", r)
 		}
 	}
@@ -116,9 +116,9 @@ func TestPruneImagesByRetention_Disabled(t *testing.T) {
 	}
 }
 
-// TestPruneEvalRuns covers keep-newest-N of CalVer run dirs + result files, the
+// TestPruneCheckRuns covers keep-newest-N of CalVer run dirs + result files, the
 // runs/<id> mtime path, and the NOTES.md preservation invariant.
-func TestPruneEvalRuns(t *testing.T) {
+func TestPruneCheckRuns(t *testing.T) {
 	root := t.TempDir()
 	bed := filepath.Join(root, "sample-bed")
 	// 3 CalVer run dirs (newest = 2026.143.0300) + NOTES.md.
@@ -134,7 +134,7 @@ func TestPruneEvalRuns(t *testing.T) {
 	}
 	mustWrite(t, filepath.Join(score, "NOTES.md"), "memory")
 
-	removed, err := pruneEvalRuns(root, 1, false)
+	removed, err := pruneCheckRuns(root, 1, false)
 	if err != nil {
 		t.Fatalf("prune: %v", err)
 	}
@@ -150,21 +150,21 @@ func TestPruneEvalRuns(t *testing.T) {
 	assertExists(t, filepath.Join(score, "NOTES.md"))
 }
 
-func TestPruneEvalRuns_DryRunAndDisabled(t *testing.T) {
+func TestPruneCheckRuns_DryRunAndDisabled(t *testing.T) {
 	root := t.TempDir()
 	bed := filepath.Join(root, "bed")
 	for _, cv := range []string{"2026.143.0100", "2026.143.0200"} {
 		mustMkdir(t, filepath.Join(bed, cv))
 	}
 	// dry-run lists but deletes nothing.
-	removed, err := pruneEvalRuns(root, 1, true)
+	removed, err := pruneCheckRuns(root, 1, true)
 	if err != nil || len(removed) != 1 {
 		t.Fatalf("dry-run removed=%v err=%v, want 1 listed", removed, err)
 	}
 	assertExists(t, filepath.Join(bed, "2026.143.0100")) // still there
 
 	// keep=0 disables.
-	r2, _ := pruneEvalRuns(root, 0, false)
+	r2, _ := pruneCheckRuns(root, 0, false)
 	if r2 != nil {
 		t.Errorf("keep=0 should no-op, got %v", r2)
 	}

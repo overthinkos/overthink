@@ -10,7 +10,7 @@ candy:
             `charly shell` / `charly start` (direct mode) runtime. The observable,
             verifiable effect of the composition is that the gpg, ssh, ssh-add,
             and direnv client binaries are all present in any box that composes
-            this candy — that is what the scenarios and eval block assert.
+            this candy — that is what the scenarios and check block assert.
         tag: [working]
     candy:
         - gnupg

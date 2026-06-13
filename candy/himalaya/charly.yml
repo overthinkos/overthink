@@ -43,7 +43,7 @@ candy:
               stdout:
                 - matches: "account|folder|envelope|message"
         # Prose-only (agent-graded): genuinely free-form behaviour that needs
-        # live IMAP/SMTP credentials a build/eval bed does not carry, so it is
+        # live IMAP/SMTP credentials a build/check bed does not carry, so it is
         # left to the agent grader rather than a deterministic check.
         - name: himalaya-manages-remote-mailbox
           step:

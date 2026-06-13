@@ -43,7 +43,7 @@ import (
 //	  disposable: false
 //	  lifecycle: long-running
 //
-// and the AUTONOMOUS rebuild path (the eval-runner / R10 discipline)
+// and the AUTONOMOUS rebuild path (the check-runner / R10 discipline)
 // then treats the domain as non-disposable and skips it — protecting
 // the experiment from an unattended destroy, with no need to edit the
 // project's charly.yml or stash a different lifecycle tag in version

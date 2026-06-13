@@ -6,7 +6,7 @@ package main
 //   - Add: builds the overlay image (Generator + PodDeployTarget) and
 //     persists the disposable/lifecycle classification.
 //   - Del: stops + removes the container deploy + overlay image + ledger.
-//   - Rebuild: the pod rebuild path (image build + eval + deploy + restart).
+//   - Rebuild: the pod rebuild path (image build + check + deploy + restart).
 //   - Lifecycle methods (Start, Stop, Status, Logs, Shell) shell out via
 //     runCharlySubcommand to the CLI surfaces (charly start / charly stop / charly status
 //     / charly logs / charly shell). The spawned child uses the same binary on
@@ -211,7 +211,7 @@ func (t *PodUnifiedTarget) Shell(ctx context.Context, cmd []string) error {
 }
 
 // Rebuild follows the standard pod rebuild sequence: image rebuild
-// (optional) → image eval → deploy add → stop → config (regen
+// (optional) → image check → deploy add → stop → config (regen
 // quadlet) → start. This is the pod rebuild path
 // — the cmd-file caller is now a thin wrapper.
 //
@@ -227,7 +227,7 @@ func (t *PodUnifiedTarget) Rebuild(ctx context.Context, opts RebuildOpts) error 
 	if opts.DryRun {
 		if opts.RebuildImage {
 			fmt.Printf("dry-run: charly box build %s\n", baseRef)
-			fmt.Printf("dry-run: charly eval box %s\n", baseRef)
+			fmt.Printf("dry-run: charly check box %s\n", baseRef)
 		}
 		fmt.Printf("dry-run: charly deploy add %s\n", t.NodeName)
 		fmt.Printf("dry-run: charly stop %s\n", t.NodeName)
@@ -240,8 +240,8 @@ func (t *PodUnifiedTarget) Rebuild(ctx context.Context, opts RebuildOpts) error 
 		if err := runCharlySubcommand("box", "build", baseRef); err != nil {
 			return fmt.Errorf("charly box build %s: %w", baseRef, err)
 		}
-		if err := runCharlySubcommand("eval", "box", baseRef); err != nil {
-			return fmt.Errorf("charly eval box %s: %w", baseRef, err)
+		if err := runCharlySubcommand("check", "box", baseRef); err != nil {
+			return fmt.Errorf("charly check box %s: %w", baseRef, err)
 		}
 	}
 

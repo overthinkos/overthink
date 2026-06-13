@@ -55,7 +55,7 @@ candy:
             - then: the pipewire audio daemon shared by the streamed session is present
               file: /usr/bin/pipewire
               exists: true
-        # Scenario 3 binds at deploy scope via `charly eval feature run`
+        # Scenario 3 binds at deploy scope via `charly check feature run`
         # (command/http), proving the whole composition reaches a live stream,
         # then closes on one prose-only step the agent grader judges visually.
         - name: streamed-kde-desktop-is-live

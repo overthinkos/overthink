@@ -26,7 +26,7 @@ import (
 // once PM settles). So the install is RETRIED until it succeeds or the
 // deadline elapses: the install SUCCEEDING is the readiness condition (a real
 // synchronization primitive, NOT a fixed sleep). This mirrors the
-// `eventually:`/`retry_interval:` the `adb-install-apidemos` eval check
+// `eventually:`/`retry_interval:` the `adb-install-apidemos` check check
 // already uses for the same op on the same device.
 const (
 	androidInstallDeadline = 180 * time.Second

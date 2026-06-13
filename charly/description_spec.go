@@ -352,7 +352,7 @@ func (s *Step) IsPending() bool {
 // ExpandedScenario is a flattened scenario: the original scenario with
 // outline placeholders substituted from a single Examples row (or the
 // original scenario verbatim if there were no Examples). Used by the
-// runner to emit one EvalResult per row without re-coding outline-aware
+// runner to emit one CheckResult per row without re-coding outline-aware
 // logic at every dispatch site.
 //
 // RowIndex is 0-based and stable across runs (deterministic ordering);

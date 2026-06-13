@@ -160,10 +160,10 @@ func TestResolveApkPath(t *testing.T) {
 	}
 }
 
-// TestResolveCheckApk covers the eval-verb path resolution (adb: install /
+// TestResolveCheckApk covers the check-verb path resolution (adb: install /
 // appium: install-app), which anchors a relative committed-APK ref against a
 // resolved candy's source tree — including the fallback used when the AUTHORING
-// candy wasn't collected into the eval-live candy map (the reachability gap).
+// candy wasn't collected into the check-live candy map (the reachability gap).
 func TestResolveCheckApk(t *testing.T) {
 	repo := t.TempDir()
 	apk := filepath.Join(repo, "tests", "data", "x.apk") // project-root fixture

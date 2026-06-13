@@ -1,9 +1,9 @@
-# tests/data — vendored test assets for `charly eval adb` + `charly eval appium`
+# tests/data — vendored test assets for `charly check adb` + `charly check appium`
 
 ## ApiDemos-debug.apk
 
 The Android `ApiDemos` sample app used by the R10 acceptance round for
-the `adb` + `appium` eval verbs. Originally part of the Android SDK
+the `adb` + `appium` check verbs. Originally part of the Android SDK
 Samples (Apache-2.0 licensed); vendored from the Appium project's
 canonical sample-apps location.
 
@@ -28,15 +28,15 @@ sha256sum tests/data/ApiDemos-debug.apk
 
 ## api-demos-caps.json
 
-W3C WebDriver capabilities for `charly eval appium session-create` against
-the ApiDemos APK on the eval-android-emulator-pod deploy. Uses the flat (non-
+W3C WebDriver capabilities for `charly check appium session-create` against
+the ApiDemos APK on the check-android-emulator-pod deploy. Uses the flat (non-
 alwaysMatch-wrapped) form — the appium session-create verb wraps it
 under W3C `alwaysMatch` automatically.
 
 Used by R10 step 8 (manual CLI smoke):
 
 ```bash
-charly eval appium session-create eval-android-emulator-pod \
+charly check appium session-create check-android-emulator-pod \
   --caps @tests/data/api-demos-caps.json
 ```
 

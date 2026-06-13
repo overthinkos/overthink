@@ -40,37 +40,37 @@ func TestMergeAndroidMap(t *testing.T) {
 	}
 }
 
-// TestValidateEvalBeds_Android covers the kind:eval bed validation for a
+// TestValidateCheckBeds_Android covers the kind:check bed validation for a
 // top-level target: android bed.
-func TestValidateEvalBeds_Android(t *testing.T) {
+func TestValidateCheckBeds_Android(t *testing.T) {
 	// android bed without an android: ref → error.
 	uf := &UnifiedFile{
-		Eval: map[string]DeploymentNode{
+		Check: map[string]DeploymentNode{
 			"bed": {Target: "android", Disposable: boolPtr(true)},
 		},
 	}
-	if err := validateEvalBeds(uf); err == nil {
+	if err := validateCheckBeds(uf); err == nil {
 		t.Error("target:android bed without android: should fail validation")
 	}
 
 	// android bed referencing an undefined device → error.
 	uf2 := &UnifiedFile{
-		Eval: map[string]DeploymentNode{
+		Check: map[string]DeploymentNode{
 			"bed": {Target: "android", Android: "ghost", Disposable: boolPtr(true)},
 		},
 	}
-	if err := validateEvalBeds(uf2); err == nil {
+	if err := validateCheckBeds(uf2); err == nil {
 		t.Error("target:android bed referencing an undefined device should fail")
 	}
 
 	// android bed referencing a defined device → ok.
 	uf3 := &UnifiedFile{
 		Android: map[string]*AndroidSpec{"dev": {Box: "android-emulator"}},
-		Eval: map[string]DeploymentNode{
+		Check: map[string]DeploymentNode{
 			"bed": {Target: "android", Android: "dev", Disposable: boolPtr(true)},
 		},
 	}
-	if err := validateEvalBeds(uf3); err != nil {
+	if err := validateCheckBeds(uf3); err != nil {
 		t.Errorf("valid target:android bed should pass, got: %v", err)
 	}
 }

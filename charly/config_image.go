@@ -130,7 +130,7 @@ func (c *BoxConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	// split lets the deploy-key and the image-ref diverge.
 	// Resolve the deploy key to its declared box short-name via THE shared
 	// resolver (deploy.go resolveDeployBoxName) that config / start / shell
-	// / eval live all use, so they never diverge. Falls back to the key for
+	// / check live all use, so they never diverge. Falls back to the key for
 	// the key==box convention. c.Box stays the deploy-KEY for container /
 	// quadlet / secret / charly.yml-key composition; only the image ref and
 	// the persisted `box:` field (below) use the resolved name. Routing the
@@ -147,8 +147,8 @@ func (c *BoxConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 		//
 		// PERSIST THE FULL REF (not the deploy key) as the charly.yml `box:`
 		// value, so the deploy is self-describing: a later project-FREE command
-		// — `charly eval live <name>`, `charly status`, `charly config <name>` on a host
-		// with no charly.yml (e.g. a VM guest, where the nested-pod eval is
+		// — `charly check live <name>`, `charly status`, `charly config <name>` on a host
+		// with no charly.yml (e.g. a VM guest, where the nested-pod check is
 		// delegated) — resolves the image straight from local storage (full refs
 		// pass through resolveImageRefForEnsure unchanged) instead of failing
 		// with "short name requires a project directory with charly.yml". The
@@ -607,7 +607,7 @@ func (c *BoxConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 		// (never clobbers operator-authored refs). charly config is exclusively
 		// a pod-deploy setup verb, so Target is always "pod"; Box is the
 		// RESOLVED box short-name (deployBoxName), NOT the deploy key —
-		// the key and the box diverge for kind:eval beds and Pattern-B
+		// the key and the box diverge for kind:check beds and Pattern-B
 		// deploys. Mirrors the fields set by the container path in
 		// deploy_add_cmd.go.
 		Box:    deployBoxName,
@@ -1569,7 +1569,7 @@ func updateAllDeployedQuadlets(rt *ResolvedRuntime, skipBox string) error {
 		// ai.opencharly.image label, which includes per-deploy alias
 		// re-tags (bumpDeployAlias in update_deploy_dispatch.go). When
 		// a sibling deploy of the same image has just been charly-updated
-		// (e.g. an eval bed of the versa image), its alias tag
+		// (e.g. an check bed of the versa image), its alias tag
 		// (`<registry>/<sibling-deploy>:<calver>`) inherits the same
 		// labels as the base, so the fresh lookup can — and did, see
 		// the 2026-05-26 bug — pick the SIBLING's alias instead of the

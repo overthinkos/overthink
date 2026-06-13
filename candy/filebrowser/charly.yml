@@ -51,7 +51,7 @@ candy:
           scope: system
     scenario:
         # DETERMINISTIC build-scope facts (embedded check verbs run at both
-        # `charly box feature run` and `charly eval feature run`).
+        # `charly box feature run` and `charly check feature run`).
         - name: filebrowser-binary-installed
           step:
             - then: the filebrowser binary is installed and executable at /usr/local/bin/filebrowser

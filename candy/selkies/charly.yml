@@ -266,7 +266,7 @@ candy:
             # creates wayland-1, and the whole desktop (labwc/chrome) crash-loops — while
             # every OTHER probe (files/services/ports/https) still passes. This ldd check
             # catches that class of missing-runtime-lib regression at BUILD scope
-            # (`charly eval box`) — no deploy or GPU needed. ldd exits 0 even when a lib is
+            # (`charly check box`) — no deploy or GPU needed. ldd exits 0 even when a lib is
             # "not found", so the assertion is on the absence of that string.
             - id: pixelflux-wayland-libs-resolvable
               command: ldd ${HOME}/.pixi/envs/default/lib/python3.*/site-packages/pixelflux/pixelflux_wayland*.so
@@ -351,7 +351,7 @@ candy:
           step:
             # Generic capture-content probe (R3: lives on the selkies layer so it
             # runs on EVERY selkies image — AMD pod, NVIDIA pod-in-VM, CPU pod —
-            # via `charly eval live`, no per-bed re-implementation). A black/broken
+            # via `charly check live`, no per-bed re-implementation). A black/broken
             # stream — dead compositor, silent encoder failure producing blank
             # output — passes every file/port/https probe; THIS is the only check
             # that proves real pixels reach the stream. Captures via the pixelflux

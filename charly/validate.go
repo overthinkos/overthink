@@ -437,10 +437,10 @@ func validateBuildAndDistro(cfg *Config, distroCfg *DistroConfig, errs *Validati
 			continue
 		}
 		validateBuild(fmt.Sprintf("box %q", name), img.Build)
-		// eval_level (acceptance-depth rung) must be one of the canonical
-		// values when set; empty defaults to noagent (ResolveEvalLevel).
-		if img.EvalLevel != "" && !IsValidEvalLevel(img.EvalLevel) {
-			errs.Add("box %q: eval_level %q must be one of: %s", name, img.EvalLevel, strings.Join(EvalLevels, ", "))
+		// check_level (acceptance-depth rung) must be one of the canonical
+		// values when set; empty defaults to noagent (ResolveCheckLevel).
+		if img.CheckLevel != "" && !IsValidCheckLevel(img.CheckLevel) {
+			errs.Add("box %q: check_level %q must be one of: %s", name, img.CheckLevel, strings.Join(CheckLevels, ", "))
 		}
 	}
 }
@@ -490,11 +490,11 @@ func validateCandyContents(layers map[string]*Candy, errs *ValidationError) {
 
 		// ADE is MANDATORY per candy: every local candy MUST ship a non-empty
 		// `description.feature:` AND a `scenario:` list containing at least one
-		// DETERMINISTIC step (do: assert) so the agentless eval always has
+		// DETERMINISTIC step (do: assert) so the agentless check always has
 		// something to verify (the spec IS the test). Scoped to local candies —
 		// a fetched remote candy's compliance is its own repo's concern (same
-		// scope as the version: check). See CLAUDE.md "Agent Driven Evaluation
-		// (ADE)" + /charly-eval:eval.
+		// scope as the version: check). See CLAUDE.md "Agent Driven Checkuation
+		// (ADE)" + /charly-check:check.
 		if !layer.Remote {
 			deterministic := 0
 			for si := range layer.scenario {
@@ -506,11 +506,11 @@ func validateCandyContents(layers map[string]*Candy, errs *ValidationError) {
 			}
 			switch {
 			case layer.Description == nil || strings.TrimSpace(layer.Description.Feature) == "":
-				errs.Add("candy %q: missing required `description:` with a non-empty feature: (ADE is mandatory). See /charly-eval:eval", name)
+				errs.Add("candy %q: missing required `description:` with a non-empty feature: (ADE is mandatory). See /charly-check:check", name)
 			case len(layer.scenario) == 0:
-				errs.Add("candy %q: missing required `scenario:` list (ADE is mandatory; the spec IS the test). See /charly-eval:eval", name)
+				errs.Add("candy %q: missing required `scenario:` list (ADE is mandatory; the spec IS the test). See /charly-check:check", name)
 			case deterministic == 0:
-				errs.Add("candy %q: `scenario:` must contain at least one deterministic step (do: assert) so the agentless eval has something to verify. See /charly-eval:eval", name)
+				errs.Add("candy %q: `scenario:` must contain at least one deterministic step (do: assert) so the agentless check has something to verify. See /charly-check:check", name)
 			default:
 				for _, issue := range validateDescriptionSteps(layer.Description, layer.scenario, "candy "+name) {
 					errs.Add("%s", issue)
@@ -979,8 +979,8 @@ func validateBuildTunables(cfg *Config, errs *ValidationError) {
 		if ic.KeepImages != nil && *ic.KeepImages < 0 {
 			errs.Add("%s: keep_images must be >= 0 (0 = disabled), got %d", name, *ic.KeepImages)
 		}
-		if ic.KeepEvalRuns != nil && *ic.KeepEvalRuns < 0 {
-			errs.Add("%s: keep_eval_runs must be >= 0 (0 = disabled), got %d", name, *ic.KeepEvalRuns)
+		if ic.KeepCheckRuns != nil && *ic.KeepCheckRuns < 0 {
+			errs.Add("%s: keep_check_runs must be >= 0 (0 = disabled), got %d", name, *ic.KeepCheckRuns)
 		}
 	}
 

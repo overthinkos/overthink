@@ -149,7 +149,7 @@ func captureVmStdout(t *testing.T, fn func()) string {
 // VM Rebuild that recreates the domain but skips the candy re-apply (the #42
 // bug) would not emit this line, and this test would fail.
 func TestVmUnifiedTarget_Rebuild_DryRun(t *testing.T) {
-	// NodeName != entity name (the eval-k3s-vm → vm: k3s-vm shape): the
+	// NodeName != entity name (the check-k3s-vm → vm: k3s-vm shape): the
 	// vm-* steps key on the entity name, but `deploy add` MUST key on the
 	// deploy NodeName — that is the deploy key dispatchNode resolves.
 	target := &VmUnifiedTarget{

@@ -150,7 +150,7 @@ candy:
             mkdir -p /build/corePlugin/dist
             cp -r dist/* /build/corePlugin/dist/
 
-            rm -f /usr/local/bin/extism-js /usr/local/bin/wasm-opt /usr/local/bin/wasm-merge /usr/local/bin/wasm-as /usr/local/bin/wasm-dis /usr/local/bin/wasm-ctor-eval /usr/local/bin/wasm-emscripten-finalize /usr/local/bin/wasm-metadce /usr/local/bin/wasm-reduce /usr/local/bin/wasm-shell /usr/local/bin/wasm-split /usr/local/bin/wasm2js
+            rm -f /usr/local/bin/extism-js /usr/local/bin/wasm-opt /usr/local/bin/wasm-merge /usr/local/bin/wasm-as /usr/local/bin/wasm-dis /usr/local/bin/wasm-ctor-check /usr/local/bin/wasm-emscripten-finalize /usr/local/bin/wasm-metadce /usr/local/bin/wasm-reduce /usr/local/bin/wasm-shell /usr/local/bin/wasm-split /usr/local/bin/wasm2js
           run_as: root
         - command: rm -rf /tmp/immich
           run_as: root

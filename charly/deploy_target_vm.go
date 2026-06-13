@@ -658,7 +658,7 @@ func (t *VmDeployTarget) writeGuestUnitFile(ctx context.Context, path, content s
 // Enable is hard (the durable boot intent); the immediate start is best-effort
 // everywhere — a GPU/graphical-session service that can't start mid-deploy
 // (before the nvidia-driver reboot + a live session) starts on the post-reboot
-// boot, and the deploy-scope eval verifies it.
+// boot, and the deploy-scope check verifies it.
 func (t *VmDeployTarget) enableServiceUnit(ctx context.Context, unit string, scope Scope, opts EmitOpts) error {
 	q := deployShellQuote(unit)
 	if scope == ScopeUser {

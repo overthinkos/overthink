@@ -86,7 +86,7 @@ candy:
               context:
                 - runtime
         # PROSE-ONLY step — free-form availability behaviour, agent-graded by
-        # `charly eval feature run` against the live deployment.
+        # `charly check feature run` against the live deployment.
         - name: mcp-server-stays-available
           step:
             - then: the charly-mcp service keeps answering MCP clients on port 18765, restarting automatically (restart=always) if the charly mcp serve process exits
@@ -107,7 +107,7 @@ candy:
                 - runtime
         - name: mcp-charly-ping
           step:
-            # MCP server exercised live via the in-repo MCP client (charly eval mcp).
+            # MCP server exercised live via the in-repo MCP client (charly check mcp).
             # Confirms the server initialises and enumerates tools derived from the
             # Kong CLI model. mcp_name: charly disambiguates on images that also expose
             # other MCP servers (jupyter, chrome-devtools).

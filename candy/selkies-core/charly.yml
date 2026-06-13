@@ -108,7 +108,7 @@ candy:
             # (chrome-cdp's program is cdp-proxy, not chrome), so this is the
             # composition's distinguishing, non-duplicative artifact. /etc/supervisord.conf
             # is chmod 0644, readable by the image's default uid-1000 user under
-            # `charly eval box`. Fails if the service block did nothing.
+            # `charly check box`. Fails if the service block did nothing.
             - id: selkies-chrome-supervisor-baked
               file: /etc/supervisord.conf
               contains:

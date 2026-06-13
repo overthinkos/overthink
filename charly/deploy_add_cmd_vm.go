@@ -242,7 +242,7 @@ func saveVmDeployState(deployName string, state *VmDeployState, spec *VmSpec) er
 	entry.Target = "vm"
 	// deployName may be a legacy "vm:<entity>" key (from charly vm create) OR a
 	// schema-v4 deploy key whose entity comes from the entry's `vm:` field
-	// (e.g. eval-k3s-vm → vm: k3s-vm). Derive the entity from the prefix
+	// (e.g. check-k3s-vm → vm: k3s-vm). Derive the entity from the prefix
 	// when present; otherwise PRESERVE the existing entry.Vm (a v4 key has
 	// no "vm:" prefix to parse, and clobbering it with "" would drop the
 	// cross-ref the rest of the deploy code relies on).
@@ -278,7 +278,7 @@ func removeVmDeployEntry(deployName string) error {
 	//
 	// If, after clearing vm_state, the entry carries NOTHING operator-authored
 	// beyond the fields saveVmDeployState auto-sets (target: vm + vm:), it was a
-	// pure auto-created VM-state record — e.g. a disposable eval-bed VM — so
+	// pure auto-created VM-state record — e.g. a disposable check-bed VM — so
 	// delete it entirely (such entries must not accumulate; that's why
 	// destroy cleaned up the entry in the first place). Otherwise keep the
 	// now-stateless entry so its operator config survives.

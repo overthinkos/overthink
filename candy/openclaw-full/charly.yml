@@ -11,7 +11,7 @@ candy:
             uv, himalaya, …). The observable effect of the composition is that every
             composed tool's key artifact lands in ONE image: the openclaw / claude /
             mcporter binaries under ~/.npm-global/bin, uv under /usr/local/bin, and
-            rg / sqlite3 / tmux / ffmpeg / gh under /usr/bin. The scenarios and eval
+            rg / sqlite3 / tmux / ffmpeg / gh under /usr/bin. The scenarios and check
             block assert that cross-section — they FAIL if any composed candy is
             dropped from the metalayer. The gateway's own port reachability is
             already checked by the composed openclaw candy and rides along.

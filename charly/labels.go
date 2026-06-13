@@ -82,11 +82,11 @@ const (
 	// `charly box inspect`, `charly deploy from-box`, and the charly.yml
 	// `shell:` overlay merge — same shape as LabelDescription.
 	LabelShell = "ai.opencharly.shell"
-	// LabelEvalLevel — the per-box acceptance-depth rung (none|build|noagent|
-	// agent) authored as BoxConfig.EvalLevel. `charly check run <bed>` reads it
+	// LabelCheckLevel — the per-box acceptance-depth rung (none|build|noagent|
+	// agent) authored as BoxConfig.CheckLevel. `charly check run <bed>` reads it
 	// from the built image to gate how deep the bed's acceptance runs. See
-	// eval_level.go for the ladder.
-	LabelEvalLevel = "ai.opencharly.eval_level"
+	// check_level.go for the ladder.
+	LabelCheckLevel = "ai.opencharly.check_level"
 )
 
 // LabelVolumeEntry represents a volume in the label JSON (short name form).
@@ -192,7 +192,7 @@ type BoxMetadata struct {
 	MCPAccept     []EnvDependency      // MCP servers image can optionally use
 	Description   *LabelDescriptionSet // three-section Gherkin-shaped self-description (candy/box/deploy)
 	Shell         *LabelShellSet       // three-section (candy/box/deploy) shell-init manifest (2026-05 cutover)
-	EvalLevel     string               // acceptance-depth rung (ai.opencharly.eval_level): none|build|noagent|agent
+	CheckLevel     string               // acceptance-depth rung (ai.opencharly.check_level): none|build|noagent|agent
 }
 
 // LabelShellSet is the three-section JSON manifest carried in
@@ -428,8 +428,8 @@ func ExtractMetadata(engine, imageRef string) (*BoxMetadata, error) {
 	meta.Status = labels[LabelStatus]
 	meta.Info = labels[LabelInfo]
 
-	// Acceptance-depth rung (eval_level)
-	meta.EvalLevel = labels[LabelEvalLevel]
+	// Acceptance-depth rung (check_level)
+	meta.CheckLevel = labels[LabelCheckLevel]
 
 	// Candy versions
 	if v := labels[LabelCandyVersion]; v != "" {

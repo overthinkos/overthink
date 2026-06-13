@@ -1,6 +1,6 @@
 package main
 
-// `charly eval libvirt <vm-name> <verb>` — the Kong command tree.
+// `charly check libvirt <vm-name> <verb>` — the Kong command tree.
 //
 // Every verb is a thin wrapper over go-libvirt RPCs + libvirtxml for
 // XML parsing. Shared helpers live in libvirt_ops.go (screenshot
@@ -334,7 +334,7 @@ func persistStr(persist bool) string {
 }
 
 // formatGraphicsListen renders a list of libvirt <listen> children
-// into a single human-readable string for `charly eval libvirt info`.
+// into a single human-readable string for `charly check libvirt info`.
 // Address listeners show as "1.2.3.4"; socket listeners show as
 // "unix://<path>"; multiple listeners are comma-separated.
 func formatGraphicsListen(listeners []libvirtxml.DomainGraphicListener) string {

@@ -47,7 +47,7 @@ func (t *TagExpr) Match(tags []string) bool {
 	for _, tag := range tags {
 		set[normalizeTag(tag)] = true
 	}
-	return t.node.eval(set)
+	return t.node.check(set)
 }
 
 // ParseTagExpr compiles a tag expression. Empty / whitespace input
@@ -113,31 +113,31 @@ func CombineTagFilters(include, exclude *TagExpr) *TagExpr {
 }
 
 // ---------------------------------------------------------------------------
-// AST + evaluator
+// AST + checkuator
 // ---------------------------------------------------------------------------
 
 type tagNode interface {
-	eval(set map[string]bool) bool
+	check(set map[string]bool) bool
 }
 
 type tagLeaf struct{ name string }
 
-func (l *tagLeaf) eval(set map[string]bool) bool { return set[l.name] }
+func (l *tagLeaf) check(set map[string]bool) bool { return set[l.name] }
 
 type tagNot struct{ of tagNode }
 
-func (n *tagNot) eval(set map[string]bool) bool { return !n.of.eval(set) }
+func (n *tagNot) check(set map[string]bool) bool { return !n.of.check(set) }
 
 type tagAnd struct{ left, right tagNode }
 
-func (a *tagAnd) eval(set map[string]bool) bool {
-	return a.left.eval(set) && a.right.eval(set)
+func (a *tagAnd) check(set map[string]bool) bool {
+	return a.left.check(set) && a.right.check(set)
 }
 
 type tagOr struct{ left, right tagNode }
 
-func (o *tagOr) eval(set map[string]bool) bool {
-	return o.left.eval(set) || o.right.eval(set)
+func (o *tagOr) check(set map[string]bool) bool {
+	return o.left.check(set) || o.right.check(set)
 }
 
 // ---------------------------------------------------------------------------

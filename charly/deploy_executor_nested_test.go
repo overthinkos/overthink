@@ -228,7 +228,7 @@ func TestNestedExecutor_EnvVarsPropagated_XdgRuntimeDir(t *testing.T) {
 	t.Setenv("WAYLAND_DISPLAY", "")
 	t.Setenv("DBUS_SESSION_BUS_ADDRESS", "")
 
-	wrapped, err := wrapWithJump(NestedJump{Kind: JumpPodmanExec, Target: "vm"}, `charly eval libvirt info vm`, false)
+	wrapped, err := wrapWithJump(NestedJump{Kind: JumpPodmanExec, Target: "vm"}, `charly check libvirt info vm`, false)
 	if err != nil {
 		t.Fatalf("wrapWithJump: %v", err)
 	}
@@ -249,7 +249,7 @@ func TestNestedExecutor_EnvVarsPropagated_DisplayWayland(t *testing.T) {
 	t.Setenv("WAYLAND_DISPLAY", "wayland-2")
 	t.Setenv("DBUS_SESSION_BUS_ADDRESS", "unix:path=/run/user/1000/bus")
 
-	wrapped, err := wrapWithJump(NestedJump{Kind: JumpPodmanExec, Target: "charly-fixture-desktop"}, `charly eval wl status fixture-desktop`, false)
+	wrapped, err := wrapWithJump(NestedJump{Kind: JumpPodmanExec, Target: "charly-fixture-desktop"}, `charly check wl status fixture-desktop`, false)
 	if err != nil {
 		t.Fatalf("wrapWithJump: %v", err)
 	}
@@ -261,7 +261,7 @@ func TestNestedExecutor_EnvVarsPropagated_DisplayWayland(t *testing.T) {
 }
 
 // TestBuildContainerEnvFlags_SkipsHostSessionRuntimeDir guards the fix for the
-// nested-toolchain regression surfaced by the eval-openclaw-desktop-pod bed:
+// nested-toolchain regression surfaced by the check-openclaw-desktop-pod bed:
 // the harness forced the host's XDG_RUNTIME_DIR=/run/user/1000 onto its
 // `podman exec`, clobbering the pod's baked /tmp and breaking rootless
 // podman/buildah/libvirt with "lstat /run/user/1000: no such file or directory".
@@ -298,7 +298,7 @@ func TestBuildContainerEnvFlags_SkipsHostSessionRuntimeDir(t *testing.T) {
 // TestBuildContainerEnvFlags_PropagatesPinnedRuntimeDir confirms the fix does
 // NOT break the libvirt-socket case: an explicitly-pinned XDG_RUNTIME_DIR that
 // is NOT under /run/user/<uid> (the charly-runtime location) must still propagate so
-// nested `charly eval libvirt` finds its socket.
+// nested `charly check libvirt` finds its socket.
 func TestBuildContainerEnvFlags_PropagatesPinnedRuntimeDir(t *testing.T) {
 	for _, k := range containerEnvPropagationKeys {
 		t.Setenv(k, "")

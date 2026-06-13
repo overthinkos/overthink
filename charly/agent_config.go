@@ -119,7 +119,7 @@ const DefaultAgentTimeout = ""
 
 var (
 	// ErrNoAgents fires when the project has no `agent:` map (no agents configured).
-	ErrNoAgents = errors.New("eval: no agents configured (add an 'agent:' map to eval.yml)")
+	ErrNoAgents = errors.New("check: no agents configured (add an 'agent:' map to check.yml)")
 
 	// ErrAgentNotFound fires when the requested AI name is absent from the catalog.
 	ErrAgentNotFound = errors.New("harness: ai not found")
@@ -290,10 +290,10 @@ func firstNonEmptyLine(s string) string {
 // ---------------------------------------------------------------------------
 
 // PrintAgents writes a human-readable table of configured agents to w.
-// Used by `charly eval list-ai`.
+// Used by `charly check list-ai`.
 func PrintAgents(w io.Writer, catalog map[string]*AgentConfig) {
 	if len(catalog) == 0 {
-		fmt.Fprintln(w, "No agents configured. Add an 'agent:' map to eval.yml.")
+		fmt.Fprintln(w, "No agents configured. Add an 'agent:' map to check.yml.")
 		return
 	}
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)

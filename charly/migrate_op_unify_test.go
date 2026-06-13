@@ -108,7 +108,7 @@ func TestMigrateOpUnify_Candy(t *testing.T) {
 // folds into that bed's scenario:.
 func TestMigrateOpUnify_RootHarnessEvalUntouched(t *testing.T) {
 	dir := t.TempDir()
-	src := `version: "2026.164.0002"
+	src := `version: "2026.164.0004"
 eval:
     eval-redis-pod:
         target: pod

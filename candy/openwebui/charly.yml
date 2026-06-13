@@ -101,7 +101,7 @@ candy:
           scope: system
     scenario:
         # DETERMINISTIC build-scope fact — the embedded check verbs run at both
-        # `charly box feature run` and `charly eval feature run`; they fail if
+        # `charly box feature run` and `charly check feature run`; they fail if
         # the auto-config entrypoint was never installed.
         - name: entrypoint-script-installed
           step:
@@ -132,7 +132,7 @@ candy:
               context:
                 - runtime
         # PROSE-ONLY step — genuine free-form behaviour, agent-graded by
-        # `charly eval feature run openwebui` against the live deployment.
+        # `charly check feature run openwebui` against the live deployment.
         - name: admin-can-reach-the-chat-ui
           step:
             - then: the rendered landing page presents the Open WebUI sign-in experience for the auto-provisioned admin account, ready to start an LLM chat

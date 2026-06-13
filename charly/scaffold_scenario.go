@@ -3,7 +3,7 @@ package main
 // scaffold_scenario.go — `charly candy add-scenario`: idempotently append a
 // Gherkin scenario to a candy's `description.scenario` list.
 //
-// This is the SPECIFY-stage authoring affordance of Agent Driven Evaluation:
+// This is the SPECIFY-stage authoring affordance of Agent Driven Checkuation:
 // it lets a human or an agent (over MCP, via the auto-reflected
 // candy.add-scenario tool) add an acceptance scenario without hand-editing
 // YAML or clobbering the existing list — the scenario sibling of

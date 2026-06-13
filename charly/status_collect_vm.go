@@ -23,7 +23,7 @@ type VMCollector struct {
 }
 
 // listLibvirtCharlyDomains lists charly-* libvirt domains. Swappable for tests
-// (mirrors InspectContainer in evalvars.go) so the table-driven test can mock
+// (mirrors InspectContainer in checkvars.go) so the table-driven test can mock
 // the libvirt listing without a live session daemon. The real implementation
 // connects to the local session daemon, lists, and disconnects.
 var listLibvirtCharlyDomains = defaultListLibvirtCharlyDomains

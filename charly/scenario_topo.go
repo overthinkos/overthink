@@ -15,7 +15,7 @@ package main
 //     order. Tie-breaks (no edge between two scenarios) by declaration
 //     index, so recipes read top-to-bottom unless a depends_on: forces
 //     reordering. Returns *CycleError on cycle (reusing graph.go's type).
-//     Used by both RunEvalLive (harness scoring, cross-pod
+//     Used by both RunCheckLive (harness scoring, cross-pod
 //     buckets) and RunScenarios (BDD execution within a description).
 //
 //   - groupConsecutiveByPod: splits a topo-sorted slice into maximal
@@ -146,7 +146,7 @@ func topoSortByDeclarationOrder(scenarios []Scenario) ([]Scenario, error) {
 // both `from-*-selftest` recipes importing `sshd-binary` from the
 // same candy).
 //
-// Used by RunEvalLive to decide whether to probe a
+// Used by RunCheckLive to decide whether to probe a
 // scenario or mark it skipped + cascade. Extracted to a named helper
 // so unit tests can verify the cascade rule independently of the live
 // podman path.

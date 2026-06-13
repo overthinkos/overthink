@@ -5,7 +5,7 @@ package main
 // the agent daemon running inside the guest (via the spicevmc channel
 // or direct virtio-serial) and unmarshals the JSON reply.
 //
-// Used by `charly eval libvirt guest <verb>`.
+// Used by `charly check libvirt guest <verb>`.
 
 import (
 	"encoding/base64"

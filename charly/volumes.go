@@ -60,7 +60,7 @@ func expandHome(path, home string) string {
 	return path
 }
 
-// Per-deploy volume naming (base / instance / Pattern-B / kind:eval bed) is
+// Per-deploy volume naming (base / instance / Pattern-B / kind:check bed) is
 // handled centrally by scopeVolumesToDeployKey + deployVolumePrefix in deploy.go
 // (keyed by the deploy's container name), so a dedicated instance-only renamer is
 // no longer needed.

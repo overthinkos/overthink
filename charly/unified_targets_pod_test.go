@@ -10,8 +10,8 @@ import (
 // stale-internal-verb class: the pod rebuild path must invoke the CURRENT verb
 // names. The dry-run tests above only check the PRINTED lines; this stubs
 // runCharlySubcommand and asserts the ACTUAL argv. That gap is exactly how
-// `eval image` survived the image→box rebrand — the dry-run line and the error
-// string were renamed to `eval box`, but the real call kept the old verb and no
+// `check image` survived the image→box rebrand — the dry-run line and the error
+// string were renamed to `check box`, but the real call kept the old verb and no
 // non-dry-run test exercised it.
 func TestPodUnifiedTarget_Rebuild_RealInvocations(t *testing.T) {
 	var calls [][]string
@@ -22,17 +22,17 @@ func TestPodUnifiedTarget_Rebuild_RealInvocations(t *testing.T) {
 	}
 	defer func() { runCharlySubcommand = orig }()
 
-	target := &PodUnifiedTarget{NodeName: "eval-x-pod", BaseImageRef: "x"}
+	target := &PodUnifiedTarget{NodeName: "check-x-pod", BaseImageRef: "x"}
 	if err := target.Rebuild(context.Background(), RebuildOpts{DryRun: false, RebuildImage: true}); err != nil {
 		t.Fatalf("Rebuild: %v", err)
 	}
 	want := [][]string{
 		{"box", "build", "x"},
-		{"eval", "box", "x"}, // NOT "eval image" — the verb is registered as `eval box`
-		{"deploy", "add", "eval-x-pod"},
-		{"stop", "eval-x-pod"},
-		{"config", "eval-x-pod"},
-		{"start", "eval-x-pod"},
+		{"check", "box", "x"}, // NOT "check image" — the verb is registered as `check box`
+		{"deploy", "add", "check-x-pod"},
+		{"stop", "check-x-pod"},
+		{"config", "check-x-pod"},
+		{"start", "check-x-pod"},
 	}
 	if len(calls) != len(want) {
 		t.Fatalf("got %d charly subcommands, want %d: %v", len(calls), len(want), calls)
@@ -46,9 +46,9 @@ func TestPodUnifiedTarget_Rebuild_RealInvocations(t *testing.T) {
 
 // TestPodUnifiedTarget_Basics verifies the trivial accessor methods.
 func TestPodUnifiedTarget_Basics(t *testing.T) {
-	target := &PodUnifiedTarget{NodeName: "eval-sway-browser-vnc-pod"}
-	if got := target.Name(); got != "eval-sway-browser-vnc-pod" {
-		t.Errorf("Name = %q, want %q", got, "eval-sway-browser-vnc-pod")
+	target := &PodUnifiedTarget{NodeName: "check-sway-browser-vnc-pod"}
+	if got := target.Name(); got != "check-sway-browser-vnc-pod" {
+		t.Errorf("Name = %q, want %q", got, "check-sway-browser-vnc-pod")
 	}
 	if got := target.Kind(); got != "pod" {
 		t.Errorf("Kind = %q, want %q", got, "pod")
@@ -65,14 +65,14 @@ func TestPodUnifiedTarget_Basics(t *testing.T) {
 // empty Engine → "podman").
 func TestPodUnifiedTarget_engine(t *testing.T) {
 	{
-		target := &PodUnifiedTarget{NodeName: "eval-sway-browser-vnc-pod"}
+		target := &PodUnifiedTarget{NodeName: "check-sway-browser-vnc-pod"}
 		if got := target.engine(); got != "podman" {
 			t.Errorf("engine(no embed) = %q, want podman", got)
 		}
 	}
 	{
 		target := &PodUnifiedTarget{
-			NodeName:        "eval-sway-browser-vnc-pod",
+			NodeName:        "check-sway-browser-vnc-pod",
 			PodDeployTarget: &PodDeployTarget{Engine: "docker"},
 		}
 		if got := target.engine(); got != "docker" {
@@ -81,7 +81,7 @@ func TestPodUnifiedTarget_engine(t *testing.T) {
 	}
 	{
 		target := &PodUnifiedTarget{
-			NodeName:        "eval-sway-browser-vnc-pod",
+			NodeName:        "check-sway-browser-vnc-pod",
 			PodDeployTarget: &PodDeployTarget{},
 		}
 		if got := target.engine(); got != "podman" {
@@ -98,7 +98,7 @@ func TestPodUnifiedTarget_engine(t *testing.T) {
 func TestPodUnifiedTarget_Test_NilExecutor(t *testing.T) {
 	// Without any embed, Executor returns a non-nil ShellExecutor
 	// — so Test should run on it. We use a hermetic command:true.
-	target := &PodUnifiedTarget{NodeName: "eval-sway-browser-vnc-pod"}
+	target := &PodUnifiedTarget{NodeName: "check-sway-browser-vnc-pod"}
 	checks := []Op{{ID: "ok", Command: "true"}}
 	if err := target.Test(context.Background(), checks, TestOpts{}); err != nil {
 		t.Errorf("Test(local fallback): %v", err)
@@ -108,21 +108,21 @@ func TestPodUnifiedTarget_Test_NilExecutor(t *testing.T) {
 // TestPodUnifiedTarget_Update_DryRun verifies the dry-run path emits
 // the expected charly-update line without invoking the subcommand.
 func TestPodUnifiedTarget_Update_DryRun(t *testing.T) {
-	target := &PodUnifiedTarget{NodeName: "eval-sway-browser-vnc-pod"}
+	target := &PodUnifiedTarget{NodeName: "check-sway-browser-vnc-pod"}
 	if err := target.Update(context.Background(), nil, UpdateOpts{DryRun: true}); err != nil {
 		t.Errorf("Update dry-run: %v", err)
 	}
 }
 
 // TestPodUnifiedTarget_Rebuild_DryRun verifies the dry-run path emits
-// the expected charly-build/eval/deploy/stop/config/start sequence without
+// the expected charly-build/check/deploy/stop/config/start sequence without
 // invoking the subcommands.
 func TestPodUnifiedTarget_Rebuild_DryRun(t *testing.T) {
-	target := &PodUnifiedTarget{NodeName: "eval-sway-browser-vnc-pod", BaseImageRef: "sway-browser-vnc"}
+	target := &PodUnifiedTarget{NodeName: "check-sway-browser-vnc-pod", BaseImageRef: "sway-browser-vnc"}
 	if err := target.Rebuild(context.Background(), RebuildOpts{DryRun: true, RebuildImage: true}); err != nil {
 		t.Errorf("Rebuild dry-run: %v", err)
 	}
-	// Without RebuildImage, the build/eval steps are skipped.
+	// Without RebuildImage, the build/check steps are skipped.
 	if err := target.Rebuild(context.Background(), RebuildOpts{DryRun: true, RebuildImage: false}); err != nil {
 		t.Errorf("Rebuild dry-run no-box: %v", err)
 	}
@@ -135,7 +135,7 @@ func TestPodUnifiedTarget_Rebuild_BaseRefFallback(t *testing.T) {
 	// stdout capture, but we can confirm the dry-run branch returns
 	// nil even when BaseImageRef is unset (Rebuild's internal
 	// fallback prevents an empty-ref panic / shell-out).
-	target := &PodUnifiedTarget{NodeName: "eval-sway-browser-vnc-pod" /* BaseImageRef unset */}
+	target := &PodUnifiedTarget{NodeName: "check-sway-browser-vnc-pod" /* BaseImageRef unset */}
 	if err := target.Rebuild(context.Background(), RebuildOpts{DryRun: true, RebuildImage: true}); err != nil {
 		t.Errorf("Rebuild dry-run with empty BaseImageRef: %v", err)
 	}

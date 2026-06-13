@@ -7,7 +7,7 @@ import (
 
 // withMockLibvirtDomains swaps the package-level listLibvirtCharlyDomains for the
 // duration of fn, restoring the real implementation afterwards. Mirrors the
-// InspectContainer swap pattern in evalvars.go so tests need no live libvirt.
+// InspectContainer swap pattern in checkvars.go so tests need no live libvirt.
 func withMockLibvirtDomains(t *testing.T, domains []domainInfo, err error, fn func()) {
 	t.Helper()
 	prev := listLibvirtCharlyDomains
@@ -107,8 +107,8 @@ func TestVMCollector_Collect(t *testing.T) {
 			},
 			deploy: &DeployConfig{
 				Deploy: map[string]DeploymentNode{
-					// deploy KEY (eval-k3s-vm) != vm entity (k3s-vm).
-					"eval-k3s-vm": {
+					// deploy KEY (check-k3s-vm) != vm entity (k3s-vm).
+					"check-k3s-vm": {
 						Target:  "vm",
 						Vm:      "k3s-vm",
 						VmState: &VmDeployState{SshPort: 2225, SshUser: "arch"},

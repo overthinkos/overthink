@@ -80,7 +80,7 @@ candy:
               fi
             fi
 
-            # Sanity: the bundle must end up findable. The eval probe
+            # Sanity: the bundle must end up findable. The check probe
             # below asserts this, but fail loudly here too so the build
             # log surfaces the issue.
             if ! find /opt/versatiles-style -maxdepth 3 -name 'versatiles-style*.js' -size +1c | head -1 | grep -q .; then

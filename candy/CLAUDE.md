@@ -7,9 +7,9 @@ config files: `pixi.toml`, `package.json`, `Cargo.toml`, service files, …).
 
 - `/charly-image:layer` — the authoritative `candy.yml` schema: the `task:` verb
   catalog, `vars:` substitution, the unified `service:` schema, package
-  sections, `eval:` checks, and the mandatory `version:` field.
+  sections, `check:` checks, and the mandatory `version:` field.
 - `/charly-image:image` — when composing candies into a box.
-- `/charly-eval:eval` — authoring the `eval:` declarative checks a candy ships.
+- `/charly-check:check` — authoring the `check:` declarative checks a candy ships.
 
 The `layer-validator` agent is a fast pre-edit sanity gate; `charly box validate`
 is the authoritative checker. Use the `charly candy …` editor verbs (comment-

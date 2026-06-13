@@ -10,7 +10,7 @@ import (
 
 // appium_session.go manages the persistent session-file pattern that lets
 // multi-step Appium tests share one WebDriver session across separate `charly
-// eval appium …` invocations. Each session-create writes a JSON file at
+// check appium …` invocations. Each session-create writes a JSON file at
 // ~/.cache/charly/appium/sessions/<image>[_<instance>].json; later
 // find/click/install-app/screenshot/etc. load it to discover the session
 // id + base URL; session-delete removes the file (and best-effort closes

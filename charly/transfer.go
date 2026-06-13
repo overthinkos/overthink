@@ -125,7 +125,7 @@ func TransferToRootful(imageRef string) error {
 //  3. Canonical `EnsureImagePresent` — pulls from the registry and
 //     falls back to a local `charly box build <name>` when the ref maps
 //     to a project charly.yml entry. This is the same code path
-//     BuilderRun, the eval preflight, and `charly box pull` all go
+//     BuilderRun, the check preflight, and `charly box pull` all go
 //     through (see charly/ensure_image.go).
 //
 // Returns ErrImageNotLocal (wrapped with the ref) only when ALL three

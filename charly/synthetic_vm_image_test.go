@@ -96,7 +96,7 @@ func TestSyntheticVmImageDistroFormat(t *testing.T) {
 }
 
 // TestResolveVmEntity is the regression guard for the bed-deploy reach bug:
-// a kind:eval bed (and any deploy.yml target:vm entry) names its VM via the
+// a kind:check bed (and any deploy.yml target:vm entry) names its VM via the
 // node's `vm:` cross-ref, NOT a "vm:"-prefixed deploy name. Before the fix the
 // candy compiler only recognized the "vm:" prefix, so a bed fell through to
 // syntheticHostBox (host distro → pac) and the deploy ran `pacman` on a
@@ -109,7 +109,7 @@ func TestResolveVmEntity(t *testing.T) {
 		node       *DeploymentNode
 		want       string
 	}{
-		{"bed via node.vm (the bug)", "eval-fedora-vm", &DeploymentNode{Vm: "fedora-vm"}, "fedora-vm"},
+		{"bed via node.vm (the bug)", "check-fedora-vm", &DeploymentNode{Vm: "fedora-vm"}, "fedora-vm"},
 		{"deploy.yml target:vm via node.vm", "my-guest", &DeploymentNode{Target: "vm", Vm: "arch"}, "arch"},
 		{"cli vm: prefix, no node", "vm:arch", nil, "arch"},
 		{"node.vm wins over prefix", "vm:ignored", &DeploymentNode{Vm: "real-vm"}, "real-vm"},

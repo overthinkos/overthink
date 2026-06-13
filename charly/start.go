@@ -77,8 +77,8 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 	}
 
 	// Resolve the deploy key to its declared image short-name via THE shared
-	// resolver (deploy.go) — the same one charly config / shell / eval live use,
-	// so no command diverges when key != image (kind:eval beds, Pattern B).
+	// resolver (deploy.go) — the same one charly config / shell / check live use,
+	// so no command diverges when key != image (kind:check beds, Pattern B).
 	// c.Image stays the deploy-KEY for container / quadlet / overlay lookups;
 	// only the image ref uses the resolved name.
 	deployBoxName := resolveDeployBoxName(c.Box, c.Instance)

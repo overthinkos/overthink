@@ -1310,7 +1310,7 @@ func (c *SecretsGpgSetupCmd) checkPrereqs() error {
 		{"gpg-connect-agent", "gpg-connect-agent"},
 	}
 	// Optional — needed ONLY for KeePassXC Secret Service passphrase
-	// auto-retrieval (pinentry-qt links libsecret to look the GPG passphrase up
+	// auto-retricheck (pinentry-qt links libsecret to look the GPG passphrase up
 	// in KeePassXC). Without them gpg still works: gpg-agent simply prompts via
 	// the configured GUI/TTY pinentry instead of auto-retrieving. charly's own
 	// credential store does NOT use these at all — it speaks the Secret Service
@@ -1318,8 +1318,8 @@ func (c *SecretsGpgSetupCmd) checkPrereqs() error {
 	// never a setup failure (the old "install libsecret" hard-error was
 	// misleading — charly does not depend on libsecret).
 	optional := []struct{ name, cmdName, note string }{
-		{"pinentry-qt", "pinentry-qt", "GUI prompt + KeePassXC passphrase auto-retrieval"},
-		{"secret-tool", "secret-tool", "from libsecret; KeePassXC passphrase auto-retrieval"},
+		{"pinentry-qt", "pinentry-qt", "GUI prompt + KeePassXC passphrase auto-retricheck"},
+		{"secret-tool", "secret-tool", "from libsecret; KeePassXC passphrase auto-retricheck"},
 	}
 	allOK := true
 	for _, ch := range required {
@@ -1340,7 +1340,7 @@ func (c *SecretsGpgSetupCmd) checkPrereqs() error {
 
 	// pinentry-qt libsecret linkage — an optional convenience, never required.
 	if pinentryHasLibsecret() {
-		fmt.Fprintln(os.Stderr, "  pinentry-qt libsecret: yes (KeePassXC passphrase auto-retrieval available)")
+		fmt.Fprintln(os.Stderr, "  pinentry-qt libsecret: yes (KeePassXC passphrase auto-retricheck available)")
 	} else {
 		fmt.Fprintln(os.Stderr, "  pinentry-qt libsecret: no (optional — gpg prompts interactively instead of auto-retrieving from KeePassXC)")
 	}

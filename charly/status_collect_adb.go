@@ -10,7 +10,7 @@ import (
 
 // AndroidCollector is the kind:android SubstrateCollector. It enumerates every
 // declared `target: android` deploy node (top-level AND nested under a pod) from
-// the merged deploy set (charly.yml's folded kind:eval beds + ~/.config/charly/
+// the merged deploy set (charly.yml's folded kind:check beds + ~/.config/charly/
 // charly.yml), resolves each to a live AndroidDevice via resolveAndroidDevice,
 // and probes the backing adb server's host:devices for online / offline. A node
 // whose device can't be resolved (emulator pod down, endpoint unreachable) is
@@ -57,7 +57,7 @@ func (a *AndroidCollector) Collect(ctx context.Context, opts CollectOpts) ([]Dep
 
 // androidDeployNode is one declared `target: android` deploy node together with
 // the dotted deploy path that addresses it (e.g.
-// "eval-android-emulator-pod.device") — the path resolveAndroidDevice needs to
+// "check-android-emulator-pod.device") — the path resolveAndroidDevice needs to
 // locate the in-pod parent container for a nested device.
 type androidDeployNode struct {
 	path string
@@ -66,7 +66,7 @@ type androidDeployNode struct {
 
 // collectAndroidDeployNodes is the SINGLE enumeration of every `target: android`
 // deploy node, shared by Available and Collect (no duplicated walk). It merges
-// the charly.yml projection (incl. folded kind:eval beds) with the local
+// the charly.yml projection (incl. folded kind:check beds) with the local
 // charly.yml — local wins per key, mirroring resolveTreeRoot's
 // MergeDeployConfigs(projectDC, localDC) precedence — then pre-order walks every
 // root so nested devices are discovered with their full dotted path.
@@ -89,7 +89,7 @@ func collectAndroidDeployNodes(opts CollectOpts) []androidDeployNode {
 }
 
 // unifiedDeployConfig projects a UnifiedFile to its DeployConfig (folded
-// kind:eval beds included) or nil when the file is absent.
+// kind:check beds included) or nil when the file is absent.
 func unifiedDeployConfig(uf *UnifiedFile) *DeployConfig {
 	if uf == nil {
 		return nil

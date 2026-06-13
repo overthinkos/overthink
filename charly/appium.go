@@ -18,10 +18,10 @@ import (
 	"github.com/tebeka/selenium"
 )
 
-// appium.go implements `charly eval appium …` — the host-side Appium
+// appium.go implements `charly check appium …` — the host-side Appium
 // WebDriver client. The host `charly` binary connects to the container's
 // host-published Appium port (container :4723 → host's HOST_PORT:4723,
-// e.g. 35001 on eval-android-emulator-pod) using github.com/tebeka/selenium
+// e.g. 35001 on check-android-emulator-pod) using github.com/tebeka/selenium
 // (W3C WebDriver client, talks Appium 2.x and 3.x because W3C is stable).
 //
 // Appium-specific endpoints not in the standard WebDriver surface
@@ -30,10 +30,10 @@ import (
 //
 // Session lifecycle: a persistent JSON file at
 // ~/.cache/charly/appium/sessions/<image>[_<instance>].json carries the
-// session id between separate `charly eval appium …` invocations. See
+// session id between separate `charly check appium …` invocations. See
 // appium_session.go for the file management.
 
-// AppiumCmd groups the `charly eval appium …` surface across three tiers:
+// AppiumCmd groups the `charly check appium …` surface across three tiers:
 //
 //	Tier 1 — typed leaves for the hot discrete ops (status/session/find/click/
 //	         send-keys/screenshot/install-app + get-text/get-attribute/clear/
@@ -61,7 +61,7 @@ type AppiumCmd struct {
 	Source       AppiumSourceCmd       `cmd:"" help:"Dump the UI hierarchy XML (GET /source)"`
 	Back         AppiumBackCmd         `cmd:"" help:"Navigate back (POST /back)"`
 
-	// Tier 2 — per-class sugar groups (nested → flat `gesture-*` etc. in eval YAML)
+	// Tier 2 — per-class sugar groups (nested → flat `gesture-*` etc. in check YAML)
 	Gesture AppiumGestureCmd `cmd:"" help:"UiAutomator2 touch gestures (tap/swipe/scroll/drag/...)"`
 	App     AppiumAppCmd     `cmd:"" help:"App lifecycle + activity (activate/start-activity/is-installed/...)"`
 	Key     AppiumKeyCmd     `cmd:"" help:"Keys + keyboard (press/hide/shown)"`
@@ -72,7 +72,7 @@ type AppiumCmd struct {
 	Raw     AppiumRawCmd     `cmd:"" help:"Issue any raw W3C WebDriver HTTP call"`
 }
 
-// AppiumGestureCmd — `charly eval appium gesture <op>`; flat `gesture-<op>` in eval YAML.
+// AppiumGestureCmd — `charly check appium gesture <op>`; flat `gesture-<op>` in check YAML.
 type AppiumGestureCmd struct {
 	Tap        AppiumGestureTapCmd        `cmd:"" help:"Single tap (mobile: clickGesture)"`
 	DoubleTap  AppiumGestureDoubleTapCmd  `cmd:"double-tap" help:"Double tap (mobile: doubleClickGesture)"`
@@ -85,7 +85,7 @@ type AppiumGestureCmd struct {
 	PinchClose AppiumGesturePinchCloseCmd `cmd:"pinch-close" help:"Pinch close (mobile: pinchCloseGesture)"`
 }
 
-// AppiumAppCmd — `charly eval appium app <op>`; flat `app-<op>` in eval YAML.
+// AppiumAppCmd — `charly check appium app <op>`; flat `app-<op>` in check YAML.
 type AppiumAppCmd struct {
 	StartActivity   AppiumAppStartActivityCmd   `cmd:"start-activity" help:"Launch an activity (mobile: startActivity, intent form)"`
 	Activate        AppiumAppActivateCmd        `cmd:"" help:"Bring an app to foreground (mobile: activateApp)"`
@@ -98,14 +98,14 @@ type AppiumAppCmd struct {
 	CurrentPackage  AppiumAppCurrentPackageCmd  `cmd:"current-package" help:"Current foreground package"`
 }
 
-// AppiumKeyCmd — `charly eval appium key <op>`; flat `key-<op>` in eval YAML.
+// AppiumKeyCmd — `charly check appium key <op>`; flat `key-<op>` in check YAML.
 type AppiumKeyCmd struct {
 	Press AppiumKeyPressCmd `cmd:"" help:"Press an Android keycode (mobile: pressKey)"`
 	Hide  AppiumKeyHideCmd  `cmd:"" help:"Hide the soft keyboard (mobile: hideKeyboard)"`
 	Shown AppiumKeyShownCmd `cmd:"" help:"Report whether the soft keyboard is shown"`
 }
 
-// AppiumDeviceCmd — `charly eval appium device <op>`; flat `device-<op>` in eval YAML.
+// AppiumDeviceCmd — `charly check appium device <op>`; flat `device-<op>` in check YAML.
 type AppiumDeviceCmd struct {
 	Info           AppiumDeviceInfoCmd           `cmd:"" help:"Device info (mobile: deviceInfo)"`
 	Battery        AppiumDeviceBatteryCmd        `cmd:"" help:"Battery info (mobile: batteryInfo)"`
@@ -154,7 +154,7 @@ func appiumBaseURL(box, instance, basePath string) (string, error) {
 // appium status — server health check (no session needed)
 // ---------------------------------------------------------------------------
 
-// AppiumStatusCmd: `charly eval appium status <image>` — issues GET <base>/status
+// AppiumStatusCmd: `charly check appium status <image>` — issues GET <base>/status
 // and prints the response body. Appium 3.x returns `{"value":{"ready":true,...}}`
 // on a healthy server. Stays away from the SDK because /status is the one
 // endpoint that doesn't need a session — bypassing selenium.NewRemote keeps
@@ -188,7 +188,7 @@ func (c *AppiumStatusCmd) Run() error {
 // appium session-create — W3C NewRemote + persistence
 // ---------------------------------------------------------------------------
 
-// AppiumSessionCreateCmd: `charly eval appium session-create <image> --caps <json>`
+// AppiumSessionCreateCmd: `charly check appium session-create <image> --caps <json>`
 // — parses the W3C capabilities JSON, creates a session via the selenium
 // SDK (which wraps Capabilities under W3C `alwaysMatch`), persists the
 // session id at ~/.cache/charly/appium/sessions/<image>[_<instance>].json,
@@ -266,7 +266,7 @@ func (c *AppiumSessionCreateCmd) Run() error {
 // appium session-delete — close + remove file
 // ---------------------------------------------------------------------------
 
-// AppiumSessionDeleteCmd: `charly eval appium session-delete <image>`. No-op
+// AppiumSessionDeleteCmd: `charly check appium session-delete <image>`. No-op
 // if the session file is missing. Errors during DELETE are warnings (the
 // server may have GC'd the session already) but the file is still removed.
 type AppiumSessionDeleteCmd struct {
@@ -323,7 +323,7 @@ func loadActiveSession(box, instance string) (*AppiumSession, error) {
 		return nil, err
 	}
 	if sess == nil {
-		return nil, fmt.Errorf("no Appium session for image %q (instance=%q) — run `charly eval appium session-create %s --caps <json>` first", box, instance, box)
+		return nil, fmt.Errorf("no Appium session for image %q (instance=%q) — run `charly check appium session-create %s --caps <json>` first", box, instance, box)
 	}
 	return sess, nil
 }
@@ -589,7 +589,7 @@ func printW3CValue(result json.RawMessage, fallback string) {
 // appium install-app — mobile:installApp escape hatch
 // ---------------------------------------------------------------------------
 
-// AppiumInstallAppCmd: `charly eval appium install-app <image> --apk <host-path>`.
+// AppiumInstallAppCmd: `charly check appium install-app <image> --apk <host-path>`.
 // `--apk` is a HOST filesystem path — symmetric with `adb: install`. The
 // in-container Appium server's `mobile: installApp` requires `appPath` (a
 // path IT can read; the base64 `{"app": …}` form is rejected with HTTP 400
@@ -597,7 +597,7 @@ func printW3CValue(result json.RawMessage, fallback string) {
 // INTO the container via `<engine> cp` to a temp path, then installApp is
 // called with that in-container path, then the temp file is removed. This
 // makes the verb self-contained: no bind-mount and no external staging step
-// are required (the eval-android-emulator-pod bed mounts no host dir).
+// are required (the check-android-emulator-pod bed mounts no host dir).
 type AppiumInstallAppCmd struct {
 	Box string `arg:"" help:"Box name"`
 	Apk string `long:"apk" required:"" help:"APK path on the HOST (staged into the container automatically, like adb install)"`
@@ -645,11 +645,11 @@ func (c *AppiumInstallAppCmd) Run() error {
 // appium find — element discovery + id print
 // ---------------------------------------------------------------------------
 
-// AppiumFindCmd: `charly eval appium find <image> --selector <expr> [--strategy STRAT]`
+// AppiumFindCmd: `charly check appium find <image> --selector <expr> [--strategy STRAT]`
 // — finds the first element matching selector + strategy, prints the
 // W3C element id. Useful for chaining (a subsequent shell-driven call
 // could use the id), but in practice the recommended pattern is to
-// inline find+click via `charly eval appium click`.
+// inline find+click via `charly check appium click`.
 // appiumElementFlags is the shared element-targeting flag set for find / click /
 // send-keys / get-text / get-attribute / clear / find-all (R3: one definition).
 type appiumElementFlags struct {
@@ -1328,7 +1328,7 @@ func (c *AppiumDeviceContextCmd) Run() error {
 }
 
 // ===========================================================================
-// Tier 3 — generic escape hatch (cdp raw / eval equivalents)
+// Tier 3 — generic escape hatch (cdp raw / check equivalents)
 // ===========================================================================
 
 // substituteElement replaces the literal {element} token with a resolved id.

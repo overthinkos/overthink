@@ -82,7 +82,7 @@ func runStepGroup(
 		}
 
 		if blocked {
-			sr.Result = EvalResult{
+			sr.Result = CheckResult{
 				Status:  TestSkip,
 				Message: "skipped — blocked by earlier fail in scenario",
 				Verb:    verbOf(&u.step),
@@ -92,9 +92,9 @@ func runStepGroup(
 		}
 
 		if u.step.IsPending() {
-			// Agent Driven Evaluation binding: a prose-only step (no
+			// Agent Driven Checkuation binding: a prose-only step (no
 			// embedded check verb) binds to the agent grader when one is
-			// set (`charly eval feature run` against a live deployment). The
+			// set (`charly check feature run` against a live deployment). The
 			// grader probes the target and returns a real pass/fail
 			// verdict with evidence — NOT "pending". Without a grader the
 			// step stays advisory: skip by default, fail under --strict.
@@ -115,7 +115,7 @@ func runStepGroup(
 				status = TestFail
 				msg = "pending (no verb bound) — strict mode"
 			}
-			sr.Result = EvalResult{Status: status, Message: msg}
+			sr.Result = CheckResult{Status: status, Message: msg}
 			pending = 1
 			results[slot] = stepGroupResult{Result: sr, Pending: pending}
 			return
@@ -143,10 +143,10 @@ func runStepGroup(
 		// individual StepResult.StepID fields, so this assignment is
 		// only useful for sequential failures — best-effort.
 		scenarioCtx.CurrentStepID = u.stepID
-		evalRes := r.runOne(ctx, &u.step.Op)
-		sr.Result = evalRes
+		checkRes := r.runOne(ctx, &u.step.Op)
+		sr.Result = checkRes
 		// Record for summarize: aggregation. Thread-safe.
-		scenarioCtx.RecordResult(u.stepID, evalRes)
+		scenarioCtx.RecordResult(u.stepID, checkRes)
 		results[slot] = stepGroupResult{Result: sr, Pending: 0}
 	}
 
@@ -233,7 +233,7 @@ func substituteIndex(c *Op, indexVar string, idx int) *Op {
 // Cycle errors are recorded as a fail verdict on every cyclic scenario
 // in the affected description, then the non-cyclic remainder runs
 // normally — matches the harness's "score the non-cyclic subset" policy
-// from RunEvalLive.
+// from RunCheckLive.
 //
 // Features are iterated in LabelDescriptionSet section order
 // (candy → box → deploy). Outline scenarios fan out to one
@@ -313,7 +313,7 @@ func cyclicScenarioResult(origin string, sIdx int, sc Scenario) ScenarioResult {
 		Tag:        append([]string(nil), sc.Tag...),
 		Status:     TestFail,
 		Step: []StepResult{{
-			Result: EvalResult{
+			Result: CheckResult{
 				Status:  TestFail,
 				Message: "scenario participates in a depends_on cycle — see validation output",
 			},
@@ -322,7 +322,7 @@ func cyclicScenarioResult(origin string, sIdx int, sc Scenario) ScenarioResult {
 }
 
 // ScenarioResult is the summary of one scenario's execution, including
-// every step's individual EvalResult. Reporters transform this into
+// every step's individual CheckResult. Reporters transform this into
 // text/json/tap/junit output.
 type ScenarioResult struct {
 	Origin     string       `json:"origin"`      // "candy:redis" etc.
@@ -333,16 +333,16 @@ type ScenarioResult struct {
 	Step       []StepResult `json:"step"`
 	Teardown   []StepResult `json:"teardown,omitempty"` // teardown steps (Ext 5; always run)
 	OnFail     []StepResult `json:"on_fail,omitempty"`
-	Status     EvalStatus   `json:"status"` // overall (fail if any step failed)
+	Status     CheckStatus   `json:"status"` // overall (fail if any step failed)
 	Pending    int          `json:"pending,omitempty"`
 }
 
-// StepResult pairs a EvalResult with the step's narrative keyword/text.
+// StepResult pairs a CheckResult with the step's narrative keyword/text.
 type StepResult struct {
 	Keyword string     `json:"keyword"`
 	Text    string     `json:"text"`
 	StepID  string     `json:"step_id"`
-	Result  EvalResult `json:"result"`
+	Result  CheckResult `json:"result"`
 }
 
 // matchScenario returns true when the filter matches the scenario's
@@ -468,7 +468,7 @@ func runOneScenario(ctx context.Context, r *Runner, origin string, scenarioIdx i
 			}
 
 			if onfailStep.IsPending() {
-				sr.Result = EvalResult{Status: TestSkip, Message: "on_fail step has no verb (advisory)"}
+				sr.Result = CheckResult{Status: TestSkip, Message: "on_fail step has no verb (advisory)"}
 				res.OnFail = append(res.OnFail, sr)
 				continue
 			}

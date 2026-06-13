@@ -60,7 +60,7 @@ type preemptLease struct {
 	Claimant  string            `yaml:"claimant"`
 	Claim     holderAddr        `yaml:"claim"` // probe whether the claimant is still alive (reconcile)
 	Tokens    []string          `yaml:"tokens"`
-	Transient bool              `yaml:"transient"` // eval-bed claims auto-release; persistent claims (vm create/start) don't
+	Transient bool              `yaml:"transient"` // check-bed claims auto-release; persistent claims (vm create/start) don't
 	Preempted []preemptedHolder `yaml:"preempted"`
 	Created   string            `yaml:"created"` // RFC3339 UTC
 }
@@ -121,7 +121,7 @@ func newResourceArbiter() *ResourceArbiter {
 }
 
 // envPreemptLeaseHeld is set by the OUTERMOST claim-bringing `charly` invocation
-// (runEvalBed, or a standalone `charly vm create`/`charly start`) so that the nested
+// (runCheckBed, or a standalone `charly vm create`/`charly start`) so that the nested
 // `charly` subprocesses it spawns (the bed's `charly vm create`/`charly deploy add`/
 // `charly vm destroy`, etc.) do NOT independently acquire or release the lease —
 // the owner manages it. An env channel, not config: it scopes to one process
@@ -135,7 +135,7 @@ const envPreemptLeaseHeld = "CHARLY_PREEMPT_LEASE"
 // claim is already covered and this is a no-op. On a real acquire it marks the
 // environment so nested `charly` subprocesses skip re-acquiring. Returns a lease
 // whose Release()/ReleaseFailed() the caller must invoke (defer); a no-op
-// lease is safe to Release. transient=true for eval-bed claims (auto-released
+// lease is safe to Release. transient=true for check-bed claims (auto-released
 // at run end), false for persistent claims (charly vm create / charly start).
 func acquireExclusiveForClaimant(claimant string, node DeploymentNode, transient bool) (*Lease, error) {
 	if len(node.RequiredExclusive()) == 0 {
@@ -214,7 +214,7 @@ func (a *ResourceArbiter) saveLedger(l *preemptLedger) error {
 // every running preemptible holder of them, persisting a crash-safe lease,
 // and returning a handle whose Release()/ReleaseFailed() restarts them.
 //
-// transient=true marks an eval-bed-style claim (auto-released at run end);
+// transient=true marks an check-bed-style claim (auto-released at run end);
 // false marks a persistent claim (charly vm create / charly start) released only when
 // the claimant itself is torn down.
 //
@@ -483,7 +483,7 @@ func (a *ResourceArbiter) Status() (*preemptLedger, []string, error) {
 
 // gatherDeployNodes returns every deploy node visible to the current
 // invocation: the current project's deploy map (committed charly.yml, which
-// includes folded kind:eval beds) as the BASE, with the operator's per-host
+// includes folded kind:check beds) as the BASE, with the operator's per-host
 // ~/.config/charly/charly.yml overlay merged ON TOP. Keyed by deploy name.
 //
 // The per-host overlay WINS on a name clash — it carries local-only deploy
@@ -521,7 +521,7 @@ func gatherPreemptibleHolders() map[string]DeploymentNode {
 	return out
 }
 
-// lookupVMClaimant finds a deploy/eval node that targets the given kind:vm
+// lookupVMClaimant finds a deploy/check node that targets the given kind:vm
 // entity and declares requires_exclusive — the claimant on whose behalf a
 // standalone `charly vm create/stop/destroy <entity>` should acquire/release an
 // exclusive lease. Returns the deploy key (claimant name) + node; ok=false

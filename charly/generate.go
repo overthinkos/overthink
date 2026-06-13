@@ -35,7 +35,7 @@ type Generator struct {
 
 	// DevLocalPkg, when true, makes localpkg candies (the charly toolchain) build
 	// from LOCAL in-development source instead of downloading the published
-	// release. Set ONLY for disposable eval-bed image builds (the eval-bed runner
+	// release. Set ONLY for disposable check-bed image builds (the check-bed runner
 	// passes `--dev-local-pkg`), so a bed always tests the in-development charly;
 	// a production box build leaves it false. See renderLocalPkgImageInstall.
 	DevLocalPkg bool
@@ -1435,7 +1435,7 @@ func (g *Generator) writeCandySteps(b *strings.Builder, candyName string, img *R
 	// compileLocalPkgStep resolves the target distro's localpkg-capable format and
 	// the candy's source; renderLocalPkgImageInstall (shared with OCITarget — R3)
 	// then picks the binary source by box type: a PRODUCTION box downloads the
-	// PUBLISHED release; a DISPOSABLE eval bed (g.DevLocalPkg) builds the
+	// PUBLISHED release; a DISPOSABLE check bed (g.DevLocalPkg) builds the
 	// IN-DEVELOPMENT package from local source. Emits "" when the format declares
 	// no localpkg contract (the candy's own task: install is the fallback).
 	if step := compileLocalPkgStep(layer, img, HostContext{}); step != nil {
@@ -2117,10 +2117,10 @@ func (g *Generator) writeLabels(b *strings.Builder, boxName string, candyOrder [
 	resolvedStatus := resolveStatus(effectiveStatus)
 	b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelStatus, resolvedStatus))
 
-	// Acceptance-depth rung — the per-box eval_level gating `charly check run
-	// <bed>` (see eval_level.go). Always emitted (normalized to the default
+	// Acceptance-depth rung — the per-box check_level gating `charly check run
+	// <bed>` (see check_level.go). Always emitted (normalized to the default
 	// rung) so a bed runner reading labels never sees an empty value.
-	b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelEvalLevel, ResolveEvalLevel(img.EvalLevel)))
+	b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelCheckLevel, ResolveCheckLevel(img.CheckLevel)))
 	if len(infoParts) > 0 {
 		// Collapse block-scalar newlines so the value is one valid LABEL line,
 		// then single-quote (NOT %q): a description may legitimately mention a

@@ -78,8 +78,8 @@ type DeployExecutor interface {
 	// escalation — callers add `sudo` explicitly when needed; mirrors the
 	// previous test-time Executor.Exec semantics. After the executor-
 	// hierarchy cutover (2026-04), this is the single capture-output
-	// method used by every probe across `charly eval live`, `charly eval box`, and
-	// `charly eval` scoring.
+	// method used by every probe across `charly check live`, `charly check box`, and
+	// `charly check` scoring.
 	RunCapture(ctx context.Context, script string) (stdout, stderr string, exit int, err error)
 
 	// Kind returns a coarse classification of the venue used by the test

@@ -21,7 +21,7 @@ var namespaceAliasRe = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
 // Unified YAML Format — Parts B/C/D/E of the refactor plan.
 //
 // `charly.yml` is the ONE filename and the only file a project needs: the entry
-// point (import: + discover:) plus the inline kinds (vm/pod/k8s/eval/local/
+// point (import: + discover:) plus the inline kinds (vm/pod/k8s/check/local/
 // android/deploy + any build-vocabulary overrides). Boxes and candies are
 // DISCOVERED per name as box/<name>/charly.yml and candy/<name>/charly.yml. The
 // default distro/builder/init/resource build vocabulary is embedded in the
@@ -112,13 +112,13 @@ type UnifiedFile struct {
 	Recipe map[string]*HarnessRecipe `yaml:"recipe,omitempty"`
 	Score  map[string]*HarnessScore  `yaml:"score,omitempty"`
 
-	// Eval (kind:eval) — disposable R10 test beds. A deploy-shaped map
-	// (bed-name → DeploymentNode) authored in eval.yml alongside the
-	// recipe/score framework. foldEvalBeds() copies each entry into the
-	// Deploy map (EvalBed=true) at load time so every deploy verb resolves
-	// a bed by name through the SAME path as any deploy; `charly eval run <bed>`
-	// drives the full R10 sequence. EvalBeds() enumerates them.
-	Eval map[string]DeploymentNode `yaml:"eval,omitempty"`
+	// Check (kind:check) — disposable R10 test beds. A deploy-shaped map
+	// (bed-name → DeploymentNode) authored in check.yml alongside the
+	// recipe/score framework. foldCheckBeds() copies each entry into the
+	// Deploy map (CheckBed=true) at load time so every deploy verb resolves
+	// a bed by name through the SAME path as any deploy; `charly check run <bed>`
+	// drives the full R10 sequence. CheckBeds() enumerates them.
+	Check map[string]DeploymentNode `yaml:"check,omitempty"`
 
 	// Calamares-aligned kinds (2026-05 cutover). `group:` ↔ Calamares
 	// netinstall package group; `target:` ↔ Calamares settings.conf
@@ -342,7 +342,7 @@ type kindKeyedDoc struct {
 
 // AgentDoc wraps a single AgentConfig with an explicit Name — the kind:agent
 // standalone form. Bundles of `kind: agent` + `name: <name>` documents
-// can be concatenated via YAML --- separators in eval.yml.
+// can be concatenated via YAML --- separators in check.yml.
 type AgentDoc struct {
 	Name        string `yaml:"name"`
 	AgentConfig `yaml:",inline"`
@@ -766,17 +766,17 @@ func LoadUnified(dir string) (*UnifiedFile, bool, error) {
 	if err := rejectLegacyBoxPort(root, merged); err != nil {
 		return nil, true, err
 	}
-	// Fold kind:eval beds into the Deploy map (EvalBed=true) so every
+	// Fold kind:check beds into the Deploy map (CheckBed=true) so every
 	// deploy verb resolves them by name through the same path as any
 	// deploy. Disjoint-name guard inside. Runs BEFORE validateDeploymentTree
 	// so folded beds get the same deploy validation (name shape, required
 	// box: on pod targets).
-	if err := foldEvalBeds(merged); err != nil {
+	if err := foldCheckBeds(merged); err != nil {
 		return nil, true, fmt.Errorf("%s: %w", root, err)
 	}
 	// Fold sibling peers (companion deployments) into the Deploy map as
 	// addressable top-level entries (inheriting the owner's disposability) so
-	// the SAME deploy verbs bring them up/down. Runs AFTER foldEvalBeds (so a
+	// the SAME deploy verbs bring them up/down. Runs AFTER foldCheckBeds (so a
 	// bed's peers fold too) and BEFORE validateDeploymentTree (so folded peers
 	// get the same deploy validation).
 	if err := foldPeers(merged); err != nil {
@@ -793,7 +793,7 @@ func LoadUnified(dir string) (*UnifiedFile, bool, error) {
 	if err := validateDeploymentTree(merged.Deploy); err != nil {
 		return nil, true, fmt.Errorf("%s: %w", root, err)
 	}
-	if err := validateEvalBeds(merged); err != nil {
+	if err := validateCheckBeds(merged); err != nil {
 		return nil, true, fmt.Errorf("%s: %w", root, err)
 	}
 	if err := validatePeers(merged); err != nil {
@@ -954,11 +954,11 @@ func validateDeploymentTree(deploy map[string]DeploymentNode) error {
 
 // validateDeployRequiresBox enforces the 2026-05-12 schema rule:
 // every `target: pod` deploy entry MUST declare its `box:` field.
-// Pre-cutover the eval runner silently fell back to inspecting the
+// Pre-cutover the check runner silently fell back to inspecting the
 // running container's image ref via `containerImageRef`, which read
 // stale OCI labels off volume-pinned containers and dropped any
 // probes added after the seed image. The hard-required field forces
-// operator intent to be explicit; the eval runner now resolves the
+// operator intent to be explicit; the check runner now resolves the
 // ref ONLY from this field.
 //
 // Scope: target: pod (or empty — pod is the default). target: vm
@@ -977,7 +977,7 @@ func validateDeployRequiresBox(deploy map[string]DeploymentNode) error {
 		}
 		if node.Box == "" {
 			return fmt.Errorf(
-				"deploy entry %q lacks required `box:` field (2026-05-12 schema cutover — pod-target deploys must declare `box:` explicitly so the eval runner reads the operator's declared intent, not the running container's stale label).\n  Remediation: run `charly migrate` (one-shot, idempotent).",
+				"deploy entry %q lacks required `box:` field (2026-05-12 schema cutover — pod-target deploys must declare `box:` explicitly so the check runner reads the operator's declared intent, not the running container's stale label).\n  Remediation: run `charly migrate` (one-shot, idempotent).",
 				name,
 			)
 		}
@@ -1265,11 +1265,11 @@ var rootShapeKeys = map[string]bool{
 	// root-shape collection-map keys (in addition to being valid
 	// kind-keyed forms). Mirrors how box/pod/vm work.
 	"agent": true, "recipe": true, "score": true,
-	// kind:eval disposable R10 beds — root-shape collection map
-	// (bed-name → DeploymentNode) authored in eval.yml. The nested `eval:`
+	// kind:check disposable R10 beds — root-shape collection map
+	// (bed-name → DeploymentNode) authored in check.yml. The nested `check:`
 	// PROBE-LIST field never appears as a top-level document key, so this
 	// only ever matches the bed collection.
-	"eval": true,
+	"check": true,
 	// Calamares-aligned kinds.
 	"group": true, "target": true, "module": true,
 	// Exclusive host-resource vocabulary (token -> hardware selector) driving
@@ -1343,13 +1343,13 @@ func classifyDoc(node *yaml.Node) (docShape, error) {
 			hasKind = true
 		}
 	}
-	// Legacy `benchmark:` root key — predates the 2026-04 harness→eval
+	// Legacy `benchmark:` root key — predates the 2026-04 harness→check
 	// cutover, whose forward-only migrator has since been removed. There is
 	// no automated path in the current binary; the block must be rewritten
-	// by hand as a `kind: score` + `kind: recipe` pair under `eval:`.
+	// by hand as a `kind: score` + `kind: recipe` pair under `check:`.
 	if hasLegacyBenchmarkKey {
 		return 0, fmt.Errorf(
-			"the `benchmark:` root key is no longer accepted — it predates the 2026-04 harness→eval cutover, whose migrator has since been removed. Rewrite the block by hand as a `kind: score` + `kind: recipe` pair under `eval:` (see /charly-eval:eval)",
+			"the `benchmark:` root key is no longer accepted — it predates the 2026-04 harness→check cutover, whose migrator has since been removed. Rewrite the block by hand as a `kind: score` + `kind: recipe` pair under `check:` (see /charly-check:check)",
 		)
 	}
 	// 2026-05 import-namespace cutover: `include:` was deleted in favor of
@@ -1674,7 +1674,7 @@ func mergeUnified(dst, src *UnifiedFile, srcDir string) {
 	mergeModuleMap(&dst.Module, src.Module)
 	mergeResourceMap(&dst.Resource, src.Resource)
 	mergeDeployMaps(&dst.Deploy, src.Deploy)
-	mergeDeployMaps(&dst.Eval, src.Eval)
+	mergeDeployMaps(&dst.Check, src.Check)
 	if dst.Provides == nil && src.Provides != nil {
 		dst.Provides = src.Provides
 	}
@@ -1965,58 +1965,58 @@ func mergeDeployMaps(dst *map[string]DeploymentNode, src map[string]DeploymentNo
 	}
 }
 
-// foldEvalBeds copies every kind:eval bed (uf.Eval) into the Deploy map
-// with EvalBed=true so that every deploy verb (`charly deploy add`, `charly config`,
-// `charly start`, `charly eval live`, `charly update`, `charly remove`) resolves a bed by
+// foldCheckBeds copies every kind:check bed (uf.Check) into the Deploy map
+// with CheckBed=true so that every deploy verb (`charly deploy add`, `charly config`,
+// `charly start`, `charly check live`, `charly update`, `charly remove`) resolves a bed by
 // name through the SAME Deploy-map path it already uses — no per-verb
-// special case. uf.Eval is retained as the authoritative bed set for
-// EvalBeds() enumeration. A name present as BOTH a kind:eval bed and a
+// special case. uf.Check is retained as the authoritative bed set for
+// CheckBeds() enumeration. A name present as BOTH a kind:check bed and a
 // kind:deploy entry is a hard error (disjoint namespaces by construction).
-func foldEvalBeds(uf *UnifiedFile) error {
-	if len(uf.Eval) == 0 {
+func foldCheckBeds(uf *UnifiedFile) error {
+	if len(uf.Check) == 0 {
 		return nil
 	}
 	if uf.Deploy == nil {
-		uf.Deploy = make(map[string]DeploymentNode, len(uf.Eval))
+		uf.Deploy = make(map[string]DeploymentNode, len(uf.Check))
 	}
-	for name, node := range uf.Eval {
+	for name, node := range uf.Check {
 		if _, clash := uf.Deploy[name]; clash {
 			return fmt.Errorf(
-				"name %q is declared as both a kind:eval bed and a kind:deploy entry — names must be unique across the two kinds; rename one",
+				"name %q is declared as both a kind:check bed and a kind:deploy entry — names must be unique across the two kinds; rename one",
 				name,
 			)
 		}
-		node.EvalBed = true
+		node.CheckBed = true
 		uf.Deploy[name] = node
-		uf.Eval[name] = node // keep the marker on the retained bed set too
+		uf.Check[name] = node // keep the marker on the retained bed set too
 	}
 	return nil
 }
 
-// EvalBeds returns the kind:eval disposable R10 beds keyed by name. It is
-// the single enumeration source for `charly eval run <bed>` / `--all-beds`;
+// CheckBeds returns the kind:check disposable R10 beds keyed by name. It is
+// the single enumeration source for `charly check run <bed>` / `--all-beds`;
 // every other consumer reads the folded entries from the Deploy map.
-func (uf *UnifiedFile) EvalBeds() map[string]DeploymentNode {
+func (uf *UnifiedFile) CheckBeds() map[string]DeploymentNode {
 	if uf == nil {
 		return nil
 	}
-	return uf.Eval
+	return uf.Check
 }
 
-// validateEvalBeds enforces the kind:eval bed-specific invariants beyond the
+// validateCheckBeds enforces the kind:check bed-specific invariants beyond the
 // generic deploy validation (which already runs on the folded beds via
 // validateDeploymentTree → validateDeployRequiresBox, covering the pod
 // `box:` requirement). Runs at LOAD time so EVERY command that resolves a
-// bed (charly eval run, charly deploy add, charly config, charly box validate, …) sees the
+// bed (charly check run, charly deploy add, charly config, charly box validate, …) sees the
 // same friendly error — not just `charly box validate`.
-func validateEvalBeds(uf *UnifiedFile) error {
-	for name, node := range uf.Eval {
+func validateCheckBeds(uf *UnifiedFile) error {
+	for name, node := range uf.Check {
 		// Disposable is the sole authorization for the destroy+rebuild the
 		// R10 sequence drives; a non-disposable bed can't be rebuilt
 		// unattended (see /charly-internals:disposable).
 		if !node.IsDisposable() {
 			return fmt.Errorf(
-				"kind:eval bed %q must set `disposable: true` — `charly eval run` destroys + rebuilds it unattended (R10 acceptance gate)",
+				"kind:check bed %q must set `disposable: true` — `charly check run` destroys + rebuilds it unattended (R10 acceptance gate)",
 				name)
 		}
 		switch node.Target {
@@ -2025,27 +2025,27 @@ func validateEvalBeds(uf *UnifiedFile) error {
 			// folded Deploy entry — no duplicate check here.
 		case "vm":
 			if node.Vm == "" {
-				return fmt.Errorf("kind:eval bed %q (target: vm) must set `vm: <entity>`", name)
+				return fmt.Errorf("kind:check bed %q (target: vm) must set `vm: <entity>`", name)
 			}
 			if _, ok := uf.VM[node.Vm]; !ok {
-				return fmt.Errorf("kind:eval bed %q references vm entity %q which is not defined", name, node.Vm)
+				return fmt.Errorf("kind:check bed %q references vm entity %q which is not defined", name, node.Vm)
 			}
 		case "local":
 			if node.Local == "" {
-				return fmt.Errorf("kind:eval bed %q (target: local) must set `local: <template>`", name)
+				return fmt.Errorf("kind:check bed %q (target: local) must set `local: <template>`", name)
 			}
 			if _, ok := uf.Local[node.Local]; !ok {
-				return fmt.Errorf("kind:eval bed %q references local template %q which is not defined", name, node.Local)
+				return fmt.Errorf("kind:check bed %q references local template %q which is not defined", name, node.Local)
 			}
 		case "android":
 			if node.Android == "" {
-				return fmt.Errorf("kind:eval bed %q (target: android) must set `android: <device>`", name)
+				return fmt.Errorf("kind:check bed %q (target: android) must set `android: <device>`", name)
 			}
 			if _, ok := uf.Android[node.Android]; !ok {
-				return fmt.Errorf("kind:eval bed %q references android device %q which is not defined", name, node.Android)
+				return fmt.Errorf("kind:check bed %q references android device %q which is not defined", name, node.Android)
 			}
 		default:
-			return fmt.Errorf("kind:eval bed %q has unsupported target %q (must be pod, vm, local, or android)", name, node.Target)
+			return fmt.Errorf("kind:check bed %q has unsupported target %q (must be pod, vm, local, or android)", name, node.Target)
 		}
 	}
 	return nil
@@ -2119,8 +2119,8 @@ func mergeBoxConfig(dst, src *BoxConfig) {
 	if dst.KeepImages == nil {
 		dst.KeepImages = src.KeepImages
 	}
-	if dst.KeepEvalRuns == nil {
-		dst.KeepEvalRuns = src.KeepEvalRuns
+	if dst.KeepCheckRuns == nil {
+		dst.KeepCheckRuns = src.KeepCheckRuns
 	}
 }
 

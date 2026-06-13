@@ -58,7 +58,7 @@ type DeployAddCmd struct {
 
 	// vmEntity is the resolved kind:vm entity name this deploy targets,
 	// populated per-node by dispatchNode from the node's `vm:` cross-ref
-	// (kind:eval beds + charly.yml target:vm entries) OR the "vm:<name>"
+	// (kind:check beds + charly.yml target:vm entries) OR the "vm:<name>"
 	// deploy-key prefix (the CLI `charly deploy add vm:<name>` form). The candy
 	// compiler reads it to build plans against the GUEST's distro/format
 	// (apt/dnf), not the operator host's. Not a Kong flag.
@@ -184,7 +184,7 @@ func (c *DeployAddCmd) Run() error {
 
 	// Operator deploy path: bring up any sibling peers (companion deployments)
 	// ALONGSIDE the root on the shared `charly` network — the SAME bringUpPeers
-	// helper the kind:eval bed runner uses (R3). The bed runner takes its own
+	// helper the kind:check bed runner uses (R3). The bed runner takes its own
 	// `--node-only` path above and brings peers up itself after `charly start`, so
 	// peers are never double-deployed. A dry-run skips bring-up (nothing real
 	// was deployed to companion).
@@ -261,7 +261,7 @@ func (c *DeployAddCmd) dispatchNode(path string, node *DeploymentNode, parentExe
 	// compiler builds plans against the GUEST's distro/format (apt/dnf on
 	// debian/fedora) rather than the operator host's (cachyos→pac). The
 	// `vm:` deploy-key prefix was the ONLY signal before — it missed every
-	// kind:eval bed and charly.yml target:vm entry whose name isn't
+	// kind:check bed and charly.yml target:vm entry whose name isn't
 	// "vm:"-prefixed, routing them through syntheticHostBox → pacman.
 	c.vmEntity = resolveVmEntity(c.Name, node)
 
@@ -556,7 +556,7 @@ func (c *DeployDelCmd) Run() error {
 		tt.KeepServices = c.KeepServices
 		// The VM ledger record + guest-side teardown key off "vm:<entity>"
 		// (VmDeployTarget.targetName). For a schema-v4 key whose `vm:`
-		// cross-ref names a different entity (e.g. eval-k3s-vm → vm: k3s-vm),
+		// cross-ref names a different entity (e.g. check-k3s-vm → vm: k3s-vm),
 		// rewrite the adapter's NodeName to the prefixed entity form so
 		// findVmDeployRecord / buildVmReverseRunner / removeVmDeployEntry
 		// resolve correctly. A legacy "vm:<name>" key passes through.
@@ -696,7 +696,7 @@ func (c *DeployAddCmd) compilePlans(ref *DeployRef, cfg *Config, distroCfg *Dist
 // its transitive deps — by augmenting cfg with a synthetic image that carries
 // the ref, so the existing CollectRemoteRefs/ScanAllCandy machinery pulls it —
 // and keys by its bare ref. This makes `charly deploy add --add-layer <remote>`
-// (e.g. the VM eval beds' add_candy:) fully automatic with no manual pre-fetch.
+// (e.g. the VM check beds' add_candy:) fully automatic with no manual pre-fetch.
 func (c *DeployAddCmd) scanCandiesForRef(ref *DeployRef, cfg *Config, dir string) (map[string]*Candy, string, error) {
 	scanCfg := cfg
 	candyKey := ref.Name
@@ -930,7 +930,7 @@ func syntheticHostBox() *ResolvedBox {
 }
 
 // resolveVmEntity returns the kind:vm entity a deploy targets, or "" when it
-// targets no VM. A node's explicit `vm:` cross-ref wins (kind:eval beds and
+// targets no VM. A node's explicit `vm:` cross-ref wins (kind:check beds and
 // charly.yml target:vm entries, whose names are NOT "vm:"-prefixed); otherwise
 // the "vm:<name>" deploy-key prefix (the CLI `charly deploy add vm:<name>` form).
 // This is the single signal the candy compiler uses to pick syntheticVmBox

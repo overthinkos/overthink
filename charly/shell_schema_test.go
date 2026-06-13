@@ -17,7 +17,7 @@ import (
 func TestShellConfig_GenericForm(t *testing.T) {
 	src := []byte(`
 init: |
-  eval "$(direnv hook ${SHELL_NAME})"
+  check "$(direnv hook ${SHELL_NAME})"
 path_append:
   - "~/.local/bin"
 priority: 10
@@ -49,7 +49,7 @@ priority: 10
 func TestShellConfig_PerShellOverride(t *testing.T) {
 	src := []byte(`
 init: |
-  eval "$(direnv hook ${SHELL_NAME})"
+  check "$(direnv hook ${SHELL_NAME})"
 fish:
   init: |
     direnv hook fish | source
@@ -87,7 +87,7 @@ csh:
 // ${SHELL_NAME} substituted only when falling back to generic.
 func TestResolveShellSpec_SelectionRule(t *testing.T) {
 	cfg := &ShellConfig{
-		Init: `eval "$(direnv hook ${SHELL_NAME})"`,
+		Init: `check "$(direnv hook ${SHELL_NAME})"`,
 		ByShell: map[string]*ShellSpec{
 			"fish": {Init: "direnv hook fish | source"},
 		},
@@ -128,7 +128,7 @@ func TestShellSnippetStep_ReverseOps(t *testing.T) {
 	managed := &ShellSnippetStep{
 		CandyName:   "direnv",
 		Shell:       "bash",
-		Snippet:     `eval "$(direnv hook bash)"`,
+		Snippet:     `check "$(direnv hook bash)"`,
 		Destination: "/home/u/.bashrc",
 		Marker:      "direnv",
 		UseDropin:   false,
@@ -152,7 +152,7 @@ func TestLabelShellSet_RoundTrip(t *testing.T) {
 				Origin: "direnv",
 				ID:     "direnv",
 				Generic: &ShellSpec{
-					Init: `eval "$(direnv hook ${SHELL_NAME})"`,
+					Init: `check "$(direnv hook ${SHELL_NAME})"`,
 				},
 				ByShell: map[string]*ShellSpec{
 					"fish": {Init: "direnv hook fish | source"},
@@ -332,7 +332,7 @@ func TestDeployShellOverlay_YAMLParse(t *testing.T) {
 // TestAppendShellPathLines_FishSyntax — fish gets fish_add_path, others
 // get POSIX export PATH.
 func TestAppendShellPathLines_FishSyntax(t *testing.T) {
-	body := `eval "$(direnv hook bash)"`
+	body := `check "$(direnv hook bash)"`
 	got := appendShellPathLines(body, []string{"~/.local/bin"}, "fish", "/home/u")
 	if !strings.Contains(got, "fish_add_path") {
 		t.Errorf("fish should use fish_add_path: %q", got)

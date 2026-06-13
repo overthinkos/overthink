@@ -71,7 +71,7 @@ func (c *UpdateCmd) dispatchByDeployTarget() error {
 	// `charly update` obeys an EXPLICIT invocation on ANY target — the tool is
 	// fully capable; the disposable-only constraint is a discipline on the AI's
 	// AUTONOMOUS action (CLAUDE.md R10 + /charly-internals:disposable) and on the
-	// eval-runner's unattended fresh-rebuild (validateEvalBeds), NOT a capability
+	// check-runner's unattended fresh-rebuild (validateCheckBeds), NOT a capability
 	// limit on this human-driven verb. For a non-disposable target we print a
 	// one-line transparency note (the operator may have mistyped a name) and
 	// proceed; we never refuse.
@@ -224,8 +224,8 @@ func rewriteQuadletImageLine(path, newRef string) error {
 // ephemeral — see IsDisposable() for the implication chain). It NEVER refuses:
 // `charly update` is a human-driven verb that obeys any explicit invocation on any
 // target. The `disposable:` flag remains load-bearing as the authorization for
-// the AI's AUTONOMOUS destroy + rebuild (CLAUDE.md R10) and for the eval-runner's
-// unattended fresh-rebuild (validateEvalBeds) — it just no longer gates this
+// the AI's AUTONOMOUS destroy + rebuild (CLAUDE.md R10) and for the check-runner's
+// unattended fresh-rebuild (validateCheckBeds) — it just no longer gates this
 // command. The note lets an operator catch a mistyped name before the rebuild
 // proceeds.
 //

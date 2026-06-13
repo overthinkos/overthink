@@ -23,7 +23,7 @@ import (
 // secret_requires / secret_accepts env (auto-generating + persisting any
 // missing required token), and injects it into every plan's TaskSteps
 // BEFORE emission. Returns the resolved candy list (the caller reuses it
-// for artifact retrieval) and the secret env map.
+// for artifact retricheck) and the secret env map.
 //
 // Shared by LocalUnifiedTarget.Add / VmUnifiedTarget.Add /
 // PodUnifiedTarget.Add — the three paths that previously each ran

@@ -341,7 +341,7 @@ func (t *VmUnifiedTarget) vmEntityName() string {
 		return t.VMName
 	}
 	// NodeName is the DEPLOY key, which is NOT the vm entity name when they
-	// differ (e.g. bed eval-k3s-vm -> vm: k3s-vm). Resolve the deploy's
+	// differ (e.g. bed check-k3s-vm -> vm: k3s-vm). Resolve the deploy's
 	// `vm:` cross-ref via the shared resolver so `charly update <bed>` runs
 	// `charly vm create <vm-entity>`, not `charly vm create <deploy-key>`. Fall back
 	// to NodeName only for legacy vm:<name> deploy keys that declare no `vm:`.
@@ -360,7 +360,7 @@ func (t *VmUnifiedTarget) vmDomainName() string {
 
 // vmEntityForAdd resolves the kind:vm entity name for an add. Prefers the
 // merged node's `vm:` cross-ref (the canonical mapping for a schema-v4
-// deploy where the key != entity, e.g. eval-k3s-vm → vm: k3s-vm); falls
+// deploy where the key != entity, e.g. check-k3s-vm → vm: k3s-vm); falls
 // back to stripping a legacy "vm:<name>" deploy-key prefix, then to the
 // leaf of a nested dotted path (stack.myvm → myvm).
 func vmEntityForAdd(node *DeploymentNode, name string) (string, error) {
@@ -534,7 +534,7 @@ func (t *VmUnifiedTarget) Add(ctx context.Context, dctx *DeployContext, plans []
 	// VM-ENTITY name ("vm:<entity>"), NOT the deploy key: a k3s cluster hosted in
 	// a VM is identified by that VM (one cluster per VM, possibly reached by
 	// several beds/deploys), so its ClusterProfile + artifact cache must land
-	// under "vm-<entity>" — the name `cluster:` refs use (e.g. the eval-k3s-vm
+	// under "vm-<entity>" — the name `cluster:` refs use (e.g. the check-k3s-vm
 	// bed's `cluster: "vm-k3s-vm"`). Passing the deploy key here wrote the fresh
 	// kubeconfig under the wrong profile name, leaving the probe on a stale CA.
 	if err := retrieveArtifactsAndK3s(ctx, exec, candyList, "vm:"+vmName, artifactEnv, opts); err != nil {

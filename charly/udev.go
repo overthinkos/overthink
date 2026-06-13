@@ -166,7 +166,7 @@ func (c *UdevInstallCmd) Run() error {
 		fmt.Fprintf(os.Stderr, "Warning: failed to trigger udev for KFD: %v\n", err)
 	}
 
-	fmt.Fprintf(os.Stderr, "Reloaded udev rules and triggered device re-evaluation\n")
+	fmt.Fprintf(os.Stderr, "Reloaded udev rules and triggered device re-checkuation\n")
 	return nil
 }
 

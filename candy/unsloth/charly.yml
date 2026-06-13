@@ -39,7 +39,7 @@ candy:
         # First two scenarios bind DETERMINISTIC steps (embedded check
         # verbs run at build + deploy scope); the last is PROSE-ONLY
         # (agent-graded — verifying the applied vLLM source patch needs a
-        # heavy live import, so it is left for `charly eval feature run`).
+        # heavy live import, so it is left for `charly check feature run`).
         - name: vllm-wheel-installed-in-pixi-env
           step:
             - then: the vLLM 0.19.x cu130 nightly wheel is installed in the pixi default environment

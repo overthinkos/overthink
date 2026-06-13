@@ -125,7 +125,7 @@ candy:
         - name: agent-joined
           step:
             # Deploy-scope: verify this node actually joined the cluster.
-            # Uses charly eval k8s wait-nodes --name <hostname> — the cluster flag
+            # Uses charly check k8s wait-nodes --name <hostname> — the cluster flag
             # resolves to the sibling k3s-server's ClusterProfile (the operator
             # must name the cluster profile to match, e.g., via ${K3S_CLUSTER}).
             - id: agent-joined

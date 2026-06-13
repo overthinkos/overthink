@@ -13,7 +13,7 @@ candy:
             post-install task (`git-lfs install --system --skip-repo`). The
             observable, verifiable effect is that all three binaries are present
             and runnable in any box that composes this candy — that is what the
-            scenarios and eval block assert; they FAIL if any of the three tools
+            scenarios and check block assert; they FAIL if any of the three tools
             is missing.
         tag: [working]
     package:

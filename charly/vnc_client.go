@@ -24,7 +24,7 @@ type VNCClient struct {
 	pixelFormat vncPixelFormat
 	zBuf        *bytes.Buffer // persistent zlib input buffer for ZRLE
 	zReader     io.ReadCloser // persistent zlib decompressor for ZRLE
-	endpoint    *EvalEndpoint // ssh -L forward (VM/ssh venues); nil for container/local
+	endpoint    *CheckEndpoint // ssh -L forward (VM/ssh venues); nil for container/local
 }
 
 // vncPixelFormat represents the RFB pixel format (16 bytes on wire).
@@ -136,7 +136,7 @@ func (c *VNCClient) handshake(password string) error {
 		}
 	case 2: // VNC auth
 		if password == "" {
-			return fmt.Errorf("VNC server requires authentication; run `charly eval vnc passwd <box>` to set a password")
+			return fmt.Errorf("VNC server requires authentication; run `charly check vnc passwd <box>` to set a password")
 		}
 		if err := c.vncAuth(password); err != nil {
 			return err
@@ -325,7 +325,7 @@ func (c *VNCClient) vencryptHandshake(password string) error {
 	case vencryptTLSVnc, vencryptX509Vnc:
 		// VNC DES challenge-response inside TLS.
 		if password == "" {
-			return fmt.Errorf("VNC server requires authentication; run `charly eval vnc passwd <box>` to set a password")
+			return fmt.Errorf("VNC server requires authentication; run `charly check vnc passwd <box>` to set a password")
 		}
 		if err := c.vncAuth(password); err != nil {
 			return err
@@ -340,7 +340,7 @@ func (c *VNCClient) vencryptHandshake(password string) error {
 	case vencryptTLSPlain, vencryptX509Plain:
 		// Plain username/password inside TLS.
 		if password == "" {
-			return fmt.Errorf("VNC server requires authentication; run `charly eval vnc passwd <box>` to set a password")
+			return fmt.Errorf("VNC server requires authentication; run `charly check vnc passwd <box>` to set a password")
 		}
 		username := "user"
 		if err := binary.Write(c.conn, binary.BigEndian, uint32(len(username))); err != nil {
@@ -944,12 +944,12 @@ func (c *VNCClient) decodeZRLETile(img *image.RGBA, tx, ty, tw, th, cpLen int) e
 // host-reachable endpoint for the in-venue VNC port 5900 (an ssh -L forward for
 // VM/ssh venues). The caller transfers ownership to the VNCClient, which closes
 // the forward on Close.
-func resolveVNCEndpoint(box, instance string) (*EvalEndpoint, error) {
-	venue, err := resolveEvalVenue(box, instance)
+func resolveVNCEndpoint(box, instance string) (*CheckEndpoint, error) {
+	venue, err := resolveCheckVenue(box, instance)
 	if err != nil {
 		return nil, err
 	}
-	return resolveEvalEndpoint(venue, 5900)
+	return resolveCheckEndpoint(venue, 5900)
 }
 
 func resolveVNCPassword(boxName, instance string) string {

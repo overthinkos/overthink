@@ -36,7 +36,7 @@ type DeployContext struct {
 	Node *DeploymentNode
 
 	// Name is the deploy key (the bed key / charly.yml map key, e.g.
-	// "eval-k3s-vm"). Distinct from the kind:vm entity name (node.Vm).
+	// "check-k3s-vm"). Distinct from the kind:vm entity name (node.Vm).
 	Name string
 
 	// Dir is the project directory.
@@ -94,7 +94,7 @@ type UnifiedDeployTarget interface {
 	Del(ctx context.Context, opts DelOpts) error
 
 	// Test runs the given deploy-scope checks against the live
-	// target. Equivalent to `charly eval live <name>`. Returns nil only if
+	// target. Equivalent to `charly check live <name>`. Returns nil only if
 	// every non-skipped check passes.
 	Test(ctx context.Context, checks []Op, opts TestOpts) error
 
@@ -160,7 +160,7 @@ type DelOpts struct {
 	RemoveVolumes bool
 }
 
-// TestOpts parameterizes `charly eval live` against a live deployment.
+// TestOpts parameterizes `charly check live` against a live deployment.
 type TestOpts struct {
 	// OnlyIDs restricts the run to the listed check IDs. Empty =
 	// run every check defined on the deployment.

@@ -1,9 +1,9 @@
 package main
 
-// `charly eval k8s <method>` — Kubernetes cluster probe verbs.
+// `charly check k8s <method>` — Kubernetes cluster probe verbs.
 //
 // Sibling of libvirt / spice / vnc / cdp / wl / dbus / mcp / record under
-// `charly eval`. Hermetic: speaks the Kubernetes API directly via the minimal
+// `charly check`. Hermetic: speaks the Kubernetes API directly via the minimal
 // client-go subset (clientcmd + dynamic + apimachinery). No dependency on
 // an external kubectl on PATH. Cluster selection via --cluster <profile>
 // (ClusterProfile in charly/k8s_config.go), --context <ctx>, or --kubeconfig
@@ -33,7 +33,7 @@ import (
 )
 
 // ---------------------------------------------------------------------------
-// K8sCmd — the Kong command tree mounted at `charly eval k8s`.
+// K8sCmd — the Kong command tree mounted at `charly check k8s`.
 // ---------------------------------------------------------------------------
 
 type K8sCmd struct {

@@ -81,16 +81,16 @@ type DeploymentNode struct {
 	// skip:true disables the baked step.
 	Scenario []Scenario `yaml:"scenario,omitempty"`
 
-	// EvalBed marks this entry as a `kind: eval` disposable R10 bed,
-	// folded into the Deploy map by foldEvalBeds() at load time so every
+	// CheckBed marks this entry as a `kind: check` disposable R10 bed,
+	// folded into the Deploy map by foldCheckBeds() at load time so every
 	// deploy verb resolves it by name with no per-verb change. Never
-	// authored as a field — the `kind: eval` discriminator is what sets
-	// it. Read by `charly eval run` to enumerate beds and by validate.go for
+	// authored as a field — the `kind: check` discriminator is what sets
+	// it. Read by `charly check run` to enumerate beds and by validate.go for
 	// the bed-specific rules (disposable required, cross-ref resolvable).
-	EvalBed bool `yaml:"-"`
+	CheckBed bool `yaml:"-"`
 
 	// Shell is the deploy-level overlay for the ai.opencharly.shell
-	// label. Same id-based replace/skip/append semantics as Eval —
+	// label. Same id-based replace/skip/append semantics as Check —
 	// applied via MergeDeployShell at deploy time. 2026-05 cutover.
 	// Each entry carries optional `id:` (matches a baked candy/box
 	// origin or "<origin>:<shell>") and either a generic body /
@@ -355,13 +355,13 @@ type DeploymentNode struct {
 	// path). A peer is a companion INSTRUMENT — the canonical case is a
 	// Chrome driver pod that CDP-probes this web-server subject via a check
 	// with `on: <peer>`; peers are reachable by `${PEER_HOST:<name>}` over
-	// the shared net and are NEVER eval-live'd themselves (excluded from
-	// bedEvalLiveRefs). foldPeers registers each peer as a top-level,
+	// the shared net and are NEVER check-live'd themselves (excluded from
+	// bedCheckLiveRefs). foldPeers registers each peer as a top-level,
 	// addressable Deploy entry at load time (inheriting this node's
 	// disposability) so the SAME `charly config`/`charly start`/`charly stop` verbs the
-	// deploy path already uses bring it up and tear it down — and a kind:eval
+	// deploy path already uses bring it up and tear it down — and a kind:check
 	// bed inherits that lifecycle through its own `charly start <bed>` step.
-	// Used identically by kind:eval beds and kind:deploy deployments (one
+	// Used identically by kind:check beds and kind:deploy deployments (one
 	// codebase). Peer keys MUST be globally unique + carry no `.` (same rule
 	// as Nested + bed names); the AUTHOR keeps peer host ports disjoint.
 	Peer map[string]*DeploymentNode `yaml:"peer,omitempty"`
@@ -624,22 +624,22 @@ func sortedNestedKeys(children map[string]*DeploymentNode) []string {
 	return out
 }
 
-// bedEvalLiveRefs returns the ordered `charly eval live` targets for a bed: the
+// bedCheckLiveRefs returns the ordered `charly check live` targets for a bed: the
 // substrate itself first, then each nested child as a sorted dotted path. This
-// is the pure list `charly eval run` walks so a nested pod's BAKED candy/box eval
+// is the pure list `charly check run` walks so a nested pod's BAKED candy/box check
 // (e.g. the selkies candy's encoder + frame checks on a nested selkies-kde pod)
 // is exercised against its real venue through the chain — not just the parent
-// substrate. Without the nested entries, `charly eval run` deploys nested children
+// substrate. Without the nested entries, `charly check run` deploys nested children
 // but never evaluates them. Pure + unit-tested.
-func bedEvalLiveRefs(name string, children map[string]*DeploymentNode) []string {
+func bedCheckLiveRefs(name string, children map[string]*DeploymentNode) []string {
 	refs := []string{name}
 	for _, k := range sortedNestedKeys(children) {
-		// A nested child gets its own `charly eval live <parent>.<child>` hop ONLY
+		// A nested child gets its own `charly check live <parent>.<child>` hop ONLY
 		// if it is an independently-resolvable venue (a pod/vm/local child with
 		// its own image/host that the chain can reach). A `target: android`
 		// child shares the parent pod's venue and has NO own image — its
 		// app-presence checks are baked into the parent's android-emulator-layer
-		// and already run in the parent ref. `charly eval live` has no android
+		// and already run in the parent ref. `charly check live` has no android
 		// dotted-path branch, so a hop for it would wrongly resolve to a
 		// non-existent `charly-<parent>.device` container. Skip android children.
 		if c := children[k]; c != nil && c.Target == "android" {
@@ -670,7 +670,7 @@ type EphemeralLifetime struct {
 	// higher-layer cleanup paths fail.
 	TTL string `yaml:"ttl,omitempty"`
 
-	// KeepOnFailure, when true, instructs the eval-runner integration
+	// KeepOnFailure, when true, instructs the check-runner integration
 	// to skip the post-scenario `charly deploy del` when assertions fail
 	// — leaves the instance alive (still subject to TTL) for operator
 	// inspection. Default false.
@@ -678,7 +678,7 @@ type EphemeralLifetime struct {
 
 	// NamingPattern is the template for ephemeral instance names.
 	// Available variables: {{.Source}} (the deploy name), {{.UUID6}}
-	// (six-char random hex), {{.Iter}} (eval-iter counter when called
+	// (six-char random hex), {{.Iter}} (check-iter counter when called
 	// from runner). Default: "{{.Source}}-eph-{{.UUID6}}".
 	NamingPattern string `yaml:"naming_pattern,omitempty"`
 
@@ -1164,10 +1164,10 @@ func parseDeployKey(key string) (boxName, instance string) {
 
 // resolveDeployKeyToBox maps a deploy-key name to the `box:` field of
 // its deploy entry. User (~/.config/charly/charly.yml) wins over project
-// (charly.yml/eval.yml) — the same precedence the eval runner and
+// (charly.yml/check.yml) — the same precedence the check runner and
 // `charly config` use. Returns "" when no entry declares a box for the key
 // (caller decides the fallback). Implements the Pattern-B (arbitrary
-// deploy-key + version-pin) and kind:eval-bed (key != box) lookups.
+// deploy-key + version-pin) and kind:check-bed (key != box) lookups.
 // See /charly-core:deploy "Two supported deploy patterns".
 func resolveDeployKeyToBox(key, instance string) string {
 	if key == "" {
@@ -1197,7 +1197,7 @@ func resolveDeployKeyToBox(key, instance string) string {
 
 // findVmDeployNode finds the DeploymentNode for a vm-target deploy. It is
 // THE shared "which deploy entry backs this VM" lookup used by both
-// `charly deploy add` (artifact-env collection) and `charly eval live` (tests
+// `charly deploy add` (artifact-env collection) and `charly check live` (tests
 // overlay), so the two never diverge. Resolution order:
 //  1. by deploy NAME (the entry key) — the precise match;
 //  2. by the legacy "vm:<name>" key form;
@@ -1205,7 +1205,7 @@ func resolveDeployKeyToBox(key, instance string) string {
 //     == name) — the fallback when the caller only knows the vm entity.
 //
 // Keying by the deploy NAME first is load-bearing: a bed whose key differs
-// from its vm entity (e.g. eval-k3s-vm -> vm: k3s-vm) is found by its key,
+// from its vm entity (e.g. check-k3s-vm -> vm: k3s-vm) is found by its key,
 // not mis-resolved via the vm entity name.
 func findVmDeployNode(deploys map[string]DeploymentNode, name, vmName string) (DeploymentNode, bool) {
 	if deploys == nil {
@@ -1232,7 +1232,7 @@ func findVmDeployNode(deploys map[string]DeploymentNode, name, vmName string) (D
 // via the shared findVmDeployNode. Returns "" when no entry declares a vm
 // entity. THE single deploy-key→vm-entity resolver so `charly update <bed>`
 // (VmUnifiedTarget) and any other vm-deploy consumer agree: the deploy KEY
-// (e.g. eval-k3s-vm) is NOT the vm entity name (k3s-vm) when they differ —
+// (e.g. check-k3s-vm) is NOT the vm entity name (k3s-vm) when they differ —
 // blindly using the key breaks `charly vm create`/`destroy` for such beds.
 func vmEntityForDeploy(deployName string) string {
 	if deployName == "" {
@@ -1257,12 +1257,12 @@ func vmEntityForDeploy(deployName string) string {
 
 // resolveDeployBoxName is THE single deploy-key→image-name resolver used
 // by every deploy-mode command that starts from a deploy key (charly config /
-// start / shell / eval live). It returns the deploy entry's declared
+// start / shell / check live). It returns the deploy entry's declared
 // `box:` (resolveDeployKeyToBox), falling back to the key itself when
 // no entry declares one (the key==image convention). Before this was
 // shared, `charly config` resolved key→image but `charly start`/`charly shell`/
-// `charly eval live` treated the key AS the image — so a kind:eval bed
-// (eval-jupyter-pod → jupyter) or any Pattern-B deploy resolved a
+// `charly check live` treated the key AS the image — so a kind:check bed
+// (check-jupyter-pod → jupyter) or any Pattern-B deploy resolved a
 // different (wrong/unresolvable) image per command. `charly update` reaches the
 // same value via its already-resolved merged-tree node (node.Image), so it
 // reads that directly rather than re-loading config here.
@@ -1429,7 +1429,7 @@ func (dc *DeployConfig) OccupiedHostPorts(excludeKey string) map[int]bool {
 // The overlay entry is keyed by deployName — the charly.yml key base the caller
 // is operating on (the bed / instance / Pattern-B name), NOT meta.Image (the
 // baked ai.opencharly.box short-name). For a plain deploy the two coincide,
-// but a kind:eval bed or a Pattern-B deploy carries a key distinct from its
+// but a kind:check bed or a Pattern-B deploy carries a key distinct from its
 // image, so the caller MUST pass its own deploy key (typically c.Image). Keying
 // off meta.Image would read whichever sibling deploy merely shares the image and
 // clobber this entry's explicit port:/env:/security: — e.g. a bed remapping
@@ -1563,7 +1563,7 @@ func MergeDeployOntoMetadata(meta *BoxMetadata, dc *DeployConfig, deployName, in
 
 // deployVolumePrefix is the named-volume prefix for a deploy: it equals the
 // deploy's container name plus a dash, so EVERY distinctly-named deploy — a base
-// deploy, a Pattern-B deploy, a `<base>/<instance>`, or a kind:eval bed — gets
+// deploy, a Pattern-B deploy, a `<base>/<instance>`, or a kind:check bed — gets
 // its own volume namespace. Two deploys NEVER share a named volume unless they
 // share a container name (which they can't — container names are unique). This
 // is the single source of truth for volume naming; ResolveVolumeBacking,
@@ -1589,7 +1589,7 @@ func deployStorageDir(deployKey, instance string) string {
 // image-derived prefix (charly-<image>-) to the deploy's own prefix
 // (deployVolumePrefix), so every distinctly-named deploy ALWAYS gets volume
 // mounts distinct from any other deploy of the same image — production pods,
-// instances, and disposable kind:eval beds alike. Before this, names were keyed
+// instances, and disposable kind:check beds alike. Before this, names were keyed
 // by the baked ai.opencharly.box label, so two deploys of one image (e.g.
 // the operator's immich plus a disposable immich bed, or two production pods)
 // shared the SAME named volumes and could read or corrupt each other's data.
@@ -1782,7 +1782,7 @@ func SaveDeployConfig(dc *DeployConfig) error {
 // `loadDeployConfigForRead(...).Lookup(deployName, instance)` without a
 // separate nil check. deployName is the charly.yml key base the caller is
 // operating on (typically c.Image), NOT the baked image short-name — for a
-// kind:eval bed or Pattern-B deploy the two differ. Pass the deploy key, never
+// kind:check bed or Pattern-B deploy the two differ. Pass the deploy key, never
 // a value derived from an image label (see MergeDeployOntoMetadata).
 func (dc *DeployConfig) Lookup(deployName, instance string) (DeploymentNode, bool) {
 	if dc == nil {
@@ -1916,7 +1916,7 @@ func MergeDeploymentNode(dst, src DeploymentNode) DeploymentNode {
 
 // isAutoVmDeployEntry reports whether a VM deploy entry carries NOTHING beyond
 // the fields saveVmDeployState auto-sets — target: vm, vm:, and vm_state. Such
-// an entry is a pure runtime-state record (e.g. a disposable eval-bed VM) that
+// an entry is a pure runtime-state record (e.g. a disposable check-bed VM) that
 // `charly vm destroy` should delete so it doesn't accumulate. Any OTHER non-zero
 // field means operator-authored per-host config (preemptible, env, tunnel,
 // port, security, …) that MUST survive a destroy→create cycle. Compares against

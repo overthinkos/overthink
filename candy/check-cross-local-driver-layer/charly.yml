@@ -1,0 +1,48 @@
+candy:
+    version: 2026.156.1530
+    name: check-cross-local-driver-layer
+    description:
+        feature: Minimal host (target:local) venue for a cross-deployment local DRIVER peer
+        narrative: |
+            Establishes a host venue for the check-cross-local-http bed's local
+            DRIVER peer: a `command:` check with `on: <this>` runs on the host
+            against a SEPARATE pod SUBJECT (cross-kind — local driver, pod
+            subject). USER-level only (a marker under $HOME, no root/sudo/gates)
+            so bringUpPeers applies it unattended via `charly deploy add`.
+        tag: [working]
+    task:
+        - mkdir: "${HOME}/.cache"
+          run_as: "${USER}"
+        - write: "${HOME}/.cache/charly-cross-local-driver-marker"
+          run_as: "${USER}"
+          mode: "0644"
+          content: |
+            charly-cross-local-driver v1
+    scenario:
+        - name: driver-marker-present
+          step:
+            - then: applying the layer leaves the cross-local-driver marker file under the host cache dir
+              file: "${HOME}/.cache/charly-cross-local-driver-marker"
+              exists: true
+        - name: driver-marker-carries-version-stamp
+          step:
+            - then: the marker records the driver version stamp the cross-local-http bed reads back to confirm the host-driver peer applied
+              file: "${HOME}/.cache/charly-cross-local-driver-marker"
+              contains:
+                - charly-cross-local-driver v1
+        - name: cross-local-driver-marker
+          step:
+            - id: cross-local-driver-marker
+              command: "test -f ${HOME}/.cache/charly-cross-local-driver-marker"
+              in_container: false
+              context:
+                - runtime
+        - name: cross-local-driver-marker-content
+          step:
+            - id: cross-local-driver-marker-content
+              command: "cat ${HOME}/.cache/charly-cross-local-driver-marker"
+              in_container: false
+              stdout:
+                - contains: charly-cross-local-driver v1
+              context:
+                - runtime

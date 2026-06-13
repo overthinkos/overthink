@@ -15,21 +15,21 @@ type DoctorCmd struct {
 	JSON bool `long:"json" help:"Output as JSON"`
 }
 
-// CheckStatus represents the result of a single dependency check.
-type CheckStatus int
+// DoctorCheckStatus represents the result of a single dependency check.
+type DoctorCheckStatus int
 
 const (
-	CheckOK      CheckStatus = iota // installed and working
+	CheckOK      DoctorCheckStatus = iota // installed and working
 	CheckMissing                    // not found
 	CheckWarning                    // found but with caveats
 	CheckInfo                       // informational (hardware, not a dep)
 	CheckAbsent                     // hardware not present (neutral)
 )
 
-// CheckResult holds the outcome of a single check.
-type CheckResult struct {
+// DoctorCheckResult holds the outcome of a single check.
+type DoctorCheckResult struct {
 	Name        string      `json:"name"`
-	Status      CheckStatus `json:"status"`
+	Status      DoctorCheckStatus `json:"status"`
 	Version     string      `json:"version,omitempty"`
 	Detail      string      `json:"detail,omitempty"`
 	InstallHint string      `json:"install_hint,omitempty"`
@@ -40,7 +40,7 @@ type CheckGroup struct {
 	Name     string        `json:"name"`
 	Required bool          `json:"required"`
 	OrLogic  bool          `json:"or_logic,omitempty"` // at least one check must pass
-	Checks   []CheckResult `json:"checks"`
+	Checks   []DoctorCheckResult `json:"checks"`
 }
 
 // HardwareInfo holds device detection results for JSON output.
@@ -92,7 +92,7 @@ func runDoctorChecks(distro Distro) []CheckGroup {
 			Name:     "Container Engine (required -- at least one)",
 			Required: true,
 			OrLogic:  true,
-			Checks: []CheckResult{
+			Checks: []DoctorCheckResult{
 				checkBinary("docker", distro),
 				checkBinary("podman", distro),
 			},
@@ -105,7 +105,7 @@ func runDoctorChecks(distro Distro) []CheckGroup {
 		{
 			Name:     "Service Management (quadlet mode)",
 			Required: false,
-			Checks: []CheckResult{
+			Checks: []DoctorCheckResult{
 				checkBinary("systemctl", distro),
 				checkQuadletPodman(distro),
 			},
@@ -123,7 +123,7 @@ func runDoctorChecks(distro Distro) []CheckGroup {
 		{
 			Name:     "Encrypted Storage",
 			Required: false,
-			Checks: []CheckResult{
+			Checks: []DoctorCheckResult{
 				checkBinary("gocryptfs", distro),
 				checkBinary("fusermount3", distro),
 				checkBinary("systemd-ask-password", distro),
@@ -137,7 +137,7 @@ func runDoctorChecks(distro Distro) []CheckGroup {
 		{
 			Name:     "Tunnels",
 			Required: false,
-			Checks: []CheckResult{
+			Checks: []DoctorCheckResult{
 				checkBinary("tailscale", distro),
 				checkBinary("cloudflared", distro),
 			},
@@ -145,14 +145,14 @@ func runDoctorChecks(distro Distro) []CheckGroup {
 		{
 			Name:     "Merge & Registry",
 			Required: false,
-			Checks: []CheckResult{
+			Checks: []DoctorCheckResult{
 				checkBinary("skopeo", distro),
 			},
 		},
 		{
 			Name:     "Shell & TTY",
 			Required: false,
-			Checks: []CheckResult{
+			Checks: []DoctorCheckResult{
 				checkBinary("script", distro),
 			},
 		},
@@ -163,7 +163,7 @@ func runDoctorChecks(distro Distro) []CheckGroup {
 		groups = append(groups, CheckGroup{
 			Name:     "Podman Machine",
 			Required: false,
-			Checks: []CheckResult{
+			Checks: []DoctorCheckResult{
 				checkGvproxyDoctor(distro),
 			},
 		})
@@ -172,8 +172,8 @@ func runDoctorChecks(distro Distro) []CheckGroup {
 	return groups
 }
 
-func buildInfraChecks(distro Distro) []CheckResult {
-	checks := []CheckResult{
+func buildInfraChecks(distro Distro) []DoctorCheckResult {
+	checks := []DoctorCheckResult{
 		checkGo(),
 		checkBinary("git", distro),
 	}
@@ -184,9 +184,9 @@ func buildInfraChecks(distro Distro) []CheckResult {
 	return checks
 }
 
-func vmChecks(distro Distro) []CheckResult {
+func vmChecks(distro Distro) []DoctorCheckResult {
 	qemuBin := qemuSystemBinary()
-	checks := []CheckResult{
+	checks := []DoctorCheckResult{
 		checkBinary(qemuBin, distro),
 		checkBinary("qemu-img", distro),
 		checkVirtiofsd(distro),
@@ -199,18 +199,18 @@ func vmChecks(distro Distro) []CheckResult {
 
 // vfioChecks reports host readiness for VFIO GPU passthrough, reusing the same
 // DetectVFIO probe that `charly vm gpu` consumes.
-func vfioChecks() []CheckResult {
+func vfioChecks() []DoctorCheckResult {
 	rep := DetectVFIO()
-	var checks []CheckResult
+	var checks []DoctorCheckResult
 
 	if rep.IOMMUEnabled {
 		detail := "enabled"
 		if rep.IOMMUKind != "" {
 			detail = rep.IOMMUKind + " — enabled"
 		}
-		checks = append(checks, CheckResult{Name: "IOMMU", Status: CheckOK, Detail: detail})
+		checks = append(checks, DoctorCheckResult{Name: "IOMMU", Status: CheckOK, Detail: detail})
 	} else {
-		checks = append(checks, CheckResult{
+		checks = append(checks, DoctorCheckResult{
 			Name:        "IOMMU",
 			Status:      CheckWarning,
 			Detail:      "not enabled (/sys/kernel/iommu_groups empty)",
@@ -219,9 +219,9 @@ func vfioChecks() []CheckResult {
 	}
 
 	if vfioPciAvailable() {
-		checks = append(checks, CheckResult{Name: "vfio-pci driver", Status: CheckOK})
+		checks = append(checks, DoctorCheckResult{Name: "vfio-pci driver", Status: CheckOK})
 	} else {
-		checks = append(checks, CheckResult{
+		checks = append(checks, DoctorCheckResult{
 			Name:        "vfio-pci driver",
 			Status:      CheckWarning,
 			Detail:      "not loaded",
@@ -231,11 +231,11 @@ func vfioChecks() []CheckResult {
 
 	// memlock — VFIO pins all guest RAM; a rootless session needs a high limit.
 	if _, hard := MemlockLimitBytes(); memlockUnlimited(hard) {
-		checks = append(checks, CheckResult{Name: "memlock limit", Status: CheckOK, Detail: "unlimited"})
+		checks = append(checks, DoctorCheckResult{Name: "memlock limit", Status: CheckOK, Detail: "unlimited"})
 	} else if hard >= 16<<30 {
-		checks = append(checks, CheckResult{Name: "memlock limit", Status: CheckOK, Detail: fmt.Sprintf("%d MiB", hard>>20)})
+		checks = append(checks, DoctorCheckResult{Name: "memlock limit", Status: CheckOK, Detail: fmt.Sprintf("%d MiB", hard>>20)})
 	} else {
-		checks = append(checks, CheckResult{
+		checks = append(checks, DoctorCheckResult{
 			Name:        "memlock limit",
 			Status:      CheckWarning,
 			Detail:      fmt.Sprintf("%d MiB — too low for GPU passthrough (needs >= guest RAM)", hard>>20),
@@ -244,7 +244,7 @@ func vfioChecks() []CheckResult {
 	}
 
 	if len(rep.GPUs) == 0 {
-		checks = append(checks, CheckResult{Name: "passthrough GPU", Status: CheckAbsent, Detail: "none detected"})
+		checks = append(checks, DoctorCheckResult{Name: "passthrough GPU", Status: CheckAbsent, Detail: "none detected"})
 		return checks
 	}
 	for _, g := range rep.GPUs {
@@ -262,7 +262,7 @@ func vfioChecks() []CheckResult {
 		if drv == "" {
 			drv = "unbound"
 		}
-		checks = append(checks, CheckResult{
+		checks = append(checks, DoctorCheckResult{
 			Name:   g.Addr,
 			Status: CheckInfo,
 			Detail: fmt.Sprintf("%s:%s %s — driver=%s, %s%s", trim0x(g.VendorID), trim0x(g.DeviceID), g.ClassLabel, drv, grp, access),
@@ -273,9 +273,9 @@ func vfioChecks() []CheckResult {
 
 // checkVirtiofsd checks for virtiofsd which may be installed outside PATH.
 // On Arch Linux it installs to /usr/lib/virtiofsd, on RHEL to /usr/libexec/virtiofsd.
-func checkVirtiofsd(distro Distro) CheckResult {
+func checkVirtiofsd(distro Distro) DoctorCheckResult {
 	if path, err := exec_LookPath("virtiofsd"); err == nil {
-		return CheckResult{
+		return DoctorCheckResult{
 			Name:   "virtiofsd",
 			Status: CheckOK,
 			Detail: path,
@@ -284,14 +284,14 @@ func checkVirtiofsd(distro Distro) CheckResult {
 	// Check non-PATH locations where distros install virtiofsd
 	for _, path := range []string{"/usr/lib/virtiofsd", "/usr/libexec/virtiofsd"} {
 		if info, err := os.Stat(path); err == nil && !info.IsDir() {
-			return CheckResult{
+			return DoctorCheckResult{
 				Name:   "virtiofsd",
 				Status: CheckOK,
 				Detail: path,
 			}
 		}
 	}
-	return CheckResult{
+	return DoctorCheckResult{
 		Name:        "virtiofsd",
 		Status:      CheckMissing,
 		Detail:      "not found",
@@ -300,10 +300,10 @@ func checkVirtiofsd(distro Distro) CheckResult {
 }
 
 // checkBinary checks if a binary exists in PATH and tries to get its version.
-func checkBinary(name string, distro Distro) CheckResult {
+func checkBinary(name string, distro Distro) DoctorCheckResult {
 	path, err := exec_LookPath(name)
 	if err != nil {
-		return CheckResult{
+		return DoctorCheckResult{
 			Name:        name,
 			Status:      CheckMissing,
 			Detail:      "not found",
@@ -311,7 +311,7 @@ func checkBinary(name string, distro Distro) CheckResult {
 		}
 	}
 	version := getBinaryVersion(name)
-	return CheckResult{
+	return DoctorCheckResult{
 		Name:    name,
 		Status:  CheckOK,
 		Version: version,
@@ -320,10 +320,10 @@ func checkBinary(name string, distro Distro) CheckResult {
 }
 
 // checkGo checks for Go and validates the version.
-func checkGo() CheckResult {
+func checkGo() DoctorCheckResult {
 	path, err := exec_LookPath("go")
 	if err != nil {
-		return CheckResult{
+		return DoctorCheckResult{
 			Name:        "go",
 			Status:      CheckMissing,
 			Detail:      "not found (required to build charly from source)",
@@ -331,7 +331,7 @@ func checkGo() CheckResult {
 		}
 	}
 	version := getBinaryVersion("go")
-	return CheckResult{
+	return DoctorCheckResult{
 		Name:    "go",
 		Status:  CheckOK,
 		Version: version,
@@ -340,16 +340,16 @@ func checkGo() CheckResult {
 }
 
 // checkQuadletPodman checks if podman is available for quadlet mode.
-func checkQuadletPodman(distro Distro) CheckResult {
+func checkQuadletPodman(distro Distro) DoctorCheckResult {
 	if _, err := exec_LookPath("podman"); err != nil {
-		return CheckResult{
+		return DoctorCheckResult{
 			Name:        "podman (for quadlet)",
 			Status:      CheckWarning,
 			Detail:      "quadlet mode requires podman",
 			InstallHint: distro.installHint("podman"),
 		}
 	}
-	return CheckResult{
+	return DoctorCheckResult{
 		Name:   "podman (for quadlet)",
 		Status: CheckOK,
 		Detail: "available",
@@ -357,11 +357,11 @@ func checkQuadletPodman(distro Distro) CheckResult {
 }
 
 // checkBuildxBuilder checks if Docker buildx is available.
-func checkBuildxBuilder() CheckResult {
+func checkBuildxBuilder() DoctorCheckResult {
 	cmd := exec.Command("docker", "buildx", "version")
 	out, err := cmd.Output()
 	if err != nil {
-		return CheckResult{
+		return DoctorCheckResult{
 			Name:        "docker buildx",
 			Status:      CheckMissing,
 			Detail:      "not available",
@@ -369,7 +369,7 @@ func checkBuildxBuilder() CheckResult {
 		}
 	}
 	version := strings.TrimSpace(strings.SplitN(string(out), "\n", 2)[0])
-	return CheckResult{
+	return DoctorCheckResult{
 		Name:    "docker buildx",
 		Status:  CheckOK,
 		Version: version,
@@ -377,10 +377,10 @@ func checkBuildxBuilder() CheckResult {
 }
 
 // checkLibvirtSocket checks if the libvirt session socket exists.
-func checkLibvirtSocket() CheckResult {
+func checkLibvirtSocket() DoctorCheckResult {
 	sockPath := libvirtSessionSocket()
 	if _, err := os.Stat(sockPath); err == nil {
-		return CheckResult{
+		return DoctorCheckResult{
 			Name:   "libvirt session socket",
 			Status: CheckOK,
 			Detail: sockPath,
@@ -397,7 +397,7 @@ func checkLibvirtSocket() CheckResult {
 		hint = "sudo systemctl enable --now virtqemud.socket && sudo usermod -aG libvirt $USER"
 	}
 
-	return CheckResult{
+	return DoctorCheckResult{
 		Name:        "libvirt session socket",
 		Status:      CheckMissing,
 		Detail:      sockPath,
@@ -406,10 +406,10 @@ func checkLibvirtSocket() CheckResult {
 }
 
 // checkGvproxyDoctor checks gvproxy availability (same logic as checkGvproxy in machine.go).
-func checkGvproxyDoctor(distro Distro) CheckResult {
+func checkGvproxyDoctor(distro Distro) DoctorCheckResult {
 	if _, err := exec_LookPath("gvproxy"); err == nil {
 		path, _ := exec_LookPath("gvproxy")
-		return CheckResult{
+		return DoctorCheckResult{
 			Name:   "gvproxy",
 			Status: CheckOK,
 			Detail: path,
@@ -417,14 +417,14 @@ func checkGvproxyDoctor(distro Distro) CheckResult {
 	}
 	for _, path := range []string{"/usr/libexec/podman/gvproxy", "/usr/local/libexec/podman/gvproxy", "/usr/lib/podman/gvproxy"} {
 		if _, err := os.Stat(path); err == nil {
-			return CheckResult{
+			return DoctorCheckResult{
 				Name:   "gvproxy",
 				Status: CheckOK,
 				Detail: path,
 			}
 		}
 	}
-	return CheckResult{
+	return DoctorCheckResult{
 		Name:        "gvproxy",
 		Status:      CheckMissing,
 		Detail:      "not found",
@@ -686,7 +686,7 @@ func groupStatusSymbol(g CheckGroup) string {
 	return "--"
 }
 
-func formatCheck(ch CheckResult) (string, string) {
+func formatCheck(ch DoctorCheckResult) (string, string) {
 	switch ch.Status {
 	case CheckOK:
 		parts := []string{ch.Name}
@@ -722,13 +722,13 @@ func managerShort(manager string) string {
 }
 
 // secretStorageChecks returns checks for the credential/secret storage subsystem.
-func secretStorageChecks() []CheckResult {
-	var checks []CheckResult
+func secretStorageChecks() []DoctorCheckResult {
+	var checks []DoctorCheckResult
 
 	// Check 1: Secret backend availability
 	kr := &KeyringStore{}
 	if err := kr.Probe(); err == nil {
-		checks = append(checks, CheckResult{
+		checks = append(checks, DoctorCheckResult{
 			Name:    "Secret backend",
 			Status:  CheckOK,
 			Version: "system keyring",
@@ -737,7 +737,7 @@ func secretStorageChecks() []CheckResult {
 		state := GetKeyringState()
 		backend := resolveSecretBackend()
 		if state == KeyringLocked {
-			checks = append(checks, CheckResult{
+			checks = append(checks, DoctorCheckResult{
 				Name:        "Secret backend",
 				Status:      CheckWarning,
 				Version:     "system keyring (LOCKED)",
@@ -745,13 +745,13 @@ func secretStorageChecks() []CheckResult {
 				InstallHint: "Unlock your keyring, or run: charly config set secret_backend config",
 			})
 		} else if backend == "config" {
-			checks = append(checks, CheckResult{
+			checks = append(checks, DoctorCheckResult{
 				Name:    "Secret backend",
 				Status:  CheckOK,
 				Version: "config file (explicit)",
 			})
 		} else {
-			checks = append(checks, CheckResult{
+			checks = append(checks, DoctorCheckResult{
 				Name:        "Secret backend",
 				Status:      CheckWarning,
 				Detail:      "config file (no keyring available)",
@@ -766,13 +766,13 @@ func secretStorageChecks() []CheckResult {
 		if info, statErr := os.Stat(configPath); statErr == nil {
 			perm := info.Mode().Perm()
 			if perm&0077 == 0 {
-				checks = append(checks, CheckResult{
+				checks = append(checks, DoctorCheckResult{
 					Name:    "Config permissions",
 					Status:  CheckOK,
 					Version: fmt.Sprintf("%04o", perm),
 				})
 			} else {
-				checks = append(checks, CheckResult{
+				checks = append(checks, DoctorCheckResult{
 					Name:        "Config permissions",
 					Status:      CheckWarning,
 					Detail:      fmt.Sprintf("%04o (world-readable)", perm),
@@ -787,13 +787,13 @@ func secretStorageChecks() []CheckResult {
 	if err == nil {
 		count := HasPlaintextCredentials(cfg)
 		if count == 0 {
-			checks = append(checks, CheckResult{
+			checks = append(checks, DoctorCheckResult{
 				Name:    "Plaintext credentials",
 				Status:  CheckOK,
 				Version: "0",
 			})
 		} else {
-			checks = append(checks, CheckResult{
+			checks = append(checks, DoctorCheckResult{
 				Name:        "Plaintext credentials",
 				Status:      CheckWarning,
 				Detail:      fmt.Sprintf("%d in config.yml", count),
@@ -820,10 +820,10 @@ func secretStorageChecks() []CheckResult {
 }
 
 // checkKeyringHealth probes each Secret Service collection and reports
-// healthy/broken counts. Returns one CheckResult per distinguishable state.
+// healthy/broken counts. Returns one DoctorCheckResult per distinguishable state.
 // Skips silently (returns nil) if there's no session bus or no collections
 // — those cases are already handled by "Secret backend" above.
-func checkKeyringHealth() []CheckResult {
+func checkKeyringHealth() []DoctorCheckResult {
 	c, err := newSSClient()
 	if err != nil {
 		// No session bus — already covered by "Secret backend" check. Skip.
@@ -833,7 +833,7 @@ func checkKeyringHealth() []CheckResult {
 
 	paths, err := c.collections()
 	if err != nil {
-		return []CheckResult{{
+		return []DoctorCheckResult{{
 			Name:        "Secret Service collections",
 			Status:      CheckWarning,
 			Detail:      fmt.Sprintf("cannot list collections: %v", err),
@@ -860,14 +860,14 @@ func checkKeyringHealth() []CheckResult {
 	}
 
 	if len(broken) == 0 {
-		return []CheckResult{{
+		return []DoctorCheckResult{{
 			Name:    "Secret Service collections",
 			Status:  CheckOK,
 			Version: fmt.Sprintf("%d healthy", len(healthy)),
 			Detail:  strings.Join(healthy, ", "),
 		}}
 	}
-	return []CheckResult{{
+	return []DoctorCheckResult{{
 		Name:   "Secret Service collections",
 		Status: CheckWarning,
 		Version: fmt.Sprintf("%d healthy + %d broken",
@@ -885,7 +885,7 @@ func checkKeyringHealth() []CheckResult {
 // in the index that are NOT present in any collection indicate that the
 // keyring has drifted — the user may need to re-store those credentials or
 // prune the stale index entries.
-func checkKeyringIndexConsistency() []CheckResult {
+func checkKeyringIndexConsistency() []DoctorCheckResult {
 	cfg, err := LoadRuntimeConfig()
 	if err != nil || len(cfg.KeyringKeys) == 0 {
 		return nil
@@ -912,13 +912,13 @@ func checkKeyringIndexConsistency() []CheckResult {
 		}
 	}
 	if len(missing) == 0 {
-		return []CheckResult{{
+		return []DoctorCheckResult{{
 			Name:    "Keyring index consistency",
 			Status:  CheckOK,
 			Version: fmt.Sprintf("%d/%d", len(cfg.KeyringKeys), len(cfg.KeyringKeys)),
 		}}
 	}
-	return []CheckResult{{
+	return []DoctorCheckResult{{
 		Name:    "Keyring index consistency",
 		Status:  CheckWarning,
 		Version: fmt.Sprintf("%d indexed, %d missing", len(cfg.KeyringKeys), len(missing)),

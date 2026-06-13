@@ -80,7 +80,7 @@ func TestResolveDeployChain_VmInnerPod(t *testing.T) {
 	// in-guest container is "charly-<childKey>" (the leaf) — NOT the host-side
 	// "charly-<vm>_<inner>" flatPath the guest never sees. The chain must podman-exec
 	// the leaf name, or it targets a container that doesn't exist (the silent
-	// single-hop the nested-pod-in-VM eval hit before this fix).
+	// single-hop the nested-pod-in-VM check hit before this fix).
 	if !strings.Contains(venue, "podman-exec:charly-inner") {
 		t.Errorf("venue %q does not contain podman-exec:charly-inner (in-guest leaf name)", venue)
 	}

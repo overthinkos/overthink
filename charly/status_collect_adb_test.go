@@ -9,7 +9,7 @@ import (
 )
 
 // androidBedUnified builds a synthetic UnifiedFile mirroring the
-// eval-android-emulator-pod bed: a target:pod root with two nested
+// check-android-emulator-pod bed: a target:pod root with two nested
 // target:android children (an in-pod image device + a remote adb endpoint
 // device), plus the matching kind:android specs. Used to drive the pure
 // enumeration paths hermetically (no live adb / podman).
@@ -20,7 +20,7 @@ func androidBedUnified() *UnifiedFile {
 			"pixel9a-endpoint": {Adb: &AndroidAdbEndpoint{Host: "127.0.0.1:1"}, Serial: "emulator-5554"},
 		},
 		Deploy: map[string]DeploymentNode{
-			"eval-android-emulator-pod": {
+			"check-android-emulator-pod": {
 				Target: "pod",
 				Box:    "android-emulator",
 				Nested: map[string]*DeploymentNode{
@@ -78,7 +78,7 @@ func TestCollectAndroidDeployNodes_EnumeratesNestedByDottedPath(t *testing.T) {
 	}
 	paths := []string{nodes[0].path, nodes[1].path}
 	sort.Strings(paths)
-	want := []string{"eval-android-emulator-pod.device", "eval-android-emulator-pod.device-net"}
+	want := []string{"check-android-emulator-pod.device", "check-android-emulator-pod.device-net"}
 	for i := range want {
 		if paths[i] != want[i] {
 			t.Errorf("path[%d] = %q, want %q", i, paths[i], want[i])

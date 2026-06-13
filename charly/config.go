@@ -163,10 +163,10 @@ type BoxConfig struct {
 
 	// Reusable-artifact retention (project-wide; authored under defaults:).
 	// keep_images = newest CalVer tags to keep per image after `charly box build`;
-	// keep_eval_runs = newest run dirs to keep per bed/score after `charly eval run`.
+	// keep_check_runs = newest run dirs to keep per bed/score after `charly check run`.
 	// 0 (or absent → Go fallback 0) disables pruning. See `charly clean`.
 	KeepImages   *int `yaml:"keep_images,omitempty"`
-	KeepEvalRuns *int `yaml:"keep_eval_runs,omitempty"`
+	KeepCheckRuns *int `yaml:"keep_check_runs,omitempty"`
 
 	// Scenario carries image-level acceptance scenarios (Op steps) — the
 	// box's own cross-candy invariants. Candy scenarios propagate via the
@@ -174,10 +174,10 @@ type BoxConfig struct {
 	// section of the ai.opencharly.description OCI label.
 	Scenario []Scenario `yaml:"scenario,omitempty"`
 
-	// EvalLevel declares how deep `charly check run <bed>` runs this box's
+	// CheckLevel declares how deep `charly check run <bed>` runs this box's
 	// acceptance: none | build | noagent (default) | agent. Baked into the
-	// ai.opencharly.eval_level capability label.
-	EvalLevel string `yaml:"eval_level,omitempty"`
+	// ai.opencharly.check_level capability label.
+	CheckLevel string `yaml:"check_level,omitempty"`
 
 	// Shell is an image-level shell-init contribution layered on top of
 	// what the included candies contribute. Same shape as the candy
@@ -213,7 +213,7 @@ type ResolvedBox struct {
 	EffectiveVersion string `json:"effective_version,omitempty"`
 	Status           string `json:"status,omitempty"`     // effective status (worst of box + candies)
 	Info             string `json:"info,omitempty"`       // aggregated info from box + candies
-	EvalLevel        string `json:"eval_level,omitempty"` // acceptance-depth rung (none|build|noagent|agent), baked as ai.opencharly.eval_level
+	CheckLevel        string `json:"check_level,omitempty"` // acceptance-depth rung (none|build|noagent|agent), baked as ai.opencharly.check_level
 	Base             string // Resolved base (external OCI ref or internal image name)
 	// From mirrors BoxConfig.From after resolution. When non-empty
 	// (e.g. "builder:pacstrap"), the generator emits FROM scratch +
@@ -400,7 +400,7 @@ func (c *Config) ResolveBox(name string, calverTag string, dir string, opts Reso
 		Version:   img.Version,
 		Status:    descriptionStatus(img.Description),
 		Info:      descriptionInfo(img.Description),
-		EvalLevel: ResolveEvalLevel(img.EvalLevel),
+		CheckLevel: ResolveCheckLevel(img.CheckLevel),
 	}
 
 	// `from: builder:<name>` — non-registry base via a kind: bootstrap
@@ -927,7 +927,7 @@ type baseChainNode struct {
 //
 // It deliberately does NOT descend import namespaces. A namespace-qualified
 // base (e.g. `selkies.selkies-labwc`) is a SEPARATELY-BUILT image that owns
-// its own baked eval / hooks / shell / volume labels; re-collecting its candies
+// its own baked check / hooks / shell / volume labels; re-collecting its candies
 // into the consumer would DOUBLE-COUNT every candy the consumer also lists
 // directly (the same candy reached bare here and via its `@github…` ref in the
 // base), which the per-section id-uniqueness validator correctly rejects.

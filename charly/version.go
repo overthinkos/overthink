@@ -71,7 +71,7 @@ func hostCharlyIsNewer(hostVer, venueVerOut string) bool {
 // Versions sort correctly both lexically and numerically.
 //
 // NB: this is "what time is it NOW", used to TAG an artifact created at this
-// moment (image build tag, eval-run dir, deploy alias). It is NOT the identity
+// moment (image build tag, check-run dir, deploy alias). It is NOT the identity
 // of the charly binary — that is CharlyVersion()/BuildCalVer. Never use ComputeCalVer()
 // to report the running binary's version.
 func ComputeCalVer() string {

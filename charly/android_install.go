@@ -2,7 +2,7 @@ package main
 
 // android_install.go — the SINGLE Android app-install path (R3).
 //
-// Both `charly eval adb install-app` / `charly eval adb install` (the eval probe
+// Both `charly check adb install-app` / `charly check adb install` (the check probe
 // verbs) AND `AndroidDeployTarget` (the `apk:` package format executor) call
 // the helpers here. There is exactly ONE implementation of "download by
 // package id via apkeep + install" and ONE of "push a committed APK +
@@ -200,7 +200,7 @@ func (d AndroidDevice) InstallFromHostApk(path string) (string, error) {
 }
 
 // Uninstall removes a package by id (idempotent — "not installed" is not an
-// error). Used by `charly eval adb uninstall` and AndroidUnifiedTarget.Del.
+// error). Used by `charly check adb uninstall` and AndroidUnifiedTarget.Del.
 func (d AndroidDevice) Uninstall(pkg string) (string, error) {
 	dev, err := adbDeviceForAddr(d.AdbAddr, d.serial())
 	if err != nil {

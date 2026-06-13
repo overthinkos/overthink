@@ -12,7 +12,7 @@ candy:
             k3d-in-docker cluster manager, always a standalone release binary).
             Each one lands at a predictable /usr/bin path and answers a version
             query, so any box composing this candy can drive a cluster with no
-            further setup. The scenarios and eval block assert exactly that —
+            further setup. The scenarios and check block assert exactly that —
             they FAIL if any of the three binaries is missing or cannot report
             its version.
         tag: [working]

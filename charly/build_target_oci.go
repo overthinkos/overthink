@@ -122,7 +122,7 @@ func (t *OCITarget) emitStep(step InstallStep, plan *InstallPlan) error {
 		return nil
 	case *LocalPkgInstallStep:
 		// Image-build install of a candy's localpkg package. PRODUCTION boxes
-		// download the PUBLISHED release; disposable eval beds build the
+		// download the PUBLISHED release; disposable check beds build the
 		// in-development package from local source — ONE shared decision in
 		// renderLocalPkgImageInstall. Both install via the SAME dep-resolving
 		// install_template (OS-tracked, not a bare COPY'd binary).
@@ -188,8 +188,8 @@ func (t *OCITarget) emitShellHook(s *ShellHookStep) error {
 // for the (install, container) cell.
 // emitLocalPkgInstall emits the image-build install of a candy's `localpkg:`
 // package via the shared renderLocalPkgImageInstall (production release-download
-// vs disposable-eval-bed in-development build — see that function). The
-// eval-bed switch flows through the Generator's DevLocalPkg flag (one source,
+// vs disposable-check-bed in-development build — see that function). The
+// check-bed switch flows through the Generator's DevLocalPkg flag (one source,
 // both image-build paths read it). The overlay path (deploy-time) never sets it.
 func (t *OCITarget) emitLocalPkgInstall(s *LocalPkgInstallStep) error {
 	dev := t.Generator != nil && t.Generator.DevLocalPkg

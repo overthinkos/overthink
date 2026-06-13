@@ -604,7 +604,7 @@ func resolveCascadePackages(layer *Candy, img *ResolvedBox) (pkgs []string, raw 
 
 // buildSystemPackagesStep constructs a SystemPackagesStep from a
 // PackageSection's Raw map, extracting the well-known structured fields
-// (repos, options, copr, modules, exclude, keys) for gate evaluation
+// (repos, options, copr, modules, exclude, keys) for gate checkuation
 // while also preserving the full Raw map for template rendering later.
 func buildSystemPackagesStep(format string, phase Phase, packages []string, raw map[string]interface{}, cacheMounts []CacheMountDef) *SystemPackagesStep {
 	step := &SystemPackagesStep{
@@ -645,7 +645,7 @@ func buildSystemPackagesStep(format string, phase Phase, packages []string, raw 
 // order. Each act op either LOWERS into an existing typed step (package →
 // SystemPackagesStep, service → ServicePackagedStep) so emit + reversal are
 // REUSED, or stays a generic OpStep (install verbs + command). The act/assert
-// boundary keeps probe-only scenario steps out of the install plan — the eval
+// boundary keeps probe-only scenario steps out of the install plan — the check
 // Runner handles those.
 func compileOpSteps(layer *Candy, img *ResolvedBox) []InstallStep {
 	var out []InstallStep
@@ -658,7 +658,7 @@ func compileOpSteps(layer *Candy, img *ResolvedBox) []InstallStep {
 	// Fold scenario do:act ops scoped to build/deploy (and NOT runtime) into
 	// the install plan, so a scenario step can provision as well as assert.
 	// A runtime-capable do:act op (the default for most verbs) is NOT folded —
-	// the eval Runner executes it live (avoids double-execution).
+	// the check Runner executes it live (avoids double-execution).
 	for si := range layer.scenario {
 		for sti := range layer.scenario[si].Step {
 			op := &layer.scenario[si].Step[sti].Op
@@ -666,7 +666,7 @@ func compileOpSteps(layer *Candy, img *ResolvedBox) []InstallStep {
 				continue
 			}
 			if op.InContext(CtxRuntime) || !(op.InContext(CtxBuild) || op.InContext(CtxDeploy)) {
-				continue // runtime/agent act → handled by the eval Runner
+				continue // runtime/agent act → handled by the check Runner
 			}
 			if s := compileActOp(op, layer, img); s != nil {
 				out = append(out, s)

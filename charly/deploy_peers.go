@@ -5,16 +5,16 @@ package main
 // A DeploymentNode's `peer:` map declares companion deployments brought up
 // ALONGSIDE it on the shared `charly` network (NOT nested inside it). The canonical
 // case is a Chrome driver pod that CDP-probes a web-server subject via a check
-// with `on: <peer>` (see eval_peer.go); peers are reachable by
-// `${PEER_HOST:<name>}` and are never eval-live'd themselves.
+// with `on: <peer>` (see check_peer.go); peers are reachable by
+// `${PEER_HOST:<name>}` and are never check-live'd themselves.
 //
 // foldPeers registers each peer as a top-level, addressable Deploy entry at
 // load time (inheriting the owner's disposability), so a peer is brought
 // up/torn down by the SAME `charly config`/`charly start`/`charly remove` verbs the deploy
 // path already uses — no parallel bring-up logic (R3). bringUpPeers /
-// tearDownPeers are the single shared helpers, invoked by BOTH the kind:eval
-// bed runner (eval_bed_run.go) and the operator deploy path
-// (deploy_add_cmd.go) — `peer:` works identically for eval and deploy from one
+// tearDownPeers are the single shared helpers, invoked by BOTH the kind:check
+// bed runner (check_bed_run.go) and the operator deploy path
+// (deploy_add_cmd.go) — `peer:` works identically for check and deploy from one
 // codebase.
 
 import (
@@ -27,7 +27,7 @@ import (
 // foldPeers copies every deploy node's `peer:` entries into the Deploy map as
 // top-level addressable entries (PeerOf set, disposability inherited), so every
 // deploy verb resolves a peer by name through the same path as any deploy.
-// Runs AFTER foldEvalBeds (so a bed's peers fold too) and BEFORE
+// Runs AFTER foldCheckBeds (so a bed's peers fold too) and BEFORE
 // validateDeploymentTree (so folded peers get the same deploy validation). A
 // peer name colliding with any existing deploy/bed/peer entry is a hard error.
 func foldPeers(uf *UnifiedFile) error {
@@ -67,7 +67,7 @@ func foldPeers(uf *UnifiedFile) error {
 		node := p.node
 		node.PeerOf = p.owner
 		// A companion inherits its owner's disposability so the owner's
-		// teardown/rebuild (e.g. a kind:eval bed's charly update) is authorized to
+		// teardown/rebuild (e.g. a kind:check bed's charly update) is authorized to
 		// destroy + rebuild it too.
 		if p.disposable {
 			disposable := true
@@ -128,7 +128,7 @@ func sortedPeerKeys(peers map[string]*DeploymentNode) []string {
 // `port:` actually publishes — `charly config` otherwise sources ports from image
 // labels behind an operator -p), then `charly config <peer>` + `charly start <peer>`,
 // then wait for readiness. A non-pod peer (target: vm/local) is registered via
-// `charly deploy add <peer>`. The SAME helper serves the kind:eval bed runner and
+// `charly deploy add <peer>`. The SAME helper serves the kind:check bed runner and
 // the operator deploy path (R3). Idempotent on an already-running peer.
 func bringUpPeers(node *DeploymentNode) error {
 	if node == nil || len(node.Peer) == 0 {

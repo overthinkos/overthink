@@ -183,7 +183,7 @@ func captureDomainScreenshotViaVirsh(domName string) (image.Image, error) {
 // keycodes (keycode set 1). Supports single keys and chord notation
 // ("ctrl+alt+F2"). Names are case-insensitive.
 //
-// The subset covered here is what the `charly eval libvirt send-key` CLI
+// The subset covered here is what the `charly check libvirt send-key` CLI
 // needs — enough for common test scenarios (login sequences, TTY
 // switches, ctrl-c). The full Linux keycode set is in
 // <linux/input-event-codes.h>; extending here is a small addition.

@@ -9,7 +9,7 @@ import (
 // recordingExecutor is a DeployExecutor that returns a single canned RunCapture
 // stdout (the guest's `charly version` probe output) and records every PutFile call,
 // so EnsureCharlyInVenue's decision (use the system charly vs deliver a /tmp copy) can be
-// asserted without a real pod/VM. Distinct from evalrun_test.go's fakeExecutor.
+// asserted without a real pod/VM. Distinct from checkrun_test.go's fakeExecutor.
 //
 // tmpExists models the idempotency probe ("/tmp/charly-<calver> version"): when
 // false (default) the probe reports "absent" (exit 1) so a fresh copy is

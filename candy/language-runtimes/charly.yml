@@ -98,7 +98,7 @@ candy:
     scenario:
         # ADE acceptance scenarios baked into ai.opencharly.description. Every
         # step embeds a check verb (file/command) → DETERMINISTIC, runs under
-        # `charly box feature run` at build scope. They mirror the eval: list.
+        # `charly box feature run` at build scope. They mirror the check: list.
         - name: dotnet-sdk-reachable
           step:
             - then: the .NET 9 SDK binary is installed at /usr/bin/dotnet

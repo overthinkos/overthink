@@ -34,7 +34,7 @@ candy:
                 # python-onnxruntime-cpu is in the CachyOS extra repo (pulled
                 # transitively as a dependency); no AUR build needed — the bare
                 # `python-onnxruntime` AUR package fails to build under the
-                # rootless arch-builder stage. The eval probe below maps
+                # rootless arch-builder stage. The check probe below maps
                 # `onnxruntime` to `python-onnxruntime-cpu` on Arch via
                 # package_map.
                 - cuda

@@ -83,7 +83,7 @@ type DataYAML struct {
 }
 
 // CandyArtifact declares a file the candy publishes back to the operator
-// after its setup completes. Retrieval happens at `charly deploy add` finalization
+// after its setup completes. Retricheck happens at `charly deploy add` finalization
 // via the target's back-channel (scp for SSH/VM, cp for host, podman cp for
 // container). The retrieved file is written to `RetrieveTo` with shell-style
 // ${ENV} expansion on the path. Optional `Rewrite` rules perform a literal
@@ -118,13 +118,13 @@ type CandyArtifact struct {
 	Optional bool `yaml:"optional,omitempty" json:"optional,omitempty"`
 
 	// WaitSeconds is the deadline (in seconds) for the file to appear on
-	// the target before retrieval. Useful for candies whose service unit
+	// the target before retricheck. Useful for candies whose service unit
 	// transitions to "active" BEFORE the artifact file is written —
 	// canonical case: k3s.service reaches active when the binary execs,
 	// but /etc/rancher/k3s/k3s.yaml lands ~3-15s later when the API
 	// server starts. Polls exec.GetFile every 1s until success or
 	// deadline. 0 (default) disables the wait — file must already exist
-	// at retrieval time. Recommended: 60-120s for k3s-class artifacts.
+	// at retricheck time. Recommended: 60-120s for k3s-class artifacts.
 	//
 	// This is a readiness probe (file existence is the synchronization
 	// primitive), not a sleep workaround — R4-compliant.

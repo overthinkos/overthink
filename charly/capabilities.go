@@ -116,8 +116,8 @@ var CapabilityLabelMap = map[string]string{
 	"Shell": LabelShell,
 
 	// Acceptance-depth rung (none|build|noagent|agent) gating how deep
-	// `charly check run <bed>` drives this box. See eval_level.go.
-	"EvalLevel": LabelEvalLevel,
+	// `charly check run <bed>` drives this box. See check_level.go.
+	"CheckLevel": LabelCheckLevel,
 }
 
 // deployOnlyCapabilityFields are BoxMetadata fields that are NOT baked

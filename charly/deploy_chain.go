@@ -12,11 +12,11 @@ import (
 // Pre-cutover (2026-04), four call sites built executor chains (or partial
 // chains) independently:
 //   - charly deploy add  → deriveChildExecutorForPath in deploy_add_cmd.go
-//   - charly eval live <name> → ad-hoc executor construction in eval_cmd.go
-//   - charly eval live parent.child → resolveNestedNode + a *flat* VmTestExecutor
+//   - charly check live <name> → ad-hoc executor construction in check_cmd.go
+//   - charly check live parent.child → resolveNestedNode + a *flat* VmTestExecutor
 //                            (silent single-hop bug — leaf tests ran on the
 //                            parent VM via SSH instead of inside the leaf pod)
-//   - charly eval     → hardcoded ContainerExecutor{ContainerName: "charly-"+pod}
+//   - charly check     → hardcoded ContainerExecutor{ContainerName: "charly-"+pod}
 //                      (single-hop only; could not reach pod-in-vm)
 //
 // Post-cutover, every call site routes through ResolveDeployChain. The
@@ -148,7 +148,7 @@ func appendHopForFlatPath(chain DeployExecutor, node *DeploymentNode, flatPath, 
 		// (the leaf). The guest never sees the host-side bed/VM-entity prefix, so
 		// once the chain has crossed into a VM guest the podman-exec hop must
 		// target the leaf name — otherwise it exec's a container that doesn't
-		// exist (the silent failure the nested-pod-in-VM eval hit: probes ran
+		// exist (the silent failure the nested-pod-in-VM check hit: probes ran
 		// against "charly-<bed>_<child>" which the guest never created).
 		podName := flatPath
 		if chainEntersVMGuest(chain) {
@@ -198,8 +198,8 @@ func appendHopForFlatPath(chain DeployExecutor, node *DeploymentNode, flatPath, 
 // rootExecutorForDeployNode selects the ROOT DeployExecutor for a
 // `target: local` deployment node from its `host:` field — the single source
 // of truth for "where does a local deploy's work run?", shared by
-// `charly deploy add` (LocalUnifiedTarget.Add) and `charly eval live`
-// (runLocalEval) so neither re-implements the selection (R3):
+// `charly deploy add` (LocalUnifiedTarget.Add) and `charly check live`
+// (runLocalCheck) so neither re-implements the selection (R3):
 //
 //	host: ""  / "local"        → ShellExecutor{} (this machine, direct shell)
 //	host: "<user>@<machine>"   → &SSHExecutor{User, Host, Port, …}
@@ -237,7 +237,7 @@ func rootExecutorForDeployNode(node *DeploymentNode) (DeployExecutor, error) {
 
 // ContainerChain returns a one-hop chain that exec's into a single named
 // running container (`<engine> exec <name> bash`). Convenience for the
-// simple `charly eval live <name>` path where there is no nested dotted path to
+// simple `charly check live <name>` path where there is no nested dotted path to
 // walk — equivalent to ResolveDeployChain on a single-segment dotted
 // path that resolves to a pod node, but skips the tree lookup.
 func ContainerChain(engine, containerName string) DeployExecutor {
@@ -253,7 +253,7 @@ func ContainerChain(engine, containerName string) DeployExecutor {
 
 // ImageChain builds a one-hop chain that runs commands inside a freshly-
 // spawned disposable container (`<engine> run --rm <imageRef> bash`).
-// Used by `charly eval box --section box` to replace the deleted
+// Used by `charly check box --section box` to replace the deleted
 // ImageExecutor — same semantics, expressed via the unified chain
 // primitive.
 //

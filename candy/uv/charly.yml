@@ -29,7 +29,7 @@ candy:
     scenario:
         # Both scenarios are DETERMINISTIC (each step embeds a check verb),
         # so they run at build scope (`charly box feature run`) AND deploy
-        # scope (`charly eval feature run`). They fail if the download/extract
+        # scope (`charly check feature run`). They fail if the download/extract
         # task did nothing — the binaries simply would not exist.
         - name: uv-package-manager-installed
           step:

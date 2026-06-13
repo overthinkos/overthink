@@ -123,7 +123,7 @@ func resolveVmBackend(configured string) (string, error) {
 // (using the global setting) can pick DIFFERENT backends — the destroy then
 // silently operates on the wrong backend's (non-existent) domain and leaves
 // the created libvirt domain running, surfacing as "domain already exists" on
-// the next create (the eval-k3s-vm `charly update` failure when vm.backend=qemu
+// the next create (the check-k3s-vm `charly update` failure when vm.backend=qemu
 // but the bed pins backend: libvirt).
 func vmConfiguredBackend(vmName, rtBackend string) string {
 	if vmName == "" {
@@ -141,7 +141,7 @@ func vmConfiguredBackend(vmName, rtBackend string) string {
 
 // startLibvirtUserSession ensures the libvirt user-session daemon is
 // running. Modular libvirt's `virtqemud --timeout=120` auto-exits
-// after 120 s of idle, so consecutive `charly eval libvirt …` calls
+// after 120 s of idle, so consecutive `charly check libvirt …` calls
 // spaced wider than that find the socket gone.
 //
 // Three start mechanisms tried in order, all best-effort:
@@ -344,10 +344,10 @@ func (c *VmCreateCmd) Run() error {
 	startLibvirtUserSession()
 
 	// Resource arbitration: a standalone `charly vm create` of a VM that a
-	// deploy/eval node claims via requires_exclusive preempts the running
+	// deploy/check node claims via requires_exclusive preempts the running
 	// holders of that resource (persistent lease — released by `charly vm stop`/
 	// `charly vm destroy`). No-op when an outer orchestrator already owns the lease
-	// (CHARLY_PREEMPT_LEASE set, e.g. an eval bed run) or when no claimant node
+	// (CHARLY_PREEMPT_LEASE set, e.g. an check bed run) or when no claimant node
 	// references this VM entity. See charly/preempt.go.
 	claimant, claimantNode, hasClaimant := lookupVMClaimant(c.Box)
 	if hasClaimant {
@@ -791,7 +791,7 @@ func (c *VmDestroyCmd) Run() error {
 	// Remove the charly.yml vm:<name> entry — the inverse of the saveVmDeployState
 	// that `charly deploy add vm:<name>` (and the ssh.port_auto vm-create persist)
 	// wrote. Destroying the VM removes the deployment, so its config must not
-	// linger; this is what made disposable eval-bed VM entries accumulate (the
+	// linger; this is what made disposable check-bed VM entries accumulate (the
 	// bed cleanup tears down via `charly vm destroy`). --keep-deploy preserves it for
 	// a deliberate re-create, mirroring `charly remove --keep-deploy` for pods.
 	if !c.KeepDeploy {

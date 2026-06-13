@@ -73,13 +73,13 @@ candy:
         - name: valkey-stores-and-returns-values
           step:
             - then: a value written with SET can be read back with GET, proving the store really persists key-value pairs
-              command: valkey-cli -h 127.0.0.1 -p 6379 set charly-eval-key charly-eval-val && valkey-cli -h 127.0.0.1 -p 6379 get charly-eval-key
+              command: valkey-cli -h 127.0.0.1 -p 6379 set charly-check-key charly-check-val && valkey-cli -h 127.0.0.1 -p 6379 get charly-check-key
               stdout:
-                - contains: charly-eval-val
+                - contains: charly-check-val
               context:
                 - runtime
         # PROSE-ONLY step — genuine free-form resilience behaviour, agent-graded
-        # by `charly eval feature run valkey` against the live deployment.
+        # by `charly check feature run valkey` against the live deployment.
         - name: valkey-service-stays-available
           step:
             - then: the supervised valkey service is running and keeps answering clients, restarting automatically (restart=always) if the valkey-server process exits
@@ -114,9 +114,9 @@ candy:
         - name: valkey-set-get
           step:
             - id: valkey-set-get
-              command: valkey-cli -h 127.0.0.1 -p 6379 set charly-eval-probe charly-eval-ok && valkey-cli -h 127.0.0.1 -p 6379 get charly-eval-probe
+              command: valkey-cli -h 127.0.0.1 -p 6379 set charly-check-probe charly-check-ok && valkey-cli -h 127.0.0.1 -p 6379 get charly-check-probe
               stdout:
-                - contains: charly-eval-ok
+                - contains: charly-check-ok
               in_container: true
               context:
                 - runtime

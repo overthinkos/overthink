@@ -54,7 +54,7 @@ import (
 // under any binary version, and being able to run `charly version` to
 // confirm the mismatch is essential when debugging the freshness error
 // itself. Heavyweight verbs (image build, image generate, deploy,
-// rebuild, eval, ...) enforce the check.
+// rebuild, check, ...) enforce the check.
 //
 // Bypass: CHARLY_SKIP_FRESHNESS_CHECK=1 disables the check entirely. Use
 // this for CI runs where the binary is intentionally pinned to a

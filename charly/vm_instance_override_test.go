@@ -191,7 +191,7 @@ func TestLoadVmInstanceOverride_LibvirtOverlay(t *testing.T) {
     filesystems:
       - driver: virtiofs
         accessmode: passthrough
-        source: /home/atrawog/.cache/charly/eval-workspace
+        source: /home/atrawog/.cache/charly/check-workspace
         target: workspace
 `
 	if err := os.WriteFile(filepath.Join(dir, "instance.yml"), []byte(yaml), 0o644); err != nil {

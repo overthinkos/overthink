@@ -7,7 +7,7 @@ import (
 
 // TestResolveAndroidHostPortRef covers the parse paths of the nested-endpoint
 // ${HOST_PORT:N} resolver. The live resolution (inspecting a running parent pod)
-// is exercised by the eval-android-emulator-pod R10 bed's device-net leg.
+// is exercised by the check-android-emulator-pod R10 bed's device-net leg.
 func TestResolveAndroidHostPortRef(t *testing.T) {
 	// A literal host:port (no ${HOST_PORT}) passes through unchanged.
 	if got, err := resolveAndroidHostPortRef("192.168.1.50:5555", "stack.device-net", nil); err != nil || got != "192.168.1.50:5555" {

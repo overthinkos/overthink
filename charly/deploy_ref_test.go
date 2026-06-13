@@ -12,9 +12,9 @@ func TestResolveDeployRefLocalImage(t *testing.T) {
 	dir := t.TempDir()
 	// Schema v4: ResolveDeployRef calls LoadUnified which reads
 	// charly.yml as the entry point. Fixture must use the unified
-	// shape with version: 2026.164.0002 and the singular box: kind map.
+	// shape with version: 2026.164.0004 and the singular box: kind map.
 	if err := os.WriteFile(filepath.Join(dir, "charly.yml"), []byte(`
-version: 2026.164.0002
+version: 2026.164.0004
 box:
   myimg:
     base: fedora
@@ -44,7 +44,7 @@ candy:
 	}
 	// Also create charly.yml so the local-name resolver has something
 	// to search — but we don't add "ripgrep" to it, so it's candy-only.
-	_ = os.WriteFile(filepath.Join(dir, "charly.yml"), []byte("version: 2026.164.0002\nimage: {}\n"), 0644)
+	_ = os.WriteFile(filepath.Join(dir, "charly.yml"), []byte("version: 2026.164.0004\nimage: {}\n"), 0644)
 
 	got, err := ResolveDeployRef("ripgrep", dir)
 	if err != nil {
@@ -66,7 +66,7 @@ candy:
 func TestResolveDeployRefCrossKindNameReuse(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "charly.yml"), []byte(`
-version: 2026.164.0002
+version: 2026.164.0004
 box:
   dup:
     base: fedora
@@ -104,7 +104,7 @@ candy:
 
 func TestResolveDeployRefUnknownName(t *testing.T) {
 	dir := t.TempDir()
-	_ = os.WriteFile(filepath.Join(dir, "charly.yml"), []byte("version: 2026.164.0002\nimage: {}\n"), 0644)
+	_ = os.WriteFile(filepath.Join(dir, "charly.yml"), []byte("version: 2026.164.0004\nimage: {}\n"), 0644)
 	_, err := ResolveDeployRef("nope", dir)
 	if err == nil {
 		t.Fatalf("expected not-found error, got nil")
@@ -180,7 +180,7 @@ func TestResolveDeployRefRemoteGitHubLegacy(t *testing.T) {
 
 // TestResolveDeployRefRemoteCandy covers the post-2026-06-rebrand `candy/<n>`
 // subpath: a remote candy ref must classify as a CANDY (not a box), so
-// `charly deploy add --add-layer @github.../candy/charly:vTAG` (the form a kind:eval
+// `charly deploy add --add-layer @github.../candy/charly:vTAG` (the form a kind:check
 // bed's add_candy compiles to) is accepted instead of hitting the "remote image
 // refs are not supported" guard. Without the /candy/ classification this fails.
 func TestResolveDeployRefRemoteCandy(t *testing.T) {

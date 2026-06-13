@@ -20,7 +20,7 @@ candy:
             left UNSET so pixelflux auto-detects per host: NVENC on the NVIDIA flavor
             (pixelflux built un-stubbed against the cuda-arch-builder), VA-API on the
             AMD flavor, CPU x264 otherwise — so the SAME layer streams on every GPU
-            config (the encoder identity is asserted per-image in the GPU eval beds).
+            config (the encoder identity is asserted per-image in the GPU check beds).
 
             This streamed Plasma is the pixelflux virtual-framebuffer session —
             intentionally distinct from any SDDM/Plasma DRM session a physical monitor
@@ -58,7 +58,7 @@ candy:
     scenario:
         # Scenarios 1 & 2 are DETERMINISTIC at build scope (file/contains verbs
         # bind to the check). Scenario 3 binds at deploy scope via
-        # `charly eval feature run` (command/http), closing on one prose-only
+        # `charly check feature run` (command/http), closing on one prose-only
         # step the agent grader judges against the live stream.
         - name: nested-session-launcher-installed
           step:
@@ -78,7 +78,7 @@ candy:
             - then: the KWin Wayland compositor that renders the nested session into pixelflux is present
               file: /usr/bin/kwin_wayland
               exists: true
-            - then: kdotool — the KWin window-automation tool that drives `charly eval wl` on this session — is present
+            - then: kdotool — the KWin window-automation tool that drives `charly check wl` on this session — is present
               file: /usr/bin/kdotool
               exists: true
             - then: the pipewire audio daemon composed for the streamed session is present
@@ -131,7 +131,7 @@ candy:
                 - runtime
         - name: kde-wl-compositor-is-kwin
           step:
-            # `charly eval wl` KWin parity — proves the host-safe KWin automation backends
+            # `charly check wl` KWin parity — proves the host-safe KWin automation backends
             # work on the nested startplasma-wayland session, matching the wlroots
             # (sway/labwc) coverage: window-management via kdotool, keyboard via wtype,
             # clipboard via wl-clipboard, plus compositor detection. Pointer + resolution

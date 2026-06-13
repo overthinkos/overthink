@@ -8,7 +8,7 @@ candy:
             fedora/arch/debian) AND declaratively wires the per-shell hook that
             makes .envrc autoload work. At `charly box build` the shell: schema
             bakes the POSIX hook into /etc/profile.d/charly-direnv-<shell>.sh for
-            bash/zsh/sh (the generic body `eval "$(direnv hook <shell>)"` with
+            bash/zsh/sh (the generic body `check "$(direnv hook <shell>)"` with
             ${SHELL_NAME} substituted) and the fish-specific hook into
             /etc/fish/conf.d/charly-direnv.fish (`direnv hook fish | source`).
             The scenarios assert both the installed/runnable binary AND the baked
@@ -18,12 +18,12 @@ candy:
     package:
         - direnv
     # Shell hooks installed declaratively via the shell: schema (2026-05).
-    # bash/zsh/sh use the POSIX-style hook (eval $(direnv hook X)) — handled
+    # bash/zsh/sh use the POSIX-style hook (check $(direnv hook X)) — handled
     # by the generic body with ${SHELL_NAME} substituted at install time.
     # fish uses different syntax, so it gets a per-shell override.
     shell:
         init: |
-            eval "$(direnv hook ${SHELL_NAME})"
+            check "$(direnv hook ${SHELL_NAME})"
         fish:
             init: |
                 direnv hook fish | source

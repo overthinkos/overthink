@@ -92,7 +92,7 @@ func (c *VncClickCmd) Run() error {
 
 	// Translate from window-relative coordinates to desktop coordinates via sway.
 	if c.FromSway != "" {
-		venue, err := resolveEvalVenue(c.Box, c.Instance)
+		venue, err := resolveCheckVenue(c.Box, c.Instance)
 		if err != nil {
 			return fmt.Errorf("resolving venue for sway: %w", err)
 		}
@@ -108,7 +108,7 @@ func (c *VncClickCmd) Run() error {
 
 	// Translate from X11 window-internal coordinates to desktop coordinates.
 	if c.FromX11 != "" {
-		venue, err := resolveEvalVenue(c.Box, c.Instance)
+		venue, err := resolveCheckVenue(c.Box, c.Instance)
 		if err != nil {
 			return fmt.Errorf("resolving venue for X11: %w", err)
 		}
@@ -225,13 +225,13 @@ type VncStatusCmd struct {
 }
 
 func (c *VncStatusCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Box, c.Instance)
+	venue, err := resolveCheckVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
 	// Resolve a host-reachable endpoint for the in-venue VNC port (an ssh -L
 	// forward for VM/ssh venues) and probe it with a TCP dial — venue-agnostic.
-	ep, err := resolveEvalEndpoint(venue, 5900)
+	ep, err := resolveCheckEndpoint(venue, 5900)
 	if err != nil {
 		return fmt.Errorf("VNC server not reachable (port 5900): %w", err)
 	}
@@ -254,7 +254,7 @@ type VncPasswdCmd struct {
 }
 
 func (c *VncPasswdCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Box, c.Instance)
+	venue, err := resolveCheckVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}

@@ -46,7 +46,7 @@ candy:
                 - spectacle
             aur:
                 # kdotool — the KWin window-management automation tool driving
-                # `charly eval wl` on KWin (the KWin analogue of wlroots' wlrctl). It
+                # `charly check wl` on KWin (the KWin analogue of wlroots' wlrctl). It
                 # talks to KWin via the scripting D-Bus API: search /
                 # windowactivate / windowminimize / windowclose / windowstate
                 # (fullscreen) / getwindowgeometry. Pointer + keyboard injection
@@ -84,7 +84,7 @@ candy:
               exists: true
         - name: kdotool-kwin-automation-available
           step:
-            - then: kdotool, the KWin window-management automation tool that drives charly eval wl on KWin, is installed at /usr/bin/kdotool
+            - then: kdotool, the KWin window-management automation tool that drives charly check wl on KWin, is installed at /usr/bin/kdotool
               file: /usr/bin/kdotool
               exists: true
         - name: plasma-desktop-installed

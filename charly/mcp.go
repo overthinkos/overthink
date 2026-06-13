@@ -11,7 +11,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// mcp.go contains the `charly eval mcp …` Kong subcommand tree. Each leaf
+// mcp.go contains the `charly check mcp …` Kong subcommand tree. Each leaf
 // resolves the image's mcp_provides declaration via OCI labels, opens a
 // session using the Anthropic Go SDK (StreamableClientTransport for
 // `transport: http` / empty; SSEClientTransport for `transport: sse`), and
@@ -24,7 +24,7 @@ import (
 // with Run() methods + positional args + `-i` flag). Live-container wiring
 // (runMcp + method allowlist) lives in testrun_ov_verbs.go.
 
-// McpCmd groups the seven `charly eval mcp …` leaves.
+// McpCmd groups the seven `charly check mcp …` leaves.
 type McpCmd struct {
 	Ping          McpPingCmd          `cmd:"" help:"Ping an MCP server (liveness check)"`
 	Servers       McpServersCmd       `cmd:"" help:"Enumerate MCP servers declared by a box (no dial)"`
@@ -50,7 +50,7 @@ type mcpCommonFlags struct {
 // Leaf commands
 // ---------------------------------------------------------------------------
 
-// McpPingCmd: `charly eval mcp ping <image>`
+// McpPingCmd: `charly check mcp ping <image>`
 type McpPingCmd struct {
 	Box string `arg:"" help:"Box name"`
 	mcpCommonFlags
@@ -73,7 +73,7 @@ func (c *McpPingCmd) Run() error {
 	return nil
 }
 
-// McpServersCmd: `charly eval mcp servers <image>` — discovery-only.
+// McpServersCmd: `charly check mcp servers <image>` — discovery-only.
 type McpServersCmd struct {
 	Box      string `arg:"" help:"Box name"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
@@ -125,7 +125,7 @@ func (c *McpServersCmd) Run() error {
 	return nil
 }
 
-// McpListToolsCmd: `charly eval mcp list-tools <image>`
+// McpListToolsCmd: `charly check mcp list-tools <image>`
 type McpListToolsCmd struct {
 	Box string `arg:"" help:"Box name"`
 	mcpCommonFlags
@@ -164,7 +164,7 @@ func (c *McpListToolsCmd) Run() error {
 	return nil
 }
 
-// McpListResourcesCmd: `charly eval mcp list-resources <image>`
+// McpListResourcesCmd: `charly check mcp list-resources <image>`
 type McpListResourcesCmd struct {
 	Box string `arg:"" help:"Box name"`
 	mcpCommonFlags
@@ -203,7 +203,7 @@ func (c *McpListResourcesCmd) Run() error {
 	return nil
 }
 
-// McpListPromptsCmd: `charly eval mcp list-prompts <image>`
+// McpListPromptsCmd: `charly check mcp list-prompts <image>`
 type McpListPromptsCmd struct {
 	Box string `arg:"" help:"Box name"`
 	mcpCommonFlags
@@ -242,7 +242,7 @@ func (c *McpListPromptsCmd) Run() error {
 	return nil
 }
 
-// McpCallCmd: `charly eval mcp call <image> <tool> [args-json]`
+// McpCallCmd: `charly check mcp call <image> <tool> [args-json]`
 type McpCallCmd struct {
 	Box   string `arg:"" help:"Box name"`
 	Tool  string `arg:"" help:"Tool name (matches a name from list-tools)"`
@@ -288,7 +288,7 @@ func (c *McpCallCmd) Run() error {
 	return nil
 }
 
-// McpReadCmd: `charly eval mcp read <image> <uri>`
+// McpReadCmd: `charly check mcp read <image> <uri>`
 type McpReadCmd struct {
 	Box string `arg:"" help:"Box name"`
 	URI string `arg:"" help:"Resource URI (match a URI from list-resources)"`

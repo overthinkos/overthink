@@ -24,7 +24,7 @@ type CdpSpaCmd struct {
 	Type     CdpSpaTypeCmd     `cmd:"" help:"Type text into the remote desktop via SPA"`
 }
 
-// spaState holds the detected SPA state from a CDP eval query.
+// spaState holds the detected SPA state from a CDP check query.
 type spaState struct {
 	CanvasWidth  int     `json:"canvasWidth"`
 	CanvasHeight int     `json:"canvasHeight"`
@@ -38,7 +38,7 @@ type spaState struct {
 	Error        string  `json:"error"`
 }
 
-// spaDetect queries the SPA state via CDP eval.
+// spaDetect queries the SPA state via CDP check.
 func spaDetect(client *CDPClient) (spaState, error) {
 	js := `(function() {
 		var c = document.getElementById("videoCanvas");

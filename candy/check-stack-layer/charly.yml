@@ -1,0 +1,100 @@
+candy:
+    version: 2026.161.2302
+    name: check-stack-layer
+    # The check listener's container port. Boxes composing this candy inherit it
+    # (CollectBoxPorts) and auto-publish it on a free 127.0.0.1 host port — the
+    # check-pod box no longer declares `port: 18794:18794` itself.
+    port:
+        - 18794
+    description:
+        feature: Combined kind:layer + kind:pod + DeployTarget smoke on top of check-base-layer
+        narrative: |
+            The second (and final) layer of the check-pod stack. In one layer it
+            proves three mechanisms the combined check-pod bed
+            (`charly check run check-pod`) covers beyond the build smoke:
+              * layer composition order — asserts /etc/check-base-marker (written by
+                the prior check-base-layer) is still present;
+              * kind:pod runtime — runs `nc -lk 18794` under the configured init
+                system and probes the listening port (harness + in-container ss);
+              * DeployTarget rendering — runs `sleep infinity` under supervisord and
+                probes the service is running.
+            Installs ncat + iproute (port listener) + coreutils (sleep) + supervisor.
+            Both services are custom exec entries — fedora-minimal ships no systemd
+            units for nc/sleep, so the layer is supervisord-only on container targets.
+        tag: [working]
+    distro:
+        fedora:
+            package:
+                - iproute
+                - ncat
+                - coreutils
+                - supervisor
+    task:
+        - write: /etc/check-stack-marker
+          run_as: root
+          mode: "0644"
+          content: |
+            check-stack v1
+    service:
+        - name: check-listener
+          exec: "/usr/bin/nc -lk 18794"
+          restart: always
+          priority: 20
+          autostart: true
+          enable: true
+          scope: system
+        - name: check-sleep
+          exec: "/usr/bin/sleep infinity"
+          restart: always
+          priority: 20
+          autostart: true
+          enable: true
+          scope: system
+    scenario:
+        # Agent Driven Evaluation acceptance scenarios baked into this layer
+        # (they ride into the check-pod image's ai.opencharly.description
+        # label). The first scenario's step is DETERMINISTIC (an embedded
+        # check verb → runs at build AND deploy scope); the second is
+        # PROSE-ONLY (no verb → agent-graded by `charly check feature run
+        # check-pod`, reported unbound/skip by build-scope
+        # `charly box feature run`).
+        - name: check-stack-marker-present
+          step:
+            - then: the check-stack marker file is present at /etc/check-stack-marker
+              file: /etc/check-stack-marker
+              exists: true
+        - name: check-listener-reachable
+          step:
+            - then: the check listener accepts a TCP connection on port 18794 from inside the deployment
+        - name: check-stack-marker-exists
+          step:
+            - id: check-stack-marker-exists
+              file: /etc/check-stack-marker
+              exists: true
+        - name: check-compose-order
+          step:
+            - id: check-compose-order
+              file: /etc/check-base-marker
+              exists: true
+        - name: check-port-listening
+          step:
+            - id: check-port-listening
+              port: 18794
+              listening: true
+              context:
+                - runtime
+        - name: check-ss-listening
+          step:
+            - id: check-ss-listening
+              command: "ss -tlnp 2>/dev/null | grep ':18794'"
+              exit_status: 0
+              in_container: true
+              context:
+                - runtime
+        - name: check-service-running
+          step:
+            - id: check-service-running
+              service: check-sleep
+              running: true
+              context:
+                - runtime

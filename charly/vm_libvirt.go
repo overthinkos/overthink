@@ -53,11 +53,11 @@ func connectLibvirt(uri string) (*libvirtConn, error) {
 // Best-effort starts virtqemud.service (with libvirtd.service as a
 // legacy fallback) before dialing — modular libvirt's `--timeout=120`
 // causes the daemon to auto-exit after 120 s of idle, so consecutive
-// `charly eval libvirt …` invocations spaced wider than that find the
+// `charly check libvirt …` invocations spaced wider than that find the
 // socket gone. systemctl auto-restart on socket activation usually
 // covers this, but on hosts without socket activation (no
 // virtqemud.socket unit) the daemon stays down. Auto-starting here
-// makes `charly eval libvirt` self-healing on idle-timeout. See the
+// makes `charly check libvirt` self-healing on idle-timeout. See the
 // 2026-05-06 R10 follow-up RCA.
 func connectLocalLibvirtSession(parsed LibvirtURI) (*libvirtConn, error) {
 	startLibvirtUserSession()

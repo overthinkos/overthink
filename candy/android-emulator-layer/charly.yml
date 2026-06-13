@@ -13,7 +13,7 @@ candy:
             /dev/kvm device-passthrough declaration that round-trips through the OCI
             label into the quadlet. CPU/RAM are auto-sized from the host at runtime
             (start-emulator). Optional GOOGLE_ACCOUNT_EMAIL + GOOGLE_AAS_TOKEN secrets
-            feed the `charly eval adb install-app --source google-play` path. The
+            feed the `charly check adb install-app --source google-play` path. The
             helper scripts, the AVD home directory, and the booted device are all
             directly observable, so the behaviour is verifiable end to end.
         tag: [working]
@@ -31,7 +31,7 @@ candy:
         # operator can still pin them explicitly via deploy.yml / -e to size down.
         ANDROID_AVD_HOME: "/home/user/.android/avd"
     # Optional, opt-in Google account credentials (absent = green). Used ONLY by
-    # the `charly eval adb install-app --source google-play` path (apkeep -e/-t). The
+    # the `charly check adb install-app --source google-play` path (apkeep -e/-t). The
     # token is an apkeep AAS token (NOT a password) minted from a Google
     # oauth_token via `apkeep -e <email> --oauth-token oauth2_4/…`. Resolved from
     # the credential store at charly config and injected as podman secrets — never
@@ -157,7 +157,7 @@ candy:
               filetype: directory
         # Deploy-scope: the composite actually boots an emulator and adb attaches.
         # Order is load-bearing — the wait-for-device gate precedes the single-shot
-        # getprop (mirrors the eval: block's readiness discipline).
+        # getprop (mirrors the check: block's readiness discipline).
         - name: emulator-boots-and-adb-attaches
           step:
             - then: the emulator supervisord service is running
@@ -220,8 +220,8 @@ candy:
                 - runtime
         - name: adb-wait-for-device-ready
           step:
-            # ORDER IS LOAD-BEARING. The eval runner executes checks in declaration
-            # order (evalrun.go Runner.Run — sequential, no sort), so the readiness
+            # ORDER IS LOAD-BEARING. The check runner executes checks in declaration
+            # order (checkrun.go Runner.Run — sequential, no sort), so the readiness
             # GATE must come FIRST: `adb wait-for-device` polls sys.boot_completed
             # every 2s until it is "1" (or timeout), tolerating the early-boot window
             # where `adb devices` reports the device as "unknown". Every one-shot adb
@@ -380,7 +380,7 @@ candy:
           step:
             - id: chrome-screencap
               adb: screencap
-              artifact: /tmp/charly-eval-chrome.png
+              artifact: /tmp/charly-check-chrome.png
               artifact_min_bytes: 5000
               context:
                 - runtime
@@ -388,8 +388,8 @@ candy:
           step:
             # ===================================================================
             # `apk:` PACKAGE FORMAT — apps installed declaratively onto the device
-            # by a `target: android` deploy (NOT by an eval verb). The
-            # eval-android-emulator-pod bed nests two kind:android devices that the
+            # by a `target: android` deploy (NOT by an check verb). The
+            # check-android-emulator-pod bed nests two kind:android devices that the
             # bed runner deploys after the pod starts:
             #   - `device` (in-pod) installs F-Droid (org.fdroid.fdroid) via apkeep
             #     in-pod from the android-test-apps layer's apk: list;
@@ -397,7 +397,7 @@ candy:
             #     (io.appium.android.apis) via goadb push from the android-apidemos
             #     layer.
             # These checks ASSERT the deploys' results (deploy-scope, so they only
-            # run under `charly eval live` after the nested deploys). F-Droid: unlike
+            # run under `charly check live` after the nested deploys). F-Droid: unlike
             # Chrome it has no static-library dependency, so it sideloads cleanly
             # from APKPure as a single x86_64 .apk.
             # ===================================================================
@@ -406,7 +406,7 @@ candy:
               arg: [pm, list, packages, org.fdroid.fdroid]
               stdout:
                 - contains: "org.fdroid.fdroid"
-              # The android `device` deploy installs F-Droid right before eval-live;
+              # The android `device` deploy installs F-Droid right before check-live;
               # allow a little settle on a fresh boot.
               eventually: 120s
               retry_interval: 5s
@@ -496,7 +496,7 @@ candy:
           step:
             - id: adb-screencap-png-min-size
               adb: screencap
-              artifact: /tmp/charly-eval-adb-screencap.png
+              artifact: /tmp/charly-check-adb-screencap.png
               artifact_min_bytes: 5000
               context:
                 - runtime
@@ -984,7 +984,7 @@ candy:
             # --- Screenshot + clean session teardown (LAST) ---
             - id: appium-screenshot
               appium: screenshot
-              artifact: /tmp/charly-eval-appium-screenshot.png
+              artifact: /tmp/charly-check-appium-screenshot.png
               artifact_min_bytes: 5000
               context:
                 - runtime

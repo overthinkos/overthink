@@ -263,12 +263,12 @@ func (c *CdpCloseCmd) Run() error {
 // port mapping, or an ssh -L forward for VM/ssh venues. The caller MUST close
 // the returned endpoint when done; for the persistent-WebSocket path the
 // CDPClient takes ownership and closes it on Close.
-func cdpDevTools(box, instance string) (devtoolsURL string, ep *EvalEndpoint, venue *EvalVenue, err error) {
-	venue, err = resolveEvalVenue(box, instance)
+func cdpDevTools(box, instance string) (devtoolsURL string, ep *CheckEndpoint, venue *CheckVenue, err error) {
+	venue, err = resolveCheckVenue(box, instance)
 	if err != nil {
 		return "", nil, nil, err
 	}
-	ep, err = resolveEvalEndpoint(venue, 9222)
+	ep, err = resolveCheckEndpoint(venue, 9222)
 	if err != nil {
 		return "", nil, venue, err
 	}
@@ -357,7 +357,7 @@ func cdpEvaluate(client *CDPClient, expression string) (string, error) {
 		return "", err
 	}
 
-	var evalResult struct {
+	var checkResult struct {
 		Result struct {
 			Type        string          `json:"type"`
 			Value       json.RawMessage `json:"value"`
@@ -367,30 +367,30 @@ func cdpEvaluate(client *CDPClient, expression string) (string, error) {
 			Text string `json:"text"`
 		} `json:"exceptionDetails"`
 	}
-	if err := json.Unmarshal(result, &evalResult); err != nil {
+	if err := json.Unmarshal(result, &checkResult); err != nil {
 		return "", fmt.Errorf("parsing evaluate result: %w", err)
 	}
-	if evalResult.ExceptionDetails != nil {
-		return "", fmt.Errorf("JavaScript exception: %s", evalResult.ExceptionDetails.Text)
+	if checkResult.ExceptionDetails != nil {
+		return "", fmt.Errorf("JavaScript exception: %s", checkResult.ExceptionDetails.Text)
 	}
 
 	// For string values, unmarshal the JSON string.
-	if evalResult.Result.Type == "string" {
+	if checkResult.Result.Type == "string" {
 		var s string
-		if err := json.Unmarshal(evalResult.Result.Value, &s); err != nil {
-			return string(evalResult.Result.Value), nil
+		if err := json.Unmarshal(checkResult.Result.Value, &s); err != nil {
+			return string(checkResult.Result.Value), nil
 		}
 		return s, nil
 	}
 	// For undefined/null, return empty.
-	if evalResult.Result.Type == "undefined" || evalResult.Result.Value == nil {
-		if evalResult.Result.Description != "" {
-			return evalResult.Result.Description, nil
+	if checkResult.Result.Type == "undefined" || checkResult.Result.Value == nil {
+		if checkResult.Result.Description != "" {
+			return checkResult.Result.Description, nil
 		}
 		return "", nil
 	}
 	// For other types (number, boolean, object), return the raw JSON.
-	return string(evalResult.Result.Value), nil
+	return string(checkResult.Result.Value), nil
 }
 
 // CdpTextCmd gets the page text content of a tab.
@@ -487,7 +487,7 @@ func (c *CdpScreenshotCmd) Run() error {
 	// Bring the tab to foreground and force a repaint before capture.
 	// Without this, a tab that is in the background (or that Chrome has
 	// suspended via memory-saver) returns a uniformly blank surface from
-	// Page.captureScreenshot — text/eval still work via Runtime.evaluate
+	// Page.captureScreenshot — text/check still work via Runtime.evaluate
 	// but the rendering buffer is empty. Errors here are non-fatal: the
 	// captureScreenshot call below remains the source of truth.
 	_, _ = client.Call("Page.bringToFront", map[string]any{})
@@ -593,7 +593,7 @@ func (c *CdpClickCmd) Run() error {
 		}
 		desktopX := int(coords.X + offset.ScreenX)
 		desktopY := int(coords.Y + offset.ScreenY + offset.ChromeHeight)
-		venue, err := resolveEvalVenue(c.Box, c.Instance)
+		venue, err := resolveCheckVenue(c.Box, c.Instance)
 		if err != nil {
 			return fmt.Errorf("resolving venue for WL click: %w", err)
 		}
@@ -730,7 +730,7 @@ func (c *CdpEvalCmd) Run() error {
 
 	result, err := cdpEvaluate(client, c.Expression)
 	if err != nil {
-		return fmt.Errorf("evaluating expression: %w", err)
+		return fmt.Errorf("checkuating expression: %w", err)
 	}
 	fmt.Println(result)
 	return nil
@@ -905,7 +905,7 @@ func (c *CdpCoordsCmd) Run() error {
 
 	// Get sway-based desktop offset (only meaningful on a wlroots/sway venue;
 	// resolves via the shared venue so it works for container or VM).
-	venue, err := resolveEvalVenue(c.Box, c.Instance)
+	venue, err := resolveCheckVenue(c.Box, c.Instance)
 	if err == nil && venue.Exec != nil {
 		swayRect, err := FindWindowRect(venue.Exec, c.AppID)
 		if err != nil {

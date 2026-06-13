@@ -2,7 +2,7 @@ package main
 
 // Shared SSH client plumbing for programmatic TCP/UNIX forwarding
 // (charly/ssh_tunnel.go) and for SPICE/VNC auto-tunneling inside the
-// `charly eval` commands. Built on `golang.org/x/crypto/ssh`, which is
+// `charly check` commands. Built on `golang.org/x/crypto/ssh`, which is
 // already a transitive dependency.
 //
 // The executor used by `charly deploy add vm:<name>` (in

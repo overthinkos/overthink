@@ -41,7 +41,7 @@ func NewCollector(rt *ResolvedRuntime) (*Collector, error) {
 	if qdir, err := quadletDir(); err == nil {
 		c.quadlet = qdir
 	}
-	// Best-effort charly.yml projection (incl. folded kind:eval beds) for
+	// Best-effort charly.yml projection (incl. folded kind:check beds) for
 	// the non-pod substrate collectors. Absence / load errors are non-fatal:
 	// the unified field stays nil and substrate collectors degrade gracefully.
 	if cwd, err := os.Getwd(); err == nil {

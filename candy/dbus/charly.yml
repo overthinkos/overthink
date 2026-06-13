@@ -8,7 +8,7 @@ candy:
             session bus under supervisord as `dbus-daemon --session --nofork
             --address=unix:path=/tmp/dbus-session`, exporting
             DBUS_SESSION_BUS_ADDRESS so notification senders, introspection tools,
-            and `charly eval dbus` clients in the container can reach the bus.
+            and `charly check dbus` clients in the container can reach the bus.
             Every claim is verifiable: the dbus-daemon binary on disk and the
             providing package installed at build scope, and at deploy scope the
             session-bus address env var exported plus the dbus service running.
@@ -69,7 +69,7 @@ candy:
               context:
                 - runtime
         # PROSE-ONLY step — genuine free-form resilience behaviour, agent-graded
-        # by `charly eval feature run dbus` against the live deployment.
+        # by `charly check feature run dbus` against the live deployment.
         - name: session-bus-stays-available
           step:
             - then: the supervised dbus service keeps the session bus reachable, restarting automatically (restart=always) if the dbus-daemon process exits

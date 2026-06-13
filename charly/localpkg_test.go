@@ -534,7 +534,7 @@ func TestRenderLocalPkgImageInstall_ProductionDownloadsRelease(t *testing.T) {
 	}
 }
 
-// renderLocalPkgImageInstall: a DISPOSABLE eval bed (devLocalPkg=true) builds the
+// renderLocalPkgImageInstall: a DISPOSABLE check bed (devLocalPkg=true) builds the
 // in-development package from LOCAL source. With no localpkg source dir present it
 // HARD ERRORS — it must NEVER silently fall back to the published release (R4: no
 // black-magic fallback that would let a bed test a stale binary).

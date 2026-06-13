@@ -42,7 +42,7 @@ type CLI struct {
 	Repo string `long:"repo" env:"CHARLY_PROJECT_REPO" placeholder:"OWNER/REPO[@REF]" help:"Read charly.yml from a remote git repo (e.g. overthinkos/overthink). Use 'default' for overthinkos/overthink."`
 
 	Alias       AliasCmd        `cmd:"" help:"Manage command aliases for container images"`
-	Clean       CleanCmd        `cmd:"" help:"Prune reusable build artifacts to defaults: retention (images, eval runs) + sweep one-time makepkg leftovers"`
+	Clean       CleanCmd        `cmd:"" help:"Prune reusable build artifacts to defaults: retention (images, check runs) + sweep one-time makepkg leftovers"`
 	Cmd         CmdCmd          `cmd:"" help:"Run a command in a running container (with notification)"`
 	Config      BoxConfigCmd    `cmd:"" help:"Configure box deployment (setup, secrets, encrypted volumes)"`
 	Deploy      DeployCmd       `cmd:"" help:"Manage charly.yml deployment overrides"`
@@ -66,7 +66,7 @@ type CLI struct {
 	Start       StartCmd        `cmd:"" help:"Start a container as a background service"`
 	Status      StatusCmd       `cmd:"" help:"Show service status (all if no box given)"`
 	Stop        StopCmd         `cmd:"" help:"Stop a running service container"`
-	Eval        EvalCmd         `cmd:"" help:"Evaluate boxes and deployments — pure-box (disposable), live (running deployment), AI-driven iteration, and live-container probe verbs (cdp/wl/dbus/vnc/mcp/spice/libvirt/record/k8s)"`
+	Check        CheckCmd         `cmd:"" help:"Evaluate boxes and deployments — pure-box (disposable), live (running deployment), AI-driven iteration, and live-container probe verbs (cdp/wl/dbus/vnc/mcp/spice/libvirt/record/k8s)"`
 	Feature     FeatureCmd      `cmd:"" help:"Gherkin-shaped description authoring: list/pending/validate"`
 	Tmux        TmuxCmd         `cmd:"" help:"Manage tmux sessions inside running containers"`
 	Udev        UdevCmd         `cmd:"" help:"Manage udev rules for GPU device access in containers"`
@@ -751,15 +751,15 @@ func main() {
 	SweepStaleTemps()
 
 	err := ctx.Run()
-	// `charly eval` distinguishes "the thing under test is broken" from "the
+	// `charly check` distinguishes "the thing under test is broken" from "the
 	// command/usage/infra errored" via a distinct exit code: 0 = pass,
-	// 1 = command error (Kong's FatalIfErrorf default), 2 = eval checks
-	// failed. See EvalFailedError / EvalCheckFailExitCode in eval_cmd.go.
+	// 1 = command error (Kong's FatalIfErrorf default), 2 = check checks
+	// failed. See CheckFailedError / CheckFailExitCode in check_cmd.go.
 	if err != nil {
-		var evalFail *EvalFailedError
-		if errors.As(err, &evalFail) {
+		var checkFail *CheckFailedError
+		if errors.As(err, &checkFail) {
 			fmt.Fprintln(os.Stderr, FormatCLIError(err))
-			os.Exit(EvalCheckFailExitCode)
+			os.Exit(CheckFailExitCode)
 		}
 	}
 	ctx.FatalIfErrorf(FormatCLIError(err))

@@ -17,7 +17,7 @@ import (
 // tree from the deploy config, attaches each declared child to its parent
 // row's DeploymentStatus.Nested[], and — under --nested — probes each child's
 // live venue through the same ResolveDeployChain + NestedExecutor primitive
-// `charly deploy add` / `charly eval live parent.child` use.
+// `charly deploy add` / `charly check live parent.child` use.
 //
 // Collector.All calls applyNestedOverlay exactly once, after the substrate
 // fan-out and before the final sort.
@@ -196,7 +196,7 @@ func claimFlatRow(childPath string, byKey map[string]int, claimed map[int]bool) 
 // runs a trivial liveness probe under nestedProbeTimeout. Returns "reachable"
 // on a clean exit, "unreachable" on any error / non-zero exit / timeout. The
 // chain construction reuses ResolveDeployChain — the SAME primitive `charly deploy
-// add` and `charly eval live parent.child` use (R3); there is no bespoke nested
+// add` and `charly check live parent.child` use (R3); there is no bespoke nested
 // dial here.
 func probeNestedChildLive(childPath string, roots map[string]DeploymentNode) string {
 	leaf, chain, err := ResolveDeployChain(roots, childPath, nil)
@@ -231,8 +231,8 @@ func nestedChildKind(child *DeploymentNode) SubstrateKind {
 }
 
 // mergedNestedRoots returns the declared deployment tree (project +
-// per-machine), with kind:eval beds already folded into the project Deploy map
-// by foldEvalBeds at load time. Mirrors resolveTreeRoot's merge precedence
+// per-machine), with kind:check beds already folded into the project Deploy map
+// by foldCheckBeds at load time. Mirrors resolveTreeRoot's merge precedence
 // (project then local overlay) but operates on the ALREADY-LOADED configs in
 // opts — applyNestedOverlay must not re-read disk or re-run LoadUnified.
 func mergedNestedRoots(opts CollectOpts) map[string]DeploymentNode {

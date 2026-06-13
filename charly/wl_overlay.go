@@ -57,7 +57,7 @@ type WlOverlayStatusCmd struct {
 }
 
 func (c *WlOverlayShowCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Box, c.Instance)
+	venue, err := resolveCheckVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -71,7 +71,7 @@ func (c *WlOverlayShowCmd) Run() error {
 }
 
 func (c *WlOverlayHideCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Box, c.Instance)
+	venue, err := resolveCheckVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -88,7 +88,7 @@ func (c *WlOverlayHideCmd) Run() error {
 }
 
 func (c *WlOverlayListCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Box, c.Instance)
+	venue, err := resolveCheckVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -96,7 +96,7 @@ func (c *WlOverlayListCmd) Run() error {
 }
 
 func (c *WlOverlayStatusCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Box, c.Instance)
+	venue, err := resolveCheckVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -155,7 +155,7 @@ func checkOverlayAvailable(ex DeployExecutor) error {
 
 // ensureOverlayDaemon starts the overlay daemon in a tmux session on the venue
 // if not already running. The daemon hosts the overlay socket; the tmux session
-// keeps it alive across the short-lived `charly eval wl overlay` invocations.
+// keeps it alive across the short-lived `charly check wl overlay` invocations.
 func ensureOverlayDaemon(ex DeployExecutor) error {
 	// Check if daemon socket already exists (daemon running)
 	if execWlCmdSilent(ex, "test -S /tmp/charly-overlay.sock") == nil {

@@ -33,7 +33,7 @@ func ExpandCandy(requested []string, layers map[string]*Candy) ([]string, error)
 		// already-bare names — local plain names and the build path's
 		// pre-normalized ResolvedBox.Candy (config.go: BareRef per ref) — so
 		// the build/install path is byte-unchanged. Without it the collectors
-		// that walk RAW cfg.Box[...].Candy (eval/hooks/shell/descriptions/
+		// that walk RAW cfg.Box[...].Candy (check/hooks/shell/descriptions/
 		// security/volumes/alias/engine + validateInitDependencies) silently
 		// dropped every candy-level contribution for @github-ref-composed
 		// boxes (the whole submodule box family).

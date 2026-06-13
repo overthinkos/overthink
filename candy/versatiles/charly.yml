@@ -120,7 +120,7 @@ candy:
           scope: system
     scenario:
         # DETERMINISTIC build-scope facts (embedded check verbs run at both
-        # `charly box feature run` and `charly eval feature run`).
+        # `charly box feature run` and `charly check feature run`).
         - name: versatiles-binary-installed
           step:
             - then: the versatiles binary is installed and executable at /usr/local/bin/versatiles
@@ -223,7 +223,7 @@ candy:
                 SRC=/workspace/tiles/pmtiles/monaco.pmtiles
                 # If the OSM DAG hasn't run yet on this deploy, skip the
                 # check cleanly — the notebook's R10 end-to-end covers the
-                # post-DAG state. The eval here covers the static binary
+                # post-DAG state. The check here covers the static binary
                 # surface; the DAG path is exercised by the notebook test.
                 if [ ! -f "$SRC" ]; then
                   echo "SKIP: $SRC not present yet (OSM DAG has not run on this deploy)"

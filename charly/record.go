@@ -28,7 +28,7 @@ type RecordStartCmd struct {
 }
 
 func (c *RecordStartCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Box, c.Instance)
+	venue, err := resolveCheckVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -38,7 +38,7 @@ func (c *RecordStartCmd) Run() error {
 
 	session := recordSessionName(c.Name)
 	if tmuxHasSession(venue.Exec, session) {
-		return fmt.Errorf("recording %q already active (session %s). Stop it first with: charly eval record stop %s -n %s",
+		return fmt.Errorf("recording %q already active (session %s). Stop it first with: charly check record stop %s -n %s",
 			c.Name, session, c.Box, c.Name)
 	}
 
@@ -87,7 +87,7 @@ func (c *RecordStartCmd) Run() error {
 
 	fmt.Fprintf(os.Stderr, "Recording started (mode: %s, tool: %s, session: %s)\n", mode, tool, session)
 	fmt.Fprintf(os.Stderr, "  Output: %s (on the target)\n", outFile)
-	fmt.Fprintf(os.Stderr, "  Stop with: charly eval record stop %s -n %s [-o local-file]\n", c.Box, c.Name)
+	fmt.Fprintf(os.Stderr, "  Stop with: charly check record stop %s -n %s [-o local-file]\n", c.Box, c.Name)
 	return nil
 }
 
@@ -123,14 +123,14 @@ type RecordStopCmd struct {
 }
 
 func (c *RecordStopCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Box, c.Instance)
+	venue, err := resolveCheckVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
 
 	session := recordSessionName(c.Name)
 	if !tmuxHasSession(venue.Exec, session) {
-		return fmt.Errorf("no active recording %q (session %s not found). Use 'charly eval record list %s' to see active recordings",
+		return fmt.Errorf("no active recording %q (session %s not found). Use 'charly check record list %s' to see active recordings",
 			c.Name, session, c.Box)
 	}
 
@@ -185,7 +185,7 @@ func (c *RecordStopCmd) Run() error {
 		}
 	} else {
 		fmt.Fprintf(os.Stderr, "Recording stopped. File on the target: %s\n", outFile)
-		fmt.Fprintf(os.Stderr, "  Copy with: charly eval record stop %s -n %s -o <local-path>\n", c.Box, c.Name)
+		fmt.Fprintf(os.Stderr, "  Copy with: charly check record stop %s -n %s -o <local-path>\n", c.Box, c.Name)
 	}
 
 	return nil
@@ -198,7 +198,7 @@ type RecordListCmd struct {
 }
 
 func (c *RecordListCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Box, c.Instance)
+	venue, err := resolveCheckVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -243,7 +243,7 @@ type RecordCmdCmd struct {
 }
 
 func (c *RecordCmdCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Box, c.Instance)
+	venue, err := resolveCheckVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}

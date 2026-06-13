@@ -4,18 +4,18 @@ package main
 // included k3s-server. Runs after RetrieveCandyArtifacts has pulled the
 // kubeconfig to ~/.cache/charly/clusters/<deploy>/kubeconfig.yaml.
 //
-// Two things happen here that the generic artifact-retrieval pipeline
+// Two things happen here that the generic artifact-retricheck pipeline
 // cannot:
 //   1. Merge the retrieved kubeconfig into ~/.kube/config under a context
 //      named after the deploy, so `kubectl --context <deploy> …` and
-//      `charly eval k8s nodes --cluster <deploy>` both work immediately.
+//      `charly check k8s nodes --cluster <deploy>` both work immediately.
 //   2. Write a ClusterProfile at ~/.config/charly/clusters/<deploy>.yaml with
 //      ingress.class=traefik and storage.class_default=local-path so any
 //      subsequent `charly deploy add <app> --target kubernetes` that selects
 //      this cluster picks up the right defaults for the k3s addon stack.
 //
 // Called from deploy_add_cmd.go and deploy_add_cmd_vm.go after the artifact
-// retrieval step when the deploy's candy list contains "k3s-server".
+// retricheck step when the deploy's candy list contains "k3s-server".
 
 import (
 	"fmt"
@@ -39,7 +39,7 @@ func sanitizeDeployName(s string) string {
 // K3sPostProvision runs the post-provision steps for a k3s-server deploy.
 // No-op when the retrieved kubeconfig path does not exist (e.g. because
 // the candy did not actually include k3s-server, or the artifact
-// retrieval was skipped by --dry-run).
+// retricheck was skipped by --dry-run).
 func K3sPostProvision(deployName string) error {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -48,7 +48,7 @@ func K3sPostProvision(deployName string) error {
 	safe := sanitizeDeployName(deployName)
 	retrieved := filepath.Join(home, ".cache", "charly", "clusters", safe, "kubeconfig.yaml")
 	if _, err := os.Stat(retrieved); err != nil {
-		// Not a k3s-server deploy, or retrieval was skipped. Nothing to do.
+		// Not a k3s-server deploy, or retricheck was skipped. Nothing to do.
 		return nil
 	}
 

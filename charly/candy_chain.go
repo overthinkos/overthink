@@ -7,7 +7,7 @@ import "fmt"
 // level. This is the ONE walk every BASE-CHAIN field collector shares —
 // CollectHooks, CollectShell, CollectDescriptions,
 // CollectBoxVolume, and CollectBoxPorts — so a contribution a base box makes
-// (a volume, an eval check, a published port) is inherited by every box built
+// (a volume, an check check, a published port) is inherited by every box built
 // on it. De-duplication is first-occurrence-wins by candy key, matching the
 // per-collector `seen` maps it replaces.
 //

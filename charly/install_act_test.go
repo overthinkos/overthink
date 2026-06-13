@@ -70,7 +70,7 @@ func TestCompileOpSteps_FoldsBuildScopedScenarioActOp(t *testing.T) {
 }
 
 // A runtime-capable do:act op (default multi-context) is NOT folded into the
-// build plan — the eval Runner executes it live, so folding would double-run.
+// build plan — the check Runner executes it live, so folding would double-run.
 func TestCompileOpSteps_DoesNotFoldRuntimeCapableActOp(t *testing.T) {
 	layer := &Candy{Name: "x", scenario: []Scenario{{
 		Name: "s",

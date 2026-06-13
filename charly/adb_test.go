@@ -27,7 +27,7 @@ func TestAdbStateString(t *testing.T) {
 
 func TestPosShellArgs_PrefixesDoubleDash(t *testing.T) {
 	// Shell args must be prefixed with `--` so flag-like tokens (-l, -p,
-	// --color) don't get claimed by Kong as flags of `charly eval adb shell`.
+	// --color) don't get claimed by Kong as flags of `charly check adb shell`.
 	c := &Op{Args: []string{"getprop", "ro.build.version.release"}}
 	got := posShellArgs(c)
 	want := []string{"--", "getprop", "ro.build.version.release"}

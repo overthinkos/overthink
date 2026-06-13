@@ -74,7 +74,7 @@ func hostImageExists(engine, ref string) bool {
 //     signature it is dropped and re-streamed ONCE; a second failure is a hard
 //     error (surfaced, never silently shipped as a broken image).
 //
-// Requires an *SSHExecutor (the VM case). The GPU eval bed is the first caller.
+// Requires an *SSHExecutor (the VM case). The GPU check bed is the first caller.
 func TransferImageToGuest(ctx context.Context, de DeployExecutor, hostEngine, ref, as string, rootless bool, opts EmitOpts) error {
 	if de == nil {
 		return fmt.Errorf("TransferImageToGuest: nil executor")

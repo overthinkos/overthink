@@ -36,7 +36,7 @@ type CDPClient struct {
 	mu       sync.Mutex
 	pending  map[int]chan cdpMessage
 	done     chan struct{}
-	endpoint *EvalEndpoint // ssh -L forward (VM/ssh venues); nil for container/local
+	endpoint *CheckEndpoint // ssh -L forward (VM/ssh venues); nil for container/local
 }
 
 // NewCDPClient connects to a CDP WebSocket endpoint and starts reading messages.

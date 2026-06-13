@@ -127,7 +127,7 @@ func TestLocalCollector_DeployRecordUnionNoDoubleCount(t *testing.T) {
 	paths := redirectLocalLedger(t, true)
 	if err := WriteDeployRecord(paths, &DeployRecord{
 		DeployID:   "deploy-X",
-		Target:     "vm:eval-arch-vm",
+		Target:     "vm:check-arch-vm",
 		Candy:      []string{"base", "charly"},
 		AddCandy:   []string{"sshkeys"},
 		DeployedAt: "2026-05-29T08:00:00Z",

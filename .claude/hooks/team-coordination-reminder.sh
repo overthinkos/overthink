@@ -11,8 +11,8 @@
 
 cat <<'EOF'
 OPENCHARLY TEAM REMINDER (pointers — the model lives in /charly-internals:agents):
-- Bed-scoped: own a DISJOINT kind:eval bed (distinct names AND host ports); a
-  PERSISTENT owner runs every full `charly eval run <bed>` as a background
+- Bed-scoped: own a DISJOINT kind:check bed (distinct names AND host ports); a
+  PERSISTENT owner runs every full `charly check run <bed>` as a background
   task (/charly-internals:agents "Bed-scoped parallel real-deployment testing").
 - The binding rule — disposable-only, commit gated on the pasted final-code
   run, no scope-shrinking flags (/charly-internals:agents "The binding rule").

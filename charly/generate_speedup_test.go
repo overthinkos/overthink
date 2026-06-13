@@ -17,7 +17,7 @@ func TestWriteContextIgnore(t *testing.T) {
 		Dir: dir,
 		Config: &Config{
 			// "image" duplicated to exercise dedup against author input.
-			Defaults: BoxConfig{ContextIgnore: []string{"image", ".eval", "image"}},
+			Defaults: BoxConfig{ContextIgnore: []string{"image", ".check", "image"}},
 		},
 	}
 	if err := g.writeContextIgnore(); err != nil {
@@ -38,7 +38,7 @@ func TestWriteContextIgnore(t *testing.T) {
 			}
 		}
 		// Config additions present.
-		for _, want := range []string{"image", ".eval"} {
+		for _, want := range []string{"image", ".check"} {
 			if !ciLineContains(s, want) {
 				t.Errorf("%s missing config entry %q", name, want)
 			}

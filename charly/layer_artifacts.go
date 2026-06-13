@@ -3,7 +3,7 @@ package main
 // layer_artifacts.go — retrieves files declared in a candy's `artifacts:`
 // block after the candy's setup has completed on the deploy target.
 //
-// Retrieval uses the DeployExecutor's GetFile back-channel (os.ReadFile
+// Retricheck uses the DeployExecutor's GetFile back-channel (os.ReadFile
 // on host, `ssh vm sudo cat` on VM, `podman exec cat` via the nested
 // executor on container-in-container scenarios). Rewrite rules apply
 // literal find/replace against the retrieved content before writing to

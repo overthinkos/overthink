@@ -22,6 +22,41 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-13 — feat(schema)!: rename the evaluation harness verb `eval` → `check` (full sweep)
+
+The evaluation harness's verb renamed from `eval` to `check` everywhere, so the
+CLI verb matches the `charly.yml` verb (the standing guidance) — the deferred
+sibling of the same-day Op-unification cutover below. This was a **full sweep**:
+the CLI command `charly eval [box|live|run|cdp|wl|dbus|vnc|mcp|record|spice|
+libvirt|k8s|adb|appium|feature]` → `charly check …`; the root `eval:` bed-registry
+key → `check:` and `kind: eval` → `kind: check`; the per-box `eval_level:` field →
+`check_level:` (baked label `ai.opencharly.eval_level` → `ai.opencharly.check_level`);
+`defaults.keep_eval_runs` → `keep_check_runs`; the run-artifact dir `.eval/` →
+`.check/`; the `eval-*` bed names (`eval-pod`→`check-pod`, `eval-local`→
+`check-local`, `eval-k3s-vm`→`check-k3s-vm`, …) and the `candy/eval-*-layer`
+candy dirs → `check-*`; the `/charly-eval:*` skill plugin → `/charly-check:*`
+(`plugins/eval/`→`plugins/check/`, the `eval` orchestrator skill →`check`,
+`eval-k8s`→`check-k8s`, `eval-sway-browser-vnc`→`check-sway-browser-vnc`, the
+`eval-bed-runner` agent →`check-bed-runner`, the `/triage-eval-failure` workflow
+→`/triage-check-failure`). 63 Go `eval_*.go` files renamed to `check_*.go`;
+`EvalCmd`→`CheckCmd` and the whole harness identifier set renamed.
+
+**Deliberately preserved** (NOT the harness): the Chrome DevTools Protocol JS
+`eval` method (`charly check cdp eval`, the `cdp: eval` YAML verb value,
+`CdpEvalCmd`, `cdpEvaluate`, `Runtime.evaluate`); the Go stdlib
+`filepath.EvalSymlinks`; the external Python packages `pure_eval` /
+`eval-type-backport` in pixi locks; and `charly doctor`'s pre-existing
+dependency-check types (renamed `CheckStatus`/`CheckResult` →
+`DoctorCheckStatus`/`DoctorCheckResult` so the harness owns the bare names).
+`EvalCheckFailExitCode` de-doubled to `CheckFailExitCode`.
+
+Migration: `migrate_eval_check.go` (schema `2026.164.0003`; HEAD bumped to
+`2026.164.0004`) renames the schema TOKENS (`eval:`→`check:`, `eval_level:`→
+`check_level:`, `keep_eval_runs:`→`keep_check_runs:`, `kind: eval`→`kind: check`)
+but never author entity NAMES — a third-party config keeps its own names. Box
+submodule `@github` candy refs (`candy/eval-*-layer`) repoint to `candy/check-*`
+at the producer's new tag (B6 cross-repo staged landing).
+
 ### 2026-06-13 — feat(schema)!: unify task: + eval: + agent: into one generic `Op` vocabulary; fold eval: into scenario:
 
 The candy/box config carried THREE parallel, duplicated operation vocabularies — `task:` (imperative install/build verbs), `eval:` + `description.scenario` (declarative check verbs, written TWICE in most candies), and a proposed free-form agent surface — backed by two Go structs (`Task` + `Check`), two verb lists (`TaskVerbs` + `CheckVerbs`), two `Kind()`/validator triples, and a doubled candy YAML. This single-phase hard cutover collapses all of it into ONE generic `Op` struct with three orthogonal axes — **verb** (the union set) × **`do:`** (`act`|`assert`|`instruct`) × **`context:`** (`build`|`deploy`|`runtime`|`agent`) — driven by ONE source of truth, the `VerbCatalog` map (`verb → {Contexts, DefaultDo, Reversible, LowersTo}`).

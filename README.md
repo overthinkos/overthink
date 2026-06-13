@@ -11,7 +11,7 @@ driving.
 
 187 candies across this repo and its submodules. 53 box definitions
 (39 enabled by default). 2 VM definitions, 2 Android devices, and a
-growing catalog of `kind: local` host templates and `kind: eval`
+growing catalog of `kind: local` host templates and `kind: check`
 test beds. Docker and Podman. `linux/amd64`. Fedora, Debian, Ubuntu,
 Arch, and CachyOS. One CLI: `charly` (29 top-level verbs). Every candy,
 box, VM, and command has a dedicated recipe card (skill) — ~290 skills
@@ -58,14 +58,14 @@ from one config and one mental model:
 | compose a reproducible box from a candy list                | `kind: box` / `kind: candy`, `charly box build`    | [Build](#build)       |
 | run one or more containers as a managed pod                 | `kind: pod`, `charly deploy add`, `charly start`           | [Run](#run)           |
 | apply the same candies to a host, VM, k8s, or Android device | `charly deploy add` + `target:`                        | [Deploy](#deploy)     |
-| prove a config actually works, end-to-end                   | `kind: eval`, `charly eval run`, baked `eval:` checks  | [Evaluate](#evaluate) |
+| prove a config actually works, end-to-end                   | `kind: check`, `charly check run`, baked `check:` checks  | [Evaluate](#evaluate) |
 
 The same `charly` drives two further stages — it
 [authors candies and boxes with an agent in the loop](#author-with-agents)
 and [manages](#manage) the running lifecycle (cleanup, diagnostics,
 schema upgrades, runtime config).
 
-> One `charly.yml`, one box, one per-host `charly.yml` overlay, and one `kind: eval`
+> One `charly.yml`, one box, one per-host `charly.yml` overlay, and one `kind: check`
 > bed drive all four stages — the build, the local run, the remote
 > deploy, and the test harness. The binary that wires them together is
 > also an MCP server, so your agent reaches every verb over the
@@ -90,7 +90,7 @@ have to.
 - **Candy** (`kind: candy` in `candy/<name>/charly.yml`) — packages (per-distro),
   tasks (eight verbs: `cmd`/`mkdir`/`copy`/`write`/`link`/`download`/
   `setcap`/`build`), services (one unified `service:` list — see
-  init-system polymorphism below), volumes, env, ports, eval probes,
+  init-system polymorphism below), volumes, env, ports, check probes,
   `env_provide`/`env_require`/`mcp_provide`/`mcp_accept` for
   cross-container discovery, plus a `version:` CalVer.
   → `/charly-image:layer`.
@@ -102,7 +102,7 @@ have to.
 
 Secure the *box* — a disposable, rootless container or VM with real,
 kernel-enforced isolation — then hand your agent the whole candy store
-inside it: every `charly` verb, every candy, every `charly eval` probe, a real
+inside it: every `charly` verb, every candy, every `charly check` probe, a real
 system, a real GPU. Far more capability than a locked-down sandbox, and
 a mistake costs one rebuild.
 → [VISION.md](VISION.md) (why), CLAUDE.md "Candyboxing" (the rule),
@@ -112,10 +112,10 @@ a mistake costs one rebuild.
 
 Prove the riskiest unknown — above all whether a particular *combination*
 of candies, at their latest versions, actually builds and runs together —
-empirically on a disposable `kind: eval` bed EARLY, before a design rests
-on it. `charly eval` makes that proof cheap, for you and your agents alike.
+empirically on a disposable `kind: check` bed EARLY, before a design rests
+on it. `charly check` makes that proof cheap, for you and your agents alike.
 → [VISION.md](VISION.md) (why), CLAUDE.md "Risk Driven Development (RDD)"
-(the rule), `/charly-eval:eval` (usage).
+(the rule), `/charly-check:check` (usage).
 
 ### Agent Driven Evaluation (acceptance)
 
@@ -124,12 +124,12 @@ on the candy that provides the behaviour, baked into the box as a label.
 A step with a check verb is verified deterministically; a prose-only step
 is graded by an **agent** probing the live deployment. Author with
 `charly candy add-scenario`, run with `charly box feature run` /
-`charly eval feature run`, or let the `charly eval run <score>` AI loop drive it to
+`charly check feature run`, or let the `charly check run <score>` AI loop drive it to
 green. The spec is the test, and agents both write it and grade it. Every
 candy MUST ship a non-empty `description.feature:` AND a `scenario:` list with
 ≥1 deterministic `do: assert` step — `charly box validate` hard-errors otherwise.
 → [VISION.md](VISION.md) (why), CLAUDE.md "Agent Driven Evaluation (ADE)"
-(the rule), `/charly-eval:eval` (usage).
+(the rule), `/charly-check:check` (usage).
 
 ### Build → run → deploy → evaluate
 
@@ -142,7 +142,7 @@ flow through all of them:
   Podman quadlets.
 - **Deploy** — `charly deploy add` applies the same candies to a host, VM,
   k8s cluster, or Android device via `target:`.
-- **Evaluate** — `kind: eval` beds and baked `eval:` checks prove any
+- **Evaluate** — `kind: check` beds and baked `check:` checks prove any
   box or deployment works end-to-end.
 
 See [Lifecycle](#lifecycle) for the full verb families (plus
@@ -166,24 +166,24 @@ discriminator in its file:
   package manager + systemd + shell profile. → `/charly-local:local-spec`.
 - **Android** (`kind: android`) — Android device: in-pod emulator
   (via `box:`) or remote/physical adb endpoint. `apk:` is a candy
-  package format scoped to Android targets. → `/charly-eval:android`.
+  package format scoped to Android targets. → `/charly-check:android`.
 - **Deploy** (`kind: deploy`) — a named deployment of one of the
   kinds above to a `target:` (`pod` default, `vm`, `k8s`, `local`,
   `android`). Carries env overlays, port remaps, volume backings,
   sidecars, tunnels, secrets, and the `disposable: true` opt-in.
   → `/charly-core:deploy`.
-- **Eval** (`kind: eval`) — a *disposable* deploy used as an R10 test
-  bed: `charly eval run <bed>` runs build → deploy → probe →
+- **Check** (`kind: check`) — a *disposable* deploy used as an R10 test
+  bed: `charly check run <bed>` runs build → deploy → probe →
   fresh-update → tear-down. The `kind: recipe` / `kind: score` /
   `kind: agent` overlays drive the agent-iteration harness on top.
-  → `/charly-eval:eval`.
+  → `/charly-check:check`.
 
 ### Cross-cutting rules
 
 **`charly.yml` is the single project entry point.** Boxes are
 discovered as `box/<name>/charly.yml`, candies as
 `candy/<name>/charly.yml`, and the remaining kinds
-(`vm`/`pod`/`k8s`/`eval`/`local`/`android`) live inline in
+(`vm`/`pod`/`k8s`/`check`/`local`/`android`) live inline in
 `charly.yml`'s root; the distro/builder/init/resource build
 vocabulary is embedded in the `charly` binary. `import:` composes
 other files or repos — a bare string for a flat same-repo import
@@ -238,7 +238,7 @@ it works, so any box or deployment is self-verifiable end-to-end — the
 same surface whether you drive it at the keyboard or your agents drive
 it autonomously. See [Evaluate](#evaluate) for the framework and
 [Works with Claude Code](#works-with-claude-code) for the agents and
-workflows. → `/charly-eval:eval`, `/charly-internals:agents`.
+workflows. → `/charly-check:check`, `/charly-internals:agents`.
 
 **Rootless-first power-user boxes.** The four boxes carrying the
 full `charly` toolchain (`fedora-coder`, `charly-fedora`, `charly-arch`,
@@ -338,8 +338,8 @@ charly deploy add host ripgrep
 charly deploy add host fedora-coder --with-services --yes
 charly deploy del host                  # reverses everything via ReverseOps + ledger
 
-# Run a kind:eval test bed end-to-end (the R10 acceptance gate)
-charly eval run eval-pod
+# Run a kind:check test bed end-to-end (the R10 acceptance gate)
+charly check run check-pod
 ```
 
 ## Lifecycle
@@ -362,7 +362,7 @@ workdirs, and runs `podman build` (or `docker build` — switch with
 planner grinds every candy smooth — deduplicated, ordered, and
 cache-warmed — before it sets into a box. The emitted image carries
 OCI labels for every capability it claims: `ai.opencharly.description`
-(the baked Gherkin scenarios), `ai.opencharly.eval_level`,
+(the baked Gherkin scenarios), `ai.opencharly.check_level`,
 `ai.opencharly.init`, `ai.opencharly.version` (content-derived
 `EffectiveVersion`, stable across no-op rebuilds), `.ports`, etc.
 
@@ -479,7 +479,7 @@ discriminates where it lands:
   via `box:` or remote adb endpoint via `adb: {host: …}`);
   `apk:` packages installed by `apkeep` (Google Play) or pushed
   from committed `.apk` files via goadb. Nested `pod → android`
-  mirrors `vm → k8s`. → `/charly-eval:android`, `/charly-eval:adb`.
+  mirrors `vm → k8s`. → `/charly-check:android`, `/charly-check:adb`.
 
 `charly deploy del`, `charly deploy sync` (apply K8s changes live),
 `charly deploy from-box` (source-less deploy from OCI labels), and
@@ -522,72 +522,72 @@ box is self-testable without its source repo.
 
 Three execution modes:
 
-- **`charly eval box <image>`** — disposable `podman run --rm` of the
+- **`charly check box <image>`** — disposable `podman run --rm` of the
   baked layer + image checks. Build-scope; no deploy state.
-- **`charly eval live <image>`** — runs all three sections against a
+- **`charly check live <image>`** — runs all three sections against a
   *running* deployment, substituting deploy-time variables
   (`${HOST_PORT:N}`, `${VOLUME_PATH:name}`, `${CONTAINER_IP}`,
   `${ENV_*}`) so the same check survives port remaps and volume
   rebindings.
-- **`charly eval run <bed>`** — the canonical R10 acceptance gate.
-  Picks a `kind: eval` bed from the project `charly.yml` `eval:` block (a disposable deploy
-  carrying `disposable: true`) and runs build → eval box → deploy
-  → eval live → fresh `charly update` → eval live again → teardown.
-  Pick the bed whose kind matches what you changed: `eval-pod`,
-  `eval-local`, `eval-k3s-vm`, `eval-android-emulator-pod`.
-  `charly eval run --all-beds` iterates the catalog.
+- **`charly check run <bed>`** — the canonical R10 acceptance gate.
+  Picks a `kind: check` bed from the project `charly.yml` `check:` block (a disposable deploy
+  carrying `disposable: true`) and runs build → check box → deploy
+  → check live → fresh `charly update` → check live again → teardown.
+  Pick the bed whose kind matches what you changed: `check-pod`,
+  `check-local`, `check-k3s-vm`, `check-android-emulator-pod`.
+  `charly check run --all-beds` iterates the catalog.
 
 Exit codes are goss-style: `0` = all checks passed, `1` =
-infra/usage error (the eval never reached a verdict), `2` =
+infra/usage error (the check never reached a verdict), `2` =
 checks failed. R10 automation treats `1` as "did not run",
 not "failed".
 
 **Agents drive these beds.** Claude Code sub-agents
-(`eval-bed-runner`, `deploy-verifier`) and dynamic workflows
-(`/verify-beds`, `/audit-deploy-configs`) run `charly eval
+(`check-bed-runner`, `deploy-verifier`) and dynamic workflows
+(`/verify-beds`, `/audit-deploy-configs`) run `charly check
 run`/`live`/`box` against the existing beds and return verbatim
 pass/fail — the same disposable-bed verification, whether you run it
 or your agent does. → `/charly-internals:agents`.
 
 Eleven live-container probe verbs — authorable inline as
-`scenario:` steps (`cdp: eval`, `wl:
+`scenario:` steps (`cdp: check`, `wl:
 screenshot`, `dbus: call`, `vnc: status`, `mcp: list-tools`, `adb:
 getprop`, `appium: click`, …):
 
-- `charly eval cdp` — Chrome DevTools Protocol (open, click, eval JS,
+- `charly check cdp` — Chrome DevTools Protocol (open, click, check JS,
   screenshot).
-- `charly eval wl` — Wayland / sway / labwc automation; `wl overlay`
+- `charly check wl` — Wayland / sway / labwc automation; `wl overlay`
   for fullscreen recording overlays.
-- `charly eval dbus` — D-Bus method calls and signal subscriptions.
-- `charly eval vnc` — RFB handshake, pointer/keyboard, clipboard,
+- `charly check dbus` — D-Bus method calls and signal subscriptions.
+- `charly check vnc` — RFB handshake, pointer/keyboard, clipboard,
   screenshot.
-- `charly eval mcp` — Model Context Protocol clients (list-tools,
+- `charly check mcp` — Model Context Protocol clients (list-tools,
   list-resources, read-resource, call-tool).
-- `charly eval spice` — SPICE display protocol with guest-agent socket.
-- `charly eval libvirt` — libvirt API (VM info, screenshot, send-key,
+- `charly check spice` — SPICE display protocol with guest-agent socket.
+- `charly check libvirt` — libvirt API (VM info, screenshot, send-key,
   QMP, snapshots, event stream).
-- `charly eval record` — terminal asciinema or desktop ffmpeg.
-- `charly eval k8s` — Kubernetes probes (nodes, pods, ingress,
+- `charly check record` — terminal asciinema or desktop ffmpeg.
+- `charly check k8s` — Kubernetes probes (nodes, pods, ingress,
   wait-ready, storageclass, addons, raw kubectl).
-- `charly eval adb` — Android Debug Bridge (devices, shell, install,
+- `charly check adb` — Android Debug Bridge (devices, shell, install,
   getprop, screencap, logcat, wait-for-device).
-- `charly eval appium` — W3C WebDriver session lifecycle, find, click,
+- `charly check appium` — W3C WebDriver session lifecycle, find, click,
   send-keys, screenshot.
 
 `charly feature {list, pending, validate}` authors and validates
 Gherkin-shaped descriptions on the same entries.
 
-→ `/charly-eval:eval`, `/charly-eval:cdp`, `/charly-eval:wl`, `/charly-eval:dbus`,
-`/charly-eval:vnc`, `/charly-eval:spice`, `/charly-eval:libvirt`,
-`/charly-eval:record`, `/charly-kubernetes:eval-k8s`, `/charly-eval:adb`,
-`/charly-eval:appium`, `/charly-eval:android`.
+→ `/charly-check:check`, `/charly-check:cdp`, `/charly-check:wl`, `/charly-check:dbus`,
+`/charly-check:vnc`, `/charly-check:spice`, `/charly-check:libvirt`,
+`/charly-check:record`, `/charly-kubernetes:check-k8s`, `/charly-check:adb`,
+`/charly-check:appium`, `/charly-check:android`.
 
 ### Author with agents
 
 > Agents in the loop, authoring and iterating on candies and
 > boxes — `charly`-specific.
 
-The agent iteration harness sits on top of `kind: eval` and
+The agent iteration harness sits on top of `kind: check` and
 adds three overlay kinds:
 
 - **`kind: agent`** — reusable agent CLI catalog (`claude`,
@@ -598,13 +598,13 @@ adds three overlay kinds:
 - **`kind: recipe`** — deterministic test specification: scenarios,
   each with a `pod:` declaring the container its probes target.
   Pure check catalogs and Gherkin scenario descriptions; no agent
-  involved here (authoring the description + eval is mandatory per candy; the
-  live agent grader via `charly eval feature run` stays opt-in).
+  involved here (authoring the description + check is mandatory per candy; the
+  live agent grader via `charly check feature run` stays opt-in).
 - **`kind: score`** — runner config naming the agent, the
-  target `eval-sandbox`, the recipes, the plateau iteration count,
-  the prompt, and the watchdog timeout. `charly eval run <score>` runs
+  target `check-sandbox`, the recipes, the plateau iteration count,
+  the prompt, and the watchdog timeout. `charly check run <score>` runs
   the multi-hour benchmark: the agent reads scope
-  (`charly eval scope`) + prior tag (`charly eval last-tag`) + live results →
+  (`charly check scope`) + prior tag (`charly check last-tag`) + live results →
   rebuilds + redeploys → harness re-scores → continues until plateau
   detection or the watchdog fires. Progressive recipe disclosure
   means the agent sees recipes one at a time as it earns them.
@@ -616,7 +616,7 @@ stdio), so Claude Code, Codex, or any MCP client drives the full
 auto-fallback to `overthinkos/overthink` when no project is wired
 (opt out with `--no-default-repo`).
 
-→ `/charly-eval:eval`, `/charly-build:charly-mcp-cmd`, `/charly-coder:charly-mcp`,
+→ `/charly-check:check`, `/charly-build:charly-mcp-cmd`, `/charly-coder:charly-mcp`,
 `/charly-coder:claude-code`, `/charly-coder:codex`, `/charly-coder:gemini`.
 
 ### Manage
@@ -625,7 +625,7 @@ auto-fallback to `overthinkos/overthink` when no project is wired
 > host-side aliases.
 
 - `charly clean` — prune build artifacts by CalVer retention
-  (`keep_images`, `keep_eval_runs`); sweeps stale makepkg
+  (`keep_images`, `keep_check_runs`); sweeps stale makepkg
   leftovers. Label-CalVer wins over tag-CalVer.
 - `charly doctor` — host dependency check (`podman`/`docker`/`libvirt`/
   `qemu`/`gnupg`/`gocryptfs`/`tailscale`/…).
@@ -657,7 +657,7 @@ auto-fallback to `overthinkos/overthink` when no project is wired
 
 The `charly` CLI has 29 top-level verbs across three modes with disjoint
 input sets — **build mode** (`charly box …` reads `charly.yml`),
-**test mode** (`charly eval …` reads OCI labels + `charly.yml` overlays,
+**test mode** (`charly check …` reads OCI labels + `charly.yml` overlays,
 never `charly.yml`), and **deploy mode** (everything else reads
 OCI labels + `charly.yml`) — plus the cross-mode `charly mcp serve`
 gateway exposing the entire surface as MCP tools.
@@ -668,7 +668,7 @@ gateway exposing the entire surface as MCP tools.
 | **Box authoring (MCP-first)** | `charly box {set, add-candy, rm-candy, fetch, refresh, write, cat}` and `charly candy {set, add-rpm, add-deb, add-pac, add-aur}` | `/charly-image:image` "Authoring" + `/charly-image:layer` |
 | **Deployment** | `charly deploy {add, del, sync, from-box, export, import, show, reset, status, path}`; `charly config`; `charly start`, `charly stop`, `charly restart`, `charly update`, `charly remove` | `/charly-core:deploy`, `/charly-core:charly-config`, `/charly-core:start`, `/charly-core:stop`, `/charly-core:charly-update`, `/charly-core:remove`, `/charly-local:local-deploy`, `/charly-kubernetes:kubernetes`, `/charly-internals:vm-deploy-target` |
 | **Runtime** | `charly shell`, `charly cmd`, `charly service`, `charly status`, `charly logs`, `charly tmux` | `/charly-core:shell`, `/charly-core:cmd`, `/charly-core:service`, `/charly-core:charly-status`, `/charly-core:logs`, `/charly-automation:tmux` |
-| **Test + probes** | `charly eval {box, live, run}` + the 11 live probe verbs (`cdp`, `wl`, `dbus`, `vnc`, `mcp`, `record`, `spice`, `libvirt`, `k8s`, `adb`, `appium`); `charly feature {list, pending, validate}` | `/charly-eval:eval`, `/charly-eval:cdp`, `/charly-eval:wl`, `/charly-eval:dbus`, `/charly-eval:vnc`, `/charly-eval:spice`, `/charly-eval:libvirt`, `/charly-eval:record`, `/charly-kubernetes:eval-k8s`, `/charly-eval:adb`, `/charly-eval:appium` |
+| **Test + probes** | `charly check {box, live, run}` + the 11 live probe verbs (`cdp`, `wl`, `dbus`, `vnc`, `mcp`, `record`, `spice`, `libvirt`, `k8s`, `adb`, `appium`); `charly feature {list, pending, validate}` | `/charly-check:check`, `/charly-check:cdp`, `/charly-check:wl`, `/charly-check:dbus`, `/charly-check:vnc`, `/charly-check:spice`, `/charly-check:libvirt`, `/charly-check:record`, `/charly-kubernetes:check-k8s`, `/charly-check:adb`, `/charly-check:appium` |
 | **MCP gateway** | `charly mcp {serve, ping, servers, list-tools, list-resources, list-prompts, call, read}` | `/charly-build:charly-mcp-cmd`, `/charly-coder:charly-mcp` |
 | **VM** | `charly vm {build, create, start, stop, destroy, snapshot, clone, console, ssh, import, list}` | `/charly-vm:vm`, `/charly-vm:vms-catalog`, `/charly-internals:vm-deploy-target` |
 | **Schema migration** | `charly migrate` (single idempotent chain) | `/charly-build:migrate` |
@@ -708,10 +708,10 @@ not enumerations:
   + bootc entries. → `/charly-vm:vms-catalog`.
 - **Deploy-target catalog** — pod / vm / k8s / local / android.
   Each has a dedicated kind file.
-- **Eval bed catalog** (the `eval:` blocks in the project and
-  `box/<distro>` `charly.yml`s) — `kind: eval` beds for R10,
+- **Check bed catalog** (the `check:` blocks in the project and
+  `box/<distro>` `charly.yml`s) — `kind: check` beds for R10,
   plus `kind: recipe` / `score` / `ai` for the agent harness.
-  → `/charly-eval:eval`.
+  → `/charly-check:check`.
 
 Candies used by only one box family are vendored in that
 `box/<distro>` submodule (e.g. `ghostty`/`keepassxc-keyring` in
@@ -746,7 +746,7 @@ not here.
 | Encrypted volume locked at boot | `charly config mount` waits for keyring unlock automatically — zero CPU, event-driven (`/charly-automation:enc`) |
 | GPU not detected | `charly doctor` then `/charly-automation:udev` |
 | Tunnel not appearing on a new instance | Tunnel config is `charly.yml`-only — add manually per instance (`/charly-core:deploy`) |
-| Service built fine but broken in production | `charly eval live <image>` runs the baked layer + image + deploy checks (`/charly-eval:eval`) |
+| Service built fine but broken in production | `charly check live <image>` runs the baked layer + image + deploy checks (`/charly-check:check`) |
 | `charly vm build` fails: "no kind:vm entity in vm.yml" | Declare a `kind: vm` entity (`/charly-vm:vms-catalog`) |
 | SPICE console blank on cloud_image VM | Known `simpledrm → qxldrmfb` race under UEFI; switch to `firmware: bios` (`/charly-vm:arch`) |
 | `charly deploy add vm:<name>` errors "VM does not exist" | Run `charly vm create <name>` first — VM deploy is not auto-provisioning (`/charly-core:deploy`) |
@@ -760,7 +760,7 @@ not here.
 ```bash
 charly box new candy my-candy             # Scaffold the directory
 # Edit candy/my-candy/charly.yml        # Declare packages, deps, env, ports,
-#                                       # services, eval probes, and tasks:
+#                                       # services, check probes, and tasks:
 #                                       # (see /charly-image:layer for the verb catalog)
 # Optionally add pixi.toml / package.json / Cargo.toml for auto-detected builders.
 
@@ -768,14 +768,14 @@ charly box new candy my-candy             # Scaffold the directory
 #   candy: [..., my-candy]
 
 charly box build my-image                 # Build it
-charly eval box my-image                  # Run the baked checks
+charly check box my-image                  # Run the baked checks
 ```
 
 `/charly-image:layer` is the canonical reference for the eight `task:`
 verbs (`cmd`, `mkdir`, `copy`, `write`, `link`, `download`,
 `setcap`, `build`), the unified `service:` schema, `vars:`
 substitution, YAML anchors, and execution-order rules.
-`/charly-eval:eval` covers the matcher forms, runtime variable table,
+`/charly-check:check` covers the matcher forms, runtime variable table,
 gold-standard pattern (`candy/redis/charly.yml`), and the 10
 authoring gotchas.
 
@@ -794,7 +794,7 @@ Every candy, every box, every command has a dedicated skill.
   "enabledPlugins": {
     "charly-core@charly-plugins": true,
     "charly-build@charly-plugins": true,
-    "charly-eval@charly-plugins": true,
+    "charly-check@charly-plugins": true,
     "charly-image@charly-plugins": true,
     "charly-internals@charly-plugins": true,
     "charly-distros@charly-plugins": true,
@@ -824,11 +824,11 @@ containers are running.
 
 **Sub-agents, dynamic workflows, and agent teams.** Beyond skills, the
 project ships Claude Code **sub-agents** (`plugins/internals/agents/`):
-executors `eval-bed-runner` and `deploy-verifier` that drive the `charly eval`
+executors `check-bed-runner` and `deploy-verifier` that drive the `charly check`
 beds and return verbatim proof, plus enforcers `root-cause-analyzer`,
 `testing-validator`, and `layer-validator`. Two **dynamic workflows**
 (`.claude/workflows/`) fan the work out — `/verify-beds` runs every
-`kind: eval` bed as the R10 gate, `/audit-deploy-configs` evaluates your
+`kind: check` bed as the R10 gate, `/audit-deploy-configs` evaluates your
 deploy configs — and the same agent definitions reuse as **agent-team**
 teammates. Whether you drive `charly` from the keyboard or hand it to an
 agent, testing and verifying deployments uses the one surface.

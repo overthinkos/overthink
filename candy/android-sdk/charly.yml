@@ -8,7 +8,7 @@ candy:
             /opt/android-sdk: cmdline-tools (sdkmanager/avdmanager),
             platform-tools (adb), build-tools 36 (aapt2), platform android-36,
             and the emulator; plus apkeep (the by-package-name app downloader
-            the `charly eval adb install-app` verb drives IN the pod), installed
+            the `charly check adb install-app` verb drives IN the pod), installed
             from its upstream precompiled x86_64 binary. The one component with
             NO package anywhere — the API-36 google_apis_playstore x86_64 system
             image — is fetched by sdkmanager into a persistent cache and copied
@@ -74,7 +74,7 @@ candy:
                     - android-emulator
     task:
         # apkeep — the by-package-name app downloader the host-side
-        # `charly eval adb install-app` verb runs IN this pod (apk-pure default,
+        # `charly check adb install-app` verb runs IN this pod (apk-pure default,
         # google-play via AAS token). Installed from the upstream precompiled
         # x86_64 binary (apkeep ships a bare binary, no tarball → no extract);
         # the AUR Rust build fails to link ring/zstd-sys under lld --gc-sections.

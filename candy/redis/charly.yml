@@ -17,7 +17,7 @@ candy:
     distro:
         arch:
             # No `redis` package on Arch/CachyOS — valkey provides /usr/bin/redis-server
-            # and /usr/bin/redis-cli (the paths the service exec + evals below use).
+            # and /usr/bin/redis-cli (the paths the service exec + checks below use).
             package:
                 - valkey
         fedora:
@@ -68,7 +68,7 @@ candy:
               context:
                 - runtime
         # PROSE-ONLY step — genuine free-form resilience behaviour, agent-graded
-        # by `charly eval feature run redis` against the live deployment.
+        # by `charly check feature run redis` against the live deployment.
         - name: redis-service-stays-available
           step:
             - then: the supervised redis service is running and keeps answering clients, restarting automatically (restart=always) if the redis-server process exits

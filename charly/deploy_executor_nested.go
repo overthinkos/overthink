@@ -76,7 +76,7 @@ const (
 
 	// JumpPodmanRun spawns a fresh disposable container per invocation
 	// via `podman run --rm <Target> bash`. Replaces the deleted
-	// ImageExecutor — `charly eval box` (build-section) uses this jump
+	// ImageExecutor — `charly check box` (build-section) uses this jump
 	// to get the same "ephemeral image probe" semantics through the
 	// unified chain primitive. Each call starts a new container; state
 	// does NOT persist across calls.
@@ -301,7 +301,7 @@ func (n *NestedExecutor) GetFile(ctx context.Context, remotePath string, asRoot 
 	case JumpPodmanExec, JumpDockerExec, JumpSSH:
 		// ok
 	default:
-		return nil, fmt.Errorf("NestedExecutor.GetFile: jump kind %d does not support file retrieval (add explicit support if needed)", int(n.Jump.Kind))
+		return nil, fmt.Errorf("NestedExecutor.GetFile: jump kind %d does not support file retricheck (add explicit support if needed)", int(n.Jump.Kind))
 	}
 	// Stage the file on the parent venue by running `cat <path>` through
 	// the jump and redirecting to a tmp path, then read from the tmp.
@@ -539,7 +539,7 @@ func parsePositiveInt(s string) (int, error) {
 //
 //   - XDG_RUNTIME_DIR: libvirt session-socket lookup
 //     ($XDG_RUNTIME_DIR/libvirt/libvirt-sock). Without this, every
-//     `charly eval libvirt …` invocation inside a nested container fails
+//     `charly check libvirt …` invocation inside a nested container fails
 //     with "Cannot connect to socket" because the in-container
 //     default ($XDG_RUNTIME_DIR=/run/user/1000) doesn't match the
 //     host's pinned location ($HOME/.local/share/charly-runtime).

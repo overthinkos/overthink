@@ -28,7 +28,7 @@ type TmuxShellCmd struct {
 }
 
 func (c *TmuxShellCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Box, c.Instance)
+	venue, err := resolveCheckVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -68,7 +68,7 @@ type TmuxCmdCmd struct {
 }
 
 func (c *TmuxCmdCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Box, c.Instance)
+	venue, err := resolveCheckVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -102,7 +102,7 @@ type TmuxRunCmd struct {
 }
 
 func (c *TmuxRunCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Box, c.Instance)
+	venue, err := resolveCheckVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -128,7 +128,7 @@ type TmuxAttachCmd struct {
 }
 
 func (c *TmuxAttachCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Box, c.Instance)
+	venue, err := resolveCheckVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -157,7 +157,7 @@ type TmuxListCmd struct {
 }
 
 func (c *TmuxListCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Box, c.Instance)
+	venue, err := resolveCheckVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -182,7 +182,7 @@ type TmuxCaptureCmd struct {
 }
 
 func (c *TmuxCaptureCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Box, c.Instance)
+	venue, err := resolveCheckVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -208,7 +208,7 @@ type TmuxSendCmd struct {
 }
 
 func (c *TmuxSendCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Box, c.Instance)
+	venue, err := resolveCheckVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -235,7 +235,7 @@ type TmuxKillCmd struct {
 }
 
 func (c *TmuxKillCmd) Run() error {
-	venue, err := resolveEvalVenue(c.Box, c.Instance)
+	venue, err := resolveCheckVenue(c.Box, c.Instance)
 	if err != nil {
 		return err
 	}

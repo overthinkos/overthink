@@ -71,7 +71,7 @@ type MigrationStep struct {
 // closure references it, and the registry's last entry uses it as its Version,
 // so the two are guaranteed equal (asserted by TestRegistryHeadMatchesLatest).
 // Bump it — and append the matching MigrationStep — for each future cutover.
-var latestSchemaVersion = mustCalVer("2026.164.0002")
+var latestSchemaVersion = mustCalVer("2026.164.0004")
 
 // migrationSteps is the ordered registry. Chronological by git landing date
 // (see `git log --diff-filter=A` on each migrate_*.go), which is the order the
@@ -339,6 +339,16 @@ func migrationSteps() []MigrationStep {
 		// to fetched candy manifests. See migrate_op_unify.go + CHANGELOG.md.
 		{mustCalVer("2026.164.0001"), "op-unify", false, func(c *MigrateContext) (bool, error) {
 			w, err := MigrateOpUnify(c.Dir, c.DryRun)
+			return len(w) > 0, err
+		}},
+		// eval→check rename: the evaluation harness's schema vocabulary renames so
+		// the YAML verb matches the renamed CLI verb (charly eval → charly check):
+		// root eval:→check: bed registry, eval_level:→check_level:, keep_eval_runs:→
+		// keep_check_runs:, kind: eval→kind: check. Author entity NAMES are not
+		// touched. TouchesHost false → remote-cache auto-migration applies it to
+		// fetched candy manifests. See migrate_eval_check.go + CHANGELOG.md.
+		{mustCalVer("2026.164.0003"), "eval-check", false, func(c *MigrateContext) (bool, error) {
+			w, err := MigrateEvalCheck(c.Dir, c.DryRun)
 			return len(w) > 0, err
 		}},
 		// HEAD — the schema stamp. Must stay LAST so LatestSchemaVersion picks it up

@@ -2,7 +2,7 @@ candy:
     version: 2026.156.1447
     name: chrome-headless
     description:
-        feature: Headless Chrome CDP driver running the real google-chrome binary in --headless=new mode for cross-deployment `charly eval` probing
+        feature: Headless Chrome CDP driver running the real google-chrome binary in --headless=new mode for cross-deployment `charly check` probing
         narrative: |
             Runs the REAL /usr/bin/google-chrome-stable in --headless=new mode on
             127.0.0.1:9223 — no Wayland compositor, no desktop — via the
@@ -10,7 +10,7 @@ candy:
             ~/.local/bin/chrome-headless-launch. Composes /charly-selkies:chrome
             (the browser binary) and /charly-selkies:chrome-cdp (the cdp-proxy
             that republishes CDP on the published port 9222 with Host-header
-            rewriting, so `charly eval cdp <this>` is reachable host-side). Use it
+            rewriting, so `charly check cdp <this>` is reachable host-side). Use it
             as a `peer:` DRIVER deployment that CDP-probes a SEPARATE web-server
             SUBJECT over the shared `charly` network without baking Chrome into the
             subject image. Every fact below is observable: the installed launcher
@@ -39,9 +39,9 @@ candy:
             #!/usr/bin/env bash
             # Headless Chrome for cross-deployment CDP driving. CDP serves on
             # 127.0.0.1:9223; the cdp-proxy (chrome-cdp) republishes it on
-            # 0.0.0.0:9222 with Host rewriting for host-side `charly eval cdp`.
+            # 0.0.0.0:9222 with Host rewriting for host-side `charly check cdp`.
             # --remote-allow-origins='*' is REQUIRED: Chrome 146+ rejects the CDP
-            # WebSocket upgrade (text/eval/screenshot/click) when the Origin
+            # WebSocket upgrade (text/check/screenshot/click) when the Origin
             # doesn't match, even though the HTTP /json endpoints (open/list) work
             # without it. The chrome-cdp wrapper sets it; this launcher bypasses
             # the wrapper, so it must set it itself.
@@ -63,7 +63,7 @@ candy:
           scope: system
     scenario:
         # DETERMINISTIC build-scope facts — embedded check verbs run at both
-        # `charly box feature run` and `charly eval feature run`.
+        # `charly box feature run` and `charly check feature run`.
         - name: headless-launcher-installed-and-configured
           step:
             - then: the chrome-headless launcher is installed and executable in the user's local bin

@@ -9,16 +9,16 @@
   "teammateMode": "auto",
   "permissions": {
     "allow": [
-      "Bash(charly eval run:*)",
-      "Bash(charly eval live:*)",
-      "Bash(charly eval box:*)",
+      "Bash(charly check run:*)",
+      "Bash(charly check live:*)",
+      "Bash(charly check box:*)",
       "Bash(charly status:*)"
     ]
   },
   "enabledPlugins": {
     "charly-core@charly-plugins": true,
     "charly-build@charly-plugins": true,
-    "charly-eval@charly-plugins": true,
+    "charly-check@charly-plugins": true,
     "charly-automation@charly-plugins": true,
     "charly-image@charly-plugins": true,
     "charly-vm@charly-plugins": true,

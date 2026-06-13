@@ -1,4 +1,4 @@
-version: 2026.164.0002
+version: 2026.164.0004
 # Canonical repo identity. After the 2026-06 box inversion main imports the three
 # active distro submodules (arch / cachyos / fedora) ONE-DIRECTIONALLY to reference
 # their relocated boxes; the submodules no longer import main as a namespace (they
@@ -8,8 +8,8 @@ repo: github.com/overthinkos/overthink
 import:
     # After the 2026-06 box inversion main owns NO boxes — it imports the three
     # active distro submodules ONE-DIRECTIONALLY to reference their relocated boxes
-    # in the inline eval/vm/local/k8s/android orchestration below (e.g. the
-    # eval-cross-* mechanism beds reference `fedora.web` / `fedora.chrome-headless`).
+    # in the inline check/vm/local/k8s/android orchestration below (e.g. the
+    # check-cross-* mechanism beds reference `fedora.web` / `fedora.chrome-headless`).
     # Each submodule owns its own base stack: arch + fedora are self-contained
     # (import: []) and cachyos imports the `arch` namespace; none imports main back
     # (they reach main's shared candies via @github refs), so the former
@@ -18,7 +18,7 @@ import:
     - cachyos: '@github.com/overthinkos/cachyos:v2026.162.0912'
     - fedora: '@github.com/overthinkos/fedora:v2026.162.0855'
 # Main owns NO boxes after the 2026-06 box inversion — only the shared candy
-# library + the inline eval/vm/local/k8s orchestration. Discover candies only.
+# library + the inline check/vm/local/k8s orchestration. Discover candies only.
 discover:
     - path: candy
       recursive: true
@@ -45,7 +45,7 @@ defaults:
     # (.git, bin, charly, *.md, editor/python/node cache-bust globs).
     context_ignore:
         - box
-        - .eval
+        - .check
         - output
         - dist
         - pkg
@@ -55,7 +55,7 @@ defaults:
     # Reusable-artifact retention (auto-pruned at creation; also via `charly clean`).
     # 0 disables. See /charly-core:clean.
     keep_images: 3 # newest CalVer tags to keep per image after `charly box build`
-    keep_eval_runs: 3 # newest run dirs to keep per bed/score after `charly eval run`
+    keep_check_runs: 3 # newest run dirs to keep per bed/score after `charly check run`
 vm:
     vm:
         source:
@@ -141,7 +141,7 @@ vm:
                       backend: /dev/urandom
                 memballoon:
                     model: virtio
-    # Arch Cloud VM backing eval-charly-vm — the pac localpkg deploy witness. Plain
+    # Arch Cloud VM backing check-charly-vm — the pac localpkg deploy witness. Plain
     # disposable VM (no port forwards / k3s); charly is installed onto it by the bed's
     # localpkg deploy, so the VM itself carries no opencharly layers.
     charly-vm:
@@ -175,7 +175,7 @@ agent:
         # tool_result / result). The harness parses each line, embeds it
         # into result-{calver}.yml under iteration[].runner_event, and tees
         # the raw NDJSON to .harness/<score>/runs/<run-id>/iter<k>/runner.ndjson
-        # for byte-exact debugging. See /charly-eval:eval for the score
+        # for byte-exact debugging. See /charly-check:check for the score
         # runner and its stream-json wire format.
         command: [claude, -p, --verbose, --output-format, stream-json, --dangerously-skip-permissions, "${PROMPT}"]
         output_format: stream-json
@@ -785,7 +785,7 @@ recipe:
                     - Via CDP `text` on tab 1, the loaded page's text
                       contains the literal string
                       `charly-web-content-marker`.
-                    - Via CDP `eval` on tab 1, the JavaScript expression
+                    - Via CDP `check` on tab 1, the JavaScript expression
                       `1+1` returns `2`.
                     - A CDP screenshot of tab 1 produces a PNG file at
                       `/tmp/cdp.png` of at least 5000 bytes, with image
@@ -846,7 +846,7 @@ recipe:
                   cdp: text
                   tab: "1"
                   stdout: {contains: ["charly-web-content-marker"]}
-            - name: desktop-cdp-eval-known-expression
+            - name: desktop-cdp-check-known-expression
               pod: desktop
               depends_on: [desktop-cdp-loads-web]
               step:
@@ -1049,17 +1049,17 @@ recipe:
                     AI exits the iteration.
 
                   What must be true to pass this test:
-                    - A VM named `nested-eval-vm` is running and reachable
-                      from the eval-sandbox (`uptime` runs successfully inside
+                    - A VM named `nested-check-vm` is running and reachable
+                      from the check-sandbox (`uptime` runs successfully inside
                       the VM via the harness chain).
                     - The VM guest has `/dev/kvm` available
                       (hardware-accelerated virtualization is reachable).
                     - Inside the VM, a pod named `inner-app-pod` is running
-                      (deployment path: `nested-eval-vm.inner-app-pod`) with
+                      (deployment path: `nested-check-vm.inner-app-pod`) with
                       an `nginx` process running and TCP port 8080 listening.
                     - Inside that pod, a nested pod named `nested-redis-pod`
                       is running (deployment path:
-                      `nested-eval-vm.inner-app-pod.nested-redis-pod`) with
+                      `nested-check-vm.inner-app-pod.nested-redis-pod`) with
                       a `redis-server` process and a non-loopback TCP 6379
                       listener.
                     - From inside `inner-app-pod`, running
@@ -1079,13 +1079,13 @@ recipe:
         scenario:
             # ─── Layer 1: VM exists and is reachable ─────────────────────────
             - name: vm-running
-              pod: nested-eval-vm
+              pod: nested-check-vm
               step:
                 - then: "the VM has booted and is reachable from the bench pod"
                   command: "uptime"
                   exit_status: 0
             - name: vm-has-kvm-acceleration
-              pod: nested-eval-vm
+              pod: nested-check-vm
               depends_on: [vm-running]
               step:
                 - then: "the guest has hardware-accelerated virtualization available"
@@ -1093,14 +1093,14 @@ recipe:
                   exists: true
             # ─── Layer 2: pod inside the VM ──────────────────────────────────
             - name: inner-pod-running
-              pod: nested-eval-vm.inner-app-pod
+              pod: nested-check-vm.inner-app-pod
               depends_on: [vm-running]
               step:
                 - then: "the inner pod's primary process is running"
                   process: nginx
                   running: true
             - name: inner-pod-listens-8080
-              pod: nested-eval-vm.inner-app-pod
+              pod: nested-check-vm.inner-app-pod
               depends_on: [inner-pod-running]
               step:
                 - then: "the inner pod's predetermined port is listening"
@@ -1108,14 +1108,14 @@ recipe:
                   listening: true
             # ─── Layer 3: pod nested inside the inner pod ────────────────────
             - name: nested-pod-running
-              pod: nested-eval-vm.inner-app-pod.nested-redis-pod
+              pod: nested-check-vm.inner-app-pod.nested-redis-pod
               depends_on: [inner-pod-running]
               step:
                 - then: "the nested data store's primary process is running"
                   process: redis-server
                   running: true
             - name: nested-pod-listens-network
-              pod: nested-eval-vm.inner-app-pod.nested-redis-pod
+              pod: nested-check-vm.inner-app-pod.nested-redis-pod
               depends_on: [nested-pod-running]
               step:
                 - then: "the nested data store is reachable on the network (not loopback only)"
@@ -1123,22 +1123,22 @@ recipe:
                   exit_status: 0
             # ─── End-to-end nonce-protected probe (the real test) ────────────
             - name: nested-set-from-inner
-              pod: nested-eval-vm.inner-app-pod
+              pod: nested-check-vm.inner-app-pod
               depends_on: [nested-pod-listens-network]
               step:
                 - then: "the inner pod successfully writes the nonce-protected key on the nested data store"
                   command: "redis-cli -h charly-inner-app-pod_nested-redis-pod SET bench:${EVAL_NONCE_KEY} ${EVAL_NONCE_VALUE}"
                   stdout: {contains: [OK]}
             - name: nested-readback-on-deepest
-              pod: nested-eval-vm.inner-app-pod.nested-redis-pod
+              pod: nested-check-vm.inner-app-pod.nested-redis-pod
               depends_on: [nested-set-from-inner]
               step:
                 - then: "the nonce-protected key is readable on the deepest pod with the correct value"
                   command: "redis-cli get bench:${EVAL_NONCE_KEY}"
                   stdout: {contains: ["${EVAL_NONCE_VALUE}"]}
-            # ─── Cross-hop reachability (VM-to-eval-sandbox-redis) ──────────────
+            # ─── Cross-hop reachability (VM-to-check-sandbox-redis) ──────────────
             - name: vm-can-reach-redis
-              pod: nested-eval-vm
+              pod: nested-check-vm
               depends_on: [vm-running]
               step:
                 - then: "the VM guest can reach the outermost data store from phase 3"
@@ -1223,7 +1223,7 @@ recipe:
     # ─────────────────────────────────────────────────────────────────────
     # charly-cli-surface — the agent drives the charly MANAGEMENT command surface
     # (box build → deploy/start → status) to stand up a pod it inspects. The
-    # deterministic eval-charly-selftest-pod bed asserts every command GROUP runs;
+    # deterministic check-charly-selftest-pod bed asserts every command GROUP runs;
     # this is the AI-driven companion proving an agent can OPERATE the CLI
     # end-to-end against a real deployment.
     # ─────────────────────────────────────────────────────────────────────
@@ -1262,16 +1262,16 @@ recipe:
                   contains: ["charly-os-content-marker"]
 score:
     # ─────────────────────────────────────────────────────────────────────
-    # charly-cli — AI eval of the charly MANAGEMENT command surface. Companion to the
-    # deterministic eval-charly-selftest-pod bed: where the bed asserts every
+    # charly-cli — AI check of the charly MANAGEMENT command surface. Companion to the
+    # deterministic check-charly-selftest-pod bed: where the bed asserts every
     # command GROUP runs in-container, this proves an AGENT can OPERATE the
     # build → deploy → status lifecycle end-to-end. A full convergence run is
     # the multi-hour benchmark; the deterministic bed is the per-commit R10 gate.
     # ─────────────────────────────────────────────────────────────────────
     charly-cli:
         description:
-            feature: "AI eval — an agent operates the charly management command surface (build → deploy → status) end-to-end."
-        pod: eval-sandbox
+            feature: "AI check — an agent operates the charly management command surface (build → deploy → status) end-to-end."
+        pod: check-sandbox
         agent: [claude]
         plateau_iteration: 3
         progressive: false
@@ -1298,17 +1298,17 @@ score:
             ${TARGET_NAME}) are available; how you satisfy the spec is your call.
     # ─────────────────────────────────────────────────────────────────────
     # Default benchmark — progressive verb-coverage curriculum across the
-    # full `charly eval` surface. 8 phases, one recipe added per phase.
+    # full `charly check` surface. 8 phases, one recipe added per phase.
     # ─────────────────────────────────────────────────────────────────────
     default:
         description:
-            feature: "Default benchmark — progressive verb-coverage curriculum across the full `charly eval` surface (system state → network → cross-pod → MCP → Kubernetes → desktop → VM → nested)."
-        pod: eval-sandbox # the AI-sandbox pod; harness runs iterations inside charly-<pod>
+            feature: "Default benchmark — progressive verb-coverage curriculum across the full `charly check` surface (system state → network → cross-pod → MCP → Kubernetes → desktop → VM → nested)."
+        pod: check-sandbox # the AI-sandbox pod; harness runs iterations inside charly-<pod>
         agent: [claude]
         plateau_iteration: 3
         progressive: true # curriculum-style: phase N adds recipe N
-        target_image: "eval-target" # informational prompt token (${TARGET_IMAGE})
-        deploy: "eval-default" # HarnessScore.Deploy (yaml:"deploy") — names the scored deployment
+        target_image: "check-target" # informational prompt token (${TARGET_IMAGE})
+        deploy: "check-default" # HarnessScore.Deploy (yaml:"deploy") — names the scored deployment
         note: true
         mcp_endpoint: "http://localhost:18765/mcp"
         env: {}
@@ -1348,7 +1348,7 @@ score:
             pod, VM, and Kubernetes cluster definition the project
             already ships (`candy/`, `box.yml`, `pod.yml`, `vm.yml`,
             `k8s.yml`). Your session has the project's plugin skills
-            loaded (`/charly-eval:eval`, `/charly-core:deploy`, `/charly-image:image`, `/charly-image:layer`,
+            loaded (`/charly-check:check`, `/charly-core:deploy`, `/charly-image:image`, `/charly-image:layer`,
             `/charly-build:build`, plus per-pod plugins (`/charly-jupyter:*`, `/charly-coder:*`, etc.) and foundation plugins (`/charly-distros:*`, `/charly-infrastructure:*`, `/charly-tools:*`), …). All of these
             are available to be used if you decide to do so — they may
             be useful for most of the scenarios. The recipes specify
@@ -1401,7 +1401,7 @@ score:
             Notes: ${NOTES}
 
             == Ground rules ==
-              - Recipe scenarios are immutable — they live in the eval: block of the project charly.yml.
+              - Recipe scenarios are immutable — they live in the check: block of the project charly.yml.
               - The ${TARGET_NAME} sandbox was rebuilt FRESH for this run; it persists
                 across iters but is destroyed + recreated NEXT run.
               - Every pod a scenario references MUST be running at exit (that's
@@ -1419,7 +1419,7 @@ score:
             check that rejects pre-staged or stale files.
 
             Re-run by harness independently (you cannot influence the verdict):
-              - Status / evaluation / listing verbs (cdp:status, cdp:eval,
+              - Status / evaluation / listing verbs (cdp:status, cdp:check,
                 wl:status, libvirt:info, libvirt:domain-xml, libvirt:guest/
                 ping, libvirt:guest/exec, k8s:nodes/wait-ready/addons/raw,
                 mcp:ping/list-tools/call/read, dbus:list/call/notify).
@@ -1437,7 +1437,7 @@ score:
                 declared `artifact:` path, with mtime ≥ iter start.
 
             == MANDATORY before exiting this iteration ==
-            Run `charly eval self-evaluate` and read its output BEFORE you
+            Run `charly check self-evaluate` and read its output BEFORE you
             exit. It runs every in-scope probe against live systems via the
             SAME code path the harness scorer will invoke at iter end. The
             verdict it prints (pass / fail / skipped per scenario) is what
@@ -1473,7 +1473,7 @@ score:
     scaffolding-selftest:
         description:
             feature: "End-to-end self-test of the harness benchmark scaffolding chain — loader + composition + cross-namespace deps + live scoring against AI-deployed pods."
-        pod: eval-sandbox
+        pod: check-sandbox
         agent: [claude]
         plateau_iteration: 3
         progressive: false
@@ -1495,7 +1495,7 @@ score:
             pod, VM, and Kubernetes cluster definition the project
             already ships (`candy/`, `box.yml`, `pod.yml`, `vm.yml`,
             `k8s.yml`). Your session has the project's plugin skills
-            loaded (`/charly-eval:eval`, `/charly-core:deploy`, `/charly-image:image`, `/charly-image:layer`,
+            loaded (`/charly-check:check`, `/charly-core:deploy`, `/charly-image:image`, `/charly-image:layer`,
             `/charly-build:build`, plus per-pod plugins (`/charly-jupyter:*`, `/charly-coder:*`, etc.) and foundation plugins (`/charly-distros:*`, `/charly-infrastructure:*`, `/charly-tools:*`), …). All of these
             are available to be used if you decide to do so — they may
             be useful for most of the scenarios. The recipes specify
@@ -1531,7 +1531,7 @@ score:
             named upstream scenarios pass.
 
             == Ground rules ==
-              - Recipe scenarios are immutable — they live in the eval: block of the project charly.yml.
+              - Recipe scenarios are immutable — they live in the check: block of the project charly.yml.
               - Every pod a scenario references MUST be running at exit
                 (that's what gets scored).
               - Imported probes are scored identically to hand-written
@@ -1545,53 +1545,53 @@ score:
             run, not the current one. Record the fix in your iteration
             notes and exit cleanly; the next run picks up the new binary.
 # =============================================================================
-# kind: eval — disposable, zero-operator-side-effect R10 test beds.
+# kind: check — disposable, zero-operator-side-effect R10 test beds.
 # =============================================================================
 # Each entry is a disposable deployment (a DeploymentNode), folded into the
 # Deploy map at load time so every deploy verb resolves it by name. Run the
-# full R10 acceptance sequence on any of them — build → eval box → deploy →
-# eval live → fresh update (R10 gate) → tear down — with:
+# full R10 acceptance sequence on any of them — build → check box → deploy →
+# check live → fresh update (R10 gate) → tear down — with:
 #
-#     charly eval run <bed>          # one bed
-#     charly eval run --all-beds     # every bed, name-sorted
+#     charly check run <bed>          # one bed
+#     charly check run --all-beds     # every bed, name-sorted
 #
 # `disposable: true` is the SOLE authorization for that unattended destroy +
-# rebuild (see /charly-internals:disposable). Naming: eval-<descriptor>-<kind>,
+# rebuild (see /charly-internals:disposable). Naming: check-<descriptor>-<kind>,
 # dropping a redundant suffix when descriptor == kind AND the short form is
-# free (eval-local, eval-pod). The harness AI-sandbox pod is named
-# `eval-sandbox` (the score `pod:` target), kept disjoint from these beds.
+# free (check-local, check-pod). The harness AI-sandbox pod is named
+# `check-sandbox` (the score `pod:` target), kept disjoint from these beds.
 #
 # Bed-to-verb coverage map:
-#   eval-k3s-vm               (vm)  — k8s (all 13 methods) + guest-side
+#   check-k3s-vm               (vm)  — k8s (all 13 methods) + guest-side
 #                                     file/service/port/process, http via
 #                                     port-forward, VmDeployTarget end-to-end
-#   eval-pod                  (pod) — combined: kind:image build + kind:layer
+#   check-pod                  (pod) — combined: kind:image build + kind:layer
 #                                     composition order + kind:pod runtime
 #                                     (nc :18794 + supervisord) + every
 #                                     DeployTarget rendering path
-#   eval-local                (local) — kind:local layer apply via ShellExecutor
-#   eval-jupyter-pod          (pod) — jupyter-mcp regression coverage
-#   eval-jupyter-ml-pod       (pod) — jupyter-ml spacy/quarto + GPU MCP probes
-#   eval-versa-pod            (pod) — versa OSM analytics + vector-tile + marimo MCP
-#   eval-android-emulator-pod (pod) — Android 16 emulator (/dev/kvm) + adb/appium
-#   eval-openclaw-pod         (pod) — minimal openclaw gateway on the cachyos base
-#   eval-openclaw-full-pod    (pod) — maximal openclaw-full on cachyos (AUR chrome,
+#   check-local                (local) — kind:local layer apply via ShellExecutor
+#   check-jupyter-pod          (pod) — jupyter-mcp regression coverage
+#   check-jupyter-ml-pod       (pod) — jupyter-ml spacy/quarto + GPU MCP probes
+#   check-versa-pod            (pod) — versa OSM analytics + vector-tile + marimo MCP
+#   check-android-emulator-pod (pod) — Android 16 emulator (/dev/kvm) + adb/appium
+#   check-openclaw-pod         (pod) — minimal openclaw gateway on the cachyos base
+#   check-openclaw-full-pod    (pod) — maximal openclaw-full on cachyos (AUR chrome,
 #                                     gogcli@latest, ffmpeg/sqlite arch coverage)
-#   eval-openclaw-desktop-pod (pod) — all-in-one: selkies desktop + openclaw-full
+#   check-openclaw-desktop-pod (pod) — all-in-one: selkies desktop + openclaw-full
 #                                     (claude-code/codex/gemini) + CPU ollama +
 #                                     nested charly toolchain (charly+container-nesting)
 #
-# Zero-operator-side-effect: pod beds → rootless podman; eval-k3s-vm → libvirt
-# qcow2; eval-local → a disposable scratch dir. No test writes to ~/.local/bin,
+# Zero-operator-side-effect: pod beds → rootless podman; check-k3s-vm → libvirt
+# qcow2; check-local → a disposable scratch dir. No test writes to ~/.local/bin,
 # ~/.config/opencharly, /etc, /usr, or any operator-side directory.
 # =============================================================================
-eval:
-    # eval-k3s-vm — disposable libvirt VM running k3s-server. Kubeconfig is
+check:
+    # check-k3s-vm — disposable libvirt VM running k3s-server. Kubeconfig is
     # pulled back for host-side k8s: probes (all 13 methods) via the forwarded
     # :6443. A VM (native kernel + cgroup tree) sidesteps the rootless-podman
     # cpuset-delegation blocker that makes a pod-hosted k3s impossible.
     # References the vm: entity `k3s-vm` (defined below).
-    eval-k3s-vm:
+    check-k3s-vm:
         target: vm
         vm: k3s-vm
         disposable: true
@@ -1671,10 +1671,10 @@ eval:
             - name: kv-matching
               step:
                 # --- matching: verb smoke --------------------------------
-                - {id: kv-matching, matching: "eval-k3s-vm up", contains: {contains: "k3s"}, context: [runtime]}
+                - {id: kv-matching, matching: "check-k3s-vm up", contains: {contains: "k3s"}, context: [runtime]}
             - name: status-shows-vm
               step:
-                # eval-coverage gate for the unified `charly status` VM substrate: the
+                # check-coverage gate for the unified `charly status` VM substrate: the
                 # libvirt-domain row must render (host-side, via listCharlyDomains). Fails
                 # if VMCollector regresses.
                 - id: status-shows-vm
@@ -1685,9 +1685,9 @@ eval:
                     - contains: k3s-vm
                   context:
                     - runtime
-    eval-local:
+    check-local:
         target: local
-        local: eval-local
+        local: check-local
         host: local
         disposable: true
         lifecycle: dev
@@ -1697,7 +1697,7 @@ eval:
         scenario:
             - name: status-shows-local
               step:
-                # eval-coverage gate for the unified `charly status` LOCAL substrate: the
+                # check-coverage gate for the unified `charly status` LOCAL substrate: the
                 # install-ledger row must render. Fails if LocalCollector regresses.
                 - id: status-shows-local
                   command: charly status --json
@@ -1715,7 +1715,7 @@ eval:
     # `pacman -U`'s it onto the guest — pacman -U AUTO-RESOLVES the mandatory repo
     # deps. This is main's own live proof of the localpkg DEPLOY path (the rpm/deb
     # legs are proven by the fedora/debian/ubuntu submodule VM beds).
-    eval-charly-vm:
+    check-charly-vm:
         target: vm
         vm: charly-vm
         disposable: true
@@ -1746,23 +1746,23 @@ eval:
                     - runtime
 local:
     # =================================================================
-    # eval-local — per-kind R10 smoke template for kind:local.
-    # Applied via the eval-local bed (kind:eval) in this file's eval: block. Single layer
-    # (eval-local-layer) drops a marker file the deploy-scope eval probe
+    # check-local — per-kind R10 smoke template for kind:local.
+    # Applied via the check-local bed (kind:check) in this file's check: block. Single layer
+    # (check-local-layer) drops a marker file the deploy-scope check probe
     # verifies on the host (not in a container).
     # =================================================================
-    eval-local:
+    check-local:
         candy:
-            - eval-local-layer
+            - check-local-layer
         description:
-            feature: Fast eval bed for kind:local layer-application smoke
-            narrative: Minimal kind:local template applying eval-local-layer to the operator's host.
+            feature: Fast check bed for kind:local layer-application smoke
+            narrative: Minimal kind:local template applying check-local-layer to the operator's host.
             tag: [working]
         scenario:
-            - name: eval-local-marker
+            - name: check-local-marker
               step:
-                - id: eval-local-marker
-                  command: "test -f /etc/eval-local-marker"
+                - id: check-local-marker
+                  command: "test -f /etc/check-local-marker"
                   in_container: false
                   context:
                     - runtime

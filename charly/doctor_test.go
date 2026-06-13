@@ -50,7 +50,7 @@ func TestGroupStatusOrLogic(t *testing.T) {
 	g := CheckGroup{
 		Required: true,
 		OrLogic:  true,
-		Checks: []CheckResult{
+		Checks: []DoctorCheckResult{
 			{Name: "docker", Status: CheckOK},
 			{Name: "podman", Status: CheckMissing},
 		},
@@ -60,7 +60,7 @@ func TestGroupStatusOrLogic(t *testing.T) {
 	}
 
 	// None OK -> group fails
-	g.Checks = []CheckResult{
+	g.Checks = []DoctorCheckResult{
 		{Name: "docker", Status: CheckMissing},
 		{Name: "podman", Status: CheckMissing},
 	}
@@ -72,7 +72,7 @@ func TestGroupStatusOrLogic(t *testing.T) {
 func TestGroupStatusAllOK(t *testing.T) {
 	g := CheckGroup{
 		Required: false,
-		Checks: []CheckResult{
+		Checks: []DoctorCheckResult{
 			{Name: "git", Status: CheckOK},
 			{Name: "go", Status: CheckOK},
 		},
@@ -85,7 +85,7 @@ func TestGroupStatusAllOK(t *testing.T) {
 func TestGroupStatusPartialOptional(t *testing.T) {
 	g := CheckGroup{
 		Required: false,
-		Checks: []CheckResult{
+		Checks: []DoctorCheckResult{
 			{Name: "tailscale", Status: CheckOK},
 			{Name: "cloudflared", Status: CheckMissing},
 		},
@@ -98,7 +98,7 @@ func TestGroupStatusPartialOptional(t *testing.T) {
 func TestGroupStatusAllMissingOptional(t *testing.T) {
 	g := CheckGroup{
 		Required: false,
-		Checks: []CheckResult{
+		Checks: []DoctorCheckResult{
 			{Name: "tailscale", Status: CheckMissing},
 			{Name: "cloudflared", Status: CheckMissing},
 		},
@@ -109,7 +109,7 @@ func TestGroupStatusAllMissingOptional(t *testing.T) {
 }
 
 func TestFormatCheckOK(t *testing.T) {
-	ch := CheckResult{Name: "docker", Status: CheckOK, Version: "Docker version 29.3.0"}
+	ch := DoctorCheckResult{Name: "docker", Status: CheckOK, Version: "Docker version 29.3.0"}
 	sym, line := formatCheck(ch)
 	if sym != "+" {
 		t.Errorf("symbol = %q, want %q", sym, "+")
@@ -120,7 +120,7 @@ func TestFormatCheckOK(t *testing.T) {
 }
 
 func TestFormatCheckMissing(t *testing.T) {
-	ch := CheckResult{Name: "podman", Status: CheckMissing, Detail: "not found", InstallHint: "pacman -S podman"}
+	ch := DoctorCheckResult{Name: "podman", Status: CheckMissing, Detail: "not found", InstallHint: "pacman -S podman"}
 	sym, line := formatCheck(ch)
 	if sym != "-" {
 		t.Errorf("symbol = %q, want %q", sym, "-")
@@ -138,7 +138,7 @@ func TestDoctorOutputJSON(t *testing.T) {
 				Name:     "Container Engine",
 				Required: true,
 				OrLogic:  true,
-				Checks: []CheckResult{
+				Checks: []DoctorCheckResult{
 					{Name: "docker", Status: CheckOK, Version: "29.3.0"},
 				},
 			},

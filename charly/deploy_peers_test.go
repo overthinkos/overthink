@@ -11,11 +11,11 @@ import (
 
 // TestFoldPeers_FoldsTopLevelAndInheritsDisposability verifies a peer is
 // registered as a top-level addressable Deploy entry, PeerOf points at the
-// owner, and a disposable owner's disposability is inherited (so a kind:eval
+// owner, and a disposable owner's disposability is inherited (so a kind:check
 // bed's destroy+rebuild is authorized to tear the peer down too).
 func TestFoldPeers_FoldsTopLevelAndInheritsDisposability(t *testing.T) {
 	uf := &UnifiedFile{Deploy: map[string]DeploymentNode{
-		"eval-cross-pod-cdp": {
+		"check-cross-pod-cdp": {
 			Target:     "pod",
 			Box:        "web",
 			Disposable: ptrBool(true),
@@ -31,8 +31,8 @@ func TestFoldPeers_FoldsTopLevelAndInheritsDisposability(t *testing.T) {
 	if !ok {
 		t.Fatalf("peer 'chrome' was not folded into the Deploy map: %v", deployKeysList(uf.Deploy))
 	}
-	if peer.PeerOf != "eval-cross-pod-cdp" {
-		t.Errorf("peer.PeerOf = %q, want eval-cross-pod-cdp", peer.PeerOf)
+	if peer.PeerOf != "check-cross-pod-cdp" {
+		t.Errorf("peer.PeerOf = %q, want check-cross-pod-cdp", peer.PeerOf)
 	}
 	if peer.Box != "chrome-headless" {
 		t.Errorf("peer.Image = %q, want chrome-headless", peer.Box)

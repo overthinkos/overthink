@@ -1,7 +1,7 @@
 package main
 
 // SSH local-forward helper built on golang.org/x/crypto/ssh. Used by
-// `charly eval spice|libvirt|vnc --uri qemu+ssh://…` auto-tunneling and
+// `charly check spice|libvirt|vnc --uri qemu+ssh://…` auto-tunneling and
 // by the user-facing `charly ssh tunnel` command (charly/ssh.go).
 //
 // Two forward modes:

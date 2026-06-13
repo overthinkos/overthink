@@ -428,7 +428,7 @@ func execLocalPkgInstall(ctx context.Context, exec DeployExecutor, s *LocalPkgIn
 }
 
 // renderLocalPkgImageInstall emits the IMAGE-build install of a candy's
-// `localpkg:` package. It is the ONE place the eval-vs-production charly-binary
+// `localpkg:` package. It is the ONE place the check-vs-production charly-binary
 // distinction lives (R3 — shared by OCITarget AND generate.go writeCandySteps,
 // so the two image-build paths can never drift):
 //
@@ -485,13 +485,13 @@ func renderLocalPkgImageInstall(s *LocalPkgInstallStep, devLocalPkg bool, imageD
 // uses — R3), stage it into the per-image build context (the charly source itself
 // is excluded from the context, so the built package FILE is what the COPY
 // reaches), and emit a COPY + the same dep-resolving install the download path
-// runs. A missing source dir is a HARD ERROR — an eval bed that cannot build the
+// runs. A missing source dir is a HARD ERROR — an check bed that cannot build the
 // in-development package must fail loudly, never silently fall back to a release.
 func renderLocalPkgImageDevInstall(s *LocalPkgInstallStep, install, imageDir, boxName string) (string, error) {
 	lp := s.LocalPkg
 	srcDir := resolveLocalPkgDir(s.PkgbuildRef, s.CandyDir, s.ProjectDir, lp.SourceSentinel)
 	if srcDir == "" {
-		return "", fmt.Errorf("dev-local-pkg: cannot locate the %s localpkg source (%q) for candy %q — a disposable eval bed must build the in-development package from local source", s.Format, s.PkgbuildRef, s.CandyName)
+		return "", fmt.Errorf("dev-local-pkg: cannot locate the %s localpkg source (%q) for candy %q — a disposable check bed must build the in-development package from local source", s.Format, s.PkgbuildRef, s.CandyName)
 	}
 	pkgFiles, err := buildLocalPkgOnHost(context.Background(), lp, srcDir, EmitOpts{})
 	if err != nil {

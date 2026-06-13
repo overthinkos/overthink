@@ -67,19 +67,3 @@ candy:
         - name: bench-redis-init-stays-up
           step:
             - then: the bench-redis-init service stays running after seeding the key (exec sleep infinity, restart=always) so supervisord does not restart-loop it
-        - name: bench-redis-init-script
-          step:
-            - id: bench-redis-init-script
-              file: /usr/local/bin/bench-redis-init.sh
-              exists: true
-              mode: "0755"
-              contains:
-                - contains: "set bench:hello world"
-        - name: bench-redis-key-set
-          step:
-            - id: bench-redis-key-set
-              command: redis-cli -h 127.0.0.1 -p 6379 get bench:hello
-              stdout: world
-              in_container: true
-              context:
-                - runtime

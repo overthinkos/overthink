@@ -51,21 +51,6 @@ candy:
         - name: amd-gpu-enumerated-when-present
           step:
             - then: on a host with an AMD GPU and /dev/kfd passed through, clinfo lists at least one ROCm OpenCL platform and rocm-smi reports the device temperature and utilization
-        - name: rocm-clinfo-binary
-          step:
-            - id: rocm-clinfo-binary
-              file: /usr/bin/clinfo
-              exists: true
-        - name: rocm-smi-binary
-          step:
-            - id: rocm-smi-binary
-              file: /usr/bin/rocm-smi
-              exists: true
-        - name: rocm-hip-runtime-package
-          step:
-            - id: rocm-hip-runtime-package
-              package: rocm-hip-runtime
-              installed: true
         - name: rocm-opencl-package
           step:
             - id: rocm-opencl-package
@@ -76,13 +61,3 @@ candy:
             - id: rocm-clinfo-package
               package: rocm-clinfo
               installed: true
-        - name: rocm-smi-package
-          step:
-            - id: rocm-smi-package
-              package: rocm-smi
-              installed: true
-        - name: rocm-path-env
-          step:
-            - id: rocm-path-env
-              command: printenv ROCM_PATH
-              stdout: /usr

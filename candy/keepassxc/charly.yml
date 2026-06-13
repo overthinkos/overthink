@@ -42,20 +42,3 @@ candy:
             - id: keepassxc-binary
               command: test -x /usr/bin/keepassxc
               exit_status: 0
-        - name: keepassxc-package
-          step:
-            - id: keepassxc-package
-              package: keepassxc
-              installed: true
-        - name: keepassxc-cli-binary
-          step:
-            - id: keepassxc-cli-binary
-              file: /usr/bin/keepassxc-cli
-              exists: true
-        - name: keepassxc-cli-version
-          step:
-            - id: keepassxc-cli-version
-              command: keepassxc-cli --version
-              exit_status: 0
-              stdout:
-                - matches: "[0-9]+\\.[0-9]+"

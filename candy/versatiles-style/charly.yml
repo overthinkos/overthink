@@ -112,32 +112,9 @@ candy:
               exit_status: 0
               stdout:
                 - matches: "v[0-9]+"
-        - name: versatiles-style-bundle-present
-          step:
-            # Build-scope: the browser bundle is present at any path under
-            # /opt/versatiles-style/ (the package layout has shifted across
-            # versions; we just verify a non-empty bundle exists).
-            - id: versatiles-style-bundle-present
-              command: |
-                find /opt/versatiles-style -maxdepth 3 -name 'versatiles-style*.js' -size +1c | head -1 | grep -q .
-              exit_status: 0
         - name: versatiles-style-install-dir
           step:
             # The install directory itself (created by the mkdir task).
             - id: versatiles-style-install-dir
               file: /opt/versatiles-style
               filetype: directory
-        - name: versatiles-style-nodejs-package
-          step:
-            # nodejs is the build/serve toolchain — same package name on arch + fedora.
-            - id: versatiles-style-nodejs-package
-              package: nodejs
-              installed: true
-        - name: versatiles-style-node-runs
-          step:
-            # The node runtime is functional (proves the package landed a working binary).
-            - id: versatiles-style-node-runs
-              command: node --version
-              exit_status: 0
-              stdout:
-                - matches: "v[0-9]+"

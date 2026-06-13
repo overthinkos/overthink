@@ -117,19 +117,6 @@ candy:
                 fedora: openssh-server
                 fedora:43: openssh-server
               installed: true
-        - name: sudoers-charly-user
-          step:
-            # /etc/sudoers.d/* is root:root 0750 — unreadable to the non-root user the
-            # disposable test runs as. Verify via `sudo -n -l` instead, which exercises
-            # the rule's effect without needing to stat the file directly. Bootc images
-            # keep USER=root (systemd handles user sessions), so drop to `user` first
-            # when running as root so we always probe the uid=1000 sudoers entry.
-            - id: sudoers-charly-user
-              command: |
-                if [ "$(id -u)" = "0" ]; then runuser -u user -- sudo -n -l; else sudo -n -l; fi
-              exit_status: 0
-              stdout:
-                - contains: "NOPASSWD"
         - name: sshd-service-running
           step:
             - id: sshd-service-running

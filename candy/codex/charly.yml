@@ -22,13 +22,3 @@ candy:
             - then: running codex --version exits cleanly
               command: ${HOME}/.npm-global/bin/codex --version
               exit_status: 0
-        - name: codex-binary
-          step:
-            - id: codex-binary
-              file: ${HOME}/.npm-global/bin/codex
-              exists: true
-        - name: codex-version
-          step:
-            - id: codex-version
-              command: ${HOME}/.npm-global/bin/codex --version
-              exit_status: 0

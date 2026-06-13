@@ -81,21 +81,6 @@ candy:
                 fi
                 tailscale debug prefs 2>/dev/null | grep -E '"OperatorUser":[[:space:]]*"[^"]+"' >/dev/null
               exit_status: 0
-        - name: tailscale-up-cli-composed
-          step:
-            # Build-scope composition facts — tailscale-up `require:`s the tailscale
-            # candy, so any image composing this runtime layer carries the CLI +
-            # daemon it drives. Unlike the three-state deploy probes below (which
-            # skip-pass on a down/logged-out daemon), these always run and FAIL if
-            # the require:tailscale composition is ever broken.
-            - id: tailscale-up-cli-composed
-              file: /usr/bin/tailscale
-              exists: true
-        - name: tailscale-up-daemon-composed
-          step:
-            - id: tailscale-up-daemon-composed
-              file: /usr/sbin/tailscaled
-              exists: true
         - name: tailscale-up-package-composed
           step:
             - id: tailscale-up-package-composed

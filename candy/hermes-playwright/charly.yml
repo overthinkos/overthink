@@ -62,35 +62,6 @@ candy:
               package: gtk3
               installed: true
             - then: Playwright can launch the installed Chromium headlessly to drive a browser automation session
-        - name: hermes-playwright-cache-dir
-          step:
-            - id: hermes-playwright-cache-dir
-              file: /tmp/.cache/ms-playwright
-              exists: true
-        - name: hermes-playwright-chromium-build-dir
-          step:
-            - id: hermes-playwright-chromium-build-dir
-              command: ls /tmp/.cache/ms-playwright
-              stdout:
-                - contains: chromium
-        - name: hermes-playwright-chromium-binary
-          step:
-            - id: hermes-playwright-chromium-binary
-              command: |
-                bin=$(ls /tmp/.cache/ms-playwright/chromium-*/chrome-linux/chrome /tmp/.cache/ms-playwright/chromium_headless_shell-*/chrome-linux/headless_shell 2>/dev/null | head -1)
-                test -x "$bin" && echo "EXEC_OK:$bin"
-              stdout:
-                - contains: EXEC_OK
-        - name: hermes-playwright-nss-package
-          step:
-            - id: hermes-playwright-nss-package
-              package: nss
-              installed: true
-        - name: hermes-playwright-gtk3-package
-          step:
-            - id: hermes-playwright-gtk3-package
-              package: gtk3
-              installed: true
         - name: hermes-playwright-alsa-lib-package
           step:
             - id: hermes-playwright-alsa-lib-package

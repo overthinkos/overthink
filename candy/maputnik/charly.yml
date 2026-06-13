@@ -147,58 +147,11 @@ candy:
         - name: maputnik-editor-ui-renders
           step:
             - then: the loaded SPA presents the Maputnik visual style editor interface (layer list and map canvas), not a blank page
-        - name: maputnik-build-dir-exists
-          step:
-            # Build-scope: maputnik built and is non-empty.
-            - id: maputnik-build-dir-exists
-              file: /opt/maputnik/build
-              filetype: directory
-              exists: true
-        - name: maputnik-index-html
-          step:
-            - id: maputnik-index-html
-              file: /opt/maputnik/build/index.html
-              exists: true
-        - name: nodejs-installed
-          step:
-            # Build-scope: nodejs binary present (for any future build verification).
-            - id: nodejs-installed
-              command: node --version
-              exit_status: 0
-        - name: maputnik-running
-          step:
-            # Deploy-scope: the http.server is up and serving the SPA.
-            - id: maputnik-running
-              service: maputnik
-              running: true
-              context:
-                - runtime
         - name: maputnik-port-reachable
           step:
             - id: maputnik-port-reachable
               addr: "127.0.0.1:${HOST_PORT:8000}"
               reachable: true
               timeout: 10s
-              context:
-                - runtime
-        - name: maputnik-http-up
-          step:
-            - id: maputnik-http-up
-              http: "http://127.0.0.1:${HOST_PORT:8000}/"
-              status: 200
-              timeout: 10s
-              context:
-                - runtime
-        - name: maputnik-asset-base-not-prefixed
-          step:
-            # Vite's default `--base=/maputnik/` bakes /maputnik/assets/* into
-            # the emitted index.html — those URLs 404 in the browser when we
-            # serve at root. The build now passes `--base=/`; this assertion
-            # locks it in (regression catches a future revert to the default).
-            - id: maputnik-asset-base-not-prefixed
-              command: |
-                ! curl -fsS http://localhost:8000/ | grep -q '"/maputnik/'
-              in_container: true
-              exit_status: 0
               context:
                 - runtime

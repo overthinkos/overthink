@@ -55,30 +55,6 @@ candy:
         - name: labwc-desktop-reaches-streamable-steady-state
           step:
             - then: once the pixelflux to labwc chain is healthy, the labwc compositor hosts the waybar panel, swaync notifier, and audio controls as one coherent, browser-streamable desktop session
-        - name: selkies-desktop-labwc-compositor
-          step:
-            # Meta-composition candy (no install of its own): assert the labwc-flavor
-            # artifacts from every composed candy coexist on the built image — the
-            # observable effect of THIS composition. None of these files would be
-            # present if selkies-desktop composed nothing.
-            - id: selkies-desktop-labwc-compositor
-              file: /usr/bin/labwc
-              exists: true
-        - name: selkies-desktop-waybar-panel
-          step:
-            - id: selkies-desktop-waybar-panel
-              file: /usr/bin/waybar
-              exists: true
-        - name: selkies-desktop-waybar-config
-          step:
-            - id: selkies-desktop-waybar-config
-              file: ${HOME}/.config/waybar/config
-              exists: true
-        - name: selkies-desktop-swaync-daemon
-          step:
-            - id: selkies-desktop-swaync-daemon
-              file: /usr/bin/swaync
-              exists: true
         - name: selkies-desktop-swaync-package
           step:
             - id: selkies-desktop-swaync-package
@@ -87,26 +63,11 @@ candy:
                 arch: swaync
                 fedora: SwayNotificationCenter
               installed: true
-        - name: selkies-desktop-pavucontrol
-          step:
-            - id: selkies-desktop-pavucontrol
-              file: /usr/bin/pavucontrol
-              exists: true
         - name: selkies-desktop-pavucontrol-package
           step:
             - id: selkies-desktop-pavucontrol-package
               package: pavucontrol
               installed: true
-        - name: selkies-desktop-chrome-spine
-          step:
-            - id: selkies-desktop-chrome-spine
-              file: /usr/bin/google-chrome-stable
-              exists: true
-        - name: selkies-desktop-pipewire-audio
-          step:
-            - id: selkies-desktop-pipewire-audio
-              file: /usr/bin/pipewire
-              exists: true
         - name: selkies-desktop-panel-running
           step:
             # Deploy-scope: the labwc-flavor UI daemons (waybar panel + swaync notifier)

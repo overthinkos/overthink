@@ -47,21 +47,6 @@ candy:
         - name: ssh-agent-socket-used-when-forwarded
           step:
             - then: with a host SSH agent forwarded at runtime, ssh-add -l inside the deployment lists the host's keys via the forwarded SSH_AUTH_SOCK
-        - name: ssh-binary
-          step:
-            - id: ssh-binary
-              file: /usr/bin/ssh
-              exists: true
-        - name: ssh-add-binary
-          step:
-            - id: ssh-add-binary
-              file: /usr/bin/ssh-add
-              exists: true
-        - name: ssh-keygen-binary
-          step:
-            - id: ssh-keygen-binary
-              file: /usr/bin/ssh-keygen
-              exists: true
         - name: ssh-client-package
           step:
             - id: ssh-client-package
@@ -70,10 +55,3 @@ candy:
                 arch: openssh
                 fedora: openssh-clients
               installed: true
-        - name: ssh-version
-          step:
-            - id: ssh-version
-              command: /usr/bin/ssh -V
-              exit_status: 0
-              stderr:
-                - contains: "OpenSSH"

@@ -85,26 +85,6 @@ candy:
             - then: the control-center D-Bus auto-activation unit is also removed
               file: /usr/share/dbus-1/services/org.erikreider.swaync.cc.service
               exists: false
-        - name: swaync-binary
-          step:
-            - id: swaync-binary
-              file: /usr/bin/swaync
-              exists: true
-        - name: swaync-config
-          step:
-            - id: swaync-config
-              file: ${HOME}/.config/swaync/config.json
-              exists: true
-        - name: swaync-style
-          step:
-            - id: swaync-style
-              file: ${HOME}/.config/swaync/style.css
-              exists: true
-        - name: swaync-client-binary
-          step:
-            - id: swaync-client-binary
-              file: /usr/bin/swaync-client
-              exists: true
         - name: swaync-package
           step:
             - id: swaync-package
@@ -113,8 +93,3 @@ candy:
                 arch: swaync
                 fedora: SwayNotificationCenter
               installed: true
-        - name: swaync-dbus-activation-removed
-          step:
-            - id: swaync-dbus-activation-removed
-              file: /usr/share/dbus-1/services/org.erikreider.swaync.service
-              exists: false

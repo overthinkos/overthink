@@ -100,26 +100,6 @@ candy:
                 - contains: pong
               context:
                 - runtime
-        - name: immich-ml-venv
-          step:
-            - id: immich-ml-venv
-              file: /opt/immich/machine-learning/.venv/bin/python
-              exists: true
-        - name: immich-ml-module
-          step:
-            - id: immich-ml-module
-              file: /opt/immich/machine-learning/immich_ml
-              filetype: directory
-        - name: immich-ml-models-dir
-          step:
-            - id: immich-ml-models-dir
-              file: ${HOME}/.immich/models
-              filetype: directory
-        - name: uv-binary
-          step:
-            - id: uv-binary
-              file: /usr/local/bin/uv
-              exists: true
         - name: immich-ml-service-running
           step:
             - id: immich-ml-service-running
@@ -137,15 +117,5 @@ candy:
               in_container: true
               stdout:
                 - equals: "200"
-              context:
-                - runtime
-        - name: immich-ml-http
-          step:
-            - id: immich-ml-http
-              command: curl -fsS http://127.0.0.1:3003/ping
-              exit_status: 0
-              in_container: true
-              stdout:
-                - contains: "pong"
               context:
                 - runtime

@@ -146,54 +146,8 @@ candy:
               file: /opt/android-sdk/system-images/android-36/google_apis_playstore/x86_64
               exists: true
               filetype: directory
-        - name: sdkmanager-binary
-          step:
-            - id: sdkmanager-binary
-              file: /opt/android-sdk/cmdline-tools/latest/bin/sdkmanager
-              exists: true
         - name: avdmanager-binary
           step:
             - id: avdmanager-binary
               file: /opt/android-sdk/cmdline-tools/latest/bin/avdmanager
               exists: true
-        - name: adb-binary
-          step:
-            - id: adb-binary
-              file: /opt/android-sdk/platform-tools/adb
-              exists: true
-        - name: aapt2-binary
-          step:
-            - id: aapt2-binary
-              # AUR android-sdk-build-tools-36 lays build-tools down under `36/`
-              # (not `36.0.0/`) — verified in the built image.
-              file: /opt/android-sdk/build-tools/36/aapt2
-              exists: true
-        - name: emulator-binary
-          step:
-            - id: emulator-binary
-              file: /opt/android-sdk/emulator/emulator
-              exists: true
-        - name: apkeep-binary
-          step:
-            - id: apkeep-binary
-              command: which apkeep
-              exit_status: 0
-        - name: platform-36-installed
-          step:
-            - id: platform-36-installed
-              file: /opt/android-sdk/platforms/android-36
-              exists: true
-              filetype: directory
-        - name: system-image-installed
-          step:
-            - id: system-image-installed
-              file: /opt/android-sdk/system-images/android-36/google_apis_playstore/x86_64
-              exists: true
-              filetype: directory
-        - name: adb-runs
-          step:
-            - id: adb-runs
-              command: /opt/android-sdk/platform-tools/adb version
-              exit_status: 0
-              stdout:
-                - contains: "Android Debug Bridge"

@@ -75,27 +75,6 @@ candy:
                 find /opt/versatiles-fonts -name '0-255.pbf' | head -1 | grep -q .
               exit_status: 0
             - then: a MapLibre GL JS client can fetch any installed family's glyph ranges via the standard {fontstack}/{range}.pbf glyph-URL template
-        - name: versatiles-fonts-bundle-present
-          step:
-            # Build-scope: at least one font family's glyph PBF range exists.
-            # `find ... -name '*.pbf'` matches MapLibre's standard glyph file
-            # layout regardless of whether the tarball nests under a top-level
-            # directory or expands flat.
-            - id: versatiles-fonts-bundle-present
-              command: |
-                find /opt/versatiles-fonts -name '*.pbf' -size +1c | head -1 | grep -q .
-              exit_status: 0
-        - name: versatiles-fonts-noto-sans
-          step:
-            # Build-scope: Noto Sans Regular is the default MapLibre style
-            # font; assert it's present specifically. versatiles-fonts uses
-            # lowercase + underscore-separated directory names (e.g.
-            # `noto_sans_regular`, not `Noto Sans Regular`), verified against
-            # the v2.1.0 release.
-            - id: versatiles-fonts-noto-sans
-              command: |
-                find /opt/versatiles-fonts -path '*noto_sans_regular*' -name '*.pbf' | head -1 | grep -q .
-              exit_status: 0
         - name: versatiles-fonts-curl
           step:
             # Build-scope: the build dependencies this candy declares are installed

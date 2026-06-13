@@ -40,15 +40,6 @@ candy:
               in_container: false
               context:
                 - runtime
-        - name: check-local-marker-exists
-          step:
-            # Deploy-scope: the kind:local apply writes the marker onto the HOST
-            # filesystem (no container) — probe host-side with in_container: false.
-            - id: check-local-marker-exists
-              command: "test -f /etc/check-local-marker"
-              in_container: false
-              context:
-                - runtime
         - name: check-local-marker-host-content
           step:
             - id: check-local-marker-host-content
@@ -64,9 +55,3 @@ candy:
               file: /etc/check-local-marker
               exists: true
               mode: "0644"
-        - name: check-local-marker-build-content
-          step:
-            - id: check-local-marker-build-content
-              file: /etc/check-local-marker
-              contains:
-                - contains: "check-local v1"

@@ -34,24 +34,11 @@ candy:
         - name: clawhub-searches-skill-registry
           step:
             - then: clawhub search <term> queries the ClawHub registry and returns matching OpenClaw skills
-        - name: clawhub-binary
-          step:
-            # Build-scope — verified inside the built image via `podman run --rm`.
-            - id: clawhub-binary
-              file: ${HOME}/.npm-global/bin/clawhub
-              exists: true
         - name: clawdhub-alias-binary
           step:
             - id: clawdhub-alias-binary
               file: ${HOME}/.npm-global/bin/clawdhub
               exists: true
-        - name: clawhub-cli-version
-          step:
-            - id: clawhub-cli-version
-              command: ${HOME}/.npm-global/bin/clawhub --cli-version
-              exit_status: 0
-              stdout:
-                - matches: "[0-9]+\\.[0-9]+\\.[0-9]+"
         - name: clawhub-help-subcommands
           step:
             - id: clawhub-help-subcommands

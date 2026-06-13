@@ -51,17 +51,6 @@ candy:
             - then: procps-ng is installed so pgrep can probe the keepalive process
               package: procps-ng
               installed: true
-        - name: os-marker-exists
-          step:
-            - id: os-marker-exists
-              file: /etc/charly-os-marker
-              exists: true
-        - name: os-marker-content
-          step:
-            - id: os-marker-content
-              file: /etc/charly-os-marker
-              contains:
-                - charly-os-content-marker
         - name: os-bash-installed
           step:
             - id: os-bash-installed

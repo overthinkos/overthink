@@ -91,31 +91,11 @@ candy:
               stdout:
                 - contains: "k3d version"
             - then: with a container runtime available, k3d can provision a local multi-node Kubernetes cluster for development and testing
-        - name: kubectl-binary
-          step:
-            - id: kubectl-binary
-              file: /usr/bin/kubectl
-              exists: true
         - name: kubectl-version
           step:
             - id: kubectl-version
               command: /usr/bin/kubectl version --client
               exit_status: 0
-        - name: helm-binary
-          step:
-            - id: helm-binary
-              file: /usr/bin/helm
-              exists: true
-        - name: helm-version
-          step:
-            - id: helm-version
-              command: /usr/bin/helm version --short
-              exit_status: 0
-        - name: k3d-binary
-          step:
-            - id: k3d-binary
-              file: /usr/bin/k3d
-              exists: true
         - name: k3d-version
           step:
             - id: k3d-version

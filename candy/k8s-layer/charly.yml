@@ -346,12 +346,6 @@ candy:
         - name: fake-apiserver-satisfies-harness-k8s-rollups
           step:
             - then: the harness `charly check k8s` wait-nodes and addon rollups exit 0 against the fixture (nodes, storageclasses, ingressclasses, and the traefik / local-path-provisioner / svclb-traefik addons all report Ready)
-        - name: harness-k8s-server-script
-          step:
-            - id: harness-k8s-server-script
-              file: /opt/harness-k8s/fake_apiserver.py
-              exists: true
-              mode: "0755"
         - name: harness-k8s-python3
           step:
             - id: harness-k8s-python3
@@ -374,15 +368,6 @@ candy:
             - id: harness-k8s-port-listening
               port: 6443
               listening: true
-              context:
-                - runtime
-        - name: harness-k8s-nodes-endpoint
-          step:
-            - id: harness-k8s-nodes-endpoint
-              http: http://127.0.0.1:${HOST_PORT:6443}/api/v1/nodes
-              status: 200
-              body:
-                - contains: charly-fixture-k8s
               context:
                 - runtime
         - name: harness-k8s-storageclass-endpoint

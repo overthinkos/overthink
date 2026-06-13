@@ -83,22 +83,6 @@ candy:
         - name: valkey-service-stays-available
           step:
             - then: the supervised valkey service is running and keeps answering clients, restarting automatically (restart=always) if the valkey-server process exits
-        - name: valkey-server-binary
-          step:
-            # Build-scope: inside the built image (`podman run --rm`).
-            - id: valkey-server-binary
-              file: /usr/bin/valkey-server
-              exists: true
-        - name: valkey-cli-binary
-          step:
-            - id: valkey-cli-binary
-              file: /usr/bin/valkey-cli
-              exists: true
-        - name: valkey-package
-          step:
-            - id: valkey-package
-              package: valkey
-              installed: true
         - name: valkey-responds
           step:
             # Deploy-scope: against the running service. HOST_PORT resolves to the
@@ -118,12 +102,5 @@ candy:
               stdout:
                 - contains: charly-check-ok
               in_container: true
-              context:
-                - runtime
-        - name: valkey-port-open
-          step:
-            - id: valkey-port-open
-              addr: 127.0.0.1:${HOST_PORT:6379}
-              reachable: true
               context:
                 - runtime

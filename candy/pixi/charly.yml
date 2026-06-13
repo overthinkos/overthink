@@ -43,11 +43,6 @@ candy:
               exit_status: 0
               stdout:
                 - matches: "[0-9]+\\.[0-9]+"
-        - name: pixi-binary
-          step:
-            - id: pixi-binary
-              file: /usr/local/bin/pixi
-              exists: true
         - name: pixi-version
           step:
             - id: pixi-version

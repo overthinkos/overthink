@@ -210,29 +210,3 @@ candy:
                 debian: libvirt-daemon-system
                 ubuntu: libvirt-daemon-system
               installed: true
-        - name: virsh-binary
-          step:
-            - id: virsh-binary
-              file: /usr/bin/virsh
-              exists: true
-        - name: qemu-system-x86-binary
-          step:
-            - id: qemu-system-x86-binary
-              file: /usr/bin/qemu-system-x86_64
-              exists: true
-        - name: qemu-img-binary
-          step:
-            - id: qemu-img-binary
-              file: /usr/bin/qemu-img
-              exists: true
-        - name: libvirt-session-list
-          step:
-            # The rootless libvirt session this candy's virtqemud serves — checked
-            # HERE so one check covers every box composing virtualization (directly
-            # or via the charly toolchain), instead of the box re-declaring it.
-            - id: libvirt-session-list
-              command: virsh -c qemu:///session list --all
-              in_container: true
-              exit_status: 0
-              context:
-                - runtime

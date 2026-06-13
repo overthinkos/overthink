@@ -46,25 +46,3 @@ candy:
               exit_status: 0
               stdout:
                 - contains: "%PDF"
-        - name: typst-binary
-          step:
-            - id: typst-binary
-              file: /usr/local/bin/typst
-              exists: true
-        - name: typst-version
-          step:
-            - id: typst-version
-              command: /usr/local/bin/typst --version
-              exit_status: 0
-              stdout:
-                - matches: "typst [0-9]"
-        - name: typst-compiles
-          step:
-            - id: typst-compiles
-              command: |
-                printf '= Hello\n\nTypst smoke test.\n' > /tmp/typst-smoke.typ
-                /usr/local/bin/typst compile /tmp/typst-smoke.typ /tmp/typst-smoke.pdf
-                head -c 4 /tmp/typst-smoke.pdf
-              exit_status: 0
-              stdout:
-                - contains: "%PDF"

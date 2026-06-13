@@ -60,18 +60,8 @@ candy:
             - id: tailscale-binary
               command: test -x /usr/bin/tailscale && test -x /usr/sbin/tailscaled
               exit_status: 0
-        - name: tailscaled-unit-enabled
-          step:
-            - id: tailscaled-unit-enabled
-              command: systemctl is-enabled tailscaled.service
-              exit_status: 0
         - name: tailscale-package
           step:
             - id: tailscale-package
               package: tailscale
               installed: true
-        - name: tailscale-cli-runs
-          step:
-            - id: tailscale-cli-runs
-              command: tailscale version
-              exit_status: 0

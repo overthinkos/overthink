@@ -93,26 +93,6 @@ candy:
             - then: the dig DNS lookup tool resolves on PATH from the per-distro bind package
               command: command -v dig
               exit_status: 0
-        - name: aws-binary
-          step:
-            - id: aws-binary
-              file: /usr/local/bin/aws
-              exists: true
-        - name: scw-binary
-          step:
-            - id: scw-binary
-              file: /usr/local/bin/scw
-              exists: true
-        - name: kubectx-binary
-          step:
-            - id: kubectx-binary
-              file: /usr/local/bin/kubectx
-              exists: true
-        - name: kubens-binary
-          step:
-            - id: kubens-binary
-              file: /usr/local/bin/kubens
-              exists: true
         - name: tofu-binary
           step:
             - id: tofu-binary
@@ -123,29 +103,8 @@ candy:
             - id: jq-binary
               file: /usr/bin/jq
               exists: true
-        - name: aws-version
-          step:
-            - id: aws-version
-              command: /usr/local/bin/aws --version
-              exit_status: 0
-              stdout:
-                - contains: "aws-cli"
         - name: scw-version
           step:
             - id: scw-version
               command: /usr/local/bin/scw version
-              exit_status: 0
-        - name: tofu-version
-          step:
-            # kubectx/kubens are file-exists-only here: they are plain kubectl
-            # wrappers that abort (exit 1) unless kubectl is present, so a functional
-            # probe requires the separate `kubernetes` candy. A box that wants
-            # functional kubectx composes both; devops-tools only ships the scripts.
-            - id: tofu-version
-              command: /usr/local/bin/tofu version
-              exit_status: 0
-        - name: jq-version
-          step:
-            - id: jq-version
-              command: /usr/bin/jq --version
               exit_status: 0

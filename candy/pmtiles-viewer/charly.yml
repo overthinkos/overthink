@@ -115,27 +115,6 @@ candy:
         - name: viewer-served-over-http
           step:
             - then: the pmtiles-viewer service serves the built SPA over HTTP, answering GET / with status 200 and root-relative asset URLs that load in the browser
-        - name: pmtiles-viewer-build-dir-exists
-          step:
-            # Build-scope: SPA built and is non-empty.
-            - id: pmtiles-viewer-build-dir-exists
-              file: /opt/pmtiles-viewer/build
-              filetype: directory
-              exists: true
-        - name: pmtiles-viewer-index-html
-          step:
-            - id: pmtiles-viewer-index-html
-              file: /opt/pmtiles-viewer/build/index.html
-              exists: true
-        - name: nodejs-installed-pmtiles-viewer
-          step:
-            # Build-scope: nodejs binary present (paired with the maputnik
-            # check — declaring it here means dropping maputnik leaves this
-            # check in place; declaring it on both layers documents the
-            # cross-layer requirement clearly).
-            - id: nodejs-installed-pmtiles-viewer
-              command: node --version
-              exit_status: 0
         - name: pmtiles-viewer-running
           step:
             # Deploy-scope: the http.server is up and serving the SPA.

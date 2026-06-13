@@ -137,25 +137,6 @@ candy:
                 # a non-TTY pipe (e.g. \x1b[32menabled\x1b[0m \x1b[32mOK\x1b[0m).
                 # The .* spans them.
                 - matches: "jupyterlab-quarto.*enabled.*OK"
-        - name: mcp-jupyter-ml-ping
-          step:
-            # MCP server exercised live via github.com/modelcontextprotocol/go-sdk.
-            # Runs only under `charly check live <image>` (deploy-scope). Build-scope and
-            # functional HTTP checks are contributed by the composed jupyter-mcp layer.
-            - id: mcp-jupyter-ml-ping
-              mcp: ping
-              timeout: 10s
-              context:
-                - runtime
-        - name: mcp-jupyter-ml-list-tools
-          step:
-            - id: mcp-jupyter-ml-list-tools
-              mcp: list-tools
-              stdout:
-                - contains: cell_insert
-                - contains: cell_execute
-              context:
-                - runtime
         - name: mcp-jupyter-ml-list-notebooks
           step:
             - id: mcp-jupyter-ml-list-notebooks

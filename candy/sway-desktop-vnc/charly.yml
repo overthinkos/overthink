@@ -65,16 +65,6 @@ candy:
             - id: sway-desktop-vnc-binaries
               command: test -x /usr/bin/sway && test -x /usr/bin/wayvnc && test -x /usr/bin/google-chrome-stable
               exit_status: 0
-        - name: sway-desktop-vnc-services
-          step:
-            - id: sway-desktop-vnc-services
-              command: supervisorctl status sway wayvnc | awk '{print $2}' | sort -u
-              in_container: true
-              exit_status: 0
-              stdout:
-                - RUNNING
-              context:
-                - runtime
         - name: sway-desktop-vnc-cdp-up
           step:
             - id: sway-desktop-vnc-cdp-up

@@ -87,33 +87,8 @@ candy:
             - then: the config documents that no guest-agent RPCs are blocked
               file: /etc/qemu/qemu-ga.conf
               contains: "No RPCs are blocked"
-        - name: qemu-ga-binary
-          step:
-            - id: qemu-ga-binary
-              file: /usr/bin/qemu-ga
-              exists: true
-        - name: qemu-ga-package
-          step:
-            - id: qemu-ga-package
-              package: qemu-guest-agent
-              installed: true
         - name: qemu-ga-config
           step:
             - id: qemu-ga-config
               file: /etc/qemu/qemu-ga.conf
               contains: "fsfreeze-hook"
-        - name: qemu-ga-fsfreeze-hook
-          step:
-            - id: qemu-ga-fsfreeze-hook
-              file: /etc/qemu/fsfreeze-hook
-              contains: "fsfreeze-hook.d"
-        - name: qemu-ga-fsfreeze-hook-dir
-          step:
-            - id: qemu-ga-fsfreeze-hook-dir
-              file: /etc/qemu/fsfreeze-hook.d
-              filetype: directory
-        - name: qemu-ga-freeze-noop
-          step:
-            - id: qemu-ga-freeze-noop
-              command: /etc/qemu/fsfreeze-hook freeze
-              exit_status: 0

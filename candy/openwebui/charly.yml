@@ -136,39 +136,11 @@ candy:
         - name: admin-can-reach-the-chat-ui
           step:
             - then: the rendered landing page presents the Open WebUI sign-in experience for the auto-provisioned admin account, ready to start an LLM chat
-        - name: openwebui-entrypoint
-          step:
-            - id: openwebui-entrypoint
-              file: ${HOME}/.local/bin/openwebui-entrypoint
-              exists: true
-              mode: "0755"
-        - name: openwebui-service
-          step:
-            - id: openwebui-service
-              service: openwebui
-              running: true
-              context:
-                - runtime
         - name: openwebui-port
           step:
             - id: openwebui-port
               addr: 127.0.0.1:${HOST_PORT:8080}
               reachable: true
               timeout: 5s
-              context:
-                - runtime
-        - name: openwebui-http
-          step:
-            - id: openwebui-http
-              http: http://127.0.0.1:${HOST_PORT:8080}/
-              status: 200
-              timeout: 30s
-              context:
-                - runtime
-        - name: openwebui-admin-email-set
-          step:
-            - id: openwebui-admin-email-set
-              command: printenv WEBUI_ADMIN_EMAIL
-              exit_status: 0
               context:
                 - runtime

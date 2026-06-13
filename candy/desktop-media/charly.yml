@@ -71,61 +71,13 @@ candy:
             - then: the poppler-glib PDF library that backs document thumbnails is installed
               package: poppler-glib
               installed: true
-        - name: gst-libav-installed
-          step:
-            # GStreamer / codec plugins — package identity + unsonamed plugin .so paths
-            - id: gst-libav-installed
-              package: gst-libav
-              installed: true
-        - name: gst-libav-plugin-so
-          step:
-            - id: gst-libav-plugin-so
-              file: /usr/lib/gstreamer-1.0/libgstlibav.so
-              exists: true
-        - name: gst-plugin-va-so
-          step:
-            - id: gst-plugin-va-so
-              file: /usr/lib/gstreamer-1.0/libgstva.so
-              exists: true
         - name: vlc-plugins-all-installed
           step:
             - id: vlc-plugins-all-installed
               package: vlc-plugins-all
               installed: true
-        - name: libdvdcss-installed
-          step:
-            - id: libdvdcss-installed
-              package: libdvdcss
-              installed: true
-        - name: ffmpegthumbnailer-binary
-          step:
-            # Thumbnailer / document libs
-            - id: ffmpegthumbnailer-binary
-              file: /usr/bin/ffmpegthumbnailer
-              exists: true
-        - name: poppler-glib-installed
-          step:
-            - id: poppler-glib-installed
-              package: poppler-glib
-              installed: true
-        - name: pipewire-alsa-installed
-          step:
-            # ALSA bridge + mixer UI
-            - id: pipewire-alsa-installed
-              package: pipewire-alsa
-              installed: true
-        - name: pipewire-alsa-config
-          step:
-            - id: pipewire-alsa-config
-              file: /etc/alsa/conf.d/99-pipewire-default.conf
-              exists: true
         - name: alsa-utils-aplay
           step:
             - id: alsa-utils-aplay
               file: /usr/bin/aplay
-              exists: true
-        - name: pavucontrol-binary
-          step:
-            - id: pavucontrol-binary
-              file: /usr/bin/pavucontrol
               exists: true

@@ -85,11 +85,6 @@ candy:
             - then: the google-chrome.desktop entry the default-browser task references is installed
               file: /usr/share/applications/google-chrome.desktop
               exists: true
-        - name: google-chrome-binary
-          step:
-            - id: google-chrome-binary
-              file: /usr/bin/google-chrome-stable
-              exists: true
         - name: chrome-package-installed
           step:
             - id: chrome-package-installed
@@ -98,15 +93,3 @@ candy:
                 arch: google-chrome
                 fedora: google-chrome-stable
               installed: true
-        - name: chrome-reports-version
-          step:
-            - id: chrome-reports-version
-              command: google-chrome-stable --version
-              exit_status: 0
-              stdout:
-                - matches: "Google Chrome"
-        - name: chrome-desktop-entry
-          step:
-            - id: chrome-desktop-entry
-              file: /usr/share/applications/google-chrome.desktop
-              exists: true

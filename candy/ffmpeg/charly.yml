@@ -42,32 +42,8 @@ candy:
               exit_status: 0
               stdout:
                 - contains: ffprobe version
-        - name: ffmpeg-binary
-          step:
-            - id: ffmpeg-binary
-              file: /usr/bin/ffmpeg
-              exists: true
-        - name: ffprobe-binary
-          step:
-            - id: ffprobe-binary
-              file: /usr/bin/ffprobe
-              exists: true
         - name: ffmpeg-package
           step:
             - id: ffmpeg-package
               package: ffmpeg
               installed: true
-        - name: ffmpeg-version
-          step:
-            - id: ffmpeg-version
-              command: ffmpeg -version
-              exit_status: 0
-              stdout:
-                - contains: ffmpeg version
-        - name: ffprobe-version
-          step:
-            - id: ffprobe-version
-              command: ffprobe -version
-              exit_status: 0
-              stdout:
-                - contains: ffprobe version

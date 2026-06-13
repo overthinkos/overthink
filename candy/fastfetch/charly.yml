@@ -36,20 +36,8 @@ candy:
               command: /usr/bin/fastfetch --pipe --logo none 2>&1
               exit_status: 0
             - then: the report is human-readable, grouping system facts (OS, kernel, CPU, memory) into labelled lines
-        - name: fastfetch-binary
-          step:
-            - id: fastfetch-binary
-              file: /usr/bin/fastfetch
-              exists: true
         - name: fastfetch-package
           step:
             - id: fastfetch-package
               package: fastfetch
               installed: true
-        - name: fastfetch-version
-          step:
-            - id: fastfetch-version
-              command: /usr/bin/fastfetch --version 2>&1
-              exit_status: 0
-              stdout:
-                - matches: "[0-9]+\\.[0-9]+"

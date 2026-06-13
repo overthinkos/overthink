@@ -24,9 +24,3 @@ candy:
               file: ${HOME}/.local/bin/pixelflux-screenshot
               exists: true
               mode: "0755"
-        - name: pixelflux-screenshot-script
-          step:
-            - id: pixelflux-screenshot-script
-              file: ${HOME}/.local/bin/pixelflux-screenshot
-              exists: true
-              mode: "0755"

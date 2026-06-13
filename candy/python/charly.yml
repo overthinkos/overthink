@@ -30,22 +30,3 @@ candy:
               exit_status: 0
               stdout:
                 - contains: "3 13"
-        - name: python-binary
-          step:
-            - id: python-binary
-              file: ${HOME}/.pixi/envs/default/bin/python
-              exists: true
-        - name: python-version
-          step:
-            - id: python-version
-              command: ${HOME}/.pixi/envs/default/bin/python --version
-              exit_status: 0
-              stdout:
-                - contains: "3.13"
-        - name: python-stdlib-runs
-          step:
-            - id: python-stdlib-runs
-              command: ${HOME}/.pixi/envs/default/bin/python -c "import sys, json, sqlite3; print(sys.version_info.major, sys.version_info.minor)"
-              exit_status: 0
-              stdout:
-                - contains: "3 13"

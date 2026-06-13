@@ -49,33 +49,8 @@ candy:
             - then: the SDK tree is unpacked at its /var/opt install prefix
               file: /var/opt/google-cloud-sdk/bin/gcloud
               exists: true
-        - name: gcloud-binary
-          step:
-            - id: gcloud-binary
-              file: /usr/bin/gcloud
-              exists: true
-        - name: gcloud-version
-          step:
-            - id: gcloud-version
-              command: /usr/bin/gcloud --version
-              exit_status: 0
-        - name: gsutil-binary
-          step:
-            - id: gsutil-binary
-              file: /usr/bin/gsutil
-              exists: true
         - name: gsutil-version
           step:
             - id: gsutil-version
               command: /usr/bin/gsutil version
-              exit_status: 0
-        - name: bq-binary
-          step:
-            - id: bq-binary
-              file: /usr/bin/bq
-              exists: true
-        - name: bq-version
-          step:
-            - id: bq-version
-              command: /usr/bin/bq version
               exit_status: 0

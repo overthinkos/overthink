@@ -82,19 +82,6 @@ candy:
               context:
                 - runtime
             - then: an agent can create a notebook and edit its cells through the MCP server end to end
-        - name: workspace-dir
-          step:
-            # Workspace mount is created by the deploy volume — only present at runtime.
-            - id: workspace-dir
-              file: /workspace
-              filetype: directory
-              context:
-                - runtime
-        - name: jupyter-lab-binary
-          step:
-            - id: jupyter-lab-binary
-              file: ${HOME}/.pixi/envs/default/bin/jupyter-lab
-              exists: true
         - name: spacy-import
           step:
             # Verify spacy + en_core_web_sm model load — build-scope smoke for the NLP
@@ -120,39 +107,12 @@ candy:
                 # a non-TTY pipe (e.g. \x1b[32menabled\x1b[0m \x1b[32mOK\x1b[0m).
                 # The .* spans them.
                 - matches: "jupyterlab-quarto.*enabled.*OK"
-        - name: jupyter-service
-          step:
-            - id: jupyter-service
-              service: jupyter
-              running: true
-              context:
-                - runtime
         - name: jupyter-port
           step:
             - id: jupyter-port
               addr: 127.0.0.1:${HOST_PORT:8888}
               reachable: true
               timeout: 5s
-              context:
-                - runtime
-        - name: jupyter-api
-          step:
-            # Service answers on its routed port at deploy time. The HOST_PORT
-            # substitution means remapping in deploy.yml just works.
-            - id: jupyter-api
-              http: http://127.0.0.1:${HOST_PORT:8888}/api
-              status: 200
-              body:
-                - contains: "version"
-              context:
-                - runtime
-        - name: mcp-jupyter-ping
-          step:
-            # MCP server exercised live via github.com/modelcontextprotocol/go-sdk.
-            # Runs only under `charly check live <image>` (deploy-scope).
-            - id: mcp-jupyter-ping
-              mcp: ping
-              timeout: 10s
               context:
                 - runtime
         - name: mcp-jupyter-list-tools

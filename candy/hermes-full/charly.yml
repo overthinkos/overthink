@@ -83,54 +83,11 @@ candy:
               context:
                 - runtime
             - and: an operator can open a shell in the deployed box and launch the hermes agent together with any bundled AI CLI (claude/codex/gemini/forge) and developer tool from that one session
-        - name: hermes-full-hermes-binary
-          step:
-            # --- AI agent + AI coding CLIs (build scope) ---
-            - id: hermes-full-hermes-binary
-              file: ${HOME}/.pixi/envs/default/bin/hermes
-              exists: true
-        - name: hermes-full-claude-binary
-          step:
-            - id: hermes-full-claude-binary
-              file: ${HOME}/.npm-global/bin/claude
-              exists: true
-        - name: hermes-full-codex-binary
-          step:
-            - id: hermes-full-codex-binary
-              file: ${HOME}/.npm-global/bin/codex
-              exists: true
-        - name: hermes-full-gemini-binary
-          step:
-            - id: hermes-full-gemini-binary
-              file: ${HOME}/.npm-global/bin/gemini
-              exists: true
-        - name: hermes-full-forge-binary
-          step:
-            - id: hermes-full-forge-binary
-              file: ${HOME}/.npm-global/bin/forge
-              exists: true
-        - name: hermes-full-ripgrep-binary
-          step:
-            # --- developer toolchain (dev-tools) ---
-            - id: hermes-full-ripgrep-binary
-              file: /usr/bin/rg
-              exists: true
-        - name: hermes-full-neovim-binary
-          step:
-            - id: hermes-full-neovim-binary
-              file: /usr/bin/nvim
-              exists: true
         - name: hermes-full-neovim-package
           step:
             - id: hermes-full-neovim-package
               package: neovim
               installed: true
-        - name: hermes-full-aws-binary
-          step:
-            # --- DevOps toolchain (devops-tools) ---
-            - id: hermes-full-aws-binary
-              file: /usr/local/bin/aws
-              exists: true
         - name: hermes-full-tofu-binary
           step:
             - id: hermes-full-tofu-binary
@@ -141,16 +98,6 @@ candy:
             - id: hermes-full-jq-binary
               file: /usr/bin/jq
               exists: true
-        - name: hermes-full-tofu-version
-          step:
-            - id: hermes-full-tofu-version
-              command: /usr/local/bin/tofu version
-              exit_status: 0
-        - name: hermes-full-jq-version
-          step:
-            - id: hermes-full-jq-version
-              command: /usr/bin/jq --version
-              exit_status: 0
         - name: hermes-full-tmux-binary
           step:
             # --- tmux ---
@@ -162,18 +109,3 @@ candy:
             - id: hermes-full-tmux-package
               package: tmux
               installed: true
-        - name: hermes-full-tmux-version
-          step:
-            - id: hermes-full-tmux-version
-              command: /usr/bin/tmux -V
-              exit_status: 0
-              stdout:
-                - matches: "^tmux"
-        - name: hermes-full-agent-service
-          step:
-            # --- deploy-scope functional probe: the agent actually runs ---
-            - id: hermes-full-agent-service
-              service: hermes
-              running: true
-              context:
-                - runtime

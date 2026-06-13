@@ -24,13 +24,3 @@ candy:
             - then: the xterm package is registered with the package manager
               package: xterm
               installed: true
-        - name: xterm-binary
-          step:
-            - id: xterm-binary
-              file: /usr/bin/xterm
-              exists: true
-        - name: xterm-package
-          step:
-            - id: xterm-package
-              package: xterm
-              installed: true

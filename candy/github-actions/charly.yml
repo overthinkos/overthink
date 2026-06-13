@@ -66,26 +66,6 @@ candy:
             - then: actionlint reports its version without error
               command: /usr/local/bin/actionlint -version
               exit_status: 0
-        - name: act-binary
-          step:
-            - id: act-binary
-              file: /usr/bin/act
-              exists: true
-        - name: act-version
-          step:
-            - id: act-version
-              command: /usr/bin/act --version
-              exit_status: 0
-        - name: actionlint-binary
-          step:
-            - id: actionlint-binary
-              file: /usr/local/bin/actionlint
-              exists: true
-        - name: actionlint-version
-          step:
-            - id: actionlint-version
-              command: /usr/local/bin/actionlint -version
-              exit_status: 0
         - name: guestfs-tools-package
           step:
             - id: guestfs-tools-package

@@ -57,31 +57,12 @@ candy:
         - name: studio-web-ui-serves
           step:
             - then: the Unsloth Studio web UI is served on port 8888 and is usable for interactive LLM fine-tuning
-        - name: unsloth-studio-pixi-python
-          step:
-            # Build-scope: the pixi environment this candy owns lands its CPython
-            # interpreter at a fixed path, with the ML/fine-tuning stack importable.
-            - id: unsloth-studio-pixi-python
-              file: ${HOME}/.pixi/envs/default/bin/python
-              exists: true
-        - name: unsloth-studio-torch
-          step:
-            - id: unsloth-studio-torch
-              command: ${HOME}/.pixi/envs/default/bin/python -c "import torch; print('torch', torch.__version__)"
-              stdout:
-                - contains: torch
         - name: unsloth-studio-finetuning-stack
           step:
             - id: unsloth-studio-finetuning-stack
               command: ${HOME}/.pixi/envs/default/bin/python -c "import transformers, peft, trl; print('finetune-stack-ok')"
               stdout:
                 - contains: finetune-stack-ok
-        - name: unsloth-studio-llama-cli
-          step:
-            # Build-scope: observable effect of the `candy: [llama-cpp]` composition.
-            - id: unsloth-studio-llama-cli
-              file: ${HOME}/llama.cpp/llama-cli
-              exists: true
         - name: unsloth-studio-service-running
           step:
             # Deploy-scope: the supervisord service runs and binds the Studio UI port.

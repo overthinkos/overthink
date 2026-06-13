@@ -63,21 +63,6 @@ candy:
             - given: redis-server-layer is deployed with --bind 0.0.0.0 and protected-mode off
             - when: a sibling redis-client pod on the shared charly network connects to charly-redis:6379
             - then: the sibling pod can SET and GET keys against this redis instance
-        - name: harness-redis-server-binary
-          step:
-            - id: harness-redis-server-binary
-              file: /usr/bin/redis-server
-              exists: true
-        - name: harness-redis-cli-binary
-          step:
-            - id: harness-redis-cli-binary
-              file: /usr/bin/redis-cli
-              exists: true
-        - name: harness-redis-package
-          step:
-            - id: harness-redis-package
-              package: valkey-compat-redis
-              installed: true
         - name: harness-redis-service-running
           step:
             - id: harness-redis-service-running
@@ -85,25 +70,10 @@ candy:
               running: true
               context:
                 - runtime
-        - name: harness-redis-responds
-          step:
-            - id: harness-redis-responds
-              command: redis-cli -h 127.0.0.1 -p 6379 ping
-              stdout: PONG
-              in_container: true
-              context:
-                - runtime
         - name: harness-redis-port-listening
           step:
             - id: harness-redis-port-listening
               port: 6379
               listening: true
-              context:
-                - runtime
-        - name: harness-redis-port-reachable
-          step:
-            - id: harness-redis-port-reachable
-              addr: 127.0.0.1:${HOST_PORT:6379}
-              reachable: true
               context:
                 - runtime

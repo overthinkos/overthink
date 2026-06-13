@@ -46,16 +46,6 @@ candy:
             - then: the wlrctl wlroots control tool is installed
               file: /usr/bin/wlrctl
               exists: true
-        - name: wtype-binary
-          step:
-            - id: wtype-binary
-              file: /usr/bin/wtype
-              exists: true
-        - name: wl-copy-binary
-          step:
-            - id: wl-copy-binary
-              file: /usr/bin/wl-copy
-              exists: true
         - name: wl-paste-binary
           step:
             - id: wl-paste-binary
@@ -65,11 +55,6 @@ candy:
           step:
             - id: wlr-randr-binary
               file: /usr/bin/wlr-randr
-              exists: true
-        - name: wlrctl-binary
-          step:
-            - id: wlrctl-binary
-              file: /usr/bin/wlrctl
               exists: true
         - name: xdotool-binary
           step:

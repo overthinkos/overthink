@@ -117,23 +117,6 @@ candy:
         - name: agent-service-runs-with-data-volume
           step:
             - then: when deployed, the persistent /opt/data volume is mounted and the supervised hermes service reaches a running state, having auto-configured an LLM provider from the supplied API key
-        - name: hermes-entrypoint
-          step:
-            - id: hermes-entrypoint
-              file: ${HOME}/.local/bin/hermes-entrypoint
-              exists: true
-              mode: "0755"
-        - name: hermes-binary
-          step:
-            - id: hermes-binary
-              file: ${HOME}/.pixi/envs/default/bin/hermes
-              exists: true
-        - name: hermes-agent-source
-          step:
-            - id: hermes-agent-source
-              file: ${HOME}/hermes-agent
-              exists: true
-              filetype: directory
         - name: hermes-data-volume-mount
           step:
             - id: hermes-data-volume-mount

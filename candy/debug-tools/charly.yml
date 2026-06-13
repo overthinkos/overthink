@@ -167,68 +167,20 @@ candy:
             - then: lsof is present to report which process holds an open file or socket
               file: /usr/bin/lsof
               exists: true
-        - name: ps-binary
-          step:
-            # Build-scope: spot-check the headline binaries from each category.
-            # If a future package rename breaks one of these, the test fails
-            # loudly at build time instead of surprising operators in production.
-            - id: ps-binary
-              file: /usr/bin/ps
-              exists: true
-        - name: ss-binary
-          step:
-            - id: ss-binary
-              file: /usr/sbin/ss
-              exists: true
-        - name: lsof-binary
-          step:
-            - id: lsof-binary
-              file: /usr/bin/lsof
-              exists: true
         - name: ping-binary
           step:
             - id: ping-binary
               command: command -v ping
               exit_status: 0
-        - name: dig-binary
-          step:
-            - id: dig-binary
-              file: /usr/bin/dig
-              exists: true
         - name: nc-binary
           step:
             - id: nc-binary
               command: command -v nc
               exit_status: 0
-        - name: tcpdump-binary
-          step:
-            - id: tcpdump-binary
-              file: /usr/sbin/tcpdump
-              exists: true
-        - name: htop-binary
-          step:
-            - id: htop-binary
-              file: /usr/bin/htop
-              exists: true
-        - name: strace-binary
-          step:
-            - id: strace-binary
-              file: /usr/bin/strace
-              exists: true
-        - name: vim-binary
-          step:
-            - id: vim-binary
-              file: /usr/bin/vim
-              exists: true
         - name: nano-binary
           step:
             - id: nano-binary
               file: /usr/bin/nano
-              exists: true
-        - name: tmux-binary
-          step:
-            - id: tmux-binary
-              file: /usr/bin/tmux
               exists: true
         - name: tree-binary
           step:

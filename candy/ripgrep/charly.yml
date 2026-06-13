@@ -34,23 +34,11 @@ candy:
             - then: rg exits 1 (no match) when the pattern is absent, never matching spuriously
               command: printf 'alpha\nbeta\n' | rg ZZZ-no-such-pattern; test $? -eq 1
               exit_status: 0
-        - name: ripgrep-binary
-          step:
-            - id: ripgrep-binary
-              file: /usr/bin/rg
-              exists: true
         - name: ripgrep-package
           step:
             - id: ripgrep-package
               package: ripgrep
               installed: true
-        - name: ripgrep-version
-          step:
-            - id: ripgrep-version
-              command: rg --version
-              exit_status: 0
-              stdout:
-                - matches: "ripgrep [0-9]"
         - name: ripgrep-search-matches
           step:
             - id: ripgrep-search-matches

@@ -35,25 +35,3 @@ candy:
               exit_status: 0
               stdout:
                 - matches: "[0-9]+\\.[0-9]+"
-        - name: summarize-binary
-          step:
-            - id: summarize-binary
-              file: ${HOME}/.npm-global/bin/summarize
-              exists: true
-        - name: summarizer-alias
-          step:
-            - id: summarizer-alias
-              file: ${HOME}/.npm-global/bin/summarizer
-              exists: true
-        - name: summarize-package
-          step:
-            - id: summarize-package
-              file: ${HOME}/.npm-global/lib/node_modules/@steipete/summarize/package.json
-              exists: true
-        - name: summarize-version
-          step:
-            - id: summarize-version
-              command: ${HOME}/.npm-global/bin/summarize --version
-              exit_status: 0
-              stdout:
-                - matches: "[0-9]+\\.[0-9]+"

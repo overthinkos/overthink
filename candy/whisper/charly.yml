@@ -31,22 +31,3 @@ candy:
               exit_status: 0
               stdout:
                 - contains: ffmpeg
-        - name: whisper-cli
-          step:
-            - id: whisper-cli
-              file: ${HOME}/.pixi/envs/default/bin/whisper
-              exists: true
-        - name: whisper-help
-          step:
-            - id: whisper-help
-              command: ${HOME}/.pixi/envs/default/bin/whisper --help
-              exit_status: 0
-              stdout:
-                - contains: "--model"
-        - name: whisper-ffmpeg-available
-          step:
-            - id: whisper-ffmpeg-available
-              command: ffmpeg -version
-              exit_status: 0
-              stdout:
-                - contains: ffmpeg

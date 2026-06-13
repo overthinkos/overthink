@@ -171,49 +171,11 @@ candy:
               exit_status: 0
               context:
                 - runtime
-        - name: gr-runner-config-runs
-          step:
-            # --- build scope: the composition actually works (run the binaries) ---
-            # config.sh executes the .NET Runner binary → proves the icu/krb5/.NET
-            # native deps resolved on cachyos (the key cachyos-port signal).
-            - id: gr-runner-config-runs
-              command: "${HOME}/actions-runner/config.sh --version"
-              exit_status: 0
-        - name: gr-runner-run-sh
-          step:
-            - id: gr-runner-run-sh
-              file: "${HOME}/actions-runner/run.sh"
-              exists: true
-        - name: gr-cosign
-          step:
-            - id: gr-cosign
-              command: cosign version
-              exit_status: 0
-        - name: gr-skopeo
-          step:
-            - id: gr-skopeo
-              command: skopeo --version
-              exit_status: 0
-        - name: gr-buildah
-          step:
-            - id: gr-buildah
-              command: buildah --version
-              exit_status: 0
-        - name: gr-go
-          step:
-            - id: gr-go
-              command: go version
-              exit_status: 0
         - name: gr-git
           step:
             - id: gr-git
               command: git --version
               exit_status: 0
-        - name: gr-qemu-aarch64
-          step:
-            - id: gr-qemu-aarch64
-              file: /usr/bin/qemu-aarch64-static
-              exists: true
         - name: gr-go-pkg
           step:
             - id: gr-go-pkg
@@ -249,31 +211,6 @@ candy:
             - id: gr-pkgbuild-dep-swtpm
               package: swtpm
               installed: true
-        - name: gr-rootless-uid
-          step:
-            # --- deploy scope: rootless runtime state ---
-            # Runs as uid 1000 (NOT root) — the whole point of the rootless cutover.
-            - id: gr-rootless-uid
-              command: id
-              stdout:
-                - contains: "uid=1000"
-              context:
-                - runtime
-        - name: gr-nested-podman-info
-          step:
-            # Rootless nested podman works (no mount_too_revealing EPERM).
-            - id: gr-nested-podman-info
-              command: podman info
-              exit_status: 0
-              context:
-                - runtime
-        - name: gr-nested-podman-run
-          step:
-            - id: gr-nested-podman-run
-              command: "podman run --rm quay.io/libpod/alpine:latest true"
-              exit_status: 0
-              context:
-                - runtime
         - name: gr-ghcr-mirror
           step:
             - id: gr-ghcr-mirror

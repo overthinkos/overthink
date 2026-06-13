@@ -51,16 +51,6 @@ candy:
             - id: notebook-ollama-staged-dir
               file: /data/workspace/ollama
               filetype: directory
-        - name: notebook-ollama-requests-staged
-          step:
-            - id: notebook-ollama-requests-staged
-              file: /data/workspace/ollama/00_Ollama_Requests.ipynb
-              exists: true
-        - name: notebook-ollama-manifest-staged
-          step:
-            - id: notebook-ollama-manifest-staged
-              file: /data/workspace/ollama/notebooks.yaml
-              exists: true
         - name: notebook-ollama-openai-staged
           step:
             - id: notebook-ollama-openai-staged
@@ -76,26 +66,3 @@ candy:
             - id: notebook-ollama-anthropic-staged
               file: /data/workspace/ollama/05_Ollama_Anthropic.ipynb
               exists: true
-        - name: notebook-ollama-collection-staged
-          step:
-            - id: notebook-ollama-collection-staged
-              command: test "$(find /data/workspace/ollama -maxdepth 1 -name '*.ipynb' | wc -l)" -ge 6
-              exit_status: 0
-        - name: notebook-ollama-provisioned
-          step:
-            # Deploy-scope — at deploy time the data is provisioned into the workspace
-            # volume's ollama/ subdirectory (needs the mounted volume + runtime vars).
-            - id: notebook-ollama-provisioned
-              file: ${VOLUME_CONTAINER_PATH:workspace}/ollama
-              filetype: directory
-              context:
-                - runtime
-        - name: notebook-ollama-requests-present
-          step:
-            - id: notebook-ollama-requests-present
-              command: ls ${VOLUME_CONTAINER_PATH:workspace}/ollama/
-              exit_status: 0
-              stdout:
-                - matches: "Ollama_Requests"
-              context:
-                - runtime

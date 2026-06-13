@@ -179,33 +179,8 @@ candy:
             - then: git is available so builder stages can clone pinned sources
               file: /usr/bin/git
               exists: true
-        - name: gcc-binary
-          step:
-            - id: gcc-binary
-              file: /usr/bin/gcc
-              exists: true
-        - name: gcc-version
-          step:
-            - id: gcc-version
-              command: /usr/bin/gcc --version
-              exit_status: 0
-        - name: make-binary
-          step:
-            - id: make-binary
-              file: /usr/bin/make
-              exists: true
         - name: make-version
           step:
             - id: make-version
               command: /usr/bin/make --version
-              exit_status: 0
-        - name: cmake-binary
-          step:
-            - id: cmake-binary
-              file: /usr/bin/cmake
-              exists: true
-        - name: cmake-version
-          step:
-            - id: cmake-version
-              command: /usr/bin/cmake --version
               exit_status: 0

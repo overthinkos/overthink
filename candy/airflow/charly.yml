@@ -245,31 +245,6 @@ candy:
               timeout: 15s
               context:
                 - runtime
-        - name: airflow-init-script
-          step:
-            # Build-scope: the wrapper scripts must exist + be executable.
-            - id: airflow-init-script
-              file: /usr/local/bin/airflow-init.sh
-              exists: true
-              mode: "0755"
-        - name: airflow-webserver-script
-          step:
-            - id: airflow-webserver-script
-              file: /usr/local/bin/airflow-webserver.sh
-              exists: true
-              mode: "0755"
-        - name: airflow-scheduler-script
-          step:
-            - id: airflow-scheduler-script
-              file: /usr/local/bin/airflow-scheduler.sh
-              exists: true
-              mode: "0755"
-        - name: airflow-dag-processor-script
-          step:
-            - id: airflow-dag-processor-script
-              file: /usr/local/bin/airflow-dag-processor.sh
-              exists: true
-              mode: "0755"
         - name: airflow-init-db-created
           step:
             # NB: no static DAG file is baked or seeded by charly anymore. Notebooks
@@ -313,33 +288,5 @@ candy:
               addr: "127.0.0.1:${HOST_PORT:8080}"
               reachable: true
               timeout: 10s
-              context:
-                - runtime
-        - name: airflow-http-version
-          step:
-            - id: airflow-http-version
-              http: "http://127.0.0.1:${HOST_PORT:8080}/api/v2/version"
-              status: 200
-              timeout: 30s
-              context:
-                - runtime
-        - name: airflow-jwt-issuance
-          step:
-            # Proves the JWT auth path notebooks depend on (e.g. the marimo
-            # osm-monaco-viz notebook's cell-3 POSTs /auth/token to get a bearer
-            # token before triggering its self-authored DAG via /api/v2/dagRuns).
-            # in_container: true so $AIRFLOW_ADMIN_PASSWORD is shell-expanded
-            # against the container env (the secret is injected by charly as an env
-            # var, never a file). A green check here is a guarantee that
-            # admin/AIRFLOW_ADMIN_PASSWORD will succeed for any in-pod client.
-            - id: airflow-jwt-issuance
-              command: |
-                curl -fsS -X POST "http://localhost:8080/auth/token" \
-                  -H "Content-Type: application/json" \
-                  -d "{\"username\":\"admin\",\"password\":\"$AIRFLOW_ADMIN_PASSWORD\"}" \
-                | grep -q '"access_token"'
-              in_container: true
-              exit_status: 0
-              timeout: 15s
               context:
                 - runtime

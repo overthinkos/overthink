@@ -50,11 +50,6 @@ candy:
               exists: true
               contains:
                 - "direnv hook fish"
-        - name: direnv-binary
-          step:
-            - id: direnv-binary
-              file: /usr/bin/direnv
-              exists: true
         - name: direnv-package
           step:
             - id: direnv-package
@@ -67,21 +62,3 @@ candy:
               exit_status: 0
               stdout:
                 - matches: "[0-9]+\\.[0-9]+"
-        - name: direnv-hook-bash
-          step:
-            # Distinctive behaviour: the shell: schema bakes the per-shell hook
-            # drop-ins at build time. These checks read the emitted files (root-owned
-            # 0644, world-readable) and assert the hook is wired — they FAIL if the
-            # declarative shell: wiring stopped emitting the drop-ins.
-            - id: direnv-hook-bash
-              file: /etc/profile.d/charly-direnv-bash.sh
-              exists: true
-              contains:
-                - "direnv hook bash"
-        - name: direnv-hook-fish
-          step:
-            - id: direnv-hook-fish
-              file: /etc/fish/conf.d/charly-direnv.fish
-              exists: true
-              contains:
-                - "direnv hook fish"

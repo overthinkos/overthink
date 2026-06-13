@@ -39,20 +39,3 @@ candy:
               exit_status: 0
               stdout:
                 - contains: github.com/steipete/camsnap
-        - name: camsnap-binary
-          step:
-            - id: camsnap-binary
-              file: ${HOME}/go/bin/camsnap
-              exists: true
-        - name: camsnap-executable
-          step:
-            - id: camsnap-executable
-              command: test -x ${HOME}/go/bin/camsnap
-              exit_status: 0
-        - name: camsnap-built-from-module
-          step:
-            - id: camsnap-built-from-module
-              command: /usr/bin/go version -m ${HOME}/go/bin/camsnap
-              exit_status: 0
-              stdout:
-                - contains: github.com/steipete/camsnap

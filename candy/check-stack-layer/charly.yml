@@ -66,11 +66,6 @@ candy:
         - name: check-listener-reachable
           step:
             - then: the check listener accepts a TCP connection on port 18794 from inside the deployment
-        - name: check-stack-marker-exists
-          step:
-            - id: check-stack-marker-exists
-              file: /etc/check-stack-marker
-              exists: true
         - name: check-compose-order
           step:
             - id: check-compose-order

@@ -63,41 +63,8 @@ candy:
                 ubuntu: iproute2
                 fedora: iproute
               installed: true
-        - name: socat-binary
-          step:
-            - id: socat-binary
-              file: /usr/bin/socat
-              exists: true
-        - name: socat-version
-          step:
-            - id: socat-version
-              command: /usr/bin/socat -V
-              exit_status: 0
         - name: socat-package
           step:
             - id: socat-package
               package: socat
               installed: true
-        - name: iproute-package
-          step:
-            - id: iproute-package
-              package: iproute
-              package_map:
-                arch: iproute2
-                debian: iproute2
-                ubuntu: iproute2
-                fedora: iproute
-              installed: true
-        - name: relay-wrapper
-          step:
-            - id: relay-wrapper
-              file: /usr/local/bin/relay-wrapper
-              exists: true
-              mode: "0755"
-        - name: relay-wrapper-usage
-          step:
-            - id: relay-wrapper-usage
-              command: /usr/local/bin/relay-wrapper
-              exit_status: 1
-              stderr:
-                - contains: "Usage"

@@ -83,37 +83,11 @@ candy:
               timeout: 5s
               context:
                 - runtime
-        - name: filebrowser-binary
-          step:
-            - id: filebrowser-binary
-              file: /usr/local/bin/filebrowser
-              exists: true
-              mode: "0755"
-        - name: filebrowser-config
-          step:
-            - id: filebrowser-config
-              file: /etc/filebrowser/config.yaml
-              exists: true
-        - name: filebrowser-service
-          step:
-            - id: filebrowser-service
-              service: filebrowser
-              running: true
-              context:
-                - runtime
         - name: filebrowser-port
           step:
             - id: filebrowser-port
               addr: 127.0.0.1:${HOST_PORT:8080}
               reachable: true
-              timeout: 5s
-              context:
-                - runtime
-        - name: filebrowser-http
-          step:
-            - id: filebrowser-http
-              http: http://127.0.0.1:${HOST_PORT:8080}/
-              status: 200
               timeout: 5s
               context:
                 - runtime

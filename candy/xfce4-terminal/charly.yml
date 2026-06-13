@@ -30,13 +30,3 @@ candy:
             - then: the sway config snippet for the terminal is installed
               file: ${HOME}/.config/sway/config.d/xfce4-terminal.conf
               exists: true
-        - name: xfce4-terminal-binary
-          step:
-            - id: xfce4-terminal-binary
-              file: /usr/bin/xfce4-terminal
-              exists: true
-        - name: xfce4-terminal-sway-conf
-          step:
-            - id: xfce4-terminal-sway-conf
-              file: ${HOME}/.config/sway/config.d/xfce4-terminal.conf
-              exists: true

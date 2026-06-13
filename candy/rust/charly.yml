@@ -49,21 +49,11 @@ candy:
               exit_status: 0
               stdout:
                 - matches: "cargo [0-9]"
-        - name: rustc-binary
-          step:
-            - id: rustc-binary
-              file: /usr/bin/rustc
-              exists: true
         - name: rustc-version
           step:
             - id: rustc-version
               command: /usr/bin/rustc --version
               exit_status: 0
-        - name: cargo-binary
-          step:
-            - id: cargo-binary
-              file: /usr/bin/cargo
-              exists: true
         - name: cargo-version
           step:
             - id: cargo-version

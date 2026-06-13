@@ -116,20 +116,3 @@ candy:
                 # passes regardless of which PATH alias resolved it (RE2: no $ anchor,
                 # which wouldn't match the trailing newline).
                 - matches: "/usr/(local/)?s?bin/charly"
-        - name: charly-version
-          step:
-            - id: charly-version
-              command: charly version
-              exit_status: 0
-              stdout:
-                - matches: "[0-9]{4}\\.[0-9]+"
-        - name: charly-doctor
-          step:
-            # Engine-agnostic: `charly doctor` prints its "Summary:" line before the
-            # required-deps exit check, so this verifies the doctor subcommand runs
-            # and reports on ANY charly box (incl. fixtures with no container engine,
-            # where `charly doctor` itself exits non-zero). The "engine present"
-            # assertion belongs to container-nesting's nested-podman probe.
-            - id: charly-doctor
-              command: charly doctor 2>&1 | grep -q "Summary:"
-              exit_status: 0

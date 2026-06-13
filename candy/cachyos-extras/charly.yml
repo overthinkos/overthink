@@ -74,28 +74,8 @@ candy:
             - then: the syncthing file-synchronisation daemon binary is present
               file: /usr/bin/syncthing
               exists: true
-        - name: btop-binary
-          step:
-            - id: btop-binary
-              file: /usr/bin/btop
-              exists: true
-        - name: syncthing-binary
-          step:
-            - id: syncthing-binary
-              file: /usr/bin/syncthing
-              exists: true
-        - name: paru-binary
-          step:
-            - id: paru-binary
-              file: /usr/bin/paru
-              exists: true
         - name: accountsservice-installed
           step:
             - id: accountsservice-installed
               package: accountsservice
               installed: true
-        - name: cloudflared-binary
-          step:
-            - id: cloudflared-binary
-              command: command -v cloudflared
-              exit_status: 0

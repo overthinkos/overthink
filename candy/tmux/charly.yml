@@ -34,20 +34,3 @@ candy:
             - then: tmux starts a detached session with no TTY, confirms it is live, then tears it down
               command: tmux new-session -d -s charly-ade-probe && tmux has-session -t charly-ade-probe && tmux kill-session -t charly-ade-probe
               exit_status: 0
-        - name: tmux-binary
-          step:
-            - id: tmux-binary
-              file: /usr/bin/tmux
-              exists: true
-        - name: tmux-package
-          step:
-            - id: tmux-package
-              package: tmux
-              installed: true
-        - name: tmux-version
-          step:
-            - id: tmux-version
-              command: /usr/bin/tmux -V
-              exit_status: 0
-              stdout:
-                - matches: "^tmux"

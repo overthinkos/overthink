@@ -73,27 +73,11 @@ candy:
         - name: serves-image-generation-api
           step:
             - then: the comfyui supervisord service comes up and serves the image-generation web UI and /system_stats API on port 8188
-        - name: comfyui-main-py
-          step:
-            # Build-scope — run inside the built image via `podman run --rm`.
-            - id: comfyui-main-py
-              file: ${HOME}/ComfyUI/main.py
-              exists: true
-        - name: comfyui-manager-cloned
-          step:
-            - id: comfyui-manager-cloned
-              file: ${HOME}/ComfyUI/custom_nodes/ComfyUI-Manager
-              filetype: directory
         - name: comfyui-models-checkpoints
           step:
             - id: comfyui-models-checkpoints
               file: ${HOME}/ComfyUI/models/checkpoints
               filetype: directory
-        - name: comfyui-aria2-binary
-          step:
-            - id: comfyui-aria2-binary
-              file: /usr/bin/aria2c
-              exists: true
         - name: comfyui-aria2-package
           step:
             - id: comfyui-aria2-package
@@ -104,11 +88,6 @@ candy:
             - id: comfyui-git-lfs-binary
               file: /usr/bin/git-lfs
               exists: true
-        - name: comfyui-git-lfs-package
-          step:
-            - id: comfyui-git-lfs-package
-              package: git-lfs
-              installed: true
         - name: comfyui-service-running
           step:
             # Deploy-scope — HOST_PORT:8188 resolves to the published host port, so the

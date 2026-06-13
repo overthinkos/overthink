@@ -121,38 +121,6 @@ candy:
               file: /workspace/tiles/shortbread
               exists: true
             - then: a tilemaker run converts an OSM PBF into a monaco-shortbread.pmtiles archive in that directory using the bundled config.json and process.lua
-        - name: tilemaker-installed
-          step:
-            # Build-scope: tilemaker binary installed. tilemaker has no
-            # `--version` flag (verified 2026-Q2); use `command -v` to confirm
-            # the binary is on PATH.
-            - id: tilemaker-installed
-              command: command -v tilemaker
-              exit_status: 0
-        - name: shortbread-process-lua
-          step:
-            # Build-scope: shortbread config files dropped at expected paths.
-            - id: shortbread-process-lua
-              file: /opt/shortbread-tilemaker/process.lua
-              exists: true
-        - name: shortbread-config-json
-          step:
-            - id: shortbread-config-json
-              file: /opt/shortbread-tilemaker/config.json
-              exists: true
-        - name: tilemaker-binary
-          step:
-            # Build-scope: tilemaker binary lands at the source-build install path.
-            - id: tilemaker-binary
-              file: /usr/local/bin/tilemaker
-              exists: true
-        - name: shortbread-bundle-no-git
-          step:
-            # Build-scope: the .git history is stripped from the cloned bundle
-            # (image-size reduction) — the directory must be absent.
-            - id: shortbread-bundle-no-git
-              file: /opt/shortbread-tilemaker/.git
-              exists: false
         - name: shortbread-lua-runtime
           step:
             # Build-scope: the Lua embedding runtime tilemaker's process.lua hooks

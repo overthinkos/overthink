@@ -196,16 +196,6 @@ candy:
             - id: marimo-curriculum-imports
               command: ${HOME}/.pixi/envs/default/bin/python -c "import marimo, torch, transformers, polars, scipy, altair, plotly, statsmodels, duckdb, sqlalchemy, sqlglot, cvxpy, clarabel, daft, wigglystuff, drawdata, marimo_learn, simpy"
               exit_status: 0
-        - name: marimo-binary
-          step:
-            - id: marimo-binary
-              file: ${HOME}/.pixi/envs/default/bin/marimo
-              exists: true
-        - name: airflow-binary
-          step:
-            - id: airflow-binary
-              file: ${HOME}/.pixi/envs/default/bin/airflow
-              exists: true
         - name: marimo-osm-mcp-imports
           step:
             # Build-scope: confirm the geospatial + GPU + MCP additions installed cleanly.
@@ -216,23 +206,6 @@ candy:
             - id: marimo-osm-mcp-imports
               command: ${HOME}/.pixi/envs/default/bin/python -c "import geopandas, shapely, fiona, pyproj, quackosm, geoparquet_io, pmtiles, h3, mercantile, folium, contextily, mapclassify, fastmcp, cudf_polars, polars_st, geopolars, geoarrow.pyarrow, geoarrow.pandas, lonboard, freestiler"
               exit_status: 0
-        - name: marimo-skills-installed
-          step:
-            # Build-scope: marimo-team/skills bundle landed and is non-empty.
-            - id: marimo-skills-installed
-              file: /opt/marimo-skills/skills
-              exists: true
-              filetype: directory
-        - name: marimo-toml-installed
-          step:
-            # Build-scope: marimo user config landed with auto-instantiate ON.
-            # `contains:` asserts the line that drives the reactive-cascade
-            # behavior (see the write: task above for the rationale).
-            - id: marimo-toml-installed
-              file: ${HOME}/.config/marimo/marimo.toml
-              exists: true
-              contains:
-                - "auto_instantiate = true"
         - name: marimo-port-reachable
           step:
             # NB: sample notebook check moved to candy/notebook-osm/ (data

@@ -33,15 +33,3 @@ candy:
               exit_status: 0
               stdout:
                 - matches: "yay v[0-9]"
-        - name: yay-binary
-          step:
-            - id: yay-binary
-              file: /usr/local/bin/yay
-              exists: true
-        - name: yay-version
-          step:
-            - id: yay-version
-              command: /usr/local/bin/yay --version
-              exit_status: 0
-              stdout:
-                - matches: "yay v[0-9]"

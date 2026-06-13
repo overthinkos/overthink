@@ -273,31 +273,16 @@ candy:
         - name: nested-container-runs-rootless
           step:
             - then: a fresh rootless `podman run` of an inner container succeeds end-to-end with no added capabilities and no --privileged
-        - name: podman-binary
-          step:
-            - id: podman-binary
-              file: /usr/bin/podman
-              exists: true
         - name: podman-version
           step:
             - id: podman-version
               command: /usr/bin/podman --version
               exit_status: 0
-        - name: buildah-binary
-          step:
-            - id: buildah-binary
-              file: /usr/bin/buildah
-              exists: true
         - name: buildah-version
           step:
             - id: buildah-version
               command: /usr/bin/buildah --version
               exit_status: 0
-        - name: skopeo-binary
-          step:
-            - id: skopeo-binary
-              file: /usr/bin/skopeo
-              exists: true
         - name: skopeo-version
           step:
             - id: skopeo-version
@@ -336,21 +321,6 @@ candy:
               exit_status: 0
               stdout:
                 - matches: ^2
-        - name: newuidmap-cap
-          step:
-            - id: newuidmap-cap
-              command: getcap /usr/bin/newuidmap | grep -c cap_setuid
-              exit_status: 0
-        - name: policy-json
-          step:
-            - id: policy-json
-              file: /etc/containers/policy.json
-              exists: true
-        - name: containers-conf-userns-host
-          step:
-            - id: containers-conf-userns-host
-              command: grep -E '^userns\s*=\s*"host"' /etc/containers/containers.conf
-              exit_status: 0
         - name: user-containers-conf-userns-host
           step:
             - id: user-containers-conf-userns-host

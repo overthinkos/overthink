@@ -44,28 +44,6 @@ candy:
             - then: the gpgconf helper ships so the agent socket path can be resolved
               file: /usr/bin/gpgconf
               exists: true
-        - name: gpg-binary
-          step:
-            - id: gpg-binary
-              file: /usr/bin/gpg
-              exists: true
-        - name: gpg-version
-          step:
-            - id: gpg-version
-              command: /usr/bin/gpg --version
-              exit_status: 0
-              stdout:
-                - contains: "gpg (GnuPG)"
-        - name: gpg-agent-binary
-          step:
-            - id: gpg-agent-binary
-              file: /usr/bin/gpg-agent
-              exists: true
-        - name: gpgconf-binary
-          step:
-            - id: gpgconf-binary
-              file: /usr/bin/gpgconf
-              exists: true
         - name: gnupg-package
           step:
             - id: gnupg-package

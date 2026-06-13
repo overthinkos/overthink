@@ -34,14 +34,3 @@ candy:
               command: test -x ${HOME}/go/bin/goplaces
               exit_status: 0
               in_container: true
-        - name: goplaces-binary
-          step:
-            - id: goplaces-binary
-              file: ${HOME}/go/bin/goplaces
-              exists: true
-        - name: goplaces-binary-executable
-          step:
-            - id: goplaces-binary-executable
-              command: test -x ${HOME}/go/bin/goplaces
-              exit_status: 0
-              in_container: true

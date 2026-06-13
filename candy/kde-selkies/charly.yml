@@ -99,12 +99,6 @@ candy:
               allow_insecure: true
               timeout: 10s
             - then: the streamed frames show a real KWin-composited KDE Plasma desktop (panel + wallpaper), not a black frame or a wlroots session
-        - name: kde-selkies-session-wrapper
-          step:
-            - id: kde-selkies-session-wrapper
-              file: ${HOME}/.local/bin/kde-selkies-session
-              exists: true
-              mode: "0755"
         - name: kde-selkies-stable
           step:
             # The nested Plasma session reaches steady-state without crash-looping —

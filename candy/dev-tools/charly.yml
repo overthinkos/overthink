@@ -146,16 +146,6 @@ candy:
               command: yamllint --version
               exit_status: 0
             - then: an engineer can lint a malformed YAML file and have yamllint flag the syntax error
-        - name: ripgrep-binary
-          step:
-            - id: ripgrep-binary
-              file: /usr/bin/rg
-              exists: true
-        - name: bat-binary
-          step:
-            - id: bat-binary
-              file: /usr/bin/bat
-              exists: true
         - name: fastfetch-binary
           step:
             # fastfetch is not in Ubuntu noble main (Debian trixie + Fedora + Arch
@@ -168,16 +158,6 @@ candy:
               exists: true
               exclude_distro:
                 - ubuntu
-        - name: neovim-binary
-          step:
-            - id: neovim-binary
-              file: /usr/bin/nvim
-              exists: true
-        - name: htop-binary
-          step:
-            - id: htop-binary
-              file: /usr/bin/htop
-              exists: true
         - name: gopls-binary
           step:
             # gopls (Go language server) — Go dev tooling for the coder/workstation
@@ -199,14 +179,3 @@ candy:
             - id: neovim-package
               package: neovim
               installed: true
-        - name: bat-runs
-          step:
-            # Functional probe: the bat pager actually runs. On Debian/Ubuntu this
-            # exercises the /usr/bin/bat -> batcat symlink the post-install task
-            # creates (batcat --version prints "batcat <ver>", which contains "bat");
-            # on Fedora/Arch it runs the native bat. exit_status 0 proves it executes.
-            - id: bat-runs
-              command: bat --version
-              exit_status: 0
-              stdout:
-                - contains: bat

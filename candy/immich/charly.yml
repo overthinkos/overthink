@@ -275,23 +275,6 @@ candy:
               context:
                 - runtime
             - then: the web UI presents a usable first-run / login experience
-        - name: immich-server-main
-          step:
-            - id: immich-server-main
-              file: /opt/immich/server/dist/main.js
-              exists: true
-        - name: immich-db-migrate-script
-          step:
-            - id: immich-db-migrate-script
-              file: /usr/local/bin/immich-db-migrate.sh
-              exists: true
-              mode: "0755"
-        - name: immich-server-start-script
-          step:
-            - id: immich-server-start-script
-              file: /usr/local/bin/immich-server-start.sh
-              exists: true
-              mode: "0755"
         - name: immich-initdb-sql
           step:
             - id: immich-initdb-sql
@@ -302,14 +285,6 @@ candy:
             - id: immich-library-dir
               file: ${HOME}/.immich/library
               filetype: directory
-        - name: immich-vips-package
-          step:
-            - id: immich-vips-package
-              package: vips
-              package_map:
-                arch: libvips
-                fedora: vips
-              installed: true
         - name: immich-server-running
           step:
             - id: immich-server-running

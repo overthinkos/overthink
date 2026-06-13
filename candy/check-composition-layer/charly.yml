@@ -31,19 +31,3 @@ candy:
               file: /etc/charly-composition-selftest
               contains:
                 - charly composition selftest marker
-        - name: composition-marker-exists
-          step:
-            - id: composition-marker-exists
-              file: /etc/charly-composition-selftest
-              exists: true
-        - name: composition-marker-content
-          step:
-            - id: composition-marker-content
-              file: /etc/charly-composition-selftest
-              contains:
-                - charly composition selftest marker
-        - name: composition-marker-mode
-          step:
-            - id: composition-marker-mode
-              file: /etc/charly-composition-selftest
-              mode: "0644"

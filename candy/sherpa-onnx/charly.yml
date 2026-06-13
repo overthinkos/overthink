@@ -63,42 +63,8 @@ candy:
             - then: the voice model tokens file ships next to the model
               file: ${HOME}/.local/share/sherpa-onnx/models/vits-piper-en_US-lessac-high/tokens.txt
               exists: true
-        - name: sherpa-onnx-tts-binary
-          step:
-            # Runtime engine binary — exists and is executable (test -x avoids
-            # running the dynamically-linked foreign binary at check time).
-            - id: sherpa-onnx-tts-binary
-              file: ${HOME}/.local/share/sherpa-onnx/runtime/bin/sherpa-onnx-offline-tts
-              exists: true
-        - name: sherpa-onnx-tts-executable
-          step:
-            - id: sherpa-onnx-tts-executable
-              command: test -x ${HOME}/.local/share/sherpa-onnx/runtime/bin/sherpa-onnx-offline-tts
-              exit_status: 0
         - name: sherpa-onnx-cli-binary
           step:
             - id: sherpa-onnx-cli-binary
               file: ${HOME}/.local/share/sherpa-onnx/runtime/bin/sherpa-onnx
-              exists: true
-        - name: sherpa-onnx-c-api-lib
-          step:
-            # Shared libraries the engine links against.
-            - id: sherpa-onnx-c-api-lib
-              file: ${HOME}/.local/share/sherpa-onnx/runtime/lib/libsherpa-onnx-c-api.so
-              exists: true
-        - name: sherpa-onnx-onnxruntime-lib
-          step:
-            - id: sherpa-onnx-onnxruntime-lib
-              file: ${HOME}/.local/share/sherpa-onnx/runtime/lib/libonnxruntime.so
-              exists: true
-        - name: sherpa-onnx-voice-model
-          step:
-            # Baked VITS voice model — proves offline synthesis needs no download.
-            - id: sherpa-onnx-voice-model
-              file: ${HOME}/.local/share/sherpa-onnx/models/vits-piper-en_US-lessac-high/en_US-lessac-high.onnx
-              exists: true
-        - name: sherpa-onnx-voice-tokens
-          step:
-            - id: sherpa-onnx-voice-tokens
-              file: ${HOME}/.local/share/sherpa-onnx/models/vits-piper-en_US-lessac-high/tokens.txt
               exists: true

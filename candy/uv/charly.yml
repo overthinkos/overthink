@@ -44,18 +44,3 @@ candy:
             - then: the uvx tool-runner is installed at /usr/local/bin/uvx
               file: /usr/local/bin/uvx
               exists: true
-        - name: uv-binary
-          step:
-            - id: uv-binary
-              file: /usr/local/bin/uv
-              exists: true
-        - name: uv-version
-          step:
-            - id: uv-version
-              command: /usr/local/bin/uv --version
-              exit_status: 0
-        - name: uvx-binary
-          step:
-            - id: uvx-binary
-              file: /usr/local/bin/uvx
-              exists: true

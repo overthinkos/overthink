@@ -31,19 +31,3 @@ candy:
               file: /etc/charly-bench-marker
               contains:
                 - charly benchmark target
-        - name: tier1-marker-exists
-          step:
-            - id: tier1-marker-exists
-              file: /etc/charly-bench-marker
-              exists: true
-        - name: tier1-marker-content
-          step:
-            - id: tier1-marker-content
-              file: /etc/charly-bench-marker
-              contains:
-                - charly benchmark target
-        - name: tier1-marker-mode
-          step:
-            - id: tier1-marker-mode
-              file: /etc/charly-bench-marker
-              mode: "0644"

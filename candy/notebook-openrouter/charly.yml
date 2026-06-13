@@ -59,11 +59,6 @@ candy:
             - id: notebook-openrouter-staged-dir
               file: /data/workspace/openrouter
               filetype: directory
-        - name: notebook-openrouter-basics-staged
-          step:
-            - id: notebook-openrouter-basics-staged
-              file: /data/workspace/openrouter/00_OpenRouter_Basics.ipynb
-              exists: true
         - name: notebook-openrouter-models-staged
           step:
             - id: notebook-openrouter-models-staged
@@ -80,34 +75,3 @@ candy:
               file: /data/workspace/openrouter/notebooks.yaml
               contains:
                 - contains: "OpenRouter Integration"
-        - name: notebook-openrouter-basics-uses-api-key
-          step:
-            - id: notebook-openrouter-basics-uses-api-key
-              file: /data/workspace/openrouter/00_OpenRouter_Basics.ipynb
-              contains:
-                - contains: "OPENROUTER_API_KEY"
-        - name: notebook-openrouter-collection-staged
-          step:
-            - id: notebook-openrouter-collection-staged
-              command: find /data/workspace/openrouter -maxdepth 1 -name "*.ipynb" | wc -l
-              exit_status: 0
-              stdout:
-                - matches: "[1-9]"
-        - name: notebook-openrouter-provisioned
-          step:
-            # Deploy-scope — at deploy time the data is provisioned into the workspace
-            # volume's openrouter/ subdirectory (needs the mounted volume + runtime vars).
-            - id: notebook-openrouter-provisioned
-              file: ${VOLUME_CONTAINER_PATH:workspace}/openrouter
-              filetype: directory
-              context:
-                - runtime
-        - name: notebook-openrouter-basics-present
-          step:
-            - id: notebook-openrouter-basics-present
-              command: ls ${VOLUME_CONTAINER_PATH:workspace}/openrouter/
-              exit_status: 0
-              stdout:
-                - matches: "OpenRouter_Basics"
-              context:
-                - runtime

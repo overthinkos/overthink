@@ -31,22 +31,3 @@ candy:
               exit_status: 0
               stdout:
                 - contains: "Usage"
-        - name: nano-pdf-binary
-          step:
-            - id: nano-pdf-binary
-              file: ${HOME}/.pixi/envs/default/bin/nano-pdf
-              exists: true
-        - name: nano-pdf-installed
-          step:
-            - id: nano-pdf-installed
-              command: ${HOME}/.pixi/envs/default/bin/python -c "import importlib.metadata as m; print(m.version('nano-pdf'))"
-              exit_status: 0
-              stdout:
-                - contains: "0.2.1"
-        - name: nano-pdf-cli-help
-          step:
-            - id: nano-pdf-cli-help
-              command: ${HOME}/.pixi/envs/default/bin/nano-pdf --help
-              exit_status: 0
-              stdout:
-                - contains: "Usage"

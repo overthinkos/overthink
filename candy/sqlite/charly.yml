@@ -36,26 +36,3 @@ candy:
               command: 'sqlite3 :memory: "CREATE TABLE t(x INTEGER); INSERT INTO t VALUES(42); SELECT x FROM t;"'
               stdout:
                 - equals: "42"
-        - name: sqlite3-binary
-          step:
-            - id: sqlite3-binary
-              file: /usr/bin/sqlite3
-              exists: true
-        - name: sqlite-package
-          step:
-            - id: sqlite-package
-              package: sqlite
-              installed: true
-        - name: sqlite3-version
-          step:
-            - id: sqlite3-version
-              command: sqlite3 --version
-              exit_status: 0
-              stdout:
-                - matches: "[0-9]+\\.[0-9]+\\.[0-9]+"
-        - name: sqlite3-query
-          step:
-            - id: sqlite3-query
-              command: 'sqlite3 :memory: "CREATE TABLE t(x INTEGER); INSERT INTO t VALUES(42); SELECT x FROM t;"'
-              stdout:
-                - equals: "42"

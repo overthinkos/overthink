@@ -77,31 +77,16 @@ candy:
               stdout:
                 - contains: "git-lfs"
             - then: with the system hooks configured by the post-install task, git-lfs is registered as a git filter so large files are smudged and cleaned transparently on checkout and commit
-        - name: gh-binary
-          step:
-            - id: gh-binary
-              file: /usr/bin/gh
-              exists: true
         - name: gh-version
           step:
             - id: gh-version
               command: /usr/bin/gh --version
               exit_status: 0
-        - name: git-binary
-          step:
-            - id: git-binary
-              file: /usr/bin/git
-              exists: true
         - name: git-version
           step:
             - id: git-version
               command: /usr/bin/git --version
               exit_status: 0
-        - name: git-lfs-binary
-          step:
-            - id: git-lfs-binary
-              file: /usr/bin/git-lfs
-              exists: true
         - name: git-lfs-version
           step:
             - id: git-lfs-version

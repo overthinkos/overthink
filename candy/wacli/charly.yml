@@ -37,17 +37,6 @@ candy:
         - name: wacli-provides-whatsapp-cli
           step:
             - then: invoking wacli in the running deployment presents its WhatsApp command interface (login/pairing prompt) instead of crashing
-        - name: wacli-binary
-          step:
-            - id: wacli-binary
-              file: ${HOME}/go/bin/wacli
-              exists: true
-        - name: wacli-executable
-          step:
-            - id: wacli-executable
-              command: test -x ${HOME}/go/bin/wacli
-              exit_status: 0
-              in_container: true
         - name: wacli-go-toolchain
           step:
             - id: wacli-go-toolchain

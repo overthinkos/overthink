@@ -49,28 +49,3 @@ candy:
             - then: STEAM_RUNTIME_PREFER_HOST_LIBRARIES is pinned to 0 so Steam uses its bundled runtime
               command: printenv STEAM_RUNTIME_PREFER_HOST_LIBRARIES
               stdout: "0"
-        - name: steam-binary
-          step:
-            - id: steam-binary
-              file: /usr/bin/steam
-              exists: true
-        - name: steam-package
-          step:
-            - id: steam-package
-              package: steam
-              installed: true
-        - name: gamescope-binary
-          step:
-            - id: gamescope-binary
-              file: /usr/bin/gamescope
-              exists: true
-        - name: gamescope-package
-          step:
-            - id: gamescope-package
-              package: gamescope
-              installed: true
-        - name: steam-runtime-host-libraries-pinned
-          step:
-            - id: steam-runtime-host-libraries-pinned
-              command: printenv STEAM_RUNTIME_PREFER_HOST_LIBRARIES
-              stdout: "0"

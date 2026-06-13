@@ -36,26 +36,6 @@ candy:
               file: /usr/bin/direnv
               exists: true
             - then: with a host SSH agent forwarded at runtime, ssh-add -l inside the deployment lists the host's keys
-        - name: agent-forwarding-gpg-binary
-          step:
-            - id: agent-forwarding-gpg-binary
-              file: /usr/bin/gpg
-              exists: true
-        - name: agent-forwarding-ssh-binary
-          step:
-            - id: agent-forwarding-ssh-binary
-              file: /usr/bin/ssh
-              exists: true
-        - name: agent-forwarding-ssh-add-binary
-          step:
-            - id: agent-forwarding-ssh-add-binary
-              file: /usr/bin/ssh-add
-              exists: true
-        - name: agent-forwarding-direnv-binary
-          step:
-            - id: agent-forwarding-direnv-binary
-              file: /usr/bin/direnv
-              exists: true
         - name: agent-forwarding-gnupg-package
           step:
             - id: agent-forwarding-gnupg-package

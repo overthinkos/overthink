@@ -79,42 +79,11 @@ candy:
               exit_status: 0
               stdout:
                 - contains: "21."
-        - name: java-home-canonical-java
-          step:
-            # Guard the cross-distro JAVA_HOME: the canonical symlink MUST resolve to a
-            # real JDK with java AND javac on every distro. This build-scope check fails
-            # if the symlink is missing/broken — exactly the regression that shipped when
-            # JAVA_HOME was hardcoded to the Fedora-only jre-21-openjdk path.
-            - id: java-home-canonical-java
-              command: test -x /usr/lib/jvm/charly-jdk21/bin/java
-              exit_status: 0
-        - name: java-home-canonical-javac
-          step:
-            - id: java-home-canonical-javac
-              command: test -x /usr/lib/jvm/charly-jdk21/bin/javac
-              exit_status: 0
-        - name: java-binary
-          step:
-            - id: java-binary
-              file: /usr/bin/java
-              exists: true
-        - name: javac-binary
-          step:
-            - id: javac-binary
-              file: /usr/bin/javac
-              exists: true
         - name: java-runs
           step:
             - id: java-runs
               command: /usr/bin/java -version
               exit_status: 0
-        - name: java-version-21
-          step:
-            - id: java-version-21
-              command: /usr/bin/java -version 2>&1
-              exit_status: 0
-              stdout:
-                - contains: "21."
         - name: java-openjdk-package
           step:
             # The JDK package is actually installed (not just the binaries present).

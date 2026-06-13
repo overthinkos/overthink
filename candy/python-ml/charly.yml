@@ -52,11 +52,6 @@ candy:
               exit_status: 0
               stdout:
                 - matches: "[0-9]+\\.[0-9]+"
-        - name: python-ml-python-binary
-          step:
-            - id: python-ml-python-binary
-              file: ${HOME}/.pixi/envs/default/bin/python
-              exists: true
         - name: python-ml-torch-importable
           step:
             - id: python-ml-torch-importable

@@ -31,20 +31,8 @@ candy:
               exit_status: 0
               stdout:
                 - matches: "gocryptfs v[0-9]"
-        - name: gocryptfs-binary
-          step:
-            - id: gocryptfs-binary
-              file: /usr/bin/gocryptfs
-              exists: true
         - name: gocryptfs-package
           step:
             - id: gocryptfs-package
               package: gocryptfs
               installed: true
-        - name: gocryptfs-version
-          step:
-            - id: gocryptfs-version
-              command: /usr/bin/gocryptfs -version
-              exit_status: 0
-              stdout:
-                - matches: "gocryptfs v[0-9]"

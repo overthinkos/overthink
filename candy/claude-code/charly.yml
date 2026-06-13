@@ -26,15 +26,3 @@ candy:
               exit_status: 0
               stdout:
                 - contains: "Claude Code"
-        - name: claude-binary
-          step:
-            - id: claude-binary
-              file: ${HOME}/.npm-global/bin/claude
-              exists: true
-        - name: claude-version
-          step:
-            - id: claude-version
-              command: ${HOME}/.npm-global/bin/claude --version
-              exit_status: 0
-              stdout:
-                - contains: "Claude Code"

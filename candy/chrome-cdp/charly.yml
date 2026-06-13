@@ -131,12 +131,6 @@ candy:
                 - contains: "webSocketDebuggerUrl"
               context:
                 - runtime
-        - name: chrome-wrapper
-          step:
-            - id: chrome-wrapper
-              file: ${HOME}/.local/bin/chrome-wrapper
-              exists: true
-              mode: "0755"
         - name: browser-open-wrapper
           step:
             - id: browser-open-wrapper
@@ -147,18 +141,6 @@ candy:
             - id: cdp-proxy-wrapper
               file: ${HOME}/.local/bin/cdp-proxy
               exists: true
-        - name: chrome-windows-manifest
-          step:
-            - id: chrome-windows-manifest
-              file: ${HOME}/.local/share/chrome-windows/manifest.json
-              exists: true
-        - name: cdp-proxy-service
-          step:
-            - id: cdp-proxy-service
-              service: cdp-proxy
-              running: true
-              context:
-                - runtime
         - name: chrome-cdp-port
           step:
             - id: chrome-cdp-port
@@ -169,22 +151,5 @@ candy:
               # starts; poll rather than fire once.
               eventually: 60s
               retry_interval: 2s
-              context:
-                - runtime
-        - name: chrome-cdp-version
-          step:
-            - id: chrome-cdp-version
-              http: http://127.0.0.1:${HOST_PORT:9222}/json/version
-              status: 200
-              timeout: 5s
-              # Readiness wait: Chrome's CDP HTTP endpoint (behind cdp-proxy) only
-              # answers once Chrome has fully started — on heavier desktops (labwc +
-              # pixelflux + supervisorctl-started Chrome) that is well after the
-              # container reaches "started". Poll until ready (still fails if Chrome
-              # never comes up) instead of one-shot, which raced and returned EOF.
-              eventually: 90s
-              retry_interval: 3s
-              body:
-                - contains: "webSocketDebuggerUrl"
               context:
                 - runtime

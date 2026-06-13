@@ -90,36 +90,8 @@ candy:
             - then: pnpm runs and reports its version
               command: pnpm --version
               exit_status: 0
-        - name: node-binary
-          step:
-            - id: node-binary
-              file: /usr/bin/node
-              exists: true
-        - name: node-version
-          step:
-            - id: node-version
-              command: /usr/bin/node --version
-              exit_status: 0
         - name: nodejs-package
           step:
             - id: nodejs-package
               package: nodejs
               installed: true
-        - name: npm-binary
-          step:
-            - id: npm-binary
-              file: /usr/bin/npm
-              exists: true
-        - name: npm-version
-          step:
-            - id: npm-version
-              command: /usr/bin/npm --version
-              exit_status: 0
-        - name: pnpm-available
-          step:
-            # pnpm is installed globally from package.json (npm -g) into ~/.npm-global/bin
-            # (on PATH via path_append) — Immich's source build + its packageManager
-            # (pnpm@10) require it.
-            - id: pnpm-available
-              command: pnpm --version
-              exit_status: 0

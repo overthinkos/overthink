@@ -73,44 +73,12 @@ candy:
               context:
                 - runtime
             - then: a plain HTTP request to the web entrypoint is redirected to the TLS websecure entrypoint
-        - name: traefik-binary
-          step:
-            # Build-scope: the artifacts the install tasks actually produce.
-            - id: traefik-binary
-              file: /usr/local/bin/traefik
-              exists: true
-        - name: traefik-binary-version
-          step:
-            - id: traefik-binary-version
-              command: /usr/local/bin/traefik version
-              exit_status: 0
-              stdout:
-                - contains: "3.4.0"
-        - name: traefik-config
-          step:
-            - id: traefik-config
-              file: /etc/traefik/traefik.yml
-              mode: "0644"
-              contains:
-                - contains: "certResolver: letsencrypt"
-        - name: traefik-dynamic-dir
-          step:
-            - id: traefik-dynamic-dir
-              file: /etc/traefik/dynamic
-              filetype: directory
         - name: traefik-service-running
           step:
             # Deploy-scope: the live reverse proxy reached via the resolved host ports.
             - id: traefik-service-running
               service: traefik
               running: true
-              context:
-                - runtime
-        - name: traefik-api-version
-          step:
-            - id: traefik-api-version
-              http: http://127.0.0.1:${HOST_PORT:8080}/api/version
-              status: 200
               context:
                 - runtime
         - name: traefik-web-port-open

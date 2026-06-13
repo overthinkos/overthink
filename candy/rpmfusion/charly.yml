@@ -37,29 +37,3 @@ candy:
               file: /etc/yum.repos.d/rpmfusion-free.repo
               contains:
                 - contains: "[rpmfusion-free]"
-        - name: rpmfusion-free-repo-file
-          step:
-            - id: rpmfusion-free-repo-file
-              file: /etc/yum.repos.d/rpmfusion-free.repo
-              exists: true
-        - name: rpmfusion-nonfree-repo-file
-          step:
-            - id: rpmfusion-nonfree-repo-file
-              file: /etc/yum.repos.d/rpmfusion-nonfree.repo
-              exists: true
-        - name: rpmfusion-free-package
-          step:
-            - id: rpmfusion-free-package
-              package: rpmfusion-free-release
-              installed: true
-        - name: rpmfusion-nonfree-package
-          step:
-            - id: rpmfusion-nonfree-package
-              package: rpmfusion-nonfree-release
-              installed: true
-        - name: rpmfusion-free-repo-section
-          step:
-            - id: rpmfusion-free-repo-section
-              file: /etc/yum.repos.d/rpmfusion-free.repo
-              contains:
-                - contains: "[rpmfusion-free]"

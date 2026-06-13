@@ -26,9 +26,3 @@ candy:
               file: ${HOME}/.local/bin/pixelflux-record
               exists: true
               mode: "0755"
-        - name: pixelflux-record-script
-          step:
-            - id: pixelflux-record-script
-              file: ${HOME}/.local/bin/pixelflux-record
-              exists: true
-              mode: "0755"

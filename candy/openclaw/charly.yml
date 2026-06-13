@@ -59,23 +59,3 @@ candy:
               timeout: 5s
               context:
                 - runtime
-        - name: openclaw-binary
-          step:
-            - id: openclaw-binary
-              file: ${HOME}/.npm-global/bin/openclaw
-              exists: true
-        - name: openclaw-service-running
-          step:
-            - id: openclaw-service-running
-              service: openclaw
-              running: true
-              context:
-                - runtime
-        - name: openclaw-gateway-port
-          step:
-            - id: openclaw-gateway-port
-              addr: 127.0.0.1:${HOST_PORT:18789}
-              reachable: true
-              timeout: 5s
-              context:
-                - runtime

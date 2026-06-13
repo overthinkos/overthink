@@ -36,20 +36,3 @@ candy:
               exit_status: 0
               stdout:
                 - contains: rec
-        - name: asciinema-binary
-          step:
-            - id: asciinema-binary
-              file: /usr/bin/asciinema
-              exists: true
-        - name: asciinema-package
-          step:
-            - id: asciinema-package
-              package: asciinema
-              installed: true
-        - name: asciinema-version
-          step:
-            - id: asciinema-version
-              command: /usr/bin/asciinema --version
-              exit_status: 0
-              stdout:
-                - contains: "asciinema"

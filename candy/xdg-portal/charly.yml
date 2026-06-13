@@ -53,26 +53,6 @@ candy:
             - then: the wlroots portal config file is installed in the user config
               file: ${HOME}/.config/xdg-desktop-portal-wlr/config
               exists: true
-        - name: xdg-desktop-portal-package
-          step:
-            - id: xdg-desktop-portal-package
-              package: xdg-desktop-portal
-              installed: true
-        - name: xdg-portal-wlr-package
-          step:
-            - id: xdg-portal-wlr-package
-              package: xdg-desktop-portal-wlr
-              installed: true
-        - name: slurp-binary
-          step:
-            - id: slurp-binary
-              file: /usr/bin/slurp
-              exists: true
-        - name: xdg-portal-wlr-config
-          step:
-            - id: xdg-portal-wlr-config
-              file: ${HOME}/.config/xdg-desktop-portal-wlr/config
-              exists: true
         - name: xdg-portal-sway-conf
           step:
             - id: xdg-portal-sway-conf

@@ -44,14 +44,3 @@ candy:
             - then: the scaffold directory is world-traversable at mode 0755
               file: /etc/charly-bench
               mode: "0755"
-        - name: check-target-layer-scaffold-dir
-          step:
-            - id: check-target-layer-scaffold-dir
-              file: /etc/charly-bench
-              exists: true
-              filetype: directory
-        - name: check-target-layer-scaffold-dir-mode
-          step:
-            - id: check-target-layer-scaffold-dir-mode
-              file: /etc/charly-bench
-              mode: "0755"

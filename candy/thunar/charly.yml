@@ -40,24 +40,3 @@ candy:
               file: ${HOME}/.config/sway/config.d/thunar.conf
               contains:
                 - contains: "bindsym $mod+e exec thunar"
-        - name: thunar-binary
-          step:
-            - id: thunar-binary
-              file: /usr/bin/thunar
-              exists: true
-        - name: thunar-package
-          step:
-            - id: thunar-package
-              package: thunar
-              installed: true
-        - name: thunar-sway-conf
-          step:
-            - id: thunar-sway-conf
-              file: ${HOME}/.config/sway/config.d/thunar.conf
-              exists: true
-        - name: thunar-sway-keybinding
-          step:
-            - id: thunar-sway-keybinding
-              file: ${HOME}/.config/sway/config.d/thunar.conf
-              contains:
-                - contains: "bindsym $mod+e exec thunar"

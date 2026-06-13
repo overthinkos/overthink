@@ -143,11 +143,6 @@ candy:
         - name: gpu-consumers-share-one-layout
           step:
             - then: downstream GPU layers (llama-cpp, vllm, comfyui, jupyter-ml) compile against the same /usr-rooted CUDA layout on both Fedora and Arch
-        - name: cuda-nvcc-binary
-          step:
-            - id: cuda-nvcc-binary
-              file: /usr/bin/nvcc
-              exists: true
         - name: cuda-cudart-package
           step:
             - id: cuda-cudart-package

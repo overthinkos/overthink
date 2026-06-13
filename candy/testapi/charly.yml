@@ -54,21 +54,11 @@ candy:
               status: 200
               body:
                 - contains: ok
-        - name: testapi-app-file
-          step:
-            - id: testapi-app-file
-              file: /home/user/testapi/app.py
-              exists: true
         - name: testapi-uvicorn-binary
           step:
             - id: testapi-uvicorn-binary
               file: /home/user/.pixi/envs/default/bin/uvicorn
               exists: true
-        - name: testapi-deps-importable
-          step:
-            - id: testapi-deps-importable
-              command: '/home/user/.pixi/envs/default/bin/python -c "import fastapi, uvicorn"'
-              exit_status: 0
         - name: testapi-service-running
           step:
             - id: testapi-service-running

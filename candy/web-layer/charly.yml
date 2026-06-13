@@ -112,20 +112,8 @@ candy:
                 - contains: charly-fixture-web-content-marker
               context:
                 - runtime
-        - name: fixture-web-nginx-installed
-          step:
-            - id: fixture-web-nginx-installed
-              package: nginx
-              installed: true
         - name: fixture-web-curl-installed
           step:
             - id: fixture-web-curl-installed
               package: curl
               installed: true
-        - name: fixture-web-content-file
-          step:
-            - id: fixture-web-content-file
-              file: /srv/fixture/index.html
-              exists: true
-              contains:
-                - charly-fixture-web-content-marker

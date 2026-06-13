@@ -80,23 +80,11 @@ candy:
             - then: the growpart partition-resize utility is installed
               file: /usr/bin/growpart
               exists: true
-        - name: cloud-init-binary
-          step:
-            - id: cloud-init-binary
-              file: /usr/bin/cloud-init
-              exists: true
         - name: cloud-init-package
           step:
             - id: cloud-init-package
               package: cloud-init
               installed: true
-        - name: cloud-init-version
-          step:
-            - id: cloud-init-version
-              command: cloud-init --version 2>&1
-              exit_status: 0
-              stdout:
-                - matches: '[0-9]+\.[0-9]'
         - name: cloud-init-nocloud-datasource
           step:
             - id: cloud-init-nocloud-datasource
@@ -107,11 +95,6 @@ candy:
                 - contains: datasource_list
                 - contains: NoCloud
                 - contains: None
-        - name: cloud-init-growpart-binary
-          step:
-            - id: cloud-init-growpart-binary
-              file: /usr/bin/growpart
-              exists: true
         - name: cloud-init-growpart-package
           step:
             - id: cloud-init-growpart-package

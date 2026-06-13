@@ -222,42 +222,6 @@ candy:
               context:
                 - runtime
             - then: a connected browser shows the live desktop rendering, not a black or frozen frame
-        - name: selkies-wrapper
-          step:
-            - id: selkies-wrapper
-              file: ${HOME}/.local/bin/selkies-wrapper
-              exists: true
-              mode: "0755"
-        - name: selkies-capture-server
-          step:
-            - id: selkies-capture-server
-              file: ${HOME}/.local/bin/selkies-capture-server
-              exists: true
-        - name: selkies-fileserver
-          step:
-            - id: selkies-fileserver
-              file: ${HOME}/.local/bin/selkies-fileserver
-              exists: true
-        - name: selkies-web-ui
-          step:
-            - id: selkies-web-ui
-              file: /usr/local/share/selkies/web
-              filetype: directory
-        - name: selkies-cert
-          step:
-            - id: selkies-cert
-              file: /usr/local/share/selkies/certs/selkies.crt
-              exists: true
-        - name: selkies-cert-key
-          step:
-            - id: selkies-cert-key
-              file: /usr/local/share/selkies/certs/selkies.key
-              exists: true
-        - name: traefik-binary
-          step:
-            - id: traefik-binary
-              file: /usr/local/bin/traefik
-              exists: true
         - name: pixelflux-wayland-libs-resolvable
           step:
             # Pixelflux's Wayland backend (pixelflux_wayland.so) is dynamically linked
@@ -316,15 +280,6 @@ candy:
               addr: 127.0.0.1:${HOST_PORT:3000}
               reachable: true
               timeout: 5s
-              context:
-                - runtime
-        - name: selkies-https
-          step:
-            - id: selkies-https
-              http: https://127.0.0.1:${HOST_PORT:3000}/
-              status: 200
-              allow_insecure: true
-              timeout: 10s
               context:
                 - runtime
         - name: selkies-vaapi-encode

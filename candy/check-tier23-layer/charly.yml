@@ -65,11 +65,6 @@ candy:
                     - charly benchmark
               context:
                 - runtime
-        - name: tier23-curl-binary
-          step:
-            - id: tier23-curl-binary
-              file: /usr/bin/curl
-              exists: true
         - name: tier23-version-file
           step:
             - id: tier23-version-file
@@ -86,15 +81,5 @@ candy:
           step:
             - id: tier23-port-open
               addr: 127.0.0.1:${HOST_PORT:8080}
-              context:
-                - runtime
-        - name: tier23-http-200
-          step:
-            - id: tier23-http-200
-              http: http://127.0.0.1:${HOST_PORT:8080}/
-              status: 200
-              body:
-                - contains:
-                    - charly benchmark
               context:
                 - runtime

@@ -52,11 +52,6 @@ candy:
         - name: workspace-share-writable-when-attached
           step:
             - then: when a workspace share is attached, /workspace is a writable virtiofs mount
-        - name: workspace-mount-unit
-          step:
-            - id: workspace-mount-unit
-              file: /etc/systemd/system/workspace.mount
-              contains: "Type=virtiofs"
         - name: workspace-virtiofs-rw
           step:
             - id: workspace-virtiofs-rw

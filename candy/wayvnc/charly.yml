@@ -59,29 +59,11 @@ candy:
               reachable: true
               context:
                 - runtime
-        - name: wayvnc-binary
-          step:
-            - id: wayvnc-binary
-              file: /usr/bin/wayvnc
-              exists: true
-        - name: wayvnc-wrapper
-          step:
-            - id: wayvnc-wrapper
-              file: ${HOME}/.local/bin/wayvnc-wrapper
-              exists: true
-              mode: "0755"
         - name: wayvnc-package
           step:
             - id: wayvnc-package
               package: wayvnc
               installed: true
-        - name: wayvnc-service-running
-          step:
-            - id: wayvnc-service-running
-              service: wayvnc
-              running: true
-              context:
-                - runtime
         - name: wayvnc-port-reachable
           step:
             - id: wayvnc-port-reachable

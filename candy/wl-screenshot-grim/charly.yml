@@ -22,13 +22,3 @@ candy:
             - then: the grim package is registered with the package manager
               package: grim
               installed: true
-        - name: grim-binary
-          step:
-            - id: grim-binary
-              file: /usr/bin/grim
-              exists: true
-        - name: grim-package
-          step:
-            - id: grim-package
-              package: grim
-              installed: true

@@ -32,24 +32,8 @@ candy:
               file: /usr/include/ffnvcodec/nvEncodeAPI.h
               contains:
                 - NvEncodeAPICreateInstance
-        - name: nvencodeapi-header
-          step:
-            - id: nvencodeapi-header
-              file: /usr/include/ffnvcodec/nvEncodeAPI.h
-              exists: true
         - name: nvenc-headers-package
           step:
             - id: nvenc-headers-package
               package: ffnvcodec-headers
               installed: true
-        - name: ffnvcodec-pkgconfig
-          step:
-            - id: ffnvcodec-pkgconfig
-              file: /usr/lib/pkgconfig/ffnvcodec.pc
-              exists: true
-        - name: nvenc-encode-api-symbol
-          step:
-            - id: nvenc-encode-api-symbol
-              file: /usr/include/ffnvcodec/nvEncodeAPI.h
-              contains:
-                - NvEncodeAPICreateInstance

@@ -29,18 +29,3 @@ candy:
             - then: running forge --version exits cleanly
               command: ${HOME}/.npm-global/bin/forge --version
               exit_status: 0
-        - name: forge-binary
-          step:
-            - id: forge-binary
-              file: ${HOME}/.npm-global/bin/forge
-              exists: true
-        - name: forge-package
-          step:
-            - id: forge-package
-              file: ${HOME}/.npm-global/lib/node_modules/forgecode/package.json
-              exists: true
-        - name: forge-version
-          step:
-            - id: forge-version
-              command: ${HOME}/.npm-global/bin/forge --version
-              exit_status: 0

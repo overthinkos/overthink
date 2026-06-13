@@ -22,6 +22,28 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-13 — refactor(check): dedup exact-content folded-eval twin scenarios
+
+The op-unify cutover folded each candy's old `eval:` check list into `scenario:`
+(preserving each check's `id:` as a single-step scenario named by that id),
+ALONGSIDE the candy's authored ADE Gherkin scenarios — which often already cover
+the same check, producing redundant "twins". This removes the exact duplicates:
+a folded-eval scenario (a single step carrying an `id:` and no Gherkin
+`then:`/`and:`) is dropped when its step's check content is BYTE-IDENTICAL to
+some ADE scenario step in the SAME candy — provably coverage-neutral, since the
+ADE step gives identical coverage. **715 twins removed across 182 main candies.**
+Near-twins (same intent, different expression — e.g. a live check using
+`${HOST_PORT}` vs the ADE step's literal port) are conservatively KEPT (not
+byte-identical → not provably redundant). Reference-aware: scenario ids
+referenced by a recipe `select:` (`sshd-binary`, `sshd-wrapper`,
+`composition-source-charly`, `composition-source-marker`) are never removed. Box
+submodules: 0 removed (their folded-eval scenarios are not byte-identical to an
+ADE step). This is a one-off content cleanup, NOT a schema change — there is no
+migration step (a third-party config keeps its own scenarios) and `version:` is
+unchanged. Verified: `charly box validate` exit 0 ZERO warnings across all 186
+candies + `charly check run check-local` PASS + `charly check run check-k3s-vm`
+PASS on the deduped candies.
+
 ### 2026-06-13 — feat(schema)!: rename the evaluation harness verb `eval` → `check` (full sweep)
 
 The evaluation harness's verb renamed from `eval` to `check` everywhere, so the

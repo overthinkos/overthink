@@ -83,31 +83,6 @@ candy:
             - then: the iptable_nat module is queued for load at boot so the docker bridge can NAT
               file: /etc/modules-load.d/ip_tables.conf
               contains: iptable_nat
-        - name: docker-binary
-          step:
-            - id: docker-binary
-              file: /usr/bin/docker
-              exists: true
-        - name: docker-version
-          step:
-            - id: docker-version
-              command: /usr/bin/docker --version
-              exit_status: 0
-        - name: containerd-binary
-          step:
-            - id: containerd-binary
-              file: /usr/bin/containerd
-              exists: true
-        - name: containerd-version
-          step:
-            - id: containerd-version
-              command: /usr/bin/containerd --version
-              exit_status: 0
-        - name: docker-compose-plugin
-          step:
-            - id: docker-compose-plugin
-              command: /usr/bin/docker compose version
-              exit_status: 0
         - name: docker-ce-package
           step:
             - id: docker-ce-package

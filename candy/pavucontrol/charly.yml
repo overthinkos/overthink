@@ -33,13 +33,3 @@ candy:
             - then: the required PipeWire audio server that pavucontrol controls is present
               file: /usr/bin/pipewire
               exists: true
-        - name: pavucontrol-binary
-          step:
-            - id: pavucontrol-binary
-              file: /usr/bin/pavucontrol
-              exists: true
-        - name: pavucontrol-package
-          step:
-            - id: pavucontrol-package
-              package: pavucontrol
-              installed: true

@@ -19,13 +19,3 @@ candy:
             - then: the xurl CLI runs and prints its usage
               command: ${HOME}/.npm-global/bin/xurl --help
               exit_status: 0
-        - name: xurl-cli
-          step:
-            - id: xurl-cli
-              file: ${HOME}/.npm-global/bin/xurl
-              exists: true
-        - name: xurl-help
-          step:
-            - id: xurl-help
-              command: ${HOME}/.npm-global/bin/xurl --help
-              exit_status: 0

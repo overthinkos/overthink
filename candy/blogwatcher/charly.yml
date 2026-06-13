@@ -38,12 +38,6 @@ candy:
               exit_status: 0
               stdout:
                 - contains: scan
-        - name: blogwatcher-binary
-          step:
-            # The candy's whole job: land the blogwatcher binary at ~/go/bin.
-            - id: blogwatcher-binary
-              file: ${HOME}/go/bin/blogwatcher
-              exists: true
         - name: blogwatcher-binary-executable
           step:
             # Present is not enough — assert it is an executable file.

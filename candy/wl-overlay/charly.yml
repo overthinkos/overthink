@@ -39,14 +39,3 @@ candy:
             - then: the gtk4-layer-shell library package is installed
               package: gtk4-layer-shell
               installed: true
-        - name: charly-overlay-script
-          step:
-            - id: charly-overlay-script
-              file: ${HOME}/.local/bin/charly-overlay
-              exists: true
-              mode: "0755"
-        - name: gtk4-layer-shell-installed
-          step:
-            - id: gtk4-layer-shell-installed
-              package: gtk4-layer-shell
-              installed: true

@@ -73,48 +73,17 @@ candy:
               allow_insecure: true
               timeout: 10s
             - then: the streamed frames show a real KWin-composited KDE Plasma desktop (panel + wallpaper), not a black frame and not the labwc flavor's waybar UI
-        - name: selkies-kde-desktop-launcher
-          step:
-            # This metalayer installs nothing itself — every check asserts a KEY ARTIFACT
-            # of a composed child, so the set FAILS if the composition is broken.
-            # --- kde-selkies (the KDE flavor seam) ---
-            - id: selkies-kde-desktop-launcher
-              file: ${HOME}/.local/bin/kde-selkies-session
-              exists: true
-              mode: "0755"
-        - name: selkies-kde-desktop-launcher-execs-plasma
-          step:
-            - id: selkies-kde-desktop-launcher-execs-plasma
-              file: ${HOME}/.local/bin/kde-selkies-session
-              contains:
-                - contains: "startplasma-wayland"
         - name: selkies-kde-desktop-plasma-session
           step:
             # --- kde-shell (Plasma session, pulled transitively via kde-selkies) ---
             - id: selkies-kde-desktop-plasma-session
               file: /usr/bin/startplasma-wayland
               exists: true
-        - name: selkies-kde-desktop-kwin
-          step:
-            - id: selkies-kde-desktop-kwin
-              file: /usr/bin/kwin_wayland
-              exists: true
         - name: selkies-kde-desktop-plasma-package
           step:
             - id: selkies-kde-desktop-plasma-package
               package: plasma-desktop
               installed: true
-        - name: selkies-kde-desktop-chrome
-          step:
-            # --- selkies-core (the shared streaming spine) ---
-            - id: selkies-kde-desktop-chrome
-              file: /usr/bin/google-chrome-stable
-              exists: true
-        - name: selkies-kde-desktop-pipewire
-          step:
-            - id: selkies-kde-desktop-pipewire
-              file: /usr/bin/pipewire
-              exists: true
         - name: selkies-kde-desktop-stream-https
           step:
             # --- the live composition effect: the streamed Plasma desktop answers ---

@@ -33,14 +33,3 @@ candy:
               file: /etc/check-base-marker
               contains:
                 - contains: "check-base v1"
-        - name: check-base-marker-exists
-          step:
-            - id: check-base-marker-exists
-              file: /etc/check-base-marker
-              exists: true
-        - name: check-base-marker-content
-          step:
-            - id: check-base-marker-content
-              file: /etc/check-base-marker
-              contains:
-                - contains: "check-base v1"

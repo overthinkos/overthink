@@ -33,13 +33,3 @@ candy:
             - then: running `songsee --version` execs the kong CLI and exits 0
               command: ${HOME}/go/bin/songsee --version
               exit_status: 0
-        - name: songsee-binary
-          step:
-            - id: songsee-binary
-              file: ${HOME}/go/bin/songsee
-              exists: true
-        - name: songsee-version-runs
-          step:
-            - id: songsee-version-runs
-              command: ${HOME}/go/bin/songsee --version
-              exit_status: 0

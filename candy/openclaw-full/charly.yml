@@ -81,62 +81,15 @@ candy:
               file: /usr/local/bin/uv
               exists: true
             - then: the running OpenClaw gateway exposes the bundled CLI tools to agent requests without relying on a system browser
-        - name: openclaw-full-claude-binary
-          step:
-            - id: openclaw-full-claude-binary
-              file: ${HOME}/.npm-global/bin/claude
-              exists: true
-        - name: openclaw-full-claude-version
-          step:
-            - id: openclaw-full-claude-version
-              command: ${HOME}/.npm-global/bin/claude --version
-              exit_status: 0
-              stdout:
-                - contains: "Claude Code"
-        - name: openclaw-full-mcporter-binary
-          step:
-            - id: openclaw-full-mcporter-binary
-              file: ${HOME}/.npm-global/bin/mcporter
-              exists: true
-        - name: openclaw-full-rg-binary
-          step:
-            - id: openclaw-full-rg-binary
-              file: /usr/bin/rg
-              exists: true
         - name: openclaw-full-ripgrep-package
           step:
             - id: openclaw-full-ripgrep-package
               package: ripgrep
               installed: true
-        - name: openclaw-full-sqlite3-binary
-          step:
-            - id: openclaw-full-sqlite3-binary
-              file: /usr/bin/sqlite3
-              exists: true
-        - name: openclaw-full-tmux-binary
-          step:
-            - id: openclaw-full-tmux-binary
-              file: /usr/bin/tmux
-              exists: true
-        - name: openclaw-full-ffmpeg-binary
-          step:
-            - id: openclaw-full-ffmpeg-binary
-              file: /usr/bin/ffmpeg
-              exists: true
-        - name: openclaw-full-gh-binary
-          step:
-            - id: openclaw-full-gh-binary
-              file: /usr/bin/gh
-              exists: true
         - name: openclaw-full-git-binary
           step:
             - id: openclaw-full-git-binary
               file: /usr/bin/git
-              exists: true
-        - name: openclaw-full-uv-binary
-          step:
-            - id: openclaw-full-uv-binary
-              file: /usr/local/bin/uv
               exists: true
         - name: openclaw-full-uvx-binary
           step:

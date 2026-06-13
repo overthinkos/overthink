@@ -230,17 +230,6 @@ candy:
         - name: martin-discovers-and-serves-vector-tiles
           step:
             - then: martin auto-discovers PMTiles files written into /workspace/tiles/pmtiles/ and serves each as a named vector-tile source (Content-Type application/x-protobuf) under /<source>/{z}/{x}/{y}
-        - name: tippecanoe-installed
-          step:
-            # Build-scope: every CLI binary present + responds to --version.
-            - id: tippecanoe-installed
-              command: tippecanoe --version
-              exit_status: 0
-        - name: gdal-installed
-          step:
-            - id: gdal-installed
-              command: ogr2ogr --version
-              exit_status: 0
         - name: jq-installed
           step:
             - id: jq-installed
@@ -251,48 +240,11 @@ candy:
             - id: martin-installed
               command: martin --version
               exit_status: 0
-        - name: pmtiles-installed
-          step:
-            - id: pmtiles-installed
-              command: pmtiles version
-              exit_status: 0
         - name: gpq-tiles-installed
           step:
             - id: gpq-tiles-installed
               command: /usr/local/bin/gpq-tiles --version
               exit_status: 0
-        - name: martin-wrapper-installed
-          step:
-            - id: martin-wrapper-installed
-              file: /usr/local/bin/martin-wrapper.sh
-              exists: true
-              mode: "0755"
-        - name: martin-running
-          step:
-            # Deploy-scope: martin service running + HTTP catalog endpoint responsive.
-            # Pre-DAG the catalog is empty (no PMTiles published yet); post-DAG it
-            # lists the monaco tile set. R10 step 16 re-verifies post-DAG.
-            - id: martin-running
-              service: martin
-              running: true
-              context:
-                - runtime
-        - name: martin-port-reachable
-          step:
-            - id: martin-port-reachable
-              addr: "127.0.0.1:${HOST_PORT:3000}"
-              reachable: true
-              timeout: 10s
-              context:
-                - runtime
-        - name: martin-http-catalog
-          step:
-            - id: martin-http-catalog
-              http: "http://127.0.0.1:${HOST_PORT:3000}/catalog"
-              status: 200
-              timeout: 10s
-              context:
-                - runtime
         - name: martin-tiles-dir-runtime
           step:
             - id: martin-tiles-dir-runtime

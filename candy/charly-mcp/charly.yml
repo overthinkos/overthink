@@ -90,13 +90,6 @@ candy:
         - name: mcp-server-stays-available
           step:
             - then: the charly-mcp service keeps answering MCP clients on port 18765, restarting automatically (restart=always) if the charly mcp serve process exits
-        - name: charly-mcp-service
-          step:
-            - id: charly-mcp-service
-              service: charly-mcp
-              running: true
-              context:
-                - runtime
         - name: charly-mcp-port
           step:
             - id: charly-mcp-port

@@ -69,22 +69,3 @@ candy:
             - id: unsloth-pixi-python
               file: ${HOME}/.pixi/envs/default/bin/python
               exists: true
-        - name: unsloth-vllm-installed
-          step:
-            - id: unsloth-vllm-installed
-              command: ${HOME}/.pixi/envs/default/bin/python -m pip show vllm
-              exit_status: 0
-              stdout:
-                - contains: "0.19.1"
-        - name: unsloth-skip-llama-cpp-env
-          step:
-            - id: unsloth-skip-llama-cpp-env
-              command: printenv UNSLOTH_SKIP_LLAMA_CPP_INSTALL
-              stdout:
-                - equals: "1"
-        - name: unsloth-hf-home-env
-          step:
-            - id: unsloth-hf-home-env
-              command: printenv HF_HOME
-              stdout:
-                - contains: ".cache/huggingface"

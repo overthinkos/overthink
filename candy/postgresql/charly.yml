@@ -185,26 +185,6 @@ candy:
               in_container: true
               context:
                 - runtime
-        - name: postgres-binary
-          step:
-            - id: postgres-binary
-              file: /usr/bin/postgres
-              exists: true
-        - name: psql-binary
-          step:
-            - id: psql-binary
-              file: /usr/bin/psql
-              exists: true
-        - name: pg-isready-binary
-          step:
-            - id: pg-isready-binary
-              file: /usr/bin/pg_isready
-              exists: true
-        - name: initdb-binary
-          step:
-            - id: initdb-binary
-              file: /usr/bin/initdb
-              exists: true
         - name: postgresql-package
           step:
             - id: postgresql-package
@@ -212,29 +192,10 @@ candy:
               package_map:
                 arch: postgresql
               installed: true
-        - name: pgvector-package
-          step:
-            - id: pgvector-package
-              package: pgvector
-              installed: true
-        - name: postgresql-entrypoint
-          step:
-            - id: postgresql-entrypoint
-              file: /usr/local/bin/postgresql-entrypoint.sh
-              exists: true
-              mode: "0755"
         - name: postgresql-service-running
           step:
             - id: postgresql-service-running
               service: postgresql
               running: true
-              context:
-                - runtime
-        - name: postgresql-ready
-          step:
-            - id: postgresql-ready
-              command: pg_isready -h ${HOME}/.postgresql
-              exit_status: 0
-              in_container: true
               context:
                 - runtime

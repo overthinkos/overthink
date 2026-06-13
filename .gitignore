@@ -63,13 +63,13 @@ dist/
 # Legacy `charly benchmark` cache (pre-2026-04).
 .benchmark/
 
-# `charly eval` artifacts under <project>/.eval/<recipe>/. Broadly
+# `charly check` artifacts under <project>/.check/<recipe>/. Broadly
 # gitignored — same pattern as .claude/memory/ + .claude/plans/: lives
 # IN the project tree so Syncthing-style file replication carries the
 # durable result files + NOTES.md memory across the user's machines,
 # but stays OUT of git history (per-machine + per-run state, not
 # version-controlled source).
-.eval/
+.check/
 
 # Syncthing conflict copies — created when the Syncthing-synced project tree
 # diverges on two machines (e.g. a file is edited while a stale copy replicates

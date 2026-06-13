@@ -8,15 +8,6 @@ candy:
             XWayland). Verifiable: the xterm binary lands at /usr/bin/xterm and
             the xterm package is installed.
         tag: [working]
-        scenario:
-            - name: xterm-installed
-              step:
-                - then: the xterm binary is installed at /usr/bin/xterm
-                  file: /usr/bin/xterm
-                  exists: true
-                - then: the xterm package is registered with the package manager
-                  package: xterm
-                  installed: true
     distro:
         arch:
             package:
@@ -24,10 +15,22 @@ candy:
         fedora:
             package:
                 - xterm
-    eval:
-        - id: xterm-binary
-          file: /usr/bin/xterm
-          exists: true
-        - id: xterm-package
-          package: xterm
-          installed: true
+    scenario:
+        - name: xterm-installed
+          step:
+            - then: the xterm binary is installed at /usr/bin/xterm
+              file: /usr/bin/xterm
+              exists: true
+            - then: the xterm package is registered with the package manager
+              package: xterm
+              installed: true
+        - name: xterm-binary
+          step:
+            - id: xterm-binary
+              file: /usr/bin/xterm
+              exists: true
+        - name: xterm-package
+          step:
+            - id: xterm-package
+              package: xterm
+              installed: true

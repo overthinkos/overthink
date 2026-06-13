@@ -14,46 +14,6 @@ candy:
             response from the running server, so each step is independently
             verifiable.
         tag: [working]
-        scenario:
-            - name: appium-server-binary-installed
-              step:
-                - then: the Appium WebDriver server binary is installed at /usr/bin/appium
-                  file: /usr/bin/appium
-                  exists: true
-                - then: the installed Appium server reports a numeric version
-                  command: /usr/bin/appium --version
-                  exit_status: 0
-                  stdout:
-                    - matches: "^[0-9]+\\."
-            - name: uiautomator2-driver-present
-              step:
-                - then: the uiautomator2 Android driver is installed per-user under ~/.appium
-                  file: ${HOME}/.appium/node_modules/appium-uiautomator2-driver
-                  exists: true
-                  filetype: directory
-            - name: webview-chromedriver-pinned-to-133
-              step:
-                - then: a chromedriver binary is baked at /opt/chromedriver/133/chromedriver
-                  file: /opt/chromedriver/133/chromedriver
-                  exists: true
-                - then: the baked chromedriver reports major version 133 matching the API-36 System WebView
-                  scope: deploy
-                  command: /opt/chromedriver/133/chromedriver --version
-                  exit_status: 0
-                  stdout:
-                    - matches: "ChromeDriver 133\\."
-            - name: appium-server-serves-webdriver
-              step:
-                - then: the running Appium server answers a WebDriver status request with HTTP 200
-                  scope: deploy
-                  http: http://127.0.0.1:${HOST_PORT:4723}/wd/hub/status
-                  status: 200
-                  timeout: 10s
-                - then: the running server reports itself ready over the Appium status verb
-                  scope: deploy
-                  appium: status
-                  stdout:
-                    - contains: '"ready":true'
     require:
         - nodejs
         - java-openjdk
@@ -74,7 +34,7 @@ candy:
                 package:
                     - appium
     task:
-        - cmd: |
+        - command: |
             set -euo pipefail
             # Driver installs per-user (writes ~/.appium/node_modules). JAVA_HOME
             # + ANDROID_HOME come from upstream layer ENV baked into the image.
@@ -82,9 +42,9 @@ candy:
             export ANDROID_HOME=/opt/android-sdk
             export PATH="$JAVA_HOME/bin:$PATH"
             /usr/bin/appium driver install uiautomator2
-          user: "${USER}"
+          run_as: "${USER}"
         - mkdir: /opt/chromedriver/${WEBVIEW_CHROMEDRIVER_MAJOR}
-          user: root
+          run_as: root
           mode: "0755"
         # Chrome-for-Testing endpoint (the legacy chromedriver.storage.googleapis.com
         # serves chromedriver ≤114 only). The CfT zip nests the binary under
@@ -92,13 +52,13 @@ candy:
         - download: "https://storage.googleapis.com/chrome-for-testing-public/${WEBVIEW_CHROMEDRIVER_VERSION}/linux64/chromedriver-linux64.zip"
           extract: zip
           to: /opt/chromedriver/${WEBVIEW_CHROMEDRIVER_MAJOR}
-          user: root
-        - cmd: |
+          run_as: root
+        - command: |
             set -euo pipefail
             D="/opt/chromedriver/${WEBVIEW_CHROMEDRIVER_MAJOR}"
             install -m 0755 "${D}/chromedriver-linux64/chromedriver" "${D}/chromedriver"
             rm -rf "${D}/chromedriver-linux64"
-          user: root
+          run_as: root
     service:
         - name: appium
           exec: "/usr/bin/appium --address 0.0.0.0 --port 4723 --base-path /wd/hub --log-level info"
@@ -114,39 +74,98 @@ candy:
           scope: system
     port:
         - 4723
-    eval:
-        - id: appium-binary
-          file: /usr/bin/appium
-          exists: true
-        - id: appium-runs
-          command: /usr/bin/appium --version
-          exit_status: 0
-          stdout:
-            - matches: "^[0-9]+\\."
-        - id: uiautomator2-driver
-          file: ${HOME}/.appium/node_modules/appium-uiautomator2-driver
-          exists: true
-          filetype: directory
-        - id: chromedriver-baked
-          file: /opt/chromedriver/133/chromedriver
-          exists: true
-        # Major-match guard: the baked chromedriver major MUST match the API-36
-        # System WebView major (133). If a future system-image bump moves the
-        # WebView major and this pin is left stale, this check FAILS loudly
-        # instead of letting WebView automation silently mismatch.
-        - id: chromedriver-major-matches-webview
-          scope: deploy
-          command: /opt/chromedriver/133/chromedriver --version
-          exit_status: 0
-          stdout:
-            - matches: "ChromeDriver 133\\."
-        - id: appium-status-endpoint
-          scope: deploy
-          http: http://127.0.0.1:${HOST_PORT:4723}/wd/hub/status
-          status: 200
-          timeout: 10s
-        - id: appium-status-ready
-          scope: deploy
-          appium: status
-          stdout:
-            - contains: '"ready":true'
+    scenario:
+        - name: appium-server-binary-installed
+          step:
+            - then: the Appium WebDriver server binary is installed at /usr/bin/appium
+              file: /usr/bin/appium
+              exists: true
+            - then: the installed Appium server reports a numeric version
+              command: /usr/bin/appium --version
+              exit_status: 0
+              stdout:
+                - matches: "^[0-9]+\\."
+        - name: uiautomator2-driver-present
+          step:
+            - then: the uiautomator2 Android driver is installed per-user under ~/.appium
+              file: ${HOME}/.appium/node_modules/appium-uiautomator2-driver
+              exists: true
+              filetype: directory
+        - name: webview-chromedriver-pinned-to-133
+          step:
+            - then: a chromedriver binary is baked at /opt/chromedriver/133/chromedriver
+              file: /opt/chromedriver/133/chromedriver
+              exists: true
+            - then: the baked chromedriver reports major version 133 matching the API-36 System WebView
+              command: /opt/chromedriver/133/chromedriver --version
+              exit_status: 0
+              stdout:
+                - matches: "ChromeDriver 133\\."
+              context:
+                - runtime
+        - name: appium-server-serves-webdriver
+          step:
+            - then: the running Appium server answers a WebDriver status request with HTTP 200
+              http: http://127.0.0.1:${HOST_PORT:4723}/wd/hub/status
+              status: 200
+              timeout: 10s
+              context:
+                - runtime
+            - then: the running server reports itself ready over the Appium status verb
+              appium: status
+              stdout:
+                - contains: '"ready":true'
+              context:
+                - runtime
+        - name: appium-binary
+          step:
+            - id: appium-binary
+              file: /usr/bin/appium
+              exists: true
+        - name: appium-runs
+          step:
+            - id: appium-runs
+              command: /usr/bin/appium --version
+              exit_status: 0
+              stdout:
+                - matches: "^[0-9]+\\."
+        - name: uiautomator2-driver
+          step:
+            - id: uiautomator2-driver
+              file: ${HOME}/.appium/node_modules/appium-uiautomator2-driver
+              exists: true
+              filetype: directory
+        - name: chromedriver-baked
+          step:
+            - id: chromedriver-baked
+              file: /opt/chromedriver/133/chromedriver
+              exists: true
+        - name: chromedriver-major-matches-webview
+          step:
+            # Major-match guard: the baked chromedriver major MUST match the API-36
+            # System WebView major (133). If a future system-image bump moves the
+            # WebView major and this pin is left stale, this check FAILS loudly
+            # instead of letting WebView automation silently mismatch.
+            - id: chromedriver-major-matches-webview
+              command: /opt/chromedriver/133/chromedriver --version
+              exit_status: 0
+              stdout:
+                - matches: "ChromeDriver 133\\."
+              context:
+                - runtime
+        - name: appium-status-endpoint
+          step:
+            - id: appium-status-endpoint
+              http: http://127.0.0.1:${HOST_PORT:4723}/wd/hub/status
+              status: 200
+              timeout: 10s
+              context:
+                - runtime
+        - name: appium-status-ready
+          step:
+            - id: appium-status-ready
+              appium: status
+              stdout:
+                - contains: '"ready":true'
+              context:
+                - runtime

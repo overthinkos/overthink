@@ -8,23 +8,26 @@ candy:
             the wf-recorder binary lands at /usr/bin/wf-recorder and the package
             is registered.
         tag: [working]
-        scenario:
-            - name: wf-recorder-installed
-              step:
-                - then: the wf-recorder binary is installed at /usr/bin/wf-recorder
-                  file: /usr/bin/wf-recorder
-                  exists: true
-                - then: the wf-recorder package is registered with the package manager
-                  package: wf-recorder
-                  installed: true
     distro:
         fedora:
             package:
                 - wf-recorder
-    eval:
-        - id: wf-recorder-binary
-          file: /usr/bin/wf-recorder
-          exists: true
-        - id: wf-recorder-package
-          package: wf-recorder
-          installed: true
+    scenario:
+        - name: wf-recorder-installed
+          step:
+            - then: the wf-recorder binary is installed at /usr/bin/wf-recorder
+              file: /usr/bin/wf-recorder
+              exists: true
+            - then: the wf-recorder package is registered with the package manager
+              package: wf-recorder
+              installed: true
+        - name: wf-recorder-binary
+          step:
+            - id: wf-recorder-binary
+              file: /usr/bin/wf-recorder
+              exists: true
+        - name: wf-recorder-package
+          step:
+            - id: wf-recorder-package
+              package: wf-recorder
+              installed: true

@@ -35,7 +35,7 @@ import (
 // CandyRecord so `charly deploy del` can replay them.
 type StepExecutor interface {
 	ExecSystemPackages(ctx context.Context, s *SystemPackagesStep, plan *InstallPlan, opts EmitOpts) error
-	ExecTask(ctx context.Context, s *TaskStep, plan *InstallPlan, opts EmitOpts) error
+	ExecTask(ctx context.Context, s *OpStep, plan *InstallPlan, opts EmitOpts) error
 	ExecFile(ctx context.Context, s *FileStep, plan *InstallPlan, opts EmitOpts) error
 	ExecShellHook(ctx context.Context, s *ShellHookStep, plan *InstallPlan, opts EmitOpts) error
 	ExecRepoChange(ctx context.Context, s *RepoChangeStep, plan *InstallPlan, opts EmitOpts) error
@@ -95,7 +95,7 @@ func WalkPlan(ctx context.Context, ex StepExecutor, plan *InstallPlan, opts Emit
 			}
 			rec.ReverseOps = append(rec.ReverseOps, s.Reverse()...)
 
-		case *TaskStep:
+		case *OpStep:
 			if err := ex.ExecTask(ctx, s, plan, opts); err != nil {
 				return rec, err
 			}

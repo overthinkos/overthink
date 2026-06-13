@@ -95,7 +95,7 @@ func (t *PodUnifiedTarget) engine() string {
 // Test runs deploy-scope checks against the live container via its
 // executor (podman-exec wrapper). Mirrors LocalUnifiedTarget.Test +
 // VmUnifiedTarget.Test — only the executor differs.
-func (t *PodUnifiedTarget) Test(ctx context.Context, checks []Check, opts TestOpts) error {
+func (t *PodUnifiedTarget) Test(ctx context.Context, checks []Op, opts TestOpts) error {
 	onlyIDs := make(map[string]bool, len(opts.OnlyIDs))
 	for _, id := range opts.OnlyIDs {
 		onlyIDs[id] = true
@@ -120,8 +120,8 @@ func (t *PodUnifiedTarget) Test(ctx context.Context, checks []Check, opts TestOp
 		if r.Status == TestFail {
 			failed++
 			id := ""
-			if r.Check != nil {
-				id = r.Check.ID
+			if r.Op != nil {
+				id = r.Op.ID
 			}
 			fmt.Fprintf(os.Stderr, "FAIL %s: %s\n", id, r.Message)
 			if opts.StopOnFail {

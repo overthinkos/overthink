@@ -103,9 +103,6 @@ var CapabilityLabelMap = map[string]string{
 	"MCPRequire":    LabelMCPRequire,
 	"MCPAccept":     LabelMCPAccept,
 
-	// Declarative tests (image-level invariants + deploy defaults)
-	"Eval": LabelEval,
-
 	// Gherkin-shaped self-description — three-section (candy/box/deploy)
 	// LabelDescriptionSet. Replaces the single-scalar Info/Status pair in
 	// the BDD cutover; those remain on BoxMetadata during the additive
@@ -117,6 +114,10 @@ var CapabilityLabelMap = map[string]string{
 	// inspect`, `charly deploy from-box`, and the charly.yml `shell:`
 	// overlay merge in MergeDeployShell.
 	"Shell": LabelShell,
+
+	// Acceptance-depth rung (none|build|noagent|agent) gating how deep
+	// `charly check run <bed>` drives this box. See eval_level.go.
+	"EvalLevel": LabelEvalLevel,
 }
 
 // deployOnlyCapabilityFields are BoxMetadata fields that are NOT baked

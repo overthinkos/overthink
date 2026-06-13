@@ -13,31 +13,6 @@ candy:
             fixed path under ~/.pixi/envs/default, so its presence and
             importability are directly checkable.
         tag: [working]
-        scenario:
-            - name: pixi-ml-environment-built
-              step:
-                - then: the pixi default-environment Python interpreter is present
-                  file: ${HOME}/.pixi/envs/default/bin/python
-                  exists: true
-                - then: PyTorch imports inside the pixi environment and prints its version
-                  command: ${HOME}/.pixi/envs/default/bin/python -c "import torch; print(torch.__version__)"
-                  exit_status: 0
-                  stdout:
-                    - matches: "[0-9]+\\.[0-9]+"
-            - name: huggingface-stack-importable
-              step:
-                - then: the transformers library imports inside the pixi environment and prints its version
-                  command: ${HOME}/.pixi/envs/default/bin/python -c "import transformers; print(transformers.__version__)"
-                  exit_status: 0
-                  stdout:
-                    - matches: "[0-9]+\\.[0-9]+"
-            - name: vllm-inference-runtime-installed
-              step:
-                - then: the vLLM nightly wheel installed by the user-phase task imports and prints its version
-                  command: ${HOME}/.pixi/envs/default/bin/python -c "import vllm; print(vllm.__version__)"
-                  exit_status: 0
-                  stdout:
-                    - matches: "[0-9]+\\.[0-9]+"
     require:
         - cuda
     candy:
@@ -48,20 +23,52 @@ candy:
     task:
         # vLLM cu130 nightly wheel (--no-deps: runtime deps provided by pixi.toml).
         # Runs after the pixi builder stage has installed the Python env.
-        - cmd: |
+        - command: |
             ~/.pixi/envs/default/bin/python -m pip install --no-deps \
               'https://wheels.vllm.ai/f53fa26e05c476a43f6db048a9e3b43bcb2b72fb/vllm-0.19.1rc1.dev39%2Bgf53fa26e0.cu130-cp38-abi3-manylinux_2_35_x86_64.whl'
-          user: "${USER}"
-    eval:
-        - id: python-ml-python-binary
-          file: ${HOME}/.pixi/envs/default/bin/python
-          exists: true
-        - id: python-ml-torch-importable
-          command: ${HOME}/.pixi/envs/default/bin/python -c "import torch; print(torch.__version__)"
-          exit_status: 0
-        - id: python-ml-vllm-importable
-          command: ${HOME}/.pixi/envs/default/bin/python -c "import vllm; print(vllm.__version__)"
-          exit_status: 0
-        - id: python-ml-transformers-importable
-          command: ${HOME}/.pixi/envs/default/bin/python -c "import transformers; print(transformers.__version__)"
-          exit_status: 0
+          run_as: "${USER}"
+    scenario:
+        - name: pixi-ml-environment-built
+          step:
+            - then: the pixi default-environment Python interpreter is present
+              file: ${HOME}/.pixi/envs/default/bin/python
+              exists: true
+            - then: PyTorch imports inside the pixi environment and prints its version
+              command: ${HOME}/.pixi/envs/default/bin/python -c "import torch; print(torch.__version__)"
+              exit_status: 0
+              stdout:
+                - matches: "[0-9]+\\.[0-9]+"
+        - name: huggingface-stack-importable
+          step:
+            - then: the transformers library imports inside the pixi environment and prints its version
+              command: ${HOME}/.pixi/envs/default/bin/python -c "import transformers; print(transformers.__version__)"
+              exit_status: 0
+              stdout:
+                - matches: "[0-9]+\\.[0-9]+"
+        - name: vllm-inference-runtime-installed
+          step:
+            - then: the vLLM nightly wheel installed by the user-phase task imports and prints its version
+              command: ${HOME}/.pixi/envs/default/bin/python -c "import vllm; print(vllm.__version__)"
+              exit_status: 0
+              stdout:
+                - matches: "[0-9]+\\.[0-9]+"
+        - name: python-ml-python-binary
+          step:
+            - id: python-ml-python-binary
+              file: ${HOME}/.pixi/envs/default/bin/python
+              exists: true
+        - name: python-ml-torch-importable
+          step:
+            - id: python-ml-torch-importable
+              command: ${HOME}/.pixi/envs/default/bin/python -c "import torch; print(torch.__version__)"
+              exit_status: 0
+        - name: python-ml-vllm-importable
+          step:
+            - id: python-ml-vllm-importable
+              command: ${HOME}/.pixi/envs/default/bin/python -c "import vllm; print(vllm.__version__)"
+              exit_status: 0
+        - name: python-ml-transformers-importable
+          step:
+            - id: python-ml-transformers-importable
+              command: ${HOME}/.pixi/envs/default/bin/python -c "import transformers; print(transformers.__version__)"
+              exit_status: 0

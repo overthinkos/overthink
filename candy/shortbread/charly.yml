@@ -14,33 +14,6 @@ candy:
             Shortbread schema is the de-facto general-purpose OSM vector-tile schema
             documented at https://shortbread-tiles.org.
         tag: [working]
-        scenario:
-            - name: tilemaker-built-from-source
-              step:
-                - then: the tilemaker binary built from systemed/tilemaker source is installed under /usr/local/bin
-                  file: /usr/local/bin/tilemaker
-                  exists: true
-                - then: tilemaker resolves on PATH so the notebook DAG can invoke it (tilemaker ships no --version flag, so resolve by name)
-                  command: command -v tilemaker
-                  exit_status: 0
-            - name: shortbread-config-bundle-dropped
-              step:
-                - then: the shortbread per-feature Lua classifier is bundled for tilemaker --process
-                  file: /opt/shortbread-tilemaker/process.lua
-                  exists: true
-                - then: the shortbread layer and zoom schema definition is bundled for tilemaker --config
-                  file: /opt/shortbread-tilemaker/config.json
-                  exists: true
-                - then: the cloned bundle has its .git history stripped to keep the image small
-                  file: /opt/shortbread-tilemaker/.git
-                  exists: false
-            - name: shortbread-output-directory-precreated
-              step:
-                - then: the versatiles-watched output directory is pre-created at build time so versatiles serve starts cleanly on a fresh deploy
-                  file: /workspace/tiles/shortbread
-                  exists: true
-                - then: a tilemaker run converts an OSM PBF into a monaco-shortbread.pmtiles archive in that directory using the bundled config.json and process.lua
-
     require:
         - supervisord
     distro:
@@ -83,7 +56,7 @@ candy:
         # on a warm package cache. Pattern mirrors the existing tippecanoe
         # build in /charly-versa:osm-tools-layer: shallow clone → make -j →
         # `make install PREFIX=/usr/local` → cleanup.
-        - cmd: |
+        - command: |
             set -euo pipefail
             git clone --depth 1 https://github.com/systemed/tilemaker /tmp/tilemaker
             cd /tmp/tilemaker
@@ -100,7 +73,7 @@ candy:
             make install PREFIX=/usr/local
             cd /
             rm -rf /tmp/tilemaker
-          user: root
+          run_as: root
         # ---- shortbread-tilemaker config bundle ----
         # The official shortbread-tiles/shortbread-tilemaker repo ships
         # process.lua (the per-feature classifier) + config.json (the
@@ -108,11 +81,11 @@ candy:
         # /opt/shortbread-tilemaker/ minus the .git/ directory so the
         # notebook's DAG can invoke tilemaker with --process + --config
         # pointing at those files.
-        - cmd: |
+        - command: |
             set -euo pipefail
             git clone --depth 1 https://github.com/shortbread-tiles/shortbread-tilemaker /opt/shortbread-tilemaker
             rm -rf /opt/shortbread-tilemaker/.git
-          user: root
+          run_as: root
         # ---- output directory (versatiles serve watches it) ----
         # versatiles serve (in /charly-versa:versatiles) is configured to
         # watch /workspace/tiles/shortbread/. Pre-creating the directory
@@ -120,43 +93,83 @@ candy:
         # even before any DAG runs (otherwise versatiles errors on the
         # missing directory).
         - mkdir: /workspace/tiles/shortbread
-          user: root
+          run_as: root
           mode: "0755"
-    eval:
-        # Build-scope: tilemaker binary installed. tilemaker has no
-        # `--version` flag (verified 2026-Q2); use `command -v` to confirm
-        # the binary is on PATH.
-        - id: tilemaker-installed
-          command: command -v tilemaker
-          exit_status: 0
-        # Build-scope: shortbread config files dropped at expected paths.
-        - id: shortbread-process-lua
-          file: /opt/shortbread-tilemaker/process.lua
-          exists: true
-        - id: shortbread-config-json
-          file: /opt/shortbread-tilemaker/config.json
-          exists: true
-        # Build-scope: tilemaker binary lands at the source-build install path.
-        - id: tilemaker-binary
-          file: /usr/local/bin/tilemaker
-          exists: true
-        # Build-scope: the .git history is stripped from the cloned bundle
-        # (image-size reduction) — the directory must be absent.
-        - id: shortbread-bundle-no-git
-          file: /opt/shortbread-tilemaker/.git
-          exists: false
-        # Build-scope: the Lua embedding runtime tilemaker's process.lua hooks
-        # into is installed. Cross-distro: Arch ships `lua`, Fedora `lua-devel`.
-        - id: shortbread-lua-runtime
-          package: lua
-          package_map:
-            fedora: lua-devel
-          installed: true
-        # Deploy-scope: the versatiles-watched directory is present on a
-        # fresh deploy (the mkdir above lands at image-build time; the
-        # workspace volume seed preserves it).
-        - id: shortbread-tiles-dir-runtime
-          scope: deploy
-          command: test -d /workspace/tiles/shortbread
-          exit_status: 0
-          in_container: true
+    scenario:
+        - name: tilemaker-built-from-source
+          step:
+            - then: the tilemaker binary built from systemed/tilemaker source is installed under /usr/local/bin
+              file: /usr/local/bin/tilemaker
+              exists: true
+            - then: tilemaker resolves on PATH so the notebook DAG can invoke it (tilemaker ships no --version flag, so resolve by name)
+              command: command -v tilemaker
+              exit_status: 0
+        - name: shortbread-config-bundle-dropped
+          step:
+            - then: the shortbread per-feature Lua classifier is bundled for tilemaker --process
+              file: /opt/shortbread-tilemaker/process.lua
+              exists: true
+            - then: the shortbread layer and zoom schema definition is bundled for tilemaker --config
+              file: /opt/shortbread-tilemaker/config.json
+              exists: true
+            - then: the cloned bundle has its .git history stripped to keep the image small
+              file: /opt/shortbread-tilemaker/.git
+              exists: false
+        - name: shortbread-output-directory-precreated
+          step:
+            - then: the versatiles-watched output directory is pre-created at build time so versatiles serve starts cleanly on a fresh deploy
+              file: /workspace/tiles/shortbread
+              exists: true
+            - then: a tilemaker run converts an OSM PBF into a monaco-shortbread.pmtiles archive in that directory using the bundled config.json and process.lua
+        - name: tilemaker-installed
+          step:
+            # Build-scope: tilemaker binary installed. tilemaker has no
+            # `--version` flag (verified 2026-Q2); use `command -v` to confirm
+            # the binary is on PATH.
+            - id: tilemaker-installed
+              command: command -v tilemaker
+              exit_status: 0
+        - name: shortbread-process-lua
+          step:
+            # Build-scope: shortbread config files dropped at expected paths.
+            - id: shortbread-process-lua
+              file: /opt/shortbread-tilemaker/process.lua
+              exists: true
+        - name: shortbread-config-json
+          step:
+            - id: shortbread-config-json
+              file: /opt/shortbread-tilemaker/config.json
+              exists: true
+        - name: tilemaker-binary
+          step:
+            # Build-scope: tilemaker binary lands at the source-build install path.
+            - id: tilemaker-binary
+              file: /usr/local/bin/tilemaker
+              exists: true
+        - name: shortbread-bundle-no-git
+          step:
+            # Build-scope: the .git history is stripped from the cloned bundle
+            # (image-size reduction) — the directory must be absent.
+            - id: shortbread-bundle-no-git
+              file: /opt/shortbread-tilemaker/.git
+              exists: false
+        - name: shortbread-lua-runtime
+          step:
+            # Build-scope: the Lua embedding runtime tilemaker's process.lua hooks
+            # into is installed. Cross-distro: Arch ships `lua`, Fedora `lua-devel`.
+            - id: shortbread-lua-runtime
+              package: lua
+              package_map:
+                fedora: lua-devel
+              installed: true
+        - name: shortbread-tiles-dir-runtime
+          step:
+            # Deploy-scope: the versatiles-watched directory is present on a
+            # fresh deploy (the mkdir above lands at image-build time; the
+            # workspace volume seed preserves it).
+            - id: shortbread-tiles-dir-runtime
+              command: test -d /workspace/tiles/shortbread
+              exit_status: 0
+              in_container: true
+              context:
+                - runtime

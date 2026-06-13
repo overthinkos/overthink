@@ -1,4 +1,4 @@
-version: 2026.163.0928
+version: 2026.164.0002
 # Canonical repo identity. After the 2026-06 box inversion main imports the three
 # active distro submodules (arch / cachyos / fedora) ONE-DIRECTIONALLY to reference
 # their relocated boxes; the submodules no longer import main as a namespace (they
@@ -506,7 +506,6 @@ recipe:
             - kind: box
               name: fedora.jupyter
               pod: mcp
-              skip_live_only: false
         scenario:
             # A. notebook_create still does NOT open a room. Auto-attach
             # happens on the FIRST notebook_*/cell_* call, not on create.
@@ -1198,7 +1197,6 @@ recipe:
             - kind: box
               name: fedora.composition-source
               pod: selftest-image
-              scope: [box]
               select: [composition-source-charly]
               prefix: solo
             # Multi-kind composition onto the SAME pod, with filter pipeline.
@@ -1209,7 +1207,6 @@ recipe:
             - kind: box
               name: fedora.composition-source
               pod: composition-app
-              scope: [box]
               select: [composition-source-charly, composition-source-marker]
               exclude: [composition-source-marker]
               prefix: img
@@ -1611,48 +1608,83 @@ eval:
             allow_repo_changes: true # pacman sync / repo key import
             skip_incompatible: true # skip rpm:/deb:-only layer sections
             verify: true
-        eval:
-            # --- Guest identity + VM health --------------------------
-            - {id: kv-guest-identity, scope: deploy, command: id, stdout: {contains: "uid=1000(arch)"}}
-            - {id: kv-guest-os-release, scope: deploy, command: "cat /etc/os-release", stdout: {contains: "ID=arch"}}
-            # --- k3s-server in-guest health --------------------------
-            # The k3s binary re-execs into `k3s-server` (the unambiguous
-            # post-exec comm name).
-            - {id: kv-k3s-process, scope: deploy, process: "k3s-server", running: true}
-            - {id: kv-port-6443-listening, scope: deploy, port: 6443, listening: true}
-            - {id: kv-kubeconfig-file, scope: deploy, file: /etc/rancher/k3s/k3s.yaml, exists: true}
-            # NOTE: no http: /healthz probe — k3s v1.31 gates /healthz behind
-            # authn (401 to anonymous). kv-k8s-raw-version exercises the
-            # authenticated API path end-to-end via the retrieved kubeconfig.
-            # --- k8s: verb (all 13 methods) --------------------------
-            - {id: kv-k8s-nodes, scope: deploy, k8s: nodes, cluster: "vm-k3s-vm"}
-            - {id: kv-k8s-wait-nodes, scope: deploy, k8s: "wait-nodes", cluster: "vm-k3s-vm", k8s_count: 1, timeout: "300s"}
-            - {id: kv-k8s-pods, scope: deploy, k8s: pods, cluster: "vm-k3s-vm", namespace: kube-system}
-            - {id: kv-k8s-wait-ready, scope: deploy, k8s: "wait-ready", cluster: "vm-k3s-vm", k8s_kind: Deployment, namespace: kube-system, name: coredns, timeout: "180s"}
-            # `addons` rolls up Traefik + ServiceLB + local-path readiness; it MUST gate
-            # the ingressclass/storageclass checks below, because those resources are
-            # registered BY the addon stack. Probing them before addons is Ready races
-            # the helm-install job / provisioner and returns an empty list — and the
-            # verb exits 0 on an empty list, so the `contains` matcher FAILS (not waits).
-            - {id: kv-k8s-addons, scope: deploy, k8s: addons, cluster: "vm-k3s-vm"}
-            - {id: kv-k8s-ingressclass-traefik, scope: deploy, k8s: ingressclass, cluster: "vm-k3s-vm", stdout: {contains: "traefik"}}
-            - {id: kv-k8s-storageclass-localpath, scope: deploy, k8s: storageclass, cluster: "vm-k3s-vm", stdout: {contains: "local-path"}}
-            - {id: kv-k8s-raw-version, scope: deploy, k8s: raw, cluster: "vm-k3s-vm", text: "version -o json"}
-            - {id: kv-k8s-service-kubernetes, scope: deploy, k8s: service, cluster: "vm-k3s-vm", namespace: default, name: kubernetes}
-            # --- command: charly-specific operator-side smoke ------------
-            - {id: kv-charly-version, scope: deploy, command: "/tmp/charly-build/charly version || charly version", stdout: {matches: "[0-9]{4}\\.[0-9]+"}, in_container: false}
-            # --- matching: verb smoke --------------------------------
-            - {id: kv-matching, scope: deploy, matching: "eval-k3s-vm up", contains: {contains: "k3s"}}
-            # eval-coverage gate for the unified `charly status` VM substrate: the
-            # libvirt-domain row must render (host-side, via listCharlyDomains). Fails
-            # if VMCollector regresses.
-            - id: status-shows-vm
-              scope: deploy
-              command: charly status --json
-              in_container: false
-              stdout:
-                - contains: '"kind": "vm"'
-                - contains: k3s-vm
+        scenario:
+            - name: kv-guest-identity
+              step:
+                # --- Guest identity + VM health --------------------------
+                - {id: kv-guest-identity, command: id, stdout: {contains: "uid=1000(arch)"}, context: [runtime]}
+            - name: kv-guest-os-release
+              step:
+                - {id: kv-guest-os-release, command: "cat /etc/os-release", stdout: {contains: "ID=arch"}, context: [runtime]}
+            - name: kv-k3s-process
+              step:
+                # --- k3s-server in-guest health --------------------------
+                # The k3s binary re-execs into `k3s-server` (the unambiguous
+                # post-exec comm name).
+                - {id: kv-k3s-process, process: "k3s-server", running: true, context: [runtime]}
+            - name: kv-port-6443-listening
+              step:
+                - {id: kv-port-6443-listening, port: 6443, listening: true, context: [runtime]}
+            - name: kv-kubeconfig-file
+              step:
+                - {id: kv-kubeconfig-file, file: /etc/rancher/k3s/k3s.yaml, exists: true, context: [runtime]}
+            - name: kv-k8s-nodes
+              step:
+                # NOTE: no http: /healthz probe — k3s v1.31 gates /healthz behind
+                # authn (401 to anonymous). kv-k8s-raw-version exercises the
+                # authenticated API path end-to-end via the retrieved kubeconfig.
+                # --- k8s: verb (all 13 methods) --------------------------
+                - {id: kv-k8s-nodes, k8s: nodes, cluster: "vm-k3s-vm", context: [runtime]}
+            - name: kv-k8s-wait-nodes
+              step:
+                - {id: kv-k8s-wait-nodes, k8s: "wait-nodes", cluster: "vm-k3s-vm", k8s_count: 1, timeout: "300s", context: [runtime]}
+            - name: kv-k8s-pods
+              step:
+                - {id: kv-k8s-pods, k8s: pods, cluster: "vm-k3s-vm", namespace: kube-system, context: [runtime]}
+            - name: kv-k8s-wait-ready
+              step:
+                - {id: kv-k8s-wait-ready, k8s: "wait-ready", cluster: "vm-k3s-vm", k8s_kind: Deployment, namespace: kube-system, name: coredns, timeout: "180s", context: [runtime]}
+            - name: kv-k8s-addons
+              step:
+                # `addons` rolls up Traefik + ServiceLB + local-path readiness; it MUST gate
+                # the ingressclass/storageclass checks below, because those resources are
+                # registered BY the addon stack. Probing them before addons is Ready races
+                # the helm-install job / provisioner and returns an empty list — and the
+                # verb exits 0 on an empty list, so the `contains` matcher FAILS (not waits).
+                - {id: kv-k8s-addons, k8s: addons, cluster: "vm-k3s-vm", context: [runtime]}
+            - name: kv-k8s-ingressclass-traefik
+              step:
+                - {id: kv-k8s-ingressclass-traefik, k8s: ingressclass, cluster: "vm-k3s-vm", stdout: {contains: "traefik"}, context: [runtime]}
+            - name: kv-k8s-storageclass-localpath
+              step:
+                - {id: kv-k8s-storageclass-localpath, k8s: storageclass, cluster: "vm-k3s-vm", stdout: {contains: "local-path"}, context: [runtime]}
+            - name: kv-k8s-raw-version
+              step:
+                - {id: kv-k8s-raw-version, k8s: raw, cluster: "vm-k3s-vm", text: "version -o json", context: [runtime]}
+            - name: kv-k8s-service-kubernetes
+              step:
+                - {id: kv-k8s-service-kubernetes, k8s: service, cluster: "vm-k3s-vm", namespace: default, name: kubernetes, context: [runtime]}
+            - name: kv-charly-version
+              step:
+                # --- command: charly-specific operator-side smoke ------------
+                - {id: kv-charly-version, command: "/tmp/charly-build/charly version || charly version", stdout: {matches: "[0-9]{4}\\.[0-9]+"}, in_container: false, context: [runtime]}
+            - name: kv-matching
+              step:
+                # --- matching: verb smoke --------------------------------
+                - {id: kv-matching, matching: "eval-k3s-vm up", contains: {contains: "k3s"}, context: [runtime]}
+            - name: status-shows-vm
+              step:
+                # eval-coverage gate for the unified `charly status` VM substrate: the
+                # libvirt-domain row must render (host-side, via listCharlyDomains). Fails
+                # if VMCollector regresses.
+                - id: status-shows-vm
+                  command: charly status --json
+                  in_container: false
+                  stdout:
+                    - contains: '"kind": "vm"'
+                    - contains: k3s-vm
+                  context:
+                    - runtime
     eval-local:
         target: local
         local: eval-local
@@ -1662,18 +1694,21 @@ eval:
         description:
             feature: Fast local bed exercising kind:local layer application
             tag: [working]
-        eval:
-            # eval-coverage gate for the unified `charly status` LOCAL substrate: the
-            # install-ledger row must render. Fails if LocalCollector regresses.
-            - id: status-shows-local
-              scope: deploy
-              command: charly status --json
-              in_container: false
-              stdout:
-                # local deploy-ids are content hashes (not the bed name), so assert
-                # the substrate renders via the kind discriminator + ledger source.
-                - contains: '"kind": "local"'
-                - contains: '"source": "ledger"'
+        scenario:
+            - name: status-shows-local
+              step:
+                # eval-coverage gate for the unified `charly status` LOCAL substrate: the
+                # install-ledger row must render. Fails if LocalCollector regresses.
+                - id: status-shows-local
+                  command: charly status --json
+                  in_container: false
+                  stdout:
+                    # local deploy-ids are content hashes (not the bed name), so assert
+                    # the substrate renders via the kind discriminator + ledger source.
+                    - contains: '"kind": "local"'
+                    - contains: '"source": "ledger"'
+                  context:
+                    - runtime
     # pac localpkg AUTO-RESOLVE witness against the LOCAL charly candy (no @github):
     # deploys candy/charly to a disposable Arch Cloud VM, where the layer's localpkg
     # builds the opencharly-git package from pkg/arch (makepkg on the host) and
@@ -1690,22 +1725,25 @@ eval:
         install_opts:
             allow_repo_changes: true
             allow_root_tasks: true
-        eval:
-            - id: localpkg-pac-autoresolve
-              scope: deploy
-              description: charly installed as the opencharly-git pacman package via localpkg, mandatory repo deps auto-resolved by pacman -U
-              command: |
-                pacman -Q opencharly-git >/dev/null 2>&1 &&
-                pacman -Q podman >/dev/null 2>&1 &&
-                pacman -Q libvirt >/dev/null 2>&1 &&
-                pacman -Q tailscale >/dev/null 2>&1 &&
-                pacman -Q gocryptfs >/dev/null 2>&1 &&
-                test "$(command -v charly)" -ef /usr/bin/charly &&
-                charly version &&
-                echo LOCALPKG-PAC-AUTORESOLVE-OK
-              stdout:
-                - contains: LOCALPKG-PAC-AUTORESOLVE-OK
-              exit_status: 0
+        scenario:
+            - name: localpkg-pac-autoresolve
+              step:
+                - id: localpkg-pac-autoresolve
+                  description: charly installed as the opencharly-git pacman package via localpkg, mandatory repo deps auto-resolved by pacman -U
+                  command: |
+                    pacman -Q opencharly-git >/dev/null 2>&1 &&
+                    pacman -Q podman >/dev/null 2>&1 &&
+                    pacman -Q libvirt >/dev/null 2>&1 &&
+                    pacman -Q tailscale >/dev/null 2>&1 &&
+                    pacman -Q gocryptfs >/dev/null 2>&1 &&
+                    test "$(command -v charly)" -ef /usr/bin/charly &&
+                    charly version &&
+                    echo LOCALPKG-PAC-AUTORESOLVE-OK
+                  stdout:
+                    - contains: LOCALPKG-PAC-AUTORESOLVE-OK
+                  exit_status: 0
+                  context:
+                    - runtime
 local:
     # =================================================================
     # eval-local — per-kind R10 smoke template for kind:local.
@@ -1720,8 +1758,11 @@ local:
             feature: Fast eval bed for kind:local layer-application smoke
             narrative: Minimal kind:local template applying eval-local-layer to the operator's host.
             tag: [working]
-        eval:
-            - id: eval-local-marker
-              scope: deploy
-              command: "test -f /etc/eval-local-marker"
-              in_container: false
+        scenario:
+            - name: eval-local-marker
+              step:
+                - id: eval-local-marker
+                  command: "test -f /etc/eval-local-marker"
+                  in_container: false
+                  context:
+                    - runtime

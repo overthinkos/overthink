@@ -155,7 +155,7 @@ func (e *vmReverseExec) reverseRunner() ReverseRunner { return e.Runner }
 
 // Test runs deploy-scope checks against the live VM via its SSHExecutor.
 // Mirrors LocalUnifiedTarget.Test — only the executor differs.
-func (t *VmUnifiedTarget) Test(ctx context.Context, checks []Check, opts TestOpts) error {
+func (t *VmUnifiedTarget) Test(ctx context.Context, checks []Op, opts TestOpts) error {
 	onlyIDs := make(map[string]bool, len(opts.OnlyIDs))
 	for _, id := range opts.OnlyIDs {
 		onlyIDs[id] = true
@@ -180,8 +180,8 @@ func (t *VmUnifiedTarget) Test(ctx context.Context, checks []Check, opts TestOpt
 		if r.Status == TestFail {
 			failed++
 			id := ""
-			if r.Check != nil {
-				id = r.Check.ID
+			if r.Op != nil {
+				id = r.Op.ID
 			}
 			fmt.Fprintf(os.Stderr, "FAIL %s: %s\n", id, r.Message)
 			if opts.StopOnFail {

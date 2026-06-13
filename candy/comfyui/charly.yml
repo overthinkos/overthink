@@ -11,31 +11,6 @@ candy:
             cloned entrypoint and Manager, the model dirs, the download-tooling
             packages, and the live /system_stats API on port 8188.
         tag: [working]
-        scenario:
-            # Scenarios 1-2 are DETERMINISTIC (embedded check verbs → run at build
-            # AND deploy scope, baked into ai.opencharly.description). Scenario 3 is
-            # PROSE-ONLY (no verb → agent-graded by `charly eval feature run comfyui`
-            # against the live GPU deployment; reported unbound by build-scope
-            # `charly box feature run`).
-            - name: comfyui-app-cloned
-              step:
-                - then: the ComfyUI server entrypoint main.py is baked into ~/ComfyUI
-                  file: ${HOME}/ComfyUI/main.py
-                  exists: true
-                - then: the ComfyUI-Manager custom node directory is cloned alongside it
-                  file: ${HOME}/ComfyUI/custom_nodes/ComfyUI-Manager
-                  filetype: directory
-            - name: model-fetch-tooling-present
-              step:
-                - then: aria2c is installed so model checkpoints can be fetched in parallel
-                  file: /usr/bin/aria2c
-                  exists: true
-                - then: git-lfs is installed for pulling large model repositories
-                  package: git-lfs
-                  installed: true
-            - name: serves-image-generation-api
-              step:
-                - then: the comfyui supervisord service comes up and serves the image-generation web UI and /system_stats API on port 8188
     require:
         - cuda
         - supervisord
@@ -57,7 +32,7 @@ candy:
         # Clone ComfyUI + the Manager into the workspace volume staging dir.
         # || true on the main clone makes this idempotent if an earlier build left
         # a partial clone (rare but observed in failed CI runs).
-        - cmd: |
+        - command: |
             git clone --depth 1 https://github.com/comfyanonymous/ComfyUI.git ${HOME}/ComfyUI || true
             cd ${HOME}/ComfyUI
             mkdir -p models/{checkpoints,clip,clip_vision,configs,controlnet}
@@ -65,7 +40,7 @@ candy:
             mkdir -p models/{photomaker,style_models,text_encoders,unet,upscale_models,vae,vae_approx}
             mkdir -p custom_nodes output input user
             git clone --depth 1 https://github.com/ltdrdata/ComfyUI-Manager.git ${HOME}/ComfyUI/custom_nodes/ComfyUI-Manager || true
-          user: "${USER}"
+          run_as: "${USER}"
     service:
         - name: comfyui
           exec: "python %(ENV_HOME)s/ComfyUI/main.py --listen 0.0.0.0"
@@ -73,43 +48,89 @@ candy:
           working_directory: "%(ENV_HOME)s/ComfyUI"
           enable: true
           scope: system
-    eval:
-        # Build-scope — run inside the built image via `podman run --rm`.
-        - id: comfyui-main-py
-          file: ${HOME}/ComfyUI/main.py
-          exists: true
-        - id: comfyui-manager-cloned
-          file: ${HOME}/ComfyUI/custom_nodes/ComfyUI-Manager
-          filetype: directory
-        - id: comfyui-models-checkpoints
-          file: ${HOME}/ComfyUI/models/checkpoints
-          filetype: directory
-        - id: comfyui-aria2-binary
-          file: /usr/bin/aria2c
-          exists: true
-        - id: comfyui-aria2-package
-          package: aria2
-          installed: true
-        - id: comfyui-git-lfs-binary
-          file: /usr/bin/git-lfs
-          exists: true
-        - id: comfyui-git-lfs-package
-          package: git-lfs
-          installed: true
-
-        # Deploy-scope — HOST_PORT:8188 resolves to the published host port, so the
-        # same probe works whatever port the deploy maps. Needs a running GPU deploy.
-        - id: comfyui-service-running
-          scope: deploy
-          service: comfyui
-          running: true
-        - id: comfyui-port-reachable
-          scope: deploy
-          addr: 127.0.0.1:${HOST_PORT:8188}
-          reachable: true
-        - id: comfyui-system-stats-api
-          scope: deploy
-          http: http://127.0.0.1:${HOST_PORT:8188}/system_stats
-          status: 200
-          body:
-            - contains: system
+    scenario:
+        # Scenarios 1-2 are DETERMINISTIC (embedded check verbs → run at build
+        # AND deploy scope, baked into ai.opencharly.description). Scenario 3 is
+        # PROSE-ONLY (no verb → agent-graded by `charly eval feature run comfyui`
+        # against the live GPU deployment; reported unbound by build-scope
+        # `charly box feature run`).
+        - name: comfyui-app-cloned
+          step:
+            - then: the ComfyUI server entrypoint main.py is baked into ~/ComfyUI
+              file: ${HOME}/ComfyUI/main.py
+              exists: true
+            - then: the ComfyUI-Manager custom node directory is cloned alongside it
+              file: ${HOME}/ComfyUI/custom_nodes/ComfyUI-Manager
+              filetype: directory
+        - name: model-fetch-tooling-present
+          step:
+            - then: aria2c is installed so model checkpoints can be fetched in parallel
+              file: /usr/bin/aria2c
+              exists: true
+            - then: git-lfs is installed for pulling large model repositories
+              package: git-lfs
+              installed: true
+        - name: serves-image-generation-api
+          step:
+            - then: the comfyui supervisord service comes up and serves the image-generation web UI and /system_stats API on port 8188
+        - name: comfyui-main-py
+          step:
+            # Build-scope — run inside the built image via `podman run --rm`.
+            - id: comfyui-main-py
+              file: ${HOME}/ComfyUI/main.py
+              exists: true
+        - name: comfyui-manager-cloned
+          step:
+            - id: comfyui-manager-cloned
+              file: ${HOME}/ComfyUI/custom_nodes/ComfyUI-Manager
+              filetype: directory
+        - name: comfyui-models-checkpoints
+          step:
+            - id: comfyui-models-checkpoints
+              file: ${HOME}/ComfyUI/models/checkpoints
+              filetype: directory
+        - name: comfyui-aria2-binary
+          step:
+            - id: comfyui-aria2-binary
+              file: /usr/bin/aria2c
+              exists: true
+        - name: comfyui-aria2-package
+          step:
+            - id: comfyui-aria2-package
+              package: aria2
+              installed: true
+        - name: comfyui-git-lfs-binary
+          step:
+            - id: comfyui-git-lfs-binary
+              file: /usr/bin/git-lfs
+              exists: true
+        - name: comfyui-git-lfs-package
+          step:
+            - id: comfyui-git-lfs-package
+              package: git-lfs
+              installed: true
+        - name: comfyui-service-running
+          step:
+            # Deploy-scope — HOST_PORT:8188 resolves to the published host port, so the
+            # same probe works whatever port the deploy maps. Needs a running GPU deploy.
+            - id: comfyui-service-running
+              service: comfyui
+              running: true
+              context:
+                - runtime
+        - name: comfyui-port-reachable
+          step:
+            - id: comfyui-port-reachable
+              addr: 127.0.0.1:${HOST_PORT:8188}
+              reachable: true
+              context:
+                - runtime
+        - name: comfyui-system-stats-api
+          step:
+            - id: comfyui-system-stats-api
+              http: http://127.0.0.1:${HOST_PORT:8188}/system_stats
+              status: 200
+              body:
+                - contains: system
+              context:
+                - runtime

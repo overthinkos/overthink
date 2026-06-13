@@ -10,35 +10,6 @@ candy:
             agent registers with the control plane and the node reaches the Ready state —
             no join-token handoff, only the server URL plus the credential-store token.
         tag: [working]
-        scenario:
-            - name: agent-config-rendered
-              step:
-                - then: the rendered agent config exists with owner-only permissions
-                  file: /etc/rancher/k3s/config.yaml
-                  exists: true
-                  mode: "0600"
-                - then: the config points the agent at the cluster server URL
-                  file: /etc/rancher/k3s/config.yaml
-                  contains: "server:"
-            - name: agent-service-installed
-              step:
-                - then: the k3s-agent systemd unit is installed
-                  file: /etc/systemd/system/k3s-agent.service
-                  exists: true
-                - then: the unit starts the node in agent (worker) mode
-                  file: /etc/systemd/system/k3s-agent.service
-                  contains: "k3s agent"
-            - name: agent-joins-cluster
-              step:
-                - then: the worker node registers with the server and reaches Ready
-                  scope: deploy
-                  k8s: wait-nodes
-                  cluster: "${K3S_CLUSTER}"
-                  name: "${HOSTNAME}"
-                  timeout: 180s
-                  stdout:
-                    contains: "Ready"
-                - then: the joined worker becomes schedulable so cluster workloads can land on it
     require:
         - k3s
     # Same pre-shared token as k3s-server consumes. Both layers declare
@@ -60,7 +31,7 @@ candy:
         # 1. Render the k3s agent config. `server:` and `token:` in the
         # config file (not CLI flags) so rotation is a file write rather
         # than a unit edit.
-        - cmd: |
+        - command: |
             set -euo pipefail
             if [ -z "${K3S_SERVER_URL}" ]; then
               echo "K3S_SERVER_URL is required — set it in deploy.yml env for this agent." >&2
@@ -72,13 +43,13 @@ candy:
             token: "${K3S_CLUSTER_TOKEN}"
             YAML
             chmod 0600 /etc/rancher/k3s/config.yaml
-          user: root
+          run_as: root
           # K3S_CLUSTER_TOKEN comes from the secrets injector;
           # K3S_SERVER_URL from deploy.yml env. Do not re-declare here.
         # 2. Emit the systemd unit directly (see the same note in
         # candy/k3s-server/candy.yml — charly's service renderer isn't yet
         # wired into host/VM deploy paths).
-        - cmd: |
+        - command: |
             set -euo pipefail
             cat >/etc/systemd/system/k3s-agent.service <<'UNIT'
             [Unit]
@@ -105,26 +76,64 @@ candy:
             UNIT
             systemctl daemon-reload
             systemctl enable --now k3s-agent.service
-          user: root
-    eval:
-        - id: k3s-agent-config-file
-          scope: build
-          file: /etc/rancher/k3s/config.yaml
-          exists: true
-          mode: "0600"
-        - id: k3s-agent-service-unit
-          scope: build
-          file: /etc/systemd/system/k3s-agent.service
-          exists: true
-        # Deploy-scope: verify this node actually joined the cluster.
-        # Uses charly eval k8s wait-nodes --name <hostname> — the cluster flag
-        # resolves to the sibling k3s-server's ClusterProfile (the operator
-        # must name the cluster profile to match, e.g., via ${K3S_CLUSTER}).
-        - id: agent-joined
-          scope: deploy
-          k8s: wait-nodes
-          cluster: "${K3S_CLUSTER}"
-          name: "${HOSTNAME}"
-          timeout: 180s
-          stdout:
-            contains: "Ready"
+          run_as: root
+    scenario:
+        - name: agent-config-rendered
+          step:
+            - then: the rendered agent config exists with owner-only permissions
+              file: /etc/rancher/k3s/config.yaml
+              exists: true
+              mode: "0600"
+            - then: the config points the agent at the cluster server URL
+              file: /etc/rancher/k3s/config.yaml
+              contains: "server:"
+        - name: agent-service-installed
+          step:
+            - then: the k3s-agent systemd unit is installed
+              file: /etc/systemd/system/k3s-agent.service
+              exists: true
+            - then: the unit starts the node in agent (worker) mode
+              file: /etc/systemd/system/k3s-agent.service
+              contains: "k3s agent"
+        - name: agent-joins-cluster
+          step:
+            - then: the worker node registers with the server and reaches Ready
+              k8s: wait-nodes
+              cluster: "${K3S_CLUSTER}"
+              name: "${HOSTNAME}"
+              timeout: 180s
+              stdout:
+                contains: "Ready"
+              context:
+                - runtime
+            - then: the joined worker becomes schedulable so cluster workloads can land on it
+        - name: k3s-agent-config-file
+          step:
+            - id: k3s-agent-config-file
+              file: /etc/rancher/k3s/config.yaml
+              exists: true
+              mode: "0600"
+              context:
+                - build
+        - name: k3s-agent-service-unit
+          step:
+            - id: k3s-agent-service-unit
+              file: /etc/systemd/system/k3s-agent.service
+              exists: true
+              context:
+                - build
+        - name: agent-joined
+          step:
+            # Deploy-scope: verify this node actually joined the cluster.
+            # Uses charly eval k8s wait-nodes --name <hostname> — the cluster flag
+            # resolves to the sibling k3s-server's ClusterProfile (the operator
+            # must name the cluster profile to match, e.g., via ${K3S_CLUSTER}).
+            - id: agent-joined
+              k8s: wait-nodes
+              cluster: "${K3S_CLUSTER}"
+              name: "${HOSTNAME}"
+              timeout: 180s
+              stdout:
+                contains: "Ready"
+              context:
+                - runtime

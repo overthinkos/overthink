@@ -11,33 +11,6 @@ candy:
             the growpart binary, and the NoCloud drop-in are all baked into the
             image and independently checkable.
         tag: [working]
-        scenario:
-            - name: cloud-init-binary-installed
-              step:
-                - then: the cloud-init binary is present in the image
-                  file: /usr/bin/cloud-init
-                  exists: true
-                - then: cloud-init responds to --version with a version string
-                  command: cloud-init --version 2>&1
-                  exit_status: 0
-                  stdout:
-                    - matches: '[0-9]+\.[0-9]'
-            - name: nocloud-datasource-pinned
-              step:
-                - then: the NoCloud datasource drop-in is installed mode 0644
-                  file: /etc/cloud/cloud.cfg.d/99-nocloud.cfg
-                  exists: true
-                  mode: "0644"
-                - then: the drop-in restricts the datasource list to NoCloud
-                  file: /etc/cloud/cloud.cfg.d/99-nocloud.cfg
-                  contains:
-                    - contains: datasource_list
-                    - contains: NoCloud
-            - name: growpart-utility-available
-              step:
-                - then: the growpart partition-resize utility is installed
-                  file: /usr/bin/growpart
-                  exists: true
     require:
         - sshd
     package:
@@ -57,10 +30,10 @@ candy:
                 - cloud-guest-utils
     task:
         - mkdir: /etc/cloud/cloud.cfg.d
-          user: root
+          run_as: root
         - write: /etc/cloud/cloud.cfg.d/99-nocloud.cfg
           mode: "0644"
-          user: root
+          run_as: root
           content: |
             datasource_list: [ NoCloud, None ]
     service:
@@ -80,34 +53,72 @@ candy:
           use_packaged: cloud-final.service
           enable: true
           scope: system
-    eval:
-        - id: cloud-init-binary
-          file: /usr/bin/cloud-init
-          exists: true
-        - id: cloud-init-package
-          package: cloud-init
-          installed: true
-        - id: cloud-init-version
-          command: cloud-init --version 2>&1
-          exit_status: 0
-          stdout:
-            - matches: '[0-9]+\.[0-9]'
-        - id: cloud-init-nocloud-datasource
-          file: /etc/cloud/cloud.cfg.d/99-nocloud.cfg
-          exists: true
-          mode: "0644"
-          contains:
-            - contains: datasource_list
-            - contains: NoCloud
-            - contains: None
-        - id: cloud-init-growpart-binary
-          file: /usr/bin/growpart
-          exists: true
-        - id: cloud-init-growpart-package
-          package: cloud-utils-growpart
-          package_map:
-            arch: cloud-guest-utils
-            debian: cloud-guest-utils
-            ubuntu: cloud-guest-utils
-            fedora: cloud-utils-growpart
-          installed: true
+    scenario:
+        - name: cloud-init-binary-installed
+          step:
+            - then: the cloud-init binary is present in the image
+              file: /usr/bin/cloud-init
+              exists: true
+            - then: cloud-init responds to --version with a version string
+              command: cloud-init --version 2>&1
+              exit_status: 0
+              stdout:
+                - matches: '[0-9]+\.[0-9]'
+        - name: nocloud-datasource-pinned
+          step:
+            - then: the NoCloud datasource drop-in is installed mode 0644
+              file: /etc/cloud/cloud.cfg.d/99-nocloud.cfg
+              exists: true
+              mode: "0644"
+            - then: the drop-in restricts the datasource list to NoCloud
+              file: /etc/cloud/cloud.cfg.d/99-nocloud.cfg
+              contains:
+                - contains: datasource_list
+                - contains: NoCloud
+        - name: growpart-utility-available
+          step:
+            - then: the growpart partition-resize utility is installed
+              file: /usr/bin/growpart
+              exists: true
+        - name: cloud-init-binary
+          step:
+            - id: cloud-init-binary
+              file: /usr/bin/cloud-init
+              exists: true
+        - name: cloud-init-package
+          step:
+            - id: cloud-init-package
+              package: cloud-init
+              installed: true
+        - name: cloud-init-version
+          step:
+            - id: cloud-init-version
+              command: cloud-init --version 2>&1
+              exit_status: 0
+              stdout:
+                - matches: '[0-9]+\.[0-9]'
+        - name: cloud-init-nocloud-datasource
+          step:
+            - id: cloud-init-nocloud-datasource
+              file: /etc/cloud/cloud.cfg.d/99-nocloud.cfg
+              exists: true
+              mode: "0644"
+              contains:
+                - contains: datasource_list
+                - contains: NoCloud
+                - contains: None
+        - name: cloud-init-growpart-binary
+          step:
+            - id: cloud-init-growpart-binary
+              file: /usr/bin/growpart
+              exists: true
+        - name: cloud-init-growpart-package
+          step:
+            - id: cloud-init-growpart-package
+              package: cloud-utils-growpart
+              package_map:
+                arch: cloud-guest-utils
+                debian: cloud-guest-utils
+                ubuntu: cloud-guest-utils
+                fedora: cloud-utils-growpart
+              installed: true

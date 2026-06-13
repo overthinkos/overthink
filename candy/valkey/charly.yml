@@ -15,44 +15,6 @@ candy:
             and a live PING/PONG + SET/GET round-trip + reachable-port probe
             against the running deployment.
         tag: [working]
-        scenario:
-            # DETERMINISTIC build-scope steps — embedded check verbs run at both
-            # build and deploy scope; they fail if valkey was never installed.
-            - name: valkey-server-and-cli-installed
-              step:
-                - then: the valkey-server daemon binary is installed at /usr/bin/valkey-server
-                  file: /usr/bin/valkey-server
-                  exists: true
-                - and: the valkey-cli client binary is installed at /usr/bin/valkey-cli
-                  file: /usr/bin/valkey-cli
-                  exists: true
-                - and: the valkey package is installed
-                  package: valkey
-                  installed: true
-            # DETERMINISTIC deploy-scope steps — need the running service, so they
-            # are scoped to deploy and probe the live container / published port.
-            - name: valkey-answers-ping-on-its-port
-              step:
-                - then: valkey-cli ping returns PONG against the supervised valkey-server
-                  scope: deploy
-                  command: valkey-cli -h 127.0.0.1 -p 6379 ping
-                  stdout: PONG
-                - and: the valkey port accepts a TCP connection from the host
-                  scope: deploy
-                  addr: 127.0.0.1:${HOST_PORT:6379}
-                  reachable: true
-            - name: valkey-stores-and-returns-values
-              step:
-                - then: a value written with SET can be read back with GET, proving the store really persists key-value pairs
-                  scope: deploy
-                  command: valkey-cli -h 127.0.0.1 -p 6379 set charly-eval-key charly-eval-val && valkey-cli -h 127.0.0.1 -p 6379 get charly-eval-key
-                  stdout:
-                    - contains: charly-eval-val
-            # PROSE-ONLY step — genuine free-form resilience behaviour, agent-graded
-            # by `charly eval feature run valkey` against the live deployment.
-            - name: valkey-service-stays-available
-              step:
-                - then: the supervised valkey service is running and keeps answering clients, restarting automatically (restart=always) if the valkey-server process exits
     require: []
     distro:
         fedora:
@@ -72,7 +34,7 @@ candy:
           path: "~/.valkey"
     task:
         - mkdir: "${HOME}/.valkey"
-          user: "${USER}"
+          run_as: "${USER}"
     service:
         - name: valkey
           exec: "/usr/bin/valkey-server --bind 0.0.0.0 --port 6379 --protected-mode no --dir %(ENV_HOME)s/.valkey --save 60 1 --loglevel notice"
@@ -80,33 +42,88 @@ candy:
           priority: 20
           enable: true
           scope: system
-    eval:
-        # Build-scope: inside the built image (`podman run --rm`).
-        - id: valkey-server-binary
-          file: /usr/bin/valkey-server
-          exists: true
-        - id: valkey-cli-binary
-          file: /usr/bin/valkey-cli
-          exists: true
-        - id: valkey-package
-          package: valkey
-          installed: true
-        # Deploy-scope: against the running service. HOST_PORT resolves to the
-        # effective deploy-time port mapping — works unchanged whether the
-        # deploy publishes 6379:6379 or remaps to (e.g.) 16379:6379. The CLI
-        # probes run in-container (valkey-cli ships in the image, not on the host).
-        - id: valkey-responds
-          scope: deploy
-          command: valkey-cli -h 127.0.0.1 -p 6379 ping
-          stdout: PONG
-          in_container: true
-        - id: valkey-set-get
-          scope: deploy
-          command: valkey-cli -h 127.0.0.1 -p 6379 set charly-eval-probe charly-eval-ok && valkey-cli -h 127.0.0.1 -p 6379 get charly-eval-probe
-          stdout:
-            - contains: charly-eval-ok
-          in_container: true
-        - id: valkey-port-open
-          scope: deploy
-          addr: 127.0.0.1:${HOST_PORT:6379}
-          reachable: true
+    scenario:
+        # DETERMINISTIC build-scope steps — embedded check verbs run at both
+        # build and deploy scope; they fail if valkey was never installed.
+        - name: valkey-server-and-cli-installed
+          step:
+            - then: the valkey-server daemon binary is installed at /usr/bin/valkey-server
+              file: /usr/bin/valkey-server
+              exists: true
+            - and: the valkey-cli client binary is installed at /usr/bin/valkey-cli
+              file: /usr/bin/valkey-cli
+              exists: true
+            - and: the valkey package is installed
+              package: valkey
+              installed: true
+        # DETERMINISTIC deploy-scope steps — need the running service, so they
+        # are scoped to deploy and probe the live container / published port.
+        - name: valkey-answers-ping-on-its-port
+          step:
+            - then: valkey-cli ping returns PONG against the supervised valkey-server
+              command: valkey-cli -h 127.0.0.1 -p 6379 ping
+              stdout: PONG
+              context:
+                - runtime
+            - and: the valkey port accepts a TCP connection from the host
+              addr: 127.0.0.1:${HOST_PORT:6379}
+              reachable: true
+              context:
+                - runtime
+        - name: valkey-stores-and-returns-values
+          step:
+            - then: a value written with SET can be read back with GET, proving the store really persists key-value pairs
+              command: valkey-cli -h 127.0.0.1 -p 6379 set charly-eval-key charly-eval-val && valkey-cli -h 127.0.0.1 -p 6379 get charly-eval-key
+              stdout:
+                - contains: charly-eval-val
+              context:
+                - runtime
+        # PROSE-ONLY step — genuine free-form resilience behaviour, agent-graded
+        # by `charly eval feature run valkey` against the live deployment.
+        - name: valkey-service-stays-available
+          step:
+            - then: the supervised valkey service is running and keeps answering clients, restarting automatically (restart=always) if the valkey-server process exits
+        - name: valkey-server-binary
+          step:
+            # Build-scope: inside the built image (`podman run --rm`).
+            - id: valkey-server-binary
+              file: /usr/bin/valkey-server
+              exists: true
+        - name: valkey-cli-binary
+          step:
+            - id: valkey-cli-binary
+              file: /usr/bin/valkey-cli
+              exists: true
+        - name: valkey-package
+          step:
+            - id: valkey-package
+              package: valkey
+              installed: true
+        - name: valkey-responds
+          step:
+            # Deploy-scope: against the running service. HOST_PORT resolves to the
+            # effective deploy-time port mapping — works unchanged whether the
+            # deploy publishes 6379:6379 or remaps to (e.g.) 16379:6379. The CLI
+            # probes run in-container (valkey-cli ships in the image, not on the host).
+            - id: valkey-responds
+              command: valkey-cli -h 127.0.0.1 -p 6379 ping
+              stdout: PONG
+              in_container: true
+              context:
+                - runtime
+        - name: valkey-set-get
+          step:
+            - id: valkey-set-get
+              command: valkey-cli -h 127.0.0.1 -p 6379 set charly-eval-probe charly-eval-ok && valkey-cli -h 127.0.0.1 -p 6379 get charly-eval-probe
+              stdout:
+                - contains: charly-eval-ok
+              in_container: true
+              context:
+                - runtime
+        - name: valkey-port-open
+          step:
+            - id: valkey-port-open
+              addr: 127.0.0.1:${HOST_PORT:6379}
+              reachable: true
+              context:
+                - runtime

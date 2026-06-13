@@ -145,7 +145,7 @@ func (t *K8sUnifiedTarget) Del(ctx context.Context, opts DelOpts) error {
 
 // Test / Update are not supported on the k8s target — the cluster is
 // managed out-of-band via `kubectl apply -k` on the rendered tree.
-func (t *K8sUnifiedTarget) Test(ctx context.Context, checks []Check, opts TestOpts) error {
+func (t *K8sUnifiedTarget) Test(ctx context.Context, checks []Op, opts TestOpts) error {
 	return fmt.Errorf("k8s %q: %w", t.NodeName, ErrNotSupportedOnK8s)
 }
 func (t *K8sUnifiedTarget) Update(ctx context.Context, plans []*InstallPlan, opts UpdateOpts) error {

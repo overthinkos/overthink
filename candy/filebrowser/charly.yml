@@ -13,38 +13,6 @@ candy:
             Every fact below is observable: the installed binary, the config
             contents, the running service, and the HTTP 200 the web UI returns.
         tag: [working]
-        scenario:
-            # DETERMINISTIC build-scope facts (embedded check verbs run at both
-            # `charly box feature run` and `charly eval feature run`).
-            - name: filebrowser-binary-installed
-              step:
-                - then: the filebrowser binary is installed and executable at /usr/local/bin/filebrowser
-                  file: /usr/local/bin/filebrowser
-                  exists: true
-                  mode: "0755"
-            - name: filebrowser-config-declares-listen-port
-              step:
-                - then: the server config is present at /etc/filebrowser/config.yaml
-                  file: /etc/filebrowser/config.yaml
-                  exists: true
-                - then: the config declares the listen port 8080
-                  file: /etc/filebrowser/config.yaml
-                  contains:
-                    - matches: "port: 8080"
-            # DETERMINISTIC deploy-scope facts — the running service answers HTTP
-            # 200 on the published port (agent-graded only if a runtime probe is
-            # unavailable; here every step embeds a check verb).
-            - name: filebrowser-serves-web-ui
-              step:
-                - then: the filebrowser service is running under the init system
-                  scope: deploy
-                  service: filebrowser
-                  running: true
-                - then: the web UI answers HTTP 200 on the published port
-                  scope: deploy
-                  http: http://127.0.0.1:${HOST_PORT:8080}/
-                  status: 200
-                  timeout: 5s
     require:
         - supervisord
     env:
@@ -66,42 +34,13 @@ candy:
           extract: none
           to: /usr/local/bin/filebrowser
           mode: "0755"
-          user: root
+          run_as: root
         - mkdir: /etc/filebrowser
-          user: root
+          run_as: root
         - copy: config.yaml
           to: /etc/filebrowser/config.yaml
           mode: "0644"
-          user: root
-    eval:
-        - id: filebrowser-binary
-          file: /usr/local/bin/filebrowser
-          exists: true
-          mode: "0755"
-        - id: filebrowser-config
-          file: /etc/filebrowser/config.yaml
-          exists: true
-        - id: filebrowser-service
-          scope: deploy
-          service: filebrowser
-          running: true
-        - id: filebrowser-port
-          scope: deploy
-          addr: 127.0.0.1:${HOST_PORT:8080}
-          reachable: true
-          timeout: 5s
-        - id: filebrowser-http
-          scope: deploy
-          http: http://127.0.0.1:${HOST_PORT:8080}/
-          status: 200
-          timeout: 5s
-        # The candy owns the `data` volume (declared above), so the
-        # "data dir exists" probe lives here — one check covers every box
-        # composing filebrowser.
-        - id: filebrowser-volumes-exist
-          scope: deploy
-          file: ${VOLUME_CONTAINER_PATH:data}
-          filetype: directory
+          run_as: root
     service:
         - name: filebrowser
           exec: /usr/local/bin/filebrowser
@@ -110,3 +49,81 @@ candy:
           restart: always
           enable: true
           scope: system
+    scenario:
+        # DETERMINISTIC build-scope facts (embedded check verbs run at both
+        # `charly box feature run` and `charly eval feature run`).
+        - name: filebrowser-binary-installed
+          step:
+            - then: the filebrowser binary is installed and executable at /usr/local/bin/filebrowser
+              file: /usr/local/bin/filebrowser
+              exists: true
+              mode: "0755"
+        - name: filebrowser-config-declares-listen-port
+          step:
+            - then: the server config is present at /etc/filebrowser/config.yaml
+              file: /etc/filebrowser/config.yaml
+              exists: true
+            - then: the config declares the listen port 8080
+              file: /etc/filebrowser/config.yaml
+              contains:
+                - matches: "port: 8080"
+        # DETERMINISTIC deploy-scope facts — the running service answers HTTP
+        # 200 on the published port (agent-graded only if a runtime probe is
+        # unavailable; here every step embeds a check verb).
+        - name: filebrowser-serves-web-ui
+          step:
+            - then: the filebrowser service is running under the init system
+              service: filebrowser
+              running: true
+              context:
+                - runtime
+            - then: the web UI answers HTTP 200 on the published port
+              http: http://127.0.0.1:${HOST_PORT:8080}/
+              status: 200
+              timeout: 5s
+              context:
+                - runtime
+        - name: filebrowser-binary
+          step:
+            - id: filebrowser-binary
+              file: /usr/local/bin/filebrowser
+              exists: true
+              mode: "0755"
+        - name: filebrowser-config
+          step:
+            - id: filebrowser-config
+              file: /etc/filebrowser/config.yaml
+              exists: true
+        - name: filebrowser-service
+          step:
+            - id: filebrowser-service
+              service: filebrowser
+              running: true
+              context:
+                - runtime
+        - name: filebrowser-port
+          step:
+            - id: filebrowser-port
+              addr: 127.0.0.1:${HOST_PORT:8080}
+              reachable: true
+              timeout: 5s
+              context:
+                - runtime
+        - name: filebrowser-http
+          step:
+            - id: filebrowser-http
+              http: http://127.0.0.1:${HOST_PORT:8080}/
+              status: 200
+              timeout: 5s
+              context:
+                - runtime
+        - name: filebrowser-volumes-exist
+          step:
+            # The candy owns the `data` volume (declared above), so the
+            # "data dir exists" probe lives here — one check covers every box
+            # composing filebrowser.
+            - id: filebrowser-volumes-exist
+              file: ${VOLUME_CONTAINER_PATH:data}
+              filetype: directory
+              context:
+                - runtime

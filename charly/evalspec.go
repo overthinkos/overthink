@@ -11,24 +11,20 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Check is a single declarative test entry. Exactly one verb discriminator
-// field must be non-empty. Mirrors the shape of Task in layers.go:219 —
-// list-of-discriminators is the project's idiomatic style for declarative
-// YAML entries.
+// Op is the unified operation vocabulary — the single struct that replaces the
+// former Task (install/build verbs) and Check (probe/assert verbs). One Op has
+// exactly one verb plus three orthogonal axes:
 //
-// Authoring examples:
+//   - Do:      act | assert | instruct — does the op perform a side-effect,
+//     assert state, or hand a free-form instruction to the agent grader.
+//     Per-verb default lives in VerbCatalog; an explicit `do:` overrides.
+//   - Context: build | deploy | runtime | agent — where the op is legal and which
+//     engine runs it (generalization of the former Check.Scope). Empty →
+//     the verb's default contexts from VerbCatalog.
 //
-//	tests:
-//	  - file: /usr/bin/redis-server
-//	    exists: true
-//	    mode: "0755"
-//	  - port: 6379
-//	    listening: true
-//	  - command: redis-cli ping
-//	    stdout: PONG
-//	  - http: http://127.0.0.1:8888/api
-//	    status: 200
-type Check struct {
+// VerbCatalog is the single source of truth for per-verb legality, default Do,
+// reversibility, and the InstallPlan step kind an act-mode op lowers to.
+type Op struct {
 	// Verb discriminators — exactly one non-empty (enforced by Kind()).
 	File        string `yaml:"file,omitempty"          json:"file,omitempty"`
 	Package     string `yaml:"package,omitempty"       json:"package,omitempty"`
@@ -45,6 +41,25 @@ type Check struct {
 	Mount       string `yaml:"mount,omitempty"         json:"mount,omitempty"`
 	Addr        string `yaml:"addr,omitempty"          json:"addr,omitempty"`
 	Matching    any    `yaml:"matching,omitempty"      json:"matching,omitempty"`
+
+	// Install/build verb discriminators (formerly the Task struct). These are
+	// imperative by nature: their VerbCatalog DefaultDo is "act". `command`
+	// (above) collapses the former Task `cmd:` and Check `command:` into one
+	// verb — context decides RUN-directive (build) vs RunCapture/RunSystem.
+	Mkdir    string `yaml:"mkdir,omitempty"    json:"mkdir,omitempty"`    // directory to create
+	Copy     string `yaml:"copy,omitempty"     json:"copy,omitempty"`     // candy-dir file to stage (src)
+	Write    string `yaml:"write,omitempty"    json:"write,omitempty"`    // destination path for inline Content
+	Link     string `yaml:"link,omitempty"     json:"link,omitempty"`     // symlink path (where the link lives)
+	Download string `yaml:"download,omitempty" json:"download,omitempty"` // URL to fetch
+	Setcap   string `yaml:"setcap,omitempty"   json:"setcap,omitempty"`   // file path for capability op
+	Build    string `yaml:"build,omitempty"    json:"build,omitempty"`    // builder selector ("all")
+
+	// Agent verb — free-form natural-language instruction handed to the AI
+	// grader (the former prose-only scenario step). DefaultDo is "instruct";
+	// legal only in the agent context (gated by eval_level). The value is the
+	// instruction text; the grader agent itself is resolved via --agent / the
+	// sole configured agent: entry.
+	Agent string `yaml:"agent,omitempty" json:"agent,omitempty"`
 
 	// Test-mode live-container verbs — each is a method-name discriminator
 	// validated against the CLI's subcommand surface. Dispatched by runCdp/
@@ -108,8 +123,29 @@ type Check struct {
 	Description string `yaml:"description,omitempty"  json:"description,omitempty"`
 	Skip        bool   `yaml:"skip,omitempty"         json:"skip,omitempty"`
 	Timeout     string `yaml:"timeout,omitempty"      json:"timeout,omitempty"`
-	Scope       string `yaml:"scope,omitempty"        json:"scope,omitempty"` // "build" | "deploy" (default filled by collector)
 	InContainer *bool  `yaml:"in_container,omitempty" json:"in_container,omitempty"`
+
+	// Unified operation axes.
+	//   Do:      "act" | "assert" | "instruct". Empty → VerbCatalog default.
+	//   Context: subset of {build, deploy, runtime, agent}. Empty → VerbCatalog default.
+	Do      string   `yaml:"do,omitempty"      json:"do,omitempty"`
+	Context []string `yaml:"context,omitempty" json:"context,omitempty"`
+
+	// Install/build modifiers (formerly Task). Validity depends on verb.
+	//   RunAs:           user context for an act-mode op (root / ${USER} / name /
+	//                    uid:gid) — the former Task `user:`, renamed so it does not
+	//                    collide with the `user` VERB discriminator. (Mode, Target,
+	//                    Caps already exist above and merge by verb-scoped meaning.)
+	RunAs           string            `yaml:"run_as,omitempty"          json:"run_as,omitempty"`
+	To              string            `yaml:"to,omitempty"              json:"to,omitempty"`                // copy/download destination
+	Content         string            `yaml:"content,omitempty"         json:"content,omitempty"`           // write: inline body
+	Extract         string            `yaml:"extract,omitempty"         json:"extract,omitempty"`           // download: archive format
+	Include         []string          `yaml:"include,omitempty"         json:"include,omitempty"`           // download: extract filter
+	StripComponents int               `yaml:"strip_components,omitempty" json:"strip_components,omitempty"` // download: tar --strip-components
+	Uninstall       []string          `yaml:"uninstall,omitempty"       json:"uninstall,omitempty"`         // explicit reverse-target file list
+	Comment         string            `yaml:"comment,omitempty"         json:"comment,omitempty"`           // Containerfile comment
+	Cache           []string          `yaml:"cache,omitempty"           json:"cache,omitempty"`             // BuildKit cache-mount paths
+	Env             map[string]string `yaml:"env,omitempty"             json:"env,omitempty"`               // download: install-script env
 
 	// BDD-era modifiers (2026-04) — usable both in scenario Steps and in classical `tests:` entries.
 	//
@@ -330,25 +366,32 @@ type Check struct {
 	RecordAudio bool   `yaml:"record_audio,omitempty" json:"record_audio,omitempty"` // --audio (desktop mode, start only)
 }
 
-// CheckVerbs lists valid discriminator keys in stable order (used for
-// deterministic error messages).
-var CheckVerbs = []string{
+// OpVerbs lists valid discriminator keys in stable order (used for
+// deterministic error messages). It is the union of the former Task install
+// verbs + Check probe/live/meta verbs + the agent verb.
+var OpVerbs = []string{
+	// install/build (imperative — DefaultDo act)
+	"mkdir", "copy", "write", "link", "download", "setcap", "build",
+	// probe/provision (act-or-assert)
 	"file", "package", "service", "port", "process", "command",
 	"http", "dns", "user", "group", "interface", "kernel-param",
 	"mount", "addr", "matching",
+	// live-container (runtime act-or-assert)
 	"cdp", "wl", "dbus", "vnc", "mcp",
 	"record", "spice", "libvirt", "k8s",
 	"adb", "appium",
-	"summarize",
-	"kill",
+	// meta
+	"summarize", "kill",
+	// agent (free-form instruct)
+	"agent",
 }
 
 // Kind returns the check's verb name and an error if zero or multiple
 // verb discriminators are set. Matches Task.Kind() semantics.
-func (c *Check) Kind() (string, error) {
+func (c *Op) Kind() (string, error) {
 	set := c.verbsSet()
 	if len(set) == 0 {
-		return "", fmt.Errorf("check has no verb set (expected exactly one of: %s)", strings.Join(CheckVerbs, ", "))
+		return "", fmt.Errorf("check has no verb set (expected exactly one of: %s)", strings.Join(OpVerbs, ", "))
 	}
 	if len(set) > 1 {
 		return "", fmt.Errorf("check has multiple verbs set (%s); exactly one is required", strings.Join(set, ", "))
@@ -368,8 +411,32 @@ func (c *Check) Kind() (string, error) {
 //	command: "uname -s"      # alone → command verb
 //	libvirt: guest/exec
 //	command: "uname -s"      # paired → modifier for guest/exec argv
-func (c *Check) verbsSet() []string {
+func (c *Op) verbsSet() []string {
 	var set []string
+	if c.Mkdir != "" {
+		set = append(set, "mkdir")
+	}
+	if c.Copy != "" {
+		set = append(set, "copy")
+	}
+	if c.Write != "" {
+		set = append(set, "write")
+	}
+	if c.Link != "" {
+		set = append(set, "link")
+	}
+	if c.Download != "" {
+		set = append(set, "download")
+	}
+	if c.Setcap != "" {
+		set = append(set, "setcap")
+	}
+	if c.Build != "" {
+		set = append(set, "build")
+	}
+	if c.Agent != "" {
+		set = append(set, "agent")
+	}
 	if c.File != "" {
 		set = append(set, "file")
 	}
@@ -676,10 +743,8 @@ func (cl *ContainsList) UnmarshalYAML(node *yaml.Node) error {
 	return nil
 }
 
-// LabelEvalSet was relocated to labelset.go in the 2026-04
-// BDD/test/harness surface-cleanup cutover, alongside the new LabelSet
-// aggregate that wraps both LabelEvalSet and LabelDescriptionSet. See
-// labelset.go for the type definition and IsEmpty method.
+// LabelDescriptionSet (labelset.go) is the three-section label set carrying an
+// image's baked scenarios; the LabelSet aggregate there wraps it.
 
 // ---------------------------------------------------------------------------
 // Variable expansion (extended grammar shared with tasks)
@@ -806,7 +871,7 @@ func IsRuntimeOnlyVar(key string) bool {
 //
 // The slice is stable (not affected by which verb is set) so callers can
 // safely iterate and mutate in place.
-func (c *Check) StringFields() []*string {
+func (c *Op) StringFields() []*string {
 	return []*string{
 		&c.File, &c.Package, &c.Service, &c.Process, &c.Command,
 		&c.HTTP, &c.DNS, &c.User, &c.Group, &c.Interface,
@@ -840,13 +905,18 @@ func (c *Check) StringFields() []*string {
 		// kill: verb's PID arg is typically ${CAPTURED:<name>} from a prior
 		// background command; Signal is a literal but expanded for symmetry.
 		&c.Kill, &c.Signal,
+		// Install/build verb discriminators + path-like modifiers (the former
+		// Task surface). Content is INTENTIONALLY excluded — write: bodies are
+		// verbatim bytes, never ${VAR}-substituted (matches the task rule).
+		&c.Mkdir, &c.Copy, &c.Write, &c.Link, &c.Download, &c.Setcap, &c.Build,
+		&c.Agent, &c.RunAs, &c.To, &c.Extract,
 	}
 }
 
 // ExpandVars rewrites every ${...} reference on this Check in place using
 // the supplied environment map. Returns the combined list of unresolved refs
 // encountered across all string fields.
-func (c *Check) ExpandVars(env map[string]string) []string {
+func (c *Op) ExpandVars(env map[string]string) []string {
 	seen := map[string]bool{}
 	var missing []string
 	for _, p := range c.StringFields() {
@@ -864,4 +934,178 @@ func (c *Check) ExpandVars(env map[string]string) []string {
 	}
 	sort.Strings(missing)
 	return missing
+}
+
+// ---------------------------------------------------------------------------
+// Unified verb vocabulary — execution context, do-mode, and the VerbCatalog
+// single source of truth for per-verb legality + lowering.
+// ---------------------------------------------------------------------------
+
+// ExecContext is where an op runs. An op's Context list (or its VerbCatalog
+// default) declares legality; the active engine supplies the running context
+// and skips ops whose context set does not include it (VenueSkip).
+type ExecContext string
+
+const (
+	CtxBuild   ExecContext = "build"   // image construction (OCITarget → Containerfile)
+	CtxDeploy  ExecContext = "deploy"  // host/VM/pod provisioning (DeployExecutor)
+	CtxRuntime ExecContext = "runtime" // a running target (eval Runner)
+	CtxAgent   ExecContext = "agent"   // an AI CLI driving the bed (do: instruct)
+)
+
+// DoMode is the act/assert/instruct axis. act = perform a side-effect;
+// assert = run the matchers (read-only); instruct = hand free-form text to the
+// agent grader.
+type DoMode string
+
+const (
+	DoAct      DoMode = "act"
+	DoAssert   DoMode = "assert"
+	DoInstruct DoMode = "instruct"
+)
+
+// VerbSpec is the per-verb metadata in VerbCatalog. Contexts[0] is the
+// canonical default context. LowersTo names the InstallPlan step kind an
+// act-mode op of this verb lowers to ("" → a generic OpStep). Reversible marks
+// whether act-mode reversal is automatic (an auto ReverseOp); when false an
+// act-mode op needs an explicit `uninstall:` or is reversed via scenario
+// teardown (live verbs) — enforced in validation.
+type VerbSpec struct {
+	Contexts   []ExecContext
+	DefaultDo  DoMode
+	Reversible bool
+	LowersTo   StepKind
+}
+
+// HasContext reports whether the verb is legal in ctx.
+func (s VerbSpec) HasContext(ctx ExecContext) bool {
+	for _, c := range s.Contexts {
+		if c == ctx {
+			return true
+		}
+	}
+	return false
+}
+
+var (
+	ctxBuildDeploy        = []ExecContext{CtxBuild, CtxDeploy}
+	ctxBuildDeployRuntime = []ExecContext{CtxBuild, CtxDeploy, CtxRuntime}
+	ctxDeployRuntime      = []ExecContext{CtxDeploy, CtxRuntime}
+	ctxRuntimeOnly        = []ExecContext{CtxRuntime}
+)
+
+// VerbCatalog is the single source of truth for every verb's legality, default
+// do-mode, reversibility, and act-mode lowering target — one table driving
+// validation, dispatch, and lowering. Keys match OpVerbs.
+var VerbCatalog = map[string]VerbSpec{
+	// install/build — imperative; build+deploy only (no live-runtime form).
+	"mkdir":    {ctxBuildDeploy, DoAct, false, ""},
+	"copy":     {ctxBuildDeploy, DoAct, true, ""}, // build → COPY, deploy → PutFile (venue-lowered)
+	"write":    {ctxBuildDeploy, DoAct, true, ""},
+	"link":     {ctxBuildDeploy, DoAct, true, ""},
+	"download": {ctxBuildDeploy, DoAct, true, ""},
+	"setcap":   {ctxBuildDeploy, DoAct, false, ""},
+	"build":    {ctxBuildDeploy, DoAct, false, ""},
+
+	// shell — act-or-assert; portable across build/deploy/runtime. No
+	// auto-reverse (opaque); act-mode needs explicit uninstall:.
+	"command": {ctxBuildDeployRuntime, DoAssert, false, ""},
+
+	// system-state probe/provision — assert by default; the act-capable subset
+	// lowers into existing reversible InstallPlan step kinds.
+	"file":         {ctxBuildDeployRuntime, DoAssert, true, ""}, // probe; file-creation is the write/copy verbs (act → runtime executor)
+	"package":      {ctxBuildDeployRuntime, DoAssert, true, StepKindSystemPackages},
+	"service":      {ctxBuildDeployRuntime, DoAssert, true, StepKindServicePackaged}, // act → enable the named packaged unit
+	"user":         {ctxBuildDeployRuntime, DoAssert, true, ""},                      // act → useradd (+ ReverseOpUserRemove)
+	"group":        {ctxBuildDeployRuntime, DoAssert, true, ""},                      // act → groupadd (+ ReverseOpGroupRemove)
+	"kernel-param": {ctxBuildDeployRuntime, DoAssert, true, ""},                      // act → sysctl (+ ReverseOpSysctlRestore)
+	"mount":        {ctxDeployRuntime, DoAssert, true, ""},                           // act → mount (+ ReverseOpUmount)
+	"port":         {ctxBuildDeployRuntime, DoAssert, false, ""},                     // observe-only
+	"process":      {ctxBuildDeployRuntime, DoAssert, false, ""},                     // observe-only
+	"http":         {ctxDeployRuntime, DoAssert, false, ""},                          // act → request (no reverse)
+	"dns":          {ctxDeployRuntime, DoAssert, false, ""},                          // observe-only
+	"interface":    {ctxRuntimeOnly, DoAssert, false, ""},                            // observe-only
+	"addr":         {ctxDeployRuntime, DoAssert, false, ""},                          // observe-only
+	"matching":     {[]ExecContext{CtxBuild, CtxDeploy, CtxRuntime, CtxAgent}, DoAssert, false, ""},
+
+	// live-container — runtime only; act drives UI/config, reversed via scenario
+	// teardown (never the ledger). k8s also legal at deploy (apply manifest).
+	"cdp":     {ctxRuntimeOnly, DoAssert, false, ""},
+	"wl":      {ctxRuntimeOnly, DoAssert, false, ""},
+	"dbus":    {ctxRuntimeOnly, DoAssert, false, ""},
+	"vnc":     {ctxRuntimeOnly, DoAssert, false, ""},
+	"mcp":     {ctxRuntimeOnly, DoAssert, false, ""},
+	"record":  {ctxRuntimeOnly, DoAssert, false, ""},
+	"spice":   {ctxRuntimeOnly, DoAssert, false, ""},
+	"libvirt": {ctxRuntimeOnly, DoAssert, false, ""},
+	"k8s":     {ctxDeployRuntime, DoAssert, false, ""},
+	"adb":     {ctxRuntimeOnly, DoAssert, false, ""},
+	"appium":  {ctxRuntimeOnly, DoAssert, false, ""},
+
+	// meta + agent.
+	"summarize": {[]ExecContext{CtxRuntime, CtxAgent}, DoAssert, false, ""},
+	"kill":      {ctxRuntimeOnly, DoAct, false, ""},
+	"agent":     {[]ExecContext{CtxAgent}, DoInstruct, false, ""},
+}
+
+// installVerbs are the verbs that render directly to a generic OpStep install
+// step (a Containerfile directive at build, a deploy shell command at deploy).
+// Distinct from the LowersTo verbs, which lower into a typed install step.
+var installVerbs = map[string]bool{
+	"mkdir": true, "copy": true, "write": true, "link": true,
+	"download": true, "setcap": true, "build": true, "command": true,
+}
+
+// ActsInBuildDeploy reports whether a do:act op with this verb has a real
+// build/deploy install path — a generic OpStep (the install verbs + command)
+// or a typed lowering (VerbCatalog.LowersTo). Every other verb's act form runs
+// only at runtime (the eval Runner's executor), so a build/deploy do:act op of
+// such a verb would be silently dropped by the compiler — the validator
+// rejects it instead (file creation in build/deploy is the write/copy verbs).
+func ActsInBuildDeploy(verb string) bool {
+	return installVerbs[verb] || VerbCatalog[verb].LowersTo != ""
+}
+
+// EffectiveDo returns the op's resolved do-mode: an explicit Do wins, else the
+// verb's VerbCatalog default, else DoAssert.
+func (c *Op) EffectiveDo() DoMode {
+	switch DoMode(c.Do) {
+	case DoAct, DoAssert, DoInstruct:
+		return DoMode(c.Do)
+	}
+	verb, err := c.Kind()
+	if err == nil {
+		if spec, ok := VerbCatalog[verb]; ok && spec.DefaultDo != "" {
+			return spec.DefaultDo
+		}
+	}
+	return DoAssert
+}
+
+// EffectiveContexts returns the op's resolved execution contexts: an explicit
+// Context wins, else the verb's VerbCatalog default, else nil.
+func (c *Op) EffectiveContexts() []ExecContext {
+	if len(c.Context) > 0 {
+		out := make([]ExecContext, 0, len(c.Context))
+		for _, s := range c.Context {
+			out = append(out, ExecContext(s))
+		}
+		return out
+	}
+	if verb, err := c.Kind(); err == nil {
+		if spec, ok := VerbCatalog[verb]; ok {
+			return spec.Contexts
+		}
+	}
+	return nil
+}
+
+// InContext reports whether the op is legal in ctx per its effective contexts.
+func (c *Op) InContext(ctx ExecContext) bool {
+	for _, x := range c.EffectiveContexts() {
+		if x == ctx {
+			return true
+		}
+	}
+	return false
 }

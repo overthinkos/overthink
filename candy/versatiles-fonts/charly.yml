@@ -13,27 +13,6 @@ candy:
             cell render labels without hitting tiles.versatiles.org as a runtime
             font CDN; the bundle is re-exported by versatiles-frontend at /fonts/.
         tag: [working]
-        scenario:
-            - name: sdf-glyph-bundle-installed
-              step:
-                - then: the install directory /opt/versatiles-fonts exists
-                  file: /opt/versatiles-fonts
-                  filetype: directory
-                - then: at least one signed-distance-field glyph PBF was unpacked from the release tarball
-                  command: |
-                    find /opt/versatiles-fonts -name '*.pbf' -size +1c | head -1 | grep -q .
-                  exit_status: 0
-                - then: the default MapLibre font Noto Sans Regular is present
-                  command: |
-                    find /opt/versatiles-fonts -path '*noto_sans_regular*' -name '*.pbf' | head -1 | grep -q .
-                  exit_status: 0
-            - name: maplibre-glyph-range-layout
-              step:
-                - then: glyphs follow MapLibre's {range}.pbf naming so the base 0-255.pbf range file exists
-                  command: |
-                    find /opt/versatiles-fonts -name '0-255.pbf' | head -1 | grep -q .
-                  exit_status: 0
-                - then: a MapLibre GL JS client can fetch any installed family's glyph ranges via the standard {fontstack}/{range}.pbf glyph-URL template
     require:
         - supervisord
     distro:
@@ -47,7 +26,7 @@ candy:
                 - jq
     task:
         - mkdir: /opt/versatiles-fonts
-          user: root
+          run_as: root
         # ---- versatiles-fonts SDF glyphs ----
         # versatiles-org/versatiles-fonts ships `fonts.tar.gz` on each
         # release with all 10 font families bundled. Resolve the asset
@@ -56,7 +35,7 @@ candy:
         # change surfaces cleanly. The tarball lays out as
         # `<font-family>/<zoom>-<range>.pbf` per MapLibre's standard
         # glyph-URL convention.
-        - cmd: |
+        - command: |
             set -euo pipefail
             ASSET=$(curl -fsSL "https://api.github.com/repos/versatiles-org/versatiles-fonts/releases/latest" \
               | jq -r '.assets[].browser_download_url' \
@@ -74,31 +53,59 @@ candy:
             tar -xzf fonts.tar.gz -C /opt/versatiles-fonts
             cd /
             rm -rf "$TMPDIR"
-          user: root
-    eval:
-        # Build-scope: at least one font family's glyph PBF range exists.
-        # `find ... -name '*.pbf'` matches MapLibre's standard glyph file
-        # layout regardless of whether the tarball nests under a top-level
-        # directory or expands flat.
-        - id: versatiles-fonts-bundle-present
-          command: |
-            find /opt/versatiles-fonts -name '*.pbf' -size +1c | head -1 | grep -q .
-          exit_status: 0
-        # Build-scope: Noto Sans Regular is the default MapLibre style
-        # font; assert it's present specifically. versatiles-fonts uses
-        # lowercase + underscore-separated directory names (e.g.
-        # `noto_sans_regular`, not `Noto Sans Regular`), verified against
-        # the v2.1.0 release.
-        - id: versatiles-fonts-noto-sans
-          command: |
-            find /opt/versatiles-fonts -path '*noto_sans_regular*' -name '*.pbf' | head -1 | grep -q .
-          exit_status: 0
-        # Build-scope: the build dependencies this candy declares are installed
-        # in the image. curl + jq resolve and fetch the GitHub release asset;
-        # both carry the same package name on arch and fedora (no package_map).
-        - id: versatiles-fonts-curl
-          package: curl
-          installed: true
-        - id: versatiles-fonts-jq
-          package: jq
-          installed: true
+          run_as: root
+    scenario:
+        - name: sdf-glyph-bundle-installed
+          step:
+            - then: the install directory /opt/versatiles-fonts exists
+              file: /opt/versatiles-fonts
+              filetype: directory
+            - then: at least one signed-distance-field glyph PBF was unpacked from the release tarball
+              command: |
+                find /opt/versatiles-fonts -name '*.pbf' -size +1c | head -1 | grep -q .
+              exit_status: 0
+            - then: the default MapLibre font Noto Sans Regular is present
+              command: |
+                find /opt/versatiles-fonts -path '*noto_sans_regular*' -name '*.pbf' | head -1 | grep -q .
+              exit_status: 0
+        - name: maplibre-glyph-range-layout
+          step:
+            - then: glyphs follow MapLibre's {range}.pbf naming so the base 0-255.pbf range file exists
+              command: |
+                find /opt/versatiles-fonts -name '0-255.pbf' | head -1 | grep -q .
+              exit_status: 0
+            - then: a MapLibre GL JS client can fetch any installed family's glyph ranges via the standard {fontstack}/{range}.pbf glyph-URL template
+        - name: versatiles-fonts-bundle-present
+          step:
+            # Build-scope: at least one font family's glyph PBF range exists.
+            # `find ... -name '*.pbf'` matches MapLibre's standard glyph file
+            # layout regardless of whether the tarball nests under a top-level
+            # directory or expands flat.
+            - id: versatiles-fonts-bundle-present
+              command: |
+                find /opt/versatiles-fonts -name '*.pbf' -size +1c | head -1 | grep -q .
+              exit_status: 0
+        - name: versatiles-fonts-noto-sans
+          step:
+            # Build-scope: Noto Sans Regular is the default MapLibre style
+            # font; assert it's present specifically. versatiles-fonts uses
+            # lowercase + underscore-separated directory names (e.g.
+            # `noto_sans_regular`, not `Noto Sans Regular`), verified against
+            # the v2.1.0 release.
+            - id: versatiles-fonts-noto-sans
+              command: |
+                find /opt/versatiles-fonts -path '*noto_sans_regular*' -name '*.pbf' | head -1 | grep -q .
+              exit_status: 0
+        - name: versatiles-fonts-curl
+          step:
+            # Build-scope: the build dependencies this candy declares are installed
+            # in the image. curl + jq resolve and fetch the GitHub release asset;
+            # both carry the same package name on arch and fedora (no package_map).
+            - id: versatiles-fonts-curl
+              package: curl
+              installed: true
+        - name: versatiles-fonts-jq
+          step:
+            - id: versatiles-fonts-jq
+              package: jq
+              installed: true

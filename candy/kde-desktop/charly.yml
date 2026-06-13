@@ -21,48 +21,6 @@ candy:
             entry is skipped (warn) by design. For the headless streamed KDE pod use
             selkies-kde-desktop, which composes kde-shell directly without SDDM.
         tag: [working]
-        scenario:
-            # Build-scope: SDDM is the display-manager half kde-desktop adds on top
-            # of kde-shell — the package + binary land even on a supervisord image
-            # (only the sddm.service entry is skipped there).
-            - name: sddm-display-manager-installed
-              step:
-                - then: the SDDM display-manager binary is installed for the graphical seat
-                  file: /usr/bin/sddm
-                  exists: true
-                - then: the sddm package is present in the image
-                  package: sddm
-                  installed: true
-            # Build-scope: the workstation-only Plasma extras that distinguish a
-            # bare-metal seat from the lean headless kde-shell streaming pod.
-            - name: workstation-plasma-extras-present
-              step:
-                - then: the workstation system monitor is available
-                  file: /usr/bin/plasma-systemmonitor
-                  exists: true
-                - then: the filelight disk-usage visualiser is installed
-                  file: /usr/bin/filelight
-                  exists: true
-                - then: the KDE partition manager is installed
-                  file: /usr/bin/partitionmanager
-                  exists: true
-                - then: the haruna media player package is present
-                  package: haruna
-                  installed: true
-            # Deploy-scope: on a real systemd seat the task flips the default
-            # target and the packaged unit is enabled so SDDM lights up a login.
-            - name: graphical-seat-boots-sddm
-              step:
-                - then: the systemd default target is graphical so SDDM starts a KDE login on the real GPU output
-                  scope: deploy
-                  command: systemctl get-default
-                  exit_status: 0
-                  stdout:
-                    - matches: "graphical.target"
-                - then: the packaged sddm.service is enabled to start at boot
-                  scope: deploy
-                  service: sddm
-                  enabled: true
     require:
         - dbus
         - pipewire
@@ -103,40 +61,101 @@ candy:
         # systemd guest the default is often multi-user.target; flip it so SDDM
         # starts a KDE login on the real GPU output. Tolerant of an image-build
         # chroot (no running systemd).
-        - cmd: |
+        - command: |
             systemctl set-default graphical.target || true
-          user: root
+          run_as: root
     service:
         - name: sddm
           use_packaged: sddm.service
           enable: true
           scope: system
-    eval:
-        - id: sddm-binary
-          file: /usr/bin/sddm
-          exists: true
-        - id: sddm-package
-          package: sddm
-          installed: true
-        - id: plasma-systemmonitor-binary
-          file: /usr/bin/plasma-systemmonitor
-          exists: true
-        - id: filelight-binary
-          file: /usr/bin/filelight
-          exists: true
-        - id: partitionmanager-binary
-          file: /usr/bin/partitionmanager
-          exists: true
-        - id: haruna-package
-          package: haruna
-          installed: true
-        - id: sddm-enabled
-          scope: deploy
-          service: sddm
-          enabled: true
-        - id: graphical-target-default
-          scope: deploy
-          command: systemctl get-default
-          exit_status: 0
-          stdout:
-            - matches: "graphical.target"
+    scenario:
+        # Build-scope: SDDM is the display-manager half kde-desktop adds on top
+        # of kde-shell — the package + binary land even on a supervisord image
+        # (only the sddm.service entry is skipped there).
+        - name: sddm-display-manager-installed
+          step:
+            - then: the SDDM display-manager binary is installed for the graphical seat
+              file: /usr/bin/sddm
+              exists: true
+            - then: the sddm package is present in the image
+              package: sddm
+              installed: true
+        # Build-scope: the workstation-only Plasma extras that distinguish a
+        # bare-metal seat from the lean headless kde-shell streaming pod.
+        - name: workstation-plasma-extras-present
+          step:
+            - then: the workstation system monitor is available
+              file: /usr/bin/plasma-systemmonitor
+              exists: true
+            - then: the filelight disk-usage visualiser is installed
+              file: /usr/bin/filelight
+              exists: true
+            - then: the KDE partition manager is installed
+              file: /usr/bin/partitionmanager
+              exists: true
+            - then: the haruna media player package is present
+              package: haruna
+              installed: true
+        # Deploy-scope: on a real systemd seat the task flips the default
+        # target and the packaged unit is enabled so SDDM lights up a login.
+        - name: graphical-seat-boots-sddm
+          step:
+            - then: the systemd default target is graphical so SDDM starts a KDE login on the real GPU output
+              command: systemctl get-default
+              exit_status: 0
+              stdout:
+                - matches: "graphical.target"
+              context:
+                - runtime
+            - then: the packaged sddm.service is enabled to start at boot
+              service: sddm
+              enabled: true
+              context:
+                - runtime
+        - name: sddm-binary
+          step:
+            - id: sddm-binary
+              file: /usr/bin/sddm
+              exists: true
+        - name: sddm-package
+          step:
+            - id: sddm-package
+              package: sddm
+              installed: true
+        - name: plasma-systemmonitor-binary
+          step:
+            - id: plasma-systemmonitor-binary
+              file: /usr/bin/plasma-systemmonitor
+              exists: true
+        - name: filelight-binary
+          step:
+            - id: filelight-binary
+              file: /usr/bin/filelight
+              exists: true
+        - name: partitionmanager-binary
+          step:
+            - id: partitionmanager-binary
+              file: /usr/bin/partitionmanager
+              exists: true
+        - name: haruna-package
+          step:
+            - id: haruna-package
+              package: haruna
+              installed: true
+        - name: sddm-enabled
+          step:
+            - id: sddm-enabled
+              service: sddm
+              enabled: true
+              context:
+                - runtime
+        - name: graphical-target-default
+          step:
+            - id: graphical-target-default
+              command: systemctl get-default
+              exit_status: 0
+              stdout:
+                - matches: "graphical.target"
+              context:
+                - runtime

@@ -168,15 +168,16 @@ type BoxConfig struct {
 	KeepImages   *int `yaml:"keep_images,omitempty"`
 	KeepEvalRuns *int `yaml:"keep_eval_runs,omitempty"`
 
-	// Tests are image-level declarative checks (cross-candy invariants).
-	// Entries without explicit scope default to "build" and land in the
-	// box section of the OCI label.
-	Eval []Check `yaml:"eval,omitempty"`
+	// Scenario carries image-level acceptance scenarios (Op steps) — the
+	// box's own cross-candy invariants. Candy scenarios propagate via the
+	// composition machinery; these are box-specific. Travels in the box
+	// section of the ai.opencharly.description OCI label.
+	Scenario []Scenario `yaml:"scenario,omitempty"`
 
-	// DeployEval are image-author-supplied deploy-level defaults. All
-	// entries default to scope: deploy and land in the deploy section of
-	// the OCI label; local charly.yml can override them by id.
-	DeployEval []Check `yaml:"deploy_eval,omitempty"`
+	// EvalLevel declares how deep `charly check run <bed>` runs this box's
+	// acceptance: none | build | noagent (default) | agent. Baked into the
+	// ai.opencharly.eval_level capability label.
+	EvalLevel string `yaml:"eval_level,omitempty"`
 
 	// Shell is an image-level shell-init contribution layered on top of
 	// what the included candies contribute. Same shape as the candy
@@ -210,8 +211,9 @@ type ResolvedBox struct {
 	// auto-intermediates are materialized). Stable across builds when no candy
 	// changed — this is what keeps a child's FROM <base> SHA from shifting.
 	EffectiveVersion string `json:"effective_version,omitempty"`
-	Status           string `json:"status,omitempty"` // effective status (worst of box + candies)
-	Info             string `json:"info,omitempty"`   // aggregated info from box + candies
+	Status           string `json:"status,omitempty"`     // effective status (worst of box + candies)
+	Info             string `json:"info,omitempty"`       // aggregated info from box + candies
+	EvalLevel        string `json:"eval_level,omitempty"` // acceptance-depth rung (none|build|noagent|agent), baked as ai.opencharly.eval_level
 	Base             string // Resolved base (external OCI ref or internal image name)
 	// From mirrors BoxConfig.From after resolution. When non-empty
 	// (e.g. "builder:pacstrap"), the generator emits FROM scratch +
@@ -394,10 +396,11 @@ func (c *Config) ResolveBox(name string, calverTag string, dir string, opts Reso
 	}
 
 	resolved := &ResolvedBox{
-		Name:    name,
-		Version: img.Version,
-		Status:  descriptionStatus(img.Description),
-		Info:    descriptionInfo(img.Description),
+		Name:      name,
+		Version:   img.Version,
+		Status:    descriptionStatus(img.Description),
+		Info:      descriptionInfo(img.Description),
+		EvalLevel: ResolveEvalLevel(img.EvalLevel),
 	}
 
 	// `from: builder:<name>` — non-registry base via a kind: bootstrap
@@ -917,7 +920,7 @@ type baseChainNode struct {
 // walkBaseChain walks boxName's ROOT-INTERNAL base-image chain and returns
 // the images in walk order (self first, then each internal base). It is the ONE
 // shared base-chain traversal used by every chain-walking collector
-// (CollectHooks / CollectEval / CollectShell / CollectDescription /
+// (CollectHooks / CollectShell / CollectDescription /
 // CollectBoxVolume) — each previously re-implemented the identical
 // `for { img := cfg.Box[current]; ...; current = img.Base }` loop (R3: one
 // implementation, no divergent copies), now cycle-safe for all of them.

@@ -211,7 +211,7 @@ func TestPersistBedDeployOverrides_SeedsPortBeforeConfig(t *testing.T) {
 		t.Fatalf("mkdir: %v", err)
 	}
 	// A pre-existing unrelated deploy must survive the seed (merge, not clobber).
-	initialYAML := `version: 2026.163.0928
+	initialYAML := `version: 2026.164.0002
 deploy:
     ollama:
         target: pod

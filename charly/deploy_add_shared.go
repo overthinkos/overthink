@@ -7,7 +7,7 @@ package main
 //
 // Ordering is load-bearing and preserved exactly:
 //   - secrets are injected into the plans BEFORE any Emit (a candy's
-//     TaskStep body references the resolved token via env).
+//     OpStep body references the resolved token via env).
 //   - artifactEnv is secretEnv first, then node.Env lines overlaid
 //     (last-wins) — so a deploy entry's explicit env: overrides an
 //     auto-generated secret of the same name.

@@ -32,7 +32,7 @@ func TestRunKill_SendsSIGKILL(t *testing.T) {
 	}
 
 	r := &Runner{Mode: RunModeLive}
-	c := &Check{
+	c := &Op{
 		Kill:   fmt.Sprintf("%d", pid),
 		Signal: "KILL",
 	}
@@ -72,7 +72,7 @@ func TestRunKill_RejectsBadPID(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			c := &Check{Kill: tc.kill}
+			c := &Op{Kill: tc.kill}
 			res := r.runKill(context.Background(), c)
 			if res.Status != TestFail {
 				t.Fatalf("Kill=%q expected FAIL, got %v message=%q", tc.kill, res.Status, res.Message)

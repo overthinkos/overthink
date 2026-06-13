@@ -14,7 +14,7 @@ func TestCollectImageVolumesSimple(t *testing.T) {
 	layers := map[string]*Candy{
 		"svc": {
 			Name:    "svc",
-			tasks:   []Task{{Cmd: "true"}},
+			tasks:   []Op{{Command: "true"}},
 			volumes: []VolumeYAML{{Name: "data", Path: "~/.myapp"}},
 		},
 	}
@@ -42,12 +42,12 @@ func TestCollectImageVolumesChain(t *testing.T) {
 	layers := map[string]*Candy{
 		"store": {
 			Name:    "store",
-			tasks:   []Task{{Cmd: "true"}},
+			tasks:   []Op{{Command: "true"}},
 			volumes: []VolumeYAML{{Name: "models", Path: "~/.models"}},
 		},
 		"app": {
 			Name:    "app",
-			tasks:   []Task{{Cmd: "true"}},
+			tasks:   []Op{{Command: "true"}},
 			volumes: []VolumeYAML{{Name: "data", Path: "~/.app"}},
 		},
 	}
@@ -77,12 +77,12 @@ func TestCollectImageVolumesDedup(t *testing.T) {
 	layers := map[string]*Candy{
 		"store": {
 			Name:    "store",
-			tasks:   []Task{{Cmd: "true"}},
+			tasks:   []Op{{Command: "true"}},
 			volumes: []VolumeYAML{{Name: "data", Path: "~/.base-data"}},
 		},
 		"override": {
 			Name:    "override",
-			tasks:   []Task{{Cmd: "true"}},
+			tasks:   []Op{{Command: "true"}},
 			volumes: []VolumeYAML{{Name: "data", Path: "~/.child-data"}},
 		},
 	}
@@ -108,7 +108,7 @@ func TestCollectImageVolumesNoVolumes(t *testing.T) {
 		},
 	}
 	layers := map[string]*Candy{
-		"plain": {Name: "plain", tasks: []Task{{Cmd: "true"}}},
+		"plain": {Name: "plain", tasks: []Op{{Command: "true"}}},
 	}
 
 	mounts, err := CollectBoxVolume(cfg, layers, "base", "/home/user", nil)

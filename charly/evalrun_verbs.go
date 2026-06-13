@@ -26,7 +26,7 @@ import (
 // tags, that mapping wins; otherwise the Check.Package scalar is used as-is.
 // The first matching distro tag wins — tags are authored in priority order
 // ("fedora:43" before "fedora"), so a map keyed by either hits.
-func resolvePackageName(c *Check, distros []string) string {
+func resolvePackageName(c *Op, distros []string) string {
 	if len(c.PackageMap) == 0 {
 		return c.Package
 	}
@@ -42,7 +42,7 @@ func resolvePackageName(c *Check, distros []string) string {
 // When Versions is set, pulls the version string and compares exactly.
 // PackageMap (if set) overrides the package name per distro — the first
 // Distros tag that matches a map key wins; otherwise Package is used.
-func (r *Runner) runPackage(ctx context.Context, c *Check) EvalResult {
+func (r *Runner) runPackage(ctx context.Context, c *Op) EvalResult {
 	wantInstalled := true
 	if c.Installed != nil {
 		wantInstalled = *c.Installed
@@ -88,7 +88,7 @@ func (r *Runner) runPackage(ctx context.Context, c *Check) EvalResult {
 
 // runService: asks supervisorctl then systemctl. Matches `running` and
 // `enabled` attributes when set.
-func (r *Runner) runService(ctx context.Context, c *Check) EvalResult {
+func (r *Runner) runService(ctx context.Context, c *Op) EvalResult {
 	svc := shellSingleQuote(c.Service)
 	// Running check
 	if c.Running != nil {
@@ -120,7 +120,7 @@ func (r *Runner) runService(ctx context.Context, c *Check) EvalResult {
 }
 
 // runProcess: pgrep -x by default (exact-name match).
-func (r *Runner) runProcess(ctx context.Context, c *Check) EvalResult {
+func (r *Runner) runProcess(ctx context.Context, c *Op) EvalResult {
 	wantRunning := true
 	if c.Running != nil {
 		wantRunning = *c.Running
@@ -139,7 +139,7 @@ func (r *Runner) runProcess(ctx context.Context, c *Check) EvalResult {
 
 // runDNS uses the charly process's resolver (host-side) under RunModeLive, and
 // `getent hosts` inside the container under RunModeBox.
-func (r *Runner) runDNS(ctx context.Context, c *Check) EvalResult {
+func (r *Runner) runDNS(ctx context.Context, c *Op) EvalResult {
 	wantResolvable := true
 	if c.Resolvable != nil {
 		wantResolvable = *c.Resolvable
@@ -178,7 +178,7 @@ func (r *Runner) runDNS(ctx context.Context, c *Check) EvalResult {
 }
 
 // runUser: getent passwd. Parses uid/gid/home/shell for optional matching.
-func (r *Runner) runUser(ctx context.Context, c *Check) EvalResult {
+func (r *Runner) runUser(ctx context.Context, c *Op) EvalResult {
 	probe := fmt.Sprintf(`getent passwd %s`, shellSingleQuote(c.User))
 	out, _, exit, err := r.Exec.RunCapture(ctx, probe)
 	if err != nil {
@@ -211,7 +211,7 @@ func (r *Runner) runUser(ctx context.Context, c *Check) EvalResult {
 }
 
 // runGroup: getent group. Parses gid and members.
-func (r *Runner) runGroup(ctx context.Context, c *Check) EvalResult {
+func (r *Runner) runGroup(ctx context.Context, c *Op) EvalResult {
 	probe := fmt.Sprintf(`getent group %s`, shellSingleQuote(c.Group))
 	out, _, exit, err := r.Exec.RunCapture(ctx, probe)
 	if err != nil {
@@ -234,7 +234,7 @@ func (r *Runner) runGroup(ctx context.Context, c *Check) EvalResult {
 
 // runInterface: `ip -o addr show <name>` — verifies existence; Addrs + MTU
 // checks parse the ip output.
-func (r *Runner) runInterface(ctx context.Context, c *Check) EvalResult {
+func (r *Runner) runInterface(ctx context.Context, c *Op) EvalResult {
 	probe := fmt.Sprintf(`ip -o addr show %s 2>/dev/null`, shellSingleQuote(c.Interface))
 	out, _, exit, err := r.Exec.RunCapture(ctx, probe)
 	if err != nil {
@@ -266,7 +266,7 @@ func (r *Runner) runInterface(ctx context.Context, c *Check) EvalResult {
 
 // runKernelParam: `sysctl -n <key>`. Matches via the Matching attribute
 // (treated as an expected exact value when scalar, or matcher when map).
-func (r *Runner) runKernelParam(ctx context.Context, c *Check) EvalResult {
+func (r *Runner) runKernelParam(ctx context.Context, c *Op) EvalResult {
 	probe := fmt.Sprintf(`sysctl -n %s 2>/dev/null`, shellSingleQuote(c.KernelParam))
 	out, _, exit, err := r.Exec.RunCapture(ctx, probe)
 	if err != nil {
@@ -287,7 +287,7 @@ func (r *Runner) runKernelParam(ctx context.Context, c *Check) EvalResult {
 
 // runMount: `findmnt -J <path>` — present ⇒ mounted. Optional source,
 // filesystem, and opts matching.
-func (r *Runner) runMount(ctx context.Context, c *Check) EvalResult {
+func (r *Runner) runMount(ctx context.Context, c *Op) EvalResult {
 	mp := shellSingleQuote(c.Mount)
 	probe := fmt.Sprintf(`findmnt -n -o SOURCE,FSTYPE,OPTIONS %s 2>/dev/null`, mp)
 	out, _, exit, err := r.Exec.RunCapture(ctx, probe)
@@ -318,7 +318,7 @@ func (r *Runner) runMount(ctx context.Context, c *Check) EvalResult {
 
 // runAddr: host-side TCP dial (under RunModeLive) or `nc -z`
 // (under RunModeBox).
-func (r *Runner) runAddr(ctx context.Context, c *Check) EvalResult {
+func (r *Runner) runAddr(ctx context.Context, c *Op) EvalResult {
 	wantReachable := true
 	if c.Reachable != nil {
 		wantReachable = *c.Reachable
@@ -350,7 +350,7 @@ func (r *Runner) runAddr(ctx context.Context, c *Check) EvalResult {
 // runMatching is purely in-process: evaluates the Contains matchers against
 // the Matching value. Useful as a building block for future derived checks
 // that don't fit any other verb.
-func (r *Runner) runMatching(ctx context.Context, c *Check) EvalResult {
+func (r *Runner) runMatching(ctx context.Context, c *Op) EvalResult {
 	value := matchValueString(c.Matching)
 	if err := matchAll(value, c.Contains); err != nil {
 		return failf(c, "%v", err)

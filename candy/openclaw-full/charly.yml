@@ -16,43 +16,6 @@ candy:
             dropped from the metalayer. The gateway's own port reachability is
             already checked by the composed openclaw candy and rides along.
         tag: [working]
-        scenario:
-            - name: agent-clis-composed
-              step:
-                - then: the claude-code CLI is composed into the image under the npm global bin dir
-                  file: ${HOME}/.npm-global/bin/claude
-                  exists: true
-                - then: claude --version exits cleanly and prints the Claude Code banner
-                  command: ${HOME}/.npm-global/bin/claude --version
-                  exit_status: 0
-                  stdout:
-                    - contains: "Claude Code"
-                - then: the mcporter MCP CLI is composed into the image
-                  file: ${HOME}/.npm-global/bin/mcporter
-                  exists: true
-            - name: system-toolbelt-composed
-              step:
-                - then: ripgrep's rg binary is present from the composed ripgrep candy
-                  file: /usr/bin/rg
-                  exists: true
-                - then: the sqlite3 shell is present from the composed sqlite candy
-                  file: /usr/bin/sqlite3
-                  exists: true
-                - then: tmux is present from the composed tmux candy
-                  file: /usr/bin/tmux
-                  exists: true
-                - then: ffmpeg is present from the composed ffmpeg candy
-                  file: /usr/bin/ffmpeg
-                  exists: true
-                - then: the GitHub CLI gh is present from the composed gh candy
-                  file: /usr/bin/gh
-                  exists: true
-            - name: gateway-orchestrates-headless-toolbelt
-              step:
-                - then: the uv Python package manager is composed into the image at /usr/local/bin/uv
-                  file: /usr/local/bin/uv
-                  exists: true
-                - then: the running OpenClaw gateway exposes the bundled CLI tools to agent requests without relying on a system browser
     candy:
         - openclaw
         - claude-code
@@ -81,46 +44,102 @@ candy:
         - ffmpeg
         - ripgrep
         - sqlite
-    # Composition-effect checks: openclaw-full installs nothing of its own, so it
-    # asserts the KEY ARTIFACTS of the candies it composes (the observable effect
-    # of the metalayer). These FAIL if any composed candy is dropped. The openclaw
-    # gateway port is checked by the openclaw candy and rides along (not duplicated).
-    eval:
-        - id: openclaw-full-claude-binary
-          file: ${HOME}/.npm-global/bin/claude
-          exists: true
-        - id: openclaw-full-claude-version
-          command: ${HOME}/.npm-global/bin/claude --version
-          exit_status: 0
-          stdout:
-            - contains: "Claude Code"
-        - id: openclaw-full-mcporter-binary
-          file: ${HOME}/.npm-global/bin/mcporter
-          exists: true
-        - id: openclaw-full-rg-binary
-          file: /usr/bin/rg
-          exists: true
-        - id: openclaw-full-ripgrep-package
-          package: ripgrep
-          installed: true
-        - id: openclaw-full-sqlite3-binary
-          file: /usr/bin/sqlite3
-          exists: true
-        - id: openclaw-full-tmux-binary
-          file: /usr/bin/tmux
-          exists: true
-        - id: openclaw-full-ffmpeg-binary
-          file: /usr/bin/ffmpeg
-          exists: true
-        - id: openclaw-full-gh-binary
-          file: /usr/bin/gh
-          exists: true
-        - id: openclaw-full-git-binary
-          file: /usr/bin/git
-          exists: true
-        - id: openclaw-full-uv-binary
-          file: /usr/local/bin/uv
-          exists: true
-        - id: openclaw-full-uvx-binary
-          file: /usr/local/bin/uvx
-          exists: true
+    scenario:
+        - name: agent-clis-composed
+          step:
+            - then: the claude-code CLI is composed into the image under the npm global bin dir
+              file: ${HOME}/.npm-global/bin/claude
+              exists: true
+            - then: claude --version exits cleanly and prints the Claude Code banner
+              command: ${HOME}/.npm-global/bin/claude --version
+              exit_status: 0
+              stdout:
+                - contains: "Claude Code"
+            - then: the mcporter MCP CLI is composed into the image
+              file: ${HOME}/.npm-global/bin/mcporter
+              exists: true
+        - name: system-toolbelt-composed
+          step:
+            - then: ripgrep's rg binary is present from the composed ripgrep candy
+              file: /usr/bin/rg
+              exists: true
+            - then: the sqlite3 shell is present from the composed sqlite candy
+              file: /usr/bin/sqlite3
+              exists: true
+            - then: tmux is present from the composed tmux candy
+              file: /usr/bin/tmux
+              exists: true
+            - then: ffmpeg is present from the composed ffmpeg candy
+              file: /usr/bin/ffmpeg
+              exists: true
+            - then: the GitHub CLI gh is present from the composed gh candy
+              file: /usr/bin/gh
+              exists: true
+        - name: gateway-orchestrates-headless-toolbelt
+          step:
+            - then: the uv Python package manager is composed into the image at /usr/local/bin/uv
+              file: /usr/local/bin/uv
+              exists: true
+            - then: the running OpenClaw gateway exposes the bundled CLI tools to agent requests without relying on a system browser
+        - name: openclaw-full-claude-binary
+          step:
+            - id: openclaw-full-claude-binary
+              file: ${HOME}/.npm-global/bin/claude
+              exists: true
+        - name: openclaw-full-claude-version
+          step:
+            - id: openclaw-full-claude-version
+              command: ${HOME}/.npm-global/bin/claude --version
+              exit_status: 0
+              stdout:
+                - contains: "Claude Code"
+        - name: openclaw-full-mcporter-binary
+          step:
+            - id: openclaw-full-mcporter-binary
+              file: ${HOME}/.npm-global/bin/mcporter
+              exists: true
+        - name: openclaw-full-rg-binary
+          step:
+            - id: openclaw-full-rg-binary
+              file: /usr/bin/rg
+              exists: true
+        - name: openclaw-full-ripgrep-package
+          step:
+            - id: openclaw-full-ripgrep-package
+              package: ripgrep
+              installed: true
+        - name: openclaw-full-sqlite3-binary
+          step:
+            - id: openclaw-full-sqlite3-binary
+              file: /usr/bin/sqlite3
+              exists: true
+        - name: openclaw-full-tmux-binary
+          step:
+            - id: openclaw-full-tmux-binary
+              file: /usr/bin/tmux
+              exists: true
+        - name: openclaw-full-ffmpeg-binary
+          step:
+            - id: openclaw-full-ffmpeg-binary
+              file: /usr/bin/ffmpeg
+              exists: true
+        - name: openclaw-full-gh-binary
+          step:
+            - id: openclaw-full-gh-binary
+              file: /usr/bin/gh
+              exists: true
+        - name: openclaw-full-git-binary
+          step:
+            - id: openclaw-full-git-binary
+              file: /usr/bin/git
+              exists: true
+        - name: openclaw-full-uv-binary
+          step:
+            - id: openclaw-full-uv-binary
+              file: /usr/local/bin/uv
+              exists: true
+        - name: openclaw-full-uvx-binary
+          step:
+            - id: openclaw-full-uvx-binary
+              file: /usr/local/bin/uvx
+              exists: true

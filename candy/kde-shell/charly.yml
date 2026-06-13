@@ -18,39 +18,6 @@ candy:
             package list (R3). require: dbus (the Plasma session bus). Every package
             lands a binary at a fixed /usr/bin path, so presence is directly verifiable.
         tag: [working]
-        scenario:
-            # Deterministic scenarios — each step embeds a check verb (file/package),
-            # so they run at BOTH build and deploy scope and would FAIL if the
-            # package set were not installed.
-            - name: plasma-wayland-session-binaries-present
-              step:
-                - then: plasmashell, the Plasma shell, is installed at /usr/bin/plasmashell
-                  file: /usr/bin/plasmashell
-                  exists: true
-                - then: kwin_wayland, the Wayland compositor, is installed at /usr/bin/kwin_wayland
-                  file: /usr/bin/kwin_wayland
-                  exists: true
-                - then: startplasma-wayland, the session entry point, is installed at /usr/bin/startplasma-wayland
-                  file: /usr/bin/startplasma-wayland
-                  exists: true
-            - name: plasma-desktop-top-package-installed
-              step:
-                - then: the dependency-pulling top package plasma-desktop is installed in the rpm/pacman database
-                  package: plasma-desktop
-                  installed: true
-            - name: curated-kde-apps-present
-              step:
-                - then: the Dolphin file manager is installed at /usr/bin/dolphin
-                  file: /usr/bin/dolphin
-                  exists: true
-                - then: the Konsole terminal is installed at /usr/bin/konsole
-                  file: /usr/bin/konsole
-                  exists: true
-            - name: kdotool-kwin-automation-available
-              step:
-                - then: kdotool, the KWin window-management automation tool that drives charly eval wl on KWin, is installed at /usr/bin/kdotool
-                  file: /usr/bin/kdotool
-                  exists: true
     require:
         - dbus
     distro:
@@ -87,25 +54,71 @@ candy:
                 # input) — keyboard uses wtype, pointer is a separate cutover.
                 package:
                     - kdotool
-    eval:
-        - id: plasma-desktop-installed
-          package: plasma-desktop
-          installed: true
-        - id: plasmashell-binary
-          file: /usr/bin/plasmashell
-          exists: true
-        - id: kwin-wayland-binary
-          file: /usr/bin/kwin_wayland
-          exists: true
-        - id: startplasma-wayland-binary
-          file: /usr/bin/startplasma-wayland
-          exists: true
-        - id: dolphin-binary
-          file: /usr/bin/dolphin
-          exists: true
-        - id: konsole-binary
-          file: /usr/bin/konsole
-          exists: true
-        - id: kdotool-binary
-          file: /usr/bin/kdotool
-          exists: true
+    scenario:
+        # Deterministic scenarios — each step embeds a check verb (file/package),
+        # so they run at BOTH build and deploy scope and would FAIL if the
+        # package set were not installed.
+        - name: plasma-wayland-session-binaries-present
+          step:
+            - then: plasmashell, the Plasma shell, is installed at /usr/bin/plasmashell
+              file: /usr/bin/plasmashell
+              exists: true
+            - then: kwin_wayland, the Wayland compositor, is installed at /usr/bin/kwin_wayland
+              file: /usr/bin/kwin_wayland
+              exists: true
+            - then: startplasma-wayland, the session entry point, is installed at /usr/bin/startplasma-wayland
+              file: /usr/bin/startplasma-wayland
+              exists: true
+        - name: plasma-desktop-top-package-installed
+          step:
+            - then: the dependency-pulling top package plasma-desktop is installed in the rpm/pacman database
+              package: plasma-desktop
+              installed: true
+        - name: curated-kde-apps-present
+          step:
+            - then: the Dolphin file manager is installed at /usr/bin/dolphin
+              file: /usr/bin/dolphin
+              exists: true
+            - then: the Konsole terminal is installed at /usr/bin/konsole
+              file: /usr/bin/konsole
+              exists: true
+        - name: kdotool-kwin-automation-available
+          step:
+            - then: kdotool, the KWin window-management automation tool that drives charly eval wl on KWin, is installed at /usr/bin/kdotool
+              file: /usr/bin/kdotool
+              exists: true
+        - name: plasma-desktop-installed
+          step:
+            - id: plasma-desktop-installed
+              package: plasma-desktop
+              installed: true
+        - name: plasmashell-binary
+          step:
+            - id: plasmashell-binary
+              file: /usr/bin/plasmashell
+              exists: true
+        - name: kwin-wayland-binary
+          step:
+            - id: kwin-wayland-binary
+              file: /usr/bin/kwin_wayland
+              exists: true
+        - name: startplasma-wayland-binary
+          step:
+            - id: startplasma-wayland-binary
+              file: /usr/bin/startplasma-wayland
+              exists: true
+        - name: dolphin-binary
+          step:
+            - id: dolphin-binary
+              file: /usr/bin/dolphin
+              exists: true
+        - name: konsole-binary
+          step:
+            - id: konsole-binary
+              file: /usr/bin/konsole
+              exists: true
+        - name: kdotool-binary
+          step:
+            - id: kdotool-binary
+              file: /usr/bin/kdotool
+              exists: true

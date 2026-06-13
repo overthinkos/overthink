@@ -11,35 +11,6 @@ candy:
             wayland-0 socket before exec'ing waybar so the bar attaches to the
             labwc compositor, not the pixelflux capture display.
         tag: [working]
-        scenario:
-            - name: waybar-binary-installed
-              step:
-                - then: the waybar status bar binary is installed at /usr/bin/waybar
-                  file: /usr/bin/waybar
-                  exists: true
-            - name: labwc-launch-wrapper-installed
-              step:
-                - then: the labwc launch wrapper is installed and executable
-                  file: ${HOME}/.local/bin/waybar-labwc-wrapper
-                  exists: true
-                  mode: "0755"
-                - then: the wrapper attaches waybar to labwc's wayland-0 socket, not the pixelflux capture compositor
-                  file: ${HOME}/.local/bin/waybar-labwc-wrapper
-                  contains: ["wayland-0"]
-            - name: waybar-labwc-config-installed
-              step:
-                - then: the bottom-bar waybar config is installed in the user's config dir
-                  file: ${HOME}/.config/waybar/config
-                  exists: true
-                - then: the config wires the wlr foreign-toplevel taskbar module
-                  file: ${HOME}/.config/waybar/config
-                  contains: ["wlr/taskbar"]
-                - then: the matching style sheet is installed alongside the config
-                  file: ${HOME}/.config/waybar/style.css
-                  exists: true
-            - name: bar-renders-in-labwc-session
-              step:
-                - then: the waybar bar is visible along the bottom of the running labwc desktop session, showing the taskbar and the Chrome launcher
     require:
         - labwc
     distro:
@@ -51,38 +22,21 @@ candy:
                 - waybar
     task:
         - mkdir: "${HOME}/.local/bin"
-          user: "${USER}"
+          run_as: "${USER}"
         - mkdir: "${HOME}/.config/waybar"
-          user: "${USER}"
+          run_as: "${USER}"
         - copy: waybar-labwc-wrapper
           to: "${HOME}/.local/bin/waybar-labwc-wrapper"
           mode: "0755"
-          user: "${USER}"
+          run_as: "${USER}"
         - copy: config.json
           to: "${HOME}/.config/waybar/config"
           mode: "0644"
-          user: "${USER}"
+          run_as: "${USER}"
         - copy: style.css
           to: "${HOME}/.config/waybar/style.css"
           mode: "0644"
-          user: "${USER}"
-    eval:
-        - id: waybar-binary
-          file: /usr/bin/waybar
-          exists: true
-        - id: waybar-package
-          package: waybar
-          installed: true
-        - id: waybar-labwc-wrapper
-          file: ${HOME}/.local/bin/waybar-labwc-wrapper
-          exists: true
-          mode: "0755"
-        - id: waybar-config
-          file: ${HOME}/.config/waybar/config
-          exists: true
-        - id: waybar-style
-          file: ${HOME}/.config/waybar/style.css
-          exists: true
+          run_as: "${USER}"
     service:
         - name: waybar
           exec: "%(ENV_HOME)s/.local/bin/waybar-labwc-wrapper"
@@ -94,3 +48,58 @@ candy:
           start_sec: 0
           enable: true
           scope: system
+    scenario:
+        - name: waybar-binary-installed
+          step:
+            - then: the waybar status bar binary is installed at /usr/bin/waybar
+              file: /usr/bin/waybar
+              exists: true
+        - name: labwc-launch-wrapper-installed
+          step:
+            - then: the labwc launch wrapper is installed and executable
+              file: ${HOME}/.local/bin/waybar-labwc-wrapper
+              exists: true
+              mode: "0755"
+            - then: the wrapper attaches waybar to labwc's wayland-0 socket, not the pixelflux capture compositor
+              file: ${HOME}/.local/bin/waybar-labwc-wrapper
+              contains: ["wayland-0"]
+        - name: waybar-labwc-config-installed
+          step:
+            - then: the bottom-bar waybar config is installed in the user's config dir
+              file: ${HOME}/.config/waybar/config
+              exists: true
+            - then: the config wires the wlr foreign-toplevel taskbar module
+              file: ${HOME}/.config/waybar/config
+              contains: ["wlr/taskbar"]
+            - then: the matching style sheet is installed alongside the config
+              file: ${HOME}/.config/waybar/style.css
+              exists: true
+        - name: bar-renders-in-labwc-session
+          step:
+            - then: the waybar bar is visible along the bottom of the running labwc desktop session, showing the taskbar and the Chrome launcher
+        - name: waybar-binary
+          step:
+            - id: waybar-binary
+              file: /usr/bin/waybar
+              exists: true
+        - name: waybar-package
+          step:
+            - id: waybar-package
+              package: waybar
+              installed: true
+        - name: waybar-labwc-wrapper
+          step:
+            - id: waybar-labwc-wrapper
+              file: ${HOME}/.local/bin/waybar-labwc-wrapper
+              exists: true
+              mode: "0755"
+        - name: waybar-config
+          step:
+            - id: waybar-config
+              file: ${HOME}/.config/waybar/config
+              exists: true
+        - name: waybar-style
+          step:
+            - id: waybar-style
+              file: ${HOME}/.config/waybar/style.css
+              exists: true

@@ -16,43 +16,6 @@ candy:
             under /opt/android-sdk, so the SDK is verifiable by probing those
             paths and running adb.
         tag: [working]
-        scenario:
-            - name: sdk-toolchain-present
-              step:
-                - then: the cmdline-tools sdkmanager lands under /opt/android-sdk
-                  file: /opt/android-sdk/cmdline-tools/latest/bin/sdkmanager
-                  exists: true
-                - then: platform-tools provides adb
-                  file: /opt/android-sdk/platform-tools/adb
-                  exists: true
-                - then: build-tools 36 provides aapt2 (Appium's ADB badging probe needs it)
-                  file: /opt/android-sdk/build-tools/36/aapt2
-                  exists: true
-                - then: the emulator binary is installed
-                  file: /opt/android-sdk/emulator/emulator
-                  exists: true
-            - name: adb-reports-version
-              step:
-                - then: adb runs and reports the Android Debug Bridge banner
-                  command: /opt/android-sdk/platform-tools/adb version
-                  exit_status: 0
-                  stdout:
-                    - contains: "Android Debug Bridge"
-            - name: apkeep-downloader-on-path
-              step:
-                - then: apkeep (the by-package-name app downloader) is installed and on PATH
-                  command: which apkeep
-                  exit_status: 0
-            - name: api-36-system-image-fetched
-              step:
-                - then: the android-36 platform is installed
-                  file: /opt/android-sdk/platforms/android-36
-                  exists: true
-                  filetype: directory
-                - then: the sdkmanager-fetched google_apis_playstore x86_64 system image is present
-                  file: /opt/android-sdk/system-images/android-36/google_apis_playstore/x86_64
-                  exists: true
-                  filetype: directory
     require:
         - java-openjdk
     env:
@@ -118,7 +81,7 @@ candy:
         - download: "https://github.com/EFForg/apkeep/releases/download/${APKEEP_VERSION}/apkeep-x86_64-unknown-linux-gnu"
           to: /usr/local/bin/apkeep
           mode: "0755"
-          user: root
+          run_as: root
         # The ONE component with no package anywhere: the API-36
         # google_apis_playstore x86_64 system image. sdkmanager (from the AUR
         # cmdline-tools) fetches it into a persistent cache mount, then it is
@@ -127,7 +90,7 @@ candy:
         # Google's ~2GB image (whose CDN intermittently serves corrupt zips). The
         # sentinel is API+variant-keyed so a prior API level's completed download
         # in the persistent mount cannot short-circuit a new API/variant pull.
-        - cmd: |
+        - command: |
             set -euo pipefail
             export JAVA_HOME=/usr/lib/jvm/charly-jdk21
             export PATH="$JAVA_HOME/bin:/opt/android-sdk/cmdline-tools/latest/bin:$PATH"
@@ -143,40 +106,94 @@ candy:
             fi
             mkdir -p /opt/android-sdk/system-images
             cp -a "${SDK_CACHE}/system-images/." /opt/android-sdk/system-images/
-          user: root
+          run_as: root
           cache:
             - /var/cache/charly-android-sysimg
-    eval:
-        - id: sdkmanager-binary
-          file: /opt/android-sdk/cmdline-tools/latest/bin/sdkmanager
-          exists: true
-        - id: avdmanager-binary
-          file: /opt/android-sdk/cmdline-tools/latest/bin/avdmanager
-          exists: true
-        - id: adb-binary
-          file: /opt/android-sdk/platform-tools/adb
-          exists: true
-        - id: aapt2-binary
-          # AUR android-sdk-build-tools-36 lays build-tools down under `36/`
-          # (not `36.0.0/`) — verified in the built image.
-          file: /opt/android-sdk/build-tools/36/aapt2
-          exists: true
-        - id: emulator-binary
-          file: /opt/android-sdk/emulator/emulator
-          exists: true
-        - id: apkeep-binary
-          command: which apkeep
-          exit_status: 0
-        - id: platform-36-installed
-          file: /opt/android-sdk/platforms/android-36
-          exists: true
-          filetype: directory
-        - id: system-image-installed
-          file: /opt/android-sdk/system-images/android-36/google_apis_playstore/x86_64
-          exists: true
-          filetype: directory
-        - id: adb-runs
-          command: /opt/android-sdk/platform-tools/adb version
-          exit_status: 0
-          stdout:
-            - contains: "Android Debug Bridge"
+    scenario:
+        - name: sdk-toolchain-present
+          step:
+            - then: the cmdline-tools sdkmanager lands under /opt/android-sdk
+              file: /opt/android-sdk/cmdline-tools/latest/bin/sdkmanager
+              exists: true
+            - then: platform-tools provides adb
+              file: /opt/android-sdk/platform-tools/adb
+              exists: true
+            - then: build-tools 36 provides aapt2 (Appium's ADB badging probe needs it)
+              file: /opt/android-sdk/build-tools/36/aapt2
+              exists: true
+            - then: the emulator binary is installed
+              file: /opt/android-sdk/emulator/emulator
+              exists: true
+        - name: adb-reports-version
+          step:
+            - then: adb runs and reports the Android Debug Bridge banner
+              command: /opt/android-sdk/platform-tools/adb version
+              exit_status: 0
+              stdout:
+                - contains: "Android Debug Bridge"
+        - name: apkeep-downloader-on-path
+          step:
+            - then: apkeep (the by-package-name app downloader) is installed and on PATH
+              command: which apkeep
+              exit_status: 0
+        - name: api-36-system-image-fetched
+          step:
+            - then: the android-36 platform is installed
+              file: /opt/android-sdk/platforms/android-36
+              exists: true
+              filetype: directory
+            - then: the sdkmanager-fetched google_apis_playstore x86_64 system image is present
+              file: /opt/android-sdk/system-images/android-36/google_apis_playstore/x86_64
+              exists: true
+              filetype: directory
+        - name: sdkmanager-binary
+          step:
+            - id: sdkmanager-binary
+              file: /opt/android-sdk/cmdline-tools/latest/bin/sdkmanager
+              exists: true
+        - name: avdmanager-binary
+          step:
+            - id: avdmanager-binary
+              file: /opt/android-sdk/cmdline-tools/latest/bin/avdmanager
+              exists: true
+        - name: adb-binary
+          step:
+            - id: adb-binary
+              file: /opt/android-sdk/platform-tools/adb
+              exists: true
+        - name: aapt2-binary
+          step:
+            - id: aapt2-binary
+              # AUR android-sdk-build-tools-36 lays build-tools down under `36/`
+              # (not `36.0.0/`) — verified in the built image.
+              file: /opt/android-sdk/build-tools/36/aapt2
+              exists: true
+        - name: emulator-binary
+          step:
+            - id: emulator-binary
+              file: /opt/android-sdk/emulator/emulator
+              exists: true
+        - name: apkeep-binary
+          step:
+            - id: apkeep-binary
+              command: which apkeep
+              exit_status: 0
+        - name: platform-36-installed
+          step:
+            - id: platform-36-installed
+              file: /opt/android-sdk/platforms/android-36
+              exists: true
+              filetype: directory
+        - name: system-image-installed
+          step:
+            - id: system-image-installed
+              file: /opt/android-sdk/system-images/android-36/google_apis_playstore/x86_64
+              exists: true
+              filetype: directory
+        - name: adb-runs
+          step:
+            - id: adb-runs
+              command: /opt/android-sdk/platform-tools/adb version
+              exit_status: 0
+              stdout:
+                - contains: "Android Debug Bridge"

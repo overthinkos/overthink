@@ -22,22 +22,6 @@ candy:
             Both services are custom exec entries — fedora-minimal ships no systemd
             units for nc/sleep, so the layer is supervisord-only on container targets.
         tag: [working]
-        scenario:
-            # Agent Driven Evaluation acceptance scenarios baked into this layer
-            # (they ride into the eval-pod image's ai.opencharly.description
-            # label). The first scenario's step is DETERMINISTIC (an embedded
-            # check verb → runs at build AND deploy scope); the second is
-            # PROSE-ONLY (no verb → agent-graded by `charly eval feature run
-            # eval-pod`, reported unbound/skip by build-scope
-            # `charly box feature run`).
-            - name: eval-stack-marker-present
-              step:
-                - then: the eval-stack marker file is present at /etc/eval-stack-marker
-                  file: /etc/eval-stack-marker
-                  exists: true
-            - name: eval-listener-reachable
-              step:
-                - then: the eval listener accepts a TCP connection on port 18794 from inside the deployment
     distro:
         fedora:
             package:
@@ -47,7 +31,7 @@ candy:
                 - supervisor
     task:
         - write: /etc/eval-stack-marker
-          user: root
+          run_as: root
           mode: "0644"
           content: |
             eval-stack v1
@@ -66,23 +50,51 @@ candy:
           autostart: true
           enable: true
           scope: system
-    eval:
-        - id: eval-stack-marker-exists
-          file: /etc/eval-stack-marker
-          exists: true
-        - id: eval-compose-order
-          file: /etc/eval-base-marker
-          exists: true
-        - id: eval-port-listening
-          scope: deploy
-          port: 18794
-          listening: true
-        - id: eval-ss-listening
-          scope: deploy
-          command: "ss -tlnp 2>/dev/null | grep ':18794'"
-          exit_status: 0
-          in_container: true
-        - id: eval-service-running
-          scope: deploy
-          service: eval-sleep
-          running: true
+    scenario:
+        # Agent Driven Evaluation acceptance scenarios baked into this layer
+        # (they ride into the eval-pod image's ai.opencharly.description
+        # label). The first scenario's step is DETERMINISTIC (an embedded
+        # check verb → runs at build AND deploy scope); the second is
+        # PROSE-ONLY (no verb → agent-graded by `charly eval feature run
+        # eval-pod`, reported unbound/skip by build-scope
+        # `charly box feature run`).
+        - name: eval-stack-marker-present
+          step:
+            - then: the eval-stack marker file is present at /etc/eval-stack-marker
+              file: /etc/eval-stack-marker
+              exists: true
+        - name: eval-listener-reachable
+          step:
+            - then: the eval listener accepts a TCP connection on port 18794 from inside the deployment
+        - name: eval-stack-marker-exists
+          step:
+            - id: eval-stack-marker-exists
+              file: /etc/eval-stack-marker
+              exists: true
+        - name: eval-compose-order
+          step:
+            - id: eval-compose-order
+              file: /etc/eval-base-marker
+              exists: true
+        - name: eval-port-listening
+          step:
+            - id: eval-port-listening
+              port: 18794
+              listening: true
+              context:
+                - runtime
+        - name: eval-ss-listening
+          step:
+            - id: eval-ss-listening
+              command: "ss -tlnp 2>/dev/null | grep ':18794'"
+              exit_status: 0
+              in_container: true
+              context:
+                - runtime
+        - name: eval-service-running
+          step:
+            - id: eval-service-running
+              service: eval-sleep
+              running: true
+              context:
+                - runtime

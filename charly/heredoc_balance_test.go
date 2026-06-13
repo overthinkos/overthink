@@ -80,8 +80,8 @@ func assertBalancedHeredoc(t *testing.T, label, out string) {
 // TestRenderTaskCommand_WriteHeredocBalanced covers the deploy-path `write:`
 // task command (`install -m … <<'CHARLY_WRITE' … CHARLY_WRITE`).
 func TestRenderTaskCommand_WriteHeredocBalanced(t *testing.T) {
-	cmd, err := renderTaskCommand(&TaskStep{
-		Task: &Task{Write: "/etc/charly/demo.conf", Content: "key = value\n", Mode: "0644"},
+	cmd, err := renderOpCommand(&OpStep{
+		Op: &Op{Write: "/etc/charly/demo.conf", Content: "key = value\n", Mode: "0644"},
 	})
 	if err != nil {
 		t.Fatalf("renderTaskCommand: %v", err)

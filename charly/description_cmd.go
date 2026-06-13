@@ -44,31 +44,31 @@ func (c *FeatureListCmd) Run() error {
 			if layer == nil {
 				continue
 			}
-			summarizeDesc("candy", name, layer.Description)
+			summarizeDesc("candy", name, layer.Description, layer.scenario)
 		}
 	}
 	if filter == "" || filter == "box" {
 		for name, img := range cfg.Box {
-			if img.Description != nil {
-				summarizeDesc("box", name, img.Description)
+			if img.Description != nil || len(img.Scenario) > 0 {
+				summarizeDesc("box", name, img.Description, img.Scenario)
 			}
 		}
 	}
 	return nil
 }
 
-func summarizeDesc(kind, name string, d *Description) {
-	if d == nil {
+func summarizeDesc(kind, name string, d *Description, scenarios []Scenario) {
+	if d == nil && len(scenarios) == 0 {
 		fmt.Printf("%s %s: (no description)\n", kind, name)
 		return
 	}
-	feature := d.Feature
-	if feature == "" {
-		feature = "(empty)"
+	feature := "(empty)"
+	if d != nil && d.Feature != "" {
+		feature = d.Feature
 	}
-	nScenarios := len(d.Scenario)
+	nScenarios := len(scenarios)
 	nSkeleton := 0
-	for _, sc := range d.Scenario {
+	for _, sc := range scenarios {
 		for _, t := range sc.Tag {
 			if normalizeTag(t) == "skeleton" {
 				nSkeleton++
@@ -108,15 +108,15 @@ func (c *FeaturePendingCmd) Run() error {
 
 	filter := strings.ToLower(strings.TrimSpace(c.Entity))
 
-	scan := func(kind, name string, d *Description) {
-		if d == nil {
+	scan := func(kind, name string, d *Description, scenarios []Scenario) {
+		if d == nil && len(scenarios) == 0 {
 			return
 		}
 		eid := kind + ":" + name
 		if filter != "" && filter != eid && filter != kind {
 			return
 		}
-		for _, sc := range d.Scenario {
+		for _, sc := range scenarios {
 			isSkel := false
 			for _, t := range sc.Tag {
 				if normalizeTag(t) == "skeleton" {
@@ -149,11 +149,11 @@ func (c *FeaturePendingCmd) Run() error {
 
 	for name, layer := range layers {
 		if layer != nil {
-			scan("candy", name, layer.Description)
+			scan("candy", name, layer.Description, layer.scenario)
 		}
 	}
 	for name, img := range cfg.Box {
-		scan("box", name, img.Description)
+		scan("box", name, img.Description, img.Scenario)
 	}
 	return nil
 }
@@ -183,25 +183,25 @@ func (c *FeatureValidateCmd) Run() error {
 	filter := strings.ToLower(strings.TrimSpace(c.Entity))
 	var errs []string
 
-	validate := func(kind, name string, d *Description) {
-		if d == nil {
+	validate := func(kind, name string, d *Description, scenarios []Scenario) {
+		if d == nil && len(scenarios) == 0 {
 			return
 		}
 		eid := kind + ":" + name
 		if filter != "" && filter != eid && filter != kind {
 			return
 		}
-		issues := ValidateDescription(d, eid)
+		issues := validateDescriptionSteps(d, scenarios, eid)
 		errs = append(errs, issues...)
 	}
 
 	for name, layer := range layers {
 		if layer != nil {
-			validate("candy", name, layer.Description)
+			validate("candy", name, layer.Description, layer.scenario)
 		}
 	}
 	for name, img := range cfg.Box {
-		validate("box", name, img.Description)
+		validate("box", name, img.Description, img.Scenario)
 	}
 
 	if len(errs) > 0 {
@@ -214,33 +214,42 @@ func (c *FeatureValidateCmd) Run() error {
 	return nil
 }
 
-// ValidateDescription runs static checks against a description:
+// validateDescriptionSteps runs static checks against a description + its
+// top-level scenario list (complementary to ValidateScenarios in
+// scenario_validate.go, which validates list structure / depends_on):
 //
 //   - feature: non-empty
-//   - every step has exactly one given/when/then/and/but
-//   - every step Check passes Check.Kind() (0 or 1 verb; 0 = pending)
+//   - every step binds a keyword OR carries an Op verb
+//   - every step's Op passes Op.Kind() (0 or 1 verb; 0 = narrative)
 //   - scenario Examples rows cover every <placeholder> used in step
-//     text or Check string fields
+//     text or Op string fields
 //
 // Returns a list of human-readable error strings (empty if OK).
-func ValidateDescription(d *Description, eid string) []string {
-	if d == nil {
-		return nil
-	}
+func validateDescriptionSteps(d *Description, scenarios []Scenario, eid string) []string {
 	var errs []string
-	if strings.TrimSpace(d.Feature) == "" {
+	if d == nil || strings.TrimSpace(d.Feature) == "" {
 		errs = append(errs, fmt.Sprintf("%s: description.feature is empty", eid))
 	}
-	for sIdx, sc := range d.Scenario {
+	for sIdx, sc := range scenarios {
 		if strings.TrimSpace(sc.Name) == "" {
 			errs = append(errs, fmt.Sprintf("%s: scenario %d has empty name", eid, sIdx))
 		}
 		for stepIdx, step := range sc.Step {
-			if _, err := step.StepKeyword(); err != nil {
-				errs = append(errs, fmt.Sprintf("%s: scenario %q step %d: %v", eid, sc.Name, stepIdx, err))
+			// A step is one Op: it is valid with a Gherkin keyword (prose, for
+			// narrative / agent-grading) OR a verb (a bare deterministic Op step,
+			// per the scenario schema) — a keyword is NOT required when a verb is
+			// present. Only a step with NEITHER (an empty step) is invalid, and
+			// MULTIPLE keywords are always invalid.
+			_, kwErr := step.StepKeyword()
+			hasVerb := !step.IsPending()
+			switch {
+			case kwErr != nil && strings.Contains(kwErr.Error(), "multiple"):
+				errs = append(errs, fmt.Sprintf("%s: scenario %q step %d: %v", eid, sc.Name, stepIdx, kwErr))
+			case kwErr != nil && !hasVerb:
+				errs = append(errs, fmt.Sprintf("%s: scenario %q step %d: empty step — needs a Gherkin keyword (given/when/then/and/but) or a verb", eid, sc.Name, stepIdx))
 			}
-			if !step.IsPending() {
-				if _, err := step.Check.Kind(); err != nil {
+			if hasVerb {
+				if _, err := step.Op.Kind(); err != nil {
 					errs = append(errs, fmt.Sprintf("%s: scenario %q step %d: %v", eid, sc.Name, stepIdx, err))
 				}
 			}
@@ -286,7 +295,7 @@ func collectPlaceholders(sc Scenario) map[string]bool {
 		scan(step.Then)
 		scan(step.And)
 		scan(step.But)
-		for _, p := range step.Check.StringFields() {
+		for _, p := range step.Op.StringFields() {
 			scan(*p)
 		}
 	}

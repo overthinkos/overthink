@@ -99,7 +99,7 @@ func (t *AndroidUnifiedTarget) Del(ctx context.Context, opts DelOpts) error {
 // Test / Update are not supported on the android target — the device is
 // managed via its pod deploy / remote host; deploy-scope eval and updates
 // flow through that substrate, not this app-install target.
-func (t *AndroidUnifiedTarget) Test(ctx context.Context, checks []Check, opts TestOpts) error {
+func (t *AndroidUnifiedTarget) Test(ctx context.Context, checks []Op, opts TestOpts) error {
 	return fmt.Errorf("android %q: test not supported on android target (eval the hosting pod/device)", t.NodeName)
 }
 func (t *AndroidUnifiedTarget) Update(ctx context.Context, plans []*InstallPlan, opts UpdateOpts) error {

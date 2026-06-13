@@ -10,23 +10,6 @@ candy:
             tool lands at a fixed path and self-reports a version, so its presence
             and basic operability are deterministically verifiable.
         tag: [working]
-        scenario:
-            - name: act-runs-workflows-locally
-              step:
-                - then: the act CLI is installed at its fixed path
-                  file: /usr/bin/act
-                  exists: true
-                - then: act reports its version without error
-                  command: /usr/bin/act --version
-                  exit_status: 0
-            - name: actionlint-validates-workflows
-              step:
-                - then: the actionlint linter is installed at its fixed path
-                  file: /usr/local/bin/actionlint
-                  exists: true
-                - then: actionlint reports its version without error
-                  command: /usr/local/bin/actionlint -version
-                  exit_status: 0
     package:
         - guestfs-tools
     task:
@@ -35,7 +18,7 @@ candy:
         # distro-agnostic tarball install so the layer composes into arch-coder
         # without needing an `aur:` section (aur: requires pacman in the final
         # image stage, which Fedora images don't have).
-        - cmd: |
+        - command: |
             set -e
             ACT_VERSION="0.2.85"
             BUILD_ARCH=$(uname -m)
@@ -48,11 +31,11 @@ candy:
             tar -xzf /tmp/act.tar.gz -C /usr/bin/ act
             chmod +x /usr/bin/act
             rm -f /tmp/act.tar.gz
-          user: root
+          run_as: root
         # actionlint: version-pinned to avoid GitHub API rate limits and the
         # greedy-regex bug that broke URL extraction against single-line JSON.
         # Uses /releases/download/<tag>/<asset> which is stable and cacheable.
-        - cmd: |
+        - command: |
             set -e
             ACTIONLINT_VERSION="1.7.12"
             BUILD_ARCH=$(uname -m)
@@ -65,20 +48,46 @@ candy:
             tar -xzf /tmp/actionlint.tar.gz -C /usr/local/bin/ actionlint
             chmod +x /usr/local/bin/actionlint
             rm -f /tmp/actionlint.tar.gz
-          user: root
-    eval:
-        - id: act-binary
-          file: /usr/bin/act
-          exists: true
-        - id: act-version
-          command: /usr/bin/act --version
-          exit_status: 0
-        - id: actionlint-binary
-          file: /usr/local/bin/actionlint
-          exists: true
-        - id: actionlint-version
-          command: /usr/local/bin/actionlint -version
-          exit_status: 0
-        - id: guestfs-tools-package
-          package: guestfs-tools
-          installed: true
+          run_as: root
+    scenario:
+        - name: act-runs-workflows-locally
+          step:
+            - then: the act CLI is installed at its fixed path
+              file: /usr/bin/act
+              exists: true
+            - then: act reports its version without error
+              command: /usr/bin/act --version
+              exit_status: 0
+        - name: actionlint-validates-workflows
+          step:
+            - then: the actionlint linter is installed at its fixed path
+              file: /usr/local/bin/actionlint
+              exists: true
+            - then: actionlint reports its version without error
+              command: /usr/local/bin/actionlint -version
+              exit_status: 0
+        - name: act-binary
+          step:
+            - id: act-binary
+              file: /usr/bin/act
+              exists: true
+        - name: act-version
+          step:
+            - id: act-version
+              command: /usr/bin/act --version
+              exit_status: 0
+        - name: actionlint-binary
+          step:
+            - id: actionlint-binary
+              file: /usr/local/bin/actionlint
+              exists: true
+        - name: actionlint-version
+          step:
+            - id: actionlint-version
+              command: /usr/local/bin/actionlint -version
+              exit_status: 0
+        - name: guestfs-tools-package
+          step:
+            - id: guestfs-tools-package
+              package: guestfs-tools
+              installed: true

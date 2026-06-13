@@ -164,7 +164,7 @@ type StepKind string
 const (
 	StepKindSystemPackages  StepKind = "SystemPackages"
 	StepKindBuilder         StepKind = "Builder"
-	StepKindTask            StepKind = "Task"
+	StepKindOp              StepKind = "Op"
 	StepKindFile            StepKind = "File"
 	StepKindServicePackaged StepKind = "ServicePackaged"
 	StepKindServiceCustom   StepKind = "ServiceCustom"
@@ -473,17 +473,17 @@ func (s *BuilderStep) Reverse() []ReverseOp {
 }
 
 // ---------------------------------------------------------------------------
-// TaskStep — one entry from the candy manifest's tasks: list.
+// OpStep — one entry from the candy manifest's tasks: list.
 // ---------------------------------------------------------------------------
 
-// TaskStep wraps a raw Task so the IR compiler doesn't have to transform
-// it further. The OCI target and host target both understand Task shapes
+// OpStep wraps a raw Op so the IR compiler doesn't have to transform
+// it further. The OCI target and host target both understand Op shapes
 // (cmd / mkdir / copy / write / link / download / setcap / build) and
 // emit the appropriate directives. CtxPath substitutes for /ctx/ in cmd
 // bodies on the host target (container RUN directives keep /ctx via
 // bind-mount, which doesn't exist on the host).
-type TaskStep struct {
-	Task         *Task
+type OpStep struct {
+	Op           *Op
 	CandyName    string
 	CandyDir     string
 	CtxPath      string // absolute layer-dir path replacing "/ctx/" on host
@@ -509,9 +509,9 @@ type TaskStep struct {
 	CandyVars map[string]string
 }
 
-func (s *TaskStep) Kind() StepKind { return StepKindTask }
+func (s *OpStep) Kind() StepKind { return StepKindOp }
 
-func (s *TaskStep) Scope() Scope {
+func (s *OpStep) Scope() Scope {
 	// Classify by the task's user context: anything at root is system;
 	// named users and numeric non-root UIDs are user scope.
 	if s.ResolvedUser == "" || s.ResolvedUser == "root" || s.ResolvedUser == "0" || s.ResolvedUser == "0:0" {
@@ -520,31 +520,31 @@ func (s *TaskStep) Scope() Scope {
 	return ScopeUser
 }
 
-func (s *TaskStep) Venue() Venue { return VenueHostNative }
+func (s *OpStep) Venue() Venue { return VenueHostNative }
 
-func (s *TaskStep) RequiresGate() Gate {
+func (s *OpStep) RequiresGate() Gate {
 	// Free-form cmd bodies running as root can do anything; gate them.
 	// Structured verbs (mkdir/copy/write/link/download/setcap) are
 	// inspectable and don't need the gate.
-	if s.Scope() == ScopeSystem && s.Task != nil && s.Task.Cmd != "" {
+	if s.Scope() == ScopeSystem && s.Op != nil && s.Op.Command != "" {
 		return GateAllowRootTasks
 	}
 	return GateNone
 }
 
-func (s *TaskStep) Reverse() []ReverseOp {
-	if s.Task == nil {
+func (s *OpStep) Reverse() []ReverseOp {
+	if s.Op == nil {
 		return nil
 	}
 	// Only structurally-reversible task verbs record reversal. Cmd tasks
 	// are opaque shell — we can't auto-reverse them.
 	switch {
-	case s.Task.Copy != "" || s.Task.Write != "":
-		dest := s.Task.To
+	case s.Op.Copy != "" || s.Op.Write != "":
+		dest := s.Op.To
 		if dest == "" {
-			dest = s.Task.Copy
+			dest = s.Op.Copy
 			if dest == "" {
-				dest = s.Task.Write
+				dest = s.Op.Write
 			}
 		}
 		kind := ReverseOpRmFileUser
@@ -556,27 +556,27 @@ func (s *TaskStep) Reverse() []ReverseOp {
 			Targets: []string{dest},
 			Scope:   s.Scope(),
 		}}
-	case s.Task.Download != "":
+	case s.Op.Download != "":
 		// When the candy author declared an explicit uninstall list,
 		// use it — that's the correct target set for extract-into-a-
 		// shared-dir tasks (e.g. tarballs that land multiple binaries
 		// in /usr/local/bin/). Otherwise fall back to task.To.
-		targets := []string{s.Task.To}
-		if len(s.Task.Uninstall) > 0 {
-			targets = append([]string(nil), s.Task.Uninstall...)
+		targets := []string{s.Op.To}
+		if len(s.Op.Uninstall) > 0 {
+			targets = append([]string(nil), s.Op.Uninstall...)
 		}
 		return []ReverseOp{{
 			Kind:    reverseFileKindFor(s.Scope()),
 			Targets: targets,
 			Scope:   s.Scope(),
 		}}
-	case s.Task.Link != "":
+	case s.Op.Link != "":
 		return []ReverseOp{{
 			Kind:    reverseFileKindFor(s.Scope()),
-			Targets: []string{s.Task.Link},
+			Targets: []string{s.Op.Link},
 			Scope:   s.Scope(),
 		}}
-	case s.Task.Mkdir != "":
+	case s.Op.Mkdir != "":
 		// Directories aren't auto-removed (might contain other files);
 		// only record paths for manual inspection via `charly deploy status`.
 		return nil
@@ -592,13 +592,13 @@ func reverseFileKindFor(sc Scope) ReverseOpKind {
 }
 
 // ---------------------------------------------------------------------------
-// FileStep — structured file placement (distinct from TaskStep copy/write).
+// FileStep — structured file placement (distinct from OpStep copy/write).
 // ---------------------------------------------------------------------------
 
 // FileStep places a single file. The compiler may emit these for
 // candy-declared file directives that aren't wrapped as tasks (e.g.
 // supervisord fragment assembly). Today's tasks.go handles most file
-// placement via TaskStep; FileStep exists for cases where the compiler
+// placement via OpStep; FileStep exists for cases where the compiler
 // synthesizes file writes that weren't in the candy manifest (e.g. service unit
 // files, managed-block contents).
 type FileStep struct {
@@ -1055,7 +1055,7 @@ type InstallPlan struct {
 // the token are left untouched, so a second call is a no-op.
 //
 // Covered fields: ShellHookStep env values + PathAdd, ShellSnippetStep Snippet
-// + Destination + PathAppend, FileStep.Dest. TaskStep cmd/content bodies are
+// + Destination + PathAppend, FileStep.Dest. OpStep cmd/content bodies are
 // intentionally NOT touched — `~`/`$HOME` there shell-expand at runtime on the
 // destination as the deploy user, which is already correct on every venue.
 // BuilderStep is also untouched — its home is resolved separately by
@@ -1088,7 +1088,7 @@ func (p *InstallPlan) ResolveHome(home string) {
 			// user-scope unit install path — against the destination home here.
 			s.UnitText = sub(s.UnitText)
 			s.UnitPath = sub(s.UnitPath)
-		case *TaskStep:
+		case *OpStep:
 			// Home-relative copy/download dest (tokenized at compile). The
 			// Task body itself (cmd/content) is left alone — those shell-expand
 			// $HOME at runtime as the deploy user.

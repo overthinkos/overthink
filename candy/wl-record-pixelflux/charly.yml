@@ -9,25 +9,26 @@ candy:
             the desktop as H.264. Verifiable: the wrapper script is installed and
             executable.
         tag: [working]
-        scenario:
-            - name: pixelflux-record-script-installed
-              step:
-                - then: the pixelflux-record wrapper is installed and executable
-                  file: ${HOME}/.local/bin/pixelflux-record
-                  exists: true
-                  mode: "0755"
     require:
         - selkies
         - ffmpeg
     task:
         - mkdir: "${HOME}/.local/bin"
-          user: "${USER}"
+          run_as: "${USER}"
         - copy: pixelflux-record
           to: "${HOME}/.local/bin/pixelflux-record"
           mode: "0755"
-          user: "${USER}"
-    eval:
-        - id: pixelflux-record-script
-          file: ${HOME}/.local/bin/pixelflux-record
-          exists: true
-          mode: "0755"
+          run_as: "${USER}"
+    scenario:
+        - name: pixelflux-record-script-installed
+          step:
+            - then: the pixelflux-record wrapper is installed and executable
+              file: ${HOME}/.local/bin/pixelflux-record
+              exists: true
+              mode: "0755"
+        - name: pixelflux-record-script
+          step:
+            - id: pixelflux-record-script
+              file: ${HOME}/.local/bin/pixelflux-record
+              exists: true
+              mode: "0755"

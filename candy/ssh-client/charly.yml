@@ -12,28 +12,6 @@ candy:
             SSH agent socket. The observable, verifiable effect is that the client
             binaries are present and `ssh -V` reports the OpenSSH banner on stderr.
         tag: [working]
-        scenario:
-            - name: ssh-client-binaries-present
-              step:
-                - then: the ssh client binary is installed at /usr/bin/ssh so in-container git and ssh can connect out
-                  file: /usr/bin/ssh
-                  exists: true
-                - then: ssh-add is installed so the forwarded host agent's keys can be loaded and listed
-                  file: /usr/bin/ssh-add
-                  exists: true
-                - then: ssh-keygen is installed for generating and inspecting key material
-                  file: /usr/bin/ssh-keygen
-                  exists: true
-            - name: ssh-reports-openssh-version
-              step:
-                - then: ssh -V identifies the client as OpenSSH on stderr and exits cleanly
-                  command: /usr/bin/ssh -V
-                  exit_status: 0
-                  stderr:
-                    - contains: "OpenSSH"
-            - name: ssh-agent-socket-used-when-forwarded
-              step:
-                - then: with a host SSH agent forwarded at runtime, ssh-add -l inside the deployment lists the host's keys via the forwarded SSH_AUTH_SOCK
     distro:
         arch:
             package:
@@ -47,24 +25,55 @@ candy:
         ubuntu:
             package:
                 - openssh-client
-    eval:
-        - id: ssh-binary
-          file: /usr/bin/ssh
-          exists: true
-        - id: ssh-add-binary
-          file: /usr/bin/ssh-add
-          exists: true
-        - id: ssh-keygen-binary
-          file: /usr/bin/ssh-keygen
-          exists: true
-        - id: ssh-client-package
-          package: openssh-client
-          package_map:
-            arch: openssh
-            fedora: openssh-clients
-          installed: true
-        - id: ssh-version
-          command: /usr/bin/ssh -V
-          exit_status: 0
-          stderr:
-            - contains: "OpenSSH"
+    scenario:
+        - name: ssh-client-binaries-present
+          step:
+            - then: the ssh client binary is installed at /usr/bin/ssh so in-container git and ssh can connect out
+              file: /usr/bin/ssh
+              exists: true
+            - then: ssh-add is installed so the forwarded host agent's keys can be loaded and listed
+              file: /usr/bin/ssh-add
+              exists: true
+            - then: ssh-keygen is installed for generating and inspecting key material
+              file: /usr/bin/ssh-keygen
+              exists: true
+        - name: ssh-reports-openssh-version
+          step:
+            - then: ssh -V identifies the client as OpenSSH on stderr and exits cleanly
+              command: /usr/bin/ssh -V
+              exit_status: 0
+              stderr:
+                - contains: "OpenSSH"
+        - name: ssh-agent-socket-used-when-forwarded
+          step:
+            - then: with a host SSH agent forwarded at runtime, ssh-add -l inside the deployment lists the host's keys via the forwarded SSH_AUTH_SOCK
+        - name: ssh-binary
+          step:
+            - id: ssh-binary
+              file: /usr/bin/ssh
+              exists: true
+        - name: ssh-add-binary
+          step:
+            - id: ssh-add-binary
+              file: /usr/bin/ssh-add
+              exists: true
+        - name: ssh-keygen-binary
+          step:
+            - id: ssh-keygen-binary
+              file: /usr/bin/ssh-keygen
+              exists: true
+        - name: ssh-client-package
+          step:
+            - id: ssh-client-package
+              package: openssh-client
+              package_map:
+                arch: openssh
+                fedora: openssh-clients
+              installed: true
+        - name: ssh-version
+          step:
+            - id: ssh-version
+              command: /usr/bin/ssh -V
+              exit_status: 0
+              stderr:
+                - contains: "OpenSSH"

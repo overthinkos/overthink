@@ -11,35 +11,40 @@ candy:
             is unpacked under ~/.npm-global/lib/node_modules/@google/gemini-cli,
             and `gemini --version` exits cleanly and prints a semantic version.
         tag: [working]
-        scenario:
-            - name: cli-binary-installed
-              step:
-                - then: the gemini binary is installed into the npm global bin directory
-                  file: ${HOME}/.npm-global/bin/gemini
-                  exists: true
-            - name: npm-package-unpacked
-              step:
-                - then: the @google/gemini-cli scoped package is unpacked under the npm global lib directory
-                  file: ${HOME}/.npm-global/lib/node_modules/@google/gemini-cli/package.json
-                  exists: true
-            - name: cli-reports-version
-              step:
-                - then: running gemini --version exits cleanly and prints a semantic version
-                  command: ${HOME}/.npm-global/bin/gemini --version
-                  exit_status: 0
-                  stdout:
-                    - matches: "[0-9]+\\.[0-9]+"
     require:
         - nodejs
-    eval:
-        - id: gemini-binary
-          file: ${HOME}/.npm-global/bin/gemini
-          exists: true
-        - id: gemini-package
-          file: ${HOME}/.npm-global/lib/node_modules/@google/gemini-cli/package.json
-          exists: true
-        - id: gemini-version
-          command: ${HOME}/.npm-global/bin/gemini --version
-          exit_status: 0
-          stdout:
-            - matches: "[0-9]+\\.[0-9]+"
+    scenario:
+        - name: cli-binary-installed
+          step:
+            - then: the gemini binary is installed into the npm global bin directory
+              file: ${HOME}/.npm-global/bin/gemini
+              exists: true
+        - name: npm-package-unpacked
+          step:
+            - then: the @google/gemini-cli scoped package is unpacked under the npm global lib directory
+              file: ${HOME}/.npm-global/lib/node_modules/@google/gemini-cli/package.json
+              exists: true
+        - name: cli-reports-version
+          step:
+            - then: running gemini --version exits cleanly and prints a semantic version
+              command: ${HOME}/.npm-global/bin/gemini --version
+              exit_status: 0
+              stdout:
+                - matches: "[0-9]+\\.[0-9]+"
+        - name: gemini-binary
+          step:
+            - id: gemini-binary
+              file: ${HOME}/.npm-global/bin/gemini
+              exists: true
+        - name: gemini-package
+          step:
+            - id: gemini-package
+              file: ${HOME}/.npm-global/lib/node_modules/@google/gemini-cli/package.json
+              exists: true
+        - name: gemini-version
+          step:
+            - id: gemini-version
+              command: ${HOME}/.npm-global/bin/gemini --version
+              exit_status: 0
+              stdout:
+                - matches: "[0-9]+\\.[0-9]+"

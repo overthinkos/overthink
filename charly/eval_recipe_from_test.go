@@ -7,28 +7,23 @@ import (
 
 // fixture builders -----------------------------------------------------------
 
-func fxCandy(name string, checks []Check) *Candy {
-	return &Candy{Name: name, tests: checks}
+// fxScenario builds a minimal named scenario with a single prose+verb step.
+func fxScenario(name, path string) Scenario {
+	tr := true
+	return Scenario{
+		Name: name,
+		Step: []Step{{Then: name + " exists", Op: Op{ID: name, File: path, Exists: &tr}}},
+	}
 }
 
-func fxCheckFile(id, path string) Check {
-	t := true
-	return Check{ID: id, File: path, Exists: &t}
+// fxCandy builds a *Candy carrying the given acceptance scenarios. Recipe
+// expansion pulls these directly (no per-check synthesis).
+func fxCandy(name string, scenarios ...Scenario) *Candy {
+	return &Candy{Name: name, scenario: scenarios}
 }
 
-func fxCheckCommand(id, cmd string) Check {
-	z := 0
-	return Check{ID: id, Command: cmd, ExitStatus: &z}
-}
-
-// fxCheckLiveOnly returns a check whose verb requires live-container
-// infrastructure (cdp). filterDropLiveOnly should remove it.
-func fxCheckLiveOnly(id string) Check {
-	return Check{ID: id, Cdp: "status"}
-}
-
-// fxUnified builds a minimal UnifiedFile populated with the given
-// boxes / pods / vms. Candies are passed separately because they go
+// fxUnified builds a minimal UnifiedFile populated with the kind maps the
+// recipe expander consults. Candies are passed separately because they go
 // through the projected-candies map, not uf.Candy.
 func fxUnified() *UnifiedFile {
 	return &UnifiedFile{
@@ -46,10 +41,10 @@ func fxUnified() *UnifiedFile {
 func TestExpandFromCandy(t *testing.T) {
 	uf := fxUnified()
 	layers := map[string]*Candy{
-		"sshd": fxCandy("sshd", []Check{
-			fxCheckFile("sshd-binary", "/usr/sbin/sshd"),
-			fxCheckFile("sshd-wrapper", "/usr/local/bin/sshd-wrapper"),
-		}),
+		"sshd": fxCandy("sshd",
+			fxScenario("sshd-binary", "/usr/sbin/sshd"),
+			fxScenario("sshd-wrapper", "/usr/local/bin/sshd-wrapper"),
+		),
 	}
 	recipe := &HarnessRecipe{
 		From: []HarnessRecipeFrom{
@@ -66,9 +61,6 @@ func TestExpandFromCandy(t *testing.T) {
 		if sc.Pod != "selftest" {
 			t.Errorf("scenario %q: pod = %q, want %q", sc.Name, sc.Pod, "selftest")
 		}
-		if len(sc.Step) != 1 {
-			t.Errorf("scenario %q: expected 1 step (Section-5 invariant), got %d", sc.Name, len(sc.Step))
-		}
 	}
 	if recipe.Scenario[0].Name != "sshd-binary" || recipe.Scenario[1].Name != "sshd-wrapper" {
 		t.Errorf("unexpected scenario names: %q, %q", recipe.Scenario[0].Name, recipe.Scenario[1].Name)
@@ -78,67 +70,69 @@ func TestExpandFromCandy(t *testing.T) {
 	}
 }
 
-func TestExpandFromImage(t *testing.T) {
+func TestExpandFromBox(t *testing.T) {
 	uf := fxUnified()
+	// A box with its own box-level scenarios — CollectDescriptions gathers
+	// these into the Box section, which the expander flattens.
 	uf.Box["arch-coder"] = BoxConfig{
-		Eval: []Check{
-			fxCheckCommand("arch-coder-charly", "test -x /usr/local/bin/charly"),
-		},
-		DeployEval: []Check{
-			fxCheckCommand("arch-coder-charly-version", "charly version"),
+		Scenario: []Scenario{
+			fxScenario("arch-coder-charly", "/usr/local/bin/charly"),
 		},
 	}
-	layers := map[string]*Candy{}
 	recipe := &HarnessRecipe{
 		From: []HarnessRecipeFrom{
 			{Kind: "box", Name: "arch-coder", Pod: "selftest-img"},
 		},
 	}
-	if err := ExpandRecipeFrom(uf, layers, "test", recipe); err != nil {
+	if err := ExpandRecipeFrom(uf, map[string]*Candy{}, "test", recipe); err != nil {
 		t.Fatalf("ExpandRecipeFrom returned error: %v", err)
 	}
-	if len(recipe.Scenario) != 2 {
-		t.Fatalf("want 2 scenarios (one image, one deploy), got %d", len(recipe.Scenario))
+	if len(recipe.Scenario) != 1 || recipe.Scenario[0].Name != "arch-coder-charly" {
+		t.Fatalf("want 1 box scenario, got %v", scenarioNames(recipe.Scenario))
+	}
+	if recipe.Scenario[0].Pod != "selftest-img" {
+		t.Errorf("box scenario pod = %q, want selftest-img", recipe.Scenario[0].Pod)
 	}
 }
 
 func TestExpandFromPod(t *testing.T) {
 	uf := fxUnified()
 	uf.Pod["redis"] = &PodSpec{
-		Eval:       []Check{fxCheckFile("redis-binary", "/usr/bin/redis-server")},
-		DeployEval: []Check{fxCheckCommand("redis-ping", "redis-cli ping")},
+		Scenario: []Scenario{
+			fxScenario("redis-binary", "/usr/bin/redis-server"),
+			fxScenario("redis-config", "/etc/redis/redis.conf"),
+		},
 	}
-	layers := map[string]*Candy{}
 	recipe := &HarnessRecipe{
 		From: []HarnessRecipeFrom{
 			{Kind: "pod", Name: "redis", Pod: "selftest-pod"},
 		},
 	}
-	if err := ExpandRecipeFrom(uf, layers, "test", recipe); err != nil {
+	if err := ExpandRecipeFrom(uf, map[string]*Candy{}, "test", recipe); err != nil {
 		t.Fatalf("ExpandRecipeFrom returned error: %v", err)
 	}
 	if len(recipe.Scenario) != 2 {
-		t.Fatalf("want 2 scenarios from pod tests + deploy_tests, got %d", len(recipe.Scenario))
+		t.Fatalf("want 2 scenarios from pod, got %d", len(recipe.Scenario))
 	}
 }
 
 func TestExpandFromVM(t *testing.T) {
 	uf := fxUnified()
 	uf.VM["arch-vm"] = &VmSpec{
-		Eval:       []Check{fxCheckCommand("vm-id", "id")},
-		DeployEval: []Check{fxCheckCommand("vm-uptime", "uptime")},
+		Scenario: []Scenario{
+			fxScenario("vm-charly", "/usr/local/bin/charly"),
+		},
 	}
-	layers := map[string]*Candy{}
 	recipe := &HarnessRecipe{
 		From: []HarnessRecipeFrom{
 			{Kind: "vm", Name: "arch-vm", Pod: "selftest-vm"},
 		},
 	}
-	if err := ExpandRecipeFrom(uf, layers, "test", recipe); err != nil {
+	if err := ExpandRecipeFrom(uf, map[string]*Candy{}, "test", recipe); err != nil {
 		t.Fatalf("ExpandRecipeFrom returned error: %v", err)
 	}
-	if len(recipe.Scenario) != 2 {
-		t.Fatalf("want 2 scenarios from vm tests + deploy_tests, got %d", len(recipe.Scenario))
+	if len(recipe.Scenario) != 1 {
+		t.Fatalf("want 1 scenario from vm, got %d", len(recipe.Scenario))
 	}
 }
 
@@ -147,13 +141,13 @@ func TestExpandFromVM(t *testing.T) {
 func TestMultiKindComposition(t *testing.T) {
 	uf := fxUnified()
 	uf.Box["img-a"] = BoxConfig{
-		Eval: []Check{fxCheckCommand("img-a-test", "true")},
+		Scenario: []Scenario{fxScenario("img-a-test", "/etc/img-a")},
 	}
 	uf.Pod["pod-a"] = &PodSpec{
-		Eval: []Check{fxCheckFile("pod-a-test", "/etc/foo")},
+		Scenario: []Scenario{fxScenario("pod-a-test", "/etc/foo")},
 	}
 	layers := map[string]*Candy{
-		"layer-a": fxCandy("layer-a", []Check{fxCheckFile("layer-a-test", "/etc/bar")}),
+		"layer-a": fxCandy("layer-a", fxScenario("layer-a-test", "/etc/bar")),
 	}
 	recipe := &HarnessRecipe{
 		From: []HarnessRecipeFrom{
@@ -166,7 +160,7 @@ func TestMultiKindComposition(t *testing.T) {
 				Name: "handwritten",
 				Pod:  "container-x",
 				Step: []Step{
-					{Then: "marker exists", Check: fxCheckFile("handwritten", "/etc/baz")},
+					{Then: "marker exists", Op: fxCheckFileOp("handwritten", "/etc/baz")},
 				},
 				DependsOn: []string{"layer-a-test"}, // cross-namespace dep
 			},
@@ -197,6 +191,12 @@ func TestMultiKindComposition(t *testing.T) {
 	}
 }
 
+// fxCheckFileOp returns a file-exists Op (used inline in hand-written steps).
+func fxCheckFileOp(id, path string) Op {
+	tr := true
+	return Op{ID: id, File: path, Exists: &tr}
+}
+
 func scenarioNames(scs []Scenario) []string {
 	out := make([]string, len(scs))
 	for i, sc := range scs {
@@ -210,12 +210,12 @@ func scenarioNames(scs []Scenario) []string {
 func TestSelectExcludeFilterPipeline(t *testing.T) {
 	uf := fxUnified()
 	layers := map[string]*Candy{
-		"l": fxCandy("l", []Check{
-			fxCheckFile("a", "/a"),
-			fxCheckFile("b", "/b"),
-			fxCheckFile("c", "/c"),
-			fxCheckFile("d", "/d"),
-		}),
+		"l": fxCandy("l",
+			fxScenario("a", "/a"),
+			fxScenario("b", "/b"),
+			fxScenario("c", "/c"),
+			fxScenario("d", "/d"),
+		),
 	}
 	recipe := &HarnessRecipe{
 		From: []HarnessRecipeFrom{
@@ -239,31 +239,10 @@ func TestSelectExcludeFilterPipeline(t *testing.T) {
 	}
 }
 
-func TestLiveOnlyVerbsDroppedByDefault(t *testing.T) {
-	uf := fxUnified()
-	layers := map[string]*Candy{
-		"l": fxCandy("l", []Check{
-			fxCheckFile("real", "/real"),
-			fxCheckLiveOnly("cdp-thing"),
-		}),
-	}
-	recipe := &HarnessRecipe{
-		From: []HarnessRecipeFrom{
-			{Kind: "candy", Name: "l", Pod: "p"},
-		},
-	}
-	if err := ExpandRecipeFrom(uf, layers, "test", recipe); err != nil {
-		t.Fatalf("expander error: %v", err)
-	}
-	if len(recipe.Scenario) != 1 || recipe.Scenario[0].Name != "real" {
-		t.Errorf("live-only check should be dropped; got %v", scenarioNames(recipe.Scenario))
-	}
-}
-
 func TestEmptyAfterFilterIsError(t *testing.T) {
 	uf := fxUnified()
 	layers := map[string]*Candy{
-		"l": fxCandy("l", []Check{fxCheckFile("a", "/a")}),
+		"l": fxCandy("l", fxScenario("a", "/a")),
 	}
 	recipe := &HarnessRecipe{
 		From: []HarnessRecipeFrom{
@@ -274,7 +253,7 @@ func TestEmptyAfterFilterIsError(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected error for empty-after-filter; got nil")
 	}
-	if !strings.Contains(err.Error(), "no tests survived") {
+	if !strings.Contains(err.Error(), "no scenarios survived") {
 		t.Errorf("unexpected error message: %v", err)
 	}
 }
@@ -309,14 +288,14 @@ func TestInvalidKindError(t *testing.T) {
 func TestNamingCollisionError(t *testing.T) {
 	uf := fxUnified()
 	layers := map[string]*Candy{
-		"l": fxCandy("l", []Check{fxCheckFile("dup", "/a")}),
+		"l": fxCandy("l", fxScenario("dup", "/a")),
 	}
 	recipe := &HarnessRecipe{
 		From: []HarnessRecipeFrom{
 			{Kind: "candy", Name: "l", Pod: "p"},
 		},
 		Scenario: []Scenario{
-			{Name: "dup", Pod: "p", Step: []Step{{Then: "x", Check: fxCheckFile("x", "/x")}}},
+			{Name: "dup", Pod: "p", Step: []Step{{Then: "x", Op: fxCheckFileOp("x", "/x")}}},
 		},
 	}
 	err := ExpandRecipeFrom(uf, layers, "test", recipe)
@@ -328,14 +307,14 @@ func TestNamingCollisionError(t *testing.T) {
 func TestPrefixDisambiguatesCollision(t *testing.T) {
 	uf := fxUnified()
 	layers := map[string]*Candy{
-		"l": fxCandy("l", []Check{fxCheckFile("dup", "/a")}),
+		"l": fxCandy("l", fxScenario("dup", "/a")),
 	}
 	recipe := &HarnessRecipe{
 		From: []HarnessRecipeFrom{
 			{Kind: "candy", Name: "l", Pod: "p", Prefix: "lp"},
 		},
 		Scenario: []Scenario{
-			{Name: "dup", Pod: "p", Step: []Step{{Then: "x", Check: fxCheckFile("x", "/x")}}},
+			{Name: "dup", Pod: "p", Step: []Step{{Then: "x", Op: fxCheckFileOp("x", "/x")}}},
 		},
 	}
 	if err := ExpandRecipeFrom(uf, layers, "test", recipe); err != nil {
@@ -348,53 +327,15 @@ func TestPrefixDisambiguatesCollision(t *testing.T) {
 	}
 }
 
-// scoring invariant — Section 5 of the plan ----------------------------------
-
-func TestImportedScenarioCountEqualsCheckCount(t *testing.T) {
-	// Section 5 invariant: 1 Check = 1 ScenarioID = 1 point.
-	// N checks (post-filter) MUST produce exactly N synthetic scenarios,
-	// each with exactly one Step.
-	uf := fxUnified()
-	layers := map[string]*Candy{
-		"l": fxCandy("l", []Check{
-			fxCheckFile("a", "/a"),
-			fxCheckFile("b", "/b"),
-			fxCheckFile("c", "/c"),
-		}),
-	}
-	recipe := &HarnessRecipe{
-		From: []HarnessRecipeFrom{
-			{Kind: "candy", Name: "l", Pod: "p"},
-		},
-		Scenario: []Scenario{
-			{Name: "extra1", Pod: "p", Step: []Step{{Then: "x", Check: fxCheckFile("x", "/x")}}},
-			{Name: "extra2", Pod: "p", Step: []Step{{Then: "y", Check: fxCheckFile("y", "/y")}}},
-		},
-	}
-	if err := ExpandRecipeFrom(uf, layers, "test", recipe); err != nil {
-		t.Fatalf("expander error: %v", err)
-	}
-	const wantImported = 3
-	const wantHandwritten = 2
-	if len(recipe.Scenario) != wantImported+wantHandwritten {
-		t.Fatalf("Section-5 invariant broken: %d Checks + %d hand-written should produce %d scenarios; got %d",
-			wantImported, wantHandwritten, wantImported+wantHandwritten, len(recipe.Scenario))
-	}
-	for i, sc := range recipe.Scenario {
-		if len(sc.Step) != 1 {
-			t.Errorf("Section-5 invariant broken: scenario[%d] %q has %d steps; want exactly 1", i, sc.Name, len(sc.Step))
-		}
-	}
-}
+// imported scenarios preserve their step shape -------------------------------
 
 func TestImportedScenarioStepShape(t *testing.T) {
-	// Each synthetic scenario must carry the source Check inline in its
-	// single Step (so the existing scoring path treats it identically
-	// to a hand-written scenario).
+	// Each imported scenario must carry its source steps inline so the
+	// existing scoring path treats it identically to a hand-written one.
 	uf := fxUnified()
-	src := fxCheckFile("source", "/the/file")
+	src := fxScenario("source", "/the/file")
 	layers := map[string]*Candy{
-		"l": fxCandy("l", []Check{src}),
+		"l": fxCandy("l", src),
 	}
 	recipe := &HarnessRecipe{
 		From: []HarnessRecipeFrom{
@@ -404,15 +345,15 @@ func TestImportedScenarioStepShape(t *testing.T) {
 	if err := ExpandRecipeFrom(uf, layers, "test", recipe); err != nil {
 		t.Fatalf("expander error: %v", err)
 	}
-	step := recipe.Scenario[0].Step[0]
-	if step.Check.File != src.File {
-		t.Errorf("source Check.File not preserved in synthetic step: got %q want %q", step.Check.File, src.File)
+	if len(recipe.Scenario) != 1 || len(recipe.Scenario[0].Step) != 1 {
+		t.Fatalf("imported scenario shape lost: %+v", recipe.Scenario)
 	}
-	if step.Check.ID != src.ID {
-		t.Errorf("source Check.ID not preserved: got %q want %q", step.Check.ID, src.ID)
+	step := recipe.Scenario[0].Step[0]
+	if step.Op.File != "/the/file" {
+		t.Errorf("source step File not preserved: got %q", step.Op.File)
 	}
 	if step.Then == "" {
-		t.Errorf("synthetic step should have a then: narrative")
+		t.Errorf("imported step should retain its then: narrative")
 	}
 }
 
@@ -420,7 +361,7 @@ func TestImportedScenarioStepShape(t *testing.T) {
 
 func TestIdempotentExpansion(t *testing.T) {
 	uf := fxUnified()
-	layers := map[string]*Candy{"l": fxCandy("l", []Check{fxCheckFile("a", "/a")})}
+	layers := map[string]*Candy{"l": fxCandy("l", fxScenario("a", "/a"))}
 	recipe := &HarnessRecipe{
 		From: []HarnessRecipeFrom{{Kind: "candy", Name: "l", Pod: "p"}},
 	}
@@ -433,26 +374,5 @@ func TestIdempotentExpansion(t *testing.T) {
 	}
 	if len(recipe.Scenario) != got1 {
 		t.Errorf("expander not idempotent: scenario count changed from %d to %d", got1, len(recipe.Scenario))
-	}
-}
-
-// scope filter ------------------------------------------------------------
-
-func TestScopeFilterDeployOnly(t *testing.T) {
-	uf := fxUnified()
-	uf.Box["i"] = BoxConfig{
-		Eval:       []Check{fxCheckCommand("img-build", "echo build")},
-		DeployEval: []Check{fxCheckCommand("img-deploy", "echo deploy")},
-	}
-	recipe := &HarnessRecipe{
-		From: []HarnessRecipeFrom{
-			{Kind: "box", Name: "i", Pod: "p", Scope: []string{"deploy"}},
-		},
-	}
-	if err := ExpandRecipeFrom(uf, map[string]*Candy{}, "test", recipe); err != nil {
-		t.Fatalf("expander error: %v", err)
-	}
-	if len(recipe.Scenario) != 1 || recipe.Scenario[0].Name != "img-deploy" {
-		t.Errorf("scope filter [deploy] should leave only img-deploy; got %v", scenarioNames(recipe.Scenario))
 	}
 }

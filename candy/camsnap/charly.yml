@@ -10,24 +10,6 @@ candy:
             binary exists, is executable, and `go version -m` reports it was built
             from the upstream github.com/steipete/camsnap module.
         tag: [working]
-        scenario:
-            - name: camsnap-binary-installed
-              step:
-                - then: the camsnap binary is installed in the user's GOPATH bin
-                  file: ${HOME}/go/bin/camsnap
-                  exists: true
-            - name: camsnap-binary-executable
-              step:
-                - then: the installed camsnap binary is executable
-                  command: test -x ${HOME}/go/bin/camsnap
-                  exit_status: 0
-            - name: camsnap-built-from-upstream-module
-              step:
-                - then: go version -m reports the binary was built from the camsnap module
-                  command: /usr/bin/go version -m ${HOME}/go/bin/camsnap
-                  exit_status: 0
-                  stdout:
-                    - contains: github.com/steipete/camsnap
     require:
         - golang
     env:
@@ -35,19 +17,42 @@ candy:
     path_append:
         - "~/go/bin"
     task:
-        - cmd: |
+        - command: |
             go install github.com/steipete/camsnap/cmd/camsnap@latest
             go clean -cache
-          user: "${USER}"
-    eval:
-        - id: camsnap-binary
-          file: ${HOME}/go/bin/camsnap
-          exists: true
-        - id: camsnap-executable
-          command: test -x ${HOME}/go/bin/camsnap
-          exit_status: 0
-        - id: camsnap-built-from-module
-          command: /usr/bin/go version -m ${HOME}/go/bin/camsnap
-          exit_status: 0
-          stdout:
-            - contains: github.com/steipete/camsnap
+          run_as: "${USER}"
+    scenario:
+        - name: camsnap-binary-installed
+          step:
+            - then: the camsnap binary is installed in the user's GOPATH bin
+              file: ${HOME}/go/bin/camsnap
+              exists: true
+        - name: camsnap-binary-executable
+          step:
+            - then: the installed camsnap binary is executable
+              command: test -x ${HOME}/go/bin/camsnap
+              exit_status: 0
+        - name: camsnap-built-from-upstream-module
+          step:
+            - then: go version -m reports the binary was built from the camsnap module
+              command: /usr/bin/go version -m ${HOME}/go/bin/camsnap
+              exit_status: 0
+              stdout:
+                - contains: github.com/steipete/camsnap
+        - name: camsnap-binary
+          step:
+            - id: camsnap-binary
+              file: ${HOME}/go/bin/camsnap
+              exists: true
+        - name: camsnap-executable
+          step:
+            - id: camsnap-executable
+              command: test -x ${HOME}/go/bin/camsnap
+              exit_status: 0
+        - name: camsnap-built-from-module
+          step:
+            - id: camsnap-built-from-module
+              command: /usr/bin/go version -m ${HOME}/go/bin/camsnap
+              exit_status: 0
+              stdout:
+                - contains: github.com/steipete/camsnap

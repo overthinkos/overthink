@@ -147,7 +147,7 @@ func TestBuildDeployPlanDevTools(t *testing.T) {
 		switch s.(type) {
 		case *SystemPackagesStep:
 			pkgCount++
-		case *TaskStep:
+		case *OpStep:
 			taskCount++
 		}
 	}
@@ -156,7 +156,7 @@ func TestBuildDeployPlanDevTools(t *testing.T) {
 			pkgCount, DescribePlan(plan))
 	}
 	if taskCount < 1 {
-		t.Errorf("expected ≥1 TaskStep, got %d; plan: %s",
+		t.Errorf("expected ≥1 OpStep, got %d; plan: %s",
 			taskCount, DescribePlan(plan))
 	}
 }
@@ -233,7 +233,7 @@ func TestMergePlansOrderingAndID(t *testing.T) {
 		&SystemPackagesStep{Format: "rpm", Phase: PhaseInstall, Packages: []string{"ripgrep"}},
 	}}
 	p2 := &InstallPlan{Candy: "uv", Distro: "fedora:43", Steps: []InstallStep{
-		&TaskStep{CandyName: "uv", Task: &Task{Download: "https://…"}},
+		&OpStep{CandyName: "uv", Op: &Op{Download: "https://…"}},
 	}}
 
 	merged := MergePlan([]*InstallPlan{p1, p2}, "fedora-coder", nil)
@@ -274,7 +274,7 @@ func TestDescribePlanSummary(t *testing.T) {
 		Steps: []InstallStep{
 			&SystemPackagesStep{Format: "rpm", Phase: PhaseInstall},
 			&SystemPackagesStep{Format: "rpm", Phase: PhaseInstall},
-			&TaskStep{Task: &Task{Mkdir: "/x"}},
+			&OpStep{Op: &Op{Mkdir: "/x"}},
 		},
 	}
 	out := DescribePlan(p)
@@ -284,8 +284,8 @@ func TestDescribePlanSummary(t *testing.T) {
 	if !strings.Contains(out, "SystemPackages: 2") {
 		t.Errorf("missing SystemPackages count: %s", out)
 	}
-	if !strings.Contains(out, "Task: 1") {
-		t.Errorf("missing Task count: %s", out)
+	if !strings.Contains(out, "Op: 1") {
+		t.Errorf("missing Op count: %s", out)
 	}
 }
 

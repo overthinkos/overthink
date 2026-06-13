@@ -9,23 +9,26 @@ candy:
             ~/.npm-global/bin. The result is verifiable: the codex binary exists at
             that path and `codex --version` exits cleanly.
         tag: [working]
-        scenario:
-            - name: cli-binary-installed
-              step:
-                - then: the codex binary is installed into the npm global bin directory
-                  file: ${HOME}/.npm-global/bin/codex
-                  exists: true
-            - name: cli-reports-version
-              step:
-                - then: running codex --version exits cleanly
-                  command: ${HOME}/.npm-global/bin/codex --version
-                  exit_status: 0
     require:
         - nodejs
-    eval:
-        - id: codex-binary
-          file: ${HOME}/.npm-global/bin/codex
-          exists: true
-        - id: codex-version
-          command: ${HOME}/.npm-global/bin/codex --version
-          exit_status: 0
+    scenario:
+        - name: cli-binary-installed
+          step:
+            - then: the codex binary is installed into the npm global bin directory
+              file: ${HOME}/.npm-global/bin/codex
+              exists: true
+        - name: cli-reports-version
+          step:
+            - then: running codex --version exits cleanly
+              command: ${HOME}/.npm-global/bin/codex --version
+              exit_status: 0
+        - name: codex-binary
+          step:
+            - id: codex-binary
+              file: ${HOME}/.npm-global/bin/codex
+              exists: true
+        - name: codex-version
+          step:
+            - id: codex-version
+              command: ${HOME}/.npm-global/bin/codex --version
+              exit_status: 0

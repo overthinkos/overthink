@@ -11,31 +11,6 @@ candy:
             docker bridge network can NAT. Every artifact is a fixed on-disk path or a
             CLI that reports its version, so the install is directly verifiable.
         tag: [working]
-        scenario:
-            - name: docker-engine-installed
-              step:
-                - then: the docker CLI binary is installed at /usr/bin/docker
-                  file: /usr/bin/docker
-                  exists: true
-                - then: the docker CLI reports its version and exits cleanly
-                  command: /usr/bin/docker --version
-                  exit_status: 0
-            - name: containerd-runtime-and-plugins
-              step:
-                - then: the containerd runtime binary is installed at /usr/bin/containerd
-                  file: /usr/bin/containerd
-                  exists: true
-                - then: the containerd runtime reports its version and exits cleanly
-                  command: /usr/bin/containerd --version
-                  exit_status: 0
-                - then: the docker compose plugin is wired into the docker CLI
-                  command: /usr/bin/docker compose version
-                  exit_status: 0
-            - name: docker-networking-prepared
-              step:
-                - then: the iptable_nat module is queued for load at boot so the docker bridge can NAT
-                  file: /etc/modules-load.d/ip_tables.conf
-                  contains: iptable_nat
     distro:
         arch:
             package:
@@ -81,33 +56,71 @@ candy:
                   components: stable
     task:
         # Load iptable_nat kernel module at boot (needed for docker networking)
-        - cmd: mkdir -p /etc/modules-load.d && echo "iptable_nat" >> /etc/modules-load.d/ip_tables.conf
-          user: root
-    eval:
-        - id: docker-binary
-          file: /usr/bin/docker
-          exists: true
-        - id: docker-version
-          command: /usr/bin/docker --version
-          exit_status: 0
-        - id: containerd-binary
-          file: /usr/bin/containerd
-          exists: true
-        - id: containerd-version
-          command: /usr/bin/containerd --version
-          exit_status: 0
-        - id: docker-compose-plugin
-          command: /usr/bin/docker compose version
-          exit_status: 0
-        - id: docker-ce-package
-          package: docker-ce
-          package_map:
-            arch: docker
-            fedora: docker-ce
-          installed: true
-        - id: containerd-package
-          package: containerd.io
-          package_map:
-            arch: containerd
-            fedora: containerd.io
-          installed: true
+        - command: mkdir -p /etc/modules-load.d && echo "iptable_nat" >> /etc/modules-load.d/ip_tables.conf
+          run_as: root
+    scenario:
+        - name: docker-engine-installed
+          step:
+            - then: the docker CLI binary is installed at /usr/bin/docker
+              file: /usr/bin/docker
+              exists: true
+            - then: the docker CLI reports its version and exits cleanly
+              command: /usr/bin/docker --version
+              exit_status: 0
+        - name: containerd-runtime-and-plugins
+          step:
+            - then: the containerd runtime binary is installed at /usr/bin/containerd
+              file: /usr/bin/containerd
+              exists: true
+            - then: the containerd runtime reports its version and exits cleanly
+              command: /usr/bin/containerd --version
+              exit_status: 0
+            - then: the docker compose plugin is wired into the docker CLI
+              command: /usr/bin/docker compose version
+              exit_status: 0
+        - name: docker-networking-prepared
+          step:
+            - then: the iptable_nat module is queued for load at boot so the docker bridge can NAT
+              file: /etc/modules-load.d/ip_tables.conf
+              contains: iptable_nat
+        - name: docker-binary
+          step:
+            - id: docker-binary
+              file: /usr/bin/docker
+              exists: true
+        - name: docker-version
+          step:
+            - id: docker-version
+              command: /usr/bin/docker --version
+              exit_status: 0
+        - name: containerd-binary
+          step:
+            - id: containerd-binary
+              file: /usr/bin/containerd
+              exists: true
+        - name: containerd-version
+          step:
+            - id: containerd-version
+              command: /usr/bin/containerd --version
+              exit_status: 0
+        - name: docker-compose-plugin
+          step:
+            - id: docker-compose-plugin
+              command: /usr/bin/docker compose version
+              exit_status: 0
+        - name: docker-ce-package
+          step:
+            - id: docker-ce-package
+              package: docker-ce
+              package_map:
+                arch: docker
+                fedora: docker-ce
+              installed: true
+        - name: containerd-package
+          step:
+            - id: containerd-package
+              package: containerd.io
+              package_map:
+                arch: containerd
+                fedora: containerd.io
+              installed: true

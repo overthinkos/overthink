@@ -29,7 +29,7 @@ func TestComputeEffectiveVersions(t *testing.T) {
 	}
 
 	cases := map[string]string{
-		"dedicated":   "2026.050.0000",  // dedicated wins
+		"dedicated":   "2026.050.0000", // dedicated wins
 		"derived":     "2026.200.0000", // highest candy version
 		"barebase":    "2026.300.0000", // dedicated bare-base version
 		"passthrough": "2026.300.0000", // recursed to barebase

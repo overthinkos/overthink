@@ -32,54 +32,63 @@ candy:
             service exposes the Ollama HTTP API (e.g. /api/tags) so any composing box
             can serve and query local models.
         tag: [working]
-        scenario:
-            # DETERMINISTIC build-scope step — the installed binary artifact.
-            - name: ollama-binary-installed
-              step:
-                - then: the ollama binary is installed at /usr/bin/ollama
-                  file: /usr/bin/ollama
-                  exists: true
-            # DETERMINISTIC deploy-scope steps — the live serve API + CLI version.
-            - name: ollama-serves-inference-api
-              step:
-                - then: the running ollama service answers the model-tags API with HTTP 200 on port 11434
-                  scope: deploy
-                  http: http://127.0.0.1:${HOST_PORT:11434}/api/tags
-                  status: 200
-                - then: the ollama CLI reports an "ollama version" string
-                  scope: deploy
-                  command: ollama --version
-                  stdout:
-                    - matches: "^ollama version"
-            # PROSE-ONLY step — model persistence is genuinely free-form (a real
-            # `ollama pull` + restart), so it binds to the agent grader.
-            - name: ollama-model-volume-persists
-              step:
-                - then: models pulled via `ollama pull` are stored under the ~/.ollama models volume and survive a service restart
     task:
         # Ollama binary release tarball (no systemd)
         - download: "https://github.com/ollama/ollama/releases/latest/download/ollama-linux-amd64.tar.zst"
           extract: tar.zst
           to: /usr
-          user: root
-    eval:
-        # Build-scope invariants on the installed artifact.
-        - id: ollama-binary
-          file: /usr/bin/ollama
-          exists: true
-        # Deploy-scope reachability + API liveness.
-        - id: ollama-tags-api
-          scope: deploy
-          http: http://127.0.0.1:${HOST_PORT:11434}/api/tags
-          status: 200
-        - id: ollama-version
-          scope: deploy
-          command: ollama --version
-          stdout:
-            - matches: "^ollama version"
+          run_as: root
     service:
         - name: ollama
           exec: "ollama serve"
           restart: always
           enable: true
           scope: system
+    scenario:
+        # DETERMINISTIC build-scope step — the installed binary artifact.
+        - name: ollama-binary-installed
+          step:
+            - then: the ollama binary is installed at /usr/bin/ollama
+              file: /usr/bin/ollama
+              exists: true
+        # DETERMINISTIC deploy-scope steps — the live serve API + CLI version.
+        - name: ollama-serves-inference-api
+          step:
+            - then: the running ollama service answers the model-tags API with HTTP 200 on port 11434
+              http: http://127.0.0.1:${HOST_PORT:11434}/api/tags
+              status: 200
+              context:
+                - runtime
+            - then: the ollama CLI reports an "ollama version" string
+              command: ollama --version
+              stdout:
+                - matches: "^ollama version"
+              context:
+                - runtime
+        # PROSE-ONLY step — model persistence is genuinely free-form (a real
+        # `ollama pull` + restart), so it binds to the agent grader.
+        - name: ollama-model-volume-persists
+          step:
+            - then: models pulled via `ollama pull` are stored under the ~/.ollama models volume and survive a service restart
+        - name: ollama-binary
+          step:
+            # Build-scope invariants on the installed artifact.
+            - id: ollama-binary
+              file: /usr/bin/ollama
+              exists: true
+        - name: ollama-tags-api
+          step:
+            # Deploy-scope reachability + API liveness.
+            - id: ollama-tags-api
+              http: http://127.0.0.1:${HOST_PORT:11434}/api/tags
+              status: 200
+              context:
+                - runtime
+        - name: ollama-version
+          step:
+            - id: ollama-version
+              command: ollama --version
+              stdout:
+                - matches: "^ollama version"
+              context:
+                - runtime

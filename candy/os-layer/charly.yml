@@ -10,24 +10,6 @@ candy:
             base + supervisord this satisfies every scenario in the
             single-pod-system-state recipe.
         tag: [working]
-        scenario:
-            - name: os-marker-written
-              step:
-                - then: the predetermined marker file exists at /etc/charly-os-marker
-                  file: /etc/charly-os-marker
-                  exists: true
-                - then: the marker file carries the content marker charly-os-content-marker
-                  file: /etc/charly-os-marker
-                  contains:
-                    - charly-os-content-marker
-            - name: system-probe-tools-installed
-              step:
-                - then: bash is present at /usr/bin/bash to back the keepalive service
-                  file: /usr/bin/bash
-                  exists: true
-                - then: procps-ng is installed so pgrep can probe the keepalive process
-                  package: procps-ng
-                  installed: true
     distro:
         fedora:
             package:
@@ -37,10 +19,10 @@ candy:
                 - util-linux
     task:
         - mkdir: /etc
-          user: root
+          run_as: root
           mode: "0755"
         - write: /etc/charly-os-marker
-          user: root
+          run_as: root
           mode: "0644"
           content: |
             charly-os-content-marker
@@ -51,18 +33,44 @@ candy:
           priority: 50
           enable: true
           scope: system
-    eval:
-        - id: os-marker-exists
-          file: /etc/charly-os-marker
-          exists: true
-        - id: os-marker-content
-          file: /etc/charly-os-marker
-          contains:
-            - charly-os-content-marker
-        - id: os-bash-installed
-          package: bash
-          installed: true
-        - id: os-bash-service-running
-          scope: deploy
-          service: os-bash
-          running: true
+    scenario:
+        - name: os-marker-written
+          step:
+            - then: the predetermined marker file exists at /etc/charly-os-marker
+              file: /etc/charly-os-marker
+              exists: true
+            - then: the marker file carries the content marker charly-os-content-marker
+              file: /etc/charly-os-marker
+              contains:
+                - charly-os-content-marker
+        - name: system-probe-tools-installed
+          step:
+            - then: bash is present at /usr/bin/bash to back the keepalive service
+              file: /usr/bin/bash
+              exists: true
+            - then: procps-ng is installed so pgrep can probe the keepalive process
+              package: procps-ng
+              installed: true
+        - name: os-marker-exists
+          step:
+            - id: os-marker-exists
+              file: /etc/charly-os-marker
+              exists: true
+        - name: os-marker-content
+          step:
+            - id: os-marker-content
+              file: /etc/charly-os-marker
+              contains:
+                - charly-os-content-marker
+        - name: os-bash-installed
+          step:
+            - id: os-bash-installed
+              package: bash
+              installed: true
+        - name: os-bash-service-running
+          step:
+            - id: os-bash-service-running
+              service: os-bash
+              running: true
+              context:
+                - runtime

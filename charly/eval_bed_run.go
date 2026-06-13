@@ -38,8 +38,22 @@ import (
 
 // bedRunOpts carries the per-run knobs (sourced from `charly eval run` flags).
 type bedRunOpts struct {
-	Keep      bool // don't tear the bed down after the run (--keep)
-	NoRebuild bool // skip the fresh-update R10 re-verify step (--no-rebuild)
+	Keep      bool   // don't tear the bed down after the run (--keep)
+	NoRebuild bool   // skip the fresh-update R10 re-verify step (--no-rebuild)
+	EvalLevel string // the bed box's acceptance-depth rung (none|build|noagent|agent); gates how deep the run drives acceptance. Empty → DefaultEvalLevel.
+}
+
+// bedEvalLevel resolves the acceptance-depth rung for a bed from its box's
+// authored eval_level (none → DefaultEvalLevel). VM / local beds carry no box
+// image, so they always run at the default rung.
+func bedEvalLevel(uf *UnifiedFile, node DeploymentNode) string {
+	if node.Box == "" {
+		return DefaultEvalLevel
+	}
+	if bc, _, ok := uf.ProjectConfig().resolveBoxRef(node.Box); ok {
+		return ResolveEvalLevel(bc.EvalLevel)
+	}
+	return DefaultEvalLevel
 }
 
 // stepResult captures one step's outcome for the summary.yml.
@@ -154,6 +168,24 @@ func runEvalBed(exe, name string, node DeploymentNode, opts bedRunOpts) (*bedRun
 	image := node.Box
 	vmTemplate := node.Vm
 	localRef := node.Local
+
+	// Acceptance-depth gating by the box's eval_level rung (see eval_level.go):
+	//   none    → neither build- nor runtime-acceptance (build+deploy smoke only)
+	//   build   → build-context acceptance (eval box) only
+	//   noagent → + deploy/runtime acceptance (eval live + feature run --no-agent)
+	//   agent   → + the prose-step agent grader (feature run WITHOUT --no-agent)
+	// The default (noagent) preserves the prior full-sequence behavior.
+	level := ResolveEvalLevel(opts.EvalLevel)
+	runBuildEval := EvalLevelReaches(level, EvalLevelBuild)
+	runRuntimeEval := EvalLevelReaches(level, EvalLevelNoAgent)
+	runAgentGrader := EvalLevelReaches(level, EvalLevelAgent)
+	featureRunArgs := func() []string {
+		args := []string{"eval", "feature", "run", name}
+		if !runAgentGrader {
+			args = append(args, "--no-agent")
+		}
+		return args
+	}
 
 	calver := ComputeCalVer()
 	logDir := filepath.Join(".eval", name, calver)
@@ -331,8 +363,11 @@ func runEvalBed(exe, name string, node DeploymentNode, opts bedRunOpts) (*bedRun
 		if err := step("image-build", []string{"box", "build", image, "--dev-local-pkg"}); err != nil {
 			return fail("image build %s: %w", image, err)
 		}
-		if err := step("eval-image", []string{"eval", "box", image}); err != nil {
-			return fail("eval box %s: %w", image, err)
+		// Build-context acceptance — gated out at eval_level: none.
+		if runBuildEval {
+			if err := step("eval-image", []string{"eval", "box", image}); err != nil {
+				return fail("eval box %s: %w", image, err)
+			}
 		}
 	}
 
@@ -487,24 +522,28 @@ func runEvalBed(exe, name string, node DeploymentNode, opts bedRunOpts) (*bedRun
 	// instruments, NEVER eval-live'd (excluded from bedEvalLiveRefs). The SAME
 	// bringUpPeers helper serves the operator deploy path (R3). One call, not
 	// one per kind.
-	if err := bringUpPeers(&node); err != nil {
-		return fail("bring up peers for %s: %w", name, err)
-	}
-	if err := evalLiveTree("eval-live"); err != nil {
-		return fail("eval live %s: %w", name, err)
-	}
+	// Deploy/runtime acceptance — gated out at eval_level: none|build (the bed
+	// then proves only that the image builds + deploys). Peers are instruments
+	// for the runtime probes, so bring-up is gated with them.
+	if runRuntimeEval {
+		if err := bringUpPeers(&node); err != nil {
+			return fail("bring up peers for %s: %w", name, err)
+		}
+		if err := evalLiveTree("eval-live"); err != nil {
+			return fail("eval live %s: %w", name, err)
+		}
 
-	// Step 4b: Agent Driven Evaluation acceptance — run the bed image's baked
-	// Gherkin scenarios (`description.scenario`) as acceptance tests. This is
-	// the opt-in scenario gate: a no-op PASS when the image bakes no scenarios,
-	// real coverage when it does. Run with --no-agent so the unattended bed
-	// sequence stays deterministic and free — the prose-step agent grader is
-	// exercised by an explicit `charly eval feature run <name>` (no --no-agent), not
-	// here. Pod beds only: VM/local deployments carry no image-baked
-	// description label to run.
-	if !isVM && !isLocal && image != "" {
-		if err := step("feature-run", []string{"eval", "feature", "run", name, "--no-agent"}); err != nil {
-			return fail("feature run %s: %w", name, err)
+		// Step 4b: Agent Driven Evaluation acceptance — run the bed image's baked
+		// Gherkin scenarios (`description.scenario`) as acceptance tests. This is
+		// the opt-in scenario gate: a no-op PASS when the image bakes no scenarios,
+		// real coverage when it does. At eval_level: noagent it runs --no-agent
+		// (deterministic, free); at eval_level: agent the prose-step agent grader
+		// runs too (featureRunArgs drops --no-agent). Pod beds only: VM/local
+		// deployments carry no image-baked description label to run.
+		if !isVM && !isLocal && image != "" {
+			if err := step("feature-run", featureRunArgs()); err != nil {
+				return fail("feature run %s: %w", name, err)
+			}
 		}
 	}
 
@@ -521,7 +560,7 @@ func runEvalBed(exe, name string, node DeploymentNode, opts bedRunOpts) (*bedRun
 		// the post-update state is unexercised. (A flat bed's `charly update`
 		// succeeding is itself the rebuild proof; its baked deploy-scope eval
 		// needs no re-deploy.)
-		if !isLocal && len(node.Nested) > 0 {
+		if runRuntimeEval && !isLocal && len(node.Nested) > 0 {
 			if isVM {
 				// `charly update` recreated the libvirt domain; the qcow2 disk (and
 				// thus the applied guest candies, the nested pod's quadlet, and
@@ -544,11 +583,11 @@ func runEvalBed(exe, name string, node DeploymentNode, opts bedRunOpts) (*bedRun
 			}
 		}
 		// Re-run the bed image's baked scenarios on the fresh rebuild (pod
-		// beds) — the deterministic ADE acceptance gate against the new image.
-		// No-op pass when the image bakes no scenarios.
-		if !isVM && !isLocal && image != "" {
+		// beds) — the ADE acceptance gate against the new image, at the box's
+		// eval_level depth. No-op pass when the image bakes no scenarios.
+		if runRuntimeEval && !isVM && !isLocal && image != "" {
 			waitForContainerReady(name, 30*time.Second)
-			if err := step("feature-run-rebuild", []string{"eval", "feature", "run", name, "--no-agent"}); err != nil {
+			if err := step("feature-run-rebuild", featureRunArgs()); err != nil {
 				return fail("feature run (fresh rebuild) %s: %w", name, err)
 			}
 		}

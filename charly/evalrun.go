@@ -45,7 +45,7 @@ func (s EvalStatus) String() string {
 // for checks that ran exactly once. Reporters surface these when Attempts>1
 // so slow startup paths are visible ("PASS in 5 attempts over 12.3s").
 type EvalResult struct {
-	Check        *Check
+	Op           *Op
 	Verb         string
 	Status       EvalStatus
 	Message      string
@@ -219,7 +219,7 @@ func (r *Runner) ClosePeers() {
 // The harness scorer (eval_runner_live.go) keeps its OWN resolver — it runs
 // against sandbox-NESTED pods, a genuinely different venue context, not a
 // duplicate of this host-context path.
-func (r *Runner) RunLive(ctx context.Context, checks []Check, instance string) []EvalResult {
+func (r *Runner) RunLive(ctx context.Context, checks []Op, instance string) []EvalResult {
 	r.TargetResolver = liveTargetResolver(instance)
 	applyPeerVars(r, checks, instance)
 	defer r.ClosePeers()
@@ -244,7 +244,7 @@ func NewRunner(exec DeployExecutor, resolver *EvalVarResolver, mode RunMode) *Ru
 // Run executes the supplied checks sequentially and returns per-check
 // results. Does not short-circuit on failure — the report should show
 // every check's outcome for CI ergonomics.
-func (r *Runner) Run(ctx context.Context, checks []Check) []EvalResult {
+func (r *Runner) Run(ctx context.Context, checks []Op) []EvalResult {
 	results := make([]EvalResult, 0, len(checks))
 	for i := range checks {
 		results = append(results, r.runOne(ctx, &checks[i]))
@@ -263,10 +263,10 @@ func (r *Runner) Run(ctx context.Context, checks []Check) []EvalResult {
 //     tests: runs pass nil TargetResolver and never hit this path.
 //  2. `eventually:` retry wrapper — when set, the verb dispatch is
 //     called repeatedly until pass or deadline.
-func (r *Runner) runOne(ctx context.Context, c *Check) EvalResult {
+func (r *Runner) runOne(ctx context.Context, c *Op) EvalResult {
 	start := time.Now()
 	kind, err := c.Kind()
-	result := EvalResult{Check: c, Verb: kind}
+	result := EvalResult{Op: c, Verb: kind}
 	if err != nil {
 		result.Status = TestFail
 		result.Message = err.Error()
@@ -299,6 +299,30 @@ func (r *Runner) runOne(ctx context.Context, c *Check) EvalResult {
 				}
 			}
 		}
+	}
+
+	// Context-vs-mode skip — the unified-Op replacement for the old
+	// scope:build↔eval-box / scope:deploy↔eval-live split. `charly eval box`
+	// (RunModeBox) runs against a disposable BUILD container, so it runs only
+	// build-context steps; `charly eval live` (RunModeLive) runs against a
+	// RUNNING target, so it runs runtime-context steps. A step whose effective
+	// context excludes the run's context is SKIPPED with a reason (e.g. a
+	// `context: [runtime]` port/service probe in eval box — no service runs in
+	// a disposable build container).
+	wantCtx := CtxRuntime
+	modeName := "live"
+	if r.Mode == RunModeBox {
+		wantCtx, modeName = CtxBuild, "box"
+	}
+	// do:instruct (the agent verb) is exempt — it routes to the grader, which
+	// itself advisory-skips when no grader is bound.
+	if c.EffectiveDo() != DoInstruct && !c.InContext(wantCtx) {
+		result.Status = TestSkip
+		result.Message = fmt.Sprintf("context %v not active in %s mode", c.EffectiveContexts(), modeName)
+		result.Elapsed = time.Since(start)
+		result.Attempts = 1
+		result.TotalElapsed = result.Elapsed
+		return result
 	}
 	// `on:` multi-target dispatch. Swap executor + resolver + image for
 	// the duration of this check only; restore on return. When
@@ -369,6 +393,18 @@ func (r *Runner) runOne(ctx context.Context, c *Check) EvalResult {
 	// Verb dispatch, wrapped in the `eventually:` retry when requested.
 	dispatch := func() EvalResult {
 		var dr EvalResult
+		// do-mode branch: instruct → agent grader; act on a state-provision
+		// verb → execute the create/configure. Action verbs (command/http/
+		// dbus/cdp/…) act in their own handler, so do:act there falls through
+		// to the assert dispatch below (the handler IS the act).
+		switch expanded.EffectiveDo() {
+		case DoInstruct:
+			return r.gradeInstruct(ctx, &expanded)
+		case DoAct:
+			if act, ok := r.runProvisionAct(ctx, &expanded, kind); ok {
+				return act
+			}
+		}
 		switch kind {
 		case "file":
 			dr = r.runFile(ctx, &expanded)
@@ -434,7 +470,7 @@ func (r *Runner) runOne(ctx context.Context, c *Check) EvalResult {
 	}
 
 	result = runWithEventually(ctx, &expanded, dispatch)
-	result.Check = c
+	result.Op = c
 	result.Verb = kind
 	result.Elapsed = time.Since(start)
 	// runWithEventually sets TotalElapsed relative to its own start time;
@@ -510,7 +546,7 @@ func (r *Runner) effectiveEnv() map[string]string {
 
 // runFile checks existence, mode, owner, group, filetype, sha256, and
 // optional content matchers on a path inside the target.
-func (r *Runner) runFile(ctx context.Context, c *Check) EvalResult {
+func (r *Runner) runFile(ctx context.Context, c *Op) EvalResult {
 	path := c.File
 	// Probe script emits a single line: exists|type|mode|owner|group|sha256
 	// then (optionally) the file's contents on stdout following a marker.
@@ -635,7 +671,7 @@ func normalizeFiletype(s string) string {
 //   - listening: true (default when unset) → probe via Exec (container-internal)
 //   - reachable/from-host semantics → dial 127.0.0.1:<HOST_PORT:N> from host
 //     (only meaningful in RunModeLive; RunModeBox skips with reason)
-func (r *Runner) runPort(ctx context.Context, c *Check) EvalResult {
+func (r *Runner) runPort(ctx context.Context, c *Op) EvalResult {
 	wantListening := true
 	if c.Listening != nil {
 		wantListening = *c.Listening
@@ -670,7 +706,7 @@ func (r *Runner) runPort(ctx context.Context, c *Check) EvalResult {
 // deploy-scope reachability checks where ${HOST_PORT:N} has been substituted
 // into the Port field. If the Port was remapped by charly.yml, the substituted
 // value is what we'll dial.
-func (r *Runner) dialPort(c *Check) EvalResult {
+func (r *Runner) dialPort(c *Op) EvalResult {
 	addr := fmt.Sprintf("127.0.0.1:%d", c.Port)
 	if c.IP != "" {
 		addr = fmt.Sprintf("%s:%d", c.IP, c.Port)
@@ -710,7 +746,7 @@ func (r *Runner) dialPort(c *Check) EvalResult {
 //
 // Host-side only. Like Background, in-container PID kill is the
 // user's responsibility (drop into command: with kill -<sig>).
-func (r *Runner) runKill(ctx context.Context, c *Check) EvalResult {
+func (r *Runner) runKill(ctx context.Context, c *Op) EvalResult {
 	if r.Mode == RunModeBox {
 		return skipf(c, "kill: not meaningful under charly eval box")
 	}
@@ -764,7 +800,7 @@ func wrapContainerCommand(script string) string {
 	return "{ " + script + "\n} </dev/null"
 }
 
-func (r *Runner) runCommand(ctx context.Context, c *Check) EvalResult {
+func (r *Runner) runCommand(ctx context.Context, c *Op) EvalResult {
 	inContainer := true
 	if c.InContainer != nil {
 		inContainer = *c.InContainer
@@ -841,14 +877,14 @@ func (r *Runner) runCommand(ctx context.Context, c *Check) EvalResult {
 // reachability). Under RunModeBox the request is issued from inside
 // the disposable container via curl (the container may have no network
 // reachability from the host, so host-side is wrong there).
-func (r *Runner) runHTTP(ctx context.Context, c *Check) EvalResult {
+func (r *Runner) runHTTP(ctx context.Context, c *Op) EvalResult {
 	if r.Mode == RunModeBox {
 		return r.runHTTPInContainer(ctx, c)
 	}
 	return r.runHTTPFromHost(ctx, c)
 }
 
-func (r *Runner) runHTTPFromHost(ctx context.Context, c *Check) EvalResult {
+func (r *Runner) runHTTPFromHost(ctx context.Context, c *Op) EvalResult {
 	client, err := httpClientFor(c, r.HTTPClient)
 	if err != nil {
 		return failf(c, "http client: %v", err)
@@ -892,7 +928,7 @@ func (r *Runner) runHTTPFromHost(ctx context.Context, c *Check) EvalResult {
 	return passf(c, fmt.Sprintf("status=%d", resp.StatusCode))
 }
 
-func (r *Runner) runHTTPInContainer(ctx context.Context, c *Check) EvalResult {
+func (r *Runner) runHTTPInContainer(ctx context.Context, c *Op) EvalResult {
 	// In-container HTTP via curl. We only check status/body here; full
 	// header-matching is implemented host-side. For Phase 3 this is
 	// sufficient for validating that the service inside the disposable
@@ -927,7 +963,7 @@ func (r *Runner) runHTTPInContainer(ctx context.Context, c *Check) EvalResult {
 // httpClientFor builds a per-check http.Client honoring AllowInsecure,
 // NoFollowRedir, CAFile, and Timeout. Derives from the runner's base client
 // so concurrent checks don't share TLS state surprises.
-func httpClientFor(c *Check, base *http.Client) (*http.Client, error) {
+func httpClientFor(c *Op, base *http.Client) (*http.Client, error) {
 	client := &http.Client{Timeout: base.Timeout}
 	if c.Timeout != "" {
 		if d, err := time.ParseDuration(c.Timeout); err == nil {
@@ -1111,16 +1147,16 @@ func matchValueStrings(v any) []string {
 // Result helpers
 // ---------------------------------------------------------------------------
 
-func passf(c *Check, msg string) EvalResult {
-	return EvalResult{Check: c, Status: TestPass, Message: msg}
+func passf(c *Op, msg string) EvalResult {
+	return EvalResult{Op: c, Status: TestPass, Message: msg}
 }
 
-func failf(c *Check, format string, args ...any) EvalResult {
-	return EvalResult{Check: c, Status: TestFail, Message: fmt.Sprintf(format, args...)}
+func failf(c *Op, format string, args ...any) EvalResult {
+	return EvalResult{Op: c, Status: TestFail, Message: fmt.Sprintf(format, args...)}
 }
 
-func skipf(c *Check, msg string) EvalResult {
-	return EvalResult{Check: c, Status: TestSkip, Message: msg}
+func skipf(c *Op, msg string) EvalResult {
+	return EvalResult{Op: c, Status: TestSkip, Message: msg}
 }
 
 func trimPreview(s string) string {
@@ -1153,13 +1189,13 @@ func FormatResultsText(w io.Writer, results []EvalResult) int {
 			skips++
 		}
 		verb := r.Verb
-		subject := firstNonEmpty(r.Check.File, r.Check.HTTP, r.Check.Command, r.Check.DNS, r.Check.Addr)
-		if r.Check.Port != 0 {
-			subject = fmt.Sprintf("%d", r.Check.Port)
+		subject := firstNonEmpty(r.Op.File, r.Op.HTTP, r.Op.Command, r.Op.DNS, r.Op.Addr)
+		if r.Op.Port != 0 {
+			subject = fmt.Sprintf("%d", r.Op.Port)
 		}
 		fmt.Fprintf(w, "%s %s %s — %s\n", glyph, verb, subject, r.Message)
-		if r.Check.Origin != "" && r.Status == TestFail {
-			fmt.Fprintf(w, "  from %s\n", r.Check.Origin)
+		if r.Op.Origin != "" && r.Status == TestFail {
+			fmt.Fprintf(w, "  from %s\n", r.Op.Origin)
 		}
 	}
 	fmt.Fprintf(w, "%d passed · %d failed · %d skipped\n", passes, fails, skips)
@@ -1188,9 +1224,9 @@ func FormatResultsJSON(w io.Writer, results []EvalResult) int {
 	out := make([]entry, 0, len(results))
 	fails := 0
 	for _, r := range results {
-		subject := firstNonEmpty(r.Check.File, r.Check.HTTP, r.Check.Command, r.Check.DNS, r.Check.Addr)
-		if r.Check.Port != 0 {
-			subject = fmt.Sprintf("%d", r.Check.Port)
+		subject := firstNonEmpty(r.Op.File, r.Op.HTTP, r.Op.Command, r.Op.DNS, r.Op.Addr)
+		if r.Op.Port != 0 {
+			subject = fmt.Sprintf("%d", r.Op.Port)
 		}
 		if r.Status == TestFail {
 			fails++
@@ -1198,7 +1234,7 @@ func FormatResultsJSON(w io.Writer, results []EvalResult) int {
 		out = append(out, entry{
 			Verb:    r.Verb,
 			Status:  r.Status.String(),
-			Origin:  r.Check.Origin,
+			Origin:  r.Op.Origin,
 			Subject: subject,
 			Message: r.Message,
 		})
@@ -1214,9 +1250,9 @@ func FormatResultsTAP(w io.Writer, results []EvalResult) int {
 	fails := 0
 	fmt.Fprintf(w, "TAP version 13\n1..%d\n", len(results))
 	for i, r := range results {
-		subject := firstNonEmpty(r.Check.File, r.Check.HTTP, r.Check.Command, r.Check.DNS, r.Check.Addr)
-		if r.Check.Port != 0 {
-			subject = fmt.Sprintf("%d", r.Check.Port)
+		subject := firstNonEmpty(r.Op.File, r.Op.HTTP, r.Op.Command, r.Op.DNS, r.Op.Addr)
+		if r.Op.Port != 0 {
+			subject = fmt.Sprintf("%d", r.Op.Port)
 		}
 		label := fmt.Sprintf("%s %s - %s", r.Verb, subject, r.Message)
 		switch r.Status {

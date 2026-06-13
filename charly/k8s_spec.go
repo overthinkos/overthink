@@ -84,10 +84,9 @@ type K8sSpec struct {
 	// generated resource.
 	Defaults K8sResourceDefaults `yaml:"defaults,omitempty"`
 
-	// --- Target-specific tests (optional) ---
+	// --- Target-specific acceptance scenarios (optional) ---
 
-	Eval       []Check `yaml:"eval,omitempty"`
-	DeployEval []Check `yaml:"deploy_eval,omitempty"`
+	Scenario []Scenario `yaml:"scenario,omitempty"`
 }
 
 // K8sResources is per-container CPU / memory requests + limits.

@@ -17,44 +17,6 @@ candy:
             stay auth-independent so the scenario holds for every box composing this
             candy (consumers such as immich override POSTGRES_USER/POSTGRES_DB).
         tag: [working]
-        scenario:
-            - name: server-and-client-binaries-installed
-              step:
-                - then: the PostgreSQL server binary is installed
-                  file: /usr/bin/postgres
-                  exists: true
-                - and: the psql client binary is installed
-                  file: /usr/bin/psql
-                  exists: true
-                - and: the initdb cluster-bootstrap tool is installed
-                  file: /usr/bin/initdb
-                  exists: true
-                - and: the pg_isready readiness probe is installed
-                  file: /usr/bin/pg_isready
-                  exists: true
-            - name: entrypoint-wrapper-installed-and-executable
-              step:
-                - then: the Docker-compatible entrypoint wrapper is present and executable
-                  file: /usr/local/bin/postgresql-entrypoint.sh
-                  exists: true
-                  mode: "0755"
-            - name: pgvector-extension-available
-              step:
-                - then: the pgvector similarity-search extension package is installed
-                  package: pgvector
-                  installed: true
-            - name: server-initializes-and-accepts-connections
-              step:
-                - then: the entrypoint initialized the cluster data directory on first run
-                  scope: deploy
-                  command: test -f ${HOME}/.postgresql/data/PG_VERSION
-                  exit_status: 0
-                  in_container: true
-                - and: the running server reports ready on its unix socket
-                  scope: deploy
-                  command: pg_isready -h ${HOME}/.postgresql
-                  exit_status: 0
-                  in_container: true
     distro:
         arch:
             # Arch `postgresql` ships the server (postgres, initdb, pg_ctl); psql,
@@ -82,17 +44,17 @@ candy:
     task:
         # Socket + postgres data dirs. chown must come after mkdir so the later
         # supervisord run-as-user doesn't trip on root-owned paths.
-        - cmd: |
+        - command: |
             mkdir -p /home/user/.postgresql
             chown 1000:1000 /home/user/.postgresql
             mkdir -p /docker-entrypoint-initdb.d
-          user: root
+          run_as: root
         # Entry-point wrapper. This used to live inside a heredoc under root.yml —
         # now the script content is the YAML `content:` and the generator stages
         # it into the build context + COPY so shell never parses it. Any `$`-sign
         # in the script stays literal (it's file content, not a cmd).
         - write: /usr/local/bin/postgresql-entrypoint.sh
-          user: root
+          run_as: root
           mode: "0755"
           content: |
             #!/bin/bash
@@ -176,40 +138,6 @@ candy:
                 POSTGRES_ARGS+=(-c "shared_preload_libraries=$POSTGRES_SHARED_PRELOAD_LIBRARIES")
             fi
             exec /usr/bin/postgres "${POSTGRES_ARGS[@]}"
-    eval:
-        - id: postgres-binary
-          file: /usr/bin/postgres
-          exists: true
-        - id: psql-binary
-          file: /usr/bin/psql
-          exists: true
-        - id: pg-isready-binary
-          file: /usr/bin/pg_isready
-          exists: true
-        - id: initdb-binary
-          file: /usr/bin/initdb
-          exists: true
-        - id: postgresql-package
-          package: postgresql-server
-          package_map:
-            arch: postgresql
-          installed: true
-        - id: pgvector-package
-          package: pgvector
-          installed: true
-        - id: postgresql-entrypoint
-          file: /usr/local/bin/postgresql-entrypoint.sh
-          exists: true
-          mode: "0755"
-        - id: postgresql-service-running
-          scope: deploy
-          service: postgresql
-          running: true
-        - id: postgresql-ready
-          scope: deploy
-          command: pg_isready -h ${HOME}/.postgresql
-          exit_status: 0
-          in_container: true
     service:
         - name: postgresql
           exec: /usr/local/bin/postgresql-entrypoint.sh
@@ -217,3 +145,96 @@ candy:
           priority: 10
           enable: true
           scope: system
+    scenario:
+        - name: server-and-client-binaries-installed
+          step:
+            - then: the PostgreSQL server binary is installed
+              file: /usr/bin/postgres
+              exists: true
+            - and: the psql client binary is installed
+              file: /usr/bin/psql
+              exists: true
+            - and: the initdb cluster-bootstrap tool is installed
+              file: /usr/bin/initdb
+              exists: true
+            - and: the pg_isready readiness probe is installed
+              file: /usr/bin/pg_isready
+              exists: true
+        - name: entrypoint-wrapper-installed-and-executable
+          step:
+            - then: the Docker-compatible entrypoint wrapper is present and executable
+              file: /usr/local/bin/postgresql-entrypoint.sh
+              exists: true
+              mode: "0755"
+        - name: pgvector-extension-available
+          step:
+            - then: the pgvector similarity-search extension package is installed
+              package: pgvector
+              installed: true
+        - name: server-initializes-and-accepts-connections
+          step:
+            - then: the entrypoint initialized the cluster data directory on first run
+              command: test -f ${HOME}/.postgresql/data/PG_VERSION
+              exit_status: 0
+              in_container: true
+              context:
+                - runtime
+            - and: the running server reports ready on its unix socket
+              command: pg_isready -h ${HOME}/.postgresql
+              exit_status: 0
+              in_container: true
+              context:
+                - runtime
+        - name: postgres-binary
+          step:
+            - id: postgres-binary
+              file: /usr/bin/postgres
+              exists: true
+        - name: psql-binary
+          step:
+            - id: psql-binary
+              file: /usr/bin/psql
+              exists: true
+        - name: pg-isready-binary
+          step:
+            - id: pg-isready-binary
+              file: /usr/bin/pg_isready
+              exists: true
+        - name: initdb-binary
+          step:
+            - id: initdb-binary
+              file: /usr/bin/initdb
+              exists: true
+        - name: postgresql-package
+          step:
+            - id: postgresql-package
+              package: postgresql-server
+              package_map:
+                arch: postgresql
+              installed: true
+        - name: pgvector-package
+          step:
+            - id: pgvector-package
+              package: pgvector
+              installed: true
+        - name: postgresql-entrypoint
+          step:
+            - id: postgresql-entrypoint
+              file: /usr/local/bin/postgresql-entrypoint.sh
+              exists: true
+              mode: "0755"
+        - name: postgresql-service-running
+          step:
+            - id: postgresql-service-running
+              service: postgresql
+              running: true
+              context:
+                - runtime
+        - name: postgresql-ready
+          step:
+            - id: postgresql-ready
+              command: pg_isready -h ${HOME}/.postgresql
+              exit_status: 0
+              in_container: true
+              context:
+                - runtime

@@ -140,7 +140,7 @@ func teardownHostDeploy(paths *LedgerPaths, rec *DeployRecord, hostHome string, 
 // the supplied check list. OnlyIDs/StopOnFail mirror their TestOpts
 // semantics; the runner-level matching for verb dispatch is shared with
 // `charly eval live`.
-func (t *LocalUnifiedTarget) Test(ctx context.Context, checks []Check, opts TestOpts) error {
+func (t *LocalUnifiedTarget) Test(ctx context.Context, checks []Op, opts TestOpts) error {
 	onlyIDs := make(map[string]bool, len(opts.OnlyIDs))
 	for _, id := range opts.OnlyIDs {
 		onlyIDs[id] = true
@@ -161,8 +161,8 @@ func (t *LocalUnifiedTarget) Test(ctx context.Context, checks []Check, opts Test
 		if r.Status == TestFail {
 			failed++
 			id := ""
-			if r.Check != nil {
-				id = r.Check.ID
+			if r.Op != nil {
+				id = r.Op.ID
 			}
 			fmt.Fprintf(os.Stderr, "FAIL %s: %s\n", id, r.Message)
 			if opts.StopOnFail {
@@ -345,7 +345,7 @@ func (t *LocalUnifiedTarget) Add(ctx context.Context, dctx *DeployContext, plans
 	}
 
 	// Resolve candy secret_requires / secret_accepts and inject them into
-	// each TaskStep's env BEFORE emission (R3 shared helper).
+	// each OpStep's env BEFORE emission (R3 shared helper).
 	candyList, secretEnv, err := prepareCandySecrets(plans, dctx.Dir)
 	if err != nil {
 		return fmt.Errorf("loading candies for secret resolution: %w", err)

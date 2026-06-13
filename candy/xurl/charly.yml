@@ -8,21 +8,24 @@ candy:
             ~/.npm-global/bin, placed on PATH by the nodejs candy). Verifiable:
             the xurl binary lands at ~/.npm-global/bin/xurl and runs `--help`.
         tag: [working]
-        scenario:
-            - name: xurl-cli-installed
-              step:
-                - then: the xurl CLI is installed in the npm global bin
-                  file: ${HOME}/.npm-global/bin/xurl
-                  exists: true
-                - then: the xurl CLI runs and prints its usage
-                  command: ${HOME}/.npm-global/bin/xurl --help
-                  exit_status: 0
     require:
         - nodejs
-    eval:
-        - id: xurl-cli
-          file: ${HOME}/.npm-global/bin/xurl
-          exists: true
-        - id: xurl-help
-          command: ${HOME}/.npm-global/bin/xurl --help
-          exit_status: 0
+    scenario:
+        - name: xurl-cli-installed
+          step:
+            - then: the xurl CLI is installed in the npm global bin
+              file: ${HOME}/.npm-global/bin/xurl
+              exists: true
+            - then: the xurl CLI runs and prints its usage
+              command: ${HOME}/.npm-global/bin/xurl --help
+              exit_status: 0
+        - name: xurl-cli
+          step:
+            - id: xurl-cli
+              file: ${HOME}/.npm-global/bin/xurl
+              exists: true
+        - name: xurl-help
+          step:
+            - id: xurl-help
+              command: ${HOME}/.npm-global/bin/xurl --help
+              exit_status: 0

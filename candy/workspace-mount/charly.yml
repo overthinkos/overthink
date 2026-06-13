@@ -12,20 +12,11 @@ candy:
             share attached; a no-op (start tolerated) at image build where no
             device exists. systemd-based (Arch/CachyOS, Fedora, bootc).
         tag: [working]
-        scenario:
-            - name: workspace-mount-unit-installed
-              step:
-                - then: the systemd .mount unit is installed and declares the virtiofs type
-                  file: /etc/systemd/system/workspace.mount
-                  contains: "Type=virtiofs"
-            - name: workspace-share-writable-when-attached
-              step:
-                - then: when a workspace share is attached, /workspace is a writable virtiofs mount
     task:
         - mkdir: /workspace
-          user: root
+          run_as: root
         - write: /etc/systemd/system/workspace.mount
-          user: root
+          run_as: root
           mode: "0644"
           content: |
             [Unit]
@@ -47,35 +38,47 @@ candy:
         # Enable for boot (survives the autostart reboot); start now if the
         # share is already attached. Tolerant so an image-build chroot (no
         # systemd, no device) doesn't fail the layer.
-        - cmd: |
+        - command: |
             systemctl daemon-reload || true
             systemctl enable workspace.mount || true
             systemctl start workspace.mount || true
-          user: root
-    eval:
-        - id: workspace-mount-unit
-          file: /etc/systemd/system/workspace.mount
-          contains: "Type=virtiofs"
-        - id: workspace-virtiofs-rw
-          # Skip-aware: the share is attached only on a running VM that declares
-          # it (N/A at image build / no-device targets — mirrors the GPU gate).
-          # When mounted it MUST be virtiofs and writable.
-          command: |
-            if ! findmnt -n /workspace >/dev/null 2>&1; then
-              echo "WORKSPACE-OK (N/A: no /workspace share attached to this target)"
-              exit 0
-            fi
-            fstype=$(findmnt -n -o FSTYPE /workspace)
-            if [ "$fstype" != "virtiofs" ]; then
-              echo "FAIL: /workspace is $fstype, expected virtiofs"
-              exit 1
-            fi
-            probe=/workspace/.charly-workspace-write-probe
-            if touch "$probe" 2>/dev/null && rm -f "$probe" 2>/dev/null; then
-              echo "WORKSPACE-OK (virtiofs read-write at /workspace)"
-            else
-              echo "FAIL: /workspace virtiofs share is not writable"
-              exit 1
-            fi
-          stdout:
-            contains: WORKSPACE-OK
+          run_as: root
+    scenario:
+        - name: workspace-mount-unit-installed
+          step:
+            - then: the systemd .mount unit is installed and declares the virtiofs type
+              file: /etc/systemd/system/workspace.mount
+              contains: "Type=virtiofs"
+        - name: workspace-share-writable-when-attached
+          step:
+            - then: when a workspace share is attached, /workspace is a writable virtiofs mount
+        - name: workspace-mount-unit
+          step:
+            - id: workspace-mount-unit
+              file: /etc/systemd/system/workspace.mount
+              contains: "Type=virtiofs"
+        - name: workspace-virtiofs-rw
+          step:
+            - id: workspace-virtiofs-rw
+              # Skip-aware: the share is attached only on a running VM that declares
+              # it (N/A at image build / no-device targets — mirrors the GPU gate).
+              # When mounted it MUST be virtiofs and writable.
+              command: |
+                if ! findmnt -n /workspace >/dev/null 2>&1; then
+                  echo "WORKSPACE-OK (N/A: no /workspace share attached to this target)"
+                  exit 0
+                fi
+                fstype=$(findmnt -n -o FSTYPE /workspace)
+                if [ "$fstype" != "virtiofs" ]; then
+                  echo "FAIL: /workspace is $fstype, expected virtiofs"
+                  exit 1
+                fi
+                probe=/workspace/.charly-workspace-write-probe
+                if touch "$probe" 2>/dev/null && rm -f "$probe" 2>/dev/null; then
+                  echo "WORKSPACE-OK (virtiofs read-write at /workspace)"
+                else
+                  echo "FAIL: /workspace virtiofs share is not writable"
+                  exit 1
+                fi
+              stdout:
+                contains: WORKSPACE-OK

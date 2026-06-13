@@ -11,23 +11,6 @@ candy:
             run with --help; a live order-status query needs Foodora auth and is
             genuinely free-form (agent-graded).
         tag: [working]
-        scenario:
-            - name: ordercli-binary-installed
-              step:
-                - then: the ordercli binary is installed at ${HOME}/go/bin/ordercli
-                  file: ${HOME}/go/bin/ordercli
-                  exists: true
-                  filetype: file
-            - name: ordercli-help-lists-providers
-              step:
-                - then: running ordercli --help prints its delivery-provider subcommands
-                  command: '${HOME}/go/bin/ordercli --help 2>&1 | grep -qiE "foodora|deliveroo|glovo|usage" && echo ran'
-                  stdout:
-                    - equals: ran
-                  exit_status: 0
-            - name: ordercli-reports-live-order-status
-              step:
-                - then: ordercli authenticates to Foodora and reports the current delivery order status
     require:
         - golang
     env:
@@ -35,17 +18,37 @@ candy:
     path_append:
         - "~/go/bin"
     task:
-        - cmd: |
+        - command: |
             go install github.com/steipete/ordercli/cmd/ordercli@latest
             go clean -cache
-          user: "${USER}"
-    eval:
-        - id: ordercli-binary
-          file: ${HOME}/go/bin/ordercli
-          exists: true
-          filetype: file
-        - id: ordercli-help-runs
-          command: '${HOME}/go/bin/ordercli --help 2>&1 | grep -qiE "foodora|deliveroo|glovo|usage" && echo ran'
-          stdout:
-            - equals: ran
-          exit_status: 0
+          run_as: "${USER}"
+    scenario:
+        - name: ordercli-binary-installed
+          step:
+            - then: the ordercli binary is installed at ${HOME}/go/bin/ordercli
+              file: ${HOME}/go/bin/ordercli
+              exists: true
+              filetype: file
+        - name: ordercli-help-lists-providers
+          step:
+            - then: running ordercli --help prints its delivery-provider subcommands
+              command: '${HOME}/go/bin/ordercli --help 2>&1 | grep -qiE "foodora|deliveroo|glovo|usage" && echo ran'
+              stdout:
+                - equals: ran
+              exit_status: 0
+        - name: ordercli-reports-live-order-status
+          step:
+            - then: ordercli authenticates to Foodora and reports the current delivery order status
+        - name: ordercli-binary
+          step:
+            - id: ordercli-binary
+              file: ${HOME}/go/bin/ordercli
+              exists: true
+              filetype: file
+        - name: ordercli-help-runs
+          step:
+            - id: ordercli-help-runs
+              command: '${HOME}/go/bin/ordercli --help 2>&1 | grep -qiE "foodora|deliveroo|glovo|usage" && echo ran'
+              stdout:
+                - equals: ran
+              exit_status: 0

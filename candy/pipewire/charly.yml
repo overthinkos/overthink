@@ -14,35 +14,6 @@ candy:
             container desktops (sway-desktop) get working audio. Verifiable by
             the installed binaries, the launch wrapper, and the running service.
         tag: [working]
-        scenario:
-            - name: media-server-and-session-manager-installed
-              step:
-                - then: the PipeWire media server binary is installed at /usr/bin/pipewire
-                  file: /usr/bin/pipewire
-                  exists: true
-                - then: the WirePlumber session manager binary is installed at /usr/bin/wireplumber
-                  file: /usr/bin/wireplumber
-                  exists: true
-            - name: pulseaudio-compat-and-control-tools-present
-              step:
-                - then: the PulseAudio compatibility shim is installed at /usr/bin/pipewire-pulse
-                  file: /usr/bin/pipewire-pulse
-                  exists: true
-                - then: the pw-cli control utility is installed at /usr/bin/pw-cli
-                  file: /usr/bin/pw-cli
-                  exists: true
-            - name: supervised-launch-wrapper-installed
-              step:
-                - then: the pipewire-wrapper launch script is installed in the user's local bin
-                  file: ${HOME}/.local/bin/pipewire-wrapper
-                  exists: true
-            - name: audio-service-runs-in-deployment
-              step:
-                - then: the pipewire service is running under the init system
-                  scope: deploy
-                  service: pipewire
-                  running: true
-                - then: the running PipeWire graph exposes a working core that audio clients can query
     distro:
         arch:
             package:
@@ -57,25 +28,11 @@ candy:
                 - wireplumber
     task:
         - mkdir: "${HOME}/.local/bin"
-          user: "${USER}"
+          run_as: "${USER}"
         - copy: pipewire-wrapper
           to: "${HOME}/.local/bin/pipewire-wrapper"
           mode: "0755"
-          user: "${USER}"
-    eval:
-        - id: pipewire-binary
-          file: /usr/bin/pipewire
-          exists: true
-        - id: wireplumber-binary
-          file: /usr/bin/wireplumber
-          exists: true
-        - id: pipewire-wrapper
-          file: ${HOME}/.local/bin/pipewire-wrapper
-          exists: true
-        - id: pipewire-service-running
-          scope: deploy
-          service: pipewire
-          running: true
+          run_as: "${USER}"
     service:
         - name: pipewire
           exec: "%(ENV_HOME)s/.local/bin/pipewire-wrapper"
@@ -86,3 +43,55 @@ candy:
           # user scope: pipewire/wireplumber need the user session bus + per-user
           # runtime dir. supervisord ignores scope → container render unchanged.
           scope: user
+    scenario:
+        - name: media-server-and-session-manager-installed
+          step:
+            - then: the PipeWire media server binary is installed at /usr/bin/pipewire
+              file: /usr/bin/pipewire
+              exists: true
+            - then: the WirePlumber session manager binary is installed at /usr/bin/wireplumber
+              file: /usr/bin/wireplumber
+              exists: true
+        - name: pulseaudio-compat-and-control-tools-present
+          step:
+            - then: the PulseAudio compatibility shim is installed at /usr/bin/pipewire-pulse
+              file: /usr/bin/pipewire-pulse
+              exists: true
+            - then: the pw-cli control utility is installed at /usr/bin/pw-cli
+              file: /usr/bin/pw-cli
+              exists: true
+        - name: supervised-launch-wrapper-installed
+          step:
+            - then: the pipewire-wrapper launch script is installed in the user's local bin
+              file: ${HOME}/.local/bin/pipewire-wrapper
+              exists: true
+        - name: audio-service-runs-in-deployment
+          step:
+            - then: the pipewire service is running under the init system
+              service: pipewire
+              running: true
+              context:
+                - runtime
+            - then: the running PipeWire graph exposes a working core that audio clients can query
+        - name: pipewire-binary
+          step:
+            - id: pipewire-binary
+              file: /usr/bin/pipewire
+              exists: true
+        - name: wireplumber-binary
+          step:
+            - id: wireplumber-binary
+              file: /usr/bin/wireplumber
+              exists: true
+        - name: pipewire-wrapper
+          step:
+            - id: pipewire-wrapper
+              file: ${HOME}/.local/bin/pipewire-wrapper
+              exists: true
+        - name: pipewire-service-running
+          step:
+            - id: pipewire-service-running
+              service: pipewire
+              running: true
+              context:
+                - runtime

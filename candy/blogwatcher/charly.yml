@@ -11,22 +11,6 @@ candy:
             executable, and `blogwatcher --help` runs (exit 0) and lists its
             feed-management subcommands (add, scan, blogs, articles, read).
         tag: [working]
-        scenario:
-            # DETERMINISTIC: the file check verb runs at build AND deploy scope.
-            - name: blogwatcher-binary-installed
-              step:
-                - then: the blogwatcher binary is installed at ~/go/bin/blogwatcher
-                  file: ${HOME}/go/bin/blogwatcher
-                  exists: true
-            # DETERMINISTIC: the binary actually runs as a cobra CLI and lists
-            # its scan subcommand.
-            - name: blogwatcher-cli-responds
-              step:
-                - then: running blogwatcher --help exits 0 and lists the scan subcommand
-                  command: "${HOME}/go/bin/blogwatcher --help 2>&1"
-                  exit_status: 0
-                  stdout:
-                    - contains: scan
     require:
         - golang
     env:
@@ -34,25 +18,46 @@ candy:
     path_append:
         - "~/go/bin"
     task:
-        - cmd: |
+        - command: |
             go install github.com/Hyaxia/blogwatcher/cmd/blogwatcher@latest
             go clean -cache
-          user: "${USER}"
-    eval:
-        # The candy's whole job: land the blogwatcher binary at ~/go/bin.
-        - id: blogwatcher-binary
-          file: ${HOME}/go/bin/blogwatcher
-          exists: true
-        # Present is not enough — assert it is an executable file.
-        - id: blogwatcher-binary-executable
-          command: "test -x ${HOME}/go/bin/blogwatcher"
-          exit_status: 0
-        # Functional probe: the binary runs as a cobra CLI and lists its real
-        # feed-management subcommands (fails if go install produced a non-working
-        # or wrong binary).
-        - id: blogwatcher-cli-help
-          command: "${HOME}/go/bin/blogwatcher --help 2>&1"
-          exit_status: 0
-          stdout:
-            - contains: scan
-            - contains: blogs
+          run_as: "${USER}"
+    scenario:
+        # DETERMINISTIC: the file check verb runs at build AND deploy scope.
+        - name: blogwatcher-binary-installed
+          step:
+            - then: the blogwatcher binary is installed at ~/go/bin/blogwatcher
+              file: ${HOME}/go/bin/blogwatcher
+              exists: true
+        # DETERMINISTIC: the binary actually runs as a cobra CLI and lists
+        # its scan subcommand.
+        - name: blogwatcher-cli-responds
+          step:
+            - then: running blogwatcher --help exits 0 and lists the scan subcommand
+              command: "${HOME}/go/bin/blogwatcher --help 2>&1"
+              exit_status: 0
+              stdout:
+                - contains: scan
+        - name: blogwatcher-binary
+          step:
+            # The candy's whole job: land the blogwatcher binary at ~/go/bin.
+            - id: blogwatcher-binary
+              file: ${HOME}/go/bin/blogwatcher
+              exists: true
+        - name: blogwatcher-binary-executable
+          step:
+            # Present is not enough — assert it is an executable file.
+            - id: blogwatcher-binary-executable
+              command: "test -x ${HOME}/go/bin/blogwatcher"
+              exit_status: 0
+        - name: blogwatcher-cli-help
+          step:
+            # Functional probe: the binary runs as a cobra CLI and lists its real
+            # feed-management subcommands (fails if go install produced a non-working
+            # or wrong binary).
+            - id: blogwatcher-cli-help
+              command: "${HOME}/go/bin/blogwatcher --help 2>&1"
+              exit_status: 0
+              stdout:
+                - contains: scan
+                - contains: blogs

@@ -16,47 +16,6 @@ candy:
             the linked convert subcommand, the serve wrapper, the running service, the
             reachable port, and the HTTP 200 a known OSM tile endpoint returns.
         tag: [working]
-        scenario:
-            # DETERMINISTIC build-scope facts (embedded check verbs run at both
-            # `charly box feature run` and `charly eval feature run`).
-            - name: versatiles-binary-installed
-              step:
-                - then: the versatiles binary is installed and executable at /usr/local/bin/versatiles
-                  file: /usr/local/bin/versatiles
-                  exists: true
-                  mode: "0755"
-                - then: the installed binary reports its version
-                  command: versatiles --version
-                  exit_status: 0
-            - name: convert-subcommand-linked
-              step:
-                - then: the convert subcommand is compiled into the binary (not a stripped-down build)
-                  command: versatiles convert --help
-                  exit_status: 0
-            - name: serve-wrapper-installed
-              step:
-                - then: the supervisord serve wrapper is installed and executable at /usr/local/bin/versatiles-wrapper.sh
-                  file: /usr/local/bin/versatiles-wrapper.sh
-                  exists: true
-                  mode: "0755"
-            # DETERMINISTIC deploy-scope facts — the running service answers an
-            # HTTP tile fetch on the published port from the always-on OSM source.
-            - name: tile-server-serves-vector-tiles
-              step:
-                - then: the versatiles service is running under the init system
-                  scope: deploy
-                  service: versatiles
-                  running: true
-                - then: the serve port is reachable on the host loopback
-                  scope: deploy
-                  addr: "127.0.0.1:${HOST_PORT:8090}"
-                  reachable: true
-                  timeout: 10s
-                - then: a known OSM tile endpoint returns HTTP 200
-                  scope: deploy
-                  http: "http://127.0.0.1:${HOST_PORT:8090}/tiles/osm/0/0/0.pbf"
-                  status: 200
-                  timeout: 10s
     require:
         - supervisord
     distro:
@@ -90,7 +49,7 @@ candy:
         # rather than pinning v4.0.0 so subsequent builds pick up
         # bugfixes — versatiles-rs has been on a quarterly release
         # cadence with backward-compatible CLI surface.
-        - cmd: |
+        - command: |
             set -euo pipefail
             # The release asset name follows the pattern
             # `versatiles-linux-gnu-x86_64.tar.gz` (gnu BEFORE x86_64,
@@ -118,7 +77,7 @@ candy:
             install -m 0755 "$BIN" /usr/local/bin/versatiles
             cd /
             rm -rf "$TMPDIR"
-          user: root
+          run_as: root
         # ---- versatiles serve wrapper ----
         # Mirrors the martin-wrapper.sh pattern in osm-tools-layer.
         # Pre-creates the shortbread tile directory (the shortbread layer
@@ -128,7 +87,7 @@ candy:
         # supervisord.
         - write: /usr/local/bin/versatiles-wrapper.sh
           mode: "0755"
-          user: root
+          run_as: root
           content: |
             #!/usr/bin/env bash
             set -euo pipefail
@@ -152,68 +111,6 @@ candy:
             done
             echo "versatiles-wrapper: starting versatiles serve with ${#ARGS[@]} source(s)" >&2
             exec /usr/local/bin/versatiles serve --port 8090 "${ARGS[@]}"
-    eval:
-        # Build-scope: versatiles binary present + the convert subcommand
-        # is shipped (verifies the binary isn't a stripped-down build).
-        - id: versatiles-installed
-          command: versatiles --version
-          exit_status: 0
-        - id: versatiles-convert-help
-          command: versatiles convert --help
-          exit_status: 0
-        - id: versatiles-wrapper-installed
-          file: /usr/local/bin/versatiles-wrapper.sh
-          exists: true
-          mode: "0755"
-        # Deploy-scope: supervisord service is RUNNING + port 8090 reachable.
-        - id: versatiles-running
-          scope: deploy
-          service: versatiles
-          running: true
-        - id: versatiles-port-reachable
-          scope: deploy
-          addr: "127.0.0.1:${HOST_PORT:8090}"
-          reachable: true
-          timeout: 10s
-        # versatiles serve doesn't serve a root index — `GET /` returns
-        # 404. Probe a known-good tile endpoint from the always-on remote
-        # `osm.versatiles` source instead (added by the wrapper). The
-        # response body is binary MVT-PBF; we only need the 200 status.
-        - id: versatiles-http-up
-          scope: deploy
-          http: "http://127.0.0.1:${HOST_PORT:8090}/tiles/osm/0/0/0.pbf"
-          status: 200
-          timeout: 10s
-        # Deploy-scope: end-to-end convert round-trip on the OSM DAG's
-        # output. This is the canonical interop verification — PMTiles in,
-        # .versatiles out, PMTiles back; both intermediate files must
-        # exist and `versatiles probe` must succeed on each. Runs only
-        # after the OSM DAG has produced monaco.pmtiles (the prior
-        # deploy-scope probes don't depend on it; this one does).
-        - id: versatiles-convert-roundtrip
-          scope: deploy
-          in_container: true
-          command: |
-            set -euo pipefail
-            SRC=/workspace/tiles/pmtiles/monaco.pmtiles
-            # If the OSM DAG hasn't run yet on this deploy, skip the
-            # check cleanly — the notebook's R10 end-to-end covers the
-            # post-DAG state. The eval here covers the static binary
-            # surface; the DAG path is exercised by the notebook test.
-            if [ ! -f "$SRC" ]; then
-              echo "SKIP: $SRC not present yet (OSM DAG has not run on this deploy)"
-              exit 0
-            fi
-            TMP=$(mktemp -d)
-            trap "rm -rf $TMP" EXIT
-            versatiles convert "$SRC" "$TMP/monaco.versatiles"
-            versatiles convert "$TMP/monaco.versatiles" "$TMP/monaco-roundtrip.pmtiles"
-            test -s "$TMP/monaco.versatiles"
-            test -s "$TMP/monaco-roundtrip.pmtiles"
-            # Probe both ends to verify they're readable + parseable.
-            versatiles probe "$SRC" >/dev/null
-            versatiles probe "$TMP/monaco-roundtrip.pmtiles" >/dev/null
-          exit_status: 0
     service:
         - name: versatiles
           exec: /usr/local/bin/versatiles-wrapper.sh
@@ -221,3 +118,126 @@ candy:
           priority: 37
           enable: true
           scope: system
+    scenario:
+        # DETERMINISTIC build-scope facts (embedded check verbs run at both
+        # `charly box feature run` and `charly eval feature run`).
+        - name: versatiles-binary-installed
+          step:
+            - then: the versatiles binary is installed and executable at /usr/local/bin/versatiles
+              file: /usr/local/bin/versatiles
+              exists: true
+              mode: "0755"
+            - then: the installed binary reports its version
+              command: versatiles --version
+              exit_status: 0
+        - name: convert-subcommand-linked
+          step:
+            - then: the convert subcommand is compiled into the binary (not a stripped-down build)
+              command: versatiles convert --help
+              exit_status: 0
+        - name: serve-wrapper-installed
+          step:
+            - then: the supervisord serve wrapper is installed and executable at /usr/local/bin/versatiles-wrapper.sh
+              file: /usr/local/bin/versatiles-wrapper.sh
+              exists: true
+              mode: "0755"
+        # DETERMINISTIC deploy-scope facts — the running service answers an
+        # HTTP tile fetch on the published port from the always-on OSM source.
+        - name: tile-server-serves-vector-tiles
+          step:
+            - then: the versatiles service is running under the init system
+              service: versatiles
+              running: true
+              context:
+                - runtime
+            - then: the serve port is reachable on the host loopback
+              addr: "127.0.0.1:${HOST_PORT:8090}"
+              reachable: true
+              timeout: 10s
+              context:
+                - runtime
+            - then: a known OSM tile endpoint returns HTTP 200
+              http: "http://127.0.0.1:${HOST_PORT:8090}/tiles/osm/0/0/0.pbf"
+              status: 200
+              timeout: 10s
+              context:
+                - runtime
+        - name: versatiles-installed
+          step:
+            # Build-scope: versatiles binary present + the convert subcommand
+            # is shipped (verifies the binary isn't a stripped-down build).
+            - id: versatiles-installed
+              command: versatiles --version
+              exit_status: 0
+        - name: versatiles-convert-help
+          step:
+            - id: versatiles-convert-help
+              command: versatiles convert --help
+              exit_status: 0
+        - name: versatiles-wrapper-installed
+          step:
+            - id: versatiles-wrapper-installed
+              file: /usr/local/bin/versatiles-wrapper.sh
+              exists: true
+              mode: "0755"
+        - name: versatiles-running
+          step:
+            # Deploy-scope: supervisord service is RUNNING + port 8090 reachable.
+            - id: versatiles-running
+              service: versatiles
+              running: true
+              context:
+                - runtime
+        - name: versatiles-port-reachable
+          step:
+            - id: versatiles-port-reachable
+              addr: "127.0.0.1:${HOST_PORT:8090}"
+              reachable: true
+              timeout: 10s
+              context:
+                - runtime
+        - name: versatiles-http-up
+          step:
+            # versatiles serve doesn't serve a root index — `GET /` returns
+            # 404. Probe a known-good tile endpoint from the always-on remote
+            # `osm.versatiles` source instead (added by the wrapper). The
+            # response body is binary MVT-PBF; we only need the 200 status.
+            - id: versatiles-http-up
+              http: "http://127.0.0.1:${HOST_PORT:8090}/tiles/osm/0/0/0.pbf"
+              status: 200
+              timeout: 10s
+              context:
+                - runtime
+        - name: versatiles-convert-roundtrip
+          step:
+            # Deploy-scope: end-to-end convert round-trip on the OSM DAG's
+            # output. This is the canonical interop verification — PMTiles in,
+            # .versatiles out, PMTiles back; both intermediate files must
+            # exist and `versatiles probe` must succeed on each. Runs only
+            # after the OSM DAG has produced monaco.pmtiles (the prior
+            # deploy-scope probes don't depend on it; this one does).
+            - id: versatiles-convert-roundtrip
+              in_container: true
+              command: |
+                set -euo pipefail
+                SRC=/workspace/tiles/pmtiles/monaco.pmtiles
+                # If the OSM DAG hasn't run yet on this deploy, skip the
+                # check cleanly — the notebook's R10 end-to-end covers the
+                # post-DAG state. The eval here covers the static binary
+                # surface; the DAG path is exercised by the notebook test.
+                if [ ! -f "$SRC" ]; then
+                  echo "SKIP: $SRC not present yet (OSM DAG has not run on this deploy)"
+                  exit 0
+                fi
+                TMP=$(mktemp -d)
+                trap "rm -rf $TMP" EXIT
+                versatiles convert "$SRC" "$TMP/monaco.versatiles"
+                versatiles convert "$TMP/monaco.versatiles" "$TMP/monaco-roundtrip.pmtiles"
+                test -s "$TMP/monaco.versatiles"
+                test -s "$TMP/monaco-roundtrip.pmtiles"
+                # Probe both ends to verify they're readable + parseable.
+                versatiles probe "$SRC" >/dev/null
+                versatiles probe "$TMP/monaco-roundtrip.pmtiles" >/dev/null
+              exit_status: 0
+              context:
+                - runtime

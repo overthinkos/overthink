@@ -332,11 +332,11 @@ func TestTransferImageToGuestReloadsCorrupt(t *testing.T) {
 func TestVmExecTaskCopyStagesViaPutFile(t *testing.T) {
 	fe := &fakeGuestExec{}
 	tgt := &VmDeployTarget{Exec: fe}
-	s := &TaskStep{
-		Task:     &Task{Copy: "relay-wrapper", To: "/usr/local/bin/relay-wrapper", Mode: "0755"},
+	s := &OpStep{
+		Op:       &Op{Copy: "relay-wrapper", To: "/usr/local/bin/relay-wrapper", Mode: "0755"},
 		CandyDir: "/host/cache/layers/socat",
 	}
-	if err := tgt.execTask(context.Background(), s, &InstallPlan{}, EmitOpts{}); err != nil {
+	if err := tgt.execOp(context.Background(), s, &InstallPlan{}, EmitOpts{}); err != nil {
 		t.Fatalf("execTask copy: %v", err)
 	}
 	if !fe.putCalled {
@@ -353,8 +353,8 @@ func TestVmExecTaskCopyStagesViaPutFile(t *testing.T) {
 func TestVmExecTaskCmdUsesSharedRenderer(t *testing.T) {
 	fe := &fakeGuestExec{}
 	tgt := &VmDeployTarget{Exec: fe}
-	s := &TaskStep{Task: &Task{Cmd: "echo hi"}, ResolvedUser: "root"}
-	if err := tgt.execTask(context.Background(), s, &InstallPlan{}, EmitOpts{}); err != nil {
+	s := &OpStep{Op: &Op{Command: "echo hi"}, ResolvedUser: "root"}
+	if err := tgt.execOp(context.Background(), s, &InstallPlan{}, EmitOpts{}); err != nil {
 		t.Fatalf("execTask cmd: %v", err)
 	}
 	if !fe.runCalled {
@@ -370,7 +370,7 @@ func TestVmExecTaskCmdUsesSharedRenderer(t *testing.T) {
 // installs carry options: through (the divergence the consolidation fixed) —
 // now via the config-driven host install renderer reading build.yml.
 func TestSharedRenderersConsolidated(t *testing.T) {
-	if _, err := renderTaskCommand(&TaskStep{Task: &Task{Copy: "f"}}); err == nil {
+	if _, err := renderOpCommand(&OpStep{Op: &Op{Copy: "f"}}); err == nil {
 		t.Error("renderTaskCommand must reject copy: (staged via PutFile, not rendered)")
 	}
 	dc, _, _, err := LoadBuildConfigForBox(repoRootDir(t))

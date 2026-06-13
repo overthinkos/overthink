@@ -150,8 +150,8 @@ func TestHostDeployTargetDryRunSystemPackages(t *testing.T) {
 }
 
 func TestRenderTaskCommandMkdir(t *testing.T) {
-	ts := &TaskStep{Task: &Task{Mkdir: "/etc/foo", Mode: "0700"}}
-	cmd, err := renderTaskCommand(ts)
+	ts := &OpStep{Op: &Op{Mkdir: "/etc/foo", Mode: "0700"}}
+	cmd, err := renderOpCommand(ts)
 	if err != nil {
 		t.Fatalf("render: %v", err)
 	}
@@ -164,11 +164,11 @@ func TestRenderTaskCommandMkdir(t *testing.T) {
 }
 
 func TestRenderTaskCommandCmdWithCtx(t *testing.T) {
-	ts := &TaskStep{
-		Task:    &Task{Cmd: "cp /ctx/config.json /etc/foo/"},
+	ts := &OpStep{
+		Op:      &Op{Command: "cp /ctx/config.json /etc/foo/"},
 		CtxPath: "/home/u/layers/foo",
 	}
-	cmd, _ := renderTaskCommand(ts)
+	cmd, _ := renderOpCommand(ts)
 	if !strings.Contains(cmd, "/home/u/layers/foo/config.json") {
 		t.Errorf("/ctx/ not substituted: %s", cmd)
 	}

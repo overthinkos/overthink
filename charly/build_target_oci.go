@@ -103,8 +103,8 @@ func (t *OCITarget) emitStep(step InstallStep, plan *InstallPlan) error {
 		return t.emitSystemPackages(s)
 	case *BuilderStep:
 		return t.emitBuilder(s, plan)
-	case *TaskStep:
-		return t.emitTask(s)
+	case *OpStep:
+		return t.emitOp(s)
 	case *FileStep:
 		return t.emitFile(s)
 	case *ServicePackagedStep:
@@ -307,12 +307,12 @@ func (t *OCITarget) emitBuilder(s *BuilderStep, plan *InstallPlan) error {
 // coalescing adjacent mkdir/link/setcap batches), we accumulate
 // consecutive TaskSteps and flush them through emitTasks as a group.
 // This preserves today's rendering semantics exactly.
-func (t *OCITarget) emitTask(s *TaskStep) error {
+func (t *OCITarget) emitOp(s *OpStep) error {
 	// Single-task emission delegates to the same emitTasks that
 	// writeCandySteps calls, but for one task at a time via a synthetic
 	// single-element layer.tasks slice. Requires Generator + Image.
 	if t.Generator == nil || t.Box == nil {
-		kind, _ := s.Task.Kind()
+		kind, _ := s.Op.Kind()
 		fmt.Fprintf(&t.buf, "# Task: %s (layer=%s) — no Generator context\n",
 			kind, s.CandyName)
 		return nil
@@ -325,7 +325,7 @@ func (t *OCITarget) emitTask(s *TaskStep) error {
 	// Temporarily swap layer.tasks to just this one task so emitTasks
 	// renders only it. Restore on exit.
 	saved := layer.tasks
-	layer.tasks = []Task{*s.Task}
+	layer.tasks = []Op{*s.Op}
 	defer func() { layer.tasks = saved }()
 
 	_, err := t.Generator.emitTasks(&t.buf, layer, t.Box, t.BuildDir, t.ContextRelPrefix, "0")

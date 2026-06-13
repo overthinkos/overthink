@@ -1815,14 +1815,6 @@ func (g *Generator) writeLabels(b *strings.Builder, boxName string, candyOrder [
 		writeJSONLabel(b, LabelHook, hooks)
 	}
 
-	// Tests: three-section (candy/box/deploy) declarative manifest. Shipped
-	// so every pulled image is self-describing at all three levels. Local
-	// charly.yml overlays (by id) are applied at charly eval live time, not here.
-	tests := CollectEval(g.Config, g.Candies, boxName)
-	if tests != nil {
-		writeJSONLabel(b, LabelEval, tests)
-	}
-
 	// Description: three-section Gherkin-shaped self-description.
 	// Replaces the retired LabelInfo/LabelStatus scalar labels. Local
 	// charly.yml `description:` overlays merge at runtime via
@@ -2124,6 +2116,11 @@ func (g *Generator) writeLabels(b *strings.Builder, boxName string, candyOrder [
 	}
 	resolvedStatus := resolveStatus(effectiveStatus)
 	b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelStatus, resolvedStatus))
+
+	// Acceptance-depth rung — the per-box eval_level gating `charly check run
+	// <bed>` (see eval_level.go). Always emitted (normalized to the default
+	// rung) so a bed runner reading labels never sees an empty value.
+	b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelEvalLevel, ResolveEvalLevel(img.EvalLevel)))
 	if len(infoParts) > 0 {
 		// Collapse block-scalar newlines so the value is one valid LABEL line,
 		// then single-quote (NOT %q): a description may legitimately mention a

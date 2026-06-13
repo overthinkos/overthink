@@ -16,7 +16,7 @@ import "testing"
 func fixtureNamespacedProject(t *testing.T) (string, *Config) {
 	t.Helper()
 	root := t.TempDir()
-	writeFixture(t, root, "charly.yml", `version: 2026.163.0928
+	writeFixture(t, root, "charly.yml", `version: 2026.164.0002
 import:
   - sub: ./sub.yml
 box:
@@ -26,7 +26,7 @@ box:
     build: [rpm]
     candy: []
 `)
-	writeFixture(t, root, "sub.yml", `version: 2026.163.0928
+	writeFixture(t, root, "sub.yml", `version: 2026.164.0002
 box:
   widget:
     base: quay.io/fedora/fedora:43
@@ -123,7 +123,7 @@ func TestResolveAllImage_RequestedQualifiedTarget(t *testing.T) {
 // name-resolution concern, not a per-image collection concern.
 func TestWalkBaseChain_RootInternalOnly(t *testing.T) {
 	root := t.TempDir()
-	writeFixture(t, root, "charly.yml", `version: 2026.163.0928
+	writeFixture(t, root, "charly.yml", `version: 2026.164.0002
 import:
   - sub: ./sub.yml
 box:
@@ -143,7 +143,7 @@ box:
     build: [rpm]
     candy: []
 `)
-	writeFixture(t, root, "sub.yml", `version: 2026.163.0928
+	writeFixture(t, root, "sub.yml", `version: 2026.164.0002
 box:
   widget:
     base: quay.io/fedora/fedora:43

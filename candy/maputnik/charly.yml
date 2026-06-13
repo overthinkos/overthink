@@ -16,50 +16,6 @@ candy:
             toolchain, the running service, the HTTP 200 the editor returns, and
             the absence of the /maputnik/ asset prefix in the served HTML.
         tag: [working]
-        scenario:
-            # DETERMINISTIC build-scope facts — embedded check verbs run at both
-            # `charly box feature run` and `charly eval feature run`.
-            - name: maputnik-spa-built-into-static-dist
-              step:
-                - then: the maputnik static dist directory was built from upstream source
-                  file: /opt/maputnik/build
-                  filetype: directory
-                  exists: true
-                - then: the SPA entrypoint index.html is present in the served dist
-                  file: /opt/maputnik/build/index.html
-                  exists: true
-            - name: node-build-toolchain-present
-              step:
-                - then: the node runtime used to build the SPA is installed and runnable
-                  command: node --version
-                  exit_status: 0
-            # DETERMINISTIC deploy-scope facts — the running service answers HTTP
-            # 200 at root on the published port and the Vite --base=/ override is
-            # locked in (no /maputnik/ asset prefix leaks into the served HTML).
-            - name: maputnik-served-over-http
-              step:
-                - then: the maputnik service is running under the init system
-                  scope: deploy
-                  service: maputnik
-                  running: true
-                - then: the static SPA answers HTTP 200 at the container root on the published port
-                  scope: deploy
-                  http: http://127.0.0.1:${HOST_PORT:8000}/
-                  status: 200
-                  timeout: 10s
-            - name: maputnik-assets-served-at-root
-              step:
-                - then: the served HTML carries no /maputnik/ asset prefix, so asset URLs resolve at the serve root
-                  scope: deploy
-                  command: |
-                    ! curl -fsS http://localhost:8000/ | grep -q '"/maputnik/'
-                  in_container: true
-                  exit_status: 0
-            # PROSE-ONLY free-form behaviour — agent-graded against the live
-            # deployment (reported unbound by build-scope `charly box feature run`).
-            - name: maputnik-editor-ui-renders
-              step:
-                - then: the loaded SPA presents the Maputnik visual style editor interface (layer list and map canvas), not a blank page
     require:
         - supervisord
     distro:
@@ -86,7 +42,7 @@ candy:
         - 8000 # maputnik static-dist HTTP server
     task:
         - mkdir: /opt/maputnik
-          user: root
+          run_as: root
         # ---- Build maputnik from upstream source ----
         # The upstream Docker image (ghcr.io/maplibre/maputnik) ships a built
         # static dist + a tiny static server, but composing it as a sidecar
@@ -98,7 +54,7 @@ candy:
         # Build duration: ~30-60 sec on a warm npm cache, ~2 min cold. Output
         # under maputnik upstream's `build/` dir lands at /opt/maputnik/build/
         # so the http.server --directory pointer below resolves correctly.
-        - cmd: |
+        - command: |
             set -euo pipefail
             # Clone shallow + most recent tag's tip. The maputnik repo has no
             # binary releases on GitHub — source build is the canonical install.
@@ -132,45 +88,7 @@ candy:
             rm -rf /tmp/maputnik
             # Drop npm cache to shrink image (~150-300 MB delta).
             rm -rf /root/.npm
-          user: root
-    eval:
-        # Build-scope: maputnik built and is non-empty.
-        - id: maputnik-build-dir-exists
-          file: /opt/maputnik/build
-          filetype: directory
-          exists: true
-        - id: maputnik-index-html
-          file: /opt/maputnik/build/index.html
-          exists: true
-        # Build-scope: nodejs binary present (for any future build verification).
-        - id: nodejs-installed
-          command: node --version
-          exit_status: 0
-        # Deploy-scope: the http.server is up and serving the SPA.
-        - id: maputnik-running
-          scope: deploy
-          service: maputnik
-          running: true
-        - id: maputnik-port-reachable
-          scope: deploy
-          addr: "127.0.0.1:${HOST_PORT:8000}"
-          reachable: true
-          timeout: 10s
-        - id: maputnik-http-up
-          scope: deploy
-          http: "http://127.0.0.1:${HOST_PORT:8000}/"
-          status: 200
-          timeout: 10s
-        # Vite's default `--base=/maputnik/` bakes /maputnik/assets/* into
-        # the emitted index.html — those URLs 404 in the browser when we
-        # serve at root. The build now passes `--base=/`; this assertion
-        # locks it in (regression catches a future revert to the default).
-        - id: maputnik-asset-base-not-prefixed
-          scope: deploy
-          command: |
-            ! curl -fsS http://localhost:8000/ | grep -q '"/maputnik/'
-          in_container: true
-          exit_status: 0
+          run_as: root
     service:
         - name: maputnik
           # System python3 (from the supervisor RPM's own dependency) — keeps
@@ -182,3 +100,105 @@ candy:
           priority: 34
           enable: true
           scope: system
+    scenario:
+        # DETERMINISTIC build-scope facts — embedded check verbs run at both
+        # `charly box feature run` and `charly eval feature run`.
+        - name: maputnik-spa-built-into-static-dist
+          step:
+            - then: the maputnik static dist directory was built from upstream source
+              file: /opt/maputnik/build
+              filetype: directory
+              exists: true
+            - then: the SPA entrypoint index.html is present in the served dist
+              file: /opt/maputnik/build/index.html
+              exists: true
+        - name: node-build-toolchain-present
+          step:
+            - then: the node runtime used to build the SPA is installed and runnable
+              command: node --version
+              exit_status: 0
+        # DETERMINISTIC deploy-scope facts — the running service answers HTTP
+        # 200 at root on the published port and the Vite --base=/ override is
+        # locked in (no /maputnik/ asset prefix leaks into the served HTML).
+        - name: maputnik-served-over-http
+          step:
+            - then: the maputnik service is running under the init system
+              service: maputnik
+              running: true
+              context:
+                - runtime
+            - then: the static SPA answers HTTP 200 at the container root on the published port
+              http: http://127.0.0.1:${HOST_PORT:8000}/
+              status: 200
+              timeout: 10s
+              context:
+                - runtime
+        - name: maputnik-assets-served-at-root
+          step:
+            - then: the served HTML carries no /maputnik/ asset prefix, so asset URLs resolve at the serve root
+              command: |
+                ! curl -fsS http://localhost:8000/ | grep -q '"/maputnik/'
+              in_container: true
+              exit_status: 0
+              context:
+                - runtime
+        # PROSE-ONLY free-form behaviour — agent-graded against the live
+        # deployment (reported unbound by build-scope `charly box feature run`).
+        - name: maputnik-editor-ui-renders
+          step:
+            - then: the loaded SPA presents the Maputnik visual style editor interface (layer list and map canvas), not a blank page
+        - name: maputnik-build-dir-exists
+          step:
+            # Build-scope: maputnik built and is non-empty.
+            - id: maputnik-build-dir-exists
+              file: /opt/maputnik/build
+              filetype: directory
+              exists: true
+        - name: maputnik-index-html
+          step:
+            - id: maputnik-index-html
+              file: /opt/maputnik/build/index.html
+              exists: true
+        - name: nodejs-installed
+          step:
+            # Build-scope: nodejs binary present (for any future build verification).
+            - id: nodejs-installed
+              command: node --version
+              exit_status: 0
+        - name: maputnik-running
+          step:
+            # Deploy-scope: the http.server is up and serving the SPA.
+            - id: maputnik-running
+              service: maputnik
+              running: true
+              context:
+                - runtime
+        - name: maputnik-port-reachable
+          step:
+            - id: maputnik-port-reachable
+              addr: "127.0.0.1:${HOST_PORT:8000}"
+              reachable: true
+              timeout: 10s
+              context:
+                - runtime
+        - name: maputnik-http-up
+          step:
+            - id: maputnik-http-up
+              http: "http://127.0.0.1:${HOST_PORT:8000}/"
+              status: 200
+              timeout: 10s
+              context:
+                - runtime
+        - name: maputnik-asset-base-not-prefixed
+          step:
+            # Vite's default `--base=/maputnik/` bakes /maputnik/assets/* into
+            # the emitted index.html — those URLs 404 in the browser when we
+            # serve at root. The build now passes `--base=/`; this assertion
+            # locks it in (regression catches a future revert to the default).
+            - id: maputnik-asset-base-not-prefixed
+              command: |
+                ! curl -fsS http://localhost:8000/ | grep -q '"/maputnik/'
+              in_container: true
+              exit_status: 0
+              context:
+                - runtime

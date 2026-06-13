@@ -11,44 +11,6 @@ candy:
             satisfy. Stdlib-only Python (no fastmcp install) keeps the image
             small and the build fast.
         tag: [working]
-        scenario:
-            # DETERMINISTIC build-scope steps — embedded check verbs that fail if
-            # the stub script or the python3 interpreter that runs it were never
-            # installed into the image.
-            - name: mcp-fixture-stub-installed
-              step:
-                - then: the stdlib MCP server script is baked into the image at /opt/harness-mcp/mcp_server.py
-                  file: /opt/harness-mcp/mcp_server.py
-                  exists: true
-                - and: the python3 interpreter that runs the stub is installed at /usr/bin/python3
-                  file: /usr/bin/python3
-                  exists: true
-                - and: the python3 package providing the interpreter is installed
-                  package: python3
-                  installed: true
-            # DETERMINISTIC deploy-scope steps — need the running fixture, so they
-            # are scoped to deploy and probe the live MCP endpoint + its port.
-            - name: mcp-server-answers-protocol
-              step:
-                - then: the running fixture answers an MCP ping over its Streamable HTTP endpoint
-                  scope: deploy
-                  mcp: ping
-                - and: a tools/list call advertises the three jupyter-named tools
-                  scope: deploy
-                  mcp: list-tools
-                  stdout:
-                    - contains: list_notebooks
-                    - contains: insert_cell
-                    - contains: execute_cell
-                - and: the server port accepts a TCP connection from the host
-                  scope: deploy
-                  addr: 127.0.0.1:${HOST_PORT:8888}
-                  reachable: true
-            # PROSE-ONLY step — genuine free-form protocol behaviour, agent-graded
-            # by `charly eval feature run` against the live deployment.
-            - name: mcp-tools-call-round-trips
-              step:
-                - then: a tools/call invocation of list_notebooks returns a notebook listing, and insert_cell / execute_cell respond without a JSON-RPC protocol error against the live fixture
     require:
         - supervisord
     distro:
@@ -65,10 +27,10 @@ candy:
           transport: http
     task:
         - mkdir: /opt/harness-mcp
-          user: root
+          run_as: root
           mode: "0755"
         - write: /opt/harness-mcp/mcp_server.py
-          user: root
+          run_as: root
           mode: "0755"
           content: |
             #!/usr/bin/env python3
@@ -264,31 +226,86 @@ candy:
           priority: 50
           enable: true
           scope: system
-    eval:
-        - id: harness-mcp-server-script
-          file: /opt/harness-mcp/mcp_server.py
-          exists: true
-        - id: harness-mcp-python3
-          file: /usr/bin/python3
-          exists: true
-        - id: harness-mcp-python3-package
-          package: python3
-          installed: true
-        # Deploy-scope: the supervised fixture must actually answer on its port.
-        - id: harness-mcp-port-reachable
-          scope: deploy
-          addr: 127.0.0.1:${HOST_PORT:8888}
-          reachable: true
-        # Deploy-scope: the MCP server (mcp_provide: jupyter) answers an MCP ping.
-        - id: harness-mcp-ping
-          scope: deploy
-          mcp: ping
-        # Deploy-scope: tools/list advertises the three jupyter-named tools the
-        # mcp-protocol-probe recipe matches on.
-        - id: harness-mcp-tools-advertised
-          scope: deploy
-          mcp: list-tools
-          stdout:
-            - contains: list_notebooks
-            - contains: insert_cell
-            - contains: execute_cell
+    scenario:
+        # DETERMINISTIC build-scope steps — embedded check verbs that fail if
+        # the stub script or the python3 interpreter that runs it were never
+        # installed into the image.
+        - name: mcp-fixture-stub-installed
+          step:
+            - then: the stdlib MCP server script is baked into the image at /opt/harness-mcp/mcp_server.py
+              file: /opt/harness-mcp/mcp_server.py
+              exists: true
+            - and: the python3 interpreter that runs the stub is installed at /usr/bin/python3
+              file: /usr/bin/python3
+              exists: true
+            - and: the python3 package providing the interpreter is installed
+              package: python3
+              installed: true
+        # DETERMINISTIC deploy-scope steps — need the running fixture, so they
+        # are scoped to deploy and probe the live MCP endpoint + its port.
+        - name: mcp-server-answers-protocol
+          step:
+            - then: the running fixture answers an MCP ping over its Streamable HTTP endpoint
+              mcp: ping
+              context:
+                - runtime
+            - and: a tools/list call advertises the three jupyter-named tools
+              mcp: list-tools
+              stdout:
+                - contains: list_notebooks
+                - contains: insert_cell
+                - contains: execute_cell
+              context:
+                - runtime
+            - and: the server port accepts a TCP connection from the host
+              addr: 127.0.0.1:${HOST_PORT:8888}
+              reachable: true
+              context:
+                - runtime
+        # PROSE-ONLY step — genuine free-form protocol behaviour, agent-graded
+        # by `charly eval feature run` against the live deployment.
+        - name: mcp-tools-call-round-trips
+          step:
+            - then: a tools/call invocation of list_notebooks returns a notebook listing, and insert_cell / execute_cell respond without a JSON-RPC protocol error against the live fixture
+        - name: harness-mcp-server-script
+          step:
+            - id: harness-mcp-server-script
+              file: /opt/harness-mcp/mcp_server.py
+              exists: true
+        - name: harness-mcp-python3
+          step:
+            - id: harness-mcp-python3
+              file: /usr/bin/python3
+              exists: true
+        - name: harness-mcp-python3-package
+          step:
+            - id: harness-mcp-python3-package
+              package: python3
+              installed: true
+        - name: harness-mcp-port-reachable
+          step:
+            # Deploy-scope: the supervised fixture must actually answer on its port.
+            - id: harness-mcp-port-reachable
+              addr: 127.0.0.1:${HOST_PORT:8888}
+              reachable: true
+              context:
+                - runtime
+        - name: harness-mcp-ping
+          step:
+            # Deploy-scope: the MCP server (mcp_provide: jupyter) answers an MCP ping.
+            - id: harness-mcp-ping
+              mcp: ping
+              context:
+                - runtime
+        - name: harness-mcp-tools-advertised
+          step:
+            # Deploy-scope: tools/list advertises the three jupyter-named tools the
+            # mcp-protocol-probe recipe matches on.
+            - id: harness-mcp-tools-advertised
+              mcp: list-tools
+              stdout:
+                - contains: list_notebooks
+                - contains: insert_cell
+                - contains: execute_cell
+              context:
+                - runtime

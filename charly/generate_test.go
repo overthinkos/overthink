@@ -156,11 +156,11 @@ func TestGenerateTraefikRoutes(t *testing.T) {
 		Candies: map[string]*Candy{
 			"traefik": {
 				Name:  "traefik",
-				tasks: []Task{{Cmd: "true"}},
+				tasks: []Op{{Command: "true"}},
 			},
 			"svc": {
 				Name:  "svc",
-				tasks: []Task{{Cmd: "true"}},
+				tasks: []Op{{Command: "true"}},
 				route: &RouteConfig{Host: "svc.localhost", Port: "9090"},
 			},
 		},
@@ -214,7 +214,7 @@ func TestGenerateRouteWithoutTraefik_NoTraefikRoutes(t *testing.T) {
 		Candies: map[string]*Candy{
 			"svc": {
 				Name:  "svc",
-				tasks: []Task{{Cmd: "true"}},
+				tasks: []Op{{Command: "true"}},
 				route: &RouteConfig{Host: "svc.localhost", Port: "9090"},
 			},
 		},
@@ -267,12 +267,12 @@ func TestGenerateInitFragments(t *testing.T) {
 		Candies: map[string]*Candy{
 			"python": {
 				Name:  "python",
-				tasks: []Task{{Cmd: "true"}},
+				tasks: []Op{{Command: "true"}},
 			},
 			"svc": {
 				Name:        "svc",
 				InitSystems: map[string]bool{"supervisord": true},
-				tasks:       []Task{{Cmd: "true"}},
+				tasks:       []Op{{Command: "true"}},
 				service: []ServiceEntry{
 					{Name: "svc", Exec: "svc serve"},
 				},
@@ -280,7 +280,7 @@ func TestGenerateInitFragments(t *testing.T) {
 			"other": {
 				Name:        "other",
 				InitSystems: map[string]bool{"supervisord": true},
-				tasks:       []Task{{Cmd: "true"}},
+				tasks:       []Op{{Command: "true"}},
 				service: []ServiceEntry{
 					{Name: "other", Exec: "other run"},
 				},
@@ -340,11 +340,11 @@ func TestGenerateRelayInitFragments(t *testing.T) {
 		Candies: map[string]*Candy{
 			"socat": {
 				Name:  "socat",
-				tasks: []Task{{Cmd: "true"}},
+				tasks: []Op{{Command: "true"}},
 			},
 			"chrome": {
 				Name:           "chrome",
-				tasks:          []Task{{Cmd: "true"}},
+				tasks:          []Op{{Command: "true"}},
 				PortRelayPorts: []int{9222},
 				InitSystems:    map[string]bool{"supervisord": true},
 				service: []ServiceEntry{

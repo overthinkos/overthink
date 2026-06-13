@@ -11,40 +11,45 @@ candy:
             asciicast v2 .cast file; this is the engine behind
             `charly eval record start --mode terminal`.
         tag: [working]
-        scenario:
-            - name: asciinema-cli-installed
-              step:
-                - then: the asciinema recorder binary is installed at /usr/bin/asciinema
-                  file: /usr/bin/asciinema
-                  exists: true
-                - then: the asciinema package is registered in the distro package database
-                  package: asciinema
-                  installed: true
-            - name: asciinema-reports-version
-              step:
-                - then: running asciinema --version prints the asciinema version banner and exits cleanly
-                  command: /usr/bin/asciinema --version
-                  exit_status: 0
-                  stdout:
-                    - contains: asciinema
-            - name: asciinema-exposes-recording-command
-              step:
-                - then: asciinema --help advertises the rec subcommand that captures terminal sessions
-                  command: /usr/bin/asciinema --help
-                  exit_status: 0
-                  stdout:
-                    - contains: rec
     package:
         - asciinema
-    eval:
-        - id: asciinema-binary
-          file: /usr/bin/asciinema
-          exists: true
-        - id: asciinema-package
-          package: asciinema
-          installed: true
-        - id: asciinema-version
-          command: /usr/bin/asciinema --version
-          exit_status: 0
-          stdout:
-            - contains: "asciinema"
+    scenario:
+        - name: asciinema-cli-installed
+          step:
+            - then: the asciinema recorder binary is installed at /usr/bin/asciinema
+              file: /usr/bin/asciinema
+              exists: true
+            - then: the asciinema package is registered in the distro package database
+              package: asciinema
+              installed: true
+        - name: asciinema-reports-version
+          step:
+            - then: running asciinema --version prints the asciinema version banner and exits cleanly
+              command: /usr/bin/asciinema --version
+              exit_status: 0
+              stdout:
+                - contains: asciinema
+        - name: asciinema-exposes-recording-command
+          step:
+            - then: asciinema --help advertises the rec subcommand that captures terminal sessions
+              command: /usr/bin/asciinema --help
+              exit_status: 0
+              stdout:
+                - contains: rec
+        - name: asciinema-binary
+          step:
+            - id: asciinema-binary
+              file: /usr/bin/asciinema
+              exists: true
+        - name: asciinema-package
+          step:
+            - id: asciinema-package
+              package: asciinema
+              installed: true
+        - name: asciinema-version
+          step:
+            - id: asciinema-version
+              command: /usr/bin/asciinema --version
+              exit_status: 0
+              stdout:
+                - contains: "asciinema"

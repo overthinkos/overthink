@@ -40,7 +40,7 @@ func TestCheckToProbe_HTTP(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := checkToProbe(&Check{HTTP: tt.http})
+			got := checkToProbe(&Op{HTTP: tt.http})
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("got %v, want %v", got, tt.want)
 			}
@@ -72,7 +72,7 @@ func TestCheckToProbe_Addr(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := checkToProbe(&Check{Addr: tt.addr})
+			got := checkToProbe(&Op{Addr: tt.addr})
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("got %v, want %v", got, tt.want)
 			}
@@ -82,7 +82,7 @@ func TestCheckToProbe_Addr(t *testing.T) {
 
 // TestCheckToProbe_File covers file: → exec test -e.
 func TestCheckToProbe_File(t *testing.T) {
-	got := checkToProbe(&Check{File: "/etc/ready"})
+	got := checkToProbe(&Op{File: "/etc/ready"})
 	want := map[string]any{"exec": map[string]any{"command": []string{"test", "-e", "/etc/ready"}}}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("got %v, want %v", got, want)
@@ -91,7 +91,7 @@ func TestCheckToProbe_File(t *testing.T) {
 
 // TestCheckToProbe_Command covers command: → exec sh -c.
 func TestCheckToProbe_Command(t *testing.T) {
-	got := checkToProbe(&Check{Command: "redis-cli ping | grep PONG"})
+	got := checkToProbe(&Op{Command: "redis-cli ping | grep PONG"})
 	want := map[string]any{"exec": map[string]any{"command": []string{"sh", "-c", "redis-cli ping | grep PONG"}}}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("got %v, want %v", got, want)
@@ -103,7 +103,7 @@ func TestCheckToProbe_NilAndEmpty(t *testing.T) {
 	if got := checkToProbe(nil); got != nil {
 		t.Errorf("nil check: got %v, want nil", got)
 	}
-	if got := checkToProbe(&Check{}); got != nil {
+	if got := checkToProbe(&Op{}); got != nil {
 		t.Errorf("empty check: got %v, want nil", got)
 	}
 }
@@ -112,7 +112,7 @@ func TestCheckToProbe_NilAndEmpty(t *testing.T) {
 // over Addr/File/Command when multiple are set (no real check carries
 // more than one verb after validation, but the function is robust).
 func TestCheckToProbe_HTTPPriority(t *testing.T) {
-	got := checkToProbe(&Check{HTTP: "http://example.com:80/health", File: "/etc/ready"})
+	got := checkToProbe(&Op{HTTP: "http://example.com:80/health", File: "/etc/ready"})
 	if _, ok := got["httpGet"]; !ok {
 		t.Errorf("expected httpGet to win over file, got %v", got)
 	}

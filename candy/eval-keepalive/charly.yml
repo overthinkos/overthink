@@ -15,52 +15,59 @@ candy:
             of its own; its observable effects are the composed supervisord binary and
             the assembled config carrying the keepalive program.
         tag: [working]
-        scenario:
-            - name: keepalive-program-assembled
-              step:
-                - then: the assembled supervisord config registers a keepalive program
-                  file: /etc/supervisord.conf
-                  contains:
-                    - "[program:keepalive]"
-                - and: the keepalive program runs /usr/bin/sleep infinity
-                  file: /etc/supervisord.conf
-                  contains:
-                    - "command=/usr/bin/sleep infinity"
-                - and: composing eval-keepalive pulls in the supervisord init binary
-                  file: /usr/bin/supervisord
-                  exists: true
-            - name: keepalive-holds-pod-at-steady-state
-              step:
-                - then: supervisord reports the keepalive program RUNNING on the live pod
-                  scope: deploy
-                  command: supervisorctl status keepalive
-                  stdout:
-                    contains: RUNNING
     candy:
         - supervisord
     service:
         - name: keepalive
           exec: /usr/bin/sleep infinity
           restart: always
-    eval:
-        # Build-scope — the candy's unique observable effect: contributing a
-        # service: forces the supervisord-conf assembly stage to bake a
-        # [program:keepalive] section running sleep infinity into the merged
-        # /etc/supervisord.conf (chmod 0644, readable by the image user).
-        - id: keepalive-program-registered
-          file: /etc/supervisord.conf
-          contains:
-            - "[program:keepalive]"
-            - "command=/usr/bin/sleep infinity"
-        # Build-scope — the observable effect of `candy: [supervisord]`: the init
-        # binary the keepalive program runs under is present in the image.
-        - id: keepalive-supervisord-binary
-          file: /usr/bin/supervisord
-          exists: true
-        # Deploy-scope — the live functional probe: supervisord actually keeps the
-        # keepalive program RUNNING, so the pod holds steady-state.
-        - id: keepalive-running
-          scope: deploy
-          command: supervisorctl status keepalive
-          stdout:
-            contains: RUNNING
+    scenario:
+        - name: keepalive-program-assembled
+          step:
+            - then: the assembled supervisord config registers a keepalive program
+              file: /etc/supervisord.conf
+              contains:
+                - "[program:keepalive]"
+            - and: the keepalive program runs /usr/bin/sleep infinity
+              file: /etc/supervisord.conf
+              contains:
+                - "command=/usr/bin/sleep infinity"
+            - and: composing eval-keepalive pulls in the supervisord init binary
+              file: /usr/bin/supervisord
+              exists: true
+        - name: keepalive-holds-pod-at-steady-state
+          step:
+            - then: supervisord reports the keepalive program RUNNING on the live pod
+              command: supervisorctl status keepalive
+              stdout:
+                contains: RUNNING
+              context:
+                - runtime
+        - name: keepalive-program-registered
+          step:
+            # Build-scope — the candy's unique observable effect: contributing a
+            # service: forces the supervisord-conf assembly stage to bake a
+            # [program:keepalive] section running sleep infinity into the merged
+            # /etc/supervisord.conf (chmod 0644, readable by the image user).
+            - id: keepalive-program-registered
+              file: /etc/supervisord.conf
+              contains:
+                - "[program:keepalive]"
+                - "command=/usr/bin/sleep infinity"
+        - name: keepalive-supervisord-binary
+          step:
+            # Build-scope — the observable effect of `candy: [supervisord]`: the init
+            # binary the keepalive program runs under is present in the image.
+            - id: keepalive-supervisord-binary
+              file: /usr/bin/supervisord
+              exists: true
+        - name: keepalive-running
+          step:
+            # Deploy-scope — the live functional probe: supervisord actually keeps the
+            # keepalive program RUNNING, so the pod holds steady-state.
+            - id: keepalive-running
+              command: supervisorctl status keepalive
+              stdout:
+                contains: RUNNING
+              context:
+                - runtime

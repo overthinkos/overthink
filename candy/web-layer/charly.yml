@@ -10,25 +10,6 @@ candy:
             probe. Combined with a fedora base + supervisord this satisfies
             every scenario in the network-and-http recipe.
         tag: [working]
-        scenario:
-            - name: fixture-web-content-installed
-              step:
-                - then: nginx is installed
-                  package: nginx
-                  installed: true
-                - then: the fixture index.html carries the predetermined content marker
-                  file: /srv/fixture/index.html
-                  exists: true
-                  contains:
-                    - charly-fixture-web-content-marker
-            - name: fixture-web-http-responds
-              step:
-                - then: the fixture web server answers HTTP 200 with the marker on its published port
-                  scope: deploy
-                  http: http://127.0.0.1:${HOST_PORT:8080}/
-                  status: 200
-                  body:
-                    - contains: charly-fixture-web-content-marker
     require:
         - supervisord
     distro:
@@ -42,10 +23,10 @@ candy:
         - 8080
     task:
         - mkdir: /srv/fixture
-          user: root
+          run_as: root
           mode: "0755"
         - write: /srv/fixture/index.html
-          user: root
+          run_as: root
           mode: "0644"
           content: |
             <!DOCTYPE html>
@@ -76,7 +57,7 @@ candy:
             </body>
             </html>
         - write: /etc/nginx/nginx.conf
-          user: root
+          run_as: root
           mode: "0644"
           content: |
             worker_processes 1;
@@ -111,15 +92,40 @@ candy:
           priority: 50
           enable: true
           scope: system
-    eval:
-        - id: fixture-web-nginx-installed
-          package: nginx
-          installed: true
-        - id: fixture-web-curl-installed
-          package: curl
-          installed: true
-        - id: fixture-web-content-file
-          file: /srv/fixture/index.html
-          exists: true
-          contains:
-            - charly-fixture-web-content-marker
+    scenario:
+        - name: fixture-web-content-installed
+          step:
+            - then: nginx is installed
+              package: nginx
+              installed: true
+            - then: the fixture index.html carries the predetermined content marker
+              file: /srv/fixture/index.html
+              exists: true
+              contains:
+                - charly-fixture-web-content-marker
+        - name: fixture-web-http-responds
+          step:
+            - then: the fixture web server answers HTTP 200 with the marker on its published port
+              http: http://127.0.0.1:${HOST_PORT:8080}/
+              status: 200
+              body:
+                - contains: charly-fixture-web-content-marker
+              context:
+                - runtime
+        - name: fixture-web-nginx-installed
+          step:
+            - id: fixture-web-nginx-installed
+              package: nginx
+              installed: true
+        - name: fixture-web-curl-installed
+          step:
+            - id: fixture-web-curl-installed
+              package: curl
+              installed: true
+        - name: fixture-web-content-file
+          step:
+            - id: fixture-web-content-file
+              file: /srv/fixture/index.html
+              exists: true
+              contains:
+                - charly-fixture-web-content-marker

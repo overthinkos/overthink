@@ -295,9 +295,9 @@ func RunEvalLive(ctx context.Context, deployment, scoreName string, scenarios []
 				Candy: []LabeledDescription{{
 					Origin: "pod:" + pod,
 					Description: Description{
-						Feature:  fmt.Sprintf("Score scenarios for pod %s", pod),
-						Scenario: []Scenario{sc},
+						Feature: fmt.Sprintf("Score scenarios for pod %s", pod),
 					},
+					Scenario: []Scenario{sc},
 				}},
 			}
 			results := RunScenarios(ctx, runner, set, nil, false)

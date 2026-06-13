@@ -14,26 +14,6 @@ candy:
             build lands at /opt/pmtiles-viewer/build/index.html and the
             supervisord service serves it over HTTP with root-relative assets.
         tag: [working]
-        scenario:
-            # Build-scope deterministic steps (file/command — checkable under
-            # `charly box feature run` in podman run --rm AND at deploy scope).
-            - name: spa-built-from-source
-              step:
-                - then: the Vite build artifact directory is present in the image
-                  file: /opt/pmtiles-viewer/build
-                  filetype: directory
-                  exists: true
-                - then: the SPA entry point index.html exists in the build artifact
-                  file: /opt/pmtiles-viewer/build/index.html
-                  exists: true
-                - then: the node toolchain that builds the SPA is installed
-                  command: node --version
-                  exit_status: 0
-            # Deploy-scope behaviour — prose-only, graded by the agent against
-            # the live pod (the http.server isn't up under build scope).
-            - name: viewer-served-over-http
-              step:
-                - then: the pmtiles-viewer service serves the built SPA over HTTP, answering GET / with status 200 and root-relative asset URLs that load in the browser
     require:
         - supervisord
     distro:
@@ -61,7 +41,7 @@ candy:
         PMTILES_VIEWER_PUBLIC_URL: "http://127.0.0.1:{{.HostPort 8001}}"
     task:
         - mkdir: /opt/pmtiles-viewer
-          user: root
+          run_as: root
         # ---- Build the PMTiles Viewer SPA from upstream source ----
         # The protomaps/PMTiles repository ships a TypeScript SPA at
         # /app/ that's deployed publicly at https://pmtiles.io. We build
@@ -72,7 +52,7 @@ candy:
         # Build duration: ~30-90 sec warm npm cache, ~2-3 min cold. Vite output
         # under app/dist/ lands at /opt/pmtiles-viewer/build/ so the
         # http.server --directory pointer below resolves correctly.
-        - cmd: |
+        - command: |
             set -euo pipefail
             # Clone shallow + the current tip of main. PMTiles has no
             # separately-released "viewer" tarball — source build of the
@@ -103,50 +83,7 @@ candy:
             rm -rf /tmp/PMTiles
             # Drop npm cache to shrink image.
             rm -rf /root/.npm
-          user: root
-    eval:
-        # Build-scope: SPA built and is non-empty.
-        - id: pmtiles-viewer-build-dir-exists
-          file: /opt/pmtiles-viewer/build
-          filetype: directory
-          exists: true
-        - id: pmtiles-viewer-index-html
-          file: /opt/pmtiles-viewer/build/index.html
-          exists: true
-        # Build-scope: nodejs binary present (paired with the maputnik
-        # check — declaring it here means dropping maputnik leaves this
-        # eval in place; declaring it on both layers documents the
-        # cross-layer requirement clearly).
-        - id: nodejs-installed-pmtiles-viewer
-          command: node --version
-          exit_status: 0
-        # Deploy-scope: the http.server is up and serving the SPA.
-        - id: pmtiles-viewer-running
-          scope: deploy
-          service: pmtiles-viewer
-          running: true
-        - id: pmtiles-viewer-port-reachable
-          scope: deploy
-          addr: "127.0.0.1:${HOST_PORT:8001}"
-          reachable: true
-          timeout: 10s
-        - id: pmtiles-viewer-http-up
-          scope: deploy
-          http: "http://127.0.0.1:${HOST_PORT:8001}/"
-          status: 200
-          timeout: 10s
-        # Lock-in for the `npm run build -- --base=/` Vite override. If
-        # the upstream PMTiles app's build script switches to a baked
-        # subpath, this assertion catches the regression at deploy-time
-        # (asset URLs in the served HTML must NOT have a /pmtiles/ or
-        # similar prefix). Defensive: scope-grep is loose enough to
-        # catch any non-root prefix.
-        - id: pmtiles-viewer-asset-base-not-prefixed
-          scope: deploy
-          command: |
-            ! curl -fsS http://localhost:8001/ | grep -qE '"/(pmtiles|app)/'
-          in_container: true
-          exit_status: 0
+          run_as: root
     service:
         - name: pmtiles-viewer
           # System python3 (from the supervisor's own dep) — same pattern
@@ -158,3 +95,83 @@ candy:
           priority: 35
           enable: true
           scope: system
+    scenario:
+        # Build-scope deterministic steps (file/command — checkable under
+        # `charly box feature run` in podman run --rm AND at deploy scope).
+        - name: spa-built-from-source
+          step:
+            - then: the Vite build artifact directory is present in the image
+              file: /opt/pmtiles-viewer/build
+              filetype: directory
+              exists: true
+            - then: the SPA entry point index.html exists in the build artifact
+              file: /opt/pmtiles-viewer/build/index.html
+              exists: true
+            - then: the node toolchain that builds the SPA is installed
+              command: node --version
+              exit_status: 0
+        # Deploy-scope behaviour — prose-only, graded by the agent against
+        # the live pod (the http.server isn't up under build scope).
+        - name: viewer-served-over-http
+          step:
+            - then: the pmtiles-viewer service serves the built SPA over HTTP, answering GET / with status 200 and root-relative asset URLs that load in the browser
+        - name: pmtiles-viewer-build-dir-exists
+          step:
+            # Build-scope: SPA built and is non-empty.
+            - id: pmtiles-viewer-build-dir-exists
+              file: /opt/pmtiles-viewer/build
+              filetype: directory
+              exists: true
+        - name: pmtiles-viewer-index-html
+          step:
+            - id: pmtiles-viewer-index-html
+              file: /opt/pmtiles-viewer/build/index.html
+              exists: true
+        - name: nodejs-installed-pmtiles-viewer
+          step:
+            # Build-scope: nodejs binary present (paired with the maputnik
+            # check — declaring it here means dropping maputnik leaves this
+            # eval in place; declaring it on both layers documents the
+            # cross-layer requirement clearly).
+            - id: nodejs-installed-pmtiles-viewer
+              command: node --version
+              exit_status: 0
+        - name: pmtiles-viewer-running
+          step:
+            # Deploy-scope: the http.server is up and serving the SPA.
+            - id: pmtiles-viewer-running
+              service: pmtiles-viewer
+              running: true
+              context:
+                - runtime
+        - name: pmtiles-viewer-port-reachable
+          step:
+            - id: pmtiles-viewer-port-reachable
+              addr: "127.0.0.1:${HOST_PORT:8001}"
+              reachable: true
+              timeout: 10s
+              context:
+                - runtime
+        - name: pmtiles-viewer-http-up
+          step:
+            - id: pmtiles-viewer-http-up
+              http: "http://127.0.0.1:${HOST_PORT:8001}/"
+              status: 200
+              timeout: 10s
+              context:
+                - runtime
+        - name: pmtiles-viewer-asset-base-not-prefixed
+          step:
+            # Lock-in for the `npm run build -- --base=/` Vite override. If
+            # the upstream PMTiles app's build script switches to a baked
+            # subpath, this assertion catches the regression at deploy-time
+            # (asset URLs in the served HTML must NOT have a /pmtiles/ or
+            # similar prefix). Defensive: scope-grep is loose enough to
+            # catch any non-root prefix.
+            - id: pmtiles-viewer-asset-base-not-prefixed
+              command: |
+                ! curl -fsS http://localhost:8001/ | grep -qE '"/(pmtiles|app)/'
+              in_container: true
+              exit_status: 0
+              context:
+                - runtime

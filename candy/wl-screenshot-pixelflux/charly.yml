@@ -8,24 +8,25 @@ candy:
             which drives the selkies pixelflux capture pipeline to grab a desktop
             frame. Verifiable: the wrapper script is installed and executable.
         tag: [working]
-        scenario:
-            - name: pixelflux-screenshot-script-installed
-              step:
-                - then: the pixelflux-screenshot wrapper is installed and executable at the expected path
-                  file: ${HOME}/.local/bin/pixelflux-screenshot
-                  exists: true
-                  mode: "0755"
     require:
         - selkies
     task:
         - mkdir: "${HOME}/.local/bin"
-          user: "${USER}"
+          run_as: "${USER}"
         - copy: pixelflux-screenshot
           to: "${HOME}/.local/bin/pixelflux-screenshot"
           mode: "0755"
-          user: "${USER}"
-    eval:
-        - id: pixelflux-screenshot-script
-          file: ${HOME}/.local/bin/pixelflux-screenshot
-          exists: true
-          mode: "0755"
+          run_as: "${USER}"
+    scenario:
+        - name: pixelflux-screenshot-script-installed
+          step:
+            - then: the pixelflux-screenshot wrapper is installed and executable at the expected path
+              file: ${HOME}/.local/bin/pixelflux-screenshot
+              exists: true
+              mode: "0755"
+        - name: pixelflux-screenshot-script
+          step:
+            - id: pixelflux-screenshot-script
+              file: ${HOME}/.local/bin/pixelflux-screenshot
+              exists: true
+              mode: "0755"

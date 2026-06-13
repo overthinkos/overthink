@@ -36,13 +36,8 @@ type PodSpec struct {
 	// values. Deployment overrides any of them.
 	EnvDefaults []string `yaml:"env_default,omitempty"`
 
-	// Tests are optional target-specific build-scope checks that run for
-	// every deployment using this template. Default empty — candy tests
-	// and box tests stay where authored and propagate automatically.
-	Eval []Check `yaml:"eval,omitempty"`
-
-	// DeployEval are optional target-specific deploy-scope defaults.
-	// Default empty. Deployment-level tests overlay on top via
-	// MergeDeployEval.
-	DeployEval []Check `yaml:"deploy_eval,omitempty"`
+	// Scenario carries optional target-specific acceptance scenarios (Op
+	// steps) that run for every deployment using this template. Candy and
+	// box scenarios propagate automatically via the composition machinery.
+	Scenario []Scenario `yaml:"scenario,omitempty"`
 }

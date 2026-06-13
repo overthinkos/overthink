@@ -10,7 +10,7 @@ func TestMatchImageGlob_FullRefAndLastSegment(t *testing.T) {
 	}{
 		{"charly-fedora-2*", true},                     // last-segment glob (the documented cache-invalidation form)
 		{"ghcr.io/overthinkos/charly-fedora-2*", true}, // full-ref glob
-		{"charly-fedora-2026-abc:2026.160.0100", true},  // exact last segment
+		{"charly-fedora-2026-abc:2026.160.0100", true}, // exact last segment
 		{"charly-debian-*", false},                     // different box
 		{"*selkies*", false},                           // path.Match: '*' does not cross unmatched text boundaries here
 	}

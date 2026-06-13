@@ -16,40 +16,6 @@ candy:
             entrypoint, the running service, the admin email injected into its
             environment, and the HTTP 200 the web UI returns on its published port.
         tag: [working]
-        scenario:
-            # DETERMINISTIC build-scope fact — the embedded check verbs run at both
-            # `charly box feature run` and `charly eval feature run`; they fail if
-            # the auto-config entrypoint was never installed.
-            - name: entrypoint-script-installed
-              step:
-                - then: the auto-config entrypoint script is present and executable at ${HOME}/.local/bin/openwebui-entrypoint
-                  file: ${HOME}/.local/bin/openwebui-entrypoint
-                  exists: true
-                  mode: "0755"
-            # DETERMINISTIC deploy-scope facts — need the running deployment, so
-            # they are scoped to deploy and probe the live container / published
-            # port (agent-graded only if a runtime probe is unavailable; here every
-            # step embeds a check verb).
-            - name: web-ui-serves-http
-              step:
-                - then: the openwebui service is running under the init system
-                  scope: deploy
-                  service: openwebui
-                  running: true
-                - and: the Open WebUI web interface answers HTTP 200 on the published port
-                  scope: deploy
-                  http: http://127.0.0.1:${HOST_PORT:8080}/
-                  status: 200
-                  timeout: 30s
-                - and: the mandatory admin email is injected into the running service environment
-                  scope: deploy
-                  command: printenv WEBUI_ADMIN_EMAIL
-                  exit_status: 0
-            # PROSE-ONLY step — genuine free-form behaviour, agent-graded by
-            # `charly eval feature run openwebui` against the live deployment.
-            - name: admin-can-reach-the-chat-ui
-              step:
-                - then: the rendered landing page presents the Open WebUI sign-in experience for the auto-provisioned admin account, ready to start an LLM chat
     require:
         - python
         - supervisord
@@ -121,34 +87,11 @@ candy:
           env: WEBUI_SECRET_KEY
     task:
         - mkdir: "${HOME}/.local/bin"
-          user: "${USER}"
+          run_as: "${USER}"
         - copy: openwebui-entrypoint
           to: "${HOME}/.local/bin/openwebui-entrypoint"
           mode: "0755"
-          user: "${USER}"
-    eval:
-        - id: openwebui-entrypoint
-          file: ${HOME}/.local/bin/openwebui-entrypoint
-          exists: true
-          mode: "0755"
-        - id: openwebui-service
-          scope: deploy
-          service: openwebui
-          running: true
-        - id: openwebui-port
-          scope: deploy
-          addr: 127.0.0.1:${HOST_PORT:8080}
-          reachable: true
-          timeout: 5s
-        - id: openwebui-http
-          scope: deploy
-          http: http://127.0.0.1:${HOST_PORT:8080}/
-          status: 200
-          timeout: 30s
-        - id: openwebui-admin-email-set
-          scope: deploy
-          command: printenv WEBUI_ADMIN_EMAIL
-          exit_status: 0
+          run_as: "${USER}"
     service:
         - name: openwebui
           exec: "%(ENV_HOME)s/.local/bin/openwebui-entrypoint"
@@ -156,3 +99,76 @@ candy:
           working_directory: "%(ENV_HOME)s"
           enable: true
           scope: system
+    scenario:
+        # DETERMINISTIC build-scope fact — the embedded check verbs run at both
+        # `charly box feature run` and `charly eval feature run`; they fail if
+        # the auto-config entrypoint was never installed.
+        - name: entrypoint-script-installed
+          step:
+            - then: the auto-config entrypoint script is present and executable at ${HOME}/.local/bin/openwebui-entrypoint
+              file: ${HOME}/.local/bin/openwebui-entrypoint
+              exists: true
+              mode: "0755"
+        # DETERMINISTIC deploy-scope facts — need the running deployment, so
+        # they are scoped to deploy and probe the live container / published
+        # port (agent-graded only if a runtime probe is unavailable; here every
+        # step embeds a check verb).
+        - name: web-ui-serves-http
+          step:
+            - then: the openwebui service is running under the init system
+              service: openwebui
+              running: true
+              context:
+                - runtime
+            - and: the Open WebUI web interface answers HTTP 200 on the published port
+              http: http://127.0.0.1:${HOST_PORT:8080}/
+              status: 200
+              timeout: 30s
+              context:
+                - runtime
+            - and: the mandatory admin email is injected into the running service environment
+              command: printenv WEBUI_ADMIN_EMAIL
+              exit_status: 0
+              context:
+                - runtime
+        # PROSE-ONLY step — genuine free-form behaviour, agent-graded by
+        # `charly eval feature run openwebui` against the live deployment.
+        - name: admin-can-reach-the-chat-ui
+          step:
+            - then: the rendered landing page presents the Open WebUI sign-in experience for the auto-provisioned admin account, ready to start an LLM chat
+        - name: openwebui-entrypoint
+          step:
+            - id: openwebui-entrypoint
+              file: ${HOME}/.local/bin/openwebui-entrypoint
+              exists: true
+              mode: "0755"
+        - name: openwebui-service
+          step:
+            - id: openwebui-service
+              service: openwebui
+              running: true
+              context:
+                - runtime
+        - name: openwebui-port
+          step:
+            - id: openwebui-port
+              addr: 127.0.0.1:${HOST_PORT:8080}
+              reachable: true
+              timeout: 5s
+              context:
+                - runtime
+        - name: openwebui-http
+          step:
+            - id: openwebui-http
+              http: http://127.0.0.1:${HOST_PORT:8080}/
+              status: 200
+              timeout: 30s
+              context:
+                - runtime
+        - name: openwebui-admin-email-set
+          step:
+            - id: openwebui-admin-email-set
+              command: printenv WEBUI_ADMIN_EMAIL
+              exit_status: 0
+              context:
+                - runtime

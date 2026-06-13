@@ -98,7 +98,7 @@ func BuildDeployPlan(layer *Candy, img *ResolvedBox, hostCtx HostContext) (*Inst
 	// builder runs in an isolated stage/image and never depends on the
 	// candy's own tasks, so running it first is always safe. On a cross-host
 	// deploy the BuilderStep extracts the home artifacts into the guest home,
-	// which the subsequent TaskStep then relocates; the OCI target hoists the
+	// which the subsequent OpStep then relocates; the OCI target hoists the
 	// builder stages regardless of step order, so its Containerfile is
 	// unchanged.
 	builderSteps := compileBuilderSteps(layer, img, hostCtx)
@@ -115,8 +115,9 @@ func BuildDeployPlan(layer *Candy, img *ResolvedBox, hostCtx HostContext) (*Inst
 		plan.Steps = append(plan.Steps, pkgStep)
 	}
 
-	// 3. Inline tasks (cmd / mkdir / copy / write / link / download / setcap).
-	taskSteps := compileTaskSteps(layer, img)
+	// 3. The install timeline: the candy's task: ops PLUS any build/deploy-scoped
+	// do:act ops folded from the scenario list (act anywhere via the do: flag).
+	taskSteps := compileOpSteps(layer, img)
 	plan.Steps = append(plan.Steps, taskSteps...)
 
 	// 4. Services: both legacy `service:` (supervisord INI fragments) and
@@ -637,49 +638,111 @@ func buildSystemPackagesStep(format string, phase Phase, packages []string, raw 
 // Task compilation
 // ---------------------------------------------------------------------------
 
-// compileTaskSteps turns the candy's tasks: list into TaskSteps. The
-// resolved user is captured at compile time so the host target doesn't
-// need to re-resolve ${USER} later; CtxPath carries the candy's absolute
-// directory for /ctx/ substitution on the host.
-func compileTaskSteps(layer *Candy, img *ResolvedBox) []InstallStep {
-	if !layer.HasTasks() || len(layer.tasks) == 0 {
-		return nil
-	}
-	out := make([]InstallStep, 0, len(layer.tasks))
+// compileOpSteps turns the candy's install timeline into InstallSteps. The
+// timeline is the `task:` ops (every one an act op — install verbs default to
+// do:act, probe verbs require explicit do:act) PLUS the build/deploy-scoped
+// do:act ops folded from the `scenario:` list, in declared (cache-stable)
+// order. Each act op either LOWERS into an existing typed step (package →
+// SystemPackagesStep, service → ServicePackagedStep) so emit + reversal are
+// REUSED, or stays a generic OpStep (install verbs + command). The act/assert
+// boundary keeps probe-only scenario steps out of the install plan — the eval
+// Runner handles those.
+func compileOpSteps(layer *Candy, img *ResolvedBox) []InstallStep {
+	var out []InstallStep
+	// The task: list — the canonical install timeline. Every op is an act op.
 	for i := range layer.tasks {
-		task := &layer.tasks[i]
-		userDir, _ := resolveUserSpec(task.User, img)
-		// Snapshot layer.vars per task so the host/local-deploy renderer
-		// can emit `export K=V` lines. Build-time gets these via
-		// Containerfile ENV (emitVarsEnv); deploy-time has no such
-		// mechanism, and references like ${K3D_VERSION} in a download
-		// URL would otherwise expand to empty.
-		var candyVars map[string]string
-		if len(layer.vars) > 0 {
-			candyVars = make(map[string]string, len(layer.vars))
-			for k, v := range layer.vars {
-				candyVars[k] = v
+		if s := compileActOp(&layer.tasks[i], layer, img); s != nil {
+			out = append(out, s)
+		}
+	}
+	// Fold scenario do:act ops scoped to build/deploy (and NOT runtime) into
+	// the install plan, so a scenario step can provision as well as assert.
+	// A runtime-capable do:act op (the default for most verbs) is NOT folded —
+	// the eval Runner executes it live (avoids double-execution).
+	for si := range layer.scenario {
+		for sti := range layer.scenario[si].Step {
+			op := &layer.scenario[si].Step[sti].Op
+			if op.EffectiveDo() != DoAct {
+				continue
+			}
+			if op.InContext(CtxRuntime) || !(op.InContext(CtxBuild) || op.InContext(CtxDeploy)) {
+				continue // runtime/agent act → handled by the eval Runner
+			}
+			if s := compileActOp(op, layer, img); s != nil {
+				out = append(out, s)
 			}
 		}
-		// Tokenize a home-relative copy/download dest so each DeployTarget
-		// resolves it against the real destination home at emit (the guest
-		// home for vm, the host home for local) — leaving the literal
-		// "${HOME}" out of the PutFile dest. Empty `to:` stays empty.
-		var resolvedTo string
-		if task.To != "" {
-			resolvedTo = ExpandPath(task.To, HomeToken)
-		}
-		out = append(out, &TaskStep{
-			Task:         task,
-			CandyName:    layer.Name,
-			CandyDir:     layer.SourceDir,
-			CtxPath:      layer.SourceDir,
-			ResolvedUser: userDir,
-			CandyVars:    candyVars,
-			To:           resolvedTo,
-		})
 	}
 	return out
+}
+
+// compileActOp lowers a single install-timeline op into the right InstallStep.
+// It is the SOLE consumer of VerbCatalog.LowersTo: a verb that names a typed
+// step kind is constructed as that step (reusing its emit + Reverse); every
+// other verb (the install verbs + command) stays a generic OpStep. Callers
+// decide which ops reach here — the task: list passes every op (the install
+// timeline is act by definition, regardless of a verb's scenario-context
+// do:assert default), the scenario fold passes only its do:act ops.
+func compileActOp(op *Op, layer *Candy, img *ResolvedBox) InstallStep {
+	verb, err := op.Kind()
+	if err != nil {
+		return nil
+	}
+	userDir, _ := resolveUserSpec(op.RunAs, img)
+	switch VerbCatalog[verb].LowersTo {
+	case StepKindSystemPackages:
+		// package → install the (cross-distro-resolved) package via the
+		// image's primary format; SystemPackagesStep.Reverse removes it.
+		return &SystemPackagesStep{
+			Format:   img.Pkg,
+			Phase:    PhaseInstall,
+			Packages: []string{resolvePackageName(op, img.Tags)},
+		}
+	case StepKindServicePackaged:
+		// service → enable (+ start at boot) the named packaged unit;
+		// ServicePackagedStep.Reverse disables it and restores prior state.
+		return &ServicePackagedStep{
+			Unit:        op.Service,
+			TargetScope: opStepScope(userDir),
+			Enable:      true,
+			CandyName:   layer.Name,
+		}
+	}
+	// Install verbs (mkdir/copy/write/link/download/setcap/build) + command →
+	// a generic OpStep (existing emit + Reverse). Snapshot layer.vars so the
+	// host/local renderer can emit `export K=V` (build-time gets these via
+	// Containerfile ENV). Tokenize a home-relative `to:` so each DeployTarget
+	// resolves it against the real destination home at emit.
+	var candyVars map[string]string
+	if len(layer.vars) > 0 {
+		candyVars = make(map[string]string, len(layer.vars))
+		for k, v := range layer.vars {
+			candyVars[k] = v
+		}
+	}
+	var resolvedTo string
+	if op.To != "" {
+		resolvedTo = ExpandPath(op.To, HomeToken)
+	}
+	return &OpStep{
+		Op:           op,
+		CandyName:    layer.Name,
+		CandyDir:     layer.SourceDir,
+		CtxPath:      layer.SourceDir,
+		ResolvedUser: userDir,
+		CandyVars:    candyVars,
+		To:           resolvedTo,
+	}
+}
+
+// opStepScope classifies a resolved user directive into install scope — root
+// (or empty / 0) is system, everything else user. Shared by the OpStep and
+// service-act lowering so the scope rule lives in one place.
+func opStepScope(userDir string) Scope {
+	if userDir == "" || userDir == "root" || userDir == "0" || userDir == "0:0" {
+		return ScopeSystem
+	}
+	return ScopeUser
 }
 
 // ---------------------------------------------------------------------------

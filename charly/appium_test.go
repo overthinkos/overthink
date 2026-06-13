@@ -24,7 +24,7 @@ func TestAppiumInstallApp_MissingHostAPK(t *testing.T) {
 
 func TestPosSelectorStrategy_DefaultsXpath(t *testing.T) {
 	// Strategy omitted → no --strategy flag emitted (subprocess defaults to xpath).
-	c := &Check{Selector: "//Button"}
+	c := &Op{Selector: "//Button"}
 	got := posSelectorStrategy(c)
 	want := []string{"--selector", "//Button"}
 	if !reflect.DeepEqual(got, want) {
@@ -33,7 +33,7 @@ func TestPosSelectorStrategy_DefaultsXpath(t *testing.T) {
 }
 
 func TestPosSelectorStrategy_WithExplicitStrategy(t *testing.T) {
-	c := &Check{Selector: "Login", Strategy: "accessibility-id"}
+	c := &Op{Selector: "Login", Strategy: "accessibility-id"}
 	got := posSelectorStrategy(c)
 	want := []string{"--selector", "Login", "--strategy", "accessibility-id"}
 	if !reflect.DeepEqual(got, want) {
@@ -42,7 +42,7 @@ func TestPosSelectorStrategy_WithExplicitStrategy(t *testing.T) {
 }
 
 func TestPosSelectorStrategy_WithSessionOverride(t *testing.T) {
-	c := &Check{Selector: "x", Strategy: "id", Session: "abc-123"}
+	c := &Op{Selector: "x", Strategy: "id", Session: "abc-123"}
 	got := posSelectorStrategy(c)
 	want := []string{"--selector", "x", "--strategy", "id", "--session", "abc-123"}
 	if !reflect.DeepEqual(got, want) {
@@ -51,7 +51,7 @@ func TestPosSelectorStrategy_WithSessionOverride(t *testing.T) {
 }
 
 func TestPosSelectorTextStrategy(t *testing.T) {
-	c := &Check{Selector: "//Input", Text: "hello world", Strategy: "xpath"}
+	c := &Op{Selector: "//Input", Text: "hello world", Strategy: "xpath"}
 	got := posSelectorTextStrategy(c)
 	want := []string{"--selector", "//Input", "--strategy", "xpath", "--text", "hello world"}
 	if !reflect.DeepEqual(got, want) {
@@ -60,7 +60,7 @@ func TestPosSelectorTextStrategy(t *testing.T) {
 }
 
 func TestPosCapsFlag(t *testing.T) {
-	c := &Check{Caps: `{"platformName":"Android"}`}
+	c := &Op{Caps: `{"platformName":"Android"}`}
 	got := posCapsFlag(c)
 	want := []string{"--caps", `{"platformName":"Android"}`}
 	if !reflect.DeepEqual(got, want) {
@@ -146,7 +146,7 @@ func TestAppiumMethods_AllowlistShape(t *testing.T) {
 func TestAppiumMethods_RequiredFieldsHaveZeroFieldCases(t *testing.T) {
 	for name, spec := range appiumMethods {
 		for _, f := range spec.required {
-			if !isZeroField(&Check{}, f) {
+			if !isZeroField(&Op{}, f) {
 				t.Errorf("appiumMethods[%q] requires %q but isZeroField(&Check{}, %q)=false (missing isZeroField case)", name, f, f)
 			}
 		}
@@ -195,75 +195,75 @@ func eqArgs(t *testing.T, name string, got, want []string) {
 
 func TestPosSelectorAttribute(t *testing.T) {
 	eqArgs(t, "posSelectorAttribute",
-		posSelectorAttribute(&Check{Selector: "//x", Strategy: "id", Attribute: "checked"}),
+		posSelectorAttribute(&Op{Selector: "//x", Strategy: "id", Attribute: "checked"}),
 		[]string{"--selector", "//x", "--strategy", "id", "--attribute", "checked"})
 	eqArgs(t, "posSelectorAttribute(+session)",
-		posSelectorAttribute(&Check{Selector: "//x", Attribute: "text", Session: "s"}),
+		posSelectorAttribute(&Op{Selector: "//x", Attribute: "text", Session: "s"}),
 		[]string{"--selector", "//x", "--attribute", "text", "--session", "s"})
 }
 
 func TestPosSessionOnly(t *testing.T) {
-	if got := posSessionOnly(&Check{}); len(got) != 0 {
+	if got := posSessionOnly(&Op{}); len(got) != 0 {
 		t.Errorf("posSessionOnly(empty) = %v, want empty", got)
 	}
-	eqArgs(t, "posSessionOnly(+session)", posSessionOnly(&Check{Session: "s1"}), []string{"--session", "s1"})
+	eqArgs(t, "posSessionOnly(+session)", posSessionOnly(&Op{Session: "s1"}), []string{"--session", "s1"})
 }
 
 func TestPosAppId(t *testing.T) {
-	eqArgs(t, "posAppId", posAppId(&Check{AppId: "io.x"}), []string{"--app-id", "io.x"})
-	eqArgs(t, "posAppId(+session)", posAppId(&Check{AppId: "io.x", Session: "s"}),
+	eqArgs(t, "posAppId", posAppId(&Op{AppId: "io.x"}), []string{"--app-id", "io.x"})
+	eqArgs(t, "posAppId(+session)", posAppId(&Op{AppId: "io.x", Session: "s"}),
 		[]string{"--app-id", "io.x", "--session", "s"})
 }
 
 func TestPosActivity(t *testing.T) {
-	eqArgs(t, "posActivity", posActivity(&Check{Activity: "p/.A"}), []string{"--activity", "p/.A"})
-	eqArgs(t, "posActivity(+params)", posActivity(&Check{Activity: "p/.A", Params: `{"a":1}`}),
+	eqArgs(t, "posActivity", posActivity(&Op{Activity: "p/.A"}), []string{"--activity", "p/.A"})
+	eqArgs(t, "posActivity(+params)", posActivity(&Op{Activity: "p/.A", Params: `{"a":1}`}),
 		[]string{"--activity", "p/.A", "--params", `{"a":1}`})
 }
 
 func TestPosKeycode(t *testing.T) {
-	eqArgs(t, "posKeycode", posKeycode(&Check{Keycode: 4}), []string{"--keycode", "4"})
-	eqArgs(t, "posKeycode(+params)", posKeycode(&Check{Keycode: 66, Params: `{"metastate":1}`}),
+	eqArgs(t, "posKeycode", posKeycode(&Op{Keycode: 4}), []string{"--keycode", "4"})
+	eqArgs(t, "posKeycode(+params)", posKeycode(&Op{Keycode: 66, Params: `{"metastate":1}`}),
 		[]string{"--keycode", "66", "--params", `{"metastate":1}`})
 }
 
 func TestPosParamsOnly(t *testing.T) {
-	if got := posParamsOnly(&Check{}); len(got) != 0 {
+	if got := posParamsOnly(&Op{}); len(got) != 0 {
 		t.Errorf("posParamsOnly(empty) = %v, want empty", got)
 	}
-	eqArgs(t, "posParamsOnly", posParamsOnly(&Check{Params: "PORTRAIT"}), []string{"--params", "PORTRAIT"})
+	eqArgs(t, "posParamsOnly", posParamsOnly(&Op{Params: "PORTRAIT"}), []string{"--params", "PORTRAIT"})
 }
 
 func TestPosElemOrXY(t *testing.T) {
-	eqArgs(t, "posElemOrXY(selector)", posElemOrXY(&Check{Selector: "//b", Strategy: "id"}),
+	eqArgs(t, "posElemOrXY(selector)", posElemOrXY(&Op{Selector: "//b", Strategy: "id"}),
 		[]string{"--selector", "//b", "--strategy", "id"})
-	eqArgs(t, "posElemOrXY(xy)", posElemOrXY(&Check{X: 10, Y: 20}),
+	eqArgs(t, "posElemOrXY(xy)", posElemOrXY(&Op{X: 10, Y: 20}),
 		[]string{"--x", "10", "--y", "20"})
-	eqArgs(t, "posElemOrXY(+params)", posElemOrXY(&Check{Selector: "//b", Params: `{"endX":1}`}),
+	eqArgs(t, "posElemOrXY(+params)", posElemOrXY(&Op{Selector: "//b", Params: `{"endX":1}`}),
 		[]string{"--selector", "//b", "--params", `{"endX":1}`})
 }
 
 func TestPosGesture(t *testing.T) {
 	eqArgs(t, "posGesture(selector+dir+pct)",
-		posGesture(&Check{Selector: "//s", Direction: "down", Percent: "0.8"}),
+		posGesture(&Op{Selector: "//s", Direction: "down", Percent: "0.8"}),
 		[]string{"--selector", "//s", "--direction", "down", "--percent", "0.8"})
 	eqArgs(t, "posGesture(xy+dir)",
-		posGesture(&Check{X: 1, Y: 2, Direction: "up"}),
+		posGesture(&Op{X: 1, Y: 2, Direction: "up"}),
 		[]string{"--x", "1", "--y", "2", "--direction", "up"})
 }
 
 func TestPosAppiumExecute(t *testing.T) {
-	eqArgs(t, "posAppiumExecute(min)", posAppiumExecute(&Check{Expression: "mobile: x"}),
+	eqArgs(t, "posAppiumExecute(min)", posAppiumExecute(&Op{Expression: "mobile: x"}),
 		[]string{"--expression", "mobile: x"})
 	eqArgs(t, "posAppiumExecute(full)",
-		posAppiumExecute(&Check{Expression: "mobile: x", RequestBody: `{"a":1}`, Selector: "//s", Strategy: "id", Session: "z"}),
+		posAppiumExecute(&Op{Expression: "mobile: x", RequestBody: `{"a":1}`, Selector: "//s", Strategy: "id", Session: "z"}),
 		[]string{"--expression", "mobile: x", "--request-body", `{"a":1}`, "--selector", "//s", "--strategy", "id", "--session", "z"})
 }
 
 func TestPosAppiumRaw(t *testing.T) {
-	eqArgs(t, "posAppiumRaw(min)", posAppiumRaw(&Check{Method: "GET", Path: "/source"}),
+	eqArgs(t, "posAppiumRaw(min)", posAppiumRaw(&Op{Method: "GET", Path: "/source"}),
 		[]string{"--method", "GET", "--path", "/source"})
 	eqArgs(t, "posAppiumRaw(element)",
-		posAppiumRaw(&Check{Method: "POST", Path: "/element/{element}/clear", RequestBody: "{}", Selector: "//s"}),
+		posAppiumRaw(&Op{Method: "POST", Path: "/element/{element}/clear", RequestBody: "{}", Selector: "//s"}),
 		[]string{"--method", "POST", "--path", "/element/{element}/clear", "--request-body", "{}", "--selector", "//s"})
 }

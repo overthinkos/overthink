@@ -10,27 +10,6 @@ candy:
             banner to stdout — so their presence and basic operability are directly
             verifiable.
         tag: [working]
-        scenario:
-            - name: ffmpeg-cli-available
-              step:
-                - then: the ffmpeg transcoder binary is installed at /usr/bin/ffmpeg
-                  file: /usr/bin/ffmpeg
-                  exists: true
-                - then: ffmpeg prints its version banner to stdout
-                  command: ffmpeg -version
-                  exit_status: 0
-                  stdout:
-                    - contains: ffmpeg version
-            - name: ffprobe-inspects-media
-              step:
-                - then: the ffprobe media inspector binary is installed at /usr/bin/ffprobe
-                  file: /usr/bin/ffprobe
-                  exists: true
-                - then: ffprobe prints its version banner to stdout
-                  command: ffprobe -version
-                  exit_status: 0
-                  stdout:
-                    - contains: ffprobe version
     distro:
         arch:
             package:
@@ -42,23 +21,53 @@ candy:
                 - name: fedora-multimedia
                   url: "https://negativo17.org/repos/fedora-multimedia.repo"
                   gpgkey: "https://negativo17.org/repos/RPM-GPG-KEY-slaanesh"
-    eval:
-        - id: ffmpeg-binary
-          file: /usr/bin/ffmpeg
-          exists: true
-        - id: ffprobe-binary
-          file: /usr/bin/ffprobe
-          exists: true
-        - id: ffmpeg-package
-          package: ffmpeg
-          installed: true
-        - id: ffmpeg-version
-          command: ffmpeg -version
-          exit_status: 0
-          stdout:
-            - contains: ffmpeg version
-        - id: ffprobe-version
-          command: ffprobe -version
-          exit_status: 0
-          stdout:
-            - contains: ffprobe version
+    scenario:
+        - name: ffmpeg-cli-available
+          step:
+            - then: the ffmpeg transcoder binary is installed at /usr/bin/ffmpeg
+              file: /usr/bin/ffmpeg
+              exists: true
+            - then: ffmpeg prints its version banner to stdout
+              command: ffmpeg -version
+              exit_status: 0
+              stdout:
+                - contains: ffmpeg version
+        - name: ffprobe-inspects-media
+          step:
+            - then: the ffprobe media inspector binary is installed at /usr/bin/ffprobe
+              file: /usr/bin/ffprobe
+              exists: true
+            - then: ffprobe prints its version banner to stdout
+              command: ffprobe -version
+              exit_status: 0
+              stdout:
+                - contains: ffprobe version
+        - name: ffmpeg-binary
+          step:
+            - id: ffmpeg-binary
+              file: /usr/bin/ffmpeg
+              exists: true
+        - name: ffprobe-binary
+          step:
+            - id: ffprobe-binary
+              file: /usr/bin/ffprobe
+              exists: true
+        - name: ffmpeg-package
+          step:
+            - id: ffmpeg-package
+              package: ffmpeg
+              installed: true
+        - name: ffmpeg-version
+          step:
+            - id: ffmpeg-version
+              command: ffmpeg -version
+              exit_status: 0
+              stdout:
+                - contains: ffmpeg version
+        - name: ffprobe-version
+          step:
+            - id: ffprobe-version
+              command: ffprobe -version
+              exit_status: 0
+              stdout:
+                - contains: ffprobe version

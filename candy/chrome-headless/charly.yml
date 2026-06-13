@@ -18,50 +18,6 @@ candy:
             running service, and the HTTP 200 that Chrome's /json/version endpoint
             returns through the proxy. Container-only.
         tag: [working]
-        scenario:
-            # DETERMINISTIC build-scope facts — embedded check verbs run at both
-            # `charly box feature run` and `charly eval feature run`.
-            - name: headless-launcher-installed-and-configured
-              step:
-                - then: the chrome-headless launcher is installed and executable in the user's local bin
-                  file: ${HOME}/.local/bin/chrome-headless-launch
-                  exists: true
-                  mode: "0755"
-                - then: the launcher execs the real google-chrome binary in new-headless mode, not the wayland wrapper
-                  file: ${HOME}/.local/bin/chrome-headless-launch
-                  contains:
-                    - contains: "google-chrome-stable"
-                    - contains: "--headless=new"
-                - then: the launcher sets --remote-allow-origins so Chrome 146+ accepts the CDP websocket upgrade
-                  file: ${HOME}/.local/bin/chrome-headless-launch
-                  contains:
-                    - contains: "remote-allow-origins"
-                - then: the launcher binds Chrome's CDP on the internal debugging port 9223
-                  file: ${HOME}/.local/bin/chrome-headless-launch
-                  contains:
-                    - contains: "remote-debugging-port=9223"
-            - name: real-chrome-binary-present
-              step:
-                - then: the real google-chrome binary the launcher execs is installed
-                  file: /usr/bin/google-chrome-stable
-                  exists: true
-            # DETERMINISTIC deploy-scope facts — the service runs and Chrome's CDP
-            # endpoint answers through the cdp-proxy on the published host port.
-            - name: headless-cdp-endpoint-driveable
-              step:
-                - then: the chrome-headless service is running under the init system
-                  scope: deploy
-                  service: chrome-headless
-                  running: true
-                - then: Chrome's CDP /json/version endpoint answers HTTP 200 with a websocket debugger URL through the proxy
-                  scope: deploy
-                  http: http://127.0.0.1:${HOST_PORT:9222}/json/version
-                  status: 200
-                  timeout: 5s
-                  eventually: 90s
-                  retry_interval: 3s
-                  body:
-                    - contains: "webSocketDebuggerUrl"
     require:
         - chrome
         - supervisord
@@ -69,16 +25,16 @@ candy:
         - chrome-cdp
     task:
         - mkdir: "${HOME}/.local/bin"
-          user: "${USER}"
+          run_as: "${USER}"
         - mkdir: "${HOME}/.chrome-headless"
-          user: "${USER}"
+          run_as: "${USER}"
         # Launch the REAL /usr/bin/google-chrome-stable, NOT the chrome-cdp
         # wrapper symlinked into ~/.local/bin (which forces --ozone-platform=
         # wayland and needs a compositor). write: content is verbatim bytes;
         # ${HOME} expands at RUN time in bash, which is correct here.
         - write: "${HOME}/.local/bin/chrome-headless-launch"
           mode: "0755"
-          user: "${USER}"
+          run_as: "${USER}"
           content: |
             #!/usr/bin/env bash
             # Headless Chrome for cross-deployment CDP driving. CDP serves on
@@ -105,24 +61,77 @@ candy:
           restart: always
           enable: true
           scope: system
-    eval:
-        - id: chrome-headless-launch-script
-          file: ${HOME}/.local/bin/chrome-headless-launch
-          exists: true
-          mode: "0755"
-        - id: chrome-headless-service
-          scope: deploy
-          service: chrome-headless
-          running: true
-        - id: chrome-headless-cdp-version
-          scope: deploy
-          # cdp-proxy republishes the headless CDP endpoint on 9222; assert it
-          # answers /json/version with a real Chrome target (webSocketDebuggerUrl).
-          # Poll: Chrome's CDP endpoint binds a few seconds after the service starts.
-          http: http://127.0.0.1:${HOST_PORT:9222}/json/version
-          status: 200
-          timeout: 5s
-          eventually: 90s
-          retry_interval: 3s
-          body:
-            - contains: "webSocketDebuggerUrl"
+    scenario:
+        # DETERMINISTIC build-scope facts — embedded check verbs run at both
+        # `charly box feature run` and `charly eval feature run`.
+        - name: headless-launcher-installed-and-configured
+          step:
+            - then: the chrome-headless launcher is installed and executable in the user's local bin
+              file: ${HOME}/.local/bin/chrome-headless-launch
+              exists: true
+              mode: "0755"
+            - then: the launcher execs the real google-chrome binary in new-headless mode, not the wayland wrapper
+              file: ${HOME}/.local/bin/chrome-headless-launch
+              contains:
+                - contains: "google-chrome-stable"
+                - contains: "--headless=new"
+            - then: the launcher sets --remote-allow-origins so Chrome 146+ accepts the CDP websocket upgrade
+              file: ${HOME}/.local/bin/chrome-headless-launch
+              contains:
+                - contains: "remote-allow-origins"
+            - then: the launcher binds Chrome's CDP on the internal debugging port 9223
+              file: ${HOME}/.local/bin/chrome-headless-launch
+              contains:
+                - contains: "remote-debugging-port=9223"
+        - name: real-chrome-binary-present
+          step:
+            - then: the real google-chrome binary the launcher execs is installed
+              file: /usr/bin/google-chrome-stable
+              exists: true
+        # DETERMINISTIC deploy-scope facts — the service runs and Chrome's CDP
+        # endpoint answers through the cdp-proxy on the published host port.
+        - name: headless-cdp-endpoint-driveable
+          step:
+            - then: the chrome-headless service is running under the init system
+              service: chrome-headless
+              running: true
+              context:
+                - runtime
+            - then: Chrome's CDP /json/version endpoint answers HTTP 200 with a websocket debugger URL through the proxy
+              http: http://127.0.0.1:${HOST_PORT:9222}/json/version
+              status: 200
+              timeout: 5s
+              eventually: 90s
+              retry_interval: 3s
+              body:
+                - contains: "webSocketDebuggerUrl"
+              context:
+                - runtime
+        - name: chrome-headless-launch-script
+          step:
+            - id: chrome-headless-launch-script
+              file: ${HOME}/.local/bin/chrome-headless-launch
+              exists: true
+              mode: "0755"
+        - name: chrome-headless-service
+          step:
+            - id: chrome-headless-service
+              service: chrome-headless
+              running: true
+              context:
+                - runtime
+        - name: chrome-headless-cdp-version
+          step:
+            - id: chrome-headless-cdp-version
+              # cdp-proxy republishes the headless CDP endpoint on 9222; assert it
+              # answers /json/version with a real Chrome target (webSocketDebuggerUrl).
+              # Poll: Chrome's CDP endpoint binds a few seconds after the service starts.
+              http: http://127.0.0.1:${HOST_PORT:9222}/json/version
+              status: 200
+              timeout: 5s
+              eventually: 90s
+              retry_interval: 3s
+              body:
+                - contains: "webSocketDebuggerUrl"
+              context:
+                - runtime

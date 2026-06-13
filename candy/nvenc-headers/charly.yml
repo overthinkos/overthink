@@ -13,36 +13,43 @@ candy:
             build-only header. Verifiable: the headers and the pkg-config descriptor
             must land in the built image.
         tag: [working]
-        scenario:
-            - name: nvenc-headers-present
-              step:
-                - then: the NVENC encode API header is installed for nvenc-sys to compile against
-                  file: /usr/include/ffnvcodec/nvEncodeAPI.h
-                  exists: true
-                - then: the ffnvcodec pkg-config descriptor is installed so downstream builds can link against ffnvcodec
-                  file: /usr/lib/pkgconfig/ffnvcodec.pc
-                  exists: true
-            - name: nvenc-encode-api-entrypoint-declared
-              step:
-                - then: the header declares the NvEncodeAPICreateInstance entry point the nvenc-sys crate binds to
-                  file: /usr/include/ffnvcodec/nvEncodeAPI.h
-                  contains:
-                    - NvEncodeAPICreateInstance
     distro:
         arch:
             package:
                 - ffnvcodec-headers
-    eval:
-        - id: nvencodeapi-header
-          file: /usr/include/ffnvcodec/nvEncodeAPI.h
-          exists: true
-        - id: nvenc-headers-package
-          package: ffnvcodec-headers
-          installed: true
-        - id: ffnvcodec-pkgconfig
-          file: /usr/lib/pkgconfig/ffnvcodec.pc
-          exists: true
-        - id: nvenc-encode-api-symbol
-          file: /usr/include/ffnvcodec/nvEncodeAPI.h
-          contains:
-            - NvEncodeAPICreateInstance
+    scenario:
+        - name: nvenc-headers-present
+          step:
+            - then: the NVENC encode API header is installed for nvenc-sys to compile against
+              file: /usr/include/ffnvcodec/nvEncodeAPI.h
+              exists: true
+            - then: the ffnvcodec pkg-config descriptor is installed so downstream builds can link against ffnvcodec
+              file: /usr/lib/pkgconfig/ffnvcodec.pc
+              exists: true
+        - name: nvenc-encode-api-entrypoint-declared
+          step:
+            - then: the header declares the NvEncodeAPICreateInstance entry point the nvenc-sys crate binds to
+              file: /usr/include/ffnvcodec/nvEncodeAPI.h
+              contains:
+                - NvEncodeAPICreateInstance
+        - name: nvencodeapi-header
+          step:
+            - id: nvencodeapi-header
+              file: /usr/include/ffnvcodec/nvEncodeAPI.h
+              exists: true
+        - name: nvenc-headers-package
+          step:
+            - id: nvenc-headers-package
+              package: ffnvcodec-headers
+              installed: true
+        - name: ffnvcodec-pkgconfig
+          step:
+            - id: ffnvcodec-pkgconfig
+              file: /usr/lib/pkgconfig/ffnvcodec.pc
+              exists: true
+        - name: nvenc-encode-api-symbol
+          step:
+            - id: nvenc-encode-api-symbol
+              file: /usr/include/ffnvcodec/nvEncodeAPI.h
+              contains:
+                - NvEncodeAPICreateInstance

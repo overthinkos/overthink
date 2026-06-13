@@ -14,31 +14,6 @@ candy:
             verifiable at build scope; live GPU enumeration is verifiable only on
             a host with a real AMD GPU passed through.
         tag: [working]
-        scenario:
-            - name: rocm-userspace-installed
-              step:
-                - then: the ROCm HIP runtime package is installed in the image
-                  package: rocm-hip-runtime
-                  installed: true
-                - then: the clinfo OpenCL diagnostic tool is present at /usr/bin/clinfo
-                  file: /usr/bin/clinfo
-                  exists: true
-            - name: rocm-smi-management-tool
-              step:
-                - then: the rocm-smi GPU management tool is present at /usr/bin/rocm-smi
-                  file: /usr/bin/rocm-smi
-                  exists: true
-                - then: the rocm-smi package is installed in the image
-                  package: rocm-smi
-                  installed: true
-            - name: rocm-path-exported
-              step:
-                - then: ROCM_PATH is exported into the container environment as /usr
-                  command: printenv ROCM_PATH
-                  stdout: /usr
-            - name: amd-gpu-enumerated-when-present
-              step:
-                - then: on a host with an AMD GPU and /dev/kfd passed through, clinfo lists at least one ROCm OpenCL platform and rocm-smi reports the device temperature and utilization
     env:
         ROCM_PATH: "/usr"
     security:
@@ -51,25 +26,63 @@ candy:
                 - rocm-opencl
                 - rocm-clinfo
                 - rocm-smi
-    eval:
-        - id: rocm-clinfo-binary
-          file: /usr/bin/clinfo
-          exists: true
-        - id: rocm-smi-binary
-          file: /usr/bin/rocm-smi
-          exists: true
-        - id: rocm-hip-runtime-package
-          package: rocm-hip-runtime
-          installed: true
-        - id: rocm-opencl-package
-          package: rocm-opencl
-          installed: true
-        - id: rocm-clinfo-package
-          package: rocm-clinfo
-          installed: true
-        - id: rocm-smi-package
-          package: rocm-smi
-          installed: true
-        - id: rocm-path-env
-          command: printenv ROCM_PATH
-          stdout: /usr
+    scenario:
+        - name: rocm-userspace-installed
+          step:
+            - then: the ROCm HIP runtime package is installed in the image
+              package: rocm-hip-runtime
+              installed: true
+            - then: the clinfo OpenCL diagnostic tool is present at /usr/bin/clinfo
+              file: /usr/bin/clinfo
+              exists: true
+        - name: rocm-smi-management-tool
+          step:
+            - then: the rocm-smi GPU management tool is present at /usr/bin/rocm-smi
+              file: /usr/bin/rocm-smi
+              exists: true
+            - then: the rocm-smi package is installed in the image
+              package: rocm-smi
+              installed: true
+        - name: rocm-path-exported
+          step:
+            - then: ROCM_PATH is exported into the container environment as /usr
+              command: printenv ROCM_PATH
+              stdout: /usr
+        - name: amd-gpu-enumerated-when-present
+          step:
+            - then: on a host with an AMD GPU and /dev/kfd passed through, clinfo lists at least one ROCm OpenCL platform and rocm-smi reports the device temperature and utilization
+        - name: rocm-clinfo-binary
+          step:
+            - id: rocm-clinfo-binary
+              file: /usr/bin/clinfo
+              exists: true
+        - name: rocm-smi-binary
+          step:
+            - id: rocm-smi-binary
+              file: /usr/bin/rocm-smi
+              exists: true
+        - name: rocm-hip-runtime-package
+          step:
+            - id: rocm-hip-runtime-package
+              package: rocm-hip-runtime
+              installed: true
+        - name: rocm-opencl-package
+          step:
+            - id: rocm-opencl-package
+              package: rocm-opencl
+              installed: true
+        - name: rocm-clinfo-package
+          step:
+            - id: rocm-clinfo-package
+              package: rocm-clinfo
+              installed: true
+        - name: rocm-smi-package
+          step:
+            - id: rocm-smi-package
+              package: rocm-smi
+              installed: true
+        - name: rocm-path-env
+          step:
+            - id: rocm-path-env
+              command: printenv ROCM_PATH
+              stdout: /usr

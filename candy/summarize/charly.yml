@@ -12,41 +12,48 @@ candy:
             ~/.npm-global/lib/node_modules/@steipete/summarize, and
             `summarize --version` prints a version and exits cleanly.
         tag: [working]
-        scenario:
-            - name: cli-binary-installed
-              step:
-                - then: the summarize binary is installed into the npm global bin directory
-                  file: ${HOME}/.npm-global/bin/summarize
-                  exists: true
-                - then: the summarizer alias binary is installed alongside it
-                  file: ${HOME}/.npm-global/bin/summarizer
-                  exists: true
-            - name: npm-package-unpacked
-              step:
-                - then: the @steipete/summarize package is unpacked under the npm global lib directory
-                  file: ${HOME}/.npm-global/lib/node_modules/@steipete/summarize/package.json
-                  exists: true
-            - name: cli-reports-version
-              step:
-                - then: running summarize --version prints a version and exits cleanly
-                  command: ${HOME}/.npm-global/bin/summarize --version
-                  exit_status: 0
-                  stdout:
-                    - matches: "[0-9]+\\.[0-9]+"
     require:
         - nodejs
-    eval:
-        - id: summarize-binary
-          file: ${HOME}/.npm-global/bin/summarize
-          exists: true
-        - id: summarizer-alias
-          file: ${HOME}/.npm-global/bin/summarizer
-          exists: true
-        - id: summarize-package
-          file: ${HOME}/.npm-global/lib/node_modules/@steipete/summarize/package.json
-          exists: true
-        - id: summarize-version
-          command: ${HOME}/.npm-global/bin/summarize --version
-          exit_status: 0
-          stdout:
-            - matches: "[0-9]+\\.[0-9]+"
+    scenario:
+        - name: cli-binary-installed
+          step:
+            - then: the summarize binary is installed into the npm global bin directory
+              file: ${HOME}/.npm-global/bin/summarize
+              exists: true
+            - then: the summarizer alias binary is installed alongside it
+              file: ${HOME}/.npm-global/bin/summarizer
+              exists: true
+        - name: npm-package-unpacked
+          step:
+            - then: the @steipete/summarize package is unpacked under the npm global lib directory
+              file: ${HOME}/.npm-global/lib/node_modules/@steipete/summarize/package.json
+              exists: true
+        - name: cli-reports-version
+          step:
+            - then: running summarize --version prints a version and exits cleanly
+              command: ${HOME}/.npm-global/bin/summarize --version
+              exit_status: 0
+              stdout:
+                - matches: "[0-9]+\\.[0-9]+"
+        - name: summarize-binary
+          step:
+            - id: summarize-binary
+              file: ${HOME}/.npm-global/bin/summarize
+              exists: true
+        - name: summarizer-alias
+          step:
+            - id: summarizer-alias
+              file: ${HOME}/.npm-global/bin/summarizer
+              exists: true
+        - name: summarize-package
+          step:
+            - id: summarize-package
+              file: ${HOME}/.npm-global/lib/node_modules/@steipete/summarize/package.json
+              exists: true
+        - name: summarize-version
+          step:
+            - id: summarize-version
+              command: ${HOME}/.npm-global/bin/summarize --version
+              exit_status: 0
+              stdout:
+                - matches: "[0-9]+\\.[0-9]+"

@@ -141,7 +141,7 @@ func CandyForPlan(plans []*InstallPlan, dir string, cfg *Config) ([]*Candy, erro
 }
 
 // InjectSecretsIntoPlans merges the resolved secret env map into every
-// TaskStep's task.Env across the supplied plans. Existing task.Env keys
+// OpStep's task.Env across the supplied plans. Existing task.Env keys
 // are preserved (candy-declared env takes precedence over a credential-
 // store collision — a deliberate choice so an author can explicitly pin
 // a value they control). Called from deploy_add_cmd after
@@ -153,18 +153,18 @@ func InjectSecretsIntoPlans(plans []*InstallPlan, env map[string]string) {
 	}
 	for _, p := range plans {
 		for _, step := range p.Steps {
-			ts, ok := step.(*TaskStep)
-			if !ok || ts.Task == nil {
+			ts, ok := step.(*OpStep)
+			if !ok || ts.Op == nil {
 				continue
 			}
-			if ts.Task.Env == nil {
-				ts.Task.Env = map[string]string{}
+			if ts.Op.Env == nil {
+				ts.Op.Env = map[string]string{}
 			}
 			for k, v := range env {
-				if _, alreadySet := ts.Task.Env[k]; alreadySet {
+				if _, alreadySet := ts.Op.Env[k]; alreadySet {
 					continue
 				}
-				ts.Task.Env[k] = v
+				ts.Op.Env[k] = v
 			}
 		}
 	}

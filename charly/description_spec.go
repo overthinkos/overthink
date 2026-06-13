@@ -46,31 +46,23 @@ import (
 // release of overlap; candy manifest files in this repo are migrated by
 // `charly migrate`.
 type Description struct {
-	Feature   string     `yaml:"feature"              json:"feature"`
-	Narrative string     `yaml:"narrative,omitempty"  json:"narrative,omitempty"`
-	Tag       []string   `yaml:"tag,omitempty"        json:"tag,omitempty"`
-	Scenario  []Scenario `yaml:"scenario,omitempty"   json:"scenario,omitempty"`
+	Feature   string   `yaml:"feature"              json:"feature"`
+	Narrative string   `yaml:"narrative,omitempty"  json:"narrative,omitempty"`
+	Tag       []string `yaml:"tag,omitempty"        json:"tag,omitempty"`
 }
 
 // UnmarshalYAML accepts:
 //
-//   - the canonical mapping form (feature + narrative + scenario)
+//   - the canonical mapping form (feature + narrative + tag)
 //   - a scalar shorthand (a single-line description that populates
-//     Feature only, leaving Scenario empty); preserves pre-existing
-//     `description: "..."` usage across candy manifest files
-//   - the legacy plural keys (`scenarios:`, `tags:`) — accept-both
-//     transitional shim removed at the close of the harness cutover
-//     once `charly migrate` has rewritten every consumer.
+//     Feature only); preserves `description: "..."` usage.
 func (d *Description) UnmarshalYAML(node *yaml.Node) error {
 	switch node.Kind {
 	case yaml.ScalarNode:
 		d.Feature = node.Value
 		return nil
 	case yaml.MappingNode:
-		// Walk the mapping by hand so we can map BOTH `scenario:` and
-		// `scenarios:` (and `tag:` / `tags:`) into the singular fields
-		// during the migration window. The map walk also gives us the
-		// node positions for clearer error messages.
+		// Walk the mapping by hand for node positions in error messages.
 		if len(node.Content)%2 != 0 {
 			return fmt.Errorf("description: malformed mapping node (odd content count)")
 		}
@@ -89,58 +81,18 @@ func (d *Description) UnmarshalYAML(node *yaml.Node) error {
 				if err := v.Decode(&d.Narrative); err != nil {
 					return fmt.Errorf("description.narrative: %w", err)
 				}
-			case "tag", "tags":
+			case "tag":
 				if err := v.Decode(&d.Tag); err != nil {
-					return fmt.Errorf("description.%s: %w", k.Value, err)
-				}
-			case "scenario", "scenarios":
-				if err := v.Decode(&d.Scenario); err != nil {
-					return fmt.Errorf("description.%s: %w", k.Value, err)
+					return fmt.Errorf("description.tag: %w", err)
 				}
 			default:
-				return fmt.Errorf("description: unknown key %q at line %d (expected: feature, narrative, tag, scenario)", k.Value, k.Line)
+				return fmt.Errorf("description: unknown key %q at line %d (expected: feature, narrative, tag)", k.Value, k.Line)
 			}
 		}
 		return nil
 	default:
 		return fmt.Errorf("description: unsupported YAML kind %d (expected scalar or mapping)", node.Kind)
 	}
-}
-
-// UnmarshalJSON mirrors UnmarshalYAML's accept-both behavior for the
-// `ai.opencharly.description` OCI label. Images built BEFORE the
-// 2026-04 singular cutover carry the old plural keys (`scenarios`,
-// `tags`) in their JSON-encoded label payload; this shim lets the
-// harness read them without requiring every image to be rebuilt
-// before it can be scored.
-func (d *Description) UnmarshalJSON(data []byte) error {
-	// Use a string→RawMessage view so we can map both plural and
-	// singular keys into the same target field.
-	var raw map[string]json.RawMessage
-	if err := json.Unmarshal(data, &raw); err != nil {
-		return err
-	}
-	for k, v := range raw {
-		switch k {
-		case "feature":
-			if err := json.Unmarshal(v, &d.Feature); err != nil {
-				return fmt.Errorf("description.feature: %w", err)
-			}
-		case "narrative":
-			if err := json.Unmarshal(v, &d.Narrative); err != nil {
-				return fmt.Errorf("description.narrative: %w", err)
-			}
-		case "tag", "tags":
-			if err := json.Unmarshal(v, &d.Tag); err != nil {
-				return fmt.Errorf("description.%s: %w", k, err)
-			}
-		case "scenario", "scenarios":
-			if err := json.Unmarshal(v, &d.Scenario); err != nil {
-				return fmt.Errorf("description.%s: %w", k, err)
-			}
-		}
-	}
-	return nil
 }
 
 // Scenario is a single BDD scenario. A scenario with a non-empty Examples
@@ -312,7 +264,7 @@ type Step struct {
 	And   string `yaml:"and,omitempty"   json:"and,omitempty"`
 	But   string `yaml:"but,omitempty"   json:"but,omitempty"`
 
-	Check `yaml:",inline"  json:",inline"`
+	Op `yaml:",inline"  json:",inline"`
 }
 
 // StepKeywords lists valid keyword discriminator keys in document order.
@@ -375,45 +327,23 @@ func (s *Step) KeywordText() string {
 // are narrative-only (no check executes) and are reported as "pending" —
 // advisory by default, fail under --strict.
 //
-// NOTE: this list mirrors Check.verbsSet but is INTENTIONALLY a separate
-// hand-maintained list rather than a delegation. Reason: the
-// `summarize:` verb is currently broken in some scenarios (over_ids
-// glob matching against recorded step IDs needs separate work), and
-// flipping its IsPending status from true to false would surface
-// pre-existing failures unrelated to whatever verb's being added.
-// When summarize lands a real fix, this list and verbsSet should be
-// unified. New verbs added in the meantime: include them here AND in
-// CheckVerbs / verbsSet.
+// Delegates to the authoritative Op.verbsSet so it can NEVER drift from the
+// Op vocabulary — the former hand-maintained list silently omitted verbs
+// (adb/appium/agent/the install verbs), misclassifying real verb-bearing
+// steps as prose. One source of truth (R3): a step is pending exactly when
+// its Op carries zero verbs.
 func (s *Step) IsPending() bool {
-	c := &s.Check
-	if c.File != "" || c.Package != "" || c.Service != "" || c.Port != 0 ||
-		c.Process != "" || c.Command != "" || c.HTTP != "" || c.DNS != "" ||
-		c.User != "" || c.Group != "" || c.Interface != "" || c.KernelParam != "" ||
-		c.Mount != "" || c.Addr != "" || c.Matching != nil ||
-		c.Cdp != "" || c.Wl != "" || c.Dbus != "" || c.Vnc != "" || c.Mcp != "" ||
-		c.Record != "" || c.Spice != "" || c.Libvirt != "" || c.K8s != "" ||
-		c.Kill != "" {
-		return false
-	}
-	return true
+	return len(s.Op.verbsSet()) == 0
 }
 
 // ---------------------------------------------------------------------------
 // OCI label shape: ai.opencharly.description
 // ---------------------------------------------------------------------------
 
-// LabelDescriptionSet is the three-section structure embedded in the
-// ai.opencharly.description OCI label: candy-contributed descriptions
-// (one per candy), box-level description (one), deploy-default
-// description (one — usually from charly.yml overlays).
-//
-// Mirrors LabelEvalSet's shape so the collection + merge pipeline and
-// the reporting format can share a mental model.
-// LabelDescriptionSet and LabeledDescription were relocated to
-// labelset.go in the 2026-04 BDD/test/harness surface-cleanup cutover,
-// alongside the new LabelSet aggregate that wraps both LabelEvalSet and
-// LabelDescriptionSet. See labelset.go for the type definitions and
-// IsEmpty method.
+// LabelDescriptionSet, LabeledDescription, and the LabelSet aggregate
+// that wraps LabelDescriptionSet were relocated to labelset.go in the
+// 2026-04 BDD/test/harness surface-cleanup cutover. See labelset.go for
+// the type definitions and IsEmpty method.
 
 // ---------------------------------------------------------------------------
 // Scenario Outline expansion
@@ -501,7 +431,7 @@ func applyOutlineSubs(s *Step, row map[string]string) {
 	s.But = substitutePlaceholders(s.But, row)
 
 	// String fields on the embedded Check.
-	for _, p := range s.Check.StringFields() {
+	for _, p := range s.Op.StringFields() {
 		if *p == "" {
 			continue
 		}
@@ -511,13 +441,13 @@ func applyOutlineSubs(s *Step, row map[string]string) {
 	// Also substitute in matcher values where strings appear. MatcherList
 	// entries may carry strings, slices of strings, or numbers; we touch
 	// only the string-typed ones.
-	substituteMatchers(s.Check.Contains, row)
-	substituteMatchers(s.Check.Stdout, row)
-	substituteMatchers(s.Check.Stderr, row)
-	substituteMatchers(s.Check.Body, row)
-	substituteMatchers(s.Check.Headers, row)
-	substituteMatchers(s.Check.Opts, row)
-	substituteMatchers(s.Check.Value, row)
+	substituteMatchers(s.Op.Contains, row)
+	substituteMatchers(s.Op.Stdout, row)
+	substituteMatchers(s.Op.Stderr, row)
+	substituteMatchers(s.Op.Body, row)
+	substituteMatchers(s.Op.Headers, row)
+	substituteMatchers(s.Op.Opts, row)
+	substituteMatchers(s.Op.Value, row)
 }
 
 // substitutePlaceholders replaces every `<name>` with the row's value for
@@ -576,13 +506,13 @@ func cloneScenario(s Scenario) Scenario {
 // cloneStepMatchers deep-copies the MatcherList fields on a step so that
 // per-row substitution doesn't poison sibling scenarios.
 func cloneStepMatchers(s *Step) {
-	s.Check.Contains = cloneMatcherList(s.Check.Contains)
-	s.Check.Stdout = cloneMatcherList(s.Check.Stdout)
-	s.Check.Stderr = cloneMatcherList(s.Check.Stderr)
-	s.Check.Body = cloneMatcherList(s.Check.Body)
-	s.Check.Headers = cloneMatcherList(s.Check.Headers)
-	s.Check.Opts = cloneMatcherList(s.Check.Opts)
-	s.Check.Value = cloneMatcherList(s.Check.Value)
+	s.Op.Contains = cloneMatcherList(s.Op.Contains)
+	s.Op.Stdout = cloneMatcherList(s.Op.Stdout)
+	s.Op.Stderr = cloneMatcherList(s.Op.Stderr)
+	s.Op.Body = cloneMatcherList(s.Op.Body)
+	s.Op.Headers = cloneMatcherList(s.Op.Headers)
+	s.Op.Opts = cloneMatcherList(s.Op.Opts)
+	s.Op.Value = cloneMatcherList(s.Op.Value)
 }
 
 // cloneMatcherList returns a deep copy of a matcher slice. Returns the

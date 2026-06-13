@@ -10,47 +10,56 @@ candy:
             the signing keys. Verifiable because both release packages land in
             the rpm database and their .repo files appear on disk.
         tag: [working]
-        scenario:
-            - name: free-repo-configured
-              step:
-                - then: the RPM Fusion free repo definition file is present on disk
-                  file: /etc/yum.repos.d/rpmfusion-free.repo
-                  exists: true
-                - then: the rpmfusion-free-release package is recorded in the rpm database
-                  package: rpmfusion-free-release
-                  installed: true
-            - name: nonfree-repo-configured
-              step:
-                - then: the RPM Fusion nonfree repo definition file is present on disk
-                  file: /etc/yum.repos.d/rpmfusion-nonfree.repo
-                  exists: true
-                - then: the rpmfusion-nonfree-release package is recorded in the rpm database
-                  package: rpmfusion-nonfree-release
-                  installed: true
-            - name: free-repo-declares-rpmfusion-section
-              step:
-                - then: the free repo file declares the rpmfusion-free repository section header
-                  file: /etc/yum.repos.d/rpmfusion-free.repo
-                  contains:
-                    - contains: "[rpmfusion-free]"
     require: []
     task:
-        - cmd: dnf install -y https://download1.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm https://download1.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-$(rpm -E %fedora).noarch.rpm
-          user: root
-    eval:
-        - id: rpmfusion-free-repo-file
-          file: /etc/yum.repos.d/rpmfusion-free.repo
-          exists: true
-        - id: rpmfusion-nonfree-repo-file
-          file: /etc/yum.repos.d/rpmfusion-nonfree.repo
-          exists: true
-        - id: rpmfusion-free-package
-          package: rpmfusion-free-release
-          installed: true
-        - id: rpmfusion-nonfree-package
-          package: rpmfusion-nonfree-release
-          installed: true
-        - id: rpmfusion-free-repo-section
-          file: /etc/yum.repos.d/rpmfusion-free.repo
-          contains:
-            - contains: "[rpmfusion-free]"
+        - command: dnf install -y https://download1.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm https://download1.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-$(rpm -E %fedora).noarch.rpm
+          run_as: root
+    scenario:
+        - name: free-repo-configured
+          step:
+            - then: the RPM Fusion free repo definition file is present on disk
+              file: /etc/yum.repos.d/rpmfusion-free.repo
+              exists: true
+            - then: the rpmfusion-free-release package is recorded in the rpm database
+              package: rpmfusion-free-release
+              installed: true
+        - name: nonfree-repo-configured
+          step:
+            - then: the RPM Fusion nonfree repo definition file is present on disk
+              file: /etc/yum.repos.d/rpmfusion-nonfree.repo
+              exists: true
+            - then: the rpmfusion-nonfree-release package is recorded in the rpm database
+              package: rpmfusion-nonfree-release
+              installed: true
+        - name: free-repo-declares-rpmfusion-section
+          step:
+            - then: the free repo file declares the rpmfusion-free repository section header
+              file: /etc/yum.repos.d/rpmfusion-free.repo
+              contains:
+                - contains: "[rpmfusion-free]"
+        - name: rpmfusion-free-repo-file
+          step:
+            - id: rpmfusion-free-repo-file
+              file: /etc/yum.repos.d/rpmfusion-free.repo
+              exists: true
+        - name: rpmfusion-nonfree-repo-file
+          step:
+            - id: rpmfusion-nonfree-repo-file
+              file: /etc/yum.repos.d/rpmfusion-nonfree.repo
+              exists: true
+        - name: rpmfusion-free-package
+          step:
+            - id: rpmfusion-free-package
+              package: rpmfusion-free-release
+              installed: true
+        - name: rpmfusion-nonfree-package
+          step:
+            - id: rpmfusion-nonfree-package
+              package: rpmfusion-nonfree-release
+              installed: true
+        - name: rpmfusion-free-repo-section
+          step:
+            - id: rpmfusion-free-repo-section
+              file: /etc/yum.repos.d/rpmfusion-free.repo
+              contains:
+                - contains: "[rpmfusion-free]"

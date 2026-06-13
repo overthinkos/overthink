@@ -11,18 +11,6 @@ candy:
             /usr/bin (cross-distro; wlrctl ships from the AUR on Arch and the
             repo on Fedora).
         tag: [working]
-        scenario:
-            - name: wayland-input-and-clipboard-tools-installed
-              step:
-                - then: the wtype keyboard-injection tool is installed
-                  file: /usr/bin/wtype
-                  exists: true
-                - then: the wl-clipboard copy tool is installed
-                  file: /usr/bin/wl-copy
-                  exists: true
-                - then: the wlrctl wlroots control tool is installed
-                  file: /usr/bin/wlrctl
-                  exists: true
     distro:
         arch:
             package:
@@ -46,25 +34,50 @@ candy:
                 - wl-clipboard
                 - wlr-randr
                 - ydotool
-    eval:
-        - id: wtype-binary
-          file: /usr/bin/wtype
-          exists: true
-        - id: wl-copy-binary
-          file: /usr/bin/wl-copy
-          exists: true
-        - id: wl-paste-binary
-          file: /usr/bin/wl-paste
-          exists: true
-        - id: wlr-randr-binary
-          file: /usr/bin/wlr-randr
-          exists: true
-        - id: wlrctl-binary
-          file: /usr/bin/wlrctl
-          exists: true
-        - id: xdotool-binary
-          file: /usr/bin/xdotool
-          exists: true
-        - id: ydotool-binary
-          file: /usr/bin/ydotool
-          exists: true
+    scenario:
+        - name: wayland-input-and-clipboard-tools-installed
+          step:
+            - then: the wtype keyboard-injection tool is installed
+              file: /usr/bin/wtype
+              exists: true
+            - then: the wl-clipboard copy tool is installed
+              file: /usr/bin/wl-copy
+              exists: true
+            - then: the wlrctl wlroots control tool is installed
+              file: /usr/bin/wlrctl
+              exists: true
+        - name: wtype-binary
+          step:
+            - id: wtype-binary
+              file: /usr/bin/wtype
+              exists: true
+        - name: wl-copy-binary
+          step:
+            - id: wl-copy-binary
+              file: /usr/bin/wl-copy
+              exists: true
+        - name: wl-paste-binary
+          step:
+            - id: wl-paste-binary
+              file: /usr/bin/wl-paste
+              exists: true
+        - name: wlr-randr-binary
+          step:
+            - id: wlr-randr-binary
+              file: /usr/bin/wlr-randr
+              exists: true
+        - name: wlrctl-binary
+          step:
+            - id: wlrctl-binary
+              file: /usr/bin/wlrctl
+              exists: true
+        - name: xdotool-binary
+          step:
+            - id: xdotool-binary
+              file: /usr/bin/xdotool
+              exists: true
+        - name: ydotool-binary
+          step:
+            - id: ydotool-binary
+              file: /usr/bin/ydotool
+              exists: true

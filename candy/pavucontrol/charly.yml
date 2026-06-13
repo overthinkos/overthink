@@ -10,20 +10,6 @@ candy:
             from the waybar volume indicator), so both its presence and the audio
             backend it drives are build-time verifiable.
         tag: [working]
-        scenario:
-            - name: pavucontrol-mixer-installed
-              step:
-                - then: the pavucontrol GTK mixer binary is installed at /usr/bin/pavucontrol
-                  file: /usr/bin/pavucontrol
-                  exists: true
-                - then: the pavucontrol package is recorded in the package database
-                  package: pavucontrol
-                  installed: true
-            - name: pipewire-audio-backend-composed
-              step:
-                - then: the required PipeWire audio server that pavucontrol controls is present
-                  file: /usr/bin/pipewire
-                  exists: true
     require:
         - pipewire
     distro:
@@ -33,10 +19,27 @@ candy:
         fedora:
             package:
                 - pavucontrol
-    eval:
-        - id: pavucontrol-binary
-          file: /usr/bin/pavucontrol
-          exists: true
-        - id: pavucontrol-package
-          package: pavucontrol
-          installed: true
+    scenario:
+        - name: pavucontrol-mixer-installed
+          step:
+            - then: the pavucontrol GTK mixer binary is installed at /usr/bin/pavucontrol
+              file: /usr/bin/pavucontrol
+              exists: true
+            - then: the pavucontrol package is recorded in the package database
+              package: pavucontrol
+              installed: true
+        - name: pipewire-audio-backend-composed
+          step:
+            - then: the required PipeWire audio server that pavucontrol controls is present
+              file: /usr/bin/pipewire
+              exists: true
+        - name: pavucontrol-binary
+          step:
+            - id: pavucontrol-binary
+              file: /usr/bin/pavucontrol
+              exists: true
+        - name: pavucontrol-package
+          step:
+            - id: pavucontrol-package
+              package: pavucontrol
+              installed: true

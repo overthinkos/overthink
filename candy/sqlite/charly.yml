@@ -9,26 +9,6 @@ candy:
             in-memory or on-disk SQLite database, so its behaviour is verifiable
             by executing a real query and asserting the returned row.
         tag: [working]
-        scenario:
-            - name: sqlite3-cli-installed
-              step:
-                - then: the sqlite3 binary is installed at /usr/bin/sqlite3
-                  file: /usr/bin/sqlite3
-                  exists: true
-                - then: the sqlite package is present in the image
-                  package: sqlite
-                  installed: true
-            - name: sqlite3-executes-sql
-              step:
-                - then: sqlite3 reports a 3.x version string
-                  command: sqlite3 --version
-                  exit_status: 0
-                  stdout:
-                    - matches: "[0-9]+\\.[0-9]+\\.[0-9]+"
-                - then: sqlite3 runs SQL against an in-memory database and returns the stored row
-                  command: 'sqlite3 :memory: "CREATE TABLE t(x INTEGER); INSERT INTO t VALUES(42); SELECT x FROM t;"'
-                  stdout:
-                    - equals: "42"
     distro:
         arch:
             package:
@@ -36,19 +16,46 @@ candy:
         fedora:
             package:
                 - sqlite
-    eval:
-        - id: sqlite3-binary
-          file: /usr/bin/sqlite3
-          exists: true
-        - id: sqlite-package
-          package: sqlite
-          installed: true
-        - id: sqlite3-version
-          command: sqlite3 --version
-          exit_status: 0
-          stdout:
-            - matches: "[0-9]+\\.[0-9]+\\.[0-9]+"
-        - id: sqlite3-query
-          command: 'sqlite3 :memory: "CREATE TABLE t(x INTEGER); INSERT INTO t VALUES(42); SELECT x FROM t;"'
-          stdout:
-            - equals: "42"
+    scenario:
+        - name: sqlite3-cli-installed
+          step:
+            - then: the sqlite3 binary is installed at /usr/bin/sqlite3
+              file: /usr/bin/sqlite3
+              exists: true
+            - then: the sqlite package is present in the image
+              package: sqlite
+              installed: true
+        - name: sqlite3-executes-sql
+          step:
+            - then: sqlite3 reports a 3.x version string
+              command: sqlite3 --version
+              exit_status: 0
+              stdout:
+                - matches: "[0-9]+\\.[0-9]+\\.[0-9]+"
+            - then: sqlite3 runs SQL against an in-memory database and returns the stored row
+              command: 'sqlite3 :memory: "CREATE TABLE t(x INTEGER); INSERT INTO t VALUES(42); SELECT x FROM t;"'
+              stdout:
+                - equals: "42"
+        - name: sqlite3-binary
+          step:
+            - id: sqlite3-binary
+              file: /usr/bin/sqlite3
+              exists: true
+        - name: sqlite-package
+          step:
+            - id: sqlite-package
+              package: sqlite
+              installed: true
+        - name: sqlite3-version
+          step:
+            - id: sqlite3-version
+              command: sqlite3 --version
+              exit_status: 0
+              stdout:
+                - matches: "[0-9]+\\.[0-9]+\\.[0-9]+"
+        - name: sqlite3-query
+          step:
+            - id: sqlite3-query
+              command: 'sqlite3 :memory: "CREATE TABLE t(x INTEGER); INSERT INTO t VALUES(42); SELECT x FROM t;"'
+              stdout:
+                - equals: "42"

@@ -9,23 +9,26 @@ candy:
             grim package is registered — both fail on an image that installed
             nothing.
         tag: [working]
-        scenario:
-            - name: grim-installed
-              step:
-                - then: the grim screenshot binary is installed at /usr/bin/grim
-                  file: /usr/bin/grim
-                  exists: true
-                - then: the grim package is registered with the package manager
-                  package: grim
-                  installed: true
     distro:
         fedora:
             package:
                 - grim
-    eval:
-        - id: grim-binary
-          file: /usr/bin/grim
-          exists: true
-        - id: grim-package
-          package: grim
-          installed: true
+    scenario:
+        - name: grim-installed
+          step:
+            - then: the grim screenshot binary is installed at /usr/bin/grim
+              file: /usr/bin/grim
+              exists: true
+            - then: the grim package is registered with the package manager
+              package: grim
+              installed: true
+        - name: grim-binary
+          step:
+            - id: grim-binary
+              file: /usr/bin/grim
+              exists: true
+        - name: grim-package
+          step:
+            - id: grim-package
+              package: grim
+              installed: true

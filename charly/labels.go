@@ -64,13 +64,12 @@ const (
 	LabelMCPProvide     = "ai.opencharly.mcp_provide"
 	LabelMCPRequire     = "ai.opencharly.mcp_require"
 	LabelMCPAccept      = "ai.opencharly.mcp_accept"
-	LabelEval           = "ai.opencharly.eval" // three-section test manifest (candy/box/deploy)
 	// LabelDescription — three-section Gherkin-shaped self-description for
 	// every `kind:` entity the image rolled up. Each section carries one
 	// LabeledDescription per contributing entity (candy/box/deploy).
 	// Authored inline in YAML under `description:` on each kind; collected
 	// via CollectDescriptions following the same base-chain walk as
-	// CollectEval. Subject to a 256 KiB soft cap with narrative truncation.
+	// CollectHooks. Subject to a 256 KiB soft cap with narrative truncation.
 	LabelDescription = "ai.opencharly.description"
 	// LabelService — structured JSON array of CapabilityService (full
 	// per-entry spec, not just names). Source-less deploy (`charly deploy from-box`)
@@ -81,8 +80,13 @@ const (
 	// ShellEntry contributions (origin = candy name / "box" / "deploy",
 	// id, generic body, per-shell ByShell map). Source of truth for
 	// `charly box inspect`, `charly deploy from-box`, and the charly.yml
-	// `shell:` overlay merge — same shape as LabelEval.
+	// `shell:` overlay merge — same shape as LabelDescription.
 	LabelShell = "ai.opencharly.shell"
+	// LabelEvalLevel — the per-box acceptance-depth rung (none|build|noagent|
+	// agent) authored as BoxConfig.EvalLevel. `charly check run <bed>` reads it
+	// from the built image to gate how deep the bed's acceptance runs. See
+	// eval_level.go for the ladder.
+	LabelEvalLevel = "ai.opencharly.eval_level"
 )
 
 // LabelVolumeEntry represents a volume in the label JSON (short name form).
@@ -186,13 +190,13 @@ type BoxMetadata struct {
 	MCPProvide    []MCPServerYAML      // MCP servers provided to other containers (service discovery templates)
 	MCPRequire    []EnvDependency      // MCP servers image must have from the environment
 	MCPAccept     []EnvDependency      // MCP servers image can optionally use
-	Eval          *LabelEvalSet        // three-section (candy/box/deploy) declarative test spec
 	Description   *LabelDescriptionSet // three-section Gherkin-shaped self-description (candy/box/deploy)
 	Shell         *LabelShellSet       // three-section (candy/box/deploy) shell-init manifest (2026-05 cutover)
+	EvalLevel     string               // acceptance-depth rung (ai.opencharly.eval_level): none|build|noagent|agent
 }
 
 // LabelShellSet is the three-section JSON manifest carried in
-// ai.opencharly.shell. Mirrors LabelEvalSet's bucketing — Candy
+// ai.opencharly.shell. Mirrors LabelDescriptionSet's bucketing — Candy
 // holds per-candy contributions (origin = candy name); Box holds
 // charly.yml-level shell: declarations; Deploy holds deploy-scope
 // defaults baked at build time. The charly.yml `shell:` overlay
@@ -424,6 +428,9 @@ func ExtractMetadata(engine, imageRef string) (*BoxMetadata, error) {
 	meta.Status = labels[LabelStatus]
 	meta.Info = labels[LabelInfo]
 
+	// Acceptance-depth rung (eval_level)
+	meta.EvalLevel = labels[LabelEvalLevel]
+
 	// Candy versions
 	if v := labels[LabelCandyVersion]; v != "" {
 		if err := json.Unmarshal([]byte(v), &meta.CandyVersion); err != nil {
@@ -532,15 +539,6 @@ func ExtractMetadata(engine, imageRef string) (*BoxMetadata, error) {
 		if err := json.Unmarshal([]byte(v), &meta.MCPAccept); err != nil {
 			return nil, fmt.Errorf("parsing %s: %w", LabelMCPAccept, err)
 		}
-	}
-
-	// Tests (three-section declarative test manifest)
-	if v := labels[LabelEval]; v != "" {
-		var ts LabelEvalSet
-		if err := json.Unmarshal([]byte(v), &ts); err != nil {
-			return nil, fmt.Errorf("parsing %s: %w", LabelEval, err)
-		}
-		meta.Eval = &ts
 	}
 
 	// Shell-init manifest (three-section, candy/box/deploy)

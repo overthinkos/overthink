@@ -279,7 +279,7 @@ func TestHostUnifiedTarget_Test_EmptyChecks(t *testing.T) {
 // a way that produces a real failure.
 func TestHostUnifiedTarget_Test_OnlyIDsFilter(t *testing.T) {
 	target := &LocalUnifiedTarget{NodeName: "host"}
-	checks := []Check{
+	checks := []Op{
 		{ID: "match", Command: "true"},
 		{ID: "fail", Command: "false"},
 	}

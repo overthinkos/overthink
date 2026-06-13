@@ -96,7 +96,7 @@ type UnifiedDeployTarget interface {
 	// Test runs the given deploy-scope checks against the live
 	// target. Equivalent to `charly eval live <name>`. Returns nil only if
 	// every non-skipped check passes.
-	Test(ctx context.Context, checks []Check, opts TestOpts) error
+	Test(ctx context.Context, checks []Op, opts TestOpts) error
 
 	// Update re-applies the plan diff between the currently-recorded
 	// candy set and the plan set derived from fresh charly.yml.

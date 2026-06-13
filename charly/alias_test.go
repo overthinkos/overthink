@@ -132,7 +132,7 @@ func TestCollectImageAliases(t *testing.T) {
 	layers := map[string]*Candy{
 		"svc": {
 			Name:    "svc",
-			tasks:   []Task{{Cmd: "true"}},
+			tasks:   []Op{{Command: "true"}},
 			aliases: []AliasYAML{{Name: "svc-cli", Command: "svc-cli-bin"}},
 		},
 	}
@@ -160,7 +160,7 @@ func TestCollectImageAliasesImageOverridesCandy(t *testing.T) {
 	layers := map[string]*Candy{
 		"svc": {
 			Name:    "svc",
-			tasks:   []Task{{Cmd: "true"}},
+			tasks:   []Op{{Command: "true"}},
 			aliases: []AliasYAML{{Name: "svc-cli", Command: "svc-cli-bin"}},
 		},
 	}
@@ -190,7 +190,7 @@ func TestCollectImageAliasesDefaultCommand(t *testing.T) {
 	layers := map[string]*Candy{
 		"svc": {
 			Name:  "svc",
-			tasks: []Task{{Cmd: "true"}},
+			tasks: []Op{{Command: "true"}},
 		},
 	}
 

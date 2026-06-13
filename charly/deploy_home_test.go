@@ -68,14 +68,14 @@ func TestCompileShellHookStepDefersHome(t *testing.T) {
 }
 
 // D1: ResolveHome substitutes the token in every home-bearing field but leaves
-// TaskStep cmd bodies alone (those shell-expand $HOME at runtime as the deploy
+// OpStep cmd bodies alone (those shell-expand $HOME at runtime as the deploy
 // user, already correct on every venue). Idempotent.
 func TestResolveHomeSubstitutesAcrossSteps(t *testing.T) {
 	plan := &InstallPlan{Steps: []InstallStep{
 		&ShellHookStep{EnvVars: map[string]string{"P": "{{.Home}}/.npm-global"}, PathAdd: []string{"{{.Home}}/bin"}},
 		&ShellSnippetStep{Snippet: "export X={{.Home}}/y", Destination: "{{.Home}}/.bashrc", PathAppend: []string{"{{.Home}}/bin"}},
 		&FileStep{Dest: "{{.Home}}/.config/foo"},
-		&TaskStep{Task: &Task{Cmd: "echo {{.Home}}", Copy: "wrapper"}, To: "{{.Home}}/.local/bin/wrapper"},
+		&OpStep{Op: &Op{Command: "echo {{.Home}}", Copy: "wrapper"}, To: "{{.Home}}/.local/bin/wrapper"},
 	}}
 	plan.ResolveHome("/home/cachy")
 
@@ -91,15 +91,15 @@ func TestResolveHomeSubstitutesAcrossSteps(t *testing.T) {
 	if fs.Dest != "/home/cachy/.config/foo" {
 		t.Errorf("FileStep.Dest = %q", fs.Dest)
 	}
-	ts := plan.Steps[3].(*TaskStep)
-	if ts.Task.Cmd != "echo {{.Home}}" {
-		t.Errorf("TaskStep.Cmd should be untouched (runtime $HOME), got %q", ts.Task.Cmd)
+	ts := plan.Steps[3].(*OpStep)
+	if ts.Op.Command != "echo {{.Home}}" {
+		t.Errorf("OpStep.Op.Command should be untouched (runtime $HOME), got %q", ts.Op.Command)
 	}
 	// The copy/download dest IS resolved — it's the PutFile target (single-quoted
 	// under sudo, so it can't shell-expand). A literal "${HOME}" dest would make
 	// PutFile create a "/home/cachy/${HOME}/..." dir under sudo (HOME=/root).
 	if ts.To != "/home/cachy/.local/bin/wrapper" {
-		t.Errorf("TaskStep.To (copy dest) = %q, want /home/cachy/.local/bin/wrapper", ts.To)
+		t.Errorf("OpStep.To (copy dest) = %q, want /home/cachy/.local/bin/wrapper", ts.To)
 	}
 
 	// Idempotent: a second call (token already gone) is a no-op.

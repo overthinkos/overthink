@@ -31,7 +31,7 @@ func TestPruneImagesByRetention(t *testing.T) {
 			img("bbb", "ghcr/foo:2026.001.0200", "foo", "2026.001.0200"), // middle foo (mark in-use)
 			img("ccc", "ghcr/foo:2026.001.0300", "foo", "2026.001.0300"), // newest foo (kept)
 			img("ddd", "ghcr/bar:2026.001.0100", "bar", "2026.001.0100"), // sole bar (kept)
-			{ID: "eee", Names: []string{"docker.io/other:latest"}}, // no charly label → ignored
+			{ID: "eee", Names: []string{"docker.io/other:latest"}},       // no charly label → ignored
 		}, nil
 	}
 	// bbb is referenced by a container → must be skipped.

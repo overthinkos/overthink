@@ -48,9 +48,8 @@ type AndroidSpec struct {
 	Device   string `yaml:"device,omitempty"`    // e.g. "pixel_9a"
 	ApiLevel int    `yaml:"api_level,omitempty"` // e.g. 36
 
-	// --- Target-specific tests (parity with K8sSpec.Eval/DeployEval) ---
-	Eval       []Check `yaml:"eval,omitempty"`
-	DeployEval []Check `yaml:"deploy_eval,omitempty"`
+	// --- Target-specific acceptance scenarios (parity with K8sSpec) ---
+	Scenario []Scenario `yaml:"scenario,omitempty"`
 }
 
 // AndroidAdbEndpoint addresses a remote/physical device's adb server.

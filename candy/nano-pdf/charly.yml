@@ -11,37 +11,42 @@ candy:
             importable, so it is verifiable by the script's existence, the installed
             distribution version it reports, and the CLI's own --help usage banner.
         tag: [working]
-        scenario:
-            - name: console-script-installed
-              step:
-                - then: the nano-pdf console script exists in the default pixi environment
-                  file: ${HOME}/.pixi/envs/default/bin/nano-pdf
-                  exists: true
-                - then: the nano-pdf distribution is installed at version 0.2.1
-                  command: ${HOME}/.pixi/envs/default/bin/python -c "import importlib.metadata as m; print(m.version('nano-pdf'))"
-                  exit_status: 0
-                  stdout:
-                    - contains: "0.2.1"
-            - name: cli-reports-usage
-              step:
-                - then: the Typer CLI runs and prints its usage banner without error
-                  command: ${HOME}/.pixi/envs/default/bin/nano-pdf --help
-                  exit_status: 0
-                  stdout:
-                    - contains: "Usage"
     require:
         - python
-    eval:
-        - id: nano-pdf-binary
-          file: ${HOME}/.pixi/envs/default/bin/nano-pdf
-          exists: true
-        - id: nano-pdf-installed
-          command: ${HOME}/.pixi/envs/default/bin/python -c "import importlib.metadata as m; print(m.version('nano-pdf'))"
-          exit_status: 0
-          stdout:
-            - contains: "0.2.1"
-        - id: nano-pdf-cli-help
-          command: ${HOME}/.pixi/envs/default/bin/nano-pdf --help
-          exit_status: 0
-          stdout:
-            - contains: "Usage"
+    scenario:
+        - name: console-script-installed
+          step:
+            - then: the nano-pdf console script exists in the default pixi environment
+              file: ${HOME}/.pixi/envs/default/bin/nano-pdf
+              exists: true
+            - then: the nano-pdf distribution is installed at version 0.2.1
+              command: ${HOME}/.pixi/envs/default/bin/python -c "import importlib.metadata as m; print(m.version('nano-pdf'))"
+              exit_status: 0
+              stdout:
+                - contains: "0.2.1"
+        - name: cli-reports-usage
+          step:
+            - then: the Typer CLI runs and prints its usage banner without error
+              command: ${HOME}/.pixi/envs/default/bin/nano-pdf --help
+              exit_status: 0
+              stdout:
+                - contains: "Usage"
+        - name: nano-pdf-binary
+          step:
+            - id: nano-pdf-binary
+              file: ${HOME}/.pixi/envs/default/bin/nano-pdf
+              exists: true
+        - name: nano-pdf-installed
+          step:
+            - id: nano-pdf-installed
+              command: ${HOME}/.pixi/envs/default/bin/python -c "import importlib.metadata as m; print(m.version('nano-pdf'))"
+              exit_status: 0
+              stdout:
+                - contains: "0.2.1"
+        - name: nano-pdf-cli-help
+          step:
+            - id: nano-pdf-cli-help
+              command: ${HOME}/.pixi/envs/default/bin/nano-pdf --help
+              exit_status: 0
+              stdout:
+                - contains: "Usage"

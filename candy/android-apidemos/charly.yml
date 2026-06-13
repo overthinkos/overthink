@@ -14,55 +14,62 @@ candy:
             apk: step runs ONLY on a `target: android` deploy, so the observable
             effect is the package present on the booted device (deploy-scope adb).
         tag: [testing]
-        scenario:
-            # Deploy-scope: the SOLE observable effect of this candy — after a
-            # `target: android` deploy applies the apk: list, the ApiDemos package
-            # is present on the device. Fails (no such package) if the committed
-            # APK was never pushed/installed. `eventually:` re-polls because the
-            # device install lands right before eval-live (mirrors the
-            # android-emulator-layer apk-net-apidemos-present guard).
-            - name: apidemos-installed-on-device
-              step:
-                - then: the ApiDemos package is installed on the device after the target:android deploy
-                  scope: deploy
-                  adb: shell
-                  arg: [pm, list, packages, io.appium.android.apis]
-                  stdout:
-                    - contains: "io.appium.android.apis"
-                  eventually: 120s
-                  retry_interval: 5s
-            # Deploy-scope: the installed package carries a launchable activity —
-            # proof the committed APK is a real app (its manifest parsed), not a
-            # bare package id. resolve-activity --brief prints "<pkg>/<activity>".
-            - name: apidemos-exposes-launcher-activity
-              step:
-                - then: the installed ApiDemos package resolves a launchable activity (a real APK manifest, not a stub)
-                  scope: deploy
-                  adb: shell
-                  arg: [cmd, package, resolve-activity, --brief, io.appium.android.apis]
-                  stdout:
-                    - contains: "io.appium.android.apis/"
     apk:
         # Committed local APK (project-root-relative) → goadb push + pm install.
         # No source: — committed files don't use apkeep.
         - apk: tests/data/ApiDemos-debug.apk
-    eval:
-        # The candy's behaviour is fully device-scoped (it installs onto a
-        # kind:android device, never into an image), so every real check is
-        # deploy-scope adb against the booted device — the same verb the
-        # android-emulator-layer regression guard uses. A build-scope file:/
-        # package: check would be fake here (no container holds the APK).
-        - id: android-apidemos-installed
-          scope: deploy
-          adb: shell
-          arg: [pm, list, packages, io.appium.android.apis]
-          stdout:
-            - contains: "io.appium.android.apis"
-          eventually: 120s
-          retry_interval: 5s
-        - id: android-apidemos-launcher-activity
-          scope: deploy
-          adb: shell
-          arg: [cmd, package, resolve-activity, --brief, io.appium.android.apis]
-          stdout:
-            - contains: "io.appium.android.apis/"
+    scenario:
+        # Deploy-scope: the SOLE observable effect of this candy — after a
+        # `target: android` deploy applies the apk: list, the ApiDemos package
+        # is present on the device. Fails (no such package) if the committed
+        # APK was never pushed/installed. `eventually:` re-polls because the
+        # device install lands right before eval-live (mirrors the
+        # android-emulator-layer apk-net-apidemos-present guard).
+        - name: apidemos-installed-on-device
+          step:
+            - then: the ApiDemos package is installed on the device after the target:android deploy
+              adb: shell
+              arg: [pm, list, packages, io.appium.android.apis]
+              stdout:
+                - contains: "io.appium.android.apis"
+              eventually: 120s
+              retry_interval: 5s
+              context:
+                - runtime
+        # Deploy-scope: the installed package carries a launchable activity —
+        # proof the committed APK is a real app (its manifest parsed), not a
+        # bare package id. resolve-activity --brief prints "<pkg>/<activity>".
+        - name: apidemos-exposes-launcher-activity
+          step:
+            - then: the installed ApiDemos package resolves a launchable activity (a real APK manifest, not a stub)
+              adb: shell
+              arg: [cmd, package, resolve-activity, --brief, io.appium.android.apis]
+              stdout:
+                - contains: "io.appium.android.apis/"
+              context:
+                - runtime
+        - name: android-apidemos-installed
+          step:
+            # The candy's behaviour is fully device-scoped (it installs onto a
+            # kind:android device, never into an image), so every real check is
+            # deploy-scope adb against the booted device — the same verb the
+            # android-emulator-layer regression guard uses. A build-scope file:/
+            # package: check would be fake here (no container holds the APK).
+            - id: android-apidemos-installed
+              adb: shell
+              arg: [pm, list, packages, io.appium.android.apis]
+              stdout:
+                - contains: "io.appium.android.apis"
+              eventually: 120s
+              retry_interval: 5s
+              context:
+                - runtime
+        - name: android-apidemos-launcher-activity
+          step:
+            - id: android-apidemos-launcher-activity
+              adb: shell
+              arg: [cmd, package, resolve-activity, --brief, io.appium.android.apis]
+              stdout:
+                - contains: "io.appium.android.apis/"
+              context:
+                - runtime

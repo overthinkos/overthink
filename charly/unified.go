@@ -2777,7 +2777,7 @@ func populateCandyFromYAML(layer *Candy, ly *CandyYAML) {
 	layer.security = ly.Security
 	layer.libvirt = ly.Libvirt
 	layer.hooks = ly.Hook
-	layer.tests = ly.Eval
+	layer.scenario = ly.Scenario
 	layer.artifacts = ly.Artifact
 	layer.capabilities = ly.Capability
 	layer.requiresCapabilities = ly.RequiresCapability

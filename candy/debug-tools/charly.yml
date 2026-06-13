@@ -13,43 +13,6 @@ candy:
             Every headline binary lands at a fixed path, so its presence is
             directly verifiable. rpm/deb/pac sections cover Fedora/Debian/Ubuntu/Arch.
         tag: [working]
-        scenario:
-            # Deterministic acceptance: each step embeds a `file:`/`exists:`
-            # check verb, so the scenario FAILS if the candy installed nothing.
-            # The paths below match the eval: block's verified locations.
-            - name: network-probes-installed
-              step:
-                - then: the DNS lookup tool dig is present for probing service discovery
-                  file: /usr/bin/dig
-                  exists: true
-                - then: the socket-statistics tool ss is present for inspecting listening ports
-                  file: /usr/sbin/ss
-                  exists: true
-                - then: tcpdump is present for capturing traffic between services
-                  file: /usr/sbin/tcpdump
-                  exists: true
-            - name: process-inspection-installed
-              step:
-                - then: the process-table tool ps is available to list running processes
-                  file: /usr/bin/ps
-                  exists: true
-                - then: the interactive process monitor htop is available
-                  file: /usr/bin/htop
-                  exists: true
-                - then: the syscall tracer strace is available to debug a stuck process
-                  file: /usr/bin/strace
-                  exists: true
-            - name: file-and-session-helpers-installed
-              step:
-                - then: an editor (vim) is present so config files can be inspected in place
-                  file: /usr/bin/vim
-                  exists: true
-                - then: tmux is present so a long-running probe survives a dropped exec session
-                  file: /usr/bin/tmux
-                  exists: true
-                - then: lsof is present to report which process holds an open file or socket
-                  file: /usr/bin/lsof
-                  exists: true
     # Distro-specific package lists. Tool names diverge across distros
     # (e.g. nmap-ncat vs ncat vs gnu-netcat) so per-distro lists are the
     # honest authoring path — no synthetic "common" package list that
@@ -167,83 +130,163 @@ candy:
                 - nano
                 - tmux
                 - rsync
-    eval:
-        # Build-scope: spot-check the headline binaries from each category.
-        # If a future package rename breaks one of these, the test fails
-        # loudly at build time instead of surprising operators in production.
-        - id: ps-binary
-          file: /usr/bin/ps
-          exists: true
-        - id: ss-binary
-          file: /usr/sbin/ss
-          exists: true
-        - id: lsof-binary
-          file: /usr/bin/lsof
-          exists: true
-        - id: ping-binary
-          command: command -v ping
-          exit_status: 0
-        - id: dig-binary
-          file: /usr/bin/dig
-          exists: true
-        - id: nc-binary
-          command: command -v nc
-          exit_status: 0
-        - id: tcpdump-binary
-          file: /usr/sbin/tcpdump
-          exists: true
-        - id: htop-binary
-          file: /usr/bin/htop
-          exists: true
-        - id: strace-binary
-          file: /usr/bin/strace
-          exists: true
-        - id: vim-binary
-          file: /usr/bin/vim
-          exists: true
-        - id: nano-binary
-          file: /usr/bin/nano
-          exists: true
-        - id: tmux-binary
-          file: /usr/bin/tmux
-          exists: true
-        - id: tree-binary
-          file: /usr/bin/tree
-          exists: true
-        - id: wget-binary
-          file: /usr/bin/wget
-          exists: true
-        - id: file-binary
-          file: /usr/bin/file
-          exists: true
-        - id: rsync-binary
-          file: /usr/bin/rsync
-          exists: true
-        # Package-identity spot-checks complement the binary-path checks above:
-        # a file check catches a moved binary, a package check catches a renamed
-        # or absent package. Names below are uniform across all four distros;
-        # the process-tools package diverges (procps-ng vs procps), so it uses
-        # package_map to resolve the right name per distro tag.
-        - id: procps-package
-          package: procps-ng
-          package_map:
-            fedora: procps-ng
-            arch: procps-ng
-            debian: procps
-            ubuntu: procps
-          installed: true
-        - id: htop-package
-          package: htop
-          installed: true
-        - id: strace-package
-          package: strace
-          installed: true
-        - id: tcpdump-package
-          package: tcpdump
-          installed: true
-        - id: tmux-package
-          package: tmux
-          installed: true
-        - id: lsof-package
-          package: lsof
-          installed: true
+    scenario:
+        # Deterministic acceptance: each step embeds a `file:`/`exists:`
+        # check verb, so the scenario FAILS if the candy installed nothing.
+        # The paths below match the eval: block's verified locations.
+        - name: network-probes-installed
+          step:
+            - then: the DNS lookup tool dig is present for probing service discovery
+              file: /usr/bin/dig
+              exists: true
+            - then: the socket-statistics tool ss is present for inspecting listening ports
+              file: /usr/sbin/ss
+              exists: true
+            - then: tcpdump is present for capturing traffic between services
+              file: /usr/sbin/tcpdump
+              exists: true
+        - name: process-inspection-installed
+          step:
+            - then: the process-table tool ps is available to list running processes
+              file: /usr/bin/ps
+              exists: true
+            - then: the interactive process monitor htop is available
+              file: /usr/bin/htop
+              exists: true
+            - then: the syscall tracer strace is available to debug a stuck process
+              file: /usr/bin/strace
+              exists: true
+        - name: file-and-session-helpers-installed
+          step:
+            - then: an editor (vim) is present so config files can be inspected in place
+              file: /usr/bin/vim
+              exists: true
+            - then: tmux is present so a long-running probe survives a dropped exec session
+              file: /usr/bin/tmux
+              exists: true
+            - then: lsof is present to report which process holds an open file or socket
+              file: /usr/bin/lsof
+              exists: true
+        - name: ps-binary
+          step:
+            # Build-scope: spot-check the headline binaries from each category.
+            # If a future package rename breaks one of these, the test fails
+            # loudly at build time instead of surprising operators in production.
+            - id: ps-binary
+              file: /usr/bin/ps
+              exists: true
+        - name: ss-binary
+          step:
+            - id: ss-binary
+              file: /usr/sbin/ss
+              exists: true
+        - name: lsof-binary
+          step:
+            - id: lsof-binary
+              file: /usr/bin/lsof
+              exists: true
+        - name: ping-binary
+          step:
+            - id: ping-binary
+              command: command -v ping
+              exit_status: 0
+        - name: dig-binary
+          step:
+            - id: dig-binary
+              file: /usr/bin/dig
+              exists: true
+        - name: nc-binary
+          step:
+            - id: nc-binary
+              command: command -v nc
+              exit_status: 0
+        - name: tcpdump-binary
+          step:
+            - id: tcpdump-binary
+              file: /usr/sbin/tcpdump
+              exists: true
+        - name: htop-binary
+          step:
+            - id: htop-binary
+              file: /usr/bin/htop
+              exists: true
+        - name: strace-binary
+          step:
+            - id: strace-binary
+              file: /usr/bin/strace
+              exists: true
+        - name: vim-binary
+          step:
+            - id: vim-binary
+              file: /usr/bin/vim
+              exists: true
+        - name: nano-binary
+          step:
+            - id: nano-binary
+              file: /usr/bin/nano
+              exists: true
+        - name: tmux-binary
+          step:
+            - id: tmux-binary
+              file: /usr/bin/tmux
+              exists: true
+        - name: tree-binary
+          step:
+            - id: tree-binary
+              file: /usr/bin/tree
+              exists: true
+        - name: wget-binary
+          step:
+            - id: wget-binary
+              file: /usr/bin/wget
+              exists: true
+        - name: file-binary
+          step:
+            - id: file-binary
+              file: /usr/bin/file
+              exists: true
+        - name: rsync-binary
+          step:
+            - id: rsync-binary
+              file: /usr/bin/rsync
+              exists: true
+        - name: procps-package
+          step:
+            # Package-identity spot-checks complement the binary-path checks above:
+            # a file check catches a moved binary, a package check catches a renamed
+            # or absent package. Names below are uniform across all four distros;
+            # the process-tools package diverges (procps-ng vs procps), so it uses
+            # package_map to resolve the right name per distro tag.
+            - id: procps-package
+              package: procps-ng
+              package_map:
+                fedora: procps-ng
+                arch: procps-ng
+                debian: procps
+                ubuntu: procps
+              installed: true
+        - name: htop-package
+          step:
+            - id: htop-package
+              package: htop
+              installed: true
+        - name: strace-package
+          step:
+            - id: strace-package
+              package: strace
+              installed: true
+        - name: tcpdump-package
+          step:
+            - id: tcpdump-package
+              package: tcpdump
+              installed: true
+        - name: tmux-package
+          step:
+            - id: tmux-package
+              package: tmux
+              installed: true
+        - name: lsof-package
+          step:
+            - id: lsof-package
+              package: lsof
+              installed: true

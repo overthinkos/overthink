@@ -806,7 +806,7 @@ func resolveIngressPort(opts K8sGenerateOpts, portNameOrNumber string) int {
 // can omit the probe entirely (kubectl tolerates a missing probe; an
 // empty map would be rendered as `livenessProbe: {}` and rejected by
 // the apiserver's schema).
-func checkToProbe(c *Check) map[string]any {
+func checkToProbe(c *Op) map[string]any {
 	if c == nil {
 		return nil
 	}

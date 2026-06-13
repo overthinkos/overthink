@@ -14,29 +14,6 @@ candy:
             chrome-wrapper target it references, and the composed Chrome + Sway
             binaries the autostart depends on.
         tag: [working]
-        scenario:
-            - name: sway-autostarts-chrome-via-dropin
-              step:
-                - then: the chrome-sway autostart snippet is installed in sway's config.d drop-in dir
-                  file: ${HOME}/.config/sway/config.d/chrome-sway.conf
-                  exists: true
-                  mode: "0644"
-                - then: the snippet tells sway to exec the chrome-wrapper launcher on startup
-                  file: ${HOME}/.config/sway/config.d/chrome-sway.conf
-                  contains:
-                    - contains: "exec chrome-wrapper"
-                - then: the chrome-wrapper launcher the snippet execs is installed and executable
-                  file: ${HOME}/.local/bin/chrome-wrapper
-                  exists: true
-                  mode: "0755"
-            - name: browser-and-compositor-composed
-              step:
-                - then: Google Chrome is installed for the compositor to launch
-                  file: /usr/bin/google-chrome-stable
-                  exists: true
-                - then: the sway compositor that reads the config.d drop-in is installed
-                  file: /usr/bin/sway
-                  exists: true
     require:
         - sway
     candy:
@@ -44,27 +21,59 @@ candy:
         - chrome-cdp
     task:
         - mkdir: "${HOME}/.config/sway/config.d"
-          user: "${USER}"
+          run_as: "${USER}"
         - copy: chrome-sway.conf
           to: "${HOME}/.config/sway/config.d/chrome-sway.conf"
           mode: "0644"
-          user: "${USER}"
-    eval:
-        - id: chrome-sway-config
-          file: ${HOME}/.config/sway/config.d/chrome-sway.conf
-          exists: true
-          mode: "0644"
-        - id: chrome-sway-autostart-directive
-          file: ${HOME}/.config/sway/config.d/chrome-sway.conf
-          contains:
-            - contains: "exec chrome-wrapper"
-        - id: chrome-sway-wrapper-target
-          file: ${HOME}/.local/bin/chrome-wrapper
-          exists: true
-          mode: "0755"
-        - id: chrome-sway-chrome-binary
-          file: /usr/bin/google-chrome-stable
-          exists: true
-        - id: chrome-sway-sway-binary
-          file: /usr/bin/sway
-          exists: true
+          run_as: "${USER}"
+    scenario:
+        - name: sway-autostarts-chrome-via-dropin
+          step:
+            - then: the chrome-sway autostart snippet is installed in sway's config.d drop-in dir
+              file: ${HOME}/.config/sway/config.d/chrome-sway.conf
+              exists: true
+              mode: "0644"
+            - then: the snippet tells sway to exec the chrome-wrapper launcher on startup
+              file: ${HOME}/.config/sway/config.d/chrome-sway.conf
+              contains:
+                - contains: "exec chrome-wrapper"
+            - then: the chrome-wrapper launcher the snippet execs is installed and executable
+              file: ${HOME}/.local/bin/chrome-wrapper
+              exists: true
+              mode: "0755"
+        - name: browser-and-compositor-composed
+          step:
+            - then: Google Chrome is installed for the compositor to launch
+              file: /usr/bin/google-chrome-stable
+              exists: true
+            - then: the sway compositor that reads the config.d drop-in is installed
+              file: /usr/bin/sway
+              exists: true
+        - name: chrome-sway-config
+          step:
+            - id: chrome-sway-config
+              file: ${HOME}/.config/sway/config.d/chrome-sway.conf
+              exists: true
+              mode: "0644"
+        - name: chrome-sway-autostart-directive
+          step:
+            - id: chrome-sway-autostart-directive
+              file: ${HOME}/.config/sway/config.d/chrome-sway.conf
+              contains:
+                - contains: "exec chrome-wrapper"
+        - name: chrome-sway-wrapper-target
+          step:
+            - id: chrome-sway-wrapper-target
+              file: ${HOME}/.local/bin/chrome-wrapper
+              exists: true
+              mode: "0755"
+        - name: chrome-sway-chrome-binary
+          step:
+            - id: chrome-sway-chrome-binary
+              file: /usr/bin/google-chrome-stable
+              exists: true
+        - name: chrome-sway-sway-binary
+          step:
+            - id: chrome-sway-sway-binary
+              file: /usr/bin/sway
+              exists: true

@@ -10,19 +10,6 @@ candy:
             candies and the fedora/arch builder images. Verifiable by
             asserting the binary landed on PATH and reports its version.
         tag: [working]
-        scenario:
-            - name: pixi-binary-installed
-              step:
-                - then: the pixi binary is installed at /usr/local/bin/pixi
-                  file: /usr/local/bin/pixi
-                  exists: true
-            - name: pixi-reports-its-version
-              step:
-                - then: running pixi --version exits cleanly and prints a version string
-                  command: /usr/local/bin/pixi --version
-                  exit_status: 0
-                  stdout:
-                    - matches: "[0-9]+\\.[0-9]+"
     # env: + path_append: moved to build.yml's pixi BUILDER definition
     # in 2026-04-29 so images that consume pixi via pixi.toml-triggered
     # builds (and don't list `pixi` as a top-level layer for sibling-
@@ -34,7 +21,7 @@ candy:
         - download: "https://github.com/prefix-dev/pixi/releases/latest/download/pixi-${BUILD_ARCH}-unknown-linux-musl.tar.gz"
           extract: tar.gz
           to: /usr/local/bin
-          user: root
+          run_as: root
     # Shell-init: put ~/.pixi/bin (where pixi installs per-user environments
     # and global tools) on the interactive shell PATH. Container images get
     # this via build.yml runtime_env on the pixi BUILDER definition; this
@@ -43,10 +30,26 @@ candy:
     shell:
         path_append:
             - "~/.pixi/bin"
-    eval:
-        - id: pixi-binary
-          file: /usr/local/bin/pixi
-          exists: true
-        - id: pixi-version
-          command: /usr/local/bin/pixi --version
-          exit_status: 0
+    scenario:
+        - name: pixi-binary-installed
+          step:
+            - then: the pixi binary is installed at /usr/local/bin/pixi
+              file: /usr/local/bin/pixi
+              exists: true
+        - name: pixi-reports-its-version
+          step:
+            - then: running pixi --version exits cleanly and prints a version string
+              command: /usr/local/bin/pixi --version
+              exit_status: 0
+              stdout:
+                - matches: "[0-9]+\\.[0-9]+"
+        - name: pixi-binary
+          step:
+            - id: pixi-binary
+              file: /usr/local/bin/pixi
+              exists: true
+        - name: pixi-version
+          step:
+            - id: pixi-version
+              command: /usr/local/bin/pixi --version
+              exit_status: 0

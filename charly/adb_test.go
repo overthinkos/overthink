@@ -28,7 +28,7 @@ func TestAdbStateString(t *testing.T) {
 func TestPosShellArgs_PrefixesDoubleDash(t *testing.T) {
 	// Shell args must be prefixed with `--` so flag-like tokens (-l, -p,
 	// --color) don't get claimed by Kong as flags of `charly eval adb shell`.
-	c := &Check{Args: []string{"getprop", "ro.build.version.release"}}
+	c := &Op{Args: []string{"getprop", "ro.build.version.release"}}
 	got := posShellArgs(c)
 	want := []string{"--", "getprop", "ro.build.version.release"}
 	if !reflect.DeepEqual(got, want) {
@@ -37,7 +37,7 @@ func TestPosShellArgs_PrefixesDoubleDash(t *testing.T) {
 }
 
 func TestPosApkFlag(t *testing.T) {
-	c := &Check{Apk: "/workspace/app.apk"}
+	c := &Op{Apk: "/workspace/app.apk"}
 	got := posApkFlag(c)
 	want := []string{"--apk", "/workspace/app.apk"}
 	if !reflect.DeepEqual(got, want) {
@@ -46,7 +46,7 @@ func TestPosApkFlag(t *testing.T) {
 }
 
 func TestPosPropertyArg(t *testing.T) {
-	c := &Check{Property: "sys.boot_completed"}
+	c := &Op{Property: "sys.boot_completed"}
 	got := posPropertyArg(c)
 	want := []string{"sys.boot_completed"}
 	if !reflect.DeepEqual(got, want) {
@@ -55,20 +55,20 @@ func TestPosPropertyArg(t *testing.T) {
 }
 
 func TestPosPackageArg(t *testing.T) {
-	c := &Check{Args: []string{"com.example.app"}}
+	c := &Op{Args: []string{"com.example.app"}}
 	got := posPackageArg(c)
 	want := []string{"com.example.app"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("posPackageArg = %v, want %v", got, want)
 	}
 	// Empty Args returns nil — caller (validator) catches that earlier.
-	if got := posPackageArg(&Check{}); got != nil {
+	if got := posPackageArg(&Op{}); got != nil {
 		t.Errorf("posPackageArg(empty) = %v, want nil", got)
 	}
 }
 
 func TestPosArtifactFlag(t *testing.T) {
-	c := &Check{Artifact: "/tmp/x.png"}
+	c := &Op{Artifact: "/tmp/x.png"}
 	got := posArtifactFlag(c)
 	want := []string{"--artifact", "/tmp/x.png"}
 	if !reflect.DeepEqual(got, want) {
@@ -78,17 +78,17 @@ func TestPosArtifactFlag(t *testing.T) {
 
 func TestPosLogcatTail(t *testing.T) {
 	// All optional — empty Check → no args.
-	if got := posLogcatTail(&Check{}); got != nil {
+	if got := posLogcatTail(&Op{}); got != nil {
 		t.Errorf("posLogcatTail(empty) = %v, want nil", got)
 	}
 	// Lines only.
-	got := posLogcatTail(&Check{Amount: 100})
+	got := posLogcatTail(&Op{Amount: 100})
 	want := []string{"--lines", "100"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("posLogcatTail lines = %v, want %v", got, want)
 	}
 	// Both lines + filter.
-	got = posLogcatTail(&Check{Amount: 50, Query: "MyApp:I *:S"})
+	got = posLogcatTail(&Op{Amount: 50, Query: "MyApp:I *:S"})
 	want = []string{"--lines", "50", "--filter", "MyApp:I *:S"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("posLogcatTail both = %v, want %v", got, want)
@@ -96,10 +96,10 @@ func TestPosLogcatTail(t *testing.T) {
 }
 
 func TestPosWaitForDevice(t *testing.T) {
-	if got := posWaitForDevice(&Check{}); got != nil {
+	if got := posWaitForDevice(&Op{}); got != nil {
 		t.Errorf("posWaitForDevice(empty) = %v, want nil (default applied subprocess-side)", got)
 	}
-	got := posWaitForDevice(&Check{Timeout: "120s"})
+	got := posWaitForDevice(&Op{Timeout: "120s"})
 	want := []string{"--timeout", "120s"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("posWaitForDevice = %v, want %v", got, want)
@@ -128,13 +128,13 @@ func TestAdbMethods_AllowlistShape(t *testing.T) {
 func TestPosInstallApp(t *testing.T) {
 	cases := []struct {
 		name string
-		c    Check
+		c    Op
 		want []string
 	}{
-		{"package-only", Check{AppId: "org.fdroid.fdroid"}, []string{"--package", "org.fdroid.fdroid"}},
-		{"with-source-arch", Check{AppId: "org.fdroid.fdroid", Source: "apk-pure", Arch: "x86_64"},
+		{"package-only", Op{AppId: "org.fdroid.fdroid"}, []string{"--package", "org.fdroid.fdroid"}},
+		{"with-source-arch", Op{AppId: "org.fdroid.fdroid", Source: "apk-pure", Arch: "x86_64"},
 			[]string{"--package", "org.fdroid.fdroid", "--source", "apk-pure", "--arch", "x86_64"}},
-		{"google-play-version", Check{AppId: "com.example", Source: "google-play", AppVersion: "1.2.3"},
+		{"google-play-version", Op{AppId: "com.example", Source: "google-play", AppVersion: "1.2.3"},
 			[]string{"--package", "com.example", "--source", "google-play", "--app-version", "1.2.3"}},
 	}
 	for _, tc := range cases {
@@ -150,13 +150,13 @@ func TestPosInstallApp(t *testing.T) {
 func TestValidateCharlyVerb_InstallAppRequiresAppId(t *testing.T) {
 	// Missing app_id ⇒ validation error.
 	errs := &ValidationError{}
-	validateCharlyVerb(&Check{Adb: "install-app"}, "adb", "loc", "deploy", errs)
+	validateCharlyVerb(&Op{Adb: "install-app", Context: []string{"runtime"}}, "adb", "loc", errs)
 	if !errs.HasErrors() {
 		t.Error("install-app without app_id should fail validation")
 	}
 	// With app_id ⇒ no error.
 	errs2 := &ValidationError{}
-	validateCharlyVerb(&Check{Adb: "install-app", AppId: "org.fdroid.fdroid"}, "adb", "loc", "deploy", errs2)
+	validateCharlyVerb(&Op{Adb: "install-app", AppId: "org.fdroid.fdroid", Context: []string{"runtime"}}, "adb", "loc", errs2)
 	if errs2.HasErrors() {
 		t.Errorf("install-app with app_id should pass, got: %v", errs2.Errors)
 	}

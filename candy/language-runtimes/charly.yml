@@ -12,34 +12,6 @@ candy:
             (Go and Node.js are installed too but their acceptance is owned by the
             golang/nodejs candies — not duplicated here, per R3.)
         tag: [working]
-        scenario:
-            # ADE acceptance scenarios baked into ai.opencharly.description. Every
-            # step embeds a check verb (file/command) → DETERMINISTIC, runs under
-            # `charly box feature run` at build scope. They mirror the eval: list.
-            - name: dotnet-sdk-reachable
-              step:
-                - then: the .NET 9 SDK binary is installed at /usr/bin/dotnet
-                  file: /usr/bin/dotnet
-                  exists: true
-                - then: dotnet reports its SDK version and exits cleanly
-                  command: /usr/bin/dotnet --version
-                  exit_status: 0
-            - name: php-cli-reachable
-              step:
-                - then: the PHP CLI binary is installed at /usr/bin/php
-                  file: /usr/bin/php
-                  exists: true
-                - then: php prints its version banner and exits cleanly
-                  command: /usr/bin/php --version
-                  exit_status: 0
-            - name: system-python3-reachable
-              step:
-                - then: the system Python 3 interpreter is at /usr/bin/python3 (the RPM one, not a pixi-env path)
-                  file: /usr/bin/python3
-                  exists: true
-                - then: python3 reports its version and exits cleanly
-                  command: /usr/bin/python3 --version
-                  exit_status: 0
     require:
         - nodejs
         - rust
@@ -104,7 +76,7 @@ candy:
         # The outer `command -v dotnet` guard makes the task idempotent across
         # tag-only rebuilds and skips Fedora/Arch where the package installed
         # dotnet already.
-        - cmd: |
+        - command: |
             if command -v dotnet >/dev/null 2>&1; then
               exit 0
             fi
@@ -122,23 +94,62 @@ candy:
             /tmp/dotnet-install.sh --channel 9.0 --install-dir /usr/share/dotnet
             ln -sf /usr/share/dotnet/dotnet /usr/bin/dotnet
             rm -f /tmp/dotnet-install.sh
-          user: root
-    eval:
-        - id: dotnet-binary
-          file: /usr/bin/dotnet
-          exists: true
-        - id: dotnet-version
-          command: /usr/bin/dotnet --version
-          exit_status: 0
-        - id: php-binary
-          file: /usr/bin/php
-          exists: true
-        - id: php-version
-          command: /usr/bin/php --version
-          exit_status: 0
-        - id: system-python3
-          file: /usr/bin/python3
-          exists: true
-        - id: system-python3-version
-          command: /usr/bin/python3 --version
-          exit_status: 0
+          run_as: root
+    scenario:
+        # ADE acceptance scenarios baked into ai.opencharly.description. Every
+        # step embeds a check verb (file/command) → DETERMINISTIC, runs under
+        # `charly box feature run` at build scope. They mirror the eval: list.
+        - name: dotnet-sdk-reachable
+          step:
+            - then: the .NET 9 SDK binary is installed at /usr/bin/dotnet
+              file: /usr/bin/dotnet
+              exists: true
+            - then: dotnet reports its SDK version and exits cleanly
+              command: /usr/bin/dotnet --version
+              exit_status: 0
+        - name: php-cli-reachable
+          step:
+            - then: the PHP CLI binary is installed at /usr/bin/php
+              file: /usr/bin/php
+              exists: true
+            - then: php prints its version banner and exits cleanly
+              command: /usr/bin/php --version
+              exit_status: 0
+        - name: system-python3-reachable
+          step:
+            - then: the system Python 3 interpreter is at /usr/bin/python3 (the RPM one, not a pixi-env path)
+              file: /usr/bin/python3
+              exists: true
+            - then: python3 reports its version and exits cleanly
+              command: /usr/bin/python3 --version
+              exit_status: 0
+        - name: dotnet-binary
+          step:
+            - id: dotnet-binary
+              file: /usr/bin/dotnet
+              exists: true
+        - name: dotnet-version
+          step:
+            - id: dotnet-version
+              command: /usr/bin/dotnet --version
+              exit_status: 0
+        - name: php-binary
+          step:
+            - id: php-binary
+              file: /usr/bin/php
+              exists: true
+        - name: php-version
+          step:
+            - id: php-version
+              command: /usr/bin/php --version
+              exit_status: 0
+        - name: system-python3
+          step:
+            - id: system-python3
+              file: /usr/bin/python3
+              exists: true
+        - name: system-python3-version
+          step:
+            - id: system-python3-version
+              command: /usr/bin/python3 --version
+              exit_status: 0

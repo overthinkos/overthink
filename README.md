@@ -126,8 +126,8 @@ is graded by an **agent** probing the live deployment. Author with
 `charly candy add-scenario`, run with `charly box feature run` /
 `charly eval feature run`, or let the `charly eval run <score>` AI loop drive it to
 green. The spec is the test, and agents both write it and grade it. Every
-candy MUST ship a full `description:` (≥1 scenario) AND a non-empty `eval:` —
-`charly box validate` hard-errors otherwise.
+candy MUST ship a non-empty `description.feature:` AND a `scenario:` list with
+≥1 deterministic `do: assert` step — `charly box validate` hard-errors otherwise.
 → [VISION.md](VISION.md) (why), CLAUDE.md "Agent Driven Evaluation (ADE)"
 (the rule), `/charly-eval:eval` (usage).
 
@@ -361,7 +361,8 @@ workdirs, and runs `podman build` (or `docker build` — switch with
 `charly settings set engine.build podman`). Like conching chocolate, the
 planner grinds every candy smooth — deduplicated, ordered, and
 cache-warmed — before it sets into a box. The emitted image carries
-OCI labels for every capability it claims: `ai.opencharly.eval`,
+OCI labels for every capability it claims: `ai.opencharly.description`
+(the baked Gherkin scenarios), `ai.opencharly.eval_level`,
 `ai.opencharly.init`, `ai.opencharly.version` (content-derived
 `EffectiveVersion`, stable across no-op rebuilds), `.ports`, etc.
 
@@ -509,11 +510,14 @@ binds host `SSH_AUTH_SOCK` / `GPG_AGENT_SOCK` into the container.
 > with the same DSL as production deploys.
 
 Tests are first-class. Every `charly.yml` (box + candy) /
-`charly.yml` can declare an `eval:` block of goss-style checks
-(files, packages, services, ports, processes, commands, HTTP, DNS,
-mounts, users, groups, kernel params, interfaces, matchers). Checks
-bake into a three-section OCI label
-(`ai.opencharly.eval` → `{candy, box, deploy}`) so any pulled
+`charly.yml` declares a top-level `scenario:` list whose steps are
+one unified `Op` vocabulary — verb × `do:` (`act`|`assert`|`instruct`)
+× `context:` — covering goss-style checks (files, packages, services,
+ports, processes, commands, HTTP, DNS, mounts, users, groups, kernel
+params, interfaces, matchers) as `do: assert`, configuration as
+`do: act`, and free-form agent instructions (`agent:`) as `do: instruct`.
+Scenarios bake into a three-section OCI label
+(`ai.opencharly.description` → `{candy, box, deploy}`) so any pulled
 box is self-testable without its source repo.
 
 Three execution modes:
@@ -546,7 +550,7 @@ pass/fail — the same disposable-bed verification, whether you run it
 or your agent does. → `/charly-internals:agents`.
 
 Eleven live-container probe verbs — authorable inline as
-declarative checks inside any `eval:` block (`cdp: eval`, `wl:
+`scenario:` steps (`cdp: eval`, `wl:
 screenshot`, `dbus: call`, `vnc: status`, `mcp: list-tools`, `adb:
 getprop`, `appium: click`, …):
 

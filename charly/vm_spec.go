@@ -56,14 +56,13 @@ type VmSpec struct {
 
 	Libvirt *LibvirtDomain `yaml:"libvirt,omitempty"`
 
-	// --- Target-specific tests (optional; default empty) ---
+	// --- Target-specific acceptance scenarios (optional) ---
 	//
-	// Candy tests and box tests propagate automatically via the existing
-	// composition machinery. These slots are ONLY for tests genuinely
-	// specific to the VM template (e.g., checking a cloud-init runcmd
-	// took effect, probing a libvirt device).
-	Eval       []Check `yaml:"eval,omitempty"`
-	DeployEval []Check `yaml:"deploy_eval,omitempty"`
+	// Candy and box scenarios propagate automatically via the composition
+	// machinery. This slot is ONLY for scenarios genuinely specific to the
+	// VM template (e.g., probing a cloud-init runcmd effect or a libvirt
+	// device).
+	Scenario []Scenario `yaml:"scenario,omitempty"`
 
 	// --- Declarative snapshot intent (optional; default empty) ---
 	//

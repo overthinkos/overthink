@@ -9,29 +9,32 @@ candy:
             ~/.npm-global/bin. The result is verifiable: the claude binary exists at
             that path and `claude --version` prints the Claude Code version banner.
         tag: [working]
-        scenario:
-            - name: cli-binary-installed
-              step:
-                - then: the claude binary is installed into the npm global bin directory
-                  file: ${HOME}/.npm-global/bin/claude
-                  exists: true
-            - name: cli-reports-claude-code-version
-              step:
-                - then: running claude --version exits cleanly and prints the Claude Code banner
-                  command: ${HOME}/.npm-global/bin/claude --version
-                  exit_status: 0
-                  stdout:
-                    - contains: "Claude Code"
     require:
         - nodejs
     path_append:
         - "~/.local/bin"
-    eval:
-        - id: claude-binary
-          file: ${HOME}/.npm-global/bin/claude
-          exists: true
-        - id: claude-version
-          command: ${HOME}/.npm-global/bin/claude --version
-          exit_status: 0
-          stdout:
-            - contains: "Claude Code"
+    scenario:
+        - name: cli-binary-installed
+          step:
+            - then: the claude binary is installed into the npm global bin directory
+              file: ${HOME}/.npm-global/bin/claude
+              exists: true
+        - name: cli-reports-claude-code-version
+          step:
+            - then: running claude --version exits cleanly and prints the Claude Code banner
+              command: ${HOME}/.npm-global/bin/claude --version
+              exit_status: 0
+              stdout:
+                - contains: "Claude Code"
+        - name: claude-binary
+          step:
+            - id: claude-binary
+              file: ${HOME}/.npm-global/bin/claude
+              exists: true
+        - name: claude-version
+          step:
+            - id: claude-version
+              command: ${HOME}/.npm-global/bin/claude --version
+              exit_status: 0
+              stdout:
+                - contains: "Claude Code"

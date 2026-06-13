@@ -176,7 +176,7 @@ func TestTaskStepScopeFromResolvedUser(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.user, func(t *testing.T) {
-			s := &TaskStep{ResolvedUser: tc.user, Task: &Task{Cmd: "true"}}
+			s := &OpStep{ResolvedUser: tc.user, Op: &Op{Command: "true"}}
 			if got := s.Scope(); got != tc.want {
 				t.Errorf("Scope() = %v, want %v", got, tc.want)
 			}
@@ -186,17 +186,17 @@ func TestTaskStepScopeFromResolvedUser(t *testing.T) {
 
 func TestTaskStepCmdGate(t *testing.T) {
 	// root cmd task is gated
-	s := &TaskStep{ResolvedUser: "root", Task: &Task{Cmd: "dnf install -y foo"}}
+	s := &OpStep{ResolvedUser: "root", Op: &Op{Command: "dnf install -y foo"}}
 	if got := s.RequiresGate(); got != GateAllowRootTasks {
 		t.Errorf("root cmd gate = %v, want allow-root-tasks", got)
 	}
 	// root structured task (mkdir) is NOT gated
-	s = &TaskStep{ResolvedUser: "root", Task: &Task{Mkdir: "/etc/foo"}}
+	s = &OpStep{ResolvedUser: "root", Op: &Op{Mkdir: "/etc/foo"}}
 	if got := s.RequiresGate(); got != GateNone {
 		t.Errorf("root mkdir gate = %v, want none", got)
 	}
 	// user cmd task is NOT gated
-	s = &TaskStep{ResolvedUser: "1000:1000", Task: &Task{Cmd: "pixi install"}}
+	s = &OpStep{ResolvedUser: "1000:1000", Op: &Op{Command: "pixi install"}}
 	if got := s.RequiresGate(); got != GateNone {
 		t.Errorf("user cmd gate = %v, want none", got)
 	}
@@ -289,8 +289,8 @@ func TestInstallPlanStepsByVenue(t *testing.T) {
 		Steps: []InstallStep{
 			&SystemPackagesStep{Format: "rpm", Phase: PhaseInstall, Packages: []string{"a"}},
 			&SystemPackagesStep{Format: "rpm", Phase: PhaseInstall, Packages: []string{"b"}},
-			&TaskStep{ResolvedUser: "root", Task: &Task{Mkdir: "/etc/foo"}},
-			&TaskStep{ResolvedUser: "1000:1000", Task: &Task{Mkdir: "$HOME/bin"}},
+			&OpStep{ResolvedUser: "root", Op: &Op{Mkdir: "/etc/foo"}},
+			&OpStep{ResolvedUser: "1000:1000", Op: &Op{Mkdir: "$HOME/bin"}},
 			&BuilderStep{Builder: "pixi"},
 		},
 	}

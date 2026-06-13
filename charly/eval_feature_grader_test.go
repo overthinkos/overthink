@@ -134,11 +134,11 @@ func proseScenarioSet() *LabelDescriptionSet {
 			Description: Description{
 				Feature:   "the gizmo works",
 				Narrative: "as an operator...",
-				Scenario: []Scenario{{
-					Name: "gizmo-prose",
-					Step: []Step{{Then: "the gizmo responds"}},
-				}},
 			},
+			Scenario: []Scenario{{
+				Name: "gizmo-prose",
+				Step: []Step{{Then: "the gizmo responds"}},
+			}},
 		}},
 	}
 }

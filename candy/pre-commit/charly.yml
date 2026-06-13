@@ -9,31 +9,6 @@ candy:
             Each tool lands as a real executable at a known path with a working --version,
             so the hook toolchain is directly verifiable.
         tag: [working]
-        scenario:
-            - name: pre-commit-framework-available
-              step:
-                - then: the pre-commit orchestrator is installed in the pixi environment
-                  file: ${HOME}/.pixi/envs/default/bin/pre-commit
-                  exists: true
-                - then: pre-commit reports its version and exits cleanly
-                  command: ${HOME}/.pixi/envs/default/bin/pre-commit --version
-                  exit_status: 0
-            - name: taplo-toml-linter-available
-              step:
-                - then: the taplo TOML linter/formatter binary is installed from cargo
-                  file: ${HOME}/.cargo/bin/taplo
-                  exists: true
-                - then: taplo reports its version and exits cleanly
-                  command: ${HOME}/.cargo/bin/taplo --version
-                  exit_status: 0
-            - name: markdownlint-cli-available
-              step:
-                - then: the markdownlint Markdown linter lands on the npm-global PATH
-                  file: ${HOME}/.npm-global/bin/markdownlint
-                  exists: true
-                - then: markdownlint reports its version and exits cleanly
-                  command: ${HOME}/.npm-global/bin/markdownlint --version
-                  exit_status: 0
     require:
         - nodejs
         - rust # cargo install taplo-cli below requires cargo on PATH.
@@ -41,24 +16,60 @@ candy:
     package:
         - pre-commit
     task:
-        - cmd: cargo install taplo-cli --locked
-          user: "${USER}"
-    eval:
-        - id: taplo-binary
-          file: ${HOME}/.cargo/bin/taplo
-          exists: true
-        - id: taplo-version
-          command: ${HOME}/.cargo/bin/taplo --version
-          exit_status: 0
-        - id: pre-commit-binary
-          file: ${HOME}/.pixi/envs/default/bin/pre-commit
-          exists: true
-        - id: pre-commit-version
-          command: ${HOME}/.pixi/envs/default/bin/pre-commit --version
-          exit_status: 0
-        - id: markdownlint-binary
-          file: ${HOME}/.npm-global/bin/markdownlint
-          exists: true
-        - id: markdownlint-version
-          command: ${HOME}/.npm-global/bin/markdownlint --version
-          exit_status: 0
+        - command: cargo install taplo-cli --locked
+          run_as: "${USER}"
+    scenario:
+        - name: pre-commit-framework-available
+          step:
+            - then: the pre-commit orchestrator is installed in the pixi environment
+              file: ${HOME}/.pixi/envs/default/bin/pre-commit
+              exists: true
+            - then: pre-commit reports its version and exits cleanly
+              command: ${HOME}/.pixi/envs/default/bin/pre-commit --version
+              exit_status: 0
+        - name: taplo-toml-linter-available
+          step:
+            - then: the taplo TOML linter/formatter binary is installed from cargo
+              file: ${HOME}/.cargo/bin/taplo
+              exists: true
+            - then: taplo reports its version and exits cleanly
+              command: ${HOME}/.cargo/bin/taplo --version
+              exit_status: 0
+        - name: markdownlint-cli-available
+          step:
+            - then: the markdownlint Markdown linter lands on the npm-global PATH
+              file: ${HOME}/.npm-global/bin/markdownlint
+              exists: true
+            - then: markdownlint reports its version and exits cleanly
+              command: ${HOME}/.npm-global/bin/markdownlint --version
+              exit_status: 0
+        - name: taplo-binary
+          step:
+            - id: taplo-binary
+              file: ${HOME}/.cargo/bin/taplo
+              exists: true
+        - name: taplo-version
+          step:
+            - id: taplo-version
+              command: ${HOME}/.cargo/bin/taplo --version
+              exit_status: 0
+        - name: pre-commit-binary
+          step:
+            - id: pre-commit-binary
+              file: ${HOME}/.pixi/envs/default/bin/pre-commit
+              exists: true
+        - name: pre-commit-version
+          step:
+            - id: pre-commit-version
+              command: ${HOME}/.pixi/envs/default/bin/pre-commit --version
+              exit_status: 0
+        - name: markdownlint-binary
+          step:
+            - id: markdownlint-binary
+              file: ${HOME}/.npm-global/bin/markdownlint
+              exists: true
+        - name: markdownlint-version
+          step:
+            - id: markdownlint-version
+              command: ${HOME}/.npm-global/bin/markdownlint --version
+              exit_status: 0

@@ -11,44 +11,51 @@ candy:
             disposable container; the GUI's interactive use is graded against a live
             desktop deployment that composes this candy.
         tag: [working]
-        scenario:
-            - name: keepassxc-gui-binary-present
-              step:
-                - then: the KeePassXC desktop binary is installed at /usr/bin/keepassxc
-                  file: /usr/bin/keepassxc
-                  exists: true
-            - name: keepassxc-package-installed
-              step:
-                - then: the keepassxc package is registered with the system package manager
-                  package: keepassxc
-                  installed: true
-            - name: keepassxc-cli-reports-version
-              step:
-                - then: the keepassxc-cli console tool ships alongside the GUI
-                  file: /usr/bin/keepassxc-cli
-                  exists: true
-                - then: keepassxc-cli runs headless and prints a semantic version
-                  command: keepassxc-cli --version
-                  exit_status: 0
-                  stdout:
-                    - matches: "[0-9]+\\.[0-9]+"
-            - name: keepassxc-gui-opens-in-desktop
-              step:
-                - then: a user can launch KeePassXC from the desktop session to create, open, and edit a .kdbx password database
     package:
         - keepassxc
-    eval:
-        - id: keepassxc-binary
-          command: test -x /usr/bin/keepassxc
-          exit_status: 0
-        - id: keepassxc-package
-          package: keepassxc
-          installed: true
-        - id: keepassxc-cli-binary
-          file: /usr/bin/keepassxc-cli
-          exists: true
-        - id: keepassxc-cli-version
-          command: keepassxc-cli --version
-          exit_status: 0
-          stdout:
-            - matches: "[0-9]+\\.[0-9]+"
+    scenario:
+        - name: keepassxc-gui-binary-present
+          step:
+            - then: the KeePassXC desktop binary is installed at /usr/bin/keepassxc
+              file: /usr/bin/keepassxc
+              exists: true
+        - name: keepassxc-package-installed
+          step:
+            - then: the keepassxc package is registered with the system package manager
+              package: keepassxc
+              installed: true
+        - name: keepassxc-cli-reports-version
+          step:
+            - then: the keepassxc-cli console tool ships alongside the GUI
+              file: /usr/bin/keepassxc-cli
+              exists: true
+            - then: keepassxc-cli runs headless and prints a semantic version
+              command: keepassxc-cli --version
+              exit_status: 0
+              stdout:
+                - matches: "[0-9]+\\.[0-9]+"
+        - name: keepassxc-gui-opens-in-desktop
+          step:
+            - then: a user can launch KeePassXC from the desktop session to create, open, and edit a .kdbx password database
+        - name: keepassxc-binary
+          step:
+            - id: keepassxc-binary
+              command: test -x /usr/bin/keepassxc
+              exit_status: 0
+        - name: keepassxc-package
+          step:
+            - id: keepassxc-package
+              package: keepassxc
+              installed: true
+        - name: keepassxc-cli-binary
+          step:
+            - id: keepassxc-cli-binary
+              file: /usr/bin/keepassxc-cli
+              exists: true
+        - name: keepassxc-cli-version
+          step:
+            - id: keepassxc-cli-version
+              command: keepassxc-cli --version
+              exit_status: 0
+              stdout:
+                - matches: "[0-9]+\\.[0-9]+"

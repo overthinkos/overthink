@@ -11,34 +11,6 @@ candy:
             dynamic-provider directory at /etc/traefik/dynamic. It runs as a supervisord
             service, so every install artifact and the live API are independently verifiable.
         tag: [working]
-        scenario:
-            - name: binary-installed-and-versioned
-              step:
-                - then: the traefik release binary is installed at /usr/local/bin/traefik
-                  file: /usr/local/bin/traefik
-                  exists: true
-                - then: running the binary reports the pinned 3.4.0 release
-                  command: /usr/local/bin/traefik version
-                  exit_status: 0
-                  stdout:
-                    - contains: "3.4.0"
-            - name: static-config-staged
-              step:
-                - then: the static configuration is staged at /etc/traefik/traefik.yml with mode 0644 and the letsencrypt resolver
-                  file: /etc/traefik/traefik.yml
-                  mode: "0644"
-                  contains:
-                    - contains: "certResolver: letsencrypt"
-                - then: the watched dynamic-provider directory exists
-                  file: /etc/traefik/dynamic
-                  filetype: directory
-            - name: reverse-proxy-serves-live
-              step:
-                - then: the insecure API and dashboard answer with HTTP 200 on the API port
-                  scope: deploy
-                  http: http://127.0.0.1:${HOST_PORT:8080}/api/version
-                  status: 200
-                - then: a plain HTTP request to the web entrypoint is redirected to the TLS websecure entrypoint
     require:
         - supervisord
     var:
@@ -59,47 +31,92 @@ candy:
           extract: tar.gz
           to: /usr/local/bin
           include: [traefik]
-          user: root
+          run_as: root
         - mkdir: /etc/traefik/dynamic
-          user: root
+          run_as: root
         - copy: traefik.yml
           to: /etc/traefik/traefik.yml
           mode: "0644"
-          user: root
+          run_as: root
     service:
         - name: traefik
           exec: "/usr/local/bin/traefik --configFile=/etc/traefik/traefik.yml"
           restart: always
           enable: true
           scope: system
-    eval:
-        # Build-scope: the artifacts the install tasks actually produce.
-        - id: traefik-binary
-          file: /usr/local/bin/traefik
-          exists: true
-        - id: traefik-binary-version
-          command: /usr/local/bin/traefik version
-          exit_status: 0
-          stdout:
-            - contains: "3.4.0"
-        - id: traefik-config
-          file: /etc/traefik/traefik.yml
-          mode: "0644"
-          contains:
-            - contains: "certResolver: letsencrypt"
-        - id: traefik-dynamic-dir
-          file: /etc/traefik/dynamic
-          filetype: directory
-        # Deploy-scope: the live reverse proxy reached via the resolved host ports.
-        - id: traefik-service-running
-          scope: deploy
-          service: traefik
-          running: true
-        - id: traefik-api-version
-          scope: deploy
-          http: http://127.0.0.1:${HOST_PORT:8080}/api/version
-          status: 200
-        - id: traefik-web-port-open
-          scope: deploy
-          addr: 127.0.0.1:${HOST_PORT:8000}
-          reachable: true
+    scenario:
+        - name: binary-installed-and-versioned
+          step:
+            - then: the traefik release binary is installed at /usr/local/bin/traefik
+              file: /usr/local/bin/traefik
+              exists: true
+            - then: running the binary reports the pinned 3.4.0 release
+              command: /usr/local/bin/traefik version
+              exit_status: 0
+              stdout:
+                - contains: "3.4.0"
+        - name: static-config-staged
+          step:
+            - then: the static configuration is staged at /etc/traefik/traefik.yml with mode 0644 and the letsencrypt resolver
+              file: /etc/traefik/traefik.yml
+              mode: "0644"
+              contains:
+                - contains: "certResolver: letsencrypt"
+            - then: the watched dynamic-provider directory exists
+              file: /etc/traefik/dynamic
+              filetype: directory
+        - name: reverse-proxy-serves-live
+          step:
+            - then: the insecure API and dashboard answer with HTTP 200 on the API port
+              http: http://127.0.0.1:${HOST_PORT:8080}/api/version
+              status: 200
+              context:
+                - runtime
+            - then: a plain HTTP request to the web entrypoint is redirected to the TLS websecure entrypoint
+        - name: traefik-binary
+          step:
+            # Build-scope: the artifacts the install tasks actually produce.
+            - id: traefik-binary
+              file: /usr/local/bin/traefik
+              exists: true
+        - name: traefik-binary-version
+          step:
+            - id: traefik-binary-version
+              command: /usr/local/bin/traefik version
+              exit_status: 0
+              stdout:
+                - contains: "3.4.0"
+        - name: traefik-config
+          step:
+            - id: traefik-config
+              file: /etc/traefik/traefik.yml
+              mode: "0644"
+              contains:
+                - contains: "certResolver: letsencrypt"
+        - name: traefik-dynamic-dir
+          step:
+            - id: traefik-dynamic-dir
+              file: /etc/traefik/dynamic
+              filetype: directory
+        - name: traefik-service-running
+          step:
+            # Deploy-scope: the live reverse proxy reached via the resolved host ports.
+            - id: traefik-service-running
+              service: traefik
+              running: true
+              context:
+                - runtime
+        - name: traefik-api-version
+          step:
+            - id: traefik-api-version
+              http: http://127.0.0.1:${HOST_PORT:8080}/api/version
+              status: 200
+              context:
+                - runtime
+        - name: traefik-web-port-open
+          step:
+            - id: traefik-web-port-open
+              addr: 127.0.0.1:${HOST_PORT:8000}
+              reachable: true
+              context:
+                - runtime

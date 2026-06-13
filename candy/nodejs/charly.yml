@@ -10,31 +10,6 @@ candy:
             is a real file at a known path with a working --version, so the runtime is
             directly verifiable.
         tag: [working]
-        scenario:
-            - name: node-runtime-available
-              step:
-                - then: the node interpreter is installed at /usr/bin/node
-                  file: /usr/bin/node
-                  exists: true
-                - then: node reports its version and exits cleanly
-                  command: /usr/bin/node --version
-                  exit_status: 0
-            - name: npm-cli-available
-              step:
-                - then: the npm package manager is installed at /usr/bin/npm
-                  file: /usr/bin/npm
-                  exists: true
-                - then: npm reports its version and exits cleanly
-                  command: /usr/bin/npm --version
-                  exit_status: 0
-            - name: pnpm-standalone-installed
-              step:
-                - then: the self-contained pnpm binary lands on the system PATH at /usr/local/bin/pnpm
-                  file: /usr/local/bin/pnpm
-                  exists: true
-                - then: pnpm runs and reports its version
-                  command: pnpm --version
-                  exit_status: 0
     env:
         NPM_CONFIG_PREFIX: "~/.npm-global"
         npm_config_cache: "~/.cache/npm"
@@ -81,7 +56,7 @@ candy:
         # multi-stage builder on this layer, which the builder images that COMPOSE
         # nodejs (arch-builder/fedora-builder) cannot self-provide. pnpm's release
         # asset tokens are x64/arm64 (match neither ${ARCH} nor ${BUILD_ARCH}).
-        - cmd: |
+        - command: |
             case "${BUILD_ARCH}" in
               x86_64)  PNPM_ARCH="x64" ;;
               aarch64) PNPM_ARCH="arm64" ;;
@@ -89,26 +64,62 @@ candy:
             esac
             curl -fsSL "https://github.com/pnpm/pnpm/releases/download/v${PNPM_VERSION}/pnpm-linux-${PNPM_ARCH}" -o /usr/local/bin/pnpm
             chmod 0755 /usr/local/bin/pnpm
-          user: root
-    eval:
-        - id: node-binary
-          file: /usr/bin/node
-          exists: true
-        - id: node-version
-          command: /usr/bin/node --version
-          exit_status: 0
-        - id: nodejs-package
-          package: nodejs
-          installed: true
-        - id: npm-binary
-          file: /usr/bin/npm
-          exists: true
-        - id: npm-version
-          command: /usr/bin/npm --version
-          exit_status: 0
-        # pnpm is installed globally from package.json (npm -g) into ~/.npm-global/bin
-        # (on PATH via path_append) — Immich's source build + its packageManager
-        # (pnpm@10) require it.
-        - id: pnpm-available
-          command: pnpm --version
-          exit_status: 0
+          run_as: root
+    scenario:
+        - name: node-runtime-available
+          step:
+            - then: the node interpreter is installed at /usr/bin/node
+              file: /usr/bin/node
+              exists: true
+            - then: node reports its version and exits cleanly
+              command: /usr/bin/node --version
+              exit_status: 0
+        - name: npm-cli-available
+          step:
+            - then: the npm package manager is installed at /usr/bin/npm
+              file: /usr/bin/npm
+              exists: true
+            - then: npm reports its version and exits cleanly
+              command: /usr/bin/npm --version
+              exit_status: 0
+        - name: pnpm-standalone-installed
+          step:
+            - then: the self-contained pnpm binary lands on the system PATH at /usr/local/bin/pnpm
+              file: /usr/local/bin/pnpm
+              exists: true
+            - then: pnpm runs and reports its version
+              command: pnpm --version
+              exit_status: 0
+        - name: node-binary
+          step:
+            - id: node-binary
+              file: /usr/bin/node
+              exists: true
+        - name: node-version
+          step:
+            - id: node-version
+              command: /usr/bin/node --version
+              exit_status: 0
+        - name: nodejs-package
+          step:
+            - id: nodejs-package
+              package: nodejs
+              installed: true
+        - name: npm-binary
+          step:
+            - id: npm-binary
+              file: /usr/bin/npm
+              exists: true
+        - name: npm-version
+          step:
+            - id: npm-version
+              command: /usr/bin/npm --version
+              exit_status: 0
+        - name: pnpm-available
+          step:
+            # pnpm is installed globally from package.json (npm -g) into ~/.npm-global/bin
+            # (on PATH via path_append) — Immich's source build + its packageManager
+            # (pnpm@10) require it.
+            - id: pnpm-available
+              command: pnpm --version
+              exit_status: 0

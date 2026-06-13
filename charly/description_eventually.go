@@ -36,7 +36,7 @@ import (
 // Context: runWithEventually honours ctx.Deadline / ctx.Done — a
 // canceled context short-circuits the loop with the last attempt's
 // result.
-func runWithEventually(ctx context.Context, check *Check, handler func() EvalResult) EvalResult {
+func runWithEventually(ctx context.Context, check *Op, handler func() EvalResult) EvalResult {
 	if check == nil || check.Eventually == "" {
 		result := handler()
 		if result.Attempts == 0 {
@@ -51,7 +51,7 @@ func runWithEventually(ctx context.Context, check *Check, handler func() EvalRes
 	deadlineD, err := time.ParseDuration(check.Eventually)
 	if err != nil {
 		r := EvalResult{
-			Check:   check,
+			Op:      check,
 			Status:  TestFail,
 			Message: fmt.Sprintf("invalid eventually duration %q: %v", check.Eventually, err),
 		}
@@ -64,7 +64,7 @@ func runWithEventually(ctx context.Context, check *Check, handler func() EvalRes
 			interval = d
 		} else {
 			r := EvalResult{
-				Check:   check,
+				Op:      check,
 				Status:  TestFail,
 				Message: fmt.Sprintf("invalid retry_interval %q: %v", check.RetryInterval, perr),
 			}

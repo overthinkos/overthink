@@ -15,17 +15,17 @@ import (
 func TestCheck_Kind(t *testing.T) {
 	tests := []struct {
 		name    string
-		check   Check
+		check   Op
 		wantKey string
 		wantErr string // substring
 	}{
-		{"file", Check{File: "/usr/bin/redis"}, "file", ""},
-		{"port", Check{Port: 6379}, "port", ""},
-		{"http", Check{HTTP: "http://x"}, "http", ""},
-		{"command", Check{Command: "redis-cli ping"}, "command", ""},
-		{"matching", Check{Matching: 42}, "matching", ""},
-		{"none", Check{}, "", "no verb"},
-		{"two", Check{File: "/x", Port: 6379}, "", "multiple verbs"},
+		{"file", Op{File: "/usr/bin/redis"}, "file", ""},
+		{"port", Op{Port: 6379}, "port", ""},
+		{"http", Op{HTTP: "http://x"}, "http", ""},
+		{"command", Op{Command: "redis-cli ping"}, "command", ""},
+		{"matching", Op{Matching: 42}, "matching", ""},
+		{"none", Op{}, "", "no verb"},
+		{"two", Op{File: "/x", Port: 6379}, "", "multiple verbs"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -62,12 +62,12 @@ func TestCheck_UnmarshalYAMLList(t *testing.T) {
   body:
     - contains: "ready"
 - id: redis-responds
-  scope: deploy
+  context: [deploy]
   command: redis-cli -h ${CONTAINER_IP} -p ${HOST_PORT:6379} ping
   stdout: PONG
   in_container: false
 `
-	var got []Check
+	var got []Op
 	if err := yaml.Unmarshal([]byte(src), &got); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
@@ -113,12 +113,12 @@ func TestCheck_UnmarshalYAMLList(t *testing.T) {
 		t.Errorf("body[0] = %+v, want {contains ready}", got[3].Body)
 	}
 
-	// 4: scope-deploy command with runtime variable references
+	// 4: deploy-context command with runtime variable references
 	if got[4].ID != "redis-responds" {
 		t.Errorf("id = %q", got[4].ID)
 	}
-	if got[4].Scope != "deploy" {
-		t.Errorf("scope = %q", got[4].Scope)
+	if len(got[4].Context) != 1 || got[4].Context[0] != "deploy" {
+		t.Errorf("context = %v, want [deploy]", got[4].Context)
 	}
 	if got[4].InContainer == nil || *got[4].InContainer {
 		t.Errorf("in_container should be pointer-to-false")
@@ -238,7 +238,7 @@ func TestIsRuntimeOnlyVar(t *testing.T) {
 
 // Full-Check in-place expansion across all string-bearing fields.
 func TestCheck_ExpandVars(t *testing.T) {
-	c := Check{
+	c := Op{
 		File:    "${HOME}/.redis",
 		Command: "redis-cli -p ${HOST_PORT:6379}",
 		HTTP:    "http://${CONTAINER_IP}:8080/health",
@@ -266,22 +266,6 @@ func TestCheck_ExpandVars(t *testing.T) {
 	wantMissing := []string{"MISSING"}
 	if !reflect.DeepEqual(missing, wantMissing) {
 		t.Errorf("missing = %v, want %v", missing, wantMissing)
-	}
-}
-
-// LabelEvalSet.IsEmpty detects both nil and all-empty-sections.
-func TestLabelTestSet_IsEmpty(t *testing.T) {
-	var nilSet *LabelEvalSet
-	if !nilSet.IsEmpty() {
-		t.Error("nil LabelEvalSet should be empty")
-	}
-	empty := &LabelEvalSet{}
-	if !empty.IsEmpty() {
-		t.Error("zero-value LabelEvalSet should be empty")
-	}
-	populated := &LabelEvalSet{Candy: []Check{{File: "/x"}}}
-	if populated.IsEmpty() {
-		t.Error("populated LabelEvalSet should not be empty")
 	}
 }
 
@@ -412,7 +396,7 @@ func TestContainsList_BareSequenceDefaultsToContains(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			var c Check
+			var c Op
 			if err := yaml.Unmarshal([]byte(tc.yaml), &c); err != nil {
 				t.Fatalf("yaml unmarshal: %v", err)
 			}
@@ -446,7 +430,7 @@ file: /srv/fixture/index.html
 exists: true
 contains: ["charly-fixture-web-content-marker"]
 `
-	var c Check
+	var c Op
 	if err := yaml.Unmarshal([]byte(yamlSrc), &c); err != nil {
 		t.Fatalf("yaml unmarshal: %v", err)
 	}
@@ -471,7 +455,7 @@ func TestContainsList_DoesNotAffectMatcherList(t *testing.T) {
 command: echo PONG
 stdout: PONG
 `
-	var c Check
+	var c Op
 	if err := yaml.Unmarshal([]byte(yamlSrc), &c); err != nil {
 		t.Fatalf("yaml unmarshal: %v", err)
 	}
@@ -494,7 +478,7 @@ command: "echo backgrounded pid=42"
 capture: writer_pid
 capture_extract: "pid=([0-9]+)"
 `
-	var c Check
+	var c Op
 	if err := yaml.Unmarshal([]byte(yamlSrc), &c); err != nil {
 		t.Fatalf("yaml unmarshal: %v", err)
 	}
@@ -550,7 +534,7 @@ func TestCheck_KillVerb(t *testing.T) {
 kill: "${CAPTURED:writer_pid}"
 signal: KILL
 `
-	var c Check
+	var c Op
 	if err := yaml.Unmarshal([]byte(yamlSrc), &c); err != nil {
 		t.Fatalf("yaml unmarshal: %v", err)
 	}

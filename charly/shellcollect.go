@@ -4,7 +4,7 @@ import "fmt"
 
 // CollectShell walks the base-image chain for boxName and gathers
 // per-(origin, shell) shell-init contributions into a three-section
-// LabelShellSet. Mirrors CollectEval / CollectHooks shape — dedupe by
+// LabelShellSet. Mirrors CollectDescriptions / CollectHooks shape — dedupe by
 // candy name, walk internal bases until an external image, terminate
 // on visited-image cycle.
 //
@@ -89,7 +89,7 @@ func shellConfigToEntry(cfg *ShellConfig, origin string) *ShellEntry {
 
 // MergeDeployShell applies a charly.yml `shell:` overlay onto a label-
 // baked LabelShellSet, returning a new merged set. Mirrors
-// MergeDeployEval semantics:
+// MergeDeployDescriptions semantics:
 //   - Entry with matching ID and skip:true → drop the matched entry.
 //   - Entry with matching ID and skip:false → replace the matched
 //     entry wholesale.

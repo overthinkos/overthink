@@ -18,28 +18,6 @@ candy:
             `insecure-skip-tls-verify: true` and uses an `http://` server
             URL, which client-go honors.
         tag: [working]
-        scenario:
-            # Agent Driven Evaluation acceptance scenarios baked into the
-            # consuming image's ai.opencharly.description label. Steps 1-2 are
-            # DETERMINISTIC (embedded check verbs); step 3 is PROSE-ONLY
-            # (agent-graded by `charly eval feature run`).
-            - name: fake-apiserver-script-installed
-              step:
-                - then: the fake Kubernetes apiserver script is installed and executable at /opt/harness-k8s/fake_apiserver.py
-                  file: /opt/harness-k8s/fake_apiserver.py
-                  exists: true
-                  mode: "0755"
-            - name: fake-apiserver-answers-node-list
-              step:
-                - then: a GET to /api/v1/nodes returns HTTP 200 carrying the Ready fixture node charly-fixture-k8s
-                  scope: deploy
-                  http: http://127.0.0.1:${HOST_PORT:6443}/api/v1/nodes
-                  status: 200
-                  body:
-                    - contains: charly-fixture-k8s
-            - name: fake-apiserver-satisfies-harness-k8s-rollups
-              step:
-                - then: the harness `charly eval k8s` wait-nodes and addon rollups exit 0 against the fixture (nodes, storageclasses, ingressclasses, and the traefik / local-path-provisioner / svclb-traefik addons all report Ready)
     require:
         - supervisord
     distro:
@@ -52,10 +30,10 @@ candy:
         - 6443
     task:
         - mkdir: /opt/harness-k8s
-          user: root
+          run_as: root
           mode: "0755"
         - write: /opt/harness-k8s/fake_apiserver.py
-          user: root
+          run_as: root
           mode: "0755"
           content: |
             #!/usr/bin/env python3
@@ -345,40 +323,83 @@ candy:
           priority: 50
           enable: true
           scope: system
-    eval:
-        - id: harness-k8s-server-script
-          file: /opt/harness-k8s/fake_apiserver.py
-          exists: true
-          mode: "0755"
-        - id: harness-k8s-python3
-          file: /usr/bin/python3
-          exists: true
-        - id: harness-k8s-python3-package
-          package: python3
-          installed: true
-        - id: harness-k8s-service-running
-          scope: deploy
-          service: harness-k8s-fixture
-          running: true
-        - id: harness-k8s-port-listening
-          scope: deploy
-          port: 6443
-          listening: true
-        - id: harness-k8s-nodes-endpoint
-          scope: deploy
-          http: http://127.0.0.1:${HOST_PORT:6443}/api/v1/nodes
-          status: 200
-          body:
-            - contains: charly-fixture-k8s
-        - id: harness-k8s-storageclass-endpoint
-          scope: deploy
-          http: http://127.0.0.1:${HOST_PORT:6443}/apis/storage.k8s.io/v1/storageclasses
-          status: 200
-          body:
-            - contains: local-path
-        - id: harness-k8s-version-endpoint
-          scope: deploy
-          http: http://127.0.0.1:${HOST_PORT:6443}/version
-          status: 200
-          body:
-            - contains: v1.31.0-fake-fixture
+    scenario:
+        # Agent Driven Evaluation acceptance scenarios baked into the
+        # consuming image's ai.opencharly.description label. Steps 1-2 are
+        # DETERMINISTIC (embedded check verbs); step 3 is PROSE-ONLY
+        # (agent-graded by `charly eval feature run`).
+        - name: fake-apiserver-script-installed
+          step:
+            - then: the fake Kubernetes apiserver script is installed and executable at /opt/harness-k8s/fake_apiserver.py
+              file: /opt/harness-k8s/fake_apiserver.py
+              exists: true
+              mode: "0755"
+        - name: fake-apiserver-answers-node-list
+          step:
+            - then: a GET to /api/v1/nodes returns HTTP 200 carrying the Ready fixture node charly-fixture-k8s
+              http: http://127.0.0.1:${HOST_PORT:6443}/api/v1/nodes
+              status: 200
+              body:
+                - contains: charly-fixture-k8s
+              context:
+                - runtime
+        - name: fake-apiserver-satisfies-harness-k8s-rollups
+          step:
+            - then: the harness `charly eval k8s` wait-nodes and addon rollups exit 0 against the fixture (nodes, storageclasses, ingressclasses, and the traefik / local-path-provisioner / svclb-traefik addons all report Ready)
+        - name: harness-k8s-server-script
+          step:
+            - id: harness-k8s-server-script
+              file: /opt/harness-k8s/fake_apiserver.py
+              exists: true
+              mode: "0755"
+        - name: harness-k8s-python3
+          step:
+            - id: harness-k8s-python3
+              file: /usr/bin/python3
+              exists: true
+        - name: harness-k8s-python3-package
+          step:
+            - id: harness-k8s-python3-package
+              package: python3
+              installed: true
+        - name: harness-k8s-service-running
+          step:
+            - id: harness-k8s-service-running
+              service: harness-k8s-fixture
+              running: true
+              context:
+                - runtime
+        - name: harness-k8s-port-listening
+          step:
+            - id: harness-k8s-port-listening
+              port: 6443
+              listening: true
+              context:
+                - runtime
+        - name: harness-k8s-nodes-endpoint
+          step:
+            - id: harness-k8s-nodes-endpoint
+              http: http://127.0.0.1:${HOST_PORT:6443}/api/v1/nodes
+              status: 200
+              body:
+                - contains: charly-fixture-k8s
+              context:
+                - runtime
+        - name: harness-k8s-storageclass-endpoint
+          step:
+            - id: harness-k8s-storageclass-endpoint
+              http: http://127.0.0.1:${HOST_PORT:6443}/apis/storage.k8s.io/v1/storageclasses
+              status: 200
+              body:
+                - contains: local-path
+              context:
+                - runtime
+        - name: harness-k8s-version-endpoint
+          step:
+            - id: harness-k8s-version-endpoint
+              http: http://127.0.0.1:${HOST_PORT:6443}/version
+              status: 200
+              body:
+                - contains: v1.31.0-fake-fixture
+              context:
+                - runtime

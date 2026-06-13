@@ -98,7 +98,7 @@ type EvalCmd struct {
 
 // EvalLiveCmd runs tests against a running service — the deploy-time entry point.
 //
-//   - Extracts the image's three-section LabelEvalSet from OCI labels.
+//   - Extracts the image's three-section LabelDescriptionSet from OCI labels.
 //   - Applies the local charly.yml tests overlay (merge by id:).
 //   - Resolves ${…} variables using meta + deploy + podman-inspect of the
 //     running container.
@@ -150,25 +150,19 @@ func (c *EvalLiveCmd) Run() error {
 	// (validateDeployRequiresBox in unified.go / deploy.go) guarantees
 	// this lookup always finds a non-empty value.
 	dir, _ := os.Getwd()
-	var localTests []Check
-	var projectTests []Check
+	var localScenarios []Scenario
 	var deployOverlay *DeploymentNode
 	var projectCfg *Config
 	if uf, ok, _ := LoadUnified(dir); ok && uf != nil {
 		projectCfg = uf.ProjectConfig()
-		if pc := uf.ProjectDeployConfig(); pc != nil {
-			if entry, ok := pc.Deploy[c.Box]; ok {
-				projectTests = entry.Eval
-			}
-		}
 	}
 	dc := loadDeployConfigForRead("charly eval live")
 	if dc != nil {
 		if entry, ok := dc.Deploy[deployKey(c.Box, c.Instance)]; ok {
-			localTests = entry.Eval
+			localScenarios = entry.Scenario
 			deployOverlay = &entry
 		} else if entry, ok := dc.Deploy[c.Box]; ok {
-			localTests = entry.Eval
+			localScenarios = entry.Scenario
 			deployOverlay = &entry
 		}
 	}
@@ -196,32 +190,31 @@ func (c *EvalLiveCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	if meta == nil || meta.Eval == nil {
-		fmt.Fprintln(os.Stderr, "No tests defined for this image.")
+	set := MergeDeployDescriptions(meta.Description, localScenarios, c.Box)
+	if set == nil || set.IsEmpty() {
+		fmt.Fprintln(os.Stderr, "No scenarios defined for this image.")
 		return nil
 	}
-	localTests = MergeDeployEval(projectTests, localTests)
 	resolver, _ := ResolveEvalVarsRuntime(meta, deployOverlay, engine, c.Box, containerName, c.Instance)
-
-	// Compose the final check list: candy + box + merged deploy.
-	checks := collectChecksForRun(meta.Eval, localTests, c.Section, c.Filter)
-	if len(checks) == 0 {
-		fmt.Fprintln(os.Stderr, "No checks to run after filtering.")
-		return nil
-	}
 
 	runner := NewRunner(ContainerChain(engine, containerName), resolver, RunModeLive)
 	runner.Box = c.Box
 	runner.Instance = c.Instance
 	runner.Distros = meta.Distro
 	runner.CandyDirs = candySourceDirs(dir, projectCfg)
-	// Cross-deployment probing (a check with `on: <driver>` reaching a SEPARATE
-	// subject via ${PEER_*}) is wired generically by RunLive — the ONE entry
-	// point every live-eval path shares (R3).
-	results := runner.RunLive(context.Background(), checks, c.Instance)
+	// Cross-deployment probing (a step with `on: <driver>` reaching a SEPARATE
+	// subject via ${PEER_*}): wire the live target resolver + peer vars — the
+	// ONE entry point every live path shares (R3).
+	runner.TargetResolver = liveTargetResolver(c.Instance)
+	for _, sec := range [][]LabeledDescription{set.Candy, set.Box, set.Deploy} {
+		for _, ld := range sec {
+			applyPeerVarsScenarios(runner, ld.Scenario, c.Instance)
+		}
+	}
 
+	results := RunScenarios(context.Background(), runner, set, nil, false)
 	fmt.Fprintf(os.Stderr, "Image: %s (container: %s)\n", meta.Box, containerName)
-	fails := formatResults(results, c.Format)
+	fails := reportScenarios(os.Stderr, results, c.Format)
 	if fails > 0 {
 		return &EvalFailedError{Failed: fails}
 	}
@@ -361,28 +354,28 @@ func (c *EvalLiveCmd) runVm() error {
 	// `target: vm` + `vm: <c.Box>` resolves to the same VM.
 	// This is what makes `charly eval live <deploy-name>` work for beds like
 	// `arch-vm` that don't carry the legacy `vm:` prefix in the key.
-	// Merge by id (local replaces project); same rules as MergeDeployEval.
+	// Merge by id (local replaces project); same rules as MergeDeployDescriptions.
 	// Resolve the VM's deploy entry via THE shared findVmDeployNode (deploy.go)
 	// — the same lookup `charly deploy add` uses — by deploy NAME (c.Box) first,
 	// then the vm entity (vmName). Keying by name first means a bed whose key
 	// differs from its vm entity (eval-k3s-vm -> vm: k3s-vm) resolves to its
 	// own entry rather than being mis-matched via the vm entity name.
-	var projectTests, localTests []Check
+	var projectScenarios, localScenarios []Scenario
 	var addCandies []string
 	// Nested dotted-path short-circuit: when the request is for a
-	// child node, use its own Tests directly instead of the parent's.
+	// child node, use its own scenarios directly instead of the parent's.
 	if nestedLeaf != nil {
-		projectTests = nestedLeaf.Eval
+		projectScenarios = nestedLeaf.Scenario
 		addCandies = nestedLeaf.AddCandy
 	} else if pc := uf.ProjectDeployConfig(); pc != nil {
 		if entry, ok := findVmDeployNode(pc.Deploy, c.Box, vmName); ok {
-			projectTests = entry.Eval
+			projectScenarios = entry.Scenario
 			addCandies = entry.AddCandy
 		}
 	}
 	if dc := loadDeployConfigForRead("charly eval vm"); dc != nil {
 		if entry, ok := findVmDeployNode(dc.Deploy, c.Box, vmName); ok {
-			localTests = entry.Eval
+			localScenarios = entry.Scenario
 			if entry.VmState != nil {
 				if entry.VmState.SshUser != "" {
 					user = entry.VmState.SshUser
@@ -393,17 +386,12 @@ func (c *EvalLiveCmd) runVm() error {
 			}
 		}
 	}
-	tests := MergeDeployEval(projectTests, localTests)
+	scenarios := append(append([]Scenario(nil), projectScenarios...), localScenarios...)
 
-	// Collect deploy-scope eval from the candies this VM deployment applies, so
-	// ANY VM deploy — the disposable bed OR the persistent operator VM — that
-	// adds a candy automatically runs that candy's checks. This is what makes
-	// `charly eval live` work against any deployment (disposable or not) with ONE
-	// check set per candy instead of a copy on each deploy (R3). Deploy-level
-	// checks override a candy check on id collision (candy is the base).
-	if candyChecks := collectAddCandyDeployEval(uf, dir, addCandies); len(candyChecks) > 0 {
-		tests = MergeDeployEval(candyChecks, tests)
-	}
+	// Collect deploy-scope scenarios from the candies this VM deployment
+	// applies, so ANY VM deploy — disposable bed OR persistent operator VM —
+	// that adds a candy automatically runs that candy's scenarios (R3).
+	scenarios = append(scenarios, collectAddCandyScenarios(uf, dir, addCandies)...)
 
 	// SSH connection details (User/Port/IdentityFile) live in the
 	// managed ssh-config Host stanza (charly-<vmName>) written at deploy
@@ -508,20 +496,19 @@ func (c *EvalLiveCmd) runVm() error {
 		return nil
 	}
 
-	baked := &LabelEvalSet{}
-	checks := collectChecksForRun(baked, tests, c.Section, c.Filter)
-	if len(checks) == 0 {
-		fmt.Fprintln(os.Stderr, "No checks to run after filtering.")
+	if len(scenarios) == 0 {
+		fmt.Fprintln(os.Stderr, "No scenarios to run.")
 		return nil
 	}
+	set := &LabelDescriptionSet{Deploy: []LabeledDescription{{Origin: "vm:" + vmName, Scenario: scenarios}}}
 
 	runner := NewRunner(executor, resolver, RunModeLive)
 	runner.Box = c.Box
 	runner.Instance = c.Instance
-	results := runner.RunLive(context.Background(), checks, c.Instance)
+	results := RunScenarios(context.Background(), runner, set, nil, false)
 
 	fmt.Fprintf(os.Stderr, "VM: charly-%s (ssh %s@%s:%d)\n", c.Box, user, host, port)
-	fails := formatResults(results, c.Format)
+	fails := reportScenarios(os.Stderr, results, c.Format)
 	if fails > 0 {
 		return &EvalFailedError{Failed: fails}
 	}
@@ -548,7 +535,7 @@ func vmHostdevCount(spec *VmSpec) int {
 // mechanism that lets `charly eval live <vm>` run a candy's checks against ANY
 // deployment that applies it — the disposable bed or the persistent operator
 // VM — so one shared check-only candy covers both (no per-deploy copy, R3).
-func collectAddCandyDeployEval(uf *UnifiedFile, dir string, addCandies []string) []Check {
+func collectAddCandyScenarios(uf *UnifiedFile, dir string, addCandies []string) []Scenario {
 	if uf == nil || len(addCandies) == 0 {
 		return nil
 	}
@@ -563,13 +550,12 @@ func collectAddCandyDeployEval(uf *UnifiedFile, dir string, addCandies []string)
 	if err != nil || candyMap == nil {
 		return nil
 	}
-	var out []Check
+	var out []Scenario
 	for _, ref := range addCandies {
-		// Only LOCAL (filesystem) candies contribute checks here — the shared
-		// check-only candies live in the project's candy/ dir. Remote @github
-		// candies are SKIPPED: they carry their own test context (and a re-scan
-		// can resolve a different cached version than what was deployed, which
-		// would surface checks the deployed version never defined).
+		// Only LOCAL (filesystem) candies contribute scenarios here — the
+		// shared candies live in the project's candy/ dir. Remote @github
+		// candies are SKIPPED: they carry their own context (and a re-scan can
+		// resolve a different cached version than what was deployed).
 		if IsRemoteCandyRef(ref) {
 			continue
 		}
@@ -577,11 +563,7 @@ func collectAddCandyDeployEval(uf *UnifiedFile, dir string, addCandies []string)
 		if !ok || lyr == nil {
 			continue
 		}
-		for _, chk := range lyr.tests {
-			if chk.Scope == "deploy" {
-				out = append(out, chk)
-			}
-		}
+		out = append(out, lyr.scenario...)
 	}
 	return out
 }
@@ -597,7 +579,7 @@ func candySourceDirs(dir string, cfg *Config) map[string]string {
 	}
 	// Key by the candy MAP KEY — which is exactly the check's Origin form:
 	// a bare name for a local candy ("sshd"), the bare @github ref for a fetched
-	// one ("github.com/owner/repo/candy/<name>"). CollectEval stamps
+	// one ("github.com/owner/repo/candy/<name>"). CollectDescriptions stamps
 	// Origin = "candy:" + this same key, so resolveCheckApk's CandyDirs[origin]
 	// lookup matches in BOTH cases.
 	out := make(map[string]string, len(candyMap))
@@ -707,20 +689,20 @@ func (c *EvalLiveCmd) runLocalEval() error {
 // source + run probes identically (R3). Host-context vars only (no
 // HOST_PORT:<N> / CONTAINER_IP). Returns the failure count.
 func evalLocalDeployScope(dir string, node *DeploymentNode, image, instance, section string, filter []string, exec DeployExecutor, format string) (int, error) {
-	var tests []Check
+	var scenarios []Scenario
 	if node != nil && strings.TrimSpace(node.Local) != "" {
 		if spec := findLocalSpec(dir, strings.TrimSpace(node.Local)); spec != nil {
-			tests = append(tests, spec.Eval...)
+			scenarios = append(scenarios, spec.Scenario...)
 		}
 	}
 	if node != nil {
-		tests = MergeDeployEval(tests, node.Eval)
+		scenarios = append(scenarios, node.Scenario...)
 	}
 	if dc := loadDeployConfigForRead("charly eval live"); dc != nil {
 		if entry, ok := dc.Deploy[deployKey(image, instance)]; ok {
-			tests = MergeDeployEval(tests, entry.Eval)
+			scenarios = append(scenarios, entry.Scenario...)
 		} else if entry, ok := dc.Deploy[image]; ok {
-			tests = MergeDeployEval(tests, entry.Eval)
+			scenarios = append(scenarios, entry.Scenario...)
 		}
 	}
 
@@ -736,18 +718,20 @@ func evalLocalDeployScope(dir string, node *DeploymentNode, image, instance, sec
 		"HOME":     home,
 	}, HasRuntime: true}
 
-	checks := collectChecksForRun(&LabelEvalSet{}, tests, section, filter)
-	if len(checks) == 0 {
-		fmt.Fprintln(os.Stderr, "No checks to run after filtering.")
+	if len(scenarios) == 0 {
+		fmt.Fprintln(os.Stderr, "No scenarios to run.")
 		return 0, nil
 	}
+	set := &LabelDescriptionSet{Deploy: []LabeledDescription{{Origin: "local:" + image, Scenario: scenarios}}}
 	runner := NewRunner(exec, resolver, RunModeLive)
 	runner.Box = image
 	runner.Instance = instance
-	// Generic cross-deployment support (on: driver + ${PEER_*}) via the shared
-	// RunLive entry point — so a local-SUBJECT bed can drive a peer too (R3).
-	results := runner.RunLive(context.Background(), checks, instance)
-	return formatResults(results, format), nil
+	// Generic cross-deployment support (on: driver + ${PEER_*}) — a local
+	// SUBJECT bed can drive a peer too (R3).
+	runner.TargetResolver = liveTargetResolver(instance)
+	applyPeerVarsScenarios(runner, scenarios, instance)
+	results := RunScenarios(context.Background(), runner, set, nil, false)
+	return reportScenarios(os.Stdout, results, format), nil
 }
 
 // EvalBoxCmd runs PURE-BOX eval against a disposable container.
@@ -780,45 +764,30 @@ func (c *EvalBoxCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	if meta == nil || meta.Eval == nil {
-		fmt.Fprintln(os.Stderr, "No eval defined for this image.")
+	if meta == nil || meta.Description == nil || meta.Description.IsEmpty() {
+		fmt.Fprintln(os.Stderr, "No scenarios defined for this image.")
 		return nil
 	}
 
-	// PURE-BOX: always disposable container, always candy + box
-	// sections only. The mode is explicit; no autodetect, no fallback.
+	// PURE-BOX: always a disposable container, build-context scenario steps
+	// only. The mode is explicit; no autodetect, no fallback. Deploy/runtime-
+	// context steps are skipped under RunModeBox.
 	executor := ImageChain(rt.RunEngine, imageRef)
 	resolver := ResolveEvalVarsBuild(meta)
-	mode := RunModeBox
-
-	checks := gatherSections(meta.Eval, nil /* no local overlay at build time */, []string{"candy", "box"})
-	checks = filterByVerb(checks, c.Filter)
-	if len(checks) == 0 {
-		fmt.Fprintln(os.Stderr, "No checks to run after filtering.")
-		return nil
-	}
-
-	runner := NewRunner(executor, resolver, mode)
+	runner := NewRunner(executor, resolver, RunModeBox)
 	runner.Distros = meta.Distro
-	results := runner.Run(context.Background(), checks)
 
-	// Also run scenarios if a Description set is baked into the image —
-	// the eval-run scorer reads this when --format yaml is requested.
-	var scenarioResults []ScenarioResult
-	if meta.Description != nil && !meta.Description.IsEmpty() {
-		scenarioResults = RunScenarios(context.Background(), runner, meta.Description, nil, false)
-	}
+	scenarioResults := RunScenarios(context.Background(), runner, meta.Description, nil, false)
 
-	liveContainer := "" // PURE-IMAGE never has a live container
 	fmt.Fprintf(os.Stderr, "Image: %s\n", imageRef)
 
 	// YAML format emits the shape ParseCharlyTestOutput expects —
-	// this is the benchmark scorer's input format.
+	// the benchmark scorer's input format.
 	if c.Format == "yaml" {
-		return emitImageTestYAML(os.Stdout, imageRef, liveContainer, scenarioResults, results)
+		return emitImageTestYAML(os.Stdout, imageRef, "", scenarioResults, nil)
 	}
 
-	fails := formatResults(results, c.Format)
+	fails := reportScenarios(os.Stderr, scenarioResults, c.Format)
 	if fails > 0 {
 		return &EvalFailedError{Failed: fails}
 	}
@@ -878,66 +847,6 @@ func emitImageTestYAML(w io.Writer, imageRef, liveContainer string, scenarios []
 	}
 	_, err = w.Write(data)
 	return err
-}
-
-// collectChecksForRun is the full charly-test assembly: all three label sections
-// + the local deploy overlay, with optional section/verb filtering.
-func collectChecksForRun(baked *LabelEvalSet, local []Check, section string, filter []string) []Check {
-	sections := []string{"candy", "box", "deploy"}
-	if section != "" {
-		sections = []string{section}
-	}
-	checks := gatherSections(baked, local, sections)
-	return filterByVerb(checks, filter)
-}
-
-// gatherSections concatenates the requested sections. For the deploy section,
-// applies MergeDeployEval with any local overlay.
-func gatherSections(baked *LabelEvalSet, local []Check, sections []string) []Check {
-	var out []Check
-	for _, s := range sections {
-		switch s {
-		case "candy":
-			out = append(out, baked.Candy...)
-		case "box":
-			out = append(out, baked.Box...)
-		case "deploy":
-			out = append(out, MergeDeployEval(baked.Deploy, local)...)
-		}
-	}
-	return out
-}
-
-// filterByVerb narrows the list to checks whose verb matches any of allowedVerbs.
-// An empty filter returns the list unchanged.
-func filterByVerb(checks []Check, allowedVerbs []string) []Check {
-	if len(allowedVerbs) == 0 {
-		return checks
-	}
-	want := map[string]bool{}
-	for _, v := range allowedVerbs {
-		want[v] = true
-	}
-	var out []Check
-	for _, c := range checks {
-		k, _ := c.Kind()
-		if want[k] {
-			out = append(out, c)
-		}
-	}
-	return out
-}
-
-// formatResults writes results in the requested format and returns the fail count.
-func formatResults(results []EvalResult, format string) int {
-	switch strings.ToLower(format) {
-	case "json":
-		return FormatResultsJSON(os.Stdout, results)
-	case "tap":
-		return FormatResultsTAP(os.Stdout, results)
-	default:
-		return FormatResultsText(os.Stdout, results)
-	}
 }
 
 // containerImageRef + containerImage (the live-container image-ref

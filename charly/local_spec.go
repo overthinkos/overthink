@@ -38,11 +38,9 @@ type LocalSpec struct {
 	// list looking for "working"/"testing"/"broken" via descriptionStatus.
 	Description *Description `yaml:"description,omitempty"`
 
-	// Eval / DeployEval are optional target-specific checks (default
-	// empty). Candy tests and per-deployment tests propagate
-	// automatically.
-	Eval       []Check `yaml:"eval,omitempty"`
-	DeployEval []Check `yaml:"deploy_eval,omitempty"`
+	// Scenario carries optional target-specific acceptance scenarios (Op
+	// steps). Candy and box scenarios propagate automatically.
+	Scenario []Scenario `yaml:"scenario,omitempty"`
 
 	// Note: there is NO image-fetch surface on a kind:local template.
 	// Deploys apply candies (host packages + configs) only; container

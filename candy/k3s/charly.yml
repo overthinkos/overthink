@@ -12,46 +12,6 @@ candy:
             binary with the right verb. Every installed artifact is
             file/command/package-checkable at build scope.
         tag: [working]
-        scenario:
-            - name: k3s-binary-installed
-              step:
-                - then: the verified k3s multi-call binary is installed at /usr/local/bin/k3s
-                  file: /usr/local/bin/k3s
-                  exists: true
-                - then: the k3s binary is executable (mode 0755)
-                  file: /usr/local/bin/k3s
-                  mode: "0755"
-                - then: the binary reports the pinned k3s version
-                  command: /usr/local/bin/k3s --version
-                  exit_status: 0
-                  stdout:
-                    contains: "k3s version v1."
-            - name: kubectl-crictl-dispatch-symlinks
-              step:
-                - then: kubectl dispatches through the k3s multi-call binary via a symlink
-                  file: /usr/local/bin/kubectl
-                  exists: true
-                  filetype: symlink
-                - then: crictl dispatches through the same multi-call binary
-                  file: /usr/local/bin/crictl
-                  exists: true
-                  filetype: symlink
-            - name: cni-runtime-dependencies-present
-              step:
-                - then: conntrack is installed for kube-proxy connection tracking
-                  package: conntrack-tools
-                  installed: true
-                  package_map:
-                    debian: conntrack
-                    ubuntu: conntrack
-                - then: socat is installed for the k3s apiserver tunnel proxy
-                  package: socat
-                  installed: true
-                - then: iptables is installed for service and pod network routing
-                  package: iptables
-                  installed: true
-                  package_map:
-                    arch: iptables-nft
     package:
         - ca-certificates
         - ethtool
@@ -82,7 +42,7 @@ candy:
         # installing, per R1 (no silent failures on an integrity check).
         # Binary lands at /usr/local/bin/k3s so the k3s-server and k3s-agent
         # layers can emit systemd units pointing at an absolute path.
-        - cmd: |
+        - command: |
             set -euo pipefail
             # Pinned version — update when cutting over.
             K3S_VERSION="v1.31.11+k3s1"
@@ -114,31 +74,82 @@ candy:
             ln -sf /usr/local/bin/k3s /usr/local/bin/kubectl
             ln -sf /usr/local/bin/k3s /usr/local/bin/crictl
             ln -sf /usr/local/bin/k3s /usr/local/bin/ctr
-          user: root
-    eval:
-        - id: k3s-binary
-          file: /usr/local/bin/k3s
-          exists: true
-        - id: k3s-binary-mode
-          file: /usr/local/bin/k3s
-          mode: "0755"
-        - id: k3s-version
-          command: /usr/local/bin/k3s --version
-          exit_status: 0
-          stdout:
-            contains: "k3s version v1."
-        - id: kubectl-symlink
-          file: /usr/local/bin/kubectl
-          exists: true
-          filetype: symlink
-        - id: conntrack-installed
-          package: conntrack-tools
-          installed: true
-          package_map:
-            debian: conntrack
-            ubuntu: conntrack
-        - id: iptables-installed
-          package: iptables
-          installed: true
-          package_map:
-            arch: iptables-nft
+          run_as: root
+    scenario:
+        - name: k3s-binary-installed
+          step:
+            - then: the verified k3s multi-call binary is installed at /usr/local/bin/k3s
+              file: /usr/local/bin/k3s
+              exists: true
+            - then: the k3s binary is executable (mode 0755)
+              file: /usr/local/bin/k3s
+              mode: "0755"
+            - then: the binary reports the pinned k3s version
+              command: /usr/local/bin/k3s --version
+              exit_status: 0
+              stdout:
+                contains: "k3s version v1."
+        - name: kubectl-crictl-dispatch-symlinks
+          step:
+            - then: kubectl dispatches through the k3s multi-call binary via a symlink
+              file: /usr/local/bin/kubectl
+              exists: true
+              filetype: symlink
+            - then: crictl dispatches through the same multi-call binary
+              file: /usr/local/bin/crictl
+              exists: true
+              filetype: symlink
+        - name: cni-runtime-dependencies-present
+          step:
+            - then: conntrack is installed for kube-proxy connection tracking
+              package: conntrack-tools
+              installed: true
+              package_map:
+                debian: conntrack
+                ubuntu: conntrack
+            - then: socat is installed for the k3s apiserver tunnel proxy
+              package: socat
+              installed: true
+            - then: iptables is installed for service and pod network routing
+              package: iptables
+              installed: true
+              package_map:
+                arch: iptables-nft
+        - name: k3s-binary
+          step:
+            - id: k3s-binary
+              file: /usr/local/bin/k3s
+              exists: true
+        - name: k3s-binary-mode
+          step:
+            - id: k3s-binary-mode
+              file: /usr/local/bin/k3s
+              mode: "0755"
+        - name: k3s-version
+          step:
+            - id: k3s-version
+              command: /usr/local/bin/k3s --version
+              exit_status: 0
+              stdout:
+                contains: "k3s version v1."
+        - name: kubectl-symlink
+          step:
+            - id: kubectl-symlink
+              file: /usr/local/bin/kubectl
+              exists: true
+              filetype: symlink
+        - name: conntrack-installed
+          step:
+            - id: conntrack-installed
+              package: conntrack-tools
+              installed: true
+              package_map:
+                debian: conntrack
+                ubuntu: conntrack
+        - name: iptables-installed
+          step:
+            - id: iptables-installed
+              package: iptables
+              installed: true
+              package_map:
+                arch: iptables-nft

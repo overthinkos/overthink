@@ -86,7 +86,7 @@ var artifactValidatableMethods = map[string]bool{
 type methodSpec struct {
 	path     []string
 	required []string
-	posArgs  func(c *Check) []string
+	posArgs  func(c *Op) []string
 	artifact bool
 	// skipBox = true means the verb operates against a cluster or other
 	// non-image target, so the usual image/deploy-name positional must NOT
@@ -437,11 +437,11 @@ var k8sMethods = map[string]methodSpec{
 
 // posK8sCluster emits only the shared cluster-selection flags. Used by
 // methods that take no other parameters (nodes, ingressclass, storageclass).
-func posK8sCluster(c *Check) []string {
+func posK8sCluster(c *Op) []string {
 	return k8sClusterArgs(c)
 }
 
-func posK8sWaitNodes(c *Check) []string {
+func posK8sWaitNodes(c *Op) []string {
 	args := k8sClusterArgs(c)
 	if c.K8sCount > 0 {
 		args = append(args, "--count", strconv.Itoa(c.K8sCount))
@@ -455,7 +455,7 @@ func posK8sWaitNodes(c *Check) []string {
 	return args
 }
 
-func posK8sPods(c *Check) []string {
+func posK8sPods(c *Op) []string {
 	args := k8sClusterArgs(c)
 	if c.Namespace != "" {
 		args = append(args, "--namespace", c.Namespace)
@@ -466,7 +466,7 @@ func posK8sPods(c *Check) []string {
 	return args
 }
 
-func posK8sWaitReady(c *Check) []string {
+func posK8sWaitReady(c *Op) []string {
 	args := k8sClusterArgs(c)
 	args = append(args, "--kind", c.K8sKind, "--name", c.Name)
 	if c.Namespace != "" {
@@ -478,7 +478,7 @@ func posK8sWaitReady(c *Check) []string {
 	return args
 }
 
-func posK8sNamespaceOpt(c *Check) []string {
+func posK8sNamespaceOpt(c *Op) []string {
 	args := k8sClusterArgs(c)
 	if c.Namespace != "" {
 		args = append(args, "--namespace", c.Namespace)
@@ -486,7 +486,7 @@ func posK8sNamespaceOpt(c *Check) []string {
 	return args
 }
 
-func posK8sLbExternal(c *Check) []string {
+func posK8sLbExternal(c *Op) []string {
 	args := k8sClusterArgs(c)
 	args = append(args, "--namespace", c.Namespace, "--name", c.Name)
 	if c.Timeout != "" {
@@ -495,7 +495,7 @@ func posK8sLbExternal(c *Check) []string {
 	return args
 }
 
-func posK8sAddons(c *Check) []string {
+func posK8sAddons(c *Op) []string {
 	args := k8sClusterArgs(c)
 	if c.Namespace != "" {
 		args = append(args, "--namespace", c.Namespace)
@@ -506,7 +506,7 @@ func posK8sAddons(c *Check) []string {
 	return args
 }
 
-func posK8sApply(c *Check) []string {
+func posK8sApply(c *Op) []string {
 	args := k8sClusterArgs(c)
 	args = append(args, "--file", c.Manifest)
 	if c.Namespace != "" {
@@ -515,7 +515,7 @@ func posK8sApply(c *Check) []string {
 	return args
 }
 
-func posK8sRaw(c *Check) []string {
+func posK8sRaw(c *Op) []string {
 	args := k8sClusterArgs(c)
 	args = append(args, "--resource", c.K8sResource)
 	if c.K8sGroup != "" {
@@ -542,7 +542,7 @@ func posK8sRaw(c *Check) []string {
 
 // k8sClusterArgs renders the shared --cluster / --context / --kubeconfig
 // selection flags from the Check.
-func k8sClusterArgs(c *Check) []string {
+func k8sClusterArgs(c *Op) []string {
 	var args []string
 	if c.Cluster != "" {
 		args = append(args, "--cluster", c.Cluster)
@@ -563,38 +563,38 @@ func k8sClusterArgs(c *Check) []string {
 // run before this point.
 // ---------------------------------------------------------------------------
 
-func posTab(c *Check) []string             { return []string{c.Tab} }
-func posURL(c *Check) []string             { return []string{c.URL} }
-func posText(c *Check) []string            { return []string{c.Text} }
-func posKeyName(c *Check) []string         { return []string{c.KeyName} }
-func posCombo(c *Check) []string           { return []string{c.Combo} }
-func posTarget(c *Check) []string          { return []string{c.Target} }
-func posCommand(c *Check) []string         { return []string{c.Command} }
-func posArtifact(c *Check) []string        { return []string{c.Artifact} }
-func posTabExpression(c *Check) []string   { return []string{c.Tab, c.Expression} }
-func posTabSelector(c *Check) []string     { return []string{c.Tab, c.Selector} }
-func posTabSelectorText(c *Check) []string { return []string{c.Tab, c.Selector, c.Text} }
-func posTabQuery(c *Check) []string {
+func posTab(c *Op) []string             { return []string{c.Tab} }
+func posURL(c *Op) []string             { return []string{c.URL} }
+func posText(c *Op) []string            { return []string{c.Text} }
+func posKeyName(c *Op) []string         { return []string{c.KeyName} }
+func posCombo(c *Op) []string           { return []string{c.Combo} }
+func posTarget(c *Op) []string          { return []string{c.Target} }
+func posCommand(c *Op) []string         { return []string{c.Command} }
+func posArtifact(c *Op) []string        { return []string{c.Artifact} }
+func posTabExpression(c *Op) []string   { return []string{c.Tab, c.Expression} }
+func posTabSelector(c *Op) []string     { return []string{c.Tab, c.Selector} }
+func posTabSelectorText(c *Op) []string { return []string{c.Tab, c.Selector, c.Text} }
+func posTabQuery(c *Op) []string {
 	if c.Query == "" {
 		return []string{c.Tab}
 	}
 	return []string{c.Tab, c.Query}
 }
-func posTabText(c *Check) []string    { return []string{c.Tab, c.Text} }
-func posTabKeyName(c *Check) []string { return []string{c.Tab, c.KeyName} }
-func posTabCombo(c *Check) []string   { return []string{c.Tab, c.Combo} }
-func posTabXY(c *Check) []string {
+func posTabText(c *Op) []string    { return []string{c.Tab, c.Text} }
+func posTabKeyName(c *Op) []string { return []string{c.Tab, c.KeyName} }
+func posTabCombo(c *Op) []string   { return []string{c.Tab, c.Combo} }
+func posTabXY(c *Op) []string {
 	return []string{c.Tab, strconv.Itoa(c.X), strconv.Itoa(c.Y)}
 }
-func posTabArtifact(c *Check) []string { return []string{c.Tab, c.Artifact} }
-func posCdpRaw(c *Check) []string {
+func posTabArtifact(c *Op) []string { return []string{c.Tab, c.Artifact} }
+func posCdpRaw(c *Op) []string {
 	args := []string{c.Tab, c.Method}
 	if c.RequestBody != "" {
 		args = append(args, c.RequestBody)
 	}
 	return args
 }
-func posXY(c *Check) []string {
+func posXY(c *Op) []string {
 	return []string{strconv.Itoa(c.X), strconv.Itoa(c.Y)}
 }
 
@@ -602,37 +602,37 @@ func posXY(c *Check) []string {
 // signature is `<image> <x1> <y1> <x2> <y2>` — e.g. `wl drag`.
 // Reuses X/Y as the start and X2/Y2 as the end so click/drag share
 // the X/Y idiom for the start point.
-func posXYXY(c *Check) []string {
+func posXYXY(c *Op) []string {
 	return []string{strconv.Itoa(c.X), strconv.Itoa(c.Y), strconv.Itoa(c.X2), strconv.Itoa(c.Y2)}
 }
-func posScroll(c *Check) []string {
+func posScroll(c *Op) []string {
 	amount := c.Amount
 	if amount == 0 {
 		amount = 1
 	}
 	return []string{strconv.Itoa(c.X), strconv.Itoa(c.Y), c.Direction, strconv.Itoa(amount)}
 }
-func posAtspi(c *Check) []string {
+func posAtspi(c *Op) []string {
 	args := []string{c.Action}
 	if c.Query != "" {
 		args = append(args, c.Query)
 	}
 	return args
 }
-func posClipboard(c *Check) []string {
+func posClipboard(c *Op) []string {
 	args := []string{c.Action}
 	if c.Action == "set" && c.Text != "" {
 		args = append(args, c.Text)
 	}
 	return args
 }
-func posTargetOptional(c *Check) []string {
+func posTargetOptional(c *Op) []string {
 	if c.Target == "" {
 		return nil
 	}
 	return []string{c.Target}
 }
-func posOverlayShow(c *Check) []string {
+func posOverlayShow(c *Op) []string {
 	// Minimal overlay-show: --type text --text <text> [--name <target>]
 	args := []string{"--type", "text", "--text", c.Text}
 	if c.Target != "" {
@@ -640,13 +640,13 @@ func posOverlayShow(c *Check) []string {
 	}
 	return args
 }
-func posDbusCall(c *Check) []string {
+func posDbusCall(c *Op) []string {
 	args := []string{c.Dest, c.Path, c.Method}
 	args = append(args, c.Args...)
 	return args
 }
-func posDbusIntrospect(c *Check) []string { return []string{c.Dest, c.Path} }
-func posDbusNotify(c *Check) []string {
+func posDbusIntrospect(c *Op) []string { return []string{c.Dest, c.Path} }
+func posDbusNotify(c *Op) []string {
 	args := []string{c.Text} // text = title
 	// c.Body MatcherList is reserved for assertion; for the actual body arg,
 	// callers can use c.Description as an authoring convention, or omit for
@@ -661,14 +661,14 @@ func posDbusNotify(c *Check) []string {
 // slice — Kong accepts flags in any position, so returning them alongside
 // positionals avoids extending methodSpec with a dedicated flag hook.
 
-func posMcpCommon(c *Check) []string {
+func posMcpCommon(c *Op) []string {
 	if c.McpName == "" {
 		return nil
 	}
 	return []string{"--name", c.McpName}
 }
 
-func posMcpCall(c *Check) []string {
+func posMcpCall(c *Op) []string {
 	args := []string{c.Tool}
 	if c.Input != "" {
 		args = append(args, c.Input)
@@ -679,7 +679,7 @@ func posMcpCall(c *Check) []string {
 	return args
 }
 
-func posMcpRead(c *Check) []string {
+func posMcpRead(c *Op) []string {
 	args := []string{c.URI}
 	if c.McpName != "" {
 		args = append(args, "--name", c.McpName)
@@ -689,7 +689,7 @@ func posMcpRead(c *Check) []string {
 
 // record positional builders. The subprocess already defaults -n to "default"
 // when RecordName is empty, so omit the flag in that case.
-func posRecordStart(c *Check) []string {
+func posRecordStart(c *Op) []string {
 	var args []string
 	if c.RecordName != "" {
 		args = append(args, "-n", c.RecordName)
@@ -706,7 +706,7 @@ func posRecordStart(c *Check) []string {
 	return args
 }
 
-func posRecordStop(c *Check) []string {
+func posRecordStop(c *Op) []string {
 	var args []string
 	if c.RecordName != "" {
 		args = append(args, "-n", c.RecordName)
@@ -719,7 +719,7 @@ func posRecordStop(c *Check) []string {
 	return args
 }
 
-func posRecordCmd(c *Check) []string {
+func posRecordCmd(c *Op) []string {
 	args := []string{c.Text}
 	if c.RecordName != "" {
 		args = append(args, "-n", c.RecordName)
@@ -731,7 +731,7 @@ func posRecordCmd(c *Check) []string {
 //
 // LibvirtSendKey takes a variadic `Keys []string` positional so
 // "ctrl alt F2" maps to three separate argv slots.
-func posKeyNameSplit(c *Check) []string {
+func posKeyNameSplit(c *Op) []string {
 	return strings.Fields(c.KeyName)
 }
 
@@ -744,7 +744,7 @@ func posKeyNameSplit(c *Check) []string {
 // For commands containing real shell metacharacters (pipes, redirects,
 // quoted spaces), use `command: "sh -c '<full command>'"` so the recipe-side
 // argv is `sh`, `-c`, `<full command>`.
-func posCommandFields(c *Check) []string {
+func posCommandFields(c *Op) []string {
 	fields := strings.Fields(c.Command)
 	if len(fields) == 0 {
 		return nil
@@ -757,7 +757,7 @@ func posCommandFields(c *Check) []string {
 
 // LibvirtQmp takes a method name + optional JSON args string. Text holds the
 // QMP method name (e.g. "query-status"); Input the JSON arg payload.
-func posLibvirtQmp(c *Check) []string {
+func posLibvirtQmp(c *Op) []string {
 	args := []string{c.Text}
 	if c.Input != "" {
 		args = append(args, c.Input)
@@ -771,26 +771,26 @@ func posLibvirtQmp(c *Check) []string {
 
 // posShellArgs prefixes "--" so kong doesn't interpret `-l` / `-p` / etc.
 // shell args as flags of the outer `charly eval adb shell` invocation.
-func posShellArgs(c *Check) []string {
+func posShellArgs(c *Op) []string {
 	return append([]string{"--"}, c.Args...)
 }
 
 // posPackageArg takes the package id from Args[0] for `adb uninstall`. The
 // Args:[0] convention (vs. a dedicated Package modifier) keeps the modifier
 // surface flat and avoids overloading c.Property.
-func posPackageArg(c *Check) []string {
+func posPackageArg(c *Op) []string {
 	if len(c.Args) == 0 {
 		return nil
 	}
 	return []string{c.Args[0]}
 }
 
-func posPropertyArg(c *Check) []string { return []string{c.Property} }
+func posPropertyArg(c *Op) []string { return []string{c.Property} }
 
 // posInstallApp builds the flags for `adb install-app` from the install-app
 // modifiers. Source/Arch/AppVersion are passed only when set so the CLI
 // defaults (apk-pure / x86_64) apply otherwise.
-func posInstallApp(c *Check) []string {
+func posInstallApp(c *Op) []string {
 	args := []string{"--package", c.AppId}
 	if c.Source != "" {
 		args = append(args, "--source", c.Source)
@@ -828,13 +828,13 @@ func (r *Runner) resolveCheckApk(apk, origin string) string {
 	return resolveApkPath(apk, dir)
 }
 
-func posApkFlag(c *Check) []string      { return []string{"--apk", c.Apk} }
-func posArtifactFlag(c *Check) []string { return []string{"--artifact", c.Artifact} }
-func posCapsFlag(c *Check) []string     { return []string{"--caps", c.Caps} }
+func posApkFlag(c *Op) []string      { return []string{"--apk", c.Apk} }
+func posArtifactFlag(c *Op) []string { return []string{"--artifact", c.Artifact} }
+func posCapsFlag(c *Op) []string     { return []string{"--caps", c.Caps} }
 
 // appendSession appends --session <id> when an explicit session override is
 // set. Shared by every appium builder (R3: one session-flag rule).
-func appendSession(args []string, c *Check) []string {
+func appendSession(args []string, c *Op) []string {
 	if c.Session != "" {
 		return append(args, "--session", c.Session)
 	}
@@ -843,7 +843,7 @@ func appendSession(args []string, c *Check) []string {
 
 // appendSelector appends --selector + optional --strategy. Shared prefix for
 // element-targeted appium builders.
-func appendSelector(args []string, c *Check) []string {
+func appendSelector(args []string, c *Op) []string {
 	args = append(args, "--selector", c.Selector)
 	if c.Strategy != "" {
 		args = append(args, "--strategy", c.Strategy)
@@ -854,7 +854,7 @@ func appendSelector(args []string, c *Check) []string {
 // appendOptSelector appends --selector(+--strategy) only when a selector is set
 // (used by execute/raw, where the element is optional and substituted via the
 // {element} token).
-func appendOptSelector(args []string, c *Check) []string {
+func appendOptSelector(args []string, c *Op) []string {
 	if c.Selector == "" {
 		return args
 	}
@@ -863,7 +863,7 @@ func appendOptSelector(args []string, c *Check) []string {
 
 // appendElemOrXY appends either --selector(+--strategy) or --x/--y. The CLI
 // gesture leaves require exactly one of the two targeting modes.
-func appendElemOrXY(args []string, c *Check) []string {
+func appendElemOrXY(args []string, c *Op) []string {
 	if c.Selector != "" {
 		return appendSelector(args, c)
 	}
@@ -873,28 +873,28 @@ func appendElemOrXY(args []string, c *Check) []string {
 // posSelectorStrategy emits --selector + optional --strategy + session. Used by
 // appium find / click / get-text / clear / find-all. Default strategy (xpath)
 // is applied subprocess-side when --strategy is omitted.
-func posSelectorStrategy(c *Check) []string {
+func posSelectorStrategy(c *Op) []string {
 	return appendSession(appendSelector(nil, c), c)
 }
 
 // posSelectorTextStrategy adds --text for send-keys.
-func posSelectorTextStrategy(c *Check) []string {
+func posSelectorTextStrategy(c *Op) []string {
 	return appendSession(append(appendSelector(nil, c), "--text", c.Text), c)
 }
 
 // posSelectorAttribute adds --attribute for get-attribute.
-func posSelectorAttribute(c *Check) []string {
+func posSelectorAttribute(c *Op) []string {
 	return appendSession(append(appendSelector(nil, c), "--attribute", c.Attribute), c)
 }
 
 // posSessionOnly emits only --session when set (source/back/contexts/info/...).
-func posSessionOnly(c *Check) []string { return appendSession(nil, c) }
+func posSessionOnly(c *Op) []string { return appendSession(nil, c) }
 
 // posAppId emits --app-id for the app-lifecycle group.
-func posAppId(c *Check) []string { return appendSession([]string{"--app-id", c.AppId}, c) }
+func posAppId(c *Op) []string { return appendSession([]string{"--app-id", c.AppId}, c) }
 
 // posActivity emits --activity (+ optional --params) for app-start-activity.
-func posActivity(c *Check) []string {
+func posActivity(c *Op) []string {
 	args := []string{"--activity", c.Activity}
 	if c.Params != "" {
 		args = append(args, "--params", c.Params)
@@ -903,7 +903,7 @@ func posActivity(c *Check) []string {
 }
 
 // posKeycode emits --keycode (+ optional --params) for key-press.
-func posKeycode(c *Check) []string {
+func posKeycode(c *Op) []string {
 	args := []string{"--keycode", strconv.Itoa(c.Keycode)}
 	if c.Params != "" {
 		args = append(args, "--params", c.Params)
@@ -913,7 +913,7 @@ func posKeycode(c *Check) []string {
 
 // posParamsOnly emits optional --params (+ session). device-* get/set ops:
 // empty params = get, non-empty = the value/JSON to apply.
-func posParamsOnly(c *Check) []string {
+func posParamsOnly(c *Op) []string {
 	var args []string
 	if c.Params != "" {
 		args = append(args, "--params", c.Params)
@@ -923,7 +923,7 @@ func posParamsOnly(c *Check) []string {
 
 // posElemOrXY: element-or-coordinate target (+ optional --params + session).
 // Used by gesture-tap/double-tap/long-press/drag.
-func posElemOrXY(c *Check) []string {
+func posElemOrXY(c *Op) []string {
 	args := appendElemOrXY(nil, c)
 	if c.Params != "" {
 		args = append(args, "--params", c.Params)
@@ -933,7 +933,7 @@ func posElemOrXY(c *Check) []string {
 
 // posGesture: element-or-coordinate + optional --direction/--percent (+ --params
 // + session). Used by gesture-swipe/scroll/fling/pinch-open/pinch-close.
-func posGesture(c *Check) []string {
+func posGesture(c *Op) []string {
 	args := appendElemOrXY(nil, c)
 	if c.Direction != "" {
 		args = append(args, "--direction", c.Direction)
@@ -949,7 +949,7 @@ func posGesture(c *Check) []string {
 
 // posAppiumExecute: --expression (+ optional --request-body + optional selector
 // for {element} substitution + session). The mobile:/execute-script escape hatch.
-func posAppiumExecute(c *Check) []string {
+func posAppiumExecute(c *Op) []string {
 	args := []string{"--expression", c.Expression}
 	if c.RequestBody != "" {
 		args = append(args, "--request-body", c.RequestBody)
@@ -959,7 +959,7 @@ func posAppiumExecute(c *Check) []string {
 
 // posAppiumRaw: --method + --path (+ optional --request-body + optional selector
 // + session). The full W3C WebDriver HTTP escape hatch.
-func posAppiumRaw(c *Check) []string {
+func posAppiumRaw(c *Op) []string {
 	args := []string{"--method", c.Method, "--path", c.Path}
 	if c.RequestBody != "" {
 		args = append(args, "--request-body", c.RequestBody)
@@ -969,7 +969,7 @@ func posAppiumRaw(c *Check) []string {
 
 // posLogcatTail emits --lines / --filter optionals only when set; the CLI
 // defaults handle the unset case.
-func posLogcatTail(c *Check) []string {
+func posLogcatTail(c *Op) []string {
 	var args []string
 	if c.Amount > 0 {
 		args = append(args, "--lines", strconv.Itoa(c.Amount))
@@ -981,7 +981,7 @@ func posLogcatTail(c *Check) []string {
 }
 
 // posWaitForDevice emits --timeout when set; default lives subprocess-side.
-func posWaitForDevice(c *Check) []string {
+func posWaitForDevice(c *Op) []string {
 	if c.Timeout == "" {
 		return nil
 	}
@@ -992,47 +992,47 @@ func posWaitForDevice(c *Check) []string {
 // Verb dispatchers
 // ---------------------------------------------------------------------------
 
-func (r *Runner) runCdp(ctx context.Context, c *Check) EvalResult {
+func (r *Runner) runCdp(ctx context.Context, c *Op) EvalResult {
 	return r.runCharlyVerb(ctx, c, "cdp", c.Cdp, cdpMethods)
 }
 
-func (r *Runner) runWl(ctx context.Context, c *Check) EvalResult {
+func (r *Runner) runWl(ctx context.Context, c *Op) EvalResult {
 	return r.runCharlyVerb(ctx, c, "wl", c.Wl, wlMethods)
 }
 
-func (r *Runner) runDbus(ctx context.Context, c *Check) EvalResult {
+func (r *Runner) runDbus(ctx context.Context, c *Op) EvalResult {
 	return r.runCharlyVerb(ctx, c, "dbus", c.Dbus, dbusMethods)
 }
 
-func (r *Runner) runVnc(ctx context.Context, c *Check) EvalResult {
+func (r *Runner) runVnc(ctx context.Context, c *Op) EvalResult {
 	return r.runCharlyVerb(ctx, c, "vnc", c.Vnc, vncMethods)
 }
 
-func (r *Runner) runMcp(ctx context.Context, c *Check) EvalResult {
+func (r *Runner) runMcp(ctx context.Context, c *Op) EvalResult {
 	return r.runCharlyVerb(ctx, c, "mcp", c.Mcp, mcpMethods)
 }
 
-func (r *Runner) runRecord(ctx context.Context, c *Check) EvalResult {
+func (r *Runner) runRecord(ctx context.Context, c *Op) EvalResult {
 	return r.runCharlyVerb(ctx, c, "record", c.Record, recordMethods)
 }
 
-func (r *Runner) runSpice(ctx context.Context, c *Check) EvalResult {
+func (r *Runner) runSpice(ctx context.Context, c *Op) EvalResult {
 	return r.runCharlyVerb(ctx, c, "spice", c.Spice, spiceMethods)
 }
 
-func (r *Runner) runLibvirt(ctx context.Context, c *Check) EvalResult {
+func (r *Runner) runLibvirt(ctx context.Context, c *Op) EvalResult {
 	return r.runCharlyVerb(ctx, c, "libvirt", c.Libvirt, libvirtMethods)
 }
 
-func (r *Runner) runK8s(ctx context.Context, c *Check) EvalResult {
+func (r *Runner) runK8s(ctx context.Context, c *Op) EvalResult {
 	return r.runCharlyVerb(ctx, c, "k8s", c.K8s, k8sMethods)
 }
 
-func (r *Runner) runAdb(ctx context.Context, c *Check) EvalResult {
+func (r *Runner) runAdb(ctx context.Context, c *Op) EvalResult {
 	return r.runCharlyVerb(ctx, c, "adb", c.Adb, adbMethods)
 }
 
-func (r *Runner) runAppium(ctx context.Context, c *Check) EvalResult {
+func (r *Runner) runAppium(ctx context.Context, c *Op) EvalResult {
 	return r.runCharlyVerb(ctx, c, "appium", c.Appium, appiumMethods)
 }
 
@@ -1053,7 +1053,7 @@ func vmDisplayDeviceAbsent(verb, stderr string) bool {
 		strings.Contains(stderr, "graphics device declared in vm.yml")
 }
 
-func (r *Runner) runCharlyVerb(ctx context.Context, c *Check, verb, method string, allowlist map[string]methodSpec) EvalResult {
+func (r *Runner) runCharlyVerb(ctx context.Context, c *Op, verb, method string, allowlist map[string]methodSpec) EvalResult {
 	if r.Mode == RunModeBox {
 		return skipf(c, fmt.Sprintf("%s: %s requires a running container (skip under charly eval box)", verb, method))
 	}
@@ -1212,7 +1212,7 @@ func (r *Runner) runCharlyVerb(ctx context.Context, c *Check, verb, method strin
 // exec produced the file, and (b) after the freshness mtime gate
 // confirmed the AI's file is fresh in validate_ai_artifacts mode.
 // Returns nil on all-pass or the first validator's error.
-func runArtifactValidators(c *Check) error {
+func runArtifactValidators(c *Op) error {
 	if c.ArtifactMinBytes > 0 {
 		info, err := os.Stat(c.Artifact)
 		if err != nil {
@@ -1370,7 +1370,7 @@ func assertArtifactMinCastEvents(path string, minEvents int) error {
 // runtime-only callers (e.g. tests loaded from an OCI label into an
 // un-validated runner) still surface authoring errors rather than silent
 // wrong behavior.
-func checkRequiredFields(c *Check, required []string) error {
+func checkRequiredFields(c *Op, required []string) error {
 	var missing []string
 	for _, f := range required {
 		if isZeroField(c, f) {
@@ -1386,7 +1386,7 @@ func checkRequiredFields(c *Check, required []string) error {
 // isZeroField checks whether the named Check field is at its zero value.
 // Enumerates the fields the new verbs use — grep-able at the allowlist site
 // so adding a new modifier means adding a case here too.
-func isZeroField(c *Check, name string) bool {
+func isZeroField(c *Op, name string) bool {
 	switch name {
 	case "Tab":
 		return c.Tab == ""

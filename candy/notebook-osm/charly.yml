@@ -16,21 +16,25 @@ candy:
             map via martin's PMTiles (URL sourced from MARTIN_PUBLIC_URL so
             the user's browser can reach the host port). Data-only layer —
             no packages, no services, no baked DAGs.
-        scenario:
-            - name: OSM viz notebook lands in workspace/notebooks/
-              step:
-                - then: the notebooks subdirectory is provisioned in the workspace
-                  scope: deploy
-                  file: ${VOLUME_CONTAINER_PATH:workspace}/notebooks
-                  filetype: directory
-                - and: the osm-monaco-viz notebook is present
-                  scope: deploy
-                  command: ls ${VOLUME_CONTAINER_PATH:workspace}/notebooks/
-                  exit_status: 0
-                  stdout:
-                    - matches: "osm-monaco-viz"
-    eval:
-        - id: notebook-osm-viz-present
-          scope: deploy
-          file: ${VOLUME_CONTAINER_PATH:workspace}/notebooks/osm-monaco-viz.py
-          exists: true
+    scenario:
+        - name: OSM viz notebook lands in workspace/notebooks/
+          step:
+            - then: the notebooks subdirectory is provisioned in the workspace
+              file: ${VOLUME_CONTAINER_PATH:workspace}/notebooks
+              filetype: directory
+              context:
+                - runtime
+            - and: the osm-monaco-viz notebook is present
+              command: ls ${VOLUME_CONTAINER_PATH:workspace}/notebooks/
+              exit_status: 0
+              stdout:
+                - matches: "osm-monaco-viz"
+              context:
+                - runtime
+        - name: notebook-osm-viz-present
+          step:
+            - id: notebook-osm-viz-present
+              file: ${VOLUME_CONTAINER_PATH:workspace}/notebooks/osm-monaco-viz.py
+              exists: true
+              context:
+                - runtime

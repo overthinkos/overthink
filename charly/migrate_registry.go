@@ -71,7 +71,7 @@ type MigrationStep struct {
 // closure references it, and the registry's last entry uses it as its Version,
 // so the two are guaranteed equal (asserted by TestRegistryHeadMatchesLatest).
 // Bump it — and append the matching MigrationStep — for each future cutover.
-var latestSchemaVersion = mustCalVer("2026.163.0928")
+var latestSchemaVersion = mustCalVer("2026.164.0002")
 
 // migrationSteps is the ordered registry. Chronological by git landing date
 // (see `git log --diff-filter=A` on each migrate_*.go), which is the order the
@@ -328,6 +328,17 @@ func migrationSteps() []MigrationStep {
 		// with the repo) is processed when ctx.HostDeployPath is set. See CHANGELOG.md.
 		{mustCalVer("2026.163.0927"), "agent-kind-rename", false, func(c *MigrateContext) (bool, error) {
 			w, err := MigrateAgentKindRename(c.Dir, c.HostDeployPath, c.DryRun)
+			return len(w) > 0, err
+		}},
+		// 2026-06 Op-vocabulary unification: task: + eval: + agent: collapse into
+		// one generic Op vocabulary; eval: check lists fold into scenario:;
+		// description.scenario: hoists to a top-level scenario:; task cmd:→command:
+		// + run-as user:→run_as:; check scope:→context:. The ROOT harness eval:
+		// block (a kind:eval bed map) is untouched (only a SequenceNode eval: is a
+		// check list). TouchesHost false → remote-cache auto-migration applies it
+		// to fetched candy manifests. See migrate_op_unify.go + CHANGELOG.md.
+		{mustCalVer("2026.164.0001"), "op-unify", false, func(c *MigrateContext) (bool, error) {
+			w, err := MigrateOpUnify(c.Dir, c.DryRun)
 			return len(w) > 0, err
 		}},
 		// HEAD — the schema stamp. Must stay LAST so LatestSchemaVersion picks it up

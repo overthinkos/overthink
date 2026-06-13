@@ -12,72 +12,81 @@ candy:
             importable, the enabling JSON present, and (once a jupyter box is deployed)
             the Streamable HTTP MCP server routing /mcp — are all verifiable.
         tag: [working]
-        scenario:
-            - name: fastmcp-runtime-present
-              step:
-                - then: fastmcp is installed in the parent pixi default environment
-                  command: ${HOME}/.pixi/envs/default/bin/pip show fastmcp
-                  exit_status: 0
-                  stdout:
-                    - contains: "Name: fastmcp"
-            - name: extension-package-importable
-              step:
-                - then: the in-tree jupyter_mcp extension package imports from the pixi env
-                  command: ${HOME}/.pixi/envs/default/bin/python -c "import jupyter_mcp"
-                  exit_status: 0
-            - name: server-extension-enabled
-              step:
-                - then: the Jupyter Server config drop-in enables the jupyter_mcp extension
-                  file: ${HOME}/.pixi/envs/default/etc/jupyter/jupyter_server_config.d/jupyter_mcp.json
-                  exists: true
-                  contains:
-                    - contains: "jupyter_mcp"
-            - name: mcp-endpoint-routes
-              step:
-                - then: the deployed JupyterLab routes /mcp to the MCP handler (an empty POST returns 400, not a 404)
-                  scope: deploy
-                  http: http://127.0.0.1:${HOST_PORT:8888}/mcp
-                  method: POST
-                  status: 400
-                  timeout: 5s
-                - then: an agent can list the notebook_*/cell_*/room_list MCP tools and round-trip a cell edit through the live server
     task:
         # fastmcp via pip: pixi's cross-platform resolver conflicts with
         # opentelemetry-api on aarch64, so we bypass pixi for this one dep.
-        - cmd: ~/.pixi/envs/default/bin/pip install "fastmcp>=3.2.0"
-          user: "${USER}"
+        - command: ~/.pixi/envs/default/bin/pip install "fastmcp>=3.2.0"
+          run_as: "${USER}"
         # The in-tree jupyter_mcp distribution — --no-deps because deps above.
-        - cmd: ~/.pixi/envs/default/bin/pip install --no-deps /ctx/jupyter_mcp
-          user: "${USER}"
+        - command: ~/.pixi/envs/default/bin/pip install --no-deps /ctx/jupyter_mcp
+          run_as: "${USER}"
         # Enable the extension in Jupyter Server config.
-        - cmd: |
+        - command: |
             JUPYTER_CONFIG_DIR=~/.pixi/envs/default/etc/jupyter/jupyter_server_config.d
             mkdir -p "$JUPYTER_CONFIG_DIR"
             echo '{"ServerApp": {"jpserver_extensions": {"jupyter_mcp": true}}}' > \
               "$JUPYTER_CONFIG_DIR/jupyter_mcp.json"
-          user: "${USER}"
-    eval:
-        - id: jupyter-mcp-config-enabled
-          file: ${HOME}/.pixi/envs/default/etc/jupyter/jupyter_server_config.d/jupyter_mcp.json
-          exists: true
-          contains:
-            - contains: "jupyter_mcp"
-        - id: fastmcp-installed
-          command: ${HOME}/.pixi/envs/default/bin/pip show fastmcp
-          exit_status: 0
-          stdout:
-            - contains: "Name: fastmcp"
-        # The in-tree jupyter_mcp distribution (pip install --no-deps /ctx/jupyter_mcp)
-        # must import from the parent pixi env — proves the extension package landed.
-        - id: jupyter-mcp-package-importable
-          command: ${HOME}/.pixi/envs/default/bin/python -c "import jupyter_mcp"
-          exit_status: 0
-        # MCP endpoint is up iff it returns something other than 404/connection-refused.
-        # An empty POST yields 400 "Bad Request" — which still proves the server is
-        # routing /mcp to its MCP handler (a missing endpoint would 404).
-        - id: jupyter-mcp-endpoint
-          scope: deploy
-          http: http://127.0.0.1:${HOST_PORT:8888}/mcp
-          method: POST
-          status: 400
-          timeout: 5s
+          run_as: "${USER}"
+    scenario:
+        - name: fastmcp-runtime-present
+          step:
+            - then: fastmcp is installed in the parent pixi default environment
+              command: ${HOME}/.pixi/envs/default/bin/pip show fastmcp
+              exit_status: 0
+              stdout:
+                - contains: "Name: fastmcp"
+        - name: extension-package-importable
+          step:
+            - then: the in-tree jupyter_mcp extension package imports from the pixi env
+              command: ${HOME}/.pixi/envs/default/bin/python -c "import jupyter_mcp"
+              exit_status: 0
+        - name: server-extension-enabled
+          step:
+            - then: the Jupyter Server config drop-in enables the jupyter_mcp extension
+              file: ${HOME}/.pixi/envs/default/etc/jupyter/jupyter_server_config.d/jupyter_mcp.json
+              exists: true
+              contains:
+                - contains: "jupyter_mcp"
+        - name: mcp-endpoint-routes
+          step:
+            - then: the deployed JupyterLab routes /mcp to the MCP handler (an empty POST returns 400, not a 404)
+              http: http://127.0.0.1:${HOST_PORT:8888}/mcp
+              method: POST
+              status: 400
+              timeout: 5s
+              context:
+                - runtime
+            - then: an agent can list the notebook_*/cell_*/room_list MCP tools and round-trip a cell edit through the live server
+        - name: jupyter-mcp-config-enabled
+          step:
+            - id: jupyter-mcp-config-enabled
+              file: ${HOME}/.pixi/envs/default/etc/jupyter/jupyter_server_config.d/jupyter_mcp.json
+              exists: true
+              contains:
+                - contains: "jupyter_mcp"
+        - name: fastmcp-installed
+          step:
+            - id: fastmcp-installed
+              command: ${HOME}/.pixi/envs/default/bin/pip show fastmcp
+              exit_status: 0
+              stdout:
+                - contains: "Name: fastmcp"
+        - name: jupyter-mcp-package-importable
+          step:
+            # The in-tree jupyter_mcp distribution (pip install --no-deps /ctx/jupyter_mcp)
+            # must import from the parent pixi env — proves the extension package landed.
+            - id: jupyter-mcp-package-importable
+              command: ${HOME}/.pixi/envs/default/bin/python -c "import jupyter_mcp"
+              exit_status: 0
+        - name: jupyter-mcp-endpoint
+          step:
+            # MCP endpoint is up iff it returns something other than 404/connection-refused.
+            # An empty POST yields 400 "Bad Request" — which still proves the server is
+            # routing /mcp to its MCP handler (a missing endpoint would 404).
+            - id: jupyter-mcp-endpoint
+              http: http://127.0.0.1:${HOST_PORT:8888}/mcp
+              method: POST
+              status: 400
+              timeout: 5s
+              context:
+                - runtime

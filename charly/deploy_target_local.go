@@ -261,8 +261,8 @@ func (t *LocalDeployTarget) execStep(step InstallStep, plan *InstallPlan, opts E
 		return t.execSystemPackages(s, plan, opts, rec, start)
 	case *BuilderStep:
 		return t.execBuilder(s, plan, opts, rec, start)
-	case *TaskStep:
-		return t.execTask(s, plan, opts, rec, start)
+	case *OpStep:
+		return t.execOp(s, plan, opts, rec, start)
 	case *FileStep:
 		return t.execFile(s, plan, opts, rec, start)
 	case *ServicePackagedStep:
@@ -614,8 +614,8 @@ func (t *LocalDeployTarget) execBuilder(s *BuilderStep, plan *InstallPlan, opts 
 	return nil
 }
 
-func (t *LocalDeployTarget) execTask(s *TaskStep, plan *InstallPlan, opts EmitOpts, rec *CandyRecord, start time.Time) error {
-	if s.Task == nil {
+func (t *LocalDeployTarget) execOp(s *OpStep, plan *InstallPlan, opts EmitOpts, rec *CandyRecord, start time.Time) error {
+	if s.Op == nil {
 		return nil
 	}
 	// copy: stages a candy file onto the venue through the executor's
@@ -624,27 +624,27 @@ func (t *LocalDeployTarget) execTask(s *TaskStep, plan *InstallPlan, opts EmitOp
 	// file-copy tasks (a rendered `install <candyDir>/<f> <dst>` only works
 	// when the candy dir is on the same host the command runs on, which is
 	// false for SSH/VM deploys — the historic VM copy:-task bug).
-	if s.Task.Copy != "" {
-		src := filepath.Join(s.CandyDir, s.Task.Copy)
+	if s.Op.Copy != "" {
+		src := filepath.Join(s.CandyDir, s.Op.Copy)
 		// Prefer the home-resolved dest (s.To) so `to: ${HOME}/...` expands to
 		// the real host home rather than staying a literal "${HOME}".
 		dst := s.To
 		if dst == "" {
-			dst = s.Task.To
+			dst = s.Op.To
 		}
 		if dst == "" {
-			dst = s.Task.Copy
+			dst = s.Op.Copy
 		}
-		if err := t.exec().PutFile(opts.ContextOrDefault(), src, dst, parseTaskMode(s.Task.Mode, 0o644), s.Scope() == ScopeSystem, opts); err != nil {
+		if err := t.exec().PutFile(opts.ContextOrDefault(), src, dst, parseTaskMode(s.Op.Mode, 0o644), s.Scope() == ScopeSystem, opts); err != nil {
 			return err
 		}
-		kind, _ := s.Task.Kind()
-		t.noteStep(rec, StepKindTask, s.Scope(), s.Venue(),
-			fmt.Sprintf("%s: %s", kind, taskSummary(s.Task)), start)
+		kind, _ := s.Op.Kind()
+		t.noteStep(rec, StepKindOp, s.Scope(), s.Venue(),
+			fmt.Sprintf("%s: %s", kind, taskSummary(s.Op)), start)
 		rec.ReverseOps = append(rec.ReverseOps, s.Reverse()...)
 		return nil
 	}
-	cmd, err := renderTaskCommand(s)
+	cmd, err := renderOpCommand(s)
 	if err != nil {
 		return err
 	}
@@ -660,14 +660,14 @@ func (t *LocalDeployTarget) execTask(s *TaskStep, plan *InstallPlan, opts EmitOp
 			return err
 		}
 	}
-	kind, _ := s.Task.Kind()
-	t.noteStep(rec, StepKindTask, s.Scope(), s.Venue(),
-		fmt.Sprintf("%s: %s", kind, taskSummary(s.Task)), start)
+	kind, _ := s.Op.Kind()
+	t.noteStep(rec, StepKindOp, s.Scope(), s.Venue(),
+		fmt.Sprintf("%s: %s", kind, taskSummary(s.Op)), start)
 	rec.ReverseOps = append(rec.ReverseOps, s.Reverse()...)
 	return nil
 }
 
-// renderTaskCommand turns a TaskStep into a shell command suitable for
+// renderOpCommand turns an OpStep into a shell command suitable for
 // sudo/user heredoc execution. Verbs handled:
 //   - mkdir      → `install -d -m<mode> <path>`
 //   - download   → curl to a tmp file, optionally extract, install
@@ -679,18 +679,18 @@ func (t *LocalDeployTarget) execTask(s *TaskStep, plan *InstallPlan, opts EmitOp
 // For v1 of the host target we implement cmd, mkdir, and link — the
 // most common verbs. The rest fall back to a "not yet supported" error
 // that tests can verify against.
-// renderTaskCommand turns a non-copy TaskStep into a shell command. It is
+// renderOpCommand turns a non-copy OpStep into a shell command. It is
 // package-level (uses only the step, not the target) so LocalDeployTarget AND
 // VmDeployTarget render every task verb through ONE code path. copy: is NOT
-// handled here — it is staged via the executor's PutFile in execTask, the only
+// handled here — it is staged via the executor's PutFile in execOp, the only
 // portable way to place a candy file on a remote/SSH venue.
-func renderTaskCommand(s *TaskStep) (string, error) {
-	task := s.Task
+func renderOpCommand(s *OpStep) (string, error) {
+	task := s.Op
 	ctxPath := s.CtxPath
 
 	switch {
-	case task.Cmd != "":
-		body := task.Cmd
+	case task.Command != "":
+		body := task.Command
 		if ctxPath != "" {
 			body = strings.ReplaceAll(body, "/ctx/", ctxPath+"/")
 		}
@@ -752,7 +752,7 @@ func parseTaskMode(mode string, def uint32) uint32 {
 // can reference ${ARCH} / ${MY_CANDY_VAR} at deploy-time the same way
 // they do at build-time. Trailing newline included; safe to prepend
 // to a script.
-func taskShellPreamble(s *TaskStep) string {
+func taskShellPreamble(s *OpStep) string {
 	var b strings.Builder
 	b.WriteString(buildArchExports())
 	if len(s.CandyVars) > 0 {
@@ -769,14 +769,14 @@ func taskShellPreamble(s *TaskStep) string {
 	// path (layer_secrets.go InjectSecretsIntoPlans) which sets task.Env to
 	// credential-store-resolved values. Exporting here means BOTH local and VM
 	// deploys propagate them to cmd: bodies through this one shared preamble.
-	if s.Task != nil && len(s.Task.Env) > 0 {
-		keys := make([]string, 0, len(s.Task.Env))
-		for k := range s.Task.Env {
+	if s.Op != nil && len(s.Op.Env) > 0 {
+		keys := make([]string, 0, len(s.Op.Env))
+		for k := range s.Op.Env {
 			keys = append(keys, k)
 		}
 		sortStrings(keys)
 		for _, k := range keys {
-			fmt.Fprintf(&b, "export %s=%s\n", k, shQuoteArg(s.Task.Env[k]))
+			fmt.Fprintf(&b, "export %s=%s\n", k, shQuoteArg(s.Op.Env[k]))
 		}
 	}
 	return b.String()
@@ -793,7 +793,7 @@ func taskShellPreamble(s *TaskStep) string {
 // referenced inside the download URL (e.g. ${K3D_VERSION}) resolve
 // correctly. Build-time gets these via Containerfile ENV; deploy-time
 // has no equivalent without this.
-func renderDownloadScript(task *Task, candyVars map[string]string) string {
+func renderDownloadScript(task *Op, candyVars map[string]string) string {
 	url := task.Download
 	to := task.To
 	extract := task.Extract
@@ -1278,11 +1278,11 @@ func (t *LocalDeployTarget) noteStep(rec *CandyRecord, kind StepKind, scope Scop
 }
 
 // taskSummary returns a short one-line summary for ledger display.
-func taskSummary(task *Task) string {
+func taskSummary(task *Op) string {
 	var b bytes.Buffer
 	switch {
-	case task.Cmd != "":
-		body := task.Cmd
+	case task.Command != "":
+		body := task.Command
 		if len(body) > 40 {
 			body = body[:40] + "…"
 		}

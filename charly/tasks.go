@@ -252,7 +252,7 @@ func emitVarsEnv(b *strings.Builder, vars map[string]string) {
 // emitMkdirBatch emits a single RUN mkdir -p for a batch of adjacent
 // mkdir tasks that share the same user. When modes differ within the batch,
 // splits per-mode chmod at the tail of the single RUN.
-func emitMkdirBatch(b *strings.Builder, tasks []Task, img *ResolvedBox) {
+func emitMkdirBatch(b *strings.Builder, tasks []Op, img *ResolvedBox) {
 	if len(tasks) == 0 {
 		return
 	}
@@ -282,7 +282,7 @@ func emitMkdirBatch(b *strings.Builder, tasks []Task, img *ResolvedBox) {
 // emitCopy emits a COPY --from=<layer-stage> directive for an existing file
 // in the candy directory. No RUN required — BuildKit handles the file
 // transfer directly from the layer's scratch stage.
-func emitCopy(b *strings.Builder, t Task, layerStage string, img *ResolvedBox) {
+func emitCopy(b *strings.Builder, t Op, layerStage string, img *ResolvedBox) {
 	src := t.Copy // relative to candy dir; do not substitute (filesystem path at generate time)
 	dest := taskSubstPath(t.To, img)
 	mode := t.Mode
@@ -290,7 +290,7 @@ func emitCopy(b *strings.Builder, t Task, layerStage string, img *ResolvedBox) {
 		mode = "0755"
 	}
 
-	_, chown := resolveUserSpec(t.User, img)
+	_, chown := resolveUserSpec(t.RunAs, img)
 	flags := []string{fmt.Sprintf("--from=%s", layerStage), fmt.Sprintf("--chmod=%s", mode)}
 	if chown != "" {
 		flags = append(flags, fmt.Sprintf("--chown=%s", chown))
@@ -303,14 +303,14 @@ func emitCopy(b *strings.Builder, t Task, layerStage string, img *ResolvedBox) {
 // relative path. layerStage here is the final build-stage name and srcPath
 // is the _inline/<candy>/<hash> path inside the build context (NOT from a
 // layer stage — inline content lives in the image's .build directory).
-func emitWrite(b *strings.Builder, t Task, srcPath string, img *ResolvedBox) {
+func emitWrite(b *strings.Builder, t Op, srcPath string, img *ResolvedBox) {
 	dest := taskSubstPath(t.Write, img)
 	mode := t.Mode
 	if mode == "" {
 		mode = "0644"
 	}
 
-	_, chown := resolveUserSpec(t.User, img)
+	_, chown := resolveUserSpec(t.RunAs, img)
 	flags := []string{fmt.Sprintf("--chmod=%s", mode)}
 	if chown != "" {
 		flags = append(flags, fmt.Sprintf("--chown=%s", chown))
@@ -321,7 +321,7 @@ func emitWrite(b *strings.Builder, t Task, srcPath string, img *ResolvedBox) {
 
 // emitLinkBatch emits a single RUN with chained ln -sf for a batch of
 // adjacent link tasks sharing the same user.
-func emitLinkBatch(b *strings.Builder, tasks []Task, img *ResolvedBox) {
+func emitLinkBatch(b *strings.Builder, tasks []Op, img *ResolvedBox) {
 	if len(tasks) == 0 {
 		return
 	}
@@ -337,7 +337,7 @@ func emitLinkBatch(b *strings.Builder, tasks []Task, img *ResolvedBox) {
 // emitSetcapBatch emits a single RUN setcap … for a batch of adjacent
 // setcap tasks. strip (empty caps) and set (non-empty caps) are chained
 // via &&.
-func emitSetcapBatch(b *strings.Builder, tasks []Task, img *ResolvedBox) {
+func emitSetcapBatch(b *strings.Builder, tasks []Op, img *ResolvedBox) {
 	if len(tasks) == 0 {
 		return
 	}
@@ -360,11 +360,11 @@ func emitSetcapBatch(b *strings.Builder, tasks []Task, img *ResolvedBox) {
 // task's user: root → shared (sharing=locked), non-root → uid/gid-owned. The
 // cache-USE logic (sentinel guards, copy-into-place) lives in the task body;
 // this only emits the mount. Generic + config-driven — nothing candy-specific.
-func taskCacheMounts(t Task, img *ResolvedBox) []string {
+func taskCacheMounts(t Op, img *ResolvedBox) []string {
 	if len(t.Cache) == 0 {
 		return nil
 	}
-	directive, _ := resolveUserSpec(t.User, img)
+	directive, _ := resolveUserSpec(t.RunAs, img)
 	root := directive == "0"
 	out := make([]string, 0, len(t.Cache))
 	for _, p := range t.Cache {
@@ -380,7 +380,7 @@ func taskCacheMounts(t Task, img *ResolvedBox) []string {
 
 // emitDownload emits one RUN per download task: fetch to a content-addressed
 // /tmp/downloads cache, then extract. Honors candy-declared `cache:` mounts.
-func emitDownload(b *strings.Builder, t Task, img *ResolvedBox) error {
+func emitDownload(b *strings.Builder, t Op, img *ResolvedBox) error {
 	url := t.Download // no generate-time substitution — left for shell/ENV to handle
 	dest := taskSubstPath(t.To, img)
 	extract := strings.TrimSpace(t.Extract)
@@ -478,7 +478,7 @@ func emitDownload(b *strings.Builder, t Task, img *ResolvedBox) error {
 // bash directly — no ANSI-C $'...' quoting involved, which dash doesn't
 // understand and the OCI image format doesn't honor SHELL directives for.
 // BUILD_ARCH is injected as a shell var so tasks using ${BUILD_ARCH} work.
-func emitCmd(b *strings.Builder, t Task, layerStage string, img *ResolvedBox, userIsRoot bool) {
+func emitCmd(b *strings.Builder, t Op, layerStage string, img *ResolvedBox, userIsRoot bool) {
 	var mounts []string
 	mounts = append(mounts, fmt.Sprintf("--mount=type=bind,from=%s,source=/,target=/ctx", layerStage))
 
@@ -521,8 +521,8 @@ func emitCmd(b *strings.Builder, t Task, layerStage string, img *ResolvedBox, us
 		}
 	}
 	b.WriteString("set -e\n")
-	b.WriteString(t.Cmd)
-	if !strings.HasSuffix(t.Cmd, "\n") {
+	b.WriteString(t.Command)
+	if !strings.HasSuffix(t.Command, "\n") {
 		b.WriteString("\n")
 	}
 	b.WriteString("OVCMD\n")
@@ -544,12 +544,12 @@ func parentDirForDest(dest string) string {
 // taskCoalescesWith returns true if next can be batched with current under
 // the adjacent-coalescing rule: same verb, same user, both verbs support
 // batching. mkdir additionally requires same mode to share one chmod.
-func taskCoalescesWith(current, next Task, currentVerb string) bool {
+func taskCoalescesWith(current, next Op, currentVerb string) bool {
 	nextVerb, err := next.Kind()
 	if err != nil || nextVerb != currentVerb {
 		return false
 	}
-	if current.User != next.User {
+	if current.RunAs != next.RunAs {
 		return false
 	}
 	switch currentVerb {
@@ -574,7 +574,7 @@ func (g *Generator) emitTasks(b *strings.Builder, layer *Candy, img *ResolvedBox
 	}
 
 	// Clone tasks and append implicit build if needed.
-	tasks := make([]Task, 0, len(layer.tasks)+1)
+	tasks := make([]Op, 0, len(layer.tasks)+1)
 	tasks = append(tasks, layer.tasks...)
 	hasExplicitBuild := false
 	for _, t := range layer.tasks {
@@ -584,7 +584,7 @@ func (g *Generator) emitTasks(b *strings.Builder, layer *Candy, img *ResolvedBox
 		}
 	}
 	if !hasExplicitBuild && g.candyHasImplicitBuild(layer, img) {
-		tasks = append(tasks, Task{Build: "all", User: "${USER}"})
+		tasks = append(tasks, Op{Build: "all", RunAs: "${USER}"})
 	}
 
 	// Track known mkdirs to suppress parent-dir auto-insertion for
@@ -613,7 +613,7 @@ func (g *Generator) emitTasks(b *strings.Builder, layer *Candy, img *ResolvedBox
 		}
 
 		// Resolve USER for this task. Build tasks default to ${USER}.
-		userField := t.User
+		userField := t.RunAs
 		if verb == "build" && userField == "" {
 			userField = "${USER}"
 		}
@@ -631,7 +631,7 @@ func (g *Generator) emitTasks(b *strings.Builder, layer *Candy, img *ResolvedBox
 		// Verb dispatch
 		switch verb {
 		case "mkdir":
-			batch := []Task{t}
+			batch := []Op{t}
 			for i+1 < len(tasks) && taskCoalescesWith(t, tasks[i+1], verb) {
 				batch = append(batch, tasks[i+1])
 				i++
@@ -642,7 +642,7 @@ func (g *Generator) emitTasks(b *strings.Builder, layer *Candy, img *ResolvedBox
 			// Auto-insert parent mkdir if not declared by the author.
 			parent := parentDirForDest(taskSubstPath(t.To, img))
 			if parent != "" && !declaredDirs[parent] && parent != img.Home && parent != "/" {
-				emitMkdirBatch(b, []Task{{Mkdir: parent, User: t.User}}, img)
+				emitMkdirBatch(b, []Op{{Mkdir: parent, RunAs: t.RunAs}}, img)
 				declaredDirs[parent] = true
 			}
 			emitCopy(b, t, layer.Name, img)
@@ -650,7 +650,7 @@ func (g *Generator) emitTasks(b *strings.Builder, layer *Candy, img *ResolvedBox
 		case "write":
 			parent := parentDirForDest(taskSubstPath(t.Write, img))
 			if parent != "" && !declaredDirs[parent] && parent != img.Home && parent != "/" {
-				emitMkdirBatch(b, []Task{{Mkdir: parent, User: t.User}}, img)
+				emitMkdirBatch(b, []Op{{Mkdir: parent, RunAs: t.RunAs}}, img)
 				declaredDirs[parent] = true
 			}
 			srcPath, err := stageInlineContent(buildDir, contextRelPrefix, layer.Name, t.Content)
@@ -660,7 +660,7 @@ func (g *Generator) emitTasks(b *strings.Builder, layer *Candy, img *ResolvedBox
 			emitWrite(b, t, srcPath, img)
 
 		case "link":
-			batch := []Task{t}
+			batch := []Op{t}
 			for i+1 < len(tasks) && taskCoalescesWith(t, tasks[i+1], verb) {
 				batch = append(batch, tasks[i+1])
 				i++
@@ -668,7 +668,7 @@ func (g *Generator) emitTasks(b *strings.Builder, layer *Candy, img *ResolvedBox
 			emitLinkBatch(b, batch, img)
 
 		case "setcap":
-			batch := []Task{t}
+			batch := []Op{t}
 			for i+1 < len(tasks) && taskCoalescesWith(t, tasks[i+1], verb) {
 				batch = append(batch, tasks[i+1])
 				i++
@@ -680,7 +680,7 @@ func (g *Generator) emitTasks(b *strings.Builder, layer *Candy, img *ResolvedBox
 				return runningUser, err
 			}
 
-		case "cmd":
+		case "command":
 			emitCmd(b, t, layer.Name, img, runningUser == "0" || runningUser == "root")
 
 		case "build":

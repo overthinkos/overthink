@@ -24,88 +24,104 @@ candy:
             streaming spine (Chrome + pipewire), proven live by the streamed Plasma
             desktop answering on the selkies HTTPS port.
         tag: [working]
-        scenario:
-            # Scenarios 1 & 2 are DETERMINISTIC at build scope (file/contains verbs
-            # bind to the check) — they would FAIL if this metalayer did not actually
-            # compose kde-selkies/kde-shell (scenario 1) and selkies-core (scenario 2).
-            - name: kde-plasma-flavor-composed
-              step:
-                - then: the kde-selkies flavor primitive's nested-session launcher is installed and executable in the deploy user's PATH
-                  file: ${HOME}/.local/bin/kde-selkies-session
-                  exists: true
-                  mode: "0755"
-                - then: the launcher execs startplasma-wayland — the KDE Plasma session entrypoint that distinguishes this flavor from labwc
-                  file: ${HOME}/.local/bin/kde-selkies-session
-                  contains:
-                    - contains: "startplasma-wayland"
-                - then: the KWin Wayland compositor (pulled transitively via kde-shell) that renders the nested Plasma session into pixelflux is present
-                  file: /usr/bin/kwin_wayland
-                  exists: true
-                - then: the Plasma shell composed from kde-shell is present
-                  file: /usr/bin/plasmashell
-                  exists: true
-            - name: selkies-streaming-spine-composed
-              step:
-                - then: Google Chrome — the supervised browser the shared selkies-core spine streams — is present
-                  file: /usr/bin/google-chrome-stable
-                  exists: true
-                - then: the pipewire audio daemon shared by the streamed session is present
-                  file: /usr/bin/pipewire
-                  exists: true
-            # Scenario 3 binds at deploy scope via `charly eval feature run`
-            # (command/http), proving the whole composition reaches a live stream,
-            # then closes on one prose-only step the agent grader judges visually.
-            - name: streamed-kde-desktop-is-live
-              step:
-                - then: the composed nested KDE Plasma session reaches RUNNING under supervisord without crash-looping
-                  command: |
-                    sleep 20
-                    supervisorctl status kde-selkies-session
-                  stdout:
-                    - matches: "RUNNING"
-                  in_container: true
-                - then: the selkies web UI streams the live KDE Plasma desktop over HTTPS on port 3000
-                  http: https://127.0.0.1:${HOST_PORT:3000}/
-                  status: 200
-                  allow_insecure: true
-                  timeout: 10s
-                - then: the streamed frames show a real KWin-composited KDE Plasma desktop (panel + wallpaper), not a black frame and not the labwc flavor's waybar UI
     candy:
         - selkies-core
         - kde-selkies
-    eval:
-        # This metalayer installs nothing itself — every check asserts a KEY ARTIFACT
-        # of a composed child, so the set FAILS if the composition is broken.
-        # --- kde-selkies (the KDE flavor seam) ---
-        - id: selkies-kde-desktop-launcher
-          file: ${HOME}/.local/bin/kde-selkies-session
-          exists: true
-          mode: "0755"
-        - id: selkies-kde-desktop-launcher-execs-plasma
-          file: ${HOME}/.local/bin/kde-selkies-session
-          contains:
-            - contains: "startplasma-wayland"
-        # --- kde-shell (Plasma session, pulled transitively via kde-selkies) ---
-        - id: selkies-kde-desktop-plasma-session
-          file: /usr/bin/startplasma-wayland
-          exists: true
-        - id: selkies-kde-desktop-kwin
-          file: /usr/bin/kwin_wayland
-          exists: true
-        - id: selkies-kde-desktop-plasma-package
-          package: plasma-desktop
-          installed: true
-        # --- selkies-core (the shared streaming spine) ---
-        - id: selkies-kde-desktop-chrome
-          file: /usr/bin/google-chrome-stable
-          exists: true
-        - id: selkies-kde-desktop-pipewire
-          file: /usr/bin/pipewire
-          exists: true
-        # --- the live composition effect: the streamed Plasma desktop answers ---
-        - id: selkies-kde-desktop-stream-https
-          scope: deploy
-          http: https://127.0.0.1:${HOST_PORT:3000}/
-          status: 200
-          allow_insecure: true
-          timeout: 10s
+    scenario:
+        # Scenarios 1 & 2 are DETERMINISTIC at build scope (file/contains verbs
+        # bind to the check) — they would FAIL if this metalayer did not actually
+        # compose kde-selkies/kde-shell (scenario 1) and selkies-core (scenario 2).
+        - name: kde-plasma-flavor-composed
+          step:
+            - then: the kde-selkies flavor primitive's nested-session launcher is installed and executable in the deploy user's PATH
+              file: ${HOME}/.local/bin/kde-selkies-session
+              exists: true
+              mode: "0755"
+            - then: the launcher execs startplasma-wayland — the KDE Plasma session entrypoint that distinguishes this flavor from labwc
+              file: ${HOME}/.local/bin/kde-selkies-session
+              contains:
+                - contains: "startplasma-wayland"
+            - then: the KWin Wayland compositor (pulled transitively via kde-shell) that renders the nested Plasma session into pixelflux is present
+              file: /usr/bin/kwin_wayland
+              exists: true
+            - then: the Plasma shell composed from kde-shell is present
+              file: /usr/bin/plasmashell
+              exists: true
+        - name: selkies-streaming-spine-composed
+          step:
+            - then: Google Chrome — the supervised browser the shared selkies-core spine streams — is present
+              file: /usr/bin/google-chrome-stable
+              exists: true
+            - then: the pipewire audio daemon shared by the streamed session is present
+              file: /usr/bin/pipewire
+              exists: true
+        # Scenario 3 binds at deploy scope via `charly eval feature run`
+        # (command/http), proving the whole composition reaches a live stream,
+        # then closes on one prose-only step the agent grader judges visually.
+        - name: streamed-kde-desktop-is-live
+          step:
+            - then: the composed nested KDE Plasma session reaches RUNNING under supervisord without crash-looping
+              command: |
+                sleep 20
+                supervisorctl status kde-selkies-session
+              stdout:
+                - matches: "RUNNING"
+              in_container: true
+            - then: the selkies web UI streams the live KDE Plasma desktop over HTTPS on port 3000
+              http: https://127.0.0.1:${HOST_PORT:3000}/
+              status: 200
+              allow_insecure: true
+              timeout: 10s
+            - then: the streamed frames show a real KWin-composited KDE Plasma desktop (panel + wallpaper), not a black frame and not the labwc flavor's waybar UI
+        - name: selkies-kde-desktop-launcher
+          step:
+            # This metalayer installs nothing itself — every check asserts a KEY ARTIFACT
+            # of a composed child, so the set FAILS if the composition is broken.
+            # --- kde-selkies (the KDE flavor seam) ---
+            - id: selkies-kde-desktop-launcher
+              file: ${HOME}/.local/bin/kde-selkies-session
+              exists: true
+              mode: "0755"
+        - name: selkies-kde-desktop-launcher-execs-plasma
+          step:
+            - id: selkies-kde-desktop-launcher-execs-plasma
+              file: ${HOME}/.local/bin/kde-selkies-session
+              contains:
+                - contains: "startplasma-wayland"
+        - name: selkies-kde-desktop-plasma-session
+          step:
+            # --- kde-shell (Plasma session, pulled transitively via kde-selkies) ---
+            - id: selkies-kde-desktop-plasma-session
+              file: /usr/bin/startplasma-wayland
+              exists: true
+        - name: selkies-kde-desktop-kwin
+          step:
+            - id: selkies-kde-desktop-kwin
+              file: /usr/bin/kwin_wayland
+              exists: true
+        - name: selkies-kde-desktop-plasma-package
+          step:
+            - id: selkies-kde-desktop-plasma-package
+              package: plasma-desktop
+              installed: true
+        - name: selkies-kde-desktop-chrome
+          step:
+            # --- selkies-core (the shared streaming spine) ---
+            - id: selkies-kde-desktop-chrome
+              file: /usr/bin/google-chrome-stable
+              exists: true
+        - name: selkies-kde-desktop-pipewire
+          step:
+            - id: selkies-kde-desktop-pipewire
+              file: /usr/bin/pipewire
+              exists: true
+        - name: selkies-kde-desktop-stream-https
+          step:
+            # --- the live composition effect: the streamed Plasma desktop answers ---
+            - id: selkies-kde-desktop-stream-https
+              http: https://127.0.0.1:${HOST_PORT:3000}/
+              status: 200
+              allow_insecure: true
+              timeout: 10s
+              context:
+                - runtime

@@ -11,43 +11,11 @@ candy:
             its presence on the PATH and its ability to report a version are directly
             verifiable.
         tag: [working]
-        scenario:
-            - name: observability-binaries-installed
-              step:
-                - then: the mcp-grafana MCP server binary is installed on the PATH
-                  file: /usr/local/bin/mcp-grafana
-                  exists: true
-                - then: Loki's logcli query client is installed
-                  file: /usr/local/bin/logcli
-                  exists: true
-                - then: Prometheus' promtool is installed
-                  file: /usr/local/bin/promtool
-                  exists: true
-                - then: Mimir's mimirtool is installed
-                  file: /usr/local/bin/mimirtool
-                  exists: true
-                - then: Tempo's tempo-cli is installed
-                  file: /usr/local/bin/tempo-cli
-                  exists: true
-                - then: Tanka's tk binary is installed
-                  file: /usr/local/bin/tk
-                  exists: true
-                - then: grafanactl is installed
-                  file: /usr/local/bin/grafanactl
-                  exists: true
-            - name: query-tools-report-version
-              step:
-                - then: logcli reports its version and exits cleanly
-                  command: /usr/local/bin/logcli --version
-                  exit_status: 0
-                - then: promtool reports its version and exits cleanly
-                  command: /usr/local/bin/promtool --version
-                  exit_status: 0
     var:
         MCP_GRAFANA_VERSION: v0.7.8
     task:
         # mcp-grafana — pinned version
-        - cmd: |
+        - command: |
             curl -fsSL "https://github.com/grafana/mcp-grafana/releases/download/${MCP_GRAFANA_VERSION}/linux.x64.grafana.tar.gz" \
               -o /tmp/mcp-grafana.tar.gz
             mkdir -p /tmp/mcp-grafana-extract
@@ -55,74 +23,123 @@ candy:
             find /tmp/mcp-grafana-extract -name "mcp-grafana" -o -name "grafana" | head -1 | xargs -I{} mv {} /usr/local/bin/mcp-grafana
             chmod +x /usr/local/bin/mcp-grafana
             rm -rf /tmp/mcp-grafana.tar.gz /tmp/mcp-grafana-extract
-          user: root
+          run_as: root
         # logcli — GitHub API lookup because release URLs aren't templatable
-        - cmd: |
+        - command: |
             URL=$(curl -fsSL https://api.github.com/repos/grafana/loki/releases/latest | grep "browser_download_url.*logcli-linux-amd64.zip\"" | cut -d'"' -f4)
             curl -fsSL "$URL" -o /tmp/logcli.zip
             cd /tmp && unzip -q logcli.zip && mv logcli-linux-amd64 /usr/local/bin/logcli
             chmod +x /usr/local/bin/logcli && rm -f /tmp/logcli.zip
-          user: root
+          run_as: root
         # promtool (from prometheus release)
-        - cmd: |
+        - command: |
             VER=$(curl -fsSL https://api.github.com/repos/prometheus/prometheus/releases/latest | grep '"tag_name":' | sed -E 's/.*"v([^"]+)".*/\1/')
             curl -fsSL "https://github.com/prometheus/prometheus/releases/download/v${VER}/prometheus-${VER}.linux-amd64.tar.gz" -o /tmp/prom.tar.gz
             mkdir -p /tmp/prom && tar -xzf /tmp/prom.tar.gz -C /tmp/prom/ --strip-components=1
             mv /tmp/prom/promtool /usr/local/bin/promtool && chmod +x /usr/local/bin/promtool
             rm -rf /tmp/prom.tar.gz /tmp/prom
-          user: root
+          run_as: root
         # mimirtool
-        - cmd: |
+        - command: |
             URL=$(curl -fsSL https://api.github.com/repos/grafana/mimir/releases/latest | grep "browser_download_url.*mimir-linux-amd64\"" | grep -v ".sha256" | cut -d'"' -f4)
             curl -fsSL "$URL" -o /usr/local/bin/mimirtool && chmod +x /usr/local/bin/mimirtool
-          user: root
+          run_as: root
         # tempo-cli
-        - cmd: |
+        - command: |
             VER=$(curl -fsSL https://api.github.com/repos/grafana/tempo/releases/latest | grep '"tag_name":' | sed -E 's/.*"v([^"]+)".*/\1/')
             curl -fsSL "https://github.com/grafana/tempo/releases/download/v${VER}/tempo_${VER}_linux_amd64.tar.gz" -o /tmp/tempo.tar.gz
             mkdir -p /tmp/tempo && tar -xzf /tmp/tempo.tar.gz -C /tmp/tempo/
             find /tmp/tempo -name "tempo-cli" -o -name "tempo" | head -1 | xargs -I{} mv {} /usr/local/bin/tempo-cli
             chmod +x /usr/local/bin/tempo-cli && rm -rf /tmp/tempo.tar.gz /tmp/tempo
-          user: root
+          run_as: root
         # tanka (tk)
         - download: "https://github.com/grafana/tanka/releases/latest/download/tk-linux-amd64"
           extract: none
           to: /usr/local/bin/tk
           mode: "0755"
-          user: root
+          run_as: root
         # grafanactl
-        - cmd: |
+        - command: |
             URL=$(curl -fsSL https://api.github.com/repos/grafana/grafanactl/releases/latest | grep "browser_download_url.*grafanactl_Linux_x86_64.tar.gz\"" | cut -d'"' -f4)
             curl -fsSL "$URL" -o /tmp/grafanactl.tar.gz
             mkdir -p /tmp/grafanactl && tar -xzf /tmp/grafanactl.tar.gz -C /tmp/grafanactl/
             find /tmp/grafanactl -name "grafanactl" | head -1 | xargs -I{} mv {} /usr/local/bin/grafanactl
             chmod +x /usr/local/bin/grafanactl && rm -rf /tmp/grafanactl.tar.gz /tmp/grafanactl
-          user: root
-    eval:
-        - id: mcp-grafana-binary
-          file: /usr/local/bin/mcp-grafana
-          exists: true
-        - id: logcli-binary
-          file: /usr/local/bin/logcli
-          exists: true
-        - id: logcli-version
-          command: /usr/local/bin/logcli --version
-          exit_status: 0
-        - id: promtool-binary
-          file: /usr/local/bin/promtool
-          exists: true
-        - id: promtool-version
-          command: /usr/local/bin/promtool --version
-          exit_status: 0
-        - id: mimirtool-binary
-          file: /usr/local/bin/mimirtool
-          exists: true
-        - id: tempo-cli-binary
-          file: /usr/local/bin/tempo-cli
-          exists: true
-        - id: tanka-binary
-          file: /usr/local/bin/tk
-          exists: true
-        - id: grafanactl-binary
-          file: /usr/local/bin/grafanactl
-          exists: true
+          run_as: root
+    scenario:
+        - name: observability-binaries-installed
+          step:
+            - then: the mcp-grafana MCP server binary is installed on the PATH
+              file: /usr/local/bin/mcp-grafana
+              exists: true
+            - then: Loki's logcli query client is installed
+              file: /usr/local/bin/logcli
+              exists: true
+            - then: Prometheus' promtool is installed
+              file: /usr/local/bin/promtool
+              exists: true
+            - then: Mimir's mimirtool is installed
+              file: /usr/local/bin/mimirtool
+              exists: true
+            - then: Tempo's tempo-cli is installed
+              file: /usr/local/bin/tempo-cli
+              exists: true
+            - then: Tanka's tk binary is installed
+              file: /usr/local/bin/tk
+              exists: true
+            - then: grafanactl is installed
+              file: /usr/local/bin/grafanactl
+              exists: true
+        - name: query-tools-report-version
+          step:
+            - then: logcli reports its version and exits cleanly
+              command: /usr/local/bin/logcli --version
+              exit_status: 0
+            - then: promtool reports its version and exits cleanly
+              command: /usr/local/bin/promtool --version
+              exit_status: 0
+        - name: mcp-grafana-binary
+          step:
+            - id: mcp-grafana-binary
+              file: /usr/local/bin/mcp-grafana
+              exists: true
+        - name: logcli-binary
+          step:
+            - id: logcli-binary
+              file: /usr/local/bin/logcli
+              exists: true
+        - name: logcli-version
+          step:
+            - id: logcli-version
+              command: /usr/local/bin/logcli --version
+              exit_status: 0
+        - name: promtool-binary
+          step:
+            - id: promtool-binary
+              file: /usr/local/bin/promtool
+              exists: true
+        - name: promtool-version
+          step:
+            - id: promtool-version
+              command: /usr/local/bin/promtool --version
+              exit_status: 0
+        - name: mimirtool-binary
+          step:
+            - id: mimirtool-binary
+              file: /usr/local/bin/mimirtool
+              exists: true
+        - name: tempo-cli-binary
+          step:
+            - id: tempo-cli-binary
+              file: /usr/local/bin/tempo-cli
+              exists: true
+        - name: tanka-binary
+          step:
+            - id: tanka-binary
+              file: /usr/local/bin/tk
+              exists: true
+        - name: grafanactl-binary
+          step:
+            - id: grafanactl-binary
+              file: /usr/local/bin/grafanactl
+              exists: true

@@ -12,34 +12,6 @@ candy:
             is checkable against the built image: binaries land at fixed paths
             and run.
         tag: [working]
-        scenario:
-            - name: core-search-and-edit-tools-present
-              step:
-                - then: the ripgrep fast-search binary is on PATH
-                  file: /usr/bin/rg
-                  exists: true
-                - then: the neovim editor binary is on PATH
-                  file: /usr/bin/nvim
-                  exists: true
-                - then: the htop process monitor binary is on PATH
-                  file: /usr/bin/htop
-                  exists: true
-            - name: bat-pager-normalized-across-distros
-              step:
-                - then: /usr/bin/bat resolves on every distro (native on Fedora/Arch, batcat symlink on Debian/Ubuntu)
-                  file: /usr/bin/bat
-                  exists: true
-                - then: the bat pager runs and reports its version
-                  command: bat --version
-                  exit_status: 0
-                  stdout:
-                    - contains: bat
-            - name: yaml-tooling-usable
-              step:
-                - then: the yamllint linter runs and reports its version
-                  command: yamllint --version
-                  exit_status: 0
-                - then: an engineer can lint a malformed YAML file and have yamllint flag the syntax error
     package:
         - bat
         - bpftrace
@@ -141,57 +113,100 @@ candy:
     # Fedora/Arch this task is a no-op: /usr/bin/bat already exists from their
     # packages and the `[ ! -e ]` guard short-circuits.
     task:
-        - cmd: |
+        - command: |
             if [ -f /usr/bin/batcat ] && [ ! -e /usr/bin/bat ]; then
               ln -sf /usr/bin/batcat /usr/bin/bat
             fi
-          user: root
-    eval:
-        - id: ripgrep-binary
-          file: /usr/bin/rg
-          exists: true
-        - id: bat-binary
-          file: /usr/bin/bat
-          exists: true
-        # fastfetch is not in Ubuntu noble main (Debian trixie + Fedora + Arch
-        # ship it under the same name). The ubuntu section deliberately omits it
-        # (the cascade cannot subtract, so it is absent on EVERY ubuntu level) —
-        # skip the probe on ubuntu. exclude_distro matches any of the image's
-        # distro tags, so the bare `ubuntu` tag covers ubuntu:24.04 and beyond.
-        - id: fastfetch-binary
-          file: /usr/bin/fastfetch
-          exists: true
-          exclude_distro:
-            - ubuntu
-        - id: neovim-binary
-          file: /usr/bin/nvim
-          exists: true
-        - id: htop-binary
-          file: /usr/bin/htop
-          exists: true
-        # gopls (Go language server) — Go dev tooling for the coder/workstation
-        # profiles (charly-cachyos + the distro -coder boxes). Packaged on Arch as
-        # `gopls`; the cachyos coder profile is Arch-based. Other distros package
-        # it under different names / not at all, so the probe is Arch-scoped until
-        # those names are verified on their beds.
-        - id: gopls-binary
-          file: /usr/bin/gopls
-          exists: true
-          exclude_distro:
-            - debian
-            - ubuntu
-            - fedora
-        # neovim ships under the same package name on every distro (top-level
-        # `package:` base), so a bare package check needs no package_map.
-        - id: neovim-package
-          package: neovim
-          installed: true
-        # Functional probe: the bat pager actually runs. On Debian/Ubuntu this
-        # exercises the /usr/bin/bat -> batcat symlink the post-install task
-        # creates (batcat --version prints "batcat <ver>", which contains "bat");
-        # on Fedora/Arch it runs the native bat. exit_status 0 proves it executes.
-        - id: bat-runs
-          command: bat --version
-          exit_status: 0
-          stdout:
-            - contains: bat
+          run_as: root
+    scenario:
+        - name: core-search-and-edit-tools-present
+          step:
+            - then: the ripgrep fast-search binary is on PATH
+              file: /usr/bin/rg
+              exists: true
+            - then: the neovim editor binary is on PATH
+              file: /usr/bin/nvim
+              exists: true
+            - then: the htop process monitor binary is on PATH
+              file: /usr/bin/htop
+              exists: true
+        - name: bat-pager-normalized-across-distros
+          step:
+            - then: /usr/bin/bat resolves on every distro (native on Fedora/Arch, batcat symlink on Debian/Ubuntu)
+              file: /usr/bin/bat
+              exists: true
+            - then: the bat pager runs and reports its version
+              command: bat --version
+              exit_status: 0
+              stdout:
+                - contains: bat
+        - name: yaml-tooling-usable
+          step:
+            - then: the yamllint linter runs and reports its version
+              command: yamllint --version
+              exit_status: 0
+            - then: an engineer can lint a malformed YAML file and have yamllint flag the syntax error
+        - name: ripgrep-binary
+          step:
+            - id: ripgrep-binary
+              file: /usr/bin/rg
+              exists: true
+        - name: bat-binary
+          step:
+            - id: bat-binary
+              file: /usr/bin/bat
+              exists: true
+        - name: fastfetch-binary
+          step:
+            # fastfetch is not in Ubuntu noble main (Debian trixie + Fedora + Arch
+            # ship it under the same name). The ubuntu section deliberately omits it
+            # (the cascade cannot subtract, so it is absent on EVERY ubuntu level) —
+            # skip the probe on ubuntu. exclude_distro matches any of the image's
+            # distro tags, so the bare `ubuntu` tag covers ubuntu:24.04 and beyond.
+            - id: fastfetch-binary
+              file: /usr/bin/fastfetch
+              exists: true
+              exclude_distro:
+                - ubuntu
+        - name: neovim-binary
+          step:
+            - id: neovim-binary
+              file: /usr/bin/nvim
+              exists: true
+        - name: htop-binary
+          step:
+            - id: htop-binary
+              file: /usr/bin/htop
+              exists: true
+        - name: gopls-binary
+          step:
+            # gopls (Go language server) — Go dev tooling for the coder/workstation
+            # profiles (charly-cachyos + the distro -coder boxes). Packaged on Arch as
+            # `gopls`; the cachyos coder profile is Arch-based. Other distros package
+            # it under different names / not at all, so the probe is Arch-scoped until
+            # those names are verified on their beds.
+            - id: gopls-binary
+              file: /usr/bin/gopls
+              exists: true
+              exclude_distro:
+                - debian
+                - ubuntu
+                - fedora
+        - name: neovim-package
+          step:
+            # neovim ships under the same package name on every distro (top-level
+            # `package:` base), so a bare package check needs no package_map.
+            - id: neovim-package
+              package: neovim
+              installed: true
+        - name: bat-runs
+          step:
+            # Functional probe: the bat pager actually runs. On Debian/Ubuntu this
+            # exercises the /usr/bin/bat -> batcat symlink the post-install task
+            # creates (batcat --version prints "batcat <ver>", which contains "bat");
+            # on Fedora/Arch it runs the native bat. exit_status 0 proves it executes.
+            - id: bat-runs
+              command: bat --version
+              exit_status: 0
+              stdout:
+                - contains: bat

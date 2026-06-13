@@ -36,49 +36,34 @@ var lowercaseEvalVarPattern = regexp.MustCompile(`\$\{[a-z][a-zA-Z0-9_]*\}`)
 //     charly.yml overrides are unambiguous.
 //  6. ExitStatus / Port / UID / GID sanity (non-negative).
 //  7. Matcher operator is a known one.
-func validateTests(cfg *Config, layers map[string]*Candy, errs *ValidationError) {
-	// Candy-level. Each Check may opt into deploy scope; default is build.
-	for name, layer := range layers {
-		for i := range layer.tests {
-			scope := layer.tests[i].Scope
-			if scope == "" {
-				scope = "build"
+func validateOps(cfg *Config, layers map[string]*Candy, errs *ValidationError) {
+	// Validate every Op embedded in a scenario step — candy + box.
+	validateScenarioOps := func(scenarios []Scenario, who string) {
+		for si := range scenarios {
+			for sti := range scenarios[si].Step {
+				op := &scenarios[si].Step[sti].Op
+				if len(op.verbsSet()) == 0 {
+					continue // narrative-only step (no verb)
+				}
+				validateCheck(op, fmt.Sprintf("%s scenario %q step[%d]", who, scenarios[si].Name, sti), errs)
 			}
-			validateCheck(&layer.tests[i], fmt.Sprintf("candy %q tests[%d]", name, i), scope, errs)
 		}
 	}
-
-	// Box-level
+	for name, layer := range layers {
+		validateScenarioOps(layer.scenario, fmt.Sprintf("candy %q", name))
+	}
 	for name, img := range cfg.Box {
 		if img.Enabled != nil && !*img.Enabled {
 			continue
 		}
-		for i := range img.Eval {
-			scope := img.Eval[i].Scope
-			if scope == "" {
-				scope = "build"
-			}
-			validateCheck(&img.Eval[i], fmt.Sprintf("box %q tests[%d]", name, i), scope, errs)
-		}
-		for i := range img.DeployEval {
-			// DeployEval always carry implicit scope:"deploy".
-			validateCheck(&img.DeployEval[i], fmt.Sprintf("box %q deploy_tests[%d]", name, i), "deploy", errs)
-		}
-
-		// ID uniqueness: collect IDs seen per effective section.
-		validateTestIDUniqueness(img, name, errs)
-
-		// Candy-contributed checks per box also need section-unique IDs. We
-		// emulate CollectEval bucketing to catch collisions across candy +
-		// box sources.
-		validateCollectedIDUniqueness(cfg, layers, name, errs)
+		validateScenarioOps(img.Scenario, fmt.Sprintf("box %q", name))
 	}
 }
 
 // validateCheck runs per-check rules. effectiveScope is "build" or "deploy"
 // — for candy manifest tests: the Check's own Scope field (defaulting to
 // build); for charly.yml deploy_tests: always "deploy".
-func validateCheck(c *Check, loc, effectiveScope string, errs *ValidationError) {
+func validateCheck(c *Op, loc string, errs *ValidationError) {
 	verb, err := c.Kind()
 	if err != nil {
 		errs.Add("%s: %v", loc, err)
@@ -95,8 +80,32 @@ func validateCheck(c *Check, loc, effectiveScope string, errs *ValidationError) 
 			errs.Add("%s: timeout %q: %v", loc, c.Timeout, err)
 		}
 	}
-	if c.Scope != "" && c.Scope != "build" && c.Scope != "deploy" {
-		errs.Add("%s: scope %q must be \"build\" or \"deploy\"", loc, c.Scope)
+	for _, ctx := range c.Context {
+		switch ExecContext(ctx) {
+		case CtxBuild, CtxDeploy, CtxRuntime, CtxAgent:
+		default:
+			errs.Add("%s: context %q must be one of build|deploy|runtime|agent", loc, ctx)
+		}
+	}
+	if spec, ok := VerbCatalog[verb]; ok {
+		for _, ctx := range c.EffectiveContexts() {
+			if !spec.HasContext(ctx) {
+				errs.Add("%s: verb %q is not legal in context %q", loc, verb, ctx)
+			}
+		}
+	}
+
+	// A do:act op must have a real install path in each build/deploy context
+	// it claims — otherwise the compiler would silently drop it. Runtime-only
+	// act verbs (file/user/group/kernel-param/mount/http/dbus/cdp/…) act via
+	// the eval Runner's executor; in build/deploy the install verbs + command
+	// + package/service are the act surface (file creation = write/copy).
+	if c.EffectiveDo() == DoAct && !ActsInBuildDeploy(verb) {
+		for _, ctx := range c.EffectiveContexts() {
+			if ctx == CtxBuild || ctx == CtxDeploy {
+				errs.Add("%s: verb %q cannot act (do: act) in %s context — its act form is runtime-only (use context: [runtime]); create files in build/deploy with the write/copy verbs", loc, verb, ctx)
+			}
+		}
 	}
 	if c.UID != nil && *c.UID < 0 {
 		errs.Add("%s: uid %d must be non-negative", loc, *c.UID)
@@ -105,8 +114,8 @@ func validateCheck(c *Check, loc, effectiveScope string, errs *ValidationError) 
 		errs.Add("%s: gid %d must be non-negative", loc, *c.GID)
 	}
 
-	// Runtime-only variable references — only allowed in deploy-scope checks.
-	if effectiveScope == "build" {
+	// Runtime-only variable references — illegal in a build-legal op.
+	if c.InContext(CtxBuild) {
 		refs := collectCheckRefs(c)
 		for _, r := range refs {
 			if IsRuntimeOnlyVar(r) {
@@ -152,13 +161,13 @@ func validateCheck(c *Check, loc, effectiveScope string, errs *ValidationError) 
 	// running container with port mappings). The allowlists live in
 	// evalrun_charly_verbs.go next to the dispatch logic so adding a new method
 	// means touching one file.
-	validateCharlyVerb(c, verb, loc, effectiveScope, errs)
+	validateCharlyVerb(c, verb, loc, errs)
 }
 
 // validateCharlyVerb checks method-name allowlists, required modifiers, and
 // deploy-scope enforcement for the cdp/wl/dbus/vnc/mcp verbs. No-op for
 // other verbs.
-func validateCharlyVerb(c *Check, verb, loc, effectiveScope string, errs *ValidationError) {
+func validateCharlyVerb(c *Op, verb, loc string, errs *ValidationError) {
 	var (
 		method    string
 		allowlist map[string]methodSpec
@@ -199,10 +208,10 @@ func validateCharlyVerb(c *Check, verb, loc, effectiveScope string, errs *Valida
 		return
 	}
 
-	// Deploy-scope only — these verbs need a running container with port
-	// mappings; build-scope (charly eval box) correctly skips them at runtime.
-	if effectiveScope == "build" {
-		errs.Add("%s: %s: verb requires scope:\"deploy\" (needs a running container with port mappings)", loc, verb)
+	// Live-container verbs need a running target — they are runtime-context
+	// only; reject in build context (charly check correctly skips them there).
+	if c.InContext(CtxBuild) {
+		errs.Add("%s: %s: verb is runtime-context only (needs a running container); not legal in build context", loc, verb)
 	}
 
 	for _, f := range spec.required {
@@ -251,7 +260,7 @@ func validWxH(s string) bool {
 
 // collectCheckRefs returns every ${NAME[:arg]} key referenced across every
 // string-typed field of the Check.
-func collectCheckRefs(c *Check) []string {
+func collectCheckRefs(c *Op) []string {
 	seen := map[string]bool{}
 	var out []string
 	for _, p := range c.StringFields() {
@@ -295,59 +304,4 @@ func validMatcherOpList() []string {
 		out = append(out, k)
 	}
 	return out
-}
-
-// validateTestIDUniqueness ensures IDs don't collide within Eval, within
-// DeployEval, or between Eval and DeployEval of the same box.
-func validateTestIDUniqueness(img BoxConfig, imgName string, errs *ValidationError) {
-	seen := map[string]string{} // id → first location
-	for i, c := range img.Eval {
-		if c.ID == "" {
-			continue
-		}
-		section := "tests"
-		loc := fmt.Sprintf("box %q %s[%d]", imgName, section, i)
-		if prev, dup := seen[c.ID]; dup {
-			errs.Add("%s: duplicate id %q (previously defined at %s)", loc, c.ID, prev)
-		} else {
-			seen[c.ID] = loc
-		}
-	}
-	for i, c := range img.DeployEval {
-		if c.ID == "" {
-			continue
-		}
-		loc := fmt.Sprintf("box %q deploy_tests[%d]", imgName, i)
-		if prev, dup := seen[c.ID]; dup {
-			errs.Add("%s: duplicate id %q (previously defined at %s)", loc, c.ID, prev)
-		} else {
-			seen[c.ID] = loc
-		}
-	}
-}
-
-// validateCollectedIDUniqueness runs CollectEval to see the post-merge
-// per-section ID layout and flags cross-candy collisions.
-func validateCollectedIDUniqueness(cfg *Config, layers map[string]*Candy, imgName string, errs *ValidationError) {
-	set := CollectEval(cfg, layers, imgName)
-	if set == nil {
-		return
-	}
-	checkSection := func(sectionName string, list []Check) {
-		seen := map[string]string{}
-		for _, c := range list {
-			if c.ID == "" {
-				continue
-			}
-			loc := fmt.Sprintf("%s (from %s)", sectionName, c.Origin)
-			if prev, dup := seen[c.ID]; dup {
-				errs.Add("box %q: duplicate id %q in %s section — %s collides with %s", imgName, c.ID, sectionName, loc, prev)
-			} else {
-				seen[c.ID] = loc
-			}
-		}
-	}
-	checkSection("candy", set.Candy)
-	checkSection("box", set.Box)
-	checkSection("deploy", set.Deploy)
 }

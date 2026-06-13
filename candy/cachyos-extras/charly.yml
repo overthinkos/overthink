@@ -12,28 +12,6 @@ candy:
             lands as a real pacman repo or AUR package, so each tool's binary and
             package identity is independently verifiable on the built image.
         tag: [working]
-        scenario:
-            - name: diagnostic-monitors-installed
-              step:
-                - then: the btop resource monitor binary is present
-                  file: /usr/bin/btop
-                  exists: true
-                - then: the duf disk-usage viewer binary is present
-                  file: /usr/bin/duf
-                  exists: true
-            - name: aur-helper-and-tunnel-installed
-              step:
-                - then: the paru AUR helper binary is present
-                  file: /usr/bin/paru
-                  exists: true
-                - then: the cloudflared-bin AUR tunnel client resolves on PATH
-                  command: command -v cloudflared
-                  exit_status: 0
-            - name: syncthing-daemon-installed
-              step:
-                - then: the syncthing file-synchronisation daemon binary is present
-                  file: /usr/bin/syncthing
-                  exists: true
     require:
         - yay
     distro:
@@ -74,19 +52,50 @@ candy:
                 package:
                     - cloudflared-bin
                     - gvisor-tap-vsock
-    eval:
-        - id: btop-binary
-          file: /usr/bin/btop
-          exists: true
-        - id: syncthing-binary
-          file: /usr/bin/syncthing
-          exists: true
-        - id: paru-binary
-          file: /usr/bin/paru
-          exists: true
-        - id: accountsservice-installed
-          package: accountsservice
-          installed: true
-        - id: cloudflared-binary
-          command: command -v cloudflared
-          exit_status: 0
+    scenario:
+        - name: diagnostic-monitors-installed
+          step:
+            - then: the btop resource monitor binary is present
+              file: /usr/bin/btop
+              exists: true
+            - then: the duf disk-usage viewer binary is present
+              file: /usr/bin/duf
+              exists: true
+        - name: aur-helper-and-tunnel-installed
+          step:
+            - then: the paru AUR helper binary is present
+              file: /usr/bin/paru
+              exists: true
+            - then: the cloudflared-bin AUR tunnel client resolves on PATH
+              command: command -v cloudflared
+              exit_status: 0
+        - name: syncthing-daemon-installed
+          step:
+            - then: the syncthing file-synchronisation daemon binary is present
+              file: /usr/bin/syncthing
+              exists: true
+        - name: btop-binary
+          step:
+            - id: btop-binary
+              file: /usr/bin/btop
+              exists: true
+        - name: syncthing-binary
+          step:
+            - id: syncthing-binary
+              file: /usr/bin/syncthing
+              exists: true
+        - name: paru-binary
+          step:
+            - id: paru-binary
+              file: /usr/bin/paru
+              exists: true
+        - name: accountsservice-installed
+          step:
+            - id: accountsservice-installed
+              package: accountsservice
+              installed: true
+        - name: cloudflared-binary
+          step:
+            - id: cloudflared-binary
+              command: command -v cloudflared
+              exit_status: 0

@@ -10,27 +10,6 @@ candy:
             Both binaries land at /usr/bin and report a version string, so a
             developer can compile and build Rust crates inside the image.
         tag: [working]
-        scenario:
-            - name: rustc-compiler-present
-              step:
-                - then: the rustc compiler binary is installed at /usr/bin/rustc
-                  file: /usr/bin/rustc
-                  exists: true
-                - then: rustc reports a version string and exits cleanly
-                  command: /usr/bin/rustc --version
-                  exit_status: 0
-                  stdout:
-                    - matches: "rustc [0-9]"
-            - name: cargo-builder-present
-              step:
-                - then: the cargo package manager binary is installed at /usr/bin/cargo
-                  file: /usr/bin/cargo
-                  exists: true
-                - then: cargo reports a version string and exits cleanly
-                  command: /usr/bin/cargo --version
-                  exit_status: 0
-                  stdout:
-                    - matches: "cargo [0-9]"
     path_append:
         - "~/.cargo/bin"
     distro:
@@ -49,24 +28,54 @@ candy:
             package:
                 - rustc
                 - cargo
-    eval:
-        - id: rustc-binary
-          file: /usr/bin/rustc
-          exists: true
-        - id: rustc-version
-          command: /usr/bin/rustc --version
-          exit_status: 0
-        - id: cargo-binary
-          file: /usr/bin/cargo
-          exists: true
-        - id: cargo-version
-          command: /usr/bin/cargo --version
-          exit_status: 0
-        - id: rust-compiler-package
-          package: rust
-          package_map:
-            arch: rust
-            fedora: rust
-            debian: rustc
-            ubuntu: rustc
-          installed: true
+    scenario:
+        - name: rustc-compiler-present
+          step:
+            - then: the rustc compiler binary is installed at /usr/bin/rustc
+              file: /usr/bin/rustc
+              exists: true
+            - then: rustc reports a version string and exits cleanly
+              command: /usr/bin/rustc --version
+              exit_status: 0
+              stdout:
+                - matches: "rustc [0-9]"
+        - name: cargo-builder-present
+          step:
+            - then: the cargo package manager binary is installed at /usr/bin/cargo
+              file: /usr/bin/cargo
+              exists: true
+            - then: cargo reports a version string and exits cleanly
+              command: /usr/bin/cargo --version
+              exit_status: 0
+              stdout:
+                - matches: "cargo [0-9]"
+        - name: rustc-binary
+          step:
+            - id: rustc-binary
+              file: /usr/bin/rustc
+              exists: true
+        - name: rustc-version
+          step:
+            - id: rustc-version
+              command: /usr/bin/rustc --version
+              exit_status: 0
+        - name: cargo-binary
+          step:
+            - id: cargo-binary
+              file: /usr/bin/cargo
+              exists: true
+        - name: cargo-version
+          step:
+            - id: cargo-version
+              command: /usr/bin/cargo --version
+              exit_status: 0
+        - name: rust-compiler-package
+          step:
+            - id: rust-compiler-package
+              package: rust
+              package_map:
+                arch: rust
+                fedora: rust
+                debian: rustc
+                ubuntu: rustc
+              installed: true

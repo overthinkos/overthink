@@ -47,7 +47,7 @@ func runStepGroup(
 	}
 	var units []stepUnit
 	for i, s := range steps {
-		count := s.Check.Count
+		count := s.Op.Count
 		if count <= 0 {
 			units = append(units, stepUnit{
 				idxInGroup: i,
@@ -60,8 +60,8 @@ func runStepGroup(
 		for j := 0; j < count; j++ {
 			ss := s // copy step
 			// Mutate the step ID + capture template by appending -<j>.
-			ss.Check.ID = appendIndex(ss.Check.ID, j)
-			ss.Check.Capture = appendIndex(ss.Check.Capture, j)
+			ss.Op.ID = appendIndex(ss.Op.ID, j)
+			ss.Op.Capture = appendIndex(ss.Op.Capture, j)
 			units = append(units, stepUnit{
 				idxInGroup: i,
 				subIdx:     j,
@@ -126,15 +126,15 @@ func runStepGroup(
 		// process env can't preserve per-goroutine values, so we substitute
 		// into the Check fields directly via string replacement instead).
 		if u.subIdx >= 0 {
-			indexVar := u.step.Check.IndexVar
+			indexVar := u.step.Op.IndexVar
 			if indexVar == "" {
 				indexVar = "INDEX"
 			}
 			// Substitute ${INDEX} (or the named var) directly into the
 			// check's expandable string fields BEFORE running. This avoids
 			// the global os.Setenv race in concurrent goroutines.
-			expanded := substituteIndex(&u.step.Check, indexVar, u.subIdx)
-			u.step.Check = *expanded
+			expanded := substituteIndex(&u.step.Op, indexVar, u.subIdx)
+			u.step.Op = *expanded
 		}
 
 		// runOne writes scenarioCtx.Captures on PASS. Mutex-protected
@@ -143,7 +143,7 @@ func runStepGroup(
 		// individual StepResult.StepID fields, so this assignment is
 		// only useful for sequential failures — best-effort.
 		scenarioCtx.CurrentStepID = u.stepID
-		evalRes := r.runOne(ctx, &u.step.Check)
+		evalRes := r.runOne(ctx, &u.step.Op)
 		sr.Result = evalRes
 		// Record for summarize: aggregation. Thread-safe.
 		scenarioCtx.RecordResult(u.stepID, evalRes)
@@ -189,7 +189,7 @@ func appendIndex(s string, idx int) string {
 // can't use os.Setenv in parallel goroutines (global), so we do
 // in-place template substitution instead. This is a narrow special-
 // case before the runner's general ${VAR} resolver runs.
-func substituteIndex(c *Check, indexVar string, idx int) *Check {
+func substituteIndex(c *Op, indexVar string, idx int) *Op {
 	out := *c // shallow copy
 	idxStr := fmt.Sprintf("%d", idx)
 	tok := "${" + indexVar + "}"
@@ -252,7 +252,7 @@ func RunScenarios(ctx context.Context, r *Runner, set *LabelDescriptionSet, filt
 			// No-op when r.Grader is nil (the common path).
 			r.GraderFeature = ld.Description.Feature
 			r.GraderNarrative = ld.Description.Narrative
-			ordered, cyclicByName := topoSortDescription(ld.Description.Scenario)
+			ordered, cyclicByName := topoSortDescription(ld.Scenario)
 			for sIdx, scenario := range ordered {
 				if cyclicByName[scenario.Name] {
 					// Cyclic scenario — emit a fail verdict so reporters
@@ -424,10 +424,10 @@ func runOneScenario(ctx context.Context, r *Runner, origin string, scenarioIdx i
 	stepIdx := 0
 	for stepIdx < len(es.Step) {
 		// Detect a parallel group at the current position.
-		groupID := es.Step[stepIdx].Check.Parallel
+		groupID := es.Step[stepIdx].Op.Parallel
 		groupEnd := stepIdx + 1
 		if groupID != "" {
-			for groupEnd < len(es.Step) && es.Step[groupEnd].Check.Parallel == groupID {
+			for groupEnd < len(es.Step) && es.Step[groupEnd].Op.Parallel == groupID {
 				groupEnd++
 			}
 		}
@@ -473,7 +473,7 @@ func runOneScenario(ctx context.Context, r *Runner, origin string, scenarioIdx i
 				continue
 			}
 
-			sr.Result = r.runOne(ctx, &onfailStep.Check)
+			sr.Result = r.runOne(ctx, &onfailStep.Op)
 			// OnFail step failures DON'T re-escalate the scenario — the
 			// scenario is already failed. We record them so reporters
 			// surface them, but they don't flip status.
@@ -507,7 +507,7 @@ func keywordOf(s *Step) string {
 // "" for pending steps. Used for reporting when the step skips because
 // a prior step failed.
 func verbOf(s *Step) string {
-	if kind, err := s.Check.Kind(); err == nil {
+	if kind, err := s.Op.Kind(); err == nil {
 		return kind
 	}
 	return ""

@@ -12,48 +12,6 @@ candy:
             binaries being on PATH, so each is directly file- and
             version-checkable inside the built image.
         tag: [working]
-        scenario:
-            - name: c-compiler-builds-and-reports-version
-              step:
-                - then: the GNU C compiler binary is installed at /usr/bin/gcc
-                  file: /usr/bin/gcc
-                  exists: true
-                - then: gcc reports its version and exits successfully
-                  command: /usr/bin/gcc --version
-                  exit_status: 0
-            - name: build-orchestrators-present
-              step:
-                - then: GNU make is available to drive Makefile builds
-                  file: /usr/bin/make
-                  exists: true
-                - then: the CMake build-system generator is available
-                  file: /usr/bin/cmake
-                  exists: true
-                - then: cmake reports its version and exits successfully
-                  command: /usr/bin/cmake --version
-                  exit_status: 0
-            - name: rust-and-native-asm-toolchain-present
-              step:
-                - then: the cargo Rust package manager is installed
-                  file: /usr/bin/cargo
-                  exists: true
-                - then: the nasm assembler (needed by SIMD native crates) is installed
-                  file: /usr/bin/nasm
-                  exists: true
-                - then: cargo reports its version and exits successfully
-                  command: /usr/bin/cargo --version
-                  exit_status: 0
-            - name: developer-utilities-present
-              step:
-                - then: the GNU debugger is available for native debugging
-                  file: /usr/bin/gdb
-                  exists: true
-                - then: ccache is available to accelerate repeat compilations
-                  file: /usr/bin/ccache
-                  exists: true
-                - then: git is available so builder stages can clone pinned sources
-                  file: /usr/bin/git
-                  exists: true
     env:
         CCACHE_DISABLE: "1"
     package:
@@ -179,22 +137,75 @@ candy:
                 - pkg-config
                 - portaudio19-dev
                 - rustc
-    eval:
-        - id: gcc-binary
-          file: /usr/bin/gcc
-          exists: true
-        - id: gcc-version
-          command: /usr/bin/gcc --version
-          exit_status: 0
-        - id: make-binary
-          file: /usr/bin/make
-          exists: true
-        - id: make-version
-          command: /usr/bin/make --version
-          exit_status: 0
-        - id: cmake-binary
-          file: /usr/bin/cmake
-          exists: true
-        - id: cmake-version
-          command: /usr/bin/cmake --version
-          exit_status: 0
+    scenario:
+        - name: c-compiler-builds-and-reports-version
+          step:
+            - then: the GNU C compiler binary is installed at /usr/bin/gcc
+              file: /usr/bin/gcc
+              exists: true
+            - then: gcc reports its version and exits successfully
+              command: /usr/bin/gcc --version
+              exit_status: 0
+        - name: build-orchestrators-present
+          step:
+            - then: GNU make is available to drive Makefile builds
+              file: /usr/bin/make
+              exists: true
+            - then: the CMake build-system generator is available
+              file: /usr/bin/cmake
+              exists: true
+            - then: cmake reports its version and exits successfully
+              command: /usr/bin/cmake --version
+              exit_status: 0
+        - name: rust-and-native-asm-toolchain-present
+          step:
+            - then: the cargo Rust package manager is installed
+              file: /usr/bin/cargo
+              exists: true
+            - then: the nasm assembler (needed by SIMD native crates) is installed
+              file: /usr/bin/nasm
+              exists: true
+            - then: cargo reports its version and exits successfully
+              command: /usr/bin/cargo --version
+              exit_status: 0
+        - name: developer-utilities-present
+          step:
+            - then: the GNU debugger is available for native debugging
+              file: /usr/bin/gdb
+              exists: true
+            - then: ccache is available to accelerate repeat compilations
+              file: /usr/bin/ccache
+              exists: true
+            - then: git is available so builder stages can clone pinned sources
+              file: /usr/bin/git
+              exists: true
+        - name: gcc-binary
+          step:
+            - id: gcc-binary
+              file: /usr/bin/gcc
+              exists: true
+        - name: gcc-version
+          step:
+            - id: gcc-version
+              command: /usr/bin/gcc --version
+              exit_status: 0
+        - name: make-binary
+          step:
+            - id: make-binary
+              file: /usr/bin/make
+              exists: true
+        - name: make-version
+          step:
+            - id: make-version
+              command: /usr/bin/make --version
+              exit_status: 0
+        - name: cmake-binary
+          step:
+            - id: cmake-binary
+              file: /usr/bin/cmake
+              exists: true
+        - name: cmake-version
+          step:
+            - id: cmake-version
+              command: /usr/bin/cmake --version
+              exit_status: 0

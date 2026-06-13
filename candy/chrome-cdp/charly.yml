@@ -18,60 +18,6 @@ candy:
             endpoint returns through the proxy. Container-only — every feature
             assumes a headless context, so it is NOT for target:local installs.
         tag: [working]
-        scenario:
-            # DETERMINISTIC build-scope facts — embedded check verbs run at both
-            # `charly box feature run` and `charly eval feature run`.
-            - name: chrome-wrapper-configures-headless-cdp
-              step:
-                - then: the chrome-wrapper launcher is installed and executable in the user's local bin
-                  file: ${HOME}/.local/bin/chrome-wrapper
-                  exists: true
-                  mode: "0755"
-                - then: the wrapper enables Chrome's CDP on the internal debugging port 9223
-                  file: ${HOME}/.local/bin/chrome-wrapper
-                  contains:
-                    - contains: "remote-debugging-port=9223"
-                - then: the wrapper spoofs a Windows user-agent for cross-site compatibility
-                  file: ${HOME}/.local/bin/chrome-wrapper
-                  contains:
-                    - contains: "Windows NT 10.0"
-            - name: cdp-proxy-and-browser-helpers-installed
-              step:
-                - then: the cdp-proxy forwarder script is installed and forwards published 9222 to internal 9223
-                  file: ${HOME}/.local/bin/cdp-proxy
-                  exists: true
-                  contains:
-                    - contains: "LISTEN_PORT = 9222"
-                    - contains: "TARGET_PORT = 9223"
-                - then: the browser-open helper that $BROWSER points at is installed and executable
-                  file: ${HOME}/.local/bin/browser-open
-                  exists: true
-                  mode: "0755"
-            - name: chrome-windows-extension-staged
-              step:
-                - then: the chrome-windows extension manifest is staged under the user's data dir
-                  file: ${HOME}/.local/share/chrome-windows/manifest.json
-                  exists: true
-                - then: the chrome-windows content script is staged alongside the manifest
-                  file: ${HOME}/.local/share/chrome-windows/content.js
-                  exists: true
-            # DETERMINISTIC deploy-scope facts — the proxy service runs and Chrome's
-            # CDP endpoint answers through it on the published host port.
-            - name: cdp-endpoint-exposed
-              step:
-                - then: the cdp-proxy service is running under the init system
-                  scope: deploy
-                  service: cdp-proxy
-                  running: true
-                - then: Chrome's CDP /json/version endpoint answers HTTP 200 with a websocket debugger URL through the proxy
-                  scope: deploy
-                  http: http://127.0.0.1:${HOST_PORT:9222}/json/version
-                  status: 200
-                  timeout: 5s
-                  eventually: 90s
-                  retry_interval: 3s
-                  body:
-                    - contains: "webSocketDebuggerUrl"
     require:
         - chrome
         - supervisord
@@ -87,86 +33,158 @@ candy:
         - 9222
     task:
         - mkdir: "${HOME}/.local/bin"
-          user: "${USER}"
+          run_as: "${USER}"
         - mkdir: "${HOME}/.local/share/chrome-windows"
-          user: "${USER}"
+          run_as: "${USER}"
         - mkdir: "${HOME}/.config"
-          user: "${USER}"
+          run_as: "${USER}"
         - copy: chrome-wrapper
           to: "${HOME}/.local/bin/chrome-wrapper"
           mode: "0755"
-          user: "${USER}"
+          run_as: "${USER}"
         - copy: chrome-restart
           to: "${HOME}/.local/bin/chrome-restart"
           mode: "0755"
-          user: "${USER}"
+          run_as: "${USER}"
         - copy: browser-open
           to: "${HOME}/.local/bin/browser-open"
           mode: "0755"
-          user: "${USER}"
+          run_as: "${USER}"
         - copy: cdp-proxy
           to: "${HOME}/.local/bin/cdp-proxy"
           mode: "0755"
-          user: "${USER}"
+          run_as: "${USER}"
         - copy: chrome-windows/manifest.json
           to: "${HOME}/.local/share/chrome-windows/manifest.json"
           mode: "0644"
-          user: "${USER}"
+          run_as: "${USER}"
         - copy: chrome-windows/rules.json
           to: "${HOME}/.local/share/chrome-windows/rules.json"
           mode: "0644"
-          user: "${USER}"
+          run_as: "${USER}"
         - copy: chrome-windows/content.js
           to: "${HOME}/.local/share/chrome-windows/content.js"
           mode: "0644"
-          user: "${USER}"
+          run_as: "${USER}"
         - link: "${HOME}/.local/bin/google-chrome-stable"
           target: chrome-wrapper
-          user: "${USER}"
+          run_as: "${USER}"
     service:
         - name: cdp-proxy
           exec: "%(ENV_HOME)s/.local/bin/cdp-proxy"
           restart: always
           enable: true
           scope: system
-    eval:
-        - id: chrome-wrapper
-          file: ${HOME}/.local/bin/chrome-wrapper
-          exists: true
-          mode: "0755"
-        - id: browser-open-wrapper
-          file: ${HOME}/.local/bin/browser-open
-          exists: true
-        - id: cdp-proxy-wrapper
-          file: ${HOME}/.local/bin/cdp-proxy
-          exists: true
-        - id: chrome-windows-manifest
-          file: ${HOME}/.local/share/chrome-windows/manifest.json
-          exists: true
-        - id: cdp-proxy-service
-          scope: deploy
-          service: cdp-proxy
-          running: true
-        - id: chrome-cdp-port
-          scope: deploy
-          addr: 127.0.0.1:${HOST_PORT:9222}
-          reachable: true
-          timeout: 5s
-          # Readiness wait: the cdp-proxy comes up shortly after the container
-          # starts; poll rather than fire once.
-          eventually: 60s
-          retry_interval: 2s
-        - id: chrome-cdp-version
-          scope: deploy
-          http: http://127.0.0.1:${HOST_PORT:9222}/json/version
-          status: 200
-          timeout: 5s
-          # Readiness wait: Chrome's CDP HTTP endpoint (behind cdp-proxy) only
-          # answers once Chrome has fully started — on heavier desktops (labwc +
-          # pixelflux + supervisorctl-started Chrome) that is well after the
-          # container reaches "started". Poll until ready (still fails if Chrome
-          # never comes up) instead of one-shot, which raced and returned EOF.
-          eventually: 90s
-          retry_interval: 3s
-          body:
-            - contains: "webSocketDebuggerUrl"
+    scenario:
+        # DETERMINISTIC build-scope facts — embedded check verbs run at both
+        # `charly box feature run` and `charly eval feature run`.
+        - name: chrome-wrapper-configures-headless-cdp
+          step:
+            - then: the chrome-wrapper launcher is installed and executable in the user's local bin
+              file: ${HOME}/.local/bin/chrome-wrapper
+              exists: true
+              mode: "0755"
+            - then: the wrapper enables Chrome's CDP on the internal debugging port 9223
+              file: ${HOME}/.local/bin/chrome-wrapper
+              contains:
+                - contains: "remote-debugging-port=9223"
+            - then: the wrapper spoofs a Windows user-agent for cross-site compatibility
+              file: ${HOME}/.local/bin/chrome-wrapper
+              contains:
+                - contains: "Windows NT 10.0"
+        - name: cdp-proxy-and-browser-helpers-installed
+          step:
+            - then: the cdp-proxy forwarder script is installed and forwards published 9222 to internal 9223
+              file: ${HOME}/.local/bin/cdp-proxy
+              exists: true
+              contains:
+                - contains: "LISTEN_PORT = 9222"
+                - contains: "TARGET_PORT = 9223"
+            - then: the browser-open helper that $BROWSER points at is installed and executable
+              file: ${HOME}/.local/bin/browser-open
+              exists: true
+              mode: "0755"
+        - name: chrome-windows-extension-staged
+          step:
+            - then: the chrome-windows extension manifest is staged under the user's data dir
+              file: ${HOME}/.local/share/chrome-windows/manifest.json
+              exists: true
+            - then: the chrome-windows content script is staged alongside the manifest
+              file: ${HOME}/.local/share/chrome-windows/content.js
+              exists: true
+        # DETERMINISTIC deploy-scope facts — the proxy service runs and Chrome's
+        # CDP endpoint answers through it on the published host port.
+        - name: cdp-endpoint-exposed
+          step:
+            - then: the cdp-proxy service is running under the init system
+              service: cdp-proxy
+              running: true
+              context:
+                - runtime
+            - then: Chrome's CDP /json/version endpoint answers HTTP 200 with a websocket debugger URL through the proxy
+              http: http://127.0.0.1:${HOST_PORT:9222}/json/version
+              status: 200
+              timeout: 5s
+              eventually: 90s
+              retry_interval: 3s
+              body:
+                - contains: "webSocketDebuggerUrl"
+              context:
+                - runtime
+        - name: chrome-wrapper
+          step:
+            - id: chrome-wrapper
+              file: ${HOME}/.local/bin/chrome-wrapper
+              exists: true
+              mode: "0755"
+        - name: browser-open-wrapper
+          step:
+            - id: browser-open-wrapper
+              file: ${HOME}/.local/bin/browser-open
+              exists: true
+        - name: cdp-proxy-wrapper
+          step:
+            - id: cdp-proxy-wrapper
+              file: ${HOME}/.local/bin/cdp-proxy
+              exists: true
+        - name: chrome-windows-manifest
+          step:
+            - id: chrome-windows-manifest
+              file: ${HOME}/.local/share/chrome-windows/manifest.json
+              exists: true
+        - name: cdp-proxy-service
+          step:
+            - id: cdp-proxy-service
+              service: cdp-proxy
+              running: true
+              context:
+                - runtime
+        - name: chrome-cdp-port
+          step:
+            - id: chrome-cdp-port
+              addr: 127.0.0.1:${HOST_PORT:9222}
+              reachable: true
+              timeout: 5s
+              # Readiness wait: the cdp-proxy comes up shortly after the container
+              # starts; poll rather than fire once.
+              eventually: 60s
+              retry_interval: 2s
+              context:
+                - runtime
+        - name: chrome-cdp-version
+          step:
+            - id: chrome-cdp-version
+              http: http://127.0.0.1:${HOST_PORT:9222}/json/version
+              status: 200
+              timeout: 5s
+              # Readiness wait: Chrome's CDP HTTP endpoint (behind cdp-proxy) only
+              # answers once Chrome has fully started — on heavier desktops (labwc +
+              # pixelflux + supervisorctl-started Chrome) that is well after the
+              # container reaches "started". Poll until ready (still fails if Chrome
+              # never comes up) instead of one-shot, which raced and returned EOF.
+              eventually: 90s
+              retry_interval: 3s
+              body:
+                - contains: "webSocketDebuggerUrl"
+              context:
+                - runtime

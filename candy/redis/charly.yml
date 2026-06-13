@@ -13,39 +13,6 @@ candy:
             verifiable: binaries on disk, the providing package installed, and a
             live PING/PONG + reachable-port probe against the running deployment.
         tag: [working]
-        scenario:
-            # DETERMINISTIC build-scope steps — embedded check verbs run at both
-            # build and deploy scope; they fail if redis/valkey was never installed.
-            - name: redis-server-and-cli-installed
-              step:
-                - then: the redis-server daemon binary is installed at /usr/bin/redis-server
-                  file: /usr/bin/redis-server
-                  exists: true
-                - and: the redis-cli client binary is installed at /usr/bin/redis-cli
-                  file: /usr/bin/redis-cli
-                  exists: true
-                - and: the providing package is installed (redis on Fedora, valkey on Arch/CachyOS)
-                  package: valkey-compat-redis
-                  package_map:
-                    arch: valkey
-                  installed: true
-            # DETERMINISTIC deploy-scope steps — need the running service, so they
-            # are scoped to deploy and probe the live container / published port.
-            - name: redis-answers-ping-on-its-port
-              step:
-                - then: redis-cli ping returns PONG against the supervised redis-server
-                  scope: deploy
-                  command: redis-cli -h 127.0.0.1 -p 6379 ping
-                  stdout: PONG
-                - and: the redis port accepts a TCP connection from the host
-                  scope: deploy
-                  addr: 127.0.0.1:${HOST_PORT:6379}
-                  reachable: true
-            # PROSE-ONLY step — genuine free-form resilience behaviour, agent-graded
-            # by `charly eval feature run redis` against the live deployment.
-            - name: redis-service-stays-available
-              step:
-                - then: the supervised redis service is running and keeps answering clients, restarting automatically (restart=always) if the redis-server process exits
     require: []
     distro:
         arch:
@@ -62,34 +29,7 @@ candy:
         - 6379
     task:
         - mkdir: "${HOME}/.redis"
-          user: "${USER}"
-    eval:
-        # Build-scope: inside the built image.
-        - id: redis-binary
-          file: /usr/bin/redis-server
-          exists: true
-        - id: redis-cli-binary
-          file: /usr/bin/redis-cli
-          exists: true
-        # Fedora 43 replaced `redis` with `valkey-compat-redis` (dnf handles the
-        # Provides: rename). rpm-installed package name differs from the dnf install
-        # request — query the actual installed provider.
-        - id: redis-package
-          package: valkey-compat-redis
-          package_map:
-            arch: valkey
-          installed: true
-        # Deploy-scope: against the running service. HOST_PORT resolves to the
-        # effective deploy-time port mapping — works unchanged whether the
-        # deploy publishes 6379:6379 or remaps to (e.g.) 16379:6379.
-        - id: redis-responds
-          scope: deploy
-          command: redis-cli -h 127.0.0.1 -p ${HOST_PORT:6379} ping
-          stdout: PONG
-          in_container: false
-        - id: redis-port-open
-          scope: deploy
-          addr: 127.0.0.1:${HOST_PORT:6379}
+          run_as: "${USER}"
     service:
         - name: redis
           exec: "/usr/bin/redis-server --bind 127.0.0.1 --port 6379 --dir %(ENV_HOME)s/.redis --save 60 1"
@@ -97,3 +37,76 @@ candy:
           priority: 20
           enable: true
           scope: system
+    scenario:
+        # DETERMINISTIC build-scope steps — embedded check verbs run at both
+        # build and deploy scope; they fail if redis/valkey was never installed.
+        - name: redis-server-and-cli-installed
+          step:
+            - then: the redis-server daemon binary is installed at /usr/bin/redis-server
+              file: /usr/bin/redis-server
+              exists: true
+            - and: the redis-cli client binary is installed at /usr/bin/redis-cli
+              file: /usr/bin/redis-cli
+              exists: true
+            - and: the providing package is installed (redis on Fedora, valkey on Arch/CachyOS)
+              package: valkey-compat-redis
+              package_map:
+                arch: valkey
+              installed: true
+        # DETERMINISTIC deploy-scope steps — need the running service, so they
+        # are scoped to deploy and probe the live container / published port.
+        - name: redis-answers-ping-on-its-port
+          step:
+            - then: redis-cli ping returns PONG against the supervised redis-server
+              command: redis-cli -h 127.0.0.1 -p 6379 ping
+              stdout: PONG
+              context:
+                - runtime
+            - and: the redis port accepts a TCP connection from the host
+              addr: 127.0.0.1:${HOST_PORT:6379}
+              reachable: true
+              context:
+                - runtime
+        # PROSE-ONLY step — genuine free-form resilience behaviour, agent-graded
+        # by `charly eval feature run redis` against the live deployment.
+        - name: redis-service-stays-available
+          step:
+            - then: the supervised redis service is running and keeps answering clients, restarting automatically (restart=always) if the redis-server process exits
+        - name: redis-binary
+          step:
+            # Build-scope: inside the built image.
+            - id: redis-binary
+              file: /usr/bin/redis-server
+              exists: true
+        - name: redis-cli-binary
+          step:
+            - id: redis-cli-binary
+              file: /usr/bin/redis-cli
+              exists: true
+        - name: redis-package
+          step:
+            # Fedora 43 replaced `redis` with `valkey-compat-redis` (dnf handles the
+            # Provides: rename). rpm-installed package name differs from the dnf install
+            # request — query the actual installed provider.
+            - id: redis-package
+              package: valkey-compat-redis
+              package_map:
+                arch: valkey
+              installed: true
+        - name: redis-responds
+          step:
+            # Deploy-scope: against the running service. HOST_PORT resolves to the
+            # effective deploy-time port mapping — works unchanged whether the
+            # deploy publishes 6379:6379 or remaps to (e.g.) 16379:6379.
+            - id: redis-responds
+              command: redis-cli -h 127.0.0.1 -p ${HOST_PORT:6379} ping
+              stdout: PONG
+              in_container: false
+              context:
+                - runtime
+        - name: redis-port-open
+          step:
+            - id: redis-port-open
+              addr: 127.0.0.1:${HOST_PORT:6379}
+              context:
+                - runtime

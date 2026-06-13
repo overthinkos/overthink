@@ -12,78 +12,31 @@ candy:
             supervisord services then run the bar and the auto-tiler against the Sway
             Wayland session. Every installed artifact is file-verifiable at build scope.
         tag: [working]
-        scenario:
-            - name: waybar-binary-installed
-              step:
-                - then: the waybar status-bar binary is installed from the distro package
-                  file: /usr/bin/waybar
-                  exists: true
-                - then: waybar is recorded as installed in the package database
-                  package: waybar
-                  installed: true
-            - name: launcher-and-autotile-scripts-staged
-              step:
-                - then: the waybar-wrapper launcher script is installed under the user's bin
-                  file: ${HOME}/.local/bin/waybar-wrapper
-                  exists: true
-                - then: the sway-autotile helper script is installed under the user's bin
-                  file: ${HOME}/.local/bin/sway-autotile
-                  exists: true
-            - name: waybar-config-staged
-              step:
-                - then: the waybar module-layout config is staged for the user
-                  file: ${HOME}/.config/waybar/config
-                  exists: true
-                - then: the Catppuccin Mocha stylesheet is staged for the user
-                  file: ${HOME}/.config/waybar/style.css
-                  exists: true
-            - name: status-bar-renders-on-sway-desktop
-              step:
-                - then: the waybar status bar appears on the running Sway desktop showing the taskbar, Chrome-restart, and notification toggle modules
     distro:
         fedora:
             package:
                 - waybar
     task:
         - mkdir: "${HOME}/.local/bin"
-          user: "${USER}"
+          run_as: "${USER}"
         - mkdir: "${HOME}/.config/waybar"
-          user: "${USER}"
+          run_as: "${USER}"
         - copy: waybar-wrapper
           to: "${HOME}/.local/bin/waybar-wrapper"
           mode: "0755"
-          user: "${USER}"
+          run_as: "${USER}"
         - copy: sway-autotile
           to: "${HOME}/.local/bin/sway-autotile"
           mode: "0755"
-          user: "${USER}"
+          run_as: "${USER}"
         - copy: config.json
           to: "${HOME}/.config/waybar/config"
           mode: "0644"
-          user: "${USER}"
+          run_as: "${USER}"
         - copy: style.css
           to: "${HOME}/.config/waybar/style.css"
           mode: "0644"
-          user: "${USER}"
-    eval:
-        - id: waybar-binary
-          file: /usr/bin/waybar
-          exists: true
-        - id: waybar-package
-          package: waybar
-          installed: true
-        - id: waybar-wrapper
-          file: ${HOME}/.local/bin/waybar-wrapper
-          exists: true
-        - id: waybar-config
-          file: ${HOME}/.config/waybar/config
-          exists: true
-        - id: waybar-style
-          file: ${HOME}/.config/waybar/style.css
-          exists: true
-        - id: sway-autotile-script
-          file: ${HOME}/.local/bin/sway-autotile
-          exists: true
+          run_as: "${USER}"
     service:
         - name: waybar
           exec: "%(ENV_HOME)s/.local/bin/waybar-wrapper"
@@ -105,3 +58,61 @@ candy:
           start_sec: 0
           enable: true
           scope: system
+    scenario:
+        - name: waybar-binary-installed
+          step:
+            - then: the waybar status-bar binary is installed from the distro package
+              file: /usr/bin/waybar
+              exists: true
+            - then: waybar is recorded as installed in the package database
+              package: waybar
+              installed: true
+        - name: launcher-and-autotile-scripts-staged
+          step:
+            - then: the waybar-wrapper launcher script is installed under the user's bin
+              file: ${HOME}/.local/bin/waybar-wrapper
+              exists: true
+            - then: the sway-autotile helper script is installed under the user's bin
+              file: ${HOME}/.local/bin/sway-autotile
+              exists: true
+        - name: waybar-config-staged
+          step:
+            - then: the waybar module-layout config is staged for the user
+              file: ${HOME}/.config/waybar/config
+              exists: true
+            - then: the Catppuccin Mocha stylesheet is staged for the user
+              file: ${HOME}/.config/waybar/style.css
+              exists: true
+        - name: status-bar-renders-on-sway-desktop
+          step:
+            - then: the waybar status bar appears on the running Sway desktop showing the taskbar, Chrome-restart, and notification toggle modules
+        - name: waybar-binary
+          step:
+            - id: waybar-binary
+              file: /usr/bin/waybar
+              exists: true
+        - name: waybar-package
+          step:
+            - id: waybar-package
+              package: waybar
+              installed: true
+        - name: waybar-wrapper
+          step:
+            - id: waybar-wrapper
+              file: ${HOME}/.local/bin/waybar-wrapper
+              exists: true
+        - name: waybar-config
+          step:
+            - id: waybar-config
+              file: ${HOME}/.config/waybar/config
+              exists: true
+        - name: waybar-style
+          step:
+            - id: waybar-style
+              file: ${HOME}/.config/waybar/style.css
+              exists: true
+        - name: sway-autotile-script
+          step:
+            - id: sway-autotile-script
+              file: ${HOME}/.local/bin/sway-autotile
+              exists: true

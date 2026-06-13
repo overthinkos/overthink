@@ -13,33 +13,38 @@ candy:
             encrypt/mount lifecycle (each mount runs in a per-volume
             `charly-enc-<image>-<volume>` systemd --user scope).
         tag: [working]
-        scenario:
-            # The candy's OWN deliverable: the gocryptfs binary on disk.
-            - name: gocryptfs-binary-installed
-              step:
-                - then: the gocryptfs encrypted-filesystem binary is installed at /usr/bin/gocryptfs
-                  file: /usr/bin/gocryptfs
-                  exists: true
-            # The binary is runnable and reports a version string — proves a
-            # working install, not just a stray file on disk.
-            - name: gocryptfs-reports-version
-              step:
-                - then: gocryptfs runs and prints a version string (gocryptfs vX.Y.Z) on stdout
-                  command: /usr/bin/gocryptfs -version
-                  exit_status: 0
-                  stdout:
-                    - matches: "gocryptfs v[0-9]"
     package:
         - gocryptfs
-    eval:
-        - id: gocryptfs-binary
-          file: /usr/bin/gocryptfs
-          exists: true
-        - id: gocryptfs-package
-          package: gocryptfs
-          installed: true
-        - id: gocryptfs-version
-          command: /usr/bin/gocryptfs -version
-          exit_status: 0
-          stdout:
-            - matches: "gocryptfs v[0-9]"
+    scenario:
+        # The candy's OWN deliverable: the gocryptfs binary on disk.
+        - name: gocryptfs-binary-installed
+          step:
+            - then: the gocryptfs encrypted-filesystem binary is installed at /usr/bin/gocryptfs
+              file: /usr/bin/gocryptfs
+              exists: true
+        # The binary is runnable and reports a version string — proves a
+        # working install, not just a stray file on disk.
+        - name: gocryptfs-reports-version
+          step:
+            - then: gocryptfs runs and prints a version string (gocryptfs vX.Y.Z) on stdout
+              command: /usr/bin/gocryptfs -version
+              exit_status: 0
+              stdout:
+                - matches: "gocryptfs v[0-9]"
+        - name: gocryptfs-binary
+          step:
+            - id: gocryptfs-binary
+              file: /usr/bin/gocryptfs
+              exists: true
+        - name: gocryptfs-package
+          step:
+            - id: gocryptfs-package
+              package: gocryptfs
+              installed: true
+        - name: gocryptfs-version
+          step:
+            - id: gocryptfs-version
+              command: /usr/bin/gocryptfs -version
+              exit_status: 0
+              stdout:
+                - matches: "gocryptfs v[0-9]"

@@ -153,7 +153,7 @@ func (c *EvalRunCmd) Run() error {
 	// runs that one; otherwise fall through to the kind:score AI loop.
 	beds := uf.EvalBeds()
 	if c.AllBeds {
-		return runAllEvalBeds(beds, bedRunOpts{Keep: c.Keep, NoRebuild: c.NoRebuild})
+		return runAllEvalBeds(uf, beds, bedRunOpts{Keep: c.Keep, NoRebuild: c.NoRebuild})
 	}
 	if c.Name == "" {
 		return fmt.Errorf("charly eval run: provide a kind:eval bed or kind:score name, or pass --all-beds")
@@ -163,7 +163,7 @@ func (c *EvalRunCmd) Run() error {
 		if exeErr != nil {
 			exe = os.Args[0]
 		}
-		res, runErr := runEvalBed(exe, c.Name, node, bedRunOpts{Keep: c.Keep, NoRebuild: c.NoRebuild})
+		res, runErr := runEvalBed(exe, c.Name, node, bedRunOpts{Keep: c.Keep, NoRebuild: c.NoRebuild, EvalLevel: bedEvalLevel(uf, node)})
 		if res != nil {
 			fmt.Fprintf(os.Stderr, "charly eval run %s: %s (steps=%d)\n",
 				c.Name, summaryStatus(res.OK), len(res.Step))
@@ -333,9 +333,9 @@ func scorePodTargetEntry(cfg *DeployConfig, scoreName, targetName string) (Deplo
 // through the full R10 sequence — the `--all-beds` replacement for the
 // retired `charly eval kind all`. Aggregates failures so one broken bed
 // doesn't mask the rest.
-func runAllEvalBeds(beds map[string]DeploymentNode, opts bedRunOpts) error {
+func runAllEvalBeds(uf *UnifiedFile, beds map[string]DeploymentNode, opts bedRunOpts) error {
 	if len(beds) == 0 {
-		return fmt.Errorf("charly eval run --all-beds: no kind:eval beds defined in eval.yml")
+		return fmt.Errorf("charly eval run --all-beds: no kind:eval beds defined in the eval: block")
 	}
 	exe, err := os.Executable()
 	if err != nil {
@@ -349,6 +349,7 @@ func runAllEvalBeds(beds map[string]DeploymentNode, opts bedRunOpts) error {
 	var failures []string
 	allEvalFails := true // every failure so far is a failing-checks (exit 2) failure
 	for _, n := range names {
+		opts.EvalLevel = bedEvalLevel(uf, beds[n])
 		res, runErr := runEvalBed(exe, n, beds[n], opts)
 		if res != nil {
 			fmt.Fprintf(os.Stderr, "charly eval run %s: %s (steps=%d)\n",

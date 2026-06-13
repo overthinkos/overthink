@@ -117,8 +117,8 @@ func TestBuildDeployPlanLocalPkgOrdering(t *testing.T) {
 	l := &Candy{
 		Name:     "charly",
 		localpkg: map[string]string{"pac": "pkg/arch"},
-		tasks: []Task{
-			{Cmd: "echo install charly", User: "root"},
+		tasks: []Op{
+			{Command: "echo install charly", RunAs: "root"},
 		},
 	}
 	img := &ResolvedBox{Name: "host-adhoc", Home: "/root", User: "root", Pkg: "pac", DistroDef: testPacDistroDef()}
@@ -133,7 +133,7 @@ func TestBuildDeployPlanLocalPkgOrdering(t *testing.T) {
 			if pkgIdx < 0 {
 				pkgIdx = i
 			}
-		case *TaskStep:
+		case *OpStep:
 			if taskIdx < 0 {
 				taskIdx = i
 			}
@@ -143,7 +143,7 @@ func TestBuildDeployPlanLocalPkgOrdering(t *testing.T) {
 		t.Fatal("no LocalPkgInstallStep in the compiled plan")
 	}
 	if taskIdx < 0 {
-		t.Fatal("no TaskStep in the compiled plan")
+		t.Fatal("no OpStep in the compiled plan")
 	}
 	if pkgIdx > taskIdx {
 		t.Errorf("localpkg step (idx %d) must precede the candy's task steps (idx %d) so the cmd: gate sees the installed package", pkgIdx, taskIdx)

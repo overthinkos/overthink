@@ -11,34 +11,6 @@ candy:
             accept it. Every claim below is observable either in the built image or
             in the running deployment.
         tag: [working]
-        scenario:
-            - name: supervisord-binaries-installed
-              step:
-                - then: the supervisord process manager binary is installed
-                  file: /usr/bin/supervisord
-                  exists: true
-                - then: the supervisorctl control client is installed
-                  file: /usr/bin/supervisorctl
-                  exists: true
-                - then: the supervisor package is recorded in the package database
-                  package: supervisor
-                  installed: true
-            - name: per-user-xdg-runtime-dir-provisioned
-              step:
-                - then: a per-user XDG_RUNTIME_DIR directory exists in the image
-                  file: /tmp/xdg-runtime
-                  filetype: directory
-                - then: XDG_RUNTIME_DIR is exported and points at the per-user runtime dir
-                  command: printenv XDG_RUNTIME_DIR
-                  stdout:
-                    - equals: /tmp/xdg-runtime
-            - name: supervisord-supervises-the-deployment
-              step:
-                - then: supervisord runs as container init and its control socket answers supervisorctl pid
-                  scope: deploy
-                  command: supervisorctl pid
-                  exit_status: 0
-                  in_container: true
     # XDG_RUNTIME_DIR for the CONTAINER. A container has no logind /run/user/<uid>,
     # so we provide a per-user runtime dir; supervisord (PID 1) + every program it
     # starts inherit this image ENV. It MUST be a per-user directory OWNED BY the
@@ -61,25 +33,62 @@ candy:
         # Per-user XDG_RUNTIME_DIR (see the env comment above): owned by the image
         # user at 0700 so older podman/buildah and wayland/pipewire both accept it.
         - mkdir: /tmp/xdg-runtime
-          user: "${USER}"
+          run_as: "${USER}"
           mode: "0700"
-    eval:
-        - id: supervisord-binary
-          file: /usr/bin/supervisord
-          exists: true
-        - id: supervisorctl-binary
-          file: /usr/bin/supervisorctl
-          exists: true
-        - id: supervisor-package
-          package: supervisor
-          installed: true
-        # Using supervisorctl rather than `process: supervisord` because pgrep
-        # isn't in the minimal image set. `supervisorctl pid` confirms the
-        # supervisord socket is reachable without tripping on intentionally-stopped
-        # programs (some layers ship autostart=false services like hermes-whatsapp,
-        # which make `supervisorctl status` return exit 3).
-        - id: supervisorctl-responds
-          scope: deploy
-          command: supervisorctl pid
-          exit_status: 0
-          in_container: true
+    scenario:
+        - name: supervisord-binaries-installed
+          step:
+            - then: the supervisord process manager binary is installed
+              file: /usr/bin/supervisord
+              exists: true
+            - then: the supervisorctl control client is installed
+              file: /usr/bin/supervisorctl
+              exists: true
+            - then: the supervisor package is recorded in the package database
+              package: supervisor
+              installed: true
+        - name: per-user-xdg-runtime-dir-provisioned
+          step:
+            - then: a per-user XDG_RUNTIME_DIR directory exists in the image
+              file: /tmp/xdg-runtime
+              filetype: directory
+            - then: XDG_RUNTIME_DIR is exported and points at the per-user runtime dir
+              command: printenv XDG_RUNTIME_DIR
+              stdout:
+                - equals: /tmp/xdg-runtime
+        - name: supervisord-supervises-the-deployment
+          step:
+            - then: supervisord runs as container init and its control socket answers supervisorctl pid
+              command: supervisorctl pid
+              exit_status: 0
+              in_container: true
+              context:
+                - runtime
+        - name: supervisord-binary
+          step:
+            - id: supervisord-binary
+              file: /usr/bin/supervisord
+              exists: true
+        - name: supervisorctl-binary
+          step:
+            - id: supervisorctl-binary
+              file: /usr/bin/supervisorctl
+              exists: true
+        - name: supervisor-package
+          step:
+            - id: supervisor-package
+              package: supervisor
+              installed: true
+        - name: supervisorctl-responds
+          step:
+            # Using supervisorctl rather than `process: supervisord` because pgrep
+            # isn't in the minimal image set. `supervisorctl pid` confirms the
+            # supervisord socket is reachable without tripping on intentionally-stopped
+            # programs (some layers ship autostart=false services like hermes-whatsapp,
+            # which make `supervisorctl status` return exit 3).
+            - id: supervisorctl-responds
+              command: supervisorctl pid
+              exit_status: 0
+              in_container: true
+              context:
+                - runtime

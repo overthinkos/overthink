@@ -287,23 +287,6 @@ func (c *InspectCmd) runFromConfig(cfg *Config, dir string) error {
 			fmt.Println(resolveStatus(resolved.Status))
 		case "info":
 			fmt.Println(resolved.Info)
-		case "tests":
-			// Emit the effective three-section test manifest as JSON.
-			// Mirrors what will land in the ai.opencharly.tests OCI label.
-			layers, err := ScanAllCandyWithConfig(dir, cfg)
-			if err != nil {
-				return err
-			}
-			set := CollectEval(cfg, layers, c.Box)
-			if set == nil {
-				fmt.Println("{}")
-				return nil
-			}
-			data, err := json.MarshalIndent(set, "", "  ")
-			if err != nil {
-				return err
-			}
-			fmt.Println(string(data))
 		default:
 			return fmt.Errorf("unknown format field: %s", c.Format)
 		}

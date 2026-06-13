@@ -7,10 +7,10 @@ import (
 
 func TestCanonicalLabelKey_ExpandsShorthand(t *testing.T) {
 	cases := map[string]string{
-		"init":                 "ai.opencharly.init",
-		"version":              "ai.opencharly.version",
-		"ai.opencharly.eval":   "ai.opencharly.eval",
-		"org.opencontainers.x": "org.opencontainers.x",
+		"init":                      "ai.opencharly.init",
+		"version":                   "ai.opencharly.version",
+		"ai.opencharly.description": "ai.opencharly.description",
+		"org.opencontainers.x":      "org.opencontainers.x",
 	}
 	for in, want := range cases {
 		if got := canonicalLabelKey(in); got != want {

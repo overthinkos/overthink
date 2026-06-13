@@ -16,38 +16,6 @@ candy:
             scenarios and eval block assert; they FAIL if any of the three tools
             is missing.
         tag: [working]
-        scenario:
-            - name: github-cli-available
-              step:
-                - then: the GitHub CLI binary is installed at /usr/bin/gh for driving GitHub (PRs, issues, releases) from the shell
-                  file: /usr/bin/gh
-                  exists: true
-                - then: gh reports its version without error
-                  command: /usr/bin/gh --version
-                  exit_status: 0
-                  stdout:
-                    - contains: "gh version"
-            - name: git-version-control-available
-              step:
-                - then: the git binary is installed at /usr/bin/git
-                  file: /usr/bin/git
-                  exists: true
-                - then: git reports its version without error
-                  command: /usr/bin/git --version
-                  exit_status: 0
-                  stdout:
-                    - contains: "git version"
-            - name: git-lfs-large-file-support
-              step:
-                - then: the git-lfs binary is installed at /usr/bin/git-lfs for transparent large-file storage
-                  file: /usr/bin/git-lfs
-                  exists: true
-                - then: git-lfs reports its version without error
-                  command: /usr/bin/git-lfs --version
-                  exit_status: 0
-                  stdout:
-                    - contains: "git-lfs"
-                - then: with the system hooks configured by the post-install task, git-lfs is registered as a git filter so large files are smudged and cleaned transparently on checkout and commit
     package:
         - git
         - git-lfs
@@ -75,35 +43,84 @@ candy:
     task:
         # git-lfs post-install config (package installed with noscripts above so
         # the systemd-triggered git-lfs install step doesn't run in the build).
-        - cmd: /usr/bin/git-lfs install --system --skip-repo 2>/dev/null || true
-          user: root
-    eval:
-        - id: gh-binary
-          file: /usr/bin/gh
-          exists: true
-        - id: gh-version
-          command: /usr/bin/gh --version
-          exit_status: 0
-        - id: git-binary
-          file: /usr/bin/git
-          exists: true
-        - id: git-version
-          command: /usr/bin/git --version
-          exit_status: 0
-        - id: git-lfs-binary
-          file: /usr/bin/git-lfs
-          exists: true
-        - id: git-lfs-version
-          command: /usr/bin/git-lfs --version
-          exit_status: 0
-        - id: gh-package
-          package: gh
-          package_map:
-            arch: github-cli
-          installed: true
-        - id: git-package
-          package: git
-          installed: true
-        - id: git-lfs-package
-          package: git-lfs
-          installed: true
+        - command: /usr/bin/git-lfs install --system --skip-repo 2>/dev/null || true
+          run_as: root
+    scenario:
+        - name: github-cli-available
+          step:
+            - then: the GitHub CLI binary is installed at /usr/bin/gh for driving GitHub (PRs, issues, releases) from the shell
+              file: /usr/bin/gh
+              exists: true
+            - then: gh reports its version without error
+              command: /usr/bin/gh --version
+              exit_status: 0
+              stdout:
+                - contains: "gh version"
+        - name: git-version-control-available
+          step:
+            - then: the git binary is installed at /usr/bin/git
+              file: /usr/bin/git
+              exists: true
+            - then: git reports its version without error
+              command: /usr/bin/git --version
+              exit_status: 0
+              stdout:
+                - contains: "git version"
+        - name: git-lfs-large-file-support
+          step:
+            - then: the git-lfs binary is installed at /usr/bin/git-lfs for transparent large-file storage
+              file: /usr/bin/git-lfs
+              exists: true
+            - then: git-lfs reports its version without error
+              command: /usr/bin/git-lfs --version
+              exit_status: 0
+              stdout:
+                - contains: "git-lfs"
+            - then: with the system hooks configured by the post-install task, git-lfs is registered as a git filter so large files are smudged and cleaned transparently on checkout and commit
+        - name: gh-binary
+          step:
+            - id: gh-binary
+              file: /usr/bin/gh
+              exists: true
+        - name: gh-version
+          step:
+            - id: gh-version
+              command: /usr/bin/gh --version
+              exit_status: 0
+        - name: git-binary
+          step:
+            - id: git-binary
+              file: /usr/bin/git
+              exists: true
+        - name: git-version
+          step:
+            - id: git-version
+              command: /usr/bin/git --version
+              exit_status: 0
+        - name: git-lfs-binary
+          step:
+            - id: git-lfs-binary
+              file: /usr/bin/git-lfs
+              exists: true
+        - name: git-lfs-version
+          step:
+            - id: git-lfs-version
+              command: /usr/bin/git-lfs --version
+              exit_status: 0
+        - name: gh-package
+          step:
+            - id: gh-package
+              package: gh
+              package_map:
+                arch: github-cli
+              installed: true
+        - name: git-package
+          step:
+            - id: git-package
+              package: git
+              installed: true
+        - name: git-lfs-package
+          step:
+            - id: git-lfs-package
+              package: git-lfs
+              installed: true

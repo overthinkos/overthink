@@ -11,49 +11,47 @@ candy:
             to this candy.yml that creates /etc/charly-bench-marker containing the
             string "charly benchmark target".
         tag: [bench, throwaway]
-        scenario:
-            - name: marker file is present with expected content
-              tag: ["@skeleton"]
-              step:
-                # Single Then step (no narrative-only Given) so the scenario
-                # has zero pending steps and Classify can return VerdictSolved
-                # when the AI's edit makes it pass.
-                - then: the marker file exists with the expected content
-                  file: /etc/charly-bench-marker
-                  exists: true
-                  contains:
-                    - charly benchmark target
-            - name: scaffold directory is created
-              # Asserts the candy's ONLY real current install artifact (the
-              # mkdir task below). Passes on the real candy, fails if the candy
-              # is a no-op — the genuine acceptance shape, complementing the
-              # @skeleton marker scenario that stays red until an AI solves it.
-              step:
-                - then: the benchmark scaffold directory exists and is a directory
-                  file: /etc/charly-bench
-                  exists: true
-                  filetype: directory
-                - then: the scaffold directory is world-traversable at mode 0755
-                  file: /etc/charly-bench
-                  mode: "0755"
     # Placeholder task. Exists only to satisfy `charly box validate`'s
     # "layer must have at least one install artifact" rule. The AI's job
     # during `charly benchmark run` is to ADD a `write:` task here that
     # creates /etc/charly-bench-marker with the expected content.
     task:
         - mkdir: /etc/charly-bench
-          user: root
+          run_as: root
           mode: "0755"
-    # Acceptance checks for the candy's genuine current behaviour: the
-    # /etc/charly-bench scaffold directory the mkdir task creates. These pass on
-    # the built image and FAIL if the candy is reduced to a no-op. (The marker
-    # file the @skeleton scenario targets is intentionally NOT asserted here —
-    # the candy does not create it; it is the AI-under-test's benchmark goal.)
-    eval:
-        - id: eval-target-layer-scaffold-dir
-          file: /etc/charly-bench
-          exists: true
-          filetype: directory
-        - id: eval-target-layer-scaffold-dir-mode
-          file: /etc/charly-bench
-          mode: "0755"
+    scenario:
+        - name: marker file is present with expected content
+          tag: ["@skeleton"]
+          step:
+            # Single Then step (no narrative-only Given) so the scenario
+            # has zero pending steps and Classify can return VerdictSolved
+            # when the AI's edit makes it pass.
+            - then: the marker file exists with the expected content
+              file: /etc/charly-bench-marker
+              exists: true
+              contains:
+                - charly benchmark target
+        - name: scaffold directory is created
+          # Asserts the candy's ONLY real current install artifact (the
+          # mkdir task below). Passes on the real candy, fails if the candy
+          # is a no-op — the genuine acceptance shape, complementing the
+          # @skeleton marker scenario that stays red until an AI solves it.
+          step:
+            - then: the benchmark scaffold directory exists and is a directory
+              file: /etc/charly-bench
+              exists: true
+              filetype: directory
+            - then: the scaffold directory is world-traversable at mode 0755
+              file: /etc/charly-bench
+              mode: "0755"
+        - name: eval-target-layer-scaffold-dir
+          step:
+            - id: eval-target-layer-scaffold-dir
+              file: /etc/charly-bench
+              exists: true
+              filetype: directory
+        - name: eval-target-layer-scaffold-dir-mode
+          step:
+            - id: eval-target-layer-scaffold-dir-mode
+              file: /etc/charly-bench
+              mode: "0755"

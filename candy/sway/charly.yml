@@ -12,30 +12,6 @@ candy:
             Every claim below is observable: the binary, the package, the staged
             files, and the live service.
         tag: [working]
-        scenario:
-            - name: compositor-binary-installed
-              step:
-                - then: the Sway compositor binary is installed at /usr/bin/sway
-                  file: /usr/bin/sway
-                  exists: true
-                - then: the sway package is registered in the package database
-                  package: sway
-                  installed: true
-            - name: launcher-and-config-staged
-              step:
-                - then: the sway-wrapper launcher is installed and executable
-                  file: ${HOME}/.local/bin/sway-wrapper
-                  exists: true
-                  mode: "0755"
-                - then: the Sway config file is staged in the user's home
-                  file: ${HOME}/.config/sway/config
-                  exists: true
-            - name: compositor-service-runs
-              step:
-                - then: the sway compositor service is running under supervisord
-                  scope: deploy
-                  service: sway
-                  running: true
     require:
         - dbus
     env:
@@ -69,37 +45,19 @@ candy:
         # in user namespaces). Strip it — not needed for headless compositor.
         - setcap: /usr/bin/sway
         - mkdir: "${HOME}/.local/bin"
-          user: "${USER}"
+          run_as: "${USER}"
         - mkdir: "${HOME}/.config/sway"
-          user: "${USER}"
+          run_as: "${USER}"
         - mkdir: "${HOME}/.config/sway/config.d"
-          user: "${USER}"
+          run_as: "${USER}"
         - copy: sway-wrapper
           to: "${HOME}/.local/bin/sway-wrapper"
           mode: "0755"
-          user: "${USER}"
+          run_as: "${USER}"
         - copy: config
           to: "${HOME}/.config/sway/config"
           mode: "0644"
-          user: "${USER}"
-    eval:
-        - id: sway-binary
-          file: /usr/bin/sway
-          exists: true
-        - id: sway-package
-          package: sway
-          installed: true
-        - id: sway-wrapper
-          file: ${HOME}/.local/bin/sway-wrapper
-          exists: true
-          mode: "0755"
-        - id: sway-config
-          file: ${HOME}/.config/sway/config
-          exists: true
-        - id: sway-service-running
-          scope: deploy
-          service: sway
-          running: true
+          run_as: "${USER}"
     service:
         - name: sway
           exec: "%(ENV_HOME)s/.local/bin/sway-wrapper"
@@ -114,3 +72,56 @@ candy:
           start_sec: 3
           enable: true
           scope: system
+    scenario:
+        - name: compositor-binary-installed
+          step:
+            - then: the Sway compositor binary is installed at /usr/bin/sway
+              file: /usr/bin/sway
+              exists: true
+            - then: the sway package is registered in the package database
+              package: sway
+              installed: true
+        - name: launcher-and-config-staged
+          step:
+            - then: the sway-wrapper launcher is installed and executable
+              file: ${HOME}/.local/bin/sway-wrapper
+              exists: true
+              mode: "0755"
+            - then: the Sway config file is staged in the user's home
+              file: ${HOME}/.config/sway/config
+              exists: true
+        - name: compositor-service-runs
+          step:
+            - then: the sway compositor service is running under supervisord
+              service: sway
+              running: true
+              context:
+                - runtime
+        - name: sway-binary
+          step:
+            - id: sway-binary
+              file: /usr/bin/sway
+              exists: true
+        - name: sway-package
+          step:
+            - id: sway-package
+              package: sway
+              installed: true
+        - name: sway-wrapper
+          step:
+            - id: sway-wrapper
+              file: ${HOME}/.local/bin/sway-wrapper
+              exists: true
+              mode: "0755"
+        - name: sway-config
+          step:
+            - id: sway-config
+              file: ${HOME}/.config/sway/config
+              exists: true
+        - name: sway-service-running
+          step:
+            - id: sway-service-running
+              service: sway
+              running: true
+              context:
+                - runtime

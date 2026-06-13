@@ -21,7 +21,7 @@ import (
 // Scope: walks ONLY the current scenario's results (via r.Scenario).
 // summarize verbs in classical `tests:` blocks (no scenario context)
 // skip with a clear message.
-func (r *Runner) runSummarize(ctx context.Context, c *Check) EvalResult {
+func (r *Runner) runSummarize(ctx context.Context, c *Op) EvalResult {
 	if r.Scenario == nil {
 		return skipf(c, "summarize: requires scenario context (use inside scenario steps)")
 	}

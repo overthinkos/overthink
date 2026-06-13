@@ -14,20 +14,6 @@ candy:
             the download-and-install ran; CREATE EXTENSION vchord against the live
             server proves it is actually loadable.
         tag: [working]
-        scenario:
-            - name: vchord-extension-control-registered
-              step:
-                - then: the vchord.control extension manifest is registered in the PostgreSQL extension sharedir
-                  command: 'SD=$(for d in /usr/share/pgsql /usr/share/postgresql; do [ -d "$d/extension" ] && echo "$d" && break; done); test -f "$SD/extension/vchord.control"'
-                  exit_status: 0
-            - name: vchord-shared-library-installed
-              step:
-                - then: the vchord.so shared library is installed alongside the server's plpgsql.so in pkglibdir
-                  command: 'PL=$(dirname "$(find /usr/lib* -name plpgsql.so -print -quit 2>/dev/null)"); test -f "$PL/vchord.so"'
-                  exit_status: 0
-            - name: vchord-loadable-as-postgres-extension
-              step:
-                - then: CREATE EXTENSION vchord succeeds against the running PostgreSQL server, exposing the vchord vector index access methods
     require:
         - postgresql
     distro:
@@ -54,7 +40,7 @@ candy:
         # `postgres --version` for the major, `find plpgsql.so` for pkglibdir
         # (Fedora /usr/lib64/pgsql, Arch /usr/lib/postgresql), and a candidate
         # loop for sharedir (Fedora /usr/share/pgsql, Arch /usr/share/postgresql).
-        - cmd: |
+        - command: |
             PG_MAJOR=$(postgres --version | awk '{print $NF}' | cut -d. -f1)
             PKGLIBDIR=$(dirname "$(find /usr/lib* -name plpgsql.so -print -quit 2>/dev/null)")
             SHAREDIR=""
@@ -91,23 +77,37 @@ candy:
             echo "VectorChord ${VCHORD_VERSION} installed:"
             ls -la "$PKGLIBDIR/vchord.so"
             ls "$SHAREDIR/extension/vchord.control"
-          user: root
-    eval:
-        - id: vchord-control-file
-          command: SD=$(for d in /usr/share/pgsql /usr/share/postgresql; do [ -d "$d/extension" ] && echo "$d" && break; done); test -f "$SD/extension/vchord.control"
-          exit_status: 0
-        - id: vchord-shared-library
-          command: PL=$(dirname "$(find /usr/lib* -name plpgsql.so -print -quit 2>/dev/null)"); test -f "$PL/vchord.so"
-          exit_status: 0
-        - id: vchord-shared-preload-env
-          scope: deploy
-          command: printenv POSTGRES_SHARED_PRELOAD_LIBRARIES
-          exit_status: 0
-          stdout:
-            - contains: "vchord.so"
-    # No deploy-scope psql probe — the superuser name depends on the
-    # POSTGRES_USER env var, and charly's ${VAR} resolver can't pick up arbitrary
-    # container-env vars. Presence of vchord.control + the shared_preload_libraries
-    # env var are together sufficient to prove the extension is installed and
-    # registered. A functional "CREATE EXTENSION vchord" probe lives in the
-    # image-level supervisorctl status check (immich-db-init runs it).
+          run_as: root
+    scenario:
+        - name: vchord-extension-control-registered
+          step:
+            - then: the vchord.control extension manifest is registered in the PostgreSQL extension sharedir
+              command: 'SD=$(for d in /usr/share/pgsql /usr/share/postgresql; do [ -d "$d/extension" ] && echo "$d" && break; done); test -f "$SD/extension/vchord.control"'
+              exit_status: 0
+        - name: vchord-shared-library-installed
+          step:
+            - then: the vchord.so shared library is installed alongside the server's plpgsql.so in pkglibdir
+              command: 'PL=$(dirname "$(find /usr/lib* -name plpgsql.so -print -quit 2>/dev/null)"); test -f "$PL/vchord.so"'
+              exit_status: 0
+        - name: vchord-loadable-as-postgres-extension
+          step:
+            - then: CREATE EXTENSION vchord succeeds against the running PostgreSQL server, exposing the vchord vector index access methods
+        - name: vchord-control-file
+          step:
+            - id: vchord-control-file
+              command: SD=$(for d in /usr/share/pgsql /usr/share/postgresql; do [ -d "$d/extension" ] && echo "$d" && break; done); test -f "$SD/extension/vchord.control"
+              exit_status: 0
+        - name: vchord-shared-library
+          step:
+            - id: vchord-shared-library
+              command: PL=$(dirname "$(find /usr/lib* -name plpgsql.so -print -quit 2>/dev/null)"); test -f "$PL/vchord.so"
+              exit_status: 0
+        - name: vchord-shared-preload-env
+          step:
+            - id: vchord-shared-preload-env
+              command: printenv POSTGRES_SHARED_PRELOAD_LIBRARIES
+              exit_status: 0
+              stdout:
+                - contains: "vchord.so"
+              context:
+                - runtime

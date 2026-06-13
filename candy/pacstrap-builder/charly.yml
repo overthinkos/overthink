@@ -11,40 +11,6 @@ candy:
             which run as privileged containers under `charly box build` and
             `charly vm build` for kind:bootstrap source kinds.
         tag: [working]
-        scenario:
-            - name: bootstrap-an-arch-rootfs
-              step:
-                - then: pacstrap bootstraps a fresh Arch/CachyOS root filesystem
-                  file: /usr/sbin/pacstrap
-                  exists: true
-                - then: the arch-install-scripts package supplies genfstab and arch-chroot alongside pacstrap
-                  package: arch-install-scripts
-                  installed: true
-            - name: partition-and-format-a-vm-disk
-              step:
-                - then: parted partitions the target VM disk
-                  file: /usr/sbin/parted
-                  exists: true
-                - then: a raw VM disk image can be created with qemu-img
-                  file: /usr/bin/qemu-img
-                  exists: true
-                - then: e2fsprogs provides the ext4 mkfs used for the root partition
-                  package: e2fsprogs
-                  installed: true
-                - then: dosfstools provides the FAT mkfs used for the EFI system partition
-                  package: dosfstools
-                  installed: true
-            - name: install-a-bootable-grub-system
-              step:
-                - then: grub-install writes the bootloader to the disk
-                  file: /usr/sbin/grub-install
-                  exists: true
-                - then: efibootmgr registers the UEFI boot entry
-                  package: efibootmgr
-                  installed: true
-                - then: mkinitcpio regenerates the initramfs inside the new root
-                  file: /usr/bin/mkinitcpio
-                  exists: true
     distro:
         arch:
             package:
@@ -59,35 +25,82 @@ candy:
                 - grub
                 - efibootmgr
                 - mkinitcpio
-    # The pacstrap toolchain this candy installs — checked HERE so the ONE check
-    # covers every box composing it (arch-pacstrap-builder, cachyos-pacstrap-builder).
-    # Build-scope (pacstrap is part of arch-install-scripts; grub/parted ship the
-    # named binaries).
-    eval:
-        - id: pacstrap-binary
-          file: /usr/sbin/pacstrap
-          exists: true
-        - id: arch-install-scripts-installed
-          package: arch-install-scripts
-          installed: true
-        - id: grub-install-binary
-          file: /usr/sbin/grub-install
-          exists: true
-        - id: parted-binary
-          file: /usr/sbin/parted
-          exists: true
-        - id: qemu-img-binary
-          file: /usr/bin/qemu-img
-          exists: true
-        - id: mkinitcpio-binary
-          file: /usr/bin/mkinitcpio
-          exists: true
-        - id: efibootmgr-installed
-          package: efibootmgr
-          installed: true
-        - id: e2fsprogs-installed
-          package: e2fsprogs
-          installed: true
-        - id: dosfstools-installed
-          package: dosfstools
-          installed: true
+    scenario:
+        - name: bootstrap-an-arch-rootfs
+          step:
+            - then: pacstrap bootstraps a fresh Arch/CachyOS root filesystem
+              file: /usr/sbin/pacstrap
+              exists: true
+            - then: the arch-install-scripts package supplies genfstab and arch-chroot alongside pacstrap
+              package: arch-install-scripts
+              installed: true
+        - name: partition-and-format-a-vm-disk
+          step:
+            - then: parted partitions the target VM disk
+              file: /usr/sbin/parted
+              exists: true
+            - then: a raw VM disk image can be created with qemu-img
+              file: /usr/bin/qemu-img
+              exists: true
+            - then: e2fsprogs provides the ext4 mkfs used for the root partition
+              package: e2fsprogs
+              installed: true
+            - then: dosfstools provides the FAT mkfs used for the EFI system partition
+              package: dosfstools
+              installed: true
+        - name: install-a-bootable-grub-system
+          step:
+            - then: grub-install writes the bootloader to the disk
+              file: /usr/sbin/grub-install
+              exists: true
+            - then: efibootmgr registers the UEFI boot entry
+              package: efibootmgr
+              installed: true
+            - then: mkinitcpio regenerates the initramfs inside the new root
+              file: /usr/bin/mkinitcpio
+              exists: true
+        - name: pacstrap-binary
+          step:
+            - id: pacstrap-binary
+              file: /usr/sbin/pacstrap
+              exists: true
+        - name: arch-install-scripts-installed
+          step:
+            - id: arch-install-scripts-installed
+              package: arch-install-scripts
+              installed: true
+        - name: grub-install-binary
+          step:
+            - id: grub-install-binary
+              file: /usr/sbin/grub-install
+              exists: true
+        - name: parted-binary
+          step:
+            - id: parted-binary
+              file: /usr/sbin/parted
+              exists: true
+        - name: qemu-img-binary
+          step:
+            - id: qemu-img-binary
+              file: /usr/bin/qemu-img
+              exists: true
+        - name: mkinitcpio-binary
+          step:
+            - id: mkinitcpio-binary
+              file: /usr/bin/mkinitcpio
+              exists: true
+        - name: efibootmgr-installed
+          step:
+            - id: efibootmgr-installed
+              package: efibootmgr
+              installed: true
+        - name: e2fsprogs-installed
+          step:
+            - id: e2fsprogs-installed
+              package: e2fsprogs
+              installed: true
+        - name: dosfstools-installed
+          step:
+            - id: dosfstools-installed
+              package: dosfstools
+              installed: true

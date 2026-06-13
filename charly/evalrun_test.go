@@ -72,7 +72,7 @@ func TestRunner_FileVerb(t *testing.T) {
 		fake.responses = []fakeResponse{
 			{matchPrefix: "if [ -e", stdout: "exists=1|regular file|755|root|root\n"},
 		}
-		results := r.Run(context.Background(), []Check{
+		results := r.Run(context.Background(), []Op{
 			{File: "/usr/bin/redis-server", Exists: ptrBool(true), Mode: "0755", Filetype: "file"},
 		})
 		if len(results) != 1 || results[0].Status != TestPass {
@@ -85,7 +85,7 @@ func TestRunner_FileVerb(t *testing.T) {
 		fake.responses = []fakeResponse{
 			{matchPrefix: "if [ -e", stdout: "exists=1|regular file|755|root|root\n"},
 		}
-		results := r.Run(context.Background(), []Check{
+		results := r.Run(context.Background(), []Op{
 			{File: "/x", Mode: "0644"},
 		})
 		if results[0].Status != TestFail || !strings.Contains(results[0].Message, "mode") {
@@ -98,7 +98,7 @@ func TestRunner_FileVerb(t *testing.T) {
 		fake.responses = []fakeResponse{
 			{matchPrefix: "if [ -e", stdout: "exists=0||||\n"},
 		}
-		results := r.Run(context.Background(), []Check{
+		results := r.Run(context.Background(), []Op{
 			{File: "/nope", Exists: ptrBool(false)},
 		})
 		if results[0].Status != TestPass {
@@ -111,7 +111,7 @@ func TestRunner_FileVerb(t *testing.T) {
 		fake.responses = []fakeResponse{
 			{matchPrefix: "if [ -e", stdout: "exists=1|regular file|644|root|root\n"},
 		}
-		results := r.Run(context.Background(), []Check{
+		results := r.Run(context.Background(), []Op{
 			{File: "/x", Exists: ptrBool(false)},
 		})
 		if results[0].Status != TestFail {
@@ -127,7 +127,7 @@ func TestRunner_PortVerb_Listening(t *testing.T) {
 	fake.responses = []fakeResponse{
 		{matchPrefix: "(ss -tlnH", exit: 0},
 	}
-	res := r.Run(context.Background(), []Check{{Port: 6379, Listening: ptrBool(true)}})
+	res := r.Run(context.Background(), []Op{{Port: 6379, Listening: ptrBool(true)}})
 	if res[0].Status != TestPass {
 		t.Errorf("expected pass, got %+v", res[0])
 	}
@@ -138,7 +138,7 @@ func TestRunner_PortVerb_NotListening(t *testing.T) {
 	fake.responses = []fakeResponse{
 		{matchPrefix: "(ss -tlnH", exit: 1},
 	}
-	res := r.Run(context.Background(), []Check{{Port: 6379, Listening: ptrBool(true)}})
+	res := r.Run(context.Background(), []Op{{Port: 6379, Listening: ptrBool(true)}})
 	if res[0].Status != TestFail {
 		t.Errorf("expected fail, got %+v", res[0])
 	}
@@ -147,7 +147,7 @@ func TestRunner_PortVerb_NotListening(t *testing.T) {
 func TestRunner_PortVerb_ReachableSkipUnderImageTest(t *testing.T) {
 	r, _ := newFakeRunner(t, RunModeBox)
 	// Reachable attribute triggers host-side dial → skipped under box test.
-	res := r.Run(context.Background(), []Check{{Port: 6379, Reachable: ptrBool(true)}})
+	res := r.Run(context.Background(), []Op{{Port: 6379, Reachable: ptrBool(true)}})
 	if res[0].Status != TestSkip {
 		t.Errorf("expected skip, got %+v", res[0])
 	}
@@ -160,7 +160,7 @@ func TestRunner_CommandVerb(t *testing.T) {
 		fake.responses = []fakeResponse{
 			{matchPrefix: "redis-cli ping", stdout: "PONG\n", exit: 0},
 		}
-		res := r.Run(context.Background(), []Check{
+		res := r.Run(context.Background(), []Op{
 			{Command: "redis-cli ping", Stdout: MatcherList{{Op: "equals", Value: "PONG"}}},
 		})
 		if res[0].Status != TestPass {
@@ -173,7 +173,7 @@ func TestRunner_CommandVerb(t *testing.T) {
 		fake.responses = []fakeResponse{
 			{matchPrefix: "status", stdout: "ready ok running", exit: 0},
 		}
-		res := r.Run(context.Background(), []Check{
+		res := r.Run(context.Background(), []Op{
 			{Command: "status", Stdout: MatcherList{{Op: "contains", Value: []any{"ready", "ok"}}}},
 		})
 		if res[0].Status != TestPass {
@@ -186,7 +186,7 @@ func TestRunner_CommandVerb(t *testing.T) {
 		fake.responses = []fakeResponse{
 			{matchPrefix: "fail-cmd", exit: 2},
 		}
-		res := r.Run(context.Background(), []Check{{Command: "fail-cmd"}})
+		res := r.Run(context.Background(), []Op{{Command: "fail-cmd"}})
 		if res[0].Status != TestFail || !strings.Contains(res[0].Message, "exit=2") {
 			t.Errorf("expected exit failure, got %+v", res[0])
 		}
@@ -197,7 +197,7 @@ func TestRunner_CommandVerb(t *testing.T) {
 		fake.responses = []fakeResponse{
 			{matchPrefix: "uptime", stdout: "load average: 0.12 0.34 0.56\n", exit: 0},
 		}
-		res := r.Run(context.Background(), []Check{
+		res := r.Run(context.Background(), []Op{
 			{Command: "uptime", Stdout: MatcherList{{Op: "matches", Value: `load average: [\d.]+`}}},
 		})
 		if res[0].Status != TestPass {
@@ -221,7 +221,7 @@ func TestRunner_HTTPVerb(t *testing.T) {
 
 	t.Run("status + body contains", func(t *testing.T) {
 		r, _ := newFakeRunner(t, RunModeLive)
-		res := r.Run(context.Background(), []Check{
+		res := r.Run(context.Background(), []Op{
 			{HTTP: srv.URL + "/ok", Status: 200, Body: MatcherList{{Op: "contains", Value: "ready"}}},
 		})
 		if res[0].Status != TestPass {
@@ -231,7 +231,7 @@ func TestRunner_HTTPVerb(t *testing.T) {
 
 	t.Run("status mismatch", func(t *testing.T) {
 		r, _ := newFakeRunner(t, RunModeLive)
-		res := r.Run(context.Background(), []Check{
+		res := r.Run(context.Background(), []Op{
 			{HTTP: srv.URL + "/boom", Status: 200},
 		})
 		if res[0].Status != TestFail {
@@ -246,7 +246,7 @@ func TestRunner_HTTPVerb(t *testing.T) {
 		}))
 		defer slow.Close()
 		r, _ := newFakeRunner(t, RunModeLive)
-		res := r.Run(context.Background(), []Check{
+		res := r.Run(context.Background(), []Op{
 			{HTTP: slow.URL, Status: 200, Timeout: "10ms"},
 		})
 		if res[0].Status != TestFail {
@@ -264,7 +264,7 @@ func TestRunner_VariableExpansion(t *testing.T) {
 			{matchPrefix: "redis-cli -p 16379", stdout: "PONG\n", exit: 0},
 		}
 		r := NewRunner(fake, &EvalVarResolver{Env: map[string]string{"HOST_PORT:6379": "16379"}}, RunModeLive)
-		res := r.Run(context.Background(), []Check{
+		res := r.Run(context.Background(), []Op{
 			{Command: "redis-cli -p ${HOST_PORT:6379}", Stdout: MatcherList{{Op: "equals", Value: "PONG"}}},
 		})
 		if res[0].Status != TestPass {
@@ -274,7 +274,7 @@ func TestRunner_VariableExpansion(t *testing.T) {
 
 	t.Run("unresolved → skip", func(t *testing.T) {
 		r, _ := newFakeRunner(t, RunModeLive)
-		res := r.Run(context.Background(), []Check{
+		res := r.Run(context.Background(), []Op{
 			{Command: "redis-cli -p ${HOST_PORT:6379}"},
 		})
 		if res[0].Status != TestSkip || !strings.Contains(res[0].Message, "unresolved") {
@@ -286,7 +286,7 @@ func TestRunner_VariableExpansion(t *testing.T) {
 // Skip:true short-circuits before any execution.
 func TestRunner_SkipFlag(t *testing.T) {
 	r, _ := newFakeRunner(t, RunModeLive)
-	res := r.Run(context.Background(), []Check{{Command: "anything", Skip: true}})
+	res := r.Run(context.Background(), []Op{{Command: "anything", Skip: true}})
 	if res[0].Status != TestSkip {
 		t.Errorf("expected skip, got %+v", res[0])
 	}
@@ -295,7 +295,7 @@ func TestRunner_SkipFlag(t *testing.T) {
 // Zero-verb check fails with a clear error at runOne.
 func TestRunner_EmptyCheck(t *testing.T) {
 	r, _ := newFakeRunner(t, RunModeLive)
-	res := r.Run(context.Background(), []Check{{}})
+	res := r.Run(context.Background(), []Op{{}})
 	if res[0].Status != TestFail || !strings.Contains(res[0].Message, "no verb") {
 		t.Errorf("expected fail with 'no verb', got %+v", res[0])
 	}
@@ -305,9 +305,9 @@ func TestRunner_EmptyCheck(t *testing.T) {
 // the number of failures.
 func TestFormatResultsText(t *testing.T) {
 	results := []EvalResult{
-		{Check: &Check{File: "/x"}, Verb: "file", Status: TestPass, Message: "ok"},
-		{Check: &Check{Port: 6379}, Verb: "port", Status: TestFail, Message: "not listening", Elapsed: 5 * time.Millisecond},
-		{Check: &Check{Command: "a"}, Verb: "command", Status: TestSkip, Message: "skipped"},
+		{Op: &Op{File: "/x"}, Verb: "file", Status: TestPass, Message: "ok"},
+		{Op: &Op{Port: 6379}, Verb: "port", Status: TestFail, Message: "not listening", Elapsed: 5 * time.Millisecond},
+		{Op: &Op{Command: "a"}, Verb: "command", Status: TestSkip, Message: "skipped"},
 	}
 	var buf bytes.Buffer
 	fails := FormatResultsText(&buf, results)

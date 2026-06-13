@@ -186,7 +186,7 @@ func TestResolveCheckApk(t *testing.T) {
 	if got := r.resolveCheckApk("./tests/data/x.apk", "candy:android-emulator-layer"); got != apk {
 		t.Errorf("local-candy resolve = %q, want %q", got, apk)
 	}
-	// FETCHED candy: map key == bare @github ref, and CollectEval stamps Origin
+	// FETCHED candy: map key == bare @github ref, and CollectDescriptions stamps Origin
 	// with that same ref. CandyDirs[origin-key] must match (the real bug — keying
 	// by bare NAME instead of the ref form left the lookup empty → install failed).
 	const ref = "github.com/owner/repo/candy/android-emulator-layer"

@@ -128,19 +128,22 @@ func TestResolveLocalImageRef_ShortNameNoMatch(t *testing.T) {
 func TestRunCharlyVerb_SkipsUnderImageTest(t *testing.T) {
 	r, _ := newFakeRunner(t, RunModeBox)
 	r.Box = "jupyter"
-	res := r.Run(context.Background(), []Check{{Cdp: "status"}})
+	res := r.Run(context.Background(), []Op{{Cdp: "status"}})
 	if len(res) != 1 || res[0].Status != TestSkip {
 		t.Fatalf("expected skip under RunModeBox, got %+v", res[0])
 	}
-	if !strings.Contains(res[0].Message, "requires a running container") {
-		t.Errorf("expected message mentioning running container, got %q", res[0].Message)
+	// A runtime-context verb (cdp) is skipped in box mode by the context-vs-mode
+	// gate (the unified-Op replacement for the per-verb "needs a running
+	// container" skip).
+	if !strings.Contains(res[0].Message, "not active in box mode") {
+		t.Errorf("expected context-not-active skip message, got %q", res[0].Message)
 	}
 }
 
 func TestRunCharlyVerb_UnknownMethodFails(t *testing.T) {
 	r, _ := newFakeRunner(t, RunModeLive)
 	r.Box = "jupyter"
-	res := r.Run(context.Background(), []Check{{Cdp: "not-a-real-method"}})
+	res := r.Run(context.Background(), []Op{{Cdp: "not-a-real-method"}})
 	if res[0].Status != TestFail || !strings.Contains(res[0].Message, "unknown method") {
 		t.Errorf("expected unknown-method failure, got %+v", res[0])
 	}
@@ -150,8 +153,8 @@ func TestRunCharlyVerb_UnknownMethodFails(t *testing.T) {
 
 func TestValidateCharlyVerb_UnknownMethodReportsError(t *testing.T) {
 	errs := &ValidationError{}
-	c := &Check{Cdp: "bogus"}
-	validateCharlyVerb(c, "cdp", "loc", "deploy", errs)
+	c := &Op{Cdp: "bogus"}
+	validateCharlyVerb(c, "cdp", "loc", errs)
 	if !errs.HasErrors() || !strings.Contains(strings.Join(errs.Errors, "\n"), "unknown method") {
 		t.Errorf("expected unknown-method error, got: %+v", errs.Errors)
 	}
@@ -160,28 +163,29 @@ func TestValidateCharlyVerb_UnknownMethodReportsError(t *testing.T) {
 func TestValidateCharlyVerb_MissingRequiredModifier(t *testing.T) {
 	errs := &ValidationError{}
 	// cdp: eval requires Tab + Expression — neither set.
-	c := &Check{Cdp: "eval"}
-	validateCharlyVerb(c, "cdp", "loc", "deploy", errs)
+	c := &Op{Cdp: "eval"}
+	validateCharlyVerb(c, "cdp", "loc", errs)
 	joined := strings.Join(errs.Errors, "\n")
 	if !strings.Contains(joined, "tab") || !strings.Contains(joined, "expression") {
 		t.Errorf("expected missing tab+expression errors, got: %v", errs.Errors)
 	}
 }
 
-func TestValidateCharlyVerb_BuildScopeRejected(t *testing.T) {
+func TestValidateCharlyVerb_BuildContextRejected(t *testing.T) {
 	errs := &ValidationError{}
-	c := &Check{Cdp: "status"}
-	validateCharlyVerb(c, "cdp", "loc", "build", errs)
-	if !errs.HasErrors() || !strings.Contains(strings.Join(errs.Errors, "\n"), "scope:\"deploy\"") {
-		t.Errorf("expected deploy-scope-required error, got: %+v", errs.Errors)
+	// A live-container verb pinned to build context must be rejected.
+	c := &Op{Cdp: "status", Context: []string{"build"}}
+	validateCharlyVerb(c, "cdp", "loc", errs)
+	if !errs.HasErrors() || !strings.Contains(strings.Join(errs.Errors, "\n"), "runtime-context only") {
+		t.Errorf("expected runtime-context-only error, got: %+v", errs.Errors)
 	}
 }
 
 func TestValidateCharlyVerb_ArtifactMethodMissingPath(t *testing.T) {
 	errs := &ValidationError{}
 	// wl: screenshot requires Artifact.
-	c := &Check{Wl: "screenshot"}
-	validateCharlyVerb(c, "wl", "loc", "deploy", errs)
+	c := &Op{Wl: "screenshot"}
+	validateCharlyVerb(c, "wl", "loc", errs)
 	if !errs.HasErrors() || !strings.Contains(strings.Join(errs.Errors, "\n"), "artifact") {
 		t.Errorf("expected artifact-required error, got: %+v", errs.Errors)
 	}
@@ -189,8 +193,8 @@ func TestValidateCharlyVerb_ArtifactMethodMissingPath(t *testing.T) {
 
 func TestValidateCharlyVerb_ValidCheckNoErrors(t *testing.T) {
 	errs := &ValidationError{}
-	c := &Check{Cdp: "eval", Tab: "1", Expression: "document.title"}
-	validateCharlyVerb(c, "cdp", "loc", "deploy", errs)
+	c := &Op{Cdp: "eval", Tab: "1", Expression: "document.title"}
+	validateCharlyVerb(c, "cdp", "loc", errs)
 	if errs.HasErrors() {
 		t.Errorf("expected no errors for valid check, got: %+v", errs.Errors)
 	}
@@ -201,16 +205,16 @@ func TestValidateCharlyVerb_ValidCheckNoErrors(t *testing.T) {
 func TestCheckKind_NewVerbsDispatched(t *testing.T) {
 	cases := []struct {
 		name string
-		c    Check
+		c    Op
 		verb string
 	}{
-		{"cdp", Check{Cdp: "status"}, "cdp"},
-		{"wl", Check{Wl: "screenshot", Artifact: "/tmp/x"}, "wl"},
-		{"dbus", Check{Dbus: "list"}, "dbus"},
-		{"vnc", Check{Vnc: "status"}, "vnc"},
-		{"record", Check{Record: "list"}, "record"},
-		{"spice", Check{Spice: "status"}, "spice"},
-		{"libvirt", Check{Libvirt: "info"}, "libvirt"},
+		{"cdp", Op{Cdp: "status"}, "cdp"},
+		{"wl", Op{Wl: "screenshot", Artifact: "/tmp/x"}, "wl"},
+		{"dbus", Op{Dbus: "list"}, "dbus"},
+		{"vnc", Op{Vnc: "status"}, "vnc"},
+		{"record", Op{Record: "list"}, "record"},
+		{"spice", Op{Spice: "status"}, "spice"},
+		{"libvirt", Op{Libvirt: "info"}, "libvirt"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -254,7 +258,7 @@ func TestShortNameMatchesRef(t *testing.T) {
 // `<namespace>/<name>` per line; --json emits the full JSON List
 // document for recipes that author `stdout: { contains: kind }`.
 func TestPosK8sRaw_JsonFlagThreaded(t *testing.T) {
-	withJSON := posK8sRaw(&Check{K8sResource: "nodes", JSON: true})
+	withJSON := posK8sRaw(&Op{K8sResource: "nodes", JSON: true})
 	foundJSON := false
 	for _, a := range withJSON {
 		if a == "--json" {
@@ -264,7 +268,7 @@ func TestPosK8sRaw_JsonFlagThreaded(t *testing.T) {
 	if !foundJSON {
 		t.Errorf("expected `--json` flag in argv when Check.JSON=true; got %v", withJSON)
 	}
-	withoutJSON := posK8sRaw(&Check{K8sResource: "nodes", JSON: false})
+	withoutJSON := posK8sRaw(&Op{K8sResource: "nodes", JSON: false})
 	for _, a := range withoutJSON {
 		if a == "--json" {
 			t.Errorf("expected NO `--json` flag when Check.JSON=false; got %v", withoutJSON)

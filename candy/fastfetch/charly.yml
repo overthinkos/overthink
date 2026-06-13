@@ -10,25 +10,6 @@ candy:
             logo and exposes a --version flag, so both its presence and its
             runtime behaviour are verifiable inside a disposable container.
         tag: [working]
-        scenario:
-            - name: fastfetch-binary-installed
-              step:
-                - then: the fastfetch binary is installed at /usr/bin/fastfetch
-                  file: /usr/bin/fastfetch
-                  exists: true
-            - name: fastfetch-reports-version
-              step:
-                - then: fastfetch --version prints a version banner and exits 0
-                  command: /usr/bin/fastfetch --version 2>&1
-                  exit_status: 0
-                  stdout:
-                    - matches: "[0-9]+\\.[0-9]+"
-            - name: fastfetch-prints-system-info
-              step:
-                - then: running fastfetch in pipe mode prints a system-information report and exits 0
-                  command: /usr/bin/fastfetch --pipe --logo none 2>&1
-                  exit_status: 0
-                - then: the report is human-readable, grouping system facts (OS, kernel, CPU, memory) into labelled lines
     distro:
         arch:
             package:
@@ -36,15 +17,39 @@ candy:
         fedora:
             package:
                 - fastfetch
-    eval:
-        - id: fastfetch-binary
-          file: /usr/bin/fastfetch
-          exists: true
-        - id: fastfetch-package
-          package: fastfetch
-          installed: true
-        - id: fastfetch-version
-          command: /usr/bin/fastfetch --version 2>&1
-          exit_status: 0
-          stdout:
-            - matches: "[0-9]+\\.[0-9]+"
+    scenario:
+        - name: fastfetch-binary-installed
+          step:
+            - then: the fastfetch binary is installed at /usr/bin/fastfetch
+              file: /usr/bin/fastfetch
+              exists: true
+        - name: fastfetch-reports-version
+          step:
+            - then: fastfetch --version prints a version banner and exits 0
+              command: /usr/bin/fastfetch --version 2>&1
+              exit_status: 0
+              stdout:
+                - matches: "[0-9]+\\.[0-9]+"
+        - name: fastfetch-prints-system-info
+          step:
+            - then: running fastfetch in pipe mode prints a system-information report and exits 0
+              command: /usr/bin/fastfetch --pipe --logo none 2>&1
+              exit_status: 0
+            - then: the report is human-readable, grouping system facts (OS, kernel, CPU, memory) into labelled lines
+        - name: fastfetch-binary
+          step:
+            - id: fastfetch-binary
+              file: /usr/bin/fastfetch
+              exists: true
+        - name: fastfetch-package
+          step:
+            - id: fastfetch-package
+              package: fastfetch
+              installed: true
+        - name: fastfetch-version
+          step:
+            - id: fastfetch-version
+              command: /usr/bin/fastfetch --version 2>&1
+              exit_status: 0
+              stdout:
+                - matches: "[0-9]+\\.[0-9]+"

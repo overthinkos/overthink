@@ -12,29 +12,6 @@ candy:
             and a `data` volume persists ~/.openclaw. Binary presence, the
             supervised service, and the reachable port are all verifiable.
         tag: [working]
-        scenario:
-            # First scenario's step is DETERMINISTIC at build scope (the npm
-            # global binary must exist); the next two are DETERMINISTIC at
-            # deploy scope (the supervised service must be running and the
-            # published gateway port must accept a TCP connection).
-            - name: gateway-binary-installed
-              step:
-                - then: the openclaw gateway binary is installed into the npm global bin
-                  file: ${HOME}/.npm-global/bin/openclaw
-                  exists: true
-            - name: gateway-service-running
-              step:
-                - then: the openclaw gateway runs as a supervised service
-                  scope: deploy
-                  service: openclaw
-                  running: true
-            - name: gateway-port-reachable
-              step:
-                - then: the running gateway accepts a TCP connection on its published port 18789
-                  scope: deploy
-                  addr: 127.0.0.1:${HOST_PORT:18789}
-                  reachable: true
-                  timeout: 5s
     require:
         - nodejs
         - socat
@@ -57,18 +34,48 @@ candy:
           restart: always
           enable: true
           scope: system
-    # The gateway this candy runs — checked HERE so one check covers every box
-    # composing it (openclaw, openclaw-full, openclaw-desktop).
-    eval:
-        - id: openclaw-binary
-          file: ${HOME}/.npm-global/bin/openclaw
-          exists: true
-        - id: openclaw-service-running
-          scope: deploy
-          service: openclaw
-          running: true
-        - id: openclaw-gateway-port
-          scope: deploy
-          addr: 127.0.0.1:${HOST_PORT:18789}
-          reachable: true
-          timeout: 5s
+    scenario:
+        # First scenario's step is DETERMINISTIC at build scope (the npm
+        # global binary must exist); the next two are DETERMINISTIC at
+        # deploy scope (the supervised service must be running and the
+        # published gateway port must accept a TCP connection).
+        - name: gateway-binary-installed
+          step:
+            - then: the openclaw gateway binary is installed into the npm global bin
+              file: ${HOME}/.npm-global/bin/openclaw
+              exists: true
+        - name: gateway-service-running
+          step:
+            - then: the openclaw gateway runs as a supervised service
+              service: openclaw
+              running: true
+              context:
+                - runtime
+        - name: gateway-port-reachable
+          step:
+            - then: the running gateway accepts a TCP connection on its published port 18789
+              addr: 127.0.0.1:${HOST_PORT:18789}
+              reachable: true
+              timeout: 5s
+              context:
+                - runtime
+        - name: openclaw-binary
+          step:
+            - id: openclaw-binary
+              file: ${HOME}/.npm-global/bin/openclaw
+              exists: true
+        - name: openclaw-service-running
+          step:
+            - id: openclaw-service-running
+              service: openclaw
+              running: true
+              context:
+                - runtime
+        - name: openclaw-gateway-port
+          step:
+            - id: openclaw-gateway-port
+              addr: 127.0.0.1:${HOST_PORT:18789}
+              reachable: true
+              timeout: 5s
+              context:
+                - runtime

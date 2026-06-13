@@ -136,13 +136,13 @@ func TestParseCalVer(t *testing.T) {
 		{"  2026.366.2359  ", true, 2026, 366, 2359}, // trimmed
 		{"4", false, 0, 0, 0},                        // legacy integer schema version
 		{"", false, 0, 0, 0},
-		{"2026.141", false, 0, 0, 0},       // too few parts
+		{"2026.141", false, 0, 0, 0},         // too few parts
 		{"2026.141.0015.30", false, 0, 0, 0}, // too many parts
 		{"x.y.z", false, 0, 0, 0},
-		{"2026.000.0000", false, 0, 0, 0},      // day < 1
-		{"2026.367.0000", false, 0, 0, 0},    // day > 366
-		{"2026.141.2400", false, 0, 0, 0},      // hour > 23
-		{"1969.001.0000", false, 0, 0, 0},      // year < 1970
+		{"2026.000.0000", false, 0, 0, 0}, // day < 1
+		{"2026.367.0000", false, 0, 0, 0}, // day > 366
+		{"2026.141.2400", false, 0, 0, 0}, // hour > 23
+		{"1969.001.0000", false, 0, 0, 0}, // year < 1970
 		// EXTREMELY STRICT — non-canonical widths/forms are rejected (no back-compat):
 		{"2026.45.0830", false, 0, 0, 0},  // day not 3-digit
 		{"2026.1.0000", false, 0, 0, 0},   // day not 3-digit
@@ -192,12 +192,12 @@ func TestCalVerAlphanumericSort(t *testing.T) {
 		"2026.045.0831",
 		"2026.112.0522",
 		"2026.161.2303",
-		"2026.163.0928",
+		"2026.164.0002",
 		"2026.366.2359",
 	}
 	// A shuffled copy, sorted PURELY alphanumerically, must equal chrono.
 	shuffled := []string{
-		"2026.163.0928", "2024.001.0000", "2026.045.0831", "2026.112.0522",
+		"2026.164.0002", "2024.001.0000", "2026.045.0831", "2026.112.0522",
 		"2026.366.2359", "2026.005.0002", "2026.161.2303", "2026.045.0830",
 	}
 	sort.Strings(shuffled)
@@ -226,12 +226,12 @@ func TestCalVerLess(t *testing.T) {
 		a, b string
 		less bool
 	}{
-		{"2026.112.0522", "2026.114.1558", true},   // earlier day
+		{"2026.112.0522", "2026.114.1558", true},  // earlier day
 		{"2026.114.1558", "2026.114.2207", true},  // same day, earlier time
 		{"2026.141.1326", "2026.141.1530", true},  // drop-kdbx < calver-schema (HEAD)
 		{"2026.141.1530", "2026.141.1530", false}, // equal is not less
 		{"2026.141.1530", "2026.141.1326", false}, // reverse
-		{"2025.366.2359", "2026.001.0000", true},       // year boundary
+		{"2025.366.2359", "2026.001.0000", true},  // year boundary
 	}
 	for _, c := range cases {
 		a, _ := ParseCalVer(c.a)

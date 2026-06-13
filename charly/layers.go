@@ -320,7 +320,7 @@ type CandyYAML struct {
 
 	// Replaces root.yml / user.yml — see Task type and docs/plan.
 	Vars map[string]string `yaml:"var,omitempty"`  // candy-local variables for ${VAR} substitution in tasks
-	Task []Task            `yaml:"task,omitempty"` // ordered install operations
+	Task []Op              `yaml:"task,omitempty"` // ordered install operations (unified Op vocabulary)
 
 	// Shell-init declarations: an intrinsic body (init/path_append/path/
 	// priority) plus per-shell sub-blocks (bash/zsh/fish/sh). Travels in
@@ -331,11 +331,11 @@ type CandyYAML struct {
 	// fish). See ShellConfig type and /charly-build:layer "Shell Init Surface".
 	Shell *ShellConfig `yaml:"shell,omitempty"`
 
-	// Tests are declarative checks contributed by this candy. They travel
-	// in the ai.opencharly.tests OCI label (candy section) and run under
-	// `charly eval box` (build-time) and `charly eval live` (deploy-time).
-	// See testspec.go for the Check type.
-	Eval []Check `yaml:"eval,omitempty"`
+	// Scenario carries the acceptance scenarios (Op steps) contributed by
+	// this candy. They travel in the ai.opencharly.description OCI label
+	// (candy section) and run under `charly check` (build) / `charly check
+	// live` (deploy). See description_spec.go for the Scenario type.
+	Scenario []Scenario `yaml:"scenario,omitempty"`
 
 	// Artifacts are files a candy publishes back to the operator after its
 	// setup runs successfully. Each artifact is retrieved from the deploy
@@ -377,7 +377,7 @@ var candyYAMLKnownFields = map[string]bool{
 	"env_provide": true, "env_require": true, "env_accept": true,
 	"secret_accept": true, "secret_require": true,
 	"mcp_provide": true, "mcp_require": true, "mcp_accept": true,
-	"var": true, "task": true, "tests": true, "eval": true,
+	"var": true, "task": true, "scenario": true,
 	"artifact":   true,
 	"capability": true, "requires_capability": true,
 	"package": true, "distro": true,
@@ -594,103 +594,6 @@ type TagPkgConfig struct {
 	Raw     map[string]interface{} `yaml:"-"`
 }
 
-// Task is a single install operation in the candy manifest `tasks:` list.
-// Exactly one of the verb-discriminator fields (Cmd, Mkdir, Copy, Write,
-// Link, Download, Setcap, Build) must be non-empty — enforced by Kind().
-// The remaining fields are shared modifiers; validator enforces which
-// modifiers are legal per verb.
-//
-// See plan: /home/atrawog/.claude/plans/can-you-ultrathink-and-partitioned-codd.md
-type Task struct {
-	// Verb discriminators — exactly one non-empty
-	Cmd      string `yaml:"cmd,omitempty"`      // shell command (escape hatch)
-	Mkdir    string `yaml:"mkdir,omitempty"`    // directory path to create
-	Copy     string `yaml:"copy,omitempty"`     // candy-dir file to copy (src)
-	Write    string `yaml:"write,omitempty"`    // destination path for inline content
-	Link     string `yaml:"link,omitempty"`     // link path (where the symlink goes)
-	Download string `yaml:"download,omitempty"` // URL to fetch
-	Setcap   string `yaml:"setcap,omitempty"`   // file path for capability operation
-	Build    string `yaml:"build,omitempty"`    // builder selector, currently only "all"
-
-	// Shared modifiers — validity depends on verb
-	User            string   `yaml:"user,omitempty"`             // user context: root / ${USER} / name / uid:gid
-	Mode            string   `yaml:"mode,omitempty"`             // octal permissions
-	To              string   `yaml:"to,omitempty"`               // destination (copy, download)
-	Target          string   `yaml:"target,omitempty"`           // symlink target
-	Content         string   `yaml:"content,omitempty"`          // inline content for write
-	Extract         string   `yaml:"extract,omitempty"`          // archive format for download
-	Include         []string `yaml:"include,omitempty"`          // path filter for download
-	StripComponents int      `yaml:"strip_components,omitempty"` // strip N leading path components from tar entries
-	// Uninstall lists file paths that `charly deploy del` should remove when
-	// reversing this task. Needed for download tasks that extract into a
-	// shared directory (e.g. /usr/local/bin): the default reverse uses
-	// task.To which would be the whole dir; authors declare the actual
-	// files here so teardown is clean without wiping unrelated binaries.
-	Uninstall []string          `yaml:"uninstall,omitempty"`
-	Env       map[string]string `yaml:"env,omitempty"`     // env vars for download install scripts
-	Caps      string            `yaml:"caps,omitempty"`    // capability spec for setcap (empty = strip)
-	Comment   string            `yaml:"comment,omitempty"` // optional Containerfile comment
-	// Cache declares additional BuildKit cache-mount paths for this task's
-	// RUN, so a task that downloads or builds heavy artifacts (e.g. an SDK
-	// installer) can persist them across builds the SAME way package caches
-	// do — surviving an upstream layer cache-miss instead of re-fetching.
-	// Ownership is derived from the task's `user:` (root → shared/locked,
-	// non-root → uid/gid-owned). Paths must be absolute; ${VAR} is
-	// substituted. The cache-USE logic (sentinel checks, copy-into-place)
-	// lives in the task body — charly only provides the mount. Honored by
-	// `cmd:` and `download:`.
-	Cache []string `yaml:"cache,omitempty"`
-}
-
-// TaskVerbs is the set of valid discriminator keys on a Task.
-// Order is stable (used for deterministic error messages).
-var TaskVerbs = []string{"cmd", "mkdir", "copy", "write", "link", "download", "setcap", "build"}
-
-// Kind returns the task's verb ("cmd", "mkdir", …) and an error if zero or
-// multiple verbs are set. Callers in the generator assume Kind returned nil
-// before branching on the returned string.
-func (t *Task) Kind() (string, error) {
-	verbs := t.presentVerbs()
-	if len(verbs) == 0 {
-		return "", fmt.Errorf("task has no action (expected exactly one of: %s)", strings.Join(TaskVerbs, ", "))
-	}
-	if len(verbs) > 1 {
-		return "", fmt.Errorf("task has conflicting actions: %s (expected exactly one)", strings.Join(verbs, ", "))
-	}
-	return verbs[0], nil
-}
-
-// presentVerbs returns the discriminator field names that are non-empty.
-// Deterministic order (matches TaskVerbs) for stable error messages.
-func (t *Task) presentVerbs() []string {
-	out := make([]string, 0, 1)
-	if t.Cmd != "" {
-		out = append(out, "cmd")
-	}
-	if t.Mkdir != "" {
-		out = append(out, "mkdir")
-	}
-	if t.Copy != "" {
-		out = append(out, "copy")
-	}
-	if t.Write != "" {
-		out = append(out, "write")
-	}
-	if t.Link != "" {
-		out = append(out, "link")
-	}
-	if t.Download != "" {
-		out = append(out, "download")
-	}
-	if t.Setcap != "" {
-		out = append(out, "setcap")
-	}
-	if t.Build != "" {
-		out = append(out, "build")
-	}
-	return out
-}
-
 func (ly *CandyYAML) UnmarshalYAML(value *yaml.Node) error {
 	// Use type alias to avoid infinite recursion
 	type candyYAMLAlias CandyYAML
@@ -740,7 +643,7 @@ type Candy struct {
 	Path        string       // directory containing the candy manifest
 	SourceDir   string       // anchor for relative file lookups (tasks.copy, data.src, install files); defaults to Path, overridden by the candy manifest's `directory:`
 	Version     string       // CalVer version from the candy manifest
-	Description *Description // Gherkin-shaped self-description (Feature/Narrative/Tag/Scenario)
+	Description *Description // Gherkin-shaped self-description (Feature/Narrative/Tag)
 	Status      string       // derived from Description.Tag — working/testing/broken (empty = testing)
 	Info        string       // derived from Description.Feature+Narrative
 	// Parse-time filesystem-probe caches: each caches a single fileExists /
@@ -801,11 +704,11 @@ type Candy struct {
 	mcpAccepts     []EnvDependency   // MCP servers this candy can optionally use
 	engine         string            // required run engine from the candy manifest ("docker", "podman", or "")
 	vars           map[string]string // candy-local variables (from the candy manifest vars:)
-	tasks          []Task            // ordered install operations (from the candy manifest tasks:)
+	tasks          []Op              // ordered install operations (from the candy manifest task:)
 	apk            []ApkPackageSpec  // Android apps to install on a kind:android device (from the candy manifest apk:)
 	localpkg       map[string]string // per-format native-package source dirs (pac/rpm/deb → dir) from the candy manifest localpkg:
 	reboot         bool              // reboot the deploy target after this candy (from the candy manifest reboot:)
-	tests          []Check           // declarative checks (from the candy manifest tests:)
+	scenario       []Scenario        // acceptance scenarios (from the candy manifest scenario:)
 	artifacts      []CandyArtifact   // files to retrieve after setup (from the candy manifest artifacts:)
 	shell          *ShellConfig      // shell-init declarations (from the candy manifest shell:)
 

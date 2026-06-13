@@ -47,7 +47,7 @@ const (
 // a no-op when no peer refs are present. The caller MUST `defer r.ClosePeers()`
 // so any ssh -L forwards opened for ${PEER_ENDPOINT} against a VM/host subject
 // are torn down at run end.
-func applyPeerVars(r *Runner, checks []Check, instance string) {
+func applyPeerVars(r *Runner, checks []Op, instance string) {
 	refs := collectPeerRefs(checks)
 	if len(refs) == 0 {
 		return
@@ -65,16 +65,16 @@ func applyPeerVars(r *Runner, checks []Check, instance string) {
 // applyPeerVarsScenarios is the scenario-list counterpart (harness / recipe /
 // feature-run paths), flattening every step's embedded Check.
 func applyPeerVarsScenarios(r *Runner, scenarios []Scenario, instance string) {
-	var checks []Check
+	var checks []Op
 	for _, sc := range scenarios {
 		for _, st := range sc.Step {
-			checks = append(checks, st.Check)
+			checks = append(checks, st.Op)
 		}
 		for _, st := range sc.Setup {
-			checks = append(checks, st.Check)
+			checks = append(checks, st.Op)
 		}
 		for _, st := range sc.Teardown {
-			checks = append(checks, st.Check)
+			checks = append(checks, st.Op)
 		}
 	}
 	applyPeerVars(r, checks, instance)
@@ -83,7 +83,7 @@ func applyPeerVarsScenarios(r *Runner, scenarios []Scenario, instance string) {
 // collectPeerRefs returns the distinct ${PEER_*} variable keys referenced
 // across every string field of every check (keys in the "NAME:arg" form used
 // by ExpandTestVars).
-func collectPeerRefs(checks []Check) []string {
+func collectPeerRefs(checks []Op) []string {
 	seen := map[string]bool{}
 	var out []string
 	for i := range checks {

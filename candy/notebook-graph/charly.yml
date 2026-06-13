@@ -32,21 +32,25 @@ candy:
             self-contained synthetic data) so it runs cleanly even
             when the OSM DAG hasn't produced /workspace/tiles/work/
             yet.
-        scenario:
-            - name: GPU libraries demo notebook lands in workspace/notebooks/
-              step:
-                - then: the notebooks subdirectory is provisioned in the workspace
-                  scope: deploy
-                  file: ${VOLUME_CONTAINER_PATH:workspace}/notebooks
-                  filetype: directory
-                - and: the gpu-libraries-demo notebook is present
-                  scope: deploy
-                  command: ls ${VOLUME_CONTAINER_PATH:workspace}/notebooks/
-                  exit_status: 0
-                  stdout:
-                    - matches: "gpu-libraries-demo"
-    eval:
-        - id: notebook-graph-demo-present
-          scope: deploy
-          file: ${VOLUME_CONTAINER_PATH:workspace}/notebooks/gpu-libraries-demo.py
-          exists: true
+    scenario:
+        - name: GPU libraries demo notebook lands in workspace/notebooks/
+          step:
+            - then: the notebooks subdirectory is provisioned in the workspace
+              file: ${VOLUME_CONTAINER_PATH:workspace}/notebooks
+              filetype: directory
+              context:
+                - runtime
+            - and: the gpu-libraries-demo notebook is present
+              command: ls ${VOLUME_CONTAINER_PATH:workspace}/notebooks/
+              exit_status: 0
+              stdout:
+                - matches: "gpu-libraries-demo"
+              context:
+                - runtime
+        - name: notebook-graph-demo-present
+          step:
+            - id: notebook-graph-demo-present
+              file: ${VOLUME_CONTAINER_PATH:workspace}/notebooks/gpu-libraries-demo.py
+              exists: true
+              context:
+                - runtime

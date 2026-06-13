@@ -24,35 +24,6 @@ candy:
             browser stays up with a responsive CDP endpoint after the
             nested-compositor startup-race settles (deploy scope).
         tag: [working]
-        scenario:
-            - name: chrome-supervisor-baked-into-image
-              step:
-                - then: the assembled supervisord config carries selkies-core's own [program:chrome] launcher entry
-                  file: /etc/supervisord.conf
-                  exists: true
-                  contains:
-                    - contains: "[program:chrome]"
-                - then: that supervised entry execs the chrome-wrapper launcher (self-synchronizing — it polls for the nested compositor's wayland-0 socket)
-                  file: /etc/supervisord.conf
-                  contains:
-                    - contains: "chrome-wrapper"
-            - name: chrome-stays-supervised-after-startup-race
-              step:
-                - then: the init system reports selkies-core's supervised chrome program as RUNNING
-                  scope: deploy
-                  service: chrome
-                  running: true
-                - then: 25s after deploy Chrome is still alive and its internal CDP endpoint on 9223 answers in-container, proving supervisord relaunched the browser past the nested-compositor self-exit instead of the bed merely racing its brief alive window
-                  scope: deploy
-                  command: |
-                    sleep 25
-                    pgrep -f "/opt/google/chrome/chrome" >/dev/null 2>&1 || { echo "FAIL: chrome not running 25s after deploy"; exit 1; }
-                    curl -sf --max-time 5 http://127.0.0.1:9223/json/version >/dev/null 2>&1 || { echo "FAIL: chrome CDP not responding"; exit 1; }
-                    echo "ok: chrome supervised + alive + CDP responsive"
-                  exit_status: 0
-                  in_container: true
-                  stdout:
-                    - contains: "ok: chrome supervised"
     candy:
         - selkies
         - pipewire
@@ -97,37 +68,75 @@ candy:
           stdout: file:/tmp/chrome.log
           enable: true
           scope: system
-    eval:
-        # Build-scope: selkies-core's OWN service block bakes a supervised
-        # [program:chrome] launcher into the assembled supervisord config. The
-        # chrome candy installs the binary, chrome-cdp installs the wrapper +
-        # cdp-proxy program — only selkies-core supervises the BROWSER itself
-        # (chrome-cdp's program is cdp-proxy, not chrome), so this is the
-        # composition's distinguishing, non-duplicative artifact. /etc/supervisord.conf
-        # is chmod 0644, readable by the image's default uid-1000 user under
-        # `charly eval box`. Fails if the service block did nothing.
-        - id: selkies-chrome-supervisor-baked
-          file: /etc/supervisord.conf
-          contains:
-            - contains: "[program:chrome]"
-            - contains: "chrome-wrapper"
-        # Deploy-scope: the supervised chrome program is RUNNING under the init
-        # system (distinct from chrome-cdp's cdp-proxy program).
-        - id: selkies-chrome-service-running
-          scope: deploy
-          service: chrome
-          running: true
-        # Regression guard for the fire-once-Chrome class (the bed used to pass
-        # only by racing Chrome's brief alive window): assert Chrome is alive AND
-        # CDP responds AFTER the startup-race settles + any supervised relaunch.
-        - id: selkies-chrome-supervised-alive
-          scope: deploy
-          command: |
-            sleep 25
-            pgrep -f "/opt/google/chrome/chrome" >/dev/null 2>&1 || { echo "FAIL: chrome not running 25s after deploy"; exit 1; }
-            curl -sf --max-time 5 http://127.0.0.1:9223/json/version >/dev/null 2>&1 || { echo "FAIL: chrome CDP not responding"; exit 1; }
-            echo "ok: chrome supervised + alive + CDP responsive"
-          exit_status: 0
-          in_container: true
-          stdout:
-            - contains: "ok: chrome supervised"
+    scenario:
+        - name: chrome-supervisor-baked-into-image
+          step:
+            - then: the assembled supervisord config carries selkies-core's own [program:chrome] launcher entry
+              file: /etc/supervisord.conf
+              exists: true
+              contains:
+                - contains: "[program:chrome]"
+            - then: that supervised entry execs the chrome-wrapper launcher (self-synchronizing — it polls for the nested compositor's wayland-0 socket)
+              file: /etc/supervisord.conf
+              contains:
+                - contains: "chrome-wrapper"
+        - name: chrome-stays-supervised-after-startup-race
+          step:
+            - then: the init system reports selkies-core's supervised chrome program as RUNNING
+              service: chrome
+              running: true
+              context:
+                - runtime
+            - then: 25s after deploy Chrome is still alive and its internal CDP endpoint on 9223 answers in-container, proving supervisord relaunched the browser past the nested-compositor self-exit instead of the bed merely racing its brief alive window
+              command: |
+                sleep 25
+                pgrep -f "/opt/google/chrome/chrome" >/dev/null 2>&1 || { echo "FAIL: chrome not running 25s after deploy"; exit 1; }
+                curl -sf --max-time 5 http://127.0.0.1:9223/json/version >/dev/null 2>&1 || { echo "FAIL: chrome CDP not responding"; exit 1; }
+                echo "ok: chrome supervised + alive + CDP responsive"
+              exit_status: 0
+              in_container: true
+              stdout:
+                - contains: "ok: chrome supervised"
+              context:
+                - runtime
+        - name: selkies-chrome-supervisor-baked
+          step:
+            # Build-scope: selkies-core's OWN service block bakes a supervised
+            # [program:chrome] launcher into the assembled supervisord config. The
+            # chrome candy installs the binary, chrome-cdp installs the wrapper +
+            # cdp-proxy program — only selkies-core supervises the BROWSER itself
+            # (chrome-cdp's program is cdp-proxy, not chrome), so this is the
+            # composition's distinguishing, non-duplicative artifact. /etc/supervisord.conf
+            # is chmod 0644, readable by the image's default uid-1000 user under
+            # `charly eval box`. Fails if the service block did nothing.
+            - id: selkies-chrome-supervisor-baked
+              file: /etc/supervisord.conf
+              contains:
+                - contains: "[program:chrome]"
+                - contains: "chrome-wrapper"
+        - name: selkies-chrome-service-running
+          step:
+            # Deploy-scope: the supervised chrome program is RUNNING under the init
+            # system (distinct from chrome-cdp's cdp-proxy program).
+            - id: selkies-chrome-service-running
+              service: chrome
+              running: true
+              context:
+                - runtime
+        - name: selkies-chrome-supervised-alive
+          step:
+            # Regression guard for the fire-once-Chrome class (the bed used to pass
+            # only by racing Chrome's brief alive window): assert Chrome is alive AND
+            # CDP responds AFTER the startup-race settles + any supervised relaunch.
+            - id: selkies-chrome-supervised-alive
+              command: |
+                sleep 25
+                pgrep -f "/opt/google/chrome/chrome" >/dev/null 2>&1 || { echo "FAIL: chrome not running 25s after deploy"; exit 1; }
+                curl -sf --max-time 5 http://127.0.0.1:9223/json/version >/dev/null 2>&1 || { echo "FAIL: chrome CDP not responding"; exit 1; }
+                echo "ok: chrome supervised + alive + CDP responsive"
+              exit_status: 0
+              in_container: true
+              stdout:
+                - contains: "ok: chrome supervised"
+              context:
+                - runtime

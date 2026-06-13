@@ -13,33 +13,6 @@ candy:
             Every claim below is observable: the binaries, the canonical symlink
             target, and the reported runtime version.
         tag: [working]
-        scenario:
-            # All steps are DETERMINISTIC — each embeds a check verb (file /
-            # command), so they run at build AND deploy scope and would FAIL if
-            # the JDK or the canonical JAVA_HOME symlink were missing.
-            - name: jdk-tooling-installed
-              step:
-                - then: the JRE launcher is installed at /usr/bin/java
-                  file: /usr/bin/java
-                  exists: true
-                - then: the compiler is installed at /usr/bin/javac
-                  file: /usr/bin/javac
-                  exists: true
-            - name: canonical-java-home-resolves
-              step:
-                - then: the distro-agnostic JAVA_HOME exposes a working java launcher
-                  command: test -x /usr/lib/jvm/charly-jdk21/bin/java
-                  exit_status: 0
-                - then: the distro-agnostic JAVA_HOME exposes a working javac compiler
-                  command: test -x /usr/lib/jvm/charly-jdk21/bin/javac
-                  exit_status: 0
-            - name: reports-openjdk-21
-              step:
-                - then: the runtime identifies itself as OpenJDK version 21
-                  command: /usr/bin/java -version 2>&1
-                  exit_status: 0
-                  stdout:
-                    - contains: "21."
     env:
         # Distro-agnostic JAVA_HOME. The task below symlinks /usr/lib/jvm/charly-jdk21 to
         # whichever JDK 21 root the distro package installed (fedora java-21-openjdk,
@@ -65,7 +38,7 @@ candy:
             package:
                 - openjdk-21-jdk-headless
     task:
-        - cmd: |
+        - command: |
             set -e
             # Establish the canonical, distro-agnostic JAVA_HOME (see env: above).
             # Pick the JDK 21 root the distro package installed and symlink a stable
@@ -78,39 +51,79 @@ candy:
             [ -n "$jdk" ] || { echo "java-openjdk: no JDK 21 found under /usr/lib/jvm" >&2; exit 1; }
             ln -sfn "$jdk" /usr/lib/jvm/charly-jdk21
             echo "java-openjdk: JAVA_HOME -> /usr/lib/jvm/charly-jdk21 -> $jdk"
-          user: root
-    eval:
-        # Guard the cross-distro JAVA_HOME: the canonical symlink MUST resolve to a
-        # real JDK with java AND javac on every distro. This build-scope check fails
-        # if the symlink is missing/broken — exactly the regression that shipped when
-        # JAVA_HOME was hardcoded to the Fedora-only jre-21-openjdk path.
-        - id: java-home-canonical-java
-          command: test -x /usr/lib/jvm/charly-jdk21/bin/java
-          exit_status: 0
-        - id: java-home-canonical-javac
-          command: test -x /usr/lib/jvm/charly-jdk21/bin/javac
-          exit_status: 0
-        - id: java-binary
-          file: /usr/bin/java
-          exists: true
-        - id: javac-binary
-          file: /usr/bin/javac
-          exists: true
-        - id: java-runs
-          command: /usr/bin/java -version
-          exit_status: 0
-        - id: java-version-21
-          command: /usr/bin/java -version 2>&1
-          exit_status: 0
-          stdout:
-            - contains: "21."
-        # The JDK package is actually installed (not just the binaries present).
-        # Cross-distro names differ — package_map resolves the right one per
-        # distro tag; the scalar (openjdk-21-jdk-headless) is the debian/ubuntu
-        # fallback.
-        - id: java-openjdk-package
-          package: openjdk-21-jdk-headless
-          package_map:
-            fedora: java-21-openjdk-headless
-            arch: jdk21-openjdk
-          installed: true
+          run_as: root
+    scenario:
+        # All steps are DETERMINISTIC — each embeds a check verb (file /
+        # command), so they run at build AND deploy scope and would FAIL if
+        # the JDK or the canonical JAVA_HOME symlink were missing.
+        - name: jdk-tooling-installed
+          step:
+            - then: the JRE launcher is installed at /usr/bin/java
+              file: /usr/bin/java
+              exists: true
+            - then: the compiler is installed at /usr/bin/javac
+              file: /usr/bin/javac
+              exists: true
+        - name: canonical-java-home-resolves
+          step:
+            - then: the distro-agnostic JAVA_HOME exposes a working java launcher
+              command: test -x /usr/lib/jvm/charly-jdk21/bin/java
+              exit_status: 0
+            - then: the distro-agnostic JAVA_HOME exposes a working javac compiler
+              command: test -x /usr/lib/jvm/charly-jdk21/bin/javac
+              exit_status: 0
+        - name: reports-openjdk-21
+          step:
+            - then: the runtime identifies itself as OpenJDK version 21
+              command: /usr/bin/java -version 2>&1
+              exit_status: 0
+              stdout:
+                - contains: "21."
+        - name: java-home-canonical-java
+          step:
+            # Guard the cross-distro JAVA_HOME: the canonical symlink MUST resolve to a
+            # real JDK with java AND javac on every distro. This build-scope check fails
+            # if the symlink is missing/broken — exactly the regression that shipped when
+            # JAVA_HOME was hardcoded to the Fedora-only jre-21-openjdk path.
+            - id: java-home-canonical-java
+              command: test -x /usr/lib/jvm/charly-jdk21/bin/java
+              exit_status: 0
+        - name: java-home-canonical-javac
+          step:
+            - id: java-home-canonical-javac
+              command: test -x /usr/lib/jvm/charly-jdk21/bin/javac
+              exit_status: 0
+        - name: java-binary
+          step:
+            - id: java-binary
+              file: /usr/bin/java
+              exists: true
+        - name: javac-binary
+          step:
+            - id: javac-binary
+              file: /usr/bin/javac
+              exists: true
+        - name: java-runs
+          step:
+            - id: java-runs
+              command: /usr/bin/java -version
+              exit_status: 0
+        - name: java-version-21
+          step:
+            - id: java-version-21
+              command: /usr/bin/java -version 2>&1
+              exit_status: 0
+              stdout:
+                - contains: "21."
+        - name: java-openjdk-package
+          step:
+            # The JDK package is actually installed (not just the binaries present).
+            # Cross-distro names differ — package_map resolves the right one per
+            # distro tag; the scalar (openjdk-21-jdk-headless) is the debian/ubuntu
+            # fallback.
+            - id: java-openjdk-package
+              package: openjdk-21-jdk-headless
+              package_map:
+                fedora: java-21-openjdk-headless
+                arch: jdk21-openjdk
+              installed: true

@@ -16,38 +16,6 @@ candy:
             libvirt qemu driver package is installed on every distro, and the
             rootless qemu:///session daemon answers once deployed.
         tag: [working]
-        scenario:
-            - name: qemu-libvirt-binaries-installed
-              step:
-                - then: the libvirt client virsh is installed at its fixed path
-                  file: /usr/bin/virsh
-                  exists: true
-                - then: the QEMU x86_64 system emulator binary is present
-                  file: /usr/bin/qemu-system-x86_64
-                  exists: true
-                - then: the qemu-img disk-image tool is present
-                  file: /usr/bin/qemu-img
-                  exists: true
-            - name: libvirt-qemu-driver-package-present
-              step:
-                - then: the libvirt qemu driver package is installed (cross-distro name resolution)
-                  package: libvirt-daemon-driver-qemu
-                  package_map:
-                    arch: libvirt
-                    fedora: libvirt-daemon-driver-qemu
-                    debian: libvirt-daemon-system
-                    ubuntu: libvirt-daemon-system
-                  installed: true
-            - name: rootless-libvirt-session-answers
-              step:
-                - then: virsh reaches the rootless qemu:///session daemon and lists domains
-                  scope: deploy
-                  command: virsh -c qemu:///session list --all
-                  in_container: true
-                  exit_status: 0
-            - name: mixed-init-service-polymorphism
-              step:
-                - then: the same virtqemud and virtnetworkd daemons come up under whichever init system the target runs (supervisord in containers, systemd on host/bootc) with no virtualization-host sibling candy
     distro:
         arch:
             package:
@@ -154,38 +122,11 @@ candy:
     # for in-container charly vm operations) doesn't consult the group at
     # all. Same task, both targets.
     task:
-        - cmd: |
+        - command: |
             if getent group libvirt >/dev/null && id -u "${USER:-user}" >/dev/null 2>&1; then
               usermod -aG libvirt "$(getent passwd 1000 | cut -d: -f1)"
             fi
-          user: root
-    eval:
-        - id: libvirt-qemu-driver-package
-          package: libvirt-daemon-driver-qemu
-          package_map:
-            arch: libvirt
-            fedora: libvirt-daemon-driver-qemu
-            fedora:43: libvirt-daemon-driver-qemu
-            debian: libvirt-daemon-system
-            ubuntu: libvirt-daemon-system
-          installed: true
-        - id: virsh-binary
-          file: /usr/bin/virsh
-          exists: true
-        - id: qemu-system-x86-binary
-          file: /usr/bin/qemu-system-x86_64
-          exists: true
-        - id: qemu-img-binary
-          file: /usr/bin/qemu-img
-          exists: true
-        # The rootless libvirt session this candy's virtqemud serves — checked
-        # HERE so one check covers every box composing virtualization (directly
-        # or via the charly toolchain), instead of the box re-declaring it.
-        - id: libvirt-session-list
-          scope: deploy
-          command: virsh -c qemu:///session list --all
-          in_container: true
-          exit_status: 0
+          run_as: root
     # Mixed-entry `service:` pattern (CLAUDE.md "Init-system
     # polymorphism via mixed `service:` entries"). Each daemon
     # appears twice with the same `name:` — one entry rendered by
@@ -225,3 +166,73 @@ candy:
           start_sec: 2
           enable: true
           scope: system
+    scenario:
+        - name: qemu-libvirt-binaries-installed
+          step:
+            - then: the libvirt client virsh is installed at its fixed path
+              file: /usr/bin/virsh
+              exists: true
+            - then: the QEMU x86_64 system emulator binary is present
+              file: /usr/bin/qemu-system-x86_64
+              exists: true
+            - then: the qemu-img disk-image tool is present
+              file: /usr/bin/qemu-img
+              exists: true
+        - name: libvirt-qemu-driver-package-present
+          step:
+            - then: the libvirt qemu driver package is installed (cross-distro name resolution)
+              package: libvirt-daemon-driver-qemu
+              package_map:
+                arch: libvirt
+                fedora: libvirt-daemon-driver-qemu
+                debian: libvirt-daemon-system
+                ubuntu: libvirt-daemon-system
+              installed: true
+        - name: rootless-libvirt-session-answers
+          step:
+            - then: virsh reaches the rootless qemu:///session daemon and lists domains
+              command: virsh -c qemu:///session list --all
+              in_container: true
+              exit_status: 0
+              context:
+                - runtime
+        - name: mixed-init-service-polymorphism
+          step:
+            - then: the same virtqemud and virtnetworkd daemons come up under whichever init system the target runs (supervisord in containers, systemd on host/bootc) with no virtualization-host sibling candy
+        - name: libvirt-qemu-driver-package
+          step:
+            - id: libvirt-qemu-driver-package
+              package: libvirt-daemon-driver-qemu
+              package_map:
+                arch: libvirt
+                fedora: libvirt-daemon-driver-qemu
+                fedora:43: libvirt-daemon-driver-qemu
+                debian: libvirt-daemon-system
+                ubuntu: libvirt-daemon-system
+              installed: true
+        - name: virsh-binary
+          step:
+            - id: virsh-binary
+              file: /usr/bin/virsh
+              exists: true
+        - name: qemu-system-x86-binary
+          step:
+            - id: qemu-system-x86-binary
+              file: /usr/bin/qemu-system-x86_64
+              exists: true
+        - name: qemu-img-binary
+          step:
+            - id: qemu-img-binary
+              file: /usr/bin/qemu-img
+              exists: true
+        - name: libvirt-session-list
+          step:
+            # The rootless libvirt session this candy's virtqemud serves — checked
+            # HERE so one check covers every box composing virtualization (directly
+            # or via the charly toolchain), instead of the box re-declaring it.
+            - id: libvirt-session-list
+              command: virsh -c qemu:///session list --all
+              in_container: true
+              exit_status: 0
+              context:
+                - runtime

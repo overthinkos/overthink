@@ -14,37 +14,6 @@ candy:
             --privileged. Every artifact below is observable in the built image; the
             end-to-end nested run is provable on a live deployment.
         tag: [working]
-        scenario:
-            - name: nesting-toolchain-installed
-              step:
-                - then: the podman container engine is installed for in-container use
-                  file: /usr/bin/podman
-                  exists: true
-                - then: the buildah image-build tool is installed
-                  file: /usr/bin/buildah
-                  exists: true
-                - then: the skopeo image-copy tool is installed
-                  file: /usr/bin/skopeo
-                  exists: true
-            - name: rootless-userns-config-present
-              step:
-                - then: containers.conf pins userns=host so the inner /proc mount is not rejected by the kernel mount_too_revealing check
-                  command: grep -E '^userns\s*=\s*"host"' /etc/containers/containers.conf
-                  exit_status: 0
-                - then: policy.json is present so podman pull/run accepts an image signature policy
-                  file: /etc/containers/policy.json
-                  exists: true
-            - name: subuid-delegation-ready
-              step:
-                - then: newuidmap carries the cap_setuid file capability so a nested user namespace can be delegated
-                  command: getcap /usr/bin/newuidmap | grep -c cap_setuid
-                  exit_status: 0
-                - then: /etc/subuid declares the username:start:count delegation ranges the inner podman maps from
-                  command: grep -cE '^[a-z0-9_-]+:[0-9]+:[0-9]+$' /etc/subuid
-                  exit_status: 0
-            - name: nested-container-runs-rootless
-              step:
-                - then: a fresh rootless `podman run` of an inner container succeeds end-to-end with no added capabilities and no --privileged
     package:
         - buildah
         - fuse-overlayfs
@@ -172,7 +141,7 @@ candy:
         # Pattern (from quay.io/podman/stable):
         #   - root    : 1:65535       (single full-range entry)
         #   - <user1000>: 1:999 + 1001:64535  (two ranges skipping own uid 1000)
-        - cmd: |
+        - command: |
             touch /etc/subuid /etc/subgid
             sed -i "/^root:/d" /etc/subuid /etc/subgid
             echo "root:1:65535" >> /etc/subuid
@@ -189,21 +158,21 @@ candy:
                 echo "${uid1000}:1001:64535"
               } >> /etc/subgid
             fi
-          user: root
+          run_as: root
         # File capabilities for newuidmap/newgidmap — required for subid
         # delegation to a nested user namespace. File caps attach to the binary.
-        - cmd: |
+        - command: |
             if [ -f /usr/bin/newuidmap ]; then
               setcap cap_setuid=ep /usr/bin/newuidmap
               setcap cap_setgid=ep /usr/bin/newgidmap
             fi
-          user: root
+          run_as: root
         - mkdir: /etc/containers
-          user: root
+          run_as: root
         # Also ensure the user's config dir exists — rootless podman prefers
         # ~/.config/containers/* over /etc/containers/*.
         - mkdir: "${HOME}/.config/containers"
-          user: "${USER}"
+          run_as: "${USER}"
         # containers.conf — matches quay.io/podman/stable's canonical config.
         # All five namespaces=host so the inner podman stays in the outer's
         # user/network/ipc/uts/cgroup namespace. Critical: userns=host is what
@@ -214,7 +183,7 @@ candy:
         # rootless podman prefers the user location; writing only /etc is
         # effectively a no-op once ~/.config exists.
         - write: /etc/containers/containers.conf
-          user: root
+          run_as: root
           mode: "0644"
           content: &containers_conf_content |
             [containers]
@@ -231,23 +200,23 @@ candy:
             events_logger = "file"
             runtime = "crun"
         - write: "${HOME}/.config/containers/containers.conf"
-          user: "${USER}"
+          run_as: "${USER}"
           mode: "0644"
           content: *containers_conf_content
         # policy.json — required by podman pull/run for image signature policy.
         - write: /etc/containers/policy.json
-          user: root
+          run_as: root
           mode: "0644"
           content: &policy_json_content |
             {"default":[{"type":"insecureAcceptAnything"}]}
         - write: "${HOME}/.config/containers/policy.json"
-          user: "${USER}"
+          run_as: "${USER}"
           mode: "0644"
           content: *policy_json_content
         # System-wide storage.conf (used by root boxes: charly-fedora/charly-arch/
         # githubrunner). fuse-overlayfs at /var/lib/containers/storage.
         - write: /etc/containers/storage.conf
-          user: root
+          run_as: root
           mode: "0644"
           content: |
             [storage]
@@ -262,7 +231,7 @@ candy:
         # podman can initialize its storage without root. The default would point
         # to /var/lib/containers/storage which the uid-1000 user cannot write.
         - write: "${HOME}/.config/containers/storage.conf"
-          user: "${USER}"
+          run_as: "${USER}"
           mode: "0644"
           content: |
             [storage]
@@ -273,70 +242,137 @@ candy:
             [storage.options.overlay]
             mount_program = "/usr/bin/fuse-overlayfs"
             mountopt = "nodev,fsync=0"
-    eval:
-        - id: podman-binary
-          file: /usr/bin/podman
-          exists: true
-        - id: podman-version
-          command: /usr/bin/podman --version
-          exit_status: 0
-        - id: buildah-binary
-          file: /usr/bin/buildah
-          exists: true
-        - id: buildah-version
-          command: /usr/bin/buildah --version
-          exit_status: 0
-        - id: skopeo-binary
-          file: /usr/bin/skopeo
-          exists: true
-        - id: skopeo-version
-          command: /usr/bin/skopeo --version
-          exit_status: 0
-        - id: newuidmap-binary
-          file: /usr/bin/newuidmap
-          exists: true
-        - id: newgidmap-binary
-          file: /usr/bin/newgidmap
-          exists: true
-        - id: tailscale-binary
-          file: /usr/bin/tailscale
-          exists: true
-        - id: tailscale-version
-          command: /usr/bin/tailscale version
-          exit_status: 0
-        # The rootless-nesting posture this candy's recipe contracts for — the
-        # subuid two-range layout, the newuidmap file-cap, policy.json,
-        # containers.conf userns=host (system + ${HOME} user copy), and the two
-        # env contracts. Portable across every box composing container-nesting
-        # (${HOME} resolves per image; the configs are written identically for
-        # uid-1000 and uid-0 boxes).
-        - id: subuid-user-two-ranges
-          command: grep -cE '^user:[0-9]+:[0-9]+$' /etc/subuid
-          exit_status: 0
-          stdout:
-            - matches: ^2
-        - id: newuidmap-cap
-          command: getcap /usr/bin/newuidmap | grep -c cap_setuid
-          exit_status: 0
-        - id: policy-json
-          file: /etc/containers/policy.json
-          exists: true
-        - id: containers-conf-userns-host
-          command: grep -E '^userns\s*=\s*"host"' /etc/containers/containers.conf
-          exit_status: 0
-        - id: user-containers-conf-userns-host
-          command: grep -E '^userns\s*=\s*"host"' ${HOME}/.config/containers/containers.conf
-          exit_status: 0
-        - id: env-containers-userns-configured
-          command: sh -c 'env | grep -q "^_CONTAINERS_USERNS_CONFIGURED="'
-          exit_status: 0
-        - id: env-buildah-isolation
-          command: sh -c 'env | grep -qx "BUILDAH_ISOLATION=chroot"'
-          exit_status: 0
-        # The end-to-end proof: a fresh nested rootless container actually runs
-        # (the mount_too_revealing / unmask=/proc/* path works).
-        - id: nested-podman-run
-          scope: deploy
-          command: podman run --rm quay.io/libpod/alpine:latest /bin/true
-          timeout: 60s
-          in_container: true
+    scenario:
+        - name: nesting-toolchain-installed
+          step:
+            - then: the podman container engine is installed for in-container use
+              file: /usr/bin/podman
+              exists: true
+            - then: the buildah image-build tool is installed
+              file: /usr/bin/buildah
+              exists: true
+            - then: the skopeo image-copy tool is installed
+              file: /usr/bin/skopeo
+              exists: true
+        - name: rootless-userns-config-present
+          step:
+            - then: containers.conf pins userns=host so the inner /proc mount is not rejected by the kernel mount_too_revealing check
+              command: grep -E '^userns\s*=\s*"host"' /etc/containers/containers.conf
+              exit_status: 0
+            - then: policy.json is present so podman pull/run accepts an image signature policy
+              file: /etc/containers/policy.json
+              exists: true
+        - name: subuid-delegation-ready
+          step:
+            - then: newuidmap carries the cap_setuid file capability so a nested user namespace can be delegated
+              command: getcap /usr/bin/newuidmap | grep -c cap_setuid
+              exit_status: 0
+            - then: /etc/subuid declares the username:start:count delegation ranges the inner podman maps from
+              command: grep -cE '^[a-z0-9_-]+:[0-9]+:[0-9]+$' /etc/subuid
+              exit_status: 0
+        - name: nested-container-runs-rootless
+          step:
+            - then: a fresh rootless `podman run` of an inner container succeeds end-to-end with no added capabilities and no --privileged
+        - name: podman-binary
+          step:
+            - id: podman-binary
+              file: /usr/bin/podman
+              exists: true
+        - name: podman-version
+          step:
+            - id: podman-version
+              command: /usr/bin/podman --version
+              exit_status: 0
+        - name: buildah-binary
+          step:
+            - id: buildah-binary
+              file: /usr/bin/buildah
+              exists: true
+        - name: buildah-version
+          step:
+            - id: buildah-version
+              command: /usr/bin/buildah --version
+              exit_status: 0
+        - name: skopeo-binary
+          step:
+            - id: skopeo-binary
+              file: /usr/bin/skopeo
+              exists: true
+        - name: skopeo-version
+          step:
+            - id: skopeo-version
+              command: /usr/bin/skopeo --version
+              exit_status: 0
+        - name: newuidmap-binary
+          step:
+            - id: newuidmap-binary
+              file: /usr/bin/newuidmap
+              exists: true
+        - name: newgidmap-binary
+          step:
+            - id: newgidmap-binary
+              file: /usr/bin/newgidmap
+              exists: true
+        - name: tailscale-binary
+          step:
+            - id: tailscale-binary
+              file: /usr/bin/tailscale
+              exists: true
+        - name: tailscale-version
+          step:
+            - id: tailscale-version
+              command: /usr/bin/tailscale version
+              exit_status: 0
+        - name: subuid-user-two-ranges
+          step:
+            # The rootless-nesting posture this candy's recipe contracts for — the
+            # subuid two-range layout, the newuidmap file-cap, policy.json,
+            # containers.conf userns=host (system + ${HOME} user copy), and the two
+            # env contracts. Portable across every box composing container-nesting
+            # (${HOME} resolves per image; the configs are written identically for
+            # uid-1000 and uid-0 boxes).
+            - id: subuid-user-two-ranges
+              command: grep -cE '^user:[0-9]+:[0-9]+$' /etc/subuid
+              exit_status: 0
+              stdout:
+                - matches: ^2
+        - name: newuidmap-cap
+          step:
+            - id: newuidmap-cap
+              command: getcap /usr/bin/newuidmap | grep -c cap_setuid
+              exit_status: 0
+        - name: policy-json
+          step:
+            - id: policy-json
+              file: /etc/containers/policy.json
+              exists: true
+        - name: containers-conf-userns-host
+          step:
+            - id: containers-conf-userns-host
+              command: grep -E '^userns\s*=\s*"host"' /etc/containers/containers.conf
+              exit_status: 0
+        - name: user-containers-conf-userns-host
+          step:
+            - id: user-containers-conf-userns-host
+              command: grep -E '^userns\s*=\s*"host"' ${HOME}/.config/containers/containers.conf
+              exit_status: 0
+        - name: env-containers-userns-configured
+          step:
+            - id: env-containers-userns-configured
+              command: sh -c 'env | grep -q "^_CONTAINERS_USERNS_CONFIGURED="'
+              exit_status: 0
+        - name: env-buildah-isolation
+          step:
+            - id: env-buildah-isolation
+              command: sh -c 'env | grep -qx "BUILDAH_ISOLATION=chroot"'
+              exit_status: 0
+        - name: nested-podman-run
+          step:
+            # The end-to-end proof: a fresh nested rootless container actually runs
+            # (the mount_too_revealing / unmask=/proc/* path works).
+            - id: nested-podman-run
+              command: podman run --rm quay.io/libpod/alpine:latest /bin/true
+              timeout: 60s
+              in_container: true
+              context:
+                - runtime

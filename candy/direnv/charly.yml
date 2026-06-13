@@ -15,29 +15,6 @@ candy:
             hook drop-ins, so they fail if either the package or the shell wiring
             is missing.
         tag: [working]
-        scenario:
-            - name: direnv-binary-installed
-              step:
-                - then: the direnv binary is installed at /usr/bin/direnv for the .envrc/.secrets autoload workflow
-                  file: /usr/bin/direnv
-                  exists: true
-                - then: direnv reports its version without error
-                  command: /usr/bin/direnv version
-                  exit_status: 0
-            - name: bash-hook-baked-into-image
-              step:
-                - then: the bash shell-init drop-in is baked into the image and installs the direnv hook so .envrc loads on directory change
-                  file: /etc/profile.d/charly-direnv-bash.sh
-                  exists: true
-                  contains:
-                    - "direnv hook bash"
-            - name: fish-hook-baked-into-image
-              step:
-                - then: the fish shell-init drop-in is baked into its conf.d and sources the direnv fish hook
-                  file: /etc/fish/conf.d/charly-direnv.fish
-                  exists: true
-                  contains:
-                    - "direnv hook fish"
     package:
         - direnv
     # Shell hooks installed declaratively via the shell: schema (2026-05).
@@ -50,29 +27,61 @@ candy:
         fish:
             init: |
                 direnv hook fish | source
-    eval:
-        - id: direnv-binary
-          file: /usr/bin/direnv
-          exists: true
-        - id: direnv-package
-          package: direnv
-          installed: true
-        - id: direnv-version
-          command: /usr/bin/direnv version
-          exit_status: 0
-          stdout:
-            - matches: "[0-9]+\\.[0-9]+"
-        # Distinctive behaviour: the shell: schema bakes the per-shell hook
-        # drop-ins at build time. These checks read the emitted files (root-owned
-        # 0644, world-readable) and assert the hook is wired — they FAIL if the
-        # declarative shell: wiring stopped emitting the drop-ins.
-        - id: direnv-hook-bash
-          file: /etc/profile.d/charly-direnv-bash.sh
-          exists: true
-          contains:
-            - "direnv hook bash"
-        - id: direnv-hook-fish
-          file: /etc/fish/conf.d/charly-direnv.fish
-          exists: true
-          contains:
-            - "direnv hook fish"
+    scenario:
+        - name: direnv-binary-installed
+          step:
+            - then: the direnv binary is installed at /usr/bin/direnv for the .envrc/.secrets autoload workflow
+              file: /usr/bin/direnv
+              exists: true
+            - then: direnv reports its version without error
+              command: /usr/bin/direnv version
+              exit_status: 0
+        - name: bash-hook-baked-into-image
+          step:
+            - then: the bash shell-init drop-in is baked into the image and installs the direnv hook so .envrc loads on directory change
+              file: /etc/profile.d/charly-direnv-bash.sh
+              exists: true
+              contains:
+                - "direnv hook bash"
+        - name: fish-hook-baked-into-image
+          step:
+            - then: the fish shell-init drop-in is baked into its conf.d and sources the direnv fish hook
+              file: /etc/fish/conf.d/charly-direnv.fish
+              exists: true
+              contains:
+                - "direnv hook fish"
+        - name: direnv-binary
+          step:
+            - id: direnv-binary
+              file: /usr/bin/direnv
+              exists: true
+        - name: direnv-package
+          step:
+            - id: direnv-package
+              package: direnv
+              installed: true
+        - name: direnv-version
+          step:
+            - id: direnv-version
+              command: /usr/bin/direnv version
+              exit_status: 0
+              stdout:
+                - matches: "[0-9]+\\.[0-9]+"
+        - name: direnv-hook-bash
+          step:
+            # Distinctive behaviour: the shell: schema bakes the per-shell hook
+            # drop-ins at build time. These checks read the emitted files (root-owned
+            # 0644, world-readable) and assert the hook is wired — they FAIL if the
+            # declarative shell: wiring stopped emitting the drop-ins.
+            - id: direnv-hook-bash
+              file: /etc/profile.d/charly-direnv-bash.sh
+              exists: true
+              contains:
+                - "direnv hook bash"
+        - name: direnv-hook-fish
+          step:
+            - id: direnv-hook-fish
+              file: /etc/fish/conf.d/charly-direnv.fish
+              exists: true
+              contains:
+                - "direnv hook fish"

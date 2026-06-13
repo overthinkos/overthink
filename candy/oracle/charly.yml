@@ -10,28 +10,31 @@ candy:
             entrypoint are deterministically verifiable in the built image with no
             network access or API credentials.
         tag: [working]
-        scenario:
-            - name: oracle-binary-on-path
-              step:
-                - then: the oracle executable is installed at ${HOME}/.npm-global/bin/oracle
-                  file: ${HOME}/.npm-global/bin/oracle
-                  exists: true
-            - name: oracle-reports-version
-              step:
-                - then: running oracle --version exits cleanly
-                  command: ${HOME}/.npm-global/bin/oracle --version
-                  exit_status: 0
-            - name: oracle-dispatches-multi-engine-queries
-              step:
-                - given: the oracle CLI and its nodejs runtime are installed in the image
-                - when: a user runs oracle with a bundled prompt against its configured AI engines
-                - then: oracle dispatches the prompt to each configured engine and returns their answers
     require:
         - nodejs
-    eval:
-        - id: oracle-binary
-          file: ${HOME}/.npm-global/bin/oracle
-          exists: true
-        - id: oracle-version
-          command: ${HOME}/.npm-global/bin/oracle --version
-          exit_status: 0
+    scenario:
+        - name: oracle-binary-on-path
+          step:
+            - then: the oracle executable is installed at ${HOME}/.npm-global/bin/oracle
+              file: ${HOME}/.npm-global/bin/oracle
+              exists: true
+        - name: oracle-reports-version
+          step:
+            - then: running oracle --version exits cleanly
+              command: ${HOME}/.npm-global/bin/oracle --version
+              exit_status: 0
+        - name: oracle-dispatches-multi-engine-queries
+          step:
+            - given: the oracle CLI and its nodejs runtime are installed in the image
+            - when: a user runs oracle with a bundled prompt against its configured AI engines
+            - then: oracle dispatches the prompt to each configured engine and returns their answers
+        - name: oracle-binary
+          step:
+            - id: oracle-binary
+              file: ${HOME}/.npm-global/bin/oracle
+              exists: true
+        - name: oracle-version
+          step:
+            - id: oracle-version
+              command: ${HOME}/.npm-global/bin/oracle --version
+              exit_status: 0

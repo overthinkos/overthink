@@ -12,30 +12,6 @@ candy:
             compiles against one layout regardless of distro. Each artifact is a
             real file or library on disk, so its presence is directly verifiable.
         tag: [working]
-        scenario:
-            - name: nvcc-compiler-installed
-              step:
-                - then: the nvcc CUDA compiler driver is on the canonical /usr path
-                  file: /usr/bin/nvcc
-                  exists: true
-                - then: nvcc reports its CUDA compilation-tools release
-                  command: nvcc --version
-                  exit_status: 0
-                  stdout:
-                    - contains: release
-            - name: cudnn-header-stitched
-              step:
-                - then: the cuDNN header is available at /usr/include regardless of distro
-                  file: /usr/include/cudnn.h
-                  exists: true
-            - name: cuda-runtime-library-present
-              step:
-                - then: the CUDA runtime library is linkable from the canonical /usr/lib64 path
-                  command: ls /usr/lib64/libcudart.so*
-                  exit_status: 0
-            - name: gpu-consumers-share-one-layout
-              step:
-                - then: downstream GPU layers (llama-cpp, vllm, comfyui, jupyter-ml) compile against the same /usr-rooted CUDA layout on both Fedora and Arch
     require:
         - nvidia
         - ffmpeg
@@ -98,7 +74,7 @@ candy:
         # a hard dependency on the NVIDIA driver. Extract headers + lib
         # symlinks manually via rpm2cpio to bypass the driver pull-in. Skipped
         # on Arch (where extra/cudnn installs headers cleanly to /opt/cuda).
-        - cmd: |
+        - command: |
             if [ ! -f /etc/fedora-release ]; then
               exit 0
             fi
@@ -119,11 +95,11 @@ candy:
               done < <(find ./usr/lib64 -maxdepth 1 -name '*.so' -type l -print0 2>/dev/null)
             fi
             cd / && rm -rf "$CUDNN_DIR"
-          user: root
+          run_as: root
         # Arch-only: stitch /opt/cuda/* into the canonical /usr-rooted layout
         # so every downstream consumer sees the same paths irrespective of
         # distro. Skipped on Fedora (where the RPMs install at /usr/* directly).
-        - cmd: |
+        - command: |
             if [ ! -f /etc/arch-release ]; then
               exit 0
             fi
@@ -142,23 +118,54 @@ candy:
             for so in /opt/cuda/targets/x86_64-linux/lib/*.so* /opt/cuda/lib64/*.so*; do
               [ -e "$so" ] && ln -sf "$so" /usr/lib64/$(basename "$so")
             done
-          user: root
-    eval:
-        - id: cuda-nvcc-binary
-          file: /usr/bin/nvcc
-          exists: true
-        - id: cuda-cudart-package
-          package: cuda-cudart-devel
-          package_map:
-            arch: cuda
-            fedora: cuda-cudart-devel
-          installed: true
-        - id: cudnn-header
-          command: ls /usr/include/cudnn.h
-          exit_status: 0
-        - id: onnxruntime-package
-          package: onnxruntime
-          package_map:
-            arch: python-onnxruntime-cpu
-            fedora: onnxruntime
-          installed: true
+          run_as: root
+    scenario:
+        - name: nvcc-compiler-installed
+          step:
+            - then: the nvcc CUDA compiler driver is on the canonical /usr path
+              file: /usr/bin/nvcc
+              exists: true
+            - then: nvcc reports its CUDA compilation-tools release
+              command: nvcc --version
+              exit_status: 0
+              stdout:
+                - contains: release
+        - name: cudnn-header-stitched
+          step:
+            - then: the cuDNN header is available at /usr/include regardless of distro
+              file: /usr/include/cudnn.h
+              exists: true
+        - name: cuda-runtime-library-present
+          step:
+            - then: the CUDA runtime library is linkable from the canonical /usr/lib64 path
+              command: ls /usr/lib64/libcudart.so*
+              exit_status: 0
+        - name: gpu-consumers-share-one-layout
+          step:
+            - then: downstream GPU layers (llama-cpp, vllm, comfyui, jupyter-ml) compile against the same /usr-rooted CUDA layout on both Fedora and Arch
+        - name: cuda-nvcc-binary
+          step:
+            - id: cuda-nvcc-binary
+              file: /usr/bin/nvcc
+              exists: true
+        - name: cuda-cudart-package
+          step:
+            - id: cuda-cudart-package
+              package: cuda-cudart-devel
+              package_map:
+                arch: cuda
+                fedora: cuda-cudart-devel
+              installed: true
+        - name: cudnn-header
+          step:
+            - id: cudnn-header
+              command: ls /usr/include/cudnn.h
+              exit_status: 0
+        - name: onnxruntime-package
+          step:
+            - id: onnxruntime-package
+              package: onnxruntime
+              package_map:
+                arch: python-onnxruntime-cpu
+                fedora: onnxruntime
+              installed: true

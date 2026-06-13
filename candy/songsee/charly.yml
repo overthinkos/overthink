@@ -11,17 +11,6 @@ candy:
             without an audio fixture: the binary lands at ~/go/bin/songsee, and
             `songsee --version` execs the kong CLI and exits 0.
         tag: [working]
-        scenario:
-            - name: songsee-binary-installed
-              step:
-                - then: the songsee binary is installed at ~/go/bin/songsee
-                  file: ${HOME}/go/bin/songsee
-                  exists: true
-            - name: songsee-version-flag-responds
-              step:
-                - then: running `songsee --version` execs the kong CLI and exits 0
-                  command: ${HOME}/go/bin/songsee --version
-                  exit_status: 0
     require:
         - golang
     env:
@@ -29,14 +18,28 @@ candy:
     path_append:
         - "~/go/bin"
     task:
-        - cmd: |
+        - command: |
             go install github.com/steipete/songsee/cmd/songsee@latest
             go clean -cache
-          user: "${USER}"
-    eval:
-        - id: songsee-binary
-          file: ${HOME}/go/bin/songsee
-          exists: true
-        - id: songsee-version-runs
-          command: ${HOME}/go/bin/songsee --version
-          exit_status: 0
+          run_as: "${USER}"
+    scenario:
+        - name: songsee-binary-installed
+          step:
+            - then: the songsee binary is installed at ~/go/bin/songsee
+              file: ${HOME}/go/bin/songsee
+              exists: true
+        - name: songsee-version-flag-responds
+          step:
+            - then: running `songsee --version` execs the kong CLI and exits 0
+              command: ${HOME}/go/bin/songsee --version
+              exit_status: 0
+        - name: songsee-binary
+          step:
+            - id: songsee-binary
+              file: ${HOME}/go/bin/songsee
+              exists: true
+        - name: songsee-version-runs
+          step:
+            - id: songsee-version-runs
+              command: ${HOME}/go/bin/songsee --version
+              exit_status: 0

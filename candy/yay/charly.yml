@@ -9,17 +9,6 @@ candy:
             Verifiable: the yay binary lands at /usr/local/bin/yay, is executable,
             and reports its version.
         tag: [working]
-        scenario:
-            - name: yay-installed
-              step:
-                - then: the yay binary is installed at /usr/local/bin/yay
-                  file: /usr/local/bin/yay
-                  exists: true
-                - then: yay runs and reports its version
-                  command: /usr/local/bin/yay --version
-                  exit_status: 0
-                  stdout:
-                    - matches: "yay v[0-9]"
     distro:
         arch:
             package:
@@ -28,17 +17,31 @@ candy:
     task:
         # yay latest release — GitHub API lookup to find the URL for our arch.
         # Uses BUILD_ARCH (uname-style) because yay release names use x86_64/aarch64.
-        - cmd: |
+        - command: |
             URL=$(curl -fsSL https://api.github.com/repos/Jguer/yay/releases/latest \
               | grep -o "https://github.com/Jguer/yay/releases/download/[^\"]*_${BUILD_ARCH}.tar.gz")
             curl -fsSL "$URL" | tar -xzf - -C /usr/local/bin --strip-components=1 --wildcards '*/yay'
-          user: root
-    eval:
-        - id: yay-binary
-          file: /usr/local/bin/yay
-          exists: true
-        - id: yay-version
-          command: /usr/local/bin/yay --version
-          exit_status: 0
-          stdout:
-            - matches: "yay v[0-9]"
+          run_as: root
+    scenario:
+        - name: yay-installed
+          step:
+            - then: the yay binary is installed at /usr/local/bin/yay
+              file: /usr/local/bin/yay
+              exists: true
+            - then: yay runs and reports its version
+              command: /usr/local/bin/yay --version
+              exit_status: 0
+              stdout:
+                - matches: "yay v[0-9]"
+        - name: yay-binary
+          step:
+            - id: yay-binary
+              file: /usr/local/bin/yay
+              exists: true
+        - name: yay-version
+          step:
+            - id: yay-version
+              command: /usr/local/bin/yay --version
+              exit_status: 0
+              stdout:
+                - matches: "yay v[0-9]"

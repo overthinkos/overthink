@@ -256,7 +256,7 @@ func FingerprintSet(set *LabelDescriptionSet) map[string]string {
 	}
 	for _, sec := range [][]LabeledDescription{set.Candy, set.Box, set.Deploy} {
 		for _, ld := range sec {
-			for sIdx, scenario := range ld.Description.Scenario {
+			for sIdx, scenario := range ld.Scenario {
 				expanded := ExpandScenario(scenario)
 				for _, es := range expanded {
 					id := ScenarioID(ld.Origin, sIdx, es.RowIndex)

@@ -75,11 +75,11 @@ type DeploymentNode struct {
 	ForwardSshAgent *bool                 `yaml:"forward_ssh_agent,omitempty"`
 	Sidecar         map[string]SidecarDef `yaml:"sidecar,omitempty"` // Sidecar container overrides
 
-	// Tests are local deploy-level overlays. They merge onto the image's
-	// label-baked deploy section at runtime: entries with an id: that
-	// matches a baked entry replace it; otherwise they append. An entry
-	// with id:X and skip:true effectively disables the baked check.
-	Eval []Check `yaml:"eval,omitempty"`
+	// Scenario carries local deploy-level acceptance overlays (Op steps).
+	// They merge onto the image's label-baked scenarios at runtime by
+	// scenario name / step id (MergeDeployDescriptions); a step with
+	// skip:true disables the baked step.
+	Scenario []Scenario `yaml:"scenario,omitempty"`
 
 	// EvalBed marks this entry as a `kind: eval` disposable R10 bed,
 	// folded into the Deploy map by foldEvalBeds() at load time so every
@@ -1104,9 +1104,9 @@ type DeployStorage struct {
 // DeployProbes — target-agnostic probes. Each entry is a Check (same shape
 // as the existing declarative test vocabulary: file, command, addr, http…).
 type DeployProbes struct {
-	Liveness  *Check `yaml:"liveness,omitempty"`
-	Readiness *Check `yaml:"readiness,omitempty"`
-	Startup   *Check `yaml:"startup,omitempty"`
+	Liveness  *Op `yaml:"liveness,omitempty"`
+	Readiness *Op `yaml:"readiness,omitempty"`
+	Startup   *Op `yaml:"startup,omitempty"`
 }
 
 // deployKey returns the charly.yml map key for an image, optionally qualified by instance.

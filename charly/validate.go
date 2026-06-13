@@ -165,9 +165,8 @@ func Validate(cfg *Config, layers map[string]*Candy, dir string, opts ResolveOpt
 		validateInitDependencies(cfg, defaultInitCfg, layers, errs)
 	}
 
-	// Validate declarative test specs (the candy manifest, charly.yml, charly.yml
-	// tests: + charly.yml deploy_eval:)
-	validateTests(cfg, layers, errs)
+	// Validate every Op embedded in a candy/box scenario step.
+	validateOps(cfg, layers, errs)
 
 	// Validate kind:local templates and target:local deployments.
 	validateLocalTemplates(dir, layers, errs)
@@ -438,6 +437,11 @@ func validateBuildAndDistro(cfg *Config, distroCfg *DistroConfig, errs *Validati
 			continue
 		}
 		validateBuild(fmt.Sprintf("box %q", name), img.Build)
+		// eval_level (acceptance-depth rung) must be one of the canonical
+		// values when set; empty defaults to noagent (ResolveEvalLevel).
+		if img.EvalLevel != "" && !IsValidEvalLevel(img.EvalLevel) {
+			errs.Add("box %q: eval_level %q must be one of: %s", name, img.EvalLevel, strings.Join(EvalLevels, ", "))
+		}
 	}
 }
 
@@ -484,24 +488,33 @@ func validateCandyContents(layers map[string]*Candy, errs *ValidationError) {
 			errs.Add("candy %q: missing required `version:` (CalVer YYYY.DDD.HHMM). Run: charly migrate", name)
 		}
 
-		// ADE is MANDATORY per candy: every local candy MUST ship a full ADE
-		// `description:` (a non-empty feature: + at least one scenario:) AND a
-		// non-empty `eval:` list. Both bake into the image's
-		// ai.opencharly.{description,eval} labels as runnable acceptance tests
-		// (the spec IS the test). Scoped to local candies — a fetched remote
-		// candy's compliance is its own repo's concern (same scope as the
-		// version: check). See CLAUDE.md "Agent Driven Evaluation (ADE)" +
-		// /charly-eval:eval.
+		// ADE is MANDATORY per candy: every local candy MUST ship a non-empty
+		// `description.feature:` AND a `scenario:` list containing at least one
+		// DETERMINISTIC step (do: assert) so the agentless eval always has
+		// something to verify (the spec IS the test). Scoped to local candies —
+		// a fetched remote candy's compliance is its own repo's concern (same
+		// scope as the version: check). See CLAUDE.md "Agent Driven Evaluation
+		// (ADE)" + /charly-eval:eval.
 		if !layer.Remote {
-			if layer.Description == nil || strings.TrimSpace(layer.Description.Feature) == "" || len(layer.Description.Scenario) == 0 {
-				errs.Add("candy %q: missing required `description:` with a non-empty feature: and at least one scenario: (ADE is mandatory). See /charly-eval:eval", name)
-			} else {
-				for _, issue := range ValidateDescription(layer.Description, "candy "+name) {
-					errs.Add("%s", issue)
+			deterministic := 0
+			for si := range layer.scenario {
+				for sti := range layer.scenario[si].Step {
+					if layer.scenario[si].Step[sti].EffectiveDo() == DoAssert {
+						deterministic++
+					}
 				}
 			}
-			if len(layer.tests) == 0 {
-				errs.Add("candy %q: missing required `eval:` block (at least one declarative check; the spec IS the test). See /charly-eval:eval", name)
+			switch {
+			case layer.Description == nil || strings.TrimSpace(layer.Description.Feature) == "":
+				errs.Add("candy %q: missing required `description:` with a non-empty feature: (ADE is mandatory). See /charly-eval:eval", name)
+			case len(layer.scenario) == 0:
+				errs.Add("candy %q: missing required `scenario:` list (ADE is mandatory; the spec IS the test). See /charly-eval:eval", name)
+			case deterministic == 0:
+				errs.Add("candy %q: `scenario:` must contain at least one deterministic step (do: assert) so the agentless eval has something to verify. See /charly-eval:eval", name)
+			default:
+				for _, issue := range validateDescriptionSteps(layer.Description, layer.scenario, "candy "+name) {
+					errs.Add("%s", issue)
+				}
 			}
 		}
 
@@ -2175,10 +2188,10 @@ func validateCandyTasks(layers map[string]*Candy, errs *ValidationError) {
 // validateSingleTask runs per-verb modifier and field validation for a single
 // task. Errors accumulate in errs. known is the set of ${VAR} names that
 // resolve (auto-exports ∪ candy.Vars keys).
-func validateSingleTask(candyName string, idx int, verb string, t *Task, known map[string]bool, errs *ValidationError) {
+func validateSingleTask(candyName string, idx int, verb string, t *Op, known map[string]bool, errs *ValidationError) {
 	// user: format check
-	if t.User != "" {
-		u := t.User
+	if t.RunAs != "" {
+		u := t.RunAs
 		if !isValidTaskUser(u) {
 			errs.Add("candy %q: tasks[%d]: user: %q is not valid (expected root, ${USER}, a name matching ^[a-z_][a-z0-9_-]*$, or <uid>:<gid>)", candyName, idx, u)
 		}
@@ -2190,11 +2203,11 @@ func validateSingleTask(candyName string, idx int, verb string, t *Task, known m
 	}
 
 	// cache: additional buildkit cache mounts — only meaningful on the
-	// RUN-emitting verbs (cmd/download); each path must be absolute (or
+	// RUN-emitting verbs (command/download); each path must be absolute (or
 	// ~/ / ${HOME}, which resolve to absolute mount points).
 	if len(t.Cache) > 0 {
-		if verb != "cmd" && verb != "download" {
-			errs.Add("candy %q: tasks[%d]: cache: is only valid on cmd: or download: tasks (got %s)", candyName, idx, verb)
+		if verb != "command" && verb != "download" {
+			errs.Add("candy %q: tasks[%d]: cache: is only valid on command: or download: tasks (got %s)", candyName, idx, verb)
 		}
 		for _, p := range t.Cache {
 			if !isAbsOrHomePath(p) {
@@ -2205,9 +2218,9 @@ func validateSingleTask(candyName string, idx int, verb string, t *Task, known m
 
 	// Per-verb required modifiers
 	switch verb {
-	case "cmd":
-		if strings.TrimSpace(t.Cmd) == "" {
-			errs.Add("candy %q: tasks[%d]: cmd: must be non-empty", candyName, idx)
+	case "command":
+		if strings.TrimSpace(t.Command) == "" {
+			errs.Add("candy %q: tasks[%d]: command: must be non-empty", candyName, idx)
 		}
 
 	case "mkdir":

@@ -106,7 +106,7 @@ func TestRunCharlyVerb_ValidateAi_AllowlistedMethod_FilePresent_FreshMtime_Valid
 		ValidateAiArtifacts: true,
 		IterStartTime:       time.Now().Add(-1 * time.Hour),
 	}
-	c := &Check{
+	c := &Op{
 		Record:                "stop",
 		Artifact:              cast,
 		ArtifactMinBytes:      50,
@@ -130,7 +130,7 @@ func TestRunCharlyVerb_ValidateAi_AllowlistedMethod_FileMissing_FailsActionable(
 		ValidateAiArtifacts: true,
 		IterStartTime:       time.Now().Add(-1 * time.Hour),
 	}
-	c := &Check{
+	c := &Op{
 		Cdp:              "screenshot",
 		Tab:              "1",
 		Artifact:         "/nonexistent/cdp.png",
@@ -169,7 +169,7 @@ func TestRunCharlyVerb_ValidateAi_AllowlistedMethod_StaleMtime_FailsAntiDeceptio
 		ValidateAiArtifacts: true,
 		IterStartTime:       time.Now().Add(-30 * time.Minute), // iter started 30m ago, file is 2h old
 	}
-	c := &Check{
+	c := &Op{
 		Cdp:              "screenshot",
 		Tab:              "1",
 		Artifact:         stale,
@@ -232,7 +232,7 @@ func TestRunCharlyVerb_ValidateAi_AllowlistedMethod_PhaseBoundary_AcceptsCrossPh
 		ValidateAiArtifacts: true,
 		IterStartTime:       time.Now().Add(-2 * time.Hour),
 	}
-	c := &Check{
+	c := &Op{
 		Record:                "stop",
 		Artifact:              cast,
 		ArtifactMinBytes:      50,
@@ -261,7 +261,7 @@ func TestRunCharlyVerb_ValidateAi_AllowlistedMethod_StdoutMatcher_FailsActionabl
 		ValidateAiArtifacts: true,
 		IterStartTime:       time.Now().Add(-1 * time.Hour),
 	}
-	c := &Check{
+	c := &Op{
 		Cdp:              "screenshot",
 		Tab:              "1",
 		Artifact:         png,

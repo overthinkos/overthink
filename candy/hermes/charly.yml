@@ -16,27 +16,6 @@ candy:
             the source tree are real files in the image, and the running service +
             data volume are probed against a live deployment.
         tag: [working]
-        scenario:
-            - name: hermes-cli-installed
-              step:
-                - then: the hermes Python CLI is installed into the pixi default environment
-                  file: ${HOME}/.pixi/envs/default/bin/hermes
-                  exists: true
-            - name: entrypoint-wrapper-installed
-              step:
-                - then: the hermes entrypoint wrapper is installed and executable on the user PATH
-                  file: ${HOME}/.local/bin/hermes-entrypoint
-                  exists: true
-                  mode: "0755"
-            - name: agent-source-staged
-              step:
-                - then: the upstream hermes-agent source tree is staged under $HOME so the entrypoint can bootstrap config, skills, and the WhatsApp bridge
-                  file: ${HOME}/hermes-agent
-                  exists: true
-                  filetype: directory
-            - name: agent-service-runs-with-data-volume
-              step:
-                - then: when deployed, the persistent /opt/data volume is mounted and the supervised hermes service reaches a running state, having auto-configured an LLM provider from the supplied API key
     require:
         - nodejs
         - supervisord
@@ -99,31 +78,11 @@ candy:
           command: hermes-agent
     task:
         - mkdir: "${HOME}/.local/bin"
-          user: "${USER}"
+          run_as: "${USER}"
         - copy: hermes-entrypoint
           to: "${HOME}/.local/bin/hermes-entrypoint"
           mode: "0755"
-          user: "${USER}"
-    eval:
-        - id: hermes-entrypoint
-          file: ${HOME}/.local/bin/hermes-entrypoint
-          exists: true
-          mode: "0755"
-        - id: hermes-binary
-          file: ${HOME}/.pixi/envs/default/bin/hermes
-          exists: true
-        - id: hermes-agent-source
-          file: ${HOME}/hermes-agent
-          exists: true
-          filetype: directory
-        - id: hermes-data-volume-mount
-          scope: deploy
-          file: /opt/data
-          filetype: directory
-        - id: hermes-service-running
-          scope: deploy
-          service: hermes
-          running: true
+          run_as: "${USER}"
     service:
         - name: hermes
           exec: "%(ENV_HOME)s/.local/bin/hermes-entrypoint"
@@ -137,3 +96,55 @@ candy:
           working_directory: "%(ENV_HOME)s/hermes-agent/scripts/whatsapp-bridge"
           enable: true
           scope: system
+    scenario:
+        - name: hermes-cli-installed
+          step:
+            - then: the hermes Python CLI is installed into the pixi default environment
+              file: ${HOME}/.pixi/envs/default/bin/hermes
+              exists: true
+        - name: entrypoint-wrapper-installed
+          step:
+            - then: the hermes entrypoint wrapper is installed and executable on the user PATH
+              file: ${HOME}/.local/bin/hermes-entrypoint
+              exists: true
+              mode: "0755"
+        - name: agent-source-staged
+          step:
+            - then: the upstream hermes-agent source tree is staged under $HOME so the entrypoint can bootstrap config, skills, and the WhatsApp bridge
+              file: ${HOME}/hermes-agent
+              exists: true
+              filetype: directory
+        - name: agent-service-runs-with-data-volume
+          step:
+            - then: when deployed, the persistent /opt/data volume is mounted and the supervised hermes service reaches a running state, having auto-configured an LLM provider from the supplied API key
+        - name: hermes-entrypoint
+          step:
+            - id: hermes-entrypoint
+              file: ${HOME}/.local/bin/hermes-entrypoint
+              exists: true
+              mode: "0755"
+        - name: hermes-binary
+          step:
+            - id: hermes-binary
+              file: ${HOME}/.pixi/envs/default/bin/hermes
+              exists: true
+        - name: hermes-agent-source
+          step:
+            - id: hermes-agent-source
+              file: ${HOME}/hermes-agent
+              exists: true
+              filetype: directory
+        - name: hermes-data-volume-mount
+          step:
+            - id: hermes-data-volume-mount
+              file: /opt/data
+              filetype: directory
+              context:
+                - runtime
+        - name: hermes-service-running
+          step:
+            - id: hermes-service-running
+              service: hermes
+              running: true
+              context:
+                - runtime

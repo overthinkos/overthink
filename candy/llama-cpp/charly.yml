@@ -11,26 +11,6 @@ candy:
             artifact lands at a fixed path under ~/llama.cpp, so its presence
             and executability are directly checkable.
         tag: [working]
-        scenario:
-            - name: llama-binaries-installed
-              step:
-                - then: the llama-quantize binary is present under ~/llama.cpp
-                  file: ${HOME}/llama.cpp/llama-quantize
-                  exists: true
-                - then: the llama-cli binary is present and executable
-                  command: test -x ${HOME}/llama.cpp/llama-cli && echo ok
-                  stdout: ok
-            - name: gguf-conversion-tools-installed
-              step:
-                - then: the HuggingFace-to-GGUF conversion script is present
-                  file: ${HOME}/llama.cpp/convert_hf_to_gguf.py
-                  exists: true
-                - then: the gguf-py conversion package directory is present
-                  file: ${HOME}/llama.cpp/gguf-py
-                  filetype: directory
-            - name: llama-cli-reports-version
-              step:
-                - then: running "llama-cli --version" prints a llama.cpp version string, confirming the prebuilt ubuntu-x64 binary executes on this host
     env:
         LLAMA_CPP_PATH: "~/llama.cpp"
     path_append:
@@ -39,7 +19,7 @@ candy:
         # Prebuilt llama.cpp binaries — GitHub release layout pins an ubuntu-x64
         # tarball that works on Fedora. Version lookup is runtime so the layer
         # auto-tracks latest.
-        - cmd: |
+        - command: |
             LLAMA_CPP_DIR=~/llama.cpp
             mkdir -p "$LLAMA_CPP_DIR"
             LLAMA_RELEASE=$(curl -fsSL "https://api.github.com/repos/ggml-org/llama.cpp/releases/latest" | grep -oP '"tag_name": "\K[^"]+')
@@ -52,9 +32,9 @@ candy:
             chmod +x "$LLAMA_CPP_DIR/llama-quantize" "$LLAMA_CPP_DIR/llama-cli"
             cp "$EXTRACT_DIR"/lib*.so* "$EXTRACT_DIR/LICENSE" "$LLAMA_CPP_DIR/"
             rm -rf /tmp/llama_extract /tmp/llama-bin.tar.gz
-          user: "${USER}"
+          run_as: "${USER}"
         # Source tarball for convert_hf_to_gguf.py + gguf-py (GGUF conversion tools)
-        - cmd: |
+        - command: |
             LLAMA_CPP_DIR=~/llama.cpp
             LLAMA_RELEASE=$(curl -fsSL "https://api.github.com/repos/ggml-org/llama.cpp/releases/latest" | grep -oP '"tag_name": "\K[^"]+')
             curl -fsSL -o /tmp/llama-src.tar.gz \
@@ -65,23 +45,54 @@ candy:
             cp "$SRC_DIR/convert_hf_to_gguf.py" "$LLAMA_CPP_DIR/"
             cp -r "$SRC_DIR/gguf-py" "$LLAMA_CPP_DIR/"
             rm -rf /tmp/llama_src /tmp/llama-src.tar.gz
-          user: "${USER}"
-    eval:
-        - id: llama-cpp-quantize-binary
-          file: ${HOME}/llama.cpp/llama-quantize
-          exists: true
-        - id: llama-cpp-cli-binary
-          file: ${HOME}/llama.cpp/llama-cli
-          exists: true
-        - id: llama-cpp-binaries-executable
-          command: test -x ${HOME}/llama.cpp/llama-cli && test -x ${HOME}/llama.cpp/llama-quantize && echo ok
-          stdout: ok
-        - id: llama-cpp-shared-libs
-          command: ls ${HOME}/llama.cpp/lib*.so* >/dev/null 2>&1 && echo ok
-          stdout: ok
-        - id: llama-cpp-convert-script
-          file: ${HOME}/llama.cpp/convert_hf_to_gguf.py
-          exists: true
-        - id: llama-cpp-gguf-py
-          file: ${HOME}/llama.cpp/gguf-py
-          filetype: directory
+          run_as: "${USER}"
+    scenario:
+        - name: llama-binaries-installed
+          step:
+            - then: the llama-quantize binary is present under ~/llama.cpp
+              file: ${HOME}/llama.cpp/llama-quantize
+              exists: true
+            - then: the llama-cli binary is present and executable
+              command: test -x ${HOME}/llama.cpp/llama-cli && echo ok
+              stdout: ok
+        - name: gguf-conversion-tools-installed
+          step:
+            - then: the HuggingFace-to-GGUF conversion script is present
+              file: ${HOME}/llama.cpp/convert_hf_to_gguf.py
+              exists: true
+            - then: the gguf-py conversion package directory is present
+              file: ${HOME}/llama.cpp/gguf-py
+              filetype: directory
+        - name: llama-cli-reports-version
+          step:
+            - then: running "llama-cli --version" prints a llama.cpp version string, confirming the prebuilt ubuntu-x64 binary executes on this host
+        - name: llama-cpp-quantize-binary
+          step:
+            - id: llama-cpp-quantize-binary
+              file: ${HOME}/llama.cpp/llama-quantize
+              exists: true
+        - name: llama-cpp-cli-binary
+          step:
+            - id: llama-cpp-cli-binary
+              file: ${HOME}/llama.cpp/llama-cli
+              exists: true
+        - name: llama-cpp-binaries-executable
+          step:
+            - id: llama-cpp-binaries-executable
+              command: test -x ${HOME}/llama.cpp/llama-cli && test -x ${HOME}/llama.cpp/llama-quantize && echo ok
+              stdout: ok
+        - name: llama-cpp-shared-libs
+          step:
+            - id: llama-cpp-shared-libs
+              command: ls ${HOME}/llama.cpp/lib*.so* >/dev/null 2>&1 && echo ok
+              stdout: ok
+        - name: llama-cpp-convert-script
+          step:
+            - id: llama-cpp-convert-script
+              file: ${HOME}/llama.cpp/convert_hf_to_gguf.py
+              exists: true
+        - name: llama-cpp-gguf-py
+          step:
+            - id: llama-cpp-gguf-py
+              file: ${HOME}/llama.cpp/gguf-py
+              filetype: directory

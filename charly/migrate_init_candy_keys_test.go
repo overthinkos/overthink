@@ -13,7 +13,7 @@ import (
 // init: is left untouched, and the step is idempotent.
 func TestMigrateInitCandyKeys(t *testing.T) {
 	dir := t.TempDir()
-	src := `version: 2026.163.0928
+	src := `version: 2026.164.0002
 init:
     supervisord:
         layer_field:

@@ -26,50 +26,6 @@ candy:
             intentionally distinct from any SDDM/Plasma DRM session a physical monitor
             shows on a real GPU output (that is kde-desktop's job).
         tag: [working]
-        scenario:
-            # Scenarios 1 & 2 are DETERMINISTIC at build scope (file/contains verbs
-            # bind to the check). Scenario 3 binds at deploy scope via
-            # `charly eval feature run` (command/http), closing on one prose-only
-            # step the agent grader judges against the live stream.
-            - name: nested-session-launcher-installed
-              step:
-                - then: the kde-selkies-session launcher is installed and executable in the deploy user's PATH
-                  file: ${HOME}/.local/bin/kde-selkies-session
-                  exists: true
-                  mode: "0755"
-                - then: the launcher execs startplasma-wayland to bring up the nested KDE Plasma session
-                  file: ${HOME}/.local/bin/kde-selkies-session
-                  contains:
-                    - contains: "startplasma-wayland"
-            - name: plasma-session-stack-composed
-              step:
-                - then: the KDE Plasma session entrypoint the launcher execs is present (composed from kde-shell)
-                  file: /usr/bin/startplasma-wayland
-                  exists: true
-                - then: the KWin Wayland compositor that renders the nested session into pixelflux is present
-                  file: /usr/bin/kwin_wayland
-                  exists: true
-                - then: kdotool — the KWin window-automation tool that drives `charly eval wl` on this session — is present
-                  file: /usr/bin/kdotool
-                  exists: true
-                - then: the pipewire audio daemon composed for the streamed session is present
-                  file: /usr/bin/pipewire
-                  exists: true
-            - name: streamed-plasma-desktop-is-live
-              step:
-                - then: the nested KDE Plasma session reaches RUNNING under supervisord without crash-looping
-                  command: |
-                    sleep 20
-                    supervisorctl status kde-selkies-session
-                  stdout:
-                    - matches: "RUNNING"
-                  in_container: true
-                - then: the selkies web UI streams the live Plasma desktop over HTTPS on port 3000
-                  http: https://127.0.0.1:${HOST_PORT:3000}/
-                  status: 200
-                  allow_insecure: true
-                  timeout: 10s
-                - then: the streamed frames show a real KWin-composited KDE Plasma desktop (panel + wallpaper), not a black frame or a wlroots session
     require:
         - selkies
         - kde-shell
@@ -79,11 +35,11 @@ candy:
         SELKIES_FRAMERATE: "60"
     task:
         - mkdir: "${HOME}/.local/bin"
-          user: "${USER}"
+          run_as: "${USER}"
         - copy: kde-selkies-session
           to: "${HOME}/.local/bin/kde-selkies-session"
           mode: "0755"
-          user: "${USER}"
+          run_as: "${USER}"
     service:
         # Nested KDE Plasma session, started after pixelflux (selkies, priority 8)
         # has created wayland-1. The wrapper polls for the socket — so NO
@@ -99,58 +55,124 @@ candy:
           # session (session bus + XDG_RUNTIME_DIR from the user manager), so it
           # finds pixelflux's wayland-1 at the same per-user runtime dir.
           scope: user
-    eval:
-        - id: kde-selkies-session-wrapper
-          file: ${HOME}/.local/bin/kde-selkies-session
-          exists: true
-          mode: "0755"
-        # The nested Plasma session reaches steady-state without crash-looping —
-        # the headless-no-seat premise (RDD-1). Mirrors labwc-stable.
-        - id: kde-selkies-stable
-          scope: deploy
-          command: |
-            sleep 20
-            supervisorctl status kde-selkies-session
-          stdout:
-            - matches: "RUNNING"
-          in_container: true
-        # selkies web UI is live on :3000 (true on every GPU config; the encoder
-        # identity — NVENC / VA-API / x264 — is asserted per-image in the GPU beds).
-        - id: kde-selkies-stream-https
-          scope: deploy
-          http: https://127.0.0.1:${HOST_PORT:3000}/
-          status: 200
-          allow_insecure: true
-          timeout: 10s
-        # `charly eval wl` KWin parity — proves the host-safe KWin automation backends
-        # work on the nested startplasma-wayland session, matching the wlroots
-        # (sway/labwc) coverage: window-management via kdotool, keyboard via wtype,
-        # clipboard via wl-clipboard, plus compositor detection. Pointer + resolution
-        # are intentionally NOT covered (no host-safe KWin backend — separate cutover;
-        # see charly/wl.go errKWinPointerUnsupported + the resolution guard).
-        - id: kde-wl-compositor-is-kwin
-          scope: deploy
-          wl: status
-          stdout:
-            - matches: "compositor: +kwin"
-            - matches: "kdotool: +available"
-        - id: kde-wl-keyboard-wtype
-          scope: deploy
-          wl: type
-          text: "ovkwin"
-        - id: kde-wl-toplevel-via-kdotool
-          scope: deploy
-          wl: toplevel
-          stdout:
-            - matches: "."
-        - id: kde-wl-clipboard-set
-          scope: deploy
-          wl: clipboard
-          action: set
-          text: "ovclip-kwin"
-        - id: kde-wl-clipboard-get
-          scope: deploy
-          wl: clipboard
-          action: get
-          stdout:
-            - contains: "ovclip-kwin"
+    scenario:
+        # Scenarios 1 & 2 are DETERMINISTIC at build scope (file/contains verbs
+        # bind to the check). Scenario 3 binds at deploy scope via
+        # `charly eval feature run` (command/http), closing on one prose-only
+        # step the agent grader judges against the live stream.
+        - name: nested-session-launcher-installed
+          step:
+            - then: the kde-selkies-session launcher is installed and executable in the deploy user's PATH
+              file: ${HOME}/.local/bin/kde-selkies-session
+              exists: true
+              mode: "0755"
+            - then: the launcher execs startplasma-wayland to bring up the nested KDE Plasma session
+              file: ${HOME}/.local/bin/kde-selkies-session
+              contains:
+                - contains: "startplasma-wayland"
+        - name: plasma-session-stack-composed
+          step:
+            - then: the KDE Plasma session entrypoint the launcher execs is present (composed from kde-shell)
+              file: /usr/bin/startplasma-wayland
+              exists: true
+            - then: the KWin Wayland compositor that renders the nested session into pixelflux is present
+              file: /usr/bin/kwin_wayland
+              exists: true
+            - then: kdotool — the KWin window-automation tool that drives `charly eval wl` on this session — is present
+              file: /usr/bin/kdotool
+              exists: true
+            - then: the pipewire audio daemon composed for the streamed session is present
+              file: /usr/bin/pipewire
+              exists: true
+        - name: streamed-plasma-desktop-is-live
+          step:
+            - then: the nested KDE Plasma session reaches RUNNING under supervisord without crash-looping
+              command: |
+                sleep 20
+                supervisorctl status kde-selkies-session
+              stdout:
+                - matches: "RUNNING"
+              in_container: true
+            - then: the selkies web UI streams the live Plasma desktop over HTTPS on port 3000
+              http: https://127.0.0.1:${HOST_PORT:3000}/
+              status: 200
+              allow_insecure: true
+              timeout: 10s
+            - then: the streamed frames show a real KWin-composited KDE Plasma desktop (panel + wallpaper), not a black frame or a wlroots session
+        - name: kde-selkies-session-wrapper
+          step:
+            - id: kde-selkies-session-wrapper
+              file: ${HOME}/.local/bin/kde-selkies-session
+              exists: true
+              mode: "0755"
+        - name: kde-selkies-stable
+          step:
+            # The nested Plasma session reaches steady-state without crash-looping —
+            # the headless-no-seat premise (RDD-1). Mirrors labwc-stable.
+            - id: kde-selkies-stable
+              command: |
+                sleep 20
+                supervisorctl status kde-selkies-session
+              stdout:
+                - matches: "RUNNING"
+              in_container: true
+              context:
+                - runtime
+        - name: kde-selkies-stream-https
+          step:
+            # selkies web UI is live on :3000 (true on every GPU config; the encoder
+            # identity — NVENC / VA-API / x264 — is asserted per-image in the GPU beds).
+            - id: kde-selkies-stream-https
+              http: https://127.0.0.1:${HOST_PORT:3000}/
+              status: 200
+              allow_insecure: true
+              timeout: 10s
+              context:
+                - runtime
+        - name: kde-wl-compositor-is-kwin
+          step:
+            # `charly eval wl` KWin parity — proves the host-safe KWin automation backends
+            # work on the nested startplasma-wayland session, matching the wlroots
+            # (sway/labwc) coverage: window-management via kdotool, keyboard via wtype,
+            # clipboard via wl-clipboard, plus compositor detection. Pointer + resolution
+            # are intentionally NOT covered (no host-safe KWin backend — separate cutover;
+            # see charly/wl.go errKWinPointerUnsupported + the resolution guard).
+            - id: kde-wl-compositor-is-kwin
+              wl: status
+              stdout:
+                - matches: "compositor: +kwin"
+                - matches: "kdotool: +available"
+              context:
+                - runtime
+        - name: kde-wl-keyboard-wtype
+          step:
+            - id: kde-wl-keyboard-wtype
+              wl: type
+              text: "ovkwin"
+              context:
+                - runtime
+        - name: kde-wl-toplevel-via-kdotool
+          step:
+            - id: kde-wl-toplevel-via-kdotool
+              wl: toplevel
+              stdout:
+                - matches: "."
+              context:
+                - runtime
+        - name: kde-wl-clipboard-set
+          step:
+            - id: kde-wl-clipboard-set
+              wl: clipboard
+              action: set
+              text: "ovclip-kwin"
+              context:
+                - runtime
+        - name: kde-wl-clipboard-get
+          step:
+            - id: kde-wl-clipboard-get
+              wl: clipboard
+              action: get
+              stdout:
+                - contains: "ovclip-kwin"
+              context:
+                - runtime

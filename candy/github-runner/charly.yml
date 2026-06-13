@@ -11,52 +11,6 @@ candy:
             deps (icu/krb5/openssl/libunwind/lttng-ust) are declared explicitly because the
             runner's installdependencies.sh has no Arch branch — so config.sh actually runs.
         tag: [working]
-        scenario:
-            - name: runner-binaries-installed-and-runnable
-              step:
-                - then: the GitHub Actions runner is extracted under the home directory with its config.sh present
-                  file: "${HOME}/actions-runner/config.sh"
-                  exists: true
-                - then: the runner's run.sh service launcher is present
-                  file: "${HOME}/actions-runner/run.sh"
-                  exists: true
-                - then: config.sh executes, proving the .NET native deps (icu/krb5/openssl/libunwind/lttng-ust) resolved on this distro
-                  command: "${HOME}/actions-runner/config.sh --version"
-                  exit_status: 0
-            - name: ci-container-toolchain-works
-              step:
-                - then: skopeo (rootless image copy) reports its version
-                  command: skopeo --version
-                  exit_status: 0
-                - then: buildah (rootless image build) reports its version
-                  command: buildah --version
-                  exit_status: 0
-                - then: cosign (image signing) reports its version
-                  command: cosign version
-                  exit_status: 0
-                - then: the go toolchain used by CI jobs reports its version
-                  command: go version
-                  exit_status: 0
-            - name: cross-arch-binfmt-available
-              step:
-                - then: the aarch64 qemu interpreter is installed so jobs can cross-build for arm64 via binfmt
-                  file: /usr/bin/qemu-aarch64-static
-                  exists: true
-            - name: runner-runs-rootless-with-nested-podman
-              step:
-                - then: the runner service process runs as the unprivileged uid 1000, never root
-                  scope: deploy
-                  command: id
-                  stdout:
-                    - contains: "uid=1000"
-                - then: rootless nested podman works inside the box (no mount_too_revealing EPERM)
-                  scope: deploy
-                  command: podman info
-                  exit_status: 0
-                - then: a CI job can actually pull and run a container image rootless
-                  scope: deploy
-                  command: "podman run --rm quay.io/libpod/alpine:latest true"
-                  exit_status: 0
     require:
         - supervisord
         # Rootless nested podman/buildah/skopeo + subuid/subgid layout +
@@ -137,22 +91,22 @@ candy:
         # chowned back to uid 1000 below so the rootless runner can write
         # _work/.runner/.credentials at runtime.
         - mkdir: "${HOME}/actions-runner"
-          user: "${USER}"
+          run_as: "${USER}"
         - download: "https://github.com/actions/runner/releases/download/v${RUNNER_VERSION}/actions-runner-linux-x64-${RUNNER_VERSION}.tar.gz"
           extract: tar.gz
           to: "${HOME}/actions-runner"
-          user: root
-        - cmd: |
+          run_as: root
+        - command: |
             rh=$(getent passwd 1000 | cut -d: -f6)
             chown -R 1000:1000 "${rh}/actions-runner"
-          user: root
+          run_as: root
         # Registry mirror for ghcr.io (host pull-through cache at 127.0.0.1:5000;
         # falls back to ghcr.io directly if absent). Rootless podman prefers
         # ~/.config/containers over /etc/containers.
         - mkdir: "${HOME}/.config/containers/registries.conf.d"
-          user: "${USER}"
+          run_as: "${USER}"
         - write: "${HOME}/.config/containers/registries.conf.d/ghcr-mirror.conf"
-          user: "${USER}"
+          run_as: "${USER}"
           mode: "0644"
           content: |
             [[registry]]
@@ -168,79 +122,170 @@ candy:
           working_directory: "%(ENV_HOME)s/actions-runner"
           enable: true
           scope: system
-    eval:
-        # --- build scope: the composition actually works (run the binaries) ---
-        # config.sh executes the .NET Runner binary → proves the icu/krb5/.NET
-        # native deps resolved on cachyos (the key cachyos-port signal).
-        - id: gr-runner-config-runs
-          command: "${HOME}/actions-runner/config.sh --version"
-          exit_status: 0
-        - id: gr-runner-run-sh
-          file: "${HOME}/actions-runner/run.sh"
-          exists: true
-        - id: gr-cosign
-          command: cosign version
-          exit_status: 0
-        - id: gr-skopeo
-          command: skopeo --version
-          exit_status: 0
-        - id: gr-buildah
-          command: buildah --version
-          exit_status: 0
-        - id: gr-go
-          command: go version
-          exit_status: 0
-        - id: gr-git
-          command: git --version
-          exit_status: 0
-        - id: gr-qemu-aarch64
-          file: /usr/bin/qemu-aarch64-static
-          exists: true
-        - id: gr-go-pkg
-          package: golang
-          package_map:
-            arch: go
-          installed: true
-        - id: gr-icu-pkg
-          package: icu
-          installed: true
-        # charly-host runtime deps completing the `charly` PKGBUILD depends= set, so the
-        # release-packages CI job builds the pac artifact natively (makepkg needs
-        # no sudo when every dep is present). FAIL without the package: additions.
-        - id: gr-pkgbuild-dep-slirp4netns
-          package: slirp4netns
-          installed: true
-        - id: gr-pkgbuild-dep-libisoburn
-          package: libisoburn
-          installed: true
-        - id: gr-pkgbuild-dep-cdrtools
-          package: cdrtools
-          installed: true
-        - id: gr-pkgbuild-dep-swtpm
-          package: swtpm
-          installed: true
-        # --- deploy scope: rootless runtime state ---
-        # Runs as uid 1000 (NOT root) — the whole point of the rootless cutover.
-        - id: gr-rootless-uid
-          scope: deploy
-          command: id
-          stdout:
-            - contains: "uid=1000"
-        # Rootless nested podman works (no mount_too_revealing EPERM).
-        - id: gr-nested-podman-info
-          scope: deploy
-          command: podman info
-          exit_status: 0
-        - id: gr-nested-podman-run
-          scope: deploy
-          command: "podman run --rm quay.io/libpod/alpine:latest true"
-          exit_status: 0
-        - id: gr-ghcr-mirror
-          scope: deploy
-          file: "${HOME}/.config/containers/registries.conf.d/ghcr-mirror.conf"
-          exists: true
-        - id: gr-newuidmap-cap
-          scope: deploy
-          command: getcap /usr/bin/newuidmap
-          stdout:
-            - contains: cap_setuid
+    scenario:
+        - name: runner-binaries-installed-and-runnable
+          step:
+            - then: the GitHub Actions runner is extracted under the home directory with its config.sh present
+              file: "${HOME}/actions-runner/config.sh"
+              exists: true
+            - then: the runner's run.sh service launcher is present
+              file: "${HOME}/actions-runner/run.sh"
+              exists: true
+            - then: config.sh executes, proving the .NET native deps (icu/krb5/openssl/libunwind/lttng-ust) resolved on this distro
+              command: "${HOME}/actions-runner/config.sh --version"
+              exit_status: 0
+        - name: ci-container-toolchain-works
+          step:
+            - then: skopeo (rootless image copy) reports its version
+              command: skopeo --version
+              exit_status: 0
+            - then: buildah (rootless image build) reports its version
+              command: buildah --version
+              exit_status: 0
+            - then: cosign (image signing) reports its version
+              command: cosign version
+              exit_status: 0
+            - then: the go toolchain used by CI jobs reports its version
+              command: go version
+              exit_status: 0
+        - name: cross-arch-binfmt-available
+          step:
+            - then: the aarch64 qemu interpreter is installed so jobs can cross-build for arm64 via binfmt
+              file: /usr/bin/qemu-aarch64-static
+              exists: true
+        - name: runner-runs-rootless-with-nested-podman
+          step:
+            - then: the runner service process runs as the unprivileged uid 1000, never root
+              command: id
+              stdout:
+                - contains: "uid=1000"
+              context:
+                - runtime
+            - then: rootless nested podman works inside the box (no mount_too_revealing EPERM)
+              command: podman info
+              exit_status: 0
+              context:
+                - runtime
+            - then: a CI job can actually pull and run a container image rootless
+              command: "podman run --rm quay.io/libpod/alpine:latest true"
+              exit_status: 0
+              context:
+                - runtime
+        - name: gr-runner-config-runs
+          step:
+            # --- build scope: the composition actually works (run the binaries) ---
+            # config.sh executes the .NET Runner binary → proves the icu/krb5/.NET
+            # native deps resolved on cachyos (the key cachyos-port signal).
+            - id: gr-runner-config-runs
+              command: "${HOME}/actions-runner/config.sh --version"
+              exit_status: 0
+        - name: gr-runner-run-sh
+          step:
+            - id: gr-runner-run-sh
+              file: "${HOME}/actions-runner/run.sh"
+              exists: true
+        - name: gr-cosign
+          step:
+            - id: gr-cosign
+              command: cosign version
+              exit_status: 0
+        - name: gr-skopeo
+          step:
+            - id: gr-skopeo
+              command: skopeo --version
+              exit_status: 0
+        - name: gr-buildah
+          step:
+            - id: gr-buildah
+              command: buildah --version
+              exit_status: 0
+        - name: gr-go
+          step:
+            - id: gr-go
+              command: go version
+              exit_status: 0
+        - name: gr-git
+          step:
+            - id: gr-git
+              command: git --version
+              exit_status: 0
+        - name: gr-qemu-aarch64
+          step:
+            - id: gr-qemu-aarch64
+              file: /usr/bin/qemu-aarch64-static
+              exists: true
+        - name: gr-go-pkg
+          step:
+            - id: gr-go-pkg
+              package: golang
+              package_map:
+                arch: go
+              installed: true
+        - name: gr-icu-pkg
+          step:
+            - id: gr-icu-pkg
+              package: icu
+              installed: true
+        - name: gr-pkgbuild-dep-slirp4netns
+          step:
+            # charly-host runtime deps completing the `charly` PKGBUILD depends= set, so the
+            # release-packages CI job builds the pac artifact natively (makepkg needs
+            # no sudo when every dep is present). FAIL without the package: additions.
+            - id: gr-pkgbuild-dep-slirp4netns
+              package: slirp4netns
+              installed: true
+        - name: gr-pkgbuild-dep-libisoburn
+          step:
+            - id: gr-pkgbuild-dep-libisoburn
+              package: libisoburn
+              installed: true
+        - name: gr-pkgbuild-dep-cdrtools
+          step:
+            - id: gr-pkgbuild-dep-cdrtools
+              package: cdrtools
+              installed: true
+        - name: gr-pkgbuild-dep-swtpm
+          step:
+            - id: gr-pkgbuild-dep-swtpm
+              package: swtpm
+              installed: true
+        - name: gr-rootless-uid
+          step:
+            # --- deploy scope: rootless runtime state ---
+            # Runs as uid 1000 (NOT root) — the whole point of the rootless cutover.
+            - id: gr-rootless-uid
+              command: id
+              stdout:
+                - contains: "uid=1000"
+              context:
+                - runtime
+        - name: gr-nested-podman-info
+          step:
+            # Rootless nested podman works (no mount_too_revealing EPERM).
+            - id: gr-nested-podman-info
+              command: podman info
+              exit_status: 0
+              context:
+                - runtime
+        - name: gr-nested-podman-run
+          step:
+            - id: gr-nested-podman-run
+              command: "podman run --rm quay.io/libpod/alpine:latest true"
+              exit_status: 0
+              context:
+                - runtime
+        - name: gr-ghcr-mirror
+          step:
+            - id: gr-ghcr-mirror
+              file: "${HOME}/.config/containers/registries.conf.d/ghcr-mirror.conf"
+              exists: true
+              context:
+                - runtime
+        - name: gr-newuidmap-cap
+          step:
+            - id: gr-newuidmap-cap
+              command: getcap /usr/bin/newuidmap
+              stdout:
+                - contains: cap_setuid
+              context:
+                - runtime

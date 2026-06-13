@@ -46,7 +46,7 @@ func TestCandyUnknownKeyRejected(t *testing.T) {
 	}
 
 	// The SINGULAR forms must parse cleanly AND populate their fields.
-	good := "name: t\ntask:\n  - cmd: echo hi\nvar:\n  FOO: bar\ncandy:\n  - supervisord\nsecret_accept:\n  - name: X\n"
+	good := "name: t\ntask:\n  - command: echo hi\nvar:\n  FOO: bar\ncandy:\n  - supervisord\nsecret_accept:\n  - name: X\n"
 	var ly CandyYAML
 	if err := yaml.Unmarshal([]byte(good), &ly); err != nil {
 		t.Fatalf("singular keys must parse, got error: %v", err)
@@ -487,7 +487,7 @@ func TestCandyPortRelay(t *testing.T) {
 	// Test direct struct construction (no testdata file needed)
 	layer := &Candy{
 		Name:           "chrome",
-		tasks:          []Task{{Cmd: "true"}},
+		tasks:          []Op{{Command: "true"}},
 		PortRelayPorts: []int{9222},
 		ports:          []string{"9222"},
 		portSpecs:      []PortSpec{{Port: 9222, Protocol: "http"}},
@@ -505,7 +505,7 @@ func TestCandyPortRelay(t *testing.T) {
 func TestCandyPortRelayNone(t *testing.T) {
 	layer := &Candy{
 		Name:  "basic",
-		tasks: []Task{{Cmd: "true"}},
+		tasks: []Op{{Command: "true"}},
 	}
 
 	if len(layer.PortRelayPorts) != 0 {
@@ -516,7 +516,7 @@ func TestCandyPortRelayNone(t *testing.T) {
 func TestCandyPortRelayMultiple(t *testing.T) {
 	layer := &Candy{
 		Name:           "multi",
-		tasks:          []Task{{Cmd: "true"}},
+		tasks:          []Op{{Command: "true"}},
 		PortRelayPorts: []int{9222, 5900},
 		ports:          []string{"9222", "5900"},
 		portSpecs:      []PortSpec{{Port: 9222, Protocol: "http"}, {Port: 5900, Protocol: "tcp"}},

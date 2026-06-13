@@ -290,8 +290,8 @@ func (t *VmDeployTarget) emitPlan(ctx context.Context, plan *InstallPlan, opts E
 			}
 			rec.ReverseOps = append(rec.ReverseOps, s.Reverse()...)
 
-		case *TaskStep:
-			if err := t.execTask(ctx, s, plan, opts); err != nil {
+		case *OpStep:
+			if err := t.execOp(ctx, s, plan, opts); err != nil {
 				return rec, err
 			}
 			rec.ReverseOps = append(rec.ReverseOps, s.Reverse()...)
@@ -486,33 +486,33 @@ func (t *VmDeployTarget) execSystemPackages(ctx context.Context, s *SystemPackag
 	return t.Exec.RunSystem(ctx, cmd, opts)
 }
 
-// execTask runs a TaskStep's rendered shell command on the guest.
+// execOp runs an OpStep's rendered shell command on the guest.
 // ScopeSystem → RunSystem; ScopeUser → RunUser.
-func (t *VmDeployTarget) execTask(ctx context.Context, s *TaskStep, plan *InstallPlan, opts EmitOpts) error {
-	if s.Task == nil {
+func (t *VmDeployTarget) execOp(ctx context.Context, s *OpStep, plan *InstallPlan, opts EmitOpts) error {
+	if s.Op == nil {
 		return nil
 	}
 	// copy: stages the candy file into the guest via PutFile (scp+install) —
 	// the SAME shared path LocalDeployTarget uses. The old renderVmTaskCommand
 	// emitted `install <hostCandyDir>/<f> <dst>`, referencing a host path that
 	// doesn't exist in the guest → file-not-found on every copy: task.
-	if s.Task.Copy != "" {
-		src := filepath.Join(s.CandyDir, s.Task.Copy)
+	if s.Op.Copy != "" {
+		src := filepath.Join(s.CandyDir, s.Op.Copy)
 		// Prefer the home-resolved dest (s.To) so `to: ${HOME}/...` lands in the
 		// real guest home, not a literal "${HOME}" dir created under sudo
 		// (HOME=/root). Falls back to the raw Task.To, then the src name.
 		dst := s.To
 		if dst == "" {
-			dst = s.Task.To
+			dst = s.Op.To
 		}
 		if dst == "" {
-			dst = s.Task.Copy
+			dst = s.Op.Copy
 		}
-		return t.Exec.PutFile(ctx, src, dst, parseTaskMode(s.Task.Mode, 0o644), s.Scope() == ScopeSystem, opts)
+		return t.Exec.PutFile(ctx, src, dst, parseTaskMode(s.Op.Mode, 0o644), s.Scope() == ScopeSystem, opts)
 	}
 	// Every other verb renders through the ONE shared renderTaskCommand
 	// (cmd/mkdir/link/setcap/write/download) so VM and local can't drift.
-	cmd, err := renderTaskCommand(s)
+	cmd, err := renderOpCommand(s)
 	if err != nil {
 		return err
 	}

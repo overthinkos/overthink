@@ -10,35 +10,10 @@ candy:
             every shell finds them. Each CLI answers its own version
             subcommand, which is what these scenarios assert.
         tag: [working]
-        scenario:
-            - name: gcloud-cli-on-path
-              step:
-                - then: the gcloud CLI is symlinked onto PATH
-                  file: /usr/bin/gcloud
-                  exists: true
-                - then: gcloud reports its version and exits cleanly
-                  command: /usr/bin/gcloud --version
-                  exit_status: 0
-            - name: storage-and-bigquery-clis-present
-              step:
-                - then: the gsutil storage CLI is on PATH
-                  file: /usr/bin/gsutil
-                  exists: true
-                - then: the bq BigQuery CLI is on PATH
-                  file: /usr/bin/bq
-                  exists: true
-                - then: bq reports its version and exits cleanly
-                  command: /usr/bin/bq version
-                  exit_status: 0
-            - name: sdk-unpacked-at-install-prefix
-              step:
-                - then: the SDK tree is unpacked at its /var/opt install prefix
-                  file: /var/opt/google-cloud-sdk/bin/gcloud
-                  exists: true
     task:
         # Google Cloud SDK only ships x86_64 linux tarballs — no arch template
         # needed. The bundled install.sh wires up shell completion / PATH.
-        - cmd: |
+        - command: |
             curl -fsSL "https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-cli-linux-x86_64.tar.gz" \
               -o /tmp/google-cloud-sdk.tar.gz
             mkdir -p /var/opt
@@ -48,23 +23,59 @@ candy:
             for cmd in gcloud gsutil bq; do
               ln -sf /var/opt/google-cloud-sdk/bin/$cmd /usr/bin/$cmd
             done
-          user: root
-    eval:
-        - id: gcloud-binary
-          file: /usr/bin/gcloud
-          exists: true
-        - id: gcloud-version
-          command: /usr/bin/gcloud --version
-          exit_status: 0
-        - id: gsutil-binary
-          file: /usr/bin/gsutil
-          exists: true
-        - id: gsutil-version
-          command: /usr/bin/gsutil version
-          exit_status: 0
-        - id: bq-binary
-          file: /usr/bin/bq
-          exists: true
-        - id: bq-version
-          command: /usr/bin/bq version
-          exit_status: 0
+          run_as: root
+    scenario:
+        - name: gcloud-cli-on-path
+          step:
+            - then: the gcloud CLI is symlinked onto PATH
+              file: /usr/bin/gcloud
+              exists: true
+            - then: gcloud reports its version and exits cleanly
+              command: /usr/bin/gcloud --version
+              exit_status: 0
+        - name: storage-and-bigquery-clis-present
+          step:
+            - then: the gsutil storage CLI is on PATH
+              file: /usr/bin/gsutil
+              exists: true
+            - then: the bq BigQuery CLI is on PATH
+              file: /usr/bin/bq
+              exists: true
+            - then: bq reports its version and exits cleanly
+              command: /usr/bin/bq version
+              exit_status: 0
+        - name: sdk-unpacked-at-install-prefix
+          step:
+            - then: the SDK tree is unpacked at its /var/opt install prefix
+              file: /var/opt/google-cloud-sdk/bin/gcloud
+              exists: true
+        - name: gcloud-binary
+          step:
+            - id: gcloud-binary
+              file: /usr/bin/gcloud
+              exists: true
+        - name: gcloud-version
+          step:
+            - id: gcloud-version
+              command: /usr/bin/gcloud --version
+              exit_status: 0
+        - name: gsutil-binary
+          step:
+            - id: gsutil-binary
+              file: /usr/bin/gsutil
+              exists: true
+        - name: gsutil-version
+          step:
+            - id: gsutil-version
+              command: /usr/bin/gsutil version
+              exit_status: 0
+        - name: bq-binary
+          step:
+            - id: bq-binary
+              file: /usr/bin/bq
+              exists: true
+        - name: bq-version
+          step:
+            - id: bq-version
+              command: /usr/bin/bq version
+              exit_status: 0

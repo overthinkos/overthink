@@ -20,46 +20,6 @@ candy:
             are the wrapper scripts (build scope) and the live REST API + JWT
             issuance (deploy scope).
         tag: [working]
-        scenario:
-            - name: init-wrapper-installed
-              step:
-                - then: the one-shot init wrapper is installed and executable
-                  file: /usr/local/bin/airflow-init.sh
-                  exists: true
-                  mode: "0755"
-            - name: daemon-wrappers-installed
-              step:
-                - then: the api-server wrapper is installed and executable
-                  file: /usr/local/bin/airflow-webserver.sh
-                  exists: true
-                  mode: "0755"
-                - then: the scheduler wrapper is installed and executable
-                  file: /usr/local/bin/airflow-scheduler.sh
-                  exists: true
-                  mode: "0755"
-                - then: the dag-processor wrapper is installed and executable
-                  file: /usr/local/bin/airflow-dag-processor.sh
-                  exists: true
-                  mode: "0755"
-            - name: rest-api-serves-version
-              step:
-                - then: the running api-server answers /api/v2/version with HTTP 200
-                  scope: deploy
-                  http: "http://127.0.0.1:${HOST_PORT:8080}/api/v2/version"
-                  status: 200
-                  timeout: 30s
-            - name: admin-jwt-issued
-              step:
-                - then: posting the injected admin credentials to /auth/token returns a bearer access_token
-                  scope: deploy
-                  command: |
-                    curl -fsS -X POST "http://localhost:8080/auth/token" \
-                      -H "Content-Type: application/json" \
-                      -d "{\"username\":\"admin\",\"password\":\"$AIRFLOW_ADMIN_PASSWORD\"}" \
-                    | grep -q '"access_token"'
-                  in_container: true
-                  exit_status: 0
-                  timeout: 15s
     require:
         - marimo
         - supervisord
@@ -134,13 +94,13 @@ candy:
     task:
         # User-phase data directories (created during build; bind-mount path persists).
         - mkdir: "${HOME}/airflow"
-          user: "${USER}"
+          run_as: "${USER}"
         - mkdir: "${HOME}/airflow/dags"
-          user: "${USER}"
+          run_as: "${USER}"
         - mkdir: "${HOME}/airflow/logs"
-          user: "${USER}"
+          run_as: "${USER}"
         - mkdir: "${HOME}/airflow/plugins"
-          user: "${USER}"
+          run_as: "${USER}"
         # ---- airflow-init.sh ----
         # Runs ONCE on container start (supervisord program with restart: no).
         # `airflow db migrate` is idempotent on the SQLite metadata DB.
@@ -155,7 +115,7 @@ candy:
         # with our injected secret. Idempotent + tolerant of secret rotation.
         - write: /usr/local/bin/airflow-init.sh
           mode: "0755"
-          user: root
+          run_as: root
           content: |
             #!/usr/bin/env bash
             set -euo pipefail
@@ -178,7 +138,7 @@ candy:
         # `exec` is critical so signals reach airflow directly (not the wrapper).
         - write: /usr/local/bin/airflow-webserver.sh
           mode: "0755"
-          user: root
+          run_as: root
           content: |
             #!/usr/bin/env bash
             set -euo pipefail
@@ -186,7 +146,7 @@ candy:
             exec "${HOME}/.pixi/envs/default/bin/airflow" api-server
         - write: /usr/local/bin/airflow-scheduler.sh
           mode: "0755"
-          user: root
+          run_as: root
           content: |
             #!/usr/bin/env bash
             set -euo pipefail
@@ -198,7 +158,7 @@ candy:
         # this service is essential, not optional, in 3.x.
         - write: /usr/local/bin/airflow-dag-processor.sh
           mode: "0755"
-          user: root
+          run_as: root
           content: |
             #!/usr/bin/env bash
             set -euo pipefail
@@ -211,76 +171,6 @@ candy:
           # canonical example is candy/notebook-osm/data/notebooks/osm-monaco-viz.py
           # which writes notebook_osm_pipeline.py into AIRFLOW__CORE__DAGS_FOLDER
           # and triggers it via POST /api/v2/dags/.../dagRuns.
-    eval:
-        # Build-scope: the wrapper scripts must exist + be executable.
-        - id: airflow-init-script
-          file: /usr/local/bin/airflow-init.sh
-          exists: true
-          mode: "0755"
-        - id: airflow-webserver-script
-          file: /usr/local/bin/airflow-webserver.sh
-          exists: true
-          mode: "0755"
-        - id: airflow-scheduler-script
-          file: /usr/local/bin/airflow-scheduler.sh
-          exists: true
-          mode: "0755"
-        - id: airflow-dag-processor-script
-          file: /usr/local/bin/airflow-dag-processor.sh
-          exists: true
-          mode: "0755"
-        # NB: no static DAG file is baked or seeded by charly anymore. Notebooks
-        # self-author DAGs at runtime; the JWT-issuance probe below is what
-        # proves the path the notebook depends on actually works.
-        # Deploy-scope: each daemon must reach RUNNING; init must EXIT 0; webserver UI 200.
-        # airflow-init is a one-shot (restart: no) — checking its side effect
-        # (the SQLite metadata DB exists) is the right invariant. The
-        # `service: ...; enabled: true` shape works for long-running services
-        # but reports false for EXITED one-shots even when they succeeded.
-        - id: airflow-init-db-created
-          scope: deploy
-          command: test -f ${HOME}/airflow/airflow.db
-          exit_status: 0
-          in_container: true
-        - id: airflow-scheduler-running
-          scope: deploy
-          service: airflow-scheduler
-          running: true
-        - id: airflow-dag-processor-running
-          scope: deploy
-          service: airflow-dag-processor
-          running: true
-        - id: airflow-webserver-running
-          scope: deploy
-          service: airflow-webserver
-          running: true
-        - id: airflow-port-reachable
-          scope: deploy
-          addr: "127.0.0.1:${HOST_PORT:8080}"
-          reachable: true
-          timeout: 10s
-        - id: airflow-http-version
-          scope: deploy
-          http: "http://127.0.0.1:${HOST_PORT:8080}/api/v2/version"
-          status: 200
-          timeout: 30s
-        # Proves the JWT auth path notebooks depend on (e.g. the marimo
-        # osm-monaco-viz notebook's cell-3 POSTs /auth/token to get a bearer
-        # token before triggering its self-authored DAG via /api/v2/dagRuns).
-        # in_container: true so $AIRFLOW_ADMIN_PASSWORD is shell-expanded
-        # against the container env (the secret is injected by charly as an env
-        # var, never a file). A green check here is a guarantee that
-        # admin/AIRFLOW_ADMIN_PASSWORD will succeed for any in-pod client.
-        - id: airflow-jwt-issuance
-          scope: deploy
-          command: |
-            curl -fsS -X POST "http://localhost:8080/auth/token" \
-              -H "Content-Type: application/json" \
-              -d "{\"username\":\"admin\",\"password\":\"$AIRFLOW_ADMIN_PASSWORD\"}" \
-            | grep -q '"access_token"'
-          in_container: true
-          exit_status: 0
-          timeout: 15s
     service:
         # One-shot init: db migrate + admin user, exits 0. Priority 25 so it
         # runs before the long-running daemons (priority 30+).
@@ -313,3 +203,143 @@ candy:
           priority: 31
           enable: true
           scope: system
+    scenario:
+        - name: init-wrapper-installed
+          step:
+            - then: the one-shot init wrapper is installed and executable
+              file: /usr/local/bin/airflow-init.sh
+              exists: true
+              mode: "0755"
+        - name: daemon-wrappers-installed
+          step:
+            - then: the api-server wrapper is installed and executable
+              file: /usr/local/bin/airflow-webserver.sh
+              exists: true
+              mode: "0755"
+            - then: the scheduler wrapper is installed and executable
+              file: /usr/local/bin/airflow-scheduler.sh
+              exists: true
+              mode: "0755"
+            - then: the dag-processor wrapper is installed and executable
+              file: /usr/local/bin/airflow-dag-processor.sh
+              exists: true
+              mode: "0755"
+        - name: rest-api-serves-version
+          step:
+            - then: the running api-server answers /api/v2/version with HTTP 200
+              http: "http://127.0.0.1:${HOST_PORT:8080}/api/v2/version"
+              status: 200
+              timeout: 30s
+              context:
+                - runtime
+        - name: admin-jwt-issued
+          step:
+            - then: posting the injected admin credentials to /auth/token returns a bearer access_token
+              command: |
+                curl -fsS -X POST "http://localhost:8080/auth/token" \
+                  -H "Content-Type: application/json" \
+                  -d "{\"username\":\"admin\",\"password\":\"$AIRFLOW_ADMIN_PASSWORD\"}" \
+                | grep -q '"access_token"'
+              in_container: true
+              exit_status: 0
+              timeout: 15s
+              context:
+                - runtime
+        - name: airflow-init-script
+          step:
+            # Build-scope: the wrapper scripts must exist + be executable.
+            - id: airflow-init-script
+              file: /usr/local/bin/airflow-init.sh
+              exists: true
+              mode: "0755"
+        - name: airflow-webserver-script
+          step:
+            - id: airflow-webserver-script
+              file: /usr/local/bin/airflow-webserver.sh
+              exists: true
+              mode: "0755"
+        - name: airflow-scheduler-script
+          step:
+            - id: airflow-scheduler-script
+              file: /usr/local/bin/airflow-scheduler.sh
+              exists: true
+              mode: "0755"
+        - name: airflow-dag-processor-script
+          step:
+            - id: airflow-dag-processor-script
+              file: /usr/local/bin/airflow-dag-processor.sh
+              exists: true
+              mode: "0755"
+        - name: airflow-init-db-created
+          step:
+            # NB: no static DAG file is baked or seeded by charly anymore. Notebooks
+            # self-author DAGs at runtime; the JWT-issuance probe below is what
+            # proves the path the notebook depends on actually works.
+            # Deploy-scope: each daemon must reach RUNNING; init must EXIT 0; webserver UI 200.
+            # airflow-init is a one-shot (restart: no) — checking its side effect
+            # (the SQLite metadata DB exists) is the right invariant. The
+            # `service: ...; enabled: true` shape works for long-running services
+            # but reports false for EXITED one-shots even when they succeeded.
+            - id: airflow-init-db-created
+              command: test -f ${HOME}/airflow/airflow.db
+              exit_status: 0
+              in_container: true
+              context:
+                - runtime
+        - name: airflow-scheduler-running
+          step:
+            - id: airflow-scheduler-running
+              service: airflow-scheduler
+              running: true
+              context:
+                - runtime
+        - name: airflow-dag-processor-running
+          step:
+            - id: airflow-dag-processor-running
+              service: airflow-dag-processor
+              running: true
+              context:
+                - runtime
+        - name: airflow-webserver-running
+          step:
+            - id: airflow-webserver-running
+              service: airflow-webserver
+              running: true
+              context:
+                - runtime
+        - name: airflow-port-reachable
+          step:
+            - id: airflow-port-reachable
+              addr: "127.0.0.1:${HOST_PORT:8080}"
+              reachable: true
+              timeout: 10s
+              context:
+                - runtime
+        - name: airflow-http-version
+          step:
+            - id: airflow-http-version
+              http: "http://127.0.0.1:${HOST_PORT:8080}/api/v2/version"
+              status: 200
+              timeout: 30s
+              context:
+                - runtime
+        - name: airflow-jwt-issuance
+          step:
+            # Proves the JWT auth path notebooks depend on (e.g. the marimo
+            # osm-monaco-viz notebook's cell-3 POSTs /auth/token to get a bearer
+            # token before triggering its self-authored DAG via /api/v2/dagRuns).
+            # in_container: true so $AIRFLOW_ADMIN_PASSWORD is shell-expanded
+            # against the container env (the secret is injected by charly as an env
+            # var, never a file). A green check here is a guarantee that
+            # admin/AIRFLOW_ADMIN_PASSWORD will succeed for any in-pod client.
+            - id: airflow-jwt-issuance
+              command: |
+                curl -fsS -X POST "http://localhost:8080/auth/token" \
+                  -H "Content-Type: application/json" \
+                  -d "{\"username\":\"admin\",\"password\":\"$AIRFLOW_ADMIN_PASSWORD\"}" \
+                | grep -q '"access_token"'
+              in_container: true
+              exit_status: 0
+              timeout: 15s
+              context:
+                - runtime

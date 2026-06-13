@@ -12,37 +12,6 @@ candy:
             binary and config file is verifiable on the built image, and the
             supervised labwc service must reach a stable RUNNING state at deploy.
         tag: [working]
-        scenario:
-            - name: compositor-binary-installed
-              step:
-                - then: the labwc Wayland compositor binary is installed at /usr/bin/labwc
-                  file: /usr/bin/labwc
-                  exists: true
-            - name: nested-session-files-present
-              step:
-                - then: the labwc-wrapper that nests the compositor under pixelflux wayland-1 is installed
-                  file: ${HOME}/.local/bin/labwc-wrapper
-                  exists: true
-                - then: the labwc rc.xml configuration (server-side decorations, maximize-all window rule) is present
-                  file: ${HOME}/.config/labwc/rc.xml
-                  exists: true
-                - then: the labwc autostart session script is present
-                  file: ${HOME}/.config/labwc/autostart
-                  exists: true
-            - name: desktop-applications-available
-              step:
-                - then: the foot terminal emulator is installed for the desktop session
-                  file: /usr/bin/foot
-                  exists: true
-                - then: the thunar file manager is installed for the desktop session
-                  file: /usr/bin/thunar
-                  exists: true
-                - then: Xwayland is installed so X11 applications run inside the Wayland session
-                  file: /usr/bin/Xwayland
-                  exists: true
-            - name: compositor-runs-as-nested-desktop
-              step:
-                - then: once pixelflux's wayland-1 socket is healthy, labwc creates its own wayland-0 socket and hosts the desktop applications as a stable supervised service
     require:
         - dbus
     # autostart script has a wait-for-supervisord-socket guard (see autostart)
@@ -73,67 +42,21 @@ candy:
                 - thunar
     task:
         - mkdir: "${HOME}/.local/bin"
-          user: "${USER}"
+          run_as: "${USER}"
         - mkdir: "${HOME}/.config/labwc"
-          user: "${USER}"
+          run_as: "${USER}"
         - copy: labwc-wrapper
           to: "${HOME}/.local/bin/labwc-wrapper"
           mode: "0755"
-          user: "${USER}"
+          run_as: "${USER}"
         - copy: rc.xml
           to: "${HOME}/.config/labwc/rc.xml"
           mode: "0644"
-          user: "${USER}"
+          run_as: "${USER}"
         - copy: autostart
           to: "${HOME}/.config/labwc/autostart"
           mode: "0644"
-          user: "${USER}"
-    eval:
-        - id: labwc-binary
-          file: /usr/bin/labwc
-          exists: true
-        - id: labwc-wrapper
-          file: ${HOME}/.local/bin/labwc-wrapper
-          exists: true
-        - id: labwc-rc
-          file: ${HOME}/.config/labwc/rc.xml
-          exists: true
-        - id: labwc-autostart
-          file: ${HOME}/.config/labwc/autostart
-          exists: true
-        - id: xwayland-binary
-          file: /usr/bin/Xwayland
-          exists: true
-        - id: labwc-service-running
-          scope: deploy
-          service: labwc
-          running: true
-        # service:running is crash-loop-blind — labwc reports RUNNING even while it
-        # restarts every few seconds when its prerequisite (pixelflux's wayland-1)
-        # is missing. Assert labwc actually created its nested compositor socket
-        # (wayland-0) — that requires the full pixelflux→labwc chain to be healthy
-        # and is the precondition for chrome to start. Poll for readiness.
-        - id: labwc-wayland-socket
-          scope: deploy
-          command: test -e /tmp/wayland-0
-          exit_status: 0
-          in_container: true
-          eventually: 60s
-          retry_interval: 3s
-        # ROBUST liveness — labwc-wayland-socket above is crash-loop-BLIND: the
-        # /tmp/wayland-0 unix socket persists as a stale file across labwc crash
-        # restarts, so `test -e` passes even while labwc is dying every few seconds.
-        # Assert labwc has held supervisord RUNNING >=20s continuously; a labwc
-        # crash-looping on a nested-compositor fault (e.g. the pixelflux out-of-order
-        # xdg configure-serial bug fixed in overthinkos/pixelflux) restarts every
-        # ~3-5s and never accumulates 20s of uptime.
-        - id: labwc-stable
-          scope: deploy
-          in_container: true
-          exit_status: 0
-          eventually: 120s
-          retry_interval: 5s
-          command: "supervisorctl status labwc | awk '/RUNNING/{n=split($NF,a,\":\"); s=a[n]+a[n-1]*60+a[n-2]*3600; if(s>=20){f=1}} END{exit !f}'"
+          run_as: "${USER}"
     service:
         - name: labwc
           exec: "%(ENV_HOME)s/.local/bin/labwc-wrapper"
@@ -144,3 +67,98 @@ candy:
           start_sec: 2
           enable: true
           scope: system
+    scenario:
+        - name: compositor-binary-installed
+          step:
+            - then: the labwc Wayland compositor binary is installed at /usr/bin/labwc
+              file: /usr/bin/labwc
+              exists: true
+        - name: nested-session-files-present
+          step:
+            - then: the labwc-wrapper that nests the compositor under pixelflux wayland-1 is installed
+              file: ${HOME}/.local/bin/labwc-wrapper
+              exists: true
+            - then: the labwc rc.xml configuration (server-side decorations, maximize-all window rule) is present
+              file: ${HOME}/.config/labwc/rc.xml
+              exists: true
+            - then: the labwc autostart session script is present
+              file: ${HOME}/.config/labwc/autostart
+              exists: true
+        - name: desktop-applications-available
+          step:
+            - then: the foot terminal emulator is installed for the desktop session
+              file: /usr/bin/foot
+              exists: true
+            - then: the thunar file manager is installed for the desktop session
+              file: /usr/bin/thunar
+              exists: true
+            - then: Xwayland is installed so X11 applications run inside the Wayland session
+              file: /usr/bin/Xwayland
+              exists: true
+        - name: compositor-runs-as-nested-desktop
+          step:
+            - then: once pixelflux's wayland-1 socket is healthy, labwc creates its own wayland-0 socket and hosts the desktop applications as a stable supervised service
+        - name: labwc-binary
+          step:
+            - id: labwc-binary
+              file: /usr/bin/labwc
+              exists: true
+        - name: labwc-wrapper
+          step:
+            - id: labwc-wrapper
+              file: ${HOME}/.local/bin/labwc-wrapper
+              exists: true
+        - name: labwc-rc
+          step:
+            - id: labwc-rc
+              file: ${HOME}/.config/labwc/rc.xml
+              exists: true
+        - name: labwc-autostart
+          step:
+            - id: labwc-autostart
+              file: ${HOME}/.config/labwc/autostart
+              exists: true
+        - name: xwayland-binary
+          step:
+            - id: xwayland-binary
+              file: /usr/bin/Xwayland
+              exists: true
+        - name: labwc-service-running
+          step:
+            - id: labwc-service-running
+              service: labwc
+              running: true
+              context:
+                - runtime
+        - name: labwc-wayland-socket
+          step:
+            # service:running is crash-loop-blind — labwc reports RUNNING even while it
+            # restarts every few seconds when its prerequisite (pixelflux's wayland-1)
+            # is missing. Assert labwc actually created its nested compositor socket
+            # (wayland-0) — that requires the full pixelflux→labwc chain to be healthy
+            # and is the precondition for chrome to start. Poll for readiness.
+            - id: labwc-wayland-socket
+              command: test -e /tmp/wayland-0
+              exit_status: 0
+              in_container: true
+              eventually: 60s
+              retry_interval: 3s
+              context:
+                - runtime
+        - name: labwc-stable
+          step:
+            # ROBUST liveness — labwc-wayland-socket above is crash-loop-BLIND: the
+            # /tmp/wayland-0 unix socket persists as a stale file across labwc crash
+            # restarts, so `test -e` passes even while labwc is dying every few seconds.
+            # Assert labwc has held supervisord RUNNING >=20s continuously; a labwc
+            # crash-looping on a nested-compositor fault (e.g. the pixelflux out-of-order
+            # xdg configure-serial bug fixed in overthinkos/pixelflux) restarts every
+            # ~3-5s and never accumulates 20s of uptime.
+            - id: labwc-stable
+              in_container: true
+              exit_status: 0
+              eventually: 120s
+              retry_interval: 5s
+              command: "supervisorctl status labwc | awk '/RUNNING/{n=split($NF,a,\":\"); s=a[n]+a[n-1]*60+a[n-2]*3600; if(s>=20){f=1}} END{exit !f}'"
+              context:
+                - runtime

@@ -11,31 +11,36 @@ candy:
             ~/.npm-global/lib/node_modules/forgecode, and `forge --version` exits
             cleanly.
         tag: [working]
-        scenario:
-            - name: cli-binary-installed
-              step:
-                - then: the forge binary is installed into the npm global bin directory
-                  file: ${HOME}/.npm-global/bin/forge
-                  exists: true
-            - name: npm-package-unpacked
-              step:
-                - then: the forgecode package is unpacked under the npm global lib directory
-                  file: ${HOME}/.npm-global/lib/node_modules/forgecode/package.json
-                  exists: true
-            - name: cli-reports-version
-              step:
-                - then: running forge --version exits cleanly
-                  command: ${HOME}/.npm-global/bin/forge --version
-                  exit_status: 0
     require:
         - nodejs
-    eval:
-        - id: forge-binary
-          file: ${HOME}/.npm-global/bin/forge
-          exists: true
-        - id: forge-package
-          file: ${HOME}/.npm-global/lib/node_modules/forgecode/package.json
-          exists: true
-        - id: forge-version
-          command: ${HOME}/.npm-global/bin/forge --version
-          exit_status: 0
+    scenario:
+        - name: cli-binary-installed
+          step:
+            - then: the forge binary is installed into the npm global bin directory
+              file: ${HOME}/.npm-global/bin/forge
+              exists: true
+        - name: npm-package-unpacked
+          step:
+            - then: the forgecode package is unpacked under the npm global lib directory
+              file: ${HOME}/.npm-global/lib/node_modules/forgecode/package.json
+              exists: true
+        - name: cli-reports-version
+          step:
+            - then: running forge --version exits cleanly
+              command: ${HOME}/.npm-global/bin/forge --version
+              exit_status: 0
+        - name: forge-binary
+          step:
+            - id: forge-binary
+              file: ${HOME}/.npm-global/bin/forge
+              exists: true
+        - name: forge-package
+          step:
+            - id: forge-package
+              file: ${HOME}/.npm-global/lib/node_modules/forgecode/package.json
+              exists: true
+        - name: forge-version
+          step:
+            - id: forge-version
+              command: ${HOME}/.npm-global/bin/forge --version
+              exit_status: 0

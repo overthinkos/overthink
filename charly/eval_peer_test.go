@@ -27,7 +27,7 @@ func TestSplitPeerKey(t *testing.T) {
 // TestCollectPeerRefs scans every check string field for ${PEER_*} refs and
 // returns exactly those (not other parameterized vars like ${HOST_PORT}).
 func TestCollectPeerRefs(t *testing.T) {
-	checks := []Check{
+	checks := []Op{
 		{Cdp: "open", URL: "http://${PEER_HOST:web}:8080"},
 		{Command: "curl http://${PEER_ENDPOINT:web:8080}/health"},
 		{Addr: "127.0.0.1:${HOST_PORT:8080}"}, // NOT a peer ref
@@ -102,12 +102,12 @@ func TestRunOne_UnresolvedPeerVarFails(t *testing.T) {
 	r := &Runner{Resolver: &EvalVarResolver{Env: map[string]string{}}}
 	// ${PEER_ENDPOINT} can't be resolved → the cross-deployment probe's premise
 	// failed → FAIL (never reaches the curl; returns at the var-resolution gate).
-	peerCheck := &Check{Command: "curl -fsS http://${PEER_ENDPOINT:absent:80}/"}
+	peerCheck := &Op{Command: "curl -fsS http://${PEER_ENDPOINT:absent:80}/"}
 	if res := r.runOne(context.Background(), peerCheck); res.Status != TestFail {
 		t.Errorf("unresolved ${PEER_ENDPOINT} → status %v (%q), want TestFail", res.Status, res.Message)
 	}
 	// A non-peer unresolved var is a legitimate SKIP (input genuinely N/A here).
-	otherCheck := &Check{Command: "echo ${SOME_UNSET_VAR}"}
+	otherCheck := &Op{Command: "echo ${SOME_UNSET_VAR}"}
 	if res := r.runOne(context.Background(), otherCheck); res.Status != TestSkip {
 		t.Errorf("unresolved non-peer var → status %v (%q), want TestSkip", res.Status, res.Message)
 	}

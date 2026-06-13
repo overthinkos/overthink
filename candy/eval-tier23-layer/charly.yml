@@ -8,27 +8,6 @@ candy:
             Tier 3: curl installed + persistent /srv/bench/version.txt.
             Both tiers share the same pod (harness-tier23).
         tag: [working]
-        scenario:
-            # Tier 3 build-scope facts — embedded check verbs (deterministic).
-            - name: tier3-curl-and-version-marker
-              step:
-                - then: curl is installed so tier3 can fetch artifacts over HTTP
-                  file: /usr/bin/curl
-                  exists: true
-                - then: the persistent tier3 version marker is on disk and carries tier3-ok
-                  file: /srv/bench/version.txt
-                  contains:
-                    - tier3-ok
-            # Tier 2 deploy-scope fact — the running http.server serves the page.
-            - name: tier2-http-serves-benchmark-page
-              step:
-                - then: the tier2 HTTP server answers on port 8080 with a page containing "charly benchmark"
-                  scope: deploy
-                  http: http://127.0.0.1:${HOST_PORT:8080}/
-                  status: 200
-                  body:
-                    - contains:
-                        - charly benchmark
     require: []
     distro:
         fedora:
@@ -41,15 +20,15 @@ candy:
         - 8080
     task:
         - mkdir: /srv/bench
-          user: root
+          run_as: root
           mode: "0755"
         - write: /srv/bench/version.txt
-          user: root
+          run_as: root
           mode: "0644"
           content: |
             tier3-ok
         - write: /srv/bench/index.html
-          user: root
+          run_as: root
           mode: "0644"
           content: |
             <!doctype html>
@@ -64,25 +43,58 @@ candy:
           priority: 20
           enable: true
           scope: system
-    eval:
-        - id: tier23-curl-binary
-          file: /usr/bin/curl
-          exists: true
-        - id: tier23-version-file
-          file: /srv/bench/version.txt
-          exists: true
-          contains:
-            - tier3-ok
-        - id: tier23-index-exists
-          file: /srv/bench/index.html
-          exists: true
-        - id: tier23-port-open
-          scope: deploy
-          addr: 127.0.0.1:${HOST_PORT:8080}
-        - id: tier23-http-200
-          scope: deploy
-          http: http://127.0.0.1:${HOST_PORT:8080}/
-          status: 200
-          body:
-            - contains:
-                - charly benchmark
+    scenario:
+        # Tier 3 build-scope facts — embedded check verbs (deterministic).
+        - name: tier3-curl-and-version-marker
+          step:
+            - then: curl is installed so tier3 can fetch artifacts over HTTP
+              file: /usr/bin/curl
+              exists: true
+            - then: the persistent tier3 version marker is on disk and carries tier3-ok
+              file: /srv/bench/version.txt
+              contains:
+                - tier3-ok
+        # Tier 2 deploy-scope fact — the running http.server serves the page.
+        - name: tier2-http-serves-benchmark-page
+          step:
+            - then: the tier2 HTTP server answers on port 8080 with a page containing "charly benchmark"
+              http: http://127.0.0.1:${HOST_PORT:8080}/
+              status: 200
+              body:
+                - contains:
+                    - charly benchmark
+              context:
+                - runtime
+        - name: tier23-curl-binary
+          step:
+            - id: tier23-curl-binary
+              file: /usr/bin/curl
+              exists: true
+        - name: tier23-version-file
+          step:
+            - id: tier23-version-file
+              file: /srv/bench/version.txt
+              exists: true
+              contains:
+                - tier3-ok
+        - name: tier23-index-exists
+          step:
+            - id: tier23-index-exists
+              file: /srv/bench/index.html
+              exists: true
+        - name: tier23-port-open
+          step:
+            - id: tier23-port-open
+              addr: 127.0.0.1:${HOST_PORT:8080}
+              context:
+                - runtime
+        - name: tier23-http-200
+          step:
+            - id: tier23-http-200
+              http: http://127.0.0.1:${HOST_PORT:8080}/
+              status: 200
+              body:
+                - contains:
+                    - charly benchmark
+              context:
+                - runtime

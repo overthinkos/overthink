@@ -22,6 +22,47 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-14 — feat(schema)!: one embedded `charly.yml`, parsed by the same loader (sidecar-root)
+
+`charly.yml` was already the one-and-only config filename project-wide — except
+inside the `charly/` Go source, where the binary still carried **two**
+differently-named embedded defaults, each parsed by its **own** code path:
+`charly/build.yml` (the default build vocabulary) via a bespoke
+`LoadEmbeddedBuildConfig` (`yaml.Unmarshal` into `UnifiedFile`), and
+`charly/sidecar.yml` (the default sidecar-template library) via a wholly separate
+`SidecarConfig` struct + `LoadEmbeddedSidecarConfig`, bypassing the unified loader
+entirely (`sidecar:` was not even a recognized key).
+
+This cutover consolidates both into a single embedded `charly/charly.yml`
+(`git mv build.yml charly.yml` + the `sidecar:` section appended; `sidecar.yml`
+deleted) and routes it through the **same** document-routing core as every other
+`charly.yml`. The loop body of `loadUnifiedInto` was extracted into a shared
+`mergeUnifiedDocs(merged, data, srcLabel, srcDir)` (classifyDoc →
+mergeUnified/mergeKindDoc); the new `embeddedDefaults()` calls it on the embedded
+bytes, so the binary's own config is parsed EXACTLY like a project's. The two
+bespoke embedded loaders + `embeddedBuildYAML`/`embeddedSidecarYAML` +
+`applyEmbeddedBuildDefaults` are deleted; `applyEmbeddedDefaults` now also seeds
+sidecar templates via the new `mergeSidecarMap`.
+
+`Sidecar` becomes a first-class `UnifiedFile` field (+ `rootShapeKeys` +
+`Config.Sidecar` + `DeployConfig.Sidecar`): a project may now declare a root
+`sidecar:` template library that extends/overrides the embedded set, and deploy
+resolution (`ResolveSidecarsForConfig(projectTemplates, deploySidecars)`) cascades
+embedded → project-root → per-deploy. `SidecarConfig` survives only as the
+`PodSpec.Sidecar` inline-list type.
+
+Because `sidecar:` is now a recognized root key, this is an additive schema
+change: a no-op `sidecar-root` `MigrationStep` (modeled on `peer-field`) raises
+`LatestSchemaVersion()` to `2026.165.1048` so an older `charly` REJECTS a
+root-`sidecar:` config (with a `Run: charly migrate` hint) instead of silently
+dropping it; `calver-schema` re-stamps every versioned file. The
+single-filename migration's redundant-`build.yml`-drop heuristic switched from a
+raw `bytes.Equal` against the embed to a SEMANTIC compare of the parsed
+distro/builder/init/resource maps (`localBuildMatchesEmbeddedVocab`) — the
+embedded bytes now also carry a `sidecar:` section a build-vocab-only `build.yml`
+never has. `build.yml` remains a valid project-level flat-import filename; only
+the embedded source file moved.
+
 ### 2026-06-13 — feat(schema)!: collapse the five test/eval formats into ONE flat `plan:` vocabulary (plan-unify)
 
 The capstone of the op-unify lineage. OpenCharly carried **five parallel

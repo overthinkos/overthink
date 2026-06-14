@@ -65,13 +65,66 @@ distro:
 	}
 }
 
+// TestEmbeddedDefaults_SameLoaderPath proves the consolidation invariant: the
+// SINGLE binary-embedded charly.yml is parsed by the SAME unified loader core
+// (embeddedDefaults → mergeUnifiedDocs) and yields BOTH the build vocabulary
+// AND the sidecar-template library from one parse — no bespoke per-section
+// loader. This is the core "parse its own charly.yml with exactly the same code
+// path" guarantee.
+func TestEmbeddedDefaults_SameLoaderPath(t *testing.T) {
+	def, err := embeddedDefaults()
+	if err != nil {
+		t.Fatalf("embeddedDefaults: %v", err)
+	}
+	// Build vocabulary view.
+	for _, d := range []string{"fedora", "arch"} {
+		if def.Distro[d] == nil {
+			t.Errorf("embedded distro %q missing from unified parse", d)
+		}
+	}
+	if def.Builder["pixi"] == nil {
+		t.Error("embedded builder pixi missing from unified parse")
+	}
+	if def.Resource["nvidia-gpu"] == nil {
+		t.Error("embedded resource nvidia-gpu missing from unified parse")
+	}
+	// Sidecar-template view — from the SAME parse, the SAME UnifiedFile.
+	ts, ok := def.Sidecar["tailscale"]
+	if !ok {
+		t.Fatal("embedded sidecar tailscale missing from unified parse")
+	}
+	if ts.Image != "ghcr.io/tailscale/tailscale:latest" {
+		t.Errorf("tailscale sidecar image = %q, want ghcr.io/tailscale/tailscale:latest", ts.Image)
+	}
+}
+
+// TestEmbeddedDefaults_SidecarProjectWins proves a project may declare a root
+// `sidecar:` template that OVERRIDES the embedded one (project-wins), routed
+// through LoadUnified exactly like the build vocabulary.
+func TestEmbeddedDefaults_SidecarProjectWins(t *testing.T) {
+	dir := t.TempDir()
+	writeFixture(t, dir, "charly.yml", `version: `+LatestSchemaVersion().String()+`
+sidecar:
+  tailscale:
+    image: example.com/custom-tailscale:pinned
+`)
+	uf, _, err := LoadUnified(dir)
+	if err != nil {
+		t.Fatalf("LoadUnified: %v", err)
+	}
+	if uf.Sidecar["tailscale"].Image != "example.com/custom-tailscale:pinned" {
+		t.Errorf("project sidecar override lost (embed wrongly won); got %q", uf.Sidecar["tailscale"].Image)
+	}
+}
+
 // TestNoHardcodedYAMLFilenames is the file-agnostic invariant guard. charly.yml
-// is the ONE YAML filename the code knows; outside migration code (which must
-// name legacy files to migrate FROM) and tests, no source may hardcode a
-// per-kind project filename — discovery + the UnifiedFileName constant cover
-// them all. deploy.yml (per-machine host state), build.yml (the embed source +
-// directive), charly.yml, and sidecar.yml are deliberately NOT in the forbidden
-// set.
+// is the ONE YAML filename the code knows — including the binary-embedded
+// default config (//go:embed charly.yml, embed_defaults.go). Outside migration
+// code (which must name legacy files to migrate FROM) and tests, no source may
+// hardcode a per-kind project filename — discovery + the UnifiedFileName
+// constant cover them all. build.yml and sidecar.yml are now legacy filenames
+// (named only in migration + tests); deploy.yml (per-machine host state) and
+// charly.yml are deliberately NOT in the forbidden set.
 func TestNoHardcodedYAMLFilenames(t *testing.T) {
 	forbidden := regexp.MustCompile(`"(box|candy|base|vm|pod|k8s|check|local|android|image|images|layer)\.yml"`)
 	entries, err := filepath.Glob("*.go")

@@ -22,6 +22,11 @@ import (
 type DeployConfig struct {
 	Provides *ProvidesConfig           `yaml:"provides,omitempty"`
 	Deploy   map[string]DeploymentNode `yaml:"deploy"`
+	// Sidecar carries the project's sidecar-template library (the embedded
+	// default set merged with any project-declared root sidecar: entries).
+	// Projected from UnifiedFile.Sidecar by ProjectDeployConfig(); deploy-time
+	// resolution merges these UNDER each deploy node's own sidecar overrides.
+	Sidecar map[string]SidecarDef `yaml:"sidecar,omitempty"`
 }
 
 // DeploymentNode is one node in the deployments tree declared in

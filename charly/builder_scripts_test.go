@@ -7,13 +7,15 @@ import (
 
 // Tests for renderBuilderScript — the bash scripts that run inside builder
 // containers during host/VM deploys. The scripts are now config-driven: they
-// render each builder's phase.install.host cell from the REAL build.yml, so
-// these are round-trip tests proving the YAML host cells produce the expected
-// shell (the faithful translation of the deleted render*Script Go helpers).
+// render each builder's phase.install.host cell from the REAL build vocabulary
+// (the embedded charly.yml), so these are round-trip tests proving the YAML host
+// cells produce the expected shell (the faithful translation of the deleted
+// render*Script Go helpers).
 
 // builderStepWithDef returns a BuilderStep carrying the resolved BuilderDef for
-// `name` loaded from the repo's real build.yml, so renderBuilderScript renders
-// the actual phase.install.host cell.
+// `name` loaded from the project's real charly.yml (plus the embedded default
+// build vocabulary), so renderBuilderScript renders the actual
+// phase.install.host cell.
 func builderStepWithDef(t *testing.T, name string, raw map[string]any) *BuilderStep {
 	t.Helper()
 	_, bc, _, err := LoadBuildConfigForBox(repoRootDir(t))
@@ -22,7 +24,7 @@ func builderStepWithDef(t *testing.T, name string, raw map[string]any) *BuilderS
 	}
 	bDef := bc.Builder[name]
 	if bDef == nil {
-		t.Fatalf("builder %q not defined in build.yml", name)
+		t.Fatalf("builder %q not defined in charly.yml", name)
 	}
 	return &BuilderStep{Builder: name, CandyName: "test-layer", BuilderDef: bDef, RawStageContext: raw}
 }
@@ -88,7 +90,7 @@ func TestRenderAurScriptPackages(t *testing.T) {
 		"*.pkg.tar.zst",
 		// The DB refresh that keeps the (cached, stale) builder DB from
 		// resolving a makedepend to a mirror-rotated version (the go-1.26.3
-		// .sig 404). Mirrors build.yml's aur stage_template (R3).
+		// .sig 404). Mirrors the embedded charly.yml's aur stage_template (R3).
 		"pacman -Syu --noconfirm",
 	}
 	for _, m := range mustContain {

@@ -50,8 +50,10 @@ vm:
   name: foo
   version: 2026.144.1443
 `)
-	// build.yml byte-matching the embedded default → dropped + deleted.
-	if err := os.WriteFile(filepath.Join(dir, "build.yml"), embeddedBuildYAML, 0o644); err != nil {
+	// build.yml whose build vocabulary matches the embedded default → dropped +
+	// deleted (semantic compare: the embedded charly.yml parses to the same
+	// distro/builder/init/resource maps).
+	if err := os.WriteFile(filepath.Join(dir, "build.yml"), embeddedCharlyYAML, 0o644); err != nil {
 		t.Fatal(err)
 	}
 

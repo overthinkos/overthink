@@ -26,8 +26,8 @@ import (
 
 // scaffoldCharlyYAML is the seed charly.yml written into a fresh project. The
 // project is immediately usable — the default distro/builder/init/resource build
-// vocabulary is embedded in the charly binary (charly/build.yml), so there is no
-// build.yml to copy or format_config to wire.
+// vocabulary AND sidecar templates are embedded in the charly binary
+// (charly/charly.yml), so there is no build vocabulary to copy or wire.
 const scaffoldCharlyYAML = `# charly.yml — unified project root: the single file a project needs.
 # See https://github.com/overthinkos/overthink for documentation.
 #

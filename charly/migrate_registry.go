@@ -71,7 +71,7 @@ type MigrationStep struct {
 // closure references it, and the registry's last entry uses it as its Version,
 // so the two are guaranteed equal (asserted by TestRegistryHeadMatchesLatest).
 // Bump it — and append the matching MigrationStep — for each future cutover.
-var latestSchemaVersion = mustCalVer("2026.164.0006")
+var latestSchemaVersion = mustCalVer("2026.165.1048")
 
 // migrationSteps is the ordered registry. Chronological by git landing date
 // (see `git log --diff-filter=A` on each migrate_*.go), which is the order the
@@ -359,13 +359,26 @@ func migrationSteps() []MigrationStep {
 			w, err := MigratePlanUnify(c.Dir, c.DryRun)
 			return len(w) > 0, err
 		}},
+		// 2026-06 sidecar-root: the sidecar-template library became a first-class
+		// root key. `sidecar:` is now a recognized UnifiedFile field (it was
+		// parsed only by a bespoke embedded loader before), so the binary's own
+		// embedded charly.yml — and any project — can carry a root `sidecar:`
+		// section that flows through the SAME unified loader as every charly.yml.
+		// Purely ADDITIVE — a config without `sidecar:` is unchanged — so this
+		// step transforms nothing; it raises HEAD so an older `charly` REJECTS a
+		// root-`sidecar:`-using config (with a `Run: charly migrate` hint) instead
+		// of silently dropping the key. The calver-schema stamp re-stamps every
+		// file to the new HEAD. See CHANGELOG.md.
+		{mustCalVer("2026.165.1047"), "sidecar-root", false, func(c *MigrateContext) (bool, error) {
+			return false, nil
+		}},
 		// HEAD — the schema stamp. Must stay LAST so LatestSchemaVersion picks it up
 		// and every versioned file lands on this CalVer. This is the integer→CalVer
 		// transition step (version: 4 → version: <HEAD>) and the universal stamper.
 		// TouchesHost is false so it ALSO runs in project-only mode (remote-cache
 		// auto-migration); its host-file stamping is gated on ctx.HostDeployPath,
 		// which the project-only runner leaves empty.
-		{mustCalVer("2026.164.0006"), "calver-schema", false, func(c *MigrateContext) (bool, error) {
+		{mustCalVer("2026.165.1048"), "calver-schema", false, func(c *MigrateContext) (bool, error) {
 			w, err := MigrateCalverSchema(c.Dir, c.HostDeployPath, latestSchemaVersion, c.DryRun)
 			return len(w) > 0, err
 		}},

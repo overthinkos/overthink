@@ -7,18 +7,18 @@ import (
 	"testing"
 )
 
-func TestLoadEmbeddedSidecarConfig(t *testing.T) {
-	cfg, err := LoadEmbeddedSidecarConfig()
+func TestEmbeddedSidecarTemplates(t *testing.T) {
+	templates, err := EmbeddedSidecarTemplates()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg == nil {
-		t.Fatal("expected non-nil config")
+	if templates == nil {
+		t.Fatal("expected non-nil templates")
 	}
 
-	ts, ok := cfg.Sidecar["tailscale"]
+	ts, ok := templates["tailscale"]
 	if !ok {
-		t.Fatal("expected tailscale sidecar in embedded config")
+		t.Fatal("expected tailscale sidecar in embedded templates")
 	}
 	if ts.Image != "ghcr.io/tailscale/tailscale:latest" {
 		t.Errorf("image = %q, want ghcr.io/tailscale/tailscale:latest", ts.Image)
@@ -137,7 +137,7 @@ func TestResolveSidecarsForConfig(t *testing.T) {
 		},
 	}
 
-	result, err := ResolveSidecarsForConfig(deploySidecars)
+	result, err := ResolveSidecarsForConfig(nil, deploySidecars)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -158,7 +158,7 @@ func TestResolveSidecarsForConfig(t *testing.T) {
 }
 
 func TestResolveSidecarsForConfig_Empty(t *testing.T) {
-	result, err := ResolveSidecarsForConfig(nil)
+	result, err := ResolveSidecarsForConfig(nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

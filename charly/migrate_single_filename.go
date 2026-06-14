@@ -12,11 +12,11 @@ package main
 //     android.yml fold their kind keys into charly.yml's root mapping; the files
 //     are deleted.
 //   - the build.yml import is dropped — the default distro/builder/init/resource
-//     vocabulary is now EMBEDDED in the charly binary (charly/build.yml, see
-//     embed_build.go). A local build.yml that byte-matches the embedded default is
-//     deleted; a CUSTOMIZED local build.yml is left imported (it overrides the
-//     embedded default). A remote `@github.../build.yml:vTAG` import is dropped
-//     (the embed supplies the identical first-party vocabulary).
+//     vocabulary is now EMBEDDED in the charly binary (charly/charly.yml, see
+//     embed_defaults.go). A local build.yml whose build vocabulary matches the
+//     embedded default is deleted; a CUSTOMIZED local build.yml is left imported
+//     (it overrides the embedded default). A remote `@github.../build.yml:vTAG`
+//     import is dropped (the embed supplies the identical first-party vocabulary).
 //   - discover: is rewritten to scan BOTH box/ and candy/ (manifest charly.yml,
 //     the single default); the folded per-kind files + build.yml are removed from
 //     import:.
@@ -32,6 +32,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"time"
 
@@ -310,7 +311,7 @@ func rewriteBuildImport(rootMap *yaml.Node, dir string, dryRun bool) bool {
 	localMatchesEmbed := false
 	if localPresent {
 		if data, err := os.ReadFile(localBuild); err == nil {
-			localMatchesEmbed = bytes.Equal(data, embeddedBuildYAML)
+			localMatchesEmbed = localBuildMatchesEmbeddedVocab(data)
 		}
 	}
 	changed := false
@@ -339,6 +340,29 @@ func rewriteBuildImport(rootMap *yaml.Node, dir string, dryRun bool) bool {
 	}
 	imp.Content = kept
 	return changed
+}
+
+// localBuildMatchesEmbeddedVocab reports whether a project's local build.yml
+// contributes only build vocabulary the binary already embeds. It compares the
+// PARSED distro/builder/init/resource maps (not raw bytes) against the embedded
+// default, so the redundant-default drop survives the build.yml+sidecar.yml ->
+// charly.yml consolidation (the embedded bytes now also carry a sidecar: section
+// a build-vocab-only build.yml never has) and is robust to comment / key-order /
+// whitespace differences. A customized build.yml (any vocab the embed lacks)
+// returns false and is left imported.
+func localBuildMatchesEmbeddedVocab(data []byte) bool {
+	var local UnifiedFile
+	if err := yaml.Unmarshal(data, &local); err != nil {
+		return false
+	}
+	def, err := embeddedDefaults()
+	if err != nil {
+		return false
+	}
+	return reflect.DeepEqual(local.Distro, def.Distro) &&
+		reflect.DeepEqual(local.Builder, def.Builder) &&
+		reflect.DeepEqual(local.Init, def.Init) &&
+		reflect.DeepEqual(local.Resource, def.Resource)
 }
 
 // rewriteFoldedImports removes the per-kind file entries from import: (box.yml /

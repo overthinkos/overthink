@@ -24,11 +24,12 @@ var namespaceAliasRe = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
 // point (import: + discover:) plus the inline kinds (vm/pod/k8s/check/local/
 // android/deploy + any build-vocabulary overrides). Boxes and candies are
 // DISCOVERED per name as box/<name>/charly.yml and candy/<name>/charly.yml. The
-// default distro/builder/init/resource build vocabulary is embedded in the
-// binary (charly/build.yml, //go:embed); a project declares distro:/builder:/
-// init:/resource: only to extend or override it. Legacy per-kind files
-// (box.yml/vm.yml/...) still LOAD as flat `import:` items, never the canonical
-// layout.
+// default distro/builder/init/resource build vocabulary AND sidecar templates
+// are embedded in the binary (charly/charly.yml, //go:embed — the embedded
+// default is parsed by the SAME loader as any project charly.yml); a project
+// declares distro:/builder:/init:/resource:/sidecar: only to extend or override
+// it. Legacy per-kind files (box.yml/vm.yml/...) still LOAD as flat `import:`
+// items, never the canonical layout.
 //
 // Key properties:
 //   - singular kind keys, routed by SHAPE (the top-level kind-key), never by filename;
@@ -129,8 +130,17 @@ type UnifiedFile struct {
 	// Resource (kind:resource) — exclusive host-resource definitions: a token
 	// name (matching requires_exclusive: / preemptible.holds:) → an optional
 	// hardware selector (e.g. gpu.vendor) that drives GPU auto-allocation at
-	// `charly vm create`. Build-vocab VALUE map, flat-imported from build.yml.
+	// `charly vm create`. Build-vocab VALUE map; the binary-embedded default
+	// set lives in the embedded charly.yml (embed_defaults.go).
 	Resource map[string]*ResourceDef `yaml:"resource,omitempty"`
+
+	// Sidecar — the reusable sidecar-container template library (sidecar name
+	// → SidecarDef). The binary-embedded default set (e.g. `tailscale`) lives
+	// in the embedded charly.yml (embed_defaults.go) and is merged UNDER a
+	// project's own entries by applyEmbeddedDefaults (project-wins). A deploy
+	// references a template by name under `deploy.<name>.sidecar:` and overrides
+	// per-instance. See /charly-automation:sidecar.
+	Sidecar map[string]SidecarDef `yaml:"sidecar,omitempty"`
 
 	// Namespaces holds child namespaces mounted by namespaced `import:`
 	// entries (alias → fully-resolved isolated UnifiedFile). NOT authored
@@ -1032,52 +1042,15 @@ func loadUnifiedInto(path string, merged *UnifiedFile, visited map[string]bool, 
 		return fmt.Errorf("reading %s: %w", abs, err)
 	}
 
-	// Parse as a multi-document YAML stream.
-	decoder := yaml.NewDecoder(strings.NewReader(string(data)))
-	docIdx := 0
-	var importQueue ImportList
-	for {
-		var node yaml.Node
-		if err := decoder.Decode(&node); err != nil {
-			if err.Error() == "EOF" {
-				break
-			}
-			return fmt.Errorf("%s:doc%d: %w", abs, docIdx, err)
-		}
-		shape, err := classifyDoc(&node)
-		if err != nil {
-			return fmt.Errorf("%s:doc%d: %w", abs, docIdx, err)
-		}
-		// Surface key misalignments (silently-dropped unknown keys) as
-		// non-fatal warnings before the lenient decode below.
-		warnUnknownYAMLKeys(&node, shape, fmt.Sprintf("%s:doc%d", abs, docIdx))
-		switch shape {
-		case docShapeRoot:
-			var uf UnifiedFile
-			if err := node.Decode(&uf); err != nil {
-				return fmt.Errorf("%s:doc%d: decoding root-shape document: %w", abs, docIdx, err)
-			}
-			// Queue imports for processing after current-file merging.
-			importQueue = append(importQueue, uf.Import...)
-			// Clear before merge so they don't leak into the merged struct.
-			uf.Import = nil
-			// Queue discovery roots (resolved relative to this file).
-			// Discovery runs only AFTER all includes are fully merged, so
-			// collect them on merged.Discover directly and process at end.
-			normalizeV4Aliases(&uf)
-			mergeUnified(merged, &uf, filepath.Dir(abs))
-		case docShapeKind:
-			var kd kindKeyedDoc
-			if err := node.Decode(&kd); err != nil {
-				return fmt.Errorf("%s:doc%d: decoding kind-keyed document: %w", abs, docIdx, err)
-			}
-			if err := mergeKindDoc(merged, &kd, filepath.Dir(abs)); err != nil {
-				return fmt.Errorf("%s:doc%d: %w", abs, docIdx, err)
-			}
-		case docShapeEmpty:
-			// Skip empty docs (YAML streams commonly end with "---\n").
-		}
-		docIdx++
+	// Parse + merge every document in the file via the SHARED routing core
+	// (mergeUnifiedDocs → classifyDoc → mergeUnified/mergeKindDoc). The SAME
+	// mergeUnifiedDocs parses the binary-embedded charly.yml (embeddedDefaults,
+	// embed_defaults.go), so the default config flows through EXACTLY the same
+	// code path as any project charly.yml. Imports are returned for resolution
+	// below.
+	importQueue, err := mergeUnifiedDocs(merged, data, abs, filepath.Dir(abs))
+	if err != nil {
+		return err
 	}
 
 	// Process imports relative to this file's directory.
@@ -1123,15 +1096,73 @@ func loadUnifiedInto(path string, merged *UnifiedFile, visited map[string]bool, 
 		if err := merged.ApplyDiscover(base); err != nil {
 			return fmt.Errorf("%s: %w", abs, err)
 		}
-		// Fill any distro/builder/init/resource vocabulary the project did NOT
-		// declare from the binary-embedded default build.yml (project-wins; see
-		// applyEmbeddedBuildDefaults). Runs for the root AND every namespace, so
-		// a project needs no build.yml of its own.
-		if err := applyEmbeddedBuildDefaults(merged); err != nil {
+		// Fill any distro/builder/init/resource vocabulary AND sidecar templates
+		// the project did NOT declare from the binary-embedded default charly.yml
+		// (project-wins; see applyEmbeddedDefaults). Runs for the root AND every
+		// namespace, so a project needs no build vocabulary of its own.
+		if err := applyEmbeddedDefaults(merged); err != nil {
 			return fmt.Errorf("%s: %w", abs, err)
 		}
 	}
 	return nil
+}
+
+// mergeUnifiedDocs parses `data` as a multi-document YAML stream and merges
+// every document into `merged` via the shared routing core — classifyDoc to
+// determine each doc's shape, then mergeUnified (root-shape) or mergeKindDoc
+// (kind-keyed). srcLabel labels diagnostics; srcDir anchors relative discover
+// paths. Returns the concatenated `import:` queue of every root-shape doc (the
+// caller resolves imports). This is the SINGLE document-interpretation path:
+// both loadUnifiedInto (an on-disk charly.yml) and embeddedDefaults (the
+// binary-embedded charly.yml) call it, so the embedded default is parsed
+// EXACTLY like every other charly.yml.
+func mergeUnifiedDocs(merged *UnifiedFile, data []byte, srcLabel, srcDir string) (ImportList, error) {
+	decoder := yaml.NewDecoder(bytes.NewReader(data))
+	docIdx := 0
+	var importQueue ImportList
+	for {
+		var node yaml.Node
+		if err := decoder.Decode(&node); err != nil {
+			if err.Error() == "EOF" {
+				break
+			}
+			return nil, fmt.Errorf("%s:doc%d: %w", srcLabel, docIdx, err)
+		}
+		shape, err := classifyDoc(&node)
+		if err != nil {
+			return nil, fmt.Errorf("%s:doc%d: %w", srcLabel, docIdx, err)
+		}
+		// Surface key misalignments (silently-dropped unknown keys) as
+		// non-fatal warnings before the lenient decode below.
+		warnUnknownYAMLKeys(&node, shape, fmt.Sprintf("%s:doc%d", srcLabel, docIdx))
+		switch shape {
+		case docShapeRoot:
+			var uf UnifiedFile
+			if err := node.Decode(&uf); err != nil {
+				return nil, fmt.Errorf("%s:doc%d: decoding root-shape document: %w", srcLabel, docIdx, err)
+			}
+			// Queue imports for processing after current-file merging.
+			importQueue = append(importQueue, uf.Import...)
+			// Clear before merge so they don't leak into the merged struct.
+			uf.Import = nil
+			// Discovery runs only AFTER all includes are fully merged, so
+			// discover roots collect on merged.Discover and process at end.
+			normalizeV4Aliases(&uf)
+			mergeUnified(merged, &uf, srcDir)
+		case docShapeKind:
+			var kd kindKeyedDoc
+			if err := node.Decode(&kd); err != nil {
+				return nil, fmt.Errorf("%s:doc%d: decoding kind-keyed document: %w", srcLabel, docIdx, err)
+			}
+			if err := mergeKindDoc(merged, &kd, srcDir); err != nil {
+				return nil, fmt.Errorf("%s:doc%d: %w", srcLabel, docIdx, err)
+			}
+		case docShapeEmpty:
+			// Skip empty docs (YAML streams commonly end with "---\n").
+		}
+		docIdx++
+	}
+	return importQueue, nil
 }
 
 // canonicalRef resolves an import ref (local path or
@@ -1260,9 +1291,13 @@ var rootShapeKeys = map[string]bool{
 	// Calamares-aligned kinds.
 	"group": true, "target": true, "module": true,
 	// Exclusive host-resource vocabulary (token -> hardware selector) driving
-	// GPU auto-allocation. Build-vocab VALUE map, like distro:; flat-imported
-	// from build.yml into the root namespace.
+	// GPU auto-allocation. Build-vocab VALUE map, like distro:; the embedded
+	// default set lives in the binary-embedded charly.yml.
 	"resource": true,
+	// Sidecar-container template library (sidecar name -> SidecarDef). A
+	// root-shape collection map like resource:; the embedded default set
+	// (tailscale) lives in the binary-embedded charly.yml.
+	"sidecar": true,
 }
 
 // kindKeysSet mirrors kindKeys for O(1) lookup.
@@ -1450,6 +1485,7 @@ func mergeUnified(dst, src *UnifiedFile, srcDir string) {
 	mergeTargetMap(&dst.Target, src.Target)
 	mergeModuleMap(&dst.Module, src.Module)
 	mergeResourceMap(&dst.Resource, src.Resource)
+	mergeSidecarMap(&dst.Sidecar, src.Sidecar)
 	mergeDeployMaps(&dst.Deploy, src.Deploy)
 	mergeDeployMaps(&dst.Check, src.Check)
 	if dst.Provides == nil && src.Provides != nil {
@@ -1543,6 +1579,25 @@ func mergeResourceMap(dst *map[string]*ResourceDef, src map[string]*ResourceDef)
 	}
 	if *dst == nil {
 		*dst = make(map[string]*ResourceDef)
+	}
+	for k, v := range src {
+		if _, exists := (*dst)[k]; !exists {
+			(*dst)[k] = v
+		}
+	}
+}
+
+// mergeSidecarMap merges sidecar-template definitions. Root-wins gap-fill,
+// like the other build-vocab maps — a project's own sidecar: entries are
+// preserved and the embedded defaults fill only the names the project did not
+// declare (applyEmbeddedDefaults relies on this). SidecarDef is a value type,
+// so the merge copies the value, not a pointer.
+func mergeSidecarMap(dst *map[string]SidecarDef, src map[string]SidecarDef) {
+	if len(src) == 0 {
+		return
+	}
+	if *dst == nil {
+		*dst = make(map[string]SidecarDef)
 	}
 	for k, v := range src {
 		if _, exists := (*dst)[k]; !exists {
@@ -2254,6 +2309,7 @@ func (uf *UnifiedFile) projectConfigCached(cache map[*UnifiedFile]*Config) *Conf
 		Defaults: uf.Defaults,
 		Box:      images,
 		Local:    uf.Local,
+		Sidecar:  uf.Sidecar,
 	}
 	cache[uf] = c // cache BEFORE recursing (cycle break)
 	if len(uf.Namespaces) > 0 {
@@ -2293,12 +2349,13 @@ func (uf *UnifiedFile) ProjectInitConfig() *InitConfig {
 // of the authored file, independent of any per-machine ~/.config/charly/charly.yml
 // which remains loaded separately by LoadDeployConfig).
 func (uf *UnifiedFile) ProjectDeployConfig() *DeployConfig {
-	if uf == nil || (len(uf.Deploy) == 0 && uf.Provides == nil) {
+	if uf == nil || (len(uf.Deploy) == 0 && uf.Provides == nil && len(uf.Sidecar) == 0) {
 		return nil
 	}
 	return &DeployConfig{
 		Provides: uf.Provides,
 		Deploy:   uf.Deploy,
+		Sidecar:  uf.Sidecar,
 	}
 }
 

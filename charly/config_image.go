@@ -64,18 +64,17 @@ type BoxConfigSetupCmd struct {
 
 func (c *BoxConfigSetupCmd) Run() error {
 	if c.ListSidecars {
-		cfg, err := LoadEmbeddedSidecarConfig()
+		templates, err := EmbeddedSidecarTemplates()
 		if err != nil {
 			return err
 		}
-		names := make([]string, 0, len(cfg.Sidecar))
-		for name := range cfg.Sidecar {
+		names := make([]string, 0, len(templates))
+		for name := range templates {
 			names = append(names, name)
 		}
 		sort.Strings(names)
 		for _, name := range names {
-			sc := cfg.Sidecar[name]
-			fmt.Printf("%-20s %s\n", name, sc.Description)
+			fmt.Printf("%-20s %s\n", name, templates[name].Description)
 		}
 		return nil
 	}
@@ -240,9 +239,9 @@ func (c *BoxConfigSetupCmd) resolveSidecars(dc *DeployConfig, rt *ResolvedRuntim
 		// Replace c.Env with app-only env vars (sidecar vars saved to charly.yml)
 		c.Env = appEnv
 
-		// Resolve: embedded templates + charly.yml overrides
+		// Resolve: embedded templates + project root sidecar: + per-deploy overrides
 		var resolveErr error
-		mergedSidecarDefs, resolveErr = ResolveSidecarsForConfig(deploySidecars)
+		mergedSidecarDefs, resolveErr = ResolveSidecarsForConfig(sidecarTemplatesOf(dc), deploySidecars)
 		if resolveErr != nil {
 			return nil, nil, envVars, fmt.Errorf("resolving sidecars: %w", resolveErr)
 		}
@@ -1718,7 +1717,7 @@ func updateAllDeployedQuadlets(rt *ResolvedRuntime, skipBox string) error {
 		var resolvedSidecars []ResolvedSidecar
 		podName := ""
 		if len(deploySidecars) > 0 {
-			mergedDefs, resolveErr := ResolveSidecarsForConfig(deploySidecars)
+			mergedDefs, resolveErr := ResolveSidecarsForConfig(sidecarTemplatesOf(dc), deploySidecars)
 			if resolveErr == nil && len(mergedDefs) > 0 {
 				var rsErr error
 				resolvedSidecars, rsErr = ResolveSidecar(mergedDefs, boxName, instance)

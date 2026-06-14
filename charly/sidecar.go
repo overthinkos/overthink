@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	_ "embed"
 	"fmt"
 	"maps"
 	"os"
@@ -10,35 +9,35 @@ import (
 	"sort"
 	"strings"
 	"text/template"
-
-	"gopkg.in/yaml.v3"
 )
 
-//go:embed sidecar.yml
-var embeddedSidecarYAML []byte
-
-// SidecarDef is a sidecar container template (embedded in the charly binary or per-image override in charly.yml).
+// SidecarDef is a sidecar container template. The default set is the
+// binary-embedded charly.yml `sidecar:` library (embed_defaults.go); a project
+// may override or extend it (a root `sidecar:` map, or a per-deploy override
+// under `deploy.<name>.sidecar:`).
 //
 // The `Parameter` field carries BOTH the template's parameter
-// declarations (sidecar.yml: each key maps to empty-string sentinel
-// for "required, must be supplied by deploy") AND the charly.yml
-// override values (each key maps to the operator-chosen string).
+// declarations (the embedded charly.yml `sidecar:` section: each key maps to
+// an empty-string sentinel for "required, must be supplied by deploy") AND the
+// per-deploy override values (each key maps to the operator-chosen string).
 // After MergeSidecar, every required parameter must have a non-empty
 // value or ResolveSidecar errors out with a remediation hint.
 //
-// Example template (sidecar.yml):
+// Example template (embedded charly.yml `sidecar:` section):
 //
 //	sidecar:
 //	  tailscale:
 //	    parameter:
 //	      tailnet: ""   # empty = required, deploy must supply
 //
-// Example charly.yml override:
+// Example per-deploy override (charly.yml):
 //
-//	sidecars:
-//	  tailscale:
-//	    parameter:
-//	      tailnet: armadillo-quail.ts.net
+//	deploy:
+//	  my-app:
+//	    sidecar:
+//	      tailscale:
+//	        parameter:
+//	          tailnet: armadillo-quail.ts.net
 type SidecarDef struct {
 	Description string            `yaml:"description,omitempty" json:"description,omitempty"`
 	Image       string            `yaml:"image,omitempty" json:"image,omitempty"`
@@ -180,7 +179,11 @@ type SidecarVolume struct {
 	Path string `yaml:"path" json:"path"` // container mount path
 }
 
-// SidecarConfig is the parsed sidecar.yml structure.
+// SidecarConfig is the inline sidecar-wrapper shape authored under a
+// kind:pod template's `sidecar:` list (PodSpec.Sidecar []SidecarConfig).
+// The default sidecar-template library is NOT loaded through this type — it
+// lives in the binary-embedded charly.yml `sidecar:` section and is read as
+// UnifiedFile.Sidecar by the unified loader (embed_defaults.go).
 type SidecarConfig struct {
 	Sidecar map[string]SidecarDef `yaml:"sidecar"`
 }
@@ -193,15 +196,6 @@ type ResolvedSidecar struct {
 	Secret   []CollectedSecret // provisioned podman secrets
 	Volume   []VolumeMount     // resolved named volumes
 	Security SecurityConfig    // merged security config
-}
-
-// LoadEmbeddedSidecarConfig parses the sidecar templates compiled into the charly binary.
-func LoadEmbeddedSidecarConfig() (*SidecarConfig, error) {
-	var cfg SidecarConfig
-	if err := yaml.Unmarshal(embeddedSidecarYAML, &cfg); err != nil {
-		return nil, fmt.Errorf("parsing embedded sidecar.yml: %w", err)
-	}
-	return &cfg, nil
 }
 
 // MergeSidecar merges sidecar definitions from base into overlay.
@@ -350,27 +344,51 @@ func ResolveSidecar(defs map[string]SidecarDef, boxName, instance string) ([]Res
 	return resolved, nil
 }
 
-// ResolveSidecarsForConfig merges embedded templates with charly.yml overrides.
-// Only sidecars referenced in deploySidecars are included.
-func ResolveSidecarsForConfig(deploySidecars map[string]SidecarDef) (map[string]SidecarDef, error) {
+// sidecarTemplatesOf returns the project-root sidecar templates carried by a
+// deploy config (nil-safe). These extend/override the embedded template set in
+// ResolveSidecarsForConfig.
+func sidecarTemplatesOf(dc *DeployConfig) map[string]SidecarDef {
+	if dc == nil {
+		return nil
+	}
+	return dc.Sidecar
+}
+
+// EmbeddedSidecarTemplates returns the binary-embedded sidecar-template
+// library (the charly.yml `sidecar:` section), read through the unified loader
+// (embeddedDefaults). It is the deploy-time template base for any sidecar a
+// deploy attaches.
+func EmbeddedSidecarTemplates() (map[string]SidecarDef, error) {
+	def, err := embeddedDefaults()
+	if err != nil {
+		return nil, err
+	}
+	return def.Sidecar, nil
+}
+
+// ResolveSidecarsForConfig builds the effective sidecar defs for a deploy: the
+// embedded template library is the BASE, a project's own root `sidecar:`
+// templates (projectTemplates) extend/override it, and each deploy's per-node
+// `sidecar:` overrides (deploySidecars) win last. Only sidecars referenced in
+// deploySidecars are returned.
+func ResolveSidecarsForConfig(projectTemplates, deploySidecars map[string]SidecarDef) (map[string]SidecarDef, error) {
 	if len(deploySidecars) == 0 {
 		return nil, nil
 	}
 
-	embedded, err := LoadEmbeddedSidecarConfig()
+	base, err := EmbeddedSidecarTemplates()
 	if err != nil {
 		return nil, err
 	}
-
-	var templates map[string]SidecarDef
-	if embedded != nil {
-		templates = embedded.Sidecar
+	// Project-declared root sidecar: templates extend/override the embedded set.
+	if len(projectTemplates) > 0 {
+		base = MergeSidecar(base, projectTemplates)
 	}
 
-	// Merge: embedded templates + charly.yml overrides
-	merged := MergeSidecar(templates, deploySidecars)
+	// Per-deploy overrides win last.
+	merged := MergeSidecar(base, deploySidecars)
 
-	// Filter: only keep sidecars that are referenced in charly.yml
+	// Filter: only keep sidecars that the deploy actually references.
 	filtered := make(map[string]SidecarDef, len(deploySidecars))
 	for name := range deploySidecars {
 		if def, ok := merged[name]; ok {

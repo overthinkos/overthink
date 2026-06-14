@@ -155,11 +155,12 @@ func (c *CheckRunLocalCmd) Run() error {
 	// AI selection — iterate.Agent is the eligible list; --agent picks one.
 	aiName := c.Agent
 	if aiName == "" {
-		if len(iterate.Agent) == 1 {
+		switch len(iterate.Agent) {
+		case 1:
 			aiName = iterate.Agent[0]
-		} else if len(iterate.Agent) == 0 {
+		case 0:
 			return fmt.Errorf("iterate entity %q has empty agent: list", c.Score)
-		} else {
+		default:
 			return fmt.Errorf("iterate entity %q has multiple eligible agents (%v); pass --agent NAME", c.Score, iterate.Agent)
 		}
 	}

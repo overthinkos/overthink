@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -836,7 +837,8 @@ func validateBoxDAG(cfg *Config, layers map[string]*Candy, dir string, opts Reso
 
 	_, orderErr := ResolveBoxOrder(images, layers)
 	if orderErr != nil {
-		if cycleErr, ok := orderErr.(*CycleError); ok {
+		var cycleErr *CycleError
+		if errors.As(orderErr, &cycleErr) {
 			errs.Add("box dependency cycle: %s", strings.Join(cycleErr.Cycle, " -> "))
 		} else {
 			errs.Add("box DAG error: %v", orderErr)
@@ -873,7 +875,8 @@ func validateCandyDAG(cfg *Config, layers map[string]*Candy, errs *ValidationErr
 		}
 		_, err := ResolveCandyOrder(bareCandies, layers, nil)
 		if err != nil {
-			if cycleErr, ok := err.(*CycleError); ok {
+			var cycleErr *CycleError
+			if errors.As(err, &cycleErr) {
 				errs.Add("box %q: candy dependency cycle: %s", boxName, strings.Join(cycleErr.Cycle, " -> "))
 			} else {
 				errs.Add("box %q: candy resolution error: %v", boxName, err)
@@ -1006,13 +1009,14 @@ func validateVolume(layers map[string]*Candy, errs *ValidationError) {
 		}
 		seen := make(map[string]bool)
 		for _, vol := range layer.Volume() {
-			if vol.Name == "" {
+			switch {
+			case vol.Name == "":
 				errs.Add("candy %q candy manifest volumes: missing required \"name\" field", name)
-			} else if !volumeNameRe.MatchString(vol.Name) {
+			case !volumeNameRe.MatchString(vol.Name):
 				errs.Add("candy %q candy manifest volumes: name %q must be lowercase alphanumeric with hyphens", name, vol.Name)
-			} else if seen[vol.Name] {
+			case seen[vol.Name]:
 				errs.Add("candy %q candy manifest volumes: duplicate volume name %q", name, vol.Name)
-			} else {
+			default:
 				seen[vol.Name] = true
 			}
 			if vol.Path == "" {
@@ -1031,13 +1035,14 @@ func validateAliases(cfg *Config, layers map[string]*Candy, errs *ValidationErro
 		}
 		seen := make(map[string]bool)
 		for _, a := range layer.Alias() {
-			if a.Name == "" {
+			switch {
+			case a.Name == "":
 				errs.Add("candy %q candy manifest aliases: missing required \"name\" field", name)
-			} else if !aliasNameRe.MatchString(a.Name) {
+			case !aliasNameRe.MatchString(a.Name):
 				errs.Add("candy %q candy manifest aliases: name %q must match [a-zA-Z0-9][a-zA-Z0-9._-]*", name, a.Name)
-			} else if seen[a.Name] {
+			case seen[a.Name]:
 				errs.Add("candy %q candy manifest aliases: duplicate alias name %q", name, a.Name)
-			} else {
+			default:
 				seen[a.Name] = true
 			}
 			if a.Command == "" {
@@ -1056,13 +1061,14 @@ func validateAliases(cfg *Config, layers map[string]*Candy, errs *ValidationErro
 		}
 		seen := make(map[string]bool)
 		for _, a := range img.Alias {
-			if a.Name == "" {
+			switch {
+			case a.Name == "":
 				errs.Add("box %q aliases: missing required \"name\" field", boxName)
-			} else if !aliasNameRe.MatchString(a.Name) {
+			case !aliasNameRe.MatchString(a.Name):
 				errs.Add("box %q aliases: name %q must match [a-zA-Z0-9][a-zA-Z0-9._-]*", boxName, a.Name)
-			} else if seen[a.Name] {
+			case seen[a.Name]:
 				errs.Add("box %q aliases: duplicate alias name %q", boxName, a.Name)
-			} else {
+			default:
 				seen[a.Name] = true
 			}
 		}
@@ -1656,7 +1662,7 @@ func validateEngineConfig(cfg *Config, layers map[string]*Candy, errs *Validatio
 			}
 		}
 		if len(engineSources) > 1 {
-			var conflicts []string
+			conflicts := make([]string, 0, len(engineSources))
 			for e, l := range engineSources {
 				conflicts = append(conflicts, fmt.Sprintf("%s (from candy %s)", e, l))
 			}
@@ -2196,11 +2202,12 @@ func validateSingleTask(candyName string, idx int, verb string, t *Op, known map
 		}
 
 	case "copy":
-		if t.Copy == "" {
+		switch {
+		case t.Copy == "":
 			errs.Add("candy %q: tasks[%d]: copy: requires a non-empty source", candyName, idx)
-		} else if strings.HasPrefix(t.Copy, "/") {
+		case strings.HasPrefix(t.Copy, "/"):
 			errs.Add("candy %q: tasks[%d]: copy: %q must be a relative path (candy-dir file)", candyName, idx, t.Copy)
-		} else if strings.Contains(t.Copy, "..") {
+		case strings.Contains(t.Copy, ".."):
 			errs.Add("candy %q: tasks[%d]: copy: %q may not contain .. (no traversal)", candyName, idx, t.Copy)
 		}
 		if t.To == "" {

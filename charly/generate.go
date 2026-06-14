@@ -100,11 +100,12 @@ func (g *Generator) resolveUserContext(img *ResolvedBox) error {
 		}
 
 		// Resolve home directory
-		if img.User == "root" {
+		switch {
+		case img.User == "root":
 			img.Home = "/root"
-		} else if origCfg.User == "" && origCfg.UID == nil {
+		case origCfg.User == "" && origCfg.UID == nil:
 			img.Home = parentImg.Home
-		} else {
+		default:
 			img.Home = fmt.Sprintf("/home/%s", img.User)
 		}
 		return nil
@@ -620,10 +621,8 @@ func (g *Generator) generateContainerfile(boxName string) error {
 	// pre-installed; that's handled by the builder's package set).
 	if img.IsExternalBase && !strings.HasPrefix(img.From, "builder:") {
 		g.writeBootstrap(&b, img)
-	} else if !strings.HasPrefix(img.From, "builder:") {
-		// Internal base - reset to root for candy processing
-		b.WriteString("USER root\n\n")
 	} else {
+		// Internal base or builder rootfs - reset to root for candy processing
 		b.WriteString("USER root\n\n")
 	}
 
@@ -879,7 +878,7 @@ func (g *Generator) generateDataImageContainerfile(boxName string, img *Resolved
 	// Volume labels (so charly config knows what volumes data targets)
 	volumes, _ := CollectBoxVolume(g.Config, g.Candies, boxName, img.Home, nil)
 	if len(volumes) > 0 {
-		var labelVols []LabelVolumeEntry
+		labelVols := make([]LabelVolumeEntry, 0, len(volumes))
 		for _, v := range volumes {
 			shortName := strings.TrimPrefix(v.VolumeName, "charly-"+boxName+"-")
 			labelVols = append(labelVols, LabelVolumeEntry{Name: shortName, Path: v.ContainerPath})
@@ -1784,7 +1783,7 @@ func (g *Generator) writeLabels(b *strings.Builder, boxName string, candyOrder [
 	// Volumes: short form names (without charly-<image>- prefix)
 	volumes, _ := CollectBoxVolume(g.Config, g.Candies, boxName, img.Home, nil)
 	if len(volumes) > 0 {
-		var labelVols []LabelVolumeEntry
+		labelVols := make([]LabelVolumeEntry, 0, len(volumes))
 		for _, v := range volumes {
 			shortName := strings.TrimPrefix(v.VolumeName, "charly-"+boxName+"-")
 			labelVols = append(labelVols, LabelVolumeEntry{Name: shortName, Path: v.ContainerPath})

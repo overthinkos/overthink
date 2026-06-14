@@ -73,17 +73,18 @@ func (c *WlScreenshotCmd) Run() error {
 
 	// Detect available screenshot tool.
 	var captureCmd string
-	if execWlCmdSilent(venue.Exec, "command -v pixelflux-screenshot >/dev/null 2>&1") == nil {
+	switch {
+	case execWlCmdSilent(venue.Exec, "command -v pixelflux-screenshot >/dev/null 2>&1") == nil:
 		// selkies-labwc: use pixelflux rendering pipeline capture.
 		captureCmd = "pixelflux-screenshot"
-	} else if execWlCmdSilent(venue.Exec, "command -v grim >/dev/null 2>&1") == nil {
+	case execWlCmdSilent(venue.Exec, "command -v grim >/dev/null 2>&1") == nil:
 		// sway-desktop: use grim (wlr-screencopy).
 		if c.Region != "" {
 			captureCmd = fmt.Sprintf("grim -g %s -", shellQuote(c.Region))
 		} else {
 			captureCmd = fmt.Sprintf("grim -o %s -", shellQuote(c.Output))
 		}
-	} else {
+	default:
 		return fmt.Errorf("no screenshot tool available (need pixelflux-screenshot or grim)")
 	}
 

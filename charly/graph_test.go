@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"reflect"
 	"testing"
 )
@@ -98,8 +99,8 @@ func TestResolveCandyOrderCycle(t *testing.T) {
 		t.Error("expected cycle error, got nil")
 	}
 
-	cycleErr, ok := err.(*CycleError)
-	if !ok {
+	var cycleErr *CycleError
+	if !errors.As(err, &cycleErr) {
 		t.Errorf("expected CycleError, got %T", err)
 	} else if len(cycleErr.Cycle) == 0 {
 		t.Error("CycleError.Cycle is empty")

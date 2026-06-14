@@ -3,6 +3,7 @@ package main
 import (
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -552,7 +553,7 @@ func TestMergedSecretsIncludeCredentialBacked(t *testing.T) {
 	// perform: start with candy-owned, append credential-backed.
 	candyOwned := CollectSecretsFromLabels("openwebui", meta.Secret)
 	credBacked, _ := CollectCandySecretAccepts("openwebui", "", meta)
-	merged := append(candyOwned, credBacked...)
+	merged := append(slices.Clone(candyOwned), credBacked...)
 
 	// Expect 3 entries: 1 candy-owned + 2 credential-backed.
 	if len(merged) != 3 {

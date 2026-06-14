@@ -13,6 +13,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -653,7 +654,7 @@ func waitWorkloadReady(client dynamic.Interface, gvr schema.GroupVersionResource
 			}
 		}
 		if time.Now().After(deadline) {
-			return fmt.Errorf("timeout waiting for %s/%s Ready (last err: %v)", namespace, name, err)
+			return fmt.Errorf("timeout waiting for %s/%s Ready (last err: %w)", namespace, name, err)
 		}
 		time.Sleep(3 * time.Second)
 	}
@@ -838,7 +839,7 @@ func readYamlDocs(path string) ([]*unstructured.Unstructured, error) {
 	for {
 		raw := map[string]interface{}{}
 		if err := decoder.Decode(&raw); err != nil {
-			if err == io.EOF {
+			if errors.Is(err, io.EOF) {
 				break
 			}
 			return nil, fmt.Errorf("decoding %s: %w", path, err)

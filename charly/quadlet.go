@@ -241,14 +241,15 @@ func generateQuadlet(cfg QuadletConfig) string {
 	if cfg.Tunnel != nil && cfg.Tunnel.Provider == "tailscale" && len(cfg.Tunnel.Ports) > 0 {
 		for _, tp := range cfg.Tunnel.Ports {
 			port := fmt.Sprintf("%d", tp.Port)
-			if tp.Protocol == "udp" {
+			switch {
+			case tp.Protocol == "udp":
 				fmt.Fprintf(&b, "# Port %s: UDP — not tunneled (tailscale serve does not support UDP; accessible directly between tailnet nodes)\n", port)
-			} else if tp.Public {
+			case tp.Public:
 				flag := tailscaleFlag(tp.Protocol)
 				target := schemeTarget(tp.Protocol, tp.backend())
 				fmt.Fprintf(&b, "# Port %s: public (internet-accessible)\n", port)
 				fmt.Fprintf(&b, "ExecStartPost=tailscale funnel --bg %s=%s %s\n", flag, port, target)
-			} else {
+			default:
 				flag := tailscaleFlag(tp.Protocol)
 				target := schemeTarget(tp.Protocol, tp.backend())
 				proto := "https"

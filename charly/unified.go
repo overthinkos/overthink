@@ -1318,15 +1318,16 @@ func classifyDoc(node *yaml.Node) (docShape, error) {
 		// scalar child; root-shape map form has child keys that are names
 		// themselves (no `name:` key at the first level of the value).
 		val := inner.Content[i+1]
-		if rootShapeKeys[k] && kindKeysSet[k] {
+		switch {
+		case rootShapeKeys[k] && kindKeysSet[k]:
 			if mapHasKey(val, "name") {
 				hasKind = true
 			} else {
 				hasRoot = true
 			}
-		} else if rootShapeKeys[k] {
+		case rootShapeKeys[k]:
 			hasRoot = true
-		} else if kindKeysSet[k] {
+		case kindKeysSet[k]:
 			hasKind = true
 		}
 	}

@@ -237,6 +237,4 @@ func loadUnifiedForImport() (map[string]*VmSpec, bool, error) {
 }
 
 // osGetwd is a small indirection to make testing easier.
-var osGetwd = func() (string, error) {
-	return os.Getwd()
-}
+var osGetwd = os.Getwd

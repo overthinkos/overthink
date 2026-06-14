@@ -1083,7 +1083,7 @@ func mapInterface(iface LibvirtInterface) libvirtxml.DomainInterface {
 		out.Boot = &libvirtxml.DomainDeviceBoot{Order: uint(iface.Boot)}
 	}
 	if len(iface.PortForwards) > 0 {
-		var ranges []libvirtxml.DomainInterfaceSourcePortForwardRange
+		ranges := make([]libvirtxml.DomainInterfaceSourcePortForwardRange, 0, len(iface.PortForwards))
 		for _, pf := range iface.PortForwards {
 			r := libvirtxml.DomainInterfaceSourcePortForwardRange{Start: uint(pf.Start)}
 			if pf.To > 0 {

@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -419,7 +420,7 @@ func (c *BoxConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 		}
 	}
 
-	collectedSecrets := append(candyOwnedSecrets, credBackedSecrets...)
+	collectedSecrets := append(slices.Clone(candyOwnedSecrets), credBackedSecrets...)
 	collectedSecrets, unmatchedRefresh := ApplySecretRefresh(collectedSecrets, c.RefreshSecret)
 	for _, name := range unmatchedRefresh {
 		fmt.Fprintf(os.Stderr, "Warning: --refresh-secret %s matched no secret declared by %s\n", name, c.Box)

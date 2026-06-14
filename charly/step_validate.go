@@ -7,6 +7,7 @@ package main
 // rule set via PlanValidationContext.
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 )
@@ -78,7 +79,8 @@ func ValidatePlan(plan []Step, ctx PlanValidationContext) error {
 
 	// Pass 3: cycle detection via the shared topo-sort.
 	if _, err := topoSortSteps(plan, origin); err != nil {
-		if cycleErr, ok := err.(*CycleError); ok {
+		var cycleErr *CycleError
+		if errors.As(err, &cycleErr) {
 			return fmt.Errorf("%s: step depends_on cycle: %s",
 				ctx.OwnerLabel, strings.Join(cycleErr.Cycle, " -> "))
 		}

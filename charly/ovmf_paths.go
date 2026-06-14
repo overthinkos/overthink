@@ -96,10 +96,13 @@ func ovmfCandidatesForDistro(distroID string, secure bool) []OvmfPaths {
 	}
 
 	// Unknown distro — try the union of common paths.
-	merged := []OvmfPaths{}
-	merged = append(merged, ovmfCandidatesForDistro("fedora", secure)...)
-	merged = append(merged, ovmfCandidatesForDistro("arch", secure)...)
-	merged = append(merged, ovmfCandidatesForDistro("debian", secure)...)
+	fedora := ovmfCandidatesForDistro("fedora", secure)
+	arch := ovmfCandidatesForDistro("arch", secure)
+	debian := ovmfCandidatesForDistro("debian", secure)
+	merged := make([]OvmfPaths, 0, len(fedora)+len(arch)+len(debian))
+	merged = append(merged, fedora...)
+	merged = append(merged, arch...)
+	merged = append(merged, debian...)
 	return merged
 }
 

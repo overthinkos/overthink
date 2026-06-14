@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"strings"
 	"testing"
 )
@@ -509,8 +510,8 @@ func TestValidateMultipleErrors(t *testing.T) {
 		t.Error("expected errors")
 	}
 
-	valErr, ok := err.(*ValidationError)
-	if !ok {
+	var valErr *ValidationError
+	if !errors.As(err, &valErr) {
 		t.Fatalf("expected ValidationError, got %T", err)
 	}
 

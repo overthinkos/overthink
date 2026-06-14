@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"syscall"
 )
@@ -147,7 +148,7 @@ func (c *ShellCmd) Run() error {
 	name := containerNameInstance(c.Box, c.Instance)
 	if containerRunning(engine, name) {
 		// Exec path: inject env vars only (can't add volumes to running container)
-		execEnv := append(envVars, agentFwd.Env...)
+		execEnv := append(slices.Clone(envVars), agentFwd.Env...)
 		workDir := resolveWorkingDir(volumes, bindMounts, home, c.Box, c.Instance)
 		args := buildExecArgs(engine, name, uid, gid, c.Command, execEnv, workDir)
 		enginePath, err := findExecutable(EngineBinary(engine))

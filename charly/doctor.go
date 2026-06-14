@@ -736,7 +736,8 @@ func secretStorageChecks() []DoctorCheckResult {
 	} else {
 		state := GetKeyringState()
 		backend := resolveSecretBackend()
-		if state == KeyringLocked {
+		switch {
+		case state == KeyringLocked:
 			checks = append(checks, DoctorCheckResult{
 				Name:        "Secret backend",
 				Status:      CheckWarning,
@@ -744,13 +745,13 @@ func secretStorageChecks() []DoctorCheckResult {
 				Detail:      "keyring is locked — credentials unavailable until unlocked",
 				InstallHint: "Unlock your keyring, or run: charly config set secret_backend config",
 			})
-		} else if backend == "config" {
+		case backend == "config":
 			checks = append(checks, DoctorCheckResult{
 				Name:    "Secret backend",
 				Status:  CheckOK,
 				Version: "config file (explicit)",
 			})
-		} else {
+		default:
 			checks = append(checks, DoctorCheckResult{
 				Name:        "Secret backend",
 				Status:      CheckWarning,

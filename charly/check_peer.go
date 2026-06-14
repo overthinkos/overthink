@@ -65,7 +65,7 @@ func applyPeerVars(r *Runner, checks []Op, instance string) {
 // applyPeerVarsSteps is the plan-step counterpart (harness / iterate /
 // feature-run paths), flattening every step's embedded Op.
 func applyPeerVarsSteps(r *Runner, plan []Step, instance string) {
-	var checks []Op
+	checks := make([]Op, 0, len(plan))
 	for _, st := range plan {
 		checks = append(checks, st.Op)
 	}

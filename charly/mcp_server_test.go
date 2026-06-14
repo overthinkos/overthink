@@ -236,7 +236,7 @@ func TestMcpServer_ArgvReconstruction(t *testing.T) {
 	}
 
 	posByProp := map[string]*kong.Positional{}
-	var posOrder []string
+	posOrder := make([]string, 0, len(leaf.Positional))
 	for _, p := range leaf.Positional {
 		n := posPropName(p)
 		posByProp[n] = p

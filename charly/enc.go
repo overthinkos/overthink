@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"slices"
 	"strings"
 	"syscall"
 	"time"
@@ -477,7 +478,7 @@ func encMount(boxName, instance, volume string) error {
 			return fmt.Errorf("creating plain dir for %s: %w", m.Name, err)
 		}
 
-		gcArgs := append(extpassArgs, "-allow_other", cipherDir, plainDir)
+		gcArgs := append(slices.Clone(extpassArgs), "-allow_other", cipherDir, plainDir)
 		scopeUnit := fmt.Sprintf("charly-enc-%s-%s", deployStorageDir(boxName, instance), m.Name)
 		scopeArgs := append([]string{"--scope", "--user", "--unit=" + scopeUnit, "--", "gocryptfs"}, gcArgs...)
 		cmd := exec.Command("systemd-run", scopeArgs...)
@@ -707,7 +708,7 @@ func ensureEncryptedMounts(boxName, instance string, autoGenerate bool) error {
 			if err := os.MkdirAll(plainDir, 0700); err != nil {
 				return fmt.Errorf("creating plain dir for %s: %w", m.Name, err)
 			}
-			gcArgs := append(extpassArgs, "-allow_other", cipherDir, plainDir)
+			gcArgs := append(slices.Clone(extpassArgs), "-allow_other", cipherDir, plainDir)
 			scopeUnit := fmt.Sprintf("charly-enc-%s-%s", boxName, m.Name)
 			scopeArgs := append([]string{"--scope", "--user", "--unit=" + scopeUnit, "--", "gocryptfs"}, gcArgs...)
 			cmd := exec.Command("systemd-run", scopeArgs...)

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -815,7 +816,7 @@ func parseCandyYAML(path string) (*CandyYAML, error) {
 	for {
 		var node yaml.Node
 		if err := decoder.Decode(&node); err != nil {
-			if err == io.EOF {
+			if errors.Is(err, io.EOF) {
 				break
 			}
 			return nil, fmt.Errorf("%s: %w", path, err)

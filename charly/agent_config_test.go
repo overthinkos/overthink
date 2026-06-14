@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"strings"
 	"testing"
 )
@@ -46,10 +47,10 @@ func TestValidateAgentCatalog_OutputFormatBogus(t *testing.T) {
 }
 
 func TestResolveAI_NoAIs(t *testing.T) {
-	if _, _, err := ResolveAgent(nil, ""); err != ErrNoAgents {
+	if _, _, err := ResolveAgent(nil, ""); !errors.Is(err, ErrNoAgents) {
 		t.Errorf("expected ErrNoAgents, got %v", err)
 	}
-	if _, _, err := ResolveAgent(map[string]*AgentConfig{}, ""); err != ErrNoAgents {
+	if _, _, err := ResolveAgent(map[string]*AgentConfig{}, ""); !errors.Is(err, ErrNoAgents) {
 		t.Errorf("expected ErrNoAgents for empty map, got %v", err)
 	}
 }

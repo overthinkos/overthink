@@ -74,11 +74,12 @@ func (ll *LibvirtGraphicsListeners) UnmarshalYAML(value *yaml.Node) error {
 			return fmt.Errorf("graphics listen (mapping): %w", err)
 		}
 		if one.Type == "" {
-			if one.Address != "" {
+			switch {
+			case one.Address != "":
 				one.Type = "address"
-			} else if one.Network != "" {
+			case one.Network != "":
 				one.Type = "network"
-			} else {
+			default:
 				return fmt.Errorf("graphics listen: mapping must set `type:` (socket|address|network) or `address:`")
 			}
 		}
@@ -91,11 +92,12 @@ func (ll *LibvirtGraphicsListeners) UnmarshalYAML(value *yaml.Node) error {
 		}
 		for i := range list {
 			if list[i].Type == "" {
-				if list[i].Address != "" {
+				switch {
+				case list[i].Address != "":
 					list[i].Type = "address"
-				} else if list[i].Network != "" {
+				case list[i].Network != "":
 					list[i].Type = "network"
-				} else {
+				default:
 					return fmt.Errorf("graphics listen[%d]: missing `type:` and no inferrable default", i)
 				}
 			}

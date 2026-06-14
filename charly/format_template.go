@@ -137,9 +137,7 @@ var templateFuncs = template.FuncMap{
 	},
 
 	// replace performs string replacement.
-	"replace": func(s, old, new string) string {
-		return strings.ReplaceAll(s, old, new)
-	},
+	"replace": strings.ReplaceAll,
 
 	// join joins a string slice with a separator.
 	"join": func(elems interface{}, sep string) string {

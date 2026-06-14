@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"testing"
 )
 
@@ -148,7 +149,7 @@ func TestVMCollector_CollectError(t *testing.T) {
 	withMockLibvirtDomains(t, nil, wantErr, func() {
 		v := &VMCollector{c: &Collector{}}
 		_, err := v.Collect(context.Background(), CollectOpts{})
-		if err != wantErr {
+		if !errors.Is(err, wantErr) {
 			t.Fatalf("Collect error = %v, want %v", err, wantErr)
 		}
 	})

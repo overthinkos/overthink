@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -256,18 +257,7 @@ func runCaptureCmd(cmd *exec.Cmd) (string, string, int, error) {
 // in testrun.go to avoid an import cycle once the test-time Executor is
 // removed.
 func asExitErrorDeploy(err error, ee **exec.ExitError) bool {
-	for err != nil {
-		if e, ok := err.(*exec.ExitError); ok {
-			*ee = e
-			return true
-		}
-		u, ok := err.(interface{ Unwrap() error })
-		if !ok {
-			return false
-		}
-		err = u.Unwrap()
-	}
-	return false
+	return errors.As(err, ee)
 }
 
 // wrapReadErr is a small wrap helper so every executor's GetFile returns

@@ -502,9 +502,8 @@ func copyIntoJumpCommand(jump NestedJump, stagePath, remotePath string, mode uin
 // components. Missing user is "", missing port is 0.
 func parseSSHTarget(target string) (user, host string, port int) {
 	rest := target
-	if idx := strings.Index(rest, "@"); idx >= 0 {
-		user = rest[:idx]
-		rest = rest[idx+1:]
+	if u, r, ok := strings.Cut(rest, "@"); ok {
+		user, rest = u, r
 	}
 	if idx := strings.LastIndex(rest, ":"); idx >= 0 {
 		host = rest[:idx]

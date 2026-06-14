@@ -635,7 +635,7 @@ func (c *CheckLiveCmd) runLocalCheck() error {
 	if uf.Deploy != nil {
 		if dotted {
 			node = resolveNestedNode(uf.Deploy, c.Box)
-			root := c.Box[:strings.Index(c.Box, ".")]
+			root, _, _ := strings.Cut(c.Box, ".")
 			if entry, ok := uf.Deploy[root]; ok {
 				rn := entry
 				rootNode = &rn

@@ -307,7 +307,7 @@ func composePackages(userPkgs []string, distro string) []string {
 // `ssh` on Debian/Ubuntu (where the systemd unit is named `ssh.service`
 // — `sshd.service` is just a symlink that systemd refuses to enable).
 func composeRunCmd(spec *VmSpec, ci *VmCloudInit) []interface{} {
-	var runcmd []interface{}
+	runcmd := make([]interface{}, 0, 1+len(ci.RunCmd))
 	sshUnit := "sshd"
 	switch spec.Source.Distro {
 	case "debian", "ubuntu":
@@ -325,7 +325,7 @@ func composeRunCmd(spec *VmSpec, ci *VmCloudInit) []interface{} {
 // composeWriteFiles turns VmCloudInitFile entries into the
 // map-list shape cloud-init expects.
 func composeWriteFiles(files []VmCloudInitFile) []map[string]interface{} {
-	var out []map[string]interface{}
+	out := make([]map[string]interface{}, 0, len(files))
 	for _, f := range files {
 		m := map[string]interface{}{
 			"path":    f.Path,

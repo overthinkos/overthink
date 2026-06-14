@@ -225,7 +225,7 @@ func dbusNotifyRemoteStrict(ex DeployExecutor, title, body string) error {
 func dbusCallRemote(ex DeployExecutor, dest, path, method string, args []string) error {
 	charlyCmd, err := EnsureCharlyInVenue(context.Background(), ex, EmitOpts{})
 	if err != nil || charlyCmd == "" {
-		return fmt.Errorf("could not provide an invokable charly on the target %s for the D-Bus call: %v", ex.Venue(), err)
+		return fmt.Errorf("could not provide an invokable charly on the target %s for the D-Bus call: %w", ex.Venue(), err)
 	}
 	parts := []string{charlyCmd, "check", "dbus", "call", ".",
 		deployShellQuote(dest), deployShellQuote(path), deployShellQuote(method)}

@@ -90,12 +90,8 @@ func resolveISOBuilder() isoBuilder {
 		return isoBuilder{
 			Bin: bin,
 			Args: func(out string, files []string) []string {
-				args := []string{
-					"-as", "mkisofs",
-					"-volid", "cidata",
-					"-joliet", "-rock",
-					"-output", out,
-				}
+				args := make([]string, 0, 8+len(files))
+				args = append(args, "-as", "mkisofs", "-volid", "cidata", "-joliet", "-rock", "-output", out)
 				return append(args, files...)
 			},
 		}
@@ -104,11 +100,8 @@ func resolveISOBuilder() isoBuilder {
 		return isoBuilder{
 			Bin: bin,
 			Args: func(out string, files []string) []string {
-				args := []string{
-					"-volid", "cidata",
-					"-joliet", "-rock",
-					"-output", out,
-				}
+				args := make([]string, 0, 6+len(files))
+				args = append(args, "-volid", "cidata", "-joliet", "-rock", "-output", out)
 				return append(args, files...)
 			},
 		}
@@ -117,11 +110,8 @@ func resolveISOBuilder() isoBuilder {
 		return isoBuilder{
 			Bin: bin,
 			Args: func(out string, files []string) []string {
-				args := []string{
-					"-volid", "cidata",
-					"-joliet", "-rock",
-					"-output", out,
-				}
+				args := make([]string, 0, 6+len(files))
+				args = append(args, "-volid", "cidata", "-joliet", "-rock", "-output", out)
 				return append(args, files...)
 			},
 		}

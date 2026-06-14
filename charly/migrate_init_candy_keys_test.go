@@ -59,7 +59,11 @@ candy:
 		}
 	}
 	// The coincidental candy.web.layer_field OUTSIDE init: must be untouched (scope).
-	candySec := s[strings.Index(s, "candy:"):]
+	candyIdx := strings.Index(s, "candy:")
+	if candyIdx < 0 {
+		t.Fatalf("test fixture missing 'candy:' marker:\n%s", s)
+	}
+	candySec := s[candyIdx:] //nolint:gocritic // want the slice from the 'candy:' match onward, not after it
 	if !strings.Contains(candySec, "layer_field: not-an-init-key") {
 		t.Errorf("a layer_field key OUTSIDE init: must NOT be renamed (scope leak):\n%s", candySec)
 	}

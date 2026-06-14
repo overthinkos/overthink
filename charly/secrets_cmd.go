@@ -89,16 +89,17 @@ type SecretsSetCmd struct {
 
 func (c *SecretsSetCmd) Run() error {
 	var value string
-	if c.Generate {
+	switch {
+	case c.Generate:
 		b := make([]byte, 16)
 		if _, err := rand.Read(b); err != nil {
 			return fmt.Errorf("generating random value: %w", err)
 		}
 		value = hex.EncodeToString(b)
 		fmt.Println(value)
-	} else if c.Value != "" {
+	case c.Value != "":
 		value = c.Value
-	} else {
+	default:
 		var err error
 		value, err = promptPassword("Secret value: ")
 		if err != nil {

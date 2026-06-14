@@ -151,7 +151,7 @@ func (d AndroidDevice) InstallByPackage(spec ApkPackageSpec) (string, error) {
 	out, runErr := cmd.CombinedOutput()
 	trimmed := strings.TrimSpace(string(out))
 	if runErr != nil {
-		return trimmed, fmt.Errorf("install %s (source %s): %v: %s", spec.Package, spec.EffectiveSource(), runErr, trimmed)
+		return trimmed, fmt.Errorf("install %s (source %s): %w: %s", spec.Package, spec.EffectiveSource(), runErr, trimmed)
 	}
 	if !strings.Contains(trimmed, "Success") {
 		return trimmed, fmt.Errorf("install %s did not return Success: %s", spec.Package, trimmed)

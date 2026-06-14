@@ -10,6 +10,7 @@ package main
 // host. Exit code propagates.
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -59,7 +60,8 @@ func ReexecOverSSH(cli *CLI) int {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
-		if ee, ok := err.(*exec.ExitError); ok {
+		var ee *exec.ExitError
+		if errors.As(err, &ee) {
 			return ee.ExitCode()
 		}
 		fmt.Fprintf(os.Stderr, "charly: ssh %s: %v\n", target, err)

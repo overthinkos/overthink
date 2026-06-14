@@ -196,7 +196,8 @@ func removeBlock(src, key string) string {
 
 // buildServicesEntries parses legacy blocks into structured entries.
 func buildServicesEntries(serviceINI string, systemUnits []string) []map[string]interface{} {
-	var out []map[string]interface{}
+	programs := parseSupervisordPrograms(serviceINI)
+	out := make([]map[string]interface{}, 0, len(systemUnits)+len(programs))
 
 	for _, unit := range systemUnits {
 		name := strings.TrimSuffix(unit, ".service")
@@ -208,7 +209,7 @@ func buildServicesEntries(serviceINI string, systemUnits []string) []map[string]
 		})
 	}
 
-	for _, program := range parseSupervisordPrograms(serviceINI) {
+	for _, program := range programs {
 		entry := map[string]interface{}{
 			"name":   program.Name,
 			"enable": true,

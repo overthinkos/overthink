@@ -24,7 +24,7 @@ func TestWriteContextIgnore(t *testing.T) {
 		t.Fatalf("writeContextIgnore: %v", err)
 	}
 
-	var bodies []string
+	bodies := make([]string, 0, len(contextIgnoreFiles))
 	for _, name := range contextIgnoreFiles {
 		data, err := os.ReadFile(filepath.Join(dir, name))
 		if err != nil {

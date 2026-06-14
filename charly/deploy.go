@@ -1651,7 +1651,8 @@ func ResolveVolumeBacking(boxName, instance string, labelVolumes []VolumeMount, 
 
 		if hasOverride && (dv.Type == "bind" || dv.Type == "encrypted") {
 			var hostPath string
-			if dv.Type == "encrypted" {
+			switch {
+			case dv.Type == "encrypted":
 				if dv.Host != "" {
 					// Explicit per-volume path: /path/{cipher,plain}
 					hostPath = filepath.Join(expandHostHome(dv.Host), "plain")
@@ -1659,9 +1660,9 @@ func ResolveVolumeBacking(boxName, instance string, labelVolumes []VolumeMount, 
 					// Global default, per-deploy: <encStoragePath>/charly-<deploy>-<name>/{cipher,plain}
 					hostPath = encryptedPlainDir(encStoragePath, deployStorageDir(boxName, instance), shortName)
 				}
-			} else if dv.Host != "" {
+			case dv.Host != "":
 				hostPath = expandHostHome(dv.Host)
-			} else {
+			default:
 				// Auto path, per-deploy: <volumesPath>/<deploy>/<name>
 				hostPath = filepath.Join(volumesPath, deployStorageDir(boxName, instance), shortName)
 			}
@@ -1685,15 +1686,16 @@ func ResolveVolumeBacking(boxName, instance string, labelVolumes []VolumeMount, 
 		containerPath := ExpandPath(dv.Path, home)
 		if dv.Type == "bind" || dv.Type == "encrypted" {
 			var hostPath string
-			if dv.Type == "encrypted" {
+			switch {
+			case dv.Type == "encrypted":
 				if dv.Host != "" {
 					hostPath = filepath.Join(expandHostHome(dv.Host), "plain")
 				} else {
 					hostPath = encryptedPlainDir(encStoragePath, deployStorageDir(boxName, instance), dv.Name)
 				}
-			} else if dv.Host != "" {
+			case dv.Host != "":
 				hostPath = expandHostHome(dv.Host)
-			} else {
+			default:
 				hostPath = filepath.Join(volumesPath, deployStorageDir(boxName, instance), dv.Name)
 			}
 			bindMounts = append(bindMounts, ResolvedBindMount{

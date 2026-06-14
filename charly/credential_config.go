@@ -139,7 +139,7 @@ func HasPlaintextCredentials(cfg *RuntimeConfig) int {
 // PlaintextCredentialEntries returns all plaintext credential entries as
 // service/key pairs for migration or audit purposes.
 func PlaintextCredentialEntries(cfg *RuntimeConfig) []struct{ Service, Key, Value string } {
-	var entries []struct{ Service, Key, Value string }
+	entries := make([]struct{ Service, Key, Value string }, 0, len(cfg.VncPasswords))
 	for k, v := range cfg.VncPasswords {
 		service, key := parseCompositeKey(k)
 		entries = append(entries, struct{ Service, Key, Value string }{service, key, v})

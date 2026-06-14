@@ -137,11 +137,12 @@ func (t *PodUnifiedTarget) Status(ctx context.Context) (StatusInfo, error) {
 			continue
 		}
 		state := "stopped"
-		if strings.Contains(line, "running") {
+		switch {
+		case strings.Contains(line, "running"):
 			state = "running"
-		} else if strings.Contains(line, "paused") {
+		case strings.Contains(line, "paused"):
 			state = "paused"
-		} else if strings.Contains(line, "crashed") {
+		case strings.Contains(line, "crashed"):
 			state = "crashed"
 		}
 		return StatusInfo{
@@ -169,7 +170,8 @@ func (t *PodUnifiedTarget) Logs(ctx context.Context, opts LogsOpts) error {
 // Shell opens an interactive shell in the container via `charly shell`.
 // With cmd, runs it non-interactively.
 func (t *PodUnifiedTarget) Shell(ctx context.Context, cmd []string) error {
-	args := []string{"shell", t.NodeName}
+	args := make([]string, 0, 2+len(cmd))
+	args = append(args, "shell", t.NodeName)
 	args = append(args, cmd...)
 	return runCharlySubcommand(args...)
 }

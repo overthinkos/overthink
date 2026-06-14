@@ -231,7 +231,8 @@ func (t *VmUnifiedTarget) Logs(ctx context.Context, opts LogsOpts) error {
 // Shell sshes into the VM via `charly vm ssh`. With cmd, runs it non-
 // interactively and returns. Without cmd, opens an interactive session.
 func (t *VmUnifiedTarget) Shell(ctx context.Context, cmd []string) error {
-	args := []string{"vm", "ssh", t.vmEntityName()}
+	args := make([]string, 0, 3+len(cmd))
+	args = append(args, "vm", "ssh", t.vmEntityName())
 	args = append(args, cmd...)
 	return runCharlySubcommand(args...)
 }

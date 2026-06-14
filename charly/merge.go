@@ -3,6 +3,7 @@ package main
 import (
 	"archive/tar"
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -314,7 +315,7 @@ func mergeLayers(layers []v1.Layer) (v1.Layer, error) {
 		tr := tar.NewReader(rc)
 		for {
 			hdr, err := tr.Next()
-			if err == io.EOF {
+			if errors.Is(err, io.EOF) {
 				break
 			}
 			if err != nil {

@@ -465,11 +465,12 @@ type spaKeyDef struct {
 func spaDispatchCharKeyDown(client *CDPClient, ch string) error {
 	upper := strings.ToUpper(ch)
 	code := "Key" + upper
-	if ch == " " {
+	switch {
+	case ch == " ":
 		code = "Space"
-	} else if ch == "-" {
+	case ch == "-":
 		code = "Minus"
-	} else if ch >= "0" && ch <= "9" {
+	case ch >= "0" && ch <= "9":
 		code = "Digit" + ch
 	}
 	params := map[string]any{
@@ -489,11 +490,12 @@ func spaDispatchCharKeyDown(client *CDPClient, ch string) error {
 func spaDispatchCharKeyUp(client *CDPClient, ch string) error {
 	upper := strings.ToUpper(ch)
 	code := "Key" + upper
-	if ch == " " {
+	switch {
+	case ch == " ":
 		code = "Space"
-	} else if ch == "-" {
+	case ch == "-":
 		code = "Minus"
-	} else if ch >= "0" && ch <= "9" {
+	case ch >= "0" && ch <= "9":
 		code = "Digit" + ch
 	}
 	params := map[string]any{

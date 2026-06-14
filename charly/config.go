@@ -406,7 +406,8 @@ func (c *Config) ResolveBox(name string, calverTag string, dir string, opts Reso
 	// `from: builder:<name>` — non-registry base via a kind: bootstrap
 	// builder. Mutually exclusive with base:; pre-build phase produces
 	// a rootfs tarball, generator emits FROM scratch + ADD.
-	if img.From != "" {
+	switch {
+	case img.From != "":
 		if img.Base != "" {
 			return nil, fmt.Errorf("image %s: from: and base: are mutually exclusive", name)
 		}
@@ -414,10 +415,10 @@ func (c *Config) ResolveBox(name string, calverTag string, dir string, opts Reso
 		resolved.BootstrapBuilderImage = img.BootstrapBuilderImage
 		resolved.Base = "scratch"
 		resolved.IsExternalBase = true
-	} else if img.DataImage {
+	case img.DataImage:
 		resolved.Base = "scratch"
 		resolved.IsExternalBase = true
-	} else {
+	default:
 		// Resolve base: image -> defaults -> "quay.io/fedora/fedora:43"
 		resolved.Base = img.Base
 		if resolved.Base == "" {

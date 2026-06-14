@@ -48,7 +48,7 @@ func captureDomainScreenshot(l *libvirt.Libvirt, dom libvirt.Domain, screen uint
 		}
 		img, ferr := captureDomainScreenshotViaVirsh(dom.Name)
 		if ferr != nil {
-			return nil, fmt.Errorf("DomainScreenshot: %w (virsh fallback: %v)", err, ferr)
+			return nil, fmt.Errorf("DomainScreenshot: %w (virsh fallback: %w)", err, ferr)
 		}
 		return img, nil
 	}

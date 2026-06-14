@@ -641,7 +641,8 @@ func posOverlayShow(c *Op) []string {
 	return args
 }
 func posDbusCall(c *Op) []string {
-	args := []string{c.Dest, c.Path, c.Method}
+	args := make([]string, 0, 3+len(c.Args))
+	args = append(args, c.Dest, c.Path, c.Method)
 	args = append(args, c.Args...)
 	return args
 }
@@ -1216,7 +1217,7 @@ func runArtifactValidators(c *Op) error {
 	if c.ArtifactMinBytes > 0 {
 		info, err := os.Stat(c.Artifact)
 		if err != nil {
-			return fmt.Errorf("artifact %q not found: %v", c.Artifact, err)
+			return fmt.Errorf("artifact %q not found: %w", c.Artifact, err)
 		}
 		if info.Size() < int64(c.ArtifactMinBytes) {
 			return fmt.Errorf("artifact %q size %d < required min_bytes %d",
@@ -1259,12 +1260,12 @@ func assertArtifactMinDimensions(path, wxh string) error {
 	}
 	f, err := os.Open(path)
 	if err != nil {
-		return fmt.Errorf("artifact %q open: %v", path, err)
+		return fmt.Errorf("artifact %q open: %w", path, err)
 	}
 	defer f.Close() //nolint:errcheck
 	cfg, _, err := image.DecodeConfig(f)
 	if err != nil {
-		return fmt.Errorf("artifact %q decode-config: %v", path, err)
+		return fmt.Errorf("artifact %q decode-config: %w", path, err)
 	}
 	if cfg.Width < wantW || cfg.Height < wantH {
 		return fmt.Errorf("artifact %q dimensions %dx%d < required min %dx%d",
@@ -1281,12 +1282,12 @@ func assertArtifactMinDimensions(path, wxh string) error {
 func assertArtifactNotUniform(path string) error {
 	f, err := os.Open(path)
 	if err != nil {
-		return fmt.Errorf("artifact %q open: %v", path, err)
+		return fmt.Errorf("artifact %q open: %w", path, err)
 	}
 	defer f.Close() //nolint:errcheck
 	img, _, err := image.Decode(f)
 	if err != nil {
-		return fmt.Errorf("artifact %q decode: %v", path, err)
+		return fmt.Errorf("artifact %q decode: %w", path, err)
 	}
 	bounds := img.Bounds()
 	w := bounds.Dx()
@@ -1332,7 +1333,7 @@ func assertArtifactNotUniform(path string) error {
 func assertArtifactMinCastEvents(path string, minEvents int) error {
 	f, err := os.Open(path)
 	if err != nil {
-		return fmt.Errorf("artifact %q open: %v", path, err)
+		return fmt.Errorf("artifact %q open: %w", path, err)
 	}
 	defer f.Close() //nolint:errcheck
 	scan := bufio.NewScanner(f)
@@ -1344,7 +1345,7 @@ func assertArtifactMinCastEvents(path string, minEvents int) error {
 	}
 	var header map[string]any
 	if err := json.Unmarshal(scan.Bytes(), &header); err != nil {
-		return fmt.Errorf("artifact %q line 1: not a JSON object (asciinema header expected): %v", path, err)
+		return fmt.Errorf("artifact %q line 1: not a JSON object (asciinema header expected): %w", path, err)
 	}
 	if _, ok := header["version"]; !ok {
 		return fmt.Errorf("artifact %q line 1: JSON object missing %q field (not an asciinema cast header)", path, "version")
@@ -1360,7 +1361,7 @@ func assertArtifactMinCastEvents(path string, minEvents int) error {
 		}
 	}
 	if err := scan.Err(); err != nil {
-		return fmt.Errorf("artifact %q scan: %v", path, err)
+		return fmt.Errorf("artifact %q scan: %w", path, err)
 	}
 	return fmt.Errorf("artifact %q has %d events, want >= %d", path, events, minEvents)
 }

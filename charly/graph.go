@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 )
 
@@ -114,7 +115,7 @@ func ResolveCandyOrder(requested []string, layers map[string]*Candy, parentCandi
 
 		// Check for cycle
 		if visiting[name] {
-			cycle := append(path, name)
+			cycle := append(slices.Clone(path), name)
 			return &CycleError{Cycle: cycle}
 		}
 
@@ -124,7 +125,7 @@ func ResolveCandyOrder(requested []string, layers map[string]*Candy, parentCandi
 		}
 
 		visiting[name] = true
-		newPath := append(path, name)
+		newPath := append(slices.Clone(path), name)
 
 		// Add included candies (composition)
 		for _, included := range layer.IncludedCandy {

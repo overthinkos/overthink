@@ -47,9 +47,9 @@ func ParseSSHTarget(s string) (SSHTarget, error) {
 	}
 	t := SSHTarget{Port: 22}
 	rest := s
-	if i := strings.Index(rest, "@"); i >= 0 {
-		t.User = rest[:i]
-		rest = rest[i+1:]
+	if user, after, ok := strings.Cut(rest, "@"); ok {
+		t.User = user
+		rest = after
 	}
 	if i := strings.LastIndex(rest, ":"); i >= 0 {
 		t.Host = rest[:i]

@@ -308,7 +308,7 @@ func formatTunnelSummary(t *TunnelYAML) string {
 	if t.Public.All || t.Private.All {
 		return fmt.Sprintf("%s (all ports)", provider)
 	}
-	var ports []int
+	ports := make([]int, 0, len(t.Public.Ports)+len(t.Private.Ports))
 	ports = append(ports, t.Public.Ports...)
 	ports = append(ports, t.Private.Ports...)
 	if len(ports) > 0 {

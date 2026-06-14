@@ -220,9 +220,7 @@ func AcceptedEnvSet(accepts, requires []EnvDependency) map[string]bool {
 // validation-time substitution before runtime data is available).
 func resolveTemplate(tmpl, containerName string, portMap map[int]int) string {
 	out := strings.ReplaceAll(tmpl, "{{.ContainerName}}", containerName)
-	out = substPortTemplate(out, "{{.ContainerPort ", "}}", func(n int) string {
-		return strconv.Itoa(n)
-	})
+	out = substPortTemplate(out, "{{.ContainerPort ", "}}", strconv.Itoa)
 	out = substPortTemplate(out, "{{.HostPort ", "}}", func(n int) string {
 		if portMap != nil {
 			if h, ok := portMap[n]; ok {

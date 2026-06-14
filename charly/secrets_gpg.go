@@ -306,7 +306,8 @@ func requireGpg() error {
 // other prompts (overwrite, etc.); `--trust-model always` answers the
 // trust prompt without requiring an explicit `--batch` opt-in.
 func gpgEncryptFile(inputPath, outputPath string, recipients []string) error {
-	args := []string{"--batch", "--trust-model", "always", "--encrypt", "--armor", "--yes", "--output", outputPath}
+	args := make([]string, 0, 8+2*len(recipients)+1)
+	args = append(args, "--batch", "--trust-model", "always", "--encrypt", "--armor", "--yes", "--output", outputPath)
 	for _, r := range recipients {
 		args = append(args, "-r", r)
 	}
@@ -333,7 +334,8 @@ func gpgDecryptToBytes(path string) ([]byte, error) {
 // gpgEncryptBytes encrypts plaintext bytes to the given file for the recipients.
 // See gpgEncryptFile for the rationale on `--batch --trust-model always`.
 func gpgEncryptBytes(plaintext []byte, outputPath string, recipients []string) error {
-	args := []string{"--batch", "--trust-model", "always", "--encrypt", "--armor", "--yes", "--output", outputPath}
+	args := make([]string, 0, 8+2*len(recipients))
+	args = append(args, "--batch", "--trust-model", "always", "--encrypt", "--armor", "--yes", "--output", outputPath)
 	for _, r := range recipients {
 		args = append(args, "-r", r)
 	}

@@ -32,7 +32,7 @@ func normalizeRepoSpec(spec string) (repoPath, version string) {
 	// auto-prefix github.com. The dot-check distinguishes "github.com/foo"
 	// (already host-qualified) from "owner/repo".
 	if slashes := strings.Count(repoPath, "/"); slashes == 1 {
-		first := repoPath[:strings.Index(repoPath, "/")]
+		first, _, _ := strings.Cut(repoPath, "/")
 		if !strings.Contains(first, ".") {
 			repoPath = "github.com/" + repoPath
 		}

@@ -291,18 +291,14 @@ func migrationSteps() []MigrationStep {
 		// unified loader as every project charly.yml (Cutover E). Retargets
 		// ctx.HostDeployPath so the trailing calver-schema stamp lands on the
 		// renamed file. TouchesHost — never runs under remote-cache auto-migration.
-		{mustCalVer("2026.161.1554"), "host-charly-yml", true, func(c *MigrateContext) (bool, error) {
-			return MigrateHostCharlyYml(c)
-		}},
+		{mustCalVer("2026.161.1554"), "host-charly-yml", true, MigrateHostCharlyYml},
 		// 2026-06 ledger-candy-keys: rename the install-ledger json keys
 		// layer→candy / add_layer→add_candy and stamp each record with the
 		// ledger schema_version (Cutover F). The ledger is per-host deploy STATE
 		// the unified loader never sees, so it gets its OWN version gate
 		// (ReadDeployRecord/ReadCandyRecord hard-reject a record without
 		// schema_version). TouchesHost; walks ctx.LedgerRoot/{deploys,layers}.
-		{mustCalVer("2026.161.1649"), "ledger-candy-keys", true, func(c *MigrateContext) (bool, error) {
-			return MigrateLedgerCandyKeys(c)
-		}},
+		{mustCalVer("2026.161.1649"), "ledger-candy-keys", true, MigrateLedgerCandyKeys},
 		// 2026-06 candy-port-inheritance cutover: boxes no longer declare ports.
 		// The box-level `port:` field is RETIRED (published ports are inherited
 		// from the candy chain — CollectBoxPorts) and host mappings are

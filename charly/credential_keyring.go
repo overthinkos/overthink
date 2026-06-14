@@ -315,7 +315,7 @@ func isKeyringNotFound(err error) bool {
 	if errors.Is(err, ErrSSNotFound) {
 		return true
 	}
-	if err == keyring.ErrNotFound {
+	if errors.Is(err, keyring.ErrNotFound) {
 		return true
 	}
 	return strings.Contains(err.Error(), "secret not found")

@@ -172,7 +172,7 @@ func ApplySecretRefresh(secrets []CollectedSecret, refresh []string) ([]Collecte
 
 // CollectSecretsFromLabels reconstructs secrets from image label metadata.
 func CollectSecretsFromLabels(boxName string, labelSecrets []LabelSecretEntry) []CollectedSecret {
-	var secrets []CollectedSecret
+	secrets := make([]CollectedSecret, 0, len(labelSecrets))
 	for _, ls := range labelSecrets {
 		secrets = append(secrets, CollectedSecret{
 			Name:       "charly-" + boxName + "-" + ls.Name,
@@ -234,7 +234,8 @@ func ProvisionPodmanSecrets(engine, boxName, instance string, secrets []Collecte
 
 		val, source := resolveSecretValue(s, boxName, instance)
 		if val == "" {
-			if autoGenerate {
+			switch {
+			case autoGenerate:
 				// Auto-generate: reuse if same podman secret name already generated
 				if cached, ok := promptedValues[s.Name]; ok {
 					val = cached
@@ -243,7 +244,7 @@ func ProvisionPodmanSecrets(engine, boxName, instance string, secrets []Collecte
 					val, source = generateAndStoreSecret("charly/secret", s.Name)
 					promptedValues[s.Name] = val
 				}
-			} else if interactive {
+			case interactive:
 				if cached, ok := promptedValues[s.Name]; ok {
 					val = cached
 					source = "user input"
@@ -270,7 +271,7 @@ func ProvisionPodmanSecrets(engine, boxName, instance string, secrets []Collecte
 					val = entered
 					source = "user input"
 				}
-			} else {
+			default:
 				fmt.Fprintf(os.Stderr, "  %-40s → no value configured\n", s.Name)
 				fmt.Fprintf(os.Stderr, "\nWARNING: Secret '%s' has no value configured.\n", s.SecretName)
 				fmt.Fprintf(os.Stderr, "The container may fail to start properly.\n\n")
@@ -306,7 +307,7 @@ func ProvisionPodmanSecrets(engine, boxName, instance string, secrets []Collecte
 
 // SecretArgs returns --secret flags for container run (direct mode).
 func SecretArgs(secrets []CollectedSecret) []string {
-	var args []string
+	args := make([]string, 0, 2*len(secrets))
 	for _, s := range secrets {
 		args = append(args, "--secret", fmt.Sprintf("%s,target=%s", s.Name, s.Target))
 	}

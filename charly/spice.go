@@ -56,7 +56,7 @@ func (f *spiceConnectFlags) open(vmName string) (*SpiceSession, error) {
 		}
 		var port int
 		if _, err := fmt.Sscanf(parts[1], "%d", &port); err != nil {
-			return nil, fmt.Errorf("invalid port in --address: %v", err)
+			return nil, fmt.Errorf("invalid port in --address: %w", err)
 		}
 		return DialSpiceTCP(parts[0], port, f.Password)
 	}

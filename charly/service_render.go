@@ -367,9 +367,7 @@ func renderTemplateString(name, tmpl string, data interface{}) (string, error) {
 // adding its helpers here so its templates stay readable.
 func serviceRenderFuncs() template.FuncMap {
 	return template.FuncMap{
-		"join": func(s []string, sep string) string {
-			return strings.Join(s, sep)
-		},
+		"join": strings.Join,
 		// derefBool dereferences a *bool for template conditionals —
 		// callers check `{{if .AutoStart}}` for "explicitly set" then
 		// `{{derefBool .AutoStart}}` to get the true/false value.

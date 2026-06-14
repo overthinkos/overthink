@@ -403,7 +403,7 @@ func generatePodSpec(opts K8sGenerateOpts) map[string]any {
 
 	// Image pull secrets
 	if opts.Cluster != nil && len(opts.Cluster.ImageDefault.PullSecrets) > 0 {
-		var refs []map[string]any
+		refs := make([]map[string]any, 0, len(opts.Cluster.ImageDefault.PullSecrets))
 		for _, s := range opts.Cluster.ImageDefault.PullSecrets {
 			refs = append(refs, map[string]any{"name": s})
 		}
@@ -617,7 +617,7 @@ func accessMode(cluster *K8sSpec, access string) string {
 }
 
 func generatePVCs(opts K8sGenerateOpts) []map[string]any {
-	var out []map[string]any
+	out := make([]map[string]any, 0, len(opts.Deploy.Storage))
 	for _, s := range opts.Deploy.Storage {
 		spec := map[string]any{
 			"accessModes": []string{accessMode(opts.Cluster, s.Access)},
@@ -641,7 +641,7 @@ func generatePVCs(opts K8sGenerateOpts) []map[string]any {
 }
 
 func generateVolumeClaimTemplates(opts K8sGenerateOpts) []map[string]any {
-	var out []map[string]any
+	out := make([]map[string]any, 0, len(opts.Deploy.Storage))
 	for _, s := range opts.Deploy.Storage {
 		spec := map[string]any{
 			"accessModes": []string{accessMode(opts.Cluster, s.Access)},
@@ -665,7 +665,7 @@ func generateVolumeClaimTemplates(opts K8sGenerateOpts) []map[string]any {
 }
 
 func generateVolumeMounts(d DeploymentNode) []map[string]any {
-	var out []map[string]any
+	out := make([]map[string]any, 0, len(d.Storage))
 	for _, s := range d.Storage {
 		mount := s.Path
 		if mount == "" {

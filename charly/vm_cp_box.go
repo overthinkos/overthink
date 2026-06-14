@@ -229,6 +229,4 @@ func streamLoadAndTag(ctx context.Context, sshExec *SSHExecutor, de DeployExecut
 }
 
 // osExecCommand is a tiny indirection so tests can stub host command exec.
-var osExecCommand = func(ctx context.Context, name string, args ...string) *exec.Cmd {
-	return exec.CommandContext(ctx, name, args...)
-}
+var osExecCommand = exec.CommandContext

@@ -132,12 +132,10 @@ func MigrateSchemaV4(doc *yaml.Node) MigrateSchemaV4Result {
 			setRootKey(root, "deployments", "deploy", imgs)
 			result.Transforms = append(result.Transforms, "deployments.images.* → deployment.*")
 			changed = true
-		} else {
+		} else if renameRootKey(root, "deployments", "deploy") {
 			// deployments: is a flat map — rename key to deployment:
-			if renameRootKey(root, "deployments", "deploy") {
-				result.Transforms = append(result.Transforms, "deployments: → deployment:")
-				changed = true
-			}
+			result.Transforms = append(result.Transforms, "deployments: → deployment:")
+			changed = true
 		}
 	}
 

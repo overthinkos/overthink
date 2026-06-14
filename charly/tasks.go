@@ -435,8 +435,10 @@ func emitDownload(b *strings.Builder, t Op, img *ResolvedBox) error {
 		}
 	}
 
-	mounts := []string{SharedCacheMount("/tmp/downloads", "").String()}
-	mounts = append(mounts, taskCacheMounts(t, img)...)
+	cacheMounts := taskCacheMounts(t, img)
+	mounts := make([]string, 0, 1+len(cacheMounts))
+	mounts = append(mounts, SharedCacheMount("/tmp/downloads", "").String())
+	mounts = append(mounts, cacheMounts...)
 	b.WriteString("RUN " + strings.Join(mounts, " ") + " bash -c " + shellSingleQuote(cmd) + "\n")
 	return nil
 }

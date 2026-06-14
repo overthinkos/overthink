@@ -623,7 +623,7 @@ func (c *AppiumInstallAppCmd) Run() error {
 	}
 	remote := "/tmp/charly-appium-" + filepath.Base(c.Apk)
 	if out, cpErr := exec.Command(engine, "cp", c.Apk, containerName+":"+remote).CombinedOutput(); cpErr != nil {
-		return fmt.Errorf("staging APK into %s: %v: %s", containerName, cpErr, strings.TrimSpace(string(out)))
+		return fmt.Errorf("staging APK into %s: %w: %s", containerName, cpErr, strings.TrimSpace(string(out)))
 	}
 	// best-effort cleanup of the staged APK; failure is non-fatal
 	defer func() { _ = exec.Command(engine, "exec", containerName, "rm", "-f", remote).Run() }()
@@ -646,7 +646,7 @@ func (c *AppiumInstallAppCmd) Run() error {
 // appium find — element discovery + id print
 // ---------------------------------------------------------------------------
 
-// AppiumFindCmd: `charly check appium find <image> --selector <expr> [--strategy STRAT]`
+// AppiumFindCmd: `charly check appium find <image> --selector <expr> [--strategy STRATEGY]`
 // — finds the first element matching selector + strategy, prints the
 // W3C element id. Useful for chaining (a subsequent shell-driven call
 // could use the id), but in practice the recommended pattern is to

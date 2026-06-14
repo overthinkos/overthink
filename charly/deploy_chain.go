@@ -80,7 +80,7 @@ func ResolveDeployChain(roots map[string]DeploymentNode, dotted string, root Dep
 	// Walk remaining segments, stacking one hop per segment.
 	for i, seg := range parts[1:] {
 		traversed := strings.Join(parts[:i+1], ".")
-		if current.Nested == nil || len(current.Nested) == 0 {
+		if len(current.Nested) == 0 {
 			return nil, nil, fmt.Errorf("path %q: %q has no nested children", dotted, traversed)
 		}
 		child, ok := current.Nested[seg]

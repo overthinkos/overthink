@@ -439,7 +439,11 @@ func generatePodSpec(opts K8sGenerateOpts) map[string]any {
 				rp = "OnFailure"
 			}
 		}
-		podSpec["restartPolicy"] = strings.Title(strings.ReplaceAll(rp, "-", ""))
+		rpClean := strings.ReplaceAll(rp, "-", "")
+		if rpClean != "" {
+			rpClean = strings.ToUpper(rpClean[:1]) + rpClean[1:]
+		}
+		podSpec["restartPolicy"] = rpClean
 	}
 
 	return podSpec
@@ -514,10 +518,9 @@ func generateService(opts K8sGenerateOpts, workloadKind string) map[string]any {
 		"ports":    servicePorts,
 		"type":     "ClusterIP",
 	}
-	if workloadKind == "StatefulSet" {
-		// Headless companion is emitted separately; this is the regular one.
-		// (A follow-up could emit a second headless Service named <name>-headless.)
-	}
+	// For a StatefulSet the headless companion Service is emitted separately;
+	// this is the regular ClusterIP one. (A follow-up could emit a second
+	// headless Service named <name>-headless.)
 	return baseManifest("v1", "Service", opts, svcSpec)
 }
 

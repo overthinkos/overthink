@@ -616,7 +616,7 @@ func (c *CheckListRunsCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	runs, err := ListRuns(nil, cwd)
+	runs, err := ListRuns(context.TODO(), cwd)
 	if err != nil {
 		return err
 	}

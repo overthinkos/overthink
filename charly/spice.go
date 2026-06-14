@@ -141,7 +141,7 @@ type SpiceStatusCmd struct {
 }
 
 func (c *SpiceStatusCmd) Run() error {
-	s, err := c.spiceConnectFlags.open(c.Vm)
+	s, err := c.open(c.Vm)
 	if err != nil {
 		return err
 	}
@@ -182,7 +182,7 @@ type SpiceScreenshotCmd struct {
 }
 
 func (c *SpiceScreenshotCmd) Run() error {
-	s, err := c.spiceConnectFlags.open(c.Vm)
+	s, err := c.open(c.Vm)
 	if err != nil {
 		return err
 	}
@@ -226,7 +226,7 @@ type SpiceClickCmd struct {
 }
 
 func (c *SpiceClickCmd) Run() error {
-	s, err := c.spiceConnectFlags.open(c.Vm)
+	s, err := c.open(c.Vm)
 	if err != nil {
 		return err
 	}
@@ -254,7 +254,7 @@ type SpiceMouseCmd struct {
 }
 
 func (c *SpiceMouseCmd) Run() error {
-	s, err := c.spiceConnectFlags.open(c.Vm)
+	s, err := c.open(c.Vm)
 	if err != nil {
 		return err
 	}
@@ -275,7 +275,7 @@ type SpiceTypeCmd struct {
 }
 
 func (c *SpiceTypeCmd) Run() error {
-	s, err := c.spiceConnectFlags.open(c.Vm)
+	s, err := c.open(c.Vm)
 	if err != nil {
 		return err
 	}
@@ -309,7 +309,7 @@ type SpiceKeyCmd struct {
 }
 
 func (c *SpiceKeyCmd) Run() error {
-	s, err := c.spiceConnectFlags.open(c.Vm)
+	s, err := c.open(c.Vm)
 	if err != nil {
 		return err
 	}
@@ -338,7 +338,7 @@ type SpiceCursorCmd struct {
 }
 
 func (c *SpiceCursorCmd) Run() error {
-	s, err := c.spiceConnectFlags.open(c.Vm)
+	s, err := c.open(c.Vm)
 	if err != nil {
 		return err
 	}

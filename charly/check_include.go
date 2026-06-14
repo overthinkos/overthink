@@ -48,8 +48,8 @@ func expandPlanIncludes(uf *UnifiedFile, layers map[string]*Candy, plan []Step, 
 		// Stamp the source origin for reporting when not already set.
 		origin := kind + ":" + name
 		for i := range steps {
-			if steps[i].Op.Origin == "" {
-				steps[i].Op.Origin = origin
+			if steps[i].Origin == "" {
+				steps[i].Origin = origin
 			}
 		}
 		visited[ref] = true
@@ -73,7 +73,7 @@ func splitIncludeRef(ref string) (kind, name string, err error) {
 	kind = strings.TrimSpace(ref[:i])
 	name = strings.TrimSpace(ref[i+1:])
 	if name == "" {
-		return "", "", fmt.Errorf("include %q: missing entity name after %q:", ref, kind)
+		return "", "", fmt.Errorf("include %q: missing entity name after kind %q", ref, kind)
 	}
 	for _, k := range includeKinds {
 		if kind == k {

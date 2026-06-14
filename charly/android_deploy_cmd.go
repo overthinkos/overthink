@@ -99,7 +99,7 @@ func resolveAndroidDevice(spec *AndroidSpec, node *DeploymentNode, path string) 
 	}
 
 	if spec.Box == "" {
-		return AndroidDevice{}, fmt.Errorf("kind:android device has neither box: nor adb:")
+		return AndroidDevice{}, fmt.Errorf("kind:android device has neither box: nor adb: declared")
 	}
 
 	engine := "podman"

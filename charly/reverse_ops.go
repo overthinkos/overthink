@@ -410,9 +410,7 @@ func runSudoArgvReverse(argv []string, re ReverseExecutor) error {
 		// as `VAR=value VAR2=value2 cmd …` so the runner's bash sees them
 		// as command-scoped env.
 		var parts []string
-		for _, e := range envPrefix {
-			parts = append(parts, e)
-		}
+		parts = append(parts, envPrefix...)
 		for _, a := range argv {
 			parts = append(parts, shellQuoteSimple(a))
 		}

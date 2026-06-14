@@ -32,13 +32,11 @@ func (r *Runner) runSummarize(ctx context.Context, c *Op) CheckResult {
 	// Walk recorded results, filter by glob match.
 	results := r.Scenario.SnapshotResults()
 	var samples []time.Duration
-	matchedIDs := []string{}
 	for stepID, checkRes := range results {
 		for _, glob := range c.OverIDs {
 			matched, err := filepath.Match(glob, stepID)
 			if err == nil && matched {
 				samples = append(samples, checkRes.Elapsed)
-				matchedIDs = append(matchedIDs, stepID)
 				break
 			}
 		}

@@ -204,11 +204,11 @@ func validatePlanSteps(desc string, plan []Step, eid string) []string {
 		}
 		switch kw {
 		case KwRun, KwCheck:
-			if _, verbErr := step.Op.Kind(); verbErr != nil {
+			if _, verbErr := step.Kind(); verbErr != nil {
 				errs = append(errs, fmt.Sprintf("%s: step %d (%s): %v", eid, i, kw, verbErr))
 			}
 		case KwAgentRun, KwAgentCheck:
-			if _, verbErr := step.Op.Kind(); verbErr == nil {
+			if _, verbErr := step.Kind(); verbErr == nil {
 				errs = append(errs, fmt.Sprintf("%s: step %d (%s): agent steps must not carry an Op verb", eid, i, kw))
 			}
 		}

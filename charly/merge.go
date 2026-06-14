@@ -223,7 +223,7 @@ func (c *MergeCmd) runOne(cfg *Config, boxName string) error {
 		// fully correct (every individual layer digest is valid). We
 		// surface a clearer diagnostic + an env-var hook to capture the
 		// failing tarball for future investigation.
-		return fmt.Errorf("post-build merge optimization failed (image is functional but unmerged): %w\n  Diagnostic: set CHARLY_MERGE_KEEP_TMP=1 and re-run `charly box merge %s` to capture the failing /tmp/charly-merge-*.tar.\n  This is a known limitation against multi-stage RPM-installed images; the build itself succeeded and the image at this tag is correct.", err, imageRef)
+		return fmt.Errorf("post-build merge optimization failed (image is functional but unmerged): %w\n  Diagnostic: set CHARLY_MERGE_KEEP_TMP=1 and re-run `charly box merge %s` to capture the failing /tmp/charly-merge-*.tar.\n  This is a known limitation against multi-stage RPM-installed images; the build itself succeeded and the image at this tag is correct", err, imageRef)
 	}
 
 	newLayers, _ := newImg.Layers()

@@ -265,7 +265,7 @@ func TestRenderEnvdBody(t *testing.T) {
 	// Deterministic ordering (sorted keys).
 	lines := strings.Split(body, "\n")
 	// Find the FOO and PIXI_CACHE_DIR lines to check ordering.
-	var fooIdx, pixiIdx int = -1, -1
+	var fooIdx, pixiIdx = -1, -1
 	for i, l := range lines {
 		if strings.HasPrefix(l, "export FOO=") {
 			fooIdx = i

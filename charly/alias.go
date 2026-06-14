@@ -159,7 +159,7 @@ func CollectBoxAlias(cfg *Config, layers map[string]*Candy, boxName string) ([]C
 				continue
 			}
 			seen[a.Name] = true
-			result = append(result, CollectedAlias{Name: a.Name, Command: a.Command})
+			result = append(result, CollectedAlias(a))
 		}
 	}
 

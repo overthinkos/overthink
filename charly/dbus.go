@@ -312,5 +312,5 @@ func dbusNoBusError() error {
 
 func dbusNoToolError(venue string) error {
 	return fmt.Errorf("cannot send D-Bus call on target %s — charly could not be provided (copy-in failed) and 'gdbus' is not installed\n"+
-		"  Ensure glib2 is present (provides gdbus) for the fallback path.", venue)
+		"  Ensure glib2 is present (provides gdbus) for the fallback path", venue)
 }

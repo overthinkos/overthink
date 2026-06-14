@@ -382,7 +382,7 @@ func (g *Generator) generateContainerfile(boxName string) error {
 	var b strings.Builder
 
 	// Header
-	b.WriteString(fmt.Sprintf("# .build/%s/Containerfile (generated -- do not edit)\n\n", boxName))
+	fmt.Fprintf(&b, "# .build/%s/Containerfile (generated -- do not edit)\n\n", boxName)
 
 	// Resolve candy order for this image
 	var parentCandies map[string]bool
@@ -408,14 +408,14 @@ func (g *Generator) generateContainerfile(boxName string) error {
 	// `from: builder:<name>` images the resolved base is "scratch" and
 	// the rootfs gets ADDed right after the FROM ${BASE_IMAGE} line below.
 	resolvedBase := g.resolveBaseImage(img)
-	b.WriteString(fmt.Sprintf("ARG BASE_IMAGE=%s\n\n", resolvedBase))
+	fmt.Fprintf(&b, "ARG BASE_IMAGE=%s\n\n", resolvedBase)
 
 	// Emit scratch stages for each candy
 	for _, candyName := range candyOrder {
 		layer := g.Candies[candyName]
 		stageName := layer.Name // use short name for stage alias
-		b.WriteString(fmt.Sprintf("FROM scratch AS %s\n", stageName))
-		b.WriteString(fmt.Sprintf("COPY %s/ /\n\n", g.candyCopySource(candyName)))
+		fmt.Fprintf(&b, "FROM scratch AS %s\n", stageName)
+		fmt.Fprintf(&b, "COPY %s/ /\n\n", g.candyCopySource(candyName))
 	}
 
 	// Emit per-candy multi-stage build stages — fully config-driven from build.yml builder: section.
@@ -460,7 +460,7 @@ func (g *Generator) generateContainerfile(boxName string) error {
 		}
 		for i, ext := range layer.Extract() {
 			stageName := fmt.Sprintf("%s-extract-%d", candyName, i)
-			b.WriteString(fmt.Sprintf("FROM %s AS %s\n\n", ext.Source, stageName))
+			fmt.Fprintf(&b, "FROM %s AS %s\n\n", ext.Source, stageName)
 		}
 	}
 
@@ -505,7 +505,7 @@ func (g *Generator) generateContainerfile(boxName string) error {
 			return err
 		}
 		b.WriteString("FROM scratch AS traefik-routes\n")
-		b.WriteString(fmt.Sprintf("COPY .build/%s/traefik-routes.yml /routes.yml\n\n", boxName))
+		fmt.Fprintf(&b, "COPY .build/%s/traefik-routes.yml /routes.yml\n\n", boxName)
 	}
 
 	// Emit init system stages (fragment assembly or file copy)
@@ -555,7 +555,7 @@ func (g *Generator) generateContainerfile(boxName string) error {
 		}
 
 		// Emit scratch stage with COPY lines for fragments
-		b.WriteString(fmt.Sprintf("FROM scratch AS %s\n", def.StageName))
+		fmt.Fprintf(&b, "FROM scratch AS %s\n", def.StageName)
 		if def.StageHeaderCopy != "" {
 			headerCopy, err := g.rewriteHeaderCopyForRemote(def.StageHeaderCopy)
 			if err != nil {
@@ -611,7 +611,7 @@ func (g *Generator) generateContainerfile(boxName string) error {
 	// dotted-out under .build/<image>/.
 	if strings.HasPrefix(img.From, "builder:") {
 		builderName := strings.TrimPrefix(img.From, "builder:")
-		b.WriteString(fmt.Sprintf("ADD .build/%s/%s.tar.gz /\n\n", boxName, builderName))
+		fmt.Fprintf(&b, "ADD .build/%s/%s.tar.gz /\n\n", boxName, builderName)
 	}
 
 	// Bootstrap preamble (only for external base images, and only when
@@ -661,21 +661,21 @@ func (g *Generator) generateContainerfile(boxName string) error {
 				// Copy artifacts
 				for _, art := range builderDef.CopyArtifacts {
 					if !hasArtifacts {
-						b.WriteString(fmt.Sprintf("# Copy %s artifacts\n", builderName))
+						fmt.Fprintf(&b, "# Copy %s artifacts\n", builderName)
 						hasArtifacts = true
 					}
 					src := expandBuilderPath(art.Src, img)
 					dst := expandBuilderPath(art.Dst, img)
 					if art.Chown {
-						b.WriteString(fmt.Sprintf("COPY --from=%s --chown=%d:%d %s %s\n", stageName, img.UID, img.GID, src, dst))
+						fmt.Fprintf(&b, "COPY --from=%s --chown=%d:%d %s %s\n", stageName, img.UID, img.GID, src, dst)
 					} else {
-						b.WriteString(fmt.Sprintf("COPY --from=%s %s %s\n", stageName, src, dst))
+						fmt.Fprintf(&b, "COPY --from=%s %s %s\n", stageName, src, dst)
 					}
 				}
 
 				// Copy binary (only once, from first matching candy)
 				if builderDef.CopyBinary != nil && !binaryCopied {
-					b.WriteString(fmt.Sprintf("COPY --from=%s %s %s\n", stageName, builderDef.CopyBinary.Src, builderDef.CopyBinary.Dst))
+					fmt.Fprintf(&b, "COPY --from=%s %s %s\n", stageName, builderDef.CopyBinary.Src, builderDef.CopyBinary.Dst)
 					binaryCopied = true
 				}
 			}
@@ -699,8 +699,8 @@ func (g *Generator) generateContainerfile(boxName string) error {
 		}
 		for i, ext := range layer.Extract() {
 			stageName := fmt.Sprintf("%s-extract-%d", candyName, i)
-			b.WriteString(fmt.Sprintf("COPY --from=%s --chown=%d:%d %s %s\n",
-				stageName, img.UID, img.GID, ext.Path, ext.Dest))
+			fmt.Fprintf(&b, "COPY --from=%s --chown=%d:%d %s %s\n",
+				stageName, img.UID, img.GID, ext.Path, ext.Dest)
 		}
 	}
 	if hasExtract {
@@ -792,7 +792,7 @@ func (g *Generator) generateContainerfile(boxName string) error {
 	if caps != nil && caps.PreserveUser {
 		// leave as root — systemd handles user sessions
 	} else if !inUserMode || needsRootAfter {
-		b.WriteString(fmt.Sprintf("USER %d\n", img.UID))
+		fmt.Fprintf(&b, "USER %d\n", img.UID)
 	}
 
 	// Emit image metadata labels LAST so test/label edits don't invalidate
@@ -820,7 +820,7 @@ func (g *Generator) generateContainerfile(boxName string) error {
 func (g *Generator) generateDataImageContainerfile(boxName string, img *ResolvedBox, candyOrder []string, imageDir string) error {
 	var b strings.Builder
 
-	b.WriteString(fmt.Sprintf("# .build/%s/Containerfile (generated -- do not edit)\n\n", boxName))
+	fmt.Fprintf(&b, "# .build/%s/Containerfile (generated -- do not edit)\n\n", boxName)
 	b.WriteString("FROM scratch\n\n")
 
 	// Scratch stages for candies that have data
@@ -829,8 +829,8 @@ func (g *Generator) generateDataImageContainerfile(boxName string, img *Resolved
 		if !layer.HasData() {
 			continue
 		}
-		b.WriteString(fmt.Sprintf("FROM scratch AS %s\n", layer.Name))
-		b.WriteString(fmt.Sprintf("COPY %s/ /\n\n", g.candyCopySource(candyName)))
+		fmt.Fprintf(&b, "FROM scratch AS %s\n", layer.Name)
+		fmt.Fprintf(&b, "COPY %s/ /\n\n", g.candyCopySource(candyName))
 	}
 
 	// Main image: just data staging + labels
@@ -842,12 +842,12 @@ func (g *Generator) generateDataImageContainerfile(boxName string, img *Resolved
 	// Minimal labels (no init, no services, no ports). Content-derived
 	// EffectiveVersion (not the per-build tag) — see writeLabels.
 	b.WriteString("# Image metadata\n")
-	b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelVersion, img.EffectiveVersion))
-	b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelBox, boxName))
+	fmt.Fprintf(&b, "LABEL %s=%q\n", LabelVersion, img.EffectiveVersion)
+	fmt.Fprintf(&b, "LABEL %s=%q\n", LabelBox, boxName)
 	if img.Registry != "" {
-		b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelRegistry, img.Registry))
+		fmt.Fprintf(&b, "LABEL %s=%q\n", LabelRegistry, img.Registry)
 	}
-	b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelDataBox, "true"))
+	fmt.Fprintf(&b, "LABEL %s=%q\n", LabelDataBox, "true")
 
 	// Data entries label
 	var dataEntries []LabelDataEntry
@@ -991,7 +991,7 @@ func (g *Generator) writeBootstrap(b *strings.Builder, img *ResolvedBox) {
 
 	// Install bootstrap packages using distro's install command
 	if distroDef != nil && distroDef.Bootstrap.InstallCmd != "" && len(distroDef.Bootstrap.Package) > 0 {
-		b.WriteString(fmt.Sprintf("%s %s && \\\n    ", distroDef.Bootstrap.InstallCmd, strings.Join(distroDef.Bootstrap.Package, " ")))
+		fmt.Fprintf(b, "%s %s && \\\n    ", distroDef.Bootstrap.InstallCmd, strings.Join(distroDef.Bootstrap.Package, " "))
 	}
 
 	// Apply distro-specific workarounds
@@ -1013,16 +1013,16 @@ func (g *Generator) writeBootstrap(b *strings.Builder, img *ResolvedBox) {
 	//                        the policy layer blocks the collision case
 	//                        via auto/create semantics before we get here).
 	if img.UserAdopted {
-		b.WriteString(fmt.Sprintf("# User %s (uid=%d) adopted from base image (declared in build.yml distro.base_user) — no useradd needed\n\n", img.User, img.UID))
+		fmt.Fprintf(b, "# User %s (uid=%d) adopted from base image (declared in build.yml distro.base_user) — no useradd needed\n\n", img.User, img.UID)
 	} else {
-		b.WriteString(fmt.Sprintf("RUN if ! getent passwd %d >/dev/null 2>&1; then \\\n", img.UID))
-		b.WriteString(fmt.Sprintf("      (getent group %d >/dev/null 2>&1 || groupadd -g %d %s) && \\\n", img.GID, img.GID, img.User))
-		b.WriteString(fmt.Sprintf("      useradd -m -u %d -g %d -s /bin/bash %s; \\\n", img.UID, img.GID, img.User))
+		fmt.Fprintf(b, "RUN if ! getent passwd %d >/dev/null 2>&1; then \\\n", img.UID)
+		fmt.Fprintf(b, "      (getent group %d >/dev/null 2>&1 || groupadd -g %d %s) && \\\n", img.GID, img.GID, img.User)
+		fmt.Fprintf(b, "      useradd -m -u %d -g %d -s /bin/bash %s; \\\n", img.UID, img.GID, img.User)
 		b.WriteString("    fi\n\n")
 	}
 
 	// WORKDIR only - ENV comes from candy env files
-	b.WriteString(fmt.Sprintf("WORKDIR %s\n\n", img.Home))
+	fmt.Fprintf(b, "WORKDIR %s\n\n", img.Home)
 }
 
 // escapeContainerfileEnvValue prefixes `\` to every `$` so Docker's ENV-
@@ -1097,13 +1097,13 @@ func (g *Generator) writeCandyEnv(b *strings.Builder, candyOrder []string, img *
 		// Build-arg-style refs (TARGETARCH, ARCH) aren't used in env: blocks
 		// — they're handled via ARG/ENV pairs inserted by emitVarsEnv —
 		// so blanket-escaping `$` is safe here.
-		b.WriteString(fmt.Sprintf("ENV %s=\"%s\"\n", key, escapeContainerfileEnvValue(expanded.Vars[key])))
+		fmt.Fprintf(b, "ENV %s=\"%s\"\n", key, escapeContainerfileEnvValue(expanded.Vars[key]))
 	}
 
 	// Append to PATH if there are path additions
 	if len(expanded.PathAppend) > 0 {
 		pathAdditions := strings.Join(expanded.PathAppend, ":")
-		b.WriteString(fmt.Sprintf("ENV PATH=\"%s:${PATH}\"\n", pathAdditions))
+		fmt.Fprintf(b, "ENV PATH=\"%s:${PATH}\"\n", pathAdditions)
 	}
 
 	if len(expanded.Vars) > 0 || len(expanded.PathAppend) > 0 {
@@ -1122,7 +1122,7 @@ func (g *Generator) writeExpose(b *strings.Builder, boxName string) {
 	}
 	b.WriteString("# Exposed ports\n")
 	for _, port := range ports {
-		b.WriteString(fmt.Sprintf("EXPOSE %s\n", port))
+		fmt.Fprintf(b, "EXPOSE %s\n", port)
 	}
 	b.WriteString("\n")
 }
@@ -1161,8 +1161,8 @@ func (g *Generator) writeDataStaging(b *strings.Builder, candyOrder []string, im
 			// <layer.Name>` — for REMOTE candies candyName is the full @github map
 			// key, which is NOT a valid build-stage reference (podman would try to
 			// pull it as an image). Local candies: candyName == layer.Name (no-op).
-			b.WriteString(fmt.Sprintf("COPY --from=%s --chown=%d:%d %s %s\n",
-				layer.Name, img.UID, img.GID, srcPath, dstPath))
+			fmt.Fprintf(b, "COPY --from=%s --chown=%d:%d %s %s\n",
+				layer.Name, img.UID, img.GID, srcPath, dstPath)
 		}
 	}
 	if hasData {
@@ -1202,9 +1202,9 @@ func (g *Generator) generateTraefikRoutes(boxName string, candyOrder []string, i
 		// Deploy-time DNS override via DeploymentNode.DNS applies separately.
 		host := r.cfg.Host
 
-		b.WriteString(fmt.Sprintf("    %s:\n", r.name))
-		b.WriteString(fmt.Sprintf("      rule: \"Host(`%s`)\"\n", host))
-		b.WriteString(fmt.Sprintf("      service: %s\n", r.name))
+		fmt.Fprintf(&b, "    %s:\n", r.name)
+		fmt.Fprintf(&b, "      rule: \"Host(`%s`)\"\n", host)
+		fmt.Fprintf(&b, "      service: %s\n", r.name)
 		b.WriteString("      entryPoints:\n")
 		b.WriteString("        - websecure\n")
 		b.WriteString("      tls:\n")
@@ -1213,10 +1213,10 @@ func (g *Generator) generateTraefikRoutes(boxName string, candyOrder []string, i
 
 	b.WriteString("  services:\n")
 	for _, r := range routes {
-		b.WriteString(fmt.Sprintf("    %s:\n", r.name))
+		fmt.Fprintf(&b, "    %s:\n", r.name)
 		b.WriteString("      loadBalancer:\n")
 		b.WriteString("        servers:\n")
-		b.WriteString(fmt.Sprintf("          - url: \"http://127.0.0.1:%s\"\n", r.cfg.Port))
+		fmt.Fprintf(&b, "          - url: \"http://127.0.0.1:%s\"\n", r.cfg.Port)
 	}
 
 	imageDir := filepath.Join(g.BuildDir, boxName)
@@ -1364,7 +1364,7 @@ func (g *Generator) writeCandySteps(b *strings.Builder, candyName string, img *R
 	layer := g.Candies[candyName]
 	stageName := layer.Name // short name used as scratch stage alias
 
-	b.WriteString(fmt.Sprintf("# Layer: %s\n", candyName))
+	fmt.Fprintf(b, "# Layer: %s\n", candyName)
 
 	// Track if we've switched to user mode
 	asUser := false
@@ -1442,7 +1442,7 @@ func (g *Generator) writeCandySteps(b *strings.Builder, candyName string, img *R
 		if s, ok := step.(*LocalPkgInstallStep); ok {
 			run, err := renderLocalPkgImageInstall(s, g.DevLocalPkg, filepath.Join(g.BuildDir, img.Name), img.Name)
 			if err != nil {
-				b.WriteString(fmt.Sprintf("# localpkg render error: %v\n", err))
+				fmt.Fprintf(b, "# localpkg render error: %v\n", err)
 			} else {
 				b.WriteString(run)
 			}
@@ -1458,7 +1458,7 @@ func (g *Generator) writeCandySteps(b *strings.Builder, candyName string, img *R
 		finalUser, err := g.emitTasks(b, layer, img, layer.runOps(), buildDir, contextRelPrefix, "0")
 		if err != nil {
 			// Phase 0: log but continue; validator should catch this earlier.
-			b.WriteString(fmt.Sprintf("# emitTasks error: %v\n", err))
+			fmt.Fprintf(b, "# emitTasks error: %v\n", err)
 		}
 		if finalUser != "0" && finalUser != "root" {
 			// Tasks ended in non-root state; reset for builders/user.yml that
@@ -1478,7 +1478,7 @@ func (g *Generator) writeCandySteps(b *strings.Builder, candyName string, img *R
 				continue
 			}
 			if !asUser {
-				b.WriteString(fmt.Sprintf("USER %d\n", img.UID))
+				fmt.Fprintf(b, "USER %d\n", img.UID)
 				asUser = true
 			}
 			ctx := &BuildStageContext{
@@ -1714,23 +1714,23 @@ func (g *Generator) writeLabels(b *strings.Builder, boxName string, candyOrder [
 	// shift and cache-misses don't cascade. See effective_version.go. Resolution
 	// prefers this label over the tag (local_image.go); it is also the
 	// "is this an charly box?" presence sentinel (ExtractMetadata).
-	b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelVersion, img.EffectiveVersion))
-	b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelBox, boxName))
-	b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelUID, strconv.Itoa(img.UID)))
-	b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelGID, strconv.Itoa(img.GID)))
-	b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelUser, img.User))
-	b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelHome, img.Home))
+	fmt.Fprintf(b, "LABEL %s=%q\n", LabelVersion, img.EffectiveVersion)
+	fmt.Fprintf(b, "LABEL %s=%q\n", LabelBox, boxName)
+	fmt.Fprintf(b, "LABEL %s=%q\n", LabelUID, strconv.Itoa(img.UID))
+	fmt.Fprintf(b, "LABEL %s=%q\n", LabelGID, strconv.Itoa(img.GID))
+	fmt.Fprintf(b, "LABEL %s=%q\n", LabelUser, img.User)
+	fmt.Fprintf(b, "LABEL %s=%q\n", LabelHome, img.Home)
 
 	// Conditional string labels (omitted when empty)
 	if img.Registry != "" {
-		b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelRegistry, img.Registry))
+		fmt.Fprintf(b, "LABEL %s=%q\n", LabelRegistry, img.Registry)
 	}
 	// Bootc-flavored compositions emit the internal round-trip label so
 	// deploy-time consumers (labels.go ExtractMetadata) continue to see
 	// meta.Bootc=true. The signal is candy-derived now (preserve_user)
 	// rather than img.Bootc.
 	if img.CandyCaps != nil && img.CandyCaps.PreserveUser {
-		b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelBootc, "true"))
+		fmt.Fprintf(b, "LABEL %s=%q\n", LabelBootc, "true")
 	}
 	// Candy-contributed OCI labels (capabilities.oci_labels). Includes
 	// dev.containers.bootc=true emitted from the bootc-config candy when its
@@ -1743,11 +1743,11 @@ func (g *Generator) writeLabels(b *strings.Builder, boxName string, candyOrder [
 		}
 		sort.Strings(keys)
 		for _, k := range keys {
-			b.WriteString(fmt.Sprintf("LABEL %s=%q\n", k, img.CandyCaps.OCILabels[k]))
+			fmt.Fprintf(b, "LABEL %s=%q\n", k, img.CandyCaps.OCILabels[k])
 		}
 	}
 	if img.Network != "" {
-		b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelNetwork, img.Network))
+		fmt.Fprintf(b, "LABEL %s=%q\n", LabelNetwork, img.Network)
 	}
 	// Schema v4: LabelEngine / LabelDNS / LabelAcmeEmail removed —
 	// deployment choices, not image declarations. Deploy-time values
@@ -1844,7 +1844,7 @@ func (g *Generator) writeLabels(b *strings.Builder, boxName string, candyOrder [
 	if img.InitConfig != nil {
 		labelInitSystem, labelInitDef := img.InitConfig.ResolveInitSystem(g.Candies, candyOrder, "")
 		if labelInitSystem != "" && labelInitDef != nil {
-			b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelInit, labelInitSystem))
+			fmt.Fprintf(b, "LABEL %s=%q\n", LabelInit, labelInitSystem)
 			// Per-init service-name list (legacy candy-name summary; kept for
 			// `charly service status/restart` CLI ergonomics).
 			var serviceNames []string
@@ -2093,7 +2093,7 @@ func (g *Generator) writeLabels(b *strings.Builder, boxName string, candyOrder [
 	skillPath := filepath.Join(g.Dir, "plugins", "charly-images", "skills", boxName, "SKILL.md")
 	if _, err := os.Stat(skillPath); err == nil {
 		skillURL := fmt.Sprintf("https://github.com/overthinkos/overthink-plugins/blob/main/charly-images/skills/%s/SKILL.md", boxName)
-		b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelSkill, skillURL))
+		fmt.Fprintf(b, "LABEL %s=%q\n", LabelSkill, skillURL)
 	}
 
 	// Status and info: the box's effective status is the WORST of its own
@@ -2115,12 +2115,12 @@ func (g *Generator) writeLabels(b *strings.Builder, boxName string, candyOrder [
 		}
 	}
 	resolvedStatus := resolveStatus(effectiveStatus)
-	b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelStatus, resolvedStatus))
+	fmt.Fprintf(b, "LABEL %s=%q\n", LabelStatus, resolvedStatus)
 
 	// Acceptance-depth rung — the per-box check_level gating `charly check run
 	// <bed>` (see check_level.go). Always emitted (normalized to the default
 	// rung) so a bed runner reading labels never sees an empty value.
-	b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelCheckLevel, ResolveCheckLevel(img.CheckLevel)))
+	fmt.Fprintf(b, "LABEL %s=%q\n", LabelCheckLevel, ResolveCheckLevel(img.CheckLevel))
 	if len(infoParts) > 0 {
 		// Collapse block-scalar newlines so the value is one valid LABEL line,
 		// then single-quote (NOT %q): a description may legitimately mention a
@@ -2129,7 +2129,7 @@ func (g *Generator) writeLabels(b *strings.Builder, boxName string, candyOrder [
 		// on, e.g., the `<` in ${PEER_HOST:<subject>}. shellSingleQuote matches
 		// how every JSON label is emitted (no shell/Dockerfile expansion).
 		combinedInfo := strings.ReplaceAll(strings.Join(infoParts, "; "), "\n", " ")
-		b.WriteString(fmt.Sprintf("LABEL %s=%s\n", LabelInfo, shellSingleQuote(combinedInfo)))
+		fmt.Fprintf(b, "LABEL %s=%s\n", LabelInfo, shellSingleQuote(combinedInfo))
 	}
 
 	// Candy versions: map of candy name -> CalVer for candies with version set
@@ -2192,7 +2192,7 @@ func (g *Generator) writeLabels(b *strings.Builder, boxName string, candyOrder [
 	// Data image flag
 	imgConfig := g.Config.Box[boxName]
 	if imgConfig.DataImage {
-		b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelDataBox, "true"))
+		fmt.Fprintf(b, "LABEL %s=%q\n", LabelDataBox, "true")
 	}
 
 	b.WriteString("\n")
@@ -2212,7 +2212,7 @@ func writeJSONLabel[T any](b *strings.Builder, key string, value T) {
 	// Wrap in single-quoted form with proper '\'' escaping so embedded single
 	// quotes (common inside test command strings like awk '{print $1}') don't
 	// terminate the LABEL value and trip podman's key=value parser.
-	b.WriteString(fmt.Sprintf("LABEL %s=%s\n", key, shellSingleQuote(s)))
+	fmt.Fprintf(b, "LABEL %s=%s\n", key, shellSingleQuote(s))
 }
 
 // resolveStatus returns the effective status string. Empty defaults to "testing".

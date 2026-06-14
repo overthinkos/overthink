@@ -68,7 +68,7 @@ func RunCheckLive(ctx context.Context, deployment, scoreName string, plan []Step
 
 	// Defensive pod check on scored steps (validator catches earlier).
 	for _, e := range entries {
-		if isScored(e.step) && e.step.Op.Pod == "" {
+		if isScored(e.step) && e.step.Pod == "" {
 			return nil, fmt.Errorf("scored step %q has empty pod field — refusing to score", e.id)
 		}
 	}
@@ -86,7 +86,7 @@ func RunCheckLive(ctx context.Context, deployment, scoreName string, plan []Step
 		if len(bucket) == 0 {
 			continue
 		}
-		pod := bucket[0].step.Op.Pod
+		pod := bucket[0].step.Pod
 
 		var ephemeralCleanup func(bool)
 		if pod != "" && isEphemeralDeploy(deployRoots, pod) {
@@ -160,7 +160,7 @@ func RunCheckLive(ctx context.Context, deployment, scoreName string, plan []Step
 						ID:     e.id,
 						Origin: "pod:" + pod,
 						Text:   e.step.KeywordText(),
-						Tag:    EffectiveTags(e.step.Op.Tag),
+						Tag:    EffectiveTags(e.step.Tag),
 						Status: "fail",
 					})
 					out.Summary.Total++
@@ -187,7 +187,7 @@ func RunCheckLive(ctx context.Context, deployment, scoreName string, plan []Step
 				ID:      e.id,
 				Origin:  "pod:" + pod,
 				Text:    e.step.KeywordText(),
-				Tag:     EffectiveTags(e.step.Op.Tag),
+				Tag:     EffectiveTags(e.step.Tag),
 				Keyword: string(keywordOf(&e.step)),
 				Status:  status,
 			}
@@ -231,9 +231,9 @@ func RunCheckLive(ctx context.Context, deployment, scoreName string, plan []Step
 		}
 		out.Step = append(out.Step, StepScore{
 			ID:            e.id,
-			Origin:        "pod:" + e.step.Op.Pod,
+			Origin:        "pod:" + e.step.Pod,
 			Text:          e.step.KeywordText(),
-			Tag:           EffectiveTags(e.step.Op.Tag),
+			Tag:           EffectiveTags(e.step.Tag),
 			Status:        "fail",
 			SkippedReason: "cycle: step is part of a depends_on cycle",
 		})
@@ -254,7 +254,7 @@ func topoSortScored(entries []scoredStep) (ordered, cyclic []scoredStep) {
 	indeg := make([]int, len(entries))
 	fwd := make([][]int, len(entries))
 	for i, e := range entries {
-		for _, dep := range e.step.Op.DependsOn {
+		for _, dep := range e.step.DependsOn {
 			if d, ok := idToIdx[dep]; ok {
 				fwd[d] = append(fwd[d], i)
 				indeg[i]++
@@ -306,15 +306,15 @@ func groupScoredByPod(sorted []scoredStep) [][]scoredStep {
 	}
 	var buckets [][]scoredStep
 	cur := []scoredStep{sorted[0]}
-	curPod := sorted[0].step.Op.Pod
+	curPod := sorted[0].step.Pod
 	for _, e := range sorted[1:] {
-		if e.step.Op.Pod == curPod {
+		if e.step.Pod == curPod {
 			cur = append(cur, e)
 			continue
 		}
 		buckets = append(buckets, cur)
 		cur = []scoredStep{e}
-		curPod = e.step.Op.Pod
+		curPod = e.step.Pod
 	}
 	buckets = append(buckets, cur)
 	return buckets
@@ -334,7 +334,7 @@ func skippedStepScore(e scoredStep, pod, blockedBy string) StepScore {
 		ID:            e.id,
 		Origin:        "pod:" + pod,
 		Text:          e.step.KeywordText(),
-		Tag:           EffectiveTags(e.step.Op.Tag),
+		Tag:           EffectiveTags(e.step.Tag),
 		Status:        "skipped",
 		SkippedReason: "dep-unmet: " + blockedBy,
 	}
@@ -373,14 +373,14 @@ func synthesizeScoreBaseline(scoreName string, plan []Step) ([]StepScore, map[st
 		id := EffectiveStepID(&s, scoredPlanOrigin, i)
 		out = append(out, StepScore{
 			ID:      id,
-			Origin:  "pod:" + s.Op.Pod,
+			Origin:  "pod:" + s.Pod,
 			Text:    s.KeywordText(),
-			Tag:     EffectiveTags(s.Op.Tag),
+			Tag:     EffectiveTags(s.Tag),
 			Keyword: string(keywordOf(&s)),
 			Status:  "fail",
 		})
 		fps[id] = FingerprintStep(s)
-		tagFps[id] = FingerprintTags(s.Op.Tag)
+		tagFps[id] = FingerprintTags(s.Tag)
 	}
 	return out, fps, tagFps
 }

@@ -730,7 +730,7 @@ func (t *VmDeployTarget) execBuilder(ctx context.Context, s *BuilderStep, plan *
 				fmt.Fprintf(os.Stderr, "VmDeployTarget: skipping builder step %q (--skip-incompatible)\n", s.Builder)
 				return nil
 			}
-			return fmt.Errorf("builder %q on VM target has no phase.install.host cell in build.yml (candy=%s). Run with --skip-incompatible to skip, or add the host cell.", s.Builder, s.CandyName)
+			return fmt.Errorf("builder %q on VM target has no phase.install.host cell in build.yml (candy=%s). Run with --skip-incompatible to skip, or add the host cell", s.Builder, s.CandyName)
 		}
 		return t.execHomeArtifactBuilder(ctx, s, opts)
 	}

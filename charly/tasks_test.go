@@ -541,7 +541,7 @@ func TestEmitTasks_OrderPreserved(t *testing.T) {
 	if idx1 < 0 || idxCopy < 0 || idx2 < 0 {
 		t.Fatalf("missing directive: mkdir1=%d copy=%d mkdir2=%d\n%s", idx1, idxCopy, idx2, out)
 	}
-	if !(idx1 < idxCopy && idxCopy < idx2) {
+	if idx1 >= idxCopy || idxCopy >= idx2 {
 		t.Errorf("order violated: mkdir1=%d copy=%d mkdir2=%d\n%s", idx1, idxCopy, idx2, out)
 	}
 }
@@ -637,7 +637,7 @@ func TestEmitVarsEnv_SortedKeys(t *testing.T) {
 	idxA := strings.Index(out, "ENV ALPHA")
 	idxM := strings.Index(out, "ENV MIDDLE")
 	idxZ := strings.Index(out, "ENV ZETA")
-	if !(idxA < idxM && idxM < idxZ) {
+	if idxA >= idxM || idxM >= idxZ {
 		t.Errorf("vars should be emitted in sorted order:\n%s", out)
 	}
 }

@@ -107,7 +107,7 @@ func TestEnsureScoreImages_EmptyPlan(t *testing.T) {
 // TestEnsureImagePresent_EmptyImageErrors guards against silent
 // no-ops on empty input.
 func TestEnsureImagePresent_EmptyImageErrors(t *testing.T) {
-	err := EnsureImagePresent(nil, "", nil, "")
+	err := EnsureImagePresent(context.TODO(), "", nil, "")
 	if err == nil {
 		t.Error("expected error on empty image identifier")
 	}

@@ -34,7 +34,7 @@ func topoSortSteps(steps []Step, origin string) ([]Step, error) {
 	indeg := make([]int, len(steps))
 	fwd := make([][]int, len(steps))
 	for i, s := range steps {
-		for _, dep := range s.Op.DependsOn {
+		for _, dep := range s.DependsOn {
 			depIdx, ok := idToIdx[dep]
 			if !ok {
 				continue // dangling ref (validator catches earlier; defensive)
@@ -78,11 +78,11 @@ func topoSortSteps(steps []Step, origin string) ([]Step, error) {
 	return out, nil
 }
 
-// firstUnmetDepStep returns the first dep id in s.Op.DependsOn whose verdict is
+// firstUnmetDepStep returns the first dep id in s.DependsOn whose verdict is
 // anything other than "pass" (or that is unknown / not yet run). Returns "" if
 // every dep passed (or the step has no deps).
 func firstUnmetDepStep(s Step, verdictByID map[string]string) string {
-	for _, dep := range s.Op.DependsOn {
+	for _, dep := range s.DependsOn {
 		v, ok := verdictByID[dep]
 		if !ok || v != "pass" {
 			return dep

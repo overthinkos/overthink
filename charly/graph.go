@@ -301,7 +301,9 @@ func topoSort(graph map[string][]string) ([]string, error) {
 			inDegree[node] = 0
 		}
 		for _, dep := range graph[node] {
-			inDegree[dep] = inDegree[dep] // ensure dep exists in map
+			if _, ok := inDegree[dep]; !ok {
+				inDegree[dep] = 0
+			}
 		}
 	}
 

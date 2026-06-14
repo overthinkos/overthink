@@ -243,7 +243,7 @@ func (c *AppiumSessionCreateCmd) Run() error {
 	}
 	sid := wd.SessionID()
 	if sid == "" {
-		return fmt.Errorf("Appium session created but SessionID was empty")
+		return fmt.Errorf("appium session created but SessionID was empty")
 	}
 	sess := &AppiumSession{
 		SessionID: sid,

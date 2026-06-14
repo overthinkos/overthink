@@ -25,7 +25,7 @@ func bakeableSteps(plan []Step) []Step {
 		switch {
 		case s.Check != "" || s.AgentCheck != "":
 			out = append(out, s)
-		case s.Run != "" && s.Op.InContext(CtxRuntime):
+		case s.Run != "" && s.InContext(CtxRuntime):
 			out = append(out, s)
 		}
 	}
@@ -90,14 +90,14 @@ func MergeDeployDescriptions(baked *LabelDescriptionSet, localPlan []Step, origi
 	locByID := map[string]loc{}
 	for li := range baked.Deploy {
 		for si := range baked.Deploy[li].Plan {
-			if id := baked.Deploy[li].Plan[si].Op.ID; id != "" {
+			if id := baked.Deploy[li].Plan[si].ID; id != "" {
 				locByID[id] = loc{li, si}
 			}
 		}
 	}
 	var fresh []Step
 	for _, st := range localPlan {
-		if id := st.Op.ID; id != "" {
+		if id := st.ID; id != "" {
 			if l, ok := locByID[id]; ok {
 				baked.Deploy[l.ld].Plan[l.st] = st // replace by id
 				continue

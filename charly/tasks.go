@@ -210,7 +210,7 @@ func emitVarsEnv(b *strings.Builder, vars map[string]string) {
 		// Simple strategy: always double-quote with basic escaping.
 		escaped := strings.ReplaceAll(v, `\`, `\\`)
 		escaped = strings.ReplaceAll(escaped, `"`, `\"`)
-		b.WriteString(fmt.Sprintf("ENV %s=\"%s\"\n", k, escaped))
+		fmt.Fprintf(b, "ENV %s=\"%s\"\n", k, escaped)
 	}
 }
 
@@ -266,7 +266,7 @@ func emitCopy(b *strings.Builder, t Op, layerStage string, img *ResolvedBox) {
 	if chown != "" {
 		flags = append(flags, fmt.Sprintf("--chown=%s", chown))
 	}
-	b.WriteString(fmt.Sprintf("COPY %s %s %s\n", strings.Join(flags, " "), src, dest))
+	fmt.Fprintf(b, "COPY %s %s %s\n", strings.Join(flags, " "), src, dest)
 }
 
 // emitWrite emits a COPY from the staged inline-content directory to the
@@ -287,7 +287,7 @@ func emitWrite(b *strings.Builder, t Op, srcPath string, img *ResolvedBox) {
 		flags = append(flags, fmt.Sprintf("--chown=%s", chown))
 	}
 	// srcPath is relative to the build context root (the image's .build/<image>/ dir).
-	b.WriteString(fmt.Sprintf("COPY %s %s %s\n", strings.Join(flags, " "), srcPath, dest))
+	fmt.Fprintf(b, "COPY %s %s %s\n", strings.Join(flags, " "), srcPath, dest)
 }
 
 // emitLinkBatch emits a single RUN with chained ln -sf for a batch of
@@ -578,7 +578,7 @@ func (g *Generator) emitTasks(b *strings.Builder, layer *Candy, img *ResolvedBox
 		verb, err := t.Kind()
 		if err != nil {
 			// Validation should have caught this; emit a comment and skip.
-			b.WriteString(fmt.Sprintf("# skipping task %d: %v\n", i, err))
+			fmt.Fprintf(b, "# skipping task %d: %v\n", i, err)
 			i++
 			continue
 		}
@@ -590,7 +590,7 @@ func (g *Generator) emitTasks(b *strings.Builder, layer *Candy, img *ResolvedBox
 		}
 		directive, _ := resolveUserSpec(userField, img)
 		if directive != runningUser {
-			b.WriteString(fmt.Sprintf("USER %s\n", directive))
+			fmt.Fprintf(b, "USER %s\n", directive)
 			runningUser = directive
 		}
 
@@ -666,7 +666,7 @@ func (g *Generator) emitTasks(b *strings.Builder, layer *Candy, img *ResolvedBox
 			b.WriteString("# build: " + t.Build + " (handled by builder stage)\n")
 
 		default:
-			b.WriteString(fmt.Sprintf("# unknown verb %q — skipping\n", verb))
+			fmt.Fprintf(b, "# unknown verb %q — skipping\n", verb)
 		}
 		i++
 	}

@@ -149,7 +149,7 @@ func (t *LocalUnifiedTarget) Test(ctx context.Context, checks []Op, opts TestOpt
 // future "diff and only apply changed steps" mode would live behind an
 // UpdateOpts flag.
 func (t *LocalUnifiedTarget) Update(ctx context.Context, plans []*InstallPlan, opts UpdateOpts) error {
-	return t.LocalDeployTarget.Emit(plans, EmitOpts{
+	return t.Emit(plans, EmitOpts{
 		DryRun:           opts.DryRun,
 		AllowRepoChanges: opts.AllowRepoChanges,
 		AllowRootTasks:   opts.AllowRootTasks,

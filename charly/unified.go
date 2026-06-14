@@ -968,7 +968,7 @@ func validateDeployRequiresBox(deploy map[string]DeploymentNode) error {
 		}
 		if node.Box == "" {
 			return fmt.Errorf(
-				"deploy entry %q lacks required `box:` field (2026-05-12 schema cutover — pod-target deploys must declare `box:` explicitly so the check runner reads the operator's declared intent, not the running container's stale label).\n  Remediation: run `charly migrate` (one-shot, idempotent).",
+				"deploy entry %q lacks required `box:` field (2026-05-12 schema cutover — pod-target deploys must declare `box:` explicitly so the check runner reads the operator's declared intent, not the running container's stale label).\n  Remediation: run `charly migrate` (one-shot, idempotent)",
 				name,
 			)
 		}

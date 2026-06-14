@@ -1759,7 +1759,7 @@ func (c *SecretsGpgDoctorCmd) Run() error {
 		if len(keyEntries) > 0 {
 			collections := map[string]bool{}
 			for _, e := range keyEntries {
-				collections[fmt.Sprintf("%s", e.Path)] = true
+				collections[string(e.Path)] = true
 			}
 			ok(fmt.Sprintf("    key backups:           %d key(s) stored across %d collection-path(s)", len(keyEntries), len(collections)))
 		} else {

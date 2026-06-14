@@ -269,8 +269,7 @@ func SubstituteStepNonces(plan []Step, nonces map[string]string) ([]Step, error)
 		if len(sub) < 2 {
 			return match
 		}
-		name := string(sub[1])
-		if v, ok := nonces[name]; ok {
+		if v, ok := nonces[string(sub[1])]; ok {
 			return []byte(v)
 		}
 		return match
@@ -281,7 +280,7 @@ func SubstituteStepNonces(plan []Step, nonces map[string]string) ([]Step, error)
 	}
 	for i := range out {
 		if i < len(plan) {
-			out[i].Op.Origin = plan[i].Op.Origin
+			out[i].Origin = plan[i].Origin
 		}
 	}
 	return out, nil

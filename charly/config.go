@@ -942,10 +942,7 @@ func (c *Config) walkBaseChain(boxName string) []baseChainNode {
 	var out []baseChainNode
 	seen := make(map[string]bool)
 	current := boxName
-	for {
-		if current == "" || seen[current] {
-			break
-		}
+	for current != "" && !seen[current] {
 		seen[current] = true
 		img, ok := c.Box[current]
 		if !ok {

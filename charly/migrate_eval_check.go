@@ -36,12 +36,9 @@ func evalCheckDoc(doc *yaml.Node) bool {
 	if root == nil {
 		return false
 	}
-	changed := false
 	// Root bed-registry key: eval: → check: (the only top-level eval: key — the
 	// former check-list eval: was folded into scenario: by the op-unify step).
-	if renameMappingKey(root, "eval", "check") {
-		changed = true
-	}
+	changed := renameMappingKey(root, "eval", "check")
 	if evalCheckWalk(root) {
 		changed = true
 	}

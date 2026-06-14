@@ -9,6 +9,7 @@ import (
 	"time"
 
 	libvirt "github.com/digitalocean/go-libvirt"
+	"github.com/digitalocean/go-libvirt/socket/dialers"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -66,7 +67,7 @@ func connectLocalLibvirtSession(parsed LibvirtURI) (*libvirtConn, error) {
 	if err != nil {
 		return nil, fmt.Errorf("connecting to libvirt session socket %s: %w", sockPath, err)
 	}
-	l := libvirt.New(c)
+	l := libvirt.NewWithDialer(dialers.NewAlreadyConnected(c))
 	if err := l.ConnectToURI(libvirt.QEMUSession); err != nil {
 		c.Close()
 		return nil, fmt.Errorf("libvirt handshake failed: %w", err)
@@ -94,7 +95,7 @@ func connectRemoteLibvirtSession(parsed LibvirtURI) (*libvirtConn, error) {
 		_ = tunnel.Close()
 		return nil, fmt.Errorf("dialing remote socket %s via ssh: %w", sockPath, err)
 	}
-	l := libvirt.New(conn)
+	l := libvirt.NewWithDialer(dialers.NewAlreadyConnected(conn))
 	if err := l.ConnectToURI(libvirt.QEMUSession); err != nil {
 		conn.Close()
 		_ = tunnel.Close()

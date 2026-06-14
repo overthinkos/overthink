@@ -1070,7 +1070,7 @@ func (l *Candy) runOps() []Op {
 			continue
 		}
 		op := step.Op
-		if op.InContext(CtxRuntime) && !(op.InContext(CtxBuild) || op.InContext(CtxDeploy)) {
+		if op.InContext(CtxRuntime) && !op.InContext(CtxBuild) && !op.InContext(CtxDeploy) {
 			continue
 		}
 		out = append(out, op)

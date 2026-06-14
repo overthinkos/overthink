@@ -75,7 +75,7 @@ func (c *VmBuildCmd) Run() error {
 			"          source:\n"+
 			"            kind: bootc\n"+
 			"            image: %s\n"+
-			"          disk_size: 20G\n",
+			"          disk_size: 20G",
 		boxName, boxName, boxName)
 }
 

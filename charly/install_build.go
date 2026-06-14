@@ -474,9 +474,9 @@ func appendShellPathLines(body string, paths []string, shell, home string) strin
 		expanded := ExpandPath(p, home)
 		switch shell {
 		case "fish":
-			sb.WriteString(fmt.Sprintf("fish_add_path -gP %s\n", shellQuote(expanded)))
+			fmt.Fprintf(&sb, "fish_add_path -gP %s\n", shellQuote(expanded))
 		default:
-			sb.WriteString(fmt.Sprintf("export PATH=\"$PATH:%s\"\n", expanded))
+			fmt.Fprintf(&sb, "export PATH=\"$PATH:%s\"\n", expanded)
 		}
 	}
 	return sb.String()
@@ -659,7 +659,7 @@ func compileOpSteps(layer *Candy, img *ResolvedBox) []InstallStep {
 		op := &step.Op
 		// A run: step scoped runtime-only (and NOT build/deploy) is handled by
 		// the check Runner live; everything else is the install timeline.
-		if op.InContext(CtxRuntime) && !(op.InContext(CtxBuild) || op.InContext(CtxDeploy)) {
+		if op.InContext(CtxRuntime) && !op.InContext(CtxBuild) && !op.InContext(CtxDeploy) {
 			continue
 		}
 		if s := compileActOp(op, layer, img); s != nil {

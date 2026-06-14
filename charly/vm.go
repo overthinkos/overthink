@@ -91,9 +91,9 @@ func resolveVmBackend(configured string) (string, error) {
 			for _, p := range probed {
 				_, err := os.Stat(p)
 				if err == nil {
-					trail.WriteString(fmt.Sprintf("\n  %s — found", p))
+					fmt.Fprintf(&trail, "\n  %s — found", p)
 				} else {
-					trail.WriteString(fmt.Sprintf("\n  %s — not found", p))
+					fmt.Fprintf(&trail, "\n  %s — not found", p)
 				}
 			}
 			return "", fmt.Errorf(
@@ -387,7 +387,7 @@ func (c *VmCreateCmd) Run() error {
 			"  Declare one (optionally paired with a bootc image), e.g.:\n"+
 			"      vm:\n"+
 			"        %s-bootc:\n"+
-			"          source: {kind: bootc, image: %s}\n",
+			"          source: {kind: bootc, image: %s}",
 		c.Box, c.Box, c.Box)
 }
 

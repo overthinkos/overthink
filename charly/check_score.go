@@ -112,8 +112,8 @@ func (r *CheckRunResults) StepByID() map[string]StepScore {
 // prose + every embedded Op field. Output: "sha256:<64 hex>".
 func FingerprintStep(s Step) string {
 	clone := s
-	clone.Op.Tag = append([]string(nil), s.Op.Tag...)
-	sort.Strings(clone.Op.Tag)
+	clone.Tag = append([]string(nil), s.Tag...)
+	sort.Strings(clone.Tag)
 	out, err := yaml.Marshal(clone)
 	if err != nil {
 		return fmt.Sprintf("MARSHAL_ERR:%s", clone.KeywordText())

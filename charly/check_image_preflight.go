@@ -30,8 +30,8 @@ func ensureScoreImages(ctx context.Context, plan []Step, uf *UnifiedFile, projec
 
 	want := map[string]struct{}{}
 	for _, s := range plan {
-		if s.Op.Pod != "" {
-			want[s.Op.Pod] = struct{}{}
+		if s.Pod != "" {
+			want[s.Pod] = struct{}{}
 		}
 	}
 	if len(want) == 0 {

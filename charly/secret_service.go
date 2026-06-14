@@ -114,7 +114,7 @@ func (c *ssClient) collections() ([]dbus.ObjectPath, error) {
 	}
 	paths, ok := v.Value().([]dbus.ObjectPath)
 	if !ok {
-		return nil, fmt.Errorf("Collections property has unexpected type %T", v.Value())
+		return nil, fmt.Errorf("unexpected type %T for Collections property", v.Value())
 	}
 	return paths, nil
 }

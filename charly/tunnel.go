@@ -449,7 +449,7 @@ func cloudflareTunnelSetup(cfg TunnelConfig) (tunnelName, configPath string, err
 		if hostname == "" {
 			hostname = cfg.Hostname // fallback to image dns
 		}
-		ingress.WriteString(fmt.Sprintf("  - hostname: %s\n    service: %s://localhost:%d\n", hostname, tp.Protocol, tp.Port))
+		fmt.Fprintf(&ingress, "  - hostname: %s\n    service: %s://localhost:%d\n", hostname, tp.Protocol, tp.Port)
 	}
 	ingress.WriteString("  - service: http_status:404\n")
 

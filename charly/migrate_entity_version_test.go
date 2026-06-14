@@ -72,7 +72,7 @@ func TestMigrateEntityVersion(t *testing.T) {
 	archIdx := strings.Index(gb, "arch:")
 	builderIdx := strings.Index(gb, "arch-builder:")
 	verIdx := strings.Index(gb, "version: "+seed)
-	if !(verIdx > archIdx && verIdx < builderIdx) {
+	if verIdx <= archIdx || verIdx >= builderIdx {
 		t.Errorf("per-entity version not placed under the arch entry (verIdx=%d archIdx=%d builderIdx=%d):\n%s", verIdx, archIdx, builderIdx, gb)
 	}
 

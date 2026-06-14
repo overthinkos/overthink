@@ -89,12 +89,8 @@ func planUnifyEntity(m *yaml.Node) bool {
 	if m == nil || m.Kind != yaml.MappingNode {
 		return false
 	}
-	changed := false
-
 	// 1. description struct → scalar string.
-	if collapseDescription(m) {
-		changed = true
-	}
+	changed := collapseDescription(m)
 
 	// 2. task: entries → run: steps, prepended to plan:.
 	if task := findMappingValue(m, "task"); task != nil && task.Kind == yaml.SequenceNode {

@@ -59,9 +59,7 @@ func (p *PodCollector) Collect(ctx context.Context, opts CollectOpts) ([]Deploym
 
 	// --all in quadlet mode: append enabled-but-not-running entries.
 	if opts.IncludeAll && c.rt.RunMode == "quadlet" {
-		for _, q := range c.enabledQuadlets(seen) {
-			snapshots = append(snapshots, q)
-		}
+		snapshots = append(snapshots, c.enabledQuadlets(seen)...)
 	}
 
 	// Worker pool fan-out across containers.

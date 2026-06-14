@@ -189,12 +189,13 @@ func MigrateSchemaV4(doc *yaml.Node) MigrateSchemaV4Result {
 			}
 			// target: container → pod, target: kubernetes → k8s
 			if t := findMappingValue(entry, "target"); t != nil && t.Kind == yaml.ScalarNode {
-				if t.Value == "container" {
+				switch t.Value {
+				case "container":
 					t.Value = "pod"
 					result.Transforms = append(result.Transforms,
 						fmt.Sprintf("deployment.%s.target: container → pod", name))
 					changed = true
-				} else if t.Value == "kubernetes" {
+				case "kubernetes":
 					t.Value = "k8s"
 					result.Transforms = append(result.Transforms,
 						fmt.Sprintf("deployment.%s.target: kubernetes → k8s", name))
@@ -234,11 +235,12 @@ func renameNestedDeployments(node *yaml.Node, parentPath string, transforms *[]s
 			*changed = true
 		}
 		if t := findMappingValue(entry, "target"); t != nil && t.Kind == yaml.ScalarNode {
-			if t.Value == "container" {
+			switch t.Value {
+			case "container":
 				t.Value = "pod"
 				*transforms = append(*transforms, fmt.Sprintf("deployment.%s.target: container → pod", name))
 				*changed = true
-			} else if t.Value == "kubernetes" {
+			case "kubernetes":
 				t.Value = "k8s"
 				*transforms = append(*transforms, fmt.Sprintf("deployment.%s.target: kubernetes → k8s", name))
 				*changed = true

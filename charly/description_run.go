@@ -62,10 +62,10 @@ func RunPlan(ctx context.Context, r *Runner, set *LabelDescriptionSet, filter *T
 	i := 0
 	for i < len(flat) {
 		// Parallel group: consecutive steps sharing a non-empty Op.Parallel id.
-		groupID := flat[i].step.Op.Parallel
+		groupID := flat[i].step.Parallel
 		end := i + 1
 		if groupID != "" {
-			for end < len(flat) && flat[end].step.Op.Parallel == groupID && flat[end].origin == flat[i].origin {
+			for end < len(flat) && flat[end].step.Parallel == groupID && flat[end].origin == flat[i].origin {
 				end++
 			}
 		}
@@ -91,7 +91,7 @@ func runFlatGroup(ctx context.Context, r *Runner, group []flatStep, stepCtx *Sce
 	}
 	var units []unit
 	for _, fs := range group {
-		count := fs.step.Op.Count
+		count := fs.step.Count
 		baseID := EffectiveStepID(&fs.step, fs.origin, fs.idx)
 		if count <= 0 {
 			units = append(units, unit{fs: fs, subIdx: -1, stepID: baseID})
@@ -99,8 +99,8 @@ func runFlatGroup(ctx context.Context, r *Runner, group []flatStep, stepCtx *Sce
 		}
 		for j := 0; j < count; j++ {
 			cp := fs
-			cp.step.Op.ID = appendIndex(cp.step.Op.ID, j)
-			cp.step.Op.Capture = appendIndex(cp.step.Op.Capture, j)
+			cp.step.ID = appendIndex(cp.step.ID, j)
+			cp.step.Capture = appendIndex(cp.step.Capture, j)
 			units = append(units, unit{fs: cp, subIdx: j, stepID: fmt.Sprintf("%s-%d", baseID, j)})
 		}
 	}

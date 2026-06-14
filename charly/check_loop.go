@@ -1080,8 +1080,8 @@ func stepShortName(id string) string {
 func warnMissingInScopePods(plan []Step) {
 	uniquePods := map[string]bool{}
 	for _, s := range plan {
-		if s.Op.Pod != "" {
-			rootPod := s.Op.Pod
+		if s.Pod != "" {
+			rootPod := s.Pod
 			if i := strings.IndexByte(rootPod, '.'); i > 0 {
 				rootPod = rootPod[:i]
 			}
@@ -1416,7 +1416,7 @@ func collectTagFingerprints(set *LabelDescriptionSet) map[string]string {
 		for _, ld := range sec {
 			for sIdx, step := range ld.Plan {
 				id := EffectiveStepID(&step, ld.Origin, sIdx)
-				out[id] = FingerprintTags(step.Op.Tag)
+				out[id] = FingerprintTags(step.Tag)
 			}
 		}
 	}

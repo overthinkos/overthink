@@ -267,16 +267,10 @@ func validateVmCloudInit(name string, spec *VmSpec, errs *ValidationError) {
 		return
 	}
 	// CloudInit only meaningful for cloud_image OR bootc+cloud-init-candy.
-	if spec.Source.Kind == "bootc" {
-		// Can't verify candy membership from here (requires Config access).
-		// Full check lives in charly box validate's top-level wiring.
-		// Per D13: warn via validator only when key_injection.cloud_init
-		// was explicitly requested (user intent to use cloud-init).
-		if spec.SSH != nil && spec.SSH.KeyInjection != nil &&
-			spec.SSH.KeyInjection.CloudInit == "enabled" {
-			// Actual "cloud-init candy present" check is deferred.
-		}
-	}
+	// For a bootc source, candy membership can't be verified from here (requires
+	// Config access); the full check lives in charly box validate's top-level
+	// wiring. Per D13 the deferred "cloud-init candy present" assertion (when
+	// key_injection.cloud_init == "enabled") belongs there too.
 	if ci.CharlyInstall != nil {
 		switch ci.CharlyInstall.Strategy {
 		case "", "auto", "scp", "skip":

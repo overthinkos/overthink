@@ -238,7 +238,7 @@ func resolveLocalImageRef(engine, input string) (string, error) {
 		for i, c := range cands {
 			refs[i] = c.ref
 		}
-		return "", fmt.Errorf("ambiguous short name %q in local storage; candidates: %s. Re-run with a full ref.",
+		return "", fmt.Errorf("ambiguous short name %q in local storage; candidates: %s. Re-run with a full ref",
 			input, strings.Join(refs, ", "))
 	}
 

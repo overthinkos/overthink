@@ -50,7 +50,7 @@ func ValidatePlan(plan []Step, ctx PlanValidationContext) error {
 		known[id] = true
 		ids = append(ids, id)
 
-		if ctx.RequirePod && (s.Check != "" || s.AgentCheck != "") && s.Op.Pod == "" {
+		if ctx.RequirePod && (s.Check != "" || s.AgentCheck != "") && s.Pod == "" {
 			return fmt.Errorf("%s: step %q: missing required `pod:` field — every scored check step in an iterate plan must declare the container its probe targets (the harness has no default scoring target)",
 				ctx.OwnerLabel, id)
 		}
@@ -59,7 +59,7 @@ func ValidatePlan(plan []Step, ctx PlanValidationContext) error {
 	// Pass 2: depends_on resolves intra-plan.
 	for i, s := range plan {
 		id := stepID(s, origin, i)
-		for _, dep := range s.Op.DependsOn {
+		for _, dep := range s.DependsOn {
 			if dep == id {
 				return fmt.Errorf("%s: step %q: depends_on cannot reference itself (%q)",
 					ctx.OwnerLabel, id, dep)

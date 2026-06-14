@@ -105,13 +105,13 @@ func PrintStoreInfo() {
 	storeInfoOnce.Do(func() {
 		store := DefaultCredentialStore()
 		name := store.Name()
-		switch {
-		case name == "keyring (locked)":
+		switch name {
+		case "keyring (locked)":
 			// Warning already printed by DefaultCredentialStore()
-		case name == "keyring":
+		case "keyring":
 			fmt.Fprintf(os.Stderr, "Using system keyring for credential storage.\n")
 			fmt.Fprintf(os.Stderr, "To force a specific backend: charly config set secret_backend keyring|config\n")
-		case name == "config":
+		case "config":
 			backend := resolveSecretBackend()
 			if backend == "config" {
 				// User explicitly chose config — no advisory needed

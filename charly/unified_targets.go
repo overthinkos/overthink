@@ -117,7 +117,7 @@ func (t *LocalUnifiedTarget) Executor() DeployExecutor {
 	if t.LocalDeployTarget == nil {
 		return ShellExecutor{}
 	}
-	return t.LocalDeployTarget.exec()
+	return t.exec()
 }
 
 // Add for the local target lives in unified_targets_local.go alongside
@@ -165,7 +165,7 @@ func (t *VmUnifiedTarget) Executor() DeployExecutor {
 	if t.VmDeployTarget == nil {
 		return nil
 	}
-	return t.VmDeployTarget.Exec
+	return t.Exec
 }
 
 // Add for the vm target lives in unified_targets_vm.go alongside
@@ -215,7 +215,7 @@ func (t *PodUnifiedTarget) Executor() DeployExecutor {
 	if t.PodDeployTarget == nil {
 		return ShellExecutor{}
 	}
-	return t.PodDeployTarget.exec()
+	return t.exec()
 }
 
 // Add for the pod target lives in unified_targets_pod.go alongside

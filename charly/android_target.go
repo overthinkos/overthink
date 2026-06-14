@@ -103,7 +103,7 @@ func (a *AndroidDeployTarget) installStep(s *ApkInstallStep, opts EmitOpts) erro
 			continue
 		}
 		if spec.Package == "" {
-			return fmt.Errorf("apk entry in candy %q has neither package: nor apk:", s.CandyName)
+			return fmt.Errorf("apk entry in candy %q has neither package: nor apk: declared", s.CandyName)
 		}
 		if opts.DryRun {
 			fmt.Printf("[dry-run] android: would install %s (source %s) via apkeep\n", spec.Package, spec.EffectiveSource())

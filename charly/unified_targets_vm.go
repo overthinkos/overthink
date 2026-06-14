@@ -167,7 +167,7 @@ func (t *VmUnifiedTarget) Update(ctx context.Context, plans []*InstallPlan, opts
 	if t.VmDeployTarget == nil {
 		return fmt.Errorf("vm %q: VmDeployTarget is nil", t.NodeName)
 	}
-	return t.VmDeployTarget.Emit(plans, EmitOpts{
+	return t.Emit(plans, EmitOpts{
 		DryRun:           opts.DryRun,
 		AllowRepoChanges: opts.AllowRepoChanges,
 		AllowRootTasks:   opts.AllowRootTasks,

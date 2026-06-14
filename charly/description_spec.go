@@ -148,8 +148,8 @@ func StepID(origin string, stepIdx int) string {
 
 // EffectiveStepID returns the step's author id when set, else a derived id.
 func EffectiveStepID(s *Step, origin string, stepIdx int) string {
-	if s.Op.ID != "" {
-		return s.Op.ID
+	if s.ID != "" {
+		return s.ID
 	}
 	return StepID(origin, stepIdx)
 }

@@ -208,8 +208,8 @@ func TestPlanUnify_IncludeSplicesCandyPlan(t *testing.T) {
 		t.Errorf("spliced steps not in order: %+v", expanded)
 	}
 	// The spliced steps carry the include source origin for reporting.
-	if expanded[0].Op.Origin != "candy:redis" {
-		t.Errorf("spliced step missing source origin, got %q", expanded[0].Op.Origin)
+	if expanded[0].Origin != "candy:redis" {
+		t.Errorf("spliced step missing source origin, got %q", expanded[0].Origin)
 	}
 }
 

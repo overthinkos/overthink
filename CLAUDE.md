@@ -53,6 +53,7 @@ Consult this table BEFORE the first tool call of every task; when several rows m
 | Unexpected failure / error / anomaly | `/charly-internals:root-cause-analyzer` agent (BEFORE any fix) |
 | **— Go & internals —** | |
 | Go source work (adding/modifying `charly` commands) | `/charly-internals:go` |
+| Go code-quality / CLAUDE.md-compliance audit / `golangci-lint` / `dupl` / duplication or dead-code check / `.golangci.yml` | `/charly-internals:go-quality` + `/charly-internals:strict-policy` |
 | IR / InstallPlan / DeployTarget / OCITarget | `/charly-internals:install-plan` |
 | OCI labels / capabilities contract | `/charly-internals:capabilities` |
 | VmSpec / libvirt / cloud-init / OVMF internals | `/charly-internals:vm-spec` (+ renderer skills as needed) |

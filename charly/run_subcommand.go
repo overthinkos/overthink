@@ -90,29 +90,3 @@ func isBenignAlreadyRunning(stderr string) bool {
 		strings.Contains(s, "operation is not valid") ||
 		strings.Contains(s, "cannot lock pid file")
 }
-
-// vmDisposableFromDeployments returns the disposability + lifecycle
-// tag for a kind:vm entity by searching the deployments tree for
-// entries with target:vm pointing at vmName via vm:. Disposable
-// is true iff any matching deployment sets it; lifecycle is the first
-// non-empty tag encountered (stable iteration via map access is not
-// guaranteed, but for the common one-deploy-per-vm case this is
-// unambiguous).
-//
-// Retained because vm_classification.go + charly vm cycle still consult it
-// to surface lifecycle metadata in operator-facing output. The
-// disposability-as-authorization gate is not applied here (charly update is
-// non-destructive by design and doesn't need a gate).
-func vmDisposableFromDeployments(tree map[string]DeploymentNode, vmName string) (disposable bool, lifecycle string) {
-	for _, node := range tree {
-		if (node.Target == "vm" || node.Target == "") && node.Vm == vmName {
-			if node.IsDisposable() {
-				disposable = true
-			}
-			if lifecycle == "" {
-				lifecycle = node.Lifecycle
-			}
-		}
-	}
-	return disposable, lifecycle
-}

@@ -176,8 +176,7 @@ func (c *RemoveCmd) Run() error {
 
 		// Remove sidecar config files. Naming convention is
 		// `<podBase>-<sidecar>-<purpose>.<ext>` (e.g.
-		// charly-foo-tailscale-serve.json from
-		// quadlet_pod.go:tailscaleServeConfigPath). The prefix is
+		// charly-foo-tailscale-serve.json). The prefix is
 		// anchored to the sidecar NAME so unrelated sidecars / bases
 		// can't match.
 		if scDir, scErr := sidecarConfigDir(); scErr == nil {

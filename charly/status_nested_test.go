@@ -91,7 +91,6 @@ func TestNestedOverlay_AttachesDeclaredChildren(t *testing.T) {
 // flat row (not running, not in --all) attaches nothing — the overlay never
 // synthesizes a phantom parent.
 func TestNestedOverlay_NoParentRowNoPhantom(t *testing.T) {
-	const parent = "check-android-emulator-pod"
 	// Only the unrelated flat row is present; the declared parent has no row.
 	rows := []DeploymentStatus{
 		{Kind: SubstratePod, Image: "redis", Status: "running", Container: "charly-redis", Source: "podman"},

@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"strings"
 )
 
 // vm_snapshot_internal.go — internal qcow2 snapshot operations via
@@ -70,43 +69,6 @@ func revertInternalSnapshot(vmName string, entry *SnapshotEntry) error {
 		return fmt.Errorf("qemu-img snapshot -a %q %s (is the VM stopped?): %w", entry.Name, disk, err)
 	}
 	return nil
-}
-
-// listInternalSnapshots returns the snapshot names embedded in the
-// primary qcow2 via `qemu-img snapshot -l`. Used by validation paths
-// to detect drift between the registry and the actual on-disk
-// snapshots; not in the V1 CLI hot-path.
-func listInternalSnapshots(vmName string) ([]string, error) {
-	disk, err := vmDiskPath(vmName)
-	if err != nil {
-		return nil, err
-	}
-	out, err := exec.Command("qemu-img", "snapshot", "-l", disk).Output()
-	if err != nil {
-		return nil, fmt.Errorf("qemu-img snapshot -l %s: %w", disk, err)
-	}
-	// Output format:
-	//   Snapshot list:
-	//   ID    TAG       VM SIZE   DATE          VM CLOCK
-	//   1     baseline  0 B       2026-04-29... 00:00:00.000
-	//
-	// Parse the second column (TAG) of each non-header line.
-	var names []string
-	lines := strings.Split(string(out), "\n")
-	for _, line := range lines {
-		fields := strings.Fields(line)
-		if len(fields) < 2 {
-			continue
-		}
-		// Skip header rows. The header always has "ID" as field 0
-		// and "TAG" as field 1; the divider line has only dashes.
-		if fields[0] == "ID" || fields[0] == "Snapshot" {
-			continue
-		}
-		// Numeric ID followed by tag — both expected.
-		names = append(names, fields[1])
-	}
-	return names, nil
 }
 
 // promoteInternalToExternal extracts an internal snapshot into a new

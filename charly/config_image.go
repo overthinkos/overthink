@@ -1541,7 +1541,7 @@ func updateAllDeployedQuadlets(rt *ResolvedRuntime, skipBox string) error {
 		// fresh resolveShellImageRef("", boxName, "") lookup. The
 		// fresh lookup walks all local images that carry the matching
 		// ai.opencharly.image label, which includes per-deploy alias
-		// re-tags (bumpDeployAlias in update_deploy_dispatch.go). When
+		// re-tags (tagDeployAlias in deploy_target_pod.go). When
 		// a sibling deploy of the same image has just been charly-updated
 		// (e.g. an check bed of the versa image), its alias tag
 		// (`<registry>/<sibling-deploy>:<calver>`) inherits the same

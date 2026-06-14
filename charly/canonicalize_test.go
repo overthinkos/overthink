@@ -36,7 +36,7 @@ func TestCanonicalizeDeployArg(t *testing.T) {
 
 // TestResolveLocalImageRef_PrefersBaseOverAlias asserts that when two
 // equal-CalVer candidates share the `ai.opencharly.box` label
-// (because `bumpDeployAlias` tags an instance alias inheriting the
+// (because `tagDeployAlias` tags an instance alias inheriting the
 // base label), the resolver picks the BASE ref (repo's trailing
 // segment == short name) over the alias (`<base>/<instance>`).
 func TestResolveLocalImageRef_PrefersBaseOverAlias(t *testing.T) {

@@ -19,7 +19,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"regexp"
 	"strings"
 )
@@ -105,68 +104,6 @@ func (c *UpdateCmd) dispatchByDeployTarget() error {
 			deployName, node.Target)
 	}
 	return lt.Rebuild(context.Background(), RebuildOpts{RebuildImage: c.Build})
-}
-
-// bumpDeployAlias re-tags the freshly-pulled base image under the
-// per-deploy alias name (`<registry>/<deployName>:<calver-from-baseRef>`)
-// so subsequent ResolveNewestLocalCalVer(deployName) finds the new
-// content. The alias mechanism (deploy_target_pod.go:tagDeployAlias)
-// is what allows `charly config <deployName>` and the quadlet `Image=`
-// line to resolve the right image when deploy-name differs from
-// image-name (e.g. `versa` deploy → `versa` image; cross-kind name reuse).
-//
-// Returns the resolved alias ref (or baseRef itself when no aliasing
-// is needed because deploy-name equals image-name). The CalVer tag is
-// extracted from baseRef so the alias tracks the actual base content,
-// not wall-clock time.
-func bumpDeployAlias(runEngine, baseRef, deployName string, meta *BoxMetadata) (string, error) {
-	calver, err := tagPart(baseRef)
-	if err != nil {
-		return "", err
-	}
-	registry := ""
-	if meta != nil && meta.Registry != "" {
-		registry = meta.Registry
-	} else if i := strings.LastIndex(baseRef, "/"); i > 0 {
-		// Fallback: extract registry portion from baseRef itself.
-		registry = baseRef[:i]
-	}
-	var aliasRef string
-	if registry != "" {
-		aliasRef = fmt.Sprintf("%s/%s:%s", registry, deployName, calver)
-	} else {
-		aliasRef = fmt.Sprintf("%s:%s", deployName, calver)
-	}
-	if aliasRef == baseRef {
-		// deploy-name == image-name; no aliasing needed.
-		return aliasRef, nil
-	}
-	cmd := exec.Command(runEngine, "tag", baseRef, aliasRef)
-	if out, err := cmd.CombinedOutput(); err != nil {
-		return "", fmt.Errorf("%s tag %s %s: %w (%s)",
-			runEngine, baseRef, aliasRef, err, strings.TrimSpace(string(out)))
-	}
-	return aliasRef, nil
-}
-
-// tagPart extracts the tag portion of an image ref. Handles both
-// `<image>:<tag>` and `<registry>/<image>:<tag>` forms; refuses refs
-// without an explicit tag (an empty `:<tag>` would be invalid podman
-// input — caller should resolve to a CalVer first via
-// resolveShellImageRef).
-func tagPart(ref string) (string, error) {
-	lastSlash := strings.LastIndex(ref, "/")
-	lastColon := strings.LastIndex(ref, ":")
-	if lastColon == -1 || lastColon < lastSlash {
-		// No tag at all, or the colon is in a host:port portion of
-		// the registry (e.g. `localhost:5000/myimage` — no tag).
-		return "", fmt.Errorf("image ref %q has no tag", ref)
-	}
-	tag := ref[lastColon+1:]
-	if tag == "" {
-		return "", fmt.Errorf("image ref %q has empty tag", ref)
-	}
-	return tag, nil
 }
 
 // quadletImageLineRe matches the `Image=<value>` directive on its own

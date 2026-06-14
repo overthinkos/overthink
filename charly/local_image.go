@@ -197,8 +197,8 @@ func resolveLocalImageRef(engine, input string) (string, error) {
 	// matches `input` (the base over a per-deploy alias). Without it a
 	// `<registry>/<base>/<instance>:<cv>` alias sorts BEFORE the base
 	// `<registry>/<base>:<cv>` (ASCII `/` < `:`), silently picking the
-	// instance alias. Pattern A deploys create these via `bumpDeployAlias`
-	// (update_deploy_dispatch.go), inheriting the base's
+	// instance alias. Pattern A deploys create these via `tagDeployAlias`
+	// (deploy_target_pod.go), inheriting the base's
 	// `ai.opencharly.image` label, so both land in `labelCands` with
 	// identical label+tag CalVers.
 	matchesShortName := func(ref, name string) bool {

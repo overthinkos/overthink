@@ -217,18 +217,6 @@ func loadCharlyYAMLNode(dir string) (*yaml.Node, error) {
 	return &root, nil
 }
 
-func saveCharlyYAMLNode(dir string, root *yaml.Node) error {
-	path := filepath.Join(dir, UnifiedFileName)
-	data, err := yaml.Marshal(root)
-	if err != nil {
-		return fmt.Errorf("marshalling charly.yml: %w", err)
-	}
-	if err := os.WriteFile(path, data, 0o644); err != nil {
-		return fmt.Errorf("writing charly.yml: %w", err)
-	}
-	return nil
-}
-
 // docContent returns the top-level mapping node of a parsed YAML document.
 // yaml.Unmarshal returns a DocumentNode whose single Content entry is the
 // root mapping — peel that wrapper for callers.
@@ -346,9 +334,8 @@ func resolveBoxNodeFile(dir, name string) (*yaml.Node, *yaml.Node, string, error
 }
 
 // saveYAMLNodeFile marshals a node tree back to an arbitrary file path,
-// preserving comments + key order (the yaml.v3 Node round-trip). The generic
-// sibling of saveCharlyYAMLNode, used when an edit targets a per-kind import
-// file rather than charly.yml itself.
+// preserving comments + key order (the yaml.v3 Node round-trip). Used when an
+// edit targets charly.yml itself or a per-kind import file.
 func saveYAMLNodeFile(path string, root *yaml.Node) error {
 	data, err := yaml.Marshal(root)
 	if err != nil {

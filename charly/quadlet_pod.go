@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"path/filepath"
 	"strings"
 )
 
@@ -147,12 +146,6 @@ func generateSidecarQuadlet(sc ResolvedSidecar, podName string) string {
 	b.WriteString("TimeoutStartSec=120\n")
 
 	return b.String()
-}
-
-// tailscaleServeConfigPath returns the host path for a Tailscale serve config file.
-func tailscaleServeConfigPath(podName string) string {
-	dir, _ := sidecarConfigDir()
-	return filepath.Join(dir, podName+"-tailscale-serve.json")
 }
 
 // TailscaleServeConfig represents the JSON structure for TS_SERVE_CONFIG.

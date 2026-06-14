@@ -944,14 +944,6 @@ func looksLikeDistroOrFormatKey(key string) bool {
 	return true
 }
 
-// resolveCandySourceDir was the resolver for the legacy `directory:` field on
-// the candy manifest. The field was deleted in the 2026-05 Calamares cutover; the
-// helper is now a no-op kept only for any external import that still calls
-// it. New code should use `path` directly.
-func resolveCandySourceDir(path, _ string) string {
-	return path
-}
-
 // scanCandy scans a single candy directory
 func scanCandy(path, name, manifest string) (*Candy, error) {
 	layer := &Candy{

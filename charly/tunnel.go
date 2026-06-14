@@ -166,18 +166,6 @@ type TunnelConfig struct {
 	Ports      []TunnelPort // all tunneled ports with access scope
 }
 
-// validTailscaleSchemes lists backend schemes supported by tailscale serve/funnel.
-var validTailscaleSchemes = map[string]bool{
-	"http": true, "https": true, "https+insecure": true,
-	"tcp": true, "tls-terminated-tcp": true,
-}
-
-// validCloudflareSchemes lists origin service schemes supported by cloudflared.
-var validCloudflareSchemes = map[string]bool{
-	"http": true, "https": true,
-	"tcp": true, "ssh": true, "rdp": true, "smb": true,
-}
-
 // schemeTarget returns the backend URL for a given scheme and port.
 func schemeTarget(scheme string, port int) string {
 	switch scheme {
@@ -307,15 +295,6 @@ func tailscalePublicOneStop(tp TunnelPort) error {
 var ValidServePorts = map[int]bool{
 	80: true, 443: true, 3000: true, 3001: true, 3002: true, 3003: true,
 	4443: true, 5432: true, 6443: true, 8443: true,
-}
-
-// isValidServePort checks if a port is allowed for tailscale serve.
-// Allowed: 80, 443, 3000-10000, 4443, 5432, 6443, 8443.
-func isValidServePort(port int) bool {
-	if port >= 3000 && port <= 10000 {
-		return true
-	}
-	return port == 80 || port == 443 || port == 4443 || port == 5432 || port == 6443 || port == 8443
 }
 
 func tailscalePrivateOneStart(tp TunnelPort) error {

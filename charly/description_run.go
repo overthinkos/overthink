@@ -230,14 +230,6 @@ func keywordOf(s *Step) StepKeyword {
 	return ""
 }
 
-// verbOf returns the Op verb bound to a step, or "" when none.
-func verbOf(s *Step) string {
-	if kind, err := s.Op.Kind(); err == nil {
-		return kind
-	}
-	return ""
-}
-
 // sendSIGTERM sends SIGTERM to a host-side PID. Best-effort.
 func sendSIGTERM(pid int) error {
 	if pid <= 0 {

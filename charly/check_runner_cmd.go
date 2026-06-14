@@ -74,7 +74,7 @@ type CheckRunCmd struct {
 	Host bool   `name:"on-host" xor:"target" help:"Override score target to run on the host directly"`
 
 	PlateauIteration int    `name:"plateau-iteration" help:"Override score.plateau_iteration"`
-	MaxStep      int    `name:"max-step" help:"Cap the pending input set"`
+	MaxStep          int    `name:"max-step" help:"Cap the pending input set"`
 	Tag              string `name:"tag" help:"Override score.tag (tag expression)"`
 	DryRun           bool   `name:"dry-run" help:"Render scope+prompt without rebuild"`
 	SkipRebuild      bool   `name:"skip-rebuild" help:"Source-only steps"`

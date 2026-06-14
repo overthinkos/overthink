@@ -418,8 +418,8 @@ func TestMergeLayers_WhiteoutSupersededByReintroduction(t *testing.T) {
 	// The re-introduced file must be present with its new content
 	if content, ok := entries["usr/lib/app/config.conf"]; !ok {
 		t.Error("re-introduced config.conf must be present in merged output")
-	} else if string(content) != "new content" {
-		t.Errorf("config.conf content = %q, want %q", string(content), "new content")
+	} else if content != "new content" {
+		t.Errorf("config.conf content = %q, want %q", content, "new content")
 	}
 
 	// The superseded whiteout must be suppressed — coexistence causes EEXIST during overlay unpack

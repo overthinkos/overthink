@@ -15,7 +15,7 @@ import (
 // declare the keys get NO surprise pruning. The repo's charly.yml opts in
 // (keep_images: 5, keep_check_runs: 10). See /charly-core:clean.
 const (
-	keepImagesFallback   = 0
+	keepImagesFallback    = 0
 	keepCheckRunsFallback = 0
 )
 
@@ -364,7 +364,7 @@ func cleanMakepkgArtifacts(projectDir string, dryRun bool) []string {
 type CleanCmd struct {
 	DryRun     bool   `long:"dry-run" help:"Print everything that would be removed; touch nothing"`
 	Images     bool   `long:"images" help:"Only image-tag retention"`
-	Check       bool   `long:"check" help:"Only check-run retention"`
+	Check      bool   `long:"check" help:"Only check-run retention"`
 	Keep       int    `long:"keep" help:"Override the retention count for this run (0 = use defaults:)"`
 	Invalidate string `long:"invalidate" help:"Remove every charly-labeled image tag matching this glob (full ref or last path segment) — targeted cache invalidation for stale intermediates; in-use images are skipped. Runs ONLY the invalidation"`
 }

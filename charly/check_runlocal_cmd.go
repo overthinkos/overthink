@@ -66,7 +66,7 @@ type CheckRunLocalCmd struct {
 	Agent       string `name:"agent" help:"Agent to invoke (defaults to score.agent when single-element)"`
 	RunID       string `name:"run-id" help:"Run identifier (set by host harness; auto if empty)"`
 	PlateauIter int    `name:"plateau-iteration" help:"Override score.plateau_iteration"`
-	MaxStep int    `name:"max-step" help:"Cap the pending input set"`
+	MaxStep     int    `name:"max-step" help:"Cap the pending input set"`
 	Tag         string `name:"tag" help:"tag expression to narrow plan steps"`
 	DryRun      bool   `name:"dry-run" help:"Render scope+prompt then exit; no AI invocation, no rebuild"`
 	SkipRebuild bool   `name:"skip-rebuild" help:"Skip per-iteration rebuild (source-only steps)"`
@@ -224,7 +224,7 @@ func (c *CheckRunLocalCmd) Run() error {
 		TargetImage:      targetImage,
 		Tag:              tagExpr,
 		PlateauIteration: plateau,
-		MaxStep:      c.MaxStep,
+		MaxStep:          c.MaxStep,
 		MCPEndpoint:      mcp,
 		Notes:            notesSnap,
 		Deploy:           c.Score,
@@ -319,8 +319,4 @@ func loadDescriptionsFromDir(dir, image string) *LabelDescriptionSet {
 		return nil
 	}
 	return CollectDescriptions(cfg, layers, image)
-}
-
-func scopeMirrorPath(layout RunLayout) string {
-	return filepath.Join(layout.RepoDir, ".check")
 }

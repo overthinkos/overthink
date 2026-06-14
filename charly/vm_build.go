@@ -79,68 +79,12 @@ func (c *VmBuildCmd) Run() error {
 		boxName, boxName, boxName)
 }
 
-// createSparseFile creates a sparse file of the given size (e.g. "10G", "20G").
-func createSparseFile(path, size string) error {
-	// Parse size to bytes
-	sizeBytes, err := parseSizeToBytes(size)
-	if err != nil {
-		return err
-	}
-
-	f, err := os.Create(path)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	return f.Truncate(sizeBytes)
-}
-
-// parseSizeToBytes converts "10G", "20M", "1T" etc. to bytes.
-func parseSizeToBytes(size string) (int64, error) {
-	size = strings.TrimSpace(size)
-	if size == "" {
-		return 0, fmt.Errorf("empty size")
-	}
-
-	multiplier := int64(1)
-	numStr := size
-
-	switch {
-	case strings.HasSuffix(size, "T") || strings.HasSuffix(size, "t"):
-		multiplier = 1024 * 1024 * 1024 * 1024
-		numStr = size[:len(size)-1]
-	case strings.HasSuffix(size, "G") || strings.HasSuffix(size, "g"):
-		multiplier = 1024 * 1024 * 1024
-		numStr = size[:len(size)-1]
-	case strings.HasSuffix(size, "M") || strings.HasSuffix(size, "m"):
-		multiplier = 1024 * 1024
-		numStr = size[:len(size)-1]
-	}
-
-	var val int64
-	if _, err := fmt.Sscanf(numStr, "%d", &val); err != nil {
-		return 0, fmt.Errorf("invalid size %q: %w", size, err)
-	}
-	return val * multiplier, nil
-}
-
 // parseImageArg splits "image:tag" into (image, tag). If no colon, tag is empty.
 func parseImageArg(arg string) (string, string) {
 	if i := strings.LastIndex(arg, ":"); i > 0 {
 		return arg[:i], arg[i+1:]
 	}
 	return arg, ""
-}
-
-// normalizeSize converts size strings like "10 GiB" or "20 MiB" to
-// compact format like "10G" or "20M". Strips spaces and converts GiB→G, MiB→M, etc.
-func normalizeSize(size string) string {
-	s := strings.ReplaceAll(size, " ", "")
-	s = strings.ReplaceAll(s, "GiB", "G")
-	s = strings.ReplaceAll(s, "MiB", "M")
-	s = strings.ReplaceAll(s, "TiB", "T")
-	return s
 }
 
 // KnownVmSourceKinds lists the source.kind values supported by charly vm build.

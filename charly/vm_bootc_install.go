@@ -63,10 +63,6 @@ func BuildBootcVM(
 		return BootcVMResult{}, fmt.Errorf("creating output dir: %w", err)
 	}
 
-	transport := spec.Source.Transport
-	if transport == "" {
-		transport = "registry"
-	}
 	rootfs := spec.Source.Rootfs
 	if rootfs == "" {
 		rootfs = "ext4"

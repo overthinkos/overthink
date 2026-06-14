@@ -148,57 +148,6 @@ func BuildLibvirtDomainXML(spec *VmSpec, rt VmRuntimeParams) (*libvirtxml.Domain
 	return d, nil
 }
 
-// renderCharlyClassificationMetadata builds the innerxml for the
-// <metadata> element. libvirt stores metadata per-namespace (one
-// element per xmlns), so both fields share a single root
-// <charly:classification> element with attributes for disposable and
-// lifecycle. Round-trips cleanly through libvirt's
-// DomainGetXMLDesc / DomainDefineXML cycle.
-func renderCharlyClassificationMetadata(disposable bool, lifecycle string) string {
-	var buf strings.Builder
-	buf.WriteString(`<charly:classification xmlns:charly="https://opencharly.ai/ns/charly/1.0"`)
-	buf.WriteString(` disposable="`)
-	if disposable {
-		buf.WriteString("true")
-	} else {
-		buf.WriteString("false")
-	}
-	buf.WriteString(`"`)
-	if lifecycle != "" {
-		buf.WriteString(` lifecycle="`)
-		buf.WriteString(xmlEscape(lifecycle))
-		buf.WriteString(`"`)
-	}
-	buf.WriteString(`/>`)
-	return buf.String()
-}
-
-// xmlEscape escapes the five XML predefined entities for the rendered
-// lifecycle tag. We use a local helper rather than encoding/xml's
-// EscapeString because we already have a strings.Builder primed and
-// this keeps the output deterministic.
-func xmlEscape(s string) string {
-	var b strings.Builder
-	b.Grow(len(s))
-	for _, r := range s {
-		switch r {
-		case '&':
-			b.WriteString("&amp;")
-		case '<':
-			b.WriteString("&lt;")
-		case '>':
-			b.WriteString("&gt;")
-		case '"':
-			b.WriteString("&quot;")
-		case '\'':
-			b.WriteString("&apos;")
-		default:
-			b.WriteRune(r)
-		}
-	}
-	return b.String()
-}
-
 // ---------------- OS ----------------
 
 func buildDomainOS(spec *VmSpec, rt VmRuntimeParams) *libvirtxml.DomainOS {

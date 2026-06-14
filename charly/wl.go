@@ -901,7 +901,7 @@ func (c *WlDragCmd) Run() error {
 		return errKWinPointerUnsupported("drag")
 	}
 
-	btnNum := 1
+	var btnNum int
 	switch c.Button {
 	case "left":
 		btnNum = 1

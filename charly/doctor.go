@@ -20,26 +20,26 @@ type DoctorCheckStatus int
 
 const (
 	CheckOK      DoctorCheckStatus = iota // installed and working
-	CheckMissing                    // not found
-	CheckWarning                    // found but with caveats
-	CheckInfo                       // informational (hardware, not a dep)
-	CheckAbsent                     // hardware not present (neutral)
+	CheckMissing                          // not found
+	CheckWarning                          // found but with caveats
+	CheckInfo                             // informational (hardware, not a dep)
+	CheckAbsent                           // hardware not present (neutral)
 )
 
 // DoctorCheckResult holds the outcome of a single check.
 type DoctorCheckResult struct {
-	Name        string      `json:"name"`
+	Name        string            `json:"name"`
 	Status      DoctorCheckStatus `json:"status"`
-	Version     string      `json:"version,omitempty"`
-	Detail      string      `json:"detail,omitempty"`
-	InstallHint string      `json:"install_hint,omitempty"`
+	Version     string            `json:"version,omitempty"`
+	Detail      string            `json:"detail,omitempty"`
+	InstallHint string            `json:"install_hint,omitempty"`
 }
 
 // CheckGroup organizes checks by feature area.
 type CheckGroup struct {
-	Name     string        `json:"name"`
-	Required bool          `json:"required"`
-	OrLogic  bool          `json:"or_logic,omitempty"` // at least one check must pass
+	Name     string              `json:"name"`
+	Required bool                `json:"required"`
+	OrLogic  bool                `json:"or_logic,omitempty"` // at least one check must pass
 	Checks   []DoctorCheckResult `json:"checks"`
 }
 

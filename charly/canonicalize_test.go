@@ -89,7 +89,7 @@ func TestMergeDeployOntoMetadata_KeyedByDeployNameNotImage(t *testing.T) {
 	// image-label container ports.
 	dc := &DeployConfig{
 		Deploy: map[string]DeploymentNode{
-			"ollama":                  {ResolvedPort: []string{"11434:11434"}},
+			"ollama":                   {ResolvedPort: []string{"11434:11434"}},
 			"check-cachyos-ollama-pod": {Box: "ollama", ResolvedPort: []string{"45434:11434"}},
 		},
 	}

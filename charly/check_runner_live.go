@@ -357,18 +357,6 @@ func resolveScoringChain(roots map[string]DeploymentNode, pod string) (DeployExe
 	return ContainerChain("podman", "charly-"+pod), nil
 }
 
-// containerRunningForScoring confirms <containerName> is running.
-func containerRunningForScoring(ctx context.Context, containerName string) error {
-	out, err := exec.CommandContext(ctx, "podman", "inspect", "--format", "{{.State.Running}}", containerName).CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("container %q not reachable: %w\n%s", containerName, err, string(out))
-	}
-	if !strings.Contains(string(out), "true") {
-		return fmt.Errorf("container %q exists but is not running", containerName)
-	}
-	return nil
-}
-
 // synthesizeScoreBaseline builds the pre-AI baseline from the scored steps,
 // marking each check:/agent-check: step status: fail at baseline. IDs match the
 // declaration-order ids RunCheckLive emits.

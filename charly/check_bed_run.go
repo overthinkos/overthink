@@ -38,8 +38,8 @@ import (
 
 // bedRunOpts carries the per-run knobs (sourced from `charly check run` flags).
 type bedRunOpts struct {
-	Keep      bool   // don't tear the bed down after the run (--keep)
-	NoRebuild bool   // skip the fresh-update R10 re-verify step (--no-rebuild)
+	Keep       bool   // don't tear the bed down after the run (--keep)
+	NoRebuild  bool   // skip the fresh-update R10 re-verify step (--no-rebuild)
 	CheckLevel string // the bed box's acceptance-depth rung (none|build|noagent|agent); gates how deep the run drives acceptance. Empty → DefaultCheckLevel.
 }
 

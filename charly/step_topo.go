@@ -4,13 +4,11 @@ package main
 //
 // Post the plan-unify cutover the scoring + ordering unit is the STEP. The
 // step's depends_on: lists step ids; pod: targets a container — both
-// carried on the step's inline Op. Two helpers:
+// carried on the step's inline Op. One helper:
 //
 //   - topoSortSteps: orders steps so every step runs after the steps its
 //     Op.DependsOn ids name. Ties break by declaration index. *CycleError on
 //     a cycle (reusing graph.go's type).
-//   - groupConsecutiveByPod: splits a topo-sorted slice into maximal runs of
-//     same-Op.Pod steps so the scorer runs one executor per bucket.
 
 import "sort"
 
@@ -91,26 +89,4 @@ func firstUnmetDepStep(s Step, verdictByID map[string]string) string {
 		}
 	}
 	return ""
-}
-
-// groupConsecutiveByPod splits sorted into maximal runs of same-Op.Pod steps.
-// Order within each bucket matches the input order.
-func groupConsecutiveByPod(sorted []Step) [][]Step {
-	if len(sorted) == 0 {
-		return nil
-	}
-	var buckets [][]Step
-	cur := []Step{sorted[0]}
-	curPod := sorted[0].Op.Pod
-	for _, s := range sorted[1:] {
-		if s.Op.Pod == curPod {
-			cur = append(cur, s)
-			continue
-		}
-		buckets = append(buckets, cur)
-		cur = []Step{s}
-		curPod = s.Op.Pod
-	}
-	buckets = append(buckets, cur)
-	return buckets
 }

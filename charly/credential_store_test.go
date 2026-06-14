@@ -6,56 +6,6 @@ import (
 	"testing"
 )
 
-// mockStore implements CredentialStore for testing.
-type mockStore struct {
-	name   string
-	data   map[string]map[string]string // service -> key -> value
-	setErr error
-}
-
-func newMockStore(name string) *mockStore {
-	return &mockStore{name: name, data: make(map[string]map[string]string)}
-}
-
-func (m *mockStore) Get(service, key string) (string, error) {
-	if svc, ok := m.data[service]; ok {
-		return svc[key], nil
-	}
-	return "", nil
-}
-
-func (m *mockStore) Set(service, key, value string) error {
-	if m.setErr != nil {
-		return m.setErr
-	}
-	if m.data[service] == nil {
-		m.data[service] = make(map[string]string)
-	}
-	m.data[service][key] = value
-	return nil
-}
-
-func (m *mockStore) Delete(service, key string) error {
-	if svc, ok := m.data[service]; ok {
-		delete(svc, key)
-	}
-	return nil
-}
-
-func (m *mockStore) List(service string) ([]string, error) {
-	var keys []string
-	if svc, ok := m.data[service]; ok {
-		for k := range svc {
-			keys = append(keys, k)
-		}
-	}
-	return keys, nil
-}
-
-func (m *mockStore) Name() string {
-	return m.name
-}
-
 func TestResolveCredentialEnvOverride(t *testing.T) {
 	t.Setenv("TEST_CRED_ENV", "from-env")
 

@@ -78,10 +78,6 @@ const (
 	AgentOutputFormatStreamJSON = "stream-json"
 )
 
-// validAgentOutputFormats lists every legal value of OutputFormat for the
-// validator's "available: ..." hint.
-var validAgentOutputFormats = []string{AgentOutputFormatPlain, AgentOutputFormatStreamJSON}
-
 // DefaultProgressCheckInterval / DefaultProgressNoImprovementTimeout are
 // the Go-level defaults the harness loop applies when an AI's
 // progress_* fields are empty strings. Per the user spec for Round 3:

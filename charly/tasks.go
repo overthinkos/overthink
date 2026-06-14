@@ -63,35 +63,6 @@ func shellSingleQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
-// shellAnsiQuote wraps s in bash ANSI-C quoting ($'...'). Real newlines and
-// backslashes are emitted as \n and \\ escapes, keeping the whole quoted
-// string on a single physical line. This is required inside Dockerfile
-// RUN lines, whose parser terminates the instruction at the first unquoted
-// newline even when the argument is inside shell single quotes.
-func shellAnsiQuote(s string) string {
-	var b strings.Builder
-	b.Grow(len(s) + 4)
-	b.WriteString("$'")
-	for _, r := range s {
-		switch r {
-		case '\\':
-			b.WriteString(`\\`)
-		case '\'':
-			b.WriteString(`\'`)
-		case '\n':
-			b.WriteString(`\n`)
-		case '\r':
-			b.WriteString(`\r`)
-		case '\t':
-			b.WriteString(`\t`)
-		default:
-			b.WriteRune(r)
-		}
-	}
-	b.WriteRune('\'')
-	return b.String()
-}
-
 // resolveUserSpec converts a task's `user:` field to (userDirective, chownPair).
 //   - userDirective: the value to emit in `USER <value>` (numeric or name).
 //   - chownPair: the numeric "<uid>:<gid>" for COPY --chown (empty if not needed).

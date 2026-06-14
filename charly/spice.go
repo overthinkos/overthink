@@ -389,7 +389,7 @@ func spiceButtonCode(name string) (uint8, error) {
 // the byte slice form Shells-com/spice's OnKeyDown/OnKeyUp expect.
 // Two-byte codes (e.g. 0xE0 0x1C for numpad Enter) pack high byte first.
 func encodeScancode(code uint8) []byte {
-	return []byte{byte(code)}
+	return []byte{code}
 }
 
 func runeToScancode(r rune) (uint8, bool) {

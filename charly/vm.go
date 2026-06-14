@@ -293,16 +293,6 @@ func qemuSystemBinary() string {
 	}
 }
 
-// qemuMachineType returns the architecture-appropriate QEMU machine type.
-func qemuMachineType() string {
-	switch runtime.GOARCH {
-	case "arm64":
-		return "virt"
-	default:
-		return "q35"
-	}
-}
-
 // vmDiskDir returns the per-VM directory holding a built disk image
 // (disk.qcow2) and, for cloud_image/bootstrap/clone sources, its NoCloud
 // seed.iso. The path is namespaced by VM name so building or creating one VM
@@ -399,110 +389,6 @@ func (c *VmCreateCmd) Run() error {
 			"        %s-bootc:\n"+
 			"          source: {kind: bootc, image: %s}\n",
 		c.Box, c.Box, c.Box)
-}
-
-func (c *VmCreateCmd) createLibvirt(name, qcow2, ram string, cpus, sshPort int, ports []string, sshPubKey string) error {
-	ramMB := parseRAMtoMB(ram)
-
-	var detected DetectedDevices
-	if !c.NoAutoDetect {
-		detected = DetectHostDevices()
-	}
-	gpu := detected.GPU
-	if gpu {
-		fmt.Fprintf(os.Stderr, "Warning: GPU passthrough for libvirt VMs requires manual --host-device configuration\n")
-	}
-
-	var smbiosCreds []string
-	if sshPubKey != "" {
-		smbiosCreds = append(smbiosCreds, SmbiosCredForRootSSH(sshPubKey))
-		fmt.Fprintf(os.Stderr, "Injecting SSH key via SMBIOS credential\n")
-	}
-
-	xmlStr := buildDomainXML(name, qcow2, ramMB, cpus, sshPort, ports, gpu, smbiosCreds...)
-
-	conn, err := connectLibvirt("")
-	if err != nil {
-		return fmt.Errorf("connecting to libvirt: %w", err)
-	}
-	defer conn.Close()
-
-	if err := conn.defineAndStartDomain(xmlStr); err != nil {
-		return fmt.Errorf("creating VM: %w", err)
-	}
-
-	fmt.Fprintf(os.Stderr, "Created VM %s (libvirt session)\n", name)
-	fmt.Fprintf(os.Stderr, "Console: charly vm console %s\n", c.Box)
-	return nil
-}
-
-func (c *VmCreateCmd) createQemu(name, qcow2, ram string, cpus, sshPort int, ports []string, sshPubKey string) error {
-	dir, err := vmDir()
-	if err != nil {
-		return err
-	}
-	stateDir := filepath.Join(dir, name)
-	if err := os.MkdirAll(stateDir, 0755); err != nil {
-		return err
-	}
-
-	qemuBin := qemuSystemBinary()
-	monitorSocket := filepath.Join(stateDir, "monitor.sock")
-	qmpSocket := filepath.Join(stateDir, "qmp.sock")
-
-	args := []string{
-		"-machine", qemuMachineType(),
-		"-m", ram,
-		"-smp", strconv.Itoa(cpus),
-		"-cpu", "host",
-		"-enable-kvm",
-		"-drive", fmt.Sprintf("file=%s,format=qcow2,if=virtio", qcow2),
-		"-monitor", fmt.Sprintf("unix:%s,server,nowait", monitorSocket),
-		"-qmp", fmt.Sprintf("unix:%s,server,nowait", qmpSocket),
-		"-serial", fmt.Sprintf("unix:%s,server,nowait", filepath.Join(stateDir, "console.sock")),
-		"-display", "none",
-		"-daemonize",
-		"-pidfile", filepath.Join(stateDir, "qemu.pid"),
-	}
-
-	// SSH key injection via systemd credentials (SMBIOS type 11)
-	if sshPubKey != "" {
-		cred := SmbiosCredForRootSSH(sshPubKey)
-		args = append(args, "-smbios", fmt.Sprintf("type=11,value=%s", cred))
-		fmt.Fprintf(os.Stderr, "Injecting SSH key via SMBIOS credential\n")
-	}
-
-	// Port forwarding: SSH mapping comes from vm.yml `vm.ssh_port`
-	// (default 2222) — published ports from the image labels follow.
-	hostfwds := fmt.Sprintf("hostfwd=tcp::%d-:22", sshPort)
-	for _, p := range ports {
-		parts := strings.SplitN(p, ":", 2)
-		if len(parts) == 2 {
-			hostfwds += fmt.Sprintf(",hostfwd=tcp::%s-:%s", parts[0], parts[1])
-		}
-	}
-
-	args = append(args, "-nic", "user,model=virtio-net-pci,"+hostfwds)
-
-	// Save command for later use
-	cmdLine := qemuBin + " " + strings.Join(args, " ")
-	cmdFile := filepath.Join(stateDir, "command")
-	if err := os.WriteFile(cmdFile, []byte(cmdLine), 0644); err != nil {
-		return err
-	}
-
-	// Start the VM
-	cmd := exec.Command(qemuBin, args...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("qemu failed: %w", err)
-	}
-
-	fmt.Fprintf(os.Stderr, "Created and started VM %s (QEMU)\n", name)
-	fmt.Fprintf(os.Stderr, "SSH: ssh -p 2222 root@localhost\n")
-	fmt.Fprintf(os.Stderr, "Console: charly vm console %s\n", c.Box)
-	return nil
 }
 
 // parseRAMtoMB converts a RAM string like "4G" or "8192M" to megabytes.
@@ -1075,15 +961,6 @@ func resolveSSHPubKey(flag, generateDir string) (string, error) {
 		}
 		return strings.TrimSpace(string(data)), nil
 	}
-}
-
-// vmSSHKeyDir returns the directory for storing VM SSH keypairs.
-func vmSSHKeyDir(name string) (string, error) {
-	dir, err := vmDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(dir, name), nil
 }
 
 // containerSSHKeyDir returns the directory for storing container SSH keypairs.

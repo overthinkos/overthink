@@ -941,18 +941,3 @@ func findK8sSpec(dir, name string) *K8sSpec {
 	}
 	return uf.K8s[name]
 }
-
-// findPodSpec looks up a PodSpec by name from the unified loader.
-func findPodSpec(dir, name string) *PodSpec {
-	if dir == "" || name == "" {
-		return nil
-	}
-	uf, _, err := LoadUnified(dir)
-	if err != nil || uf == nil {
-		return nil
-	}
-	if uf.Pod == nil {
-		return nil
-	}
-	return uf.Pod[name]
-}

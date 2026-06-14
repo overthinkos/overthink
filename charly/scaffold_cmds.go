@@ -250,11 +250,11 @@ func resolveProjectFile(projectDir, relPath string) (string, error) {
 // `charly candy …` — top-level group for editing candy manifest files
 
 type CandyCmd struct {
-	Set         CandySetCmd         `cmd:"" help:"Set a value in a candy manifest by dot-path"`
-	AddRpm      CandyAddPkgCmd      `cmd:"add-rpm" help:"Append packages to a candy's distro.fedora.package list"`
-	AddDeb      CandyAddPkgCmd      `cmd:"add-deb" help:"Append packages to a candy's shared distro.'debian,ubuntu'.package list"`
-	AddPac      CandyAddPkgCmd      `cmd:"add-pac" help:"Append packages to a candy's distro.arch.package list"`
-	AddAur      CandyAddPkgCmd      `cmd:"add-aur" help:"Append packages to a candy's distro.arch.aur.package list"`
+	Set    CandySetCmd    `cmd:"" help:"Set a value in a candy manifest by dot-path"`
+	AddRpm CandyAddPkgCmd `cmd:"add-rpm" help:"Append packages to a candy's distro.fedora.package list"`
+	AddDeb CandyAddPkgCmd `cmd:"add-deb" help:"Append packages to a candy's shared distro.'debian,ubuntu'.package list"`
+	AddPac CandyAddPkgCmd `cmd:"add-pac" help:"Append packages to a candy's distro.arch.package list"`
+	AddAur CandyAddPkgCmd `cmd:"add-aur" help:"Append packages to a candy's distro.arch.aur.package list"`
 }
 
 type CandySetCmd struct {
@@ -297,9 +297,6 @@ func (c *CandySetCmd) Run() error {
 type CandyAddPkgCmd struct {
 	Name     string   `arg:"" help:"Candy name (under candy/)"`
 	Packages []string `arg:"" help:"Package names to append"`
-	// section is set by the parent group via aliases; default to rpm if
-	// somehow invoked directly.
-	section string `kong:"-"`
 }
 
 func (c *CandyAddPkgCmd) Run() error {

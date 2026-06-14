@@ -173,7 +173,7 @@ func TestMergeBoxConfig_BuildTunables(t *testing.T) {
 		ContextIgnore: []string{"image", ".check"},
 		Cache:         "image",
 		KeepImages:    intPtr(5),
-		KeepCheckRuns:  intPtr(10),
+		KeepCheckRuns: intPtr(10),
 	}
 	mergeBoxConfig(dst, src)
 	if dst.KeepImages == nil || *dst.KeepImages != 5 {

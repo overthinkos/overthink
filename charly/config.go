@@ -165,7 +165,7 @@ type BoxConfig struct {
 	// keep_images = newest CalVer tags to keep per image after `charly box build`;
 	// keep_check_runs = newest run dirs to keep per bed/score after `charly check run`.
 	// 0 (or absent → Go fallback 0) disables pruning. See `charly clean`.
-	KeepImages   *int `yaml:"keep_images,omitempty"`
+	KeepImages    *int `yaml:"keep_images,omitempty"`
 	KeepCheckRuns *int `yaml:"keep_check_runs,omitempty"`
 
 	// Plan carries image-level acceptance + provisioning steps — the box's
@@ -211,9 +211,9 @@ type ResolvedBox struct {
 	// auto-intermediates are materialized). Stable across builds when no candy
 	// changed — this is what keeps a child's FROM <base> SHA from shifting.
 	EffectiveVersion string `json:"effective_version,omitempty"`
-	Status           string `json:"status,omitempty"`     // effective status (worst of box + candies)
-	Info             string `json:"info,omitempty"`       // aggregated info from box + candies
-	CheckLevel        string `json:"check_level,omitempty"` // acceptance-depth rung (none|build|noagent|agent), baked as ai.opencharly.check_level
+	Status           string `json:"status,omitempty"`      // effective status (worst of box + candies)
+	Info             string `json:"info,omitempty"`        // aggregated info from box + candies
+	CheckLevel       string `json:"check_level,omitempty"` // acceptance-depth rung (none|build|noagent|agent), baked as ai.opencharly.check_level
 	Base             string // Resolved base (external OCI ref or internal image name)
 	// From mirrors BoxConfig.From after resolution. When non-empty
 	// (e.g. "builder:pacstrap"), the generator emits FROM scratch +
@@ -396,10 +396,10 @@ func (c *Config) ResolveBox(name string, calverTag string, dir string, opts Reso
 	}
 
 	resolved := &ResolvedBox{
-		Name:      name,
-		Version:   img.Version,
-		Status:    resolveStatus(""), // boxes author no status; the effective rung (worst-of-candy-chain) is computed at generate time for the ai.opencharly.status label
-		Info:      descriptionInfo(img.Description),
+		Name:       name,
+		Version:    img.Version,
+		Status:     resolveStatus(""), // boxes author no status; the effective rung (worst-of-candy-chain) is computed at generate time for the ai.opencharly.status label
+		Info:       descriptionInfo(img.Description),
 		CheckLevel: ResolveCheckLevel(img.CheckLevel),
 	}
 

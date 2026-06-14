@@ -409,56 +409,6 @@ func waitForKeyringUnlockLoop(
 	}
 }
 
-// encInit initializes gocryptfs cipher directories for an image.
-// If volume is non-empty, only that volume is initialized.
-func encInit(boxName, instance, volume string) error {
-	mounts, storagePath, err := loadEncryptedVolume(boxName, instance)
-	if err != nil {
-		return err
-	}
-
-	passphrase, err := resolveEncPassphrase(boxName, false)
-	if err != nil {
-		return err
-	}
-	extpassArgs, cleanup := encExtpassArgs("charly-" + boxName)
-	defer cleanup()
-
-	for _, m := range mounts {
-		if volume != "" && m.Name != volume {
-			continue
-		}
-
-		volDir := resolveEncVolumeDir(m, storagePath, deployStorageDir(boxName, instance))
-		cipherDir := filepath.Join(volDir, "cipher")
-		plainDir := filepath.Join(volDir, "plain")
-
-		if isEncryptedInitialized(cipherDir) {
-			fmt.Fprintf(os.Stderr, "%s: already initialized\n", m.Name)
-			continue
-		}
-
-		if err := os.MkdirAll(cipherDir, 0700); err != nil {
-			return fmt.Errorf("creating cipher dir for %s: %w", m.Name, err)
-		}
-		if err := os.MkdirAll(plainDir, 0700); err != nil {
-			return fmt.Errorf("creating plain dir for %s: %w", m.Name, err)
-		}
-
-		args := append([]string{"-init"}, extpassArgs...)
-		args = append(args, cipherDir)
-		cmd := exec.Command("gocryptfs", args...)
-		cmd.Env = append(os.Environ(), "GOCRYPTFS_PASSWORD="+passphrase)
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("gocryptfs -init for %s: %w", m.Name, err)
-		}
-		fmt.Fprintf(os.Stderr, "Initialized %s at %s\n", m.Name, cipherDir)
-	}
-	return nil
-}
-
 // encMount mounts encrypted volumes for an image.
 // If volume is non-empty, only that volume is mounted.
 // Uses resolveEncPassphraseForMount which waits for keyring unlock under systemd.

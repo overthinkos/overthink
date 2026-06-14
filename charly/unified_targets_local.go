@@ -325,7 +325,7 @@ func (t *LocalUnifiedTarget) Add(ctx context.Context, dctx *DeployContext, plans
 	// charly check live's runLocalCheck uses). opts.ParentExec (nested
 	// local-target inside a container/VM) stays here: it's
 	// deploy-execution-specific, not a property of the node's host:.
-	var exec DeployExecutor = ShellExecutor{}
+	var exec DeployExecutor
 	switch {
 	case opts.ParentExec != nil:
 		tgt.Executor = opts.ParentExec

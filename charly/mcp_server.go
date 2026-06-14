@@ -89,11 +89,11 @@ var mcpDestructivePaths = map[string]bool{
 	"box.refresh":   true, // deletes + re-clones cache
 	"box.write":     true, // writes arbitrary file under project root
 	// Candy authoring — mutates the candy manifest.
-	"candy.set":          true,
-	"candy.add-rpm":      true,
-	"candy.add-deb":      true,
-	"candy.add-pac":      true,
-	"candy.add-aur":      true,
+	"candy.set":     true,
+	"candy.add-rpm": true,
+	"candy.add-deb": true,
+	"candy.add-pac": true,
+	"candy.add-aur": true,
 	// Benchmark — run mutates workspace + rebuilds images; self-evaluate
 	// rebuilds images. Read-only siblings (scope, last-test-tag, list,
 	// list-runners, report) stay exposed.

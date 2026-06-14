@@ -166,34 +166,6 @@ type TunnelConfig struct {
 	Ports      []TunnelPort // all tunneled ports with access scope
 }
 
-// collectPortProtos builds a port->protocol map from candy PortSpec data.
-// It resolves the full candy tree (including composing candies) to find all port specs.
-func collectPortProtos(layers map[string]*Candy, candyNames []string) map[int]string {
-	// Resolve full candy order including sub-candies of composing candies
-	allCandies, err := ResolveCandyOrder(candyNames, layers, nil)
-	if err != nil {
-		// Fall back to direct candy names on error
-		allCandies = candyNames
-	}
-
-	protos := make(map[int]string)
-	for _, name := range allCandies {
-		layer, ok := layers[name]
-		if !ok {
-			continue
-		}
-		for _, ps := range layer.PortSpecs() {
-			if ps.Protocol != "" && ps.Protocol != "http" {
-				protos[ps.Port] = ps.Protocol
-			}
-		}
-	}
-	if len(protos) == 0 {
-		return nil
-	}
-	return protos
-}
-
 // validTailscaleSchemes lists backend schemes supported by tailscale serve/funnel.
 var validTailscaleSchemes = map[string]bool{
 	"http": true, "https": true, "https+insecure": true,

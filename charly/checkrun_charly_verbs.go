@@ -105,7 +105,7 @@ var cdpMethods = map[string]methodSpec{
 	"url":        {path: []string{"cdp", "url"}, required: []string{"Tab"}, posArgs: posTab},
 	"text":       {path: []string{"cdp", "text"}, required: []string{"Tab"}, posArgs: posTab},
 	"html":       {path: []string{"cdp", "html"}, required: []string{"Tab"}, posArgs: posTab},
-	"check":       {path: []string{"cdp", "check"}, required: []string{"Tab", "Expression"}, posArgs: posTabExpression},
+	"check":      {path: []string{"cdp", "check"}, required: []string{"Tab", "Expression"}, posArgs: posTabExpression},
 	"axtree":     {path: []string{"cdp", "axtree"}, required: []string{"Tab"}, posArgs: posTabQuery},
 	"coords":     {path: []string{"cdp", "coords"}, required: []string{"Tab", "Selector"}, posArgs: posTabSelector},
 	"raw":        {path: []string{"cdp", "raw"}, required: []string{"Tab", "Method"}, posArgs: posCdpRaw},

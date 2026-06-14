@@ -22,8 +22,8 @@ type VNCClient struct {
 	height      uint16
 	name        string
 	pixelFormat vncPixelFormat
-	zBuf        *bytes.Buffer // persistent zlib input buffer for ZRLE
-	zReader     io.ReadCloser // persistent zlib decompressor for ZRLE
+	zBuf        *bytes.Buffer  // persistent zlib input buffer for ZRLE
+	zReader     io.ReadCloser  // persistent zlib decompressor for ZRLE
 	endpoint    *CheckEndpoint // ssh -L forward (VM/ssh venues); nil for container/local
 }
 

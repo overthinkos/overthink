@@ -1,7 +1,5 @@
 package main
 
-import "fmt"
-
 // CollectShell walks the base-image chain for boxName and gathers
 // per-(origin, shell) shell-init contributions into a three-section
 // LabelShellSet. Mirrors CollectDescriptions / CollectHooks shape — dedupe by
@@ -146,45 +144,4 @@ func replaceShellEntryByID(set *LabelShellSet, e ShellEntry) bool {
 		}
 	}
 	return false
-}
-
-// resolveDeploymentShellOverride applies the selection rule (per-shell
-// wins over generic) to an aggregate LabelShellSet at deploy time.
-// Returns a flat (origin, shell) → ShellSpec map for the renderer to
-// consume. Origin order is Candy first, then Box, then Deploy — so
-// later contributors win on (origin, shell) collision.
-func resolveDeploymentShellOverride(set *LabelShellSet) map[string]map[string]*ShellSpec {
-	out := map[string]map[string]*ShellSpec{}
-	if set == nil {
-		return out
-	}
-	for _, bucket := range [][]ShellEntry{set.Candy, set.Box, set.Deploy} {
-		for _, e := range bucket {
-			if _, ok := out[e.Origin]; !ok {
-				out[e.Origin] = map[string]*ShellSpec{}
-			}
-			for _, shell := range []string{"bash", "zsh", "fish", "sh"} {
-				if spec, has := e.ByShell[shell]; has && spec != nil {
-					out[e.Origin][shell] = spec
-					continue
-				}
-				if e.Generic != nil && e.Generic.Init != "" {
-					out[e.Origin][shell] = e.Generic
-				}
-			}
-		}
-	}
-	return out
-}
-
-// shellEntryDescribe returns a one-line summary for log output.
-func shellEntryDescribe(e ShellEntry) string {
-	shells := make([]string, 0, len(e.ByShell))
-	for k := range e.ByShell {
-		shells = append(shells, k)
-	}
-	if e.Generic != nil && e.Generic.Init != "" {
-		shells = append(shells, "generic")
-	}
-	return fmt.Sprintf("origin=%s id=%s shells=%v", e.Origin, e.ID, shells)
 }

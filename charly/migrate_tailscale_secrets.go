@@ -168,14 +168,6 @@ func setSecretsEnv(path, name, value string) error {
 	return cmd.Run()
 }
 
-// unsetSecretsEnv calls `charly secrets gpg unset <name> -f <path>`.
-func unsetSecretsEnv(path, name string) error {
-	cmd := exec.Command("ov", "secrets", "gpg", "unset", name, "-f", path)
-	cmd.Stdout = os.Stderr
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
-}
-
 // detectTailnetFromRunningSidecar tries to read the MagicDNS suffix from a
 // currently-running tailscale sidecar via `podman exec ... tailscale status
 // --json`. Returns (suffix, true) on success, ("", false) otherwise.

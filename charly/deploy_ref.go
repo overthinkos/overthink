@@ -157,7 +157,7 @@ func refSubPathHas(subPath, segment string) bool {
 // resolveRemoteRef parses and classifies an @-prefixed remote ref.
 func resolveRemoteRef(ref string) (*DeployRef, error) {
 	parsed := ParseRemoteRef(ref)
-	kind := RefKindCandy
+	var kind RefKind
 	switch {
 	case refSubPathHas(parsed.SubPath, "candy") || refSubPathHas(parsed.SubPath, "layers"):
 		// `candy/<n>` is the post-rebrand candy subpath; `layers/<n>` is the

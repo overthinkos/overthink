@@ -195,30 +195,6 @@ func extractQuadletImageLine(path string) (string, error) {
 	return strings.TrimPrefix(m, "Image="), nil
 }
 
-// rewriteQuadletImageLine replaces the `Image=<old>` line in the
-// quadlet at `path` with `Image=<newRef>`. All other lines are
-// preserved verbatim. Atomic write: writes to `<path>.new`, then
-// renames.
-func rewriteQuadletImageLine(path, newRef string) error {
-	content, err := os.ReadFile(path)
-	if err != nil {
-		return fmt.Errorf("reading quadlet %s: %w", path, err)
-	}
-	if !quadletImageLineRe.Match(content) {
-		return fmt.Errorf("no Image= line found in quadlet %s", path)
-	}
-	newContent := quadletImageLineRe.ReplaceAll(content, []byte("Image="+newRef))
-	tmp := path + ".new"
-	if err := os.WriteFile(tmp, newContent, 0o600); err != nil {
-		return fmt.Errorf("writing %s: %w", tmp, err)
-	}
-	if err := os.Rename(tmp, path); err != nil {
-		_ = os.Remove(tmp)
-		return fmt.Errorf("renaming %s → %s: %w", tmp, path, err)
-	}
-	return nil
-}
-
 // noteUpdateDisposability prints a one-line transparency note when an EXPLICIT
 // `charly update` targets a deploy that is NOT marked `disposable: true` (and not
 // ephemeral — see IsDisposable() for the implication chain). It NEVER refuses:

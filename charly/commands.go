@@ -92,18 +92,6 @@ type UpdateCmd struct {
 	DataFrom  string `long:"data-from" help:"Sync data from this data image instead"`
 }
 
-// updateCmdBuildFn is the hook invoked when UpdateCmd.Run sees --build for a
-// local image. Default implementation runs BuildCmd; tests override this to
-// spy on invocations without actually building.
-var updateCmdBuildFn = func(image, tag string) error {
-	fmt.Fprintf(os.Stderr, "Building %s locally (--build requested)\n", image)
-	bc := &BuildCmd{
-		Boxes: []string{image},
-		Tag:   tag,
-	}
-	return bc.Run()
-}
-
 // Run dispatches `charly update <name>` to the target-specific update
 // helper. The argument MUST resolve to a deploy entry in charly.yml
 // (project + user-overlay merged). There is NO legacy fall-through to
@@ -118,90 +106,6 @@ func (c *UpdateCmd) Run() error {
 	}
 	c.Box, c.Instance = canonicalizeDeployArg(c.Box, c.Instance)
 	return c.dispatchByDeployTarget()
-}
-
-// syncData merges data from the (new) image into bind-backed volumes.
-// Uses merge mode (cp -an) to add new files without overwriting existing user data.
-func (c *UpdateCmd) syncData(engine string, imageRef string, meta *BoxMetadata, rt *ResolvedRuntime) {
-	// Re-extract metadata from the new image
-	newMeta, err := ExtractMetadata(engine, imageRef)
-	if err != nil || newMeta == nil {
-		return
-	}
-
-	dataMeta := newMeta
-	dataRef := imageRef
-
-	// Use external data image if --data-from specified
-	if c.DataFrom != "" {
-		dataRef = c.DataFrom
-		if !strings.Contains(dataRef, ":") {
-			// Short name without tag — resolve to newest local CalVer.
-			// charly is CalVer-only; `:latest` is no longer a valid fallback.
-			if resolved, err := ResolveNewestLocalCalVer(engine, dataRef); err == nil && resolved != "" {
-				dataRef = resolved
-			}
-		}
-		dm, err := ExtractMetadata(engine, dataRef)
-		if err != nil || dm == nil {
-			fmt.Fprintf(os.Stderr, "Warning: could not load data image %s: %v\n", dataRef, err)
-			return
-		}
-		dataMeta = dm
-	}
-
-	if len(dataMeta.DataEntries) == 0 {
-		return
-	}
-
-	// Load deploy config to find bind-backed volumes
-	dc := loadDeployConfigForRead("charly remove volumes-lookup")
-	if dc == nil {
-		return
-	}
-	imgDeploy, ok := dc.Deploy[deployKey(c.Box, c.Instance)]
-	if !ok {
-		return
-	}
-
-	// Re-scope volume names to this deploy (syncData doesn't route through
-	// MergeDeployOntoMetadata) so syncData targets the deploy's OWN volumes,
-	// never a same-image sibling's.
-	scopeVolumesToDeployKey(newMeta, c.Box, c.Instance)
-	volumes, bindMounts := ResolveVolumeBacking(c.Box, c.Instance, newMeta.Volume, imgDeploy.Volume,
-		newMeta.Home, rt.EncryptedStoragePath, rt.VolumesPath)
-	if len(bindMounts) == 0 && len(volumes) == 0 {
-		return
-	}
-
-	mode := DataProvisionMerge
-	if c.ForceSeed {
-		mode = DataProvisionForce
-	}
-
-	fmt.Fprintln(os.Stderr, "Syncing data from new image...")
-	seeded, err := provisionData(engine, dataRef, dataMeta, bindMounts, volumes, c.Box, c.Instance, mode)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: data sync failed: %v\n", err)
-		return
-	}
-
-	// Update charly.yml with new data source
-	if seeded > 0 {
-		for i := range imgDeploy.Volume {
-			for _, entry := range dataMeta.DataEntries {
-				if imgDeploy.Volume[i].Name == entry.Volume {
-					imgDeploy.Volume[i].DataSeeded = true
-					imgDeploy.Volume[i].DataSource = dataRef
-				}
-			}
-		}
-		dc.Deploy[deployKey(c.Box, c.Instance)] = imgDeploy
-		if err := SaveDeployConfig(dc); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: could not save data source to charly.yml: %v\n", err)
-		}
-		fmt.Fprintf(os.Stderr, "Synced data for %d volume(s)\n", seeded)
-	}
 }
 
 // RemoveCmd removes a service container

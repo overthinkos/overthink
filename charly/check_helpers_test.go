@@ -10,11 +10,6 @@ import (
 // the unified loader (charly.yml + includes).
 const testdataDir = "testdata"
 
-// testBuildConfigRef — retained for tests that still reference the legacy
-// format_config path. After the unified cutover it's the same as testdataDir
-// since the unified loader reads charly.yml, not a format_config pointer.
-const testBuildConfigRef = testdataDir
-
 // testDistroConfig returns the default DistroConfig from testdata fixtures for tests.
 func testDistroConfig() *DistroConfig {
 	distroCfg, _, _, err := LoadBuildConfigForBox(testdataDir)
@@ -65,27 +60,4 @@ func testProjectDir(t interface {
 		t.Fatalf("writing build.yml: %v", err)
 	}
 	return tmpdir
-}
-
-// testFormatSection creates a PackageSection for testing.
-func testFormatSection(format string, raw map[string]interface{}) *PackageSection {
-	section := &PackageSection{
-		FormatName: format,
-		Raw:        raw,
-	}
-	if pkgs, ok := raw["packages"]; ok {
-		section.Packages = toStringSlice(pkgs)
-	}
-	return section
-}
-
-// testCandyWithFormat creates a Candy with a single format section for testing.
-func testCandyWithFormat(name, format string, raw map[string]interface{}) *Candy {
-	section := testFormatSection(format, raw)
-	return &Candy{
-		Name: name,
-		formatSections: map[string]*PackageSection{
-			format: section,
-		},
-	}
 }

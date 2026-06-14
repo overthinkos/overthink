@@ -62,7 +62,7 @@ type HarnessOpts struct {
 	TargetImage      string
 	Tag              string
 	PlateauIteration int
-	MaxStep      int
+	MaxStep          int
 	MCPEndpoint      string
 	Notes            string // ${NOTES} snapshot at run start
 	NoMCP            bool

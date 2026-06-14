@@ -66,7 +66,7 @@ type CLI struct {
 	Start       StartCmd        `cmd:"" help:"Start a container as a background service"`
 	Status      StatusCmd       `cmd:"" help:"Show service status (all if no box given)"`
 	Stop        StopCmd         `cmd:"" help:"Stop a running service container"`
-	Check        CheckCmd         `cmd:"" help:"Evaluate boxes and deployments — pure-box (disposable), live (running deployment), AI-driven iteration, and live-container probe verbs (cdp/wl/dbus/vnc/mcp/spice/libvirt/record/k8s)"`
+	Check       CheckCmd        `cmd:"" help:"Evaluate boxes and deployments — pure-box (disposable), live (running deployment), AI-driven iteration, and live-container probe verbs (cdp/wl/dbus/vnc/mcp/spice/libvirt/record/k8s)"`
 	Feature     FeatureCmd      `cmd:"" help:"plan-shaped description authoring: list/pending/validate"`
 	Tmux        TmuxCmd         `cmd:"" help:"Manage tmux sessions inside running containers"`
 	Udev        UdevCmd         `cmd:"" help:"Manage udev rules for GPU device access in containers"`

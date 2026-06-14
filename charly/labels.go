@@ -192,7 +192,7 @@ type BoxMetadata struct {
 	MCPAccept     []EnvDependency      // MCP servers image can optionally use
 	Description   *LabelDescriptionSet // three-section plan-shaped self-description (candy/box/deploy)
 	Shell         *LabelShellSet       // three-section (candy/box/deploy) shell-init manifest (2026-05 cutover)
-	CheckLevel     string               // acceptance-depth rung (ai.opencharly.check_level): none|build|noagent|agent
+	CheckLevel    string               // acceptance-depth rung (ai.opencharly.check_level): none|build|noagent|agent
 }
 
 // LabelShellSet is the three-section JSON manifest carried in

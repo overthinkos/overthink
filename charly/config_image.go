@@ -893,27 +893,6 @@ func IsDirectDeploy(box, instance string) bool {
 	return err == nil
 }
 
-// readDirectDeployMarker loads a marker file (returns nil, nil when the
-// file doesn't exist — caller should treat that as "not a direct deploy").
-func readDirectDeployMarker(box, instance string) (*directDeployMarker, error) {
-	path, err := directDeployMarkerPath(box, instance)
-	if err != nil {
-		return nil, err
-	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
-		}
-		return nil, err
-	}
-	var m directDeployMarker
-	if err := json.Unmarshal(data, &m); err != nil {
-		return nil, fmt.Errorf("parsing direct-mode marker %s: %w", path, err)
-	}
-	return &m, nil
-}
-
 // writeDirectDeployMarker persists the marker JSON.
 func writeDirectDeployMarker(m directDeployMarker) error {
 	path, err := directDeployMarkerPath(m.Image, m.Instance)

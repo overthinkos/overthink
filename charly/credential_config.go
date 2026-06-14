@@ -130,18 +130,6 @@ func deleteConfigCredential(cfg *RuntimeConfig, service, key string) {
 	}
 }
 
-// configCredentialMap returns the config map for a given service.
-// Only valid for CredServiceVNC; other services use composite keys.
-// Deprecated: prefer lookupConfigCredential/setConfigCredential/deleteConfigCredential directly.
-func configCredentialMap(cfg *RuntimeConfig, service string) map[string]string {
-	switch service {
-	case CredServiceVNC:
-		return cfg.VncPasswords
-	default:
-		return nil
-	}
-}
-
 // HasPlaintextCredentials returns the number of plaintext credentials
 // currently stored in config.yml credential maps.
 func HasPlaintextCredentials(cfg *RuntimeConfig) int {

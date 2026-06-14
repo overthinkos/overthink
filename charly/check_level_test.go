@@ -61,8 +61,8 @@ func TestExtractMetadata_CheckLevel(t *testing.T) {
 
 	InspectLabels = func(engine, imageRef string) (map[string]string, error) {
 		return map[string]string{
-			LabelVersion:   "1",
-			LabelBox:       "x",
+			LabelVersion:    "1",
+			LabelBox:        "x",
 			LabelCheckLevel: "agent",
 		}, nil
 	}

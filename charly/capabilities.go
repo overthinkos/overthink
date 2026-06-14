@@ -104,9 +104,8 @@ var CapabilityLabelMap = map[string]string{
 	"MCPAccept":     LabelMCPAccept,
 
 	// plan-shaped self-description — three-section (candy/box/deploy)
-	// LabelDescriptionSet. Replaces the single-scalar Info/Status pair in
-	// the BDD cutover; those remain on BoxMetadata during the additive
-	// foundation phase and are removed in the hard-cutover commit.
+	// LabelDescriptionSet. The description label set is additive; the
+	// Info/Status fields remain on BoxMetadata alongside it.
 	"Description": LabelDescription,
 
 	// Shell-init manifest — three-section (candy/box/deploy) per-shell

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"strings"
 )
@@ -146,82 +145,6 @@ func generateSidecarQuadlet(sc ResolvedSidecar, podName string) string {
 	b.WriteString("TimeoutStartSec=120\n")
 
 	return b.String()
-}
-
-// TailscaleServeConfig represents the JSON structure for TS_SERVE_CONFIG.
-// Uses Tailscale's ipn.ServeConfig format.
-type TailscaleServeConfig struct {
-	TCP         map[string]TailscaleTCPConfig `json:"TCP,omitempty"`
-	Web         map[string]TailscaleWebConfig `json:"Web,omitempty"`
-	AllowFunnel map[string]bool               `json:"AllowFunnel,omitempty"`
-}
-
-// TailscaleTCPConfig represents a TCP port configuration in serve config.
-type TailscaleTCPConfig struct {
-	HTTPS bool `json:"HTTPS,omitempty"`
-}
-
-// TailscaleWebConfig represents a web handler configuration in serve config.
-type TailscaleWebConfig struct {
-	Handlers map[string]TailscaleHandler `json:"Handlers,omitempty"`
-}
-
-// TailscaleHandler represents a single handler in serve config.
-type TailscaleHandler struct {
-	Proxy string `json:"Proxy,omitempty"`
-}
-
-// GenerateTailscaleServeConfig creates a TS_SERVE_CONFIG JSON from tunnel config.
-// The config uses ${TS_CERT_DOMAIN} placeholder which Tailscale's containerboot
-// substitutes with the node's FQDN at startup.
-func GenerateTailscaleServeConfig(tunnel *TunnelConfig) ([]byte, error) {
-	if tunnel == nil || len(tunnel.Ports) == 0 {
-		return nil, nil
-	}
-
-	cfg := TailscaleServeConfig{
-		TCP:         make(map[string]TailscaleTCPConfig),
-		Web:         make(map[string]TailscaleWebConfig),
-		AllowFunnel: make(map[string]bool),
-	}
-
-	for _, tp := range tunnel.Ports {
-		if tp.Protocol == "udp" {
-			continue // UDP not supported by tailscale serve
-		}
-
-		port := fmt.Sprintf("%d", tp.Port)
-		backendPort := tp.backend()
-		backendScheme := "http"
-		if tp.Protocol == "https" || tp.Protocol == "https+insecure" {
-			backendScheme = "https"
-		}
-
-		if isTCPFamily(tp.Protocol) {
-			// TCP ports: use raw TCP proxying (TS_SERVE_CONFIG doesn't have a
-			// direct TCP proxy equivalent; for TCP, ExecStartPost is still needed)
-			continue
-		}
-
-		// HTTPS port: configure TLS termination + web proxy
-		cfg.TCP[port] = TailscaleTCPConfig{HTTPS: true}
-
-		hostPort := fmt.Sprintf("${TS_CERT_DOMAIN}:%s", port)
-		cfg.Web[hostPort] = TailscaleWebConfig{
-			Handlers: map[string]TailscaleHandler{
-				"/": {Proxy: fmt.Sprintf("%s://127.0.0.1:%d", backendScheme, backendPort)},
-			},
-		}
-
-		cfg.AllowFunnel[hostPort] = tp.Public
-	}
-
-	// Only return config if we have any web entries
-	if len(cfg.Web) == 0 {
-		return nil, nil
-	}
-
-	return json.MarshalIndent(cfg, "", "  ")
 }
 
 // --- Filename helpers ---

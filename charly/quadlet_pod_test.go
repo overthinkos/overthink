@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"strings"
 	"testing"
 )
@@ -271,94 +270,6 @@ func TestGenerateQuadlet_HostTunnelWithSidecar(t *testing.T) {
 	}
 	if !strings.Contains(content, "ExecStopPost=-tailscale serve") {
 		t.Error("host tailscale serve cleanup should be present")
-	}
-}
-
-func TestGenerateTailscaleServeConfig(t *testing.T) {
-	tunnel := &TunnelConfig{
-		Provider: "tailscale",
-		Ports: []TunnelPort{
-			{Port: 443, BackendPort: 18789, Protocol: "http", Public: true},
-			{Port: 8443, BackendPort: 8443, Protocol: "https", Public: false},
-		},
-	}
-
-	data, err := GenerateTailscaleServeConfig(tunnel)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if data == nil {
-		t.Fatal("expected non-nil serve config")
-	}
-
-	var cfg TailscaleServeConfig
-	if err := json.Unmarshal(data, &cfg); err != nil {
-		t.Fatal(err)
-	}
-
-	// Check TCP entries
-	if _, ok := cfg.TCP["443"]; !ok {
-		t.Error("missing TCP 443")
-	}
-	if _, ok := cfg.TCP["8443"]; !ok {
-		t.Error("missing TCP 8443")
-	}
-
-	// Check Web entries
-	webKey443 := "${TS_CERT_DOMAIN}:443"
-	if web, ok := cfg.Web[webKey443]; !ok {
-		t.Error("missing Web entry for 443")
-	} else {
-		handler := web.Handlers["/"]
-		if handler.Proxy != "http://127.0.0.1:18789" {
-			t.Errorf("proxy = %q, want http://127.0.0.1:18789", handler.Proxy)
-		}
-	}
-
-	webKey8443 := "${TS_CERT_DOMAIN}:8443"
-	if web, ok := cfg.Web[webKey8443]; !ok {
-		t.Error("missing Web entry for 8443")
-	} else {
-		handler := web.Handlers["/"]
-		if handler.Proxy != "https://127.0.0.1:8443" {
-			t.Errorf("proxy = %q, want https://127.0.0.1:8443", handler.Proxy)
-		}
-	}
-
-	// Check AllowFunnel
-	if !cfg.AllowFunnel[webKey443] {
-		t.Error("port 443 should have AllowFunnel=true (public)")
-	}
-	if cfg.AllowFunnel[webKey8443] {
-		t.Error("port 8443 should have AllowFunnel=false (private)")
-	}
-}
-
-func TestGenerateTailscaleServeConfig_TCPOnly(t *testing.T) {
-	tunnel := &TunnelConfig{
-		Provider: "tailscale",
-		Ports: []TunnelPort{
-			{Port: 5432, Protocol: "tcp", Public: false},
-		},
-	}
-
-	data, err := GenerateTailscaleServeConfig(tunnel)
-	if err != nil {
-		t.Fatal(err)
-	}
-	// TCP-only ports don't produce a serve config (TS_SERVE_CONFIG doesn't support raw TCP)
-	if data != nil {
-		t.Error("TCP-only tunnel should produce nil serve config")
-	}
-}
-
-func TestGenerateTailscaleServeConfig_Nil(t *testing.T) {
-	data, err := GenerateTailscaleServeConfig(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if data != nil {
-		t.Error("nil tunnel should produce nil serve config")
 	}
 }
 

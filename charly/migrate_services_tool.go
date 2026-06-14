@@ -299,6 +299,9 @@ func parseSupervisordPrograms(ini string) []supervisordProgram {
 			}
 		}
 	}
+	if err := scanner.Err(); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: supervisord ini scan error: %v\n", err)
+	}
 	if cur != nil {
 		programs = append(programs, *cur)
 	}

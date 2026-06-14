@@ -428,12 +428,12 @@ func (c *BoxConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 
 	// Inject provides BEFORE env resolution so this image's own provides
 	// (pod case) and other images' provides are available in the quadlet.
-	if meta != nil && len(meta.EnvProvide) > 0 {
+	if len(meta.EnvProvide) > 0 {
 		if _, injErr := injectEnvProvides(c.Box, c.Instance, meta.EnvProvide, portMap); injErr != nil {
 			fmt.Fprintf(os.Stderr, "Warning: could not inject env_provides: %v\n", injErr)
 		}
 	}
-	if meta != nil && len(meta.MCPProvide) > 0 {
+	if len(meta.MCPProvide) > 0 {
 		if _, injErr := injectMCPProvides(c.Box, c.Instance, meta.MCPProvide, portMap); injErr != nil {
 			fmt.Fprintf(os.Stderr, "Warning: could not inject mcp_provides: %v\n", injErr)
 		}
@@ -471,7 +471,7 @@ func (c *BoxConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	envVars = enrichNoProxy(envVars, dc.DeployedContainerNames())
 
 	// Enforce env_requires — hard error before writing anything
-	if meta != nil && len(meta.EnvRequire) > 0 {
+	if len(meta.EnvRequire) > 0 {
 		if err := checkMissingEnvRequires(c.Box, meta.EnvRequire, envVars); err != nil {
 			return err
 		}
@@ -835,10 +835,7 @@ func (c *BoxConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 skipDataProvision:
 
 	// Run post_enable hooks from image labels
-	var hooks *HooksConfig
-	if meta != nil {
-		hooks = meta.Hook
-	}
+	hooks := meta.Hook
 	if hooks != nil && hooks.PostEnable != "" {
 		ctrName := containerNameInstance(c.Box, c.Instance)
 		svc := serviceNameInstance(c.Box, c.Instance)
@@ -868,7 +865,7 @@ skipDataProvision:
 	}
 
 	// Warn about missing mcp_requires servers
-	if meta != nil && len(meta.MCPRequire) > 0 {
+	if len(meta.MCPRequire) > 0 {
 		dc := loadDeployConfigForRead("charly config mcp_requires check")
 		var mcpServers []MCPProvideEntry
 		if dc != nil && dc.Provides != nil {

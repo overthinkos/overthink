@@ -28,7 +28,6 @@ package main
 // block is removed from the shell init file.
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"os"
@@ -310,10 +309,8 @@ func stripLegacyOverthinkBlocks(existing string) string {
 		return existing
 	}
 	var out strings.Builder
-	scanner := bufio.NewScanner(strings.NewReader(existing))
 	inBlock := false
-	for scanner.Scan() {
-		line := scanner.Text()
+	for _, line := range strings.Split(existing, "\n") {
 		if strings.Contains(line, legacyBegin) {
 			inBlock = true
 			continue
@@ -341,11 +338,9 @@ func replaceOrAppendManagedBlock(existing, body, marker string) string {
 	existing = stripLegacyOverthinkBlocks(existing)
 	begin, end := markersForTag(marker)
 	if strings.Contains(existing, begin) {
-		scanner := bufio.NewScanner(strings.NewReader(existing))
 		var out strings.Builder
 		inBlock := false
-		for scanner.Scan() {
-			line := scanner.Text()
+		for _, line := range strings.Split(existing, "\n") {
 			if strings.Contains(line, begin) {
 				inBlock = true
 				out.WriteString(begin + "\n")
@@ -387,11 +382,9 @@ func replaceOrPrependManagedBlock(existing, body, marker string) string {
 	begin, end := markersForTag(marker)
 	if strings.Contains(existing, begin) {
 		// Same in-place replacement as replaceOrAppendManagedBlock.
-		scanner := bufio.NewScanner(strings.NewReader(existing))
 		var out strings.Builder
 		inBlock := false
-		for scanner.Scan() {
-			line := scanner.Text()
+		for _, line := range strings.Split(existing, "\n") {
 			if strings.Contains(line, begin) {
 				inBlock = true
 				out.WriteString(begin + "\n")
@@ -426,10 +419,8 @@ func stripManagedBlock(existing, marker string) string {
 		return existing
 	}
 	var out strings.Builder
-	scanner := bufio.NewScanner(strings.NewReader(existing))
 	inBlock := false
-	for scanner.Scan() {
-		line := scanner.Text()
+	for _, line := range strings.Split(existing, "\n") {
 		if strings.Contains(line, begin) {
 			inBlock = true
 			continue

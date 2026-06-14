@@ -118,6 +118,9 @@ func parseKFDGFXVersion(path string) string {
 			return fmt.Sprintf("%d.%d.0", major, minor)
 		}
 	}
+	if err := scanner.Err(); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: KFD properties scan error: %v\n", err)
+	}
 	return ""
 }
 

@@ -115,6 +115,9 @@ func parseAliasScript(path string) (*AliasInfo, error) {
 			command = after
 		}
 	}
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("parsing alias script %s: %w", path, err)
+	}
 
 	if !hasMarker {
 		return nil, nil

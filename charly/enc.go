@@ -85,6 +85,9 @@ func defaultIsEncryptedMounted(plainDir string) bool {
 			}
 		}
 	}
+	if err := scanner.Err(); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: /proc/mounts scan error: %v\n", err)
+	}
 	return false
 }
 

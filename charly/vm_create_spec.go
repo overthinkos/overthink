@@ -317,5 +317,8 @@ func detectRuntimeHostVendor() string {
 			}
 		}
 	}
+	if err := scanner.Err(); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: /proc/cpuinfo scan error: %v\n", err)
+	}
 	return ""
 }

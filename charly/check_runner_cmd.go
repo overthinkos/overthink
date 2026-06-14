@@ -447,6 +447,9 @@ func runWithPhaseResync(cmd *exec.Cmd, scoreName string) error {
 			}
 		}(n)
 	}
+	if err := scanner.Err(); err != nil {
+		fmt.Fprintf(os.Stderr, "harness: stderr scan stopped early: %v\n", err)
+	}
 	return cmd.Wait()
 }
 

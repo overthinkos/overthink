@@ -238,6 +238,9 @@ func extractLegacyShellBodies(body string) (bash, zsh, fish string) {
 			collected = append(collected, l)
 		}
 	}
+	if err := scanner.Err(); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: legacy shell body scan error: %v\n", err)
+	}
 	flush()
 	return bash, zsh, fish
 }

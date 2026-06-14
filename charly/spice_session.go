@@ -143,15 +143,6 @@ func DialSpiceUnix(path, passwd string) (*SpiceSession, error) {
 	return &SpiceSession{client: cli, driver: drv, addr: "unix://" + path}, nil
 }
 
-// DialSpiceSession is retained as a thin wrapper over DialSpiceTCP
-// for any external callers — existing internal callers have been
-// migrated to the explicit TCP/Unix constructors.
-//
-// Deprecated: use DialSpiceTCP or DialSpiceUnix directly.
-func DialSpiceSession(host string, port int, passwd string) (*SpiceSession, error) {
-	return DialSpiceTCP(host, port, passwd)
-}
-
 // Close tears down any auto-opened SSH tunnel. Shells-com/spice has
 // no explicit Close for its channels; they rely on GC.
 func (s *SpiceSession) Close() error {

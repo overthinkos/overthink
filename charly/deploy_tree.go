@@ -235,7 +235,7 @@ func vmChildExecutor(node *DeploymentNode, parentExec DeployExecutor, deployName
 // doesn't carry its own key (the map above owns the key), we embed
 // the dotted path into EmitOpts.Path upstream; deriveChildExecutor
 // reads that when available.
-func containerNameForNode(node *DeploymentNode) string {
+func containerNameForNode(_ *DeploymentNode) string {
 	// Placeholder: the real path is known only by the walker that
 	// tracks it. When invoked from the walker's DeployTreeVisitor,
 	// callers pass the name via the NestedJump.Target directly and

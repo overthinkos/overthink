@@ -896,7 +896,7 @@ func stringSliceFromYAML(v any) ([]string, bool) {
 // pixiDefaultEnvName returns the default pixi env name for a candy.
 // Pixi uses "default" unless the manifest declares otherwise; we keep it
 // simple and let the host target refine at install time.
-func pixiDefaultEnvName(layer *Candy) string {
+func pixiDefaultEnvName(_ *Candy) string {
 	return "default"
 }
 

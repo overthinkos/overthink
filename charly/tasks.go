@@ -685,6 +685,6 @@ func (g *Generator) emitTasks(b *strings.Builder, layer *Candy, img *ResolvedBox
 // builder auto-append. Phase 0: placeholder that returns false — builders
 // continue to run via the existing writeCandySteps builder block. Phase 2
 // migrations will switch on this once explicit build: tasks appear.
-func (g *Generator) candyHasImplicitBuild(layer *Candy, img *ResolvedBox) bool {
+func (g *Generator) candyHasImplicitBuild(_ *Candy, _ *ResolvedBox) bool {
 	return false
 }

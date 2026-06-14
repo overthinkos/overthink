@@ -119,6 +119,9 @@ func parseResolvNameservers(path string) []string {
 			seen[ip] = true
 		}
 	}
+	if err := sc.Err(); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: resolv.conf scan error: %v\n", err)
+	}
 	return out
 }
 

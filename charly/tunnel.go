@@ -291,12 +291,6 @@ func tailscalePublicOneStop(tp TunnelPort) error {
 
 // --- Tailscale Private (tailnet-only via serve) ---
 
-// ValidServePorts are the allowed external ports for Tailscale Serve.
-var ValidServePorts = map[int]bool{
-	80: true, 443: true, 3000: true, 3001: true, 3002: true, 3003: true,
-	4443: true, 5432: true, 6443: true, 8443: true,
-}
-
 func tailscalePrivateOneStart(tp TunnelPort) error {
 	if tp.Protocol == "udp" {
 		fmt.Fprintf(os.Stderr, "Warning: port %d (UDP) cannot be tunneled — tailscale serve only supports TCP/HTTPS. UDP traffic works directly between tailnet nodes.\n", tp.Port)

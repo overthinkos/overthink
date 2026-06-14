@@ -269,13 +269,11 @@ type ResolvedBox struct {
 	// Data image (scratch-based, data-only)
 	DataImage bool // true = FROM scratch, no runtime, no init, no services
 
-	// CandyCaps aggregates candy-contributed capabilities from this
-	// box's resolved candy composition (preserve_user, data_only,
-	// init_system_hint, oci_labels, etc.). Populated by ResolveBox
-	// via AggregateCandyCapabilities. Replaces the magic image-level
-	// flags (Bootc, DataImage) with a candy-derived surface — those
-	// fields remain during the cutover transition and are removed in
-	// the same commit once consumers migrate to CandyCaps.
+	// CandyCaps is the candy-derived capability surface aggregated from
+	// this box's resolved candy composition (preserve_user, data_only,
+	// init_system_hint, oci_labels, etc.). Populated by ResolveBox via
+	// AggregateCandyCapabilities. The image-level flags (DataImage,
+	// Bootc) remain as authored image-level fields alongside it.
 	CandyCaps *AggregatedCandyCaps `json:"-"`
 
 	// Derived fields
@@ -725,10 +723,6 @@ func resolveIntPtr(value, fallback *int, defaultVal int) int {
 	}
 	return defaultVal
 }
-
-// resolveVmConfig was removed in the VM hard-cutover. VM configuration
-// now lives on `kind: vm` entities in vm.yml (VmSpec); box:
-// entries no longer carry vm: or libvirt: fields.
 
 // resolveEffectiveBuilder computes an image's effective builder map via the
 // SINGLE canonical precedence, lowest→highest:

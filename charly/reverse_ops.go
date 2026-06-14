@@ -338,6 +338,7 @@ func reverseRestoreEnabled(op ReverseOp, re ReverseExecutor) error {
 	return nil
 }
 
+//nolint:unparam // uniform reverse-op handler signature (ReverseOp, ReverseExecutor); params unused by this completeness stub
 func reverseRemoveManaged(op ReverseOp, re ReverseExecutor) error {
 	// Managed-block removal happens at the session level, not per-op.
 	// This kind is present for completeness but LocalUnifiedTarget.Del

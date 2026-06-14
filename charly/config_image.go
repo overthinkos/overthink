@@ -688,7 +688,7 @@ func (c *BoxConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	if svcDir, svcErr := systemdUserDir(); svcErr == nil {
 		encPath := filepath.Join(svcDir, encServiceFilename(c.Box))
 		if _, statErr := os.Stat(encPath); statErr == nil {
-			os.Remove(encPath)
+			_ = os.Remove(encPath)
 			fmt.Fprintf(os.Stderr, "Removed stale %s\n", encPath)
 		}
 	}

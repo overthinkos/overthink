@@ -134,12 +134,12 @@ func (t *SSHTunnel) acceptLoop(ctx context.Context, ln net.Listener, dial func()
 			return
 		}
 		go func() {
-			defer local.Close()
+			defer local.Close() //nolint:errcheck
 			remote, err := dial()
 			if err != nil {
 				return
 			}
-			defer remote.Close()
+			defer remote.Close() //nolint:errcheck
 			// Two halves of the pipe. Close whichever side finishes
 			// first so the other io.Copy returns promptly.
 			done := make(chan struct{}, 2)

@@ -224,7 +224,7 @@ func (c *DeployResetCmd) Run() error {
 	if len(dc.Deploy) == 0 {
 		// No images left — remove the file
 		path, _ := DeployConfigPath()
-		os.Remove(path)
+		_ = os.Remove(path)
 		fmt.Printf("Removed overrides for %q (charly.yml now empty, removed)\n", key)
 		return nil
 	}

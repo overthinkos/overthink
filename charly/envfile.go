@@ -47,7 +47,7 @@ func LoadProcessDotenv(dir string) error {
 
 		// Only set if NOT already in environment (real env takes precedence)
 		if _, exists := os.LookupEnv(key); !exists {
-			os.Setenv(key, value)
+			_ = os.Setenv(key, value)
 			dotenvLoaded[key] = true
 		}
 	}

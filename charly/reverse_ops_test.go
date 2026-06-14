@@ -103,7 +103,7 @@ func TestReverseOpsDryRunEmitsSudoMarkers(t *testing.T) {
 	oldStderr := os.Stderr
 	os.Stderr = w
 	_ = runReverseOps(ops, re)
-	w.Close()
+	_ = w.Close()
 	os.Stderr = oldStderr
 	var buf [1024]byte
 	n, _ := r.Read(buf[:])

@@ -97,19 +97,19 @@ func ResolveVmTarget(vmName, uri string) (*VmTarget, error) {
 	domName := vmDomainNameFor(vmName)
 	dom, err := conn.lookupDomain(domName)
 	if err != nil {
-		conn.Close()
+		_ = conn.Close()
 		return nil, fmt.Errorf("domain %q not found; start with `charly vm start %s`: %w", domName, vmName, err)
 	}
 
 	// Parse live XML.
 	xmlStr, err := conn.getDomainXML(dom)
 	if err != nil {
-		conn.Close()
+		_ = conn.Close()
 		return nil, fmt.Errorf("getting XML for %s: %w", domName, err)
 	}
 	parsed := &libvirtxml.Domain{}
 	if err := parsed.Unmarshal(xmlStr); err != nil {
-		conn.Close()
+		_ = conn.Close()
 		return nil, fmt.Errorf("parsing XML for %s: %w", domName, err)
 	}
 

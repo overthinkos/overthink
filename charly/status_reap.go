@@ -66,7 +66,7 @@ func ephemeralUnderlyingResourceAlive(name string, node DeploymentNode) bool {
 		if err != nil {
 			return true // can't probe → conservative: assume alive
 		}
-		defer conn.Close()
+		defer conn.Close() //nolint:errcheck
 		domName := "charly-" + node.Vm
 		if node.VmState != nil && node.VmState.Ephemeral != nil && node.VmState.Ephemeral.InstanceName != "" {
 			domName = "charly-" + node.VmState.Ephemeral.InstanceName

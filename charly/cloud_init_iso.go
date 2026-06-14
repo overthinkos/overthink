@@ -32,7 +32,7 @@ func WriteSeedISO(outPath, userData, metaData, networkConfig string) error {
 		return fmt.Errorf("creating temp dir: %w", err)
 	}
 	RegisterTempCleanup(tmpDir)
-	defer func() { os.RemoveAll(tmpDir); UnregisterTempCleanup(tmpDir) }()
+	defer func() { _ = os.RemoveAll(tmpDir); UnregisterTempCleanup(tmpDir) }()
 
 	if err := os.WriteFile(filepath.Join(tmpDir, "user-data"), []byte(userData), 0o644); err != nil {
 		return fmt.Errorf("writing user-data: %w", err)

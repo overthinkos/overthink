@@ -109,7 +109,7 @@ func TestSweep_HeldByCurrentProcess_Kept(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer f.Close()
+	defer f.Close() //nolint:errcheck
 	SweepStaleTemps()
 	if _, err := os.Stat(p); err != nil {
 		t.Errorf("expected kept (held open by current process), stat = %v", err)

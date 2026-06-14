@@ -90,7 +90,7 @@ func runMcpServeListImages(t *testing.T, bin, cwd string, extraEnv, args []strin
 		select {
 		case <-done:
 		case <-time.After(2 * time.Second):
-			cmd.Process.Kill()
+			_ = cmd.Process.Kill()
 			<-done
 		}
 	}()
@@ -98,8 +98,12 @@ func runMcpServeListImages(t *testing.T, bin, cwd string, extraEnv, args []strin
 	// Minimal MCP stdio handshake: initialize, then tools/call box.list.boxes.
 	send := func(req map[string]any) {
 		b, _ := json.Marshal(req)
-		stdin.Write(b)
-		stdin.Write([]byte("\n"))
+		if _, err := stdin.Write(b); err != nil {
+			t.Fatalf("stdin write: %v", err)
+		}
+		if _, err := stdin.Write([]byte("\n")); err != nil {
+			t.Fatalf("stdin write: %v", err)
+		}
 	}
 	send(map[string]any{
 		"jsonrpc": "2.0", "id": 1, "method": "initialize",

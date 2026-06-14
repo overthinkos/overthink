@@ -317,7 +317,7 @@ func (n *NestedExecutor) GetFile(ctx context.Context, remotePath string, asRoot 
 	if err := n.Parent.RunUser(ctx, wrapped, opts); err != nil {
 		return nil, fmt.Errorf("nested GetFile stage: %w", err)
 	}
-	defer n.Parent.RunUser(ctx, "rm -f "+deployShellQuote(stage), opts)
+	defer n.Parent.RunUser(ctx, "rm -f "+deployShellQuote(stage), opts) //nolint:errcheck
 	return n.Parent.GetFile(ctx, stage, false, opts)
 }
 

@@ -2293,13 +2293,13 @@ func (g *Generator) createRemoteCandyCopies() error {
 	}
 	if !hasRemote {
 		// Clean up _layers dir if it exists from a previous run
-		os.RemoveAll(filepath.Join(g.BuildDir, "_layers"))
+		_ = os.RemoveAll(filepath.Join(g.BuildDir, "_layers"))
 		return nil
 	}
 
 	candiesDir := filepath.Join(g.BuildDir, "_layers")
 	// Remove and recreate to ensure clean state
-	os.RemoveAll(candiesDir)
+	_ = os.RemoveAll(candiesDir)
 	if err := os.MkdirAll(candiesDir, 0755); err != nil {
 		return err
 	}

@@ -203,7 +203,7 @@ func (c *MergeCmd) runOne(cfg *Config, boxName string) error {
 		rmCmd := exec.Command(binary, "manifest", "rm", imageRef)
 		rmCmd.Stdout = io.Discard
 		rmCmd.Stderr = io.Discard
-		rmCmd.Run()
+		_ = rmCmd.Run() // best-effort: removing a possibly-absent manifest before load
 	}
 
 	if err := saveImageToDaemon(newImg, imageRef, engine); err != nil {
@@ -615,7 +615,7 @@ func loadImageFromDaemon(ref string, engine string) (v1.Image, func(), bool, err
 	rmCmd := exec.Command(binary, "rmi", tmpRef)
 	rmCmd.Stdout = io.Discard
 	rmCmd.Stderr = io.Discard
-	rmCmd.Run()
+	_ = rmCmd.Run() // best-effort: cleaning up the temp tag regardless of outcome
 
 	if err != nil {
 		return nil, nil, false, fmt.Errorf("saving extracted manifest image: %w", err)
@@ -632,18 +632,18 @@ func saveAndLoad(binary, ref string) (v1.Image, func(), error) {
 	}
 	RegisterTempCleanup(tmpFile.Name())
 
-	cleanup := func() { os.Remove(tmpFile.Name()); UnregisterTempCleanup(tmpFile.Name()) }
+	cleanup := func() { _ = os.Remove(tmpFile.Name()); UnregisterTempCleanup(tmpFile.Name()) }
 
 	cmd := exec.Command(binary, "save", ref)
 	cmd.Stdout = tmpFile
 	cmd.Stderr = io.Discard
 	if err := cmd.Run(); err != nil {
-		tmpFile.Close()
+		_ = tmpFile.Close()
 		cleanup()
 		return nil, nil, err
 	}
 
-	tmpFile.Close()
+	_ = tmpFile.Close()
 
 	img, err := tarball.ImageFromPath(tmpFile.Name(), nil)
 	if err != nil {
@@ -671,13 +671,13 @@ func saveImageToDaemon(img v1.Image, ref string, engine string) error {
 	loaded := false
 	defer func() {
 		if loaded || !keepOnFail {
-			os.Remove(tmpFile.Name())
+			_ = os.Remove(tmpFile.Name())
 			UnregisterTempCleanup(tmpFile.Name())
 		} else {
 			fmt.Fprintf(os.Stderr, "CHARLY_MERGE_KEEP_TMP=1: kept failing tarball at %s\n", tmpFile.Name())
 		}
 	}()
-	defer tmpFile.Close()
+	defer tmpFile.Close() //nolint:errcheck
 
 	tag, err := name.NewTag(ref)
 	if err != nil {

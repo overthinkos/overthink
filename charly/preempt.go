@@ -577,7 +577,7 @@ func holderStart(addr holderAddr) error {
 // pidfile liveness).
 func vmIsRunning(name string) bool {
 	if conn, err := connectLibvirt(""); err == nil {
-		defer conn.Close()
+		defer conn.Close() //nolint:errcheck
 		if dom, lerr := conn.lookupDomain(name); lerr == nil {
 			if st, serr := conn.domainState(dom); serr == nil {
 				return domainStateString(st) == "running"

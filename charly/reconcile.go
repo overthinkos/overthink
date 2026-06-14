@@ -41,7 +41,7 @@ func reconcileCandidateFiles(dir string) []string {
 	// no-op (the root err arm returns nil).
 	for _, sub := range []string{DefaultBoxDir, DefaultCandyDir} {
 		root := filepath.Join(dir, sub)
-		filepath.Walk(root, func(p string, info os.FileInfo, err error) error {
+		_ = filepath.Walk(root, func(p string, info os.FileInfo, err error) error {
 			if err != nil || info == nil {
 				return nil
 			}

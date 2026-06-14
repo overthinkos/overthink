@@ -79,7 +79,7 @@ func FetchQcow2(src VmSource) (FetchedImage, error) {
 	}
 	if expected != "" && actual != expected {
 		// Hard failure — don't promote to cache.
-		os.Remove(partPath)
+		_ = os.Remove(partPath)
 		return FetchedImage{}, fmt.Errorf("checksum mismatch: expected %s, got %s", expected, actual)
 	}
 
@@ -232,7 +232,7 @@ func downloadResumable(u, dst string) error {
 	if err != nil {
 		return fmt.Errorf("opening %s: %w", dst, err)
 	}
-	defer f.Close()
+	defer f.Close() //nolint:errcheck
 
 	total := offset + resp.ContentLength
 	fmt.Fprintf(os.Stderr, "Fetching %s", u)
@@ -264,7 +264,7 @@ func fileSHA256(path string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer f.Close()
+	defer f.Close() //nolint:errcheck
 	h := sha256.New()
 	if _, err := io.Copy(h, f); err != nil {
 		return "", err

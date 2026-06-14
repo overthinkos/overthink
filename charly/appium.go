@@ -625,7 +625,8 @@ func (c *AppiumInstallAppCmd) Run() error {
 	if out, cpErr := exec.Command(engine, "cp", c.Apk, containerName+":"+remote).CombinedOutput(); cpErr != nil {
 		return fmt.Errorf("staging APK into %s: %v: %s", containerName, cpErr, strings.TrimSpace(string(out)))
 	}
-	defer exec.Command(engine, "exec", containerName, "rm", "-f", remote).Run()
+	// best-effort cleanup of the staged APK; failure is non-fatal
+	defer func() { _ = exec.Command(engine, "exec", containerName, "rm", "-f", remote).Run() }()
 
 	s := newW3CSession(sess.BaseURL, sess.SessionID)
 	args := []interface{}{map[string]interface{}{"appPath": remote}}

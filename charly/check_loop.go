@@ -255,7 +255,7 @@ var buildImageFn = func(ctx context.Context, repoDir, image, tag, logPath string
 		if err == nil {
 			cmd.Stdout = f
 			cmd.Stderr = f
-			defer f.Close()
+			defer f.Close() //nolint:errcheck
 		}
 	}
 	err := cmd.Run()
@@ -306,12 +306,12 @@ var runRunnerFn = func(ctx context.Context, layout RunLayout, argv []string, env
 		if err != nil {
 			return 0, fmt.Errorf("harness: open ndjson sink: %w", err)
 		}
-		defer sink.Close()
+		defer sink.Close() //nolint:errcheck
 		stderrFile, err := os.Create(stream.StderrPath)
 		if err != nil {
 			return 0, fmt.Errorf("harness: open stderr file: %w", err)
 		}
-		defer stderrFile.Close()
+		defer stderrFile.Close() //nolint:errcheck
 		cmd.Stdout = sink
 		cmd.Stderr = stderrFile
 		runErr := cmd.Run()
@@ -323,7 +323,7 @@ var runRunnerFn = func(ctx context.Context, layout RunLayout, argv []string, env
 		if ferr == nil {
 			cmd.Stdout = f
 			cmd.Stderr = f
-			defer f.Close()
+			defer f.Close() //nolint:errcheck
 		}
 	}
 	err := cmd.Run()
@@ -1147,7 +1147,7 @@ func killOrphanLoopBashes(targetKind, targetName string) {
 		cmd := exec.Command("podman", "exec", container, "pkill", "-c", "-f", pat)
 		out, _ := cmd.Output()
 		var n int
-		fmt.Sscanf(string(out), "%d", &n)
+		_, _ = fmt.Sscanf(string(out), "%d", &n) // best-effort: parse failure leaves n=0 (no orphans counted)
 		if n > 0 {
 			fmt.Fprintf(os.Stderr, "harness: killed %d orphan bash poll-loop(s) [%s] inside %s before iter commit\n", n, label, container)
 		}
@@ -1488,7 +1488,7 @@ func ResolveLastTestTag(targetImage string, stdout *os.File) error {
 	}
 	iterStr := os.Getenv("CHARLY_EVAL_ITERATION")
 	var iter int
-	fmt.Sscanf(iterStr, "%d", &iter)
+	_, _ = fmt.Sscanf(iterStr, "%d", &iter) // best-effort: parse failure leaves iter=0, caught by the iter<=1 guard
 	if iter <= 1 {
 		return fmt.Errorf("harness: no prior iteration on iter %d", iter)
 	}

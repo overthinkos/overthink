@@ -120,15 +120,15 @@ func cleanupRenamedDeploy(name string) {
 		return
 	}
 	// 1. Stop the user-mode systemd unit. Best-effort.
-	exec.Command("systemctl", "--user", "stop", name+".service").Run()
+	_ = exec.Command("systemctl", "--user", "stop", name+".service").Run() // best-effort
 	// 2. Force-remove the container (covers running + stopped).
-	exec.Command("podman", "rm", "-f", name).Run()
+	_ = exec.Command("podman", "rm", "-f", name).Run() // best-effort
 	// 3. Delete the now-stale quadlet.
-	os.Remove(quadlet)
+	_ = os.Remove(quadlet)
 	// 4. Reload systemd so it forgets the unit; otherwise enabling the
 	//    fresh quadlet emits a "Unit was already loaded from disk"
 	//    transient warning that confuses bug reports.
-	exec.Command("systemctl", "--user", "daemon-reload").Run()
+	_ = exec.Command("systemctl", "--user", "daemon-reload").Run() // best-effort
 	fmt.Printf("  cleaned up stale deploy state: %s (quadlet + systemd unit + container)\n", name)
 }
 

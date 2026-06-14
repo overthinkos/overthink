@@ -209,12 +209,22 @@ func TestIsRemoteImageRef(t *testing.T) {
 func TestScanRemoteCandies(t *testing.T) {
 	dir := t.TempDir()
 	candiesDir := filepath.Join(dir, "candy")
-	os.MkdirAll(filepath.Join(candiesDir, "cuda"), 0755)
-	os.MkdirAll(filepath.Join(candiesDir, "python-ml"), 0755)
+	if err := os.MkdirAll(filepath.Join(candiesDir, "cuda"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(candiesDir, "python-ml"), 0755); err != nil {
+		t.Fatal(err)
+	}
 
-	os.WriteFile(filepath.Join(candiesDir, "cuda", "charly.yml"), []byte("candy:\n  name: cuda\n  package:\n    - cuda-toolkit\n"), 0644)
-	os.WriteFile(filepath.Join(candiesDir, "python-ml", "charly.yml"), []byte("candy:\n  name: python-ml\n  require:\n    - cuda\n"), 0644)
-	os.WriteFile(filepath.Join(candiesDir, "python-ml", "pixi.toml"), []byte("[project]\nname = \"python-ml\"\n"), 0644)
+	if err := os.WriteFile(filepath.Join(candiesDir, "cuda", "charly.yml"), []byte("candy:\n  name: cuda\n  package:\n    - cuda-toolkit\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(candiesDir, "python-ml", "charly.yml"), []byte("candy:\n  name: python-ml\n  require:\n    - cuda\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(candiesDir, "python-ml", "pixi.toml"), []byte("[project]\nname = \"python-ml\"\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	wantRefs := map[string]bool{
 		"github.com/overthinkos/ml-layers/candy/cuda":      true,
@@ -630,9 +640,15 @@ func TestRepoGitURL(t *testing.T) {
 func TestDiscoverRemoteCandies(t *testing.T) {
 	dir := t.TempDir()
 	candiesDir := filepath.Join(dir, "candy")
-	os.MkdirAll(filepath.Join(candiesDir, "beta"), 0755)
-	os.MkdirAll(filepath.Join(candiesDir, "alpha"), 0755)
-	os.WriteFile(filepath.Join(candiesDir, "README.md"), []byte("test"), 0644)
+	if err := os.MkdirAll(filepath.Join(candiesDir, "beta"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(candiesDir, "alpha"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(candiesDir, "README.md"), []byte("test"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	names, err := DiscoverRemoteCandy(dir)
 	if err != nil {

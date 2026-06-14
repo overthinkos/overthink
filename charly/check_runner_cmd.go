@@ -488,7 +488,7 @@ func (c *CheckLastTagCmd) Run() error {
 		return fmt.Errorf("charly check last-test-tag: must run inside an iteration")
 	}
 	var k int
-	fmt.Sscanf(iter, "%d", &k)
+	_, _ = fmt.Sscanf(iter, "%d", &k) // best-effort: parse failure leaves k=0, caught by the k<=1 guard
 	if k <= 1 {
 		return fmt.Errorf("charly check last-test-tag: no prior iteration (k=%d)", k)
 	}
@@ -556,7 +556,7 @@ func (c *CheckSelfCheckCmd) Run() error {
 	}
 	var phase int
 	if phaseStr != "" {
-		fmt.Sscanf(phaseStr, "%d", &phase)
+		_, _ = fmt.Sscanf(phaseStr, "%d", &phase) // best-effort: parse failure leaves phase=0 (default phase)
 	}
 
 	layers, lerr := ScanCandy(cwd)

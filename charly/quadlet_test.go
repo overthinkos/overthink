@@ -231,13 +231,17 @@ func TestQuadletExists(t *testing.T) {
 	tmpDir := t.TempDir()
 	// Write a fake .container file
 	systemdDir := filepath.Join(tmpDir, ".config", "containers", "systemd")
-	os.MkdirAll(systemdDir, 0755)
-	os.WriteFile(filepath.Join(systemdDir, "charly-testimg.container"), []byte("test"), 0644)
+	if err := os.MkdirAll(systemdDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(systemdDir, "charly-testimg.container"), []byte("test"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	// Override HOME so quadletDir resolves to our temp dir
 	origHome := os.Getenv("HOME")
-	os.Setenv("HOME", tmpDir)
-	defer os.Setenv("HOME", origHome)
+	_ = os.Setenv("HOME", tmpDir)
+	defer os.Setenv("HOME", origHome) //nolint:errcheck
 
 	exists, err := quadletExists("testimg")
 	if err != nil {

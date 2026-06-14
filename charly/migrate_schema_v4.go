@@ -73,7 +73,7 @@ func MigrateSchemaV4Files(dir string, dryRun bool) ([]string, error) {
 		if err := enc.Encode(&doc); err != nil {
 			return changed, fmt.Errorf("encoding %s: %w", path, err)
 		}
-		enc.Close()
+		_ = enc.Close()
 		if err := os.WriteFile(path, out.Bytes(), 0o644); err != nil {
 			return changed, fmt.Errorf("writing %s: %w", path, err)
 		}

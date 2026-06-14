@@ -289,7 +289,7 @@ func buildDepPkgsOnHost(ctx context.Context, lp *LocalPkgDef, bDef *BuilderDef, 
 	// Always surface the builder's stdout/stderr — the operator needs to see
 	// compile output to debug build failures, not just the bare exit status.
 	if len(out) > 0 {
-		os.Stderr.Write(out)
+		_, _ = os.Stderr.Write(out)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("%s builder: %w", lp.DepBuilder, err)

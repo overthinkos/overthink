@@ -32,6 +32,17 @@ linters:
     - nakedret      # naked returns in long functions
     - prealloc      # slice preallocation opportunities
   settings:
+    errcheck:
+      # Unactionable stdlib calls whose error has no meaningful handling in a CLI:
+      # writing to stderr/stdout/string-builders never produces an actionable error,
+      # and a deferred Close on a network conn / response body / read handle is the
+      # idiomatic best-effort cleanup. Genuinely actionable errors (os.WriteFile,
+      # exec.Cmd.Run, fmt.Sscanf, io.Copy, …) are NOT excluded and ARE handled.
+      exclude-functions:
+        - fmt.Fprint
+        - fmt.Fprintf
+        - fmt.Fprintln
+        - (io.Closer).Close
     dupl:
       threshold: 150        # token threshold — high enough to flag real copy-paste, not noise
     gocyclo:

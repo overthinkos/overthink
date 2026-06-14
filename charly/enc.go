@@ -63,7 +63,7 @@ func defaultIsEncryptedMounted(plainDir string) bool {
 	if err != nil {
 		return false
 	}
-	defer f.Close()
+	defer f.Close() //nolint:errcheck
 
 	// Resolve symlinks for comparison
 	resolved, err := filepath.EvalSymlinks(plainDir)
@@ -109,10 +109,14 @@ func encExtpassArgs(imageID string) ([]string, func()) {
 		return []string{"-extpass", ep}, func() {}
 	}
 	RegisterTempCleanup(f.Name())
-	f.WriteString(script)
-	f.Chmod(0700)
-	f.Close()
-	return []string{"-extpass", f.Name()}, func() { os.Remove(f.Name()); UnregisterTempCleanup(f.Name()) }
+	if _, werr := f.WriteString(script); werr != nil {
+		fmt.Fprintf(os.Stderr, "encExtpassArgs: write extpass script: %v\n", werr)
+	}
+	if cerr := f.Chmod(0700); cerr != nil {
+		fmt.Fprintf(os.Stderr, "encExtpassArgs: chmod extpass script: %v\n", cerr)
+	}
+	_ = f.Close()
+	return []string{"-extpass", f.Name()}, func() { _ = os.Remove(f.Name()); UnregisterTempCleanup(f.Name()) }
 }
 
 // resolveEncPassphrase resolves the gocryptfs passphrase for an image.
@@ -316,14 +320,14 @@ func waitForKeyringUnlock(
 		return waitForKeyringUnlockBackstopOnly(ctx, boxName, resolver, reset)
 	}
 	if err := conn.Auth(nil); err != nil {
-		conn.Close()
+		_ = conn.Close()
 		return waitForKeyringUnlockBackstopOnly(ctx, boxName, resolver, reset)
 	}
 	if err := conn.Hello(); err != nil {
-		conn.Close()
+		_ = conn.Close()
 		return waitForKeyringUnlockBackstopOnly(ctx, boxName, resolver, reset)
 	}
-	defer conn.Close()
+	defer conn.Close() //nolint:errcheck
 
 	matchRule := "type='signal',interface='org.freedesktop.DBus.Properties',member='PropertiesChanged',path_namespace='/org/freedesktop/secrets/collection'"
 	call := conn.BusObject().Call("org.freedesktop.DBus.AddMatch", 0, matchRule)
@@ -528,7 +532,7 @@ func encUnmount(boxName, instance, volume string) error {
 		}
 		// Stop the gocryptfs scope unit (gocryptfs may linger after fusermount)
 		scopeUnit := fmt.Sprintf("charly-enc-%s-%s.scope", deployStorageDir(boxName, instance), m.Name)
-		exec.Command("systemctl", "--user", "stop", scopeUnit).Run() // best-effort
+		_ = exec.Command("systemctl", "--user", "stop", scopeUnit).Run() // best-effort
 		fmt.Fprintf(os.Stderr, "Unmounted %s\n", m.Name)
 	}
 	return nil
@@ -621,9 +625,13 @@ func encPasswd(boxName, instance string) error {
 			return fmt.Errorf("creating temp script for %s: %w", m.Name, err)
 		}
 		RegisterTempCleanup(oldScript.Name())
-		oldScript.WriteString("#!/bin/bash\nprintf '%s' '" + strings.ReplaceAll(oldPass, "'", "'\\''") + "'\n")
-		oldScript.Chmod(0700)
-		oldScript.Close()
+		if _, werr := oldScript.WriteString("#!/bin/bash\nprintf '%s' '" + strings.ReplaceAll(oldPass, "'", "'\\''") + "'\n"); werr != nil {
+			return fmt.Errorf("writing temp script for %s: %w", m.Name, werr)
+		}
+		if cerr := oldScript.Chmod(0700); cerr != nil {
+			return fmt.Errorf("chmod temp script for %s: %w", m.Name, cerr)
+		}
+		_ = oldScript.Close()
 
 		// Pipe new password via stdin to gocryptfs -passwd
 		cmd := exec.Command("gocryptfs", "-passwd", "-extpass", oldScript.Name(), cipherDir)
@@ -631,7 +639,7 @@ func encPasswd(boxName, instance string) error {
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		runErr := cmd.Run()
-		os.Remove(oldScript.Name())
+		_ = os.Remove(oldScript.Name())
 		UnregisterTempCleanup(oldScript.Name())
 		if runErr != nil {
 			return fmt.Errorf("changing password for %s: %w", m.Name, runErr)

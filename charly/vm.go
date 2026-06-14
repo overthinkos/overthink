@@ -448,7 +448,7 @@ func startVM(box, instance string) error {
 		if err != nil {
 			return err
 		}
-		defer conn.Close()
+		defer conn.Close() //nolint:errcheck
 
 		dom, err := conn.lookupDomain(name)
 		if err != nil {
@@ -529,7 +529,7 @@ func stopVM(box, instance string, force bool) error {
 		if err != nil {
 			return err
 		}
-		defer conn.Close()
+		defer conn.Close() //nolint:errcheck
 
 		dom, err := conn.lookupDomain(name)
 		if err != nil {
@@ -563,7 +563,7 @@ func stopVM(box, instance string, force bool) error {
 				if data, readErr := os.ReadFile(pidFile); readErr == nil {
 					if pid, parseErr := strconv.Atoi(strings.TrimSpace(string(data))); parseErr == nil {
 						if proc, findErr := os.FindProcess(pid); findErr == nil {
-							proc.Signal(syscall.SIGTERM)
+							_ = proc.Signal(syscall.SIGTERM)
 						}
 					}
 				}
@@ -609,7 +609,7 @@ func (c *VmDestroyCmd) Run() error {
 		if err != nil {
 			return err
 		}
-		defer conn.Close()
+		defer conn.Close() //nolint:errcheck
 
 		dom, err := conn.lookupDomain(name)
 		if err != nil {
@@ -642,7 +642,7 @@ func (c *VmDestroyCmd) Run() error {
 		}
 
 		// Remove state directory
-		os.RemoveAll(stateDir)
+		_ = os.RemoveAll(stateDir)
 		fmt.Fprintf(os.Stderr, "Destroyed VM %s\n", name)
 	}
 
@@ -670,7 +670,7 @@ func (c *VmDestroyCmd) Run() error {
 		// Remove only THIS VM's disk dir — never the shared parent (which
 		// would delete every other VM's disk too).
 		qcow2Dir := vmDiskDir(c.Box)
-		os.RemoveAll(qcow2Dir)
+		_ = os.RemoveAll(qcow2Dir)
 		fmt.Fprintf(os.Stderr, "Deleted disk images in %s\n", qcow2Dir)
 	}
 
@@ -716,7 +716,7 @@ func (c *VmListCmd) Run() error {
 
 	// libvirt probe
 	if conn, err := connectLibvirt(""); err == nil {
-		defer conn.Close()
+		defer conn.Close() //nolint:errcheck
 		domains, derr := conn.listCharlyDomains()
 		if derr != nil {
 			probeNotes = append(probeNotes, fmt.Sprintf("(libvirt: listing failed: %v)", derr))
@@ -808,7 +808,7 @@ func (c *VmListCmd) runCleanOrphans() error {
 	if err != nil {
 		return fmt.Errorf("connecting to libvirt: %w", err)
 	}
-	defer conn.Close()
+	defer conn.Close() //nolint:errcheck
 	domains, err := conn.listCharlyDomains()
 	if err != nil {
 		return fmt.Errorf("listing domains: %w", err)
@@ -899,7 +899,7 @@ func connectUnixConsole(socketPath string) error {
 	if err != nil {
 		return fmt.Errorf("connecting to %s: %w", socketPath, err)
 	}
-	defer conn.Close()
+	defer conn.Close() //nolint:errcheck
 
 	// Switch terminal to raw mode
 	fd := int(os.Stdin.Fd())
@@ -908,16 +908,17 @@ func connectUnixConsole(socketPath string) error {
 		if err != nil {
 			return fmt.Errorf("setting raw terminal mode: %w", err)
 		}
-		defer term.Restore(fd, oldState)
+		defer term.Restore(fd, oldState) //nolint:errcheck
 	}
 
-	// Bidirectional copy
+	// Bidirectional copy — relay errors are the normal "connection closed"
+	// signal for an interactive console, so they're intentionally dropped.
 	done := make(chan struct{})
 	go func() {
-		io.Copy(conn, os.Stdin)
+		_, _ = io.Copy(conn, os.Stdin)
 		close(done)
 	}()
-	io.Copy(os.Stdout, conn)
+	_, _ = io.Copy(os.Stdout, conn)
 	<-done
 	return nil
 }

@@ -250,12 +250,12 @@ func EnsureManagedBlockVia(ctx context.Context, exec DeployExecutor, shell Shell
 		return "", fmt.Errorf("EnsureManagedBlockVia tmp: %w", err)
 	}
 	tmpPath := tmp.Name()
-	defer os.Remove(tmpPath)
+	defer os.Remove(tmpPath) //nolint:errcheck
 	if _, err := tmp.WriteString(updated); err != nil {
-		tmp.Close()
+		_ = tmp.Close()
 		return "", fmt.Errorf("EnsureManagedBlockVia stage: %w", err)
 	}
-	tmp.Close()
+	_ = tmp.Close()
 	if err := exec.PutFile(ctx, tmpPath, path, 0644, false, opts); err != nil {
 		return "", fmt.Errorf("EnsureManagedBlockVia write %s: %w", path, err)
 	}

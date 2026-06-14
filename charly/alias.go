@@ -97,7 +97,7 @@ func parseAliasScript(path string) (*AliasInfo, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
+	defer f.Close() //nolint:errcheck
 
 	scanner := bufio.NewScanner(f)
 	var hasMarker bool

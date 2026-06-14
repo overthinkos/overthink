@@ -142,12 +142,12 @@ func EnsurePerVmNvram(templatePath, perVmDir string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("opening OVMF_VARS template %q: %w", templatePath, err)
 	}
-	defer src.Close()
+	defer src.Close() //nolint:errcheck
 	out, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
 	if err != nil {
 		return "", fmt.Errorf("creating per-VM NVRAM file %q: %w", dst, err)
 	}
-	defer out.Close()
+	defer out.Close() //nolint:errcheck
 	if _, err := io.Copy(out, src); err != nil {
 		return "", fmt.Errorf("copying OVMF_VARS template: %w", err)
 	}

@@ -32,7 +32,7 @@ func captureStderr(t *testing.T, fn func()) string {
 	}()
 
 	fn()
-	w.Close()
+	_ = w.Close()
 	<-done
 	return buf.String()
 }

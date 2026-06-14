@@ -64,7 +64,7 @@ func TestResolveRuntime_Defaults(t *testing.T) {
 
 	// Ensure env vars are clear
 	for _, key := range []string{"CHARLY_BUILD_ENGINE", "CHARLY_RUN_ENGINE", "CHARLY_RUN_MODE", "CHARLY_AUTO_ENABLE", "CHARLY_BIND_ADDRESS"} {
-		os.Unsetenv(key)
+		_ = os.Unsetenv(key)
 	}
 
 	rt, err := ResolveRuntime()
@@ -101,14 +101,16 @@ func TestResolveRuntime_EnvOverridesConfig(t *testing.T) {
 
 	// Write config with podman
 	cfg := &RuntimeConfig{Engine: EngineConfig{Build: "podman"}}
-	SaveRuntimeConfig(cfg)
+	if err := SaveRuntimeConfig(cfg); err != nil {
+		t.Fatal(err)
+	}
 
 	// Set env to override
-	os.Setenv("CHARLY_BUILD_ENGINE", "docker")
-	defer os.Unsetenv("CHARLY_BUILD_ENGINE")
-	os.Unsetenv("CHARLY_RUN_ENGINE")
-	os.Unsetenv("CHARLY_RUN_MODE")
-	os.Unsetenv("CHARLY_BIND_ADDRESS")
+	_ = os.Setenv("CHARLY_BUILD_ENGINE", "docker")
+	defer os.Unsetenv("CHARLY_BUILD_ENGINE") //nolint:errcheck
+	_ = os.Unsetenv("CHARLY_RUN_ENGINE")
+	_ = os.Unsetenv("CHARLY_RUN_MODE")
+	_ = os.Unsetenv("CHARLY_BIND_ADDRESS")
 
 	rt, err := ResolveRuntime()
 	if err != nil {
@@ -126,11 +128,11 @@ func TestResolveRuntime_InvalidEngine(t *testing.T) {
 		return filepath.Join(t.TempDir(), "config.yml"), nil
 	}
 
-	os.Setenv("CHARLY_BUILD_ENGINE", "containerd")
-	defer os.Unsetenv("CHARLY_BUILD_ENGINE")
-	os.Unsetenv("CHARLY_RUN_ENGINE")
-	os.Unsetenv("CHARLY_RUN_MODE")
-	os.Unsetenv("CHARLY_BIND_ADDRESS")
+	_ = os.Setenv("CHARLY_BUILD_ENGINE", "containerd")
+	defer os.Unsetenv("CHARLY_BUILD_ENGINE") //nolint:errcheck
+	_ = os.Unsetenv("CHARLY_RUN_ENGINE")
+	_ = os.Unsetenv("CHARLY_RUN_MODE")
+	_ = os.Unsetenv("CHARLY_BIND_ADDRESS")
 
 	_, err := ResolveRuntime()
 	if err == nil {
@@ -145,11 +147,11 @@ func TestResolveRuntime_InvalidRunMode(t *testing.T) {
 		return filepath.Join(t.TempDir(), "config.yml"), nil
 	}
 
-	os.Unsetenv("CHARLY_BUILD_ENGINE")
-	os.Unsetenv("CHARLY_RUN_ENGINE")
-	os.Unsetenv("CHARLY_BIND_ADDRESS")
-	os.Setenv("CHARLY_RUN_MODE", "swarm")
-	defer os.Unsetenv("CHARLY_RUN_MODE")
+	_ = os.Unsetenv("CHARLY_BUILD_ENGINE")
+	_ = os.Unsetenv("CHARLY_RUN_ENGINE")
+	_ = os.Unsetenv("CHARLY_BIND_ADDRESS")
+	_ = os.Setenv("CHARLY_RUN_MODE", "swarm")
+	defer os.Unsetenv("CHARLY_RUN_MODE") //nolint:errcheck
 
 	_, err := ResolveRuntime()
 	if err == nil {
@@ -197,8 +199,12 @@ func TestResetConfigValue(t *testing.T) {
 	defer func() { RuntimeConfigPath = orig }()
 	RuntimeConfigPath = func() (string, error) { return configPath, nil }
 
-	SetConfigValue("engine.build", "podman")
-	ResetConfigValue("engine.build")
+	if err := SetConfigValue("engine.build", "podman"); err != nil {
+		t.Fatal(err)
+	}
+	if err := ResetConfigValue("engine.build"); err != nil {
+		t.Fatal(err)
+	}
 
 	val, _ := GetConfigValue("engine.build")
 	if val != "" {
@@ -214,9 +220,15 @@ func TestResetConfigValue_All(t *testing.T) {
 	defer func() { RuntimeConfigPath = orig }()
 	RuntimeConfigPath = func() (string, error) { return configPath, nil }
 
-	SetConfigValue("engine.build", "podman")
-	SetConfigValue("run_mode", "quadlet")
-	ResetConfigValue("")
+	if err := SetConfigValue("engine.build", "podman"); err != nil {
+		t.Fatal(err)
+	}
+	if err := SetConfigValue("run_mode", "quadlet"); err != nil {
+		t.Fatal(err)
+	}
+	if err := ResetConfigValue(""); err != nil {
+		t.Fatal(err)
+	}
 
 	cfg, _ := LoadRuntimeConfig()
 	if cfg.Engine.Build != "" || cfg.RunMode != "" {
@@ -232,19 +244,21 @@ func TestListConfigValues(t *testing.T) {
 	defer func() { RuntimeConfigPath = orig }()
 	RuntimeConfigPath = func() (string, error) { return configPath, nil }
 
-	os.Unsetenv("CHARLY_BUILD_ENGINE")
-	os.Unsetenv("CHARLY_RUN_ENGINE")
-	os.Unsetenv("CHARLY_RUN_MODE")
-	os.Unsetenv("CHARLY_AUTO_ENABLE")
-	os.Unsetenv("CHARLY_BIND_ADDRESS")
-	os.Unsetenv("CHARLY_ENCRYPTED_STORAGE_PATH")
-	os.Unsetenv("CHARLY_SECRET_BACKEND")
-	os.Unsetenv("CHARLY_VM_BACKEND")
-	os.Unsetenv("CHARLY_VM_DISK_SIZE")
-	os.Unsetenv("CHARLY_VM_RAM")
-	os.Unsetenv("CHARLY_VM_CPUS")
+	_ = os.Unsetenv("CHARLY_BUILD_ENGINE")
+	_ = os.Unsetenv("CHARLY_RUN_ENGINE")
+	_ = os.Unsetenv("CHARLY_RUN_MODE")
+	_ = os.Unsetenv("CHARLY_AUTO_ENABLE")
+	_ = os.Unsetenv("CHARLY_BIND_ADDRESS")
+	_ = os.Unsetenv("CHARLY_ENCRYPTED_STORAGE_PATH")
+	_ = os.Unsetenv("CHARLY_SECRET_BACKEND")
+	_ = os.Unsetenv("CHARLY_VM_BACKEND")
+	_ = os.Unsetenv("CHARLY_VM_DISK_SIZE")
+	_ = os.Unsetenv("CHARLY_VM_RAM")
+	_ = os.Unsetenv("CHARLY_VM_CPUS")
 
-	SetConfigValue("engine.build", "podman")
+	if err := SetConfigValue("engine.build", "podman"); err != nil {
+		t.Fatal(err)
+	}
 
 	vals, err := ListConfigValues()
 	if err != nil {
@@ -366,17 +380,19 @@ func TestAutoEnable_EnvOverridesConfig(t *testing.T) {
 	defer func() { RuntimeConfigPath = orig }()
 	RuntimeConfigPath = func() (string, error) { return configPath, nil }
 
-	os.Unsetenv("CHARLY_BUILD_ENGINE")
-	os.Unsetenv("CHARLY_RUN_ENGINE")
-	os.Unsetenv("CHARLY_RUN_MODE")
-	os.Unsetenv("CHARLY_BIND_ADDRESS")
+	_ = os.Unsetenv("CHARLY_BUILD_ENGINE")
+	_ = os.Unsetenv("CHARLY_RUN_ENGINE")
+	_ = os.Unsetenv("CHARLY_RUN_MODE")
+	_ = os.Unsetenv("CHARLY_BIND_ADDRESS")
 
 	// Config says false
-	SetConfigValue("auto_enable", "false")
+	if err := SetConfigValue("auto_enable", "false"); err != nil {
+		t.Fatal(err)
+	}
 
 	// Env says true
-	os.Setenv("CHARLY_AUTO_ENABLE", "true")
-	defer os.Unsetenv("CHARLY_AUTO_ENABLE")
+	_ = os.Setenv("CHARLY_AUTO_ENABLE", "true")
+	defer os.Unsetenv("CHARLY_AUTO_ENABLE") //nolint:errcheck
 
 	rt, err := ResolveRuntime()
 	if err != nil {
@@ -395,12 +411,12 @@ func TestAutoEnable_EnvValue1(t *testing.T) {
 	defer func() { RuntimeConfigPath = orig }()
 	RuntimeConfigPath = func() (string, error) { return configPath, nil }
 
-	os.Unsetenv("CHARLY_BUILD_ENGINE")
-	os.Unsetenv("CHARLY_RUN_ENGINE")
-	os.Unsetenv("CHARLY_RUN_MODE")
-	os.Unsetenv("CHARLY_BIND_ADDRESS")
-	os.Setenv("CHARLY_AUTO_ENABLE", "1")
-	defer os.Unsetenv("CHARLY_AUTO_ENABLE")
+	_ = os.Unsetenv("CHARLY_BUILD_ENGINE")
+	_ = os.Unsetenv("CHARLY_RUN_ENGINE")
+	_ = os.Unsetenv("CHARLY_RUN_MODE")
+	_ = os.Unsetenv("CHARLY_BIND_ADDRESS")
+	_ = os.Setenv("CHARLY_AUTO_ENABLE", "1")
+	defer os.Unsetenv("CHARLY_AUTO_ENABLE") //nolint:errcheck
 
 	rt, err := ResolveRuntime()
 	if err != nil {
@@ -419,13 +435,15 @@ func TestAutoEnable_ListConfigValues(t *testing.T) {
 	defer func() { RuntimeConfigPath = orig }()
 	RuntimeConfigPath = func() (string, error) { return configPath, nil }
 
-	os.Unsetenv("CHARLY_BUILD_ENGINE")
-	os.Unsetenv("CHARLY_RUN_ENGINE")
-	os.Unsetenv("CHARLY_RUN_MODE")
-	os.Unsetenv("CHARLY_AUTO_ENABLE")
-	os.Unsetenv("CHARLY_BIND_ADDRESS")
+	_ = os.Unsetenv("CHARLY_BUILD_ENGINE")
+	_ = os.Unsetenv("CHARLY_RUN_ENGINE")
+	_ = os.Unsetenv("CHARLY_RUN_MODE")
+	_ = os.Unsetenv("CHARLY_AUTO_ENABLE")
+	_ = os.Unsetenv("CHARLY_BIND_ADDRESS")
 
-	SetConfigValue("auto_enable", "true")
+	if err := SetConfigValue("auto_enable", "true"); err != nil {
+		t.Fatal(err)
+	}
 
 	vals, err := ListConfigValues()
 	if err != nil {
@@ -459,17 +477,19 @@ func TestBindAddress_EnvOverridesConfig(t *testing.T) {
 	defer func() { RuntimeConfigPath = orig }()
 	RuntimeConfigPath = func() (string, error) { return configPath, nil }
 
-	os.Unsetenv("CHARLY_BUILD_ENGINE")
-	os.Unsetenv("CHARLY_RUN_ENGINE")
-	os.Unsetenv("CHARLY_RUN_MODE")
-	os.Unsetenv("CHARLY_AUTO_ENABLE")
+	_ = os.Unsetenv("CHARLY_BUILD_ENGINE")
+	_ = os.Unsetenv("CHARLY_RUN_ENGINE")
+	_ = os.Unsetenv("CHARLY_RUN_MODE")
+	_ = os.Unsetenv("CHARLY_AUTO_ENABLE")
 
 	// Config says 127.0.0.1
-	SetConfigValue("bind_address", "127.0.0.1")
+	if err := SetConfigValue("bind_address", "127.0.0.1"); err != nil {
+		t.Fatal(err)
+	}
 
 	// Env says 0.0.0.0
-	os.Setenv("CHARLY_BIND_ADDRESS", "0.0.0.0")
-	defer os.Unsetenv("CHARLY_BIND_ADDRESS")
+	_ = os.Setenv("CHARLY_BIND_ADDRESS", "0.0.0.0")
+	defer os.Unsetenv("CHARLY_BIND_ADDRESS") //nolint:errcheck
 
 	rt, err := ResolveRuntime()
 	if err != nil {
@@ -488,12 +508,12 @@ func TestBindAddress_InvalidEnv(t *testing.T) {
 	defer func() { RuntimeConfigPath = orig }()
 	RuntimeConfigPath = func() (string, error) { return configPath, nil }
 
-	os.Unsetenv("CHARLY_BUILD_ENGINE")
-	os.Unsetenv("CHARLY_RUN_ENGINE")
-	os.Unsetenv("CHARLY_RUN_MODE")
-	os.Unsetenv("CHARLY_AUTO_ENABLE")
-	os.Setenv("CHARLY_BIND_ADDRESS", "10.0.0.1")
-	defer os.Unsetenv("CHARLY_BIND_ADDRESS")
+	_ = os.Unsetenv("CHARLY_BUILD_ENGINE")
+	_ = os.Unsetenv("CHARLY_RUN_ENGINE")
+	_ = os.Unsetenv("CHARLY_RUN_MODE")
+	_ = os.Unsetenv("CHARLY_AUTO_ENABLE")
+	_ = os.Setenv("CHARLY_BIND_ADDRESS", "10.0.0.1")
+	defer os.Unsetenv("CHARLY_BIND_ADDRESS") //nolint:errcheck
 
 	_, err := ResolveRuntime()
 	if err == nil {

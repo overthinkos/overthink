@@ -288,7 +288,7 @@ func (vncProbe) ProbeHost(ctx context.Context, snap *ContainerSnapshot) ToolStat
 	if err != nil {
 		return ts
 	}
-	defer conn.Close()
+	defer conn.Close() //nolint:errcheck
 	_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
 	var banner [12]byte
 	if _, err := io.ReadFull(conn, banner[:]); err != nil {

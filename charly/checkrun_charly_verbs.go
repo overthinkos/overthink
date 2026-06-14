@@ -1261,7 +1261,7 @@ func assertArtifactMinDimensions(path, wxh string) error {
 	if err != nil {
 		return fmt.Errorf("artifact %q open: %v", path, err)
 	}
-	defer f.Close()
+	defer f.Close() //nolint:errcheck
 	cfg, _, err := image.DecodeConfig(f)
 	if err != nil {
 		return fmt.Errorf("artifact %q decode-config: %v", path, err)
@@ -1283,7 +1283,7 @@ func assertArtifactNotUniform(path string) error {
 	if err != nil {
 		return fmt.Errorf("artifact %q open: %v", path, err)
 	}
-	defer f.Close()
+	defer f.Close() //nolint:errcheck
 	img, _, err := image.Decode(f)
 	if err != nil {
 		return fmt.Errorf("artifact %q decode: %v", path, err)
@@ -1334,7 +1334,7 @@ func assertArtifactMinCastEvents(path string, minEvents int) error {
 	if err != nil {
 		return fmt.Errorf("artifact %q open: %v", path, err)
 	}
-	defer f.Close()
+	defer f.Close() //nolint:errcheck
 	scan := bufio.NewScanner(f)
 	// asciinema events can be long; bump the buffer so a 1MB single line
 	// does not silently truncate the count.

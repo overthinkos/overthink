@@ -539,7 +539,7 @@ func cloudflareTunnelStop(cfg TunnelConfig) error {
 
 	pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
 	if err != nil {
-		os.Remove(pidPath)
+		_ = os.Remove(pidPath)
 		return fmt.Errorf("invalid PID in %s: %w", pidPath, err)
 	}
 
@@ -551,7 +551,7 @@ func cloudflareTunnelStop(cfg TunnelConfig) error {
 		fmt.Fprintf(os.Stderr, "Stopped cloudflared tunnel %s (PID %d)\n", name, pid)
 	}
 
-	os.Remove(pidPath)
+	_ = os.Remove(pidPath)
 	return nil
 }
 

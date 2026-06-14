@@ -136,7 +136,7 @@ func AppendNote(projectDir, score, runID, iter, ai, text string) error {
 	if err != nil {
 		return fmt.Errorf("note append: open %s: %w", path, err)
 	}
-	defer f.Close()
+	defer f.Close() //nolint:errcheck
 	if _, err := f.WriteString(header + body); err != nil {
 		return fmt.Errorf("note append: write %s: %w", path, err)
 	}

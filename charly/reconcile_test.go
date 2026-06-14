@@ -35,7 +35,7 @@ func TestImageReconcile_NewestReferenced(t *testing.T) {
 	if err := os.Chdir(dir); err != nil {
 		t.Fatal(err)
 	}
-	defer os.Chdir(cwd)
+	defer os.Chdir(cwd) //nolint:errcheck
 
 	cmd := &BoxReconcileCmd{}
 	if err := cmd.Run(); err != nil {
@@ -104,7 +104,7 @@ func TestImageReconcile_VendoredCandyRequires(t *testing.T) {
 	if err := os.Chdir(dir); err != nil {
 		t.Fatal(err)
 	}
-	defer os.Chdir(cwd)
+	defer os.Chdir(cwd) //nolint:errcheck
 	if err := (&BoxReconcileCmd{}).Run(); err != nil {
 		t.Fatalf("reconcile: %v", err)
 	}
@@ -150,7 +150,7 @@ func TestImageReconcile_SkipsSubmodules(t *testing.T) {
 	if err := os.Chdir(dir); err != nil {
 		t.Fatal(err)
 	}
-	defer os.Chdir(cwd)
+	defer os.Chdir(cwd) //nolint:errcheck
 	if err := (&BoxReconcileCmd{}).Run(); err != nil {
 		t.Fatalf("reconcile: %v", err)
 	}
@@ -172,7 +172,7 @@ func TestImageReconcile_NoPins(t *testing.T) {
 	if err := os.Chdir(dir); err != nil {
 		t.Fatal(err)
 	}
-	defer os.Chdir(cwd)
+	defer os.Chdir(cwd) //nolint:errcheck
 	if err := (&BoxReconcileCmd{}).Run(); err != nil {
 		t.Fatalf("reconcile no-pins: %v", err)
 	}

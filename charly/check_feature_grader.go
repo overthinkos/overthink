@@ -169,7 +169,7 @@ func RunAgentOnce(ctx context.Context, ai *AgentConfig, prompt string, timeout t
 		if err != nil {
 			return "", "", fmt.Errorf("writing grader prompt file: %w", err)
 		}
-		defer os.Remove(f.Name())
+		defer os.Remove(f.Name()) //nolint:errcheck
 		if _, err := f.WriteString(prompt); err != nil {
 			_ = f.Close()
 			return "", "", err

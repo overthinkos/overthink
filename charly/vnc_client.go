@@ -51,7 +51,7 @@ func NewVNCClient(address, password string) (*VNCClient, error) {
 
 	c := &VNCClient{conn: conn}
 	if err := c.handshake(password); err != nil {
-		conn.Close()
+		_ = conn.Close()
 		return nil, fmt.Errorf("VNC handshake with %s: %w", address, err)
 	}
 	return c, nil
@@ -555,8 +555,8 @@ func (c *VNCClient) Screenshot() (image.Image, error) {
 		return nil, fmt.Errorf("requesting framebuffer: %w", err)
 	}
 
-	c.conn.SetReadDeadline(time.Now().Add(10 * time.Second))
-	defer c.conn.SetReadDeadline(time.Time{})
+	_ = c.conn.SetReadDeadline(time.Now().Add(10 * time.Second))
+	defer c.conn.SetReadDeadline(time.Time{}) //nolint:errcheck
 
 	// Read server messages until we get a FramebufferUpdate.
 	for {
@@ -985,7 +985,7 @@ func connectVNCScreenshot(box, instance string) (image.Image, uint16, uint16, er
 	if err != nil {
 		return nil, 0, 0, err
 	}
-	defer client.Close()
+	defer client.Close() //nolint:errcheck
 	img, err := client.Screenshot()
 	if err != nil {
 		return nil, 0, 0, err

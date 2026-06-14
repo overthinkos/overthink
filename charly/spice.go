@@ -75,7 +75,7 @@ func (f *spiceConnectFlags) open(vmName string) (*SpiceSession, error) {
 	// here too, so we must open a fresh one for tunneling when
 	// remote. This separation makes the session independent.
 	tunnelTarget := t.Uri
-	t.Close()
+	_ = t.Close()
 	if err != nil {
 		return nil, err
 	}
@@ -123,7 +123,10 @@ func dialSpiceEndpoint(ep DisplayEndpoint, uri string) (*SpiceSession, error) {
 	}
 	parts := strings.SplitN(localAddr, ":", 2)
 	port := 0
-	fmt.Sscanf(parts[1], "%d", &port)
+	if _, err := fmt.Sscanf(parts[1], "%d", &port); err != nil {
+		_ = tunnel.Close()
+		return nil, fmt.Errorf("parsing forwarded TCP port %q: %w", parts[1], err)
+	}
 	s, err := DialSpiceTCP(parts[0], port, ep.Password)
 	if err != nil {
 		_ = tunnel.Close()
@@ -145,7 +148,7 @@ func (c *SpiceStatusCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	defer s.Close()
+	defer s.Close() //nolint:errcheck
 	// Wait briefly for channels to enumerate.
 	_ = s.WaitForInputs(2 * time.Second)
 
@@ -186,7 +189,7 @@ func (c *SpiceScreenshotCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	defer s.Close()
+	defer s.Close() //nolint:errcheck
 	if err := s.WaitForDisplay(c.Wait); err != nil {
 		return err
 	}
@@ -230,7 +233,7 @@ func (c *SpiceClickCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	defer s.Close()
+	defer s.Close() //nolint:errcheck
 	if err := s.WaitForInputs(5 * time.Second); err != nil {
 		return err
 	}
@@ -258,7 +261,7 @@ func (c *SpiceMouseCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	defer s.Close()
+	defer s.Close() //nolint:errcheck
 	if err := s.WaitForInputs(5 * time.Second); err != nil {
 		return err
 	}
@@ -279,7 +282,7 @@ func (c *SpiceTypeCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	defer s.Close()
+	defer s.Close() //nolint:errcheck
 	if err := s.WaitForInputs(5 * time.Second); err != nil {
 		return err
 	}
@@ -313,7 +316,7 @@ func (c *SpiceKeyCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	defer s.Close()
+	defer s.Close() //nolint:errcheck
 	if err := s.WaitForInputs(5 * time.Second); err != nil {
 		return err
 	}
@@ -342,7 +345,7 @@ func (c *SpiceCursorCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	defer s.Close()
+	defer s.Close() //nolint:errcheck
 	deadline := time.Now().Add(c.Wait)
 	for time.Now().Before(deadline) {
 		if img, x, y := s.Cursor(); img != nil {

@@ -691,8 +691,8 @@ func captureAndRun(argv []string) (stdout, stderr string, err error) {
 	}
 	errR, errW, pipeErr := os.Pipe()
 	if pipeErr != nil {
-		outR.Close()
-		outW.Close()
+		_ = outR.Close()
+		_ = outW.Close()
 		return "", "", fmt.Errorf("creating stderr pipe: %w", pipeErr)
 	}
 	os.Stdout = outW

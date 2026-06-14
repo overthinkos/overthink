@@ -48,7 +48,7 @@ func (c *VncScreenshotCmd) Run() error {
 	if err != nil {
 		return fmt.Errorf("creating file %s: %w", c.File, err)
 	}
-	defer f.Close()
+	defer f.Close() //nolint:errcheck
 
 	if err := png.Encode(f, img); err != nil {
 		return fmt.Errorf("encoding PNG: %w", err)
@@ -130,7 +130,7 @@ func (c *VncClickCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	defer vncClient.Close()
+	defer vncClient.Close() //nolint:errcheck
 
 	if err := vncClient.PointerClick(clickX, clickY, vncButton(c.Button)); err != nil {
 		return fmt.Errorf("clicking at (%d, %d): %w", clickX, clickY, err)
@@ -153,7 +153,7 @@ func (c *VncTypeCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	defer client.Close()
+	defer client.Close() //nolint:errcheck
 
 	time.Sleep(100 * time.Millisecond)
 	if err := client.TypeText(c.Text); err != nil {
@@ -182,7 +182,7 @@ func (c *VncKeyCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	defer client.Close()
+	defer client.Close() //nolint:errcheck
 
 	time.Sleep(100 * time.Millisecond)
 	if err := client.KeyPress(keysym); err != nil {
@@ -207,7 +207,7 @@ func (c *VncMouseCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	defer client.Close()
+	defer client.Close() //nolint:errcheck
 
 	if err := client.PointerMove(c.X, c.Y); err != nil {
 		return fmt.Errorf("moving mouse to (%d, %d): %w", c.X, c.Y, err)
@@ -356,7 +356,7 @@ func (c *VncRfbCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	defer client.Close()
+	defer client.Close() //nolint:errcheck
 
 	switch c.Method {
 	case "key":

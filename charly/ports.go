@@ -210,7 +210,7 @@ func CheckPortAvailability(ports []string, bindAddr string, engine string) []Por
 					OwnerType: ownerType,
 				})
 			} else {
-				conn.Close()
+				_ = conn.Close()
 			}
 		} else {
 			ln, err := net.Listen("tcp", addr)
@@ -223,7 +223,7 @@ func CheckPortAvailability(ports []string, bindAddr string, engine string) []Por
 					OwnerType: ownerType,
 				})
 			} else {
-				ln.Close()
+				_ = ln.Close()
 			}
 		}
 	}

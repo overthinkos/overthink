@@ -128,7 +128,7 @@ func migrateCandyShellSchema(path string, dryRun bool) (bool, error) {
 	if err := enc.Encode(&root); err != nil {
 		return false, err
 	}
-	enc.Close()
+	_ = enc.Close()
 	return true, os.WriteFile(path, buf.Bytes(), 0644)
 }
 

@@ -102,7 +102,9 @@ func makeTarLayer(files map[string]string) (v1.Layer, error) {
 			return nil, err
 		}
 	}
-	tw.Close()
+	if err := tw.Close(); err != nil {
+		return nil, err
+	}
 
 	data := buf.Bytes()
 	return tarball.LayerFromOpener(func() (io.ReadCloser, error) {
@@ -130,7 +132,9 @@ func readTarEntries(layer v1.Layer) (map[string]string, error) {
 		}
 		var content bytes.Buffer
 		if hdr.Size > 0 {
-			io.Copy(&content, tr)
+			if _, err := io.Copy(&content, tr); err != nil {
+				return nil, err
+			}
 		}
 		entries[hdr.Name] = content.String()
 	}

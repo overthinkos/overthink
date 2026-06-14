@@ -46,7 +46,7 @@ func DetectHostDistro() (*HostDistro, error) {
 	if err != nil {
 		return nil, fmt.Errorf("DetectHostDistro: %w", err)
 	}
-	defer f.Close()
+	defer f.Close() //nolint:errcheck
 
 	hd := &HostDistro{}
 	scanner := bufio.NewScanner(f)
@@ -258,10 +258,10 @@ func CompareGlibc(a, b string) int {
 func parseMajMin(v string) (maj, min int) {
 	parts := strings.SplitN(v, ".", 2)
 	if len(parts) > 0 {
-		fmt.Sscanf(parts[0], "%d", &maj)
+		_, _ = fmt.Sscanf(parts[0], "%d", &maj) // best-effort: non-numeric field stays 0 (documented)
 	}
 	if len(parts) > 1 {
-		fmt.Sscanf(parts[1], "%d", &min)
+		_, _ = fmt.Sscanf(parts[1], "%d", &min) // best-effort: non-numeric field stays 0 (documented)
 	}
 	return maj, min
 }

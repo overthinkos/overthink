@@ -69,7 +69,7 @@ func connectLocalLibvirtSession(parsed LibvirtURI) (*libvirtConn, error) {
 	}
 	l := libvirt.NewWithDialer(dialers.NewAlreadyConnected(c))
 	if err := l.ConnectToURI(libvirt.QEMUSession); err != nil {
-		c.Close()
+		_ = c.Close()
 		return nil, fmt.Errorf("libvirt handshake failed: %w", err)
 	}
 	return &libvirtConn{l: l, uri: parsed}, nil
@@ -97,7 +97,7 @@ func connectRemoteLibvirtSession(parsed LibvirtURI) (*libvirtConn, error) {
 	}
 	l := libvirt.NewWithDialer(dialers.NewAlreadyConnected(conn))
 	if err := l.ConnectToURI(libvirt.QEMUSession); err != nil {
-		conn.Close()
+		_ = conn.Close()
 		_ = tunnel.Close()
 		return nil, fmt.Errorf("libvirt handshake over ssh failed: %w", err)
 	}
@@ -430,7 +430,7 @@ exit 1
 	if err != nil {
 		return "", fmt.Errorf("ssh session: %w", err)
 	}
-	defer session.Close()
+	defer session.Close() //nolint:errcheck
 	out, err := session.Output(script)
 	if err != nil {
 		return "", fmt.Errorf("probing remote socket path: %w", err)

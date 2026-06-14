@@ -136,7 +136,7 @@ func (c *CDPClient) Call(method string, params any) (json.RawMessage, error) {
 
 // Close shuts down the WebSocket connection.
 func (c *CDPClient) Close() {
-	c.ws.Close()
+	_ = c.ws.Close()
 	<-c.done
 	// Tear down the ssh -L forward (if any) after the WebSocket closes.
 	c.endpoint.Close()

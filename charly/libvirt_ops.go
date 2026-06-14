@@ -155,10 +155,10 @@ func captureDomainScreenshotViaVirsh(domName string) (image.Image, error) {
 		return nil, fmt.Errorf("creating tempfile: %w", err)
 	}
 	tmpPath := tmp.Name()
-	tmp.Close()
+	_ = tmp.Close()
 	RegisterTempCleanup(tmpPath)
-	defer func() { os.Remove(tmpPath); UnregisterTempCleanup(tmpPath) }()
-	defer os.Remove(filepath.Join(filepath.Dir(tmpPath), "charly-libvirt-screenshot-temp.ppm"))
+	defer func() { _ = os.Remove(tmpPath); UnregisterTempCleanup(tmpPath) }()
+	defer os.Remove(filepath.Join(filepath.Dir(tmpPath), "charly-libvirt-screenshot-temp.ppm")) //nolint:errcheck
 
 	cmd := exec.Command("virsh", "-c", "qemu:///session", "screenshot", domName, tmpPath)
 	out, err := cmd.CombinedOutput()
@@ -169,7 +169,7 @@ func captureDomainScreenshotViaVirsh(domName string) (image.Image, error) {
 	if err != nil {
 		return nil, fmt.Errorf("opening virsh screenshot output: %w", err)
 	}
-	defer f.Close()
+	defer f.Close() //nolint:errcheck
 	img, _, err := image.Decode(f)
 	if err != nil {
 		return nil, fmt.Errorf("decoding virsh screenshot output: %w", err)

@@ -65,7 +65,7 @@ func runDocMigration(dir string, dryRun bool, candidateFiles func(string) []stri
 				return rewritten, fmt.Errorf("encoding %s: %w", path, eerr)
 			}
 		}
-		enc.Close()
+		_ = enc.Close()
 		if !dryRun {
 			if werr := os.WriteFile(path, out.Bytes(), 0o644); werr != nil {
 				return rewritten, fmt.Errorf("writing %s: %w", path, werr)

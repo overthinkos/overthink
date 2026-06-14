@@ -88,7 +88,7 @@ func AcquireLedgerLock(paths *LedgerPaths) (*LedgerLock, error) {
 		return nil, fmt.Errorf("ledger lock open: %w", err)
 	}
 	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
-		f.Close()
+		_ = f.Close()
 		return nil, fmt.Errorf("ledger lock flock: %w", err)
 	}
 	return &LedgerLock{f: f}, nil
@@ -100,7 +100,7 @@ func (l *LedgerLock) Release() error {
 		return nil
 	}
 	err := syscall.Flock(int(l.f.Fd()), syscall.LOCK_UN)
-	l.f.Close()
+	_ = l.f.Close()
 	l.f = nil
 	return err
 }

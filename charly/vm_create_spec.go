@@ -156,7 +156,7 @@ func (c *VmCreateCmd) runVmSpecCreate(vmName string, spec *VmSpec, backend strin
 		if err != nil {
 			return fmt.Errorf("connecting to libvirt: %w", err)
 		}
-		defer conn.Close()
+		defer conn.Close() //nolint:errcheck
 		if err := conn.defineAndStartDomain(xmlStr); err != nil {
 			return fmt.Errorf("creating VM %s: %w", vmDomainName, err)
 		}
@@ -294,7 +294,7 @@ func detectRuntimeHostVendor() string {
 	if err != nil {
 		return ""
 	}
-	defer f.Close()
+	defer f.Close() //nolint:errcheck
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
 		line := scanner.Text()

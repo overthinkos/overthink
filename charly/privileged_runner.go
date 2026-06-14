@@ -115,7 +115,7 @@ func RunPrivileged(p PrivilegedRun) error {
 	if useSudo {
 		if err := TransferToRootful(p.Image); err != nil {
 			if hostStaging != "" {
-				os.RemoveAll(hostStaging)
+				_ = os.RemoveAll(hostStaging)
 			}
 			return fmt.Errorf("staging %s into rootful storage: %w", p.Image, err)
 		}
@@ -137,7 +137,7 @@ func RunPrivileged(p PrivilegedRun) error {
 	}
 	if err := cmd.Run(); err != nil {
 		if hostStaging != "" {
-			os.RemoveAll(hostStaging)
+			_ = os.RemoveAll(hostStaging)
 		}
 		return fmt.Errorf("privileged run %s failed: %w", p.Image, err)
 	}
@@ -146,14 +146,14 @@ func RunPrivileged(p PrivilegedRun) error {
 		// Copy the output from the staging dir to OutputDest.
 		srcPath := filepath.Join(hostStaging, filepath.Base(p.OutputPath))
 		if err := os.MkdirAll(filepath.Dir(p.OutputDest), 0o755); err != nil {
-			os.RemoveAll(hostStaging)
+			_ = os.RemoveAll(hostStaging)
 			return fmt.Errorf("creating output destination dir: %w", err)
 		}
 		if err := copyFileBytes(srcPath, p.OutputDest); err != nil {
-			os.RemoveAll(hostStaging)
+			_ = os.RemoveAll(hostStaging)
 			return fmt.Errorf("capturing privileged output %s -> %s: %w", srcPath, p.OutputDest, err)
 		}
-		os.RemoveAll(hostStaging)
+		_ = os.RemoveAll(hostStaging)
 	}
 	return nil
 }

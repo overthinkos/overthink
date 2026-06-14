@@ -70,7 +70,7 @@ func openVncForVm(vmName, uri string) (*vmVncSession, error) {
 	}
 	ep, err := t.VncEndpoint()
 	tunnelTarget := t.Uri
-	t.Close()
+	_ = t.Close()
 	if err != nil {
 		return nil, err
 	}
@@ -97,7 +97,7 @@ func openVncForVm(vmName, uri string) (*vmVncSession, error) {
 		}
 		cli, err := NewVNCClient(bridge.Addr().String(), ep.Password)
 		if err != nil {
-			bridge.Close()
+			_ = bridge.Close()
 			return nil, err
 		}
 		return &vmVncSession{client: cli, bridge: bridge}, nil
@@ -115,18 +115,18 @@ func openVncForVm(vmName, uri string) (*vmVncSession, error) {
 		}
 		localSock, _, err := tun.ForwardUnix(context.Background(), ep.SocketPath)
 		if err != nil {
-			tun.Close()
+			_ = tun.Close()
 			return nil, err
 		}
 		bridge, err := unixToTcpBridge(localSock)
 		if err != nil {
-			tun.Close()
+			_ = tun.Close()
 			return nil, err
 		}
 		cli, err := NewVNCClient(bridge.Addr().String(), ep.Password)
 		if err != nil {
-			bridge.Close()
-			tun.Close()
+			_ = bridge.Close()
+			_ = tun.Close()
 			return nil, err
 		}
 		return &vmVncSession{client: cli, bridge: bridge, tunnel: tun}, nil
@@ -143,12 +143,12 @@ func openVncForVm(vmName, uri string) (*vmVncSession, error) {
 		}
 		localAddr, _, err := tun.ForwardTCP(context.Background(), ep.Host, ep.Port)
 		if err != nil {
-			tun.Close()
+			_ = tun.Close()
 			return nil, err
 		}
 		cli, err := NewVNCClient(localAddr, ep.Password)
 		if err != nil {
-			tun.Close()
+			_ = tun.Close()
 			return nil, err
 		}
 		return &vmVncSession{client: cli, tunnel: tun}, nil
@@ -171,12 +171,12 @@ func unixToTcpBridge(socketPath string) (net.Listener, error) {
 				return
 			}
 			go func() {
-				defer c.Close()
+				defer c.Close() //nolint:errcheck
 				u, err := net.DialTimeout("unix", socketPath, 5*time.Second)
 				if err != nil {
 					return
 				}
-				defer u.Close()
+				defer u.Close() //nolint:errcheck
 				done := make(chan struct{}, 2)
 				go func() { _, _ = io.Copy(u, c); done <- struct{}{} }()
 				go func() { _, _ = io.Copy(c, u); done <- struct{}{} }()

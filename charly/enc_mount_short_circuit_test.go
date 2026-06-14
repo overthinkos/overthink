@@ -137,7 +137,7 @@ deploy:
 	t.Setenv("INVOCATION_ID", "test")
 	resetDefaultCredentialStore()
 	defer resetDefaultCredentialStore()
-	os.Unsetenv("GOCRYPTFS_PASSWORD")
+	_ = os.Unsetenv("GOCRYPTFS_PASSWORD")
 
 	err := encMount("testimg", "", "")
 	// Expect an error from passphrase resolution (no credential stored in

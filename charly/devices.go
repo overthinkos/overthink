@@ -101,7 +101,7 @@ func parseKFDGFXVersion(path string) string {
 	if err != nil {
 		return ""
 	}
-	defer f.Close()
+	defer f.Close() //nolint:errcheck
 
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
@@ -234,7 +234,7 @@ func EnsureCDI() {
 		return // nvidia-ctk not installed, can't generate
 	}
 
-	os.MkdirAll("/etc/cdi", 0755)
+	_ = os.MkdirAll("/etc/cdi", 0755) // best-effort — nvidia-ctk surfaces a clear error otherwise
 	cmd := exec.Command(ctk, "cdi", "generate", "--output=/etc/cdi/nvidia.yaml")
 	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr

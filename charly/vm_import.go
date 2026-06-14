@@ -100,7 +100,7 @@ func ImportFromLibvirt(domainName, targetName string) (string, *VmSpec, error) {
 	if err != nil {
 		return "", nil, fmt.Errorf("connecting to libvirt: %w", err)
 	}
-	defer conn.Close()
+	defer conn.Close() //nolint:errcheck
 
 	dom, err := conn.lookupDomain(domainName)
 	if err != nil {
@@ -248,7 +248,7 @@ func ListUnmanagedDomains() ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("connecting to libvirt: %w", err)
 	}
-	defer conn.Close()
+	defer conn.Close() //nolint:errcheck
 
 	domains, _, err := conn.l.ConnectListAllDomains(1, 0)
 	if err != nil {

@@ -75,7 +75,7 @@ func newStreamJSONSink(ndjsonPath string, onEvent func(RunnerEvent)) (*streamJSO
 	s.parserWG.Add(1)
 	go func() {
 		defer s.parserWG.Done()
-		defer pr.Close()
+		defer pr.Close() //nolint:errcheck
 		scanner := bufio.NewScanner(pr)
 		// Up to 8 MiB per line — claude can emit large tool-result
 		// blobs (file contents, command output) inside one assistant

@@ -95,7 +95,7 @@ func parseResolvNameservers(path string) []string {
 	if err != nil {
 		return nil
 	}
-	defer f.Close()
+	defer f.Close() //nolint:errcheck
 	var out []string
 	seen := map[string]bool{}
 	sc := bufio.NewScanner(f)

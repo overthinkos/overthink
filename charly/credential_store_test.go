@@ -17,7 +17,7 @@ func TestResolveCredentialEnvOverride(t *testing.T) {
 
 func TestResolveCredentialDefault(t *testing.T) {
 	// Ensure no env var set
-	os.Unsetenv("TEST_CRED_NONE")
+	_ = os.Unsetenv("TEST_CRED_NONE")
 
 	// Use config backend (no keyring in tests) with empty config
 	dir := t.TempDir()
@@ -135,7 +135,7 @@ func TestResolveSecretBackendConfig(t *testing.T) {
 		t.Fatalf("SaveRuntimeConfig: %v", err)
 	}
 
-	os.Unsetenv("CHARLY_SECRET_BACKEND")
+	_ = os.Unsetenv("CHARLY_SECRET_BACKEND")
 	if got := resolveSecretBackend(); got != "config" {
 		t.Errorf("resolveSecretBackend() = %q, want %q", got, "config")
 	}
@@ -148,7 +148,7 @@ func TestResolveSecretBackendDefault(t *testing.T) {
 	}
 	defer func() { RuntimeConfigPath = defaultRuntimeConfigPath }()
 
-	os.Unsetenv("CHARLY_SECRET_BACKEND")
+	_ = os.Unsetenv("CHARLY_SECRET_BACKEND")
 	if got := resolveSecretBackend(); got != "auto" {
 		t.Errorf("resolveSecretBackend() = %q, want %q", got, "auto")
 	}

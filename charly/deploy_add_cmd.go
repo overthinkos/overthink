@@ -536,7 +536,7 @@ func (c *DeployDelCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	defer lock.Release()
+	defer lock.Release() //nolint:errcheck
 
 	node, kind := c.resolveDelNode()
 

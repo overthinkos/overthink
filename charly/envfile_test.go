@@ -20,7 +20,9 @@ NOVALUE
 # Another comment
 MULTI=hello world
 `
-	os.WriteFile(envPath, []byte(content), 0644)
+	if err := os.WriteFile(envPath, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	got, err := ParseEnvFile(envPath)
 	if err != nil {
@@ -80,7 +82,9 @@ func TestParseEnvFileNotFound(t *testing.T) {
 func TestLoadWorkspaceEnv(t *testing.T) {
 	dir := t.TempDir()
 	envPath := filepath.Join(dir, ".env")
-	os.WriteFile(envPath, []byte("KEY=value\n"), 0644)
+	if err := os.WriteFile(envPath, []byte("KEY=value\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	got, err := LoadWorkspaceEnv(dir)
 	if err != nil {
@@ -116,11 +120,13 @@ func TestDeduplicateEnv(t *testing.T) {
 func TestLoadProcessDotenv(t *testing.T) {
 	resetDotenvLoaded()
 	dir := t.TempDir()
-	os.WriteFile(filepath.Join(dir, ".env"), []byte("TEST_DOTENV_VAR=from_dotenv\nTEST_DOTENV_EMPTY=\n"), 0644)
+	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte("TEST_DOTENV_VAR=from_dotenv\nTEST_DOTENV_EMPTY=\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	t.Cleanup(func() {
-		os.Unsetenv("TEST_DOTENV_VAR")
-		os.Unsetenv("TEST_DOTENV_EMPTY")
+		_ = os.Unsetenv("TEST_DOTENV_VAR")
+		_ = os.Unsetenv("TEST_DOTENV_EMPTY")
 		resetDotenvLoaded()
 	})
 
@@ -146,11 +152,13 @@ func TestLoadProcessDotenv(t *testing.T) {
 func TestLoadProcessDotenvRealEnvWins(t *testing.T) {
 	resetDotenvLoaded()
 	dir := t.TempDir()
-	os.WriteFile(filepath.Join(dir, ".env"), []byte("TEST_EXISTING=from_dotenv\n"), 0644)
+	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte("TEST_EXISTING=from_dotenv\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
-	os.Setenv("TEST_EXISTING", "from_real_env")
+	_ = os.Setenv("TEST_EXISTING", "from_real_env")
 	t.Cleanup(func() {
-		os.Unsetenv("TEST_EXISTING")
+		_ = os.Unsetenv("TEST_EXISTING")
 		resetDotenvLoaded()
 	})
 
@@ -180,11 +188,15 @@ func TestResolveEnvVars(t *testing.T) {
 	dir := t.TempDir()
 
 	// Create workspace .env
-	os.WriteFile(filepath.Join(dir, ".env"), []byte("WS=workspace\nSHARED=ws\n"), 0644)
+	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte("WS=workspace\nSHARED=ws\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	// Create CLI env file
 	cliEnvPath := filepath.Join(dir, "cli.env")
-	os.WriteFile(cliEnvPath, []byte("CLI_FILE=yes\nSHARED=cli-file\n"), 0644)
+	if err := os.WriteFile(cliEnvPath, []byte("CLI_FILE=yes\nSHARED=cli-file\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	got, err := ResolveEnvVars(
 		nil, // no global env

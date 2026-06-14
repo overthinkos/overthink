@@ -186,9 +186,15 @@ func (c *UdevRemoveCmd) Run() error {
 	fmt.Fprintf(os.Stderr, "Removed %s\n", udevRuleFile)
 
 	// Reload and trigger
-	exec.Command("sudo", "udevadm", "control", "--reload-rules").Run()
-	exec.Command("sudo", "udevadm", "trigger", "--subsystem-match=drm").Run()
-	exec.Command("sudo", "udevadm", "trigger", "--subsystem-match=kfd").Run()
+	if err := exec.Command("sudo", "udevadm", "control", "--reload-rules").Run(); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: failed to reload udev rules: %v\n", err)
+	}
+	if err := exec.Command("sudo", "udevadm", "trigger", "--subsystem-match=drm").Run(); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: failed to trigger udev for DRM: %v\n", err)
+	}
+	if err := exec.Command("sudo", "udevadm", "trigger", "--subsystem-match=kfd").Run(); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: failed to trigger udev for KFD: %v\n", err)
+	}
 	fmt.Fprintf(os.Stderr, "Reloaded udev rules\n")
 	return nil
 }

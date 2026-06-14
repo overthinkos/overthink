@@ -2027,7 +2027,7 @@ func cleanDeployEntry(boxName, instance string) {
 
 	if len(dc.Deploy) == 0 && dc.Provides == nil {
 		if path, pathErr := DeployConfigPath(); pathErr == nil {
-			os.Remove(path)
+			_ = os.Remove(path)
 		}
 	} else if err := SaveDeployConfig(dc); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: could not clean charly.yml: %v\n", err)

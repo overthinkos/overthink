@@ -63,7 +63,7 @@ func (c *LibvirtListCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	defer conn.Close()
+	defer conn.Close() //nolint:errcheck
 
 	flags := libvirt.ConnectListDomainsActive | libvirt.ConnectListDomainsInactive
 	doms, _, err := conn.l.ConnectListAllDomains(1, flags)
@@ -112,7 +112,7 @@ func (c *LibvirtInfoCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	defer t.Close()
+	defer t.Close() //nolint:errcheck
 
 	state, _, err := t.Conn.l.DomainGetState(t.Domain, 0)
 	if err != nil {
@@ -207,7 +207,7 @@ func (c *LibvirtScreenshotCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	defer t.Close()
+	defer t.Close() //nolint:errcheck
 	if err := t.EnsureRunning(); err != nil {
 		return err
 	}
@@ -251,7 +251,7 @@ func (c *LibvirtSendKeyCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	defer t.Close()
+	defer t.Close() //nolint:errcheck
 	if err := t.EnsureRunning(); err != nil {
 		return err
 	}
@@ -282,7 +282,7 @@ func (c *LibvirtPasswdCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	defer t.Close()
+	defer t.Close() //nolint:errcheck
 	if err := t.EnsureRunning(); err != nil {
 		return err
 	}
@@ -373,7 +373,7 @@ func (c *LibvirtQmpCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	defer t.Close()
+	defer t.Close() //nolint:errcheck
 
 	req := map[string]any{"execute": c.Command}
 	if c.Args != "" {
@@ -420,7 +420,7 @@ func (c *LibvirtDomainXMLCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	defer t.Close()
+	defer t.Close() //nolint:errcheck
 	var flags libvirt.DomainXMLFlags
 	if c.Config {
 		flags |= libvirt.DomainXMLInactive
@@ -446,7 +446,7 @@ func (c *LibvirtConsoleCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	defer t.Close()
+	defer t.Close() //nolint:errcheck
 	// go-libvirt's DomainOpenConsole + stream API is not wrapped for
 	// easy tailing in this MVP. Report remediation — users fall back
 	// to `virsh console <domain>` for interactive sessions.
@@ -467,7 +467,7 @@ func (c *LibvirtEventsCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	defer conn.Close()
+	defer conn.Close() //nolint:errcheck
 
 	// go-libvirt event subscription requires callback plumbing that
 	// isn't straightforward in the current API version. MVP: poll
@@ -535,7 +535,7 @@ func (c *LibvirtGuestPingCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	defer t.Close()
+	defer t.Close() //nolint:errcheck
 	a := NewGuestAgent(t.Conn.l, t.Domain, c.Timeout)
 	if err := a.Ping(); err != nil {
 		return fmt.Errorf("agent ping: %w", err)
@@ -554,7 +554,7 @@ func (c *LibvirtGuestInfoCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	defer t.Close()
+	defer t.Close() //nolint:errcheck
 	a := NewGuestAgent(t.Conn.l, t.Domain, 10*time.Second)
 	info, err := a.Info()
 	if err != nil {
@@ -573,7 +573,7 @@ func (c *LibvirtGuestOsInfoCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	defer t.Close()
+	defer t.Close() //nolint:errcheck
 	a := NewGuestAgent(t.Conn.l, t.Domain, 10*time.Second)
 	info, err := a.OSInfo()
 	if err != nil {
@@ -592,7 +592,7 @@ func (c *LibvirtGuestTimeCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	defer t.Close()
+	defer t.Close() //nolint:errcheck
 	a := NewGuestAgent(t.Conn.l, t.Domain, 10*time.Second)
 	gt, err := a.Time()
 	if err != nil {
@@ -613,7 +613,7 @@ func (c *LibvirtGuestHostnameCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	defer t.Close()
+	defer t.Close() //nolint:errcheck
 	a := NewGuestAgent(t.Conn.l, t.Domain, 10*time.Second)
 	h, err := a.Hostname()
 	if err != nil {
@@ -633,7 +633,7 @@ func (c *LibvirtGuestUsersCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	defer t.Close()
+	defer t.Close() //nolint:errcheck
 	a := NewGuestAgent(t.Conn.l, t.Domain, 10*time.Second)
 	users, err := a.Users()
 	if err != nil {
@@ -652,7 +652,7 @@ func (c *LibvirtGuestInterfacesCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	defer t.Close()
+	defer t.Close() //nolint:errcheck
 	a := NewGuestAgent(t.Conn.l, t.Domain, 10*time.Second)
 	ifs, err := a.NetworkInterfaces()
 	if err != nil {
@@ -671,7 +671,7 @@ func (c *LibvirtGuestDisksCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	defer t.Close()
+	defer t.Close() //nolint:errcheck
 	a := NewGuestAgent(t.Conn.l, t.Domain, 10*time.Second)
 	d, err := a.Disks()
 	if err != nil {
@@ -690,7 +690,7 @@ func (c *LibvirtGuestFsinfoCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	defer t.Close()
+	defer t.Close() //nolint:errcheck
 	a := NewGuestAgent(t.Conn.l, t.Domain, 10*time.Second)
 	fs, err := a.FSInfo()
 	if err != nil {
@@ -709,7 +709,7 @@ func (c *LibvirtGuestVcpusCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	defer t.Close()
+	defer t.Close() //nolint:errcheck
 	a := NewGuestAgent(t.Conn.l, t.Domain, 10*time.Second)
 	v, err := a.VCPUs()
 	if err != nil {
@@ -731,7 +731,7 @@ func (c *LibvirtGuestExecCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	defer t.Close()
+	defer t.Close() //nolint:errcheck
 	a := NewGuestAgent(t.Conn.l, t.Domain, 30*time.Second)
 	status, err := a.ExecAndWait(c.Argv, c.Capture, 250*time.Millisecond, c.Wait)
 	if err != nil {
@@ -739,11 +739,11 @@ func (c *LibvirtGuestExecCmd) Run() error {
 	}
 	if status.OutData != "" {
 		data, _ := base64Decode(status.OutData)
-		os.Stdout.Write(data)
+		_, _ = os.Stdout.Write(data)
 	}
 	if status.ErrData != "" {
 		data, _ := base64Decode(status.ErrData)
-		os.Stderr.Write(data)
+		_, _ = os.Stderr.Write(data)
 	}
 	if status.Signal != 0 {
 		return fmt.Errorf("killed by signal %d", status.Signal)
@@ -770,7 +770,7 @@ func (c *LibvirtGuestFileReadCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	defer t.Close()
+	defer t.Close() //nolint:errcheck
 	a := NewGuestAgent(t.Conn.l, t.Domain, 30*time.Second)
 	data, err := a.FileRead(c.Path)
 	if err != nil {
@@ -791,7 +791,7 @@ func (c *LibvirtGuestFileWriteCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	defer t.Close()
+	defer t.Close() //nolint:errcheck
 	data, err := io.ReadAll(os.Stdin)
 	if err != nil {
 		return fmt.Errorf("reading stdin: %w", err)
@@ -820,7 +820,7 @@ func (c *LibvirtGuestFsfreezeStatusCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	defer t.Close()
+	defer t.Close() //nolint:errcheck
 	a := NewGuestAgent(t.Conn.l, t.Domain, 10*time.Second)
 	s, err := a.FsFreezeStatus()
 	if err != nil {
@@ -840,7 +840,7 @@ func (c *LibvirtGuestFsfreezeFreezeCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	defer t.Close()
+	defer t.Close() //nolint:errcheck
 	a := NewGuestAgent(t.Conn.l, t.Domain, 30*time.Second)
 	n, err := a.FsFreeze()
 	if err != nil {
@@ -860,7 +860,7 @@ func (c *LibvirtGuestFsfreezeThawCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	defer t.Close()
+	defer t.Close() //nolint:errcheck
 	a := NewGuestAgent(t.Conn.l, t.Domain, 30*time.Second)
 	n, err := a.FsThaw()
 	if err != nil {
@@ -881,7 +881,7 @@ func (c *LibvirtGuestFstrimCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	defer t.Close()
+	defer t.Close() //nolint:errcheck
 	a := NewGuestAgent(t.Conn.l, t.Domain, 60*time.Second)
 	if err := a.FsTrim(uint64(c.Minimum)); err != nil {
 		return err
@@ -910,7 +910,7 @@ func (c *LibvirtSnapshotListCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	defer t.Close()
+	defer t.Close() //nolint:errcheck
 	snaps, _, err := t.Conn.l.DomainListAllSnapshots(t.Domain, 1, 0)
 	if err != nil {
 		return err
@@ -935,7 +935,7 @@ func (c *LibvirtSnapshotCreateCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	defer t.Close()
+	defer t.Close() //nolint:errcheck
 	snap := libvirtxml.DomainSnapshot{
 		Name:        c.Name,
 		Description: c.Desc,
@@ -967,7 +967,7 @@ func (c *LibvirtSnapshotInfoCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	defer t.Close()
+	defer t.Close() //nolint:errcheck
 	snap, err := t.Conn.l.DomainSnapshotLookupByName(t.Domain, c.Name, 0)
 	if err != nil {
 		return err
@@ -991,7 +991,7 @@ func (c *LibvirtSnapshotRevertCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	defer t.Close()
+	defer t.Close() //nolint:errcheck
 	snap, err := t.Conn.l.DomainSnapshotLookupByName(t.Domain, c.Name, 0)
 	if err != nil {
 		return err
@@ -1014,7 +1014,7 @@ func (c *LibvirtSnapshotDeleteCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	defer t.Close()
+	defer t.Close() //nolint:errcheck
 	snap, err := t.Conn.l.DomainSnapshotLookupByName(t.Domain, c.Name, 0)
 	if err != nil {
 		return err

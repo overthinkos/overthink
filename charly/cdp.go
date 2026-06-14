@@ -576,7 +576,7 @@ func (c *CdpClickCmd) Run() error {
 		if err != nil {
 			return fmt.Errorf("connecting to VNC: %w", err)
 		}
-		defer vncClient.Close()
+		defer vncClient.Close() //nolint:errcheck
 		if err := vncClient.PointerClick(desktopX, desktopY, 1); err != nil {
 			return fmt.Errorf("VNC click at (%d, %d): %w", desktopX, desktopY, err)
 		}

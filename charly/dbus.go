@@ -111,7 +111,7 @@ func dbusNotifyLocal(title, body string) error {
 	if err != nil {
 		return err
 	}
-	defer conn.Close()
+	defer conn.Close() //nolint:errcheck
 
 	obj := conn.Object("org.freedesktop.Notifications", "/org/freedesktop/Notifications")
 	call := obj.Call("org.freedesktop.Notifications.Notify", 0,
@@ -132,7 +132,7 @@ func dbusCallLocal(dest, path, method string, args []string) error {
 	if err != nil {
 		return err
 	}
-	defer conn.Close()
+	defer conn.Close() //nolint:errcheck
 
 	parsed, err := parseDbusArgs(args)
 	if err != nil {
@@ -156,7 +156,7 @@ func dbusListLocal() error {
 	if err != nil {
 		return err
 	}
-	defer conn.Close()
+	defer conn.Close() //nolint:errcheck
 
 	var names []string
 	err = conn.BusObject().Call("org.freedesktop.DBus.ListNames", 0).Store(&names)
@@ -174,7 +174,7 @@ func dbusIntrospectLocal(dest, path string) error {
 	if err != nil {
 		return err
 	}
-	defer conn.Close()
+	defer conn.Close() //nolint:errcheck
 
 	var xml string
 	obj := conn.Object(dest, dbus.ObjectPath(path))

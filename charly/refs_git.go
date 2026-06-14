@@ -90,14 +90,14 @@ func GitClone(repoURL string, ref string, commit string, targetDir string) error
 		if err := gitCloneByCommit(repoURL, commit, targetDir); err == nil {
 			return nil
 		}
-		os.RemoveAll(targetDir) // clean up partial clone before falling back
+		_ = os.RemoveAll(targetDir) // clean up partial clone before falling back
 	}
 
 	// Fallback: clone by ref name (servers that don't allow fetch-by-sha).
 	cmd := exec.Command("git", "clone", "--depth", "1", "--branch", ref, repoURL, targetDir)
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
-		os.RemoveAll(targetDir) // clean up partial clone
+		_ = os.RemoveAll(targetDir) // clean up partial clone
 		return fmt.Errorf("git clone --branch %s %s: %w", ref, repoURL, err)
 	}
 
@@ -126,7 +126,7 @@ func gitCloneByCommit(repoURL string, commit string, targetDir string) error {
 		cmd.Dir = targetDir
 		cmd.Stderr = os.Stderr
 		if err := cmd.Run(); err != nil {
-			os.RemoveAll(targetDir) // clean up on failure
+			_ = os.RemoveAll(targetDir) // clean up on failure
 			return fmt.Errorf("git %s: %w", strings.Join(args[1:], " "), err)
 		}
 	}
@@ -169,7 +169,7 @@ func DownloadRepo(repoPath string, version string) (string, error) {
 	}
 
 	// Remove .git directory to save space (cache is read-only)
-	os.RemoveAll(filepath.Join(cachePath, ".git"))
+	_ = os.RemoveAll(filepath.Join(cachePath, ".git"))
 
 	return cachePath, nil
 }

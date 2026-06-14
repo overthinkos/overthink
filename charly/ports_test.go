@@ -248,7 +248,7 @@ func TestCheckPortAvailabilityUDP(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to bind test UDP port: %v", err)
 	}
-	defer conn.Close()
+	defer conn.Close() //nolint:errcheck
 
 	port := conn.LocalAddr().(*net.UDPAddr).Port
 	ports := []string{strconv.Itoa(port) + ":" + strconv.Itoa(port) + "/udp"}
@@ -301,7 +301,7 @@ func TestCheckPortAvailabilityInUse(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to bind test port: %v", err)
 	}
-	defer ln.Close()
+	defer ln.Close() //nolint:errcheck
 
 	port := ln.Addr().(*net.TCPAddr).Port
 	ports := []string{strconv.Itoa(port) + ":" + strconv.Itoa(port)}

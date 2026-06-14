@@ -73,7 +73,7 @@ func runSshTunnel(vmName, uri string, forceTCP bool, kind string) error {
 		ep, err = t.VncEndpoint()
 	}
 	tunnelTarget := t.Uri
-	t.Close()
+	_ = t.Close()
 	if err != nil {
 		return err
 	}

@@ -215,7 +215,7 @@ func TestRunner_Addr(t *testing.T) {
 		t.Fatalf("listen: %v", err)
 	}
 	addr := l.Addr().String()
-	l.Close() // free the port
+	_ = l.Close() // free the port
 	res = r.Run(context.Background(), []Op{
 		{Addr: addr, Reachable: ptrBool(false)},
 	})

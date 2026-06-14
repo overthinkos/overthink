@@ -412,7 +412,7 @@ func (t *VmDeployTarget) execShellSnippet(ctx context.Context, s *ShellSnippetSt
 	if err != nil {
 		return fmt.Errorf("tempdir: %w", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer os.RemoveAll(tmpDir) //nolint:errcheck
 	tmpPath := filepath.Join(tmpDir, "snippet")
 	if err := os.WriteFile(tmpPath, fileBytes, 0644); err != nil {
 		return fmt.Errorf("stage snippet: %w", err)
@@ -816,7 +816,7 @@ func (t *VmDeployTarget) execHomeArtifactBuilder(ctx context.Context, s *Builder
 		return fmt.Errorf("builder staging mkdir: %w", err)
 	}
 	RegisterTempCleanup(stageHost)
-	defer func() { os.RemoveAll(stageHost); UnregisterTempCleanup(stageHost) }()
+	defer func() { _ = os.RemoveAll(stageHost); UnregisterTempCleanup(stageHost) }()
 
 	bindMounts := map[string]string{guestHome: stageHost}
 	envVars := UserScopeEnv(guestHome)
@@ -847,7 +847,7 @@ func (t *VmDeployTarget) execHomeArtifactBuilder(ctx context.Context, s *Builder
 		ProjectDir: t.ProjectDir,
 	})
 	if len(out) > 0 {
-		os.Stderr.Write(out)
+		_, _ = os.Stderr.Write(out)
 	}
 	if err != nil {
 		return fmt.Errorf("VM %s builder (candy=%s): %w", s.Builder, s.CandyName, err)
@@ -879,7 +879,7 @@ func (t *VmDeployTarget) execHomeArtifactBuilder(ctx context.Context, s *Builder
 		return fmt.Errorf("tar staging mkdir: %w", err)
 	}
 	RegisterTempCleanup(tarDir)
-	defer func() { os.RemoveAll(tarDir); UnregisterTempCleanup(tarDir) }()
+	defer func() { _ = os.RemoveAll(tarDir); UnregisterTempCleanup(tarDir) }()
 	tarball := filepath.Join(tarDir, "artifacts.tar.gz")
 	tarArgs := append([]string{"-C", stageHost, "-czf", tarball}, transferDirs...)
 	tarCmd := exec.CommandContext(ctx, "tar", tarArgs...)

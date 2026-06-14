@@ -162,7 +162,7 @@ func (t *LocalDeployTarget) Emit(plans []*InstallPlan, opts EmitOpts) error {
 	if err != nil {
 		return err
 	}
-	defer lock.Release()
+	defer lock.Release() //nolint:errcheck
 
 	// Sudo preflight: refresh the timestamp once at the start so later
 	// `sudo bash <<EOF` blocks reuse the cache. --yes skips the prompt
@@ -340,7 +340,7 @@ func (t *LocalDeployTarget) execShellSnippet(s *ShellSnippetStep, plan *InstallP
 	if err != nil {
 		return fmt.Errorf("tempdir: %w", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer os.RemoveAll(tmpDir) //nolint:errcheck
 	tmpPath := filepath.Join(tmpDir, "snippet")
 	if err := os.WriteFile(tmpPath, fileBytes, 0644); err != nil {
 		return fmt.Errorf("stage snippet: %w", err)
@@ -531,7 +531,7 @@ func (t *LocalDeployTarget) execBuilder(s *BuilderStep, plan *InstallPlan, opts 
 			return err
 		}
 		RegisterTempCleanup(aurStage)
-		defer func() { os.RemoveAll(aurStage); UnregisterTempCleanup(aurStage) }()
+		defer func() { _ = os.RemoveAll(aurStage); UnregisterTempCleanup(aurStage) }()
 		bindMounts["/tmp/aur-pkgs"] = aurStage
 	}
 

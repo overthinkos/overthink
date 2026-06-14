@@ -113,14 +113,14 @@ func (c *SecretsGpgEditCmd) Run() error {
 
 	plaintext, decErr := gpgDecryptToBytes(c.File)
 	if decErr != nil {
-		tmp.Close()
+		_ = tmp.Close()
 		return decErr
 	}
 	if _, writeErr := tmp.Write(plaintext); writeErr != nil {
-		tmp.Close()
+		_ = tmp.Close()
 		return fmt.Errorf("writing temp file: %w", writeErr)
 	}
-	tmp.Close()
+	_ = tmp.Close()
 
 	// Get recipients before editing
 	recipients, err := listRecipients(c.File)
@@ -456,9 +456,11 @@ func removeEnvLine(lines []string, key string) []string {
 func secureDelete(path string) {
 	if info, err := os.Stat(path); err == nil {
 		zeros := make([]byte, info.Size())
-		os.WriteFile(path, zeros, 0600)
+		if werr := os.WriteFile(path, zeros, 0600); werr != nil {
+			fmt.Fprintf(os.Stderr, "secureDelete: overwrite %s: %v\n", path, werr)
+		}
 	}
-	os.Remove(path)
+	_ = os.Remove(path)
 }
 
 // ── GPG/Secret Service helpers ──────────────────────────────────────
@@ -1388,7 +1390,7 @@ func (c *SecretsGpgSetupCmd) ensureKey() error {
 
 	fmt.Fprint(os.Stderr, "  Generate a new GPG key? [Y/n] ")
 	var answer string
-	fmt.Scanln(&answer)
+	_, _ = fmt.Scanln(&answer) // best-effort: empty input (bare Enter) errors but correctly defaults to yes
 	if answer != "" && answer[0] != 'Y' && answer[0] != 'y' {
 		return fmt.Errorf("no GPG key available; run 'gpg --full-generate-key' manually")
 	}

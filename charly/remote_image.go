@@ -94,7 +94,7 @@ func (ctx *RemoteImageContext) BuildImage(rt *ResolvedRuntime, tag string) error
 	if err := os.Chdir(ctx.CacheDir); err != nil {
 		return fmt.Errorf("changing to cache dir: %w", err)
 	}
-	defer os.Chdir(origDir)
+	defer os.Chdir(origDir) //nolint:errcheck
 
 	return buildCmd.Run()
 }

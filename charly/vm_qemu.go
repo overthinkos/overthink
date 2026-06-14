@@ -85,5 +85,5 @@ func killQemuByPID(stateDir string) {
 	if err != nil {
 		return
 	}
-	proc.Kill()
+	_ = proc.Kill()
 }

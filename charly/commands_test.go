@@ -23,11 +23,11 @@ func TestBoxConfigSetupCmd_DirectModeAllowed(t *testing.T) {
 	defer func() { RuntimeConfigPath = orig }()
 	RuntimeConfigPath = func() (string, error) { return configPath, nil }
 
-	os.Unsetenv("CHARLY_BUILD_ENGINE")
-	os.Unsetenv("CHARLY_RUN_ENGINE")
-	os.Unsetenv("CHARLY_AUTO_ENABLE")
-	os.Setenv("CHARLY_RUN_MODE", "direct")
-	defer os.Unsetenv("CHARLY_RUN_MODE")
+	_ = os.Unsetenv("CHARLY_BUILD_ENGINE")
+	_ = os.Unsetenv("CHARLY_RUN_ENGINE")
+	_ = os.Unsetenv("CHARLY_AUTO_ENABLE")
+	_ = os.Setenv("CHARLY_RUN_MODE", "direct")
+	defer os.Unsetenv("CHARLY_RUN_MODE") //nolint:errcheck
 
 	cmd := &BoxConfigSetupCmd{Box: "fedora-test"}
 	err := cmd.Run()
@@ -49,10 +49,10 @@ func TestBoxConfigRemoveCmd_DirectModeAllowed(t *testing.T) {
 	defer func() { RuntimeConfigPath = orig }()
 	RuntimeConfigPath = func() (string, error) { return configPath, nil }
 
-	os.Unsetenv("CHARLY_BUILD_ENGINE")
-	os.Unsetenv("CHARLY_RUN_ENGINE")
-	os.Setenv("CHARLY_RUN_MODE", "direct")
-	defer os.Unsetenv("CHARLY_RUN_MODE")
+	_ = os.Unsetenv("CHARLY_BUILD_ENGINE")
+	_ = os.Unsetenv("CHARLY_RUN_ENGINE")
+	_ = os.Setenv("CHARLY_RUN_MODE", "direct")
+	defer os.Unsetenv("CHARLY_RUN_MODE") //nolint:errcheck
 
 	cmd := &BoxConfigRemoveCmd{Box: "fedora-test"}
 	err := cmd.Run()

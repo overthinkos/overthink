@@ -309,7 +309,7 @@ func opPrimaryKey(node *yaml.Node) string {
 func opUnifyCandidateFiles(dir string) []string {
 	seen := map[string]struct{}{}
 	addYAMLTree := func(root string) {
-		filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
+		_ = filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
 			if err != nil {
 				return nil
 			}

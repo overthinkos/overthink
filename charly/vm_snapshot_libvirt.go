@@ -61,7 +61,7 @@ func createExternalSnapshot(opts SnapshotCreateOpts, outFile string) error {
 	if err != nil {
 		return fmt.Errorf("connecting to libvirt: %w", err)
 	}
-	defer conn.Close()
+	defer conn.Close() //nolint:errcheck
 
 	domName := "charly-" + opts.VmName
 	dom, err := conn.lookupDomain(domName)
@@ -137,7 +137,7 @@ func deleteExternalSnapshot(vmName string, entry *SnapshotEntry) error {
 		fmt.Fprintf(os.Stderr, "note: connecting to libvirt for snapshot delete: %v (continuing with FS cleanup)\n", err)
 		return nil
 	}
-	defer conn.Close()
+	defer conn.Close() //nolint:errcheck
 
 	domName := "charly-" + vmName
 	dom, err := conn.lookupDomain(domName)
@@ -170,7 +170,7 @@ func revertExternalSnapshot(vmName string, entry *SnapshotEntry) error {
 	if err != nil {
 		return fmt.Errorf("connecting to libvirt: %w", err)
 	}
-	defer conn.Close()
+	defer conn.Close() //nolint:errcheck
 
 	domName := "charly-" + vmName
 	dom, err := conn.lookupDomain(domName)

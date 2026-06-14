@@ -78,7 +78,9 @@ func TestResolveAgentForwarding_DeployOverride(t *testing.T) {
 	// Even with SSH_AUTH_SOCK set, deploy override should suppress forwarding
 	tmp := t.TempDir()
 	sock := filepath.Join(tmp, "agent.sock")
-	os.WriteFile(sock, nil, 0600)
+	if err := os.WriteFile(sock, nil, 0600); err != nil {
+		t.Fatal(err)
+	}
 	t.Setenv("SSH_AUTH_SOCK", sock)
 
 	result := ResolveAgentForwarding(rt, deploy, "/home/testuser")

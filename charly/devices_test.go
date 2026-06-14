@@ -245,9 +245,11 @@ func TestAMDGFXVersionParsing(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer os.Remove(f.Name())
-			f.WriteString(tt.content)
-			f.Close()
+			defer os.Remove(f.Name()) //nolint:errcheck
+			if _, err := f.WriteString(tt.content); err != nil {
+				t.Fatal(err)
+			}
+			_ = f.Close()
 
 			got := parseKFDGFXVersion(f.Name())
 			if got != tt.expected {

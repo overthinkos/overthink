@@ -33,7 +33,7 @@ func defaultListLibvirtCharlyDomains() ([]domainInfo, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer conn.Close()
+	defer conn.Close() //nolint:errcheck
 	return conn.listCharlyDomains()
 }
 

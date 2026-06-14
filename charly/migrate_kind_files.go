@@ -89,7 +89,7 @@ func writeYAMLDoc(path string, doc *yaml.Node) error {
 	if err := enc.Encode(doc); err != nil {
 		return fmt.Errorf("encoding %s: %w", path, err)
 	}
-	enc.Close()
+	_ = enc.Close()
 	if err := os.WriteFile(path, out.Bytes(), 0o644); err != nil {
 		return fmt.Errorf("writing %s: %w", path, err)
 	}
@@ -196,7 +196,7 @@ func renameKindDocKey(path, oldKind, newKind string, dryRun bool) (int, error) {
 		if err := enc.Encode(doc); err != nil {
 			return count, fmt.Errorf("encoding %s: %w", path, err)
 		}
-		enc.Close()
+		_ = enc.Close()
 	}
 	if err := os.WriteFile(path, out.Bytes(), 0o644); err != nil {
 		return count, fmt.Errorf("writing %s: %w", path, err)

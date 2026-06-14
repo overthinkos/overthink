@@ -102,7 +102,7 @@ candy:
         # [...]}` at the image level; charly/security.go unions onto this layer.
         security_opt:
             - unmask=/proc/*
-        device:
+        devices:
             # /dev/fuse is needed by fuse-overlayfs (inner podman's storage driver
             # of choice when the kernel overlay isn't usable from a rootless outer).
             - /dev/fuse

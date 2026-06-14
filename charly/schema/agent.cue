@@ -8,7 +8,7 @@
 	prompt_via: *"argv" | "file"
 	version_command?: [...string]
 	timeout?: #Duration
-	env?: [string]: string
+	env?: #StrMap
 	working_dir?: string & !=""
 	credential?: [...#CredentialMount]
 	progress_check_interval?:         #Duration
@@ -23,5 +23,4 @@
 	optional?: bool
 }
 
-// Go time.ParseDuration string (units ns/us/µs/ms/s/m/h), e.g. "30m", "1h30m".
-#Duration: string & =~"^[0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h)([0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h))*$"
+// #Duration now lives in _common.cue (shared by agent + deploy + #Op).

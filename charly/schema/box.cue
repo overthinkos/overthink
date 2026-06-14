@@ -1,7 +1,10 @@
 // CUE schema for the `box` kind. #Box validates ONE box entity (the value under
 // `box:` in a discovered box/<distro>/box/<name>/charly.yml). Per-entity model.
-// OPEN tail; real fields constrained. Shared #Step from _common.cue. Source of
-// truth: charly/config.go BoxConfig.
+// CLOSED (an unknown key is a typo). Shared defs (#Step/#Security/#Shell/#CalVer/
+// #EntityRef/#EnvVar) come from _common.cue. Source of truth: charly/config.go
+// BoxConfig (the `defaults:` block reuses BoxConfig but is NOT validated against
+// #Box — only box ENTITIES are — so every BoxConfig field is modeled here even
+// when only `defaults:` authors it).
 
 // Package formats (BoxConfig.Build / BuildFormats). Named #BuildFormat to avoid
 // colliding with distro.cue's #Format (the package-format definition struct).
@@ -10,66 +13,31 @@
 // Builder build-type slots (BoxConfig.Produce + BoxConfig.Builder keys).
 #BuildType: "pixi" | "npm" | "cargo" | "aur"
 
-#BoxSecurity: {
-	privileged?: bool
-	cgroupns?:   string & !=""
-	cap_add?: [...(string & !="")]
-	devices?: [...(string & !="")]
-	security_opt?: [...(string & !="")]
-	ipc_mode?: string & !=""
-	shm_size?: string & !=""
-	group_add?: [...(string & !="")]
-	mount?: [...(string & !="")]
-	memory_max?:      string & !=""
-	memory_high?:     string & !=""
-	memory_swap_max?: string & !=""
-	cpus?:            string & !=""
-	...
-}
-
+// MergeConfig (config.go). CLOSED.
 #BoxMerge: {
 	auto?:         bool
 	max_mb?:       int & >=0
 	max_total_mb?: int & >=0
-	...
 }
 
+// AliasConfig (config.go). CLOSED. command defaults to name when omitted.
 #BoxAlias: {
 	name:     string & !=""
-	command?: string
-	...
+	command?: string & !=""
 }
 
-#BoxShellSpec: {
-	init?: string
-	path_append?: [...string]
-	path?: string
-	...
-}
-
-#BoxShell: {
-	init?: string
-	path_append?: [...string]
-	path?:     string
-	priority?: int
-	bash?:     #BoxShellSpec
-	zsh?:      #BoxShellSpec
-	fish?:     #BoxShellSpec
-	sh?:       #BoxShellSpec
-	...
-}
-
+// base and from are mutually exclusive; neither is also valid (scratch box).
+// matchN is applied via `&` (NOT embedded) so the struct literal stays CLOSED —
+// an embedded matchN silently disables closedness.
 #Box: {
-	name:         string & =~"^[a-z0-9]+(-[a-z0-9]+)*$"
-	version?:     string & =~"^[0-9]{4}\\.[0-9]{1,3}\\.[0-9]{3,4}$"
+	name:         #EntityRef
+	version?:     #CalVer
 	description?: string & !=""
 	enabled?:     bool
 
 	base?:                    string & !=""
 	from?:                    string & =~"^builder:[a-z0-9]+(-[a-z0-9]+)*$"
 	bootstrap_builder_image?: string & !=""
-	// base and from are mutually exclusive; neither is also valid (scratch box).
-	matchN(<=1, [{base!: _}, {from!: _}])
 
 	platform?: [...(string & =~"^[a-z][a-z0-9]*/[a-z0-9]+")]
 	tag?:      string & !=""
@@ -78,7 +46,7 @@
 	distro?: [...(string & !="")]
 	build?:  #BuildFormat | [...#BuildFormat]
 
-	candy?: [...(string & !="")]
+	candy?: [...#CandyRef]
 
 	// box-level port: is RETIRED (rejectLegacyBoxPort) — ports inherit from candies.
 	port?: _|_
@@ -91,9 +59,9 @@
 	builder?: {[string]: string & !=""}
 	produce?: [...#BuildType]
 
-	env?: [...(string & !="")]
+	env?: [...#EnvVar]
 	env_file?:   string & !=""
-	security?:   #BoxSecurity
+	security?:   #Security
 	network?:    string & !=""
 	init?:       "supervisord" | "systemd"
 	data_image?: bool
@@ -112,6 +80,5 @@
 	plan?: [...#Step]
 	check_level?: *"noagent" | "none" | "build" | "agent"
 
-	shell?: #BoxShell
-	...
-}
+	shell?: #Shell
+} & ({from?: _|_} | {base?: _|_}) // at most one of base/from (disjunction keeps it CLOSED; matchN would open it)

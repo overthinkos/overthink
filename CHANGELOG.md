@@ -22,6 +22,75 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-14 — feat(schema)!: tighten all CUE schemas to closed Go-struct parity
+
+The follow-on to the additive CUE-validation layer (below): the deliberately
+**loose** first-pass schemas (open `...` tails on every def, blanket `{...}`
+passthroughs for whole subtrees) are tightened to **closed** Go-struct parity.
+A CUE `#Def` is closed by default; "tighten" = drop the `...` so an unknown key
+is rejected (catching typos `yaml.v3` silently ignores), and replace every
+blanket `{...}` with a modeled closed def. Per kind:
+
+- **vm**: the two blanket lines `libvirt?: {...}` / `cloud_init?: {...}` become
+  `#LibvirtDomain` (57 sub-defs mirroring `libvirt_yaml.go` — features/cpu/clock/
+  memory/numa/cputune/devices(disk/interface/graphics/video/…)/seclabel/…) and
+  `#VmCloudInit` (6 sub-defs). The genuine typed-open hatches stay open and named:
+  `xml_passthrough` (string), `snippets` ([]string), cloud_init `extra` (string),
+  `network.ethernets` (`{[string]:{[string]:_}}`). Every `map[string]string`
+  libvirt attr is a TYPED `{[string]: string}`, never a blanket. NB: `ValidateVmSpec`/
+  `ValidateLibvirtDomain` are TEST-ONLY (never wired into production), so the CUE
+  `#Vm` path is now the SOLE production validator for VM/libvirt/cloud_init —
+  these blankets had meant ZERO real validation of those subtrees.
+- **deploy**: `sidecar`/`shell`/`probes`/`vm_state`/`#PortScope` blankets →
+  `#Sidecar`/`#DeployShellOverlay`/`#DeployProbes`/`#VmDeployState` (open tail —
+  machine-written runtime state) / typed `"all" | [...int] | {[…]: string}`.
+- **k8s**: closed; `pod_default.tolerations` stays open (raw K8s Toleration objects).
+- **box/candy/distro/builder/init/group/pod/sidecar/android/local/agent/module/
+  target/resource**: closed; full field models from each Go struct.
+
+Cross-cutting work: shared defs consolidated to ONE home in `_common.cue` (R3 —
+`#Security`/`#Size`/`#Shell`/`#ShellSpec`/`#PackageItem`/`#DistroPackages`/`#AUR`/
+`#RepoBlock`/`#Duration`/`#CalVer`/`#EntityRef`/`#CandyRef`/`#PortPin`/`#VmSize`/
+`#EnvVar`/`#InstallOpts`), deleting box's duplicate `#BoxSecurity`/`#BoxShell`.
+A closed `#Op` (every authored yaml key of `checkspec.go`'s Op) + tightened
+`#Step` (the 5-keyword disjunction embedding `#Op`) replace the open Op tail; the
+live-verb method enums (`#CdpMethod`/`#WlMethod`/…) mirror the Go `*Methods`
+allowlists exactly. **CUE closedness sharp edge:** an embedded `matchN(...)`
+silently DISABLES struct closedness — the three mutual-exclusion sites
+(box base/from, candy apk package/apk, vm-ssh port/port_auto) use the
+`{closed} & (arm | arm)` disjunction idiom instead, which preserves closedness.
+**Scalar-coercion parity:** `yaml.v3` coerces an unquoted `PORT: 8080` into a
+`map[string]string` string, so env-idiomatic value positions use
+`#StrMap`/`#StrVal` (`string | number | bool`) to match Go and avoid
+false-rejecting valid configs.
+
+The tightening **surfaced eight latent bugs the loose schema had masked**, all
+fixed in this cutover: a phantom Go `cdpMethods["check"]` keyed to a non-existent
+`charly check cdp check` subcommand (the real one is `eval`, per the CLI + skill
++ corpus) → renamed to `eval` and R5-swept across the map, the two
+`validateCharlyVerb` tests, and a bench-bed prompt; `exit_code:` on four check
+steps (the Op field is `exit_status` — `exit_code` was silently dropped, so those
+checks asserted nothing) in jupyter/jupyter-ml; `exclude_distros:` (plural; the
+yaml tag is singular `exclude_distro`, so the exclusion never applied) in sag;
+`autostart:` (the field is `auto_start`) in check-stack-layer; and **`device:`
+(the `SecurityConfig` field is `devices`) in container-nesting + k3s-server —
+meaning `/dev/fuse` and `/dev/net/tun` were silently NOT being added to those
+containers.**
+
+Proven: `go test ./...` green (corpus 186/186 candies + 79/79 boxes + every kind
++ 29 reject/teeth tests that fail under the old loose schema); a live
+`charly box validate` (exit 0) on the real project; and a fresh `check-k3s-vm`
+image BUILD (the tight schema + the local fixed `k3s-server` candy built a real
+VM image end to end). Because the tight schema validates candies WHEREVER
+resolved, it correctly rejects the SAME latent bugs in candies fetched from a
+pinned remote tag — so landing is a B6/B7 cross-repo cascade: the superproject
+publishes the fixed candies (new tag), each `box/<distro>` submodule
+`charly box reconcile`s its `@github` candy pins to it (its build is then the
+real consumer gate), and the superproject bumps the gitlinks. Making CUE the
+SOLE authority — deleting the now-duplicate declarative Go per-entity validators
+(keeping the cross-entity graph/scope checks) + the explicit-`kind:`
+normalization migration — is the next CUE-authoritative cutover.
+
 ### 2026-06-14 — feat(schema): CUE schema validation for all config kinds (additive)
 
 The first phase of the CUE migration: a CUE-based validation layer over the

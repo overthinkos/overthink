@@ -545,7 +545,7 @@ check:
                 check that rejects pre-staged or stale files.
 
                 Re-run by harness independently (you cannot influence the verdict):
-                  - Status / evaluation / listing verbs (cdp:status, cdp:check,
+                  - Status / evaluation / listing verbs (cdp:status, cdp:eval,
                     wl:status, libvirt:info, libvirt:domain-xml, libvirt:guest/
                     ping, libvirt:guest/exec, k8s:nodes/wait-ready/addons/raw,
                     mcp:ping/list-tools/call/read, dbus:list/call/notify).

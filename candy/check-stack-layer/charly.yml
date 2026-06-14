@@ -32,14 +32,14 @@ candy:
           exec: "/usr/bin/nc -lk 18794"
           restart: always
           priority: 20
-          autostart: true
+          auto_start: true
           enable: true
           scope: system
         - name: check-sleep
           exec: "/usr/bin/sleep infinity"
           restart: always
           priority: 20
-          autostart: true
+          auto_start: true
           enable: true
           scope: system
     plan:

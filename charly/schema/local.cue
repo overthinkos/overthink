@@ -13,19 +13,5 @@
 	plan?: [...#Step]
 }
 
-// A candy ref: bare lowercase-hyphenated name OR a remote @github…:vTAG ref.
-#CandyRef: =~"^(@.+|[a-z0-9]+(-[a-z0-9]+)*)$"
-
-// An env entry: KEY=VALUE (value may be empty / contain =).
-#EnvVar: =~"^[A-Za-z_][A-Za-z0-9_]*=.*$"
-
-// install_opts gates (deploy.go InstallOptsConfig). Singular with_service
-// (charly migrate rewrote the legacy plural with_services).
-#InstallOpts: {
-	with_service?:       bool
-	allow_repo_changes?: bool
-	allow_root_tasks?:   bool
-	skip_incompatible?:  bool
-	verify?:             bool
-	builder_image?:      string & !=""
-}
+// #CandyRef / #EnvVar / #InstallOpts now live in _common.cue (shared with
+// deploy + pod + candy).

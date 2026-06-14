@@ -1,7 +1,8 @@
 // CUE schema for the `builder` kind. #Builder validates ONE value of the
-// `builder:` map (BuilderDef). OPEN tail; template/script bodies are Go
-// text/template (plain `string`). #CacheMount / #PhaseSet / #PhaseTemplates are
-// shared (_common.cue). No #Step (builder has no plan).
+// `builder:` map (BuilderDef). CLOSED: every authored key is modeled (an unknown
+// key is a typo). Template/script bodies are Go text/template (plain `string`).
+// #CacheMount / #PhaseSet / #PhaseTemplates are shared (_common.cue). No #Step
+// (builder has no plan).
 
 #Builder: {
 	detect_file?: [...(string & !="")]
@@ -9,8 +10,8 @@
 	requires_src_dir?: bool
 	inline?:           bool
 	cache_mount?: [...#CacheMount]
-	env?: [string]:         string
-	runtime_env?: [string]: string
+	env?:         #StrMap
+	runtime_env?: #StrMap
 	stage_template?:   string
 	install_template?: string
 	manylinux_fix?:    string
@@ -26,7 +27,6 @@
 	if privileged {
 		output_artifact!: string & =~"^/"
 	}
-	...
 }
 
 #Copy: {

@@ -32,7 +32,7 @@ candy:
     security:
         privileged: true
         cgroupns: host
-        device:
+        devices:
             - /dev/fuse
     # K3S_CLUSTER_TOKEN is the shared pre-shared token that authorizes
     # k3s-agent nodes to join this server. Auto-generated on first deploy

@@ -1,6 +1,7 @@
 // CUE schema for the `init` kind. #Init validates ONE value of the `init:` map
-// (InitDef — supervisord/systemd). OPEN tail; *_template fields are Go
-// text/template (plain `string`). No #Step (init has no plan).
+// (InitDef — supervisord/systemd). CLOSED: every authored key is modeled (an
+// unknown key is a typo). *_template fields are Go text/template (plain
+// `string`). No #Step (init has no plan).
 
 #Init: {
 	candy_field?: [...(string & !="")]
@@ -32,7 +33,6 @@
 	label_key?: string & =~"^ai\\.opencharly\\.service\\.[a-z0-9]+$"
 
 	service_schema?: #InitServiceSchema
-	...
 }
 
 #InitServiceSchema: {
@@ -41,5 +41,4 @@
 	dropin_template?:      string
 	dropin_path_template?: string
 	supports_packaged?:    bool
-	...
 }

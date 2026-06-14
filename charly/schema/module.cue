@@ -1,6 +1,7 @@
 // CUE schema for the `module` kind (Calamares installer module / module.desc).
-// #Module validates ONE module entity. No on-disk corpus yet; modeled from
-// ModuleSpec. `requiredModules` keeps Calamares' camelCase verbatim. No #Step.
+// #Module validates ONE module entity. CLOSED: every authored key is modeled (an
+// unknown key is a typo). No on-disk corpus yet; modeled from ModuleSpec.
+// `requiredModules` keeps Calamares' camelCase verbatim. No #Step.
 
 #Module: {
 	name:         string & =~"^[a-z0-9]+(-[a-z0-9]+)*$"
@@ -16,5 +17,4 @@
 	emergency: *false | bool
 	timeout?:  int & >=0
 	chroot:    *false | bool
-	...
 }

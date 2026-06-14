@@ -73,7 +73,7 @@ var artifactValidatableMethods = map[string]bool{
 
 // methodSpec describes one method within a verb group.
 //
-//	path     — CLI subcommand path after "check", e.g. ["cdp", "check"] or
+//	path     — CLI subcommand path after "check", e.g. ["cdp", "eval"] or
 //	           ["cdp", "spa", "click"] for nested subcommands.
 //	required — Check struct field names that must be non-empty/non-zero at
 //	           validation time. Empty list ⇒ no method-specific modifiers.
@@ -105,7 +105,7 @@ var cdpMethods = map[string]methodSpec{
 	"url":        {path: []string{"cdp", "url"}, required: []string{"Tab"}, posArgs: posTab},
 	"text":       {path: []string{"cdp", "text"}, required: []string{"Tab"}, posArgs: posTab},
 	"html":       {path: []string{"cdp", "html"}, required: []string{"Tab"}, posArgs: posTab},
-	"check":      {path: []string{"cdp", "check"}, required: []string{"Tab", "Expression"}, posArgs: posTabExpression},
+	"eval":       {path: []string{"cdp", "eval"}, required: []string{"Tab", "Expression"}, posArgs: posTabExpression},
 	"axtree":     {path: []string{"cdp", "axtree"}, required: []string{"Tab"}, posArgs: posTabQuery},
 	"coords":     {path: []string{"cdp", "coords"}, required: []string{"Tab", "Selector"}, posArgs: posTabSelector},
 	"raw":        {path: []string{"cdp", "raw"}, required: []string{"Tab", "Method"}, posArgs: posCdpRaw},

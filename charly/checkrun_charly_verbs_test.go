@@ -162,8 +162,8 @@ func TestValidateCharlyVerb_UnknownMethodReportsError(t *testing.T) {
 
 func TestValidateCharlyVerb_MissingRequiredModifier(t *testing.T) {
 	errs := &ValidationError{}
-	// cdp: check requires Tab + Expression — neither set.
-	c := &Op{Cdp: "check"}
+	// cdp: eval requires Tab + Expression — neither set.
+	c := &Op{Cdp: "eval"}
 	validateCharlyVerb(c, "cdp", "loc", errs)
 	joined := strings.Join(errs.Errors, "\n")
 	if !strings.Contains(joined, "tab") || !strings.Contains(joined, "expression") {
@@ -193,7 +193,7 @@ func TestValidateCharlyVerb_ArtifactMethodMissingPath(t *testing.T) {
 
 func TestValidateCharlyVerb_ValidCheckNoErrors(t *testing.T) {
 	errs := &ValidationError{}
-	c := &Op{Cdp: "check", Tab: "1", Expression: "document.title"}
+	c := &Op{Cdp: "eval", Tab: "1", Expression: "document.title"}
 	validateCharlyVerb(c, "cdp", "loc", errs)
 	if errs.HasErrors() {
 		t.Errorf("expected no errors for valid check, got: %+v", errs.Errors)

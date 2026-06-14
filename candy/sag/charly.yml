@@ -38,7 +38,7 @@ candy:
         - check: the Fedora alsa development headers for sag's cgo audio backend are installed
           package: alsa-lib-devel
           installed: true
-          exclude_distros:
+          exclude_distro:
             - arch
             - cachyos
             - debian

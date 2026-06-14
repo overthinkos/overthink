@@ -1,8 +1,8 @@
 // CUE schema for the `distro` kind. #Distro validates ONE value of the `distro:`
-// map (DistroDef) — the build vocabulary. OPEN tail; the real invariants (URLs,
-// version/name patterns, required base_user/local_pkg fields) are constrained.
-// TEXT/TEMPLATE fields are Go text/template — plain `string`, never parsed.
-// #CacheMount / #PhaseSet / #PhaseTemplates are shared (_common.cue).
+// map (DistroDef) — the build vocabulary. CLOSED: every authored key is modeled
+// (an unknown key is a typo). TEXT/TEMPLATE fields are Go text/template — plain
+// `string`, never parsed. #CacheMount / #PhaseSet / #PhaseTemplates are shared
+// (_common.cue).
 
 #Distro: {
 	inherits?:         string & =~"^[a-z0-9]+(-[a-z0-9]+)*$"
@@ -17,14 +17,14 @@
 	alpine_bootstrap?: #AlpineBootstrap
 	bootloader?:       #Bootloader
 	dnf?:              #Dnf
-	...
 }
 
+// install_cmd is the bootstrap command; ubuntu sets it to "" (kept WITHOUT
+// `& !=""` so the empty-string base case validates).
 #Bootstrap: {
 	install_cmd: string
 	package?: [...string]
 	cache_mount?: [...#CacheMount]
-	...
 }
 
 #Format: {
@@ -36,13 +36,11 @@
 	validate?: [...#FormatRule]
 	secondary?: bool
 	local_pkg?: #LocalPkg
-	...
 }
 
 #FormatRule: {
 	field: string & !=""
 	rule:  string & !=""
-	...
 }
 
 #LocalPkg: {
@@ -53,7 +51,6 @@
 	probe:              string & !=""
 	dep_builder?:       string
 	download_template?: string
-	...
 }
 
 #Pacstrap: {
@@ -62,13 +59,11 @@
 	mirrorlist_url?:   string & =~"^https?://"
 	extra_repo?: [...#PacstrapRepo]
 	runtime_pacman_conf?: string
-	...
 }
 #PacstrapRepo: {
 	name:      string & !=""
 	server:    string & =~"^https?://"
 	siglevel?: string
-	...
 }
 #Debootstrap: {
 	suite?:   string
@@ -78,34 +73,28 @@
 	include_package?: [...string]
 	base_package?: [...string]
 	extra_repo?: [...#DebootstrapRepo]
-	...
 }
 #DebootstrapRepo: {
 	name:        string & !=""
 	url:         string & =~"^https?://"
 	suite?:      string
 	components?: string
-	...
 }
 #AlpineBootstrap: {
 	mirror_url?: string & =~"^https?://"
-	...
 }
 #Bootloader: {
 	install_template?:   string
 	initramfs_template?: string
 	fstab_template?:     string
-	...
 }
 #BaseUser: {
 	name: string & !=""
 	uid:  int & >=0
 	gid:  int & >=0
 	home: string & =~"^/"
-	...
 }
 #Dnf: {
 	max_parallel_downloads?: int & >=1
 	fastestmirror?:          bool
-	...
 }

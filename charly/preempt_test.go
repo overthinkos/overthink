@@ -2,6 +2,7 @@ package main
 
 import (
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -57,12 +58,7 @@ func claimantNode(requires []string) DeploymentNode {
 }
 
 func opsContain(ops []string, want string) bool {
-	for _, o := range ops {
-		if o == want {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(ops, want)
 }
 
 // 1. Acquire stops a running holder of the token; Release restores it.

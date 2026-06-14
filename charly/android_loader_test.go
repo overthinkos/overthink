@@ -46,7 +46,7 @@ func TestValidateCheckBeds_Android(t *testing.T) {
 	// android bed without an android: ref → error.
 	uf := &UnifiedFile{
 		Check: map[string]DeploymentNode{
-			"bed": {Target: "android", Disposable: boolPtr(true)},
+			"bed": {Target: "android", Disposable: new(true)},
 		},
 	}
 	if err := validateCheckBeds(uf); err == nil {
@@ -56,7 +56,7 @@ func TestValidateCheckBeds_Android(t *testing.T) {
 	// android bed referencing an undefined device → error.
 	uf2 := &UnifiedFile{
 		Check: map[string]DeploymentNode{
-			"bed": {Target: "android", Android: "ghost", Disposable: boolPtr(true)},
+			"bed": {Target: "android", Android: "ghost", Disposable: new(true)},
 		},
 	}
 	if err := validateCheckBeds(uf2); err == nil {
@@ -67,7 +67,7 @@ func TestValidateCheckBeds_Android(t *testing.T) {
 	uf3 := &UnifiedFile{
 		Android: map[string]*AndroidSpec{"dev": {Box: "android-emulator"}},
 		Check: map[string]DeploymentNode{
-			"bed": {Target: "android", Android: "dev", Disposable: boolPtr(true)},
+			"bed": {Target: "android", Android: "dev", Disposable: new(true)},
 		},
 	}
 	if err := validateCheckBeds(uf3); err != nil {

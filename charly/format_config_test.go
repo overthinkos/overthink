@@ -1,6 +1,7 @@
 package main
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -155,13 +156,7 @@ func TestBuilderNames(t *testing.T) {
 	// (debootstrap/pacstrap beyond testdata's pixi/npm/cargo/aur), so assert the
 	// testdata builders are PRESENT rather than pinning an exact count.
 	for _, want := range []string{"pixi", "npm", "cargo", "aur"} {
-		found := false
-		for _, n := range names {
-			if n == want {
-				found = true
-				break
-			}
-		}
+		found := slices.Contains(names, want)
 		if !found {
 			t.Errorf("builder %q missing from %v", want, names)
 		}

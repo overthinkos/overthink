@@ -289,17 +289,18 @@ func guestNestedCheckCmd(guestPod, format, section string, filter []string, inst
 	if format == "" {
 		format = "text"
 	}
-	cmd := "charly check live " + shellSingleQuote(guestPod) + " --format " + shellSingleQuote(format)
+	var cmd strings.Builder
+	cmd.WriteString("charly check live " + shellSingleQuote(guestPod) + " --format " + shellSingleQuote(format))
 	if section != "" {
-		cmd += " --section " + shellSingleQuote(section)
+		cmd.WriteString(" --section " + shellSingleQuote(section))
 	}
 	for _, f := range filter {
-		cmd += " --filter " + shellSingleQuote(f)
+		cmd.WriteString(" --filter " + shellSingleQuote(f))
 	}
 	if instance != "" {
-		cmd += " -i " + shellSingleQuote(instance)
+		cmd.WriteString(" -i " + shellSingleQuote(instance))
 	}
-	return cmd
+	return cmd.String()
 }
 
 func (c *CheckLiveCmd) runVm() error {

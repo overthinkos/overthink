@@ -20,7 +20,9 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"maps"
 	"os"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -569,7 +571,7 @@ func cascadeTagChain(img *ResolvedBox) []string {
 	return chain
 }
 
-func resolveCascadePackages(layer *Candy, img *ResolvedBox) (pkgs []string, raw map[string]interface{}, matched bool) {
+func resolveCascadePackages(layer *Candy, img *ResolvedBox) (pkgs []string, raw map[string]any, matched bool) {
 	seen := map[string]bool{}
 	add := func(in []string) {
 		for _, p := range in {
@@ -582,10 +584,10 @@ func resolveCascadePackages(layer *Candy, img *ResolvedBox) (pkgs []string, raw 
 	// Always-included base first (stable ordering).
 	add(layer.TopPackages())
 
-	raw = map[string]interface{}{}
+	raw = map[string]any{}
 	chain := cascadeTagChain(img)
-	for i := len(chain) - 1; i >= 0; i-- { // least → most specific: format → distro → version
-		cfg := layer.TagSection(chain[i])
+	for _, c := range slices.Backward(chain) { // least → most specific: format → distro → version
+		cfg := layer.TagSection(c)
 		if cfg == nil {
 			continue
 		}
@@ -606,7 +608,7 @@ func resolveCascadePackages(layer *Candy, img *ResolvedBox) (pkgs []string, raw 
 // PackageSection's Raw map, extracting the well-known structured fields
 // (repos, options, copr, modules, exclude, keys) for gate checkuation
 // while also preserving the full Raw map for template rendering later.
-func buildSystemPackagesStep(format string, phase Phase, packages []string, raw map[string]interface{}, cacheMounts []CacheMountDef) *SystemPackagesStep {
+func buildSystemPackagesStep(format string, phase Phase, packages []string, raw map[string]any, cacheMounts []CacheMountDef) *SystemPackagesStep {
 	step := &SystemPackagesStep{
 		Format:            format,
 		Phase:             phase,
@@ -709,9 +711,7 @@ func compileActOp(op *Op, layer *Candy, img *ResolvedBox) InstallStep {
 	var candyVars map[string]string
 	if len(layer.vars) > 0 {
 		candyVars = make(map[string]string, len(layer.vars))
-		for k, v := range layer.vars {
-			candyVars[k] = v
-		}
+		maps.Copy(candyVars, layer.vars)
 	}
 	var resolvedTo string
 	if op.To != "" {
@@ -836,8 +836,8 @@ func resolveBuilderImage(name string, img *ResolvedBox, hostCtx HostContext) str
 // candy's Cargo.toml [[bin]] section, etc.). For now we capture names
 // derivable from the candy manifest alone; the host target refines these at
 // execution time.
-func collectBuilderContext(layer *Candy, builderName string, _ *BuilderDef, img *ResolvedBox) map[string]interface{} {
-	ctx := map[string]interface{}{
+func collectBuilderContext(layer *Candy, builderName string, _ *BuilderDef, img *ResolvedBox) map[string]any {
+	ctx := map[string]any{
 		"layer":   layer.Name,
 		"builder": builderName,
 		"home":    img.Home,
@@ -877,11 +877,11 @@ func collectBuilderContext(layer *Candy, builderName string, _ *BuilderDef, img 
 // stringSliceFromYAML coerces a YAML-decoded value into []string. The
 // decoder produces []interface{} for sequences; we tolerate already-
 // stringified slices for callers that pre-process.
-func stringSliceFromYAML(v interface{}) ([]string, bool) {
+func stringSliceFromYAML(v any) ([]string, bool) {
 	switch s := v.(type) {
 	case []string:
 		return append([]string(nil), s...), true
-	case []interface{}:
+	case []any:
 		out := make([]string, 0, len(s))
 		for _, e := range s {
 			if str, ok := e.(string); ok {

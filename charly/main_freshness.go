@@ -153,7 +153,7 @@ func isFreshnessSafeVerb(verbPath string) bool {
 // charly/main.go alongside it.
 func findCharlySourceRoot(start string) string {
 	cur := start
-	for i := 0; i < 12; i++ {
+	for range 12 {
 		if statExists(filepath.Join(cur, "charly", "main.go")) &&
 			statExists(filepath.Join(cur, UnifiedFileName)) {
 			return cur

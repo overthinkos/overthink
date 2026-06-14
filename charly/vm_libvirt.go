@@ -268,11 +268,11 @@ func extractChannelSocketPaths(xmlStr string) []string {
 		}
 		// Look for <source path='…'/> (or path="…").
 		for _, q := range []string{"path='", `path="`} {
-			si := strings.Index(body, q)
-			if si < 0 {
+			_, after, ok := strings.Cut(body, q)
+			if !ok {
 				continue
 			}
-			rest := body[si+len(q):]
+			rest := after
 			ei := strings.IndexAny(rest, `'"`)
 			if ei < 0 {
 				continue
@@ -309,11 +309,11 @@ func extractGraphicsSocketPaths(xmlStr string) []string {
 		}
 		// Look for socket='…' or socket="…"
 		for _, q := range []string{"socket='", `socket="`} {
-			si := strings.Index(tag, q)
-			if si < 0 {
+			_, after, ok := strings.Cut(tag, q)
+			if !ok {
 				continue
 			}
-			rest := tag[si+len(q):]
+			rest := after
 			ei := strings.IndexAny(rest, `'"`)
 			if ei < 0 {
 				continue

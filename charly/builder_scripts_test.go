@@ -14,7 +14,7 @@ import (
 // builderStepWithDef returns a BuilderStep carrying the resolved BuilderDef for
 // `name` loaded from the repo's real build.yml, so renderBuilderScript renders
 // the actual phase.install.host cell.
-func builderStepWithDef(t *testing.T, name string, raw map[string]interface{}) *BuilderStep {
+func builderStepWithDef(t *testing.T, name string, raw map[string]any) *BuilderStep {
 	t.Helper()
 	_, bc, _, err := LoadBuildConfigForBox(repoRootDir(t))
 	if err != nil {
@@ -73,7 +73,7 @@ func TestRenderCargoScript(t *testing.T) {
 }
 
 func TestRenderAurScriptPackages(t *testing.T) {
-	s := builderStepWithDef(t, "aur", map[string]interface{}{
+	s := builderStepWithDef(t, "aur", map[string]any{
 		"packages": []string{"some-pkg", "another-pkg"},
 	})
 	out, err := renderBuilderScript(s, "/home/user")

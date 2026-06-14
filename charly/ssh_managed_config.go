@@ -244,14 +244,14 @@ func saveStanzas(path string, stanzas map[string]string) error {
 // managedBody returns just the contents between the begin/end fence
 // markers in `text`. Returns "" when the markers are absent.
 func managedBody(text string) string {
-	begin := strings.Index(text, managedBlockBegin)
-	if begin < 0 {
+	_, after, ok := strings.Cut(text, managedBlockBegin)
+	if !ok {
 		return ""
 	}
-	rest := text[begin+len(managedBlockBegin):]
-	end := strings.Index(rest, managedBlockEnd)
-	if end < 0 {
+	rest := after
+	before0, _, ok0 := strings.Cut(rest, managedBlockEnd)
+	if !ok0 {
 		return ""
 	}
-	return strings.TrimLeft(rest[:end], "\n")
+	return strings.TrimLeft(before0, "\n")
 }

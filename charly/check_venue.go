@@ -77,8 +77,8 @@ func parsePublishedPort(output string, port int) (string, error) {
 	}
 	hostPort := strings.TrimSpace(lines[0])
 	hostPort = strings.Replace(hostPort, "0.0.0.0", "127.0.0.1", 1)
-	if strings.HasPrefix(hostPort, "[::]:") {
-		hostPort = "127.0.0.1:" + strings.TrimPrefix(hostPort, "[::]:")
+	if after, ok := strings.CutPrefix(hostPort, "[::]:"); ok {
+		hostPort = "127.0.0.1:" + after
 	}
 	return hostPort, nil
 }

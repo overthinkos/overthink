@@ -23,8 +23,8 @@ func normalizeRepoSpec(spec string) (repoPath, version string) {
 	if spec == "default" {
 		return DefaultProjectRepo, ""
 	}
-	if at := strings.Index(spec, "@"); at >= 0 {
-		repoPath, version = spec[:at], spec[at+1:]
+	if before, after, ok := strings.Cut(spec, "@"); ok {
+		repoPath, version = before, after
 	} else {
 		repoPath = spec
 	}

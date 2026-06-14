@@ -382,7 +382,7 @@ func TestSharedRenderersConsolidated(t *testing.T) {
 		Phase:             PhaseInstall,
 		Packages:          []string{"libyuv"},
 		Options:           []string{"--overwrite", "*"},
-		RawInstallContext: map[string]interface{}{"package": []string{"libyuv"}, "options": []string{"--overwrite", "*"}},
+		RawInstallContext: map[string]any{"package": []string{"libyuv"}, "options": []string{"--overwrite", "*"}},
 	})
 	if err != nil || got != "pacman -Sy --noconfirm --needed --overwrite * libyuv" {
 		t.Errorf("pac options not applied by shared host renderer: %q (err %v)", got, err)

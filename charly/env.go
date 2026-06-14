@@ -1,6 +1,7 @@
 package main
 
 import (
+	"maps"
 	"strings"
 )
 
@@ -58,9 +59,7 @@ func MergeEnvConfigs(configs []*EnvConfig) *EnvConfig {
 			continue
 		}
 		// Merge vars (later overrides earlier)
-		for key, value := range cfg.Vars {
-			merged.Vars[key] = value
-		}
+		maps.Copy(merged.Vars, cfg.Vars)
 		// Accumulate PATH entries
 		merged.PathAppend = append(merged.PathAppend, cfg.PathAppend...)
 	}

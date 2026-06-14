@@ -170,8 +170,8 @@ func vmNameFromDeployName(deployName string) (string, error) {
 	if rest == "" {
 		return "", fmt.Errorf("VM deploy name missing vm-name portion (got %q)", deployName)
 	}
-	if idx := strings.IndexByte(rest, '/'); idx >= 0 {
-		return rest[:idx], nil
+	if before, _, ok := strings.Cut(rest, "/"); ok {
+		return before, nil
 	}
 	return rest, nil
 }

@@ -495,7 +495,7 @@ func repoRootDir(t *testing.T) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for i := 0; i < 16; i++ {
+	for range 16 {
 		// The repo root holds the unified charly.yml entry point. build.yml is no
 		// longer a reliable marker — it's embedded in the binary, and the charly/
 		// source dir carries the embed-source build.yml.

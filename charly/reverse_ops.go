@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -53,12 +54,12 @@ func (c *DeployDelCmd) reverseRunner() ReverseRunner { return c.Runner }
 // removed). Idempotent where possible: a missing file is treated as
 // "already removed" rather than an error.
 func runReverseOps(ops []ReverseOp, exec ReverseExecutor) {
-	for i := len(ops) - 1; i >= 0; i-- {
-		if err := runReverseOp(ops[i], exec); err != nil {
+	for _, op := range slices.Backward(ops) {
+		if err := runReverseOp(op, exec); err != nil {
 			// Keep going: a partial teardown is better than giving up
 			// mid-way with half the candy removed. Log to stderr and
 			// continue.
-			fmt.Fprintf(os.Stderr, "reverse: %s failed: %v\n", ops[i].Kind, err)
+			fmt.Fprintf(os.Stderr, "reverse: %s failed: %v\n", op.Kind, err)
 		}
 	}
 }

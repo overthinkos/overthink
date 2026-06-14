@@ -11,6 +11,7 @@ import (
 	"image/color"
 	"io"
 	"net"
+	"slices"
 	"strings"
 	"time"
 )
@@ -90,28 +91,16 @@ func (c *VNCClient) handshake(password string) error {
 
 	// Choose security type: prefer VeNCrypt (19) when available, then None (1), then VNC auth (2).
 	var chosenType uint8
-	hasVeNCrypt := false
-	for _, st := range secTypes {
-		if st == 19 {
-			hasVeNCrypt = true
-			break
-		}
-	}
+	hasVeNCrypt := slices.Contains(secTypes, 19)
 	if hasVeNCrypt {
 		chosenType = 19
 	} else {
-		for _, st := range secTypes {
-			if st == 1 {
-				chosenType = 1
-				break
-			}
+		if slices.Contains(secTypes, 1) {
+			chosenType = 1
 		}
 		if chosenType == 0 {
-			for _, st := range secTypes {
-				if st == 2 {
-					chosenType = 2
-					break
-				}
+			if slices.Contains(secTypes, 2) {
+				chosenType = 2
 			}
 		}
 	}
@@ -803,8 +792,8 @@ func (c *VNCClient) decodeZRLETile(img *image.RGBA, tx, ty, tw, th, cpLen int) e
 
 	switch {
 	case subenc == 0: // Raw CPIXEL
-		for py := 0; py < th; py++ {
-			for px := 0; px < tw; px++ {
+		for py := range th {
+			for px := range tw {
 				clr, err := c.readCPixel(c.zReader, cpLen)
 				if err != nil {
 					return err
@@ -818,8 +807,8 @@ func (c *VNCClient) decodeZRLETile(img *image.RGBA, tx, ty, tw, th, cpLen int) e
 		if err != nil {
 			return err
 		}
-		for py := 0; py < th; py++ {
-			for px := 0; px < tw; px++ {
+		for py := range th {
+			for px := range tw {
 				img.SetRGBA(tx+px, ty+py, clr)
 			}
 		}
@@ -843,13 +832,13 @@ func (c *VNCClient) decodeZRLETile(img *image.RGBA, tx, ty, tw, th, cpLen int) e
 		default:
 			bitsPerIndex = 4
 		}
-		for py := 0; py < th; py++ {
+		for py := range th {
 			bytesPerRow := (tw*bitsPerIndex + 7) / 8
 			rowBuf := make([]byte, bytesPerRow)
 			if _, err := io.ReadFull(c.zReader, rowBuf); err != nil {
 				return err
 			}
-			for px := 0; px < tw; px++ {
+			for px := range tw {
 				bitPos := px * bitsPerIndex
 				byteIdx := bitPos / 8
 				bitOff := uint(8 - bitsPerIndex - (bitPos % 8))

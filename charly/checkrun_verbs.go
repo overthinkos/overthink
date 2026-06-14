@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -72,13 +73,7 @@ func (r *Runner) runPackage(ctx context.Context, c *Op) CheckResult {
 			return failf(c, "version probe exit %d err %v", exit, err)
 		}
 		got := strings.TrimSpace(ver)
-		matched := false
-		for _, v := range c.Versions {
-			if got == v {
-				matched = true
-				break
-			}
-		}
+		matched := slices.Contains(c.Versions, got)
 		if !matched {
 			return failf(c, "version %q not in %v", got, c.Versions)
 		}

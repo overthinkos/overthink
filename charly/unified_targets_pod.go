@@ -132,7 +132,7 @@ func (t *PodUnifiedTarget) Status(ctx context.Context) (StatusInfo, error) {
 	// Best-effort parsing: scan for our deploy name and a state token.
 	// Avoiding the full JSON unmarshal here keeps the unified surface
 	// from coupling to the (still-evolving) status JSON schema.
-	for _, line := range strings.Split(out, "\n") {
+	for line := range strings.SplitSeq(out, "\n") {
 		if !strings.Contains(line, t.NodeName) {
 			continue
 		}

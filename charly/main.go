@@ -758,8 +758,7 @@ func main() {
 	// 1 = command error (Kong's FatalIfErrorf default), 2 = check checks
 	// failed. See CheckFailedError / CheckFailExitCode in check_cmd.go.
 	if err != nil {
-		var checkFail *CheckFailedError
-		if errors.As(err, &checkFail) {
+		if _, ok := errors.AsType[*CheckFailedError](err); ok {
 			fmt.Fprintln(os.Stderr, FormatCLIError(err))
 			os.Exit(CheckFailExitCode)
 		}

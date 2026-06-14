@@ -83,10 +83,7 @@ func (c *Collector) All(ctx context.Context, includeAll, nested bool) ([]Deploym
 	// Concurrent substrate fan-out, bounded by the same NumCPU*2 cap the pod
 	// worker pool uses.
 	perKind := make([][]DeploymentStatus, len(collectors))
-	workers := runtime.NumCPU() * 2
-	if workers < 4 {
-		workers = 4
-	}
+	workers := max(runtime.NumCPU()*2, 4)
 	if workers > len(collectors) {
 		workers = len(collectors)
 	}
@@ -274,11 +271,9 @@ func (c *Collector) runProbes(ctx context.Context, snap *ContainerSnapshot) []To
 			hostRes[i] = p.ProbeHost(ctx, snap)
 		}(i, p)
 	}
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		guestRes = runGuestProbes(ctx, c.engine, snap.Name, guestProbes)
-	}()
+	})
 	wg.Wait()
 
 	all := append([]ToolStatus{}, hostRes...)
@@ -442,7 +437,7 @@ func parseQuadletDescription(unitPath string) (box, instance string) {
 	if err != nil {
 		return "", ""
 	}
-	for _, line := range strings.Split(string(data), "\n") {
+	for line := range strings.SplitSeq(string(data), "\n") {
 		line = strings.TrimSpace(line)
 		if !strings.HasPrefix(line, "Description=OpenCharly ") {
 			continue

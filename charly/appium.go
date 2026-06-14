@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"net/url"
 	"os"
@@ -216,14 +217,14 @@ func (c *AppiumSessionCreateCmd) Run() error {
 		}
 		capsRaw = string(data)
 	}
-	var parsed map[string]interface{}
+	var parsed map[string]any
 	if err := json.Unmarshal([]byte(capsRaw), &parsed); err != nil {
 		return fmt.Errorf("parsing caps JSON: %w", err)
 	}
 	// Unwrap alwaysMatch if present — the SDK's newW3CCapabilities adds
 	// its own wrapper, so passing a pre-wrapped map would nest the
 	// alwaysMatch twice and break caps matching server-side.
-	if inner, ok := parsed["alwaysMatch"].(map[string]interface{}); ok {
+	if inner, ok := parsed["alwaysMatch"].(map[string]any); ok {
 		parsed = inner
 	}
 	base, err := appiumBaseURL(c.Box, c.Instance, c.BasePath)
@@ -350,7 +351,7 @@ func newW3CSession(base, sessionID string) *w3cSession {
 // call issues a JSON-bodied request to /session/<id>/<endpoint> and
 // returns the W3C "value" field of the response. body=nil means GET; any
 // other body means POST/DELETE based on method.
-func (s *w3cSession) call(method, endpoint string, body interface{}) (json.RawMessage, error) {
+func (s *w3cSession) call(method, endpoint string, body any) (json.RawMessage, error) {
 	u := s.BaseURL + "/session/" + url.PathEscape(s.SessionID) + endpoint
 	var reqBody io.Reader
 	if body != nil {
@@ -417,7 +418,7 @@ func (s *w3cSession) click(elemID string) error {
 }
 
 func (s *w3cSession) sendKeys(elemID, text string) error {
-	_, err := s.call(http.MethodPost, "/element/"+url.PathEscape(elemID)+"/value", map[string]interface{}{"text": text})
+	_, err := s.call(http.MethodPost, "/element/"+url.PathEscape(elemID)+"/value", map[string]any{"text": text})
 	return err
 }
 
@@ -433,8 +434,8 @@ func (s *w3cSession) screenshot() ([]byte, error) {
 	return base64.StdEncoding.DecodeString(b64)
 }
 
-func (s *w3cSession) executeScript(script string, args []interface{}) (json.RawMessage, error) {
-	body := map[string]interface{}{
+func (s *w3cSession) executeScript(script string, args []any) (json.RawMessage, error) {
+	body := map[string]any{
 		"script": script,
 		"args":   args,
 	}
@@ -471,7 +472,7 @@ func (s *w3cSession) elementAttribute(elemID, name string) (string, error) {
 }
 
 func (s *w3cSession) clearElement(elemID string) error {
-	_, err := s.call(http.MethodPost, "/element/"+url.PathEscape(elemID)+"/clear", map[string]interface{}{})
+	_, err := s.call(http.MethodPost, "/element/"+url.PathEscape(elemID)+"/clear", map[string]any{})
 	return err
 }
 
@@ -512,7 +513,7 @@ func (s *w3cSession) source() (string, error) {
 // navigateBack uses the session-scoped W3C /back endpoint (not /session/<id>/back
 // nesting — call() already injects /session/<id>).
 func (s *w3cSession) navigateBack() error {
-	_, err := s.call(http.MethodPost, "/back", map[string]interface{}{})
+	_, err := s.call(http.MethodPost, "/back", map[string]any{})
 	return err
 }
 
@@ -539,7 +540,7 @@ func (s *w3cSession) currentContext() (string, error) {
 }
 
 func (s *w3cSession) setContext(name string) error {
-	_, err := s.call(http.MethodPost, "/context", map[string]interface{}{"name": name})
+	_, err := s.call(http.MethodPost, "/context", map[string]any{"name": name})
 	return err
 }
 
@@ -554,13 +555,13 @@ func (s *w3cSession) orientation() (string, error) {
 }
 
 func (s *w3cSession) setOrientation(o string) error {
-	_, err := s.call(http.MethodPost, "/orientation", map[string]interface{}{"orientation": o})
+	_, err := s.call(http.MethodPost, "/orientation", map[string]any{"orientation": o})
 	return err
 }
 
 // rawCall issues an arbitrary W3C call relative to /session/<id> (the path the
 // caller supplies is appended after /session/<id>). Backs `appium raw`.
-func (s *w3cSession) rawCall(method, path string, body interface{}) (json.RawMessage, error) {
+func (s *w3cSession) rawCall(method, path string, body any) (json.RawMessage, error) {
 	if !strings.HasPrefix(path, "/") {
 		path = "/" + path
 	}
@@ -629,7 +630,7 @@ func (c *AppiumInstallAppCmd) Run() error {
 	defer func() { _ = exec.Command(engine, "exec", containerName, "rm", "-f", remote).Run() }()
 
 	s := newW3CSession(sess.BaseURL, sess.SessionID)
-	args := []interface{}{map[string]interface{}{"appPath": remote}}
+	args := []any{map[string]any{"appPath": remote}}
 	result, err := s.executeScript("mobile: installApp", args)
 	if err != nil {
 		return fmt.Errorf("mobile: installApp %s (host %s): %w", remote, c.Apk, err)
@@ -938,7 +939,7 @@ func runAppiumGesture(gesture, pastTense string, f *appiumTargetFlags) error {
 	if err != nil {
 		return err
 	}
-	args := map[string]interface{}{}
+	args := map[string]any{}
 	if f.Params != "" {
 		if err := json.Unmarshal([]byte(f.Params), &args); err != nil {
 			return fmt.Errorf("invalid --params JSON: %w", err)
@@ -966,7 +967,7 @@ func runAppiumGesture(gesture, pastTense string, f *appiumTargetFlags) error {
 		}
 		args["percent"] = p
 	}
-	if _, err := s.executeScript("mobile: "+gesture, []interface{}{args}); err != nil {
+	if _, err := s.executeScript("mobile: "+gesture, []any{args}); err != nil {
 		return fmt.Errorf("mobile: %s: %w", gesture, err)
 	}
 	fmt.Println(pastTense)
@@ -1043,7 +1044,7 @@ func (f *appiumAppIdFlags) run(method, fallback string) error {
 	if err != nil {
 		return err
 	}
-	result, err := s.executeScript("mobile: "+method, []interface{}{map[string]interface{}{"appId": f.AppId}})
+	result, err := s.executeScript("mobile: "+method, []any{map[string]any{"appId": f.AppId}})
 	if err != nil {
 		return fmt.Errorf("mobile: %s %s: %w", method, f.AppId, err)
 	}
@@ -1062,17 +1063,15 @@ func (c *AppiumAppStartActivityCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	args := map[string]interface{}{"intent": c.Activity}
+	args := map[string]any{"intent": c.Activity}
 	if c.Params != "" {
-		var extra map[string]interface{}
+		var extra map[string]any
 		if err := json.Unmarshal([]byte(c.Params), &extra); err != nil {
 			return fmt.Errorf("invalid --params JSON: %w", err)
 		}
-		for k, v := range extra {
-			args[k] = v
-		}
+		maps.Copy(args, extra)
 	}
-	if _, err := s.executeScript("mobile: startActivity", []interface{}{args}); err != nil {
+	if _, err := s.executeScript("mobile: startActivity", []any{args}); err != nil {
 		return fmt.Errorf("mobile: startActivity %s: %w", c.Activity, err)
 	}
 	fmt.Println("started " + c.Activity)
@@ -1130,17 +1129,15 @@ func (c *AppiumKeyPressCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	args := map[string]interface{}{"keycode": c.Keycode}
+	args := map[string]any{"keycode": c.Keycode}
 	if c.Params != "" {
-		var extra map[string]interface{}
+		var extra map[string]any
 		if err := json.Unmarshal([]byte(c.Params), &extra); err != nil {
 			return fmt.Errorf("invalid --params JSON: %w", err)
 		}
-		for k, v := range extra {
-			args[k] = v
-		}
+		maps.Copy(args, extra)
 	}
-	if _, err := s.executeScript("mobile: pressKey", []interface{}{args}); err != nil {
+	if _, err := s.executeScript("mobile: pressKey", []any{args}); err != nil {
 		return fmt.Errorf("mobile: pressKey %d: %w", c.Keycode, err)
 	}
 	fmt.Printf("pressed %d\n", c.Keycode)
@@ -1169,7 +1166,7 @@ func appiumDeviceMobile(f *appiumSessionFlags, method string) error {
 	if err != nil {
 		return err
 	}
-	result, err := s.executeScript("mobile: "+method, []interface{}{})
+	result, err := s.executeScript("mobile: "+method, []any{})
 	if err != nil {
 		return fmt.Errorf("mobile: %s: %w", method, err)
 	}
@@ -1202,7 +1199,7 @@ func (c *AppiumDeviceNotificationsCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	if _, err := s.executeScript("mobile: openNotifications", []interface{}{}); err != nil {
+	if _, err := s.executeScript("mobile: openNotifications", []any{}); err != nil {
 		return fmt.Errorf("mobile: openNotifications: %w", err)
 	}
 	fmt.Println("opened")
@@ -1251,7 +1248,7 @@ func (c *AppiumDeviceGetClipboardCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	result, err := s.executeScript("mobile: getClipboard", []interface{}{})
+	result, err := s.executeScript("mobile: getClipboard", []any{})
 	if err != nil {
 		return fmt.Errorf("mobile: getClipboard: %w", err)
 	}
@@ -1278,8 +1275,8 @@ func (c *AppiumDeviceSetClipboardCmd) Run() error {
 		return err
 	}
 	content := base64.StdEncoding.EncodeToString([]byte(c.Params))
-	arg := map[string]interface{}{"content": content, "contentType": "plaintext"}
-	if _, err := s.executeScript("mobile: setClipboard", []interface{}{arg}); err != nil {
+	arg := map[string]any{"content": content, "contentType": "plaintext"}
+	if _, err := s.executeScript("mobile: setClipboard", []any{arg}); err != nil {
 		return fmt.Errorf("mobile: setClipboard: %w", err)
 	}
 	fmt.Println("set")
@@ -1358,16 +1355,16 @@ func (c *AppiumExecuteCmd) Run() error {
 		}
 		body = substituteElement(body, id)
 	}
-	args := []interface{}{}
+	args := []any{}
 	if strings.TrimSpace(body) != "" {
-		var v interface{}
+		var v any
 		if err := json.Unmarshal([]byte(body), &v); err != nil {
 			return fmt.Errorf("invalid --request-body JSON: %w", err)
 		}
-		if arr, ok := v.([]interface{}); ok {
+		if arr, ok := v.([]any); ok {
 			args = arr
 		} else {
-			args = []interface{}{v}
+			args = []any{v}
 		}
 	}
 	result, err := s.executeScript(c.Expression, args)
@@ -1402,7 +1399,7 @@ func (c *AppiumRawCmd) Run() error {
 		path = substituteElement(path, id)
 		body = substituteElement(body, id)
 	}
-	var reqBody interface{}
+	var reqBody any
 	if strings.TrimSpace(body) != "" {
 		if err := json.Unmarshal([]byte(body), &reqBody); err != nil {
 			return fmt.Errorf("invalid --request-body JSON: %w", err)

@@ -246,22 +246,22 @@ func substPortTemplate(s, prefix, suffix string, mapFn func(int) string) string 
 		}
 		out.WriteString(s[:i])
 		rest := s[i+len(prefix):]
-		j := strings.Index(rest, suffix)
-		if j < 0 {
+		before, after, ok := strings.Cut(rest, suffix)
+		if !ok {
 			// unterminated — pass through verbatim
 			out.WriteString(prefix)
 			s = rest
 			continue
 		}
-		arg := strings.TrimSpace(rest[:j])
+		arg := strings.TrimSpace(before)
 		if n, err := strconv.Atoi(arg); err == nil {
 			out.WriteString(mapFn(n))
 		} else {
 			out.WriteString(prefix)
-			out.WriteString(rest[:j])
+			out.WriteString(before)
 			out.WriteString(suffix)
 		}
-		s = rest[j+len(suffix):]
+		s = after
 	}
 }
 
@@ -292,21 +292,21 @@ func stripPortTemplate(s, prefix, suffix string) string {
 		}
 		out.WriteString(s[:i])
 		rest := s[i+len(prefix):]
-		j := strings.Index(rest, suffix)
-		if j < 0 {
+		before, after, ok := strings.Cut(rest, suffix)
+		if !ok {
 			out.WriteString(prefix)
 			s = rest
 			continue
 		}
-		arg := strings.TrimSpace(rest[:j])
+		arg := strings.TrimSpace(before)
 		if _, err := strconv.Atoi(arg); err != nil {
 			// non-numeric — leave verbatim so the outer check catches it
 			out.WriteString(prefix)
-			out.WriteString(rest[:j])
+			out.WriteString(before)
 			out.WriteString(suffix)
 		}
 		// numeric N — drop the whole placeholder
-		s = rest[j+len(suffix):]
+		s = after
 	}
 }
 

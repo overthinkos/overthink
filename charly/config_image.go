@@ -463,8 +463,8 @@ func (c *BoxConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 		var appEnv, sidecarEnvOverrides []string
 		for _, e := range c.Env {
 			key := e
-			if idx := strings.IndexByte(e, '='); idx >= 0 {
-				key = e[:idx]
+			if before, _, ok := strings.Cut(e, "="); ok {
+				key = before
 			}
 			if scName, ok := sidecarEnvKeys[key]; ok {
 				// Route to sidecar
@@ -474,8 +474,8 @@ func (c *BoxConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 					deploySidecars[scName] = def
 				}
 				def := deploySidecars[scName]
-				if idx := strings.IndexByte(e, '='); idx >= 0 {
-					def.Env[key] = e[idx+1:]
+				if _, after, ok := strings.Cut(e, "="); ok {
+					def.Env[key] = after
 				}
 				deploySidecars[scName] = def
 				sidecarEnvOverrides = append(sidecarEnvOverrides, e)
@@ -504,8 +504,8 @@ func (c *BoxConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 		if len(sidecarEnvOverrides) > 0 {
 			for _, e := range sidecarEnvOverrides {
 				key := e
-				if idx := strings.IndexByte(e, '='); idx >= 0 {
-					key = e[:idx]
+				if before, _, ok := strings.Cut(e, "="); ok {
+					key = before
 				}
 				scName := sidecarEnvKeys[key]
 				fmt.Fprintf(os.Stderr, "Routed %s to sidecar %s\n", key, scName)
@@ -1167,9 +1167,9 @@ func (c *BoxConfigSetupCmd) parseVolumeFlags() []DeployVolumeConfig {
 		if seen[b] || seen[strings.SplitN(b, "=", 2)[0]] {
 			continue
 		}
-		if idx := strings.IndexByte(b, '='); idx >= 0 {
-			name := b[:idx]
-			host := b[idx+1:]
+		if before, after, ok := strings.Cut(b, "="); ok {
+			name := before
+			host := after
 			configs = append(configs, DeployVolumeConfig{Name: name, Type: "bind", Host: host})
 			seen[name] = true
 		} else {
@@ -1233,7 +1233,7 @@ func parseVolumeEnv(boxName string) []DeployVolumeConfig {
 	}
 
 	var configs []DeployVolumeConfig
-	for _, entry := range strings.Split(envVal, ",") {
+	for entry := range strings.SplitSeq(envVal, ",") {
 		entry = strings.TrimSpace(entry)
 		if entry == "" {
 			continue

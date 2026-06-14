@@ -33,6 +33,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 )
@@ -80,8 +81,8 @@ func archRenameText(s string) string {
 	for _, e := range archRenameExternals {
 		s = strings.ReplaceAll(s, e.placeholder, e.token)
 	}
-	for i := len(protected) - 1; i >= 0; i-- {
-		s = strings.ReplaceAll(s, fmt.Sprintf("\x00OVX_RE%d\x00", i), protected[i])
+	for i, p := range slices.Backward(protected) {
+		s = strings.ReplaceAll(s, fmt.Sprintf("\x00OVX_RE%d\x00", i), p)
 	}
 	return s
 }

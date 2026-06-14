@@ -118,7 +118,7 @@ func TestBuilderStepReverse(t *testing.T) {
 	pixi := &BuilderStep{
 		Builder:         "pixi",
 		CandyName:       "pre-commit",
-		RawStageContext: map[string]interface{}{"env_name": "pre-commit"},
+		RawStageContext: map[string]any{"env_name": "pre-commit"},
 	}
 	ops := pixi.Reverse()
 	if len(ops) != 1 || ops[0].Kind != ReverseOpPixiEnvRemove {
@@ -128,7 +128,7 @@ func TestBuilderStepReverse(t *testing.T) {
 	// cargo → cargo-uninstall with binaries from ctx
 	cargo := &BuilderStep{
 		Builder:         "cargo",
-		RawStageContext: map[string]interface{}{"binaries": []string{"rg", "fd"}},
+		RawStageContext: map[string]any{"binaries": []string{"rg", "fd"}},
 	}
 	ops = cargo.Reverse()
 	if len(ops) != 1 || ops[0].Kind != ReverseOpCargoUninstall {
@@ -141,7 +141,7 @@ func TestBuilderStepReverse(t *testing.T) {
 	// npm → npm-uninstall-g with packages from ctx (as []interface{} per yaml.v3)
 	npm := &BuilderStep{
 		Builder:         "npm",
-		RawStageContext: map[string]interface{}{"packages": []interface{}{"@anthropic-ai/claude-code"}},
+		RawStageContext: map[string]any{"packages": []any{"@anthropic-ai/claude-code"}},
 	}
 	ops = npm.Reverse()
 	if len(ops) != 1 || ops[0].Kind != ReverseOpNpmUninstallG {
@@ -151,7 +151,7 @@ func TestBuilderStepReverse(t *testing.T) {
 	// aur → package-remove (system-scope)
 	aur := &BuilderStep{
 		Builder:         "aur",
-		RawStageContext: map[string]interface{}{"packages": []string{"some-aur-pkg"}},
+		RawStageContext: map[string]any{"packages": []string{"some-aur-pkg"}},
 	}
 	ops = aur.Reverse()
 	if len(ops) != 1 || ops[0].Kind != ReverseOpPackageRemove {
@@ -341,12 +341,12 @@ func TestGateEnabledMatrix(t *testing.T) {
 
 func TestExtractStringSliceHandlesBothShapes(t *testing.T) {
 	// []string
-	m1 := map[string]interface{}{"k": []string{"a", "b"}}
+	m1 := map[string]any{"k": []string{"a", "b"}}
 	if got := extractStringSlice(m1, "k"); len(got) != 2 || got[0] != "a" {
 		t.Errorf("extractStringSlice([]string) = %v, want [a b]", got)
 	}
 	// []interface{} (as produced by yaml.v3 when unmarshaling into map[string]interface{})
-	m2 := map[string]interface{}{"k": []interface{}{"a", "b"}}
+	m2 := map[string]any{"k": []any{"a", "b"}}
 	if got := extractStringSlice(m2, "k"); len(got) != 2 || got[0] != "a" {
 		t.Errorf("extractStringSlice([]interface{}) = %v, want [a b]", got)
 	}

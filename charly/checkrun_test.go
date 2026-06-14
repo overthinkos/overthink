@@ -73,7 +73,7 @@ func TestRunner_FileVerb(t *testing.T) {
 			{matchPrefix: "if [ -e", stdout: "exists=1|regular file|755|root|root\n"},
 		}
 		results := r.Run(context.Background(), []Op{
-			{File: "/usr/bin/redis-server", Exists: ptrBool(true), Mode: "0755", Filetype: "file"},
+			{File: "/usr/bin/redis-server", Exists: new(true), Mode: "0755", Filetype: "file"},
 		})
 		if len(results) != 1 || results[0].Status != TestPass {
 			t.Errorf("expected pass, got %+v", results[0])
@@ -99,7 +99,7 @@ func TestRunner_FileVerb(t *testing.T) {
 			{matchPrefix: "if [ -e", stdout: "exists=0||||\n"},
 		}
 		results := r.Run(context.Background(), []Op{
-			{File: "/nope", Exists: ptrBool(false)},
+			{File: "/nope", Exists: new(false)},
 		})
 		if results[0].Status != TestPass {
 			t.Errorf("expected pass for absent-as-expected, got %+v", results[0])
@@ -112,7 +112,7 @@ func TestRunner_FileVerb(t *testing.T) {
 			{matchPrefix: "if [ -e", stdout: "exists=1|regular file|644|root|root\n"},
 		}
 		results := r.Run(context.Background(), []Op{
-			{File: "/x", Exists: ptrBool(false)},
+			{File: "/x", Exists: new(false)},
 		})
 		if results[0].Status != TestFail {
 			t.Errorf("expected fail, got %+v", results[0])
@@ -127,7 +127,7 @@ func TestRunner_PortVerb_Listening(t *testing.T) {
 	fake.responses = []fakeResponse{
 		{matchPrefix: "(ss -tlnH", exit: 0},
 	}
-	res := r.Run(context.Background(), []Op{{Port: 6379, Listening: ptrBool(true)}})
+	res := r.Run(context.Background(), []Op{{Port: 6379, Listening: new(true)}})
 	if res[0].Status != TestPass {
 		t.Errorf("expected pass, got %+v", res[0])
 	}
@@ -138,7 +138,7 @@ func TestRunner_PortVerb_NotListening(t *testing.T) {
 	fake.responses = []fakeResponse{
 		{matchPrefix: "(ss -tlnH", exit: 1},
 	}
-	res := r.Run(context.Background(), []Op{{Port: 6379, Listening: ptrBool(true)}})
+	res := r.Run(context.Background(), []Op{{Port: 6379, Listening: new(true)}})
 	if res[0].Status != TestFail {
 		t.Errorf("expected fail, got %+v", res[0])
 	}
@@ -147,7 +147,7 @@ func TestRunner_PortVerb_NotListening(t *testing.T) {
 func TestRunner_PortVerb_ReachableSkipUnderImageTest(t *testing.T) {
 	r, _ := newFakeRunner(t, RunModeBox)
 	// Reachable attribute triggers host-side dial → skipped under box test.
-	res := r.Run(context.Background(), []Op{{Port: 6379, Reachable: ptrBool(true)}})
+	res := r.Run(context.Background(), []Op{{Port: 6379, Reachable: new(true)}})
 	if res[0].Status != TestSkip {
 		t.Errorf("expected skip, got %+v", res[0])
 	}
@@ -321,8 +321,6 @@ func TestFormatResultsText(t *testing.T) {
 		}
 	}
 }
-
-func ptrBool(b bool) *bool { return &b }
 
 // Sync guard: every operator listed as valid by the validator must be
 // implemented by matchOne. A new allow-listed op without a runner branch

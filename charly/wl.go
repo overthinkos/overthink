@@ -497,10 +497,10 @@ func FindX11WindowGeometry(ex DeployExecutor, target string) (int, int, error) {
 	}
 
 	// Parse "Geometry: WIDTHxHEIGHT" from xdotool output
-	for _, line := range strings.Split(out, "\n") {
+	for line := range strings.SplitSeq(out, "\n") {
 		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, "Geometry:") {
-			geom := strings.TrimSpace(strings.TrimPrefix(line, "Geometry:"))
+		if after, ok := strings.CutPrefix(line, "Geometry:"); ok {
+			geom := strings.TrimSpace(after)
 			parts := strings.SplitN(geom, "x", 2)
 			if len(parts) == 2 {
 				w, errW := strconv.Atoi(parts[0])
@@ -1051,18 +1051,18 @@ func (c *WlGeometryCmd) Run() error {
 	if err == nil {
 		// Parse xdotool output: "Position: X,Y" and "Geometry: WxH"
 		var x, y, w, h int
-		for _, line := range strings.Split(string(data), "\n") {
+		for line := range strings.SplitSeq(string(data), "\n") {
 			line = strings.TrimSpace(line)
-			if strings.HasPrefix(line, "Position:") {
-				pos := strings.TrimSpace(strings.TrimPrefix(line, "Position:"))
+			if after, ok := strings.CutPrefix(line, "Position:"); ok {
+				pos := strings.TrimSpace(after)
 				pos = strings.Split(pos, " ")[0] // strip "(screen: N)"
 				if coords := strings.SplitN(pos, ",", 2); len(coords) == 2 {
 					x, _ = strconv.Atoi(coords[0])
 					y, _ = strconv.Atoi(coords[1])
 				}
 			}
-			if strings.HasPrefix(line, "Geometry:") {
-				geom := strings.TrimSpace(strings.TrimPrefix(line, "Geometry:"))
+			if after, ok := strings.CutPrefix(line, "Geometry:"); ok {
+				geom := strings.TrimSpace(after)
 				if dims := strings.SplitN(geom, "x", 2); len(dims) == 2 {
 					w, _ = strconv.Atoi(dims[0])
 					h, _ = strconv.Atoi(dims[1])
@@ -1079,7 +1079,7 @@ func (c *WlGeometryCmd) Run() error {
 	// Last fallback: wlr-randr output geometry (for Wayland-native maximized windows).
 	randrOut, randrErr := captureWlCmd(venue.Exec, "wlr-randr 2>/dev/null")
 	if randrErr == nil {
-		for _, line := range strings.Split(string(randrOut), "\n") {
+		for line := range strings.SplitSeq(string(randrOut), "\n") {
 			line = strings.TrimSpace(line)
 			if strings.Contains(line, "current") && strings.Contains(line, "px") {
 				res := strings.Fields(line)[0] // "1280x720"

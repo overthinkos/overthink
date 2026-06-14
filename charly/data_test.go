@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -67,12 +68,7 @@ func (f *fakeRunner) findRunCall() *recordedCall {
 
 // containsArg returns true if the call's args contain the given token.
 func (c *recordedCall) containsArg(token string) bool {
-	for _, a := range c.args {
-		if a == token {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(c.args, token)
 }
 
 // containsSubstring returns true if any arg contains the given substring.

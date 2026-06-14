@@ -97,7 +97,7 @@ func runFlatGroup(ctx context.Context, r *Runner, group []flatStep, stepCtx *Sce
 			units = append(units, unit{fs: fs, subIdx: -1, stepID: baseID})
 			continue
 		}
-		for j := 0; j < count; j++ {
+		for j := range count {
 			cp := fs
 			cp.step.ID = appendIndex(cp.step.ID, j)
 			cp.step.Capture = appendIndex(cp.step.Capture, j)

@@ -257,7 +257,7 @@ func parsePS(data string) ([]enginePSRow, error) {
 	}
 	// docker ps emits NDJSON by default
 	var de []dockerPSEntry
-	for _, line := range strings.Split(trimmed, "\n") {
+	for line := range strings.SplitSeq(trimmed, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" {
 			continue
@@ -285,11 +285,8 @@ func fromPodmanPorts(in []podmanPort) []PortMapping {
 	}
 	out := make([]PortMapping, 0, len(in))
 	for _, p := range in {
-		span := p.Range
-		if span < 1 {
-			span = 1
-		}
-		for i := 0; i < span; i++ {
+		span := max(p.Range, 1)
+		for i := range span {
 			out = append(out, PortMapping{
 				HostIP:   p.HostIP,
 				HostPort: p.HostPort + i,
@@ -326,13 +323,13 @@ func parseDockerPortString(s string) []PortMapping {
 		return nil
 	}
 	var out []PortMapping
-	for _, item := range strings.Split(s, ",") {
+	for item := range strings.SplitSeq(s, ",") {
 		item = strings.TrimSpace(item)
-		arrow := strings.Index(item, "->")
-		if arrow < 0 {
+		before, after, ok := strings.Cut(item, "->")
+		if !ok {
 			continue // unpublished
 		}
-		left, right := item[:arrow], item[arrow+2:]
+		left, right := before, after
 		var bindIP string
 		var hostPortStr string
 		// Handle "[v6]:port" and "v4:port" and bare "port"
@@ -353,9 +350,9 @@ func parseDockerPortString(s string) []PortMapping {
 		}
 		proto := "tcp"
 		ctrStr := right
-		if j := strings.Index(right, "/"); j >= 0 {
-			proto = strings.TrimSpace(right[j+1:])
-			ctrStr = right[:j]
+		if before, after, ok := strings.Cut(right, "/"); ok {
+			proto = strings.TrimSpace(after)
+			ctrStr = before
 		}
 		ctrPort, err := strconv.Atoi(strings.TrimSpace(ctrStr))
 		if err != nil || ctrPort <= 0 {

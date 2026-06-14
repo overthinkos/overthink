@@ -209,10 +209,8 @@ func isKeyringIndexed(service, key string) (bool, error) {
 		return false, err
 	}
 	entry := service + "/" + key
-	for _, e := range cfg.KeyringKeys {
-		if e == entry {
-			return true, nil
-		}
+	if slices.Contains(cfg.KeyringKeys, entry) {
+		return true, nil
 	}
 	return false, nil
 }
@@ -268,8 +266,8 @@ func (k *KeyringStore) List(service string) ([]string, error) {
 	prefix := service + "/"
 	var keys []string
 	for _, entry := range cfg.KeyringKeys {
-		if strings.HasPrefix(entry, prefix) {
-			keys = append(keys, strings.TrimPrefix(entry, prefix))
+		if after, ok := strings.CutPrefix(entry, prefix); ok {
+			keys = append(keys, after)
 		}
 	}
 	return keys, nil

@@ -7,11 +7,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"net"
 	"net/http"
 	"os"
 	"os/exec"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -276,15 +278,13 @@ func (r *Runner) runOne(ctx context.Context, c *Op) CheckResult {
 	// some distros (e.g. a binary that a given distro renames or drops).
 	if len(c.ExcludeDistros) > 0 && len(r.Distros) > 0 {
 		for _, imgTag := range r.Distros {
-			for _, excl := range c.ExcludeDistros {
-				if imgTag == excl {
-					result.Status = TestSkip
-					result.Message = fmt.Sprintf("excluded on distro %q", imgTag)
-					result.Elapsed = time.Since(start)
-					result.Attempts = 1
-					result.TotalElapsed = result.Elapsed
-					return result
-				}
+			if slices.Contains(c.ExcludeDistros, imgTag) {
+				result.Status = TestSkip
+				result.Message = fmt.Sprintf("excluded on distro %q", imgTag)
+				result.Elapsed = time.Since(start)
+				result.Attempts = 1
+				result.TotalElapsed = result.Elapsed
+				return result
 			}
 		}
 	}
@@ -512,12 +512,8 @@ func (r *Runner) effectiveEnv() map[string]string {
 		capN = len(r.Scenario.Captures)
 	}
 	env := make(map[string]string, len(base)+len(r.PeerVars)+capN+2)
-	for k, v := range base {
-		env[k] = v
-	}
-	for k, v := range r.PeerVars {
-		env[k] = v
-	}
+	maps.Copy(env, base)
+	maps.Copy(env, r.PeerVars)
 	if r.Scenario != nil {
 		r.Scenario.ApplyToEnv(env)
 	}

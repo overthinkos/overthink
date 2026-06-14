@@ -193,7 +193,7 @@ func (t *VmUnifiedTarget) Status(ctx context.Context) (StatusInfo, error) {
 	if err != nil {
 		return StatusInfo{State: "unknown"}, err
 	}
-	for _, line := range strings.Split(out, "\n") {
+	for line := range strings.SplitSeq(out, "\n") {
 		fields := strings.Fields(line)
 		if len(fields) < 3 {
 			continue

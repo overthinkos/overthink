@@ -1,6 +1,7 @@
 package main
 
 import (
+	"slices"
 	"strconv"
 	"testing"
 
@@ -152,10 +153,8 @@ func TestBuildLocalArgs_DockerEngineSkipsJobsFlag(t *testing.T) {
 	cmd := &BuildCmd{Cache: "none"}
 	args := cmd.buildLocalArgs("docker", []string{"img:latest"}, "linux/amd64", "img", "ghcr.io/org")
 
-	for _, a := range args {
-		if a == "--jobs" {
-			t.Errorf("docker args should not include --jobs, got: %v", args)
-			return
-		}
+	if slices.Contains(args, "--jobs") {
+		t.Errorf("docker args should not include --jobs, got: %v", args)
+		return
 	}
 }

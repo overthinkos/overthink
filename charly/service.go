@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"slices"
 	"strings"
 )
 
@@ -194,10 +195,8 @@ func validateServiceName(engine, containerName, serviceName string) error {
 	if meta == nil {
 		return fmt.Errorf("no opencharly metadata found for container %s", containerName)
 	}
-	for _, s := range meta.ServiceNames {
-		if s == serviceName {
-			return nil
-		}
+	if slices.Contains(meta.ServiceNames, serviceName) {
+		return nil
 	}
 	return fmt.Errorf("service %q not found in image (available: %s)", serviceName, strings.Join(meta.ServiceNames, ", "))
 }

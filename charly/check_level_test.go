@@ -78,7 +78,7 @@ func TestExtractMetadata_CheckLevel(t *testing.T) {
 // validateBuild rejects an out-of-ladder check_level value.
 func TestValidate_RejectsBadCheckLevel(t *testing.T) {
 	cfg := &Config{Box: map[string]BoxConfig{
-		"img": {Enabled: boolPtr(true), CheckLevel: "verbose"},
+		"img": {Enabled: new(true), CheckLevel: "verbose"},
 	}}
 	errs := &ValidationError{}
 	validateBuildAndDistro(cfg, &DistroConfig{}, errs)

@@ -248,7 +248,7 @@ func repoOverrideDir(repoPath string) (string, bool, error) {
 	if spec == "" {
 		return "", false, nil
 	}
-	for _, pair := range strings.Split(spec, ",") {
+	for pair := range strings.SplitSeq(spec, ",") {
 		pair = strings.TrimSpace(pair)
 		if pair == "" {
 			continue
@@ -373,9 +373,9 @@ func cacheBehindHead(path string) bool {
 
 // firstYAMLVersionLine extracts the value of the first top-level `version:` line.
 func firstYAMLVersionLine(data []byte) string {
-	for _, line := range strings.Split(string(data), "\n") {
-		if strings.HasPrefix(line, "version:") {
-			return strings.TrimSpace(strings.TrimPrefix(line, "version:"))
+	for line := range strings.SplitSeq(string(data), "\n") {
+		if after, ok := strings.CutPrefix(line, "version:"); ok {
+			return strings.TrimSpace(after)
 		}
 	}
 	return ""

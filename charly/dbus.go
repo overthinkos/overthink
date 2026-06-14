@@ -238,15 +238,15 @@ func dbusCallRemote(ex DeployExecutor, dest, path, method string, args []string)
 // --- Argument parsing ---
 
 // parseDbusArgs parses typed D-Bus arguments like "string:hello", "uint32:0", "boolean:true".
-func parseDbusArgs(args []string) ([]interface{}, error) {
-	var result []interface{}
+func parseDbusArgs(args []string) ([]any, error) {
+	var result []any
 	for _, arg := range args {
-		idx := strings.IndexByte(arg, ':')
-		if idx < 0 {
+		before, after, ok := strings.Cut(arg, ":")
+		if !ok {
 			return nil, fmt.Errorf("invalid argument %q: expected type:value (e.g. string:hello, uint32:0)", arg)
 		}
-		typ := arg[:idx]
-		val := arg[idx+1:]
+		typ := before
+		val := after
 		parsed, err := parseDbusTypedValue(typ, val)
 		if err != nil {
 			return nil, fmt.Errorf("argument %q: %w", arg, err)
@@ -256,7 +256,7 @@ func parseDbusArgs(args []string) ([]interface{}, error) {
 	return result, nil
 }
 
-func parseDbusTypedValue(typ, val string) (interface{}, error) {
+func parseDbusTypedValue(typ, val string) (any, error) {
 	switch typ {
 	case "string":
 		return val, nil

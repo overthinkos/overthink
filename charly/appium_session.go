@@ -24,12 +24,12 @@ import (
 
 // AppiumSession is the on-disk shape persisted between leaf invocations.
 type AppiumSession struct {
-	SessionID string                 `json:"session_id"`
-	BaseURL   string                 `json:"base_url"`
-	CreatedAt time.Time              `json:"created_at"`
-	Image     string                 `json:"image"`
-	Instance  string                 `json:"instance,omitempty"`
-	Caps      map[string]interface{} `json:"caps,omitempty"`
+	SessionID string         `json:"session_id"`
+	BaseURL   string         `json:"base_url"`
+	CreatedAt time.Time      `json:"created_at"`
+	Image     string         `json:"image"`
+	Instance  string         `json:"instance,omitempty"`
+	Caps      map[string]any `json:"caps,omitempty"`
 }
 
 // appiumSessionsDir returns ~/.cache/charly/appium/sessions, creating it on

@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -24,7 +25,7 @@ func (e *ValidationError) Error() string {
 }
 
 // Add adds an error to the collection
-func (e *ValidationError) Add(format string, args ...interface{}) {
+func (e *ValidationError) Add(format string, args ...any) {
 	e.Errors = append(e.Errors, fmt.Sprintf(format, args...))
 }
 
@@ -258,7 +259,7 @@ func validateLocalDeployments(dir string, errs *ValidationError) {
 				errs.Add("deployment %q: invalid host %q: %v", name, hostField, perr)
 			}
 			if node.User != "" && strings.Contains(hostField, "@") {
-				inlineUser := strings.SplitN(hostField, "@", 2)[0]
+				inlineUser, _, _ := strings.Cut(hostField, "@")
 				if inlineUser != node.User {
 					errs.Add("deployment %q: ambiguous user — host: %q has inline user %q but user: field is %q (remove one)",
 						name, hostField, inlineUser, node.User)
@@ -366,11 +367,8 @@ func validateInitDependencies(cfg *Config, initCfg *InitConfig, layers map[strin
 				images, resolveErr := cfg.ResolveAllBox("unused", ".", ResolveOpts{})
 				if resolveErr == nil {
 					allCandies := collectAllBoxCandies(imgName, images, layers)
-					for _, l := range allCandies {
-						if l == def.DependsCandy {
-							hasDepCandy = true
-							break
-						}
+					if slices.Contains(allCandies, def.DependsCandy) {
+						hasDepCandy = true
 					}
 				}
 			}
@@ -762,7 +760,7 @@ func validateEnvFiles(layers map[string]*Candy, errs *ValidationError) {
 // must carry a name. The canonical repo key is `repo` (singular) — what
 // derivePackageSectionsFromCalamares writes and DistroPackages.Repo unmarshals.
 func validatePkgConfig(layers map[string]*Candy, errs *ValidationError) {
-	validateRaw := func(name, label string, raw map[string]interface{}, candyHasPkgs bool) {
+	validateRaw := func(name, label string, raw map[string]any, candyHasPkgs bool) {
 		if raw == nil {
 			return
 		}
@@ -837,8 +835,7 @@ func validateBoxDAG(cfg *Config, layers map[string]*Candy, dir string, opts Reso
 
 	_, orderErr := ResolveBoxOrder(images, layers)
 	if orderErr != nil {
-		var cycleErr *CycleError
-		if errors.As(orderErr, &cycleErr) {
+		if cycleErr, ok := errors.AsType[*CycleError](orderErr); ok {
 			errs.Add("box dependency cycle: %s", strings.Join(cycleErr.Cycle, " -> "))
 		} else {
 			errs.Add("box DAG error: %v", orderErr)
@@ -875,8 +872,7 @@ func validateCandyDAG(cfg *Config, layers map[string]*Candy, errs *ValidationErr
 		}
 		_, err := ResolveCandyOrder(bareCandies, layers, nil)
 		if err != nil {
-			var cycleErr *CycleError
-			if errors.As(err, &cycleErr) {
+			if cycleErr, ok := errors.AsType[*CycleError](err); ok {
 				errs.Add("box %q: candy dependency cycle: %s", boxName, strings.Join(cycleErr.Cycle, " -> "))
 			} else {
 				errs.Add("box %q: candy resolution error: %v", boxName, err)
@@ -1129,13 +1125,7 @@ func validateBuilders(cfg *Config, layers map[string]*Candy, builderCfg *Builder
 					continue
 				}
 				// Check builder declares this capability
-				hasCapability := false
-				for _, b := range builderImg.Produce {
-					if b == typ {
-						hasCapability = true
-						break
-					}
-				}
+				hasCapability := slices.Contains(builderImg.Produce, typ)
 				if len(builderImg.Produce) > 0 && !hasCapability {
 					errs.Add("box %q: builder.%s references %q which does not declare builds: [%s]", boxName, typ, builder, typ)
 				}

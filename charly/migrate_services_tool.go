@@ -14,6 +14,7 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"sort"
@@ -115,8 +116,8 @@ func extractBlock(src, key string) string {
 			trimmed := strings.TrimLeft(line, " \t")
 			indent = line[:len(line)-len(trimmed)]
 		}
-		if strings.HasPrefix(line, indent) {
-			blockLines = append(blockLines, strings.TrimPrefix(line, indent))
+		if after, ok := strings.CutPrefix(line, indent); ok {
+			blockLines = append(blockLines, after)
 			continue
 		}
 		break
@@ -141,8 +142,8 @@ func extractListBlock(src, key string) []string {
 			continue
 		}
 		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "- ") {
-			items = append(items, strings.TrimSpace(strings.TrimPrefix(trimmed, "- ")))
+		if after, ok := strings.CutPrefix(trimmed, "- "); ok {
+			items = append(items, strings.TrimSpace(after))
 			continue
 		}
 		if trimmed != "" {
@@ -195,13 +196,13 @@ func removeBlock(src, key string) string {
 }
 
 // buildServicesEntries parses legacy blocks into structured entries.
-func buildServicesEntries(serviceINI string, systemUnits []string) []map[string]interface{} {
+func buildServicesEntries(serviceINI string, systemUnits []string) []map[string]any {
 	programs := parseSupervisordPrograms(serviceINI)
-	out := make([]map[string]interface{}, 0, len(systemUnits)+len(programs))
+	out := make([]map[string]any, 0, len(systemUnits)+len(programs))
 
 	for _, unit := range systemUnits {
 		name := strings.TrimSuffix(unit, ".service")
-		out = append(out, map[string]interface{}{
+		out = append(out, map[string]any{
 			"name":         name,
 			"use_packaged": appendServiceSuffix(unit),
 			"enable":       true,
@@ -210,7 +211,7 @@ func buildServicesEntries(serviceINI string, systemUnits []string) []map[string]
 	}
 
 	for _, program := range programs {
-		entry := map[string]interface{}{
+		entry := map[string]any{
 			"name":   program.Name,
 			"enable": true,
 			"scope":  "system",
@@ -220,9 +221,7 @@ func buildServicesEntries(serviceINI string, systemUnits []string) []map[string]
 		}
 		if len(program.Environment) > 0 {
 			env := map[string]string{}
-			for k, v := range program.Environment {
-				env[k] = v
-			}
+			maps.Copy(env, program.Environment)
 			entry["env"] = env
 		}
 		switch program.AutoRestart {
@@ -277,12 +276,12 @@ func parseSupervisordPrograms(ini string) []supervisordProgram {
 		if cur == nil {
 			continue
 		}
-		eq := strings.Index(line, "=")
-		if eq < 0 {
+		before, after, ok := strings.Cut(line, "=")
+		if !ok {
 			continue
 		}
-		key := strings.TrimSpace(line[:eq])
-		val := strings.TrimSpace(line[eq+1:])
+		key := strings.TrimSpace(before)
+		val := strings.TrimSpace(after)
 		switch key {
 		case "command":
 			cur.Command = val
@@ -338,7 +337,7 @@ func parseSupervisordEnv(s string) []envKV {
 	return out
 }
 
-func renderServicesYAML(entries []map[string]interface{}) string {
+func renderServicesYAML(entries []map[string]any) string {
 	var b strings.Builder
 	b.WriteString("services:\n")
 	for i, e := range entries {

@@ -15,17 +15,17 @@ import (
 func TestStringSliceFromYAML(t *testing.T) {
 	cases := []struct {
 		name string
-		in   interface{}
+		in   any
 		want []string
 		ok   bool
 	}{
 		{"pre-stringified", []string{"code", "vscode"}, []string{"code", "vscode"}, true},
-		{"yaml-decoded", []interface{}{"code", "vscode"}, []string{"code", "vscode"}, true},
-		{"empty-decoded", []interface{}{}, []string{}, true},
-		{"non-string-elements", []interface{}{"code", 42, "vscode"}, []string{"code", "vscode"}, true},
+		{"yaml-decoded", []any{"code", "vscode"}, []string{"code", "vscode"}, true},
+		{"empty-decoded", []any{}, []string{}, true},
+		{"non-string-elements", []any{"code", 42, "vscode"}, []string{"code", "vscode"}, true},
 		{"nil", nil, nil, false},
 		{"string", "code", nil, false},
-		{"map", map[string]interface{}{"x": 1}, nil, false},
+		{"map", map[string]any{"x": 1}, nil, false},
 	}
 	for _, c := range cases {
 		got, ok := stringSliceFromYAML(c.in)
@@ -47,11 +47,11 @@ func TestStringSliceFromYAML(t *testing.T) {
 // RawStageContext map. End-to-end shape: yaml-decoded list →
 // stringSliceFromYAML → ctx["replaces"] → extractStringSlice.
 func TestExtractStringSlice_AurReplacesShape(t *testing.T) {
-	repls, ok := stringSliceFromYAML([]interface{}{"code", "code-features"})
+	repls, ok := stringSliceFromYAML([]any{"code", "code-features"})
 	if !ok {
 		t.Fatal("stringSliceFromYAML rejected expected shape")
 	}
-	ctx := map[string]interface{}{
+	ctx := map[string]any{
 		"layer":    "vscode",
 		"builder":  "aur",
 		"packages": []string{"visual-studio-code-bin"},

@@ -38,7 +38,7 @@ func unknownYAMLKeys(node *yaml.Node, shape docShape) []string {
 		return nil
 	} else {
 		var out []string
-		for _, line := range strings.Split(err.Error(), "\n") {
+		for line := range strings.SplitSeq(err.Error(), "\n") {
 			line = strings.TrimSpace(line)
 			if strings.Contains(line, "not found in type") {
 				out = append(out, line)

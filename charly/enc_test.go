@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -296,13 +297,7 @@ func TestBuildShellArgsWithBindMountsPodman(t *testing.T) {
 	}
 	args := buildShellArgs("podman", "myapp:latest", 1000, 1000, nil, nil, bindMounts, false, "", "127.0.0.1", nil, SecurityConfig{}, "/workspace")
 
-	found := false
-	for _, arg := range args {
-		if arg == "--userns=keep-id:uid=1000,gid=1000" {
-			found = true
-			break
-		}
-	}
+	found := slices.Contains(args, "--userns=keep-id:uid=1000,gid=1000")
 	if !found {
 		t.Errorf("expected --userns=keep-id:uid=1000,gid=1000 in podman args, got: %v", args)
 	}
@@ -338,13 +333,7 @@ func TestBuildStartArgsWithBindMountsPodman(t *testing.T) {
 	}
 	args := buildStartArgs("podman", "myapp:latest", 1000, 1000, nil, "charly-myapp", nil, bindMounts, false, "127.0.0.1", nil, SecurityConfig{}, []string{"supervisord", "-n", "-c", "/etc/supervisord.conf"}, "/workspace")
 
-	found := false
-	for _, arg := range args {
-		if arg == "--userns=keep-id:uid=1000,gid=1000" {
-			found = true
-			break
-		}
-	}
+	found := slices.Contains(args, "--userns=keep-id:uid=1000,gid=1000")
 	if !found {
 		t.Errorf("expected --userns=keep-id:uid=1000,gid=1000 in podman args, got: %v", args)
 	}

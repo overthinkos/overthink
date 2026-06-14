@@ -241,7 +241,7 @@ func FindPortOwner(port int, engine string) (owner string, ownerType string) {
 		return "unknown", "host-process"
 	}
 
-	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+	for line := range strings.SplitSeq(strings.TrimSpace(string(out)), "\n") {
 		if line == "" {
 			continue
 		}
@@ -413,7 +413,7 @@ func AllocateAutoPorts(containerPorts []int, occupied map[int]bool) ([]ParsedPor
 			return nil, fmt.Errorf("AllocateAutoPorts: invalid container port %d", cp)
 		}
 		var host int
-		for attempt := 0; attempt < 32; attempt++ {
+		for range 32 {
 			ln, err := net.Listen("tcp", "127.0.0.1:0")
 			if err != nil {
 				return nil, fmt.Errorf("AllocateAutoPorts: probe failed for container port %d: %w", cp, err)

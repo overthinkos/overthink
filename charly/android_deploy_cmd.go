@@ -139,17 +139,17 @@ func resolveAndroidDevice(spec *AndroidSpec, node *DeploymentNode, path string) 
 // when it carries no ${HOST_PORT:N} reference (a literal host:port endpoint).
 func resolveAndroidHostPortRef(addr, path string, node *DeploymentNode) (string, error) {
 	const marker = "${HOST_PORT:"
-	idx := strings.Index(addr, marker)
-	if idx < 0 {
+	before, after, ok := strings.Cut(addr, marker)
+	if !ok {
 		return addr, nil
 	}
-	rest := addr[idx+len(marker):]
-	end := strings.IndexByte(rest, '}')
-	if end < 0 {
+	rest := after
+	before0, after0, ok0 := strings.Cut(rest, "}")
+	if !ok0 {
 		return "", fmt.Errorf("adb host %q: malformed ${HOST_PORT:N} (no closing brace)", addr)
 	}
 	var ctrPort int
-	if _, err := fmt.Sscanf(rest[:end], "%d", &ctrPort); err != nil || ctrPort <= 0 {
+	if _, err := fmt.Sscanf(before0, "%d", &ctrPort); err != nil || ctrPort <= 0 {
 		return "", fmt.Errorf("adb host %q: ${HOST_PORT:N} requires a positive container port", addr)
 	}
 	i := strings.LastIndexByte(path, '.')
@@ -173,7 +173,7 @@ func resolveAndroidHostPortRef(addr, path string, node *DeploymentNode) (string,
 	if err != nil {
 		return "", err
 	}
-	return addr[:idx] + fmt.Sprintf("%d", hp) + rest[end+1:], nil
+	return before + fmt.Sprintf("%d", hp) + after0, nil
 }
 
 // resolveAndroidGoogleCreds reads the apkeep google-play credentials from the

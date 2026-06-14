@@ -167,13 +167,13 @@ func TestMergeBoxConfig_BuildTunables(t *testing.T) {
 	// dst empty → fills from src (the path that dropped these fields).
 	dst := &BoxConfig{}
 	src := &BoxConfig{
-		Jobs:          intPtr(4),
-		PodmanJobs:    intPtr(0),
-		PodmanJobsCap: intPtr(8),
+		Jobs:          new(4),
+		PodmanJobs:    new(0),
+		PodmanJobsCap: new(8),
 		ContextIgnore: []string{"image", ".check"},
 		Cache:         "image",
-		KeepImages:    intPtr(5),
-		KeepCheckRuns: intPtr(10),
+		KeepImages:    new(5),
+		KeepCheckRuns: new(10),
 	}
 	mergeBoxConfig(dst, src)
 	if dst.KeepImages == nil || *dst.KeepImages != 5 {
@@ -199,8 +199,8 @@ func TestMergeBoxConfig_BuildTunables(t *testing.T) {
 	}
 
 	// dst already set → src must NOT override (per-field "dst wins if set").
-	dst2 := &BoxConfig{Jobs: intPtr(2), Cache: "registry"}
-	mergeBoxConfig(dst2, &BoxConfig{Jobs: intPtr(9), Cache: "image"})
+	dst2 := &BoxConfig{Jobs: new(2), Cache: "registry"}
+	mergeBoxConfig(dst2, &BoxConfig{Jobs: new(9), Cache: "image"})
 	if dst2.Jobs == nil || *dst2.Jobs != 2 {
 		t.Errorf("dst Jobs should win, got %v", dst2.Jobs)
 	}

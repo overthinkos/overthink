@@ -54,7 +54,7 @@ func (p PortScope) MarshalJSON() ([]byte, error) {
 	return []byte("null"), nil
 }
 
-func (p PortScope) MarshalYAML() (interface{}, error) { //nolint:unparam // error return kept for interface/API stability
+func (p PortScope) MarshalYAML() (any, error) { //nolint:unparam // error return kept for interface/API stability
 	if p.All {
 		return "all", nil
 	}
@@ -114,8 +114,8 @@ func (p PortScope) IsZero() bool {
 type TunnelYAML struct {
 	Provider string    `yaml:"provider" json:"provider"`
 	Tunnel   string    `yaml:"tunnel,omitempty" json:"tunnel,omitempty"` // cloudflare: tunnel name
-	Public   PortScope `yaml:"public,omitempty" json:"public,omitempty"`
-	Private  PortScope `yaml:"private,omitempty" json:"private,omitempty"`
+	Public   PortScope `yaml:"public,omitempty" json:"public"`
+	Private  PortScope `yaml:"private,omitempty" json:"private"`
 }
 
 // UnmarshalYAML handles bare string ("tailscale"/"cloudflare") or expanded form.
@@ -563,8 +563,8 @@ func createCloudflaredTunnel(name string) (string, error) {
 
 	// Parse UUID from output: "Created tunnel <name> with id <uuid>"
 	outputStr := string(output)
-	if idx := strings.Index(outputStr, "with id "); idx != -1 {
-		uuid := strings.TrimSpace(outputStr[idx+len("with id "):])
+	if _, after, ok := strings.Cut(outputStr, "with id "); ok {
+		uuid := strings.TrimSpace(after)
 		// UUID may have trailing newline or text
 		if nlIdx := strings.IndexAny(uuid, "\n\r "); nlIdx != -1 {
 			uuid = uuid[:nlIdx]

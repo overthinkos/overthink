@@ -141,8 +141,8 @@ func TestArtifactMinCastEvents_ParsesCast(t *testing.T) {
 func writePNG(t *testing.T, path string, w, h int, c color.RGBA) {
 	t.Helper()
 	img := image.NewRGBA(image.Rect(0, 0, w, h))
-	for y := 0; y < h; y++ {
-		for x := 0; x < w; x++ {
+	for y := range h {
+		for x := range w {
 			img.Set(x, y, c)
 		}
 	}
@@ -160,8 +160,8 @@ func writePNG(t *testing.T, path string, w, h int, c color.RGBA) {
 func writeMixedPNG(t *testing.T, path string, w, h int, bg, fg color.RGBA, markX, markY int) {
 	t.Helper()
 	img := image.NewRGBA(image.Rect(0, 0, w, h))
-	for y := 0; y < h; y++ {
-		for x := 0; x < w; x++ {
+	for y := range h {
+		for x := range w {
 			img.Set(x, y, bg)
 		}
 	}
@@ -185,7 +185,7 @@ func writeCast(t *testing.T, path string, numEvents int) {
 	t.Helper()
 	var buf bytes.Buffer
 	buf.WriteString(`{"version":2,"width":80,"height":24}` + "\n")
-	for i := 0; i < numEvents; i++ {
+	for i := range numEvents {
 		buf.WriteString(`[`)
 		buf.WriteString(`0.`)
 		buf.WriteString(itoa(i))

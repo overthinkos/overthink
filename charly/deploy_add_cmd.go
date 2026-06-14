@@ -18,6 +18,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -703,9 +704,7 @@ func (c *DeployAddCmd) scanCandiesForRef(ref *DeployRef, cfg *Config, dir string
 	if ref.Source == RefSourceRemote {
 		aug := *cfg
 		aug.Box = make(map[string]BoxConfig, len(cfg.Box)+1)
-		for k, v := range cfg.Box {
-			aug.Box[k] = v
-		}
+		maps.Copy(aug.Box, cfg.Box)
 		aug.Box["__charly_addlayer_fetch__"] = BoxConfig{Candy: []string{ref.Raw}}
 		scanCfg = &aug
 		candyKey = BareRef(ref.Raw)

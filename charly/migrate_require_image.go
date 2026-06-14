@@ -241,8 +241,8 @@ func migrateRequireImageOneFile(path string, dryRun bool, extraImageNames map[st
 			// Established multi-pod convention — see project
 			// deploy.yml's jupyter-pod → image: jupyter,
 			// jupyter-ml-pod → image: jupyter-ml.
-			if strings.HasSuffix(key, "-pod") {
-				base := strings.TrimSuffix(key, "-pod")
+			if before, ok := strings.CutSuffix(key, "-pod"); ok {
+				base := before
 				if injectImageField(valNode, base) {
 					mutated = true
 					changes = append(changes, fmt.Sprintf("injected image: %q on %q (<base>-pod suffix convention)", base, key))

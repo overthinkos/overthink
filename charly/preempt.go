@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -497,9 +498,7 @@ func (a *ResourceArbiter) Status() (*preemptLedger, []string, error) {
 func gatherDeployNodes() map[string]DeploymentNode {
 	out := map[string]DeploymentNode{}
 	if uf, ok, err := LoadUnified("."); err == nil && ok && uf != nil {
-		for name, node := range uf.Deploy {
-			out[name] = node
-		}
+		maps.Copy(out, uf.Deploy)
 	}
 	if dc := loadDeployConfigForRead("charly preempt"); dc != nil {
 		for name, node := range dc.Deploy {

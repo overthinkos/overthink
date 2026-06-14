@@ -4,6 +4,7 @@ import (
 	"bytes"
 	_ "embed"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"sort"
@@ -223,9 +224,7 @@ func MergeSidecar(base, overlay map[string]SidecarDef) map[string]SidecarDef {
 	}
 	if len(overlay) == 0 {
 		result := make(map[string]SidecarDef, len(base))
-		for k, v := range base {
-			result[k] = v
-		}
+		maps.Copy(result, base)
 		return result
 	}
 
@@ -273,23 +272,15 @@ func mergeSingleSidecar(base, overlay SidecarDef) SidecarDef {
 	// renderSidecarEnvFrom raises a clear error at charly-config time.
 	if len(base.Parameter) > 0 || len(overlay.Parameter) > 0 {
 		mergedParam := make(map[string]string, len(base.Parameter)+len(overlay.Parameter))
-		for k, v := range base.Parameter {
-			mergedParam[k] = v
-		}
-		for k, v := range overlay.Parameter {
-			mergedParam[k] = v
-		}
+		maps.Copy(mergedParam, base.Parameter)
+		maps.Copy(mergedParam, overlay.Parameter)
 		merged.Parameter = mergedParam
 	}
 
 	if len(overlay.Env) > 0 {
 		mergedEnv := make(map[string]string, len(base.Env)+len(overlay.Env))
-		for k, v := range base.Env {
-			mergedEnv[k] = v
-		}
-		for k, v := range overlay.Env {
-			mergedEnv[k] = v
-		}
+		maps.Copy(mergedEnv, base.Env)
+		maps.Copy(mergedEnv, overlay.Env)
 		merged.Env = mergedEnv
 	}
 
@@ -471,7 +462,7 @@ func findPodSidecarQuadlets(qdir, podName, mainContainerFile string) ([]string, 
 		if rErr != nil {
 			continue
 		}
-		for _, line := range strings.Split(string(content), "\n") {
+		for line := range strings.SplitSeq(string(content), "\n") {
 			if strings.TrimSpace(line) == expected {
 				matches = append(matches, name)
 				break

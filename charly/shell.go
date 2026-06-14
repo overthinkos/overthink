@@ -256,9 +256,9 @@ func buildShellArgs(engine, imageRef string, uid, gid int, ports []string, volum
 		args = append(args, "-v", fmt.Sprintf("%s:%s", bm.HostPath, bm.ContPath))
 	}
 	for _, m := range security.Mounts {
-		if strings.HasPrefix(m, "tmpfs:") {
+		if after, ok := strings.CutPrefix(m, "tmpfs:"); ok {
 			// tmpfs:/path:options → --tmpfs /path:options
-			args = append(args, "--tmpfs", strings.TrimPrefix(m, "tmpfs:"))
+			args = append(args, "--tmpfs", after)
 		} else {
 			args = append(args, "-v", m)
 		}

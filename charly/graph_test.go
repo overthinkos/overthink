@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"reflect"
+	"slices"
 	"testing"
 )
 
@@ -270,10 +271,8 @@ func TestResolveImageOrderWithBootstrapBuilder(t *testing.T) {
 	}
 	levelOf := func(name string) int {
 		for i, level := range levels {
-			for _, n := range level {
-				if n == name {
-					return i
-				}
+			if slices.Contains(level, name) {
+				return i
 			}
 		}
 		return -1
@@ -631,7 +630,7 @@ func TestTopoSortDeterministic(t *testing.T) {
 		t.Fatalf("topoSort() error = %v", err)
 	}
 
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		result, err := topoSort(graph)
 		if err != nil {
 			t.Fatalf("topoSort() error = %v", err)

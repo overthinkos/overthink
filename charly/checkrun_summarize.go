@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"math"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 )
@@ -47,7 +47,7 @@ func (r *Runner) runSummarize(ctx context.Context, c *Op) CheckResult {
 	}
 
 	// Sort for percentile computation.
-	sort.Slice(samples, func(i, j int) bool { return samples[i] < samples[j] })
+	slices.Sort(samples)
 
 	// Compute requested metrics. Default to all five if none specified.
 	metricSet := c.Metrics
@@ -145,10 +145,7 @@ func pctMS(sorted []time.Duration, p float64) float64 {
 	if len(sorted) == 0 {
 		return 0
 	}
-	idx := int(math.Round(p * float64(len(sorted)-1)))
-	if idx < 0 {
-		idx = 0
-	}
+	idx := max(int(math.Round(p*float64(len(sorted)-1))), 0)
 	if idx >= len(sorted) {
 		idx = len(sorted) - 1
 	}

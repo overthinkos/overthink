@@ -30,6 +30,7 @@ package main
 
 import (
 	"fmt"
+	"maps"
 	"os"
 	"strconv"
 	"strings"
@@ -56,9 +57,7 @@ func applyPeerVars(r *Runner, checks []Op, instance string) {
 	if r.PeerVars == nil {
 		r.PeerVars = map[string]string{}
 	}
-	for k, v := range vars {
-		r.PeerVars[k] = v
-	}
+	maps.Copy(r.PeerVars, vars)
 	r.peerCleanups = append(r.peerCleanups, cleanups...)
 }
 
@@ -85,8 +84,8 @@ func collectPeerRefs(checks []Op) []string {
 			}
 			for _, key := range TestVarRefs(*p) {
 				name := key
-				if idx := strings.IndexByte(key, ':'); idx >= 0 {
-					name = key[:idx]
+				if before, _, ok := strings.Cut(key, ":"); ok {
+					name = before
 				}
 				if name != peerHostVar && name != peerEndpointVar {
 					continue
@@ -157,11 +156,11 @@ func resolvePeerVars(refs []string, instance string) (map[string]string, []func(
 // splitPeerKey splits a "PEER_HOST:web" / "PEER_ENDPOINT:web:8080" key into the
 // variable name and the remaining argument(s) (everything after the FIRST colon).
 func splitPeerKey(key string) (name, arg string, ok bool) {
-	idx := strings.IndexByte(key, ':')
-	if idx < 0 {
+	before, after, ok := strings.Cut(key, ":")
+	if !ok {
 		return key, "", false
 	}
-	return key[:idx], key[idx+1:], true
+	return before, after, true
 }
 
 // filterPeerVars returns the subset of unresolved variable keys that are
@@ -174,8 +173,8 @@ func filterPeerVars(missing []string) []string {
 	var out []string
 	for _, key := range missing {
 		name := key
-		if idx := strings.IndexByte(key, ':'); idx >= 0 {
-			name = key[:idx]
+		if before, _, ok := strings.Cut(key, ":"); ok {
+			name = before
 		}
 		if name == peerHostVar || name == peerEndpointVar {
 			out = append(out, key)

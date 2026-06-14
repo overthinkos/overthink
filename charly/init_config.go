@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -136,13 +137,7 @@ func detectsInit(def *InitDef, ly *CandyYAML, candyPath string) bool {
 		return false
 	}
 	// candy_field: [service] gates schema-driven detection.
-	participatesInSchema := false
-	for _, field := range def.CandyFields {
-		if field == "service" {
-			participatesInSchema = true
-			break
-		}
-	}
+	participatesInSchema := slices.Contains(def.CandyFields, "service")
 	if participatesInSchema {
 		for i := range ly.Service {
 			entry := &ly.Service[i]

@@ -223,7 +223,7 @@ func classifyYAMLFile(path string) (RefKind, error) {
 	if err != nil {
 		return "", fmt.Errorf("reading %s: %w", path, err)
 	}
-	var top map[string]interface{}
+	var top map[string]any
 	if err := yaml.Unmarshal(data, &top); err != nil {
 		return "", fmt.Errorf("parsing %s: %w", path, err)
 	}

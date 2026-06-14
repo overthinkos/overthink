@@ -213,8 +213,8 @@ func rewriteCharlyBrandScalar(v string) string {
 	// Candy-ref path segment: …/candy/ov-mcp:vTAG and …/candy/ov:vTAG.
 	v = strings.ReplaceAll(v, "/candy/ov-mcp", "/candy/charly-mcp")
 	v = strings.ReplaceAll(v, "/candy/ov:", "/candy/charly:")
-	if strings.HasSuffix(v, "/candy/ov") {
-		v = strings.TrimSuffix(v, "/candy/ov") + "/candy/charly"
+	if before, ok := strings.CutSuffix(v, "/candy/ov"); ok {
+		v = before + "/candy/charly"
 	}
 	// OCI label namespace.
 	v = strings.ReplaceAll(v, "org.overthinkos.", "ai.opencharly.")

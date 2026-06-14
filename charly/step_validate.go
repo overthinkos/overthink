@@ -79,8 +79,7 @@ func ValidatePlan(plan []Step, ctx PlanValidationContext) error {
 
 	// Pass 3: cycle detection via the shared topo-sort.
 	if _, err := topoSortSteps(plan, origin); err != nil {
-		var cycleErr *CycleError
-		if errors.As(err, &cycleErr) {
+		if cycleErr, ok := errors.AsType[*CycleError](err); ok {
 			return fmt.Errorf("%s: step depends_on cycle: %s",
 				ctx.OwnerLabel, strings.Join(cycleErr.Cycle, " -> "))
 		}

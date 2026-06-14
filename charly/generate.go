@@ -4,9 +4,11 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -67,13 +69,7 @@ func (g *Generator) globalOrderForBox(imageCandies []string, parentCandies map[s
 	// Safety: if global order is missing some needed candies (shouldn't happen),
 	// append them in their original order
 	for _, l := range needed {
-		found := false
-		for _, o := range order {
-			if o == l {
-				found = true
-				break
-			}
-		}
+		found := slices.Contains(order, l)
 		if !found {
 			order = append(order, l)
 		}
@@ -606,8 +602,8 @@ func (g *Generator) generateContainerfile(boxName string) error {
 	// was staged by runPrivilegedBuilders (see build.go preBuildHook).
 	// The path is relative to the project-root build context, so it
 	// dotted-out under .build/<image>/.
-	if strings.HasPrefix(img.From, "builder:") {
-		builderName := strings.TrimPrefix(img.From, "builder:")
+	if after, ok := strings.CutPrefix(img.From, "builder:"); ok {
+		builderName := after
 		fmt.Fprintf(&b, "ADD .build/%s/%s.tar.gz /\n\n", boxName, builderName)
 	}
 
@@ -1571,12 +1567,7 @@ func (g *Generator) candyNeedsBuilder(img *ResolvedBox, layer *Candy, builderDef
 
 // buildFormatsInclude returns true if formats contains target.
 func buildFormatsInclude(formats []string, target string) bool {
-	for _, f := range formats {
-		if f == target {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(formats, target)
 }
 
 // collectBuilderRuntimeEnv returns synthesised EnvConfig entries for every
@@ -1932,9 +1923,7 @@ func (g *Generator) writeLabels(b *strings.Builder, boxName string, candyOrder [
 	for _, candyName := range candyOrder {
 		layer := g.Candies[candyName]
 		if layer.HasEnvProvides() {
-			for k, v := range layer.EnvProvides() {
-				envProvides[k] = v
-			}
+			maps.Copy(envProvides, layer.EnvProvides())
 		}
 	}
 	if len(envProvides) > 0 {
@@ -2246,8 +2235,8 @@ func descriptionInfo(d string) string {
 	if d == "" {
 		return ""
 	}
-	if i := strings.IndexByte(d, '\n'); i >= 0 {
-		return strings.TrimSpace(d[:i])
+	if before, _, ok := strings.Cut(d, "\n"); ok {
+		return strings.TrimSpace(before)
 	}
 	return d
 }
@@ -2321,7 +2310,7 @@ func (g *Generator) remoteBuildConfigCacheRoot() string {
 	for _, l := range g.Candies {
 		if l.Remote && l.Path != "" {
 			suffix := filepath.Join(l.SubPathPrefix, l.Name) // e.g. "candy/pixi"
-			if trimmed := strings.TrimSuffix(l.Path, suffix); trimmed != l.Path {
+			if trimmed, ok := strings.CutSuffix(l.Path, suffix); ok {
 				return strings.TrimRight(trimmed, string(filepath.Separator))
 			}
 		}

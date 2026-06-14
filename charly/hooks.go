@@ -80,7 +80,7 @@ func removeVolumes(engine, boxName, instance string) {
 		return
 	}
 
-	for _, name := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+	for name := range strings.SplitSeq(strings.TrimSpace(string(out)), "\n") {
 		if name == "" {
 			continue
 		}

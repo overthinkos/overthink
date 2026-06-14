@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"maps"
+	"slices"
 	"sort"
 
 	"gopkg.in/yaml.v3"
@@ -195,11 +197,6 @@ func (ic *BoxConfig) IsEnabled() bool {
 	return *ic.Enabled
 }
 
-// boolPtr returns a pointer to a bool value
-func boolPtr(v bool) *bool {
-	return &v
-}
-
 // ResolvedBox represents a fully resolved box configuration
 type ResolvedBox struct {
 	Name    string
@@ -290,22 +287,12 @@ type ResolvedBox struct {
 // Tags include format (rpm, deb, pac), distro (fedora, arch),
 // version (fedora:43), and the implicit "all".
 func (img *ResolvedBox) SupportsTag(tag string) bool {
-	for _, t := range img.Tags {
-		if t == tag {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(img.Tags, tag)
 }
 
 // SupportsBuild returns true if this image has the given build format.
 func (img *ResolvedBox) SupportsBuild(format string) bool {
-	for _, b := range img.BuildFormats {
-		if b == format {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(img.BuildFormats, format)
 }
 
 // LoadConfig reads charly.yml and returns the Config (defaults + images)
@@ -706,11 +693,6 @@ func resolveIntPtr(value, fallback *int, defaultVal int) int {
 	return defaultVal
 }
 
-// intPtr returns a pointer to an int value
-func intPtr(v int) *int {
-	return &v
-}
-
 // resolveVmConfig was removed in the VM hard-cutover. VM configuration
 // now lives on `kind: vm` entities in vm.yml (VmSpec); box:
 // entries no longer carry vm: or libvirt: fields.
@@ -742,12 +724,8 @@ func intPtr(v int) *int {
 // lockstep with the resolve set.
 func (c *Config) resolveEffectiveBuilder(name string, distro []string, base string, isExternalBase bool, imgBuilder BuilderMap) BuilderMap {
 	out := make(BuilderMap)
-	for typ, b := range c.Defaults.Builder {
-		out[typ] = b
-	}
-	for typ, b := range c.distroBuilderMap(distro) {
-		out[typ] = b
-	}
+	maps.Copy(out, c.Defaults.Builder)
+	maps.Copy(out, c.distroBuilderMap(distro))
 	if !isExternalBase {
 		// DELIBERATELY flat (not resolveBoxRef): a base's builder map is only
 		// inherited when the base is ROOT-local. A namespace-qualified base
@@ -757,14 +735,10 @@ func (c *Config) resolveEffectiveBuilder(name string, distro []string, base stri
 		// builder distro-keyed via distroBuilderMap above. So the qualified-base
 		// miss is correct, not a divergence bug. See namespace.go's header.
 		if baseImg, ok := c.Box[base]; ok {
-			for typ, b := range baseImg.Builder {
-				out[typ] = b
-			}
+			maps.Copy(out, baseImg.Builder)
 		}
 	}
-	for typ, b := range imgBuilder {
-		out[typ] = b
-	}
+	maps.Copy(out, imgBuilder)
 	for typ, b := range out {
 		if b == name {
 			delete(out, typ)
@@ -842,10 +816,8 @@ func (c *Config) distroBuilderMap(distroTags []string) BuilderMap {
 			if len(img.Builder) == 0 {
 				continue
 			}
-			for _, d := range img.Distro {
-				if d == tag {
-					return img.Builder
-				}
+			if slices.Contains(img.Distro, tag) {
+				return img.Builder
 			}
 		}
 	}

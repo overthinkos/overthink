@@ -214,13 +214,13 @@ func GitDefaultBranch(repoURL string) (string, error) {
 // parseDefaultBranch extracts the branch name from git ls-remote --symref output.
 // Example line: "ref: refs/heads/main\tHEAD"
 func parseDefaultBranch(output string) string {
-	for _, line := range strings.Split(output, "\n") {
+	for line := range strings.SplitSeq(output, "\n") {
 		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, "ref: refs/heads/") {
+		if after, ok := strings.CutPrefix(line, "ref: refs/heads/"); ok {
 			// "ref: refs/heads/main\tHEAD" -> "main"
-			ref := strings.TrimPrefix(line, "ref: refs/heads/")
-			if idx := strings.IndexByte(ref, '\t'); idx != -1 {
-				return ref[:idx]
+			ref := after
+			if before, _, ok := strings.Cut(ref, "\t"); ok {
+				return before
 			}
 		}
 	}
@@ -254,7 +254,7 @@ func GitLatestTag(repoURL string) (string, error) {
 func parseTagRefs(output string) []string {
 	var tags []string
 	seen := make(map[string]bool)
-	for _, line := range strings.Split(output, "\n") {
+	for line := range strings.SplitSeq(output, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" {
 			continue

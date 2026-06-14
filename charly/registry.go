@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -125,8 +126,8 @@ func extractFileFromImage(img v1.Image, path string) ([]byte, error) {
 	}
 
 	// Process layers in reverse order (top layer first) to get the latest version
-	for i := len(layers) - 1; i >= 0; i-- {
-		layer := layers[i]
+	for _, layer := range slices.Backward(layers) {
+
 		reader, err := layer.Uncompressed()
 		if err != nil {
 			continue

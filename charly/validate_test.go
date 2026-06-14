@@ -38,19 +38,19 @@ func TestValidateBuildTunables(t *testing.T) {
 		wantErr string // substring; "" = expect no error
 	}{
 		{"all unset is valid", BoxConfig{}, ""},
-		{"valid full set", BoxConfig{Jobs: intPtr(4), PodmanJobs: intPtr(0), PodmanJobsCap: intPtr(8), Cache: "image", ContextIgnore: []string{"image", ".check"}}, ""},
-		{"jobs zero rejected", BoxConfig{Jobs: intPtr(0)}, "jobs must be >= 1"},
-		{"jobs negative rejected", BoxConfig{Jobs: intPtr(-2)}, "jobs must be >= 1"},
-		{"podman_jobs negative rejected", BoxConfig{PodmanJobs: intPtr(-1)}, "podman_jobs must be >= 0"},
-		{"podman_jobs zero allowed (auto)", BoxConfig{PodmanJobs: intPtr(0)}, ""},
-		{"podman_jobs_cap zero rejected", BoxConfig{PodmanJobsCap: intPtr(0)}, "podman_jobs_cap must be >= 1"},
+		{"valid full set", BoxConfig{Jobs: new(4), PodmanJobs: new(0), PodmanJobsCap: new(8), Cache: "image", ContextIgnore: []string{"image", ".check"}}, ""},
+		{"jobs zero rejected", BoxConfig{Jobs: new(0)}, "jobs must be >= 1"},
+		{"jobs negative rejected", BoxConfig{Jobs: new(-2)}, "jobs must be >= 1"},
+		{"podman_jobs negative rejected", BoxConfig{PodmanJobs: new(-1)}, "podman_jobs must be >= 0"},
+		{"podman_jobs zero allowed (auto)", BoxConfig{PodmanJobs: new(0)}, ""},
+		{"podman_jobs_cap zero rejected", BoxConfig{PodmanJobsCap: new(0)}, "podman_jobs_cap must be >= 1"},
 		{"bad cache mode rejected", BoxConfig{Cache: "bogus"}, "cache must be one of"},
 		{"cache none allowed", BoxConfig{Cache: "none"}, ""},
 		{"empty context_ignore entry rejected", BoxConfig{ContextIgnore: []string{"image", "  "}}, "context_ignore[1] must not be empty"},
-		{"keep_images zero allowed (disabled)", BoxConfig{KeepImages: intPtr(0)}, ""},
-		{"keep_images negative rejected", BoxConfig{KeepImages: intPtr(-1)}, "keep_images must be >= 0"},
-		{"keep_check_runs valid", BoxConfig{KeepCheckRuns: intPtr(10)}, ""},
-		{"keep_check_runs negative rejected", BoxConfig{KeepCheckRuns: intPtr(-3)}, "keep_check_runs must be >= 0"},
+		{"keep_images zero allowed (disabled)", BoxConfig{KeepImages: new(0)}, ""},
+		{"keep_images negative rejected", BoxConfig{KeepImages: new(-1)}, "keep_images must be >= 0"},
+		{"keep_check_runs valid", BoxConfig{KeepCheckRuns: new(10)}, ""},
+		{"keep_check_runs negative rejected", BoxConfig{KeepCheckRuns: new(-3)}, "keep_check_runs must be >= 0"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -174,7 +174,7 @@ func TestValidateCoprWithoutPackages(t *testing.T) {
 			Name: "layer",
 			plan: []Step{{Run: "build", Op: Op{Command: "true"}}},
 			formatSections: map[string]*PackageSection{
-				"rpm": {FormatName: "rpm", Raw: map[string]interface{}{"copr": []interface{}{"owner/project"}}},
+				"rpm": {FormatName: "rpm", Raw: map[string]any{"copr": []any{"owner/project"}}},
 			},
 		},
 	}
@@ -197,7 +197,7 @@ func TestValidateReposWithoutPackages(t *testing.T) {
 			Name: "layer",
 			plan: []Step{{Run: "build", Op: Op{Command: "true"}}}, // needs some install file
 			formatSections: map[string]*PackageSection{
-				"rpm": {FormatName: "rpm", Raw: map[string]interface{}{"repo": []interface{}{map[string]interface{}{"name": "test", "url": "http://example.com"}}}},
+				"rpm": {FormatName: "rpm", Raw: map[string]any{"repo": []any{map[string]any{"name": "test", "url": "http://example.com"}}}},
 			},
 		},
 	}
@@ -220,7 +220,7 @@ func TestValidateModulesWithoutPackages(t *testing.T) {
 			Name: "layer",
 			plan: []Step{{Run: "build", Op: Op{Command: "true"}}},
 			formatSections: map[string]*PackageSection{
-				"rpm": {FormatName: "rpm", Raw: map[string]interface{}{"modules": []interface{}{"valkey:remi-9.0"}}},
+				"rpm": {FormatName: "rpm", Raw: map[string]any{"modules": []any{"valkey:remi-9.0"}}},
 			},
 		},
 	}
@@ -282,9 +282,9 @@ func TestValidatePacReposMissingName(t *testing.T) {
 		"layer": {
 			Name: "layer",
 			formatSections: map[string]*PackageSection{
-				"pac": {FormatName: "pac", Packages: []string{"pkg"}, Raw: map[string]interface{}{
-					"packages": []interface{}{"pkg"},
-					"repo":     []interface{}{map[string]interface{}{"server": "https://example.com"}},
+				"pac": {FormatName: "pac", Packages: []string{"pkg"}, Raw: map[string]any{
+					"packages": []any{"pkg"},
+					"repo":     []any{map[string]any{"server": "https://example.com"}},
 				}},
 			},
 		},
@@ -319,7 +319,7 @@ func TestValidateAurWithoutAurBuilder(t *testing.T) {
 		"aur-layer": {
 			Name: "aur-layer",
 			formatSections: map[string]*PackageSection{
-				"aur": {FormatName: "aur", Packages: []string{"yay-bin"}, Raw: map[string]interface{}{"packages": []interface{}{"yay-bin"}}},
+				"aur": {FormatName: "aur", Packages: []string{"yay-bin"}, Raw: map[string]any{"packages": []any{"yay-bin"}}},
 			},
 		},
 	}
@@ -356,8 +356,8 @@ func TestValidateAurOnFedoraImageNoError(t *testing.T) {
 		"multi-distro-layer": {
 			Name: "multi-distro-layer",
 			formatSections: map[string]*PackageSection{
-				"rpm": {FormatName: "rpm", Packages: []string{"google-chrome-stable"}, Raw: map[string]interface{}{"packages": []interface{}{"google-chrome-stable"}}},
-				"aur": {FormatName: "aur", Packages: []string{"google-chrome"}, Raw: map[string]interface{}{"packages": []interface{}{"google-chrome"}}},
+				"rpm": {FormatName: "rpm", Packages: []string{"google-chrome-stable"}, Raw: map[string]any{"packages": []any{"google-chrome-stable"}}},
+				"aur": {FormatName: "aur", Packages: []string{"google-chrome"}, Raw: map[string]any{"packages": []any{"google-chrome"}}},
 			},
 		},
 	}
@@ -388,7 +388,7 @@ func TestValidateAurOnArchImageWithoutAurInBuildFormats(t *testing.T) {
 		"aur-layer": {
 			Name: "aur-layer",
 			formatSections: map[string]*PackageSection{
-				"aur": {FormatName: "aur", Packages: []string{"yay-bin"}, Raw: map[string]interface{}{"packages": []interface{}{"yay-bin"}}},
+				"aur": {FormatName: "aur", Packages: []string{"yay-bin"}, Raw: map[string]any{"packages": []any{"yay-bin"}}},
 			},
 		},
 	}
@@ -759,7 +759,7 @@ func TestValidateSkipsDisabledImages(t *testing.T) {
 		Box: map[string]BoxConfig{
 			"good": {Candy: []string{"pixi"}},
 			"bad-disabled": {
-				Enabled: boolPtr(false),
+				Enabled: new(false),
 				Candy:   []string{"nonexistent-layer"},
 				Build:   BuildFormats{"invalid"},
 			},

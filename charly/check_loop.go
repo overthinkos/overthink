@@ -581,10 +581,7 @@ func runOneIteration(
 			scoreDelta = reportSoFar.Iterations[n-1].ScoreDelta
 		}
 	}
-	attemptsLeft := opts.PlateauIteration - plateauCounterEntering
-	if attemptsLeft < 0 {
-		attemptsLeft = 0
-	}
+	attemptsLeft := max(opts.PlateauIteration-plateauCounterEntering, 0)
 	phaseIntro := ""
 	substCtx := &SubstContext{
 		RunID:            layout.RunID,
@@ -1249,10 +1246,7 @@ type ScopeStep struct {
 // renderScope builds the Scope that iteration k will see.
 func renderScope(opts HarnessOpts, layout RunLayout, k int, reportSoFar *FinalReport, unsolved []StepScore) *HarnessScope {
 	plateauCounter := computePlateauSoFar(reportSoFar)
-	attemptsLeft := opts.PlateauIteration - plateauCounter
-	if attemptsLeft < 0 {
-		attemptsLeft = 0
-	}
+	attemptsLeft := max(opts.PlateauIteration-plateauCounter, 0)
 	scoreDelta := 0
 	if n := len(reportSoFar.Iterations); n > 0 {
 		scoreDelta = reportSoFar.Iterations[n-1].ScoreDelta

@@ -18,7 +18,7 @@ func TestFoldPeers_FoldsTopLevelAndInheritsDisposability(t *testing.T) {
 		"check-cross-pod-cdp": {
 			Target:     "pod",
 			Box:        "web",
-			Disposable: ptrBool(true),
+			Disposable: new(true),
 			Peer: map[string]*DeploymentNode{
 				"chrome": {Target: "pod", Box: "chrome-headless"},
 			},

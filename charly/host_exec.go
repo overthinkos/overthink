@@ -33,8 +33,8 @@ func shouldReexecForHost(cli *CLI, cmdPath string) bool {
 		return false
 	}
 	head := cmdPath
-	if i := strings.Index(cmdPath, " "); i >= 0 {
-		head = cmdPath[:i]
+	if before, _, ok := strings.Cut(cmdPath, " "); ok {
+		head = before
 	}
 	switch head {
 	case "settings", "version", "ssh":
@@ -60,8 +60,7 @@ func ReexecOverSSH(cli *CLI) int {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
-		var ee *exec.ExitError
-		if errors.As(err, &ee) {
+		if ee, ok := errors.AsType[*exec.ExitError](err); ok {
 			return ee.ExitCode()
 		}
 		fmt.Fprintf(os.Stderr, "charly: ssh %s: %v\n", target, err)
@@ -108,7 +107,7 @@ func resolveHostAlias(h string) (string, error) {
 func buildRemoteArgv(argv []string) []string {
 	out := make([]string, 0, len(argv))
 	skipNext := false
-	for i := 0; i < len(argv); i++ {
+	for i := range argv {
 		a := argv[i]
 		if skipNext {
 			skipNext = false

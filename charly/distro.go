@@ -28,12 +28,12 @@ func detectDistro() Distro {
 // parseOsRelease parses os-release content and returns a Distro.
 func parseOsRelease(content string) Distro {
 	d := Distro{ID: "unknown", Name: "Unknown"}
-	for _, line := range strings.Split(content, "\n") {
-		if strings.HasPrefix(line, "ID=") {
-			d.ID = strings.Trim(strings.TrimPrefix(line, "ID="), "\"")
+	for line := range strings.SplitSeq(content, "\n") {
+		if after, ok := strings.CutPrefix(line, "ID="); ok {
+			d.ID = strings.Trim(after, "\"")
 		}
-		if strings.HasPrefix(line, "NAME=") {
-			d.Name = strings.Trim(strings.TrimPrefix(line, "NAME="), "\"")
+		if after, ok := strings.CutPrefix(line, "NAME="); ok {
+			d.Name = strings.Trim(after, "\"")
 		}
 	}
 	switch d.ID {

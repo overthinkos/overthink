@@ -222,8 +222,9 @@ type graderVerdict struct {
 func parseVerdict(out string) (pass bool, evidence string, ok bool) {
 	// First, harvest any stream-json result text so the verdict embedded in
 	// the agent's final message is searchable even under NDJSON.
-	text := out
-	for _, line := range strings.Split(out, "\n") {
+	var text strings.Builder
+	text.WriteString(out)
+	for line := range strings.SplitSeq(out, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" || !strings.HasPrefix(line, "{") {
 			continue
@@ -234,13 +235,13 @@ func parseVerdict(out string) (pass bool, evidence string, ok bool) {
 		}
 		if ev["type"] == "result" {
 			if r, isStr := ev["result"].(string); isStr {
-				text += "\n" + r
+				text.WriteString("\n" + r)
 			}
 		}
 	}
 
 	// Scan for the LAST balanced JSON object that contains "verdict".
-	if v, found := lastVerdictObject(text); found {
+	if v, found := lastVerdictObject(text.String()); found {
 		var gv graderVerdict
 		if json.Unmarshal([]byte(v), &gv) == nil && gv.Verdict != "" {
 			return strings.EqualFold(strings.TrimSpace(gv.Verdict), "pass"), gv.Evidence, true
@@ -282,7 +283,7 @@ func lastVerdictObject(s string) (string, bool) {
 // compact one-line error/evidence messages.
 func lastLines(s string, n int) string {
 	var lines []string
-	for _, l := range strings.Split(s, "\n") {
+	for l := range strings.SplitSeq(s, "\n") {
 		if t := strings.TrimSpace(l); t != "" {
 			lines = append(lines, t)
 		}

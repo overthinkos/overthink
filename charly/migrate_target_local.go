@@ -149,8 +149,8 @@ func applyTargetLocalRewrites(src string, templates map[string]bool) string {
 				continue
 			}
 			value := rest
-			if comment := strings.Index(rest, " #"); comment >= 0 {
-				value = strings.TrimSpace(rest[:comment])
+			if before, _, ok := strings.Cut(rest, " #"); ok {
+				value = strings.TrimSpace(before)
 			}
 			value = strings.Trim(value, `"'`)
 			isHostname := strings.ContainsAny(value, "@.:") || value == "localhost" || value == "local"

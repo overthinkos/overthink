@@ -162,7 +162,7 @@ func networkDNSServers(binary string) map[string]bool {
 	if err != nil {
 		return have
 	}
-	for _, line := range strings.Split(string(out), "\n") {
+	for line := range strings.SplitSeq(string(out), "\n") {
 		if s := strings.TrimSpace(line); s != "" {
 			have[s] = true
 		}

@@ -45,7 +45,7 @@ func TestDeploymentNode_EphemeralImpliesDisposable(t *testing.T) {
 		},
 		{
 			name: "explicit disposable + no ephemeral → disposable",
-			node: DeploymentNode{Disposable: boolPtr(true)},
+			node: DeploymentNode{Disposable: new(true)},
 			want: true,
 		},
 	}

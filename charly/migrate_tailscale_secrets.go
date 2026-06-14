@@ -152,7 +152,7 @@ func readSecretsEnv(path, name string) (string, error) {
 		return "", err
 	}
 	prefix := "export " + name + "="
-	for _, line := range strings.Split(string(out), "\n") {
+	for line := range strings.SplitSeq(string(out), "\n") {
 		if !strings.HasPrefix(line, prefix) {
 			continue
 		}
@@ -186,7 +186,7 @@ func detectTailnetFromRunningSidecar() (string, bool) {
 		return "", false
 	}
 	var sidecarCtr string
-	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+	for line := range strings.SplitSeq(strings.TrimSpace(string(out)), "\n") {
 		if strings.HasSuffix(line, "-tailscale") {
 			sidecarCtr = line
 			break

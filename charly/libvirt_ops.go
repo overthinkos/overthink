@@ -93,8 +93,8 @@ func captureDomainScreenshot(l *libvirt.Libvirt, dom libvirt.Domain, screen uint
 	// The single byte after the max value is the header terminator
 	// (newline). Consume and proceed to raw pixel data.
 	img := image.NewRGBA(image.Rect(0, 0, w, h))
-	for y := 0; y < h; y++ {
-		for x := 0; x < w; x++ {
+	for y := range h {
+		for x := range w {
 			rByte, err := r.ReadByte()
 			if err != nil {
 				return nil, fmt.Errorf("read pixel at (%d,%d): %w", x, y, err)
@@ -190,8 +190,8 @@ func captureDomainScreenshotViaVirsh(domName string) (image.Image, error) {
 func mapLibvirtKeys(keys []string) ([]uint32, error) {
 	var codes []uint32
 	for _, k := range keys {
-		parts := strings.Split(k, "+")
-		for _, p := range parts {
+		parts := strings.SplitSeq(k, "+")
+		for p := range parts {
 			code, ok := libvirtKeyMap[strings.ToLower(strings.TrimSpace(p))]
 			if !ok {
 				return nil, fmt.Errorf("unknown key: %q", p)

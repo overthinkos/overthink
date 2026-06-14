@@ -112,7 +112,7 @@ func BuilderRun(ctx context.Context, opts BuilderRunOpts) ([]byte, error) {
 		shellified := engine + " " + shellJoin(args)
 		fmt.Fprintln(os.Stderr, "[dry-run] "+shellified)
 		fmt.Fprintln(os.Stderr, "[dry-run] script body:")
-		for _, line := range strings.Split(opts.ScriptBody, "\n") {
+		for line := range strings.SplitSeq(opts.ScriptBody, "\n") {
 			fmt.Fprintln(os.Stderr, "[dry-run]   "+line)
 		}
 		return nil, nil

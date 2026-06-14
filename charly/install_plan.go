@@ -283,7 +283,7 @@ type RepoSpec struct {
 	// different subsets (rpm has url/id/key; deb has suite/components;
 	// pac has url/keys). Carried as map so the template-rendered host
 	// and container forms can pick what they need.
-	Raw map[string]interface{}
+	Raw map[string]any
 }
 
 // SystemPackagesStep installs packages via a distro package manager. One
@@ -305,7 +305,7 @@ type SystemPackagesStep struct {
 	// These are populated by the compiler and consumed by the OCI target;
 	// the host target ignores CacheMounts (no BuildKit outside containers).
 	CacheMount        []CacheMountSpec
-	RawInstallContext map[string]interface{}
+	RawInstallContext map[string]any
 }
 
 func (s *SystemPackagesStep) Kind() StepKind { return StepKindSystemPackages }
@@ -390,7 +390,7 @@ type BuilderStep struct {
 
 	// Builder-specific template context — the compiler populates this from
 	// the candy's manifest files + build.yml builder definition.
-	RawStageContext map[string]interface{}
+	RawStageContext map[string]any
 
 	// LocalPkg is the package format's localpkg contract, populated by the
 	// compiler for the `aur` builder only. The aur builder produces package
@@ -1210,7 +1210,7 @@ func GateEnabled(g Gate, opts EmitOpts) bool {
 // ---------------------------------------------------------------------------
 
 // extractString returns m[key] as a string or "" if absent.
-func extractString(m map[string]interface{}, key string) string {
+func extractString(m map[string]any, key string) string {
 	if m == nil {
 		return ""
 	}
@@ -1224,7 +1224,7 @@ func extractString(m map[string]interface{}, key string) string {
 
 // extractStringSlice returns m[key] as []string or nil if absent.
 // Accepts []string and []interface{} (as produced by yaml.v3) inputs.
-func extractStringSlice(m map[string]interface{}, key string) []string {
+func extractStringSlice(m map[string]any, key string) []string {
 	if m == nil {
 		return nil
 	}
@@ -1237,7 +1237,7 @@ func extractStringSlice(m map[string]interface{}, key string) []string {
 		out := make([]string, len(t))
 		copy(out, t)
 		return out
-	case []interface{}:
+	case []any:
 		out := make([]string, 0, len(t))
 		for _, e := range t {
 			if s, ok := e.(string); ok {

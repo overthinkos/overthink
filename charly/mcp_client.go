@@ -136,8 +136,8 @@ func lookupHostPort(inspect *ContainerInspection, containerPort string) (string,
 	}
 	for key, binds := range inspect.NetworkSettings.Ports {
 		portStr := key
-		if i := strings.IndexByte(key, '/'); i >= 0 {
-			portStr = key[:i]
+		if before, _, ok := strings.Cut(key, "/"); ok {
+			portStr = before
 		}
 		if portStr != containerPort {
 			continue
@@ -197,7 +197,7 @@ func formatPrompt(p *mcp.Prompt) string {
 // stripped. Used to keep the one-line-per-record output shape even when
 // server-reported descriptions span multiple lines.
 func firstLine(s string) string {
-	for _, line := range strings.Split(s, "\n") {
+	for line := range strings.SplitSeq(s, "\n") {
 		trimmed := strings.TrimSpace(line)
 		if trimmed != "" {
 			return trimmed

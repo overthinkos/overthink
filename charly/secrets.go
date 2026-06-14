@@ -120,7 +120,7 @@ func ListProvisionedSecretNames(engineBin, boxName string) []string {
 	}
 	prefix := "charly-" + boxName + "-"
 	var names []string
-	for _, n := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+	for n := range strings.SplitSeq(strings.TrimSpace(string(out)), "\n") {
 		if n != "" && strings.HasPrefix(n, prefix) {
 			names = append(names, n)
 		}

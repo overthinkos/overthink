@@ -276,10 +276,7 @@ func retryUnavailable(
 ) (string, error) {
 	deadline := time.Now().Add(encMountDeadline)
 	attempt := 0
-	maxAttempts := int(encMountDeadline / encMountPollPeriod)
-	if maxAttempts < 1 {
-		maxAttempts = 1
-	}
+	maxAttempts := max(int(encMountDeadline/encMountPollPeriod), 1)
 	for {
 		attempt++
 		val, src := resolver()

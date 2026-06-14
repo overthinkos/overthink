@@ -106,7 +106,7 @@ type VmCloudInitNetwork struct {
 	// Example:
 	//   ens3: {dhcp4: true}
 	//   ens4: {addresses: ["10.0.0.1/24"], gateway4: "10.0.0.254"}
-	Ethernets map[string]map[string]interface{} `yaml:"ethernets,omitempty"`
+	Ethernets map[string]map[string]any `yaml:"ethernets,omitempty"`
 }
 
 // VmCloudInitMirrors overrides distro package-manager mirror URLs.

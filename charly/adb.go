@@ -536,7 +536,7 @@ func adbCurrentFocus(dev *adb.Device) (string, error) {
 // parseCurrentFocus extracts the first mCurrentFocus line from `dumpsys window`
 // output (trimmed), or "" if absent. Pure — split out for unit testing.
 func parseCurrentFocus(dumpsysWindow string) string {
-	for _, line := range strings.Split(dumpsysWindow, "\n") {
+	for line := range strings.SplitSeq(dumpsysWindow, "\n") {
 		if strings.Contains(line, "mCurrentFocus") {
 			return strings.TrimSpace(line)
 		}

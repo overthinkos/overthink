@@ -337,14 +337,14 @@ func TestValidateOps_LibvirtClean(t *testing.T) {
 func TestValidateOps_Clean(t *testing.T) {
 	layers := map[string]*Candy{
 		"redis": opsCandy("redis",
-			Op{File: "/usr/bin/redis-server", Exists: ptrBool(true), Mode: "0755"},
-			Op{Port: 6379, Listening: ptrBool(true)},
-			Op{Command: "redis-cli -p ${HOST_PORT:6379} ping", Context: []string{"deploy"}, InContainer: ptrBool(false)},
+			Op{File: "/usr/bin/redis-server", Exists: new(true), Mode: "0755"},
+			Op{Port: 6379, Listening: new(true)},
+			Op{Command: "redis-cli -p ${HOST_PORT:6379} ping", Context: []string{"deploy"}, InContainer: new(false)},
 		),
 	}
 	cfg := &Config{Box: map[string]BoxConfig{
 		"redis-ml": {
-			Enabled: boolPtr(true),
+			Enabled: new(true),
 			Candy:   []string{"redis"},
 			Plan: []Step{
 				{Check: "version", Op: Op{ID: "version", Command: "redis-server --version"}},

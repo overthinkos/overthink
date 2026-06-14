@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -79,12 +80,12 @@ func (c *SecretsGpgEnvCmd) Run() error {
 	}
 
 	for _, entry := range entries {
-		idx := strings.IndexByte(entry, '=')
-		if idx < 0 {
+		before, after, ok := strings.Cut(entry, "=")
+		if !ok {
 			continue
 		}
-		key := entry[:idx]
-		value := entry[idx+1:]
+		key := before
+		value := after
 		fmt.Printf("export %s=%s\n", key, shellQuote(value))
 	}
 
@@ -250,11 +251,9 @@ func (c *SecretsGpgAddRecipientCmd) Run() error {
 	}
 
 	// Check if already a recipient
-	for _, r := range recipients {
-		if r == c.KeyID {
-			fmt.Fprintf(os.Stderr, "Key %s is already a recipient.\n", c.KeyID)
-			return nil
-		}
+	if slices.Contains(recipients, c.KeyID) {
+		fmt.Fprintf(os.Stderr, "Key %s is already a recipient.\n", c.KeyID)
+		return nil
 	}
 
 	recipients = append(recipients, c.KeyID)
@@ -849,7 +848,7 @@ func diagnoseGPGDecryptionFailure(path, gpgStderr string) {
 		}
 	} else {
 		// Couldn't parse recipients, show raw GPG error
-		for _, line := range strings.Split(strings.TrimSpace(gpgStderr), "\n") {
+		for line := range strings.SplitSeq(strings.TrimSpace(gpgStderr), "\n") {
 			if line != "" {
 				fmt.Fprintf(os.Stderr, "  gpg: %s\n", line)
 			}

@@ -195,7 +195,7 @@ func TestNestedExecutor_ThreeLevelNesting_DelimitersUnique(t *testing.T) {
 	// distinct close-delim's open delim appears exactly once
 	// elsewhere in the script (in `<<'<delim>'` form).
 	closeDelims := map[string]int{}
-	for _, line := range strings.Split(final, "\n") {
+	for line := range strings.SplitSeq(final, "\n") {
 		l := strings.TrimSpace(line)
 		if strings.HasPrefix(l, "CHARLY_NESTED_SCRIPT_EOF") && !strings.Contains(l, " ") {
 			closeDelims[l]++

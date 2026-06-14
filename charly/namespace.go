@@ -177,7 +177,8 @@ func (c *Config) resolveNamespacedBases(out map[string]*ResolvedBox, calverTag, 
 // to pull that ancestor too.
 func (c *Config) pullNamespacedBox(from *Config, ref, keyPrefix, calverTag, dir string, opts ResolveOpts, out map[string]*ResolvedBox) error {
 	cur := from
-	curPrefix := keyPrefix
+	var curPrefix strings.Builder
+	curPrefix.WriteString(keyPrefix)
 	for {
 		ns, rest, qualified := splitNamespaceRef(ref)
 		if !qualified {
@@ -188,10 +189,10 @@ func (c *Config) pullNamespacedBox(from *Config, ref, keyPrefix, calverTag, dir 
 			return fmt.Errorf("import namespace %q not found (resolving %q)", ns, keyPrefix+ref)
 		}
 		cur = child
-		curPrefix += ns + "."
+		curPrefix.WriteString(ns + ".")
 		ref = rest
 	}
-	fullKey := curPrefix + ref
+	fullKey := curPrefix.String() + ref
 	if _, ok := out[fullKey]; ok {
 		return nil
 	}
@@ -218,7 +219,7 @@ func (c *Config) pullNamespacedBox(from *Config, ref, keyPrefix, calverTag, dir 
 		if r == "" {
 			return r
 		}
-		return curPrefix + r
+		return curPrefix.String() + r
 	}
 	if len(ri.Builder) > 0 {
 		rk := make(BuilderMap, len(ri.Builder))
@@ -237,5 +238,5 @@ func (c *Config) pullNamespacedBox(from *Config, ref, keyPrefix, calverTag, dir 
 	origBase := ri.Base
 	ri.Base = requalify(origBase)
 	out[fullKey] = ri
-	return c.pullNamespacedBox(cur, origBase, curPrefix, calverTag, dir, opts, out)
+	return c.pullNamespacedBox(cur, origBase, curPrefix.String(), calverTag, dir, opts, out)
 }

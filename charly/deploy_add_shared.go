@@ -15,6 +15,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"maps"
 	"os"
 	"strings"
 )
@@ -48,9 +49,7 @@ func prepareCandySecrets(plans []*InstallPlan, dir string) ([]*Candy, map[string
 // node is the dispatch-merged DeploymentNode (never re-read from disk).
 func buildArtifactEnv(secretEnv map[string]string, node *DeploymentNode) map[string]string {
 	env := make(map[string]string, len(secretEnv))
-	for k, v := range secretEnv {
-		env[k] = v
-	}
+	maps.Copy(env, secretEnv)
 	if node != nil {
 		for _, line := range node.Env {
 			if idx := strings.Index(line, "="); idx > 0 {

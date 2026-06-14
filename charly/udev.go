@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"os/user"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -285,12 +286,7 @@ func userInGroup(groupName string) bool {
 	if err != nil {
 		return false
 	}
-	for _, id := range groups {
-		if id == gid {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(groups, gid)
 }
 
 func udevRulesInstalled() bool {

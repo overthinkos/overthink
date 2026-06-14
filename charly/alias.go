@@ -108,11 +108,11 @@ func parseAliasScript(path string) (*AliasInfo, error) {
 		if line == aliasMarker {
 			hasMarker = true
 		}
-		if strings.HasPrefix(line, "# box: ") {
-			image = strings.TrimPrefix(line, "# box: ")
+		if after, ok := strings.CutPrefix(line, "# box: "); ok {
+			image = after
 		}
-		if strings.HasPrefix(line, "# command: ") {
-			command = strings.TrimPrefix(line, "# command: ")
+		if after, ok := strings.CutPrefix(line, "# command: "); ok {
+			command = after
 		}
 	}
 

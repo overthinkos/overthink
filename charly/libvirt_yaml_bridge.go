@@ -505,7 +505,7 @@ func subIDRange(path, username string, uid int) (start, count int, ok bool) {
 		return 0, 0, false
 	}
 	uidStr := strconv.Itoa(uid)
-	for _, line := range strings.Split(string(data), "\n") {
+	for line := range strings.SplitSeq(string(data), "\n") {
 		fields := strings.Split(strings.TrimSpace(line), ":")
 		if len(fields) != 3 {
 			continue
@@ -809,11 +809,11 @@ func buildDomainDevices(spec *VmSpec, rt VmRuntimeParams) *libvirtxml.DomainDevi
 	// Auto-synthesized serial + console for `charly vm console`.
 	out.Serials = append(out.Serials, libvirtxml.DomainSerial{
 		Source: &libvirtxml.DomainChardevSource{Pty: &libvirtxml.DomainChardevSourcePty{}},
-		Target: &libvirtxml.DomainSerialTarget{Port: uintPtr(0)},
+		Target: &libvirtxml.DomainSerialTarget{Port: new(uint)},
 	})
 	out.Consoles = append(out.Consoles, libvirtxml.DomainConsole{
 		Source: &libvirtxml.DomainChardevSource{Pty: &libvirtxml.DomainChardevSourcePty{}},
-		Target: &libvirtxml.DomainConsoleTarget{Type: "serial", Port: uintPtr(0)},
+		Target: &libvirtxml.DomainConsoleTarget{Type: "serial", Port: new(uint)},
 	})
 
 	if lvd != nil {
@@ -1688,8 +1688,6 @@ func mergeXMLPassthrough(d *libvirtxml.Domain, passthrough string) error {
 }
 
 // ---------------- Small helpers ----------------
-
-func uintPtr(v uint) *uint { return &v }
 
 func uintPtrOrNil(s string) *uint {
 	if s == "" {

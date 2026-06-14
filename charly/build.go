@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -237,7 +238,6 @@ func (c *BuildCmd) Run() error {
 				g.SetLimit(jobs)
 
 				for _, name := range level {
-					name := name
 					img := gen.Boxes[name]
 					content := gen.Containerfiles[name]
 					g.Go(func() error {
@@ -764,7 +764,7 @@ func (c *BuildCmd) buildPodmanPushArgs(tags []string, platforms []string, name, 
 func retryCmd(baseDelay time.Duration, fn func() error) error {
 	const maxAttempts = 3
 	var err error
-	for i := 0; i < maxAttempts; i++ {
+	for i := range maxAttempts {
 		if i > 0 {
 			delay := baseDelay * time.Duration(1<<(i-1))
 			fmt.Fprintf(os.Stderr, "Retry %d/%d after %v...\n", i, maxAttempts-1, delay)
@@ -809,7 +809,7 @@ func detectRemoteIncludePassthrough(dir string, boxes []string) (string, bool) {
 	var peek struct {
 		// Read the `import:` list generically (items are either bare strings —
 		// flat imports — or single-key `alias: ref` maps — namespaced imports).
-		Import []interface{}              `yaml:"import"`
+		Import []any                      `yaml:"import"`
 		Box    map[string]json.RawMessage `yaml:"box"`
 	}
 	if err := yaml.Unmarshal(data, &peek); err != nil {
@@ -941,11 +941,8 @@ func ensureCharlyBinaryFresh(dir string, boxes map[string]*ResolvedBox, requeste
 		if !ok {
 			continue
 		}
-		for _, layer := range img.Candy {
-			if layer == "charly" {
-				needs = true
-				break
-			}
+		if slices.Contains(img.Candy, "charly") {
+			needs = true
 		}
 		if needs {
 			break

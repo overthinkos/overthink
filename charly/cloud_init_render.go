@@ -60,7 +60,7 @@ func RenderCloudInit(spec *VmSpec, rt CloudInitRuntimeParams) (userData, metaDat
 	if ci.Hostname != "" {
 		hostname = ci.Hostname
 	}
-	metaMap := map[string]interface{}{}
+	metaMap := map[string]any{}
 	if rt.InstanceID != "" {
 		metaMap["instance-id"] = rt.InstanceID
 	}
@@ -76,7 +76,7 @@ func RenderCloudInit(spec *VmSpec, rt CloudInitRuntimeParams) (userData, metaDat
 	// --- network-config ---
 
 	if ci.Network != nil && len(ci.Network.Ethernets) > 0 {
-		netMap := map[string]interface{}{
+		netMap := map[string]any{
 			"version": 2,
 		}
 		if ci.Network.Version > 0 {
@@ -92,7 +92,7 @@ func RenderCloudInit(spec *VmSpec, rt CloudInitRuntimeParams) (userData, metaDat
 
 	// --- user-data ---
 
-	userMap := map[string]interface{}{}
+	userMap := map[string]any{}
 
 	if hostname != "" {
 		userMap["hostname"] = hostname
@@ -126,9 +126,9 @@ func RenderCloudInit(spec *VmSpec, rt CloudInitRuntimeParams) (userData, metaDat
 
 	if ci.Mirrors != nil && len(ci.Mirrors.APT) > 0 {
 		// cloud-init apt config (Ubuntu/Debian guests).
-		userMap["apt"] = map[string]interface{}{
+		userMap["apt"] = map[string]any{
 			"preserve_sources_list": false,
-			"primary": []map[string]interface{}{
+			"primary": []map[string]any{
 				{"arches": []string{"default"}, "uri": ci.Mirrors.APT[0]},
 			},
 		}
@@ -167,7 +167,7 @@ func RenderCloudInit(spec *VmSpec, rt CloudInitRuntimeParams) (userData, metaDat
 // existing sudoers membership). Merge-by-name semantics mean no user
 // is recreated: if an entry's Name matches an already-existing
 // account, cloud-init just appends ssh_authorized_keys.
-func composeUsers(spec *VmSpec, ci *VmCloudInit, rt CloudInitRuntimeParams) []interface{} {
+func composeUsers(spec *VmSpec, ci *VmCloudInit, rt CloudInitRuntimeParams) []any {
 	sshUser := resolveCloudInitSSHUser(spec)
 	baseUser := ""
 	if spec != nil {
@@ -175,7 +175,7 @@ func composeUsers(spec *VmSpec, ci *VmCloudInit, rt CloudInitRuntimeParams) []in
 	}
 
 	// Start with the distro default so cloud-init doesn't disable it.
-	out := []interface{}{"default"}
+	out := []any{"default"}
 
 	// User-declared custom users are emitted as-is.
 	mergedSSH := false
@@ -199,7 +199,7 @@ func composeUsers(spec *VmSpec, ci *VmCloudInit, rt CloudInitRuntimeParams) []in
 	// with NOPASSWD via /etc/sudoers.d/10-default, Ubuntu's ubuntu
 	// user has equivalent, etc.).
 	if baseUser != "" && sshUser == baseUser {
-		entry := map[string]interface{}{"name": sshUser}
+		entry := map[string]any{"name": sshUser}
 		applySSHDefaults(entry, rt)
 		out = append(out, entry)
 		return out
@@ -208,7 +208,7 @@ func composeUsers(spec *VmSpec, ci *VmCloudInit, rt CloudInitRuntimeParams) []in
 	// Create path: the sshUser is a NEW user the upstream didn't
 	// ship. Emit full create-user entry with sudo, wheel membership,
 	// and bash shell.
-	entry := map[string]interface{}{
+	entry := map[string]any{
 		"name":   sshUser,
 		"sudo":   "ALL=(ALL) NOPASSWD:ALL",
 		"groups": []string{"wheel"},
@@ -240,8 +240,8 @@ func resolveCloudInitSSHUser(spec *VmSpec) string {
 	return ""
 }
 
-func userEntryToMap(u VmCloudInitUser) map[string]interface{} {
-	m := map[string]interface{}{"name": u.Name}
+func userEntryToMap(u VmCloudInitUser) map[string]any {
+	m := map[string]any{"name": u.Name}
 	if u.Sudo {
 		m["sudo"] = "ALL=(ALL) NOPASSWD:ALL"
 	}
@@ -259,7 +259,7 @@ func userEntryToMap(u VmCloudInitUser) map[string]interface{} {
 
 // applySSHDefaults adds ssh_authorized_keys to a user entry when
 // key injection via cloud-init is enabled and a pubkey exists.
-func applySSHDefaults(entry map[string]interface{}, rt CloudInitRuntimeParams) {
+func applySSHDefaults(entry map[string]any, rt CloudInitRuntimeParams) {
 	if rt.InjectKeyViaCloudInit && rt.SSHPublicKey != "" {
 		existing, _ := entry["ssh_authorized_keys"].([]string)
 		entry["ssh_authorized_keys"] = append(existing, rt.SSHPublicKey)
@@ -306,8 +306,8 @@ func composePackages(userPkgs []string, distro string) []string {
 // The sshd unit name is distro-aware: `sshd` on Arch/Fedora,
 // `ssh` on Debian/Ubuntu (where the systemd unit is named `ssh.service`
 // — `sshd.service` is just a symlink that systemd refuses to enable).
-func composeRunCmd(spec *VmSpec, ci *VmCloudInit) []interface{} {
-	runcmd := make([]interface{}, 0, 1+len(ci.RunCmd))
+func composeRunCmd(spec *VmSpec, ci *VmCloudInit) []any {
+	runcmd := make([]any, 0, 1+len(ci.RunCmd))
 	sshUnit := "sshd"
 	switch spec.Source.Distro {
 	case "debian", "ubuntu":
@@ -324,10 +324,10 @@ func composeRunCmd(spec *VmSpec, ci *VmCloudInit) []interface{} {
 
 // composeWriteFiles turns VmCloudInitFile entries into the
 // map-list shape cloud-init expects.
-func composeWriteFiles(files []VmCloudInitFile) []map[string]interface{} {
-	out := make([]map[string]interface{}, 0, len(files))
+func composeWriteFiles(files []VmCloudInitFile) []map[string]any {
+	out := make([]map[string]any, 0, len(files))
 	for _, f := range files {
-		m := map[string]interface{}{
+		m := map[string]any{
 			"path":    f.Path,
 			"content": f.Content,
 		}

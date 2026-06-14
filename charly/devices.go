@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -106,8 +107,8 @@ func parseKFDGFXVersion(path string) string {
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
 		line := scanner.Text()
-		if strings.HasPrefix(line, "gfx_target_version ") {
-			valStr := strings.TrimPrefix(line, "gfx_target_version ")
+		if after, ok := strings.CutPrefix(line, "gfx_target_version "); ok {
+			valStr := after
 			val, err := strconv.Atoi(strings.TrimSpace(valStr))
 			if err != nil || val == 0 {
 				return "" // node 0 is CPU (version 0)
@@ -245,10 +246,8 @@ func EnsureCDI() {
 // keep-groups preserves all host supplementary groups (video, render, etc.)
 // inside the container. It is mutually exclusive with explicit group names.
 func appendGroupsForAMDGPU(groups []string) []string {
-	for _, g := range groups {
-		if g == "keep-groups" {
-			return groups
-		}
+	if slices.Contains(groups, "keep-groups") {
+		return groups
 	}
 	return appendUnique(groups, "keep-groups")
 }

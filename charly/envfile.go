@@ -37,13 +37,13 @@ func LoadProcessDotenv(dir string) error {
 	}
 
 	for _, entry := range entries {
-		idx := strings.IndexByte(entry, '=')
-		if idx < 0 {
+		before, after, ok := strings.Cut(entry, "=")
+		if !ok {
 			// Bare KEY (no value) — skip, inheriting from host is meaningless here
 			continue
 		}
-		key := entry[:idx]
-		value := entry[idx+1:]
+		key := before
+		value := after
 
 		// Only set if NOT already in environment (real env takes precedence)
 		if _, exists := os.LookupEnv(key); !exists {
@@ -80,15 +80,15 @@ func ParseEnvBytes(data []byte) ([]string, error) {
 		}
 
 		// Must contain = for KEY=VALUE format
-		idx := strings.IndexByte(line, '=')
-		if idx < 0 {
+		before, after, ok := strings.Cut(line, "=")
+		if !ok {
 			// KEY without value — pass through as-is (docker behavior: inherits from host)
 			envs = append(envs, line)
 			continue
 		}
 
-		key := line[:idx]
-		value := line[idx+1:]
+		key := before
+		value := after
 
 		// Strip surrounding quotes from value
 		if len(value) >= 2 {
@@ -170,13 +170,13 @@ func ResolveEnvVars(globalEnv []string, deployEnv []string, deployEnvFile string
 // Standard HTTP clients (Python, curl, Go) require comma-separated NO_PROXY.
 func normalizeNoProxy(envs []string) []string {
 	for i, e := range envs {
-		idx := strings.IndexByte(e, '=')
-		if idx < 0 {
+		before, after, ok := strings.Cut(e, "=")
+		if !ok {
 			continue
 		}
-		key := e[:idx]
+		key := before
 		if key == "NO_PROXY" || key == "no_proxy" {
-			val := e[idx+1:]
+			val := after
 			envs[i] = key + "=" + strings.ReplaceAll(val, ";", ",")
 		}
 	}
@@ -193,11 +193,11 @@ func enrichNoProxy(envs []string, containerNames []string) []string {
 	hasProxy := false
 	noProxyIdx := -1
 	for i, e := range envs {
-		idx := strings.IndexByte(e, '=')
-		if idx < 0 {
+		before, _, ok := strings.Cut(e, "=")
+		if !ok {
 			continue
 		}
-		key := e[:idx]
+		key := before
 		if key == "HTTP_PROXY" || key == "HTTPS_PROXY" ||
 			key == "http_proxy" || key == "https_proxy" {
 			hasProxy = true
@@ -216,7 +216,7 @@ func enrichNoProxy(envs []string, containerNames []string) []string {
 		idx := strings.IndexByte(envs[noProxyIdx], '=')
 		key = envs[noProxyIdx][:idx]
 		val = envs[noProxyIdx][idx+1:]
-		for _, entry := range strings.Split(val, ",") {
+		for entry := range strings.SplitSeq(val, ",") {
 			existing[strings.TrimSpace(entry)] = true
 		}
 	} else {
@@ -253,8 +253,8 @@ func deduplicateEnv(envs []string) []string {
 
 	for _, e := range envs {
 		key := e
-		if idx := strings.IndexByte(e, '='); idx >= 0 {
-			key = e[:idx]
+		if before, _, ok := strings.Cut(e, "="); ok {
+			key = before
 		}
 
 		if prevIdx, ok := seen[key]; ok {

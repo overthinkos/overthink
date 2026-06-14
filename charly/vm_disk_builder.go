@@ -133,7 +133,7 @@ func EmitDiskBuildScript(layout DiskLayout) (string, string, error) {
 	return prelude, finalize, nil
 }
 
-func renderTmpl(name, tmpl string, ctx interface{}) (string, error) {
+func renderTmpl(name, tmpl string, ctx any) (string, error) {
 	t, err := template.New(name).Funcs(templateFuncs).Parse(tmpl)
 	if err != nil {
 		return "", err

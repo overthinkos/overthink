@@ -15,7 +15,7 @@ func TestRunner_Package(t *testing.T) {
 		fake.responses = []fakeResponse{
 			{matchPrefix: "rpm -q 'redis'", exit: 0},
 		}
-		res := r.Run(context.Background(), []Op{{Package: "redis", Installed: ptrBool(true)}})
+		res := r.Run(context.Background(), []Op{{Package: "redis", Installed: new(true)}})
 		if res[0].Status != TestPass {
 			t.Errorf("expected pass, got %+v", res[0])
 		}
@@ -26,7 +26,7 @@ func TestRunner_Package(t *testing.T) {
 		fake.responses = []fakeResponse{
 			{matchPrefix: "rpm -q 'redis'", exit: 1},
 		}
-		res := r.Run(context.Background(), []Op{{Package: "redis", Installed: ptrBool(true)}})
+		res := r.Run(context.Background(), []Op{{Package: "redis", Installed: new(true)}})
 		if res[0].Status != TestFail {
 			t.Errorf("expected fail, got %+v", res[0])
 		}
@@ -54,7 +54,7 @@ func TestRunner_Service(t *testing.T) {
 		fake.responses = []fakeResponse{
 			{matchPrefix: "supervisorctl status 'jupyter'", exit: 0},
 		}
-		res := r.Run(context.Background(), []Op{{Service: "jupyter", Running: ptrBool(true)}})
+		res := r.Run(context.Background(), []Op{{Service: "jupyter", Running: new(true)}})
 		if res[0].Status != TestPass {
 			t.Errorf("expected pass, got %+v", res[0])
 		}
@@ -65,7 +65,7 @@ func TestRunner_Service(t *testing.T) {
 		fake.responses = []fakeResponse{
 			{matchPrefix: "supervisorctl status 'jupyter'", exit: 1},
 		}
-		res := r.Run(context.Background(), []Op{{Service: "jupyter", Running: ptrBool(true)}})
+		res := r.Run(context.Background(), []Op{{Service: "jupyter", Running: new(true)}})
 		if res[0].Status != TestFail {
 			t.Errorf("expected fail, got %+v", res[0])
 		}
@@ -85,7 +85,7 @@ func TestRunner_Process(t *testing.T) {
 	t.Run("expected absent", func(t *testing.T) {
 		r, fake := newFakeRunner(t, RunModeLive)
 		fake.responses = []fakeResponse{{matchPrefix: "pgrep -x 'worm'", exit: 1}}
-		res := r.Run(context.Background(), []Op{{Process: "worm", Running: ptrBool(false)}})
+		res := r.Run(context.Background(), []Op{{Process: "worm", Running: new(false)}})
 		if res[0].Status != TestPass {
 			t.Errorf("got %+v", res[0])
 		}
@@ -105,7 +105,7 @@ func TestRunner_DNS(t *testing.T) {
 	t.Run("unresolvable as expected", func(t *testing.T) {
 		r, _ := newFakeRunner(t, RunModeLive)
 		res := r.Run(context.Background(), []Op{
-			{DNS: "this-host-will-never-exist.invalid", Resolvable: ptrBool(false)},
+			{DNS: "this-host-will-never-exist.invalid", Resolvable: new(false)},
 		})
 		if res[0].Status != TestPass {
 			t.Errorf("expected pass, got %+v", res[0])
@@ -217,7 +217,7 @@ func TestRunner_Addr(t *testing.T) {
 	addr := l.Addr().String()
 	_ = l.Close() // free the port
 	res = r.Run(context.Background(), []Op{
-		{Addr: addr, Reachable: ptrBool(false)},
+		{Addr: addr, Reachable: new(false)},
 	})
 	if res[0].Status != TestPass {
 		t.Errorf("expected unreachable-as-expected, got %+v", res[0])

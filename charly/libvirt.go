@@ -147,7 +147,7 @@ func InjectLibvirtXML(vmName string, snippets []string) error {
 			return fmt.Errorf("stopping VM %s: %w", vmName, err)
 		}
 		// Wait for shutoff
-		for i := 0; i < 10; i++ {
+		for range 10 {
 			dom, err = conn.lookupDomain(vmName)
 			if err != nil {
 				break

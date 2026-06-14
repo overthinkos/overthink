@@ -20,6 +20,7 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"maps"
 	"sort"
 	"strings"
 	"text/template"
@@ -333,13 +334,9 @@ func sortedEnvList(env map[string]string) []KeyValue {
 // mutate base.
 func flattenedEnvMap(base map[string]string, overrides *ServiceOverrides) map[string]string {
 	out := make(map[string]string, len(base))
-	for k, v := range base {
-		out[k] = v
-	}
+	maps.Copy(out, base)
 	if overrides != nil {
-		for k, v := range overrides.Env {
-			out[k] = v
-		}
+		maps.Copy(out, overrides.Env)
 	}
 	return out
 }
@@ -347,7 +344,7 @@ func flattenedEnvMap(base map[string]string, overrides *ServiceOverrides) map[st
 // renderTemplateString executes a Go text/template with the standard
 // helper funcs (join, supervisordRestart, systemdRestart, systemdStdout)
 // plus whatever the caller's context provides.
-func renderTemplateString(name, tmpl string, data interface{}) (string, error) {
+func renderTemplateString(name, tmpl string, data any) (string, error) {
 	if tmpl == "" {
 		return "", nil
 	}
@@ -413,8 +410,8 @@ func serviceRenderFuncs() template.FuncMap {
 		// "file:/path" renders as append:/path; everything else maps
 		// directly.
 		"systemdStdout": func(s string) string {
-			if strings.HasPrefix(s, "file:") {
-				return "append:" + strings.TrimPrefix(s, "file:")
+			if after, ok := strings.CutPrefix(s, "file:"); ok {
+				return "append:" + after
 			}
 			if s == "" {
 				return "journal"
@@ -427,8 +424,8 @@ func serviceRenderFuncs() template.FuncMap {
 		// stdout, the long-standing default, so services that don't set stdout:
 		// are unchanged).
 		"supervisordLog": func(s string) string {
-			if strings.HasPrefix(s, "file:") {
-				return strings.TrimPrefix(s, "file:")
+			if after, ok := strings.CutPrefix(s, "file:"); ok {
+				return after
 			}
 			switch s {
 			case "none":

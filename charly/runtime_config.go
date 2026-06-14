@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -441,8 +442,8 @@ func GetConfigValue(key string) (string, error) {
 	case "vm.transport":
 		return cfg.Vm.Transport, nil
 	default:
-		if strings.HasPrefix(key, "hosts.") {
-			alias := strings.TrimPrefix(key, "hosts.")
+		if after, ok := strings.CutPrefix(key, "hosts."); ok {
+			alias := after
 			if alias == "" {
 				return "", fmt.Errorf("hosts. key requires an alias name")
 			}
@@ -451,8 +452,8 @@ func GetConfigValue(key string) (string, error) {
 			}
 			return cfg.HostAliases[alias], nil
 		}
-		if strings.HasPrefix(key, "vnc.password.") {
-			name := strings.TrimPrefix(key, "vnc.password.")
+		if after, ok := strings.CutPrefix(key, "vnc.password."); ok {
+			name := after
 			val, source := ResolveCredential("", CredServiceVNC, name, "")
 			if source == "locked" {
 				return "<LOCKED>", nil
@@ -462,10 +463,8 @@ func GetConfigValue(key string) (string, error) {
 			if val == "" && GetKeyringState() == KeyringLocked {
 				kr := &KeyringStore{}
 				if keys, err := kr.List(CredServiceVNC); err == nil {
-					for _, k := range keys {
-						if k == name {
-							return "<LOCKED>", nil
-						}
+					if slices.Contains(keys, name) {
+						return "<LOCKED>", nil
 					}
 				}
 			}
@@ -607,8 +606,8 @@ func SetConfigValue(key, value string) error {
 	case "vm.transport":
 		cfg.Vm.Transport = value
 	default:
-		if strings.HasPrefix(key, "hosts.") {
-			alias := strings.TrimPrefix(key, "hosts.")
+		if after, ok := strings.CutPrefix(key, "hosts."); ok {
+			alias := after
 			if alias == "" {
 				return fmt.Errorf("hosts. key requires an alias name")
 			}
@@ -619,8 +618,8 @@ func SetConfigValue(key, value string) error {
 			break
 		}
 		// Credential keys go through the credential store
-		if strings.HasPrefix(key, "vnc.password.") {
-			name := strings.TrimPrefix(key, "vnc.password.")
+		if after, ok := strings.CutPrefix(key, "vnc.password."); ok {
+			name := after
 			return DefaultCredentialStore().Set(CredServiceVNC, name, value)
 		}
 	}
@@ -682,16 +681,16 @@ func ResetConfigValue(key string) error {
 	case "vm.transport":
 		cfg.Vm.Transport = ""
 	default:
-		if strings.HasPrefix(key, "hosts.") {
-			alias := strings.TrimPrefix(key, "hosts.")
+		if after, ok := strings.CutPrefix(key, "hosts."); ok {
+			alias := after
 			if cfg.HostAliases != nil {
 				delete(cfg.HostAliases, alias)
 			}
 			break
 		}
 		// Credential keys: delete from credential store
-		if strings.HasPrefix(key, "vnc.password.") {
-			name := strings.TrimPrefix(key, "vnc.password.")
+		if after, ok := strings.CutPrefix(key, "vnc.password."); ok {
+			name := after
 			return DefaultCredentialStore().Delete(CredServiceVNC, name)
 		}
 		return fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, engine.rootful, run_mode, auto_enable, bind_address, encrypted_storage_path, secret_backend, forward_gpg_agent, forward_ssh_agent, hosts.<alias>, vm.backend, vm.disk_size, vm.root_size, vm.ram, vm.cpus, vm.rootfs, vm.transport, vnc.password.<image>)", key)

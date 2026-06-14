@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -80,31 +81,26 @@ func TestRenderDnfConfWrite(t *testing.T) {
 }
 
 func ciFirstLine(s string) string {
-	if i := strings.IndexByte(s, '\n'); i >= 0 {
-		return s[:i]
+	if before, _, ok := strings.Cut(s, "\n"); ok {
+		return before
 	}
 	return s
 }
 
 func ciStripFirstLine(s string) string {
-	if i := strings.IndexByte(s, '\n'); i >= 0 {
-		return s[i+1:]
+	if _, after, ok := strings.Cut(s, "\n"); ok {
+		return after
 	}
 	return ""
 }
 
 func ciLineContains(s, want string) bool {
-	for _, ln := range strings.Split(s, "\n") {
-		if ln == want {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(strings.Split(s, "\n"), want)
 }
 
 func ciCountLine(s, want string) int {
 	n := 0
-	for _, ln := range strings.Split(s, "\n") {
+	for ln := range strings.SplitSeq(s, "\n") {
 		if ln == want {
 			n++
 		}

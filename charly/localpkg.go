@@ -225,7 +225,7 @@ func buildDepPkgsOnHost(_ context.Context, lp *LocalPkgDef, bDef *BuilderDef, bu
 		BuilderDef:      bDef,
 		CandyDir:        candyDir,
 		Phase:           PhaseInstall,
-		RawStageContext: map[string]interface{}{"packages": packages},
+		RawStageContext: map[string]any{"packages": packages},
 	}
 
 	// Host staging dir bind-mounted as /tmp/aur-pkgs — the builder writes the

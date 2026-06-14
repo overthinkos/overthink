@@ -181,7 +181,7 @@ func nodeReady(u *unstructured.Unstructured) bool {
 		return false
 	}
 	for _, raw := range conds {
-		m, ok := raw.(map[string]interface{})
+		m, ok := raw.(map[string]any)
 		if !ok {
 			continue
 		}
@@ -419,7 +419,7 @@ func ingressHosts(u *unstructured.Unstructured) []string {
 	rules, _, _ := unstructured.NestedSlice(u.Object, "spec", "rules")
 	var out []string
 	for _, r := range rules {
-		m, ok := r.(map[string]interface{})
+		m, ok := r.(map[string]any)
 		if !ok {
 			continue
 		}
@@ -434,13 +434,13 @@ func ingressBackends(u *unstructured.Unstructured) []string {
 	rules, _, _ := unstructured.NestedSlice(u.Object, "spec", "rules")
 	var out []string
 	for _, r := range rules {
-		m, _ := r.(map[string]interface{})
-		http, _ := m["http"].(map[string]interface{})
-		paths, _ := http["paths"].([]interface{})
+		m, _ := r.(map[string]any)
+		http, _ := m["http"].(map[string]any)
+		paths, _ := http["paths"].([]any)
 		for _, p := range paths {
-			pm, _ := p.(map[string]interface{})
-			backend, _ := pm["backend"].(map[string]interface{})
-			svc, _ := backend["service"].(map[string]interface{})
+			pm, _ := p.(map[string]any)
+			backend, _ := pm["backend"].(map[string]any)
+			svc, _ := backend["service"].(map[string]any)
 			if name, ok := svc["name"].(string); ok {
 				out = append(out, name)
 			}
@@ -536,7 +536,7 @@ func (c *K8sServiceCmd) Run() error {
 func serviceExternalIP(u *unstructured.Unstructured) string {
 	ingress, _, _ := unstructured.NestedSlice(u.Object, "status", "loadBalancer", "ingress")
 	for _, raw := range ingress {
-		m, ok := raw.(map[string]interface{})
+		m, ok := raw.(map[string]any)
 		if !ok {
 			continue
 		}
@@ -837,7 +837,7 @@ func readYamlDocs(path string) ([]*unstructured.Unstructured, error) {
 	var out []*unstructured.Unstructured
 	decoder := yamlutil.NewYAMLOrJSONDecoder(strings.NewReader(string(data)), 4096)
 	for {
-		raw := map[string]interface{}{}
+		raw := map[string]any{}
 		if err := decoder.Decode(&raw); err != nil {
 			if errors.Is(err, io.EOF) {
 				break

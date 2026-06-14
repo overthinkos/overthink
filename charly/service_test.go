@@ -1,6 +1,7 @@
 package main
 
 import (
+	"slices"
 	"testing"
 )
 
@@ -14,13 +15,7 @@ func TestValidateServiceNameFound(t *testing.T) {
 	}
 
 	for _, svc := range []string{"traefik", "testapi"} {
-		found := false
-		for _, s := range meta.ServiceNames {
-			if s == svc {
-				found = true
-				break
-			}
-		}
+		found := slices.Contains(meta.ServiceNames, svc)
 		if !found {
 			t.Errorf("service %q should be found in Services %v", svc, meta.ServiceNames)
 		}
@@ -34,13 +29,7 @@ func TestValidateServiceNameNotFound(t *testing.T) {
 	}
 
 	svc := "nonexistent"
-	found := false
-	for _, s := range meta.ServiceNames {
-		if s == svc {
-			found = true
-			break
-		}
-	}
+	found := slices.Contains(meta.ServiceNames, svc)
 	if found {
 		t.Error("service \"nonexistent\" should not be found")
 	}
@@ -53,13 +42,7 @@ func TestValidateServiceNameEmpty(t *testing.T) {
 	}
 
 	svc := "svc"
-	found := false
-	for _, s := range meta.ServiceNames {
-		if s == svc {
-			found = true
-			break
-		}
-	}
+	found := slices.Contains(meta.ServiceNames, svc)
 	if found {
 		t.Error("service should not be found in nil ServiceNames list")
 	}

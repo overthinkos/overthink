@@ -73,8 +73,8 @@ func (c *ConfigFileStore) List(service string) ([]string, error) {
 		prefix := service + "/"
 		keys := make([]string, 0)
 		for k := range cfg.VncPasswords {
-			if strings.HasPrefix(k, prefix) {
-				keys = append(keys, strings.TrimPrefix(k, prefix))
+			if after, ok := strings.CutPrefix(k, prefix); ok {
+				keys = append(keys, after)
 			}
 		}
 		if len(keys) == 0 {
@@ -154,14 +154,14 @@ func PlaintextCredentialEntries(cfg *RuntimeConfig) []struct{ Service, Key, Valu
 func parseCompositeKey(compositeKey string) (service, key string) {
 	// Check known multi-slash service prefixes first
 	for _, prefix := range knownServicePrefixes {
-		if strings.HasPrefix(compositeKey, prefix) {
-			return strings.TrimSuffix(prefix, "/"), strings.TrimPrefix(compositeKey, prefix)
+		if after, ok := strings.CutPrefix(compositeKey, prefix); ok {
+			return strings.TrimSuffix(prefix, "/"), after
 		}
 	}
 	// No known prefix matched: if it contains a slash, treat as single-slash
 	// service/key (for future unknown services).
-	if idx := strings.Index(compositeKey, "/"); idx >= 0 {
-		return compositeKey[:idx], compositeKey[idx+1:]
+	if before, after, ok := strings.Cut(compositeKey, "/"); ok {
+		return before, after
 	}
 	// No slash at all: it's a bare VNC key
 	return CredServiceVNC, compositeKey

@@ -127,9 +127,9 @@ func (dbusProbe) Parse(stdout string) ToolStatus {
 	}
 	ts.Status = "ok"
 	var daemons []string
-	for _, line := range strings.Split(stdout, "\n") {
+	for line := range strings.SplitSeq(stdout, "\n") {
 		line = strings.TrimSpace(line)
-		if d := strings.TrimPrefix(line, "DAEMON="); d != line {
+		if d, ok := strings.CutPrefix(line, "DAEMON="); ok {
 			daemons = append(daemons, d)
 		}
 	}
@@ -175,7 +175,7 @@ func (wlProbe) Parse(stdout string) ToolStatus {
 	ts := ToolStatus{Name: "wl", Status: "-"}
 	var tools []string
 	seenScreenshot := false
-	for _, line := range strings.Split(stdout, "\n") {
+	for line := range strings.SplitSeq(stdout, "\n") {
 		line = strings.TrimSpace(line)
 		t := strings.TrimPrefix(line, "WL=")
 		if t == line {
@@ -344,12 +344,12 @@ func splitProbeSections(out string) map[string]string {
 			break
 		}
 		afterStart := rest[startIdx+len(probeStartMarker):]
-		nameEnd := strings.Index(afterStart, "===\n")
-		if nameEnd < 0 {
+		before, after, ok := strings.Cut(afterStart, "===\n")
+		if !ok {
 			break
 		}
-		name := afterStart[:nameEnd]
-		body := afterStart[nameEnd+len("===\n"):]
+		name := before
+		body := after
 		endIdx := strings.Index(body, probeEndMarker+name+"===")
 		if endIdx < 0 {
 			sections[name] = strings.TrimSpace(body)

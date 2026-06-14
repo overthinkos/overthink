@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -32,9 +33,9 @@ func (p *PortSpec) UnmarshalYAML(value *yaml.Node) error {
 		}
 		// Try as "proto:port" string
 		s := value.Value
-		if idx := strings.Index(s, ":"); idx != -1 {
-			proto := s[:idx]
-			portStr := s[idx+1:]
+		if before, after, ok := strings.Cut(s, ":"); ok {
+			proto := before
+			portStr := after
 			n, err := strconv.Atoi(portStr)
 			if err != nil {
 				return fmt.Errorf("invalid port spec %q: port must be a number", s)
@@ -479,11 +480,11 @@ func derivePackageSectionsFromCalamares(layer *Candy, ly *CandyYAML) {
 		}
 		cfg := layer.tagSections[tagKey]
 		if cfg == nil {
-			cfg = &TagPkgConfig{Raw: map[string]interface{}{}}
+			cfg = &TagPkgConfig{Raw: map[string]any{}}
 			layer.tagSections[tagKey] = cfg
 		}
 		if cfg.Raw == nil {
-			cfg.Raw = map[string]interface{}{}
+			cfg.Raw = map[string]any{}
 		}
 		return cfg
 	}
@@ -493,11 +494,11 @@ func derivePackageSectionsFromCalamares(layer *Candy, ly *CandyYAML) {
 		}
 		ps := layer.formatSections[fmtName]
 		if ps == nil {
-			ps = &PackageSection{FormatName: fmtName, Raw: map[string]interface{}{}}
+			ps = &PackageSection{FormatName: fmtName, Raw: map[string]any{}}
 			layer.formatSections[fmtName] = ps
 		}
 		if ps.Raw == nil {
-			ps.Raw = map[string]interface{}{}
+			ps.Raw = map[string]any{}
 		}
 		return ps
 	}
@@ -517,7 +518,7 @@ func derivePackageSectionsFromCalamares(layer *Candy, ly *CandyYAML) {
 	// setRaw records a non-nil extra (repo/copr/options/exclude/module) into a
 	// section's Raw. Within ONE distro level it's a plain assign; cross-level
 	// most-specific-wins is the resolver's job (compileSystemPackageSteps).
-	setRaw := func(raw map[string]interface{}, key string, val interface{}) {
+	setRaw := func(raw map[string]any, key string, val any) {
 		if val != nil {
 			raw[key] = val
 		}
@@ -537,7 +538,7 @@ func derivePackageSectionsFromCalamares(layer *Candy, ly *CandyYAML) {
 		}
 		// Split compound keys (`debian,ubuntu` / `debian-13,ubuntu-24.04`); each
 		// part becomes its own tag section carrying this entry's shared content.
-		for _, part := range strings.Split(distroKey, ",") {
+		for part := range strings.SplitSeq(distroKey, ",") {
 			part = strings.TrimSpace(part)
 			if part == "" {
 				continue
@@ -585,9 +586,9 @@ func derivePackageSectionsFromCalamares(layer *Candy, ly *CandyYAML) {
 // PackageSection represents a generic format-specific package config in the candy manifest.
 // All fields from the YAML section are available in Raw for template rendering.
 type PackageSection struct {
-	FormatName string                 // "rpm", "deb", "pac", "aur", etc.
-	Packages   []string               // extracted from Raw["package"] for quick access
-	Raw        map[string]interface{} // all fields from YAML, passed to templates
+	FormatName string         // "rpm", "deb", "pac", "aur", etc.
+	Packages   []string       // extracted from Raw["package"] for quick access
+	Raw        map[string]any // all fields from YAML, passed to templates
 }
 
 // TagPkgConfig is a distro/version-specific package config (e.g. `debian:13:`,
@@ -596,8 +597,8 @@ type PackageSection struct {
 // sections can carry `repos:`, `options:`, `keys:` — the same schema as the
 // generic format section — for version-specific upstream repo configurations.
 type TagPkgConfig struct {
-	Package []string               `yaml:"package,omitempty"`
-	Raw     map[string]interface{} `yaml:"-"`
+	Package []string       `yaml:"package,omitempty"`
+	Raw     map[string]any `yaml:"-"`
 }
 
 func (ly *CandyYAML) UnmarshalYAML(value *yaml.Node) error {
@@ -928,14 +929,14 @@ func looksLikeDistroOrFormatKey(key string) bool {
 	if candyYAMLFormatNames[key] {
 		return true
 	}
-	for _, part := range strings.Split(key, ",") {
+	for part := range strings.SplitSeq(key, ",") {
 		part = strings.TrimSpace(part)
 		if part == "" {
 			return false
 		}
 		bare := part
-		if i := strings.IndexByte(part, ':'); i >= 0 {
-			bare = part[:i]
+		if before, _, ok := strings.Cut(part, ":"); ok {
+			bare = before
 		}
 		if !candyYAMLDistroNames[bare] {
 			return false
@@ -1230,13 +1231,7 @@ func PopulateCandyInitSystem(layers map[string]*Candy, initCfg *InitConfig) {
 			//   - custom exec   → inits with ServiceSchema.ServiceTemplate != ""
 			// The legacy `candy_field: [service]` config just gates whether
 			// this init participates in schema detection at all.
-			participatesInSchema := false
-			for _, field := range def.CandyFields {
-				if field == "service" {
-					participatesInSchema = true
-					break
-				}
-			}
+			participatesInSchema := slices.Contains(def.CandyFields, "service")
 			if participatesInSchema {
 				for i := range layer.service {
 					entry := &layer.service[i]

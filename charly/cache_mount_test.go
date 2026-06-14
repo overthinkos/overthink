@@ -91,7 +91,7 @@ func TestRenderCacheMounts_TrailingSeparator(t *testing.T) {
 // the same dst MUST produce the same id every time, otherwise cache is
 // keyed by something volatile and breaks the entire purpose of the fix.
 func TestCacheMountID_StableAcrossInvocations(t *testing.T) {
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		a := SharedCacheMount("/var/cache/libdnf5", "locked").String()
 		b := SharedCacheMount("/var/cache/libdnf5", "locked").String()
 		if a != b {

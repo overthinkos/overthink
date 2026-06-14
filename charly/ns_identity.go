@@ -93,13 +93,13 @@ func normalizeGitRemoteURL(raw string) string {
 	s := strings.TrimSpace(raw)
 	s = strings.TrimSuffix(s, "/")
 	s = strings.TrimSuffix(s, ".git")
-	if strings.HasPrefix(s, "git@") {
-		s = strings.TrimPrefix(s, "git@")
+	if after, ok := strings.CutPrefix(s, "git@"); ok {
+		s = after
 		return strings.Replace(s, ":", "/", 1)
 	}
 	for _, sch := range []string{"https://", "http://", "ssh://", "git://"} {
-		if strings.HasPrefix(s, sch) {
-			s = strings.TrimPrefix(s, sch)
+		if after, ok := strings.CutPrefix(s, sch); ok {
+			s = after
 			if slash := strings.Index(s, "/"); slash >= 0 {
 				if at := strings.Index(s[:slash], "@"); at >= 0 {
 					s = s[at+1:]

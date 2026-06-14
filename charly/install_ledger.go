@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"syscall"
 	"time"
 
@@ -249,7 +250,7 @@ func DeleteCandyRecord(paths *LedgerPaths, layer string) error {
 
 // writeJSONAtomic writes data to path via a temp file + rename so
 // readers never see a partial write.
-func writeJSONAtomic(path string, data interface{}) error {
+func writeJSONAtomic(path string, data any) error {
 	encoded, err := json.MarshalIndent(data, "", "  ")
 	if err != nil {
 		return err
@@ -313,12 +314,7 @@ func RemoveCandyDeployment(paths *LedgerPaths, candyName, deployID string) (*Can
 }
 
 func containsString(s []string, v string) bool {
-	for _, x := range s {
-		if x == v {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(s, v)
 }
 
 // ---------------------------------------------------------------------------

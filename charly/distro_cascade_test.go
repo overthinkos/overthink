@@ -221,7 +221,7 @@ distro:
     package: [tailscale]
     repo: [{name: tailscale, suite: noble}]
 `
-	for i := 0; i < 50; i++ { // many iterations to defeat any map-order flakiness
+	for i := range 50 { // many iterations to defeat any map-order flakiness
 		l := deriveCandy(t, body)
 		deb := pkgStep(t, compileSystemPackageSteps(l, debImg("debian:13", "debian"), HostContext{}))
 		ubu := pkgStep(t, compileSystemPackageSteps(l, debImg("ubuntu:24.04", "ubuntu"), HostContext{}))

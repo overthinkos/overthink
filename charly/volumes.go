@@ -144,9 +144,9 @@ func parseVolumeFlagsStandalone(volumeFlags, bindFlags []string) []DeployVolumeC
 		if seen[b] || seen[strings.SplitN(b, "=", 2)[0]] {
 			continue
 		}
-		if idx := strings.IndexByte(b, '='); idx >= 0 {
-			name := b[:idx]
-			host := b[idx+1:]
+		if before, after, ok := strings.Cut(b, "="); ok {
+			name := before
+			host := after
 			// Resolve "." to absolute path
 			if host == "." {
 				if abs, err := filepath.Abs(host); err == nil {

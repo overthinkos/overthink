@@ -139,7 +139,7 @@ func TestHostDeployTargetDryRunSystemPackages(t *testing.T) {
 				Format:            "rpm",
 				Phase:             PhaseInstall,
 				Packages:          []string{"ripgrep"},
-				RawInstallContext: map[string]interface{}{"package": []string{"ripgrep"}},
+				RawInstallContext: map[string]any{"package": []string{"ripgrep"}},
 			},
 		},
 	}
@@ -204,7 +204,7 @@ func TestRenderHostPackageCommand(t *testing.T) {
 			Format:            tc.format,
 			Phase:             PhaseInstall,
 			Packages:          tc.packages,
-			RawInstallContext: map[string]interface{}{"package": tc.packages},
+			RawInstallContext: map[string]any{"package": tc.packages},
 		}
 		got, err := renderHostPackageCommand(dc, s)
 		if err != nil {
@@ -225,7 +225,7 @@ func TestRenderHostPackageCommand(t *testing.T) {
 		Phase:             PhaseInstall,
 		Packages:          []string{"libyuv"},
 		Options:           []string{"--overwrite", "*"},
-		RawInstallContext: map[string]interface{}{"package": []string{"libyuv"}, "options": []string{"--overwrite", "*"}},
+		RawInstallContext: map[string]any{"package": []string{"libyuv"}, "options": []string{"--overwrite", "*"}},
 	}
 	want := "pacman -Sy --noconfirm --needed --overwrite * libyuv"
 	if got, err := renderHostPackageCommand(dc, opt); err != nil || got != want {
@@ -250,7 +250,7 @@ func TestRenderHostPackageCommandDebRepo(t *testing.T) {
 		Format:   "deb",
 		Phase:    PhaseInstall,
 		Packages: []string{"tailscale"},
-		RawInstallContext: map[string]interface{}{
+		RawInstallContext: map[string]any{
 			"package": []string{"tailscale"},
 			// Production shape is []map[string]any (DistroPackages.Repo); the
 			// template's NewInstallContext.toMapSlice handles it.

@@ -361,8 +361,10 @@ func emitDownload(b *strings.Builder, t Op, img *ResolvedBox) error {
 	// The bare `VAR=val cmd` prefix form sets VAR only in cmd's environment
 	// *after* bash has already expanded any ${VAR} in cmd's arguments, which
 	// leaves the URL with an empty arch string.
-	envPrefix := "export BUILD_ARCH=$(uname -m);"
-	envForSh := "BUILD_ARCH=$(uname -m)"
+	var envPrefix strings.Builder
+	envPrefix.WriteString("export BUILD_ARCH=$(uname -m);")
+	var envForSh strings.Builder
+	envForSh.WriteString("BUILD_ARCH=$(uname -m)")
 	if len(t.Env) > 0 {
 		keys := make([]string, 0, len(t.Env))
 		for k := range t.Env {
@@ -370,8 +372,8 @@ func emitDownload(b *strings.Builder, t Op, img *ResolvedBox) error {
 		}
 		sort.Strings(keys)
 		for _, k := range keys {
-			envPrefix += fmt.Sprintf(" export %s=%s;", k, shellSingleQuote(t.Env[k]))
-			envForSh += fmt.Sprintf(" %s=%s", k, shellSingleQuote(t.Env[k]))
+			fmt.Fprintf(&envPrefix, " export %s=%s;", k, shellSingleQuote(t.Env[k]))
+			fmt.Fprintf(&envForSh, " %s=%s", k, shellSingleQuote(t.Env[k]))
 		}
 	}
 
@@ -404,7 +406,7 @@ func emitDownload(b *strings.Builder, t Op, img *ResolvedBox) error {
 	// download (e.g. a flaky CDN) is never reused (next build re-fetches). The
 	// previous implementation declared the /tmp/downloads mount but streamed
 	// curl straight to tar / wrote to /tmp/dl.zip — the cache was never used.
-	fetch := fmt.Sprintf(`%s mkdir -p /tmp/downloads; __u=%q; __c=/tmp/downloads/$(printf %%s "$__u" | sha256sum | cut -c1-64); [ -s "$__c" ] || { curl -fsSL "$__u" -o "$__c.part" && mv -f "$__c.part" "$__c"; }`, envPrefix, url)
+	fetch := fmt.Sprintf(`%s mkdir -p /tmp/downloads; __u=%q; __c=/tmp/downloads/$(printf %%s "$__u" | sha256sum | cut -c1-64); [ -s "$__c" ] || { curl -fsSL "$__u" -o "$__c.part" && mv -f "$__c.part" "$__c"; }`, envPrefix.String(), url)
 
 	var extractCmd string
 	switch extract {
@@ -419,7 +421,7 @@ func emitDownload(b *strings.Builder, t Op, img *ResolvedBox) error {
 	case "sh":
 		// Run the cached install script (exported env above is inherited; also
 		// passed explicitly to mirror the prior `| ENV sh` form).
-		extractCmd = fmt.Sprintf(`%s sh "$__c"`, envForSh)
+		extractCmd = fmt.Sprintf(`%s sh "$__c"`, envForSh.String())
 	case "none":
 		extractCmd = fmt.Sprintf(`cp -f "$__c" %s`, dest)
 	default:

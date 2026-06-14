@@ -58,8 +58,8 @@ func parseFromRef(s string) (vm, snap string, err error) {
 	if s == "" {
 		return "", "", fmt.Errorf("--from is required (e.g. --from arch@baseline)")
 	}
-	if i := strings.Index(s, "@"); i >= 0 {
-		return s[:i], s[i+1:], nil
+	if before, after, ok := strings.Cut(s, "@"); ok {
+		return before, after, nil
 	}
 	return s, "", nil
 }

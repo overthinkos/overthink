@@ -41,7 +41,7 @@ func testBuilderCfg() *BuilderConfig {
 // a pixi builder — enough to cover most fixture Configs without error.
 func testProjectDir(t interface {
 	TempDir() string
-	Fatalf(string, ...interface{})
+	Fatalf(string, ...any)
 	Helper()
 }) string {
 	t.Helper()

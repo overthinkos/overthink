@@ -395,7 +395,7 @@ func (dc *DistroConfig) resolveInherits(def *DistroDef, maxDepth int) *DistroDef
 	// "Child wins per non-nil/non-empty field, else inherit from parent"
 	// applied uniformly across every optional sub-block. This pattern
 	// scales as new sub-blocks are added (Pacstrap, Bootloader, etc.).
-	pickPtr := func(child, parent interface{}) interface{} {
+	pickPtr := func(child, parent any) any {
 		// Caller passes typed pointers; return whichever is non-nil.
 		if child != nil && !isNilPtr(child) {
 			return child
@@ -479,7 +479,7 @@ func (dc *DistroConfig) resolveInherits(def *DistroDef, maxDepth int) *DistroDef
 
 // isNilPtr is a small helper used by resolveInherits's per-field merge
 // pattern. Returns true for typed nil pointers; false for everything else.
-func isNilPtr(v interface{}) bool {
+func isNilPtr(v any) bool {
 	if v == nil {
 		return true
 	}

@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -612,10 +613,8 @@ func splitDottedPath(path string) []string {
 		return nil
 	}
 	out := strings.Split(path, ".")
-	for _, p := range out {
-		if p == "" {
-			return nil
-		}
+	if slices.Contains(out, "") {
+		return nil
 	}
 	return out
 }
@@ -1150,8 +1149,8 @@ func canonicalizeDeployArg(arg, instance string) (box, inst string) {
 	// (registry host like ghcr.io) or "@" anywhere (digest pin) or the
 	// trailing segment carries ":tag". Pass through.
 	first := arg
-	if i := strings.Index(arg, "/"); i >= 0 {
-		first = arg[:i]
+	if before, _, ok := strings.Cut(arg, "/"); ok {
+		first = before
 	}
 	if strings.Contains(first, ".") || strings.Contains(arg, "@") || strings.Contains(arg[strings.LastIndex(arg, "/"):], ":") {
 		return arg, ""
@@ -1163,8 +1162,8 @@ func canonicalizeDeployArg(arg, instance string) (box, inst string) {
 // "selkies-desktop" → ("selkies-desktop", "")
 // "selkies-desktop/foo" → ("selkies-desktop", "foo")
 func parseDeployKey(key string) (boxName, instance string) {
-	if idx := strings.IndexByte(key, '/'); idx >= 0 {
-		return key[:idx], key[idx+1:]
+	if before, after, ok := strings.Cut(key, "/"); ok {
+		return before, after
 	}
 	return key, ""
 }
@@ -1616,7 +1615,7 @@ func scopeVolumesToDeployKey(meta *BoxMetadata, deployName, instance string) {
 		return
 	}
 	for i := range meta.Volume {
-		if rest := strings.TrimPrefix(meta.Volume[i].VolumeName, oldPrefix); rest != meta.Volume[i].VolumeName {
+		if rest, ok := strings.CutPrefix(meta.Volume[i].VolumeName, oldPrefix); ok {
 			meta.Volume[i].VolumeName = newPrefix + rest
 		}
 	}
@@ -2053,8 +2052,8 @@ func appendOrReplaceEnv(envs []string, entry string) []string {
 
 // envKey extracts the KEY part from a KEY=VALUE string.
 func envKey(entry string) string {
-	if idx := strings.IndexByte(entry, '='); idx >= 0 {
-		return entry[:idx]
+	if before, _, ok := strings.Cut(entry, "="); ok {
+		return before
 	}
 	return entry
 }
@@ -2217,8 +2216,8 @@ func stripSecretEnvNames(env []string, blocked []string) []string {
 	out := make([]string, 0, len(env))
 	for _, kv := range env {
 		key := kv
-		if idx := strings.IndexByte(kv, '='); idx >= 0 {
-			key = kv[:idx]
+		if before, _, ok := strings.Cut(kv, "="); ok {
+			key = before
 		}
 		if blockedSet[key] {
 			continue
@@ -2234,13 +2233,13 @@ func stripSecretEnvNames(env []string, blocked []string) []string {
 func mergeEnvVars(existing, newVars []string) []string {
 	newByKey := make(map[string]string, len(newVars))
 	for _, kv := range newVars {
-		key := strings.SplitN(kv, "=", 2)[0]
+		key, _, _ := strings.Cut(kv, "=")
 		newByKey[key] = kv
 	}
 	result := make([]string, 0, len(existing)+len(newVars))
 	seen := make(map[string]bool)
 	for _, kv := range existing {
-		key := strings.SplitN(kv, "=", 2)[0]
+		key, _, _ := strings.Cut(kv, "=")
 		if newKV, ok := newByKey[key]; ok {
 			result = append(result, newKV)
 			seen[key] = true
@@ -2249,7 +2248,7 @@ func mergeEnvVars(existing, newVars []string) []string {
 		}
 	}
 	for _, kv := range newVars {
-		key := strings.SplitN(kv, "=", 2)[0]
+		key, _, _ := strings.Cut(kv, "=")
 		if !seen[key] {
 			result = append(result, kv)
 		}

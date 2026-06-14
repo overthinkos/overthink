@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"sort"
@@ -325,9 +326,7 @@ func baseManifest(apiVersion, kind string, opts K8sGenerateOpts, spec any) map[s
 func mergedLabels(opts K8sGenerateOpts) map[string]string {
 	out := map[string]string{"app": opts.DeploymentName}
 	if opts.Cluster != nil {
-		for k, v := range opts.Cluster.Defaults.Labels {
-			out[k] = v
-		}
+		maps.Copy(out, opts.Cluster.Defaults.Labels)
 	}
 	return out
 }
@@ -531,13 +530,13 @@ func generateService(opts K8sGenerateOpts, _ string) map[string]any {
 func generateEnv(env []string) []map[string]any {
 	var out []map[string]any
 	for _, kv := range env {
-		idx := strings.IndexByte(kv, '=')
-		if idx < 0 {
+		before, after, ok := strings.Cut(kv, "=")
+		if !ok {
 			continue
 		}
 		out = append(out, map[string]any{
-			"name":  kv[:idx],
-			"value": kv[idx+1:],
+			"name":  before,
+			"value": after,
 		})
 	}
 	return out
@@ -852,11 +851,11 @@ func checkToProbe(c *Op) map[string]any {
 func parseHTTPForProbe(url string) (path string, port int, host string) {
 	path, port = "/", 80
 	rest := url
-	if strings.HasPrefix(rest, "https://") {
-		rest = strings.TrimPrefix(rest, "https://")
+	if after, ok := strings.CutPrefix(rest, "https://"); ok {
+		rest = after
 		port = 443
-	} else if strings.HasPrefix(rest, "http://") {
-		rest = strings.TrimPrefix(rest, "http://")
+	} else if after, ok := strings.CutPrefix(rest, "http://"); ok {
+		rest = after
 	}
 	// rest = host[:port][/path]
 	pathIdx := strings.Index(rest, "/")

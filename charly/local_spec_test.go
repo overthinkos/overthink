@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 )
 
@@ -114,13 +115,7 @@ func TestSshExecutor_WithUserPortArgs(t *testing.T) {
 	args := e.sshBaseArgs()
 	wantParts := []string{"-p", "2222", "-o", "ProxyJump=bastion", "ubuntu@ci-runner-3.lan"}
 	for _, want := range wantParts {
-		found := false
-		for _, a := range args {
-			if a == want {
-				found = true
-				break
-			}
-		}
+		found := slices.Contains(args, want)
 		if !found {
 			t.Errorf("missing %q in argv: %v", want, args)
 		}

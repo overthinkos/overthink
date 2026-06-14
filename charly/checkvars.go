@@ -223,8 +223,8 @@ func mergeRuntimeVars(env map[string]string, meta *BoxMetadata, c *ContainerInsp
 		if meta != nil {
 			for _, p := range meta.Port {
 				containerPort := p
-				if i := strings.IndexByte(p, ':'); i >= 0 {
-					containerPort = p[i+1:]
+				if _, after, ok := strings.Cut(p, ":"); ok {
+					containerPort = after
 				}
 				if j := strings.IndexByte(containerPort, '/'); j >= 0 {
 					containerPort = containerPort[:j]
@@ -237,8 +237,8 @@ func mergeRuntimeVars(env map[string]string, meta *BoxMetadata, c *ContainerInsp
 	} else {
 		for k, binds := range c.NetworkSettings.Ports {
 			portStr := k
-			if i := strings.IndexByte(k, '/'); i >= 0 {
-				portStr = k[:i] // strip "/tcp" / "/udp"
+			if before, _, ok := strings.Cut(k, "/"); ok {
+				portStr = before // strip "/tcp" / "/udp"
 			}
 			if len(binds) == 0 {
 				continue

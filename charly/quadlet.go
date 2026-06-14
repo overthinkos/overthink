@@ -104,9 +104,9 @@ func generateQuadlet(cfg QuadletConfig) string {
 		fmt.Fprintf(&b, "Volume=%s:%s\n", bm.HostPath, bm.ContPath)
 	}
 	for _, m := range cfg.Security.Mounts {
-		if strings.HasPrefix(m, "tmpfs:") {
+		if after, ok := strings.CutPrefix(m, "tmpfs:"); ok {
 			// tmpfs:/path:options → Tmpfs=/path:options
-			fmt.Fprintf(&b, "Tmpfs=%s\n", strings.TrimPrefix(m, "tmpfs:"))
+			fmt.Fprintf(&b, "Tmpfs=%s\n", after)
 		} else {
 			fmt.Fprintf(&b, "Volume=%s\n", m)
 		}
@@ -179,9 +179,9 @@ func generateQuadlet(cfg QuadletConfig) string {
 	}
 	for _, e := range cfg.Env {
 		// Quote the value if it contains characters that systemd would interpret
-		if idx := strings.IndexByte(e, '='); idx >= 0 {
-			key := e[:idx]
-			val := e[idx+1:]
+		if before, after, ok := strings.Cut(e, "="); ok {
+			key := before
+			val := after
 			if strings.ContainsAny(val, `"{}[] `) {
 				fmt.Fprintf(&b, "Environment=%s=%q\n", key, val)
 			} else {

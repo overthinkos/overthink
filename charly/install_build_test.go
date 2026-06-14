@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -23,7 +24,7 @@ func compilerTestProjectDir(t *testing.T) (string, func()) { //nolint:unparam //
 	}
 	// Walk up from current to find the project root (charly.yml marker).
 	dir := prev
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		if _, err := os.Stat(filepath.Join(dir, UnifiedFileName)); err == nil {
 			if err := os.Chdir(dir); err != nil {
 				t.Fatalf("chdir %s: %v", dir, err)
@@ -103,13 +104,7 @@ func TestBuildDeployPlanRipgrep(t *testing.T) {
 	if pkgSteps[0].Format != "rpm" {
 		t.Errorf("pkg format = %q, want rpm", pkgSteps[0].Format)
 	}
-	found := false
-	for _, p := range pkgSteps[0].Packages {
-		if p == "ripgrep" {
-			found = true
-			break
-		}
-	}
+	found := slices.Contains(pkgSteps[0].Packages, "ripgrep")
 	if !found {
 		t.Errorf("ripgrep package not in step packages: %v", pkgSteps[0].Packages)
 	}
@@ -296,7 +291,7 @@ func TestDescribePlanSummary(t *testing.T) {
 // []interface{} assertion, so step.Repos was ALWAYS empty and the PhasePrepare
 // repo-gate (SystemPackagesStep.RequiresGate) never saw a candy's repos.
 func TestBuildSystemPackagesStepRepos(t *testing.T) {
-	raw := map[string]interface{}{
+	raw := map[string]any{
 		"package": []string{"tailscale"},
 		"repo": []map[string]any{{
 			"name": "tailscale",

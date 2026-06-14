@@ -85,7 +85,7 @@ func determinismFixture() (map[string]*ResolvedBox, map[string]*Candy, *Config) 
 func TestComputeIntermediates_Deterministic(t *testing.T) {
 	const trials = 50
 	var want string
-	for i := 0; i < trials; i++ {
+	for i := range trials {
 		images, layers, cfg := determinismFixture()
 		result, err := ComputeIntermediates(images, layers, cfg, "v1")
 		if err != nil {
@@ -108,7 +108,7 @@ func TestComputeIntermediates_Deterministic(t *testing.T) {
 func TestGlobalCandyOrder_Deterministic(t *testing.T) {
 	const trials = 50
 	var want string
-	for i := 0; i < trials; i++ {
+	for i := range trials {
 		images, layers, _ := determinismFixture()
 		order, err := GlobalCandyOrder(images, layers)
 		if err != nil {

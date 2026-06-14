@@ -2,7 +2,9 @@ package main
 
 import (
 	"fmt"
+	"maps"
 	"os"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -134,10 +136,8 @@ func GlobalCandyOrder(boxes map[string]*ResolvedBox, layers map[string]*Candy) (
 		if prev == cur || !isNode(prev) || !isNode(cur) {
 			return
 		}
-		for _, d := range graph[cur] {
-			if d == prev {
-				return // already constrained
-			}
+		if slices.Contains(graph[cur], prev) {
+			return // already constrained
 		}
 		// Adding "cur depends on prev" creates a cycle iff prev already
 		// (transitively) depends on cur.
@@ -202,12 +202,7 @@ func graphReaches(graph map[string][]string, from, to string) bool {
 			return false
 		}
 		visited[n] = true
-		for _, d := range graph[n] {
-			if dfs(d) {
-				return true
-			}
-		}
-		return false
+		return slices.ContainsFunc(graph[n], dfs)
 	}
 	return dfs(from)
 }
@@ -749,21 +744,15 @@ func createIntermediate(name, parentName string, uid int, pathCandies []string, 
 	// lets the hoisted AUR candy (chrome's google-chrome) find its builder instead
 	// of failing with "needs builder aur but no builders.aur configured".
 	builderMap := make(BuilderMap)
-	for k, v := range cfg.Defaults.Builder {
-		builderMap[k] = v
-	}
+	maps.Copy(builderMap, cfg.Defaults.Builder)
 	// Distro-keyed default — the SAME mechanism ResolveBox /
 	// resolveEffectiveBuilder use: a cachyos/Arch intermediate seeds
 	// arch-builder from the root-namespace distro image, so it never falls back
 	// to the Fedora default even before the consumer-wins merge below (which
 	// remains authoritative for the hoisted candies).
-	for k, v := range cfg.distroBuilderMap(inheritedDistro) {
-		builderMap[k] = v
-	}
+	maps.Copy(builderMap, cfg.distroBuilderMap(inheritedDistro))
 	if parent, ok := result[parentName]; ok {
-		for k, v := range parent.Builder {
-			builderMap[k] = v
-		}
+		maps.Copy(builderMap, parent.Builder)
 	}
 	for _, cname := range consumerBoxes {
 		c, ok := result[cname]
@@ -773,9 +762,7 @@ func createIntermediate(name, parentName string, uid int, pathCandies []string, 
 		if !ok {
 			continue
 		}
-		for k, v := range c.Builder {
-			builderMap[k] = v
-		}
+		maps.Copy(builderMap, c.Builder)
 	}
 
 	img := &ResolvedBox{

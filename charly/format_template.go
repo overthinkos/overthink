@@ -117,12 +117,12 @@ var templateFuncs = template.FuncMap{
 	},
 
 	// quote returns a shell-safe quoted string.
-	"quote": func(s interface{}) string {
+	"quote": func(s any) string {
 		return fmt.Sprintf("%q", fmt.Sprint(s))
 	},
 
 	// default returns the value if non-empty, otherwise the fallback.
-	"default": func(val, fallback interface{}) interface{} {
+	"default": func(val, fallback any) any {
 		s := fmt.Sprint(val)
 		if s == "" || s == "<nil>" {
 			return fallback
@@ -140,11 +140,11 @@ var templateFuncs = template.FuncMap{
 	"replace": strings.ReplaceAll,
 
 	// join joins a string slice with a separator.
-	"join": func(elems interface{}, sep string) string {
+	"join": func(elems any, sep string) string {
 		switch v := elems.(type) {
 		case []string:
 			return strings.Join(v, sep)
-		case []interface{}:
+		case []any:
 			strs := make([]string, len(v))
 			for i, e := range v {
 				strs[i] = fmt.Sprint(e)
@@ -175,7 +175,7 @@ var templateFuncs = template.FuncMap{
 	// (i.e. needs `dnf5 config-manager addrepo`). Lets install_template
 	// conditionally install `dnf5-plugins` — necessary on bootc bases
 	// which strip it from the default install.
-	"anyRepoHasURL": func(repos []map[string]interface{}) bool {
+	"anyRepoHasURL": func(repos []map[string]any) bool {
 		for _, r := range repos {
 			if u, ok := r["url"]; ok && fmt.Sprint(u) != "" {
 				return true
@@ -189,7 +189,7 @@ var templateFuncs = template.FuncMap{
 type InstallContext struct {
 	CacheMounts []CacheMountDef
 	Packages    []string
-	Repos       []map[string]interface{}
+	Repos       []map[string]any
 	Options     []string
 	// Format-specific fields accessed via Raw
 	Copr    []string
@@ -227,7 +227,7 @@ type BuildStageContext struct {
 }
 
 // RenderTemplate renders a Go text/template with the given context.
-func RenderTemplate(name, tmplStr string, ctx interface{}) (string, error) {
+func RenderTemplate(name, tmplStr string, ctx any) (string, error) {
 	if tmplStr == "" {
 		return "", nil
 	}
@@ -243,7 +243,7 @@ func RenderTemplate(name, tmplStr string, ctx interface{}) (string, error) {
 }
 
 // NewInstallContext creates an InstallContext from a generic PackageSection.
-func NewInstallContext(section map[string]interface{}, cacheMounts []CacheMountDef) *InstallContext {
+func NewInstallContext(section map[string]any, cacheMounts []CacheMountDef) *InstallContext {
 	ctx := &InstallContext{
 		CacheMounts: cacheMounts,
 	}
@@ -274,11 +274,11 @@ func NewInstallContext(section map[string]interface{}, cacheMounts []CacheMountD
 }
 
 // toStringSlice converts an interface{} to []string.
-func toStringSlice(v interface{}) []string {
+func toStringSlice(v any) []string {
 	switch val := v.(type) {
 	case []string:
 		return val
-	case []interface{}:
+	case []any:
 		result := make([]string, len(val))
 		for i, e := range val {
 			result[i] = fmt.Sprint(e)
@@ -293,20 +293,20 @@ func toStringSlice(v interface{}) []string {
 // both `[]interface{}` (legacy raw-YAML decode shape) and `[]map[string]any`
 // (typed shape produced by the post-2026-05 derivePackageSectionsFromCalamares
 // bridge that copies `DistroPackages.Repos` directly into PackageSection.Raw).
-func toMapSlice(v interface{}) []map[string]interface{} {
+func toMapSlice(v any) []map[string]any {
 	switch val := v.(type) {
-	case []interface{}:
-		result := make([]map[string]interface{}, 0, len(val))
+	case []any:
+		result := make([]map[string]any, 0, len(val))
 		for _, e := range val {
-			if m, ok := e.(map[string]interface{}); ok {
+			if m, ok := e.(map[string]any); ok {
 				result = append(result, m)
 			}
 		}
 		return result
-	case []map[string]interface{}:
+	case []map[string]any:
 		// Already the right shape (also matches []map[string]any since
 		// `any` is an alias for `interface{}`); just copy.
-		result := make([]map[string]interface{}, len(val))
+		result := make([]map[string]any, len(val))
 		copy(result, val)
 		return result
 	default:

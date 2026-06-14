@@ -12,6 +12,7 @@ package main
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -66,19 +67,17 @@ func expandPlanIncludes(uf *UnifiedFile, layers map[string]*Candy, plan []Step, 
 // splitIncludeRef splits a `<kind>:<name>` include directive into its kind and
 // name, validating the kind against includeKinds.
 func splitIncludeRef(ref string) (kind, name string, err error) {
-	i := strings.IndexByte(ref, ':')
-	if i < 0 {
+	before, after, ok := strings.Cut(ref, ":")
+	if !ok {
 		return "", "", fmt.Errorf("include %q: expected <kind>:<name> (one of: %s)", ref, strings.Join(includeKinds, ", "))
 	}
-	kind = strings.TrimSpace(ref[:i])
-	name = strings.TrimSpace(ref[i+1:])
+	kind = strings.TrimSpace(before)
+	name = strings.TrimSpace(after)
 	if name == "" {
 		return "", "", fmt.Errorf("include %q: missing entity name after kind %q", ref, kind)
 	}
-	for _, k := range includeKinds {
-		if kind == k {
-			return kind, name, nil
-		}
+	if slices.Contains(includeKinds, kind) {
+		return kind, name, nil
 	}
 	return "", "", fmt.Errorf("include %q: invalid kind %q (one of: %s)", ref, kind, strings.Join(includeKinds, ", "))
 }

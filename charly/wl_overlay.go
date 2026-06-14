@@ -182,7 +182,7 @@ func ensureOverlayDaemon(ex DeployExecutor) error {
 	}
 
 	// Wait for socket to appear (bounded readiness probe, not a blind sleep).
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		time.Sleep(250 * time.Millisecond)
 		if execWlCmdSilent(ex, "test -S /tmp/charly-overlay.sock") == nil {
 			return nil

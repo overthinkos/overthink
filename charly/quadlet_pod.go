@@ -91,9 +91,9 @@ func generateSidecarQuadlet(sc ResolvedSidecar, podName string) string {
 
 	// Environment variables (sorted for deterministic output)
 	for _, kv := range SortedSidecarEnv(sc.Env) {
-		if idx := strings.IndexByte(kv, '='); idx >= 0 {
-			key := kv[:idx]
-			val := kv[idx+1:]
+		if before, after, ok := strings.Cut(kv, "="); ok {
+			key := before
+			val := after
 			if IsSidecarEnvQuotable(val) {
 				fmt.Fprintf(&b, "Environment=%s=%q\n", key, val)
 			} else {

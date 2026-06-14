@@ -142,10 +142,10 @@ var deployOnlyCapabilityFields = map[string]bool{
 // TestCapabilityLabelCompleteness to fail the build when a field is added
 // without a label mapping.
 func checkCapabilityLabelCompleteness() error {
-	rt := reflect.TypeOf(BoxMetadata{})
+	rt := reflect.TypeFor[BoxMetadata]()
 	var missing []string
-	for i := 0; i < rt.NumField(); i++ {
-		name := rt.Field(i).Name
+	for field := range rt.Fields() {
+		name := field.Name
 		if deployOnlyCapabilityFields[name] {
 			continue
 		}

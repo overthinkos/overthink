@@ -17,7 +17,7 @@ func TestAppiumSession_RoundTrip(t *testing.T) {
 		CreatedAt: time.Now().UTC().Truncate(time.Millisecond),
 		Image:     "android-emulator",
 		Instance:  "",
-		Caps:      map[string]interface{}{"platformName": "Android"},
+		Caps:      map[string]any{"platformName": "Android"},
 	}
 	if err := saveAppiumSession(want); err != nil {
 		t.Fatalf("saveAppiumSession: %v", err)

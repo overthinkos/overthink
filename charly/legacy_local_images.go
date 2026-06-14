@@ -15,6 +15,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -85,7 +86,7 @@ func scanLegacyLocalImagesInFile(path, body string) []LegacyImagesBlock {
 		templateIndent int    // indent column of the template-name key
 	)
 
-	for i := 0; i < len(lines); i++ {
+	for i := range lines {
 		line := lines[i]
 		trimmed := strings.TrimLeft(line, " \t")
 		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
@@ -174,10 +175,7 @@ func scanLegacyLocalImagesInFile(path, body string) []LegacyImagesBlock {
 // skip already-migrated `images:` blocks (they're inside a marker
 // comment fence).
 func previousLinesContainMarker(lines []string, idx, n int, marker string) bool {
-	start := idx - n
-	if start < 0 {
-		start = 0
-	}
+	start := max(idx-n, 0)
 	for j := start; j < idx; j++ {
 		if strings.Contains(lines[j], marker) {
 			return true
@@ -249,8 +247,8 @@ func rewriteLegacyLocalImagesInFile(path, body string) (string, int) {
 	// in a fresh slice — `append(lines[:s], lines[e:]...)` aliases the
 	// backing array when capacity permits, which corrupts the tail
 	// region with whatever the appended replacement just wrote there.
-	for i := len(edits) - 1; i >= 0; i-- {
-		e := edits[i]
+	for _, e := range slices.Backward(edits) {
+
 		// 1-based to 0-based slice indexing.
 		out := make([]string, 0, len(lines)-((e.end-e.start)+1)+len(e.replacement))
 		out = append(out, lines[:e.start-1]...)

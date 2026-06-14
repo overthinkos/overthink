@@ -1297,14 +1297,8 @@ func assertArtifactNotUniform(path string) error {
 	}
 	// Sample 100 pixels on a 10x10 stride. For very small images this still
 	// covers every pixel because step rounds up via max(1, dim/10).
-	stepX := w / 10
-	if stepX < 1 {
-		stepX = 1
-	}
-	stepY := h / 10
-	if stepY < 1 {
-		stepY = 1
-	}
+	stepX := max(w/10, 1)
+	stepY := max(h/10, 1)
 	var firstR, firstG, firstB, firstA uint32
 	first := true
 	for py := bounds.Min.Y; py < bounds.Max.Y; py += stepY {

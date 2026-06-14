@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"testing"
 
 	dbus "github.com/godbus/dbus/v5"
@@ -135,9 +136,7 @@ func (f *fakeSSOps) itemMetadata(item dbus.ObjectPath) (string, map[string]strin
 		return "", nil, fmt.Errorf("itemMetadata: item %s not found", item)
 	}
 	cloned := make(map[string]string, len(it.attrs))
-	for k, v := range it.attrs {
-		cloned[k] = v
-	}
+	maps.Copy(cloned, it.attrs)
 	return it.label, cloned, nil
 }
 
@@ -160,9 +159,7 @@ func (f *fakeSSOps) createItem(path dbus.ObjectPath, attrs map[string]string, se
 	f.nextItemSeq++
 	itemPath := dbus.ObjectPath(fmt.Sprintf("%s/items/auto-%d", path, f.nextItemSeq))
 	cloned := make(map[string]string, len(attrs))
-	for k, v := range attrs {
-		cloned[k] = v
-	}
+	maps.Copy(cloned, attrs)
 	clonedSecret := make([]byte, len(secret))
 	copy(clonedSecret, secret)
 	it := &fakeItem{
@@ -222,9 +219,7 @@ func (f *fakeSSOps) addItem(coll dbus.ObjectPath, itemPath dbus.ObjectPath) {
 // searchItemByAttrs (subset match) and getSecret (by path).
 func (f *fakeSSOps) addItemWithAttrs(coll dbus.ObjectPath, attrs map[string]string, itemPath dbus.ObjectPath, secret []byte, label string) {
 	cloned := make(map[string]string, len(attrs))
-	for k, v := range attrs {
-		cloned[k] = v
-	}
+	maps.Copy(cloned, attrs)
 	clonedSecret := make([]byte, len(secret))
 	copy(clonedSecret, secret)
 	it := &fakeItem{
@@ -501,7 +496,7 @@ func TestIsCollectionUnlockedSignal(t *testing.T) {
 			name: "correct_unlock_signal",
 			sig: &dbus.Signal{
 				Name: "org.freedesktop.DBus.Properties.PropertiesChanged",
-				Body: []interface{}{
+				Body: []any{
 					"org.freedesktop.Secret.Collection",
 					map[string]dbus.Variant{"Locked": dbus.MakeVariant(false)},
 					[]string{},
@@ -513,7 +508,7 @@ func TestIsCollectionUnlockedSignal(t *testing.T) {
 			name: "locked_true_still_locked",
 			sig: &dbus.Signal{
 				Name: "org.freedesktop.DBus.Properties.PropertiesChanged",
-				Body: []interface{}{
+				Body: []any{
 					"org.freedesktop.Secret.Collection",
 					map[string]dbus.Variant{"Locked": dbus.MakeVariant(true)},
 					[]string{},
@@ -525,7 +520,7 @@ func TestIsCollectionUnlockedSignal(t *testing.T) {
 			name: "wrong_interface",
 			sig: &dbus.Signal{
 				Name: "org.freedesktop.DBus.Properties.PropertiesChanged",
-				Body: []interface{}{
+				Body: []any{
 					"org.freedesktop.Secret.Item",
 					map[string]dbus.Variant{"Locked": dbus.MakeVariant(false)},
 					[]string{},
@@ -537,7 +532,7 @@ func TestIsCollectionUnlockedSignal(t *testing.T) {
 			name: "unrelated_property",
 			sig: &dbus.Signal{
 				Name: "org.freedesktop.DBus.Properties.PropertiesChanged",
-				Body: []interface{}{
+				Body: []any{
 					"org.freedesktop.Secret.Collection",
 					map[string]dbus.Variant{"Label": dbus.MakeVariant("foo")},
 					[]string{},
@@ -554,7 +549,7 @@ func TestIsCollectionUnlockedSignal(t *testing.T) {
 			name: "wrong_signal_name",
 			sig: &dbus.Signal{
 				Name: "org.freedesktop.Secret.Service.CollectionCreated",
-				Body: []interface{}{"something"},
+				Body: []any{"something"},
 			},
 			want: false,
 		},
@@ -562,7 +557,7 @@ func TestIsCollectionUnlockedSignal(t *testing.T) {
 			name: "empty_body",
 			sig: &dbus.Signal{
 				Name: "org.freedesktop.DBus.Properties.PropertiesChanged",
-				Body: []interface{}{},
+				Body: []any{},
 			},
 			want: false,
 		},

@@ -43,7 +43,7 @@ func (p *PackageItem) UnmarshalYAML(node *yaml.Node) error {
 // MarshalYAML emits the bare-scalar shorthand when only Name is set, otherwise
 // the object form. Keeps migrated candy manifest files concise where the long form
 // adds no value.
-func (p PackageItem) MarshalYAML() (interface{}, error) { //nolint:unparam // error return kept for interface/API stability
+func (p PackageItem) MarshalYAML() (any, error) { //nolint:unparam // error return kept for interface/API stability
 	if p.Description == "" {
 		return p.Name, nil
 	}
@@ -92,7 +92,7 @@ type DistroPackages struct {
 	// the migrator and the parser in lockstep so install templates that read
 	// fields outside the typed surface (a custom `keys:` block, etc.) still
 	// see the original data.
-	Raw map[string]interface{} `yaml:"-" json:"-"`
+	Raw map[string]any `yaml:"-" json:"-"`
 }
 
 // PackageNames returns just the names from a PackageItem list, in order.

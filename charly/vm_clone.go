@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -104,10 +105,8 @@ func BuildClone(vmName string, spec *VmSpec, _, vmStateDir string) error {
 // there).
 func appendCloudInitClean(existing []string) []string {
 	const cleanCmd = "cloud-init clean --machine-id --logs"
-	for _, e := range existing {
-		if e == cleanCmd {
-			return existing
-		}
+	if slices.Contains(existing, cleanCmd) {
+		return existing
 	}
 	return append(existing, cleanCmd)
 }

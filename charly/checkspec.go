@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 
@@ -211,11 +212,11 @@ type Op struct {
 	// Per-metric numeric matchers — when set, the verb fails if the metric
 	// exceeds the threshold. Reuses the existing Matcher type so lt/le/gt/ge
 	// numeric ops work as on any other verb.
-	P50Match  Matcher `yaml:"p50,omitempty"  json:"p50,omitempty"`
-	P95Match  Matcher `yaml:"p95,omitempty"  json:"p95,omitempty"`
-	P99Match  Matcher `yaml:"p99,omitempty"  json:"p99,omitempty"`
-	MaxMatch  Matcher `yaml:"max,omitempty"  json:"max,omitempty"`
-	MeanMatch Matcher `yaml:"mean,omitempty" json:"mean,omitempty"`
+	P50Match  Matcher `yaml:"p50,omitempty"  json:"p50"`
+	P95Match  Matcher `yaml:"p95,omitempty"  json:"p95"`
+	P99Match  Matcher `yaml:"p99,omitempty"  json:"p99"`
+	MaxMatch  Matcher `yaml:"max,omitempty"  json:"max"`
+	MeanMatch Matcher `yaml:"mean,omitempty" json:"mean"`
 
 	// Origin is populated at collection time (candy:<name>, box:<name>,
 	// deploy-default, deploy-local). Not authored in YAML, but travels in
@@ -849,8 +850,8 @@ var runtimeOnlyVarPrefixes = []string{
 // prefix because parameterized vars share a common prefix with their arg.
 func IsRuntimeOnlyVar(key string) bool {
 	name := key
-	if i := strings.IndexByte(key, ':'); i >= 0 {
-		name = key[:i]
+	if before, _, ok := strings.Cut(key, ":"); ok {
+		name = before
 	}
 	for _, p := range runtimeOnlyVarPrefixes {
 		if name == p || strings.HasPrefix(name, p) {
@@ -977,12 +978,7 @@ type VerbSpec struct {
 
 // HasContext reports whether the verb is legal in ctx.
 func (s VerbSpec) HasContext(ctx ExecContext) bool {
-	for _, c := range s.Contexts {
-		if c == ctx {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(s.Contexts, ctx)
 }
 
 var (
@@ -1100,10 +1096,5 @@ func (c *Op) EffectiveContexts() []ExecContext {
 
 // InContext reports whether the op is legal in ctx per its effective contexts.
 func (c *Op) InContext(ctx ExecContext) bool {
-	for _, x := range c.EffectiveContexts() {
-		if x == ctx {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(c.EffectiveContexts(), ctx)
 }

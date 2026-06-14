@@ -140,21 +140,21 @@ func TestProgressWatchdog_ContextCancelExitsCleanly(t *testing.T) {
 // TestProgressWatchdog_OnTickFiresEveryCheckInterval — count tick
 // callbacks over a window proportional to CheckInterval.
 func TestProgressWatchdog_OnTickFiresEveryCheckInterval(t *testing.T) {
-	var tickCount int32
+	var tickCount atomic.Int32
 	stub := &stubProber{score: 1, total: 5}
 	wd := &ProgressWatchdog{
 		CheckInterval:        20 * time.Millisecond,
 		NoImprovementTimeout: 0, // disabled — testing tick rate only
 		Probe:                stub.probe,
 		OnTick: func(elapsed time.Duration, score, total int, lastImprovedAt time.Time) {
-			atomic.AddInt32(&tickCount, 1)
+			tickCount.Add(1)
 		},
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 105*time.Millisecond)
 	defer cancel()
 	wd.Run(ctx)
 
-	got := atomic.LoadInt32(&tickCount)
+	got := tickCount.Load()
 	// Expect ~5 ticks (105ms / 20ms = 5.25). Allow 4-6 for scheduler jitter.
 	if got < 4 || got > 6 {
 		t.Errorf("expected 4-6 ticks in ~5x CheckInterval, got %d", got)
@@ -273,7 +273,7 @@ func TestProgressWatchdog_FirstProbeIsBaselineNotImprovement(t *testing.T) {
 // stamp lastImprovedAt. This is the positive case for the
 // baseline-vs-improvement distinction tested above.
 func TestProgressWatchdog_RealImprovementAfterBaselineSetsTimestamp(t *testing.T) {
-	var tickN int32
+	var tickN atomic.Int32
 	stub := &stubProber{score: 0, total: 5}
 	type sample struct {
 		lastImprovedAt time.Time
@@ -284,7 +284,7 @@ func TestProgressWatchdog_RealImprovementAfterBaselineSetsTimestamp(t *testing.T
 		CheckInterval:        10 * time.Millisecond,
 		NoImprovementTimeout: 0,
 		Probe: func(ctx context.Context) (int, int, error) {
-			n := atomic.AddInt32(&tickN, 1)
+			n := tickN.Add(1)
 			if n >= 2 {
 				stub.set(3, 5, nil) // score rises to 3 on tick 2 onward
 			}

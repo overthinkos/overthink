@@ -189,7 +189,7 @@ func (il *ImportList) UnmarshalYAML(node *yaml.Node) error {
 // MarshalYAML emits each entry compactly: a flat entry as a scalar string, a
 // namespaced entry as a single-key `alias: ref` map — the same shapes
 // UnmarshalYAML accepts (round-trip safe; used by migrators that write configs).
-func (il ImportList) MarshalYAML() (interface{}, error) { //nolint:unparam // error return kept for interface/API stability
+func (il ImportList) MarshalYAML() (any, error) { //nolint:unparam // error return kept for interface/API stability
 	seq := &yaml.Node{Kind: yaml.SequenceNode}
 	for _, e := range il {
 		if e.Namespace == "" {

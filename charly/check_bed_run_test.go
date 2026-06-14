@@ -84,9 +84,9 @@ func TestCheckFailedError(t *testing.T) {
 func TestFoldCheckBeds_FoldsIntoDeploy(t *testing.T) {
 	uf := &UnifiedFile{
 		Check: map[string]DeploymentNode{
-			"sample-pod-bed":   {Target: "pod", Box: "sample-image", Disposable: boolPtr(true)},
-			"sample-vm-bed":    {Target: "vm", Vm: "sample-vm", Disposable: boolPtr(true)},
-			"sample-local-bed": {Target: "local", Local: "sample-local", Disposable: boolPtr(true)},
+			"sample-pod-bed":   {Target: "pod", Box: "sample-image", Disposable: new(true)},
+			"sample-vm-bed":    {Target: "vm", Vm: "sample-vm", Disposable: new(true)},
+			"sample-local-bed": {Target: "local", Local: "sample-local", Disposable: new(true)},
 		},
 	}
 	if err := foldCheckBeds(uf); err != nil {
@@ -115,7 +115,7 @@ func TestFoldCheckBeds_DisjointNameGuard(t *testing.T) {
 			"clash": {Target: "pod", Box: "x"},
 		},
 		Check: map[string]DeploymentNode{
-			"clash": {Target: "pod", Box: "y", Disposable: boolPtr(true)},
+			"clash": {Target: "pod", Box: "y", Disposable: new(true)},
 		},
 	}
 	err := foldCheckBeds(uf)
@@ -142,7 +142,7 @@ func TestValidateCheckBeds_DisposableRequired(t *testing.T) {
 func TestValidateCheckBeds_TargetEnum(t *testing.T) {
 	uf := &UnifiedFile{
 		Check: map[string]DeploymentNode{
-			"check-weird": {Target: "k8s", Disposable: boolPtr(true)},
+			"check-weird": {Target: "k8s", Disposable: new(true)},
 		},
 	}
 	err := validateCheckBeds(uf)
@@ -156,7 +156,7 @@ func TestValidateCheckBeds_TargetEnum(t *testing.T) {
 func TestValidateCheckBeds_VmRefMustResolve(t *testing.T) {
 	missing := &UnifiedFile{
 		Check: map[string]DeploymentNode{
-			"check-k3s-vm": {Target: "vm", Vm: "k3s-vm", Disposable: boolPtr(true)},
+			"check-k3s-vm": {Target: "vm", Vm: "k3s-vm", Disposable: new(true)},
 		},
 	}
 	if err := validateCheckBeds(missing); err == nil || !strings.Contains(err.Error(), "not defined") {
@@ -165,7 +165,7 @@ func TestValidateCheckBeds_VmRefMustResolve(t *testing.T) {
 	ok := &UnifiedFile{
 		VM: map[string]*VmSpec{"k3s-vm": {}},
 		Check: map[string]DeploymentNode{
-			"check-k3s-vm": {Target: "vm", Vm: "k3s-vm", Disposable: boolPtr(true)},
+			"check-k3s-vm": {Target: "vm", Vm: "k3s-vm", Disposable: new(true)},
 		},
 	}
 	if err := validateCheckBeds(ok); err != nil {
@@ -178,7 +178,7 @@ func TestValidateCheckBeds_VmRefMustResolve(t *testing.T) {
 func TestValidateCheckBeds_LocalRefMustResolve(t *testing.T) {
 	missing := &UnifiedFile{
 		Check: map[string]DeploymentNode{
-			"check-local": {Target: "local", Local: "check-local", Disposable: boolPtr(true)},
+			"check-local": {Target: "local", Local: "check-local", Disposable: new(true)},
 		},
 	}
 	if err := validateCheckBeds(missing); err == nil || !strings.Contains(err.Error(), "not defined") {
@@ -187,7 +187,7 @@ func TestValidateCheckBeds_LocalRefMustResolve(t *testing.T) {
 	ok := &UnifiedFile{
 		Local: map[string]*LocalSpec{"check-local": {}},
 		Check: map[string]DeploymentNode{
-			"check-local": {Target: "local", Local: "check-local", Disposable: boolPtr(true)},
+			"check-local": {Target: "local", Local: "check-local", Disposable: new(true)},
 		},
 	}
 	if err := validateCheckBeds(ok); err != nil {
@@ -230,7 +230,7 @@ deploy:
 		Target:     "pod",
 		Box:        "ollama",
 		Port:       []string{"45434:11434"},
-		Disposable: boolPtr(true),
+		Disposable: new(true),
 		Lifecycle:  "dev",
 	}
 	persistBedDeployOverrides("check-cachyos-ollama-pod", bed)

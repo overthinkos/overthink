@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -402,9 +403,9 @@ func (c *CdpSpaKeyComboCmd) Run() error {
 		return fmt.Errorf("key %s press: %w", mainKey.Key, err)
 	}
 
-	for i := len(mods) - 1; i >= 0; i-- {
-		if err := spaDispatchKeyUp(client, mods[i]); err != nil {
-			return fmt.Errorf("modifier %s keyUp: %w", mods[i].Key, err)
+	for _, mod := range slices.Backward(mods) {
+		if err := spaDispatchKeyUp(client, mod); err != nil {
+			return fmt.Errorf("modifier %s keyUp: %w", mod.Key, err)
 		}
 	}
 

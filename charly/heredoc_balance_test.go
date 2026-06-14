@@ -65,7 +65,7 @@ func assertBalancedHeredoc(t *testing.T, label, out string) {
 		// The terminator must appear as its own line (a heredoc terminator is
 		// matched only at the start of a line, optionally indented for <<-).
 		terminated := false
-		for _, line := range strings.Split(out, "\n") {
+		for line := range strings.SplitSeq(out, "\n") {
 			if strings.TrimSpace(line) == tag {
 				terminated = true
 				break

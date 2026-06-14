@@ -949,7 +949,7 @@ func diagnoseCDP(engine, containerName, image string, origErr error) error {
 		pid := strings.TrimSpace(string(pidOut))
 		if pid != "" {
 			chromeAlive = true
-			firstPid := strings.Split(pid, "\n")[0]
+			firstPid, _, _ := strings.Cut(pid, "\n")
 			fmt.Fprintf(os.Stderr, "  Chrome:     running (pid %s)\n", firstPid)
 		}
 	}

@@ -639,7 +639,7 @@ func TestComputeIntermediates_NvidiaScenario(t *testing.T) {
 	// python-ml's base chain must eventually reach nvidia
 	found := false
 	current := npImg.Base
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		if current == "nvidia" {
 			found = true
 			break
@@ -662,7 +662,7 @@ func TestComputeIntermediates_NvidiaScenario(t *testing.T) {
 		}
 		found := false
 		current := img.Base
-		for i := 0; i < 10; i++ {
+		for range 10 {
 			if current == "python-ml" {
 				found = true
 				break
@@ -783,7 +783,7 @@ func TestComputeIntermediates_UserImageAtBranchPoint(t *testing.T) {
 		img := result[appName]
 		found := false
 		current := img.Base
-		for i := 0; i < 10; i++ {
+		for range 10 {
 			if current == "svbase" {
 				found = true
 				break
@@ -865,7 +865,7 @@ func TestComputeIntermediates_UserImageAsBranchIntermediate(t *testing.T) {
 		img := result[appName]
 		found := false
 		current := img.Base
-		for i := 0; i < 10; i++ {
+		for range 10 {
 			if current == "mid" {
 				found = true
 				break
@@ -963,7 +963,7 @@ func TestComputeIntermediates_PlatformInheritance(t *testing.T) {
 		// Walk base chain to see if nvidia is an ancestor
 		current := img.Base
 		nvidiaAncestor := false
-		for i := 0; i < 10; i++ {
+		for range 10 {
 			if current == "nvidia" {
 				nvidiaAncestor = true
 				break

@@ -86,8 +86,8 @@ func TestResolveUpdateDeployNode(t *testing.T) {
 // disposable flag now gates only the AI's autonomous destroy (CLAUDE.md R10) and
 // the check-runner's unattended fresh-rebuild — not this human-driven verb.
 func TestNoteUpdateDisposability(t *testing.T) {
-	tDisposable := boolPtr(true)
-	fDisposable := boolPtr(false)
+	tDisposable := new(true)
+	fDisposable := new(false)
 	cases := []struct {
 		name     string
 		node     *DeploymentNode

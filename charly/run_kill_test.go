@@ -43,7 +43,7 @@ func TestRunKill_SendsSIGKILL(t *testing.T) {
 
 	// Wait for the OS to reap. Up to 2 seconds with 50ms checks.
 	gone := false
-	for i := 0; i < 40; i++ {
+	for range 40 {
 		// FindProcess always succeeds on unix; Signal(0) returns
 		// "no such process" / "process already finished" once it's gone.
 		proc, _ := os.FindProcess(pid)

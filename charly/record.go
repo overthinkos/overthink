@@ -148,7 +148,7 @@ func (c *RecordStopCmd) Run() error {
 
 	// Wait for session to exit gracefully (bounded readiness probe).
 	stopped := false
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		time.Sleep(500 * time.Millisecond)
 		if !tmuxHasSession(venue.Exec, session) {
 			stopped = true
@@ -211,7 +211,7 @@ func (c *RecordListCmd) Run() error {
 	}
 
 	var recordings []string
-	for _, line := range strings.Split(out, "\n") {
+	for line := range strings.SplitSeq(out, "\n") {
 		line = strings.TrimSpace(line)
 		if strings.HasPrefix(line, "record-") {
 			recordings = append(recordings, line)

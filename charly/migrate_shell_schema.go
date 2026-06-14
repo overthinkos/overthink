@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -112,8 +113,8 @@ func migrateCandyShellSchema(path string, dryRun bool) (bool, error) {
 		return false, nil
 	}
 	// Remove matched tasks (in reverse order so indices stay valid).
-	for j := len(legacyIndices) - 1; j >= 0; j-- {
-		idx := legacyIndices[j]
+	for _, idx := range slices.Backward(legacyIndices) {
+
 		tasksNode.Content = append(tasksNode.Content[:idx], tasksNode.Content[idx+1:]...)
 	}
 	// Build a shell: node and merge into body.

@@ -564,8 +564,8 @@ func translateHostPathToVenue(hostPath string, parent *DeploymentNode) (string, 
 			return filepath.Clean(v.Path), true
 		}
 		prefix := hostBase + string(filepath.Separator)
-		if strings.HasPrefix(clean, prefix) {
-			rel := strings.TrimPrefix(clean, prefix)
+		if after, ok := strings.CutPrefix(clean, prefix); ok {
+			rel := after
 			return filepath.Join(v.Path, rel), true
 		}
 	}

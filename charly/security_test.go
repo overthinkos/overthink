@@ -2,6 +2,7 @@ package main
 
 import (
 	"reflect"
+	"slices"
 	"testing"
 )
 
@@ -375,13 +376,7 @@ func TestFormatCPUQuota(t *testing.T) {
 func TestBuildStartArgsWithPrivileged(t *testing.T) {
 	sec := SecurityConfig{Privileged: true}
 	args := buildStartArgs("docker", "myimage:latest", 0, 0, nil, "charly-myimage", nil, nil, false, "127.0.0.1", nil, sec, []string{"supervisord", "-n", "-c", "/etc/supervisord.conf"}, "/workspace")
-	found := false
-	for _, arg := range args {
-		if arg == "--privileged" {
-			found = true
-			break
-		}
-	}
+	found := slices.Contains(args, "--privileged")
 	if !found {
 		t.Errorf("expected --privileged in args: %v", args)
 	}
@@ -452,12 +447,7 @@ func TestGenerateQuadletWithCapAdd(t *testing.T) {
 }
 
 func containsLine(content, line string) bool {
-	for _, l := range splitLines(content) {
-		if l == line {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(splitLines(content), line)
 }
 
 func splitLines(s string) []string {

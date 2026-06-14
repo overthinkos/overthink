@@ -121,7 +121,7 @@ func DetectStaleEncryptedQuadlets(quadletDir string) ([]string, error) {
 // added 2026-04-16). Tolerant to ov-binary path variations
 // (`/usr/bin/ov`, `~/.local/bin/ov`, bare `ov`).
 func quadletHasMountHook(body, name string) bool {
-	for _, line := range strings.Split(body, "\n") {
+	for line := range strings.SplitSeq(body, "\n") {
 		trim := strings.TrimSpace(line)
 		if !strings.HasPrefix(trim, "ExecStartPre=") {
 			continue

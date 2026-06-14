@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"maps"
 	"regexp"
 	"sync"
 )
@@ -134,9 +135,7 @@ func (s *ScenarioContext) SnapshotResults() map[string]CheckResult {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	out := make(map[string]CheckResult, len(s.Results))
-	for k, v := range s.Results {
-		out[k] = v
-	}
+	maps.Copy(out, s.Results)
 	return out
 }
 

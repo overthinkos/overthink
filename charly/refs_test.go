@@ -381,7 +381,7 @@ func TestCollectRemoteRefsOptsIncludeDisabled(t *testing.T) {
 	cfg := &Config{
 		Box: map[string]BoxConfig{
 			"debian-builder": {
-				Enabled: boolPtr(false),
+				Enabled: new(false),
 				Candy: []string{
 					"@github.com/overthinkos/overthink/layers/pixi:v1.0.0",
 				},
@@ -413,7 +413,7 @@ func TestCollectRemoteRefsOptsIncludeDisabled(t *testing.T) {
 
 	// A DIFFERENT disabled image must stay filtered under the scoped opts.
 	cfg.Box["other-disabled"] = BoxConfig{
-		Enabled: boolPtr(false),
+		Enabled: new(false),
 		Candy:   []string{"@github.com/myorg/other/layers/x:v3.0.0"},
 	}
 	dls2, err := CollectRemoteRefsOpts(cfg, layers, opts)

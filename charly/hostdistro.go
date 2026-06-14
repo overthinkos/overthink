@@ -62,7 +62,7 @@ func DetectHostDistro() (*HostDistro, error) {
 		case "VERSION_ID":
 			hd.VersionID = val
 		case "ID_LIKE":
-			for _, s := range strings.Fields(val) {
+			for s := range strings.FieldsSeq(val) {
 				if s != "" {
 					hd.IDLike = append(hd.IDLike, s)
 				}
@@ -84,12 +84,12 @@ func splitOsReleaseLine(line string) (key, val string, ok bool) {
 	if line == "" || strings.HasPrefix(line, "#") {
 		return "", "", false
 	}
-	eq := strings.Index(line, "=")
-	if eq < 0 {
+	before, after, ok := strings.Cut(line, "=")
+	if !ok {
 		return "", "", false
 	}
-	key = strings.TrimSpace(line[:eq])
-	val = strings.TrimSpace(line[eq+1:])
+	key = strings.TrimSpace(before)
+	val = strings.TrimSpace(after)
 	if len(val) >= 2 {
 		if (val[0] == '"' && val[len(val)-1] == '"') ||
 			(val[0] == '\'' && val[len(val)-1] == '\'') {

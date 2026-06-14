@@ -64,10 +64,7 @@ func (p *PodCollector) Collect(ctx context.Context, opts CollectOpts) ([]Deploym
 
 	// Worker pool fan-out across containers.
 	results := make([]DeploymentStatus, len(snapshots))
-	workers := runtime.NumCPU() * 2
-	if workers < 4 {
-		workers = 4
-	}
+	workers := max(runtime.NumCPU()*2, 4)
 	if workers > len(snapshots) {
 		workers = len(snapshots)
 	}

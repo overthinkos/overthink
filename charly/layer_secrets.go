@@ -20,6 +20,7 @@ package main
 // Set is visible to the second caller's ResolveCredential.
 
 import (
+	"maps"
 	"strings"
 )
 
@@ -104,9 +105,7 @@ func ResolveCandySecret(layer *Candy) map[string]string {
 func ResolveSecretForCandy(layers []*Candy) map[string]string {
 	env := map[string]string{}
 	for _, l := range layers {
-		for k, v := range ResolveCandySecret(l) {
-			env[k] = v
-		}
+		maps.Copy(env, ResolveCandySecret(l))
 	}
 	return env
 }

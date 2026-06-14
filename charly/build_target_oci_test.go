@@ -53,8 +53,8 @@ func TestOCITargetEmitSystemPackagesWithLegacyTemplate(t *testing.T) {
 			Format:   "rpm",
 			Phase:    PhaseInstall,
 			Packages: []string{"ripgrep"},
-			RawInstallContext: map[string]interface{}{
-				"package": []interface{}{"ripgrep"},
+			RawInstallContext: map[string]any{
+				"package": []any{"ripgrep"},
 			},
 		},
 	}}
@@ -87,8 +87,8 @@ func TestOCITargetEmitSystemPackagesPrefersNewPhases(t *testing.T) {
 			Format:   "rpm",
 			Phase:    PhaseInstall,
 			Packages: []string{"foo"},
-			RawInstallContext: map[string]interface{}{
-				"package": []interface{}{"foo"},
+			RawInstallContext: map[string]any{
+				"package": []any{"foo"},
 			},
 		},
 	}}

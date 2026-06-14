@@ -310,7 +310,7 @@ func stripLegacyOverthinkBlocks(existing string) string {
 	}
 	var out strings.Builder
 	inBlock := false
-	for _, line := range strings.Split(existing, "\n") {
+	for line := range strings.SplitSeq(existing, "\n") {
 		if strings.Contains(line, legacyBegin) {
 			inBlock = true
 			continue
@@ -340,7 +340,7 @@ func replaceOrAppendManagedBlock(existing, body, marker string) string {
 	if strings.Contains(existing, begin) {
 		var out strings.Builder
 		inBlock := false
-		for _, line := range strings.Split(existing, "\n") {
+		for line := range strings.SplitSeq(existing, "\n") {
 			if strings.Contains(line, begin) {
 				inBlock = true
 				out.WriteString(begin + "\n")
@@ -384,7 +384,7 @@ func replaceOrPrependManagedBlock(existing, body, marker string) string {
 		// Same in-place replacement as replaceOrAppendManagedBlock.
 		var out strings.Builder
 		inBlock := false
-		for _, line := range strings.Split(existing, "\n") {
+		for line := range strings.SplitSeq(existing, "\n") {
 			if strings.Contains(line, begin) {
 				inBlock = true
 				out.WriteString(begin + "\n")
@@ -420,7 +420,7 @@ func stripManagedBlock(existing, marker string) string {
 	}
 	var out strings.Builder
 	inBlock := false
-	for _, line := range strings.Split(existing, "\n") {
+	for line := range strings.SplitSeq(existing, "\n") {
 		if strings.Contains(line, begin) {
 			inBlock = true
 			continue

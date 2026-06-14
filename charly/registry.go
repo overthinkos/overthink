@@ -64,7 +64,7 @@ func InspectRemoteImage(ref string) (*ImageInfo, error) {
 }
 
 // ImageExists checks if an image exists in the registry
-func ImageExists(ref string) (bool, error) {
+func ImageExists(ref string) (bool, error) { //nolint:unparam // error return kept for interface/API stability
 	_, err := crane.Digest(ref)
 	if err != nil {
 		// Check if it's a "not found" error

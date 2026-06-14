@@ -320,7 +320,7 @@ func runAllCheckBeds(uf *UnifiedFile, beds map[string]DeploymentNode, opts bedRu
 }
 
 // runLocalInProcess invokes CheckRunLocalCmd in-process for host targets.
-func runLocalInProcess(args []string, scoreName, runID string, cwd string) error {
+func runLocalInProcess(args []string, _, _ string, cwd string) error {
 	exe, err := os.Executable()
 	if err != nil {
 		exe = "charly"

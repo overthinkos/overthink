@@ -464,7 +464,7 @@ var deviceDescriptions = map[string]string{
 }
 
 // runHardwareChecks probes for GPU and devices, matching DetectHostDevices() behavior.
-func runHardwareChecks(distro Distro) HardwareInfo {
+func runHardwareChecks(_ Distro) HardwareInfo {
 	hw := HardwareInfo{}
 
 	// GPU detection (same as DetectGPU)

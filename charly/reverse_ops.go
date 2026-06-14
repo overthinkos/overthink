@@ -52,7 +52,7 @@ func (c *DeployDelCmd) reverseRunner() ReverseRunner { return c.Runner }
 // runReverseOps executes ops in REVERSE order (last-installed, first-
 // removed). Idempotent where possible: a missing file is treated as
 // "already removed" rather than an error.
-func runReverseOps(ops []ReverseOp, exec ReverseExecutor) error {
+func runReverseOps(ops []ReverseOp, exec ReverseExecutor) {
 	for i := len(ops) - 1; i >= 0; i-- {
 		if err := runReverseOp(ops[i], exec); err != nil {
 			// Keep going: a partial teardown is better than giving up
@@ -61,7 +61,6 @@ func runReverseOps(ops []ReverseOp, exec ReverseExecutor) error {
 			fmt.Fprintf(os.Stderr, "reverse: %s failed: %v\n", ops[i].Kind, err)
 		}
 	}
-	return nil
 }
 
 // runReverseOp dispatches on Kind and runs the appropriate command.

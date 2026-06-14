@@ -172,7 +172,7 @@ func TeardownEphemeralLifecycle(node *DeploymentNode, deployName string) error {
 
 	// Step 2: cancel transient timer.
 	if node.VmState != nil && node.VmState.Ephemeral != nil && node.VmState.Ephemeral.TimerUnit != "" {
-		_ = cancelTransientTimer(node.VmState.Ephemeral.TimerUnit)
+		cancelTransientTimer(node.VmState.Ephemeral.TimerUnit)
 	}
 
 	// Step 3: snapshot refcount decrement (vm-target).
@@ -284,14 +284,13 @@ func registerTransientTimer(deployName string, ttl time.Duration) (string, error
 
 // cancelTransientTimer stops a previously registered transient unit.
 // Best-effort — failures are logged but not surfaced.
-func cancelTransientTimer(unit string) error {
+func cancelTransientTimer(unit string) {
 	if unit == "" {
-		return nil
+		return
 	}
 	cmd := exec.Command("systemctl", "--user", "stop", unit)
 	cmd.Stderr = os.Stderr
 	_ = cmd.Run()
-	return nil
 }
 
 // sanitizeUnitName makes a string safe for systemd unit naming

@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"os"
 	"sort"
-	"time"
 )
 
 // foldPeers copies every deploy node's `peer:` entries into the Deploy map as
@@ -147,7 +146,7 @@ func bringUpPeers(node *DeploymentNode) error {
 					return fmt.Errorf("peer %q (%v): %w", peerKey, step, err)
 				}
 			}
-			waitForContainerReady(peerKey, 30*time.Second)
+			waitForContainerReady(peerKey)
 		} else {
 			if err := runCharlySubcommand("deploy", "add", peerKey); err != nil {
 				return fmt.Errorf("peer %q (deploy add): %w", peerKey, err)

@@ -9,7 +9,7 @@ import (
 
 // shrinkEncMountTimings shrinks the poll deadline so tests complete quickly.
 // Returns a restore function.
-func shrinkEncMountTimings(t *testing.T) func() {
+func shrinkEncMountTimings(_ *testing.T) func() {
 	origDeadline := encMountDeadline
 	origPeriod := encMountPollPeriod
 	encMountDeadline = 100 * time.Millisecond

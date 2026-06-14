@@ -40,7 +40,7 @@ type flatStep struct {
 // include: steps never reach here (expanded at collect time); a residual one
 // is a no-op skip. Agent steps route to the grader; run/check stamp the
 // keyword-derived intentDo and dispatch through runOne.
-func RunPlan(ctx context.Context, r *Runner, set *LabelDescriptionSet, filter *TagExpr, strict bool) []StepResult {
+func RunPlan(ctx context.Context, r *Runner, set *LabelDescriptionSet, _ *TagExpr, strict bool) []StepResult {
 	if set == nil {
 		return nil
 	}

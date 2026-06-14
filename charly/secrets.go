@@ -186,7 +186,7 @@ func CollectSecretsFromLabels(boxName string, labelSecrets []LabelSecretEntry) [
 
 // ProvisionPodmanSecrets creates podman secrets from the credential store.
 // Returns the secrets that were successfully provisioned and any that fell back to env vars.
-func ProvisionPodmanSecrets(engine, boxName, instance string, secrets []CollectedSecret, autoGenerate bool) (provisioned []CollectedSecret, fallbackEnv []string, err error) {
+func ProvisionPodmanSecrets(engine, boxName, instance string, secrets []CollectedSecret, autoGenerate bool) (provisioned []CollectedSecret, fallbackEnv []string, err error) { //nolint:unparam // error return kept for interface/API stability
 	if engine == "docker" {
 		fmt.Fprintln(os.Stderr, "NOTE: Docker secrets require Swarm mode (not available).")
 		fmt.Fprintln(os.Stderr, "Falling back to environment variable injection for secrets.")

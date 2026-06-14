@@ -369,7 +369,7 @@ func TestBuildImageCacheNoRegistry(t *testing.T) {
 
 func TestRetryCmdSucceedsFirstAttempt(t *testing.T) {
 	calls := 0
-	err := retryCmd(3, time.Millisecond, func() error {
+	err := retryCmd(time.Millisecond, func() error {
 		calls++
 		return nil
 	})
@@ -383,7 +383,7 @@ func TestRetryCmdSucceedsFirstAttempt(t *testing.T) {
 
 func TestRetryCmdSucceedsAfterRetries(t *testing.T) {
 	calls := 0
-	err := retryCmd(3, time.Millisecond, func() error {
+	err := retryCmd(time.Millisecond, func() error {
 		calls++
 		if calls < 3 {
 			return fmt.Errorf("transient error")
@@ -400,7 +400,7 @@ func TestRetryCmdSucceedsAfterRetries(t *testing.T) {
 
 func TestRetryCmdExhaustsAttempts(t *testing.T) {
 	calls := 0
-	err := retryCmd(3, time.Millisecond, func() error {
+	err := retryCmd(time.Millisecond, func() error {
 		calls++
 		return fmt.Errorf("persistent error")
 	})

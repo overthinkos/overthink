@@ -730,7 +730,7 @@ func (r *Runner) dialPort(c *Op) CheckResult {
 //
 // Host-side only. Like Background, in-container PID kill is the
 // user's responsibility (drop into command: with kill -<sig>).
-func (r *Runner) runKill(ctx context.Context, c *Op) CheckResult {
+func (r *Runner) runKill(_ context.Context, c *Op) CheckResult {
 	if r.Mode == RunModeBox {
 		return skipf(c, "kill: not meaningful under charly check box")
 	}

@@ -24,54 +24,62 @@ func MigrateTailscaleSecretsAuto(secretsFile string, dryRun bool) ([]string, err
 	if err != nil {
 		// .secrets may be absent or gpg unavailable on this host — that is
 		// not a migration failure; fall through to the scan.
-		return changes, scanTailscaleDeployYAML()
+		scanTailscaleDeployYAML()
+		return changes, nil
 	}
 	if legacy == "" {
-		return changes, scanTailscaleDeployYAML()
+		scanTailscaleDeployYAML()
+		return changes, nil
 	}
 	suffix, ok := detectTailnetFromRunningSidecar()
 	if !ok || strings.TrimSpace(suffix) == "" {
 		fmt.Fprintf(os.Stderr, "tailscale-secrets: legacy TS_AUTHKEY found in %s but the tailnet could not be auto-detected;\n", secretsFile)
 		fmt.Fprintln(os.Stderr, "  run `charly secrets gpg set TS_AUTHKEY_<TAILNET> <value>` manually to rename it (left in place for now).")
-		return changes, scanTailscaleDeployYAML()
+		scanTailscaleDeployYAML()
+		return changes, nil
 	}
 	newName := "TS_AUTHKEY_" + normalizeTailnetSuffix(suffix)
 	if newName == "TS_AUTHKEY_" {
-		return changes, scanTailscaleDeployYAML()
+		scanTailscaleDeployYAML()
+		return changes, nil
 	}
 	existing, err := readSecretsEnv(secretsFile, newName)
 	if err != nil {
-		return changes, scanTailscaleDeployYAML()
+		scanTailscaleDeployYAML()
+		return changes, nil
 	}
 	if existing != "" {
 		// Already migrated (or a conflicting value the operator must resolve
 		// — non-interactive mode leaves conflicts untouched).
-		return changes, scanTailscaleDeployYAML()
+		scanTailscaleDeployYAML()
+		return changes, nil
 	}
 	if dryRun {
 		changes = append(changes, fmt.Sprintf("would set %s in %s (tailnet %s)", newName, secretsFile, suffix))
-		return changes, scanTailscaleDeployYAML()
+		scanTailscaleDeployYAML()
+		return changes, nil
 	}
 	if err := setSecretsEnv(secretsFile, newName, legacy); err != nil {
 		return changes, fmt.Errorf("setting %s in %s: %w", newName, secretsFile, err)
 	}
 	changes = append(changes, fmt.Sprintf("set %s in %s (tailnet %s; legacy TS_AUTHKEY preserved)", newName, secretsFile, suffix))
-	return changes, scanTailscaleDeployYAML()
+	scanTailscaleDeployYAML()
+	return changes, nil
 }
 
 // scanTailscaleDeployYAML walks ~/.config/ov/deploy.yml for sidecars.tailscale
 // entries lacking parameter.tailnet and emits one warning per entry. Does NOT
 // auto-write (the operator chooses which tailnet per deploy). Used by
 // MigrateTailscaleSecretsAuto.
-func scanTailscaleDeployYAML() error {
+func scanTailscaleDeployYAML() {
 	configDir, err := os.UserConfigDir()
 	if err != nil {
-		return nil // best-effort
+		return // best-effort
 	}
 	path := filepath.Join(configDir, "ov", "deploy.yml")
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil // file not present is fine
+		return // file not present is fine
 	}
 	var doc struct {
 		Deploy map[string]struct {
@@ -84,7 +92,7 @@ func scanTailscaleDeployYAML() error {
 		} `yaml:"deploy"`
 	}
 	if err := yaml.Unmarshal(data, &doc); err != nil {
-		return nil // tolerant — schema warnings live elsewhere
+		return // tolerant — schema warnings live elsewhere
 	}
 	var warnings []string
 	for deployName, entry := range doc.Deploy {
@@ -101,7 +109,7 @@ func scanTailscaleDeployYAML() error {
 		}
 	}
 	if len(warnings) == 0 {
-		return nil
+		return
 	}
 	fmt.Fprintln(os.Stderr, "\nDeploy.yml entries with tailscale sidecar but no parameter.tailnet:")
 	for _, name := range warnings {
@@ -110,7 +118,6 @@ func scanTailscaleDeployYAML() error {
 	fmt.Fprintln(os.Stderr, "\nNext step: add `parameter: { tailnet: <suffix> }` under each entry's `sidecar.tailscale:` block")
 	fmt.Fprintln(os.Stderr, "before running `charly config <deploy>`. Without it, the sidecar resolution will")
 	fmt.Fprintln(os.Stderr, "error out with a clear message naming the missing parameter.")
-	return nil
 }
 
 // normalizeTailnetSuffix mirrors the `tailnetEnvSuffix` template func in

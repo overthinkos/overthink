@@ -107,7 +107,7 @@ func SSHClientConfig(t SSHTarget) (*ssh.ClientConfig, error) {
 
 // SSHAuthMethods probes the user's environment for usable SSH auth.
 // Agent first, then the three common Ed25519/RSA/ECDSA private keys.
-func SSHAuthMethods() ([]ssh.AuthMethod, error) {
+func SSHAuthMethods() ([]ssh.AuthMethod, error) { //nolint:unparam // error return kept for interface/API stability
 	var methods []ssh.AuthMethod
 	if sock := os.Getenv("SSH_AUTH_SOCK"); sock != "" {
 		if conn, err := net.Dial("unix", sock); err == nil {

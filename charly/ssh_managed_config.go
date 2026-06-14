@@ -147,7 +147,7 @@ func RemoveVmSshStanza(home string, alias string) (remaining int, err error) {
 
 // ListVmSshAliases returns the alias names currently present in the
 // managed fragment, in stable (sorted) order.
-func ListVmSshAliases(home string) ([]string, error) {
+func ListVmSshAliases(home string) ([]string, error) { //nolint:unparam // error return kept for interface/API stability
 	frag := SshFragmentPath(home)
 	if _, err := os.Stat(frag); os.IsNotExist(err) {
 		return nil, nil

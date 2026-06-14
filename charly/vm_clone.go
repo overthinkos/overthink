@@ -32,7 +32,7 @@ import (
 // (source.from_vm and source.from_snapshot fully populated). outputDir
 // is where output/qcow2/disk.qcow2 + output/qcow2/seed.iso will be
 // written, mirroring the cloud_image build path's conventions.
-func BuildClone(vmName string, spec *VmSpec, outputDir, vmStateDir string) error {
+func BuildClone(vmName string, spec *VmSpec, _, vmStateDir string) error {
 	if spec.Source.Kind != "clone" {
 		return fmt.Errorf("BuildClone called with source.kind == %q (want clone)", spec.Source.Kind)
 	}

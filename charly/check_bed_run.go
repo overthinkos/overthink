@@ -470,7 +470,7 @@ func runCheckBed(exe, name string, node DeploymentNode, opts bedRunOpts) (*bedRu
 			// `charly start` returns once systemd reports active, but the
 			// container's services may not have bound ports yet. Poll until
 			// `podman exec true` succeeds (cheap; usually <1s).
-			waitForContainerReady(name, 30*time.Second)
+			waitForContainerReady(name)
 			// Now the substrate is up: deploy any nested children onto it,
 			// pre-order. The canonical case is a `target: android` device
 			// child whose candies' apk: packages install onto the running
@@ -571,7 +571,7 @@ func runCheckBed(exe, name string, node DeploymentNode, opts bedRunOpts) (*bedRu
 				// survived the domain recreate (the Cutover 2 persistence gate).
 				waitForVmSshReady(vmTemplate, 120*time.Second)
 			} else {
-				waitForContainerReady(name, 30*time.Second)
+				waitForContainerReady(name)
 				for _, childKey := range sortedNestedKeys(node.Nested) {
 					if err := step("redeploy-"+childKey, []string{"deploy", "add", name + "." + childKey}); err != nil {
 						return fail("re-deploy nested child %s.%s (fresh rebuild): %w", name, childKey, err)
@@ -586,7 +586,7 @@ func runCheckBed(exe, name string, node DeploymentNode, opts bedRunOpts) (*bedRu
 		// beds) — the ADE acceptance gate against the new image, at the box's
 		// check_level depth. No-op pass when the image bakes no plan steps.
 		if runRuntimeCheck && !isVM && !isLocal && image != "" {
-			waitForContainerReady(name, 30*time.Second)
+			waitForContainerReady(name)
 			if err := step("feature-run-rebuild", featureRunArgs()); err != nil {
 				return fail("feature run (fresh rebuild) %s: %w", name, err)
 			}
@@ -646,9 +646,10 @@ func waitForVmSshReady(vmName string, timeout time.Duration) {
 // systemd reports the service active, but supervisord + child programs may
 // not have bound listening ports yet. Best-effort: silent on timeout (the
 // next check-live step surfaces the real failure with full context).
-func waitForContainerReady(bed string, timeout time.Duration) {
+func waitForContainerReady(bed string) {
+	const readyTimeout = 30 * time.Second
 	containerName := "charly-" + bed
-	deadline := time.Now().Add(timeout)
+	deadline := time.Now().Add(readyTimeout)
 	for time.Now().Before(deadline) {
 		cmd := exec.Command("podman", "exec", containerName, "true")
 		if err := cmd.Run(); err == nil {

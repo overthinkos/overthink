@@ -5,13 +5,14 @@ import (
 )
 
 // nestedUnified builds a minimal UnifiedFile projection carrying one declared
-// nested topology: a target:pod parent `parent` with two target:android nested
-// children `device` and `device-net` (the check-android-emulator-pod shape),
-// plus an unrelated flat pod deploy the overlay must leave alone.
-func nestedUnified(parent string) *UnifiedFile {
+// nested topology: a target:pod parent `check-android-emulator-pod` with two
+// target:android nested children `device` and `device-net` (the
+// check-android-emulator-pod shape), plus an unrelated flat pod deploy the
+// overlay must leave alone.
+func nestedUnified() *UnifiedFile {
 	return &UnifiedFile{
 		Deploy: map[string]DeploymentNode{
-			parent: {
+			"check-android-emulator-pod": {
 				Target: "pod",
 				Box:    "android-emulator",
 				Nested: map[string]*DeploymentNode{
@@ -44,7 +45,7 @@ func TestNestedOverlay_AttachesDeclaredChildren(t *testing.T) {
 		{Kind: SubstratePod, Image: parent, Status: "running", Container: "charly-" + parent, Source: "podman"},
 		{Kind: SubstratePod, Image: "redis", Status: "running", Container: "charly-redis", Source: "podman"},
 	}
-	opts := CollectOpts{Unified: nestedUnified(parent), RunMode: "quadlet"}
+	opts := CollectOpts{Unified: nestedUnified(), RunMode: "quadlet"}
 
 	out := applyNestedOverlay(rows, opts)
 
@@ -95,7 +96,7 @@ func TestNestedOverlay_NoParentRowNoPhantom(t *testing.T) {
 	rows := []DeploymentStatus{
 		{Kind: SubstratePod, Image: "redis", Status: "running", Container: "charly-redis", Source: "podman"},
 	}
-	opts := CollectOpts{Unified: nestedUnified(parent), RunMode: "quadlet"}
+	opts := CollectOpts{Unified: nestedUnified(), RunMode: "quadlet"}
 
 	out := applyNestedOverlay(rows, opts)
 
@@ -190,7 +191,7 @@ func TestNestedOverlay_MovesFlatAndroidRowOnly(t *testing.T) {
 		{Kind: SubstratePod, Image: parent, Status: "running", Container: "charly-" + parent, Source: "podman"},
 		{Kind: SubstrateAndroid, Image: devicePath, Status: "online", Container: "emulator-5554", Network: "in-pod (charly-" + parent + ")", Source: "adb"},
 	}
-	opts := CollectOpts{Unified: nestedUnified(parent), RunMode: "quadlet"}
+	opts := CollectOpts{Unified: nestedUnified(), RunMode: "quadlet"}
 
 	out := applyNestedOverlay(rows, opts)
 
@@ -245,7 +246,7 @@ func TestNestedOverlay_LiveProbeUnreachable(t *testing.T) {
 	rows := []DeploymentStatus{
 		{Kind: SubstratePod, Image: parent, Status: "running", Container: "charly-" + parent, Source: "podman"},
 	}
-	opts := CollectOpts{Unified: nestedUnified(parent), RunMode: "quadlet", Nested: true}
+	opts := CollectOpts{Unified: nestedUnified(), RunMode: "quadlet", Nested: true}
 
 	out := applyNestedOverlay(rows, opts)
 

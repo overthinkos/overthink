@@ -45,9 +45,9 @@ func determinismFixture() (map[string]*ResolvedBox, map[string]*Candy, *Config) 
 		"y": {Name: "y", plan: []Step{{Run: "build", Op: Op{Command: "true"}}}},
 	}
 
-	mk := func(name, base string, ext bool, candy []string, builds BuildFormats, distro []string) *ResolvedBox {
+	mk := func(name, base string, candy []string, builds BuildFormats, distro []string) *ResolvedBox {
 		return &ResolvedBox{
-			Name: name, Base: base, IsExternalBase: ext,
+			Name: name, Base: base, IsExternalBase: true,
 			Candy: candy, Tag: "v1", Registry: "r",
 			FullTag: "r/" + name + ":v1", Pkg: "rpm",
 			BuildFormats: builds, Distro: distro,
@@ -58,11 +58,11 @@ func determinismFixture() (map[string]*ResolvedBox, map[string]*Candy, *Config) 
 	// is sibling-group-order sensitive.
 	images := map[string]*ResolvedBox{
 		// base A group: shared → {leafA, leafB}, consumers carry different formats
-		"a-one": mk("a-one", "reg-a/img:1", true, []string{"leafA", "x", "y"}, BuildFormats{"pac", "aur"}, []string{"arch"}),
-		"a-two": mk("a-two", "reg-a/img:1", true, []string{"leafB", "y", "x"}, BuildFormats{"pac", "x264"}, []string{"arch", "arch-extra"}),
+		"a-one": mk("a-one", "reg-a/img:1", []string{"leafA", "x", "y"}, BuildFormats{"pac", "aur"}, []string{"arch"}),
+		"a-two": mk("a-two", "reg-a/img:1", []string{"leafB", "y", "x"}, BuildFormats{"pac", "x264"}, []string{"arch", "arch-extra"}),
 		// base B group: same short name "img", same branch shape
-		"b-one": mk("b-one", "reg-b/img:1", true, []string{"leafA"}, BuildFormats{"pac", "aur"}, []string{"arch"}),
-		"b-two": mk("b-two", "reg-b/img:1", true, []string{"leafB"}, BuildFormats{"pac", "x264"}, []string{"arch"}),
+		"b-one": mk("b-one", "reg-b/img:1", []string{"leafA"}, BuildFormats{"pac", "aur"}, []string{"arch"}),
+		"b-two": mk("b-two", "reg-b/img:1", []string{"leafB"}, BuildFormats{"pac", "x264"}, []string{"arch"}),
 	}
 
 	cfg := &Config{

@@ -349,9 +349,9 @@ func SavePortOverride(box, instance string, ports []string) error {
 // each mapping. "auto" sentinels are skipped (they have no container port
 // to extract — they ARE the request to allocate one). Unparseable entries
 // are silently dropped (the loud-skip warning lives in CheckPortAvailability).
-func containerPortsFromMappings(mappings []string) ([]int, error) {
+func containerPortsFromMappings(mappings []string) []int {
 	if len(mappings) == 0 {
-		return nil, nil
+		return nil
 	}
 	result := make([]int, 0, len(mappings))
 	for _, m := range mappings {
@@ -364,7 +364,7 @@ func containerPortsFromMappings(mappings []string) ([]int, error) {
 		}
 		result = append(result, cp)
 	}
-	return result, nil
+	return result
 }
 
 // sameStringSlice reports whether two string slices are element-wise equal

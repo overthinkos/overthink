@@ -26,7 +26,7 @@ type Collector struct {
 // NewCollector wires up the runtime + engine + cached deploy + quadlet dir.
 // Errors are surfaced for the runtime/engine resolve; charly.yml validation
 // failures degrade gracefully (a stderr warning, deploy lookups skipped).
-func NewCollector(rt *ResolvedRuntime) (*Collector, error) {
+func NewCollector(rt *ResolvedRuntime) (*Collector, error) { //nolint:unparam // error return kept for interface/API stability
 	c := &Collector{
 		rt:     rt,
 		engine: NewEngineClient(rt.RunEngine),
@@ -60,7 +60,7 @@ func NewCollector(rt *ResolvedRuntime) (*Collector, error) {
 // A collector returning an error logs a WARNING to stderr and contributes no
 // rows (graceful degradation) — it NEVER aborts the whole command. The pod
 // substrate's worker-pool fan-out lives inside PodCollector.Collect.
-func (c *Collector) All(ctx context.Context, includeAll, nested bool) ([]DeploymentStatus, error) {
+func (c *Collector) All(ctx context.Context, includeAll, nested bool) ([]DeploymentStatus, error) { //nolint:unparam // error return kept for interface/API stability
 	opts := CollectOpts{
 		IncludeAll: includeAll,
 		Nested:     nested,
@@ -130,7 +130,7 @@ func (c *Collector) All(ctx context.Context, includeAll, nested bool) ([]Deploym
 // Single collects status for one image+instance. Sequential — only one
 // container, no need for the worker pool. Pod-scoped: the `charly status <image>`
 // detail path covers the podman/docker substrate.
-func (c *Collector) Single(ctx context.Context, image, instance string) (DeploymentStatus, error) {
+func (c *Collector) Single(ctx context.Context, image, instance string) (DeploymentStatus, error) { //nolint:unparam // error return kept for interface/API stability
 	boxName := resolveBoxName(image)
 	runEngine := ResolveBoxEngineForDeploy(boxName, instance, c.rt.RunEngine)
 	engine := NewEngineClient(runEngine)

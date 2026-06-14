@@ -15,7 +15,7 @@ type VmGpuCmd struct {
 // VmGpuStatusCmd reports whether the host is configured for VFIO passthrough.
 type VmGpuStatusCmd struct{}
 
-func (c *VmGpuStatusCmd) Run() error {
+func (c *VmGpuStatusCmd) Run() error { //nolint:unparam // error return kept for interface/API stability
 	rep := DetectVFIO()
 	fmt.Println("VFIO / GPU passthrough status")
 	fmt.Println()
@@ -83,7 +83,7 @@ func (c *VmGpuStatusCmd) Run() error {
 // VmGpuListCmd lists each GPU plus a ready-to-paste hostdevs YAML block.
 type VmGpuListCmd struct{}
 
-func (c *VmGpuListCmd) Run() error {
+func (c *VmGpuListCmd) Run() error { //nolint:unparam // error return kept for interface/API stability
 	rep := DetectVFIO()
 	if len(rep.GPUs) == 0 {
 		fmt.Println("No GPUs detected under /sys/bus/pci/devices.")

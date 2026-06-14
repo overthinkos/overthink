@@ -115,10 +115,7 @@ func MigrateSingleFilename(dir, hostDeployPath string, dryRun bool) ([]string, e
 	// --- Phase 3: fold per-kind files into charly.yml's root mapping ---
 	for _, pf := range foldKindFiles {
 		p := filepath.Join(dir, pf)
-		mod, err := foldKindFileInto(rootMap, p, dryRun)
-		if err != nil {
-			return changed, err
-		}
+		mod := foldKindFileInto(rootMap, p, dryRun)
 		if mod {
 			rootChanged = true
 			if !dryRun {
@@ -244,18 +241,18 @@ func splitBoxMapping(dir string, boxMap *yaml.Node, dryRun bool) error {
 // foldKindFileInto merges a per-kind file's kind keys (vm/pod/k8s/eval/...) into
 // the charly.yml root mapping. version/import/discover/defaults are skipped.
 // Returns whether the root mapping changed (caller deletes the file).
-func foldKindFileInto(rootMap *yaml.Node, path string, dryRun bool) (bool, error) {
+func foldKindFileInto(rootMap *yaml.Node, path string, dryRun bool) bool {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return false, nil
+		return false
 	}
 	var doc yaml.Node
 	if yaml.Unmarshal(data, &doc) != nil {
-		return false, nil
+		return false
 	}
 	src := docRootMapping(&doc)
 	if src == nil {
-		return false, nil
+		return false
 	}
 	changed := false
 	for i := 0; i+1 < len(src.Content); i += 2 {
@@ -278,7 +275,7 @@ func foldKindFileInto(rootMap *yaml.Node, path string, dryRun bool) (bool, error
 		rootMap.Content = append(rootMap.Content, src.Content[i], src.Content[i+1])
 		changed = true
 	}
-	return changed, nil
+	return changed
 }
 
 // mergeMappingEntries appends src entries whose key is absent in dst (dst wins).

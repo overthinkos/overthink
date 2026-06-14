@@ -258,7 +258,7 @@ func TestCdpAxtreeCmd(t *testing.T) {
 	}
 }
 
-func TestCdpCmdSubcommands(t *testing.T) {
+func TestCdpCmdSubcommands(_ *testing.T) {
 	// Verify CdpCmd struct has all expected subcommands.
 	var cmd CdpCmd
 	_ = cmd.Open

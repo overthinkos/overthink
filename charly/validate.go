@@ -886,7 +886,7 @@ func validateCandyDAG(cfg *Config, layers map[string]*Candy, errs *ValidationErr
 }
 
 // validatePort validates port declarations in candies and images
-func validatePort(cfg *Config, layers map[string]*Candy, errs *ValidationError) {
+func validatePort(_ *Config, layers map[string]*Candy, errs *ValidationError) {
 	// Validate candy ports from the candy manifest
 	for name, layer := range layers {
 		if !layer.HasPorts() {
@@ -907,7 +907,7 @@ func validatePort(cfg *Config, layers map[string]*Candy, errs *ValidationError) 
 }
 
 // validateRoutes validates route file declarations in candies
-func validateRoutes(cfg *Config, layers map[string]*Candy, errs *ValidationError) {
+func validateRoutes(_ *Config, layers map[string]*Candy, errs *ValidationError) {
 	// Validate route config from the candy manifest
 	for name, layer := range layers {
 		if !layer.HasRoute() {
@@ -1435,7 +1435,7 @@ func validateRemoteCandies(cfg *Config, layers map[string]*Candy, errs *Validati
 }
 
 // validateSystemdServices validates systemd .service files in candies
-func validateSystemdServices(cfg *Config, layers map[string]*Candy, errs *ValidationError) {
+func validateSystemdServices(_ *Config, layers map[string]*Candy, errs *ValidationError) {
 	for name, layer := range layers {
 		if len(layer.ServiceFiles()) == 0 {
 			continue

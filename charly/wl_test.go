@@ -159,7 +159,7 @@ func TestWlModifierMap(t *testing.T) {
 	}
 }
 
-func TestWlCmdSubcommands(t *testing.T) {
+func TestWlCmdSubcommands(_ *testing.T) {
 	// Verify WlCmd struct has all expected subcommands by checking Kong tags.
 	// This is a structural test — it won't run commands, just confirms registration.
 	var cmd WlCmd

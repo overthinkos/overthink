@@ -478,11 +478,11 @@ type gpgSecretKeyInfo struct {
 }
 
 // getSecretKeys returns info about all GPG secret keys.
-func getSecretKeys() ([]gpgSecretKeyInfo, error) {
+func getSecretKeys() []gpgSecretKeyInfo {
 	cmd := exec.Command("gpg", "--list-secret-keys", "--keyid-format", "long", "--with-keygrip", "--with-colons")
 	out, err := cmd.Output()
 	if err != nil {
-		return nil, nil // no keys is not an error
+		return nil // no keys is not an error
 	}
 	var keys []gpgSecretKeyInfo
 	var current *gpgSecretKeyInfo
@@ -525,7 +525,7 @@ func getSecretKeys() ([]gpgSecretKeyInfo, error) {
 	if current != nil {
 		keys = append(keys, *current)
 	}
-	return keys, nil
+	return keys
 }
 
 // getKeygrip returns the primary keygrip for a given key ID.
@@ -808,10 +808,7 @@ func autoSelectKeyID(preferID string) (string, error) {
 	if preferID != "" {
 		return preferID, nil
 	}
-	keys, err := getSecretKeys()
-	if err != nil {
-		return "", err
-	}
+	keys := getSecretKeys()
 	if len(keys) == 0 {
 		return "", fmt.Errorf("no GPG secret keys found")
 	}
@@ -973,7 +970,7 @@ func (c *SecretsGpgImportKeyCmd) importFromDirectory(dir string) error {
 	}
 
 	// Print summary
-	keys, _ := getSecretKeys()
+	keys := getSecretKeys()
 	if len(keys) > 0 {
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Imported keys:")
@@ -1061,7 +1058,7 @@ func (c *SecretsGpgImportKeyCmd) importFromKeystore() error {
 		return fmt.Errorf("no keys could be imported from Secret Service")
 	}
 
-	keys, _ := getSecretKeys()
+	keys := getSecretKeys()
 	if len(keys) > 0 {
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Imported keys:")
@@ -1174,7 +1171,7 @@ func (c *SecretsGpgExportKeyCmd) exportToKeystore(keyID string) error {
 	}
 
 	// Get key info for label
-	keys, _ := getSecretKeys()
+	keys := getSecretKeys()
 	uid := keyID
 	for _, k := range keys {
 		if k.KeyID == keyID {
@@ -1370,7 +1367,7 @@ func (c *SecretsGpgSetupCmd) ensureKey() error {
 	}
 
 	// Check if we have keys now
-	keys, _ := getSecretKeys()
+	keys := getSecretKeys()
 	if len(keys) > 0 {
 		for _, k := range keys {
 			fmt.Fprintf(os.Stderr, "  Found: %s  %s\n", k.KeyID, k.UID)
@@ -1452,7 +1449,7 @@ Passphrase: %s
 		return fmt.Errorf("key generation failed: %w", err)
 	}
 
-	keys, _ := getSecretKeys()
+	keys := getSecretKeys()
 	for _, k := range keys {
 		fmt.Fprintf(os.Stderr, "  Generated: %s  %s\n", k.KeyID, k.UID)
 	}
@@ -1476,7 +1473,7 @@ func (c *SecretsGpgSetupCmd) ensurePassphrase() error {
 	}
 
 	// Get ALL keygrips for the key (primary + subkeys share the same passphrase)
-	keys, _ := getSecretKeys()
+	keys := getSecretKeys()
 	var keygrips []string
 	for _, k := range keys {
 		if k.KeyID == keyID {
@@ -1622,7 +1619,7 @@ func presetPassphrasesFromSS(keyID string) {
 		return
 	}
 
-	keys, _ := getSecretKeys()
+	keys := getSecretKeys()
 	for _, k := range keys {
 		if k.KeyID != keyID {
 			continue
@@ -1723,7 +1720,7 @@ func (c *SecretsGpgDoctorCmd) Run() error {
 	}
 
 	// 5. Secret keys
-	keys, _ := getSecretKeys()
+	keys := getSecretKeys()
 	if len(keys) == 0 {
 		warn("  secret keys:             NONE")
 	} else {

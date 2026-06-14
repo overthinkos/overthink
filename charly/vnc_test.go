@@ -168,7 +168,7 @@ func TestChooseVeNCryptSubType(t *testing.T) {
 	}
 }
 
-func TestVncCmdStructure(t *testing.T) {
+func TestVncCmdStructure(_ *testing.T) {
 	cmd := VncCmd{}
 	_ = cmd.Screenshot
 	_ = cmd.Click

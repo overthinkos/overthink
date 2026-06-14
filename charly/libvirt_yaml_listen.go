@@ -111,7 +111,7 @@ func (ll *LibvirtGraphicsListeners) UnmarshalYAML(value *yaml.Node) error {
 // MarshalYAML preserves the shorthand: a single address listener
 // marshals as a scalar; everything else marshals as a sequence.
 // Keeps re-marshaled vm.yml readable.
-func (ll LibvirtGraphicsListeners) MarshalYAML() (any, error) {
+func (ll LibvirtGraphicsListeners) MarshalYAML() (any, error) { //nolint:unparam // error return kept for interface/API stability
 	if len(ll) == 1 {
 		l := ll[0]
 		if l.Type == "address" && l.Socket == "" && l.Network == "" {

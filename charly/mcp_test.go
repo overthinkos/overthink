@@ -90,18 +90,18 @@ func TestResolveContainerNameTemplate(t *testing.T) {
 // rewriteMCPURLForHost — the load-bearing translator
 // ---------------------------------------------------------------------------
 
-func makeInspect(containerPort, hostPort string) *ContainerInspection {
+func makeInspect(hostPort string) *ContainerInspection {
 	return &ContainerInspection{
 		NetworkSettings: InspectNetwork{
 			Ports: map[string][]InspectPortBind{
-				containerPort + "/tcp": {{HostPort: hostPort}},
+				"8888/tcp": {{HostPort: hostPort}},
 			},
 		},
 	}
 }
 
 func TestRewriteMCPURL_ContainerName(t *testing.T) {
-	got, err := rewriteMCPURLForHost("http://charly-jupyter:8888/mcp", "charly-jupyter", makeInspect("8888", "8888"))
+	got, err := rewriteMCPURLForHost("http://charly-jupyter:8888/mcp", "charly-jupyter", makeInspect("8888"))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -113,7 +113,7 @@ func TestRewriteMCPURL_ContainerName(t *testing.T) {
 
 func TestRewriteMCPURL_RemappedHostPort(t *testing.T) {
 	// Container port 8888 is published to host port 18888 (instance remap).
-	got, err := rewriteMCPURLForHost("http://charly-jupyter:8888/mcp", "charly-jupyter", makeInspect("8888", "18888"))
+	got, err := rewriteMCPURLForHost("http://charly-jupyter:8888/mcp", "charly-jupyter", makeInspect("18888"))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -125,7 +125,7 @@ func TestRewriteMCPURL_RemappedHostPort(t *testing.T) {
 
 func TestRewriteMCPURL_ExternalHostPassthrough(t *testing.T) {
 	// URL points at an external host — do not rewrite.
-	got, err := rewriteMCPURLForHost("https://mcp.example.com/api", "charly-jupyter", makeInspect("8888", "8888"))
+	got, err := rewriteMCPURLForHost("https://mcp.example.com/api", "charly-jupyter", makeInspect("8888"))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -154,7 +154,7 @@ func TestRewriteMCPURL_NoInspection(t *testing.T) {
 
 func TestRewriteMCPURL_MissingPort(t *testing.T) {
 	// URL has no explicit port. Can't map.
-	_, err := rewriteMCPURLForHost("http://charly-jupyter/mcp", "charly-jupyter", makeInspect("8888", "8888"))
+	_, err := rewriteMCPURLForHost("http://charly-jupyter/mcp", "charly-jupyter", makeInspect("8888"))
 	if err == nil || !strings.Contains(err.Error(), "no port") {
 		t.Fatalf("expected missing-port error, got %v", err)
 	}
@@ -163,7 +163,7 @@ func TestRewriteMCPURL_MissingPort(t *testing.T) {
 func TestRewriteMCPURL_LocalhostIsAccepted(t *testing.T) {
 	// Entry may already be pod-rewritten to localhost from podAwareMCPProvides;
 	// we still need to map the container port to the published host port.
-	got, err := rewriteMCPURLForHost("http://localhost:8888/mcp", "charly-jupyter", makeInspect("8888", "18888"))
+	got, err := rewriteMCPURLForHost("http://localhost:8888/mcp", "charly-jupyter", makeInspect("18888"))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

@@ -1174,7 +1174,7 @@ func (l *Candy) TagSection(tag string) *TagPkgConfig {
 func (l *Candy) TopPackages() []string { return l.topPackages }
 
 // EnvConfig returns the environment config (pre-populated from the candy manifest)
-func (l *Candy) EnvConfig() (*EnvConfig, error) {
+func (l *Candy) EnvConfig() (*EnvConfig, error) { //nolint:unparam // error return kept for interface/API stability
 	if l.envConfig != nil {
 		return l.envConfig, nil
 	}
@@ -1182,7 +1182,7 @@ func (l *Candy) EnvConfig() (*EnvConfig, error) {
 }
 
 // Ports returns the ports (pre-populated from the candy manifest)
-func (l *Candy) Port() ([]string, error) {
+func (l *Candy) Port() ([]string, error) { //nolint:unparam // error return kept for interface/API stability
 	if l.ports != nil {
 		return l.ports, nil
 	}
@@ -1280,7 +1280,7 @@ type RouteConfig struct {
 }
 
 // Route returns the route config (pre-populated from the candy manifest)
-func (l *Candy) Route() (*RouteConfig, error) {
+func (l *Candy) Route() (*RouteConfig, error) { //nolint:unparam // error return kept for interface/API stability
 	if l.route != nil {
 		return l.route, nil
 	}

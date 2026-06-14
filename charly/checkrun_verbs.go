@@ -350,7 +350,7 @@ func (r *Runner) runAddr(ctx context.Context, c *Op) CheckResult {
 // runMatching is purely in-process: evaluates the Contains matchers against
 // the Matching value. Useful as a building block for future derived checks
 // that don't fit any other verb.
-func (r *Runner) runMatching(ctx context.Context, c *Op) CheckResult {
+func (r *Runner) runMatching(_ context.Context, c *Op) CheckResult {
 	value := matchValueString(c.Matching)
 	if err := matchAll(value, c.Contains); err != nil {
 		return failf(c, "%v", err)

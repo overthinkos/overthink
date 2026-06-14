@@ -15,7 +15,7 @@ import (
 // compilerTestProjectDir chdirs to the project root (the parent of charly/)
 // and returns a cleanup callback. The compiler tests rely on being able
 // to LoadConfig from charly.yml, which only exists in the project root.
-func compilerTestProjectDir(t *testing.T) (string, func()) {
+func compilerTestProjectDir(t *testing.T) (string, func()) { //nolint:unparam // test helper returns (dir, cleanup); dir kept for symmetry
 	t.Helper()
 	prev, err := os.Getwd()
 	if err != nil {

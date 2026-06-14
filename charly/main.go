@@ -680,7 +680,7 @@ func (c *SettingsPathCmd) Run() error {
 // VersionCmd prints the computed CalVer tag
 type VersionCmd struct{}
 
-func (c *VersionCmd) Run() error {
+func (c *VersionCmd) Run() error { //nolint:unparam // error return kept for interface/API stability
 	// The BINARY's identity (stamped at build time), NOT the wall clock.
 	fmt.Println(CharlyVersion())
 	return nil

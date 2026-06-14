@@ -505,7 +505,7 @@ func makeToolHandler(path string, leaf *kong.Node) mcp.ToolHandler {
 		var input map[string]any
 		if len(req.Params.Arguments) > 0 {
 			if err := json.Unmarshal(req.Params.Arguments, &input); err != nil {
-				return toolError(fmt.Errorf("parsing arguments: %w", err))
+				return toolError(fmt.Errorf("parsing arguments: %w", err)), nil
 			}
 		}
 		if input == nil {
@@ -514,7 +514,7 @@ func makeToolHandler(path string, leaf *kong.Node) mcp.ToolHandler {
 
 		argv, err := argvFromJSON(cmdTokens, posOrder, posByProp, flagByProp, input)
 		if err != nil {
-			return toolError(err)
+			return toolError(err), nil
 		}
 
 		stdout, stderr, runErr := captureAndRun(argv)
@@ -771,10 +771,10 @@ func assembleToolText(stdout, stderr string, runErr error) string {
 	return b.String()
 }
 
-func toolError(err error) (*mcp.CallToolResult, error) {
+func toolError(err error) *mcp.CallToolResult {
 	res := &mcp.CallToolResult{
 		IsError: true,
 		Content: []mcp.Content{&mcp.TextContent{Text: err.Error()}},
 	}
-	return res, nil
+	return res
 }

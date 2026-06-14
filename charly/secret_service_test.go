@@ -207,13 +207,14 @@ func attrsEqual(a, b map[string]string) bool {
 	return true
 }
 
-// addItem records a {service, username} entry under coll with itemPath as its
-// path. Legacy helper for credential-keyring tests; for arbitrary attribute
-// shapes (GPG keystore tests) use addItemWithAttrs.
-func (f *fakeSSOps) addItem(coll dbus.ObjectPath, service, username string, itemPath dbus.ObjectPath) {
+// addItem records the canonical {service=charly/enc, username=immich-ml} entry
+// under coll with itemPath as its path. Legacy helper for credential-keyring
+// tests; for arbitrary attribute shapes (GPG keystore tests) use
+// addItemWithAttrs.
+func (f *fakeSSOps) addItem(coll dbus.ObjectPath, itemPath dbus.ObjectPath) {
 	f.addItemWithAttrs(coll, map[string]string{
-		"service":  service,
-		"username": username,
+		"service":  "charly/enc",
+		"username": "immich-ml",
 	}, itemPath, nil, "")
 }
 
@@ -247,7 +248,7 @@ func TestFindItem_DefaultAliasHealthy(t *testing.T) {
 	f.aliasMap["default"] = defaultPath
 	f.collectionList = []dbus.ObjectPath{defaultPath}
 	f.labels[defaultPath] = "Login"
-	f.addItem(defaultPath, "charly/enc", "immich-ml", "/items/pw1")
+	f.addItem(defaultPath, "/items/pw1")
 
 	item, label, err := findItemAcrossCollections(f, "charly/enc", "immich-ml", "")
 	if err != nil {
@@ -274,7 +275,7 @@ func TestFindItem_DefaultAliasBroken_FallbackToIteration(t *testing.T) {
 	f.labels[stub] = ""
 	f.labels[real] = "opencharly"
 	f.healthErrs[stub] = errors.New("Input/output error") // broken stub
-	f.addItem(real, "charly/enc", "immich-ml", "/items/real-pw")
+	f.addItem(real, "/items/real-pw")
 
 	item, label, err := findItemAcrossCollections(f, "charly/enc", "immich-ml", "")
 	if err != nil {
@@ -302,7 +303,7 @@ func TestFindItem_PreferLabel_SelectsByLabel(t *testing.T) {
 	f.labels[aliasTarget] = "Default"
 	f.labels[labelTarget] = "opencharly"
 	// Item only in the label collection, not in the default.
-	f.addItem(labelTarget, "charly/enc", "immich-ml", "/items/in-opencharly")
+	f.addItem(labelTarget, "/items/in-opencharly")
 
 	item, label, err := findItemAcrossCollections(f, "charly/enc", "immich-ml", "opencharly")
 	if err != nil {
@@ -405,7 +406,7 @@ func TestFindItem_DefaultAliasUnsetButIterationFinds(t *testing.T) {
 	f.aliasMap["default"] = "" // unset (readAlias returns empty path, no error)
 	f.collectionList = []dbus.ObjectPath{c1}
 	f.labels[c1] = "Only"
-	f.addItem(c1, "charly/enc", "immich-ml", "/items/found")
+	f.addItem(c1, "/items/found")
 
 	item, label, err := findItemAcrossCollections(f, "charly/enc", "immich-ml", "")
 	if err != nil {
@@ -433,7 +434,7 @@ func TestFindItem_DefaultAliasDeduped(t *testing.T) {
 	f.aliasMap["default"] = real // resolves to the concrete path
 	f.collectionList = []dbus.ObjectPath{real}
 	f.labels[real] = "Login"
-	f.addItem(real, "charly/enc", "immich-ml", "/items/pw")
+	f.addItem(real, "/items/pw")
 
 	// If iteration happened twice, unlock would be called twice. We track
 	// that via a counter in a wrapper.

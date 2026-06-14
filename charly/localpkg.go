@@ -196,7 +196,7 @@ func buildLocalPkgOnHost(ctx context.Context, lp *LocalPkgDef, srcDir string, op
 //
 // The staging tmpdir is registered for sweep but deliberately NOT defer-removed:
 // the caller owns the returned package files until install completes.
-func buildDepPkgsOnHost(ctx context.Context, lp *LocalPkgDef, bDef *BuilderDef, builderImage string, packages []string, candyDir string, cfg *Config, projectDir string, opts EmitOpts) ([]string, error) {
+func buildDepPkgsOnHost(_ context.Context, lp *LocalPkgDef, bDef *BuilderDef, builderImage string, packages []string, candyDir string, cfg *Config, projectDir string, opts EmitOpts) ([]string, error) {
 	if len(packages) == 0 {
 		return nil, nil
 	}

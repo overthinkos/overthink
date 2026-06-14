@@ -300,10 +300,8 @@ func (t *LocalDeployTarget) execStep(step InstallStep, plan *InstallPlan, opts E
 // no-ops with a logged reason. UseDropin=true writes the file
 // outright; UseDropin=false applies replaceOrAppendManagedBlock to the
 // existing rc file under a per-candy fence pair.
-func (t *LocalDeployTarget) execShellSnippet(s *ShellSnippetStep, plan *InstallPlan, opts EmitOpts, rec *CandyRecord, start time.Time) error {
-	if err := t.ensureShellProbe(opts); err != nil {
-		return err
-	}
+func (t *LocalDeployTarget) execShellSnippet(s *ShellSnippetStep, _ *InstallPlan, opts EmitOpts, rec *CandyRecord, start time.Time) error {
+	t.ensureShellProbe(opts)
 	if !t.shellsPresent[s.Shell] {
 		t.logSkipReason(fmt.Sprintf("shell-snippet %s/%s: %s not installed on target", s.CandyName, s.Shell, s.Shell), opts)
 		return nil
@@ -357,9 +355,9 @@ func (t *LocalDeployTarget) execShellSnippet(s *ShellSnippetStep, plan *InstallP
 // ensureShellProbe populates t.shellsPresent on first call. Each shell
 // in the allowlist is probed with `command -v <shell>` over the
 // configured executor; presence is cached for the rest of Emit().
-func (t *LocalDeployTarget) ensureShellProbe(opts EmitOpts) error {
+func (t *LocalDeployTarget) ensureShellProbe(opts EmitOpts) {
 	if t.shellsPresent != nil {
-		return nil
+		return
 	}
 	t.shellsPresent = make(map[string]bool, len(ShellAllowlist))
 	if opts.DryRun {
@@ -368,7 +366,7 @@ func (t *LocalDeployTarget) ensureShellProbe(opts EmitOpts) error {
 		for shell := range ShellAllowlist {
 			t.shellsPresent[shell] = true
 		}
-		return nil
+		return
 	}
 	exec := t.exec()
 	for shell := range ShellAllowlist {
@@ -381,7 +379,6 @@ func (t *LocalDeployTarget) ensureShellProbe(opts EmitOpts) error {
 		}
 		t.shellsPresent[shell] = strings.TrimSpace(stdout) == "yes"
 	}
-	return nil
 }
 
 // logSkipReason emits a single line on the target's stderr describing
@@ -415,7 +412,7 @@ func isFileNotFoundErr(err error) bool {
 // Step executors
 // ---------------------------------------------------------------------------
 
-func (t *LocalDeployTarget) execShellHook(s *ShellHookStep, plan *InstallPlan, opts EmitOpts, rec *CandyRecord, start time.Time) error {
+func (t *LocalDeployTarget) execShellHook(s *ShellHookStep, _ *InstallPlan, opts EmitOpts, rec *CandyRecord, start time.Time) error {
 	if opts.DryRun {
 		fmt.Fprintf(t.stderr(), "[dry-run] env.d/%s.env + managed block\n", s.CandyName)
 		t.noteStep(rec, StepKindShellHook, s.Scope(), s.Venue(), fmt.Sprintf("candy=%s", s.CandyName), start)
@@ -432,7 +429,7 @@ func (t *LocalDeployTarget) execShellHook(s *ShellHookStep, plan *InstallPlan, o
 	return nil
 }
 
-func (t *LocalDeployTarget) execSystemPackages(s *SystemPackagesStep, plan *InstallPlan, opts EmitOpts, rec *CandyRecord, start time.Time) error {
+func (t *LocalDeployTarget) execSystemPackages(s *SystemPackagesStep, _ *InstallPlan, opts EmitOpts, rec *CandyRecord, start time.Time) error {
 	cmd, err := t.renderSystemPackageCommand(s)
 	if err != nil {
 		return err
@@ -493,7 +490,7 @@ func renderHostPackageCommand(distroCfg *DistroConfig, s *SystemPackagesStep) (s
 	return strings.TrimSpace(cmd), nil
 }
 
-func (t *LocalDeployTarget) execBuilder(s *BuilderStep, plan *InstallPlan, opts EmitOpts, rec *CandyRecord, start time.Time) error {
+func (t *LocalDeployTarget) execBuilder(s *BuilderStep, _ *InstallPlan, opts EmitOpts, rec *CandyRecord, start time.Time) error {
 	// Builder image resolution mirrors VmDeployTarget.execBuilder:
 	//   1. EmitOpts.BuilderImageOverride (--builder-image flag)
 	//   2. BuilderStep.BuilderImage (compiled from charly.yml)
@@ -614,7 +611,7 @@ func (t *LocalDeployTarget) execBuilder(s *BuilderStep, plan *InstallPlan, opts 
 	return nil
 }
 
-func (t *LocalDeployTarget) execOp(s *OpStep, plan *InstallPlan, opts EmitOpts, rec *CandyRecord, start time.Time) error {
+func (t *LocalDeployTarget) execOp(s *OpStep, _ *InstallPlan, opts EmitOpts, rec *CandyRecord, start time.Time) error {
 	if s.Op == nil {
 		return nil
 	}
@@ -924,7 +921,7 @@ func renderDownloadScript(task *Op, candyVars map[string]string) string {
 	return b.String()
 }
 
-func (t *LocalDeployTarget) execFile(s *FileStep, plan *InstallPlan, opts EmitOpts, rec *CandyRecord, start time.Time) error {
+func (t *LocalDeployTarget) execFile(s *FileStep, _ *InstallPlan, opts EmitOpts, rec *CandyRecord, start time.Time) error {
 	mode := fmt.Sprintf("%04o", s.Mode.Perm())
 	owner := ""
 	if s.Owner != "" && s.Owner != "root" {
@@ -945,7 +942,7 @@ func (t *LocalDeployTarget) execFile(s *FileStep, plan *InstallPlan, opts EmitOp
 	return nil
 }
 
-func (t *LocalDeployTarget) execServicePackaged(s *ServicePackagedStep, plan *InstallPlan, opts EmitOpts, rec *CandyRecord, start time.Time) error {
+func (t *LocalDeployTarget) execServicePackaged(s *ServicePackagedStep, _ *InstallPlan, opts EmitOpts, rec *CandyRecord, start time.Time) error {
 	// Query prior enabled state for restore-on-teardown.
 	s.PriorEnabled = systemctlIsEnabled(s.Unit, s.TargetScope)
 
@@ -966,7 +963,7 @@ func (t *LocalDeployTarget) execServicePackaged(s *ServicePackagedStep, plan *In
 	return nil
 }
 
-func (t *LocalDeployTarget) execServiceCustom(s *ServiceCustomStep, plan *InstallPlan, opts EmitOpts, rec *CandyRecord, start time.Time) error {
+func (t *LocalDeployTarget) execServiceCustom(s *ServiceCustomStep, _ *InstallPlan, opts EmitOpts, rec *CandyRecord, start time.Time) error {
 	if s.UnitPath == "" || s.UnitText == "" {
 		return fmt.Errorf("service %s: no unit text rendered (compile-time render skipped this entry; check that the candy's mixed-`service:` pair is well-formed)", s.Name)
 	}
@@ -987,7 +984,7 @@ func (t *LocalDeployTarget) execServiceCustom(s *ServiceCustomStep, plan *Instal
 	return nil
 }
 
-func (t *LocalDeployTarget) execRepoChange(s *RepoChangeStep, plan *InstallPlan, opts EmitOpts, rec *CandyRecord, start time.Time) error {
+func (t *LocalDeployTarget) execRepoChange(s *RepoChangeStep, _ *InstallPlan, opts EmitOpts, rec *CandyRecord, start time.Time) error {
 	cmd := fmt.Sprintf("mkdir -p %s && cat > %s <<'CHARLY_REPO'\n%s\nCHARLY_REPO",
 		shQuoteArg(filepath.Dir(s.File)), shQuoteArg(s.File), s.Content)
 	if err := t.runSystem(cmd, opts); err != nil {
@@ -1009,7 +1006,7 @@ func (t *LocalDeployTarget) execRepoChange(s *RepoChangeStep, plan *InstallPlan,
 // dir is a clean no-op (the candy's curl task installs it there). The shared
 // build+transfer+install body lives in localpkg.go (R3 — the VM target calls the
 // same execLocalPkgInstall).
-func (t *LocalDeployTarget) execLocalPkg(s *LocalPkgInstallStep, plan *InstallPlan, opts EmitOpts, rec *CandyRecord, start time.Time) error {
+func (t *LocalDeployTarget) execLocalPkg(s *LocalPkgInstallStep, _ *InstallPlan, opts EmitOpts, rec *CandyRecord, start time.Time) error {
 	ctx := opts.ContextOrDefault()
 	supported := venueHasPkgManager(ctx, t.exec(), s.LocalPkg, opts)
 	if err := execLocalPkgInstall(ctx, t.exec(), s, supported, t.Name(), opts); err != nil {
@@ -1257,17 +1254,17 @@ func (t *LocalDeployTarget) stderr() *os.File {
 	return os.Stderr
 }
 
-func (t *LocalDeployTarget) logSkip(batch StepBatch, opts EmitOpts) {
+func (t *LocalDeployTarget) logSkip(batch StepBatch, _ EmitOpts) {
 	for _, s := range batch.Steps {
 		fmt.Fprintf(t.stderr(), "[skip] %s scope=%s reason=container-only\n", s.Kind(), s.Scope())
 	}
 }
 
-func (t *LocalDeployTarget) logGated(step InstallStep, gate Gate, opts EmitOpts) {
+func (t *LocalDeployTarget) logGated(step InstallStep, gate Gate, _ EmitOpts) {
 	fmt.Fprintf(t.stderr(), "[skip] %s scope=%s requires --%s\n", step.Kind(), step.Scope(), gate)
 }
 
-func (t *LocalDeployTarget) noteStep(rec *CandyRecord, kind StepKind, scope Scope, venue Venue, summary string, start time.Time) {
+func (t *LocalDeployTarget) noteStep(rec *CandyRecord, kind StepKind, scope Scope, venue Venue, summary string, _ time.Time) {
 	rec.Steps = append(rec.Steps, StepRecord{
 		Kind:        kind,
 		Scope:       scope,

@@ -126,7 +126,7 @@ func findVmDeployRecord(paths *LedgerPaths, vmName string) (*DeployRecord, error
 // checking) live in the managed Host stanza written by `charly vm
 // create` / runVmAdd; ssh(1) reads them from ~/.ssh/config so we
 // need only the alias here.
-func buildVmReverseRunner(deployName string) (*sshReverseRunner, error) {
+func buildVmReverseRunner(deployName string) *sshReverseRunner {
 	vmName, err := vmNameFromDeployName(deployName)
 	if err != nil {
 		// Fallback: if the name doesn't carry the legacy "vm:" prefix,
@@ -137,7 +137,7 @@ func buildVmReverseRunner(deployName string) (*sshReverseRunner, error) {
 		Host:           VmSshAlias(vmName),
 		ConnectTimeout: 10,
 	}
-	return &sshReverseRunner{exec: exec}, nil
+	return &sshReverseRunner{exec: exec}
 }
 
 // sshReverseRunner adapts SSHExecutor to the ReverseRunner interface so
@@ -222,7 +222,7 @@ func resolveVmSshPort(spec *VmSpec, vmName string) (int, error) {
 // saveVmDeployState writes the updated VmDeployState into
 // ~/.config/charly/charly.yml for the given deploy name. Idempotent —
 // overwrites the deploy.<name>.vm_state block.
-func saveVmDeployState(deployName string, state *VmDeployState, spec *VmSpec) error {
+func saveVmDeployState(deployName string, state *VmDeployState, _ *VmSpec) error {
 	// Load existing charly.yml (or start fresh).
 	dc, err := LoadDeployConfig()
 	if err != nil {

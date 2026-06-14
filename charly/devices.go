@@ -411,7 +411,7 @@ func iommuGroupMembers(sysRoot string, group int) []string {
 // VFIO passthrough pins all guest RAM, so QEMU needs a memlock limit ≥ guest
 // RAM. Under rootless qemu:///session the limit is inherited from the login
 // session (commonly 8 MiB), so this is a passthrough-readiness signal.
-func MemlockLimitBytes() (soft, hard uint64) {
+func MemlockLimitBytes() (soft, hard uint64) { //nolint:unparam // soft returned for rlimit-pair API completeness
 	var rl unix.Rlimit
 	if err := unix.Getrlimit(unix.RLIMIT_MEMLOCK, &rl); err != nil {
 		return 0, 0

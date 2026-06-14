@@ -1410,8 +1410,8 @@ func TestValidateDataEntryKnownVolume(t *testing.T) {
 
 // secretDepsCandy builds a minimal candy with the given secret dependency
 // configuration, for reuse across tests.
-func secretDepsCandy(name string, opts func(l *Candy)) *Candy {
-	l := &Candy{Name: name, plan: []Step{{Run: "build", Op: Op{Command: "true"}}}}
+func secretDepsCandy(opts func(l *Candy)) *Candy {
+	l := &Candy{Name: "svc", plan: []Step{{Run: "build", Op: Op{Command: "true"}}}}
 	if opts != nil {
 		opts(l)
 	}
@@ -1423,7 +1423,7 @@ func secretDepsCandy(name string, opts func(l *Candy)) *Candy {
 func TestValidateSecretAcceptsHappyPath(t *testing.T) {
 	cfg := &Config{Box: map[string]BoxConfig{}}
 	layers := map[string]*Candy{
-		"svc": secretDepsCandy("svc", func(l *Candy) {
+		"svc": secretDepsCandy(func(l *Candy) {
 			l.secretAccepts = []EnvDependency{
 				{Name: "OPENROUTER_API_KEY", Description: "OpenRouter API key", Key: "charly/api-key/openrouter"},
 			}
@@ -1439,7 +1439,7 @@ func TestValidateSecretAcceptsHappyPath(t *testing.T) {
 func TestValidateSecretRequiresMissingDescription(t *testing.T) {
 	cfg := &Config{Box: map[string]BoxConfig{}}
 	layers := map[string]*Candy{
-		"svc": secretDepsCandy("svc", func(l *Candy) {
+		"svc": secretDepsCandy(func(l *Candy) {
 			l.secretRequires = []EnvDependency{
 				{Name: "WEBUI_ADMIN_PASSWORD"}, // no Description
 			}
@@ -1459,7 +1459,7 @@ func TestValidateSecretRequiresMissingDescription(t *testing.T) {
 func TestValidateSecretAcceptsInvalidName(t *testing.T) {
 	cfg := &Config{Box: map[string]BoxConfig{}}
 	layers := map[string]*Candy{
-		"svc": secretDepsCandy("svc", func(l *Candy) {
+		"svc": secretDepsCandy(func(l *Candy) {
 			l.secretAccepts = []EnvDependency{
 				{Name: "OPENROUTER-API-KEY", Description: "hyphen not allowed"},
 			}
@@ -1479,7 +1479,7 @@ func TestValidateSecretAcceptsInvalidName(t *testing.T) {
 func TestValidateSecretAcceptsCollidesWithEnvAccepts(t *testing.T) {
 	cfg := &Config{Box: map[string]BoxConfig{}}
 	layers := map[string]*Candy{
-		"svc": secretDepsCandy("svc", func(l *Candy) {
+		"svc": secretDepsCandy(func(l *Candy) {
 			l.envAccepts = []EnvDependency{
 				{Name: "OPENROUTER_API_KEY", Description: "plaintext"},
 			}
@@ -1502,7 +1502,7 @@ func TestValidateSecretAcceptsCollidesWithEnvAccepts(t *testing.T) {
 func TestValidateSecretRequiresCollidesWithEnvRequires(t *testing.T) {
 	cfg := &Config{Box: map[string]BoxConfig{}}
 	layers := map[string]*Candy{
-		"svc": secretDepsCandy("svc", func(l *Candy) {
+		"svc": secretDepsCandy(func(l *Candy) {
 			l.envRequires = []EnvDependency{
 				{Name: "WEBUI_ADMIN_PASSWORD", Description: "plaintext"},
 			}
@@ -1525,7 +1525,7 @@ func TestValidateSecretRequiresCollidesWithEnvRequires(t *testing.T) {
 func TestValidateSecretAcceptsCollidesWithSecretRequires(t *testing.T) {
 	cfg := &Config{Box: map[string]BoxConfig{}}
 	layers := map[string]*Candy{
-		"svc": secretDepsCandy("svc", func(l *Candy) {
+		"svc": secretDepsCandy(func(l *Candy) {
 			l.secretRequires = []EnvDependency{
 				{Name: "API_TOKEN", Description: "required"},
 			}
@@ -1549,7 +1549,7 @@ func TestValidateSecretAcceptsCollidesWithSecretRequires(t *testing.T) {
 func TestValidateSecretCollidesWithEnvProvides(t *testing.T) {
 	cfg := &Config{Box: map[string]BoxConfig{}}
 	layers := map[string]*Candy{
-		"svc": secretDepsCandy("svc", func(l *Candy) {
+		"svc": secretDepsCandy(func(l *Candy) {
 			l.envProvides = map[string]string{
 				"API_TOKEN": "http://{{.ContainerName}}:8080/token", // would be plaintext
 			}
@@ -1573,7 +1573,7 @@ func TestValidateSecretCollidesWithEnvProvides(t *testing.T) {
 func TestValidateSecretAcceptsKeyMustStartWithCharly(t *testing.T) {
 	cfg := &Config{Box: map[string]BoxConfig{}}
 	layers := map[string]*Candy{
-		"svc": secretDepsCandy("svc", func(l *Candy) {
+		"svc": secretDepsCandy(func(l *Candy) {
 			l.secretAccepts = []EnvDependency{
 				{Name: "AWS_ACCESS_KEY_ID", Description: "bad key", Key: "aws/access-key"},
 			}
@@ -1600,7 +1600,7 @@ func TestValidateSecretAcceptsKeyValidFormats(t *testing.T) {
 	for _, k := range cases {
 		cfg := &Config{Box: map[string]BoxConfig{}}
 		layers := map[string]*Candy{
-			"svc": secretDepsCandy("svc", func(l *Candy) {
+			"svc": secretDepsCandy(func(l *Candy) {
 				l.secretAccepts = []EnvDependency{
 					{Name: "SOME_API_KEY", Description: "ok", Key: k},
 				}
@@ -1626,7 +1626,7 @@ func TestValidateSecretAcceptsKeyInvalidFormats(t *testing.T) {
 	for _, k := range cases {
 		cfg := &Config{Box: map[string]BoxConfig{}}
 		layers := map[string]*Candy{
-			"svc": secretDepsCandy("svc", func(l *Candy) {
+			"svc": secretDepsCandy(func(l *Candy) {
 				l.secretAccepts = []EnvDependency{
 					{Name: "SOME_API_KEY", Description: "ok", Key: k},
 				}
@@ -1645,7 +1645,7 @@ func TestValidateSecretAcceptsKeyInvalidFormats(t *testing.T) {
 func TestValidateSecretAcceptsInvalidSlug(t *testing.T) {
 	cfg := &Config{Box: map[string]BoxConfig{}}
 	layers := map[string]*Candy{
-		"svc": secretDepsCandy("svc", func(l *Candy) {
+		"svc": secretDepsCandy(func(l *Candy) {
 			l.secretAccepts = []EnvDependency{
 				{Name: "_LEADING_UNDERSCORE", Description: "bad slug"},
 			}

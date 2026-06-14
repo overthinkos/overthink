@@ -379,10 +379,8 @@ func (t *VmDeployTarget) emitPlan(ctx context.Context, plan *InstallPlan, opts E
 // shell presence on the guest via SSH, writes drop-in or applies
 // managed-block to existing rc file. Probe result cached on the
 // target struct for the duration of Emit().
-func (t *VmDeployTarget) execShellSnippet(ctx context.Context, s *ShellSnippetStep, plan *InstallPlan, opts EmitOpts) error {
-	if err := t.ensureShellProbe(ctx, opts); err != nil {
-		return err
-	}
+func (t *VmDeployTarget) execShellSnippet(ctx context.Context, s *ShellSnippetStep, _ *InstallPlan, opts EmitOpts) error {
+	t.ensureShellProbe(ctx, opts)
 	if !t.shellsPresent[s.Shell] {
 		fmt.Fprintf(os.Stderr, "vm:%s skip: shell-snippet %s/%s: %s not installed on guest\n",
 			t.VMName, s.CandyName, s.Shell, s.Shell)
@@ -426,16 +424,16 @@ func (t *VmDeployTarget) execShellSnippet(ctx context.Context, s *ShellSnippetSt
 // ensureShellProbe populates t.shellsPresent on first call. Each shell
 // in the allowlist is probed with `command -v <shell>` over the SSH
 // executor; presence is cached for the rest of Emit().
-func (t *VmDeployTarget) ensureShellProbe(ctx context.Context, opts EmitOpts) error {
+func (t *VmDeployTarget) ensureShellProbe(ctx context.Context, opts EmitOpts) {
 	if t.shellsPresent != nil {
-		return nil
+		return
 	}
 	t.shellsPresent = make(map[string]bool, len(ShellAllowlist))
 	if opts.DryRun {
 		for shell := range ShellAllowlist {
 			t.shellsPresent[shell] = true
 		}
-		return nil
+		return
 	}
 	for shell := range ShellAllowlist {
 		stdout, _, _, err := t.Exec.RunCapture(ctx,
@@ -446,7 +444,6 @@ func (t *VmDeployTarget) ensureShellProbe(ctx context.Context, opts EmitOpts) er
 		}
 		t.shellsPresent[shell] = strings.TrimSpace(stdout) == "yes"
 	}
-	return nil
 }
 
 // detectGuestShell resolves the GUEST user's login shell from the guest's
@@ -475,7 +472,7 @@ func (t *VmDeployTarget) detectGuestShell(ctx context.Context) ShellKind {
 // Renders the format's phase.install.host template from build.yml via the SHARED
 // config-driven renderer (renderHostPackageCommand) — the SAME path
 // LocalDeployTarget uses and the same FormatDef the OCI container path reads (R3).
-func (t *VmDeployTarget) execSystemPackages(ctx context.Context, s *SystemPackagesStep, plan *InstallPlan, opts EmitOpts) error {
+func (t *VmDeployTarget) execSystemPackages(ctx context.Context, s *SystemPackagesStep, _ *InstallPlan, opts EmitOpts) error {
 	cmd, err := renderHostPackageCommand(t.DistroCfg, s)
 	if err != nil {
 		return fmt.Errorf("VmDeployTarget: %w", err)
@@ -488,7 +485,7 @@ func (t *VmDeployTarget) execSystemPackages(ctx context.Context, s *SystemPackag
 
 // execOp runs an OpStep's rendered shell command on the guest.
 // ScopeSystem → RunSystem; ScopeUser → RunUser.
-func (t *VmDeployTarget) execOp(ctx context.Context, s *OpStep, plan *InstallPlan, opts EmitOpts) error {
+func (t *VmDeployTarget) execOp(ctx context.Context, s *OpStep, _ *InstallPlan, opts EmitOpts) error {
 	if s.Op == nil {
 		return nil
 	}
@@ -572,7 +569,7 @@ func (t *VmDeployTarget) execReboot(ctx context.Context, s *RebootStep, opts Emi
 // execFile handles a FileStep — reads the file content from FileStep.Source
 // on the host, then scp's it to FileStep.Dest in the guest via PutFile
 // (for system-scoped paths) or RunUser install (for user-scoped paths).
-func (t *VmDeployTarget) execFile(ctx context.Context, s *FileStep, plan *InstallPlan, opts EmitOpts) error {
+func (t *VmDeployTarget) execFile(ctx context.Context, s *FileStep, _ *InstallPlan, opts EmitOpts) error {
 	if s.Source == "" {
 		return fmt.Errorf("VmDeployTarget: FileStep for %s has empty Source", s.Dest)
 	}
@@ -583,7 +580,7 @@ func (t *VmDeployTarget) execFile(ctx context.Context, s *FileStep, plan *Instal
 // execShellHook writes the env.d file for a candy. Candy env vars end
 // up in ~/.config/opencharly/env.d/<candy>.env on the guest; the managed
 // block in the guest user's shell init sources them.
-func (t *VmDeployTarget) execShellHook(ctx context.Context, s *ShellHookStep, plan *InstallPlan, opts EmitOpts) error {
+func (t *VmDeployTarget) execShellHook(ctx context.Context, s *ShellHookStep, _ *InstallPlan, opts EmitOpts) error {
 	// Shared env.d renderer (shell_profile.go renderEnvdBody) so VM and local
 	// produce byte-identical env.d files — including the accumulating
 	// PATH-prepend (export PATH="d1:d2:$PATH") that the old VM-only renderer
@@ -602,7 +599,7 @@ CHARLY_ENVD
 
 // execRepoChange writes a repo config file (e.g. rpmfusion-free.repo
 // under /etc/yum.repos.d/) to the guest. Always sudo.
-func (t *VmDeployTarget) execRepoChange(ctx context.Context, s *RepoChangeStep, plan *InstallPlan, opts EmitOpts) error {
+func (t *VmDeployTarget) execRepoChange(ctx context.Context, s *RepoChangeStep, _ *InstallPlan, opts EmitOpts) error {
 	script := fmt.Sprintf(`
 set -e
 install -D -m0644 /dev/stdin %s <<'CHARLY_REPO'
@@ -615,7 +612,7 @@ CHARLY_REPO
 // execServicePackaged enables a distro-shipped systemd unit (with
 // optional drop-ins) on the guest. --with-services gate already
 // checked in emitPlan.
-func (t *VmDeployTarget) execServicePackaged(ctx context.Context, s *ServicePackagedStep, plan *InstallPlan, opts EmitOpts) error {
+func (t *VmDeployTarget) execServicePackaged(ctx context.Context, s *ServicePackagedStep, _ *InstallPlan, opts EmitOpts) error {
 	if s.OverridesText != "" && s.OverridesPath != "" {
 		if err := t.writeGuestUnitFile(ctx, s.OverridesPath, s.OverridesText, s.TargetScope, opts); err != nil {
 			return err
@@ -686,7 +683,7 @@ func (t *VmDeployTarget) enableServiceUnit(ctx context.Context, unit string, sco
 // in install_build.go (the unified init-system polymorphism filter); the
 // previous lazy `renderCustomServiceForSystemdTarget` fallback was
 // deleted in the 2026-05 unification cutover.
-func (t *VmDeployTarget) execServiceCustom(ctx context.Context, s *ServiceCustomStep, plan *InstallPlan, opts EmitOpts) error {
+func (t *VmDeployTarget) execServiceCustom(ctx context.Context, s *ServiceCustomStep, _ *InstallPlan, opts EmitOpts) error {
 	if s.UnitText == "" || s.UnitPath == "" {
 		return fmt.Errorf("service %s: no unit text rendered (compile-time render skipped this entry; check that the candy's mixed-`service:` pair is well-formed)", s.Name)
 	}
@@ -715,7 +712,7 @@ func (t *VmDeployTarget) execServiceCustom(ctx context.Context, s *ServiceCustom
 //
 // Unknown builders honor --skip-incompatible (set by callers that legitimately
 // want to skip rpm:/deb:-only sections) and otherwise hard-error.
-func (t *VmDeployTarget) execBuilder(ctx context.Context, s *BuilderStep, plan *InstallPlan, opts EmitOpts) error {
+func (t *VmDeployTarget) execBuilder(ctx context.Context, s *BuilderStep, _ *InstallPlan, opts EmitOpts) error {
 	// Route by OUTPUT shape, not builder name: a builder that produces package
 	// FILES carries the format's local_pkg contract (s.LocalPkg, set by the
 	// compiler for the aur builder) — those go through the build-on-host →

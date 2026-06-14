@@ -203,7 +203,7 @@ var glibcRegexp = regexp.MustCompile(`(\d+)\.(\d+)(?:\.\d+)?\s*$`)
 // "" with no error when glibc can't be detected (e.g. musl hosts) —
 // callers should treat an empty string as "unknown, skip the preflight
 // check".
-func DetectHostGlibc() (string, error) {
+func DetectHostGlibc() (string, error) { //nolint:unparam // error return kept for interface/API stability
 	out, err := exec.Command("ldd", "--version").Output()
 	if err != nil {
 		// Non-glibc systems (alpine/musl) return an error; signal

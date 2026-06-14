@@ -189,7 +189,7 @@ func (il *ImportList) UnmarshalYAML(node *yaml.Node) error {
 // MarshalYAML emits each entry compactly: a flat entry as a scalar string, a
 // namespaced entry as a single-key `alias: ref` map — the same shapes
 // UnmarshalYAML accepts (round-trip safe; used by migrators that write configs).
-func (il ImportList) MarshalYAML() (interface{}, error) {
+func (il ImportList) MarshalYAML() (interface{}, error) { //nolint:unparam // error return kept for interface/API stability
 	seq := &yaml.Node{Kind: yaml.SequenceNode}
 	for _, e := range il {
 		if e.Namespace == "" {
@@ -2446,11 +2446,7 @@ func (uf *UnifiedFile) ProjectCandies(rootDir string) (map[string]*Candy, error)
 			continue
 		}
 		// Inline candy — synthesize.
-		layer, err := synthesizeInlineCandy(name, il, rootDir)
-		if err != nil {
-			return nil, fmt.Errorf("inline candy %q: %w", name, err)
-		}
-		out[name] = layer
+		out[name] = synthesizeInlineCandy(name, il, rootDir)
 	}
 	return out, nil
 }
@@ -2459,7 +2455,7 @@ func (uf *UnifiedFile) ProjectCandies(rootDir string) (map[string]*Candy, error)
 // unified file. The effective Path is rootDir (the charly.yml's dir);
 // SourceDir always equals Path (the `directory:` field was deleted in the
 // 2026-05 Calamares cutover).
-func synthesizeInlineCandy(name string, il *InlineCandy, rootDir string) (*Candy, error) {
+func synthesizeInlineCandy(name string, il *InlineCandy, rootDir string) *Candy {
 	// Use inline candy body as if it were a parsed candy manifest at rootDir.
 	layer := &Candy{
 		Name: name,
@@ -2482,7 +2478,7 @@ func synthesizeInlineCandy(name string, il *InlineCandy, rootDir string) (*Candy
 	if len(svcFiles) > 0 {
 		layer.serviceFiles = svcFiles
 	}
-	return layer, nil
+	return layer
 }
 
 // populateCandyFromYAML copies every field from a parsed CandyYAML into the

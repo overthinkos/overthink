@@ -183,7 +183,7 @@ func TestStopCmd_UnmountFlagDefaults(t *testing.T) {
 // fast-path: when want=false, it returns immediately without consulting
 // deploy.yml or attempting any encUnmount call. Documented as the first
 // line of the function — a regression here would invert the opt-in.
-func TestStopUnmountIfRequested_NoOpWhenWantFalse(t *testing.T) {
+func TestStopUnmountIfRequested_NoOpWhenWantFalse(_ *testing.T) {
 	// A bogus image+instance that has no deploy entry would normally
 	// cause encUnmount → loadEncryptedVolume to error. Because want=
 	// false, the helper short-circuits and the call never happens, so

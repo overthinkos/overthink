@@ -51,10 +51,7 @@ func FetchQcow2(src VmSource) (FetchedImage, error) {
 	cacheSumPath := cachePath + ".sha256"
 
 	// Resolve expected sha256.
-	expected, err := resolveExpectedSHA256(src)
-	if err != nil {
-		return FetchedImage{}, err
-	}
+	expected := resolveExpectedSHA256(src)
 
 	// Cache hit: verify recorded sha256 matches (if we have one), then
 	// re-verify file sha256 periodically. To avoid re-hashing large
@@ -97,9 +94,9 @@ func FetchQcow2(src VmSource) (FetchedImage, error) {
 // sidecar files at the same directory as src.URL. Returns "" when none
 // resolve — in that case, FetchQcow2 proceeds without verification
 // (and records whatever sha256 the downloaded bytes compute to).
-func resolveExpectedSHA256(src VmSource) (string, error) {
+func resolveExpectedSHA256(src VmSource) string {
 	if src.Checksum.Value != "" {
-		return normalizeSum(src.Checksum.Value), nil
+		return normalizeSum(src.Checksum.Value)
 	}
 	// Auto-resolve sidecar.
 	for _, suffix := range []string{".SHA256", ".sha256", ".sha256sum"} {
@@ -113,10 +110,10 @@ func resolveExpectedSHA256(src VmSource) (string, error) {
 		//   "<hex>\n"               (bare digest)
 		sum := extractBareSHA256(string(body), baseNameFromURL(src.URL))
 		if sum != "" {
-			return sum, nil
+			return sum
 		}
 	}
-	return "", nil
+	return ""
 }
 
 func fetchSidecar(u string) ([]byte, bool) {

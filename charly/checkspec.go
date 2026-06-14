@@ -578,7 +578,7 @@ func (m *Matcher) UnmarshalYAML(node *yaml.Node) error {
 }
 
 // MarshalYAML emits the canonical operator-map form so round-tripping is stable.
-func (m Matcher) MarshalYAML() (any, error) {
+func (m Matcher) MarshalYAML() (any, error) { //nolint:unparam // error return kept for interface/API stability
 	if m.Op == "equals" {
 		return m.Value, nil
 	}

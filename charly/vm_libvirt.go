@@ -187,7 +187,7 @@ func (c *libvirtConn) gracefulStopDomain(dom libvirt.Domain) {
 // undefineDomain removes the domain definition.
 // Note: removeStorage is handled by the caller (file deletion), not via libvirt flags,
 // since libvirt's storage wipe only works with managed storage pools.
-func (c *libvirtConn) undefineDomain(dom libvirt.Domain, removeStorage bool) error {
+func (c *libvirtConn) undefineDomain(dom libvirt.Domain, _ bool) error {
 	return c.l.DomainUndefineFlags(dom, libvirt.DomainUndefineNvram)
 }
 

@@ -33,9 +33,7 @@ func TestReverseOpsUserScopeFileRemove(t *testing.T) {
 		{Kind: ReverseOpRmFileUser, Targets: []string{fileA, fileB}, Scope: ScopeUser},
 	}
 	re := &mockReverseExecutor{dryRun: false}
-	if err := runReverseOps(ops, re); err != nil {
-		t.Fatalf("runReverseOps: %v", err)
-	}
+	runReverseOps(ops, re)
 	for _, f := range []string{fileA, fileB} {
 		if _, err := os.Stat(f); !os.IsNotExist(err) {
 			t.Errorf("file still exists: %s (err=%v)", f, err)
@@ -54,9 +52,7 @@ func TestReverseOpsPixiEnvRemove(t *testing.T) {
 		{Kind: ReverseOpPixiEnvRemove, Targets: []string{"pre-commit"}, Scope: ScopeUser},
 	}
 	re := &mockReverseExecutor{}
-	if err := runReverseOps(ops, re); err != nil {
-		t.Fatalf("runReverseOps: %v", err)
-	}
+	runReverseOps(ops, re)
 	if _, err := os.Stat(envDir); !os.IsNotExist(err) {
 		t.Errorf("pixi env still exists: %v", err)
 	}
@@ -65,28 +61,30 @@ func TestReverseOpsPixiEnvRemove(t *testing.T) {
 func TestReverseOpsKeepServicesFlag(t *testing.T) {
 	// With keepServices=true, ReverseOpServiceDisable / ServiceRemove /
 	// RemoveDropin should no-op. We can't actually invoke systemctl in
-	// tests, but we can verify the flag path is honored by running in
-	// non-dry-run mode and checking no error is returned (the real
-	// systemctl calls would fail).
+	// tests, but each handler returns early on the keep flag BEFORE touching
+	// the (nil) runner, so a honored flag path emits nothing on stderr —
+	// assert that to prove the ops were skipped.
 	re := &mockReverseExecutor{keepServices: true}
 	ops := []ReverseOp{
 		{Kind: ReverseOpServiceDisable, Targets: []string{"nonexistent.service"}, Scope: ScopeUser},
 		{Kind: ReverseOpServiceRemove, Targets: []string{"/nonexistent"}, Scope: ScopeUser},
 		{Kind: ReverseOpRemoveDropin, Targets: []string{"/nonexistent"}, Scope: ScopeUser},
 	}
-	if err := runReverseOps(ops, re); err != nil {
-		t.Fatalf("with keep-services=true, expected no error: %v", err)
+	if got := captureStderr(t, func() { runReverseOps(ops, re) }); got != "" {
+		t.Errorf("keep-services=true should skip all service ops, but got stderr output: %q", got)
 	}
 }
 
 func TestReverseOpsKeepRepoChangesFlag(t *testing.T) {
+	// keep-repo handlers return early on the flag BEFORE the dry-run print,
+	// so a honored flag emits nothing on stderr even in dry-run mode.
 	re := &mockReverseExecutor{keepRepo: true, dryRun: true}
 	ops := []ReverseOp{
 		{Kind: ReverseOpRemoveRepoFile, Targets: []string{"/etc/yum.repos.d/foo.repo"}, Format: "rpm"},
 		{Kind: ReverseOpCoprDisable, Targets: []string{"foo/bar"}, Format: "rpm"},
 	}
-	if err := runReverseOps(ops, re); err != nil {
-		t.Fatalf("with keep-repo=true, expected no error: %v", err)
+	if got := captureStderr(t, func() { runReverseOps(ops, re) }); got != "" {
+		t.Errorf("keep-repo=true should skip all repo ops, but got stderr output: %q", got)
 	}
 }
 
@@ -99,15 +97,7 @@ func TestReverseOpsDryRunEmitsSudoMarkers(t *testing.T) {
 	ops := []ReverseOp{
 		{Kind: ReverseOpPackageRemove, Format: "rpm", Targets: []string{"ripgrep"}, UninstallCmd: "dnf remove -y ripgrep"},
 	}
-	r, w, _ := os.Pipe()
-	oldStderr := os.Stderr
-	os.Stderr = w
-	_ = runReverseOps(ops, re)
-	_ = w.Close()
-	os.Stderr = oldStderr
-	var buf [1024]byte
-	n, _ := r.Read(buf[:])
-	got := string(buf[:n])
+	got := captureStderr(t, func() { runReverseOps(ops, re) })
 	if !strings.Contains(got, "[dry-run]") {
 		t.Errorf("expected dry-run marker, got: %s", got)
 	}
@@ -134,7 +124,7 @@ func TestReverseOpsOrderIsReversed(t *testing.T) {
 		{Kind: ReverseOpRmFileUser, Targets: []string{pathB}, Scope: ScopeUser},
 	}
 	re := &mockReverseExecutor{}
-	_ = runReverseOps(ops, re)
+	runReverseOps(ops, re)
 	if _, err := os.Stat(pathA); !os.IsNotExist(err) {
 		t.Errorf("path A should be removed")
 	}

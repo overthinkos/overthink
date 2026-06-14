@@ -113,7 +113,7 @@ func ReadNote(projectDir, score string) (string, error) {
 // CHARLY_EVAL_NOTES_FILE to be set (i.e., the caller is inside a
 // harness iteration). Notes are run-scoped — ad-hoc seeding from
 // outside an iteration is intentionally unsupported.
-func AppendNote(projectDir, score, runID, iter, ai, text string) error {
+func AppendNote(_, score, runID, iter, ai, text string) error {
 	if score == "" {
 		return fmt.Errorf("note append: score name required")
 	}

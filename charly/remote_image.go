@@ -77,7 +77,7 @@ func ResolveRemoteImage(ref string, tag string) (*RemoteImageContext, error) {
 }
 
 // BuildImage builds the image locally from the cached source.
-func (ctx *RemoteImageContext) BuildImage(rt *ResolvedRuntime, tag string) error {
+func (ctx *RemoteImageContext) BuildImage(_ *ResolvedRuntime, tag string) error {
 	gen, err := NewGenerator(ctx.CacheDir, "", ResolveOpts{})
 	if err != nil {
 		return fmt.Errorf("creating generator for %s: %w", ctx.Ref.RepoPath, err)

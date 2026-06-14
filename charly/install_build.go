@@ -189,7 +189,7 @@ func compileApkStep(layer *Candy) InstallStep {
 // when no dep builder resolves, BuilderImage is "" and the dep-build is skipped
 // with a clear log (the candy's own curl/COPY fallback still covers
 // non-localpkg targets).
-func compileLocalPkgStep(layer *Candy, img *ResolvedBox, hostCtx HostContext) InstallStep {
+func compileLocalPkgStep(layer *Candy, img *ResolvedBox, _ HostContext) InstallStep {
 	// The target distro must declare a localpkg-capable package format, AND the
 	// candy must point that format at a source dir. Resolve the format FIRST so
 	// the per-format `localpkg:` map picks the matching source (pac→pkg/arch,
@@ -290,7 +290,7 @@ func primaryDistroTag(img *ResolvedBox, hostCtx HostContext) string {
 // synthetic plan's Home was the host operator's home, so env.d on the guest
 // pointed at /home/<operator> instead of /home/<guest-user>. See
 // InstallPlan.ResolveHome.
-func compileShellHookStep(layer *Candy, img *ResolvedBox) *ShellHookStep {
+func compileShellHookStep(layer *Candy, _ *ResolvedBox) *ShellHookStep {
 	envCfg, _ := layer.EnvConfig()
 	if envCfg == nil {
 		return nil
@@ -520,7 +520,7 @@ func appendShellPathLines(body string, paths []string, shell, home string) strin
 // packages via the bare-distro tag (img.Distro = [fedora] / [arch]); there is no
 // format-section fallback — the deb collapse that caused non-deterministic repo
 // selection is gone (per-distro tag sections never share a mutable section).
-func compileSystemPackageSteps(layer *Candy, img *ResolvedBox, hostCtx HostContext) []InstallStep {
+func compileSystemPackageSteps(layer *Candy, img *ResolvedBox, _ HostContext) []InstallStep {
 	if img.DistroDef == nil {
 		return nil
 	}
@@ -836,7 +836,7 @@ func resolveBuilderImage(name string, img *ResolvedBox, hostCtx HostContext) str
 // candy's Cargo.toml [[bin]] section, etc.). For now we capture names
 // derivable from the candy manifest alone; the host target refines these at
 // execution time.
-func collectBuilderContext(layer *Candy, builderName string, bDef *BuilderDef, img *ResolvedBox) map[string]interface{} {
+func collectBuilderContext(layer *Candy, builderName string, _ *BuilderDef, img *ResolvedBox) map[string]interface{} {
 	ctx := map[string]interface{}{
 		"layer":   layer.Name,
 		"builder": builderName,

@@ -304,7 +304,7 @@ func (c *BuildCmd) Run() error {
 // (`img.FullTag`, e.g. `ghcr.io/overthinkos/fedora:2026.114.1042`), and
 // short-name resolution goes through `ResolveNewestLocalCalVer` in
 // local_image.go via the `ai.opencharly.version` OCI label.
-func imageTags(name string, img *ResolvedBox, cfg *Config) []string {
+func imageTags(_ string, img *ResolvedBox, _ *Config) []string {
 	return []string{img.FullTag}
 }
 
@@ -593,7 +593,7 @@ func (c *BuildCmd) pushImage(dir string, tags []string) error {
 	for _, tag := range tags {
 		fmt.Fprintf(os.Stderr, "Pushing %s\n", tag)
 		pushTag := tag
-		if err := retryCmd(3, 5*time.Second, func() error {
+		if err := retryCmd(5*time.Second, func() error {
 			var pushCmd *exec.Cmd
 			if isManifest {
 				pushCmd = exec.Command("podman", "manifest", "push", "--all", tags[0], "docker://"+pushTag)
@@ -670,7 +670,7 @@ func (c *BuildCmd) buildLocalArgs(engine string, tags []string, platform, name, 
 }
 
 // buildPushArgs constructs args for a multi-platform push build.
-func (c *BuildCmd) buildPushArgs(engine string, tags []string, platforms []string, engineName, name, registry string) []string {
+func (c *BuildCmd) buildPushArgs(_ string, tags []string, platforms []string, engineName, name, registry string) []string {
 	if engineName == "podman" {
 		return c.buildPodmanPushArgs(tags, platforms, name, registry)
 	}
@@ -761,7 +761,8 @@ func (c *BuildCmd) buildPodmanPushArgs(tags []string, platforms []string, name, 
 }
 
 // retryCmd retries fn up to maxAttempts times with exponential backoff starting at baseDelay.
-func retryCmd(maxAttempts int, baseDelay time.Duration, fn func() error) error {
+func retryCmd(baseDelay time.Duration, fn func() error) error {
+	const maxAttempts = 3
 	var err error
 	for i := 0; i < maxAttempts; i++ {
 		if i > 0 {

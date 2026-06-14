@@ -54,7 +54,7 @@ func (p PortScope) MarshalJSON() ([]byte, error) {
 	return []byte("null"), nil
 }
 
-func (p PortScope) MarshalYAML() (interface{}, error) {
+func (p PortScope) MarshalYAML() (interface{}, error) { //nolint:unparam // error return kept for interface/API stability
 	if p.All {
 		return "all", nil
 	}
@@ -645,7 +645,7 @@ func resolveProto(containerPort int, portProtos map[int]string) string {
 // ResolveTunnelConfig resolves a TunnelYAML into a TunnelConfig with defaults applied.
 // portProtos maps container port -> protocol ("http" or "tcp") from candy PortSpec data.
 // boxPorts is the list of image port mappings (e.g. "18789:18789", "443:18789").
-func ResolveTunnelConfig(t *TunnelYAML, boxName string, dns string, layers map[string]*Candy, candyNames []string, portProtos map[int]string, boxPorts []string) *TunnelConfig {
+func ResolveTunnelConfig(t *TunnelYAML, boxName string, dns string, _ map[string]*Candy, _ []string, portProtos map[int]string, boxPorts []string) *TunnelConfig {
 	if t == nil {
 		return nil
 	}

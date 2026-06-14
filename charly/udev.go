@@ -50,7 +50,7 @@ type drmDevice struct {
 
 type UdevStatusCmd struct{}
 
-func (c *UdevStatusCmd) Run() error {
+func (c *UdevStatusCmd) Run() error { //nolint:unparam // error return kept for interface/API stability
 	devices := detectGPUDevices()
 	inRender := userInGroup("render")
 	inVideo := userInGroup("video")

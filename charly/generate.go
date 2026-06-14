@@ -83,7 +83,7 @@ func (g *Generator) globalOrderForBox(imageCandies []string, parentCandies map[s
 }
 
 // resolveUserContext detects existing user in base image or uses configured values
-func (g *Generator) resolveUserContext(img *ResolvedBox) error {
+func (g *Generator) resolveUserContext(img *ResolvedBox) {
 	if !img.IsExternalBase {
 		// Internal base - inherit from parent, but respect explicit overrides
 		parentImg := g.Boxes[img.Base]
@@ -108,14 +108,14 @@ func (g *Generator) resolveUserContext(img *ResolvedBox) error {
 		default:
 			img.Home = fmt.Sprintf("/home/%s", img.User)
 		}
-		return nil
+		return
 	}
 
 	// External base - try to detect existing user at configured UID
 	userInfo, err := InspectImageUser(img.Base, img.UID)
 	if err != nil {
 		// Can't inspect, use configured defaults
-		return nil
+		return
 	}
 
 	if userInfo != nil {
@@ -125,8 +125,6 @@ func (g *Generator) resolveUserContext(img *ResolvedBox) error {
 		img.GID = userInfo.GID
 	}
 	// else: no user found at UID, will create with configured values
-
-	return nil
 }
 
 // NewGenerator creates a new generator. opts is propagated through Validate
@@ -282,9 +280,7 @@ func (g *Generator) Generate() error {
 
 	// Resolve user context for each image (in order, so parents are resolved first)
 	for _, name := range order {
-		if err := g.resolveUserContext(g.Boxes[name]); err != nil {
-			return fmt.Errorf("resolving user context for %s: %w", name, err)
-		}
+		g.resolveUserContext(g.Boxes[name])
 	}
 
 	// Generate Containerfile for each image
@@ -1170,7 +1166,7 @@ func (g *Generator) writeDataStaging(b *strings.Builder, candyOrder []string, im
 }
 
 // generateTraefikRoutes generates a traefik dynamic config YAML for route candies
-func (g *Generator) generateTraefikRoutes(boxName string, candyOrder []string, img *ResolvedBox) error {
+func (g *Generator) generateTraefikRoutes(boxName string, candyOrder []string, _ *ResolvedBox) error {
 	var b strings.Builder
 
 	b.WriteString("# .build/" + boxName + "/traefik-routes.yml (generated -- do not edit)\n")

@@ -687,7 +687,7 @@ func (c *CheckLiveCmd) runLocalCheck() error {
 // `charly deploy add <local> --verify` (LocalDeployTarget) so the two surfaces
 // source + run probes identically (R3). Host-context vars only (no
 // HOST_PORT:<N> / CONTAINER_IP). Returns the failure count.
-func checkLocalDeployScope(dir string, node *DeploymentNode, image, instance, section string, filter []string, exec DeployExecutor, format string) (int, error) {
+func checkLocalDeployScope(dir string, node *DeploymentNode, image, instance, _ string, _ []string, exec DeployExecutor, format string) (int, error) { //nolint:unparam // error return kept for symmetry with sibling deploy-scope checks
 	var plan []Step
 	if node != nil && strings.TrimSpace(node.Local) != "" {
 		if spec := findLocalSpec(dir, strings.TrimSpace(node.Local)); spec != nil {

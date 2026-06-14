@@ -132,7 +132,7 @@ func TestBuildOverlayShowArgsHighlight(t *testing.T) {
 	}
 }
 
-func TestWlOverlayCmdSubcommands(t *testing.T) {
+func TestWlOverlayCmdSubcommands(_ *testing.T) {
 	// Structural test: verify WlOverlayCmd has all expected subcommands.
 	var cmd WlOverlayCmd
 	_ = cmd.Show
@@ -141,7 +141,7 @@ func TestWlOverlayCmdSubcommands(t *testing.T) {
 	_ = cmd.Status
 }
 
-func TestWlCmdHasOverlay(t *testing.T) {
+func TestWlCmdHasOverlay(_ *testing.T) {
 	// Structural test: verify Overlay field exists on WlCmd.
 	var cmd WlCmd
 	_ = cmd.Overlay

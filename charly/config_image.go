@@ -192,11 +192,8 @@ func (c *BoxConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	// secret_accepts/secret_requires entry is moved into the credential
 	// store and stripped from c.Env before it can reach saveDeployState or
 	// the quadlet writer. Plan §2.5.
-	if scrubbed, _, err := scrubSecretCLIEnv(c.Env, meta); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: could not scrub CLI secret env: %v\n", err)
-	} else {
-		c.Env = scrubbed
-	}
+	scrubbed, _ := scrubSecretCLIEnv(c.Env, meta)
+	c.Env = scrubbed
 
 	// Persist any --memory-max / --memory-high / --memory-swap-max / --cpus
 	// flags into charly.yml so they survive across runs, and so that
@@ -216,10 +213,7 @@ func (c *BoxConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	if dc != nil {
 		key := deployKey(c.Box, c.Instance)
 		overlay := dc.Deploy[key]
-		containerPorts, cpErr := containerPortsFromMappings(meta.Port)
-		if cpErr != nil {
-			return fmt.Errorf("resolving container ports: %w", cpErr)
-		}
+		containerPorts := containerPortsFromMappings(meta.Port)
 		if len(containerPorts) > 0 || len(overlay.Port) > 0 {
 			resolved, rErr := ResolveDeployPorts(containerPorts, overlay.Port, overlay.ResolvedPort, dc.OccupiedHostPorts(key))
 			if rErr != nil {

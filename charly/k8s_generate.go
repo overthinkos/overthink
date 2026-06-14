@@ -499,7 +499,7 @@ func generateContainerPorts(caps *Capabilities) []map[string]any {
 	return out
 }
 
-func generateService(opts K8sGenerateOpts, workloadKind string) map[string]any {
+func generateService(opts K8sGenerateOpts, _ string) map[string]any {
 	ports := generateContainerPorts(opts.Capabilities)
 	if len(ports) == 0 {
 		return nil

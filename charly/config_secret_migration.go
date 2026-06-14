@@ -199,16 +199,16 @@ func MigratePlaintextEnvSecret(dc *DeployConfig, meta *BoxMetadata, image, insta
 // normal secret resolution path picks up the stored value on the same
 // charly config invocation.
 //
-// Returns (cleaned []string, imported int, err). cleaned is the new -e list
+// Returns (cleaned []string, imported int). cleaned is the new -e list
 // (never nil — returns an empty slice when all entries were migrated);
 // imported is the number of credentials moved into the store.
-func scrubSecretCLIEnv(cliEnv []string, meta *BoxMetadata) ([]string, int, error) {
+func scrubSecretCLIEnv(cliEnv []string, meta *BoxMetadata) ([]string, int) {
 	if len(cliEnv) == 0 {
-		return cliEnv, 0, nil
+		return cliEnv, 0
 	}
 	declared := secretDeclaredOnBox(meta)
 	if len(declared) == 0 {
-		return cliEnv, 0, nil
+		return cliEnv, 0
 	}
 
 	depByName := map[string]EnvDependency{}
@@ -244,7 +244,7 @@ func scrubSecretCLIEnv(cliEnv []string, meta *BoxMetadata) ([]string, int, error
 		fmt.Fprintf(os.Stderr, "Imported %s into credential store (%s/%s)\n", name, service, credKey)
 		imported++
 	}
-	return cleaned, imported, nil
+	return cleaned, imported
 }
 
 // writeDeployBackup copies the current charly.yml (if it exists) to

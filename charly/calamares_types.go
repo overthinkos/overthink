@@ -43,7 +43,7 @@ func (p *PackageItem) UnmarshalYAML(node *yaml.Node) error {
 // MarshalYAML emits the bare-scalar shorthand when only Name is set, otherwise
 // the object form. Keeps migrated candy manifest files concise where the long form
 // adds no value.
-func (p PackageItem) MarshalYAML() (interface{}, error) {
+func (p PackageItem) MarshalYAML() (interface{}, error) { //nolint:unparam // error return kept for interface/API stability
 	if p.Description == "" {
 		return p.Name, nil
 	}

@@ -73,11 +73,7 @@ func (t *VmUnifiedTarget) Del(ctx context.Context, opts DelOpts) error {
 	if t.RevRunner == nil {
 		// Caller didn't pre-build the runner — build it ourselves from
 		// the persisted deploy state.
-		runner, rerr := buildVmReverseRunner(t.NodeName)
-		if rerr != nil {
-			return fmt.Errorf("building VM reverse runner: %w", rerr)
-		}
-		t.RevRunner = runner
+		t.RevRunner = buildVmReverseRunner(t.NodeName)
 	}
 	re := &vmReverseExec{
 		DryRun:          opts.DryRun,
@@ -94,9 +90,7 @@ func (t *VmUnifiedTarget) Del(ctx context.Context, opts DelOpts) error {
 		if !shouldRemove {
 			continue
 		}
-		if rerr := runReverseOps(candyRec.ReverseOps, re); rerr != nil {
-			return fmt.Errorf("reversing candy %s: %w", layer, rerr)
-		}
+		runReverseOps(candyRec.ReverseOps, re)
 		_ = t.RevRunner.RunUser(fmt.Sprintf(`rm -f "$HOME/.config/opencharly/env.d/%s.env"`, layer))
 		if derr := DeleteCandyRecord(paths, layer); derr != nil {
 			return fmt.Errorf("deleting candy record %s: %w", layer, derr)

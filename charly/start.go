@@ -217,7 +217,7 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 	return nil
 }
 
-func (c *StartCmd) runQuadlet(rt *ResolvedRuntime) error {
+func (c *StartCmd) runQuadlet(_ *ResolvedRuntime) error {
 	exists, err := quadletExistsInstance(c.Box, c.Instance)
 	if err != nil {
 		return err

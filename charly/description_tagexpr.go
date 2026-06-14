@@ -218,7 +218,7 @@ func (p *tagParser) peek() (tagToken, bool) {
 	return p.toks[p.pos], true
 }
 
-func (p *tagParser) consume() tagToken {
+func (p *tagParser) consume() tagToken { //nolint:unparam // parser API: returns the consumed token for callers that need it
 	t := p.toks[p.pos]
 	p.pos++
 	return t

@@ -123,9 +123,7 @@ func teardownHostDeploy(paths *LedgerPaths, rec *DeployRecord, hostHome string, 
 		if !shouldRemove {
 			continue
 		}
-		if err := runReverseOps(candyRec.ReverseOps, re); err != nil {
-			return fmt.Errorf("reversing candy %s: %w", layer, err)
-		}
+		runReverseOps(candyRec.ReverseOps, re)
 		_ = RemoveEnvdFile(hostHome, layer)
 		if err := DeleteCandyRecord(paths, layer); err != nil {
 			return err

@@ -72,7 +72,7 @@ func (t *OCITarget) String() string {
 }
 
 // emitPlan emits directives for one candy's plan.
-func (t *OCITarget) emitPlan(plan *InstallPlan, opts EmitOpts) error {
+func (t *OCITarget) emitPlan(plan *InstallPlan, _ EmitOpts) error {
 	// Resolve the deferred {{.Home}} token in home-bearing step fields to
 	// the image's runtime home. For an OCI build (and the pod-overlay build
 	// that reuses OCITarget) img.Home IS the home the baked paths run under.
@@ -234,7 +234,7 @@ func (t *OCITarget) emitSystemPackages(s *SystemPackagesStep) error {
 // generator uses. Requires OCITarget.Box + OCITarget.BuilderConfig
 // to be populated; otherwise emits a comment explaining why nothing
 // was rendered (tests that don't care about real output leave them nil).
-func (t *OCITarget) emitBuilder(s *BuilderStep, plan *InstallPlan) error {
+func (t *OCITarget) emitBuilder(s *BuilderStep, _ *InstallPlan) error {
 	if t.BuilderConfig == nil {
 		fmt.Fprintf(&t.buf, "# Builder: %s (layer=%s) — skipped, no BuilderConfig\n",
 			s.Builder, s.CandyName)
